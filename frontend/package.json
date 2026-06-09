@@ -66,6 +66,7 @@
 	"dependencies": {
 		"@tanstack/svelte-query": "^6.1.29",
 		"@tanstack/svelte-query-devtools": "^6.1.29",
+		"@types/node": "^25.9.2",
 		"events": "^3.3.0",
 		"jsonwebtoken": "^9.0.3",
 		"openapi-fetch": "^0.17.0",
