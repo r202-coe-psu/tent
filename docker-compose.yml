@@ -1,0 +1,19 @@
+services:
+  couchdb:
+    image: couchdb:3.5
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER:-admin}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
+    ports:
+      - "5984:5984"
+    volumes:
+      - ../deployment/couchdb/data:/opt/couchdb/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5984/_up" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+network:
+  default:

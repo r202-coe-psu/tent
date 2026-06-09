@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="th">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>CouchDB Lab — ขั้นตอนสร้าง Database</title>
+		<style>
+			:root {
+				--bg: #0f1117;
+				--panel: #171a23;
+				--panel-2: #1e222d;
+				--border: #2a2f3a;
+				--text: #e6e9ef;
+				--muted: #9aa3b2;
+				--accent: #5eead4;
+				--accent-2: #7dd3fc;
+				--warn: #fbbf24;
+				--danger: #f87171;
+				--radius: 12px;
+			}
+			* { box-sizing: border-box; }
+			html { scroll-behavior: smooth; }
+			body {
+				margin: 0;
+				background: var(--bg);
+				color: var(--text);
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans Thai',
+					Tahoma, sans-serif;
+				line-height: 1.7;
+			}
+			.layout { display: flex; max-width: 1400px; margin: 0 auto; }
+			nav {
+				position: sticky;
+				top: 0;
+				align-self: flex-start;
+				height: 100vh;
+				width: 260px;
+				flex-shrink: 0;
+				overflow-y: auto;
+				padding: 28px 18px;
+				border-right: 1px solid var(--border);
+				background: var(--panel);
+			}
+			nav h2 {
+				font-size: 13px;
+				text-transform: uppercase;
+				letter-spacing: 0.08em;
+				color: var(--muted);
+				margin: 0 0 14px;
+			}
+			nav a {
+				display: block;
+				color: var(--muted);
+				text-decoration: none;
+				padding: 7px 12px;
+				border-radius: 8px;
+				font-size: 14px;
+				transition: all 0.15s;
+			}
+			nav a:hover { color: var(--text); background: var(--panel-2); }
+			nav a.active { color: var(--accent); background: var(--panel-2); }
+			nav .back {
+				display: block;
+				margin-bottom: 16px;
+				color: var(--accent-2);
+				font-size: 13px;
+				text-decoration: none;
+			}
+			nav .back:hover { text-decoration: underline; }
+			main { flex: 1; min-width: 0; padding: 40px 48px 120px; }
+			header.hero { margin-bottom: 48px; }
+			header.hero h1 {
+				font-size: 34px;
+				margin: 0 0 10px;
+				background: linear-gradient(90deg, var(--accent), var(--accent-2));
+				-webkit-background-clip: text;
+				background-clip: text;
+				-webkit-text-fill-color: transparent;
+			}
+			header.hero p { color: var(--muted); font-size: 16px; margin: 0; }
+			section { margin-bottom: 56px; scroll-margin-top: 24px; }
+			section > h2 {
+				font-size: 24px;
+				margin: 0 0 6px;
+				padding-bottom: 10px;
+				border-bottom: 1px solid var(--border);
+			}
+			section h3 { font-size: 18px; margin: 28px 0 8px; color: var(--accent-2); }
+			p { color: #cdd3df; }
+			code {
+				background: var(--panel-2);
+				padding: 2px 6px;
+				border-radius: 5px;
+				font-size: 0.88em;
+				color: var(--accent);
+				font-family: 'SF Mono', Consolas, monospace;
+			}
+			pre {
+				background: var(--panel-2);
+				border: 1px solid var(--border);
+				border-radius: var(--radius);
+				padding: 16px 18px;
+				overflow-x: auto;
+				font-size: 13.5px;
+				line-height: 1.6;
+			}
+			pre code { background: none; padding: 0; color: var(--text); }
+			table {
+				width: 100%;
+				border-collapse: collapse;
+				margin: 16px 0;
+				font-size: 14px;
+			}
+			th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+			th { color: var(--accent-2); font-weight: 600; }
+			td code { font-size: 0.85em; }
+			ul { padding-left: 22px; }
+			li { margin: 6px 0; color: #cdd3df; }
+			.callout {
+				border-left: 3px solid var(--accent);
+				background: var(--panel);
+				padding: 14px 18px;
+				border-radius: 0 var(--radius) var(--radius) 0;
+				margin: 18px 0;
+			}
+			.callout.warn { border-color: var(--warn); }
+			.callout.danger { border-color: var(--danger); }
+			.callout strong { color: var(--text); }
+
+			/* step badge */
+			.step-num {
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				width: 28px;
+				height: 28px;
+				border-radius: 8px;
+				background: var(--panel-2);
+				border: 1px solid var(--border);
+				color: var(--accent);
+				font-size: 14px;
+				font-weight: 600;
+				margin-right: 10px;
+				vertical-align: middle;
+			}
+			.tag {
+				display: inline-block;
+				font-family: 'SF Mono', Consolas, monospace;
+				font-size: 12px;
+				padding: 2px 8px;
+				border-radius: 6px;
+				border: 1px solid var(--border);
+				background: var(--panel-2);
+				color: var(--accent-2);
+			}
+			.tag.put { color: #86efac; }
+			.tag.get { color: var(--accent-2); }
+			.tag.del { color: var(--danger); }
+
+			/* diagram card */
+			.diagram {
+				position: relative;
+				background: var(--panel);
+				border: 1px solid var(--border);
+				border-radius: var(--radius);
+				padding: 20px;
+				margin: 20px 0;
+			}
+			.diagram .bar {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				margin-bottom: 12px;
+			}
+			.diagram .bar span { font-size: 13px; color: var(--muted); }
+			.diagram .zoom-btn {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				background: var(--panel-2);
+				border: 1px solid var(--border);
+				color: var(--accent);
+				border-radius: 8px;
+				padding: 6px 12px;
+				font-size: 12.5px;
+				cursor: pointer;
+				transition: all 0.15s;
+			}
+			.diagram .zoom-btn:hover { background: #262b37; border-color: var(--accent); }
+			.diagram .mermaid {
+				text-align: center;
+				cursor: zoom-in;
+				overflow-x: auto;
+			}
+			.diagram .mermaid svg { max-width: 100%; height: auto; }
+
+			/* modal viewer */
+			.viewer {
+				position: fixed;
+				inset: 0;
+				background: rgba(8, 10, 14, 0.96);
+				display: none;
+				z-index: 1000;
+				flex-direction: column;
+			}
+			.viewer.open { display: flex; }
+			.viewer-bar {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				padding: 14px 20px;
+				border-bottom: 1px solid var(--border);
+				background: var(--panel);
+			}
+			.viewer-bar .title { font-size: 14px; color: var(--muted); }
+			.viewer-controls { display: flex; gap: 8px; }
+			.viewer-controls button {
+				background: var(--panel-2);
+				border: 1px solid var(--border);
+				color: var(--text);
+				width: 38px;
+				height: 38px;
+				border-radius: 8px;
+				font-size: 18px;
+				cursor: pointer;
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+			}
+			.viewer-controls button:hover { border-color: var(--accent); color: var(--accent); }
+			.viewer-stage {
+				flex: 1;
+				overflow: hidden;
+				cursor: grab;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				touch-action: none;
+			}
+			.viewer-stage.grabbing { cursor: grabbing; }
+			.viewer-stage svg {
+				transform-origin: 0 0;
+				will-change: transform;
+				max-width: none !important;
+				height: auto;
+			}
+			.viewer-hint {
+				position: absolute;
+				bottom: 18px;
+				left: 50%;
+				transform: translateX(-50%);
+				background: var(--panel);
+				border: 1px solid var(--border);
+				border-radius: 20px;
+				padding: 8px 18px;
+				font-size: 12.5px;
+				color: var(--muted);
+			}
+			@media (max-width: 860px) {
+				nav { display: none; }
+				main { padding: 24px 18px 80px; }
+			}
+		</style>
+	</head>
+	<body>
+		<div class="layout">
+			<nav id="toc">
+				<a class="back" href="./architecture.html">← กลับไป Architecture</a>
+				<h2>สารบัญ</h2>
+				<a href="#intro">ภาพรวม</a>
+				<a href="#prereq">ก่อนเริ่ม — Admin Client</a>
+				<a href="#flow">ภาพรวม Flow</a>
+				<a href="#step1">1 · สร้าง Database</a>
+				<a href="#step2">2 · ตั้ง _security</a>
+				<a href="#step3">3 · Design Doc</a>
+				<a href="#step4">4 · สร้าง User</a>
+				<a href="#step5">5 · Grant Access</a>
+				<a href="#rev">เรื่อง _rev</a>
+				<a href="#status">Status Codes</a>
+				<a href="#cheatsheet">Cheat Sheet</a>
+			</nav>
+
+			<main>
+				<header class="hero">
+					<h1>ขั้นตอนสร้าง Database ใน CouchDB</h1>
+					<p>คู่มือทีละขั้น ตาม pattern จริงในโปรเจคนี้ — สร้าง DB → ตั้งสิทธิ์ → design doc → user → grant access</p>
+				</header>
+
+				<section id="intro">
+					<h2>ภาพรวม</h2>
+					<p>
+						CouchDB เป็น REST API ล้วน — สร้าง database = ส่ง HTTP request ไม่มี schema
+						ไม่ต้อง migration ทุกอย่างคุยผ่าน HTTP method (<code>PUT</code> / <code>GET</code> /
+						<code>DELETE</code>) ตรงไปยัง URL ของ resource
+					</p>
+					<div class="callout">
+						<strong>หลักสำคัญ:</strong> ทุก privileged call ต้องผ่าน admin client ฝั่ง server
+						(<code>web/src/lib/server/couch-admin.ts</code>) เพื่อไม่ให้ admin password หลุดไปฝั่ง browser
+						โค้ดในเอกสารนี้อ้างอิงจาก <code>api/register/+server.ts</code> และ
+						<code>api/admin/demo/+server.ts</code>
+					</div>
+				</section>
+
+				<section id="prereq">
+					<h2>ก่อนเริ่ม — Admin Client</h2>
+					<p>
+						admin URL พร้อม credential เก็บใน private env var <code>COUCHDB_ADMIN_URL</code>
+						ไม่ถูก bundle ไป browser มี helper 2 ตัว:
+					</p>
+					<table>
+						<thead>
+							<tr><th>Helper</th><th>พฤติกรรม</th><th>ใช้ตอน</th></tr>
+						</thead>
+						<tbody>
+							<tr><td><code>adminRaw(path, method, body?)</code></td><td>คืน <code>{ status, data }</code> ไม่ throw แม้ HTTP error</td><td>ต้องเช็ค status เอง (เช่น 412 = มีอยู่แล้ว)</td></tr>
+							<tr><td><code>adminFetch&lt;T&gt;(path, init?)</code></td><td>parse JSON แล้ว throw reason ของ CouchDB ถ้า error</td><td>อยากให้ fail ทันทีเมื่อพลาด</td></tr>
+						</tbody>
+					</table>
+					<pre><code>// ทุก step ข้างล่างเรียกผ่านสองตัวนี้
+import { adminRaw, adminFetch } from '$lib/server/couch-admin';</code></pre>
+				</section>
+
+				<section id="flow">
+					<h2>ภาพรวม Flow</h2>
+					<p>ลำดับการ setup ทั้งระบบ — จากสร้าง DB จนพร้อมใช้งาน (อ้างอิง <code>setupDemo()</code>)</p>
+					<div class="diagram">
+						<div class="bar">
+							<span>รูปที่ 1 — ลำดับการสร้างและตั้งค่า database</span>
+							<button class="zoom-btn" data-zoom>🔍 ขยาย</button>
+						</div>
+						<div class="mermaid">
+flowchart TB
+    A["PUT /{db}<br/>สร้าง database"] --> B["PUT /{db}/_security<br/>ตั้งว่าใครเข้าได้"]
+    B --> C["PUT /{db}/_design/{name}<br/>validate_doc_update (optional)"]
+    C --> D["PUT /_users/org.couchdb.user:{name}<br/>สร้าง user"]
+    D --> E["อ่าน _security เดิม<br/>เพิ่มชื่อ user เข้า members.names"]
+    E --> F["PUT /{db}/{docId}<br/>seed เอกสารตั้งต้น"]
+    classDef db fill:#134e4a,stroke:#5eead4,color:#e6e9ef;
+    classDef sec fill:#1e3a5f,stroke:#7dd3fc,color:#e6e9ef;
+    classDef usr fill:#3b3052,stroke:#c4b5fd,color:#e6e9ef;
+    class A,F db;
+    class B,C,E sec;
+    class D usr;
+						</div>
+					</div>
+				</section>
+
+				<section id="step1">
+					<h2><span class="step-num">1</span>สร้าง Database</h2>
+					<p><span class="tag put">PUT</span> <code>/{dbname}</code> — แค่นี้ database ก็เกิด</p>
+					<pre><code>const { status, data } = await adminRaw('/notes', 'PUT');
+// status 201 → สร้างสำเร็จ
+// status 412 → มีอยู่แล้ว (Precondition Failed) → ข้ามได้
+// อื่นๆ        → error, ดู data.reason</code></pre>
+					<div class="callout">
+						<strong>ชื่อ database:</strong> ตัวพิมพ์เล็ก เริ่มด้วยตัวอักษร ใช้ได้แค่
+						<code>a-z 0-9 _ $ ( ) + - /</code> ชื่อขึ้นต้น <code>_</code> สงวนไว้ให้ระบบ
+						(เช่น <code>_users</code>, <code>_replicator</code>)
+					</div>
+				</section>
+
+				<section id="step2">
+					<h2><span class="step-num">2</span>ตั้ง _security — ใครเข้าได้</h2>
+					<p>
+						<span class="tag put">PUT</span> <code>/{dbname}/_security</code> —
+						database เปล่าใครก็เข้าได้ ต้องตั้ง <code>_security</code> เพื่อจำกัดสิทธิ์
+					</p>
+					<pre><code>const sec = {
+  admins:  { names: [], roles: [] },
+  members: { names: [], roles: ['team:alpha'] }
+};
+await adminRaw('/demo_alpha/_security', 'PUT', sec);</code></pre>
+					<ul>
+						<li><code>members.names</code> — รายชื่อ user ที่เข้าได้ (รายคน)</li>
+						<li><code>members.roles</code> — role ที่เข้าได้ (เช่น <code>team:alpha</code>)</li>
+						<li><code>admins</code> — ใครแก้ design doc / security ของ DB นี้ได้</li>
+						<li>ปล่อยว่างทั้งหมด → ใครก็เข้าได้</li>
+					</ul>
+					<div class="callout warn">
+						<strong>ระวัง:</strong> ชื่อที่ไม่อยู่ใน <code>members</code> โดน CouchDB reject <code>403</code>
+						ทันทีตั้งแต่ชั้น API — ก่อนถึง frontend ด้วยซ้ำ
+					</div>
+				</section>
+
+				<section id="step3">
+					<h2><span class="step-num">3</span>Design Doc — Validation (optional)</h2>
+					<p>
+						<span class="tag put">PUT</span> <code>/{dbname}/_design/{name}</code> —
+						ใส่ <code>validate_doc_update</code> เพื่อบังคับกฎตอนเขียนทุก doc
+						(เช่น กันเขียนข้าม team)
+					</p>
+					<pre><code>const validateFn = `function(newDoc, oldDoc, userCtx) {
+  if (userCtx.roles.indexOf('_admin') !== -1) return;
+  var team = newDoc.team;
+  if (!team) throw({ forbidden: 'team field required' });
+  if (userCtx.roles.indexOf('team:' + team) === -1)
+    throw({ forbidden: 'Access denied: requires role team:' + team });
+}`;
+
+// update ต้องแนบ _rev เดิม → GET ก่อน
+const { data: existing } = await adminRaw('/demo_shared/_design/access', 'GET');
+const rev = existing?._rev;
+await adminRaw('/demo_shared/_design/access', 'PUT', {
+  _id: '_design/access',
+  ...(rev ? { _rev: rev } : {}),
+  validate_doc_update: validateFn
+});</code></pre>
+					<div class="callout">
+						<strong>เมื่อไหร่ใช้:</strong> ข้ามได้ถ้าคุม access ระดับ DB ด้วย <code>_security</code> พอแล้ว
+						ใช้ design doc เมื่อต้องการกฎ <em>ภายใน</em> DB (เช่น 1 DB หลาย team)
+					</div>
+				</section>
+
+				<section id="step4">
+					<h2><span class="step-num">4</span>สร้าง User</h2>
+					<p>
+						user เก็บใน database พิเศษ <code>_users</code> — doc id ต้องขึ้นต้น
+						<code>org.couchdb.user:</code>
+					</p>
+					<pre><code>await adminFetch(
+  `/_users/org.couchdb.user:${encodeURIComponent(username)}`,
+  {
+    method: 'PUT',
+    body: JSON.stringify({
+      name: username,
+      password,           // CouchDB hash ให้เอง
+      roles: [],          // เช่น ['team:alpha']
+      type: 'user'        // ต้องมี
+    })
+  }
+);</code></pre>
+					<div class="callout warn">
+						<strong>ต้องครบ:</strong> <code>name</code>, <code>type: 'user'</code>, และ doc id
+						ที่ขึ้นต้น <code>org.couchdb.user:</code> ขาดอย่างใดอย่างหนึ่ง CouchDB reject
+					</div>
+				</section>
+
+				<section id="step5">
+					<h2><span class="step-num">5</span>Grant Access — ให้ User เข้า DB</h2>
+					<p>
+						เพิ่ม user เข้า DB ที่มีอยู่แล้ว = อ่าน <code>_security</code> เดิม → push ชื่อ →
+						PUT กลับ (อ้างอิง <code>grantNotesAccess()</code>)
+					</p>
+					<pre><code>async function grantNotesAccess(username) {
+  const security = await adminFetch('/notes/_security');
+  security.members ??= { names: [], roles: [] };
+  security.members.names ??= [];
+  if (!security.members.names.includes(username)) {
+    security.members.names.push(username);
+  }
+  await adminFetch('/notes/_security', {
+    method: 'PUT',
+    body: JSON.stringify(security)
+  });
+}</code></pre>
+					<div class="callout">
+						<strong>Pattern read-modify-write:</strong> อ่านของเดิมมาก่อนเสมอ แล้วแก้เฉพาะ field
+						ที่ต้องการ — ไม่งั้นจะเขียนทับ members เดิมหาย
+					</div>
+				</section>
+
+				<section id="rev">
+					<h2>เรื่อง _rev — กฎเหล็ก</h2>
+					<p>
+						CouchDB ใช้ MVCC — ทุก document มี <code>_rev</code> การ <strong>แก้</strong> หรือ
+						<strong>ลบ</strong> doc ที่มีอยู่แล้ว <em>ต้องแนบ</em> <code>_rev</code> ล่าสุด
+						ไม่งั้นได้ <code>409 Conflict</code>
+					</p>
+					<pre><code>// แก้ doc → GET เอา _rev ก่อนเสมอ
+const { data } = await adminRaw('/db/doc-id', 'GET');
+await adminRaw('/db/doc-id', 'PUT', { ...body, _rev: data._rev });
+
+// ลบ doc → ส่ง rev เป็น query param
+await adminRaw(`/db/doc-id?rev=${data._rev}`, 'DELETE');</code></pre>
+					<div class="callout danger">
+						<strong>สร้างใหม่ vs แก้:</strong> สร้าง doc ครั้งแรก = ไม่ต้องมี <code>_rev</code> ·
+						แก้ของเดิม = ต้องมี <code>_rev</code> — โค้ดในโปรเจค GET ก่อนทุกครั้งเพื่อรองรับทั้งสองกรณี
+						(<code>rev ? { _rev: rev } : {}</code>)
+					</div>
+				</section>
+
+				<section id="status">
+					<h2>Status Codes ที่เจอบ่อย</h2>
+					<table>
+						<thead>
+							<tr><th>Code</th><th>ความหมาย</th><th>ทำยังไง</th></tr>
+						</thead>
+						<tbody>
+							<tr><td><code>201</code></td><td>สร้าง DB / doc สำเร็จ</td><td>ผ่าน</td></tr>
+							<tr><td><code>200</code></td><td>อ่าน / อัปเดตสำเร็จ</td><td>ผ่าน</td></tr>
+							<tr><td><code>412</code></td><td>DB มีอยู่แล้ว (สร้างซ้ำ)</td><td>ข้ามได้ — ถือว่า idempotent</td></tr>
+							<tr><td><code>409</code></td><td>Conflict — <code>_rev</code> ไม่ตรง/ขาด</td><td>GET เอา <code>_rev</code> ล่าสุดมาใหม่</td></tr>
+							<tr><td><code>401</code></td><td>ไม่ได้ auth</td><td>เช็ค <code>COUCHDB_ADMIN_URL</code> / cookie</td></tr>
+							<tr><td><code>403</code></td><td>ไม่มีสิทธิ์ (_security กัน)</td><td>เพิ่มชื่อใน members หรือใช้ admin</td></tr>
+						</tbody>
+					</table>
+				</section>
+
+				<section id="cheatsheet">
+					<h2>Cheat Sheet</h2>
+					<table>
+						<thead>
+							<tr><th>ต้องการ</th><th>Method + Path</th></tr>
+						</thead>
+						<tbody>
+							<tr><td>สร้าง database</td><td><span class="tag put">PUT</span> <code>/{db}</code></td></tr>
+							<tr><td>ลบ database</td><td><span class="tag del">DELETE</span> <code>/{db}</code></td></tr>
+							<tr><td>เช็ค DB / ดู info</td><td><span class="tag get">GET</span> <code>/{db}</code></td></tr>
+							<tr><td>ตั้งสิทธิ์</td><td><span class="tag put">PUT</span> <code>/{db}/_security</code></td></tr>
+							<tr><td>ดูสิทธิ์</td><td><span class="tag get">GET</span> <code>/{db}/_security</code></td></tr>
+							<tr><td>design doc</td><td><span class="tag put">PUT</span> <code>/{db}/_design/{name}</code></td></tr>
+							<tr><td>สร้าง/แก้ doc</td><td><span class="tag put">PUT</span> <code>/{db}/{docId}</code></td></tr>
+							<tr><td>สร้าง user</td><td><span class="tag put">PUT</span> <code>/_users/org.couchdb.user:{name}</code></td></tr>
+							<tr><td>เช็ค session ปัจจุบัน</td><td><span class="tag get">GET</span> <code>/_session</code></td></tr>
+						</tbody>
+					</table>
+				</section>
+			</main>
+		</div>
+
+		<!-- fullscreen pan/zoom viewer -->
+		<div class="viewer" id="viewer">
+			<div class="viewer-bar">
+				<span class="title" id="viewerTitle">Diagram</span>
+				<div class="viewer-controls">
+					<button data-act="out" title="ซูมออก">−</button>
+					<button data-act="in" title="ซูมเข้า">+</button>
+					<button data-act="reset" title="รีเซ็ต">⤢</button>
+					<button data-act="close" title="ปิด">✕</button>
+				</div>
+			</div>
+			<div class="viewer-stage" id="stage">
+				<div id="stageInner"></div>
+			</div>
+			<div class="viewer-hint">เลื่อนล้อเมาส์ = ซูม · ลากเมาส์ = แพน · ดับเบิลคลิก = รีเซ็ต · Esc = ปิด</div>
+		</div>
+
+		<script type="module">
+			import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+			mermaid.initialize({
+				startOnLoad: true,
+				theme: 'dark',
+				themeVariables: {
+					background: '#171a23',
+					primaryColor: '#1e222d',
+					primaryTextColor: '#e6e9ef',
+					primaryBorderColor: '#2a2f3a',
+					lineColor: '#5eead4',
+					fontFamily: "'Noto Sans Thai', -apple-system, sans-serif"
+				},
+				flowchart: { curve: 'basis', htmlLabels: true },
+				securityLevel: 'loose'
+			});
+			await mermaid.run();
+
+			/* ---- fullscreen pan/zoom viewer ---- */
+			const viewer = document.getElementById('viewer');
+			const stage = document.getElementById('stage');
+			const inner = document.getElementById('stageInner');
+			const titleEl = document.getElementById('viewerTitle');
+			let scale = 1, tx = 0, ty = 0, dragging = false, sx = 0, sy = 0;
+
+			function apply() {
+				const svg = inner.querySelector('svg');
+				if (svg) svg.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+			}
+			function reset() {
+				const svg = inner.querySelector('svg');
+				if (!svg) return;
+				const sb = stage.getBoundingClientRect();
+				const vb = svg.getBoundingClientRect();
+				const natW = svg.viewBox?.baseVal?.width || vb.width;
+				const natH = svg.viewBox?.baseVal?.height || vb.height;
+				const fit = Math.min((sb.width * 0.92) / natW, (sb.height * 0.92) / natH);
+				scale = fit > 0 && isFinite(fit) ? fit : 1;
+				tx = (sb.width - natW * scale) / 2;
+				ty = (sb.height - natH * scale) / 2;
+				apply();
+			}
+			function open(mermaidEl, title) {
+				const svg = mermaidEl.querySelector('svg');
+				if (!svg) return;
+				inner.innerHTML = '';
+				const clone = svg.cloneNode(true);
+				clone.removeAttribute('style');
+				clone.style.transformOrigin = '0 0';
+				inner.appendChild(clone);
+				titleEl.textContent = title || 'Diagram';
+				viewer.classList.add('open');
+				requestAnimationFrame(reset);
+			}
+			function close() { viewer.classList.remove('open'); }
+
+			document.querySelectorAll('[data-zoom]').forEach((btn) => {
+				btn.addEventListener('click', () => {
+					const card = btn.closest('.diagram');
+					open(card.querySelector('.mermaid'), card.querySelector('.bar span')?.textContent);
+				});
+			});
+			document.querySelectorAll('.diagram .mermaid').forEach((m) => {
+				m.addEventListener('click', () => {
+					const card = m.closest('.diagram');
+					open(m, card.querySelector('.bar span')?.textContent);
+				});
+			});
+
+			stage.addEventListener('wheel', (e) => {
+				e.preventDefault();
+				const rect = stage.getBoundingClientRect();
+				const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+				const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+				const ns = Math.min(Math.max(scale * factor, 0.1), 12);
+				tx = mx - (mx - tx) * (ns / scale);
+				ty = my - (my - ty) * (ns / scale);
+				scale = ns;
+				apply();
+			}, { passive: false });
+
+			stage.addEventListener('pointerdown', (e) => {
+				dragging = true; sx = e.clientX - tx; sy = e.clientY - ty;
+				stage.classList.add('grabbing'); stage.setPointerCapture(e.pointerId);
+			});
+			stage.addEventListener('pointermove', (e) => {
+				if (!dragging) return;
+				tx = e.clientX - sx; ty = e.clientY - sy; apply();
+			});
+			stage.addEventListener('pointerup', () => { dragging = false; stage.classList.remove('grabbing'); });
+			stage.addEventListener('dblclick', reset);
+
+			viewer.querySelectorAll('[data-act]').forEach((b) => {
+				b.addEventListener('click', () => {
+					const a = b.dataset.act;
+					if (a === 'close') return close();
+					if (a === 'reset') return reset();
+					const rect = stage.getBoundingClientRect();
+					const cx = rect.width / 2, cy = rect.height / 2;
+					const factor = a === 'in' ? 1.3 : 1 / 1.3;
+					const ns = Math.min(Math.max(scale * factor, 0.1), 12);
+					tx = cx - (cx - tx) * (ns / scale);
+					ty = cy - (cy - ty) * (ns / scale);
+					scale = ns; apply();
+				});
+			});
+			window.addEventListener('keydown', (e) => {
+				if (e.key === 'Escape' && viewer.classList.contains('open')) close();
+			});
+
+			/* ---- scrollspy TOC ---- */
+			const links = [...document.querySelectorAll('#toc a:not(.back)')];
+			const map = new Map(links.map((l) => [l.getAttribute('href').slice(1), l]));
+			const obs = new IntersectionObserver((entries) => {
+				entries.forEach((en) => {
+					if (en.isIntersecting) {
+						links.forEach((l) => l.classList.remove('active'));
+						map.get(en.target.id)?.classList.add('active');
+					}
+				});
+			}, { rootMargin: '-20% 0px -70% 0px' });
+			document.querySelectorAll('section[id]').forEach((s) => obs.observe(s));
+		</script>
+	</body>
+</html>
