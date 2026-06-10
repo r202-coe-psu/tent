@@ -1,0 +1,424 @@
+---
+title: Smart Shelter — Full-System Data Model (CouchDB / PouchDB)
+summary: Canonical data design — db-per-shelter, type-discriminated docs, append-only events, map/reduce read models, MVCC conflict policy. แทน MongoDB schema เดิมทั้งหมด
+badges: CouchDB, PouchDB, Data Model, v2.0, Draft
+lang: th
+footer: Smart Shelter Full-System · Data Model
+---
+
+# Smart Shelter — Full-System Data Model (CouchDB/PouchDB)
+
+> Design spec กลางสำหรับ Smart Shelter **full-system** ทุก module (Core, Household&Zoning,
+> Supply&Inventory, Donation, Kitchen&Food, Volunteer, SOP&Resource Calc, Security, Referral,
+> EOC+Open API, Family Search). รวม baseline people/core + operations layer เป็น **28 doc types**.
+>
+> **SoT = CouchDB replication graph** (multi-master). Offline boundary = PouchDB ⇄ CouchDB
+> (PouchDB เป็น store จริง ไม่ใช่ staging). สถาปัตยกรรมเต็มดูที่
+> [architecture](../architecture/architecture.html). last designed: 2026-06-06
+
+---
+
+## 0. หลักการแปลงจาก MongoDB
+
+| MongoDB เดิม | CouchDB/PouchDB ใหม่ |
+| --- | --- |
+| collection | **database-per-shelter** (`shelter-<code>`) + ฟิลด์ `type` แยกชนิด doc |
+| `_id: ObjectId` | `_id: string` typed prefix เช่น `evacuee:P-SH001-000045` |
+| FK = ObjectId ref | `_id` string ของ doc ปลายทาง (ฟิลด์ `*_id`) |
+| `createIndex` | **Mango `_index`** + `_design` map/reduce **views** |
+| denormalized read model (เขียนทับ) | **reduce view** (ไม่เก็บ mutable doc ที่ชนกันได้) |
+| atomic counter (`$inc`) | central-mint official code (offline ใช้ uuid ชั่วคราว) |
+| unique key | deterministic `_id` (เช่น `idempotency_key` เป็น `_id`) |
+| update overwrite | `_rev` MVCC; event/ledger = immutable (append doc ใหม่) |
+
+หลักการ domain ที่คงเดิม: **evacuee = sensitive core** · **ledger/event = append-only** ·
+**aggregate = computed read model** · **ratio/standard = config ไม่ hardcode ต่อ shelter**
+
+---
+
+## 1. Database & doc-type map
+
+**Per-shelter db `shelter-<code>`** ถือ doc หลายชนิดแยกด้วย `type`. **Global db**
+(`catalog`, `sop-profiles`, `config`, `_users`) replicate central→edge แบบ pull.
+**Central-only**: `eoc-aggregates`, `audit`, `exports`
+
+| # | Module | FR | Doc types (`type=…`) | DB |
+| --- | --- | --- | --- | --- |
+| 1 | Platform/Core | FR-34 | user, id_mint, audit, export_job, import_batch | _users / config / central |
+| 2 | Household & Zoning | FR-21..26 | evacuee, evacuee_medical, household, movement, shelter(.zones) | shelter-* |
+| 3 | Supply & Inventory | FR-27..31 | supply_item★(catalog), stock_ledger★, stock_transfer★ | catalog + shelter-* |
+| 4 | Donation | FR-32..38 | donation★, donation_campaign★ | shelter-* |
+| 5 | Kitchen & Food | FR-39..41 | meal_plan★, kitchen_requisition★, meal_service★ | shelter-* |
+| 6 | Volunteer | FR-42..43 | volunteer★, shift_assignment★ | shelter-* |
+| 7 | SOP & Resource Calc | FR-44..46,54 | sop_profile★, resource_calc★ | sop-profiles + shelter-* |
+| 8 | Security | FR-47 | security_event★ | shelter-* |
+| 9 | Referral | FR-48 | referral★ | shelter-* |
+| 10 | EOC + Open API | FR-49..51 | api_key★, eoc_aggregate★ | config + central |
+| 11 | Family Search | FR-52..53 | evacuee.privacy.consent, search_audit★ | shelter-* / central |
+| — | Dashboard/balances (cross) | — | **view** (ไม่ใช่ doc) | computed |
+
+**28 doc types:** user, shelter, evacuee, evacuee_medical, household, movement, security_event,
+import_batch, export_job, id_mint, audit, sop_profile, resource_calc, supply_item, stock_ledger,
+stock_transfer, donation, donation_campaign, meal_plan, kitchen_requisition, meal_service,
+volunteer, shift_assignment, referral, api_key, eoc_aggregate, search_audit
+*(+ stock_balances/dashboard/occupancy = reduce views, ไม่นับเป็น doc type)*
+
+> **เปลี่ยนสำคัญ:** `offline_submissions` **ถูกตัด** — PouchDB local store เป็น queue เอง.
+> `stock_balances` + `dashboard_summaries` เดิมเป็น collection → ตอนนี้เป็น **reduce view**
+> บน stock_ledger/movement (กัน write conflict)
+
+---
+
+## 2. Read models = views (ไม่ใช่ doc)
+
+เดิม stock_balances / dashboard_summaries / occupancy เป็น doc ที่ maintain เอง → เสี่ยง
+conflict ใน multi-master. ใหม่ทำเป็น **`_design` map/reduce view**:
+
+```javascript
+// _design/stock/_view/balance — on-hand ต่อ (shelter,item) = sum(signed qty) ของ stock_ledger
+function (doc) {
+  if (doc.type === 'stock_ledger') {
+    emit([doc.shelter_id, doc.item_code], doc.quantity_base);
+  }
+}
+// reduce: _sum  → group_level=2 ได้ balance ปัจจุบัน
+```
+
+| Read model | View | Source |
+| --- | --- | --- |
+| stock balance | `_design/stock/_view/balance` (_sum) — CouchDB | stock_ledger |
+| occupancy | `_design/occupancy/_view/by_shelter` (_sum) — CouchDB | movement (signed) |
+| dashboard summary | **MongoDB read side** (ingest จาก `_changes`) | evacuee, movement, ledger |
+| eoc aggregate | **MongoDB read side** (central worker projection) | per-shelter changes |
+
+- **operational view** (balance/occupancy) = CouchDB `_design` view ใช้หน้างานได้แม้ offline
+- **analytics/dashboard** (dashboard summary, eoc aggregate) = **MongoDB read model** ฝั่ง online —
+  consumer อ่าน CouchDB central `_changes` → aggregation pipeline (ดู [architecture §7](../architecture/architecture.html))
+
+ยอมรับ staleness 1–3 นาที (rebuild view / `_changes` debounce)
+
+---
+
+## 3. Doc-type specs (new types — fields, _id, indexes)
+
+> ทุก doc มี `_id`(string), `_rev`(MVCC), `type`. FK = string `_id` ของ doc ปลายทาง.
+> "UK" เดิม = deterministic `_id`. "Index" = Mango `_index` หรือ `_design` view.
+
+### sop_profile (db `sop-profiles`, config, Module B)
+ratio/standard ของ Sphere/ปภ./custom — ไม่ hardcode ต่อ shelter. shelter อ้างผ่าน `profile_key`.
+```json
+{
+  "_id": "sop_profile:sphere",
+  "type": "sop_profile",
+  "profile_key": "sphere",
+  "name": "Sphere 2018", "version": "2018",
+  "ratios": {
+    "covered_area_sqm_per_person": 3.5, "site_area_sqm_per_person": 45,
+    "water_liters_per_person_day": 15, "persons_per_water_point": 250,
+    "persons_per_toilet": 20, "toilet_female_male_ratio": "3:1",
+    "persons_per_bathing_unit": 50, "households_per_waste_bin": 10,
+    "meals_per_person_day": 3, "kcal_per_person_day": 2100, "volunteers_per_100_persons": 5
+  },
+  "checklist": ["has_health_point","has_isolation_area","has_child_friendly_space","has_women_safe_space"],
+  "is_active": true, "created_at": "2026-06-06T00:00:00Z"
+}
+```
+`_id` = `sop_profile:<profile_key>` (unique โดยธรรมชาติ). read-mostly; replicate central→edge.
+
+### resource_calc (shelter db, read model, Module B — FR-45/46/54)
+ผล daily resource calc engine + what-if snapshot ต่อ shelter ต่อวัน.
+```json
+{
+  "_id": "resource_calc:SH001:2026-06-06:actual",
+  "type": "resource_calc",
+  "shelter_id": "shelter:SH001",
+  "calc_date": "2026-06-06", "scenario": "actual",
+  "profile_key": "sphere",
+  "input": { "current_evacuees": 527, "household_count": 173, "horizon_days": 3 },
+  "requirements": [
+    { "resource": "water_liters", "per_day": 7905, "for_horizon": 23715, "available": 6000, "gap": 17715, "status": "fail" },
+    { "resource": "meals", "per_day": 1581, "available_stock_days": 1.2, "status": "warning" },
+    { "resource": "toilets", "required": 27, "available": 30, "gap": -3, "status": "pass" }
+  ],
+  "overall_status": "fail",
+  "generated_by": "engine", "generated_at": "2026-06-06T01:00:00Z"
+}
+```
+`_id` encode (shelter,date,scenario) → idempotent regen. what_if rows prune ได้. depends on stock balance view + occupancy.
+
+### supply_item (db `catalog`, master, Module C — FR-27)
+catalog กลาง ไม่ผูก shelter.
+```json
+{
+  "_id": "supply_item:WTR-500", "type": "supply_item",
+  "item_code": "WTR-500", "name": "น้ำดื่ม 500ml",
+  "category": "water", "unit": "bottle", "unit_to_base": { "case": 12 },
+  "is_consumable": true, "reorder_default": 1000, "is_active": true
+}
+```
+Mango index: `{category:1}`. replicate central→edge (pull).
+
+### stock_ledger (shelter db, append-only, Module C — FR-28/29/30)
+ledger ทุกการเคลื่อนไหว stock. **immutable** — แก้ด้วย reversal entry. `_id` = idempotency_key → dedup ข้าม replica.
+```json
+{
+  "_id": "stock_ledger:<idempotency_key>",
+  "type": "stock_ledger",
+  "shelter_id": "shelter:SH001",
+  "item_id": "supply_item:WTR-500", "item_code": "WTR-500",
+  "entry_type": "receive",
+  "quantity_base": 480,
+  "ref": { "source": "donation", "ref_id": "donation:SH001:000031", "ref_code": "DN-SH001-000031" },
+  "reason": null, "actor_user_id": "user:abc",
+  "created_at": "2026-06-06T02:00:00Z"
+}
+```
+Mango: `{shelter_id, item_id, created_at}`, `{"ref.ref_id"}`. balance = `_sum` view (ไม่เก็บ balance_after เพื่อกัน drift). **ไม่มี conflict** (immutable + deterministic `_id`).
+
+### stock_transfer (shelter db, Module C — FR-30)
+inter-shelter transfer 2-phase (dispatch → confirm). อยู่ทั้ง 2 shelter db (replicate ผ่าน central).
+```json
+{
+  "_id": "stock_transfer:TRF-000014", "type": "stock_transfer",
+  "transfer_code": "TRF-000014",
+  "from_shelter_id": "shelter:SH001", "to_shelter_id": "shelter:SH002",
+  "lines": [{ "item_id": "supply_item:WTR-500", "item_code": "WTR-500", "quantity_base": 240 }],
+  "status": "in_transit",
+  "dispatched_by": "user:x", "dispatched_at": "2026-06-06T03:00:00Z",
+  "received_by": null, "received_at": null, "received_lines": [],
+  "ledger_out_ids": ["stock_ledger:..."], "ledger_in_ids": []
+}
+```
+transfer_out post ledger ที่ from; transfer_in post ที่ to ตอน confirm (idempotent ผ่าน `_id` ledger).
+
+### donation (shelter db, Module Donation — FR-32/33)
+donor pre-declaration + intake. **No-auth donor surface (FD-16)** — track ด้วย token.
+```json
+{
+  "_id": "donation:SH001:000031", "type": "donation",
+  "donation_code": "DN-SH001-000031",
+  "tracking_token": "k7mQ2x9fP3wRtY8b",
+  "shelter_id": "shelter:SH001", "campaign_id": "donation_campaign:CMP-000005",
+  "donor": {
+    "name": "...", "phone_masked": "08****567", "phone_verified": true,
+    "type": "individual", "is_anonymous": false
+  },
+  "declared_lines": [{ "item_code": "WTR-500", "name": "น้ำดื่ม", "quantity": 480, "unit": "bottle" }],
+  "status": "received", "redirect_to_shelter_id": null,
+  "intake": { "received_by": "user:y", "received_at": "...", "matched_item_ids": [], "ledger_ids": [], "discrepancy_note": null },
+  "source_channel": "qr", "created_at": "2026-06-06T04:00:00Z"
+}
+```
+Mango: `{tracking_token}` (public lookup), `{shelter_id,status,created_at}`, `{campaign_id}`.
+- **Public track (FD-16)** ผ่าน FastAPI lookup ด้วย `tracking_token` เท่านั้น — **ห้าม** lookup ด้วย sequential `donation_code` (enumerable)
+- `tracking_token` CSPRNG ≥16 char สร้าง client ได้; no-auth write = rate-limit + CAPTCHA + OTP (NFR-24)
+- transparency report (FR-38) = view aggregate 24h (masked donor)
+
+### donation_campaign (shelter db, Module Donation — FR-35/36/37)
+reservation quota vs stock, auto cut-off, smart redirect.
+```json
+{
+  "_id": "donation_campaign:CMP-000005", "type": "donation_campaign",
+  "campaign_code": "CMP-000005", "shelter_id": "shelter:SH001",
+  "title": "ขาดน้ำดื่ม ศูนย์บางปลา",
+  "targets": [{ "item_code": "WTR-500", "target_qty": 10000, "reserved_qty": 6400, "received_qty": 5200 }],
+  "status": "open", "auto_close_at_target": true, "cutoff_at": null,
+  "redirect_policy": { "enabled": true, "to_under_threshold": true },
+  "public_qr_token": "...", "opened_at": "...", "closed_at": null
+}
+```
+cut-off engine (central worker) ปิดเมื่อ received≥target; redirect เทียบ stock balance view.
+
+### meal_plan (shelter db, Module D — FR-39)
+```json
+{
+  "_id": "meal_plan:SH001:2026-06-06", "type": "meal_plan",
+  "shelter_id": "shelter:SH001", "plan_date": "2026-06-06", "profile_key": "sphere",
+  "occupancy_snapshot": 527,
+  "diet_breakdown": { "regular": 480, "halal": 40, "medical": 7 },
+  "planned_meals": [{ "meal": "breakfast", "portions": 527 }, { "meal": "lunch", "portions": 527 }, { "meal": "dinner", "portions": 527 }],
+  "estimated_ingredients": [{ "item_code": "RICE-1", "quantity_base": 79, "unit": "kg" }],
+  "status": "planned", "generated_at": "..."
+}
+```
+`_id` encode (shelter,plan_date). depends on resource_calc + evacuee.food_profile.
+
+### kitchen_requisition (shelter db, Module D — FR-40)
+เบิกของเข้าครัว → deduct stock (post ledger distribute).
+```json
+{
+  "_id": "kitchen_requisition:REQ-000022", "type": "kitchen_requisition",
+  "requisition_code": "REQ-000022", "shelter_id": "shelter:SH001",
+  "meal_plan_id": "meal_plan:SH001:2026-06-06",
+  "lines": [{ "item_id": "supply_item:RICE-1", "item_code": "RICE-1", "quantity_base": 79, "ledger_id": "stock_ledger:..." }],
+  "status": "issued", "requested_by": "user:a", "issued_by": "user:b", "issued_at": "..."
+}
+```
+issue → stock_ledger entry_type=distribute, source=kitchen_requisition.
+
+### meal_service (shelter db, Module D — FR-41)
+```json
+{
+  "_id": "meal_service:SH001:2026-06-06:lunch", "type": "meal_service",
+  "shelter_id": "shelter:SH001", "meal_plan_id": "meal_plan:SH001:2026-06-06",
+  "service_date": "2026-06-06", "meal": "lunch",
+  "served_portions": 510, "waste_portions": 12, "external_donated_portions": 0,
+  "note": null, "recorded_by": "user:c", "recorded_at": "..."
+}
+```
+`_id` encode (shelter,date,meal).
+
+### volunteer (shelter db, Module A — FR-42)
+แยกจาก user (อาสาอาจไม่มี login).
+```json
+{
+  "_id": "volunteer:VOL-000045", "type": "volunteer",
+  "volunteer_code": "VOL-000045", "shelter_id": "shelter:SH001", "user_id": null,
+  "name": "...", "phone_masked": "08****567",
+  "skills": ["first_aid","cooking","translation_burmese"],
+  "availability": [{ "day": "mon", "from": "08:00", "to": "16:00" }],
+  "status": "active", "registered_at": "..."
+}
+```
+Mango: `{shelter_id,status}`, `{shelter_id,skills}`.
+
+### shift_assignment (shelter db, Module A — FR-43)
+```json
+{
+  "_id": "shift_assignment:<uuid>", "type": "shift_assignment",
+  "shelter_id": "shelter:SH001", "volunteer_id": "volunteer:VOL-000045",
+  "task": "kitchen_help", "required_skills": ["cooking"],
+  "shift": { "date": "2026-06-06", "from": "08:00", "to": "12:00" },
+  "status": "assigned", "match_score": 0.92, "assigned_by": "user:d", "assigned_at": "..."
+}
+```
+Mango: `{shelter_id,"shift.date"}`, `{volunteer_id,"shift.date"}` (กันชนเวลา).
+
+### security_event (shelter db, append-only, Module E — FR-47)
+perimeter/safety event. `_id` = idempotency_key → dedup. immutable.
+```json
+{
+  "_id": "security_event:<idempotency_key>", "type": "security_event",
+  "shelter_id": "shelter:SH001",
+  "subject": { "type": "evacuee", "id": "evacuee:P-SH001-000045", "code": "P-SH001-000045" },
+  "event_type": "gate_in", "gate": "north",
+  "incident": null, "headcount": null,
+  "recorded_by": "user:e", "occurred_at": "..."
+}
+```
+Mango: `{shelter_id,occurred_at}`, `{"subject.id",occurred_at}`. ต่างจาก movement (= official check-in/out สำหรับ occupancy); security = perimeter.
+
+### referral (shelter db, Module F — FR-48)
+```json
+{
+  "_id": "referral:REF-000008", "type": "referral",
+  "referral_code": "REF-000008",
+  "from_shelter_id": "shelter:SH001", "to_shelter_id": "shelter:SH002", "to_external": null,
+  "subject": { "type": "household", "id": "household:H-SH001-000012", "code": "H-SH001-000012", "headcount": 4 },
+  "reason": "medical", "priority": "urgent", "status": "pending",
+  "notes_masked": "...",
+  "raised_by": "user:f", "raised_at": "...", "responded_by": null, "responded_at": null
+}
+```
+Mango: `{from_shelter_id,status}`, `{to_shelter_id,status}`. medical note masked per RBAC.
+
+### api_key (db `config`/central, Module EOC — FR-50)
+API-key principal (แทน eoc_viewer role per FD-14). **ใช้ที่ central FastAPI เท่านั้น**.
+```json
+{
+  "_id": "api_key:ak_live_8f...", "type": "api_key",
+  "key_id": "ak_live_8f...", "hashed_secret": "argon2...",
+  "name": "Hat Yai ROD integration", "tier": "eoc",
+  "scopes": ["aggregate:read"], "allowed_shelter_ids": [],
+  "rate_limit": { "rpm": 60, "burst": 120 },
+  "status": "active", "rotated_from": null,
+  "issued_by": "user:admin", "issued_at": "...", "last_used_at": null, "expires_at": null
+}
+```
+ทุก call → audit (entity_type=api_key). versioned endpoint. rate-limit + aggregate-only ทำที่ FastAPI (CouchDB ทำไม่ได้).
+
+### eoc_aggregate (MongoDB read side, central-only, Module EOC — FR-49)
+cross-shelter aggregate read model — **no person drill** (FD-14). เก็บใน **MongoDB** (ฝั่ง read/
+dashboard) ไม่ใช่ CouchDB — สร้างด้วย aggregation pipeline จาก CouchDB `_changes` (architecture §7).
+ตัวอย่าง document:
+```json
+{
+  "_id": "eoc_aggregate:2026-06-06:province:songkhla", "type": "eoc_aggregate",
+  "aggregate_date": "2026-06-06", "scope": "province:songkhla",
+  "generated_at": "...", "shelter_count": 12,
+  "totals": { "occupancy": 4821, "capacity": 6000, "households": 1503,
+    "demographic_counts": { "male": {"0_5":120}, "female": {} }, "disability_total": 88, "care_total": 142 },
+  "sop_rollup": { "shelters_failing": 3, "by_metric": { "water": 4, "toilet": 1 } },
+  "supply_rollup": { "items_below_reorder": 21 },
+  "shelters_brief": [{ "shelter_code": "SH-001", "occupancy": 527, "sop_status": "fail" }]
+}
+```
+worker รวม per-shelter view ข้าม db → doc นี้ ที่ central. ไม่มี PII/person row.
+
+### search_audit (central, Module Family Search — FR-53, anti-enumeration)
+```json
+{
+  "_id": "search_audit:<uuid>", "type": "search_audit",
+  "query_hash": "sha256(normalized query)", "client_fingerprint": "hashed ip+ua",
+  "result_bucket": "0 | 1 | many", "matched": false,
+  "created_at": "..."
+}
+```
+Mango: `{client_fingerprint,created_at}`. TTL = purge job (CouchDB ไม่มี TTL native → worker ลบ >7d). ไม่เก็บ raw query/result id. consent/opt-out อยู่ใน `evacuee.privacy`.
+
+---
+
+## 4. Official ID minting (แทน id_counters)
+
+CouchDB ไม่มี atomic counter → sequential code (`P-SH001-000045`, `DN-SH001-000031`, `TRF-…`,
+`REQ-…`, `VOL-…`, `REF-…`) mint ที่ **central FastAPI เท่านั้น** ตอน doc แรกถึง central
+(ดู [architecture §8](../architecture/architecture.html)).
+- offline: doc ใช้ `_id` = `<type>:tmp-<uuid>`, `official_code=null`
+- central worker assign code + dedup → replicate กลับ
+- `id_mint` doc (central) เก็บ last-issued ต่อ (type, shelter) แทน id_counters
+
+---
+
+## 5. audit (append-only)
+
+audit doc (immutable) stamp `actor_user_id` + scope. entity_type ครอบคลุม:
+`evacuee, movement, security_event, supply_item, stock_ledger, stock_transfer, donation,
+donation_campaign, meal_plan, kitchen_requisition, meal_service, volunteer, shift_assignment,
+referral, api_key, eoc_aggregate`. action เช่น `stock.receive, stock.distribute, transfer.dispatch,
+transfer.confirm, donation.intake, campaign.cutoff, requisition.issue, referral.raise,
+referral.respond, apikey.issue, apikey.rotate, apikey.revoke`. VDU บังคับ stamp actor.
+
+---
+
+## 6. Conflict policy ต่อ doc type
+
+| Doc type | Policy |
+| --- | --- |
+| stock_ledger, movement, security_event, audit | immutable + deterministic `_id` → **ไม่มี conflict** |
+| evacuee, household profile | field-level merge (LWW ต่อ field) + flag field ที่ขัดแย้ง → review |
+| shelter, donation_campaign config | LWW ระดับ doc + audit |
+| read model (balance/dashboard/occupancy) | ไม่เก็บ doc — recompute เป็น view |
+
+reconcile worker (central) สแกน `_conflicts` แก้ตาม policy หรือ enqueue needs_review.
+
+---
+
+## 7. Offline boundary (full-system)
+
+- core (evacuee/household/movement) = **offline-native** บน PouchDB ⇄ CouchDB (ไม่มี offline_submissions อีก)
+- operations (supply/donation/kitchen/volunteer/security) = online-first backoffice แต่ replicate ปกติ; post idempotent (`idempotency_key` = `_id`) ทน retry/เน็ตวูบ
+- EOC/Open API = read-only egress ผ่าน central FastAPI ไม่รับ offline write
+
+---
+
+## 8. Cross-cutting design rules
+
+1. **Ledger/event = source of truth, balance = view** (recompute, ไม่เก็บ mutable balance)
+2. **Computed read models = views**: balance, occupancy, dashboard, eoc_aggregate — stale 1–3 นาที
+3. **Config not hardcode**: sop_profile (ratio), supply_item (catalog) อยู่ global db แยกจาก shelter
+4. **Idempotency**: ledger, security_event, transfer confirm, donation intake — `idempotency_key` = `_id` กัน double-post
+5. **PII minimization**: medical/national_id แยกเป็น doc/db ต่างหาก (filtered replication ต่อ role); donor/volunteer phone masked; eoc_aggregate/search_audit ไม่มี person row
+6. **Append-only / immutable**: stock_ledger, movement, security_event, audit — แก้ด้วย reversal/compensating entry
+7. **Aggregate-only egress** (FD-14): EOC + Open API ออกแค่ aggregate ผ่าน FastAPI + API-key + rate-limit + audit
+
+ERD ความสัมพันธ์ doc-type ดูที่ [smart-shelter-erd](./smart-shelter-erd.html).
