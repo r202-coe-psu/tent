@@ -15,6 +15,8 @@ Source of truth ของตัวเลข = `_tasks.py` — สร้างเ
 
 ## Schedule & Deadline
 
+- **Greenfield:** ยังไม่มีระบบ MVP ที่ใช้งานจริงมาก่อน (มีเพียง CouchDB PoC) — คำว่า "MVP/baseline" ในเอกสารชุดนี้และ PRD หมายถึง **baseline scope FR-1–20** (auth, person registration, screening, person QR/movement, dashboard, offline — spec ใน `docs/features/`) ซึ่งต้อง **build เป็นส่วนแรกของ foundation** ก่อนที่ R2 จะต่อยอด
+- ⚠️ **ช่องว่างที่ต้องเคาะ:** baseline FR-1–20 ยังไม่มี T-task/effort ของตัวเองในตาราง (walking skeleton ครอบแค่ auth/RBAC skeleton, base schema, 1 vertical slice) — ยอดรวม 213 Adj MD **ยังไม่รวม**งาน build baseline เต็ม (registration UI, screening, offline sync, dashboard) ต้องเพิ่ม task หรือขยาย scope T-01/T-02/ทีม Household & Zoning ในการประชุม kickoff
 - **Kickoff:** 2026-06-10 · **Workshop (ทีมเริ่มงาน):** 2026-06-17
 - **In-scope** (R2 + R3 + Family Search + governance): ส่งมอบภายใน **สิงหาคม 2026** (2026-08-31), go-live กันยายน
 - **Deferred** (EOC aggregate API, Open API, SOP simulation, inventory polish): ส่งมอบหลัง go-live
