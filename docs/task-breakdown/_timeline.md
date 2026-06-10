@@ -1,0 +1,217 @@
+---
+title: "Task Breakdown — Dependencies & Timeline"
+status: active
+created: 2026-06-05
+updated: 2026-06-09
+note: deps มาจาก _tasks.py — แก้ task/deps แล้วอัปเดต diagram ด้วยมือ. Schedule เคาะ 2026-06-09 (compress build → มิ.ย.–ส.ค., go-live ก.ย.)
+---
+
+# Dependencies & Timeline
+
+อะไร block อะไร + timeline (มิ.ย.–ส.ค. 2026, go-live ก.ย.). อ้าง [task module breakdown](_index.md).
+
+## 0. Schedule Decision (ข้อสรุป 2026-06-09)
+
+ทีม = **2 Lead + 4 teams × 3** (greenfield — มีเพียง CouchDB PoC, ยังไม่เริ่ม development).
+
+| วันที่ | event |
+| --- | --- |
+| **10/06/2026** | Kickoff Lead + foundation เริ่มทันที (walking skeleton) |
+| **17/06/2026** | Workshop ทีม → 4 teams เริ่มงาน |
+| **31/08/2026** | In-scope เสร็จ (R2 + R3 + Family Search + governance) — เป้าหมายส่งมอบ |
+| **ก.ย. 2026 (สัปดาห์ 1)** | Go-live ใช้งานจริง |
+| **14/09/2026 (สัปดาห์ที่ 2 ก.ย.)** | **Hard deadline** — deferred tail ต้องจบในกรอบนี้ ไม่มีงานเลยกว่านี้ |
+
+**Scope สำหรับ go-live ก.ย.**
+
+- **In-scope (จบ ส.ค.):** R2 Foundation + R3 Operations + **Family Search (T-40/41)** core public feature + **T-43 RoPA/retention (minimal)** เพราะ Family Search เปิด public = PII exposure จริง
+- **Deferred (หลัง go-live, cap 14/09/2026):** EOC aggregate API (T-37/38), Open API (T-39), SOP simulation (T-42), inventory polish (T-45)
+
+**Walking skeleton — Lead 2 คนต้องส่งก่อน 17/06** (greenfield risk): repo + branch/PR convention + CI/CD, auth/RBAC skeleton (T-01), CouchDB base schema + sync/conflict design (T-02 ตั้งต้น), 1 vertical slice end-to-end ให้ทีม copy pattern, seed data. ใช้ `docs/architecture/` + `docs/data/` เป็น input อย่า redesign จากศูนย์. **CouchDB (offline-first sync, conflict, RBAC) = tech risk #1 → Lead B (technical/integration) เป็นเจ้าของ T-02 + CouchDB**.
+
+**เงื่อนไขฝั่งบริษัท (เน็ท):** P-02 (R3 design) ต้องเสร็จก่อน ก.ค. (ทีมแตะ R3 ~ต้น ก.ค.). P-03 ดึงเฉพาะ **ส่วน Family Search** มา design ล่วงหน้า; EOC/Open API design ยัง defer.
+
+## 1. คอขวด (hub — block หลายตัว)
+
+| Task | Module | Block กี่ตัว | block อะไร |
+| --- | --- | --- | --- |
+| **P-01** design (บริษัท) | pre | 3 | T-01/02/03 (ทั้ง R2 foundation) — ส่งแล้ว ไม่ block |
+| **T-02** data model | Core | 6 | T-04, T-08, T-10, T-17, T-18, T-19 — fan-out ใหญ่สุด |
+| **T-11** stock ledger | C | 4 | T-12, T-13, T-14, T-15 |
+| **T-14** stock dashboard | C | 3 | T-21 (donation reservation), T-23, T-31 |
+| **T-31** resource calc engine | B | 4 | T-25 (meal plan), T-32, T-35, T-42 — cross-module hub |
+| **T-44** UAT + handover | Core | 3 | T-46, Q-02, Q-03 |
+| **all R3 เสร็จ** | gate | — | T-37 (EOC) — **deferred post-go-live**, ไม่อยู่บนเส้นวิกฤต ส.ค. แล้ว |
+
+**เส้นวิกฤต (longest internal, scope ส.ค.):** `T-02 → T-11 → T-14 → T-31 → T-25 → T-26 → T-27` → (R3 gate) → `T-44`.
+ตัด `T-37 → T-39` (EOC/Open API) ออกจากเส้นวิกฤต → **deferred post-go-live** → critical path สั้นลง ~11 WD.
+**Family Search (T-04 → T-40 → T-41)** เป็น branch ขนานออกจาก household — **ไม่ทำให้เส้นวิกฤตยาวขึ้น** ใช้ capacity Team 1.
+Pre-production (P-0x) ส่งแล้ว/ดึงมาขนาน → **ไม่ใช่ external lead-time block** (เว้น P-02 ต้องเสร็จก่อน ก.ค.).
+
+## 2. Dependency Graph
+
+```mermaid
+flowchart LR
+  classDef hub fill:#fde68a,stroke:#d97706,stroke-width:2px;
+  classDef crit fill:#fecaca,stroke:#dc2626,stroke-width:2px;
+  classDef gate fill:#bbf7d0,stroke:#16a34a,stroke-width:2px;
+  classDef design fill:#e5e7eb,stroke:#6b7280,stroke-dasharray:4 3;
+  classDef deferred fill:#f3e8ff,stroke:#9333ea,stroke-dasharray:5 3;
+
+  P01([P-01 design]):::design
+  P03([P-03 design]):::design
+
+  subgraph R2["R2 — Foundation (ส.ค. ต้น)"]
+    T01[T-01 RBAC]
+    T02[T-02 data model]:::crit
+    T03[T-03 API freeze]
+    T04[T-04 household]
+    T05[T-05 ID/QR]
+    T06[T-06 search+checkin]
+    T07[T-07 pet/asset]
+    T08[T-08 zone def]
+    T09[T-09 zone alloc]
+    T10[T-10 supply catalog]
+    T11[T-11 stock ledger]:::crit
+    T12[T-12 distribute]
+    T13[T-13 transfer]
+    T14[T-14 stock dashboard]:::crit
+    T15[T-15 donor predeclare]
+    T16[T-16 intake audit]
+    T17[T-17 kitchen groundwork]
+    T18[T-18 SOP groundwork]
+    T19[T-19 security groundwork]
+    G2{{T-20 Foundation Gate}}:::gate
+  end
+
+  subgraph R3["R3 — Operations (ส.ค. กลาง-ปลาย)"]
+    T21[T-21 reservation]
+    T22[T-22 cut-off]
+    T23[T-23 redirect]
+    T24[T-24 transparency]
+    T25[T-25 meal plan]
+    T26[T-26 requisition]
+    T27[T-27 meal service]
+    T28[T-28 volunteer reg]
+    T29[T-29 skill match]
+    T30[T-30 SOP config]
+    T31[T-31 resource calc]:::crit
+    T32[T-32 calc dashboard]
+    T33[T-33 security checkin]
+    T34[T-34 referral]
+    T35[T-35 calc backbone]
+    G3{{T-36 Operations Gate}}:::gate
+  end
+
+  subgraph R4["R4 — Integration (Family Search: ส.ค. · EOC/Open API: deferred ≤14 ก.ย.)"]
+    T37[T-37 EOC aggregate API]:::deferred
+    T38[T-38 EOC API-key/scope]:::deferred
+    T39[T-39 Open API]:::deferred
+    T40[T-40 search consent]
+    T41[T-41 family search]
+    T42[T-42 SOP simulation]:::deferred
+    T43[T-43 RoPA/retention]
+    T44[T-44 UAT+handover]:::hub
+    T45[T-45 inventory polish]:::deferred
+    T46[T-46 Handover Gate]:::gate
+    Q01[Q-01 deploy automation]
+    Q02[Q-02 support buffer]
+    Q03[Q-03 user manual]
+  end
+
+  P01 --> T01 & T02 & T03
+  T02 --> T04 & T08 & T10 & T17 & T18 & T19
+  T04 --> T05 & T07 & T40
+  T05 --> T06
+  T08 --> T09
+  T10 --> T11
+  T11 --> T12 & T13 & T14 & T15
+  T15 --> T16
+
+  T14 --> T21 & T23 & T31
+  T16 --> T21 & T24
+  T21 --> T22
+  T22 --> T23
+  T17 --> T25
+  T30 --> T31
+  T31 --> T25 & T32 & T35 & T42
+  T12 --> T26
+  T25 --> T26
+  T26 --> T27
+  T18 --> T28 & T30
+  T28 --> T29
+  T19 --> T33 & T34
+
+  G2 -. all R2 .-> R3
+  G3 -. all R3 .-> T37
+  T37 --> T38 & T39
+  P03 --> T39 & T41
+  T40 --> T41
+  T44 --> T46 & Q02 & Q03
+```
+
+> สีแดง = เส้นวิกฤต · สีส้ม = hub · เขียว = gate · เทา dashed = design (บริษัท) · ม่วง dashed = **deferred post-go-live**.
+> `G2/G3 -. all .->` = ต้องปิดทั้ง phase ก่อนข้าม (integration gate).
+> Family Search (T-40/41) + T-43 = **เก็บใน scope ส.ค.** (core public feature + PII compliance) แม้อยู่ subgraph R4.
+
+## 3. Timeline (Gantt)
+
+```mermaid
+gantt
+  title Smart Shelter — Build 10 มิ.ย.–31 ส.ค. 2026 · Go-live ก.ย.
+  dateFormat YYYY-MM-DD
+  axisFormat %m/%d
+
+  section Pre-design (บริษัท)
+  P-01 R2 design (ส่งแล้ว)          :done, p1, 2026-05-25, 2026-06-09
+  P-02 R3 design (ก่อน ก.ค.)         :crit, p2, 2026-06-10, 2026-06-30
+  P-03 Family Search design          :p3, 2026-06-15, 12d
+
+  section Foundation / Walking Skeleton (Lead)
+  Kickoff Lead                       :milestone, k0, 2026-06-10, 0d
+  repo+CI/CD+auth+CouchDB schema      :crit, sk, 2026-06-10, 7d
+  T-01/02/03 RBAC+data model+API freeze :crit, t013, 2026-06-10, 12d
+  Workshop — 4 teams เริ่ม            :milestone, w1, 2026-06-17, 0d
+
+  section R2 Foundation (มิ.ย.–ก.ค.)
+  household + zone (T-04..09)         :t0409, 2026-06-17, 18d
+  T-11 stock ledger (crit)           :crit, t11, after t013, 5d
+  T-14 stock dashboard (crit)        :crit, t14, after t11, 4d
+  donation intake (T-15/16)          :t1516, after t11, 6d
+  groundwork R3 (T-17/18/19)         :gw, after t013, 8d
+  T-20 Foundation Gate               :milestone, g2, 2026-07-17, 0d
+
+  section R3 Operations (ก.ค.–ส.ค.)
+  T-31 resource calc (crit)          :crit, t31, after t14, 5d
+  T-25 meal plan (crit)              :crit, t25, after t31, 5d
+  T-26/27 kitchen (crit)             :crit, t2627, after t25, 6d
+  donation flows (T-21..24)          :t2124, 2026-07-21, 12d
+  volunteer/SOP (T-28..32)           :t2832, 2026-07-21, 16d
+  security/referral (T-33/34)        :t3334, 2026-07-25, 10d
+  T-36 Operations Gate               :milestone, g3, 2026-08-22, 0d
+
+  section Family Search (core public · ขนาน)
+  T-40 search consent                :fs1, after t0409, 5d
+  T-41 family search                 :fs2, after fs1, 6d
+  T-43 RoPA/retention (minimal)      :t43, 2026-08-01, 6d
+
+  section UAT + Go-live (ส.ค.–ก.ย.)
+  Q-01 deploy automation             :q1, 2026-08-10, 6d
+  T-44 UAT + hardening + handover    :crit, t44, 2026-08-22, 9d
+  Q-03 user manual + runbook         :q3, 2026-08-22, 8d
+  In-scope เสร็จ (เป้าหมาย)           :milestone, dl, 2026-08-31, 0d
+  Go-live ใช้งานจริง                  :milestone, gl, 2026-09-01, 0d
+
+  section Deferred + Support (cap 14/09)
+  T-37/38 EOC aggregate API          :def1, 2026-09-01, 6d
+  T-39 Open API                      :def2, after def1, 4d
+  T-42 SOP sim · T-45 polish         :def3, 2026-09-01, 8d
+  Q-02 support buffer                :q2, 2026-09-01, 10d
+  Hard deadline (สัปดาห์ที่ 2 ก.ย.)    :milestone, hd, 2026-09-14, 0d
+```
+
+> **เส้นวิกฤต (in-scope, จบ ส.ค.):** walking skeleton (T-01/02/03) → T-11 → T-14 → T-31 → T-25 → T-26/27 → (R3 gate) → T-44 UAT → ส่งมอบ 31 ส.ค.
+> Family Search (T-40/41) = branch ขนานออกจาก household — core public feature, อยู่ใน scope. T-43 (minimal) บังคับเพราะ public PII.
+> **Greenfield:** 10–17 มิ.ย. Lead ส่ง walking skeleton ก่อนทีม 12 คนเข้า; CouchDB sync/conflict = technical risk อันดับ 1.
+> **Deferred** (EOC / Open API / SOP sim / polish) = หลัง go-live, **hard deadline 14/09/2026** (สัปดาห์ที่ 2 ก.ย.) — ไม่มีงานเลยกรอบนี้. P-02 ต้องเสร็จก่อน ก.ค. มิฉะนั้นทีมรอ design.
+> วันใน gantt = ประมาณการ sequencing บนเส้นวิกฤต — งานราย module รันขนาน (4 teams × 3 + Lead pair, part-time academic).
