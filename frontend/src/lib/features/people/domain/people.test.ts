@@ -1,0 +1,73 @@
+import { describe, it, expect } from 'vitest';
+import {
+	createEvacuee,
+	createMovement,
+	createScreening,
+	applyMovementToStay,
+	isEvacuee
+} from './people';
+import type { AuthorContext } from '$lib/db/model';
+
+const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
+
+describe('createEvacuee', () => {
+	it('stamps the envelope and applies spec defaults', () => {
+		const e = createEvacuee(
+			{ first_name: '  สมชาย ', last_name: 'ใจดี', gender: 'male', phone: '0812345678' },
+			ctx
+		);
+		expect(e._id.startsWith('evacuee:')).toBe(true);
+		expect(e.type).toBe('evacuee');
+		expect(e.schema_v).toBe(1);
+		expect(e.shelter_code).toBe('SH001');
+		expect(e.created_by).toBe('staff1');
+		expect(e.created_at).toBe(e.updated_at);
+		expect(e.first_name).toBe('สมชาย'); // trimmed
+		expect(e.official_code).toBeNull(); // minted later
+		expect(e.privacy).toEqual({ search_excluded: false });
+		expect(e.current_stay.status).toBe('registered');
+		expect(e.special_needs).toEqual([]);
+		expect(e.registered_via).toBe('app');
+		expect(isEvacuee(e)).toBe(true);
+	});
+
+	it('accepts "no phone" as null', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'other', phone: null }, ctx);
+		expect(e.phone).toBeNull();
+	});
+
+	it('rejects an empty first name', () => {
+		expect(() =>
+			createEvacuee({ first_name: '  ', last_name: 'ข', gender: 'male', phone: null }, ctx)
+		).toThrow();
+	});
+});
+
+describe('movement → current_stay', () => {
+	it('check_in moves the snapshot to checked_in at the event time', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const m = createMovement(
+			{
+				evacuee_id: e._id,
+				action: 'check_in',
+				zone: 'Z1',
+				occurred_at: '2026-06-11T03:00:00.000Z'
+			},
+			ctx
+		);
+		const updated = applyMovementToStay(e, m);
+		expect(updated.current_stay.status).toBe('checked_in');
+		expect(updated.current_stay.zone).toBe('Z1');
+		expect(updated.current_stay.since).toBe('2026-06-11T03:00:00.000Z');
+	});
+});
+
+describe('createScreening', () => {
+	it('defaults the screening time to now when omitted', () => {
+		const s = createScreening({ evacuee_id: 'evacuee:x', track: 'fast_track' }, ctx);
+		expect(s.type).toBe('screening');
+		expect(s.needs_referral).toBe(false);
+		expect(s.symptoms).toEqual([]);
+		expect(typeof s.screened_at).toBe('string');
+	});
+});

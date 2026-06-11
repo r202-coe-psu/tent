@@ -4,82 +4,127 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project State
 
-This repo (`tent`, app title **"CouchDB Lab"**) is an early-stage scaffold from the
-**sveltekitten** SPA template. As of now the committed tree contains the template's
-config, docs, prebuilt `frontend/build/` output, and e2e tests — but **`frontend/src/`
-and `frontend/package.json` do not yet exist**. When implementing features you will be
-creating `src/` from scratch following the conventions documented below; treat
-`frontend/agent-role.md` and `frontend/AGENTS.md` as the binding spec for that work.
+This repo (`tent`, app title **"CouchDB Lab"**) is a local-first **CouchDB** app built from the
+**sveltekitten** SPA template. The frontend now lives under `frontend/src/` with a working
+layered feature set (`login`, `me`, `users`, `register`, `shelter`, `health`, `people`,
+`operations`, …), a `$lib/db/` PouchDB/CouchDB layer, and dev-server admin API routes.
 
-The intended backend is **CouchDB 3.5** (see `docker-compose.yml`), reached directly
-from the browser with cookie-based session auth via a same-origin dev proxy
-(`PUBLIC_COUCH_PROXY=/couch`). Note a discrepancy to resolve as code lands: the template
-docs (`agent-role.md`) and the e2e `mock-api.js` describe a generic JWT + `openapi-fetch`
-backend (`/v1/auth/login`), while `.env`/`docker-compose.yml` target CouchDB directly.
-The CouchDB direction reflects this project; the JWT bits are leftover template boilerplate.
+The backend is **CouchDB 3.5** (see `docker-compose.yml`), reached from the browser with
+cookie-based `_session` auth via a same-origin dev proxy (`PUBLIC_COUCH_PROXY=/couch`).
+
+> **Stale docs — ignore where they disagree:** `frontend/agent-role.md` (and `AGENTS.md`) still
+> describe the original template (JWT + `openapi-fetch`, flat `api.ts`/`queries.ts` features). The
+> JWT/`openapi-fetch` bits are leftover boilerplate. The binding specs are
+> **`frontend/CONTRIBUTING.md`** (toolchain, definition of done, architecture, data/sync/auth rules)
+> and **`frontend/CONVENTIONS.md`** (naming, structure, coding patterns) — plus the actual `src/`
+> tree. When anything here is thinner than those two, **they win; follow them.**
+
+Data model / domain specs for the Smart Shelter system live in `docs/data/` (`data-model.md`,
+`schema.md`, `api-contract.md`, `couchdb-mongodb-sync.md`) and `docs/features/`.
 
 ## Commands
 
-Run all frontend commands from `frontend/`. Package manager is **pnpm** (enforced via
-corepack in the Dockerfile).
+Run all frontend commands from `frontend/`. Package manager is **pnpm only** (lockfile
+`pnpm-lock.yaml`; enforced via corepack in the Dockerfile). Don't add npm/yarn lockfiles.
 
-- `pnpm dev` — Vite dev server (port 5173). Docker: `pnpm dev --host 0.0.0.0`
-- `pnpm check` — `svelte-check` type-check. **Run before finishing any task.**
-- `pnpm openapi` — regenerate `src/lib/api/openapi.d.ts`. Only run if a task explicitly requires it.
-- `npx @sveltejs/mcp svelte-autofixer ./src/path/to/Component.svelte` — **must** run (and
-  re-run until clean) on every `.svelte` file before delivering it.
-- e2e (Playwright): tests live in `frontend/e2e/`; `e2e/mock-api.js` is a standalone mock
-  backend used during the run. Tests hit the built preview (`localhost:4173`).
+| Task | Command |
+| --- | --- |
+| Dev server (binds `0.0.0.0`, port 5173) | `pnpm dev` |
+| Type-check | `pnpm check` |
+| Lint + format check | `pnpm lint` |
+| Auto-format | `pnpm format` |
+| Unit tests (once / watch) | `pnpm test` / `pnpm test:watch` |
+| E2E (Playwright) | `pnpm test:e2e` |
+| Regenerate OpenAPI types | `pnpm openapi:update` (only when a task requires it) |
 
-Bring up the CouchDB backend from repo root: `docker compose up` (needs a `.env` with
-`COUCHDB_USER`/`COUCHDB_PASSWORD`; copy from `.env.example`). Data persists to
-`../deployment/couchdb/data`.
+**Definition of done (all must pass locally — see CONTRIBUTING.md §2):** `pnpm lint`, `pnpm check`
+(zero errors), `pnpm test` (new domain/data logic ships with tests), and every `.svelte` file you
+touched run through **`svelte-autofixer`** (Svelte MCP) until clean.
+
+Bring up CouchDB from repo root: `docker compose up` (needs a `.env` with `COUCHDB_USER`/
+`COUCHDB_PASSWORD`; copy from `.env.example`). The frontend also needs `frontend/.env`
+(copy `frontend/.env.example`) for the `PUBLIC_*` vars. Data persists to `../deployment/couchdb/data`.
 
 ## Architecture
 
-**Static SPA** — `@sveltejs/adapter-static` with `ssr = false`, `prerender = true`. There
-is **no server-side code**: no `+page.server.ts`, no `+layout.server.ts`, no load functions
-that run on a server. All data fetching is client-side via **TanStack Query**
-(`@tanstack/svelte-query`), wired through `QueryClientProvider` in the root layout.
+**Static SPA** — `@sveltejs/adapter-static` (`ssr = false`, `prerender = true`, `200.html`
+fallback). **No server-side data loading**: no `+page.server.ts`, no `+layout.server.ts`, no server
+`load`. All data fetching is client-side via **TanStack Query** (`@tanstack/svelte-query`), wired
+through `QueryClientProvider` in the root layout.
 
-**Stack**: SvelteKit 2 + Svelte 5 (runes only) + Vite + TypeScript + Tailwind CSS v4 (no
-config file — `@tailwindcss/vite`). UI is shadcn-svelte over `bits-ui` primitives in
-`src/lib/components/ui/`. Forms use Superforms + Zod (`zod4Client` adapter). User feedback
-is **toast only** (`svelte-sonner`) — never `console.log`.
+**Stack**: SvelteKit 2 + Svelte 5 (runes only) + Vite + TypeScript + Tailwind CSS v4 (no config
+file — `@tailwindcss/vite`). UI is shadcn-svelte over `bits-ui` primitives in
+`src/lib/components/ui/`. Forms use Superforms + Zod (`zod4Client` adapter). User feedback is
+**toast only** (`svelte-sonner`) — never `console.log` (the PouchDB sync `console.warn` paths are
+the deliberate exception).
 
-**Auth (client-side)**: access token held in memory in `authStore`
-(`src/lib/stores/auth.svelte.ts`); refresh token in an httpOnly cookie. Protected pages
-live in the `src/routes/(protected)/` route group, where a `+layout.ts` guard calls
-`requireAuth()` automatically. Do not modify the token-refresh logic in
-`$lib/api/auth-interceptor.ts` or the cookie names/TTLs in `$lib/utils/auth.ts` unless the
-task is specifically about them.
+### Offline-first data, sync & auth — do not bypass (CONTRIBUTING.md §4)
 
-### Feature-sliced layering (enforced by ESLint)
+- **All persistence goes through PouchDB** (`$lib/db/pouch.ts`), which **live-syncs** to CouchDB.
+  UI never talks to a remote DB directly — it reads/writes local PouchDB; sync propagates changes.
+- **Reactivity comes from the changes feed**, not manual refetching: the live-sync wiring
+  invalidates the relevant TanStack Query keys on PouchDB `change` events. Never poll / never use
+  `refetchInterval` for live data.
+- **Auth is the CouchDB `_session` cookie** (`$lib/db/couch.ts`). Identity is cached (localStorage /
+  `authStore` in `src/lib/stores/auth.svelte.ts`) so the app stays usable offline; only _sync_ needs
+  a live session. On a 401/403 the sync stops and the store flags **`needsReauth`** — the user is
+  **not** logged out of the local experience. Don't "fix" this by forcing a logout/redirect on sync
+  errors.
+- Use the guards in **`$lib/guards/auth.ts`** (`requireAuth`, `requireAdmin`, `redirectIfAuthenticated`)
+  from route `+layout.ts`/`+page.ts` `load` functions. Don't roll your own redirect logic.
+- **Admin credentials (`COUCHDB_ADMIN_URL`) are server-only** — usable only in dev-server API routes
+  under `src/routes/api/**` and `$lib/server/couch-admin.ts`. Those API routes exist **only on the
+  dev server** and are absent from the static prod build; client features must not depend on them.
+  Never import server code into client bundles; never put credentials behind a `PUBLIC_` env var.
+- Keep CouchDB same-origin in dev via the Vite `/couch` proxy (`PUBLIC_COUCH_PROXY`) so the session
+  cookie is first-party — don't hardcode absolute CouchDB URLs in feature code.
 
-Features live under `src/lib/features/<name>/` and are split into layers:
-`domain/`, `data/`, `application/`, `ui/`. **Cross-feature and route code may import a
-feature only through its barrel** (`$lib/features/<name>`) — reaching into a feature's
-internal layers is an ESLint error (`no-restricted-imports`). A feature may freely import
-its own internals. (`agent-role.md` also describes an older flat layout —
-`api.ts`/`queries.ts`/`schema.ts`/`components/`; the ESLint-enforced layered structure
-above is authoritative.)
+### Feature-sliced layering (lint-enforced)
 
-`src/lib/components/ui/**` is vendored/generated shadcn-svelte and is excluded from lint —
-do not hand-maintain it.
+Features live under `src/lib/features/<name>/`, split into four layers with a strict dependency
+direction **`ui → application → data → domain`**:
+
+```
+features/<name>/
+  domain/       pure entities, Zod schemas, factories, invariants, type guards — no I/O, no Svelte, no PouchDB
+  data/         repository INTERFACE + concrete PouchDB impl + seed/admin helpers
+  application/  TanStack Query hooks (createQuery/createMutation) + live-sync wiring (depends on the repo interface)
+  ui/           feature-specific .svelte components
+  index.ts      the public barrel — the ONLY entry point other code may import
+```
+
+- **Cross-feature & route code may import a feature only through its barrel** `$lib/features/<name>`.
+  Reaching into `…/domain/*`, `…/data/*`, `…/application/*`, `…/ui/*` from outside is an ESLint error
+  (`no-restricted-imports`). A feature may import its own internals freely.
+- Add a new public export by **widening `index.ts`**, not by importing an inner module elsewhere.
+- When adding a feature, mirror an existing one — **`shelter`** is the reference layered impl
+  (multi-database variant). Protected pages go in `src/routes/(protected)/<feature>/+page.svelte`.
+- For all naming/structure/coding details (file naming, types-vs-interface, guard style, doc `_id`
+  patterns, query-key factories, test conventions) follow **`frontend/CONVENTIONS.md`** verbatim.
+- `src/lib/components/ui/**` is vendored/generated shadcn-svelte and lint-excluded — don't hand-edit;
+  add components via the shadcn-svelte workflow.
 
 ## Svelte 5 Conventions
 
 Runes mode only — no Svelte 4 syntax. `$state`/`$derived`/`$props`/`onclick`, snippets +
-`{@render}` instead of slots, `<X>` instead of `<svelte:component>`, `{@attach}` instead
-of `use:`. Use a class with `$state` fields for shared state, not Svelte stores. Prefer
-`$state.raw` for large API objects; derive with `$derived` (never compute in `$effect`);
-always key `{#each}` blocks (never by index); use `createContext` for type-safe context.
+`{@render}` instead of slots, `<X>` instead of `<svelte:component>`, `{@attach}` instead of `use:`.
+Use a class with `$state` fields for shared state, not Svelte stores. Prefer `$state.raw` for large
+API objects; derive with `$derived` (never compute in `$effect`); always key `{#each}` blocks (never
+by index); use `createContext` for type-safe context.
 
-The Svelte MCP server (`mcp.svelte.dev`) is configured — use `list-sections` then
-`get-documentation` for SvelteKit/Svelte topics before answering, and `svelte-autofixer`
-to validate components.
+The Svelte MCP server (`mcp.svelte.dev`) is configured — use `list-sections` then `get-documentation`
+for SvelteKit/Svelte topics before answering, and `svelte-autofixer` to validate every `.svelte`
+file before delivering it.
 
 ## Formatting
 
-Prettier: tabs, single quotes, no trailing comma, printWidth 100, with the svelte and
-tailwindcss plugins.
+Prettier: tabs, single quotes, no trailing comma, printWidth 100, with the svelte and tailwindcss
+plugins. `pnpm lint` checks Prettier + ESLint; `pnpm format` rewrites.
+
+## Commits & PRs
+
+Conventional Commits (`<type>(<scope>): <imperative summary>`, ≤72 chars, lowercase after colon).
+Branch off `main` — don't commit straight to it. One PR = one feature/concern; respect layer
+boundaries (domain + UI in the same feature is fine; reaching across feature barrels to make
+something work is not). PR description says what changed and how it was verified. See
+`frontend/CONVENTIONS.md` §1 and `frontend/CONTRIBUTING.md` §8.
