@@ -102,7 +102,7 @@ POST /api/v1/mint
 ## 4. Provisioning (system_admin เท่านั้น)
 
 ```
-POST /api/v1/shelters            { code, name, capacity, zones[] }
+POST /api/v1/shelters            { code, name, capacity, zones[], area_m2?, facilities? }
   → สร้าง shelter_{code} + _security + design docs + registry doc ที่ central
     + ออก credentials/replication docs สำหรับ edge server ของศูนย์ (edge⇄central + filtered _users)
 POST /api/v1/shelters/{code}/close   → ตั้ง status=closed + closed_at (เริ่มนาฬิกา retention 3 เดือน)

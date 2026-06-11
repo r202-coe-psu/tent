@@ -133,7 +133,13 @@ State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc 
 ```js
 // registry:  shelter:{code}
 { type: "shelter", code: "SH001", name, status: "open|closed", capacity,
-  zones: [{ code, name, capacity }], location, contact, opened_at, closed_at }
+  zones: [{ code, name, capacity }],
+  area_m2: 1200,                          // opt — พื้นที่ปิดรวม m² (Sphere ≥3.5 m²/คน)
+  facilities: {                           // opt — นับจริง ใช้คำนวณ Sphere ratio vs occupancy
+    toilets_female: 10, toilets_male: 10, toilets_accessible: 2,
+    showers: 8, water_points: 3, handwashing_stations: 6
+  },
+  location, contact, opened_at, closed_at }
 // registry:  config:app
 { type: "config", public_otp_required: false, duplicate_hint_threshold: 0.8, ... }
 

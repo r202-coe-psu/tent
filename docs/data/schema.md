@@ -268,8 +268,10 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 | `code` | str | req | `SH###` unique — ตรงกับชื่อ db |
 | `name` | str | req | — |
 | `status` | enum(`open`,`closed`) | req | `closed` → เริ่มนาฬิกา retention |
-| `capacity` | int>0 | req | — |
+| `capacity` | int>0 | req | จำนวนคนสูงสุด — ควรสอดคล้องกับ `area_m2` (Sphere ≥3.5 m²/คน); ผลรวม zone capacity ≤ ค่านี้ |
 | `zones` | [{`code`:str, `name`:str, `capacity`:int>0}] | req | — |
+| `area_m2` | num>0\|null | opt | พื้นที่ปิดรวม (m²) — ใช้คำนวณ m²/คน เทียบ Sphere 3.5 m² minimum; `null` = ยังไม่ได้วัด |
+| `facilities` | {`toilets_female`:int≥0, `toilets_male`:int≥0, `toilets_accessible`:int≥0, `showers`:int≥0, `water_points`:int≥0, `handwashing_stations`:int≥0} | opt | นับจริงที่ศูนย์ — ใช้คำนวณ Sphere ratio vs occupancy (เช่น 1 toilet:20 คน แยกเพศ, 1 water point:250 คน); `null` = ยังไม่ได้สำรวจ |
 | `location` | {`address`:str, `lat`:num?, `lng`:num?} | opt | — |
 | `contact` | {`name`:str, `phone`:str} | opt | — |
 | `edge_url` | str\|null | sys | base URL ของ edge server ศูนย์นั้น |
