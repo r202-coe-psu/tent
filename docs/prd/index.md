@@ -40,6 +40,6 @@ updated: 2026-06-11
 - Scope/FR/NFR ราย phase → เอกสารในชุดนี้
 - FR-1..FR-20 / NFR-1..NFR-11 baseline → feature specs ใน [`docs/features/`](../features/index.html) + [Task Breakdown module 0](../task-breakdown/00-baseline.md)
 - Task/effort/timeline → [Task Breakdown by Module](../task-breakdown/_index.md) + [Dependencies & Timeline](../task-breakdown/_timeline.md)
-- Field-level schema → [Data Dictionary](../data/smart-shelter-data-dictionary.md)
+- Field-level schema → [Database Schema](../data/schema.md) · topology/policy → [Data Model v3](../data/data-model.md) · planes/endpoints → [API Contract](../data/api-contract.md) *(ชุด docs/data เดิม retired 2026-06-11)*
 - Role/permission → [Role Permission Matrix](role-permission-matrix.html)
 - Full-project source → [proposal](../source/psu-smart-shelter-f-20260522.pdf)

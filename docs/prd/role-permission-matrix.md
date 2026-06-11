@@ -10,7 +10,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 
 ## 0. Document Purpose
 
-ออกแบบใหม่ให้ **lean** — ลด role จาก 12 เหลือ **5 internal role** ที่ตรงกับหน้าที่จริงในพื้นที่ ปิด **K-12 / A1** (RBAC phase-blocker ของ R2). เมื่อ approve = canonical ของ RBAC behavior ทั้งระบบ. field-level schema ยังอ้าง [Data Dictionary](../data/smart-shelter-data-dictionary.md) เป็น master.
+ออกแบบใหม่ให้ **lean** — ลด role จาก 12 เหลือ **5 internal role** ที่ตรงกับหน้าที่จริงในพื้นที่ ปิด **K-12 / A1** (RBAC phase-blocker ของ R2). เมื่อ approve = canonical ของ RBAC behavior ทั้งระบบ. field-level schema อ้าง [Data Model v3](../data/data-model.md) เป็น master *(Data Dictionary เดิม retired 2026-06-11)*.
 
 การเปลี่ยนแปลงหลักจาก draft เดิม:
 - ตัด `registration_officer`, `medical_staff`, `executive`, `eoc_viewer`, `volunteer_coordinator`, `security_officer` ออก

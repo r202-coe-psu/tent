@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en" data-theme="pastel">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Public No-Login Tier Flow Spec</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>body{background:#f6fbf8}.shell{max-width:1380px;margin:0 auto;padding:1rem}@media print{.no-print{display:none!important}body{background:#fff}}</style>
+  </head>
+  <body>
+    <header class="navbar bg-base-100 border-b border-base-300"><div class="flex-1"><div><p class="text-xs uppercase text-base-content/60">Feature Flow Spec</p><h1 class="text-xl font-semibold">Public / No-Login Tier (FAM + DN + PUB)</h1></div></div><div class="flex-none gap-2 no-print"><a class="btn btn-sm btn-outline" href="./index.html">Back</a><span class="badge badge-warning">Draft v0.2</span><span class="badge badge-outline">2026-06-11</span></div></header>
+    <main class="shell space-y-4">
+
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Summary</h2><p>ครอบคลุม access tier ที่<strong>ไม่ต้อง login</strong>: Family Search (FAM), Donor (DN, FD-16) และ Public Transparency (PUB) — เป็น Public API Service แยกจากระบบหลัก รันที่ central เท่านั้น</p><div class="alert alert-info"><span>หลักการ: เห็นน้อยที่สุดเท่าที่จำเป็น · อ่านจาก central node เสมอ · ไม่ expose CouchDB ตรงสู่ public · ไม่แตะ edge/shelter device</span></div><div class="alert alert-warning"><span>API tier (machine / API key / EOC / Open API) <strong>ไม่อยู่ใน spec นี้</strong> — deferred ตาม FD-14 (ทำหลัง main application เสร็จ)</span></div></div></section>
+
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Architecture &amp; Trust Boundary</h2><ul>
+        <li><strong>Public API Service</strong> เป็น service แยก deploy ที่ central เท่านั้น — อ่านจาก central CouchDB (replica รวมของทุก shelter db) ไม่มีเส้นทางใดไปถึง edge device</li>
+        <li>ห้าม expose CouchDB endpoint ตรงสู่ public ทุกกรณี — ทุก request ผ่าน service layer ที่ทำ projection (เลือก field ที่อนุญาตเท่านั้น) ก่อนตอบ</li>
+        <li>เส้นทางเขียน (donor declaration) เขียนลง central แล้ว replicate ลง shelter db ปลายทางทิศเดียว — ไม่รอ edge confirm</li>
+        <li>Data freshness = eventual ตาม replication lag — ทุก response แนบ <code>as_of</code> timestamp และ UI public ต้องแสดงเวลาข้อมูลล่าสุด</li>
+        <li>Response ของ public tier ต้องไม่มี field ภายใน (<code>_id</code>, <code>_rev</code>, doc type, internal id) — ใช้ opaque public id/token เท่านั้น</li>
+      </ul></div></section>
+
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Access Tiers</h2><div class="overflow-x-auto"><table class="table table-zebra"><thead><tr><th>Tier</th><th>ใคร</th><th>เห็นอะไร</th><th>เขียนอะไรได้</th><th>Phase</th></tr></thead><tbody>
+        <tr><td><strong>FAM</strong> Family Search</td><td>ญาติ/ครอบครัวผู้อพยพ</td><td>ชื่อจริงเต็ม + นามสกุล masked, ชื่อเล่น, ชื่อศูนย์, สถานะการพัก — เท่านั้น</td><td>— (อ่านอย่างเดียว แต่ทุก query ถูก audit)</td><td>R3–R4</td></tr>
+        <tr><td><strong>DN</strong> Donor</td><td>ผู้บริจาค (FD-16)</td><td>รายการของที่ศูนย์ขาด (aggregate) + สถานะ declaration ของตน</td><td>pre-declaration + reservation</td><td>R2→R3</td></tr>
+        <tr><td><strong>PUB</strong> Transparency</td><td>ประชาชนทั่วไป</td><td>ตัวเลข aggregate ต่อศูนย์/campaign</td><td>—</td><td>R3–R4</td></tr>
+      </tbody></table></div></div></section>
+
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Abuse Control &amp; Friction Policy</h2><p>ช่วงภัยพิบัติ usability มาก่อน friction — ใช้ <strong>risk-based friction</strong> แทนการบังคับ OTP/CAPTCHA ทุก request:</p><ul>
+        <li><strong>ชั้นแรก (เปิดตลอด):</strong> rate-limit ต่อ IP และต่อเบอร์โทร, max result ต่อ query, reservation TTL, audit ทุก write และทุก FAM query</li>
+        <li><strong>OTP:</strong> เป็น config flag <code>public_otp_required</code> (db <code>config</code>) — <strong>default off</strong>; เปิดเฉพาะเมื่อเจอ spam จริง การปิด OTP แลกกับ fake declaration ซึ่งรับได้เพราะ reservation เป็น soft + หมดอายุเอง</li>
+        <li><strong>CAPTCHA:</strong> ไม่ใช้ third-party ที่พึ่ง network ภายนอก (reCAPTCHA) — ถ้าจำเป็นใช้ proof-of-work แบบ self-hosted (เช่น ALTCHA) และ trigger เฉพาะ traffic pattern ผิดปกติ ไม่โชว์กับ user ปกติ</li>
+        <li><strong>Reservation TTL:</strong> declaration ที่ไม่มีการส่งของจริงภายใน 72 ชม. ถูกปลด reservation อัตโนมัติ (คืน need ให้ donor รายอื่น) — declaration ยัง track ได้แต่สถานะเป็น <code>expired</code></li>
+      </ul><div class="alert alert-warning"><span><strong>Open point:</strong> นโยบาย "OTP default off + risk-based" เป็นข้อเสนอจากการ review (2026-06-11) แทนร่างเดิมที่บังคับ OTP/CAPTCHA — รอเคาะสุดท้าย</span></div></div></section>
+
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">FAM — Family Search</h2><ul>
+        <li>Endpoint: <code>POST /public/v1/family-search</code> — ใช้ POST กันชื่อบุคคลติด access log/URL</li>
+        <li>Query ได้ 2 ทาง: (a) ชื่อ/สกุล — ขั้นต่ำ 3 ตัวอักษร match ระดับ token; (b) <strong>เบอร์โทร — ต้องครบทั้งเบอร์เท่านั้น</strong> (normalize ตัดขีด/เว้นวรรค) ไม่รับ partial กัน enumeration — ไม่มี endpoint แบบ list-all</li>
+        <li>Response ต่อคน: <strong>ชื่อจริงเต็ม + นามสกุล masked</strong> (กติกาด้านล่าง), ชื่อเล่น, ชื่อศูนย์, สถานะ (<code>in_shelter</code> / <code>moved</code> / <code>checked_out</code>) — <strong>ไม่มีเบอร์โทรเด็ดขาด</strong> (แม้ query ด้วยเบอร์) ไม่มีเลขบัตร medical zone หรือ field อื่นใด</li>
+        <li><strong>กติกา mask นามสกุล</strong> (นับเป็น grapheme cluster ไม่ใช่ code point — สระ/วรรณยุกต์ไทยต้องเกาะพยัญชนะ):
+          <ul>
+            <li>ยาว ≥ 5 ตัว: เก็บ 2 ตัวแรก + <code>****</code> + 2 ตัวท้าย — "อินทปัญญา" → "อิน****ญา"</li>
+            <li>ยาว ≤ 4 ตัว (edge case เช่น "ลี", "แสง"): เก็บตัวแรกตัวเดียว + <code>****</code> — "ลี" → "ล****"</li>
+            <li><code>****</code> เป็นความยาวคงที่เสมอ — ไม่เปิดเผยความยาวจริงของนามสกุล</li>
+          </ul></li>
+        <li><strong>Consent model = opt-out:</strong> ค้นเจอเป็น default; ถ้า <code>privacy.search_excluded = true</code> ให้ <strong>hide ทั้ง record</strong> จากผลค้นหา (ไม่ปรากฏแม้ query ตรงตัว)</li>
+        <li>Max 10 ผลต่อ query; ทุก query เขียน <code>search_audit</code> ที่ central (query text, IP hash, ผลลัพธ์กี่รายการ)</li>
+        <li>Anti-enumeration: rate-limit แรงต่อ IP, ตอบ generic เมื่อไม่พบ (ไม่บอกว่า "มีแต่ถูกซ่อน"), PoW challenge เมื่อ pattern ผิดปกติ</li>
+      </ul></div></section>
+
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">DN — Donor</h2><div class="overflow-x-auto"><table class="table table-zebra"><thead><tr><th>Endpoint</th><th>Auth</th><th>ทำอะไร</th></tr></thead><tbody>
+        <tr><td><code>GET /public/v1/needs</code></td><td>ไม่ต้อง (เคาะ 2026-06-11)</td><td>รายการของที่ศูนย์ขาด aggregate จาก campaign — เลือกดูรายศูนย์ได้</td></tr>
+        <tr><td><code>POST /public/v1/donations</code></td><td>เบอร์โทร (+ OTP เฉพาะเมื่อ flag เปิด)</td><td>สร้าง pre-declaration + soft reservation → ตอบ <code>tracking_token</code></td></tr>
+        <tr><td><code>GET /public/v1/donations/{tracking_token}</code></td><td>token ในตัว</td><td>สถานะ declaration ของตนเท่านั้น (declared → received / expired)</td></tr>
+        <tr><td><code>POST /public/v1/otp/request</code> · <code>/otp/verify</code></td><td>—</td><td>ใช้เฉพาะเมื่อ <code>public_otp_required</code> เปิด</td></tr>
+      </tbody></table></div><ul>
+        <li><code>tracking_token</code> = opaque random ≥128-bit, <strong>ใช้ได้ตลอดไป</strong> (เคาะ 2026-06-11) — แสดงครั้งเดียวตอนสร้าง + แนะนำ donor เก็บลิงก์</li>
+        <li>เก็บ donor PII ขั้นต่ำ: ชื่อ + เบอร์โทร; index ด้วย hash ของเบอร์ ไม่ expose เบอร์กลับใน response ใด ๆ</li>
+        <li>declaration เขียนเป็น doc ฝั่ง central → replicate ลง shelter db ปลายทาง; ศูนย์เห็นรายการรอรับใน Donation module</li>
+      </ul></div></section>
+
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">PUB — Transparency</h2><ul>
+        <li><code>GET /public/v1/transparency/shelters</code> — รายชื่อศูนย์ที่เปิด + occupancy รวม (จำนวนคน ไม่มีรายบุคคล)</li>
+        <li><code>GET /public/v1/transparency/donations</code> — ยอดรับบริจาค aggregate ต่อศูนย์/campaign</li>
+        <li>Aggregate เท่านั้นทุกกรณี — ไม่มีเส้นทางใดไปถึงข้อมูลระดับบุคคลจาก tier นี้</li>
+      </ul></div></section>
+
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">API Conventions (service นี้)</h2><pre><code>Base path : /public/v1
+Error     : { "error": { "code": "RATE_LIMITED", "message": "..." } }   // no PII in errors
+Paging    : ?limit=&amp;bookmark=        // CouchDB-style bookmark
+Freshness : ทุก response แนบ "as_of": ISO-8601</code></pre></div></section>
+
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Data Touchpoints &amp; Retention</h2><div class="overflow-x-auto"><table class="table table-zebra"><thead><tr><th>Tier</th><th>อ่าน (projection จาก central)</th><th>เขียน</th></tr></thead><tbody>
+        <tr><td>FAM</td><td>evacuee (เฉพาะ name/nickname/shelter/status + privacy flag)</td><td>search_audit</td></tr>
+        <tr><td>DN</td><td>donation_campaign (aggregate needs)</td><td>donation (pre-declaration)</td></tr>
+        <tr><td>PUB</td><td>occupancy / donation views (aggregate)</td><td>—</td></tr>
+      </tbody></table></div><ul>
+        <li><strong>Retention (เคาะ 2026-06-11):</strong> ข้อมูลส่วนบุคคลถูกลบ/anonymize ภายใน <strong>3 เดือนหลังปิดศูนย์</strong>; local db บนมือถืออาสามีอายุ <strong>1 เดือน</strong> + มี SOP สั่งลบข้อมูลบน device; <strong>PSU เป็น data controller</strong> ในระยะนี้</li>
+        <li><strong>Operating assumptions (เคาะ 2026-06-11):</strong> ≤350 shelters · ศูนย์ใหญ่สุด ≤20,000 คน · ≤50 devices/ศูนย์ — ใช้เป็นฐาน sizing ของ rate-limit, index และ replication design</li>
+      </ul></div></section>
+
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Acceptance Criteria</h2><ul>
+        <li>ทุก endpoint ใช้งานได้โดยไม่ login; ไม่มี response ใดมี field เกินที่ระบุใน spec นี้</li>
+        <li>FAM: คนที่ <code>search_excluded</code> ไม่ปรากฏในผลค้นหาแม้ query ตรงตัว; ทุก query มี search_audit record</li>
+        <li>FAM: นามสกุลใน response ถูก mask ตามกติกาเสมอ (รวม edge case นามสกุลสั้น); ไม่มี response ใดมีเบอร์โทร; ค้นด้วยเบอร์ partial ต้องไม่ได้ผลลัพธ์</li>
+        <li>DN: declaration ที่ไม่ส่งของภายใน 72 ชม. ปลด reservation อัตโนมัติ; tracking_token เดิมยังเปิดดูสถานะ expired ได้</li>
+        <li>DN: เมื่อ <code>public_otp_required</code> ปิด — สร้าง declaration ได้โดยไม่มี OTP; เมื่อเปิด — ต้องผ่าน OTP ก่อน</li>
+        <li>Public service อ่านจาก central เท่านั้น — ทดสอบโดยตัด central ออก: ทุก endpoint ตอบ error ที่ควบคุมได้ ไม่ fallback ไป edge</li>
+        <li>Rate-limit ทำงานต่อ IP และต่อเบอร์; เกิน limit ตอบ <code>RATE_LIMITED</code> ไม่ leak ข้อมูล</li>
+      </ul></div></section>
+
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Open Points</h2><ul>
+        <li>เคาะสุดท้าย: OTP default off + risk-based friction (ดู Abuse Control) — เสนอแทนการบังคับ OTP/CAPTCHA เพราะ usability ช่วงภัยพิบัติ</li>
+        <li>ช่องทางแจ้ง <code>tracking_token</code> ซ้ำเมื่อ donor ทำหาย (SMS resend? ผูกกับเบอร์?) — ยังไม่กำหนด</li>
+        <li>รายละเอียด field ของ donation doc / campaign doc → รอ Data Model ฉบับใหม่ (docs/data เดิมถูก retire 2026-06-11)</li>
+      </ul></div></section>
+
+    </main>
+  </body>
+</html>
