@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { CreateUserForm, UserList, useUsers, useCreateUser, useDeleteUser } from '$lib/features/users';
+	import {
+		CreateUserForm,
+		UserList,
+		useUsers,
+		useCreateUser,
+		useDeleteUser
+	} from '$lib/features/users';
 	import type { CouchUserDoc } from '$lib/features/users';
 
 	const usersQuery = useUsers();
@@ -9,17 +15,23 @@
 	const deleteMutation = useDeleteUser();
 
 	function handleCreate(data: { name: string; password: string }) {
-		createMutation.mutate({ name: data.name, password: data.password }, {
-			onSuccess: () => toast.success(`User "${data.name}" created`),
-			onError: (err: Error) => toast.error(err.message)
-		});
+		createMutation.mutate(
+			{ name: data.name, password: data.password },
+			{
+				onSuccess: () => toast.success(`User "${data.name}" created`),
+				onError: (err: Error) => toast.error(err.message)
+			}
+		);
 	}
 
 	function handleDelete(user: CouchUserDoc) {
-		deleteMutation.mutate({ id: user._id, rev: user._rev }, {
-			onSuccess: () => toast.success(`User "${user.name}" deleted`),
-			onError: (err: Error) => toast.error(err.message)
-		});
+		deleteMutation.mutate(
+			{ id: user._id, rev: user._rev },
+			{
+				onSuccess: () => toast.success(`User "${user.name}" deleted`),
+				onError: (err: Error) => toast.error(err.message)
+			}
+		);
 	}
 </script>
 

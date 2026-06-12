@@ -10,6 +10,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { LANDING_ROUTE } from '$lib/guards/auth';
 
 	const form = superForm(defaults(zod4(loginSchema)), {
 		SPA: true,
@@ -21,14 +22,14 @@
 				return;
 			}
 
-			await toast.promise(
+			toast.promise(
 				(async () => {
 					await authStore.login({
 						name: form.data.username,
 						password: form.data.password
 					});
 					reset();
-					await goto(resolve('/notes'));
+					await goto(resolve(LANDING_ROUTE));
 				})(),
 				{
 					loading: 'Logging in...',

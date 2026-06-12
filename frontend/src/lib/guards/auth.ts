@@ -3,6 +3,12 @@ import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { resolve } from '$app/paths';
 
+/** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
+export const LANDING_ROUTE = '/home';
+
+/** The login page — where unauthenticated and just-logged-out users are sent. */
+export const LOGIN_ROUTE = '/login';
+
 /**
  * Auth guard for protected routes. Resolves the CouchDB `_session` cookie and
  * redirects to /login when there is no authenticated user.
@@ -21,7 +27,7 @@ export async function requireAuth() {
 	await authStore.ensureInitialized();
 
 	if (!authStore.isAuthenticated) {
-		throw redirect(302, resolve('/login'));
+		throw redirect(302, resolve(LOGIN_ROUTE));
 	}
 }
 
@@ -32,7 +38,7 @@ export async function requireAuth() {
 export async function requireAdmin() {
 	await requireAuth();
 	if (!authStore.user?.roles.includes('_admin')) {
-		throw redirect(302, resolve('/home'));
+		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
 
@@ -47,7 +53,7 @@ export async function requireAdmin() {
  *   return {};
  * };
  */
-export async function redirectIfAuthenticated(redirectTo: '/notes' = '/notes') {
+export async function redirectIfAuthenticated(redirectTo: typeof LANDING_ROUTE = LANDING_ROUTE) {
 	if (!browser) return;
 
 	await authStore.ensureInitialized();
