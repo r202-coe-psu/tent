@@ -86,9 +86,9 @@ export const localDb = browser ? getDb() : (null as unknown as PouchDB.Database)
 
 // ---------------------------------------------------------------- multi-db
 //
-// The shelter demo keeps one database per shelter (shelter_a / _b / _c). These
-// helpers manage an arbitrary named local DB + its live sync, reusing the same
-// cookie auth + 401 handling as the notes sync above.
+// Generic helpers for managing an arbitrary named local DB + its live sync
+// (e.g. one database per scope), reusing the same cookie auth + 401 handling as
+// the notes sync above.
 
 const namedDbs = new Map<string, PouchDB.Database>();
 const namedSyncs = new Map<string, PouchDB.Replication.Sync<object>>();

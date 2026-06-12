@@ -67,8 +67,10 @@ features/<name>/
   possible — keep the repo injectable.
 - **Add a new UI/query export by widening `index.ts`**, not by importing the inner module elsewhere.
 
-When you add a feature, mirror an existing one (`notes` is the reference; `shelter` shows the
-multi-database variant). Protected pages go in `src/routes/(protected)/<feature>/+page.svelte`.
+When you add a feature, mirror an existing one (`notes` is the reference; the quarantined
+`demo/lib/features/shelter` shows the multi-database variant — read it as a pattern only, it is
+demo code excluded from the build). Protected pages go in
+`src/routes/(protected)/<feature>/+page.svelte`.
 
 ## 4. Data, sync & auth — do not bypass
 

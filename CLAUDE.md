@@ -6,8 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repo (`tent`, app title **"CouchDB Lab"**) is a local-first **CouchDB** app built from the
 **sveltekitten** SPA template. The frontend now lives under `frontend/src/` with a working
-layered feature set (`login`, `me`, `users`, `register`, `shelter`, `health`, `people`,
-`operations`, …), a `$lib/db/` PouchDB/CouchDB layer, and dev-server admin API routes.
+layered feature set (`login`, `me`, `users`, `register`, `health`, `people`, `operations`, …), a
+`$lib/db/` PouchDB/CouchDB layer, and dev-server admin API routes. The original template demos
+(RBAC `demo` + the shelter A/B/C `shelter` demo) have been quarantined under the repo-root `demo/`
+directory — reference only, excluded from the build (see `demo/README.md`).
 
 The backend is **CouchDB 3.5** (see `docker-compose.yml`), reached from the browser with
 cookie-based `_session` auth via a same-origin dev proxy (`PUBLIC_COUCH_PROXY=/couch`).
@@ -97,8 +99,10 @@ features/<name>/
   Reaching into `…/domain/*`, `…/data/*`, `…/application/*`, `…/ui/*` from outside is an ESLint error
   (`no-restricted-imports`). A feature may import its own internals freely.
 - Add a new public export by **widening `index.ts`**, not by importing an inner module elsewhere.
-- When adding a feature, mirror an existing one — **`shelter`** is the reference layered impl
-  (multi-database variant). Protected pages go in `src/routes/(protected)/<feature>/+page.svelte`.
+- When adding a feature, mirror an existing one. The quarantined **`demo/lib/features/shelter`**
+  remains the most complete layered reference (multi-database variant) — read it as a pattern, but
+  don't import from it or treat its demo authz/seed as prod. Protected pages go in
+  `src/routes/(protected)/<feature>/+page.svelte`.
 - For all naming/structure/coding details (file naming, types-vs-interface, guard style, doc `_id`
   patterns, query-key factories, test conventions) follow **`frontend/CONVENTIONS.md`** verbatim.
 - `src/lib/components/ui/**` is vendored/generated shadcn-svelte and lint-excluded — don't hand-edit;

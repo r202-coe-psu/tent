@@ -160,8 +160,11 @@ if (isOccupant(raw)) { /* raw is Occupant here */ }
 
 ## 4. Feature architecture in practice
 
-Every feature follows the strict four-layer model. The **`shelter`** feature is the reference
-implementation — read it before building a new feature.
+Every feature follows the strict four-layer model. The most complete reference is the quarantined
+**`demo/lib/features/shelter`** feature — read it as a structural pattern before building a new
+feature, but note it is demo code (excluded from the build); don't import from it or copy its
+demo authz/seed into prod. The `shelter`/`Shelter`/`Occupant` names used as examples throughout
+this doc come from it.
 
 ```
 features/<name>/
