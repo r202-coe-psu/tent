@@ -23,7 +23,6 @@ describe('createEvacuee', () => {
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
 		expect(e.first_name).toBe('สมชาย'); // trimmed
-		expect(e.official_code).toBeNull(); // minted later
 		expect(e.privacy).toEqual({ search_excluded: false });
 		expect(e.current_stay.status).toBe('registered');
 		expect(e.special_needs).toEqual([]);

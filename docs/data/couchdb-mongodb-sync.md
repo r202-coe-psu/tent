@@ -28,18 +28,19 @@ api-contract v1 เดิมเขียนว่า public plane "อ่าน 
 
 ---
 
-## 1. Topology — ต่อจาก 3 ชั้นเดิม
+## 1. Topology — ต่อจาก central-first sync
 
 ```
-device (PouchDB) ⇄ LAN ⇄ edge (CouchDB @ศูนย์) ⇄ WAN ⇄ central (CouchDB)
-                                                            │
-                                            sync worker (CDC ทั้งสองทิศ)
-                                                            │
-                                                       MongoDB  ⇄  /public/v1/* (internet)
+staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั้งสองทิศ) ⇄ MongoDB ⇄ /public/v1/*
+        │                              ⇅
+        │ fallback only                │ edge fallback replica / backlog
+        └──────── LAN ────────────⇄ edge (CouchDB @ศูนย์)
 ```
 
 - public client **ไม่เคย**คุย CouchDB; คุยแค่ `/public/v1/*` ที่อ่าน/เขียน Mongo
-- staff/device **ไม่เคย**คุย Mongo; อยู่บน sync plane (PouchDB⇄edge⇄central) เหมือนเดิม
+- staff/device **ไม่เคย**คุย Mongo; app เขียน local PouchDB ก่อน แล้ว sync กับ active remote เดียว:
+  central ปกติ, edge เฉพาะ WAN/central outage, local-only ถ้าไม่เห็นทั้งคู่
+- edge เป็น LAN continuity/fallback replica ไม่ใช่ normal client hub; เมื่อ WAN กลับมา edge sync backlog กลับ central
 - **sync worker** = service เดียวที่แตะทั้งสอง store; อยู่ฝั่ง central (มี WAN ถึง central CouchDB + Mongo)
 - Mongo replica ขึ้น public edge ได้ (read replica) แต่ write ทุกอย่างวิ่งผ่าน sync worker จุดเดียว
 
@@ -124,8 +125,9 @@ public ประกาศบริจาคผ่าน `POST /public/v1/donatio
      (worker crash/retry → put ซ้ำ → 409 = สำเร็จแล้ว ไม่เกิด donation ซ้ำ)
    → mark Mongo doc synced_to_couch=true
 
-3. central → edge → device (replication ปกติ)
-   → staff ที่ศูนย์เห็น "donation ขาเข้า" สถานะ declared ในแอป
+3. central → device (active remote ปกติ) + central → edge fallback replica
+   → staff ที่ศูนย์เห็น "donation ขาเข้า" สถานะ declared ในแอปเมื่อ sync กับ central;
+     ถ้าอยู่โหมด Edge-only fallback จะเห็นจาก edge replica และ edge จะส่ง backlog กลับ central เมื่อ WAN คืน
 ```
 
 donation doc ที่ลงไปเป็น state machine แบบ **forward-only** (data-model §3.2): `declared → received → expired`.

@@ -98,16 +98,16 @@
         <section id="intro" data-title="ภาพรวม">
           <h2>ภาพรวม</h2>
           <p>
-            ระบบนี้ใช้ CouchDB เป็น source of truth ทั้งเรื่อง authentication และ authorization
+            ระบบนี้ใช้ Central CouchDB เป็น source of truth ทั้งเรื่อง authentication และ authorization
             โดย frontend (SvelteKit + PouchDB) ทำหน้าที่ <em>อ่าน</em> สิทธิ์มาแสดงผลและ gate route เท่านั้น
-            ความปลอดภัยจริงบังคับใช้ที่ชั้น CouchDB
+            ความปลอดภัยจริงบังคับใช้ที่ชั้น Central CouchDB; Edge fallback ใช้ <code>_session</code> แยกและไม่ให้สิทธิ์แทน Central API
           </p>
           <figure class="diagram">
             <figcaption class="diagram-cap">รูปที่ 1 — สถาปัตยกรรม 3 ชั้น</figcaption>
             <div class="mermaid-zoom">
               <pre class="mermaid">
 flowchart TB
-    subgraph L1["LAYER 1 · CouchDB — source of truth"]
+    subgraph L1["LAYER 1 · Central CouchDB — source of truth"]
         U[("_users DB&lt;br/&gt;เก็บ user + roles")]
         S[("_security doc&lt;br/&gt;ใครเข้า DB ไหนได้")]
         SE["POST /_session&lt;br/&gt;ออก cookie"]
@@ -287,20 +287,20 @@ flowchart LR
         <section id="shelter" data-title="Shelter Offline-First">
           <h2>Shelter Management — Offline-First (อุทกภัย)</h2>
           <p>
-            สถานการณ์: น้ำท่วม ไม่มี internet แต่มีไฟ บางศูนย์มี edge computer บางศูนย์ไม่มี
+            สถานการณ์: น้ำท่วม internet/WAN ไม่เสถียร แต่มีไฟ บางศูนย์มี LAN Edge fallback บางศูนย์ไม่มี
             ระบบซับซ้อน — รับคนเข้า, บริจาค, จอง, แผนที่อพยพ, ครัว, คลังสินค้า
-            นี่คือ killer use case ของ CouchDB เพราะถูกออกแบบมาเพื่อ offline-first
-            multi-master replication โดยตรง
+            นี่คือ killer use case ของ CouchDB/PouchDB เพราะ client เขียน local ก่อนเสมอ แล้วเลือก remote sync
+            ได้แบบควบคุม: Central เป็น remote ปกติ, LAN Edge ใช้เฉพาะตอน WAN/Central ล่ม
           </p>
           <div class="overflow-x-auto my-4">
             <table class="table table-zebra">
               <thead><tr><th>ความต้องการ</th><th>CouchDB ให้อะไร</th></tr></thead>
               <tbody>
-                <tr><td>ไม่มี internet</td><td>replication เป็น async ทำงาน local 100%</td></tr>
-                <tr><td>edge บางที่ไม่มี</td><td>PouchDB ในมือถือ = CouchDB ย่อส่วน sync กันเองได้</td></tr>
+                <tr><td>ไม่มี internet</td><td>PouchDB ทำงาน local 100% แล้ว sync backlog เมื่อ remote กลับมา</td></tr>
+                <tr><td>edge บางที่ไม่มี</td><td>ไม่มี edge = local-only ระหว่าง outage; มี edge = fallback replica ผ่าน LAN เท่านั้น</td></tr>
                 <tr><td>หลายคนแก้ offline พร้อมกัน</td><td>MVCC + revision tree, merge ตอน sync</td></tr>
                 <tr><td>ไฟดับ/เครื่องพัง</td><td>ข้อมูลกระจายหลาย replica ไม่หายทั้งหมด</td></tr>
-                <tr><td>เน็ตกลับมา</td><td>sync ต่อจาก checkpoint อัตโนมัติ</td></tr>
+                <tr><td>เน็ตกลับมา</td><td>client failback ไป Central; Edge sync backlog ขึ้น Central จาก checkpoint</td></tr>
               </tbody>
             </table>
           </div>
@@ -308,42 +308,41 @@ flowchart LR
 
         <section id="topology" data-title="Replication Topology">
           <h2>Replication Topology</h2>
-          <p>ทุกชั้นเก็บ full replica ตาม scope → ทำงานได้แม้ตัดขาดจากชั้นบน → sync เมื่อ connection กลับมา</p>
+          <p>Client เขียน local PouchDB ก่อนเสมอ และมี active remote ได้ครั้งละหนึ่งเป้าหมาย: Central เมื่อ reachable, LAN Edge เฉพาะตอน WAN/Central ล่ม, local-only เมื่อไม่มี remote ใดใช้ได้</p>
           <figure class="diagram">
-            <figcaption class="diagram-cap">รูปที่ 4 — Cloud → Edge → Device topology</figcaption>
+            <figcaption class="diagram-cap">รูปที่ 4 — Central-first topology with LAN Edge fallback</figcaption>
             <div class="mermaid-zoom">
               <pre class="mermaid">
 flowchart TB
-    CLOUD["☁️ CLOUD CouchDB&lt;br/&gt;central — เมื่อมี internet"]
-    subgraph SA["🖥️ Shelter A (มี edge)"]
-        EA[("Edge CouchDB")]
-        PA1["📱 PouchDB"]
-        PA2["📱 PouchDB"]
+    CENTRAL["☁️ Central CouchDB + Service API&lt;br/&gt;normal auth + sync target"]
+    RULE["Client rule&lt;br/&gt;write local PouchDB first&lt;br/&gt;active remote = Central OR Edge OR local-only"]
+    subgraph SA["🖥️ Shelter A (มี LAN Edge fallback)"]
+        EA[("LAN Edge CouchDB&lt;br/&gt;fallback replica only")]
+        PA1["📱 Staff PouchDB"]
+        PA2["📱 Staff PouchDB"]
     end
-    subgraph SB["🖥️ Shelter B (มี edge)"]
-        EB[("Edge CouchDB")]
-        PB1["📱 PouchDB"]
+    subgraph SB["🚫 Shelter B (ไม่มี edge)"]
+        PB1["📱 Staff PouchDB&lt;br/&gt;local-only during outage"]
     end
-    subgraph SC["🚫 Shelter C (ไม่มี edge)"]
-        TC["📱 Tablet = soft-edge"]
-        PC1["📱 PouchDB"]
-        PC2["📱 PouchDB"]
+    subgraph PUB["🌐 Public / no-login"]
+        WEB["Public clients"]
     end
-    CLOUD &lt;--&gt;|opportunistic sync| EA
-    CLOUD &lt;--&gt;|opportunistic sync| EB
-    EA &lt;--&gt;|LAN redundancy| EB
-    EA &lt;--&gt; PA1
-    EA &lt;--&gt; PA2
-    EB &lt;--&gt; PB1
-    TC &lt;--&gt; PC1
-    TC &lt;--&gt; PC2
-    TC &lt;-.sync เมื่อเน็ตมา.-&gt; CLOUD
+    PA1 &lt;--&gt;|Central reachable| CENTRAL
+    PA2 &lt;--&gt;|Central reachable| CENTRAL
+    PB1 &lt;--&gt;|Central reachable| CENTRAL
+    PA1 -. WAN/Central outage .-&gt; EA
+    PA2 -. WAN/Central outage .-&gt; EA
+    EA &lt;--&gt;|WAN returns: sync backlog| CENTRAL
+    WEB --&gt;|Central-only public API| CENTRAL
+    RULE -. governs .-&gt; PA1
+    RULE -. governs .-&gt; PA2
+    RULE -. governs .-&gt; PB1
     classDef cloud fill:#1e3a5f,stroke:#7dd3fc,color:#e6e9ef;
     classDef edge fill:#134e4a,stroke:#5eead4,color:#e6e9ef;
     classDef noedge fill:#4a2c2c,stroke:#f87171,color:#e6e9ef;
-    class CLOUD cloud;
-    class EA,EB edge;
-    class TC noedge;
+    class CENTRAL,RULE cloud;
+    class EA edge;
+    class PB1 noedge;
               </pre>
               <div class="zoom-tools">
                 <button type="button" data-zoom-act="out" title="ซูมออก">−</button>
@@ -353,6 +352,12 @@ flowchart TB
               <span class="zoom-hint">ล้อเมาส์ = ซูม · ลาก = แพน · ดับเบิลคลิก = รีเซ็ต</span>
             </div>
           </figure>
+          <ul>
+            <li>ห้าม device รัน long-lived replication ไป Central และ Edge พร้อมกัน — remote target ต้อง switch แบบ exclusive</li>
+            <li>Central และ Edge มี <code>_session</code> cookie แยกกัน; session fallback ที่ Edge ใช้เรียก Central service API ไม่ได้</li>
+            <li>Edge เป็น LAN continuity/fallback replica และ sync backlog ขึ้น Central เมื่อ WAN กลับมา ไม่ใช่ normal client hub</li>
+            <li>Public/no-login endpoints อยู่ที่ Central เท่านั้นและไม่ fallback ไป Edge</li>
+          </ul>
           <h3>Database layout</h3>
           <pre><code>ต่อ shelter หนึ่งศูนย์:
   shelter{id}_intake       ระบบรับคนเข้า
@@ -367,27 +372,30 @@ flowchart TB
           <p>แยก DB ตาม subsystem → sync เลือกเฉพาะที่จำเป็น, คุม role แยก, DB นึงพังไม่ลามทั้งหมด</p>
         </section>
 
-        <section id="noedge" data-title="ศูนย์ไม่มี Edge">
-          <h2>ศูนย์ไม่มี Edge Computer</h2>
+        <section id="noedge" data-title="ศูนย์ไม่มี LAN Edge">
+          <h2>ศูนย์ไม่มี LAN Edge</h2>
           <figure class="diagram">
-            <figcaption class="diagram-cap">รูปที่ 5 — Soft-edge vs Peer mesh</figcaption>
+            <figcaption class="diagram-cap">รูปที่ 5 — No-edge local-only vs optional soft-edge fallback</figcaption>
             <div class="mermaid-zoom">
               <pre class="mermaid">
 flowchart LR
-    subgraph OptA["ทางเลือก A · Soft-edge (แนะนำ)"]
-        H["📱 Tablet hub&lt;br/&gt;เก็บข้อมูลศูนย์ทั้งหมด"]
-        D1["📱"] --&gt; H
-        D2["📱"] --&gt; H
-        D3["📱"] --&gt; H
-        H -.sync ขึ้น cloud เมื่อมีโอกาส.-&gt; X["☁️/Edge"]
+    subgraph OptA["ทางเลือก A · No Edge (default)"]
+        D1["📱 Staff PouchDB"]
+        L1["local-only queue&lt;br/&gt;เมื่อ Central ใช้ไม่ได้"]
+        C1["☁️ Central"]
+        D1 &lt;--&gt;|Central reachable| C1
+        D1 -. WAN/Central outage .-&gt; L1
     end
-    subgraph OptB["ทางเลือก B · Peer mesh"]
-        M1["📱"] &lt;--&gt; M2["📱"]
-        M2 &lt;--&gt; M3["📱"]
-        M1 &lt;--&gt; M3
+    subgraph OptB["ทางเลือก B · Soft-edge fallback (เฉพาะช่วง outage)"]
+        H["📱 Tablet fallback replica"]
+        D2["📱"] -. WAN/Central outage + LAN .-&gt; H
+        D3["📱"] -. WAN/Central outage + LAN .-&gt; H
+        H -. WAN returns: sync backlog .-&gt; C2["☁️ Central"]
     end
     classDef hub fill:#134e4a,stroke:#5eead4,color:#e6e9ef;
+    classDef local fill:#4a2c2c,stroke:#f87171,color:#e6e9ef;
     class H hub;
+    class L1 local;
               </pre>
               <div class="zoom-tools">
                 <button type="button" data-zoom-act="out" title="ซูมออก">−</button>
@@ -398,8 +406,8 @@ flowchart LR
             </div>
           </figure>
           <p>
-            แนะนำ <strong>A</strong> — มี anchor point ชัด จัดการ conflict ง่ายกว่า
-            B เสี่ยง: ถ้าทุกเครื่องออกจากศูนย์พร้อมกัน ข้อมูลไปกับเครื่อง
+            Default ของศูนย์ไม่มี Edge คือ Central-first เมื่อ online และ local-only ระหว่าง outage
+            ถ้าต้องมี soft-edge ให้กำหนดเป็น fallback replica ชั่วคราวเท่านั้น ไม่ใช่ normal hub และไม่ให้ session ของ soft-edge ใช้แทน Central API ได้
           </p>
         </section>
 
@@ -464,9 +472,10 @@ flowchart TB
           <h2>สรุปคำแนะนำ</h2>
           <ul>
             <li>ใช้ <strong>Pattern 1</strong> (DB-per-subscope + roles) เป็นฐาน</li>
-            <li>Topology: <strong>Cloud → Edge → Device</strong> (hub-and-spoke)</li>
-            <li>Edge ข้างเคียง sync กันผ่าน LAN → redundancy</li>
-            <li>Shelter ไม่มี edge → ใช้ tablet เป็น <strong>soft-edge hub</strong></li>
+            <li>Topology: <strong>Central-first + LAN Edge fallback</strong> (ไม่ใช่ Edge เป็น normal hub)</li>
+            <li>Device เขียน local PouchDB ก่อน แล้ว sync ไป active remote เพียงหนึ่งตัว: Central, Edge fallback, หรือ local-only</li>
+            <li>Edge เก็บ fallback replica และ sync backlog ขึ้น Central เมื่อ WAN กลับมา</li>
+            <li>Shelter ไม่มี edge → Central เมื่อ online, local-only ตอน outage; soft-edge ใช้ได้เฉพาะ fallback ที่กำหนดชัด</li>
             <li>ระบบนับจำนวน → <strong>event-sourcing/ledger</strong> กัน conflict</li>
             <li><strong>Filtered replication</strong> → device โหลดเฉพาะ scope ตัวเอง</li>
             <li><code>_id</code> ใช้ natural key (เช่น national_id) กัน duplicate</li>

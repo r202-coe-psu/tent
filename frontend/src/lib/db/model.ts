@@ -82,5 +82,10 @@ export const phoneSchema = z
 /** Reusable enum for the registration channel. */
 export const registeredViaSchema = z.enum(['app', 'import', 'paper']);
 
-/** Codify the `SH###` shelter-code shape used across registry + docs. */
-export const shelterCodeSchema = z.string().regex(/^SH\d{3}$/, 'Shelter code must look like SH001');
+/**
+ * Codify the shelter-code shape used across registry + docs (schema.md §3.1):
+ * `^SH\d{3,}$` — 1–999 padded to 3 digits (`SH001`), ≥1000 widens (`SH1000`).
+ */
+export const shelterCodeSchema = z
+	.string()
+	.regex(/^SH\d{3,}$/, 'Shelter code must look like SH001');

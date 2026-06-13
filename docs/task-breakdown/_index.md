@@ -19,7 +19,7 @@ Source of truth ของตัวเลข = `_tasks.py` — สร้างเ
 
 - **Greenfield:** ยังไม่มีระบบ MVP ที่ใช้งานจริงมาก่อน (มีเพียง CouchDB PoC) — คำว่า "MVP/baseline" ในเอกสารชุดนี้และ PRD หมายถึง **baseline scope FR-1–20** (auth, person registration, screening, person QR/movement, dashboard, offline — spec ใน `docs/features/`) ซึ่งต้อง **build เป็นส่วนแรกของ foundation** ก่อนที่ R2 จะต่อยอด
 - ✅ **ปิดช่องว่างแล้ว (เคาะ 2026-06-11):** baseline FR-1–20 มี T-task ของตัวเองแล้ว — [module 0 Baseline](00-baseline.md) (T-47..T-55, 37 Adj MD) ยอดรวมใหม่ = **250 Adj MD**; estimate เคาะจริงใน workshop (K-16)
-- **Data layer (เคาะ 2026-06-11):** ระบบหลักเป็น **offline-first บน CouchDB เป็นหลัก** (PouchDB↔CouchDB sync); EOC/Open API เป็น **service แยก** ดึงข้อมูลผ่าน worker/ETL (ดู [10-eoc](10-eoc.md)) — datastore ของ aggregate read-model รอตัดสินใจใน P-03
+- **Data layer (เคาะ 2026-06-11):** ระบบหลักเป็น **offline-first บน Central CouchDB เป็นหลัก** (PouchDB เขียน local ก่อน แล้ว sync กับ active remote หนึ่งตัว: Central, LAN Edge fallback ตอน WAN/Central ล่ม, หรือ local-only); EOC/Open API เป็น **service แยก** ดึงข้อมูลจาก Central ผ่าน worker/ETL (ดู [10-eoc](10-eoc.md)) — datastore ของ aggregate read-model รอตัดสินใจใน P-03
 - **Kickoff:** 2026-06-10 · **Workshop (ทีมเริ่มงาน):** 2026-06-17
 - **In-scope** (Baseline + R2 + R3 + Family Search + governance): ส่งมอบภายใน **สิงหาคม 2026** (2026-08-31), **go-live full program กันยายน** (สัปดาห์ 1)
 - **Deferred** (EOC aggregate API, Open API, SOP simulation, inventory polish): ส่งมอบหลัง go-live

@@ -25,7 +25,7 @@ Field contract อิง [Data Dictionary](../data/smart-shelter-data-dictionary
 1. **Greenfield** — ยังไม่มีระบบ MVP ใช้งานจริงมาก่อน มีเพียง CouchDB PoC; baseline FR-1–20 (registration-first) ต้อง build เป็นส่วนแรกของ foundation
 2. **ทีม 14 คน = 2 Lead (Platform/Core) + 4 ทีม × 3** (part-time academic) — รันขนานหลายทีมต่อ gate; จับ domain เข้าทีม D1–D4 **รอตัดสินใจ (K-13)**
 3. **ฤดูเสี่ยงน้ำท่วม ก.ย.–ธ.ค.** — ระบบต้อง **go-live full program ก.ย.** ก่อนช่วงเสี่ยง → build บีบอยู่ใน **มิ.ย.–ส.ค.**
-4. **Offline-first บน CouchDB เป็นหลัก** (PouchDB↔CouchDB sync) — sync/conflict = tech risk #1; EOC/Open API เป็น service แยก (worker/ETL)
+4. **Offline-first บน Central CouchDB เป็นหลัก** — app เขียน local PouchDB ก่อน แล้ว sync กับ active remote หนึ่งตัว: Central เมื่อ reachable, LAN Edge เฉพาะตอน WAN/Central outage, หรือ local-only; sync/conflict/failback = tech risk #1; EOC/Open API เป็น service แยก (worker/ETL จาก Central)
 5. **หลัง go-live**: รับ feedback + แก้ไข (maintenance) ต่อเนื่องจนครบกำหนดโครงการ **12 เดือน** — งาน feature ใหม่จบที่ 14 ก.ย. ([ASSUMPTION RM-A1])
 
 ## 2. Timeline (canonical — สรุปจาก [_timeline.md](../task-breakdown/_timeline.md))
@@ -50,7 +50,7 @@ Gate semantics: ทุก gate ต้องผ่าน automated checks + stagi
 
 | หน่วย | คน | Domain | Active |
 | --- | --- | --- | --- |
-| **Lead pair** Platform/Core | 2 | auth, RBAC, data model, shared API, CouchDB sync, DevOps, integration + floating reviewer | ตลอด |
+| **Lead pair** Platform/Core | 2 | auth, RBAC, data model, shared API, Central-first CouchDB/PouchDB sync + Edge fallback, DevOps, integration + floating reviewer | ตลอด |
 | **D1–D4** | 3×4 | **รอตัดสินใจ (K-13)** — จับ 6 domain ลง 4 ทีม (ดู [Squad Roster](squad-roster.html)) | — |
 
 **6 domain ที่ต้องจับลง D1–D4:** People & Search (รวม baseline registration) · Supply & Inventory · Donation · Kitchen & Food · Volunteer & SOP · Security/Referral/EOC — load ราย domain ดู [Task Breakdown](../task-breakdown/_index.md)
@@ -79,15 +79,15 @@ all R3 producers ──> (deferred ≤14 ก.ย.) EOC aggregate API ──> Ope
 
 ## 5. Data Layer & EOC Architecture (เคาะ 2026-06-11)
 
-- **ระบบหลัก: CouchDB เป็นหลัก, offline-first** — browser sync ผ่าน PouchDB; sync/conflict design อยู่ใน T-02 (Lead B เจ้าของ, tech risk #1)
-- **EOC + Open API: service แยก** — worker/ETL อ่านจาก CouchDB มาสรุปเป็น aggregate read-model แล้ว expose เป็น EOC API (API-key principal, FD-14) + Open API tier (One Data / Hat Yai ROD)
+- **ระบบหลัก: Central CouchDB เป็นหลัก, offline-first** — browser sync ผ่าน PouchDB โดย active remote มีครั้งละหนึ่งเป้าหมาย; LAN Edge เป็น outage fallback replica และ failback กลับ Central เมื่อ WAN กลับมา; sync/conflict design อยู่ใน T-02 (Lead B เจ้าของ, tech risk #1)
+- **EOC + Open API: service แยก** — worker/ETL อ่านจาก Central CouchDB มาสรุปเป็น aggregate read-model แล้ว expose เป็น EOC API (API-key principal, FD-14) + Open API tier (One Data / Hat Yai ROD)
 - **Datastore ของ aggregate read-model: รอตัดสินใจใน P-03** — ร่างเดิม MongoDB; ทางเลือก CouchDB database แยก / PostgreSQL (ดู [10-eoc](../task-breakdown/10-eoc.md))
 
 ## 6. Cross-cutting
 
 - **RBAC**: 5 internal roles ตาม [Role Permission Matrix](role-permission-matrix.html) enforce ที่ backend. **Donor = no-auth** (track ผ่าน `tracking_token` — FD-16). **EOC = API-key principal ไม่ใช่ human role** (FD-14)
 - **Masking/PDPA**: medical/national-ID mask ตาม role; family search + donation transparency + Open API = public-facing → ผ่าน data-governance review ก่อน publish
-- **Offline**: offline-first เฉพาะ flow หน้างาน (registration/screening เป็นหลัก); module หลังบ้าน online-first; full offline sync ทุก module = out of scope
+- **Offline**: offline-first เฉพาะ flow หน้างาน (registration/screening เป็นหลัก); module หลังบ้าน online-first; LAN Edge fallback ไม่ใช่ normal hub; public/no-login endpoints เป็น Central-only; full offline sync ทุก module = out of scope
 - **Audit**: ทุก sensitive/stock/donation/referral action ต้อง auditable
 - **Schema**: อิง [Data Dictionary](../data/smart-shelter-data-dictionary.md) — ออกแบบให้ baseline collections รองรับการต่อยอด R2-R4 โดยไม่ destructive migration
 
@@ -96,7 +96,7 @@ all R3 producers ──> (deferred ≤14 ก.ย.) EOC aggregate API ──> Ope
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
 | Greenfield + build บีบ มิ.ย.–ส.ค. | คุณภาพตก, bug หลุดเข้า field ช่วงเสี่ยงน้ำท่วม | walking skeleton ให้ pattern เดียวกันทุกทีม; ทุก gate คง critical bug = 0; maintenance period หลัง go-live รองรับ |
-| CouchDB sync/conflict (T-54/T-02) | offline data หาย/ซ้ำ — พังความเชื่อใจหน้างาน | Lead B เจ้าของ; เริ่มทันทีหลัง skeleton; ทดสอบ conflict scenario ใน Foundation Gate |
+| CouchDB sync/conflict/failback (T-54/T-02) | offline data หาย/ซ้ำ หรือ client sync ไป Central+Edge พร้อมกัน — พังความเชื่อใจหน้างาน | Lead B เจ้าของ; เริ่มทันทีหลัง skeleton; ทดสอบ Central success, Edge fallback, local-only, failback และ conflict scenario ใน Foundation Gate |
 | 4 ทีม + Lead pair ชน shared core | merge conflict, API contract แตก | Lead pair ถือ API convention + freeze contract ต้น phase; review ก่อนแก้ core |
 | SOP calc (T-31) รอ input หลาย module | คอขวดปลาย R3 | เริ่ม SOP data contract แต่ต้น R3 ขนานกับ producer; calc logic มาทีหลัง |
 | P-02 (R3 design) ส่งช้า | ทีมรอ design ~ต้น ก.ค. | บริษัท commit เสร็จก่อน ก.ค. (เงื่อนไขใน [_timeline §0](../task-breakdown/_timeline.md)) |

@@ -25,7 +25,7 @@ note: ปรับตาม schedule decision 2026-06-09 + ข้อสรุป
 - เจ้าหน้าที่ register, screen, track movement ผู้อพยพได้แบบ real-time
 - ศูนย์เดินงานประจำวัน (คลัง, ครัว, อาสาสมัคร) จากข้อมูลจริง ไม่ใช่การประมาณ
 - ส่งข้อมูล aggregate ให้ EOC / Hat Yai ROD / One Data ผ่าน API (service แยก)
-- ใช้งานได้แม้ network ขาด — **offline-first บน CouchDB** — และมี fallback เป็น Excel import
+- ใช้งานได้แม้ network ขาด — **offline-first บน Central CouchDB/PouchDB** โดย LAN Edge เป็น outage fallback เท่านั้น — และมี fallback เป็น Excel import
 
 **สถานะปัจจุบัน (greenfield):** ยังไม่มีระบบใช้งานจริงมาก่อน — มี **CouchDB PoC**, design package P-01 (ส่งแล้ว), feature specs ([`docs/features/`](../features/index.html)) และ [Data Dictionary](../data/smart-shelter-data-dictionary.md) เป็นจุดตั้งต้น ทุกอย่างต้อง build ภายใน **มิ.ย.–ส.ค. 2026** เพื่อ **go-live full program ก.ย.** ก่อนฤดูเสี่ยง จากนั้นรับ feedback + แก้ไขจนครบกำหนดโครงการ **12 เดือน**
 
@@ -54,7 +54,7 @@ note: ปรับตาม schedule decision 2026-06-09 + ข้อสรุป
 | **เมื่อไร** | **build = มิ.ย.–ส.ค. 2026** · in-scope ส่งมอบ **31 ส.ค.** · **go-live full program ก.ย.** (สัปดาห์ 1) · deferred tail ≤ **14 ก.ย.** (hard deadline งาน feature) |
 | **หลัง go-live** | รับ feedback + แก้ไข (maintenance) จนครบกำหนดโครงการ **12 เดือน** — ไม่มี feature ใหม่หลัง 14 ก.ย. |
 | **ใคร** | นักศึกษา **14 คน = 2 Lead (Platform/Core) + 4 ทีม × 3** (Lead pair ควบ integrator + shared core) — จับ domain เข้าทีม **รอตัดสินใจ (K-13)** |
-| **stack หลัก** | **offline-first บน CouchDB เป็นหลัก** (PouchDB sync); EOC/Open API = **service แยก** (worker/ETL — datastore รอเคาะใน P-03) |
+| **stack หลัก** | **offline-first บน Central CouchDB เป็นหลัก** (PouchDB local write + one active remote: Central, LAN Edge fallback, หรือ local-only); EOC/Open API = **service แยก** (worker/ETL จาก Central — datastore รอเคาะใน P-03) |
 | **scope** | in-scope ส.ค.: Baseline + R2 + R3 + Family Search + governance · deferred ≤14 ก.ย.: EOC aggregate API, Open API, SOP simulation, inventory polish |
 | **งานรวม** | นักศึกษา (prod+post) **250 Adj MD** หลัง AI uplift + pre-production บริษัท 30 — ดู [Task Breakdown](../task-breakdown/_index.md) |
 | **แบ่งงาน** | **Pre-production = บริษัท** (UX/design/spec — P-01 ส่งแล้ว, P-02 ก่อน ก.ค.); **Production + Post = นักศึกษา 2 Lead + 4 ทีม** |
@@ -66,14 +66,14 @@ note: ปรับตาม schedule decision 2026-06-09 + ข้อสรุป
 ## 2. เรามาถึงไหนแล้ว → จะไปไหนต่อ
 
 **มีแล้ววันนี้:**
-- **CouchDB PoC** — พิสูจน์แนว offline-first sync เบื้องต้น (ยังไม่ใช่ระบบใช้งานจริง)
+- **CouchDB PoC** — พิสูจน์แนว offline-first sync เบื้องต้น (ยังไม่ใช่ระบบใช้งานจริง; production topology ต้องเป็น Central-first + Edge fallback เท่านั้น)
 - **Design package P-01** (บริษัท — ส่งแล้ว): UX/wireframe household/zoning/inventory/donation, role-permission matrix, API spec
 - **Feature specs baseline FR-1–20** ใน [`docs/features/`](../features/index.html) + [Data Dictionary](../data/smart-shelter-data-dictionary.md) / [Data Model](../data/smart-shelter-data-model.md) / [ERD](../data/smart-shelter-erd.md)
 
 **ยังไม่มี:** โค้ดระบบจริงทุกส่วน — **baseline FR-1–20 (registration-first) คือสิ่งแรกที่ต้อง build** (T-47..T-55, [module 0](../task-breakdown/00-baseline.md)) ต่อจาก walking skeleton ของ Lead pair
 
 > **Baseline scope (FR 1-20):** Registration-first, Person-only. E2E flow: login (role+shelter scope) → register Person (required ขั้นต่ำ name+gender) → screening/vulnerability/medical/fast-track ตามสิทธิ์ → Person Shelter ID/QR → search/scan check-in → check-out + occupancy guardrail (warning-only) → Dashboard v1 (occupancy, capacity, vulnerable/fast-track count, medical summary, in/out today) → export ตาม shelter/date/role พร้อม audit+masking → offline draft/queue (registration/screening) + manual/Excel fallback + assisted import.
-> **Data contract:** collections หลักตาม [Data Dictionary](../data/smart-shelter-data-dictionary.md) — `users`, `shelters`, `evacuees`, `movement_events`, `dashboard_summaries`, `offline_submissions`, `import_batches`, `export_jobs`, `id_counters`, `audit_logs`. `national_id_hash` ห้าม return จาก API; sensitive fields mask/hide ตาม role ทั้ง UI/API/export; QR payload ไม่มี PII/health. **CouchDB = source of truth (offline-first, PouchDB sync)**; EOC/Open API ใช้ aggregate read-model แยก (ETL — datastore รอเคาะ P-03)
+> **Data contract:** collections หลักตาม [Data Dictionary](../data/smart-shelter-data-dictionary.md) — `users`, `shelters`, `evacuees`, `movement_events`, `dashboard_summaries`, `offline_submissions`, `import_batches`, `export_jobs`, `id_counters`, `audit_logs`. `national_id_hash` ห้าม return จาก API; sensitive fields mask/hide ตาม role ทั้ง UI/API/export; QR payload ไม่มี PII/health. **Central CouchDB = source of truth**; PouchDB เขียน local ก่อนแล้ว sync กับ active remote หนึ่งตัว (Central, LAN Edge fallback ตอน WAN/Central ล่ม, หรือ local-only). EOC/Open API ใช้ aggregate read-model แยกจาก Central (ETL — datastore รอเคาะ P-03)
 
 ### Baseline acceptance scenarios (FR-1–20) — เกณฑ์รับ baseline + smoke test ทุก gate
 
@@ -87,7 +87,7 @@ Baseline build เสร็จเมื่อ scenarios เหล่านี้
 6. check-out → movement history และ occupancy guardrail (warning-only) ถูกต้อง
 7. Dashboard v1 แสดง occupancy, capacity, vulnerable count, fast-track count, medical summary, in/out today และ last updated
 8. Export ตาม shelter / date / role พร้อม audit log และ masking ตาม role
-9. Offline draft / fallback ไม่ทำข้อมูลหายหรือซ้ำ และมี assisted import path
+9. Offline draft / fallback ไม่ทำข้อมูลหายหรือซ้ำ: Central online sync ไป Central เท่านั้น, Central down + LAN Edge sync ไป Edge เท่านั้น, no remote = local-only, failback กลับ Central ไม่สร้าง duplicate และมี assisted import path
 
 **เป้าหมายทั้งโครงการ:** ทุกอย่างที่ proposal วางไว้ — Baseline + Household, zoning, คลังสิ่งของ, donation อัจฉริยะ, ครัวกลาง, อาสาสมัคร, SOP calculator, security, referral, family search + (deferred) EOC aggregate API / Open API
 
@@ -138,7 +138,7 @@ Baseline build เสร็จเมื่อ scenarios เหล่านี้
 - **เป้า:** build baseline (registration-first) + ปูฐานหลังบ้าน — ผูกคนเป็นครัวเรือน+จัดโซน, เปิดคลังกลางเห็น stock real-time, รับ donation เข้าคลัง
 - **ส่งมอบ:** Baseline FR-1–20 เต็ม (T-47..55), Household reg + QR/search/check-in, zoning, pet/asset, supply catalog + receive/distribute/transfer + stock dashboard + reorder threshold, donor pre-declaration, RBAC role ใหม่ + field-level
 - **Gate:** Foundation — baseline acceptance scenarios ผ่าน, stock dashboard reconcile กับ ledger, household check-in ถูกต้อง
-- **คอขวด:** Lead pair ต้องปิด data model (T-02) + RBAC (T-01) ให้ไว ทุกทีมขึ้นกับมัน; **T-54 offline sync = tech risk #1**
+- **คอขวด:** Lead pair ต้องปิด data model (T-02) + RBAC (T-01) ให้ไว ทุกทีมขึ้นกับมัน; **T-54 Central-first offline sync/failback = tech risk #1**
 
 ### R3 — Operations (ก.ค.–ส.ค. · Operations Gate 22 ส.ค. · phase หนักสุด)
 
@@ -162,7 +162,7 @@ Baseline build เสร็จเมื่อ scenarios เหล่านี้
 
 | หน่วย | คน | Domain | Active |
 | --- | --- | --- | --- |
-| **Lead pair** Platform/Core ⭐ | 2 | auth, RBAC, data model, shared API, CouchDB sync, DevOps, integration + integrator/review | ตลอด |
+| **Lead pair** Platform/Core ⭐ | 2 | auth, RBAC, data model, shared API, Central-first CouchDB/PouchDB sync + Edge fallback, DevOps, integration + integrator/review | ตลอด |
 | **D1** | 3 | _(รอตัดสินใจ — K-13)_ | — |
 | **D2** | 3 | _(รอตัดสินใจ — K-13)_ | — |
 | **D3** | 3 | _(รอตัดสินใจ — K-13)_ | — |
@@ -233,7 +233,7 @@ all R3 producers ─> (deferred ≤14 ก.ย.) T-37 EOC API ─> T-39 Open API
 - ID ทั้งระบบ: FR 1-56, NFR 1-26, UJ 1-10, SM 1-20 (baseline = 1-20 ต้อง build เหมือน FR อื่น)
 
 **Data & RBAC**
-- **CouchDB = source of truth, offline-first** (PouchDB sync); schema อิง [Data Dictionary](../data/smart-shelter-data-dictionary.md); ออกแบบ baseline collections ให้ต่อยอด R2-R4 ได้โดยไม่ destructive migration
+- **Central CouchDB = source of truth, offline-first** (PouchDB local write + one active remote); schema อิง [Data Dictionary](../data/smart-shelter-data-dictionary.md); ออกแบบ baseline collections ให้ต่อยอด R2-R4 ได้โดยไม่ destructive migration. LAN Edge เป็น fallback replica เฉพาะตอน WAN/Central ล่ม และ public/no-login endpoints ไม่ fallback ไป Edge
 - Internal roles: 5 role ตาม [Role Permission Matrix](role-permission-matrix.html) — enforce ที่ **backend** ทุกตัว. **Donor = no-auth public surface** (track ผ่าน `tracking_token`, ไม่ใช่ login role — FD-16). **EOC = aggregate API + API KEY** (machine-to-machine, service แยก, ไม่ใช่ login role — FD-14)
 - Masking/PDPA: ข้อมูล medical/national-ID ยัง mask; family search + donation transparency + EOC/Open API = **aggregate/no-PII** ต้องผ่าน data-governance review ก่อน publish
 - Audit: ทุก sensitive/stock/donation/referral action auditable
@@ -250,7 +250,7 @@ all R3 producers ─> (deferred ≤14 ก.ย.) T-37 EOC API ─> T-39 Open API
 | Risk | Mitigation |
 | --- | --- |
 | Greenfield + build บีบ มิ.ย.–ส.ค. | walking skeleton ให้ pattern เดียวกัน; คง critical bug = 0 ทุก gate; maintenance period รองรับหลัง go-live |
-| CouchDB offline sync/conflict (tech risk #1) | Lead B เจ้าของ T-02/T-54; เริ่มทันทีหลัง skeleton; ทดสอบ conflict ใน Foundation Gate |
+| CouchDB offline sync/conflict/failback (tech risk #1) | Lead B เจ้าของ T-02/T-54; เริ่มทันทีหลัง skeleton; ทดสอบ Central success, Edge fallback, local-only, failback และ conflict ใน Foundation Gate |
 | Platform/Core foundation ช้า block ทุกคน | Lead pair = คนเก่งสุด; freeze API contract วันแรก |
 | ประเมิน MD ต่ำ (junior + part-time academic) | recalibrate หลัง 1–2 สัปดาห์ (K-16); deferred tail = buffer แรก |
 | P-02 design ส่งช้า | บริษัท commit ก่อน ก.ค.; ทีมขึ้น R3 ~ต้น ก.ค. |
@@ -280,7 +280,7 @@ all R3 producers ─> (deferred ≤14 ก.ย.) T-37 EOC API ─> T-39 Open API
 - Decisions K-12..K-17 ปิดหรือมี owner + due
 - RBAC matrix full-system มีแผน approve ก่อนทีมขึ้น feature ที่พึ่ง permission ใหม่
 - ทีมเข้าใจ vertical ownership + shared-core review + branch/gate
-- เริ่มทันที: Lead pair ลุย walking skeleton (data model/RBAC/CouchDB sync), 4 ทีมเตรียมเข้า workshop 17 มิ.ย.
+- เริ่มทันที: Lead pair ลุย walking skeleton (data model/RBAC/Central-first CouchDB sync + Edge fallback), 4 ทีมเตรียมเข้า workshop 17 มิ.ย.
 
 ---
 

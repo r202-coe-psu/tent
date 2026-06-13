@@ -13,12 +13,13 @@
     <header class="navbar bg-base-100 border-b border-base-300"><div class="flex-1"><div><p class="text-xs uppercase text-base-content/60">Feature Flow Spec</p><h1 class="text-xl font-semibold">Public / No-Login Tier (FAM + DN + PUB)</h1></div></div><div class="flex-none gap-2 no-print"><a class="btn btn-sm btn-outline" href="./index.html">Back</a><span class="badge badge-warning">Draft v0.2</span><span class="badge badge-outline">2026-06-11</span></div></header>
     <main class="shell space-y-4">
 
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Summary</h2><p>ครอบคลุม access tier ที่<strong>ไม่ต้อง login</strong>: Family Search (FAM), Donor (DN, FD-16) และ Public Transparency (PUB) — เป็น Public API Service แยกจากระบบหลัก รันที่ central เท่านั้น</p><div class="alert alert-info"><span>หลักการ: เห็นน้อยที่สุดเท่าที่จำเป็น · อ่านจาก central node เสมอ · ไม่ expose CouchDB ตรงสู่ public · ไม่แตะ edge/shelter device</span></div><div class="alert alert-warning"><span>API tier (machine / API key / EOC / Open API) <strong>ไม่อยู่ใน spec นี้</strong> — deferred ตาม FD-14 (ทำหลัง main application เสร็จ)</span></div></div></section>
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Summary</h2><p>ครอบคลุม access tier ที่<strong>ไม่ต้อง login</strong>: Family Search (FAM), Donor (DN, FD-16) และ Public Transparency (PUB) — เป็น Public API Service แยกจากระบบหลัก รันที่ central เท่านั้น</p><div class="alert alert-info"><span>หลักการ: เห็นน้อยที่สุดเท่าที่จำเป็น · อ่านจาก central node เสมอ · ไม่ expose CouchDB ตรงสู่ public · ไม่แตะ edge/shelter device · staff LAN fallback ไม่ใช้กับ public tier</span></div><div class="alert alert-warning"><span>API tier (machine / API key / EOC / Open API) <strong>ไม่อยู่ใน spec นี้</strong> — deferred ตาม FD-14 (ทำหลัง main application เสร็จ)</span></div></div></section>
 
       <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Architecture &amp; Trust Boundary</h2><ul>
-        <li><strong>Public API Service</strong> เป็น service แยก deploy ที่ central เท่านั้น — อ่านจาก central CouchDB (replica รวมของทุก shelter db) ไม่มีเส้นทางใดไปถึง edge device</li>
+        <li><strong>Public API Service</strong> เป็น service แยก deploy ที่ central เท่านั้น — อ่านจาก central CouchDB (replica รวมของทุก shelter db) ไม่มีเส้นทางใดไปถึง Edge หรือ shelter device</li>
+        <li>Public/no-login endpoints เป็น <strong>Central-only</strong>: ถ้า Central ใช้ไม่ได้ ให้ตอบ error ที่ควบคุมได้ ไม่ fallback ไป LAN Edge แม้ staff client จะอยู่ใน Edge fallback mode</li>
         <li>ห้าม expose CouchDB endpoint ตรงสู่ public ทุกกรณี — ทุก request ผ่าน service layer ที่ทำ projection (เลือก field ที่อนุญาตเท่านั้น) ก่อนตอบ</li>
-        <li>เส้นทางเขียน (donor declaration) เขียนลง central แล้ว replicate ลง shelter db ปลายทางทิศเดียว — ไม่รอ edge confirm</li>
+        <li>เส้นทางเขียน (donor declaration) เขียนลง central แล้ว replicate ลง shelter db ปลายทางทิศเดียว — ไม่เขียนผ่าน Edge และไม่รอ Edge confirm</li>
         <li>Data freshness = eventual ตาม replication lag — ทุก response แนบ <code>as_of</code> timestamp และ UI public ต้องแสดงเวลาข้อมูลล่าสุด</li>
         <li>Response ของ public tier ต้องไม่มี field ภายใน (<code>_id</code>, <code>_rev</code>, doc type, internal id) — ใช้ opaque public id/token เท่านั้น</li>
       </ul></div></section>
@@ -88,7 +89,7 @@ Freshness : ทุก response แนบ "as_of": ISO-8601</code></pre></div></s
         <li>FAM: นามสกุลใน response ถูก mask ตามกติกาเสมอ (รวม edge case นามสกุลสั้น); ไม่มี response ใดมีเบอร์โทร; ค้นด้วยเบอร์ partial ต้องไม่ได้ผลลัพธ์</li>
         <li>DN: declaration ที่ไม่ส่งของภายใน 72 ชม. ปลด reservation อัตโนมัติ; tracking_token เดิมยังเปิดดูสถานะ expired ได้</li>
         <li>DN: เมื่อ <code>public_otp_required</code> ปิด — สร้าง declaration ได้โดยไม่มี OTP; เมื่อเปิด — ต้องผ่าน OTP ก่อน</li>
-        <li>Public service อ่านจาก central เท่านั้น — ทดสอบโดยตัด central ออก: ทุก endpoint ตอบ error ที่ควบคุมได้ ไม่ fallback ไป edge</li>
+        <li>Public service อ่าน/เขียนผ่าน central เท่านั้น — ทดสอบโดยตัด central ออก: ทุก endpoint ตอบ error ที่ควบคุมได้ ไม่ fallback ไป Edge หรือ staff LAN fallback path</li>
         <li>Rate-limit ทำงานต่อ IP และต่อเบอร์; เกิน limit ตอบ <code>RATE_LIMITED</code> ไม่ leak ข้อมูล</li>
       </ul></div></section>
 

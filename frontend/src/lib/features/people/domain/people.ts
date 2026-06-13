@@ -82,7 +82,6 @@ export interface Evacuee extends BaseDoc {
 	special_needs: SpecialNeed[];
 	emergency_contact?: EmergencyContact;
 	household_id: string | null;
-	official_code: string | null; // minted by the central service; null until then
 	current_stay: CurrentStay;
 	privacy: { search_excluded: boolean };
 	registered_via: z.infer<typeof registeredViaSchema>;
@@ -245,7 +244,6 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
 			household_id: d.household_id,
-			official_code: null,
 			current_stay: { status: 'registered', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via

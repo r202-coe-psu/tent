@@ -16,7 +16,7 @@ note: เพิ่ม manual 2026-06-11 (ปิดช่องว่างที
 - **Design input (บริษัท):** P-01 (ส่งแล้ว) + feature specs `docs/features/`
 - **Target ส่งมอบ:** ภายใน Foundation Gate (17 ก.ค. 2026) — เป็น precondition ของหลาย feature R2/R3
 
-หมายเหตุ: walking skeleton ของ Lead (10–17 มิ.ย.) ครอบ repo/CI/CD, auth/RBAC skeleton (T-01), CouchDB base schema + sync/conflict design (T-02 ตั้งต้น) และ 1 vertical slice — task ในตารางนี้คือการ build baseline **เต็ม** ต่อจาก skeleton
+หมายเหตุ: walking skeleton ของ Lead (10–17 มิ.ย.) ครอบ repo/CI/CD, auth/RBAC skeleton (T-01), Central CouchDB base schema + Central-first sync/conflict design (T-02 ตั้งต้น; LAN Edge เป็น outage fallback เท่านั้น) และ 1 vertical slice — task ในตารางนี้คือการ build baseline **เต็ม** ต่อจาก skeleton
 
 ## Features / Tasks
 
@@ -29,7 +29,7 @@ note: เพิ่ม manual 2026-06-11 (ปิดช่องว่างที
 | T-51 | Search + QR scan check-in/out + movement history + occupancy guardrail (warning-only) | FR-10..13 | prod | in-scope | 7 | ÷1.6 | 4.5 | T-50 |
 | T-52 | Dashboard v1 (occupancy, capacity, vulnerable/fast-track count, in/out today, last-updated) | FR-14 | prod | in-scope | 6 | ÷1.6 | 4 | T-51 |
 | T-53 | Export ตาม shelter/date/role + audit log + masking ตาม role | FR-15..16 | prod | in-scope | 5 | ÷1.25 | 4 | T-48 |
-| T-54 | Offline draft/queue + PouchDB↔CouchDB sync + conflict handling (registration/screening) | FR-17..18 | prod | in-scope | 10 | ÷1.25 | 8 | T-02,T-48 |
+| T-54 | Offline draft/queue + Central-first PouchDB sync + LAN Edge fallback/conflict handling (registration/screening) | FR-17..18 | prod | in-scope | 10 | ÷1.25 | 8 | T-02,T-48 |
 | T-55 | Manual/Excel fallback + assisted import | FR-19..20 | prod | in-scope | 5 | ÷1.25 | 4 | T-48 |
 | | **รวมทั้งโมดูล** | | | | **52** | | **37** | |
 
@@ -39,7 +39,7 @@ note: เพิ่ม manual 2026-06-11 (ปิดช่องว่างที
 
 > DoD ทุก prod task ยึดมาตรฐานกลาง: **UI + API + data + test + demo ของ slice**
 
-- **T-54 (offline sync) = tech risk #1 ของโครงการ** — CouchDB sync/conflict, Lead B เป็นเจ้าของร่วม (ต่อจาก T-02); เริ่มทันทีหลัง skeleton อย่ารอท้าย phase
+- **T-54 (offline sync) = tech risk #1 ของโครงการ** — app เขียน local PouchDB ก่อน, active remote มีได้หนึ่งเป้าหมาย (Central, Edge fallback, หรือ local-only), ห้าม long-lived sync ไป Central+Edge พร้อมกัน, และต้องทดสอบ failback ไม่ให้ duplicate; Lead B เป็นเจ้าของร่วม (ต่อจาก T-02); เริ่มทันทีหลัง skeleton อย่ารอท้าย phase
 - T-48/T-49/T-51 คือเส้นหลักของ flow หน้างาน (register → screen → check-in) — เป็น vertical slice ที่ทีม copy pattern จาก walking skeleton
 - T-52/T-53 ปิดท้าย เพราะต้องมี movement/audit data จริงให้แสดง/ตรวจ
 
@@ -52,6 +52,6 @@ note: เพิ่ม manual 2026-06-11 (ปิดช่องว่างที
 
 ## Dependencies
 
-**ต้นทาง:** T-01 (RBAC skeleton), T-02 (data model + sync design) จาก walking skeleton
+**ต้นทาง:** T-01 (RBAC skeleton), T-02 (data model + Central-first sync/fallback design) จาก walking skeleton
 
 **ปลายทาง (block):** T-04 household (ขยายจาก person), T-40 search consent, dashboard/EOC metrics ทุกตัวอ่านข้อมูลที่ baseline ผลิต — Foundation Gate (T-20) ครอบ baseline ด้วย

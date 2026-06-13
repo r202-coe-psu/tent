@@ -16,10 +16,12 @@ note: แตกจาก api-contract.md v1 + role-permission-matrix — map ห
 3. **Public plane** — ไม่ต้อง login (family search, donor, transparency) — อยู่นอกสองระบบแรก
 
 ทั้งสองระบบแรกเป็น **SPA ตัวเดียวกัน** (เมนูแยกตาม role) และเป็น **offline-first**: งานปฏิบัติการ
-เกือบทั้งหมด **ไม่มี REST endpoint** — เป็นการเขียน doc ลง PouchDB ฝั่ง client แล้ว sync ผ่าน
-`/couch` (Plane A ใน [api-contract.md](data/api-contract.md)) endpoint จริงมีเฉพาะงานที่ CouchDB
-ทำเองไม่ได้ (`/api/v1/*`, Plane B) กับชั้นสาธารณะ (`/public/v1/*`, Plane C). ดังนั้นตารางข้างล่าง
-คอลัมน์ "Endpoint / Data action" จะบอกว่าแต่ละหน้า **คุยกับอะไรจริง ๆ**
+เกือบทั้งหมด **ไม่มี REST endpoint** — เป็นการเขียน doc ลง PouchDB ฝั่ง client ก่อน แล้ว sync ผ่าน
+`/couch` (Plane A ใน [api-contract.md](data/api-contract.md)). ปกติ `/couch` ชี้ central; จะชี้
+LAN Edge เฉพาะช่วง WAN/central outage และห้าม sync ยาวไปทั้งสองที่พร้อมกัน. endpoint จริงมีเฉพาะงานที่
+CouchDB ทำเองไม่ได้ (`/api/v1/*`, Plane B, central-only) กับชั้นสาธารณะ (`/public/v1/*`, Plane C).
+ระหว่าง Edge-only fallback `/api/v1/*` ใช้ไม่ได้จนกว่า central จะกลับมา.
+ดังนั้นตารางข้างล่างคอลัมน์ "Endpoint / Data action" จะบอกว่าแต่ละหน้า **คุยกับอะไรจริง ๆ**
 
 Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)): **SA** system_admin ·
 **SM** shelter_manager · **VOL** volunteer · **KS** kitchen_staff · **WS** warehouse_staff
@@ -30,13 +32,14 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 
 | Route | หน้าที่ | FR | Endpoint / Data action |
 | --- | --- | --- | --- |
-| `/login` | login เข้า edge server ของศูนย์ตน (ทำงานแม้ WAN ขาด) | FR-1 | `POST /couch/_session` |
-| *(ทุกหน้า — session check)* | whoami / ตรวจ session, derive เมนูจาก `userCtx.roles` | FR-1 | `GET /couch/_session` |
+| `/login` | login กับ central ก่อน; fallback ไป edge server ของศูนย์ตนเมื่อ WAN/central ขาด | FR-1 | `POST /couch/_session` (central; edge fallback) |
+| *(ทุกหน้า — session check)* | whoami / ตรวจ session ของ active remote, derive เมนูจาก `userCtx.roles` | FR-1 | `GET /couch/_session` |
 | `/logout` (action) | ออกจากระบบ — local PouchDB ยังใช้ต่อได้ offline | FR-1 | `DELETE /couch/_session` |
 | `/me` | โปรไฟล์ผู้ใช้ + สถานะ sync / needsReauth | — | local (`authStore`) |
 
-**Sync background (ไม่มี UI):** PouchDB ⇄ `shelter_{code}` (live, สองทาง) · pull `registry`,
-`catalog` ทุก 5 นาที · auto-mint เมื่อ WAN ถึง central (`POST /api/v1/mint` — ดู §1)
+**Sync background (ไม่มี UI):** PouchDB ⇄ central `shelter_{code}` (live, สองทาง) เป็นค่า default;
+สลับไป edge เฉพาะ WAN/central outage; local-only ถ้าไม่เห็นทั้งคู่ · pull `registry`, `catalog`
+จาก active remote ทุก 5 นาที · auto-mint เมื่อ WAN ถึง central (`POST /api/v1/mint` — ดู §1)
 
 ---
 
@@ -129,10 +132,10 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 
 | Route | หน้าที่ | FR | Endpoint / Data action |
 | --- | --- | --- | --- |
-| `/admin/shelters` | เปิดศูนย์: สร้าง db + `_security` + design docs + edge credentials/replication | FR-2..3 | `POST /api/v1/shelters` |
+| `/admin/shelters` | เปิดศูนย์: สร้าง central db + `_security` + design docs + edge fallback replica/credentials/replication | FR-2..3 | `POST /api/v1/shelters` |
 | `/admin/shelters/[code]` | แก้ config ศูนย์ + **ปิดศูนย์** (เริ่มนาฬิกา retention 3 เดือน) | FR-2 | `POST /api/v1/shelters/{code}/close` |
 | `/admin/users` | สร้าง/แก้ user + role + เปลี่ยนรหัสผ่าน (กติกา 1 user 1 shelter) | FR-1, FR-34 | `POST /api/v1/users` (ห่อ `_users`) |
-| `/admin/catalog` | master ข้ามศูนย์: supply item catalog, recipe, SOP ratio profile | FR-27, FR-44 | เขียน `catalog` db ที่ central (device ได้ผ่าน pull) |
+| `/admin/catalog` | master ข้ามศูนย์: supply item catalog, recipe, SOP ratio profile | FR-27, FR-44 | เขียน `catalog` db ที่ central (device pull จาก central ปกติ; edge ได้ fallback replica) |
 | `/admin/api-keys` | issue/rotate/revoke EOC API key + scope (FD-14) | FR-50 | central service (R4 deferred) |
 | `/admin/audit` | ดู audit trail (override, retroactive edit, export, ลบ) | FR-16, 33 | Mango query `audit` ที่ central |
 | `/admin/consent` | search consent / opt-out (SM ทำใน scope ศูนย์ตนได้) | FR-52 | update `evacuee.privacy.search_excluded` |
@@ -166,11 +169,11 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 | Plane | Endpoint | ใช้โดย |
 | --- | --- | --- |
 | A — Sync | `POST/GET/DELETE /couch/_session` | ทุก role (login/whoami/logout) |
-| A — Sync | replicate `shelter_{code}` ⇄ · `registry` ← · `catalog` ← (edge) | PouchDB background |
-| B — Service | `POST /api/v1/mint` | app อัตโนมัติ (intake §1) |
-| B — Service | `POST /api/v1/shelters` · `POST /api/v1/shelters/{code}/close` | SA (backoffice §2.9) |
-| B — Service | `POST /api/v1/users` | SA |
-| B — Service | `POST /api/v1/exports` · `GET /api/v1/exports/{id}` | SM/SA (backoffice §2.1) |
+| A — Sync | replicate `shelter_{code}` ⇄ active remote · `registry` ← · `catalog` ← (central ปกติ; edge fallback เฉพาะ outage) | PouchDB background |
+| B — Service (central-only) | `POST /api/v1/mint` | app อัตโนมัติ (intake §1) |
+| B — Service (central-only) | `POST /api/v1/shelters` · `POST /api/v1/shelters/{code}/close` | SA (backoffice §2.9) |
+| B — Service (central-only) | `POST /api/v1/users` | SA |
+| B — Service (central-only) | `POST /api/v1/exports` · `GET /api/v1/exports/{id}` | SM/SA (backoffice §2.1) |
 | C — Public | 5 endpoints ตาม §3 | DN / FAM / PUB |
 
 **สิ่งที่ตั้งใจ "ไม่มี"** (ยืนยันตาม api-contract §7): REST CRUD ของ doc ปฏิบัติการทุกชนิด ·
