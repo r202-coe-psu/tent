@@ -13,3 +13,4 @@ Thumbs.db
 # Claude Code (keep shared settings.json, ignore local + ephemeral)
 .claude/settings.local.json
 .claude/worktrees/
+.claude/plans/
