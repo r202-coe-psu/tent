@@ -76,11 +76,11 @@
 				<Form.Button disabled={$submitting}>Login</Form.Button>
 			</Field.FieldGroup>
 		</form>
-		<p class="mt-4 text-center text-sm text-muted-foreground">
+		<!-- <p class="mt-4 text-center text-sm text-muted-foreground">
 			Don't have an account?
 			<a href={resolve('/register')} class="underline underline-offset-4 hover:text-primary">
 				Register
 			</a>
-		</p>
+		</p> -->
 	</Card.Content>
 </Card.Root>
