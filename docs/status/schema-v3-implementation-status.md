@@ -18,7 +18,7 @@ updated: 2026-06-12
 |---|---|
 | `_id = "{type}:{ulid}"` | ✓ `makeDoc()` ใช้ `ulid()` |
 | `type`, `schema_v` | ✓ |
-| `shelter_id`, `created_by` | ✗ ต้องแก้ `AuthorContext` → ใช้ shelter ULID แทน code |
+| `shelter_code`, `created_by` | ✗ ต้องแก้ `AuthorContext` → ใช้ shelter code (เช่น `SH001`) |
 | `created_at`, `updated_at` | ✓ |
 
 ---
@@ -73,14 +73,14 @@ Extras: `applyMovementToStay()` + type guards ครบ
 
 | จุดต่าง | shelter (ปัจจุบัน) | schema v3 |
 |---|---|---|
-| Common envelope | ไม่มี `schema_v`, `shelter_id`, `created_at/by` | บังคับทุก doc |
+| Common envelope | ไม่มี `schema_v`, `shelter_code`, `created_at/by` | บังคับทุก doc |
 | `_id` | `crypto.randomUUID()` | ULID `{type}:{ulid}` |
 | คน | `Occupant` (`name`, `note`, `status: in/out`) | `evacuee` + `movement` แยก doc |
 | Inventory | `InventoryItem` อยู่ใน shelter db | `supply_item` อยู่ใน `catalog` db |
 | Stock | `StockTxn` (`itemId`, `delta`, `byUser`, `at`) | `stock_ledger` (`item_id`, `qty` signed, `reason` enum) |
 | Config | `ShelterConfig` อยู่ใน shelter db | `shelter:{ulid}` อยู่ใน `registry` db |
 | Roles | `shelter_a_manager/volunteer` | `shelter:{id}` role model ใหม่ |
-| DB name | `shelter_a/b/c` | `shelter_{shelter_id}` (เช่น `shelter_01h...`) |
+| DB name | `shelter_a/b/c` | `shelter_{shelter_code}` (เช่น `shelter_SH001`) |
 
 ดู `docs/demo/shelter-demo.md` สำหรับ context เดิม
 
