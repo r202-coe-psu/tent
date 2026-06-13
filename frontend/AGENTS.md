@@ -35,8 +35,11 @@ Only call after user confirms they want one. NEVER call if code was written to p
 ## SPA-Specific Notes
 
 - This is a **static SPA**: `ssr = false`, `prerender = true` — no `+page.server.ts` or server-only code
-- Auth is **client-side**: `authStore` (`src/lib/stores/auth.svelte.ts`) holds the access token in memory; refresh token lives in an httpOnly cookie
-- Protected pages go inside `src/routes/(protected)/` — the auth guard runs automatically via `+layout.ts`
-- API calls go directly to `PUBLIC_API_URL` via the typed `client` (`src/lib/api/client.ts`) — the auth header is injected automatically by middleware
-- New features belong in `src/lib/features/<name>/` with `api.ts`, `queries.ts`, `schema.ts`, `components/`
-- Never add `console.log` — use toast notifications for user feedback
+- Auth is **CouchDB `_session` cookie**: `authStore` (`src/lib/stores/auth.svelte.ts`) holds
+  `{ user, needsReauth }` — no JWT, no access-token
+- **Sync target priority: central → edge (WAN outage only) → local-only**; never run replication
+  to both simultaneously
+- Protected pages go inside `src/routes/(protected)/` — the auth guard runs via `+layout.ts`
+- New features belong in `src/lib/features/<name>/` with layers: `domain/`, `data/`,
+  `application/`, `ui/`, `index.ts` (public barrel only)
+- Never `console.log` — use toast notifications for user feedback
