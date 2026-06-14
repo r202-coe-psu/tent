@@ -1,6 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminFetch } from '$lib/server/couch-admin';
+import { adminFetch, ServiceError } from '$lib/server/couch-admin';
+import { createUser } from '$lib/server/user-service';
 
 // Public self-signup endpoint; never prerendered (static build omits it).
 export const prerender = false;
@@ -30,10 +31,15 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (!username || username.length < 3) throw error(400, 'Username must be at least 3 characters');
 	if (!password || password.length < 6) throw error(400, 'Password must be at least 6 characters');
 
-	await adminFetch(`/_users/org.couchdb.user:${encodeURIComponent(username)}`, {
-		method: 'PUT',
-		body: JSON.stringify({ name: username, password, roles: [], type: 'user' })
-	});
+	// Single admin-write path for _users — same module the /api/v1/users BFF uses.
+	// Public self-signup gets no shelter role; an SA/SM assigns roles afterwards.
+	// Map the service-layer error back to this endpoint's {message} contract.
+	try {
+		await createUser({ name: username, password, roles: [] });
+	} catch (e) {
+		if (e instanceof ServiceError) throw error(e.code === 'CONFLICT' ? 409 : 500, e.message);
+		throw e;
+	}
 	await grantNotesAccess(username);
 	return json({ ok: true });
 };

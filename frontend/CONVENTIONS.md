@@ -29,13 +29,13 @@ covers the _how_ — naming, structure, and coding patterns every contributor mu
 <type>/<short-slug>
 ```
 
-| Type       | When to use                                      |
-| ---------- | ------------------------------------------------ |
-| `feat/`    | new feature or user-visible capability           |
-| `fix/`     | bug fix                                          |
-| `refactor/`| internal restructure, no behavior change         |
-| `chore/`   | tooling, deps, CI, docs                          |
-| `test/`    | tests only                                       |
+| Type        | When to use                              |
+| ----------- | ---------------------------------------- |
+| `feat/`     | new feature or user-visible capability   |
+| `fix/`      | bug fix                                  |
+| `refactor/` | internal restructure, no behavior change |
+| `chore/`    | tooling, deps, CI, docs                  |
+| `test/`     | tests only                               |
 
 Examples: `feat/person-intake-form`, `fix/sync-conflict-toast`, `chore/upgrade-tanstack-query`
 
@@ -54,6 +54,7 @@ Follow **Conventional Commits**:
 - Types: `feat`, `fix`, `refactor`, `test`, `chore`, `docs`, `perf`
 
 Good examples:
+
 ```
 feat(shelter): add check-out flow with timestamp
 fix(sync): stop redirecting to login on 401 during background sync
@@ -61,6 +62,7 @@ chore(deps): bump pnpm to 9.x
 ```
 
 Bad examples:
+
 ```
 updated stuff
 WIP
@@ -80,17 +82,17 @@ fixed bug in shelter
 
 ## 2. File & directory naming
 
-| Artifact                        | Convention                                    | Example                           |
-| ------------------------------- | --------------------------------------------- | --------------------------------- |
-| Svelte component                | `kebab-case.svelte`                           | `intake-form.svelte`              |
-| TypeScript module (general)     | `kebab-case.ts`                               | `shelter-sync.ts`                 |
-| TypeScript module (layer qualifier) | `<name>.<qualifier>.ts`                   | `shelter.repository.ts`           |
-| Test file                       | `<module>.test.ts` (colocated)                | `shelter.test.ts`                 |
-| Feature barrel                  | `index.ts`                                    | `features/shelter/index.ts`       |
-| Layer subdirectory              | singular noun                                 | `domain/`, `data/`, `ui/`         |
-| Feature root                    | singular kebab-case noun                      | `features/shelter/`               |
-| Route directory                 | SvelteKit conventions (`[param]`, `(group)`)  | `routes/(protected)/shelter/`     |
-| shadcn-svelte component files   | `<component>.svelte` + `index.ts`             | `button/button.svelte`            |
+| Artifact                            | Convention                                   | Example                       |
+| ----------------------------------- | -------------------------------------------- | ----------------------------- |
+| Svelte component                    | `kebab-case.svelte`                          | `intake-form.svelte`          |
+| TypeScript module (general)         | `kebab-case.ts`                              | `shelter-sync.ts`             |
+| TypeScript module (layer qualifier) | `<name>.<qualifier>.ts`                      | `shelter.repository.ts`       |
+| Test file                           | `<module>.test.ts` (colocated)               | `shelter.test.ts`             |
+| Feature barrel                      | `index.ts`                                   | `features/shelter/index.ts`   |
+| Layer subdirectory                  | singular noun                                | `domain/`, `data/`, `ui/`     |
+| Feature root                        | singular kebab-case noun                     | `features/shelter/`           |
+| Route directory                     | SvelteKit conventions (`[param]`, `(group)`) | `routes/(protected)/shelter/` |
+| shadcn-svelte component files       | `<component>.svelte` + `index.ts`            | `button/button.svelte`        |
 
 Use dot notation (`<name>.<qualifier>.ts`) when the suffix describes the **layer role** of the
 file — it groups related files together in editor tabs and avoids ambiguity between e.g. a
@@ -117,24 +119,28 @@ queries.ts             ← application TanStack Query hooks
 
 ```ts
 // Good
-export interface Occupant { _id: string; name: string; status: 'in' | 'out' }
+export interface Occupant {
+	_id: string;
+	name: string;
+	status: 'in' | 'out';
+}
 export type OccupantStatus = Occupant['status'];
 
 // Avoid
-type Occupant = { _id: string; name: string }  // prefer interface for domain shapes
+type Occupant = { _id: string; name: string }; // prefer interface for domain shapes
 ```
 
 ### Naming
 
-| Kind              | Style             | Example                       |
-| ----------------- | ----------------- | ----------------------------- |
-| Type / Interface  | PascalCase        | `ShelterConfig`, `OccupantInput` |
-| Zod schema        | camelCase + `Schema` suffix | `occupantInputSchema`  |
-| Inferred Zod type | PascalCase (same stem) | `OccupantInput`          |
-| Enum-like const   | SCREAMING_SNAKE + `as const` | `SHELTER_IDS`         |
-| Query key factory | camelCase + `Keys` suffix | `shelterKeys`            |
-| Repository interface | PascalCase + `Repository` | `ShelterRepository`  |
-| Concrete impl     | PascalCase + `PouchRepository` | `ShelterPouchRepository` |
+| Kind                 | Style                          | Example                          |
+| -------------------- | ------------------------------ | -------------------------------- |
+| Type / Interface     | PascalCase                     | `ShelterConfig`, `OccupantInput` |
+| Zod schema           | camelCase + `Schema` suffix    | `occupantInputSchema`            |
+| Inferred Zod type    | PascalCase (same stem)         | `OccupantInput`                  |
+| Enum-like const      | SCREAMING_SNAKE + `as const`   | `SHELTER_IDS`                    |
+| Query key factory    | camelCase + `Keys` suffix      | `shelterKeys`                    |
+| Repository interface | PascalCase + `Repository`      | `ShelterRepository`              |
+| Concrete impl        | PascalCase + `PouchRepository` | `ShelterPouchRepository`         |
 
 ### Prefer explicit return types on exported functions
 
@@ -237,6 +243,7 @@ IDs are human-readable and type-prefixed to allow range queries:
 ```
 
 Prefix choices:
+
 - Use the exact `type` string of the document, e.g. `occupant:`, `item:`, `txn:`.
 - Singletons use a plain key (`config`).
 - Event-sourced / time-ordered documents prefix with ISO date for natural sort.
@@ -258,7 +265,7 @@ Write a corresponding type guard:
 
 ```ts
 export const isOccupant = (d: unknown): d is Occupant =>
-  !!d && typeof d === 'object' && (d as { type?: unknown }).type === 'occupant';
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'occupant';
 ```
 
 ### Event-sourced quantities
@@ -272,8 +279,9 @@ two clients go offline and both update stock.
 Do not poll. Invalidate TanStack Query keys from the PouchDB changes feed:
 
 ```ts
-db.changes({ live: true, since: 'now', include_docs: false })
-  .on('change', () => queryClient.invalidateQueries({ queryKey: featureKeys.all }));
+db.changes({ live: true, since: 'now', include_docs: false }).on('change', () =>
+	queryClient.invalidateQueries({ queryKey: featureKeys.all })
+);
 ```
 
 See `shelter-sync.ts` for the complete pattern including cleanup on unmount.
@@ -286,17 +294,17 @@ See `shelter-sync.ts` for the complete pattern including cleanup on unmount.
 
 ```svelte
 <script lang="ts">
-  // 1. imports
-  // 2. $props (destructured immediately)
-  // 3. $state / $derived
-  // 4. functions / handlers
-  // 5. $effect (last resort only)
+	// 1. imports
+	// 2. $props (destructured immediately)
+	// 3. $state / $derived
+	// 4. functions / handlers
+	// 5. $effect (last resort only)
 </script>
 
 <!-- markup -->
 
 <style>
-  /* only when Tailwind utility classes aren't sufficient */
+	/* only when Tailwind utility classes aren't sufficient */
 </style>
 ```
 
@@ -306,9 +314,9 @@ Always destructure `$props()` with explicit types:
 
 ```svelte
 <script lang="ts">
-  import type { Occupant } from '$lib/features/shelter';
+	import type { Occupant } from '$lib/features/shelter';
 
-  const { occupant, onCheckOut }: { occupant: Occupant; onCheckOut: () => void } = $props();
+	const { occupant, onCheckOut }: { occupant: Occupant; onCheckOut: () => void } = $props();
 </script>
 ```
 
@@ -347,7 +355,7 @@ const { onSave }: { onSave: (item: OccupantInput) => void } = $props();
 ```svelte
 <!-- Good -->
 {#snippet actions()}
-  <Button>Save</Button>
+	<Button>Save</Button>
 {/snippet}
 {@render actions()}
 
@@ -378,8 +386,8 @@ Define the Zod schema in `domain/<name>.ts`, not inside the form component:
 ```ts
 // domain/shelter.ts
 export const occupantInputSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required'),
-  note: z.string().trim().default(''),
+	name: z.string().trim().min(1, 'Name is required'),
+	note: z.string().trim().default('')
 });
 export type OccupantInput = z.infer<typeof occupantInputSchema>;
 ```
@@ -388,28 +396,28 @@ export type OccupantInput = z.infer<typeof occupantInputSchema>;
 
 ```svelte
 <script lang="ts">
-  import { superForm } from 'sveltekit-superforms';
-  import { zod4Client } from 'sveltekit-superforms/adapters';
-  import { occupantInputSchema } from '$lib/features/shelter';
+	import { superForm } from 'sveltekit-superforms';
+	import { zod4Client } from 'sveltekit-superforms/adapters';
+	import { occupantInputSchema } from '$lib/features/shelter';
 
-  const form = superForm(
-    { name: '', note: '' },
-    {
-      SPA: true,
-      validators: zod4Client(occupantInputSchema),
-      onUpdate: ({ form }) => {
-        if (!form.valid) return;
-        mutation.mutate(form.data);
-      },
-    },
-  );
-  const { form: formData, errors, enhance } = form;
+	const form = superForm(
+		{ name: '', note: '' },
+		{
+			SPA: true,
+			validators: zod4Client(occupantInputSchema),
+			onUpdate: ({ form }) => {
+				if (!form.valid) return;
+				mutation.mutate(form.data);
+			}
+		}
+	);
+	const { form: formData, errors, enhance } = form;
 </script>
 
 <form use:enhance>
-  <input bind:value={$formData.name} />
-  {#if $errors.name}<p>{$errors.name}</p>{/if}
-  …
+	<input bind:value={$formData.name} />
+	{#if $errors.name}<p>{$errors.name}</p>{/if}
+	…
 </form>
 ```
 
@@ -429,9 +437,9 @@ Define a keys factory in `application/queries.ts`:
 
 ```ts
 export const shelterKeys = {
-  all: ['shelter'] as const,
-  occupants: (shelterId: string) => ['shelter', shelterId, 'occupants'] as const,
-  config:    (shelterId: string) => ['shelter', shelterId, 'config'] as const,
+	all: ['shelter'] as const,
+	occupants: (shelterId: string) => ['shelter', shelterId, 'occupants'] as const,
+	config: (shelterId: string) => ['shelter', shelterId, 'config'] as const
 };
 ```
 
@@ -439,10 +447,10 @@ export const shelterKeys = {
 
 ```ts
 export function useOccupants(shelterId: string) {
-  return createQuery({
-    queryKey: shelterKeys.occupants(shelterId),
-    queryFn: () => repo.listOccupants(),
-  });
+	return createQuery({
+		queryKey: shelterKeys.occupants(shelterId),
+		queryFn: () => repo.listOccupants()
+	});
 }
 ```
 
@@ -450,13 +458,13 @@ export function useOccupants(shelterId: string) {
 
 ```ts
 export function useCheckIn(shelterId: string) {
-  const client = useQueryClient();
+	const client = useQueryClient();
 
-  return createMutation({
-    mutationFn: (input: OccupantInput) => repo.saveOccupant(createOccupant(input)),
-    onSuccess: () => client.invalidateQueries({ queryKey: shelterKeys.occupants(shelterId) }),
-    onError: () => toast.error('Failed to check in occupant'),
-  });
+	return createMutation({
+		mutationFn: (input: OccupantInput) => repo.saveOccupant(createOccupant(input)),
+		onSuccess: () => client.invalidateQueries({ queryKey: shelterKeys.occupants(shelterId) }),
+		onError: () => toast.error('Failed to check in occupant')
+	});
 }
 ```
 
@@ -475,11 +483,11 @@ export function useCheckIn(shelterId: string) {
 
 ```svelte
 {#if query.isLoading}
-  <Skeleton class="h-8 w-full" />
+	<Skeleton class="h-8 w-full" />
 {:else if query.isError}
-  <p class="text-destructive">Failed to load data.</p>
+	<p class="text-destructive">Failed to load data.</p>
 {:else}
-  <!-- data -->
+	<!-- data -->
 {/if}
 ```
 
@@ -511,12 +519,12 @@ Always show an explicit empty state — never render an empty list silently:
 
 ### What to test
 
-| Layer       | Test focus                                                     | Adapter          |
-| ----------- | -------------------------------------------------------------- | ---------------- |
-| domain      | factories, invariants, derived computations, type guards       | Node (no DOM)    |
-| data        | repository CRUD, conflict handling, seed helpers               | `pouchdb-adapter-memory` |
-| application | query hooks behaviour under success / error                    | in-memory repo   |
-| ui          | only if there is significant render logic (conditional renders)| jsdom via Svelte Testing Library |
+| Layer       | Test focus                                                      | Adapter                          |
+| ----------- | --------------------------------------------------------------- | -------------------------------- |
+| domain      | factories, invariants, derived computations, type guards        | Node (no DOM)                    |
+| data        | repository CRUD, conflict handling, seed helpers                | `pouchdb-adapter-memory`         |
+| application | query hooks behaviour under success / error                     | in-memory repo                   |
+| ui          | only if there is significant render logic (conditional renders) | jsdom via Svelte Testing Library |
 
 ### File placement
 
@@ -534,11 +542,11 @@ import { describe, it, expect } from 'vitest';
 import { createOccupant, countCheckedIn } from './shelter';
 
 describe('createOccupant', () => {
-  it('sets status to in and records checkInAt', () => {
-    const occ = createOccupant({ name: 'Alice', note: '' });
-    expect(occ.status).toBe('in');
-    expect(occ.checkInAt).toMatch(/^\d{4}-/);
-  });
+	it('sets status to in and records checkInAt', () => {
+		const occ = createOccupant({ name: 'Alice', note: '' });
+		expect(occ.status).toBe('in');
+		expect(occ.checkInAt).toMatch(/^\d{4}-/);
+	});
 });
 ```
 

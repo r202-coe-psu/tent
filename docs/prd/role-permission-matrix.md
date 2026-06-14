@@ -82,8 +82,12 @@ closes: K-12 (A1 RBAC phase-blocker)
 | Donor pre-declaration (สร้าง) | FR-32 | ✓ | scope | scope | scope | self |
 | Donation intake audit trail (ดู) | FR-33 | ✓ | scope | — | scope | — |
 | กำหนด role ใหม่ + field permission | FR-34 | ✓ | — | — | — | — |
+| สร้าง/ลบ user (login) + assign role | FR-34 | ✓ | scope (staff) | — | — | — |
 
 **หมายเหตุ:**
+- **FR-34 user creation (แก้ 2026-06-14):** SM สร้าง/ลบได้เฉพาะ **staff** (`volunteer`/`kitchen_staff`/`warehouse_staff`)
+  ใน **ศูนย์ตน** (shelter derive จาก session) — สร้าง `shelter_manager`/`system_admin` หรือข้ามศูนย์ = SA เท่านั้น.
+  การ "กำหนด role ใหม่/field permission" ยังคง SA only. ผ่าน `POST /api/v1/users` (api-contract.md §3).
 - WS เห็นเฉพาะ inventory/donation ของศูนย์ตน — **ไม่เห็น** Person/medical (ดู §6)
 - catalog (FR-27) = master ข้ามศูนย์ → SA only
 - SM ดู stock dashboard ได้ (วางแผน) แต่ไม่ write ledger โดยตรง (เว้นแต่ KS tasks ใน §4)

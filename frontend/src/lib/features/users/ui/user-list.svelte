@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import type { CouchUserDoc } from '../data/users.api';
+	import type { UserSummary } from '../data/users.api';
 
 	let {
 		users,
 		ondelete,
 		pending = false
 	}: {
-		users: CouchUserDoc[];
-		ondelete: (user: CouchUserDoc) => void;
+		users: UserSummary[];
+		ondelete: (name: string) => void;
 		pending?: boolean;
 	} = $props();
 </script>
@@ -17,14 +17,17 @@
 	<p class="text-sm text-muted-foreground">No users yet.</p>
 {:else}
 	<div class="flex flex-col gap-2">
-		{#each users as user (user._id)}
-			<div class="flex items-center justify-between">
-				<span class="text-sm font-medium">{user.name}</span>
+		{#each users as user (user.name)}
+			<div class="flex items-center justify-between gap-2">
+				<div class="min-w-0">
+					<span class="text-sm font-medium">{user.name}</span>
+					<span class="ml-2 text-xs text-muted-foreground">{user.roles.join(', ') || '—'}</span>
+				</div>
 				<Button
 					variant="destructive"
 					size="sm"
 					disabled={pending}
-					onclick={() => ondelete(user)}
+					onclick={() => ondelete(user.name)}
 				>
 					Delete
 				</Button>

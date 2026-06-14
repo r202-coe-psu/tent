@@ -1,63 +1,34 @@
-import { COUCH_URL } from '$lib/db/couch';
+/**
+ * User-management data layer — talks to the central service plane `/api/v1/users`
+ * (same-origin BFF in dev; a reverse proxy routes it to FastAPI in prod). The
+ * client never touches CouchDB `/_users` directly, so a shelter_manager (not a
+ * CouchDB `_admin`) can manage users — the BFF authorizes by role.
+ *
+ * Errors follow the contract envelope `{ error: { code, message } }`
+ * (api-contract.md §2); we surface `message` so the UI can toast it.
+ */
 
-export interface CouchUserDoc {
-	_id: string;
-	_rev: string;
+import { serviceFetch } from '$lib/api/service';
+
+const USERS_ENDPOINT = '/api/v1/users';
+
+export interface UserSummary {
 	name: string;
 	roles: string[];
-	type: string;
 }
 
-interface AllDocsResponse {
-	rows: { id: string; doc: CouchUserDoc }[];
+export function listUsers(): Promise<UserSummary[]> {
+	return serviceFetch<UserSummary[]>(USERS_ENDPOINT);
 }
 
-const USER_PREFIX = 'org.couchdb.user:';
-
-// User management talks to CouchDB's _users database directly with the current
-// user's session cookie — no admin escalation. CouchDB enforces that only a
-// server admin may read/write _users; a non-admin gets 401/403, which we
-// surface as a clear "no permission" error.
-async function usersFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-	const res = await fetch(`${COUCH_URL}/_users${path}`, {
-		credentials: 'include',
-		...init,
-		headers: {
-			'Content-Type': 'application/json',
-			Accept: 'application/json',
-			...init.headers
-		}
-	});
-
-	if (res.status === 401 || res.status === 403) {
-		throw new Error('You do not have permission to manage users (server admin required).');
-	}
-
-	const data = (await res.json().catch(() => null)) as
-		| (T & { error?: string; reason?: string })
-		| null;
-
-	if (!res.ok) {
-		throw new Error(data?.reason || data?.error || `CouchDB request failed (${res.status})`);
-	}
-
-	return data as T;
+export function createUser(input: {
+	name: string;
+	password: string;
+	roles: string[];
+}): Promise<{ ok: true }> {
+	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });
 }
 
-export async function listUsers(): Promise<CouchUserDoc[]> {
-	const res = await usersFetch<AllDocsResponse>('/_all_docs?include_docs=true');
-	return res.rows.filter((r) => r.id.startsWith(USER_PREFIX)).map((r) => r.doc);
-}
-
-export async function createUser(name: string, password: string): Promise<void> {
-	await usersFetch(`/${USER_PREFIX}${encodeURIComponent(name)}`, {
-		method: 'PUT',
-		body: JSON.stringify({ name, password, roles: [], type: 'user' })
-	});
-}
-
-export async function deleteUser(id: string, rev: string): Promise<void> {
-	await usersFetch(`/${encodeURIComponent(id)}?rev=${encodeURIComponent(rev)}`, {
-		method: 'DELETE'
-	});
+export function deleteUser(name: string): Promise<{ ok: true }> {
+	return serviceFetch(`${USERS_ENDPOINT}?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
 }

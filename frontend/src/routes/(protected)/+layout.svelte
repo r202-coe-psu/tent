@@ -6,9 +6,14 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { LOGIN_ROUTE } from '$lib/guards/auth';
+	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
+
+	const roles = $derived(authStore.user?.roles ?? []);
+	const isSA = $derived(isSystemAdmin(roles));
+	const canManageUsers = $derived(isSA || isShelterManager(roles));
 
 	async function logout() {
 		await authStore.logout();
@@ -22,9 +27,14 @@
 		<a href={resolve('/home')} class="font-semibold">App</a>
 		<div class="flex items-center gap-4">
 			<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
-			{#if authStore.user?.roles.includes('_admin')}
+			<Separator orientation="vertical" class="h-4" />
+			<a href={resolve('/people')} class="text-sm hover:underline">People</a>
+			{#if isSA}
 				<Separator orientation="vertical" class="h-4" />
-				<a href={resolve('/admin/users')} class="text-sm hover:underline">Admin</a>
+				<a href={resolve('/admin/shelters')} class="text-sm hover:underline">Shelters</a>
+			{/if}
+			{#if canManageUsers}
+				<a href={resolve('/admin/users')} class="text-sm hover:underline">Users</a>
 			{/if}
 			<Separator orientation="vertical" class="h-4" />
 			<Button variant="outline" size="sm" onclick={logout}>Logout</Button>
