@@ -2,6 +2,7 @@ import { authStore } from '$lib/stores/auth.svelte';
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { resolve } from '$app/paths';
+import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
 export const LANDING_ROUTE = '/home';
@@ -32,12 +33,24 @@ export async function requireAuth() {
 }
 
 /**
- * Admin guard — requires an active `_admin` CouchDB session.
- * Redirects to /home when authenticated but not admin.
+ * Admin guard — requires a system admin (`system_admin` or the CouchDB `_admin`).
+ * Redirects to /home when authenticated but not an admin.
  */
 export async function requireAdmin() {
 	await requireAuth();
-	if (!authStore.user?.roles.includes('_admin')) {
+	if (!isSystemAdmin(authStore.user?.roles ?? [])) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Manager guard — requires a system admin OR a shelter_manager. Used by the
+ * user-management page (the BFF is the real authorization gate; this is UX).
+ */
+export async function requireManager() {
+	await requireAuth();
+	const roles = authStore.user?.roles ?? [];
+	if (!isSystemAdmin(roles) && !isShelterManager(roles)) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

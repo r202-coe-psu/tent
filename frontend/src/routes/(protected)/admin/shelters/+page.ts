@@ -1,6 +1,6 @@
-import { requireManager } from '$lib/guards/auth';
+import { requireAdmin } from '$lib/guards/auth';
 import type { PageLoad } from './$types';
 
 export const load = (async () => {
-	await requireManager();
+	await requireAdmin();
 }) satisfies PageLoad;

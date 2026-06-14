@@ -4,12 +4,25 @@
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { createUserSchema } from '../domain/schema';
+	import { STAFF_CAPABILITIES, SHELTER_CAPABILITIES } from '$lib/auth/roles';
+	import { createUserSchema, type CreateUserInput } from '../domain/schema';
 
 	let {
 		onsubmit,
+		isSA = false,
+		shelterCode = null,
 		pending = false
-	}: { onsubmit: (data: { name: string; password: string }) => void; pending?: boolean } = $props();
+	}: {
+		onsubmit: (input: CreateUserInput) => void;
+		/** System admin: may grant any capability + choose the shelter. */
+		isSA?: boolean;
+		/** A manager's own shelter (locked); SA leaves this null and types one. */
+		shelterCode?: string | null;
+		pending?: boolean;
+	} = $props();
+
+	// SA may grant shelter_manager too; a manager only staff capabilities.
+	const capabilities = $derived(isSA ? SHELTER_CAPABILITIES : STAFF_CAPABILITIES);
 
 	const form = superForm(defaults(zod4(createUserSchema)), {
 		SPA: true,
@@ -17,7 +30,9 @@
 		resetForm: false,
 		onUpdate: async ({ form }) => {
 			if (!form.valid) return;
-			onsubmit({ name: form.data.username, password: form.data.password });
+			// A manager's shelter is implicit; an SA types it in the field.
+			const shelter_code = isSA ? form.data.shelter_code : (shelterCode ?? undefined);
+			onsubmit({ ...form.data, shelter_code });
 			reset();
 		}
 	});
@@ -36,6 +51,7 @@
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
+
 		<Form.Field {form} name="password">
 			<Form.Control>
 				{#snippet children({ props })}
@@ -45,6 +61,42 @@
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
-		<Form.Button disabled={$submitting || pending}>Create User</Form.Button>
+
+		<Form.Field {form} name="capability">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>Role</Form.Label>
+					<select
+						{...props}
+						bind:value={$formData.capability}
+						class="h-9 rounded-md border border-input bg-background px-3 text-sm"
+					>
+						{#each capabilities as cap (cap)}
+							<option value={cap}>{cap}</option>
+						{/each}
+					</select>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+
+		{#if isSA}
+			<Form.Field {form} name="shelter_code">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>Shelter code</Form.Label>
+						<Input {...props} placeholder="SH001" bind:value={$formData.shelter_code} />
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		{:else}
+			<Field.Field>
+				<Form.Label>Shelter</Form.Label>
+				<p class="text-sm text-muted-foreground">{shelterCode ?? '—'} (your shelter)</p>
+			</Field.Field>
+		{/if}
+
+		<Form.Button disabled={$submitting || pending}>Create user</Form.Button>
 	</Field.FieldGroup>
 </form>

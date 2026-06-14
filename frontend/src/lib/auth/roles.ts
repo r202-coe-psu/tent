@@ -1,0 +1,56 @@
+/**
+ * Role kernel — the canonical CouchDB role vocabulary (docs/prd/role-permission-matrix.md §1.1,
+ * docs/data/data-model.md §6). Pure + isomorphic: shared by the server BFF (authorization) and the
+ * client (forms, nav). No I/O, no Svelte.
+ *
+ * `_users.roles` is either `["system_admin"]` (global) or `["shelter:{code}", <capability>...]`
+ * (one shelter scope + capability roles). `shelter_manager` subsumes the staff capabilities.
+ */
+
+/** App-level system administrator (global; no `shelter:` scope). */
+export const SYSTEM_ADMIN = 'system_admin';
+
+/** Per-shelter manager — may run any staff function in their own shelter. */
+export const SHELTER_MANAGER = 'shelter_manager';
+
+/** Capability roles a shelter_manager is allowed to grant. */
+export const STAFF_CAPABILITIES = ['volunteer', 'kitchen_staff', 'warehouse_staff'] as const;
+export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
+
+/** Every capability an SA may grant alongside the shelter scope. */
+export const SHELTER_CAPABILITIES = [...STAFF_CAPABILITIES, SHELTER_MANAGER] as const;
+export type ShelterCapability = (typeof SHELTER_CAPABILITIES)[number];
+
+/** The CouchDB server-admin role — never mintable through the app. */
+export const COUCH_ADMIN = '_admin';
+
+/** Shelter-scope role string for a shelter code, e.g. `SH001` → `shelter:SH001`. */
+export function shelterScopeRole(code: string): string {
+	return `shelter:${code}`;
+}
+
+/** Extract the single shelter code from a role list (`shelter:SH001` → `SH001`), or null. */
+export function shelterCodeFromRoles(roles: readonly string[]): string | null {
+	const scope = roles.find((r) => r.startsWith('shelter:'));
+	return scope ? scope.slice('shelter:'.length) : null;
+}
+
+/** True when the role list denotes an SA or the CouchDB server admin (SA-equivalent). */
+export function isSystemAdmin(roles: readonly string[]): boolean {
+	return roles.includes(SYSTEM_ADMIN) || roles.includes(COUCH_ADMIN);
+}
+
+/** True when the role list denotes a shelter_manager. */
+export function isShelterManager(roles: readonly string[]): boolean {
+	return roles.includes(SHELTER_MANAGER);
+}
+
+/**
+ * True when every non-shelter capability in the list is a staff capability
+ * (no `shelter_manager`/`system_admin`/`_admin`). A shelter_manager may only
+ * create or delete staff — this is that predicate.
+ */
+export function isStaffOnly(roles: readonly string[]): boolean {
+	const staff = STAFF_CAPABILITIES as readonly string[];
+	return roles.filter((r) => !r.startsWith('shelter:')).every((c) => staff.includes(c));
+}
