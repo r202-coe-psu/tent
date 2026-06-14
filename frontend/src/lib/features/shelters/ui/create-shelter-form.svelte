@@ -27,21 +27,11 @@
 
 <form method="POST" use:form.enhance>
 	<Field.FieldGroup>
-		<Form.Field {form} name="shelter_code">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>Shelter code</Form.Label>
-					<Input {...props} placeholder="SH001" bind:value={$formData.shelter_code} />
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
 		<Form.Field {form} name="name">
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>Name</Form.Label>
-					<Input {...props} placeholder="Shelter SH001" bind:value={$formData.name} />
+					<Input {...props} placeholder="e.g. Main Evacuation Center" bind:value={$formData.name} />
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />

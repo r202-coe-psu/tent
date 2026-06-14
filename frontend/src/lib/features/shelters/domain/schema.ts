@@ -1,9 +1,7 @@
 import { z } from 'zod';
-import { shelterCodeSchema } from '$lib/db/model';
 
-/** Form input for provisioning a shelter (workshop: explicit code, not counter-minted). */
+/** Form input for provisioning a shelter — code is auto-assigned by the server. */
 export const createShelterSchema = z.object({
-	shelter_code: shelterCodeSchema,
 	name: z.string().trim().min(1, 'Name is required')
 });
 

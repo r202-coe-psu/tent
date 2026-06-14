@@ -92,7 +92,7 @@
 			</Form.Field>
 		{:else}
 			<Field.Field>
-				<Form.Label>Shelter</Form.Label>
+				<Field.Label>Shelter</Field.Label>
 				<p class="text-sm text-muted-foreground">{shelterCode ?? '—'} (your shelter)</p>
 			</Field.Field>
 		{/if}

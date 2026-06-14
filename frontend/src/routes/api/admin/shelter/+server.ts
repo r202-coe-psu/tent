@@ -1,7 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
-import { shelterCodeSchema } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
 // Dev-only provisioning endpoint — never prerendered (absent from the static
@@ -111,18 +110,23 @@ async function listShelterMasters(): Promise<ShelterMaster[]> {
 	return rows.filter((r) => r.id.startsWith('shelter:') && r.doc).map((r) => r.doc);
 }
 
-/** POST { shelter_code, name?, zones? } — provision a shelter end to end. */
+/** Generate the next shelter code (SH001, SH002, …) from existing registry entries. */
+async function nextShelterCode(): Promise<string> {
+	const masters = await listShelterMasters();
+	const nums = masters.map((m) => parseInt(m.code.replace(/^SH/, ''), 10)).filter((n) => !isNaN(n));
+	const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+	return `SH${String(next).padStart(3, '0')}`;
+}
+
+/** POST { name?, zones? } — provision a shelter; code is auto-assigned. */
 export const POST: RequestHandler = async ({ request }) => {
 	await requireAdmin(request.headers.get('cookie'));
 	try {
 		const body = (await request.json().catch(() => ({}))) as {
-			shelter_code?: unknown;
 			name?: unknown;
 			zones?: unknown;
 		};
-		const parsed = shelterCodeSchema.safeParse(body.shelter_code);
-		if (!parsed.success) throw new ServiceError('VALIDATION', 'shelter_code must look like SH001');
-		const code = parsed.data;
+		const code = await nextShelterCode();
 		const name =
 			typeof body.name === 'string' && body.name.trim() ? body.name.trim() : `Shelter ${code}`;
 		const zones =

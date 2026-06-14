@@ -30,6 +30,6 @@ export function listShelters(): Promise<ShelterSummary[]> {
 export function createShelter(input: CreateShelterInput): Promise<{ ok: true; code: string }> {
 	return serviceFetch(SHELTER_ENDPOINT, {
 		method: 'POST',
-		body: JSON.stringify({ shelter_code: input.shelter_code, name: input.name })
+		body: JSON.stringify({ name: input.name })
 	});
 }

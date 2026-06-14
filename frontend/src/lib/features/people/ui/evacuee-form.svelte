@@ -95,7 +95,7 @@
 
 		<Field.Field orientation="horizontal">
 			<Checkbox id="no-phone" bind:checked={noPhone} />
-			<Form.Label for="no-phone">ไม่มี (no phone)</Form.Label>
+			<Field.Label for="no-phone">ไม่มี (no phone)</Field.Label>
 		</Field.Field>
 
 		<Form.Button disabled={$submitting || pending}>Register evacuee</Form.Button>
