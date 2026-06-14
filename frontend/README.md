@@ -39,11 +39,11 @@ cp .env.example .env
 
 `.env` keys:
 
-| Key | ค่า default | คำอธิบาย |
-|---|---|---|
-| `PUBLIC_APP_TITLE` | `Tent` | ชื่อแอป |
-| `PUBLIC_COUCHDB_URL` | `http://localhost:5984` | CouchDB base URL (ห้ามใส่ credentials — ค่านี้ bundle เข้า browser) |
-| `PUBLIC_COUCH_PROXY` | `/couch` | Vite dev proxy path ให้ CouchDB อยู่ same-origin (session cookie ทำงานได้) |
+| Key                  | ค่า default             | คำอธิบาย                                                                   |
+| -------------------- | ----------------------- | -------------------------------------------------------------------------- |
+| `PUBLIC_APP_TITLE`   | `Tent`                  | ชื่อแอป                                                                    |
+| `PUBLIC_COUCHDB_URL` | `http://localhost:5984` | CouchDB base URL (ห้ามใส่ credentials — ค่านี้ bundle เข้า browser)        |
+| `PUBLIC_COUCH_PROXY` | `/couch`                | Vite dev proxy path ให้ CouchDB อยู่ same-origin (session cookie ทำงานได้) |
 
 ## รัน Development
 
@@ -59,25 +59,25 @@ pnpm dev
 ```
 
 - Dev server: http://localhost:5173
-- CouchDB: http://localhost:5984 (Fauxton UI: http://localhost:5984/_utils)
+- CouchDB: http://localhost:5984 (Fauxton UI: http://localhost:5984/\_utils)
 - คำขอที่ `/couch/*` ถูก proxy ไป `PUBLIC_COUCHDB_URL` (ดู `vite.config.ts`) เพื่อให้ same-origin
 
 > Docker: `pnpm dev` bind `0.0.0.0` อยู่แล้ว
 
 ## Scripts
 
-| Command | ทำอะไร |
-|---|---|
-| `pnpm dev` | Vite dev server (port 5173) |
-| `pnpm build` | Build production (static output) |
-| `pnpm preview` | Preview build ที่ build แล้ว |
-| `pnpm check` | `svelte-check` type-check — **รันก่อนจบงานทุกครั้ง** |
-| `pnpm lint` | `prettier --check` + `eslint` |
-| `pnpm format` | Prettier เขียนทับ |
-| `pnpm test` | Unit test (Vitest) |
-| `pnpm test:watch` | Vitest watch mode |
-| `pnpm test:e2e` | Build แล้วรัน Playwright e2e |
-| `pnpm openapi:update` | Regenerate API types จาก OpenAPI spec |
+| Command               | ทำอะไร                                               |
+| --------------------- | ---------------------------------------------------- |
+| `pnpm dev`            | Vite dev server (port 5173)                          |
+| `pnpm build`          | Build production (static output)                     |
+| `pnpm preview`        | Preview build ที่ build แล้ว                         |
+| `pnpm check`          | `svelte-check` type-check — **รันก่อนจบงานทุกครั้ง** |
+| `pnpm lint`           | `prettier --check` + `eslint`                        |
+| `pnpm format`         | Prettier เขียนทับ                                    |
+| `pnpm test`           | Unit test (Vitest)                                   |
+| `pnpm test:watch`     | Vitest watch mode                                    |
+| `pnpm test:e2e`       | Build แล้วรัน Playwright e2e                         |
+| `pnpm openapi:update` | Regenerate API types จาก OpenAPI spec                |
 
 ## โครงสร้าง
 

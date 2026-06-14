@@ -1,10 +1,6 @@
 /** True when `err` is a PouchDB/CouchDB error with the given HTTP status code. */
 export function isPouchError(err: unknown, status: number): boolean {
-	return (
-		typeof err === 'object' &&
-		err !== null &&
-		(err as { status?: number }).status === status
-	);
+	return typeof err === 'object' && err !== null && (err as { status?: number }).status === status;
 }
 
 // ----------------------------------------------------------------- typed errors

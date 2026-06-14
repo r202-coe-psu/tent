@@ -56,16 +56,16 @@ Never run live replication to both central and edge simultaneously; stop the cur
 
 ## Svelte 5 Quick Reference
 
-| Avoid | Use |
-|-------|-----|
-| `let x = 0` (implicit reactivity) | `$state` |
-| `$:` reactive statements | `$derived` / `$effect` |
-| `export let` | `$props` |
-| `on:click` | `onclick` |
-| `<slot>` | `{#snippet}` + `{@render}` |
-| `<svelte:component this={X}>` | `<X>` |
-| `use:action` | `{@attach}` |
-| Svelte stores for shared state | class with `$state` fields |
+| Avoid                             | Use                        |
+| --------------------------------- | -------------------------- |
+| `let x = 0` (implicit reactivity) | `$state`                   |
+| `$:` reactive statements          | `$derived` / `$effect`     |
+| `export let`                      | `$props`                   |
+| `on:click`                        | `onclick`                  |
+| `<slot>`                          | `{#snippet}` + `{@render}` |
+| `<svelte:component this={X}>`     | `<X>`                      |
+| `use:action`                      | `{@attach}`                |
+| Svelte stores for shared state    | class with `$state` fields |
 
 - Use `$state.raw` for large API response objects (avoids deep proxy overhead)
 - Derive computed values with `$derived`; never compute inside `$effect`
