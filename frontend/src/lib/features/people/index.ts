@@ -55,3 +55,7 @@ export {
 	type MovementInput,
 	type ScreeningInput
 } from './domain/people';
+
+// Data — repository contract + PouchDB binding
+export type { PeopleRepository } from './data/people.repository';
+export { peopleRepository, SHELTER_CODE, SHELTER_DB } from './data/people.pouch';
