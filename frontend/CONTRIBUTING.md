@@ -85,6 +85,14 @@ This app is **offline-first**. Treat these as load-bearing:
   usable offline; only _sync_ needs a live session. On a 401/403 the sync stops and the store flags
   `needsReauth` — **the user is not logged out of the local experience.** Don't "fix" this by forcing
   a logout/redirect on sync errors.
+- **Sync target has a strict priority — one active remote at a time:**
+  central CouchDB first (via `/couch` proxy); edge CouchDB on LAN only when
+  WAN/central is unreachable; local-only when neither is reachable. Never run
+  live replication to both simultaneously — stop the current sync before switching targets.
+- **Login uses the same priority:** always attempt central first. Edge fallback login
+  works because `_users` is filtered-replicated to the edge server. An edge `AuthSession`
+  cookie does NOT grant access to `/api/v1/*` service endpoints (central-only). When
+  central returns, the app must re-login against central and switch the active remote back.
 - Use the guards in `$lib/guards/auth.ts` (`requireAuth`, `requireAdmin`, `redirectIfAuthenticated`)
   from route `+layout.ts`/`+page.ts` `load` functions. Don't roll your own redirect logic.
 - **Admin credentials (`COUCHDB_ADMIN_URL`) are server-only.** They may only be used in the dev-server

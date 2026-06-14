@@ -64,6 +64,17 @@ the deliberate exception).
 
 - **All persistence goes through PouchDB** (`$lib/db/pouch.ts`), which **live-syncs** to CouchDB.
   UI never talks to a remote DB directly — it reads/writes local PouchDB; sync propagates changes.
+- **Sync target follows a strict priority — one active remote at a time:**
+  1. **Central CouchDB** (normal; WAN reachable; via `/couch` proxy)
+  2. **Edge CouchDB on LAN** — fallback only when WAN/central is unreachable; edge is a
+     LAN-continuity replica, NOT a normal client hub
+  3. **Local-only** — when neither central nor edge is reachable
+
+  Never run live replication to both central and edge simultaneously; stop the old sync before
+  starting the new one. When central returns, switch the active remote back to central.
+- **Login follows the same priority:** always attempt `POST /couch/_session` against central
+  first; edge fallback login is possible only because `_users` is filtered-replicated to the
+  edge server. Edge `AuthSession` cookies do NOT grant access to `/api/v1/*` service endpoints.
 - **Reactivity comes from the changes feed**, not manual refetching: the live-sync wiring
   invalidates the relevant TanStack Query keys on PouchDB `change` events. Never poll / never use
   `refetchInterval` for live data.

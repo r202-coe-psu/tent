@@ -15,8 +15,7 @@ export const useUsers = () =>
 export const useCreateUser = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ name, password }: { name: string; password: string }) =>
-			createUser(name, password),
+		mutationFn: (input: { name: string; password: string; roles: string[] }) => createUser(input),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
 	}));
 };
@@ -24,7 +23,7 @@ export const useCreateUser = () => {
 export const useDeleteUser = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ id, rev }: { id: string; rev: string }) => deleteUser(id, rev),
+		mutationFn: (name: string) => deleteUser(name),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
 	}));
 };

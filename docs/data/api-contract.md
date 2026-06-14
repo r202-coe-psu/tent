@@ -104,8 +104,18 @@ POST /api/v1/shelters            { name, capacity, zones[], area_m2?, facilities
     + ออก credentials/replication docs สำหรับ edge server ของศูนย์ (edge⇄central สำหรับ fallback/backlog + filtered _users)
   → res: { id: "shelter:{ulid}", shelter_code: "SH001" }
 POST /api/v1/shelters/{id}/close   → ตั้ง status=closed + closed_at (เริ่มนาฬิกา retention 3 เดือน)
-POST /api/v1/users               { name, password, roles[] }   // ห่อ _users เพื่อบังคับกติกา 1 user 1 shelter
+
+POST   /api/v1/users             { name, password, roles[] }   // ห่อ _users เพื่อบังคับกติกา 1 user 1 shelter
+GET    /api/v1/users             → list users (scoped: SA=ทั้งหมด, SM=เฉพาะศูนย์ตน)
+DELETE /api/v1/users?name=       → ลบ user (SM ลบได้เฉพาะ staff ในศูนย์ตน)
 ```
+
+> **shelter provisioning** (`/api/v1/shelters*`) = `system_admin` เท่านั้น. **user management**
+> (`/api/v1/users`) authorization ละเอียดกว่า (FR-34, แก้ 2026-06-14):
+> - **`system_admin`** — สร้าง/ลบ user ได้ทุก role (ยกเว้น CouchDB `_admin`), ทุกศูนย์; เลือก `shelter:{code}` จาก payload.
+> - **`shelter_manager`** — เฉพาะ **staff** (`volunteer`/`kitchen_staff`/`warehouse_staff`) ใน **ศูนย์ตนเท่านั้น**;
+>   `shelter:{code}` derive จาก session ผู้เรียก (ไม่เชื่อ client). ห้าม grant `shelter_manager`/`system_admin`/`_admin` หรือข้ามศูนย์ → `FORBIDDEN`.
+> - server validate `roles[]` เสมอ (ไม่ไว้ใจ payload). contract นี้คือสิ่งที่ service จริง (FastAPI) ต้องบังคับเหมือนกัน — dev BFF เป็น implementation ชั่วคราว.
 
 ## 4. Export service (FR-14..16)
 

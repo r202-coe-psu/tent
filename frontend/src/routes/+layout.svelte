@@ -5,8 +5,24 @@
 	import { Toaster } from '$lib/components/ui/sonner/index.js';
 	import { PUBLIC_APP_TITLE } from '$env/static/public';
 	import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools';
+	import { startNamedSync, stopNamedSync } from '$lib/db/pouch';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { SHELTER_DB, startPeopleLiveQuery } from '$lib/features/people';
 
 	let { children, data } = $props();
+
+	// Shelter data sync + changes-feed reactivity follow the auth lifecycle:
+	// start once authenticated, tear down on logout. One active remote, one feed
+	// — both bound to the SAME shelter db (CONTRIBUTING.md §4).
+	$effect(() => {
+		if (!authStore.isAuthenticated) return;
+		startNamedSync(SHELTER_DB, () => authStore.markNeedsReauth());
+		const live = startPeopleLiveQuery(data.queryClient);
+		return () => {
+			live.stop();
+			stopNamedSync(SHELTER_DB);
+		};
+	});
 </script>
 
 <svelte:head>

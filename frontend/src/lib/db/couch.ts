@@ -50,7 +50,10 @@ export async function couchFetch<T>(path: string, init: RequestInit = {}): Promi
 }
 
 /** Authenticate against `_users`; CouchDB sets the AuthSession cookie on success. */
-export async function sessionLogin(input: { name: string; password: string }): Promise<SessionUser> {
+export async function sessionLogin(input: {
+	name: string;
+	password: string;
+}): Promise<SessionUser> {
 	const res = await couchFetch<{ ok: boolean; name: string; roles: string[] }>('/_session', {
 		method: 'POST',
 		body: JSON.stringify(input)

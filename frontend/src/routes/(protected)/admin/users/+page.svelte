@@ -1,37 +1,47 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import * as Card from '$lib/components/ui/card/index.js';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { isSystemAdmin, shelterCodeFromRoles, shelterScopeRole } from '$lib/auth/roles';
 	import {
 		CreateUserForm,
 		UserList,
 		useUsers,
 		useCreateUser,
-		useDeleteUser
+		useDeleteUser,
+		type CreateUserInput
 	} from '$lib/features/users';
-	import type { CouchUserDoc } from '$lib/features/users';
+
+	const roles = $derived(authStore.user?.roles ?? []);
+	const isSA = $derived(isSystemAdmin(roles));
+	const shelterCode = $derived(shelterCodeFromRoles(roles));
 
 	const usersQuery = useUsers();
 	const createMutation = useCreateUser();
 	const deleteMutation = useDeleteUser();
 
-	function handleCreate(data: { name: string; password: string }) {
+	function handleCreate(input: CreateUserInput) {
+		const code = isSA ? input.shelter_code : shelterCode;
+		if (!code) {
+			toast.error('A shelter code is required');
+			return;
+		}
+		// Build the canonical roles[]: shelter scope + capability (server re-validates).
+		const userRoles = [shelterScopeRole(code), input.capability];
 		createMutation.mutate(
-			{ name: data.name, password: data.password },
+			{ name: input.username, password: input.password, roles: userRoles },
 			{
-				onSuccess: () => toast.success(`User "${data.name}" created`),
+				onSuccess: () => toast.success(`User "${input.username}" created`),
 				onError: (err: Error) => toast.error(err.message)
 			}
 		);
 	}
 
-	function handleDelete(user: CouchUserDoc) {
-		deleteMutation.mutate(
-			{ id: user._id, rev: user._rev },
-			{
-				onSuccess: () => toast.success(`User "${user.name}" deleted`),
-				onError: (err: Error) => toast.error(err.message)
-			}
-		);
+	function handleDelete(name: string) {
+		deleteMutation.mutate(name, {
+			onSuccess: () => toast.success(`User "${name}" deleted`),
+			onError: (err: Error) => toast.error(err.message)
+		});
 	}
 </script>
 
@@ -40,10 +50,18 @@
 
 	<Card.Root class="mb-8">
 		<Card.Header>
-			<Card.Title>Create User</Card.Title>
+			<Card.Title>Create user</Card.Title>
+			<Card.Description>
+				{isSA ? 'Add staff or a shelter manager to any shelter.' : `Add staff to ${shelterCode}.`}
+			</Card.Description>
 		</Card.Header>
 		<Card.Content>
-			<CreateUserForm onsubmit={handleCreate} pending={createMutation.isPending} />
+			<CreateUserForm
+				onsubmit={handleCreate}
+				{isSA}
+				{shelterCode}
+				pending={createMutation.isPending}
+			/>
 		</Card.Content>
 	</Card.Root>
 

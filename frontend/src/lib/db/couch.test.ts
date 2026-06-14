@@ -135,9 +135,7 @@ describe('getSession', () => {
 	});
 
 	it('returns null when userCtx.name is null', async () => {
-		fetchMock.mockResolvedValue(
-			mockResponse({ ok: true, userCtx: { name: null, roles: [] } })
-		);
+		fetchMock.mockResolvedValue(mockResponse({ ok: true, userCtx: { name: null, roles: [] } }));
 
 		expect(await getSession()).toBeNull();
 	});

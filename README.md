@@ -40,22 +40,29 @@ GIS, Model 3 ระดับ, SOP, ข้อเสนอเชิงนโยบ
 
 ## สถานะปัจจุบันของ codebase
 
-ระยะเริ่มต้น — เป็น demo/prototype ของแพลตฟอร์มจัดการศูนย์พักพิง สร้างจาก template
-[sveltekitten](#) (SvelteKit SPA) ตอนนี้มีโดเมน Smart Shelter เริ่มเป็นรูปเป็นร่างแล้วใน
-[frontend/src/lib/features/shelter/](frontend/src/lib/features/shelter/)
+ระยะ prototype — domain และ data layer ของ Smart Shelter เริ่มเป็นรูปเป็นร่างใน
+`frontend/src/lib/features/` (people, operations, users, …) บน architecture ดังนี้:
+
+**Topology (central-first + LAN fallback):**
+
+```
+device (PouchDB) ⇄ WAN ⇄ central (CouchDB 3.5)
+      │                        │ edge fallback replica
+      └──── LAN (fallback) ⇄ edge (CouchDB @ศูนย์)
+```
+
+App เขียน local PouchDB ก่อนเสมอ; sync กับ active remote เดียว (central ปกติ,
+edge เฉพาะ WAN outage, local-only ถ้าไม่เห็นทั้งคู่)
 
 สิ่งที่มีในโค้ดตอนนี้:
 
-- **โดเมนศูนย์พักพิง** — config (ชื่อ + capacity), occupant (เช็คอิน/เช็คเอาท์), inventory item,
-  และ stock transaction แบบ event-sourced (ยอดคงเหลือ = ผลรวม delta ของ txn เพื่อให้ merge
-  การแก้ไขแบบ offline ได้โดยไม่ชน) — ดู [shelter.ts](frontend/src/lib/features/shelter/domain/shelter.ts)
-- **3 ศูนย์ตัวอย่าง** (A / B / C) แต่ละศูนย์เป็น CouchDB database แยกกัน (`shelter_a`/`_b`/`_c`)
-- **Role-based access** — `shelter_<id>_manager` / `shelter_<id>_volunteer` map กับ CouchDB roles
-- **UI** — inventory panel, intake form, capacity card, occupant list + หน้า admin (shelter/users/demo)
-- **Offline-first** — sync ผ่าน PouchDB ↔ CouchDB
+- **Domain model** — evacuee, household, medical, movement, stock, donation, donation campaign
+  (`features/people`, `features/operations`)
+- **Role-based access** — CouchDB `_session`; roles: `system_admin` | `shelter:{code}` + function roles
+- **Offline-first** — PouchDB sync ผ่าน `/couch` proxy (same-origin, first-party cookie)
+- **Admin ops** — dev-server API routes (`/api/register`, `/api/admin/users`) ถือ admin credentials ฝั่ง server
 
-> หมายเหตุ: README นี้เน้นภาพรวม ยังไม่ลงรายละเอียดสถาปัตยกรรม — ดู [CLAUDE.md](CLAUDE.md)
-> และ [frontend/AGENTS.md](frontend/AGENTS.md) สำหรับ convention การพัฒนา
+> demo เก่า (shelter A/B/C) ถูกย้ายไป `demo/` แล้ว — ไม่ได้ build ใน production
 
 ## Tech stack (ย่อ)
 
