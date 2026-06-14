@@ -68,3 +68,7 @@ export {
 	useUpdateEvacuee,
 	startPeopleLiveQuery
 } from './application/queries';
+
+// UI — feature components
+export { default as EvacueeForm } from './ui/evacuee-form.svelte';
+export { default as EvacueeList } from './ui/evacuee-list.svelte';
