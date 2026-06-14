@@ -59,3 +59,12 @@ export {
 // Data — repository contract + PouchDB binding
 export type { PeopleRepository } from './data/people.repository';
 export { peopleRepository, SHELTER_CODE, SHELTER_DB } from './data/people.pouch';
+
+// Application — TanStack Query hooks + changes-feed live-query wiring
+export {
+	peopleKeys,
+	useEvacuees,
+	useCreateEvacuee,
+	useUpdateEvacuee,
+	startPeopleLiveQuery
+} from './application/queries';
