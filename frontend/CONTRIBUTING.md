@@ -91,11 +91,13 @@ This app is **offline-first**. Treat these as load-bearing:
 
 ## 5. SPA / SvelteKit constraints
 
-- Static build via `@sveltejs/adapter-static` with a `200.html` fallback. **No SSR data loading**:
-  no `+page.server.ts`, no `+layout.server.ts`, no server `load`. All data fetching is client-side.
-- The `src/routes/api/**` endpoints exist **only on the dev server** (they hold the admin secret) and
-  are intentionally absent from the static production build. Don't make client features depend on them
-  being present in prod.
+- Built via `@sveltejs/adapter-node` — a SPA/PWA served by a Node server, `ssr = false`. **No SSR data
+  loading**: no `+page.server.ts`, no `+layout.server.ts`, no server `load`. All page data fetching is
+  client-side.
+- The `src/routes/api/**` `+server.ts` endpoints run on the Node server in **both dev and production**
+  (they hold the admin secret). They are marked `prerender = false` so they stay dynamic; an
+  `api/+layout.ts` documents this intent at the group level. Keep secrets server-side only — never
+  expose them to client bundles.
 - Keep CouchDB same-origin in dev via the Vite `/couch` proxy (`PUBLIC_COUCH_PROXY`) so the session
   cookie is first-party — don't hardcode absolute CouchDB URLs in feature code.
 

@@ -62,7 +62,7 @@ GIS, Model 3 ระดับ, SOP, ข้อเสนอเชิงนโยบ
 - **Frontend**: SvelteKit 2 + Svelte 5 (runes) + TypeScript, Tailwind CSS v4, shadcn-svelte
 - **Data**: client-side ล้วน — TanStack Query, PouchDB (offline) sync กับ CouchDB 3.5
 - **Backend**: CouchDB 3.5 ตรงจาก browser (cookie session auth ผ่าน dev proxy `/couch`)
-- **Deploy**: static SPA (`adapter-static`, `ssr = false`)
+- **Deploy**: SPA/PWA เสิร์ฟด้วย Node server (`adapter-node`, `ssr = false`) — Node รัน `/api/*` server endpoints ด้วย
 
 ## เริ่มต้นใช้งาน
 

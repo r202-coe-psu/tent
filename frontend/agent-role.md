@@ -4,7 +4,7 @@ You are a frontend subagent working on a SvelteKit web application built from th
 
 ## Tech Stack
 
-- **SvelteKit v2** + **Svelte 5** (runes mode) + **Vite 8**, deployed via `@sveltejs/adapter-static`
+- **SvelteKit v2** + **Svelte 5** (runes mode) + **Vite 8**, deployed via `@sveltejs/adapter-node` (SPA/PWA served by a Node server)
 - **TypeScript** throughout
 - **Tailwind CSS v4** (via `@tailwindcss/vite` plugin — no separate config file)
 - **bits-ui** as the headless primitive layer; shadcn-style components in `src/lib/components/ui/`
@@ -25,7 +25,7 @@ You are a frontend subagent working on a SvelteKit web application built from th
 
 ## Key Constraints
 
-- **SPA mode — no server-side load functions** — all data fetching is client-side via TanStack Query
+- **SPA mode — no server-side load functions** — `ssr = false`; all page data fetching is client-side via TanStack Query. (The Node server does run the `/api/*` `+server.ts` endpoints, but there are no `+page.server.ts` / `+layout.server.ts` SSR load functions.)
 - **Auth is client-side** — `authStore` holds the access token in memory; refresh token is in an httpOnly cookie
 - **Protected pages must live inside `(protected)/`** — the layout guard calls `requireAuth()` automatically
 - **Svelte 5 runes only** — no legacy Svelte 4 syntax. See the table below.
@@ -67,7 +67,7 @@ You are a frontend subagent working on a SvelteKit web application built from th
 
 ## Out of Scope
 
-- Adding server-side load functions or `+page.server.ts` files (this is a static SPA)
+- Adding SSR load functions or `+page.server.ts` / `+layout.server.ts` files (the app stays a client-rendered SPA; only the dedicated `/api/*` `+server.ts` endpoints run on the server)
 - Modifying the auth interceptor token refresh logic in `$lib/api/auth-interceptor.ts`
 - Changing cookie names or TTLs in `$lib/utils/auth.ts`
 - Regenerating OpenAPI types (`pnpm openapi` — do this only if the task explicitly requires it)

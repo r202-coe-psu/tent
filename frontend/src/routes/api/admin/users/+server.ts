@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminFetch, requireAdmin } from '$lib/server/couch-admin';
 
-// Admin-only endpoints; never prerendered (static build omits them).
+// Admin-only endpoints; never prerendered — run on the Node server at runtime.
 export const prerender = false;
 
 interface CouchUserDoc {
@@ -13,28 +13,6 @@ interface CouchUserDoc {
 	type: string;
 }
 
-interface NotesSecurity {
-	admins: { names: string[]; roles: string[] };
-	members: { names: string[]; roles: string[] };
-}
-
-async function grantNotesAccess(username: string): Promise<void> {
-	const security = await adminFetch<NotesSecurity>('/notes/_security');
-	security.members ??= { names: [], roles: [] };
-	security.members.names ??= [];
-	if (!security.members.names.includes(username)) {
-		security.members.names.push(username);
-	}
-	await adminFetch('/notes/_security', { method: 'PUT', body: JSON.stringify(security) });
-}
-
-async function revokeNotesAccess(username: string): Promise<void> {
-	const security = await adminFetch<NotesSecurity>('/notes/_security');
-	if (security.members?.names) {
-		security.members.names = security.members.names.filter((n) => n !== username);
-		await adminFetch('/notes/_security', { method: 'PUT', body: JSON.stringify(security) });
-	}
-}
 
 export const GET: RequestHandler = async ({ request }) => {
 	await requireAdmin(request.headers.get('cookie'));
@@ -57,7 +35,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		method: 'PUT',
 		body: JSON.stringify({ name, password, roles: [], type: 'user' })
 	});
-	await grantNotesAccess(name);
 	return json({ ok: true });
 };
 
@@ -70,6 +47,5 @@ export const DELETE: RequestHandler = async ({ request, url }) => {
 	await adminFetch(`/_users/${encodeURIComponent(id)}?rev=${encodeURIComponent(rev)}`, {
 		method: 'DELETE'
 	});
-	await revokeNotesAccess(id.replace('org.couchdb.user:', ''));
 	return json({ ok: true });
 };

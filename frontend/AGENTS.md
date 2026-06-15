@@ -34,7 +34,7 @@ Only call after user confirms they want one. NEVER call if code was written to p
 
 ## SPA-Specific Notes
 
-- This is a **static SPA**: `ssr = false`, `prerender = true` — no `+page.server.ts` or server-only code
+- This is a **SPA/PWA served by a Node server** (`@sveltejs/adapter-node`): `ssr = false` — no `+page.server.ts` / `+layout.server.ts` SSR load functions. The only server-side code is the `/api/*` `+server.ts` endpoints (admin, register), which run on the Node runtime and are marked `prerender = false`.
 - Auth is **client-side**: `authStore` (`src/lib/stores/auth.svelte.ts`) holds the access token in memory; refresh token lives in an httpOnly cookie
 - Protected pages go inside `src/routes/(protected)/` — the auth guard runs automatically via `+layout.ts`
 - API calls go directly to `PUBLIC_API_URL` via the typed `client` (`src/lib/api/client.ts`) — the auth header is injected automatically by middleware

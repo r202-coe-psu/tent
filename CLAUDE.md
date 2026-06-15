@@ -4,12 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project State
 
-This repo (`tent`, app title **"CouchDB Lab"**) is an early-stage scaffold from the
-**sveltekitten** SPA template. As of now the committed tree contains the template's
-config, docs, prebuilt `frontend/build/` output, and e2e tests — but **`frontend/src/`
-and `frontend/package.json` do not yet exist**. When implementing features you will be
-creating `src/` from scratch following the conventions documented below; treat
-`frontend/agent-role.md` and `frontend/AGENTS.md` as the binding spec for that work.
+This repo (`tent`, app title **"CouchDB Lab"**) started from the **sveltekitten** SPA
+template and now has a live `frontend/src/` and `frontend/package.json`: the Smart Shelter
+domain (auth, register, shelter, admin) is scaffolded, with `/api/*` server endpoints under
+`src/routes/api/`. When implementing features, follow the conventions documented below and
+treat `frontend/agent-role.md` and `frontend/AGENTS.md` as the binding spec for that work.
 
 The intended backend is **CouchDB 3.5** (see `docker-compose.yml`), reached directly
 from the browser with cookie-based session auth via a same-origin dev proxy
@@ -37,9 +36,12 @@ Bring up the CouchDB backend from repo root: `docker compose up` (needs a `.env`
 
 ## Architecture
 
-**Static SPA** — `@sveltejs/adapter-static` with `ssr = false`, `prerender = true`. There
-is **no server-side code**: no `+page.server.ts`, no `+layout.server.ts`, no load functions
-that run on a server. All data fetching is client-side via **TanStack Query**
+**SPA/PWA on Node** — `@sveltejs/adapter-node` with `ssr = false` (app pages stay
+client-rendered). The app is still a SPA/PWA, but it is now served by a Node server, which
+also runs the `/api/*` **server endpoints** (`+server.ts` under `src/routes/api/` — admin
+and register) in production. Those endpoints hold the admin secret and are marked
+`prerender = false`. There are still **no `+page.server.ts` / `+layout.server.ts` SSR load
+functions** — all page data fetching is client-side via **TanStack Query**
 (`@tanstack/svelte-query`), wired through `QueryClientProvider` in the root layout.
 
 **Stack**: SvelteKit 2 + Svelte 5 (runes only) + Vite + TypeScript + Tailwind CSS v4 (no

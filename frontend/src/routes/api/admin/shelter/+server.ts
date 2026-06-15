@@ -16,7 +16,7 @@ import {
 	type ShelterVerifyResult
 } from '$lib/features/shelter/data/shelter.seed';
 
-// Admin-only endpoint; never prerendered (static build omits it).
+// Admin-only endpoint; never prerendered — runs on the Node server at runtime.
 export const prerender = false;
 
 /** PUT a doc, carrying the existing _rev if one is present (idempotent). */
