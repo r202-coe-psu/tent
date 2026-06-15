@@ -8,7 +8,7 @@ function couchInit(user: string, password: string, couchUrl: string) {
 	return {
 		name: 'couch-init',
 		configureServer() {
-				const base = couchUrl;
+			const base = couchUrl;
 			const auth = 'Basic ' + Buffer.from(`${user}:${password}`).toString('base64');
 			const dbs = ['_users', '_replicator', '_global_changes', 'notes'];
 			Promise.all(
