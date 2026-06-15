@@ -5,16 +5,16 @@ phase: R2
 month: มิ.ย.–ก.ค. 2026 (Foundation Gate 17 ก.ค.)
 gate: Backoffice Foundation Gate
 created: 2026-06-03
-updated: 2026-06-11
+updated: 2026-06-15
 ---
 
 # Phase R2 PRD: Foundation — Baseline, Household, Zoning & Inventory
 
 ## 0. Document Purpose
 
-PRD ฉบับนี้กำหนด scope/FR/NFR ของ **Phase R2 (มิ.ย.–ก.ค. 2026, Foundation Gate 17 ก.ค.)** ซึ่งเป็น phase แรกของการ build ผู้อ่านคือ PM/SA, Product Owner, Lead pair + ทีมที่เกี่ยวข้อง (จับทีม **รอตัดสินใจ — K-13**) และ QA/Release Owner
+PRD ฉบับนี้กำหนด scope/FR/NFR ของ **Phase R2 (มิ.ย.–ก.ค. 2026, Foundation Gate 17 ก.ค.)** ซึ่งเป็น phase แรกของการ build ผู้อ่านคือ PM/SA, Product Owner, Lead pair + ทีมที่เกี่ยวข้อง (K-13 ปิดแล้วตาม Squad Roster) และ QA/Release Owner
 
-**Greenfield:** ยังไม่มีระบบ MVP มาก่อน — phase นี้รวมการ build **Baseline FR-1–20** (registration-first: auth, person registration, screening, QR/movement, dashboard, export, offline, fallback) เป็นส่วนแรก ก่อน/ขนานกับ feature ใหม่ของ R2 ด้านล่าง Baseline spec อยู่ใน [`docs/features/`](../features/index.html) + [Task Breakdown module 0](../task-breakdown/00-baseline.md); เอกสารนี้ spec เฉพาะ **FR-21..FR-34** ที่ต่อยอดจาก baseline (numbering เดินต่อ: FR-21, NFR-12, UJ-5, SM-7) field contract อิง [Data Dictionary](../data/smart-shelter-data-dictionary.md) ลำดับ phase และทีม ดูใน [Roadmap](roadmap.html)
+**Greenfield:** ยังไม่มีระบบ MVP มาก่อน — phase นี้รวมการ build **Baseline FR-1–20** (registration-first: auth, person registration, screening, QR/movement, dashboard, export, offline, fallback) เป็นส่วนแรก ก่อน/ขนานกับ feature ใหม่ของ R2 ด้านล่าง Baseline spec อยู่ใน [`docs/features/`](../features/index.html) + [Task Breakdown module 0](../task-breakdown/00-baseline.md); เอกสารนี้ spec เฉพาะ **FR-21..FR-34** ที่ต่อยอดจาก baseline (numbering เดินต่อ: FR-21, NFR-12, UJ-5, SM-7) field contract อิง [Database Schema](../data/schema.md) + [Data Model](../data/data-model.md) ลำดับ phase และทีม ดูใน [Roadmap](roadmap.html)
 
 จุดยืนของ R2: **build ฐานหน้างาน + ปูฐานหลังบ้าน** — baseline registration-first, Household/zoning และ resource backbone (Inventory) ที่ Donation/Kitchen/SOP ใน R3 ต้องใช้ ยังไม่เปิด module operations เต็ม
 
@@ -82,7 +82,7 @@ R2 เติมสามอย่างที่ทำให้ศูนย์ "
 Registration Officer สามารถสร้าง Household และผูก Person ตั้งแต่ 1 คนขึ้นไปเข้าด้วยกัน พร้อมระบุ Household Head
 
 **Consequences (testable):**
-- สร้าง Household ได้จากข้อมูลขั้นต่ำ: ระบุ Household Head 1 คน (เป็น Person ที่มี required fields ชื่อ+เพศตาม FR-5)
+- สร้าง Household ได้จากข้อมูลขั้นต่ำ: ระบุ Household Head 1 คน (เป็น Person ที่มี required fields `first_name` + `last_name` + `gender` + `phone|null` ตาม FR-5)
 - เพิ่ม/ลบสมาชิกจาก Household ได้ และ Person หนึ่งคนอยู่ได้เพียง 1 Household ณ เวลาหนึ่ง
 - Person-only registration เดิม (FR-4) ยังทำงานได้ — Household เป็น optional grouping ไม่ใช่ required step
 

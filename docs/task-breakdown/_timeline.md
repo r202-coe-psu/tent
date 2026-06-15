@@ -3,7 +3,7 @@ title: "Task Breakdown — Dependencies & Timeline"
 status: active
 created: 2026-06-05
 updated: 2026-06-11
-note: deps มาจาก _tasks.py — แก้ task/deps แล้วอัปเดต diagram ด้วยมือ. Schedule เคาะ 2026-06-09 (compress build → มิ.ย.–ส.ค., go-live ก.ย.) · baseline T-47..55 เพิ่ม 2026-06-11
+note: deps maintained directly in Markdown. Schedule เคาะ 2026-06-09 (compress build → มิ.ย.–ส.ค., go-live ก.ย.) · baseline T-47..55 เพิ่ม 2026-06-11
 ---
 
 # Dependencies & Timeline

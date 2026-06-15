@@ -2,16 +2,16 @@
 title: Full-System PRD Artifacts Index
 status: active
 created: 2026-06-03
-updated: 2026-06-11
+updated: 2026-06-15
 ---
 
 # Smart Shelter — Full-System PRD
 
 ชุดเอกสาร PRD สำหรับการพัฒนา Smart Shelter Management Platform ทั้งระบบ — **greenfield** (ยังไม่มีระบบใช้งานจริง มีเพียง CouchDB PoC; baseline FR-1–20 ต้อง build เป็นส่วนแรกของ foundation)
 
-**Schedule (เคาะ 2026-06-09):** build **มิ.ย.–ส.ค. 2026** · in-scope ส่งมอบ **31 ส.ค.** · **go-live full program ก.ย.** (สัปดาห์ 1) · deferred tail จบภายใน **14 ก.ย.** (hard deadline งาน feature) · หลังจากนั้นรับ feedback + แก้ไขจนครบกำหนดโครงการ **12 เดือน**. ทีม **14 คน = 2 Lead (Platform/Core) + 4 ทีม × 3** (จับ domain เข้าทีม **รอตัดสินใจ — K-13**) scope **software platform เท่านั้น**
+**Schedule (เคาะ 2026-06-09):** build **มิ.ย.–ส.ค. 2026** · in-scope ส่งมอบ **31 ส.ค.** · **go-live full program ก.ย.** (สัปดาห์ 1) · deferred tail จบภายใน **14 ก.ย.** (hard deadline งาน feature) · หลังจากนั้นรับ feedback + แก้ไขจนครบกำหนดโครงการ **12 เดือน**. ทีม **14 คน = 2 Lead (Platform/Core) + 4 ทีม × 3** (K-13 ปิดแล้วตาม Squad Roster) scope **software platform เท่านั้น**
 
-**ระบบหลักเป็น offline-first บน Central CouchDB เป็นหลัก**: app เขียน local PouchDB ก่อน แล้ว sync กับ active remote เดียว (Central ปกติ, LAN Edge fallback ตอน WAN/Central ล่ม, หรือ local-only); EOC/Open API เป็น service แยก (worker/ETL จาก Central — ดู [Task Breakdown module 10](../task-breakdown/10-eoc.md))
+**ระบบหลักเป็น offline-first บน Central CouchDB เป็นหลัก**: app เขียน local PouchDB ก่อน แล้ว sync กับ active remote เดียว (Central ปกติ, LAN Edge fallback ตอน WAN/Central ล่ม, หรือ local-only); public tier และ EOC/Open API read-model ใช้ MongoDB projection จาก Central CouchDB (ดู [Task Breakdown module 10](../task-breakdown/10-eoc.md))
 
 สร้างด้วย bmad-prd skill
 

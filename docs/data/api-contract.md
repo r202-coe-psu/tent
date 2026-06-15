@@ -66,7 +66,7 @@ Remote ของ device เลือกตาม precedence และมี **ac
 
 | งานใน feature spec | การกระทำจริง |
 | --- | --- |
-| สร้าง/แก้คน (FR-4..6) | `put evacuee:{ulid}` — required แค่ first_name+last_name+gender |
+| สร้าง/แก้คน (FR-4..6) | `put evacuee:{ulid}` — required `first_name` + `last_name` + `gender` + `phone`; phone เป็น `null` ได้เมื่อไม่มี |
 | duplicate hint (FR-5) | query Mango index ชื่อ/phone ฝั่ง local ก่อน put; override → `put audit:{ulid}` |
 | screening (FR-7..9) | `put screening:{ulid}` (append-only) |
 | check-in/out (FR-11..12) | `put movement:{ulid}` + update `evacuee.current_stay` |

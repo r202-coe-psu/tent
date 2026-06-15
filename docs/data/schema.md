@@ -1,5 +1,5 @@
 ---
-title: Smart Shelter — Database Schema (Data Dictionary) v3
+title: Smart Shelter — Database Schema v3
 status: draft for review
 created: 2026-06-11
 updated: 2026-06-12
