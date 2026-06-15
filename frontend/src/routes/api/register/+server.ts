@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { adminFetch, ServiceError } from '$lib/server/couch-admin';
 import { createUser } from '$lib/server/user-service';
 
-// Public self-signup endpoint; never prerendered (static build omits it).
+// Public self-signup endpoint; never prerendered — runs on the Node server at runtime.
 export const prerender = false;
 
 interface NotesSecurity {

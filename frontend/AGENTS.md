@@ -38,7 +38,7 @@ Only call after user confirms they want one. NEVER call if code was written to p
 
 ## SPA-Specific Notes
 
-- This is a **static SPA**: `ssr = false`, `prerender = true` — no `+page.server.ts` or server-only code
+- This is a **SPA/PWA served by a Node server** (`@sveltejs/adapter-node`): `ssr = false` — no `+page.server.ts` / `+layout.server.ts` SSR load functions. The only server-side code is the `/api/*` `+server.ts` endpoints (admin, register), which run on the Node runtime and are marked `prerender = false`.
 - Auth is **CouchDB `_session` cookie**: `authStore` (`src/lib/stores/auth.svelte.ts`) holds
   `{ user, needsReauth }` — no JWT, no access-token
 - **Sync target priority: central → edge (WAN outage only) → local-only**; never run replication

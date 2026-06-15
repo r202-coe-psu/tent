@@ -49,10 +49,13 @@ Bring up CouchDB from repo root: `docker compose up` (needs a `.env` with `COUCH
 
 ## Architecture
 
-**Static SPA** — `@sveltejs/adapter-static` (`ssr = false`, `prerender = true`, `200.html`
-fallback). **No server-side data loading**: no `+page.server.ts`, no `+layout.server.ts`, no server
-`load`. All data fetching is client-side via **TanStack Query** (`@tanstack/svelte-query`), wired
-through `QueryClientProvider` in the root layout.
+**SPA/PWA on Node** — `@sveltejs/adapter-node` (`ssr = false`). The app stays a
+client-rendered SPA/PWA but is served by a Node server, which also runs the `/api/*`
+**server endpoints** (`+server.ts` under `src/routes/api/` — admin, register) in production;
+those hold the admin secret and are marked `prerender = false`. **No server-side data
+loading**: no `+page.server.ts`, no `+layout.server.ts`, no server `load`. All page data
+fetching is client-side via **TanStack Query** (`@tanstack/svelte-query`), wired through
+`QueryClientProvider` in the root layout.
 
 **Stack**: SvelteKit 2 + Svelte 5 (runes only) + Vite + TypeScript + Tailwind CSS v4 (no config
 file — `@tailwindcss/vite`). UI is shadcn-svelte over `bits-ui` primitives in

@@ -9,7 +9,7 @@ import {
 	type VerifyResult
 } from '$lib/features/demo/data/demo.constants';
 
-// Admin-only endpoints; never prerendered (static build omits them).
+// Admin-only endpoints; never prerendered — run on the Node server at runtime.
 export const prerender = false;
 
 async function setupDemo(): Promise<SetupStep[]> {

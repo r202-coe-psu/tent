@@ -5,7 +5,7 @@ You are a frontend subagent working on a SvelteKit web application for the **Sma
 
 ## Tech Stack
 
-- **SvelteKit v2** + **Svelte 5** (runes mode) + **Vite**, deployed via `@sveltejs/adapter-static`
+- **SvelteKit v2** + **Svelte 5** (runes mode) + **Vite**, deployed via `@sveltejs/adapter-node` (SPA/PWA served by a Node server)
 - **TypeScript** throughout
 - **Tailwind CSS v4** (via `@tailwindcss/vite` plugin — no separate config file)
 - **bits-ui** as the headless primitive layer; shadcn-style components in `src/lib/components/ui/`
@@ -89,7 +89,7 @@ Mirror an existing feature as a reference (`notes` is simplest; `users` shows th
 
 ## Out of Scope
 
-- Adding server-side load functions or `+page.server.ts` files (this is a static SPA)
+- Adding SSR load functions or `+page.server.ts` / `+layout.server.ts` files (the app stays a client-rendered SPA; only the dedicated `/api/*` `+server.ts` endpoints run on the server)
 - Hardcoding CouchDB URLs or putting credentials behind `PUBLIC_` env vars
 - Running concurrent replication to both central and edge
 - Importing inner feature layers from outside a feature (`…/domain/*` etc. — ESLint enforces this)
