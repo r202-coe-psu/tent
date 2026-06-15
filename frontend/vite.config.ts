@@ -16,7 +16,8 @@ function couchInit(user: string, password: string, couchUrl: string) {
 					fetch(`${base}/${db}`, { method: 'PUT', headers: { Authorization: auth } })
 						.then((r) => r.json())
 						.then((r) => {
-							if (r.ok || r.error === 'file_exists') console.log(`[couch-init] ✓ ${db}`);
+							if (r.ok) console.log(`[couch-init] created ${db}`);
+							else if (r.error === 'file_exists') console.log(`[couch-init] exists  ${db}`);
 							else console.warn(`[couch-init] ${db}:`, r);
 						})
 						.catch((e) => console.warn(`[couch-init] ${db} unreachable:`, e.message))
