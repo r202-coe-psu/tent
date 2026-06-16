@@ -182,6 +182,6 @@ JWT/refresh token · EOC human dashboard ในระบบหลัก · endpo
 ## Traceability
 
 - Endpoint จริง + plane → [api-contract.md](data/api-contract.md)
-- Doc types / views → [data-model.md](data/data-model.md) §3–4 · field เต็ม → [schema.md](data/schema.md)
+- Doc types / views → [data-model.md](data/data-model.md) §3–4 · field เต็ม → [schema.md](data/schema.md) · ER diagram → [schema-er-diagram.md](data/schema-er-diagram.md)
 - สิทธิ์ราย action → [role-permission-matrix.md](prd/role-permission-matrix.md)
 - FR ราย phase → [PRD index](prd/index.md) · task → [task-breakdown](task-breakdown/_index.md)
