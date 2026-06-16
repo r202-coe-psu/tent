@@ -24,6 +24,25 @@ cookie-based `_session` auth via a same-origin dev proxy (`PUBLIC_COUCH_PROXY=/c
 Data model / domain specs for the Smart Shelter system live in `docs/data/` (`data-model.md`,
 `schema.md`, `api-contract.md`, `couchdb-mongodb-sync.md`) and `docs/features/`.
 
+## Change Management — track every spec change, ask first
+
+This is a **research project**: requirements are still being gathered while build is already
+underway, so spec/docs **will keep changing** throughout. Change is the normal flow, not an
+exception — but it must be **tracked strictly**. The binding policy is **`docs/change-management.md`**;
+the change log lives in **`docs/changes/`**.
+
+- **Never edit spec/docs silently.** Any change in the categories listed in
+  `docs/change-management.md` §2 (a `docs/data/schema.md` field, a business rule/enum/invariant,
+  a `docs/task-breakdown/` or `docs/prd/` scope/gate, a role/permission, a `schema_v` bump) needs
+  a **Change Record** in `docs/changes/`.
+- **Before recording or making any such change, STOP and ask the project owner how to track it**
+  — CR file vs Notion vs a `decision sync` frontmatter note, and at what level of detail. There is
+  **no default**; do not guess the tracking method. (Trivial typo/format/link fixes are exempt.)
+- When you do change a doc, update its `updated:` frontmatter date, and bump `schema_v` + write a
+  migration note when a persisted doc shape changes.
+- Distinguish **stable core** (envelope, auth, sync, layer boundaries — overlaps the "do not bypass"
+  rules below) from **volatile spec** (fields, rules, copy). Stable-core changes need review first.
+
 ## Commands
 
 Run all frontend commands from `frontend/`. Package manager is **pnpm only** (lockfile
