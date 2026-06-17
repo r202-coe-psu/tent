@@ -35,6 +35,7 @@ import {
 	type WalkInDonationInput,
 } from '$lib/features/operations/domain/operations';
 import { type AuthorContext, now } from '$lib/db/model';
+import { ulid } from '$lib/db/ulid';
 
 // ─── env ──────────────────────────────────────────────────────────────────────
 
@@ -142,9 +143,20 @@ const ITEM = {
 
 async function seedRegistry(): Promise<void> {
 	await ensureDb('registry');
+
+	// Idempotent by code-check (matching the admin endpoint pattern) — not by fixed _id.
+	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
+	if (status === 200) {
+		const rows = (data as { rows?: { doc?: { type?: string; code?: string } }[] }).rows ?? [];
+		if (rows.some((r) => r.doc?.type === 'shelter' && r.doc?.code === SHELTER_CODE)) {
+			console.log('  ✓ registry: shelter SH001 already exists, skipping');
+			return;
+		}
+	}
+
 	const ts = now();
 	await putDoc('registry', {
-		_id: 'shelter:seed-SH001',
+		_id: `shelter:${ulid()}`,
 		type: 'shelter',
 		schema_v: 1,
 		code: SHELTER_CODE,
