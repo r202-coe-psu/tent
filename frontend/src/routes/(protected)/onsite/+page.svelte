@@ -29,7 +29,7 @@
 
 	<main class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 		<a
-			href={resolve('/people')}
+			href={resolve('/onsite/people')}
 			class="group flex min-h-[220px] flex-col justify-between rounded-2xl border border-border bg-card p-8 shadow-[0_4px_25px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md"
 		>
 			<div

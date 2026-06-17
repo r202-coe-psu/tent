@@ -28,7 +28,7 @@
 		<div class="flex items-center gap-4">
 			<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
 			<Separator orientation="vertical" class="h-4" />
-			<a href={resolve('/people')} class="text-sm hover:underline">People</a>
+			<a href={resolve('/onsite/people')} class="text-sm hover:underline">People</a>
 			{#if isSA}
 				<Separator orientation="vertical" class="h-4" />
 				<a href={resolve('/admin/shelters')} class="text-sm hover:underline">Shelters</a>

@@ -10,7 +10,6 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { LOGIN_ROUTE } from '$lib/guards/auth';
 	import HomePortalCard from '$lib/components/home-portal-card.svelte';
-	import HomePortalMenu from '$lib/components/home-portal-menu.svelte';
 
 	async function logout() {
 		await authStore.logout();
@@ -71,17 +70,8 @@
 					accent="muted"
 					title="ระบบส่วนหลัง (Back-End)"
 					description="ระบบ ERP บริหารจัดการศูนย์พักพิงแบบครบวงจร, คลังสิ่งของ, ครัวกลาง และ SOP ภาพรวมจังหวัด"
-				>
-					{#snippet actions()}
-						<HomePortalMenu
-							label="Open menu"
-							items={[
-								{ label: 'Shelter', href: resolve('/admin/shelters') },
-								{ label: 'User', href: resolve('/admin/users') }
-							]}
-						/>
-					{/snippet}
-				</HomePortalCard>
+					href={resolve('/admin')}
+				/>
 			</main>
 		</div>
 	</div>
