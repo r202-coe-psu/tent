@@ -50,7 +50,7 @@ export default ts.config(
 	{
 		// A feature may freely import its own internals; the barrel rule only
 		// guards cross-feature/route access.
-		files: ['src/lib/features/**'],
+		files: ['src/lib/features/**', 'scripts/**'],
 		rules: { 'no-restricted-imports': 'off' }
 	},
 	{
