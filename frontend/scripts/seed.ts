@@ -4,6 +4,22 @@
  * Usage:  pnpm seed  (from frontend/)
  * Needs:  CouchDB running + COUCHDB_ADMIN_URL in frontend/.env
  *
+ * ## Factory usage
+ *
+ * | Section                      | Factory               | Source              |
+ * |------------------------------|-----------------------|---------------------|
+ * | seedShelter — households     | createHousehold       | people domain       |
+ * | seedShelter — evacuees       | createEvacuee         | people domain       |
+ * | seedShelter — movements      | createMovement        | people domain       |
+ * | seedShelter — medicals       | createMedical         | people domain       |
+ * | seedShelter — screenings     | createScreening       | people domain       |
+ * | seedShelter — stock ledger   | createStockLedger     | operations domain   |
+ * | seedShelter — donations      | createWalkInDonation  | operations domain   |
+ * | seedShelter — campaigns      | createCampaign        | operations domain   |
+ * | seedRegistry — shelter master| plain object          | no factory (server-side only) |
+ * | seedCatalog — supply items   | plain object          | no factory (no catalog feature) |
+ * | seedCatalog — recipes        | plain object          | no factory (no catalog feature) |
+ *
  * Safe to re-run: catalog and registry docs use deterministic IDs
  * (PUT → 409 = already exists → skip). Shelter docs use ULIDs so
  * re-running adds another batch — useful for volume testing.
