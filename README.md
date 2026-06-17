@@ -90,6 +90,7 @@ pnpm dev          # http://localhost:5173
 - `pnpm check` — type-check (รันก่อนปิดงานทุกครั้ง)
 - `pnpm test` — unit tests (Vitest)
 - `pnpm test:e2e` — Playwright e2e
+- `pnpm seed` — Create mooc data (purge old data first)
 
 ## แหล่งอ้างอิง
 
