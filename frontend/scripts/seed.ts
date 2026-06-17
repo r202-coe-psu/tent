@@ -131,12 +131,12 @@ const CTX: AuthorContext = { shelterCode: SHELTER_CODE, createdBy: 'seed' };
 
 // Supply item IDs — referenced by operations seed data below.
 const ITEM = {
-	rice: 'item:seed-rice',
-	water: 'item:seed-water',
-	paracetamol: 'item:seed-paracetamol',
-	soap: 'item:seed-soap',
-	blanket: 'item:seed-blanket',
-	egg: 'item:seed-egg',
+	rice: 'item:rice',
+	water: 'item:water',
+	paracetamol: 'item:paracetamol',
+	soap: 'item:soap',
+	blanket: 'item:blanket',
+	egg: 'item:egg',
 } as const;
 
 // ─── seedRegistry ─────────────────────────────────────────────────────────────
@@ -198,7 +198,7 @@ async function seedCatalog(): Promise<void> {
 		catalogDoc(ITEM.egg, 'supply_item', { name: 'ไข่ไก่', category: 'food', unit: 'piece', perishable: true, reorder_level: 100 }),
 	];
 	const recipes = [
-		catalogDoc('recipe:seed-fried-egg-rice', 'recipe', {
+		catalogDoc('recipe:fried-egg-rice', 'recipe', {
 			name: 'ข้าวไข่เจียว',
 			serving_unit: 'box',
 			ingredients: [
@@ -208,7 +208,7 @@ async function seedCatalog(): Promise<void> {
 			tags: [],
 			active: true,
 		}),
-		catalogDoc('recipe:seed-congee', 'recipe', {
+		catalogDoc('recipe:congee', 'recipe', {
 			name: 'ข้าวต้ม',
 			serving_unit: 'bowl',
 			ingredients: [{ item_id: ITEM.rice, qty: 0.15, unit: 'kg' }],
