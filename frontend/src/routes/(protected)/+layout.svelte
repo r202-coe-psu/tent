@@ -24,7 +24,7 @@
 
 <div class="flex min-h-svh flex-col">
 	<header class="flex items-center justify-between border-b px-6 py-3">
-		<a href={resolve('/home')} class="font-semibold">App</a>
+		<a href={resolve('/')} class="font-semibold">App</a>
 		<div class="flex items-center gap-4">
 			<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
 			<Separator orientation="vertical" class="h-4" />
