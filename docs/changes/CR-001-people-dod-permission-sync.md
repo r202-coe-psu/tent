@@ -1,7 +1,7 @@
 ---
 id: CR-001
-title: "02-people.md — เพิ่ม permission cross-ref, household gaps (lifecycle, screening, UI split, bulk ops)"
-status: proposed
+title: "02-people.md — เพิ่ม permission cross-ref, household gaps (lifecycle, screening, UI split, bulk ops, pre-registration)"
+status: done
 date: 2026-06-18
 requested_by: project owner (session 2026-06-18)
 decided_by: <เจ้าของโครงการ>
@@ -25,6 +25,7 @@ Review `02-people.md` เทียบ `role-permission-matrix.md` พบ gap ห
 6. **Bulk zone operations ขาด** — T-09 assign ทีละ household; backoffice ต้องการ bulk assign/move ยังไม่อยู่ใน scope
 7. **Household head emergency contact** — T-04 กำหนด head ได้แต่ไม่มี DoD ครอบ emergency contact / communication preference ของ head
 8. **Audit/override log ดูไม่ได้จาก backoffice** — T-09 บันทึก override actor แต่ไม่มี task ครอบ "ดู audit log / override history"
+9. **Pre-registration ผู้อพยพล่วงหน้า ขาดจาก spec ทั้งหมด** — ไม่มี flow สำหรับ SM/VOL สร้าง household ก่อน household มาถึงจริง (เช่น รับแจ้งจาก EOC ว่าจะมีกลุ่มคนมา) ทำให้ QR ออกล่วงหน้าได้, SM วางแผน zone ได้, VOL check-in ได้รวดเร็วขึ้นเมื่อมาถึง
 
 ## Change
 
@@ -39,6 +40,8 @@ Review `02-people.md` เทียบ `role-permission-matrix.md` พบ gap ห
 | Household lifecycle | T-06 DoD | ครอบแค่ check-in/out | เพิ่ม: status state machine `arriving → checked-in → transferred → evacuated → closed` + transition rules |
 | Head emergency contact | T-04 DoD | กำหนด head ได้ | เพิ่ม: head record ต้องมี emergency contact (phone) + communication preference |
 | Override audit view | T-09 DoD | บันทึก override actor | เพิ่ม: SM สามารถดู override history ของโซนตนได้ |
+| Pre-registration | T-04 DoD | สร้าง household ณ จุดรับหรือทีหลัง | เพิ่ม: SM/VOL สร้าง household สถานะ `pre-registered` ล่วงหน้าได้; QR ออกทันที; check-in (T-06) เปลี่ยน status → `checked-in` |
+| Checkout destination | T-06 DoD + state machine | แยก state `transferred`/`evacuated`/`checked-out` | ยุบเป็น `checked-out` เดียว + `checkout_destination` field required: `returned_home` / `transferred_shelter` (+ ชื่อศูนย์) / `referred_facility` (+ ชื่อสถานที่) / `other` (+ หมายเหตุ) — ทุกการออกจาก shelter ใช้ action checkout เดียวกัน |
 
 ### ส่วนที่ต้องการ PM ตัดสินใจก่อน
 
@@ -64,7 +67,35 @@ sequenceDiagram
     note over SM,SYS: VOL ไม่มีสิทธิ์ step นี้
 ```
 
-### Phase 1 — Registration (VOL หรือ SM ทำ ณ จุดรับ หรือล่วงหน้า)
+### Phase 0.5 — Pre-registration ล่วงหน้า (SM หรือ VOL backoffice, ก่อน household มาถึง)
+
+> Path นี้: รับแจ้งล่วงหน้าว่าจะมีกลุ่มคนมา → สร้าง household + ออก QR รอไว้
+
+```mermaid
+sequenceDiagram
+    actor SM as SM / VOL (backoffice)
+    participant SYS as System
+
+    SM->>SYS: สร้าง household (T-04)<br/>status: pre-registered<br/>กรอก head + สมาชิก + emergency contact
+    SYS->>SYS: validate + generate Shelter ID + QR (T-05)
+    SYS-->>SM: household pre-registered, QR พร้อม (ส่ง/พิมพ์ล่วงหน้าได้)
+
+    opt วางแผน zone ล่วงหน้า
+        SM->>SYS: assign zone (T-09) — zone จอง capacity ไว้รอ
+        note over SM,SYS: pre-registered ไม่นับ occupancy จนกว่าจะ check-in จริง
+    end
+
+    note over SM,SYS: ถ้า household ไม่มาถึง → SM mark cancelled ได้
+```
+
+> เมื่อ household มาถึงจริง → VOL scan QR ที่ออกไว้แล้ว → Phase 2 (check-in + screening) ทันที
+> status เปลี่ยน: `pre-registered → arriving → checked-in`
+
+---
+
+### Phase 1A — Household สร้าง ณ จุดรับ (VOL, คนมาถึงพร้อมกันทั้งครอบครัว)
+
+> Path นี้: VOL สร้าง household + check-in ในครั้งเดียวกัน
 
 ```mermaid
 sequenceDiagram
@@ -74,15 +105,64 @@ sequenceDiagram
     VOL->>SYS: สร้าง household (T-04)<br/>กรอก head + สมาชิก + emergency contact ของ head
     SYS->>SYS: validate: head มี required fields (FR-5)<br/>1 person อยู่ได้แค่ 1 active household
     SYS-->>VOL: household created
-    SYS->>SYS: auto-generate Shelter ID + QR (T-05)<br/>opaque token, ไม่ฝัง PII
-    SYS-->>VOL: แสดง QR บนหน้าจอ (พิมพ์/บัตรได้)
+    SYS->>SYS: auto-generate Shelter ID + QR (T-05)
+    SYS-->>VOL: แสดง QR (พิมพ์/บัตรได้)
 
     opt มีสัตว์/ทรัพย์สิน/ยานพาหนะ
-        VOL->>SYS: บันทึก pet/asset/vehicle (T-07)<br/>ผูกกับ household หรือ person
-        SYS-->>VOL: บันทึกแล้ว, ระบุจำนวนสัตว์เลี้ยงต่อโซน query ได้
+        VOL->>SYS: บันทึก pet/asset/vehicle (T-07)
+        SYS-->>VOL: บันทึกแล้ว
     end
 
-    note over VOL,SYS: person-only flow (ไม่สร้าง household) ทำได้ปกติ — household เป็น optional
+    note over VOL,SYS: ต่อเนื่องไป Phase 2 (check-in + screening) ทันที
+```
+
+### Phase 1B — Person-only check-in ก่อน (คนมาถึงคนเดียว หรือรีบเข้า)
+
+> Path นี้: ไม่มี household ตอนมาถึง → check-in เป็นรายบุคคลก่อน → สร้าง household ทีหลัง
+
+```mermaid
+sequenceDiagram
+    actor VOL as VOL (Volunteer)
+    participant SYS as System
+    actor SM as SM (Shelter Manager)
+
+    VOL->>SYS: ลงทะเบียน person (baseline FR-4..6)<br/>ชื่อ, เพศ, ข้อมูลพื้นฐาน — ไม่บังคับสร้าง household
+    SYS-->>VOL: person record created, status: arriving
+    VOL->>SYS: check-in รายบุคคล (T-06 person-only)
+    SYS->>SYS: status → checked-in (person scope), occupancy +1
+    SYS-->>VOL: check-in สำเร็จ
+
+    note over VOL,SYS: person อยู่โดยไม่มี household ได้ตามปกติ
+
+    rect rgb(240, 248, 255)
+        note over VOL,SM: ── Fallback: สร้าง household ทีหลัง (VOL หรือ SM) ──
+        VOL->>SYS: สร้าง household ใหม่ (T-04)<br/>กำหนด head + attach person ที่ check-in ไปแล้ว
+        SYS->>SYS: validate: person ยังไม่มี active household<br/>ถ้ามีแล้ว → error "already in household X"
+        SYS-->>VOL: household created, QR ออกให้ใหม่ (T-05)
+        note over VOL,SYS: person record ไม่เสียหาย — household เป็น additive layer
+    end
+```
+
+### Phase 1C — Backoffice สร้าง household หลังจาก persons check-in แยกกัน (VOL หรือ SM)
+
+> Path นี้: หลายคนในครอบครัวเดียวกัน check-in แยก → backoffice/VOL รวมเป็น household ทีหลัง
+
+```mermaid
+sequenceDiagram
+    actor SM as SM / VOL (backoffice)
+    participant SYS as System
+
+    note over SM,SYS: persons A, B, C ถูก check-in แยกกันไปแล้ว (person-only)
+
+    SM->>SYS: ค้นหา person A, B, C (T-06 search)
+    SM->>SYS: สร้าง household ใหม่ (T-04)<br/>ตั้ง head = A, attach B และ C
+    SYS->>SYS: validate แต่ละ person: ไม่มี active household อื่น
+    SYS-->>SM: household created + QR ออก (T-05)
+
+    opt ต้องการ assign zone ให้ household ที่เพิ่งรวม
+        SM->>SYS: assign zone (T-09)
+        SYS-->>SM: zone assigned, occupancy อัปเดต
+    end
 ```
 
 ### Phase 2 — Arrival Check-in + Screening (VOL ทำที่ประตูศูนย์)
@@ -160,20 +240,30 @@ sequenceDiagram
 ### Household status state machine
 
 ```
-[สร้าง household] ──→ arriving
-                            │
-                    check-in confirmed
-                            │
-                            ▼
-                       checked-in ──→ transferred (ย้ายศูนย์)
-                            │
-                    check-out / evacuate
-                            │
-                            ▼
-                  checked-out / evacuated
-                            │
-                         closed
+[สร้าง household]
+        │
+        ├─── สร้างล่วงหน้า ──→ pre-registered ──→ arriving
+        │                                              │
+        └─── สร้าง ณ จุดรับ ────────────────→ arriving
+                                                       │
+                                               check-in confirmed
+                                                       │
+                                                       ▼
+                                                  checked-in ──→ transferred (ย้ายศูนย์)
+                                                       │
+                                               check-out / evacuate
+                                                       │
+                                                       ▼
+                                             checked-out / evacuated
+                                                       │
+                                                    closed
 ```
+
+**กฎ pre-registered:**
+- QR ออกได้ทันทีที่สร้าง (ก่อนมาถึง)
+- SM assign zone ล่วงหน้าได้ (T-09) — zone จอง capacity ไว้รอ
+- ถ้า household ไม่มาถึงภายในเวลาที่กำหนด → SM ปิด / mark `cancelled` ได้
+- `pre-registered` ไม่นับ occupancy จนกว่าจะ check-in จริง
 
 ---
 
@@ -194,3 +284,7 @@ N/A — documentation-only change (จนกว่า PM จะ approve option B
 - 2026-06-18 — backoffice/frontline UI split resolved: Option A (note ใน task ไม่แยก task)
 - 2026-06-18 — bulk zone allocation resolved: Option A (extend T-09 ไม่เปิด task ใหม่)
 - 2026-06-18 — open questions ทั้งหมด resolved; รอ PM approve CR ก่อนแก้ DoD
+- 2026-06-18 — pre-registration confirmed: extend T-04 ให้สร้าง household สถานะ `pre-registered` ล่วงหน้าได้; ไม่นับ occupancy จนกว่า check-in; QR ออกทันที; SM assign zone ล่วงหน้าได้
+- 2026-06-18 — approved by project owner; แก้ DoD ใน 02-people.md เริ่มได้
+- 2026-06-18 — done; 02-people.md อัปเดตครบทุก task
+- 2026-06-18 — spec clarification (T-06): checkout = action เดียวสำหรับการออกทุกประเภท; ต้องระบุ destination (กลับบ้าน / ย้ายศูนย์ + ชื่อศูนย์ / ไปสถานที่ช่วยเหลืออื่น + ชื่อ / อื่นๆ + หมายเหตุ); ยุบ state `transferred`/`evacuated` รวมเป็น `checked-out` + `checkout_destination` field

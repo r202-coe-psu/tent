@@ -16,4 +16,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 
 | CR | Title | Status | Layer | Date | Affects |
 | --- | --- | --- | --- | --- | --- |
-| [CR-001](CR-001-people-dod-permission-sync.md) | 02-people.md: household gaps — permission cross-ref, lifecycle, screening, UI split, bulk ops | proposed | volatile | 2026-06-18 | docs/task-breakdown/02-people.md DoD T-04..T-09 |
+| [CR-001](CR-001-people-dod-permission-sync.md) | 02-people.md: household gaps — permission cross-ref, lifecycle, screening, UI split, bulk ops, pre-registration | done | volatile | 2026-06-18 | docs/task-breakdown/02-people.md DoD T-04..T-09 |
