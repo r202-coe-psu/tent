@@ -5,7 +5,7 @@ import { resolve } from '$app/paths';
 import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
-export const LANDING_ROUTE = '/home';
+export const LANDING_ROUTE = '/';
 
 /** The login page — where unauthenticated and just-logged-out users are sent. */
 export const LOGIN_ROUTE = '/login';
@@ -34,7 +34,7 @@ export async function requireAuth() {
 
 /**
  * Admin guard — requires a system admin (`system_admin` or the CouchDB `_admin`).
- * Redirects to /home when authenticated but not an admin.
+ * Redirects to / when authenticated but not an admin.
  */
 export async function requireAdmin() {
 	await requireAuth();

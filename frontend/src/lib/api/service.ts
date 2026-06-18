@@ -1,5 +1,5 @@
 /**
- * Client helper for the service plane (`/api/v1/*`, `/api/admin/*`). Sends the
+ * Client helper for the service plane (`/api/v1/*`, `/api/back-office/*`). Sends the
  * session cookie and unwraps the contract error envelope
  * `{ error: { code, message } }` (api-contract.md §2) into a thrown Error whose
  * message the UI can toast. Same-origin paths so the cookie is first-party;

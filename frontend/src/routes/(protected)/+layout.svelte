@@ -24,17 +24,17 @@
 
 <div class="flex min-h-svh flex-col">
 	<header class="flex items-center justify-between border-b px-6 py-3">
-		<a href={resolve('/home')} class="font-semibold">App</a>
+		<a href={resolve('/')} class="font-semibold">App</a>
 		<div class="flex items-center gap-4">
 			<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
 			<Separator orientation="vertical" class="h-4" />
-			<a href={resolve('/people')} class="text-sm hover:underline">People</a>
+			<a href={resolve('/onsite/people')} class="text-sm hover:underline">People</a>
 			{#if isSA}
 				<Separator orientation="vertical" class="h-4" />
-				<a href={resolve('/admin/shelters')} class="text-sm hover:underline">Shelters</a>
+				<a href={resolve('/back-office/shelters')} class="text-sm hover:underline">Shelters</a>
 			{/if}
 			{#if canManageUsers}
-				<a href={resolve('/admin/users')} class="text-sm hover:underline">Users</a>
+				<a href={resolve('/back-office/users')} class="text-sm hover:underline">Users</a>
 			{/if}
 			<Separator orientation="vertical" class="h-4" />
 			<Button variant="outline" size="sm" onclick={logout}>Logout</Button>
