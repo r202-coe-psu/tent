@@ -1,4 +1,5 @@
 import type { AuthorContext } from '$lib/db/model';
+import type { PaginatedResult } from '$lib/db/repository';
 import type { Evacuee, EvacueeInput } from '../domain/people';
 
 /**
@@ -15,6 +16,8 @@ export interface PeopleRepository {
 	createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee>;
 	/** Every evacuee in this shelter database. */
 	listEvacuees(): Promise<Evacuee[]>;
+	/** Paginated list of evacuees — fetches all then slices by page/pageSize. */
+	listEvacueesPaginated(page: number, pageSize: number): Promise<PaginatedResult<Evacuee>>;
 	/** One evacuee by `_id`, or `null` when absent. */
 	getEvacuee(id: string): Promise<Evacuee | null>;
 	/** Persist an edited evacuee (LWW: bumps `updated_at`). */

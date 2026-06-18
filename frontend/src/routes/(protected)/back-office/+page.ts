@@ -1,6 +1,6 @@
-import { requireAdmin } from '$lib/guards/auth';
-import type { PageLoad } from './$types';
+import { redirect } from '@sveltejs/kit';
+import { resolve } from '$app/paths';
 
-export const load = (async () => {
-	await requireAdmin();
-}) satisfies PageLoad;
+export const load = async () => {
+	redirect(307, resolve('/back-office/evacuee-management'));
+};

@@ -1,5 +1,5 @@
 import { namedLocalDb } from '$lib/db/pouch';
-import { createRepository, type Repository } from '$lib/db/repository';
+import { createRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { touch, type AuthorContext } from '$lib/db/model';
 import {
 	createEvacuee as buildEvacuee,
@@ -35,18 +35,27 @@ export class PeoplePouchRepository implements PeopleRepository {
 		this.repo = createRepository(namedLocalDb(dbName));
 	}
 
+	/** Mint an evacuee from form input + author context and persist it. */
 	createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee> {
 		return this.repo.put(buildEvacuee(input, ctx));
 	}
 
+	/** Every evacuee in this shelter database. */
 	listEvacuees(): Promise<Evacuee[]> {
 		return this.repo.allByType('evacuee', isEvacuee);
 	}
 
+	/** Paginated list of evacuees — fetches all then slices by page/pageSize. */
+	listEvacueesPaginated(page: number, pageSize: number): Promise<PaginatedResult<Evacuee>> {
+		return this.repo.pageByType('evacuee', isEvacuee, page, pageSize);
+	}
+
+	/** One evacuee by `_id`, or `null` when absent. */
 	getEvacuee(id: string): Promise<Evacuee | null> {
 		return this.repo.get<Evacuee>(id);
 	}
 
+	/** Persist an edited evacuee (LWW: bumps `updated_at`). */
 	updateEvacuee(evacuee: Evacuee): Promise<Evacuee> {
 		return this.repo.put(touch(evacuee));
 	}

@@ -40,7 +40,7 @@ import {
 	type HouseholdInput,
 	type MedicalInput,
 	type MovementInput,
-	type ScreeningInput,
+	type ScreeningInput
 } from '$lib/features/people/domain/people';
 import {
 	createCampaign,
@@ -48,7 +48,7 @@ import {
 	createWalkInDonation,
 	type CampaignInput,
 	type StockLedgerInput,
-	type WalkInDonationInput,
+	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
@@ -105,7 +105,7 @@ async function couchReq(
 	const res = await fetch(`${COUCH_URL}${path}`, {
 		method,
 		headers,
-		...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+		...(body !== undefined ? { body: JSON.stringify(body) } : {})
 	});
 	const data = await res.json();
 	return { status: res.status, data };
@@ -136,7 +136,15 @@ async function bulkDocs(db: string, docs: unknown[]): Promise<void> {
 
 function catalogDoc(id: string, type: string, body: Record<string, unknown>) {
 	const ts = now();
-	return { _id: id, type, schema_v: 1, created_at: ts, updated_at: ts, created_by: 'seed', ...body };
+	return {
+		_id: id,
+		type,
+		schema_v: 1,
+		created_at: ts,
+		updated_at: ts,
+		created_by: 'seed',
+		...body
+	};
 }
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -152,7 +160,7 @@ const ITEM = {
 	paracetamol: 'item:paracetamol',
 	soap: 'item:soap',
 	blanket: 'item:blanket',
-	egg: 'item:egg',
+	egg: 'item:egg'
 } as const;
 
 // ─── seedRegistry ─────────────────────────────────────────────────────────────
@@ -181,7 +189,7 @@ async function seedRegistry(): Promise<void> {
 		capacity: 200,
 		zones: [
 			{ code: 'Z1', name: 'โซน A', capacity: 100 },
-			{ code: 'Z2', name: 'โซน B', capacity: 100 },
+			{ code: 'Z2', name: 'โซน B', capacity: 100 }
 		],
 		area_m2: 800,
 		facilities: {
@@ -190,12 +198,12 @@ async function seedRegistry(): Promise<void> {
 			toilets_accessible: 2,
 			showers: 8,
 			water_points: 6,
-			handwashing_stations: 10,
+			handwashing_stations: 10
 		},
 		opened_at: ts,
 		created_at: ts,
 		updated_at: ts,
-		created_by: 'seed',
+		created_by: 'seed'
 	});
 	console.log('  ✓ registry: 1 shelter master (SH001)');
 }
@@ -206,12 +214,48 @@ async function seedCatalog(): Promise<void> {
 	await ensureDb('catalog');
 
 	const items = [
-		catalogDoc(ITEM.rice, 'supply_item', { name: 'ข้าวสาร', category: 'food', unit: 'kg', perishable: false, reorder_level: 50 }),
-		catalogDoc(ITEM.water, 'supply_item', { name: 'น้ำดื่ม', category: 'water', unit: 'bottle', perishable: false, reorder_level: 200 }),
-		catalogDoc(ITEM.paracetamol, 'supply_item', { name: 'ยาพาราเซตามอล', category: 'medicine', unit: 'tablet', perishable: true, reorder_level: 500 }),
-		catalogDoc(ITEM.soap, 'supply_item', { name: 'สบู่ก้อน', category: 'hygiene', unit: 'bar', perishable: false, reorder_level: 100 }),
-		catalogDoc(ITEM.blanket, 'supply_item', { name: 'ผ้าห่ม', category: 'bedding', unit: 'piece', perishable: false, reorder_level: 30 }),
-		catalogDoc(ITEM.egg, 'supply_item', { name: 'ไข่ไก่', category: 'food', unit: 'piece', perishable: true, reorder_level: 100 }),
+		catalogDoc(ITEM.rice, 'supply_item', {
+			name: 'ข้าวสาร',
+			category: 'food',
+			unit: 'kg',
+			perishable: false,
+			reorder_level: 50
+		}),
+		catalogDoc(ITEM.water, 'supply_item', {
+			name: 'น้ำดื่ม',
+			category: 'water',
+			unit: 'bottle',
+			perishable: false,
+			reorder_level: 200
+		}),
+		catalogDoc(ITEM.paracetamol, 'supply_item', {
+			name: 'ยาพาราเซตามอล',
+			category: 'medicine',
+			unit: 'tablet',
+			perishable: true,
+			reorder_level: 500
+		}),
+		catalogDoc(ITEM.soap, 'supply_item', {
+			name: 'สบู่ก้อน',
+			category: 'hygiene',
+			unit: 'bar',
+			perishable: false,
+			reorder_level: 100
+		}),
+		catalogDoc(ITEM.blanket, 'supply_item', {
+			name: 'ผ้าห่ม',
+			category: 'bedding',
+			unit: 'piece',
+			perishable: false,
+			reorder_level: 30
+		}),
+		catalogDoc(ITEM.egg, 'supply_item', {
+			name: 'ไข่ไก่',
+			category: 'food',
+			unit: 'piece',
+			perishable: true,
+			reorder_level: 100
+		})
 	];
 	const recipes = [
 		catalogDoc('recipe:fried-egg-rice', 'recipe', {
@@ -219,18 +263,18 @@ async function seedCatalog(): Promise<void> {
 			serving_unit: 'box',
 			ingredients: [
 				{ item_id: ITEM.rice, qty: 0.2, unit: 'kg' },
-				{ item_id: ITEM.egg, qty: 2, unit: 'piece' },
+				{ item_id: ITEM.egg, qty: 2, unit: 'piece' }
 			],
 			tags: [],
-			active: true,
+			active: true
 		}),
 		catalogDoc('recipe:congee', 'recipe', {
 			name: 'ข้าวต้ม',
 			serving_unit: 'bowl',
 			ingredients: [{ item_id: ITEM.rice, qty: 0.15, unit: 'kg' }],
 			tags: ['soft_food'],
-			active: true,
-		}),
+			active: true
+		})
 	];
 
 	for (const doc of [...items, ...recipes]) await putDoc('catalog', doc);
@@ -244,27 +288,140 @@ async function seedShelter(): Promise<void> {
 
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
-		{ label: 'ครอบครัวใจดี', zone: 'Z1', head_evacuee_id: null, pets: [], notes: 'ครอบครัวใหญ่ 4 คน' },
-		{ label: 'ครอบครัวสุขสาย', zone: 'Z1', head_evacuee_id: null, pets: [{ species: 'dog', count: 1 }] },
-		{ label: 'ครอบครัวรักสงบ', zone: 'Z2', head_evacuee_id: null, pets: [] },
+		{
+			label: 'ครอบครัวใจดี',
+			zone: 'Z1',
+			head_evacuee_id: null,
+			pets: [],
+			notes: 'ครอบครัวใหญ่ 4 คน'
+		},
+		{
+			label: 'ครอบครัวสุขสาย',
+			zone: 'Z1',
+			head_evacuee_id: null,
+			pets: [{ species: 'dog', count: 1 }]
+		},
+		{ label: 'ครอบครัวรักสงบ', zone: 'Z2', head_evacuee_id: null, pets: [] }
 	];
 	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, CTX));
 
 	// — evacuees ————————————————————————————————————————————————————————————————
 	const evacueeInputs: EvacueeInput[] = [
 		// hh1 — family of 4 (สมชาย household)
-		{ first_name: 'สมชาย',   last_name: 'ใจดี',   gender: 'male',   phone: '0811111111', birth_year: 1955, religion: 'buddhist', special_needs: ['elderly'],           household_id: hh1._id, registered_via: 'import' },
-		{ first_name: 'สมหญิง',  last_name: 'ใจดี',   gender: 'female', phone: '0812222222', birth_year: 1958, religion: 'buddhist', special_needs: ['elderly'],           household_id: hh1._id, registered_via: 'import' },
-		{ first_name: 'ประเสริฐ', last_name: 'ใจดี',   gender: 'male',   phone: '0813333333', birth_year: 1990, religion: 'buddhist', special_needs: [],                    household_id: hh1._id, registered_via: 'import' },
-		{ first_name: 'ประภา',   last_name: 'ใจดี',   gender: 'female', phone: '0814444444', birth_year: 1993, religion: 'buddhist', special_needs: ['pregnant'],          household_id: hh1._id, registered_via: 'import', emergency_contact: { name: 'ประเสริฐ ใจดี', phone: '0813333333', relation: 'สามี' } },
+		{
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			gender: 'male',
+			phone: '0811111111',
+			birth_year: 1955,
+			religion: 'buddhist',
+			special_needs: ['elderly'],
+			household_id: hh1._id,
+			registered_via: 'import'
+		},
+		{
+			first_name: 'สมหญิง',
+			last_name: 'ใจดี',
+			gender: 'female',
+			phone: '0812222222',
+			birth_year: 1958,
+			religion: 'buddhist',
+			special_needs: ['elderly'],
+			household_id: hh1._id,
+			registered_via: 'import'
+		},
+		{
+			first_name: 'ประเสริฐ',
+			last_name: 'ใจดี',
+			gender: 'male',
+			phone: '0813333333',
+			birth_year: 1990,
+			religion: 'buddhist',
+			special_needs: [],
+			household_id: hh1._id,
+			registered_via: 'import'
+		},
+		{
+			first_name: 'ประภา',
+			last_name: 'ใจดี',
+			gender: 'female',
+			phone: '0814444444',
+			birth_year: 1993,
+			religion: 'buddhist',
+			special_needs: ['pregnant'],
+			household_id: hh1._id,
+			registered_via: 'import',
+			emergency_contact: { name: 'ประเสริฐ ใจดี', phone: '0813333333', relation: 'สามี' }
+		},
 		// hh2 — small family with infant (มาลี household)
-		{ first_name: 'มาลี',    last_name: 'สุขสาย', gender: 'female', phone: null,         birth_year: 1988, religion: 'buddhist', special_needs: [],                    household_id: hh2._id, registered_via: 'import' },
-		{ first_name: 'สมพล',    last_name: 'สุขสาย', gender: 'male',   phone: '0815555555', birth_year: 1985, religion: 'buddhist', special_needs: [],                    household_id: hh2._id, registered_via: 'import' },
-		{ first_name: 'น้องดาว',  last_name: 'สุขสาย', gender: 'female', phone: null,         birth_year: 2024, religion: 'buddhist', special_needs: ['infant'],            household_id: hh2._id, registered_via: 'import' },
+		{
+			first_name: 'มาลี',
+			last_name: 'สุขสาย',
+			gender: 'female',
+			phone: null,
+			birth_year: 1988,
+			religion: 'buddhist',
+			special_needs: [],
+			household_id: hh2._id,
+			registered_via: 'import'
+		},
+		{
+			first_name: 'สมพล',
+			last_name: 'สุขสาย',
+			gender: 'male',
+			phone: '0815555555',
+			birth_year: 1985,
+			religion: 'buddhist',
+			special_needs: [],
+			household_id: hh2._id,
+			registered_via: 'import'
+		},
+		{
+			first_name: 'น้องดาว',
+			last_name: 'สุขสาย',
+			gender: 'female',
+			phone: null,
+			birth_year: 2024,
+			religion: 'buddhist',
+			special_needs: ['infant'],
+			household_id: hh2._id,
+			registered_via: 'import'
+		},
 		// hh3 — Muslim family (วิชัย household)
-		{ first_name: 'วิชัย',   last_name: 'รักสงบ', gender: 'male',   phone: '0816666666', birth_year: 1972, religion: 'muslim',   special_needs: [],                    household_id: hh3._id, registered_via: 'import' },
-		{ first_name: 'ฟาตีเมาะ', last_name: 'รักสงบ', gender: 'female', phone: '0817777777', birth_year: 1975, religion: 'muslim',   special_needs: ['chronic_illness'],   household_id: hh3._id, registered_via: 'import', emergency_contact: { name: 'วิชัย รักสงบ', phone: '0816666666', relation: 'สามี' } },
-		{ first_name: 'อาเซ็ม',   last_name: 'รักสงบ', gender: 'male',   phone: null,         birth_year: 2012, religion: 'muslim',   special_needs: [],                    household_id: hh3._id, registered_via: 'import' },
+		{
+			first_name: 'วิชัย',
+			last_name: 'รักสงบ',
+			gender: 'male',
+			phone: '0816666666',
+			birth_year: 1972,
+			religion: 'muslim',
+			special_needs: [],
+			household_id: hh3._id,
+			registered_via: 'import'
+		},
+		{
+			first_name: 'ฟาตีเมาะ',
+			last_name: 'รักสงบ',
+			gender: 'female',
+			phone: '0817777777',
+			birth_year: 1975,
+			religion: 'muslim',
+			special_needs: ['chronic_illness'],
+			household_id: hh3._id,
+			registered_via: 'import',
+			emergency_contact: { name: 'วิชัย รักสงบ', phone: '0816666666', relation: 'สามี' }
+		},
+		{
+			first_name: 'อาเซ็ม',
+			last_name: 'รักสงบ',
+			gender: 'male',
+			phone: null,
+			birth_year: 2012,
+			religion: 'muslim',
+			special_needs: [],
+			household_id: hh3._id,
+			registered_via: 'import'
+		}
 	];
 	const evacuees = evacueeInputs.map((e) => createEvacuee(e, CTX));
 
@@ -272,7 +429,7 @@ async function seedShelter(): Promise<void> {
 	const movementInputs: MovementInput[] = evacuees.map((e) => ({
 		evacuee_id: e._id,
 		action: 'check_in' as const,
-		zone: evacueeInputs[evacuees.indexOf(e)].household_id === hh3._id ? 'Z2' : 'Z1',
+		zone: evacueeInputs[evacuees.indexOf(e)].household_id === hh3._id ? 'Z2' : 'Z1'
 	}));
 	const movements = movementInputs.map((m) => createMovement(m, CTX));
 
@@ -281,31 +438,85 @@ async function seedShelter(): Promise<void> {
 
 	// — medical records ————————————————————————————————————————————————————————
 	const medicalInputs: MedicalInput[] = [
-		{ evacuee_id: evacuees[0]._id, blood_group: 'O',       conditions: ['ความดันโลหิตสูง'],           medications: ['แอมโลดิปีน 5mg'],   allergies: [],       track: 'fast_track' },
-		{ evacuee_id: evacuees[1]._id, blood_group: 'A',       conditions: ['เบาหวานชนิดที่ 2'],          medications: ['เมตฟอร์มิน 500mg'], allergies: [],       track: 'fast_track' },
-		{ evacuee_id: evacuees[3]._id, blood_group: 'A',       conditions: [],                            medications: ['วิตามินก่อนคลอด'],   allergies: [],       track: 'fast_track', notes: 'ตั้งครรภ์ 28 สัปดาห์' },
-		{ evacuee_id: evacuees[8]._id, blood_group: 'B',       conditions: ['โรคหอบหืด'],                medications: ['ซัลบูทามอล'],        allergies: ['ซัลฟา'], track: 'fast_track' },
+		{
+			evacuee_id: evacuees[0]._id,
+			blood_group: 'O',
+			conditions: ['ความดันโลหิตสูง'],
+			medications: ['แอมโลดิปีน 5mg'],
+			allergies: [],
+			track: 'fast_track'
+		},
+		{
+			evacuee_id: evacuees[1]._id,
+			blood_group: 'A',
+			conditions: ['เบาหวานชนิดที่ 2'],
+			medications: ['เมตฟอร์มิน 500mg'],
+			allergies: [],
+			track: 'fast_track'
+		},
+		{
+			evacuee_id: evacuees[3]._id,
+			blood_group: 'A',
+			conditions: [],
+			medications: ['วิตามินก่อนคลอด'],
+			allergies: [],
+			track: 'fast_track',
+			notes: 'ตั้งครรภ์ 28 สัปดาห์'
+		},
+		{
+			evacuee_id: evacuees[8]._id,
+			blood_group: 'B',
+			conditions: ['โรคหอบหืด'],
+			medications: ['ซัลบูทามอล'],
+			allergies: ['ซัลฟา'],
+			track: 'fast_track'
+		}
 	];
 	const medicals = medicalInputs.map((m) => createMedical(m, CTX));
 
 	// — screenings ————————————————————————————————————————————————————————————
 	const screeningInputs: ScreeningInput[] = [
-		{ evacuee_id: evacuees[0]._id, symptoms: ['ปวดศีรษะ'],                temperature_c: 37.2, track: 'normal',     needs_referral: false },
-		{ evacuee_id: evacuees[3]._id, symptoms: ['ปวดหลัง', 'บวมเท้า'],      temperature_c: 37.0, track: 'fast_track', needs_referral: true, notes: 'ควรพบสูติแพทย์' },
-		{ evacuee_id: evacuees[8]._id, symptoms: ['หายใจหอบ', 'แน่นหน้าอก'], temperature_c: 37.5, track: 'fast_track', needs_referral: true },
-		{ evacuee_id: evacuees[5]._id, symptoms: [],                           temperature_c: 36.7, track: 'normal',     needs_referral: false },
+		{
+			evacuee_id: evacuees[0]._id,
+			symptoms: ['ปวดศีรษะ'],
+			temperature_c: 37.2,
+			track: 'normal',
+			needs_referral: false
+		},
+		{
+			evacuee_id: evacuees[3]._id,
+			symptoms: ['ปวดหลัง', 'บวมเท้า'],
+			temperature_c: 37.0,
+			track: 'fast_track',
+			needs_referral: true,
+			notes: 'ควรพบสูติแพทย์'
+		},
+		{
+			evacuee_id: evacuees[8]._id,
+			symptoms: ['หายใจหอบ', 'แน่นหน้าอก'],
+			temperature_c: 37.5,
+			track: 'fast_track',
+			needs_referral: true
+		},
+		{
+			evacuee_id: evacuees[5]._id,
+			symptoms: [],
+			temperature_c: 36.7,
+			track: 'normal',
+			needs_referral: false
+		}
 	];
 	const screenings = screeningInputs.map((s) => createScreening(s, CTX));
 
 	// — stock ledger ——————————————————————————————————————————————————————————
 	const stockInputs: StockLedgerInput[] = [
-		{ item_id: ITEM.rice,        qty: 200,  unit: 'kg',     reason: 'receive',    ref_id: null },
-		{ item_id: ITEM.water,       qty: 500,  unit: 'bottle', reason: 'receive',    ref_id: null },
-		{ item_id: ITEM.paracetamol, qty: 1000, unit: 'tablet', reason: 'receive',    ref_id: null },
-		{ item_id: ITEM.soap,        qty: 150,  unit: 'bar',    reason: 'receive',    ref_id: null },
-		{ item_id: ITEM.blanket,     qty: 80,   unit: 'piece',  reason: 'receive',    ref_id: null },
-		{ item_id: ITEM.rice,        qty: -30,  unit: 'kg',     reason: 'distribute', ref_id: null },
-		{ item_id: ITEM.water,       qty: -100, unit: 'bottle', reason: 'distribute', ref_id: null },
+		{ item_id: ITEM.rice, qty: 200, unit: 'kg', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.water, qty: 500, unit: 'bottle', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.paracetamol, qty: 1000, unit: 'tablet', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.soap, qty: 150, unit: 'bar', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.blanket, qty: 80, unit: 'piece', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.rice, qty: -30, unit: 'kg', reason: 'distribute', ref_id: null },
+		{ item_id: ITEM.water, qty: -100, unit: 'bottle', reason: 'distribute', ref_id: null }
 	];
 	const stockEntries = stockInputs.map((s) => createStockLedger(s, CTX));
 
@@ -314,18 +525,18 @@ async function seedShelter(): Promise<void> {
 		{
 			title: 'รับบริจาคอาหารและน้ำดื่ม',
 			needs: [
-				{ item_id: ITEM.rice,  qty_target: 500,  unit: 'kg' },
-				{ item_id: ITEM.water, qty_target: 1000, unit: 'bottle' },
+				{ item_id: ITEM.rice, qty_target: 500, unit: 'kg' },
+				{ item_id: ITEM.water, qty_target: 1000, unit: 'bottle' }
 			],
-			notes: 'เปิดรับบริจาคเพื่อผู้ประสบภัยน้ำท่วม',
+			notes: 'เปิดรับบริจาคเพื่อผู้ประสบภัยน้ำท่วม'
 		},
 		{
 			title: 'รับบริจาคของใช้ส่วนตัว',
 			needs: [
-				{ item_id: ITEM.soap,    qty_target: 200, unit: 'bar' },
-				{ item_id: ITEM.blanket, qty_target: 100, unit: 'piece' },
-			],
-		},
+				{ item_id: ITEM.soap, qty_target: 200, unit: 'bar' },
+				{ item_id: ITEM.blanket, qty_target: 100, unit: 'piece' }
+			]
+		}
 	];
 	const campaigns = campaignInputs.map((c) => createCampaign(c, CTX));
 
@@ -336,25 +547,25 @@ async function seedShelter(): Promise<void> {
 			kind: 'items',
 			items: [{ item_id: ITEM.rice, qty: 50, unit: 'kg' }],
 			campaign_id: campaigns[0]._id,
-			tracking_token_hash: 'mock-track-001',
+			tracking_token_hash: 'mock-track-001'
 		},
 		{
 			donor: { name: 'วัดท่าสะอ้าน', phone: null, phone_hash: 'mock-hash-wat' },
 			kind: 'items',
 			items: [
-				{ item_id: ITEM.water,   qty: 100, unit: 'bottle' },
-				{ item_id: ITEM.blanket, qty: 20,  unit: 'piece' },
+				{ item_id: ITEM.water, qty: 100, unit: 'bottle' },
+				{ item_id: ITEM.blanket, qty: 20, unit: 'piece' }
 			],
 			campaign_id: campaigns[0]._id,
-			tracking_token_hash: 'mock-track-002',
+			tracking_token_hash: 'mock-track-002'
 		},
 		{
 			donor: { name: 'ทดสอบ ระบบ', phone: '0899999999', phone_hash: 'mock-hash-test' },
 			kind: 'money',
 			amount_thb: 5000,
 			campaign_id: null,
-			tracking_token_hash: 'mock-track-003',
-		},
+			tracking_token_hash: 'mock-track-003'
+		}
 	];
 	const donations = donationInputs.map((d) => createWalkInDonation(d, CTX));
 
@@ -367,13 +578,17 @@ async function seedShelter(): Promise<void> {
 		...screenings,
 		...stockEntries,
 		...campaigns,
-		...donations,
+		...donations
 	];
 	await bulkDocs(SHELTER_DB, allDocs);
 
-	console.log(`  ✓ ${SHELTER_DB}: 3 households, ${evacuees.length} evacuees, ${movements.length} movements`);
+	console.log(
+		`  ✓ ${SHELTER_DB}: 3 households, ${evacuees.length} evacuees, ${movements.length} movements`
+	);
 	console.log(`  ✓ ${SHELTER_DB}: ${medicals.length} medicals, ${screenings.length} screenings`);
-	console.log(`  ✓ ${SHELTER_DB}: ${stockEntries.length} stock entries, ${campaigns.length} campaigns, ${donations.length} donations`);
+	console.log(
+		`  ✓ ${SHELTER_DB}: ${stockEntries.length} stock entries, ${campaigns.length} campaigns, ${donations.length} donations`
+	);
 }
 
 // ─── main ─────────────────────────────────────────────────────────────────────

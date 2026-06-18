@@ -43,7 +43,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '1. ทะเบียนและกำลังพล',
 		items: [
-			{ label: 'จัดการผู้ประสบภัย', href: resolve('/back-office'), icon: Users },
+			{ label: 'จัดการผู้ประสบภัย', href: resolve('/back-office/evacuee-management'), icon: Users },
 			{ label: 'จัดการอาสาสมัคร', href: null, icon: HeartHandshake }
 		]
 	},
@@ -69,7 +69,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				href: null,
 				icon: Building,
 				children: [
-					{ label: 'ตั้งค่าศูนย์พักพิง', href: null, icon: Building },
+					{ label: 'ตั้งค่าศูนย์พักพิง', href: resolve('/back-office/shelters'), icon: Building },
 					{ label: 'จัดการบ้านพี่เลี้ยง', href: null, icon: House }
 				]
 			},
