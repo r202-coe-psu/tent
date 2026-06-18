@@ -70,10 +70,11 @@
 
 			<a
 				href="/public/transparency"
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive('/public/transparency') ? 'bg-primary-muted text-primary' : 'text-muted-foreground'}"
+				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 text-muted-foreground pointer-events-none opacity-45 select-none"
+				title="เร็วๆ นี้"
 			>
 				<FileText class="h-4 w-4" />
-				รายงานความโปร่งใส
+				รายงานความโปร่งใส <span class="text-[9px] font-bold text-muted-foreground/60">(เร็วๆ นี้)</span>
 			</a>
 
 			<!-- Dropdown for Volunteers -->
