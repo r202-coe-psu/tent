@@ -11,15 +11,25 @@ import type { BaseDoc } from './model';
  * Secondary-key lookups (by phone, status, …) graduate to Mango `find()` once
  * the `pouchdb-find` plugin + `createIndex` land (schema.md §6) — a later step.
  */
+export interface PaginatedResult<T> {
+	items: T[];
+	total: number;
+	page: number;
+	pageSize: number;
+	totalPages: number;
+}
+
 export interface Repository {
-	/** Insert or update a doc; returns it stamped with the new `_rev`. */
 	put<T extends BaseDoc>(doc: T): Promise<T>;
-	/** Fetch a doc by `_id`, or `null` when it does not exist. */
 	get<T extends BaseDoc>(id: string): Promise<T | null>;
-	/** Delete a doc (needs a live `_rev`). */
 	remove(doc: BaseDoc): Promise<void>;
-	/** Every doc whose `_id` starts with `"{type}:"`, narrowed by `guard`. */
 	allByType<T extends BaseDoc>(type: string, guard: (d: unknown) => d is T): Promise<T[]>;
+	pageByType<T extends BaseDoc>(
+		type: string,
+		guard: (d: unknown) => d is T,
+		page: number,
+		pageSize: number
+	): Promise<PaginatedResult<T>>;
 }
 
 /** Build a {@link Repository} bound to one local PouchDB database. */
@@ -51,6 +61,26 @@ export function createRepository(db: PouchDB.Database): Repository {
 				endkey: `${type}:￰`
 			});
 			return res.rows.map((r) => r.doc as unknown).filter((d): d is T => guard(d));
+		},
+
+		async pageByType<T extends BaseDoc>(
+			type: string,
+			guard: (d: unknown) => d is T,
+			page: number,
+			pageSize: number
+		): Promise<PaginatedResult<T>> {
+			const all = await db.allDocs({
+				include_docs: true,
+				startkey: `${type}:`,
+				endkey: `${type}:￰`
+			});
+			const matched = all.rows.map((r) => r.doc as unknown).filter((d): d is T => guard(d));
+			const total = matched.length;
+			const totalPages = Math.max(1, Math.ceil(total / pageSize));
+			const safePage = Math.max(1, Math.min(page, totalPages));
+			const start = (safePage - 1) * pageSize;
+			const items = matched.slice(start, start + pageSize);
+			return { items, total, page: safePage, pageSize, totalPages };
 		}
 	};
 }
