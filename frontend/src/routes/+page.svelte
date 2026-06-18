@@ -70,7 +70,7 @@
 					accent="muted"
 					title="ระบบส่วนหลัง (Back-End)"
 					description="ระบบ ERP บริหารจัดการศูนย์พักพิงแบบครบวงจร, คลังสิ่งของ, ครัวกลาง และ SOP ภาพรวมจังหวัด"
-					href={resolve('/admin')}
+					href={resolve('/back-office')}
 				/>
 			</main>
 		</div>

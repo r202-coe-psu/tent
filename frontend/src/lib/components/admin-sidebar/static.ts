@@ -43,7 +43,7 @@ export const adminSidebarGroups: AdminSidebarGroup[] = [
 	{
 		title: '1. ทะเบียนและกำลังพล',
 		items: [
-			{ label: 'จัดการผู้ประสบภัย', href: resolve('/admin'), icon: Users },
+			{ label: 'จัดการผู้ประสบภัย', href: resolve('/back-office'), icon: Users },
 			{ label: 'จัดการอาสาสมัคร', href: null, icon: HeartHandshake }
 		]
 	},
@@ -73,7 +73,7 @@ export const adminSidebarGroups: AdminSidebarGroup[] = [
 					{ label: 'จัดการบ้านพี่เลี้ยง', href: null, icon: House }
 				]
 			},
-			{ label: 'จัดการผู้ใช้งานและสิทธิ์', href: resolve('/admin/users'), icon: UserCog },
+			{ label: 'จัดการผู้ใช้งานและสิทธิ์', href: resolve('/back-office/users'), icon: UserCog },
 			{
 				label: 'จัดการข้อมูลหลัก (Master Data)',
 				href: null,

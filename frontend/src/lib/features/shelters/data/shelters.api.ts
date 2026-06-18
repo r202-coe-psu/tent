@@ -3,11 +3,11 @@ import type { CreateShelterInput } from '../domain/schema';
 
 /**
  * Shelter provisioning data layer — talks to the dev admin route
- * `/api/admin/shelter` (creates db + _security + validate_doc_update + registry
+ * `/api/back-office/shelter` (creates db + _security + validate_doc_update + registry
  * master doc, schema.md §3.1). Admin-only; in prod this is a provisioning
  * service, not a client path.
  */
-const SHELTER_ENDPOINT = '/api/admin/shelter';
+const SHELTER_ENDPOINT = '/api/back-office/shelter';
 
 export interface Zone {
 	code: string;

@@ -31,10 +31,10 @@
 			<a href={resolve('/onsite/people')} class="text-sm hover:underline">People</a>
 			{#if isSA}
 				<Separator orientation="vertical" class="h-4" />
-				<a href={resolve('/admin/shelters')} class="text-sm hover:underline">Shelters</a>
+				<a href={resolve('/back-office/shelters')} class="text-sm hover:underline">Shelters</a>
 			{/if}
 			{#if canManageUsers}
-				<a href={resolve('/admin/users')} class="text-sm hover:underline">Users</a>
+				<a href={resolve('/back-office/users')} class="text-sm hover:underline">Users</a>
 			{/if}
 			<Separator orientation="vertical" class="h-4" />
 			<Button variant="outline" size="sm" onclick={logout}>Logout</Button>
