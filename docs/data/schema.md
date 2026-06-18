@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-06-18
+updated: 2026-06-19
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -261,6 +261,8 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 ## 3. DB `registry` (central-managed → pull ลง device; edge fallback replica)
 
 ### 3.1 `shelter` — `shelter:{ulid}`
+
+> **schema_v 2** — `capacity` เพิ่มเป็น required field, `status` ใช้ enum(`open`,`closed`) (เลิกใช้ `active`). CR-004.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
