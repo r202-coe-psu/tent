@@ -309,7 +309,7 @@
 				<!-- Add item button -->
 				<button 
 					onclick={addItem}
-					class="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border hover:bg-muted/30 py-3 text-xs font-bold text-[#2B4C7E] transition-colors cursor-pointer"
+					class="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border hover:bg-muted/30 py-3 text-xs font-bold text-primary transition-colors cursor-pointer"
 				>
 					<Plus class="h-4 w-4" />
 					เพิ่มรายการสิ่งของ
@@ -320,7 +320,7 @@
 			<button 
 				onclick={() => { if (donorName && donorPhone) { activeTab = 'time'; if (reachedStep < 3) reachedStep = 3; } }}
 				disabled={!donorName || !donorPhone}
-				class="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-xs font-bold text-white transition-colors cursor-pointer {donorName && donorPhone ? 'bg-[#2B4C7E] hover:bg-[#2B4C7E]/95' : 'bg-muted-foreground/30 text-muted-foreground cursor-not-allowed'}"
+				class="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-xs font-bold text-white transition-colors cursor-pointer {donorName && donorPhone ? 'bg-primary hover:bg-primary-dark' : 'bg-muted-foreground/30 text-muted-foreground cursor-not-allowed'}"
 			>
 				ถัดไป: เลือกจุดส่งมอบ
 				<span>→</span>
@@ -354,7 +354,7 @@
 
 				<button 
 					onclick={() => { activeTab = 'ticket'; if (reachedStep < 4) reachedStep = 4; }} 
-					class="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#2B4C7E] hover:bg-[#2B4C7E]/95 py-3.5 text-xs font-bold text-white transition-colors"
+					class="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary-dark py-3.5 text-xs font-bold text-white transition-colors"
 				>
 					ยืนยันการจองคิวบริจาค
 					<span>→</span>

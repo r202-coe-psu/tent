@@ -59,7 +59,7 @@
 	</div>
 
 	<!-- 2. ค้นหาศูนย์พักพิงใกล้คุณ (Geo-Routing) -->
-	<div class="mb-12 overflow-hidden rounded-2xl bg-primary-strong text-primary-foreground shadow-lg">
+	<div class="mb-12 overflow-hidden rounded-2xl bg-primary-dark text-primary-foreground shadow-lg">
 		<div class="relative px-6 py-12 text-center md:px-12 md:py-16">
 			<div class="relative mx-auto max-w-2xl">
 				<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary-foreground/10 text-primary-foreground">
@@ -116,7 +116,7 @@
 				icon={Heart}
 				iconClass="bg-primary-muted text-primary"
 			>
-				<a href="/public/donations" class="flex items-center justify-between rounded-lg bg-[#2B4C7E] px-3 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#2B4C7E]/90">
+				<a href="/public/donations" class="flex items-center justify-between rounded-lg bg-primary px-3 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-primary-dark">
 					แจ้งบริจาคสิ่งของล่วงหน้า
 					<span class="text-white/70">›</span>
 				</a>
@@ -131,11 +131,11 @@
 				title="สำหรับอาสาสมัคร"
 				description="ร่วมเป็นส่วนหนึ่งของการช่วยเหลือ"
 				icon={UserPlus}
-				iconClass="bg-success-muted/50 text-success"
+				iconClass="bg-chart-2/15 text-chart-2"
 			>
-				<a href="/public/volunteers" class="flex items-center justify-between rounded-lg bg-[#E8F5E9] px-3 py-2.5 text-xs font-semibold text-[#2E7D32] transition-colors hover:bg-[#C8E6C9]">
+				<a href="/public/volunteers" class="flex items-center justify-between rounded-lg bg-chart-2/10 px-3 py-2.5 text-xs font-semibold text-chart-2 transition-colors hover:bg-chart-2/20">
 					สมัคร / จองกะช่วยเหลือ
-					<span class="text-[#2E7D32]/70">›</span>
+					<span class="text-chart-2/70">›</span>
 				</a>
 			</PublicQuickServiceCard>
 
@@ -201,9 +201,9 @@
 		</div>
 
 		<!-- ติดต่อฉุกเฉินและด่วน -->
-		<div class="flex flex-col justify-center rounded-2xl bg-[#0f172a] p-6 text-white shadow-lg lg:p-8">
+		<div class="flex flex-col justify-center rounded-2xl bg-primary-dark p-6 text-white shadow-lg lg:p-8">
 			<div class="mb-4 flex items-center gap-3">
-				<PhoneCall class="h-6 w-6 text-success" />
+				<PhoneCall class="h-6 w-6 text-chart-2" />
 				<h2 class="text-xl font-bold">ติดต่อฉุกเฉินและด่วน</h2>
 			</div>
 			<p class="mb-6 text-sm text-slate-300">
@@ -212,7 +212,7 @@
 
 			<div class="flex flex-col gap-3">
 				<!-- โทร 1669 -->
-				<a href="tel:1669" class="flex items-center justify-between rounded-xl bg-[#dc2626] px-5 py-4 font-bold transition-colors hover:bg-[#dc2626]/90">
+				<a href="tel:1669" class="flex items-center justify-between rounded-xl bg-danger px-5 py-4 font-bold transition-colors hover:bg-danger/90">
 					<div class="flex items-center gap-3">
 						<Phone class="h-5 w-5 text-white" />
 						<span class="text-white text-base">โทร 1669</span>
@@ -221,7 +221,7 @@
 				</a>
 				
 				<!-- โทร 1784 -->
-				<a href="tel:1784" class="flex items-center justify-between rounded-xl bg-[#f59e0b] px-5 py-4 font-bold transition-colors hover:bg-[#f59e0b]/90">
+				<a href="tel:1784" class="flex items-center justify-between rounded-xl bg-warning px-5 py-4 font-bold transition-colors hover:bg-warning/90">
 					<div class="flex items-center gap-3">
 						<Phone class="h-5 w-5 text-white" />
 						<span class="text-white text-base">โทร 1784</span>
@@ -231,12 +231,12 @@
 
 				<div class="mt-2 grid grid-cols-2 gap-3">
 					<!-- LINE -->
-					<a href="#" class="flex items-center justify-center gap-2 rounded-xl bg-[#00B900] py-3.5 text-sm font-bold text-white transition-colors hover:bg-[#00B900]/90">
+					<a href="#" class="flex items-center justify-center gap-2 rounded-xl bg-chart-2 py-3.5 text-sm font-bold text-white transition-colors hover:bg-chart-2/90">
 						<MessageCircle class="h-4.5 w-4.5" />
 						ติดต่อผ่าน LINE
 					</a>
 					<!-- Facebook -->
-					<a href="#" class="flex items-center justify-center gap-2 rounded-xl bg-[#1877F2] py-3.5 text-sm font-bold text-white transition-colors hover:bg-[#1877F2]/90">
+					<a href="#" class="flex items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-bold text-white transition-colors hover:bg-primary-dark">
 						<Globe class="h-4.5 w-4.5" />
 						ศูนย์เพจ Facebook
 					</a>
