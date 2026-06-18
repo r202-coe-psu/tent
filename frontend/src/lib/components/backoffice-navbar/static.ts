@@ -28,18 +28,18 @@ type Group = Leaf & {
 	children: Leaf[];
 };
 
-export type AdminSidebarNode = Leaf | Group;
+export type BackofficeNavbarNode = Leaf | Group;
 
-const isGroup = (n: AdminSidebarNode): n is Group => 'children' in n;
+const isGroup = (n: BackofficeNavbarNode): n is Group => 'children' in n;
 
-export type AdminSidebarGroup = {
+export type BackofficeNavbarGroup = {
 	title: string;
-	items: AdminSidebarNode[];
+	items: BackofficeNavbarNode[];
 };
 
-export type AdminSidebarLeaf = Leaf;
+export type BackofficeNavbarLeaf = Leaf;
 
-export const adminSidebarGroups: AdminSidebarGroup[] = [
+export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '1. ทะเบียนและกำลังพล',
 		items: [
@@ -90,6 +90,6 @@ export const adminSidebarGroups: AdminSidebarGroup[] = [
 	}
 ];
 
-export const adminHomePath: ResolvedPathname = resolve('/');
+export const backofficeHomePath: ResolvedPathname = resolve('/');
 
 export { isGroup };
