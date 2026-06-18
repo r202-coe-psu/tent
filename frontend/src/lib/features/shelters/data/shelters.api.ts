@@ -1,5 +1,12 @@
 import { serviceFetch } from '$lib/api/service';
-import type { CreateShelterInput } from '../domain/schema';
+import type {
+	CreateShelterInput,
+	UpdateShelterInput,
+	Zone,
+	Item,
+	Rule,
+	Sop
+} from '../domain/schema';
 
 /**
  * Shelter provisioning data layer — talks to the dev admin route
@@ -9,27 +16,41 @@ import type { CreateShelterInput } from '../domain/schema';
  */
 const SHELTER_ENDPOINT = '/api/back-office/shelter';
 
-export interface Zone {
-	code: string;
-	name: string;
-	capacity: number;
-}
+export type { Zone, Item, Rule, Sop };
 
 export interface ShelterSummary {
 	code: string;
 	name: string;
 	db: string;
 	status: string;
+	capacity: number;
 	zones: Zone[];
+	items: Item[];
+	rules: Rule[];
+	sops: Sop[];
 }
 
 export function listShelters(): Promise<ShelterSummary[]> {
 	return serviceFetch<ShelterSummary[]>(SHELTER_ENDPOINT);
 }
 
+export function getShelter(code: string): Promise<ShelterSummary> {
+	return serviceFetch<ShelterSummary>(`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}`);
+}
+
 export function createShelter(input: CreateShelterInput): Promise<{ ok: true; code: string }> {
 	return serviceFetch(SHELTER_ENDPOINT, {
 		method: 'POST',
-		body: JSON.stringify({ name: input.name })
+		body: JSON.stringify(input)
+	});
+}
+
+export function updateShelter(
+	code: string,
+	input: UpdateShelterInput
+): Promise<{ ok: true; code: string }> {
+	return serviceFetch(`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}`, {
+		method: 'PATCH',
+		body: JSON.stringify(input)
 	});
 }
