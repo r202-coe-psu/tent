@@ -2,7 +2,7 @@
 title: "Task Breakdown by Module — Index"
 status: active
 created: 2026-06-05
-updated: 2026-06-15
+updated: 2026-06-18
 note: decision-synced 2026-06-15 — Markdown task-breakdown เป็น planning source ปัจจุบัน; technical source คือ docs/data/schema.md + data-model.md + api-contract.md
 ---
 
@@ -30,7 +30,7 @@ Planning source ปัจจุบัน = Markdown ใน `docs/task-breakdown/
 
 | Decision | Status |
 | --- | --- |
-| K-12 role-permission matrix | ✅ Approved 5 internal roles: `system_admin`, `shelter_manager`, `volunteer`, `kitchen_staff`, `warehouse_staff` |
+| K-12 role-permission matrix | ✅ Approved 5 internal roles: `system_admin`, `shelter_manager`, `registration_staff`, `kitchen_staff`, `warehouse_staff` — `volunteer` ไม่ใช่ RoleKey (CR-002) |
 | K-13 team assignment | ✅ Closed per `teamplanning.md`: Lead = แจ็ก/เด่น; Team A = Donation+Volunteer; Team B = People+Family Search+Security; Team C = Supply+Kitchen; Team D = SOP+Referral |
 | K-14 Open API contract owner | เปิดแบบมี owner — PM/SA + ศูนย์คอม; implementation รอ P-03 contract/sign-off |
 | K-15 family search consent | ✅ Opt-out: default `privacy.search_excluded=false`, opt-out audit required |

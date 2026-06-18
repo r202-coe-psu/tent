@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB/PouchDB) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-06-15
+updated: 2026-06-18
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -201,8 +201,9 @@ design doc เดียวกัน deploy พร้อม db provisioning
 - เมื่อ central กลับมา app ต้อง validate/login central session แล้วสลับ active remote กลับ central;
   ระหว่างสลับยังคงกติกา device replicate ไป remote เดียวเท่านั้น
 - สร้าง/แก้ user ทำที่ central เท่านั้น (ผ่าน `/api/v1/users`) — เปลี่ยนรหัสผ่านต้องมี WAN ถึง central
-- `_users` doc: `roles: ["system_admin"]` หรือ `["shelter:{id}", "volunteer", "kitchen_staff", ...]`
-  (1 user 1 shelter — role `shelter:{id}` ตัวเดียวเสมอ; `shelter_manager` ครอบสิทธิ์ VOL/KS/WS)
+- `_users` doc: `roles: ["system_admin"]` หรือ `["shelter:{id}", "registration_staff", "kitchen_staff", ...]`
+  (1 user 1 shelter — role `shelter:{id}` ตัวเดียวเสมอ; `shelter_manager` ครอบสิทธิ์ REG/KS/WS);
+  `affiliation_tags: ["volunteer"]` เป็น metadata เท่านั้น ไม่ให้สิทธิ์และไม่เปลี่ยน shelter scope
 - `shelter_{shelter_code}._security.members.roles = ["shelter:{id}"]` + admins = `system_admin` —
   ตั้งเหมือนกันทั้ง central และ edge (provisioning จัดให้)
 - `validate_doc_update` ต่อ shelter db บังคับ: type whitelist, append-only types ปฏิเสธ update/delete,

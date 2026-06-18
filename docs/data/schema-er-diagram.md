@@ -2,7 +2,7 @@
 title: Smart Shelter — Database ER Diagram v3
 status: draft for review
 created: 2026-06-17
-updated: 2026-06-17
+updated: 2026-06-18
 source: docs/data/schema.md
 ---
 
@@ -324,7 +324,8 @@ erDiagram
 erDiagram
     COUCH_USER {
         string name PK "_users name"
-        json roles "CouchDB roles"
+        json roles "CouchDB roles e.g. shelter:id registration_staff"
+        json affiliation_tags "metadata only e.g. volunteer governance default empty"
     }
 
     VOLUNTEER {
@@ -469,7 +470,8 @@ erDiagram
 
     COUCH_USER {
         string name PK "_users name"
-        json roles "CouchDB roles"
+        json roles "CouchDB roles e.g. shelter:id registration_staff"
+        json affiliation_tags "metadata only e.g. volunteer governance default empty"
     }
 
     SHELTER ||--o{ SHELTER_ZONE : "zones"

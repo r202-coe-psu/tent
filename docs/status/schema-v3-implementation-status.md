@@ -1,7 +1,7 @@
 ---
 title: Schema v3 — Implementation Status
 created: 2026-06-11
-updated: 2026-06-12
+updated: 2026-06-18
 ---
 
 # Schema v3 — Implementation Status
@@ -79,7 +79,7 @@ Extras: `applyMovementToStay()` + type guards ครบ
 | Inventory | `InventoryItem` อยู่ใน shelter db | `supply_item` อยู่ใน `catalog` db |
 | Stock | `StockTxn` (`itemId`, `delta`, `byUser`, `at`) | `stock_ledger` (`item_id`, `qty` signed, `reason` enum) |
 | Config | `ShelterConfig` อยู่ใน shelter db | `shelter:{ulid}` อยู่ใน `registry` db |
-| Roles | `shelter_a_manager/volunteer` | `shelter:{id}` role model ใหม่ |
+| Roles | `shelter_a_manager/volunteer` | `shelter:{id}` + `registration_staff`/`kitchen_staff`/`warehouse_staff` role model ใหม่ |
 | DB name | `shelter_a/b/c` | `shelter_{shelter_code}` (เช่น `shelter_SH001`) |
 
 ดู `docs/demo/shelter-demo.md` สำหรับ context เดิม

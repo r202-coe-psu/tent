@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4)"
 status: approved
 created: 2026-06-04
-updated: 2026-06-15
+updated: 2026-06-18
 closes: K-12 (A1 RBAC phase-blocker)
 ---
 
@@ -13,9 +13,10 @@ closes: K-12 (A1 RBAC phase-blocker)
 ออกแบบใหม่ให้ **lean** — ลด role จาก 12 เหลือ **5 internal role** ที่ตรงกับหน้าที่จริงในพื้นที่ และ **approved ปิด K-12 / A1** (RBAC phase-blocker ของ R2). เอกสารนี้คือ canonical ของ RBAC behavior ทั้งระบบ. Field schema อ้าง [Database Schema v3](../data/schema.md) และ [Data Model v3](../data/data-model.md) เป็น master.
 
 การเปลี่ยนแปลงหลักจาก draft เดิม:
-- ตัด role เฉพาะทางเดิมออก รวมถึง registration, medical, executive, EOC viewer, volunteer coordinator และ security officer
-- เพิ่ม `volunteer`, `kitchen_staff`, `warehouse_staff`
-- `shelter_manager` ดูดซับ VC + SO + สามารถทำงานแทน VOL/KS/WS ได้ในศูนย์ตน
+- ตัด role เฉพาะทางเดิมออก รวมถึง medical, executive, EOC viewer, volunteer coordinator และ security officer
+- เพิ่ม `registration_staff`, `kitchen_staff`, `warehouse_staff`
+- `volunteer` ไม่ใช่ RoleKey แล้ว — ใช้เป็น domain/profile หรือ `_users.affiliation_tags[]` เท่านั้น
+- `shelter_manager` ดูดซับ VC + SO + สามารถทำงานแทน REG/KS/WS ได้ในศูนย์ตน
 - medical data: internal authenticated staff เห็นตาม shelter scope; public/FAM/API/EOC ไม่ได้รับ medical หรือ national ID ทุกกรณี
 - EOC = **aggregate API + API-key principal** (FD-14, service แยก) — ไม่มี EOC dashboard/role ในระบบหลัก; cross-shelter view ภายในระบบ = SA เท่านั้น
 - schema: `assigned_shelter_ids[]` → `shelter_id` (single) — SA มี `null` (global)
@@ -31,15 +32,16 @@ closes: K-12 (A1 RBAC phase-blocker)
 | ตัวย่อ | Role key (code) | ชื่อในงาน | Phase | หน้าที่หลัก |
 | --- | --- | --- | --- | --- |
 | SA | `system_admin` | System Admin | R1 | global; จัดการ shelter/user/role/audit/catalog/SOP config ทุกอย่าง |
-| SM | `shelter_manager` | Shelter Manager | R1 | บริหารศูนย์ตน; ครอบ VOL+KS+WS+security event+referral+รับสมัครอาสา |
-| VOL | `volunteer` | Volunteer | R2 | ลงทะเบียน Person/Household/สัตว์/สิ่งของ, check-in/out, เช็คมื้ออาหาร |
+| SM | `shelter_manager` | Shelter Manager | R1 | บริหารศูนย์ตน; ครอบ REG+KS+WS+security event+referral+รับสมัครอาสา |
+| REG | `registration_staff` | Registration Staff | R2 | ลงทะเบียน Person/Household/สัตว์/สิ่งของ, check-in/out, เช็คมื้ออาหาร |
 | KS | `kitchen_staff` | Kitchen Staff | R3 | meal plan, requisition (ตัด stock), meal service record |
 | WS | `warehouse_staff` | Warehouse Staff | R2 | catalog, receive/distribute/transfer, stock dashboard, reorder |
 
 **กฎสำคัญ:**
-- 1 user สามารถถือหลาย role ได้ (เช่น `volunteer` + `kitchen_staff`)
+- 1 user สามารถถือหลาย role ได้ (เช่น `registration_staff` + `kitchen_staff`)
 - 1 user อยู่ได้แค่ 1 shelter — ถ้าต้องทำงานอีกศูนย์ต้อง logout + ใช้ account อื่น
-- `shelter_manager` มีสิทธิ์ครอบคลุม VOL/KS/WS ทั้งหมดในศูนย์ตน (ไม่ต้องถือ role เหล่านั้นเพิ่ม)
+- `shelter_manager` มีสิทธิ์ครอบคลุม REG/KS/WS ทั้งหมดในศูนย์ตน (ไม่ต้องถือ role เหล่านั้นเพิ่ม)
+- `_users.affiliation_tags[]` เป็น metadata เท่านั้น (เช่น `volunteer`, `governance`) — ไม่ให้สิทธิ์, ไม่เปลี่ยน shelter scope, และไม่ bypass role check
 
 ### 1.2 Non-user access tiers (ไม่อยู่ใน users collection)
 
@@ -65,7 +67,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 
 ## 3. Action Matrix — R2 (Household, Zoning, Inventory, Donation intake)
 
-| Action | FR | SA | SM | VOL | WS | DN |
+| Action | FR | SA | SM | REG | WS | DN |
 | --- | --- | --- | --- | --- | --- | --- |
 | สร้าง/แก้ Household + attach members | FR-21 | ✓ | scope | scope | — | — |
 | ออก Household Shelter ID/QR | FR-22 | ✓ | scope | scope | — | — |
@@ -84,7 +86,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 | สร้าง/ลบ user (login) + assign role | FR-34 | ✓ | scope (staff) | — | — | — |
 
 **หมายเหตุ:**
-- **FR-34 user creation (แก้ 2026-06-14):** SM สร้าง/ลบได้เฉพาะ **staff** (`volunteer`/`kitchen_staff`/`warehouse_staff`)
+- **FR-34 user creation (แก้ 2026-06-18):** SM สร้าง/ลบได้เฉพาะ **staff** (`registration_staff`/`kitchen_staff`/`warehouse_staff`)
   ใน **ศูนย์ตน** (shelter derive จาก session) — สร้าง `shelter_manager`/`system_admin` หรือข้ามศูนย์ = SA เท่านั้น.
   การกำหนด role/scope permission ยังคง SA only. ผ่าน `POST /api/v1/users` (api-contract.md §3).
 - WS เห็นเฉพาะ inventory/donation ของศูนย์ตน — **ไม่เห็น** Person/medical (ดู §6)
@@ -96,7 +98,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 
 ## 4. Action Matrix — R3 (Donation full, Kitchen, Volunteer, SOP, Security, Referral)
 
-| Action | FR | SA | SM | WS | KS | VOL | DN | PUB |
+| Action | FR | SA | SM | WS | KS | REG | DN | PUB |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Donation reservation | FR-35 | ✓ | scope | scope | — | — | self | — |
 | Donation cut-off (auto/config) | FR-36 | ✓ | scope | scope | — | — | — | — |
@@ -115,7 +117,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 
 **หมายเหตุ:**
 - **Kitchen requisition (FR-40)** ✅ **CONFIRMED option A (2026-06-05)**: KS เขียน requisition ตัด on-hand ตรง ผ่าน Stock Ledger เดียวกับ WS (FR-29 pattern). KS เขียนได้เฉพาะ requisition-type entry; WS own receive/transfer/adjust. SM สามารถเขียน KS entries ได้ (SM ⊇ KS)
-- Volunteer/VC responsibilities (FR-42/43) ย้ายมาที่ SM — **ไม่มี volunteer_coordinator role แยก**
+- Volunteer/VC responsibilities (FR-42/43) ย้ายมาที่ SM — **ไม่มี volunteer_coordinator role แยก**; คำว่า Volunteer ใน FR-42/43 คือ domain/profile ไม่ใช่ RoleKey
 - Security events (FR-47) = SM เท่านั้น — **ไม่มี security_officer role แยก**
 - **Referral & hand-off (FR-48)** ✅ **CONFIRMED (FD-13):** `shelter_manager` เป็นเจ้าของ referral; medical detail อยู่ใน internal shelter scope เท่านั้น และไม่ออก public/API/EOC (§6)
 - SOP ratio config (FR-44) = master ข้ามศูนย์ → SA only
@@ -146,7 +148,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 
 ต่อจาก Data Model v3: internal authenticated staff เห็น medical ตาม shelter scope เพื่อรองรับสถานการณ์ฉุกเฉิน; public/FAM/API/EOC ต้อง redact medical และ national ID ก่อน response เสมอ.
 
-| Field / กลุ่ม | NFR | SA | SM | VOL | KS | WS | API | PUB |
+| Field / กลุ่ม | NFR | SA | SM | REG | KS | WS | API | PUB |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Household identity (head, members ref) | NFR-5 | ✓ | ✓ | ✓ | — | — | — | — |
 | Pet/asset/vehicle | — | ✓ | ✓ | ✓ | — | — | — | — |
@@ -160,7 +162,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 | Evacuee directory (family search, FAM) | NFR-5/6 | ✓ | ✓ | — | — | — | — | name+nickname+status 🔒 |
 
 **หมายเหตุ medical:**
-- ไม่มี role แพทย์แยกแล้ว — VOL/KS/SM เห็น medical fields ตาม shelter scope เพื่อรองรับ registration, screening, meal planning และเหตุฉุกเฉิน
+- ไม่มี role แพทย์แยกแล้ว — REG/KS/SM เห็น medical fields ตาม shelter scope เพื่อรองรับ registration, screening, meal planning และเหตุฉุกเฉิน
 - family search, donation transparency, EOC API และ Open API ต้องไม่ส่ง medical, national ID, address หรือ phone ของผู้พักพิงออกนอกระบบ
 
 ---
@@ -170,7 +172,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 ### 7.1 Internal shelter scope
 
 - `system_admin` = global — ไม่มี shelter_id check; `shelter_id = null`
-- ทุก role อื่น (SM/VOL/KS/WS): `shelter_id` ต้องตรงกัน; ข้ามศูนย์ → `NoPermission`
+- ทุก role อื่น (SM/REG/KS/WS): `shelter_id` ต้องตรงกัน; ข้ามศูนย์ → `NoPermission`
 - 1 user = 1 shelter เสมอ — ถ้าต้องทำงานอีกศูนย์ต้อง logout + ใช้ account ที่ assign ศูนย์นั้น
 - multi-role: `user.role_keys` เป็น list; permission check = `has_any_role(user, allowed_set)`
 - list/search ของ non-admin filter ด้วย `shelter_id` อัตโนมัติ (NFR-4)
@@ -199,6 +201,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 | T3 | Public/external tier | ✅ **CONFIRMED (FD-16, 2026-06-06):** donor = no-auth, tracking_token, OTP; shortage visible รายศูนย์ (no-PII); family search = opt-out | §1.2, §3 FR-32, §7.2, §7.3 |
 | T4 | Referral medical visibility | ✅ **CONFIRMED (FD-13, sync 2026-06-15):** SM เป็นเจ้าของ referral; medical detail อยู่ใน internal shelter scope เท่านั้น และไม่ออก public/API/EOC | §4 FR-48, §6 |
 | T5 | EOC viewer scope | ❌ **CANCELLED:** EV role dropped; EOC = aggregate API + API-key principal (FD-14, service แยก) | §5 FR-49/50 |
+| T6 | RoleKey rename + user affiliation tags | ✅ **CONFIRMED (CR-002, 2026-06-18):** `volunteer` RoleKey → `registration_staff`; `_users.affiliation_tags[]` เป็น metadata only | §1.1, §9 |
 
 ---
 
@@ -207,13 +210,15 @@ closes: K-12 (A1 RBAC phase-blocker)
 ยังไม่ implement ใน backend จริง. **Greenfield:** path ไฟล์ด้านล่างอ้างโครงร่าง backend จาก design เดิม — ใช้เป็น design intent แล้ว map เข้าโครงจริงเมื่อ walking skeleton ขึ้น (ยังไม่มี `backend/` ใน repo). baseline regression ต้องผ่าน (NFR-16).
 
 **`backend/apiapp/modules/user/schemas.py`**
-- `RoleKey` enum: คง `system_admin`, `shelter_manager`; เพิ่ม `volunteer`, `kitchen_staff`, `warehouse_staff`; ไม่มี donor/referral login role
+- `RoleKey` enum: คง `system_admin`, `shelter_manager`; เพิ่ม `registration_staff`, `kitchen_staff`, `warehouse_staff`; ไม่มี donor/referral login role
+- User model: เพิ่ม `affiliation_tags: list[str] = []` เป็น metadata only (เช่น `volunteer`, `governance`) — ห้ามใช้แทน permission
 - User model: `assigned_shelter_ids: list[PydanticObjectId]` → `shelter_id: PydanticObjectId | None` (None = global/SA)
 - Migration: `assigned_shelter_ids[0]` → `shelter_id`; warn + manual review สำหรับ user ที่มีมากกว่า 1 shelter
+- Migration: `_users.roles[]` ค่า `volunteer` → `registration_staff`; ห้าม infer `affiliation_tags: ["volunteer"]` อัตโนมัติ
 
 **`backend/apiapp/modules/shelter/permissions.py`**
-- `EVACUEE_WRITE_ROLES` = {system_admin, shelter_manager, volunteer}
-- `MOVEMENT_ROLES` = {system_admin, shelter_manager, volunteer}
+- `EVACUEE_WRITE_ROLES` = {system_admin, shelter_manager, registration_staff}
+- `MOVEMENT_ROLES` = {system_admin, shelter_manager, registration_staff}
 - เพิ่ม `INVENTORY_WRITE_ROLES` = {system_admin, shelter_manager, warehouse_staff}
 - เพิ่ม `KITCHEN_ROLES` = {system_admin, shelter_manager, kitchen_staff}
 - เพิ่ม `SECURITY_EVENT_ROLES` = {system_admin, shelter_manager}
@@ -222,15 +227,15 @@ closes: K-12 (A1 RBAC phase-blocker)
 - medical visibility: internal staff ใช้ shelter scope; public/API serializers redact เสมอ
 
 **`backend/apiapp/modules/shelter/masking.py`**
-- อัปเดต `operational_minimum_v1`: medical fields visible สำหรับ SM/VOL/KS ใน shelter scope
-- `serialize_evacuee()`: national_id ส่งเฉพาะ internal roles ที่ได้รับอนุญาต; WS/public/API ไม่เห็น; medical fields คืนปกติสำหรับ SM/VOL/KS
+- อัปเดต `operational_minimum_v1`: medical fields visible สำหรับ SM/REG/KS ใน shelter scope
+- `serialize_evacuee()`: national_id ส่งเฉพาะ internal roles ที่ได้รับอนุญาต; WS/public/API ไม่เห็น; medical fields คืนปกติสำหรับ SM/REG/KS
 - เพิ่ม `family_directory_v1`: คืนเฉพาะ `first_name`, `last_name`, `nickname`, `shelter_status`
 
 **CouchDB indexes**
 - ลบ index บน `assigned_shelter_ids`
 - เพิ่ม index บน `shelter_id + status`
 
-**Guardrail tests**: ต่อ role ใหม่ (write/no-write, mask, scope enforcement, SM ⊇ VOL/KS/WS)
+**Guardrail tests**: ต่อ role ใหม่ (write/no-write, mask, scope enforcement, SM ⊇ REG/KS/WS, `affiliation_tags` ไม่ให้สิทธิ์)
 
 ---
 

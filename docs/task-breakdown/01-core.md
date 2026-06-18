@@ -2,7 +2,7 @@
 title: "Task Breakdown — Platform/Core"
 status: active
 created: 2026-06-05
-updated: 2026-06-14
+updated: 2026-06-18
 module: core
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---
@@ -47,7 +47,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ### T-01 — RBAC extension: approved 5 roles + shelter-scope enforcement + public/API redaction (FR-34)
 
-**Description:** สร้างระบบ RBAC เต็มรูปต่อจาก auth/RBAC skeleton ของ walking skeleton (**greenfield — ไม่มีระบบ MVP เดิมรันอยู่**): ใช้ approved 5 internal roles (`system_admin`, `shelter_manager`, `volunteer`, `kitchen_staff`, `warehouse_staff`) ตาม [role-permission matrix](../prd/role-permission-matrix.md), บังคับ role/shelter-scope ทุก write/read path และบังคับ public/API redaction สำหรับ medical/national ID. Internal authenticated staff เห็น medical ตาม shelter scope เพื่อรองรับงานฉุกเฉิน; public/FAM/API/EOC ไม่ได้รับ medical หรือ national ID ทุกกรณี
+**Description:** สร้างระบบ RBAC เต็มรูปต่อจาก auth/RBAC skeleton ของ walking skeleton (**greenfield — ไม่มีระบบ MVP เดิมรันอยู่**): ใช้ approved 5 internal roles (`system_admin`, `shelter_manager`, `registration_staff`, `kitchen_staff`, `warehouse_staff`) ตาม [role-permission matrix](../prd/role-permission-matrix.md), บังคับ role/shelter-scope ทุก write/read path และบังคับ public/API redaction สำหรับ medical/national ID. Internal authenticated staff เห็น medical ตาม shelter scope เพื่อรองรับงานฉุกเฉิน; public/FAM/API/EOC ไม่ได้รับ medical หรือ national ID ทุกกรณี (`volunteer` ไม่ใช่ RoleKey — เป็น domain/profile concept หรือ `affiliation_tags` เท่านั้น)
 
 **Definition of Done:**
 
