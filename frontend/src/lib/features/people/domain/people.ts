@@ -346,6 +346,27 @@ export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacu
 	};
 }
 
+// ---------------------------------------------------------------- display helpers
+
+export const SPECIAL_NEED_CHIPS: Record<SpecialNeed, { emoji: string; label: string }> = {
+	elderly: { emoji: '👴', label: 'ผู้สูงอายุ' },
+	disabled: { emoji: '♿', label: 'พิการ' },
+	pregnant: { emoji: '🤰', label: 'ครรภ์' },
+	infant: { emoji: '👶', label: 'เด็กเล็ก' },
+	chronic_illness: { emoji: '🩺', label: 'โรคเรื้อรัง' },
+	bedridden: { emoji: '🛏️', label: 'ผู้ป่วยติดเตียง' }
+} as const;
+
+export function maskNationalId(id: string | null | undefined): string {
+	if (!id || id.length < 6) return '—';
+	return `${id.slice(0, 3)}***${id.slice(-3)}`;
+}
+
+export function zoneLabel(zone: string | null | undefined): string {
+	if (!zone) return '—';
+	return zone.toUpperCase();
+}
+
 // ---------------------------------------------------------------- type guards
 
 export const isEvacuee = (d: unknown): d is Evacuee =>

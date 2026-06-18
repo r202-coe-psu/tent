@@ -58,7 +58,7 @@
 		</div>
 	{/if}
 
-	<main class="flex-1">
+	<main class="flex flex-1 flex-col">
 		{@render children()}
 	</main>
 </div>
