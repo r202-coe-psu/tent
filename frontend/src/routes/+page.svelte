@@ -54,7 +54,7 @@
 					title="เว็บพอร์ทัลสาธารณะ"
 					badge="ประชาชน / อาสาสมัคร"
 					description="ค้นหาญาติ, นัดหมายบริจาคสิ่งของ และลงทะเบียนอาสาสมัคร (Public & Volunteer Portal)"
-					disabled
+					href={resolve('/public')}
 				/>
 
 				<HomePortalCard
