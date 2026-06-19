@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { type BaseDoc, makeDoc, type AuthorContext, now } from '$lib/db/model';
-import { createAuditEntry, type AuditEntry } from '../../shared/domain/audit';
+import { makeDoc, type AuthorContext, touch, shelterCodeSchema } from '$lib/db/model';
+import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
 
 export const SOP_RATIO_KEYS = [
 	'water_l_per_person_day',
@@ -8,23 +8,30 @@ export const SOP_RATIO_KEYS = [
 	'toilet_per_person'
 ] as const;
 
-export type SopRatioKey = typeof SOP_RATIO_KEYS[number];
+export type SopRatioKey = (typeof SOP_RATIO_KEYS)[number];
+
+const ratioShape = SOP_RATIO_KEYS.reduce(
+	(acc, key) => ({ ...acc, [key]: z.number().positive() }),
+	{} as Record<SopRatioKey, z.ZodNumber>
+);
 
 /**
  * Validates that all keys in the record are part of the whitelist
  * and that all values are positive numbers.
  */
-export const ratiosSchema = z.record(
-	z.enum(SOP_RATIO_KEYS),
-	z.number().positive().optional()
-).refine((r) => Object.values(r).some((v) => v !== undefined), { message: 'At least one ratio must be specified' });
+export const ratiosSchema = z
+	.object(ratioShape)
+	.partial()
+	.refine((r) => Object.keys(r).length > 0, {
+		message: 'At least one ratio must be specified'
+	});
 
 export const sopRatioProfileSchema = z.object({
 	_id: z.string().min(1),
 	_rev: z.string().optional(),
 	type: z.literal('sop_profile'),
 	schema_v: z.number().int().positive(),
-	shelter_code: z.string().min(1),
+	shelter_code: shelterCodeSchema,
 	created_at: z.string().datetime(),
 	updated_at: z.string().datetime(),
 	created_by: z.string().min(1),
@@ -72,7 +79,7 @@ export function createInitialProfile(
 
 	const audit = createAuditEntry(
 		{
-			action: 'other',
+			action: 'created',
 			target_type: 'sop_profile',
 			target_id: profile._id,
 			reason: 'Initial creation',
@@ -155,9 +162,8 @@ export function createNewVersion(
 
 	// Deactivate the previous profile immutably
 	const deactivatedPrev: SopRatioProfile = {
-		...prev,
-		active: false,
-		updated_at: now()
+		...touch(prev),
+		active: false
 	};
 
 	return { deactivatedPrev, profile, audit };
