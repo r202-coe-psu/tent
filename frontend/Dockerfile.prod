@@ -1,0 +1,31 @@
+FROM node:24-slim AS builder
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+ARG PUBLIC_APP_TITLE=Tent
+ARG PUBLIC_COUCHDB_URL=http://localhost
+ARG PUBLIC_COUCH_PROXY=/couch
+
+RUN PUBLIC_APP_TITLE=$PUBLIC_APP_TITLE \
+    PUBLIC_COUCHDB_URL=$PUBLIC_COUCHDB_URL \
+    PUBLIC_COUCH_PROXY=$PUBLIC_COUCH_PROXY \
+    pnpm build
+
+# ---
+
+FROM node:24-slim AS runner
+WORKDIR /app
+
+COPY --from=builder /app/build ./build
+COPY --from=builder /app/package.json ./
+
+ENV NODE_ENV=production
+
+EXPOSE 3000
+CMD ["node", "build"]
