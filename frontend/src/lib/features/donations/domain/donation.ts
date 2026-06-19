@@ -23,6 +23,7 @@ export const donationPreDeclarationInputSchema = z.object({
         })
     ).min(1, 'Please add at least one item to the donation'),
     phone: z.string().min(1, 'Phone is required'),
+    otpToken: z.string().min(6, 'Please provide a valid 6-digit OTP code.')
 })
 
 export const isDonationPreDeclaration = (d: unknown): d is DonationPreDeclaration => !!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_pre_declaration';
