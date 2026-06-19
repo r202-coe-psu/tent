@@ -2,6 +2,13 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { ulid } from '$lib/db/ulid';
+import {
+	createShelterSchema,
+	type Zone,
+	type Item,
+	type Rule,
+	type Sop
+} from '$lib/features/shelters';
 
 // Dev-only provisioning endpoint — never prerendered (absent from the static
 // prod build). In production shelters are minted from the central counter
@@ -11,14 +18,6 @@ import { ulid } from '$lib/db/ulid';
 export const prerender = false;
 
 const REGISTRY_DB = 'registry';
-
-interface Zone {
-	code: string;
-	name: string;
-	capacity: number;
-}
-
-const DEFAULT_ZONES: Zone[] = [{ code: 'Z1', name: 'Zone 1', capacity: 100 }];
 
 function shelterDbName(code: string): string {
 	// CouchDB requires lowercase database names; the `shelter_code` field stays canonical (e.g. SH001).
@@ -96,7 +95,11 @@ interface ShelterMaster {
 	code: string;
 	name: string;
 	zones: Zone[];
+	items?: Item[];
+	rules?: Rule[];
+	sops?: Sop[];
 	status: string;
+	capacity: number;
 	created_at: string;
 	updated_at: string;
 }
@@ -110,27 +113,38 @@ async function listShelterMasters(): Promise<ShelterMaster[]> {
 	return rows.filter((r) => r.id.startsWith('shelter:') && r.doc).map((r) => r.doc);
 }
 
-/** Generate the next shelter code (SH001, SH002, …) from existing registry entries. */
+/**
+ * Auto-assign the next shelter code in the `SHxxx` sequence.
+ * Reads all existing master docs, extracts the numeric suffix, and returns
+ * the next value zero-padded to at least 3 digits (SH001 → SH002 → ... → SH010 ...).
+ */
 async function nextShelterCode(): Promise<string> {
 	const masters = await listShelterMasters();
-	const nums = masters.map((m) => parseInt(m.code.replace(/^SH/, ''), 10)).filter((n) => !isNaN(n));
-	const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+	let max = 0;
+	for (const m of masters) {
+		const match = m.code.match(/^SH(\d+)$/i);
+		if (match) {
+			const n = parseInt(match[1], 10);
+			if (n > max) max = n;
+		}
+	}
+	const next = max + 1;
 	return `SH${String(next).padStart(3, '0')}`;
 }
 
-/** POST { name?, zones? } — provision a shelter; code is auto-assigned. */
+/** POST { name, capacity, zones? } — provision a shelter; code is auto-assigned. */
 export const POST: RequestHandler = async ({ request }) => {
 	await requireAdmin(request.headers.get('cookie'));
 	try {
-		const body = (await request.json().catch(() => ({}))) as {
-			name?: unknown;
-			zones?: unknown;
-		};
+		const body = (await request.json().catch(() => ({}))) as unknown;
+		const input = createShelterSchema.parse(body);
 		const code = await nextShelterCode();
-		const name =
-			typeof body.name === 'string' && body.name.trim() ? body.name.trim() : `Shelter ${code}`;
-		const zones =
-			Array.isArray(body.zones) && body.zones.length ? (body.zones as Zone[]) : DEFAULT_ZONES;
+		const name = input.name;
+		const capacity = input.capacity;
+		const zones = input.zones;
+		const items = input.items;
+		const rules = input.rules;
+		const sops = input.sops;
 		const db = shelterDbName(code);
 
 		const steps: { step: string; status: number }[] = [];
@@ -160,14 +174,18 @@ export const POST: RequestHandler = async ({ request }) => {
 		const masters = await listShelterMasters();
 		if (!masters.some((m) => m.code === code)) {
 			const ts = nowIso();
-			const master: ShelterMaster = {
+			const master = {
 				_id: `shelter:${ulid()}`,
 				type: 'shelter',
-				schema_v: 1,
+				schema_v: 2,
 				code,
 				name,
 				zones,
-				status: 'active',
+				items,
+				rules,
+				sops,
+				status: 'open',
+				capacity,
 				created_at: ts,
 				updated_at: ts
 			};
@@ -208,7 +226,11 @@ export const GET: RequestHandler = async ({ request }) => {
 				name: m.name,
 				db: shelterDbName(m.code),
 				zones: m.zones ?? [],
-				status: m.status
+				items: m.items ?? [],
+				rules: m.rules ?? [],
+				sops: m.sops ?? [],
+				status: m.status === 'active' ? 'open' : m.status,
+				capacity: m.capacity ?? 0
 			}))
 		);
 	} catch (e) {
