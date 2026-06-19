@@ -54,7 +54,7 @@
 </script>
 
 <aside
-	class="relative flex h-full shrink-0 flex-col border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 {collapsed
+	class="relative flex min-h-0 shrink-0 flex-col border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 {collapsed
 		? 'w-16'
 		: 'w-72'}"
 >

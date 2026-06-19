@@ -44,6 +44,9 @@ export {
 	createMovement,
 	createScreening,
 	applyMovementToStay,
+	maskNationalId,
+	zoneLabel,
+	SPECIAL_NEED_CHIPS,
 	isEvacuee,
 	isMedical,
 	isHousehold,
@@ -64,6 +67,7 @@ export { peopleRepository, SHELTER_CODE, SHELTER_DB } from './data/people.pouch'
 export {
 	peopleKeys,
 	useEvacuees,
+	useEvacueesPaginated,
 	useCreateEvacuee,
 	useUpdateEvacuee,
 	startPeopleLiveQuery

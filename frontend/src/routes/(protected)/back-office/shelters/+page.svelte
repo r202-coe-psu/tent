@@ -1,51 +1,58 @@
 <script lang="ts">
-	import { toast } from 'svelte-sonner';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import * as Card from '$lib/components/ui/card/index.js';
-	import {
-		CreateShelterForm,
-		ShelterList,
-		useShelters,
-		useCreateShelter,
-		type CreateShelterInput
-	} from '$lib/features/shelters';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import Building from '@lucide/svelte/icons/building';
+	import Plus from '@lucide/svelte/icons/plus';
+	import { ShelterList, useShelters, type ShelterSummary } from '$lib/features/shelters';
 
 	const sheltersQuery = useShelters();
-	const createMutation = useCreateShelter();
 
-	function handleCreate(input: CreateShelterInput) {
-		createMutation.mutate(input, {
-			onSuccess: (res) => toast.success(`Shelter "${res.code}" provisioned`),
-			onError: (err: Error) => toast.error(err.message)
-		});
+	function handleCreateNew() {
+		goto(resolve('/back-office/shelters/create'));
+	}
+
+	function handleEdit(shelter: ShelterSummary) {
+		goto(resolve(`/back-office/shelters/edit/${encodeURIComponent(shelter.code)}`));
 	}
 </script>
 
-<div class="container mx-auto max-w-2xl p-6">
-	<h1 class="mb-6 text-3xl font-bold">Shelters</h1>
+<svelte:head>
+	<title>ตั้งค่าศูนย์พักพิง · SmartShelter</title>
+</svelte:head>
 
-	<Card.Root class="mb-8">
-		<Card.Header>
-			<Card.Title>Provision shelter</Card.Title>
-			<Card.Description
-				>Creates the database, security, validation, and registry entry.</Card.Description
-			>
-		</Card.Header>
-		<Card.Content>
-			<CreateShelterForm onsubmit={handleCreate} pending={createMutation.isPending} />
-		</Card.Content>
-	</Card.Root>
+<header
+	class="flex shrink-0 items-center justify-between border-b border-sidebar-border bg-card px-4 py-2.5"
+>
+	<div class="flex items-center gap-2">
+		<Building class="h-4 w-4 text-muted-foreground" />
+		<h1 class="text-base font-bold text-foreground">ตั้งค่าศูนย์พักพิง</h1>
+	</div>
+	<Button size="sm" onclick={handleCreateNew}>
+		<Plus class="mr-2 h-4 w-4" /> เพิ่มศูนย์พักพิงใหม่
+	</Button>
+</header>
+
+<div class="flex w-full flex-1 flex-col gap-6 p-6">
+	<div class="flex flex-col gap-1 border-l-4 border-border pl-3">
+		<h2 class="text-sm font-bold text-foreground">จัดการโครงสร้างศูนย์พักพิง</h2>
+	</div>
 
 	<Card.Root>
 		<Card.Header>
-			<Card.Title>Provisioned shelters</Card.Title>
+			<div class="flex items-center gap-2">
+				<Building class="h-4 w-4 text-muted-foreground" />
+				<Card.Title class="text-sm">ศูนย์พักพิงในระบบ</Card.Title>
+			</div>
 		</Card.Header>
 		<Card.Content>
 			{#if sheltersQuery.isLoading}
-				<p class="text-sm text-muted-foreground">Loading...</p>
+				<p class="text-sm text-muted-foreground">กำลังโหลด...</p>
 			{:else if sheltersQuery.isError}
-				<p class="text-sm text-destructive">Error: {sheltersQuery.error?.message}</p>
+				<p class="text-sm text-destructive">เกิดข้อผิดพลาด: {sheltersQuery.error?.message}</p>
 			{:else}
-				<ShelterList shelters={sheltersQuery.data ?? []} />
+				<ShelterList shelters={sheltersQuery.data ?? []} onedit={handleEdit} />
 			{/if}
 		</Card.Content>
 	</Card.Root>

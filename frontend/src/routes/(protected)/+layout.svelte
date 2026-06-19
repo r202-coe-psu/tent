@@ -22,8 +22,8 @@
 	}
 </script>
 
-<div class="flex min-h-svh flex-col">
-	<header class="flex items-center justify-between border-b px-6 py-3">
+<div class="flex h-svh flex-col overflow-hidden">
+	<header class="flex shrink-0 items-center justify-between border-b bg-background px-6 py-3">
 		<a href={resolve('/')} class="font-semibold">App</a>
 		<div class="flex items-center gap-4">
 			<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
@@ -58,7 +58,7 @@
 		</div>
 	{/if}
 
-	<main class="flex-1">
+	<main class="flex min-h-0 flex-1 flex-col">
 		{@render children()}
 	</main>
 </div>
