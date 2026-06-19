@@ -30,7 +30,7 @@ export const auditEntryInputSchema = z.object({
 	target_type: z.string().min(1),
 	target_id: z.string().min(1),
 	reason: z.string().min(1),
-	context: z.record(z.unknown()).optional(),
+	context: z.record(z.string(), z.unknown()).optional(),
 	occurred_at: z.string().optional()
 });
 export type AuditEntryInput = z.input<typeof auditEntryInputSchema>;
