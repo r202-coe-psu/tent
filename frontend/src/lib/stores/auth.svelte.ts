@@ -1,6 +1,5 @@
 import { browser } from '$app/environment';
 import { getSession, sessionLogin, sessionLogout, type SessionUser } from '$lib/db/couch';
-import { startSync, stopSync } from '$lib/db/pouch';
 
 const STORAGE_KEY = 'auth:user';
 
@@ -45,10 +44,6 @@ class AuthStore {
 	});
 	private initPromise: Promise<void> | null = null;
 
-	private onSyncAuthError = (): void => {
-		this.state.needsReauth = true;
-	};
-
 	/** Flag an expired sync session (e.g. from a feature-managed sync). */
 	markNeedsReauth(): void {
 		this.state.needsReauth = true;
@@ -82,13 +77,11 @@ class AuthStore {
 					persistUser(user);
 					if (user) {
 						this.state.needsReauth = false;
-						startSync(this.onSyncAuthError);
 					}
 				})
 				.catch(() => {
 					// Offline / server unreachable — keep the cached identity so the
 					// user stays in the app. Sync retries automatically once online.
-					if (this.state.user) startSync(this.onSyncAuthError);
 				});
 		}
 		return this.initPromise;
@@ -100,7 +93,6 @@ class AuthStore {
 		this.state.needsReauth = false;
 		persistUser(user);
 		this.initPromise = Promise.resolve();
-		if (browser) startSync(this.onSyncAuthError);
 		return user;
 	}
 
@@ -108,7 +100,6 @@ class AuthStore {
 		try {
 			await sessionLogout();
 		} finally {
-			if (browser) stopSync();
 			this.state.user = null;
 			this.state.needsReauth = false;
 			persistUser(null);

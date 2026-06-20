@@ -28,18 +28,22 @@
 <div class="mx-auto max-w-4xl px-4 py-8">
 	<!-- Tab Bar Navigation -->
 	<div class="mb-8 flex justify-center">
+
 		<div class="inline-flex rounded-xl bg-muted/60 p-1 border border-border/50 shadow-2xs">
 			<button 
 				onclick={() => { if (donationStore.reachedStep >= 1) donationStore.activeTab = 'needs'; }}
 				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all {donationStore.activeTab === 'needs' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
+
 			>
 				<Compass class="h-3.5 w-3.5" />
 				ความต้องการด่วน
 			</button>
+
 			<button 
 				onclick={() => { if (donationStore.reachedStep >= 2) donationStore.activeTab = 'form'; }}
 				disabled={donationStore.reachedStep < 2}
 				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all {donationStore.activeTab === 'form' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'} {donationStore.reachedStep < 2 ? 'opacity-40 cursor-not-allowed' : ''}"
+
 			>
 				<Heart class="h-3.5 w-3.5" />
 				ฟอร์มบริจาค

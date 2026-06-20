@@ -1,12 +1,12 @@
 services:
   couchdb:
-    container_name: couchdb-staging
+    container_name: tent-couchdb-staging
     image: couchdb:3.5
     environment:
       COUCHDB_USER: ${COUCHDB_USER}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
     volumes:
-      - ../deployment/couchdb/data:/opt/couchdb/data
+      - ../deployment/tent/data:/opt/couchdb/data
     # No port binding — reachable only inside Docker network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
@@ -15,8 +15,22 @@ services:
       retries: 10
       start_period: 10s
 
+  couchdb-init:
+    image: curlimages/curl:latest
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+    restart: on-failure
+    entrypoint: ["sh", "-c"]
+    command:
+      - "curl -sf -X POST http://$${COUCHDB_USER}:$${COUCHDB_PASSWORD}@couchdb:5984/_cluster_setup -H 'Content-Type: application/json' -d '{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"$${COUCHDB_USER}\",\"password\":\"$${COUCHDB_PASSWORD}\",\"port\":5984}'"
+
   frontend:
-    container_name: frontend-staging
+    container_name: tent-frontend-staging
+    image: tent/frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
@@ -32,15 +46,17 @@ services:
     depends_on:
       couchdb:
         condition: service_healthy
+      couchdb-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   nginx:
-    container_name: nginx-staging
+    container_name: tent-nginx-staging
     image: nginx:alpine
     ports:
       - "${NGINX_PORT:-80}:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx:/etc/nginx/conf.d:ro
     depends_on:
       - frontend
       - couchdb
