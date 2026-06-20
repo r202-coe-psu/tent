@@ -15,7 +15,7 @@
 	} = $props();
 </script>
 
-<section class="mb-6 mt-6 space-y-6 rounded-2xl border border-shelter-border bg-card p-6 shadow-sm">
+<section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border bg-card p-6 shadow-sm">
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<span
 			class="flex h-6 w-6 items-center justify-center rounded-full bg-shelter-blue-bg text-xs font-bold text-shelter-blue-text"
