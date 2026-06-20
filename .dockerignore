@@ -1,0 +1,21 @@
+# Env
+.env
+.env.*
+!.env.example
+
+# Deployment data
+deployment/
+
+# Docs / tooling
+docs/
+.claude/
+*.md
+!README.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
