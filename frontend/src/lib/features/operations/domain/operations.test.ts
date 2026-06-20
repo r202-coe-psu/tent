@@ -9,7 +9,9 @@ import {
 	stockBalance,
 	createCampaign,
 	openNeeds,
-	type Donation
+	createReceiveEntry,
+	type Donation,
+	type ReceiveSource
 } from './operations';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -116,5 +118,112 @@ describe('openNeeds', () => {
 		expect(remaining).toHaveLength(1);
 		expect(remaining[0].item_id).toBe('item:rice');
 		expect(remaining[0].qty_target).toBe(50);
+	});
+});
+
+describe('createReceiveEntry', () => {
+	it('mints positive receive ledger entry for purchase source', () => {
+		const entry = createReceiveEntry(
+			{
+				item_id: 'item:rice',
+				qty: 10,
+				unit: 'kg',
+				source: 'purchase',
+				ref_id: null
+			},
+			ctx
+		);
+		expect(entry.type).toBe('stock_ledger');
+		expect(entry.qty).toBe(10);
+		expect(entry.reason).toBe('receive');
+		expect(entry.shelter_code).toBe(ctx.shelterCode);
+	});
+
+	it('maps sources to correct reasons', () => {
+		const sourcesAndReasons = {
+			donation: 'donation',
+			purchase: 'receive',
+			transfer_in: 'transfer_in',
+			manual: 'adjust'
+		} as const;
+
+		for (const [source, reason] of Object.entries(sourcesAndReasons)) {
+			const entry = createReceiveEntry(
+				{
+					item_id: 'item:rice',
+					qty: 5,
+					unit: 'kg',
+					source: source as ReceiveSource,
+					ref_id: null
+				},
+				ctx
+			);
+			expect(entry.reason).toBe(reason);
+		}
+	});
+
+	it('rejects zero quantity', () => {
+		expect(() =>
+			createReceiveEntry(
+				{
+					item_id: 'item:rice',
+					qty: 0,
+					unit: 'kg',
+					source: 'purchase',
+					ref_id: null
+				},
+				ctx
+			)
+		).toThrow();
+	});
+
+	it('rejects negative quantity', () => {
+		expect(() =>
+			createReceiveEntry(
+				{
+					item_id: 'item:rice',
+					qty: -5,
+					unit: 'kg',
+					source: 'purchase',
+					ref_id: null
+				},
+				ctx
+			)
+		).toThrow();
+	});
+
+	it('accepts optional lot.expiry and lot.note', () => {
+		const entry = createReceiveEntry(
+			{
+				item_id: 'item:rice',
+				qty: 10,
+				unit: 'kg',
+				source: 'purchase',
+				ref_id: null,
+				lot: {
+					expiry: '2026-12-31T00:00:00Z',
+					note: 'Zone A'
+				}
+			},
+			ctx
+		);
+		expect(entry.lot).toEqual({
+			expiry: '2026-12-31T00:00:00Z',
+			note: 'Zone A'
+		});
+	});
+
+	it('accepts empty lot', () => {
+		const entry = createReceiveEntry(
+			{
+				item_id: 'item:rice',
+				qty: 10,
+				unit: 'kg',
+				source: 'purchase',
+				ref_id: null
+			},
+			ctx
+		);
+		expect(entry.lot).toBeUndefined();
 	});
 });

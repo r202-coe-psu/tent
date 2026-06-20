@@ -134,6 +134,61 @@ export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): 
 	);
 }
 
+export const receiveSourceSchema = z.enum([
+	'donation', // บริจาค (ประชาชน / เอกชน / มูลนิธิ)
+	'purchase', // จัดซื้อ / หน่วยงานรัฐ
+	'transfer_in', // โอนมาจากศูนย์อื่น
+	'manual' // กรอกเอง / ปรับปรุงสต๊อก
+]);
+export type ReceiveSource = z.infer<typeof receiveSourceSchema>;
+
+export const receiveInputSchema = z.object({
+	item_id: z.string().min(1),
+	qty: z.coerce.number().positive('Quantity must be > 0'),
+	unit: z.string().trim().min(1),
+	source: receiveSourceSchema,
+	ref_id: z.string().nullable().default(null),
+	lot: z
+		.object({
+			expiry: z.string().optional(),
+			note: z.string().trim().optional()
+		})
+		.optional(),
+	occurred_at: z.string().optional()
+});
+export type ReceiveInput = z.input<typeof receiveInputSchema>;
+
+export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): StockLedger {
+	const d = receiveInputSchema.parse(input);
+	let reason: LedgerReason;
+	switch (d.source) {
+		case 'donation':
+			reason = 'donation';
+			break;
+		case 'purchase':
+			reason = 'receive';
+			break;
+		case 'transfer_in':
+			reason = 'transfer_in';
+			break;
+		case 'manual':
+			reason = 'adjust';
+			break;
+	}
+	return createStockLedger(
+		{
+			item_id: d.item_id,
+			qty: d.qty,
+			unit: d.unit,
+			reason,
+			ref_id: d.ref_id,
+			lot: d.lot,
+			occurred_at: d.occurred_at
+		},
+		ctx
+	);
+}
+
 /** Sum signed deltas per item — the `stock_balance` read model, computed client-side. */
 export function stockBalance(ledger: StockLedger[]): Map<string, number> {
 	const balance = new Map<string, number>();
