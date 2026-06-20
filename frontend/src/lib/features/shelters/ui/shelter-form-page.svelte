@@ -19,7 +19,9 @@
 		type Zone,
 		type Item,
 		type Rule,
-		type Sop
+		type Sop,
+		type CreateShelterInput,
+		type UpdateShelterInput
 	} from '$lib/features/shelters';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Save from '@lucide/svelte/icons/save';
@@ -44,21 +46,32 @@
 	let rules = $state<Rule[]>([]);
 	let sops = $state<Sop[]>([]);
 
-	const activeSchema = isEdit ? updateShelterSchema : createShelterSchema;
-	const form = superForm(defaults(zod4(activeSchema)), {
+	const getActiveSchema = () => (isEdit ? updateShelterSchema : createShelterSchema);
+	const form = superForm(defaults(zod4(getActiveSchema())), {
 		SPA: true,
-		validators: zod4(activeSchema),
+		validators: zod4(getActiveSchema()),
 		resetForm: false,
 		onSubmit: async () => {
-			form.form.set({
-				code,
-				name,
-				capacity: Number(capacity),
-				zones: $state.snapshot(zones),
-				items: $state.snapshot(items),
-				rules: $state.snapshot(rules),
-				sops: $state.snapshot(sops)
-			});
+			if (isEdit) {
+				form.form.set({
+					name,
+					capacity: Number(capacity),
+					zones: $state.snapshot(zones),
+					items: $state.snapshot(items),
+					rules: $state.snapshot(rules),
+					sops: $state.snapshot(sops)
+				} as UpdateShelterInput);
+			} else {
+				form.form.set({
+					code,
+					name,
+					capacity: Number(capacity),
+					zones: $state.snapshot(zones),
+					items: $state.snapshot(items),
+					rules: $state.snapshot(rules),
+					sops: $state.snapshot(sops)
+				} as CreateShelterInput);
+			}
 		},
 		onUpdate: async ({ form: validated }) => {
 			if (!validated.valid) {
@@ -90,9 +103,10 @@
 					}
 				);
 			} else {
+				const createData = validated.data as CreateShelterInput;
 				createMutation.mutate(
 					{
-						code: validated.data.code.trim(),
+						code: createData.code.trim(),
 						...payload
 					},
 					{
