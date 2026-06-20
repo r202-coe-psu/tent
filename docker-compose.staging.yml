@@ -1,6 +1,6 @@
 services:
   couchdb:
-    container_name: couchdb-staging
+    container_name: tent-couchdb-staging
     image: couchdb:3.5
     environment:
       COUCHDB_USER: ${COUCHDB_USER}
@@ -29,7 +29,7 @@ services:
       - "curl -sf -X POST http://$${COUCHDB_USER}:$${COUCHDB_PASSWORD}@couchdb:5984/_cluster_setup -H 'Content-Type: application/json' -d '{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"$${COUCHDB_USER}\",\"password\":\"$${COUCHDB_PASSWORD}\",\"port\":5984}'"
 
   frontend:
-    container_name: frontend-staging
+    container_name: tent-frontend-staging
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
@@ -50,7 +50,7 @@ services:
     restart: unless-stopped
 
   nginx:
-    container_name: nginx-staging
+    container_name: tent-nginx-staging
     image: nginx:alpine
     ports:
       - "${NGINX_PORT:-80}:80"
