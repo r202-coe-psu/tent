@@ -6,7 +6,7 @@ services:
       COUCHDB_USER: ${COUCHDB_USER}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
     volumes:
-      - ../deployment/couchdb/data:/opt/couchdb/data
+      - ../deployment/tent/data:/opt/couchdb/data
     # No port binding — reachable only inside Docker network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
