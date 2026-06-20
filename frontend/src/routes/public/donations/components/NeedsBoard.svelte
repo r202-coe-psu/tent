@@ -12,7 +12,7 @@
 				<Heart class="h-5 w-5 text-primary" />
 				กระดานความต้องการด่วน
 			</h2>
-			<p class="mt-1 text-[11px] text-muted-foreground">
+			<p class="mt-1 text-xs text-muted-foreground">
 				อัปเดตข้อมูลแบบเรียลไทม์จากทุกศูนย์พักพิง คุณสามารถช่วยเหลือเติมเต็มในส่วนที่ขาดแคลนได้ทันที
 			</p>
 		</div>
@@ -46,24 +46,24 @@
 					</span>
 					<div>
 						<h3 class="text-sm font-bold text-foreground">ศูนย์พักพิง เทศบาลนครหาดใหญ่</h3>
-						<p class="text-[10px] text-muted-foreground">(โรงเรียนเทศบาล 2)</p>
+						<p class="text-xs text-muted-foreground">(โรงเรียนเทศบาล 2)</p>
 					</div>
-					<span class="ml-2 rounded-full bg-primary-muted text-primary px-2.5 py-0.5 text-[10px] font-bold">เปิดรับบริจาค</span>
+					<span class="ml-2 rounded-full bg-primary-muted text-primary px-2.5 py-0.5 text-xs font-bold">เปิดรับบริจาค</span>
 				</div>
 
 				<!-- Needs list inside shelter -->
 				<div class="mt-4 flex flex-col gap-2">
 					<div class="flex items-center justify-between rounded-lg bg-danger-muted/20 border border-danger-border/30 px-3.5 py-2 text-xs">
 						<span class="font-bold text-danger">• ด่วน! น้ำดื่ม</span>
-						<span class="rounded-md bg-white px-2 py-0.5 text-[10px] font-bold text-danger border border-danger/10">ขาด 500 แพ็ค</span>
+						<span class="rounded-md bg-white px-2 py-0.5 text-xs font-bold text-danger border border-danger/10">ขาด 500 แพ็ค</span>
 					</div>
 					<div class="flex items-center justify-between rounded-lg bg-danger-muted/20 border border-danger-border/30 px-3.5 py-2 text-xs">
 						<span class="font-bold text-danger">• ด่วน! ยาแก้ปวด</span>
-						<span class="rounded-md bg-white px-2 py-0.5 text-[10px] font-bold text-danger border border-danger/10">ขาด 200 แผง</span>
+						<span class="rounded-md bg-white px-2 py-0.5 text-xs font-bold text-danger border border-danger/10">ขาด 200 แผง</span>
 					</div>
 					<div class="flex items-center justify-between rounded-lg bg-muted/40 px-3.5 py-2 text-xs text-muted-foreground">
 						<span>ขอรับบริจาคเสื้อผ้ามือสอง</span>
-						<span class="text-[10px]">ค้นสต๊อก 12...</span>
+						<span class="text-xs">ค้นสต๊อก 12...</span>
 					</div>
 				</div>
 			</div>
@@ -76,7 +76,7 @@
 					จองคิวบริจาค
 					<span>→</span>
 				</button>
-				<span class="mt-2 text-[10px] text-muted-foreground text-center">ช่วยลดความแออัดหน้าศูนย์</span>
+				<span class="mt-2 text-xs text-muted-foreground text-center">ช่วยลดความแออัดหน้าศูนย์</span>
 			</div>
 		</div>
 
@@ -89,9 +89,9 @@
 					</span>
 					<div>
 						<h3 class="text-sm font-bold text-foreground">ศูนย์พักพิง เทศบาลเมืองคลองแห</h3>
-						<p class="text-[10px] text-muted-foreground">(โรงเรียนวัดคลองแห)</p>
+						<p class="text-xs text-muted-foreground">(โรงเรียนวัดคลองแห)</p>
 					</div>
-					<span class="ml-2 rounded-full bg-primary-muted text-primary px-2.5 py-0.5 text-[10px] font-bold">เปิดรับบริจาค</span>
+					<span class="ml-2 rounded-full bg-primary-muted text-primary px-2.5 py-0.5 text-xs font-bold">เปิดรับบริจาค</span>
 				</div>
 			</div>
 			<div class="flex flex-col items-center justify-center shrink-0 md:border-l md:border-border/60 md:pl-6 pt-4 md:pt-0">

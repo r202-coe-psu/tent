@@ -20,7 +20,7 @@
 		<div class="text-xs font-bold text-foreground">Tracking Token</div>
 		<div class="mt-1 text-sm font-black text-primary font-mono tracking-wider select-all">{donationStore.trackingToken}</div>
 
-		<div class="mt-4 border-t border-border/60 pt-4 text-left space-y-2 text-[11px] text-muted-foreground">
+		<div class="mt-4 border-t border-border/60 pt-4 text-left space-y-2 text-xs text-muted-foreground">
 			<div class="flex justify-between">
 				<span>ผู้บริจาค:</span>
 				<span class="font-bold text-foreground">{donationStore.donorName || 'ไม่ระบุชื่อ'}</span>
