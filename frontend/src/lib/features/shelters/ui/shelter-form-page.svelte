@@ -44,10 +44,10 @@
 	let rules = $state<Rule[]>([]);
 	let sops = $state<Sop[]>([]);
 
-	const activeSchema = isEdit ? updateShelterSchema : createShelterSchema;
-	const form = superForm(defaults(zod4(activeSchema)), {
+	const schema = () => isEdit ? updateShelterSchema : createShelterSchema;
+	const form = superForm(defaults(zod4(schema())), {
 		SPA: true,
-		validators: zod4(activeSchema),
+		validators: zod4(schema()),
 		resetForm: false,
 		onSubmit: async () => {
 			form.form.set({
