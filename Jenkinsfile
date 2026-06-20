@@ -30,11 +30,11 @@ pipeline {
                 echo "Setting up JAVA_HOME..."
                 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
                 echo "export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> ~/.profile
-                echo "export PATH=$JAVA_HOME/bin:$PATH" >> ~/.profile
+                echo 'export PATH=$JAVA_HOME/bin:$PATH' >> ~/.profile
 
                 echo "Installing pnpm..."
-                npm install -g pnpm
-                echo "export PATH=$(npm bin -g):$PATH" >> ~/.profile
+                npm install -g pnpm@9
+                echo 'export PATH=$(npm config get prefix)/bin:$PATH' >> ~/.profile
                 . ~/.profile
 
                 java -version || exit 1
