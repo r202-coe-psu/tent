@@ -24,12 +24,9 @@ services:
       COUCHDB_USER: ${COUCHDB_USER}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
     restart: on-failure
-    command: >
-      sh -c "
-        curl -sf -X POST http://$${COUCHDB_USER}:$${COUCHDB_PASSWORD}@couchdb:5984/_cluster_setup
-          -H 'Content-Type: application/json'
-          -d '{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"$${COUCHDB_USER}\",\"password\":\"$${COUCHDB_PASSWORD}\",\"port\":5984}'
-      "
+    entrypoint: ["sh", "-c"]
+    command:
+      - "curl -sf -X POST http://$${COUCHDB_USER}:$${COUCHDB_PASSWORD}@couchdb:5984/_cluster_setup -H 'Content-Type: application/json' -d '{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"$${COUCHDB_USER}\",\"password\":\"$${COUCHDB_PASSWORD}\",\"port\":5984}'"
 
   frontend:
     container_name: frontend-staging
