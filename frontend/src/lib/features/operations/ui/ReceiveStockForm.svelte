@@ -242,7 +242,7 @@
 			<Form.Field {form} name="ref_id">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label>เลข้อ้างอิง (เลขอ้างอิงของบริจาค/โอน)</Form.Label>
+						<Form.Label>เลขอ้างอิง (เลขอ้างอิงของบริจาค/โอน)</Form.Label>
 						<Input
 							{...props}
 							placeholder="เช่น donation:12345 หรือ transfer:6789"
