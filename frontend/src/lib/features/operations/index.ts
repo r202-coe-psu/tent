@@ -45,3 +45,33 @@ export {
 	type WalkInDonationInput,
 	type CampaignInput
 } from './domain/operations';
+
+// Domain updates for receive
+export {
+	receiveSourceSchema,
+	receiveInputSchema,
+	createReceiveEntry,
+	type ReceiveInput
+} from './domain/operations';
+
+// Data layer
+export {
+	operationsRepository,
+	shelterDb
+} from './data/operations.pouch';
+export type { OperationsRepository } from './data/operations.repository';
+
+// Application queries
+export {
+	operationsKeys,
+	useLedger,
+	useLedgerByItem,
+	useStockBalance,
+	useReceiveStock,
+	startOperationsLiveQuery
+} from './application/queries';
+
+// UI components
+export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';
+export { default as LedgerTable } from './ui/LedgerTable.svelte';
+
