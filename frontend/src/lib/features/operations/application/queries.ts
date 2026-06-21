@@ -1,0 +1,70 @@
+import {
+	createMutation,
+	createQuery,
+	useQueryClient,
+	type QueryClient
+} from '@tanstack/svelte-query';
+import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
+import type { AuthorContext } from '$lib/db/model';
+import { operationsRepository, shelterDb } from '../data/operations.pouch';
+import { createReceiveEntry, type ReceiveInput } from '../domain/operations';
+
+export const operationsKeys = {
+	all: ['operations'] as const,
+	ledger: () => [...operationsKeys.all, 'ledger'] as const,
+	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
+	balance: () => [...operationsKeys.all, 'balance'] as const
+};
+
+/**
+ * Query hook to retrieve all stock ledger entries.
+ */
+export const useLedger = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.ledger(),
+		queryFn: () => operationsRepository().listLedger()
+	}));
+
+/**
+ * Query hook to retrieve stock ledger entries filtered by a specific item.
+ */
+export const useLedgerByItem = (itemId: () => string) =>
+	createQuery(() => ({
+		queryKey: operationsKeys.byItem(itemId()),
+		queryFn: () => operationsRepository().listLedgerByItem(itemId())
+	}));
+
+/**
+ * Query hook to retrieve the current on-hand stock balances (Map of itemId -> quantity).
+ */
+export const useStockBalance = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.balance(),
+		queryFn: () => operationsRepository().getBalance()
+	}));
+
+/**
+ * Mutation hook to receive inbound stock, persist the ledger entry, and invalidate caches.
+ */
+export const useReceiveStock = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) => {
+			const entry = createReceiveEntry(input, ctx);
+			return operationsRepository().addLedgerEntry(entry);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/**
+ * Starts a live query changes feed for operations (Stock Ledger documents).
+ * Automatically invalidates active queries when database changes happen.
+ */
+export function startOperationsLiveQuery(queryClient: QueryClient): LiveQueryHandle {
+	return startLiveQuery(shelterDb(), queryClient, (type) =>
+		type === 'stock_ledger' ? [operationsKeys.ledger(), operationsKeys.balance()] : []
+	);
+}
