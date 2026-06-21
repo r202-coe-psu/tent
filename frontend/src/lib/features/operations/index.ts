@@ -55,10 +55,7 @@ export {
 } from './domain/operations';
 
 // Data layer
-export {
-	operationsRepository,
-	shelterDb
-} from './data/operations.pouch';
+export { operationsRepository, shelterDb } from './data/operations.pouch';
 export type { OperationsRepository } from './data/operations.repository';
 
 // Application queries
@@ -74,4 +71,3 @@ export {
 // UI components
 export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';
 export { default as LedgerTable } from './ui/LedgerTable.svelte';
-
