@@ -54,7 +54,7 @@
         <a class="btn btn-sm btn-outline" href="./public-tier-flow-spec.html"
           >Public Tier Flow</a
         >
-        <span class="badge badge-warning">Draft v0.1</span>
+        <span class="badge badge-warning">Draft v0.3</span>
         <span class="badge badge-outline">2026-06-22</span>
       </div>
     </header>
@@ -98,9 +98,10 @@
               tracked ใน
               <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
                 >CR-005 §F</a
-              >. mockup เพิ่ม <strong>donor PII (Line/email/ใบอนุโมทนา), logistics
+              >. mockup เพิ่ม <strong>donor PII (Line/email optional), logistics
               (วิธีส่ง/ยานพาหนะ), และ slot-based queue booking</strong> เกินร่างเดิม
-              ใน public-tier-flow-spec §DN — รายละเอียดที่ยังต้องเคาะดูส่วน
+              ใน public-tier-flow-spec §DN. <strong>ใบอนุโมทนา/ลดหย่อนภาษีไม่รองรับ
+              (DN-3, 2026-06-22)</strong> — รายละเอียดที่ยังต้องเคาะดูส่วน
               <a href="#open">Open Points</a></span
             >
           </div>
@@ -132,8 +133,10 @@
                 <tr>
                   <td>Auth requirement</td>
                   <td>
-                    ไม่ต้อง login (anonymous) — ยืนยันด้วยเบอร์โทร (+ OTP เฉพาะเมื่อ
-                    <code>public_otp_required</code> เปิด, DN-1)
+                    ไม่ต้อง login (anonymous) — ยืนยันด้วยเบอร์โทร.
+                    <strong>Develop แบบไม่มี OTP ไปก่อน</strong> (flag
+                    <code>public_otp_required</code> = off); OTP รอยืนยันรอบสอง
+                    (DN-1, ติดไว้ก่อน 2026-06-22)
                   </td>
                 </tr>
                 <tr>
@@ -259,7 +262,9 @@
             <span
               >ความเร่งด่วน + จำนวนที่ขาด + สถานะ "งดรับ/ล้นสต็อก" เป็น
               <strong>aggregate ต่อ need item</strong> — ไม่มีข้อมูลรายบุคคล.
-              field/สูตรคำนวณ "ขาด N" / "ล้น %" รอ Data Model (DN-4)</span
+              สูตร: <code>needs_open = qty_target − Σ donation(declared+received)</code>;
+              "ขาด N" = <code>max(0, needs_open)</code>; "ล้น %" = <code>Σ/qty_target×100</code>;
+              "งดรับ" = <code>needs_open ≤ 0</code> (DN-4)</span
             >
           </div>
         </div>
@@ -314,16 +319,15 @@
                     DN-2 (2026-06-22)
                   </td>
                 </tr>
-                <tr>
-                  <td>☑ ต้องการใบอนุโมทนาบัตร / ลดหย่อนภาษี</td>
-                  <td><span class="badge badge-ghost badge-sm">checkbox</span></td>
-                  <td>
-                    ถ้าติ๊ก → ต้องเก็บ PII เพิ่ม (ชื่อจริง/ที่อยู่/เลขผู้เสียภาษี)
-                    + flow ออกใบ — <strong>ยังไม่เคาะ (DN-3)</strong>
-                  </td>
-                </tr>
               </tbody>
             </table>
+          </div>
+          <div class="alert alert-info">
+            <span
+              ><strong>ใบอนุโมทนาบัตร / ลดหย่อนภาษี: ระบบไม่รองรับ (DN-3, 2026-06-22)</strong>
+              — ไม่มี checkbox/ฟิลด์ขอใบในฟอร์มนี้, ไม่เก็บ PII เพิ่ม (ที่อยู่/เลขผู้เสียภาษี),
+              ไม่มี flow ออกใบ</span
+            >
           </div>
           <h3>ส่วนที่ 2 — รายละเอียดสิ่งของบริจาค <span class="text-sm font-normal">(repeatable)</span></h3>
           <p>แต่ละแถวรายการของบริจาค (กด "เพิ่มรายการสิ่งของ" เพื่อเพิ่มแถว):</p>
@@ -487,8 +491,8 @@
             <span
               ><strong>mockup ขยาย field ของ DN tier</strong> เกินร่างเดิมใน
               <a href="./public-tier-flow-spec.html">public-tier-flow-spec §DN</a>
-              (เดิมเก็บ donor PII ขั้นต่ำ = ชื่อ + เบอร์). mockup เพิ่ม Line/email,
-              ใบอนุโมทนา (ลดหย่อนภาษี), logistics และ slot booking — tracked ใน
+              (เดิมเก็บ donor PII ขั้นต่ำ = ชื่อ + เบอร์). mockup เพิ่ม Line/email
+              (optional), logistics และ slot booking — tracked ใน
               <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
                 >CR-005 §F</a
               ></span
@@ -530,10 +534,10 @@
                 </tr>
                 <tr>
                   <td>donor: ใบอนุโมทนา / ลดหย่อนภาษี</td>
-                  <td>ชื่อจริง/ที่อยู่/เลขผู้เสียภาษี (ถ้าติ๊ก)</td>
+                  <td>—</td>
                   <td>
-                    <span class="badge badge-warning badge-sm">DN-3 OPEN</span>
-                    PII อ่อนไหวเพิ่ม + flow ออกใบ — ยังไม่เคาะ
+                    <span class="badge badge-neutral badge-sm">DN-3 NOT SUPPORTED</span>
+                    ระบบไม่รองรับ — ไม่เก็บ PII ของใบ, ไม่มี flow ออกใบ (2026-06-22)
                   </td>
                 </tr>
                 <tr>
@@ -602,7 +606,8 @@
                     เบอร์โทร (+ OTP เฉพาะเมื่อ <code>public_otp_required</code>, DN-1)
                   </td>
                   <td>
-                    error banner; <code>SLOT_FULL</code> → ขอเลือก slot ใหม่;
+                    error banner; <code>NEED_FULL</code> → ขอเลือกรายการอื่น;
+                    <code>SLOT_FULL</code> → ขอเลือก slot ใหม่;
                     <code>RATE_LIMITED</code> → ลองใหม่ภายหลัง
                   </td>
                 </tr>
@@ -634,13 +639,13 @@
             </table>
           </div>
           <pre><code>POST /public/v1/donations
-Body  : { donor: { name, phone, line_id?, email?, tax_receipt? },
+Body  : { donor: { name, phone, line_id?, email? },
           shelter_id,                       // lock จากการ์ด (ขั้น 1)
           items: [ { category, type, quantity, unit, condition, notes? } ],
           logistics: { delivery_method, vehicle?, slot, eta } }
 Resp  : { booking_ref: "DN-306892", tracking_token: "<opaque>",
           shelter_name, slot, item_count, status: "declared" }
-Error : { "error": { "code": "SLOT_FULL" | "RATE_LIMITED", "message": "..." } }  // no PII
+Error : { "error": { "code": "NEED_FULL" | "SLOT_FULL" | "RATE_LIMITED", "message": "..." } }  // no PII
 
 PATCH /public/v1/donations/{tracking_token}        // DN-6 — แก้ภายหลังผ่าน ticket
 Body  : { courier_tracking_no?, note? }            // เฉพาะ field ที่อนุญาต
@@ -654,8 +659,8 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
             <code>donation_slot</code> (slot ที่ศูนย์ตั้งค่า, DN-5). doc
             <code>type:"donation"</code> เดิมถูก <strong>extend</strong> (ไม่ใช่
             doc ใหม่) — เพิ่ม <code>logistics</code>, <code>booking_ref</code>,
-            <code>donor.line_id/email</code>, <code>items[].category/condition/note</code>,
-            <code>tax_receipt_requested</code>. เขียนที่ shelter db (public flow
+            <code>donor.line_id/email</code>, <code>items[].category/condition/note</code>.
+            เขียนที่ shelter db (public flow
             ผ่าน central → replicate). response สาธารณะ project เฉพาะ field ที่อนุญาต
             (ไม่ส่ง <code>_id</code>/<code>_rev</code>/<code>phone</code>/<code>phone_hash</code>/<code>tracking_token_hash</code>):
           </p>
@@ -679,7 +684,6 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
     "eta": "2026-06-22T09:00:00+07:00",   // = ต้น slot ที่จอง
     "courier_tracking_no": null           // DN-6 — donor เติมภายหลังผ่าน PATCH
   },
-  "tax_receipt_requested": false,         // DN-3 — field PII ของใบยังไม่เคาะ
   "status": "declared",                   // declared → received | expired | cancelled
   "declared_at": "...", "expires_at": "..."
 }</code></pre>
@@ -688,8 +692,8 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
             <a href="./public-tier-flow-spec.html">public-tier trust boundary</a>;
             declaration replicate ลง shelter db ปลายทาง. รายละเอียด field + index +
             migration (schema_v 1→2) ดู
-            <a href="../data/schema.md">schema.md §2.3</a>; field ของ DN-3
-            (ใบอนุโมทนา) ยังรอเคาะ.
+            <a href="../data/schema.md">schema.md §2.3</a>. ใบอนุโมทนา (DN-3)
+            ระบบไม่รองรับ — ไม่มี field ใน doc.
           </p>
         </div>
       </section>
@@ -717,11 +721,15 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
                 </tr>
                 <tr>
                   <td>เลือก need ที่ "งดรับ/ล้นสต็อก"</td>
-                  <td>กดเลือกไม่ได้ (disabled) + tooltip "ศูนย์งดรับชั่วคราว"</td>
+                  <td>กดเลือกไม่ได้ (disabled) + tooltip "ศูนย์งดรับชั่วคราว" — เกณฑ์ auto: <code>needs_open ≤ 0</code> (รับครบ/เกิน <code>qty_target</code> ของ campaign รอบนี้) (DN-4)</td>
                 </tr>
                 <tr>
                   <td>Form validation</td>
                   <td>ชื่อ/เบอร์ว่าง หรือไม่มี item → inline error ก่อนไปขั้นถัดไป</td>
+                </tr>
+                <tr>
+                  <td>Need เต็มพอดีตอน submit</td>
+                  <td>race: เห็นยังรับได้ตอนกด แต่ submit แล้ว <code>needs_open ≤ 0</code> พอดี → <code>NEED_FULL</code> ขอเลือกรายการอื่น (มิเรอร์ <code>SLOT_FULL</code>) (DN-4)</td>
                 </tr>
                 <tr>
                   <td>Slot เต็ม</td>
@@ -784,7 +792,7 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
             <li>☐ ค้นหา/filter category → รายการ need กรองถูกต้อง</li>
             <li>☐ item "งดรับ/ล้นสต็อก" แสดงเทาจาง + กดเลือกไม่ได้</li>
             <li>☐ กด "จองคิวบริจาค" จากการ์ด → ขั้น 2 lock ศูนย์ + pre-fill หมวดหมู่/ประเภทจาก need</li>
-            <li>☐ ฟอร์ม: ชื่อ + เบอร์ required; Line/email optional; ติ๊กใบอนุโมทนาได้</li>
+            <li>☐ ฟอร์ม: ชื่อ + เบอร์ required; Line/email optional; ไม่มี checkbox ใบอนุโมทนา (DN-3 ไม่รองรับ)</li>
             <li>☐ เพิ่ม/ลบรายการสิ่งของ (≥1) → "ถัดไป" validate ผ่าน</li>
             <li>☐ ขั้น 3: เลือกวิธีส่ง + ยานพาหนะ; ศูนย์ปลายทาง read-only (lock จากการ์ด)</li>
             <li>☐ เลือก slot "ว่าง" ได้; slot "คิวเต็ม" disabled</li>
@@ -793,6 +801,7 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
             <li>☐ สแกน/เปิดลิงก์ tracking_token → เห็นสถานะ declaration ของตน (declared)</li>
             <li>☐ response <strong>ไม่มี</strong> เบอร์โทร donor / <code>_id</code>/<code>_rev</code></li>
             <li>☐ declaration ปรากฏที่ศูนย์ปลายทาง (replicate) พร้อมเวลานัด/ETA</li>
+            <li>☐ submit ตอน need เต็มพอดี (<code>needs_open ≤ 0</code>) → <code>NEED_FULL</code> ขอเลือกรายการอื่น</li>
             <li>☐ submit ตอน slot เต็มพอดี → <code>SLOT_FULL</code> ขอเลือกใหม่</li>
             <li>☐ "นำทางด้วย Google Maps" เปิดพิกัดศูนย์ถูกต้อง</li>
             <li>☐ Toggle EN → ทุก label/สถานะเปลี่ยนเป็น English</li>
@@ -809,8 +818,8 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
           <p class="text-sm">
             4 ข้อความต้องการของเจ้าของ (เห็น needs · กรอกจากการ์ด · ระบุเวลา/คนส่ง/
             ปลายทาง lock/ETA · บันทึก+พิมพ์ตั๋วแปะของ) = <strong>scope ที่ยืนยันแล้ว</strong>
-            ของหน้านี้. <strong>DN-2 / DN-5 / DN-6 / DN-7 เคาะแล้ว (2026-06-22)</strong>;
-            เหลือ <strong>DN-1 / DN-3 / DN-4</strong> ที่เจ้าของจะหาคำตอบมาเติมต่อ.
+            ของหน้านี้. <strong>DN-2 / DN-3 / DN-4 / DN-5 / DN-6 / DN-7 เคาะแล้ว (2026-06-22)</strong>;
+            <strong>DN-1 ติดไว้ก่อน</strong> (develop แบบไม่มี OTP, รอยืนยันรอบสอง).
           </p>
           <div class="overflow-x-auto">
             <table class="table table-zebra">
@@ -825,7 +834,7 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
                 <tr>
                   <td>DN-1</td>
                   <td>ต้องยืนยันเบอร์ด้วย OTP ตอน submit หรือไม่ (mockup เขียน "สำหรับส่ง SMS ยืนยัน")?</td>
-                  <td><span class="badge badge-warning">OPEN</span> — เจ้าของจะหาคำตอบมาเติม; flag <code>public_otp_required</code> มีอยู่</td>
+                  <td><span class="badge badge-warning">ON HOLD</span> — <strong>ติดไว้ก่อน: develop แบบไม่มี OTP ไปก่อน</strong> (flag <code>public_otp_required</code> = off), รอเจ้าของยืนยันรอบสอง (2026-06-22)</td>
                 </tr>
                 <tr>
                   <td>DN-2</td>
@@ -835,12 +844,12 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
                 <tr>
                   <td>DN-3</td>
                   <td>ใบอนุโมทนาบัตร/ลดหย่อนภาษี — เก็บ PII อะไรเพิ่ม (ที่อยู่/เลขผู้เสียภาษี) + ใครออกใบ?</td>
-                  <td><span class="badge badge-warning">OPEN</span> — เจ้าของจะหาคำตอบมาเติม; checkbox มีไว้ในฟอร์ม แต่ flow ออกใบยังไม่นิยาม</td>
+                  <td><span class="badge badge-success">RESOLVED</span> — <strong>ระบบไม่รองรับเรื่องนี้</strong> (เจ้าของ 2026-06-22); ตัด checkbox/field/flow ออกใบทั้งหมด</td>
                 </tr>
                 <tr>
                   <td>DN-4</td>
                   <td>"ขาด N" / "ล้นสต็อก %" / "ของยังรับได้ %" คำนวณจาก field ไหน + เกณฑ์ "งดรับ"?</td>
-                  <td><span class="badge badge-warning">OPEN</span> — เจ้าของจะหาคำตอบมาเติม; รอ Data Model (needs/receiving capacity)</td>
+                  <td><span class="badge badge-success">RESOLVED</span> — <strong><code>qty_target</code> ของ campaign คือ cap ต่อรอบ</strong> (เจ้าของ 2026-06-22). ใช้ view <code>needs_open</code> (<a href="../data/schema.md">schema.md §2.4</a>) ที่มีอยู่แล้ว — ไม่เพิ่ม field: <code>needs_open = qty_target − Σ donation(declared+received)</code>; <code>"ขาด N" = max(0, needs_open)</code>; <code>"ล้น %" = Σ/qty_target×100</code>; เกณฑ์ "งดรับ" = <code>needs_open ≤ 0</code> → public กดไม่ได้ ต้องไปรายการถัดไป. กัน race ตอน submit ด้วย <code>NEED_FULL</code> (มิเรอร์ <code>SLOT_FULL</code>)</td>
                 </tr>
                 <tr>
                   <td>DN-5</td>
@@ -867,9 +876,9 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
                 >CR-005 §F</a
               >. การขยาย DN surface ที่เคาะแล้ว (DN-2 Line/email optional, DN-5
               shelter-configured slots, DN-6 donor-edited tracking, DN-7 donation
-              doc shape) reflect ใน
+              doc shape, DN-3 ใบอนุโมทนาไม่รองรับ) reflect ใน
               <a href="./public-tier-flow-spec.html">public-tier-flow-spec §DN</a>;
-              DN-3 (ใบอนุโมทนา) จะ reflect เพิ่มเมื่อเคาะ</span
+              DN-1 (OTP) ติดไว้ก่อน — develop แบบไม่มี OTP</span
             >
           </div>
         </div>
