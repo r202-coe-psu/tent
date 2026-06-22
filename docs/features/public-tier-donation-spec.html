@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="en" data-theme="lofi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Public Portal — Donation &amp; Queue Booking Flow Spec</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+      body {
+        background: #f6fbf8;
+      }
+      .shell {
+        max-width: 1380px;
+        margin: 0 auto;
+        padding: 1rem;
+      }
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        body {
+          background: #fff;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="navbar bg-base-100 border-b border-base-300">
+      <div class="flex-1">
+        <div>
+          <p class="text-xs uppercase text-base-content/60">
+            Feature Flow Spec
+          </p>
+          <h1 class="text-xl font-semibold">
+            Public Portal — Donation &amp; Queue Booking (บริจาคและจองคิว)
+          </h1>
+        </div>
+      </div>
+      <div class="flex-none gap-2 no-print">
+        <a class="btn btn-sm btn-outline" href="./index.html">Back</a>
+        <a class="btn btn-sm btn-outline" href="./public-portal-landing-spec.html"
+          >Landing Spec</a
+        >
+        <a class="btn btn-sm btn-outline" href="./public-tier-flow-spec.html"
+          >Public Tier Flow</a
+        >
+        <span class="badge badge-warning">Draft v0.3</span>
+        <span class="badge badge-outline">2026-06-22</span>
+      </div>
+    </header>
+    <main class="shell space-y-4">
+      <!-- SUMMARY -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Summary</h2>
+          <p>
+            หน้า <strong>"บริจาคและจองคิว"</strong> — nav link ของ Public Portal
+            (<a href="./public-portal-landing-spec.html">landing</a> hand off มา
+            ที่ <code>/donate</code>). เป็นจุดที่ <strong>ผู้บริจาค (Donor)</strong>
+            ดูว่าศูนย์ใดขาดอะไร, ประกาศของที่จะนำมามอบ, และ
+            <strong>จองคิว/นัดเวลาส่งของล่วงหน้า</strong> เพื่อให้ทีมงานที่ศูนย์
+            เตรียมจุดรับและลดความแออัดหน้าศูนย์. นี่คือ <strong>DN tier</strong>
+            (Donor) ของ public/no-login service (ดู
+            <a href="./public-tier-flow-spec.html">Public Tier Flow Spec §DN</a>,
+            FD-16).
+          </p>
+          <div class="alert alert-info">
+            <span
+              >หน้านี้เป็น <strong>Public / No-Login Tier (DN)</strong> —
+              บริจาคได้โดยไม่ต้อง login. donor ให้ <strong>ชื่อ + เบอร์โทร</strong>
+              เพื่อสร้าง pre-declaration + soft reservation; ระบบตอบ
+              <strong>ตั๋ว (booking ref + QR + tracking token)</strong>. อ่าน/เขียน
+              central-only — trust boundary ดู
+              <a href="./public-tier-flow-spec.html">Public Tier Flow Spec</a></span
+            >
+          </div>
+          <div class="alert alert-warning">
+            <span
+              >เป้าหมายหลัก: <strong>เติมเต็มของที่ศูนย์ขาดให้ตรงจุด + ติดตามของได้
+              ทั้งสองฝั่ง</strong> — donor พิมพ์ตั๋วแปะลงของ, ศูนย์เห็นรายการรอรับ
+              พร้อมเวลานัด/เวลาคาดว่าจะถึง. ออกแบบให้ใช้บนมือถือใน network
+              ไม่เสถียร; รองรับ TH/EN (EN toggle)</span
+            >
+          </div>
+          <div class="alert">
+            <span class="text-sm"
+              ><strong>Change tracking:</strong> หน้านี้และ field/exposure ใหม่ของมัน
+              tracked ใน
+              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+                >CR-005 §F</a
+              >. mockup เพิ่ม <strong>donor PII (Line/email optional), logistics
+              (วิธีส่ง/ยานพาหนะ), และ slot-based queue booking</strong> เกินร่างเดิม
+              ใน public-tier-flow-spec §DN. <strong>ใบอนุโมทนา/ลดหย่อนภาษีไม่รองรับ
+              (DN-3, 2026-06-22)</strong> — รายละเอียดที่ยังต้องเคาะดูส่วน
+              <a href="#open">Open Points</a></span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- SCOPE -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Scope &amp; Route</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Route</td>
+                  <td>
+                    <code>/donate</code> (nav "บริจาคและจองคิว") · deep-link
+                    <code>/donate?shelter={id}</code> /
+                    <code>/donate?need={need_id}</code> จาก needs card ·
+                    <code>/donate/track/{tracking_token}</code> (เปิด/แก้ตั๋วภายหลัง — DN-6)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Auth requirement</td>
+                  <td>
+                    ไม่ต้อง login (anonymous) — ยืนยันด้วยเบอร์โทร.
+                    <strong>Develop แบบไม่มี OTP ไปก่อน</strong> (flag
+                    <code>public_otp_required</code> = off); OTP รอยืนยันรอบสอง
+                    (DN-1, ติดไว้ก่อน 2026-06-22)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Data tier</td>
+                  <td>
+                    DN (Public API Service, central เท่านั้น) — ดู
+                    public-tier-flow-spec §DN
+                  </td>
+                </tr>
+                <tr>
+                  <td>Primary endpoints</td>
+                  <td>
+                    <code>GET /public/v1/needs</code> ·
+                    <code>POST /public/v1/donations</code> ·
+                    <code>GET /public/v1/donations/{tracking_token}</code> ·
+                    <code>PATCH /public/v1/donations/{tracking_token}</code> (DN-6)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Language</td>
+                  <td>ภาษาไทย default + toggle EN</td>
+                </tr>
+                <tr>
+                  <td>i18n key namespace</td>
+                  <td><code>public.donate</code></td>
+                </tr>
+                <tr>
+                  <td>Render strategy</td>
+                  <td>
+                    pre-rendered static shell + client hydration; needs/slot fetch
+                    client-side; submit ผ่าน POST (กัน PII ติด URL/access log)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Phase</td>
+                  <td>R2 → R3 — Public Portal (DN, FD-16)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- LAYOUT OVERVIEW -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Layout Overview — 4-Step Wizard</h2>
+          <p>
+            หน้านี้เป็น stepper 4 ขั้น (tab bar ด้านบนแสดงสถานะแต่ละขั้น). ทิศทาง
+            ปกติเดินจากซ้ายไปขวา; กดย้อนขั้นที่ทำเสร็จแล้วได้.
+          </p>
+          <ol>
+            <li>
+              <strong>ความต้องการด่วน</strong> (Urgent Needs Board) — ดูของที่
+              ทุกศูนย์ขาด, filter/ค้นหา, เลือก "จองคิวบริจาค" จากการ์ดศูนย์
+            </li>
+            <li>
+              <strong>ฟอร์มบริจาค</strong> (Donation Form) — ข้อมูลผู้บริจาค +
+              รายการสิ่งของ (pre-fill จากการ์ดที่เลือกในขั้น 1)
+            </li>
+            <li>
+              <strong>เวลา/สถานที่</strong> (Logistics) — วิธีจัดส่ง, ยานพาหนะ,
+              ศูนย์ปลายทาง (lock จากการ์ด), เลือกวัน + ช่วงเวลา (จองคิว) + เวลา
+              คาดว่าจะถึง
+            </li>
+            <li>
+              <strong>ตั๋วของฉัน</strong> (My Ticket) — QR + booking ref + สรุปนัด;
+              <strong>บันทึก/พิมพ์ตั๋วแปะลงของ</strong>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- STEP 1 -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">1 · ความต้องการด่วน — Urgent Needs Board</h2>
+          <p>
+            ตอบโจทย์ข้อ 1: <strong>เห็นรายการที่ศูนย์ต้องการรับบริจาคทั้งหมด</strong>.
+            อ่าน aggregate จาก <code>GET /public/v1/needs</code> (no auth) — ไม่มี
+            ข้อมูลรายบุคคล.
+          </p>
+          <ul>
+            <li>
+              หัวข้อ <strong>"กระดานความต้องการด่วน"</strong> + subtitle
+              "อัปเดตข้อมูลแบบเรียลไทม์จากทุกศูนย์พักพิง คุณสามารถช่วยเติมเต็มในส่วน
+              ที่ขาดแคลนได้ทันที"
+            </li>
+            <li>
+              <strong>ช่องค้นหา</strong> สิ่งของ (placeholder "ค้นหาสิ่งของที่ต้องการ
+              บริจาค เช่น น้ำดื่ม, ยาพาหนะ…") — filter client-side ตามชื่อ item
+            </li>
+            <li>
+              <strong>Category filter chips</strong>: ทั้งหมด · ● ด่วนพิเศษ ·
+              อาหาร &amp; น้ำ · ยารักษาโรค (ชุด category มาจาก needs data)
+            </li>
+            <li>
+              <strong>การ์ดต่อศูนย์</strong> — ชื่อศูนย์ + badge "เปิดรับบริจาค",
+              และรายการ need item แต่ละรายการพร้อมระดับความเร่งด่วนและจำนวนที่ขาด:
+              <ul>
+                <li>
+                  item ด่วน (พื้นแดง, ● จุดแดง): เช่น "ด่วน! น้ำดื่ม — ขาด 500 แพ็ค",
+                  "ด่วน! ยาแก้ปวด — ขาด 200 แผง"
+                </li>
+                <li>
+                  item ปกติ: เช่น "ข้าวกล่อง — ขาด 300 ชุด"
+                </li>
+                <li>
+                  item <strong>ล้นสต็อก / งดรับ</strong> (เทาจาง): เช่น
+                  "งดรับเสื้อผ้ามือสอง — ล้นสต็อก 120%" — แสดงเพื่อกันบริจาคซ้ำ,
+                  <strong>กดเลือกไม่ได้</strong> (DN-4)
+                </li>
+              </ul>
+            </li>
+            <li>
+              ปุ่ม <strong>"จองคิวบริจาค →"</strong> ต่อการ์ด + caption
+              "ช่วยลดความแออัดหน้าศูนย์" → ไปขั้น 2 โดย
+              <strong>lock ศูนย์ปลายทาง</strong> และ pre-fill รายการสิ่งของจาก need
+              ที่กด (deep-link <code>?shelter=</code>/<code>?need=</code>)
+            </li>
+          </ul>
+          <div class="alert alert-info">
+            <span
+              >ความเร่งด่วน + จำนวนที่ขาด + สถานะ "งดรับ/ล้นสต็อก" เป็น
+              <strong>aggregate ต่อ need item</strong> — ไม่มีข้อมูลรายบุคคล.
+              สูตร: <code>needs_open = qty_target − Σ donation(declared+received)</code>;
+              "ขาด N" = <code>max(0, needs_open)</code>; "ล้น %" = <code>Σ/qty_target×100</code>;
+              "งดรับ" = <code>needs_open ≤ 0</code> (DN-4)</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2 -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">2 · ฟอร์มบริจาค — Donation Form</h2>
+          <p>
+            ตอบโจทย์ข้อ 2: <strong>กรอกสิ่งที่จะบริจาค จากการ์ดที่เลือก</strong>.
+            หมวดหมู่/ประเภทสิ่งของ pre-fill จาก need item ที่กดมา (donor แก้ไข/เพิ่ม
+            รายการได้).
+          </p>
+          <h3>ส่วนที่ 1 — ข้อมูลผู้บริจาค <span class="text-sm font-normal">("สำหรับติดต่อกลับกรณีฉุกเฉิน")</span></h3>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Required</th>
+                  <th>หมายเหตุ</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>ชื่อ-นามสกุล / นามแฝง / องค์กร</td>
+                  <td><span class="badge badge-error badge-sm">required</span></td>
+                  <td>รับนามแฝง/ชื่อองค์กรได้ (ไม่บังคับชื่อจริง)</td>
+                </tr>
+                <tr>
+                  <td>เบอร์โทรศัพท์มือถือ</td>
+                  <td><span class="badge badge-error badge-sm">required</span></td>
+                  <td>
+                    สำหรับส่ง SMS ยืนยัน; index ด้วย hash ของเบอร์ —
+                    <strong>ไม่ echo เบอร์กลับใน response</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Line ID</td>
+                  <td><span class="badge badge-ghost badge-sm">optional</span></td>
+                  <td>
+                    ช่องทางติดต่อเสริม — <strong>เก็บได้ (optional)</strong>, ยืนยัน
+                    DN-2 (2026-06-22)
+                  </td>
+                </tr>
+                <tr>
+                  <td>อีเมล</td>
+                  <td><span class="badge badge-ghost badge-sm">optional</span></td>
+                  <td>
+                    ช่องทางติดต่อเสริม — <strong>เก็บได้ (optional)</strong>, ยืนยัน
+                    DN-2 (2026-06-22)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="alert alert-info">
+            <span
+              ><strong>ใบอนุโมทนาบัตร / ลดหย่อนภาษี: ระบบไม่รองรับ (DN-3, 2026-06-22)</strong>
+              — ไม่มี checkbox/ฟิลด์ขอใบในฟอร์มนี้, ไม่เก็บ PII เพิ่ม (ที่อยู่/เลขผู้เสียภาษี),
+              ไม่มี flow ออกใบ</span
+            >
+          </div>
+          <h3>ส่วนที่ 2 — รายละเอียดสิ่งของบริจาค <span class="text-sm font-normal">(repeatable)</span></h3>
+          <p>แต่ละแถวรายการของบริจาค (กด "เพิ่มรายการสิ่งของ" เพื่อเพิ่มแถว):</p>
+          <ul>
+            <li><strong>หมวดหมู่</strong> (category) — เช่น Food, Medicine (pre-fill จาก need)</li>
+            <li><strong>ประเภทสิ่งของ</strong> (type) — เช่น "น้ำดื่มขวด 600ml" (pre-fill จาก need)</li>
+            <li><strong>ปริมาณ</strong> (quantity) — ตัวเลข</li>
+            <li><strong>หน่วย</strong> (unit) — เช่น ชิ้น / แพ็ค / แผง / ชุด</li>
+            <li><strong>สภาพสิ่งของ</strong> (condition) — เช่น "ของใหม่ 100%"</li>
+            <li><strong>หมายเหตุเพิ่มเติม</strong> (notes, optional) — เช่น "ข้าวกล่องมังสวิรัติ"</li>
+          </ul>
+          <ul>
+            <li>ปุ่ม <strong>"+ เพิ่มรายการสิ่งของ"</strong> — เพิ่มแถว item; ลบแถวได้ (เหลืออย่างน้อย 1)</li>
+            <li>ปุ่ม <strong>"ถัดไป: เลือกจุดส่งมอบ →"</strong> — validate (ชื่อ/เบอร์/≥1 item) แล้วไปขั้น 3</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- STEP 3 -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">3 · เวลา/สถานที่ — Logistics &amp; Queue Booking</h2>
+          <p>
+            ตอบโจทย์ข้อ 3: <strong>ระบุเวลาที่จะส่ง + ใครเป็นคนส่ง + ส่งไปที่ไหน
+            (lock จากการ์ด) + เวลาที่คาดว่าของจะถึง</strong> เพื่อให้ทีมงานที่ศูนย์
+            ติดตามได้.
+          </p>
+          <ul>
+            <li>
+              <strong>วิธีการจัดส่ง *</strong> — เลือก 1:
+              <ul>
+                <li>นำมาส่งด้วยตนเอง</li>
+                <li>ส่งผ่านขนส่งพัสดุ</li>
+                <li>ต้องการให้รถศูนย์ไปรับ (ของเยอะมาก)</li>
+              </ul>
+            </li>
+            <li>
+              <strong>ประเภทยานพาหนะที่จะนำมาส่ง *</strong> (caption: "ข้อมูลนี้
+              สำคัญมาก เพื่อให้จุดรับของกะพื้นที่จอดและเตรียมคนยกของ"): รถจักรยานยนต์
+              / รถเก๋ง-รถยนต์ / รถกระบะ / รถบรรทุก — แสดงเมื่อวิธีส่ง = ตนเอง/รถศูนย์
+            </li>
+            <li>
+              <strong>เลือกศูนย์รับบริจาค *</strong> —
+              <strong>lock จากการ์ดที่กดมาในขั้น 1</strong> (read-only) เช่น
+              "ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2) (ของยังรับได้ 60%)".
+              "ของยังรับได้ %" = donation receiving capacity (DN-4)
+            </li>
+            <li>
+              <strong>เลือกวันที่และช่วงเวลาส่งของ *</strong> — grid slot ต่อช่วง
+              เช่น 09:00-10:00 / 10:00-11:00 / 13:00-14:00 / 14:00-15:00 / 15:00-16:00.
+              แต่ละ slot แสดงสถานะ <strong>"ว่าง"</strong> หรือ
+              <strong>"คิวเต็ม (งด)"</strong> (disabled). slot ที่เลือก = นัดหมาย
+              (จองคิว). <strong>ศูนย์เป็นผู้ตั้งค่า slot เอง</strong> — ช่วงเวลา/
+              จำนวน slot/ความจุต่อ slot กำหนดโดยเจ้าหน้าที่ศูนย์ใน Donation module
+              (back-office); หน้า public อ่าน slot + ความจุที่เหลือ แล้ว disable
+              เมื่อเต็ม (DN-5, ยืนยัน 2026-06-22)
+            </li>
+          </ul>
+          <h3>"ใครเป็นคนส่ง" + "เวลาคาดว่าจะถึง" (ข้อ 3)</h3>
+          <ul>
+            <li>
+              <strong>ผู้ส่ง</strong> = ชื่อ + เบอร์ผู้บริจาคจากขั้น 2 (ผูกกับ
+              declaration เพื่อให้ศูนย์รู้ว่าใครจะมา). <strong>ผู้ส่งกรอกข้อมูล
+              ทั้งหมดเอง</strong> (DN-6, ยืนยัน 2026-06-22)
+            </li>
+            <li>
+              ถ้าวิธีส่ง = <strong>ขนส่งพัสดุ</strong> → เลข tracking ของผู้ให้
+              บริการมักได้มาทีหลัง donor จึง <strong>ยังไม่ต้องกรอกตอนนี้</strong>;
+              donor กลับมา <strong>กรอก/แก้เลข tracking ภายหลังผ่านหน้า ticket</strong>
+              (ลิงก์ <code>/donate/track/{tracking_token}</code> — ดูขั้น 4)
+            </li>
+            <li>
+              <strong>เวลาคาดว่าของจะถึง (ETA)</strong> = ช่วงเวลา slot ที่จอง
+              (นัดหมาย). ศูนย์ใช้ ETA นี้เตรียมจุดรับและติดตามว่าของถึงตามนัดหรือไม่.
+              field <code>eta</code>/<code>slot</code> ติดไปกับ declaration doc
+            </li>
+            <li>
+              ปุ่ม <strong>"กลับ"</strong> (ขั้น 2) ·
+              <strong>"ยืนยันการจองคิวบริจาค"</strong> → ยิง
+              <code>POST /public/v1/donations</code>, ได้ตั๋ว (ขั้น 4)
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- STEP 4 -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">4 · ตั๋วของฉัน — My Ticket</h2>
+          <p>
+            ตอบโจทย์ข้อ 4: <strong>ผู้บริจาคบันทึก + พิมพ์ตั๋วแปะลงของที่บริจาค</strong>
+            เพื่อให้ติดตามได้ทั้งฝั่งศูนย์และผู้บริจาค.
+          </p>
+          <ul>
+            <li>
+              การ์ดสำเร็จ (พื้นเขียว, icon โล่): <strong>"สำเร็จ! ตั๋วบริจาคของคุณ"</strong>
+              + คำแนะนำ "แสดง QR Code นี้ให้ รปภ. หรือเจ้าหน้าที่ศูนย์"
+            </li>
+            <li>
+              <strong>QR Code</strong> — encode ลิงก์ติดตาม
+              <code>/donate/track/{tracking_token}</code> (เปิด GET donations
+              endpoint); สแกนได้ทั้งฝั่งศูนย์ (ยืนยันรับของ) และ donor (ดูสถานะ)
+            </li>
+            <li>
+              <strong>BOOKING REF.</strong> เช่น <code>DN-306892</code> — รหัส
+              อ่านได้/พิมพ์ได้ (มนุษย์อ่าน) คู่กับ tracking_token (opaque)
+            </li>
+            <li>
+              สรุปนัด: <strong>ศูนย์พักพิงปลายทาง</strong> (ชื่อศูนย์),
+              <strong>เวลานัดหมาย</strong> (ช่วง slot เช่น 09:00-10:00),
+              <strong>รายการสิ่งของ</strong> (เช่น "1 รายการ")
+            </li>
+            <li>
+              ปุ่ม <strong>"นำทางด้วย Google Maps"</strong> (เปิด external map ไปศูนย์)
+            </li>
+            <li>
+              <strong>"บันทึก/พิมพ์ตั๋ว" (ข้อ 4)</strong> — ปุ่มพิมพ์/บันทึกตั๋ว
+              (print-friendly label: QR + booking ref + ศูนย์ + เวลานัด + รายการ)
+              เพื่อ <strong>แปะลงกล่อง/ถุงของบริจาค</strong>. donor แนะนำให้เก็บลิงก์
+              tracking ไว้ดูสถานะ (declared → received / expired)
+            </li>
+            <li>ลิงก์ <strong>"กลับสู่หน้าหลัก"</strong></li>
+          </ul>
+          <h3>หน้า Ticket เปิด/แก้ไขภายหลัง — <code>/donate/track/{tracking_token}</code> (DN-6)</h3>
+          <p>
+            ตั๋ว (QR/ลิงก์) เปิดซ้ำได้ตลอดด้วย <code>tracking_token</code> และ
+            <strong>แก้ไขบางฟิลด์ได้</strong> เพราะ donor มักได้ข้อมูลบางส่วนทีหลัง:
+          </p>
+          <ul>
+            <li>
+              <strong>เลข tracking ขนส่งพัสดุ</strong> — กรอก/แก้ได้ภายหลัง (กรณี
+              วิธีส่ง = ขนส่งพัสดุ) → ศูนย์เห็นเลขเพื่อติดตามพัสดุ
+            </li>
+            <li>ดูสถานะ declaration ของตน: <code>declared → received / expired</code></li>
+            <li>
+              แก้ได้เฉพาะก่อนศูนย์ mark <code>received</code>; ทุกการแก้เขียน
+              central → replicate ลง shelter db (ศูนย์เห็น update)
+            </li>
+            <li>
+              ยิง <code>PATCH /public/v1/donations/{tracking_token}</code> (auth =
+              token ในตัว); แก้ได้เฉพาะ field ที่อนุญาต (เลข tracking / หมายเหตุ),
+              <strong>ห้ามแก้</strong> ศูนย์ปลายทาง/slot/ตัว booking_ref
+            </li>
+          </ul>
+          <div class="alert alert-info">
+            <span
+              ><strong>ติดตามสองฝั่ง:</strong> declaration เขียนที่ central →
+              replicate ลง shelter db ปลายทาง — ศูนย์เห็นรายการรอรับ + เวลานัด/ETA
+              ใน Donation module; สแกน QR บนของเพื่อ mark received. donor เปิดลิงก์
+              tracking_token ดูสถานะของตนเอง (เห็นเฉพาะของตน)</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- DATA EXPOSURE -->
+      <section id="exposure" class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">5 · Data Exposure &amp; Privacy (DN tier)</h2>
+          <div class="alert alert-warning mb-2">
+            <span
+              ><strong>mockup ขยาย field ของ DN tier</strong> เกินร่างเดิมใน
+              <a href="./public-tier-flow-spec.html">public-tier-flow-spec §DN</a>
+              (เดิมเก็บ donor PII ขั้นต่ำ = ชื่อ + เบอร์). mockup เพิ่ม Line/email
+              (optional), logistics และ slot booking — tracked ใน
+              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+                >CR-005 §F</a
+              ></span
+            >
+          </div>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Surface</th>
+                  <th>Field</th>
+                  <th>สถานะ</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>รายการของที่ศูนย์ขาด (board)</td>
+                  <td><code>needs</code> aggregate ต่อ item/ศูนย์</td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OK</span>
+                    aggregate เท่านั้น — ไม่มีรายบุคคล
+                  </td>
+                </tr>
+                <tr>
+                  <td>donor: ชื่อ + เบอร์ (เก็บ, ไม่ echo)</td>
+                  <td><code>donor_name</code> / <code>phone</code> (hash index)</td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OK</span>
+                    ตาม DN เดิม; ไม่คืนเบอร์ใน response ใด ๆ
+                  </td>
+                </tr>
+                <tr>
+                  <td>donor: Line ID / email</td>
+                  <td><code>line_id</code> / <code>email</code> (optional)</td>
+                  <td>
+                    <span class="badge badge-success badge-sm">DN-2 RESOLVED</span>
+                    เก็บได้ ทั้งคู่เป็น optional (2026-06-22)
+                  </td>
+                </tr>
+                <tr>
+                  <td>donor: ใบอนุโมทนา / ลดหย่อนภาษี</td>
+                  <td>—</td>
+                  <td>
+                    <span class="badge badge-neutral badge-sm">DN-3 NOT SUPPORTED</span>
+                    ระบบไม่รองรับ — ไม่เก็บ PII ของใบ, ไม่มี flow ออกใบ (2026-06-22)
+                  </td>
+                </tr>
+                <tr>
+                  <td>logistics: วิธีส่ง / ยานพาหนะ / ETA / slot</td>
+                  <td><code>delivery_method</code> / <code>vehicle</code> / <code>eta</code> / <code>slot</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OK</span>
+                    operational; ติดกับ declaration → ศูนย์เห็นเพื่อเตรียมรับ
+                  </td>
+                </tr>
+                <tr>
+                  <td>ตั๋ว: booking ref + tracking_token</td>
+                  <td><code>booking_ref</code> / <code>tracking_token</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OK</span>
+                    token = opaque ≥128-bit; response ไม่มี <code>_id</code>/<code>_rev</code>/doc type
+                  </td>
+                </tr>
+                <tr>
+                  <td>GET donations/{token}</td>
+                  <td>สถานะ declaration ของตนเท่านั้น</td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OK</span>
+                    เห็นเฉพาะของตน (declared / received / expired)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>หลักการ (เหมือน DN tier)</h3>
+          <ul>
+            <li>เก็บ donor PII ขั้นต่ำ; index เบอร์ด้วย hash — ไม่ echo เบอร์กลับ</li>
+            <li>submit ผ่าน POST (PII ไม่ติด URL/access log)</li>
+            <li>tracking_token = opaque random ≥128-bit, ใช้ได้ตลอดไป — แสดง/แนะนำให้เก็บ</li>
+            <li>response ไม่มี field ภายใน (<code>_id</code>/<code>_rev</code>/doc type/internal id)</li>
+            <li>เขียน central → replicate ลง shelter db ปลายทาง; rate-limit + audit; ไม่ fallback edge</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- API -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">API Calls on this Page (Summary)</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>When</th>
+                  <th>Auth</th>
+                  <th>Fail behavior</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>GET /public/v1/needs</code></td>
+                  <td>เปิดขั้น 1 (board) + filter/ค้นหา</td>
+                  <td>ไม่ต้อง login</td>
+                  <td>error banner; แสดง needs ที่ cache ไว้ถ้ามี</td>
+                </tr>
+                <tr>
+                  <td><code>POST /public/v1/donations</code></td>
+                  <td>กด "ยืนยันการจองคิวบริจาค" (ขั้น 3)</td>
+                  <td>
+                    เบอร์โทร (+ OTP เฉพาะเมื่อ <code>public_otp_required</code>, DN-1)
+                  </td>
+                  <td>
+                    error banner; <code>NEED_FULL</code> → ขอเลือกรายการอื่น;
+                    <code>SLOT_FULL</code> → ขอเลือก slot ใหม่;
+                    <code>RATE_LIMITED</code> → ลองใหม่ภายหลัง
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>GET /public/v1/donations/{tracking_token}</code></td>
+                  <td>เปิดลิงก์/สแกน QR ตั๋ว (ขั้น 4 / track)</td>
+                  <td>token ในตัว</td>
+                  <td>token ไม่ถูกต้อง → empty/expired state</td>
+                </tr>
+                <tr>
+                  <td><code>PATCH /public/v1/donations/{tracking_token}</code></td>
+                  <td>กรอก/แก้เลข tracking ขนส่งพัสดุภายหลัง (DN-6)</td>
+                  <td>token ในตัว</td>
+                  <td>
+                    แก้ field ที่อนุญาตเท่านั้น; ถ้า <code>received</code> แล้ว →
+                    <code>409 LOCKED</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>POST /public/v1/otp/request</code> ·
+                    <code>/otp/verify</code>
+                  </td>
+                  <td>เฉพาะเมื่อ <code>public_otp_required</code> เปิด</td>
+                  <td>—</td>
+                  <td>OTP ผิด/หมดเวลา → ขอใหม่</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code>POST /public/v1/donations
+Body  : { donor: { name, phone, line_id?, email? },
+          shelter_id,                       // lock จากการ์ด (ขั้น 1)
+          items: [ { category, type, quantity, unit, condition, notes? } ],
+          logistics: { delivery_method, vehicle?, slot, eta } }
+Resp  : { booking_ref: "DN-306892", tracking_token: "<opaque>",
+          shelter_name, slot, item_count, status: "declared" }
+Error : { "error": { "code": "NEED_FULL" | "SLOT_FULL" | "RATE_LIMITED", "message": "..." } }  // no PII
+
+PATCH /public/v1/donations/{tracking_token}        // DN-6 — แก้ภายหลังผ่าน ticket
+Body  : { courier_tracking_no?, note? }            // เฉพาะ field ที่อนุญาต
+Resp  : { booking_ref, status, courier_tracking_no, updated_at }
+Error : { "error": { "code": "LOCKED" } }          // ถ้า status = received แล้ว</code></pre>
+          <h3>Donation doc shape (DN-7, ยืนยัน 2026-06-22)</h3>
+          <p>
+            <strong>Field-level canonical = </strong>
+            <a href="../data/schema.md">docs/data/schema.md</a> §2.3
+            <code>donation</code> (<strong>schema_v 2</strong>) + §2.13
+            <code>donation_slot</code> (slot ที่ศูนย์ตั้งค่า, DN-5). doc
+            <code>type:"donation"</code> เดิมถูก <strong>extend</strong> (ไม่ใช่
+            doc ใหม่) — เพิ่ม <code>logistics</code>, <code>booking_ref</code>,
+            <code>donor.line_id/email</code>, <code>items[].category/condition/note</code>.
+            เขียนที่ shelter db (public flow
+            ผ่าน central → replicate). response สาธารณะ project เฉพาะ field ที่อนุญาต
+            (ไม่ส่ง <code>_id</code>/<code>_rev</code>/<code>phone</code>/<code>phone_hash</code>/<code>tracking_token_hash</code>):
+          </p>
+          <pre><code>{
+  "_id": "donation:&lt;ulid&gt;",  "type": "donation",  "schema_v": 2,
+  "shelter_code": "SH001",                // envelope — ศูนย์ปลายทาง (lock จากการ์ด)
+  "channel": "public",
+  "booking_ref": "DN-306892",             // sys, human-readable, unique — พิมพ์บนตั๋ว
+  "tracking_token_hash": "&lt;sha256&gt;",     // sys — เก็บ hash; token จริงโชว์ donor ครั้งเดียว
+  "donor": { "name": "...", "phone_hash": "...",   // ไม่ echo phone/hash สู่ public
+             "line_id": null, "email": null },     // optional (DN-2)
+  "kind": "items",
+  "items": [
+    { "free_text": "น้ำดื่มขวด 600ml", "category": "water",
+      "qty": 1, "unit": "ชิ้น", "condition": "ของใหม่ 100%", "note": null }
+  ],
+  "logistics": {                          // req เมื่อ channel=public
+    "delivery_method": "self_dropoff",    // self_dropoff | parcel | shelter_pickup
+    "vehicle": "car",                     // เฉพาะ self_dropoff/shelter_pickup
+    "slot": { "date": "2026-06-22", "from": "09:00", "to": "10:00" },  // → donation_slot
+    "eta": "2026-06-22T09:00:00+07:00",   // = ต้น slot ที่จอง
+    "courier_tracking_no": null           // DN-6 — donor เติมภายหลังผ่าน PATCH
+  },
+  "status": "declared",                   // declared → received | expired | cancelled
+  "declared_at": "...", "expires_at": "..."
+}</code></pre>
+          <p>
+            เขียน central-only ตาม
+            <a href="./public-tier-flow-spec.html">public-tier trust boundary</a>;
+            declaration replicate ลง shelter db ปลายทาง. รายละเอียด field + index +
+            migration (schema_v 1→2) ดู
+            <a href="../data/schema.md">schema.md §2.3</a>. ใบอนุโมทนา (DN-3)
+            ระบบไม่รองรับ — ไม่มี field ใน doc.
+          </p>
+        </div>
+      </section>
+
+      <!-- STATES -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Page States</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>State</th>
+                  <th>What changes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Board loading</td>
+                  <td>skeleton การ์ดศูนย์; ค้นหา/filter ปิดชั่วคราว</td>
+                </tr>
+                <tr>
+                  <td>Board empty / ไม่มีของขาด</td>
+                  <td>empty state "ขณะนี้ทุกศูนย์ยังไม่มีรายการขาดแคลนเร่งด่วน"</td>
+                </tr>
+                <tr>
+                  <td>เลือก need ที่ "งดรับ/ล้นสต็อก"</td>
+                  <td>กดเลือกไม่ได้ (disabled) + tooltip "ศูนย์งดรับชั่วคราว" — เกณฑ์ auto: <code>needs_open ≤ 0</code> (รับครบ/เกิน <code>qty_target</code> ของ campaign รอบนี้) (DN-4)</td>
+                </tr>
+                <tr>
+                  <td>Form validation</td>
+                  <td>ชื่อ/เบอร์ว่าง หรือไม่มี item → inline error ก่อนไปขั้นถัดไป</td>
+                </tr>
+                <tr>
+                  <td>Need เต็มพอดีตอน submit</td>
+                  <td>race: เห็นยังรับได้ตอนกด แต่ submit แล้ว <code>needs_open ≤ 0</code> พอดี → <code>NEED_FULL</code> ขอเลือกรายการอื่น (มิเรอร์ <code>SLOT_FULL</code>) (DN-4)</td>
+                </tr>
+                <tr>
+                  <td>Slot เต็ม</td>
+                  <td>slot disabled "คิวเต็ม (งด)"; submit แล้วเต็มพอดี → <code>SLOT_FULL</code> ขอเลือกใหม่</td>
+                </tr>
+                <tr>
+                  <td>Submitting</td>
+                  <td>ปุ่มยืนยัน loading; กันกดซ้ำ (idempotent ต่อ token)</td>
+                </tr>
+                <tr>
+                  <td>ตั๋วสำเร็จ</td>
+                  <td>ขั้น 4: QR + booking ref + สรุปนัด + ปุ่มพิมพ์/นำทาง</td>
+                </tr>
+                <tr>
+                  <td>เปิดตั๋วภายหลัง (track)</td>
+                  <td>
+                    <code>/donate/track/{token}</code>: สถานะ declaration + ฟอร์มแก้
+                    เลข tracking ขนส่ง (DN-6); ถ้า <code>received</code> แล้ว → read-only
+                  </td>
+                </tr>
+                <tr>
+                  <td>OTP required</td>
+                  <td>เฉพาะเมื่อ flag เปิด: ขั้น OTP ก่อนยืนยัน (DN-1)</td>
+                </tr>
+                <tr>
+                  <td>Rate limited</td>
+                  <td>banner เตือน + ปิดปุ่มยืนยันชั่วคราว</td>
+                </tr>
+                <tr>
+                  <td>API offline (central ล่ม)</td>
+                  <td>error banner "ระบบบริจาคไม่พร้อมใช้งานชั่วคราว"; ไม่ fallback edge</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACCESSIBILITY -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Accessibility &amp; Performance Requirements</h2>
+          <ul>
+            <li><strong>WCAG 2.1 AA</strong> — contrast ≥ 4.5:1; stepper, urgency badge, slot state อ่านได้</li>
+            <li>stepper ใช้ <code>aria-current="step"</code>; slot/urgency ไม่สื่อด้วยสีอย่างเดียว — มี icon + ข้อความ</li>
+            <li>ฟอร์มทุก input มี <code>&lt;label&gt;</code>/<code>aria-label</code>; error ผูก <code>aria-describedby</code></li>
+            <li>ตั๋ว: QR มี <code>alt</code>/ข้อความ booking ref สำรอง; print label พิมพ์ได้คมชัด (ขาวดำ)</li>
+            <li>LCP ≤ 2.5 s บน 3G; board fetch แยกจาก paint ของ shell</li>
+            <li>ภาษาไทย: <code>lang="th"</code> บน root เมื่อ locale = TH</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- UAT -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">UAT Checklist</h2>
+          <ul>
+            <li>☐ เปิด <code>/donate</code> โดยไม่ login → เห็น board ความต้องการด่วนทุกศูนย์</li>
+            <li>☐ ค้นหา/filter category → รายการ need กรองถูกต้อง</li>
+            <li>☐ item "งดรับ/ล้นสต็อก" แสดงเทาจาง + กดเลือกไม่ได้</li>
+            <li>☐ กด "จองคิวบริจาค" จากการ์ด → ขั้น 2 lock ศูนย์ + pre-fill หมวดหมู่/ประเภทจาก need</li>
+            <li>☐ ฟอร์ม: ชื่อ + เบอร์ required; Line/email optional; ไม่มี checkbox ใบอนุโมทนา (DN-3 ไม่รองรับ)</li>
+            <li>☐ เพิ่ม/ลบรายการสิ่งของ (≥1) → "ถัดไป" validate ผ่าน</li>
+            <li>☐ ขั้น 3: เลือกวิธีส่ง + ยานพาหนะ; ศูนย์ปลายทาง read-only (lock จากการ์ด)</li>
+            <li>☐ เลือก slot "ว่าง" ได้; slot "คิวเต็ม" disabled</li>
+            <li>☐ ยืนยัน → ได้ตั๋ว: QR + booking ref (DN-xxxxxx) + ศูนย์ + เวลานัด + จำนวนรายการ</li>
+            <li>☐ พิมพ์/บันทึกตั๋ว → label มี QR + booking ref แปะลงของได้</li>
+            <li>☐ สแกน/เปิดลิงก์ tracking_token → เห็นสถานะ declaration ของตน (declared)</li>
+            <li>☐ response <strong>ไม่มี</strong> เบอร์โทร donor / <code>_id</code>/<code>_rev</code></li>
+            <li>☐ declaration ปรากฏที่ศูนย์ปลายทาง (replicate) พร้อมเวลานัด/ETA</li>
+            <li>☐ submit ตอน need เต็มพอดี (<code>needs_open ≤ 0</code>) → <code>NEED_FULL</code> ขอเลือกรายการอื่น</li>
+            <li>☐ submit ตอน slot เต็มพอดี → <code>SLOT_FULL</code> ขอเลือกใหม่</li>
+            <li>☐ "นำทางด้วย Google Maps" เปิดพิกัดศูนย์ถูกต้อง</li>
+            <li>☐ Toggle EN → ทุก label/สถานะเปลี่ยนเป็น English</li>
+            <li>☐ Mobile 375px → board, ฟอร์ม, slot grid, ตั๋ว อ่าน/กดได้</li>
+            <li>☐ ตัด central → บริจาคไม่ได้ตอบ error ที่ควบคุมได้ (ไม่ fallback edge)</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- OPEN POINTS -->
+      <section id="open" class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Open Points</h2>
+          <p class="text-sm">
+            4 ข้อความต้องการของเจ้าของ (เห็น needs · กรอกจากการ์ด · ระบุเวลา/คนส่ง/
+            ปลายทาง lock/ETA · บันทึก+พิมพ์ตั๋วแปะของ) = <strong>scope ที่ยืนยันแล้ว</strong>
+            ของหน้านี้. <strong>DN-2 / DN-3 / DN-4 / DN-5 / DN-6 / DN-7 เคาะแล้ว (2026-06-22)</strong>;
+            <strong>DN-1 ติดไว้ก่อน</strong> (develop แบบไม่มี OTP, รอยืนยันรอบสอง).
+          </p>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>คำถาม</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>DN-1</td>
+                  <td>ต้องยืนยันเบอร์ด้วย OTP ตอน submit หรือไม่ (mockup เขียน "สำหรับส่ง SMS ยืนยัน")?</td>
+                  <td><span class="badge badge-warning">ON HOLD</span> — <strong>ติดไว้ก่อน: develop แบบไม่มี OTP ไปก่อน</strong> (flag <code>public_otp_required</code> = off), รอเจ้าของยืนยันรอบสอง (2026-06-22)</td>
+                </tr>
+                <tr>
+                  <td>DN-2</td>
+                  <td>เก็บ Line ID / email (donor PII เกินร่างเดิม)?</td>
+                  <td><span class="badge badge-success">RESOLVED</span> — <strong>เก็บได้ ทั้งคู่เป็น optional</strong> (เจ้าของ 2026-06-22)</td>
+                </tr>
+                <tr>
+                  <td>DN-3</td>
+                  <td>ใบอนุโมทนาบัตร/ลดหย่อนภาษี — เก็บ PII อะไรเพิ่ม (ที่อยู่/เลขผู้เสียภาษี) + ใครออกใบ?</td>
+                  <td><span class="badge badge-success">RESOLVED</span> — <strong>ระบบไม่รองรับเรื่องนี้</strong> (เจ้าของ 2026-06-22); ตัด checkbox/field/flow ออกใบทั้งหมด</td>
+                </tr>
+                <tr>
+                  <td>DN-4</td>
+                  <td>"ขาด N" / "ล้นสต็อก %" / "ของยังรับได้ %" คำนวณจาก field ไหน + เกณฑ์ "งดรับ"?</td>
+                  <td><span class="badge badge-success">RESOLVED</span> — <strong><code>qty_target</code> ของ campaign คือ cap ต่อรอบ</strong> (เจ้าของ 2026-06-22). ใช้ view <code>needs_open</code> (<a href="../data/schema.md">schema.md §2.4</a>) ที่มีอยู่แล้ว — ไม่เพิ่ม field: <code>needs_open = qty_target − Σ donation(declared+received)</code>; <code>"ขาด N" = max(0, needs_open)</code>; <code>"ล้น %" = Σ/qty_target×100</code>; เกณฑ์ "งดรับ" = <code>needs_open ≤ 0</code> → public กดไม่ได้ ต้องไปรายการถัดไป. กัน race ตอน submit ด้วย <code>NEED_FULL</code> (มิเรอร์ <code>SLOT_FULL</code>)</td>
+                </tr>
+                <tr>
+                  <td>DN-5</td>
+                  <td>กติกา slot/คิว: จำนวน slot, ความจุต่อ slot, ใครตั้งค่า, reservation หมดอายุ?</td>
+                  <td><span class="badge badge-success">RESOLVED</span> — <strong>ศูนย์ตั้งค่า slot เองใน Donation module</strong> (เจ้าของ 2026-06-22); หน้า public อ่าน slot + ความจุที่เหลือ</td>
+                </tr>
+                <tr>
+                  <td>DN-6</td>
+                  <td>กรณีส่งผ่านขนส่งพัสดุ — เก็บเลข tracking ผู้ให้บริการยังไง?</td>
+                  <td><span class="badge badge-success">RESOLVED</span> — <strong>donor กรอกเองทั้งหมด + แก้ภายหลังผ่านหน้า ticket</strong> (<code>PATCH /donations/{token}</code>) เพราะเลข tracking ได้มาทีหลัง (เจ้าของ 2026-06-22)</td>
+                </tr>
+                <tr>
+                  <td>DN-7</td>
+                  <td>donation doc shape (donor/items/logistics/slot) + schema_v</td>
+                  <td><span class="badge badge-success">RESOLVED</span> — <strong>extend <code>donation</code> ใน <a href="../data/schema.md">schema.md §2.3</a> เป็น schema_v 2</strong> (logistics/booking_ref/line_id/email/items+) + เพิ่ม <code>donation_slot</code> §2.13 (DN-5); migration 1→2 (field ใหม่ optional)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="alert alert-info mt-2">
+            <span
+              >หน้านี้ tracked ใน
+              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+                >CR-005 §F</a
+              >. การขยาย DN surface ที่เคาะแล้ว (DN-2 Line/email optional, DN-5
+              shelter-configured slots, DN-6 donor-edited tracking, DN-7 donation
+              doc shape, DN-3 ใบอนุโมทนาไม่รองรับ) reflect ใน
+              <a href="./public-tier-flow-spec.html">public-tier-flow-spec §DN</a>;
+              DN-1 (OTP) ติดไว้ก่อน — develop แบบไม่มี OTP</span
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
