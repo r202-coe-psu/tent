@@ -1,15 +1,28 @@
-from fastapi import status
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from typing import Union
 
-async def http422_error_handler(request, exc: RequestValidationError) -> JSONResponse:
-    errors = []
-    for error in exc.errors():
-        errors.append({
-            "field": ".".join([str(loc) for loc in error["loc"][1:]]) if len(error["loc"]) > 1 else str(error["loc"][0]),
-            "message": error["msg"]
-        })
+from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.constants import REF_PREFIX
+from fastapi.openapi.utils import validation_error_response_definition
+from pydantic import ValidationError
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
+
+
+async def http422_error_handler(
+    _: Request,
+    exc: Union[RequestValidationError, ValidationError],
+) -> JSONResponse:
     return JSONResponse(
-        {"error": {"code": "VALIDATION_ERROR", "message": "Validation failed", "details": errors}},
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        {"errors": exc.errors()},
+        status_code=HTTP_422_UNPROCESSABLE_ENTITY,
     )
+
+
+validation_error_response_definition["properties"] = {
+    "errors": {
+        "title": "Errors",
+        "type": "array",
+        "items": {"$ref": "{0}ValidationError".format(REF_PREFIX)},
+    },
+}

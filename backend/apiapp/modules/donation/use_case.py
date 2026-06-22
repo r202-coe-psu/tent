@@ -3,12 +3,10 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Optional
 from .schemas import DonationPreDeclarationInput, DonationResponse, DonationDetailResponse
-from ...infrastructure.database import db_helper
+from .model import Donation
 from ...core.exceptions import NotFoundError, ValidationError
 
 class DonationUseCase:
-    collection_name = "donations"
-
     def _get_sha256_hash(self, value: str) -> str:
         return hashlib.sha256(value.encode('utf-8')).hexdigest()
 
@@ -20,45 +18,52 @@ class DonationUseCase:
 
         tracking_token = f"TX-DON-{str(uuid.uuid4())[:8].upper()}"
         tracking_token_hash = self._get_sha256_hash(tracking_token)
+        booking_ref = f"DN-{str(uuid.uuid4())[:6].upper()}"
 
         now = datetime.utcnow()
         expires_at = now + timedelta(hours=72)
 
-        doc = {
-            "tracking_token": tracking_token,
-            "tracking_token_hash": tracking_token_hash,
-            "shelter_code": payload.shelter_code,
-            "donor": payload.donor.model_dump(),
-            "items_declared": [item.model_dump() for item in payload.items_declared],
-            "status": "declared",
-            "created_at": now.isoformat() + "Z",
-            "expires_at": expires_at.isoformat() + "Z",
-            "synced_to_couch": False
-        }
+        doc = Donation(
+            tracking_token=tracking_token,
+            tracking_token_hash=tracking_token_hash,
+            booking_ref=booking_ref,
+            shelter_code=payload.shelter_code,
+            donor=payload.donor,
+            items_declared=payload.items_declared,
+            logistics=payload.logistics,
+            status="declared",
+            channel="public",
+            created_at=now,
+            expires_at=expires_at,
+            synced_to_couch=False
+        )
 
-        await db_helper.db[self.collection_name].insert_one(doc)
+        await doc.insert()
 
         return {
             "success": True,
             "trackingToken": tracking_token,
+            "booking_ref": booking_ref,
             "as_of": now
         }
 
     async def get_donation_by_token(self, tracking_token: str) -> dict:
         token_hash = self._get_sha256_hash(tracking_token)
-        doc = await db_helper.db[self.collection_name].find_one({"tracking_token_hash": token_hash})
+        doc = await Donation.find_one(Donation.tracking_token_hash == token_hash)
         if not doc:
             raise NotFoundError("Donation record not found")
 
         return {
             "success": True,
             "donation": {
-                "status": doc["status"],
-                "shelter_code": doc["shelter_code"],
-                "items_declared": doc["items_declared"],
-                "received_summary": doc.get("received_summary"),
-                "created_at": doc["created_at"],
-                "expires_at": doc["expires_at"]
+                "status": doc.status,
+                "shelter_code": doc.shelter_code,
+                "booking_ref": doc.booking_ref,
+                "items_declared": [item.model_dump() for item in doc.items_declared],
+                "logistics": doc.logistics.model_dump() if doc.logistics else None,
+                "received_summary": doc.received_summary,
+                "created_at": doc.created_at.isoformat() + "Z",
+                "expires_at": doc.expires_at.isoformat() + "Z"
             }
         }
 
