@@ -54,12 +54,6 @@ export const POST = async ({ request, getClientAddress }) => {
 			},
 			items_declared: parsed.data.items_declared
 		});
-
-		console.log('\n--- 📂 [Real MongoDB State: New Donation Created] ---');
-		console.log(`Document ID: ${saved._id}`);
-		console.log(`Tracking Token: ${saved.tracking_token}`);
-		console.log('-----------------------------------------------------\n');
-
 		return json({ 
 			success: true, 
 			trackingToken,

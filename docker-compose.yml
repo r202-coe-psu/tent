@@ -32,5 +32,22 @@ services:
           -d '{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"$${COUCHDB_USER}\",\"password\":\"$${COUCHDB_PASSWORD}\",\"port\":5984}'
       "
 
+  mongodb:
+    image: mongo:8
+    container_name: tent-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - ../deployment/tent/mongodb/data/db:/data/db
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    networks:
+      - default
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   default:
+

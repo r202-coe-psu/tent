@@ -6,13 +6,14 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import { toast } from 'svelte-sonner';
 	import { donationStore } from '../donation.svelte';
 
 	let validationErrors = $state<string[]>([]);
 
 	function handleNext() {
 		validationErrors = [];
-		
+
 		// 1. Validate donor name
 		if (!donationStore.donorName.trim()) {
 			validationErrors.push('กรุณาระบุชื่อ-นามสกุล / นามแฝง / องค์กร');
@@ -23,12 +24,14 @@
 		if (!donationStore.donorPhone.trim()) {
 			validationErrors.push('กรุณาระบุเบอร์โทรศัพท์มือถือ');
 		} else if (!phoneRegex.test(donationStore.donorPhone.trim())) {
-			validationErrors.push('กรุณาระบุเบอร์โทรศัพท์มือถือให้ถูกต้อง (รูปแบบ 10 หลัก ขึ้นต้นด้วย 0)');
+			validationErrors.push(
+				'กรุณาระบุเบอร์โทรศัพท์มือถือให้ถูกต้อง (รูปแบบ 10 หลัก ขึ้นต้นด้วย 0)'
+			);
 		}
 
 		// 3. Validate items
 		if (donationStore.items.length === 0) {
-			validationErrors.push('กรุณาเพิ่มรายการสิ่งของบริจาคอย่างน้อย 1 รายาร');
+			validationErrors.push('กรุณาเพิ่มรายการสิ่งของบริจาคอย่างน้อย 1 รายการ');
 		} else {
 			donationStore.items.forEach((item, index) => {
 				if (!item.name.trim()) {
@@ -46,15 +49,19 @@
 		if (validationErrors.length === 0) {
 			donationStore.activeTab = 'time';
 			if (donationStore.reachedStep < 3) donationStore.reachedStep = 3;
+		} else {
+			toast.error('กรุณากรอกข้อมูลให้ถูกต้องครบถ้วน');
 		}
 	}
 </script>
 
-<div class="rounded-3xl border border-border bg-card p-6 md:p-8 shadow-xs">
+<div class="rounded-3xl border border-border bg-card p-6 shadow-xs md:p-8">
 	<!-- ส่วนที่ 1: ข้อมูลผู้บริจาค -->
 	<div class="mb-8">
 		<div class="mb-6 flex items-center gap-2.5 border-b border-border/55 pb-3">
-			<div class="flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+			<div
+				class="flex h-7 w-7 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-blue-600"
+			>
 				<User class="h-4 w-4" />
 			</div>
 			<div>
@@ -68,8 +75,8 @@
 				<Label class="block text-xs font-bold text-foreground" for="donor-name">
 					ชื่อ-นามสกุล / นามแฝง / องค์กร <span class="text-danger">*</span>
 				</Label>
-				<Input 
-					type="text" 
+				<Input
+					type="text"
 					id="donor-name"
 					bind:value={donationStore.donorName}
 					placeholder="เช่น บจก. ใจดี หรือ นางสาว รักดี"
@@ -81,8 +88,8 @@
 				<Label class="block text-xs font-bold text-foreground" for="donor-phone">
 					เบอร์โทรศัพท์มือถือ <span class="text-danger">*</span>
 				</Label>
-				<Input 
-					type="text" 
+				<Input
+					type="text"
 					id="donor-phone"
 					bind:value={donationStore.donorPhone}
 					placeholder="สำหรับส่ง SMS ยืนยัน"
@@ -94,8 +101,8 @@
 				<Label class="block text-xs font-bold text-foreground" for="donor-line">
 					Line ID (ไม่บังคับ)
 				</Label>
-				<Input 
-					type="text" 
+				<Input
+					type="text"
 					id="donor-line"
 					bind:value={donationStore.donorLine}
 					placeholder=""
@@ -107,8 +114,8 @@
 				<Label class="block text-xs font-bold text-foreground" for="donor-email">
 					อีเมล (ไม่บังคับ)
 				</Label>
-				<Input 
-					type="email" 
+				<Input
+					type="email"
 					id="donor-email"
 					bind:value={donationStore.donorEmail}
 					placeholder=""
@@ -117,19 +124,22 @@
 			</div>
 		</div>
 
-		<div class="mt-4 flex items-center gap-3 cursor-pointer rounded-xl bg-muted/30 border border-border/40 p-4 select-none">
-			<Checkbox 
-				id="tax-receipt" 
-				bind:checked={donationStore.taxReceipt}
-			/>
-			<Label for="tax-receipt" class="text-xs font-bold text-foreground cursor-pointer">ต้องการใบอนุโมทนาบัตร / ลดหย่อนภาษี</Label>
+		<div
+			class="mt-4 flex cursor-pointer items-center gap-3 rounded-xl border border-border/40 bg-muted/30 p-4 select-none"
+		>
+			<Checkbox id="tax-receipt" bind:checked={donationStore.taxReceipt} />
+			<Label for="tax-receipt" class="cursor-pointer text-xs font-bold text-foreground"
+				>ต้องการใบอนุโมทนาบัตร / ลดหย่อนภาษี</Label
+			>
 		</div>
 	</div>
 
 	<!-- ส่วนที่ 2: รายละเอียดสิ่งของบริจาค -->
 	<div class="mb-8">
 		<div class="mb-6 flex items-center gap-2.5 border-b border-border/55 pb-3">
-			<div class="flex h-7 w-7 items-center justify-center rounded-full bg-amber-50 text-amber-600 border border-amber-100">
+			<div
+				class="flex h-7 w-7 items-center justify-center rounded-full border border-amber-100 bg-amber-50 text-amber-600"
+			>
 				<Box class="h-4 w-4" />
 			</div>
 			<div>
@@ -139,30 +149,25 @@
 		</div>
 
 		{#if donationStore.items.length > 0}
-			<div class="flex flex-col gap-3 mb-4">
+			<div class="mb-4 flex flex-col gap-3">
 				{#each donationStore.items as item, index}
-					<div class="flex items-center gap-2.5 rounded-xl border border-border p-3 bg-muted/10">
-						<Input 
-							type="text" 
+					<div class="flex items-center gap-2.5 rounded-xl border border-border bg-muted/10 p-3">
+						<Input
+							type="text"
 							placeholder="เช่น ข้าวสาร, แพมเพิสเด็ก"
 							bind:value={item.name}
 							class="flex-1"
 						/>
-						<Input 
-							type="number" 
-							placeholder="จำนวน"
-							bind:value={item.amount}
-							class="w-20"
-						/>
-						<Input 
-							type="text" 
+						<Input type="number" placeholder="จำนวน" bind:value={item.amount} class="w-20" />
+						<Input
+							type="text"
 							placeholder="หน่วย เช่น แพ็ค, ชิ้น"
 							bind:value={item.unit}
 							class="w-24"
 						/>
-						<button 
+						<button
 							onclick={() => donationStore.removeItem(index)}
-							class="text-xs text-danger font-bold hover:underline px-2"
+							class="px-2 text-xs font-bold text-danger hover:underline"
 						>
 							ลบ
 						</button>
@@ -171,9 +176,9 @@
 			</div>
 		{/if}
 
-		<button 
+		<button
 			onclick={() => donationStore.addItem()}
-			class="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border hover:bg-muted/30 py-3 text-xs font-bold text-primary transition-colors cursor-pointer"
+			class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-3 text-xs font-bold text-primary transition-colors hover:bg-muted/30"
 		>
 			<Plus class="h-4 w-4" />
 			เพิ่มรายการสิ่งของ
@@ -187,7 +192,7 @@
 				<AlertCircle class="h-4 w-4" />
 				พบข้อมูลไม่ถูกต้อง:
 			</div>
-			<ul class="list-disc pl-5 space-y-1">
+			<ul class="list-disc space-y-1 pl-5">
 				{#each validationErrors as err}
 					<li>{err}</li>
 				{/each}
@@ -196,12 +201,11 @@
 	{/if}
 
 	<!-- Form Submit / Next Button -->
-	<button 
+	<button
 		onclick={handleNext}
-		class="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-xs font-bold text-white transition-colors cursor-pointer bg-primary hover:bg-primary-dark"
+		class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-xs font-bold text-white transition-colors hover:bg-primary-dark"
 	>
 		ถัดไป: เลือกจุดส่งมอบ
 		<span>→</span>
 	</button>
 </div>
-
