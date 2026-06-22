@@ -1,0 +1,1206 @@
+<!doctype html>
+<html lang="en" data-theme="lofi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Public Portal — Landing Page Flow Spec</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+      body {
+        background: #f6fbf8;
+      }
+      .shell {
+        max-width: 1380px;
+        margin: 0 auto;
+        padding: 1rem;
+      }
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        body {
+          background: #fff;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="navbar bg-base-100 border-b border-base-300">
+      <div class="flex-1">
+        <div>
+          <p class="text-xs uppercase text-base-content/60">
+            Feature Flow Spec
+          </p>
+          <h1 class="text-xl font-semibold">
+            Public Portal — Landing Page (ระบบข้อมูลสาธารณะ)
+          </h1>
+        </div>
+      </div>
+      <div class="flex-none gap-2 no-print">
+        <a class="btn btn-sm btn-outline" href="./index.html">Back</a>
+        <span class="badge badge-warning">Draft v0.3</span>
+        <span class="badge badge-outline">2026-06-22</span>
+      </div>
+    </header>
+    <main class="shell space-y-4">
+      <!-- SUMMARY -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Summary</h2>
+          <p>
+            หน้า Landing Page ของ <strong>Public Portal</strong> —
+            จุดเข้าถึงระบบสาธารณะโดยไม่ต้อง login สำหรับประชาชนทั่วไป,
+            ญาติผู้ประสบภัย, ผู้บริจาค และอาสาสมัคร ทำหน้าที่เป็น single entry
+            point ที่รวม: <strong>search hero พร้อม real-time metrics</strong>,
+            ประกาศฉุกเฉิน, ทางลัดบริการด่วน, FAQ และช่องทางติดต่อฉุกเฉิน
+          </p>
+          <div class="alert alert-info">
+            <span
+              >หน้านี้เป็น <strong>Public / No-Login Tier</strong> —
+              ต้องไม่มีข้อมูลส่วนบุคคลใด ๆ ปรากฏ. ข้อมูลที่แสดงเป็น
+              aggregate/static เท่านั้น. รายละเอียด trust boundary ดูที่
+              <a href="./public-tier-flow-spec.html"
+                >Public Tier Flow Spec</a
+              ></span
+            >
+          </div>
+          <div class="alert alert-warning">
+            <span
+              >ออกแบบให้ใช้งานได้บนมือถือในสภาวะ network ไม่เสถียร — load เร็ว,
+              ไม่พึ่ง JS สำหรับ content หลัก, รองรับ TH/EN (EN toggle)</span
+            >
+          </div>
+          <div class="alert">
+            <span class="text-sm"
+              ><strong>v0.2 (2026-06-21):</strong> ปรับตาม mockup รอบใหม่ — (1)
+              <strong>สลับลำดับ</strong> ให้ Search Hero อยู่บนสุด, Alert Banner
+              ย้ายลงมาใต้ hero; (2) เพิ่ม
+              <strong>Real-Time Metrics panel</strong> ใน hero; (3) quick
+              service cards เพิ่ม badge; (4) ปรับ copy ของ help center /
+              emergency contacts เป็นโทน EOC</span
+            >
+          </div>
+          <div class="alert alert-success">
+            <span class="text-sm"
+              ><strong>v0.3 (2026-06-22) — decisions เคาะแล้ว:</strong> (1)
+              <strong
+                >ปิด (disable) ส่วน Transparency และ Volunteer ไว้ก่อน</strong
+              >
+              — nav links + volunteer quick-service card + volunteer metric; (2)
+              FAQ เป็น dynamic ต้องมี setup ใน EOC (OP-1); (3) LINE OA / FB URL
+              เป็น setup ใน EOC ไม่แสดงผลตอนนี้ (OP-2); (4) alert level 4 บน
+              mobile = sticky top (OP-4); (5) ลิงก์แผนที่ = internal
+              <code>/shelters</code> (OP-5); (6) metric "ผู้ประสบภัยปลอดภัย" =
+              occupancy รวม —
+              <strong>approved ให้แสดงต่อ public ได้</strong> (OP-6,
+              2026-06-22); (7) metrics polling = ทุก 10 นาที, stale-data
+              threshold = 30 นาที (OP-7)</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- SCOPE -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Scope &amp; Route</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Route</td>
+                  <td>
+                    <code>/</code> (root / หน้าแรก) หรือ <code>/public</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Auth requirement</td>
+                  <td>ไม่ต้อง login (anonymous)</td>
+                </tr>
+                <tr>
+                  <td>Data tier</td>
+                  <td>
+                    อ่าน aggregate-only จาก Public API Service (central
+                    เท่านั้น) — ดู public-tier-flow-spec
+                  </td>
+                </tr>
+                <tr>
+                  <td>Language</td>
+                  <td>ภาษาไทย default + toggle EN</td>
+                </tr>
+                <tr>
+                  <td>i18n key namespace</td>
+                  <td><code>public.landing</code></td>
+                </tr>
+                <tr>
+                  <td>Render strategy</td>
+                  <td>
+                    SSR / pre-rendered static shell + client hydration สำหรับ
+                    live data (metrics, alert banner, capacity)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Phase</td>
+                  <td>R3 — MVP Public Portal</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- LAYOUT OVERVIEW -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Layout Overview (top → bottom)</h2>
+          <ol>
+            <li>
+              <strong>Global Navigation Bar</strong> — logo, nav links, language
+              toggle
+            </li>
+            <li>
+              <strong>Search Hero + Real-Time Metrics</strong> — dark gradient
+              hero card: ซ้าย = search ญาติ, ขวา = real-time metrics panel
+            </li>
+            <li>
+              <strong>Emergency Alert Banner</strong> — แสดงเฉพาะเมื่อมี active
+              alert level ≥ 1; ซ่อนเมื่อไม่มี
+            </li>
+            <li>
+              <strong>Quick Services Grid</strong> — 3 card ที่ active (ผู้ประสบภัย
+              / บริจาค / ค้นหาญาติ; volunteer disabled v0.3) แต่ละ card มี badge
+            </li>
+            <li>
+              <strong>Help Center + Emergency Contacts</strong> — 2 col desktop
+              (FAQ ซ้าย, hotline ขวา); stack mobile
+            </li>
+            <li><strong>Footer</strong> — เครดิตระบบ</li>
+          </ol>
+          <div class="alert alert-info">
+            <span
+              ><strong>เปลี่ยนจาก v0.1:</strong> เดิม alert banner
+              อยู่บนสุดเหนือ search hero — รอบนี้ search hero เป็น hero บนสุด
+              แล้ว alert banner อยู่ใต้ลงมา</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 1: NAVBAR -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">1 · Global Navigation Bar</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Element</th>
+                  <th>Label (TH)</th>
+                  <th>Target</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Logo/Brand</td>
+                  <td>Smart Shelter<br /><small>ระบบข้อมูลสาธารณะ</small></td>
+                  <td><code>/</code></td>
+                  <td>Icon + wordmark; subtitle แสดงบน desktop เท่านั้น</td>
+                </tr>
+                <tr>
+                  <td>Active tab indicator</td>
+                  <td>หน้าแรก</td>
+                  <td><code>/</code></td>
+                  <td>Highlight สีต่างจากรายการอื่น</td>
+                </tr>
+                <tr>
+                  <td>Nav link 1</td>
+                  <td>ตรวจสอบศูนย์พักพิง</td>
+                  <td><code>/shelters</code></td>
+                  <td>รายชื่อและ capacity ศูนย์</td>
+                </tr>
+                <tr>
+                  <td>Nav link 2</td>
+                  <td>สืบค้นญาติ</td>
+                  <td><code>/search</code></td>
+                  <td>หน้า FAM search แบบเต็ม</td>
+                </tr>
+                <tr>
+                  <td>Nav link 3</td>
+                  <td>บริจาคและจองคิว</td>
+                  <td><code>/donate</code></td>
+                  <td>DN tier — pre-declaration / wishlist</td>
+                </tr>
+                <tr class="opacity-50">
+                  <td>Nav link 4</td>
+                  <td>รายงานความโปร่งใส</td>
+                  <td><code>/transparency</code></td>
+                  <td>
+                    <span class="badge badge-ghost badge-sm"
+                      >DISABLED v0.3</span
+                    >
+                    ซ่อน/disable ไว้ก่อน — เปิดภายหลัง
+                  </td>
+                </tr>
+                <tr class="opacity-50">
+                  <td>Nav link 5</td>
+                  <td>อาสาสมัคร / พี่เลี้ยง</td>
+                  <td><code>/volunteer</code></td>
+                  <td>
+                    <span class="badge badge-ghost badge-sm"
+                      >DISABLED v0.3</span
+                    >
+                    ซ่อน/disable dropdown ไว้ก่อน (OP-3) — เปิดภายหลัง
+                  </td>
+                </tr>
+                <tr>
+                  <td>Language toggle</td>
+                  <td>EN</td>
+                  <td>—</td>
+                  <td>
+                    สลับ locale TH ↔ EN; persist ใน localStorage
+                    (<code>lang</code>)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Behavior</h3>
+          <ul>
+            <li>
+              Sticky บน desktop; collapse เป็น hamburger บน mobile (breakpoint
+              &lt;768 px)
+            </li>
+            <li>
+              Active state: highlight tab ของหน้าปัจจุบัน (underline /
+              background) ชัดเจน
+            </li>
+            <li>
+              <strong>v0.3:</strong> "รายงานความโปร่งใส" และ "อาสาสมัคร /
+              พี่เลี้ยง" <strong>disable ไว้ก่อน</strong> — ซ่อนออกจาก navbar
+              ทั้งคู่ (ไม่แสดงเป็น disabled item) จนกว่าจะเปิด feature
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 2: SEARCH HERO + METRICS -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">2 · Search Hero + Real-Time Metrics</h2>
+          <p>
+            Hero card บนสุด (dark navy gradient, text ขาว). Desktop = 2 คอลัมน์:
+            ซ้าย ≈ 60% search, ขวา ≈ 40% metrics panel. Mobile = stack (metrics
+            อยู่ใต้ search).
+          </p>
+
+          <h3>2a · Left — Search</h3>
+          <ul>
+            <li>
+              Badge บนสุด: <strong>"LIVE DISASTER COORDINATION LINK"</strong> +
+              activity/pulse icon (สีเขียว) — แสดงสถานะระบบ live
+            </li>
+            <li>
+              Heading (2 บรรทัด):
+              <strong
+                >"ระบบข้อมูลผู้ประสบภัยและสืบค้นสถานะเข้าพักฉุกเฉิน"</strong
+              >
+              — บรรทัด 2 highlight สีฟ้าอ่อน
+            </li>
+            <li>
+              Description: "เชื่อมต่อ อำนวยความสะดวก
+              และรายงานความช่วยเหลือสาธารณะเพื่อความโปร่งใสแบบตามเวลาจริง
+              (Real-Time Transparency) สามารถสืบหาญาติ ติดตามผู้ประสบภัย
+              หรือร่วมแจกจ่ายเสบียงผ่านเครือข่ายของเรา"
+            </li>
+            <li>
+              Search input: placeholder "สืบหาญาติด้วย ชื่อ-นามสกุล หรือ
+              รหัสประชาชน..." — full width บน mobile
+            </li>
+            <li>
+              CTA button: <strong>"ค้นหาญาติตอนนี้"</strong> (สีฟ้า/primary)
+              <span class="badge badge-sm badge-warning"
+                >เปลี่ยนจาก "ค้นหา" (v0.1)</span
+              >
+            </li>
+          </ul>
+          <h4>Search Behavior</h4>
+          <ul>
+            <li>
+              Submit (button click หรือกด Enter) → navigate ไป
+              <code>/search?q={encoded_query}</code>
+            </li>
+            <li>
+              Validation ฝั่ง client: ต้องมีข้อความ ≥ 2 ตัวอักษรก่อน submit
+              (ไม่แสดง error จนกว่าจะ submit)
+            </li>
+            <li>
+              ไม่ทำ live search / autocomplete บนหน้านี้ — ทำบน
+              <code>/search</code> เท่านั้น
+            </li>
+            <li>
+              ข้อมูลที่พิมพ์ไม่ส่งไปไหนจนกว่า user จะ submit (privacy — ไม่ log
+              keystroke)
+            </li>
+          </ul>
+          <div class="alert alert-info">
+            <span
+              >Logic การค้นหาและ privacy rule (นามสกุล masking, rate-limit,
+              search_audit) อยู่ใน
+              <a href="./public-tier-flow-spec.html"
+                >FAM section ของ public-tier-flow-spec</a
+              ></span
+            >
+          </div>
+
+          <h3>
+            2b · Right — Real-Time Metrics Panel
+            <span class="badge badge-success">ใหม่ใน v0.2</span>
+          </h3>
+          <p>
+            Panel แสดงตัวเลขสถานการณ์รวมแบบ aggregate. Header:
+            <strong>"สถานการณ์ปัจจุบัน ณ ขณะนี้ (REAL-TIME METRICS)"</strong>
+          </p>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Metric label (TH)</th>
+                  <th>Value format</th>
+                  <th>API field</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>ศูนย์อพยพหลัก</td>
+                  <td><code>{open} / {total} แห่ง</code> (เช่น 5 / 5)</td>
+                  <td>
+                    <code>shelters_open</code> / <code>shelters_total</code>
+                  </td>
+                  <td>จำนวนศูนย์ที่เปิด เทียบทั้งหมด</td>
+                </tr>
+                <tr>
+                  <td>ผู้ประสบภัยปลอดภัย</td>
+                  <td><code>{count} คน</code> (เช่น 7)</td>
+                  <td><code>occupancy_total</code></td>
+                  <td>
+                    <strong>= occupancy รวมทุกศูนย์</strong>
+                    (จำนวนคนที่เข้าพักรวม) — aggregate เท่านั้น.
+                    <span class="badge badge-success badge-sm">APPROVED OP-6</span>
+                    แสดงได้ (เพื่อให้รู้ว่าศูนย์เต็มหรือยัง); ห้าม drill-down รายชื่อ
+                  </td>
+                </tr>
+                <tr class="opacity-50">
+                  <td>อาสาสมัครลงปฏิบัติงาน</td>
+                  <td><code>{count} นาย</code> + badge "ACTIVE DUTY"</td>
+                  <td><code>volunteers_active</code></td>
+                  <td>
+                    <span class="badge badge-ghost badge-sm"
+                      >DISABLED v0.3</span
+                    >
+                    ซ่อนไว้ก่อนพร้อม volunteer feature — เปิดภายหลัง
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="alert alert-warning">
+            <span
+              ><strong>v0.3:</strong> metric "อาสาสมัครลงปฏิบัติงาน"
+              ซ่อนไว้ตอนนี้ (volunteer disabled). Panel เหลือ 2 metric:
+              ศูนย์อพยพหลัก + ผู้ประสบภัยปลอดภัย</span
+            >
+          </div>
+          <h4>Metrics Behavior</h4>
+          <ul>
+            <li>
+              Data source: <code>GET /public/v1/transparency/summary</code> —
+              ส่ง aggregate counts (central-only)
+            </li>
+            <li>
+              <strong>Refresh: polling ทุก 10 นาที</strong> (OP-7) — ไม่มี
+              realtime socket; public metrics ยอมรับ polling ได้
+            </li>
+            <li>
+              <strong>Stale-data threshold = 30 นาที</strong> (OP-7): ถ้า
+              <code>as_of</code> เก่ากว่า 30 นาที (poll ล้มเหลวต่อเนื่อง)
+              ให้แสดง badge/label "ข้อมูลอาจไม่เป็นปัจจุบัน" คู่กับตัวเลขเดิม —
+              ยังโชว์ค่าเก่าได้แต่เตือน user
+            </li>
+            <li>
+              ต้องแนบ <code>as_of</code> timestamp จาก API — UI แสดง
+              "อัปเดตล่าสุด …" ใต้ panel
+            </li>
+            <li>
+              Loading: แสดง skeleton ต่อ metric; ไม่บล็อก paint ของ search
+            </li>
+            <li>
+              Fail/offline (ไม่มีค่าเดิมเลย): แสดง "—" แทนตัวเลข + tooltip
+              "ข้อมูลสดไม่พร้อมใช้งาน" (ไม่ throw error ทั้งหน้า)
+            </li>
+          </ul>
+          <div class="alert alert-success">
+            <span
+              ><strong>Privacy note (APPROVED OP-6 — ดู
+              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+                >CR-005 §A</a
+              >):</strong>
+              "ผู้ประสบภัยปลอดภัย" = occupancy รวมทุกศูนย์ —
+              <strong>แสดงต่อ public ได้</strong> (aggregate ระดับระบบ; ห้าม
+              drill-down เป็นรายชื่อ). feature flag
+              <code>public_metrics_occupancy</code> (db <code>config</code>)
+              เหลือไว้เป็น <strong>kill-switch, default on</strong>. metric
+              <code>shelters_open/total</code> เปิดได้ปกติ</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 3: ALERT BANNER -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">3 · Emergency Alert Banner</h2>
+          <div class="alert alert-warning mb-2">
+            <span
+              >อยู่ <strong>ใต้</strong> search hero (เปลี่ยนจาก v0.1
+              ที่อยู่บนสุด). แสดงเฉพาะเมื่อ API ส่ง active alert — ถ้าไม่มี
+              alert ให้ซ่อน section นี้ทั้งหมด</span
+            >
+          </div>
+          <h3>Data Source</h3>
+          <p>
+            อ่านจาก <code>GET /public/v1/alerts/active</code> — ส่งคืน active
+            alert (level, title, description, affected_area, shelter_statuses[])
+          </p>
+          <h3>Visual Design</h3>
+          <ul>
+            <li>
+              Background: สีแดงอ่อน/pink (level ≥ 4) หรือสีเหลือง/ส้ม (level
+              1–3); มี border สีตาม level
+            </li>
+            <li>
+              Icon: triangle warning (สีแดง level 4, ส้ม level 2–3, เหลือง level
+              1)
+            </li>
+            <li>
+              Title: dot indicator +
+              <strong>"{title} ระดับ {level} ({label})"</strong> — ตัวอย่างจาก
+              mockup: "ศูนย์ประสานแจ้งพิกัดและประมวลความคลาดเคลื่อนระดับ 4
+              (อพยพทันที)"
+            </li>
+            <li>
+              Description: ข้อความบรรยายพื้นที่ผลกระทบ + คำสั่ง (multiline) —
+              มาจาก field <code>description</code>
+            </li>
+          </ul>
+          <h3>Alert Level Label Mapping</h3>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>level</th>
+                  <th>label (TH)</th>
+                  <th>Banner color</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td>เฝ้าระวัง</td>
+                  <td>yellow / warning</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>แจ้งเตือน</td>
+                  <td>orange</td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td>เตรียมพร้อม</td>
+                  <td>orange-red</td>
+                </tr>
+                <tr>
+                  <td>4</td>
+                  <td>อพยพทันที</td>
+                  <td>red / error</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Shelter Capacity Chips</h3>
+          <p>
+            แสดง chip per shelter ใน <code>shelter_statuses[]</code> จาก API
+            (ไม่ hardcode). แต่ละ chip มี dot indicator + ชื่อ + capacity badge:
+          </p>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Display</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>name</code></td>
+                  <td>
+                    dot + ชื่อศูนย์ + ป้าย (Primary / Secondary / …) — ตัวอย่าง
+                    "ศูนย์ค่ายทหาร (Primary)"
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>occupancy_pct</code></td>
+                  <td>badge สีแดงถ้า ≥ 90%, ส้ม 70–89%, เขียว &lt;70%</td>
+                </tr>
+                <tr>
+                  <td><code>label</code></td>
+                  <td>
+                    ข้อความจาก API เช่น "หนาแน่นสูง (95%)", "เปิดรับได้ (40%)"
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Interaction</h3>
+          <ul>
+            <li>
+              คลิกที่ chip → navigate ไป <code>/shelters/{shelter_id}</code>
+            </li>
+            <li>Banner ไม่มีปุ่ม dismiss — ต้องเห็นตลอดที่ alert active</li>
+            <li>Refresh ข้อมูล alert ทุก 5 นาที (polling)</li>
+            <li>
+              <strong>Mobile + alert level 4 (OP-4):</strong> banner
+              <strong>sticky top</strong> — pin ไว้บนสุดของ viewport เมื่อ
+              scroll (fixed) เพื่อให้คำสั่งอพยพอยู่ในสายตาตลอด. Level 1–3 scroll
+              ตามปกติ
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 4: QUICK SERVICES -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">
+            4 · Quick Services Grid
+            (เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์)
+          </h2>
+          <p>
+            Section heading:
+            <strong>"เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์"</strong
+            ><br />Subtitle: "ดำเนินการติดต่อ ลงทะเบียน
+            หรือประสานขอโอนย้ายสิ่งของเสบียงในระบบเพื่อรับรองความช่วยเหลือที่รวดเร็ว"
+          </p>
+          <p>
+            Grid card — 4 คอลัมน์ desktop, 1 คอลัมน์ mobile. แต่ละ card: icon
+            (มุมซ้าย), heading + <strong>badge</strong>, description, และ 1–2
+            action link/button. <strong>v0.3:</strong> card "ทีมอาสาสมัคร"
+            disabled → แสดงจริง <strong>3 card</strong> (ผู้ประสบภัย / บริจาค /
+            ค้นหาญาติ); ปรับ grid ให้ลื่นกับ 3 คอลัมน์ชั่วคราว
+          </p>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Card</th>
+                  <th>Heading (TH)</th>
+                  <th>Badge</th>
+                  <th>Description</th>
+                  <th>Actions → Route</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><small>icon: shield (red)</small></td>
+                  <td>ระเบียบสิทธิ์ผู้ประสบภัย</td>
+                  <td>
+                    <span class="badge badge-error badge-sm">ด่วนที่สุด</span>
+                  </td>
+                  <td>
+                    ท่านสามารถยื่นขอลงทะเบียนเข้าพัก สแกนเช็กอิน
+                    หรือจองสิทธิ์ล่วงหน้าเพื่อจัดสรรเต็นท์ส่วนตัว ยา
+                    และเครื่องนุ่งห่ม
+                  </td>
+                  <td>
+                    ลงทะเบียนเข้าศูนย์ล่วงหน้า → <code>/register/pre</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td><small>icon: gift/box (blue)</small></td>
+                  <td>สำหรับผู้ใจบุญ / บริจาค</td>
+                  <td>
+                    <span class="badge badge-info badge-sm">Wishlist</span>
+                  </td>
+                  <td>
+                    ร่วมประสานงานมอบอาหารปรุงสุก วัตถุดิบ น้ำดื่ม หรือสมทบกองทุน
+                    EOC ข้อมูลจัดซื้อโปร่งใส ตรวจสอบได้ทันที
+                  </td>
+                  <td>
+                    <strong>[primary button]</strong> แจ้งบริจาคสิ่งของล่วงหน้า
+                    → <code>/donate/declare</code><br />
+                    [link] ดูบัญชีรับบริจาค / บอร์ดขอของ →
+                    <code>/donate/wishlist</code>
+                  </td>
+                </tr>
+                <tr class="opacity-50">
+                  <td><small>icon: person+ (green)</small></td>
+                  <td>
+                    สำหรับทีมอาสาสมัคร
+                    <span class="badge badge-ghost badge-sm"
+                      >DISABLED v0.3</span
+                    >
+                  </td>
+                  <td>
+                    <span class="badge badge-success badge-sm">ร่วมแรงกาย</span>
+                  </td>
+                  <td>
+                    ร่วมลงทะเบียนจองกะงานฝ่ายสวัสดิการ แจกจ่าย ขนย้าย แพทย์สนาม
+                    หรือสนับสนุนเจ้าหน้าที่ ณ พื้นที่อุทกภัยชายแดนใต้
+                  </td>
+                  <td>
+                    <strong>ซ่อนทั้ง card ไว้ก่อน</strong> — เปิดพร้อม volunteer
+                    feature. (เดิม: [green button] สมัคร / จองกะช่วยเหลือ →
+                    <code>/volunteer/register</code>)
+                  </td>
+                </tr>
+                <tr>
+                  <td><small>icon: search (purple)</small></td>
+                  <td>สืบหากองสิทธิ์ญาติ</td>
+                  <td>
+                    <span class="badge badge-secondary badge-sm"
+                      >PDPA Shield</span
+                    >
+                  </td>
+                  <td>
+                    เช็กรายชื่อผู้ประสบภัยปลอดภัยในพิกัดศูนย์ควบคุม
+                    ดึงระบบเก็บรวบรวมหลักฐานและส่งต่ออย่างเป็นความลับมั่นคงสูง
+                  </td>
+                  <td>ค้นหารายบุคคลด่วนที่สุด → <code>/search</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Card Design Rules</h3>
+          <ul>
+            <li>Card มี white background, rounded, subtle shadow</li>
+            <li>
+              Icon สีต่างกันต่อ card (shield=red, gift=blue, person+=green,
+              search=purple) เพื่อ scan ได้เร็ว
+            </li>
+            <li>
+              Badge อยู่ inline ข้าง heading; สีตามความหมาย (ด่วนที่สุด=red,
+              Wishlist=blue, ร่วมแรงกาย=green, PDPA Shield=purple)
+            </li>
+            <li>
+              "PDPA Shield" badge สื่อว่า flow
+              ค้นหาญาติคุ้มครองข้อมูลส่วนบุคคลตาม PDPA — ไม่ใช่ปุ่ม, เป็น trust
+              marker เฉย ๆ
+            </li>
+            <li>
+              Action link style: text link พร้อม <code>&gt;</code> chevron; card
+              2 มี primary button (CTA หลัก) + link รอง
+            </li>
+            <li>
+              ถ้า route ยังไม่พร้อม ให้แสดง link เป็น disabled (ไม่ซ่อน) พร้อม
+              badge "เร็ว ๆ นี้"
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 5a: HELP CENTER -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">
+            5a · Help Center (EOC Help Center &amp; FAQ)
+          </h2>
+          <p>
+            Panel ซ้าย (desktop 50%). Heading:
+            <strong>"ศูนย์รวมความช่วยเหลือ (EOC Help Center &amp; FAQ)"</strong
+            ><br />Subtitle: "คำถามที่พบบ่อยระดับศูนย์ —
+            ดึงพิกัดข้อมูลจัดเรียงเรียลไทม์จากระบบตั้งค่า FAQ ของฝ่ายบริหารศูนย์
+            (EOC Dashboard Setup)"
+          </p>
+          <h3>Data Source</h3>
+          <p>
+            <strong>FAQ เป็น dynamic (OP-1 เคาะแล้ว)</strong> — อ่านจาก
+            <code>GET /public/v1/faq</code>; content จัดการผ่าน
+            <strong>หน้า setup ใน EOC</strong> (back-office):
+            เพิ่ม/แก้/ลบ/จัดลำดับ FAQ items. ถ้า API ใช้ไม่ได้ fallback ไป i18n
+            static FAQ. <strong>Dependency:</strong> EOC FAQ setup screen เป็น
+            scope แยก ต้องมี spec/งานของตัวเอง
+          </p>
+          <h3>FAQ Items (จาก mockup)</h3>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Question (TH)</th>
+                  <th>Answer (TH)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td>เปิดรับบริจาคอะไรบ้าง?</td>
+                  <td>
+                    ขณะนี้ศูนย์ส่วนกลางเปิดรับบริจาค น้ำดื่ม ข้าวสาร
+                    และยารักษาโรค
+                  </td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>สามารถสมัครเป็นอาสาสมัครได้ที่ไหน?</td>
+                  <td>(expandable — answer จาก API)</td>
+                </tr>
+                <tr>
+                  <td>—</td>
+                  <td>ตรวจสอบพิกัดแผนที่แต่ละศูนย์และบ้านพี่เลี้ยง</td>
+                  <td>
+                    link row → navigate <strong>internal</strong> ไป
+                    <code>/shelters</code> (OP-5 เคาะแล้ว: internal
+                    ไม่ใช่ external map)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Interaction</h3>
+          <ul>
+            <li>
+              FAQ items: accordion มี number badge (1, 2, …) + chevron;
+              expand/collapse แสดง answer; item แรก default expanded
+            </li>
+            <li>
+              "ตรวจสอบพิกัดแผนที่...": เป็น link row ไม่ใช่ accordion — navigate
+              internal ไป <code>/shelters</code> (ไม่เปิด tab ใหม่/external map)
+            </li>
+            <li>ไม่จำกัดจำนวน FAQ items — render ทั้งหมดที่ API/i18n ส่งมา</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 5b: EMERGENCY CONTACTS -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">
+            5b · Emergency Contacts
+            (ประสานการกู้ชีพฉุกเฉินและหน่วยเคลื่อนที่เร็ว)
+          </h2>
+          <p>
+            Panel ขวา (desktop 50%) — dark navy background, text ขาว/ขาวอมฟ้า
+          </p>
+          <h3>Header</h3>
+          <ul>
+            <li>
+              Badge บนสุด: green dot +
+              <strong>"OPERATIONS ON STANDBY 24/7"</strong>
+            </li>
+            <li>Icon: phone สีเขียว</li>
+            <li>
+              Title:
+              <strong>"ประสานการกู้ชีพฉุกเฉินและหน่วยเคลื่อนที่เร็ว"</strong>
+            </li>
+            <li>
+              Subtitle: "หากติดค้างอยู่ในตึกถูกน้ำ เจ็บครรภ์คลอด สัตว์มีพิษกัด
+              หรือต้องการรถย้ายระดับสูงพิกัดตำบล ประสานงานโดยอัตโนมัติ"
+            </li>
+          </ul>
+          <h3>Contact Buttons</h3>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Label</th>
+                  <th>Number / Link</th>
+                  <th>Tag</th>
+                  <th>Color</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>โทร 1669</td>
+                  <td><code>tel:1669</code></td>
+                  <td>สายด่วนกู้ชีพแพทย์ฉุกเฉิน</td>
+                  <td>Red</td>
+                  <td><code>href="tel:1669"</code></td>
+                </tr>
+                <tr>
+                  <td>โทร 1784</td>
+                  <td><code>tel:1784</code></td>
+                  <td>ศูนย์เตือนภัย ปภ. พายุคุกคาม</td>
+                  <td>Orange</td>
+                  <td><code>href="tel:1784"</code></td>
+                </tr>
+                <tr class="opacity-50">
+                  <td>แอดมิน LINE OA</td>
+                  <td>LINE OA URL</td>
+                  <td>—</td>
+                  <td>Green</td>
+                  <td>
+                    <span class="badge badge-ghost badge-sm">HIDDEN v0.3</span>
+                    URL เป็น setup ใน EOC — ไม่แสดงผลตอนนี้ (OP-2)
+                  </td>
+                </tr>
+                <tr class="opacity-50">
+                  <td>เพจข่าวสารศูนย์ EOC</td>
+                  <td>Facebook Page URL</td>
+                  <td>—</td>
+                  <td>Blue</td>
+                  <td>
+                    <span class="badge badge-ghost badge-sm">HIDDEN v0.3</span>
+                    URL เป็น setup ใน EOC — ไม่แสดงผลตอนนี้ (OP-2)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Design Rules</h3>
+          <ul>
+            <li>
+              <strong>v0.3:</strong> ปุ่ม LINE OA / FB
+              <strong>ซ่อนไว้ก่อน</strong> (URL จัดการเป็น setup ใน EOC,
+              ยังไม่แสดงผล) — แสดงจริงเฉพาะปุ่มโทร 1669 / 1784
+            </li>
+            <li>
+              hotline buttons full-width บน mobile; ปุ่มโทร 2 ปุ่มเรียงแนวตั้ง /
+              2 col ตามพื้นที่
+            </li>
+            <li>
+              ปุ่มโทรต้องมี <code>href="tel:..."</code> — กดได้ทันทีบน mobile
+              โดยไม่ต้องกรอก
+            </li>
+            <li>
+              เมื่อเปิด LINE OA / FB ภายหลัง: URL เก็บเป็น setup ใน EOC (admin
+              config doc) ไม่ hardcode; ถ้ายังไม่ตั้งค่า → ซ่อนปุ่มนั้น
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 6: FOOTER -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">6 · Footer</h2>
+          <ul>
+            <li>
+              ข้อความ: "This app was developed by …" (static text, ปรับได้ใน
+              i18n)
+            </li>
+            <li>ลิงก์: "Report legal issue" (เปิด mailto หรือ form)</li>
+            <li>ไม่มี nav link ซ้ำจาก navbar บน footer (keep it minimal)</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- API CONTRACT SUMMARY -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">API Calls on this Page (Summary)</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>When</th>
+                  <th>Refresh</th>
+                  <th>Fail behavior</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>GET /public/v1/transparency/summary</code></td>
+                  <td>page load + every 10 min</td>
+                  <td>polling 10 min; stale-data &gt; 30 min</td>
+                  <td>
+                    แสดง "—" เมื่อไม่มีค่าเดิม; ถ้า as_of &gt; 30 min โชว์ค่าเก่า
+                    + เตือน "ข้อมูลอาจไม่เป็นปัจจุบัน"
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>GET /public/v1/alerts/active</code></td>
+                  <td>page load + every 5 min</td>
+                  <td>polling 5 min</td>
+                  <td>ซ่อน banner (ไม่แสดง error ให้ user)</td>
+                </tr>
+                <tr>
+                  <td><code>GET /public/v1/faq</code></td>
+                  <td>page load ครั้งเดียว</td>
+                  <td>SWR / long TTL</td>
+                  <td>fallback ไป i18n static FAQ</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Search ไม่เกิดบนหน้านี้ — เกิดบน <code>/search</code> หลัง user
+            submit form. ทุก endpoint อ่าน central-only ตาม public-tier trust
+            boundary
+          </p>
+        </div>
+      </section>
+
+      <!-- STATES -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Page States</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>State</th>
+                  <th>What changes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Normal (ไม่มี alert)</td>
+                  <td>
+                    ไม่มี alert banner; แสดง search hero + metrics + quick
+                    services + help/contacts
+                  </td>
+                </tr>
+                <tr>
+                  <td>Metrics loading</td>
+                  <td>metrics panel แสดง skeleton; search ใช้ได้ทันที</td>
+                </tr>
+                <tr>
+                  <td>Alert level 1–3</td>
+                  <td>banner สีส้ม/เหลือง ใต้ hero; เนื้อหาอื่นเหมือนเดิม</td>
+                </tr>
+                <tr>
+                  <td>Alert level 4 (อพยพทันที)</td>
+                  <td>banner สีแดง prominent ใต้ hero</td>
+                </tr>
+                <tr>
+                  <td>API offline</td>
+                  <td>
+                    metrics แสดง "—"; ซ่อน alert banner; quick services
+                    ยังใช้ได้ (static route links); toaster "ข้อมูลสดอาจไม่
+                    update"
+                  </td>
+                </tr>
+                <tr>
+                  <td>Loading initial</td>
+                  <td>
+                    metrics + alert slot แสดง skeleton; quick services แสดงทันที
+                    (static)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACCESSIBILITY & PERFORMANCE -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">
+            Accessibility &amp; Performance Requirements
+          </h2>
+          <ul>
+            <li>
+              <strong>WCAG 2.1 AA</strong> — contrast ratio ≥ 4.5:1 ทุก text;
+              hotline buttons และ metrics บน dark bg ≥ 4.5:1
+            </li>
+            <li>
+              Search input ต้องมี <code>aria-label</code> และ associate กับ
+              label text
+            </li>
+            <li>
+              Alert banner ต้อง announce ผ่าน <code>role="alert"</code> เมื่อ
+              content เปลี่ยน
+            </li>
+            <li>
+              Real-time metrics ที่อัปเดตเอง ใช้
+              <code>aria-live="polite"</code> เพื่อไม่รบกวน screen reader
+            </li>
+            <li>
+              Quick service cards ต้องใช้ <code>&lt;a&gt;</code> ไม่ใช่
+              <code>&lt;div onclick&gt;</code>
+            </li>
+            <li>
+              LCP target: ≤ 2.5 s บน 3G (static shell ต้อง hydrate เร็ว;
+              metrics/alert API ต้องไม่บล็อก paint)
+            </li>
+            <li>
+              ภาษาไทย: <code>lang="th"</code> บน root element เมื่อ locale = TH
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- UAT -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">UAT Checklist</h2>
+          <ul>
+            <li>
+              ☐ เปิดหน้า / โดยไม่ login → เห็นหน้า landing ครบทุก section
+              ตามลำดับ (hero → alert → quick services → help/contacts)
+            </li>
+            <li>
+              ☐ Metrics panel แสดงตัวเลข aggregate จาก API พร้อม "อัปเดตล่าสุด
+              …"
+            </li>
+            <li>☐ Metrics auto-refresh ทุก 60 วินาที โดยไม่ reload หน้า</li>
+            <li>
+              ☐ เมื่อ API ส่ง alert level 4 → banner สีแดงปรากฏ "ใต้" hero พร้อม
+              chip capacity ศูนย์
+            </li>
+            <li>☐ เมื่อไม่มี alert → banner ไม่ปรากฏ (ไม่มี empty card)</li>
+            <li>
+              ☐ กรอกชื่อในช่อง search แล้วกด Enter/"ค้นหาญาติตอนนี้" → ไปหน้า
+              /search?q=...
+            </li>
+            <li>☐ คลิก "ลงทะเบียนเข้าศูนย์ล่วงหน้า" → ไป /register/pre</li>
+            <li>☐ คลิก "แจ้งบริจาคสิ่งของล่วงหน้า" → ไป /donate/declare</li>
+            <li>☐ คลิก "ค้นหารายบุคคลด่วนที่สุด" → ไป /search</li>
+            <li>
+              ☐ <strong>v0.3:</strong> nav "รายงานความโปร่งใส" / "อาสาสมัคร",
+              card "ทีมอาสาสมัคร", metric "อาสาสมัครลงปฏิบัติงาน" และปุ่ม LINE/FB
+              <strong>ไม่ปรากฏ</strong> (disabled)
+            </li>
+            <li>
+              ☐ Metrics panel แสดง 2 ค่า (ศูนย์อพยพหลัก + ผู้ประสบภัยปลอดภัย),
+              refresh ทุก 10 นาที; ถ้า as_of &gt; 30 นาที โชว์ป้ายเตือน stale
+            </li>
+            <li>☐ Alert level 4 บน mobile → banner sticky top ขณะ scroll</li>
+            <li>☐ กดปุ่ม "โทร 1669" บนมือถือ → เปิด dialer</li>
+            <li>
+              ☐ Toggle EN → หน้าเปลี่ยนเป็น English (ทุก section รวม metrics
+              labels)
+            </li>
+            <li>
+              ☐ ปิด network → metrics แสดง "—", หน้ายังโหลดได้, quick services
+              link ยังกดได้, toaster แจ้ง offline
+            </li>
+            <li>
+              ☐ Mobile 375px → navbar collapse, hero stack (metrics ใต้ search),
+              quick services stack 1 col
+            </li>
+            <li>
+              ☐ Screen reader → อ่าน alert banner เมื่อปรากฏ; metrics update
+              เป็น polite announcement
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- OPEN POINTS -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Open Points</h2>
+          <p class="text-sm">
+            OP-1 ถึง OP-7 เคาะแล้ว (2026-06-22) — รวม <strong>OP-6</strong>
+            (occupancy_total approved ให้แสดง public ได้).
+          </p>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>คำถาม</th>
+                  <th>Status / Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>OP-1</td>
+                  <td>FAQ dynamic หรือ static?</td>
+                  <td>
+                    <strong>RESOLVED</strong> — dynamic, จัดการผ่าน setup ใน EOC
+                    (ต้องมี EOC FAQ setup screen เป็น dependency)
+                  </td>
+                </tr>
+                <tr>
+                  <td>OP-2</td>
+                  <td>LINE OA / FB Page URL เก็บที่ไหน + แสดงอย่างไร?</td>
+                  <td>
+                    <strong>RESOLVED</strong> — เป็น setup ใน EOC,
+                    <strong>ไม่แสดงผลตอนนี้</strong> (ซ่อนปุ่ม LINE/FB)
+                  </td>
+                </tr>
+                <tr>
+                  <td>OP-3</td>
+                  <td>Volunteer sub-menu มี items อะไรบ้าง?</td>
+                  <td>
+                    <strong>RESOLVED</strong> — ปิด volunteer ทั้งส่วนไว้ก่อน
+                    (ไม่ต้องระบุ sub-menu ตอนนี้)
+                  </td>
+                </tr>
+                <tr>
+                  <td>OP-4</td>
+                  <td>Alert level 4 บน mobile — sticky top หรือ scroll?</td>
+                  <td><strong>RESOLVED</strong> — sticky top</td>
+                </tr>
+                <tr>
+                  <td>OP-5</td>
+                  <td>ลิงก์แผนที่ — internal หรือ external map?</td>
+                  <td>
+                    <strong>RESOLVED</strong> — internal (<code>/shelters</code>)
+                    สำหรับหน้านี้
+                  </td>
+                </tr>
+                <tr>
+                  <td>OP-6</td>
+                  <td>
+                    Real-Time Metrics "ผู้ประสบภัยปลอดภัย" = <strong>occupancy
+                    รวม</strong> — expose สู่ public ได้หรือไม่?
+                  </td>
+                  <td>
+                    <span class="badge badge-success">RESOLVED</span> —
+                    แสดงได้ (เพื่อให้รู้ว่าศูนย์เต็มหรือยัง); flag = kill-switch
+                    default on
+                  </td>
+                </tr>
+                <tr>
+                  <td>OP-7</td>
+                  <td>Metrics refresh cadence + stale policy?</td>
+                  <td>
+                    <strong>RESOLVED</strong> — polling ทุก 10 นาที, stale-data
+                    threshold 30 นาที
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="alert alert-success mt-2">
+            <span
+              ><strong>OP-6 — APPROVED (2026-06-22):</strong> count
+              "ผู้ประสบภัยปลอดภัย" (= occupancy รวม) <strong>แสดงต่อ public
+              ได้</strong> — เป็น aggregate ระดับระบบ (ห้าม drill-down รายชื่อ).
+              feature flag <code>public_metrics_occupancy</code> เหลือเป็น
+              kill-switch (default on). <strong>tracked ใน
+              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+                >CR-005 §A</a
+              ></strong> (approved). per-shelter occupancy (หน้า
+              <a href="./public-portal-shelter-spec.html">Shelter Dashboard</a>)
+              แสดงเป๊ะเสมอ (OP-9).</span
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
