@@ -71,3 +71,4 @@ export {
 // UI components
 export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';
 export { default as LedgerTable } from './ui/LedgerTable.svelte';
+export { default as StockTable } from './ui/StockTable.svelte';

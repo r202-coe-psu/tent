@@ -8,6 +8,8 @@
 	import { startNamedSync, stopNamedSync } from '$lib/db/pouch';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SHELTER_DB, startPeopleLiveQuery } from '$lib/features/people';
+	import { startOperationsLiveQuery } from '$lib/features/operations';
+	import { startKitchenLiveQuery } from '$lib/features/kitchen';
 
 	let { children, data } = $props();
 
@@ -16,11 +18,22 @@
 	// — both bound to the SAME shelter db (CONTRIBUTING.md §4).
 	$effect(() => {
 		if (!authStore.isAuthenticated) return;
+		
+		// Synchronize databases
 		startNamedSync(SHELTER_DB, () => authStore.markNeedsReauth());
-		const live = startPeopleLiveQuery(data.queryClient);
+		startNamedSync('catalog', () => authStore.markNeedsReauth());
+		
+		// Start changes feed live-queries
+		const livePeople = startPeopleLiveQuery(data.queryClient);
+		const liveOperations = startOperationsLiveQuery(data.queryClient);
+		const liveKitchen = startKitchenLiveQuery(data.queryClient);
+		
 		return () => {
-			live.stop();
+			livePeople.stop();
+			liveOperations.stop();
+			liveKitchen.stop();
 			stopNamedSync(SHELTER_DB);
+			stopNamedSync('catalog');
 		};
 	});
 </script>
