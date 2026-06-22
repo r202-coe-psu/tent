@@ -2,7 +2,7 @@
 title: "Task Breakdown by Module — Index"
 status: active
 created: 2026-06-05
-updated: 2026-06-18
+updated: 2026-06-22
 note: decision-synced 2026-06-15 — Markdown task-breakdown เป็น planning source ปัจจุบัน; technical source คือ docs/data/schema.md + data-model.md + api-contract.md
 ---
 
@@ -72,12 +72,12 @@ Planning source ปัจจุบัน = Markdown ใน `docs/task-breakdown/
 | 4   | [Donation](04-donation.md)                | 6     | 20      | R2, R3     | ส.ค.                   |
 | 5   | [Module D — Kitchen & Food](05-D.md)      | 4     | 15.5    | R2, R3     | ส.ค.                   |
 | 6   | [Module A — Volunteer](06-A.md)           | 2     | 7.5     | R3         | ส.ค.                   |
-| 7   | [Module B — SOP & Resource Calc](07-B.md) | 5     | 20      | R2, R3, R4 | ส.ค. + deferred tail   |
+| 7   | [Module B — SOP & Resource Calc](07-B.md) | 5     | 21.5    | R2, R3, R4 | ส.ค. + deferred tail   |
 | 8   | [Module E — Security](08-E.md)            | 2     | 9       | R2, R3     | ส.ค.                   |
 | 9   | [Module F — Referral](09-F.md)            | 1     | 4       | R3         | ส.ค.                   |
 | 10  | [EOC + Open API (Part 3)](10-eoc.md)      | 3     | 13.5    | R4         | ก.ย. wk2 (deferred)    |
 | 11  | [Family Search](11-famsearch.md)          | 2     | 7.5     | R4         | ส.ค.                   |
-|     | **รวม (prod+post นักศึกษา)**              |       | **250** |            |                        |
+|     | **รวม (prod+post นักศึกษา)**              |       | **251.5** |            |                        |
 
 ## Pre-production design (บริษัท — แยก capacity)
 
