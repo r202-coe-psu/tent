@@ -4,10 +4,10 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import { donationStore } from './donation.svelte';
-	import NeedsBoard from './components/NeedsBoard.svelte';
-	import DonorForm from './components/DonorForm.svelte';
-	import TimeSelection from './components/TimeSelection.svelte';
-	import SuccessTicket from './components/SuccessTicket.svelte';
+	import NeedsBoard from '../../../lib/components/public-donor-needs.svelte';
+	import DonorForm from '../../../lib/components/form/form-donor.svelte';
+	import TimeSelection from '../../../lib/components/form/donor-time-selection-form.svelte';
+	import SuccessTicket from '../../../lib/components/public-donor-success-ticket.svelte';
 
 </script>
 

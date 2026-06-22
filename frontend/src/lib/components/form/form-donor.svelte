@@ -6,7 +6,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Checkbox } from '$lib/components/ui/checkbox';
-	import { donationStore } from '../donation.svelte';
+	import { donationStore } from '../../../routes/public/donations/donation.svelte';
 
 	let validationErrors = $state<string[]>([]);
 

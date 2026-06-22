@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Check from '@lucide/svelte/icons/check';
-	import { donationStore } from '../donation.svelte';
+	import { donationStore } from '../../routes/public/donations/donation.svelte';
 </script>
 
 <div class="rounded-3xl border border-border bg-card p-6 md:p-8 shadow-xs text-center max-w-md mx-auto">

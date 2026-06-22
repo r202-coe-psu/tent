@@ -9,7 +9,7 @@
 	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
 	import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '$lib/components/ui/select';
 	import { today, getLocalTimeZone, type DateValue } from '@internationalized/date';
-	import { donationStore } from '../donation.svelte';
+	import { donationStore } from '../../../routes/public/donations/donation.svelte';
 
 	let selectedShelter = $state('SH001');
 	let selectedDate = $state<DateValue>(today(getLocalTimeZone()));
