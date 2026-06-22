@@ -116,14 +116,6 @@
 				/>
 			</div>
 		</div>
-
-		<div class="mt-4 flex items-center gap-3 cursor-pointer rounded-xl bg-muted/30 border border-border/40 p-4 select-none">
-			<Checkbox 
-				id="tax-receipt" 
-				bind:checked={donationStore.taxReceipt}
-			/>
-			<Label for="tax-receipt" class="text-xs font-bold text-foreground cursor-pointer">ต้องการใบอนุโมทนาบัตร / ลดหย่อนภาษี</Label>
-		</div>
 	</div>
 
 	<!-- ส่วนที่ 2: รายละเอียดสิ่งของบริจาค -->
