@@ -63,8 +63,8 @@ export async function POST({ request }) {
 The system holds highly sensitive data (National IDs, Medical conditions, Vulnerability notes).
 
 - **EOC & Public APIs**: Never expose full `medical`, `vulnerability`, or `national_id` fields to Public APIs or the EOC (Emergency Operation Center) sync endpoints. Redact these fields server-side before returning JSON.
-  - **Exception (CR-005 - Public Metrics)**: Aggregate counts such as `vulnerable_count` and `occupancy_total` are allowed on the Public Dashboard (strictly aggregate only, no drill-down to individuals). *(Source: `docs/changes/CR-005-public-portal-landing-public-metrics.md` §A / OP-6, OP-8)*
-  - **Exception (CR-005 - Family Search)**: The Family Search API (`/search`) may return partially masked PII to help relatives (e.g., `national_id` masked as 3-front/3-back, full first name with masked last name, masked origin address). Full PII and medical details must still be strictly omitted. *(Source: `docs/changes/CR-005-public-portal-landing-public-metrics.md` §E / FS-2, FS-3)*
+  - **Exception (CR-005 - Public Metrics)**: Aggregate counts such as `vulnerable_count` and `occupancy_total` are allowed on the Public Dashboard (strictly aggregate only, no drill-down to individuals).
+  - **Exception (CR-005 - Family Search)**: The Family Search API (`/search`) may return partially masked PII to help relatives (e.g., `national_id` masked as 3-front/3-back, full first name with masked last name, masked origin address). Full PII and medical details must still be strictly omitted.
 - **Internal Staff**: Internal staff can see medical/PII data, but ONLY for evacuees within their own shelter scope.
 - **Donors**: The "Donor" is NOT an RBAC role; it is a public no-auth surface. Never leak evacuee PII to the donation pages.
 
