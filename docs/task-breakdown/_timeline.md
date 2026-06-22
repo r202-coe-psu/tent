@@ -2,8 +2,8 @@
 title: "Task Breakdown — Dependencies & Timeline"
 status: active
 created: 2026-06-05
-updated: 2026-06-11
-note: deps maintained directly in Markdown. Schedule เคาะ 2026-06-09 (compress build → มิ.ย.–ส.ค., go-live ก.ย.) · baseline T-47..55 เพิ่ม 2026-06-11
+updated: 2026-06-22
+note: deps maintained directly in Markdown. Schedule เคาะ 2026-06-09 (compress build → มิ.ย.–ส.ค., go-live ก.ย.) · baseline T-47..55 เพิ่ม 2026-06-11 · public-tier T-57..60 เพิ่มตาม CR-005 2026-06-22
 ---
 
 # Dependencies & Timeline
@@ -25,7 +25,7 @@ note: deps maintained directly in Markdown. Schedule เคาะ 2026-06-09 (co
 
 **Scope สำหรับ go-live ก.ย.**
 
-- **In-scope (จบ ส.ค.):** **Baseline FR-1–20 (T-47..T-55, ดู [00-baseline](00-baseline.md))** + R2 Foundation + R3 Operations + **Family Search (T-40/41)** core public feature + **T-43 RoPA/retention (minimal)** เพราะ Family Search เปิด public = PII exposure จริง
+- **In-scope (จบ ส.ค.):** **Baseline FR-1–20 (T-47..T-55, ดู [00-baseline](00-baseline.md))** + R2 Foundation + R3 Operations + **Family Search (T-40/41)** core public feature + **Public Portal (T-57/58/59) + public `/donate` (T-60)** ตาม CR-005 + **T-43 RoPA/retention (minimal)** เพราะ public tier (family search/portal/donate) เปิด public = PII/data exposure จริง
 - **Deferred (หลัง go-live, cap 14/09/2026):** EOC aggregate API (T-37/38), Open API (T-39), SOP simulation (T-42), inventory polish (T-45)
 
 **Walking skeleton — Lead 2 คนต้องส่งก่อน 17/06** (greenfield risk): repo + branch/PR convention + CI/CD, auth/RBAC skeleton (T-01), Central CouchDB base schema + Central-first sync/conflict design (T-02 ตั้งต้น; LAN Edge เป็น outage fallback เท่านั้น), 1 vertical slice end-to-end ให้ทีม copy pattern, seed data. ใช้ `docs/architecture/` + `docs/data/` เป็น input อย่า redesign จากศูนย์. **CouchDB/PouchDB (local write, one active remote, failback, conflict, RBAC) = tech risk #1 → Lead B (technical/integration) เป็นเจ้าของ T-02 + CouchDB**.
@@ -115,6 +115,10 @@ flowchart LR
     T33[T-33 security checkin]
     T34[T-34 referral]
     T35[T-35 calc backbone]
+    T60[T-60 public /donate]
+    T57[T-57 public landing]
+    T58[T-58 public /shelters]
+    T59[T-59 public FAQ]
     G3{{T-36 Operations Gate}}:::gate
   end
 
@@ -162,6 +166,14 @@ flowchart LR
   T28 --> T29
   T19 --> T33 & T34
 
+  T15 --> T60
+  T22 --> T60
+  T52 --> T57
+  T35 --> T57
+  T57 --> T58
+  T47 --> T58
+  T03 --> T59
+
   G2 -. all R2 .-> R3
   G3 -. all R3 .-> T37
   T37 --> T38 & T39
@@ -173,6 +185,7 @@ flowchart LR
 > สีแดง = เส้นวิกฤต · สีส้ม = hub · เขียว = gate · เทา dashed = design (บริษัท) · ม่วง dashed = **deferred post-go-live**.
 > `G2/G3 -. all .->` = ต้องปิดทั้ง phase ก่อนข้าม (integration gate). **Foundation Gate (T-20) ครอบ Baseline (T-47..55) ด้วย.**
 > Family Search (T-40/41) + T-43 = **เก็บใน scope ส.ค.** (core public feature + PII compliance) แม้อยู่ subgraph R4.
+> **Public tier (CR-005):** T-57/58/59 (Public Portal, [12-public](12-public.md)) + T-60 (public `/donate`, [04-donation](04-donation.md)) = R3 — อ่าน aggregate read-model (T-35) เท่านั้น, metric กั้นหลัง kill-switch flag, no person-level; ไม่อยู่บนเส้นวิกฤต stock chain แต่ผูก PII/data-governance review (T-43) + redaction whitelist (T-01).
 
 ## 3. Timeline (Gantt)
 
@@ -215,6 +228,7 @@ gantt
   donation flows (T-21..24)          :t2124, 2026-07-21, 12d
   volunteer/SOP (T-28..32)           :t2832, 2026-07-21, 16d
   security/referral (T-33/34)        :t3334, 2026-07-25, 10d
+  public tier — portal+/donate (T-57..60, CR-005) :pub, 2026-08-01, 18d
   T-36 Operations Gate               :milestone, g3, 2026-08-22, 0d
 
   section Family Search (core public · ขนาน)
