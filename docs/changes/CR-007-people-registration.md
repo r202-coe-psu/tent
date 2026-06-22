@@ -43,6 +43,8 @@ affects:
 
 *Migration Rules (v1 -> v2):* หากระบบดึง evacuee เดิมมาอ่านและ `schema_v` เป็น 1 จะ default `nationality`, `ethnicity`, และ `country` เป็น `'ไทย'` อัตโนมัติ
 
+*หมายเหตุ* การเก็บค่า `nationality`, `ethnicity`, `country` ให้เก็บเป็นตัวอักษรภาษาอังกฤษ (Uppercase) ตาม `schema.md` ส่วนการแสดงผลใน UI ให้ใช้การ map เพื่อแปลงเป็นภาษาไทย
+
 ### 3. Client-side & UI Form changes
 
 | Layer | Before | After |
