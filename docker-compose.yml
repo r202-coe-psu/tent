@@ -16,5 +16,21 @@ services:
       retries: 10
       start_period: 10s
 
+  couchdb-init:
+    image: curlimages/curl:latest
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER:-admin}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
+    restart: on-failure
+    command: >
+      sh -c "
+        curl -sf -X POST http://$${COUCHDB_USER}:$${COUCHDB_PASSWORD}@couchdb:5984/_cluster_setup
+          -H 'Content-Type: application/json'
+          -d '{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"$${COUCHDB_USER}\",\"password\":\"$${COUCHDB_PASSWORD}\",\"port\":5984}'
+      "
+
 networks:
   default:

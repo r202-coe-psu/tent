@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="en" data-theme="lofi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Public Portal — Shelter Dashboard Flow Spec</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+      body {
+        background: #f6fbf8;
+      }
+      .shell {
+        max-width: 1380px;
+        margin: 0 auto;
+        padding: 1rem;
+      }
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        body {
+          background: #fff;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="navbar bg-base-100 border-b border-base-300">
+      <div class="flex-1">
+        <div>
+          <p class="text-xs uppercase text-base-content/60">
+            Feature Flow Spec
+          </p>
+          <h1 class="text-xl font-semibold">
+            Public Portal — Shelter Dashboard (ตรวจสอบศูนย์พักพิง)
+          </h1>
+        </div>
+      </div>
+      <div class="flex-none gap-2 no-print">
+        <a class="btn btn-sm btn-outline" href="./index.html">Back</a>
+        <a class="btn btn-sm btn-outline" href="./public-portal-landing-spec.html"
+          >Landing Spec</a
+        >
+        <span class="badge badge-warning">Draft v0.1</span>
+        <span class="badge badge-outline">2026-06-22</span>
+      </div>
+    </header>
+    <main class="shell space-y-4">
+      <!-- SUMMARY -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Summary</h2>
+          <p>
+            หน้า <strong>"ตรวจสอบสถานะศูนย์พักพิง"</strong> (PUBLIC SHELTER
+            DASHBOARD) — แยกออกมาจาก Public Portal landing spec
+            (<a href="./public-portal-landing-spec.html">nav link 1</a>). เป็น
+            จุดที่ประชาชน / ญาติผู้ประสบภัยใช้ดู <strong>รวมศูนย์พักพิง สถานะความจุ
+            และเปอร์เซ็นต์ความหนาแน่นของผู้ประสบภัยตามเวลาจริง</strong> เพื่อ
+            ประกอบการตัดสินใจเคลื่อนย้ายและขอรับความช่วยเหลือ. Layout = metric
+            cards (บนสุด) + 3 คอลัมน์: panel ค้นหา/ฟิลเตอร์ (ซ้าย), map พร้อมหมุดศูนย์
+            (กลาง), list ศูนย์พักพิง (ขวา).
+          </p>
+          <div class="alert alert-info">
+            <span
+              >หน้านี้เป็น <strong>Public / No-Login Tier (PUB)</strong> —
+              ต้องไม่มีข้อมูลส่วนบุคคลใด ๆ ปรากฏ. ข้อมูลที่แสดงเป็น
+              aggregate ต่อศูนย์เท่านั้น (occupancy รวม ไม่มีรายบุคคล).
+              รายละเอียด trust boundary ดูที่
+              <a href="./public-tier-flow-spec.html">Public Tier Flow Spec</a
+              ></span
+            >
+          </div>
+          <div class="alert alert-warning">
+            <span
+              >ออกแบบให้ใช้งานได้บนมือถือในสภาวะ network ไม่เสถียร — list/metrics
+              ต้องอ่านได้แม้ map ยังโหลดไม่เสร็จ; รองรับ TH/EN (EN toggle)</span
+            >
+          </div>
+          <div class="alert">
+            <span class="text-sm"
+              ><strong>Change tracking:</strong> หน้านี้แยกออกมาตาม
+              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+                >CR-005 §D</a
+              >. metric "ผู้พักพิงปัจจุบัน" / "กลุ่มเปราะบาง"
+              <strong>approved ให้แสดงได้</strong> (OP-6 / OP-8); flag เหลือเป็น
+              kill-switch — ดูส่วน
+              <a href="#exposure">Data Exposure &amp; Privacy</a></span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- SCOPE -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Scope &amp; Route</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Route</td>
+                  <td><code>/shelters</code> (nav link "ตรวจสอบศูนย์พักพิง")</td>
+                </tr>
+                <tr>
+                  <td>Auth requirement</td>
+                  <td>ไม่ต้อง login (anonymous)</td>
+                </tr>
+                <tr>
+                  <td>Data tier</td>
+                  <td>
+                    อ่าน aggregate-only จาก Public API Service (central
+                    เท่านั้น) — ดู public-tier-flow-spec
+                  </td>
+                </tr>
+                <tr>
+                  <td>Language</td>
+                  <td>ภาษาไทย default + toggle EN</td>
+                </tr>
+                <tr>
+                  <td>i18n key namespace</td>
+                  <td><code>public.shelters</code></td>
+                </tr>
+                <tr>
+                  <td>Render strategy</td>
+                  <td>
+                    SSR / pre-rendered static shell + client hydration สำหรับ
+                    live data (metrics, list, map markers)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Phase</td>
+                  <td>R3 — MVP Public Portal</td>
+                </tr>
+                <tr>
+                  <td>Detail route</td>
+                  <td>
+                    <code>/shelters/{shelter_id}</code> (ปุ่ม "ดูรายละเอียด") —
+                    spec แยก
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- LAYOUT OVERVIEW -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Layout Overview (top → bottom)</h2>
+          <ol>
+            <li>
+              <strong>Global Navigation Bar</strong> — เหมือน landing (tab
+              "ตรวจสอบศูนย์พักพิง" active)
+            </li>
+            <li>
+              <strong>Page Hero</strong> — dark navy card: badge "PUBLIC SHELTER
+              DASHBOARD" + heading "ตรวจสอบสถานะศูนย์พักพิง" + คำบรรยาย
+            </li>
+            <li>
+              <strong>Metric Cards Row</strong> — 4 cards: ศูนย์พักพิงทั้งหมด /
+              เปิดใช้งาน / ผู้พักพิงปัจจุบัน / กลุ่มเปราะบาง
+            </li>
+            <li>
+              <strong>Main 3-column Panel</strong> — ซ้าย: search + filter; กลาง:
+              map; ขวา: shelter list
+            </li>
+            <li><strong>Footer</strong> — เครดิตระบบ (เหมือน landing)</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- SECTION 1: HERO -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">1 · Page Hero</h2>
+          <ul>
+            <li>
+              Background: dark navy gradient, text ขาว (เหมือน landing hero)
+            </li>
+            <li>
+              Badge บนสุด: building icon +
+              <strong>"PUBLIC SHELTER DASHBOARD"</strong>
+            </li>
+            <li>
+              Heading: <strong>"ตรวจสอบสถานะศูนย์พักพิง"</strong>
+            </li>
+            <li>
+              Description: "ข้อมูลรวมศูนย์พักพิง สถานะความจุ
+              และเปอร์เซ็นต์ความหนาแน่นของผู้ประสบภัยตามเวลาจริง
+              เพื่อประกอบการตัดสินใจเคลื่อนย้ายและขอรับความช่วยเหลือ"
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 2: METRIC CARDS -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">2 · Metric Cards Row</h2>
+          <p>
+            4 cards (4 คอลัมน์ desktop, 2×2 หรือ stack mobile). แต่ละ card: icon
+            (ซ้าย) + label + ตัวเลขเด่น + หน่วย. ข้อมูล aggregate ระดับระบบ.
+          </p>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Card label (TH)</th>
+                  <th>Value format</th>
+                  <th>API field</th>
+                  <th>Exposure</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>ศูนย์พักพิงทั้งหมด</td>
+                  <td><code>{total} แห่ง</code> (เช่น 5)</td>
+                  <td><code>shelters_total</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OPEN ได้ปกติ</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td>ศูนย์พักพิงที่เปิดใช้งาน</td>
+                  <td><code>{open} แห่ง</code> (เช่น 5)</td>
+                  <td><code>shelters_open</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OPEN ได้ปกติ</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td>ผู้พักพิงปัจจุบัน</td>
+                  <td><code>{count} คน</code> (เช่น 7)</td>
+                  <td><code>occupancy_total</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">APPROVED OP-6</span>
+                    แสดงได้ (รู้ว่าศูนย์เต็มหรือยัง); flag = kill-switch default on
+                  </td>
+                </tr>
+                <tr>
+                  <td>กลุ่มเปราะบาง</td>
+                  <td><code>{count} คน</code> (เช่น 3)</td>
+                  <td><code>vulnerable_count</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">APPROVED OP-8</span>
+                    แสดงได้ (aggregate ระบบ, ห้าม drill-down); flag = kill-switch
+                    default on
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="alert alert-success">
+            <span
+              ><strong>2 card ขวา (ผู้พักพิงปัจจุบัน / กลุ่มเปราะบาง) — APPROVED
+              (OP-6 / OP-8, 2026-06-22):</strong> แสดงต่อ public ได้.
+              feature flag <code>public_metrics_occupancy</code> /
+              <code>public_metrics_vulnerable</code> เหลือไว้เป็น
+              <strong>operational kill-switch (default on)</strong> เผื่อปิดฉุกเฉิน
+              — ดูส่วน <a href="#exposure">Data Exposure &amp; Privacy</a></span
+            >
+          </div>
+          <h3>Metrics Behavior</h3>
+          <ul>
+            <li>
+              Data source: <code>GET /public/v1/transparency/summary</code> —
+              aggregate counts (central-only)
+            </li>
+            <li>
+              <strong>Refresh: polling ทุก 10 นาที</strong> (OP-7), stale-data
+              threshold 30 นาที — สอดคล้องกับ landing metrics
+            </li>
+            <li>Loading: skeleton ต่อ card; ไม่บล็อก paint ของ list/filter</li>
+            <li>
+              Fail/offline: แสดง "—" แทนตัวเลข + tooltip "ข้อมูลสดไม่พร้อมใช้งาน"
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 3: SEARCH + FILTER -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">3 · Search &amp; Filter Panel (ซ้าย)</h2>
+          <p>
+            Panel "ค้นหา" — desktop คอลัมน์ซ้าย; mobile = collapsible ด้านบน list.
+            ทุก filter เป็น <strong>client-side query param</strong> เท่านั้น —
+            ไม่ใช่ data exposure.
+          </p>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Control</th>
+                  <th>Type</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>ค้นหา ชื่อศูนย์, ตำบล…</td>
+                  <td>text input</td>
+                  <td>filter list แบบ contains (client-side)</td>
+                </tr>
+                <tr>
+                  <td>จังหวัด</td>
+                  <td>select (default "ทั้งหมด")</td>
+                  <td>cascade → reset อำเภอ/ตำบล</td>
+                </tr>
+                <tr>
+                  <td>อำเภอ/เขต</td>
+                  <td>select (default "ทั้งหมด")</td>
+                  <td>ขึ้นกับจังหวัดที่เลือก</td>
+                </tr>
+                <tr>
+                  <td>ตำบล/แขวง</td>
+                  <td>select (default "ทั้งหมด")</td>
+                  <td>ขึ้นกับอำเภอที่เลือก</td>
+                </tr>
+                <tr>
+                  <td>ระยะทางเส้นทาง</td>
+                  <td>chip group: 5 / 10 / 20 / 50 (กม.)</td>
+                  <td>
+                    filter รัศมีจากตำแหน่งผู้ใช้ (ต้องขอ geolocation; ถ้าไม่ได้ →
+                    disable chips + tooltip)
+                  </td>
+                </tr>
+                <tr>
+                  <td>สถานะศูนย์พักพิง</td>
+                  <td>checkbox: เปิดใช้งาน / ปิดใช้งาน</td>
+                  <td>default "เปิดใช้งาน" ติ๊ก</td>
+                </tr>
+                <tr>
+                  <td>ประเภทศูนย์พักพิง</td>
+                  <td>checkbox group</td>
+                  <td>ประเภทตาม shelter type enum</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Filter Behavior</h3>
+          <ul>
+            <li>
+              filter ทำงานกับ dataset เดียวกันที่ขับ list + map — เปลี่ยน filter
+              อัปเดตทั้งสองพร้อมกัน
+            </li>
+            <li>
+              "ระยะทางเส้นทาง" ต้องมีตำแหน่งผู้ใช้ก่อน; ถ้า deny geolocation →
+              ซ่อน/disable distance filter + แสดงทั้งหมด
+            </li>
+            <li>
+              จำนวนผลลัพธ์แสดงที่หัว list ("รายชื่อศูนย์พักพิง N แห่ง")
+            </li>
+            <li>empty state: "ไม่พบศูนย์ตามเงื่อนไข" + ปุ่มล้างฟิลเตอร์</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 4: MAP -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">4 · Map (กลาง)</h2>
+          <ul>
+            <li>
+              แสดงหมุดศูนย์พักพิงตาม <code>geo</code> ของแต่ละศูนย์ (lat/lng) +
+              หมุด "เป้าหมาย" และเส้นทางตัวอย่าง
+            </li>
+            <li>
+              พิกัด/ที่ตั้งศูนย์เป็น
+              <strong>ข้อมูลสาธารณะเชิงปฏิบัติการ</strong> — expose ได้ (ไม่ใช่
+              PII)
+            </li>
+            <li>
+              คลิกหมุด → highlight card ใน list (และ scroll ไปหา); คลิก card ใน
+              list → pan/zoom ไปหมุดนั้น (sync 2 ทาง)
+            </li>
+            <li>
+              marker สีตามสถานะความหนาแน่น (ดู occupancy_pct ใน list) — แดง ≥90%,
+              ส้ม 70–89%, เขียว &lt;70%
+            </li>
+            <li>
+              map degrade gracefully: ถ้า tile โหลดไม่ได้ (offline) → list +
+              metrics ยังใช้ได้เต็มที่; แสดง placeholder แทน map
+            </li>
+            <li>
+              ปุ่ม "นำทาง" ใน list เปิด external map app
+              (<code>geo:</code>/Google Maps directions) — ออกนอกระบบ
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 5: SHELTER LIST -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">5 · Shelter List (ขวา)</h2>
+          <p>
+            Header: "รายชื่อศูนย์พักพิง <strong>N แห่ง</strong>" + ปุ่ม
+            "ดูรายการทั้งหมด". การ์ดต่อศูนย์ (scrollable):
+          </p>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Display</th>
+                  <th>API field</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>ชื่อศูนย์</td>
+                  <td>เช่น "ศูนย์พักพิง เทศบาลนครหาดใหญ่"</td>
+                  <td><code>name</code></td>
+                </tr>
+                <tr>
+                  <td>สถานะ</td>
+                  <td>dot + "เปิดใช้งาน" / "ปิดใช้งาน"</td>
+                  <td><code>status</code> (active/inactive)</td>
+                </tr>
+                <tr>
+                  <td>ที่ตั้ง</td>
+                  <td>pin icon + "อปท. …, จังหวัด"</td>
+                  <td><code>address</code> / <code>org</code></td>
+                </tr>
+                <tr>
+                  <td>ระยะทางจากจุดศูนย์กลาง</td>
+                  <td>"8.5 กม."</td>
+                  <td>คำนวณจาก <code>geo</code> + ตำแหน่งผู้ใช้</td>
+                </tr>
+                <tr>
+                  <td>ผู้พักพิงปัจจุบัน</td>
+                  <td>
+                    progress bar + <code>{occupancy}/{capacity} คน</code> (เช่น
+                    3/250)
+                  </td>
+                  <td><code>occupancy</code> / <code>capacity</code></td>
+                </tr>
+                <tr>
+                  <td>จำนวนที่ว่าง</td>
+                  <td><code>capacity − occupancy</code> (เช่น 247 คน)</td>
+                  <td>derived</td>
+                </tr>
+                <tr>
+                  <td>Action: ดูรายละเอียด</td>
+                  <td>ปุ่ม outline → <code>/shelters/{id}</code></td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td>Action: นำทาง</td>
+                  <td>ปุ่ม primary → external map directions</td>
+                  <td><code>geo</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>List Behavior</h3>
+          <ul>
+            <li>
+              progress bar สีตาม occupancy_pct: แดง ≥90%, ส้ม 70–89%, เขียว
+              &lt;70%
+            </li>
+            <li>
+              per-shelter occupancy/capacity
+              <strong>แสดงตัวเลขเป๊ะเสมอ</strong> (OP-9 approved — เช่น 3/250,
+              ไม่ปัด/ไม่ mask แม้ count ต่ำ)
+            </li>
+            <li>เรียงลำดับ default: ระยะทางใกล้สุดก่อน (ถ้ามีตำแหน่ง) มิฉะนั้นตามชื่อ</li>
+            <li>การ์ด sync กับ map marker (hover/click highlight)</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 6: DATA EXPOSURE -->
+      <section id="exposure" class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">6 · Data Exposure &amp; Privacy (PUB tier)</h2>
+          <div class="alert alert-info mb-2">
+            <span
+              >หลักการ PUB: aggregate ต่อศูนย์เท่านั้น · ไม่มีรายบุคคล · ไม่ drill
+              down เป็นรายชื่อ · อ่าน central-only. tracked ใน
+              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+                >CR-005 §D</a
+              ></span
+            >
+          </div>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Surface</th>
+                  <th>Field</th>
+                  <th>สถานะ exposure</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Card ศูนย์ทั้งหมด / เปิดใช้งาน</td>
+                  <td>
+                    <code>shelters_total</code> / <code>shelters_open</code>
+                  </td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OPEN ได้ปกติ</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Card ผู้พักพิงปัจจุบัน</td>
+                  <td><code>occupancy_total</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">APPROVED OP-6</span>
+                    แสดงได้ (aggregate ระบบ). flag
+                    <code>public_metrics_occupancy</code> = kill-switch default on;
+                    ห้าม drill-down เป็นรายชื่อ
+                  </td>
+                </tr>
+                <tr>
+                  <td>Card กลุ่มเปราะบาง</td>
+                  <td><code>vulnerable_count</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">APPROVED OP-8</span>
+                    แสดงได้ (aggregate ระบบ). flag
+                    <code>public_metrics_vulnerable</code> = kill-switch default on;
+                    ห้าม drill-down เป็นราย attribute ความเปราะบาง
+                  </td>
+                </tr>
+                <tr>
+                  <td>Per-shelter occupancy/capacity</td>
+                  <td><code>occupancy</code> / <code>capacity</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">APPROVED OP-9</span>
+                    แสดงตัวเลขเป๊ะเสมอ (ไม่ปัด/ไม่ mask แม้ count ต่ำ) — ยอมรับ
+                    edge-case re-id เพื่อความโปร่งใส
+                  </td>
+                </tr>
+                <tr>
+                  <td>Map markers / ที่ตั้ง / ระยะทาง</td>
+                  <td>shelter <code>geo</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OPEN</span>
+                    ข้อมูลสาธารณะเชิงปฏิบัติการ
+                  </td>
+                </tr>
+                <tr>
+                  <td>Filter ทุกตัว</td>
+                  <td>query param</td>
+                  <td>
+                    <span class="badge badge-success badge-sm">N/A</span>
+                    ไม่ใช่ data exposure
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="alert alert-success mt-2">
+            <span
+              ><strong>Build rule (OP-6 / OP-8 approved 2026-06-22):</strong> หน้า
+              <code>/shelters</code> แสดง metric card ทั้ง 4 ได้ —
+              shelters_open/total, occupancy_total, vulnerable_count — รวมทั้ง
+              map, filter, per-shelter occupancy/capacity (แสดงเป๊ะเสมอ —
+              OP-9). flag <code>public_metrics_occupancy</code> /
+              <code>public_metrics_vulnerable</code> เหลือไว้เป็น kill-switch
+              (default on). open points ครบทุกข้อ — CR-005 approved</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- API CONTRACT SUMMARY -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">API Calls on this Page (Summary)</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>When</th>
+                  <th>Refresh</th>
+                  <th>Fail behavior</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>GET /public/v1/transparency/summary</code></td>
+                  <td>page load + every 10 min</td>
+                  <td>polling 10 min; stale &gt; 30 min</td>
+                  <td>
+                    metric cards แสดง "—"; ถ้า as_of &gt; 30 min โชว์ค่าเก่า +
+                    ป้ายเตือน
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>GET /public/v1/transparency/shelters</code></td>
+                  <td>page load + every 10 min</td>
+                  <td>polling 10 min</td>
+                  <td>
+                    list/map แสดง empty + toaster "ข้อมูลศูนย์สดไม่พร้อมใช้งาน"
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            ทุก endpoint อ่าน central-only ตาม public-tier trust boundary.
+            <code>occupancy_total</code> + <code>vulnerable_count</code> ใน
+            response = approved (OP-6 / OP-8); คืนค่าเว้นแต่ kill-switch flag ถูกปิด.
+          </p>
+        </div>
+      </section>
+
+      <!-- STATES -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Page States</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>State</th>
+                  <th>What changes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Normal</td>
+                  <td>metric cards + filter + map + list ครบ</td>
+                </tr>
+                <tr>
+                  <td>Loading initial</td>
+                  <td>metric cards + list แสดง skeleton; filter ใช้ได้ทันที</td>
+                </tr>
+                <tr>
+                  <td>Kill-switch off (occupancy/vulnerable)</td>
+                  <td>
+                    ปกติ default on (แสดง); ถ้าปิด kill-switch → ซ่อน card นั้น;
+                    row เหลือเท่าที่เปิด
+                  </td>
+                </tr>
+                <tr>
+                  <td>No geolocation</td>
+                  <td>
+                    ซ่อน/disable distance filter + ระยะทางใน card; list เรียงตามชื่อ
+                  </td>
+                </tr>
+                <tr>
+                  <td>Filter ไม่พบผล</td>
+                  <td>list empty state + ปุ่มล้างฟิลเตอร์; map ไม่มีหมุด</td>
+                </tr>
+                <tr>
+                  <td>Map offline</td>
+                  <td>map placeholder; list + metrics ยังทำงานเต็มที่</td>
+                </tr>
+                <tr>
+                  <td>API offline</td>
+                  <td>metrics "—"; list empty + toaster; filter UI ยังใช้ได้</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACCESSIBILITY & PERFORMANCE -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">
+            Accessibility &amp; Performance Requirements
+          </h2>
+          <ul>
+            <li>
+              <strong>WCAG 2.1 AA</strong> — contrast ≥ 4.5:1; metric บน dark
+              hero และ progress bar labels ต้องอ่านได้
+            </li>
+            <li>
+              Search input + filter selects ต้องมี <code>aria-label</code> /
+              associated label
+            </li>
+            <li>
+              map ต้องมี non-map fallback (list) — ผู้ใช้ screen reader
+              เข้าถึงข้อมูลศูนย์ผ่าน list ได้ครบ
+            </li>
+            <li>
+              metric ที่อัปเดตเอง ใช้ <code>aria-live="polite"</code>
+            </li>
+            <li>
+              shelter card actions ใช้ <code>&lt;a&gt;</code> /
+              <code>&lt;button&gt;</code> ที่ focusable
+            </li>
+            <li>
+              LCP ≤ 2.5 s บน 3G; map (tile โหลดหนัก) ต้อง lazy / ไม่บล็อก paint
+              ของ list/metrics
+            </li>
+            <li>ภาษาไทย: <code>lang="th"</code> บน root เมื่อ locale = TH</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- UAT -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">UAT Checklist</h2>
+          <ul>
+            <li>
+              ☐ เปิด <code>/shelters</code> โดยไม่ login → เห็น hero + metric
+              cards + filter + map + list
+            </li>
+            <li>
+              ☐ metric cards แสดงตัวเลข aggregate จาก API; card ที่ flag off
+              ไม่ปรากฏ
+            </li>
+            <li>☐ เลือกจังหวัด/อำเภอ/ตำบล → list + map อัปเดตพร้อมกัน</li>
+            <li>☐ เลือกระยะทาง 5/10/20/50 (เมื่อมีตำแหน่ง) → กรองรัศมีถูกต้อง</li>
+            <li>☐ ติ๊ก/เอาออก "เปิดใช้งาน"/"ปิดใช้งาน" → list กรองตามสถานะ</li>
+            <li>☐ คลิกหมุด map → highlight card ที่ตรงกันใน list (และกลับกัน)</li>
+            <li>
+              ☐ per-shelter แสดง occupancy/capacity (เช่น 3/250) + จำนวนที่ว่าง
+              ถูกต้อง
+            </li>
+            <li>☐ คลิก "ดูรายละเอียด" → ไป /shelters/{id}</li>
+            <li>☐ คลิก "นำทาง" → เปิด external map directions</li>
+            <li>☐ filter ไม่พบผล → empty state + ปุ่มล้างฟิลเตอร์</li>
+            <li>
+              ☐ ปิด network → metrics "—", map placeholder, list empty + toaster;
+              filter UI ยังกดได้
+            </li>
+            <li>☐ deny geolocation → distance filter + ระยะทางซ่อน/disable</li>
+            <li>☐ Toggle EN → ทุก label/หน่วยเปลี่ยนเป็น English</li>
+            <li>☐ Mobile 375px → filter collapsible, map/list stack อ่านได้</li>
+            <li>
+              ☐ card "ผู้พักพิงปัจจุบัน" + "กลุ่มเปราะบาง" แสดงค่าจริง (OP-6/OP-8
+              approved); ทดสอบ kill-switch: ตั้ง flag off → card นั้น
+              <strong>ไม่ปรากฏ</strong> และ API ไม่คืนค่า
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- OPEN POINTS -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Open Points</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>คำถาม</th>
+                  <th>Status / Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>OP-6</td>
+                  <td>
+                    expose <code>occupancy_total</code> ("ผู้พักพิงปัจจุบัน") สู่
+                    public ได้ไหม?
+                  </td>
+                  <td>
+                    <span class="badge badge-success">RESOLVED</span> —
+                    แสดงได้ (เพื่อให้รู้ว่าเต็มหรือยัง); flag = kill-switch
+                    default on
+                  </td>
+                </tr>
+                <tr>
+                  <td>OP-8</td>
+                  <td>
+                    expose <code>vulnerable_count</code> ("กลุ่มเปราะบาง") สู่
+                    public ได้ไหม?
+                  </td>
+                  <td>
+                    <span class="badge badge-success">RESOLVED</span> —
+                    แสดงได้ (aggregate ระบบ, ห้าม drill-down); flag = kill-switch
+                    default on
+                  </td>
+                </tr>
+                <tr>
+                  <td>OP-9</td>
+                  <td>
+                    per-shelter occupancy เป๊ะเมื่อ count ต่ำ — bucket/ปัด หรือ
+                    แสดงดิบ?
+                  </td>
+                  <td>
+                    <span class="badge badge-success">RESOLVED</span> —
+                    แสดงตัวเลขเป๊ะเสมอ (ไม่ปัด/ไม่ mask)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="alert alert-success mt-2">
+            <span
+              >privacy decisions (OP-6, OP-8, OP-9)
+              <strong>approved ครบ</strong> (2026-06-22) — tracked ใน
+              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+                >CR-005</a
+              >
+              (status: approved). metric แสดงต่อ public ได้; flag = kill-switch
+              default on</span
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

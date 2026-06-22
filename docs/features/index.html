@@ -175,6 +175,46 @@
                 <a class="btn btn-sm btn-primary w-fit" href="./public-tier-flow-spec.html">Open Spec</a>
               </div>
             </article>
+            <article class="card bg-base-200 border border-base-300 lg:col-span-2">
+              <div class="card-body">
+                <div class="flex items-center gap-2">
+                  <h3 class="card-title text-base">9. Public Portal — Landing Page</h3>
+                  <span class="badge badge-warning">Draft · R3</span>
+                </div>
+                <p class="text-sm">หน้า landing สาธารณะ: family search hero + real-time metrics, emergency alert banner, quick services grid (victim/donor/volunteer/search), EOC help center FAQ, emergency hotline contacts</p>
+                <a class="btn btn-sm btn-primary w-fit" href="./public-portal-landing-spec.html">Open Spec</a>
+              </div>
+            </article>
+            <article class="card bg-base-200 border border-base-300 lg:col-span-2">
+              <div class="card-body">
+                <div class="flex items-center gap-2">
+                  <h3 class="card-title text-base">10. Public Portal — Shelter Dashboard (ตรวจสอบศูนย์พักพิง)</h3>
+                  <span class="badge badge-warning">Draft · R3</span>
+                </div>
+                <p class="text-sm">หน้าตรวจสอบสถานะศูนย์พักพิง (/shelters): metric cards (ศูนย์ทั้งหมด/เปิด/ผู้พักพิง/กลุ่มเปราะบาง), search + filter (จังหวัด/อำเภอ/ตำบล/ระยะทาง/สถานะ/ประเภท), map หมุดศูนย์, shelter list พร้อม occupancy/capacity — metric อ่อนไหวติด feature flag (CR-005 §D)</p>
+                <a class="btn btn-sm btn-primary w-fit" href="./public-portal-shelter-spec.html">Open Spec</a>
+              </div>
+            </article>
+            <article class="card bg-base-200 border border-base-300 lg:col-span-2">
+              <div class="card-body">
+                <div class="flex items-center gap-2">
+                  <h3 class="card-title text-base">11. Public Portal — Family Search (สืบค้นญาติ)</h3>
+                  <span class="badge badge-warning">Draft · R3</span>
+                </div>
+                <p class="text-sm">หน้าสืบค้นญาติ/ครอบครัว (/search, Restoring Family Links, FAM tier): ค้นด้วยเลขบัตร 13 หลัก/passport/ชื่อ-สกุล/เบอร์ (FS-1), คืนข้อมูลบุคคลแบบ masked ตาม PDPA — ชื่อจริงเต็ม+สกุล mask, เลขบัตร mask, เพศ, ศูนย์, ภูมิลำเนา, เวลาลงทะเบียน, โซน, สถานะความปลอดภัย (FS-2/FS-3) — ขยาย FAM exposure surface (CR-005 §E)</p>
+                <a class="btn btn-sm btn-primary w-fit" href="./public-tier-find-spec.html">Open Spec</a>
+              </div>
+            </article>
+            <article class="card bg-base-200 border border-base-300 lg:col-span-2">
+              <div class="card-body">
+                <div class="flex items-center gap-2">
+                  <h3 class="card-title text-base">12. Public Portal — Donation &amp; Queue Booking (บริจาคและจองคิว)</h3>
+                  <span class="badge badge-warning">Draft · R2→R3</span>
+                </div>
+                <p class="text-sm">หน้าบริจาคและจองคิว (/donate, DN tier): stepper 4 ขั้น — กระดานความต้องการด่วนทุกศูนย์ (needs), ฟอร์มผู้บริจาค + รายการสิ่งของ (pre-fill จากการ์ด), logistics + จองคิว slot เวลา/ETA (ปลายทาง lock จากการ์ด), ตั๋ว QR + booking ref ที่บันทึก/พิมพ์แปะลงของได้ — ขยาย DN surface (donor PII/slot booking, CR-005 §F; DN-1..DN-7 open)</p>
+                <a class="btn btn-sm btn-primary w-fit" href="./public-tier-donation-spec.html">Open Spec</a>
+              </div>
+            </article>
           </div>
         </div>
       </section>

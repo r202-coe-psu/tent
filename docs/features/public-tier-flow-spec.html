@@ -10,7 +10,7 @@
     <style>body{background:#f6fbf8}.shell{max-width:1380px;margin:0 auto;padding:1rem}@media print{.no-print{display:none!important}body{background:#fff}}</style>
   </head>
   <body>
-    <header class="navbar bg-base-100 border-b border-base-300"><div class="flex-1"><div><p class="text-xs uppercase text-base-content/60">Feature Flow Spec</p><h1 class="text-xl font-semibold">Public / No-Login Tier (FAM + DN + PUB)</h1></div></div><div class="flex-none gap-2 no-print"><a class="btn btn-sm btn-outline" href="./index.html">Back</a><span class="badge badge-warning">Draft v0.2</span><span class="badge badge-outline">2026-06-11</span></div></header>
+    <header class="navbar bg-base-100 border-b border-base-300"><div class="flex-1"><div><p class="text-xs uppercase text-base-content/60">Feature Flow Spec</p><h1 class="text-xl font-semibold">Public / No-Login Tier (FAM + DN + PUB)</h1></div></div><div class="flex-none gap-2 no-print"><a class="btn btn-sm btn-outline" href="./index.html">Back</a><a class="btn btn-sm btn-outline" href="./public-tier-find-spec.html">Family Search Spec</a><a class="btn btn-sm btn-outline" href="./public-tier-donation-spec.html">Donation Spec</a><span class="badge badge-warning">Draft v0.3</span><span class="badge badge-outline">2026-06-22</span></div></header>
     <main class="shell space-y-4">
 
       <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Summary</h2><p>ครอบคลุม access tier ที่<strong>ไม่ต้อง login</strong>: Family Search (FAM), Donor (DN, FD-16) และ Public Transparency (PUB) — เป็น Public API Service แยกจากระบบหลัก รันที่ central เท่านั้น</p><div class="alert alert-info"><span>หลักการ: เห็นน้อยที่สุดเท่าที่จำเป็น · อ่านจาก central node เสมอ · ไม่ expose CouchDB ตรงสู่ public · ไม่แตะ edge/shelter device · staff LAN fallback ไม่ใช้กับ public tier</span></div><div class="alert alert-warning"><span>API tier (machine / API key / EOC / Open API) <strong>ไม่อยู่ใน spec นี้</strong> — deferred ตาม FD-14 (ทำหลัง main application เสร็จ)</span></div></div></section>
@@ -37,7 +37,7 @@
         <li><strong>Reservation TTL:</strong> declaration ที่ไม่มีการส่งของจริงภายใน 72 ชม. ถูกปลด reservation อัตโนมัติ (คืน need ให้ donor รายอื่น) — declaration ยัง track ได้แต่สถานะเป็น <code>expired</code></li>
       </ul><div class="alert alert-warning"><span><strong>Open point:</strong> นโยบาย "OTP default off + risk-based" เป็นข้อเสนอจากการ review (2026-06-11) แทนร่างเดิมที่บังคับ OTP/CAPTCHA — รอเคาะสุดท้าย</span></div></div></section>
 
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">FAM — Family Search</h2><ul>
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">FAM — Family Search</h2><div class="alert alert-warning"><span><strong>Expanded surface (CR-005 §E, approved 2026-06-22):</strong> หน้า public <code>/search</code> ("สืบค้นญาติ") ขยาย FAM tier เกินร่างด้านล่าง — ค้นได้เพิ่มด้วย <strong>เลขบัตร 13 หลัก (exact) + passport</strong> (FS-1) และคืน field เพิ่ม <strong>เลขบัตร mask, เพศ, ชื่อศูนย์, ภูมิลำเนา mask, เวลาลงทะเบียน, โซน</strong> (FS-2, ทุก field masked) นอกเหนือ ชื่อ/สถานะด้านล่าง. กติกา mask ชื่อ (ชื่อเต็ม + สกุล mask) คงเดิม (FS-3). identifier ทุกตัว exact-only กัน enumeration. รายละเอียดเต็ม: <a href="./public-tier-find-spec.html">Family Search Flow Spec</a></span></div><ul>
         <li>Endpoint: <code>POST /public/v1/family-search</code> — ใช้ POST กันชื่อบุคคลติด access log/URL</li>
         <li>Query ได้ 2 ทาง: (a) ชื่อ/สกุล — ขั้นต่ำ 3 ตัวอักษร match ระดับ token; (b) <strong>เบอร์โทร — ต้องครบทั้งเบอร์เท่านั้น</strong> (normalize ตัดขีด/เว้นวรรค) ไม่รับ partial กัน enumeration — ไม่มี endpoint แบบ list-all</li>
         <li>Response ต่อคน: <strong>ชื่อจริงเต็ม + นามสกุล masked</strong> (กติกาด้านล่าง), ชื่อเล่น, ชื่อศูนย์, สถานะ (<code>in_shelter</code> / <code>moved</code> / <code>checked_out</code>) — <strong>ไม่มีเบอร์โทรเด็ดขาด</strong> (แม้ query ด้วยเบอร์) ไม่มีเลขบัตร medical zone หรือ field อื่นใด</li>
@@ -52,10 +52,11 @@
         <li>Anti-enumeration: rate-limit แรงต่อ IP, ตอบ generic เมื่อไม่พบ (ไม่บอกว่า "มีแต่ถูกซ่อน"), PoW challenge เมื่อ pattern ผิดปกติ</li>
       </ul></div></section>
 
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">DN — Donor</h2><div class="overflow-x-auto"><table class="table table-zebra"><thead><tr><th>Endpoint</th><th>Auth</th><th>ทำอะไร</th></tr></thead><tbody>
+      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">DN — Donor</h2><div class="alert alert-warning"><span><strong>Expanded surface (CR-005 §F, 2026-06-22):</strong> หน้า public <code>/donate</code> ("บริจาคและจองคิว") ขยาย DN tier เกินร่างด้านล่าง — donor PII เพิ่ม <strong>Line ID / email (optional, DN-2 resolved)</strong> นอกเหนือ ชื่อ+เบอร์ (ใบอนุโมทนา DN-3 = <strong>ระบบไม่รองรับ</strong>); เพิ่ม <strong>logistics (วิธีส่ง/ยานพาหนะ/ETA) + slot booking ที่ <em>ศูนย์ตั้งค่าเอง</em></strong> (DN-5 resolved); donor <strong>แก้เลข tracking ขนส่งพัสดุภายหลังผ่าน ticket</strong> (DN-6 resolved → <code>PATCH /donations/{token}</code>); doc ใหม่ <code>type:"donation"</code> schema_v 2 (DN-7 resolved). <strong>โควตารับบริจาคนับจาก campaign <code>qty_target</code></strong> (DN-4 resolved): need ที่ <code>needs_open ≤ 0</code> (รับครบ/เกินเป้ารอบนี้) = "งดรับ" กดไม่ได้; submit ตอนเต็มพอดี → <code>NEED_FULL</code>. DN-1 (OTP) <strong>ติดไว้ก่อน — develop แบบไม่มี OTP</strong>. รายละเอียดเต็ม: <a href="./public-tier-donation-spec.html">Donation &amp; Queue Booking Flow Spec</a></span></div><div class="overflow-x-auto"><table class="table table-zebra"><thead><tr><th>Endpoint</th><th>Auth</th><th>ทำอะไร</th></tr></thead><tbody>
         <tr><td><code>GET /public/v1/needs</code></td><td>ไม่ต้อง (เคาะ 2026-06-11)</td><td>รายการของที่ศูนย์ขาด aggregate จาก campaign — เลือกดูรายศูนย์ได้</td></tr>
-        <tr><td><code>POST /public/v1/donations</code></td><td>เบอร์โทร (+ OTP เฉพาะเมื่อ flag เปิด)</td><td>สร้าง pre-declaration + soft reservation → ตอบ <code>tracking_token</code></td></tr>
+        <tr><td><code>POST /public/v1/donations</code></td><td>เบอร์โทร (+ OTP เฉพาะเมื่อ flag เปิด)</td><td>สร้าง pre-declaration + soft reservation → ตอบ <code>tracking_token</code>; re-check โควตา atomic — need เต็ม (<code>needs_open ≤ 0</code>) → <code>NEED_FULL</code>, slot เต็ม → <code>SLOT_FULL</code></td></tr>
         <tr><td><code>GET /public/v1/donations/{tracking_token}</code></td><td>token ในตัว</td><td>สถานะ declaration ของตนเท่านั้น (declared → received / expired)</td></tr>
+        <tr><td><code>PATCH /public/v1/donations/{tracking_token}</code></td><td>token ในตัว</td><td>donor แก้เลข tracking ขนส่งพัสดุ/หมายเหตุ ภายหลัง (DN-6); ห้ามแก้ศูนย์/slot/booking_ref; lock เมื่อ received</td></tr>
         <tr><td><code>POST /public/v1/otp/request</code> · <code>/otp/verify</code></td><td>—</td><td>ใช้เฉพาะเมื่อ <code>public_otp_required</code> เปิด</td></tr>
       </tbody></table></div><ul>
         <li><code>tracking_token</code> = opaque random ≥128-bit, <strong>ใช้ได้ตลอดไป</strong> (เคาะ 2026-06-11) — แสดงครั้งเดียวตอนสร้าง + แนะนำ donor เก็บลิงก์</li>
@@ -64,9 +65,10 @@
       </ul></div></section>
 
       <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">PUB — Transparency</h2><ul>
-        <li><code>GET /public/v1/transparency/shelters</code> — รายชื่อศูนย์ที่เปิด + occupancy รวม (จำนวนคน ไม่มีรายบุคคล)</li>
+        <li><code>GET /public/v1/transparency/summary</code> — system-wide aggregate: <code>shelters_open</code>/<code>shelters_total</code>, <code>occupancy_total</code> (OP-6 approved), <code>vulnerable_count</code> (OP-8 approved) — ดู <a href="../changes/CR-005-public-portal-landing-public-metrics.md">CR-005 §A/§D</a>; ขับ landing metrics + Shelter Dashboard cards</li>
+        <li><code>GET /public/v1/transparency/shelters</code> — รายชื่อศูนย์ที่เปิด + occupancy รวม + capacity ต่อศูนย์ (จำนวนคน ไม่มีรายบุคคล); per-shelter แสดงตัวเลขเป๊ะเสมอ (OP-9 approved — ไม่ปัด/ไม่ mask)</li>
         <li><code>GET /public/v1/transparency/donations</code> — ยอดรับบริจาค aggregate ต่อศูนย์/campaign</li>
-        <li>Aggregate เท่านั้นทุกกรณี — ไม่มีเส้นทางใดไปถึงข้อมูลระดับบุคคลจาก tier นี้</li>
+        <li>Aggregate เท่านั้นทุกกรณี — ไม่มีเส้นทางใดไปถึงข้อมูลระดับบุคคลจาก tier นี้ (occupancy_total / vulnerable_count = aggregate ระดับระบบ, ห้าม drill-down)</li>
       </ul></div></section>
 
       <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">API Conventions (service นี้)</h2><pre><code>Base path : /public/v1
@@ -88,6 +90,7 @@ Freshness : ทุก response แนบ "as_of": ISO-8601</code></pre></div></s
         <li>FAM: คนที่ <code>search_excluded</code> ไม่ปรากฏในผลค้นหาแม้ query ตรงตัว; ทุก query มี search_audit record</li>
         <li>FAM: นามสกุลใน response ถูก mask ตามกติกาเสมอ (รวม edge case นามสกุลสั้น); ไม่มี response ใดมีเบอร์โทร; ค้นด้วยเบอร์ partial ต้องไม่ได้ผลลัพธ์</li>
         <li>DN: declaration ที่ไม่ส่งของภายใน 72 ชม. ปลด reservation อัตโนมัติ; tracking_token เดิมยังเปิดดูสถานะ expired ได้</li>
+        <li>DN: need ที่รับครบ/เกินเป้า campaign (<code>needs_open ≤ 0</code>) แสดง "งดรับ" กดเลือกไม่ได้; submit ตอนเต็มพอดี → <code>NEED_FULL</code> (โควตานับ donation <code>declared</code>+<code>received</code> ปลดคืนเมื่อ reservation expire)</li>
         <li>DN: เมื่อ <code>public_otp_required</code> ปิด — สร้าง declaration ได้โดยไม่มี OTP; เมื่อเปิด — ต้องผ่าน OTP ก่อน</li>
         <li>Public service อ่าน/เขียนผ่าน central เท่านั้น — ทดสอบโดยตัด central ออก: ทุก endpoint ตอบ error ที่ควบคุมได้ ไม่ fallback ไป Edge หรือ staff LAN fallback path</li>
         <li>Rate-limit ทำงานต่อ IP และต่อเบอร์; เกิน limit ตอบ <code>RATE_LIMITED</code> ไม่ leak ข้อมูล</li>
@@ -96,7 +99,7 @@ Freshness : ทุก response แนบ "as_of": ISO-8601</code></pre></div></s
       <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Open Points</h2><ul>
         <li>เคาะสุดท้าย: OTP default off + risk-based friction (ดู Abuse Control) — เสนอแทนการบังคับ OTP/CAPTCHA เพราะ usability ช่วงภัยพิบัติ</li>
         <li>ช่องทางแจ้ง <code>tracking_token</code> ซ้ำเมื่อ donor ทำหาย (SMS resend? ผูกกับเบอร์?) — ยังไม่กำหนด</li>
-        <li>รายละเอียด field ของ donation doc / campaign doc → รอ Data Model ฉบับใหม่ (docs/data เดิมถูก retire 2026-06-11)</li>
+        <li>รายละเอียด field ของ donation / campaign / slot doc → canonical ที่ <a href="../data/schema.md">schema.md</a> §2.3 (<code>donation</code> schema_v 2, CR-005 §F) · §2.4 (<code>donation_campaign</code>) · §2.13 (<code>donation_slot</code>, DN-5)</li>
       </ul></div></section>
 
     </main>
