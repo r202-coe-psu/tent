@@ -10,93 +10,193 @@
 	import PendingReviewBoard from './components/pending-review-board.svelte';
 	import PendingReviewDialog from './components/pending-review-dialog.svelte';
 	import ScanStation from './components/scan-station.svelte';
-	import type { SpecialRequestInput } from '$lib/features/operations';
+	import {
+		useCampaigns,
+		useStockLedgers,
+		useDonations,
+		useCreateCampaign,
+		useUpdateCampaign,
+		stockBalance,
+		SHELTER_CODE,
+		type SpecialRequestInput,
+		type Donation
+	} from '$lib/features/operations';
+	import { authStore } from '$lib/stores/auth.svelte';
 
 	let selectedShelter = $state('shelter-1');
 	let activeSubTab = $state('scan'); // 'scan', 'pending', 'needs'
 	let isModalOpen = $state(false);
 
-	let items = $state([
-		{
-			id: '1',
-			name: 'ข้าวสาร (ข้าวหอมมะลิ 100%)',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 450,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		},
-		{
-			id: '2',
-			name: 'เนื้อไก่สด (เนื้อส่วนอก / สะโพก)',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 150,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		},
-		{
-			id: '3',
-			name: 'น้ำดื่มบรรจุขวด 1.5L',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 600,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		},
-		{
-			id: '4',
-			name: 'ข้าวสาร (ข้าวหอมมะลิ 100%)',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 80,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		},
-		{
-			id: '5',
-			name: 'น้ำดื่มบรรจุขวด 1.5L',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 120,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		}
-	]);
+	const campaignsQuery = useCampaigns();
+	const stockLedgersQuery = useStockLedgers();
+	const donationsQuery = useDonations();
 
-	function toggleShowOnHome(itemId: string) {
-		const item = items.find((i) => i.id === itemId);
-		if (item) {
-			item.showOnHome = !item.showOnHome;
-			toast.success(
-				item.showOnHome ? `กำลังโปรโมต "${item.name}" บนหน้าแรก` : `ซ่อน "${item.name}" จากหน้าแรก`
+	const createCampaignMutation = useCreateCampaign();
+	const updateCampaignMutation = useUpdateCampaign();
+
+	const ITEM_NAMES: Record<string, string> = {
+		'item:rice': 'ข้าวสาร (ข้าวหอมมะลิ 100%)',
+		'item:water': 'น้ำดื่มบรรจุขวด 1.5L',
+		'item:paracetamol': 'ยาพาราเซตามอล',
+		'item:soap': 'สบู่ก้อน',
+		'item:blanket': 'ผ้าห่มกันหนาว',
+		'item:egg': 'ไข่ไก่สด'
+	};
+
+	const balances = $derived(stockBalance(stockLedgersQuery.data ?? []));
+
+	const ctx = $derived({
+		shelterCode: SHELTER_CODE,
+		createdBy: authStore.user?.name ?? 'system'
+	});
+
+	const derivedItems = $derived.by(() => {
+		const campaigns = campaignsQuery.data ?? [];
+		const donations = donationsQuery.data ?? [];
+
+		const donationsByCampaign = new Map<string, Donation[]>();
+		for (const don of donations) {
+			if (don.status === 'expired' || don.status === 'cancelled') continue;
+
+			if (!don.campaign_id) continue;
+			if (!donationsByCampaign.has(don.campaign_id)) {
+				donationsByCampaign.set(don.campaign_id, []);
+			}
+			donationsByCampaign.get(don.campaign_id)!.push(don);
+		}
+
+		const list: any[] = [];
+		for (const camp of campaigns) {
+			const campDonations = donationsByCampaign.get(camp._id) ?? [];
+			for (const need of camp.needs) {
+				const itemId = need.item_id;
+
+				let reserved = 0;
+				for (const don of campDonations) {
+					for (const item of don.items ?? []) {
+						if (item.item_id === itemId) {
+							reserved += item.qty;
+						}
+					}
+				}
+
+				const onHand = balances.get(itemId) ?? 0;
+				const target = need.qty_target;
+
+				const isAutoCutOff = onHand + reserved >= target;
+				const isManualClosed = camp.status === 'closed';
+				const isCutOff = isAutoCutOff || isManualClosed;
+
+				list.push({
+					id: `${camp._id}:${itemId}`,
+					name: ITEM_NAMES[itemId] ?? itemId,
+					location: camp.title || 'คลังช่วยเหลือภัยพิบัติ EOC',
+					reserved: reserved,
+					onHand: onHand,
+					target: target,
+					showOnHome: !isManualClosed,
+					isCutOff: isCutOff,
+					campaignDoc: camp
+				});
+			}
+		}
+		return list;
+	});
+
+	function toggleShowOnHome(compoundId: string) {
+		const targetItem = derivedItems.find((i) => i.id === compoundId);
+		if (targetItem) {
+			const campaign = targetItem.campaignDoc;
+			const nextStatus = campaign.status === 'open' ? 'closed' : 'open';
+			updateCampaignMutation.mutate(
+				{
+					...campaign,
+					status: nextStatus
+				},
+				{
+					onSuccess: () => {
+						toast.success(
+							nextStatus === 'open'
+								? `กำลังโปรโมต "${targetItem.name}" บนหน้าแรก`
+								: `ซ่อน "${targetItem.name}" จากหน้าแรก`
+						);
+					},
+					onError: (err) => {
+						toast.error(`ไม่สามารถแก้ไขการโปรโมตได้: ${err.message}`);
+					}
+				}
 			);
 		}
 	}
 
-	function toggleCutOff(itemId: string) {
-		const item = items.find((i) => i.id === itemId);
-		if (item) {
-			item.isCutOff = !item.isCutOff;
-			toast.success(
-				item.isCutOff
-					? `ปิดรับบริจาคสำหรับ "${item.name}" แล้ว`
-					: `เปิดรับบริจาคสำหรับ "${item.name}" อีกครั้ง`
+	function toggleCutOff(compoundId: string) {
+		const targetItem = derivedItems.find((i) => i.id === compoundId);
+		if (targetItem) {
+			const campaign = targetItem.campaignDoc;
+			const nextStatus = campaign.status === 'open' ? 'closed' : 'open';
+			updateCampaignMutation.mutate(
+				{
+					...campaign,
+					status: nextStatus
+				},
+				{
+					onSuccess: () => {
+						toast.success(
+							nextStatus === 'closed'
+								? `ปิดรับบริจาคสำหรับ "${targetItem.name}" แล้ว`
+								: `เปิดรับบริจาคสำหรับ "${targetItem.name}" อีกครั้ง`
+						);
+					},
+					onError: (err) => {
+						toast.error(`ไม่สามารถบันทึกสถานะได้: ${err.message}`);
+					}
+				}
 			);
 		}
 	}
 
 	function handleAddRequest(input: SpecialRequestInput) {
-		items.push({
-			id: String(items.length + 1),
-			name: input.name,
-			location: input.location,
-			reserved: 0,
-			target: input.target,
-			showOnHome: true,
-			isCutOff: false
-		});
-		toast.success(`เพิ่มประกาศความต้องการ "${input.name}" สำเร็จ`);
+		// แมปคำค้นหาภาษาไทยทั่วไปเข้ากับ ID ของประเภทไอเท็มในฐานข้อมูล
+		const lowerName = input.name.toLowerCase();
+		let itemId = 'item:custom';
+		if (lowerName.includes('ข้าว')) itemId = 'item:rice';
+		else if (lowerName.includes('น้ำ')) itemId = 'item:water';
+		else if (lowerName.includes('พารา') || lowerName.includes('ยา')) itemId = 'item:paracetamol';
+		else if (lowerName.includes('สบู่')) itemId = 'item:soap';
+		else if (lowerName.includes('ห่ม')) itemId = 'item:blanket';
+		else if (lowerName.includes('ไข่')) itemId = 'item:egg';
+		else {
+			// กรณีที่พิมพ์คำอื่น ๆ จะสุ่มรหัสไอเท็มขึ้นมาใหม่
+			itemId = `item:${Math.random().toString(36).substring(2, 8)}`;
+		}
+
+		const newCampaignInput = {
+			title: input.name,
+			needs: [
+				{
+					item_id: itemId,
+					qty_target: input.target,
+					unit: 'ชิ้น'
+				}
+			],
+			notes: `ประกาศพิเศษสำหรับคลัง: ${input.location}`
+		};
+
+		createCampaignMutation.mutate(
+			{
+				input: newCampaignInput,
+				ctx: ctx
+			},
+			{
+				onSuccess: () => {
+					toast.success(`เพิ่มประกาศความต้องการ "${input.name}" สำเร็จ`);
+					isModalOpen = false; // ปิดหน้าต่างโมดอลกรอกข้อมูล
+				},
+				onError: (err) => {
+					toast.error(`ไม่สามารถสร้างประกาศได้: ${err.message}`);
+				}
+			}
+		);
 	}
 
 	let pendingRequests = $state([
@@ -266,7 +366,7 @@
 		/>
 	{:else if activeSubTab === 'needs'}
 		<NeedsBoardAdmin
-			{items}
+			items={derivedItems}
 			onAddRequest={() => (isModalOpen = true)}
 			onToggleShowOnHome={toggleShowOnHome}
 			onToggleCutOff={toggleCutOff}

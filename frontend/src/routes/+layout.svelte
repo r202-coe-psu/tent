@@ -8,6 +8,7 @@
 	import { startNamedSync, stopNamedSync } from '$lib/db/pouch';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SHELTER_DB, startPeopleLiveQuery } from '$lib/features/people';
+	import { startOperationsLiveQuery } from '$lib/features/operations';
 
 	let { children, data } = $props();
 
@@ -17,9 +18,11 @@
 	$effect(() => {
 		if (!authStore.isAuthenticated) return;
 		startNamedSync(SHELTER_DB, () => authStore.markNeedsReauth());
-		const live = startPeopleLiveQuery(data.queryClient);
+		const livePeople = startPeopleLiveQuery(data.queryClient);
+		const liveOps = startOperationsLiveQuery(data.queryClient);
 		return () => {
-			live.stop();
+			livePeople.stop();
+			liveOps.stop();
 			stopNamedSync(SHELTER_DB);
 		};
 	});

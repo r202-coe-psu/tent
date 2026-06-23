@@ -47,3 +47,20 @@ export {
 	type CampaignInput,
 	type SpecialRequestInput
 } from './domain/operations';
+
+// Data layer — repositories
+export {
+	operationsRepository,
+	shelterDb,
+	SHELTER_CODE
+} from './data/operations.pouch';
+// Application — queries
+export {
+	operationsKeys,
+	useCampaigns,
+	useStockLedgers,
+	useDonations,
+	useCreateCampaign,
+	useUpdateCampaign,
+	startOperationsLiveQuery
+} from './application/queries';
