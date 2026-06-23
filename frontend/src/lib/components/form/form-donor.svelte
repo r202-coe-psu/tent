@@ -6,8 +6,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Checkbox } from '$lib/components/ui/checkbox';
-	import { toast } from 'svelte-sonner';
-	import { donationStore } from '../donation.svelte';
+	import { donationStore } from '../../../routes/public/donations/donation.svelte';
 
 	let validationErrors = $state<string[]>([]);
 
@@ -122,15 +121,6 @@
 					class="mt-1.5"
 				/>
 			</div>
-		</div>
-
-		<div
-			class="mt-4 flex cursor-pointer items-center gap-3 rounded-xl border border-border/40 bg-muted/30 p-4 select-none"
-		>
-			<Checkbox id="tax-receipt" bind:checked={donationStore.taxReceipt} />
-			<Label for="tax-receipt" class="cursor-pointer text-xs font-bold text-foreground"
-				>ต้องการใบอนุโมทนาบัตร / ลดหย่อนภาษี</Label
-			>
 		</div>
 	</div>
 
