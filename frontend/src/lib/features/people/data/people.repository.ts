@@ -1,6 +1,6 @@
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
-import type { Evacuee, EvacueeInput } from '../domain/people';
+import type { Evacuee, EvacueeInput, Household, HouseholdInput } from '../domain/people';
 
 /**
  * Persistence contract for the `people` feature. The application layer depends
@@ -22,4 +22,15 @@ export interface PeopleRepository {
 	getEvacuee(id: string): Promise<Evacuee | null>;
 	/** Persist an edited evacuee (LWW: bumps `updated_at`). */
 	updateEvacuee(evacuee: Evacuee): Promise<Evacuee>;
+
+	/** Mint a household from form input + author context and persist it. */
+	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household>;
+	/** Every household in this shelter database. */
+	listHouseholds(): Promise<Household[]>;
+	/** Paginated list of households — fetches all then slices by page/pageSize. */
+	listHouseholdsPaginated(page: number, pageSize: number): Promise<PaginatedResult<Household>>;
+	/** One household by `_id`, or `null` when absent. */
+	getHousehold(id: string): Promise<Household | null>;
+	/** Persist an edited household (LWW: bumps `updated_at`). */
+	updateHousehold(household: Household): Promise<Household>;
 }

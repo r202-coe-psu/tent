@@ -5,7 +5,11 @@ import {
 	createEvacuee as buildEvacuee,
 	isEvacuee,
 	type Evacuee,
-	type EvacueeInput
+	type EvacueeInput,
+	createHousehold as buildHousehold,
+	isHousehold,
+	type Household,
+	type HouseholdInput
 } from '../domain/people';
 import type { PeopleRepository } from './people.repository';
 
@@ -58,6 +62,31 @@ export class PeoplePouchRepository implements PeopleRepository {
 	/** Persist an edited evacuee (LWW: bumps `updated_at`). */
 	updateEvacuee(evacuee: Evacuee): Promise<Evacuee> {
 		return this.repo.put(touch(evacuee));
+	}
+
+	/** Mint a household from form input + author context and persist it. */
+	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household> {
+		return this.repo.put(buildHousehold(input, ctx));
+	}
+
+	/** Every household in this shelter database. */
+	listHouseholds(): Promise<Household[]> {
+		return this.repo.allByType('household', isHousehold);
+	}
+
+	/** Paginated list of households. */
+	listHouseholdsPaginated(page: number, pageSize: number): Promise<PaginatedResult<Household>> {
+		return this.repo.pageByType('household', isHousehold, page, pageSize);
+	}
+
+	/** One household by `_id`, or `null` when absent. */
+	getHousehold(id: string): Promise<Household | null> {
+		return this.repo.get<Household>(id);
+	}
+
+	/** Persist an edited household (LWW: bumps `updated_at`). */
+	updateHousehold(household: Household): Promise<Household> {
+		return this.repo.put(touch(household));
 	}
 }
 

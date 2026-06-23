@@ -4,7 +4,9 @@ import {
 	createMovement,
 	createScreening,
 	applyMovementToStay,
-	isEvacuee
+	isEvacuee,
+	createHousehold,
+	isHousehold
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -68,5 +70,32 @@ describe('createScreening', () => {
 		expect(s.needs_referral).toBe(false);
 		expect(s.symptoms).toEqual([]);
 		expect(typeof s.screened_at).toBe('string');
+	});
+});
+
+describe('createHousehold', () => {
+	it('stamps the household document correctly and parses pets', () => {
+		const h = createHousehold(
+			{
+				label: ' บ้านทองดี ',
+				head_evacuee_id: 'evacuee:123',
+				zone: 'A',
+				pets: [{ species: 'dog', count: 2, notes: 'friendly' }],
+				notes: 'ใกล้ประตูทางออก'
+			},
+			ctx
+		);
+
+		expect(h._id.startsWith('household:')).toBe(true);
+		expect(h.type).toBe('household');
+		expect(h.schema_v).toBe(1);
+		expect(h.shelter_code).toBe('SH001');
+		expect(h.created_by).toBe('staff1');
+		expect(h.label).toBe('บ้านทองดี'); // trimmed
+		expect(h.head_evacuee_id).toBe('evacuee:123');
+		expect(h.zone).toBe('A');
+		expect(h.pets).toEqual([{ species: 'dog', count: 2, notes: 'friendly' }]);
+		expect(h.notes).toBe('ใกล้ประตูทางออก');
+		expect(isHousehold(h)).toBe(true);
 	});
 });
