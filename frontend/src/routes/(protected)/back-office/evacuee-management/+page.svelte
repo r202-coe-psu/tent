@@ -250,7 +250,7 @@
 					<span class="rounded bg-primary/10 px-1.5 py-0.5 font-bold text-primary">{householdsTotal} ครัวเรือน</span>
 				</p>
 			</div>
-			<Button size="sm" onclick={() => goto(resolve('/back-office/households'))}>
+			<Button size="sm" onclick={() => goto(resolve('/back-office/households/new'))}>
 				<Plus class="h-3.5 w-3.5 mr-1" />
 				เพิ่มครัวเรือน
 			</Button>
@@ -335,7 +335,7 @@
 									<Button
 										variant="outline"
 										size="sm"
-										onclick={() => goto(resolve(`/back-office/households?id=${h._id}`))}
+										onclick={() => goto(resolve(`/back-office/households/${h._id}`))}
 									>
 										แก้ไขข้อมูล
 									</Button>

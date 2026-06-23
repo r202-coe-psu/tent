@@ -21,8 +21,8 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 
 	// Retrieve household ID if editing
-	const householdIdParam = $derived($page.url.searchParams.get('id'));
-	const isEditMode = $derived(!!householdIdParam);
+	const householdIdParam = $derived($page.params.id);
+	const isEditMode = true;
 
 	// Fetch data
 	const evacueesQuery = useEvacuees();
@@ -68,11 +68,7 @@
 			};
 
 			let householdId = '';
-			if (!isEditMode) {
-				const res = await createHouseholdMutation.mutateAsync({ input, ctx });
-				householdId = res._id;
-				toast.success(`สร้างครัวเรือน "${res.label}" สำเร็จ`);
-			} else if (isEditMode && editingHousehold) {
+			if (isEditMode && editingHousehold) {
 				const updated = {
 					...editingHousehold,
 					label: input.label,
@@ -197,10 +193,10 @@
 				</div>
 				<div>
 					<Card.Title class="text-xl font-bold text-foreground">
-						{isEditMode ? 'แก้ไขข้อมูลครัวเรือน' : 'เพิ่มครัวเรือนใหม่'}
+						แก้ไขข้อมูลครัวเรือน
 					</Card.Title>
 					<p class="text-xs text-muted-foreground mt-0.5">
-						{isEditMode ? 'อัปเดตข้อมูล สมาชิก และสัตว์เลี้ยงของครัวเรือน' : 'บันทึกข้อมูลเพื่อจัดกลุ่มสมาชิกและจัดสรรที่พัก'}
+						อัปเดตข้อมูล สมาชิก และสัตว์เลี้ยงของครัวเรือน
 					</p>
 				</div>
 			</div>
