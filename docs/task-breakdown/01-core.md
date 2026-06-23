@@ -2,9 +2,9 @@
 title: "Task Breakdown — Platform/Core"
 status: active
 created: 2026-06-05
-updated: 2026-06-18
+updated: 2026-06-22
 module: core
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
+note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (2026-06-22) แก้ public-tier redaction (T-01) + donation schema_v2/donation_slot (T-02) + public read-model (T-35)
 ---
 
 # Platform/Core
@@ -53,7 +53,8 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 - Role + permission ครบตาม role-permission matrix, mapping ทดสอบ allow/deny ต่อ role อัตโนมัติ
 - Role/shelter-scope enforcement บังคับที่ data/service layer — cross-shelter access ต้อง deny ทั้ง read/write
-- Public/FAM/API/EOC serializers มี no-medical/no-national-ID tests รวม parameter manipulation/adversarial request
+- Public/FAM/API/EOC serializers มี no-medical-detail tests รวม parameter manipulation/adversarial request; **national ID rule เป็น tier-specific (CR-005):** PUB/EOC/Open API = ห้าม national ID ทุกกรณี; **FAM tier (`/search`) คืน national ID แบบ masked เท่านั้น** (3หน้า+3ท้าย) — test ยืนยันว่าเลขเต็ม/เบอร์เต็ม/medical หลุดไม่ได้แม้ query ด้วยเลขบัตร/เบอร์
+- **PUB-tier aggregate whitelist (CR-005 §A/OP-8):** serializer ของ `/public/v1/transparency/*` ยอมให้ aggregate ระดับระบบ `occupancy_total` + `vulnerable_count` ผ่านได้ (กั้นหลัง flag `public_metrics_occupancy`/`public_metrics_vulnerable`, default on) — **ห้าม drill-down เป็นรายชื่อ/ราย attribute** (test ยืนยันไม่มี person-level path)
 - Role ฝั่ง baseline (registration, screening, medical) ทำงานถูกต้องร่วมกับ role ใหม่ภายใต้ matrix เดียวกัน และมี pattern/ตัวอย่างให้ทีมอื่น reuse
 - เอกสารวิธีประกาศ permission ของ endpoint ใหม่ สั้นพอให้ทีมทำตามเองได้
 
@@ -67,8 +68,8 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - Sync/conflict design (offline-first) เขียนเป็นเอกสาร + พิสูจน์ด้วย test conflict scenario จริงบน CouchDB โดยกำหนดว่า app เขียน local PouchDB ก่อน, active remote มีครั้งละหนึ่งเป้าหมาย (Central, Edge fallback, หรือ local-only), Edge sync backlog ขึ้น Central เมื่อ WAN กลับมา และ failback ไม่สร้าง duplicate
 - ส่วนขยายเป็น additive ต่อ base schema — ไม่ breaking ต่อ collection ที่ทีมอื่นเริ่มใช้แล้ว (มี regression test)
 - Seed data + ตัวอย่าง query ต่อ entity ให้ทีม copy pattern, ผ่าน review แล้วทีม downstream เริ่มงานได้
+- **CR-005 §F (additive, backward-compatible):** `donation` §2.3 bump **schema_v 1→2** (+`logistics`, `booking_ref`, `donor.line_id/email`, `items[].category/condition/note` — ทั้งหมด optional/sys, ไม่ backfill) + **`donation_slot` §2.13 doc type ใหม่** (DN-5) + index + view `slot_availability`/`needs_open`; อัปเดต `validate_doc_update` (central **และ** edge) ให้รับ field/type ใหม่ก่อน rollout — feed T-60
 
-### T-03 — Shared API convention + contract freeze for phase
 
 **Description:** กำหนดมาตรฐาน API ใช้ร่วมทุกทีม (naming, error shape, pagination, auth, versioning, remote/session state) แล้ว **freeze contract ของ phase** — กันปัญหา 4 ทีมต่างคนต่างออกแบบจน integrate ไม่ได้ตอน gate
 
@@ -98,6 +99,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - Read-model/materialized view สำหรับ occupancy, stock, calc result — latency ตาม NFR-18/21 พิสูจน์ด้วย load test บนข้อมูลขนาด realistic (เช่น ผู้พักพิง 3,000 คนตาม scale ใน source proposal)
 - Write path หน้างานไม่ช้าลง (เทียบ benchmark ก่อน-หลัง)
 - เอกสาร pattern การเพิ่ม view ใหม่ให้ทีมอื่นใช้ต่อ
+- **CR-005 (public metrics):** read-model ครอบ aggregate ที่ public tier ใช้ — `occupancy_total`, `vulnerable_count`, `shelters_open/total`, per-shelter occupancy/capacity (T-57/T-58) + `needs_open`/`slot_availability` (T-60); public page อ่านแบบ polling (10 นาที, stale-threshold 30 นาที — OP-7) ไม่ poll DB ตรง
 
 ### T-36 — R3 integration + Operations Gate UAT (gate)
 
