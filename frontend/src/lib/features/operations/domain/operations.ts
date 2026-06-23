@@ -339,3 +339,12 @@ export const isDonation = (d: unknown): d is Donation =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation';
 export const isDonationCampaign = (d: unknown): d is DonationCampaign =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_campaign';
+
+// ---------------------------------------------------------------- special request form schema
+export const specialRequestSchema = z.object({
+	name: z.string().trim().min(1, 'กรุณาระบุชื่อพัสดุ / ประกาศ'),
+	target: z.coerce.number().int().positive('เป้าหมายต้องมากกว่า 0'),
+	location: z.string().trim().min(1, 'กรุณาระบุคลังเป้าหมาย')
+});
+export type SpecialRequestInput = z.infer<typeof specialRequestSchema>;
+

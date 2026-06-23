@@ -29,6 +29,7 @@ export {
 	stockLedgerInputSchema,
 	walkInDonationInputSchema,
 	campaignInputSchema,
+	specialRequestSchema,
 	createStockLedger,
 	createWalkInDonation,
 	createCampaign,
@@ -43,5 +44,6 @@ export {
 	isDonationCampaign,
 	type StockLedgerInput,
 	type WalkInDonationInput,
-	type CampaignInput
+	type CampaignInput,
+	type SpecialRequestInput
 } from './domain/operations';
