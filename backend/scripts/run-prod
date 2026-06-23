@@ -1,3 +1,0 @@
-#!/usr/bin/env sh
-
-LOGGING_LEVEL=20 APP_ENV=prod poetry run fastapi run apiapp/main.py --port 9000
