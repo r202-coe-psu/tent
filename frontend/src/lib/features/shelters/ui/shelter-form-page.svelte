@@ -92,7 +92,7 @@
 			} else {
 				createMutation.mutate(
 					{
-						code: validated.data.code.trim(),
+						code: validated.data.code!.trim(),
 						...payload
 					},
 					{
