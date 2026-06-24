@@ -1,48 +1,26 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, serviceError, ServiceError } from '$lib/server/couch-admin';
-import {
-	migrateShelterV2ToCurrent,
-	type ShelterMaster,
-	type ShelterMasterV2
-} from '$lib/features/shelters';
+import { serviceError } from '$lib/server/couch-admin';
+import { findMasterByCode, migrate } from '$lib/server/shelters.admin';
 
 export const prerender = false;
-
-const REGISTRY_DB = 'registry';
-
-async function findMasterByCode(code: string): Promise<ShelterMaster | null> {
-	const res = await adminRaw(`/${REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
-	if (res.status === 404) return null;
-	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not read registry');
-	const rows = (res.data as { rows?: { id: string; doc: unknown }[] })?.rows ?? [];
-	const match = rows.find(
-		(r) => r.id.startsWith('shelter:') && r.doc && (r.doc as { code?: string }).code === code
-	);
-	return (match?.doc as ShelterMaster) ?? null;
-}
-
-function migrate(master: ShelterMasterV2 | ShelterMaster): ShelterMaster {
-	if (master.schema_v >= 3) return master as ShelterMaster;
-	return migrateShelterV2ToCurrent(master);
-}
 
 /**
  * GET /public/v1/shelters/{code}/risk
  * Public endpoint (no auth) — returns section 5 fields for EOC real-time consumption.
- * Live-sync driven (PouchDB changes feed → revalidate public query key).
+ *
+ * PII redaction: this endpoint exposes ONLY the risk section + operation_status.
+ * It never returns `contact`, `phone`, `facilities` counts, or any evacuee data
+ * (per security-rbac-bestpractices §3). Aggregate public metrics live in a
+ * separate `/public/metrics` endpoint.
  */
 export const GET: RequestHandler = async ({ params }) => {
 	try {
 		const code = params.code;
-		if (!code) {
-			return error(400, { message: 'Missing code' });
-		}
+		if (!code) return error(400, { message: 'Missing code' });
 
 		const master = await findMasterByCode(code);
-		if (!master) {
-			return error(404, { message: `Shelter "${code}" not found` });
-		}
+		if (!master) return error(404, { message: `Shelter "${code}" not found` });
 
 		const migrated = migrate(master);
 

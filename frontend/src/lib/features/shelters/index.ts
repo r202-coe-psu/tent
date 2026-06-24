@@ -56,6 +56,8 @@ export {
 // Application (public)
 export {
 	sheltersKeys,
+	SHELTER_REGISTRY_DB,
+	startSheltersLiveQuery,
 	useShelters,
 	useShelter,
 	useCreateShelter,

@@ -1,5 +1,7 @@
-import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
+import { createMutation, createQuery, useQueryClient, type QueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
+import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
+import { namedLocalDb } from '$lib/db/pouch';
 import {
 	createShelter,
 	listShelters,
@@ -9,6 +11,8 @@ import {
 	reopenZone
 } from '../data/shelters.api';
 import type { Shelter } from '../domain/schema';
+
+export const SHELTER_REGISTRY_DB = 'registry';
 
 export const sheltersKeys = {
 	all: ['shelters'] as const,
@@ -33,9 +37,12 @@ export const useCreateShelter = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: (input: Shelter) => createShelter(input),
-		onSuccess: () => {
+		onSuccess: (result) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
-			toast.success('บันทึกข้อมูลและสร้างศูนย์พักพิงสำเร็จ');
+			if (result?.code) {
+				queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(result.code) });
+			}
+			toast.success(`บันทึกข้อมูลและสร้างศูนย์พักพิง ${result?.code ?? ''} สำเร็จ`);
 		},
 		onError: (err: Error) => {
 			toast.error(err.message || 'เกิดข้อผิดพลาดในการสร้างศูนย์พักพิง');
@@ -51,7 +58,7 @@ export const useUpdateShelter = () => {
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
-			toast.success('อัปเดตข้อมูลโครงสร้างศูนย์พักพิงสำเร็จ');
+			toast.success(`อัปเดตข้อมูลศูนย์พักพิง ${variables.code} สำเร็จ`);
 		},
 		onError: (err: Error) => {
 			toast.error(err.message || 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
@@ -76,7 +83,7 @@ export const useCloseZone = () => {
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
-			toast.success(`ปิดโซน ${variables.zoneCode} เรียบร้อย`);
+			toast.success(`ปิดโซน ${variables.zoneCode} ของศูนย์ ${variables.code} เรียบร้อย`);
 		},
 		onError: (err: Error) => {
 			toast.error(err.message || 'ไม่สามารถปิดโซนได้');
@@ -99,10 +106,31 @@ export const useReopenZone = () => {
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
-			toast.success(`เปิดโซน ${variables.zoneCode} อีกครั้ง`);
+			toast.success(`เปิดโซน ${variables.zoneCode} ของศูนย์ ${variables.code} อีกครั้ง`);
 		},
 		onError: (err: Error) => {
 			toast.error(err.message || 'ไม่สามารถเปิดโซนได้');
 		}
 	}));
 };
+
+/**
+ * Wire the PouchDB changes feed to TanStack Query invalidations for the
+ * shelter registry. Reactivity comes from replication (and local writes),
+ * not from polling — covers cross-tab writes and remote-sync refreshes.
+ *
+ * Hook from the root layout alongside the people live query.
+ */
+export function startSheltersLiveQuery(queryClient: QueryClient): LiveQueryHandle {
+	return startLiveQuery(namedLocalDb(SHELTER_REGISTRY_DB), queryClient, (type) => {
+		if (type === 'shelter') {
+			return [sheltersKeys.list(), [...sheltersKeys.all, 'detail']];
+		}
+		if (type === 'audit') {
+			// Audit log changes don't directly affect shelter queries today,
+			// but forward-compatibility: they could power a timeline view.
+			return [];
+		}
+		return [];
+	});
+}

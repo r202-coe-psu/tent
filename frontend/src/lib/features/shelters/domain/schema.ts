@@ -120,6 +120,8 @@ export const zoneSchema = z.object({
 	status: zoneStatusSchema.default('active'),
 	closed_at: z.string().datetime().nullish().default(null),
 	closed_by: z.string().nullish().default(null),
+	reopened_at: z.string().datetime().nullish().default(null),
+	reopened_by: z.string().nullish().default(null),
 	reason: z.string().nullish().default(null)
 });
 export type Zone = z.infer<typeof zoneSchema>;
@@ -234,13 +236,23 @@ export interface ShelterMaster {
 export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaster): ShelterMaster {
 	if (master.schema_v >= 3) return master as ShelterMaster;
 	const v2 = master as ShelterMasterV2;
-	return {
+	// Backfill shelter capacity: v2 stored capacity at the top level but v3 zones
+	// are the source of truth, so sum zone capacity (>= 0) and fall back to 100
+	// when there are no zones (a single empty shelter shouldn't display 0).
+	const zoneSum = (v2.zones ?? []).reduce(
+		(sum, z) => sum + (Number.isFinite(z.capacity) ? z.capacity : 0),
+		0
+	);
+	const backfilledCapacity =
+		typeof v2.capacity === 'number' && v2.capacity > 0 ? v2.capacity : zoneSum > 0 ? zoneSum : 100;
+	const v3 = {
 		...v2,
-		schema_v: 3,
-		operation_status: v2.status === 'open' ? 'active' : (v2.status as OperationStatus),
+		schema_v: 3 as const,
+		operation_status:
+			v2.status === 'open' ? ('active' as OperationStatus) : (v2.status as OperationStatus),
 		shelter_type: null,
 		area_type: null,
-		capacity: v2.capacity ?? 0,
+		capacity: backfilledCapacity,
 		facilities: {
 			toilets_male: v2.facilities?.toilets_male ?? null,
 			toilets_female: v2.facilities?.toilets_female ?? null,
@@ -273,7 +285,15 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 			status: 'active' as ZoneStatus,
 			closed_at: null,
 			closed_by: null,
+			reopened_at: null,
+			reopened_by: null,
 			reason: null
 		}))
-	} as unknown as ShelterMaster;
+	};
+	// v2-only fields are not part of v3 — drop them rather than carry dead data.
+	delete (v3 as Record<string, unknown>).status;
+	delete (v3 as Record<string, unknown>).items;
+	delete (v3 as Record<string, unknown>).rules;
+	delete (v3 as Record<string, unknown>).sops;
+	return v3 as unknown as ShelterMaster;
 }

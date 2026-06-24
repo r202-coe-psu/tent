@@ -99,6 +99,8 @@ describe('zoneSchema', () => {
 		expect(z.status).toBe('active');
 		expect(z.closed_at).toBeNull();
 		expect(z.closed_by).toBeNull();
+		expect(z.reopened_at).toBeNull();
+		expect(z.reopened_by).toBeNull();
 		expect(z.reason).toBeNull();
 	});
 
@@ -116,6 +118,12 @@ describe('zoneSchema', () => {
 			const z = zoneSchema.parse({ code: 'Z1', name: 'X', capacity: 10, type: t });
 			expect(z.type).toBe(t);
 		}
+	});
+
+	it('rejects invalid closed_at (not a datetime)', () => {
+		expect(() =>
+			zoneSchema.parse({ code: 'Z1', name: 'X', capacity: 1, closed_at: 'not-a-date' })
+		).toThrow();
 	});
 });
 
@@ -296,7 +304,49 @@ describe('migrateShelterV2ToCurrent', () => {
 		expect(z?.status).toBe('active');
 		expect(z?.closed_at).toBeNull();
 		expect(z?.closed_by).toBeNull();
+		expect(z?.reopened_at).toBeNull();
+		expect(z?.reopened_by).toBeNull();
 		expect(z?.reason).toBeNull();
+	});
+
+	it('backfills capacity from v2 top-level when present', () => {
+		const migrated = migrateShelterV2ToCurrent({ ...v2Master, capacity: 250 });
+		expect(migrated.capacity).toBe(250);
+	});
+
+	it('backfills capacity from sum of zones when v2 top-level missing or zero', () => {
+		const without = migrateShelterV2ToCurrent({ ...v2Master, capacity: undefined });
+		// 50 (single zone)
+		expect(without.capacity).toBe(50);
+		const zero = migrateShelterV2ToCurrent({ ...v2Master, capacity: 0 });
+		expect(zero.capacity).toBe(50);
+		const multi = migrateShelterV2ToCurrent({
+			...v2Master,
+			capacity: undefined,
+			zones: [
+				{ code: 'Z1', name: 'A', capacity: 30 },
+				{ code: 'Z2', name: 'B', capacity: 70 }
+			]
+		});
+		expect(multi.capacity).toBe(100);
+	});
+
+	it('falls back to 100 capacity when no zones and no v2 capacity', () => {
+		const noZones = migrateShelterV2ToCurrent({ ...v2Master, zones: [], capacity: undefined });
+		expect(noZones.capacity).toBe(100);
+	});
+
+	it('drops v2-only fields (status, items, rules, sops)', () => {
+		const migrated = migrateShelterV2ToCurrent({
+			...v2Master,
+			items: [] as never,
+			rules: [] as never,
+			sops: [] as never
+		});
+		expect((migrated as unknown as Record<string, unknown>).status).toBeUndefined();
+		expect((migrated as unknown as Record<string, unknown>).items).toBeUndefined();
+		expect((migrated as unknown as Record<string, unknown>).rules).toBeUndefined();
+		expect((migrated as unknown as Record<string, unknown>).sops).toBeUndefined();
 	});
 
 	it('is idempotent — calling twice on v2 produces same result', () => {

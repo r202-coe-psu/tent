@@ -1,20 +1,21 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
+import { adminRaw, requireAdmin, serviceError } from '$lib/server/couch-admin';
 import { ulid } from '$lib/db/ulid';
-import { createShelterSchema, migrateShelterV2ToCurrent } from '$lib/features/shelters';
+import { createShelterSchema, type ShelterMaster } from '$lib/features/shelters/domain/schema';
+import {
+	SHELTER_REGISTRY_DB,
+	listShelterMasters,
+	migrate,
+	mergeShelterSecurity,
+	nowIso,
+	updateMaster
+} from '$lib/server/shelters.admin';
 
-// Dev-only provisioning endpoint — never prerendered (absent from the static
-// prod build). In production shelters are minted from the central counter
-// (schema.md §3.1/§5.3); here we take an explicit shelter_code from the form —
-// a documented dev shortcut, NOT a schema change. Requires CouchDB `_admin`
-// since creating databases needs server admin.
 export const prerender = false;
 
-const REGISTRY_DB = 'registry';
-
+/** Database name for a shelter's own per-shelter CouchDB. */
 function shelterDbName(code: string): string {
-	// CouchDB requires lowercase database names; the `shelter_code` field stays canonical (e.g. SH001).
 	return `shelter_${code.toLowerCase()}`;
 }
 
@@ -49,10 +50,6 @@ function validateDocUpdate(code: string): string {
 }`;
 }
 
-function nowIso(): string {
-	return new Date().toISOString();
-}
-
 function seedEvacuee(
 	code: string,
 	first: string,
@@ -81,32 +78,7 @@ function seedEvacuee(
 	};
 }
 
-interface ShelterMaster {
-	_id: string;
-	_rev?: string;
-	type: 'shelter';
-	schema_v: number;
-	code: string;
-	name: string;
-	created_at: string;
-	updated_at: string;
-	[key: string]: unknown;
-}
-
-/** Read all shelter master docs from the registry (empty if the db is absent). */
-async function listShelterMasters(): Promise<ShelterMaster[]> {
-	const res = await adminRaw(`/${REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
-	if (res.status === 404) return [];
-	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not read registry');
-	const rows = (res.data as { rows?: { id: string; doc: ShelterMaster }[] })?.rows ?? [];
-	return rows.filter((r) => r.id.startsWith('shelter:') && r.doc).map((r) => r.doc);
-}
-
-/**
- * Auto-assign the next shelter code in the `SHxxx` sequence.
- * Reads all existing master docs, extracts the numeric suffix, and returns
- * the next value zero-padded to at least 3 digits (SH001 → SH002 → ... → SH010 ...).
- */
+/** Auto-assign the next shelter code in the SHxxx sequence. */
 async function nextShelterCode(): Promise<string> {
 	const masters = await listShelterMasters();
 	let max = 0;
@@ -117,8 +89,7 @@ async function nextShelterCode(): Promise<string> {
 			if (n > max) max = n;
 		}
 	}
-	const next = max + 1;
-	return `SH${String(next).padStart(3, '0')}`;
+	return `SH${String(max + 1).padStart(3, '0')}`;
 }
 
 /** POST shelter (5-section v3 schema) — provision a shelter; code is auto-assigned. */
@@ -135,12 +106,15 @@ export const POST: RequestHandler = async ({ request }) => {
 		// 1. Shelter database (412 = already exists → idempotent).
 		steps.push({ step: 'create-db', status: (await adminRaw(`/${db}`, 'PUT')).status });
 
-		// 2. _security — members by shelter role, admins by system_admin (data-model.md §6).
-		const security = await adminRaw(`/${db}/_security`, 'PUT', {
-			admins: { names: [], roles: ['system_admin'] },
-			members: { names: [], roles: [`shelter:${code}`] }
-		});
-		steps.push({ step: 'security', status: security.status });
+		// 2. _security — read-modify-write to avoid clobbering existing members
+		// (skill: couchdb-pouchdb-bestpractices §4). On first provision this is
+		// a no-op merge; on re-runs it preserves any staff added since.
+		await mergeShelterSecurity(
+			db,
+			{ roles: ['system_admin'] },
+			{ roles: [`shelter:${code}`] }
+		);
+		steps.push({ step: 'security', status: 200 });
 
 		// 3. validate_doc_update design doc (idempotent re-PUT with _rev).
 		const existing = await adminRaw(`/${db}/_design/access`, 'GET');
@@ -153,21 +127,21 @@ export const POST: RequestHandler = async ({ request }) => {
 		steps.push({ step: 'design', status: design.status });
 
 		// 4. Registry + shelter master doc (schema.md §3.1) — idempotent by `code`.
-		await adminRaw(`/${REGISTRY_DB}`, 'PUT');
+		await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
 		const masters = await listShelterMasters();
 		if (!masters.some((m) => m.code === code)) {
 			const ts = nowIso();
 			const master = {
 				_id: `shelter:${ulid()}`,
-				type: 'shelter',
-				schema_v: 3,
+				type: 'shelter' as const,
+				schema_v: 3 as const,
 				code,
 				...input,
 				created_at: ts,
 				updated_at: ts
 			};
 			const res = await adminRaw(
-				`/${REGISTRY_DB}/${encodeURIComponent(master._id)}`,
+				`/${SHELTER_REGISTRY_DB}/${encodeURIComponent(master._id)}`,
 				'PUT',
 				master
 			);
@@ -199,7 +173,7 @@ export const GET: RequestHandler = async ({ request }) => {
 		const masters = await listShelterMasters();
 		return json(
 			masters.map((m) => {
-				const migrated = migrateShelterV2ToCurrent(m as never);
+				const migrated = migrate(m as ShelterMaster);
 				return {
 					code: migrated.code,
 					name: migrated.name,

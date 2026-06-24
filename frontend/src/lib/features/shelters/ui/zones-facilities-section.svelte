@@ -116,6 +116,8 @@
 				status: 'active' as const,
 				closed_at: null,
 				closed_by: null,
+				reopened_at: null,
+				reopened_by: null,
 				reason: null
 			}
 		];

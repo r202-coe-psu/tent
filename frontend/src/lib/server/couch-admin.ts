@@ -91,6 +91,27 @@ export async function requireAdmin(cookie: string | null): Promise<void> {
 	if (!roles.includes('_admin')) throw error(403, 'Admin privileges required');
 }
 
+/**
+ * Authorize a shelter-scoped write: SA can edit any shelter; shelter_manager
+ * may only edit shelters matching their own `shelterCode` scope. Resolves the
+ * caller from the session cookie and returns the {@link Caller} so the handler
+ * can use the server-verified `shelterCode` rather than trusting the request
+ * body (per the RBAC skill's "Write Path" rule).
+ *
+ * @param cookie  The request's `Cookie` header (may be null for anonymous).
+ * @param code    The shelter code from the URL params. The caller's `shelterCode`
+ *                must equal this value unless the caller is a system admin.
+ */
+export async function requireShelterManagerOrSA(
+	cookie: string | null,
+	code: string
+): Promise<Caller> {
+	const caller = await authorizeUserWrite(cookie);
+	if (caller.isSA) return caller;
+	if (caller.shelterCode && caller.shelterCode === code) return caller;
+	throw error(403, `Caller is not authorised for shelter "${code}"`);
+}
+
 // ----------------------------------------------------------- service contract
 //
 // The /api/v1/* service plane (api-contract.md §2) speaks a stable contract the

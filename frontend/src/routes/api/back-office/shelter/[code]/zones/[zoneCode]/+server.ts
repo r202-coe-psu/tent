@@ -1,89 +1,17 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
-import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
+import { adminRaw, requireShelterManagerOrSA, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { ulid } from '$lib/db/ulid';
-import {
-	migrateShelterV2ToCurrent,
-	type ShelterMaster,
-	type ShelterMasterV2,
-	type Zone
-} from '$lib/features/shelters';
+import type { Zone } from '$lib/features/shelters/domain/schema';
+import { nowIso, updateMaster } from '$lib/server/shelters.admin';
 
 export const prerender = false;
-
-const REGISTRY_DB = 'registry';
 
 const closeZoneSchema = z.object({
 	reason: z.string().trim().optional().nullable(),
 	closed_by: z.string().trim().optional().nullable()
 });
-
-const reopenZoneSchema = z.object({
-	reopened_by: z.string().trim().optional().nullable()
-});
-
-function nowIso(): string {
-	return new Date().toISOString();
-}
-
-async function findMasterByCode(code: string): Promise<ShelterMaster | null> {
-	const res = await adminRaw(`/${REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
-	if (res.status === 404) return null;
-	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not read registry');
-	const rows = (res.data as { rows?: { id: string; doc: unknown }[] })?.rows ?? [];
-	const match = rows.find(
-		(r) => r.id.startsWith('shelter:') && r.doc && (r.doc as { code?: string }).code === code
-	);
-	return (match?.doc as ShelterMaster) ?? null;
-}
-
-function migrate(master: ShelterMasterV2 | ShelterMaster): ShelterMaster {
-	if (master.schema_v >= 3) return master as ShelterMaster;
-	return migrateShelterV2ToCurrent(master);
-}
-
-async function writeMasterAndAudit(
-	migrated: ShelterMaster,
-	updatedZones: Zone[],
-	auditAction: 'zone.close' | 'zone.reopen',
-	zoneCode: string,
-	previousStatus: string,
-	reason: string | null
-): Promise<void> {
-	const now = nowIso();
-	const finalMaster: ShelterMaster = {
-		...migrated,
-		zones: updatedZones,
-		updated_at: now
-	};
-
-	const writeRes = await adminRaw(
-		`/${REGISTRY_DB}/${encodeURIComponent(migrated._id)}`,
-		'PUT',
-		finalMaster
-	);
-	if (writeRes.status >= 400) {
-		const couchErr = writeRes.data as { error?: string; reason?: string } | null;
-		const detail = couchErr?.reason ?? couchErr?.error ?? 'unknown';
-		throw new ServiceError('INTERNAL', `Registry PUT failed (${writeRes.status}): ${detail}`);
-	}
-
-	// Append audit log (per data-model.md §3.6) — ULID for collision-safe id.
-	const auditDoc = {
-		_id: `audit:${ulid()}`,
-		type: 'audit',
-		schema_v: 1,
-		shelter_code: finalMaster.code,
-		action: auditAction,
-		target_type: 'shelter_zone',
-		target_id: `${finalMaster.code}:${zoneCode}`,
-		reason: reason ?? '',
-		context: { zone_code: zoneCode, previous_status: previousStatus },
-		occurred_at: now
-	};
-	await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(auditDoc._id)}`, 'PUT', auditDoc);
-}
 
 /**
  * POST /api/back-office/shelter/{code}/zones/{zoneCode}
@@ -92,56 +20,77 @@ async function writeMasterAndAudit(
  *   Returns 409 if the zone is already closed.
  */
 export const POST: RequestHandler = async ({ request, params }) => {
-	await requireAdmin(request.headers.get('cookie'));
+	const code = params.code;
+	const zoneCode = params.zoneCode;
+	if (!code || !zoneCode) return error(400, { message: 'Missing code or zoneCode' });
+
 	try {
-		const code = params.code;
-		const zoneCode = params.zoneCode;
-		if (!code || !zoneCode) {
-			return error(400, { message: 'Missing code or zoneCode' });
-		}
+		await requireShelterManagerOrSA(request.headers.get('cookie'), code);
 
 		const body = (await request.json().catch(() => ({}))) as unknown;
 		const parsed = closeZoneSchema.parse(body);
 		const reason = parsed.reason ?? null;
 		const closedBy = parsed.closed_by ?? null;
 
-		const master = await findMasterByCode(code);
-		if (!master) {
-			return error(404, { message: `Shelter "${code}" not found` });
-		}
-		if (!master._rev) {
-			return error(500, { message: 'Shelter master doc has no _rev' });
-		}
+		// updateMaster retries on 409 (skill: couchdb-pouchdb-bestpractices §3).
+		// The mutator returns the new zone shape in `meta` so we can echo it
+		// back in the response without re-reading the master doc.
+		const { meta } = await updateMaster<{ updatedZone: Zone; previousStatus: string }>(
+			code,
+			(current) => {
+				const zones = current.zones ?? [];
+				const zoneIndex = zones.findIndex((z) => z.code === zoneCode);
+				if (zoneIndex === -1) {
+					throw new ServiceError(
+						'VALIDATION',
+						`Zone "${zoneCode}" not found in shelter ${code}`
+					);
+				}
+				const target = zones[zoneIndex];
+				if (target.status === 'closed') {
+					throw new ServiceError('CONFLICT', `Zone "${zoneCode}" is already closed`);
+				}
+				const updatedZone: Zone = {
+					...target,
+					status: 'closed',
+					closed_at: nowIso(),
+					closed_by: closedBy,
+					reopened_at: null,
+					reopened_by: null,
+					reason
+				};
+				return {
+					patch: {
+						zones: zones.map((z, i) => (i === zoneIndex ? updatedZone : z))
+					},
+					meta: { updatedZone, previousStatus: target.status }
+				};
+			}
+		);
 
-		const migrated = migrate(master);
-		const zones = migrated.zones ?? [];
-		const zoneIndex = zones.findIndex((z) => z.code === zoneCode);
-		if (zoneIndex === -1) {
-			return error(404, { message: `Zone "${zoneCode}" not found in shelter ${code}` });
+		if (!meta) {
+			return error(500, { message: 'Zone update lost during write' });
 		}
+		const updatedZone = meta.updatedZone;
+		const previousStatus = meta.previousStatus;
 
-		const currentZone = zones[zoneIndex];
-		if (currentZone.status === 'closed') {
-			return error(409, { message: `Zone "${zoneCode}" is already closed` });
-		}
-
-		const now = nowIso();
-		const updatedZone: Zone = {
-			...currentZone,
-			status: 'closed',
-			closed_at: now,
-			closed_by: closedBy,
-			reason
+		// Append audit log (per data-model.md §3.6) — ULID for collision-safe id.
+		const auditDoc = {
+			_id: `audit:${ulid()}`,
+			type: 'audit',
+			schema_v: 1,
+			shelter_code: code,
+			action: 'zone.close',
+			target_type: 'shelter_zone',
+			target_id: `${code}:${zoneCode}`,
+			reason: reason ?? '',
+			context: { zone_code: zoneCode, previous_status: previousStatus, actor: closedBy },
+			occurred_at: nowIso()
 		};
-		const updatedZones = zones.map((z, i) => (i === zoneIndex ? updatedZone : z));
-
-		await writeMasterAndAudit(
-			migrated,
-			updatedZones,
-			'zone.close',
-			zoneCode,
-			currentZone.status,
-			reason
+		await adminRaw(
+			`/registry/${encodeURIComponent(auditDoc._id)}`,
+			'PUT',
+			auditDoc
 		);
 
 		return json({
