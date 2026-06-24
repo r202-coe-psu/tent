@@ -39,6 +39,7 @@ export {
 	canTransitionDonation,
 	stockBalance,
 	openNeeds,
+	isNeedCutOff,
 	isStockLedger,
 	isDonation,
 	isDonationCampaign,

@@ -9,6 +9,7 @@ import {
 	stockBalance,
 	createCampaign,
 	openNeeds,
+	isNeedCutOff,
 	type Donation
 } from './operations';
 import type { AuthorContext } from '$lib/db/model';
@@ -116,5 +117,31 @@ describe('openNeeds', () => {
 		expect(remaining).toHaveLength(1);
 		expect(remaining[0].item_id).toBe('item:rice');
 		expect(remaining[0].qty_target).toBe(50);
+	});
+});
+
+describe('Donation Cut-off (T-22) threshold crossing', () => {
+	it('Should automatically cut off when On-hand + Reserved >= Target', () => {
+		// Case A: Total is less than target (On-hand 40 + Reserved 50 = 90 < 100) -> Still open (false)
+		expect(isNeedCutOff(100, 40, 50, 'open')).toBe(false);
+
+		// Case B: Total equals the target exactly (On-hand 50 + Reserved 50 = 100 >= 100) -> Cut off immediately (true)
+		expect(isNeedCutOff(100, 50, 50, 'open')).toBe(true);
+
+		// Case C: Total exceeds the target (On-hand 60 + Reserved 50 = 110 >= 100) -> Cut off immediately (true)
+		expect(isNeedCutOff(100, 60, 50, 'open')).toBe(true);
+	});
+
+	it('Should automatically reopen when inventory drops below target due to distribution', () => {
+		// First: Inventory exceeds target (On-hand 120 + Reserved 0 >= 100) -> Cut off (true)
+		expect(isNeedCutOff(100, 120, 0, 'open')).toBe(true);
+
+		// Later: Staff distributed items to evacuees, leaving 80 items (On-hand 80 + Reserved 0 < 100) -> Must reopen (false)
+		expect(isNeedCutOff(100, 80, 0, 'open')).toBe(false);
+	});
+
+	it('Should always remain closed if the campaign is manually closed (Manual Override)', () => {
+		// Even if the total is below target (On-hand 10 + Reserved 10 = 20 < 100), but campaign status is 'closed' -> Must cut off (true)
+		expect(isNeedCutOff(100, 10, 10, 'closed')).toBe(true);
 	});
 });

@@ -348,3 +348,17 @@ export const specialRequestSchema = z.object({
 });
 export type SpecialRequestInput = z.infer<typeof specialRequestSchema>;
 
+/**
+ * Determines the donation cut-off status (T-22 Cut-off Rule).
+ * Automatically closes when: On-hand inventory (onHand) + Reserved amount (reserved) >= Target (target)
+ * Or when the campaign is manually closed.
+ */
+export function isNeedCutOff(
+	qtyTarget: number,
+	onHandStock: number,
+	reservedQty: number,
+	campaignStatus: 'open' | 'closed'
+): boolean {
+	if (campaignStatus === 'closed') return true;
+	return (onHandStock + reservedQty) >= qtyTarget;
+}
