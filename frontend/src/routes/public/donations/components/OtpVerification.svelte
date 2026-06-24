@@ -18,8 +18,11 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					shelter_code: 'SH001', 
-					items: donationStore.items.length > 0 ? donationStore.items.map((it, i) => ({ item_id: `item-${i}`, qty: it.amount })) : [{ item_id: 'default', qty: 1 }],
+					shelter_code: donationStore.selectedShelter || 'SH001',
+					items: donationStore.items.map(it => ({
+						item_id: it.item_id || (it.name.includes('ข้าว') ? 'item:rice' : it.name.includes('น้ำ') ? 'item:water' : it.name.includes('สบู่') ? 'item:soap' : 'item:blanket'),
+						qty: it.amount
+					})),
 					phone: donationStore.donorPhone || '0000000000',
 					otpToken: otpCode
 				})
@@ -52,9 +55,9 @@
 		<label for="otp-input" class="block text-xs font-bold text-foreground mt-2 text-center">
 			กรอกรหัส 6 หลัก
 		</label>
-		<input 
+		<input
 			id="otp-input"
-			type="text" 
+			type="text"
 			maxlength="6"
 			bind:value={otpCode}
 			class="mt-1 text-center text-xl tracking-[0.5em] font-mono rounded-xl border border-border bg-card px-3.5 py-4 text-foreground outline-hidden focus:ring-1 focus:ring-primary w-full"
@@ -67,17 +70,17 @@
 			</div>
 		{/if}
 
-		<button 
-			onclick={submitDonation} 
+		<button
+			onclick={submitDonation}
 			disabled={donationStore.isSubmitting || otpCode.length !== 6}
 			class="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary-dark py-3.5 text-xs font-bold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 		>
 			{donationStore.isSubmitting ? 'กำลังตรวจสอบ...' : 'ยืนยันและรับตั๋ว'}
 			{#if !donationStore.isSubmitting}<span>→</span>{/if}
 		</button>
-		
-		<button 
-			onclick={() => { donationStore.activeTab = 'time'; }} 
+
+		<button
+			onclick={() => { donationStore.activeTab = 'time'; }}
 			disabled={donationStore.isSubmitting}
 			class="mt-2 flex w-full items-center justify-center rounded-xl bg-transparent hover:bg-muted py-3.5 text-xs font-bold text-muted-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 		>

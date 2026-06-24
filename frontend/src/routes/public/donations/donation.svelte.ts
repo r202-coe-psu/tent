@@ -2,13 +2,14 @@ export interface DonationItem {
 	name: string;
 	amount: number;
 	unit: string;
+	item_id?: string;
 }
 
 export type TabStep = 'needs' | 'form' | 'time' | 'otp' | 'ticket';
 
 class DonationStore {
 	activeTab = $state<TabStep>('needs');
-	reachedStep = $state(1); // 1: needs, 2: form, 3: time, 4: otp, 5: ticket
+	reachedStep = $state(1); // 1: ความต้องการด่วน, 2: แบบฟอร์ม, 3: วันเวลา/สถานที่, 4: OTP, 5: ตั๋วการจอง
 
 	donorName = $state('');
 	donorPhone = $state('');
@@ -17,6 +18,9 @@ class DonationStore {
 	taxReceipt = $state(false);
 
 	items = $state<DonationItem[]>([]);
+
+	selectedShelter = $state('');
+	deliveryDate = $state('');
 
 	captchaToken = $state('');
 	isSubmitting = $state(false);
@@ -40,6 +44,8 @@ class DonationStore {
 		this.donorEmail = '';
 		this.taxReceipt = false;
 		this.items = [];
+		this.selectedShelter = '';
+		this.deliveryDate = '';
 		this.captchaToken = '';
 		this.isSubmitting = false;
 		this.errorMessage = '';

@@ -3,7 +3,6 @@ import {
     donationPreDeclarationInputSchema,
     isDonationPreDeclaration
 } from './donation';
-import { isDonation } from '$lib/features/operations';
 
 describe('donationPreDeclarationInputSchema', () => {
     // 1. Valid Case
@@ -14,7 +13,8 @@ describe('donationPreDeclarationInputSchema', () => {
                 { item_id: 'item:noodles_01', qty: 10 },
                 { item_id: 'item:water_01', qty: 5 },
             ],
-            phone: '0812345678'
+            phone: '0812345678',
+            otpToken: '123456'
         };
 
         const result = donationPreDeclarationInputSchema.safeParse(validData);
@@ -26,13 +26,14 @@ describe('donationPreDeclarationInputSchema', () => {
         const invalidData = {
             shelter_code: '',
             items: [{ item_id: 'item:noodles_01', qty: 10 }],
-            phone: '0812345678'
+            phone: '0812345678',
+            otpToken: '123456'
         };
 
         const result = donationPreDeclarationInputSchema.safeParse(invalidData);
         expect(result.success).toBe(false);
         if (!result.success) {
-            const errorMessage = result.error.issues[0].message;
+            const errorMessage = result.error.issues.find(i => i.path.includes('shelter_code'))?.message;
             expect(errorMessage).toBe('Please select a shelter.')
         }
     });
@@ -43,12 +44,13 @@ describe('donationPreDeclarationInputSchema', () => {
             shelter_code: 'SH001',
             items: [{ item_id: 'item:noodles_01', qty: -5 }],
             phone: '0812345678',
+            otpToken: '123456'
         };
 
         const result = donationPreDeclarationInputSchema.safeParse(invalidData);
         expect(result.success).toBe(false);
         if (!result.success) {
-            const errorMessage = result.error.issues[0].message;
+            const errorMessage = result.error.issues.find(i => i.path.includes('qty') || i.path.includes('items'))?.message;
             expect(errorMessage).toBe('Please enter a valid quantity')
         }
     });
@@ -59,16 +61,16 @@ describe('donationPreDeclarationInputSchema', () => {
             shelter_code: 'SH001',
             items: [{ item_id: 'item:noodles_01', qty: 10.5 }],
             phone: '0812345678',
+            otpToken: '123456'
         };
 
         const result = donationPreDeclarationInputSchema.safeParse(invalidData);
         expect(result.success).toBe(false);
         if (!result.success) {
-            const errorMessage = result.error.issues[0].message;
+            const errorMessage = result.error.issues.find(i => i.path.includes('qty') || i.path.includes('items'))?.message;
             expect(errorMessage).toBe('Please enter a valid quantity')
         }
     });
-
 
     // 4. Invalid Case - Missing donation items
     it('fails validation when donation items are missing', () => {
@@ -76,16 +78,17 @@ describe('donationPreDeclarationInputSchema', () => {
             shelter_code: 'SH001',
             items: [],
             phone: '0812345678',
+            otpToken: '123456'
         };
 
         const result = donationPreDeclarationInputSchema.safeParse(invalidData);
         expect(result.success).toBe(false);
         if (!result.success) {
-            const errorMessage = result.error.issues[0].message;
+            const errorMessage = result.error.issues.find(i => i.path.includes('items'))?.message;
             expect(errorMessage).toBe('Please add at least one item to the donation')
         }
     });
-})
+});
 
 describe('isDonationPreDeclaration (Type Guard)', () => {
     it('returns true for a valid donation pre-declaration document', () => {
