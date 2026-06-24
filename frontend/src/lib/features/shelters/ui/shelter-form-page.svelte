@@ -99,7 +99,27 @@
 	const errorMessage = $derived(isEdit ? (shelterQuery.error?.message ?? '') : '');
 </script>
 
-<main class="flex-1 space-y-6 overflow-y-auto p-6 text-[13px] text-foreground">
+<main class="text-[13px] text-foreground">
+	<div
+		class="sticky top-0 z-10 flex flex-col justify-between border-b border-shelter-border bg-background/95 px-6 py-4 backdrop-blur-sm sm:flex-row sm:items-center"
+	>
+		<div class="flex items-center space-x-2">
+			<a
+				href={resolve('/back-office/shelters')}
+				class="mr-1 rounded-lg p-2 transition hover:bg-muted/50"
+			>
+				<ArrowLeft class="h-4 w-4 text-muted-foreground" />
+			</a>
+			<h1 class="text-xl font-bold text-foreground">
+				{isEdit ? `แก้ไขศูนย์: ${id}` : 'สร้างศูนย์พักพิงใหม่'}
+			</h1>
+		</div>
+		<Button type="submit" form="shelter-form" disabled={$submitting || isPending}>
+			<Save class="h-4 w-4" />
+			<span>{isPending ? 'กำลังบันทึก...' : 'บันทึกข้อมูลทั้งหมด'}</span>
+		</Button>
+	</div>
+
 	{#if isLoading}
 		<div class="flex items-center justify-center py-20 text-muted-foreground">
 			กำลังโหลดข้อมูลศูนย์พักพิง...
@@ -113,32 +133,12 @@
 			>
 		</div>
 	{:else}
-		<div
-			class="top-0 z-10 -mx-6 -mt-6 mb-2 flex flex-col justify-between border-b border-shelter-border bg-background/95 px-6 py-4 backdrop-blur-sm sm:flex-row sm:items-center"
-		>
-			<div class="flex items-center space-x-2">
-				<a
-					href={resolve('/back-office/shelters')}
-					class="mr-1 rounded-lg p-2 transition hover:bg-muted/50"
-				>
-					<ArrowLeft class="h-4 w-4 text-muted-foreground" />
-				</a>
-				<h1 class="text-xl font-bold text-foreground">
-					{isEdit ? `แก้ไขศูนย์: ${id}` : 'สร้างศูนย์พักพิงใหม่'}
-				</h1>
-			</div>
-			<Button type="submit" form="shelter-form" disabled={$submitting || isPending}>
-				<Save class="h-4 w-4" />
-				<span>{isPending ? 'กำลังบันทึก...' : 'บันทึกข้อมูลทั้งหมด'}</span>
-			</Button>
-		</div>
-
-		<form id="shelter-form" method="POST" use:enhance class="space-y-6">
+		<form id="shelter-form" method="POST" use:enhance class="space-y-6 p-6">
 			<BasicInfoSection {form} {formData} />
 
 			<CapacitySection {form} {formData} />
 
-			<ZonesFacilitiesSection {form} {formData} />
+			<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
 
 			<UtilitiesSection {form} {formData} />
 

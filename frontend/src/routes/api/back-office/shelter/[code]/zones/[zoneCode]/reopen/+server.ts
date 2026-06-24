@@ -14,11 +14,6 @@ export const prerender = false;
 
 const REGISTRY_DB = 'registry';
 
-const closeZoneSchema = z.object({
-	reason: z.string().trim().optional().nullable(),
-	closed_by: z.string().trim().optional().nullable()
-});
-
 const reopenZoneSchema = z.object({
 	reopened_by: z.string().trim().optional().nullable()
 });
@@ -43,53 +38,11 @@ function migrate(master: ShelterMasterV2 | ShelterMaster): ShelterMaster {
 	return migrateShelterV2ToCurrent(master);
 }
 
-async function writeMasterAndAudit(
-	migrated: ShelterMaster,
-	updatedZones: Zone[],
-	auditAction: 'zone.close' | 'zone.reopen',
-	zoneCode: string,
-	previousStatus: string,
-	reason: string | null
-): Promise<void> {
-	const now = nowIso();
-	const finalMaster: ShelterMaster = {
-		...migrated,
-		zones: updatedZones,
-		updated_at: now
-	};
-
-	const writeRes = await adminRaw(
-		`/${REGISTRY_DB}/${encodeURIComponent(migrated._id)}`,
-		'PUT',
-		finalMaster
-	);
-	if (writeRes.status >= 400) {
-		const couchErr = writeRes.data as { error?: string; reason?: string } | null;
-		const detail = couchErr?.reason ?? couchErr?.error ?? 'unknown';
-		throw new ServiceError('INTERNAL', `Registry PUT failed (${writeRes.status}): ${detail}`);
-	}
-
-	// Append audit log (per data-model.md §3.6) — ULID for collision-safe id.
-	const auditDoc = {
-		_id: `audit:${ulid()}`,
-		type: 'audit',
-		schema_v: 1,
-		shelter_code: finalMaster.code,
-		action: auditAction,
-		target_type: 'shelter_zone',
-		target_id: `${finalMaster.code}:${zoneCode}`,
-		reason: reason ?? '',
-		context: { zone_code: zoneCode, previous_status: previousStatus },
-		occurred_at: now
-	};
-	await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(auditDoc._id)}`, 'PUT', auditDoc);
-}
-
 /**
- * POST /api/back-office/shelter/{code}/zones/{zoneCode}
- * Body: { reason?: string, closed_by?: string }
- * - close: set status='closed', record closed_at/closed_by/reason, append audit log
- *   Returns 409 if the zone is already closed.
+ * POST /api/back-office/shelter/{code}/zones/{zoneCode}/reopen
+ * Body: { reopened_by?: string }
+ * - reopen: set status='active', clear closed_at/closed_by/reason, append audit log
+ *   Returns 409 if the zone is already active.
  */
 export const POST: RequestHandler = async ({ request, params }) => {
 	await requireAdmin(request.headers.get('cookie'));
@@ -101,9 +54,8 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		}
 
 		const body = (await request.json().catch(() => ({}))) as unknown;
-		const parsed = closeZoneSchema.parse(body);
-		const reason = parsed.reason ?? null;
-		const closedBy = parsed.closed_by ?? null;
+		const parsed = reopenZoneSchema.parse(body);
+		const reopenedBy = parsed.reopened_by ?? null;
 
 		const master = await findMasterByCode(code);
 		if (!master) {
@@ -121,35 +73,58 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		}
 
 		const currentZone = zones[zoneIndex];
-		if (currentZone.status === 'closed') {
-			return error(409, { message: `Zone "${zoneCode}" is already closed` });
+		if (currentZone.status === 'active') {
+			return error(409, { message: `Zone "${zoneCode}" is already active` });
 		}
 
 		const now = nowIso();
 		const updatedZone: Zone = {
 			...currentZone,
-			status: 'closed',
-			closed_at: now,
-			closed_by: closedBy,
-			reason
+			status: 'active',
+			closed_at: null,
+			closed_by: null,
+			reason: null
 		};
 		const updatedZones = zones.map((z, i) => (i === zoneIndex ? updatedZone : z));
 
-		await writeMasterAndAudit(
-			migrated,
-			updatedZones,
-			'zone.close',
-			zoneCode,
-			currentZone.status,
-			reason
+		const finalMaster: ShelterMaster = {
+			...migrated,
+			zones: updatedZones,
+			updated_at: now
+		};
+
+		const writeRes = await adminRaw(
+			`/${REGISTRY_DB}/${encodeURIComponent(migrated._id)}`,
+			'PUT',
+			finalMaster
 		);
+		if (writeRes.status >= 400) {
+			const couchErr = writeRes.data as { error?: string; reason?: string } | null;
+			const detail = couchErr?.reason ?? couchErr?.error ?? 'unknown';
+			throw new ServiceError('INTERNAL', `Registry PUT failed (${writeRes.status}): ${detail}`);
+		}
+
+		// Append audit log (per data-model.md §3.6) — ULID for collision-safe id.
+		const auditDoc = {
+			_id: `audit:${ulid()}`,
+			type: 'audit',
+			schema_v: 1,
+			shelter_code: code,
+			action: 'zone.reopen',
+			target_type: 'shelter_zone',
+			target_id: `${code}:${zoneCode}`,
+			reason: reopenedBy ? `reopened_by:${reopenedBy}` : '',
+			context: { zone_code: zoneCode, previous_status: currentZone.status },
+			occurred_at: now
+		};
+		await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(auditDoc._id)}`, 'PUT', auditDoc);
 
 		return json({
 			ok: true,
 			code,
 			zoneCode,
-			status: 'closed',
-			closed_at: updatedZone.closed_at
+			status: 'active',
+			closed_at: null
 		});
 	} catch (e) {
 		return serviceError(e);

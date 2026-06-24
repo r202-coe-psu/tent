@@ -7,19 +7,89 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { toast } from 'svelte-sonner';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { useCloseZone, useReopenZone } from '../application/queries';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Power from '@lucide/svelte/icons/power';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 
 	let {
 		form,
 		formData,
+		shelterCode = '',
 		disabled = false
 	}: {
 		form: SuperForm<Shelter>;
 		formData: SuperFormData<Shelter>;
+		shelterCode?: string;
 		disabled?: boolean;
 	} = $props();
+
+	const closeZoneMutation = useCloseZone();
+	const reopenZoneMutation = useReopenZone();
+
+	// Confirmation modal state for close/reopen
+	let confirmAction = $state<'close' | 'reopen' | null>(null);
+	let confirmZoneCode = $state<string>('');
+	let confirmIndex = $state<number>(-1);
+	let confirmReason = $state<string>('');
+	let confirmOpen = $derived(confirmAction !== null);
+
+	function openConfirm(action: 'close' | 'reopen', zoneCode: string, index: number) {
+		if (!shelterCode) {
+			toast.error(action === 'close' ? 'บันทึกศูนย์พักพิงก่อนปิดโซน' : 'บันทึกศูนย์พักพิงก่อนเปิดโซน');
+			return;
+		}
+		confirmAction = action;
+		confirmZoneCode = zoneCode;
+		confirmIndex = index;
+		confirmReason = '';
+	}
+
+	function cancelConfirm() {
+		confirmAction = null;
+		confirmZoneCode = '';
+		confirmIndex = -1;
+		confirmReason = '';
+	}
+
+	function submitConfirm() {
+		if (!confirmAction || confirmIndex < 0) return;
+		const action = confirmAction;
+		const index = confirmIndex;
+		const zoneCode = confirmZoneCode;
+		const reason = confirmReason.trim();
+		const actor = authStore.user?.name ?? null;
+
+		if (action === 'close') {
+			closeZoneMutation.mutate(
+				{ code: shelterCode, zoneCode, reason: reason || undefined, closedBy: actor ?? undefined },
+				{
+					onSuccess: () => {
+						$formData.zones = $formData.zones.map((z, i) =>
+							i === index ? { ...z, status: 'closed' as const } : z
+						);
+					}
+				}
+			);
+		} else {
+			reopenZoneMutation.mutate(
+				{ code: shelterCode, zoneCode, reopenedBy: actor ?? undefined },
+				{
+					onSuccess: () => {
+						$formData.zones = $formData.zones.map((z, i) =>
+							i === index ? { ...z, status: 'active' as const } : z
+						);
+					}
+				}
+			);
+		}
+		cancelConfirm();
+	}
 
 	const zoneTypeOptions: { value: ZoneType; label: string }[] = [
 		{ value: 'general', label: 'ทั่วไป' },
@@ -104,14 +174,16 @@
 	<!-- 3a. Living Zones -->
 
 	<div class="space-y-4 rounded-xl border border-shelter-border bg-background p-5">
-		<div class="flex items-center justify-between">
+		<div
+			class="sticky top-[72px] z-10 -mx-5 -mt-5 mb-4 flex items-center justify-between rounded-t-xl border-b border-shelter-border bg-background/95 p-5 backdrop-blur-sm"
+		>
 			<h3 class="text-sm font-bold text-card-foreground">การตั้งค่าโซนที่พัก (Living Zones)</h3>
 			<Button
 				variant="outline"
 				size="sm"
 				onclick={addNewZone}
 				{disabled}
-				class="rounded-full border-orange-200 bg-orange-50 text-orange-600 hover:bg-orange-100 hover:text-orange-700"
+				class="rounded-full border-orange-200 bg-orange-50 text-orange-600 shadow-sm hover:bg-orange-100 hover:text-orange-700"
 			>
 				<Plus class="mr-1 h-4 w-4" /> เพิ่มโซน
 			</Button>
@@ -123,12 +195,20 @@
 				<div
 					class="flex items-center gap-3 rounded-xl border border-shelter-border bg-muted/30 p-2"
 				>
-					<Input
-						bind:value={$formData.zones[index].name}
-						placeholder="ชื่อโซน"
-						class="flex-1 bg-white"
-						{disabled}
-					/>
+					<Form.Field {form} name={`zones[${index}].name`} class="flex-1 space-y-0">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Input
+									{...props}
+									bind:value={$formData.zones[index].name}
+									placeholder="ชื่อโซน"
+									class="bg-white"
+									{disabled}
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 					<Select.Root type="single" bind:value={$formData.zones[index].type} {disabled}>
 						<Select.Trigger
 							class="flex !h-9 w-[200px] items-start rounded-md border border-input bg-white px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
@@ -142,26 +222,59 @@
 							{/each}
 						</Select.Content>
 					</Select.Root>
-					<div class="relative w-[140px]">
-						<Input
-							type="number"
-							bind:value={$formData.zones[index].capacity}
-							class="bg-white pr-10 text-right"
-							{disabled}
-						/>
-						<span class="absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
-							คน
-						</span>
-					</div>
+					<Form.Field {form} name={`zones[${index}].capacity`} class="w-[140px] space-y-0">
+						<Form.Control>
+							{#snippet children({ props })}
+								<div class="relative">
+									<Input
+										{...props}
+										type="number"
+										bind:value={$formData.zones[index].capacity}
+										class="bg-white pr-10 text-right"
+										{disabled}
+									/>
+									<span
+										class="absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground"
+										>คน</span
+									>
+								</div>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 					<Button
 						variant="ghost"
 						size="icon"
 						class="text-destructive hover:bg-destructive/10 hover:text-destructive"
 						onclick={() => deleteZone(index)}
 						{disabled}
+						title="ลบโซน"
 					>
 						<Trash2 class="h-4 w-4" />
 					</Button>
+					{#if $formData.zones[index].status === 'closed'}
+						<Button
+							variant="ghost"
+							size="icon"
+							class="text-green-600 hover:bg-green-50 hover:text-green-700"
+							onclick={() => openConfirm('reopen', $formData.zones[index].code, index)}
+							{disabled}
+							title="เปิดโซนอีกครั้ง"
+						>
+							<RotateCcw class="h-4 w-4" />
+						</Button>
+					{:else}
+						<Button
+							variant="ghost"
+							size="icon"
+							class="text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+							onclick={() => openConfirm('close', $formData.zones[index].code, index)}
+							{disabled}
+							title="ปิดโซน"
+						>
+							<Power class="h-4 w-4" />
+						</Button>
+					{/if}
 				</div>
 			{/each}
 			{#if ($formData.zones ?? []).length === 0}
@@ -181,17 +294,24 @@
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label>🚹 ห้องน้ำชาย</Form.Label>
-						<Input
-							{...props}
-							type="number"
-							min="0"
-							value={$formData.facilities.toilets_male ?? ''}
-							oninput={(e) =>
-								($formData.facilities.toilets_male =
-									e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
-							{disabled}
-							placeholder="0"
-						/>
+						<div class="flex">
+							<Input
+								{...props}
+								type="number"
+								min="0"
+								value={$formData.facilities.toilets_male ?? ''}
+								oninput={(e) =>
+									($formData.facilities.toilets_male =
+										e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+								{disabled}
+								placeholder="0"
+								class="rounded-r-none"
+							/>
+							<span
+								class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
+								>ห้อง</span
+							>
+						</div>
 					{/snippet}
 				</Form.Control>
 				<Form.FieldErrors />
@@ -201,17 +321,24 @@
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label>🚺 ห้องน้ำหญิง</Form.Label>
-						<Input
-							{...props}
-							type="number"
-							min="0"
-							value={$formData.facilities.toilets_female ?? ''}
-							oninput={(e) =>
-								($formData.facilities.toilets_female =
-									e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
-							{disabled}
-							placeholder="0"
-						/>
+						<div class="flex">
+							<Input
+								{...props}
+								type="number"
+								min="0"
+								value={$formData.facilities.toilets_female ?? ''}
+								oninput={(e) =>
+									($formData.facilities.toilets_female =
+										e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+								{disabled}
+								placeholder="0"
+								class="rounded-r-none"
+							/>
+							<span
+								class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
+								>ห้อง</span
+							>
+						</div>
 					{/snippet}
 				</Form.Control>
 				<Form.FieldErrors />
@@ -221,17 +348,24 @@
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label>♿ ห้องน้ำคนพิการ</Form.Label>
-						<Input
-							{...props}
-							type="number"
-							min="0"
-							value={$formData.facilities.toilets_accessible ?? ''}
-							oninput={(e) =>
-								($formData.facilities.toilets_accessible =
-									e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
-							{disabled}
-							placeholder="0"
-						/>
+						<div class="flex">
+							<Input
+								{...props}
+								type="number"
+								min="0"
+								value={$formData.facilities.toilets_accessible ?? ''}
+								oninput={(e) =>
+									($formData.facilities.toilets_accessible =
+										e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+								{disabled}
+								placeholder="0"
+								class="rounded-r-none"
+							/>
+							<span
+								class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
+								>ห้อง</span
+							>
+						</div>
 					{/snippet}
 				</Form.Control>
 				<Form.FieldErrors />
@@ -241,17 +375,24 @@
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label>🚿 ห้องอาบน้ำ</Form.Label>
-						<Input
-							{...props}
-							type="number"
-							min="0"
-							value={$formData.facilities.showers ?? ''}
-							oninput={(e) =>
-								($formData.facilities.showers =
-									e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
-							{disabled}
-							placeholder="0"
-						/>
+						<div class="flex">
+							<Input
+								{...props}
+								type="number"
+								min="0"
+								value={$formData.facilities.showers ?? ''}
+								oninput={(e) =>
+									($formData.facilities.showers =
+										e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+								{disabled}
+								placeholder="0"
+								class="rounded-r-none"
+							/>
+							<span
+								class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
+								>ห้อง</span
+							>
+						</div>
 					{/snippet}
 				</Form.Control>
 				<Form.FieldErrors />
@@ -379,4 +520,44 @@
 			<Form.FieldErrors />
 		</Form.Field>
 	</div>
+
+	<Dialog.Root open={confirmOpen} onOpenChange={(open) => !open && cancelConfirm()}>
+		<Dialog.Content class="sm:max-w-md">
+			<Dialog.Header>
+				<Dialog.Title>
+					{confirmAction === 'close' ? `ปิดโซน ${confirmZoneCode}` : `เปิดโซน ${confirmZoneCode} อีกครั้ง`}
+				</Dialog.Title>
+				<Dialog.Description>
+					{confirmAction === 'close'
+						? 'โซนนี้จะไม่รับการ assign ใหม่ (ผู้อยู่เดิมไม่ถูกย้ายออก)'
+						: 'โซนนี้จะกลับมารับการ assign อีกครั้ง'}
+				</Dialog.Description>
+			</Dialog.Header>
+
+			<div class="space-y-2 py-2">
+				<Label for="zone-action-reason" class="text-sm">
+					เหตุผล {confirmAction === 'close' ? '(อาจเว้นว่างได้)' : '(ไม่บังคับ)'}
+				</Label>
+				<Input
+					id="zone-action-reason"
+					bind:value={confirmReason}
+					placeholder={confirmAction === 'close' ? 'เช่น ห้องน้ำพัง, พื้นที่ไม่ปลอดภัย' : ''}
+					autofocus
+				/>
+			</div>
+
+			<Dialog.Footer class="gap-2">
+				<Button variant="outline" onclick={cancelConfirm} disabled={closeZoneMutation.isPending || reopenZoneMutation.isPending}>
+					ยกเลิก
+				</Button>
+				<Button
+					variant={confirmAction === 'close' ? 'destructive' : 'default'}
+					onclick={submitConfirm}
+					disabled={closeZoneMutation.isPending || reopenZoneMutation.isPending}
+				>
+					{confirmAction === 'close' ? 'ยืนยันปิดโซน' : 'ยืนยันเปิดโซน'}
+				</Button>
+			</Dialog.Footer>
+		</Dialog.Content>
+	</Dialog.Root>
 </section>

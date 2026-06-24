@@ -58,8 +58,10 @@
 		? 'w-16'
 		: 'w-72'}"
 >
-	<div class="flex items-center justify-between border-b border-sidebar-border p-5">
-		<a href={backofficeHomePath} class="flex items-center gap-3" aria-label="กลับหน้าเลือกเมนูหลัก">
+	<div
+		class="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-sidebar-border bg-card p-5"
+	>
+		<a href={backofficeHomePath} class="flex flex-1 items-center gap-3" aria-label="กลับหน้าเลือกเมนูหลัก">
 			<div
 				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground"
 			>
@@ -73,7 +75,7 @@
 		</a>
 		<button
 			type="button"
-			class="absolute top-6 -right-3 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-sidebar-border bg-card text-xs text-muted-foreground shadow-sm hover:bg-muted"
+			class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-sidebar-border bg-card text-xs text-muted-foreground shadow-sm hover:bg-muted"
 			onclick={() => (collapsed = !collapsed)}
 			aria-label={collapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
 		>

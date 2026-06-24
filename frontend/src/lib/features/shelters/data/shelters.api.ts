@@ -59,13 +59,28 @@ export function updateShelter(
 export function closeZone(
 	code: string,
 	zoneCode: string,
-	reason?: string
+	reason?: string,
+	closedBy?: string
 ): Promise<{ ok: true; code: string; zoneCode: string; status: string }> {
 	return serviceFetch(
 		`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}/zones/${encodeURIComponent(zoneCode)}`,
 		{
 			method: 'POST',
-			body: JSON.stringify({ action: 'close', reason })
+			body: JSON.stringify({ reason, closed_by: closedBy })
+		}
+	);
+}
+
+export function reopenZone(
+	code: string,
+	zoneCode: string,
+	reopenedBy?: string
+): Promise<{ ok: true; code: string; zoneCode: string; status: string }> {
+	return serviceFetch(
+		`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}/zones/${encodeURIComponent(zoneCode)}/reopen`,
+		{
+			method: 'POST',
+			body: JSON.stringify({ reopened_by: reopenedBy })
 		}
 	);
 }

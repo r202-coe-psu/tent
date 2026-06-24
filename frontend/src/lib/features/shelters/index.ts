@@ -49,6 +49,7 @@ export {
 	createShelter,
 	updateShelter,
 	closeZone,
+	reopenZone,
 	type ShelterSummary
 } from './data/shelters.api';
 
@@ -59,7 +60,8 @@ export {
 	useShelter,
 	useCreateShelter,
 	useUpdateShelter,
-	useCloseZone
+	useCloseZone,
+	useReopenZone
 } from './application/queries';
 
 // UI (public — single page now handles create+edit via isEdit prop)

@@ -5,7 +5,8 @@ import {
 	listShelters,
 	updateShelter,
 	getShelter,
-	closeZone
+	closeZone,
+	reopenZone
 } from '../data/shelters.api';
 import type { Shelter } from '../domain/schema';
 
@@ -61,8 +62,17 @@ export const useUpdateShelter = () => {
 export const useCloseZone = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ code, zoneCode, reason }: { code: string; zoneCode: string; reason?: string }) =>
-			closeZone(code, zoneCode, reason),
+		mutationFn: ({
+			code,
+			zoneCode,
+			reason,
+			closedBy
+		}: {
+			code: string;
+			zoneCode: string;
+			reason?: string;
+			closedBy?: string;
+		}) => closeZone(code, zoneCode, reason, closedBy),
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
@@ -70,6 +80,29 @@ export const useCloseZone = () => {
 		},
 		onError: (err: Error) => {
 			toast.error(err.message || 'ไม่สามารถปิดโซนได้');
+		}
+	}));
+};
+
+export const useReopenZone = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			code,
+			zoneCode,
+			reopenedBy
+		}: {
+			code: string;
+			zoneCode: string;
+			reopenedBy?: string;
+		}) => reopenZone(code, zoneCode, reopenedBy),
+		onSuccess: (_, variables) => {
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			toast.success(`เปิดโซน ${variables.zoneCode} อีกครั้ง`);
+		},
+		onError: (err: Error) => {
+			toast.error(err.message || 'ไม่สามารถเปิดโซนได้');
 		}
 	}));
 };
