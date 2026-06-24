@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { makeDoc, type AuthorContext, touch, shelterCodeSchema } from '$lib/db/model';
+import { makeDoc, catalogDoc, type AuthorContext, touch, shelterCodeSchema } from '$lib/db/model';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
 
 export const SOP_RATIO_KEYS = [
@@ -26,12 +26,12 @@ export const ratiosSchema = z
 		message: 'At least one ratio must be specified'
 	});
 
-export const sopRatioProfileSchema = z.object({
+// --- Master SOP Profile Schema (catalog DB, schema_v 2)
+export const sopMasterSchema = z.object({
 	_id: z.string().min(1),
 	_rev: z.string().optional(),
 	type: z.literal('sop_profile'),
-	schema_v: z.number().int().positive(),
-	shelter_code: shelterCodeSchema,
+	schema_v: z.literal(2),
 	created_at: z.string().datetime(),
 	updated_at: z.string().datetime(),
 	created_by: z.string().min(1),
@@ -41,19 +41,81 @@ export const sopRatioProfileSchema = z.object({
 	active: z.boolean()
 });
 
-export type SopRatioProfile = z.infer<typeof sopRatioProfileSchema>;
+export type SopMaster = z.infer<typeof sopMasterSchema>;
 
-export const isSopRatioProfile = (d: unknown): d is SopRatioProfile =>
+export const isSopMaster = (d: unknown): d is SopMaster =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'sop_profile';
 
+// --- Override SOP Profile Schema (shelter_* DB, schema_v 1)
+export const sopOverrideSchema = z.object({
+	_id: z.string().min(1),
+	_rev: z.string().optional(),
+	type: z.literal('sop_override'),
+	schema_v: z.literal(1),
+	shelter_code: shelterCodeSchema,
+	base_profile_id: z.string().min(1),
+	name: z.string().min(1),
+	ratios: ratiosSchema,
+	version: z.number().int().positive(),
+	active: z.boolean(),
+	created_at: z.string().datetime(),
+	updated_at: z.string().datetime(),
+	created_by: z.string().min(1)
+});
+
+export type SopOverride = z.infer<typeof sopOverrideSchema>;
+
+export const isSopOverride = (d: unknown): d is SopOverride =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'sop_override';
+
 /**
- * Creates the initial version of a new SOP Ratio Profile.
+ * Resolves the effective SOP profile ratios for a shelter:
+ * If an active override is present, use its ratios.
+ * Otherwise, fall back to the active master profile ratios.
  */
+export function resolveEffectiveProfile(
+	override?: SopOverride | null,
+	master?: SopMaster | null
+): { ratios: Partial<Record<SopRatioKey, number>>; ratio_source: 'master' | 'override' } | null {
+	if (override && override.active) {
+		return {
+			ratios: override.ratios,
+			ratio_source: 'override'
+		};
+	}
+	if (master && master.active) {
+		return {
+			ratios: master.ratios,
+			ratio_source: 'master'
+		};
+	}
+	return null;
+}
+
+// Overload signatures for createInitialProfile
 export function createInitialProfile(
+	targetType: 'sop_profile',
 	name: string,
 	ratios: Partial<Record<SopRatioKey, number>>,
-	ctx: AuthorContext
-): { profile: SopRatioProfile; audit: AuditEntry } {
+	ctx: { createdBy: string }
+): { profile: SopMaster; audit: AuditEntry };
+
+export function createInitialProfile(
+	targetType: 'sop_override',
+	name: string,
+	ratios: Partial<Record<SopRatioKey, number>>,
+	ctx: AuthorContext & { base_profile_id: string }
+): { profile: SopOverride; audit: AuditEntry };
+
+/**
+ * Creates the initial version of a new SOP Master Profile or SOP Override.
+ */
+export function createInitialProfile(
+	targetType: 'sop_profile' | 'sop_override',
+	name: string,
+	ratios: Partial<Record<SopRatioKey, number>>,
+	ctx: any
+): { profile: SopMaster | SopOverride; audit: AuditEntry } {
 	// Filter out any unexpected keys for safety
 	const safeRatios: Partial<Record<SopRatioKey, number>> = {};
 	for (const key of SOP_RATIO_KEYS) {
@@ -62,53 +124,99 @@ export function createInitialProfile(
 		}
 	}
 
-	const profile = makeDoc(
-		'sop_profile',
-		1,
-		{
-			name,
-			ratios: safeRatios,
-			version: 1,
-			active: true
-		},
-		ctx
-	) as SopRatioProfile;
+	if (targetType === 'sop_profile') {
+		const profile = catalogDoc(
+			'sop_profile',
+			2,
+			{
+				name,
+				ratios: safeRatios,
+				version: 1,
+				active: true
+			},
+			ctx.createdBy
+		) as SopMaster;
 
-	// Validate against the schema invariants (values > 0, valid keys)
-	sopRatioProfileSchema.parse(profile);
+		sopMasterSchema.parse(profile);
 
-	const audit = createAuditEntry(
-		{
-			action: 'created',
-			target_type: 'sop_profile',
-			target_id: profile._id,
-			reason: 'Initial creation',
-			context: {
-				ratios: profile.ratios
-			}
-		},
-		ctx
-	);
+		const audit = createAuditEntry(
+			{
+				action: 'created',
+				target_type: 'sop_profile',
+				target_id: profile._id,
+				reason: 'Initial creation',
+				context: {
+					ratios: profile.ratios
+				}
+			},
+			{ shelterCode: 'catalog', createdBy: ctx.createdBy }
+		);
 
-	return { profile, audit };
+		return { profile, audit };
+	} else {
+		const profile = makeDoc(
+			'sop_override',
+			1,
+			{
+				base_profile_id: ctx.base_profile_id,
+				name,
+				ratios: safeRatios,
+				version: 1,
+				active: true
+			},
+			ctx
+		) as SopOverride;
+
+		sopOverrideSchema.parse(profile);
+
+		const audit = createAuditEntry(
+			{
+				action: 'created',
+				target_type: 'sop_override',
+				target_id: profile._id,
+				reason: 'Initial creation',
+				context: {
+					ratios: profile.ratios,
+					base_profile_id: ctx.base_profile_id
+				}
+			},
+			ctx
+		);
+
+		return { profile, audit };
+	}
 }
 
-export type CreateNewVersionResult =
-	| { deactivatedPrev: SopRatioProfile; profile: SopRatioProfile; audit: AuditEntry }
-	| { deactivatedPrev: null; profile: SopRatioProfile; audit: null };
+export type CreateNewVersionResult<T extends SopMaster | SopOverride> =
+	| { deactivatedPrev: T; profile: T; audit: AuditEntry }
+	| { deactivatedPrev: null; profile: T; audit: null };
 
-/**
- * Creates a new version of an existing SOP Ratio Profile.
- * This is an immutable operation; the previous profile is not modified.
- * It also returns an AuditEntry representing the change.
- * If changes yield an identical state, it aborts gracefully as an idempotent no-op.
- */
+// Overload signatures for createNewVersion
 export function createNewVersion(
-	prev: SopRatioProfile,
+	prev: SopMaster,
+	changes: Partial<Record<SopRatioKey, number>>,
+	reason: string,
+	ctx: { createdBy: string }
+): CreateNewVersionResult<SopMaster>;
+
+export function createNewVersion(
+	prev: SopOverride,
 	changes: Partial<Record<SopRatioKey, number>>,
 	reason: string,
 	ctx: AuthorContext
-): CreateNewVersionResult {
+): CreateNewVersionResult<SopOverride>;
+
+/**
+ * Creates a new version of an existing SOP Master Profile or SOP Override.
+ * This is an immutable operation; the previous profile is not modified.
+ * If changes yield an identical state, it aborts gracefully as an idempotent no-op.
+ */
+export function createNewVersion<T extends SopMaster | SopOverride>(
+	prev: T,
+	changes: Partial<Record<SopRatioKey, number>>,
+	reason: string,
+	ctx: any
+): CreateNewVersionResult<T> {
 	// Filter incoming changes to ensure no poisoned keys leak into the merge
 	const safeChanges: Partial<Record<SopRatioKey, number>> = {};
 	let hasChanges = false;
@@ -123,48 +231,86 @@ export function createNewVersion(
 	}
 
 	if (!hasChanges) {
-		return { deactivatedPrev: null, profile: prev, audit: null };
+		return { deactivatedPrev: null, profile: prev, audit: null } as any;
 	}
 
 	// Merge old and new ratios safely
 	const newRatios = { ...prev.ratios, ...safeChanges };
 
-	const profile = makeDoc(
-		'sop_profile',
-		1,
-		{
-			name: prev.name,
-			ratios: newRatios,
-			version: prev.version + 1,
-			active: true
-		},
-		ctx
-	) as SopRatioProfile;
+	if (prev.type === 'sop_profile') {
+		const profile = catalogDoc(
+			'sop_profile',
+			2,
+			{
+				name: prev.name,
+				ratios: newRatios,
+				version: prev.version + 1,
+				active: true
+			},
+			ctx.createdBy
+		) as SopMaster;
 
-	// Validate against the schema invariants
-	sopRatioProfileSchema.parse(profile);
+		sopMasterSchema.parse(profile);
 
-	// Generate audit entry for the change
-	const audit = createAuditEntry(
-		{
-			action: 'manual_adjust',
-			target_type: 'sop_profile',
-			target_id: profile._id,
-			reason,
-			context: {
-				previous_version: prev.version,
-				previous_id: prev._id,
-				changes: safeChanges
-			}
-		},
-		ctx
-	);
+		const audit = createAuditEntry(
+			{
+				action: 'manual_adjust',
+				target_type: 'sop_profile',
+				target_id: profile._id,
+				reason,
+				context: {
+					previous_version: prev.version,
+					previous_id: prev._id,
+					changes: safeChanges
+				}
+			},
+			{ shelterCode: 'catalog', createdBy: ctx.createdBy }
+		);
 
-	// Deactivate the previous profile immutably
-	const deactivatedPrev: SopRatioProfile = {
-		...touch(prev),
-		active: false
-	};
+		const deactivatedPrev = {
+			...touch(prev),
+			active: false
+		} as SopMaster;
 
-	return { deactivatedPrev, profile, audit };
+		return { deactivatedPrev, profile, audit } as any;
+	} else {
+		const overridePrev = prev as SopOverride;
+		const profile = makeDoc(
+			'sop_override',
+			1,
+			{
+				base_profile_id: overridePrev.base_profile_id,
+				name: overridePrev.name,
+				ratios: newRatios,
+				version: overridePrev.version + 1,
+				active: true
+			},
+			ctx
+		) as SopOverride;
+
+		sopOverrideSchema.parse(profile);
+
+		const audit = createAuditEntry(
+			{
+				action: 'manual_adjust',
+				target_type: 'sop_override',
+				target_id: profile._id,
+				reason,
+				context: {
+					previous_version: overridePrev.version,
+					previous_id: overridePrev._id,
+					changes: safeChanges,
+					base_profile_id: overridePrev.base_profile_id
+				}
+			},
+			ctx
+		);
+
+		const deactivatedPrev = {
+			...touch(overridePrev),
+			active: false
+		} as SopOverride;
+
+		return { deactivatedPrev, profile, audit } as any;
+	}
 }

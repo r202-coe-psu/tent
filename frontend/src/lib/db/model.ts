@@ -65,8 +65,42 @@ export function makeDoc<T extends string, B extends object>(
 	};
 }
 
+/** Fields present on every document in a catalog/global database. */
+export interface CatalogDoc {
+	_id: string;
+	_rev?: string;
+	type: string;
+	schema_v: number;
+	created_at: Timestamp;
+	updated_at: Timestamp;
+	created_by: string;
+}
+
+/**
+ * Stamp the common envelope for a catalog document, minting a ULID `_id`.
+ * Catalog documents do not have a `shelter_code` field.
+ */
+export function catalogDoc<T extends string, B extends object>(
+	type: T,
+	schemaV: number,
+	body: B,
+	createdBy: string,
+	id: string = ulid()
+): CatalogDoc & { type: T } & B {
+	const ts = now();
+	return {
+		_id: makeDocId(type, id),
+		type,
+		schema_v: schemaV,
+		created_at: ts,
+		updated_at: ts,
+		created_by: createdBy,
+		...body
+	};
+}
+
 /** Return a copy of a mutable doc with a fresh `updated_at` (LWW conflict key). */
-export function touch<T extends BaseDoc>(doc: T): T {
+export function touch<T extends { updated_at: Timestamp }>(doc: T): T {
 	return { ...doc, updated_at: now() };
 }
 
