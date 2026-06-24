@@ -3,32 +3,13 @@ import type { RequestHandler } from './$types';
 import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
 import {
 	updateShelterSchema,
-	type Zone,
-	type Item,
-	type Rule,
-	type Sop
+	migrateShelterV2ToCurrent,
+	type ShelterMaster
 } from '$lib/features/shelters';
 
 export const prerender = false;
 
 const REGISTRY_DB = 'registry';
-
-interface ShelterMaster {
-	_id: string;
-	_rev?: string;
-	type: 'shelter';
-	schema_v: number;
-	code: string;
-	name: string;
-	zones: Zone[];
-	items?: Item[];
-	rules?: Rule[];
-	sops?: Sop[];
-	status: string;
-	capacity?: number;
-	created_at: string;
-	updated_at: string;
-}
 
 function nowIso(): string {
 	return new Date().toISOString();
@@ -38,22 +19,16 @@ async function findMasterByCode(code: string): Promise<ShelterMaster | null> {
 	const res = await adminRaw(`/${REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
 	if (res.status === 404) return null;
 	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not read registry');
-	const rows = (res.data as { rows?: { id: string; doc: ShelterMaster }[] })?.rows ?? [];
-	const match = rows.find((r) => r.id.startsWith('shelter:') && r.doc && r.doc.code === code);
-	return match?.doc ?? null;
+	const rows = (res.data as { rows?: { id: string; doc: unknown }[] })?.rows ?? [];
+	const match = rows.find(
+		(r) => r.id.startsWith('shelter:') && r.doc && (r.doc as { code?: string }).code === code
+	);
+	return (match?.doc as ShelterMaster) ?? null;
 }
 
-function migrateV1ToV2(master: ShelterMaster): ShelterMaster {
-	if (master.schema_v >= 2) return master;
-	const zones = master.zones ?? [];
-	const capacity = zones.reduce((sum, z) => sum + (z.capacity ?? 0), 0);
-	const status = master.status === 'active' ? 'open' : master.status;
-	return {
-		...master,
-		schema_v: 2,
-		capacity,
-		status
-	};
+function migrate(master: ShelterMaster): ShelterMaster {
+	if (master.schema_v >= 3) return master;
+	return migrateShelterV2ToCurrent(master);
 }
 
 export const GET: RequestHandler = async ({ request, params }) => {
@@ -69,17 +44,23 @@ export const GET: RequestHandler = async ({ request, params }) => {
 			return error(404, { message: `Shelter "${code}" not found` });
 		}
 
-		const migrated = migrateV1ToV2(master);
+		const migrated = migrate(master);
 		return json({
 			code: migrated.code,
 			name: migrated.name,
 			db: `shelter_${migrated.code.toLowerCase()}`,
-			status: migrated.status,
+			operation_status: migrated.operation_status ?? 'standby',
 			capacity: migrated.capacity ?? 0,
-			zones: migrated.zones ?? [],
-			items: migrated.items ?? [],
-			rules: migrated.rules ?? [],
-			sops: migrated.sops ?? []
+			shelter_type: migrated.shelter_type ?? null,
+			location: migrated.location ?? {},
+			contact: migrated.contact ?? {},
+			area_m2: migrated.area_m2 ?? null,
+			area_type: migrated.area_type ?? null,
+			facilities: migrated.facilities ?? {},
+			common_areas: migrated.common_areas ?? { sub_storage: [] },
+			utilities: migrated.utilities ?? { communications: [] },
+			risk: migrated.risk ?? {},
+			zones: migrated.zones ?? []
 		});
 	} catch (e) {
 		return serviceError(e);
@@ -105,15 +86,10 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 			return error(500, { message: 'Shelter master doc has no _rev' });
 		}
 
-		const migrated = migrateV1ToV2(master);
-		const updated = {
+		const migrated = migrate(master);
+		const updated: ShelterMaster = {
 			...migrated,
-			name: input.name,
-			capacity: input.capacity,
-			zones: input.zones,
-			items: input.items,
-			rules: input.rules,
-			sops: input.sops,
+			...input,
 			updated_at: nowIso()
 		};
 

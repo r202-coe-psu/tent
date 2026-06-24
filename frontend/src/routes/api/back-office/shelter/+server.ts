@@ -2,13 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { ulid } from '$lib/db/ulid';
-import {
-	createShelterSchema,
-	type Zone,
-	type Item,
-	type Rule,
-	type Sop
-} from '$lib/features/shelters';
+import { createShelterSchema, migrateShelterV2ToCurrent } from '$lib/features/shelters';
 
 // Dev-only provisioning endpoint — never prerendered (absent from the static
 // prod build). In production shelters are minted from the central counter
@@ -94,14 +88,9 @@ interface ShelterMaster {
 	schema_v: number;
 	code: string;
 	name: string;
-	zones: Zone[];
-	items?: Item[];
-	rules?: Rule[];
-	sops?: Sop[];
-	status: string;
-	capacity: number;
 	created_at: string;
 	updated_at: string;
+	[key: string]: unknown;
 }
 
 /** Read all shelter master docs from the registry (empty if the db is absent). */
@@ -132,19 +121,13 @@ async function nextShelterCode(): Promise<string> {
 	return `SH${String(next).padStart(3, '0')}`;
 }
 
-/** POST { name, capacity, zones? } — provision a shelter; code is auto-assigned. */
+/** POST shelter (5-section v3 schema) — provision a shelter; code is auto-assigned. */
 export const POST: RequestHandler = async ({ request }) => {
 	await requireAdmin(request.headers.get('cookie'));
 	try {
 		const body = (await request.json().catch(() => ({}))) as unknown;
 		const input = createShelterSchema.parse(body);
 		const code = await nextShelterCode();
-		const name = input.name;
-		const capacity = input.capacity;
-		const zones = input.zones;
-		const items = input.items;
-		const rules = input.rules;
-		const sops = input.sops;
 		const db = shelterDbName(code);
 
 		const steps: { step: string; status: number }[] = [];
@@ -177,15 +160,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			const master = {
 				_id: `shelter:${ulid()}`,
 				type: 'shelter',
-				schema_v: 2,
+				schema_v: 3,
 				code,
-				name,
-				zones,
-				items,
-				rules,
-				sops,
-				status: 'open',
-				capacity,
+				...input,
 				created_at: ts,
 				updated_at: ts
 			};
@@ -221,17 +198,26 @@ export const GET: RequestHandler = async ({ request }) => {
 	try {
 		const masters = await listShelterMasters();
 		return json(
-			masters.map((m) => ({
-				code: m.code,
-				name: m.name,
-				db: shelterDbName(m.code),
-				zones: m.zones ?? [],
-				items: m.items ?? [],
-				rules: m.rules ?? [],
-				sops: m.sops ?? [],
-				status: m.status === 'active' ? 'open' : m.status,
-				capacity: m.capacity ?? 0
-			}))
+			masters.map((m) => {
+				const migrated = migrateShelterV2ToCurrent(m as never);
+				return {
+					code: migrated.code,
+					name: migrated.name,
+					db: shelterDbName(migrated.code),
+					operation_status: migrated.operation_status ?? 'standby',
+					capacity: migrated.capacity ?? 0,
+					shelter_type: migrated.shelter_type ?? null,
+					location: migrated.location ?? {},
+					contact: migrated.contact ?? {},
+					area_m2: migrated.area_m2 ?? null,
+					area_type: migrated.area_type ?? null,
+					facilities: migrated.facilities ?? {},
+					common_areas: migrated.common_areas ?? { sub_storage: [] },
+					utilities: migrated.utilities ?? { communications: [] },
+					risk: migrated.risk ?? {},
+					zones: migrated.zones ?? []
+				};
+			})
 		);
 	} catch (e) {
 		return serviceError(e);
