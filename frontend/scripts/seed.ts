@@ -50,6 +50,7 @@ import {
 	type StockLedgerInput,
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
+import { createInitialProfile } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
@@ -279,6 +280,24 @@ async function seedCatalog(): Promise<void> {
 
 	for (const doc of [...items, ...recipes]) await putDoc('catalog', doc);
 	console.log(`  ✓ catalog: ${items.length} supply items, ${recipes.length} recipes`);
+}
+
+async function seedCatalogSopRatios(): Promise<void> {
+	await ensureDb('catalog');
+
+	const { profile, audit } = createInitialProfile(
+		'sop_profile',
+		'Sphere Baseline',
+		{
+			water_l_per_person_day: 15, // liters/person/day
+			rice_g_per_person_meal: 200, // grams/person/meal
+			toilet_per_person: 0.05 // toilets/person
+		},
+		{ createdBy: 'seed' }
+	);
+
+	await bulkDocs('catalog', [profile, audit]);
+	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded');
 }
 
 // ─── seedShelter ──────────────────────────────────────────────────────────────
@@ -599,6 +618,7 @@ async function main() {
 	try {
 		await seedRegistry();
 		await seedCatalog();
+		await seedCatalogSopRatios();
 		await seedShelter();
 		console.log('\nDone.\n');
 	} catch (err) {
