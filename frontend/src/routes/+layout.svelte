@@ -24,6 +24,7 @@
 			livePeople.stop();
 			liveOps.stop();
 			stopNamedSync(SHELTER_DB);
+			data.queryClient.clear();
 		};
 	});
 </script>

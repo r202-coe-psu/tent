@@ -1,4 +1,4 @@
-import { createQuery, createMutation, type QueryClient } from '@tanstack/svelte-query';
+import { createQuery, createMutation, useQueryClient, type QueryClient } from '@tanstack/svelte-query';
 import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import type { AuthorContext } from '$lib/db/model';
 import { operationsRepository, shelterDb } from '../data/operations.pouch';
@@ -33,18 +33,28 @@ export const useDonations = () =>
     }));
 
 /** Mutation helper to create a new campaign/special request. */
-export const useCreateCampaign = () =>
-    createMutation(() => ({
+export const useCreateCampaign = () => {
+    const queryClient = useQueryClient();
+    return createMutation(() => ({
         mutationFn: ({ input, ctx }: { input: CampaignInput; ctx: AuthorContext }) =>
-            operationsRepository().createCampaign(input, ctx)
+            operationsRepository().createCampaign(input, ctx),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: operationsKeys.campaigns() });
+        }
     }));
+};
 
 /** Mutation helper to update an existing campaign (e.g. manually closing or opening it). */
-export const useUpdateCampaign = () =>
-    createMutation(() => ({
+export const useUpdateCampaign = () => {
+    const queryClient = useQueryClient();
+    return createMutation(() => ({
         mutationFn: (campaign: DonationCampaign) =>
-            operationsRepository().updateCampaign(campaign)
+            operationsRepository().updateCampaign(campaign),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: operationsKeys.campaigns() });
+        }
     }));
+};
 
 /**
  * Watch PouchDB's changes feed for the local shelter database. When any operational

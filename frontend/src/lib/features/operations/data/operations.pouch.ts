@@ -43,7 +43,13 @@ export class OperationsPouchRepository implements OperationsRepository {
 
     /** Persist updates to a campaign (bumps updated_at timestamp). */
     async updateCampaign(campaign: DonationCampaign): Promise<DonationCampaign> {
-        return this.repo.put(touch(campaign));
+        // Read-Modify-Write: Fetch the latest _rev from the database to prevent 409 conflict
+        const existing = await this.repo.get<DonationCampaign>(campaign._id);
+        const merged = {
+            ...campaign,
+            _rev: existing?._rev ?? campaign._rev
+        };
+        return this.repo.put(touch(merged));
     }
 
     /** Fetch all stock ledger logs in this shelter. */
