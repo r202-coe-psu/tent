@@ -2,6 +2,7 @@ export interface DonationItem {
 	name: string;
 	amount: number;
 	unit: string;
+	item_id?: string;
 }
 
 export type TabStep = 'needs' | 'form' | 'time' | 'ticket';
@@ -17,6 +18,9 @@ class DonationStore {
 	taxReceipt = $state(false);
 
 	items = $state<DonationItem[]>([]);
+
+	selectedShelter = $state('');
+	deliveryDate = $state('');
 
 	captchaToken = $state('');
 	isSubmitting = $state(false);
@@ -40,6 +44,8 @@ class DonationStore {
 		this.donorEmail = '';
 		this.taxReceipt = false;
 		this.items = [];
+		this.selectedShelter = '';
+		this.deliveryDate = '';
 		this.captchaToken = '';
 		this.isSubmitting = false;
 		this.errorMessage = '';

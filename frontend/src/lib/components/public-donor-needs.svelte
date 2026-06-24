@@ -1,8 +1,115 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import Heart from '@lucide/svelte/icons/heart';
 	import Compass from '@lucide/svelte/icons/compass';
 	import Search from '@lucide/svelte/icons/search';
+	import Building from '@lucide/svelte/icons/building';
+	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import { donationStore } from '../../routes/public/donations/donation.svelte';
+
+	interface Need {
+		item_id: string;
+		name: string;
+		qty_needed: number;
+		unit: string;
+	}
+
+	interface ShelterNeeds {
+		code: string;
+		name: string;
+		needs: Need[];
+	}
+
+	let shelters = $state<ShelterNeeds[]>([]);
+	let searchTerm = $state('');
+	let filterType = $state<'all' | 'urgent' | 'food' | 'medical'>('all');
+	let isLoading = $state(true);
+
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/public/v1/needs');
+			if (res.ok) {
+				shelters = await res.json();
+			}
+		} catch (err) {
+			console.error('Failed to fetch needs:', err);
+		} finally {
+			isLoading = false;
+		}
+	});
+
+	// สร้างรายการประมวลผล (Derived) ของศูนย์พักพิงและรายการความต้องการหลังจากผ่านตัวกรอง
+	let filteredShelters = $derived.by(() => {
+		return shelters.map(s => {
+			const needsList = s.needs.filter(n => {
+				// ตรวจสอบคำค้นหา
+				if (searchTerm) {
+					const term = searchTerm.toLowerCase();
+					const nameMatches = n.name.toLowerCase().includes(term);
+					const shelterMatches = s.name.toLowerCase().includes(term);
+					if (!nameMatches && !shelterMatches) {
+						return false;
+					}
+				}
+
+				// กรองข้อมูลแยกตามหมวดหมู่สิ่งของ
+				if (filterType === 'food') {
+					return n.item_id === 'item:rice' || n.item_id === 'item:water' || n.name.includes('อาหาร') || n.name.includes('ข้าว') || n.name.includes('น้ำ');
+				}
+				if (filterType === 'medical') {
+					return n.item_id === 'item:soap' || n.name.includes('ยา') || n.name.includes('สบู่') || n.name.includes('แพทย์');
+				}
+				if (filterType === 'urgent') {
+					return n.qty_needed >= 250;
+				}
+				return true;
+			});
+			return {
+				...s,
+				needs: needsList
+			};
+		}).filter(s => s.needs.length > 0 || (!searchTerm && filterType === 'all'));
+	});
+
+	function selectShelterAndItem(shelterCode: string, itemName?: string, itemUnit?: string, itemId?: string) {
+		donationStore.selectedShelter = shelterCode;
+		if (itemName) {
+			donationStore.items = [{ name: itemName, amount: 10, unit: itemUnit || 'ชิ้น', item_id: itemId }];
+		} else {
+			donationStore.items = [];
+		}
+		donationStore.activeTab = 'form';
+		if (donationStore.reachedStep < 2) {
+			donationStore.reachedStep = 2;
+		}
+	}
+
+	function splitShelterName(name: string): { title: string; subtext: string } {
+		const match = name.match(/^([^(]+)\s*(\([^)]+\))$/);
+		if (match) {
+			return { title: match[1].trim(), subtext: match[2].trim() };
+		}
+		return { title: name, subtext: '' };
+	}
+
+	function formatUnit(unit: string, name: string): string {
+		const u = unit.toLowerCase();
+		const n = name.toLowerCase();
+		if (n.includes('น้ำ')) return 'แพ็ค';
+		if (n.includes('ยา') || n.includes('สบู่')) {
+			if (n.includes('ยา')) return 'แผง';
+			return 'ก้อน';
+		}
+		if (n.includes('ข้าว')) return 'ชุด';
+		if (u === 'kg') return 'กิโลกรัม';
+		if (u === 'bottle') return 'ขวด';
+		if (u === 'bar') return 'ก้อน';
+		if (u === 'piece') {
+			if (n.includes('ผ้าห่ม')) return 'ผืน';
+			return 'ชิ้น';
+		}
+		return unit;
+	}
 </script>
 
 <div class="rounded-3xl border border-border bg-card p-6 md:p-8 shadow-xs">
@@ -18,9 +125,10 @@
 		</div>
 		<!-- Search -->
 		<div class="relative w-full md:w-80">
-			<input 
-				type="text" 
+			<input
+				type="text"
 				placeholder="ค้นหาสิ่งของที่ต้องการบริจาค เช่น น้ำดื่ม, ยาสามัญ..."
+				bind:value={searchTerm}
 				class="w-full rounded-xl border border-border bg-muted/20 px-3 py-2 pl-9 text-xs outline-hidden focus:ring-1 focus:ring-primary focus:border-primary text-foreground"
 			/>
 			<Search class="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -29,80 +137,123 @@
 
 	<!-- Categories -->
 	<div class="flex flex-wrap gap-2 mb-6">
-		<button class="rounded-full bg-foreground text-background px-4 py-1.5 text-xs font-bold">ทั้งหมด</button>
-		<button class="rounded-full border border-border hover:bg-muted px-4 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">ด่วนพิเศษ</button>
-		<button class="rounded-full border border-border hover:bg-muted px-4 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">อาหาร & น้ำ</button>
-		<button class="rounded-full border border-border hover:bg-muted px-4 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">ยารักษาโรค</button>
+		<button
+			onclick={() => filterType = 'all'}
+			class="rounded-full px-4 py-2 text-xs font-bold transition-all cursor-pointer {filterType === 'all' ? 'bg-[#1d1d1f] text-white shadow-sm' : 'bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#e8e8ed]'}"
+		>
+			ทั้งหมด
+		</button>
+		<button
+			onclick={() => filterType = 'urgent'}
+			class="rounded-full px-4 py-2 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 {filterType === 'urgent' ? 'bg-red-50 text-red-700 border border-red-200 shadow-sm' : 'bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#e8e8ed]'}"
+		>
+			<span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+			ด่วนพิเศษ
+		</button>
+		<button
+			onclick={() => filterType = 'food'}
+			class="rounded-full px-4 py-2 text-xs font-bold transition-all cursor-pointer {filterType === 'food' ? 'bg-[#0071e3] text-white shadow-sm' : 'bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#e8e8ed]'}"
+		>
+			อาหาร & น้ำ
+		</button>
+		<button
+			onclick={() => filterType = 'medical'}
+			class="rounded-full px-4 py-2 text-xs font-bold transition-all cursor-pointer {filterType === 'medical' ? 'bg-[#10b981] text-white shadow-sm' : 'bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#e8e8ed]'}"
+		>
+			ยารักษาโรค
+		</button>
 	</div>
 
 	<!-- Shelter list -->
 	<div class="flex flex-col gap-6">
-		<!-- Shelter Card 1 -->
-		<div class="rounded-2xl border border-border p-5 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-muted/5">
-			<div class="flex-1">
-				<div class="flex items-center gap-2.5">
-					<span class="rounded-lg bg-blue-50 text-blue-600 border border-blue-100 p-1">
-						<Compass class="h-4 w-4" />
-					</span>
-					<div>
-						<h3 class="text-sm font-bold text-foreground">ศูนย์พักพิง เทศบาลนครหาดใหญ่</h3>
-						<p class="text-xs text-muted-foreground">(โรงเรียนเทศบาล 2)</p>
-					</div>
-					<span class="ml-2 rounded-full bg-primary-muted text-primary px-2.5 py-0.5 text-xs font-bold">เปิดรับบริจาค</span>
-				</div>
+		{#if isLoading}
+			<div class="text-center py-8 text-xs text-muted-foreground">กำลังโหลดข้อมูล...</div>
+		{:else if filteredShelters.length === 0}
+			<div class="text-center py-8 text-xs text-muted-foreground">ไม่พบข้อมูลความต้องการที่ตรงกับการค้นหา</div>
+		{:else}
+			{#each filteredShelters as shelter (shelter.code)}
+				{@const nameParts = splitShelterName(shelter.name)}
+				<div class="bg-white rounded-[24px] border border-black/[0.04] p-5 md:p-6 shadow-xs flex flex-col md:flex-row gap-6 hover:shadow-md transition-all">
+					<!-- Left: Shelter & Needs info -->
+					<div class="flex-1 space-y-4">
+						<div class="flex items-center justify-between md:justify-start gap-3">
+							<div class="font-bold text-[#1d1d1f] text-base flex items-center gap-2">
+								<Building class="text-[#0071e3] shrink-0" size={18} />
+								<div>
+									<span class="block text-[#1d1d1f] text-base font-bold">{nameParts.title}</span>
+									{#if nameParts.subtext}
+										<span class="block text-[11px] text-[#86868b] font-medium">{nameParts.subtext}</span>
+									{/if}
+								</div>
+							</div>
+							<div class="text-[10px] font-bold text-[#0071e3] bg-[#0071e3]/10 border border-[#0071e3]/20 px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+								เปิดรับบริจาค
+							</div>
+						</div>
 
-				<!-- Needs list inside shelter -->
-				<div class="mt-4 flex flex-col gap-2">
-					<div class="flex items-center justify-between rounded-lg bg-danger-muted/20 border border-danger-border/30 px-3.5 py-2 text-xs">
-						<span class="font-bold text-danger">• ด่วน! น้ำดื่ม</span>
-						<span class="rounded-md bg-white px-2 py-0.5 text-xs font-bold text-danger border border-danger/10">ขาด 500 แพ็ค</span>
+						<!-- Needs list inside shelter -->
+						<div class="flex flex-col gap-2">
+							{#each shelter.needs as need}
+								{@const isUrgent = need.qty_needed >= 250 || need.name.includes('น้ำ') || need.name.includes('ยา')}
+								{#if isUrgent}
+									<!-- รายการด่วนพิเศษ (ด่วน!) -->
+									<button
+										type="button"
+										onclick={() => selectShelterAndItem(shelter.code, need.name, formatUnit(need.unit, need.name), need.item_id)}
+										class="flex w-full items-center justify-between rounded-xl bg-red-50 border border-red-100 px-3.5 py-2.5 text-xs transition-colors hover:bg-red-100/50 cursor-pointer select-none text-left"
+									>
+										<span class="text-red-700 text-sm font-bold flex items-center gap-2">
+											<span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+											ด่วน! {need.name}
+										</span>
+										<span class="text-xs font-black text-slate-700 bg-white px-2 py-1 rounded shadow-sm border border-slate-100">
+											ขาด {need.qty_needed} {formatUnit(need.unit, need.name)}
+										</span>
+									</button>
+								{:else}
+									<!-- รายการปกติ -->
+									<button
+										type="button"
+										onclick={() => selectShelterAndItem(shelter.code, need.name, formatUnit(need.unit, need.name), need.item_id)}
+										class="flex w-full items-center justify-between rounded-xl bg-[#f5f5f7] border border-black/[0.04] px-3.5 py-2.5 text-xs transition-colors hover:bg-[#e8e8ed]/70 cursor-pointer select-none text-left"
+									>
+										<span class="text-[#1d1d1f] text-sm font-bold flex items-center gap-2">
+											{#if need.name.includes('ข้าว')}🍚{:else if need.name.includes('สบู่')}🧼{:else}📦{/if} {need.name}
+										</span>
+										<span class="text-[12px] font-bold text-[#86868b] bg-white px-2 py-1 rounded border border-black/[0.04] shadow-sm">
+											ขาด {need.qty_needed} {formatUnit(need.unit, need.name)}
+										</span>
+									</button>
+								{/if}
+							{/each}
+
+							<!-- สถานะการรับบริจาคเสื้อผ้า (งดรับ - ต้นสต๊อก 120%) -->
+							{#if filterType === 'all'}
+								<div class="flex w-full items-center justify-between rounded-xl bg-[#f5f5f7] border border-black/[0.04] px-3.5 py-2.5 text-xs opacity-60 grayscale line-through text-[#86868b] select-none">
+									<span class="text-sm font-bold">
+										งดรับเสื้อผ้ามือสอง
+									</span>
+									<span class="text-[12px] font-bold bg-white px-2 py-1 rounded border border-black/[0.04] shadow-sm no-underline inline-block">
+										ต้นสต๊อก 120%
+									</span>
+								</div>
+							{/if}
+						</div>
 					</div>
-					<div class="flex items-center justify-between rounded-lg bg-danger-muted/20 border border-danger-border/30 px-3.5 py-2 text-xs">
-						<span class="font-bold text-danger">• ด่วน! ยาแก้ปวด</span>
-						<span class="rounded-md bg-white px-2 py-0.5 text-xs font-bold text-danger border border-danger/10">ขาด 200 แผง</span>
-					</div>
-					<div class="flex items-center justify-between rounded-lg bg-muted/40 px-3.5 py-2 text-xs text-muted-foreground">
-						<span>ขอรับบริจาคเสื้อผ้ามือสอง</span>
-						<span class="text-xs">ค้นสต๊อก 12...</span>
+
+					<!-- Right: Actions -->
+					<div class="md:w-48 shrink-0 flex flex-col justify-end pt-4 md:pt-0 border-t md:border-t-0 md:border-l border-black/[0.04] md:pl-6">
+						<button
+							onclick={() => selectShelterAndItem(shelter.code)}
+							class="bg-[#0071e3] text-white px-4 py-3 rounded-xl font-bold shadow-sm hover:bg-[#1557b0] transition-colors w-full text-center active:scale-[0.98] text-[13px] sm:text-sm flex items-center justify-center gap-2 cursor-pointer"
+						>
+							จองคิวบริจาค
+							<span>→</span>
+						</button>
+						<p class="text-[10px] text-center text-[#86868b] mt-3 font-medium hidden md:block">ช่วยลดความแออัดหน้าศูนย์</p>
 					</div>
 				</div>
-			</div>
-
-			<div class="flex flex-col items-center justify-center shrink-0 md:border-l md:border-border/60 md:pl-6 pt-4 md:pt-0">
-				<button 
-					onclick={() => { donationStore.activeTab = 'form'; if (donationStore.reachedStep < 2) donationStore.reachedStep = 2; }} 
-					class="flex items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs px-5 py-3 shadow-xs transition-colors cursor-pointer w-full md:w-auto"
-				>
-					จองคิวบริจาค
-					<span>→</span>
-				</button>
-				<span class="mt-2 text-xs text-muted-foreground text-center">ช่วยลดความแออัดหน้าศูนย์</span>
-			</div>
-		</div>
-
-		<!-- Shelter Card 2 -->
-		<div class="rounded-2xl border border-border p-5 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-muted/5">
-			<div class="flex-1">
-				<div class="flex items-center gap-2.5">
-					<span class="rounded-lg bg-blue-50 text-blue-600 border border-blue-100 p-1">
-						<Compass class="h-4 w-4" />
-					</span>
-					<div>
-						<h3 class="text-sm font-bold text-foreground">ศูนย์พักพิง เทศบาลเมืองคลองแห</h3>
-						<p class="text-xs text-muted-foreground">(โรงเรียนวัดคลองแห)</p>
-					</div>
-					<span class="ml-2 rounded-full bg-primary-muted text-primary px-2.5 py-0.5 text-xs font-bold">เปิดรับบริจาค</span>
-				</div>
-			</div>
-			<div class="flex flex-col items-center justify-center shrink-0 md:border-l md:border-border/60 md:pl-6 pt-4 md:pt-0">
-				<button 
-					onclick={() => { donationStore.activeTab = 'form'; if (donationStore.reachedStep < 2) donationStore.reachedStep = 2; }} 
-					class="flex items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs px-5 py-3 shadow-xs transition-colors cursor-pointer w-full md:w-auto"
-				>
-					จองคิวบริจาค
-					<span>→</span>
-				</button>
-			</div>
-		</div>
+			{/each}
+		{/if}
 	</div>
 </div>

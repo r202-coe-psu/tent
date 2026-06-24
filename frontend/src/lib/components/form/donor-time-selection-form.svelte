@@ -1,6 +1,9 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
+	import Search from '@lucide/svelte/icons/search';
+	import Check from '@lucide/svelte/icons/check';
 	import { env } from '$env/dynamic/public';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -11,9 +14,102 @@
 	import { today, getLocalTimeZone, type DateValue } from '@internationalized/date';
 	import { donationStore } from '../../../routes/public/donations/donation.svelte';
 
-	let selectedShelter = $state('SH001');
+	interface Need {
+		item_id: string;
+		name: string;
+		qty_needed: number;
+		unit: string;
+	}
+
+	interface ShelterNeeds {
+		code: string;
+		name: string;
+		needs: Need[];
+	}
+
+	let shelters = $state<ShelterNeeds[]>([]);
 	let selectedDate = $state<DateValue>(today(getLocalTimeZone()));
 	let selectedTime = $state('12:00');
+
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/public/v1/needs');
+			if (res.ok) {
+				shelters = await res.json();
+				if (!donationStore.selectedShelter && shelters.length > 0) {
+					donationStore.selectedShelter = shelters[0].code;
+				}
+			}
+		} catch (err) {
+			console.error('Failed to fetch shelters:', err);
+		}
+	});
+
+	// คำนวณยอดบริจาครวมในตะกร้าและคำแนะนำเปลี่ยนเส้นทางอัจฉริยะ (T-23)
+	let totalQty = $derived(donationStore.items.reduce((acc, curr) => acc + curr.amount, 0));
+
+	let suggestion = $derived.by(() => {
+		if (!donationStore.selectedShelter || shelters.length < 2) return null;
+
+		const currentShelter = shelters.find((s) => s.code === donationStore.selectedShelter);
+		if (!currentShelter) return null;
+
+		let shouldSuggest = totalQty > 20;
+
+		for (const donItem of donationStore.items) {
+			const itemId =
+				donItem.item_id ||
+				(donItem.name.includes('ข้าว')
+					? 'item:rice'
+					: donItem.name.includes('น้ำ')
+						? 'item:water'
+						: donItem.name.includes('สบู่')
+							? 'item:soap'
+							: 'item:blanket');
+			const need = currentShelter.needs.find((n) => n.item_id === itemId);
+			if (!need || need.qty_needed <= 0) {
+				shouldSuggest = true;
+				break;
+			}
+		}
+
+		if (!shouldSuggest) return null;
+
+		let bestAltShelter: ShelterNeeds | null = null;
+		let maxNeed = -1;
+
+		for (const alt of shelters) {
+			if (alt.code === donationStore.selectedShelter) continue;
+			let altTotalNeed = 0;
+			for (const donItem of donationStore.items) {
+				const itemId =
+					donItem.item_id ||
+					(donItem.name.includes('ข้าว')
+						? 'item:rice'
+						: donItem.name.includes('น้ำ')
+							? 'item:water'
+							: donItem.name.includes('สบู่')
+								? 'item:soap'
+								: 'item:blanket');
+				const need = alt.needs.find((n) => n.item_id === itemId);
+				if (need) {
+					altTotalNeed += need.qty_needed;
+				}
+			}
+			if (altTotalNeed > maxNeed) {
+				maxNeed = altTotalNeed;
+				bestAltShelter = alt;
+			}
+		}
+
+		if (bestAltShelter && maxNeed > 0) {
+			return {
+				code: bestAltShelter.code,
+				name: bestAltShelter.name
+			};
+		}
+		return null;
+	});
 
 	function renderRecaptcha(node: HTMLElement) {
 		const initCaptcha = () => {
@@ -34,7 +130,6 @@
 	}
 
 	async function submitDonation() {
-		// Read token from global variable
 		donationStore.captchaToken = (window as any).__captchaToken || '';
 
 		if (!donationStore.captchaToken) {
@@ -45,7 +140,6 @@
 		donationStore.isSubmitting = true;
 		donationStore.errorMessage = '';
 
-		// Combine date and time
 		const dateTimeString = selectedDate ? `${selectedDate.toString()}T${selectedTime}:00.000Z` : new Date().toISOString();
 
 		try {
@@ -53,7 +147,7 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					shelter_code: selectedShelter,
+					shelter_code: donationStore.selectedShelter,
 					donor: {
 						name: donationStore.donorName || 'ไม่ระบุชื่อ',
 						phone: donationStore.donorPhone || '0000000000'
@@ -86,17 +180,49 @@
 	<p class="mt-1 text-xs text-muted-foreground">กําหนดเวลานําส่งสิ่งของบริจาคเพื่อลดความหนาแน่นในจุดบริการ</p>
 
 	<div class="mt-6 inline-flex flex-col gap-4 text-left w-full max-w-sm">
+		<!-- กล่องแนะนำโดยระบบ AI / การเปลี่ยนเส้นทางอัจฉริยะ (T-23) -->
+		{#if suggestion}
+			<div class="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl space-y-2 mb-2 text-left animate-in fade-in duration-200">
+				<div class="flex items-center gap-2 text-amber-700 font-bold text-[15px]">
+					<Search class="h-4 w-4 text-amber-600" />
+					ระบบ AI แนะนำจุดบริจาคใหม่!
+				</div>
+				<p class="text-sm font-medium text-amber-800 leading-relaxed">
+					ศูนย์ที่คุณเจาะจง <span class="underline">ของเริ่มล้นแล้วและรถติดขัด</span>ขอแนะนำให้เปลี่ยนจุดบริจาคไปยัง
+					<strong class="bg-white px-1.5 py-0.5 rounded border border-amber-200/50 text-slate-800 font-bold">{suggestion.name}</strong>
+					ซึ่งเดินทางสะดวกกว่า
+				</p>
+				<div class="flex gap-2 mt-2.5">
+					<button
+						type="button"
+						onclick={() => { donationStore.selectedShelter = suggestion!.code; }}
+						class="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-lg text-[13px] font-bold flex justify-center items-center gap-1 transition-colors cursor-pointer"
+					>
+						ตามคำแนะนำ AI <Check class="h-3.5 w-3.5" />
+					</button>
+					<button
+						type="button"
+						onclick={() => { donationStore.errorMessage = ''; }}
+						class="flex-1 border border-amber-500/30 text-amber-700 py-2.5 rounded-lg text-[13px] font-bold hover:bg-amber-500/5 transition-colors cursor-pointer"
+					>
+						ใช้จุดเดิม
+					</button>
+				</div>
+			</div>
+		{/if}
+
 		<div class="flex flex-col gap-1.5">
 			<Label for="destination-select" class="text-xs font-bold text-foreground">
 				จุดส่งมอบปลายทาง
 			</Label>
-			<Select type="single" bind:value={selectedShelter}>
+			<Select type="single" bind:value={donationStore.selectedShelter} items={shelters.map(s => ({ value: s.code, label: s.name }))}>
 				<SelectTrigger class="w-full">
 					<SelectValue placeholder="เลือกศูนย์พักพิง" />
 				</SelectTrigger>
 				<SelectContent>
-					<SelectItem value="SH001" label="ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)" />
-					<SelectItem value="SH002" label="ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)" />
+					{#each shelters as s}
+						<SelectItem value={s.code} label={s.name} />
+					{/each}
 				</SelectContent>
 			</Select>
 		</div>
