@@ -21,6 +21,14 @@ import {
  */
 
 // ---------------------------------------------------------------- enums
+export const cardTypeSchema = z.enum(['national_id', 'passport', 'pink_card', 'other']);
+export type CardType = z.infer<typeof cardTypeSchema>;
+
+export const personIdSchema = z.object({
+	cardType: cardTypeSchema.default('national_id'),
+	number: z.string().trim().optional()
+});
+export type PersonId = z.infer<typeof personIdSchema>;
 
 export const genderSchema = z.enum(['male', 'female', 'other']);
 export type Gender = z.infer<typeof genderSchema>;
@@ -77,7 +85,8 @@ export interface Evacuee extends BaseDoc {
 	phone: string | null;
 	nickname?: string;
 	birth_year?: number;
-	national_id?: string;
+	person_id?: PersonId;
+	country: string;
 	religion?: Religion;
 	special_needs: SpecialNeed[];
 	emergency_contact?: EmergencyContact;
@@ -152,11 +161,13 @@ export const evacueeInputSchema = z.object({
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
 	birth_year: z.coerce.number().int().optional(),
-	national_id: z
-		.string()
-		.regex(/^\d{13}$/, 'National ID must be 13 digits')
-		.optional(),
-	religion: religionSchema.optional(),
+	person_id: personIdSchema.default({ cardType: 'national_id', number: '' }),
+	country: z.string().trim().min(1, 'Country is required').default('ไทย'),
+	religion: religionSchema.default('buddhist'),
+	medical_conditions: z.array(z.string().trim().min(1)).default([]),
+	medical_allergies: z.array(z.string().trim().min(1)).default([]),
+	medical_medications: z.array(z.string().trim().min(1)).default([]),
+	medical_note: z.string().trim().optional(),
 	special_needs: z.array(specialNeedSchema).default([]),
 	emergency_contact: z
 		.object({
@@ -239,8 +250,9 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			phone: d.phone,
 			...(d.nickname ? { nickname: d.nickname } : {}),
 			...(d.birth_year !== undefined ? { birth_year: d.birth_year } : {}),
-			...(d.national_id ? { national_id: d.national_id } : {}),
+			...(d.person_id ? { person_id: d.person_id } : {}),
 			...(d.religion ? { religion: d.religion } : {}),
+			country: d.country,
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
 			household_id: d.household_id,
@@ -379,3 +391,112 @@ export const isMovement = (d: unknown): d is Movement =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'movement';
 export const isScreening = (d: unknown): d is Screening =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'screening';
+
+export interface EwarSymptom {
+	id: string;
+	emoji: string;
+	label: string;
+	sublabel?: string;
+}
+
+export interface EwarSymptomGroup {
+	title: string;
+	symptoms: EwarSymptom[];
+}
+
+export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
+	{
+		title: 'กลุ่มอาการทางเดินอาหาร (Gastrointestinal)',
+		symptoms: [
+			{
+				id: 'acute_watery_diarrhea',
+				emoji: '💧',
+				label: 'อุจจาระร่วงเฉียบพลันแบบเป็นน้ำ (Acute watery diarrhoea)',
+				sublabel: 'เพื่อเฝ้าระวังอหิวาตกโรค (Cholera)'
+			},
+			{
+				id: 'acute_bloody_diarrhea',
+				emoji: '🩸',
+				label: 'อุจจาระร่วงเฉียบพลันแบบมีเลือดปน (Acute bloody diarrhoea)',
+				sublabel: 'เพื่อเฝ้าระวังโรคบิด (Shigellosis)'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มอาการทางเดินหายใจ (Respiratory)',
+		symptoms: [
+			{
+				id: 'acute_respiratory',
+				emoji: '😷',
+				label: 'การติดเชื้อระบบทางเดินหายใจเฉียบพลัน (Acute respiratory infection)'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มอาการไข้และโรคติดเชื้อ (Fevers & Infectious Diseases)',
+		symptoms: [
+			{
+				id: 'hemorrhagic_fever',
+				emoji: '🦟',
+				label: 'กลุ่มอาการไข้เลือดออกเฉียบพลัน (Acute haemorrhagic fever syndrome)',
+				sublabel: 'เช่น โรคไข้เลือดออก (Dengue)'
+			},
+			{
+				id: 'malaria',
+				emoji: '🤒',
+				label: 'ไข้มาลาเรีย (Malaria – suspected/confirmed)'
+			},
+			{
+				id: 'acute_jaundice',
+				emoji: '🟡',
+				label: 'กลุ่มอาการตีซ่านเฉียบพลัน / ตัวเหลืองตาเหลือง (Acute jaundice syndrome)',
+				sublabel: 'เพื่อเฝ้าระวังไวรัสตับอักเสบ เอ หรือ อี (Hepatitis A, E)'
+			},
+			{
+				id: 'typhoid',
+				emoji: '🧪',
+				label: 'ไข้ไทฟอยด์ (Typhoid)'
+			},
+			{
+				id: 'high_fever',
+				emoji: '🔥',
+				label: 'ไข้สูงอื่นๆ มากกว่า 38.5 องศาเซลเซียส (Other fever >38.5°C)'
+			}
+		]
+	},
+	{
+		title: 'วัคซีนและการเฝ้าระวัง (Vaccine-preventable & Alert Diseases)',
+		symptoms: [
+			{ id: 'measles', emoji: '🔴', label: 'โรคหัด / ไข้ออกผื่น (Measles)' },
+			{
+				id: 'meningitis',
+				emoji: '🧠',
+				label: 'เยื่อหุ้มสมองอักเสบ (Meningitis - suspected)'
+			},
+			{ id: 'tetanus', emoji: '💉', label: 'บาดทะยัก (Tetanus)' },
+			{
+				id: 'afp',
+				emoji: '🦵',
+				label: 'กลุ่มอาการอัมพาตอ่อนปวกเปียกเฉียบพลัน / แขนขาอ่อนแรง (AFP)',
+				sublabel: 'เพื่อเฝ้าระวังโรคโปลิโอ'
+			},
+			{
+				id: 'diphtheria',
+				emoji: '🫁',
+				label: 'คอตีบ (Diphtheria) และ ไอกรน (Pertussis)'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มการบาดเจ็บและเหตุฉุกเฉินอื่นๆ (Injuries & Emergencies)',
+		symptoms: [
+			{ id: 'trauma', emoji: '💥', label: 'การบาดเจ็บ / อุบัติเหตุฉุกเฉินหนัก (Trauma)' },
+			{
+				id: 'chemical_poisoning',
+				emoji: '☣️',
+				label: 'การได้รับสารพิษหรือสารเคมี (Chemical poisoning)'
+			},
+			{ id: 'other_illness', emoji: '⚠️', label: 'อาการเจ็บป่วยอื่นๆ (Others)' }
+		]
+	}
+];

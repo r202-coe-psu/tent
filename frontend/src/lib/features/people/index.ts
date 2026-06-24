@@ -74,6 +74,7 @@ export {
 	useHouseholdsPaginated,
 	useCreateHousehold,
 	useUpdateHousehold,
+	useCreateScreening,
 	startPeopleLiveQuery
 } from './application/queries';
 

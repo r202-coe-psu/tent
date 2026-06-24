@@ -3,7 +3,7 @@ import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { peopleRepository, shelterDb } from '../data/people.pouch';
-import type { Evacuee, EvacueeInput, Household, HouseholdInput } from '../domain/people';
+import type { Evacuee, EvacueeInput, Household, HouseholdInput, ScreeningInput } from '../domain/people';
 
 export const peopleKeys = {
 	all: ['people'] as const,
@@ -65,6 +65,12 @@ export const useCreateHousehold = () =>
 export const useUpdateHousehold = () =>
 	createMutation(() => ({
 		mutationFn: (household: Household) => peopleRepository().updateHousehold(household)
+	}));
+
+export const useCreateScreening = () =>
+	createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: ScreeningInput; ctx: AuthorContext }) =>
+			peopleRepository().createScreening(input, ctx)
 	}));
 
 export function startPeopleLiveQuery(queryClient: QueryClient): LiveQueryHandle {

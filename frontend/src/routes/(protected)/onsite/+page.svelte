@@ -44,12 +44,12 @@
 				</p>
 			</div>
 		</a>
-		<div
-			class="flex min-h-[220px] flex-col justify-between rounded-2xl border-2 border-danger-border bg-card p-8 opacity-60"
-			aria-disabled="true"
+		<a
+			href={resolve('/onsite/people?mode=fast_track')}
+			class="group flex min-h-[220px] flex-col justify-between rounded-2xl border-2 border-danger-border bg-card p-8 shadow-[0_4px_25px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md"
 		>
 			<div
-				class="flex h-14 w-14 items-center justify-center rounded-2xl bg-danger-muted text-xl text-danger"
+				class="flex h-14 w-14 items-center justify-center rounded-2xl bg-danger-muted text-xl text-danger transition-colors group-hover:bg-red-100"
 			>
 				<TriangleAlert class="size-6" />
 			</div>
@@ -59,7 +59,7 @@
 					Emergency Fast-Track
 				</p>
 			</div>
-		</div>
+		</a>
 
 		<div
 			class="flex min-h-[220px] flex-col justify-between rounded-2xl border border-border bg-card p-8 opacity-60"

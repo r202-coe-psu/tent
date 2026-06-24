@@ -1,6 +1,13 @@
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
-import type { Evacuee, EvacueeInput, Household, HouseholdInput } from '../domain/people';
+import type {
+	Evacuee,
+	EvacueeInput,
+	Household,
+	HouseholdInput,
+	Screening,
+	ScreeningInput
+} from '../domain/people';
 
 /**
  * Persistence contract for the `people` feature. The application layer depends
@@ -33,4 +40,7 @@ export interface PeopleRepository {
 	getHousehold(id: string): Promise<Household | null>;
 	/** Persist an edited household (LWW: bumps `updated_at`). */
 	updateHousehold(household: Household): Promise<Household>;
+
+	/** Mint a screening from input + author context and persist it. */
+	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening>;
 }

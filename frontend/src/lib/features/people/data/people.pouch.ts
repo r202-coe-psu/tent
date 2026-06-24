@@ -4,12 +4,16 @@ import { touch, type AuthorContext } from '$lib/db/model';
 import {
 	createEvacuee as buildEvacuee,
 	isEvacuee,
+	createMedical as buildMedical,
 	type Evacuee,
 	type EvacueeInput,
 	createHousehold as buildHousehold,
 	isHousehold,
 	type Household,
-	type HouseholdInput
+	type HouseholdInput,
+	createScreening as buildScreening,
+	type Screening,
+	type ScreeningInput
 } from '../domain/people';
 import type { PeopleRepository } from './people.repository';
 
@@ -39,11 +43,31 @@ export class PeoplePouchRepository implements PeopleRepository {
 		this.repo = createRepository(namedLocalDb(dbName));
 	}
 
-	/** Mint an evacuee from form input + author context and persist it. */
-	createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee> {
-		return this.repo.put(buildEvacuee(input, ctx));
-	}
+/** Mint an evacuee from form input + author context and persist it. */
+	async createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee> {
+		const evacuee = buildEvacuee(input, ctx);
+		await this.repo.put(evacuee);
 
+		if (
+			(input.medical_conditions && input.medical_conditions.length > 0) ||
+			(input.medical_allergies && input.medical_allergies.length > 0) ||
+			(input.medical_medications && input.medical_medications.length > 0) ||
+			(input.medical_note && input.medical_note.length > 0)
+		) {
+			const medicalInput = {
+				evacuee_id: evacuee._id,
+				conditions: input.medical_conditions || [],
+				allergies: input.medical_allergies || [],
+				medications: input.medical_medications || [],
+				notes: input.medical_note || '',
+				track: 'normal' as const
+			};
+			const medicalDoc = buildMedical(medicalInput, ctx);
+			await this.repo.put(medicalDoc);
+		}
+
+		return evacuee;
+	}
 	/** Every evacuee in this shelter database. */
 	listEvacuees(): Promise<Evacuee[]> {
 		return this.repo.allByType('evacuee', isEvacuee);
@@ -87,6 +111,11 @@ export class PeoplePouchRepository implements PeopleRepository {
 	/** Persist an edited household (LWW: bumps `updated_at`). */
 	updateHousehold(household: Household): Promise<Household> {
 		return this.repo.put(touch(household));
+	}
+
+	/** Mint a screening from input + author context and persist it. */
+	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening> {
+		return this.repo.put(buildScreening(input, ctx));
 	}
 }
 
