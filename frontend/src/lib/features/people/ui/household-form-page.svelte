@@ -7,8 +7,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Home from '@lucide/svelte/icons/home';
+	import HouseholdForm from './household-form.svelte';
 	import {
-		HouseholdForm,
 		useEvacuees,
 		useHouseholds,
 		useCreateHousehold,
@@ -16,13 +16,19 @@
 		useUpdateEvacuee,
 		SHELTER_CODE,
 		type HouseholdInput
-	} from '$lib/features/people';
+	} from '../index';
 	import { useShelter } from '$lib/features/shelters';
 	import { authStore } from '$lib/stores/auth.svelte';
 
-	// Retrieve household ID if editing
-	const householdIdParam = $derived($page.params.id);
-	const isEditMode = true;
+	let {
+		id = '',
+		isEdit = false
+	}: {
+		id?: string;
+		isEdit?: boolean;
+	} = $props();
+
+	const isEditMode = $derived(isEdit);
 
 	// Fetch data
 	const evacueesQuery = useEvacuees();
@@ -32,8 +38,8 @@
 
 	// Find editing household if relevant
 	const editingHousehold = $derived(
-		householdIdParam && householdsQuery.data
-			? householdsQuery.data.find((h) => h._id === householdIdParam) || null
+		isEditMode && id && householdsQuery.data
+			? householdsQuery.data.find((h) => h._id === id) || null
 			: null
 	);
 
@@ -84,6 +90,10 @@
 				await updateHouseholdMutation.mutateAsync(updated);
 				householdId = editingHousehold._id;
 				toast.success(`แก้ไขข้อมูลครัวเรือน "${updated.label}" สำเร็จ`);
+			} else {
+				const res = await createHouseholdMutation.mutateAsync({ input, ctx });
+				householdId = res._id;
+				toast.success(`สร้างครัวเรือน "${res.label}" สำเร็จ`);
 			}
 
 			// Sync membership
@@ -193,10 +203,12 @@
 				</div>
 				<div>
 					<Card.Title class="text-xl font-bold text-foreground">
-						แก้ไขข้อมูลครัวเรือน
+						{isEditMode ? 'แก้ไขข้อมูลครัวเรือน' : 'เพิ่มครัวเรือนใหม่'}
 					</Card.Title>
 					<p class="text-xs text-muted-foreground mt-0.5">
-						อัปเดตข้อมูล สมาชิก และสัตว์เลี้ยงของครัวเรือน
+						{isEditMode 
+							? 'อัปเดตข้อมูล สมาชิก และสัตว์เลี้ยงของครัวเรือน' 
+							: 'บันทึกข้อมูลเพื่อจัดกลุ่มสมาชิกและจัดสรรที่พัก'}
 					</p>
 				</div>
 			</div>

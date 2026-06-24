@@ -81,11 +81,11 @@
 		return items.filter((h) => {
 			const labelMatch = h.label.toLowerCase().includes(needle);
 			const zoneMatch = (h.zone?.toLowerCase() ?? '').includes(needle);
-			
+
 			const head = allEvacueesQuery.data?.find((e) => e._id === h.head_evacuee_id);
 			const headName = head ? `${head.first_name} ${head.last_name}`.toLowerCase() : '';
 			const headMatch = headName.includes(needle);
-			
+
 			return labelMatch || zoneMatch || headMatch;
 		});
 	});
@@ -140,7 +140,9 @@
 				</div>
 				<p class="mt-0.5 text-xs text-muted-foreground">
 					จำนวนผู้พักพิงในระบบทั้งหมด
-					<span class="rounded bg-primary/10 px-1.5 py-0.5 font-bold text-primary">{evacueesTotal} คน</span>
+					<span class="rounded bg-primary/10 px-1.5 py-0.5 font-bold text-primary"
+						>{evacueesTotal} คน</span
+					>
 				</p>
 			</div>
 			<Button size="sm" onclick={() => goto(resolve('/onsite/people'))}>
@@ -247,11 +249,13 @@
 				</div>
 				<p class="mt-0.5 text-xs text-muted-foreground">
 					จำนวนครัวเรือนในระบบทั้งหมด
-					<span class="rounded bg-primary/10 px-1.5 py-0.5 font-bold text-primary">{householdsTotal} ครัวเรือน</span>
+					<span class="rounded bg-primary/10 px-1.5 py-0.5 font-bold text-primary"
+						>{householdsTotal} ครัวเรือน</span
+					>
 				</p>
 			</div>
 			<Button size="sm" onclick={() => goto(resolve('/back-office/households/new'))}>
-				<Plus class="h-3.5 w-3.5 mr-1" />
+				<Plus class="mr-1 h-3.5 w-3.5" />
 				เพิ่มครัวเรือน
 			</Button>
 		</div>
@@ -290,22 +294,20 @@
 						{#each filteredHouseholds as h (h._id)}
 							{@const head = allEvacueesQuery.data?.find((e) => e._id === h.head_evacuee_id)}
 							{@const headName = head ? `${head.first_name} ${head.last_name}` : '—'}
-							{@const members = allEvacueesQuery.data?.filter((e) => e.household_id === h._id) ?? []}
+							{@const members =
+								allEvacueesQuery.data?.filter((e) => e.household_id === h._id) ?? []}
 							<Table.Row>
 								<Table.Cell class="font-mono text-muted-foreground"
 									>{h._id.split(':')[1]}</Table.Cell
 								>
-								<Table.Cell class="font-bold text-foreground"
-									>{h.label}</Table.Cell
-								>
-								<Table.Cell class="font-medium text-foreground"
-									>{headName}</Table.Cell
-								>
+								<Table.Cell class="font-bold text-foreground">{h.label}</Table.Cell>
+								<Table.Cell class="font-medium text-foreground">{headName}</Table.Cell>
 								<Table.Cell>
 									<div class="flex flex-wrap gap-1">
 										{#if members.length > 0}
 											{#each members as m}
-												<span class="rounded bg-muted px-1.5 py-0.5 text-[11px] text-foreground font-medium"
+												<span
+													class="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground"
 													>{m.first_name} {m.last_name}</span
 												>
 											{/each}
@@ -314,15 +316,23 @@
 										{/if}
 									</div>
 								</Table.Cell>
-								<Table.Cell class="font-semibold font-mono text-primary"
+								<Table.Cell class="font-mono font-semibold text-primary"
 									>{zoneLabel(h.zone)}</Table.Cell
 								>
 								<Table.Cell>
 									<div class="flex flex-wrap gap-1">
 										{#if h.pets && h.pets.length > 0}
 											{#each h.pets as p}
-												{@const petEmoji = p.species === 'dog' ? '🐶' : p.species === 'cat' ? '🐱' : p.species === 'bird' ? '🐦' : '🐾'}
-												<span class="rounded bg-secondary text-secondary-foreground px-1.5 py-0.5 text-[11px] font-semibold"
+												{@const petEmoji =
+													p.species === 'dog'
+														? '🐶'
+														: p.species === 'cat'
+															? '🐱'
+															: p.species === 'bird'
+																? '🐦'
+																: '🐾'}
+												<span
+													class="rounded bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-secondary-foreground"
 													>{petEmoji} {p.count}</span
 												>
 											{/each}
@@ -335,7 +345,7 @@
 									<Button
 										variant="outline"
 										size="sm"
-										onclick={() => goto(resolve(`/back-office/households/${h._id}`))}
+										onclick={() => goto(resolve(`/back-office/households/edit/${h._id}`))}
 									>
 										แก้ไขข้อมูล
 									</Button>
