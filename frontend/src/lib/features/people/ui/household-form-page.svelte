@@ -85,7 +85,13 @@
 						count: Number(p.count),
 						...(p.notes ? { notes: p.notes } : {})
 					})),
-					notes: input.notes ?? undefined
+					notes: input.notes ?? undefined,
+					address_no: input.address_no || undefined,
+					village_no: input.village_no || undefined,
+					subdistrict: input.subdistrict || undefined,
+					district: input.district || undefined,
+					province: input.province || undefined,
+					postal_code: input.postal_code || undefined
 				};
 				await updateHouseholdMutation.mutateAsync(updated);
 				householdId = editingHousehold._id;

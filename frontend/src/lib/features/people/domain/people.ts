@@ -121,6 +121,12 @@ export interface Household extends BaseDoc {
 	zone: string | null;
 	pets: PetGroup[];
 	notes?: string;
+	address_no?: string;
+	village_no?: string;
+	subdistrict?: string;
+	district?: string;
+	province?: string;
+	postal_code?: string;
 }
 
 export interface MovementDestination {
@@ -205,7 +211,13 @@ export const householdInputSchema = z.object({
 			})
 		)
 		.default([]),
-	notes: z.string().trim().optional()
+	notes: z.string().trim().optional(),
+	address_no: z.string().trim().optional(),
+	village_no: z.string().trim().optional(),
+	subdistrict: z.string().trim().optional(),
+	district: z.string().trim().optional(),
+	province: z.string().trim().optional(),
+	postal_code: z.string().trim().optional()
 });
 export type HouseholdInput = z.input<typeof householdInputSchema>;
 
@@ -292,7 +304,13 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 			head_evacuee_id: d.head_evacuee_id,
 			zone: d.zone,
 			pets: d.pets,
-			...(d.notes ? { notes: d.notes } : {})
+			...(d.notes ? { notes: d.notes } : {}),
+			...(d.address_no ? { address_no: d.address_no } : {}),
+			...(d.village_no ? { village_no: d.village_no } : {}),
+			...(d.subdistrict ? { subdistrict: d.subdistrict } : {}),
+			...(d.district ? { district: d.district } : {}),
+			...(d.province ? { province: d.province } : {}),
+			...(d.postal_code ? { postal_code: d.postal_code } : {})
 		},
 		ctx
 	);

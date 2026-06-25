@@ -66,6 +66,12 @@
 			$formData.zone = initialData.zone;
 			$formData.head_evacuee_id = initialData.head_evacuee_id;
 			$formData.notes = initialData.notes ?? '';
+			$formData.address_no = initialData.address_no ?? '';
+			$formData.village_no = initialData.village_no ?? '';
+			$formData.subdistrict = initialData.subdistrict ?? '';
+			$formData.district = initialData.district ?? '';
+			$formData.province = initialData.province ?? '';
+			$formData.postal_code = initialData.postal_code ?? '';
 			dogCount = initialData.pets.find((p) => p.species === 'dog')?.count ?? 0;
 			catCount = initialData.pets.find((p) => p.species === 'cat')?.count ?? 0;
 			birdCount = initialData.pets.find((p) => p.species === 'bird')?.count ?? 0;
@@ -76,6 +82,12 @@
 			$formData.zone = null;
 			$formData.head_evacuee_id = null;
 			$formData.notes = '';
+			$formData.address_no = '';
+			$formData.village_no = '';
+			$formData.subdistrict = '';
+			$formData.district = '';
+			$formData.province = '';
+			$formData.postal_code = '';
 			dogCount = 0;
 			catCount = 0;
 			birdCount = 0;
@@ -358,6 +370,78 @@
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
+
+		<div class="space-y-4 border-t border-border/50 pt-4 mt-2">
+			<h3 class="text-xs font-bold text-primary uppercase tracking-wider">ที่อยู่ครอบครัวหลัก</h3>
+			
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+				<Form.Field {form} name="address_no">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>บ้านเลขที่</Form.Label>
+							<Input {...props} bind:value={$formData.address_no} placeholder="เช่น 123/45" class="bg-background" />
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<Form.Field {form} name="village_no">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>หมู่ที่ / ตรอก / ซอย / ถนน</Form.Label>
+							<Input {...props} bind:value={$formData.village_no} placeholder="เช่น หมู่ 2" class="bg-background" />
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<Form.Field {form} name="subdistrict">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>ตำบล / แขวง</Form.Label>
+							<Input {...props} bind:value={$formData.subdistrict} placeholder="เช่น หาดใหญ่" class="bg-background" />
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+			</div>
+
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+				<Form.Field {form} name="district">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>อำเภอ / เขต</Form.Label>
+							<Input {...props} bind:value={$formData.district} placeholder="เช่น หาดใหญ่" class="bg-background" />
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<Form.Field {form} name="province">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>จังหวัด</Form.Label>
+							<Input {...props} bind:value={$formData.province} placeholder="เช่น สงขลา" class="bg-background" />
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<Form.Field {form} name="postal_code">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>รหัสไปรษณีย์</Form.Label>
+							<Input {...props} bind:value={$formData.postal_code} placeholder="เช่น 90110" class="bg-background" />
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+			</div>
+
+			<p class="text-[11px] text-muted-foreground italic">
+				* การแก้ไขที่อยู่จะอัปเดตข้อมูลของทุกคนในครอบครัวอัตโนมัติ
+			</p>
+		</div>
 
 		<Form.Field {form} name="notes">
 			<Form.Control>

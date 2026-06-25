@@ -81,7 +81,13 @@ describe('createHousehold', () => {
 				head_evacuee_id: 'evacuee:123',
 				zone: 'A',
 				pets: [{ species: 'dog', count: 2, notes: 'friendly' }],
-				notes: 'ใกล้ประตูทางออก'
+				notes: 'ใกล้ประตูทางออก',
+				address_no: ' 123/45 ',
+				village_no: ' หมู่ 2 ',
+				subdistrict: ' หาดใหญ่ ',
+				district: ' หาดใหญ่ ',
+				province: ' สงขลา ',
+				postal_code: ' 90110 '
 			},
 			ctx
 		);
@@ -96,6 +102,12 @@ describe('createHousehold', () => {
 		expect(h.zone).toBe('A');
 		expect(h.pets).toEqual([{ species: 'dog', count: 2, notes: 'friendly' }]);
 		expect(h.notes).toBe('ใกล้ประตูทางออก');
+		expect(h.address_no).toBe('123/45'); // trimmed
+		expect(h.village_no).toBe('หมู่ 2'); // trimmed
+		expect(h.subdistrict).toBe('หาดใหญ่'); // trimmed
+		expect(h.district).toBe('หาดใหญ่'); // trimmed
+		expect(h.province).toBe('สงขลา'); // trimmed
+		expect(h.postal_code).toBe('90110'); // trimmed
 		expect(isHousehold(h)).toBe(true);
 	});
 });
