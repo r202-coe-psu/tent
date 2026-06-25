@@ -1,6 +1,7 @@
 import { namedLocalDb } from '$lib/db/pouch';
 import { createRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { touch, type AuthorContext } from '$lib/db/model';
+import { SHELTER_CODE, SHELTER_DB, shelterDb as _shelterDb } from '$lib/db/shelter';
 import {
 	createEvacuee as buildEvacuee,
 	isEvacuee,
@@ -17,19 +18,7 @@ import {
 } from '../domain/people';
 import type { PeopleRepository } from './people.repository';
 
-/**
- * The single shelter database this skeleton syncs to. For the walking skeleton
- * the shelter is fixed; remote selection (Edge fallback) is T-54, out of scope.
- *
- * INVARIANT: the repository, the changes-feed live-query, and `startNamedSync`
- * must all target THIS name. A changes feed on the wrong db silently never
- * fires.
- */
-export const SHELTER_CODE = 'SH001';
-// CouchDB database names must be lowercase (illegal_database_name otherwise),
-// so the db name lower-cases the code; the `shelter_code` envelope field stays
-// canonical 'SH001'.
-export const SHELTER_DB = `shelter_${SHELTER_CODE.toLowerCase()}`;
+export { SHELTER_CODE, SHELTER_DB };
 
 /**
  * PouchDB-backed repository for the people feature. The only file here that
@@ -127,10 +116,4 @@ export function peopleRepository(): PeopleRepository {
 	return singleton;
 }
 
-/**
- * The local shelter PouchDB handle — the SAME one the repository writes to, so
- * the changes-feed live-query observes local + replicated writes alike.
- */
-export function shelterDb(): PouchDB.Database {
-	return namedLocalDb(SHELTER_DB);
-}
+export const shelterDb = _shelterDb;

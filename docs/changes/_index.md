@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-06-22  # +CR-006
+updated: 2026-06-24  # +CR-009
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -22,3 +22,5 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-004](CR-004-shelter-create-edit.md) | Shelter create + edit — เพิ่ม capacity field, PATCH endpoint, edit UI, schema_v bump | approved | volatile | 2026-06-18 | schema.md §3.1, features/shelters/*, api/back-office/shelter/+server.ts |
 | [CR-005](CR-005-public-portal-landing-public-metrics.md) | Public Portal landing v0.3 — public exposure ของ occupancy_total (OP-6) + vulnerable_count (OP-8) approved, per-shelter occupancy แสดงเป๊ะ (OP-9), deferral ของ Transparency/Volunteer, decisions OP-1..OP-7, + Public Shelter Dashboard /shelters, + Family Search /search (§E, FS-1..FS-3), + Donation & Queue Booking /donate (§F, DN-1..DN-7) | approved | volatile | 2026-06-22 | features/public-portal-landing-spec.html, public-portal-shelter-spec.html, public-tier-find-spec.html, public-tier-donation-spec.html, public-tier-flow-spec.html, /shelters + /search + /donate pages, /public/v1/transparency/* + family-search + needs + donations + /faq, EOC FAQ setup |
 | [CR-006](CR-006-sop-profile-master-override.md) | SOP profile สองชั้น — master (`sop_profile`, catalog, SA, ถอด shelter_code) + `sop_override` (shelter_*, shelter_manager, override ทั้ง profile, set active เอง); แก้ DB conflict §4.2; resolve = override active ?? master | approved | stable | 2026-06-22 | schema.md §4.2 + §4.x sop_override + §7 + §8, schema_v sop_profile 1→2, features/sop-ratios/{domain,data}, data-model.md sync direction, task-breakdown/07-B.md (T-30/T-31/T-32) |
+| [CR-007](CR-007-people-registration.md) | People Registration Schema — เพิ่ม `country` (req, default THAILAND), religion opt→req; ตัด `nationality`/`ethnicity` ออก; schema_v 1→2 | approved | volatile | 2026-06-23 | docs/data/schema.md §1.1, schema_v evacuee 1→2, features/people/domain/people.ts |
+| [CR-009](CR-009-register-household-flow.md) | Register Flow — ย้ายการจัดการ Household จาก Stage 2 → Stage 3, แบ่งเป็น 2 Box (Search เดิม = ลูกบ้าน / Create ใหม่ = หัวหน้าบ้าน) | approved | volatile | 2026-06-24 | task-breakdown/02-people.md T-04, features/register/{ui,domain}, api/register/+server.ts |

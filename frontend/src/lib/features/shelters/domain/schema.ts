@@ -45,6 +45,7 @@ export const createShelterSchema = z.object({
 export type CreateShelterInput = z.infer<typeof createShelterSchema>;
 
 export const updateShelterSchema = z.object({
+	code: z.string().trim().optional(),
 	name: z.string().trim().min(1, 'ชื่อศูนย์พักพิงต้องไม่ว่าง'),
 	capacity: shelterCapacitySchema,
 	zones: z.array(zoneSchema).default([]),

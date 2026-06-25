@@ -9,6 +9,12 @@ declare global {
 		// interface PageState {}
 		// interface Platform {}
 	}
+	interface Window {
+		grecaptcha?: {
+			render: (container: HTMLElement | string, parameters: { sitekey: string; callback?: string | Function }) => void;
+		};
+		__captchaToken?: string;
+	}
 }
 
 export {};

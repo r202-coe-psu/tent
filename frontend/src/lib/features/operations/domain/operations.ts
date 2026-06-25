@@ -116,6 +116,16 @@ export const stockLedgerInputSchema = z.object({
 });
 export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
 
+export const receiveInputSchema = z.object({
+	item_id: z.string().min(1),
+	qty: z.coerce.number().positive('Quantity must be positive'),
+	unit: z.string().trim().min(1),
+	ref_id: z.string().nullable().default(null),
+	lot: z.object({ expiry: z.string().optional(), note: z.string().trim().optional() }).optional(),
+	occurred_at: z.string().optional()
+});
+export type ReceiveInput = z.input<typeof receiveInputSchema>;
+
 export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): StockLedger {
 	const d = stockLedgerInputSchema.parse(input);
 	return makeDoc(
@@ -339,3 +349,12 @@ export const isDonation = (d: unknown): d is Donation =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation';
 export const isDonationCampaign = (d: unknown): d is DonationCampaign =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_campaign';
+
+// ---------------------------------------------------------------- special request form schema
+export const specialRequestSchema = z.object({
+	name: z.string().trim().min(1, 'กรุณาระบุชื่อพัสดุ / ประกาศ'),
+	target: z.coerce.number().int().positive('เป้าหมายต้องมากกว่า 0'),
+	location: z.string().trim().min(1, 'กรุณาระบุคลังเป้าหมาย')
+});
+export type SpecialRequestInput = z.infer<typeof specialRequestSchema>;
+
