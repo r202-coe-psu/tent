@@ -6,7 +6,6 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import LogOut from '@lucide/svelte/icons/log-out';
-	import Users from '@lucide/svelte/icons/users';
 	import Building from '@lucide/svelte/icons/building';
 	import Warehouse from '@lucide/svelte/icons/warehouse';
 	import UserCog from '@lucide/svelte/icons/user-cog';
@@ -84,10 +83,10 @@
 		? 'w-16'
 		: 'w-72'}"
 >
-	<div class="sticky top-0 z-20 flex items-center justify-between gap-2 bg-card p-5">
+	<div class="sticky top-0 z-20 flex items-center bg-card {collapsed ? 'px-2 py-5 justify-center' : 'p-5 justify-between gap-2'}">
 		<a
 			href={backofficeHomePath}
-			class="flex flex-1 items-center gap-3"
+			class="flex items-center gap-3 {collapsed ? 'justify-center flex-none' : 'flex-1'}"
 			aria-label="กลับหน้าเลือกเมนูหลัก"
 		>
 			<div
@@ -103,11 +102,11 @@
 		</a>
 		<button
 			type="button"
-			class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-sidebar-border bg-card text-xs text-muted-foreground shadow-sm hover:bg-muted"
+			class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-sidebar-border bg-card text-xs text-muted-foreground shadow-sm hover:bg-muted {collapsed ? 'absolute -right-3 top-6 z-30' : ''}"
 			onclick={() => (collapsed = !collapsed)}
 			aria-label={collapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
 		>
-			<ChevronLeft class="h-3 w-3" />
+			<ChevronLeft class="h-3 w-3 transition-transform {collapsed ? 'rotate-180' : ''}" />
 		</button>
 	</div>
 
@@ -115,10 +114,12 @@
 		<div class="space-y-6 p-4 text-[13px] font-medium text-muted-foreground">
 			<a
 				href={backofficeHomePath}
-				class="flex w-full items-center justify-center gap-2 rounded-xl bg-muted px-4 py-2.5 text-sm font-normal text-foreground transition-colors hover:bg-muted/70"
+				class="flex w-full items-center justify-center rounded-xl bg-muted py-2.5 text-sm font-normal text-foreground transition-colors hover:bg-muted/70 {collapsed
+					? 'px-2'
+					: 'gap-2 px-4'}"
 				title="กลับหน้าเลือกเมนูหลัก"
 			>
-				<House class="h-3.5 w-3.5 text-muted-foreground" />
+				<House class="h-4 w-4 shrink-0 text-muted-foreground" />
 				{#if !collapsed}<span>กลับหน้าเลือกเมนูหลัก</span>{/if}
 			</a>
 
