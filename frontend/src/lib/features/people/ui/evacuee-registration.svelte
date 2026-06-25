@@ -23,7 +23,6 @@
 		onBack
 	}: { onsubmit: (input: EvacueeInput) => void; pending?: boolean; onBack: () => void } = $props();
 
-	let noPhone = $state(false);
 	let birthDateStr = $state('');
 	let facePhotoUrl = $state<string | null>(null);
 	let medicalConditionsStr = $state('');
@@ -45,6 +44,33 @@
 					return;
 				}
 			}
+
+			if ($formData.phone) {
+				const cleanPhone = $formData.phone.replace(/\D/g, '');
+				if (cleanPhone.length !== 10) {
+					// @ts-ignore
+					$errors.phone = ['เบอร์โทรศัพท์ต้องมี 10 หลัก'];
+					cancel();
+					return;
+				}
+			}
+
+			if ($formData.emergency_contact) {
+				const ec = $formData.emergency_contact;
+				if (!ec.name?.trim() && !ec.phone?.trim()) {
+					$formData.emergency_contact = undefined;
+				} else if (ec.phone) {
+					const cleanPhone = ec.phone.replace(/\D/g, '');
+					if (cleanPhone.length !== 10) {
+						// @ts-ignore
+						if (!$errors.emergency_contact) $errors.emergency_contact = {};
+						// @ts-ignore
+						$errors.emergency_contact.phone = ['เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก'];
+						cancel();
+						return;
+					}
+				}
+			}
 		},
 		onUpdate: async ({ form }) => {
 			if (!form.valid) return;
@@ -54,26 +80,14 @@
 
 	const { form: formData, errors, submitting, reset } = form;
 
-	$effect(() => {
-		if (noPhone) $formData.phone = null;
-	});
-
-	let age = $derived.by(() => {
-		if (!birthDateStr) return '';
-		const birthDate = new Date(birthDateStr);
-		const today = new Date();
-		let calcAge = today.getFullYear() - birthDate.getFullYear();
-		const m = today.getMonth() - birthDate.getMonth();
-		if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-			calcAge--;
-		}
-		return calcAge >= 0 ? calcAge : '';
-	});
+	let age = $state('');
 
 	$effect(() => {
 		if (birthDateStr) {
 			const birthDate = new Date(birthDateStr);
 			$formData.birth_year = birthDate.getFullYear() + 543;
+		} else if (age && !isNaN(Number(age))) {
+			$formData.birth_year = new Date().getFullYear() + 543 - Number(age);
 		} else {
 			$formData.birth_year = undefined;
 		}
@@ -225,9 +239,14 @@
 						<Label>อายุ (ปี)</Label>
 						<Input
 							type="text"
-							disabled
+							inputmode="numeric"
+							maxlength={3}
 							value={age}
-							class="bg-muted text-muted-foreground"
+							oninput={(e) => {
+								const val = e.currentTarget.value.replace(/\D/g, '');
+								e.currentTarget.value = val;
+								age = val;
+							}}
 						/>
 					</div>
 
@@ -260,21 +279,19 @@
 								<Input
 									{...props}
 									inputmode="numeric"
+									maxlength={10}
 									placeholder="08X-XXX-XXXX"
-									disabled={noPhone}
 									value={$formData.phone ?? ''}
-									oninput={(e) => ($formData.phone = e.currentTarget.value)}
+									oninput={(e) => {
+										const val = e.currentTarget.value.replace(/\D/g, '');
+										e.currentTarget.value = val;
+										$formData.phone = val === '' ? null : val;
+									}}
 								/>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
 					</Form.Field>
-				</div>
-
-				<!-- Checkbox ไม่มีเบอร์โทรศัพท์ -->
-				<div class="flex items-center space-x-2">
-					<Checkbox id="no-phone" bind:checked={noPhone} />
-					<Label for="no-phone" class="text-sm font-medium leading-none cursor-pointer">ไม่มี (no phone)</Label>
 				</div>
 
 				<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -382,6 +399,61 @@
 				{/each}
 			</div>
 			<Form.Field {form} name="special_needs"><Form.FieldErrors /></Form.Field>
+			
+			<div class="mt-8 mb-4 overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]">
+				<div class="border-b border-[#E2E8F0] px-4 py-3 sm:px-6">
+					<h3 class="flex items-center gap-2 text-base font-bold text-foreground">
+						<span>🚨</span> ข้อมูลติดต่อฉุกเฉิน (Emergency Contact)
+					</h3>
+				</div>
+				<div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:p-6">
+					<Form.Field {form} name="emergency_contact.name">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>ชื่อ-นามสกุล บุคคลติดต่อฉุกเฉิน</Form.Label>
+								<Input 
+									{...props} 
+									placeholder="ชื่อนามสกุล ญาติ/ผู้ใกล้ชิด" 
+									value={$formData.emergency_contact?.name ?? ''}
+									oninput={(e) => {
+										if (!$formData.emergency_contact) {
+											$formData.emergency_contact = { name: '', phone: '', relation: 'ญาติ/ผู้ใกล้ชิด' };
+										}
+										$formData.emergency_contact.name = e.currentTarget.value;
+									}}
+									class="bg-white" 
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+
+					<Form.Field {form} name="emergency_contact.phone">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>เบอร์ติดต่อฉุกเฉิน</Form.Label>
+								<Input 
+									{...props} 
+									inputmode="numeric" 
+									maxlength={10} 
+									placeholder="08X-XXX-XXXX" 
+									value={$formData.emergency_contact?.phone ?? ''}
+									class="bg-white"
+									oninput={(e) => {
+										const val = e.currentTarget.value.replace(/\D/g, '');
+										e.currentTarget.value = val;
+										if (!$formData.emergency_contact) {
+											$formData.emergency_contact = { name: '', phone: '', relation: 'ญาติ/ผู้ใกล้ชิด' };
+										}
+										$formData.emergency_contact.phone = val;
+									}}
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+				</div>
+			</div>
 
 			<div class="pt-2">
 				<Form.Field {form} name="medical_note">
