@@ -85,7 +85,7 @@ async function couchReq(
 // with the `.ts` extension. Vitest is set up to run this; the script invokes
 // it via `tsx scripts/migrate-shelter.ts` (configured in package.json).
 
-import { migrateShelterV2ToCurrent } from '../src/lib/features/shelters/domain/schema';
+import { migrateShelterV2ToCurrent } from '../src/lib/features/shelters/server';
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
@@ -131,8 +131,7 @@ async function main() {
 		code?: string;
 		type?: string;
 	}
-	const rows =
-		(listRes.data as { rows?: Array<{ id: string; doc: DocShape }> })?.rows ?? [];
+	const rows = (listRes.data as { rows?: Array<{ id: string; doc: DocShape }> })?.rows ?? [];
 	const shelterMasters = rows.filter(
 		(r) => r.id.startsWith('shelter:') && r.doc && r.doc.type === 'shelter'
 	);
@@ -160,11 +159,7 @@ async function main() {
 
 		if (!DRY_RUN) {
 			try {
-				const putRes = await couchReq(
-					'PUT',
-					`/${REGISTRY_DB}/${encodeURIComponent(row.id)}`,
-					v3
-				);
+				const putRes = await couchReq('PUT', `/${REGISTRY_DB}/${encodeURIComponent(row.id)}`, v3);
 				if (putRes.status >= 400) {
 					console.error(`    ✗ write failed: ${putRes.status}`, putRes.data);
 					failed++;

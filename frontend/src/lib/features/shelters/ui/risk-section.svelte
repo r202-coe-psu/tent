@@ -17,10 +17,12 @@
 	} = $props();
 </script>
 
-<section class="mt-6 mb-6 space-y-6 rounded-2xl border border-red-200 bg-red-50/40 p-6 shadow-sm">
-	<div class="flex items-center space-x-2 border-b border-red-200 pb-3">
+<section
+	class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border bg-shelter-rose-bg/10 p-6 shadow-sm"
+>
+	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<span
-			class="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700"
+			class="flex h-6 w-6 items-center justify-center rounded-full bg-shelter-rose-bg text-xs font-bold text-shelter-rose-text"
 			>5</span
 		>
 		<h2 class="text-base font-bold text-card-foreground">
@@ -91,9 +93,9 @@
 	</Form.Field>
 
 	<div
-		class="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+		class="flex items-start gap-2 rounded-lg border border-shelter-border bg-muted/30 p-3 text-sm text-shelter-rose-text"
 	>
-		<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+		<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-shelter-rose-text" />
 		<p>ข้อมูลส่วนนี้จะถูกใช้เพื่อช่วย EOC กราบถึงข้อจำกัดของศูนย์แบบ Real-time</p>
 	</div>
 </section>

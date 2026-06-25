@@ -1,9 +1,14 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
-import { adminRaw, requireShelterManagerOrSA, serviceError, ServiceError } from '$lib/server/couch-admin';
+import {
+	adminRaw,
+	requireShelterManagerOrSA,
+	serviceError,
+	ServiceError
+} from '$lib/server/couch-admin';
 import { ulid } from '$lib/db/ulid';
-import type { Zone } from '$lib/features/shelters/domain/schema';
+import type { Zone } from '$lib/features/shelters/server';
 import { nowIso, updateMaster } from '$lib/server/shelters.admin';
 
 export const prerender = false;
@@ -36,10 +41,7 @@ export const POST: RequestHandler = async ({ request, params }) => {
 				const zones = current.zones ?? [];
 				const zoneIndex = zones.findIndex((z) => z.code === zoneCode);
 				if (zoneIndex === -1) {
-					throw new ServiceError(
-						'VALIDATION',
-						`Zone "${zoneCode}" not found in shelter ${code}`
-					);
+					throw new ServiceError('VALIDATION', `Zone "${zoneCode}" not found in shelter ${code}`);
 				}
 				const target = zones[zoneIndex];
 				if (target.status === 'active') {
@@ -82,11 +84,7 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			context: { zone_code: zoneCode, previous_status: previousStatus, actor: reopenedBy },
 			occurred_at: nowIso()
 		};
-		await adminRaw(
-			`/registry/${encodeURIComponent(auditDoc._id)}`,
-			'PUT',
-			auditDoc
-		);
+		await adminRaw(`/registry/${encodeURIComponent(auditDoc._id)}`, 'PUT', auditDoc);
 
 		return json({
 			ok: true,

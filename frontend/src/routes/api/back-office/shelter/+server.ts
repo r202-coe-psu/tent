@@ -2,14 +2,14 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, requireAdmin, serviceError } from '$lib/server/couch-admin';
 import { ulid } from '$lib/db/ulid';
-import { createShelterSchema, type ShelterMaster } from '$lib/features/shelters/domain/schema';
+import { createShelterSchema, type ShelterMaster } from '$lib/features/shelters/server';
+import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
 import {
 	SHELTER_REGISTRY_DB,
 	listShelterMasters,
 	migrate,
 	mergeShelterSecurity,
-	nowIso,
-	updateMaster
+	nowIso
 } from '$lib/server/shelters.admin';
 
 export const prerender = false;
@@ -109,11 +109,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		// 2. _security — read-modify-write to avoid clobbering existing members
 		// (skill: couchdb-pouchdb-bestpractices §4). On first provision this is
 		// a no-op merge; on re-runs it preserves any staff added since.
-		await mergeShelterSecurity(
-			db,
-			{ roles: ['system_admin'] },
-			{ roles: [`shelter:${code}`] }
-		);
+		await mergeShelterSecurity(db, { roles: ['system_admin'] }, { roles: [`shelter:${code}`] });
 		steps.push({ step: 'security', status: 200 });
 
 		// 3. validate_doc_update design doc (idempotent re-PUT with _rev).
@@ -128,6 +124,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		// 4. Registry + shelter master doc (schema.md §3.1) — idempotent by `code`.
 		await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
+		// Ensure authenticated users (SM / staff) can sync the registry.
+		await mergeShelterSecurity(
+			SHELTER_REGISTRY_DB,
+			{ roles: ['system_admin'] },
+			{ roles: [...SHELTER_CAPABILITIES] }
+		);
 		const masters = await listShelterMasters();
 		if (!masters.some((m) => m.code === code)) {
 			const ts = nowIso();

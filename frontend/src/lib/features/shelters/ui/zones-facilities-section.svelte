@@ -11,6 +11,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { ulid } from '$lib/db/ulid';
 	import { useCloseZone, useReopenZone } from '../application/queries';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -35,32 +36,30 @@
 	// Confirmation modal state for close/reopen
 	let confirmAction = $state<'close' | 'reopen' | null>(null);
 	let confirmZoneCode = $state<string>('');
-	let confirmIndex = $state<number>(-1);
 	let confirmReason = $state<string>('');
 	let confirmOpen = $derived(confirmAction !== null);
 
-	function openConfirm(action: 'close' | 'reopen', zoneCode: string, index: number) {
+	function openConfirm(action: 'close' | 'reopen', zoneCode: string) {
 		if (!shelterCode) {
-			toast.error(action === 'close' ? 'บันทึกศูนย์พักพิงก่อนปิดโซน' : 'บันทึกศูนย์พักพิงก่อนเปิดโซน');
+			toast.error(
+				action === 'close' ? 'บันทึกศูนย์พักพิงก่อนปิดโซน' : 'บันทึกศูนย์พักพิงก่อนเปิดโซน'
+			);
 			return;
 		}
 		confirmAction = action;
 		confirmZoneCode = zoneCode;
-		confirmIndex = index;
 		confirmReason = '';
 	}
 
 	function cancelConfirm() {
 		confirmAction = null;
 		confirmZoneCode = '';
-		confirmIndex = -1;
 		confirmReason = '';
 	}
 
 	function submitConfirm() {
-		if (!confirmAction || confirmIndex < 0) return;
+		if (!confirmAction || !confirmZoneCode) return;
 		const action = confirmAction;
-		const index = confirmIndex;
 		const zoneCode = confirmZoneCode;
 		const reason = confirmReason.trim();
 		const actor = authStore.user?.name ?? null;
@@ -70,8 +69,8 @@
 				{ code: shelterCode, zoneCode, reason: reason || undefined, closedBy: actor ?? undefined },
 				{
 					onSuccess: () => {
-						$formData.zones = $formData.zones.map((z, i) =>
-							i === index ? { ...z, status: 'closed' as const } : z
+						$formData.zones = $formData.zones.map((z) =>
+							z.code === zoneCode ? { ...z, status: 'closed' as const } : z
 						);
 					}
 				}
@@ -81,8 +80,8 @@
 				{ code: shelterCode, zoneCode, reopenedBy: actor ?? undefined },
 				{
 					onSuccess: () => {
-						$formData.zones = $formData.zones.map((z, i) =>
-							i === index ? { ...z, status: 'active' as const } : z
+						$formData.zones = $formData.zones.map((z) =>
+							z.code === zoneCode ? { ...z, status: 'active' as const } : z
 						);
 					}
 				}
@@ -104,14 +103,14 @@
 		const zones = $formData.zones ?? [];
 		let newCode = `Z${zones.length + 1}`;
 		while (zones.some((z: Zone) => z.code === newCode)) {
-			newCode = `Z${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+			newCode = `Z${ulid()}`;
 		}
 		$formData.zones = [
 			...zones,
 			{
 				code: newCode,
 				name: '',
-				capacity: 0,
+				capacity: undefined as unknown as number,
 				type: 'general' as ZoneType,
 				status: 'active' as const,
 				closed_at: null,
@@ -124,8 +123,8 @@
 		toast.success('เพิ่มโซนสำเร็จ');
 	}
 
-	function deleteZone(index: number) {
-		$formData.zones = $formData.zones.filter((_: Zone, i: number) => i !== index);
+	function deleteZone(code: string) {
+		$formData.zones = $formData.zones.filter((z: Zone) => z.code !== code);
 		toast.success('ลบโซนสำเร็จ');
 	}
 
@@ -177,7 +176,7 @@
 
 	<div class="space-y-4 rounded-xl border border-shelter-border bg-background p-5">
 		<div
-			class="sticky top-[72px] z-10 -mx-5 -mt-5 mb-4 flex items-center justify-between rounded-t-xl border-b border-shelter-border bg-background/95 p-5 backdrop-blur-sm"
+			class="z-10 -mx-5 -mt-5 mb-4 flex items-center justify-between rounded-t-xl border-b border-shelter-border bg-background/95 p-5 backdrop-blur-sm"
 		>
 			<h3 class="text-sm font-bold text-card-foreground">การตั้งค่าโซนที่พัก (Living Zones)</h3>
 			<Button
@@ -192,8 +191,7 @@
 		</div>
 
 		<div class="space-y-3">
-			<!-- eslint-disable-next-line @typescript-eslint/no-unused-vars -->
-			{#each $formData.zones ?? [] as _, index (index)}
+			{#each $formData.zones ?? [] as zone, index (zone.code)}
 				<div
 					class="flex items-center gap-3 rounded-xl border border-shelter-border bg-muted/30 p-2"
 				>
@@ -202,7 +200,7 @@
 							{#snippet children({ props })}
 								<Input
 									{...props}
-									bind:value={$formData.zones[index].name}
+									bind:value={zone.name}
 									placeholder="ชื่อโซน"
 									class="bg-white"
 									{disabled}
@@ -211,12 +209,11 @@
 						</Form.Control>
 						<Form.FieldErrors />
 					</Form.Field>
-					<Select.Root type="single" bind:value={$formData.zones[index].type} {disabled}>
+					<Select.Root type="single" bind:value={zone.type} {disabled}>
 						<Select.Trigger
 							class="flex !h-9 w-[200px] items-start rounded-md border border-input bg-white px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
 						>
-							{zoneTypeOptions.find((o) => o.value === $formData.zones[index].type)?.label ??
-								'— เลือก —'}
+							{zoneTypeOptions.find((o) => o.value === zone.type)?.label ?? '— เลือก —'}
 						</Select.Trigger>
 						<Select.Content>
 							{#each zoneTypeOptions as opt (opt.value)}
@@ -231,7 +228,7 @@
 									<Input
 										{...props}
 										type="number"
-										bind:value={$formData.zones[index].capacity}
+										bind:value={zone.capacity}
 										class="bg-white pr-10 text-right"
 										{disabled}
 									/>
@@ -248,19 +245,19 @@
 						variant="ghost"
 						size="icon"
 						class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-						onclick={() => deleteZone(index)}
+						onclick={() => deleteZone(zone.code)}
 						{disabled}
 						title="ลบโซน"
 					>
 						<Trash2 class="h-4 w-4" />
 					</Button>
-					{#if $formData.zones[index].status === 'closed'}
+					{#if zone.status === 'closed'}
 						<Button
 							variant="ghost"
 							size="icon"
 							class="text-green-600 hover:bg-green-50 hover:text-green-700"
-							onclick={() => openConfirm('reopen', $formData.zones[index].code, index)}
-							{disabled}
+							onclick={() => openConfirm('reopen', zone.code)}
+							disabled={disabled || closeZoneMutation.isPending || reopenZoneMutation.isPending}
 							title="เปิดโซนอีกครั้ง"
 						>
 							<RotateCcw class="h-4 w-4" />
@@ -270,8 +267,8 @@
 							variant="ghost"
 							size="icon"
 							class="text-orange-600 hover:bg-orange-50 hover:text-orange-700"
-							onclick={() => openConfirm('close', $formData.zones[index].code, index)}
-							{disabled}
+							onclick={() => openConfirm('close', zone.code)}
+							disabled={disabled || closeZoneMutation.isPending || reopenZoneMutation.isPending}
 							title="ปิดโซน"
 						>
 							<Power class="h-4 w-4" />
@@ -527,7 +524,9 @@
 		<Dialog.Content class="sm:max-w-md">
 			<Dialog.Header>
 				<Dialog.Title>
-					{confirmAction === 'close' ? `ปิดโซน ${confirmZoneCode}` : `เปิดโซน ${confirmZoneCode} อีกครั้ง`}
+					{confirmAction === 'close'
+						? `ปิดโซน ${confirmZoneCode}`
+						: `เปิดโซน ${confirmZoneCode} อีกครั้ง`}
 				</Dialog.Title>
 				<Dialog.Description>
 					{confirmAction === 'close'
@@ -549,7 +548,11 @@
 			</div>
 
 			<Dialog.Footer class="gap-2">
-				<Button variant="outline" onclick={cancelConfirm} disabled={closeZoneMutation.isPending || reopenZoneMutation.isPending}>
+				<Button
+					variant="outline"
+					onclick={cancelConfirm}
+					disabled={closeZoneMutation.isPending || reopenZoneMutation.isPending}
+				>
 					ยกเลิก
 				</Button>
 				<Button

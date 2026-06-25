@@ -67,34 +67,34 @@
 	// Auto-select the first available shelter when availableShelters list is loaded/changed
 	$effect(() => {
 		const shelters = availableShelters;
-		if (shelters.length > 0) {
-			const current = backofficeState.selectedShelter;
-			const hasCurrent = shelters.some((s) => s.code === current);
-			if (!hasCurrent) {
-				backofficeState.selectedShelter = shelters[0].code;
-			}
+		if (shelters.length > 0 && backofficeState.selectedShelter === '') {
+			backofficeState.selectedShelter = shelters[0].code;
 		}
 	});
 </script>
 
-<div class="flex flex-col md:flex-row min-h-0 w-full flex-1 items-stretch overflow-hidden bg-muted/30 text-foreground">
+<div
+	class="flex min-h-0 w-full flex-1 flex-col items-stretch overflow-hidden bg-muted/30 text-foreground md:flex-row"
+>
 	<BackofficeNavbar />
-	<div class="min-h-0 w-full flex-1 flex flex-col overflow-hidden">
+	<div class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
 		<!-- Static Top Header Bar (shared by all backoffice pages) -->
-		<header class="flex h-16 shrink-0 flex-col justify-center border-b border-sidebar-border bg-card px-4 md:px-6">
+		<header
+			class="flex h-16 shrink-0 flex-col justify-center border-b border-sidebar-border bg-card px-4 md:px-6"
+		>
 			<div class="flex items-center justify-between gap-4">
 				<!-- Left: Page Title & Icon -->
 				<div class="flex items-center gap-2">
-					<PageIcon class="h-4.5 w-4.5 text-primary shrink-0" />
+					<PageIcon class="size-4 shrink-0 text-primary" />
 					<h1 class="text-sm font-bold text-foreground">{pageTitle}</h1>
 				</div>
 
 				<!-- Right: Controls -->
 				<div class="flex items-center gap-2 md:gap-3">
 					<div class="flex items-center gap-1.5 text-xs text-muted-foreground">
-						<span class="shrink-0 hidden sm:inline">ศูนย์อพยพ:</span>
+						<span class="hidden shrink-0 sm:inline">ศูนย์อพยพ:</span>
 						<Select type="single" bind:value={backofficeState.selectedShelter}>
-							<SelectTrigger class="w-[200px] md:w-[280px] h-9">
+							<SelectTrigger class="h-9 w-[200px] md:w-[280px]">
 								<SelectValue placeholder="เลือกศูนย์อพยพ" />
 							</SelectTrigger>
 							<SelectContent>
@@ -113,40 +113,38 @@
 
 					<!-- Offline Mode Badge -->
 					{#if backofficeState.isOffline}
-						<span class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-600">
+						<span
+							class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-600"
+						>
 							<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500"></span>
 							Offline Mode
 						</span>
 					{:else}
-						<span class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-600">
+						<span
+							class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-600"
+						>
 							<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
 							Online Mode
 						</span>
 					{/if}
-
-					<!-- Toggle Mode Button -->
-					<button
-						type="button"
-						class="rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground shadow-xs transition-colors hover:bg-muted active:scale-[0.97]"
-						onclick={() => (backofficeState.isOffline = !backofficeState.isOffline)}
-					>
-						สลับโหมด
-					</button>
 				</div>
 			</div>
 		</header>
 
 		<!-- Content Area -->
-		<div class="min-h-0 flex-1 overflow-y-auto flex flex-col">
+		<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
 			<!-- Offline Banner -->
 			{#if backofficeState.isOffline}
-				<div class="px-4 pt-4 md:px-6 md:pt-6 shrink-0">
-					<div class="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-amber-800 md:p-4 dark:text-amber-300">
+				<div class="shrink-0 px-4 pt-4 md:px-6 md:pt-6">
+					<div
+						class="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-amber-800 md:p-4 dark:text-amber-300"
+					>
 						<AlertTriangle class="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500" />
 						<div>
 							<h4 class="text-xs font-bold">Offline Mode: เปิดใช้งานระบบบันทึกในเครื่อง</h4>
 							<p class="mt-1 text-[11px] leading-relaxed opacity-90">
-								ระบบอ่าน-เขียนข้อมูลไปยังคอมพิวเตอร์ของคุณโดยตรง จะทำการซิงก์ข้อมูลขึ้นคลาวด์อัตโนมัติเมื่อตรวจพบการเชื่อมต่อออนไลน์
+								ระบบอ่าน-เขียนข้อมูลไปยังคอมพิวเตอร์ของคุณโดยตรง
+								จะทำการซิงก์ข้อมูลขึ้นคลาวด์อัตโนมัติเมื่อตรวจพบการเชื่อมต่อออนไลน์
 							</p>
 						</div>
 					</div>

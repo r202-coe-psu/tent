@@ -65,11 +65,11 @@
 
 	const { form: formData, submitting, enhance } = form;
 
-	// Ensure nested optional objects exist so child sections can bind safely
-	$effect(() => {
-		if (!$formData.location) $formData.location = {};
-		if (!$formData.contact) $formData.contact = {};
-	});
+	// Ensure nested optional objects exist so child sections can bind safely.
+	// Done synchronously at form-init time (not inside $effect) to avoid the
+	// reactive loop that reads $formData.{location,contact} then writes them back.
+	if (!$formData.location) $formData.location = {};
+	if (!$formData.contact) $formData.contact = {};
 
 	// Populate form data when edit query loads
 	$effect(() => {

@@ -12,7 +12,11 @@
  */
 
 import { adminRaw, ServiceError } from './couch-admin';
-import { migrateShelterV2ToCurrent, type ShelterMaster, type ShelterMasterV2 } from '$lib/features/shelters/domain/schema';
+import {
+	migrateShelterV2ToCurrent,
+	type ShelterMaster,
+	type ShelterMasterV2
+} from '$lib/features/shelters/server';
 
 export const SHELTER_REGISTRY_DB = 'registry';
 
@@ -35,9 +39,10 @@ export async function listShelterMasters(): Promise<ShelterMaster[]> {
 }
 
 /**
- * Find a shelter master by its `code` field (e.g. SH001). Performs a
- * full-doc scan over the registry — fine at current scale; a `_view/by_code`
- * can be added later if the registry grows.
+ * Find a shelter master by its `code` field (e.g. SH001). Scans the full
+ * registry — the `_id` uses a ULID (`shelter:{ulid()}`), not the code, so
+ * direct lookup is not possible without a `_view/by_code`.
+ * TODO: switch to `shelter:{code}` as the canonical `_id` and drop this scan.
  */
 export async function findMasterByCode(code: string): Promise<ShelterMaster | null> {
 	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
@@ -111,8 +116,8 @@ export async function updateMaster<T = void>(
 				`Registry write failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
 			);
 		}
-		const data = res.data as { _id: string; _rev: string };
-		return { id: data._id, rev: data._rev, meta: next.meta };
+		const data = res.data as { id: string; rev: string };
+		return { id: data.id, rev: data.rev, meta: next.meta };
 	}
 
 	throw new ServiceError(
@@ -136,8 +141,10 @@ export async function mergeShelterSecurity(
 ): Promise<void> {
 	const current = await adminRaw(`/${db}/_security`, 'GET');
 	const existing =
-		(current.data as { admins?: { names?: string[]; roles?: string[] }; members?: { names?: string[]; roles?: string[] } } | null) ??
-		{};
+		(current.data as {
+			admins?: { names?: string[]; roles?: string[] };
+			members?: { names?: string[]; roles?: string[] };
+		} | null) ?? {};
 
 	const merged = {
 		admins: {

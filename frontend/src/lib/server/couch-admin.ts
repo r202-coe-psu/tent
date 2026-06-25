@@ -193,12 +193,47 @@ export async function authorizeUserWrite(cookie: string | null): Promise<Caller>
 }
 
 /**
+ * Read-only gate: SA or any user whose roles include the shelter scope
+ * (`shelter:{code}`). Use this for GET endpoints — staff roles
+ * (registration_staff / kitchen_staff / warehouse_staff) all need to see their
+ * shelter's detail to do their work; writes still require
+ * `requireShelterManagerOrSA`.
+ *
+ * @param cookie  The request's `Cookie` header (may be null for anonymous).
+ * @param code    The shelter code from the URL params. The caller's roles must
+ *                include `shelter:{code}` unless the caller is a system admin.
+ */
+export async function requireShelterScopeOrSA(
+	cookie: string | null,
+	code: string
+): Promise<Caller> {
+	const { base } = adminConfig();
+	const res = await fetch(`${base}/_session`, {
+		headers: { Accept: 'application/json', ...(cookie ? { Cookie: cookie } : {}) }
+	});
+	const data = (await res.json().catch(() => null)) as {
+		userCtx?: { name: string | null; roles: string[] };
+	} | null;
+	const name = data?.userCtx?.name;
+	const roles = data?.userCtx?.roles ?? [];
+	if (!name) throw error(401, 'Authentication required');
+
+	const isSA = isSystemAdmin(roles);
+	const shelterCode = shelterCodeFromRoles(roles);
+	if (!isSA && shelterCode !== code) {
+		throw error(403, `Caller is not in shelter "${code}" scope`);
+	}
+	return { name, roles, isSA, shelterCode };
+}
+
+/**
  * Enforce what a caller may grant a new/edited user (least privilege). The
  * requested `roles[]` is validated against the caller — never trusted:
  *  - SA: any roles except the CouchDB server admin (`_admin`); at most one
  *    shelter scope (1 user 1 shelter).
  *  - shelter_manager: shelter scope MUST equal the caller's own (no cross-shelter),
- *    capabilities ⊆ {volunteer, kitchen_staff, warehouse_staff} (no manager/SA).
+ *    capabilities ⊆ {registration_staff, kitchen_staff, warehouse_staff}
+ *    (no manager/SA). Per CR-002 / spec §1.1, `volunteer` is no longer a RoleKey.
  *
  * Throws {@link ServiceError} (FORBIDDEN/VALIDATION) on violation.
  */
@@ -223,7 +258,7 @@ export function assertCanGrant(caller: Caller, requestedRoles: readonly string[]
 	if (!isStaffOnly(requestedRoles)) {
 		throw new ServiceError(
 			'FORBIDDEN',
-			'A manager may only grant volunteer/kitchen_staff/warehouse_staff'
+			'A manager may only grant registration_staff/kitchen_staff/warehouse_staff'
 		);
 	}
 }
