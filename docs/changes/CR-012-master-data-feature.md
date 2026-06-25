@@ -1,10 +1,10 @@
 ---
-id: CR-010
-title: "Master Data Engine — เพิ่ม doc type `master_data` ใน registry (5 type hardcode, SA only) + UI `/registration-config`; Phase 1 = CRUD ยังไม่ wire evacuee/medical/household [⏳ OPEN: code vs ULID identifier]"
-status: proposed
+id: CR-012
+title: "Master Data Engine — เพิ่ม doc type `master_data` ใน registry (5 type hardcode, SA only) + UI `/registration-config`; Phase 1 = CRUD ยังไม่ wire evacuee/medical/household; identifier = Option A (code semantic string)"
+status: approved
 date: 2026-06-25
 requested_by: development team (UI mockup @spec/image.png, @spec/image copy.png)
-decided_by: <project owner>
+decided_by: project owner
 layer: volatile          # new doc type ตาม pattern registry (central-managed, pull ลง device); ไม่แตะ envelope/auth/sync priority
 affects:
   - docs/data/schema.md §3.3 — new `master_data` doc type (ใหม่)
@@ -32,9 +32,9 @@ affects:
 
 CR นี้ทำ **Phase 1 = CRUD admin UI + storage เท่านั้น** ไม่ wire เข้า evacuee/medical/household form (Phase 2 = GET API + wiring, ทำใน CR ถัดไป)
 
-### Open decision: `code` (slug) vs `id` (ULID) — รอ team/owner เคาะ
+### Identifier decision: `code` (slug) — ✅ DECIDED Option A
 
-> **สถานะ: ⏳ OPEN** — ทั้งสองทางมี trade-off จริง ต้องการ input จาก team/owner ก่อน lock doc shape
+> **สถานะ: ✅ DECIDED** — เลือก **Option A (`code` semantic string)** — 2026-06-25
 
 #### บริบท
 
@@ -117,15 +117,15 @@ interface MasterDataItem {
    - ถ้ามี evacuee/medical doc เดิมที่ hardcode enum (`elderly`, `muslim`) → **Option A** ตรงเป๊ะ
    - ถ้าเริ่มใหม่หมด → เปิดทาง Option B
 
-#### Recommendation (เบื้องต้น)
+#### ✅ Decision: Option A (`code` semantic string)
 
-**Option A (`code` semantic string)** — เพราะ:
+**เลือก Option A** — เพราะ:
 - schema เดิมใช้ string semantic อยู่แล้ว → ไม่ต้องเปลี่ยน main schema
 - Phase 2 wire ตรง ไม่มี lookup table
 - Debug/query/log ง่ายกว่ามาก
 - Overhead ของ slugify + dict map รับได้ (one-time investment)
 
-> ⏳ **รอ decision** — implement Phase 1 จะ block จนกว่า owner/team จะเคาะ A/B/C
+> ✅ **DECIDED 2026-06-25** — implement Phase 1 ใช้ `code` semantic string
 
 ## Change
 
@@ -137,7 +137,7 @@ interface MasterDataItem {
 | `type` | str | client | `"master_data"` — discriminator |
 | `schema_v` | int | client | `1` (initial) |
 | `master_type` | enum(5 type) | req | `vulnerable_group` \| `health_condition` \| `dietary_restrictions` \| `pet_types` \| `house_damage` (hardcode ใน code ตาม UI mockup) |
-| `items` | [{**id?**, **code?**, label, is_default}] | req | ≥1 item; **identifier shape ⏳ OPEN** (ดู "Open decision" section ด้านบน — `code` semantic, `id` ULID, หรือ hybrid) |
+| `items` | [{**code**, label, is_default}] | req | ≥1 item; **identifier = `code` semantic string** (Option A) — auto-generate จาก label (slugify + dict map); immutable หลัง create |
 | common envelope | — | sys | `created_at`/`updated_at`/`created_by` (registry ไม่มี `shelter_code` — เป็น global) |
 
 **Master type labels (hardcode ใน code):**
@@ -154,37 +154,17 @@ const MASTER_DATA_TYPES = [
 ] as const;
 ```
 
-**Item shape:**
-
-> ⏳ **Open decision** (ดู "Open decision" section ด้านบน) — final shape รอ A/B/C:
+**Item shape (✅ Option A — code semantic string):**
 
 ```ts
-// Option A (recommended) — code semantic
-interface MasterDataItemA {
-  code: string;          // immutable, lower_snake, auto-generate จาก label
+interface MasterDataItem {
+  code: string;          // immutable, lower_snake, auto-generate จาก label (slugify + dict map)
   label: string;         // Thai display, editable
   is_default: boolean;   // 1 item per type = true (enforce)
-  parent_code?: string;  // CR-011: community type เท่านั้น — ref code ของ municipality_zone item
+  parent_code?: string;  // community type เท่านั้น — ref code ของ municipality_zone item
 }
 
-// Option B — id ULID (Phase 2 derive code เพิ่ม)
-interface MasterDataItemB {
-  id: string;            // ULID, internal key ใน array
-  label: string;
-  is_default: boolean;
-  parent_code?: string;  // CR-011: community type เท่านั้น
-}
-
-// Option C — hybrid
-interface MasterDataItemC {
-  id: string;            // ULID, internal key
-  code: string;          // slug, map ลง main schema
-  label: string;
-  is_default: boolean;
-  parent_code?: string;  // CR-011: community type เท่านั้น
-}
-
-// ไม่มี `active` field — hard delete (Phase 1, ทั้ง 3 option)
+// ไม่มี `active` field — hard delete (Phase 1)
 ```
 
 ### 2. Permission
@@ -210,10 +190,7 @@ interface MasterDataItemC {
 - **Buttons:** "ยกเลิกและย้อนกลับ" · "บันทึก" (primary, blue)
 - **Behavior เพิ่มเติม (ไม่มีใน mockup แต่ต้องมี):**
   - ติ๊ก `is_default` → unset `is_default` ของ item เดิมใน type เดียวกัน (1 default per type)
-  - **Identifier generation** — ⏳ OPEN (ดู "Open decision" section):
-    - **Option A:** auto-generate `code` จาก label ตอน create (slugify + dict map)
-    - **Option B:** mint ULID เป็น `id`
-    - **Option C:** ทำทั้งสองอย่าง
+  - **Identifier generation** — ✅ Option A: auto-generate `code` จาก label ตอน create (slugify + dict map); immutable หลัง save
   - Validation: label required, label unique case-insensitive ภายใน type, identifier (code/id) unique ใน array
   - Hard delete: ลบ item ออกจาก array (item หายจาก UI ทันที) — **Phase 2 จะ block delete เมื่อ code ถูก reference ใน evacuee/medical/household doc**
   - แก้ label: แก้ได้, `code` ไม่เปลี่ยน
@@ -282,20 +259,20 @@ Phase 2 (separate CR): ตอน wire เข้า form จะต้อง backf
 
 ## Open dependencies
 
-- **⏳ OPEN: identifier shape (A vs B vs C)** — รอ owner/team เคาะก่อน implement (ดู "Open decision" section) — **blocker สำหรับ Phase 1 implement**
-- **Slugify dictionary** (เฉพาะ Option A/C) — `domain/master-data.ts` ต้องมี dict map สำหรับ label ที่ใช้บ่อย (เช่น "ผู้สูงอายุ" → `elderly`, "หญิงตั้งครรภ์" → `pregnant`) — ถ้า slug ชนกัน fallback = append ULID suffix
+- **Slugify dictionary** — `domain/master-data.ts` ต้องมี dict map สำหรับ label ที่ใช้บ่อย (เช่น "ผู้สูงอายุ" → `elderly`, "หญิงตั้งครรภ์" → `pregnant`) — ถ้า slug ชนกัน fallback = append ULID suffix
 - **Seed defaults** — **decision อัปเดต (CR-011):** `municipality_zone` และ `community` ต้อง **auto-seed** เมื่อ initialize ระบบครั้งแรก (idempotent) เพราะผู้ใช้ต้องเลือกได้ทันที; 5 type เดิม (vulnerable/health/dietary/pet/house_damage) ยังคง "ไม่ auto-seed" ตาม decision เดิม. ข้อมูล seed ดู **Appendix A** ด้านล่าง
 - **Phase 2 scope ใน CR ถัดไป** — จะต้องตัดสินใจ: (a) wire order (people → medical → household), (b) shrink enum 6→4 พร้อม migration main schema, (c) block-delete rule
 
 ## Decision log
 
 - 2026-06-25 — proposed (CR นี้)
+- 2026-06-25 — **approved** — project owner confirm Option A (`code` semantic string) เป็น identifier สำหรับ `items[]`; unblock Phase 1 implement
 - 2026-06-25 — design decisions:
   - storage: `registry` DB, `_id = master_data:{type}` (deterministic 1 doc ต่อ type)
   - type: 5 type hardcode ใน code ตาม UI mockup (ไม่ master ในตัว)
   - permission: SA only (write); read = any authenticated (Phase 2 API)
   - path: `/(protected)/registration-config/` (ไม่ใช่ back-office/admin/onsite)
-  - identifier: **⏳ OPEN** — A vs B vs C (recommend A เบื้องต้น — รอ owner/team เคาะ)
+  - identifier: **✅ Option A** — `code` semantic string (auto-generate จาก label, slugify + dict map)
   - code generation: auto-generate จาก label (slugify + dict map สำหรับ label ไทย)
   - delete: hard delete (ไม่มี `active` field) — Phase 2 จะ block เมื่อมี reference
   - pattern: A (เก็บ code เป็น string ใน main doc เมื่อ Phase 2 wire) — ตรงกับ schema เดิม, ไม่ต้องเปลี่ยน main schema structure
