@@ -1,6 +1,7 @@
 # Agent Skill Source Log: security-rbac-bestpractices
 
 **Location:** `frontend/.agents/skills/security-rbac-bestpractices/SKILL.md`
+**Last Updated:** 2026-06-22
 
 ข้อมูลที่นำมาใช้สังเคราะห์เป็นกฎและคำแนะนำในไฟล์ `SKILL.md` มาจากการสืบค้นเอกสารและโค้ดของระบบ ดังนี้ครับ:
 
@@ -18,10 +19,12 @@
   - การบันทึกหรือดึงข้อมูลต้องบังคับกรองด้วย `shelterCode` ตลอด ห้ามเชื่อใจ Payload ที่ส่งมาจาก Client เพื่อป้องกัน Data Leak ระหว่างศูนย์
 
 ### 3. Data Privacy & Redaction
-* **แหล่งที่มา**: `docs/task-breakdown/10-eoc.md` และ `docs/task-breakdown/_index.md`
+* **แหล่งที่มา**: `docs/task-breakdown/10-eoc.md`, `docs/task-breakdown/_index.md` และ **`docs/changes/CR-005-public-portal-landing-public-metrics.md`**
 * **ข้อมูลที่พบ**: 
   - ข้อมูลส่วนบุคคล (PII) เช่น เลขบัตรประชาชน (National ID), ประวัติการแพทย์ (Medical), และกลุ่มเปราะบาง (Vulnerability) ถือเป็นความลับสูงสุด
   - มีกฎระบุว่า "Public/FAM/API/EOC serializers มี no-medical/no-national-ID tests" แปลว่าระบบภายนอกห้ามเห็นข้อมูลนี้เด็ดขาด ต้องทำ Redaction เสมอ
+  - **(อัปเดตจาก CR-005)**: มีข้อยกเว้นอนุญาตให้แสดงตัวเลขภาพรวม (Aggregate counts) เช่น `vulnerable_count` และ `occupancy_total` ในหน้า Public Dashboard ได้ แต่ห้ามเจาะลึกดูรายชื่อ (No drill-down)
+  - **(อัปเดตจาก CR-005)**: ระบบ Family Search (`/search`) อนุญาตให้คืนค่าระบุตัวตนแบบพรางข้อมูล (Partially masked PII) ได้ เช่น พรางเลขบัตร 3 ตัวหน้า 3 ตัวหลัง, แสดงชื่อเต็มพรางนามสกุล, และพรางที่อยู่ แต่ห้ามคืนข้อมูล PII ฉบับเต็มหรือข้อมูลแพทย์
 
 ### 4. UI Route Guards
 * **แหล่งที่มา**: `docs/task-breakdown/_index.md`
