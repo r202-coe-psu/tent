@@ -16,19 +16,19 @@
 	const statusConfig: Record<OperationStatus, { label: string; class: string }> = {
 		standby: {
 			label: 'เตรียมพร้อม',
-			class: 'bg-gray-100 text-gray-700'
+			class: 'bg-muted text-muted-foreground'
 		},
 		active: {
 			label: 'เปิดรับ',
-			class: 'bg-green-100 text-green-700'
+			class: 'bg-shelter-emerald-bg text-shelter-emerald-text'
 		},
 		full_capacity: {
 			label: 'เต็ม',
-			class: 'bg-yellow-100 text-yellow-700'
+			class: 'bg-shelter-amber-bg text-shelter-amber-text'
 		},
 		closed: {
 			label: 'ปิด',
-			class: 'bg-red-100 text-red-700'
+			class: 'bg-shelter-rose-bg text-shelter-rose-text'
 		}
 	};
 </script>
@@ -57,7 +57,7 @@
 							<span
 								class="rounded px-2 py-0.5 text-[11px] font-bold {statusConfig[
 									shelter.operation_status
-								]?.class ?? 'bg-gray-100 text-gray-700'}"
+								]?.class ?? 'bg-muted text-muted-foreground'}"
 							>
 								{statusConfig[shelter.operation_status]?.label ?? shelter.operation_status}
 							</span>

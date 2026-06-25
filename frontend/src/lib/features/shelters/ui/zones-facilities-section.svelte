@@ -72,7 +72,9 @@
 						$formData.zones = $formData.zones.map((z) =>
 							z.code === zoneCode ? { ...z, status: 'closed' as const } : z
 						);
-					}
+						cancelConfirm();
+					},
+					onError: () => cancelConfirm()
 				}
 			);
 		} else {
@@ -83,11 +85,12 @@
 						$formData.zones = $formData.zones.map((z) =>
 							z.code === zoneCode ? { ...z, status: 'active' as const } : z
 						);
-					}
+						cancelConfirm();
+					},
+					onError: () => cancelConfirm()
 				}
 			);
 		}
-		cancelConfirm();
 	}
 
 	const zoneTypeOptions: { value: ZoneType; label: string }[] = [
@@ -110,7 +113,7 @@
 			{
 				code: newCode,
 				name: '',
-				capacity: undefined as unknown as number,
+				capacity: 0,
 				type: 'general' as ZoneType,
 				status: 'active' as const,
 				closed_at: null,
@@ -145,9 +148,15 @@
 			return;
 		}
 		const current = $formData.common_areas.sub_storage ?? [];
+		// Backfill `id` on legacy items so the each-block key stays stable even
+		// when an item is removed from the middle of the list.
+		const withIds = current.map((item) => (item.id ? item : { ...item, id: ulid() }));
 		$formData.common_areas = {
 			...$formData.common_areas,
-			sub_storage: [...current, { name: newSubStorageName.trim(), type: newSubStorageType }]
+			sub_storage: [
+				...withIds,
+				{ id: ulid(), name: newSubStorageName.trim(), type: newSubStorageType }
+			]
 		};
 		newSubStorageName = '';
 		newSubStorageType = 'general';
@@ -163,7 +172,7 @@
 </script>
 
 <section
-	class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border bg-amber-50/30 p-6 shadow-sm"
+	class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border bg-shelter-amber-bg/30 p-6 shadow-sm"
 >
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<span
@@ -449,7 +458,7 @@
 			</div>
 			{#if ($formData.common_areas.sub_storage ?? []).length > 0}
 				<div class="mb-2 space-y-1">
-					{#each $formData.common_areas.sub_storage ?? [] as item, i (i)}
+					{#each $formData.common_areas.sub_storage ?? [] as item, i (item.id ?? `legacy-${i}`)}
 						<div
 							class="flex items-center justify-between rounded-lg border border-shelter-border p-2 text-sm"
 						>
