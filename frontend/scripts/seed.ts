@@ -147,6 +147,7 @@ async function setSecurity(db: string, security: CouchDbSecurity): Promise<void>
 	// 5. Push it back
 	const { status } = await couchReq('PUT', `/${db}/_security`, existing);
 	if (status !== 200) throw new Error(`Cannot set _security for "${db}" (HTTP ${status})`);
+	console.log(`  ✓ ${db}: _security set`);
 }
 
 // PUT individual doc — 201 created, 409 conflict (idempotent seed) both ok.
