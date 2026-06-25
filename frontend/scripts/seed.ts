@@ -123,7 +123,29 @@ interface CouchDbSecurity {
 }
 
 async function setSecurity(db: string, security: CouchDbSecurity): Promise<void> {
-	const { status } = await couchReq('PUT', `/${db}/_security`, security);
+	// 1. Fetch the existing security object
+	const { status: getStatus, data } = await couchReq('GET', `/${db}/_security`);
+	const existing = (getStatus === 200 ? data : {}) as CouchDbSecurity;
+
+	// 2. Ensure properties exist
+	existing.admins ??= { names: [], roles: [] };
+	existing.members ??= { names: [], roles: [] };
+	existing.admins.names ??= [];
+	existing.admins.roles ??= [];
+	existing.members.names ??= [];
+	existing.members.roles ??= [];
+
+	// 3. Helper to merge arrays without duplicates
+	const merge = (a: string[], b: string[] = []) => Array.from(new Set([...a, ...b]));
+
+	// 4. Merge new roles and names
+	existing.admins.roles = merge(existing.admins.roles, security.admins?.roles);
+	existing.admins.names = merge(existing.admins.names, security.admins?.names);
+	existing.members.roles = merge(existing.members.roles, security.members?.roles);
+	existing.members.names = merge(existing.members.names, security.members?.names);
+
+	// 5. Push it back
+	const { status } = await couchReq('PUT', `/${db}/_security`, existing);
 	if (status !== 200)
 		throw new Error(`Cannot set _security for "${db}" (HTTP ${status})`);
 }
