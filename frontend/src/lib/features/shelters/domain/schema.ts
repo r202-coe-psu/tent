@@ -70,6 +70,7 @@ export type Facilities = z.infer<typeof facilitiesSchema>;
 // ===== Common areas (per-shelter, per image section 3c) =====
 
 export const subStorageItemSchema = z.object({
+	id: z.string().optional(),
 	name: z.string().trim().min(1, 'ชื่อสถานที่จัดเก็บต้องไม่ว่าง'),
 	type: subStorageTypeSchema
 });

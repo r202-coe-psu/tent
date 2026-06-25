@@ -199,13 +199,17 @@ export async function authorizeUserWrite(cookie: string | null): Promise<Caller>
  * shelter's detail to do their work; writes still require
  * `requireShelterManagerOrSA`.
  *
+ * Omit `code` to only resolve the caller's session (returns the {@link Caller}
+ * so the handler can scope the response — e.g. SA → all rows, shelter-scoped
+ * user → only their own). With `code`, the caller's `shelterCode` must equal
+ * that value unless the caller is a system admin.
+ *
  * @param cookie  The request's `Cookie` header (may be null for anonymous).
- * @param code    The shelter code from the URL params. The caller's roles must
- *                include `shelter:{code}` unless the caller is a system admin.
+ * @param code    Optional shelter code from the URL params.
  */
 export async function requireShelterScopeOrSA(
 	cookie: string | null,
-	code: string
+	code?: string
 ): Promise<Caller> {
 	const { base } = adminConfig();
 	const res = await fetch(`${base}/_session`, {
@@ -218,12 +222,16 @@ export async function requireShelterScopeOrSA(
 	const roles = data?.userCtx?.roles ?? [];
 	if (!name) throw error(401, 'Authentication required');
 
-	const isSA = isSystemAdmin(roles);
-	const shelterCode = shelterCodeFromRoles(roles);
-	if (!isSA && shelterCode !== code) {
-		throw error(403, `Caller is not in shelter "${code}" scope`);
-	}
-	return { name, roles, isSA, shelterCode };
+	const caller: Caller = {
+		name,
+		roles,
+		isSA: isSystemAdmin(roles),
+		shelterCode: shelterCodeFromRoles(roles)
+	};
+	if (code === undefined) return caller;
+	if (caller.isSA) return caller;
+	if (caller.shelterCode === code) return caller;
+	throw error(403, `Caller is not in shelter "${code}" scope`);
 }
 
 /**

@@ -1,4 +1,9 @@
-import { createMutation, createQuery, useQueryClient, type QueryClient } from '@tanstack/svelte-query';
+import {
+	createMutation,
+	createQuery,
+	useQueryClient,
+	type QueryClient
+} from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
 import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import { namedLocalDb } from '$lib/db/pouch';
