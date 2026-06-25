@@ -1,6 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, requireAdmin, serviceError } from '$lib/server/couch-admin';
+import {
+	adminRaw,
+	requireAdmin,
+	requireShelterScopeOrSA,
+	serviceError
+} from '$lib/server/couch-admin';
 import { ulid } from '$lib/db/ulid';
 import { createShelterSchema, type ShelterMaster } from '$lib/features/shelters/server';
 import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
@@ -167,14 +172,15 @@ export const POST: RequestHandler = async ({ request }) => {
 		return serviceError(e);
 	}
 };
-
 /** GET — list provisioned shelters from the registry. */
 export const GET: RequestHandler = async ({ request }) => {
-	await requireAdmin(request.headers.get('cookie'));
 	try {
+		const caller = await requireShelterScopeOrSA(request.headers.get('cookie'));
 		const masters = await listShelterMasters();
+		// SA sees every shelter; a shelter-scoped user only sees their own.
+		const visible = caller.isSA ? masters : masters.filter((m) => m.code === caller.shelterCode);
 		return json(
-			masters.map((m) => {
+			visible.map((m) => {
 				const migrated = migrate(m as ShelterMaster);
 				return {
 					code: migrated.code,
