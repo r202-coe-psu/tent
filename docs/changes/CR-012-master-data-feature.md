@@ -148,7 +148,9 @@ const MASTER_DATA_TYPES = [
   'health_condition',      // โรคประจำตัวและอาการแพ้ (Health Condition)
   'dietary_restrictions',  // ศาสนาและข้อจำกัดอาหาร (Dietary Restrictions)
   'pet_types',             // ประเภทสัตว์เลี้ยง (Pet Types)
-  'house_damage'           // สถานะความเสียหายของบ้าน (House Damage)
+  'house_damage',          // สถานะความเสียหายของบ้าน (House Damage)
+  'municipality_zone',     // เขตเทศบาล (เช่น เขต 1–4 หาดใหญ่) — CR-011
+  'community'              // ชุมชน (filter by municipality_zone) — CR-011
 ] as const;
 ```
 
@@ -159,24 +161,27 @@ const MASTER_DATA_TYPES = [
 ```ts
 // Option A (recommended) — code semantic
 interface MasterDataItemA {
-  code: string;         // immutable, lower_snake, auto-generate จาก label
-  label: string;        // Thai display, editable
-  is_default: boolean;  // 1 item per type = true (enforce)
+  code: string;          // immutable, lower_snake, auto-generate จาก label
+  label: string;         // Thai display, editable
+  is_default: boolean;   // 1 item per type = true (enforce)
+  parent_code?: string;  // CR-011: community type เท่านั้น — ref code ของ municipality_zone item
 }
 
 // Option B — id ULID (Phase 2 derive code เพิ่ม)
 interface MasterDataItemB {
-  id: string;           // ULID, internal key ใน array
+  id: string;            // ULID, internal key ใน array
   label: string;
   is_default: boolean;
+  parent_code?: string;  // CR-011: community type เท่านั้น
 }
 
 // Option C — hybrid
 interface MasterDataItemC {
-  id: string;           // ULID, internal key
-  code: string;         // slug, map ลง main schema
+  id: string;            // ULID, internal key
+  code: string;          // slug, map ลง main schema
   label: string;
   is_default: boolean;
+  parent_code?: string;  // CR-011: community type เท่านั้น
 }
 
 // ไม่มี `active` field — hard delete (Phase 1, ทั้ง 3 option)
@@ -279,7 +284,7 @@ Phase 2 (separate CR): ตอน wire เข้า form จะต้อง backf
 
 - **⏳ OPEN: identifier shape (A vs B vs C)** — รอ owner/team เคาะก่อน implement (ดู "Open decision" section) — **blocker สำหรับ Phase 1 implement**
 - **Slugify dictionary** (เฉพาะ Option A/C) — `domain/master-data.ts` ต้องมี dict map สำหรับ label ที่ใช้บ่อย (เช่น "ผู้สูงอายุ" → `elderly`, "หญิงตั้งครรภ์" → `pregnant`) — ถ้า slug ชนกัน fallback = append ULID suffix
-- **Seed defaults** — เมื่อ admin เปิด type แรก ควร seed items ตาม mockup (4+4+5+4+3 = 20 items) เพื่อให้ไม่ว่างเปล่า — **decision: ไม่ auto-seed** ให้ SA กดเพิ่มเอง (clean state แรก ให้ admin เห็นว่าต้องเพิ่มอะไรบ้าง)
+- **Seed defaults** — **decision อัปเดต (CR-011):** `municipality_zone` และ `community` ต้อง **auto-seed** เมื่อ initialize ระบบครั้งแรก (idempotent) เพราะผู้ใช้ต้องเลือกได้ทันที; 5 type เดิม (vulnerable/health/dietary/pet/house_damage) ยังคง "ไม่ auto-seed" ตาม decision เดิม. ข้อมูล seed ดู **Appendix A** ด้านล่าง
 - **Phase 2 scope ใน CR ถัดไป** — จะต้องตัดสินใจ: (a) wire order (people → medical → household), (b) shrink enum 6→4 พร้อม migration main schema, (c) block-delete rule
 
 ## Decision log
@@ -294,4 +299,144 @@ Phase 2 (separate CR): ตอน wire เข้า form จะต้อง backf
   - code generation: auto-generate จาก label (slugify + dict map สำหรับ label ไทย)
   - delete: hard delete (ไม่มี `active` field) — Phase 2 จะ block เมื่อมี reference
   - pattern: A (เก็บ code เป็น string ใน main doc เมื่อ Phase 2 wire) — ตรงกับ schema เดิม, ไม่ต้องเปลี่ยน main schema structure
-  - tracking: CR file ใน `docs/changes/CR-010-master-data-engine.md` ตาม user request
+  - tracking: CR file ใน `docs/changes/CR-012-master-data-feature.md` ตาม user request
+- 2026-06-25 — **CR-011 amend:** เพิ่ม master_type `municipality_zone` + `community` (7 types รวม); เพิ่ม `parent_code?: string` ใน item shape (community → zone relationship); เปลี่ยน seed decision สำหรับ 2 type ใหม่ (auto-seed); ข้อมูล seed จาก Wikipedia (Appendix A)
+
+---
+
+## Appendix A — Seed Data: municipality_zone + community (Hat Yai)
+
+> แหล่งข้อมูล: [Wikipedia — เทศบาลนครหาดใหญ่](https://th.wikipedia.org/wiki/%E0%B9%80%E0%B8%97%E0%B8%A8%E0%B8%9A%E0%B8%B2%E0%B8%A5%E0%B8%99%E0%B8%84%E0%B8%A3%E0%B8%AB%E0%B8%B2%E0%B8%94%E0%B9%83%E0%B8%AB%E0%B8%8D%E0%B9%88)
+> Code scheme: zone = `zone_{n}`; community = `z{n}_c{nn}` (zone prefix + sequential 2-digit)
+
+### master_data:municipality_zone
+
+```json
+{
+  "_id": "master_data:municipality_zone",
+  "type": "master_data",
+  "master_type": "municipality_zone",
+  "items": [
+    { "code": "zone_1", "label": "เขต 1", "is_default": true },
+    { "code": "zone_2", "label": "เขต 2", "is_default": false },
+    { "code": "zone_3", "label": "เขต 3", "is_default": false },
+    { "code": "zone_4", "label": "เขต 4", "is_default": false }
+  ]
+}
+```
+
+### master_data:community
+
+```json
+{
+  "_id": "master_data:community",
+  "type": "master_data",
+  "master_type": "community",
+  "items": [
+    { "code": "z1_c01", "label": "ชุมชนหน้าสวนสาธารณะ",               "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c02", "label": "ชุมชนทักษิณเมืองทอง",               "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c03", "label": "ชุมชนสุภาพอ่อนหวาน",                "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c04", "label": "ชุมชนหน้าค่ายเสนาณรงค์",            "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c05", "label": "ชุมชนภาสว่าง",                      "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c06", "label": "ชุมชนอู่ ท.ส.",                     "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c07", "label": "ชุมชนพรุแม่สอน",                    "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c08", "label": "ชุมชนกอบกาญจน์ศึกษา",               "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c09", "label": "ชุมชนแม่ลิเตา",                     "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c10", "label": "ชุมชนคลองเตย",                      "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c11", "label": "ชุมชนโรงปูน",                       "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c12", "label": "ชุมชนอนุสรณ์อาจารย์ทอง",            "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c13", "label": "ชุมชนสามัคคี",                      "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c14", "label": "ชุมชนหน้าโรงพยาบาลศิครินทร์",       "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c15", "label": "ชุมชนเกาะเสือ",                     "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c16", "label": "ชุมชนหลังสนามกีฬา",                 "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c17", "label": "ชุมชนหลังโรงเรียนหาดใหญ่วิทยาลัย", "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c18", "label": "ชุมชนศรีนิล",                       "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c19", "label": "ชุมชนหมัดยาเม๊าะ",                  "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c20", "label": "ชุมชนป้อม 6",                       "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c21", "label": "ชุมชนหน้าสนามกีฬา",                 "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c22", "label": "ชุมชนโรงเรียนชาตรี",                "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c23", "label": "ชุมชนศิครินทร์",                    "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c24", "label": "ชุมชนรัถการ",                       "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c25", "label": "ชุมชนริมทางรถไฟ",                   "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c26", "label": "ชุมชนมุสลิม",                       "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c27", "label": "ชุมชนหอนาฬิกา",                     "is_default": false, "parent_code": "zone_1" },
+    { "code": "z1_c28", "label": "ชุมชนตลาดคอมแพล็กซ์",               "is_default": false, "parent_code": "zone_1" },
+    { "code": "z2_c01", "label": "ชุมชนบ้านพักรถไฟ",                  "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c02", "label": "ชุมชนศาลเจ้าพ่อเสือ",               "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c03", "label": "ชุมชนตลาดใหม่",                     "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c04", "label": "ชุมชนกิมหยงสันติสุข",               "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c05", "label": "ชุมชนพระเสน่หา",                    "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c06", "label": "ชุมชนป้อม 4",                       "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c07", "label": "ชุมชนแสงศรี",                       "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c08", "label": "ชุมชนสวนศิริ",                      "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c09", "label": "ชุมชนจิระนคร",                      "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c10", "label": "ชุมชนท่งเซียเซี่ยงตึ้ง",            "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c11", "label": "ชุมชนประชาธิปัตย์",                 "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c12", "label": "ชุมชนสามชัย",                       "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c13", "label": "ชุมชนหน้าโรงเรียนหาดใหญ่วิทยาคม",  "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c14", "label": "ชุมชนชุมอุทิศ",                     "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c15", "label": "ชุมชนโรงพยาบาลกรุงเทพ",             "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c16", "label": "ชุมชนบ้านจ่า",                      "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c17", "label": "ชุมชนดรุณศึกษา",                    "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c18", "label": "ชุมชนกลางนา",                       "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c19", "label": "ชุมชนหน้าโรงเรียนโสตศึกษา",         "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c20", "label": "ชุมชนหัวนาหัก",                     "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c21", "label": "ชุมชนซีกิมหยง",                     "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c22", "label": "ชุมชนละม้ายสงเคราะห์",              "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c23", "label": "ชุมชนคลองเรียน",                    "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c24", "label": "ชุมชนบ้านร่มเย็น",                  "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c25", "label": "ชุมชนทุ่งรี",                       "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c26", "label": "ชุมชนตลาดคลองเรียน",                "is_default": false, "parent_code": "zone_2" },
+    { "code": "z2_c27", "label": "ชุมชน ม.อ.-คลองเรียน 1",            "is_default": false, "parent_code": "zone_2" },
+    { "code": "z3_c01", "label": "ชุมชนริมควน",                       "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c02", "label": "ชุมชนคลองระบายน้ำที่ 1",            "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c03", "label": "ชุมชนเทศาพัฒนา",                    "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c04", "label": "ชุมชนตลาดพ่อพรหม",                  "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c05", "label": "ชุมชนศาลาลุงทอง",                   "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c06", "label": "ชุมชนหลังที่ว่าการอำเภอ",           "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c07", "label": "ชุมชนบ้านหาดใหญ่",                  "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c08", "label": "ชุมชนท่าเคียน",                     "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c09", "label": "ชุมชนดีแลนด์-ไทยเจริญ",            "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c10", "label": "ชุมชนปรักกริม",                     "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c11", "label": "ชุมชนจันทร์ประทีป",                 "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c12", "label": "ชุมชนจันทร์วิโรจน์",                "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c13", "label": "ชุมชนรัตนวิบูลย์",                  "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c14", "label": "ชุมชนจันทร์นิเวศน์",                "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c15", "label": "ชุมชนทุ่งเสา",                      "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c16", "label": "ชุมชนอู่ญี่ปุ่น",                   "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c17", "label": "ชุมชนขนส่ง",                        "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c18", "label": "ชุมชนหน้าวัดคลองเรียน",             "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c19", "label": "ชุมชนสามแยกคลองเรียน",              "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c20", "label": "ชุมชนผาสุก-เคียงดาว",               "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c21", "label": "ชุมชนไทยโฮเต็ล",                    "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c22", "label": "ชุมชนหน้าสถานีรถไฟ",                "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c23", "label": "ชุมชนหลังโรงพัก",                   "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c24", "label": "ชุมชนหลังอู่รถไฟ",                  "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c25", "label": "ชุมชนประชาราษฎร์อุทิศ",             "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c26", "label": "ชุมชนแฟลตเคหะใหม่",                 "is_default": false, "parent_code": "zone_3" },
+    { "code": "z3_c27", "label": "ชุมชนแฟลตเคหะเก่า",                 "is_default": false, "parent_code": "zone_3" },
+    { "code": "z4_c01", "label": "ชุมชนท่าไทร",                       "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c02", "label": "ชุมชนสถานีอู่ตะเภา",                "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c03", "label": "ชุมชนต้นโด",                        "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c04", "label": "ชุมชนหน้าโรงเหล้าสรรพสามิตร",      "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c05", "label": "ชุมชนสัจจกุล",                      "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c06", "label": "ชุมชนรัชมังคลาภิเษก",               "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c07", "label": "ชุมชนบ้านฉาง",                      "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c08", "label": "ชุมชนสามทหาร",                      "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c09", "label": "ชุมชนบางหัก",                       "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c10", "label": "ชุมชนเกาะเลียบ",                    "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c11", "label": "ชุมชนรัตนอุทิศ",                    "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c12", "label": "ชุมชนสถานี 2",                      "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c13", "label": "ชุมชนมงคลหรรษา",                    "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c14", "label": "ชุมชนบ้านกลาง",                     "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c15", "label": "ชุมชนโชคสมาน",                      "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c16", "label": "ชุมชนหน้าอำเภอ",                    "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c17", "label": "ชุมชนราษฎร์อุทิศ",                  "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c18", "label": "ชุมชนวัดโคกสมานคุณ",                "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c19", "label": "ชุมชนวัดหาดใหญ่ใน",                 "is_default": false, "parent_code": "zone_4" },
+    { "code": "z4_c20", "label": "ชุมชนสถานีขนส่งหาดใหญ่ใน",         "is_default": false, "parent_code": "zone_4" }
+  ]
+}
+```
+
+> หมายเหตุ: ข้อมูลจาก Wikipedia (รายการชุมชน 4 เขต รวม 102 ชุมชน) ณ 2026-06-25. SA สามารถแก้ไข/เพิ่มชุมชนได้ผ่าน registration-config UI หลัง seed.
