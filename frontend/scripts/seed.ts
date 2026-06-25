@@ -146,8 +146,7 @@ async function setSecurity(db: string, security: CouchDbSecurity): Promise<void>
 
 	// 5. Push it back
 	const { status } = await couchReq('PUT', `/${db}/_security`, existing);
-	if (status !== 200)
-		throw new Error(`Cannot set _security for "${db}" (HTTP ${status})`);
+	if (status !== 200) throw new Error(`Cannot set _security for "${db}" (HTTP ${status})`);
 }
 
 // PUT individual doc — 201 created, 409 conflict (idempotent seed) both ok.
@@ -200,6 +199,10 @@ const ITEM = {
 
 async function seedRegistry(): Promise<void> {
 	await ensureDb('registry');
+	await setSecurity('catalog', {
+		admins: { names: [], roles: ['system_admin'] },
+		members: { names: [], roles: [] }
+	});
 
 	// Idempotent by code-check (matching the admin endpoint pattern) — not by fixed _id.
 	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
@@ -245,6 +248,10 @@ async function seedRegistry(): Promise<void> {
 
 async function seedCatalog(): Promise<void> {
 	await ensureDb('catalog');
+	await setSecurity('catalog', {
+		admins: { names: [], roles: ['system_admin'] },
+		members: { names: [], roles: [] }
+	});
 
 	const items = [
 		catalogDoc(ITEM.rice, 'supply_item', {
