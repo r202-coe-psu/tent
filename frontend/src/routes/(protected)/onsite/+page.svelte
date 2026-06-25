@@ -2,7 +2,6 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Expand from '@lucide/svelte/icons/expand';
 	import Search from '@lucide/svelte/icons/search';
-	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { resolve } from '$app/paths';
 </script>
@@ -41,22 +40,6 @@
 				<h2 class="mb-1 text-2xl font-bold text-foreground">ลงทะเบียนใหม่</h2>
 				<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
 					New Registration
-				</p>
-			</div>
-		</a>
-		<a
-			href={resolve('/onsite/people?mode=fast_track')}
-			class="group flex min-h-[220px] flex-col justify-between rounded-2xl border-2 border-danger-border bg-card p-8 shadow-[0_4px_25px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md"
-		>
-			<div
-				class="flex h-14 w-14 items-center justify-center rounded-2xl bg-danger-muted text-xl text-danger transition-colors group-hover:bg-red-100"
-			>
-				<TriangleAlert class="size-6" />
-			</div>
-			<div>
-				<h2 class="mb-1 text-2xl font-bold text-destructive">ฉุกเฉิน / กลุ่มเปราะบาง</h2>
-				<p class="text-xs font-medium tracking-wider text-danger-subtle uppercase">
-					Emergency Fast-Track
 				</p>
 			</div>
 		</a>

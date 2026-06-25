@@ -15,6 +15,7 @@
 	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import Zap from '@lucide/svelte/icons/zap';
 	import { page } from '$app/stores';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	const evacueesQuery = useEvacuees();
 	const createMutation = useCreateEvacuee();
@@ -23,7 +24,7 @@
 	let isFastTrack = $derived($page.url.searchParams.get('mode') === 'fast_track');
 
 	function handleRegister(input: EvacueeInput, symptoms: string[]) {
-		const ctx = { shelterCode: SHELTER_CODE, createdBy: authStore.user?.name ?? 'unknown' };
+		const ctx = { shelterCode: shelterStore.selectedShelterCode ?? SHELTER_CODE, createdBy: authStore.user?.name ?? 'unknown' };
 		createMutation.mutate(
 			{ input, ctx },
 			{
@@ -52,7 +53,7 @@
 			}
 		);
 	}
-	let step = $state<1 | 2>(1);
+	let step = $state<1 | 2 | 3>(1);
 </script>
 
 <div class="container mx-auto max-w-5xl p-6">
@@ -70,13 +71,13 @@
 		</div>
 	{/if}
 
-	{#if step === 1}
+	{#if step === 2}
 		<Card.Root class="mb-8">
 			<Card.Header class="p-4 flex flex-row items-start gap-3 space-y-0">
 				<div
 					class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
 				>
-					1
+					2
 				</div>
 				<div class="space-y-1">
 					<Card.Title class="text-base font-semibold leading-none">
@@ -88,14 +89,14 @@
 				</div>
 			</Card.Header>
 		</Card.Root>
-	{:else if step === 2}
+	{:else if step === 3}
 		<Card.Root class="mb-4">
 			<Card.Header class="p-4 flex flex-row items-center justify-between gap-3 space-y-0">
 				<div class="flex items-center gap-3">
 					<div
 						class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
 					>
-						2
+						3
 					</div>
 					<div class="space-y-1">
 						<Card.Title class="text-base font-semibold leading-none">ข้อมูลผู้ประสบภัย (Registration)</Card.Title>
