@@ -27,6 +27,7 @@ export {
 	transferStatusSchema,
 	donationChannelSchema,
 	stockLedgerInputSchema,
+	receiveInputSchema,
 	walkInDonationInputSchema,
 	campaignInputSchema,
 	specialRequestSchema,
@@ -43,7 +44,22 @@ export {
 	isDonation,
 	isDonationCampaign,
 	type StockLedgerInput,
+	type ReceiveInput,
 	type WalkInDonationInput,
 	type CampaignInput,
 	type SpecialRequestInput
 } from './domain/operations';
+
+// Data — repository contract + PouchDB binding
+export type { OperationsRepository } from './data/operations.repository';
+export { operationsRepository, SHELTER_CODE, SHELTER_DB } from './data/operations.pouch';
+
+// Application — TanStack Query hooks + live-query wiring
+export {
+	operationsKeys,
+	useLedger,
+	useStockBalance,
+	useReceiveStock,
+	startOperationsLiveQuery
+} from './application/queries';
+
