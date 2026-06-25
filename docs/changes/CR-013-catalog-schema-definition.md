@@ -1,6 +1,6 @@
 ---
 title: Catalog Schema Definition
-status: draft
+status: approved
 created: 2026-06-25
 updated: 2026-06-25
 module: C
