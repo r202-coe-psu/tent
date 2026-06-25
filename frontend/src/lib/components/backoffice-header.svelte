@@ -1,5 +1,4 @@
 <script lang="ts">
-	// Destructure Svelte 5 props
 	let {
 		title,
 		subtitle = 'ศูนย์จัดการข้อมูลหลังบ้าน (BACKEND MASTER CONSOLE)',
@@ -11,7 +10,7 @@
 	} = $props();
 </script>
 
-<div class="rounded-2xl bg-[#002f6c] p-6 text-white shadow-sm transition-all duration-300">
+<div class="rounded-2xl bg-[#002f6c] p-6 mt-6 text-white shadow-sm transition-all duration-300">
 	<div class="flex flex-col gap-1.5">
 		{#if subtitle}
 			<span class="text-[10px] font-semibold tracking-wider text-sky-400 uppercase">
