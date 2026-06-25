@@ -117,7 +117,12 @@ async function ensureDb(name: string): Promise<void> {
 		throw new Error(`Cannot create database "${name}" (HTTP ${status})`);
 }
 
-async function setSecurity(db: string, security: unknown): Promise<void> {
+interface CouchDbSecurity {
+	admins?: { names?: string[]; roles?: string[] };
+	members?: { names?: string[]; roles?: string[] };
+}
+
+async function setSecurity(db: string, security: CouchDbSecurity): Promise<void> {
 	const { status } = await couchReq('PUT', `/${db}/_security`, security);
 	if (status !== 200)
 		throw new Error(`Cannot set _security for "${db}" (HTTP ${status})`);
