@@ -50,7 +50,7 @@ import {
 	type StockLedgerInput,
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
-import { createInitialProfile } from '$lib/features/sop-ratios/domain/sop-ratio';
+import { createInitialProfile } from '$lib/features/sop-ratios';
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 

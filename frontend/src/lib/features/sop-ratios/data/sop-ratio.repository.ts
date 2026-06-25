@@ -13,7 +13,7 @@ export interface SopMasterRepository {
 		deactivatedPrev: SopMaster | null,
 		profile: SopMaster,
 		audit: AuditEntry | null
-	): Promise<void>;
+	): Promise<{ profile: SopMaster; deactivatedPrev: SopMaster | null; audit: AuditEntry | null }>;
 
 	setActive(id: string, ctx?: { createdBy: string }): Promise<void>;
 }
@@ -26,7 +26,7 @@ export interface SopOverrideRepository {
 		deactivatedPrev: SopOverride | null,
 		profile: SopOverride,
 		audit: AuditEntry | null
-	): Promise<void>;
+	): Promise<{ profile: SopOverride; deactivatedPrev: SopOverride | null; audit: AuditEntry | null }>;
 
 	setActive(id: string, ctx?: AuthorContext): Promise<void>;
 }

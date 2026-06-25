@@ -147,6 +147,30 @@ describe('SOP Ratio Domain', () => {
 			expect(result.audit).toBeNull();
 			expect(result.profile).toBe(prev);
 		});
+
+		it('should keep untouched ratio keys after partial update', () => {
+			const { profile: prev } = createInitialProfile(
+				'sop_profile',
+				'Standard',
+				{ water_l_per_person_day: 15, rice_g_per_person_meal: 150 },
+				masterCtx
+			);
+
+			const { profile: next } = createNewVersion(
+				prev,
+				{ rice_g_per_person_meal: 200 },
+				'Update rice only',
+				masterCtx
+			);
+
+			// Untouched key must survive the partial update
+			expect(next.ratios.water_l_per_person_day).toBe(15);
+			// Changed key must reflect new value
+			expect(next.ratios.rice_g_per_person_meal).toBe(200);
+			// A new doc must be created
+			expect(next._id).not.toBe(prev._id);
+			expect(next.version).toBe(2);
+		});
 	});
 
 	describe('createNewVersion - Override', () => {

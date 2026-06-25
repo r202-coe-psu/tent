@@ -39,7 +39,7 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 		deactivatedPrev: SopMaster | null,
 		profile: SopMaster,
 		audit: AuditEntry | null
-	): Promise<void> {
+	): Promise<{ profile: SopMaster; deactivatedPrev: SopMaster | null; audit: AuditEntry | null }> {
 		const docs: any[] = [];
 		if (deactivatedPrev) {
 			docs.push(deactivatedPrev);
@@ -53,17 +53,21 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 		if (errors.length > 0) {
 			throw new Error(`Failed to save master versions atomically: ${JSON.stringify(errors)}`);
 		}
+		let updatedDeactivatedPrev: SopMaster | null = deactivatedPrev;
+		let updatedProfile = profile;
+		let updatedAudit: AuditEntry | null = audit;
 		for (const res of results) {
 			if ('ok' in res && res.ok) {
 				if (deactivatedPrev && deactivatedPrev._id === res.id) {
-					deactivatedPrev._rev = res.rev;
+					updatedDeactivatedPrev = { ...deactivatedPrev, _rev: res.rev };
 				} else if (profile._id === res.id) {
-					profile._rev = res.rev;
+					updatedProfile = { ...profile, _rev: res.rev };
 				} else if (audit && audit._id === res.id) {
-					audit._rev = res.rev;
+					updatedAudit = { ...audit, _rev: res.rev };
 				}
 			}
 		}
+		return { profile: updatedProfile, deactivatedPrev: updatedDeactivatedPrev, audit: updatedAudit };
 	}
 
 	async setActive(id: string, ctx?: { createdBy: string }): Promise<void> {
@@ -123,9 +127,16 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 	private readonly db: PouchDB.Database;
 	private readonly repo: Repository;
 
-	constructor(db: PouchDB.Database = namedLocalDb('shelter_sh001')) {
-		this.db = db;
-		this.repo = createRepository(db);
+	/**
+	 * shelterCode is mandatory — no hardcoded default to prevent cross-shelter data leaks.
+	 * Pass db explicitly in tests (pouchdb-adapter-memory).
+	 */
+	constructor(shelterCode: string, db?: PouchDB.Database) {
+		if (!shelterCode || shelterCode.trim() === '') {
+			throw new Error('SopOverridePouchRepository: shelterCode is mandatory');
+		}
+		this.db = db ?? namedLocalDb(`shelter_${shelterCode.toLowerCase()}`);
+		this.repo = createRepository(this.db);
 	}
 
 	async listActive(): Promise<SopOverride[]> {
@@ -146,7 +157,7 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 		deactivatedPrev: SopOverride | null,
 		profile: SopOverride,
 		audit: AuditEntry | null
-	): Promise<void> {
+	): Promise<{ profile: SopOverride; deactivatedPrev: SopOverride | null; audit: AuditEntry | null }> {
 		const docs: any[] = [];
 		if (deactivatedPrev) {
 			docs.push(deactivatedPrev);
@@ -160,17 +171,21 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 		if (errors.length > 0) {
 			throw new Error(`Failed to save override versions atomically: ${JSON.stringify(errors)}`);
 		}
+		let updatedDeactivatedPrev: SopOverride | null = deactivatedPrev;
+		let updatedProfile = profile;
+		let updatedAudit: AuditEntry | null = audit;
 		for (const res of results) {
 			if ('ok' in res && res.ok) {
 				if (deactivatedPrev && deactivatedPrev._id === res.id) {
-					deactivatedPrev._rev = res.rev;
+					updatedDeactivatedPrev = { ...deactivatedPrev, _rev: res.rev };
 				} else if (profile._id === res.id) {
-					profile._rev = res.rev;
+					updatedProfile = { ...profile, _rev: res.rev };
 				} else if (audit && audit._id === res.id) {
-					audit._rev = res.rev;
+					updatedAudit = { ...audit, _rev: res.rev };
 				}
 			}
 		}
+		return { profile: updatedProfile, deactivatedPrev: updatedDeactivatedPrev, audit: updatedAudit };
 	}
 
 	async setActive(id: string, ctx?: AuthorContext): Promise<void> {
@@ -247,13 +262,19 @@ let masterSingleton: SopMasterRepository | null = null;
 let overrideSingleton: SopOverrideRepository | null = null;
 
 export function sopMasterRepository(db?: PouchDB.Database): SopMasterRepository {
-	if (db) return new SopMasterPouchRepository(db);
-	if (!masterSingleton) masterSingleton = new SopMasterPouchRepository();
+	if (db) {
+		masterSingleton = new SopMasterPouchRepository(db);
+	} else if (!masterSingleton) {
+		masterSingleton = new SopMasterPouchRepository();
+	}
 	return masterSingleton;
 }
 
-export function sopOverrideRepository(db?: PouchDB.Database): SopOverrideRepository {
-	if (db) return new SopOverridePouchRepository(db);
-	if (!overrideSingleton) overrideSingleton = new SopOverridePouchRepository();
+export function sopOverrideRepository(shelterCode: string, db?: PouchDB.Database): SopOverrideRepository {
+	if (db) {
+		overrideSingleton = new SopOverridePouchRepository(shelterCode, db);
+	} else if (!overrideSingleton) {
+		overrideSingleton = new SopOverridePouchRepository(shelterCode);
+	}
 	return overrideSingleton;
 }

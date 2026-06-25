@@ -27,11 +27,13 @@ export const ratiosSchema = z
 	});
 
 // --- Master SOP Profile Schema (catalog DB, schema_v 2)
+export const SOP_MASTER_SCHEMA_VERSION = 2;
+
 export const sopMasterSchema = z.object({
 	_id: z.string().min(1),
 	_rev: z.string().optional(),
 	type: z.literal('sop_profile'),
-	schema_v: z.literal(2),
+	schema_v: z.literal(SOP_MASTER_SCHEMA_VERSION),
 	created_at: z.string().datetime(),
 	updated_at: z.string().datetime(),
 	created_by: z.string().min(1),
@@ -44,14 +46,19 @@ export const sopMasterSchema = z.object({
 export type SopMaster = z.infer<typeof sopMasterSchema>;
 
 export const isSopMaster = (d: unknown): d is SopMaster =>
-	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'sop_profile';
+	!!d &&
+	typeof d === 'object' &&
+	(d as { type?: unknown }).type === 'sop_profile' &&
+	(d as { schema_v?: unknown }).schema_v === SOP_MASTER_SCHEMA_VERSION;
 
 // --- Override SOP Profile Schema (shelter_* DB, schema_v 1)
+export const SOP_OVERRIDE_SCHEMA_VERSION = 1;
+
 export const sopOverrideSchema = z.object({
 	_id: z.string().min(1),
 	_rev: z.string().optional(),
 	type: z.literal('sop_override'),
-	schema_v: z.literal(1),
+	schema_v: z.literal(SOP_OVERRIDE_SCHEMA_VERSION),
 	shelter_code: shelterCodeSchema,
 	base_profile_id: z.string().min(1),
 	name: z.string().min(1),
@@ -66,7 +73,11 @@ export const sopOverrideSchema = z.object({
 export type SopOverride = z.infer<typeof sopOverrideSchema>;
 
 export const isSopOverride = (d: unknown): d is SopOverride =>
-	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'sop_override';
+	!!d &&
+	typeof d === 'object' &&
+	(d as { type?: unknown }).type === 'sop_override' &&
+	(d as { schema_v?: unknown }).schema_v === SOP_OVERRIDE_SCHEMA_VERSION;
+
 
 /**
  * Resolves the effective SOP profile ratios for a shelter:

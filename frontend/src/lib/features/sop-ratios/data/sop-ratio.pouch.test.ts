@@ -124,13 +124,13 @@ describe('SopMasterPouchRepository', () => {
 			{ water_l_per_person_day: 15 },
 			masterCtx
 		);
-		await repo.createVersion(null, p1, a1);
+		const { profile: savedP1 } = await repo.createVersion(null, p1, a1);
 
 		const {
 			deactivatedPrev,
 			profile: p1v2,
 			audit: a2
-		} = createNewVersion(p1, { water_l_per_person_day: 18 }, 'Manual adjust', masterCtx);
+		} = createNewVersion(savedP1, { water_l_per_person_day: 18 }, 'Manual adjust', masterCtx);
 
 		await repo.createVersion(deactivatedPrev, p1v2, a2);
 
@@ -182,7 +182,7 @@ describe('SopOverridePouchRepository', () => {
 		db = new PouchDB(`test-sop-override-${Math.random().toString(36).slice(2)}`, {
 			adapter: 'memory'
 		});
-		repo = new SopOverridePouchRepository(db);
+		repo = new SopOverridePouchRepository('SH001', db);
 	});
 
 	it('should list only active overrides', async () => {
@@ -229,7 +229,7 @@ describe('resolveEffective application helper', () => {
 		});
 
 		const masterRepo = new SopMasterPouchRepository(masterDb);
-		const overrideRepo = new SopOverridePouchRepository(overrideDb);
+		const overrideRepo = new SopOverridePouchRepository('SH001', overrideDb);
 
 		// 1. Initial state: neither has active profiles
 		let effective = await resolveEffective(overrideRepo, masterRepo);
