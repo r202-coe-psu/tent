@@ -117,6 +117,12 @@ async function ensureDb(name: string): Promise<void> {
 		throw new Error(`Cannot create database "${name}" (HTTP ${status})`);
 }
 
+async function setSecurity(db: string, security: unknown): Promise<void> {
+	const { status } = await couchReq('PUT', `/${db}/_security`, security);
+	if (status !== 200)
+		throw new Error(`Cannot set _security for "${db}" (HTTP ${status})`);
+}
+
 // PUT individual doc — 201 created, 409 conflict (idempotent seed) both ok.
 async function putDoc(db: string, doc: Record<string, unknown>): Promise<void> {
 	const { status } = await couchReq('PUT', `/${db}/${encodeURIComponent(doc._id as string)}`, doc);
@@ -285,6 +291,10 @@ async function seedCatalog(): Promise<void> {
 
 async function seedShelter(): Promise<void> {
 	await ensureDb(SHELTER_DB);
+	await setSecurity(SHELTER_DB, {
+		admins: { names: [], roles: ['system_admin'] },
+		members: { names: [], roles: [`shelter:${SHELTER_CODE}`] }
+	});
 
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
