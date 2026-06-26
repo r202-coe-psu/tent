@@ -18,9 +18,12 @@ pipeline {
         WEB_BUILD_PATH = './frontend'               // Path to build frontend
     }
     stages {
-        stage('Setup System (Install PNPM)') {
+        stage('Setup System (Install PNPM and Rsync)') {
             steps {
                 sh '''
+                echo "Installing rsync and ssh client..."
+                apt-get update && apt-get install -y rsync openssh-client
+
                 echo "Installing pnpm globally..."
                 npm install -g pnpm
                 pnpm --version
