@@ -77,7 +77,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - สมาชิก 1 คนอยู่ได้ 1 active household เท่านั้น (validation + error message ชัดเจน)
 - `pre-registered` household ไม่นับ occupancy จนกว่าจะ check-in จริง (T-06)
 - SM mark `cancelled` สำหรับ `pre-registered` household ที่ไม่มาถึงได้
-- Person-only registration (FR-4 baseline) ทำงานได้โดยไม่ต้องสร้าง household — household เป็น optional ไม่ใช่ขั้นบังคับ
+- ทุก person ต้องมี household เสมอ — Stage 3 บังคับ join หรือ create (CR-009 amend); solo evacuee = household ขนาด 1 คน (head_evacuee_id = ตัวเอง)
 - ลบ/ย้ายสมาชิกแล้วข้อมูล person record ไม่เสียหาย (additive ต่อ base schema T-02)
 - เขียนลง CouchDB ตาม schema T-02 พร้อม audit metadata (ใคร/เมื่อไร)
 - Unit + integration test ผ่าน, demo flow ลงทะเบียนครอบครัว 1 ครัวเรือนได้จริง (ครอบ path A + B)

@@ -126,21 +126,13 @@ sequenceDiagram
     participant SYS as System
     actor SM as SM (Shelter Manager)
 
-    VOL->>SYS: ลงทะเบียน person (baseline FR-4..6)<br/>ชื่อ, เพศ, ข้อมูลพื้นฐาน — ไม่บังคับสร้าง household
+    VOL->>SYS: ลงทะเบียน person Stage 1–2 (baseline FR-4..6)<br/>ชื่อ, เพศ, ข้อมูลพื้นฐาน
     SYS-->>VOL: person record created, status: arriving
-    VOL->>SYS: check-in รายบุคคล (T-06 person-only)
-    SYS->>SYS: status → checked-in (person scope), occupancy +1
-    SYS-->>VOL: check-in สำเร็จ
+    VOL->>SYS: Stage 3 — join หรือ create household (บังคับ, CR-009 amend)<br/>solo = สร้าง household ใหม่ขนาด 1 คน
+    SYS->>SYS: validate + ผูก household_id → person
+    SYS-->>VOL: household assigned, check-in พร้อม
 
-    note over VOL,SYS: person อยู่โดยไม่มี household ได้ตามปกติ
-
-    rect rgb(240, 248, 255)
-        note over VOL,SM: ── Fallback: สร้าง household ทีหลัง (VOL หรือ SM) ──
-        VOL->>SYS: สร้าง household ใหม่ (T-04)<br/>กำหนด head + attach person ที่ check-in ไปแล้ว
-        SYS->>SYS: validate: person ยังไม่มี active household<br/>ถ้ามีแล้ว → error "already in household X"
-        SYS-->>VOL: household created, QR ออกให้ใหม่ (T-05)
-        note over VOL,SYS: person record ไม่เสียหาย — household เป็น additive layer
-    end
+    note over VOL,SYS: ⚠️ amended CR-009 (2026-06-25): household บังคับทุก person<br/>solo evacuee = household ขนาด 1 (head = ตัวเอง)
 ```
 
 ### Phase 1C — Backoffice สร้าง household หลังจาก persons check-in แยกกัน (VOL หรือ SM)
