@@ -29,7 +29,7 @@ note: decision-synced 2026-06-15 — maintained directly in Markdown as planning
 | ID   | Status           | Feature / Task                                                                                                  | FR        | Stage | Scope    | Raw MD | AI×    | Adj MD | Depends   |
 | ---- | ---------------- | --------------------------------------------------------------------------------------------------------------- | --------- | ----- | -------- | ------ | ------ | ------ | --------- |
 | T-47 | 🔄               | Shelter master + config + seed data                                                                             | FR-2..3   | prod  | in-scope | 3      | ÷1.6   | 2      | T-02      |
-| T-48 | ⬜               | Person registration (required `first_name`+`last_name`+`gender`+`phone`; phone เป็น `null` ได้เมื่อไม่มี) + แก้ไขข้อมูล | FR-4..5   | prod  | in-scope | 6      | ÷1.6   | 4      | T-01,T-02 |
+| T-48 | ⬜               | Person registration (4-Step Wizard รวม Triage, รองรับ Smart Card, ข้อมูลขั้นต่ำ) + แก้ไขข้อมูล | FR-4..5   | prod  | in-scope | 6      | ÷1.6   | 4      | T-01,T-02 |
 | T-49 | ⬜               | Screening: vulnerability flags / medical notes / fast-track ตาม role                                            | FR-6..8   | prod  | in-scope | 6      | ÷1.6   | 4      | T-48      |
 | T-50 | ⬜               | Person Shelter ID/QR generation (payload ไม่มี PII/health)                                                      | FR-9      | prod  | in-scope | 4      | ÷1.6   | 2.5    | T-48      |
 | T-51 | ⬜               | Search + QR scan check-in/out + movement history + occupancy guardrail (warning-only)                           | FR-10..13 | prod  | in-scope | 7      | ÷1.6   | 4.5    | T-50      |
@@ -45,7 +45,7 @@ note: decision-synced 2026-06-15 — maintained directly in Markdown as planning
 
 > DoD ทุก prod task ยึด [Standard DoD](_index.md#standard-dod): **UI + data/write path + validation + permission + test + demo ของ slice**
 
-- T-48 registration minimum ต้องตรง [Database Schema](../data/schema.md): `first_name`, `last_name`, `gender`, `phone`; phone เป็น required UI field แต่เลือก/กรอก "ไม่มี" แล้วเก็บ `null`
+- T-48 registration minimum ต้องตรง [Database Schema](../data/schema.md): `first_name`, `last_name`, `gender`, `phone`; phone เป็น required UI field แต่เลือก/กรอก "ไม่มี" แล้วเก็บ `null` (อัปเดต CR-014: ปรับ UI เป็น 4-Step Wizard รวม Triage และดึงข้อมูลจาก Smart Card)
 - **T-54 (offline sync) = tech risk #1 ของโครงการ** — app เขียน local PouchDB ก่อน, active remote มีได้หนึ่งเป้าหมาย (Central, Edge fallback, หรือ local-only), ห้าม long-lived sync ไป Central+Edge พร้อมกัน, และต้องทดสอบ failback ไม่ให้ duplicate; Lead B เป็นเจ้าของร่วม (ต่อจาก T-02); เริ่มทันทีหลัง skeleton อย่ารอท้าย phase
 - T-48/T-49/T-51 คือเส้นหลักของ flow หน้างาน (register → screen → check-in) — เป็น vertical slice ที่ทีม copy pattern จาก walking skeleton
 - T-52/T-53 ปิดท้าย เพราะต้องมี movement/audit data จริงให้แสดง/ตรวจ

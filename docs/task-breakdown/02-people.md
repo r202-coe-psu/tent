@@ -168,6 +168,7 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 
 **Definition of Done:**
 - CRUD pet/asset/vehicle ผูก person หรือ household พร้อมประเภทตามรายการที่ design (P-01) กำหนด — บันทึกได้โดยไม่ block registration flow
+- **(CR-014)** รองรับ Camera Flow เพื่อถ่ายภาพหรืออัปโหลดภาพทรัพย์สิน เก็บ URL อ้างอิงลงใน `asset_photos`
 - จำนวนสัตว์เลี้ยงต่อโซน query ได้ (รองรับ zone allocation)
 - แสดงในหน้า household profile และ test + demo ผ่าน
 
@@ -202,6 +203,8 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 
 - **Single assign (VOL/SM):** เลือก household → ระบบ suggest zone พร้อมเหตุผล → ยืนยัน/override
 - **Bulk assign (SM backoffice):** เลือกหลาย household → assign zone เดียวกัน → warning รายครัวเรือนที่เกิน capacity หรือผิดประเภท → SM ยืนยัน (override บันทึก actor รายรายการ)
+- **(CR-014) GBV Protection:** ระบบตรวจสอบกฎความปลอดภัยเรื่องเพศสภาพ (ห้ามผู้ชายเข้าโซน `female_only`) ถ้าละเมิดให้เตือน/บล็อกตาม Policy
+- **(CR-014) Notification/Receipt:** พิมพ์ใบเสร็จความร้อน (Thermal Slip) หรือส่ง SMS แจ้งผู้พักพิง 1-Click ทันทีที่ลงโซนสำเร็จ
 - **Pre-registration zone reservation:** `pre-registered` household assign zone ได้ล่วงหน้า — นับเป็น "reserved" ไม่ใช่ "occupied" จนกว่าจะ check-in จริง
 
 **Definition of Done:**

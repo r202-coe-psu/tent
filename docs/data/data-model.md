@@ -91,14 +91,15 @@ device (PouchDB)  ⇄ WAN ⇄  central (CouchDB)
   phone: "0812345678" | null,         // required ใน UI — ผู้ลงทะเบียนกด/กรอก "ไม่มี" → เก็บ null
                                       // ใช้ค้นใน FAM search (เบอร์เต็มเท่านั้น) — ไม่ส่งกลับใน public response
   // ---- optional เติมทีหลัง ----
-  nickname, birth_year, national_id, religion,
+  nickname, birth_year, national_id, religion, country,
   special_needs: ["elderly","disabled","pregnant","infant", ...],
   emergency_contact: { name, phone, relation },
   household_id,                       // -> household:{ulid}
   current_stay: { status: "registered|checked_in|checked_out|transferred",
                   zone, since },      // denormalized เพื่อ UI; ความจริงอยู่ที่ movement events
   privacy: { search_excluded: false },// FAM opt-out (default ค้นเจอ)
-  registered_via: "app|import|paper"
+  registered_via: "app|import|paper",
+  asset_photos: ["https://..."]       // เก็บ URL รูปภาพทรัพย์สิน (CR-014)
 }
 
 // movement:{ulid}  (append-only)
@@ -143,13 +144,19 @@ State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc 
                                           // เป็นชื่อ db shelter_{code} + อ้างข้ามศูนย์ทุกที่ (shelter_code)
                                           // pattern ^SH\d{3,}$: 1–999 pad 3 หลัก, ≥1000 กว้างตามจริง (SH1000)
   name, status: "open|closed", capacity,
-  zones: [{ code, name, capacity }],
+  zones: [{ code, name, capacity, allowed_gender: "all|female_only|male_only" }],
   area_m2: 1200,                          // opt — พื้นที่ปิดรวม m² (Sphere ≥3.5 m²/คน)
   facilities: {                           // opt — นับจริง ใช้คำนวณ Sphere ratio vs occupancy
     toilets_female: 10, toilets_male: 10, toilets_accessible: 2,
     showers: 8, water_points: 3, handwashing_stations: 6
   },
   location, contact, opened_at, closed_at }
+
+// registry:  host_house:{ulid} (New in CR-014)
+{ type: "host_house", host_name, phone, address, max_capacity,
+  checklist: { has_safe_dry_area: true, has_clean_toilet: true, has_drinking_water: true },
+  photos, status: "pending|approved|rejected|closed" }
+
 // registry:  config:app
 { type: "config", public_otp_required: false, duplicate_hint_threshold: 0.8, ... }
 

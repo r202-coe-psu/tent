@@ -27,7 +27,8 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 | T-57 | Public Portal landing + real-time metrics panel | CR-005 §A/B/C | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-52,T-35,T-01 |
 | T-58 | Public Shelter Dashboard (`/shelters`) — cards + map + filter | CR-005 §D | R3 | prod | ส.ค. | 7 | ÷1.4 | 5 | T-57,T-47 |
 | T-59 | Public FAQ (dynamic) + EOC FAQ setup screen | CR-005 OP-1 | R3 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-03 |
-| | **รวมทั้งโมดูล** | | | | | **17** | | **11.5** | |
+| T-61 | Host-House E-Form (บ้านพี่เลี้ยง) | CR-014 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3.1 | T-57 |
+| | **รวมทั้งโมดูล** | | | | | **22** | | **14.6** | |
 
 ## Task Details
 
@@ -63,12 +64,22 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 - Back-office FAQ setup: CRUD รายการ FAQ (จำกัดสิทธิ์ตาม role-permission matrix), เผยแพร่/ซ่อนได้, มีผลกับ public ทันที (ไม่ cache ค้างเกินกำหนด)
 - LINE OA / FB Page URL config (OP-2) เก็บใน setup เดียวกัน (ยังซ่อนปุ่มฝั่ง public ตอนนี้) + demo เพิ่ม/แก้ FAQ แล้วเห็นบน public
 
+### T-61 — Host-House E-Form (บ้านพี่เลี้ยง) (CR-014)
+
+**Description:** ระบบลงทะเบียนบ้านพี่เลี้ยง สำหรับประชาชนจิตอาสาที่ต้องการเปิดพื้นที่บ้านตัวเองเป็นสถานที่พักพิงชั่วคราว (อ้างอิง Design v5 โมดูล 3.19)
+
+**Definition of Done:**
+- ฟอร์มกรอกชื่อเจ้าของบ้าน, เบอร์โทร, พิกัดและที่อยู่, ความจุ (จำนวนคน)
+- มี Checklist ประเมินความปลอดภัยเบื้องต้น (พื้นที่แห้ง, ห้องน้ำ, น้ำดื่ม)
+- รองรับ Camera Flow ในการถ่ายภาพพื้นที่บ้านและอัปโหลดแนบกับฟอร์ม
+- เก็บข้อมูลลงฐานข้อมูลด้วย document type ใหม่ `host_house` (มีสถานะ pending รอการอนุมัติจากฝั่งศูนย์)
+
 ## Effort by phase (Adj MD)
 
 | Phase | Raw MD | Adj MD |
 | --- | --- | --- |
-| R3 | 17 | 11.5 |
-| **รวม** | **17** | **11.5** |
+| R3 | 22 | 14.6 |
+| **รวม** | **22** | **14.6** |
 
 > estimate provisional (CR-005, 2026-06-22) — recalibrate ตาม K-16. Team assignment ของ public-portal surface ต้องยืนยันใน workshop (K-13 follow-up).
 
