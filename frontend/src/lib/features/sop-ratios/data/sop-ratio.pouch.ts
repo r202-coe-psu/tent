@@ -22,8 +22,21 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 	}
 
 	async listActive(): Promise<SopMaster[]> {
-		const all = await this.repo.allByType('sop_profile', isSopMaster);
-		return all.filter((p) => p.active);
+		try {
+			if (typeof (this.db as any).find !== 'function') {
+				throw new Error('pouchdb-find plugin not registered');
+			}
+			const result = await (this.db as any).find({
+				selector: { 
+					type: 'sop_profile', 
+					active: true 
+				}
+			});
+			return result.docs.filter(isSopMaster);
+		} catch (error) {
+			const all = await this.repo.allByType('sop_profile', isSopMaster);
+			return all.filter((p) => p.active);
+		}
 	}
 
 	async listVersions(name: string): Promise<SopMaster[]> {
@@ -40,84 +53,143 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 		profile: SopMaster,
 		audit: AuditEntry | null
 	): Promise<{ profile: SopMaster; deactivatedPrev: SopMaster | null; audit: AuditEntry | null }> {
-		const docs: Array<SopMaster | AuditEntry> = [];
-		if (deactivatedPrev) {
-			docs.push(deactivatedPrev);
+		if (!deactivatedPrev && !audit) {
+			return { profile, deactivatedPrev: null, audit: null };
 		}
-		docs.push(profile);
-		if (audit) {
-			docs.push(audit);
-		}
-		const results = await this.db.bulkDocs(docs);
-		const errors = results.filter((r) => 'error' in r);
-		if (errors.length > 0) {
-			throw new Error(`Failed to save master versions atomically: ${JSON.stringify(errors)}`);
-		}
-		let updatedDeactivatedPrev: SopMaster | null = deactivatedPrev;
-		let updatedProfile = profile;
-		let updatedAudit: AuditEntry | null = audit;
-		for (const res of results) {
-			if ('ok' in res && res.ok) {
-				if (deactivatedPrev && deactivatedPrev._id === res.id) {
-					updatedDeactivatedPrev = { ...deactivatedPrev, _rev: res.rev };
-				} else if (profile._id === res.id) {
-					updatedProfile = { ...profile, _rev: res.rev };
-				} else if (audit && audit._id === res.id) {
-					updatedAudit = { ...audit, _rev: res.rev };
+
+		const MAX_RETRIES = 3;
+		let attempts = 0;
+		let currentDeactivatedPrev = deactivatedPrev;
+
+		while (attempts < MAX_RETRIES) {
+			try {
+				const docs: Array<SopMaster | AuditEntry> = [];
+				if (currentDeactivatedPrev) {
+					docs.push(currentDeactivatedPrev);
 				}
+				docs.push(profile);
+				if (audit) {
+					docs.push(audit);
+				}
+				const results = await this.db.bulkDocs(docs);
+				const errors = results.filter((r) => 'error' in r);
+				
+				const hasConflict = errors.some((e: any) => e.status === 409 || e.name === 'conflict' || e.error === 'conflict');
+				if (hasConflict) {
+					throw new Error('409_CONFLICT');
+				} else if (errors.length > 0) {
+					throw new Error(`Failed to save master versions atomically: ${JSON.stringify(errors)}`);
+				}
+
+				let updatedDeactivatedPrev: SopMaster | null = currentDeactivatedPrev;
+				let updatedProfile = profile;
+				let updatedAudit: AuditEntry | null = audit;
+
+				for (const res of results) {
+					if ('ok' in res && res.ok) {
+						if (currentDeactivatedPrev && currentDeactivatedPrev._id === res.id) {
+							updatedDeactivatedPrev = { ...currentDeactivatedPrev, _rev: res.rev };
+						} else if (profile._id === res.id) {
+							updatedProfile = { ...profile, _rev: res.rev };
+						} else if (audit && audit._id === res.id) {
+							updatedAudit = { ...audit, _rev: res.rev };
+						}
+					}
+				}
+				return { profile: updatedProfile, deactivatedPrev: updatedDeactivatedPrev, audit: updatedAudit };
+
+			} catch (error: any) {
+				if (error.message === '409_CONFLICT') {
+					attempts++;
+					if (attempts >= MAX_RETRIES) {
+						throw new Error('Max retries reached due to Document Conflicts (409) in createVersion (master).');
+					}
+					await new Promise((resolve) => setTimeout(resolve, 50 * attempts));
+					
+					if (currentDeactivatedPrev) {
+						const freshPrev = await this.getById(currentDeactivatedPrev._id);
+						if (freshPrev) {
+							currentDeactivatedPrev = { ...currentDeactivatedPrev, _rev: freshPrev._rev };
+						}
+					}
+					continue;
+				}
+				throw error;
 			}
 		}
-		return { profile: updatedProfile, deactivatedPrev: updatedDeactivatedPrev, audit: updatedAudit };
+		throw new Error('Unexpected error in createVersion');
 	}
 
 	async setActive(id: string, ctx?: { createdBy: string }): Promise<void> {
-		const target = await this.getById(id);
-		if (!target) {
-			throw new Error(`SOP master profile with ID ${id} not found`);
-		}
+		const MAX_RETRIES = 3;
+		let attempts = 0;
 
-		const activeProfiles = await this.listActive();
-		const sameNameActive = activeProfiles.filter(
-			(p) => p.name === target.name && p._id !== target._id
-		);
+		while (attempts < MAX_RETRIES) {
+			try {
+				const target = await this.getById(id);
+				if (!target) {
+					throw new Error(`SOP master profile with ID ${id} not found`);
+				}
 
-		const docsToSave: Array<SopMaster | AuditEntry> = [];
+				const activeProfiles = await this.listActive();
+				const sameNameActive = activeProfiles.filter(
+					(p) => p.name === target.name && p._id !== target._id
+				);
 
-		for (const p of sameNameActive) {
-			docsToSave.push({
-				...touch(p),
-				active: false
-			});
-		}
+				const docsToSave: Array<SopMaster | AuditEntry> = [];
 
-		if (!target.active) {
-			docsToSave.push({
-				...touch(target),
-				active: true
-			});
-		}
+				for (const p of sameNameActive) {
+					docsToSave.push({
+						...touch(p),
+						active: false
+					});
+				}
 
-		if (ctx) {
-			const audit = createAuditEntry(
-				{
-					action: 'manual_adjust',
-					target_type: 'sop_profile',
-					target_id: target._id,
-					reason: `Set version ${target.version} of profile "${target.name}" as active`,
-					context: {
-						deactivated_ids: sameNameActive.map((p) => p._id)
+				if (!target.active) {
+					docsToSave.push({
+						...touch(target),
+						active: true
+					});
+				}
+
+				if (ctx) {
+					const audit = createAuditEntry(
+						{
+							action: 'manual_adjust',
+							target_type: 'sop_profile',
+							target_id: target._id,
+							reason: `Set version ${target.version} of profile "${target.name}" as active`,
+							context: {
+								deactivated_ids: sameNameActive.map((p) => p._id)
+							}
+						},
+						{ shelterCode: 'catalog', createdBy: ctx.createdBy }
+					);
+					docsToSave.push(audit);
+				}
+
+				if (docsToSave.length > 0) {
+					const results = await this.db.bulkDocs(docsToSave);
+					const errors = results.filter((r) => 'error' in r);
+					
+					const hasConflict = errors.some((e: any) => e.status === 409 || e.name === 'conflict' || e.error === 'conflict');
+					if (hasConflict) {
+						throw new Error('409_CONFLICT');
+					} else if (errors.length > 0) {
+						throw new Error(`Failed to set active master atomically: ${JSON.stringify(errors)}`);
 					}
-				},
-				{ shelterCode: 'catalog', createdBy: ctx.createdBy }
-			);
-			docsToSave.push(audit);
-		}
-
-		if (docsToSave.length > 0) {
-			const results = await this.db.bulkDocs(docsToSave);
-			const errors = results.filter((r) => 'error' in r);
-			if (errors.length > 0) {
-				throw new Error(`Failed to set active master atomically: ${JSON.stringify(errors)}`);
+				}
+				return;
+			} catch (error: any) {
+				if (error.message === '409_CONFLICT') {
+					attempts++;
+					if (attempts >= MAX_RETRIES) {
+						throw new Error('Max retries reached due to Document Conflicts (409) on master profile.');
+					}
+					await new Promise((resolve) => setTimeout(resolve, 50 * attempts));
+					continue;
+				}
+				throw error;
 			}
 		}
 	}
@@ -140,8 +212,21 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 	}
 
 	async listActive(): Promise<SopOverride[]> {
-		const all = await this.repo.allByType('sop_override', isSopOverride);
-		return all.filter((p) => p.active);
+		try {
+			if (typeof (this.db as any).find !== 'function') {
+				throw new Error('pouchdb-find plugin not registered');
+			}
+			const result = await (this.db as any).find({
+				selector: { 
+					type: 'sop_override', 
+					active: true 
+				}
+			});
+			return result.docs.filter(isSopOverride);
+		} catch (error) {
+			const all = await this.repo.allByType('sop_override', isSopOverride);
+			return all.filter((p) => p.active);
+		}
 	}
 
 	async listVersions(name: string): Promise<SopOverride[]> {
@@ -158,85 +243,144 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 		profile: SopOverride,
 		audit: AuditEntry | null
 	): Promise<{ profile: SopOverride; deactivatedPrev: SopOverride | null; audit: AuditEntry | null }> {
-		const docs: Array<SopOverride | AuditEntry> = [];
-		if (deactivatedPrev) {
-			docs.push(deactivatedPrev);
+		if (!deactivatedPrev && !audit) {
+			return { profile, deactivatedPrev: null, audit: null };
 		}
-		docs.push(profile);
-		if (audit) {
-			docs.push(audit);
-		}
-		const results = await this.db.bulkDocs(docs);
-		const errors = results.filter((r) => 'error' in r);
-		if (errors.length > 0) {
-			throw new Error(`Failed to save override versions atomically: ${JSON.stringify(errors)}`);
-		}
-		let updatedDeactivatedPrev: SopOverride | null = deactivatedPrev;
-		let updatedProfile = profile;
-		let updatedAudit: AuditEntry | null = audit;
-		for (const res of results) {
-			if ('ok' in res && res.ok) {
-				if (deactivatedPrev && deactivatedPrev._id === res.id) {
-					updatedDeactivatedPrev = { ...deactivatedPrev, _rev: res.rev };
-				} else if (profile._id === res.id) {
-					updatedProfile = { ...profile, _rev: res.rev };
-				} else if (audit && audit._id === res.id) {
-					updatedAudit = { ...audit, _rev: res.rev };
+
+		const MAX_RETRIES = 3;
+		let attempts = 0;
+		let currentDeactivatedPrev = deactivatedPrev;
+
+		while (attempts < MAX_RETRIES) {
+			try {
+				const docs: Array<SopOverride | AuditEntry> = [];
+				if (currentDeactivatedPrev) {
+					docs.push(currentDeactivatedPrev);
 				}
+				docs.push(profile);
+				if (audit) {
+					docs.push(audit);
+				}
+				const results = await this.db.bulkDocs(docs);
+				const errors = results.filter((r) => 'error' in r);
+				
+				const hasConflict = errors.some((e: any) => e.status === 409 || e.name === 'conflict' || e.error === 'conflict');
+				if (hasConflict) {
+					throw new Error('409_CONFLICT');
+				} else if (errors.length > 0) {
+					throw new Error(`Failed to save override versions atomically: ${JSON.stringify(errors)}`);
+				}
+
+				let updatedDeactivatedPrev: SopOverride | null = currentDeactivatedPrev;
+				let updatedProfile = profile;
+				let updatedAudit: AuditEntry | null = audit;
+
+				for (const res of results) {
+					if ('ok' in res && res.ok) {
+						if (currentDeactivatedPrev && currentDeactivatedPrev._id === res.id) {
+							updatedDeactivatedPrev = { ...currentDeactivatedPrev, _rev: res.rev };
+						} else if (profile._id === res.id) {
+							updatedProfile = { ...profile, _rev: res.rev };
+						} else if (audit && audit._id === res.id) {
+							updatedAudit = { ...audit, _rev: res.rev };
+						}
+					}
+				}
+				return { profile: updatedProfile, deactivatedPrev: updatedDeactivatedPrev, audit: updatedAudit };
+
+			} catch (error: any) {
+				if (error.message === '409_CONFLICT') {
+					attempts++;
+					if (attempts >= MAX_RETRIES) {
+						throw new Error('Max retries reached due to Document Conflicts (409) in createVersion (override).');
+					}
+					await new Promise((resolve) => setTimeout(resolve, 50 * attempts));
+					
+					if (currentDeactivatedPrev) {
+						const freshPrev = await this.getById(currentDeactivatedPrev._id);
+						if (freshPrev) {
+							currentDeactivatedPrev = { ...currentDeactivatedPrev, _rev: freshPrev._rev };
+						}
+					}
+					continue;
+				}
+				throw error;
 			}
 		}
-		return { profile: updatedProfile, deactivatedPrev: updatedDeactivatedPrev, audit: updatedAudit };
+		throw new Error('Unexpected error in createVersion');
 	}
 
 	async setActive(id: string, ctx?: AuthorContext): Promise<void> {
-		const target = await this.getById(id);
-		if (!target) {
-			throw new Error(`SOP override with ID ${id} not found`);
-		}
+		const MAX_RETRIES = 3;
+		let attempts = 0;
 
-		const activeOverrides = await this.listActive();
-		const sameNameActive = activeOverrides.filter(
-			(p) => p.name === target.name && p._id !== target._id
-		);
+		while (attempts < MAX_RETRIES) {
+			try {
+				const target = await this.getById(id);
+				if (!target) {
+					throw new Error(`SOP override with ID ${id} not found`);
+				}
 
-		const docsToSave: Array<SopOverride | AuditEntry> = [];
+				const activeOverrides = await this.listActive();
+				const sameNameActive = activeOverrides.filter(
+					(p) => p.name === target.name && p._id !== target._id
+				);
 
-		for (const p of sameNameActive) {
-			docsToSave.push({
-				...touch(p),
-				active: false
-			});
-		}
+				const docsToSave: Array<SopOverride | AuditEntry> = [];
 
-		if (!target.active) {
-			docsToSave.push({
-				...touch(target),
-				active: true
-			});
-		}
+				for (const p of sameNameActive) {
+					docsToSave.push({
+						...touch(p),
+						active: false
+					});
+				}
 
-		if (ctx) {
-			const audit = createAuditEntry(
-				{
-					action: 'manual_adjust',
-					target_type: 'sop_override',
-					target_id: target._id,
-					reason: `Set version ${target.version} of override "${target.name}" as active`,
-					context: {
-						deactivated_ids: sameNameActive.map((p) => p._id),
-						base_profile_id: target.base_profile_id
+				if (!target.active) {
+					docsToSave.push({
+						...touch(target),
+						active: true
+					});
+				}
+
+				if (ctx) {
+					const audit = createAuditEntry(
+						{
+							action: 'manual_adjust',
+							target_type: 'sop_override',
+							target_id: target._id,
+							reason: `Set version ${target.version} of override "${target.name}" as active`,
+							context: {
+								deactivated_ids: sameNameActive.map((p) => p._id),
+								base_profile_id: target.base_profile_id
+							}
+						},
+						ctx
+					);
+					docsToSave.push(audit);
+				}
+
+				if (docsToSave.length > 0) {
+					const results = await this.db.bulkDocs(docsToSave);
+					const errors = results.filter((r) => 'error' in r);
+					
+					const hasConflict = errors.some((e: any) => e.status === 409 || e.name === 'conflict' || e.error === 'conflict');
+					if (hasConflict) {
+						throw new Error('409_CONFLICT');
+					} else if (errors.length > 0) {
+						throw new Error(`Failed to set active override atomically: ${JSON.stringify(errors)}`);
 					}
-				},
-				ctx
-			);
-			docsToSave.push(audit);
-		}
-
-		if (docsToSave.length > 0) {
-			const results = await this.db.bulkDocs(docsToSave);
-			const errors = results.filter((r) => 'error' in r);
-			if (errors.length > 0) {
-				throw new Error(`Failed to set active override atomically: ${JSON.stringify(errors)}`);
+				}
+				return;
+			} catch (error: any) {
+				if (error.message === '409_CONFLICT') {
+					attempts++;
+					if (attempts >= MAX_RETRIES) {
+						throw new Error('Max retries reached due to Document Conflicts (409) on override profile.');
+					}
+					await new Promise((resolve) => setTimeout(resolve, 50 * attempts));
+					continue;
+				}
+				throw error;
 			}
 		}
 	}
@@ -258,7 +402,18 @@ export async function resolveEffectiveRatios(
 } | null> {
 	const activeOverrides = await overrideRepo.listActive();
 	const activeMasters = await masterRepo.listActive();
-	return resolveDomain(activeOverrides[0] || null, activeMasters[0] || null);
+
+	// 🛡️ Defensive Fallback: ป้องกันกรณี Database เอ๋อแล้วมี Active 2 ตัว 
+	// โดยการบังคับเรียง version จากมากไปน้อย แล้วหยิบตัวล่าสุด (index 0) เสมอ
+	const safeOverride = activeOverrides.length > 0 
+		? activeOverrides.sort((a, b) => b.version - a.version)[0] 
+		: null;
+		
+	const safeMaster = activeMasters.length > 0 
+		? activeMasters.sort((a, b) => b.version - a.version)[0] 
+		: null;
+
+	return resolveDomain(safeOverride, safeMaster);
 }
 
 let masterSingleton: SopMasterRepository | null = null;
@@ -288,4 +443,12 @@ export function sopOverrideRepository(shelterCode: string, db?: PouchDB.Database
 		overrideSingletons.set(shelterCode, new SopOverridePouchRepository(shelterCode));
 	}
 	return overrideSingletons.get(shelterCode)!;
+}
+
+export function clearSopOverrideCache(shelterCode?: string): void {
+	if (shelterCode) {
+		overrideSingletons.delete(shelterCode);
+	} else {
+		overrideSingletons.clear();
+	}
 }
