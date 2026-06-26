@@ -12,6 +12,7 @@
 		actions?: Snippet;
 		href?: string;
 		disabled?: boolean;
+		class?: string;
 	}
 
 	let {
@@ -22,7 +23,8 @@
 		badge,
 		actions,
 		href,
-		disabled = false
+		disabled = false,
+		class: className = ''
 	}: Props = $props();
 
 	const iconWrapperClass = $derived(
@@ -47,7 +49,7 @@
 	class="group relative flex min-h-[320px] flex-col items-start rounded-2xl {cardBorderClass} bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all {href &&
 	!disabled
 		? 'cursor-pointer hover:-translate-y-1 hover:shadow-md'
-		: ''} {disabled ? 'cursor-not-allowed opacity-60' : ''}"
+		: ''} {disabled ? 'cursor-not-allowed opacity-60' : ''} {className}"
 >
 	{#if badge}
 		<div
