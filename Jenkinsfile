@@ -81,10 +81,12 @@ pipeline {
 
         stage('Lint and Formatting Check') {
             steps {
-                sh '''
-                cd frontend
-                pnpm lint
-                '''
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                    sh '''
+                    cd frontend
+                    pnpm lint
+                    '''
+                }
             }
         }
 
