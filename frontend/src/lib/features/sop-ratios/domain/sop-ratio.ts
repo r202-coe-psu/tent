@@ -19,12 +19,7 @@ const ratioShape = SOP_RATIO_KEYS.reduce(
  * Validates that all keys in the record are part of the whitelist
  * and that all values are positive numbers.
  */
-export const ratiosSchema = z
-	.object(ratioShape)
-	.partial()
-	.refine((r) => Object.keys(r).length > 0, {
-		message: 'At least one ratio must be specified'
-	});
+export const ratiosSchema = z.object(ratioShape);
 
 // --- Master SOP Profile Schema (catalog DB, schema_v 2)
 export const SOP_MASTER_SCHEMA_VERSION = 2;
@@ -116,14 +111,14 @@ export function resolveEffectiveProfile(
 export function createInitialProfile(
 	targetType: 'sop_profile',
 	name: string,
-	ratios: Partial<Record<SopRatioKey, number>>,
+	ratios: Record<SopRatioKey, number>,
 	ctx: { createdBy: string }
 ): { profile: SopMaster; audit: AuditEntry };
 
 export function createInitialProfile(
 	targetType: 'sop_override',
 	name: string,
-	ratios: Partial<Record<SopRatioKey, number>>,
+	ratios: Record<SopRatioKey, number>,
 	ctx: AuthorContext & { base_profile_id: string }
 ): { profile: SopOverride; audit: AuditEntry };
 
@@ -133,15 +128,13 @@ export function createInitialProfile(
 export function createInitialProfile(
 	targetType: 'sop_profile' | 'sop_override',
 	name: string,
-	ratios: Partial<Record<SopRatioKey, number>>,
+	ratios: Record<SopRatioKey, number>,
 	ctx: AnyProfileCtx
 ): { profile: SopMaster | SopOverride; audit: AuditEntry } {
 	// Filter out any unexpected keys for safety
-	const safeRatios: Partial<Record<SopRatioKey, number>> = {};
+	const safeRatios = {} as Record<SopRatioKey, number>;
 	for (const key of SOP_RATIO_KEYS) {
-		if (ratios[key] !== undefined) {
-			safeRatios[key] = ratios[key];
-		}
+		safeRatios[key] = ratios[key];
 	}
 
 	if (targetType === 'sop_profile') {
@@ -253,7 +246,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 	}
 
 	if (!hasChanges) {
-		return { deactivatedPrev: null, profile: prev, audit: null } as any;
+		return { deactivatedPrev: null, profile: prev, audit: null } as CreateNewVersionResult<T>;
 	}
 
 	// Merge old and new ratios safely
@@ -294,7 +287,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 			active: false
 		} as SopMaster;
 
-		return { deactivatedPrev, profile, audit } as any;
+		return { deactivatedPrev, profile, audit } as CreateNewVersionResult<T>;
 	} else {
 		// prev is SopOverride: ctx is guaranteed to be AuthorContext by the public overload
 		const overrideCtx = ctx as AuthorContext;
@@ -335,6 +328,6 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 			active: false
 		} as SopOverride;
 
-		return { deactivatedPrev, profile, audit } as any;
+		return { deactivatedPrev, profile, audit } as CreateNewVersionResult<T>;
 	}
 }

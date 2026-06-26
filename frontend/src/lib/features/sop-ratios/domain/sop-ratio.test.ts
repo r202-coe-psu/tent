@@ -21,7 +21,7 @@ describe('SOP Ratio Domain', () => {
 			const { profile, audit } = createInitialProfile(
 				'sop_profile',
 				'Sphere baseline',
-				{ water_l_per_person_day: 15 },
+				{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 				masterCtx
 			);
 
@@ -29,6 +29,8 @@ describe('SOP Ratio Domain', () => {
 			expect(profile.version).toBe(1);
 			expect(profile.active).toBe(true);
 			expect(profile.ratios.water_l_per_person_day).toBe(15);
+			expect(profile.ratios.rice_g_per_person_meal).toBe(200);
+			expect(profile.ratios.toilet_per_person).toBe(0.05);
 			expect(profile.type).toBe('sop_profile');
 			expect(profile._id.startsWith('sop_profile:')).toBe(true);
 			expect((profile as any).shelter_code).toBeUndefined(); // Master has no shelter_code
@@ -45,7 +47,7 @@ describe('SOP Ratio Domain', () => {
 			expect(() => {
 				// @ts-expect-error Testing invalid runtime input
 				createInitialProfile('sop_profile', 'Sphere baseline', { invalid_key: 10 }, masterCtx);
-			}).toThrow('At least one ratio must be specified');
+			}).toThrow();
 		});
 
 		it('should reject negative or zero values', () => {
@@ -53,7 +55,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ water_l_per_person_day: 0 },
+					{ water_l_per_person_day: 0, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 					masterCtx
 				);
 			}).toThrow();
@@ -62,7 +64,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ water_l_per_person_day: -5 },
+					{ water_l_per_person_day: -5, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 					masterCtx
 				);
 			}).toThrow();
@@ -74,7 +76,7 @@ describe('SOP Ratio Domain', () => {
 			const { profile, audit } = createInitialProfile(
 				'sop_override',
 				'Winter Override',
-				{ water_l_per_person_day: 18 },
+				{ water_l_per_person_day: 18, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 				overrideCtx
 			);
 
@@ -101,7 +103,7 @@ describe('SOP Ratio Domain', () => {
 			const { profile: prev } = createInitialProfile(
 				'sop_profile',
 				'Sphere baseline',
-				{ water_l_per_person_day: 15 },
+				{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 				masterCtx
 			);
 
@@ -137,7 +139,7 @@ describe('SOP Ratio Domain', () => {
 			const { profile: prev } = createInitialProfile(
 				'sop_profile',
 				'Standard',
-				{ water_l_per_person_day: 15 },
+				{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 				masterCtx
 			);
 
@@ -152,7 +154,7 @@ describe('SOP Ratio Domain', () => {
 			const { profile: prev } = createInitialProfile(
 				'sop_profile',
 				'Standard',
-				{ water_l_per_person_day: 15, rice_g_per_person_meal: 150 },
+				{ water_l_per_person_day: 15, rice_g_per_person_meal: 150, toilet_per_person: 0.05 },
 				masterCtx
 			);
 
@@ -167,6 +169,7 @@ describe('SOP Ratio Domain', () => {
 			expect(next.ratios.water_l_per_person_day).toBe(15);
 			// Changed key must reflect new value
 			expect(next.ratios.rice_g_per_person_meal).toBe(200);
+			expect(next.ratios.toilet_per_person).toBe(0.05);
 			// A new doc must be created
 			expect(next._id).not.toBe(prev._id);
 			expect(next.version).toBe(2);
@@ -178,7 +181,7 @@ describe('SOP Ratio Domain', () => {
 			const { profile: prev } = createInitialProfile(
 				'sop_override',
 				'Winter Override',
-				{ water_l_per_person_day: 18 },
+				{ water_l_per_person_day: 18, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 				overrideCtx
 			);
 
@@ -212,14 +215,14 @@ describe('SOP Ratio Domain', () => {
 			const { profile: master } = createInitialProfile(
 				'sop_profile',
 				'Master Baseline',
-				{ water_l_per_person_day: 15 },
+				{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 				masterCtx
 			);
 
 			const { profile: override } = createInitialProfile(
 				'sop_override',
 				'Local Override',
-				{ water_l_per_person_day: 20 },
+				{ water_l_per_person_day: 20, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 				overrideCtx
 			);
 

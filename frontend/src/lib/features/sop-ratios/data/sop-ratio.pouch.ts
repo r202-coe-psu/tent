@@ -23,16 +23,16 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 
 	async listActive(): Promise<SopMaster[]> {
 		try {
-			if (typeof (this.db as any).find !== 'function') {
+			if (typeof (this.db as PouchDB.Database & { find?: Function }).find !== 'function') {
 				throw new Error('pouchdb-find plugin not registered');
 			}
-			const result = await (this.db as any).find({
+			const result = await (this.db as PouchDB.Database & { find: Function }).find({
 				selector: { 
 					type: 'sop_profile', 
 					active: true 
 				}
 			});
-			return result.docs.filter(isSopMaster);
+			return (result.docs as unknown[]).filter(isSopMaster);
 		} catch (error) {
 			const all = await this.repo.allByType('sop_profile', isSopMaster);
 			return all.filter((p) => p.active);
@@ -74,7 +74,10 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 				const results = await this.db.bulkDocs(docs);
 				const errors = results.filter((r) => 'error' in r);
 				
-				const hasConflict = errors.some((e: any) => e.status === 409 || e.name === 'conflict' || e.error === 'conflict');
+				const hasConflict = errors.some((e: unknown) => {
+					const err = e as { status?: number; name?: string; error?: string };
+					return err.status === 409 || err.name === 'conflict' || err.error === 'conflict';
+				});
 				if (hasConflict) {
 					throw new Error('409_CONFLICT');
 				} else if (errors.length > 0) {
@@ -98,8 +101,8 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 				}
 				return { profile: updatedProfile, deactivatedPrev: updatedDeactivatedPrev, audit: updatedAudit };
 
-			} catch (error: any) {
-				if (error.message === '409_CONFLICT') {
+			} catch (error: unknown) {
+				if (error instanceof Error && error.message === '409_CONFLICT') {
 					attempts++;
 					if (attempts >= MAX_RETRIES) {
 						throw new Error('Max retries reached due to Document Conflicts (409) in createVersion (master).');
@@ -172,7 +175,10 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 					const results = await this.db.bulkDocs(docsToSave);
 					const errors = results.filter((r) => 'error' in r);
 					
-					const hasConflict = errors.some((e: any) => e.status === 409 || e.name === 'conflict' || e.error === 'conflict');
+					const hasConflict = errors.some((e: unknown) => {
+					const err = e as { status?: number; name?: string; error?: string };
+					return err.status === 409 || err.name === 'conflict' || err.error === 'conflict';
+				});
 					if (hasConflict) {
 						throw new Error('409_CONFLICT');
 					} else if (errors.length > 0) {
@@ -180,8 +186,8 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 					}
 				}
 				return;
-			} catch (error: any) {
-				if (error.message === '409_CONFLICT') {
+			} catch (error: unknown) {
+				if (error instanceof Error && error.message === '409_CONFLICT') {
 					attempts++;
 					if (attempts >= MAX_RETRIES) {
 						throw new Error('Max retries reached due to Document Conflicts (409) on master profile.');
@@ -213,16 +219,16 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 
 	async listActive(): Promise<SopOverride[]> {
 		try {
-			if (typeof (this.db as any).find !== 'function') {
+			if (typeof (this.db as PouchDB.Database & { find?: Function }).find !== 'function') {
 				throw new Error('pouchdb-find plugin not registered');
 			}
-			const result = await (this.db as any).find({
+			const result = await (this.db as PouchDB.Database & { find: Function }).find({
 				selector: { 
 					type: 'sop_override', 
 					active: true 
 				}
 			});
-			return result.docs.filter(isSopOverride);
+			return (result.docs as unknown[]).filter(isSopOverride);
 		} catch (error) {
 			const all = await this.repo.allByType('sop_override', isSopOverride);
 			return all.filter((p) => p.active);
@@ -264,7 +270,10 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 				const results = await this.db.bulkDocs(docs);
 				const errors = results.filter((r) => 'error' in r);
 				
-				const hasConflict = errors.some((e: any) => e.status === 409 || e.name === 'conflict' || e.error === 'conflict');
+				const hasConflict = errors.some((e: unknown) => {
+					const err = e as { status?: number; name?: string; error?: string };
+					return err.status === 409 || err.name === 'conflict' || err.error === 'conflict';
+				});
 				if (hasConflict) {
 					throw new Error('409_CONFLICT');
 				} else if (errors.length > 0) {
@@ -288,8 +297,8 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 				}
 				return { profile: updatedProfile, deactivatedPrev: updatedDeactivatedPrev, audit: updatedAudit };
 
-			} catch (error: any) {
-				if (error.message === '409_CONFLICT') {
+			} catch (error: unknown) {
+				if (error instanceof Error && error.message === '409_CONFLICT') {
 					attempts++;
 					if (attempts >= MAX_RETRIES) {
 						throw new Error('Max retries reached due to Document Conflicts (409) in createVersion (override).');
@@ -322,13 +331,13 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 				}
 
 				const activeOverrides = await this.listActive();
-				const sameNameActive = activeOverrides.filter(
-					(p) => p.name === target.name && p._id !== target._id
+				const otherActive = activeOverrides.filter(
+					(p) => p._id !== target._id
 				);
 
 				const docsToSave: Array<SopOverride | AuditEntry> = [];
 
-				for (const p of sameNameActive) {
+				for (const p of otherActive) {
 					docsToSave.push({
 						...touch(p),
 						active: false
@@ -350,7 +359,7 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 							target_id: target._id,
 							reason: `Set version ${target.version} of override "${target.name}" as active`,
 							context: {
-								deactivated_ids: sameNameActive.map((p) => p._id),
+								deactivated_ids: otherActive.map((p) => p._id),
 								base_profile_id: target.base_profile_id
 							}
 						},
@@ -363,7 +372,10 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 					const results = await this.db.bulkDocs(docsToSave);
 					const errors = results.filter((r) => 'error' in r);
 					
-					const hasConflict = errors.some((e: any) => e.status === 409 || e.name === 'conflict' || e.error === 'conflict');
+					const hasConflict = errors.some((e: unknown) => {
+					const err = e as { status?: number; name?: string; error?: string };
+					return err.status === 409 || err.name === 'conflict' || err.error === 'conflict';
+				});
 					if (hasConflict) {
 						throw new Error('409_CONFLICT');
 					} else if (errors.length > 0) {
@@ -371,8 +383,8 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 					}
 				}
 				return;
-			} catch (error: any) {
-				if (error.message === '409_CONFLICT') {
+			} catch (error: unknown) {
+				if (error instanceof Error && error.message === '409_CONFLICT') {
 					attempts++;
 					if (attempts >= MAX_RETRIES) {
 						throw new Error('Max retries reached due to Document Conflicts (409) on override profile.');

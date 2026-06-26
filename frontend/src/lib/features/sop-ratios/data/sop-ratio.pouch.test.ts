@@ -40,13 +40,13 @@ describe('SopMasterPouchRepository', () => {
 		const { profile: p1, audit: a1 } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15 },
+			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 			masterCtx
 		);
 		const { profile: p2, audit: a2 } = createInitialProfile(
 			'sop_profile',
 			'Thai Red Cross',
-			{ water_l_per_person_day: 20 },
+			{ water_l_per_person_day: 20, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 			masterCtx
 		);
 
@@ -73,7 +73,7 @@ describe('SopMasterPouchRepository', () => {
 		const { profile: p1, audit: a1 } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15 },
+			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 			masterCtx
 		);
 		await repo.createVersion(null, p1, a1);
@@ -87,7 +87,7 @@ describe('SopMasterPouchRepository', () => {
 		const { profile: p2, audit: a3 } = createInitialProfile(
 			'sop_profile',
 			'Different Name',
-			{ water_l_per_person_day: 10 },
+			{ water_l_per_person_day: 10, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 			masterCtx
 		);
 
@@ -104,7 +104,7 @@ describe('SopMasterPouchRepository', () => {
 		const { profile, audit } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15 },
+			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 			masterCtx
 		);
 		await repo.createVersion(null, profile, audit);
@@ -121,7 +121,7 @@ describe('SopMasterPouchRepository', () => {
 		const { profile: p1, audit: a1 } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15 },
+			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 			masterCtx
 		);
 		const { profile: savedP1 } = await repo.createVersion(null, p1, a1);
@@ -150,7 +150,7 @@ describe('SopMasterPouchRepository', () => {
 		const { profile: p1, audit: a1 } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15 },
+			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 			masterCtx
 		);
 		await repo.createVersion(null, p1, a1);
@@ -189,13 +189,13 @@ describe('SopOverridePouchRepository', () => {
 		const { profile: p1, audit: a1 } = createInitialProfile(
 			'sop_override',
 			'Winter Adjust',
-			{ water_l_per_person_day: 15 },
+			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 			overrideCtx
 		);
 		const { profile: p2, audit: a2 } = createInitialProfile(
 			'sop_override',
 			'Summer Adjust',
-			{ water_l_per_person_day: 20 },
+			{ water_l_per_person_day: 20, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 			overrideCtx
 		);
 
@@ -216,6 +216,42 @@ describe('SopOverridePouchRepository', () => {
 		expect(active.map((p) => p.name)).toContain('Winter Adjust');
 		expect(active.map((p) => p.name)).toContain('Summer Adjust');
 		expect(active.find((p) => p.name === 'Summer Adjust')?.version).toBe(2);
+	});
+
+	it('should set an override to active and deactivate all other overrides in the shelter database', async () => {
+		const { profile: p1, audit: a1 } = createInitialProfile(
+			'sop_override',
+			'Winter Adjust',
+			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			overrideCtx
+		);
+		const { profile: p2, audit: a2 } = createInitialProfile(
+			'sop_override',
+			'Summer Adjust',
+			{ water_l_per_person_day: 20, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			overrideCtx
+		);
+
+		await repo.createVersion(null, p1, a1);
+		await repo.createVersion(null, p2, a2);
+
+		// Activate p1
+		await repo.setActive(p1._id, overrideCtx);
+
+		// Now p1 must be active, p2 must be inactive
+		let doc1 = await repo.getById(p1._id);
+		let doc2 = await repo.getById(p2._id);
+		expect(doc1?.active).toBe(true);
+		expect(doc2?.active).toBe(false);
+
+		// Activate p2
+		await repo.setActive(p2._id, overrideCtx);
+
+		// Now p2 must be active, p1 must be inactive
+		doc1 = await repo.getById(p1._id);
+		doc2 = await repo.getById(p2._id);
+		expect(doc1?.active).toBe(false);
+		expect(doc2?.active).toBe(true);
 	});
 });
 
@@ -239,7 +275,7 @@ describe('resolveEffective application helper', () => {
 		const { profile: masterProfile, audit: masterAudit } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15 },
+			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 			masterCtx
 		);
 		await masterRepo.createVersion(null, masterProfile, masterAudit);
@@ -253,7 +289,7 @@ describe('resolveEffective application helper', () => {
 		const { profile: overrideProfile, audit: overrideAudit } = createInitialProfile(
 			'sop_override',
 			'Local Override',
-			{ water_l_per_person_day: 20 },
+			{ water_l_per_person_day: 20, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 			overrideCtx
 		);
 		await overrideRepo.createVersion(null, overrideProfile, overrideAudit);
