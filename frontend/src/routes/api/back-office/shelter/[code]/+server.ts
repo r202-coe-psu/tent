@@ -1,10 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import {
-	serviceError,
-	requireShelterScopeOrSA,
-	requireShelterManagerOrSA
-} from '$lib/server/couch-admin';
+import { serviceError, requireShelterScopeOrSA, requireAdmin } from '$lib/server/couch-admin';
 import { updateShelterSchema } from '$lib/features/shelters/server';
 import { findMasterByCode, migrate, nowIso, updateMaster } from '$lib/server/shelters.admin';
 
@@ -48,7 +44,7 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 	if (!code) return error(400, { message: 'Missing code' });
 
 	try {
-		await requireShelterManagerOrSA(request.headers.get('cookie'), code);
+		await requireAdmin(request.headers.get('cookie'));
 
 		const body = (await request.json().catch(() => ({}))) as unknown;
 		const input = updateShelterSchema.parse(body);
