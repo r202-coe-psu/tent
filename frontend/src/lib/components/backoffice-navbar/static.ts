@@ -86,7 +86,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				href: null,
 				icon: Database,
 				children: [
-					{ label: '1. ข้อมูลบุคคล', href: null, icon: Users },
+					{
+						label: '1. ข้อมูลบุคคล',
+						href: resolve('/back-office/registration-config'),
+						icon: Users
+					},
 					{ label: '2. คลังสินค้า', href: null, icon: Warehouse },
 					{ label: '3. พารามิเตอร์', href: null, icon: Calculator },
 					{ label: '4. อาสาสมัคร', href: null, icon: HandHeart },
