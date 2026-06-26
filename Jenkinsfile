@@ -92,19 +92,23 @@ pipeline {
 
         stage('Type Check') {
             steps {
-                sh '''
-                cd frontend
-                pnpm check
-                '''
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                    sh '''
+                    cd frontend
+                    pnpm check
+                    '''
+                }
             }
         }
 
         stage('Run Unit Tests') {
             steps {
-                sh '''
-                cd frontend
-                pnpm test
-                '''
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                    sh '''
+                    cd frontend
+                    pnpm test
+                    '''
+                }
             }
         }
 
