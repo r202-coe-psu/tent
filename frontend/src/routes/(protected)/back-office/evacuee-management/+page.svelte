@@ -48,13 +48,13 @@
 		const needle = evacueeSearch.trim().toLowerCase();
 		if (!needle) return items;
 		return items.filter((e) => {
-			const masked = maskNationalId(e.national_id).toLowerCase();
+			const masked = maskNationalId(e.person_id?.number).toLowerCase();
 			return (
 				e.first_name.toLowerCase().includes(needle) ||
 				e.last_name.toLowerCase().includes(needle) ||
 				(e.nickname?.toLowerCase().includes(needle) ?? false) ||
 				masked.includes(needle) ||
-				(e.national_id?.includes(needle) ?? false)
+				(e.person_id?.number?.includes(needle) ?? false)
 			);
 		});
 	});
@@ -179,7 +179,7 @@
 						{#each filteredEvacuees as e (e._id)}
 							<Table.Row>
 								<Table.Cell class="font-mono text-muted-foreground"
-									>{maskNationalId(e.national_id)}</Table.Cell
+									>{maskNationalId(e.person_id?.number)}</Table.Cell
 								>
 								<Table.Cell class="font-bold text-foreground"
 									>{e.first_name} {e.last_name}</Table.Cell

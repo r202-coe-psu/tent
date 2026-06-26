@@ -18,7 +18,8 @@
 		initialData = null,
 		allEvacuees = [],
 		zones = [],
-		households = []
+		households = [],
+		initialMemberIds = []
 	}: {
 		onsubmit: (input: HouseholdInput, selectedMemberIds: string[], emergencyContactPhone?: string) => void;
 		oncancel: () => void;
@@ -27,6 +28,7 @@
 		allEvacuees?: Evacuee[];
 		zones?: { code: string; name: string }[];
 		households?: Household[];
+		initialMemberIds?: string[];
 	} = $props();
 
 	const form = superForm(defaults(zod4(householdInputSchema)), {
@@ -80,7 +82,7 @@
 		} else {
 			$formData.label = '';
 			$formData.zone = null;
-			$formData.head_evacuee_id = null;
+			$formData.head_evacuee_id = initialMemberIds[0] ?? null;
 			$formData.notes = '';
 			$formData.address_no = '';
 			$formData.village_no = '';
@@ -92,7 +94,7 @@
 			catCount = 0;
 			birdCount = 0;
 			otherCount = 0;
-			selectedMemberIds = [];
+			selectedMemberIds = [...initialMemberIds];
 		}
 	});
 
@@ -132,7 +134,7 @@
 			const lastName = (e.last_name || '').toLowerCase();
 			const nickname = (e.nickname || '').toLowerCase();
 			const phone = (e.phone || '').toLowerCase();
-			const nationalId = (e.national_id || '').toLowerCase();
+			const nationalId = (e.person_id?.number || '').toLowerCase();
 			return (
 				firstName.includes(q) ||
 				lastName.includes(q) ||
@@ -208,7 +210,7 @@
 					>
 						<option value={null}>ไม่มีหัวหน้าครัวเรือน (None)</option>
 						{#each allEvacuees as e}
-							<option value={e._id}>{e.first_name} {e.last_name} ({maskNationalId(e.national_id)})</option>
+							<option value={e._id}>{e.first_name} {e.last_name} ({maskNationalId(e.person_id?.number)})</option>
 						{/each}
 					</select>
 				{/snippet}
@@ -271,7 +273,7 @@
 											{e.first_name} {e.last_name}
 										</span>
 										<span class="text-[10px] text-muted-foreground">
-											ID: {maskNationalId(e.national_id) || 'ไม่มี'} | โทร: {e.phone || 'ไม่มี'}
+											ID: {maskNationalId(e.person_id?.number) || 'ไม่มี'} | โทร: {e.phone || 'ไม่มี'}
 										</span>
 									</div>
 									{#if hasOtherHousehold}

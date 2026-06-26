@@ -23,37 +23,31 @@
 
 	let isFastTrack = $derived($page.url.searchParams.get('mode') === 'fast_track');
 
-	function handleRegister(input: EvacueeInput, symptoms: string[]) {
+	async function handleRegister(input: EvacueeInput, symptoms: string[]) {
 		const ctx = { shelterCode: shelterStore.selectedShelterCode ?? SHELTER_CODE, createdBy: authStore.user?.name ?? 'unknown' };
-		createMutation.mutate(
-			{ input, ctx },
-			{
-				onSuccess: (evacuee) => {
-					toast.success(`Registered ${evacuee.first_name} ${evacuee.last_name}`);
-					
-					// Create screening record
-					createScreeningMutation.mutate({
-						input: {
-							evacuee_id: evacuee._id,
-							symptoms,
-							temperature_c: null,
-							track: isFastTrack ? 'fast_track' : (symptoms.length > 0 ? 'fast_track' : 'normal'),
-							needs_referral: false,
-						},
-						ctx
-					}, {
-						onSuccess: () => console.log('Screening record created successfully.'),
-						onError: (err) => {
-							console.error('Failed to create screening:', err);
-							toast.error(`Screening failed: ${err.message}`);
-						}
-					});
+		try {
+			const evacuee = await createMutation.mutateAsync({ input, ctx });
+			toast.success(`Registered ${evacuee.first_name} ${evacuee.last_name}`);
+			
+			// Create screening record
+			await createScreeningMutation.mutateAsync({
+				input: {
+					evacuee_id: evacuee._id,
+					symptoms,
+					temperature_c: null,
+					track: isFastTrack ? 'fast_track' : (symptoms.length > 0 ? 'fast_track' : 'normal'),
+					needs_referral: false,
 				},
-				onError: (err: Error) => toast.error(err.message)
-			}
-		);
+				ctx
+			});
+			console.log('Screening record created successfully.');
+			return evacuee;
+		} catch (err: any) {
+			toast.error(err.message || err);
+			throw err;
+		}
 	}
-	let step = $state<1 | 2 | 3>(1);
+	let step = $state<1 | 2 | 3 | 4>(1);
 </script>
 
 <div class="container mx-auto max-w-5xl p-6">
@@ -77,7 +71,7 @@
 				<div
 					class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
 				>
-					2
+					1
 				</div>
 				<div class="space-y-1">
 					<Card.Title class="text-base font-semibold leading-none">
@@ -96,7 +90,7 @@
 					<div
 						class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
 					>
-						3
+						2
 					</div>
 					<div class="space-y-1">
 						<Card.Title class="text-base font-semibold leading-none">ข้อมูลผู้ประสบภัย (Registration)</Card.Title>
@@ -108,6 +102,22 @@
 				<Button class="bg-[#003B71] text-white hover:bg-[#002a50]">
 					<CreditCard class="mr-2 h-4 w-4" /> ดึงข้อมูลบัตรประชาชน
 				</Button>
+			</Card.Header>
+		</Card.Root>
+	{:else if step === 4}
+		<Card.Root class="mb-4">
+			<Card.Header class="p-4 flex flex-row items-center gap-3 space-y-0">
+				<div
+					class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
+				>
+					3
+				</div>
+				<div class="space-y-1">
+					<Card.Title class="text-base font-semibold leading-none">ข้อมูลครัวเรือน (Household Info)</Card.Title>
+					<Card.Description class="text-sm">
+						ระบุสมาชิกกลุ่ม/ครัวเรือน ที่พักอาศัย และข้อมูลอื่นๆ ของผู้ประสบภัย
+					</Card.Description>
+				</div>
 			</Card.Header>
 		</Card.Root>
 	{/if}

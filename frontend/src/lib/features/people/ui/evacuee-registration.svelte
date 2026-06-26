@@ -16,6 +16,7 @@
 		type EvacueeInput
 	} from '../domain/people';
 	import Camera from '@lucide/svelte/icons/camera';
+	import { COUNTRIES } from '$lib/utils/country';
 
 	let {
 		onsubmit,
@@ -305,11 +306,9 @@
 									bind:value={$formData.country}
 									class="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 								>
-									<option value="ไทย">ไทย</option>
-									<option value="เมียนมา">เมียนมา</option>
-									<option value="กัมพูชา">กัมพูชา</option>
-									<option value="ลาว">ลาว</option>
-									<option value="อื่นๆ">อื่นๆ</option>
+									{#each COUNTRIES as country}
+										<option value={country.value}>{country.label}</option>
+									{/each}
 								</select>
 							{/snippet}
 						</Form.Control>
@@ -483,7 +482,9 @@
 			>
 				ย้อนกลับ
 			</Button>
-			<Form.Button class="flex-1 h-10" disabled={$submitting || pending}> ลงทะเบียนผู้ประสบภัย ⏭️</Form.Button>
+		</div>
+		<div class="flex items-center gap-3 pt-2 justify-end">
+			<Form.Button disabled={$submitting || pending}> Next ⏭️</Form.Button>
 		</div>
 	</Field.FieldGroup>
 </form>

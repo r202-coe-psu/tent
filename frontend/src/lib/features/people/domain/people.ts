@@ -168,7 +168,7 @@ export const evacueeInputSchema = z.object({
 	nickname: z.string().trim().optional(),
 	birth_year: z.coerce.number().int().optional(),
 	person_id: personIdSchema.default({ cardType: 'national_id', number: '' }),
-	country: z.string().trim().min(1, 'Country is required').default('ไทย'),
+	country: z.string().trim().min(1, 'Country is required').default('THAILAND'),
 	religion: religionSchema.default('buddhist'),
 	medical_conditions: z.array(z.string().trim().min(1)).default([]),
 	medical_allergies: z.array(z.string().trim().min(1)).default([]),
