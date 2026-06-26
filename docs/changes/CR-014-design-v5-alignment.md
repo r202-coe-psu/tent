@@ -34,11 +34,12 @@ affects:
 | `T-48` (Registration) | ปรับ Flow เป็น 4-Step Wizard รวม Triage และรองรับการดึงข้อมูลจาก **Smart Card Reader** |
 | `T-07` (Pet/Asset) | รองรับการเปิดกล้อง (Camera Flow) และอัปโหลดภาพ |
 | `T-09` (Zone) | เพิ่มกฎความปลอดภัย **GBV Protection** (GBV = Gender Base Violence) ควบคุมเพศในการเข้าโซน และระบบพิมพ์ **Thermal Slip / SMS** ทันทีหลังจัดโซน |
-| `New Task` (Public) | สร้างหน้าฟอร์มลงทะเบียน **บ้านพี่เลี้ยง (Host House E-Form)** สำหรับประชาชนจิตอาสา |
+| `New Task` (Public) | สร้างหน้าฟอร์มลงทะเบียน **บ้านพี่เลี้ยง (Host House E-Form)** สำหรับประชาชนจิตอาสา (T-61) |
+| `New Task` (Admin) | เพิ่มระบบ **อนุมัติ/จัดการบ้านพี่เลี้ยง (Host-House Admin Approval)** ฝั่ง Back-office (T-62) |
 
 ## Open Question
 1. เก็บรูปยังไง - ในส่วนการ implement developer-guide.md ไม่ได้กล่าวถึงการจัดการรูปภาพบน couchdb และยังไม่มี practices ในส่วนนี้
-2. 
+   **คำตอบแนะนำจาก Ai:** ให้ใช้ **CouchDB Attachments (Blob)** สำหรับจัดเก็บภาพ (เช่น `asset_photos`, ภาพบ้านพี่เลี้ยง) เนื่องจากระบบเป็น Offline-first การใช้ Attachments จะช่วยให้ PouchDB เซฟรูปไว้ใน IndexedDB ได้เมื่อออฟไลน์ และทำการ Sync แบบ Binary อัตโนมัติเมื่อกลับมาออนไลน์ (แต่ควรมีการ Compress รูปจากฝั่ง Frontend เช่น Resize กว้างไม่เกิน 800px, บีบอัด WebP/JPEG คุณภาพ 70% ก่อนบันทึกลง PouchDB เสมอ เพื่อลดขนาด Storage)
 
 ## Impact
 - `docs/data/schema.md` — เพิ่มและแก้ไขฟิลด์ พร้อม Bump Version

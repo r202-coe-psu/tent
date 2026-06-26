@@ -28,7 +28,8 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 | T-58 | Public Shelter Dashboard (`/shelters`) — cards + map + filter | CR-005 §D | R3 | prod | ส.ค. | 7 | ÷1.4 | 5 | T-57,T-47 |
 | T-59 | Public FAQ (dynamic) + EOC FAQ setup screen | CR-005 OP-1 | R3 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-03 |
 | T-61 | Host-House E-Form (บ้านพี่เลี้ยง) | CR-014 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3.1 | T-57 |
-| | **รวมทั้งโมดูล** | | | | | **22** | | **14.6** | |
+| T-62 | Host-House Admin Approval (อนุมัติบ้านพี่เลี้ยง) | CR-014 | R3 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-61,T-01 |
+| | **รวมทั้งโมดูล** | | | | | **26** | | **17.1** | |
 
 ## Task Details
 
@@ -74,12 +75,22 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 - รองรับ Camera Flow ในการถ่ายภาพพื้นที่บ้านและอัปโหลดแนบกับฟอร์ม
 - เก็บข้อมูลลงฐานข้อมูลด้วย document type ใหม่ `host_house` (มีสถานะ pending รอการอนุมัติจากฝั่งศูนย์)
 
+### T-62 — Host-House Admin Approval (อนุมัติบ้านพี่เลี้ยง) (CR-014)
+
+**Description:** หน้าจอพิจารณาคำร้องขอเปิด "บ้านพี่เลี้ยง" ใน EOC/Admin Dashboard (Pending Requests) สำหรับตรวจสอบและอนุมัติพื้นที่พักพิงเพิ่มเติม
+
+**Definition of Done:**
+- ดึงรายการ `host_house` ที่สถานะเป็น `pending` มาแสดงผลให้ EOC/Admin ตรวจสอบ (จำกัดสิทธิ์ตาม Role)
+- ดูรายละเอียดข้อมูล พิกัด และภาพถ่ายแนบที่จิตอาสาส่งมาได้
+- กดปุ่ม "อนุมัติ (Approve)" เพื่อเปลี่ยนสถานะเป็น `approved` (เปิดเป็น capacity สำหรับจัดโซน) หรือกด "ปฏิเสธ (Reject)" พร้อมระบุเหตุผล
+- บันทึก Audit log (ใครเป็นผู้อนุมัติ/ปฏิเสธ เวลาใด) ลงในฐานข้อมูล
+
 ## Effort by phase (Adj MD)
 
 | Phase | Raw MD | Adj MD |
 | --- | --- | --- |
-| R3 | 22 | 14.6 |
-| **รวม** | **22** | **14.6** |
+| R3 | 26 | 17.1 |
+| **รวม** | **26** | **17.1** |
 
 > estimate provisional (CR-005, 2026-06-22) — recalibrate ตาม K-16. Team assignment ของ public-portal surface ต้องยืนยันใน workshop (K-13 follow-up).
 
