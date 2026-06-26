@@ -286,16 +286,14 @@ async function seedCatalogSopRatios(): Promise<void> {
 	await ensureDb('catalog');
 
 	// Idempotent check: check if the Sphere Baseline master profile already exists in catalog DB
-	const { status, data } = await couchReq(
-		'GET',
-		'/catalog/_all_docs?include_docs=true&startkey="sop_profile:"&endkey="sop_profile:\ufff0"'
-	);
+	// We use the deterministic ID 'master_sphere_baseline' to do an O(1) direct document lookup
+	const deterministicId = 'master_sphere_baseline';
+	const fullDocId = `sop_profile:${deterministicId}`;
+	const { status } = await couchReq('GET', `/catalog/${encodeURIComponent(fullDocId)}`);
+	
 	if (status === 200) {
-		const rows = (data as { rows?: { doc?: { type?: string; name?: string } }[] }).rows ?? [];
-		if (rows.some((r) => r.doc?.name === 'Sphere Baseline')) {
-			console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" already exists, skipping');
-			return;
-		}
+		console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" already exists, skipping');
+		return;
 	}
 
 	const { profile, audit } = createInitialProfile(
@@ -308,6 +306,11 @@ async function seedCatalogSopRatios(): Promise<void> {
 		},
 		{ createdBy: 'seed' }
 	);
+
+	// Override standard ULIDs with deterministic IDs for idempotency scan boundary
+	profile._id = fullDocId;
+	audit.target_id = fullDocId;
+	audit._id = `audit:seed_sphere_baseline`;
 
 	await bulkDocs('catalog', [profile, audit]);
 	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded');
