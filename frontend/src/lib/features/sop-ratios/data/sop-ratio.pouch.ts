@@ -40,7 +40,7 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 		profile: SopMaster,
 		audit: AuditEntry | null
 	): Promise<{ profile: SopMaster; deactivatedPrev: SopMaster | null; audit: AuditEntry | null }> {
-		const docs: any[] = [];
+		const docs: Array<SopMaster | AuditEntry> = [];
 		if (deactivatedPrev) {
 			docs.push(deactivatedPrev);
 		}
@@ -81,7 +81,7 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 			(p) => p.name === target.name && p._id !== target._id
 		);
 
-		const docsToSave: any[] = [];
+		const docsToSave: Array<SopMaster | AuditEntry> = [];
 
 		for (const p of sameNameActive) {
 			docsToSave.push({
@@ -158,7 +158,7 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 		profile: SopOverride,
 		audit: AuditEntry | null
 	): Promise<{ profile: SopOverride; deactivatedPrev: SopOverride | null; audit: AuditEntry | null }> {
-		const docs: any[] = [];
+		const docs: Array<SopOverride | AuditEntry> = [];
 		if (deactivatedPrev) {
 			docs.push(deactivatedPrev);
 		}
@@ -199,7 +199,7 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 			(p) => p.name === target.name && p._id !== target._id
 		);
 
-		const docsToSave: any[] = [];
+		const docsToSave: Array<SopOverride | AuditEntry> = [];
 
 		for (const p of sameNameActive) {
 			docsToSave.push({
@@ -245,8 +245,11 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 /**
  * Resolves the effective profile ratios at the application/data layer.
  * Pulls the active override and the active master, then resolves them.
+ *
+ * Named `resolveEffectiveRatios` (not `resolveEffective`) to distinguish clearly
+ * from the pure-domain `resolveEffectiveProfile` in the barrel export.
  */
-export async function resolveEffective(
+export async function resolveEffectiveRatios(
 	overrideRepo: SopOverrideRepository,
 	masterRepo: SopMasterRepository
 ): Promise<{
@@ -259,7 +262,12 @@ export async function resolveEffective(
 }
 
 let masterSingleton: SopMasterRepository | null = null;
-let overrideSingleton: SopOverrideRepository | null = null;
+/**
+ * Per-shelter singleton cache — keyed by shelterCode.
+ * Using a Map prevents cross-shelter data leaks where SH001's repo would be
+ * returned for SH002 requests when a single shared variable is used.
+ */
+const overrideSingletons = new Map<string, SopOverrideRepository>();
 
 export function sopMasterRepository(db?: PouchDB.Database): SopMasterRepository {
 	if (db) {
@@ -272,9 +280,12 @@ export function sopMasterRepository(db?: PouchDB.Database): SopMasterRepository 
 
 export function sopOverrideRepository(shelterCode: string, db?: PouchDB.Database): SopOverrideRepository {
 	if (db) {
-		overrideSingleton = new SopOverridePouchRepository(shelterCode, db);
-	} else if (!overrideSingleton) {
-		overrideSingleton = new SopOverridePouchRepository(shelterCode);
+		const r = new SopOverridePouchRepository(shelterCode, db);
+		overrideSingletons.set(shelterCode, r);
+		return r;
 	}
-	return overrideSingleton;
+	if (!overrideSingletons.has(shelterCode)) {
+		overrideSingletons.set(shelterCode, new SopOverridePouchRepository(shelterCode));
+	}
+	return overrideSingletons.get(shelterCode)!;
 }

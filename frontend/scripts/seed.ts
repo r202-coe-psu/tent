@@ -286,10 +286,13 @@ async function seedCatalogSopRatios(): Promise<void> {
 	await ensureDb('catalog');
 
 	// Idempotent check: check if the Sphere Baseline master profile already exists in catalog DB
-	const { status, data } = await couchReq('GET', '/catalog/_all_docs?include_docs=true');
+	const { status, data } = await couchReq(
+		'GET',
+		'/catalog/_all_docs?include_docs=true&startkey="sop_profile:"&endkey="sop_profile:\ufff0"'
+	);
 	if (status === 200) {
 		const rows = (data as { rows?: { doc?: { type?: string; name?: string } }[] }).rows ?? [];
-		if (rows.some((r) => r.doc?.type === 'sop_profile' && r.doc?.name === 'Sphere Baseline')) {
+		if (rows.some((r) => r.doc?.name === 'Sphere Baseline')) {
 			console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" already exists, skipping');
 			return;
 		}

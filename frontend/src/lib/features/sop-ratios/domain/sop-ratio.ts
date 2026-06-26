@@ -80,6 +80,15 @@ export const isSopOverride = (d: unknown): d is SopOverride =>
 
 
 /**
+ * Context types for the two flavours of SOP profiles.
+ * Used in implementation signatures of createInitialProfile / createNewVersion
+ * to replace `ctx: any` while still accepting both overload branches.
+ */
+type MasterCtx = { createdBy: string };
+type OverrideCtx = AuthorContext & { base_profile_id: string };
+type AnyProfileCtx = MasterCtx | OverrideCtx;
+
+/**
  * Resolves the effective SOP profile ratios for a shelter:
  * If an active override is present, use its ratios.
  * Otherwise, fall back to the active master profile ratios.
@@ -125,7 +134,7 @@ export function createInitialProfile(
 	targetType: 'sop_profile' | 'sop_override',
 	name: string,
 	ratios: Partial<Record<SopRatioKey, number>>,
-	ctx: any
+	ctx: AnyProfileCtx
 ): { profile: SopMaster | SopOverride; audit: AuditEntry } {
 	// Filter out any unexpected keys for safety
 	const safeRatios: Partial<Record<SopRatioKey, number>> = {};
@@ -165,17 +174,19 @@ export function createInitialProfile(
 
 		return { profile, audit };
 	} else {
+		// targetType === 'sop_override': ctx is guaranteed to be OverrideCtx by the public overload
+		const overrideCtx = ctx as OverrideCtx;
 		const profile = makeDoc(
 			'sop_override',
 			1,
 			{
-				base_profile_id: ctx.base_profile_id,
+				base_profile_id: overrideCtx.base_profile_id,
 				name,
 				ratios: safeRatios,
 				version: 1,
 				active: true
 			},
-			ctx
+			overrideCtx
 		) as SopOverride;
 
 		sopOverrideSchema.parse(profile);
@@ -188,10 +199,10 @@ export function createInitialProfile(
 				reason: 'Initial creation',
 				context: {
 					ratios: profile.ratios,
-					base_profile_id: ctx.base_profile_id
+					base_profile_id: overrideCtx.base_profile_id
 				}
 			},
-			ctx
+			overrideCtx
 		);
 
 		return { profile, audit };
@@ -226,7 +237,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 	prev: T,
 	changes: Partial<Record<SopRatioKey, number>>,
 	reason: string,
-	ctx: any
+	ctx: MasterCtx | AuthorContext
 ): CreateNewVersionResult<T> {
 	// Filter incoming changes to ensure no poisoned keys leak into the merge
 	const safeChanges: Partial<Record<SopRatioKey, number>> = {};
@@ -285,6 +296,8 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 
 		return { deactivatedPrev, profile, audit } as any;
 	} else {
+		// prev is SopOverride: ctx is guaranteed to be AuthorContext by the public overload
+		const overrideCtx = ctx as AuthorContext;
 		const overridePrev = prev as SopOverride;
 		const profile = makeDoc(
 			'sop_override',
@@ -296,7 +309,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 				version: overridePrev.version + 1,
 				active: true
 			},
-			ctx
+			overrideCtx
 		) as SopOverride;
 
 		sopOverrideSchema.parse(profile);
@@ -314,7 +327,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 					base_profile_id: overridePrev.base_profile_id
 				}
 			},
-			ctx
+			overrideCtx
 		);
 
 		const deactivatedPrev = {

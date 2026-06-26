@@ -15,6 +15,12 @@ export interface SopMasterRepository {
 		audit: AuditEntry | null
 	): Promise<{ profile: SopMaster; deactivatedPrev: SopMaster | null; audit: AuditEntry | null }>;
 
+	/**
+	 * Sets the master profile as active.
+	 * Master profiles reside in the catalog DB which lacks a shelter context,
+	 * so only `createdBy` is required for the audit entry. (The audit internal logic
+	 * will default to shelterCode: 'catalog').
+	 */
 	setActive(id: string, ctx?: { createdBy: string }): Promise<void>;
 }
 
@@ -28,5 +34,10 @@ export interface SopOverrideRepository {
 		audit: AuditEntry | null
 	): Promise<{ profile: SopOverride; deactivatedPrev: SopOverride | null; audit: AuditEntry | null }>;
 
+	/**
+	 * Sets the override profile as active for the shelter.
+	 * Overrides are shelter-specific, requiring the full AuthorContext
+	 * (including shelterCode) for proper auditing.
+	 */
 	setActive(id: string, ctx?: AuthorContext): Promise<void>;
 }

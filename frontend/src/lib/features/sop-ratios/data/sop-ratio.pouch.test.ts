@@ -11,7 +11,7 @@ import {
 import {
 	SopMasterPouchRepository,
 	SopOverridePouchRepository,
-	resolveEffective
+	resolveEffectiveRatios
 } from './sop-ratio.pouch';
 import type { AuthorContext } from '$lib/db/model';
 import type { AuditEntry } from '$lib/features/shared';
@@ -232,7 +232,7 @@ describe('resolveEffective application helper', () => {
 		const overrideRepo = new SopOverridePouchRepository('SH001', overrideDb);
 
 		// 1. Initial state: neither has active profiles
-		let effective = await resolveEffective(overrideRepo, masterRepo);
+		let effective = await resolveEffectiveRatios(overrideRepo, masterRepo);
 		expect(effective).toBeNull();
 
 		// 2. Add active master profile
@@ -244,7 +244,7 @@ describe('resolveEffective application helper', () => {
 		);
 		await masterRepo.createVersion(null, masterProfile, masterAudit);
 
-		effective = await resolveEffective(overrideRepo, masterRepo);
+		effective = await resolveEffectiveRatios(overrideRepo, masterRepo);
 		expect(effective).not.toBeNull();
 		expect(effective?.ratio_source).toBe('master');
 		expect(effective?.ratios.water_l_per_person_day).toBe(15);
@@ -258,8 +258,7 @@ describe('resolveEffective application helper', () => {
 		);
 		await overrideRepo.createVersion(null, overrideProfile, overrideAudit);
 
-		effective = await resolveEffective(overrideRepo, masterRepo);
-		expect(effective).not.toBeNull();
+		effective = await resolveEffectiveRatios(overrideRepo, masterRepo);
 		expect(effective?.ratio_source).toBe('override');
 		expect(effective?.ratios.water_l_per_person_day).toBe(20);
 	});
