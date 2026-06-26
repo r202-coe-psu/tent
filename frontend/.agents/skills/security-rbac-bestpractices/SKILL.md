@@ -36,12 +36,14 @@ if (isSystemAdmin(roles)) {
 }
 ```
 
-## 2. Shelter Scope Isolation (Multi-tenant)
+## 2. Shelter Scope Isolation (Multi-tenant) & Catalog
 
 Data from `SH001` MUST NEVER leak to `SH002`.
 
-- **Write Path**: When a user creates a record, you must inject the `shelterCode` from their authenticated context (via server-side verification), NOT from their user input payload.
-- **Read Path**: When fetching data, always filter by the `shelterCode` in the query/view unless the user is a `system_admin`.
+- **Write Path (Shelter DB)**: When a user creates a record in `shelter_*`, you must inject the `shelterCode` from their authenticated context (via server-side verification), NOT from their user input payload.
+- **Read Path (Shelter DB)**: When fetching data, always filter by the `shelterCode` in the query/view unless the user is a `system_admin`.
+- **Catalog DB Access**: The `catalog` DB contains central master data (e.g., `sop_profile`). It is strictly **Read-Only** for shelters. ONLY a `system_admin` is allowed to mutate data in the `catalog` DB.
+- **Master vs Override Pattern**: For configurable settings, `system_admin` maintains the master document in `catalog`, while `shelter_manager` creates an override document (e.g., `sop_override`) inside their own `shelter_*` DB.
 
 **Example: Server-side Extraction (`+server.ts`)**
 ```typescript
