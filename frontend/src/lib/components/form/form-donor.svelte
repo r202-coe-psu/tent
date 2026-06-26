@@ -5,7 +5,15 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { Checkbox } from '$lib/components/ui/checkbox';
+	import { Button } from '$lib/components/ui/button';
+	import {
+		Select,
+		SelectTrigger,
+		SelectContent,
+		SelectItem,
+		SelectValue
+	} from '$lib/components/ui/select';
+	import { toast } from 'svelte-sonner';
 	import { donationStore } from '../../../routes/public/donations/donation.svelte';
 
 	let validationErrors = $state<string[]>([]);
@@ -33,7 +41,7 @@
 			validationErrors.push('กรุณาเพิ่มรายการสิ่งของบริจาคอย่างน้อย 1 รายการ');
 		} else {
 			donationStore.items.forEach((item, index) => {
-				if (!item.name.trim()) {
+				if (!item.name || !item.name.trim()) {
 					validationErrors.push(`รายการที่ ${index + 1}: กรุณาระบุชื่อสิ่งของ`);
 				}
 				if (!item.amount || item.amount <= 0) {
@@ -59,9 +67,9 @@
 	<div class="mb-8">
 		<div class="mb-6 flex items-center gap-2.5 border-b border-border/55 pb-3">
 			<div
-				class="flex h-7 w-7 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-blue-600"
+				class="flex size-10 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-blue-600"
 			>
-				<User class="h-4 w-4" />
+				<User class="size-6" />
 			</div>
 			<div>
 				<h2 class="text-base font-bold text-foreground">ส่วนที่ 1: ข้อมูลผู้บริจาค</h2>
@@ -128,58 +136,93 @@
 	<div class="mb-8">
 		<div class="mb-6 flex items-center gap-2.5 border-b border-border/55 pb-3">
 			<div
-				class="flex h-7 w-7 items-center justify-center rounded-full border border-amber-100 bg-amber-50 text-amber-600"
+				class="flex size-10 items-center justify-center rounded-full border border-amber-100 bg-amber-50 text-amber-600"
 			>
-				<Box class="h-4 w-4" />
+				<Box class="size-6" />
 			</div>
 			<div>
 				<h2 class="text-base font-bold text-foreground">ส่วนที่ 2: รายละเอียดสิ่งของบริจาค</h2>
-				<p class="text-xs text-muted-foreground">ระบุรายการสิ่งของที่คุณจะนำมามอบให้</p>
+				<p class="text-xs bg-primary-dark/10 rounded-sm p-1 text-primary-dark">💡 เลือกลบรายการที่ไม่ต้องการบริจาคออก และปรับระบุจำนวนที่คุณต้องการบริจาคได้ตามสะดวก</p>
 			</div>
 		</div>
 
 		{#if donationStore.items.length > 0}
-			<div class="mb-4 flex flex-col gap-3">
+			<div class="mb-4 flex flex-col gap-4">
 				{#each donationStore.items as item, index}
-					<div class="flex items-center gap-2.5 rounded-xl border border-border bg-muted/10 p-3">
-						<Input
-							type="text"
-							placeholder="เช่น ข้าวสาร, แพมเพิสเด็ก"
-							bind:value={item.name}
-							class="flex-1"
-						/>
-						<Input type="number" placeholder="จำนวน" bind:value={item.amount} class="w-20" />
-						<Input
-							type="text"
-							placeholder="หน่วย เช่น แพ็ค, ชิ้น"
-							bind:value={item.unit}
-							class="w-24"
-						/>
-						<button
+					<div class="relative rounded-lg border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+						<Button
+							variant="ghost"
+							size="icon"
+							class="absolute right-2 top-2 text-muted-foreground hover:bg-danger/10 hover:text-danger"
+							title="ลบรายการ"
 							onclick={() => donationStore.removeItem(index)}
-							class="px-2 text-xs font-bold text-danger hover:underline"
 						>
-							ลบ
-						</button>
+							<svg viewBox="0 0 24 24" class="h-5 w-5 fill-current">
+								<path d="M9 3v1H4v2h1v13c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V6h1V4h-5V3H9m0 5h2v9H9V8m4 0h2v9h-2V8Z"/>
+							</svg>
+						</Button>
+
+						<div class="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
+							<div class="flex flex-col w-full gap-1.5">
+								<Label class="text-xs font-bold text-foreground">หมวดหมู่</Label>
+								<Select type="single" bind:value={item.category}>
+									<SelectTrigger class="w-full h-full">
+										<SelectValue placeholder="เลือกหมวดหมู่" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="Food" label="อาหาร/เครื่องดื่ม">อาหาร/เครื่องดื่ม</SelectItem>
+										<SelectItem value="Clothing" label="เสื้อผ้า/เครื่องนุ่งห่ม">เสื้อผ้า/เครื่องนุ่งห่ม</SelectItem>
+										<SelectItem value="Medicine" label="ยารักษาโรค/เวชภัณฑ์">ยารักษาโรค/เวชภัณฑ์</SelectItem>
+										<SelectItem value="Supply" label="ของใช้ทั่วไป">ของใช้ทั่วไป</SelectItem>
+										<SelectItem value="Other" label="อื่นๆ">อื่นๆ</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+							<div class="flex flex-col gap-1.5">
+								<Label class="text-xs font-bold text-foreground">ชื่อสิ่งของ</Label>
+								<Input type="text" placeholder="เช่น น้ำดื่มขวด 600ml" bind:value={item.name} />
+							</div>
+						</div>
+
+						<div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+							<div class="flex flex-col gap-1.5">
+								<Label class="text-xs font-bold text-foreground">ปริมาณ</Label>
+								<Input type="number" bind:value={item.amount} min="1" />
+							</div>
+							<div class="flex flex-col gap-1.5">
+								<Label class="text-xs font-bold text-foreground">หน่วย</Label>
+								<Input type="text" bind:value={item.unit} />
+							</div>
+							<div class="flex flex-col gap-1.5">
+								<Label class="text-xs font-bold text-foreground">สภาพสิ่งของ</Label>
+								<Input type="text" bind:value={item.condition} />
+							</div>
+						</div>
+
+						<div class="mt-4 flex flex-col gap-1.5">
+							<Label class="text-xs font-bold text-foreground">หมายเหตุเพิ่มเติม (Optional)</Label>
+							<Input type="text" placeholder="เช่น ข้าวกล่องมังสวิรัติ, เสื้อผ้าเด็ก 5 ขวบ" bind:value={item.remark} />
+						</div>
 					</div>
 				{/each}
 			</div>
 		{/if}
 
-		<button
+		<Button
+			variant="outline"
 			onclick={() => donationStore.addItem()}
-			class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-3 text-xs font-bold text-primary transition-colors hover:bg-muted/30"
+			class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-6 text-xs font-bold text-primary transition-colors hover:bg-muted/30"
 		>
-			<Plus class="h-4 w-4" />
+			<Plus class="size-6" />
 			เพิ่มรายการสิ่งของ
-		</button>
+		</Button>
 	</div>
 
 	<!-- ส่วนแสดงผลความผิดพลาดจากการตรวจสอบข้อมูล -->
 	{#if validationErrors.length > 0}
 		<div class="mb-6 rounded-xl border border-danger/30 bg-danger/5 p-4 text-xs text-danger">
 			<div class="mb-2 flex items-center gap-2 font-bold">
-				<AlertCircle class="h-4 w-4" />
+				<AlertCircle class="size-6" />
 				พบข้อมูลไม่ถูกต้อง:
 			</div>
 			<ul class="list-disc space-y-1 pl-5">
@@ -191,11 +234,11 @@
 	{/if}
 
 	<!-- Form Submit / Next Button -->
-	<button
+	<Button
 		onclick={handleNext}
-		class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-xs font-bold text-white transition-colors hover:bg-primary-dark"
+		class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-6 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary-dark"
 	>
 		ถัดไป: เลือกจุดส่งมอบ
 		<span>→</span>
-	</button>
+	</Button>
 </div>

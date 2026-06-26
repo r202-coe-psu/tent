@@ -14,7 +14,7 @@ import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '
  *     physically arrive, staff count them and key the receipt by hand
  *     (`keyDonationReceipt`), which is what mints the `stock_ledger` entries.
  *     `donation.items` is a planning signal only
- *     (docs/data/couchdb-mongodb-sync.md §4.2).
+ *     (docs/data/data-model.md §4).
  */
 
 // ---------------------------------------------------------------- enums
@@ -68,6 +68,8 @@ export interface Donor {
 	name: string;
 	phone: string | null;
 	phone_hash: string;
+	tax_receipt?: boolean;
+	tax_id?: string;
 }
 
 export interface Donation extends BaseDoc {
@@ -176,7 +178,9 @@ export const walkInDonationInputSchema = z
 				.trim()
 				.regex(/^[0-9]+$/)
 				.nullable(),
-			phone_hash: z.string().min(1)
+			phone_hash: z.string().min(1),
+			tax_receipt: z.boolean().optional(),
+			tax_id: z.string().optional()
 		}),
 		kind: z.enum(['items', 'money']),
 		items: z.array(donationItemSchema).optional(),
@@ -259,8 +263,8 @@ export interface CountedItem {
 /**
  * Turn a hand counted donation into stock. This is the ONLY path from a
  * donation to `stock_ledger`; there is no automatic conversion of the declared
- * items (docs/data/couchdb-mongodb-sync.md §4.2). Each counted line becomes one
- * positive `receive` ledger entry referencing the donation.
+ * items. Each counted line becomes one positive `receive` ledger entry
+ * referencing the donation.
  */
 export function keyDonationReceipt(
 	donation: Donation,

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Check from '@lucide/svelte/icons/check';
 	import { donationStore } from '../../routes/public/donations/donation.svelte';
+	import { Button } from '$lib/components/ui/button';
 </script>
 
 <div
@@ -48,12 +49,13 @@
 		</div>
 	</div>
 
-	<button
+	<Button
+		variant="outline"
 		onclick={() => {
 			donationStore.reset();
 		}}
-		class="w-full rounded-xl border border-border py-3 text-xs font-bold text-foreground transition-colors hover:bg-muted"
+		class="w-full rounded-xl border border-border py-6 text-xs font-bold text-foreground transition-colors hover:bg-muted"
 	>
 		กลับหน้าแรกกระดานความต้องการ
-	</button>
+	</Button>
 </div>

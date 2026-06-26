@@ -1,29 +1,84 @@
 import { json } from '@sveltejs/kit';
-import { getDonationByHash } from '$lib/server/mongodb';
+import { adminRaw } from '$lib/server/couch-admin';
 import { sha256Hex } from '$lib/db/hash';
+import { donationIpLimiter } from '$lib/server/security/rate-limiter';
 
-export const GET = async ({ params }) => {
+export const GET = async ({ params, getClientAddress }) => {
 	try {
 		const { tracking_token } = params;
 		if (!tracking_token) {
 			return json({ success: false, error: 'Tracking token is required' }, { status: 400 });
 		}
 
-		// Compute hash to look up in database (prevents IDOR)
-		const tokenHash = await sha256Hex(tracking_token);
-		const donation = await getDonationByHash(tokenHash);
-
-		if (!donation) {
-			return json({ success: false, error: 'Donation record not found' }, { status: 404 });
+		// Rate Limiting
+		const ip = getClientAddress();
+		if (!donationIpLimiter.check(ip)) {
+			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
-		// Return status and details WITHOUT PII (donor name, phone, email etc.)
+		// Parse token to find shelter code
+		// Expected format: TX-{SHELTER_CODE}-{UUID} or old format TX-DON-{UUID}
+		const parts = tracking_token.split('-');
+		if (parts.length < 3) {
+			return json({ success: false, error: 'Invalid tracking token format' }, { status: 400 });
+		}
+
+		const shelterCode = parts[1] === 'DON' ? 'SH001' : parts[1]; // fallback for old tokens if needed
+		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
+		const docId = `donation:${tracking_token}`;
+
+		// Query CouchDB directly
+		const res = await adminRaw(`/${shelterDb}/${encodeURIComponent(docId)}`, 'GET');
+		if (res.status === 404) {
+			return json({ success: false, error: 'Donation record not found' }, { status: 404 });
+		}
+		if (res.status !== 200) {
+			console.error('Failed to fetch from CouchDB', res.data);
+			return json({ success: false, error: 'Database fetch failed' }, { status: 500 });
+		}
+
+		const donation = res.data as any;
+
+		// Optional: Verify hash if strict security is required, but document ID lookup is sufficient
+		// The hash was mainly for IDOR protection
+		const tokenHash = await sha256Hex(tracking_token);
+		if (donation.tracking_token_hash && donation.tracking_token_hash !== tokenHash) {
+			return json({ success: false, error: 'Invalid token hash' }, { status: 403 });
+		}
+
+		// Mask PII before returning to public
+		const maskedDonor = { ...donation.donor };
+		if (maskedDonor.phone && maskedDonor.phone.length >= 7) {
+			maskedDonor.phone =
+				maskedDonor.phone.substring(0, 3) +
+				'-***-' +
+				maskedDonor.phone.substring(maskedDonor.phone.length - 4);
+		}
+		if (maskedDonor.line_id && maskedDonor.line_id.length >= 3) {
+			maskedDonor.line_id = maskedDonor.line_id.substring(0, 2) + '***';
+		}
+		if (maskedDonor.email && maskedDonor.email.includes('@')) {
+			const parts = maskedDonor.email.split('@');
+			maskedDonor.email = parts[0].substring(0, 2) + '***@' + parts[1];
+		}
+
+		// Return status and details INCLUDING PII (donor), logistics, and booking_ref (CR-005)
 		return json({
 			success: true,
 			donation: {
 				status: donation.status,
+				booking_ref: donation.booking_ref,
 				shelter_code: donation.shelter_code,
-				items_declared: donation.items_declared,
+				donor: maskedDonor,
+				items: (donation.items || donation.items_declared || []).map((i: any) => ({
+					free_text: i.free_text || i.item_name,
+					category: i.category,
+					qty: i.qty,
+					unit: i.unit,
+					condition: i.condition,
+					note: i.note
+				})),
+				logistics: donation.logistics,
 				received_summary: donation.received_summary || null,
 				created_at: donation.created_at,
 				expires_at: donation.expires_at
@@ -35,3 +90,63 @@ export const GET = async ({ params }) => {
 	}
 };
 
+export const PATCH = async ({ params, request }) => {
+	try {
+		const { tracking_token } = params;
+		if (!tracking_token) {
+			return json({ success: false, error: 'Tracking token is required' }, { status: 400 });
+		}
+
+		const payload = await request.json();
+		if (!payload.courier_tracking_no) {
+			return json({ success: false, error: 'courier_tracking_no is required' }, { status: 400 });
+		}
+
+		// Parse token to find shelter code
+		const parts = tracking_token.split('-');
+		if (parts.length < 3) {
+			return json({ success: false, error: 'Invalid tracking token format' }, { status: 400 });
+		}
+		const shelterCode = parts[1] === 'DON' ? 'SH001' : parts[1];
+		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
+		const docId = `donation:${tracking_token}`;
+
+		// Fetch latest rev from CouchDB
+		const latestDocRes = await adminRaw(`/${shelterDb}/${encodeURIComponent(docId)}`, 'GET');
+		if (latestDocRes.status === 404) {
+			return json({ success: false, error: 'Donation record not found' }, { status: 404 });
+		}
+		if (latestDocRes.status !== 200) {
+			console.error('Failed to fetch from CouchDB', latestDocRes.data);
+			return json({ success: false, error: 'Database fetch failed' }, { status: 500 });
+		}
+
+		const latestDoc = latestDocRes.data as any;
+
+		// Optional: Verify hash
+		const tokenHash = await sha256Hex(tracking_token);
+		if (latestDoc.tracking_token_hash && latestDoc.tracking_token_hash !== tokenHash) {
+			return json({ success: false, error: 'Invalid token hash' }, { status: 403 });
+		}
+
+		// Update CouchDB document
+		if (!latestDoc.logistics) latestDoc.logistics = {};
+		latestDoc.logistics.courier_tracking_no = payload.courier_tracking_no;
+		latestDoc.updated_at = new Date().toISOString();
+
+		const updateRes = await adminRaw(
+			`/${shelterDb}/${encodeURIComponent(docId)}`,
+			'PUT',
+			latestDoc
+		);
+		if (updateRes.status !== 201 && updateRes.status !== 200) {
+			console.error('Failed to update CouchDB', updateRes.data);
+			return json({ success: false, error: 'Database update failed' }, { status: 500 });
+		}
+
+		return json({ success: true, message: 'Courier tracking number updated' });
+	} catch (e) {
+		console.error(e);
+		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+	}
+};

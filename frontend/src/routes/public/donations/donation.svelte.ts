@@ -1,7 +1,10 @@
 export interface DonationItem {
+	category?: string;
 	name: string;
 	amount: number;
 	unit: string;
+	condition?: string;
+	remark?: string;
 }
 
 export type TabStep = 'needs' | 'form' | 'time' | 'ticket';
@@ -14,9 +17,26 @@ class DonationStore {
 	donorPhone = $state('');
 	donorLine = $state('');
 	donorEmail = $state('');
-	taxReceipt = $state(false);
 
-	items = $state<DonationItem[]>([]);
+	deliveryMethod = $state<'self_dropoff' | 'parcel' | 'shelter_pickup'>('self_dropoff');
+	vehicleType = $state<'motorcycle' | 'car' | 'pickup' | 'truck' | undefined>(undefined);
+	slotDate = $state('');
+	slotTime = $state('');
+	shelterCode = $state('');
+	courierTrackingNo = $state('');
+	eta = $state('');
+	pickupAddress = $state('');
+
+	items = $state<DonationItem[]>([
+		{
+			category: 'Food',
+			name: '',
+			amount: 1,
+			unit: 'ชิ้น',
+			condition: '',
+			remark: ''
+		}
+	]);
 
 	captchaToken = $state('');
 	isSubmitting = $state(false);
@@ -24,7 +44,14 @@ class DonationStore {
 	trackingToken = $state('');
 
 	addItem() {
-		this.items.push({ name: '', amount: 1, unit: 'ชิ้น' });
+		this.items.push({
+			category: 'Food',
+			name: '',
+			amount: 1,
+			unit: 'ชิ้น',
+			condition: '',
+			remark: ''
+		});
 	}
 
 	removeItem(index: number) {
@@ -38,8 +65,24 @@ class DonationStore {
 		this.donorPhone = '';
 		this.donorLine = '';
 		this.donorEmail = '';
-		this.taxReceipt = false;
-		this.items = [];
+		this.deliveryMethod = 'self_dropoff';
+		this.vehicleType = undefined;
+		this.slotDate = '';
+		this.slotTime = '';
+		this.shelterCode = '';
+		this.courierTrackingNo = '';
+		this.eta = '';
+		this.pickupAddress = '';
+		this.items = [
+			{
+				category: 'Food',
+				name: '',
+				amount: 1,
+				unit: 'ชิ้น',
+				condition: '',
+				remark: ''
+			}
+		];
 		this.captchaToken = '';
 		this.isSubmitting = false;
 		this.errorMessage = '';

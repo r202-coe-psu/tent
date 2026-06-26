@@ -8,18 +8,16 @@
 	import DonorForm from '$lib/components/form/form-donor.svelte';
 	import TimeSelection from '$lib/components/form/donor-time-selection-form.svelte';
 	import SuccessTicket from '$lib/components/public-donor-success-ticket.svelte';
-
+	import { env } from '$env/dynamic/public';
+	
+	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 </script>
 
 <svelte:head>
 	<title>บริจาคและจองคิว — Smart Shelter</title>
-	<script src="https://www.google.com/recaptcha/api.js" async defer></script>
-	<script>
-		// Global callback for reCAPTCHA
-		function onCaptchaSuccess(token) {
-			window.__captchaToken = token;
-		}
-	</script>
+	{#if siteKey}
+		<script src="https://www.google.com/recaptcha/api.js?render={siteKey}" async defer></script>
+	{/if}
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-4 py-8">

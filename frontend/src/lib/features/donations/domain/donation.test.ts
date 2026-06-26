@@ -15,7 +15,6 @@ describe('donationPreDeclarationInputSchema', () => {
 		expect(result.success).toBe(true);
 	});
 
-	// 2. Invalid Case - Missing Shelter Code
 	it('fails validation when shelter_code is missing', () => {
 		const result = donationPreDeclarationInputSchema.safeParse({ ...baseValid, shelter_code: '' });
 		expect(result.success).toBe(false);
@@ -48,7 +47,6 @@ describe('donationPreDeclarationInputSchema', () => {
 		}
 	});
 
-	// 4. Invalid Case - Missing donation items
 	it('fails validation when donation items are missing', () => {
 		const result = donationPreDeclarationInputSchema.safeParse({
 			...baseValid,
@@ -67,13 +65,15 @@ describe('isDonationPreDeclaration (Type Guard)', () => {
 			_id: 'donation_pre_declaration:some-uuid',
 			type: 'donation_pre_declaration',
 			tracking_token: 'some-uuid',
+			booking_ref: 'DN-123456',
 			shelter_code: 'SH001',
-			items: [{ item_id: 'item:noodles_01', qty: 10 }],
+			items_declared: [{ item_name: 'Noodles', qty: 10, unit: 'box' }],
 			donor_phone_hash: 'some-sha256-hash',
-			status: 'pending',
+			status: 'declared',
 			created_at: '2026-06-19T00:00:00Z',
+			updated_at: '2026-06-19T00:00:00Z',
 			created_by: 'system',
-			schema_v: 1
+			schema_v: 2
 		};
 
 		expect(isDonationPreDeclaration(mockDoc)).toBe(true);
