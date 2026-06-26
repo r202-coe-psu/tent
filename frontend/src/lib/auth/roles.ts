@@ -13,8 +13,12 @@ export const SYSTEM_ADMIN = 'system_admin';
 /** Per-shelter manager — may run any staff function in their own shelter. */
 export const SHELTER_MANAGER = 'shelter_manager';
 
-/** Capability roles a shelter_manager is allowed to grant. */
-export const STAFF_CAPABILITIES = ['volunteer', 'kitchen_staff', 'warehouse_staff'] as const;
+/** Capability roles a shelter_manager is allowed to grant (per spec §1.1). */
+export const STAFF_CAPABILITIES = [
+	'registration_staff',
+	'kitchen_staff',
+	'warehouse_staff'
+] as const;
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 
 /** Every capability an SA may grant alongside the shelter scope. */
@@ -53,4 +57,44 @@ export function isShelterManager(roles: readonly string[]): boolean {
 export function isStaffOnly(roles: readonly string[]): boolean {
 	const staff = STAFF_CAPABILITIES as readonly string[];
 	return roles.filter((r) => !r.startsWith('shelter:')).every((c) => staff.includes(c));
+}
+
+/**
+ * Per-role English display labels for the staff capability set. Kept in one
+ * place so adding a new capability in `STAFF_CAPABILITIES` surfaces here at
+ * the type level (TypeScript will flag a missing entry below). Labels mirror
+ * the canonical role names in `role-permission-matrix.md` §1.1.
+ */
+const STAFF_CAPABILITY_LABELS: Record<StaffCapability, string> = {
+	registration_staff: 'Registration Staff',
+	kitchen_staff: 'Kitchen Staff',
+	warehouse_staff: 'Warehouse Staff'
+};
+
+/**
+ * Human-readable English label for a single CouchDB role string. Shelter-scope
+ * roles render as `Shelter Staff (SH001)`. Unknown values fall back to the
+ * raw role string so the UI never goes blank.
+ */
+export function roleDisplayLabel(role: string): string {
+	if (role === SYSTEM_ADMIN) return 'System Admin';
+	if (role === SHELTER_MANAGER) return 'Shelter Manager';
+	if (role === COUCH_ADMIN) return 'Couch Admin';
+	if (role.startsWith('shelter:')) {
+		return `Shelter Staff (${role.slice('shelter:'.length)})`;
+	}
+	if ((STAFF_CAPABILITIES as readonly string[]).includes(role)) {
+		return STAFF_CAPABILITY_LABELS[role as StaffCapability];
+	}
+	return role;
+}
+
+/**
+ * Join a role list into a single human-readable string. Returns `'General User'`
+ * for an empty list — used as the avatar tooltip in the back-office navbar
+ * when the user has no assigned roles.
+ */
+export function formatRoleList(roles: readonly string[] | undefined): string {
+	if (!roles || roles.length === 0) return 'General User';
+	return roles.map(roleDisplayLabel).join(', ');
 }

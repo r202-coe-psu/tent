@@ -1,9 +1,9 @@
-import { requireAdmin } from '$lib/guards/auth';
+import { requireAuth } from '$lib/guards/auth';
 import type { PageLoad } from './$types';
 import { error } from '@sveltejs/kit';
 
 export const load = (async ({ params }) => {
-	await requireAdmin();
+	await requireAuth();
 	if (params.mode !== 'create' && params.mode !== 'edit') {
 		error(404, 'Page not found');
 	}
