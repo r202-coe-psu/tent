@@ -9,17 +9,12 @@
 		useShelter,
 		useCreateShelter,
 		useUpdateShelter,
-		ShelterDetailsSection,
-		ZonesSection,
-		ItemsSection,
-		RulesSection,
-		SopsSection,
-		createShelterSchema,
-		updateShelterSchema,
-		type Zone,
-		type Item,
-		type Rule,
-		type Sop
+		shelterSchema,
+		BasicInfoSection,
+		CapacitySection,
+		ZonesFacilitiesSection,
+		UtilitiesSection,
+		RiskSection
 	} from '$lib/features/shelters';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Save from '@lucide/svelte/icons/save';
@@ -36,91 +31,65 @@
 	const createMutation = useCreateShelter();
 	const updateMutation = useUpdateShelter();
 
-	let code = $state('');
-	let name = $state('');
-	let capacity = $state<number>(0);
-	let zones = $state<Zone[]>([]);
-	let items = $state<Item[]>([]);
-	let rules = $state<Rule[]>([]);
-	let sops = $state<Sop[]>([]);
-
-	const schema = () => isEdit ? updateShelterSchema : createShelterSchema;
-	const form = superForm(defaults(zod4(schema())), {
+	const form = superForm(defaults(zod4(shelterSchema)), {
 		SPA: true,
-		validators: zod4(schema()),
+		dataType: 'json',
+		validators: zod4(shelterSchema),
 		resetForm: false,
-		onSubmit: async () => {
-			form.form.set({
-				code,
-				name,
-				capacity: Number(capacity),
-				zones: $state.snapshot(zones),
-				items: $state.snapshot(items),
-				rules: $state.snapshot(rules),
-				sops: $state.snapshot(sops)
-			});
-		},
 		onUpdate: async ({ form: validated }) => {
 			if (!validated.valid) {
-				console.error('[ShelterForm] Validation failed:', validated.errors);
 				toast.error('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
 				return;
 			}
 
-			const payload = {
-				name: validated.data.name.trim(),
-				capacity: validated.data.capacity,
-				zones: validated.data.zones,
-				items: validated.data.items,
-				rules: validated.data.rules,
-				sops: validated.data.sops
-			};
+			const data = validated.data;
 
 			if (isEdit) {
 				updateMutation.mutate(
-					{ code: id, input: payload },
+					{ code: id, input: data },
 					{
 						onSuccess: () => {
-							toast.success('อัปเดตข้อมูลโครงสร้างศูนย์พักพิงสำเร็จ');
 							goto(resolve('/back-office/shelters'));
-						},
-						onError: (err) => {
-							toast.error(err.message || 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
 						}
 					}
 				);
 			} else {
-				createMutation.mutate(
-					{
-						code: validated.data.code!.trim(),
-						...payload
-					},
-					{
-						onSuccess: () => {
-							toast.success('บันทึกข้อมูลและสร้างศูนย์พักพิงสำเร็จ');
-							goto(resolve('/back-office/shelters'));
-						},
-						onError: (err) => {
-							toast.error(err.message || 'เกิดข้อผิดพลาดในการสร้างศูนย์พักพิง');
-						}
+				createMutation.mutate(data, {
+					onSuccess: () => {
+						goto(resolve('/back-office/shelters'));
 					}
-				);
+				});
 			}
 		}
 	});
 
-	const { enhance, submitting } = form;
+	const { form: formData, submitting, enhance } = form;
+
+	// Ensure nested optional objects exist so child sections can bind safely.
+	// Done synchronously at form-init time (not inside $effect) to avoid the
+	// reactive loop that reads $formData.{location,contact} then writes them back.
+	if (!$formData.location) $formData.location = {};
+	if (!$formData.contact) $formData.contact = {};
 
 	// Populate form data when edit query loads
 	$effect(() => {
 		if (shelterQuery.data) {
-			code = shelterQuery.data.code;
-			name = shelterQuery.data.name;
-			capacity = shelterQuery.data.capacity;
-			zones = $state.snapshot(shelterQuery.data.zones ?? []);
-			items = $state.snapshot(shelterQuery.data.items ?? []);
-			rules = $state.snapshot(shelterQuery.data.rules ?? []);
-			sops = $state.snapshot(shelterQuery.data.sops ?? []);
+			const d = shelterQuery.data;
+			$formData = {
+				name: d.name,
+				operation_status: d.operation_status,
+				shelter_type: d.shelter_type ?? null,
+				location: d.location ?? {},
+				contact: d.contact ?? {},
+				capacity: d.capacity,
+				area_m2: d.area_m2 ?? null,
+				area_type: d.area_type ?? null,
+				facilities: d.facilities ?? {},
+				common_areas: d.common_areas ?? { sub_storage: [] },
+				utilities: d.utilities ?? { communications: [] },
+				risk: d.risk ?? {},
+				zones: d.zones ?? []
+			};
 		}
 	});
 
@@ -130,7 +99,27 @@
 	const errorMessage = $derived(isEdit ? (shelterQuery.error?.message ?? '') : '');
 </script>
 
-<main class="flex-1 space-y-6 overflow-y-auto p-6 text-[13px] text-foreground">
+<main class="text-[13px] text-foreground">
+	<div
+		class="sticky top-0 z-10 flex flex-col justify-between border-b border-shelter-border bg-background/95 px-6 py-4 backdrop-blur-sm sm:flex-row sm:items-center"
+	>
+		<div class="flex items-center space-x-2">
+			<a
+				href={resolve('/back-office/shelters')}
+				class="mr-1 rounded-lg p-2 transition hover:bg-muted/50"
+			>
+				<ArrowLeft class="h-4 w-4 text-muted-foreground" />
+			</a>
+			<h1 class="text-xl font-bold text-foreground">
+				{isEdit ? `แก้ไขศูนย์: ${id}` : 'สร้างศูนย์พักพิงใหม่'}
+			</h1>
+		</div>
+		<Button type="submit" form="shelter-form" disabled={$submitting || isPending}>
+			<Save class="h-4 w-4" />
+			<span>{isPending ? 'กำลังบันทึก...' : 'บันทึกข้อมูลทั้งหมด'}</span>
+		</Button>
+	</div>
+
 	{#if isLoading}
 		<div class="flex items-center justify-center py-20 text-muted-foreground">
 			กำลังโหลดข้อมูลศูนย์พักพิง...
@@ -144,36 +133,16 @@
 			>
 		</div>
 	{:else}
-		<div
-			class="top-0 z-10 -mx-6 -mt-6 mb-2 flex flex-col justify-between border-b border-shelter-border bg-background/95 px-6 py-4 backdrop-blur-sm sm:flex-row sm:items-center"
-		>
-			<div class="flex items-center space-x-2">
-				<a
-					href={resolve('/back-office/shelters')}
-					class="mr-1 rounded-lg p-2 transition hover:bg-muted/50"
-				>
-					<ArrowLeft class="h-4 w-4 text-muted-foreground" />
-				</a>
-				<h1 class="text-xl font-bold text-foreground">
-					ตั้งค่าโครงสร้างระบบ ({isEdit ? `แก้ไขศูนย์: ${id}` : 'สร้างศูนย์พักพิงใหม่'})
-				</h1>
-			</div>
-			<Button type="submit" form="shelter-form" disabled={$submitting || isPending}>
-				<Save class="h-4 w-4" />
-				<span>{isPending ? 'กำลังบันทึก...' : 'บันทึกข้อมูลโครงสร้างทั้งหมด'}</span>
-			</Button>
-		</div>
+		<form id="shelter-form" method="POST" use:enhance class="space-y-6 p-6">
+			<BasicInfoSection {form} {formData} />
 
-		<form id="shelter-form" method="POST" use:enhance>
-			<ShelterDetailsSection bind:code bind:name bind:capacity disabledCode={isEdit} />
+			<CapacitySection {form} {formData} />
 
-			<ZonesSection bind:zones />
+			<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
 
-			<ItemsSection bind:items />
+			<UtilitiesSection {form} {formData} />
 
-			<RulesSection bind:rules />
-
-			<SopsSection bind:sops />
+			<RiskSection {form} {formData} />
 		</form>
 	{/if}
 </main>

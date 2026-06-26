@@ -19,7 +19,8 @@
 		"openapi:fetch": "mkdir -p src/libs/api-specs && curl -f http://localhost:9000/openapi.json -o src/libs/api-specs/fastapi.json",
 		"openapi:fastapi": "openapi-typescript src/libs/api-specs/fastapi.json -o src/lib/api/openapi.d.ts",
 		"openapi:update": "pnpm openapi:fetch && pnpm openapi:fastapi",
-		"seed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts"
+		"seed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts",
+		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.1.0",
