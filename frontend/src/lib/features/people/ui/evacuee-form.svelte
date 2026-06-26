@@ -33,6 +33,29 @@
 	let isSubmittingEvacuee = $state(false);
 	let isSubmittingHousehold = $state(false);
 
+	let pendingEvacueeInput = $state<EvacueeInput | null>(null);
+	let pendingSymptoms = $state<string[]>([]);
+
+	let tempEvacuee = $derived.by(() => {
+		if (!pendingEvacueeInput) return null;
+		return {
+			_id: 'temp-new-evacuee',
+			...pendingEvacueeInput,
+			current_stay: {
+				status: 'checked_in',
+				zone: null
+			}
+		} as any;
+	});
+
+	let combinedEvacuees = $derived.by(() => {
+		const list = evacueesQuery.data ? [...evacueesQuery.data] : [];
+		if (tempEvacuee) {
+			list.push(tempEvacuee);
+		}
+		return list;
+	});
+
 	// Fetch data for HouseholdForm
 	const evacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
@@ -42,19 +65,12 @@
 	const createHouseholdMutation = useCreateHousehold();
 	const updateEvacueeMutation = useUpdateEvacuee();
 
-	async function handleRegistrationSubmit(input: EvacueeInput) {
-		isSubmittingEvacuee = true;
-		try {
-			const result = await onsubmit(input, Array.from(selectedSymptoms));
-			newlyRegisteredEvacuee = result;
-			selectedSymptoms.clear();
-			isHealthy = false;
-			step = 4;
-		} catch (err) {
-			// Error is already toasted in page, or we can handle it if needed
-		} finally {
-			isSubmittingEvacuee = false;
-		}
+	function handleRegistrationSubmit(input: EvacueeInput) {
+		pendingEvacueeInput = input;
+		pendingSymptoms = Array.from(selectedSymptoms);
+		selectedSymptoms.clear();
+		isHealthy = false;
+		step = 4;
 	}
 
 	async function handleHouseholdSubmit(
@@ -71,18 +87,36 @@
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 
+			let evacueeIdMap: Record<string, string> = {};
+			if (pendingEvacueeInput) {
+				const registeredEvacuee = await onsubmit(pendingEvacueeInput, pendingSymptoms);
+				newlyRegisteredEvacuee = registeredEvacuee;
+				evacueeIdMap['temp-new-evacuee'] = registeredEvacuee._id;
+				pendingEvacueeInput = null;
+				pendingSymptoms = [];
+			}
+
+			const resolvedMemberIds = selectedMemberIds.map((id) => evacueeIdMap[id] || id);
+			if (input.head_evacuee_id && evacueeIdMap[input.head_evacuee_id]) {
+				input.head_evacuee_id = evacueeIdMap[input.head_evacuee_id];
+			}
+
 			// Create household
 			const res = await createHouseholdMutation.mutateAsync({ input, ctx });
 			const householdId = res._id;
 			toast.success(`สร้างครัวเรือน "${res.label}" สำเร็จ`);
 
 			// Sync membership
-			const allEvacuees = evacueesQuery.data ?? [];
+			const allEvacuees = [...(evacueesQuery.data || [])];
+			if (newlyRegisteredEvacuee) {
+				allEvacuees.push(newlyRegisteredEvacuee);
+			}
+
 			const currentMembers = allEvacuees.filter((ev) => ev.household_id === householdId);
 			const currentMemberIds = currentMembers.map((ev) => ev._id);
 
-			const toAdd = selectedMemberIds.filter((id) => !currentMemberIds.includes(id));
-			const toRemove = currentMemberIds.filter((id) => !selectedMemberIds.includes(id));
+			const toAdd = resolvedMemberIds.filter((id) => !currentMemberIds.includes(id));
+			const toRemove = currentMemberIds.filter((id) => !resolvedMemberIds.includes(id));
 
 			const getUpdatedEmergencyContact = (evac: any, phone: string | undefined) => {
 				if (phone === undefined) return evac.emergency_contact;
@@ -161,6 +195,8 @@
 	function handleHouseholdCancel() {
 		step = 1;
 		newlyRegisteredEvacuee = null;
+		pendingEvacueeInput = null;
+		pendingSymptoms = [];
 	}
 </script>
 
@@ -208,9 +244,9 @@
 		onsubmit={handleHouseholdSubmit}
 		oncancel={handleHouseholdCancel}
 		pending={isSubmittingHousehold}
-		allEvacuees={evacueesQuery.data ?? []}
+		allEvacuees={combinedEvacuees}
 		zones={zones}
 		households={householdsQuery.data ?? []}
-		initialMemberIds={newlyRegisteredEvacuee ? [newlyRegisteredEvacuee._id] : []}
+		initialMemberIds={pendingEvacueeInput ? ['temp-new-evacuee'] : (newlyRegisteredEvacuee ? [newlyRegisteredEvacuee._id] : [])}
 	/>
 {/if}

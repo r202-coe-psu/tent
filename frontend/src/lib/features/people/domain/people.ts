@@ -174,6 +174,7 @@ export const evacueeInputSchema = z.object({
 	medical_allergies: z.array(z.string().trim().min(1)).default([]),
 	medical_medications: z.array(z.string().trim().min(1)).default([]),
 	medical_note: z.string().trim().optional(),
+	track: careTrackSchema.optional(),
 	special_needs: z.array(specialNeedSchema).default([]),
 	emergency_contact: z
 		.object({

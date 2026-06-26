@@ -74,6 +74,11 @@
 			<Button type="button" class="w-full h-12 bg-[#0C2D4E] hover:bg-[#0A2647] text-white text-base font-medium" onclick={doSearch}>
 				ตรวจสอบข้อมูล
 			</Button>
+
+			<Button type="button" variant="outline" class="w-full h-12 border-[#0C2D4E] text-[#0C2D4E] hover:bg-[#0C2D4E]/10 text-base font-medium flex items-center justify-center gap-2" onclick={onNext}>
+				<UserPlus class="h-5 w-5" />
+				ลงทะเบียนใหม่
+			</Button>
 		</div>
 	</div>
 

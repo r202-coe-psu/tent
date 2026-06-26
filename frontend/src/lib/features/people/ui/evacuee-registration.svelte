@@ -84,9 +84,7 @@
 					const cleanPhone = ec.phone.replace(/\D/g, '');
 					if (cleanPhone.length !== 10) {
 						// @ts-ignore
-						if (!$errors.emergency_contact) $errors.emergency_contact = {};
-						// @ts-ignore
-						$errors.emergency_contact.phone = ['เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก'];
+						$errors.emergency_contact = { phone: ['เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก'] };
 						cancel();
 						return;
 					}

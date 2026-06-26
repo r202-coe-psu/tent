@@ -35,7 +35,7 @@ export class PeoplePouchRepository implements PeopleRepository {
 /** Mint an evacuee from form input + author context and persist it. */
 	async createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee> {
 		const evacuee = buildEvacuee(input, ctx);
-		await this.repo.put(evacuee);
+		const saved = await this.repo.put(evacuee);
 
 		if (
 			(input.medical_conditions && input.medical_conditions.length > 0) ||
@@ -49,13 +49,13 @@ export class PeoplePouchRepository implements PeopleRepository {
 				allergies: input.medical_allergies || [],
 				medications: input.medical_medications || [],
 				notes: input.medical_note || '',
-				track: 'normal' as const
+				track: input.track || 'normal' as const
 			};
 			const medicalDoc = buildMedical(medicalInput, ctx);
 			await this.repo.put(medicalDoc);
 		}
 
-		return evacuee;
+		return saved;
 	}
 	/** Every evacuee in this shelter database. */
 	listEvacuees(): Promise<Evacuee[]> {

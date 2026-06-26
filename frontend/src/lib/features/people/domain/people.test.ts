@@ -20,13 +20,14 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(1);
+		expect(e.schema_v).toBe(2);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
 		expect(e.first_name).toBe('สมชาย'); // trimmed
 		expect(e.privacy).toEqual({ search_excluded: false });
 		expect(e.current_stay.status).toBe('registered');
+		expect(e.country).toBe('THAILAND');
 		expect(e.special_needs).toEqual([]);
 		expect(e.registered_via).toBe('app');
 		expect(isEvacuee(e)).toBe(true);

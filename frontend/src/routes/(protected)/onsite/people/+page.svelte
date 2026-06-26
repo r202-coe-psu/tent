@@ -25,8 +25,16 @@
 
 	async function handleRegister(input: EvacueeInput, symptoms: string[]) {
 		const ctx = { shelterCode: shelterStore.selectedShelterCode ?? SHELTER_CODE, createdBy: authStore.user?.name ?? 'unknown' };
+		const track = isFastTrack ? 'fast_track' : (symptoms.length > 0 ? 'fast_track' : 'normal');
+
 		try {
-			const evacuee = await createMutation.mutateAsync({ input, ctx });
+			const evacuee = await createMutation.mutateAsync({ 
+				input: {
+					...input,
+					track
+				}, 
+				ctx 
+			});
 			toast.success(`Registered ${evacuee.first_name} ${evacuee.last_name}`);
 			
 			// Create screening record
@@ -35,7 +43,7 @@
 					evacuee_id: evacuee._id,
 					symptoms,
 					temperature_c: null,
-					track: isFastTrack ? 'fast_track' : (symptoms.length > 0 ? 'fast_track' : 'normal'),
+					track,
 					needs_referral: false,
 				},
 				ctx

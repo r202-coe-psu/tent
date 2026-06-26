@@ -13,7 +13,7 @@
 	});
 </script>
 
-<nav class="flex h-[52px] w-full items-center justify-end bg-[#0A2647] px-6 text-white shadow-sm">
+<nav class="flex h-[52px] w-full items-center justify-center bg-[#0A2647] px-6 text-white shadow-sm">
 	<div class="flex items-center">
 		{#if sheltersQuery.isLoading}
 			<span class="text-sm font-medium text-white/80 pr-4">กำลังโหลด...</span>
