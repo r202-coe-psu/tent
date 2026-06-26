@@ -1,12 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
-import {
-	adminRaw,
-	requireShelterManagerOrSA,
-	serviceError,
-	ServiceError
-} from '$lib/server/couch-admin';
+import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { ulid } from '$lib/db/ulid';
 import type { Zone } from '$lib/features/shelters/server';
 import { nowIso, updateMaster } from '$lib/server/shelters.admin';
@@ -30,7 +25,7 @@ export const POST: RequestHandler = async ({ request, params }) => {
 	if (!code || !zoneCode) return error(400, { message: 'Missing code or zoneCode' });
 
 	try {
-		await requireShelterManagerOrSA(request.headers.get('cookie'), code);
+		await requireAdmin(request.headers.get('cookie'));
 
 		const body = (await request.json().catch(() => ({}))) as unknown;
 		const parsed = closeZoneSchema.parse(body);
