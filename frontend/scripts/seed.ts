@@ -200,7 +200,7 @@ const ITEM = {
 
 async function seedRegistry(): Promise<void> {
 	await ensureDb('registry');
-	await setSecurity('catalog', {
+	await setSecurity('registry', {
 		admins: { names: [], roles: ['system_admin'] },
 		members: { names: [], roles: [] }
 	});
