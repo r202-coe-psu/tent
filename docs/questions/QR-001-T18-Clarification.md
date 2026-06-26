@@ -1,7 +1,7 @@
 ---
 title: T-18 Clarification Questions — Round 1
 created: 2026-06-20
-updated: 2026-06-20
+updated: 2026-06-25   # Q-T18-2 resolved → CR-006 amend
 module: B (SOP & Resource Calc) + A (Volunteer)
 status: in-progress
 ---
@@ -35,7 +35,12 @@ feature `sop-ratios` ยังไม่มีในโค้ด — ไฟล์
 
 **คำตอบจาก Dev Lead:** รอ PO อนุมัติ key list
 
-**สถานะ:** ⏳ WAITING on PO
+**✅ RESOLVED 2026-06-25 (PO):** ครอบคลุมทุกมิติ ปภ.2565 + Sphere 2018, **merge** คีย์ความหมายซ้ำ →
+**20 canonical keys**, คงรูป `{key: num>0}` (เลขเดียวต่อคีย์ ไม่ใช่ range), เพิ่ม `SOP_RATIO_KIND`
+(multiply/divide/threshold). บันทึก → [CR-006 §"SOP ratio canonical key list"](../changes/CR-006-sop-profile-master-override.md).
+ค่า seed จริงต่อคีย์ยังตาม Q-T18-3.
+
+**สถานะ:** ✅ RESOLVED → CR-006 (amend 2026-06-25)
 
 ---
 
@@ -101,7 +106,7 @@ feature `sop-ratios` ยังไม่มีในโค้ด — ไฟล์
 | Q | คำถาม | สถานะ |
 |---|---|---|
 | Q-T18-1 | sop_profile อยู่ใน DB ไหน | ⏳ รอ PO confirm (catalog central-only หรือ per-shelter แก้ได้) |
-| Q-T18-2 | ratios canonical key list | ⏳ รอ PO อนุมัติ key list |
+| Q-T18-2 | ratios canonical key list | ✅ RESOLVED 2026-06-25 → CR-006 (3→20 keys, merge ปภ.+Sphere) |
 | Q-T18-3 | rice_g_per_person_meal default | ⏳ รอ PO confirm option (override layer) |
 | Q-T18-4 | availability shape | ⏳ dev lead รอปรึกษา PO |
 | Q-T18-5 | output เก็บที่ไหน | ✅ ประชุม PO → docs/changes/ |

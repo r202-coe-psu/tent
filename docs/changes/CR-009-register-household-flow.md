@@ -3,11 +3,13 @@ id: CR-009
 title: "Register Flow — แยกการจัดการ Household ไป Stage 3 (Search เดิม = ลูกบ้าน / Create ใหม่ = หัวหน้าบ้าน)"
 status: approved
 date: 2026-06-24
+amended: 2026-06-25
 requested_by: development team B
 decided_by: product owner
 layer: volatile
 affects:
   - docs/task-breakdown/02-people.md — T-04 (Description, Flow Path A, DoD)
+  - docs/changes/CR-001-people-dod-permission-sync.md — Phase 1B diagram (household optional → mandatory)
   - frontend/src/lib/features/register/ui/stage2-registration.svelte
   - frontend/src/lib/features/register/ui/stage3-head-of-household.svelte
   - frontend/src/lib/features/register/domain/schema.ts
@@ -70,3 +72,19 @@ N/A — ไม่มีการ bump `schema_v` (ไม่เปลี่ยน
 
 - 2026-06-24 — proposed (request change จากทีม B ขอปรับ design flow ใหม่)
 - 2026-06-24 — **approved** by product owner — รับและจะปรับ design ให้ตามที่ request มา
+- 2026-06-25 — **amend:** Stage 3 บังคับทุก person — ไม่มี skip path; **household เป็น required ไม่ใช่ optional** (override CR-001 Phase 1B ที่บอกว่า "person อยู่โดยไม่มี household ได้"); solo evacuee = สร้าง household ใหม่ขนาด 1 คน (head_evacuee_id = ตัวเอง); แก้ไข task-breakdown/02-people.md T-04 DoD บรรทัดที่เกี่ยวข้องแล้ว — เหตุผล: ต้องการเก็บ address ของที่อยู่เดิม (CR-011) ซึ่งอยู่ระดับ household; person ที่ไม่มี household จะไม่มีที่เก็บ address
+
+## Amendment (2026-06-25) — Household Mandatory
+
+### สิ่งที่เปลี่ยน
+
+| | Before (CR-001 / task-breakdown เดิม) | After (amend นี้) |
+| --- | --- | --- |
+| household requirement | optional — "person อยู่โดยไม่มี household ได้ตามปกติ" | **required** — ทุก person ต้องมี household |
+| Stage 3 | 2 ทางเลือก (join / create) — implicit skip ได้ | 2 ทางเลือก (join / create) — **ไม่มี skip** |
+| solo evacuee | `household_id = null` ได้ | สร้าง household ขนาด 1 คน (`head_evacuee_id = ตัวเอง`) |
+| address storage | N/A | address เก็บใน household เสมอ (CR-011) |
+
+### เหตุผล
+- CR-011 เพิ่ม address fields ที่ระดับ household — ถ้า household optional จะมี person ที่ไม่มีที่เก็บ address
+- CR-009 Stage 3 flow ไม่มี skip path อยู่แล้ว — amend นี้แค่ประกาศชัดเจนตาม intent เดิม
