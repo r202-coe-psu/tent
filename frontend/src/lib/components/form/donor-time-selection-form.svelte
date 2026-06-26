@@ -19,7 +19,7 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import { donationStore } from '../../../routes/public/donations/donation.svelte';
-	import SelectLabel from '../ui/select/select-label.svelte';
+
 
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	let selectedDate = $state<DateValue>(today(getLocalTimeZone()));
