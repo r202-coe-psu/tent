@@ -9,7 +9,7 @@ export const GET = async () => {
 		// For public APIs, we filter out sensitive info and only return operational shelters
 		const visible = masters
 			.map(m => migrate(m as ShelterMaster))
-			.filter(m => m.operation_status === 'open');
+			.filter(m => m.operation_status !== 'closed');
 		
 		return json(
 			visible.map((m) => ({
