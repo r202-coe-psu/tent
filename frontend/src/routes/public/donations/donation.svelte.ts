@@ -90,4 +90,11 @@ class DonationStore {
 	}
 }
 
-export const donationStore = new DonationStore();
+import { setContext, getContext } from "svelte";
+const DONATION_KEY = Symbol("DONATION");
+export function setDonationStore() {
+	return setContext(DONATION_KEY, new DonationStore());
+}
+export function getDonationStore() {
+	return getContext<DonationStore>(DONATION_KEY);
+}

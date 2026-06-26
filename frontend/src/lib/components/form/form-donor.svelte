@@ -14,7 +14,8 @@
 		SelectValue
 	} from '$lib/components/ui/select';
 	import { toast } from 'svelte-sonner';
-	import { donationStore } from '../../../routes/public/donations/donation.svelte';
+	import { getDonationStore } from '../../../routes/public/donations/donation.svelte';
+	const donationStore = getDonationStore();
 
 	let validationErrors = $state<string[]>([]);
 

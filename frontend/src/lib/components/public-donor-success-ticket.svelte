@@ -1,7 +1,8 @@
 <script lang="ts">
 	import Check from '@lucide/svelte/icons/check';
-	import { donationStore } from '../../routes/public/donations/donation.svelte';
+	import { getDonationStore } from '../../routes/public/donations/donation.svelte';
 	import { Button } from '$lib/components/ui/button';
+	const donationStore = getDonationStore();
 </script>
 
 <div

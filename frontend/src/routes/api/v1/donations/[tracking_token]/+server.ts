@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { adminRaw } from '$lib/server/couch-admin';
 import { sha256Hex } from '$lib/db/hash';
 import { donationIpLimiter } from '$lib/server/security/rate-limiter';
+import type { PublicDonationDoc } from '$lib/features/donations/domain/public-donation';
 
 export const GET = async ({ params, getClientAddress }) => {
 	try {
@@ -37,7 +38,7 @@ export const GET = async ({ params, getClientAddress }) => {
 			return json({ success: false, error: 'Database fetch failed' }, { status: 500 });
 		}
 
-		const donation = res.data as any;
+		const donation = res.data as PublicDonationDoc;
 
 		// Optional: Verify hash if strict security is required, but document ID lookup is sufficient
 		// The hash was mainly for IDOR protection
@@ -48,6 +49,9 @@ export const GET = async ({ params, getClientAddress }) => {
 
 		// Mask PII before returning to public
 		const maskedDonor = { ...donation.donor };
+		if (maskedDonor.name) {
+			maskedDonor.name = maskedDonor.name.substring(0, 1) + '***';
+		}
 		if (maskedDonor.phone && maskedDonor.phone.length >= 7) {
 			maskedDonor.phone =
 				maskedDonor.phone.substring(0, 3) +

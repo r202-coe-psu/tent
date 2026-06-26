@@ -18,7 +18,8 @@
 	import { today, getLocalTimeZone, type DateValue } from '@internationalized/date';
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
-	import { donationStore } from '../../../routes/public/donations/donation.svelte';
+	import { getDonationStore } from '../../../routes/public/donations/donation.svelte';
+	const donationStore = getDonationStore();
 
 
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
@@ -28,7 +29,7 @@
 
 	onMount(async () => {
 		try {
-			const res = await fetch('/public/v1/shelters');
+			const res = await fetch('/api/v1/shelters');
 			const data = await res.json();
 			if (Array.isArray(data)) shelters = data;
 		} catch (e) {
@@ -90,7 +91,7 @@
 		}
 
 		try {
-			const res = await fetch('/public/v1/donations', {
+			const res = await fetch('/api/v1/donations', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({

@@ -3,13 +3,14 @@
 	import Heart from '@lucide/svelte/icons/heart';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import FileText from '@lucide/svelte/icons/file-text';
-	import { donationStore } from './donation.svelte';
+	import { setDonationStore } from './donation.svelte';
 	import NeedsBoard from '$lib/components/public-donor-needs.svelte';
 	import DonorForm from '$lib/components/form/form-donor.svelte';
 	import TimeSelection from '$lib/components/form/donor-time-selection-form.svelte';
 	import SuccessTicket from '$lib/components/public-donor-success-ticket.svelte';
 	import { env } from '$env/dynamic/public';
 	
+	const donationStore = setDonationStore();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 </script>
 

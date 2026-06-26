@@ -2,8 +2,9 @@
 	import Heart from '@lucide/svelte/icons/heart';
 	import Compass from '@lucide/svelte/icons/compass';
 	import Search from '@lucide/svelte/icons/search';
-	import { donationStore } from '../../routes/public/donations/donation.svelte';
+	import { getDonationStore } from '../../routes/public/donations/donation.svelte';
 	import { Button } from '$lib/components/ui/button';
+	const donationStore = getDonationStore();
 </script>
 
 <div class="rounded-3xl border border-border bg-card p-6 shadow-xs md:p-8">
