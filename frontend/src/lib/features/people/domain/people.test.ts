@@ -79,7 +79,8 @@ describe('createHousehold', () => {
 			{
 				label: ' บ้านทองดี ',
 				head_evacuee_id: 'evacuee:123',
-				zone: 'A',
+				municipality_zone: 'zone_1',
+				community: 'z1_c01',
 				pets: [{ species: 'dog', count: 2, notes: 'friendly' }],
 				notes: 'ใกล้ประตูทางออก',
 				address_no: ' 123/45 ',
@@ -94,12 +95,14 @@ describe('createHousehold', () => {
 
 		expect(h._id.startsWith('household:')).toBe(true);
 		expect(h.type).toBe('household');
-		expect(h.schema_v).toBe(1);
+		expect(h.schema_v).toBe(2);
 		expect(h.shelter_code).toBe('SH001');
 		expect(h.created_by).toBe('staff1');
 		expect(h.label).toBe('บ้านทองดี'); // trimmed
 		expect(h.head_evacuee_id).toBe('evacuee:123');
-		expect(h.zone).toBe('A');
+		expect(h.municipality_zone).toBe('zone_1');
+		expect(h.community).toBe('z1_c01');
+		expect((h as any).zone).toBeUndefined();
 		expect(h.pets).toEqual([{ species: 'dog', count: 2, notes: 'friendly' }]);
 		expect(h.notes).toBe('ใกล้ประตูทางออก');
 		expect(h.address_no).toBe('123/45'); // trimmed
@@ -109,5 +112,24 @@ describe('createHousehold', () => {
 		expect(h.province).toBe('สงขลา'); // trimmed
 		expect(h.postal_code).toBe('90110'); // trimmed
 		expect(isHousehold(h)).toBe(true);
+	});
+
+	it('sets omitted address fields to null to match schema', () => {
+		const h = createHousehold(
+			{
+				label: 'บ้านเดียวดาย',
+				head_evacuee_id: null,
+				municipality_zone: null,
+				community: null,
+				pets: []
+			},
+			ctx
+		);
+		expect(h.address_no).toBeNull();
+		expect(h.village_no).toBeNull();
+		expect(h.subdistrict).toBeNull();
+		expect(h.district).toBeNull();
+		expect(h.province).toBeNull();
+		expect(h.postal_code).toBeNull();
 	});
 });

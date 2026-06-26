@@ -118,15 +118,18 @@ export interface Household extends BaseDoc {
 	type: 'household';
 	label: string;
 	head_evacuee_id: string | null;
-	zone: string | null;
+	// zone?: string | null; // ลบออกตาม CR-011
+	municipality_zone: string | null; // เพิ่มเข้ามาตาม CR-011: code จาก master_data:municipality_zone (เขต 1-4)
+	community: string | null;         // เพิ่มเข้ามาตาม CR-011: code จาก master_data:community (ชุมชน, filter by zone)
 	pets: PetGroup[];
 	notes?: string;
-	address_no?: string;
-	village_no?: string;
-	subdistrict?: string;
-	district?: string;
-	province?: string;
-	postal_code?: string;
+	// เพิ่มฟิลด์ที่อยู่แบบ flat 6 ฟิลด์ ตาม CR-011 และตรงกับ canonical schema docs/data/schema.md §1.3 (ชนิด str|null)
+	address_no: string | null;
+	village_no: string | null;
+	subdistrict: string | null;
+	district: string | null;
+	province: string | null;
+	postal_code: string | null;
 }
 
 export interface MovementDestination {
@@ -201,7 +204,9 @@ export type MedicalInput = z.input<typeof medicalInputSchema>;
 export const householdInputSchema = z.object({
 	label: z.string().trim().min(1, 'Label is required'),
 	head_evacuee_id: z.string().nullable().default(null),
-	zone: z.string().trim().nullable().default(null),
+	// zone: z.string().trim().nullable().default(null), // ลบออกตาม CR-011
+	municipality_zone: z.string().trim().nullable().default(null), // เพิ่มเข้ามาตาม CR-011
+	community: z.string().trim().nullable().default(null), // เพิ่มเข้ามาตาม CR-011
 	pets: z
 		.array(
 			z.object({
@@ -212,12 +217,12 @@ export const householdInputSchema = z.object({
 		)
 		.default([]),
 	notes: z.string().trim().optional(),
-	address_no: z.string().trim().optional(),
-	village_no: z.string().trim().optional(),
-	subdistrict: z.string().trim().optional(),
-	district: z.string().trim().optional(),
-	province: z.string().trim().optional(),
-	postal_code: z.string().trim().optional()
+	address_no: z.string().trim().nullable().default(null),
+	village_no: z.string().trim().nullable().default(null),
+	subdistrict: z.string().trim().nullable().default(null),
+	district: z.string().trim().nullable().default(null),
+	province: z.string().trim().nullable().default(null),
+	postal_code: z.string().trim().nullable().default(null)
 });
 export type HouseholdInput = z.input<typeof householdInputSchema>;
 
@@ -298,19 +303,21 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 	const d = householdInputSchema.parse(input);
 	return makeDoc(
 		'household',
-		1,
+		2, // ปรับเวอร์ชัน schema_v จาก 1 -> 2 ตาม CR-011
 		{
 			label: d.label,
 			head_evacuee_id: d.head_evacuee_id,
-			zone: d.zone,
+			// zone: d.zone, // ลบออกตาม CR-011
+			municipality_zone: d.municipality_zone, // เพิ่มเข้ามาตาม CR-011
+			community: d.community, // เพิ่มเข้ามาตาม CR-011
 			pets: d.pets,
 			...(d.notes ? { notes: d.notes } : {}),
-			...(d.address_no ? { address_no: d.address_no } : {}),
-			...(d.village_no ? { village_no: d.village_no } : {}),
-			...(d.subdistrict ? { subdistrict: d.subdistrict } : {}),
-			...(d.district ? { district: d.district } : {}),
-			...(d.province ? { province: d.province } : {}),
-			...(d.postal_code ? { postal_code: d.postal_code } : {})
+			address_no: d.address_no || null,
+			village_no: d.village_no || null,
+			subdistrict: d.subdistrict || null,
+			district: d.district || null,
+			province: d.province || null,
+			postal_code: d.postal_code || null
 		},
 		ctx
 	);
@@ -518,3 +525,141 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 		]
 	}
 ];
+
+// ---------------------------------------------------------------- CR-011 static master data (Hat Yai)
+// NOTE: ข้อมูลเขตเทศบาล (Municipality Zones) และชุมชน (Communities) ชุดนี้เป็นค่าคงที่ (Static Mock)
+// ที่ใช้จำลองขึ้นมาเพื่อใช้ในหน้าจอจัดการครัวเรือนชั่วคราว (CR-011) เนื่องจากฟีเจอร์ Master Data Engine (CR-012)
+// ยังไม่ได้รับการพัฒนาอย่างเป็นทางการ เมื่อระบบ CR-012 พัฒนาเสร็จสิ้น ข้อมูลส่วนนี้จะถูกเปลี่ยนไปดึงผ่าน API/Database
+
+export interface MunicipalityZoneOption {
+	code: string;
+	label: string;
+}
+
+export interface CommunityOption {
+	code: string;
+	label: string;
+	parent_code: string;
+}
+
+export const MUNICIPALITY_ZONES: MunicipalityZoneOption[] = [
+	{ code: 'zone_1', label: 'เขต 1' },
+	{ code: 'zone_2', label: 'เขต 2' },
+	{ code: 'zone_3', label: 'เขต 3' },
+	{ code: 'zone_4', label: 'เขต 4' }
+];
+
+export const COMMUNITIES: CommunityOption[] = [
+	{ code: 'z1_c01', label: 'ชุมชนหน้าสวนสาธารณะ', parent_code: 'zone_1' },
+	{ code: 'z1_c02', label: 'ชุมชนทักษิณเมืองทอง', parent_code: 'zone_1' },
+	{ code: 'z1_c03', label: 'ชุมชนสุภาพอ่อนหวาน', parent_code: 'zone_1' },
+	{ code: 'z1_c04', label: 'ชุมชนหน้าค่ายเสนาณรงค์', parent_code: 'zone_1' },
+	{ code: 'z1_c05', label: 'ชุมชนภาสว่าง', parent_code: 'zone_1' },
+	{ code: 'z1_c06', label: 'ชุมชนอู่ ท.ส.', parent_code: 'zone_1' },
+	{ code: 'z1_c07', label: 'ชุมชนพรุแม่สอน', parent_code: 'zone_1' },
+	{ code: 'z1_c08', label: 'ชุมชนกอบกาญจน์ศึกษา', parent_code: 'zone_1' },
+	{ code: 'z1_c09', label: 'ชุมชนแม่ลิเตา', parent_code: 'zone_1' },
+	{ code: 'z1_c10', label: 'ชุมชนคลองเตย', parent_code: 'zone_1' },
+	{ code: 'z1_c11', label: 'ชุมชนโรงปูน', parent_code: 'zone_1' },
+	{ code: 'z1_c12', label: 'ชุมชนอนุสรณ์อาจารย์ทอง', parent_code: 'zone_1' },
+	{ code: 'z1_c13', label: 'ชุมชนสามัคคี', parent_code: 'zone_1' },
+	{ code: 'z1_c14', label: 'ชุมชนหน้าโรงพยาบาลศิครินทร์', parent_code: 'zone_1' },
+	{ code: 'z1_c15', label: 'ชุมชนเกาะเสือ', parent_code: 'zone_1' },
+	{ code: 'z1_c16', label: 'ชุมชนหลังสนามกีฬา', parent_code: 'zone_1' },
+	{ code: 'z1_c17', label: 'ชุมชนหลังโรงเรียนหาดใหญ่วิทยาลัย', parent_code: 'zone_1' },
+	{ code: 'z1_c18', label: 'ชุมชนศรีนิล', parent_code: 'zone_1' },
+	{ code: 'z1_c19', label: 'ชุมชนหมัดยาเม๊าะ', parent_code: 'zone_1' },
+	{ code: 'z1_c20', label: 'ชุมชนป้อม 6', parent_code: 'zone_1' },
+	{ code: 'z1_c21', label: 'ชุมชนหน้าสนามกีฬา', parent_code: 'zone_1' },
+	{ code: 'z1_c22', label: 'ชุมชนโรงเรียนชาตรี', parent_code: 'zone_1' },
+	{ code: 'z1_c23', label: 'ชุมชนศิครินทร์', parent_code: 'zone_1' },
+	{ code: 'z1_c24', label: 'ชุมชนรัถการ', parent_code: 'zone_1' },
+	{ code: 'z1_c25', label: 'ชุมชนริมทางรถไฟ', parent_code: 'zone_1' },
+	{ code: 'z1_c26', label: 'ชุมชนมุสลิม', parent_code: 'zone_1' },
+	{ code: 'z1_c27', label: 'ชุมชนหอนาฬิกา', parent_code: 'zone_1' },
+	{ code: 'z1_c28', label: 'ชุมชนตลาดคอมแพล็กซ์', parent_code: 'zone_1' },
+	{ code: 'z2_c01', label: 'ชุมชนบ้านพักรถไฟ', parent_code: 'zone_2' },
+	{ code: 'z2_c02', label: 'ชุมชนศาลเจ้าพ่อเสือ', parent_code: 'zone_2' },
+	{ code: 'z2_c03', label: 'ชุมชนตลาดใหม่', parent_code: 'zone_2' },
+	{ code: 'z2_c04', label: 'ชุมชนกิมหยงสันติสุข', parent_code: 'zone_2' },
+	{ code: 'z2_c05', label: 'ชุมชนพระเสน่หา', parent_code: 'zone_2' },
+	{ code: 'z2_c06', label: 'ชุมชนป้อม 4', parent_code: 'zone_2' },
+	{ code: 'z2_c07', label: 'ชุมชนแสงศรี', parent_code: 'zone_2' },
+	{ code: 'z2_c08', label: 'ชุมชนสวนศิริ', parent_code: 'zone_2' },
+	{ code: 'z2_c09', label: 'ชุมชนจิระนคร', parent_code: 'zone_2' },
+	{ code: 'z2_c10', label: 'ชุมชนท่งเซียเซี่ยงตึ้ง', parent_code: 'zone_2' },
+	{ code: 'z2_c11', label: 'ชุมชนประชาธิปัตย์', parent_code: 'zone_2' },
+	{ code: 'z2_c12', label: 'ชุมชนสามชัย', parent_code: 'zone_2' },
+	{ code: 'z2_c13', label: 'ชุมชนหน้าโรงเรียนหาดใหญ่วิทยาคม', parent_code: 'zone_2' },
+	{ code: 'z2_c14', label: 'ชุมชนชุมอุทิศ', parent_code: 'zone_2' },
+	{ code: 'z2_c15', label: 'ชุมชนโรงพยาบาลกรุงเทพ', parent_code: 'zone_2' },
+	{ code: 'z2_c16', label: 'ชุมชนบ้านจ่า', parent_code: 'zone_2' },
+	{ code: 'z2_c17', label: 'ชุมชนดรุณศึกษา', parent_code: 'zone_2' },
+	{ code: 'z2_c18', label: 'ชุมชนกลางนา', parent_code: 'zone_2' },
+	{ code: 'z2_c19', label: 'ชุมชนหน้าโรงเรียนโสตศึกษา', parent_code: 'zone_2' },
+	{ code: 'z2_c20', label: 'ชุมชนหัวนาหัก', parent_code: 'zone_2' },
+	{ code: 'z2_c21', label: 'ชุมชนซีกิมหยง', parent_code: 'zone_2' },
+	{ code: 'z2_c22', label: 'ชุมชนละม้ายสงเคราะห์', parent_code: 'zone_2' },
+	{ code: 'z2_c23', label: 'ชุมชนคลองเรียน', parent_code: 'zone_2' },
+	{ code: 'z2_c24', label: 'ชุมชนบ้านร่มเย็น', parent_code: 'zone_2' },
+	{ code: 'z2_c25', label: 'ชุมชนทุ่งรี', parent_code: 'zone_2' },
+	{ code: 'z2_c26', label: 'ชุมชนตลาดคลองเรียน', parent_code: 'zone_2' },
+	{ code: 'z2_c27', label: 'ชุมชน ม.อ.-คลองเรียน 1', parent_code: 'zone_2' },
+	{ code: 'z3_c01', label: 'ชุมชนริมควน', parent_code: 'zone_3' },
+	{ code: 'z3_c02', label: 'ชุมชนคลองระบายน้ำที่ 1', parent_code: 'zone_3' },
+	{ code: 'z3_c03', label: 'ชุมชนเทศาพัฒนา', parent_code: 'zone_3' },
+	{ code: 'z3_c04', label: 'ชุมชนตลาดพ่อพรหม', parent_code: 'zone_3' },
+	{ code: 'z3_c05', label: 'ชุมชนศาลาลุงทอง', parent_code: 'zone_3' },
+	{ code: 'z3_c06', label: 'ชุมชนหลังที่ว่าการอำเภอ', parent_code: 'zone_3' },
+	{ code: 'z3_c07', label: 'ชุมชนบ้านหาดใหญ่', parent_code: 'zone_3' },
+	{ code: 'z3_c08', label: 'ชุมชนท่าเคียน', parent_code: 'zone_3' },
+	{ code: 'z3_c09', label: 'ชุมชนดีแลนด์-ไทยเจริญ', parent_code: 'zone_3' },
+	{ code: 'z3_c10', label: 'ชุมชนปรักกริม', parent_code: 'zone_3' },
+	{ code: 'z3_c11', label: 'ชุมชนจันทร์ประทีป', parent_code: 'zone_3' },
+	{ code: 'z3_c12', label: 'ชุมชนจันทร์วิโรจน์', parent_code: 'zone_3' },
+	{ code: 'z3_c13', label: 'ชุมชนรัตนวิบูลย์', parent_code: 'zone_3' },
+	{ code: 'z3_c14', label: 'ชุมชนจันทร์นิเวศน์', parent_code: 'zone_3' },
+	{ code: 'z3_c15', label: 'ชุมชนทุ่งเสา', parent_code: 'zone_3' },
+	{ code: 'z3_c16', label: 'ชุมชนอู่ญี่ปุ่น', parent_code: 'zone_3' },
+	{ code: 'z3_c17', label: 'ชุมชนขนส่ง', parent_code: 'zone_3' },
+	{ code: 'z3_c18', label: 'ชุมชนหน้าวัดคลองเรียน', parent_code: 'zone_3' },
+	{ code: 'z3_c19', label: 'ชุมชนสามแยกคลองเรียน', parent_code: 'zone_3' },
+	{ code: 'z3_c20', label: 'ชุมชนผาสุก-เคียงดาว', parent_code: 'zone_3' },
+	{ code: 'z3_c21', label: 'ชุมชนไทยโฮเต็ล', parent_code: 'zone_3' },
+	{ code: 'z3_c22', label: 'ชุมชนหน้าสถานีรถไฟ', parent_code: 'zone_3' },
+	{ code: 'z3_c23', label: 'ชุมชนหลังโรงพัก', parent_code: 'zone_3' },
+	{ code: 'z3_c24', label: 'ชุมชนหลังอู่รถไฟ', parent_code: 'zone_3' },
+	{ code: 'z3_c25', label: 'ชุมชนประชาราษฎร์อุทิศ', parent_code: 'zone_3' },
+	{ code: 'z3_c26', label: 'ชุมชนแฟลตเคหะใหม่', parent_code: 'zone_3' },
+	{ code: 'z3_c27', label: 'ชุมชนแฟลตเคหะเก่า', parent_code: 'zone_3' },
+	{ code: 'z4_c01', label: 'ชุมชนท่าไทร', parent_code: 'zone_4' },
+	{ code: 'z4_c02', label: 'ชุมชนสถานีอู่ตะเภา', parent_code: 'zone_4' },
+	{ code: 'z4_c03', label: 'ชุมชนต้นโด', parent_code: 'zone_4' },
+	{ code: 'z4_c04', label: 'ชุมชนหน้าโรงเหล้าสรรพสามิตร', parent_code: 'zone_4' },
+	{ code: 'z4_c05', label: 'ชุมชนสัจจกุล', parent_code: 'zone_4' },
+	{ code: 'z4_c06', label: 'ชุมชนรัชมังคลาภิเษก', parent_code: 'zone_4' },
+	{ code: 'z4_c07', label: 'ชุมชนบ้านฉาง', parent_code: 'zone_4' },
+	{ code: 'z4_c08', label: 'ชุมชนสามทหาร', parent_code: 'zone_4' },
+	{ code: 'z4_c09', label: 'ชุมชนบางหัก', parent_code: 'zone_4' },
+	{ code: 'z4_c10', label: 'ชุมชนเกาะเลียบ', parent_code: 'zone_4' },
+	{ code: 'z4_c11', label: 'ชุมชนรัตนอุทิศ', parent_code: 'zone_4' },
+	{ code: 'z4_c12', label: 'ชุมชนสถานี 2', parent_code: 'zone_4' },
+	{ code: 'z4_c13', label: 'ชุมชนมงคลหรรษา', parent_code: 'zone_4' },
+	{ code: 'z4_c14', label: 'ชุมชนบ้านกลาง', parent_code: 'zone_4' },
+	{ code: 'z4_c15', label: 'ชุมชนโชคสมาน', parent_code: 'zone_4' },
+	{ code: 'z4_c16', label: 'ชุมชนหน้าอำเภอ', parent_code: 'zone_4' },
+	{ code: 'z4_c17', label: 'ชุมชนราษฎร์อุทิศ', parent_code: 'zone_4' },
+	{ code: 'z4_c18', label: 'ชุมชนวัดโคกสมานคุณ', parent_code: 'zone_4' },
+	{ code: 'z4_c19', label: 'ชุมชนวัดหาดใหญ่ใน', parent_code: 'zone_4' },
+	{ code: 'z4_c20', label: 'ชุมชนสถานีขนส่งหาดใหญ่ใน', parent_code: 'zone_4' }
+];
+
+export function getMunicipalityZoneLabel(code: string | null | undefined): string {
+	if (!code) return '—';
+	return MUNICIPALITY_ZONES.find((z) => z.code === code)?.label ?? code;
+}
+
+export function getCommunityLabel(code: string | null | undefined): string {
+	if (!code) return '—';
+	return COMMUNITIES.find((c) => c.code === code)?.label ?? code;
+}

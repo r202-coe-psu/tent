@@ -3,7 +3,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import X from '@lucide/svelte/icons/x';
-	import { maskNationalId } from '../domain/people';
+	import { maskNationalId, MUNICIPALITY_ZONES, COMMUNITIES } from '../domain/people';
 	import type { Household, Evacuee, HouseholdInput } from '../domain/people';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
@@ -59,11 +59,24 @@
 	let containerDiv = $state<HTMLDivElement | null>(null);
 	let emergencyContactPhone = $state('');
 
+	// Reset community if it does not belong to selected zone
+	$effect(() => {
+		const zone = $formData.municipality_zone;
+		const comm = $formData.community;
+		if (comm) {
+			const opt = COMMUNITIES.find((c) => c.code === comm);
+			if (!opt || opt.parent_code !== zone) {
+				$formData.community = null;
+			}
+		}
+	});
+
 	// Pre-fill state when initialData is provided
 	$effect(() => {
 		if (initialData) {
 			$formData.label = initialData.label;
-			$formData.zone = initialData.zone;
+			$formData.municipality_zone = initialData.municipality_zone;
+			$formData.community = initialData.community;
 			$formData.head_evacuee_id = initialData.head_evacuee_id;
 			$formData.notes = initialData.notes ?? '';
 			$formData.address_no = initialData.address_no ?? '';
@@ -79,7 +92,8 @@
 			selectedMemberIds = allEvacuees.filter((e) => e.household_id === initialData._id).map((e) => e._id);
 		} else {
 			$formData.label = '';
-			$formData.zone = null;
+			$formData.municipality_zone = null;
+			$formData.community = null;
 			$formData.head_evacuee_id = null;
 			$formData.notes = '';
 			$formData.address_no = '';
@@ -178,18 +192,38 @@
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<Form.Field {form} name="zone">
+		<Form.Field {form} name="municipality_zone">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>โซนพักของครัวเรือน</Form.Label>
+					<Form.Label>เขตเทศบาล (ที่อยู่เดิม)</Form.Label>
 					<select
 						{...props}
-						bind:value={$formData.zone}
+						bind:value={$formData.municipality_zone}
 						class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
 					>
-						<option value={null}>ไม่มีการจัดสรร (None)</option>
-						{#each zones as z}
-							<option value={z.code}>{z.name} ({z.code})</option>
+						<option value={null}>กรุณาเลือกเขต...</option>
+						{#each MUNICIPALITY_ZONES as mz}
+							<option value={mz.code}>{mz.label}</option>
+						{/each}
+					</select>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+
+		<Form.Field {form} name="community">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>ชุมชน (ที่อยู่เดิม)</Form.Label>
+					<select
+						{...props}
+						bind:value={$formData.community}
+						disabled={!$formData.municipality_zone}
+						class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+					>
+						<option value={null}>กรุณาเลือกชุมชน...</option>
+						{#each COMMUNITIES.filter(c => c.parent_code === $formData.municipality_zone) as c}
+							<option value={c.code}>{c.label}</option>
 						{/each}
 					</select>
 				{/snippet}

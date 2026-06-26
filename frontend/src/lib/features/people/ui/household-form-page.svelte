@@ -79,19 +79,20 @@
 					...editingHousehold,
 					label: input.label,
 					head_evacuee_id: input.head_evacuee_id ?? null,
-					zone: input.zone ?? null,
+					municipality_zone: input.municipality_zone ?? null,
+					community: input.community ?? null,
 					pets: (input.pets ?? []).map((p) => ({
 						species: p.species,
 						count: Number(p.count),
 						...(p.notes ? { notes: p.notes } : {})
 					})),
 					notes: input.notes ?? undefined,
-					address_no: input.address_no || undefined,
-					village_no: input.village_no || undefined,
-					subdistrict: input.subdistrict || undefined,
-					district: input.district || undefined,
-					province: input.province || undefined,
-					postal_code: input.postal_code || undefined
+					address_no: input.address_no || null,
+					village_no: input.village_no || null,
+					subdistrict: input.subdistrict || null,
+					district: input.district || null,
+					province: input.province || null,
+					postal_code: input.postal_code || null
 				};
 				await updateHouseholdMutation.mutateAsync(updated);
 				householdId = editingHousehold._id;
