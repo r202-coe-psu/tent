@@ -12,7 +12,6 @@
 	import ScanStation from './components/scan-station.svelte';
 	import type { SpecialRequestInput } from '$lib/features/operations';
 
-	let selectedShelter = $state('shelter-1');
 	let activeSubTab = $state('scan'); // 'scan', 'pending', 'needs'
 	let isModalOpen = $state(false);
 
@@ -166,48 +165,7 @@
 	}
 </script>
 
-<header
-	class="flex shrink-0 flex-col gap-4 border-b border-sidebar-border bg-card px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6"
->
-	<div class="flex items-center gap-2">
-		<Package class="h-5 w-5 text-muted-foreground" />
-		<h1 class="text-base font-bold text-foreground">คลังทรัพยากร (Stock & Donations)</h1>
-	</div>
-
-	<div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:w-auto">
-		<div class="flex w-full items-center gap-1.5 text-xs text-muted-foreground sm:w-auto">
-			<span class="shrink-0">ศูนย์อพยพ:</span>
-			<select
-				bind:value={selectedShelter}
-				class="w-full max-w-full truncate rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary sm:w-auto sm:max-w-[280px] md:max-w-xs"
-			>
-				<option value="shelter-1">ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)</option>
-				<option value="shelter-2">ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)</option>
-			</select>
-		</div>
-
-		<span
-			class="inline-flex shrink-0 items-center justify-center gap-1.5 self-start rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[11px] font-medium text-amber-600 sm:self-auto"
-		>
-			<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500"></span>
-			Offline Mode
-		</span>
-	</div>
-</header>
-
 <div class="flex w-full flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
-	<div
-		class="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-amber-800 md:p-4 dark:text-amber-300"
-	>
-		<AlertTriangle class="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500" />
-		<div>
-			<h4 class="text-xs font-bold">Offline Mode: เปิดใช้งานระบบบันทึกในเครื่อง</h4>
-			<p class="mt-1 text-[11px] leading-relaxed opacity-90">
-				ระบบอ่าน-เขียนข้อมูลไปยังคอมพิวเตอร์ของคุณโดยตรง
-				จะทำการซิงก์ข้อมูลขึ้นคลาวด์อัตโนมัติเมื่อตรวจพบการเชื่อมต่อออนไลน์
-			</p>
-		</div>
-	</div>
 
 	<div
 		class="flex scrollbar-none items-center justify-start overflow-x-auto border-b border-border"

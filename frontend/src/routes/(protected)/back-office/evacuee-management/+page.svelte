@@ -102,10 +102,6 @@
 	<title>จัดการผู้ประสบภัย · SmartShelter</title>
 </svelte:head>
 
-<header class="flex shrink-0 items-center gap-2 border-b border-sidebar-border bg-card px-4 py-2.5">
-	<Users class="h-4 w-4 text-primary" />
-	<h1 class="text-base font-bold text-foreground">จัดการผู้ประสบภัย</h1>
-</header>
 
 <div class="flex shrink-0 gap-2 border-b border-border bg-card px-4 py-2">
 	<Button

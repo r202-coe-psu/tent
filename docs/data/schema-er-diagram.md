@@ -49,12 +49,12 @@ erDiagram
     EVACUEE ||--o{ REFERRAL : "evacuee_id"
     EVACUEE }o--o{ SECURITY_EVENT : "evacuee_ids"
 
-    SUPPLY_ITEM ||--o{ STOCK_LEDGER : "item_id"
-    SUPPLY_ITEM ||--o{ STOCK_TRANSFER_ITEM : "item_id"
-    SUPPLY_ITEM |o--o{ DONATION_ITEM : "item_id optional"
-    SUPPLY_ITEM ||--o{ DONATION_CAMPAIGN_NEED : "item_id"
-    SUPPLY_ITEM ||--o{ RECIPE_INGREDIENT : "item_id"
-    SUPPLY_ITEM ||--o{ REQUISITION_ITEM : "item_id"
+    ITEM_MASTER ||--o{ STOCK_LEDGER : "item_id"
+    ITEM_MASTER ||--o{ STOCK_TRANSFER_ITEM : "item_id"
+    ITEM_MASTER |o--o{ DONATION_ITEM : "item_id optional"
+    ITEM_MASTER ||--o{ DONATION_CAMPAIGN_NEED : "item_id"
+    ITEM_MASTER ||--o{ RECIPE_INGREDIENT : "item_master_id"
+    ITEM_MASTER ||--o{ REQUISITION_ITEM : "item_id"
 
     STOCK_TRANSFER ||--|{ STOCK_TRANSFER_ITEM : "items"
     STOCK_TRANSFER |o--o{ STOCK_LEDGER : "transfer ref_id"
@@ -160,20 +160,39 @@ erDiagram
 
 ```mermaid
 erDiagram
-    SUPPLY_ITEM {
-        string _id PK "item:ulid"
+    ITEM_CATEGORY {
+        string _id PK "item_category:ulid"
         string name "req"
-        enum category "food water medicine clothing hygiene bedding equipment other"
-        string unit "canonical unit"
-        float reorder_level "nullable"
-        boolean perishable "default false"
+        boolean is_default "default false"
+    }
+
+    ITEM_MASTER {
+        string _id PK "item_master:sku or item_master:ulid"
+        string name "req"
+        string SKU "opt e.g. P-001"
+        string description "opt"
+        string base_unit "req e.g. ชิ้น กรัม มิลลิลิตร"
+        json conversions "opt uom_name multiplier barcode"
+        string default_purchasing_uom "opt"
+        string default_inventory_uom "opt"
+        string default_issue_uom "opt"
+        enum distribution_type "consumable one_time"
+        float target_reserve_days "opt"
+        float consumption_rate "opt"
+        string unit "opt unit of consumption_rate"
+        enum timeframe "daily weekly"
+        float sphere_standard "opt Sphere per person"
+        float overstock_alert_days "opt"
+        enum target_audience_type "all specific_segments"
+        json target_restrictions "opt genders vulnerable_groups diet_religions"
+        boolean is_default "default false"
     }
 
     STOCK_LEDGER {
         string _id PK "stock_ledger:ulid"
-        string item_id FK "item:ulid"
+        string item_id FK "item_master:sku or item_master:ulid"
         float qty "signed nonzero"
-        string unit "must match item unit"
+        string unit "must match item base_unit"
         enum reason "receive distribute requisition adjust transfer_out transfer_in donation"
         string ref_id FK "nullable source doc"
         json lot "expiry note"
@@ -192,9 +211,9 @@ erDiagram
 
     STOCK_TRANSFER_ITEM {
         string stock_transfer_id FK "logical parent"
-        string item_id FK "item:ulid"
+        string item_id FK "item_master:sku or item_master:ulid"
         float qty "positive"
-        string unit "must match item unit"
+        string unit "must match item base_unit"
     }
 
     DONATION {
@@ -232,25 +251,25 @@ erDiagram
 
     DONATION_CAMPAIGN_NEED {
         string campaign_id FK "logical parent"
-        string item_id FK "item:ulid"
+        string item_id FK "item_master:sku or item_master:ulid"
         float qty_target "positive"
         string unit "req"
     }
 
     RECIPE {
         string _id PK "recipe:ulid"
-        string name "req"
-        string serving_unit "default box"
-        json ingredients "embedded array"
-        json tags "halal soft_food vegetarian infant"
-        boolean active "req"
+        string label "req Thai display name"
+        json ingredients "embedded array item_master_id quantity uom"
+        float standard_portions "positive servings per batch"
+        float standard_duration_hours "positive hours to prepare"
+        boolean is_default "default false"
     }
 
     RECIPE_INGREDIENT {
         string recipe_id FK "logical parent"
-        string item_id FK "item:ulid"
-        float qty "per serving unit"
-        string unit "must match item unit"
+        string item_master_id FK "item_master:sku or item_master:ulid"
+        float quantity "positive per batch"
+        string uom "unit of measure"
     }
 
     MEAL_PLAN {
@@ -279,10 +298,10 @@ erDiagram
 
     REQUISITION_ITEM {
         string requisition_id FK "logical parent"
-        string item_id FK "item:ulid"
+        string item_id FK "item_master:sku or item_master:ulid"
         float qty_requested "positive"
         float qty_issued "nonnegative"
-        string unit "must match item unit"
+        string unit "must match item base_unit"
     }
 
     MEAL_SERVICE {
@@ -295,25 +314,25 @@ erDiagram
         string notes "opt"
     }
 
-    SUPPLY_ITEM ||--o{ STOCK_LEDGER : "ledger item"
+    ITEM_MASTER ||--o{ STOCK_LEDGER : "ledger item"
     STOCK_TRANSFER ||--|{ STOCK_TRANSFER_ITEM : "transfer lines"
-    SUPPLY_ITEM ||--o{ STOCK_TRANSFER_ITEM : "transfer item"
+    ITEM_MASTER ||--o{ STOCK_TRANSFER_ITEM : "transfer item"
     STOCK_TRANSFER |o--o{ STOCK_LEDGER : "transfer_out transfer_in"
 
     DONATION_CAMPAIGN ||--|{ DONATION_CAMPAIGN_NEED : "campaign needs"
-    SUPPLY_ITEM ||--o{ DONATION_CAMPAIGN_NEED : "needed item"
+    ITEM_MASTER ||--o{ DONATION_CAMPAIGN_NEED : "needed item"
     DONATION_CAMPAIGN |o--o{ DONATION : "campaign_id"
     DONATION ||--o{ DONATION_ITEM : "donated lines"
-    SUPPLY_ITEM |o--o{ DONATION_ITEM : "optional catalog item"
+    ITEM_MASTER |o--o{ DONATION_ITEM : "optional catalog item"
     DONATION |o--o{ STOCK_LEDGER : "received donation"
 
     RECIPE ||--|{ RECIPE_INGREDIENT : "ingredients"
-    SUPPLY_ITEM ||--o{ RECIPE_INGREDIENT : "ingredient item"
+    ITEM_MASTER ||--o{ RECIPE_INGREDIENT : "ingredient item"
     MEAL_PLAN ||--|{ MEAL_PLAN_RECIPE : "planned recipes"
     RECIPE ||--o{ MEAL_PLAN_RECIPE : "used by plan"
     MEAL_PLAN ||--o| KITCHEN_REQUISITION : "requisition source"
     KITCHEN_REQUISITION ||--|{ REQUISITION_ITEM : "requested items"
-    SUPPLY_ITEM ||--o{ REQUISITION_ITEM : "requested item"
+    ITEM_MASTER ||--o{ REQUISITION_ITEM : "requested item"
     KITCHEN_REQUISITION ||--o{ STOCK_LEDGER : "issued ledgers"
     MEAL_PLAN ||--o| MEAL_SERVICE : "same date meal"
 ```

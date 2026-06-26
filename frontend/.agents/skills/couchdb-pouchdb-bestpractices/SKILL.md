@@ -11,7 +11,10 @@ The Smart Shelter project uses an **Offline-First** architecture utilizing both 
 
 1. **Write to Local First**: Always write data to the local PouchDB instance first. Do not query or write to CouchDB directly from the frontend UI.
 2. **Repository Pattern**: All database operations must go through the Repository pattern (`frontend/src/lib/db/repository.ts` and feature-specific repositories like `people.pouch.ts`).
-3. **Replication Topology**: `device (PouchDB) ⇄ WAN ⇄ central (CouchDB 3.5)`. The active remote is single-target (Central normally, or LAN Edge as a fallback).
+3. **Replication Topology (Multi-DB)**: The system replicates from two primary sources:
+   - `shelter_{code}`: Read/Write database for daily shelter operations.
+   - `catalog`: Read-Only database for central master data (e.g., `sop_profile`).
+   Note: PouchDB cannot perform joins across databases. Any cross-database aggregation (Master vs Override) must be handled in the application/domain layer.
 4. **Live Query**: Use the changes feed (`frontend/src/lib/db/live-query.ts`) to convert PouchDB changes into Svelte/TanStack Query reactivity.
 5. **MVCC and `_rev`**: CouchDB uses Multi-Version Concurrency Control. Always fetch the latest `_rev` before updating or deleting an existing document to avoid `409 Conflict`.
 6. **Admin Operations**: Database creation, `_security` updates, and user management must be done via the server-side admin client (`$lib/server/couch-admin.ts`) to keep credentials secure.

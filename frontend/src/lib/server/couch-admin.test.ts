@@ -20,7 +20,7 @@ function grantError(caller: Caller, roles: string[]): ServiceError | null {
 
 describe('assertCanGrant', () => {
 	it('SA may grant staff, managers, and any shelter', () => {
-		expect(grantError(sa, ['shelter:SH009', 'volunteer'])).toBeNull();
+		expect(grantError(sa, ['shelter:SH009', 'registration_staff'])).toBeNull();
 		expect(grantError(sa, ['shelter:SH002', 'shelter_manager'])).toBeNull();
 	});
 
@@ -34,12 +34,12 @@ describe('assertCanGrant', () => {
 	});
 
 	it('a manager may grant own-shelter staff', () => {
-		expect(grantError(mgr, ['shelter:SH001', 'volunteer'])).toBeNull();
+		expect(grantError(mgr, ['shelter:SH001', 'registration_staff'])).toBeNull();
 		expect(grantError(mgr, ['shelter:SH001', 'kitchen_staff', 'warehouse_staff'])).toBeNull();
 	});
 
 	it('a manager may not cross shelters', () => {
-		expect(grantError(mgr, ['shelter:SH002', 'volunteer'])?.code).toBe('FORBIDDEN');
+		expect(grantError(mgr, ['shelter:SH002', 'registration_staff'])?.code).toBe('FORBIDDEN');
 	});
 
 	it('a manager may not grant manager or system_admin', () => {
@@ -54,6 +54,6 @@ describe('assertCanGrant', () => {
 			isSA: false,
 			shelterCode: null
 		};
-		expect(grantError(noScope, ['volunteer'])?.code).toBe('FORBIDDEN');
+		expect(grantError(noScope, ['registration_staff'])?.code).toBe('FORBIDDEN');
 	});
 });
