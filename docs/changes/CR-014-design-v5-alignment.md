@@ -33,8 +33,12 @@ affects:
 | --- | --- |
 | `T-48` (Registration) | ปรับ Flow เป็น 4-Step Wizard รวม Triage และรองรับการดึงข้อมูลจาก **Smart Card Reader** |
 | `T-07` (Pet/Asset) | รองรับการเปิดกล้อง (Camera Flow) และอัปโหลดภาพ |
-| `T-09` (Zone) | เพิ่มกฎความปลอดภัย **GBV Protection** ควบคุมเพศในการเข้าโซน และระบบพิมพ์ **Thermal Slip / SMS** ทันทีหลังจัดโซน |
+| `T-09` (Zone) | เพิ่มกฎความปลอดภัย **GBV Protection** (GBV = Gender Base Violence) ควบคุมเพศในการเข้าโซน และระบบพิมพ์ **Thermal Slip / SMS** ทันทีหลังจัดโซน |
 | `New Task` (Public) | สร้างหน้าฟอร์มลงทะเบียน **บ้านพี่เลี้ยง (Host House E-Form)** สำหรับประชาชนจิตอาสา |
+
+## Open Question
+1. เก็บรูปยังไง - ในส่วนการ implement developer-guide.md ไม่ได้กล่าวถึงการจัดการรูปภาพบน couchdb และยังไม่มี practices ในส่วนนี้
+2. 
 
 ## Impact
 - `docs/data/schema.md` — เพิ่มและแก้ไขฟิลด์ พร้อม Bump Version
