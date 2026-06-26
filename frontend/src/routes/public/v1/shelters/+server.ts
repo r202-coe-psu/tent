@@ -1,28 +1,24 @@
 import { json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
-import { adminRaw } from '$lib/server/couch-admin';
+import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
+import type { ShelterMaster } from '$lib/features/shelters/server';
 
-export const GET: RequestHandler = async () => {
+export const GET = async () => {
 	try {
-		const res = await adminRaw(`/registry/_all_docs?include_docs=true`, 'GET');
-		if (res.status === 404) return json([]);
-		if (res.status >= 400) return json({ error: 'Database fetch failed' }, { status: 500 });
+		const masters = await listShelterMasters();
 		
-		const rows = (res.data as any)?.rows ?? [];
-		const masters = rows.filter((r: any) => r.id.startsWith('shelter:') && r.doc).map((r: any) => r.doc);
+		// For public APIs, we filter out sensitive info and only return operational shelters
+		const visible = masters
+			.map(m => migrate(m as ShelterMaster))
+			.filter(m => m.operation_status === 'open');
 		
-		const list = masters
-            .filter((m: any) => m.status === 'open' || m.status === 'active')
-            .map((m: any) => ({
-                code: m.code,
-                name: m.name,
-                status: m.status,
-                capacity: m.capacity ?? 0
-		    }));
-            
-		return json(list);
+		return json(
+			visible.map((m) => ({
+				code: m.code,
+				name: m.name
+			}))
+		);
 	} catch (e) {
-		console.error('Failed to list shelters:', e);
-		return json({ error: 'Internal server error' }, { status: 500 });
+		console.error(e);
+		return json({ error: 'Failed to fetch shelters' }, { status: 500 });
 	}
 };
