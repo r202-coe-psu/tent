@@ -22,6 +22,7 @@ type Leaf = {
 	label: string;
 	href: ResolvedPathname | null;
 	icon: typeof Icon;
+	requiresAdmin?: boolean;
 };
 
 type Group = Leaf & {
@@ -68,8 +69,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'ตั้งค่าโครงสร้างศูนย์',
 				href: null,
 				icon: Building,
+				requiresAdmin: true,
 				children: [
-					{ label: 'ตั้งค่าศูนย์พักพิง', href: resolve('/back-office/shelters'), icon: Building },
+					{
+						label: 'ตั้งค่าศูนย์พักพิง',
+						href: resolve('/back-office/shelters'),
+						icon: Building,
+						requiresAdmin: true
+					},
 					{ label: 'จัดการบ้านพี่เลี้ยง', href: null, icon: House }
 				]
 			},
