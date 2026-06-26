@@ -1,22 +1,42 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		evacueeInputSchema,
-		genderSchema,
-		religionSchema,
 		specialNeedSchema,
 		SPECIAL_NEED_CHIPS,
 		type EvacueeInput
 	} from '../domain/people';
 	import Camera from '@lucide/svelte/icons/camera';
 	import { COUNTRIES } from '$lib/utils/country';
+
+	const cardTypeOptions = [
+		{ value: 'national_id', label: 'เลขประจำตัวประชาชน (Thai National ID)' },
+		{ value: 'passport', label: 'หนังสือเดินทาง (Passport)' },
+		{ value: 'pink_card', label: 'บัตรประจำตัวคนซึ่งไม่มีสัญชาติไทย (Pink Card)' },
+		{ value: 'other', label: 'อื่นๆ (Other)' }
+	];
+
+	const genderOptions = [
+		{ value: 'male', label: 'ชาย (Male)' },
+		{ value: 'female', label: 'หญิง (Female)' },
+		{ value: 'other', label: 'อื่นๆ (Other)' }
+	];
+
+	const religionOptions = [
+		{ value: 'buddhist', label: 'พุทธ (Buddhism)' },
+		{ value: 'muslim', label: 'อิสลาม (Islam)' },
+		{ value: 'christian', label: 'คริสต์ (Christianity)' },
+		{ value: 'other', label: 'อื่นๆ (Other)' },
+		{ value: 'unknown', label: 'ไม่ระบุ (Unknown)' }
+	];
 
 	let {
 		onsubmit,
@@ -96,29 +116,40 @@
 
 	$effect(() => {
 		$formData.medical_conditions = medicalConditionsStr
-			? medicalConditionsStr.split(',').map((s) => s.trim()).filter(Boolean)
+			? medicalConditionsStr
+					.split(',')
+					.map((s) => s.trim())
+					.filter(Boolean)
 			: [];
 	});
 
 	$effect(() => {
 		$formData.medical_medications = medicalMedicationsStr
-			? medicalMedicationsStr.split(',').map((s) => s.trim()).filter(Boolean)
+			? medicalMedicationsStr
+					.split(',')
+					.map((s) => s.trim())
+					.filter(Boolean)
 			: [];
 	});
 
 	$effect(() => {
 		$formData.medical_allergies = medicalAllergiesStr
-			? medicalAllergiesStr.split(',').map((s) => s.trim()).filter(Boolean)
+			? medicalAllergiesStr
+					.split(',')
+					.map((s) => s.trim())
+					.filter(Boolean)
 			: [];
 	});
 </script>
 
 <form method="POST" use:form.enhance class="space-y-6">
 	<Field.FieldGroup>
-		<div class="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6 items-start">
+		<div class="grid grid-cols-1 items-start gap-6 md:grid-cols-[200px_1fr]">
 			<!-- Column 1: Face Photo mockup -->
 			<div class="space-y-2">
-				<p class="text-sm font-medium leading-none text-foreground">ภาพถ่ายใบหน้า (Face Recognition)</p>
+				<p class="text-sm leading-none font-medium text-foreground">
+					ภาพถ่ายใบหน้า (Face Recognition)
+				</p>
 				<input
 					type="file"
 					accept="image/*"
@@ -133,13 +164,13 @@
 				/>
 				<label
 					for="face-photo-input"
-					class="cursor-pointer block border border-dashed border-muted-foreground/30 hover:border-primary/50 bg-muted/20 hover:bg-muted/30 transition-all rounded-xl p-4 text-center"
+					class="block cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
 				>
 					{#if facePhotoUrl}
-						<img src={facePhotoUrl} alt="Face" class="w-full h-40 object-cover rounded-lg" />
+						<img src={facePhotoUrl} alt="Face" class="h-40 w-full rounded-lg object-cover" />
 					{:else}
-						<div class="flex flex-col items-center justify-center h-40">
-							<Camera class="h-10 w-10 text-muted-foreground mb-2" />
+						<div class="flex h-40 flex-col items-center justify-center">
+							<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
 							<span class="text-xs text-muted-foreground">แตะเพื่อถ่ายภาพ</span>
 						</div>
 					{/if}
@@ -148,19 +179,22 @@
 
 			<!-- Column 2: Fields grid -->
 			<div class="space-y-4">
-				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-					<!-- ประเภทบัตร -->
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<div class="space-y-2">
 						<Label>ประเภทบัตร</Label>
-						<select
-							bind:value={$formData.person_id.cardType}
-							class="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-						>
-							<option value="national_id">เลขประจำตัวประชาชน (Thai National ID)</option>
-							<option value="passport">หนังสือเดินทาง (Passport)</option>
-							<option value="pink_card">บัตรประจำตัวคนซึ่งไม่มีสัญชาติไทย (Pink Card)</option>
-							<option value="other">อื่นๆ (Other)</option>
-						</select>
+						<Select.Root type="single" bind:value={$formData.person_id.cardType}>
+							<Select.Trigger
+								class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+							>
+								{cardTypeOptions.find((o) => o.value === $formData.person_id.cardType)?.label ??
+									'— เลือก —'}
+							</Select.Trigger>
+							<Select.Content>
+								{#each cardTypeOptions as opt (opt.value)}
+									<Select.Item value={opt.value} label={opt.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
 					</div>
 
 					<!-- เลขประจำตัวประชาชน / พาสปอร์ต / อื่นๆ -->
@@ -180,8 +214,16 @@
 								</Form.Label>
 								<Input
 									{...props}
-									maxlength={$formData.person_id.cardType === 'national_id' ? 13 : ($formData.person_id.cardType === 'passport' ? 9 : undefined)}
-									placeholder={$formData.person_id.cardType === 'national_id' ? 'X-XXXX-XXXXX-XX-X' : ($formData.person_id.cardType === 'passport' ? 'Passport Number' : 'หมายเลขบัตร')}
+									maxlength={$formData.person_id.cardType === 'national_id'
+										? 13
+										: $formData.person_id.cardType === 'passport'
+											? 9
+											: undefined}
+									placeholder={$formData.person_id.cardType === 'national_id'
+										? 'X-XXXX-XXXXX-XX-X'
+										: $formData.person_id.cardType === 'passport'
+											? 'Passport Number'
+											: 'หมายเลขบัตร'}
 									bind:value={$formData.person_id.number}
 								/>
 							{/snippet}
@@ -190,7 +232,7 @@
 					</Form.Field>
 				</div>
 
-				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<!-- ชื่อ -->
 					<Form.Field {form} name="first_name">
 						<Form.Control>
@@ -225,14 +267,11 @@
 					</Form.Field>
 				</div>
 
-				<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+				<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
 					<!-- วันเกิด -->
 					<div class="space-y-2">
 						<Label>วันเกิด</Label>
-						<Input
-							type="date"
-							bind:value={birthDateStr}
-						/>
+						<Input type="date" bind:value={birthDateStr} />
 					</div>
 
 					<!-- อายุ -->
@@ -251,22 +290,23 @@
 						/>
 					</div>
 
-					<!-- เพศ -->
 					<Form.Field {form} name="gender">
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>เพศ</Form.Label>
-								<select
-									{...props}
-									bind:value={$formData.gender}
-									class="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-								>
-									{#each genderSchema.options as g (g)}
-										<option value={g}>
-											{g === 'male' ? 'ชาย (Male)' : g === 'female' ? 'หญิง (Female)' : 'อื่นๆ (Other)'}
-										</option>
-									{/each}
-								</select>
+								<Select.Root type="single" bind:value={$formData.gender}>
+									<Select.Trigger
+										{...props}
+										class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+									>
+										{genderOptions.find((o) => o.value === $formData.gender)?.label ?? '— เลือก —'}
+									</Select.Trigger>
+									<Select.Content>
+										{#each genderOptions as opt (opt.value)}
+											<Select.Item value={opt.value} label={opt.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
@@ -295,50 +335,43 @@
 					</Form.Field>
 				</div>
 
-				<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-					<!-- ประเทศ -->
+				<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
 					<Form.Field {form} name="country">
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>ประเทศ</Form.Label>
-								<select
-									{...props}
+								<Combobox
+									items={COUNTRIES}
 									bind:value={$formData.country}
-									class="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-								>
-									{#each COUNTRIES as country}
-										<option value={country.value}>{country.label}</option>
-									{/each}
-								</select>
+									placeholder="เลือกประเทศ..."
+									searchPlaceholder="ค้นหาประเทศ..."
+									emptyText="ไม่พบประเทศ"
+									controlProps={props}
+									class="h-9"
+								/>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
 					</Form.Field>
 
-					<!-- ศาสนา -->
 					<Form.Field {form} name="religion">
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>ศาสนา *</Form.Label>
-								<select
-									{...props}
-									bind:value={$formData.religion}
-									class="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-								>
-									{#each religionSchema.options as r (r)}
-										<option value={r}>
-											{r === 'buddhist'
-												? 'พุทธ (Buddhism)'
-												: r === 'muslim'
-													? 'อิสลาม (Islam)'
-													: r === 'christian'
-														? 'คริสต์ (Christianity)'
-														: r === 'other'
-															? 'อื่นๆ (Other)'
-															: 'ไม่ระบุ (Unknown)'}
-										</option>
-									{/each}
-								</select>
+								<Select.Root type="single" bind:value={$formData.religion}>
+									<Select.Trigger
+										{...props}
+										class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+									>
+										{religionOptions.find((o) => o.value === $formData.religion)?.label ??
+											'— เลือก —'}
+									</Select.Trigger>
+									<Select.Content>
+										{#each religionOptions as opt (opt.value)}
+											<Select.Item value={opt.value} label={opt.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
@@ -348,32 +381,41 @@
 		</div>
 
 		<!-- Medical fields section (โรคประจำตัว) -->
-		<div class="border-t border-border pt-6 space-y-4 w-full">
-			<h3 class="text-sm font-semibold text-foreground flex items-center gap-2">
+		<div class="w-full space-y-4 border-t border-border pt-6">
+			<h3 class="flex items-center gap-2 text-sm font-semibold text-foreground">
 				<span>🏥</span> โรคประจำตัว & ข้อมูลสุขภาพ
 			</h3>
 			<div class="grid grid-cols-1 gap-4">
 				<div class="space-y-2">
 					<Label>โรคประจำตัว</Label>
-					<Input placeholder="เช่น เบาหวาน, ความดัน (ถ้าไม่มีให้เว้นว่าง)" bind:value={medicalConditionsStr} />
+					<Input
+						placeholder="เช่น เบาหวาน, ความดัน (ถ้าไม่มีให้เว้นว่าง)"
+						bind:value={medicalConditionsStr}
+					/>
 				</div>
 			</div>
 
-			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 				<div class="space-y-2">
 					<Label>ประวัติการแพ้ยา</Label>
-					<Input placeholder="เช่น พาราเซตามอล (ถ้าไม่มีให้เว้นว่าง)" bind:value={medicalMedicationsStr} />
+					<Input
+						placeholder="เช่น พาราเซตามอล (ถ้าไม่มีให้เว้นว่าง)"
+						bind:value={medicalMedicationsStr}
+					/>
 				</div>
 
 				<div class="space-y-2">
 					<Label>ประวัติการแพ้อาหาร</Label>
-					<Input placeholder="เช่น อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)" bind:value={medicalAllergiesStr} />
+					<Input
+						placeholder="เช่น อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
+						bind:value={medicalAllergiesStr}
+					/>
 				</div>
 			</div>
 		</div>
 
 		<!-- Special Needs section -->
-		<div class="border-t border-border pt-6 space-y-2 w-full">
+		<div class="w-full space-y-2 border-t border-border pt-6">
 			<Label class="text-sm font-semibold">แท็กกลุ่มเปราะบางและความต้องการพิเศษ</Label>
 			<div class="flex flex-wrap gap-2 pt-1">
 				{#each specialNeedSchema.options as need (need)}
@@ -388,7 +430,7 @@
 								? current.filter((n) => n !== need)
 								: [...current, need];
 						}}
-						class="h-auto inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-normal transition-colors {checked
+						class="inline-flex h-auto items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-normal transition-colors {checked
 							? 'border-primary bg-primary/10 font-medium text-primary hover:bg-primary/15'
 							: 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-primary/5'}"
 					>
@@ -398,7 +440,7 @@
 				{/each}
 			</div>
 			<Form.Field {form} name="special_needs"><Form.FieldErrors /></Form.Field>
-			
+
 			<div class="mt-8 mb-4 overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]">
 				<div class="border-b border-[#E2E8F0] px-4 py-3 sm:px-6">
 					<h3 class="flex items-center gap-2 text-base font-bold text-foreground">
@@ -410,17 +452,21 @@
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>ชื่อ-นามสกุล บุคคลติดต่อฉุกเฉิน</Form.Label>
-								<Input 
-									{...props} 
-									placeholder="ชื่อนามสกุล ญาติ/ผู้ใกล้ชิด" 
+								<Input
+									{...props}
+									placeholder="ชื่อนามสกุล ญาติ/ผู้ใกล้ชิด"
 									value={$formData.emergency_contact?.name ?? ''}
 									oninput={(e) => {
 										if (!$formData.emergency_contact) {
-											$formData.emergency_contact = { name: '', phone: '', relation: 'ญาติ/ผู้ใกล้ชิด' };
+											$formData.emergency_contact = {
+												name: '',
+												phone: '',
+												relation: 'ญาติ/ผู้ใกล้ชิด'
+											};
 										}
 										$formData.emergency_contact.name = e.currentTarget.value;
 									}}
-									class="bg-white" 
+									class="bg-white"
 								/>
 							{/snippet}
 						</Form.Control>
@@ -431,18 +477,22 @@
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>เบอร์ติดต่อฉุกเฉิน</Form.Label>
-								<Input 
-									{...props} 
-									inputmode="numeric" 
-									maxlength={10} 
-									placeholder="08X-XXX-XXXX" 
+								<Input
+									{...props}
+									inputmode="numeric"
+									maxlength={10}
+									placeholder="08X-XXX-XXXX"
 									value={$formData.emergency_contact?.phone ?? ''}
 									class="bg-white"
 									oninput={(e) => {
 										const val = e.currentTarget.value.replace(/\D/g, '');
 										e.currentTarget.value = val;
 										if (!$formData.emergency_contact) {
-											$formData.emergency_contact = { name: '', phone: '', relation: 'ญาติ/ผู้ใกล้ชิด' };
+											$formData.emergency_contact = {
+												name: '',
+												phone: '',
+												relation: 'ญาติ/ผู้ใกล้ชิด'
+											};
 										}
 										$formData.emergency_contact.phone = val;
 									}}
@@ -463,7 +513,7 @@
 								{...props}
 								bind:value={$formData.medical_note}
 								placeholder="เช่น ผู้ป่วยที่ต้องรับยาเฉพาะทาง หรือต้องการการดูแลพิเศษ"
-								class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+								class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 							></textarea>
 						{/snippet}
 					</Form.Control>
@@ -473,18 +523,18 @@
 		</div>
 
 		<!-- Back + Submit row -->
-		<div class="flex items-center gap-3 pt-6 border-t border-border w-full">
+		<div class="flex w-full items-center gap-3 border-t border-border pt-6">
 			<Button
 				type="button"
 				variant="outline"
 				onclick={onBack}
-				class="gap-1 px-6 py-2 text-sm font-medium h-10"
+				class="h-10 gap-1 px-6 py-2 text-sm font-medium"
 			>
 				ย้อนกลับ
 			</Button>
 		</div>
-		<div class="flex items-center gap-3 pt-2 justify-end">
-			<Form.Button disabled={$submitting || pending}> Next ⏭️</Form.Button>
+		<div class="flex items-center justify-end gap-3 pt-2">
+			<Form.Button disabled={$submitting || pending}>Next ⏭️</Form.Button>
 		</div>
 	</Field.FieldGroup>
 </form>
