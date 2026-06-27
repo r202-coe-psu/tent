@@ -4,11 +4,11 @@
 	import SearchSection from './evacuee-search.svelte';
 	import EwarSymptomSection from './evacuee-ewar-symptom.svelte';
 	import RegistrationSection from './evacuee-registration.svelte';
-	import HouseholdForm from './household-form.svelte';
+	import HouseholdRegisterForm from './household-register-form.svelte';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { useShelter } from '$lib/features/shelters';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import {
 		useEvacuees,
 		useHouseholds,
@@ -27,7 +27,7 @@
 		step?: 1 | 2 | 3 | 4;
 	} = $props();
 
-	let selectedSymptoms = $state(new SvelteSet<string>());
+	const selectedSymptoms = new SvelteSet<string>();
 	let isHealthy = $state(false);
 	let newlyRegisteredEvacuee = $state<any>(null);
 	let isSubmittingEvacuee = $state(false);
@@ -56,11 +56,9 @@
 		return list;
 	});
 
-	// Fetch data for HouseholdForm
+		// Fetch data for HouseholdRegisterForm
 	const evacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
-	const shelterQuery = useShelter(() => SHELTER_CODE);
-	const zones = $derived(shelterQuery.data?.zones ?? []);
 
 	const createHouseholdMutation = useCreateHousehold();
 	const updateEvacueeMutation = useUpdateEvacuee();
@@ -73,11 +71,7 @@
 		step = 4;
 	}
 
-	async function handleHouseholdSubmit(
-		input: HouseholdInput,
-		selectedMemberIds: string[],
-		emergencyContactPhone?: string
-	) {
+	async function handleHouseholdSelect(household: any) {
 		if (isSubmittingHousehold) return;
 		isSubmittingHousehold = true;
 
@@ -87,100 +81,86 @@
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 
-			let evacueeIdMap: Record<string, string> = {};
+			let registeredEvacuee = newlyRegisteredEvacuee;
 			if (pendingEvacueeInput) {
-				const registeredEvacuee = await onsubmit(pendingEvacueeInput, pendingSymptoms);
+				registeredEvacuee = await onsubmit(pendingEvacueeInput, pendingSymptoms);
 				newlyRegisteredEvacuee = registeredEvacuee;
-				evacueeIdMap['temp-new-evacuee'] = registeredEvacuee._id;
 				pendingEvacueeInput = null;
 				pendingSymptoms = [];
 			}
 
-			const resolvedMemberIds = selectedMemberIds.map((id) => evacueeIdMap[id] || id);
-			if (input.head_evacuee_id && evacueeIdMap[input.head_evacuee_id]) {
-				input.head_evacuee_id = evacueeIdMap[input.head_evacuee_id];
+			if (!registeredEvacuee) {
+				throw new Error('ไม่พบข้อมูลผู้ประสบภัยที่กำลังลงทะเบียน');
 			}
 
+			// Update the newly created evacuee's household_id to the selected household's ID
+			await updateEvacueeMutation.mutateAsync({
+				...registeredEvacuee,
+				household_id: household._id
+			});
+			toast.success(`เข้าร่วมครัวเรือน "${household.label}" สำเร็จ`);
+
+			// Go back to step 1
+			step = 1;
+			newlyRegisteredEvacuee = null;
+		} catch (err: any) {
+			toast.error(`เกิดข้อผิดพลาด: ${err.message || err}`);
+		} finally {
+			isSubmittingHousehold = false;
+		}
+	}
+
+	async function handleHouseholdRegisterSubmit(addressInput: Partial<HouseholdInput>) {
+		if (isSubmittingHousehold) return;
+		isSubmittingHousehold = true;
+
+		try {
+			const ctx = {
+				shelterCode: shelterStore.selectedShelterCode ?? SHELTER_CODE,
+				createdBy: authStore.user?.name ?? 'unknown'
+			};
+
+			let registeredEvacuee = newlyRegisteredEvacuee;
+			if (pendingEvacueeInput) {
+				registeredEvacuee = await onsubmit(pendingEvacueeInput, pendingSymptoms);
+				newlyRegisteredEvacuee = registeredEvacuee;
+				pendingEvacueeInput = null;
+				pendingSymptoms = [];
+			}
+
+			if (!registeredEvacuee) {
+				throw new Error('ไม่พบข้อมูลผู้ประสบภัยที่กำลังลงทะเบียน');
+			}
+
+			// Create a household label based on the evacuee's name
+			const householdLabel = `ครอบครัว${registeredEvacuee.first_name} ${registeredEvacuee.last_name}`;
+
+			// Construct HouseholdInput
+			const householdInput: HouseholdInput = {
+				label: householdLabel,
+				head_evacuee_id: registeredEvacuee._id,
+				municipality_zone: null,
+				community: null,
+				pets: [],
+				notes: '',
+				address_no: addressInput.address_no || null,
+				village_no: addressInput.village_no || null,
+				subdistrict: addressInput.subdistrict || null,
+				district: addressInput.district || null,
+				province: addressInput.province || null,
+				postal_code: addressInput.postal_code || null
+			};
+
 			// Create household
-			const res = await createHouseholdMutation.mutateAsync({ input, ctx });
+			const res = await createHouseholdMutation.mutateAsync({ input: householdInput, ctx });
 			const householdId = res._id;
 			toast.success(`สร้างครัวเรือน "${res.label}" สำเร็จ`);
 
-			// Sync membership
-			const allEvacuees = [...(evacueesQuery.data || [])];
-			if (newlyRegisteredEvacuee) {
-				allEvacuees.push(newlyRegisteredEvacuee);
-			}
-
-			const currentMembers = allEvacuees.filter((ev) => ev.household_id === householdId);
-			const currentMemberIds = currentMembers.map((ev) => ev._id);
-
-			const toAdd = resolvedMemberIds.filter((id) => !currentMemberIds.includes(id));
-			const toRemove = currentMemberIds.filter((id) => !resolvedMemberIds.includes(id));
-
-			const getUpdatedEmergencyContact = (evac: any, phone: string | undefined) => {
-				if (phone === undefined) return evac.emergency_contact;
-				const trimmed = phone.trim();
-				if (!trimmed) return undefined;
-				return {
-					name: evac.emergency_contact?.name || 'ผู้ติดต่อฉุกเฉิน',
-					relation: evac.emergency_contact?.relation || 'ติดต่อฉุกเฉิน',
-					phone: trimmed
-				};
-			};
-
-			// Add members
-			for (const evacId of toAdd) {
-				const evac = allEvacuees.find((ev) => ev._id === evacId);
-				if (evac) {
-					const isHead = input.head_evacuee_id === evacId;
-					const updatedEvac: any = {
-						...evac,
-						household_id: householdId
-					};
-					if (isHead && emergencyContactPhone !== undefined) {
-						const updatedContact = getUpdatedEmergencyContact(evac, emergencyContactPhone);
-						if (updatedContact) {
-							updatedEvac.emergency_contact = updatedContact;
-						} else {
-							delete updatedEvac.emergency_contact;
-						}
-					}
-					await updateEvacueeMutation.mutateAsync(updatedEvac);
-				}
-			}
-
-			// Remove members
-			for (const evacId of toRemove) {
-				const evac = allEvacuees.find((ev) => ev._id === evacId);
-				if (evac) {
-					await updateEvacueeMutation.mutateAsync({
-						...evac,
-						household_id: null
-					});
-				}
-			}
-
-			// If the head evacuee was already a member (not in toAdd), update emergency contact if changed
-			if (input.head_evacuee_id && !toAdd.includes(input.head_evacuee_id)) {
-				const headEvac = allEvacuees.find((ev) => ev._id === input.head_evacuee_id);
-				if (headEvac && emergencyContactPhone !== undefined) {
-					const currentPhone = headEvac.emergency_contact?.phone ?? '';
-					const trimmedPhone = emergencyContactPhone.trim();
-					if (currentPhone !== trimmedPhone) {
-						const updatedEvac = {
-							...headEvac
-						};
-						const updatedContact = getUpdatedEmergencyContact(headEvac, emergencyContactPhone);
-						if (updatedContact) {
-							updatedEvac.emergency_contact = updatedContact;
-						} else {
-							delete updatedEvac.emergency_contact;
-						}
-						await updateEvacueeMutation.mutateAsync(updatedEvac);
-					}
-				}
-			}
+			// Update the evacuee to link to the new household
+			await updateEvacueeMutation.mutateAsync({
+				...registeredEvacuee,
+				household_id: householdId
+			});
 
 			// Go back to step 1
 			step = 1;
@@ -240,13 +220,33 @@
 		
 	/>
 {:else if step === 4}
-	<HouseholdForm
-		onsubmit={handleHouseholdSubmit}
-		oncancel={handleHouseholdCancel}
-		pending={isSubmittingHousehold}
-		allEvacuees={combinedEvacuees}
-		zones={zones}
-		households={householdsQuery.data ?? []}
-		initialMemberIds={pendingEvacueeInput ? ['temp-new-evacuee'] : (newlyRegisteredEvacuee ? [newlyRegisteredEvacuee._id] : [])}
-	/>
+	<div class="space-y-6">
+		<HouseholdRegisterForm
+			allEvacuees={combinedEvacuees}
+			households={householdsQuery.data ?? []}
+			onsubmit={handleHouseholdRegisterSubmit}
+			onselect={handleHouseholdSelect}
+			pending={isSubmittingHousehold}
+		/>
+		<div class="flex justify-between items-center border-t border-border pt-6">
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => {
+					step = 3;
+				}}
+				class="h-10 gap-1 px-6 py-2 text-sm font-medium"
+			>
+				ย้อนกลับ
+			</Button>
+			<Button
+				type="button"
+				variant="ghost"
+				onclick={handleHouseholdCancel}
+				class="h-10 text-sm font-medium text-destructive hover:bg-destructive/10 hover:text-destructive cursor-pointer"
+			>
+				ยกเลิกการลงทะเบียน
+			</Button>
+		</div>
+	</div>
 {/if}

@@ -121,9 +121,9 @@
 					3
 				</div>
 				<div class="space-y-1">
-					<Card.Title class="text-base font-semibold leading-none">ข้อมูลครัวเรือน (Household Info)</Card.Title>
+					<Card.Title class="text-base font-semibold leading-none">หน้าค้นหาครอบครัว (Head of Household)</Card.Title>
 					<Card.Description class="text-sm">
-						ระบุสมาชิกกลุ่ม/ครัวเรือน ที่พักอาศัย และข้อมูลอื่นๆ ของผู้ประสบภัย
+						สืบค้นและตรวจสอบกลุ่มครอบครัว หรือลงทะเบียนเป็นครอบครัวใหม่
 					</Card.Description>
 				</div>
 			</Card.Header>

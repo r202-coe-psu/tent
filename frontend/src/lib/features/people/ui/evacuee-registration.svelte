@@ -532,7 +532,7 @@
 			</Button>
 		</div>
 		<div class="flex items-center justify-end gap-3 pt-2">
-			<Form.Button disabled={$submitting || pending}>Next ⏭️</Form.Button>
+			<Form.Button disabled={$submitting || pending}>Next</Form.Button>
 		</div>
 	</Field.FieldGroup>
 </form>
