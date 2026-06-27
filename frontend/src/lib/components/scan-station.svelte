@@ -10,7 +10,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
-	import { Html5QrcodeScanner } from 'html5-qrcode';
+	// Html5QrcodeScanner will be loaded via CDN script; no import required
 	import { untrack } from 'svelte';
 
 	let activeMode = $state<'scan' | 'walkin'>('scan');
@@ -29,7 +29,7 @@
 	let walkinDonorPhone = $state('');
 	let walkinItems = $state([{ name: '', qty: 1, unit: 'ชิ้น' }]);
 
-	let scanner: Html5QrcodeScanner | null = null;
+	let scanner: any = null;
 
 	$effect(() => {
 		if (scanState === 'scanning') {
@@ -105,6 +105,9 @@
 		walkinItems = [{ name: '', qty: 1, unit: 'ชิ้น' }];
 	}
 </script>
+<svelte:head>
+	<script src="https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js"></script>
+</svelte:head>
 
 <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
 	<!-- Section Header -->
