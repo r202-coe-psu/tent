@@ -77,7 +77,8 @@ function loadEnv(): Record<string, string> {
 }
 
 const env = loadEnv();
-const rawCouchUrl = env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984';
+const rawCouchUrl =
+	process.env.COUCHDB_ADMIN_URL ?? env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984';
 
 // Node's native fetch rejects URLs with embedded credentials — split them out.
 function parseCouchUrl(raw: string): { baseUrl: string; authHeader: string } {
