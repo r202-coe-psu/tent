@@ -15,13 +15,15 @@ import {
 	House,
 	Calculator,
 	HandHeart,
-	MapPin
+	MapPin,
+	ScanLine
 } from '@lucide/svelte/icons';
 
 type Leaf = {
 	label: string;
 	href: ResolvedPathname | null;
 	icon: typeof Icon;
+	requiresAdmin?: boolean;
 };
 
 type Group = Leaf & {
@@ -51,7 +53,18 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '2. บริหารทรัพยากร',
 		items: [
 			{ label: 'การประเมินประจำวัน (Daily SOP)', href: null, icon: ClipboardList },
-			{ label: 'คลังสิ่งของและบริจาค', href: null, icon: Package }
+			{
+				label: 'คลังสิ่งของและบริจาค',
+				href: resolve('/back-office/stock-donations'),
+				icon: Package,
+				children: [
+					{
+						label: 'สแกน QR รับของเข้าคลัง',
+						href: resolve('/back-office/stock-donations'),
+						icon: ScanLine
+					}
+				]
+			}
 		]
 	},
 	{
@@ -68,8 +81,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'ตั้งค่าโครงสร้างศูนย์',
 				href: null,
 				icon: Building,
+				requiresAdmin: true,
 				children: [
-					{ label: 'ตั้งค่าศูนย์พักพิง', href: resolve('/back-office/shelters'), icon: Building },
+					{
+						label: 'ตั้งค่าศูนย์พักพิง',
+						href: resolve('/back-office/shelters'),
+						icon: Building,
+						requiresAdmin: true
+					},
 					{ label: 'จัดการบ้านพี่เลี้ยง', href: null, icon: House }
 				]
 			},

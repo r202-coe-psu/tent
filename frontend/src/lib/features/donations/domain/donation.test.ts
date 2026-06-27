@@ -1,25 +1,55 @@
 import { describe, it, expect } from 'vitest';
 import {
-    donationPreDeclarationInputSchema,
-    isDonationPreDeclaration
+	donationPreDeclarationInputSchema,
+	isDonationPreDeclaration,
+	receiveDonation,
+	type DonationPreDeclaration
 } from './donation';
 
-describe('donationPreDeclarationInputSchema', () => {
-    // 1. Valid Case
-    it('passes validation with valid donor declaration data', () => {
-        const validData = {
-            shelter_code: 'SH001',
-            items: [
-                { item_id: 'item:noodles_01', qty: 10 },
-                { item_id: 'item:water_01', qty: 5 },
-            ],
-            phone: '0812345678',
-            otpToken: '123456'
-        };
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-        const result = donationPreDeclarationInputSchema.safeParse(validData);
-        expect(result.success).toBe(true);
-    });
+function makeDeclaredDonation(overrides: Partial<DonationPreDeclaration> = {}): DonationPreDeclaration {
+	return {
+		_id: 'donation_pre_declaration:01ABCDEFGHIJKLMNOPQRSTUVWX',
+		type: 'donation_pre_declaration',
+		schema_v: 2,
+		shelter_code: 'SH001',
+		tracking_token: 'tok-abc',
+		booking_ref: 'DN-123456',
+		items: [
+			{ free_text: 'Noodles', qty: 10, unit: 'box' },
+			{ free_text: 'Water', qty: 5, unit: 'bottle' }
+		],
+		donor_phone_hash: 'sha256-hash',
+		status: 'declared',
+		created_at: '2026-06-01T00:00:00.000Z',
+		updated_at: '2026-06-01T00:00:00.000Z',
+		created_by: 'public',
+		...overrides
+	};
+}
+
+// ---------------------------------------------------------------------------
+// donationPreDeclarationInputSchema
+// ---------------------------------------------------------------------------
+
+describe('donationPreDeclarationInputSchema', () => {
+	const getValidData = () => ({
+		shelter_code: 'SH001',
+		donor: { name: 'John Doe', phone: '0812345678' },
+		items: [
+			{ free_text: 'Noodles', qty: 10, unit: 'box' },
+			{ free_text: 'Water', qty: 5, unit: 'bottle' }
+		],
+		captchaToken: 'valid_token'
+	});
+
+	it('passes validation with valid donor declaration data', () => {
+		const result = donationPreDeclarationInputSchema.safeParse(getValidData());
+		expect(result.success).toBe(true);
+	});
 
     // 2. Invalid Case - Missing Shelter Code
     it('fails validation when shelter_code is missing', () => {
@@ -91,29 +121,18 @@ describe('donationPreDeclarationInputSchema', () => {
 });
 
 describe('isDonationPreDeclaration (Type Guard)', () => {
-    it('returns true for a valid donation pre-declaration document', () => {
-        const mockDoc = {
-            _id: 'donation_pre_declaration:some-uuid',
-            type: 'donation_pre_declaration',
-            tracking_token: 'some-uuid',
-            shelter_code: 'SH001',
-            items: [{ item_id: 'item:noodles_01', qty: 10 }],
-            donor_phone_hash: 'some-sha256-hash',
-            status: 'pending',
-            created_at: '2026-06-19T00:00:00Z',
-            created_by: 'system',
-            schema_v: 1
-        };
+	it('returns true for a valid donation pre-declaration document', () => {
+		expect(isDonationPreDeclaration(makeDeclaredDonation())).toBe(true);
+	});
 
-        expect(isDonationPreDeclaration(mockDoc)).toBe(true);
-    });
+	it('returns false for an invalid document type', () => {
+		expect(isDonationPreDeclaration({ _id: 'evacuee:01', type: 'evacuee', first_name: 'John' })).toBe(false);
+	});
+});
 
-    it('returns false for an invalid document type', () => {
-        const mockDoc = {
-            _id: 'evacuee:some-uuid',
-            type: 'evacuee',
-            first_name: 'John',
-        };
+// ---------------------------------------------------------------------------
+// receiveDonation — T-16-3.2 Audit Trail
+// ---------------------------------------------------------------------------
 
         expect(isDonationPreDeclaration(mockDoc)).toBe(false);
     });

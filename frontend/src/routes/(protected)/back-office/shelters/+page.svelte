@@ -22,21 +22,12 @@
 	<title>ตั้งค่าศูนย์พักพิง · SmartShelter</title>
 </svelte:head>
 
-<header
-	class="flex shrink-0 items-center justify-between border-b border-sidebar-border bg-card px-4 py-2.5"
->
-	<div class="flex items-center gap-2">
-		<Building class="h-4 w-4 text-muted-foreground" />
-		<h1 class="text-base font-bold text-foreground">ตั้งค่าศูนย์พักพิง</h1>
-	</div>
-	<Button size="sm" onclick={handleCreateNew}>
-		<Plus class="mr-2 h-4 w-4" /> เพิ่มศูนย์พักพิงใหม่
-	</Button>
-</header>
-
 <div class="flex w-full flex-1 flex-col gap-6 p-6">
-	<div class="flex flex-col gap-1 border-l-4 border-border pl-3">
+	<div class="flex items-center justify-between gap-4 border-l-4 border-border pl-3">
 		<h2 class="text-sm font-bold text-foreground">จัดการโครงสร้างศูนย์พักพิง</h2>
+		<Button size="sm" onclick={handleCreateNew}>
+			<Plus class="mr-2 h-4 w-4" /> เพิ่มศูนย์พักพิงใหม่
+		</Button>
 	</div>
 
 	<Card.Root>

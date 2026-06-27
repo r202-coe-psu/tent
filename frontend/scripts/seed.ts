@@ -77,7 +77,8 @@ function loadEnv(): Record<string, string> {
 }
 
 const env = loadEnv();
-const rawCouchUrl = env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984';
+const rawCouchUrl =
+	process.env.COUCHDB_ADMIN_URL ?? env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984';
 
 // Node's native fetch rejects URLs with embedded credentials — split them out.
 function parseCouchUrl(raw: string): { baseUrl: string; authHeader: string } {
@@ -115,6 +116,39 @@ async function ensureDb(name: string): Promise<void> {
 	const { status } = await couchReq('PUT', `/${name}`);
 	if (status !== 201 && status !== 412)
 		throw new Error(`Cannot create database "${name}" (HTTP ${status})`);
+}
+
+interface CouchDbSecurity {
+	admins?: { names?: string[]; roles?: string[] };
+	members?: { names?: string[]; roles?: string[] };
+}
+
+async function setSecurity(db: string, security: CouchDbSecurity): Promise<void> {
+	// 1. Fetch the existing security object
+	const { status: getStatus, data } = await couchReq('GET', `/${db}/_security`);
+	const existing = (getStatus === 200 ? data : {}) as CouchDbSecurity;
+
+	// 2. Ensure properties exist
+	existing.admins ??= { names: [], roles: [] };
+	existing.members ??= { names: [], roles: [] };
+	existing.admins.names ??= [];
+	existing.admins.roles ??= [];
+	existing.members.names ??= [];
+	existing.members.roles ??= [];
+
+	// 3. Helper to merge arrays without duplicates
+	const merge = (a: string[], b: string[] = []) => Array.from(new Set([...a, ...b]));
+
+	// 4. Merge new roles and names
+	existing.admins.roles = merge(existing.admins.roles, security.admins?.roles);
+	existing.admins.names = merge(existing.admins.names, security.admins?.names);
+	existing.members.roles = merge(existing.members.roles, security.members?.roles);
+	existing.members.names = merge(existing.members.names, security.members?.names);
+
+	// 5. Push it back
+	const { status } = await couchReq('PUT', `/${db}/_security`, existing);
+	if (status !== 200) throw new Error(`Cannot set _security for "${db}" (HTTP ${status})`);
+	console.log(`  ✓ ${db}: _security set`);
 }
 
 // PUT individual doc — 201 created, 409 conflict (idempotent seed) both ok.
@@ -175,10 +209,19 @@ const ITEM = {
 
 async function seedRegistry(): Promise<void> {
 	await ensureDb('registry');
+	await setSecurity('registry', {
+		admins: { names: [], roles: ['system_admin'] },
+		members: { names: [], roles: [] }
+	});
 
 	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
-	const rows = status === 200 ? (data as { rows?: { doc?: { type?: string; code?: string } }[] }).rows ?? [] : [];
-	const existingCodes = new Set(rows.filter(r => r.doc?.type === 'shelter').map(r => r.doc?.code));
+	const rows =
+		status === 200
+			? ((data as { rows?: { doc?: { type?: string; code?: string } }[] }).rows ?? [])
+			: [];
+	const existingCodes = new Set(
+		rows.filter((r) => r.doc?.type === 'shelter').map((r) => r.doc?.code)
+	);
 
 	const ts = nowIso();
 
@@ -223,9 +266,7 @@ async function seedRegistry(): Promise<void> {
 			name: 'ศูนย์พักพิงเทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)',
 			status: 'open',
 			capacity: 150,
-			zones: [
-				{ code: 'Z1', name: 'โซนทั่วไป', capacity: 150 }
-			],
+			zones: [{ code: 'Z1', name: 'โซนทั่วไป', capacity: 150 }],
 			area_m2: 600,
 			facilities: {
 				toilets_female: 3,
@@ -250,6 +291,10 @@ async function seedRegistry(): Promise<void> {
 
 async function seedCatalog(): Promise<void> {
 	await ensureDb('catalog');
+	await setSecurity('catalog', {
+		admins: { names: [], roles: ['system_admin'] },
+		members: { names: [], roles: [] }
+	});
 
 	const items = [
 		catalogDoc(ITEM.rice, 'supply_item', {
@@ -548,8 +593,20 @@ async function seedShelter(code: string, dbName: string, ctx: AuthorContext): Pr
 
 	// — stock ledger ——————————————————————————————————————————————————————————
 	const stockInputs: StockLedgerInput[] = [
-		{ item_id: ITEM.rice, qty: code === SH001_CODE ? 200 : 100, unit: 'kg', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.water, qty: code === SH001_CODE ? 500 : 300, unit: 'bottle', reason: 'receive', ref_id: null },
+		{
+			item_id: ITEM.rice,
+			qty: code === SH001_CODE ? 200 : 100,
+			unit: 'kg',
+			reason: 'receive',
+			ref_id: null
+		},
+		{
+			item_id: ITEM.water,
+			qty: code === SH001_CODE ? 500 : 300,
+			unit: 'bottle',
+			reason: 'receive',
+			ref_id: null
+		},
 		{ item_id: ITEM.paracetamol, qty: 1000, unit: 'tablet', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.soap, qty: 150, unit: 'bar', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.blanket, qty: 80, unit: 'piece', reason: 'receive', ref_id: null },

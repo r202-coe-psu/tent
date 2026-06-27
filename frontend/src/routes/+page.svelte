@@ -9,7 +9,11 @@
 	import { Button } from '$lib/components/ui/button';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { LOGIN_ROUTE } from '$lib/guards/auth';
+	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 	import HomePortalCard from '$lib/components/home-portal-card.svelte';
+
+	const roles = $derived(authStore.user?.roles ?? []);
+	const canSeeBackoffice = $derived(isSystemAdmin(roles) || isShelterManager(roles));
 
 	async function logout() {
 		await authStore.logout();
@@ -39,7 +43,11 @@
 				</p>
 			</header>
 
-			<main class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+			<main
+				class="grid grid-cols-1 gap-6 md:grid-cols-2 {canSeeBackoffice
+					? 'lg:grid-cols-4'
+					: 'lg:grid-cols-3'}"
+			>
 				<HomePortalCard
 					icon={Users}
 					accent="brand"
@@ -65,13 +73,15 @@
 					disabled
 				/>
 
-				<HomePortalCard
-					icon={Boxes}
-					accent="muted"
-					title="ระบบส่วนหลัง (Back-Office)"
-					description="ระบบ ERP บริหารจัดการศูนย์พักพิงแบบครบวงจร, คลังสิ่งของ, ครัวกลาง และ SOP ภาพรวมจังหวัด"
-					href={resolve('/back-office')}
-				/>
+				{#if canSeeBackoffice}
+					<HomePortalCard
+						icon={Boxes}
+						accent="muted"
+						title="ระบบส่วนหลัง (Back-Office)"
+						description="ระบบ ERP บริหารจัดการศูนย์พักพิงแบบครบวงจร, คลังสิ่งของ, ครัวกลาง และ SOP ภาพรวมจังหวัด"
+						href={resolve('/back-office')}
+					/>
+				{/if}
 			</main>
 		</div>
 	</div>

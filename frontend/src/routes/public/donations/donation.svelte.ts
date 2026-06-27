@@ -5,7 +5,7 @@ export interface DonationItem {
 	item_id?: string;
 }
 
-export type TabStep = 'needs' | 'form' | 'time' | 'otp' | 'ticket';
+export type TabStep = 'needs' | 'form' | 'time' | 'ticket';
 
 class DonationStore {
 	activeTab = $state<TabStep>('needs');
