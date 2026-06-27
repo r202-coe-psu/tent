@@ -17,3 +17,6 @@ Thumbs.db
 
 # Private
 .private/
+
+# Meeting notes (not shared with team)
+docs/meetings/

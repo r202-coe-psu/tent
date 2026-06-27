@@ -8,23 +8,25 @@
 	import { startNamedSync, stopNamedSync } from '$lib/db/pouch';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SHELTER_DB, startPeopleLiveQuery } from '$lib/features/people';
-	import { startOperationsLiveQuery } from '$lib/features/operations';
+	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
 
 	let { children, data } = $props();
 
 	// Shelter data sync + changes-feed reactivity follow the auth lifecycle:
 	// start once authenticated, tear down on logout. One active remote, one feed
-	// — both bound to the SAME shelter db (CONTRIBUTING.md §4).
+	// — both bound to the SAME shelter db (CONTRIBUTING.md §4). The registry
+	// db carries the shelter master doc + audit log; it syncs alongside.
 	$effect(() => {
 		if (!authStore.isAuthenticated) return;
 		startNamedSync(SHELTER_DB, () => authStore.markNeedsReauth());
-		const livePeople = startPeopleLiveQuery(data.queryClient);
-		const liveOps = startOperationsLiveQuery(data.queryClient);
+		startNamedSync(SHELTER_REGISTRY_DB, () => authStore.markNeedsReauth());
+		const peopleLive = startPeopleLiveQuery(data.queryClient);
+		const sheltersLive = startSheltersLiveQuery(data.queryClient);
 		return () => {
-			livePeople.stop();
-			liveOps.stop();
+			peopleLive.stop();
+			sheltersLive.stop();
 			stopNamedSync(SHELTER_DB);
-			data.queryClient.clear();
+			stopNamedSync(SHELTER_REGISTRY_DB);
 		};
 	});
 </script>

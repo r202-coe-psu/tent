@@ -4,11 +4,11 @@ export interface DonationItem {
 	unit: string;
 }
 
-export type TabStep = 'needs' | 'form' | 'time' | 'otp' | 'ticket';
+export type TabStep = 'needs' | 'form' | 'time' | 'ticket';
 
 class DonationStore {
 	activeTab = $state<TabStep>('needs');
-	reachedStep = $state(1); // 1: needs, 2: form, 3: time, 4: otp, 5: ticket
+	reachedStep = $state(1); // 1: needs, 2: form, 3: time, 4: ticket
 
 	donorName = $state('');
 	donorPhone = $state('');
