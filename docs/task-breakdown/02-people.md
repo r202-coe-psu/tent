@@ -2,9 +2,9 @@
 title: "Task Breakdown — Household & Zoning"
 status: active
 created: 2026-06-05
-updated: 2026-06-18
+updated: 2026-06-24
 module: people
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; updated 2026-06-18 per CR-001 (permission cross-ref, lifecycle, screening inline, pre-registration, bulk ops, UI split)
+note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; updated 2026-06-18 per CR-001 (permission cross-ref, lifecycle, screening inline, pre-registration, bulk ops, UI split); updated 2026-06-24 per CR-009 (T-04 — Household management ย้ายไป Stage 3, 2-box search/create flow)
 ---
 
 # Household & Zoning
@@ -38,7 +38,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 **Roles:** `SA ✓ · SM scope · VOL scope` — ดู [role-permission-matrix §3](../prd/role-permission-matrix.md#3-action-matrix--r2)
 
-**Description:** สร้าง "ครัวเรือน" เป็น **optional grouping** เหนือ person record ของ baseline registration (FR-4..6) — ผูก person ตั้งแต่ 1 คนขึ้นไปเข้าครัวเรือน กำหนด/เปลี่ยนหัวหน้าครัวเรือน (head) ได้ โดย person-only flow ต้องทำงานได้โดยไม่บังคับสร้างครัวเรือน (PRD FR-21)
+**Description:** สร้าง "ครัวเรือน" เป็น **optional grouping** เหนือ person record ของ baseline registration (FR-4..6) — ผูก person ตั้งแต่ 1 คนขึ้นไปเข้าครัวเรือน กำหนด/เปลี่ยนหัวหน้าครัวเรือน (head) ได้ โดย person-only flow ต้องทำงานได้โดยไม่บังคับสร้างครัวเรือน (PRD FR-21) — การจัดการและตั้งค่า Household จะแยกมาอยู่ใน **Stage 3 (จัดการตั้งค่าหัวหน้าครอบครัว)** อย่างชัดเจน เพื่อลดความสับสนกับฟอร์มข้อมูลบุคคลใน Stage 2 (ดู [CR-009](../changes/CR-009-register-household-flow.md))
 
 รองรับ **3 creation path**:
 
@@ -48,9 +48,11 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 | **B — Pre-registration ล่วงหน้า** | SM หรือ VOL (backoffice) | รับแจ้งล่วงหน้าว่าจะมา | `pre-registered` |
 | **C — Post-arrival grouping** | SM หรือ VOL | persons check-in แยกกันไปแล้ว | สร้าง household แล้ว attach persons ที่มี status `checked-in` อยู่แล้ว |
 
-**Flow — Path A (สร้าง ณ จุดรับ):**
-1. VOL กรอก head + สมาชิก + emergency contact ของ head
-2. ระบบ validate → ออก Shelter ID + QR (T-05) ทันที
+**Flow — Path A (สร้าง ณ จุดรับ) — ทำในขั้นตอน Stage 3:**
+1. VOL ตรวจสอบและจัดการ household โดยแบ่งเป็น 2 ทางเลือก (2 Box):
+   - **A.1 ค้นหาบ้านเดิม (Search Existing):** ค้นหาสถานที่/บ้านเลขที่จากระบบ (AutoComplete) หากพบ ให้เลือกเพื่อผูกบุคคลที่ลงทะเบียนนี้เป็น **"ลูกบ้าน" (Member)**
+   - **A.2 สร้างบ้านใหม่ (Create New):** หากไม่พบ ให้กรอกฟอร์มที่อยู่ใหม่ และระบบจะผูกบุคคลนี้เป็น **"หัวหน้าบ้าน" (Head)** อัตโนมัติ (พร้อมกรอก emergency contact)
+2. ระบบ validate → ออก Shelter ID + QR (T-05) ทันที (เฉพาะกรณีสร้างบ้านใหม่)
 3. ดำเนินต่อที่ check-in (T-06)
 
 **Flow — Path B (Pre-registration):**
@@ -67,13 +69,15 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 4. ออก Shelter ID + QR ใหม่
 
 **Definition of Done:**
+- API + UI ของระบบลงทะเบียน (Stage 3) มีการแบ่งแยก flow ค้นหาที่อยู่เดิม (รับบทลูกบ้าน) และสร้างที่อยู่ใหม่ (รับบทหัวหน้าบ้าน) อย่างชัดเจน
+- ระบบสามารถ assign role สมาชิก (ลูกบ้าน/หัวหน้าบ้าน) ให้ตรงตามเงื่อนไขทางเลือกโดยอัตโนมัติ
 - API + UI สร้าง/แก้ไข household, เพิ่ม-ถอดสมาชิก, ตั้งและเปลี่ยน head ได้ (head ต้องเป็น person ที่มี required fields ตาม FR-5)
 - รองรับทั้ง 3 creation path: สร้าง ณ จุดรับ (`arriving`), pre-registration (`pre-registered`), post-arrival grouping
 - Head record ต้องมี emergency contact (phone) + communication preference
 - สมาชิก 1 คนอยู่ได้ 1 active household เท่านั้น (validation + error message ชัดเจน)
 - `pre-registered` household ไม่นับ occupancy จนกว่าจะ check-in จริง (T-06)
 - SM mark `cancelled` สำหรับ `pre-registered` household ที่ไม่มาถึงได้
-- Person-only registration (FR-4 baseline) ทำงานได้โดยไม่ต้องสร้าง household — household เป็น optional ไม่ใช่ขั้นบังคับ
+- ทุก person ต้องมี household เสมอ — Stage 3 บังคับ join หรือ create (CR-009 amend); solo evacuee = household ขนาด 1 คน (head_evacuee_id = ตัวเอง)
 - ลบ/ย้ายสมาชิกแล้วข้อมูล person record ไม่เสียหาย (additive ต่อ base schema T-02)
 - เขียนลง CouchDB ตาม schema T-02 พร้อม audit metadata (ใคร/เมื่อไร)
 - Unit + integration test ผ่าน, demo flow ลงทะเบียนครอบครัว 1 ครัวเรือนได้จริง (ครอบ path A + B)

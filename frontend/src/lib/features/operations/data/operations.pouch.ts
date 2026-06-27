@@ -1,10 +1,17 @@
 import { namedLocalDb } from '$lib/db/pouch';
 import { createRepository, type Repository } from '$lib/db/repository';
-import { isStockLedger, stockBalance, type StockLedger } from '../domain/operations';
+import { SHELTER_CODE, SHELTER_DB, shelterDb as _shelterDb } from '$lib/db/shelter';
+import type { AuthorContext } from '$lib/db/model';
+import {
+	isStockLedger,
+	stockBalance,
+	createReceiveEntry,
+	type StockLedger,
+	type ReceiveInput
+} from '../domain/operations';
 import type { OperationsRepository } from './operations.repository';
 
-export const SHELTER_CODE = 'SH001';
-export const SHELTER_DB = `shelter_${SHELTER_CODE.toLowerCase()}`;
+export { SHELTER_CODE, SHELTER_DB };
 
 /**
  * PouchDB-backed repository implementation for Operations (Stock Ledger).
@@ -33,6 +40,11 @@ export class OperationsPouchRepository implements OperationsRepository {
 		const ledger = await this.listLedger();
 		return stockBalance(ledger);
 	}
+
+	async receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger> {
+		const entry = createReceiveEntry(input, ctx);
+		return this.addLedgerEntry(entry);
+	}
 }
 
 let singleton: OperationsRepository | null = null;
@@ -45,9 +57,4 @@ export function operationsRepository(): OperationsRepository {
 	return singleton;
 }
 
-/**
- * Returns the raw shelter PouchDB database handle for live sync queries.
- */
-export function shelterDb(): PouchDB.Database {
-	return namedLocalDb(SHELTER_DB);
-}
+export const shelterDb = _shelterDb;

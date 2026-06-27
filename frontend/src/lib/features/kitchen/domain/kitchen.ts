@@ -1,74 +1,14 @@
 import { z } from 'zod';
 import type { BaseDoc, Timestamp, AuthorContext } from '$lib/db/model';
-import { makeDoc, now } from '$lib/db/model';
+import { makeDoc } from '$lib/db/model';
 
-export const productionStatusSchema = z.enum(['pending', 'in_progress', 'completed', 'cancelled']);
-export type ProductionStatus = z.infer<typeof productionStatusSchema>;
+// ---- enums ----
 
 export const mealPeriodSchema = z.enum(['breakfast', 'lunch', 'dinner', 'snack']);
 export type MealPeriod = z.infer<typeof mealPeriodSchema>;
 
-export interface ProductionLog extends BaseDoc {
-	type: 'production_log';
-	menu: string;
-	sub_note?: string;
-	boxes: number;
-	weight_kg: number;
-	status: ProductionStatus;
-	meal_period: MealPeriod;
-	stoves_used: number;
-	stoves_total: number;
-	started_at: Timestamp;
-	completed_at: Timestamp | null;
-	estimated_minutes: number | null;
-}
-
-export type KitchenDoc = ProductionLog;
-
-export const productionLogInputSchema = z.object({
-	menu: z.string().trim().min(1, 'Menu is required'),
-	sub_note: z.string().trim().optional(),
-	boxes: z.coerce.number().int().positive(),
-	weight_kg: z.coerce.number().positive(),
-	status: productionStatusSchema.default('pending'),
-	meal_period: mealPeriodSchema,
-	stoves_used: z.coerce.number().int().min(0).default(0),
-	stoves_total: z.coerce.number().int().positive().default(4),
-	estimated_minutes: z.coerce.number().nullable().default(null)
-});
-export type ProductionLogInput = z.input<typeof productionLogInputSchema>;
-
-export function createProductionLog(input: ProductionLogInput, ctx: AuthorContext): ProductionLog {
-	const d = productionLogInputSchema.parse(input);
-	return makeDoc(
-		'production_log',
-		1,
-		{
-			menu: d.menu,
-			...(d.sub_note ? { sub_note: d.sub_note } : {}),
-			boxes: d.boxes,
-			weight_kg: d.weight_kg,
-			status: d.status,
-			meal_period: d.meal_period,
-			stoves_used: d.stoves_used,
-			stoves_total: d.stoves_total,
-			estimated_minutes: d.estimated_minutes,
-			started_at: now(),
-			completed_at: d.status === 'completed' ? now() : null
-		},
-		ctx
-	);
-}
-
-export const isProductionLog = (d: unknown): d is ProductionLog =>
-	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'production_log';
-
-export const STATUS_CONFIG: Record<ProductionStatus, { label: string; className: string }> = {
-	pending: { label: 'รอดำเนินการ', className: 'bg-yellow-50 text-yellow-700' },
-	in_progress: { label: 'กำลังประกอบ', className: 'bg-blue-50 text-blue-700' },
-	completed: { label: 'สำเร็จแล้ว', className: 'bg-green-50 text-green-700' },
-	cancelled: { label: 'ยกเลิก', className: 'bg-red-50 text-red-600' }
-};
+export const mealPlanStatusSchema = z.enum(['draft', 'confirmed']);
+export type MealPlanStatus = z.infer<typeof mealPlanStatusSchema>;
 
 export const MEAL_PERIOD_LABELS: Record<MealPeriod, string> = {
 	breakfast: 'มื้อเช้า',
@@ -77,7 +17,180 @@ export const MEAL_PERIOD_LABELS: Record<MealPeriod, string> = {
 	snack: 'ของว่าง'
 };
 
-export function shortCode(log: ProductionLog): string {
-	const part = log._id.split(':')[1] ?? log._id;
-	return `PRD-${part.slice(-4).toUpperCase()}`;
+// ---- MealPlan (schema.md §2.5) ----------------------------------------
+// _id is deterministic: "meal_plan:{date}:{meal}" — one doc per day+meal.
+// Collision on two devices → CouchDB conflict, not a duplicate doc.
+
+export interface MealPlanHeadcount {
+	total: number;
+	halal: number;
+	soft_food: number;
+	infant: number;
 }
+
+export interface MealPlanRecipe {
+	recipe_id: string;
+	planned_qty: number;
+}
+
+export interface MealPlan extends BaseDoc {
+	type: 'meal_plan';
+	date: string;
+	meal: MealPeriod;
+	headcount: MealPlanHeadcount;
+	recipes: MealPlanRecipe[];
+	status: MealPlanStatus;
+	override_reason?: string | null;
+}
+
+export const mealPlanInputSchema = z.object({
+	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+	meal: mealPeriodSchema,
+	headcount: z.object({
+		total: z.number().int().min(0),
+		halal: z.number().int().min(0),
+		soft_food: z.number().int().min(0),
+		infant: z.number().int().min(0)
+	}),
+	recipes: z
+		.array(
+			z.object({
+				recipe_id: z.string().min(1),
+				planned_qty: z.number().int().positive()
+			})
+		)
+		.min(1, 'At least one recipe required'),
+	status: mealPlanStatusSchema.default('draft'),
+	override_reason: z.string().nullable().optional()
+});
+export type MealPlanInput = z.input<typeof mealPlanInputSchema>;
+
+export function createMealPlan(input: MealPlanInput, ctx: AuthorContext): MealPlan {
+	const d = mealPlanInputSchema.parse(input);
+	return makeDoc(
+		'meal_plan',
+		1,
+		{
+			date: d.date,
+			meal: d.meal,
+			headcount: d.headcount,
+			recipes: d.recipes,
+			status: d.status,
+			...(d.override_reason != null ? { override_reason: d.override_reason } : {})
+		},
+		ctx,
+		`${d.date}:${d.meal}` // deterministic suffix
+	);
+}
+
+export const isMealPlan = (d: unknown): d is MealPlan =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'meal_plan';
+
+// ---- KitchenRequisition (schema.md §2.6) — append-only ----------------
+// ledger_ids must be pre-populated at creation (append-only → no updates).
+
+export interface KitchenRequisitionItem {
+	item_id: string;
+	qty_requested: number;
+	qty_issued: number;
+	unit: string;
+}
+
+export interface KitchenRequisition extends BaseDoc {
+	type: 'kitchen_requisition';
+	meal_plan_id: string | null;
+	items: KitchenRequisitionItem[];
+	ledger_ids: string[];
+	issued_at: Timestamp;
+}
+
+export const kitchenRequisitionInputSchema = z.object({
+	meal_plan_id: z.string().nullable().default(null),
+	items: z
+		.array(
+			z.object({
+				item_id: z.string().min(1),
+				qty_requested: z.number().positive(),
+				qty_issued: z.number().min(0),
+				unit: z.string().trim().min(1)
+			})
+		)
+		.min(1, 'At least one item required')
+});
+export type KitchenRequisitionInput = z.input<typeof kitchenRequisitionInputSchema>;
+
+export function createKitchenRequisition(
+	input: KitchenRequisitionInput,
+	ledgerIds: string[], // pre-generated by the pouch layer before the bulkDocs write
+	ctx: AuthorContext
+): KitchenRequisition {
+	const d = kitchenRequisitionInputSchema.parse(input);
+	return makeDoc(
+		'kitchen_requisition',
+		1,
+		{
+			meal_plan_id: d.meal_plan_id,
+			items: d.items,
+			ledger_ids: ledgerIds,
+			issued_at: new Date().toISOString()
+		},
+		ctx
+	);
+}
+
+export const isKitchenRequisition = (d: unknown): d is KitchenRequisition =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'kitchen_requisition';
+
+// ---- MealService (schema.md §2.7) — deterministic _id, append-only ----
+// _id: "meal_service:{date}:{meal}" — same deterministic pattern as meal_plan.
+
+export interface MealServiceExternal {
+	volunteers: number;
+	outside_evacuees: number;
+}
+
+export interface MealService extends BaseDoc {
+	type: 'meal_service';
+	date: string;
+	meal: MealPeriod;
+	served: number;
+	waste: number;
+	external: MealServiceExternal;
+	notes?: string;
+}
+
+export const mealServiceInputSchema = z.object({
+	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+	meal: mealPeriodSchema,
+	served: z.number().int().min(0),
+	waste: z.number().int().min(0),
+	external: z.object({
+		volunteers: z.number().int().min(0),
+		outside_evacuees: z.number().int().min(0)
+	}),
+	notes: z.string().trim().optional()
+});
+export type MealServiceInput = z.input<typeof mealServiceInputSchema>;
+
+export function createMealService(input: MealServiceInput, ctx: AuthorContext): MealService {
+	const d = mealServiceInputSchema.parse(input);
+	return makeDoc(
+		'meal_service',
+		1,
+		{
+			date: d.date,
+			meal: d.meal,
+			served: d.served,
+			waste: d.waste,
+			external: d.external,
+			...(d.notes ? { notes: d.notes } : {})
+		},
+		ctx,
+		`${d.date}:${d.meal}` // deterministic suffix
+	);
+}
+
+export const isMealService = (d: unknown): d is MealService =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'meal_service';
+
+export type KitchenDoc = MealPlan | KitchenRequisition | MealService;

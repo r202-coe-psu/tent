@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="en" data-theme="lofi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Public Portal — Family Search Flow Spec</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+      body {
+        background: #f6fbf8;
+      }
+      .shell {
+        max-width: 1380px;
+        margin: 0 auto;
+        padding: 1rem;
+      }
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        body {
+          background: #fff;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="navbar bg-base-100 border-b border-base-300">
+      <div class="flex-1">
+        <div>
+          <p class="text-xs uppercase text-base-content/60">
+            Feature Flow Spec
+          </p>
+          <h1 class="text-xl font-semibold">
+            Public Portal — Family Search (สืบค้นญาติ / Restoring Family Links)
+          </h1>
+        </div>
+      </div>
+      <div class="flex-none gap-2 no-print">
+        <a class="btn btn-sm btn-outline" href="./index.html">Back</a>
+        <a class="btn btn-sm btn-outline" href="./public-portal-landing-spec.html"
+          >Landing Spec</a
+        >
+        <a class="btn btn-sm btn-outline" href="./public-tier-flow-spec.html"
+          >Public Tier Flow</a
+        >
+        <span class="badge badge-warning">Draft v0.1</span>
+        <span class="badge badge-outline">2026-06-22</span>
+      </div>
+    </header>
+    <main class="shell space-y-4">
+      <!-- SUMMARY -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Summary</h2>
+          <p>
+            หน้า <strong>"ระบบสืบค้นญาติและครอบครัว"</strong> (RESTORING FAMILY
+            LINKS) — nav link "สืบค้นญาติ" ของ Public Portal
+            (<a href="./public-portal-landing-spec.html">landing</a> hand off มา
+            ที่ <code>/search</code>). เป็นจุดที่ <strong>ญาติ/ครอบครัวผู้ประสบภัย</strong>
+            ค้นหาบุคคลและ <strong>ยืนยันว่าเขาปลอดภัยและอยู่ที่ศูนย์ใด</strong>
+            เพื่อบรรเทาความเครียดโดยไม่ต้องออกเดินทางตามหา. นี่คือ
+            <strong>FAM tier</strong> ของ public/no-login service (ดู
+            <a href="./public-tier-flow-spec.html">Public Tier Flow Spec §FAM</a>).
+          </p>
+          <div class="alert alert-info">
+            <span
+              >หน้านี้เป็น <strong>Public / No-Login Tier (FAM)</strong> —
+              ค้นหาได้โดยไม่ login. response แสดง <strong>ข้อมูลส่วนบุคคลแบบ
+              จำกัด + Data Masking ตาม PDPA</strong>; ทุก query ถูก audit. อ่าน
+              central-only — trust boundary ดู
+              <a href="./public-tier-flow-spec.html">Public Tier Flow Spec</a></span
+            >
+          </div>
+          <div class="alert alert-warning">
+            <span
+              >เป้าหมายหลัก: <strong>หาผู้ประสบภัยให้เจอและรู้ว่าปลอดภัยอยู่ที่ไหน</strong>
+              — usability มาก่อน friction ช่วงภัยพิบัติ. ออกแบบให้ใช้บนมือถือใน
+              network ไม่เสถียร; รองรับ TH/EN (EN toggle)</span
+            >
+          </div>
+          <div class="alert">
+            <span class="text-sm"
+              ><strong>Change tracking:</strong> หน้านี้และ data-exposure
+              decisions ของมัน tracked ใน
+              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+                >CR-005 §E</a
+              >. การค้นด้วยเลขบัตร 13 หลัก + ชุด field ที่คืน (FS-1/FS-2) เป็นการ
+              <strong>ขยาย exposure surface ของ FAM tier</strong> เกินร่างเดิมใน
+              public-tier-flow-spec — <strong>approved 2026-06-22</strong>. ดูส่วน
+              <a href="#exposure">Data Exposure &amp; Privacy</a></span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- SCOPE -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Scope &amp; Route</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Route</td>
+                  <td>
+                    <code>/search</code> (nav "สืบค้นญาติ") · deep-link
+                    <code>/search?q={encoded_query}</code> จาก landing hero
+                  </td>
+                </tr>
+                <tr>
+                  <td>Auth requirement</td>
+                  <td>ไม่ต้อง login (anonymous) — ทุก query ถูก audit</td>
+                </tr>
+                <tr>
+                  <td>Data tier</td>
+                  <td>
+                    FAM (Public API Service, central เท่านั้น) — ดู
+                    public-tier-flow-spec §FAM
+                  </td>
+                </tr>
+                <tr>
+                  <td>Primary endpoint</td>
+                  <td><code>POST /public/v1/family-search</code></td>
+                </tr>
+                <tr>
+                  <td>Language</td>
+                  <td>ภาษาไทย default + toggle EN</td>
+                </tr>
+                <tr>
+                  <td>i18n key namespace</td>
+                  <td><code>public.search</code></td>
+                </tr>
+                <tr>
+                  <td>Render strategy</td>
+                  <td>
+                    pre-rendered static shell + client hydration; ผลค้นหา fetch
+                    client-side (POST — ไม่ติด URL/access log)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Phase</td>
+                  <td>R3 — MVP Public Portal (FAM)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- LAYOUT OVERVIEW -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Layout Overview (top → bottom)</h2>
+          <ol>
+            <li>
+              <strong>Global Navigation Bar</strong> — เหมือน landing (tab
+              "สืบค้นญาติ" active)
+            </li>
+            <li>
+              <strong>Page Hero</strong> — dark navy card: badge "RESTORING
+              FAMILY LINKS" + heading "ระบบสืบค้นญาติและครอบครัว" + คำบรรยาย
+            </li>
+            <li>
+              <strong>Search Card</strong> — หัวข้อ "กรอกข้อมูลเพื่อค้นหา" +
+              คำอธิบายช่องค้น + PDPA notice + input + ปุ่ม "ค้นหา"
+            </li>
+            <li>
+              <strong>Result Summary</strong> — แถบ "พบข้อมูลทั้งหมด N รายการ"
+            </li>
+            <li>
+              <strong>Result Card(s)</strong> — ต่อบุคคล: ชื่อ (mask) + สถานะ
+              ความปลอดภัย + field รายละเอียด (mask) + PDPA footer note
+            </li>
+            <li><strong>Footer</strong> — เครดิตระบบ (เหมือน landing)</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- SECTION 1: HERO -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">1 · Page Hero</h2>
+          <ul>
+            <li>Background: dark navy gradient, text ขาว (เหมือน landing hero)</li>
+            <li>
+              Badge บนสุด: search icon +
+              <strong>"RESTORING FAMILY LINKS"</strong>
+            </li>
+            <li>
+              Heading: <strong>"ระบบสืบค้นญาติและครอบครัว"</strong>
+            </li>
+            <li>
+              Description: "สืบค้นและตรวจสอบสถานะความปลอดภัยของบุคคลในครอบครัว
+              เพื่อบรรเทาความเครียดโดยไม่ต้องออกเดินทางตามหา
+              ด้วยระบบคุ้มครองข้อมูลส่วนบุคคล (PDPA)"
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 2: SEARCH CARD -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">2 · Search Card</h2>
+          <ul>
+            <li>หัวข้อ: <strong>"กรอกข้อมูลเพื่อค้นหา"</strong></li>
+            <li>
+              คำอธิบายใต้หัวข้อ: "รองรับการค้นหาด้วยหมายเลขบัตรประชาชน 13 หลัก,
+              ชื่อ-นามสกุล, หมายเลขหนังสือเดินทาง หรือ เบอร์โทรศัพท์"
+            </li>
+            <li>
+              <strong>PDPA notice</strong> (กล่อง alert สีเหลือง, icon โล่):
+              หัวข้อ "ประกาศความเป็นส่วนตัว (PDPA / Data Privacy)" + ข้อความ
+              "เพื่อความปลอดภัยของข้อมูลผู้ประสบภัย ระบบจะทำ Data Masking
+              ปกปิดข้อมูลบางส่วน เช่น ชื่อ-สกุล และรหัสบัตรประชาชน ตาม พ.ร.บ.
+              คุ้มครองข้อมูลส่วนบุคคล" — <strong>แสดงตลอดเวลา</strong> (ก่อน/หลัง
+              ค้นหา)
+            </li>
+            <li>
+              <strong>Search input</strong>: text เดียว (icon แว่นขยาย),
+              placeholder ตัวอย่าง เช่น <code>3900100244192</code>; กด Enter หรือ
+              ปุ่มเพื่อค้น
+            </li>
+            <li>
+              ปุ่ม <strong>"ค้นหา"</strong> (primary) — ยิง
+              <code>POST /public/v1/family-search</code>
+            </li>
+          </ul>
+          <div class="alert alert-warning">
+            <span
+              ><strong>ไม่มีปุ่ม "จำลอง"/demo</strong> (FS-4 — ตัดออกตามเจ้าของ
+              2026-06-22): ทุกการค้นหายิง API จริงและเขียน audit เท่านั้น</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 3: SEARCH METHODS -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">3 · Search Methods &amp; Matching Rules (FS-1)</h2>
+          <p>
+            หนึ่งช่องค้น — ระบบ <strong>auto-detect ประเภท input</strong>
+            จากรูปแบบ แล้ว match ตามกติกาด้านล่าง. ค้นได้จากทุกช่องทางนี้
+            (เป้าหมาย: หาผู้ประสบภัยให้เจอ):
+          </p>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Input</th>
+                  <th>Detect rule</th>
+                  <th>Match</th>
+                  <th>Anti-enumeration</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>เลขบัตรประชาชน 13 หลัก</td>
+                  <td>ตัวเลข 13 ตัว (ตัดขีด/เว้นวรรค)</td>
+                  <td><strong>exact match ครบ 13 หลักเท่านั้น</strong></td>
+                  <td>ไม่รับ partial; rate-limit + audit</td>
+                </tr>
+                <tr>
+                  <td>หมายเลขหนังสือเดินทาง (passport)</td>
+                  <td>alphanumeric รูปแบบ passport</td>
+                  <td><strong>exact match เต็มเลขเท่านั้น</strong></td>
+                  <td>ไม่รับ partial; rate-limit + audit</td>
+                </tr>
+                <tr>
+                  <td>เบอร์โทรศัพท์</td>
+                  <td>ตัวเลขรูปแบบเบอร์ไทย (normalize)</td>
+                  <td><strong>exact match ครบทั้งเบอร์เท่านั้น</strong></td>
+                  <td>ไม่รับ partial; rate-limit + audit</td>
+                </tr>
+                <tr>
+                  <td>ชื่อ / นามสกุล</td>
+                  <td>ข้อความที่ไม่เข้ารูปแบบเลขข้างบน</td>
+                  <td>
+                    token match ขั้นต่ำ <strong>3 ตัวอักษร</strong> (match ชื่อ
+                    หรือ สกุล หรือทั้งคู่)
+                  </td>
+                  <td>max 10 ผล/query; rate-limit แรง; PoW เมื่อ pattern ผิดปกติ</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Matching Behavior</h3>
+          <ul>
+            <li>
+              <strong>Exact-match identifiers</strong> (เลขบัตร / passport /
+              เบอร์) — ต้องครบเต็มเสมอเพื่อกัน enumeration; ไม่มี endpoint
+              list-all / prefix search
+            </li>
+            <li>
+              <strong>Consent model = opt-out</strong> (เหมือน FAM): ถ้า
+              <code>privacy.search_excluded = true</code> →
+              <strong>hide ทั้ง record</strong> แม้ query ตรงตัว (เลขบัตร/เบอร์
+              ตรงเป๊ะก็ไม่ขึ้น)
+            </li>
+            <li>
+              ไม่พบ → ตอบ generic empty (ไม่บอกว่า "มีแต่ถูกซ่อน") กัน
+              probing
+            </li>
+            <li>
+              ทุก query (ยกเว้น "จำลอง") เขียน <code>search_audit</code> ที่
+              central: query type, hash ของ query, IP hash, จำนวนผลลัพธ์
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 4: RESULT CARD -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">4 · Result Card Fields (FS-2)</h2>
+          <p>
+            แถบสรุป "<strong>พบข้อมูลทั้งหมด N รายการ</strong>" (icon ✓) เหนือ
+            list. แต่ละ record = 1 การ์ด. ชุด field ที่คืน
+            <strong>approved เต็มชุดตาม mockup</strong> (CR-005 §E / FS-2):
+          </p>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Field (TH)</th>
+                  <th>Display</th>
+                  <th>Masking</th>
+                  <th>API field</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>ชื่อ-นามสกุล</td>
+                  <td>เช่น "สมชาย ร****ณา"</td>
+                  <td>
+                    <strong>ชื่อจริงเต็ม + สกุล mask</strong> (FS-3) — ดูส่วน 5
+                  </td>
+                  <td><code>name</code> (projected, masked)</td>
+                </tr>
+                <tr>
+                  <td>สถานะความปลอดภัย</td>
+                  <td>
+                    badge เขียว ● "ปลอดภัย (อยู่ในศูนย์แล้ว)" /
+                    "ย้ายศูนย์แล้ว" / "ออกจากศูนย์แล้ว"
+                  </td>
+                  <td>ไม่ mask</td>
+                  <td>
+                    <code>status</code> (in_shelter / moved / checked_out)
+                  </td>
+                </tr>
+                <tr>
+                  <td>เลขบัตรประชาชน</td>
+                  <td>เช่น "390-XXXX-XX-192"</td>
+                  <td><strong>mask</strong> — 3 หลักหน้า + 3 หลักท้าย</td>
+                  <td><code>national_id</code> (masked)</td>
+                </tr>
+                <tr>
+                  <td>เพศ</td>
+                  <td>"ชาย" / "หญิง" / ฯลฯ</td>
+                  <td>ไม่ mask</td>
+                  <td><code>gender</code></td>
+                </tr>
+                <tr>
+                  <td>พำนักอยู่ที่ศูนย์พักพิง</td>
+                  <td>
+                    icon + ชื่อศูนย์ เช่น "ศูนย์พักพิง เทศบาลนครหาดใหญ่
+                    (โรงเรียนเทศบาล 2)"
+                  </td>
+                  <td>ไม่ mask (ชื่อศูนย์เป็นข้อมูลสาธารณะ)</td>
+                  <td><code>shelter_name</code></td>
+                </tr>
+                <tr>
+                  <td>ภูมิลำเนาเดิม</td>
+                  <td>
+                    เช่น "**/* ถ.นิพัทธ์อุทิศ 1 ต.หาดใหญ่ อ.หาดใหญ่ จ.สงขลา"
+                  </td>
+                  <td>
+                    <strong>mask เลขที่บ้าน</strong>; แสดงถนน/ตำบล/อำเภอ/จังหวัด
+                  </td>
+                  <td><code>origin_address</code> (masked)</td>
+                </tr>
+                <tr>
+                  <td>เวลาลงทะเบียนเข้าพัก</td>
+                  <td>เช่น "27/5/2569 15:30:00 น." (พ.ศ.)</td>
+                  <td>ไม่ mask</td>
+                  <td><code>checked_in_at</code></td>
+                </tr>
+                <tr>
+                  <td>สถานะความดูแล (โซน)</td>
+                  <td>เช่น "โซนที่ General"</td>
+                  <td>ไม่ mask (ชื่อโซน — ไม่ลงรายละเอียด medical)</td>
+                  <td><code>care_zone</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="alert alert-info mt-2">
+            <span
+              ><strong>PDPA footer note</strong> (ท้ายการ์ด, icon กุญแจ):
+              "ข้อมูลบางส่วนถูกปกปิดภายใต้นโยบาย PDPA
+              และใช้สำหรับการค้นหาทางไกลเท่านั้น"</span
+            >
+          </div>
+          <div class="alert alert-warning mt-2">
+            <span
+              ><strong>ห้ามคืน field นอกตารางนี้เด็ดขาด</strong> — ไม่มีเบอร์โทร
+              (แม้ query ด้วยเบอร์), ไม่มีเลขบัตรเต็ม, ไม่มี medical detail, ไม่มี
+              <code>_id</code>/<code>_rev</code>/internal id. response แนบ
+              <code>as_of</code> timestamp</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 5: MASKING RULES -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">5 · Masking Rules (FS-3)</h2>
+          <h3>ชื่อ-นามสกุล — ชื่อจริงเต็ม + สกุล mask</h3>
+          <p>
+            <strong>ตัดสินใจตาม FAM spec เดิม</strong> (override mockup ที่ mask
+            ทั้งสองส่วน): แสดง <strong>ชื่อจริงเต็ม</strong> เพื่อให้ญาติยืนยัน
+            ตัวบุคคลได้, mask เฉพาะ <strong>นามสกุล</strong>. นับเป็น grapheme
+            cluster (สระ/วรรณยุกต์ไทยเกาะพยัญชนะ):
+          </p>
+          <ul>
+            <li>
+              สกุลยาว ≥ 5 ตัว: เก็บ 2 ตัวแรก + <code>****</code> + 2 ตัวท้าย —
+              "รัตนโกสินทร์" → "รั****นทร์" (ตัวอย่างกติกา)
+            </li>
+            <li>
+              สกุลยาว ≤ 4 ตัว: เก็บตัวแรกตัวเดียว + <code>****</code> — "แสง" →
+              "แ****"
+            </li>
+            <li>
+              <code>****</code> ความยาวคงที่เสมอ — ไม่เปิดเผยความยาวจริงของนามสกุล
+            </li>
+          </ul>
+          <h3>เลขบัตรประชาชน — แสดง 3 หน้า + 3 ท้าย</h3>
+          <ul>
+            <li>
+              format คงที่ <code>NNN-XXXX-XX-NNN</code> — เก็บ 3 หลักแรก + 3 หลักท้าย,
+              mask ตรงกลางทั้งหมด (เช่น <code>390-XXXX-XX-192</code>)
+            </li>
+            <li>ไม่คืนเลขบัตรเต็มในทุก response</li>
+          </ul>
+          <h3>ภูมิลำเนาเดิม — mask เลขที่บ้าน</h3>
+          <ul>
+            <li>
+              mask บ้านเลขที่ (<code>**/*</code>) — แสดงเฉพาะระดับ
+              ถนน/ตำบล/อำเภอ/จังหวัด (พอให้ทราบพื้นที่ ไม่ระบุพิกัดบ้านชัด)
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- SECTION 6: DATA EXPOSURE -->
+      <section id="exposure" class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">6 · Data Exposure &amp; Privacy (FAM tier)</h2>
+          <div class="alert alert-warning mb-2">
+            <span
+              ><strong>หน้านี้ขยาย exposure surface ของ FAM tier</strong> เกิน
+              ร่างเดิมใน
+              <a href="./public-tier-flow-spec.html">public-tier-flow-spec §FAM</a>
+              (ซึ่งจำกัดที่ ชื่อ/เบอร์ + ห้ามเลขบัตร/field อื่น). การขยายนี้
+              <strong>approved 2026-06-22</strong> tracked ใน
+              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+                >CR-005 §E</a
+              ></span
+            >
+          </div>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Surface</th>
+                  <th>Field</th>
+                  <th>สถานะ exposure</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>ค้นด้วยเลขบัตร 13 หลัก / passport</td>
+                  <td>query (exact match)</td>
+                  <td>
+                    <span class="badge badge-success badge-sm">APPROVED FS-1</span>
+                    เพิ่มช่องทางค้น (exact-only กัน enumeration) — เกิน FAM เดิม
+                  </td>
+                </tr>
+                <tr>
+                  <td>ค้นด้วยเบอร์โทร / ชื่อ-สกุล</td>
+                  <td>query</td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OPEN ได้ปกติ</span>
+                    ตาม FAM เดิม (เบอร์ exact, ชื่อ ≥3 ตัว)
+                  </td>
+                </tr>
+                <tr>
+                  <td>ชื่อจริง + สกุล (mask)</td>
+                  <td><code>name</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OPEN ได้ปกติ</span>
+                    ชื่อเต็ม + สกุล mask (FS-3)
+                  </td>
+                </tr>
+                <tr>
+                  <td>เลขบัตร (mask 3+3) / เพศ</td>
+                  <td>
+                    <code>national_id</code> (masked) / <code>gender</code>
+                  </td>
+                  <td>
+                    <span class="badge badge-success badge-sm">APPROVED FS-2</span>
+                    เกิน FAM เดิม — approved เพื่อยืนยันตัวบุคคล
+                  </td>
+                </tr>
+                <tr>
+                  <td>ชื่อศูนย์ / โซนความดูแล</td>
+                  <td><code>shelter_name</code> / <code>care_zone</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">APPROVED FS-2</span>
+                    โซน = ชื่อโซนเท่านั้น (ไม่ลง medical detail)
+                  </td>
+                </tr>
+                <tr>
+                  <td>ภูมิลำเนาเดิม (mask) / เวลาลงทะเบียน</td>
+                  <td>
+                    <code>origin_address</code> (masked) /
+                    <code>checked_in_at</code>
+                  </td>
+                  <td>
+                    <span class="badge badge-success badge-sm">APPROVED FS-2</span>
+                    address mask เลขที่บ้าน
+                  </td>
+                </tr>
+                <tr>
+                  <td>สถานะความปลอดภัย</td>
+                  <td><code>status</code></td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OPEN ได้ปกติ</span>
+                    in_shelter / moved / checked_out (core ของหน้านี้)
+                  </td>
+                </tr>
+                <tr>
+                  <td>เบอร์โทร / เลขบัตรเต็ม / medical detail</td>
+                  <td>—</td>
+                  <td>
+                    <span class="badge badge-error badge-sm">ห้ามคืน</span>
+                    ไม่ปรากฏใน response ใด ๆ (แม้ query ด้วยเบอร์)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>หลักการ (เหมือน FAM tier)</h3>
+          <ul>
+            <li>เห็นน้อยที่สุดเท่าที่จำเป็น — projection เลือก field ที่อนุญาตก่อนตอบ</li>
+            <li>opt-out: <code>search_excluded</code> → hide ทั้ง record</li>
+            <li>exact-only สำหรับ identifier (เลขบัตร/passport/เบอร์) กัน enumeration</li>
+            <li>audit ทุก query; rate-limit ต่อ IP; PoW เมื่อ pattern ผิดปกติ</li>
+            <li>อ่าน central-only — ไม่ fallback ไป edge/LAN</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- API CONTRACT -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">API Calls on this Page (Summary)</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>When</th>
+                  <th>Auth</th>
+                  <th>Fail behavior</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>POST /public/v1/family-search</code></td>
+                  <td>กด "ค้นหา" / Enter / deep-link <code>?q=</code></td>
+                  <td>ไม่ต้อง login (audit ทุก call)</td>
+                  <td>
+                    error banner; <code>RATE_LIMITED</code> → "ค้นหาบ่อยเกินไป
+                    ลองใหม่ภายหลัง"; ไม่ leak ข้อมูล
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code>POST /public/v1/family-search
+Body  : { "q": "3900100244192" }   // POST กันชื่อ/เลขติด URL/access log
+Resp  : { "results": [ { name, status, national_id, gender,
+                         shelter_name, origin_address, checked_in_at,
+                         care_zone } ],         // ทุก field masked ตามกติกา
+          "count": 1, "as_of": "2026-06-22T..." }
+Error : { "error": { "code": "RATE_LIMITED", "message": "..." } }  // no PII
+Max   : 10 results/query (ชื่อ); identifier exact = 0/1</code></pre>
+          <p>
+            อ่าน central-only ตาม
+            <a href="./public-tier-flow-spec.html">public-tier trust boundary</a>;
+            response ไม่มี field ภายใน (<code>_id</code>/<code>_rev</code>/doc type).
+          </p>
+        </div>
+      </section>
+
+      <!-- STATES -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Page States</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>State</th>
+                  <th>What changes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Initial (ก่อนค้น)</td>
+                  <td>hero + search card + PDPA notice; ไม่มี result summary/list</td>
+                </tr>
+                <tr>
+                  <td>Searching</td>
+                  <td>ปุ่ม "ค้นหา" loading; skeleton แถว result</td>
+                </tr>
+                <tr>
+                  <td>พบผล (≥1)</td>
+                  <td>"พบข้อมูลทั้งหมด N รายการ" + result card(s)</td>
+                </tr>
+                <tr>
+                  <td>ไม่พบ</td>
+                  <td>
+                    empty state generic "ไม่พบข้อมูลตามที่ค้นหา" + คำแนะนำลองค้น
+                    ด้วยข้อมูลอื่น (ไม่บอกว่ามีแต่ถูกซ่อน)
+                  </td>
+                </tr>
+                <tr>
+                  <td>Input ไม่ถูกต้อง</td>
+                  <td>
+                    เช่น เลขบัตรไม่ครบ 13 / ชื่อ &lt;3 ตัว → inline validation
+                    ก่อนยิง API
+                  </td>
+                </tr>
+                <tr>
+                  <td>Rate limited</td>
+                  <td>banner เตือน + ปิดปุ่มค้นชั่วคราว</td>
+                </tr>
+                <tr>
+                  <td>API offline (central ล่ม)</td>
+                  <td>
+                    error banner "ระบบค้นหาไม่พร้อมใช้งานชั่วคราว"; ไม่ fallback
+                    edge
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACCESSIBILITY & PERFORMANCE -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">
+            Accessibility &amp; Performance Requirements
+          </h2>
+          <ul>
+            <li>
+              <strong>WCAG 2.1 AA</strong> — contrast ≥ 4.5:1; PDPA notice + status
+              badge ต้องอ่านได้
+            </li>
+            <li>
+              search input มี <code>aria-label</code>; ผลค้นหาประกาศผ่าน
+              <code>aria-live="polite"</code> ("พบ N รายการ")
+            </li>
+            <li>ปุ่ม "ค้นหา"/"จำลอง" เป็น <code>&lt;button&gt;</code> focusable</li>
+            <li>
+              status badge ไม่สื่อด้วยสีอย่างเดียว — มี icon + ข้อความกำกับ
+            </li>
+            <li>LCP ≤ 2.5 s บน 3G; ผลค้นหา fetch แยกจาก paint ของ shell</li>
+            <li>ภาษาไทย: <code>lang="th"</code> บน root เมื่อ locale = TH</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- UAT -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">UAT Checklist</h2>
+          <ul>
+            <li>
+              ☐ เปิด <code>/search</code> โดยไม่ login → เห็น hero + search card +
+              PDPA notice
+            </li>
+            <li>
+              ☐ ค้นด้วยเลขบัตร 13 หลักเป๊ะ → พบ record; เลขบัตรไม่ครบ → validation
+              error (ไม่ยิง API)
+            </li>
+            <li>☐ ค้นด้วย passport / เบอร์โทร (เต็ม) → พบ record; partial → ไม่พบ</li>
+            <li>☐ ค้นด้วยชื่อ/นามสกุล (≥3 ตัว) → match list (max 10)</li>
+            <li>
+              ☐ result card แสดง: ชื่อเต็ม + สกุล mask, สถานะปลอดภัย, เลขบัตร mask
+              (3+3), เพศ, ศูนย์, ภูมิลำเนา mask, เวลาลงทะเบียน, โซน
+            </li>
+            <li>☐ response <strong>ไม่มี</strong> เบอร์โทร / เลขบัตรเต็ม / medical detail</li>
+            <li>☐ record ที่ <code>search_excluded</code> → ไม่ขึ้นแม้ค้นเลขบัตรตรงเป๊ะ</li>
+            <li>☐ ค้นไม่พบ → empty state generic (ไม่บอกว่ามีแต่ถูกซ่อน)</li>
+            <li>☐ ค้นรัว ๆ เกิน limit → <code>RATE_LIMITED</code> banner</li>
+            <li>☐ ทุกการค้นเขียน <code>search_audit</code> ที่ central</li>
+            <li>☐ ไม่มีปุ่ม "จำลอง"/demo บนหน้า (FS-4 ตัดออก)</li>
+            <li>☐ ตัด central → ค้นไม่ได้ตอบ error ที่ควบคุมได้ (ไม่ fallback edge)</li>
+            <li>☐ deep-link <code>/search?q=...</code> จาก landing → ค้นอัตโนมัติ</li>
+            <li>☐ Toggle EN → ทุก label/สถานะเปลี่ยนเป็น English</li>
+            <li>☐ Mobile 375px → search card + result card อ่านได้</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- OPEN POINTS -->
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Open Points</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>คำถาม</th>
+                  <th>Status / Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>FS-1</td>
+                  <td>
+                    ค้นด้วยเลขบัตร 13 หลัก (+ passport) ได้ไหม — FAM เดิมอนุญาต
+                    ชื่อ/เบอร์เท่านั้น?
+                  </td>
+                  <td>
+                    <span class="badge badge-success">RESOLVED</span> — อนุญาต;
+                    ค้นได้จาก เลขบัตร(13 เป๊ะ) / passport / ชื่อ / นามสกุล / เบอร์
+                    (identifier = exact-only กัน enumeration)
+                  </td>
+                </tr>
+                <tr>
+                  <td>FS-2</td>
+                  <td>
+                    คืน field มากกว่า FAM เดิม (เลขบัตร mask, เพศ, ศูนย์, ภูมิลำเนา,
+                    เวลา, โซน) สู่ public ได้ไหม?
+                  </td>
+                  <td>
+                    <span class="badge badge-success">RESOLVED</span> — อนุมัติ
+                    ชุดเต็มตาม mockup (ทุก field masked ตามกติกา; ห้ามเบอร์/เลขบัตร
+                    เต็ม/medical)
+                  </td>
+                </tr>
+                <tr>
+                  <td>FS-3</td>
+                  <td>กติกา mask ชื่อ — mask ทั้งสองส่วน หรือ ชื่อเต็ม + สกุล mask?</td>
+                  <td>
+                    <span class="badge badge-success">RESOLVED</span> — ใช้ FAM
+                    เดิม: <strong>ชื่อจริงเต็ม + นามสกุล mask</strong> (override
+                    mockup ที่ mask ทั้งคู่)
+                  </td>
+                </tr>
+                <tr>
+                  <td>FS-4</td>
+                  <td>ปุ่ม "จำลอง" (demo) ควรมีไหม?</td>
+                  <td>
+                    <span class="badge badge-error">REJECTED</span> — ไม่มี demo
+                    เลย (เจ้าของ 2026-06-22); ทุกการค้นยิง API จริง + audit
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="alert alert-success mt-2">
+            <span
+              >FS-1 / FS-2 / FS-3 <strong>approved 2026-06-22</strong> — tracked
+              ใน
+              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+                >CR-005 §E</a
+              >. การขยาย exposure ของ FAM tier ต้อง reflect กลับใน
+              public-tier-flow-spec §FAM</span
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

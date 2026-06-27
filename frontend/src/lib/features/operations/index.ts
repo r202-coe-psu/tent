@@ -27,8 +27,10 @@ export {
 	transferStatusSchema,
 	donationChannelSchema,
 	stockLedgerInputSchema,
+	receiveInputSchema,
 	walkInDonationInputSchema,
 	campaignInputSchema,
+	specialRequestSchema,
 	createStockLedger,
 	createWalkInDonation,
 	createCampaign,
@@ -42,23 +44,22 @@ export {
 	isDonation,
 	isDonationCampaign,
 	type StockLedgerInput,
+	type ReceiveInput,
 	type WalkInDonationInput,
-	type CampaignInput
+	type CampaignInput,
+	type SpecialRequestInput
 } from './domain/operations';
-
 // Domain updates for receive
 export {
 	receiveSourceSchema,
-	receiveInputSchema,
-	createReceiveEntry,
-	type ReceiveInput
+	createReceiveEntry
 } from './domain/operations';
 
-// Data layer
-export { operationsRepository, shelterDb } from './data/operations.pouch';
+// Data — repository contract + PouchDB binding
 export type { OperationsRepository } from './data/operations.repository';
+export { operationsRepository, shelterDb, SHELTER_CODE, SHELTER_DB } from './data/operations.pouch';
 
-// Application queries
+// Application — TanStack Query hooks + live-query wiring
 export {
 	operationsKeys,
 	useLedger,

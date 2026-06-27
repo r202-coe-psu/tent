@@ -1,13 +1,9 @@
-import {
-	createMutation,
-	createQuery,
-	useQueryClient,
-	type QueryClient
-} from '@tanstack/svelte-query';
+import { createMutation, createQuery, useQueryClient, type QueryClient } from '@tanstack/svelte-query';
 import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
+import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
-import { operationsRepository, shelterDb } from '../data/operations.pouch';
-import { createReceiveEntry, type ReceiveInput } from '../domain/operations';
+import { operationsRepository } from '../data/operations.pouch';
+import type { ReceiveInput } from '../domain/operations';
 
 export const operationsKeys = {
 	all: ['operations'] as const,
@@ -49,10 +45,8 @@ export const useStockBalance = () =>
 export const useReceiveStock = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) => {
-			const entry = createReceiveEntry(input, ctx);
-			return operationsRepository().addLedgerEntry(entry);
-		},
+		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) =>
+			operationsRepository().receiveStock(input, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}
@@ -64,7 +58,12 @@ export const useReceiveStock = () => {
  * Automatically invalidates active queries when database changes happen.
  */
 export function startOperationsLiveQuery(queryClient: QueryClient): LiveQueryHandle {
-	return startLiveQuery(shelterDb(), queryClient, (type) =>
-		type === 'stock_ledger' ? [operationsKeys.ledger(), operationsKeys.balance()] : []
-	);
+	return startLiveQuery(shelterDb(), queryClient, (type) => {
+		switch (type) {
+			case 'stock_ledger':
+				return [operationsKeys.ledger(), operationsKeys.balance()];
+			default:
+				return [];
+		}
+	});
 }

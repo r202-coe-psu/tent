@@ -1,33 +1,72 @@
 import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
 import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
+import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
-import { kitchenRepository, kitchenDb } from '../data/kitchen.pouch';
-import type { ProductionLog, ProductionLogInput } from '../domain/kitchen';
+import { kitchenRepository } from '../data/kitchen.pouch';
+import type { MealPlanInput, KitchenRequisitionInput, MealServiceInput } from '../domain/kitchen';
 
 export const kitchenKeys = {
 	all: ['kitchen'] as const,
-	logs: () => [...kitchenKeys.all, 'production_logs'] as const
+	mealPlans: () => [...kitchenKeys.all, 'meal_plans'] as const,
+	requisitions: () => [...kitchenKeys.all, 'requisitions'] as const,
+	mealServices: () => [...kitchenKeys.all, 'meal_services'] as const
 };
 
-export const useProductionLogs = () =>
+// --- MealPlan ---
+
+export const useMealPlans = () =>
 	createQuery(() => ({
-		queryKey: kitchenKeys.logs(),
-		queryFn: () => kitchenRepository().listProductionLogs()
+		queryKey: kitchenKeys.mealPlans(),
+		queryFn: () => kitchenRepository().listMealPlans()
 	}));
 
-export const useCreateProductionLog = () =>
+export const useCreateMealPlan = () =>
 	createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: ProductionLogInput; ctx: AuthorContext }) =>
-			kitchenRepository().createProductionLog(input, ctx)
+		mutationFn: ({ input, ctx }: { input: MealPlanInput; ctx: AuthorContext }) =>
+			kitchenRepository().createMealPlan(input, ctx)
 	}));
 
-export const useUpdateProductionLog = () =>
-	createMutation(() => ({
-		mutationFn: (log: ProductionLog) => kitchenRepository().updateProductionLog(log)
+// --- KitchenRequisition ---
+
+export const useRequisitions = () =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.requisitions(),
+		queryFn: () => kitchenRepository().listRequisitions()
 	}));
+
+export const useIssueRequisition = () =>
+	createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: KitchenRequisitionInput; ctx: AuthorContext }) =>
+			kitchenRepository().issueRequisition(input, ctx)
+	}));
+
+// --- MealService ---
+
+export const useMealServices = () =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.mealServices(),
+		queryFn: () => kitchenRepository().listMealServices()
+	}));
+
+export const useRecordMealService = () =>
+	createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: MealServiceInput; ctx: AuthorContext }) =>
+			kitchenRepository().recordMealService(input, ctx)
+	}));
+
+// --- Live sync ---
 
 export function startKitchenLiveQuery(queryClient: QueryClient): LiveQueryHandle {
-	return startLiveQuery(kitchenDb(), queryClient, (type) =>
-		type === 'production_log' ? [kitchenKeys.logs()] : []
-	);
+	return startLiveQuery(shelterDb(), queryClient, (type) => {
+		switch (type) {
+			case 'meal_plan':
+				return [kitchenKeys.mealPlans()];
+			case 'kitchen_requisition':
+				return [kitchenKeys.requisitions()];
+			case 'meal_service':
+				return [kitchenKeys.mealServices()];
+			default:
+				return [];
+		}
+	});
 }

@@ -1,4 +1,5 @@
-import type { StockLedger } from '../domain/operations';
+import type { AuthorContext } from '$lib/db/model';
+import type { StockLedger, ReceiveInput } from '../domain/operations';
 
 /**
  * Repository contract for managing stock ledger entries and calculating inventory balances.
@@ -25,4 +26,9 @@ export interface OperationsRepository {
 	 * Calculate current on-hand stock balance for all items (sum of signed deltas).
 	 */
 	getBalance(): Promise<Map<string, number>>;
+
+	/**
+	 * Process and persist an inbound stock receive entry.
+	 */
+	receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger>;
 }
