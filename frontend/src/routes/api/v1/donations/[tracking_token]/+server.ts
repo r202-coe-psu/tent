@@ -19,12 +19,12 @@ export const GET = async ({ params, getClientAddress }) => {
 
 		// Parse token to find shelter code
 		// Expected format: TX-{SHELTER_CODE}-{UUID} or old format TX-DON-{UUID}
-		const parts = tracking_token.split('-');
-		if (parts.length < 3) {
+		const match = tracking_token.match(/^TX-([A-Z0-9]+)-/);
+		if (!match) {
 			return json({ success: false, error: 'Invalid tracking token format' }, { status: 400 });
 		}
-
-		const shelterCode = parts[1] === 'DON' ? 'SH001' : parts[1]; // fallback for old tokens if needed
+		const extracted = match[1];
+		const shelterCode = extracted === 'DON' ? 'SH001' : extracted;
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
 		const docId = `donation:${tracking_token}`;
 
@@ -66,7 +66,7 @@ export const GET = async ({ params, getClientAddress }) => {
 			maskedDonor.email = parts[0].substring(0, 2) + '***@' + parts[1];
 		}
 
-		// Return status and details INCLUDING PII (donor), logistics, and booking_ref (CR-005)
+		// Return status and details with MASKED PII (donor), logistics, and booking_ref (CR-005)
 		return json({
 			success: true,
 			donation: {
@@ -94,7 +94,7 @@ export const GET = async ({ params, getClientAddress }) => {
 	}
 };
 
-export const PATCH = async ({ params, request }) => {
+export const PATCH = async ({ params, request, getClientAddress }) => {
 	try {
 		const { tracking_token } = params;
 		if (!tracking_token) {
@@ -106,12 +106,19 @@ export const PATCH = async ({ params, request }) => {
 			return json({ success: false, error: 'courier_tracking_no is required' }, { status: 400 });
 		}
 
+		// Rate Limiting
+		const ip = getClientAddress();
+		if (!donationIpLimiter.check(ip)) {
+			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
+		}
+
 		// Parse token to find shelter code
-		const parts = tracking_token.split('-');
-		if (parts.length < 3) {
+		const match = tracking_token.match(/^TX-([A-Z0-9]+)-/);
+		if (!match) {
 			return json({ success: false, error: 'Invalid tracking token format' }, { status: 400 });
 		}
-		const shelterCode = parts[1] === 'DON' ? 'SH001' : parts[1];
+		const extracted = match[1];
+		const shelterCode = extracted === 'DON' ? 'SH001' : extracted;
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
 		const docId = `donation:${tracking_token}`;
 

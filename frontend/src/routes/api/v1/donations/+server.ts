@@ -34,8 +34,12 @@ export const POST = async ({ request, getClientAddress }) => {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
-		// 3. CAPTCHA Check (Bypass if dummy secret or in development environment)
-		if (!dev && env.SECRET_RECAPTCHA_KEY && env.SECRET_RECAPTCHA_KEY !== 'dummy-secret') {
+		// 3. CAPTCHA Check (Fail-closed in production)
+		if (!dev) {
+			if (!env.SECRET_RECAPTCHA_KEY || env.SECRET_RECAPTCHA_KEY === 'dummy-secret') {
+				console.error('SECRET_RECAPTCHA_KEY is missing or invalid in production!');
+				return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
+			}
 			if (!parsed.data.captchaToken) {
 				return json({ success: false, error: 'CAPTCHA token is required.' }, { status: 400 });
 			}
@@ -46,20 +50,8 @@ export const POST = async ({ request, getClientAddress }) => {
 		}
 
 		// 3.5 Atomic check for needs_open (CR-005 DN-4)
-		// Mock NEED_FULL check: if donor tries to donate 'rice' which has needs_open = 0
-		const isFullItemIncluded = parsed.data.items.some(
-			(i) => i.free_text.toLowerCase() === 'rice' || i.free_text === 'ข้าวสาร'
-		);
-		if (isFullItemIncluded) {
-			return json(
-				{
-					success: false,
-					error: 'NEED_FULL',
-					message: 'One or more items are no longer needed (capacity full).'
-				},
-				{ status: 409 }
-			);
-		}
+		// TODO: Implement actual check with CouchDB view to prevent over-donating items
+		// The mock check has been removed as it blocks legitimate donations.
 
 		// 4. Generate secure token and hash
 		// Embed shelter_code in token so GET /donations/[token] knows which CouchDB database to query

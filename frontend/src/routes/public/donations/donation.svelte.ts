@@ -1,4 +1,5 @@
 export interface DonationItem {
+	id: string;
 	category?: string;
 	name: string;
 	amount: number;
@@ -29,6 +30,7 @@ class DonationStore {
 
 	items = $state<DonationItem[]>([
 		{
+			id: crypto.randomUUID(),
 			category: 'Food',
 			name: '',
 			amount: 1,
@@ -45,6 +47,7 @@ class DonationStore {
 
 	addItem() {
 		this.items.push({
+			id: crypto.randomUUID(),
 			category: 'Food',
 			name: '',
 			amount: 1,
@@ -54,8 +57,8 @@ class DonationStore {
 		});
 	}
 
-	removeItem(index: number) {
-		this.items = this.items.filter((_, i) => i !== index);
+	removeItem(id: string) {
+		this.items = this.items.filter((item) => item.id !== id);
 	}
 
 	reset() {
@@ -75,6 +78,7 @@ class DonationStore {
 		this.pickupAddress = '';
 		this.items = [
 			{
+				id: crypto.randomUUID(),
 				category: 'Food',
 				name: '',
 				amount: 1,

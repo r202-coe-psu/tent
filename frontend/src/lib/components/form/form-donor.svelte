@@ -149,14 +149,14 @@
 
 		{#if donationStore.items.length > 0}
 			<div class="mb-4 flex flex-col gap-4">
-				{#each donationStore.items as item, index}
+				{#each donationStore.items as item, index (item.id)}
 					<div class="relative rounded-lg border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
 						<Button
 							variant="ghost"
 							size="icon"
 							class="absolute right-2 top-2 text-muted-foreground hover:bg-danger/10 hover:text-danger"
 							title="ลบรายการ"
-							onclick={() => donationStore.removeItem(index)}
+							onclick={() => donationStore.removeItem(item.id)}
 						>
 							<svg viewBox="0 0 24 24" class="h-5 w-5 fill-current">
 								<path d="M9 3v1H4v2h1v13c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V6h1V4h-5V3H9m0 5h2v9H9V8m4 0h2v9h-2V8Z"/>

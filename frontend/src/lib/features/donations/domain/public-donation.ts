@@ -16,6 +16,18 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 		courier_tracking_no?: string | null;
 		pickup_address?: string;
 	};
-	received_summary?: any;
-	items_declared?: any;
+	received_summary?: {
+		total_items: number;
+		received_at: string;
+		remarks?: string;
+	};
+	items_declared?: Array<{
+		item_id?: string;
+		free_text?: string;
+		category?: string;
+		qty: number;
+		unit: string;
+		condition?: string;
+		note?: string;
+	}>;
 }

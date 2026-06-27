@@ -67,6 +67,10 @@
 				token = await (window as any).grecaptcha.execute(siteKey, { action: 'donate' });
 			} catch (e) {
 				console.error('reCAPTCHA execute error:', e);
+				donationStore.errorMessage = 'ระบบยืนยันตัวตนขัดข้อง (reCAPTCHA) กรุณาลองใหม่อีกครั้ง หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต';
+				toast.error(donationStore.errorMessage);
+				donationStore.isSubmitting = false;
+				return;
 			}
 		}
 
