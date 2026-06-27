@@ -1,0 +1,305 @@
+<script lang="ts">
+	import Scan from '@lucide/svelte/icons/scan';
+	import Camera from '@lucide/svelte/icons/camera';
+	import QrCode from '@lucide/svelte/icons/qr-code';
+	import Check from '@lucide/svelte/icons/check';
+	import X from '@lucide/svelte/icons/x';
+	import User from '@lucide/svelte/icons/user';
+	import Plus from '@lucide/svelte/icons/plus';
+	import Trash from '@lucide/svelte/icons/trash-2';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { toast } from 'svelte-sonner';
+	import { Html5QrcodeScanner } from 'html5-qrcode';
+	import { untrack } from 'svelte';
+
+	let activeMode = $state<'scan' | 'walkin'>('scan');
+	let scanState = $state<'idle' | 'scanning' | 'result'>('idle');
+
+	// Mocked scanned booking data
+	let bookingRef = $state('DN-582910');
+	let donorName = $state('คุณสมชาย ใจดี');
+	let scannedItems = $state([
+		{ name: 'น้ำดื่ม', qty: 50, unit: 'แพ็ค' },
+		{ name: 'ปลากระป๋อง', qty: 100, unit: 'กระป๋อง' }
+	]);
+
+	// Walk-in data
+	let walkinDonorName = $state('');
+	let walkinDonorPhone = $state('');
+	let walkinItems = $state([{ name: '', qty: 1, unit: 'ชิ้น' }]);
+
+	let scanner: Html5QrcodeScanner | null = null;
+
+	$effect(() => {
+		if (scanState === 'scanning') {
+			untrack(() => {
+				scanner = new Html5QrcodeScanner(
+					'qr-reader',
+					{ fps: 10, qrbox: { width: 250, height: 250 } },
+					/* verbose= */ false
+				);
+				scanner.render(onScanSuccess, onScanFailure);
+			});
+		} else {
+			if (scanner) {
+				scanner.clear().catch(console.error);
+				scanner = null;
+			}
+		}
+
+		return () => {
+			if (scanner) {
+				scanner.clear().catch(console.error);
+			}
+		};
+	});
+
+	function startScan() {
+		scanState = 'scanning';
+	}
+
+	function onScanSuccess(decodedText: string) {
+		// Mock API fetch using the decoded text
+		bookingRef = decodedText.includes('TX-') ? decodedText : 'DN-' + decodedText.substring(0, 6);
+		donorName = 'คุณสมชาย ใจดี';
+		scannedItems = [
+			{ name: 'น้ำดื่ม', qty: 50, unit: 'แพ็ค' },
+			{ name: 'ปลากระป๋อง', qty: 100, unit: 'กระป๋อง' }
+		];
+		scanState = 'result';
+		if (scanner) {
+			scanner.clear().catch(console.error);
+			scanner = null;
+		}
+	}
+
+	function onScanFailure(error: any) {
+		// Ignore continuous scan failures
+	}
+
+	function handleCancel() {
+		scanState = 'idle';
+	}
+
+	function handleSaveScan() {
+		toast.success(`บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef})`);
+		scannedItems.forEach(item => {
+			toast.info(`รับเข้า: ${item.name} จำนวน ${item.qty} ${item.unit}`);
+		});
+		scanState = 'idle';
+	}
+
+	function handleSaveWalkin() {
+		if (!walkinDonorName) {
+			toast.error('กรุณาระบุชื่อผู้บริจาค');
+			return;
+		}
+		if (walkinItems.some(i => !i.name || i.qty <= 0 || !i.unit)) {
+			toast.error('กรุณาระบุข้อมูลสิ่งของให้ครบถ้วน');
+			return;
+		}
+		toast.success(`บันทึกรับเข้าคลังแบบ Walk-in สำเร็จ (${walkinDonorName})`);
+		walkinDonorName = '';
+		walkinDonorPhone = '';
+		walkinItems = [{ name: '', qty: 1, unit: 'ชิ้น' }];
+	}
+</script>
+
+<div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+	<!-- Section Header -->
+	<div
+		class="flex flex-col justify-between gap-4 border-b border-border/60 bg-muted/5 p-6 md:flex-row md:items-center"
+	>
+		<div>
+			<h2 class="flex items-center gap-2 text-base font-bold text-foreground">
+				<Scan class="h-5 w-5 text-primary" />
+				ระบบรับของเข้าคลัง (Intake Station)
+			</h2>
+			<p class="mt-1 text-[11px] text-muted-foreground">
+				สแกนคิวอาร์โค้ดใบจองจากมือถือผู้บริจาค หรือลงทะเบียนรับของบริจาคแบบ Walk-in
+			</p>
+		</div>
+
+		<!-- Mode Switcher -->
+		<div class="flex items-center gap-2 rounded-xl bg-muted/50 p-1 border border-border/50">
+			<button
+				type="button"
+				onclick={() => activeMode = 'scan'}
+				class="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-colors {activeMode === 'scan' ? 'bg-card text-primary shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
+			>
+				<Scan class="h-3.5 w-3.5" />
+				สแกนรับของ (แจ้งล่วงหน้า)
+			</button>
+			<button
+				type="button"
+				onclick={() => activeMode = 'walkin'}
+				class="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-colors {activeMode === 'walkin' ? 'bg-card text-primary shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
+			>
+				<User class="h-3.5 w-3.5" />
+				รับแบบ Walk-in
+			</button>
+		</div>
+	</div>
+
+	<!-- Scan Mode Body -->
+	{#if activeMode === 'scan'}
+		<div class="p-6 flex items-center justify-center min-h-[420px] bg-muted/5">
+			{#if scanState === 'idle'}
+				<div class="w-full max-w-md rounded-2xl border border-dashed border-border/60 bg-card p-8 text-center shadow-xs flex flex-col items-center justify-center animate-in fade-in duration-200">
+					<div class="h-16 w-16 rounded-full bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center text-primary mb-4">
+						<Camera class="h-8 w-8" />
+					</div>
+					<h3 class="text-sm font-bold text-foreground mb-1">เปิดกล้องสแกนคิวอาร์โค้ด</h3>
+					<p class="text-xs text-muted-foreground max-w-xs mb-6 leading-relaxed">
+						เปิดกล้องหรือจำลองการอ่าน QR Code บนฟอร์มส่งมอบพัสดุและเสบียงอาหาร
+					</p>
+					<Button onclick={startScan} class="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold">
+						<Scan class="h-4 w-4" />
+						เปิดกล้องเพื่อสแกน (Start Camera)
+					</Button>
+				</div>
+			{:else if scanState === 'scanning'}
+				<div class="w-full max-w-md rounded-2xl border border-dashed border-border/60 bg-card p-6 text-center shadow-xs flex flex-col items-center justify-center animate-in fade-in duration-200">
+					<h3 class="text-sm font-bold text-foreground mb-4">หันกล้องไปที่คิวอาร์โค้ด</h3>
+					<div id="qr-reader" class="w-full overflow-hidden rounded-xl border border-border/50"></div>
+					<Button variant="outline" onclick={handleCancel} class="mt-6 w-full rounded-xl font-bold">
+						ยกเลิก
+					</Button>
+				</div>
+			{:else if scanState === 'result'}
+				<div class="w-full max-w-md animate-in rounded-3xl border border-border bg-card text-foreground shadow-2xl duration-200 zoom-in-95 overflow-hidden">
+					<div class="flex items-start justify-between bg-zinc-950 p-5 text-white border-b border-border/20">
+						<div>
+							<div class="flex items-center gap-2 mb-1.5">
+								<span class="text-[9px] font-bold text-zinc-400 uppercase tracking-wide">BOOKING REF.</span>
+								<span class="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-extrabold text-black">{bookingRef}</span>
+							</div>
+							<h3 class="text-sm font-bold text-white">
+								ชื่อผู้บริจาค: <span class="text-amber-400 font-semibold">{donorName}</span>
+							</h3>
+						</div>
+						<button
+							type="button"
+							onclick={handleCancel}
+							class="cursor-pointer rounded-lg p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+						>
+							<X class="h-4.5 w-4.5" />
+						</button>
+					</div>
+
+					<div class="p-5 space-y-4 bg-card">
+						<h4 class="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">
+							รายการที่จองไว้ (กรอกจำนวนที่รับจริง)
+						</h4>
+						<div class="space-y-2.5">
+							{#each scannedItems as item}
+								<div class="flex items-center justify-between rounded-xl bg-muted/30 border border-border/40 p-3">
+									<span class="text-xs font-bold text-foreground">{item.name}</span>
+									<div class="flex items-center gap-2">
+										<Input
+											type="number"
+											min="0"
+											bind:value={item.qty}
+											class="w-20 text-right h-8 rounded-lg bg-card text-xs font-semibold px-2 border-primary/50 focus:border-primary"
+										/>
+										<span class="text-[11px] text-muted-foreground font-semibold w-12">{item.unit}</span>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+
+					<div class="p-4 bg-muted/10 border-t border-border/60">
+						<Button
+							onclick={handleSaveScan}
+							class="w-full cursor-pointer inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 text-xs transition-colors"
+						>
+							<Check class="h-4 w-4" />
+							บันทึกของเข้าคลังเรียบร้อย
+						</Button>
+					</div>
+				</div>
+			{/if}
+		</div>
+	{/if}
+
+	<!-- Walk-in Mode Body -->
+	{#if activeMode === 'walkin'}
+		<div class="p-6 bg-muted/5 min-h-[420px]">
+			<div class="max-w-2xl mx-auto rounded-2xl border border-border bg-card p-6 shadow-xs animate-in fade-in duration-200">
+				<div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+					<div>
+						<label class="mb-1.5 block text-xs font-bold text-muted-foreground">ชื่อผู้บริจาค <span class="text-red-500">*</span></label>
+						<Input bind:value={walkinDonorName} placeholder="เช่น คุณสมชาย ใจดี" class="h-9 text-xs" />
+					</div>
+					<div>
+						<label class="mb-1.5 block text-xs font-bold text-muted-foreground">เบอร์โทรติดต่อ</label>
+						<Input bind:value={walkinDonorPhone} placeholder="08X-XXX-XXXX" class="h-9 text-xs" />
+					</div>
+				</div>
+
+				<div class="mb-4 flex items-center justify-between">
+					<h4 class="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider">
+						รายการสิ่งของที่รับบริจาค
+					</h4>
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={() => walkinItems = [...walkinItems, { name: '', qty: 1, unit: 'ชิ้น' }]}
+						class="h-7 text-[10px] font-bold"
+					>
+						<Plus class="mr-1 h-3 w-3" />
+						เพิ่มรายการ
+					</Button>
+				</div>
+
+				<div class="space-y-3 mb-8">
+					{#each walkinItems as item, idx}
+						<div class="flex items-start gap-2 sm:items-center">
+							<div class="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-12">
+								<div class="sm:col-span-6">
+									<Input bind:value={item.name} placeholder="ชื่อสิ่งของ" class="h-8 text-xs" />
+								</div>
+								<div class="sm:col-span-3">
+									<Input type="number" bind:value={item.qty} min="1" placeholder="จำนวน" class="h-8 text-xs text-right" />
+								</div>
+								<div class="sm:col-span-3">
+									<Input bind:value={item.unit} placeholder="หน่วย" class="h-8 text-xs" />
+								</div>
+							</div>
+							{#if walkinItems.length > 1}
+								<Button
+									variant="ghost"
+									size="icon"
+									class="h-8 w-8 text-muted-foreground hover:text-red-500"
+									onclick={() => walkinItems = walkinItems.filter((_, i) => i !== idx)}
+								>
+									<Trash class="h-4 w-4" />
+								</Button>
+							{/if}
+						</div>
+					{/each}
+				</div>
+
+				<div class="pt-4 border-t border-border/60">
+					<Button
+						onclick={handleSaveWalkin}
+						class="w-full sm:w-auto cursor-pointer inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 text-xs transition-colors"
+					>
+						<Check class="h-4 w-4" />
+						บันทึกรับเข้าคลังแบบ Walk-in
+					</Button>
+				</div>
+			</div>
+		</div>
+	{/if}
+</div>
+
+<style>
+	@keyframes scanEffect {
+		0% { top: 10%; }
+		50% { top: 90%; }
+		100% { top: 10%; }
+	}
+</style>
