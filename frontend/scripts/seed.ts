@@ -332,10 +332,14 @@ async function seedCatalogSopRatios(): Promise<void> {
 	const deterministicId = 'master_sphere_baseline';
 	const fullDocId = `sop_profile:${deterministicId}`;
 	const { status } = await couchReq('GET', `/catalog/${encodeURIComponent(fullDocId)}`);
-	
+
 	if (status === 200) {
 		console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" already exists, skipping');
 		return;
+	}
+
+	if (status !== 404) {
+		throw new Error(`seedCatalogSopRatios: unexpected status ${status} checking ${fullDocId}`);
 	}
 
 	const { profile, audit } = createInitialProfile(

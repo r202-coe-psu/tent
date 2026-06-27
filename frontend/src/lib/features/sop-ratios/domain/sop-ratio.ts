@@ -73,7 +73,6 @@ export const isSopOverride = (d: unknown): d is SopOverride =>
 	(d as { type?: unknown }).type === 'sop_override' &&
 	(d as { schema_v?: unknown }).schema_v === SOP_OVERRIDE_SCHEMA_VERSION;
 
-
 /**
  * Context types for the two flavours of SOP profiles.
  * Used in implementation signatures of createInitialProfile / createNewVersion
@@ -87,6 +86,10 @@ type AnyProfileCtx = MasterCtx | OverrideCtx;
  * Resolves the effective SOP profile ratios for a shelter:
  * If an active override is present, use its ratios.
  * Otherwise, fall back to the active master profile ratios.
+ *
+ * NOTE: This is a synchronous domain function that operates on in-memory models.
+ * For the asynchronous helper that automatically loads data from database repositories,
+ * use `resolveEffectiveRatios` in `$lib/features/sop-ratios`.
  */
 export function resolveEffectiveProfile(
 	override?: SopOverride | null,

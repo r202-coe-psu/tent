@@ -11,7 +11,11 @@ import {
 import {
 	SopMasterPouchRepository,
 	SopOverridePouchRepository,
-	resolveEffectiveRatios
+	resolveEffectiveRatios,
+	sopMasterRepository,
+	sopOverrideRepository,
+	clearSopMasterCache,
+	clearSopOverrideCache
 } from './sop-ratio.pouch';
 import type { AuthorContext } from '$lib/db/model';
 import type { AuditEntry } from '$lib/features/shared';
@@ -297,5 +301,47 @@ describe('resolveEffective application helper', () => {
 		effective = await resolveEffectiveRatios(overrideRepo, masterRepo);
 		expect(effective?.ratio_source).toBe('override');
 		expect(effective?.ratios.water_l_per_person_day).toBe(20);
+	});
+});
+
+describe('Repository Caching and Singletons', () => {
+	it('should return master repository singleton and isolate per injected db', () => {
+		clearSopMasterCache();
+		const db1 = new PouchDB('test-master-singleton-1', { adapter: 'memory' });
+		const db2 = new PouchDB('test-master-singleton-2', { adapter: 'memory' });
+
+		const repo1 = sopMasterRepository(db1);
+		const repo2 = sopMasterRepository(db2);
+		expect(repo1).not.toBe(repo2);
+
+		const repo3 = sopMasterRepository();
+		expect(repo3).toBe(repo2); // Should return the latest cached singleton
+
+		clearSopMasterCache();
+		// If we fetch without DB now, it creates default one which uses namedLocalDb('catalog')
+		const repo4 = sopMasterRepository();
+		expect(repo4).not.toBe(repo3);
+	});
+
+	it('should isolate overrides per shelter code and clear cache correctly', () => {
+		clearSopOverrideCache();
+		const db1 = new PouchDB('test-override-cache-1', { adapter: 'memory' });
+
+		const repo1 = sopOverrideRepository('SH001', db1);
+		const repo2 = sopOverrideRepository('SH002', db1);
+		expect(repo1).not.toBe(repo2);
+
+		const repo3 = sopOverrideRepository('SH001');
+		expect(repo3).toBe(repo1); // Should retrieve from cache map
+
+		clearSopOverrideCache('SH001');
+		const repo4 = sopOverrideRepository('SH001');
+		expect(repo4).not.toBe(repo1); // Cached SH001 repo was deleted
+
+		expect(sopOverrideRepository('SH002')).toBe(repo2); // SH002 should still be cached
+
+		clearSopOverrideCache();
+		const repo5 = sopOverrideRepository('SH002');
+		expect(repo5).not.toBe(repo2); // All caches cleared
 	});
 });

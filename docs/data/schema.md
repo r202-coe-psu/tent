@@ -408,7 +408,7 @@ interface MasterDataItem {
 
 `producible(recipe) = min(stock_balance[item_master_id] / quantity)` — คำนวณฝั่ง client (data-model §4)
 
-> **Migration note:** `supply_item` docs (schema_v 1) ยังคงอยู่ใน DB จนกว่าจะ migrate; client ต้อง handle ทั้ง `item:` prefix (เดิม) และ `item_master:` prefix (ใหม่) IN ช่วง transition
+> **Migration note:** `supply_item` docs (schema_v 1) ยังคงอยู่ใน DB จนกว่าจะ migrate; client ต้อง handle ทั้ง `item:` prefix (เดิม) และ `item_master:` prefix (ใหม่) ในช่วง transition
 
 ### 4.4 `sop_profile` — `sop_profile:{ulid}`
 
