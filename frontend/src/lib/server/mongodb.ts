@@ -4,7 +4,8 @@ export interface SavedDonation {
 	tracking_token_hash: string;
 	shelter_code: string;
 	donor: { name: string; phone: string };
-	items_declared: { item_name: string; qty: number; unit: string }[];
+	/** schema_v 2 — free-text items from the donor */
+	items: { free_text: string; qty: number; unit: string; category?: string; condition?: string; note?: string }[];
 	status: 'declared' | 'received' | 'expired';
 	received_summary?: string | null;
 	created_at: string;

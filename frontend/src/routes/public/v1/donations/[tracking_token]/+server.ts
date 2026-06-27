@@ -23,7 +23,7 @@ export const GET = async ({ params }) => {
 			donation: {
 				status: donation.status,
 				shelter_code: donation.shelter_code,
-				items_declared: donation.items_declared,
+				items: donation.items,
 				received_summary: donation.received_summary || null,
 				created_at: donation.created_at,
 				expires_at: donation.expires_at

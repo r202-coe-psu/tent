@@ -33,7 +33,7 @@ export const POST = async ({ request, getClientAddress }) => {
 
 		// 3. CAPTCHA Check (Bypass if dummy secret or in development environment)
 		if (!dev && env.SECRET_RECAPTCHA_KEY && env.SECRET_RECAPTCHA_KEY !== 'dummy-secret') {
-			const isHuman = await captchaProvider.verifyToken(parsed.data.captchaToken, ip);
+			const isHuman = await captchaProvider.verifyToken(parsed.data.captchaToken ?? '', ip);
 			if (!isHuman) {
 				return json({ success: false, error: 'CAPTCHA verification failed.' }, { status: 403 });
 			}
@@ -52,7 +52,7 @@ export const POST = async ({ request, getClientAddress }) => {
 				name: parsed.data.donor.name,
 				phone: parsed.data.donor.phone
 			},
-			items_declared: parsed.data.items_declared
+			items: parsed.data.items
 		});
 
 		console.log('\n--- 📂 [Real MongoDB State: New Donation Created] ---');

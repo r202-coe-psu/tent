@@ -1,15 +1,13 @@
 <script lang="ts">
-	import Package from '@lucide/svelte/icons/package';
 	import Scan from '@lucide/svelte/icons/scan';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import { toast } from 'svelte-sonner';
-	import NeedsBoardAdmin from './components/needs-board-admin.svelte';
-	import SpecialRequestDialog from './components/special-request-dialog.svelte';
-	import PendingReviewBoard from './components/pending-review-board.svelte';
-	import PendingReviewDialog from './components/pending-review-dialog.svelte';
-	import ScanStation from './components/scan-station.svelte';
+	import NeedsBoardAdmin from '../../../../lib/components/needs-board-admin.svelte';
+	import SpecialRequestDialog from '$lib/components/special-request-dialog.svelte';
+	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
+	import PendingReviewDialog from '$lib/components/pending-review-dialog.svelte';
+	import ScanStation from '$lib/components/scan-station.svelte';
 	import type { SpecialRequestInput } from '$lib/features/operations';
 
 	let activeSubTab = $state('scan'); // 'scan', 'pending', 'needs'
