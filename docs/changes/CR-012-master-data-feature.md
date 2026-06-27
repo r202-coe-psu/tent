@@ -1,6 +1,6 @@
 ---
 id: CR-012
-title: "Master Data Engine — เพิ่ม doc type `master_data` ใน registry (5 type hardcode, SA only) + UI `/registration-config`; Phase 1 = CRUD ยังไม่ wire evacuee/medical/household; identifier = Option A (code semantic string)"
+title: "Master Data Engine — เพิ่ม doc type `master_data` ใน registry (5 type hardcode, SA only) + UI `/registration-config`; Phase 1 = CRUD ยังไม่ wire evacuee/medical/household; identifier = ULID (revised 2026-06-26, เดิม Option A semantic slug)"
 status: approved
 date: 2026-06-25
 requested_by: development team (UI mockup @spec/image.png, @spec/image copy.png)
@@ -32,9 +32,13 @@ affects:
 
 CR นี้ทำ **Phase 1 = CRUD admin UI + storage เท่านั้น** ไม่ wire เข้า evacuee/medical/household form (Phase 2 = GET API + wiring, ทำใน CR ถัดไป)
 
-### Identifier decision: `code` (slug) — ✅ DECIDED Option A
+### Identifier decision: `code` (slug) — ⚠️ SUPERSEDED 2026-06-26 → ULID
 
-> **สถานะ: ✅ DECIDED** — เลือก **Option A (`code` semantic string)** — 2026-06-25
+> **สถานะ: ⚠️ SUPERSEDED 2026-06-26** — owner revise: identifier `items[].code` = **ULID ทุกตัว**
+> (runtime **และ** seed) แทน Option A (semantic slug). เหตุผล + รายละเอียดดู Decision log
+> (entry 2026-06-26) ด้านล่าง. การวิเคราะห์ Option A/B/C ด้านล่างเก็บไว้เป็น historical record.
+>
+> ~~**สถานะเดิม: ✅ DECIDED** — เลือก **Option A (`code` semantic string)** — 2026-06-25~~
 
 #### บริบท
 
@@ -137,7 +141,7 @@ interface MasterDataItem {
 | `type` | str | client | `"master_data"` — discriminator |
 | `schema_v` | int | client | `1` (initial) |
 | `master_type` | enum(5 type) | req | `vulnerable_group` \| `health_condition` \| `dietary_restrictions` \| `pet_types` \| `house_damage` (hardcode ใน code ตาม UI mockup) |
-| `items` | [{**code**, label, is_default}] | req | ≥1 item; **identifier = `code` semantic string** (Option A) — auto-generate จาก label (slugify + dict map); immutable หลัง create |
+| `items` | [{**code**, label, is_default}] | req | ≥1 item; **identifier = `code` = ULID** (SUPERSEDED 2026-06-26, เดิม Option A semantic slug) — mint ตอน create, immutable หลัง create; ไม่มี slugify/dict |
 | common envelope | — | sys | `created_at`/`updated_at`/`created_by` (registry ไม่มี `shelter_code` — เป็น global) |
 
 **Master type labels (hardcode ใน code):**
@@ -154,17 +158,18 @@ const MASTER_DATA_TYPES = [
 ] as const;
 ```
 
-**Item shape (✅ Option A — code semantic string):**
+**Item shape (⚠️ SUPERSEDED 2026-06-26 — code = ULID, ไม่ใช่ semantic slug):**
 
 ```ts
 interface MasterDataItem {
-  code: string;          // immutable, lower_snake, auto-generate จาก label (slugify + dict map)
+  code: string;          // ULID — mint ตอน create (ทั้ง runtime และ seed), immutable, opaque
   label: string;         // Thai display, editable
   is_default: boolean;   // 1 item per type = true (enforce)
-  parent_code?: string;  // community type เท่านั้น — ref code ของ municipality_zone item
+  parent_code?: string;  // community type เท่านั้น — ref ULID `code` ของ municipality_zone item
 }
 
 // ไม่มี `active` field — hard delete (Phase 1)
+// field ยังชื่อ `code` (ไม่ rename เป็น `id`) เพื่อเลี่ยงแก้ field name ทั่ว schema.md/data-model.md
 ```
 
 ### 2. Permission
@@ -190,8 +195,8 @@ interface MasterDataItem {
 - **Buttons:** "ยกเลิกและย้อนกลับ" · "บันทึก" (primary, blue)
 - **Behavior เพิ่มเติม (ไม่มีใน mockup แต่ต้องมี):**
   - ติ๊ก `is_default` → unset `is_default` ของ item เดิมใน type เดียวกัน (1 default per type)
-  - **Identifier generation** — ✅ Option A: auto-generate `code` จาก label ตอน create (slugify + dict map); immutable หลัง save
-  - Validation: label required, label unique case-insensitive ภายใน type, identifier (code/id) unique ใน array
+  - **Identifier generation** — ⚠️ SUPERSEDED 2026-06-26: mint `code = ulid()` ตอน create (ไม่มี slugify/dict); immutable หลัง save
+  - Validation: label required, label unique case-insensitive ภายใน type, `code` (ULID) unique ใน array (unique-by-construction)
   - Hard delete: ลบ item ออกจาก array (item หายจาก UI ทันที) — **Phase 2 จะ block delete เมื่อ code ถูก reference ใน evacuee/medical/household doc**
   - แก้ label: แก้ได้, `code` ไม่เปลี่ยน
 
@@ -220,8 +225,8 @@ interface MasterDataItem {
 ```
 src/lib/features/master-data/
 ├── domain/
-│   ├── master-data.ts         # types + zod + factory + slugifyThai/en + 1-default-enforce
-│   └── master-data.test.ts    # invariants: code slugify, is_default unique, factory stamps envelope
+│   ├── master-data.ts         # types + zod + factory (code = ulid()) + 1-default-enforce
+│   └── master-data.test.ts    # invariants: is_default unique per type, factory stamps envelope + ulid code
 ├── data/
 │   ├── master-data.repository.ts  # interface (read/write)
 │   └── master-data.pouch.ts       # PouchDB impl over `registry` db (namedLocalDb)
@@ -259,7 +264,7 @@ Phase 2 (separate CR): ตอน wire เข้า form จะต้อง backf
 
 ## Open dependencies
 
-- **Slugify dictionary** — `domain/master-data.ts` ต้องมี dict map สำหรับ label ที่ใช้บ่อย (เช่น "ผู้สูงอายุ" → `elderly`, "หญิงตั้งครรภ์" → `pregnant`) — ถ้า slug ชนกัน fallback = append ULID suffix
+- ~~**Slugify dictionary**~~ — **ยกเลิก (SUPERSEDED 2026-06-26):** `code = ulid()` ไม่ต้องมี dict map / slugify / transliteration อีกต่อไป
 - **Seed defaults** — **decision อัปเดต (CR-011):** `municipality_zone` และ `community` ต้อง **auto-seed** เมื่อ initialize ระบบครั้งแรก (idempotent) เพราะผู้ใช้ต้องเลือกได้ทันที; 5 type เดิม (vulnerable/health/dietary/pet/house_damage) ยังคง "ไม่ auto-seed" ตาม decision เดิม. ข้อมูล seed ดู **Appendix A** ด้านล่าง
 - **Phase 2 scope ใน CR ถัดไป** — จะต้องตัดสินใจ: (a) wire order (people → medical → household), (b) shrink enum 6→4 พร้อม migration main schema, (c) block-delete rule
 
@@ -278,13 +283,24 @@ Phase 2 (separate CR): ตอน wire เข้า form จะต้อง backf
   - pattern: A (เก็บ code เป็น string ใน main doc เมื่อ Phase 2 wire) — ตรงกับ schema เดิม, ไม่ต้องเปลี่ยน main schema structure
   - tracking: CR file ใน `docs/changes/CR-012-master-data-feature.md` ตาม user request
 - 2026-06-25 — **CR-011 amend:** เพิ่ม master_type `municipality_zone` + `community` (7 types รวม); เพิ่ม `parent_code?: string` ใน item shape (community → zone relationship); เปลี่ยน seed decision สำหรับ 2 type ใหม่ (auto-seed); ข้อมูล seed จาก Wikipedia (Appendix A)
+- 2026-06-26 — **owner revision: identifier = ULID (supersede Option A):** project owner (= requester) เคาะเปลี่ยน `items[].code` จาก semantic slug (Option A) → **`ulid()` ทุกตัว ทั้ง runtime และ seed**. เหตุผล:
+  - **invariant เดียว** — "ทุก `code` เป็น ULID" สม่ำเสมอ/เทส/document ง่ายกว่า rule แบบมีเงื่อนไข (semantic-if-seed / ulid-if-runtime)
+  - 5 type ส่วนตัว (vulnerable/health/dietary/pet/house_damage) **ไม่ auto-seed** อยู่แล้ว → admin สร้าง runtime → เป็น ULID อยู่ดี; ถ้า seed (zone/community) ใช้ semantic จะกลายเป็นข้อยกเว้นเดียว = ตัวที่ทำให้ inconsistent
+  - **ยังไม่ deploy prod / ไม่มี persisted doc** → ไม่มี migration cost; ตัด dependency "slugify dict + transliteration" ออกทั้งหมด
+  - **tradeoff ที่รับ:** ค่า `code` ที่ store อ่านไม่ออกใน log/Mango (opaque) — owner รับได้; debug ผ่าน `label` แทน
+  - **ผลกระทบ:** field ยังชื่อ `code` (ไม่ rename เป็น `id`, เลี่ยงแก้ field name ทั่ว schema.md/data-model.md); `_id` ยังเป็น `master_data:{type}` (deterministic, ไม่เปลี่ยน); Appendix A `zone_1`/`z1_c01` กลายเป็น **seed-authoring logical key** เท่านั้น — seed mint `code = ulid()` ต่อ item แล้ว resolve `community.parent_code` ผ่าน map(logical key → minted ULID) ตอน seed
+  - tracking: **append Decision log entry นี้ใน CR-012** (owner เลือก option 1)
 
 ---
 
 ## Appendix A — Seed Data: municipality_zone + community (Hat Yai)
 
 > แหล่งข้อมูล: [Wikipedia — เทศบาลนครหาดใหญ่](https://th.wikipedia.org/wiki/%E0%B9%80%E0%B8%97%E0%B8%A8%E0%B8%9A%E0%B8%B2%E0%B8%A5%E0%B8%99%E0%B8%84%E0%B8%A3%E0%B8%AB%E0%B8%B2%E0%B8%94%E0%B9%83%E0%B8%AB%E0%B8%8D%E0%B9%88)
-> Code scheme: zone = `zone_{n}`; community = `z{n}_c{nn}` (zone prefix + sequential 2-digit)
+>
+> ⚠️ **SUPERSEDED 2026-06-26 — `code` ใน Appendix นี้เป็น "seed-authoring logical key" เท่านั้น ไม่ใช่ค่าที่ store จริง.**
+> ตาม owner revision (Decision log 2026-06-26) seed จะ **mint `code = ulid()` ต่อ item** และ resolve
+> `community.parent_code` ผ่าน map(`zone_n` → minted ULID) ตอน seed. `zone_{n}` / `z{n}_c{nn}`
+> ด้านล่างใช้สำหรับ author/link ในโค้ด seed เท่านั้น.
 
 ### master_data:municipality_zone
 
@@ -417,3 +433,48 @@ Phase 2 (separate CR): ตอน wire เข้า form จะต้อง backf
 ```
 
 > หมายเหตุ: ข้อมูลจาก Wikipedia (รายการชุมชน 4 เขต รวม 102 ชุมชน) ณ 2026-06-25. SA สามารถแก้ไข/เพิ่มชุมชนได้ผ่าน registration-config UI หลัง seed.
+
+---
+
+## Implementation notes for dev (2026-06-26)
+
+> Pointer สำหรับ dev ที่จะ implement — เป็นสิ่งที่ codebase บอกแต่ spec ด้านบนไม่ได้พูด.
+> path อ้างอิงทั้งหมดเทียบจาก `frontend/src/lib/`. **อ่าน `CONTRIBUTING.md` + `CONVENTIONS.md` ก่อนเริ่ม.**
+
+### 1. ⚠️ Envelope — อย่าใช้ `makeDoc()`/`BaseDoc` ของ feature ปกติ
+
+`master_data` เป็น **registry doc (global) ไม่มี `shelter_code`** แต่:
+
+- `makeDoc()` (`db/model.ts:48`) **stamp `shelter_code: ctx.shelterCode` เสมอ** (line 60) และ
+  `BaseDoc.shelter_code` เป็น **required** (`db/model.ts:21`) → ใช้ `makeDoc` ตรงๆ ไม่ได้ จะติด shelter_code ที่ไม่ควรมี.
+- **ทำตาม precedent ของ `shelters` แทน ไม่ใช่ `people`:** `features/shelters/domain/schema.ts`
+  ประกาศ envelope (`_id`/`created_at`/`created_by`/…) เองใน interface โดย **ไม่ import `makeDoc`/`BaseDoc`** และไม่มี `shelter_code`.
+- factory ของ master_data ให้ตั้ง `_id = master_data:{master_type}` **deterministic** (1 doc ต่อ type), `type = "master_data"`, `schema_v = 1`, `created_at`/`updated_at`/`created_by` เอง.
+
+### 2. ⚠️ `code = ulid()` — แต่ field ยังชื่อ `code`
+
+- mint ด้วย `ulid()` จาก `db/ulid.ts:60` ทั้ง runtime (admin เพิ่ม) **และ seed**.
+- **ห้าม** เขียน slugify/dict/transliteration (ถูกยกเลิกแล้ว — ดู Decision log 2026-06-26).
+- **Seed** (`municipality_zone` + `community`): Appendix A `zone_1`/`z1_c01` เป็นแค่ authoring key —
+  ตอน seed ให้ mint `code = ulid()` ต่อ item แล้ว resolve `community.parent_code` ผ่าน
+  `Map<logicalKey, mintedUlid>` (mint zone ก่อน, แล้ว community อ้าง ulid ของ zone). 5 type ส่วนตัว **ไม่ auto-seed**.
+
+### 3. Mirror pattern ที่ใช้ได้เลย
+
+- **data layer** (`data/master-data.pouch.ts`): lift จาก `features/people/data/people.pouch.ts`
+  แต่ DB = `namedLocalDb('registry')` (ค่าคงที่ `SHELTER_REGISTRY_DB = 'registry'` มีใน `features/shelters`).
+  หน่วย CRUD = **`items[]` ภายใน doc เดียว** → `repo.get(id)` → แก้ array (logic ใน domain) → `repo.put(touch(doc))`. `repo.remove` ใช้กับ "ลบ item" ไม่ได้ (นั่นคือลบทั้ง doc) — delete item = put doc ที่ตัด item ออกจาก array.
+- **application** (`application/queries.ts`): mirror `people/application/queries.ts`; live-query ดู
+  `features/shelters/application/queries.ts:130` (`startLiveQuery(namedLocalDb('registry'), qc, type => type === 'master_data' ? [...] : [])`).
+- **route guard**: `requireAdmin` จาก `$lib/guards/auth.ts` ใน `+page.ts` `load`.
+
+### 4. 🔴 Stable-core — ต้อง review แยก ก่อน/นอกเหนือ Phase 1 frontend
+
+CR §2 ระบุ write = SA only บังคับที่ **CouchDB `validate_doc_update`** ("reject `master_data:*` จาก non-SA").
+นี่เป็น **auth/sync stable-core change** (ddoc ฝั่ง CouchDB) — ตาม `docs/change-management.md` ต้อง
+**review ก่อน** และอยู่นอกขอบเขต frontend feature. **เคาะกับ owner**: Phase 1 รวม ddoc นี้ไหม หรือทำ frontend ก่อนแล้ว enforcement ตามทีหลัง. UI guard (`requireAdmin`) ป้องกัน accidental เท่านั้น ไม่ใช่ security boundary.
+
+### 5. Definition of done (CONTRIBUTING.md §2)
+
+`pnpm lint` + `pnpm check` (0 errors) + `pnpm test` (domain logic ใหม่ต้องมีเทส: 1-default-per-type,
+factory stamps envelope + ulid code, label unique ใน type) + ทุก `.svelte` ผ่าน `svelte-autofixer`.
