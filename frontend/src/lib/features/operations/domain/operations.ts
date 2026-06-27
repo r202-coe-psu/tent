@@ -62,12 +62,30 @@ export interface DonationItem {
 	free_text?: string;
 	qty: number;
 	unit: string;
+	category?: string;
+	condition?: string;
+	note?: string;
 }
 
 export interface Donor {
 	name: string;
 	phone: string | null;
 	phone_hash: string;
+	line_id?: string | null;
+	email?: string | null;
+}
+
+//  public logistics & queue booking
+export interface DonationLogistics {
+	delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
+	vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+	slot?: {
+		date: string;
+		from: string;
+		to: string;
+	} | null;
+	eta?: Timestamp | null;
+	courier_tracking_no?: string | null;
 }
 
 export interface Donation extends BaseDoc {
@@ -83,6 +101,18 @@ export interface Donation extends BaseDoc {
 	declared_at: Timestamp;
 	received_at: Timestamp | null;
 	expires_at: Timestamp;
+	booking_ref?: string;
+	logistics?: DonationLogistics;
+}
+
+export interface DonationSlot extends BaseDoc {
+	type: 'donation_slot';
+	date: string; // YYYY-MM-DD
+	from: string; // HH:mm
+	to: string;   // HH:mm
+	capacity: number;
+	status: 'open' | 'closed';
+	note?: string;
 }
 
 export interface CampaignNeed {
@@ -323,21 +353,30 @@ export function createCampaign(input: CampaignInput, ctx: AuthorContext): Donati
  * not expired/cancelled) already cover. Drives `GET /public/v1/needs`
  * (data-model.md §4, view `needs_open`).
  */
-export function openNeeds(campaign: DonationCampaign, donations: Donation[]): CampaignNeed[] {
-	const covered = new Map<string, number>();
+export function openNeeds(campaign: DonationCampaign, donations: Donation[], stockLedgers: StockLedger[]): CampaignNeed[] {
+	const onHand = stockBalance(stockLedgers);
+	const reserved = new Map<string, number>();
+
 	for (const don of donations) {
 		if (don.campaign_id !== campaign._id) continue;
-		if (don.status === 'expired' || don.status === 'cancelled') continue;
+		if (don.status !== 'declared') continue;
 		for (const item of don.items ?? []) {
 			if (!item.item_id) continue;
-			covered.set(item.item_id, (covered.get(item.item_id) ?? 0) + item.qty);
+			reserved.set(item.item_id, (reserved.get(item.item_id) ?? 0) + item.qty);
 		}
 	}
+
 	return campaign.needs
-		.map((need) => ({
-			...need,
-			qty_target: need.qty_target - (covered.get(need.item_id) ?? 0)
-		}))
+		.map((need) => {
+			const currentOnHand = onHand.get(need.item_id) ?? 0;
+			const currentReserved = reserved.get(need.item_id) ?? 0;
+			const remaining = need.qty_target - (currentOnHand + currentReserved)
+
+			return {
+				...need,
+				qty_target: Math.max(0, remaining)
+			}
+		})
 		.filter((need) => need.qty_target > 0);
 }
 
@@ -372,3 +411,8 @@ export function isNeedCutOff(
 	if (campaignStatus === 'closed') return true;
 	return (onHandStock + reservedQty) >= qtyTarget;
 }
+
+// public donation time-slot booking (R2.3)
+// The slot is “used” when a donation is received into it.
+export const isDonationSlot = (d: unknown): d is DonationSlot =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_slot';

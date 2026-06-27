@@ -17,7 +17,8 @@ export type {
 	LedgerReason,
 	DonationStatus,
 	TransferStatus,
-	DonationChannel
+	DonationChannel,
+	DonationSlot
 } from './domain/operations';
 
 // Domain — schemas + factories + transitions + read models + guards
@@ -44,6 +45,7 @@ export {
 	isStockLedger,
 	isDonation,
 	isDonationCampaign,
+	isDonationSlot,
 	type StockLedgerInput,
 	type ReceiveInput,
 	type WalkInDonationInput,
@@ -61,6 +63,11 @@ export {
 	useLedger,
 	useStockBalance,
 	useReceiveStock,
+	useCampaigns,
+	useStockLedgers,
+	useDonations,
+	useCreateCampaign,
+	useUpdateCampaign,
 	startOperationsLiveQuery
 } from './application/queries';
 

@@ -109,16 +109,50 @@ describe('openNeeds', () => {
 			{
 				...declaredItemsDonation(),
 				campaign_id: campaign._id,
+				status: 'declared',
 				items: [{ item_id: 'item:water', qty: 100, unit: 'ขวด' }]
 			}
 		];
-		const remaining = openNeeds(campaign, donations);
+		const remaining = openNeeds(campaign, donations, []);
 		// water fully covered → dropped; rice untouched → remains
 		expect(remaining).toHaveLength(1);
 		expect(remaining[0].item_id).toBe('item:rice');
 		expect(remaining[0].qty_target).toBe(50);
 	});
+
+	it('subtracts on-hand stock and active reservations correctly', () => {
+		const campaign = createCampaign(
+			{
+				title: 'ของยังชีพ',
+				needs: [
+					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
+				]
+			},
+			ctx
+		);
+
+		const stockLedgers = [
+			createStockLedger({ item_id: 'item:water', qty: 30, unit: 'ขวด', reason: 'receive' }, ctx)
+		];
+
+		const donations: Donation[] = [
+			{
+				...declaredItemsDonation(),
+				campaign_id: campaign._id,
+				status: 'declared',
+				items: [{ item_id: 'item:water', qty: 40, unit: 'ขวด' }]
+			}
+		];
+
+		const remaining = openNeeds(campaign, donations, stockLedgers);
+
+		expect(remaining).toHaveLength(2);
+		const waterNeed = remaining.find(r => r.item_id === 'item:water');
+		expect(waterNeed?.qty_target).toBe(30);
+	});
 });
+
 
 describe('Donation Cut-off (T-22) threshold crossing', () => {
 	it('Should automatically cut off when On-hand + Reserved >= Target', () => {
