@@ -23,7 +23,9 @@
 		maskNationalId,
 		zoneLabel,
 		SPECIAL_NEED_CHIPS,
-		type Household
+		type Household,
+		getMunicipalityZoneLabel,
+		getCommunityLabel
 	} from '$lib/features/people';
 	import type { SpecialNeed } from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
@@ -80,7 +82,11 @@
 		if (!needle) return items;
 		return items.filter((h) => {
 			const labelMatch = h.label.toLowerCase().includes(needle);
-			const zoneMatch = (h.zone?.toLowerCase() ?? '').includes(needle);
+			const zoneMatch =
+				(h.municipality_zone?.toLowerCase() ?? '').includes(needle) ||
+				(h.community?.toLowerCase() ?? '').includes(needle) ||
+				getMunicipalityZoneLabel(h.municipality_zone).toLowerCase().includes(needle) ||
+				getCommunityLabel(h.community).toLowerCase().includes(needle);
 
 			const head = allEvacueesQuery.data?.find((e) => e._id === h.head_evacuee_id);
 			const headName = head ? `${head.first_name} ${head.last_name}`.toLowerCase() : '';
@@ -281,7 +287,7 @@
 							<Table.Head>ชื่อครัวเรือน</Table.Head>
 							<Table.Head>หัวหน้าครัวเรือน</Table.Head>
 							<Table.Head>สมาชิก</Table.Head>
-							<Table.Head>ZONE</Table.Head>
+							<Table.Head>เขต / ชุมชน</Table.Head>
 							<Table.Head>สัตว์เลี้ยง</Table.Head>
 							<Table.Head class="text-center">จัดการ</Table.Head>
 						</Table.Row>
@@ -312,9 +318,16 @@
 										{/if}
 									</div>
 								</Table.Cell>
-								<Table.Cell class="font-mono font-semibold text-primary"
-									>{zoneLabel(h.zone)}</Table.Cell
-								>
+								<Table.Cell class="font-semibold text-primary">
+									{#if h.municipality_zone}
+										{getMunicipalityZoneLabel(h.municipality_zone)}
+										{#if h.community}
+											/ {getCommunityLabel(h.community)}
+										{/if}
+									{:else}
+										—
+									{/if}
+								</Table.Cell>
 								<Table.Cell>
 									<div class="flex flex-wrap gap-1">
 										{#if h.pets && h.pets.length > 0}
