@@ -75,14 +75,16 @@ describe('createScreening', () => {
 });
 
 describe('createHousehold', () => {
-	it('stamps the household document correctly and parses pets', () => {
+	it('stamps the household document correctly and parses pets, assets, and vehicles', () => {
 		const h = createHousehold(
 			{
 				label: ' บ้านทองดี ',
 				head_evacuee_id: 'evacuee:123',
 				municipality_zone: 'zone_1',
 				community: 'z1_c01',
-				pets: [{ species: 'dog', count: 2, notes: 'friendly' }],
+				pets: [{ species: 'dog', count: 2, notes: 'friendly', has_cage: true, image_url: 'http://image.png' }],
+				assets: { description: 'สร้อยคอทองคำ', image_url: null },
+				vehicle: { type: 'car', license_plate: 'กข 1234' },
 				notes: 'ใกล้ประตูทางออก',
 				address_no: ' 123/45 ',
 				village_no: ' หมู่ 2 ',
@@ -96,7 +98,7 @@ describe('createHousehold', () => {
 
 		expect(h._id.startsWith('household:')).toBe(true);
 		expect(h.type).toBe('household');
-		expect(h.schema_v).toBe(2);
+		expect(h.schema_v).toBe(3);
 		expect(h.shelter_code).toBe('SH001');
 		expect(h.created_by).toBe('staff1');
 		expect(h.label).toBe('บ้านทองดี'); // trimmed
@@ -104,7 +106,9 @@ describe('createHousehold', () => {
 		expect(h.municipality_zone).toBe('zone_1');
 		expect(h.community).toBe('z1_c01');
 		expect((h as any).zone).toBeUndefined();
-		expect(h.pets).toEqual([{ species: 'dog', count: 2, notes: 'friendly' }]);
+		expect(h.pets).toEqual([{ species: 'dog', count: 2, notes: 'friendly', has_cage: true, image_url: 'http://image.png' }]);
+		expect(h.assets).toEqual({ description: 'สร้อยคอทองคำ', image_url: null });
+		expect(h.vehicle).toEqual({ type: 'car', license_plate: 'กข 1234' });
 		expect(h.notes).toBe('ใกล้ประตูทางออก');
 		expect(h.address_no).toBe('123/45'); // trimmed
 		expect(h.village_no).toBe('หมู่ 2'); // trimmed

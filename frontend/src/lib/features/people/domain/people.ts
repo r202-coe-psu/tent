@@ -108,22 +108,34 @@ export interface Medical extends BaseDoc {
 	notes?: string;
 }
 
+export interface HouseholdAsset {
+	description: string;
+	image_url: string | null;
+}
+
+export interface HouseholdVehicle {
+	type: 'car' | 'motorcycle' | 'other';
+	license_plate: string | null;
+}
+
 export interface PetGroup {
 	species: 'dog' | 'cat' | 'bird' | 'other';
 	count: number;
 	notes?: string;
+	has_cage?: boolean;
+	image_url?: string | null;
 }
 
 export interface Household extends BaseDoc {
 	type: 'household';
 	label: string;
 	head_evacuee_id: string | null;
-	// zone?: string | null; // ลบออกตาม CR-011
-	municipality_zone: string | null; // เพิ่มเข้ามาตาม CR-011: code จาก master_data:municipality_zone (เขต 1-4)
-	community: string | null;         // เพิ่มเข้ามาตาม CR-011: code จาก master_data:community (ชุมชน, filter by zone)
+	municipality_zone: string | null;
+	community: string | null;
 	pets: PetGroup[];
+	assets?: HouseholdAsset | null;
+	vehicle?: HouseholdVehicle | null;
 	notes?: string;
-	// เพิ่มฟิลด์ที่อยู่แบบ flat 6 ฟิลด์ ตาม CR-011 และตรงกับ canonical schema docs/data/schema.md §1.3 (ชนิด str|null)
 	address_no: string | null;
 	village_no: string | null;
 	subdistrict: string | null;
@@ -205,18 +217,33 @@ export type MedicalInput = z.input<typeof medicalInputSchema>;
 export const householdInputSchema = z.object({
 	label: z.string().trim().min(1, 'Label is required'),
 	head_evacuee_id: z.string().nullable().default(null),
-	// zone: z.string().trim().nullable().default(null), // ลบออกตาม CR-011
-	municipality_zone: z.string().trim().nullable().default(null), // เพิ่มเข้ามาตาม CR-011
-	community: z.string().trim().nullable().default(null), // เพิ่มเข้ามาตาม CR-011
+	municipality_zone: z.string().trim().nullable().default(null),
+	community: z.string().trim().nullable().default(null),
 	pets: z
 		.array(
 			z.object({
 				species: z.enum(['dog', 'cat', 'bird', 'other']),
 				count: z.coerce.number().int().positive(),
-				notes: z.string().trim().optional()
+				notes: z.string().trim().optional(),
+				has_cage: z.boolean().optional(),
+				image_url: z.string().trim().nullable().optional()
 			})
 		)
 		.default([]),
+	assets: z
+		.object({
+			description: z.string().trim(),
+			image_url: z.string().trim().nullable().default(null)
+		})
+		.nullable()
+		.optional(),
+	vehicle: z
+		.object({
+			type: z.enum(['car', 'motorcycle', 'other']),
+			license_plate: z.string().trim().nullable().default(null)
+		})
+		.nullable()
+		.optional(),
 	notes: z.string().trim().optional(),
 	address_no: z.string().trim().nullable().default(null),
 	village_no: z.string().trim().nullable().default(null),
@@ -304,14 +331,15 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 	const d = householdInputSchema.parse(input);
 	return makeDoc(
 		'household',
-		2, // ปรับเวอร์ชัน schema_v จาก 1 -> 2 ตาม CR-011
+		3, // ปรับเวอร์ชัน schema_v จาก 2 -> 3 ตาม CR-016
 		{
 			label: d.label,
 			head_evacuee_id: d.head_evacuee_id,
-			// zone: d.zone, // ลบออกตาม CR-011
-			municipality_zone: d.municipality_zone, // เพิ่มเข้ามาตาม CR-011
-			community: d.community, // เพิ่มเข้ามาตาม CR-011
+			municipality_zone: d.municipality_zone,
+			community: d.community,
 			pets: d.pets,
+			assets: d.assets || null,
+			vehicle: d.vehicle || null,
 			...(d.notes ? { notes: d.notes } : {}),
 			address_no: d.address_no || null,
 			village_no: d.village_no || null,
