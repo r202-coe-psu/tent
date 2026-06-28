@@ -20,7 +20,9 @@ pipeline {
     stages {
         stage('Staging CI/CD Pipeline') {
             when {
-                branch 'staging'
+                expression {
+                    return (env.BRANCH_NAME == 'staging') || (env.GIT_BRANCH != null && env.GIT_BRANCH.endsWith('staging'))
+                }
             }
             stages {
                 stage('Setup System (Install PNPM, Rsync and Semgrep)') {

@@ -50,6 +50,21 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  seed:
+    image: node:24-slim
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    environment:
+      COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@tent-couchdb-staging:5984
+    depends_on:
+      couchdb:
+        condition: service_healthy
+      couchdb-init:
+        condition: service_completed_successfully
+    command: sh -c "corepack enable && pnpm seed"
+    profiles: ["seed"]
+
   nginx:
     container_name: tent-nginx-staging
     image: nginx:alpine
