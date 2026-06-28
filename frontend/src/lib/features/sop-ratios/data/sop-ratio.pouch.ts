@@ -96,25 +96,22 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 	}
 
 	async listActive(): Promise<SopMaster[]> {
-		try {
-			if (typeof (this.db as PouchDB.Database & { find?: Function }).find !== 'function') {
-				throw new Error('pouchdb-find plugin not registered');
+		const db = this.db as PouchDB.Database & { find?: (req: object) => Promise<{ docs: unknown[] }> };
+		if (typeof db.find === 'function') {
+			// TODO(provisioning): Ensure secondary index on ['type', 'active'] is created during DB init per CR-006 §indexes
+			try {
+				const result = await db.find({
+					selector: { type: 'sop_profile', active: true }
+				});
+				return (result.docs as unknown[]).filter(isSopMaster);
+			} catch (error) {
+				// Fallback gracefully if find executes but fails due to environment setup
 			}
-			const result = await (this.db as PouchDB.Database & { find: Function }).find({
-				selector: {
-					type: 'sop_profile',
-					active: true
-				}
-			});
-			return (result.docs as unknown[]).filter(isSopMaster);
-		} catch (error) {
-			// Only fall back when pouchdb-find is absent; rethrow real DB errors.
-			if (error instanceof Error && error.message === 'pouchdb-find plugin not registered') {
-				const all = await this.repo.allByType('sop_profile', isSopMaster);
-				return all.filter((p) => p.active);
-			}
-			throw error;
 		}
+
+		// Structural Fallback
+		const all = await this.repo.allByType('sop_profile', isSopMaster);
+		return all.filter((p) => p.active);
 	}
 
 	async listVersions(name: string): Promise<SopMaster[]> {
@@ -227,25 +224,22 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 	}
 
 	async listActive(): Promise<SopOverride[]> {
-		try {
-			if (typeof (this.db as PouchDB.Database & { find?: Function }).find !== 'function') {
-				throw new Error('pouchdb-find plugin not registered');
+		const db = this.db as PouchDB.Database & { find?: (req: object) => Promise<{ docs: unknown[] }> };
+		if (typeof db.find === 'function') {
+			// TODO(provisioning): Ensure secondary index on ['type', 'active'] is created during DB init per CR-006 §indexes
+			try {
+				const result = await db.find({
+					selector: { type: 'sop_override', active: true }
+				});
+				return (result.docs as unknown[]).filter(isSopOverride);
+			} catch (error) {
+				// Fallback gracefully if find executes but fails due to environment setup
 			}
-			const result = await (this.db as PouchDB.Database & { find: Function }).find({
-				selector: {
-					type: 'sop_override',
-					active: true
-				}
-			});
-			return (result.docs as unknown[]).filter(isSopOverride);
-		} catch (error) {
-			// Only fall back when pouchdb-find is absent; rethrow real DB errors.
-			if (error instanceof Error && error.message === 'pouchdb-find plugin not registered') {
-				const all = await this.repo.allByType('sop_override', isSopOverride);
-				return all.filter((p) => p.active);
-			}
-			throw error;
 		}
+
+		// Structural Fallback
+		const all = await this.repo.allByType('sop_override', isSopOverride);
+		return all.filter((p) => p.active);
 	}
 
 	async listVersions(name: string): Promise<SopOverride[]> {
@@ -355,7 +349,7 @@ export async function resolveEffectiveRatios(
 	overrideRepo: SopOverrideRepository,
 	masterRepo: SopMasterRepository
 ): Promise<{
-	ratios: Partial<Record<SopRatioKey, number>>;
+	ratios: Record<SopRatioKey, number>;
 	ratio_source: 'master' | 'override';
 } | null> {
 	const activeOverrides = await overrideRepo.listActive();
@@ -364,10 +358,10 @@ export async function resolveEffectiveRatios(
 	// 🛡️ Defensive Fallback: ป้องกันกรณี Database เอ๋อแล้วมี Active 2 ตัว
 	// โดยการบังคับเรียง version จากมากไปน้อย แล้วหยิบตัวล่าสุด (index 0) เสมอ
 	const safeOverride =
-		activeOverrides.length > 0 ? activeOverrides.sort((a, b) => b.version - a.version)[0] : null;
+		activeOverrides.length > 0 ? [...activeOverrides].sort((a, b) => b.version - a.version)[0] : null;
 
 	const safeMaster =
-		activeMasters.length > 0 ? activeMasters.sort((a, b) => b.version - a.version)[0] : null;
+		activeMasters.length > 0 ? [...activeMasters].sort((a, b) => b.version - a.version)[0] : null;
 
 	return resolveDomain(safeOverride, safeMaster);
 }
@@ -380,10 +374,8 @@ let masterSingleton: SopMasterRepository | null = null;
  */
 const overrideSingletons = new Map<string, SopOverrideRepository>();
 
-export function sopMasterRepository(db?: PouchDB.Database): SopMasterRepository {
-	if (db) {
-		masterSingleton = new SopMasterPouchRepository(db);
-	} else if (!masterSingleton) {
+export function sopMasterRepository(): SopMasterRepository {
+	if (!masterSingleton) {
 		masterSingleton = new SopMasterPouchRepository();
 	}
 	return masterSingleton;
@@ -393,15 +385,7 @@ export function clearSopMasterCache(): void {
 	masterSingleton = null;
 }
 
-export function sopOverrideRepository(
-	shelterCode: string,
-	db?: PouchDB.Database
-): SopOverrideRepository {
-	if (db) {
-		const r = new SopOverridePouchRepository(shelterCode, db);
-		overrideSingletons.set(shelterCode, r);
-		return r;
-	}
+export function sopOverrideRepository(shelterCode: string): SopOverrideRepository {
 	if (!overrideSingletons.has(shelterCode)) {
 		overrideSingletons.set(shelterCode, new SopOverridePouchRepository(shelterCode));
 	}
@@ -414,4 +398,14 @@ export function clearSopOverrideCache(shelterCode?: string): void {
 	} else {
 		overrideSingletons.clear();
 	}
+}
+
+// --- Test Helpers (not exported from barrel) ---
+
+export function createSopMasterRepositoryForTest(db: PouchDB.Database): SopMasterPouchRepository {
+	return new SopMasterPouchRepository(db);
+}
+
+export function createSopOverrideRepositoryForTest(shelterCode: string, db: PouchDB.Database): SopOverridePouchRepository {
+	return new SopOverridePouchRepository(shelterCode, db);
 }

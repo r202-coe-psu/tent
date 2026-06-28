@@ -17,7 +17,5 @@ export type { SopMasterRepository, SopOverrideRepository } from './data/sop-rati
 export {
 	sopMasterRepository,
 	sopOverrideRepository,
-	resolveEffectiveRatios,
-	clearSopOverrideCache,
-	clearSopMasterCache
+	resolveEffectiveRatios
 } from './data/sop-ratio.pouch';

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import PouchDB from 'pouchdb-browser';
 import memory from 'pouchdb-adapter-memory';
 import {
@@ -15,7 +15,9 @@ import {
 	sopMasterRepository,
 	sopOverrideRepository,
 	clearSopMasterCache,
-	clearSopOverrideCache
+	clearSopOverrideCache,
+	createSopMasterRepositoryForTest,
+	createSopOverrideRepositoryForTest
 } from './sop-ratio.pouch';
 import type { AuthorContext } from '$lib/db/model';
 import type { AuditEntry } from '$lib/features/shared';
@@ -37,7 +39,11 @@ describe('SopMasterPouchRepository', () => {
 		db = new PouchDB(`test-sop-master-${Math.random().toString(36).slice(2)}`, {
 			adapter: 'memory'
 		});
-		repo = new SopMasterPouchRepository(db);
+		repo = createSopMasterRepositoryForTest(db);
+	});
+
+	afterEach(async () => {
+		if (db) await db.destroy();
 	});
 
 	it('should list only active master profiles', async () => {
@@ -186,7 +192,11 @@ describe('SopOverridePouchRepository', () => {
 		db = new PouchDB(`test-sop-override-${Math.random().toString(36).slice(2)}`, {
 			adapter: 'memory'
 		});
-		repo = new SopOverridePouchRepository('SH001', db);
+		repo = createSopOverrideRepositoryForTest('SH001', db);
+	});
+
+	afterEach(async () => {
+		if (db) await db.destroy();
 	});
 
 	it('should list only active overrides', async () => {
@@ -260,16 +270,26 @@ describe('SopOverridePouchRepository', () => {
 });
 
 describe('resolveEffective application helper', () => {
-	it('should resolve effective profile based on active override and master', async () => {
-		const masterDb = new PouchDB(`test-resolve-master-${Math.random().toString(36).slice(2)}`, {
-			adapter: 'memory'
-		});
-		const overrideDb = new PouchDB(`test-resolve-override-${Math.random().toString(36).slice(2)}`, {
-			adapter: 'memory'
-		});
+	let masterDb: PouchDB.Database;
+	let overrideDb: PouchDB.Database;
 
-		const masterRepo = new SopMasterPouchRepository(masterDb);
-		const overrideRepo = new SopOverridePouchRepository('SH001', overrideDb);
+	beforeEach(() => {
+		masterDb = new PouchDB(`test-resolve-master-${Math.random().toString(36).slice(2)}`, {
+			adapter: 'memory'
+		});
+		overrideDb = new PouchDB(`test-resolve-override-${Math.random().toString(36).slice(2)}`, {
+			adapter: 'memory'
+		});
+	});
+
+	afterEach(async () => {
+		if (masterDb) await masterDb.destroy();
+		if (overrideDb) await overrideDb.destroy();
+	});
+
+	it('should resolve effective profile based on active override and master', async () => {
+		const masterRepo = createSopMasterRepositoryForTest(masterDb);
+		const overrideRepo = createSopOverrideRepositoryForTest('SH001', overrideDb);
 
 		// 1. Initial state: neither has active profiles
 		let effective = await resolveEffectiveRatios(overrideRepo, masterRepo);
@@ -305,30 +325,19 @@ describe('resolveEffective application helper', () => {
 });
 
 describe('Repository Caching and Singletons', () => {
-	it('should return master repository singleton and isolate per injected db', () => {
+	it('should return master repository singleton', () => {
 		clearSopMasterCache();
-		const db1 = new PouchDB('test-master-singleton-1', { adapter: 'memory' });
-		const db2 = new PouchDB('test-master-singleton-2', { adapter: 'memory' });
 
-		const repo1 = sopMasterRepository(db1);
-		const repo2 = sopMasterRepository(db2);
-		expect(repo1).not.toBe(repo2);
-
-		const repo3 = sopMasterRepository();
-		expect(repo3).toBe(repo2); // Should return the latest cached singleton
-
-		clearSopMasterCache();
-		// If we fetch without DB now, it creates default one which uses namedLocalDb('catalog')
-		const repo4 = sopMasterRepository();
-		expect(repo4).not.toBe(repo3);
+		const repo1 = sopMasterRepository();
+		const repo2 = sopMasterRepository();
+		expect(repo1).toBe(repo2);
 	});
 
 	it('should isolate overrides per shelter code and clear cache correctly', () => {
 		clearSopOverrideCache();
-		const db1 = new PouchDB('test-override-cache-1', { adapter: 'memory' });
 
-		const repo1 = sopOverrideRepository('SH001', db1);
-		const repo2 = sopOverrideRepository('SH002', db1);
+		const repo1 = sopOverrideRepository('SH001');
+		const repo2 = sopOverrideRepository('SH002');
 		expect(repo1).not.toBe(repo2);
 
 		const repo3 = sopOverrideRepository('SH001');

@@ -94,7 +94,7 @@ type AnyProfileCtx = MasterCtx | OverrideCtx;
 export function resolveEffectiveProfile(
 	override?: SopOverride | null,
 	master?: SopMaster | null
-): { ratios: Partial<Record<SopRatioKey, number>>; ratio_source: 'master' | 'override' } | null {
+): { ratios: Record<SopRatioKey, number>; ratio_source: 'master' | 'override' } | null {
 	if (override && override.active) {
 		return {
 			ratios: override.ratios,
@@ -137,7 +137,9 @@ export function createInitialProfile(
 	// Filter out any unexpected keys for safety
 	const safeRatios = {} as Record<SopRatioKey, number>;
 	for (const key of SOP_RATIO_KEYS) {
-		safeRatios[key] = ratios[key];
+		if (ratios[key] !== undefined) {
+			safeRatios[key] = ratios[key];
+		}
 	}
 
 	if (targetType === 'sop_profile') {

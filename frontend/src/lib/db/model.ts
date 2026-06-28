@@ -124,12 +124,5 @@ export const shelterCodeSchema = z
 	.string()
 	.regex(/^SH\d{3,}$/, 'Shelter code must look like SH001');
 
-/**
- * Special schema for global/system layers (e.g., Audit Trail or System Config)
- * that allows identifying the context as the central database ('catalog').
- */
-export const auditShelterCodeSchema = z.union([
-	shelterCodeSchema,
-	z.literal('catalog')
-]);
+
 
