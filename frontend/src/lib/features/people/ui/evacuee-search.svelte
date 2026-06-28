@@ -2,79 +2,59 @@
 	import Search from '@lucide/svelte/icons/search';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Check from '@lucide/svelte/icons/check';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import Loader from '@lucide/svelte/icons/loader';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { useEvacuees } from '$lib/features/people';
-	import type { Evacuee } from '$lib/features/people';
-	import EvacueeProfileView from './evacuee-profile-view.svelte';
+	import { useSearchEvacuees } from '$lib/features/people';
+	import type { StayStatus } from '$lib/features/people';
+
+	const STATUS_LABELS: Record<StayStatus, string> = {
+		registered: 'ลงทะเบียนแล้ว',
+		checked_in: 'เข้าพักแล้ว',
+		checked_out: 'ออกไปแล้ว',
+		transferred: 'ย้ายไปแล้ว'
+	};
 
 	let { onNext }: { onNext: () => void } = $props();
 
 	let query = $state('');
-	let hasSearched = $state(false);
-	let searchResult = $state<Evacuee | null>(null);
-	let showProfile = $state(false);
+	let debouncedQuery = $state('');
 
-	const evacueesQuery = useEvacuees();
+	let debounceTimer: ReturnType<typeof setTimeout>;
 
-	function doSearch() {
-		if (!query.trim()) {
-			hasSearched = false;
-			searchResult = null;
-			showProfile = false;
+	$effect(() => {
+		const q = query.trim();
+		clearTimeout(debounceTimer);
+		if (!q) {
+			debouncedQuery = '';
 			return;
 		}
+		debounceTimer = setTimeout(() => {
+			debouncedQuery = q;
+		}, 300);
+		return () => clearTimeout(debounceTimer);
+	});
 
-		const q = query.trim().toLowerCase();
-		const data = evacueesQuery.data || [];
+	const searchQuery = useSearchEvacuees(
+		() => debouncedQuery,
+		() => !!debouncedQuery
+	);
 
-		const found = data.find((e) => {
-			if (
-				e.person_id?.number &&
-				e.person_id.number.replace(/\D/g, '').includes(q.replace(/\D/g, ''))
-			)
-				return true;
-			if (e.phone && e.phone.replace(/\D/g, '').includes(q.replace(/\D/g, ''))) return true;
-			if (e.first_name.toLowerCase().includes(q)) return true;
-			if (e.last_name.toLowerCase().includes(q)) return true;
-			if (`${e.first_name} ${e.last_name}`.toLowerCase().includes(q)) return true;
-			return false;
-		});
+	const searchResults = $derived(searchQuery.data ?? []);
+	const isSearching = $derived(searchQuery.isFetching && !!debouncedQuery);
+	const hasSearched = $derived(
+		!!debouncedQuery && !searchQuery.isFetching && searchQuery.data !== undefined
+	);
 
-		searchResult = found || null;
-		hasSearched = true;
-		showProfile = false;
-	}
-
-	function handleKeyDown(e: KeyboardEvent) {
-		if (e.key === 'Enter') {
-			e.preventDefault();
-			doSearch();
-		}
-	}
-
-	function backToSearch() {
-		showProfile = false;
+	function viewEvacueeDetail(id: string) {
+		goto(resolve(`/onsite/people/evacuee-profile-view/${id}`));
 	}
 </script>
 
-{#if showProfile && searchResult}
-	<!-- Full-width profile view -->
-	<div class="w-full space-y-4">
-		<button
-			onclick={backToSearch}
-			class="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-		>
-			<ArrowLeft class="size-4" />
-			<span>กลับไปผลการค้นหา</span>
-		</button>
-
-		<EvacueeProfileView evacueeId={searchResult._id} readonly={true} />
-	</div>
-{:else}
-	<!-- Search form -->
-	<div class="mx-auto w-full max-w-3xl space-y-8 pt-4">
+<div class="w-full space-y-6 pt-4">
+	<div class="mx-auto w-full max-w-3xl space-y-6">
 		<div class="space-y-2">
 			<h2 class="flex items-center gap-2 text-xl font-bold text-foreground">
 				<Search class="h-6 w-6" />
@@ -89,23 +69,22 @@
 		<div class="rounded-xl border border-border bg-card p-6 shadow-sm">
 			<div class="space-y-4">
 				<div class="relative">
-					<Search class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+					{#if isSearching}
+						<Loader
+							class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 animate-spin text-muted-foreground"
+						/>
+					{:else}
+						<Search
+							class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+						/>
+					{/if}
 					<Input
 						type="text"
 						placeholder="เลขบัตรประชาชน / เบอร์โทร / ชื่อ-นามสกุล"
 						bind:value={query}
-						onkeydown={handleKeyDown}
 						class="h-12 border-transparent bg-muted/50 pl-10 focus-visible:border-primary"
 					/>
 				</div>
-
-				<Button
-					type="button"
-					class="h-12 w-full bg-[#0C2D4E] text-base font-medium text-white hover:bg-[#0A2647]"
-					onclick={doSearch}
-				>
-					ตรวจสอบข้อมูล
-				</Button>
 
 				<Button
 					type="button"
@@ -119,44 +98,65 @@
 			</div>
 		</div>
 
-		{#if hasSearched}
-			{#if searchResult}
-				<!-- พบข้อมูล -->
-				<div class="flex items-start gap-4 rounded-xl border border-green-200 bg-[#F0FDF4] p-6">
-					<div
-						class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-600"
+		{#if isSearching}
+			<div class="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+				<Loader class="h-4 w-4 animate-spin" />
+				กำลังค้นหา...
+			</div>
+		{:else if searchQuery.isError}
+			<p class="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+				เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง
+			</p>
+		{:else if hasSearched}
+			{#if searchResults.length > 0}
+				<div class="space-y-3">
+					<div class="flex items-center gap-2">
+						<Check class="h-5 w-5 text-green-600" />
+						<h3 class="font-bold text-green-800">
+							พบข้อมูลในระบบ {searchResults.length} ราย
+						</h3>
+					</div>
+
+					<div class="space-y-2">
+						{#each searchResults as evacuee (evacuee._id)}
+							<div
+								class="flex items-center justify-between gap-4 rounded-lg border border-green-200 bg-[#F0FDF4] px-4 py-3"
+							>
+								<div class="min-w-0">
+									<p class="truncate font-semibold text-green-900">
+										{evacuee.first_name}
+										{evacuee.last_name}
+									</p>
+									<p class="text-xs text-green-700">
+										สถานะ: {STATUS_LABELS[evacuee.current_stay.status] ?? evacuee.current_stay.status}
+										{#if evacuee.phone}
+											· {evacuee.phone}
+										{/if}
+									</p>
+								</div>
+								<Button
+									type="button"
+									size="sm"
+									class="shrink-0 bg-[#10b981] font-semibold text-white hover:bg-[#059669]"
+									onclick={() => viewEvacueeDetail(evacuee._id)}
+								>
+									ดู / แก้ไข
+								</Button>
+							</div>
+						{/each}
+					</div>
+
+					<Button
+						type="button"
+						variant="outline"
+						class="h-11 w-full rounded-lg border border-green-200 bg-white font-semibold text-green-700 hover:bg-green-50"
+						onclick={onNext}
 					>
-						<Check class="h-6 w-6" />
-					</div>
-					<div class="w-full space-y-4">
-						<div>
-							<h3 class="text-lg font-bold text-green-800">พบข้อมูลในระบบแล้ว</h3>
-							<p class="text-sm font-medium text-green-700">
-								ชื่อ: {searchResult.first_name}
-								{searchResult.last_name} (สถานะ: {searchResult.current_stay.status})
-							</p>
-						</div>
-						<div class="flex gap-4">
-							<Button
-								type="button"
-								class="h-11 flex-1 rounded-lg bg-[#10b981] font-semibold text-white hover:bg-[#059669]"
-								onclick={() => (showProfile = true)}
-							>
-								ดู / แก้ไขข้อมูล
-							</Button>
-							<Button
-								type="button"
-								variant="outline"
-								class="h-11 flex-1 rounded-lg border border-green-200 bg-white font-semibold text-green-700 hover:bg-green-50"
-								onclick={onNext}
-							>
-								ลงทะเบียนใหม่แทน
-							</Button>
-						</div>
-					</div>
+						<UserPlus class="h-4 w-4" />
+						ลงทะเบียนใหม่แทน
+					</Button>
 				</div>
 			{:else}
-				<!-- ไม่พบข้อมูล -->
 				<div class="flex items-start gap-4 rounded-xl border border-blue-100 bg-[#F4F8FA] p-6">
 					<div
 						class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[#0C2D4E]"
@@ -182,4 +182,4 @@
 			{/if}
 		{/if}
 	</div>
-{/if}
+</div>

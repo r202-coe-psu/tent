@@ -75,6 +75,7 @@ export {
 	peopleKeys,
 	useEvacuees,
 	useEvacueesPaginated,
+	useSearchEvacuees,
 	useCreateEvacuee,
 	useUpdateEvacuee,
 	useHouseholds,

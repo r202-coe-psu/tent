@@ -41,6 +41,9 @@ export interface PeopleRepository {
 	/** Persist an edited household (LWW: bumps `updated_at`). */
 	updateHousehold(household: Household): Promise<Household>;
 
+	/** Search evacuees by name, phone, or national ID. */
+	searchEvacuees(query: string): Promise<Evacuee[]>;
+
 	/** Mint a screening from input + author context and persist it. */
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening>;
 }

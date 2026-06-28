@@ -20,6 +20,7 @@ export const peopleKeys = {
 	evacuees: () => [...peopleKeys.all, 'evacuees'] as const,
 	evacueesPaginated: (page: number, pageSize: number) =>
 		[...peopleKeys.all, 'evacuees', { page, pageSize }] as const,
+	evacueesSearch: (query: string) => [...peopleKeys.all, 'evacuees', 'search', query] as const,
 	households: () => [...peopleKeys.all, 'households'] as const,
 	householdsPaginated: (page: number, pageSize: number) =>
 		[...peopleKeys.all, 'households', { page, pageSize }] as const,
@@ -41,6 +42,13 @@ export const useEvacueesPaginated = (page: () => number, pageSize: () => number)
 			peopleRepository().listEvacueesPaginated(page(), pageSize()) as Promise<
 				PaginatedResult<Evacuee>
 			>
+	}));
+
+export const useSearchEvacuees = (query: () => string, enabled: () => boolean) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.evacueesSearch(query()),
+		queryFn: () => peopleRepository().searchEvacuees(query()),
+		enabled: enabled()
 	}));
 
 export const useCreateEvacuee = () =>
@@ -131,7 +139,7 @@ export const useScreenings = () =>
 export function startPeopleLiveQuery(queryClient: QueryClient): LiveQueryHandle {
 	return startLiveQuery(shelterDb(), queryClient, (type) => {
 		if (type === 'evacuee') {
-			return [peopleKeys.evacuees(), [...peopleKeys.all, 'evacuees']];
+			return [peopleKeys.evacuees(), [...peopleKeys.all, 'evacuees', 'search']];
 		}
 		if (type === 'household') {
 			return [peopleKeys.households(), [...peopleKeys.all, 'households']];

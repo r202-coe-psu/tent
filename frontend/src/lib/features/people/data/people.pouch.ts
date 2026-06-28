@@ -32,7 +32,7 @@ export class PeoplePouchRepository implements PeopleRepository {
 		this.repo = createRepository(namedLocalDb(dbName));
 	}
 
-/** Mint an evacuee from form input + author context and persist it. */
+	/** Mint an evacuee from form input + author context and persist it. */
 	async createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee> {
 		const evacuee = buildEvacuee(input, ctx);
 		const saved = await this.repo.put(evacuee);
@@ -49,7 +49,7 @@ export class PeoplePouchRepository implements PeopleRepository {
 				allergies: input.medical_allergies || [],
 				medications: input.medical_medications || [],
 				notes: input.medical_note || '',
-				track: input.track || 'normal' as const
+				track: input.track || ('normal' as const)
 			};
 			const medicalDoc = buildMedical(medicalInput, ctx);
 			await this.repo.put(medicalDoc);
@@ -75,6 +75,30 @@ export class PeoplePouchRepository implements PeopleRepository {
 	/** Persist an edited evacuee (LWW: bumps `updated_at`). */
 	updateEvacuee(evacuee: Evacuee): Promise<Evacuee> {
 		return this.repo.put(touch(evacuee));
+	}
+
+	/** Search evacuees by name, phone, or national ID — in-memory filter over prefix scan. */
+	async searchEvacuees(query: string): Promise<Evacuee[]> {
+		const q = query.trim().toLowerCase();
+		if (!q) return [];
+
+		const all = await this.repo.allByType('evacuee', isEvacuee);
+		const digitsOnly = q.replace(/\D/g, '');
+
+		return all.filter((e) => {
+			if (e.privacy?.search_excluded) return false;
+			if (
+				e.first_name.toLowerCase().includes(q) ||
+				e.last_name.toLowerCase().includes(q) ||
+				`${e.first_name} ${e.last_name}`.toLowerCase().includes(q)
+			)
+				return true;
+			if (digitsOnly) {
+				if (e.phone?.replace(/\D/g, '').includes(digitsOnly)) return true;
+				if (e.person_id?.number?.replace(/\D/g, '').includes(digitsOnly)) return true;
+			}
+			return false;
+		});
 	}
 
 	/** Mint a household from form input + author context and persist it. */
