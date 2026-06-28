@@ -23,11 +23,13 @@
 	let {
 		onsubmit,
 		pending = false,
-		step = $bindable(1)
+		step = $bindable(1),
+		onComplete
 	}: {
 		onsubmit: (input: EvacueeInput, symptoms: string[]) => Promise<any> | any;
 		pending?: boolean;
 		step?: 1 | 2 | 3 | 4 | 5 | 6;
+		onComplete?: (evacuee: any) => void;
 	} = $props();
 
 	const selectedSymptoms = new SvelteSet<string>();
@@ -266,13 +268,18 @@
 				}
 			});
 			toast.success('บันทึกข้อมูลและจัดสรรพื้นที่สำเร็จ');
-			
-			// Reset and go back to step 1
+
+			const finishedEvacuee = latestEvacuee ? { ...latestEvacuee, current_stay: { status: 'checked_in', zone, since: new Date().toISOString() } } : newlyRegisteredEvacuee;
+
+			// Reset internal state
 			step = 1;
 			newlyRegisteredEvacuee = null;
 			selectedHousehold = null;
 			isCreatingNewHousehold = false;
 			newHouseholdAddress = null;
+
+			// Notify parent to show the success/wristband screen
+			onComplete?.(finishedEvacuee);
 		} catch (err: any) {
 			toast.error(`เกิดข้อผิดพลาดในการจัดสรรพื้นที่: ${err.message || err}`);
 		}
