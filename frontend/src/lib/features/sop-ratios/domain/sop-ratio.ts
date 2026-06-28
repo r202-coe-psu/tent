@@ -203,7 +203,11 @@ export function createNewMasterVersion(
 		{ shelterCode: 'catalog', createdBy }
 	);
 
-	const deactivatedPrev: SopMasterProfile = { ...prev, updated_at: new Date().toISOString(), active: false };
+	const deactivatedPrev: SopMasterProfile = {
+		...prev,
+		updated_at: new Date().toISOString(),
+		active: false
+	};
 
 	return { deactivatedPrev, profile, audit };
 }

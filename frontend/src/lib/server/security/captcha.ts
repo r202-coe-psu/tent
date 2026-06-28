@@ -11,7 +11,7 @@ export class ReCaptchaProvider implements CaptchaProvider {
 
 	async verifyToken(token: string, ip?: string, expectedAction?: string): Promise<boolean> {
 		if (!token) return false;
-		
+
 		try {
 			const params = new URLSearchParams();
 			params.append('secret', this.secretKey);
@@ -29,7 +29,7 @@ export class ReCaptchaProvider implements CaptchaProvider {
 			});
 
 			const data = await res.json();
-			
+
 			if (data.success) {
 				// reCAPTCHA v3 returns a score
 				if (data.score !== undefined) {

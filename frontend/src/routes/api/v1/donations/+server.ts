@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { randomInt } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { dev } from '$app/environment';
 import { donationPreDeclarationInputSchema } from '$lib/features/donations';
@@ -57,7 +58,7 @@ export const POST = async ({ request, getClientAddress }) => {
 		// Embed shelter_code in token so GET /donations/[token] knows which CouchDB database to query
 		const trackingToken = `TX-${parsed.data.shelter_code.toUpperCase()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
 		const trackingTokenHash = await sha256Hex(trackingToken);
-		const bookingRef = 'DN-' + Math.floor(100000 + Math.random() * 900000);
+		const bookingRef = 'DN-' + randomInt(100000, 1000000);
 		const now = new Date().toISOString();
 
 		const expiresAtDate = new Date();
@@ -67,7 +68,7 @@ export const POST = async ({ request, getClientAddress }) => {
 
 		// 5. Save to CouchDB (Real database layer)
 		const couchDoc = {
-			_id: `donation:${trackingToken}`,
+			_id: `donation:${trackingTokenHash}`,
 			type: 'donation',
 			schema_v: 2,
 			channel: 'public',
@@ -100,14 +101,46 @@ export const POST = async ({ request, getClientAddress }) => {
 		};
 
 		const shelterDb = `shelter_${parsed.data.shelter_code.toLowerCase()}`;
-		const res = await adminRaw(
-			`/${shelterDb}/${encodeURIComponent(couchDoc._id)}`,
-			'PUT',
-			couchDoc
-		);
 
-		if (res.status !== 201 && res.status !== 200) {
-			console.error('Failed to save to CouchDB', res.data);
+		// Use dedicated limited-permission user for public writes instead of admin
+		const writerUrl = env.COUCHDB_PUBLIC_WRITER_URL;
+		let resStatus = 500;
+		let resData = null;
+
+		if (writerUrl) {
+			const match = writerUrl.match(/^(https?:\/\/)([^:]+):([^@]+)@(.+)$/);
+			if (match) {
+				const [, scheme, user, pass, host] = match;
+				const base = `${scheme}${host}`.replace(/\/$/, '');
+				const authHeader = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
+
+				const fetchRes = await fetch(`${base}/${shelterDb}/${encodeURIComponent(couchDoc._id)}`, {
+					method: 'PUT',
+					headers: {
+						Authorization: authHeader,
+						'Content-Type': 'application/json',
+						Accept: 'application/json'
+					},
+					body: JSON.stringify(couchDoc)
+				});
+				resStatus = fetchRes.status;
+				resData = await fetchRes.json().catch(() => null);
+			} else {
+				console.error('Invalid COUCHDB_PUBLIC_WRITER_URL format');
+			}
+		} else {
+			// Fallback if not configured yet, but should enforce via validate_doc_update
+			const res = await adminRaw(
+				`/${shelterDb}/${encodeURIComponent(couchDoc._id)}`,
+				'PUT',
+				couchDoc
+			);
+			resStatus = res.status;
+			resData = res.data;
+		}
+
+		if (resStatus !== 201 && resStatus !== 200) {
+			console.error('Failed to save to CouchDB', resData);
 			return json({ success: false, error: 'Database save failed' }, { status: 500 });
 		}
 

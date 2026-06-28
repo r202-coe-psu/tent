@@ -31,7 +31,7 @@ class DonationStore {
 	items = $state<DonationItem[]>([
 		{
 			id: crypto.randomUUID(),
-			category: 'Food',
+			category: 'food',
 			name: '',
 			amount: 1,
 			unit: 'ชิ้น',
@@ -48,7 +48,7 @@ class DonationStore {
 	addItem() {
 		this.items.push({
 			id: crypto.randomUUID(),
-			category: 'Food',
+			category: 'food',
 			name: '',
 			amount: 1,
 			unit: 'ชิ้น',
@@ -79,7 +79,7 @@ class DonationStore {
 		this.items = [
 			{
 				id: crypto.randomUUID(),
-				category: 'Food',
+				category: 'food',
 				name: '',
 				amount: 1,
 				unit: 'ชิ้น',
@@ -94,11 +94,16 @@ class DonationStore {
 	}
 }
 
-import { setContext, getContext } from "svelte";
-const DONATION_KEY = Symbol("DONATION");
+import { setContext, getContext } from 'svelte';
+const DONATION_KEY = Symbol('DONATION');
 export function setDonationStore() {
 	return setContext(DONATION_KEY, new DonationStore());
 }
 export function getDonationStore() {
-	return getContext<DonationStore>(DONATION_KEY);
+	const store = getContext<DonationStore>(DONATION_KEY);
+	if (!store)
+		throw new Error(
+			'getDonationStore must be used within a component that called setDonationStore'
+		);
+	return store;
 }

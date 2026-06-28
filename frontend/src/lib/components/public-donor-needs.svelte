@@ -33,9 +33,7 @@
 
 	<!-- Categories -->
 	<div class="mb-6 flex flex-wrap gap-2">
-		<Button class="rounded-full px-4 text-xs font-bold"
-			>ทั้งหมด</Button
-		>
+		<Button class="rounded-full px-4 text-xs font-bold">ทั้งหมด</Button>
 		<Button
 			variant="outline"
 			class="rounded-full border border-border px-4 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -61,7 +59,9 @@
 		>
 			<div class="flex-1">
 				<div class="flex items-center gap-2.5">
-					<span class="rounded-lg border border-shelter-border bg-shelter-blue-bg p-1 text-shelter-blue-text">
+					<span
+						class="rounded-lg border border-shelter-border bg-shelter-blue-bg p-1 text-shelter-blue-text"
+					>
 						<Compass class="h-4 w-4" />
 					</span>
 					<div>
@@ -126,7 +126,9 @@
 		>
 			<div class="flex-1">
 				<div class="flex items-center gap-2.5">
-					<span class="rounded-lg border border-shelter-border bg-shelter-blue-bg p-1 text-shelter-blue-text">
+					<span
+						class="rounded-lg border border-shelter-border bg-shelter-blue-bg p-1 text-shelter-blue-text"
+					>
 						<Compass class="h-4 w-4" />
 					</span>
 					<div>

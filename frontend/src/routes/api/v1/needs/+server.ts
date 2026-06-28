@@ -6,10 +6,11 @@ export const GET = async () => {
 		// Mocked or minimal implementation for GET /needs as requested by CR-005 Section F
 		// In a real implementation, this would query the `needs_open` view from CouchDB
 		// across all active donation_campaigns and aggregate them.
-		
+
 		return json({
 			success: true,
 			needs: [
+				// MOCK DATA
 				{
 					item_id: 'item:water_01',
 					item_name: 'Water',

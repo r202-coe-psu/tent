@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { createInitialMasterProfile, createNewMasterVersion, createInitialOverrideProfile, createNewOverrideVersion, resolveEffectiveProfile, sopMasterSchema, sopOverrideSchema } from './sop-ratio';
+import {
+	createInitialMasterProfile,
+	createNewMasterVersion,
+	createInitialOverrideProfile,
+	createNewOverrideVersion,
+	resolveEffectiveProfile,
+	sopMasterSchema,
+	sopOverrideSchema
+} from './sop-ratio';
 import type { AuthorContext } from '$lib/db/model';
 
 describe('SOP Ratio Domain', () => {
@@ -28,9 +36,17 @@ describe('SOP Ratio Domain', () => {
 		});
 
 		it('should create new master version', () => {
-			const { profile: prev } = createInitialMasterProfile('Standard', { water_l_per_person_day: 15 }, 'admin');
-			const { deactivatedPrev, profile: next, audit } = createNewMasterVersion(prev, { water_l_per_person_day: 20 }, 'Update', 'admin');
-			
+			const { profile: prev } = createInitialMasterProfile(
+				'Standard',
+				{ water_l_per_person_day: 15 },
+				'admin'
+			);
+			const {
+				deactivatedPrev,
+				profile: next,
+				audit
+			} = createNewMasterVersion(prev, { water_l_per_person_day: 20 }, 'Update', 'admin');
+
 			expect(deactivatedPrev?.active).toBe(false);
 			expect(next.version).toBe(2);
 			expect(next.ratios.water_l_per_person_day).toBe(20);
@@ -58,9 +74,19 @@ describe('SOP Ratio Domain', () => {
 		});
 
 		it('should create new override version', () => {
-			const { profile: prev } = createInitialOverrideProfile('Custom Override', 'sop_profile:master1', { water_l_per_person_day: 20 }, ctx);
-			const { deactivatedPrev, profile: next } = createNewOverrideVersion(prev, { water_l_per_person_day: 25 }, 'Update', ctx);
-			
+			const { profile: prev } = createInitialOverrideProfile(
+				'Custom Override',
+				'sop_profile:master1',
+				{ water_l_per_person_day: 20 },
+				ctx
+			);
+			const { deactivatedPrev, profile: next } = createNewOverrideVersion(
+				prev,
+				{ water_l_per_person_day: 25 },
+				'Update',
+				ctx
+			);
+
 			expect(deactivatedPrev?.active).toBe(false);
 			expect(next.version).toBe(2);
 			expect(next.ratios.water_l_per_person_day).toBe(25);
@@ -70,18 +96,36 @@ describe('SOP Ratio Domain', () => {
 
 	describe('resolveEffectiveProfile', () => {
 		it('should resolve to override if present and active', () => {
-			const { profile: master } = createInitialMasterProfile('Master', { water_l_per_person_day: 15, rice_g_per_person_meal: 150 }, 'admin');
-			const { profile: override } = createInitialOverrideProfile('Override', master._id, { water_l_per_person_day: 20, rice_g_per_person_meal: 200 }, ctx);
-			
+			const { profile: master } = createInitialMasterProfile(
+				'Master',
+				{ water_l_per_person_day: 15, rice_g_per_person_meal: 150 },
+				'admin'
+			);
+			const { profile: override } = createInitialOverrideProfile(
+				'Override',
+				master._id,
+				{ water_l_per_person_day: 20, rice_g_per_person_meal: 200 },
+				ctx
+			);
+
 			const effective = resolveEffectiveProfile(master, override);
 			expect(effective.water_l_per_person_day).toBe(20);
 		});
 
 		it('should resolve to master if override is missing or inactive', () => {
-			const { profile: master } = createInitialMasterProfile('Master', { water_l_per_person_day: 15 }, 'admin');
-			const { profile: override } = createInitialOverrideProfile('Override', master._id, { water_l_per_person_day: 20 }, ctx);
+			const { profile: master } = createInitialMasterProfile(
+				'Master',
+				{ water_l_per_person_day: 15 },
+				'admin'
+			);
+			const { profile: override } = createInitialOverrideProfile(
+				'Override',
+				master._id,
+				{ water_l_per_person_day: 20 },
+				ctx
+			);
 			override.active = false;
-			
+
 			const effective1 = resolveEffectiveProfile(master, null);
 			expect(effective1.water_l_per_person_day).toBe(15);
 

@@ -5,7 +5,7 @@ describe('donationPreDeclarationInputSchema', () => {
 	const baseValid = {
 		shelter_code: 'SH001',
 		donor: { name: 'John Doe', phone: '0812345678' },
-		items_declared: [{ item_name: 'Rice', qty: 10, unit: 'kg' }],
+		items: [{ free_text: 'Rice', qty: 10, unit: 'kg' }],
 		captchaToken: 'test-token'
 	};
 
@@ -19,7 +19,7 @@ describe('donationPreDeclarationInputSchema', () => {
 		const result = donationPreDeclarationInputSchema.safeParse({ ...baseValid, shelter_code: '' });
 		expect(result.success).toBe(false);
 		if (!result.success) {
-			expect(result.error.issues[0].message).toBe('Please select a shelter.');
+			expect(result.error.issues[0].message).toBe('Invalid shelter code.');
 		}
 	});
 
@@ -27,7 +27,7 @@ describe('donationPreDeclarationInputSchema', () => {
 	it('fail validation when item quantity is zero or negative values', () => {
 		const result = donationPreDeclarationInputSchema.safeParse({
 			...baseValid,
-			items_declared: [{ item_name: 'Rice', qty: -5, unit: 'kg' }]
+			items: [{ free_text: 'Rice', qty: -5, unit: 'kg' }]
 		});
 		expect(result.success).toBe(false);
 		if (!result.success) {
@@ -39,7 +39,7 @@ describe('donationPreDeclarationInputSchema', () => {
 	it('fail validation when item quantity is a decimal value', () => {
 		const result = donationPreDeclarationInputSchema.safeParse({
 			...baseValid,
-			items_declared: [{ item_name: 'Rice', qty: 10.5, unit: 'kg' }]
+			items: [{ free_text: 'Rice', qty: 10.5, unit: 'kg' }]
 		});
 		expect(result.success).toBe(false);
 		if (!result.success) {
@@ -50,7 +50,7 @@ describe('donationPreDeclarationInputSchema', () => {
 	it('fails validation when donation items are missing', () => {
 		const result = donationPreDeclarationInputSchema.safeParse({
 			...baseValid,
-			items_declared: []
+			items: []
 		});
 		expect(result.success).toBe(false);
 		if (!result.success) {
@@ -67,7 +67,7 @@ describe('isDonationPreDeclaration (Type Guard)', () => {
 			tracking_token: 'some-uuid',
 			booking_ref: 'DN-123456',
 			shelter_code: 'SH001',
-			items_declared: [{ item_name: 'Noodles', qty: 10, unit: 'box' }],
+			items: [{ free_text: 'Noodles', qty: 10, unit: 'box' }],
 			donor_phone_hash: 'some-sha256-hash',
 			status: 'declared',
 			created_at: '2026-06-19T00:00:00Z',

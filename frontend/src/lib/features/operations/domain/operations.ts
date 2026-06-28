@@ -361,4 +361,3 @@ export const specialRequestSchema = z.object({
 	location: z.string().trim().min(1, 'กรุณาระบุคลังเป้าหมาย')
 });
 export type SpecialRequestInput = z.infer<typeof specialRequestSchema>;
-

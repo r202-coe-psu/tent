@@ -18,7 +18,7 @@ export class RateLimiter {
 	 */
 	check(key: string): boolean {
 		if (!key) return true;
-		
+
 		const now = Date.now();
 		const entry = this.store.get(key) || { timestamps: [] };
 

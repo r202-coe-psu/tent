@@ -26,7 +26,8 @@ export const GET = async ({ params, getClientAddress }) => {
 		const extracted = match[1];
 		const shelterCode = extracted === 'DON' ? 'SH001' : extracted;
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
-		const docId = `donation:${tracking_token}`;
+		const tokenHash = await sha256Hex(tracking_token);
+		const docId = `donation:${tokenHash}`;
 
 		// Query CouchDB directly
 		const res = await adminRaw(`/${shelterDb}/${encodeURIComponent(docId)}`, 'GET');
@@ -42,7 +43,6 @@ export const GET = async ({ params, getClientAddress }) => {
 
 		// Optional: Verify hash if strict security is required, but document ID lookup is sufficient
 		// The hash was mainly for IDOR protection
-		const tokenHash = await sha256Hex(tracking_token);
 		if (donation.tracking_token_hash && donation.tracking_token_hash !== tokenHash) {
 			return json({ success: false, error: 'Invalid token hash' }, { status: 403 });
 		}
@@ -120,7 +120,8 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		const extracted = match[1];
 		const shelterCode = extracted === 'DON' ? 'SH001' : extracted;
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
-		const docId = `donation:${tracking_token}`;
+		const tokenHash = await sha256Hex(tracking_token);
+		const docId = `donation:${tokenHash}`;
 
 		// Fetch latest rev from CouchDB
 		const latestDocRes = await adminRaw(`/${shelterDb}/${encodeURIComponent(docId)}`, 'GET');
@@ -132,12 +133,21 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 			return json({ success: false, error: 'Database fetch failed' }, { status: 500 });
 		}
 
-		const latestDoc = latestDocRes.data as any;
+		const latestDoc = latestDocRes.data as PublicDonationDoc;
 
 		// Optional: Verify hash
-		const tokenHash = await sha256Hex(tracking_token);
 		if (latestDoc.tracking_token_hash && latestDoc.tracking_token_hash !== tokenHash) {
 			return json({ success: false, error: 'Invalid token hash' }, { status: 403 });
+		}
+
+		if (latestDoc.logistics?.delivery_method !== 'parcel') {
+			return json(
+				{
+					success: false,
+					error: 'Courier tracking number can only be updated for parcel deliveries'
+				},
+				{ status: 400 }
+			);
 		}
 
 		// Update CouchDB document
