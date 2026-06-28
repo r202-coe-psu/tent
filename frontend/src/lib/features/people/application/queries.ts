@@ -3,7 +3,17 @@ import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { peopleRepository, shelterDb } from '../data/people.pouch';
-import type { Evacuee, EvacueeInput, Household, HouseholdInput, ScreeningInput } from '../domain/people';
+import type {
+	Evacuee,
+	EvacueeInput,
+	Household,
+	HouseholdInput,
+	ScreeningInput,
+	Medical,
+	Movement,
+	Screening
+} from '../domain/people';
+import { isMedical, isMovement, isScreening } from '../domain/people';
 
 export const peopleKeys = {
 	all: ['people'] as const,
@@ -12,7 +22,10 @@ export const peopleKeys = {
 		[...peopleKeys.all, 'evacuees', { page, pageSize }] as const,
 	households: () => [...peopleKeys.all, 'households'] as const,
 	householdsPaginated: (page: number, pageSize: number) =>
-		[...peopleKeys.all, 'households', { page, pageSize }] as const
+		[...peopleKeys.all, 'households', { page, pageSize }] as const,
+	medicals: () => [...peopleKeys.all, 'medicals'] as const,
+	movements: () => [...peopleKeys.all, 'movements'] as const,
+	screenings: () => [...peopleKeys.all, 'screenings'] as const
 };
 
 export const useEvacuees = () =>
@@ -73,6 +86,48 @@ export const useCreateScreening = () =>
 			peopleRepository().createScreening(input, ctx)
 	}));
 
+export const useMedicals = () =>
+	createQuery(() => ({
+		queryKey: peopleKeys.medicals(),
+		queryFn: async () => {
+			const db = shelterDb();
+			const res = await db.allDocs({
+				include_docs: true,
+				startkey: 'medical:',
+				endkey: 'medical:￰'
+			});
+			return res.rows.map((r) => r.doc as unknown).filter((d): d is Medical => isMedical(d));
+		}
+	}));
+
+export const useMovements = () =>
+	createQuery(() => ({
+		queryKey: peopleKeys.movements(),
+		queryFn: async () => {
+			const db = shelterDb();
+			const res = await db.allDocs({
+				include_docs: true,
+				startkey: 'movement:',
+				endkey: 'movement:￰'
+			});
+			return res.rows.map((r) => r.doc as unknown).filter((d): d is Movement => isMovement(d));
+		}
+	}));
+
+export const useScreenings = () =>
+	createQuery(() => ({
+		queryKey: peopleKeys.screenings(),
+		queryFn: async () => {
+			const db = shelterDb();
+			const res = await db.allDocs({
+				include_docs: true,
+				startkey: 'screening:',
+				endkey: 'screening:￰'
+			});
+			return res.rows.map((r) => r.doc as unknown).filter((d): d is Screening => isScreening(d));
+		}
+	}));
+
 export function startPeopleLiveQuery(queryClient: QueryClient): LiveQueryHandle {
 	return startLiveQuery(shelterDb(), queryClient, (type) => {
 		if (type === 'evacuee') {
@@ -80,6 +135,15 @@ export function startPeopleLiveQuery(queryClient: QueryClient): LiveQueryHandle 
 		}
 		if (type === 'household') {
 			return [peopleKeys.households(), [...peopleKeys.all, 'households']];
+		}
+		if (type === 'medical') {
+			return [peopleKeys.medicals()];
+		}
+		if (type === 'movement') {
+			return [peopleKeys.movements()];
+		}
+		if (type === 'screening') {
+			return [peopleKeys.screenings()];
 		}
 		return [];
 	});

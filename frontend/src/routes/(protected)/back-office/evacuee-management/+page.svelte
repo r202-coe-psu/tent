@@ -108,7 +108,6 @@
 	<title>จัดการผู้ประสบภัย · SmartShelter</title>
 </svelte:head>
 
-
 <div class="flex shrink-0 gap-2 border-b border-border bg-card px-4 py-2">
 	<Button
 		size="sm"
@@ -208,9 +207,15 @@
 								</Table.Cell>
 								<Table.Cell class="font-medium">{zoneLabel(e.current_stay.zone)}</Table.Cell>
 								<Table.Cell class="text-center">
-									<Button variant="outline" size="sm" onclick={() => toast.info('เร็วๆ นี้')}
-										>ตรวจประวัติ</Button
+									<Button
+										variant="outline"
+										size="sm"
+										onclick={() =>
+											goto(resolve(`/back-office/evacuee-management/edit/-evacuee/${e._id}`))}
 									>
+										<Pencil class="mr-1 h-3.5 w-3.5" />
+										แก้ไขข้อมูล
+									</Button>
 								</Table.Cell>
 							</Table.Row>
 						{/each}
