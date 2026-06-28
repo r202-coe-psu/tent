@@ -8,7 +8,7 @@ affects:
   - CR-005
 ---
 
-# CR-016: Dashboard API Architecture (T-52 & T-58)
+# CR-017: Dashboard API Architecture (T-52 & T-58)
 
 **สรุป (TL;DR):** วางโครงสร้าง API ของ Dashboard สำหรับระบบ Back-office (T-52) และ Public (T-58) ให้แยกส่วนกันชัดเจนตามหลัก DDD เปลี่ยนวิธีดึงข้อมูลสาธารณะจาก Dynamic Query เป็น Dockerized Background Worker (Daemon) + Read-Model และเพิ่มสคริปต์สร้าง CouchDB View สำหรับ T-52
 
