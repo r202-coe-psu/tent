@@ -58,7 +58,7 @@
 			throw err;
 		}
 	}
-	let step = $state<1 | 2 | 3 | 4>(1);
+	let step = $state<1 | 2 | 3 | 4 | 5 | 6>(1);
 </script>
 
 <div class="container mx-auto max-w-5xl p-6">
@@ -82,13 +82,31 @@
 		</div>
 	{/if}
 
-	{#if step === 2}
-		<Card.Root class="mb-8">
+	{#if step === 1}
+		<Card.Root class="mb-4">
 			<Card.Header class="flex flex-row items-start gap-3 space-y-0 p-4">
 				<div
 					class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
 				>
 					1
+				</div>
+				<div class="space-y-1">
+					<Card.Title class="text-base leading-none font-semibold">
+						ตรวจสอบประวัติการลงทะเบียน
+					</Card.Title>
+					<Card.Description class="text-sm">
+						ค้นหาด้วยเลขบัตรประชาชน, เบอร์โทรศัพท์ หรือชื่อ-นามสกุล ก่อนลงทะเบียนใหม่
+					</Card.Description>
+				</div>
+			</Card.Header>
+		</Card.Root>
+	{:else if step === 2}
+		<Card.Root class="mb-4">
+			<Card.Header class="flex flex-row items-start gap-3 space-y-0 p-4">
+				<div
+					class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
+				>
+					2
 				</div>
 				<div class="space-y-1">
 					<Card.Title class="text-base leading-none font-semibold">
@@ -107,7 +125,7 @@
 					<div
 						class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
 					>
-						2
+						3
 					</div>
 					<div class="space-y-1">
 						<Card.Title class="text-base leading-none font-semibold"
@@ -127,7 +145,7 @@
 				<div
 					class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
 				>
-					3
+					4
 				</div>
 				<div class="space-y-1">
 					<Card.Title class="text-base leading-none font-semibold"

@@ -279,27 +279,64 @@
 	}
 </script>
 
-<!-- ── Step indicator ─────────────────────────────────────────────────────────── -->
-<div class="mb-6 flex items-center gap-3">
+<!-- ── Step wizard indicator ───────────────────────────────────────────────────── -->
+{#snippet stepLabel(s: number)}
+	{s === 1
+		? 'ตรวจสอบประวัติ'
+		: s === 2
+			? 'ประเมินอาการ'
+			: s === 3
+				? 'ข้อมูลผู้ประสบภัย'
+				: s === 4
+					? 'ข้อมูลครัวเรือน'
+					: s === 5
+						? 'ทรัพย์สินและสัตว์เลี้ยง'
+						: 'จัดสรรพื้นที่'}
+{/snippet}
+
+<div class="mb-8 flex items-start">
 	{#each [1, 2, 3, 4, 5, 6] as s (s)}
-		<div class="flex items-center gap-2">
-			<div
-				class="flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold transition-colors {step ===
-				s
-					? 'bg-primary text-primary-foreground'
-					: step > s
-						? 'bg-green-600 text-white'
-						: 'bg-muted text-muted-foreground'}"
-			>
-				{step > s ? '✓' : s}
+		<div class="flex flex-1 flex-col items-center gap-2">
+			<div class="flex w-full items-center">
+				<!-- left connector -->
+				<div
+					class="h-0.5 flex-1 transition-colors {s === 1
+						? 'invisible'
+						: step >= s
+							? 'bg-green-500'
+							: 'bg-border'}"
+				></div>
+				<!-- circle -->
+				<div
+					class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors {step ===
+					s
+						? 'bg-primary text-primary-foreground ring-4 ring-primary/20'
+						: step > s
+							? 'bg-green-600 text-white'
+							: 'bg-muted text-muted-foreground'}"
+				>
+					{step > s ? '✓' : s}
+				</div>
+				<!-- right connector -->
+				<div
+					class="h-0.5 flex-1 transition-colors {s === 6
+						? 'invisible'
+						: step > s
+							? 'bg-green-500'
+							: 'bg-border'}"
+				></div>
 			</div>
-			<span class="text-sm font-medium {step === s ? 'text-foreground' : 'text-muted-foreground'}">
-				{s === 1 ? 'ตรวจสอบประวัติ' : s === 2 ? 'ประเมินอาการ (EWAR)' : s === 3 ? 'ข้อมูลผู้ประสบภัย' : s === 4 ? 'ข้อมูลครัวเรือน' : s === 5 ? 'ทรัพย์สินและสัตว์เลี้ยง' : 'จัดสรรพื้นที่ (Zoning)'}
+			<!-- label below -->
+			<span
+				class="hidden text-center text-xs font-medium leading-tight sm:block {step === s
+					? 'text-foreground'
+					: step > s
+						? 'text-green-700'
+						: 'text-muted-foreground'}"
+			>
+				{@render stepLabel(s)}
 			</span>
 		</div>
-		{#if s < 6}
-			<div class="h-px flex-1 bg-border hidden sm:block"></div>
-		{/if}
 	{/each}
 </div>
 
