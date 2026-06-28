@@ -2,8 +2,9 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { EWAR_SYMPTOM_GROUPS } from '../domain/people';
 	import type { SvelteSet } from 'svelte/reactivity';
+	import { toast } from 'svelte-sonner';
 
-	let { onNext, selectedSymptoms, isHealthy = $bindable(false) }: { onNext: () => void, selectedSymptoms: SvelteSet<string>, isHealthy: boolean } = $props();
+	let { onNext, onBack, selectedSymptoms, isHealthy = $bindable(false) }: { onNext: () => void, onBack: () => void, selectedSymptoms: SvelteSet<string>, isHealthy: boolean } = $props();
 
 	function toggleSymptom(id: string) {
 		if (isHealthy) return;
@@ -17,6 +18,14 @@
 	function toggleHealthy() {
 		isHealthy = !isHealthy;
 		if (isHealthy) selectedSymptoms.clear();
+	}
+
+	function handleNext() {
+		if (!isHealthy && selectedSymptoms.size === 0) {
+			toast.error('กรุณาเลือกอาการที่พบ หรือระบุว่า "ไม่มีอาการ" ก่อนดำเนินการต่อ');
+			return;
+		}
+		onNext();
 	}
 </script>
 
@@ -63,12 +72,20 @@
 		</div>
 	{/each}
 
-	<!-- Next button -->
-	<div class="flex justify-end pt-2">
+	<!-- Back + Next row -->
+	<div class="flex items-center justify-between border-t border-border pt-6">
 		<Button
 			type="button"
-			onclick={onNext}
-			class="px-6 py-2.5 text-sm font-semibold"
+			variant="outline"
+			onclick={onBack}
+			class="h-10 px-6 text-sm font-medium"
+		>
+			ย้อนกลับ
+		</Button>
+		<Button
+			type="button"
+			onclick={handleNext}
+			class="h-10 px-6 text-sm font-semibold"
 		>
 			ถัดไป →
 		</Button>

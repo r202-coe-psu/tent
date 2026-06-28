@@ -309,6 +309,7 @@
 	<EwarSymptomSection
 		bind:isHealthy
 		{selectedSymptoms}
+		onBack={() => (step = 1)}
 		onNext={() => (step = 3)}
 	/>
 {:else if step === 3}

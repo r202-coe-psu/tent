@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { toast } from 'svelte-sonner';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -65,6 +66,7 @@
 				if (cleanId.length !== 13) {
 					// @ts-ignore
 					$errors.person_id = { number: ['เลขประจำตัวประชาชนต้องมี 13 หลัก'] };
+					toast.error('เลขประจำตัวประชาชนต้องมี 13 หลัก');
 					cancel();
 					return;
 				}
@@ -75,6 +77,7 @@
 				if (cleanPhone.length !== 10) {
 					// @ts-ignore
 					$errors.phone = ['เบอร์โทรศัพท์ต้องมี 10 หลัก'];
+					toast.error('เบอร์โทรศัพท์ต้องมี 10 หลัก');
 					cancel();
 					return;
 				}
@@ -89,6 +92,7 @@
 					if (cleanPhone.length !== 10) {
 						// @ts-ignore
 						$errors.emergency_contact = { phone: ['เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก'] };
+						toast.error('เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก');
 						cancel();
 						return;
 					}
@@ -96,7 +100,10 @@
 			}
 		},
 		onUpdate: async ({ form }) => {
-			if (!form.valid) return;
+			if (!form.valid) {
+				toast.error('กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน');
+				return;
+			}
 			onsubmit(form.data);
 		}
 	});
@@ -546,18 +553,18 @@
 		</div>
 
 		<!-- Back + Submit row -->
-		<div class="flex w-full items-center gap-3 border-t border-border pt-6">
+		<div class="flex w-full items-center justify-between border-t border-border pt-6">
 			<Button
 				type="button"
 				variant="outline"
 				onclick={onBack}
-				class="h-10 gap-1 px-6 py-2 text-sm font-medium"
+				class="h-10 px-6 text-sm font-medium"
 			>
 				ย้อนกลับ
 			</Button>
-		</div>
-		<div class="flex items-center justify-end gap-3 pt-2">
-			<Form.Button disabled={$submitting || pending}>Next</Form.Button>
+			<Form.Button disabled={$submitting || pending} class="h-10 px-6 text-sm font-semibold">
+				ถัดไป →
+			</Form.Button>
 		</div>
 	</Field.FieldGroup>
 </form>

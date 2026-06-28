@@ -3,7 +3,7 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter, type Zone } from '$lib/features/shelters/index.js';
-	
+
 	let {
 		evacuee,
 		onBack,
@@ -13,14 +13,16 @@
 		onBack: () => void;
 		onSubmit: (zone: string) => void;
 	} = $props();
-	
+
 	let selectedZone = $state('');
 
 	// Query current shelter data to get zones
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? '');
 
 	// Filter only active zones
-	let activeZones = $derived((shelterQuery.data?.zones || []).filter((z: Zone) => z.status !== 'closed'));
+	let activeZones = $derived(
+		(shelterQuery.data?.zones || []).filter((z: Zone) => z.status !== 'closed')
+	);
 
 	// AI Smart Zoning Recommendation
 	const recommendedZoneType = $derived.by(() => {
@@ -46,8 +48,10 @@
 
 <div class="space-y-4">
 	<!-- Header Card -->
-	<div class="rounded-xl border border-border bg-card p-6 shadow-sm flex items-center gap-4">
-		<div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#e2e8f0] text-slate-700 font-bold text-lg">
+	<div class="flex items-center gap-4 rounded-xl border border-border bg-card p-6 shadow-sm">
+		<div
+			class="flex h-10 w-10 items-center justify-center rounded-full bg-[#e2e8f0] text-lg font-bold text-slate-700"
+		>
 			6
 		</div>
 		<div>
@@ -57,35 +61,38 @@
 	</div>
 
 	<!-- Form Content -->
-	<div class="rounded-xl border border-blue-200 bg-[#f0f9ff] p-8 shadow-sm flex flex-col items-center justify-center space-y-4 text-center">
+	<div
+		class="flex flex-col items-center justify-center space-y-4 rounded-xl border border-blue-200 bg-[#f0f9ff] p-8 text-center shadow-sm"
+	>
 		<div class="space-y-1">
-			<p class="text-[10px] font-bold text-blue-900 tracking-wider">ระบบคัดแยกอัตโนมัติ (AI SMART ZONING)</p>
 			<p class="text-lg font-medium text-foreground">โซนแนะนำ:</p>
 			{#if shelterQuery.isLoading}
-				<p class="text-sm text-muted-foreground animate-pulse">กำลังโหลดข้อมูลโซน...</p>
+				<p class="animate-pulse text-sm text-muted-foreground">กำลังโหลดข้อมูลโซน...</p>
+			{:else if recommendedZone}
+				<h3 class="mt-2 flex items-center justify-center gap-2 text-2xl font-bold">
+					<span class="text-3xl">
+						{recommendedZone.type === 'vulnerable' ? '🟣' : '🟢'}
+					</span>
+					{recommendedZone.name}
+				</h3>
+				<p class="mt-1 text-xs text-muted-foreground">
+					แนะนำตามสถานะของผู้อพยพ ({recommendedZone.type === 'vulnerable'
+						? 'กลุ่มเปราะบาง'
+						: 'บุคคลทั่วไป'})
+				</p>
 			{:else}
-				{#if recommendedZone}
-					<h3 class="text-2xl font-bold flex items-center gap-2 justify-center mt-2">
-						<span class="text-3xl">
-							{recommendedZone.type === 'vulnerable' ? '🟣' : '🟢'}
-						</span>
-						{recommendedZone.name}
-					</h3>
-					<p class="text-xs text-muted-foreground mt-1">
-						แนะนำตามสถานะของผู้อพยพ ({recommendedZone.type === 'vulnerable' ? 'กลุ่มเปราะบาง' : 'บุคคลทั่วไป'})
-					</p>
-				{:else}
-					<h3 class="text-lg font-bold flex items-center gap-2 justify-center mt-2 text-muted-foreground">
-						ไม่มีโซนที่เปิดให้บริการในศูนย์นี้
-					</h3>
-				{/if}
+				<h3
+					class="mt-2 flex items-center justify-center gap-2 text-lg font-bold text-muted-foreground"
+				>
+					ไม่มีโซนที่เปิดให้บริการในศูนย์นี้
+				</h3>
 			{/if}
 		</div>
-		
+
 		{#if activeZones.length > 0}
-			<div class="w-full max-w-sm mt-4">
+			<div class="mt-4 w-full max-w-sm">
 				<Select.Root type="single" bind:value={selectedZone}>
-					<Select.Trigger class="w-full h-12 bg-white rounded-xl shadow-sm border-border">
+					<Select.Trigger class="h-12 w-full rounded-xl border-border bg-white shadow-sm">
 						{@const currentZone = activeZones.find((z: Zone) => z.code === selectedZone)}
 						<span class="flex items-center gap-2 text-base font-medium">
 							{currentZone ? `📍 ${currentZone.name}` : 'เลือกโซน...'}
@@ -104,16 +111,21 @@
 	</div>
 
 	<!-- Bottom Actions -->
-	<div class="flex flex-col gap-3 bg-card p-6 rounded-xl border shadow-sm">
-		<Button 
-			type="button" 
-			disabled={!selectedZone || shelterQuery.isLoading} 
-			class="w-full h-12 text-sm md:text-base font-medium bg-[#003B71] hover:bg-[#002a50] rounded-xl" 
+	<div class="flex flex-col gap-3 rounded-xl border bg-card p-6 shadow-sm">
+		<Button
+			type="button"
+			disabled={!selectedZone || shelterQuery.isLoading}
+			class="h-12 w-full rounded-xl bg-[#003B71] text-sm font-medium hover:bg-[#002a50] md:text-base"
 			onclick={() => onSubmit(selectedZone)}
 		>
 			ยืนยันการเลือกโซน และไปขั้นตอนถัดไป &gt;
 		</Button>
-		<Button type="button" variant="outline" class="w-full h-12 text-sm md:text-base font-medium rounded-xl" onclick={onBack}>
+		<Button
+			type="button"
+			variant="outline"
+			class="h-12 w-full rounded-xl text-sm font-medium md:text-base"
+			onclick={onBack}
+		>
 			ย้อนกลับ
 		</Button>
 	</div>
