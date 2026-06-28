@@ -26,8 +26,9 @@ interface SessionResponse {
 }
 
 /** Thin fetch wrapper: sends cookies, parses JSON, throws CouchDB's reason on error. */
-export async function couchFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-	const res = await fetch(`${COUCH_URL}${path}`, {
+export async function couchFetch<T>(path: string, init: RequestInit & { fetch?: typeof fetch } = {}): Promise<T> {
+	const fetchFn = init.fetch || fetch;
+	const res = await fetchFn(`${COUCH_URL}${path}`, {
 		credentials: 'include',
 		...init,
 		headers: {
@@ -67,8 +68,8 @@ export async function sessionLogout(): Promise<void> {
 }
 
 /** Current user from the session cookie, or null when anonymous. */
-export async function getSession(): Promise<SessionUser | null> {
-	const res = await couchFetch<SessionResponse>('/_session');
+export async function getSession(fetchFn?: typeof fetch): Promise<SessionUser | null> {
+	const res = await couchFetch<SessionResponse>('/_session', { fetch: fetchFn });
 	if (!res.userCtx?.name) return null;
 	return { name: res.userCtx.name, roles: res.userCtx.roles };
 }

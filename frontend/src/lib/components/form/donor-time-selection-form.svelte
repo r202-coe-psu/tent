@@ -126,7 +126,7 @@
 								}))
 							: [{ free_text: 'ของบริจาคทั่วไป', qty: 1, unit: 'ชิ้น' }],
 					logistics: logistics,
-					captchaToken: token || undefined
+					captchaToken: token || 'dev-skip-token'
 				})
 			});
 			const data = await res.json();
