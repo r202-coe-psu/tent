@@ -15,7 +15,11 @@
 		type EvacueeInput
 	} from '../domain/people';
 	import Camera from '@lucide/svelte/icons/camera';
+	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import { COUNTRIES } from '$lib/utils/country';
+	import { Calendar } from '$lib/components/ui/calendar/index.js';
+	import * as Popover from '$lib/components/ui/popover/index.js';
+	import { type DateValue } from '@internationalized/date';
 
 	const cardTypeOptions = [
 		{ value: 'national_id', label: 'เลขประจำตัวประชาชน (Thai National ID)' },
@@ -44,7 +48,7 @@
 		onBack
 	}: { onsubmit: (input: EvacueeInput) => void; pending?: boolean; onBack: () => void } = $props();
 
-	let birthDateStr = $state('');
+	let birthDate = $state<DateValue | undefined>(undefined);
 	let facePhotoUrl = $state<string | null>(null);
 	let medicalConditionsStr = $state('');
 	let medicalMedicationsStr = $state('');
@@ -102,9 +106,8 @@
 	let age = $state('');
 
 	$effect(() => {
-		if (birthDateStr) {
-			const birthDate = new Date(birthDateStr);
-			$formData.birth_year = birthDate.getFullYear() + 543;
+		if (birthDate) {
+			$formData.birth_year = birthDate.year + 543;
 		} else if (age && !isNaN(Number(age))) {
 			$formData.birth_year = new Date().getFullYear() + 543 - Number(age);
 		} else {
@@ -269,7 +272,29 @@
 					<!-- วันเกิด -->
 					<div class="space-y-2">
 						<Label>วันเกิด</Label>
-						<Input type="date" bind:value={birthDateStr} />
+						<Popover.Root>
+							<Popover.Trigger class="w-full">
+								<Button
+									type="button"
+									variant="outline"
+									class="h-9 w-full justify-start text-left font-normal"
+								>
+									<CalendarIcon class="mr-2 h-4 w-4 text-muted-foreground" />
+									{#if birthDate}
+										{birthDate.day}/{birthDate.month}/{birthDate.year + 543}
+									{:else}
+										<span class="text-muted-foreground text-sm">เลือกวันเกิด</span>
+									{/if}
+								</Button>
+							</Popover.Trigger>
+							<Popover.Content class="w-auto p-0">
+								<Calendar
+									type="single"
+									bind:value={birthDate}
+									captionLayout="dropdown"
+								/>
+							</Popover.Content>
+						</Popover.Root>
 					</div>
 
 					<!-- อายุ -->
