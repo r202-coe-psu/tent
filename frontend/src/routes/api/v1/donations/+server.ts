@@ -57,7 +57,6 @@ export const POST = async ({ request, getClientAddress }) => {
 		// 4. Generate secure token and hash
 		// Embed shelter_code in token so GET /donations/[token] knows which CouchDB database to query
 		const trackingToken = `TX-${parsed.data.shelter_code.toUpperCase()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
-		const trackingTokenHash = await sha256Hex(trackingToken);
 		const bookingRef = 'DN-' + randomInt(100000, 1000000);
 		const now = new Date().toISOString();
 
@@ -68,7 +67,7 @@ export const POST = async ({ request, getClientAddress }) => {
 
 		// 5. Save to CouchDB (Real database layer)
 		const couchDoc = {
-			_id: `donation:${trackingTokenHash}`,
+			_id: `donation:${trackingToken}`,
 			type: 'donation',
 			schema_v: 2,
 			channel: 'public',
@@ -79,7 +78,7 @@ export const POST = async ({ request, getClientAddress }) => {
 			expires_at: expiresAtDate.toISOString(),
 			created_by: 'public',
 			booking_ref: bookingRef,
-			tracking_token_hash: trackingTokenHash, // keep hash for audit/consistency
+			tracking_token: trackingToken, // store token directly as requested
 			kind: 'items',
 			donor: {
 				name: parsed.data.donor.name,

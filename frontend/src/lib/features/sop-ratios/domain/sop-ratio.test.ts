@@ -11,7 +11,12 @@ import {
 import type { AuthorContext } from '$lib/db/model';
 
 describe('SOP Ratio Domain', () => {
-	const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'admin' };
+	const masterCtx = { createdBy: 'admin' };
+	const overrideCtx: AuthorContext & { base_profile_id: string } = {
+		shelterCode: 'SH001',
+		createdBy: 'admin',
+		base_profile_id: 'sop_profile:base-id'
+	};
 
 	describe('Master Profile', () => {
 		it('should create a valid master profile with whitelist keys and audit trail', () => {
@@ -25,10 +30,13 @@ describe('SOP Ratio Domain', () => {
 			expect(profile.version).toBe(1);
 			expect(profile.active).toBe(true);
 			expect(profile.ratios.water_l_per_person_day).toBe(15);
+			expect(profile.ratios.rice_g_per_person_meal).toBe(200);
+			expect(profile.ratios.toilet_per_person).toBe(0.05);
 			expect(profile.type).toBe('sop_profile');
 			expect(profile.schema_v).toBe(2);
 			expect((profile as any).shelter_code).toBeUndefined(); // Master has no shelter_code
 			expect(profile._id.startsWith('sop_profile:')).toBe(true);
+			expect((profile as any).shelter_code).toBeUndefined(); // Master has no shelter_code
 
 			expect(audit.action).toBe('created');
 			expect(audit.target_type).toBe('sop_profile');

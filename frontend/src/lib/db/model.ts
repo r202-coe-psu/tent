@@ -13,7 +13,7 @@ import { ulid } from './ulid';
 export type Timestamp = string;
 
 /** Fields present on every document in a catalog database. */
-export interface CatalogBaseDoc {
+export interface CatalogDoc {
 	_id: string;
 	_rev?: string;
 	type: string;
@@ -29,7 +29,7 @@ export function catalogDoc<T extends string, B extends object>(
 	body: B,
 	createdBy: string,
 	id: string = ulid()
-): CatalogBaseDoc & { type: T } & B {
+): CatalogDoc & { type: T } & B {
 	const ts = now();
 	return {
 		_id: makeDocId(type, id),
@@ -95,8 +95,9 @@ export function makeDoc<T extends string, B extends object>(
 	};
 }
 
+
 /** Return a copy of a mutable doc with a fresh `updated_at` (LWW conflict key). */
-export function touch<T extends BaseDoc>(doc: T): T {
+export function touch<T extends { updated_at: Timestamp }>(doc: T): T {
 	return { ...doc, updated_at: now() };
 }
 

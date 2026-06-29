@@ -149,7 +149,41 @@ export function createInitialOverrideProfile(
 		ctx
 	);
 
-	return { profile, audit };
+		return { profile, audit };
+	} else {
+		// targetType === 'sop_override': ctx is guaranteed to be OverrideCtx by the public overload
+		const overrideCtx = ctx as OverrideCtx;
+		const profile = makeDoc(
+			'sop_override',
+			1,
+			{
+				base_profile_id: overrideCtx.base_profile_id,
+				name,
+				ratios: safeRatios,
+				version: 1,
+				active: true
+			},
+			overrideCtx
+		) as SopOverride;
+
+		sopOverrideSchema.parse(profile);
+
+		const audit = createAuditEntry(
+			{
+				action: 'created',
+				target_type: 'sop_override',
+				target_id: profile._id,
+				reason: 'Initial creation',
+				context: {
+					ratios: profile.ratios,
+					base_profile_id: overrideCtx.base_profile_id
+				}
+			},
+			overrideCtx
+		);
+
+		return { profile, audit };
+	}
 }
 
 export type CreateNewVersionResult<T> =
@@ -173,7 +207,7 @@ export function createNewMasterVersion(
 	}
 
 	if (!hasChanges) {
-		return { deactivatedPrev: null, profile: prev, audit: null };
+		return { deactivatedPrev: null, profile: prev, audit: null } as CreateNewVersionResult<T>;
 	}
 
 	const newRatios = { ...prev.ratios, ...safeChanges };
@@ -209,7 +243,49 @@ export function createNewMasterVersion(
 		active: false
 	};
 
-	return { deactivatedPrev, profile, audit };
+		return { deactivatedPrev, profile, audit } as CreateNewVersionResult<T>;
+	} else {
+		// prev is SopOverride: ctx is guaranteed to be AuthorContext by the public overload
+		const overrideCtx = ctx as AuthorContext;
+		const overridePrev = prev as SopOverride;
+		const profile = makeDoc(
+			'sop_override',
+			1,
+			{
+				base_profile_id: overridePrev.base_profile_id,
+				name: overridePrev.name,
+				ratios: newRatios,
+				version: overridePrev.version + 1,
+				active: true
+			},
+			overrideCtx
+		) as SopOverride;
+
+		sopOverrideSchema.parse(profile);
+
+		const audit = createAuditEntry(
+			{
+				action: 'manual_adjust',
+				target_type: 'sop_override',
+				target_id: profile._id,
+				reason,
+				context: {
+					previous_version: overridePrev.version,
+					previous_id: overridePrev._id,
+					changes: safeChanges,
+					base_profile_id: overridePrev.base_profile_id
+				}
+			},
+			overrideCtx
+		);
+
+		const deactivatedPrev = {
+			...touch(overridePrev),
+			active: false
+		} as SopOverride;
+
+		return { deactivatedPrev, profile, audit } as CreateNewVersionResult<T>;
+	}
 }
 
 export function createNewOverrideVersion(

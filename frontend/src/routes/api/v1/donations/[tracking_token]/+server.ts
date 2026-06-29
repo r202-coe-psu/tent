@@ -26,8 +26,7 @@ export const GET = async ({ params, getClientAddress }) => {
 		const extracted = match[1];
 		const shelterCode = extracted === 'DON' ? 'SH001' : extracted;
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
-		const tokenHash = await sha256Hex(tracking_token);
-		const docId = `donation:${tokenHash}`;
+		const docId = `donation:${tracking_token}`;
 
 		// Query CouchDB directly
 		const res = await adminRaw(`/${shelterDb}/${encodeURIComponent(docId)}`, 'GET');
@@ -41,10 +40,9 @@ export const GET = async ({ params, getClientAddress }) => {
 
 		const donation = res.data as PublicDonationDoc;
 
-		// Optional: Verify hash if strict security is required, but document ID lookup is sufficient
-		// The hash was mainly for IDOR protection
-		if (donation.tracking_token_hash && donation.tracking_token_hash !== tokenHash) {
-			return json({ success: false, error: 'Invalid token hash' }, { status: 403 });
+		// Fallback for older hashed documents if needed could go here.
+		if (donation.tracking_token && donation.tracking_token !== tracking_token) {
+			return json({ success: false, error: 'Invalid token' }, { status: 403 });
 		}
 
 		// Mask PII before returning to public
@@ -120,8 +118,7 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		const extracted = match[1];
 		const shelterCode = extracted === 'DON' ? 'SH001' : extracted;
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
-		const tokenHash = await sha256Hex(tracking_token);
-		const docId = `donation:${tokenHash}`;
+		const docId = `donation:${tracking_token}`;
 
 		// Fetch latest rev from CouchDB
 		const latestDocRes = await adminRaw(`/${shelterDb}/${encodeURIComponent(docId)}`, 'GET');
@@ -135,9 +132,8 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 
 		const latestDoc = latestDocRes.data as PublicDonationDoc;
 
-		// Optional: Verify hash
-		if (latestDoc.tracking_token_hash && latestDoc.tracking_token_hash !== tokenHash) {
-			return json({ success: false, error: 'Invalid token hash' }, { status: 403 });
+		if (latestDoc.tracking_token && latestDoc.tracking_token !== tracking_token) {
+			return json({ success: false, error: 'Invalid token' }, { status: 403 });
 		}
 
 		if (latestDoc.logistics?.delivery_method !== 'parcel') {
