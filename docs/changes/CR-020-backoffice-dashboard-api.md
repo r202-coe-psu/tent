@@ -1,12 +1,12 @@
 ---
-status: proposed
+status: approved
 created: 2026-06-29
 updated: 2026-06-29
 affects:
   - T-52
 ---
 
-# CR-019: Back-office Dashboard API Architecture (T-52)
+# CR-020: Back-office Dashboard API Architecture (T-52)
 
 **สรุป (TL;DR):** วางโครงสร้าง API ของ Dashboard สำหรับระบบ Back-office (T-52) เพิ่มสคริปต์สร้าง CouchDB View (MapReduce) สำหรับดึงสถิติรายศูนย์แบบ Real-time และแยก Feature Domain ให้ชัดเจนตามหลัก DDD
 
@@ -77,3 +77,14 @@ API (แบ่งเป็น 3 เส้นทางย่อยภายใต
 ## 6. สิ่งที่ต้องปรับ Spec
 
 - อัปเดตเงื่อนไขเรื่องการสร้าง CouchDB View ให้เป็นส่วนหนึ่งของงาน **T-52** (`docs/task-breakdown/00-baseline.md`)
+
+## 7. การเปลี่ยนแปลงที่ทำไปแล้ว (Completed)
+
+### CouchDB View Naming Conventions (2026-06-29)
+
+เพิ่ม conventions การตั้งชื่อ CouchDB Views ให้เป็นมาตรฐานเดียวกันทั้งโครงการ:
+
+- **`frontend/CONVENTIONS.md` §5** — เพิ่ม subsection "CouchDB View naming conventions" ครอบคลุม: pattern `{subject}[_{qualifier}]`, ตาราง qualifier types, map key conventions, และกฎห้ามเรียก view จาก browser
+- **`.claude/skills/couchdb-pouchdb-bestpractices/SKILL.md` §6** — เพิ่ม "CouchDB View Naming Conventions" พร้อม code examples (do/don't) และ query parameter guide
+
+Conventions ได้รับการออกแบบให้ตรงกับ view ที่มีอยู่แล้วทั้ง 6 ตัวใน `schema.md` §7 (`occupancy`, `stock_balance`, `latest_screening`, `meals_served`, `needs_open`, `slot_availability`) โดยไม่มีการเปลี่ยนชื่อใดๆ
