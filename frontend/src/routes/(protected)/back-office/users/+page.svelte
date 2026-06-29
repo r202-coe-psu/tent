@@ -21,7 +21,7 @@
 	const deleteMutation = useDeleteUser();
 
 	function handleCreate(input: CreateUserInput) {
-		const code = isSA ? input.shelter_code : shelterCode;
+		const code = isSA ? input.shelter_id : shelterCode;
 		if (!code) {
 			toast.error('A shelter code is required');
 			return;
@@ -29,7 +29,12 @@
 		// Build the canonical roles[]: shelter scope + capability (server re-validates).
 		const userRoles = [shelterScopeRole(code), input.capability];
 		createMutation.mutate(
-			{ name: input.username, password: input.password, roles: userRoles },
+			{
+				name: input.username,
+				password: input.password,
+				roles: userRoles,
+				affiliation_tags: input.affiliation_tags
+			},
 			{
 				onSuccess: () => toast.success(`User "${input.username}" created`),
 				onError: (err: Error) => toast.error(err.message)

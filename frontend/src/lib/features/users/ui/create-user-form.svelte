@@ -6,6 +6,9 @@
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { STAFF_CAPABILITIES, SHELTER_CAPABILITIES } from '$lib/auth/roles';
 	import { createUserSchema, type CreateUserInput } from '../domain/schema';
+	import { useShelters } from '$lib/features/shelters';
+
+	const sheltersQuery = useShelters();
 
 	let {
 		onsubmit,
@@ -31,8 +34,8 @@
 		onUpdate: async ({ form }) => {
 			if (!form.valid) return;
 			// A manager's shelter is implicit; an SA types it in the field.
-			const shelter_code = isSA ? form.data.shelter_code : (shelterCode ?? undefined);
-			onsubmit({ ...form.data, shelter_code });
+			const shelter_id = isSA ? form.data.shelter_id : (shelterCode ?? undefined);
+			onsubmit({ ...form.data, shelter_id });
 			reset();
 		}
 	});
@@ -81,11 +84,22 @@
 		</Form.Field>
 
 		{#if isSA}
-			<Form.Field {form} name="shelter_code">
+			<Form.Field {form} name="shelter_id">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label>Shelter code</Form.Label>
-						<Input {...props} placeholder="SH001" bind:value={$formData.shelter_code} />
+						<Form.Label>Shelter ID (Code)</Form.Label>
+						<select
+							{...props}
+							bind:value={$formData.shelter_id}
+							class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+						>
+							<option value="">-- Select Shelter --</option>
+							{#if sheltersQuery.data}
+								{#each sheltersQuery.data as shelter (shelter.code)}
+									<option value={shelter.code}>{shelter.name} ({shelter.code})</option>
+								{/each}
+							{/if}
+						</select>
 					{/snippet}
 				</Form.Control>
 				<Form.FieldErrors />
