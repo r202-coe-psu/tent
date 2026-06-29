@@ -7,16 +7,20 @@
 	import { STAFF_CAPABILITIES, SHELTER_CAPABILITIES } from '$lib/auth/roles';
 	import { createUserSchema, type CreateUserInput } from '../domain/schema';
 	import { useShelters } from '$lib/features/shelters';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Save } from '@lucide/svelte';
 
 	const sheltersQuery = useShelters();
 
 	let {
 		onsubmit,
+		oncancel,
 		isSA = false,
 		shelterCode = null,
 		pending = false
 	}: {
 		onsubmit: (input: CreateUserInput) => void;
+		oncancel?: () => void;
 		/** System admin: may grant any capability + choose the shelter. */
 		isSA?: boolean;
 		/** A manager's own shelter (locked); SA leaves this null and types one. */
@@ -44,12 +48,12 @@
 </script>
 
 <form method="POST" use:form.enhance>
-	<Field.FieldGroup>
+	<Field.FieldGroup class="space-y-4">
 		<Form.Field {form} name="username">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>Username</Form.Label>
-					<Input {...props} bind:value={$formData.username} />
+					<Form.Label class="font-bold">Username</Form.Label>
+					<Input {...props} bind:value={$formData.username} class="bg-slate-50 border-0 shadow-none h-11" placeholder="user123" />
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -58,8 +62,8 @@
 		<Form.Field {form} name="password">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>Password</Form.Label>
-					<Input {...props} type="password" bind:value={$formData.password} />
+					<Form.Label class="font-bold">ชื่อ-สกุล</Form.Label>
+					<Input {...props} type="password" bind:value={$formData.password} class="bg-slate-50 border-0 shadow-none h-11" placeholder="นาย สมชาย" />
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -68,11 +72,11 @@
 		<Form.Field {form} name="capability">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>Role</Form.Label>
+					<Form.Label class="font-bold">บทบาท (Role)</Form.Label>
 					<select
 						{...props}
 						bind:value={$formData.capability}
-						class="h-9 rounded-md border border-input bg-background px-3 text-sm"
+						class="h-11 w-full rounded-md bg-slate-50 border-0 shadow-none px-3 text-sm"
 					>
 						{#each capabilities as cap (cap)}
 							<option value={cap}>{cap}</option>
@@ -87,11 +91,11 @@
 			<Form.Field {form} name="shelter_id">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label>Shelter ID (Code)</Form.Label>
+						<Form.Label class="font-bold">Shelter ID (Code)</Form.Label>
 						<select
 							{...props}
 							bind:value={$formData.shelter_id}
-							class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+							class="h-11 w-full rounded-md bg-slate-50 border-0 shadow-none px-3 text-sm"
 						>
 							<option value="">-- Select Shelter --</option>
 							{#if sheltersQuery.data}
@@ -106,11 +110,21 @@
 			</Form.Field>
 		{:else}
 			<Field.Field>
-				<Field.Label>Shelter</Field.Label>
+				<Field.Label class="font-bold">Shelter</Field.Label>
 				<p class="text-sm text-muted-foreground">{shelterCode ?? '—'} (your shelter)</p>
 			</Field.Field>
 		{/if}
 
-		<Form.Button disabled={$submitting || pending}>Create user</Form.Button>
+		<div class="flex gap-4 pt-4 mt-2">
+			{#if oncancel}
+				<Button type="button" variant="outline" class="flex-1 h-11 border-slate-200" onclick={oncancel}>
+					ยกเลิก
+				</Button>
+			{/if}
+			<Form.Button disabled={$submitting || pending} class="flex-1 h-11 bg-slate-500 hover:bg-slate-600">
+				<Save class="w-4 h-4 mr-2" />
+				บันทึกข้อมูล
+			</Form.Button>
+		</div>
 	</Field.FieldGroup>
 </form>
