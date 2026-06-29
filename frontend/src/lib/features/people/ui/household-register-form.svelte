@@ -90,7 +90,7 @@
 		if (searchMode === 'exact') {
 			const hhList = households.filter(h => {
 				if (!h.head_evacuee_id) return false;
-				const head = allEvacuees.find(e => e._id === h.head_evacuee_id);
+				const head = allEvacuees.find(e => e._id === h.head_evacuee_id && !e.privacy?.search_excluded);
 				if (!head) return false;
 				return (
 					(head.phone && head.phone.toLowerCase().includes(query)) ||

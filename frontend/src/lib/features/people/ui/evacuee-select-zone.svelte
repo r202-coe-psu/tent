@@ -24,7 +24,6 @@
 		(shelterQuery.data?.zones || []).filter((z: Zone) => z.status !== 'closed')
 	);
 
-	// AI Smart Zoning Recommendation
 	const recommendedZoneType = $derived.by(() => {
 		if (evacuee?.special_needs && evacuee.special_needs.length > 0) {
 			return 'vulnerable';

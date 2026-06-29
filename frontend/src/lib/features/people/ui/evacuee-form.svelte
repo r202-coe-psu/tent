@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { SvelteSet } from 'svelte/reactivity';
-	import type { EvacueeInput, HouseholdInput } from '../domain/people';
+	import type { EvacueeInput, HouseholdInput, Evacuee, Household } from '../domain/people';
 	import SearchSection from './evacuee-search.svelte';
 	import EwarSymptomSection from './evacuee-ewar-symptom.svelte';
 	import RegistrationSection from './evacuee-registration.svelte';
@@ -15,6 +15,7 @@
 		useEvacuees,
 		useHouseholds,
 		useCreateHousehold,
+		useUpdateHousehold,
 		useUpdateEvacuee,
 		peopleRepository,
 		SHELTER_CODE
@@ -34,14 +35,14 @@
 
 	const selectedSymptoms = new SvelteSet<string>();
 	let isHealthy = $state(false);
-	let newlyRegisteredEvacuee = $state<any>(null);
+	let newlyRegisteredEvacuee = $state<Evacuee | null>(null);
 	let isSubmittingEvacuee = $state(false);
 	let isSubmittingHousehold = $state(false);
 
 	let pendingEvacueeInput = $state<EvacueeInput | null>(null);
 	let pendingSymptoms = $state<string[]>([]);
 
-	let selectedHousehold = $state<any>(null);
+	let selectedHousehold = $state<Household | null>(null);
 	let isCreatingNewHousehold = $state(false);
 	let newHouseholdAddress = $state<Partial<HouseholdInput> | null>(null);
 
@@ -70,6 +71,7 @@
 	const householdsQuery = useHouseholds();
 
 	const createHouseholdMutation = useCreateHousehold();
+	const updateHouseholdMutation = useUpdateHousehold();
 	const updateEvacueeMutation = useUpdateEvacuee();
 
 	function handleRegistrationSubmit(input: EvacueeInput) {
@@ -195,7 +197,7 @@
 					updatedPets.push(...pets);
 				}
 
-				await peopleRepository().updateHousehold({
+				await updateHouseholdMutation.mutateAsync({
 					...latestHousehold,
 					label: latestHousehold.label || `ครอบครัวผู้ประสบภัย ${latestHousehold._id}`,
 					pets: updatedPets,

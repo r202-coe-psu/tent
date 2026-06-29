@@ -142,7 +142,7 @@
 	let filteredEvacuees = $derived.by(() => {
 		const q = searchQuery.toLowerCase().trim();
 		return allEvacuees.filter((e) => {
-			if (selectedMemberIds.includes(e._id)) return false;
+			if (e.privacy?.search_excluded) return false;
 			if (!q) return true;
 			const firstName = (e.first_name || '').toLowerCase();
 			const lastName = (e.last_name || '').toLowerCase();

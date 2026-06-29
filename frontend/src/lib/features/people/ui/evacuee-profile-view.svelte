@@ -222,11 +222,10 @@
 		try {
 			await updateHouseholdMutation.mutateAsync({
 				...household,
-				notes: JSON.stringify({
-					vehicle: vehicleType,
-					licensePlate: vehicleType !== 'none' ? licensePlate : '',
-					valuables
-				}),
+				vehicle: vehicleType !== 'none'
+					? { type: vehicleType as 'car' | 'motorcycle' | 'other', license_plate: licensePlate || null }
+					: null,
+				assets: valuables ? { description: valuables, image_url: null } : null,
 				pets: petsList.filter((p) => p.count > 0)
 			});
 			toast.success('แก้ไขข้อมูลทรัพย์สินและสัตว์เลี้ยงสำเร็จ');

@@ -114,10 +114,10 @@ export const useScreenings = () =>
 export function startPeopleLiveQuery(queryClient: QueryClient): LiveQueryHandle {
 	return startLiveQuery(shelterDb(), queryClient, (type) => {
 		if (type === 'evacuee') {
-			return [peopleKeys.evacuees(), [...peopleKeys.all, 'evacuees', 'search']];
+			return [[...peopleKeys.all, 'evacuees']];
 		}
 		if (type === 'household') {
-			return [peopleKeys.households(), [...peopleKeys.all, 'households']];
+			return [[...peopleKeys.all, 'households']];
 		}
 		if (type === 'medical') {
 			return [peopleKeys.medicals()];

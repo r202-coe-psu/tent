@@ -49,7 +49,7 @@
 		onBack
 	}: { onsubmit: (input: EvacueeInput) => void; pending?: boolean; onBack: () => void } = $props();
 
-	let birthDate = $state<DateValue | undefined>(undefined);
+	let birthYearBE = $state('');
 	let facePhotoUrl = $state<string | null>(null);
 	let medicalConditionsStr = $state('');
 	let medicalMedicationsStr = $state('');
@@ -64,8 +64,7 @@
 			if ($formData.person_id.cardType === 'national_id' && $formData.person_id.number) {
 				const cleanId = $formData.person_id.number.replace(/\D/g, '');
 				if (cleanId.length !== 13) {
-					// @ts-ignore
-					$errors.person_id = { number: ['เลขประจำตัวประชาชนต้องมี 13 หลัก'] };
+					$errors.person_id = { ...($errors.person_id || {}), number: ['เลขประจำตัวประชาชนต้องมี 13 หลัก'] };
 					toast.error('เลขประจำตัวประชาชนต้องมี 13 หลัก');
 					cancel();
 					return;
@@ -75,7 +74,6 @@
 			if ($formData.phone) {
 				const cleanPhone = $formData.phone.replace(/\D/g, '');
 				if (cleanPhone.length !== 10) {
-					// @ts-ignore
 					$errors.phone = ['เบอร์โทรศัพท์ต้องมี 10 หลัก'];
 					toast.error('เบอร์โทรศัพท์ต้องมี 10 หลัก');
 					cancel();
@@ -90,8 +88,7 @@
 				} else if (ec.phone) {
 					const cleanPhone = ec.phone.replace(/\D/g, '');
 					if (cleanPhone.length !== 10) {
-						// @ts-ignore
-						$errors.emergency_contact = { phone: ['เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก'] };
+						$errors.emergency_contact = { ...($errors.emergency_contact || {}), phone: ['เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก'] };
 						toast.error('เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก');
 						cancel();
 						return;
@@ -113,8 +110,8 @@
 	let age = $state('');
 
 	$effect(() => {
-		if (birthDate) {
-			$formData.birth_year = birthDate.year + 543;
+		if (birthYearBE && !isNaN(Number(birthYearBE))) {
+			$formData.birth_year = Number(birthYearBE);
 		} else if (age && !isNaN(Number(age))) {
 			$formData.birth_year = new Date().getFullYear() + 543 - Number(age);
 		} else {
@@ -276,32 +273,14 @@
 				</div>
 
 				<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-					<!-- วันเกิด -->
+					<!-- ปีเกิด (พ.ศ.) -->
 					<div class="space-y-2">
-						<Label>วันเกิด</Label>
-						<Popover.Root>
-							<Popover.Trigger class="w-full">
-								<Button
-									type="button"
-									variant="outline"
-									class="h-9 w-full justify-start text-left font-normal"
-								>
-									<CalendarIcon class="mr-2 h-4 w-4 text-muted-foreground" />
-									{#if birthDate}
-										{birthDate.day}/{birthDate.month}/{birthDate.year + 543}
-									{:else}
-										<span class="text-muted-foreground text-sm">เลือกวันเกิด</span>
-									{/if}
-								</Button>
-							</Popover.Trigger>
-							<Popover.Content class="w-auto p-0">
-								<Calendar
-									type="single"
-									bind:value={birthDate}
-									captionLayout="dropdown"
-								/>
-							</Popover.Content>
-						</Popover.Root>
+						<Label>ปีเกิด (พ.ศ.)</Label>
+						<Input
+							type="text"
+							placeholder="เช่น 2530"
+							bind:value={birthYearBE}
+						/>
 					</div>
 
 					<!-- อายุ -->
