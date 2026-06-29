@@ -186,18 +186,21 @@
 			if (selectedHousehold) {
 				householdId = selectedHousehold._id;
 				
+				const latestHousehold = await peopleRepository().getHousehold(selectedHousehold._id);
+				if (!latestHousehold) throw new Error('ไม่พบครัวเรือนในระบบ');
+
 				// Append new pets if any
-				let updatedPets = [...(selectedHousehold.pets || [])];
+				let updatedPets = [...(latestHousehold.pets || [])];
 				if (pets.length > 0) {
 					updatedPets.push(...pets);
 				}
 
 				await peopleRepository().updateHousehold({
-					...selectedHousehold,
-					label: selectedHousehold.label || `ครอบครัวผู้ประสบภัย ${selectedHousehold._id}`,
+					...latestHousehold,
+					label: latestHousehold.label || `ครอบครัวผู้ประสบภัย ${latestHousehold._id}`,
 					pets: updatedPets,
-					assets: assets || selectedHousehold.assets || null,
-					vehicle: vehicle || selectedHousehold.vehicle || null
+					assets: assets || latestHousehold.assets || null,
+					vehicle: vehicle || latestHousehold.vehicle || null
 				});
 			} else if (isCreatingNewHousehold || pets.length > 0 || assets || vehicle) {
 				const addr = newHouseholdAddress || {};

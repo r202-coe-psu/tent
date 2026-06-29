@@ -13,7 +13,6 @@ import type {
 	Movement,
 	Screening
 } from '../domain/people';
-import { isMedical, isMovement, isScreening } from '../domain/people';
 
 export const peopleKeys = {
 	all: ['people'] as const,
@@ -97,43 +96,19 @@ export const useCreateScreening = () =>
 export const useMedicals = () =>
 	createQuery(() => ({
 		queryKey: peopleKeys.medicals(),
-		queryFn: async () => {
-			const db = shelterDb();
-			const res = await db.allDocs({
-				include_docs: true,
-				startkey: 'medical:',
-				endkey: 'medical:￰'
-			});
-			return res.rows.map((r) => r.doc as unknown).filter((d): d is Medical => isMedical(d));
-		}
+		queryFn: () => peopleRepository().listMedicals()
 	}));
 
 export const useMovements = () =>
 	createQuery(() => ({
 		queryKey: peopleKeys.movements(),
-		queryFn: async () => {
-			const db = shelterDb();
-			const res = await db.allDocs({
-				include_docs: true,
-				startkey: 'movement:',
-				endkey: 'movement:￰'
-			});
-			return res.rows.map((r) => r.doc as unknown).filter((d): d is Movement => isMovement(d));
-		}
+		queryFn: () => peopleRepository().listMovements()
 	}));
 
 export const useScreenings = () =>
 	createQuery(() => ({
 		queryKey: peopleKeys.screenings(),
-		queryFn: async () => {
-			const db = shelterDb();
-			const res = await db.allDocs({
-				include_docs: true,
-				startkey: 'screening:',
-				endkey: 'screening:￰'
-			});
-			return res.rows.map((r) => r.doc as unknown).filter((d): d is Screening => isScreening(d));
-		}
+		queryFn: () => peopleRepository().listScreenings()
 	}));
 
 export function startPeopleLiveQuery(queryClient: QueryClient): LiveQueryHandle {

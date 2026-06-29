@@ -14,7 +14,12 @@ import {
 	type HouseholdInput,
 	createScreening as buildScreening,
 	type Screening,
-	type ScreeningInput
+	type ScreeningInput,
+	isMedical,
+	isMovement,
+	isScreening,
+	type Medical,
+	type Movement
 } from '../domain/people';
 import type { PeopleRepository } from './people.repository';
 
@@ -129,6 +134,18 @@ export class PeoplePouchRepository implements PeopleRepository {
 	/** Mint a screening from input + author context and persist it. */
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening> {
 		return this.repo.put(buildScreening(input, ctx));
+	}
+
+	listMedicals(): Promise<Medical[]> {
+		return this.repo.allByType('medical', isMedical);
+	}
+
+	listMovements(): Promise<Movement[]> {
+		return this.repo.allByType('movement', isMovement);
+	}
+
+	listScreenings(): Promise<Screening[]> {
+		return this.repo.allByType('screening', isScreening);
 	}
 }
 

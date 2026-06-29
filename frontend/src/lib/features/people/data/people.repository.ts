@@ -6,7 +6,9 @@ import type {
 	Household,
 	HouseholdInput,
 	Screening,
-	ScreeningInput
+	ScreeningInput,
+	Medical,
+	Movement
 } from '../domain/people';
 
 /**
@@ -46,4 +48,10 @@ export interface PeopleRepository {
 
 	/** Mint a screening from input + author context and persist it. */
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening>;
+	/** Every medical record in this shelter database. */
+	listMedicals(): Promise<Medical[]>;
+	/** Every movement record in this shelter database. */
+	listMovements(): Promise<Movement[]>;
+	/** Every screening record in this shelter database. */
+	listScreenings(): Promise<Screening[]>;
 }
