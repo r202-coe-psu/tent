@@ -1,6 +1,6 @@
 import { adminRaw } from '$lib/server/couch-admin';
 import { ServiceError, type Caller } from '$lib/server/couch-admin';
-import { isStaffOnly } from '$lib/auth/roles';
+import { isStaffOnly, shelterCodeFromRoles } from '$lib/auth/roles';
 
 /**
  * User service — the ONLY module that writes CouchDB `_users` with admin creds.
@@ -18,6 +18,8 @@ const USER_PREFIX = 'org.couchdb.user:';
 export interface UserSummary {
 	name: string;
 	roles: string[];
+	shelter_id?: string | null;
+	affiliation_tags?: string[];
 }
 
 interface CouchUserDoc {
@@ -26,6 +28,8 @@ interface CouchUserDoc {
 	name: string;
 	roles: string[];
 	type: string;
+	shelter_id?: string | null;
+	affiliation_tags?: string[];
 }
 
 function userDocId(name: string): string {
@@ -37,13 +41,16 @@ export async function createUser(input: {
 	name: string;
 	password: string;
 	roles: string[];
+	affiliation_tags?: string[];
 }): Promise<void> {
-	const { name, password, roles } = input;
+	const { name, password, roles, affiliation_tags } = input;
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
 		name,
 		password,
 		roles,
-		type: 'user'
+		type: 'user',
+		shelter_id: shelterCodeFromRoles(roles),
+		affiliation_tags: affiliation_tags ?? []
 	});
 	if (res.status === 409) throw new ServiceError('CONFLICT', `User "${name}" already exists`);
 	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not create user');
@@ -56,7 +63,12 @@ export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 	const rows = (res.data as { rows?: { id: string; doc: CouchUserDoc }[] })?.rows ?? [];
 	const all = rows
 		.filter((r) => r.id.startsWith(USER_PREFIX) && r.doc)
-		.map((r) => ({ name: r.doc.name, roles: r.doc.roles ?? [] }));
+		.map((r) => ({
+			name: r.doc.name,
+			roles: r.doc.roles ?? [],
+			shelter_id: r.doc.shelter_id ?? null,
+			affiliation_tags: r.doc.affiliation_tags ?? []
+		}));
 	if (caller.isSA) return all;
 	const scope = `shelter:${caller.shelterCode}`;
 	return all.filter((u) => u.roles.includes(scope));

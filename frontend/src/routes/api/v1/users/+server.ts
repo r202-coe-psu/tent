@@ -18,9 +18,10 @@ interface CreateUserBody {
 	name?: unknown;
 	password?: unknown;
 	roles?: unknown;
+	affiliation_tags?: unknown;
 }
 
-/** POST { name, password, roles[] } — create a user (SA: any non-_admin; SM: own-shelter staff). */
+/** POST { name, password, roles[], affiliation_tags? } — create a user (SA: any non-_admin; SM: own-shelter staff). */
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const caller = await authorizeUserWrite(request.headers.get('cookie'));
@@ -31,13 +32,16 @@ export const POST: RequestHandler = async ({ request }) => {
 		const roles = Array.isArray(body.roles)
 			? body.roles.filter((r): r is string => typeof r === 'string')
 			: [];
+		const affiliation_tags = Array.isArray(body.affiliation_tags)
+			? body.affiliation_tags.filter((t): t is string => typeof t === 'string')
+			: [];
 
 		if (name.length < 3) throw new ServiceError('VALIDATION', 'name must be at least 3 characters');
 		if (password.length < 6)
 			throw new ServiceError('VALIDATION', 'password must be at least 6 characters');
 
 		assertCanGrant(caller, roles);
-		await createUser({ name, password, roles });
+		await createUser({ name, password, roles, affiliation_tags });
 		return json({ ok: true });
 	} catch (e) {
 		return serviceError(e);

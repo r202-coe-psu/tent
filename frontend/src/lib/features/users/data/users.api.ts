@@ -15,6 +15,8 @@ const USERS_ENDPOINT = '/api/v1/users';
 export interface UserSummary {
 	name: string;
 	roles: string[];
+	shelter_id?: string | null;
+	affiliation_tags?: string[];
 }
 
 export function listUsers(): Promise<UserSummary[]> {
@@ -25,6 +27,7 @@ export function createUser(input: {
 	name: string;
 	password: string;
 	roles: string[];
+	affiliation_tags?: string[];
 }): Promise<{ ok: true }> {
 	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });
 }

@@ -14,7 +14,8 @@ export const createUserSchema = z.object({
 	username: z.string().min(3, 'Username must be at least 3 characters'),
 	password: z.string().min(6, 'Password must be at least 6 characters'),
 	capability: capabilitySchema,
-	shelter_code: shelterCodeSchema.optional()
+	shelter_id: shelterCodeSchema.optional(),
+	affiliation_tags: z.array(z.string()).optional()
 });
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
