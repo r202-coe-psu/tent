@@ -16,7 +16,7 @@ export const useCreateUser = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: (
-			input: { name: string; password: string; roles: string[]; affiliation_tags?: string[] }
+			input: { name: string; password: string; display_name: string; roles: string[]; affiliation_tags?: string[] }
 		) => createUser(input),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
 	}));
@@ -28,6 +28,7 @@ export const useUpdateUser = () => {
 		mutationFn: (input: {
 			name: string;
 			password?: string;
+			display_name?: string;
 			roles?: string[];
 			affiliation_tags?: string[];
 		}) => {

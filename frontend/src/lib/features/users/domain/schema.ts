@@ -13,6 +13,7 @@ export type Capability = z.infer<typeof capabilitySchema>;
 export const createUserSchema = z.object({
 	username: z.string().min(3, 'Username must be at least 3 characters'),
 	password: z.string().min(6, 'Password must be at least 6 characters'),
+	display_name: z.string().min(1, 'Display name is required'),
 	capability: capabilitySchema,
 	shelter_id: shelterCodeSchema.optional(),
 	affiliation_tags: z.array(z.string()).optional()
@@ -23,6 +24,7 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
 export const editUserSchema = z.object({
 	username: z.string(),
 	password: z.string().min(6, 'Password must be at least 6 characters').or(z.literal('')),
+	display_name: z.string().min(1, 'Display name is required'),
 	capability: capabilitySchema,
 	shelter_id: shelterCodeSchema.optional(),
 	affiliation_tags: z.array(z.string()).optional()

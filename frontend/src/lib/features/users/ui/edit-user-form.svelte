@@ -46,6 +46,7 @@
 			{
 				username: $state.snapshot(user.name),
 				password: '',
+				display_name: $state.snapshot(user.display_name) ?? '',
 				capability: $state.snapshot(userCapability) as any,
 				shelter_id: $state.snapshot(user.shelter_id) ?? undefined,
 				affiliation_tags: $state.snapshot(user.affiliation_tags)
@@ -79,6 +80,21 @@
 						bind:value={$formData.username}
 						disabled
 						class="bg-slate-100 border-0 shadow-none h-11 text-slate-500 cursor-not-allowed"
+					/>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+
+		<Form.Field {form} name="display_name">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label class="font-bold">ชื่อ-สกุล</Form.Label>
+					<Input
+						{...props}
+						bind:value={$formData.display_name}
+						class="bg-slate-50 border-0 shadow-none h-11"
+						placeholder="นาย สมชาย"
 					/>
 				{/snippet}
 			</Form.Control>

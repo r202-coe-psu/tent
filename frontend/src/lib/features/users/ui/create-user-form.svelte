@@ -64,6 +64,21 @@
 			<Form.FieldErrors />
 		</Form.Field>
 
+		<Form.Field {form} name="display_name">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label class="font-bold">ชื่อ-สกุล</Form.Label>
+					<Input
+						{...props}
+						bind:value={$formData.display_name}
+						class="h-11 border-0 bg-slate-50 shadow-none"
+						placeholder="นาย สมชาย"
+					/>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+
 		<Form.Field {form} name="password">
 			<Form.Control>
 				{#snippet children({ props })}

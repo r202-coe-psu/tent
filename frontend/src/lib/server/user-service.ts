@@ -18,6 +18,7 @@ const USER_PREFIX = 'org.couchdb.user:';
 export interface UserSummary {
 	name: string;
 	roles: string[];
+	display_name?: string | null;
 	shelter_id?: string | null;
 	affiliation_tags?: string[];
 }
@@ -28,6 +29,7 @@ interface CouchUserDoc {
 	name: string;
 	roles: string[];
 	type: string;
+	display_name?: string | null;
 	shelter_id?: string | null;
 	affiliation_tags?: string[];
 }
@@ -40,13 +42,15 @@ function userDocId(name: string): string {
 export async function createUser(input: {
 	name: string;
 	password: string;
+	display_name: string;
 	roles: string[];
 	affiliation_tags?: string[];
 }): Promise<void> {
-	const { name, password, roles, affiliation_tags } = input;
+	const { name, password, display_name, roles, affiliation_tags } = input;
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
 		name,
 		password,
+		display_name,
 		roles,
 		type: 'user',
 		shelter_id: shelterCodeFromRoles(roles),
@@ -66,6 +70,7 @@ export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 		.map((r) => ({
 			name: r.doc.name,
 			roles: r.doc.roles ?? [],
+			display_name: r.doc.display_name ?? null,
 			shelter_id: r.doc.shelter_id ?? null,
 			affiliation_tags: r.doc.affiliation_tags ?? []
 		}));
@@ -100,6 +105,7 @@ export async function updateUser(
 	name: string,
 	input: {
 		password?: string;
+		display_name?: string;
 		roles?: string[];
 		affiliation_tags?: string[];
 	},
@@ -134,6 +140,7 @@ export async function updateUser(
 
 	const updatedDoc: any = {
 		...doc,
+		...(input.display_name !== undefined ? { display_name: input.display_name } : {}),
 		...(input.roles ? { roles: input.roles, shelter_id: shelterCodeFromRoles(input.roles) } : {}),
 		...(input.affiliation_tags ? { affiliation_tags: input.affiliation_tags } : {})
 	};

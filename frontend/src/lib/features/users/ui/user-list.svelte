@@ -36,7 +36,7 @@
 				<Table.Row class="hover:bg-slate-50/50">
 					<Table.Cell class="pl-10 font-medium">{user.name}</Table.Cell>
 					<Table.Cell class="font-bold">
-						{user.name}
+						{user.display_name ?? user.name}
 					</Table.Cell>
 					<Table.Cell>
 						<Badge

@@ -47,6 +47,7 @@
 			{
 				name: input.username,
 				password: input.password,
+				display_name: input.display_name,
 				roles: userRoles,
 				affiliation_tags: input.affiliation_tags
 			},
@@ -77,6 +78,7 @@
 			{
 				name: selectedUser.name,
 				password: input.password || undefined,
+				display_name: input.display_name,
 				roles: userRoles,
 				affiliation_tags: input.affiliation_tags
 			},

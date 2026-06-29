@@ -20,7 +20,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	// Public self-signup gets no shelter role; an SA/SM assigns roles afterwards.
 	// Map the service-layer error back to this endpoint's {message} contract.
 	try {
-		await createUser({ name: username, password, roles: [] });
+		await createUser({ name: username, password, display_name: username, roles: [] });
 	} catch (e) {
 		if (e instanceof ServiceError) throw error(e.code === 'CONFLICT' ? 409 : 500, e.message);
 		throw e;

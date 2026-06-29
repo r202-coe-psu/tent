@@ -17,6 +17,7 @@ export const prerender = false;
 interface CreateUserBody {
 	name?: unknown;
 	password?: unknown;
+	display_name?: unknown;
 	roles?: unknown;
 	affiliation_tags?: unknown;
 }
@@ -24,11 +25,12 @@ interface CreateUserBody {
 interface UpdateUserBody {
 	name?: unknown;
 	password?: unknown;
+	display_name?: unknown;
 	roles?: unknown;
 	affiliation_tags?: unknown;
 }
 
-/** POST { name, password, roles[], affiliation_tags? } — create a user (SA: any non-_admin; SM: own-shelter staff). */
+/** POST { name, password, display_name, roles[], affiliation_tags? } — create a user (SA: any non-_admin; SM: own-shelter staff). */
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const caller = await authorizeUserWrite(request.headers.get('cookie'));
@@ -36,6 +38,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		const name = typeof body.name === 'string' ? body.name.trim() : '';
 		const password = typeof body.password === 'string' ? body.password : '';
+		const display_name = typeof body.display_name === 'string' ? body.display_name.trim() : '';
 		const roles = Array.isArray(body.roles)
 			? body.roles.filter((r): r is string => typeof r === 'string')
 			: [];
@@ -46,9 +49,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (name.length < 3) throw new ServiceError('VALIDATION', 'name must be at least 3 characters');
 		if (password.length < 6)
 			throw new ServiceError('VALIDATION', 'password must be at least 6 characters');
+		if (display_name.length < 1)
+			throw new ServiceError('VALIDATION', 'display_name must be at least 1 character');
 
 		assertCanGrant(caller, roles);
-		await createUser({ name, password, roles, affiliation_tags });
+		await createUser({ name, password, display_name, roles, affiliation_tags });
 		return json({ ok: true });
 	} catch (e) {
 		return serviceError(e);
@@ -71,8 +76,11 @@ export const PUT: RequestHandler = async ({ request }) => {
 			? body.affiliation_tags.filter((t): t is string => typeof t === 'string')
 			: undefined;
 		const password = typeof body.password === 'string' && body.password.length > 0 ? body.password : undefined;
+		const display_name = typeof body.display_name === 'string' && body.display_name.trim().length > 0
+			? body.display_name.trim()
+			: undefined;
 
-		await updateUser(name, { password, roles, affiliation_tags }, caller);
+		await updateUser(name, { password, display_name, roles, affiliation_tags }, caller);
 		return json({ ok: true });
 	} catch (e) {
 		return serviceError(e);
