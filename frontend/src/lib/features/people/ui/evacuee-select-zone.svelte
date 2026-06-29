@@ -100,7 +100,7 @@
 					<Select.Content class="rounded-xl">
 						{#each activeZones as zone (zone.code)}
 							<Select.Item value={zone.code} class="text-base font-medium">
-								📍 {zone.name} ({zone.capacity} คน)
+								📍 {zone.name}
 							</Select.Item>
 						{/each}
 					</Select.Content>
