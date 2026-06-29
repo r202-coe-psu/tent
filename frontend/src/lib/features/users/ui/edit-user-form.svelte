@@ -46,7 +46,7 @@
 				username: user.name,
 				password: '',
 				display_name: user.display_name ?? '',
-				capability: userCapability as any,
+				capability: userCapability as EditUserInput['capability'],
 				shelter_id: user.shelter_id ?? undefined,
 				affiliation_tags: $state.snapshot(user.affiliation_tags)
 			})),

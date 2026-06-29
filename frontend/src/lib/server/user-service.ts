@@ -138,12 +138,12 @@ export async function updateUser(
 		}
 	}
 
-	const updatedDoc: any = {
+	const updatedDoc = {
 		...doc,
 		...(input.display_name !== undefined ? { display_name: input.display_name } : {}),
 		...(input.roles ? { roles: input.roles, shelter_id: shelterCodeFromRoles(input.roles) } : {}),
 		...(input.affiliation_tags ? { affiliation_tags: input.affiliation_tags } : {})
-	};
+	} as CouchUserDoc & { password?: string; password_sha?: string; salt?: string };
 
 	if (input.password && input.password.trim().length >= 6) {
 		updatedDoc.password = input.password;
