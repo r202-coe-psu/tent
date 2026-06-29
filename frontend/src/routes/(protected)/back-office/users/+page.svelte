@@ -187,6 +187,7 @@
 			{:else}
 				<UserList
 					users={filteredUsers}
+					{isSA}
 					onedit={handleEdit}
 					ondelete={confirmDelete}
 					pending={deleteMutation.isPending}
