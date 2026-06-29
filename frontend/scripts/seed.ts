@@ -207,7 +207,10 @@ async function seedRegistry(): Promise<void> {
 	await ensureDb('registry');
 	await setSecurity('registry', {
 		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff'] }
+		members: {
+			names: [],
+			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
+		}
 	});
 
 	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
@@ -261,9 +264,7 @@ async function seedRegistry(): Promise<void> {
 			name: 'ศูนย์พักพิงปัตตานี (ทดสอบ)',
 			status: 'open',
 			capacity: 100,
-			zones: [
-				{ code: 'Z1', name: 'โซนรวม', capacity: 100 }
-			],
+			zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 100 }],
 			area_m2: 400,
 			facilities: {
 				toilets_female: 2,
@@ -290,7 +291,10 @@ async function seedCatalog(): Promise<void> {
 	await ensureDb('catalog');
 	await setSecurity('catalog', {
 		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff'] }
+		members: {
+			names: [],
+			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
+		}
 	});
 
 	const items = [
@@ -684,7 +688,13 @@ async function seedShelter2(): Promise<void> {
 
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
-		{ label: 'ครอบครัวปัตตานี', zone: 'Z1', head_evacuee_id: null, pets: [], notes: 'ตัวอย่าง SH002' }
+		{
+			label: 'ครอบครัวปัตตานี',
+			zone: 'Z1',
+			head_evacuee_id: null,
+			pets: [],
+			notes: 'ตัวอย่าง SH002'
+		}
 	];
 	const [hh1] = hhInputs.map((h) => createHousehold(h, CTX_2));
 

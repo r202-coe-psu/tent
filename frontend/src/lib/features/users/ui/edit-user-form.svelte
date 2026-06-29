@@ -37,9 +37,7 @@
 
 	// Find the user's capability from their roles
 	const userCapability = $derived(
-		user.roles.find((r) =>
-			(capabilities as readonly string[]).includes(r)
-		) ?? capabilities[0]
+		user.roles.find((r) => (capabilities as readonly string[]).includes(r)) ?? capabilities[0]
 	);
 
 	const form = superForm(
@@ -80,7 +78,7 @@
 						{...props}
 						bind:value={$formData.username}
 						disabled
-						class="bg-slate-100 border-0 shadow-none h-11 text-slate-500 cursor-not-allowed"
+						class="h-11 cursor-not-allowed border-0 bg-slate-100 text-slate-500 shadow-none"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -94,7 +92,7 @@
 					<Input
 						{...props}
 						bind:value={$formData.display_name}
-						class="bg-slate-50 border-0 shadow-none h-11"
+						class="h-11 border-0 bg-slate-50 shadow-none"
 						placeholder="นาย สมชาย"
 					/>
 				{/snippet}
@@ -110,7 +108,7 @@
 						{...props}
 						type="password"
 						bind:value={$formData.password}
-						class="bg-slate-50 border-0 shadow-none h-11"
+						class="h-11 border-0 bg-slate-50 shadow-none"
 						placeholder="••••••"
 					/>
 				{/snippet}
@@ -125,7 +123,7 @@
 					<select
 						{...props}
 						bind:value={$formData.capability}
-						class="h-11 w-full rounded-md bg-slate-50 border-0 shadow-none px-3 text-sm"
+						class="h-11 w-full rounded-md border-0 bg-slate-50 px-3 text-sm shadow-none"
 					>
 						{#each capabilities as cap (cap)}
 							<option value={cap}>{cap}</option>
@@ -144,7 +142,7 @@
 						<select
 							{...props}
 							bind:value={$formData.shelter_id}
-							class="h-11 w-full rounded-md bg-slate-50 border-0 shadow-none px-3 text-sm"
+							class="h-11 w-full rounded-md border-0 bg-slate-50 px-3 text-sm shadow-none"
 						>
 							<option value="">-- Select Shelter --</option>
 							{#if sheltersQuery.data}
@@ -164,14 +162,22 @@
 			</Field.Field>
 		{/if}
 
-		<div class="flex gap-4 pt-4 mt-2">
+		<div class="mt-2 flex gap-4 pt-4">
 			{#if oncancel}
-				<Button type="button" variant="outline" class="flex-1 h-11 border-slate-200" onclick={oncancel}>
+				<Button
+					type="button"
+					variant="outline"
+					class="h-11 flex-1 border-slate-200"
+					onclick={oncancel}
+				>
 					ยกเลิก
 				</Button>
 			{/if}
-			<Form.Button disabled={$submitting || pending} class="flex-1 h-11 bg-slate-500 hover:bg-slate-600">
-				<Save class="w-4 h-4 mr-2" />
+			<Form.Button
+				disabled={$submitting || pending}
+				class="h-11 flex-1 bg-slate-500 hover:bg-slate-600"
+			>
+				<Save class="mr-2 h-4 w-4" />
 				บันทึกข้อมูล
 			</Form.Button>
 		</div>

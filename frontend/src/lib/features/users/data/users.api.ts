@@ -45,7 +45,8 @@ export function updateUser(
 		display_name?: string;
 		roles?: string[];
 		affiliation_tags?: string[];
-	}): Promise<{ ok: true }> {
+	}
+): Promise<{ ok: true }> {
 	return serviceFetch(USERS_ENDPOINT, {
 		method: 'PUT',
 		body: JSON.stringify({ name, ...input })

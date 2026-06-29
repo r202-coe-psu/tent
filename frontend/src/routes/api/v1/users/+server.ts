@@ -75,10 +75,12 @@ export const PUT: RequestHandler = async ({ request }) => {
 		const affiliation_tags = Array.isArray(body.affiliation_tags)
 			? body.affiliation_tags.filter((t): t is string => typeof t === 'string')
 			: undefined;
-		const password = typeof body.password === 'string' && body.password.length > 0 ? body.password : undefined;
-		const display_name = typeof body.display_name === 'string' && body.display_name.trim().length > 0
-			? body.display_name.trim()
-			: undefined;
+		const password =
+			typeof body.password === 'string' && body.password.length > 0 ? body.password : undefined;
+		const display_name =
+			typeof body.display_name === 'string' && body.display_name.trim().length > 0
+				? body.display_name.trim()
+				: undefined;
 
 		await updateUser(name, { password, display_name, roles, affiliation_tags }, caller);
 		return json({ ok: true });

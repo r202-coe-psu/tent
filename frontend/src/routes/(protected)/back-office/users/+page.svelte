@@ -114,7 +114,9 @@
 		usersQuery.data?.filter((u: UserSummary) => {
 			if (!searchQuery) return true;
 			const q = searchQuery.toLowerCase();
-			return u.name.toLowerCase().includes(q) || u.roles.some((r: string) => r.toLowerCase().includes(q));
+			return (
+				u.name.toLowerCase().includes(q) || u.roles.some((r: string) => r.toLowerCase().includes(q))
+			);
 		}) ?? []
 	);
 </script>
@@ -223,7 +225,7 @@
 
 <!-- Confirm Delete Dialog -->
 <Dialog.Root bind:open={deleteDialogOpen}>
-	<Dialog.Content class="sm:max-w-[400px] p-6 rounded-2xl">
+	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[400px]">
 		<Dialog.Header>
 			<Dialog.Title class="text-lg font-bold text-red-600">ยืนยันการลบผู้ใช้งาน</Dialog.Title>
 			<Dialog.Description class="pt-2 text-sm text-slate-500">
@@ -231,15 +233,23 @@
 				การดำเนินการนี้ไม่สามารถย้อนกลับได้
 			</Dialog.Description>
 		</Dialog.Header>
-		<div class="flex gap-4 pt-4 mt-2 justify-end">
-			<Button type="button" variant="outline" onclick={() => { deleteDialogOpen = false; userToDelete = null; }} class="rounded-lg">
+		<div class="mt-2 flex justify-end gap-4 pt-4">
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => {
+					deleteDialogOpen = false;
+					userToDelete = null;
+				}}
+				class="rounded-lg"
+			>
 				ยกเลิก
 			</Button>
 			<Button
 				variant="destructive"
 				disabled={deleteMutation.isPending}
 				onclick={handleDelete}
-				class="bg-red-600 hover:bg-red-700 text-white rounded-lg"
+				class="rounded-lg bg-red-600 text-white hover:bg-red-700"
 			>
 				{#if deleteMutation.isPending}กำลังลบ...{:else}ยืนยันการลบ{/if}
 			</Button>
