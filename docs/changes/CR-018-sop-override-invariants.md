@@ -1,7 +1,7 @@
 ---
 id: CR-018
 title: "SOP master/override invariants and resolve semantics"
-status: proposed
+status: approved
 date: 2026-06-29
 requested_by: development team D
 decided_by: project owner
@@ -74,3 +74,4 @@ N/A — ไม่เปลี่ยนรูป doc
 ## Decision log
 
 - 2026-06-29 — proposed; aligned with CR-006 approved ratio design — ไม่เปลี่ยนชุดคีย์, เพิ่มเฉพาะ invariant/semantics
+- 2026-06-29 — approved by project owner
