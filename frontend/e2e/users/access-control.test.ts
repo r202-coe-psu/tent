@@ -102,7 +102,7 @@ async function apiGet(session: string): Promise<{ status: number; body: unknown 
 // ─── fixture accounts (persistent across all tests in this file) ──────────────
 
 /** Unique suffix to avoid collisions when tests run in parallel across files. */
-const RUN_ID = Date.now().toString(36);
+const RUN_ID = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 
 const ACCOUNTS: TestUser[] = [
 	{ name: `e2e_sa_${RUN_ID}`, password: 'Password1!', roles: SA_ROLES, display_name: 'E2E SA' },

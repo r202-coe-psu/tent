@@ -13,8 +13,10 @@ export default defineConfig({
 	use: {
 		baseURL: 'http://localhost:4173',
 		trace: 'on-first-retry',
+		video: process.env.PW_VIDEO ? 'on' : 'off',
 		launchOptions: {
-			args: ['--no-sandbox', '--disable-setuid-sandbox']
+			args: ['--no-sandbox', '--disable-setuid-sandbox'],
+			slowMo: process.env.PW_SLOWMO ? parseInt(process.env.PW_SLOWMO, 10) : 0
 		}
 	},
 	projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],

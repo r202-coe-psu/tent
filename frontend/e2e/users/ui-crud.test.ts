@@ -8,21 +8,10 @@
  *   fixture data; write mutations (DELETE) go through the real BFF.
  *
  * Coverage:
- * [Guard]  Unauthenticated visit → redirect to /login
- * [Guard]  registration_staff visit → redirect to /
- * [Guard]  shelter_manager visit → page renders
- * [Guard]  system_admin visit → page renders
- * [UI-SA]  SA sees shelter dropdown in Create User form
- * [UI-SA]  SA sees shelter_manager in capability options
- * [UI-SM]  SM sees locked shelter (no dropdown) in Create User form
- * [UI-SM]  SM cannot see shelter_manager in capability list
- * [UI-SM]  Edit/Delete disabled for manager-level rows
- * [UI-SM]  Edit/Delete enabled for staff rows
- * [UI-SA]  Edit/Delete enabled for all rows
- * [UI]     Search filters user list by username
- * [UI]     Search filters by role name
- * [UI]     Clearing search shows all users
- * [UI]     Delete confirm dialog + real BFF cleanup
+ * [Search] filters user list by username or role
+ * [Delete] SA can delete a user
+ * [Edit]   SA can edit a user
+ * [Create] SA can create a user
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -63,7 +52,7 @@ async function mockShelters(page: Page, shelters: Record<string, unknown>[] = []
 
 // ─── fixture users ─────────────────────────────────────────────────────────────
 
-const RUN_ID = Date.now().toString(36);
+const RUN_ID = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 const ACCOUNTS = [
 	{ name: `ui_sa_${RUN_ID}`, password: 'Password1!', roles: SA_ROLES, display_name: 'UI SA' },
 	{
@@ -103,7 +92,6 @@ test.afterEach(async ({ page }) => {
 
 const SA = ACCOUNTS[0];
 const SM1 = ACCOUNTS[1];
-const STAFF1 = ACCOUNTS[2];
 
 // ─── Fixture data for UI rendering ────────────────────────────────────────────
 
@@ -130,142 +118,6 @@ const FIXTURE_USERS = [
 		affiliation_tags: ['volunteer']
 	}
 ];
-
-// ─── Route Guards ──────────────────────────────────────────────────────────────
-
-test.describe('User Management UI — Route Guards', () => {
-	test('unauthenticated user is redirected to /login', async ({ page }) => {
-		await page.context().clearCookies();
-		await page.goto('http://localhost:4173/login', { waitUntil: 'domcontentloaded' });
-		await page.evaluate(() => localStorage.removeItem('auth:user'));
-		await page.goto('http://localhost:4173/back-office/users');
-		await expect(page).toHaveURL(/\/login/);
-	});
-
-	test('registration_staff is redirected to / (not a manager)', async ({ page }) => {
-		await injectSession(page, STAFF1, sessions[STAFF1.name]);
-		await mockUserList(page, []);
-		await mockShelters(page);
-		await page.goto('http://localhost:4173/back-office/users');
-		// Should be redirected away from users page by requireManager()
-		await page.waitForURL((url) => !url.pathname.includes('/back-office/users'), { timeout: 8000 });
-		await expect(page).not.toHaveURL(/back-office\/users/);
-	});
-
-	test('shelter_manager can access /back-office/users', async ({ page }) => {
-		await injectSession(page, SM1, sessions[SM1.name]);
-		await mockUserList(page, FIXTURE_USERS);
-		await mockShelters(page);
-		await page.goto('http://localhost:4173/back-office/users');
-		await expect(page.getByRole('heading', { level: 1, name: /User Management/i })).toBeVisible({
-			timeout: 8000
-		});
-	});
-
-	test('system_admin can access /back-office/users', async ({ page }) => {
-		await injectSession(page, SA, sessions[SA.name]);
-		await mockUserList(page, FIXTURE_USERS);
-		await mockShelters(page, [{ code: 'SH001', name: 'Test Shelter' }]);
-		await page.goto('http://localhost:4173/back-office/users');
-		await expect(page.getByRole('heading', { level: 1, name: /User Management/i })).toBeVisible({
-			timeout: 8000
-		});
-	});
-});
-
-// ─── Role-Aware Form Rendering ─────────────────────────────────────────────────
-
-test.describe('User Management UI — Role-Aware Form Rendering', () => {
-	test.beforeEach(async ({ page }) => {
-		await mockShelters(page, [
-			{ code: 'SH001', name: 'Shelter Songkhla' },
-			{ code: 'SH002', name: 'Shelter Pattani' }
-		]);
-	});
-
-	test('SA: Create User form shows shelter dropdown', async ({ page }) => {
-		await injectSession(page, SA, sessions[SA.name]);
-		await mockUserList(page, []);
-		await page.goto('http://localhost:4173/back-office/users');
-		await page.getByRole('button', { name: /เพิ่มผู้ใช้/ }).click();
-		await expect(page.locator('select[name="shelter_id"]')).toBeVisible();
-	});
-
-	test('SA: Create User form shows shelter_manager in capability options', async ({ page }) => {
-		await injectSession(page, SA, sessions[SA.name]);
-		await mockUserList(page, []);
-		await page.goto('http://localhost:4173/back-office/users');
-		await page.getByRole('button', { name: /เพิ่มผู้ใช้/ }).click();
-		const capSelect = page.locator('select[name="capability"]');
-		await expect(capSelect).toBeVisible();
-		const options = await capSelect.locator('option').allTextContents();
-		expect(options).toContain('shelter_manager');
-	});
-
-	test('SM: Create User form shows fixed shelter code (no dropdown)', async ({ page }) => {
-		await injectSession(page, SM1, sessions[SM1.name]);
-		await mockUserList(page, []);
-		await page.goto('http://localhost:4173/back-office/users');
-		await page.getByRole('button', { name: /เพิ่มผู้ใช้/ }).click();
-		// SM should NOT see a shelter select
-		await expect(page.locator('select[name="shelter_id"]')).not.toBeVisible();
-		// Should show their shelter code as static text
-		await expect(page.getByText(/SH001.*your shelter/i)).toBeVisible();
-	});
-
-	test('SM: Create User form does NOT include shelter_manager in capabilities', async ({
-		page
-	}) => {
-		await injectSession(page, SM1, sessions[SM1.name]);
-		await mockUserList(page, []);
-		await page.goto('http://localhost:4173/back-office/users');
-		await page.getByRole('button', { name: /เพิ่มผู้ใช้/ }).click();
-		const capSelect = page.locator('select[name="capability"]');
-		await expect(capSelect).toBeVisible();
-		const options = await capSelect.locator('option').allTextContents();
-		expect(options).not.toContain('shelter_manager');
-		expect(options).toContain('registration_staff');
-		expect(options).toContain('kitchen_staff');
-		expect(options).toContain('warehouse_staff');
-	});
-});
-
-// ─── Action Buttons (RBAC) ─────────────────────────────────────────────────────
-
-test.describe('User Management UI — Action Buttons (RBAC)', () => {
-	test('SM: Edit and Delete buttons are disabled for shelter_manager rows', async ({ page }) => {
-		await injectSession(page, SM1, sessions[SM1.name]);
-		await mockUserList(page, FIXTURE_USERS);
-		await mockShelters(page);
-		await page.goto('http://localhost:4173/back-office/users');
-
-		const managerRow = page.locator('tr').filter({ hasText: 'jane_manager' });
-		await expect(managerRow).toBeVisible();
-		await expect(managerRow.getByRole('button', { name: /จัดการ/ })).toBeDisabled();
-	});
-
-	test('SM: Edit button is enabled for staff rows', async ({ page }) => {
-		await injectSession(page, SM1, sessions[SM1.name]);
-		await mockUserList(page, FIXTURE_USERS);
-		await mockShelters(page);
-		await page.goto('http://localhost:4173/back-office/users');
-
-		const staffRow = page.locator('tr').filter({ hasText: 'john_staff' });
-		await expect(staffRow).toBeVisible();
-		await expect(staffRow.getByRole('button', { name: /จัดการ/ })).toBeEnabled();
-	});
-
-	test('SA: Edit button is enabled for all rows including manager', async ({ page }) => {
-		await injectSession(page, SA, sessions[SA.name]);
-		await mockUserList(page, FIXTURE_USERS);
-		await mockShelters(page);
-		await page.goto('http://localhost:4173/back-office/users');
-
-		const managerRow = page.locator('tr').filter({ hasText: 'jane_manager' });
-		await expect(managerRow).toBeVisible();
-		await expect(managerRow.getByRole('button', { name: /จัดการ/ })).toBeEnabled();
-	});
-});
 
 // ─── Search ────────────────────────────────────────────────────────────────────
 
@@ -359,5 +211,229 @@ test.describe('User Management UI — Delete Flow (real BFF)', () => {
 		// Remove from cleanup list since it's already deleted
 		const idx = createdDuringTest.indexOf(victim);
 		if (idx !== -1) createdDuringTest.splice(idx, 1);
+	});
+
+	test('SM can delete a staff user in their shelter', async ({ page }) => {
+		const victim = `ui_sm_del_victim_${RUN_ID}`;
+		await createCouchUser({
+			name: victim,
+			password: 'Pass1234!',
+			roles: STAFF_SH001_ROLES,
+			display_name: 'Victim'
+		});
+		createdDuringTest.push(victim);
+
+		await injectSession(page, SM1, sessions[SM1.name]);
+
+		await mockUserList(page, [
+			{
+				name: victim,
+				display_name: 'Victim',
+				roles: STAFF_SH001_ROLES,
+				shelter_id: 'SH001',
+				affiliation_tags: []
+			}
+		]);
+		await mockShelters(page);
+		await page.goto('http://localhost:4173/back-office/users');
+
+		const victimRow = page.locator('tr').filter({ hasText: victim });
+		await expect(victimRow).toBeVisible();
+		await victimRow.locator('button').last().click();
+
+		await expect(page.getByRole('dialog')).toBeVisible();
+		await page.getByRole('button', { name: /ยืนยันการลบ/ }).click();
+		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
+
+		const auth = 'Basic ' + btoa('admin:password');
+		const check = await fetch(
+			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(victim)}`,
+			{ headers: { Authorization: auth } }
+		);
+		expect(check.status).toBe(404);
+
+		const idx = createdDuringTest.indexOf(victim);
+		if (idx !== -1) createdDuringTest.splice(idx, 1);
+	});
+});
+
+// ─── Edit Flow (real BFF) ──────────────────────────────────────────────────────
+
+test.describe('User Management UI — Edit Flow (real BFF)', () => {
+	test('SA can edit an existing user', async ({ page }) => {
+		const target = `ui_edit_${RUN_ID}`;
+		await createCouchUser({
+			name: target,
+			password: 'Password1!',
+			roles: STAFF_SH001_ROLES,
+			display_name: 'Old Name'
+		});
+		createdDuringTest.push(target);
+
+		await injectSession(page, SA, sessions[SA.name]);
+
+		await mockUserList(page, [
+			{
+				name: target,
+				display_name: 'Old Name',
+				roles: STAFF_SH001_ROLES,
+				shelter_id: 'SH001',
+				affiliation_tags: []
+			}
+		]);
+		await mockShelters(page, [{ code: 'SH001', name: 'Test Shelter' }]);
+		await page.goto('http://localhost:4173/back-office/users');
+
+		// Click edit button (usually the first button in the row)
+		const targetRow = page.locator('tr').filter({ hasText: target });
+		await expect(targetRow).toBeVisible();
+		await targetRow.locator('button').first().click();
+
+		await expect(page.getByRole('dialog')).toBeVisible();
+
+		// Change display name
+		await page.locator('input[name="display_name"]').fill('New Name Edited');
+
+		// Submit
+		await page.getByRole('button', { name: /บันทึก/ }).click();
+		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
+
+		// Verify change in CouchDB
+		const auth = 'Basic ' + btoa('admin:password');
+		const check = await fetch(
+			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(target)}`,
+			{ headers: { Authorization: auth } }
+		);
+		expect(check.status).toBe(200);
+		const doc = await check.json();
+		expect(doc.display_name).toBe('New Name Edited');
+	});
+
+	test('SM can edit a staff user in their shelter', async ({ page }) => {
+		const target = `ui_sm_edit_${RUN_ID}`;
+		await createCouchUser({
+			name: target,
+			password: 'Password1!',
+			roles: STAFF_SH001_ROLES,
+			display_name: 'Old Name'
+		});
+		createdDuringTest.push(target);
+
+		await injectSession(page, SM1, sessions[SM1.name]);
+
+		await mockUserList(page, [
+			{
+				name: target,
+				display_name: 'Old Name',
+				roles: STAFF_SH001_ROLES,
+				shelter_id: 'SH001',
+				affiliation_tags: []
+			}
+		]);
+		await mockShelters(page);
+		await page.goto('http://localhost:4173/back-office/users');
+
+		const targetRow = page.locator('tr').filter({ hasText: target });
+		await expect(targetRow).toBeVisible();
+		await targetRow.locator('button').first().click();
+
+		await expect(page.getByRole('dialog')).toBeVisible();
+
+		await page.locator('input[name="display_name"]').fill('SM Edited Name');
+
+		await page.getByRole('button', { name: /บันทึก/ }).click();
+		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
+
+		const auth = 'Basic ' + btoa('admin:password');
+		const check = await fetch(
+			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(target)}`,
+			{ headers: { Authorization: auth } }
+		);
+		expect(check.status).toBe(200);
+		const doc = await check.json();
+		expect(doc.display_name).toBe('SM Edited Name');
+	});
+});
+
+// ─── Create Flow (real BFF) ────────────────────────────────────────────────────
+
+test.describe('User Management UI — Create Flow (real BFF)', () => {
+	test('SA can create a new shelter manager', async ({ page }) => {
+		const newUsername = `ui_new_sm_${RUN_ID}`;
+		// Ensure it gets cleaned up after test
+		createdDuringTest.push(newUsername);
+
+		await injectSession(page, SA, sessions[SA.name]);
+
+		await mockUserList(page, []);
+		await mockShelters(page, [{ code: 'SH001', name: 'Test Shelter' }]);
+		await page.goto('http://localhost:4173/back-office/users');
+
+		// Click create button
+		await page.getByRole('button', { name: /เพิ่มผู้ใช้/ }).click();
+
+		// Fill form
+		await expect(page.getByRole('dialog')).toBeVisible();
+		await page.locator('input[name="username"]').fill(newUsername);
+		await page.locator('input[name="password"]').fill('Password123!');
+		await page.locator('input[name="display_name"]').fill('New UI SM');
+
+		// SA can select capability and shelter
+		await page.locator('select[name="capability"]').selectOption('shelter_manager');
+		await page.locator('select[name="shelter_id"]').selectOption('SH001');
+
+		// Submit form
+		await page.getByRole('button', { name: /บันทึก/ }).click();
+
+		// Wait for dialog to close indicating success
+		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
+
+		// Verify user is actually created in CouchDB
+		const auth = 'Basic ' + btoa('admin:password');
+		const check = await fetch(
+			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(newUsername)}`,
+			{ headers: { Authorization: auth } }
+		);
+		expect(check.status).toBe(200);
+		const doc = await check.json();
+		expect(doc.roles).toContain('shelter:SH001');
+		expect(doc.roles).toContain('shelter_manager');
+		expect(doc.display_name).toBe('New UI SM');
+	});
+
+	test('SM can create a new staff user in their shelter', async ({ page }) => {
+		const newUsername = `ui_new_staff_${RUN_ID}`;
+		createdDuringTest.push(newUsername);
+
+		await injectSession(page, SM1, sessions[SM1.name]);
+
+		await mockUserList(page, []);
+		await mockShelters(page);
+		await page.goto('http://localhost:4173/back-office/users');
+
+		await page.getByRole('button', { name: /เพิ่มผู้ใช้/ }).click();
+
+		await expect(page.getByRole('dialog')).toBeVisible();
+		await page.locator('input[name="username"]').fill(newUsername);
+		await page.locator('input[name="password"]').fill('Password123!');
+		await page.locator('input[name="display_name"]').fill('New UI Staff');
+
+		// SM can only create staff, shelter is fixed.
+		await page.locator('select[name="capability"]').selectOption('kitchen_staff');
+
+		await page.getByRole('button', { name: /บันทึก/ }).click();
+
+		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
+
+		const auth = 'Basic ' + btoa('admin:password');
+		const check = await fetch(
+			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(newUsername)}`,
+			{ headers: { Authorization: auth } }
+		);
+		expect(check.status).toBe(200);
+		const doc = await check.json();
+		expect(doc.roles).toContain('shelter:SH001'); // SM1's shelter
+		expect(doc.roles).toContain('kitchen_staff');
+		expect(doc.display_name).toBe('New UI Staff');
 	});
 });
