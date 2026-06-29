@@ -62,44 +62,46 @@
 		usersQuery.data?.filter((u) => {
 			if (!searchQuery) return true;
 			const q = searchQuery.toLowerCase();
-			return (
-				u.name.toLowerCase().includes(q) ||
-				u.roles.some((r) => r.toLowerCase().includes(q))
-			);
+			return u.name.toLowerCase().includes(q) || u.roles.some((r) => r.toLowerCase().includes(q));
 		}) ?? []
 	);
 </script>
 
-<div class="container mx-auto p-6 max-w-[1200px]">
-	<div class="bg-card text-card-foreground shadow-sm rounded-2xl border p-6 min-h-[500px]">
+<div class="container mx-auto max-w-[1200px] p-6">
+	<div class="min-h-[500px] rounded-2xl border bg-card p-6 text-card-foreground shadow-sm">
 		<!-- Header -->
-		<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+		<div class="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
 			<div class="flex items-center gap-4">
 				<div class="text-blue-900/80">
-					<UserPlus class="w-8 h-8" />
+					<UserPlus class="h-8 w-8" />
 				</div>
 				<div>
 					<h1 class="text-2xl font-bold">จัดการผู้ใช้งาน (User Management)</h1>
-					<p class="text-muted-foreground text-sm mt-1">ค้นหาและจัดการสิทธิ์ส่วนบุคคลในระบบ</p>
+					<p class="mt-1 text-sm text-muted-foreground">ค้นหาและจัดการสิทธิ์ส่วนบุคคลในระบบ</p>
 				</div>
 			</div>
-			
+
 			<Dialog.Root bind:open={dialogOpen}>
 				<Dialog.Trigger>
 					{#snippet child({ props })}
-						<Button {...props} class="bg-[#0f2d5c] hover:bg-[#0a1e3f] text-white rounded-xl px-6">
+						<Button
+							{...props}
+							class="rounded-lg bg-[#0f2d5c] px-5 py-5 font-semibold text-white hover:bg-[#0a1e3f]"
+						>
 							<span class="mr-2">+</span> เพิ่มผู้ใช้
 						</Button>
 					{/snippet}
 				</Dialog.Trigger>
-				<Dialog.Content class="sm:max-w-[500px] p-0 overflow-hidden rounded-2xl">
+				<Dialog.Content class="overflow-hidden rounded-2xl p-0 sm:max-w-[500px]">
 					<Dialog.Header class="p-6 pb-2">
-						<Dialog.Title class="text-xl font-bold">เพิ่มผู้ใช้ใหม่</Dialog.Title>
+						<Dialog.Title class="bg-base-300 rounded-t-xl text-xl font-bold"
+							>เพิ่มผู้ใช้ใหม่</Dialog.Title
+						>
 					</Dialog.Header>
 					<div class="px-6 pb-6">
 						<CreateUserForm
 							onsubmit={handleCreate}
-							oncancel={() => dialogOpen = false}
+							oncancel={() => (dialogOpen = false)}
 							{isSA}
 							{shelterCode}
 							pending={createMutation.isPending}
@@ -110,24 +112,26 @@
 		</div>
 
 		<!-- Search -->
-		<div class="bg-slate-50 p-4 rounded-2xl border mb-6">
+		<div class="mb-6 rounded-2xl border bg-slate-50 p-4">
 			<div class="relative max-w-full">
-				<Search class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+				<Search class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
 				<Input
 					bind:value={searchQuery}
 					type="text"
 					placeholder="ค้นหาชื่อ, Username หรือ Role..."
-					class="pl-11 bg-white border-0 shadow-sm h-12 rounded-xl text-base"
+					class="h-12 rounded-xl border-0 bg-white pl-11 text-base shadow-sm"
 				/>
 			</div>
 		</div>
 
 		<!-- List -->
-		<div class="bg-white rounded-2xl border overflow-hidden shadow-sm">
+		<div class="overflow-hidden rounded-2xl border bg-white shadow-sm">
 			{#if usersQuery.isLoading}
 				<div class="p-8 text-center text-sm text-muted-foreground">Loading...</div>
 			{:else if usersQuery.isError}
-				<div class="p-8 text-center text-sm text-destructive">Error: {usersQuery.error?.message}</div>
+				<div class="p-8 text-center text-sm text-destructive">
+					Error: {usersQuery.error?.message}
+				</div>
 			{:else}
 				<UserList
 					users={filteredUsers}

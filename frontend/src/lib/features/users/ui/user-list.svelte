@@ -22,43 +22,53 @@
 	<Table.Root>
 		<Table.Header class="bg-slate-50/50">
 			<Table.Row>
-				<Table.Head class="font-bold text-slate-700">USERNAME</Table.Head>
-				<Table.Head class="font-bold text-slate-700">ชื่อ-สกุล</Table.Head>
-				<Table.Head class="font-bold text-slate-700">ROLE</Table.Head>
-				<Table.Head class="font-bold text-slate-700">STATUS</Table.Head>
-				<Table.Head class="text-right font-bold text-slate-700">จัดการ</Table.Head>
+				<Table.Head class="py-4 pl-10 text-left font-bold text-slate-700">USERNAME</Table.Head>
+				<Table.Head class="py-4 text-left font-bold text-slate-700">ชื่อ-สกุล</Table.Head>
+				<Table.Head class="py-4 text-left font-bold text-slate-700">ROLE</Table.Head>
+				<Table.Head class="py-4 text-left font-bold text-slate-700">STATUS</Table.Head>
+				<Table.Head class="py-4 text-center font-bold text-slate-700">จัดการ</Table.Head>
 			</Table.Row>
 		</Table.Header>
 		<Table.Body>
 			{#each users as user (user.name)}
 				<Table.Row class="hover:bg-slate-50/50">
-					<Table.Cell class="font-medium">{user.name}</Table.Cell>
+					<Table.Cell class="pl-10 font-medium">{user.name}</Table.Cell>
 					<Table.Cell class="font-bold">
 						{user.name}
 					</Table.Cell>
 					<Table.Cell>
-						<Badge variant="secondary" class="bg-slate-100 text-slate-700 hover:bg-slate-100/80 rounded-md font-normal">
+						<Badge
+							variant="secondary"
+							class="rounded-md bg-slate-100 font-semibold text-slate-700 hover:bg-slate-100/80"
+						>
 							{user.roles.join(', ') || '—'}
 						</Badge>
 					</Table.Cell>
 					<Table.Cell>
-						<Badge variant="outline" class="bg-green-50 text-green-700 border-green-200 hover:bg-green-50 rounded-md font-normal">
-							<CheckCircle2 class="w-3 h-3 mr-1" /> Active
+						<Badge
+							variant="outline"
+							class="rounded-md border-green-200 bg-green-50 font-normal text-green-700 hover:bg-green-50"
+						>
+							<CheckCircle2 class="mr-1 h-3 w-3" /> Active
 						</Badge>
 					</Table.Cell>
-					<Table.Cell class="text-right">
-						<div class="flex items-center justify-end gap-2">
-							<Button variant="secondary" size="sm" class="bg-blue-50 text-blue-800 hover:bg-blue-100 text-xs px-3 h-8">
-								<Settings2 class="w-3 h-3 mr-1" /> จัดการ
+					<Table.Cell class="text-center">
+						<div class="flex items-center justify-center gap-2">
+							<Button
+								variant="secondary"
+								size="sm"
+								class="h-8 bg-blue-50 px-3 text-xs text-blue-800 hover:bg-blue-100"
+							>
+								<Settings2 class="mr-1 h-3 w-3" /> จัดการ
 							</Button>
 							<Button
 								variant="outline"
 								size="icon"
-								class="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 border-red-100"
+								class="h-8 w-8 border-red-100 text-red-500 hover:bg-red-50 hover:text-red-600"
 								disabled={pending}
 								onclick={() => ondelete(user.name)}
 							>
-								<Trash2 class="w-4 h-4" />
+								<Trash2 class="h-4 w-4" />
 							</Button>
 						</div>
 					</Table.Cell>
