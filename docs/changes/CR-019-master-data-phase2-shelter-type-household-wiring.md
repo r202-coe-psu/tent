@@ -1,7 +1,7 @@
 ---
-id: CR-018
+id: CR-019
 title: "Master Data Phase 2 — เพิ่ม shelter_type + wire municipality_zone/community dropdown ใน household-form"
-status: proposed
+status: approved
 date: 2026-06-29
 requested_by: development team B
 decided_by: project owner
@@ -18,7 +18,7 @@ affects:
   - frontend/src/lib/features/people/domain/people.test.ts — อัปเดต tests
 ---
 
-# CR-018 — Master Data Phase 2: Shelter Type Config + Household Dropdown Wiring
+# CR-019 — Master Data Phase 2: Shelter Type Config + Household Dropdown Wiring
 
 ## สรุป (TL;DR)
 
