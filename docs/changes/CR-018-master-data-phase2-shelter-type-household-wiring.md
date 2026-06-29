@@ -136,6 +136,37 @@ affects:
 
 ---
 
+## Definition of Done
+
+### Code
+- [ ] `shelter_type` อยู่ใน `MASTER_DATA_TYPES` constant และ `MasterType` enum ใน `master-data.ts`
+- [ ] seed `shelter_type` ≥3 items (ULID codes) พร้อม `is_default: true` 1 ค่า — idempotent
+- [ ] `/back-office/shelter-config` render ได้โดยไม่ crash — แสดงเฉพาะ `shelter_type` type card
+- [ ] `/back-office/household-master-data` render ได้โดยไม่ crash — แสดงเฉพาะ `municipality_zone` + `community` type cards
+- [ ] navbar "จัดการข้อมูลหลัก" มี 3 items: ข้อมูลบุคคล / Shelter Config / Household Config
+- [ ] `household-form.svelte` ไม่ import `MUNICIPALITY_ZONES` / `COMMUNITIES` จาก `people.ts`
+- [ ] municipality_zone dropdown โหลด items จาก `master_data` ผ่าน TanStack Query
+- [ ] community dropdown filter ด้วย `parent_code === selectedZoneCode` จาก `master_data`
+- [ ] dropdown แสดง disabled/skeleton ขณะ query pending; แสดง empty state เมื่อ items = []
+- [ ] `MUNICIPALITY_ZONES` + `COMMUNITIES` ลบออกจาก `people.ts` และ `index.ts` barrel แล้ว
+- [ ] `RegistrationConfigPage` (หรือ wrapper) รับ `allowedTypes` prop และ filter cards ได้
+
+### Tests
+- [ ] `pnpm test` ผ่าน — unit tests ใน `master-data.test.ts` ครอบ `shelter_type` type
+- [ ] `people.test.ts` ไม่มี reference ถึง `MUNICIPALITY_ZONES` / `COMMUNITIES` ที่ถูกลบ
+- [ ] `pnpm check` — TypeScript 0 errors
+- [ ] `pnpm lint` — ผ่าน (Prettier + ESLint)
+
+### Manual verification
+- [ ] เปิด `/back-office/shelter-config` → เห็น card + default seed items ของ shelter_type
+- [ ] คลิก card → เพิ่ม/แก้ไข/ลบ item ได้ผ่าน modal เดิม
+- [ ] เปิด `/back-office/household-master-data` → เห็น municipality_zone + community cards เท่านั้น
+- [ ] แก้ label ของ zone item ใน household-master-data → reload household form → dropdown แสดง label ใหม่
+- [ ] เลือก zone → community dropdown กรองเฉพาะ community ที่มี `parent_code` ตรงกัน
+- [ ] ปิด network (offline) → household form แสดง loading/empty state ไม่ throw
+
+---
+
 ## Decision log
 
 - 2026-06-29 — proposed (ปิด gap CR-012 Phase 2: wiring + เพิ่ม shelter_type + เมนูใหม่)
