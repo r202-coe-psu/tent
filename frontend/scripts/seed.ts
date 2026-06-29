@@ -207,7 +207,7 @@ async function seedRegistry(): Promise<void> {
 	await ensureDb('registry');
 	await setSecurity('registry', {
 		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [] }
+		members: { names: [], roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff'] }
 	});
 
 	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
@@ -290,7 +290,7 @@ async function seedCatalog(): Promise<void> {
 	await ensureDb('catalog');
 	await setSecurity('catalog', {
 		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [] }
+		members: { names: [], roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff'] }
 	});
 
 	const items = [
