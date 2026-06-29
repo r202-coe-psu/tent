@@ -10,6 +10,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Save } from '@lucide/svelte';
 	import type { UserSummary } from '../data/users.api';
+	import { untrack } from 'svelte';
 
 	const sheltersQuery = useShelters();
 
@@ -43,14 +44,14 @@
 
 	const form = superForm(
 		defaults(
-			{
-				username: $state.snapshot(user.name),
+			untrack(() => ({
+				username: user.name,
 				password: '',
-				display_name: $state.snapshot(user.display_name) ?? '',
-				capability: $state.snapshot(userCapability) as any,
-				shelter_id: $state.snapshot(user.shelter_id) ?? undefined,
+				display_name: user.display_name ?? '',
+				capability: userCapability as any,
+				shelter_id: user.shelter_id ?? undefined,
 				affiliation_tags: $state.snapshot(user.affiliation_tags)
-			},
+			})),
 			zod4(editUserSchema)
 		),
 		{
