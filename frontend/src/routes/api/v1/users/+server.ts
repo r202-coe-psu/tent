@@ -6,7 +6,7 @@ import {
 	serviceError,
 	ServiceError
 } from '$lib/server/couch-admin';
-import { createUser, deleteUser, listUsers } from '$lib/server/user-service';
+import { createUser, deleteUser, listUsers, updateUser } from '$lib/server/user-service';
 
 // Service plane `/api/v1/*` — dev BFF mirroring the canonical contract
 // (api-contract.md §2/§3) so it is a drop-in swap for the future FastAPI.
@@ -15,6 +15,13 @@ import { createUser, deleteUser, listUsers } from '$lib/server/user-service';
 export const prerender = false;
 
 interface CreateUserBody {
+	name?: unknown;
+	password?: unknown;
+	roles?: unknown;
+	affiliation_tags?: unknown;
+}
+
+interface UpdateUserBody {
 	name?: unknown;
 	password?: unknown;
 	roles?: unknown;
@@ -42,6 +49,30 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		assertCanGrant(caller, roles);
 		await createUser({ name, password, roles, affiliation_tags });
+		return json({ ok: true });
+	} catch (e) {
+		return serviceError(e);
+	}
+};
+
+/** PUT — update a user (SA: any; SM: own-shelter staff). */
+export const PUT: RequestHandler = async ({ request }) => {
+	try {
+		const caller = await authorizeUserWrite(request.headers.get('cookie'));
+		const body = (await request.json().catch(() => ({}))) as UpdateUserBody;
+
+		const name = typeof body.name === 'string' ? body.name.trim() : '';
+		if (!name) throw new ServiceError('VALIDATION', 'name is required');
+
+		const roles = Array.isArray(body.roles)
+			? body.roles.filter((r): r is string => typeof r === 'string')
+			: undefined;
+		const affiliation_tags = Array.isArray(body.affiliation_tags)
+			? body.affiliation_tags.filter((t): t is string => typeof t === 'string')
+			: undefined;
+		const password = typeof body.password === 'string' && body.password.length > 0 ? body.password : undefined;
+
+		await updateUser(name, { password, roles, affiliation_tags }, caller);
 		return json({ ok: true });
 	} catch (e) {
 		return serviceError(e);

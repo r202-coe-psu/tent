@@ -94,3 +94,56 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 	const res = await adminRaw(`/_users/${userDocId(name)}?rev=${doc._rev}`, 'DELETE');
 	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not delete user');
 }
+
+/** Update an existing user. A manager may only edit users in their own shelter and only staff. */
+export async function updateUser(
+	name: string,
+	input: {
+		password?: string;
+		roles?: string[];
+		affiliation_tags?: string[];
+	},
+	caller: Caller
+): Promise<void> {
+	const got = await adminRaw(`/_users/${userDocId(name)}`, 'GET');
+	if (got.status === 404) throw new ServiceError('VALIDATION', `User "${name}" not found`);
+	if (got.status >= 400) throw new ServiceError('INTERNAL', 'Could not read user');
+	const doc = got.data as CouchUserDoc;
+
+	// Authorize changes
+	if (!caller.isSA) {
+		const scope = `shelter:${caller.shelterCode}`;
+		if (!doc.roles?.includes(scope)) {
+			throw new ServiceError('FORBIDDEN', 'A manager may only edit users in their own shelter');
+		}
+		// Staff only — a manager cannot edit another manager (or themselves).
+		if (!isStaffOnly(doc.roles ?? [])) {
+			throw new ServiceError('FORBIDDEN', 'A manager may only edit staff users');
+		}
+		// If caller tries to change roles to something outside their scope:
+		if (input.roles) {
+			const { assertCanGrant } = await import('./couch-admin');
+			assertCanGrant(caller, input.roles);
+		}
+	} else {
+		if (input.roles) {
+			const { assertCanGrant } = await import('./couch-admin');
+			assertCanGrant(caller, input.roles);
+		}
+	}
+
+	const updatedDoc: any = {
+		...doc,
+		...(input.roles ? { roles: input.roles, shelter_id: shelterCodeFromRoles(input.roles) } : {}),
+		...(input.affiliation_tags ? { affiliation_tags: input.affiliation_tags } : {})
+	};
+
+	if (input.password && input.password.trim().length >= 6) {
+		updatedDoc.password = input.password;
+		delete updatedDoc.password_sha;
+		delete updatedDoc.salt;
+	}
+
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
+	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not update user');
+}

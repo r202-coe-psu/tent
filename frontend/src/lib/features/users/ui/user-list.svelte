@@ -7,10 +7,12 @@
 
 	let {
 		users,
+		onedit,
 		ondelete,
 		pending = false
 	}: {
 		users: UserSummary[];
+		onedit: (user: UserSummary) => void;
 		ondelete: (name: string) => void;
 		pending?: boolean;
 	} = $props();
@@ -58,6 +60,7 @@
 								variant="secondary"
 								size="sm"
 								class="h-8 bg-blue-50 px-3 text-xs text-blue-800 hover:bg-blue-100"
+								onclick={() => onedit(user)}
 							>
 								<Settings2 class="mr-1 h-3 w-3" /> จัดการ
 							</Button>

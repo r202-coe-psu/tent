@@ -19,3 +19,13 @@ export const createUserSchema = z.object({
 });
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
+
+export const editUserSchema = z.object({
+	username: z.string(),
+	password: z.string().min(6, 'Password must be at least 6 characters').or(z.literal('')),
+	capability: capabilitySchema,
+	shelter_id: shelterCodeSchema.optional(),
+	affiliation_tags: z.array(z.string()).optional()
+});
+
+export type EditUserInput = z.infer<typeof editUserSchema>;
