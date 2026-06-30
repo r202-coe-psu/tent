@@ -50,6 +50,7 @@ import {
 	type StockLedgerInput,
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
+import { createInitialProfile } from '$lib/features/sop-ratios';
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
@@ -321,6 +322,44 @@ async function seedCatalog(): Promise<void> {
 
 	for (const doc of [...items, ...recipes]) await putDoc('catalog', doc);
 	console.log(`  ✓ catalog: ${items.length} supply items, ${recipes.length} recipes`);
+}
+
+async function seedCatalogSopRatios(): Promise<void> {
+	await ensureDb('catalog');
+
+	// Idempotent check: check if the Sphere Baseline master profile already exists in catalog DB
+	// We use the deterministic ID 'master_sphere_baseline' to do an O(1) direct document lookup
+	const deterministicId = 'master_sphere_baseline';
+	const fullDocId = `sop_profile:${deterministicId}`;
+	const { status } = await couchReq('GET', `/catalog/${encodeURIComponent(fullDocId)}`);
+
+	if (status === 200) {
+		console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" already exists, skipping');
+		return;
+	}
+
+	if (status !== 404) {
+		throw new Error(`seedCatalogSopRatios: unexpected status ${status} checking ${fullDocId}`);
+	}
+
+	const { profile, audit } = createInitialProfile(
+		'sop_profile',
+		'Sphere Baseline',
+		{
+			water_l_per_person_day: 15, // liters/person/day
+			rice_g_per_person_meal: 200, // grams/person/meal
+			toilet_per_person: 0.05 // toilets/person
+		},
+		{ createdBy: 'seed' }
+	);
+
+	// Override standard ULIDs with deterministic IDs for idempotency scan boundary
+	profile._id = fullDocId;
+	audit.target_id = fullDocId;
+	audit._id = `audit:seed_sphere_baseline`;
+
+	await bulkDocs('catalog', [profile, audit]);
+	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded');
 }
 
 // ─── seedShelter ──────────────────────────────────────────────────────────────
@@ -645,6 +684,7 @@ async function main() {
 	try {
 		await seedRegistry();
 		await seedCatalog();
+		await seedCatalogSopRatios();
 		await seedShelter();
 		console.log('\nDone.\n');
 	} catch (err) {
