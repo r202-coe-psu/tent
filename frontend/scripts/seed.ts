@@ -785,21 +785,27 @@ async function seedShelter2(): Promise<void> {
 async function seedDashboardData(): Promise<void> {
 	await ensureDb(SHELTER_DB);
 
-	// Check if already seeded by counting if we have a lot of evacuees
+	// Check if already seeded by looking specifically for our generated mock docs
 	const { status, data } = await couchReq('GET', `/${SHELTER_DB}/_all_docs?limit=200`);
 	if (status === 200) {
 		const rows = (data as { rows?: { id: string }[] }).rows ?? [];
-		const evacueeCount = rows.filter((r) => r.id.startsWith('evacuee:')).length;
-		if (evacueeCount > 50) {
+		const mockCount = rows.filter((r) => r.id.startsWith('evacuee:seed-genname')).length;
+		if (mockCount > 10) {
 			console.log(
-				`  ✓ ${SHELTER_DB}: dashboard data already seeded (${evacueeCount} evacuees found), skipping`
+				`  ✓ ${SHELTER_DB}: dashboard data already seeded (${mockCount} mock evacuees found), skipping`
 			);
 			return;
 		}
 	}
 
 	const COUNTRIES = ['THAILAND', 'THAILAND', 'THAILAND', 'MYANMAR', 'LAOS', 'CAMBODIA', 'UNKNOWN'];
-	const STATUSES = ['registered', 'checked_in', 'checked_in', 'checked_out', 'transferred'] as const;
+	const STATUSES = [
+		'registered',
+		'checked_in',
+		'checked_in',
+		'checked_out',
+		'transferred'
+	] as const;
 	const CURRENT_YEAR = new Date().getFullYear();
 
 	function rnd(min: number, max: number) {
@@ -821,8 +827,8 @@ async function seedDashboardData(): Promise<void> {
 	};
 
 	for (let i = 0; i < NUM_DOCS; i++) {
-		const birth_year = (CURRENT_YEAR + 543) - rnd(0, 80);
-		const age = (CURRENT_YEAR + 543) - birth_year;
+		const birth_year = CURRENT_YEAR + 543 - rnd(0, 80);
+		const age = CURRENT_YEAR + 543 - birth_year;
 		let ageBucket = '60+';
 		if (age <= 4) ageBucket = '0-4';
 		else if (age <= 11) ageBucket = '5-11';
@@ -841,14 +847,14 @@ async function seedDashboardData(): Promise<void> {
 			gender: i % 2 === 0 ? 'male' : 'female',
 			phone: null,
 			birth_year,
-			registered_via: 'import',
-			country,
-			religion: 'unknown'
+			registered_via: 'import'
 		};
 
 		const doc = createEvacuee(input, CTX);
-		
-		// Force override for views
+
+		// Force override for views & identification
+		doc._id = `evacuee:seed-genname-${i}`;
+		(doc as Evacuee & { country: string }).country = country;
 		doc.current_stay.status = status;
 		doc.created_at = randomDatePast30Days();
 
@@ -937,7 +943,9 @@ async function deleteDashboardData(): Promise<void> {
 		return;
 	}
 
-	const rows = (data as { rows: { doc: { type?: string; first_name?: string } & Record<string, unknown> }[] }).rows;
+	const rows = (
+		data as { rows: { doc: { type?: string; first_name?: string } & Record<string, unknown> }[] }
+	).rows;
 	const toDelete = rows
 		.filter((r) => r.doc?.type === 'evacuee' && r.doc?.first_name?.startsWith('GenName'))
 		.map((r) => ({ ...r.doc, _deleted: true }));
