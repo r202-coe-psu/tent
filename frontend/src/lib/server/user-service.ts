@@ -145,7 +145,10 @@ export async function updateUser(
 		...(input.affiliation_tags ? { affiliation_tags: input.affiliation_tags } : {})
 	} as CouchUserDoc & { password?: string; password_sha?: string; salt?: string };
 
-	if (input.password && input.password.trim().length >= 6) {
+	if (input.password) {
+		if (input.password.trim().length < 6) {
+			throw new ServiceError('VALIDATION', 'Password must be at least 6 characters long');
+		}
 		updatedDoc.password = input.password;
 		delete updatedDoc.password_sha;
 		delete updatedDoc.salt;
