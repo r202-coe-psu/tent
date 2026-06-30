@@ -170,3 +170,108 @@ export async function mergeShelterSecurity(
 function uniq<T>(arr: T[]): T[] {
 	return [...new Set(arr)];
 }
+
+/**
+ * Deploy CouchDB Design Documents (Views) for a shelter database.
+ *
+ * CR-020 (T-52): Adds 4 MapReduce views under the single `_design/app` design
+ * document (couchdb-pouchdb-bestpractices §6 — one design doc per db).
+ *
+ * Views deployed:
+ *   - `occupancy`               — count by `current_stay.status` (total / checked_in / checked_out)
+ *   - `demographics_by_age`     — count by age-bucket string, derived from `birth_year` (พ.ศ.)
+ *   - `demographics_by_country`     — count by `country` field (req); falls back to 'unknown'
+ *   - `registrations_by_date`   — count evacuee docs by `created_at` date (YYYY-MM-DD)
+ *
+ * All views use `?group=true` for per-key breakdown (see CONVENTIONS.md §5).
+ * Views are idempotent: if `_design/app` already exists the current `_rev` is
+ * fetched first and sent on the PUT (Read-Modify-Write; skill §3).
+ */
+export async function deployShelterViews(db: string): Promise<number> {
+	// ── occupancy ────────────────────────────────────────────────────────────
+	// Emits current_stay.status as the key so callers get per-status counts
+	// with `?group=true`. Schema: evacuee.current_stay.status ∈
+	// { registered, checked_in, checked_out, transferred } (schema.md §1.1).
+	const occupancyMap = `function(doc) {
+  if (doc.type !== 'evacuee' || !doc.current_stay) return;
+  emit(doc.current_stay.status, 1);
+}`;
+
+	// ── demographics_by_age ──────────────────────────────────────────────────
+	// birth_year is stored as a Thai Buddhist Era (พ.ศ.) 4-digit integer.
+	// Convert to approximate age: CE_year = พ.ศ. − 543; age = currentYear − CE_year.
+	// Bucket labels mirror CR-020 §3 (age groups).
+	// Evacuees with no birth_year emit 'unknown'.
+	const demographicsByAgeMap = `function(doc) {
+  if (doc.type !== 'evacuee') return;
+  if (!doc.birth_year) { emit('unknown', 1); return; }
+  var ceYear = doc.birth_year - 543;
+  var currentYear = new Date().getFullYear();
+  var age = currentYear - ceYear;
+  var bucket;
+  if      (age <= 4)  bucket = '0-4';
+  else if (age <= 11) bucket = '5-11';
+  else if (age <= 17) bucket = '12-17';
+  else if (age <= 59) bucket = '18-59';
+  else                bucket = '60+';
+  emit(bucket, 1);
+}`;
+
+	// ── demographics_by_country ──────────────────────────────────────────────
+	// Uses the `country` req field on evacuee (enum mapped to THAILAND default).
+	// Falls back to 'unknown' when absent or blank (for backwards compat).
+	// CR-020 §3 calls this "สัญชาติ/ประเทศ" (updated via CR-007).
+	const demographicsByCountryMap = `function(doc) {
+  if (doc.type !== 'evacuee') return;
+  var c = (doc.country || '').trim().toUpperCase() || 'UNKNOWN';
+  emit(c, 1);
+}`;
+
+	// ── registrations_by_date ────────────────────────────────────────────────
+	// Emits the date portion of created_at (YYYY-MM-DD) as the key.
+	// Query with ?group=true to get daily registration counts.
+	// Use ?startkey="YYYY-MM-DD"&endkey="YYYY-MM-DD￰" for date ranges.
+	const registrationsByDateMap = `function(doc) {
+  if (doc.type !== 'evacuee' || !doc.created_at) return;
+  var date = doc.created_at.slice(0, 10);
+  emit(date, 1);
+}`;
+
+	const appDesign: { _id: string; _rev?: string; views: Record<string, { map: string; reduce: string }> } = {
+		_id: '_design/app',
+		views: {
+			occupancy: {
+				map: occupancyMap,
+				reduce: '_count'
+			},
+			demographics_by_age: {
+				map: demographicsByAgeMap,
+				reduce: '_count'
+			},
+			demographics_by_country: {
+				map: demographicsByCountryMap,
+				reduce: '_count'
+			},
+			registrations_by_date: {
+				map: registrationsByDateMap,
+				reduce: '_count'
+			}
+		}
+	};
+
+	// Read-Modify-Write: fetch existing _rev to avoid 409 Conflict (skill §3).
+	const existing = await adminRaw(`/${db}/_design/app`, 'GET');
+	if (existing.status === 200) {
+		appDesign['_rev'] = (existing.data as { _rev: string })._rev;
+	}
+
+	const res = await adminRaw(`/${db}/_design/app`, 'PUT', appDesign);
+	if (res.status >= 400) {
+		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+		throw new ServiceError(
+			'INTERNAL',
+			`Failed to deploy _design/app to ${db} (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
+	}
+	return res.status;
+}
