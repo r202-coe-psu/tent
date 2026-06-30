@@ -149,7 +149,9 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		}
 
 		// Update CouchDB document
-		if (!latestDoc.logistics) latestDoc.logistics = {};
+		if (!latestDoc.logistics) {
+			return json({ success: false, error: 'Logistics data missing' }, { status: 400 });
+		}
 		latestDoc.logistics.courier_tracking_no = payload.courier_tracking_no;
 		latestDoc.updated_at = new Date().toISOString();
 

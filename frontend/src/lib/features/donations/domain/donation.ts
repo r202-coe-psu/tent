@@ -74,7 +74,7 @@ export const donationPreDeclarationInputSchema = z.object({
 		})
 		.optional(),
 	captchaToken: z
-		.string({ required_error: 'CAPTCHA token is required' })
+		.string()
 		.min(1, 'CAPTCHA token is required')
 });
 
