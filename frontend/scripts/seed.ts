@@ -36,6 +36,7 @@ import {
 	createMedical,
 	createMovement,
 	createScreening,
+	type Evacuee,
 	type EvacueeInput,
 	type HouseholdInput,
 	type MedicalInput,
@@ -50,7 +51,7 @@ import {
 	type StockLedgerInput,
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
-import { createInitialProfile } from '$lib/features/sop-ratios';
+import { createInitialProfile } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
@@ -412,6 +413,7 @@ async function seedShelter(): Promise<void> {
 		admins: { names: [], roles: ['system_admin'] },
 		members: { names: [], roles: [`shelter:${SHELTER_CODE}`] }
 	});
+	await deployShelterViews(SHELTER_DB);
 
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
@@ -724,6 +726,7 @@ async function seedShelter2(): Promise<void> {
 		admins: { names: [], roles: ['system_admin'] },
 		members: { names: [], roles: [`shelter:${SHELTER_CODE_2}`] }
 	});
+	await deployShelterViews(SHELTER_DB_2);
 
 	const { status, data } = await couchReq('GET', `/${SHELTER_DB_2}/_all_docs?limit=1`);
 	if (status === 200 && (data as { rows?: unknown[] }).rows?.length) {
@@ -778,9 +781,184 @@ async function seedShelter2(): Promise<void> {
 	console.log(`  ✓ ${SHELTER_DB_2}: 1 household, 1 evacuee, 1 movement, 1 stock entry`);
 }
 
+// ─── seedDashboardData ────────────────────────────────────────────────────────
+async function seedDashboardData(): Promise<void> {
+	await ensureDb(SHELTER_DB);
+
+	// Check if already seeded by counting if we have a lot of evacuees
+	const { status, data } = await couchReq('GET', `/${SHELTER_DB}/_all_docs?limit=200`);
+	if (status === 200) {
+		const rows = (data as { rows?: { id: string }[] }).rows ?? [];
+		const evacueeCount = rows.filter((r) => r.id.startsWith('evacuee:')).length;
+		if (evacueeCount > 50) {
+			console.log(
+				`  ✓ ${SHELTER_DB}: dashboard data already seeded (${evacueeCount} evacuees found), skipping`
+			);
+			return;
+		}
+	}
+
+	const COUNTRIES = ['THAILAND', 'THAILAND', 'THAILAND', 'MYANMAR', 'LAOS', 'CAMBODIA', 'UNKNOWN'];
+	const STATUSES = ['registered', 'checked_in', 'checked_in', 'checked_out', 'transferred'] as const;
+	const CURRENT_YEAR = new Date().getFullYear();
+
+	function rnd(min: number, max: number) {
+		return Math.floor(Math.random() * (max - min + 1)) + min;
+	}
+
+	function randomDatePast30Days() {
+		const date = new Date();
+		date.setDate(date.getDate() - rnd(0, 30));
+		return date.toISOString();
+	}
+
+	const NUM_DOCS = 100;
+	const docs: Evacuee[] = [];
+	const stats = {
+		status: {} as Record<string, number>,
+		country: {} as Record<string, number>,
+		age: { '0-4': 0, '5-11': 0, '12-17': 0, '18-59': 0, '60+': 0 } as Record<string, number>
+	};
+
+	for (let i = 0; i < NUM_DOCS; i++) {
+		const birth_year = (CURRENT_YEAR + 543) - rnd(0, 80);
+		const age = (CURRENT_YEAR + 543) - birth_year;
+		let ageBucket = '60+';
+		if (age <= 4) ageBucket = '0-4';
+		else if (age <= 11) ageBucket = '5-11';
+		else if (age <= 17) ageBucket = '12-17';
+		else if (age <= 59) ageBucket = '18-59';
+
+		const country = COUNTRIES[rnd(0, COUNTRIES.length - 1)];
+		const status = STATUSES[rnd(0, STATUSES.length - 1)];
+
+		stats.status[status] = (stats.status[status] || 0) + 1;
+		stats.country[country] = (stats.country[country] || 0) + 1;
+		stats.age[ageBucket] = (stats.age[ageBucket] || 0) + 1;
+		const input: EvacueeInput = {
+			first_name: `GenName${i}`,
+			last_name: `GenSurname${i}`,
+			gender: i % 2 === 0 ? 'male' : 'female',
+			phone: null,
+			birth_year,
+			registered_via: 'import',
+			country,
+			religion: 'unknown'
+		};
+
+		const doc = createEvacuee(input, CTX);
+		
+		// Force override for views
+		doc.current_stay.status = status;
+		doc.created_at = randomDatePast30Days();
+
+		docs.push(doc);
+	}
+
+	await bulkDocs(SHELTER_DB, docs);
+	console.log(`\n  --- 📊 Dashboard Seed Stats (${NUM_DOCS} docs) ---`);
+	console.log(`  [Status] :`, stats.status);
+	console.log(`  [Country]:`, stats.country);
+	console.log(`  [Age]    :`, stats.age);
+	console.log(`  --------------------------------------------\n`);
+}
+
+// ─── deployShelterViews ──────────────────────────────────────────────────────
+
+async function deployShelterViews(db: string): Promise<void> {
+	const appDesign = {
+		_id: '_design/app',
+		views: {
+			occupancy: {
+				map: `function(doc) {
+					if (doc.type !== 'evacuee' || !doc.current_stay) return;
+					emit(doc.current_stay.status, 1);
+				}`,
+				reduce: '_count'
+			},
+			demographics_by_age: {
+				map: `function(doc) {
+					if (doc.type !== 'evacuee') return;
+					if (!doc.birth_year) { emit('unknown', 1); return; }
+					var ceYear = doc.birth_year - 543;
+					var currentYear = new Date().getFullYear();
+					var age = currentYear - ceYear;
+					var bucket;
+					if      (age <= 4)  bucket = '0-4';
+					else if (age <= 11) bucket = '5-11';
+					else if (age <= 17) bucket = '12-17';
+					else if (age <= 59) bucket = '18-59';
+					else                bucket = '60+';
+					emit(bucket, 1);
+				}`,
+				reduce: '_count'
+			},
+			demographics_by_country: {
+				map: `function(doc) {
+					if (doc.type !== 'evacuee') return;
+					var c = (doc.country || '').trim().toUpperCase() || 'UNKNOWN';
+					emit(c, 1);
+				}`,
+				reduce: '_count'
+			},
+			registrations_by_date: {
+				map: `function(doc) {
+					if (doc.type !== 'evacuee' || !doc.created_at) return;
+					var date = doc.created_at.slice(0, 10);
+					emit(date, 1);
+				}`,
+				reduce: '_count'
+			}
+		}
+	} as { _id: string; _rev?: string; views: Record<string, { map: string; reduce: string }> };
+
+	const existing = await couchReq('GET', `/${db}/_design/app`);
+	if (existing.status === 200) {
+		appDesign['_rev'] = (existing.data as { _rev: string })._rev;
+	}
+
+	const res = await couchReq('PUT', `/${db}/_design/app`, appDesign);
+	if (res.status >= 400) {
+		console.error(`  ✗ Failed to deploy views to ${db}`);
+	} else {
+		console.log(`  ✓ ${db}: views deployed`);
+	}
+}
+
+// ─── deleteDashboardData ──────────────────────────────────────────────────────
+
+async function deleteDashboardData(): Promise<void> {
+	await ensureDb(SHELTER_DB);
+	console.log(`Searching for dashboard test data in ${SHELTER_DB}...`);
+
+	const { status, data } = await couchReq('GET', `/${SHELTER_DB}/_all_docs?include_docs=true`);
+	if (status !== 200) {
+		console.log(`Failed to fetch docs: HTTP ${status}`);
+		return;
+	}
+
+	const rows = (data as { rows: { doc: { type?: string; first_name?: string } & Record<string, unknown> }[] }).rows;
+	const toDelete = rows
+		.filter((r) => r.doc?.type === 'evacuee' && r.doc?.first_name?.startsWith('GenName'))
+		.map((r) => ({ ...r.doc, _deleted: true }));
+
+	if (toDelete.length === 0) {
+		console.log(`  ✓ No dashboard test data found to delete.`);
+		return;
+	}
+
+	await bulkDocs(SHELTER_DB, toDelete);
+	console.log(`  ✓ Deleted ${toDelete.length} dashboard test documents.`);
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+	if (process.argv.includes('--delete-dashboard')) {
+		await deleteDashboardData();
+		process.exit(0);
+	}
+
 	const displayUrl = rawCouchUrl.replace(/\/\/([^:]+):[^@]+@/, '//$1:***@');
 	console.log(`\nSeeding mock data → ${displayUrl}\n`);
 	try {
@@ -789,6 +967,7 @@ async function main() {
 		await seedCatalogSopRatios();
 		await seedShelter();
 		await seedShelter2();
+		await seedDashboardData();
 		console.log('\nDone.\n');
 	} catch (err) {
 		console.error('\nSeed failed:', err);
