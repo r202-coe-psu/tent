@@ -93,7 +93,7 @@
 					reserved: reserved,
 					onHand: onHand,
 					target: target,
-					showOnHome: !isManualClosed,
+					showOnHome: camp.visible_on_home !== false,
 					isCutOff: isCutOff,
 					isManualClosed: isManualClosed,
 					campaignDoc: camp
@@ -107,16 +107,16 @@
 		const targetItem = derivedItems.find((i) => i.id === compoundId);
 		if (targetItem) {
 			const campaign = targetItem.campaignDoc;
-			const nextStatus = campaign.status === 'open' ? 'closed' : 'open';
+			const nextVisible = campaign.visible_on_home === false ? true : false;
 			updateCampaignMutation.mutate(
 				{
 					...campaign,
-					status: nextStatus
+					visible_on_home: nextVisible
 				},
 				{
 					onSuccess: () => {
 						toast.success(
-							nextStatus === 'open'
+							nextVisible
 								? `กำลังโปรโมต "${targetItem.name}" บนหน้าแรก`
 								: `ซ่อน "${targetItem.name}" จากหน้าแรก`
 						);

@@ -129,6 +129,7 @@ export interface DonationCampaign extends BaseDoc {
 	opens_at?: Timestamp;
 	closes_at?: Timestamp | null;
 	notes?: string;
+	visible_on_home?: boolean;
 }
 
 export type OperationsDoc = StockLedger | Donation | DonationCampaign;
@@ -327,7 +328,8 @@ export const campaignInputSchema = z.object({
 		.min(1, 'A campaign needs at least one item'),
 	opens_at: z.string().optional(),
 	closes_at: z.string().nullable().optional(),
-	notes: z.string().trim().optional()
+	notes: z.string().trim().optional(),
+	visible_on_home: z.boolean().optional().default(true)
 });
 export type CampaignInput = z.input<typeof campaignInputSchema>;
 
@@ -340,6 +342,7 @@ export function createCampaign(input: CampaignInput, ctx: AuthorContext): Donati
 			title: d.title,
 			needs: d.needs,
 			status: 'open' as const,
+			visible_on_home: d.visible_on_home,
 			...(d.opens_at ? { opens_at: d.opens_at } : {}),
 			...(d.closes_at !== undefined ? { closes_at: d.closes_at } : {}),
 			...(d.notes ? { notes: d.notes } : {})
