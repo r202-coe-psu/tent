@@ -64,11 +64,10 @@ export const POST = async ({ request, getClientAddress }) => {
 		expiresAtDate.setHours(expiresAtDate.getHours() + 72);
 
 		const phoneHash = await sha256Hex(phone);
-		const trackingTokenHash = await sha256Hex(trackingToken);
 
 		// 5. Save to CouchDB (Real database layer)
 		const couchDoc = {
-			_id: `donation:${trackingTokenHash}`,
+			_id: `donation:${trackingToken}`,
 			type: 'donation',
 			schema_v: 2,
 			channel: 'public',
@@ -79,7 +78,7 @@ export const POST = async ({ request, getClientAddress }) => {
 			expires_at: expiresAtDate.toISOString(),
 			created_by: 'public',
 			booking_ref: bookingRef,
-			tracking_token_hash: trackingTokenHash,
+			tracking_token: trackingToken, // store token directly as requested
 			kind: 'items',
 			donor: {
 				name: parsed.data.donor.name,

@@ -26,7 +26,8 @@ export const GET = async ({ params, getClientAddress }) => {
 		const extracted = match[1];
 		const shelterCode = extracted === 'DON' ? 'SH001' : extracted;
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
-		const docId = `donation:${tracking_token}`;
+		const trackingTokenHash = await sha256Hex(tracking_token);
+		const docId = `donation:${trackingTokenHash}`;
 
 		// Query CouchDB directly
 		const res = await adminRaw(`/${shelterDb}/${encodeURIComponent(docId)}`, 'GET');
@@ -40,8 +41,8 @@ export const GET = async ({ params, getClientAddress }) => {
 
 		const donation = res.data as PublicDonationDoc;
 
-		// Fallback for older hashed documents if needed could go here.
-		if (donation.tracking_token && donation.tracking_token !== tracking_token) {
+		// Check if token matches
+		if (donation.tracking_token_hash && donation.tracking_token_hash !== trackingTokenHash) {
 			return json({ success: false, error: 'Invalid token' }, { status: 403 });
 		}
 
@@ -118,7 +119,8 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		const extracted = match[1];
 		const shelterCode = extracted === 'DON' ? 'SH001' : extracted;
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
-		const docId = `donation:${tracking_token}`;
+		const trackingTokenHash = await sha256Hex(tracking_token);
+		const docId = `donation:${trackingTokenHash}`;
 
 		// Fetch latest rev from CouchDB
 		const latestDocRes = await adminRaw(`/${shelterDb}/${encodeURIComponent(docId)}`, 'GET');
@@ -132,7 +134,7 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 
 		const latestDoc = latestDocRes.data as PublicDonationDoc;
 
-		if (latestDoc.tracking_token && latestDoc.tracking_token !== tracking_token) {
+		if (latestDoc.tracking_token_hash && latestDoc.tracking_token_hash !== trackingTokenHash) {
 			return json({ success: false, error: 'Invalid token' }, { status: 403 });
 		}
 
