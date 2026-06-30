@@ -281,9 +281,7 @@
 				<div class="mt-2 grid grid-cols-2 gap-3">
 					<!-- LINE -->
 					<a
-						href="https://line.me"
-						target="_blank"
-						rel="noopener noreferrer"
+						href="#line"
 						class="flex items-center justify-center gap-2 rounded-xl bg-chart-2 py-3.5 text-sm font-bold text-white transition-colors hover:bg-chart-2/90"
 					>
 						<MessageCircle class="h-4.5 w-4.5" />
@@ -291,9 +289,7 @@
 					</a>
 					<!-- Facebook -->
 					<a
-						href="https://facebook.com"
-						target="_blank"
-						rel="noopener noreferrer"
+						href="#facebook"
 						class="flex items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-bold text-white transition-colors hover:bg-primary-dark"
 					>
 						<Globe class="h-4.5 w-4.5" />

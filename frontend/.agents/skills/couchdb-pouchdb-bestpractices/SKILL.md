@@ -143,6 +143,86 @@ $effect(() => {
 });
 ```
 
+## 6. CouchDB View Naming Conventions
+
+All views live in a **single design document per database**: `_design/app`. Never create additional design docs (e.g. `_design/analytics`, `_design/reports`) — deploy all views together at provisioning time.
+
+### View name pattern: `{subject}[_{qualifier}]`
+
+`snake_case` only. The subject is the entity or metric being aggregated (noun). The qualifier narrows the meaning.
+
+| Qualifier type | Pattern | Examples |
+|---|---|---|
+| None (bare aggregate) | `{subject}` | `occupancy` |
+| State/filter | `{subject}_{state}` | `needs_open` |
+| Computed metric / running total | `{subject}_{metric}` | `stock_balance`, `meals_served`, `slot_availability` |
+| Most-recent per entity | `latest_{subject}` | `latest_screening` |
+| Grouped by dimension | `{subject}_by_{dimension}` | `registrations_by_date`, `demographics_by_age`, `demographics_by_nationality` |
+
+**Rules:**
+1. Subject is always a noun — never a verb or action word.
+2. Use `latest_` prefix only for views that return the most recent document per entity key (combine with `reduce=false` and `descending=true` or use `_count` reduce on a composite key).
+3. Use `_by_{dimension}` when the view's primary purpose is breakdown/grouping (query with `?group=true`).
+4. A view that fits multiple patterns — pick the most descriptive qualifier, not the shortest.
+5. Never abbreviate: `registrations` not `regs`, `demographics` not `demo`.
+
+### Map key conventions
+
+| Purpose | Key shape | Notes |
+|---|---|---|
+| Single aggregate | `emit(null, value)` | Single reduced result, no grouping |
+| Group by state/field | `emit(doc.field, value)` | Query with `?group=true` |
+| Time-series | `emit([doc.date, doc.sub_key], value)` | Coarsest dimension first; use `startkey`/`endkey` for range |
+| Latest-per-entity | `emit([doc.entity_id, doc.occurred_at], null)` | Descending + limit=1 per entity |
+| Composite breakdown | `emit([doc.primary, doc.secondary], value)` | `?group_level=1` for top-level only |
+
+Value conventions: `1` for count, `doc.quantity` (or numeric field) for sum, `null` for map-only views.
+
+### Query parameter conventions
+
+| Scenario | Parameters |
+|---|---|
+| Single aggregate value | `?reduce=true` (default) |
+| Per-key breakdown | `?group=true` |
+| Top-level group only | `?group_level=1` |
+| Date range | `?startkey=["2026-01-01"]&endkey=["2026-12-31￰"]` |
+| Raw map rows (no reduce) | `?reduce=false` |
+
+The `￰` high-value sentinel at the end of string ranges ensures all sub-keys under a date prefix are included.
+
+### Calling views from `+server.ts`
+
+```typescript
+// do this — always via adminRaw in +server.ts, never from the client
+import { adminRaw } from '$lib/server/couch-admin';
+
+const db = `shelter_${params.code}`;
+
+// Single aggregate
+const { data: occ } = await adminRaw(`/${db}/_design/app/_view/occupancy`, 'GET');
+// data.rows[0].value = { total, present, checked_out }
+
+// Per-key breakdown
+const { data: demo } = await adminRaw(
+  `/${db}/_design/app/_view/demographics_by_age?group=true`, 'GET'
+);
+// data.rows = [{ key: "0-4", value: 12 }, { key: "5-11", value: 8 }, ...]
+
+// Date range
+const start = '2026-06-01';
+const end = '2026-06-30￰';
+const { data: reg } = await adminRaw(
+  `/${db}/_design/app/_view/registrations_by_date?group=true&startkey="${start}"&endkey="${end}"`,
+  'GET'
+);
+```
+
+```typescript
+// don't do this — never query views from the browser/client
+const res = await fetch(`/couch/shelter_sh001/_design/app/_view/occupancy`);
+// Bypasses server auth guard and leaks DB structure to the client
+```
+
 ## Reference Documentation
 
 - **Database Setup & Lab**: `docs/create-database.html` - Guide on DB creation, security, validation, user creation, and status codes.
