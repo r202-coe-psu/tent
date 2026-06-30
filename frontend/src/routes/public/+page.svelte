@@ -21,6 +21,7 @@
 	import PublicQuickServiceCard from '$lib/components/public-quick-service-card.svelte';
 	import PublicEmergencyBanner from '$lib/components/public-emergency-banner.svelte';
 	import PublicHeroMetrics from '$lib/components/public-hero-metrics.svelte';
+	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -88,59 +89,59 @@
 			<PublicQuickServiceCard
 				title="ระเบียบสิทธิ์ผู้<br/>ประสบภัย"
 				badge="ด่วน<br/>ที่สุด"
-				badgeClass="bg-red-50 text-red-600"
+				badgeClass="bg-danger-muted text-danger"
 				description="ท่านสามารถยื่นขอลงทะเบียนเข้าพัก สแกนเข้าออก หรือจองสิทธิ์ล่วงหน้าเพื่อจัดสรรเต็นท์ส่วนตัว ยา และเครื่องนุ่งห่ม"
 				icon={ShieldAlert}
-				iconClass="bg-red-50 text-red-500"
+				iconClass="bg-danger-muted/30 text-danger"
 			>
-				<button class="flex w-full items-center justify-center rounded-xl bg-[#1e3a8a] px-3 py-3 text-xs font-bold text-white transition-colors hover:bg-blue-900 shadow-sm">
+				<PublicActionBtn>
 					ลงทะเบียน
-				</button>
+				</PublicActionBtn>
 			</PublicQuickServiceCard>
 
 			<!-- สำหรับผู้ใจบุญ / บริจาค -->
 			<PublicQuickServiceCard
 				title="สำหรับผู้ใจบุญ /<br/>บริจาค"
 				badge="Wishlist"
-				badgeClass="bg-blue-50 text-blue-600"
+				badgeClass="bg-primary-muted text-primary"
 				description="ร่วมประสานงานมอบอาหารปรุงสุก วัตถุดิบ น้ำดื่ม หรือสมทบกองทุน EOC ข้อมูลจัดซื้อโปร่งใส ตรวจสอบได้ทันที"
 				icon={Package}
-				iconClass="bg-blue-50 text-blue-500"
+				iconClass="bg-primary-muted/50 text-primary"
 			>
-				<button class="flex w-full items-center justify-center rounded-xl bg-[#1e3a8a] px-3 py-3 text-xs font-bold text-white transition-colors hover:bg-blue-900 shadow-sm">
+				<PublicActionBtn>
 					แจ้งบริจาคสิ่งของล่วงหน้า
-				</button>
-				<button class="flex w-full items-center justify-center rounded-xl bg-transparent border border-[#1e3a8a]/20 px-3 py-3 text-[11px] font-bold text-[#1e3a8a] transition-colors hover:bg-slate-50 shadow-sm">
+				</PublicActionBtn>
+				<PublicActionBtn variant="outline">
 					ดูบัญชีรับบริจาค / บอร์ดขอของ
-				</button>
+				</PublicActionBtn>
 			</PublicQuickServiceCard>
 
 			<!-- สำหรับทีมอาสาสมัคร -->
 			<PublicQuickServiceCard
 				title="สำหรับทีมอาสา<br/>สมัคร"
 				badge="ร่วมแรง<br/>กาย"
-				badgeClass="bg-green-50 text-green-600"
+				badgeClass="bg-chart-2/15 text-chart-2"
 				description="ร่วมลงทะเบียนจองกะงานฝ่ายสวัสดิการ แจกจ่าย ขนย้าย แพทย์สนาม หรือสนับสนุนเจ้าหน้าที่ ณ พื้นที่อุทกภัยชายแดนใต้"
 				icon={UserPlus}
-				iconClass="bg-green-50 text-green-500"
+				iconClass="bg-chart-2/15 text-chart-2"
 			>
-				<button class="flex w-full items-center justify-center rounded-xl bg-[#1e3a8a] px-3 py-3 text-xs font-bold text-white transition-colors hover:bg-blue-900 shadow-sm">
+				<PublicActionBtn>
 					สมัคร / จองกะช่วยเหลือ
-				</button>
+				</PublicActionBtn>
 			</PublicQuickServiceCard>
 
 			<!-- สืบค้นกองสิทธิ์ญาติ -->
 			<PublicQuickServiceCard
 				title="สืบค้นกองสิทธิ์<br/>ญาติ"
 				badge="PDPA<br/>Shield"
-				badgeClass="bg-purple-50 text-purple-600"
+				badgeClass="bg-accent-purple-muted text-accent-purple"
 				description="เช็ครายชื่อผู้ประสบภัย ปลอดภัยในพิกัดศูนย์ควบคุม ตรึงระบบเก็บรวบรวมหลักฐานและส่งต่ออย่างเป็นความลับขั้นสูงสุด"
 				icon={Search}
-				iconClass="bg-purple-50 text-purple-500"
+				iconClass="bg-accent-purple-muted/50 text-accent-purple"
 			>
-				<button class="flex w-full items-center justify-center rounded-xl bg-[#1e3a8a] px-3 py-3 text-xs font-bold text-white transition-colors hover:bg-blue-900 shadow-sm">
+				<PublicActionBtn>
 					ค้นหารายบุคคลด่วนที่สุด
-				</button>
+				</PublicActionBtn>
 			</PublicQuickServiceCard>
 		</div>
 	</section>

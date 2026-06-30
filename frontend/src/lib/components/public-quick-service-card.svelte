@@ -30,7 +30,7 @@
 	</div>
 
 	<div class="mb-2 flex items-start justify-between gap-2">
-		<h3 class="text-sm leading-snug font-bold text-slate-800" style="word-break: break-word;">
+		<h3 class="text-sm leading-snug font-bold text-card-foreground" style="word-break: break-word;">
 			{@html title}
 		</h3>
 		{#if badge}
@@ -40,7 +40,7 @@
 		{/if}
 	</div>
 
-	<p class="mb-6 text-[11px] leading-relaxed text-slate-500">{description}</p>
+	<p class="mb-6 text-[11px] leading-relaxed text-muted-foreground">{description}</p>
 
 	<div class="mt-auto flex flex-col gap-2">
 		{@render children?.()}
