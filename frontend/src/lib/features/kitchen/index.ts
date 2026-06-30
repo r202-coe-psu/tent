@@ -1,3 +1,12 @@
+// UI components
+export { default as MealPlanList } from './ui/meal-plan-list.svelte';
+export { default as MealPlanForm } from './ui/meal-plan-form.svelte';
+export { default as GasManagement } from './ui/gas-management.svelte';
+
+// Domain — meal calculation (T-25)
+export { calculateMealIngredients, RICE_RECIPE_ID } from './domain/meal-calc';
+export type { MealCalcSource, MealCalcResult } from './domain/meal-calc';
+
 // Domain — documents
 export type {
 	MealPlan,
@@ -12,7 +21,9 @@ export type {
 	MealPlanStatus,
 	MealPlanInput,
 	KitchenRequisitionInput,
-	MealServiceInput
+	MealServiceInput,
+	GasCylinderType,
+	GasCylinderTypeInput
 } from './domain/kitchen';
 
 // Domain — schemas, factories, guards, labels
@@ -40,9 +51,15 @@ export {
 	kitchenKeys,
 	useMealPlans,
 	useCreateMealPlan,
+	useCreateMealPlanCalc,
+	useConfirmMealPlan,
 	useRequisitions,
 	useIssueRequisition,
 	useMealServices,
 	useRecordMealService,
+	useGasCylinderTypes,
+	useCreateGasCylinderType,
+	useUpdateGasCylinderType,
+	useDeleteGasCylinderType,
 	startKitchenLiveQuery
 } from './application/queries';

@@ -9,3 +9,6 @@ export {
 	type CreateNewVersionResult,
 	type SopRatioKey
 } from './domain/sop-ratio';
+
+// Application — TanStack Query hooks
+export { sopRatioKeys, useActiveSopProfile, useSopProfiles } from './application/queries';

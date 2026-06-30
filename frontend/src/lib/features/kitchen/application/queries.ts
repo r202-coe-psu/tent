@@ -3,13 +3,17 @@ import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { kitchenRepository } from '../data/kitchen.pouch';
-import type { MealPlanInput, KitchenRequisitionInput, MealServiceInput } from '../domain/kitchen';
+import { sopRatioRepository } from '$lib/features/sop-ratios/data/sop-ratio.pouch';
+import type { MealPlanInput, KitchenRequisitionInput, MealServiceInput, GasCylinderTypeInput } from '../domain/kitchen';
+import { calculateMealIngredients } from '../domain/meal-calc';
+import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
 
 export const kitchenKeys = {
 	all: ['kitchen'] as const,
 	mealPlans: () => [...kitchenKeys.all, 'meal_plans'] as const,
 	requisitions: () => [...kitchenKeys.all, 'requisitions'] as const,
-	mealServices: () => [...kitchenKeys.all, 'meal_services'] as const
+	mealServices: () => [...kitchenKeys.all, 'meal_services'] as const,
+	gasCylinderTypes: () => [...kitchenKeys.all, 'gas_cylinder_types'] as const
 };
 
 // --- MealPlan ---
@@ -24,6 +28,39 @@ export const useCreateMealPlan = () =>
 	createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: MealPlanInput; ctx: AuthorContext }) =>
 			kitchenRepository().createMealPlan(input, ctx)
+	}));
+
+export const useCreateMealPlanCalc = () =>
+	createMutation(() => ({
+		mutationFn: async ({
+			date,
+			meal,
+			headcount,
+			ctx
+		}: {
+			date: string;
+			meal: MealPeriod;
+			headcount: MealPlanHeadcount;
+			ctx: AuthorContext;
+		}) => {
+			const profile = await sopRatioRepository().getActiveProfile();
+			if (!profile) throw new Error('No active SOP profile found — seed one first');
+			const riceG = profile.ratios.rice_g_per_person_meal;
+			if (!riceG) throw new Error('Active SOP profile missing rice_g_per_person_meal');
+			const { recipes } = calculateMealIngredients(
+				headcount,
+				riceG,
+				profile._id,
+				profile.version,
+				new Date().toISOString()
+			);
+			return kitchenRepository().createMealPlan({ date, meal, headcount, recipes }, ctx);
+		}
+	}));
+
+export const useConfirmMealPlan = () =>
+	createMutation(() => ({
+		mutationFn: (plan: any) => kitchenRepository().confirmMealPlan(plan)
 	}));
 
 // --- KitchenRequisition ---
@@ -52,6 +89,32 @@ export const useRecordMealService = () =>
 	createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: MealServiceInput; ctx: AuthorContext }) =>
 			kitchenRepository().recordMealService(input, ctx)
+	}));
+
+// --- GasCylinderType ---
+
+export const useGasCylinderTypes = () =>
+	createQuery(() => ({
+		queryKey: [...kitchenKeys.all, 'gas_cylinder_types'],
+		queryFn: () => kitchenRepository().listGasCylinderTypes()
+	}));
+
+export const useCreateGasCylinderType = () =>
+	createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: GasCylinderTypeInput; ctx: AuthorContext }) =>
+			kitchenRepository().createGasCylinderType(input, ctx)
+	}));
+
+export const useUpdateGasCylinderType = () =>
+	createMutation(() => ({
+		mutationFn: ({ doc, input }: any) =>
+			kitchenRepository().updateGasCylinderType(doc, input)
+	}));
+
+export const useDeleteGasCylinderType = () =>
+	createMutation(() => ({
+		mutationFn: (doc: any) =>
+			kitchenRepository().deleteGasCylinderType(doc)
 	}));
 
 // --- Live sync ---
