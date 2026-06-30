@@ -50,6 +50,7 @@ import {
 	type StockLedgerInput,
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
+import { createInitialProfile } from '$lib/features/sop-ratios';
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
@@ -195,6 +196,10 @@ const SH002_CODE = 'SH002';
 const SH002_DB = 'shelter_sh002';
 const SH002_CTX: AuthorContext = { shelterCode: SH002_CODE, createdBy: 'seed' };
 
+const SHELTER_CODE_2 = 'SH002';
+const SHELTER_DB_2 = 'shelter_sh002';
+const CTX_2: AuthorContext = { shelterCode: SHELTER_CODE_2, createdBy: 'seed' };
+
 // Supply item IDs — referenced by operations seed data below.
 const ITEM = {
 	rice: 'item:rice',
@@ -211,26 +216,28 @@ async function seedRegistry(): Promise<void> {
 	await ensureDb('registry');
 	await setSecurity('registry', {
 		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [] }
+		members: {
+			names: [],
+			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
+		}
 	});
 
 	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
-	const rows =
-		status === 200
-			? ((data as { rows?: { doc?: { type?: string; code?: string } }[] }).rows ?? [])
-			: [];
-	const existingCodes = new Set(
-		rows.filter((r) => r.doc?.type === 'shelter').map((r) => r.doc?.code)
-	);
+	let hasSH001 = false;
+	let hasSH002 = false;
+	if (status === 200) {
+		const rows = (data as { rows?: { doc?: { type?: string; code?: string } }[] }).rows ?? [];
+		hasSH001 = rows.some((r) => r.doc?.type === 'shelter' && r.doc?.code === SHELTER_CODE);
+		hasSH002 = rows.some((r) => r.doc?.type === 'shelter' && r.doc?.code === SHELTER_CODE_2);
+	}
 
-	const ts = nowIso();
-
-	if (!existingCodes.has(SH001_CODE)) {
+	const ts = now();
+	if (!hasSH001) {
 		await putDoc('registry', {
 			_id: `shelter:${ulid()}`,
 			type: 'shelter',
-			schema_v: 2,
-			code: SH001_CODE,
+			schema_v: 1,
+			code: SHELTER_CODE,
 			name: 'ศูนย์พักพิงสงขลา (ทดสอบ)',
 			status: 'open',
 			capacity: 200,
@@ -252,36 +259,36 @@ async function seedRegistry(): Promise<void> {
 			updated_at: ts,
 			created_by: 'seed'
 		});
-		console.log('  ✓ registry: shelter SH001 created');
+		console.log('  ✓ registry: 1 shelter master (SH001)');
 	} else {
 		console.log('  ✓ registry: shelter SH001 already exists, skipping');
 	}
 
-	if (!existingCodes.has(SH002_CODE)) {
+	if (!hasSH002) {
 		await putDoc('registry', {
 			_id: `shelter:${ulid()}`,
 			type: 'shelter',
-			schema_v: 2,
-			code: SH002_CODE,
-			name: 'ศูนย์พักพิงเทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)',
+			schema_v: 1,
+			code: SHELTER_CODE_2,
+			name: 'ศูนย์พักพิงปัตตานี (ทดสอบ)',
 			status: 'open',
-			capacity: 150,
-			zones: [{ code: 'Z1', name: 'โซนทั่วไป', capacity: 150 }],
-			area_m2: 600,
+			capacity: 100,
+			zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 100 }],
+			area_m2: 400,
 			facilities: {
-				toilets_female: 3,
-				toilets_male: 3,
+				toilets_female: 2,
+				toilets_male: 2,
 				toilets_accessible: 1,
 				showers: 4,
-				water_points: 4,
-				handwashing_stations: 6
+				water_points: 2,
+				handwashing_stations: 4
 			},
 			opened_at: ts,
 			created_at: ts,
 			updated_at: ts,
 			created_by: 'seed'
 		});
-		console.log('  ✓ registry: shelter SH002 created');
+		console.log('  ✓ registry: 1 shelter master (SH002)');
 	} else {
 		console.log('  ✓ registry: shelter SH002 already exists, skipping');
 	}
@@ -293,7 +300,10 @@ async function seedCatalog(): Promise<void> {
 	await ensureDb('catalog');
 	await setSecurity('catalog', {
 		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [] }
+		members: {
+			names: [],
+			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
+		}
 	});
 
 	const items = [
@@ -362,6 +372,44 @@ async function seedCatalog(): Promise<void> {
 
 	for (const doc of [...items, ...recipes]) await putDoc('catalog', doc);
 	console.log(`  ✓ catalog: ${items.length} supply items, ${recipes.length} recipes`);
+}
+
+async function seedCatalogSopRatios(): Promise<void> {
+	await ensureDb('catalog');
+
+	// Idempotent check: check if the Sphere Baseline master profile already exists in catalog DB
+	// We use the deterministic ID 'master_sphere_baseline' to do an O(1) direct document lookup
+	const deterministicId = 'master_sphere_baseline';
+	const fullDocId = `sop_profile:${deterministicId}`;
+	const { status } = await couchReq('GET', `/catalog/${encodeURIComponent(fullDocId)}`);
+
+	if (status === 200) {
+		console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" already exists, skipping');
+		return;
+	}
+
+	if (status !== 404) {
+		throw new Error(`seedCatalogSopRatios: unexpected status ${status} checking ${fullDocId}`);
+	}
+
+	const { profile, audit } = createInitialProfile(
+		'sop_profile',
+		'Sphere Baseline',
+		{
+			water_l_per_person_day: 15, // liters/person/day
+			rice_g_per_person_meal: 200, // grams/person/meal
+			toilet_per_person: 0.05 // toilets/person
+		},
+		{ createdBy: 'seed' }
+	);
+
+	// Override standard ULIDs with deterministic IDs for idempotency scan boundary
+	profile._id = fullDocId;
+	audit.target_id = fullDocId;
+	audit._id = `audit:seed_sphere_baseline`;
+
+	await bulkDocs('catalog', [profile, audit]);
+	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded');
 }
 
 // ─── seedShelter ──────────────────────────────────────────────────────────────
@@ -686,6 +734,66 @@ async function seedShelter(code: string, dbName: string, ctx: AuthorContext): Pr
 	);
 }
 
+async function seedShelter2(): Promise<void> {
+	await ensureDb(SHELTER_DB_2);
+	await setSecurity(SHELTER_DB_2, {
+		admins: { names: [], roles: ['system_admin'] },
+		members: { names: [], roles: [`shelter:${SHELTER_CODE_2}`] }
+	});
+
+	const { status, data } = await couchReq('GET', `/${SHELTER_DB_2}/_all_docs?limit=1`);
+	if (status === 200 && (data as { rows?: unknown[] }).rows?.length) {
+		console.log(`  ✓ ${SHELTER_DB_2}: already seeded, skipping`);
+		return;
+	}
+
+	// — households ——————————————————————————————————————————————————————————————
+	const hhInputs: HouseholdInput[] = [
+		{
+			label: 'ครอบครัวปัตตานี',
+			zone: 'Z1',
+			head_evacuee_id: null,
+			pets: [],
+			notes: 'ตัวอย่าง SH002'
+		}
+	];
+	const [hh1] = hhInputs.map((h) => createHousehold(h, CTX_2));
+
+	// — evacuees ————————————————————————————————————————————————————————————————
+	const evacueeInputs: EvacueeInput[] = [
+		{
+			first_name: 'ดานียา',
+			last_name: 'มานะ',
+			gender: 'female',
+			phone: '0899998888',
+			birth_year: 1995,
+			religion: 'muslim',
+			special_needs: [],
+			household_id: hh1._id,
+			registered_via: 'import'
+		}
+	];
+	const evacuees = evacueeInputs.map((e) => createEvacuee(e, CTX_2));
+
+	const movementInputs: MovementInput[] = evacuees.map((e) => ({
+		evacuee_id: e._id,
+		action: 'check_in' as const,
+		zone: 'Z1'
+	}));
+	const movements = movementInputs.map((m) => createMovement(m, CTX_2));
+	const checkedInEvacuees = evacuees.map((e, i) => applyMovementToStay(e, movements[i]));
+
+	const stockInputs: StockLedgerInput[] = [
+		{ item_id: ITEM.water, qty: 100, unit: 'bottle', reason: 'receive', ref_id: null }
+	];
+	const stockEntries = stockInputs.map((s) => createStockLedger(s, CTX_2));
+
+	const allDocs = [hh1, ...checkedInEvacuees, ...movements, ...stockEntries];
+	await bulkDocs(SHELTER_DB_2, allDocs);
+
+	console.log(`  ✓ ${SHELTER_DB_2}: 1 household, 1 evacuee, 1 movement, 1 stock entry`);
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -694,8 +802,9 @@ async function main() {
 	try {
 		await seedRegistry();
 		await seedCatalog();
-		await seedShelter(SH001_CODE, SH001_DB, SH001_CTX);
-		await seedShelter(SH002_CODE, SH002_DB, SH002_CTX);
+		await seedCatalogSopRatios();
+		await seedShelter();
+		await seedShelter2();
 		console.log('\nDone.\n');
 	} catch (err) {
 		console.error('\nSeed failed:', err);

@@ -22,6 +22,7 @@
 	import PublicEmergencyBanner from '$lib/components/public-emergency-banner.svelte';
 	import PublicHeroMetrics from '$lib/components/public-hero-metrics.svelte';
 	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
+	import Button from '$lib/components/ui/button/button.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -242,21 +243,21 @@
 				<!-- LINE / FB (Hidden per T-57 OP-2) -->
 				<div class="mt-2 grid-cols-2 gap-3 hidden">
 					<!-- LINE -->
-					<button
+					<Button
 						type="button"
 						class="flex items-center justify-center gap-2 rounded-xl bg-chart-2 py-3.5 text-sm font-bold text-white transition-colors hover:bg-chart-2/90"
 					>
 						<MessageCircle class="h-4.5 w-4.5" />
 						ติดต่อผ่าน LINE
-					</button>
+					</Button>
 					<!-- Facebook -->
-					<button
+					<Button
 						type="button"
 						class="flex items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-bold text-white transition-colors hover:bg-primary-dark"
 					>
 						<Globe class="h-4.5 w-4.5" />
 						ศูนย์เพจ Facebook
-					</button>
+					</Button>
 				</div>
 			</div>
 		</div>
