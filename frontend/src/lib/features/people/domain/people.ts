@@ -460,24 +460,27 @@ export interface EwarSymptomGroup {
 
 export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 	{
-		title: 'กลุ่มอาการทางเดินอาหาร (Gastrointestinal)',
+		title: 'กลุ่มอาการทางเดินอาหาร',
 		symptoms: [
 			{
 				id: 'acute_watery_diarrhea',
 				emoji: '💧',
-				label: 'อุจจาระร่วงเฉียบพลันแบบเป็นน้ำ (Acute watery diarrhoea)',
-				sublabel: 'เพื่อเฝ้าระวังอหิวาตกโรค (Cholera)'
+				label: 'อุจจาระร่วงเฉียบพลันแบบเป็นน้ำ/อหิวาตกโรค (Acute watery diarrhoea / Cholera)'
 			},
 			{
 				id: 'acute_bloody_diarrhea',
 				emoji: '🩸',
-				label: 'อุจจาระร่วงเฉียบพลันแบบมีเลือดปน (Acute bloody diarrhoea)',
-				sublabel: 'เพื่อเฝ้าระวังโรคบิด (Shigellosis)'
+				label: 'ท้องร่วงเป็นเลือด/โรคบิด (Acute bloody diarrhoea / Shigellosis)'
+			},
+			{
+				id: 'typhoid',
+				emoji: '🌡️',
+				label: 'ไทฟอยด์ (Typhoid)'
 			}
 		]
 	},
 	{
-		title: 'กลุ่มอาการทางเดินหายใจ (Respiratory)',
+		title: 'กลุ่มอาการทางเดินหายใจ',
 		symptoms: [
 			{
 				id: 'acute_respiratory',
@@ -487,70 +490,98 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 		]
 	},
 	{
-		title: 'กลุ่มอาการไข้และโรคติดเชื้อ (Fevers & Infectious Diseases)',
+		title: 'กลุ่มโรคที่มีพาหะนำโรค',
 		symptoms: [
-			{
-				id: 'hemorrhagic_fever',
-				emoji: '🦟',
-				label: 'กลุ่มอาการไข้เลือดออกเฉียบพลัน (Acute haemorrhagic fever syndrome)',
-				sublabel: 'เช่น โรคไข้เลือดออก (Dengue)'
-			},
 			{
 				id: 'malaria',
 				emoji: '🤒',
-				label: 'ไข้มาลาเรีย (Malaria – suspected/confirmed)'
+				label: 'ไข้มาลาเรีย (Malaria)'
 			},
 			{
-				id: 'acute_jaundice',
-				emoji: '🟡',
-				label: 'กลุ่มอาการตีซ่านเฉียบพลัน / ตัวเหลืองตาเหลือง (Acute jaundice syndrome)',
-				sublabel: 'เพื่อเฝ้าระวังไวรัสตับอักเสบ เอ หรือ อี (Hepatitis A, E)'
-			},
-			{
-				id: 'typhoid',
-				emoji: '🧪',
-				label: 'ไข้ไทฟอยด์ (Typhoid)'
-			},
-			{
-				id: 'high_fever',
-				emoji: '🔥',
-				label: 'ไข้สูงอื่นๆ มากกว่า 38.5 องศาเซลเซียส (Other fever >38.5°C)'
+				id: 'dengue',
+				emoji: '🦟',
+				label: 'ไข้เลือดออก (Dengue)'
 			}
 		]
 	},
 	{
-		title: 'วัคซีนและการเฝ้าระวัง (Vaccine-preventable & Alert Diseases)',
+		title: 'กลุ่มโรคติดต่อรุนแรงและไข้ออกผื่น',
 		symptoms: [
-			{ id: 'measles', emoji: '🔴', label: 'โรคหัด / ไข้ออกผื่น (Measles)' },
+			{
+				id: 'measles',
+				emoji: '🔴',
+				label: 'โรคหัด (Measles)'
+			},
 			{
 				id: 'meningitis',
 				emoji: '🧠',
-				label: 'เยื่อหุ้มสมองอักเสบ (Meningitis - suspected)'
-			},
-			{ id: 'tetanus', emoji: '💉', label: 'บาดทะยัก (Tetanus)' },
-			{
-				id: 'afp',
-				emoji: '🦵',
-				label: 'กลุ่มอาการอัมพาตอ่อนปวกเปียกเฉียบพลัน / แขนขาอ่อนแรง (AFP)',
-				sublabel: 'เพื่อเฝ้าระวังโรคโปลิโอ'
+				label: 'เยื่อหุ้มสมองอักเสบ (Meningitis)'
 			},
 			{
 				id: 'diphtheria',
-				emoji: '🫁',
-				label: 'คอตีบ (Diphtheria) และ ไอกรน (Pertussis)'
+				emoji: '🗣️',
+				label: 'คอตีบ (Diphtheria)'
+			},
+			{
+				id: 'pertussis',
+				emoji: '😮‍💨',
+				label: 'ไอกรน (Pertussis)'
 			}
 		]
 	},
 	{
-		title: 'กลุ่มการบาดเจ็บและเหตุฉุกเฉินอื่นๆ (Injuries & Emergencies)',
+		title: 'กลุ่มอาการตับอักเสบ',
 		symptoms: [
-			{ id: 'trauma', emoji: '💥', label: 'การบาดเจ็บ / อุบัติเหตุฉุกเฉินหนัก (Trauma)' },
+			{
+				id: 'acute_jaundice_syndrome',
+				emoji: '🟡',
+				label: 'ภาวะดีซ่านเฉียบพลัน (Acute Jaundice Syndrome)'
+			},
+			{
+				id: 'Hepatitis A or E',
+				emoji: '🦠',
+				label: 'ไวรัสตับอักเสบชนิด เอ หรือ อี (Hepatitis A or E)'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มอาการทางระบบประสาทและอื่นๆ',
+		symptoms: [
+			{
+				id: 'acute_flaccid_paralysis',
+				emoji: '🦿',
+				label: 'ภาวะกล้ามเนื้ออ่อนปวกเปียกเฉียบพลันหรือโรคโปลิโอ (Acute Flaccid Paralysis / Polio)'
+			},
+			{
+				id: 'tetanus',
+				emoji: '🩹',
+				label: 'บาดทะยัก (Tetanus)'
+			},
+			{
+				id: 'acute_haemorrhagic_fever_syndrome',
+				emoji: '🩸',
+				label: 'กลุ่มอาการไข้เลือดออกรุงแรง (Acute Haemorrhagic Fever Syndrome)'
+			}
+		]
+	},
+	{
+		title: 'อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ',
+		symptoms: [
+			{
+				id: 'high_fever',
+				emoji: '🔥',
+				label: 'อาการไข้สูงกว่า 38.5 องศาเซลเซียส'
+			},
+			{
+				id: 'trauma',
+				emoji: '💥',
+				label: 'การบาดเจ็บ (Trauma)'
+			},
 			{
 				id: 'chemical_poisoning',
-				emoji: '☣️',
-				label: 'การได้รับสารพิษหรือสารเคมี (Chemical poisoning)'
-			},
-			{ id: 'other_illness', emoji: '⚠️', label: 'อาการเจ็บป่วยอื่นๆ (Others)' }
+				emoji: '☠️',
+				label: 'สารเคมีเป็นพิษ (Chemical Poisoning)'
+			}
 		]
 	}
 ];
