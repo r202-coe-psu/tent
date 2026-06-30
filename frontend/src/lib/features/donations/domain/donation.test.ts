@@ -134,6 +134,3 @@ describe('isDonationPreDeclaration (Type Guard)', () => {
 // receiveDonation — T-16-3.2 Audit Trail
 // ---------------------------------------------------------------------------
 
-        expect(isDonationPreDeclaration(mockDoc)).toBe(false);
-    });
-});

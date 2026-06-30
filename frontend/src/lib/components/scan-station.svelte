@@ -276,13 +276,13 @@
 			>
 				<div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div>
-						<label class="mb-1.5 block text-xs font-bold text-muted-foreground"
-							>ชื่อผู้บริจาค <span class="text-red-500">*</span></label
+						<div class="mb-1.5 block text-xs font-bold text-muted-foreground"
+							>ชื่อผู้บริจาค <span class="text-red-500">*</span></div
 						>
 						<Input bind:value={walkinDonorName} placeholder="เช่น คุณสมชาย ใจดี" class="h-9 text-xs" />
 					</div>
 					<div>
-						<label class="mb-1.5 block text-xs font-bold text-muted-foreground">เบอร์โทรติดต่อ</label>
+						<div class="mb-1.5 block text-xs font-bold text-muted-foreground">เบอร์โทรติดต่อ</div>
 						<Input bind:value={walkinDonorPhone} placeholder="08X-XXX-XXXX" class="h-9 text-xs" />
 					</div>
 				</div>

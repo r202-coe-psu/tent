@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { PageData } from './$types';
+	import { onDestroy, onMount } from 'svelte';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Navigation from '@lucide/svelte/icons/navigation';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
@@ -13,13 +15,46 @@
 	import Phone from '@lucide/svelte/icons/phone';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import Globe from '@lucide/svelte/icons/globe';
+	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import Package from '@lucide/svelte/icons/package';
+	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import PublicQuickServiceCard from '$lib/components/public-quick-service-card.svelte';
+	import PublicEmergencyBanner from '$lib/components/public-emergency-banner.svelte';
+	import PublicHeroMetrics from '$lib/components/public-hero-metrics.svelte';
+
+	let { data }: { data: PageData } = $props();
 
 	// Demo data for shelters in emergency banner
 	const alerts = [
 		{ name: 'ศูนย์ค่ายทหาร (Primary)', capacity: 'เต็มความจุ (95%)', variant: 'danger' },
 		{ name: 'ศูนย์ ม.ราชภัฏ (Secondary)', capacity: 'ว่างรับได้ (40%)', variant: 'success' }
 	];
+
+	// OP-7: Polling state
+	let lastUpdated = $state(0);
+	$effect(() => { if (!lastUpdated) lastUpdated = data.lastUpdated; });
+	let isStale = $state(false);
+	
+	onMount(() => {
+		// Mock 10-minute polling (we'll just use a shorter interval for demo)
+		const pollInterval = setInterval(() => {
+			// Mock refetching
+			lastUpdated = Date.now();
+			isStale = false;
+		}, 600000); // 10 mins
+
+		// Stale threshold 30 minutes check
+		const staleCheck = setInterval(() => {
+			if (Date.now() - lastUpdated > 1800000) { // 30 mins
+				isStale = true;
+			}
+		}, 60000); // Check every minute
+
+		return () => {
+			clearInterval(pollInterval);
+			clearInterval(staleCheck);
+		};
+	});
 </script>
 
 <svelte:head>
@@ -28,158 +63,83 @@
 
 <div class="mx-auto max-w-7xl px-4 py-8 md:px-6">
 	<!-- 1. ประกาศด่วนระดับ 4 (อพยพทันที) -->
-	<div
-		class="mb-8 overflow-hidden rounded-xl border border-danger-border bg-danger-muted/30 shadow-xs"
-	>
-		<div class="flex flex-col border-l-4 border-danger p-5 md:flex-row md:items-start md:gap-4">
-			<!-- Alert Icon -->
-			<div
-				class="mb-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-danger-muted text-danger md:mb-0"
-			>
-				<ShieldAlert class="h-6 w-6" />
-			</div>
-			<!-- Alert Content -->
-			<div class="flex-1">
-				<h3 class="text-base font-bold text-danger">ประกาศด่วนระดับ 4 (อพยพทันที)</h3>
-				<p class="mt-1 text-sm leading-relaxed text-danger-subtle">
-					พื้นที่ อ.เมืองน้ำท่วมสูง 1.5 - 2 เมตร กระแสไฟถูกตัด
-					ขอให้ประชาชนในพื้นที่เสี่ยงเคลื่อนย้ายมายังศูนย์พักพิงที่เปิดรับด่วน
-				</p>
-				<!-- Shelter Badges -->
-				<div class="mt-4 flex flex-wrap gap-3">
-					{#each alerts as alert}
-						<div
-							class="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 shadow-2xs"
-						>
-							<span class="text-xs font-semibold text-card-foreground">{alert.name}</span>
-							<span
-								class="rounded-md px-2 py-0.5 text-[10px] font-bold uppercase
-								{alert.variant === 'danger' ? 'bg-danger-muted text-danger' : 'bg-chart-2/15 text-chart-2'}"
-							>
-								{alert.capacity}
-							</span>
-						</div>
-					{/each}
-				</div>
-			</div>
-		</div>
-	</div>
+	<PublicEmergencyBanner {alerts} />
 
-	<!-- 2. ค้นหาศูนย์พักพิงใกล้คุณ (Geo-Routing) -->
-	<div class="mb-12 overflow-hidden rounded-2xl bg-primary-dark text-primary-foreground shadow-lg">
-		<div class="relative px-6 py-12 text-center md:px-12 md:py-16">
-			<div class="relative mx-auto max-w-2xl">
-				<div
-					class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary-foreground/10 text-primary-foreground"
-				>
-					<MapPin class="h-6 w-6" />
-				</div>
-				<h2 class="text-2xl font-bold tracking-tight text-primary-foreground md:text-3xl">
-					ค้นหาศูนย์พักพิงใกล้คุณ (Geo-Routing)
-				</h2>
-				<p class="mt-2 text-sm text-primary-foreground/80">
-					กรุณาระบุตำบล หรือ อำเภอ เพื่อให้ระบบแนะนำศูนย์ที่เดินทางปลอดภัยและยังว่างอยู่
-				</p>
+	<!-- 2. Hero & Real-Time Metrics (T-57) -->
+	<PublicHeroMetrics
+		summary={data.summary}
+		flags={data.flags}
+		{lastUpdated}
+		{isStale}
+	/>
 
-				<!-- Search Form -->
-				<div class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-					<div class="relative flex-1">
-						<input
-							type="text"
-							placeholder="เช่น ต.คอหงส์ หรือ อ.หาดใหญ่"
-							class="w-full rounded-xl border-0 bg-card px-4 py-3.5 pl-11 text-sm text-card-foreground placeholder-muted-foreground shadow-md outline-hidden focus:ring-2 focus:ring-primary"
-						/>
-						<Search class="absolute top-4 left-4 h-4.5 w-4.5 text-muted-foreground" />
-					</div>
-					<button
-						class="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-sm font-bold text-primary-foreground shadow-md transition-colors hover:bg-primary/90"
-					>
-						<Navigation class="h-4 w-4" />
-						นำทาง
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<!-- 3. เมนูด่วน (Quick Services) -->
+	<!-- 3. เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์ -->
 	<section class="mb-12">
+		<div class="mb-8">
+			<div class="flex items-center gap-2 mb-2">
+				<Compass class="h-5 w-5 text-slate-500" />
+				<h2 class="text-xl font-bold text-slate-800">เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์</h2>
+			</div>
+			<p class="text-xs text-slate-500">ดำเนินการติดต่อ ลงทะเบียน หรือประสานขอโอนย้ายเพื่อรับรองความช่วยเหลือที่รวดเร็ว</p>
+		</div>
+
 		<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-			<!-- สำหรับผู้ประสบภัย -->
+			<!-- ระเบียบสิทธิ์ผู้ประสบภัย -->
 			<PublicQuickServiceCard
-				title="สำหรับผู้ประสบภัย"
-				description="ขอความช่วยเหลือและเข้าพัก"
+				title="ระเบียบสิทธิ์ผู้<br/>ประสบภัย"
+				badge="ด่วน<br/>ที่สุด"
+				badgeClass="bg-red-50 text-red-600"
+				description="ท่านสามารถยื่นขอลงทะเบียนเข้าพัก สแกนเข้าออก หรือจองสิทธิ์ล่วงหน้าเพื่อจัดสรรเต็นท์ส่วนตัว ยา และเครื่องนุ่งห่ม"
 				icon={ShieldAlert}
-				iconClass="bg-danger-muted/30 text-danger"
+				iconClass="bg-red-50 text-red-500"
 			>
-				<button
-					disabled
-					class="flex w-full cursor-not-allowed items-center justify-between rounded-lg bg-muted/40 px-3 py-2.5 text-xs font-semibold text-muted-foreground opacity-55 select-none"
-				>
-					ลงทะเบียนเข้าศูนย์ล่วงหน้า (เร็วๆ นี้)
-					<span class="text-muted-foreground">›</span>
-				</button>
-				<button
-					disabled
-					class="flex w-full cursor-not-allowed items-center justify-between rounded-lg bg-muted/40 px-3 py-2.5 text-xs font-semibold text-muted-foreground opacity-55 select-none"
-				>
-					รับ QR Code เข้าศูนย์ด่วน (เร็วๆ นี้)
-					<span class="text-muted-foreground">›</span>
+				<button class="flex w-full items-center justify-center rounded-xl bg-[#1e3a8a] px-3 py-3 text-xs font-bold text-white transition-colors hover:bg-blue-900 shadow-sm">
+					ลงทะเบียน
 				</button>
 			</PublicQuickServiceCard>
 
-			<!-- สำหรับผู้บริจาค -->
+			<!-- สำหรับผู้ใจบุญ / บริจาค -->
 			<PublicQuickServiceCard
-				title="สำหรับผู้บริจาค"
-				description="สมทบทุนและสิ่งของจำเป็น"
-				icon={Heart}
-				iconClass="bg-primary-muted text-primary"
+				title="สำหรับผู้ใจบุญ /<br/>บริจาค"
+				badge="Wishlist"
+				badgeClass="bg-blue-50 text-blue-600"
+				description="ร่วมประสานงานมอบอาหารปรุงสุก วัตถุดิบ น้ำดื่ม หรือสมทบกองทุน EOC ข้อมูลจัดซื้อโปร่งใส ตรวจสอบได้ทันที"
+				icon={Package}
+				iconClass="bg-blue-50 text-blue-500"
 			>
-				<a
-					href="/public/donations"
-					class="flex items-center justify-between rounded-lg bg-primary px-3 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-primary-dark"
-				>
+				<button class="flex w-full items-center justify-center rounded-xl bg-[#1e3a8a] px-3 py-3 text-xs font-bold text-white transition-colors hover:bg-blue-900 shadow-sm">
 					แจ้งบริจาคสิ่งของล่วงหน้า
-					<span class="text-white/70">›</span>
-				</a>
-				<button
-					disabled
-					class="flex w-full cursor-not-allowed items-center justify-center rounded-lg px-3 py-2.5 text-xs font-semibold text-muted-foreground opacity-55 select-none"
-				>
-					ดูบัญชีรับบริจาค / Wishlist (เร็วๆ นี้)
-					<span class="ml-1">›</span>
+				</button>
+				<button class="flex w-full items-center justify-center rounded-xl bg-transparent border border-[#1e3a8a]/20 px-3 py-3 text-[11px] font-bold text-[#1e3a8a] transition-colors hover:bg-slate-50 shadow-sm">
+					ดูบัญชีรับบริจาค / บอร์ดขอของ
 				</button>
 			</PublicQuickServiceCard>
 
-			<!-- สำหรับอาสาสมัคร -->
+			<!-- สำหรับทีมอาสาสมัคร -->
 			<PublicQuickServiceCard
-				title="สำหรับอาสาสมัคร"
-				description="ร่วมเป็นส่วนหนึ่งของการช่วยเหลือ"
+				title="สำหรับทีมอาสา<br/>สมัคร"
+				badge="ร่วมแรง<br/>กาย"
+				badgeClass="bg-green-50 text-green-600"
+				description="ร่วมลงทะเบียนจองกะงานฝ่ายสวัสดิการ แจกจ่าย ขนย้าย แพทย์สนาม หรือสนับสนุนเจ้าหน้าที่ ณ พื้นที่อุทกภัยชายแดนใต้"
 				icon={UserPlus}
-				iconClass="bg-chart-2/15 text-chart-2"
+				iconClass="bg-green-50 text-green-500"
 			>
-				<a
-					href="/public/volunteers"
-					class="flex items-center justify-between rounded-lg bg-chart-2/10 px-3 py-2.5 text-xs font-semibold text-chart-2 transition-colors hover:bg-chart-2/20"
-				>
+				<button class="flex w-full items-center justify-center rounded-xl bg-[#1e3a8a] px-3 py-3 text-xs font-bold text-white transition-colors hover:bg-blue-900 shadow-sm">
 					สมัคร / จองกะช่วยเหลือ
-					<span class="text-chart-2/70">›</span>
-				</a>
+				</button>
 			</PublicQuickServiceCard>
 
-			<!-- ค้นหาญาติ -->
+			<!-- สืบค้นกองสิทธิ์ญาติ -->
 			<PublicQuickServiceCard
-				title="ค้นหาญาติ"
-				description="ติดตามสถานะญาติในศูนย์พักพิง"
+				title="สืบค้นกองสิทธิ์<br/>ญาติ"
+				badge="PDPA<br/>Shield"
+				badgeClass="bg-purple-50 text-purple-600"
+				description="เช็ครายชื่อผู้ประสบภัย ปลอดภัยในพิกัดศูนย์ควบคุม ตรึงระบบเก็บรวบรวมหลักฐานและส่งต่ออย่างเป็นความลับขั้นสูงสุด"
 				icon={Search}
-				iconClass="bg-accent-purple-muted/50 text-accent-purple"
+				iconClass="bg-purple-50 text-purple-500"
 			>
-				<button
-					disabled
-					class="flex w-full cursor-not-allowed items-center justify-between rounded-lg bg-muted/40 px-3 py-2.5 text-xs font-semibold text-muted-foreground opacity-55 select-none"
-				>
-					ค้นหาบุคคลที่สูญหาย (เร็วๆ นี้)
-					<span class="text-muted-foreground">›</span>
+				<button class="flex w-full items-center justify-center rounded-xl bg-[#1e3a8a] px-3 py-3 text-xs font-bold text-white transition-colors hover:bg-blue-900 shadow-sm">
+					ค้นหารายบุคคลด่วนที่สุด
 				</button>
 			</PublicQuickServiceCard>
 		</div>
@@ -228,14 +188,14 @@
 					</div>
 				</div>
 
-				<button
-					disabled
-					class="mt-2 flex w-fit cursor-not-allowed items-center gap-2 text-left text-sm font-bold text-muted-foreground opacity-55 select-none"
+				<a
+					href="/public/shelters"
+					class="mt-2 flex w-fit items-center gap-2 text-left text-sm font-bold text-primary hover:underline"
 				>
 					<MapPin class="h-4 w-4" />
-					ดูพิกัดแผนที่แต่ละศูนย์ (เร็วๆ นี้)
+					ตรวจสอบพิกัดแผนที่แต่ละศูนย์
 					<ExternalLink class="h-3 w-3" />
-				</button>
+				</a>
 			</div>
 		</div>
 
@@ -278,23 +238,24 @@
 					<span class="rounded-lg bg-black/20 px-3 py-1.5 text-[11px] text-white">สายด่วน ปภ.</span>
 				</a>
 
-				<div class="mt-2 grid grid-cols-2 gap-3">
+				<!-- LINE / FB (Hidden per T-57 OP-2) -->
+				<div class="mt-2 grid-cols-2 gap-3 hidden">
 					<!-- LINE -->
-					<a
-						href="#"
+					<button
+						type="button"
 						class="flex items-center justify-center gap-2 rounded-xl bg-chart-2 py-3.5 text-sm font-bold text-white transition-colors hover:bg-chart-2/90"
 					>
 						<MessageCircle class="h-4.5 w-4.5" />
 						ติดต่อผ่าน LINE
-					</a>
+					</button>
 					<!-- Facebook -->
-					<a
-						href="#"
+					<button
+						type="button"
 						class="flex items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-bold text-white transition-colors hover:bg-primary-dark"
 					>
 						<Globe class="h-4.5 w-4.5" />
 						ศูนย์เพจ Facebook
-					</a>
+					</button>
 				</div>
 			</div>
 		</div>
