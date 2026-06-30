@@ -20,3 +20,5 @@ Thumbs.db
 
 # Meeting notes (not shared with team)
 docs/meetings/
+
+.pnpm-store/
