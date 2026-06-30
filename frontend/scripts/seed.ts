@@ -686,6 +686,12 @@ async function seedShelter2(): Promise<void> {
 		members: { names: [], roles: [`shelter:${SHELTER_CODE_2}`] }
 	});
 
+	const { status, data } = await couchReq('GET', `/${SHELTER_DB_2}/_all_docs?limit=1`);
+	if (status === 200 && (data as { rows?: unknown[] }).rows?.length) {
+		console.log(`  ✓ ${SHELTER_DB_2}: already seeded, skipping`);
+		return;
+	}
+
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
 		{
