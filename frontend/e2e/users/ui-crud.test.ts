@@ -376,7 +376,7 @@ test.describe('User Management UI — Create Flow (real BFF)', () => {
 		// Fill form
 		await expect(page.getByRole('dialog')).toBeVisible();
 		await page.locator('input[name="username"]').fill(newUsername);
-		await page.locator('input[name="password"]').fill('Password123!');
+		await page.locator('input[name="password"]').fill('TestPass1234!');
 		await page.locator('input[name="display_name"]').fill('New UI SM');
 
 		// SA can select capability and shelter
@@ -416,7 +416,7 @@ test.describe('User Management UI — Create Flow (real BFF)', () => {
 
 		await expect(page.getByRole('dialog')).toBeVisible();
 		await page.locator('input[name="username"]').fill(newUsername);
-		await page.locator('input[name="password"]').fill('Password123!');
+		await page.locator('input[name="password"]').fill('TestPass1234!');
 		await page.locator('input[name="display_name"]').fill('New UI Staff');
 
 		// SM can only create staff, shelter is fixed.

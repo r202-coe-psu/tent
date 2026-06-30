@@ -7,6 +7,7 @@ import {
 	ServiceError
 } from '$lib/server/couch-admin';
 import { createUser, deleteUser, listUsers, updateUser } from '$lib/server/user-service';
+import { validatePassword } from '$lib/server/password-policy';
 
 // Service plane `/api/v1/*` — dev BFF mirroring the canonical contract
 // (api-contract.md §2/§3) so it is a drop-in swap for the future FastAPI.
@@ -47,13 +48,12 @@ export const POST: RequestHandler = async ({ request }) => {
 			: [];
 
 		if (name.length < 3) throw new ServiceError('VALIDATION', 'name must be at least 3 characters');
-		if (password.length < 6)
-			throw new ServiceError('VALIDATION', 'password must be at least 6 characters');
+		const validPassword = validatePassword(password);
 		if (display_name.length < 1)
 			throw new ServiceError('VALIDATION', 'display_name must be at least 1 character');
 
 		assertCanGrant(caller, roles);
-		await createUser({ name, password, display_name, roles, affiliation_tags });
+		await createUser({ name, password: validPassword, display_name, roles, affiliation_tags });
 		return json({ ok: true });
 	} catch (e) {
 		return serviceError(e);

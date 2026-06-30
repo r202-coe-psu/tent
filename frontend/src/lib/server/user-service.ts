@@ -1,6 +1,7 @@
 import { adminRaw } from '$lib/server/couch-admin';
 import { ServiceError, type Caller } from '$lib/server/couch-admin';
 import { isStaffOnly, shelterCodeFromRoles } from '$lib/auth/roles';
+import { validatePassword } from '$lib/server/password-policy';
 
 /**
  * User service — the ONLY module that writes CouchDB `_users` with admin creds.
@@ -46,7 +47,8 @@ export async function createUser(input: {
 	roles: string[];
 	affiliation_tags?: string[];
 }): Promise<void> {
-	const { name, password, display_name, roles, affiliation_tags } = input;
+	const { name, display_name, roles, affiliation_tags } = input;
+	const password = validatePassword(input.password);
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
 		name,
 		password,
@@ -146,10 +148,8 @@ export async function updateUser(
 	} as CouchUserDoc & { password?: string; password_sha?: string; salt?: string };
 
 	if (input.password) {
-		if (input.password.trim().length < 6) {
-			throw new ServiceError('VALIDATION', 'Password must be at least 6 characters long');
-		}
-		updatedDoc.password = input.password;
+		const password = validatePassword(input.password);
+		updatedDoc.password = password;
 		delete updatedDoc.password_sha;
 		delete updatedDoc.salt;
 	}
