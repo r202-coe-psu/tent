@@ -26,6 +26,11 @@ affects:
 สร้าง Service ใหม่ด้วย Python/FastAPI (รันแยกใน Docker Container) โดยทำงานร่วมกับ **Redis** เพื่อทำหน้าที่คอยซิงก์ข้อมูลระหว่าง CouchDB (Central) และ MongoDB โดยมีกลไกสำหรับ Public Dashboard (Outbound Plane) คือ:
 
 1. **Tail `_changes` & Debounce:** เกาะติดความเคลื่อนไหว (CDC) ของฐานข้อมูล CouchDB ในทุกศูนย์ (`shelter_{code}`) และ `registry` โดยอาจใช้ **Redis** ในการพักข้อมูล (Cache) หรือทำ Debounce เพื่อลดภาระการทำงานซ้ำซ้อนหากมีอัปเดตเข้ามาพร้อมกันจำนวนมาก
+   > คำถาม: การ sync ข้อมูลจะทำแบบใด
+   >
+   > 1.ให้ Worker polling couchdb ทุกวินาทีเพื่อตรวจสอบการเปลี่ยนแปลง แล้วค่อย syncฦ
+   > 2.เปิด api ให้ Worker ถูก trigger จาก couchdb คล้ายๆ (hook)
+   > 2.1 ถามต่อ - ทำยังไง ทำได้จริงไหม?
 2. **Projector:** ทำหน้าที่กรองข้อมูลตาม whitelist โดยดึงเฉพาะข้อมูลที่จะให้ Public ดูได้ (เช่น `public_transparency` ที่รวม occupancy_count และยอดบริจาค, `public_persons` สำหรับค้นหา)
 3. **Upsert:** นำข้อมูลที่ผ่านการ Project แล้วไปอัปเดตหรือลบใน MongoDB Collection ปลายทาง
 
@@ -55,21 +60,19 @@ affects:
  │ │   ┗ 📜 +server.ts       <-- [T-58] API ดึงสถิติรวมจาก MongoDB (Public)
  │ ┗ 📂 src/lib/features/
  │   ┗ 📂 public-portal      <-- [T-58] Zod Schema (Non-PII) & API Wrapper หน้าบ้าน
- ┣ 📂 sync-worker            <-- [T-58] โฟลเดอร์ใหม่สำหรับ Sync Service (Python/FastAPI)
+ ┣ 📂 worker            <-- [T-58] โฟลเดอร์ใหม่สำหรับ Sync Service (Python/FastAPI)
  │ ┣ 📜 Dockerfile           <-- คอนฟิกสำหรับสร้าง Docker Image
  │ ┣ 📜 main.py              <-- โค้ดหลักที่ทำหน้าที่ Listen CouchDB, คุยกับ Redis และ MongoDB
  │ ┗ 📜 requirements.txt     <-- ไฟล์จัดการ Dependencies
- ┗ 📜 docker-compose.yml     <-- [T-58] เพิ่ม Service `sync-worker`, `redis` และ `mongodb`
+ ┗ 📜 docker-compose.yml     <-- [T-58] เพิ่ม Service `worker`, `redis` และ `mongodb`
  ┗ ิ📂 backend                 <-- clone มาจาก repo https://github.com/importstar/fastapi-beanie-simplified
-```
-
 ```
 
 ## 4. ไฟล์ที่ได้รับผลกระทบ
 
 - `frontend/src/routes/api/v1/public/shelters/+server.ts` (สร้างใหม่)
 - `frontend/src/lib/features/public-portal/...` (สร้างใหม่)
-- `sync-worker/main.py` และ `sync-worker/Dockerfile` (สร้างใหม่/แทนที่ metrics-worker)
+- `worker/main.py` และ `worker/Dockerfile` (สร้างใหม่/แทนที่ metrics-worker)
 - `docker-compose.yml` (แก้ไข เพิ่ม MongoDB, Redis และ Sync Worker)
 
 ## 5. Edge Cases & Mitigations (กรณีสุดวิสัยและวิธีรับมือ)
@@ -94,4 +97,3 @@ affects:
 
 - เปลี่ยนข้อกำหนดการออกแบบจาก In-memory Cache (Redis) เป็น **MongoDB** ควบคู่กับ **Sync Worker** เป็น Public-facing Store แทน
 - อัปเดต Task Breakdown **T-58** (`docs/task-breakdown/12-public.md`) และอ้างอิงกลับไปยังหลักการ Sync ตามเอกสาร `docs/data/couchdb-mongodb-sync.md`
-```
