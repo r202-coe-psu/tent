@@ -9,25 +9,31 @@
 
 	let {
 		activeType,
-		counts
+		counts,
+		allowedTypes,
+		basePath
 	}: {
 		activeType: MasterDataType;
 		counts: Partial<Record<MasterDataType, number>>;
+		allowedTypes?: readonly MasterDataType[];
+		basePath?: string;
 	} = $props();
 
-	const BASE_PATH = resolve('/back-office/registration-config');
+	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/registration-config'));
+	const visibleTypes = $derived(
+		allowedTypes ? MASTER_DATA_TYPES.filter((t) => allowedTypes.includes(t)) : MASTER_DATA_TYPES
+	);
 
 	function navigateToType(type: MasterDataType) {
-		// BASE_PATH already uses resolve() above; the query string is the only dynamic part.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
-		goto(`${BASE_PATH}?type=${encodeURIComponent(type)}`, { replaceState: true });
+		goto(`${resolvedBasePath}?type=${encodeURIComponent(type)}`, { replaceState: true });
 	}
 </script>
 
 <aside class="rounded-xl border bg-card p-4 text-card-foreground shadow-sm">
 	<h2 class="mb-3 text-sm font-semibold text-muted-foreground">ประเภทพารามิเตอร์มาสเตอร์</h2>
 	<nav class="flex flex-col gap-2">
-		{#each MASTER_DATA_TYPES as type (type)}
+		{#each visibleTypes as type (type)}
 			{@const isActive = type === activeType}
 			<button
 				type="button"

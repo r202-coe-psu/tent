@@ -23,12 +23,11 @@
 		maskNationalId,
 		zoneLabel,
 		SPECIAL_NEED_CHIPS,
-		type Household,
-		getMunicipalityZoneLabel,
-		getCommunityLabel
+		type Household
 	} from '$lib/features/people';
 	import type { SpecialNeed } from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
+	import { useMasterData } from '$lib/features/master-data';
 	import { authStore } from '$lib/stores/auth.svelte';
 
 	type TabKey = 'evacuee' | 'household';
@@ -82,11 +81,9 @@
 		if (!needle) return items;
 		return items.filter((h) => {
 			const labelMatch = h.label.toLowerCase().includes(needle);
-			const zoneMatch =
-				(h.municipality_zone?.toLowerCase() ?? '').includes(needle) ||
-				(h.community?.toLowerCase() ?? '').includes(needle) ||
-				getMunicipalityZoneLabel(h.municipality_zone).toLowerCase().includes(needle) ||
-				getCommunityLabel(h.community).toLowerCase().includes(needle);
+			const mzLabel = (municipalityZoneLabels[h.municipality_zone ?? ''] ?? h.municipality_zone ?? '').toLowerCase();
+			const commLabel = (communityLabels[h.community ?? ''] ?? h.community ?? '').toLowerCase();
+			const zoneMatch = mzLabel.includes(needle) || commLabel.includes(needle);
 
 			const head = allEvacueesQuery.data?.find((e) => e._id === h.head_evacuee_id);
 			const headName = head ? `${head.first_name} ${head.last_name}`.toLowerCase() : '';
@@ -98,6 +95,21 @@
 
 	const householdsTotal = $derived(householdsQuery.data?.total ?? 0);
 	const householdsTotalPages = $derived(householdsQuery.data?.totalPages ?? 1);
+
+	// Master data for resolving household codes to labels
+	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
+	const communityQuery = useMasterData(() => 'community');
+
+	const municipalityZoneLabels = $derived(
+		Object.fromEntries(
+			(municipalityZoneQuery.data?.items ?? []).map((item) => [item.code, item.label])
+		)
+	);
+	const communityLabels = $derived(
+		Object.fromEntries(
+			(communityQuery.data?.items ?? []).map((item) => [item.code, item.label])
+		)
+	);
 
 	// Shelter zones
 	const shelterQuery = useShelter(() => SHELTER_CODE);
@@ -288,7 +300,6 @@
 				<Table.Root>
 					<Table.Header>
 						<Table.Row>
-							<Table.Head>HOUSEHOLD REF</Table.Head>
 							<Table.Head>ชื่อครัวเรือน</Table.Head>
 							<Table.Head>หัวหน้าครัวเรือน</Table.Head>
 							<Table.Head>สมาชิก</Table.Head>
@@ -304,9 +315,6 @@
 							{@const members =
 								allEvacueesQuery.data?.filter((e) => e.household_id === h._id) ?? []}
 							<Table.Row>
-								<Table.Cell class="font-mono text-muted-foreground"
-									>{h._id.split(':')[1]}</Table.Cell
-								>
 								<Table.Cell class="font-bold text-foreground">{h.label}</Table.Cell>
 								<Table.Cell class="font-medium text-foreground">{headName}</Table.Cell>
 								<Table.Cell>
@@ -323,15 +331,25 @@
 										{/if}
 									</div>
 								</Table.Cell>
-								<Table.Cell class="font-semibold text-primary">
-									{#if h.municipality_zone}
-										{getMunicipalityZoneLabel(h.municipality_zone)}
-										{#if h.community}
-											/ {getCommunityLabel(h.community)}
+								<Table.Cell>
+									<div class="flex flex-wrap gap-1">
+										{#if h.municipality_zone || h.community}
+											{#if h.municipality_zone}
+												<span
+													class="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground"
+													>{municipalityZoneLabels[h.municipality_zone] ?? h.municipality_zone}</span
+												>
+											{/if}
+											{#if h.community}
+												<span
+													class="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground"
+													>{communityLabels[h.community] ?? h.community}</span
+												>
+											{/if}
+										{:else}
+											<span class="text-[11px] text-muted-foreground italic">ไม่มี</span>
 										{/if}
-									{:else}
-										—
-									{/if}
+									</div>
 								</Table.Cell>
 								<Table.Cell>
 									<div class="flex flex-wrap gap-1">

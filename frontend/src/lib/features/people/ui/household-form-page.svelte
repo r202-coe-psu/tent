@@ -17,7 +17,6 @@
 		SHELTER_CODE,
 		type HouseholdInput
 	} from '../index';
-	import { useShelter } from '$lib/features/shelters';
 	import { authStore } from '$lib/stores/auth.svelte';
 
 	let {
@@ -33,9 +32,6 @@
 	// Fetch data
 	const evacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
-	const shelterQuery = useShelter(() => SHELTER_CODE);
-	const zones = $derived(shelterQuery.data?.zones ?? []);
-
 	// Find editing household if relevant
 	const editingHousehold = $derived(
 		isEditMode && id && householdsQuery.data
@@ -196,25 +192,34 @@
 
 <div class="mx-auto w-full max-w-2xl px-4 py-8 md:px-6">
 	<div class="mb-6 flex items-center justify-between">
-		<Button variant="outline" size="sm" class="rounded-full gap-2 text-muted-foreground" onclick={handleCancel}>
+		<Button
+			variant="outline"
+			size="sm"
+			class="gap-2 rounded-full text-muted-foreground"
+			onclick={handleCancel}
+		>
 			<ArrowLeft class="size-4" />
 			<span>ย้อนกลับ</span>
 		</Button>
 	</div>
 
 	<Card.Root class="overflow-hidden border border-border shadow-lg">
-		<Card.Header class="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b border-border/50 py-6 px-6">
+		<Card.Header
+			class="border-b border-border/50 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-6 py-6"
+		>
 			<div class="flex items-center gap-3">
-				<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary">
+				<div
+					class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary"
+				>
 					<Home class="size-5" />
 				</div>
 				<div>
 					<Card.Title class="text-xl font-bold text-foreground">
 						{isEditMode ? 'แก้ไขข้อมูลครัวเรือน' : 'เพิ่มครัวเรือนใหม่'}
 					</Card.Title>
-					<p class="text-xs text-muted-foreground mt-0.5">
-						{isEditMode 
-							? 'อัปเดตข้อมูล สมาชิก และสัตว์เลี้ยงของครัวเรือน' 
+					<p class="mt-0.5 text-xs text-muted-foreground">
+						{isEditMode
+							? 'อัปเดตข้อมูล สมาชิก และสัตว์เลี้ยงของครัวเรือน'
 							: 'บันทึกข้อมูลเพื่อจัดกลุ่มสมาชิกและจัดสรรที่พัก'}
 					</p>
 				</div>
@@ -223,13 +228,15 @@
 
 		<Card.Content class="p-6">
 			{#if evacueesQuery.isLoading || householdsQuery.isLoading}
-				<div class="flex flex-col items-center justify-center py-12 gap-2">
-					<div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+				<div class="flex flex-col items-center justify-center gap-2 py-12">
+					<div
+						class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"
+					></div>
 					<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูลระบบ...</p>
 				</div>
 			{:else if isEditMode && !editingHousehold}
 				<div class="py-8 text-center">
-					<p class="text-sm text-destructive font-semibold">ไม่พบข้อมูลครัวเรือนที่ต้องการแก้ไข</p>
+					<p class="text-sm font-semibold text-destructive">ไม่พบข้อมูลครัวเรือนที่ต้องการแก้ไข</p>
 					<Button variant="outline" class="mt-4" onclick={handleCancel}>กลับหน้าหลัก</Button>
 				</div>
 			{:else}
@@ -239,7 +246,6 @@
 					pending={isSubmitting}
 					initialData={editingHousehold}
 					allEvacuees={evacueesQuery.data ?? []}
-					zones={zones}
 					households={householdsQuery.data ?? []}
 				/>
 			{/if}

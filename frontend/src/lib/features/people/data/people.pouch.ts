@@ -77,9 +77,10 @@ export class PeoplePouchRepository implements PeopleRepository {
 		return this.repo.get<Evacuee>(id);
 	}
 
-	/** Persist an edited evacuee (LWW: bumps `updated_at`). */
-	updateEvacuee(evacuee: Evacuee): Promise<Evacuee> {
-		return this.repo.put(touch(evacuee));
+	/** Persist an edited evacuee (LWW: bumps `updated_at`). Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
+	async updateEvacuee(evacuee: Evacuee): Promise<Evacuee> {
+		const latest = await this.repo.get<Evacuee>(evacuee._id);
+		return this.repo.put(touch({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }));
 	}
 
 	/** Search evacuees by name, phone, or national ID — in-memory filter over prefix scan. */
@@ -126,9 +127,10 @@ export class PeoplePouchRepository implements PeopleRepository {
 		return this.repo.get<Household>(id);
 	}
 
-	/** Persist an edited household (LWW: bumps `updated_at`). */
-	updateHousehold(household: Household): Promise<Household> {
-		return this.repo.put(touch(household));
+	/** Persist an edited household (LWW: bumps `updated_at`). Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
+	async updateHousehold(household: Household): Promise<Household> {
+		const latest = await this.repo.get<Household>(household._id);
+		return this.repo.put(touch({ ...household, _rev: latest?._rev ?? household._rev }));
 	}
 
 	/** Mint a screening from input + author context and persist it. */

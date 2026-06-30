@@ -21,9 +21,7 @@ export type {
 	StayStatus,
 	MovementAction,
 	CareTrack,
-	BloodGroup,
-	MunicipalityZoneOption,
-	CommunityOption
+	BloodGroup
 } from './domain/people';
 
 // Domain — input schemas + factories + transitions + guards
@@ -55,10 +53,6 @@ export {
 	isHousehold,
 	isMovement,
 	isScreening,
-	MUNICIPALITY_ZONES,
-	COMMUNITIES,
-	getMunicipalityZoneLabel,
-	getCommunityLabel,
 	type EvacueeInput,
 	type MedicalInput,
 	type HouseholdInput,

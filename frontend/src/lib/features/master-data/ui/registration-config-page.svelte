@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import {
 		applyItemOp,
 		masterTypeSchema,
@@ -11,6 +12,16 @@
 	import MasterDataItemList from './master-data-item-list.svelte';
 	import MasterDataEditModal from './master-data-edit-modal.svelte';
 
+	let {
+		allowedTypes,
+		basePath
+	}: {
+		allowedTypes?: readonly MasterDataType[];
+		basePath?: string;
+	} = $props();
+
+	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/registration-config'));
+
 	// Active type lives in the URL (`?type=...`) — single source of truth so
 	// the left-column tabs act as deep links, browser back/forward work, and
 	// `MasterDataTypeList` can render real `<a href>` anchors.
@@ -19,7 +30,12 @@
 	function parseActiveType(): MasterDataType {
 		const raw = page.url.searchParams.get('type');
 		const parsed = masterTypeSchema.safeParse(raw);
-		return parsed.success ? parsed.data : 'vulnerable_group';
+		if (parsed.success) {
+			// If allowedTypes is set, ensure the parsed type is in the allowed set
+			if (!allowedTypes || allowedTypes.includes(parsed.data)) return parsed.data;
+		}
+		// Default to first allowed type, or 'vulnerable_group' if no filter
+		return allowedTypes?.[0] ?? 'vulnerable_group';
 	}
 
 	const list = useMasterDataList();
@@ -69,7 +85,7 @@
 	</header>
 
 	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
-		<MasterDataTypeList {activeType} {counts} />
+		<MasterDataTypeList {activeType} {counts} {allowedTypes} basePath={resolvedBasePath} />
 		<MasterDataItemList type={activeType} {items} onAdd={openAdd} onEdit={openEdit} />
 	</div>
 </div>

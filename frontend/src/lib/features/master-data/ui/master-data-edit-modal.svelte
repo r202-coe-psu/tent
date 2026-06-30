@@ -90,16 +90,12 @@
 					<Input
 						id="master-data-label"
 						bind:value={label}
-						placeholder="เช่น ผู้สูงอายุ"
+						placeholder="กรอกชื่อแสดงผลภาษาไทย"
 						aria-invalid={labelError ? 'true' : 'false'}
 						autocomplete="off"
 					/>
 					{#if labelError}
 						<p class="text-xs text-destructive" role="alert">{labelError}</p>
-					{:else if codePreview}
-						<p class="text-xs text-muted-foreground">
-							code (auto): <code class="rounded bg-muted px-1.5 py-0.5">{codePreview}</code>
-						</p>
 					{/if}
 				</div>
 

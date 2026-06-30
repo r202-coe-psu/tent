@@ -82,7 +82,15 @@ describe('createHousehold', () => {
 				head_evacuee_id: 'evacuee:123',
 				municipality_zone: 'zone_1',
 				community: 'z1_c01',
-				pets: [{ species: 'dog', count: 2, notes: 'friendly', has_cage: true, image_url: 'http://image.png' }],
+				pets: [
+					{
+						species: 'dog',
+						count: 2,
+						notes: 'friendly',
+						has_cage: true,
+						image_url: 'http://image.png'
+					}
+				],
 				assets: { description: 'สร้อยคอทองคำ', image_url: null },
 				vehicle: { type: 'car', license_plate: 'กข 1234' },
 				notes: 'ใกล้ประตูทางออก',
@@ -106,7 +114,9 @@ describe('createHousehold', () => {
 		expect(h.municipality_zone).toBe('zone_1');
 		expect(h.community).toBe('z1_c01');
 		expect((h as any).zone).toBeUndefined();
-		expect(h.pets).toEqual([{ species: 'dog', count: 2, notes: 'friendly', has_cage: true, image_url: 'http://image.png' }]);
+		expect(h.pets).toEqual([
+			{ species: 'dog', count: 2, notes: 'friendly', has_cage: true, image_url: 'http://image.png' }
+		]);
 		expect(h.assets).toEqual({ description: 'สร้อยคอทองคำ', image_url: null });
 		expect(h.vehicle).toEqual({ type: 'car', license_plate: 'กข 1234' });
 		expect(h.notes).toBe('ใกล้ประตูทางออก');

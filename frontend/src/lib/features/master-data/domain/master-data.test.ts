@@ -3,6 +3,7 @@ import {
 	applyItemOp,
 	createMasterData,
 	enforceOneDefault,
+	masterDataItemSchema,
 	masterDataSchema,
 	masterTypeSchema,
 	slugifyLabel,
@@ -18,13 +19,16 @@ function makeItem(partial: Partial<MasterDataItem> = {}): MasterDataItem {
 }
 
 describe('masterTypeSchema', () => {
-	it('accepts the 5 master types', () => {
+	it('accepts the 8 master types', () => {
 		for (const t of [
 			'vulnerable_group',
 			'health_condition',
 			'dietary_restrictions',
 			'pet_types',
-			'house_damage'
+			'house_damage',
+			'municipality_zone',
+			'community',
+			'shelter_type'
 		] as const) {
 			expect(masterTypeSchema.parse(t)).toBe(t);
 		}
@@ -164,5 +168,32 @@ describe('applyItemOp', () => {
 		const out = applyItemOp(items, { kind: 'setDefault', code: 'b' });
 		expect(out.find((i) => i.code === 'b')?.is_default).toBe(true);
 		expect(out.find((i) => i.code === 'elderly')?.is_default).toBe(false);
+	});
+});
+
+describe('parent_code (community type)', () => {
+	it('masterDataItemSchema accepts item with parent_code', () => {
+		const item = masterDataItemSchema.parse({
+			code: 'c01',
+			label: 'ชุมชนทดสอบ',
+			is_default: false,
+			parent_code: 'zone_1'
+		});
+		expect(item.parent_code).toBe('zone_1');
+	});
+
+	it('masterDataItemSchema accepts item without parent_code', () => {
+		const item = masterDataItemSchema.parse({ code: 'z1', label: 'เขต 1', is_default: true });
+		expect(item.parent_code).toBeUndefined();
+	});
+
+	it('createMasterData accepts shelter_type', () => {
+		const doc = createMasterData(
+			'shelter_type',
+			[makeItem({ code: 'school', label: 'โรงเรียน', is_default: true })],
+			ctx
+		);
+		expect(doc._id).toBe('master_data:shelter_type');
+		expect(doc.master_type).toBe('shelter_type');
 	});
 });

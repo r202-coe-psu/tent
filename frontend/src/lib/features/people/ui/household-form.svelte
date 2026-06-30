@@ -2,14 +2,19 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import X from '@lucide/svelte/icons/x';
-	import { maskNationalId, MUNICIPALITY_ZONES, COMMUNITIES } from '../domain/people';
-	import type { Household, Evacuee, HouseholdInput } from '../domain/people';
+	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
+	import X from '@lucide/svelte/icons/x';
+	import UserRound from '@lucide/svelte/icons/user-round';
+	import MapPin from '@lucide/svelte/icons/map-pin';
+	import PawPrint from '@lucide/svelte/icons/paw-print';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
+	import { maskNationalId } from '../domain/people';
 	import { householdInputSchema } from '../domain/people';
+	import { useMasterData } from '$lib/features/master-data';
+	import type { Household, Evacuee, HouseholdInput } from '../domain/people';
 
 	let {
 		onsubmit,
@@ -17,69 +22,75 @@
 		pending = false,
 		initialData = null,
 		allEvacuees = [],
-		zones = [],
 		households = [],
 		initialMemberIds = []
 	}: {
-		onsubmit: (input: HouseholdInput, selectedMemberIds: string[], emergencyContactPhone?: string) => void;
+		onsubmit: (
+			input: HouseholdInput,
+			selectedMemberIds: string[],
+			emergencyContactPhone?: string
+		) => void;
 		oncancel: () => void;
 		pending?: boolean;
 		initialData?: Household | null;
 		allEvacuees?: Evacuee[];
-		zones?: { code: string; name: string }[];
 		households?: Household[];
 		initialMemberIds?: string[];
 	} = $props();
 
+	// --- Master data queries (independent; no parent_code filtering on community) ---
+	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
+	const communityQuery = useMasterData(() => 'community');
+
+	const municipalityZoneItems = $derived(
+		(municipalityZoneQuery.data?.items ?? []).map((z) => ({ value: z.code, label: z.label }))
+	);
+	const communityItems = $derived(
+		(communityQuery.data?.items ?? []).map((c) => ({ value: c.code, label: c.label }))
+	);
+
+	// --- Superform ---
 	const form = superForm(defaults(zod4(householdInputSchema)), {
 		SPA: true,
 		validators: zod4(householdInputSchema),
 		resetForm: false,
 		onUpdate: async ({ form }) => {
 			if (!form.valid) return;
-
-			if ($formData.head_evacuee_id && !emergencyContactPhone.trim()) {
-				return;
-			}
-
+			if ($formData.head_evacuee_id && !emergencyContactPhone.trim()) return;
 			onsubmit(form.data, selectedMemberIds, emergencyContactPhone.trim());
 		}
 	});
 
 	const { form: formData, submitting } = form;
 
-	// Modal Form State
+	// Local combobox bridge state (Combobox binds string, formData uses string | null)
+	let mzVal = $state('');
+	let commVal = $state('');
+
+	$effect(() => {
+		$formData.municipality_zone = mzVal || null;
+	});
+	$effect(() => {
+		$formData.community = commVal || null;
+	});
+
+	// --- Member / pet state ---
 	let dogCount = $state(0);
 	let catCount = $state(0);
 	let birdCount = $state(0);
 	let otherCount = $state(0);
 	let selectedMemberIds = $state<string[]>([]);
-
-	// Dropdown Search Member State
-	let searchQuery = $state('');
-	let isDropdownOpen = $state(false);
-	let containerDiv = $state<HTMLDivElement | null>(null);
+	let memberSearchValue = $state('');
+	let headComboValue = $state('');
 	let emergencyContactPhone = $state('');
+	let membersInitialized = $state(false);
 
-	// Reset community if it does not belong to selected zone
-	$effect(() => {
-		const zone = $formData.municipality_zone;
-		const comm = $formData.community;
-		if (comm) {
-			const opt = COMMUNITIES.find((c) => c.code === comm);
-			if (!opt || opt.parent_code !== zone) {
-				$formData.community = null;
-			}
-		}
-	});
-
-	// Pre-fill state when initialData is provided
+	// Pre-fill form fields from initialData — does NOT read allEvacuees to avoid re-running on live-sync updates
 	$effect(() => {
 		if (initialData) {
 			$formData.label = initialData.label;
-			$formData.municipality_zone = initialData.municipality_zone;
-			$formData.community = initialData.community;
 			$formData.head_evacuee_id = initialData.head_evacuee_id;
+			headComboValue = initialData.head_evacuee_id ?? '';
 			$formData.notes = initialData.notes ?? '';
 			$formData.address_no = initialData.address_no ?? '';
 			$formData.village_no = initialData.village_no ?? '';
@@ -87,16 +98,17 @@
 			$formData.district = initialData.district ?? '';
 			$formData.province = initialData.province ?? '';
 			$formData.postal_code = initialData.postal_code ?? '';
+			mzVal = initialData.municipality_zone ?? '';
+			commVal = initialData.community ?? '';
 			dogCount = initialData.pets.find((p) => p.species === 'dog')?.count ?? 0;
 			catCount = initialData.pets.find((p) => p.species === 'cat')?.count ?? 0;
 			birdCount = initialData.pets.find((p) => p.species === 'bird')?.count ?? 0;
 			otherCount = initialData.pets.find((p) => p.species === 'other')?.count ?? 0;
-			selectedMemberIds = allEvacuees.filter((e) => e.household_id === initialData._id).map((e) => e._id);
+			membersInitialized = false;
 		} else {
 			$formData.label = '';
-			$formData.municipality_zone = null;
-			$formData.community = null;
 			$formData.head_evacuee_id = null;
+			headComboValue = '';
 			$formData.notes = '';
 			$formData.address_no = '';
 			$formData.village_no = '';
@@ -104,15 +116,28 @@
 			$formData.district = '';
 			$formData.province = '';
 			$formData.postal_code = '';
+			mzVal = '';
+			commVal = '';
 			dogCount = 0;
 			catCount = 0;
 			birdCount = 0;
 			otherCount = 0;
 			selectedMemberIds = [...initialMemberIds];
+			membersInitialized = true;
 		}
 	});
 
-	// Sync pets array in form data reactively
+	// Initialize selectedMemberIds once from allEvacuees — re-runs only until allEvacuees loads
+	$effect(() => {
+		if (membersInitialized || !initialData) return;
+		if (allEvacuees.length === 0) return;
+		selectedMemberIds = allEvacuees
+			.filter((e) => e.household_id === initialData._id)
+			.map((e) => e._id);
+		membersInitialized = true;
+	});
+
+	// Sync pets array
 	$effect(() => {
 		const petGroups = [];
 		if (dogCount > 0) petGroups.push({ species: 'dog' as const, count: dogCount });
@@ -122,231 +147,219 @@
 		$formData.pets = petGroups;
 	});
 
-	// Sync head of household selection to selected members
+	// Track head changes: remove old head from members, add new head
+	let prevHeadId = $state<string | null>(null);
 	$effect(() => {
-		if ($formData.head_evacuee_id && !selectedMemberIds.includes($formData.head_evacuee_id)) {
-			selectedMemberIds = [...selectedMemberIds, $formData.head_evacuee_id];
+		const newHead = $formData.head_evacuee_id;
+		if (newHead !== prevHeadId) {
+			if (prevHeadId !== null) {
+				selectedMemberIds = selectedMemberIds.filter((id) => id !== prevHeadId);
+			}
+			prevHeadId = newHead;
+		}
+		if (newHead && !selectedMemberIds.includes(newHead)) {
+			selectedMemberIds = [...selectedMemberIds, newHead];
 		}
 	});
 
-	// Sync emergency contact phone when formHead changes
+	const memberItems = $derived(
+		allEvacuees
+			.filter((e) => !e.privacy?.search_excluded)
+			.map((e) => ({
+				value: e._id,
+				label: [e.first_name, e.last_name, e.nickname, e.phone, e.person_id?.number]
+					.filter(Boolean)
+					.join(' '),
+				evacuee: e,
+				hasOther: !!(e.household_id && initialData && e.household_id !== initialData._id),
+				otherLabel: households.find((h) => h._id === e.household_id)?.label ?? 'ครัวเรือนอื่น'
+			}))
+	);
+
 	$effect(() => {
-		if ($formData.head_evacuee_id) {
-			const headEvac = allEvacuees.find((e) => e._id === $formData.head_evacuee_id);
-			emergencyContactPhone = headEvac?.emergency_contact?.phone ?? '';
-		} else {
-			emergencyContactPhone = '';
+		if (memberSearchValue) {
+			if (!selectedMemberIds.includes(memberSearchValue))
+				selectedMemberIds = [...selectedMemberIds, memberSearchValue];
+			memberSearchValue = '';
 		}
 	});
 
-	let filteredEvacuees = $derived.by(() => {
-		const q = searchQuery.toLowerCase().trim();
-		return allEvacuees.filter((e) => {
-			if (e.privacy?.search_excluded) return false;
-			if (!q) return true;
-			const firstName = (e.first_name || '').toLowerCase();
-			const lastName = (e.last_name || '').toLowerCase();
-			const nickname = (e.nickname || '').toLowerCase();
-			const phone = (e.phone || '').toLowerCase();
-			const nationalId = (e.person_id?.number || '').toLowerCase();
-			return (
-				firstName.includes(q) ||
-				lastName.includes(q) ||
-				nickname.includes(q) ||
-				phone.includes(q) ||
-				nationalId.includes(q)
-			);
-		});
+	const headItems = $derived([
+		{ value: '', label: 'ไม่มีหัวหน้าครัวเรือน', evacuee: null as Evacuee | null },
+		...allEvacuees
+			.filter((e) => !e.privacy?.search_excluded)
+			.map((e) => ({
+				value: e._id,
+				label: [e.first_name, e.last_name, e.nickname, e.phone, e.person_id?.number]
+					.filter(Boolean)
+					.join(' '),
+				evacuee: e as Evacuee | null
+			}))
+	]);
+
+	$effect(() => {
+		$formData.head_evacuee_id = headComboValue || null;
 	});
-
-	function handleFocusOut(e: FocusEvent) {
-		if (containerDiv && !containerDiv.contains(e.relatedTarget as Node)) {
-			isDropdownOpen = false;
-		}
-	}
-
-	function selectMember(id: string) {
-		if (!selectedMemberIds.includes(id)) {
-			selectedMemberIds = [...selectedMemberIds, id];
-		}
-		searchQuery = '';
-		isDropdownOpen = false;
-	}
 
 	function removeMember(id: string) {
 		selectedMemberIds = selectedMemberIds.filter((mId) => mId !== id);
-		// Clear head of household if they are deselected from members
-		if ($formData.head_evacuee_id === id) {
-			$formData.head_evacuee_id = null;
-		}
+		if ($formData.head_evacuee_id === id) $formData.head_evacuee_id = null;
 	}
 </script>
 
 <form method="POST" use:form.enhance>
 	<Field.FieldGroup>
+		<!-- ─────────────────────── ชื่อครัวเรือน ─────────────────────── -->
 		<Form.Field {form} name="label">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>ชื่อเรียกครัวเรือน (เช่น บ้านสมชาย, ครอบครัวใจดี)</Form.Label>
-					<Input {...props} bind:value={$formData.label} placeholder="ระบุชื่อครัวเรือน..." required />
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="municipality_zone">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>เขตเทศบาล (ที่อยู่เดิม)</Form.Label>
-					<select
+					<Form.Label>ชื่อเรียกครัวเรือน <span class="text-destructive">*</span></Form.Label>
+					<Input
 						{...props}
-						bind:value={$formData.municipality_zone}
-						class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-					>
-						<option value={null}>กรุณาเลือกเขต...</option>
-						{#each MUNICIPALITY_ZONES as mz}
-							<option value={mz.code}>{mz.label}</option>
-						{/each}
-					</select>
+						bind:value={$formData.label}
+						placeholder="เช่น บ้านสมชาย, ครอบครัวใจดี"
+						required
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<Form.Field {form} name="community">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>ชุมชน (ที่อยู่เดิม)</Form.Label>
-					<select
-						{...props}
-						bind:value={$formData.community}
-						disabled={!$formData.municipality_zone}
-						class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-					>
-						<option value={null}>กรุณาเลือกชุมชน...</option>
-						{#each COMMUNITIES.filter(c => c.parent_code === $formData.municipality_zone) as c}
-							<option value={c.code}>{c.label}</option>
-						{/each}
-					</select>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
+		<!-- ─────────────────────── หัวหน้าครัวเรือน ─────────────────────── -->
 		<Form.Field {form} name="head_evacuee_id">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>หัวหน้าครัวเรือน</Form.Label>
-					<select
-						{...props}
-						bind:value={$formData.head_evacuee_id}
-						class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+					<Form.Label class="flex items-center gap-1.5">
+						<UserRound class="size-3.5 text-muted-foreground" />
+						หัวหน้าครัวเรือน
+					</Form.Label>
+					<Combobox
+						items={headItems}
+						bind:value={headComboValue}
+						placeholder="พิมพ์ชื่อ, เบอร์ หรือเลขบัตรเพื่อค้นหา..."
+						searchPlaceholder="ค้นหาผู้ประสบภัย..."
+						emptyText="ไม่พบผู้ประสบภัยที่ตรงกับการค้นหา"
+						controlProps={props}
+						class="h-9 w-full"
 					>
-						<option value={null}>ไม่มีหัวหน้าครัวเรือน (None)</option>
-						{#each allEvacuees as e}
-							<option value={e._id}>{e.first_name} {e.last_name} ({maskNationalId(e.person_id?.number)})</option>
-						{/each}
-					</select>
+						{#snippet children({ item })}
+							{#if item.evacuee}
+								<span class="font-medium">{item.evacuee.first_name} {item.evacuee.last_name}</span>
+								{#if item.evacuee.person_id?.number}
+									<span class="text-xs text-muted-foreground">
+										· {maskNationalId(item.evacuee.person_id.number)}
+									</span>
+								{/if}
+							{:else}
+								{item.label}
+							{/if}
+						{/snippet}
+					</Combobox>
 				{/snippet}
 			</Form.Control>
-			<Form.Description>หัวหน้าครัวเรือนจะถูกเลือกจากรายชื่อผู้ประสบภัยทั้งหมดในระบบ</Form.Description>
+			<Form.Description>หัวหน้าจะถูกเพิ่มเข้าสมาชิกโดยอัตโนมัติ</Form.Description>
 			<Form.FieldErrors />
 		</Form.Field>
 
+		<!-- Emergency contact of head -->
 		{#if $formData.head_evacuee_id}
 			{@const headEvac = allEvacuees.find((e) => e._id === $formData.head_evacuee_id)}
 			{#if headEvac}
-				<div class="flex flex-col gap-1.5 p-3.5 bg-primary/5 border border-primary/10 rounded-lg">
-					<Label for="emergency-phone" class="text-xs font-bold text-primary uppercase tracking-wider">
-						เบอร์ติดต่อฉุกเฉิน (Emergency Contact Phone) ของหัวหน้าครัวเรือน
+				<div class="space-y-1.5 rounded-lg border border-primary/15 bg-primary/5 px-4 py-3">
+					<Label
+						for="emergency-phone"
+						class="text-xs font-semibold tracking-wide text-primary uppercase"
+					>
+						เบอร์ติดต่อฉุกเฉินของหัวหน้าครัวเรือน <span class="text-destructive">*</span>
 					</Label>
 					<Input
 						id="emergency-phone"
 						type="tel"
-						placeholder="ระบุเบอร์โทรศัพท์..."
-						bind:value={emergencyContactPhone}
-						class="bg-background mt-1"
+						inputmode="numeric"
+						placeholder="ระบุเบอร์โทรศัพท์ (ตัวเลขเท่านั้น)"
+						value={emergencyContactPhone}
+						oninput={(e) => {
+							emergencyContactPhone = (e.currentTarget as HTMLInputElement).value.replace(
+								/\D/g,
+								''
+							);
+						}}
+						class="bg-background"
 						required
 					/>
-					<p class="text-[11px] text-muted-foreground mt-0.5">
-						เบอร์นี้จะถูกบันทึกในข้อมูลผู้ติดต่อฉุกเฉินของ {headEvac.first_name} {headEvac.last_name}
+					<p class="text-[11px] text-muted-foreground">
+						จะบันทึกใน emergency contact ของ {headEvac.first_name}
+						{headEvac.last_name}
 					</p>
 				</div>
 			{/if}
 		{/if}
 
-		<div class="flex flex-col gap-1.5">
-			<Label class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-				เลือกสมาชิกในครัวเรือน
+		<!-- ─────────────────────── สมาชิก ─────────────────────── -->
+		<div class="space-y-2">
+			<Label class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+				สมาชิกในครัวเรือน
 			</Label>
-			
-			<div class="relative w-full" bind:this={containerDiv} onfocusout={handleFocusOut}>
-				<Input
-					type="text"
-					placeholder="พิมพ์เพื่อค้นหาชื่อสมาชิก..."
-					bind:value={searchQuery}
-					onfocus={() => isDropdownOpen = true}
-					class="w-full bg-background"
-				/>
-				
-				{#if isDropdownOpen}
-					<div class="absolute z-50 w-full mt-1 max-h-60 overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-lg p-1">
-						{#if filteredEvacuees.length === 0}
-							<p class="text-xs text-muted-foreground p-2">ไม่พบผู้ประสบภัยที่ตรงกับการค้นหา</p>
-						{:else}
-							{#each filteredEvacuees as e (e._id)}
-								{@const hasOtherHousehold = e.household_id && e.household_id !== initialData?._id}
-								{@const otherHouseholdLabel = households.find((h) => h._id === e.household_id)?.label ?? 'ครัวเรือนอื่น'}
-								<button
-									type="button"
-									onclick={() => selectMember(e._id)}
-									class="flex w-full items-center justify-between gap-2 text-left text-sm px-3 py-2 hover:bg-accent hover:text-accent-foreground rounded-sm transition-colors cursor-pointer"
-								>
-									<div class="flex flex-col">
-										<span class="font-medium text-foreground">
-											{e.first_name} {e.last_name}
-										</span>
-										<span class="text-[10px] text-muted-foreground">
-											ID: {maskNationalId(e.person_id?.number) || 'ไม่มี'} | โทร: {e.phone || 'ไม่มี'}
-										</span>
-									</div>
-									{#if hasOtherHousehold}
-										<span class="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 px-1.5 py-0.5 rounded shrink-0">
-											ย้ายจาก: {otherHouseholdLabel}
-										</span>
-									{/if}
-								</button>
-							{/each}
+
+			<Combobox
+				items={memberItems}
+				bind:value={memberSearchValue}
+				placeholder="พิมพ์ชื่อ, เบอร์ หรือเลขบัตรเพื่อค้นหา..."
+				searchPlaceholder="ค้นหาผู้ประสบภัย..."
+				emptyText="ไม่พบผู้ประสบภัยที่ตรงกับการค้นหา"
+				class="h-9 w-full"
+			>
+				{#snippet children({ item })}
+					<div class="flex w-full items-center justify-between gap-2">
+						<div class="flex flex-col">
+							<span class="font-medium">{item.evacuee.first_name} {item.evacuee.last_name}</span>
+							<span class="text-[10px] text-muted-foreground">
+								ID: {maskNationalId(item.evacuee.person_id?.number) || 'ไม่มี'} · โทร: {item.evacuee
+									.phone || 'ไม่มี'}
+							</span>
+						</div>
+						{#if item.hasOther}
+							<span
+								class="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-600 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-400"
+							>
+								ย้ายจาก: {item.otherLabel}
+							</span>
 						{/if}
 					</div>
-				{/if}
-			</div>
+				{/snippet}
+			</Combobox>
 
-			<!-- Chips of selected members -->
 			{#if selectedMemberIds.length > 0}
-				<div class="flex flex-wrap gap-2 mt-1 p-2 border border-border/50 rounded-md bg-muted/10">
-					{#each selectedMemberIds as id (id)}
-						{@const member = allEvacuees.find((e) => e._id === id)}
+				<div class="flex flex-wrap gap-2 rounded-md border border-border/50 bg-muted/10 p-2">
+					{#each selectedMemberIds as memberId (memberId)}
+						{@const member = allEvacuees.find((e) => e._id === memberId)}
 						{#if member}
-							{@const hasOtherHousehold = member.household_id && member.household_id !== initialData?._id}
-							{@const otherHouseholdLabel = households.find((h) => h._id === member.household_id)?.label ?? 'ครัวเรือนอื่น'}
-							<div class="flex items-center gap-1.5 bg-secondary text-secondary-foreground text-xs font-medium px-2.5 py-1 rounded-full border border-border">
+							{@const hasOther = member.household_id && member.household_id !== initialData?._id}
+							{@const otherLabel =
+								households.find((h) => h._id === member.household_id)?.label ?? 'ครัวเรือนอื่น'}
+							<div
+								class="flex items-center gap-1.5 rounded-full border border-border bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground"
+							>
 								<span>{member.first_name} {member.last_name}</span>
-								{#if hasOtherHousehold}
-									<span class="text-[9px] text-amber-700 bg-amber-50 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 px-1 rounded">
-										ย้ายจาก: {otherHouseholdLabel}
+								{#if hasOther}
+									<span
+										class="rounded border border-amber-200 bg-amber-50 px-1 text-[9px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-400"
+									>
+										ย้ายจาก: {otherLabel}
 									</span>
 								{/if}
-								{#if $formData.head_evacuee_id === id}
-									<span class="text-[9px] text-primary bg-primary/10 dark:bg-primary/20 px-1 rounded border border-primary/20 font-semibold">
+								{#if $formData.head_evacuee_id === memberId}
+									<span
+										class="rounded border border-primary/20 bg-primary/10 px-1 text-[9px] font-semibold text-primary"
+									>
 										หัวหน้า
 									</span>
 								{/if}
 								<button
 									type="button"
-									class="text-muted-foreground hover:text-foreground rounded-full p-0.5 transition-colors focus:outline-none cursor-pointer"
+									class="cursor-pointer rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
 									aria-label="ลบสมาชิก"
-									onclick={() => removeMember(id)}
+									onclick={() => removeMember(memberId)}
 								>
 									<X class="size-3" />
 								</button>
@@ -357,65 +370,119 @@
 			{/if}
 		</div>
 
+		<!-- ─────────────────────── เขต / ชุมชน ─────────────────────── -->
+		<div class="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
+			<h3
+				class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+			>
+				<MapPin class="size-3.5" />
+				ที่อยู่เดิม (เขต / ชุมชน)
+			</h3>
+
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+				<Form.Field {form} name="municipality_zone">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>เขตเทศบาล</Form.Label>
+							<Combobox
+								{...props}
+								items={municipalityZoneItems}
+								bind:value={mzVal}
+								placeholder={municipalityZoneQuery.isPending ? 'กำลังโหลด...' : 'เลือกเขต...'}
+								searchPlaceholder="ค้นหาเขต..."
+								emptyText="ไม่พบเขตที่ค้นหา"
+								disabled={municipalityZoneQuery.isPending}
+								class="h-9 w-full"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<Form.Field {form} name="community">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>ชุมชน</Form.Label>
+							<Combobox
+								{...props}
+								items={communityItems}
+								bind:value={commVal}
+								placeholder={communityQuery.isPending ? 'กำลังโหลด...' : 'เลือกชุมชน...'}
+								searchPlaceholder="ค้นหาชุมชน..."
+								emptyText="ไม่พบชุมชนที่ค้นหา"
+								disabled={communityQuery.isPending}
+								class="h-9 w-full"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+			</div>
+		</div>
+
+		<!-- ─────────────────────── สัตว์เลี้ยง ─────────────────────── -->
 		<Form.Field {form} name="pets">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>สัตว์เลี้ยงในครอบครัว</Form.Label>
-					<div class="grid grid-cols-2 gap-3 mt-1">
-						<div class="flex items-center justify-between border border-border rounded-lg p-2 bg-muted/30">
-							<span class="text-sm font-medium">🐶 สุนัข (Dog)</span>
-							<Input
-								type="number"
-								min="0"
-								bind:value={dogCount}
-								class="w-16 h-8 text-center px-1"
-							/>
-						</div>
-
-						<div class="flex items-center justify-between border border-border rounded-lg p-2 bg-muted/30">
-							<span class="text-sm font-medium">🐱 แมว (Cat)</span>
-							<Input
-								type="number"
-								min="0"
-								bind:value={catCount}
-								class="w-16 h-8 text-center px-1"
-							/>
-						</div>
-
-						<div class="flex items-center justify-between border border-border rounded-lg p-2 bg-muted/30">
-							<span class="text-sm font-medium">🐦 นก (Bird)</span>
-							<Input
-								type="number"
-								min="0"
-								bind:value={birdCount}
-								class="w-16 h-8 text-center px-1"
-							/>
-						</div>
-
-						<div class="flex items-center justify-between border border-border rounded-lg p-2 bg-muted/30">
-							<span class="text-sm font-medium">🐾 อื่นๆ (Other)</span>
-							<Input
-								type="number"
-								min="0"
-								bind:value={otherCount}
-								class="w-16 h-8 text-center px-1"
-							/>
-						</div>
+					<Form.Label class="flex items-center gap-1.5">
+						<PawPrint class="size-3.5 text-muted-foreground" />
+						สัตว์เลี้ยง
+					</Form.Label>
+					<div {...props} class="mt-1 grid grid-cols-2 gap-2.5">
+						{#each [{ label: '🐶 สุนัข', bind: dogCount }, { label: '🐱 แมว', bind: catCount }, { label: '🐦 นก', bind: birdCount }, { label: '🐾 อื่นๆ', bind: otherCount }] as pet, i (i)}
+							<div
+								class="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2"
+							>
+								<span class="text-sm font-medium">{pet.label}</span>
+								{#if i === 0}
+									<Input
+										type="number"
+										min="0"
+										bind:value={dogCount}
+										class="h-8 w-16 px-1 text-center"
+									/>
+								{:else if i === 1}
+									<Input
+										type="number"
+										min="0"
+										bind:value={catCount}
+										class="h-8 w-16 px-1 text-center"
+									/>
+								{:else if i === 2}
+									<Input
+										type="number"
+										min="0"
+										bind:value={birdCount}
+										class="h-8 w-16 px-1 text-center"
+									/>
+								{:else}
+									<Input
+										type="number"
+										min="0"
+										bind:value={otherCount}
+										class="h-8 w-16 px-1 text-center"
+									/>
+								{/if}
+							</div>
+						{/each}
 					</div>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<div class="space-y-4 border-t border-border/50 pt-4 mt-2">
-			<h3 class="text-xs font-bold text-primary uppercase tracking-wider">ที่อยู่ครอบครัวหลัก</h3>
-			
+		<!-- ─────────────────────── ที่อยู่ครอบครัวหลัก ─────────────────────── -->
+		<div class="space-y-3 border-t border-border/50 pt-4">
+			<h3 class="text-xs font-semibold tracking-wide text-primary uppercase">
+				ที่อยู่ครอบครัวหลัก
+			</h3>
+
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
 				<Form.Field {form} name="address_no">
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label>บ้านเลขที่</Form.Label>
-							<Input {...props} bind:value={$formData.address_no} placeholder="เช่น 123/45" class="bg-background" />
+							<Input {...props} bind:value={$formData.address_no} placeholder="เช่น 123/45" />
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />
@@ -424,8 +491,8 @@
 				<Form.Field {form} name="village_no">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label>หมู่ที่ / ตรอก / ซอย / ถนน</Form.Label>
-							<Input {...props} bind:value={$formData.village_no} placeholder="เช่น หมู่ 2" class="bg-background" />
+							<Form.Label>หมู่ / ตรอก / ซอย / ถนน</Form.Label>
+							<Input {...props} bind:value={$formData.village_no} placeholder="เช่น หมู่ 2" />
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />
@@ -435,7 +502,7 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label>ตำบล / แขวง</Form.Label>
-							<Input {...props} bind:value={$formData.subdistrict} placeholder="เช่น หาดใหญ่" class="bg-background" />
+							<Input {...props} bind:value={$formData.subdistrict} placeholder="เช่น หาดใหญ่" />
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />
@@ -447,7 +514,7 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label>อำเภอ / เขต</Form.Label>
-							<Input {...props} bind:value={$formData.district} placeholder="เช่น หาดใหญ่" class="bg-background" />
+							<Input {...props} bind:value={$formData.district} placeholder="เช่น หาดใหญ่" />
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />
@@ -457,7 +524,7 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label>จังหวัด</Form.Label>
-							<Input {...props} bind:value={$formData.province} placeholder="เช่น สงขลา" class="bg-background" />
+							<Input {...props} bind:value={$formData.province} placeholder="เช่น สงขลา" />
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />
@@ -467,18 +534,15 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label>รหัสไปรษณีย์</Form.Label>
-							<Input {...props} bind:value={$formData.postal_code} placeholder="เช่น 90110" class="bg-background" />
+							<Input {...props} bind:value={$formData.postal_code} placeholder="เช่น 90110" />
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />
 				</Form.Field>
 			</div>
-
-			<p class="text-[11px] text-muted-foreground italic">
-				* การแก้ไขที่อยู่จะอัปเดตข้อมูลของทุกคนในครอบครัวอัตโนมัติ
-			</p>
 		</div>
 
+		<!-- ─────────────────────── บันทึกเพิ่มเติม ─────────────────────── -->
 		<Form.Field {form} name="notes">
 			<Form.Control>
 				{#snippet children({ props })}
@@ -487,16 +551,19 @@
 						{...props}
 						bind:value={$formData.notes}
 						placeholder="ข้อมูลเพิ่มเติม เช่น เบอร์ติดต่อสำรอง, ปัญหาสุขภาพของสัตว์เลี้ยง..."
-						class="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+						class="min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
 					></textarea>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<div class="flex justify-end gap-2 pt-3">
+		<!-- ─────────────────────── Actions ─────────────────────── -->
+		<div class="flex justify-end gap-2 pt-2">
 			<Button type="button" variant="outline" onclick={oncancel}>ยกเลิก</Button>
-			<Form.Button disabled={$submitting || pending}>บันทึก</Form.Button>
+			<Form.Button disabled={$submitting || pending}>
+				{pending ? 'กำลังบันทึก...' : 'บันทึก'}
+			</Form.Button>
 		</div>
 	</Field.FieldGroup>
 </form>

@@ -24,7 +24,10 @@ export const MASTER_DATA_TYPES = [
 	'health_condition',
 	'dietary_restrictions',
 	'pet_types',
-	'house_damage'
+	'house_damage',
+	'municipality_zone',
+	'community',
+	'shelter_type'
 ] as const;
 export type MasterDataType = (typeof MASTER_DATA_TYPES)[number];
 
@@ -36,7 +39,10 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	health_condition: 'โรคประจำตัวและอาการแพ้ (Health Condition)',
 	dietary_restrictions: 'ศาสนาและข้อจำกัดอาหาร (Dietary Restrictions)',
 	pet_types: 'ประเภทสัตว์เลี้ยง (Pet Types)',
-	house_damage: 'สถานะความเสียหายของบ้าน (House Damage)'
+	house_damage: 'สถานะความเสียหายของบ้าน (House Damage)',
+	municipality_zone: 'เขตเทศบาล (Municipality Zone)',
+	community: 'ชุมชน (Community)',
+	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)'
 };
 
 /** Stable `code` used as the doc id — registry has no `shelter_code` (global). */
@@ -59,7 +65,8 @@ export const masterDataItemSchema = z.object({
 		.min(1)
 		.regex(/^[a-z0-9_]+$/, 'Code must be lower_snake'),
 	label: z.string().trim().min(1),
-	is_default: z.boolean()
+	is_default: z.boolean(),
+	parent_code: z.string().trim().min(1).optional()
 });
 export type MasterDataItem = z.infer<typeof masterDataItemSchema>;
 
