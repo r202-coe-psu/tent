@@ -2,7 +2,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import type { UserSummary } from '../data/users.api';
-	import { Settings2, Trash2, CheckCircle2 } from '@lucide/svelte';
+	import { Settings2, Trash2 } from '@lucide/svelte';
 	import * as Table from '$lib/components/ui/table/index.js';
 
 	import { isStaffOnly } from '$lib/auth/roles';
@@ -31,7 +31,6 @@
 				<Table.Head class="py-4 pl-10 text-left font-bold text-slate-700">USERNAME</Table.Head>
 				<Table.Head class="py-4 text-left font-bold text-slate-700">ชื่อ-สกุล</Table.Head>
 				<Table.Head class="py-4 text-left font-bold text-slate-700">ROLE</Table.Head>
-				<Table.Head class="py-4 text-left font-bold text-slate-700">STATUS</Table.Head>
 				<Table.Head class="py-4 text-center font-bold text-slate-700">จัดการ</Table.Head>
 			</Table.Row>
 		</Table.Header>
@@ -48,14 +47,6 @@
 							class="rounded-md bg-slate-100 font-semibold text-slate-700 hover:bg-slate-100/80"
 						>
 							{user.roles.join(', ') || '—'}
-						</Badge>
-					</Table.Cell>
-					<Table.Cell>
-						<Badge
-							variant="outline"
-							class="rounded-md border-green-200 bg-green-50 font-normal text-green-700 hover:bg-green-50"
-						>
-							<CheckCircle2 class="mr-1 h-3 w-3" /> Active
 						</Badge>
 					</Table.Cell>
 					<Table.Cell class="text-center">
