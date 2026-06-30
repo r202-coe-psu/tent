@@ -107,6 +107,27 @@ export class KitchenPouchRepository implements KitchenRepository {
 	listMealServices(): Promise<MealService[]> {
 		return this.repo.allByType('meal_service', isMealService);
 	}
+
+	async confirmMealPlan(plan: any): Promise<any> {
+		plan.status = 'confirmed';
+		return this.repo.put(plan);
+	}
+
+	async createGasCylinderType(input: any, ctx: any): Promise<any> {
+		throw new Error('Not implemented yet');
+	}
+
+	async listGasCylinderTypes(): Promise<any[]> {
+		return [];
+	}
+
+	async updateGasCylinderType(doc: any, input: any): Promise<any> {
+		throw new Error('Not implemented yet');
+	}
+
+	async deleteGasCylinderType(doc: any): Promise<void> {
+		throw new Error('Not implemented yet');
+	}
 }
 
 let singleton: KitchenRepository | null = null;
