@@ -19,6 +19,7 @@ import {
 	createCouchUser,
 	deleteCouchUser,
 	couchLogin,
+	COUCH_AUTH,
 	SA_ROLES,
 	SM_SH001_ROLES,
 	STAFF_SH001_ROLES
@@ -201,7 +202,7 @@ test.describe('User Management UI — Delete Flow (real BFF)', () => {
 		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
 
 		// Verify user is actually gone from CouchDB
-		const auth = 'Basic ' + btoa('admin:password');
+		const auth = COUCH_AUTH;
 		const check = await fetch(
 			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(victim)}`,
 			{ headers: { Authorization: auth } }
@@ -245,7 +246,7 @@ test.describe('User Management UI — Delete Flow (real BFF)', () => {
 		await page.getByRole('button', { name: /ยืนยันการลบ/ }).click();
 		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
 
-		const auth = 'Basic ' + btoa('admin:password');
+		const auth = COUCH_AUTH;
 		const check = await fetch(
 			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(victim)}`,
 			{ headers: { Authorization: auth } }
@@ -299,7 +300,7 @@ test.describe('User Management UI — Edit Flow (real BFF)', () => {
 		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
 
 		// Verify change in CouchDB
-		const auth = 'Basic ' + btoa('admin:password');
+		const auth = COUCH_AUTH;
 		const check = await fetch(
 			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(target)}`,
 			{ headers: { Authorization: auth } }
@@ -344,7 +345,7 @@ test.describe('User Management UI — Edit Flow (real BFF)', () => {
 		await page.getByRole('button', { name: /บันทึก/ }).click();
 		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
 
-		const auth = 'Basic ' + btoa('admin:password');
+		const auth = COUCH_AUTH;
 		const check = await fetch(
 			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(target)}`,
 			{ headers: { Authorization: auth } }
@@ -389,7 +390,7 @@ test.describe('User Management UI — Create Flow (real BFF)', () => {
 		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
 
 		// Verify user is actually created in CouchDB
-		const auth = 'Basic ' + btoa('admin:password');
+		const auth = COUCH_AUTH;
 		const check = await fetch(
 			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(newUsername)}`,
 			{ headers: { Authorization: auth } }
@@ -425,7 +426,7 @@ test.describe('User Management UI — Create Flow (real BFF)', () => {
 
 		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
 
-		const auth = 'Basic ' + btoa('admin:password');
+		const auth = COUCH_AUTH;
 		const check = await fetch(
 			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(newUsername)}`,
 			{ headers: { Authorization: auth } }

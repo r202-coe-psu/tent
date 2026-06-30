@@ -26,7 +26,7 @@ function parseCouchUrl(raw: string): { base: string; auth: string } {
 	};
 }
 
-const { base: COUCH_BASE, auth: COUCH_AUTH } = parseCouchUrl(COUCH_URL);
+export const { base: COUCH_BASE, auth: COUCH_AUTH } = parseCouchUrl(COUCH_URL);
 
 async function couchReq(
 	method: string,
