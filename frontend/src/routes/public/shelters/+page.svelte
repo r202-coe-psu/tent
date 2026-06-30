@@ -17,6 +17,10 @@
 	import Filter from '@lucide/svelte/icons/filter';
 	
 	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
+	import { Checkbox } from '$lib/components/ui/checkbox';
+	import * as Select from '$lib/components/ui/select';
 	import PublicShelterMetricCard from '$lib/components/public-shelter-metric-card.svelte';
 	import PublicShelterCard from '$lib/components/public-shelter-card.svelte';
 
@@ -252,43 +256,58 @@
 				
 				<form method="GET" action="/public/shelters" class="space-y-4">
 					<div class="space-y-1.5">
-						<label for="search" class="text-xs font-semibold text-muted-foreground">ค้นหา</label>
+						<Label for="search" class="text-xs font-semibold text-muted-foreground">ค้นหา</Label>
 						<div class="relative">
-							<input
+							<Input
 								id="search"
 								name="q"
 								type="text"
 								bind:value={searchQuery}
 								placeholder="ชื่อศูนย์, ตำบล..."
-								class="w-full rounded-xl border border-input bg-background px-3 py-2.5 pl-9 text-sm text-foreground shadow-xs outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
+								class="w-full rounded-xl pl-9"
 							/>
-							<Search class="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
+							<Search class="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
 						</div>
 					</div>
 
 					<div class="space-y-1.5">
-						<label for="province" class="text-xs font-semibold text-muted-foreground">จังหวัด</label>
-						<select id="province" name="province" class="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground shadow-xs outline-hidden focus:border-primary focus:ring-1 focus:ring-primary">
-							<option value="">จังหวัด (ทั้งหมด)</option>
-							<option value="songkhla">สงขลา</option>
-						</select>
+						<Label for="province" class="text-xs font-semibold text-muted-foreground">จังหวัด</Label>
+						<Select.Root type="single" name="province">
+							<Select.Trigger class="w-full rounded-xl">
+								<Select.Value placeholder="จังหวัด (ทั้งหมด)" />
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="">จังหวัด (ทั้งหมด)</Select.Item>
+								<Select.Item value="songkhla">สงขลา</Select.Item>
+							</Select.Content>
+						</Select.Root>
 					</div>
 
 					<div class="space-y-1.5">
-						<label for="district" class="text-xs font-semibold text-muted-foreground">อำเภอ/เขต</label>
-						<select id="district" name="district" class="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground shadow-xs outline-hidden focus:border-primary focus:ring-1 focus:ring-primary">
-							<option value="">อำเภอ (ทั้งหมด)</option>
-							<option value="hatyai">หาดใหญ่</option>
-							<option value="muang">เมืองสงขลา</option>
-						</select>
+						<Label for="district" class="text-xs font-semibold text-muted-foreground">อำเภอ/เขต</Label>
+						<Select.Root type="single" name="district">
+							<Select.Trigger class="w-full rounded-xl">
+								<Select.Value placeholder="อำเภอ (ทั้งหมด)" />
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="">อำเภอ (ทั้งหมด)</Select.Item>
+								<Select.Item value="hatyai">หาดใหญ่</Select.Item>
+								<Select.Item value="muang">เมืองสงขลา</Select.Item>
+							</Select.Content>
+						</Select.Root>
 					</div>
 					
 					<div class="space-y-1.5">
-						<label for="subdistrict" class="text-xs font-semibold text-muted-foreground">ตำบล/แขวง</label>
-						<select id="subdistrict" name="subdistrict" class="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground shadow-xs outline-hidden focus:border-primary focus:ring-1 focus:ring-primary">
-							<option value="">ตำบล (ทั้งหมด)</option>
-							<option value="korhong">คอหงส์</option>
-						</select>
+						<Label for="subdistrict" class="text-xs font-semibold text-muted-foreground">ตำบล/แขวง</Label>
+						<Select.Root type="single" name="subdistrict">
+							<Select.Trigger class="w-full rounded-xl">
+								<Select.Value placeholder="ตำบล (ทั้งหมด)" />
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="">ตำบล (ทั้งหมด)</Select.Item>
+								<Select.Item value="korhong">คอหงส์</Select.Item>
+							</Select.Content>
+						</Select.Root>
 					</div>
 
 					<div class="space-y-2 pt-2">
@@ -304,21 +323,21 @@
 					<div class="space-y-2 pt-2 border-t border-border mt-2">
 						<div class="text-xs font-semibold text-muted-foreground">สถานะศูนย์พักพิง</div>
 						<div class="flex items-center gap-4">
-							<label class="flex items-center gap-2 cursor-pointer">
-								<input type="checkbox" name="status" value="OPEN" checked class="rounded border-input text-primary focus:ring-primary" />
-								<span class="text-sm font-medium text-foreground">เปิดใช้งาน</span>
-							</label>
-							<label class="flex items-center gap-2 cursor-pointer">
-								<input type="checkbox" name="status" value="CLOSED" class="rounded border-input text-primary focus:ring-primary" />
-								<span class="text-sm font-medium text-foreground">ปิดใช้งาน</span>
-							</label>
+							<div class="flex items-center gap-2">
+								<Checkbox id="status-open" name="status" value="OPEN" checked={true} />
+								<Label for="status-open" class="text-sm font-medium cursor-pointer">เปิดใช้งาน</Label>
+							</div>
+							<div class="flex items-center gap-2">
+								<Checkbox id="status-closed" name="status" value="CLOSED" checked={false} />
+								<Label for="status-closed" class="text-sm font-medium cursor-pointer">ปิดใช้งาน</Label>
+							</div>
 						</div>
 					</div>
 					
 					<div class="pt-2 border-t border-border mt-4">
-						<button type="submit" class="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary-dark">
+						<Button type="submit" class="w-full rounded-xl font-bold">
 							ค้นหาและกรองข้อมูล
-						</button>
+						</Button>
 					</div>
 				</form>
 			</div>

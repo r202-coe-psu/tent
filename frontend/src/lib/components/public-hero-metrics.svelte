@@ -28,7 +28,7 @@
 				LIVE DISASTER COORDINATION LINK
 			</div>
 			<h2 class="text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl leading-tight mb-4">
-				ระบบข้อมูลผู้ประสบภัย<br/>และสืบค้นสถานะเข้าพัก<br/>ฉุกเฉิน
+				ระบบข้อมูลผู้ประสบภัยและสืบค้นสถานะเข้าพักฉุกเฉิน
 			</h2>
 			<p class="mt-2 text-sm text-white/80 leading-relaxed max-w-lg mb-8">
 				เชื่อมต่อ อำนวยความสะดวก และรายงานความช่วยเหลือสาธารณะเพื่อความโปร่งใสแบบตามเวลาจริง (Real-Time Transparency) สามารถสืบหาญาติ ติดตามผู้ประสบภัย หรือร่วมแจกจ่ายเสบียงผ่านเครือข่ายของเรา
