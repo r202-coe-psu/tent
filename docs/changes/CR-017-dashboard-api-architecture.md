@@ -67,7 +67,7 @@ affects:
  ┗ 📜 docker-compose.yml     <-- [T-58] เพิ่ม Service `worker`, `redis` และ `mongodb`
  ┗ ิ📂 backend                 <-- clone มาจาก repo https://github.com/importstar/fastapi-beanie-simplified
 ```
-
+> คำถาม: init backend พี่เน็ทจะ init เองหรือให้ TL init ครับ
 ## 4. ไฟล์ที่ได้รับผลกระทบ
 
 - `frontend/src/routes/api/v1/public/shelters/+server.ts` (สร้างใหม่)
