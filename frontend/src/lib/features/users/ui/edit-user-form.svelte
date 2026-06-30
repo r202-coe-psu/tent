@@ -5,21 +5,25 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { STAFF_CAPABILITIES, SHELTER_CAPABILITIES } from '$lib/auth/roles';
-	import { createUserSchema, type CreateUserInput } from '../domain/schema';
+	import { editUserSchema, type EditUserInput } from '../domain/schema';
 	import { useShelters } from '$lib/features/shelters';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Save } from '@lucide/svelte';
+	import type { UserSummary } from '../data/users.api';
+	import { untrack } from 'svelte';
 
 	const sheltersQuery = useShelters();
 
 	let {
+		user,
 		onsubmit,
 		oncancel,
 		isSA = false,
 		shelterCode = null,
 		pending = false
 	}: {
-		onsubmit: (input: CreateUserInput) => void;
+		user: UserSummary;
+		onsubmit: (input: EditUserInput) => void;
 		oncancel?: () => void;
 		/** System admin: may grant any capability + choose the shelter. */
 		isSA?: boolean;
@@ -31,20 +35,37 @@
 	// SA may grant shelter_manager too; a manager only staff capabilities.
 	const capabilities = $derived(isSA ? SHELTER_CAPABILITIES : STAFF_CAPABILITIES);
 
-	const form = superForm(defaults(zod4(createUserSchema)), {
-		SPA: true,
-		validators: zod4(createUserSchema),
-		resetForm: false,
-		onUpdate: async ({ form }) => {
-			if (!form.valid) return;
-			// A manager's shelter is implicit; an SA types it in the field.
-			const shelter_id = isSA ? form.data.shelter_id : (shelterCode ?? undefined);
-			onsubmit({ ...form.data, shelter_id });
-			reset();
-		}
-	});
+	// Find the user's capability from their roles
+	const userCapability = $derived(
+		user.roles.find((r) => (capabilities as readonly string[]).includes(r)) ?? capabilities[0]
+	);
 
-	const { form: formData, submitting, reset } = form;
+	const form = superForm(
+		defaults(
+			untrack(() => ({
+				username: user.name,
+				password: '',
+				display_name: user.display_name ?? '',
+				capability: userCapability as EditUserInput['capability'],
+				shelter_id: user.shelter_id ?? undefined,
+				affiliation_tags: $state.snapshot(user.affiliation_tags)
+			})),
+			zod4(editUserSchema)
+		),
+		{
+			SPA: true,
+			validators: zod4(editUserSchema),
+			resetForm: false,
+			onUpdate: async ({ form }) => {
+				if (!form.valid) return;
+				// A manager's shelter is implicit; an SA types it in the field.
+				const shelter_id = isSA ? form.data.shelter_id : (shelterCode ?? undefined);
+				onsubmit({ ...form.data, shelter_id });
+			}
+		}
+	);
+
+	const { form: formData, submitting } = form;
 </script>
 
 <form method="POST" use:form.enhance>
@@ -56,8 +77,8 @@
 					<Input
 						{...props}
 						bind:value={$formData.username}
-						class="h-11 border-0 bg-slate-50 shadow-none"
-						placeholder="user123"
+						disabled
+						class="h-11 cursor-not-allowed border-0 bg-slate-100 text-slate-500 shadow-none"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -82,7 +103,7 @@
 		<Form.Field {form} name="password">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label class="font-bold">รหัสผ่าน (Password)</Form.Label>
+					<Form.Label class="font-bold">รหัสผ่านใหม่ (หากต้องการเปลี่ยน)</Form.Label>
 					<Input
 						{...props}
 						type="password"
