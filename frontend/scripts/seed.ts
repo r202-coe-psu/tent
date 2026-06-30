@@ -55,6 +55,8 @@ import { createInitialProfile } from '$lib/features/sop-ratios/domain/sop-ratio'
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
+import { SHELTER_DASHBOARD_VIEWS } from '$lib/features/shelters/server';
+
 // ─── env ──────────────────────────────────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -872,51 +874,7 @@ async function seedDashboardData(): Promise<void> {
 // ─── deployShelterViews ──────────────────────────────────────────────────────
 
 async function deployShelterViews(db: string): Promise<void> {
-	const appDesign = {
-		_id: '_design/app',
-		views: {
-			occupancy: {
-				map: `function(doc) {
-					if (doc.type !== 'evacuee' || !doc.current_stay) return;
-					emit(doc.current_stay.status, 1);
-				}`,
-				reduce: '_count'
-			},
-			demographics_by_age: {
-				map: `function(doc) {
-					if (doc.type !== 'evacuee') return;
-					if (!doc.birth_year) { emit('unknown', 1); return; }
-					var ceYear = doc.birth_year - 543;
-					var currentYear = new Date().getFullYear();
-					var age = currentYear - ceYear;
-					var bucket;
-					if      (age <= 4)  bucket = '0-4';
-					else if (age <= 11) bucket = '5-11';
-					else if (age <= 17) bucket = '12-17';
-					else if (age <= 59) bucket = '18-59';
-					else                bucket = '60+';
-					emit(bucket, 1);
-				}`,
-				reduce: '_count'
-			},
-			demographics_by_country: {
-				map: `function(doc) {
-					if (doc.type !== 'evacuee') return;
-					var c = (doc.country || '').trim().toUpperCase() || 'UNKNOWN';
-					emit(c, 1);
-				}`,
-				reduce: '_count'
-			},
-			registrations_by_date: {
-				map: `function(doc) {
-					if (doc.type !== 'evacuee' || !doc.created_at) return;
-					var date = doc.created_at.slice(0, 10);
-					emit(date, 1);
-				}`,
-				reduce: '_count'
-			}
-		}
-	} as { _id: string; _rev?: string; views: Record<string, { map: string; reduce: string }> };
+	const appDesign = JSON.parse(JSON.stringify(SHELTER_DASHBOARD_VIEWS));
 
 	const existing = await couchReq('GET', `/${db}/_design/app`);
 	if (existing.status === 200) {
@@ -937,7 +895,8 @@ async function deleteDashboardData(): Promise<void> {
 	await ensureDb(SHELTER_DB);
 	console.log(`Searching for dashboard test data in ${SHELTER_DB}...`);
 
-	const { status, data } = await couchReq('GET', `/${SHELTER_DB}/_all_docs?include_docs=true`);
+	const keys = Array.from({ length: 100 }, (_, i) => `evacuee:seed-genname-${i}`);
+	const { status, data } = await couchReq('POST', `/${SHELTER_DB}/_all_docs?include_docs=true`, { keys });
 	if (status !== 200) {
 		console.log(`Failed to fetch docs: HTTP ${status}`);
 		return;
@@ -947,7 +906,7 @@ async function deleteDashboardData(): Promise<void> {
 		data as { rows: { doc: { type?: string; first_name?: string } & Record<string, unknown> }[] }
 	).rows;
 	const toDelete = rows
-		.filter((r) => r.doc?.type === 'evacuee' && r.doc?.first_name?.startsWith('GenName'))
+		.filter((r) => r.doc && r.doc._id)
 		.map((r) => ({ ...r.doc, _deleted: true }));
 
 	if (toDelete.length === 0) {

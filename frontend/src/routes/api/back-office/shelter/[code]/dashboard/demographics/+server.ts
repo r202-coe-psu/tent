@@ -18,12 +18,11 @@ import {
 	rowsToAgeGroups,
 	rowsToCountries
 } from '$lib/features/dashboard-demographics';
+import type { ViewResult } from '$lib/server/shelters.admin';
 
 export const prerender = false;
 
-interface ViewResult {
-	rows: { key: string; value: number }[];
-}
+
 
 export const GET: RequestHandler = async ({ params, request }) => {
 	try {

@@ -15,6 +15,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, requireShelterScopeOrSA, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { rowsToOccupancyPayload, OccupancyPayloadSchema } from '$lib/features/dashboard-occupancy';
+import type { ViewResult } from '$lib/server/shelters.admin';
 
 export const prerender = false;
 
@@ -39,9 +40,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 			throw new ServiceError('INTERNAL', `CouchDB view error (${res.status})`);
 		}
 
-		interface ViewResult {
-			rows: { key: string; value: number }[];
-		}
+
 		const rows = (res.data as ViewResult).rows ?? [];
 
 		// Map view rows → typed payload; Zod validates output shape.

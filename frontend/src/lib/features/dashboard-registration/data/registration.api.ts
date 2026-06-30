@@ -5,6 +5,7 @@
  * Never calls CouchDB directly from the browser.
  */
 import type { RegistrationsPayload } from '../domain/schema';
+import { serviceFetch } from '$lib/api/service';
 
 /**
  * Fetch daily registration statistics for a shelter from the BFF.
@@ -19,20 +20,12 @@ export async function fetchRegistrations(
 	from?: string,
 	to?: string
 ): Promise<RegistrationsPayload> {
-	const url = new URL(
-		`/api/back-office/shelter/${encodeURIComponent(shelterCode)}/dashboard/registrations`,
-		location.origin
+	const params = new URLSearchParams();
+	if (from) params.set('from', from);
+	if (to) params.set('to', to);
+	
+	const query = params.toString() ? `?${params.toString()}` : '';
+	return serviceFetch<RegistrationsPayload>(
+		`/api/back-office/shelter/${encodeURIComponent(shelterCode)}/dashboard/registrations${query}`
 	);
-	if (from) url.searchParams.set('from', from);
-	if (to) url.searchParams.set('to', to);
-
-	const res = await fetch(url.toString(), { credentials: 'same-origin' });
-	if (!res.ok) {
-		const body = await res.json().catch(() => ({}));
-		throw new Error(
-			(body as { error?: { message?: string } }).error?.message ??
-				`Registrations fetch failed (${res.status})`
-		);
-	}
-	return res.json() as Promise<RegistrationsPayload>;
 }

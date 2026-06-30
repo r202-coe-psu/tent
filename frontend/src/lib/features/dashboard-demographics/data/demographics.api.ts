@@ -5,6 +5,7 @@
  * Never calls CouchDB directly from the browser.
  */
 import type { DemographicsPayload } from '../domain/schema';
+import { serviceFetch } from '$lib/api/service';
 
 /**
  * Fetch age-group and nationality statistics for a shelter from the BFF.
@@ -13,16 +14,7 @@ import type { DemographicsPayload } from '../domain/schema';
  * @throws on network errors or non-OK HTTP responses
  */
 export async function fetchDemographics(shelterCode: string): Promise<DemographicsPayload> {
-	const res = await fetch(
-		`/api/back-office/shelter/${encodeURIComponent(shelterCode)}/dashboard/demographics`,
-		{ credentials: 'same-origin' }
+	return serviceFetch<DemographicsPayload>(
+		`/api/back-office/shelter/${encodeURIComponent(shelterCode)}/dashboard/demographics`
 	);
-	if (!res.ok) {
-		const body = await res.json().catch(() => ({}));
-		throw new Error(
-			(body as { error?: { message?: string } }).error?.message ??
-				`Demographics fetch failed (${res.status})`
-		);
-	}
-	return res.json() as Promise<DemographicsPayload>;
 }

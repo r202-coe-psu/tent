@@ -6,6 +6,7 @@
  * (couchdb-pouchdb-bestpractices: rule 1 "Write to Local First / no direct CouchDB from UI").
  */
 import type { OccupancyPayload } from '../domain/schema';
+import { serviceFetch } from '$lib/api/service';
 
 /**
  * Fetch occupancy statistics for a shelter from the BFF.
@@ -14,16 +15,7 @@ import type { OccupancyPayload } from '../domain/schema';
  * @throws on network errors or non-OK HTTP responses
  */
 export async function fetchOccupancy(shelterCode: string): Promise<OccupancyPayload> {
-	const res = await fetch(
-		`/api/back-office/shelter/${encodeURIComponent(shelterCode)}/dashboard/occupancy`,
-		{ credentials: 'same-origin' }
+	return serviceFetch<OccupancyPayload>(
+		`/api/back-office/shelter/${encodeURIComponent(shelterCode)}/dashboard/occupancy`
 	);
-	if (!res.ok) {
-		const body = await res.json().catch(() => ({}));
-		throw new Error(
-			(body as { error?: { message?: string } }).error?.message ??
-				`Occupancy fetch failed (${res.status})`
-		);
-	}
-	return res.json() as Promise<OccupancyPayload>;
 }

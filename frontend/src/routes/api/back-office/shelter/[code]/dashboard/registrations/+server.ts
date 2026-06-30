@@ -23,6 +23,7 @@ import {
 	rowsToRegistrationsPayload,
 	defaultDateRange
 } from '$lib/features/dashboard-registration';
+import type { ViewResult } from '$lib/server/shelters.admin';
 
 export const prerender = false;
 
@@ -30,9 +31,7 @@ export const prerender = false;
 // when used as endkey. (couchdb-pouchdb-bestpractices §6 CONVENTIONS.md §5)
 const SENTINEL = '\ufff0';
 
-interface ViewResult {
-	rows: { key: string; value: number }[];
-}
+
 
 export const GET: RequestHandler = async ({ params, request, url }) => {
 	try {
