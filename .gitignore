@@ -20,5 +20,6 @@ Thumbs.db
 
 # Meeting notes (not shared with team)
 docs/meetings/
+couchdb-session.ini
 
 .pnpm-store/
