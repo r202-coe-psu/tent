@@ -229,7 +229,7 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	).toISOString();
 	return makeDoc(
 		'donation',
-		1,
+		2,
 		{
 			channel: 'walk_in' as const,
 			donor: d.donor,
