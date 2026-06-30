@@ -12,9 +12,7 @@
 import { z } from 'zod';
 
 /** ISO date string (YYYY-MM-DD). */
-const IsoDate = z
-	.string()
-	.regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD');
+const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD');
 
 /** Query params schema for the registrations endpoint. */
 export const RegistrationsQuerySchema = z.object({

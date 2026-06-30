@@ -7,10 +7,7 @@
  *   3. Edge cases: empty rows, unknown status keys, duplicate keys
  */
 import { describe, it, expect } from 'vitest';
-import {
-	rowsToOccupancyPayload,
-	OccupancyPayloadSchema
-} from './schema';
+import { rowsToOccupancyPayload, OccupancyPayloadSchema } from './schema';
 
 describe('rowsToOccupancyPayload', () => {
 	it('aggregates all known status keys correctly', () => {

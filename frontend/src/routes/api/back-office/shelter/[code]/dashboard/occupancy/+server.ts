@@ -13,7 +13,12 @@
  */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, requireShelterScopeOrSA, serviceError, ServiceError } from '$lib/server/couch-admin';
+import {
+	adminRaw,
+	requireShelterScopeOrSA,
+	serviceError,
+	ServiceError
+} from '$lib/server/couch-admin';
 import { rowsToOccupancyPayload, OccupancyPayloadSchema } from '$lib/features/dashboard-occupancy';
 import type { ViewResult } from '$lib/server/shelters.admin';
 
@@ -39,7 +44,6 @@ export const GET: RequestHandler = async ({ params, request }) => {
 		if (res.status >= 400) {
 			throw new ServiceError('INTERNAL', `CouchDB view error (${res.status})`);
 		}
-
 
 		const rows = (res.data as ViewResult).rows ?? [];
 

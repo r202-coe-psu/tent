@@ -23,7 +23,7 @@ export async function fetchRegistrations(
 	const params = new URLSearchParams();
 	if (from) params.set('from', from);
 	if (to) params.set('to', to);
-	
+
 	const query = params.toString() ? `?${params.toString()}` : '';
 	return serviceFetch<RegistrationsPayload>(
 		`/api/back-office/shelter/${encodeURIComponent(shelterCode)}/dashboard/registrations${query}`

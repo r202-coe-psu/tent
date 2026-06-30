@@ -16,7 +16,12 @@
  */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, requireShelterScopeOrSA, serviceError, ServiceError } from '$lib/server/couch-admin';
+import {
+	adminRaw,
+	requireShelterScopeOrSA,
+	serviceError,
+	ServiceError
+} from '$lib/server/couch-admin';
 import {
 	RegistrationsQuerySchema,
 	RegistrationsPayloadSchema,
@@ -30,8 +35,6 @@ export const prerender = false;
 // High-value sentinel: ensures all string sub-keys under a date prefix are included
 // when used as endkey. (couchdb-pouchdb-bestpractices §6 CONVENTIONS.md §5)
 const SENTINEL = '\ufff0';
-
-
 
 export const GET: RequestHandler = async ({ params, request, url }) => {
 	try {
@@ -62,11 +65,7 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 		const res = await adminRaw(viewPath, 'GET');
 
 		if (res.status === 404) {
-			return json(
-				RegistrationsPayloadSchema.parse(
-					rowsToRegistrationsPayload(code, [], from, to)
-				)
-			);
+			return json(RegistrationsPayloadSchema.parse(rowsToRegistrationsPayload(code, [], from, to)));
 		}
 		if (res.status >= 400) {
 			throw new ServiceError('INTERNAL', `registrations_by_date view error (${res.status})`);

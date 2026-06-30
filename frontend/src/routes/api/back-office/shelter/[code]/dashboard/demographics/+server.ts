@@ -12,7 +12,12 @@
  */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, requireShelterScopeOrSA, serviceError, ServiceError } from '$lib/server/couch-admin';
+import {
+	adminRaw,
+	requireShelterScopeOrSA,
+	serviceError,
+	ServiceError
+} from '$lib/server/couch-admin';
 import {
 	DemographicsPayloadSchema,
 	rowsToAgeGroups,
@@ -21,8 +26,6 @@ import {
 import type { ViewResult } from '$lib/server/shelters.admin';
 
 export const prerender = false;
-
-
 
 export const GET: RequestHandler = async ({ params, request }) => {
 	try {
