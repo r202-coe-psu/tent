@@ -16,8 +16,9 @@
 	import Eye from '@lucide/svelte/icons/eye';
 	import Filter from '@lucide/svelte/icons/filter';
 	
-	// Components
 	import { Button } from '$lib/components/ui/button';
+	import PublicShelterMetricCard from '$lib/components/public-shelter-metric-card.svelte';
+	import PublicShelterCard from '$lib/components/public-shelter-card.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -187,42 +188,30 @@
 
 	<!-- 4 Metric Cards -->
 	<div class="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-6">
-		<div class="flex items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-xs transition-all hover:shadow-md">
-			<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-				<ClipboardList class="h-6 w-6" />
-			</div>
-			<div>
-				<p class="text-sm font-medium text-muted-foreground">ศูนย์พักพิงทั้งหมด</p>
-				<p class="mt-1 text-2xl font-bold text-foreground">
-					{data.summary.shelters_total} <span class="text-sm font-normal text-muted-foreground">แห่ง</span>
-				</p>
-			</div>
-		</div>
+		<PublicShelterMetricCard 
+			title="ศูนย์พักพิงทั้งหมด" 
+			value={data.summary.shelters_total} 
+			unit="แห่ง" 
+			icon={ClipboardList} 
+			iconClass="bg-muted text-muted-foreground" 
+		/>
 
-		<div class="flex items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-xs transition-all hover:shadow-md">
-			<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-success/15 text-success">
-				<Building2 class="h-6 w-6" />
-			</div>
-			<div>
-				<p class="text-sm font-medium text-muted-foreground">เปิดใช้งาน</p>
-				<p class="mt-1 text-2xl font-bold text-foreground">
-					{data.summary.shelters_open} <span class="text-sm font-normal text-muted-foreground">แห่ง</span>
-				</p>
-			</div>
-		</div>
+		<PublicShelterMetricCard 
+			title="เปิดใช้งาน" 
+			value={data.summary.shelters_open} 
+			unit="แห่ง" 
+			icon={Building2} 
+			iconClass="bg-success/15 text-success" 
+		/>
 
 		{#if public_metrics_occupancy}
-			<div class="flex items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-xs transition-all hover:shadow-md">
-				<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-muted text-primary">
-					<Users class="h-6 w-6" />
-				</div>
-				<div>
-					<p class="text-sm font-medium text-muted-foreground">ผู้พักพิงปัจจุบัน</p>
-					<p class="mt-1 text-2xl font-bold text-foreground">
-						{data.summary.occupancy_total} <span class="text-sm font-normal text-muted-foreground">คน</span>
-					</p>
-				</div>
-			</div>
+			<PublicShelterMetricCard 
+				title="ผู้พักพิงปัจจุบัน" 
+				value={data.summary.occupancy_total} 
+				unit="คน" 
+				icon={Users} 
+				iconClass="bg-primary-muted text-primary" 
+			/>
 		{:else}
 			<div class="flex items-center gap-4 rounded-2xl border border-dashed border-border bg-muted/30 p-5 shadow-xs opacity-50">
 				<div class="flex flex-col">
@@ -233,17 +222,13 @@
 		{/if}
 
 		{#if public_metrics_vulnerable}
-			<div class="flex items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-xs transition-all hover:shadow-md">
-				<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-warning/15 text-warning-dark">
-					<AlertTriangle class="h-6 w-6" />
-				</div>
-				<div>
-					<p class="text-sm font-medium text-muted-foreground">กลุ่มเปราะบาง</p>
-					<p class="mt-1 text-2xl font-bold text-foreground">
-						{data.summary.vulnerable_count} <span class="text-sm font-normal text-muted-foreground">คน</span>
-					</p>
-				</div>
-			</div>
+			<PublicShelterMetricCard 
+				title="กลุ่มเปราะบาง" 
+				value={data.summary.vulnerable_count} 
+				unit="คน" 
+				icon={AlertTriangle} 
+				iconClass="bg-warning/15 text-warning-dark" 
+			/>
 		{:else}
 			<div class="flex items-center gap-4 rounded-2xl border border-dashed border-border bg-muted/30 p-5 shadow-xs opacity-50">
 				<div class="flex flex-col">
@@ -356,56 +341,11 @@
 
 			<div class="flex flex-col gap-4 overflow-y-auto pr-2 custom-scrollbar" style="max-height: 600px;">
 				{#each data.shelters as shelter}
-					<div class="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-xs transition-colors hover:border-primary/30 hover:bg-muted/10">
-						<!-- Title and Status -->
-						<div class="mb-3 flex items-start justify-between gap-2">
-							<h4 class="font-bold text-foreground leading-tight">{shelter.name}</h4>
-							<span class="shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold {getStatusColor(shelter.status)}">
-								<span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current"></span>{getStatusText(shelter.status)}
-							</span>
-						</div>
-
-						<!-- Address and Distance -->
-						<div class="mb-4 flex flex-col gap-1.5 text-xs text-muted-foreground">
-							<div class="flex items-start gap-1.5">
-								<MapPin class="h-3.5 w-3.5 shrink-0 mt-0.5" />
-								<span>{shelter.address}</span>
-							</div>
-							<div class="ml-5">
-								ระยะห่างจากจุดศูนย์กลาง: <span class="font-bold text-foreground">{shelter.distance} กม.</span>
-							</div>
-						</div>
-
-						<!-- Occupancy and Capacity -->
-						<div class="mb-5 flex flex-col gap-2 rounded-xl bg-muted/40 p-3 text-sm">
-							<div class="flex justify-between items-center">
-								<span class="text-muted-foreground font-medium text-xs">ผู้พักพิงปัจจุบัน</span>
-								<div class="font-bold text-foreground">
-									<!-- OP-9: Exact string representation (e.g. 3/250) -->
-									<span class="text-base">{shelter.occupancy}</span><span class="text-muted-foreground font-normal">/{shelter.capacity}</span>
-									<span class="text-xs ml-1 font-normal text-muted-foreground">คน</span>
-								</div>
-							</div>
-							<div class="flex justify-between items-center border-t border-border/60 pt-2">
-								<span class="text-success font-medium text-xs">จำนวนที่ว่าง</span>
-								<div class="font-bold text-success">
-									{shelter.available} <span class="text-xs font-normal">คน</span>
-								</div>
-							</div>
-						</div>
-
-						<!-- Actions -->
-						<div class="mt-auto flex gap-2">
-							<Button 
-							onclick={() => window.open(`/public/shelters/${shelter.id}`, '_blank')}
-							variant="outline" size="sm" class="flex-1 h-9 rounded-xl border-border text-xs font-bold text-foreground hover:bg-muted">
-								<Eye class="mr-1.5 h-3.5 w-3.5" /> ดูรายละเอียด
-							</Button>
-							<Button size="sm" class="flex-1 h-9 rounded-xl bg-primary-dark text-xs font-bold text-primary-foreground hover:bg-primary">
-								<Navigation class="mr-1.5 h-3.5 w-3.5" /> นำทาง
-							</Button>
-						</div>
-					</div>
+					<PublicShelterCard 
+						{shelter} 
+						{getStatusColor} 
+						{getStatusText} 
+					/>
 				{/each}
 			</div>
 		</div>

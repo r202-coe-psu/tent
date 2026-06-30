@@ -87,8 +87,8 @@
 		<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
 			<!-- ระเบียบสิทธิ์ผู้ประสบภัย -->
 			<PublicQuickServiceCard
-				title="ระเบียบสิทธิ์ผู้<br/>ประสบภัย"
-				badge="ด่วน<br/>ที่สุด"
+				title="ระเบียบสิทธิ์ผู้ประสบภัย"
+				badge="ด่วนที่สุด"
 				badgeClass="bg-danger-muted text-danger"
 				description="ท่านสามารถยื่นขอลงทะเบียนเข้าพัก สแกนเข้าออก หรือจองสิทธิ์ล่วงหน้าเพื่อจัดสรรเต็นท์ส่วนตัว ยา และเครื่องนุ่งห่ม"
 				icon={ShieldAlert}
@@ -101,7 +101,7 @@
 
 			<!-- สำหรับผู้ใจบุญ / บริจาค -->
 			<PublicQuickServiceCard
-				title="สำหรับผู้ใจบุญ /<br/>บริจาค"
+				title="สำหรับผู้ใจบุญ/บริจาค"
 				badge="Wishlist"
 				badgeClass="bg-primary-muted text-primary"
 				description="ร่วมประสานงานมอบอาหารปรุงสุก วัตถุดิบ น้ำดื่ม หรือสมทบกองทุน EOC ข้อมูลจัดซื้อโปร่งใส ตรวจสอบได้ทันที"
@@ -118,8 +118,8 @@
 
 			<!-- สำหรับทีมอาสาสมัคร -->
 			<PublicQuickServiceCard
-				title="สำหรับทีมอาสา<br/>สมัคร"
-				badge="ร่วมแรง<br/>กาย"
+				title="สำหรับทีมอาสาสมัคร"
+				badge="ร่วมแรงกาย"
 				badgeClass="bg-chart-2/15 text-chart-2"
 				description="ร่วมลงทะเบียนจองกะงานฝ่ายสวัสดิการ แจกจ่าย ขนย้าย แพทย์สนาม หรือสนับสนุนเจ้าหน้าที่ ณ พื้นที่อุทกภัยชายแดนใต้"
 				icon={UserPlus}
@@ -132,8 +132,8 @@
 
 			<!-- สืบค้นกองสิทธิ์ญาติ -->
 			<PublicQuickServiceCard
-				title="สืบค้นกองสิทธิ์<br/>ญาติ"
-				badge="PDPA<br/>Shield"
+				title="สืบค้นกองสิทธิ์ญาติ"
+				badge="PDPA Shield"
 				badgeClass="bg-accent-purple-muted text-accent-purple"
 				description="เช็ครายชื่อผู้ประสบภัย ปลอดภัยในพิกัดศูนย์ควบคุม ตรึงระบบเก็บรวบรวมหลักฐานและส่งต่ออย่างเป็นความลับขั้นสูงสุด"
 				icon={Search}
