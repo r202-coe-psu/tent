@@ -1,7 +1,7 @@
 ---
 status: proposed
 created: 2026-06-29
-updated: 2026-06-29
+updated: 2026-06-30
 affects:
   - T-58
   - CR-005
@@ -9,32 +9,41 @@ affects:
 
 # CR-017: Public Dashboard API Architecture (T-58)
 
-**สรุป (TL;DR):** วางโครงสร้าง API ของ Dashboard สำหรับระบบ Public (T-58) เปลี่ยนวิธีดึงข้อมูลสาธารณะจาก Dynamic Query เป็น Dockerized Background Worker (Daemon) + Read-Model เพื่อป้องกันระบบล่ม และแยก Feature Domain ป้องกันข้อมูลส่วนบุคคล (PII) รั่วไหล
+**สรุป (TL;DR):** วางโครงสร้าง API ของ Dashboard สำหรับระบบ Public (T-58) เปลี่ยนวิธีดึงข้อมูลสาธารณะโดยใช้ MongoDB เป็น Public-facing Store ควบคู่กับ Sync Worker (CDC) ทำหน้าที่เป็น Read-Model แทนการอ่าน CouchDB โดยตรง เพื่อแยก Blast Radius ป้องกัน CouchDB กลางล่ม และใช้กลไก Projection ป้องกันข้อมูลส่วนบุคคล (PII) รั่วไหลเด็ดขาด
 
 ## 1. สาเหตุที่จะทำ
 
-- **ป้องกัน Database Overload:** การที่ Public API วิ่งเข้าไปอ่านข้อมูล `occupancy` สดๆ จากฐานข้อมูล `shelter_{code}` ทุกศูนย์พร้อมกัน เมื่อมีคนเข้าเว็บสาธารณะจำนวนมาก จะทำให้ CouchDB ทำงานหนักจนระบบล่ม จึงต้องทำ Background Worker แยกออกมา
-- **ป้องกันข้อมูล PII รั่วไหล:** หากใช้ API รวมกันระหว่างหน้าบ้านและหลังบ้าน อาจทำให้ข้อมูลส่วนบุคคล (PII) หลุดออกไปสู่สาธารณะ จึงต้องแยก Feature กันอย่างเด็ดขาด
+- **ป้องกัน Database Overload (Blast Radius):** การที่ Public API วิ่งเข้าไปอ่านข้อมูลจากฐานข้อมูล `shelter_{code}` สดๆ จาก CouchDB จะทำให้ระบบหลักที่ใช้งานโดยเจ้าหน้าที่ (Operational) ได้รับผลกระทบหากมี public traffic หรือ DDoS เข้ามา การแยก MongoDB มารับโหลดจะช่วยจำกัดขอบเขตความเสียหาย
+- **ป้องกันข้อมูล PII รั่วไหล (Privacy by Construction):** การฉาย (Project) ข้อมูลจาก CouchDB ไปยัง MongoDB จะทำการกรองข้อมูล (Allow-list) เฉพาะฟิลด์ที่เปิดเผยได้เท่านั้น ทำให้ต่อให้ MongoDB รั่วไหลก็ไม่มีข้อมูล PII หลุดออกไป
+- **ประสิทธิภาพการค้นหา (Query Shape):** หน้า Public ต้องการการค้นหาแบบ Text Index (เช่น หาชื่อครอบครัว หรือ เบอร์โทร) ซึ่งทำบน MongoDB ได้มีประสิทธิภาพและง่ายกว่า CouchDB View มาก
 
 ## 2. สิ่งที่จะทำ
 
-เพื่อให้ระบบสามารถรองรับประชาชนที่เข้ามาดู Dashboard จำนวนมหาศาลได้พร้อมกันโดยไม่ล่ม เราจะแบ่งการพัฒนาระบบออกเป็น 3 ส่วนหลัก ดังนี้:
+เพื่อให้ระบบสามารถรองรับประชาชนที่เข้ามาดู Dashboard หรือค้นหาข้อมูลจำนวนมหาศาลได้พร้อมกันโดยไม่ล่ม เราจะแบ่งการพัฒนาระบบออกเป็น 3 ส่วนหลัก ดังนี้:
 
-### ส่วนที่ 1: สร้าง Background Worker (`metrics-worker`)
-สร้าง Service ใหม่ด้วย Node.js (รันแยกใน Docker Container) เพื่อทำหน้าที่เป็น "พนักงานหลังบ้าน" คอยรวบรวมข้อมูลอัตโนมัติ โดยมีขั้นตอนดังนี้:
-1. **Listen (ดักฟัง):** เกาะติด (`Subscribe`) ความเคลื่อนไหวของฐานข้อมูล CouchDB ในทุกศูนย์ที่กำลังเปิดอยู่
-2. **Trigger (กระตุ้น):** เมื่อมีประชาชน Check-in หรือ Check-out ระบบจะกระตุ้นให้ Worker ตื่นขึ้นมาทำงาน
-3. **Aggregate (รวบยอด):** Worker จะหน่วงเวลาเล็กน้อย (Debounce) เพื่อรอกวาดตัวเลขสถิติรวมจากทุกศูนย์มาบวกกันในรอบเดียว
+### ส่วนที่ 1: สร้าง Sync Worker (Background Worker)
 
-### ส่วนที่ 2: ใช้ Redis เป็นที่เก็บข้อมูลความเร็วสูง (In-memory Cache)
-เพื่อความเร็วในการดึงข้อมูลสูงสุด เราจะใช้ Redis เป็นตัวกลาง:
-- **Save:** เมื่อ Worker คำนวณยอดรวมเสร็จ จะนำตัวเลขไปบันทึกทับลงใน **Redis** (เช่น Key: `public_metrics:latest`) 
-- ข้อมูลใน Redis จะถูกอัปเดตให้สดใหม่เสมอ (Real-time) ตามความเคลื่อนไหวในศูนย์
+สร้าง Service ใหม่ด้วย Python/FastAPI (รันแยกใน Docker Container) โดยทำงานร่วมกับ **Redis** เพื่อทำหน้าที่คอยซิงก์ข้อมูลระหว่าง CouchDB (Central) และ MongoDB โดยมีกลไกสำหรับ Public Dashboard (Outbound Plane) คือ:
+
+1. **Tail `_changes` & Debounce:** เกาะติดความเคลื่อนไหว (CDC) ของฐานข้อมูล CouchDB ในทุกศูนย์ (`shelter_{code}`) และ `registry` โดยอาจใช้ **Redis** ในการพักข้อมูล (Cache) หรือทำ Debounce เพื่อลดภาระการทำงานซ้ำซ้อนหากมีอัปเดตเข้ามาพร้อมกันจำนวนมาก
+2. **Projector:** ทำหน้าที่กรองข้อมูลตาม whitelist โดยดึงเฉพาะข้อมูลที่จะให้ Public ดูได้ (เช่น `public_transparency` ที่รวม occupancy_count และยอดบริจาค, `public_persons` สำหรับค้นหา)
+3. **Upsert:** นำข้อมูลที่ผ่านการ Project แล้วไปอัปเดตหรือลบใน MongoDB Collection ปลายทาง
+
+### ส่วนที่ 2: ใช้ MongoDB เป็น Public-facing Store
+
+ข้อมูลที่จะนำไปแสดงใน Public Dashboard (T-58) จะถูกดึงมาจาก MongoDB ทั้งหมด:
+
+- **Collections หลัก:**
+  - `public_transparency`: ยอดสรุปแต่ละศูนย์ (เช่น คนเข้าพัก, ยอดของบริจาค)
+  - `public_needs`: ความต้องการสิ่งของ
+  - `public_persons`: ข้อมูลคนในศูนย์ (บังข้อมูลบางส่วน เพื่อค้นหา)
+- ไม่มีการให้ Public API เข้าถึง CouchDB โดยตรง (CouchDB ไม่รับ Public Internet Traffic เลย)
 
 ### ส่วนที่ 3: ปรับปรุง Public API & โครงสร้างหน้าบ้าน (T-58)
-- **API ดึงข้อมูล:** API ของหน้าเว็บสาธารณะจะไม่ไปยุ่งกับ CouchDB เลย แต่จะวิ่งมาดึงข้อมูลสรุปจาก **Redis** แทนเท่านั้น
+
+- **API ดึงข้อมูล:** API ของหน้าเว็บสาธารณะจะวิ่งมาดึงข้อมูลสรุปจาก **MongoDB** เท่านั้น
 - **เพิ่มประสิทธิภาพ:** มีการแนบ Header `Cache-Control: public, max-age=600` เพื่อช่วยลดภาระของเซิร์ฟเวอร์
-- **ความปลอดภัยของข้อมูล (DDD):** แยกโค้ดหน้าบ้านไปไว้ที่ `$lib/features/public-portal` อย่างเด็ดขาด เพื่อป้องกันไม่ให้ข้อมูลส่วนบุคคล (PII) หลุดออกสู่สาธารณะ
+- **ความปลอดภัยของข้อมูล (DDD):** แยกโค้ดหน้าบ้านไปไว้ที่ `$lib/features/public-portal` อย่างเด็ดขาด
 
 ## 3. โครงสร้างโค้ด (Code Structure)
 
@@ -43,43 +52,46 @@ affects:
  ┣ 📂 frontend
  │ ┣ 📂 src/routes/api/
  │ │ ┗ 📂 v1/public/shelters
- │ │   ┗ 📜 +server.ts       <-- [T-58] API ดึงสถิติรวมจาก Read-Model (Public)
+ │ │   ┗ 📜 +server.ts       <-- [T-58] API ดึงสถิติรวมจาก MongoDB (Public)
  │ ┗ 📂 src/lib/features/
  │   ┗ 📂 public-portal      <-- [T-58] Zod Schema (Non-PII) & API Wrapper หน้าบ้าน
- ┣ 📂 metrics-worker         <-- [T-58] โฟลเดอร์ใหม่สำหรับ Background Service
+ ┣ 📂 sync-worker            <-- [T-58] โฟลเดอร์ใหม่สำหรับ Sync Service (Python/FastAPI)
  │ ┣ 📜 Dockerfile           <-- คอนฟิกสำหรับสร้าง Docker Image
- │ ┣ 📜 index.ts             <-- โค้ดหลักที่ทำหน้าที่ Listen CouchDB `_changes`
- │ ┗ 📜 package.json
- ┗ 📜 docker-compose.yml     <-- [T-58] เพิ่ม Service `metrics-worker` และ `redis`
+ │ ┣ 📜 main.py              <-- โค้ดหลักที่ทำหน้าที่ Listen CouchDB, คุยกับ Redis และ MongoDB
+ │ ┗ 📜 requirements.txt     <-- ไฟล์จัดการ Dependencies
+ ┗ 📜 docker-compose.yml     <-- [T-58] เพิ่ม Service `sync-worker`, `redis` และ `mongodb`
+ ┗ ิ📂 backend                 <-- clone มาจาก repo https://github.com/importstar/fastapi-beanie-simplified
+```
+
 ```
 
 ## 4. ไฟล์ที่ได้รับผลกระทบ
 
 - `frontend/src/routes/api/v1/public/shelters/+server.ts` (สร้างใหม่)
 - `frontend/src/lib/features/public-portal/...` (สร้างใหม่)
-- `metrics-worker/index.ts` และ `metrics-worker/Dockerfile` (สร้างใหม่ทั้งหมด)
-- `docker-compose.yml` (แก้ไข)
+- `sync-worker/main.py` และ `sync-worker/Dockerfile` (สร้างใหม่/แทนที่ metrics-worker)
+- `docker-compose.yml` (แก้ไข เพิ่ม MongoDB, Redis และ Sync Worker)
 
 ## 5. Edge Cases & Mitigations (กรณีสุดวิสัยและวิธีรับมือ)
 
-เนื่องจากสถาปัตยกรรมนี้ใช้ Background Worker และ In-memory Cache จึงมีความเสี่ยงที่ต้องจัดการเพิ่มเติมดังนี้:
+1. **MongoDB Connection Failure / Replica ล่ม:**
+   - **ปัญหา:** Public API ดึงข้อมูลไม่ได้
+   - **วิธีรับมือ:** ฝั่ง API ส่ง HTTP 503 กลับไปพร้อม Cache-Control เล็กน้อยเพื่อป้องกันบอทสแปม โดยที่ระบบ Operational ของศูนย์ (CouchDB) จะไม่ได้รับผลกระทบใดๆ (Blast Radius จำกัดแค่ระดับ Public Plane)
 
-1. **Redis Connection Failure (Redis ล่ม):**
-   - **ปัญหา:** Worker ไม่สามารถบันทึกสถิติได้ หรือ Public API ดึงข้อมูลไม่ได้
-   - **วิธีรับมือ:** Worker ต้องมี Retry Logic ในการพยายามต่อใหม่ ส่วนฝั่ง API หากดึงข้อมูลจาก Redis ไม่สำเร็จ ให้พิจารณาส่ง HTTP 503 กลับไปพร้อม Cache-Control เล็กน้อยเพื่อป้องกันบอทสแปมและไม่ให้หน้าบ้านค้าง
+2. **CouchDB `_changes` Feed Disconnected (สายหลุดจากฐานข้อมูลกลาง):**
+   - **ปัญหา:** Sync Worker ขาดการเชื่อมต่อ ทำให้ข้อมูลฝั่ง MongoDB ไม่ถูกอัปเดต (Stale Data) แต่หน้าเว็บสาธารณะไม่ล่ม
+   - **วิธีรับมือ:** เก็บ Checkpoint (`last_seq`) ไว้ใน MongoDB collection `_sync_checkpoints` เพื่อให้เวลา Worker ทำการตื่นขึ้นมาใหม่ หรือ Reconnect สำเร็จ จะสามารถทำงานต่อจากจุดเดิมได้ทันที โดยไม่ตกหล่น
 
-2. **CouchDB `_changes` Feed Disconnected (สายหลุดจากฐานข้อมูล):**
-   - **ปัญหา:** Worker ขาดการเชื่อมต่อ ทำให้ตัวเลขสถิติบนหน้าเว็บหยุดนิ่งโดยไม่มี Error แจ้งเตือน (Silent Failure)
-   - **วิธีรับมือ:** ดักจับ Event `error` และ `end` บน Feed Listener แล้วสั่ง `.stop()` เคลียร์หน่วยความจำ ก่อนที่จะหน่วงเวลาพยายาม Reconnect ใหม่อัตโนมัติ
-
-3. **Partial Aggregation Failure (ดึงข้อมูลล้มเหลวเฉพาะบางศูนย์):**
-   - **ปัญหา:** หากศูนย์ใดศูนย์หนึ่งฐานข้อมูลมีปัญหา (ตอบสนองช้า/พัง) ตอนกวาดข้อมูลรวมทั้งหมดอาจพาให้พังทั้งระบบ
-   - **วิธีรับมือ:** ใช้ `Promise.allSettled()` แทน `Promise.all()` เพื่อให้ Worker ยังคงนำข้อมูลจากศูนย์ที่ "สำเร็จ" มารวมกันได้ ส่วนศูนย์ที่ดึงไม่สำเร็จให้ Log แจ้งเตือนไว้ โดยไม่ทำให้หน้าเว็บสาธารณะล่ม
+3. **Data Retention และ Purge (การลบข้อมูล):**
+   - **ปัญหา:** คำสั่ง `_purge` ใน CouchDB จะไม่มี event ส่งไปยัง `_changes` feed ทำให้ข้อมูลฝั่ง MongoDB อาจจะค้าง PII
+   - **วิธีรับมือ:** ต้องมี Retention Job ที่ทำงานคู่กัน หากทำการลบข้อมูลถาวรฝั่ง CouchDB (เช่น ปิดศูนย์เกิน 3 เดือน หรือลบข้อมูลผู้บริจาค) จะต้องลบข้อมูลใน MongoDB Collection ที่เกี่ยวข้องด้วยพร้อมกัน
 
 4. **Dynamic Listener Miss (เปิด/ปิดศูนย์กะทันหัน):**
    - **ปัญหา:** แอดมินปิดศูนย์ไปแล้วแต่ Worker ยังพยายามดึงข้อมูล หรือเปิดศูนย์ใหม่แต่ Worker ไม่ยอมเข้าไปดักฟัง
-   - **วิธีรับมือ:** Worker ต้องเกาะติด `_changes` feed ของฐานข้อมูล `registry` เป็นหลัก เพื่อตรวจจับ `operation_status` แบบ Real-time แล้วเรียกฟังก์ชัน `startShelterListener()` หรือ `stopShelterListener()` อัปเดตตัวเองให้ตรงกับสถานะจริงเสมอ
+   - **วิธีรับมือ:** Worker ต้องเกาะติด `_changes` feed ของฐานข้อมูล `registry` เป็นหลัก เพื่อตรวจจับ `operation_status` แบบ Real-time แล้วสั่งรันหรือหยุด Listener ของศูนย์นั้นๆ ให้สัมพันธ์กับสถานะจริงเสมอ
 
 ## 6. สิ่งที่ต้องปรับ Spec
 
-- เพิ่ม Requirements เรื่อง Background Worker (Docker Container), การใช้ **Redis** สำหรับเก็บ Read-Model ลงในรายละเอียดงานของ **T-58** (`docs/task-breakdown/12-public.md`)
+- เปลี่ยนข้อกำหนดการออกแบบจาก In-memory Cache (Redis) เป็น **MongoDB** ควบคู่กับ **Sync Worker** เป็น Public-facing Store แทน
+- อัปเดต Task Breakdown **T-58** (`docs/task-breakdown/12-public.md`) และอ้างอิงกลับไปยังหลักการ Sync ตามเอกสาร `docs/data/couchdb-mongodb-sync.md`
+```
