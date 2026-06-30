@@ -156,7 +156,6 @@
 	}
 
 	function handleAddRequest(input: SpecialRequestInput) {
-		// แมปคำค้นหาภาษาไทยทั่วไปเข้ากับ ID ของประเภทไอเท็มในฐานข้อมูล
 		const lowerName = input.name.toLowerCase();
 		let itemId = 'item:custom';
 		if (lowerName.includes('ข้าว')) itemId = 'item:rice';
@@ -166,8 +165,12 @@
 		else if (lowerName.includes('ห่ม')) itemId = 'item:blanket';
 		else if (lowerName.includes('ไข่')) itemId = 'item:egg';
 		else {
-			// กรณีที่พิมพ์คำอื่น ๆ จะสุ่มรหัสไอเท็มขึ้นมาใหม่
-			itemId = `item:${Math.random().toString(36).substring(2, 8)}`;
+			const slug = input.name
+				.trim()
+				.toLowerCase()
+				.replace(/[^a-z0-9\u0e00-\u0e7f]+/g, '-')
+				.replace(/^-+|-+$/g, '');
+			itemId = `item:${slug || 'custom'}`;
 		}
 
 		const newCampaignInput = {
@@ -190,7 +193,7 @@
 			{
 				onSuccess: () => {
 					toast.success(`เพิ่มประกาศความต้องการ "${input.name}" สำเร็จ`);
-					isModalOpen = false; // ปิดหน้าต่างโมดอลกรอกข้อมูล
+					isModalOpen = false;
 				},
 				onError: (err) => {
 					toast.error(`ไม่สามารถสร้างประกาศได้: ${err.message}`);
