@@ -15,7 +15,8 @@
 		useUpdateHousehold,
 		useUpdateEvacuee,
 		SHELTER_CODE,
-		type HouseholdInput
+		type HouseholdInput,
+		type Evacuee
 	} from '../index';
 	import { authStore } from '$lib/stores/auth.svelte';
 
@@ -108,7 +109,7 @@
 			const toRemove = currentMemberIds.filter((id) => !selectedMemberIds.includes(id));
 
 			// Helper to get updated emergency contact
-			const getUpdatedEmergencyContact = (evac: any, phone: string | undefined) => {
+			const getUpdatedEmergencyContact = (evac: Evacuee, phone: string | undefined) => {
 				if (phone === undefined) return evac.emergency_contact;
 				const trimmed = phone.trim();
 				if (!trimmed) return undefined; // clear it
