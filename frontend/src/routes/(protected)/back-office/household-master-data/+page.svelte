@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { RegistrationConfigPage } from '$lib/features/master-data';
+	import { RegistrationConfigPage, HOUSEHOLD_MASTER_TYPES } from '$lib/features/master-data';
 </script>
 
 <RegistrationConfigPage
-	allowedTypes={['municipality_zone', 'community']}
+	allowedTypes={HOUSEHOLD_MASTER_TYPES}
 	basePath={resolve('/back-office/household-master-data')}
 />

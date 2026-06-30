@@ -7,6 +7,9 @@
 // Domain — types, enums, labels, factories
 export {
 	MASTER_DATA_TYPES,
+	REGISTRATION_MASTER_TYPES,
+	HOUSEHOLD_MASTER_TYPES,
+	SHELTER_MASTER_TYPES,
 	MASTER_DATA_TYPE_LABELS,
 	masterTypeSchema,
 	masterDataSchema,

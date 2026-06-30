@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { RegistrationConfigPage } from '$lib/features/master-data';
+	import { RegistrationConfigPage, REGISTRATION_MASTER_TYPES } from '$lib/features/master-data';
 </script>
 
-<RegistrationConfigPage />
+<RegistrationConfigPage allowedTypes={REGISTRATION_MASTER_TYPES} />

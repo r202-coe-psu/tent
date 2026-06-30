@@ -33,6 +33,24 @@ export type MasterDataType = (typeof MASTER_DATA_TYPES)[number];
 
 export const masterTypeSchema = z.enum(MASTER_DATA_TYPES);
 
+/** Types shown on the Registration Config page (ตั้งค่าการลงทะเบียน). */
+export const REGISTRATION_MASTER_TYPES = [
+	'vulnerable_group',
+	'health_condition',
+	'dietary_restrictions',
+	'pet_types',
+	'house_damage'
+] as const satisfies readonly MasterDataType[];
+
+/** Types shown on the Household Master Data page. */
+export const HOUSEHOLD_MASTER_TYPES = [
+	'municipality_zone',
+	'community'
+] as const satisfies readonly MasterDataType[];
+
+/** Types shown on the Shelter Config page. */
+export const SHELTER_MASTER_TYPES = ['shelter_type'] as const satisfies readonly MasterDataType[];
+
 /** Thai + English labels for the master_type enum — used in the type list cards. */
 export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	vulnerable_group: 'ประเภทกลุ่มเปราะบาง (Vulnerable Group)',
