@@ -88,13 +88,14 @@
 
 				list.push({
 					id: `${camp._id}:${itemId}`,
-					name: ITEM_NAMES[itemId] ?? itemId,
+					name: ITEM_NAMES[itemId] ?? (itemId.startsWith('item:') ? itemId.slice(5) : itemId),
 					location: camp.title || 'คลังช่วยเหลือภัยพิบัติ EOC',
 					reserved: reserved,
 					onHand: onHand,
 					target: target,
 					showOnHome: !isManualClosed,
 					isCutOff: isCutOff,
+					isManualClosed: isManualClosed,
 					campaignDoc: camp
 				});
 			}
@@ -266,7 +267,6 @@
 </script>
 
 <div class="flex w-full flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
-
 	<div
 		class="flex scrollbar-none items-center justify-start overflow-x-auto border-b border-border"
 	>

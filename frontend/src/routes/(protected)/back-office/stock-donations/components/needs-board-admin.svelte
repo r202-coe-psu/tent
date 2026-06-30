@@ -14,6 +14,7 @@
 		target: number;
 		showOnHome: boolean;
 		isCutOff: boolean;
+		isManualClosed: boolean;
 	}
 
 	let {
@@ -156,11 +157,11 @@
 								type="button"
 								onclick={() => onToggleCutOff(item.id)}
 								class="inline-flex cursor-pointer items-center justify-center rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors
-								{item.isCutOff
+								{item.isManualClosed
 									? 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400'
 									: 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100/70 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-400'}"
 							>
-								{item.isCutOff ? 'เปิดรับบริจาค (Restore)' : 'Force Cut-off (ปิดด่วน)'}
+								{item.isManualClosed ? 'เปิดรับบริจาค (Restore)' : 'Force Cut-off (ปิดด่วน)'}
 							</button>
 						</Table.Cell>
 					</Table.Row>
