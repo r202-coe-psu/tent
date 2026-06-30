@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Combobox } from '$lib/components/ui/combobox/index.js';
+	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,14 +39,13 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>เขตเทศบาล</Form.Label>
-					<Combobox
-						{...props}
+					<SearchSelect
 						items={municipalityZoneItems}
 						bind:value={mzVal}
 						placeholder={mzPending ? 'กำลังโหลด...' : 'เลือกเขต...'}
-						searchPlaceholder="ค้นหาเขต..."
 						emptyText="ไม่พบเขตที่ค้นหา"
 						disabled={mzPending}
+						controlProps={props}
 						class="h-9 w-full"
 					/>
 				{/snippet}
@@ -58,14 +57,13 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>ชุมชน</Form.Label>
-					<Combobox
-						{...props}
+					<SearchSelect
 						items={communityItems}
 						bind:value={commVal}
 						placeholder={commPending ? 'กำลังโหลด...' : 'เลือกชุมชน...'}
-						searchPlaceholder="ค้นหาชุมชน..."
 						emptyText="ไม่พบชุมชนที่ค้นหา"
 						disabled={commPending}
+						controlProps={props}
 						class="h-9 w-full"
 					/>
 				{/snippet}

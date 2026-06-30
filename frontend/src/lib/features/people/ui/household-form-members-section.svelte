@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { Label } from '$lib/components/ui/label/index.js';
-	import { Combobox } from '$lib/components/ui/combobox/index.js';
+	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import X from '@lucide/svelte/icons/x';
-	import { maskNationalId } from '../domain/people';
 	import type { Evacuee, Household } from '../domain/people';
 
 	let {
@@ -31,32 +30,13 @@
 		สมาชิกในครัวเรือน
 	</Label>
 
-	<Combobox
+	<SearchSelect
 		items={memberItems}
 		bind:value={memberSearchValue}
 		placeholder="พิมพ์ชื่อเพื่อค้นหา..."
-		searchPlaceholder="ค้นหาผู้ประสบภัย..."
 		emptyText="ไม่พบผู้ประสบภัยที่ตรงกับการค้นหา"
 		class="h-9 w-full"
-	>
-		{#snippet children({ item })}
-			<div class="flex w-full items-center justify-between gap-2">
-				<div class="flex flex-col">
-					<span class="font-medium">{item.evacuee.first_name} {item.evacuee.last_name}</span>
-					<span class="text-[10px] text-muted-foreground">
-						ID: {maskNationalId(item.evacuee.person_id?.number) || 'ไม่มี'} · โทร: {item.evacuee.phone || 'ไม่มี'}
-					</span>
-				</div>
-				{#if item.hasOther}
-					<span
-						class="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-600 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-400"
-					>
-						ย้ายจาก: {item.otherLabel}
-					</span>
-				{/if}
-			</div>
-		{/snippet}
-	</Combobox>
+	/>
 
 	{#if selectedMemberIds.length > 0}
 		<div class="flex flex-wrap gap-2 rounded-md border border-border/50 bg-muted/10 p-2">

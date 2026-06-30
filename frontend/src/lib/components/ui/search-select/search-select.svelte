@@ -1,7 +1,7 @@
 <script lang="ts" generics="T extends { value: string; label: string }">
-	import { cn } from "$lib/utils/shadcn.js";
-	import * as Popover from "$lib/components/ui/popover/index.js";
-	import { Input } from "$lib/components/ui/input/index.js";
+	import { cn } from '$lib/utils/shadcn.js';
+	import * as Popover from '$lib/components/ui/popover/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import SearchIcon from '@lucide/svelte/icons/search';
 
@@ -28,7 +28,6 @@
 	let searchTerm = $state('');
 	let inputRef = $state<HTMLInputElement>(null!);
 
-	// Keep searchTerm in sync with value only when the popover is closed (mount, external change, or close)
 	$effect(() => {
 		if (!open) {
 			const matched = items.find((i) => i.value === value);
@@ -39,9 +38,7 @@
 	const filteredItems = $derived(
 		searchTerm.trim() === ''
 			? items
-			: items.filter((item) =>
-					item.label.toLowerCase().includes(searchTerm.trim().toLowerCase())
-				)
+			: items.filter((item) => item.label.toLowerCase().includes(searchTerm.trim().toLowerCase()))
 	);
 
 	function onSelect(item: T) {
@@ -50,12 +47,8 @@
 		open = false;
 	}
 
-	function handleInput(e: Event) {
-		const target = e.target as HTMLInputElement;
-		searchTerm = target.value;
-		open = true; // Open popover while typing
-
-		// If input is completely empty, clear the value
+	function handleInput() {
+		open = true;
 		if (searchTerm.trim() === '') {
 			value = '';
 		}
@@ -72,27 +65,42 @@
 					{...controlProps}
 					{...restProps}
 					type="text"
-					value={searchTerm}
-					oninput={handleInput}
-					onfocus={() => {
-						open = true;
-					}}
-					onclick={(e) => {
-						if (open) {
-							e.stopPropagation();
+					bind:value={searchTerm}
+oninput={handleInput}
+				onfocus={() => {
+					open = true;
+				}}
+				onclick={(e) => {
+					if (open) {
+						e.stopPropagation();
+					}
+				}}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') {
+						const first = filteredItems[0];
+						if (first) {
+							e.preventDefault();
+							onSelect(first);
 						}
-					}}
-					placeholder={placeholder}
-					disabled={disabled}
-					class={cn("w-full pr-8", className)}
+					}
+				}}
+				{placeholder}
+					{disabled}
+					class={cn('w-full pr-8', className)}
 				/>
-				<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground/50">
+				<div
+					class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground/50"
+				>
 					<SearchIcon class="size-4" />
 				</div>
 			</div>
 		{/snippet}
 	</Popover.Trigger>
-	<Popover.Content class="w-[--bits-popover-anchor-width] p-1 bg-popover text-popover-foreground max-h-[300px] overflow-y-auto">
+	<Popover.Content
+		class="max-h-[300px] min-w-(--bits-floating-anchor-width) w-(--bits-floating-anchor-width) overflow-y-auto bg-popover p-1 text-popover-foreground"
+		trapFocus={false}
+		onOpenAutoFocus={(e) => e.preventDefault()}
+	>
 		<div class="flex flex-col gap-0.5">
 			{#if filteredItems.length === 0}
 				<div class="py-6 text-center text-sm text-muted-foreground">
@@ -103,15 +111,15 @@
 					<button
 						type="button"
 						class={cn(
-							"relative flex w-full cursor-default items-center rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground text-left",
-							value === item.value && "bg-accent/50 font-medium"
+							'relative flex w-full cursor-default items-center rounded-sm py-1.5 pr-8 pl-2 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground',
+							value === item.value && 'bg-accent/50 font-medium'
 						)}
 						onpointerdown={(e) => {
 							e.preventDefault();
 							onSelect(item);
 						}}
 					>
-						<span class="flex flex-1 gap-2 shrink-0 whitespace-nowrap">
+						<span class="flex flex-1 shrink-0 gap-2 whitespace-nowrap">
 							{item.label}
 						</span>
 						<span class="absolute end-2 flex size-3.5 items-center justify-center">

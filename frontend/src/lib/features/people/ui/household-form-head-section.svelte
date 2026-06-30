@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import { Combobox } from '$lib/components/ui/combobox/index.js';
+	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import UserRound from '@lucide/svelte/icons/user-round';
-	import { maskNationalId } from '../domain/people';
 	import type { Evacuee } from '../domain/people';
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	import type { SuperForm } from 'sveltekit-superforms';
@@ -13,17 +12,23 @@
 		form,
 		headItems,
 		headComboValue = $bindable(),
+		noHead = $bindable(false),
 		allEvacuees,
 		emergencyContactPhone = $bindable()
 	}: {
 		form: SuperForm<any>;
 		headItems: { value: string; label: string; evacuee: Evacuee | null }[];
 		headComboValue: string;
+		noHead: boolean;
 		allEvacuees: Evacuee[];
 		emergencyContactPhone: string;
 	} = $props();
 
 	const formData = $derived(form.form);
+
+	$effect(() => {
+		if (noHead) headComboValue = '';
+	});
 </script>
 
 <!-- ชื่อเรียกครัวเรือน -->
@@ -42,36 +47,47 @@
 	<Form.FieldErrors />
 </Form.Field>
 
+<!-- Radio: ระบุหัวหน้า / ไม่มีหัวหน้า -->
+<div class="flex items-center gap-5 text-sm">
+	<label class="flex cursor-pointer items-center gap-2">
+		<input
+			type="radio"
+			name="head-mode"
+			checked={!noHead}
+			onchange={() => (noHead = false)}
+			class="accent-primary"
+		/>
+		<span class="font-medium">ระบุหัวหน้าครัวเรือน</span>
+	</label>
+	<label class="flex cursor-pointer items-center gap-2">
+		<input
+			type="radio"
+			name="head-mode"
+			checked={noHead}
+			onchange={() => (noHead = true)}
+			class="accent-primary"
+		/>
+		<span class="font-medium">ไม่มีหัวหน้าครัวเรือน</span>
+	</label>
+</div>
+
 <!-- หัวหน้าครัวเรือน -->
 <Form.Field {form} name="head_evacuee_id">
 	<Form.Control>
 		{#snippet children({ props })}
-			<Form.Label class="flex items-center gap-1.5">
+			<Form.Label class="flex items-center gap-1.5 {noHead ? 'text-muted-foreground' : ''}">
 				<UserRound class="size-3.5 text-muted-foreground" />
 				หัวหน้าครัวเรือน
 			</Form.Label>
-			<Combobox
+			<SearchSelect
 				items={headItems}
 				bind:value={headComboValue}
 				placeholder="พิมพ์ชื่อเพื่อค้นหา..."
-				searchPlaceholder="ค้นหาผู้ประสบภัย..."
 				emptyText="ไม่พบผู้ประสบภัยที่ตรงกับการค้นหา"
 				controlProps={props}
 				class="h-9 w-full"
-			>
-				{#snippet children({ item })}
-					{#if item.evacuee}
-						<span class="font-medium">{item.evacuee.first_name} {item.evacuee.last_name}</span>
-						{#if item.evacuee.person_id?.number}
-							<span class="text-xs text-muted-foreground">
-								· {maskNationalId(item.evacuee.person_id.number)}
-							</span>
-						{/if}
-					{:else}
-						{item.label}
-					{/if}
-				{/snippet}
-			</Combobox>
+				disabled={noHead}
+			/>
 		{/snippet}
 	</Form.Control>
 	<Form.Description>หัวหน้าจะถูกเพิ่มเข้าสมาชิกโดยอัตโนมัติ</Form.Description>

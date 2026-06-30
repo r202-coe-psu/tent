@@ -74,6 +74,7 @@
 	let selectedMemberIds = $state<string[]>([]);
 	let memberSearchValue = $state('');
 	let headComboValue = $state('');
+	let noHead = $state(false);
 	let emergencyContactPhone = $state('');
 	let membersInitialized = $state(false);
 
@@ -83,6 +84,7 @@
 			$formData.label = initialData.label;
 			$formData.head_evacuee_id = initialData.head_evacuee_id;
 			headComboValue = initialData.head_evacuee_id ?? '';
+			noHead = initialData.head_evacuee_id === null;
 			$formData.notes = initialData.notes ?? '';
 			$formData.address_no = initialData.address_no ?? '';
 			$formData.village_no = initialData.village_no ?? '';
@@ -101,6 +103,7 @@
 			$formData.label = '';
 			$formData.head_evacuee_id = null;
 			headComboValue = '';
+			noHead = false;
 			$formData.notes = '';
 			$formData.address_no = '';
 			$formData.village_no = '';
@@ -180,7 +183,6 @@
 	);
 
 	const headItems = $derived([
-		{ value: '', label: 'ไม่มีหัวหน้าครัวเรือน', evacuee: null as Evacuee | null },
 		...allEvacuees
 			.filter((e) => !e.privacy?.search_excluded)
 			.map((e) => ({
@@ -202,6 +204,7 @@
 			{form}
 			{headItems}
 			bind:headComboValue
+			bind:noHead
 			{allEvacuees}
 			bind:emergencyContactPhone
 		/>
