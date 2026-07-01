@@ -53,12 +53,21 @@
 	--danger-subtle: oklch(0.704 0.191 22.216);
 	--danger-border: oklch(0.936 0.032 17.717);
 
+	/* Success — operational status (green) */
+	--success: oklch(60.35% 0.1905 139.079);
+	--success-dark: oklch(28.809% 0.08753 137.159);
+	--success-foreground: oklch(0.985 0.001 106.423);
+	--success-muted: oklch(0.971 0.013 137.38);
+	--success-subtle: oklch(0.704 0.191 132.216);
+	--success-border: oklch(0.936 0.032 137.717);
+
 	/* Warning — offline mode banner, pet-friendly zone, etc. (amber) */
-	--warning: oklch(0.769 0.188 70.08);
-	--warning-foreground: oklch(0.985 0.001 106.423);
-	--warning-muted: oklch(0.962 0.059 95.617);
-	--warning-subtle: oklch(0.555 0.163 60.682);
-	--warning-border: oklch(0.882 0.057 95.617);
+	--warning: oklch(82.233% 0.17032 79.874);
+	--warning-foreground: oklch(0.147 0.004 49.25);
+	--warning-muted: oklch(0.408 0.123 63.95);
+	--warning-subtle: oklch(0.882 0.057 95.617);
+	--warning-border: oklch(0.408 0.123 63.95);
+	--warning-dark: oklch(73.738% 0.16072 68.971);
 
 	/* Shelter Specific Colors */
 	--shelter-bg: oklch(0.982 0.009 239);
@@ -123,11 +132,12 @@
 	--danger-border: oklch(0.271 0.105 24.938);
 
 	/* Warning — offline / amber (dark mode) */
-	--warning: oklch(0.769 0.188 70.08);
+	--warning: oklch(82.233% 0.17032 79.874);
 	--warning-foreground: oklch(0.147 0.004 49.25);
 	--warning-muted: oklch(0.408 0.123 63.95);
 	--warning-subtle: oklch(0.882 0.057 95.617);
 	--warning-border: oklch(0.408 0.123 63.95);
+	--warning-dark: oklch(77.085% 0.16457 71.779);
 
 	/* Shelter Specific Colors (Dark Mode) */
 	--shelter-bg: oklch(0.18 0.005 240);
@@ -195,8 +205,17 @@
 	--color-danger-subtle: var(--danger-subtle);
 	--color-danger-border: var(--danger-border);
 
+	/* Success (operational status) */
+	--color-success: var(--success);
+	--color-success-dark: var(--success-dark);
+	--color-success-foreground: var(--success-foreground);
+	--color-success-muted: var(--success-muted);
+	--color-success-subtle: var(--success-subtle);
+	--color-success-border: var(--success-border);
+
 	/* Warning (offline / amber) */
 	--color-warning: var(--warning);
+	--color-warning-dark: var(--warning-dark);
 	--color-warning-foreground: var(--warning-foreground);
 	--color-warning-muted: var(--warning-muted);
 	--color-warning-subtle: var(--warning-subtle);
