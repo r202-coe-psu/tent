@@ -74,14 +74,22 @@ edge เฉพาะ WAN outage, local-only ถ้าไม่เห็นทั
 ## เริ่มต้นใช้งาน
 
 ```bash
-# 1. ยก CouchDB ขึ้น (ต้องมี .env — copy จาก .env.example)
+# 1. ยก CouchDB และ Worker ขึ้น (ต้องมี .env — copy จาก .env.example)
 cp .env.example .env
+cp couchdb-session-example.ini couchdb-session.ini
 docker compose up -d
 
 # 2. frontend (ใช้ pnpm)
 cd frontend
 pnpm install
 pnpm dev          # http://localhost:5173
+
+# 3. การรัน metrics-worker (กรณีต้องการ Debug โค้ดโดยไม่รันผ่าน Docker)
+# (ปกติ Worker จะรันอัตโนมัติพร้อม docker compose up ไปแล้ว)
+cd metrics-worker
+pnpm install
+pnpm run build
+pnpm start
 ```
 
 คำสั่งที่ใช้บ่อย (รันใน `frontend/`):

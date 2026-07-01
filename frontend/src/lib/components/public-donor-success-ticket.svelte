@@ -3,8 +3,10 @@
 	import Truck from '@lucide/svelte/icons/truck';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
-	import { donationStore } from '../../routes/public/donations/donation.svelte';
+	import { getDonationStore } from '../../routes/public/donations/donation.svelte';
 	import QRCode from 'qrcode';
+
+	const donationStore = getDonationStore();
 
 	let courierTracking = $state('');
 	let savingCourier = $state(false);
@@ -24,21 +26,13 @@
 		}
 	});
 
-	// แปลงวันเวลาส่งมอบเป็นรูปแบบไทยที่อ่านง่าย
-	const deliveryDisplay = $derived.by(() => {
-		if (!donationStore.deliveryDate) return '-';
-		const d = new Date(donationStore.deliveryDate);
-		if (Number.isNaN(d.getTime())) return donationStore.deliveryDate;
-		return d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
-	});
-
 	async function saveCourier() {
 		if (!donationStore.trackingToken) return;
 		savingCourier = true;
 		courierError = '';
 		courierSaved = false;
 		try {
-			const res = await fetch(`/public/v1/donations/${donationStore.trackingToken}`, {
+			const res = await fetch(`/api/v1/donations/${donationStore.trackingToken}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ courier_tracking_no: courierTracking })
@@ -112,13 +106,19 @@
 			</div>
 			<div class="flex justify-between gap-2">
 				<span>จุดส่งมอบ:</span>
-				<span class="text-right font-bold text-foreground">
-					{donationStore.selectedShelterName || donationStore.selectedShelter || '-'}
-				</span>
+				<span class="text-right font-bold text-foreground"
+					>{donationStore.shelterCode || 'ศูนย์พักพิงที่เลือก'}</span
+				>
 			</div>
 			<div class="flex justify-between gap-2">
 				<span>เวลาส่งมอบ:</span>
-				<span class="text-right font-bold text-foreground">{deliveryDisplay}</span>
+				<span class="text-right font-bold text-foreground">
+					{#if donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup'}
+						{donationStore.slotDate} - {donationStore.slotTime}
+					{:else}
+						{donationStore.eta || '-'}
+					{/if}
+				</span>
 			</div>
 		</div>
 	</div>
@@ -152,11 +152,11 @@
 		{/if}
 	</div>
 
-	<button
-		type="button"
+	<Button
+		variant="outline"
 		onclick={() => donationStore.reset()}
-		class="w-full rounded-xl border border-border py-3 text-xs font-bold text-foreground transition-colors hover:bg-muted"
+		class="w-full rounded-xl border border-border py-6 text-xs font-bold text-foreground transition-colors hover:bg-muted"
 	>
 		กลับหน้าแรกกระดานความต้องการ
-	</button>
+	</Button>
 </div>

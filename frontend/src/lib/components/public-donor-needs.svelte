@@ -3,7 +3,10 @@
 	import Heart from '@lucide/svelte/icons/heart';
 	import Compass from '@lucide/svelte/icons/compass';
 	import Search from '@lucide/svelte/icons/search';
-	import { donationStore } from '../../routes/public/donations/donation.svelte';
+	import { getDonationStore } from '../../routes/public/donations/donation.svelte';
+	import { Button } from '$lib/components/ui/button';
+
+	const donationStore = getDonationStore();
 
 	interface Need {
 		item_id: string;
@@ -66,6 +69,7 @@
 		if (need.status === 'closed') return;
 		donationStore.selectedShelter = shelter.code;
 		donationStore.selectedShelterName = shelter.name;
+		donationStore.shelterCode = shelter.code;
 		donationStore.shelterLocked = true;
 		donationStore.items = [
 			{
@@ -73,10 +77,8 @@
 				name: need.name,
 				amount: 1,
 				unit: need.unit,
-				item_id: need.item_id,
-				category: '',
 				condition: '',
-				note: ''
+				remark: ''
 			}
 		];
 		donationStore.activeTab = 'form';
@@ -87,6 +89,7 @@
 	function pickShelter(shelter: ShelterNeeds) {
 		donationStore.selectedShelter = shelter.code;
 		donationStore.selectedShelterName = shelter.name;
+		donationStore.shelterCode = shelter.code;
 		donationStore.shelterLocked = true;
 		donationStore.activeTab = 'form';
 		if (donationStore.reachedStep < 2) donationStore.reachedStep = 2;
@@ -120,25 +123,21 @@
 
 	<!-- Categories -->
 	<div class="mb-6 flex flex-wrap gap-2">
-		<button
-			type="button"
-			class="rounded-full bg-foreground px-4 py-1.5 text-xs font-bold text-background"
-			>ทั้งหมด</button
+		<Button class="rounded-full px-4 text-xs font-bold">ทั้งหมด</Button>
+		<Button
+			variant="outline"
+			class="rounded-full border border-border px-4 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+			>ด่วนพิเศษ</Button
 		>
-		<button
-			type="button"
-			class="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-			>ด่วนพิเศษ</button
+		<Button
+			variant="outline"
+			class="rounded-full border border-border px-4 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+			>อาหาร & น้ำ</Button
 		>
-		<button
-			type="button"
-			class="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-			>อาหาร & น้ำ</button
-		>
-		<button
-			type="button"
-			class="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-			>ยารักษาโรค</button
+		<Button
+			variant="outline"
+			class="rounded-full border border-border px-4 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+			>ยารักษาโรค</Button
 		>
 	</div>
 
@@ -207,14 +206,13 @@
 					<div
 						class="flex shrink-0 flex-col items-center justify-center pt-4 md:border-l md:border-border/60 md:pt-0 md:pl-6"
 					>
-						<button
-							type="button"
+						<Button
 							onclick={() => pickShelter(shelter)}
-							class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-xs font-bold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 md:w-auto"
+							class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-5 py-6 text-xs font-bold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 md:w-auto"
 						>
 							จองคิวบริจาค
 							<span>→</span>
-						</button>
+						</Button>
 						<span class="mt-2 text-center text-xs text-muted-foreground"
 							>ช่วยลดความแออัดหน้าศูนย์</span
 						>

@@ -1,26 +1,27 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
-import { ulid } from '$lib/db/ulid';
 import {
-	createShelterSchema,
-	type Zone,
-	type Item,
-	type Rule,
-	type Sop
-} from '$lib/features/shelters';
+	adminRaw,
+	requireAdmin,
+	requireShelterScopeOrSA,
+	serviceError
+} from '$lib/server/couch-admin';
+import { ulid } from '$lib/db/ulid';
+import { createShelterSchema, type ShelterMaster } from '$lib/features/shelters/server';
+import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
+import {
+	SHELTER_REGISTRY_DB,
+	listShelterMasters,
+	migrate,
+	mergeShelterSecurity,
+	nowIso,
+	deployShelterViews
+} from '$lib/server/shelters.admin';
 
-// Dev-only provisioning endpoint — never prerendered (absent from the static
-// prod build). In production shelters are minted from the central counter
-// (schema.md §3.1/§5.3); here we take an explicit shelter_code from the form —
-// a documented dev shortcut, NOT a schema change. Requires CouchDB `_admin`
-// since creating databases needs server admin.
 export const prerender = false;
 
-const REGISTRY_DB = 'registry';
-
+/** Database name for a shelter's own per-shelter CouchDB. */
 function shelterDbName(code: string): string {
-	// CouchDB requires lowercase database names; the `shelter_code` field stays canonical (e.g. SH001).
 	return `shelter_${code.toLowerCase()}`;
 }
 
@@ -48,15 +49,11 @@ function validateDocUpdate(code: string): string {
   if (newDoc.shelter_code !== '${code}') {
     throw { forbidden: 'shelter_code must be ${code}' };
   }
-  var allowed = ['evacuee'];
+  var allowed = ['evacuee', 'donation'];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
   }
 }`;
-}
-
-function nowIso(): string {
-	return new Date().toISOString();
 }
 
 function seedEvacuee(
@@ -87,37 +84,7 @@ function seedEvacuee(
 	};
 }
 
-interface ShelterMaster {
-	_id: string;
-	_rev?: string;
-	type: 'shelter';
-	schema_v: number;
-	code: string;
-	name: string;
-	zones: Zone[];
-	items?: Item[];
-	rules?: Rule[];
-	sops?: Sop[];
-	status: string;
-	capacity: number;
-	created_at: string;
-	updated_at: string;
-}
-
-/** Read all shelter master docs from the registry (empty if the db is absent). */
-async function listShelterMasters(): Promise<ShelterMaster[]> {
-	const res = await adminRaw(`/${REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
-	if (res.status === 404) return [];
-	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not read registry');
-	const rows = (res.data as { rows?: { id: string; doc: ShelterMaster }[] })?.rows ?? [];
-	return rows.filter((r) => r.id.startsWith('shelter:') && r.doc).map((r) => r.doc);
-}
-
-/**
- * Auto-assign the next shelter code in the `SHxxx` sequence.
- * Reads all existing master docs, extracts the numeric suffix, and returns
- * the next value zero-padded to at least 3 digits (SH001 → SH002 → ... → SH010 ...).
- */
+/** Auto-assign the next shelter code in the SHxxx sequence. */
 async function nextShelterCode(): Promise<string> {
 	const masters = await listShelterMasters();
 	let max = 0;
@@ -128,23 +95,16 @@ async function nextShelterCode(): Promise<string> {
 			if (n > max) max = n;
 		}
 	}
-	const next = max + 1;
-	return `SH${String(next).padStart(3, '0')}`;
+	return `SH${String(max + 1).padStart(3, '0')}`;
 }
 
-/** POST { name, capacity, zones? } — provision a shelter; code is auto-assigned. */
+/** POST shelter (5-section v3 schema) — provision a shelter; code is auto-assigned. */
 export const POST: RequestHandler = async ({ request }) => {
 	await requireAdmin(request.headers.get('cookie'));
 	try {
 		const body = (await request.json().catch(() => ({}))) as unknown;
 		const input = createShelterSchema.parse(body);
 		const code = await nextShelterCode();
-		const name = input.name;
-		const capacity = input.capacity;
-		const zones = input.zones;
-		const items = input.items;
-		const rules = input.rules;
-		const sops = input.sops;
 		const db = shelterDbName(code);
 
 		const steps: { step: string; status: number }[] = [];
@@ -152,12 +112,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		// 1. Shelter database (412 = already exists → idempotent).
 		steps.push({ step: 'create-db', status: (await adminRaw(`/${db}`, 'PUT')).status });
 
-		// 2. _security — members by shelter role, admins by system_admin (data-model.md §6).
-		const security = await adminRaw(`/${db}/_security`, 'PUT', {
-			admins: { names: [], roles: ['system_admin'] },
-			members: { names: [], roles: [`shelter:${code}`] }
-		});
-		steps.push({ step: 'security', status: security.status });
+		// 2. _security — read-modify-write to avoid clobbering existing members
+		// (skill: couchdb-pouchdb-bestpractices §4). On first provision this is
+		// a no-op merge; on re-runs it preserves any staff added since.
+		await mergeShelterSecurity(db, { roles: ['system_admin'] }, { roles: [`shelter:${code}`] });
+		steps.push({ step: 'security', status: 200 });
 
 		// 3. validate_doc_update design doc (idempotent re-PUT with _rev).
 		const existing = await adminRaw(`/${db}/_design/access`, 'GET');
@@ -169,28 +128,32 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 		steps.push({ step: 'design', status: design.status });
 
+		// 3.5. Deploy app views (CR-017)
+		const appStatus = await deployShelterViews(db);
+		steps.push({ step: 'design-app', status: appStatus });
+
 		// 4. Registry + shelter master doc (schema.md §3.1) — idempotent by `code`.
-		await adminRaw(`/${REGISTRY_DB}`, 'PUT');
+		await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
+		// Ensure authenticated users (SM / staff) can sync the registry.
+		await mergeShelterSecurity(
+			SHELTER_REGISTRY_DB,
+			{ roles: ['system_admin'] },
+			{ roles: [...SHELTER_CAPABILITIES] }
+		);
 		const masters = await listShelterMasters();
 		if (!masters.some((m) => m.code === code)) {
 			const ts = nowIso();
 			const master = {
 				_id: `shelter:${ulid()}`,
-				type: 'shelter',
-				schema_v: 2,
+				type: 'shelter' as const,
+				schema_v: 3 as const,
 				code,
-				name,
-				zones,
-				items,
-				rules,
-				sops,
-				status: 'open',
-				capacity,
+				...input,
 				created_at: ts,
 				updated_at: ts
 			};
 			const res = await adminRaw(
-				`/${REGISTRY_DB}/${encodeURIComponent(master._id)}`,
+				`/${SHELTER_REGISTRY_DB}/${encodeURIComponent(master._id)}`,
 				'PUT',
 				master
 			);
@@ -214,24 +177,34 @@ export const POST: RequestHandler = async ({ request }) => {
 		return serviceError(e);
 	}
 };
-
 /** GET — list provisioned shelters from the registry. */
 export const GET: RequestHandler = async ({ request }) => {
-	await requireAdmin(request.headers.get('cookie'));
 	try {
+		const caller = await requireShelterScopeOrSA(request.headers.get('cookie'));
 		const masters = await listShelterMasters();
+		// SA sees every shelter; a shelter-scoped user only sees their own.
+		const visible = caller.isSA ? masters : masters.filter((m) => m.code === caller.shelterCode);
 		return json(
-			masters.map((m) => ({
-				code: m.code,
-				name: m.name,
-				db: shelterDbName(m.code),
-				zones: m.zones ?? [],
-				items: m.items ?? [],
-				rules: m.rules ?? [],
-				sops: m.sops ?? [],
-				status: m.status === 'active' ? 'open' : m.status,
-				capacity: m.capacity ?? 0
-			}))
+			visible.map((m) => {
+				const migrated = migrate(m as ShelterMaster);
+				return {
+					code: migrated.code,
+					name: migrated.name,
+					db: shelterDbName(migrated.code),
+					operation_status: migrated.operation_status ?? 'standby',
+					capacity: migrated.capacity ?? 0,
+					shelter_type: migrated.shelter_type ?? null,
+					location: migrated.location ?? {},
+					contact: migrated.contact ?? {},
+					area_m2: migrated.area_m2 ?? null,
+					area_type: migrated.area_type ?? null,
+					facilities: migrated.facilities ?? {},
+					common_areas: migrated.common_areas ?? { sub_storage: [] },
+					utilities: migrated.utilities ?? { communications: [] },
+					risk: migrated.risk ?? {},
+					zones: migrated.zones ?? []
+				};
+			})
 		);
 	} catch (e) {
 		return serviceError(e);

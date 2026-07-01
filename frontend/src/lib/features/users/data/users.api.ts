@@ -15,6 +15,9 @@ const USERS_ENDPOINT = '/api/v1/users';
 export interface UserSummary {
 	name: string;
 	roles: string[];
+	display_name?: string | null;
+	shelter_id?: string | null;
+	affiliation_tags?: string[];
 }
 
 export function listUsers(): Promise<UserSummary[]> {
@@ -24,11 +27,28 @@ export function listUsers(): Promise<UserSummary[]> {
 export function createUser(input: {
 	name: string;
 	password: string;
+	display_name: string;
 	roles: string[];
+	affiliation_tags?: string[];
 }): Promise<{ ok: true }> {
 	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });
 }
 
 export function deleteUser(name: string): Promise<{ ok: true }> {
 	return serviceFetch(`${USERS_ENDPOINT}?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
+}
+
+export function updateUser(
+	name: string,
+	input: {
+		password?: string;
+		display_name?: string;
+		roles?: string[];
+		affiliation_tags?: string[];
+	}
+): Promise<{ ok: true }> {
+	return serviceFetch(USERS_ENDPOINT, {
+		method: 'PUT',
+		body: JSON.stringify({ name, ...input })
+	});
 }

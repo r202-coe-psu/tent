@@ -63,8 +63,7 @@ export async function adminFetch<T>(path: string, init: RequestInit = {}): Promi
 		}
 	});
 	const data = (await res.json().catch(() => null)) as
-		| (T & { error?: string; reason?: string })
-		| null;
+		(T & { error?: string; reason?: string }) | null;
 	if (!res.ok) {
 		throw error(res.status, data?.reason ?? data?.error ?? `CouchDB error (${res.status})`);
 	}
@@ -91,6 +90,27 @@ export async function requireAdmin(cookie: string | null): Promise<void> {
 	if (!roles.includes('_admin')) throw error(403, 'Admin privileges required');
 }
 
+/**
+ * Authorize a shelter-scoped write: SA can edit any shelter; shelter_manager
+ * may only edit shelters matching their own `shelterCode` scope. Resolves the
+ * caller from the session cookie and returns the {@link Caller} so the handler
+ * can use the server-verified `shelterCode` rather than trusting the request
+ * body (per the RBAC skill's "Write Path" rule).
+ *
+ * @param cookie  The request's `Cookie` header (may be null for anonymous).
+ * @param code    The shelter code from the URL params. The caller's `shelterCode`
+ *                must equal this value unless the caller is a system admin.
+ */
+export async function requireShelterManagerOrSA(
+	cookie: string | null,
+	code: string
+): Promise<Caller> {
+	const caller = await authorizeUserWrite(cookie);
+	if (caller.isSA) return caller;
+	if (caller.shelterCode && caller.shelterCode === code) return caller;
+	throw error(403, `Caller is not authorised for shelter "${code}"`);
+}
+
 // ----------------------------------------------------------- service contract
 //
 // The /api/v1/* service plane (api-contract.md §2) speaks a stable contract the
@@ -98,11 +118,7 @@ export async function requireAdmin(cookie: string | null): Promise<void> {
 // session-cookie authorization. These helpers keep the BFF on that contract.
 
 export type ServiceErrorCode =
-	| 'UNAUTHENTICATED'
-	| 'FORBIDDEN'
-	| 'VALIDATION'
-	| 'CONFLICT'
-	| 'INTERNAL';
+	'UNAUTHENTICATED' | 'FORBIDDEN' | 'VALIDATION' | 'CONFLICT' | 'INTERNAL';
 
 const STATUS_BY_CODE: Record<ServiceErrorCode, number> = {
 	UNAUTHENTICATED: 401,
@@ -172,12 +188,55 @@ export async function authorizeUserWrite(cookie: string | null): Promise<Caller>
 }
 
 /**
+ * Read-only gate: SA or any user whose roles include the shelter scope
+ * (`shelter:{code}`). Use this for GET endpoints — staff roles
+ * (registration_staff / kitchen_staff / warehouse_staff) all need to see their
+ * shelter's detail to do their work; writes still require
+ * `requireShelterManagerOrSA`.
+ *
+ * Omit `code` to only resolve the caller's session (returns the {@link Caller}
+ * so the handler can scope the response — e.g. SA → all rows, shelter-scoped
+ * user → only their own). With `code`, the caller's `shelterCode` must equal
+ * that value unless the caller is a system admin.
+ *
+ * @param cookie  The request's `Cookie` header (may be null for anonymous).
+ * @param code    Optional shelter code from the URL params.
+ */
+export async function requireShelterScopeOrSA(
+	cookie: string | null,
+	code?: string
+): Promise<Caller> {
+	const { base } = adminConfig();
+	const res = await fetch(`${base}/_session`, {
+		headers: { Accept: 'application/json', ...(cookie ? { Cookie: cookie } : {}) }
+	});
+	const data = (await res.json().catch(() => null)) as {
+		userCtx?: { name: string | null; roles: string[] };
+	} | null;
+	const name = data?.userCtx?.name;
+	const roles = data?.userCtx?.roles ?? [];
+	if (!name) throw error(401, 'Authentication required');
+
+	const caller: Caller = {
+		name,
+		roles,
+		isSA: isSystemAdmin(roles),
+		shelterCode: shelterCodeFromRoles(roles)
+	};
+	if (code === undefined) return caller;
+	if (caller.isSA) return caller;
+	if (caller.shelterCode === code) return caller;
+	throw error(403, `Caller is not in shelter "${code}" scope`);
+}
+
+/**
  * Enforce what a caller may grant a new/edited user (least privilege). The
  * requested `roles[]` is validated against the caller — never trusted:
  *  - SA: any roles except the CouchDB server admin (`_admin`); at most one
  *    shelter scope (1 user 1 shelter).
  *  - shelter_manager: shelter scope MUST equal the caller's own (no cross-shelter),
- *    capabilities ⊆ {volunteer, kitchen_staff, warehouse_staff} (no manager/SA).
+ *    capabilities ⊆ {registration_staff, kitchen_staff, warehouse_staff}
+ *    (no manager/SA). Per CR-002 / spec §1.1, `volunteer` is no longer a RoleKey.
  *
  * Throws {@link ServiceError} (FORBIDDEN/VALIDATION) on violation.
  */
@@ -202,7 +261,7 @@ export function assertCanGrant(caller: Caller, requestedRoles: readonly string[]
 	if (!isStaffOnly(requestedRoles)) {
 		throw new ServiceError(
 			'FORBIDDEN',
-			'A manager may only grant volunteer/kitchen_staff/warehouse_staff'
+			'A manager may only grant registration_staff/kitchen_staff/warehouse_staff'
 		);
 	}
 }

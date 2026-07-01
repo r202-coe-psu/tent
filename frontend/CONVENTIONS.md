@@ -286,6 +286,40 @@ db.changes({ live: true, since: 'now', include_docs: false }).on('change', () =>
 
 See `shelter-sync.ts` for the complete pattern including cleanup on unmount.
 
+### CouchDB View naming conventions
+
+All views deploy in a single design document per database: **`_design/app`**. Never create additional design docs.
+
+View names follow the pattern **`{subject}[_{qualifier}]`** in `snake_case`:
+
+| Qualifier type                  | Pattern                    | Examples                                             |
+| ------------------------------- | -------------------------- | ---------------------------------------------------- |
+| None (bare aggregate)           | `{subject}`                | `occupancy`                                          |
+| State / filter                  | `{subject}_{state}`        | `needs_open`                                         |
+| Computed metric / running total | `{subject}_{metric}`       | `stock_balance`, `meals_served`, `slot_availability` |
+| Most-recent per entity          | `latest_{subject}`         | `latest_screening`                                   |
+| Grouped by dimension            | `{subject}_by_{dimension}` | `registrations_by_date`, `demographics_by_age`       |
+
+Rules:
+
+- Subject is always a **noun** — never a verb.
+- `latest_` only for views returning the most recent document per entity key.
+- `_by_{dimension}` only for views queried with `?group=true`.
+- No abbreviations: `registrations` not `regs`, `demographics` not `demo`.
+
+Map key conventions:
+
+| Purpose           | Key shape                                                         |
+| ----------------- | ----------------------------------------------------------------- |
+| Single aggregate  | `emit(null, value)`                                               |
+| Group by field    | `emit(doc.field, value)`                                          |
+| Time-series       | `emit([doc.date, doc.sub_key], value)` — coarsest dimension first |
+| Latest-per-entity | `emit([doc.entity_id, doc.occurred_at], null)`                    |
+
+Value: `1` for count, numeric field for sum, `null` for map-only views.
+
+Views are called **server-side only** from `+server.ts` via `adminRaw`. Never call `_design/app/_view/*` from the browser.
+
 ---
 
 ## 6. Svelte 5 component patterns

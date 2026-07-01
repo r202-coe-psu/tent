@@ -1,273 +1,453 @@
 <script lang="ts">
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
-	import Lock from '@lucide/svelte/icons/lock';
 	import { env } from '$env/dynamic/public';
-	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { Input } from '$lib/components/ui/input';
+	import { Textarea } from '$lib/components/ui/textarea';
 	import { Button } from '$lib/components/ui/button';
 	import { Calendar } from '$lib/components/ui/calendar';
 	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
-	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
+	import {
+		Select,
+		SelectTrigger,
+		SelectContent,
+		SelectItem,
+		SelectValue
+	} from '$lib/components/ui/select';
 	import { today, getLocalTimeZone, type DateValue } from '@internationalized/date';
-	import { donationStore } from '../../../routes/public/donations/donation.svelte';
+	import { toast } from 'svelte-sonner';
+	import { onMount } from 'svelte';
+	import { getDonationStore } from '../../../routes/public/donations/donation.svelte';
+	const donationStore = getDonationStore();
 
-	const shelterNames: Record<string, string> = {
-		SH001: 'ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)',
-		SH002: 'ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)'
-	};
-
-	// logistics (DN) — slot จะเพิ่มเมื่อปลด T-02
-	const deliveryMethods = [
-		{ value: 'self_dropoff', label: 'นำไปส่งเอง' },
-		{ value: 'parcel', label: 'ส่งทางพัสดุ/ขนส่ง' },
-		{ value: 'shelter_pickup', label: 'ให้ศูนย์มารับ' }
-	];
-	const vehicles = [
-		{ value: '', label: 'ไม่ระบุยานพาหนะ' },
-		{ value: 'motorcycle', label: 'มอเตอร์ไซค์' },
-		{ value: 'car', label: 'รถยนต์' },
-		{ value: 'pickup', label: 'รถกระบะ' },
-		{ value: 'truck', label: 'รถบรรทุก' }
-	];
-
+	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	let selectedDate = $state<DateValue>(today(getLocalTimeZone()));
-	let selectedTime = $state('12:00');
-	let deliveryMethod = $state('self_dropoff');
-	let vehicle = $state('');
+	let shelters = $state<Array<{ code: string; name: string }>>([]);
+	let isLoading = $state(true);
 
-	// bits-ui v2 ไม่โชว์ label ของ value ที่เลือกบน trigger ให้อัตโนมัติ → คำนวณ label เอง
-	const shelterLabel = $derived(shelterNames[donationStore.selectedShelter] ?? 'เลือกศูนย์พักพิง');
-	const deliveryLabel = $derived(
-		deliveryMethods.find((m) => m.value === deliveryMethod)?.label ?? 'เลือกวิธีนำส่ง'
-	);
-	const vehicleLabel = $derived(
-		vehicles.find((v) => v.value === vehicle)?.label ?? 'ไม่ระบุยานพาหนะ'
-	);
-
-	function renderRecaptcha(node: HTMLElement) {
-		const initCaptcha = () => {
-			if (window.grecaptcha && window.grecaptcha.render) {
-				try {
-					window.grecaptcha.render(node, {
-						sitekey: env.PUBLIC_RECAPTCHA_SITE_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
-						callback: 'onCaptchaSuccess'
-					});
-				} catch (e) {
-					console.error('reCAPTCHA render error:', e);
-				}
-			} else {
-				setTimeout(initCaptcha, 100);
-			}
-		};
-		initCaptcha();
-	}
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/v1/shelters');
+			const data = await res.json();
+			if (Array.isArray(data)) shelters = data;
+		} catch (e) {
+			console.error('Failed to load shelters:', e);
+			toast.error('ไม่สามารถโหลดรายชื่อศูนย์พักพิงได้ กรุณาลองใหม่อีกครั้ง');
+		} finally {
+			isLoading = false;
+		}
+	});
 
 	async function submitDonation() {
-		// Read token from global variable
-		donationStore.captchaToken =
-			(window as unknown as { __captchaToken?: string }).__captchaToken || '';
+		donationStore.errorMessage = '';
 
-		if (!donationStore.captchaToken) {
-			donationStore.errorMessage = 'กรุณายืนยันว่าคุณไม่ใช่โปรแกรมอัตโนมัติ';
+		if (!donationStore.deliveryMethod) {
+			donationStore.errorMessage = 'กรุณาเลือกวิธีการจัดส่ง';
 			return;
 		}
-
-		if (deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress.trim()) {
-			donationStore.errorMessage = 'กรุณากรอกที่อยู่สำหรับให้ศูนย์ไปรับของบริจาค';
+		if (donationStore.deliveryMethod === 'self_dropoff' && !donationStore.vehicleType) {
+			donationStore.errorMessage = 'กรุณาเลือกประเภทยานพาหนะ';
+			return;
+		}
+		if (
+			(donationStore.deliveryMethod === 'self_dropoff' ||
+				donationStore.deliveryMethod === 'shelter_pickup') &&
+			(!selectedDate || !donationStore.slotTime)
+		) {
+			donationStore.errorMessage = 'กรุณาเลือกวันที่และช่วงเวลา';
+			return;
+		}
+		if (donationStore.deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress) {
+			donationStore.errorMessage = 'กรุณาระบุที่อยู่สำหรับไปรับของ';
 			return;
 		}
 
 		donationStore.isSubmitting = true;
-		donationStore.errorMessage = '';
+		let token = '';
 
-		// รวมวัน+เวลาส่งมอบ และเก็บลง store เพื่อโชว์บนตั๋ว
-		const dateTimeString = selectedDate
-			? `${selectedDate.toString()}T${selectedTime}:00.000Z`
-			: new Date().toISOString();
-		donationStore.deliveryDate = dateTimeString;
-		donationStore.selectedShelterName =
-			shelterNames[donationStore.selectedShelter] ?? donationStore.selectedShelter;
+		if (siteKey && (window as any).grecaptcha) {
+			try {
+				token = await (window as any).grecaptcha.execute(siteKey, { action: 'donate' });
+			} catch (e) {
+				console.error('reCAPTCHA execute error:', e);
+				donationStore.errorMessage =
+					'ระบบยืนยันตัวตนขัดข้อง (reCAPTCHA) กรุณาลองใหม่อีกครั้ง หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต';
+				toast.error(donationStore.errorMessage);
+				donationStore.isSubmitting = false;
+				return;
+			}
+		}
+
+		let slotDateStr = selectedDate
+			? selectedDate.toString()
+			: new Date().toISOString().split('T')[0];
+		let fromTime = donationStore.slotTime.split('-')[0]?.trim() || '00:00';
+		let toTime = donationStore.slotTime.split('-')[1]?.trim() || '23:59';
+
+		let logistics: any = {
+			delivery_method: donationStore.deliveryMethod
+		};
+
+		if (donationStore.deliveryMethod === 'self_dropoff') {
+			logistics.vehicle = donationStore.vehicleType;
+			logistics.slot = { date: slotDateStr, from: fromTime, to: toTime };
+		} else if (donationStore.deliveryMethod === 'shelter_pickup') {
+			logistics.slot = { date: slotDateStr, from: fromTime, to: toTime };
+			if (donationStore.pickupAddress) logistics.pickup_address = donationStore.pickupAddress;
+			if (donationStore.eta) logistics.eta = donationStore.eta;
+		} else if (donationStore.deliveryMethod === 'parcel') {
+			if (donationStore.eta) logistics.eta = donationStore.eta;
+			if (donationStore.courierTrackingNo)
+				logistics.courier_tracking_no = donationStore.courierTrackingNo;
+		}
 
 		try {
-			const res = await fetch('/public/v1/donations', {
+			const res = await fetch('/api/v1/donations', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					shelter_code: donationStore.selectedShelter,
+					shelter_code: donationStore.shelterCode,
 					donor: {
 						name: donationStore.donorName || 'ไม่ระบุชื่อ',
 						phone: donationStore.donorPhone || '0000000000',
 						line_id: donationStore.donorLine || undefined,
 						email: donationStore.donorEmail || undefined
 					},
-					items_declared:
+					items:
 						donationStore.items.length > 0
 							? donationStore.items.map((it) => ({
-									item_id: it.item_id || undefined,
-									item_name: it.name || 'ไม่ได้ระบุ',
+									free_text: it.name || 'ไม่ได้ระบุ',
+									category: it.category || undefined,
 									qty: it.amount || 1,
 									unit: it.unit || 'ชิ้น',
-									category: it.category || undefined,
 									condition: it.condition || undefined,
-									note: it.note || undefined
+									note: it.remark || undefined
 								}))
-							: [{ item_name: 'ของบริจาคทั่วไป', qty: 1, unit: 'ชิ้น' }],
-					logistics: {
-						delivery_method: deliveryMethod,
-						vehicle: vehicle || undefined,
-						eta: dateTimeString,
-						pickup_address:
-							deliveryMethod === 'shelter_pickup' ? donationStore.pickupAddress : undefined
-					},
-					captchaToken: donationStore.captchaToken
+							: [{ free_text: 'ของบริจาคทั่วไป', qty: 1, unit: 'ชิ้น' }],
+					logistics: logistics,
+					captchaToken: token || 'dev-skip-token'
 				})
 			});
 			const data = await res.json();
 			if (!data.success) {
-				if (data.error === 'NEED_FULL') {
-					donationStore.errorMessage =
-						'ขออภัย สิ่งของบางรายการที่ศูนย์นี้รับครบแล้ว กรุณาเลือกศูนย์อื่นหรือรายการอื่น';
-				} else {
-					donationStore.errorMessage = data.error || 'ไม่สามารถจองคิวบริจาคได้';
-				}
+				donationStore.errorMessage = data.error || 'ไม่สามารถจองคิวบริจาคได้';
+				toast.error(donationStore.errorMessage);
 			} else {
 				donationStore.trackingToken = data.trackingToken;
-				donationStore.bookingRef = data.booking_ref ?? '';
 				donationStore.activeTab = 'ticket';
 				if (donationStore.reachedStep < 4) donationStore.reachedStep = 4;
+				toast.success('ยืนยันการจองคิวบริจาคสำเร็จ!');
 			}
-		} catch {
+		} catch (err) {
 			donationStore.errorMessage = 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์';
+			toast.error(donationStore.errorMessage);
 		} finally {
 			donationStore.isSubmitting = false;
 		}
 	}
+
+	// TODO(CR-XX): Migrate hardcoded time slots and capacities to backend
+	// The current slots are hardcoded for mockup purposes. The 'full' status on 13:00-14:00 must be tracked in issue backlog.
+	const timeSlots = [
+		{ label: '09:00 - 10:00', status: 'available' },
+		{ label: '10:00 - 11:00', status: 'available' },
+		{ label: '13:00 - 14:00', status: 'full' },
+		{ label: '14:00 - 15:00', status: 'available' },
+		{ label: '15:00 - 16:00', status: 'available' }
+	];
 </script>
 
-<div class="rounded-3xl border border-border bg-card p-6 text-center shadow-xs md:p-8">
-	<MapPin class="mx-auto mb-4 h-12 w-12 text-primary/80" />
-	<h2 class="text-base font-bold text-foreground">เลือกวันเวลา และสถานที่จัดส่ง</h2>
-	<p class="mt-1 text-xs text-muted-foreground">
-		กําหนดเวลานําส่งสิ่งของบริจาคเพื่อลดความหนาแน่นในจุดบริการ
-	</p>
-
-	<div class="mt-6 inline-flex w-full max-w-sm flex-col gap-4 text-left">
-		<div class="flex flex-col gap-1.5">
-			<Label for="destination-select" class="text-xs font-bold text-foreground">
-				จุดส่งมอบปลายทาง
-			</Label>
-			<Select
-				type="single"
-				bind:value={donationStore.selectedShelter}
-				disabled={donationStore.shelterLocked}
+<div class="w-full rounded-xl border border-border bg-card p-8 text-left font-['Prompt'] shadow-sm">
+	<div class="mb-6 flex items-center gap-4 border-b border-border pb-6">
+		<div
+			class="flex h-12 w-12 items-center justify-center rounded-full bg-warning-muted text-warning"
+		>
+			<svg
+				class="h-6 w-6 -rotate-45 transform"
+				fill="none"
+				stroke="currentColor"
+				viewBox="0 0 24 24"
+				><path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="2"
+					d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+				></path></svg
 			>
-				<SelectTrigger class="w-full">
-					{shelterLabel}
-				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value="SH001" label="ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)" />
-					<SelectItem value="SH002" label="ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)" />
-				</SelectContent>
-			</Select>
-			{#if donationStore.shelterLocked}
-				<p class="flex items-center gap-1 text-[11px] text-muted-foreground">
-					<Lock class="h-3 w-3" />
-					ล็อกศูนย์ปลายทางตามรายการที่เลือกจากกระดานความต้องการ
-				</p>
-			{/if}
 		</div>
-
-		<div class="flex flex-col gap-1.5">
-			<Label for="delivery-method" class="text-xs font-bold text-foreground">วิธีนำส่ง</Label>
-			<Select type="single" bind:value={deliveryMethod}>
-				<SelectTrigger class="w-full">
-					{deliveryLabel}
-				</SelectTrigger>
-				<SelectContent>
-					{#each deliveryMethods as m (m.value)}
-						<SelectItem value={m.value} label={m.label} />
-					{/each}
-				</SelectContent>
-			</Select>
+		<div>
+			<h1 class="text-xl font-semibold text-foreground">ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์</h1>
+			<p class="text-sm text-muted-foreground">ระบุวิธีการจัดส่งและเวลาที่จะมาถึง</p>
 		</div>
+	</div>
 
-		{#if deliveryMethod === 'shelter_pickup'}
-			<div class="flex animate-in flex-col gap-1.5 duration-200 fade-in slide-in-from-top-2">
-				<Label for="pickup-address" class="text-xs font-bold text-foreground">
-					ที่อยู่สำหรับให้ศูนย์มารับสิ่งของบริจาค
-				</Label>
-				<Input
-					id="pickup-address"
-					type="text"
-					placeholder="ระบุที่อยู่โดยละเอียด เช่น บ้านเลขที่ ถนน ตำบล อำเภอ จังหวัด"
-					bind:value={donationStore.pickupAddress}
-				/>
+	<div class="mb-8">
+		<h2 class="mb-3 text-sm font-semibold text-foreground">
+			วิธีการจัดส่ง <span class="text-danger">*</span>
+		</h2>
+		<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+			<Button
+				variant="outline"
+				onclick={() => (donationStore.deliveryMethod = 'self_dropoff')}
+				class="h-auto rounded-lg border px-4 py-4 text-left font-medium shadow-sm transition 
+					{donationStore.deliveryMethod === 'self_dropoff'
+					? 'border-warning bg-warning-muted text-warning hover:bg-warning-muted/80'
+					: 'border-border text-muted-foreground hover:bg-muted/30'}"
+			>
+				นำมาส่งด้วยตนเอง
+			</Button>
+			<Button
+				variant="outline"
+				onclick={() => (donationStore.deliveryMethod = 'parcel')}
+				class="h-auto rounded-lg border px-4 py-4 text-left font-medium shadow-sm transition 
+					{donationStore.deliveryMethod === 'parcel'
+					? 'border-warning bg-warning-muted text-warning hover:bg-warning-muted/80'
+					: 'border-border text-muted-foreground hover:bg-muted/30'}"
+			>
+				ส่งผ่านขนส่งพัสดุ
+			</Button>
+			<Button
+				variant="outline"
+				onclick={() => (donationStore.deliveryMethod = 'shelter_pickup')}
+				class="h-auto rounded-lg border px-4 py-4 text-left font-medium shadow-sm transition 
+					{donationStore.deliveryMethod === 'shelter_pickup'
+					? 'border-warning bg-warning-muted text-warning hover:bg-warning-muted/80'
+					: 'border-border text-muted-foreground hover:bg-muted/30'}"
+			>
+				ต้องการให้รถศูนย์ไปรับ (ของเยอะมาก)
+			</Button>
+		</div>
+	</div>
+
+	<div class="mb-8 rounded-xl border border-border bg-muted/20 p-6 fade-in">
+		<div class="mb-6">
+			<div class="mb-2 flex items-center gap-2">
+				<MapPin class="h-4 w-4 text-muted-foreground" />
+				<h2 class="text-sm font-semibold text-foreground">
+					เลือกศูนย์รับบริจาค <span class="text-danger">*</span>
+					{#if donationStore.shelterLocked}
+						<span class="inline-flex items-center gap-1 ml-2 text-xs font-normal text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
+							<Lock class="h-3 w-3" />
+							ล็อกตามความต้องการที่เลือก
+						</span>
+					{/if}
+				</h2>
 			</div>
-		{/if}
-
-		<div class="flex flex-col gap-1.5">
-			<Label for="vehicle-select" class="text-xs font-bold text-foreground"
-				>ยานพาหนะ (ไม่บังคับ)</Label
-			>
-			<Select type="single" bind:value={vehicle}>
-				<SelectTrigger class="w-full">
-					{vehicleLabel}
+			<Select type="single" bind:value={donationStore.shelterCode} disabled={donationStore.shelterLocked}>
+				<SelectTrigger class="w-full border-border bg-card font-medium text-foreground shadow-sm">
+					<SelectValue placeholder="เลือกศูนย์พักพิง" />
 				</SelectTrigger>
-				<SelectContent>
-					{#each vehicles.filter((v) => v.value) as v (v.value)}
-						<SelectItem value={v.value} label={v.label} />
+				<SelectContent class="font-['Prompt']">
+					{#each shelters as shelter}
+						<SelectItem value={shelter.code} label={shelter.name}>{shelter.name}</SelectItem>
 					{/each}
+					{#if isLoading}
+						<SelectItem value="loading" label="กำลังโหลดข้อมูล..." disabled
+							>กำลังโหลดข้อมูล...</SelectItem
+						>
+					{:else if shelters.length === 0}
+						<SelectItem value="empty" label="ไม่พบศูนย์ที่เปิดรับบริจาค" disabled
+							>ไม่พบศูนย์ที่เปิดรับบริจาค</SelectItem
+						>
+					{/if}
 				</SelectContent>
 			</Select>
 		</div>
+	</div>
 
-		<div class="flex flex-col gap-1.5">
-			<Label class="text-xs font-bold text-foreground">วันที่ต้องการส่งมอบสิ่งของ</Label>
-			<Popover>
-				<PopoverTrigger>
+	{#if donationStore.deliveryMethod === 'self_dropoff'}
+		<div class="mb-8 fade-in">
+			<h2 class="mb-1 text-sm font-semibold text-foreground">
+				ประเภทยานพาหนะที่จะนำมาส่ง <span class="text-destructive">*</span>
+			</h2>
+			<p class="mb-3 text-xs text-muted-foreground">
+				ข้อมูลนี้สำคัญมาก เพื่อให้จุดรับของกะพื้นที่จอดและเตรียมคนยกของ
+			</p>
+			<div class="grid grid-cols-2 gap-4 md:grid-cols-4">
+				{#each ['motorcycle', 'car', 'pickup', 'truck'] as vtype}
 					<Button
 						variant="outline"
-						class="h-auto w-full justify-start py-3.5 text-left text-xs font-normal"
+						onclick={() => (donationStore.vehicleType = vtype as any)}
+						class="h-auto rounded-lg border py-3 text-sm font-medium transition 
+					{donationStore.vehicleType === vtype
+							? 'border-transparent bg-warning text-warning-foreground shadow-sm hover:bg-warning/90'
+							: 'border-border text-muted-foreground hover:bg-muted/30'}"
 					>
-						<CalendarIcon class="mr-2 h-4 w-4 text-muted-foreground" />
-						{#if selectedDate}
-							{selectedDate.toString()}
-						{:else}
-							<span>เลือกวันที่ส่งมอบ</span>
+						{#if vtype === 'motorcycle'}
+							รถจักรยานยนต์
+						{:else if vtype === 'car'}
+							รถเก๋ง / รถยนต์
+						{:else if vtype === 'pickup'}
+							รถกระบะ
+						{:else if vtype === 'truck'}
+							รถบรรทุก
 						{/if}
 					</Button>
-				</PopoverTrigger>
-				<PopoverContent class="w-auto p-0">
-					<Calendar type="single" bind:value={selectedDate} initialFocus />
-				</PopoverContent>
-			</Popover>
-		</div>
-
-		<div class="flex flex-col gap-1.5">
-			<Label for="time-input" class="text-xs font-bold text-foreground">เวลาที่จะส่งของ</Label>
-			<Input id="time-input" type="time" bind:value={selectedTime} class="mt-1" />
-		</div>
-
-		<div class="mt-4 flex justify-center">
-			<div use:renderRecaptcha></div>
-		</div>
-
-		{#if donationStore.errorMessage}
-			<div
-				class="mt-4 rounded-lg border border-danger/30 bg-danger-muted/20 p-2 text-center text-xs font-bold text-danger"
-			>
-				{donationStore.errorMessage}
+				{/each}
 			</div>
-		{/if}
+		</div>
+	{/if}
 
+	{#if donationStore.deliveryMethod === 'parcel'}
+		<div class="mb-8 fade-in">
+			<h2 class="mb-3 text-sm font-semibold text-foreground">ข้อมูลขนส่งพัสดุ</h2>
+			<div class="grid gap-4 md:grid-cols-2">
+				<div>
+					<Label class="mb-1 block text-sm font-medium">คาดว่าจะถึง (ETA)</Label>
+					<Input bind:value={donationStore.eta} placeholder="เช่น พรุ่งนี้ช่วงบ่าย" class="h-11" />
+				</div>
+				<div>
+					<Label class="mb-1 block text-sm font-medium">เลขพัสดุ (Tracking No.)</Label>
+					<Input
+						bind:value={donationStore.courierTrackingNo}
+						placeholder="ระบุภายหลังได้"
+						class="h-11"
+					/>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if donationStore.deliveryMethod === 'shelter_pickup'}
+		<div class="mb-8 fade-in">
+			<h2 class="mb-3 text-sm font-semibold text-foreground">
+				ข้อมูลสถานที่ให้ไปรับ <span class="text-danger">*</span>
+			</h2>
+			<div class="grid gap-4">
+				<div>
+					<Label class="mb-1 block text-sm font-medium">ที่อยู่ติดต่อ / รายละเอียดสถานที่</Label>
+					<Textarea
+						bind:value={donationStore.pickupAddress}
+						placeholder="ระบุบ้านเลขที่ ซอย ถนน หรือจุดสังเกต"
+						class="h-24 resize-none"
+					/>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup'}
+		<div class="mb-8 rounded-xl border border-border bg-muted/20 p-6 fade-in">
+			<div>
+				<div class="mb-3 flex items-center gap-2">
+					<CalendarIcon class="h-4 w-4 text-muted-foreground" />
+					<h2 class="text-sm font-semibold text-foreground">
+						เลือกวันที่และช่วงเวลา {donationStore.deliveryMethod === 'shelter_pickup'
+							? 'ที่ต้องการให้ไปรับ'
+							: 'ที่จะนำของมาส่ง'} <span class="text-danger">*</span>
+					</h2>
+				</div>
+
+				<div class="mb-4">
+					<Popover>
+						<PopoverTrigger class="w-full">
+							<Button
+								variant="outline"
+								class="h-auto w-full! justify-start border-border bg-card py-3 text-left font-medium text-foreground shadow-sm hover:border-warning"
+							>
+								<CalendarIcon class="mr-2 h-4 w-4 text-muted-foreground" />
+								{#if selectedDate}
+									{selectedDate.toString()}
+								{:else}
+									<span>เลือกวันที่</span>
+								{/if}
+							</Button>
+						</PopoverTrigger>
+						<PopoverContent class="w-auto p-0 font-['Prompt']">
+							<Calendar type="single" bind:value={selectedDate} initialFocus />
+						</PopoverContent>
+					</Popover>
+				</div>
+
+				<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+					{#each timeSlots as slot}
+						<Button
+							variant="outline"
+							onclick={() => {
+								if (slot.status === 'available') donationStore.slotTime = slot.label;
+							}}
+							disabled={slot.status === 'full'}
+							class="flex h-auto flex-col items-center justify-center rounded-lg border p-3 text-center transition 
+						{slot.status === 'full'
+								? 'cursor-not-allowed border-border/50 bg-muted/50 opacity-70'
+								: donationStore.slotTime === slot.label
+									? 'border-warning bg-warning-muted text-warning hover:bg-warning-muted/80'
+									: 'border-border bg-card hover:border-warning-subtle'}"
+						>
+							<div
+								class="text-sm font-medium {slot.status === 'full'
+									? 'text-muted-foreground'
+									: donationStore.slotTime === slot.label
+										? 'text-warning-subtle'
+										: 'text-foreground'}"
+							>
+								{slot.label}
+							</div>
+							<div
+								class="mt-1 text-xs {donationStore.slotTime === slot.label
+									? 'text-warning'
+									: 'text-muted-foreground'}"
+							>
+								{slot.status === 'full' ? 'คิวเต็ม (งด)' : 'ว่าง'}
+							</div>
+						</Button>
+					{/each}
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if donationStore.errorMessage}
+		<div
+			class="mt-4 rounded-lg border border-danger/30 bg-danger/10 p-3 text-center text-sm font-medium text-danger"
+		>
+			{donationStore.errorMessage}
+		</div>
+	{/if}
+
+	<hr class="mt-6 mb-6 border-border" />
+
+	<div class="flex gap-4">
+		<Button
+			variant="outline"
+			onclick={() => (donationStore.activeTab = 'form')}
+			class="h-12 rounded-lg bg-muted px-8 font-medium text-foreground transition hover:bg-muted/80"
+		>
+			กลับ
+		</Button>
 		<Button
 			onclick={submitDonation}
 			disabled={donationStore.isSubmitting}
-			class="mt-6 flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-xs font-bold text-white transition-colors"
+			class="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-6 font-medium text-primary-foreground transition hover:bg-primary-dark disabled:opacity-70"
 		>
 			{donationStore.isSubmitting ? 'กำลังดำเนินการ...' : 'ยืนยันการจองคิวบริจาค'}
-			{#if !donationStore.isSubmitting}<span>→</span>{/if}
+			{#if !donationStore.isSubmitting}
+				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+					><path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+					></path></svg
+				>
+			{/if}
 		</Button>
 	</div>
 </div>
+
+<style>
+	.fade-in {
+		animation: fadeIn 0.3s ease-in-out;
+	}
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+			transform: translateY(-5px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+</style>

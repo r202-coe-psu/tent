@@ -56,38 +56,37 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
 		await page.locator('#donor-email').fill('donor@example.com');
 
 		// Fill item details (already pre-filled with name/qty/unit, let's verify)
-		const itemName = page.locator('input[placeholder="เช่น ข้าวสาร, แพมเพิสเด็ก"]');
+		const itemName = page.locator('input[placeholder="เช่น น้ำดื่มขวด 600ml"]');
 		await expect(itemName).toHaveValue('ข้าวสาร');
 
 		// Select item category
 		// Click category select trigger
-		await page.locator('[data-slot="select-trigger"]').first().click();
-		await page.locator('[data-slot="select-item"]', { hasText: 'อาหาร' }).click();
+		await page.getByRole('combobox').first().click();
+		await page.getByRole('option', { name: 'อาหาร/เครื่องดื่ม' }).click();
 
 		// Click Next to Step 3
 		await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 
 		// Step 3: Logistics & Time selection
-		await expect(page.locator('h2', { hasText: 'เลือกวันเวลา และสถานที่จัดส่ง' })).toBeVisible();
+		await expect(page.locator('h1', { hasText: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })).toBeVisible();
 
 		// Assert shelter is locked to SH001
 		await expect(
-			page.getByText('ล็อกศูนย์ปลายทางตามรายการที่เลือกจากกระดานความต้องการ')
+			page.getByText('ล็อกตามความต้องการที่เลือก')
 		).toBeVisible();
 
-		// Choose delivery method
-		await page.locator('[data-slot="select-trigger"]').nth(1).click();
-		await page.locator('[data-slot="select-item"]', { hasText: 'ส่งทางพัสดุ/ขนส่ง' }).click();
+		// Choose delivery method (Button grid)
+		await page.getByRole('button', { name: 'ส่งผ่านขนส่งพัสดุ' }).click();
 
-		// Mock POST /public/v1/donations response
-		await page.route('**/public/v1/donations', async (route) => {
+		// Mock POST /api/v1/donations response
+		await page.route('**/api/v1/donations', async (route) => {
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({
 					success: true,
-					trackingToken: 'TX-DON-E2ETEST',
-					booking_ref: 'DN-555555'
+					trackingToken: 'TX-SH001-E2ETEST',
+					bookingRef: 'DN-555555'
 				})
 			});
 		});
@@ -103,17 +102,17 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
 		// Step 4: Success Ticket
 		await expect(page.locator('h2', { hasText: 'จองสิทธิ์บริจาคสําเร็จ!' })).toBeVisible();
 		await expect(page.getByText('DN-555555')).toBeVisible();
-		await expect(page.getByText('TX-DON-E2ETEST').first()).toBeVisible();
+		await expect(page.getByText('TX-SH001-E2ETEST').first()).toBeVisible();
 		await expect(page.getByText('ผู้บริจาคใจบุญ')).toBeVisible();
 
 		// Mock PATCH for courier tracking update
-		await page.route('**/public/v1/donations/TX-DON-E2ETEST', async (route) => {
+		await page.route('**/api/v1/donations/TX-SH001-E2ETEST', async (route) => {
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({
 					success: true,
-					courier_tracking_no: 'TH123456789'
+					message: 'Courier tracking number updated'
 				})
 			});
 		});
