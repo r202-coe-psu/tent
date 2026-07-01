@@ -8,13 +8,22 @@
 
 	interface NeedItem {
 		id: string;
-		name: string;
+		title: string;
 		location: string;
 		reserved: number;
 		target: number;
 		showOnHome: boolean;
 		isCutOff: boolean;
 		isManualClosed: boolean;
+		needs: {
+			itemId: string;
+			name: string;
+			reserved: number;
+			onHand: number;
+			target: number;
+			unit: string;
+			isCutOff: boolean;
+		}[];
 	}
 
 	let {
@@ -34,8 +43,9 @@
 	let filteredItems = $derived(
 		items.filter(
 			(item) =>
-				item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-				item.location.toLowerCase().includes(searchQuery.toLowerCase())
+				item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				item.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				item.needs.some((need) => need.name.toLowerCase().includes(searchQuery.toLowerCase()))
 		)
 	);
 </script>
@@ -82,24 +92,21 @@
 				<Table.Row
 					class="border-b border-border bg-muted/20 text-[11px] font-bold text-muted-foreground uppercase"
 				>
-					<Table.Head class="px-6 py-4">รายการพัสดุ / ประกาศพิเศษ</Table.Head>
-					<Table.Head class="px-6 py-4 text-right">ยอดจองบริจาคแล้ว</Table.Head>
-					<Table.Head class="px-6 py-4 text-right">ยอดเป้าหมาย</Table.Head>
-					<Table.Head class="px-6 py-4">ความคืบหน้า (PROGRESS)</Table.Head>
+					<Table.Head class="px-6 py-4">แคมเปญ / ประกาศพิเศษ</Table.Head>
+					<Table.Head class="px-6 py-4">รายการความต้องการและความคืบหน้า</Table.Head>
 					<Table.Head class="px-6 py-4 text-center">สถานะโปรโมตหน้าแรก</Table.Head>
 					<Table.Head class="px-6 py-4 text-center">การจัดการ</Table.Head>
 				</Table.Row>
 			</Table.Header>
 			<Table.Body class="divide-y divide-border/60 text-xs">
 				{#each filteredItems as item (item.id)}
-					{@const progressPercent = Math.min(Math.round((item.reserved / item.target) * 100), 100)}
-
 					<Table.Row
 						class="transition-colors hover:bg-muted/5 {item.isCutOff
 							? 'bg-muted/10 opacity-65'
 							: ''}"
 					>
-						<Table.Cell class="px-6 py-4">
+						<!-- แคมเปญ / สถานที่คลัง -->
+						<Table.Cell class="px-6 py-4 align-top">
 							<div class="flex items-center gap-2 font-bold text-foreground">
 								{#if item.isCutOff}
 									<span
@@ -107,38 +114,56 @@
 										>CUT-OFF</span
 									>
 								{/if}
-								{item.name}
+								{item.title}
 							</div>
-							<div class="mt-0.5 text-[10px] text-muted-foreground">{item.location}</div>
+							<div class="mt-1 text-[10px] text-muted-foreground">{item.location}</div>
 						</Table.Cell>
 
-						<Table.Cell class="px-6 py-4 text-right font-semibold text-foreground">
-							<span class="rounded-md border border-border/40 bg-muted px-2.5 py-1">
-								{item.reserved.toLocaleString()}
-							</span>
-						</Table.Cell>
-
-						<Table.Cell class="px-6 py-4 text-right font-semibold text-foreground">
-							{item.target.toLocaleString()}
-						</Table.Cell>
-
-						<Table.Cell class="min-w-[180px] px-6 py-4">
-							<div class="flex items-center gap-3">
-								<div
-									class="relative h-2 w-28 overflow-hidden rounded-full border border-border/40 bg-muted"
-								>
-									<div
-										class="h-full rounded-full transition-all duration-300 {item.isCutOff
-											? 'bg-red-500'
-											: 'bg-primary'}"
-										style="width: {progressPercent}%"
-									></div>
-								</div>
-								<span class="text-[10px] font-bold text-muted-foreground">{progressPercent}%</span>
+						<!-- รายการย่อยย่อย และความคืบหน้า (Warning 3: รวมยอดจอง + ยอดคลัง) -->
+						<Table.Cell class="px-6 py-4">
+							<div class="flex flex-col gap-4">
+								{#each item.needs as need}
+									{@const totalAcquired = need.reserved + need.onHand}
+									{@const progressPercent = Math.min(
+										Math.round((totalAcquired / need.target) * 100),
+										100
+									)}
+									<div class="flex flex-col gap-1">
+										<div
+											class="flex items-center justify-between text-[11px] font-medium text-foreground"
+										>
+											<div class="flex items-center gap-1.5">
+												<span>{need.name}</span>
+												{#if need.isCutOff}
+													<span
+														class="py-0.2 rounded bg-amber-100 px-1 text-[8px] font-extrabold text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+													>
+														FULL
+													</span>
+												{/if}
+											</div>
+											<span class="text-muted-foreground">
+												จอง: {need.reserved} · คลัง: {need.onHand} / เป้าหมาย: {need.target}
+												{need.unit} ({progressPercent}%)
+											</span>
+										</div>
+										<div
+											class="relative h-2 w-full overflow-hidden rounded-full border border-border/40 bg-muted"
+										>
+											<div
+												class="h-full rounded-full transition-all duration-300 {need.isCutOff
+													? 'bg-red-500'
+													: 'bg-primary'}"
+												style="width: {progressPercent}%"
+											></div>
+										</div>
+									</div>
+								{/each}
 							</div>
 						</Table.Cell>
 
-						<Table.Cell class="px-6 py-4 text-center">
+						<!-- ปุ่มโชว์/ซ่อน บนหน้าแรก -->
+						<Table.Cell class="px-6 py-4 text-center align-top">
 							<button
 								type="button"
 								onclick={() => onToggleShowOnHome(item.id)}
@@ -152,7 +177,8 @@
 							</button>
 						</Table.Cell>
 
-						<Table.Cell class="px-6 py-4 text-center">
+						<!-- ปุ่ม Force Close / Restore -->
+						<Table.Cell class="px-6 py-4 text-center align-top">
 							<button
 								type="button"
 								onclick={() => onToggleCutOff(item.id)}
@@ -167,7 +193,7 @@
 					</Table.Row>
 				{:else}
 					<Table.Row>
-						<Table.Cell colspan={6} class="px-6 py-8 text-center text-muted-foreground">
+						<Table.Cell colspan={4} class="px-6 py-8 text-center text-muted-foreground">
 							ไม่พบรายการความต้องการที่ค้นหา
 						</Table.Cell>
 					</Table.Row>

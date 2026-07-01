@@ -67,6 +67,9 @@
 		const list: any[] = [];
 		for (const camp of campaigns) {
 			const campDonations = donationsByCampaign.get(camp._id) ?? [];
+			const needs: any[] = [];
+			let allNeedsCutOff = true;
+
 			for (const need of camp.needs) {
 				const itemId = need.item_id;
 
@@ -86,19 +89,34 @@
 				const isManualClosed = camp.status === 'closed';
 				const isCutOff = isAutoCutOff || isManualClosed;
 
-				list.push({
-					id: `${camp._id}:${itemId}`,
+				if (!isCutOff) {
+					allNeedsCutOff = false;
+				}
+
+				needs.push({
+					itemId: itemId,
 					name: ITEM_NAMES[itemId] ?? (itemId.startsWith('item:') ? itemId.slice(5) : itemId),
-					location: camp.title || 'คลังช่วยเหลือภัยพิบัติ EOC',
 					reserved: reserved,
 					onHand: onHand,
 					target: target,
-					showOnHome: camp.visible_on_home !== false,
-					isCutOff: isCutOff,
-					isManualClosed: isManualClosed,
-					campaignDoc: camp
+					unit: need.unit,
+					isCutOff: isCutOff
 				});
 			}
+
+			const isManualClosed = camp.status === 'closed';
+			const isCutOff = allNeedsCutOff || isManualClosed;
+
+			list.push({
+				id: camp._id,
+				title: camp.title || 'ประกาศช่วยเหลือภัยพิบัติ EOC',
+				location: camp.notes || 'คลังช่วยเหลือภัยพิบัติ EOC',
+				needs: needs,
+				showOnHome: camp.visible_on_home !== false,
+				isCutOff: isCutOff,
+				isManualClosed: isManualClosed,
+				campaignDoc: camp
+			});
 		}
 		return list;
 	});
@@ -117,8 +135,8 @@
 					onSuccess: () => {
 						toast.success(
 							nextVisible
-								? `กำลังโปรโมต "${targetItem.name}" บนหน้าแรก`
-								: `ซ่อน "${targetItem.name}" จากหน้าแรก`
+								? `กำลังโปรโมต "${targetItem.title}" บนหน้าแรก`
+								: `ซ่อน "${targetItem.title}" จากหน้าแรก`
 						);
 					},
 					onError: (err) => {
@@ -143,8 +161,8 @@
 					onSuccess: () => {
 						toast.success(
 							nextStatus === 'closed'
-								? `ปิดรับบริจาคสำหรับ "${targetItem.name}" แล้ว`
-								: `เปิดรับบริจาคสำหรับ "${targetItem.name}" อีกครั้ง`
+								? `ปิดรับบริจาคสำหรับ "${targetItem.title}" แล้ว`
+								: `เปิดรับบริจาคสำหรับ "${targetItem.title}" อีกครั้ง`
 						);
 					},
 					onError: (err) => {

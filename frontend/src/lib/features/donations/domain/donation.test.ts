@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-    donationPreDeclarationInputSchema
+    donationPreDeclarationInputSchema,
+    isDonationPreDeclaration
 } from './donation';
 
 describe('donationPreDeclarationInputSchema', () => {
@@ -57,5 +58,30 @@ describe('donationPreDeclarationInputSchema', () => {
         if (!result.success) {
             expect(result.error.issues[0].message).toBe('Please add at least one item to the donation');
         }
+    });
+});
+
+describe('isDonationPreDeclaration', () => {
+    it('should return true for a valid donation_pre_declaration document', () => {
+        const mockDoc = {
+            _id: 'donation_pre_declaration:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+            type: 'donation_pre_declaration',
+            schema_v: 1,
+            shelter_code: 'SH001',
+            tracking_token: 'token123',
+            items_declared: [],
+            donor_phone_hash: 'hash',
+            status: 'declared',
+            created_at: '2026-06-30T17:00:00Z',
+            updated_at: '2026-06-30T17:00:00Z',
+            created_by: 'user'
+        };
+        expect(isDonationPreDeclaration(mockDoc)).toBe(true);
+    });
+
+    it('should return false for invalid documents or other types', () => {
+        expect(isDonationPreDeclaration({ type: 'donation' })).toBe(false);
+        expect(isDonationPreDeclaration(null)).toBe(false);
+        expect(isDonationPreDeclaration('string')).toBe(false);
     });
 });
