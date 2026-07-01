@@ -6,8 +6,24 @@ describe('donationPreDeclarationInputSchema', () => {
 		shelter_code: 'SH001',
 		donor: { name: 'John Doe', phone: '0812345678' },
 		items: [{ free_text: 'Rice', qty: 10, unit: 'kg' }],
+		// logistics เป็น req เมื่อ channel=public (schema.md §2.3)
+		logistics: { delivery_method: 'self_dropoff', vehicle: 'car' },
 		captchaToken: 'test-token'
 	};
+
+	it('fails validation when logistics is missing (required for public)', () => {
+		const { logistics, ...noLogistics } = baseValid;
+		const result = donationPreDeclarationInputSchema.safeParse(noLogistics);
+		expect(result.success).toBe(false);
+	});
+
+	it('fails validation when vehicle is set on a parcel delivery', () => {
+		const result = donationPreDeclarationInputSchema.safeParse({
+			...baseValid,
+			logistics: { delivery_method: 'parcel', vehicle: 'car' }
+		});
+		expect(result.success).toBe(false);
+	});
 
 	// 1. Valid Case
 	it('passes validation with valid donor declaration data', () => {

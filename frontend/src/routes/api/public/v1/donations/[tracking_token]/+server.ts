@@ -6,6 +6,28 @@ import { env } from '$env/dynamic/private';
 import { dev } from '$app/environment';
 import type { PublicDonationDoc } from '$lib/features/donations';
 
+// resolve shelter db จาก token (format: TX-{SHELTER_CODE}-{UUID}; legacy TX-DON-... → SH001)
+function shelterDbFromToken(token: string): string | null {
+	const match = token.match(/^TX-([A-Z0-9]+)-/);
+	if (!match) return null;
+	const code = match[1] === 'DON' ? 'SH001' : match[1];
+	return `shelter_${code.toLowerCase()}`;
+}
+
+// donation _id = donation:{ulid} → ค้นด้วย tracking_token_hash (schema.md §2.3 index (tracking_token_hash))
+async function findByTokenHash(shelterDb: string, hash: string): Promise<PublicDonationDoc | null> {
+	const res = await adminRaw(
+		`/${shelterDb}/_all_docs?include_docs=true&startkey="donation:"&endkey="donation:￰"`,
+		'GET'
+	);
+	if (res.status >= 400) return null;
+	const rows = (res.data as { rows?: { doc: PublicDonationDoc }[] })?.rows ?? [];
+	for (const r of rows) {
+		if (r.doc && r.doc.type === 'donation' && r.doc.tracking_token_hash === hash) return r.doc;
+	}
+	return null;
+}
+
 export const GET = async ({ params, getClientAddress }) => {
 	try {
 		const { tracking_token } = params;
@@ -13,61 +35,34 @@ export const GET = async ({ params, getClientAddress }) => {
 			return json({ success: false, error: 'Tracking token is required' }, { status: 400 });
 		}
 
-		// Rate Limiting
 		const ip = getClientAddress();
 		if (!donationIpLimiter.check(ip)) {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
-		// Parse token to find shelter code
-		// Expected format: TX-{SHELTER_CODE}-{UUID} or old format TX-DON-{UUID}
-		const match = tracking_token.match(/^TX-([A-Z0-9]+)-/);
-		if (!match) {
+		const shelterDb = shelterDbFromToken(tracking_token);
+		if (!shelterDb) {
 			return json({ success: false, error: 'Invalid tracking token format' }, { status: 400 });
 		}
-		const extracted = match[1];
-		const shelterCode = extracted === 'DON' ? 'SH001' : extracted;
-		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
 		const trackingTokenHash = await sha256Hex(tracking_token);
-		const docId = `donation:${trackingTokenHash}`;
 
-		// Query CouchDB directly
-		const res = await adminRaw(`/${shelterDb}/${encodeURIComponent(docId)}`, 'GET');
-		if (res.status === 404) {
+		const donation = await findByTokenHash(shelterDb, trackingTokenHash);
+		if (!donation) {
 			return json({ success: false, error: 'Donation record not found' }, { status: 404 });
 		}
-		if (res.status !== 200) {
-			console.error('Failed to fetch from CouchDB', res.data);
-			return json({ success: false, error: 'Database fetch failed' }, { status: 500 });
-		}
 
-		const donation = res.data as PublicDonationDoc;
-
-		// Check if token matches
-		if (donation.tracking_token_hash && donation.tracking_token_hash !== trackingTokenHash) {
-			return json({ success: false, error: 'Invalid token' }, { status: 403 });
+		// Mask PII; ห้าม echo phone/phone_hash สู่ public (schema.md §2.3)
+		const rawDonor = donation.donor ?? ({} as PublicDonationDoc['donor']);
+		const maskedDonor: Record<string, unknown> = {};
+		if (rawDonor.name) maskedDonor.name = rawDonor.name.substring(0, 1) + '***';
+		if (rawDonor.line_id && rawDonor.line_id.length >= 3) {
+			maskedDonor.line_id = rawDonor.line_id.substring(0, 2) + '***';
 		}
-
-		// Mask PII before returning to public
-		const maskedDonor = { ...donation.donor };
-		if (maskedDonor.name) {
-			maskedDonor.name = maskedDonor.name.substring(0, 1) + '***';
-		}
-		if (maskedDonor.phone && maskedDonor.phone.length >= 7) {
-			maskedDonor.phone =
-				maskedDonor.phone.substring(0, 3) +
-				'-***-' +
-				maskedDonor.phone.substring(maskedDonor.phone.length - 4);
-		}
-		if (maskedDonor.line_id && maskedDonor.line_id.length >= 3) {
-			maskedDonor.line_id = maskedDonor.line_id.substring(0, 2) + '***';
-		}
-		if (maskedDonor.email && maskedDonor.email.includes('@')) {
-			const parts = maskedDonor.email.split('@');
+		if (rawDonor.email && rawDonor.email.includes('@')) {
+			const parts = rawDonor.email.split('@');
 			maskedDonor.email = parts[0].substring(0, 2) + '***@' + parts[1];
 		}
 
-		// Return status and details with MASKED PII (donor), logistics, and booking_ref (CR-005)
 		return json({
 			success: true,
 			donation: {
@@ -107,40 +102,23 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 			return json({ success: false, error: 'courier_tracking_no is required' }, { status: 400 });
 		}
 
-		// Rate Limiting
 		const ip = getClientAddress();
 		if (!donationIpLimiter.check(ip)) {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
-		// Parse token to find shelter code
-		const match = tracking_token.match(/^TX-([A-Z0-9]+)-/);
-		if (!match) {
+		const shelterDb = shelterDbFromToken(tracking_token);
+		if (!shelterDb) {
 			return json({ success: false, error: 'Invalid tracking token format' }, { status: 400 });
 		}
-		const extracted = match[1];
-		const shelterCode = extracted === 'DON' ? 'SH001' : extracted;
-		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
 		const trackingTokenHash = await sha256Hex(tracking_token);
-		const docId = `donation:${trackingTokenHash}`;
 
-		// Fetch latest rev from CouchDB
-		const latestDocRes = await adminRaw(`/${shelterDb}/${encodeURIComponent(docId)}`, 'GET');
-		if (latestDocRes.status === 404) {
+		const latestDoc = await findByTokenHash(shelterDb, trackingTokenHash);
+		if (!latestDoc) {
 			return json({ success: false, error: 'Donation record not found' }, { status: 404 });
 		}
-		if (latestDocRes.status !== 200) {
-			console.error('Failed to fetch from CouchDB', latestDocRes.data);
-			return json({ success: false, error: 'Database fetch failed' }, { status: 500 });
-		}
 
-		const latestDoc = latestDocRes.data as PublicDonationDoc;
-
-		if (latestDoc.tracking_token_hash && latestDoc.tracking_token_hash !== trackingTokenHash) {
-			return json({ success: false, error: 'Invalid token' }, { status: 403 });
-		}
-
-		if (latestDoc.logistics?.delivery_method !== 'parcel') {
+		if (!latestDoc.logistics || latestDoc.logistics.delivery_method !== 'parcel') {
 			return json(
 				{
 					success: false,
@@ -150,10 +128,6 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 			);
 		}
 
-		// Update CouchDB document
-		if (!latestDoc.logistics) {
-			return json({ success: false, error: 'Logistics data missing' }, { status: 400 });
-		}
 		latestDoc.logistics.courier_tracking_no = payload.courier_tracking_no;
 		latestDoc.updated_at = new Date().toISOString();
 
@@ -168,7 +142,7 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 				const base = `${scheme}${host}`.replace(/\/$/, '');
 				const authHeader = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
 
-				const fetchRes = await fetch(`${base}/${shelterDb}/${encodeURIComponent(docId)}`, {
+				const fetchRes = await fetch(`${base}/${shelterDb}/${encodeURIComponent(latestDoc._id)}`, {
 					method: 'PUT',
 					headers: {
 						Authorization: authHeader,
@@ -188,7 +162,7 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 				return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
 			}
 			const updateRes = await adminRaw(
-				`/${shelterDb}/${encodeURIComponent(docId)}`,
+				`/${shelterDb}/${encodeURIComponent(latestDoc._id)}`,
 				'PUT',
 				latestDoc
 			);

@@ -1,5 +1,6 @@
 export interface DonationItem {
 	id: string;
+	item_id?: string; // catalog item id from a picked need card → lets needs_open decrease
 	category?: string;
 	name: string;
 	amount: number;

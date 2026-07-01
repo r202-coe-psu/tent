@@ -1,6 +1,7 @@
 <script lang="ts">
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
+	import Lock from '@lucide/svelte/icons/lock';
 	import { env } from '$env/dynamic/public';
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
@@ -103,7 +104,7 @@
 		}
 
 		try {
-			const res = await fetch('/api/v1/donations', {
+			const res = await fetch('/api/public/v1/donations', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -117,6 +118,7 @@
 					items:
 						donationStore.items.length > 0
 							? donationStore.items.map((it) => ({
+									item_id: it.item_id || undefined,
 									free_text: it.name || 'ไม่ได้ระบุ',
 									category: it.category || undefined,
 									qty: it.amount || 1,
@@ -135,6 +137,8 @@
 				toast.error(donationStore.errorMessage);
 			} else {
 				donationStore.trackingToken = data.trackingToken;
+				donationStore.bookingRef = data.bookingRef;
+				donationStore.slotDate = slotDateStr;
 				donationStore.activeTab = 'ticket';
 				if (donationStore.reachedStep < 4) donationStore.reachedStep = 4;
 				toast.success('ยืนยันการจองคิวบริจาคสำเร็จ!');
@@ -227,14 +231,20 @@
 				<h2 class="text-sm font-semibold text-foreground">
 					เลือกศูนย์รับบริจาค <span class="text-danger">*</span>
 					{#if donationStore.shelterLocked}
-						<span class="inline-flex items-center gap-1 ml-2 text-xs font-normal text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
+						<span
+							class="ml-2 inline-flex items-center gap-1 rounded-md bg-muted/60 px-2 py-0.5 text-xs font-normal text-muted-foreground"
+						>
 							<Lock class="h-3 w-3" />
 							ล็อกตามความต้องการที่เลือก
 						</span>
 					{/if}
 				</h2>
 			</div>
-			<Select type="single" bind:value={donationStore.shelterCode} disabled={donationStore.shelterLocked}>
+			<Select
+				type="single"
+				bind:value={donationStore.shelterCode}
+				disabled={donationStore.shelterLocked}
+			>
 				<SelectTrigger class="w-full border-border bg-card font-medium text-foreground shadow-sm">
 					<SelectValue placeholder="เลือกศูนย์พักพิง" />
 				</SelectTrigger>

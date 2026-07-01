@@ -24,7 +24,7 @@ vi.mock('$env/dynamic/private', () => ({
 	env: { SECRET_RECAPTCHA_KEY: 'dummy-secret' }
 }));
 
-describe('POST /api/v1/donations', () => {
+describe('POST /api/public/v1/donations', () => {
 	beforeEach(() => {
 		vi.resetAllMocks();
 		vi.mocked(donationIpLimiter.check).mockReturnValue(true);
@@ -41,6 +41,7 @@ describe('POST /api/v1/donations', () => {
 		},
 		items: [
 			{
+				item_id: 'item:rice',
 				free_text: 'ข้าวสาร',
 				qty: 5,
 				unit: 'kg',
@@ -109,8 +110,12 @@ describe('POST /api/v1/donations', () => {
 		const putCall = vi.mocked(adminRaw).mock.calls.find((call) => call[1] === 'PUT');
 		expect(putCall).toBeDefined();
 		const savedDoc = putCall![2] as any;
+		expect(savedDoc._id).toMatch(/^donation:/);
 		expect(savedDoc.type).toBe('donation');
 		expect(savedDoc.schema_v).toBe(2);
+		// donation is linked to the campaign so needs_open can decrease (DN-4)
+		expect(savedDoc.campaign_id).toBe('donation_campaign:c1');
+		expect(savedDoc.items[0].item_id).toBe('item:rice');
 		expect(savedDoc.donor.name).toBe('John Doe');
 		expect(savedDoc.donor.line_id).toBe('john_line');
 		expect(savedDoc.logistics.delivery_method).toBe('self_dropoff');
@@ -233,6 +238,67 @@ describe('POST /api/v1/donations', () => {
 		expect(data.item_id).toBe('item:rice');
 	});
 
+	it('returns 409 SLOT_FULL if the logistics slot is already fully booked', async () => {
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('donation_campaign:')) {
+				return Promise.resolve({
+					status: 200,
+					data: { rows: [] }
+				});
+			}
+			if (method === 'GET' && path.includes('donation_slot')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						capacity: 1,
+						status: 'open'
+					}
+				});
+			}
+			if (method === 'GET' && path.includes('donation')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									_id: 'donation:d1',
+									type: 'donation',
+									status: 'declared',
+									logistics: {
+										slot: { date: '2026-06-27', from: '09:00', to: '10:00' }
+									}
+								}
+							}
+						]
+					}
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const mockRequest = {
+			json: () =>
+				Promise.resolve({
+					...validPayload,
+					logistics: {
+						delivery_method: 'self_dropoff',
+						slot: { date: '2026-06-27', from: '09:00', to: '10:00' }
+					}
+				})
+		};
+
+		const response = await POST({
+			request: mockRequest as any,
+			getClientAddress: () => '127.0.0.1'
+		} as any);
+
+		const data = await response.json();
+		expect(response.status).toBe(409);
+		expect(data.success).toBe(false);
+		expect(data.error).toBe('SLOT_FULL');
+	});
+
 	it('returns 422 if input schema validation fails', async () => {
 		const invalidPayload = {
 			...validPayload,
@@ -241,6 +307,22 @@ describe('POST /api/v1/donations', () => {
 
 		const mockRequest = {
 			json: () => Promise.resolve(invalidPayload)
+		};
+
+		const response = await POST({
+			request: mockRequest as any,
+			getClientAddress: () => '127.0.0.1'
+		} as any);
+
+		const data = await response.json();
+		expect(response.status).toBe(422);
+		expect(data.success).toBe(false);
+	});
+
+	it('returns 422 when logistics is missing (required for public channel)', async () => {
+		const { logistics, ...noLogistics } = validPayload;
+		const mockRequest = {
+			json: () => Promise.resolve(noLogistics)
 		};
 
 		const response = await POST({

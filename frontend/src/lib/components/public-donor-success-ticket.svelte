@@ -32,7 +32,7 @@
 		courierError = '';
 		courierSaved = false;
 		try {
-			const res = await fetch(`/api/v1/donations/${donationStore.trackingToken}`, {
+			const res = await fetch(`/api/public/v1/donations/${donationStore.trackingToken}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ courier_tracking_no: courierTracking })
@@ -55,7 +55,7 @@
 	class="mx-auto max-w-md rounded-3xl border border-border bg-card p-6 text-center shadow-xs md:p-8"
 >
 	<div
-		class="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 dark:border-emerald-500/30 mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border"
+		class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-50 text-emerald-600 dark:border-emerald-500/30 dark:bg-emerald-950/30 dark:text-emerald-400"
 	>
 		<Check class="h-8 w-8" />
 	</div>
@@ -124,33 +124,37 @@
 	</div>
 
 	<!-- DN-6: donor เติม/แก้เลขพัสดุ (กรณีส่งทางขนส่ง) ได้เองภายหลัง -->
-	<div class="mb-6 rounded-2xl border border-border bg-muted/10 p-4 text-left">
-		<div class="mb-2 flex items-center gap-2 text-xs font-bold text-foreground">
-			<Truck class="h-4 w-4 text-muted-foreground" />
-			ส่งทางขนส่งพัสดุ? เพิ่มเลขติดตาม (ไม่บังคับ)
+	{#if donationStore.deliveryMethod === 'parcel'}
+		<div class="mb-6 rounded-2xl border border-border bg-muted/10 p-4 text-left">
+			<div class="mb-2 flex items-center gap-2 text-xs font-bold text-foreground">
+				<Truck class="h-4 w-4 text-muted-foreground" />
+				ส่งทางขนส่งพัสดุ? เพิ่มเลขติดตาม (ไม่บังคับ)
+			</div>
+			<div class="flex items-center gap-2">
+				<Input
+					type="text"
+					placeholder="เลขพัสดุ เช่น TH12345678"
+					bind:value={courierTracking}
+					class="flex-1"
+				/>
+				<Button
+					onclick={saveCourier}
+					disabled={savingCourier || !courierTracking.trim()}
+					class="shrink-0"
+				>
+					{savingCourier ? 'กำลังบันทึก...' : 'บันทึก'}
+				</Button>
+			</div>
+			{#if courierSaved}
+				<p class="mt-2 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+					บันทึกเลขพัสดุเรียบร้อยแล้ว
+				</p>
+			{/if}
+			{#if courierError}
+				<p class="mt-2 text-[11px] font-bold text-danger">{courierError}</p>
+			{/if}
 		</div>
-		<div class="flex items-center gap-2">
-			<Input
-				type="text"
-				placeholder="เลขพัสดุ เช่น TH12345678"
-				bind:value={courierTracking}
-				class="flex-1"
-			/>
-			<Button
-				onclick={saveCourier}
-				disabled={savingCourier || !courierTracking.trim()}
-				class="shrink-0"
-			>
-				{savingCourier ? 'กำลังบันทึก...' : 'บันทึก'}
-			</Button>
-		</div>
-		{#if courierSaved}
-			<p class="text-emerald-600 dark:text-emerald-400 mt-2 text-[11px] font-bold">บันทึกเลขพัสดุเรียบร้อยแล้ว</p>
-		{/if}
-		{#if courierError}
-			<p class="mt-2 text-[11px] font-bold text-danger">{courierError}</p>
-		{/if}
-	</div>
+	{/if}
 
 	<Button
 		variant="outline"

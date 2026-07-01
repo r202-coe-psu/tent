@@ -14,6 +14,7 @@ export interface DonationPreDeclaration extends BaseDoc {
 	tracking_token: string;
 	shelter_code: string;
 	items: {
+		item_id?: string;
 		free_text: string;
 		category?: string;
 		qty: number;
@@ -45,6 +46,9 @@ export const donationPreDeclarationInputSchema = z.object({
 	items: z
 		.array(
 			z.object({
+				// item_id links the donation to a catalog item so needs_open can be reduced
+				// (schema.md §2.3 — item_id OR free_text). The board pre-fills item_id from a need card.
+				item_id: z.string().optional(),
 				free_text: z.string().min(1, 'Please enter an item name'),
 				category: z.string().optional(),
 				qty: z
@@ -57,6 +61,7 @@ export const donationPreDeclarationInputSchema = z.object({
 			})
 		)
 		.min(1, 'Please add at least one item to the donation'),
+	// logistics เป็น req เมื่อ channel=public (schema.md §2.3) — public POST ทุกใบต้องมี
 	logistics: z
 		.object({
 			delivery_method: z.enum(['self_dropoff', 'parcel', 'shelter_pickup']),
@@ -72,7 +77,11 @@ export const donationPreDeclarationInputSchema = z.object({
 			courier_tracking_no: z.string().nullable().optional(),
 			pickup_address: z.string().optional()
 		})
-		.optional(),
+		// vehicle เฉพาะ self_dropoff/shelter_pickup — ห้ามมากับ parcel (schema.md §2.3)
+		.refine((l) => !(l.delivery_method === 'parcel' && l.vehicle), {
+			message: 'vehicle is only allowed for self_dropoff or shelter_pickup',
+			path: ['vehicle']
+		}),
 	captchaToken: z.string().min(1, 'CAPTCHA token is required')
 });
 

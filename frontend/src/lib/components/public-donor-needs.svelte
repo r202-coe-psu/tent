@@ -74,9 +74,10 @@
 		donationStore.items = [
 			{
 				id: crypto.randomUUID(),
+				item_id: need.item_id,
 				name: need.name,
 				amount: 1,
-				unit: need.unit,
+				unit: formatUnit(need.unit),
 				condition: '',
 				remark: ''
 			}
