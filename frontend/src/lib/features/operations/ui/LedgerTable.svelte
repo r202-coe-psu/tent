@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { useLedger } from '../application/queries';
+	import { useLedger, useLedgerByItem } from '../application/queries';
 	import { useSupplyItems } from '$lib/features/supply';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -10,13 +10,14 @@
 
 	// Fetch stock movements ledger
 	const ledgerQuery = useLedger();
-	const itemsQuery = useSupplyItems();
+	const itemsQuery = useSupplyItems()
+	? useLedgerByItem(() => filterItemId!)
+	: useLedger();
 
 	const ledger = $derived(ledgerQuery.data ?? []);
 	// Sort by occurred_at descending to show newest entries first
 	const sortedLedger = $derived(
 		[...ledger]
-			.filter((entry) => (filterItemId ? entry.item_id === filterItemId : true))
 			.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
 	);
 
