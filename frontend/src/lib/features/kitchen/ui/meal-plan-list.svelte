@@ -19,36 +19,17 @@
 		useConfirmMealPlan,
 		useGasCylinderTypes,
 		MEAL_PERIOD_LABELS,
+		RICE_RECIPE_ID,
 		MealPlanForm,
 		type MealPlan
 	} from '$lib/features/kitchen';
-	import { useActiveSopProfile, sopRatioKeys } from '$lib/features/sop-ratios';
-	import { seedDefaultSopProfile } from '$lib/features/sop-ratios/data/sop-ratio.seed';
-	import { useQueryClient } from '@tanstack/svelte-query';
+	import { useActiveSopProfile } from '$lib/features/sop-ratios';
 
 	const plans = useMealPlans();
 	let createOpen = $state(false);
 	const confirm = useConfirmMealPlan();
 	const sopProfile = useActiveSopProfile();
 	const gasTypes = useGasCylinderTypes();
-	const queryClient = useQueryClient();
-
-	let seeding = $state(false);
-
-	async function handleSeed() {
-		seeding = true;
-		try {
-			await seedDefaultSopProfile();
-			await queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
-			toast.success(
-				'สร้าง SOP profile มาตรฐาน (150 ก./คน/มื้อ) แล้ว — กด "จัดสรรใบสั่งทำกิจกรรมใหม่" เพื่อสร้างแผน'
-			);
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'seed ไม่สำเร็จ');
-		} finally {
-			seeding = false;
-		}
-	}
 
 	const today = new Date().toISOString().slice(0, 10);
 
@@ -74,18 +55,17 @@
 		}
 	}
 
+	// meal_plan:{date}:{meal} — the real deterministic reference, not a fabricated code.
 	function formatId(id: string): string {
-		// meal_plan:2026-06-26:lunch → PRD-xxxx (last 4 chars of suffix)
-		const suffix = id.split(':').pop() ?? id;
-		return `PRD-${suffix.slice(-4).toUpperCase()}`;
+		const parts = id.split(':');
+		return parts.slice(1).join(':') || id;
 	}
 
-	const MENU_LABEL: Record<string, string> = {
-		breakfast: 'ข้าวต้ม + ไข่ต้ม (มื้อเช้ามาตรฐาน)',
-		lunch: 'ข้าวสวย + ไข่ต้ม (มาตรฐานช่วยผู้ประสบภัย)',
-		dinner: 'ข้าวสวย + แกงจืด (มื้อเย็นมาตรฐาน)',
-		snack: 'ขนมปัง + นม (ของว่างมาตรฐาน)'
-	};
+	// Rice qty (grams) from the calculated recipes — the actual ingredient output.
+	function riceGrams(plan: MealPlan): number | null {
+		const rice = plan.recipes?.find((r) => r.recipe_id === RICE_RECIPE_ID);
+		return rice ? rice.planned_qty : null;
+	}
 
 	function formatTime(iso: string): string {
 		return new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
@@ -161,25 +141,15 @@
 		</div>
 	</div>
 
-	<!-- SOP setup banner -->
+	<!-- SOP setup notice — master profiles are seeded by system_admin, not from here (CR-006) -->
 	{#if !sopProfile.isPending && !sopProfile.data}
 		<Card.Root class="border-amber-300 bg-amber-50">
-			<Card.Content class="flex flex-wrap items-center justify-between gap-4 pt-4">
-				<div>
-					<p class="font-semibold text-amber-800">ยังไม่มีค่ามาตรฐาน SOP ในระบบ</p>
-					<p class="mt-0.5 text-xs text-amber-700">
-						กด "Seed ค่ามาตรฐาน" เพื่อสร้าง SOP profile (150 ก./คน/มื้อ) — ทำครั้งเดียว
-						จากนั้นสร้างแผนอาหารได้เลย
-					</p>
-				</div>
-				<Button
-					variant="outline"
-					onclick={handleSeed}
-					disabled={seeding}
-					class="border-amber-400 text-amber-900 hover:bg-amber-100"
-				>
-					{seeding ? 'กำลัง seed...' : 'Seed ค่ามาตรฐาน'}
-				</Button>
+			<Card.Content class="pt-4">
+				<p class="font-semibold text-amber-800">ยังไม่มีค่ามาตรฐาน SOP ในระบบ</p>
+				<p class="mt-0.5 text-xs text-amber-700">
+					ค่ามาตรฐาน SOP (สัดส่วนวัตถุดิบต่อคน) เป็นข้อมูลส่วนกลาง — ตั้งค่าโดยผู้ดูแลระบบเท่านั้น
+					กรุณาติดต่อผู้ดูแลระบบเพื่อสร้าง master SOP profile ก่อนวางแผนอาหาร
+				</p>
 			</Card.Content>
 		</Card.Root>
 	{/if}
@@ -217,7 +187,7 @@
 				</Button>
 				<Button
 					variant="outline"
-					onclick={() => goto(resolve('/back-office/kitchen/production-board') + '?mode=custom')}
+					onclick={() => goto(resolve('/back-office/kitchen/production-board'))}
 					class="rounded-full px-5"
 				>
 					<FileText class="mr-1.5 h-3.5 w-3.5" />
@@ -258,16 +228,16 @@
 										</p>
 									</Table.Cell>
 									<Table.Cell class="max-w-xs px-6">
-										<p class="text-sm font-medium">
-											{MENU_LABEL[plan.meal] ?? MEAL_PERIOD_LABELS[plan.meal]}
-										</p>
-										<p class="mt-0.5 text-xs text-muted-foreground">
-											ผ่านการรับรองสุขลักษณะเพื่อผู้ประสบภัย
-										</p>
+										<p class="text-sm font-medium">{MEAL_PERIOD_LABELS[plan.meal]}</p>
+										{#if riceGrams(plan) !== null}
+											<p class="mt-0.5 text-xs text-muted-foreground">
+												ข้าวสาร: {riceGrams(plan)?.toLocaleString()} g
+											</p>
+										{/if}
 									</Table.Cell>
 									<Table.Cell class="px-6 text-right">
 										<p class="font-semibold">{plan.headcount.total.toLocaleString()}</p>
-										<p class="text-xs text-muted-foreground">กล่อง</p>
+										<p class="text-xs text-muted-foreground">คน</p>
 									</Table.Cell>
 									<Table.Cell class="px-6 text-center">
 										{#if plan.status === 'confirmed'}
@@ -300,12 +270,7 @@
 											<Button
 												size="sm"
 												variant="outline"
-												onclick={() =>
-													goto(
-														resolve('/back-office/kitchen/production-board') +
-															'?ref=' +
-															encodeURIComponent(plan._id)
-													)}
+												onclick={() => goto(resolve('/back-office/kitchen/production-board'))}
 											>
 												จัดการ
 											</Button>

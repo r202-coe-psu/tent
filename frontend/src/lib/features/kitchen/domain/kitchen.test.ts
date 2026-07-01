@@ -69,6 +69,20 @@ describe('createMealPlan', () => {
 			)
 		).toThrow();
 	});
+
+	it('rejects headcount sub-counts exceeding total (CR-021 invariant)', () => {
+		expect(() =>
+			createMealPlan(
+				{
+					date: '2026-07-15',
+					meal: 'lunch',
+					headcount: { total: 10, halal: 6, soft_food: 4, infant: 2 },
+					recipes: [{ recipe_id: 'recipe:x', planned_qty: 5 }]
+				},
+				ctx
+			)
+		).toThrow();
+	});
 });
 
 // ---- KitchenRequisition ----

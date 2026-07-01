@@ -102,3 +102,97 @@ describe('KitchenPouchRepository.issueRequisition — spike: ledger deduction pa
 		).rejects.toMatchObject({ status: 409 });
 	});
 });
+
+describe('KitchenPouchRepository.createMealPlan — calc_source audit trail (CR-021)', () => {
+	let repo: KitchenPouchRepository;
+
+	beforeEach(() => {
+		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
+		repo = new KitchenPouchRepository();
+	});
+
+	const calcSource = {
+		sop_profile_id: 'sop_profile:abc',
+		sop_profile_version: 3,
+		headcount_as_of: '2026-07-01T00:00:00.000Z'
+	};
+
+	it('persists calc_source onto the stored meal_plan doc', async () => {
+		const plan = await repo.createMealPlan(
+			{
+				date: '2026-07-15',
+				meal: 'breakfast',
+				headcount: { total: 100, halal: 0, soft_food: 0, infant: 0 },
+				recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 15000 }],
+				calc_source: calcSource
+			},
+			ctx
+		);
+
+		const stored = (await testDb.get(plan._id)) as Record<string, unknown>;
+		expect(stored.schema_v).toBe(2);
+		expect(stored.calc_source).toEqual(calcSource);
+	});
+});
+
+describe('KitchenPouchRepository.confirmMealPlan — state transition', () => {
+	let repo: KitchenPouchRepository;
+
+	beforeEach(() => {
+		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
+		repo = new KitchenPouchRepository();
+	});
+
+	const draftInput = {
+		date: '2026-07-15',
+		meal: 'lunch' as const,
+		headcount: { total: 50, halal: 0, soft_food: 0, infant: 0 },
+		recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 7500 }]
+	};
+
+	it('draft → confirmed bumps status + updated_at and keeps _rev valid', async () => {
+		const draft = await repo.createMealPlan(draftInput, ctx);
+		const confirmed = await repo.confirmMealPlan(draft);
+
+		expect(confirmed.status).toBe('confirmed');
+		const stored = (await testDb.get(confirmed._id)) as Record<string, unknown>;
+		expect(stored.status).toBe('confirmed');
+	});
+
+	it('rejects confirming a non-draft plan', async () => {
+		const draft = await repo.createMealPlan(draftInput, ctx);
+		const confirmed = await repo.confirmMealPlan(draft);
+		await expect(repo.confirmMealPlan(confirmed)).rejects.toThrow(/only draft/i);
+	});
+});
+
+describe('KitchenPouchRepository.gasCylinderType — CRUD', () => {
+	let repo: KitchenPouchRepository;
+
+	beforeEach(() => {
+		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
+		repo = new KitchenPouchRepository();
+	});
+
+	const input = {
+		name: 'เตาแรงดันสูง + ถัง 15kg',
+		capacity_kg: 15,
+		burn_rate_kg_per_hour: 0.5,
+		time_multiplier: 1
+	};
+
+	it('create → list → update → delete round-trips', async () => {
+		const created = await repo.createGasCylinderType(input, ctx);
+		expect(created.type).toBe('gas_cylinder_type');
+
+		const listed = await repo.listGasCylinderTypes();
+		expect(listed).toHaveLength(1);
+
+		const updated = await repo.updateGasCylinderType(created, { ...input, capacity_kg: 48 });
+		expect(updated.capacity_kg).toBe(48);
+		expect(updated.updated_at >= created.updated_at).toBe(true);
+
+		await repo.deleteGasCylinderType(updated);
+		expect(await repo.listGasCylinderTypes()).toHaveLength(0);
+	});
+});

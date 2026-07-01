@@ -4,7 +4,14 @@ import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { kitchenRepository } from '../data/kitchen.pouch';
 import { getActiveSopProfile } from '$lib/features/sop-ratios';
-import type { MealPlanInput, KitchenRequisitionInput, MealServiceInput, GasCylinderTypeInput } from '../domain/kitchen';
+import type {
+	MealPlan,
+	MealPlanInput,
+	KitchenRequisitionInput,
+	MealServiceInput,
+	GasCylinderType,
+	GasCylinderTypeInput
+} from '../domain/kitchen';
 import { calculateMealIngredients } from '../domain/meal-calc';
 import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
 
@@ -47,20 +54,23 @@ export const useCreateMealPlanCalc = () =>
 			if (!profile) throw new Error('No active SOP profile found — seed one first');
 			const riceG = profile.ratios.rice_g_per_person_meal;
 			if (!riceG) throw new Error('Active SOP profile missing rice_g_per_person_meal');
-			const { recipes } = calculateMealIngredients(
+			const { recipes, calc_source } = calculateMealIngredients(
 				headcount,
 				riceG,
 				profile._id,
 				profile.version,
 				new Date().toISOString()
 			);
-			return kitchenRepository().createMealPlan({ date, meal, headcount, recipes }, ctx);
+			return kitchenRepository().createMealPlan(
+				{ date, meal, headcount, recipes, calc_source },
+				ctx
+			);
 		}
 	}));
 
 export const useConfirmMealPlan = () =>
 	createMutation(() => ({
-		mutationFn: (plan: any) => kitchenRepository().confirmMealPlan(plan)
+		mutationFn: (plan: MealPlan) => kitchenRepository().confirmMealPlan(plan)
 	}));
 
 // --- KitchenRequisition ---
@@ -95,7 +105,7 @@ export const useRecordMealService = () =>
 
 export const useGasCylinderTypes = () =>
 	createQuery(() => ({
-		queryKey: [...kitchenKeys.all, 'gas_cylinder_types'],
+		queryKey: kitchenKeys.gasCylinderTypes(),
 		queryFn: () => kitchenRepository().listGasCylinderTypes()
 	}));
 
@@ -107,14 +117,13 @@ export const useCreateGasCylinderType = () =>
 
 export const useUpdateGasCylinderType = () =>
 	createMutation(() => ({
-		mutationFn: ({ doc, input }: any) =>
+		mutationFn: ({ doc, input }: { doc: GasCylinderType; input: GasCylinderTypeInput }) =>
 			kitchenRepository().updateGasCylinderType(doc, input)
 	}));
 
 export const useDeleteGasCylinderType = () =>
 	createMutation(() => ({
-		mutationFn: (doc: any) =>
-			kitchenRepository().deleteGasCylinderType(doc)
+		mutationFn: (doc: GasCylinderType) => kitchenRepository().deleteGasCylinderType(doc)
 	}));
 
 // --- Live sync ---
@@ -128,6 +137,8 @@ export function startKitchenLiveQuery(queryClient: QueryClient): LiveQueryHandle
 				return [kitchenKeys.requisitions()];
 			case 'meal_service':
 				return [kitchenKeys.mealServices()];
+			case 'gas_cylinder_type':
+				return [kitchenKeys.gasCylinderTypes()];
 			default:
 				return [];
 		}

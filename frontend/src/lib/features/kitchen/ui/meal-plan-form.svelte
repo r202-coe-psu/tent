@@ -14,9 +14,6 @@
 		type MealPlanHeadcount
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
-	import { seedDefaultSopProfile } from '$lib/features/sop-ratios/data/sop-ratio.seed';
-	import { useQueryClient } from '@tanstack/svelte-query';
-	import { sopRatioKeys } from '$lib/features/sop-ratios';
 
 	let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -29,22 +26,6 @@
 
 	const sopProfile = useActiveSopProfile();
 	const createCalc = useCreateMealPlanCalc();
-	const queryClient = useQueryClient();
-
-	let seeding = $state(false);
-
-	async function handleSeed() {
-		seeding = true;
-		try {
-			await seedDefaultSopProfile();
-			await queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
-			toast.success('สร้าง SOP profile มาตรฐาน (150 ก./คน/มื้อ) แล้ว');
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'seed ไม่สำเร็จ');
-		} finally {
-			seeding = false;
-		}
-	}
 
 	const headcount = $derived<MealPlanHeadcount>({
 		total,
@@ -52,6 +33,9 @@
 		soft_food: softFood,
 		infant
 	});
+
+	// Sub-counts cannot exceed total (mirrors the domain invariant).
+	const subCountsValid = $derived(halal + softFood + infant <= total);
 
 	const preview = $derived.by(() => {
 		if (!sopProfile.data || total <= 0) return null;
@@ -82,7 +66,11 @@
 			softFood = 0;
 			infant = 0;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
+			if ((err as { status?: number })?.status === 409) {
+				toast.error(`มีแผน ${MEAL_PERIOD_LABELS[meal]} ของวันที่ ${date} อยู่แล้ว`);
+			} else {
+				toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
+			}
 		}
 	}
 </script>
@@ -134,17 +122,18 @@
 				</div>
 			</div>
 
+			{#if !subCountsValid}
+				<p class="text-xs text-destructive">
+					ยอดฮาลาล + อาหารอ่อน + ทารก รวมกันต้องไม่เกินจำนวนทั้งหมด
+				</p>
+			{/if}
+
 			{#if sopProfile.isPending}
 				<p class="text-xs text-muted-foreground">กำลังโหลด SOP profile...</p>
 			{:else if !sopProfile.data}
-				<div
-					class="flex items-center justify-between gap-3 rounded-md border border-destructive/50 bg-destructive/5 p-3"
-				>
-					<p class="text-xs text-destructive">ไม่มี SOP profile — ยังไม่มีในระบบ</p>
-					<Button type="button" size="sm" variant="outline" onclick={handleSeed} disabled={seeding}>
-						{seeding ? 'กำลัง seed...' : 'Seed ค่ามาตรฐาน'}
-					</Button>
-				</div>
+				<p class="text-xs text-destructive">
+					ไม่มี SOP profile ในระบบ — ติดต่อผู้ดูแลระบบเพื่อสร้างค่ามาตรฐานส่วนกลางก่อน
+				</p>
 			{:else if preview}
 				<div class="space-y-1 rounded-md border bg-muted/50 p-3">
 					<p class="text-xs font-medium text-muted-foreground">ผลการคำนวณ</p>
@@ -163,7 +152,10 @@
 
 			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={() => (open = false)}>ยกเลิก</Button>
-				<Button type="submit" disabled={createCalc.isPending || total <= 0 || !sopProfile.data}>
+				<Button
+					type="submit"
+					disabled={createCalc.isPending || total <= 0 || !sopProfile.data || !subCountsValid}
+				>
 					{createCalc.isPending ? 'กำลังบันทึก...' : 'สร้างแผน (draft)'}
 				</Button>
 			</Dialog.Footer>

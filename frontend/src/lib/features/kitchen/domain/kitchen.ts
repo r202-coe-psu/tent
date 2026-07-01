@@ -48,12 +48,16 @@ export interface MealPlan extends BaseDoc {
 export const mealPlanInputSchema = z.object({
 	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
 	meal: mealPeriodSchema,
-	headcount: z.object({
-		total: z.number().int().min(0),
-		halal: z.number().int().min(0),
-		soft_food: z.number().int().min(0),
-		infant: z.number().int().min(0)
-	}),
+	headcount: z
+		.object({
+			total: z.number().int().min(0),
+			halal: z.number().int().min(0),
+			soft_food: z.number().int().min(0),
+			infant: z.number().int().min(0)
+		})
+		.refine((h) => h.halal + h.soft_food + h.infant <= h.total, {
+			message: 'Sub-counts (halal + soft_food + infant) cannot exceed total headcount'
+		}),
 	recipes: z
 		.array(
 			z.object({
@@ -225,14 +229,22 @@ export const gasCylinderTypeInputSchema = z.object({
 });
 export type GasCylinderTypeInput = z.input<typeof gasCylinderTypeInputSchema>;
 
-export function createGasCylinderType(input: GasCylinderTypeInput, ctx: AuthorContext): GasCylinderType {
+export function createGasCylinderType(
+	input: GasCylinderTypeInput,
+	ctx: AuthorContext
+): GasCylinderType {
 	const d = gasCylinderTypeInputSchema.parse(input);
-	return makeDoc('gas_cylinder_type', 1, {
-		name: d.name,
-		capacity_kg: d.capacity_kg,
-		burn_rate_kg_per_hour: d.burn_rate_kg_per_hour,
-		time_multiplier: d.time_multiplier
-	}, ctx);
+	return makeDoc(
+		'gas_cylinder_type',
+		1,
+		{
+			name: d.name,
+			capacity_kg: d.capacity_kg,
+			burn_rate_kg_per_hour: d.burn_rate_kg_per_hour,
+			time_multiplier: d.time_multiplier
+		},
+		ctx
+	);
 }
 
 export const isGasCylinderType = (d: unknown): d is GasCylinderType =>

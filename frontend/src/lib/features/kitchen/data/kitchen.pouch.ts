@@ -1,21 +1,26 @@
 import { namedLocalDb } from '$lib/db/pouch';
 import { createRepository, type Repository } from '$lib/db/repository';
-import { makeDocId, now, type AuthorContext } from '$lib/db/model';
+import { makeDocId, now, touch, type AuthorContext } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 import { SHELTER_CODE, SHELTER_DB, shelterDb } from '$lib/db/shelter';
 import {
 	createMealPlan,
 	createKitchenRequisition,
 	createMealService,
+	createGasCylinderType,
+	gasCylinderTypeInputSchema,
 	isMealPlan,
 	isKitchenRequisition,
 	isMealService,
+	isGasCylinderType,
 	type MealPlan,
 	type MealPlanInput,
 	type KitchenRequisition,
 	type KitchenRequisitionInput,
 	type MealService,
-	type MealServiceInput
+	type MealServiceInput,
+	type GasCylinderType,
+	type GasCylinderTypeInput
 } from '../domain/kitchen';
 import type { KitchenRepository } from './kitchen.repository';
 
@@ -108,25 +113,35 @@ export class KitchenPouchRepository implements KitchenRepository {
 		return this.repo.allByType('meal_service', isMealService);
 	}
 
-	async confirmMealPlan(plan: any): Promise<any> {
-		plan.status = 'confirmed';
-		return this.repo.put(plan);
+	// Read-modify-write via the domain envelope: bump updated_at (LWW key) and
+	// guard the state transition. Only draft → confirmed is legal.
+	async confirmMealPlan(plan: MealPlan): Promise<MealPlan> {
+		if (plan.status !== 'draft') {
+			throw new Error('confirmMealPlan: only draft plans can be confirmed');
+		}
+		return this.repo.put({ ...touch(plan), status: 'confirmed' });
 	}
 
-	async createGasCylinderType(input: any, ctx: any): Promise<any> {
-		throw new Error('Not implemented yet');
+	// --- GasCylinderType (mutable reference data, LWW via touch) ---
+
+	createGasCylinderType(input: GasCylinderTypeInput, ctx: AuthorContext): Promise<GasCylinderType> {
+		return this.repo.put(createGasCylinderType(input, ctx));
 	}
 
-	async listGasCylinderTypes(): Promise<any[]> {
-		return [];
+	listGasCylinderTypes(): Promise<GasCylinderType[]> {
+		return this.repo.allByType('gas_cylinder_type', isGasCylinderType);
 	}
 
-	async updateGasCylinderType(doc: any, input: any): Promise<any> {
-		throw new Error('Not implemented yet');
+	updateGasCylinderType(
+		doc: GasCylinderType,
+		input: GasCylinderTypeInput
+	): Promise<GasCylinderType> {
+		const d = gasCylinderTypeInputSchema.parse(input);
+		return this.repo.put(touch({ ...doc, ...d }));
 	}
 
-	async deleteGasCylinderType(doc: any): Promise<void> {
-		throw new Error('Not implemented yet');
+	async deleteGasCylinderType(doc: GasCylinderType): Promise<void> {
+		await this.repo.remove(doc);
 	}
 }
 
