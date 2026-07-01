@@ -29,6 +29,9 @@ export interface KitchenRepository {
 	// GasCylinderType — reference data
 	createGasCylinderType(input: GasCylinderTypeInput, ctx: AuthorContext): Promise<GasCylinderType>;
 	listGasCylinderTypes(): Promise<GasCylinderType[]>;
-	updateGasCylinderType(doc: GasCylinderType, input: GasCylinderTypeInput): Promise<GasCylinderType>;
+	updateGasCylinderType(
+		doc: GasCylinderType,
+		input: GasCylinderTypeInput
+	): Promise<GasCylinderType>;
 	deleteGasCylinderType(doc: GasCylinderType): Promise<void>;
 }

@@ -2,7 +2,7 @@ import { authStore } from '$lib/stores/auth.svelte';
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { resolve } from '$app/paths';
-import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+import { hasStaffCapability, isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
 export const LANDING_ROUTE = '/';
@@ -51,6 +51,23 @@ export async function requireManager() {
 	await requireAuth();
 	const roles = authStore.user?.roles ?? [];
 	if (!isSystemAdmin(roles) && !isShelterManager(roles)) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Kitchen guard — requires system_admin, shelter_manager, or the `kitchen_staff`
+ * capability (CR-023). This is a UX gate; the data layer remains the real
+ * authorization boundary. Redirects to / when authenticated but unauthorized.
+ */
+export async function requireKitchen() {
+	await requireAuth();
+	const roles = authStore.user?.roles ?? [];
+	if (
+		!isSystemAdmin(roles) &&
+		!isShelterManager(roles) &&
+		!hasStaffCapability(roles, 'kitchen_staff')
+	) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

@@ -55,8 +55,10 @@ export const mealPlanInputSchema = z.object({
 			soft_food: z.number().int().min(0),
 			infant: z.number().int().min(0)
 		})
-		.refine((h) => h.halal + h.soft_food + h.infant <= h.total, {
-			message: 'Sub-counts (halal + soft_food + infant) cannot exceed total headcount'
+		.refine((h) => h.halal <= h.total && h.soft_food <= h.total && h.infant <= h.total, {
+			// Sub-counts are orthogonal dimensions (a person may be both muslim and
+			// an infant), so each is bounded by total independently — not their sum. CR-022.
+			message: 'Each sub-count (halal / soft_food / infant) cannot exceed total headcount'
 		}),
 	recipes: z
 		.array(

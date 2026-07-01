@@ -5,10 +5,8 @@
 	import Flame from '@lucide/svelte/icons/flame';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Plus from '@lucide/svelte/icons/plus';
-	import Play from '@lucide/svelte/icons/play';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import { resolve } from '$app/paths';
-	import { goto } from '$app/navigation';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import { Button } from '$lib/components/ui/button';
@@ -16,6 +14,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		useMealPlans,
+		useOccupancyHeadcount,
 		useConfirmMealPlan,
 		useGasCylinderTypes,
 		MEAL_PERIOD_LABELS,
@@ -30,6 +29,7 @@
 	const confirm = useConfirmMealPlan();
 	const sopProfile = useActiveSopProfile();
 	const gasTypes = useGasCylinderTypes();
+	const occupancy = useOccupancyHeadcount();
 
 	const today = new Date().toISOString().slice(0, 10);
 
@@ -92,7 +92,7 @@
 					class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800"
 				>
 					<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
-					ผู้พักพิงวันนี้ (LIVE COUNT)
+					ผู้พักพิง (LIVE COUNT): {occupancy.data?.total ?? 0} คน
 				</span>
 				<a
 					href={resolve('/back-office/kitchen/gas')}
@@ -178,21 +178,14 @@
 					<Plus class="mr-1.5 h-3.5 w-3.5" />
 					สร้างแผนอาหารใหม่
 				</Button>
-				<Button
-					onclick={() => goto(resolve('/back-office/kitchen/production-board'))}
-					class="rounded-full bg-primary px-5 text-white hover:bg-primary/90"
+				<!-- BOM / production-board ยังไม่พร้อม (coming soon) — ซ่อนปุ่มไว้ก่อนกันหลงทาง -->
+				<span
+					class="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-dashed border-muted-foreground/40 px-4 py-2 text-xs font-medium text-muted-foreground/60"
+					title="ยังไม่พร้อมใช้งาน"
 				>
-					<Play class="mr-1.5 h-3.5 w-3.5 fill-white" />
-					เพิ่มสูตรมาตรฐาน (BOM)
-				</Button>
-				<Button
-					variant="outline"
-					onclick={() => goto(resolve('/back-office/kitchen/production-board'))}
-					class="rounded-full px-5"
-				>
-					<FileText class="mr-1.5 h-3.5 w-3.5" />
-					กำหนดสูตรเอง (Custom)
-				</Button>
+					<FileText class="h-3.5 w-3.5" />
+					ฐานสูตร BOM (เร็วๆ นี้)
+				</span>
 			</div>
 		</Card.Header>
 
@@ -206,7 +199,7 @@
 					<Table.Root>
 						<Table.Header>
 							<Table.Row class="text-xs">
-								<Table.Head class="min-w-[140px] px-6">รหัส / เวลาบันทึก</Table.Head>
+								<Table.Head class="min-w-[140px] px-6">แผน (วัน:มื้อ) / เวลาบันทึก</Table.Head>
 								<Table.Head class="min-w-[240px] px-6">ตำรับเสบียงอาหาร (เมนู)</Table.Head>
 								<Table.Head class="min-w-[120px] px-6 text-right">ยอดจัดสรรผลิต</Table.Head>
 								<Table.Head class="min-w-[140px] px-6 text-center">สถานะ</Table.Head>
@@ -232,6 +225,11 @@
 										{#if riceGrams(plan) !== null}
 											<p class="mt-0.5 text-xs text-muted-foreground">
 												ข้าวสาร: {riceGrams(plan)?.toLocaleString()} g
+											</p>
+										{/if}
+										{#if plan.override_reason}
+											<p class="mt-0.5 text-xs text-amber-700" title={plan.override_reason}>
+												⚑ แก้ยอด: {plan.override_reason}
 											</p>
 										{/if}
 									</Table.Cell>
@@ -267,13 +265,7 @@
 												ยืนยันแผน
 											</Button>
 										{:else}
-											<Button
-												size="sm"
-												variant="outline"
-												onclick={() => goto(resolve('/back-office/kitchen/production-board'))}
-											>
-												จัดการ
-											</Button>
+											<span class="text-xs text-muted-foreground">—</span>
 										{/if}
 									</Table.Cell>
 								</Table.Row>

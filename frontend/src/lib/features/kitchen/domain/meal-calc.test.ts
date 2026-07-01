@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { calculateMealIngredients, RICE_RECIPE_ID } from './meal-calc';
-import type { MealPlanHeadcount } from './kitchen';
+import { calculateMealIngredients, toRequisitionInput, RICE_RECIPE_ID } from './meal-calc';
+import type { MealPlan, MealPlanHeadcount } from './kitchen';
 
 const SOP_ID = 'sop_profile:TEST001';
 const SOP_VERSION = 1;
@@ -77,5 +77,42 @@ describe('calculateMealIngredients', () => {
 		);
 		const plain = calculateMealIngredients(headcount(100), 150, SOP_ID, SOP_VERSION, AS_OF);
 		expect(mixed.recipes[0].planned_qty).toBe(plain.recipes[0].planned_qty);
+	});
+});
+
+describe('toRequisitionInput — T-26 handoff (CR-022)', () => {
+	const plan = (recipes: MealPlan['recipes']): MealPlan => ({
+		_id: 'meal_plan:2026-07-15:lunch',
+		type: 'meal_plan',
+		schema_v: 2,
+		shelter_code: 'SH001',
+		created_at: AS_OF,
+		updated_at: AS_OF,
+		created_by: 'tester',
+		date: '2026-07-15',
+		meal: 'lunch',
+		headcount: headcount(100),
+		recipes,
+		status: 'confirmed'
+	});
+
+	it('maps rice recipe (grams) to a stock requisition item', () => {
+		const input = toRequisitionInput(plan([{ recipe_id: RICE_RECIPE_ID, planned_qty: 15000 }]));
+		expect(input.meal_plan_id).toBe('meal_plan:2026-07-15:lunch');
+		expect(input.items).toEqual([
+			{ item_id: 'item:rice', qty_requested: 15000, qty_issued: 0, unit: 'g' }
+		]);
+	});
+
+	it('produces a valid KitchenRequisitionInput (qty_issued starts at 0 for T-26)', () => {
+		const input = toRequisitionInput(plan([{ recipe_id: RICE_RECIPE_ID, planned_qty: 7500 }]));
+		expect(input.items[0].qty_issued).toBe(0);
+		expect(input.items[0].qty_requested).toBeGreaterThan(0);
+	});
+
+	it('throws when a recipe has no stock item mapping', () => {
+		expect(() =>
+			toRequisitionInput(plan([{ recipe_id: 'ingredient:mystery', planned_qty: 10 }]))
+		).toThrow(/no stock item mapping/);
 	});
 });

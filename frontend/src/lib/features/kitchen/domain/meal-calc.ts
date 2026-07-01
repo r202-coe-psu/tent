@@ -1,8 +1,19 @@
-import type { MealPlanHeadcount, MealPlanRecipe } from './kitchen';
+import type {
+	KitchenRequisitionInput,
+	MealPlan,
+	MealPlanHeadcount,
+	MealPlanRecipe
+} from './kitchen';
 
 // Conventional recipe_id for rice — T-26 maps this to the stock item_id.
 // Future ingredients (egg, vegetable, etc.) will add entries here when P-02 ships.
 export const RICE_RECIPE_ID = 'ingredient:rice';
+
+// Maps a calculated recipe_id to the stock item it draws down + its unit.
+// The bridge to T-26 (kitchen requisition → stock ledger). CR-022.
+export const RECIPE_TO_STOCK_ITEM: Record<string, { item_id: string; unit: string }> = {
+	[RICE_RECIPE_ID]: { item_id: 'item:rice', unit: 'g' }
+};
 
 export interface MealCalcSource {
 	sop_profile_id: string;
@@ -50,4 +61,29 @@ export function calculateMealIngredients(
 			headcount_as_of: headcountAsOf
 		}
 	};
+}
+
+/**
+ * Adapts a meal plan into a {@link KitchenRequisitionInput} — the handoff to
+ * T-26 (FR-40). Each recipe becomes a requested stock item; `qty_issued`
+ * starts at 0 because the actual issued amount (partial when stock is short)
+ * is decided by T-26 at issue time. Pure: no I/O, no stock lookup.
+ *
+ * Throws if a recipe has no stock mapping — a plan must not silently produce a
+ * requisition that skips an ingredient.
+ */
+export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
+	const items = plan.recipes.map((r) => {
+		const stock = RECIPE_TO_STOCK_ITEM[r.recipe_id];
+		if (!stock) {
+			throw new Error(`toRequisitionInput: no stock item mapping for recipe "${r.recipe_id}"`);
+		}
+		return {
+			item_id: stock.item_id,
+			qty_requested: r.planned_qty,
+			qty_issued: 0,
+			unit: stock.unit
+		};
+	});
+	return { meal_plan_id: plan._id, items };
 }

@@ -1,4 +1,4 @@
-import { requireAuth } from '$lib/guards/auth';
+import { requireKitchen } from '$lib/guards/auth';
 import type { PageLoad } from './$types';
 
-export const load: PageLoad = requireAuth;
+export const load: PageLoad = requireKitchen;

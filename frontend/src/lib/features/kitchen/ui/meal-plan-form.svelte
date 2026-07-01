@@ -3,11 +3,14 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import Users from '@lucide/svelte/icons/users';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SHELTER_CODE } from '$lib/db/shelter';
 	import {
 		useCreateMealPlanCalc,
+		useOccupancyHeadcount,
 		calculateMealIngredients,
 		MEAL_PERIOD_LABELS,
 		type MealPeriod,
@@ -23,9 +26,34 @@
 	let halal = $state(0);
 	let softFood = $state(0);
 	let infant = $state(0);
+	let overrideReason = $state('');
 
 	const sopProfile = useActiveSopProfile();
+	const occupancy = useOccupancyHeadcount();
 	const createCalc = useCreateMealPlanCalc();
+
+	// Auto-fill headcount from live occupancy once per open (T-06 source). After
+	// that the fields are the user's to edit; the "ใช้ยอดล่าสุด" button re-syncs.
+	let applied = $state(false);
+
+	function fillFromOccupancy(h: MealPlanHeadcount) {
+		total = h.total;
+		halal = h.halal;
+		softFood = h.soft_food;
+		infant = h.infant;
+	}
+
+	$effect(() => {
+		if (!open) {
+			applied = false;
+			return;
+		}
+		if (!applied && occupancy.data) {
+			fillFromOccupancy(occupancy.data);
+			overrideReason = '';
+			applied = true;
+		}
+	});
 
 	const headcount = $derived<MealPlanHeadcount>({
 		total,
@@ -34,8 +62,26 @@
 		infant
 	});
 
-	// Sub-counts cannot exceed total (mirrors the domain invariant).
-	const subCountsValid = $derived(halal + softFood + infant <= total);
+	// Each sub-count is bounded by total independently (orthogonal dimensions).
+	const subCountsValid = $derived(halal <= total && softFood <= total && infant <= total);
+
+	// Overridden = final headcount differs from the live occupancy snapshot.
+	const isOverridden = $derived.by(() => {
+		const o = occupancy.data;
+		if (!o) return false;
+		return (
+			total !== o.total || halal !== o.halal || softFood !== o.soft_food || infant !== o.infant
+		);
+	});
+
+	const overrideReasonValid = $derived(!isOverridden || overrideReason.trim().length > 0);
+
+	function resetToOccupancy() {
+		if (occupancy.data) {
+			fillFromOccupancy(occupancy.data);
+			overrideReason = '';
+		}
+	}
 
 	const preview = $derived.by(() => {
 		if (!sopProfile.data || total <= 0) return null;
@@ -58,13 +104,16 @@
 		e.preventDefault();
 		const ctx = { shelterCode: SHELTER_CODE, createdBy: authStore.user?.name ?? 'staff' };
 		try {
-			await createCalc.mutateAsync({ date, meal, headcount, ctx });
+			await createCalc.mutateAsync({
+				date,
+				meal,
+				headcount,
+				override_reason: isOverridden ? overrideReason.trim() : null,
+				ctx
+			});
 			toast.success(`สร้างแผน ${MEAL_PERIOD_LABELS[meal]} วันที่ ${date} แล้ว`);
 			open = false;
-			total = 0;
-			halal = 0;
-			softFood = 0;
-			infant = 0;
+			overrideReason = '';
 		} catch (err) {
 			if ((err as { status?: number })?.status === 409) {
 				toast.error(`มีแผน ${MEAL_PERIOD_LABELS[meal]} ของวันที่ ${date} อยู่แล้ว`);
@@ -79,7 +128,9 @@
 	<Dialog.Content class="max-w-lg">
 		<Dialog.Header>
 			<Dialog.Title>สร้างแผนอาหาร</Dialog.Title>
-			<Dialog.Description>กรอกข้อมูลเพื่อคำนวณรายการวัตถุดิบอัตโนมัติ</Dialog.Description>
+			<Dialog.Description
+				>คำนวณรายการวัตถุดิบอัตโนมัติจากยอดผู้พักพิงจริง × SOP ratio</Dialog.Description
+			>
 		</Dialog.Header>
 
 		<form onsubmit={handleSubmit} class="space-y-4">
@@ -100,6 +151,31 @@
 						{/each}
 					</select>
 				</div>
+			</div>
+
+			<!-- Live occupancy source (T-06) -->
+			<div
+				class="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2 text-xs"
+			>
+				<span class="flex items-center gap-1.5 text-muted-foreground">
+					<Users class="h-3.5 w-3.5" />
+					{#if occupancy.isPending}
+						กำลังอ่านยอดผู้พักพิง...
+					{:else}
+						ยอดผู้พักพิงล่าสุด (checked-in): <span class="font-semibold text-foreground"
+							>{occupancy.data?.total ?? 0}</span
+						> คน
+					{/if}
+				</span>
+				<button
+					type="button"
+					class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-primary hover:bg-primary/10 disabled:opacity-50"
+					onclick={resetToOccupancy}
+					disabled={!occupancy.data}
+				>
+					<RefreshCw class="h-3 w-3" />
+					ใช้ยอดล่าสุด
+				</button>
 			</div>
 
 			<div class="space-y-1.5">
@@ -124,8 +200,24 @@
 
 			{#if !subCountsValid}
 				<p class="text-xs text-destructive">
-					ยอดฮาลาล + อาหารอ่อน + ทารก รวมกันต้องไม่เกินจำนวนทั้งหมด
+					ยอดฮาลาล / อาหารอ่อน / ทารก แต่ละช่องต้องไม่เกินจำนวนทั้งหมด
 				</p>
+			{/if}
+
+			<!-- Manual override reason — required when headcount deviates from occupancy -->
+			{#if isOverridden}
+				<div class="space-y-1.5">
+					<Label for="mp-override" class="text-xs text-amber-700">
+						เหตุผลที่แก้ยอดต่างจาก occupancy (บังคับ)
+					</Label>
+					<textarea
+						id="mp-override"
+						bind:value={overrideReason}
+						rows="2"
+						placeholder="เช่น มีอาสาสมัคร/ผู้มาช่วยงานเพิ่ม 20 คน"
+						class="flex w-full rounded-md border border-amber-300 bg-transparent px-3 py-1.5 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+					></textarea>
+				</div>
 			{/if}
 
 			{#if sopProfile.isPending}
@@ -154,7 +246,11 @@
 				<Button type="button" variant="outline" onclick={() => (open = false)}>ยกเลิก</Button>
 				<Button
 					type="submit"
-					disabled={createCalc.isPending || total <= 0 || !sopProfile.data || !subCountsValid}
+					disabled={createCalc.isPending ||
+						total <= 0 ||
+						!sopProfile.data ||
+						!subCountsValid ||
+						!overrideReasonValid}
 				>
 					{createCalc.isPending ? 'กำลังบันทึก...' : 'สร้างแผน (draft)'}
 				</Button>
