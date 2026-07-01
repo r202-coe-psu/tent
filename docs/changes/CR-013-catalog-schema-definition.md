@@ -1,11 +1,19 @@
 ---
-title: Catalog Schema Definition
+id: CR-013
+title: Catalog Schema Definition — item_category, supply_item, recipe field alignment
 status: approved
-created: 2026-06-25
-updated: 2026-06-25
+date: 2026-06-25
+requested_by: Module C team
+decided_by: project owner
+layer: volatile
+affects:
+  - docs/data/schema.md
+  - frontend/src/lib/features/catalog/
 module: C
 note: Mapping UI Form Fields to Database Schema
 ---
+
+# CR-013 — Catalog Schema Definition
 
 ## 1. ปัญหาที่เจอ
 

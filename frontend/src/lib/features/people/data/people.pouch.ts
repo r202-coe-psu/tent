@@ -4,6 +4,8 @@ import { touch, type AuthorContext } from '$lib/db/model';
 import { SHELTER_CODE, SHELTER_DB, shelterDb as _shelterDb } from '$lib/db/shelter';
 import {
 	createEvacuee as buildEvacuee,
+	createMovement,
+	applyMovementToStay,
 	isEvacuee,
 	type Evacuee,
 	type EvacueeInput
@@ -47,6 +49,17 @@ export class PeoplePouchRepository implements PeopleRepository {
 	/** Persist an edited evacuee (LWW: bumps `updated_at`). */
 	updateEvacuee(evacuee: Evacuee): Promise<Evacuee> {
 		return this.repo.put(touch(evacuee));
+	}
+
+	/** Record a check-in movement, then apply it to the evacuee's current_stay. */
+	async checkInEvacuee(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		zone: string | null = null
+	): Promise<Evacuee> {
+		const movement = createMovement({ evacuee_id: evacuee._id, action: 'check_in', zone }, ctx);
+		await this.repo.put(movement);
+		return this.repo.put(applyMovementToStay(evacuee, movement));
 	}
 }
 

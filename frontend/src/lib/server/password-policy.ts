@@ -34,10 +34,7 @@ export function validatePassword(raw: string): string {
 	if (!HAS_SPECIAL.test(password)) failures.push('at least one special character');
 
 	if (failures.length > 0) {
-		throw new ServiceError(
-			'VALIDATION',
-			`Password must contain: ${failures.join(', ')}`
-		);
+		throw new ServiceError('VALIDATION', `Password must contain: ${failures.join(', ')}`);
 	}
 
 	return password;

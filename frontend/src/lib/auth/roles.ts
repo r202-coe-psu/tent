@@ -49,6 +49,11 @@ export function isShelterManager(roles: readonly string[]): boolean {
 	return roles.includes(SHELTER_MANAGER);
 }
 
+/** True when the roles hold a given staff capability (e.g. `kitchen_staff`). */
+export function hasStaffCapability(roles: readonly string[], cap: StaffCapability): boolean {
+	return roles.includes(cap);
+}
+
 /**
  * True when every non-shelter capability in the list is a staff capability
  * (no `shelter_manager`/`system_admin`/`_admin`). A shelter_manager may only

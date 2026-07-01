@@ -1,10 +1,13 @@
 import { z } from 'zod';
-import { type BaseDoc, touch } from '$lib/db/model';
-import { createAuditEntry, type AuditEntry, type AuditAction } from '$lib/features/shared';
+import { type BaseDoc } from '$lib/db/model';
 
-// ---------------------------------------------------------------------------
-// Document type
-// ---------------------------------------------------------------------------
+export const PUBLIC_DONATION_CATEGORIES = [
+	{ value: 'food', label: 'อาหาร/เครื่องดื่ม' },
+	{ value: 'clothing', label: 'เสื้อผ้า/เครื่องนุ่งห่ม' },
+	{ value: 'medicine', label: 'ยารักษาโรค/เวชภัณฑ์' },
+	{ value: 'supply', label: 'ของใช้ทั่วไป' },
+	{ value: 'other', label: 'อื่นๆ' }
+] as const;
 
 export interface DonationPreDeclaration extends BaseDoc {
 	type: 'donation_pre_declaration';
@@ -31,12 +34,8 @@ export interface DonationPreDeclaration extends BaseDoc {
 	booking_ref?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Input schema (Zod) — for form validation / API ingress
-// ---------------------------------------------------------------------------
-
 export const donationPreDeclarationInputSchema = z.object({
-	shelter_code: z.string().min(1, 'Please select a shelter.'),
+	shelter_code: z.string().regex(/^[A-Za-z0-9_-]{1,20}$/, 'Invalid shelter code.'),
 	donor: z.object({
 		name: z.string().min(1, 'Name is required'),
 		phone: z.string().min(1, 'Phone is required'),
@@ -74,79 +73,8 @@ export const donationPreDeclarationInputSchema = z.object({
 			pickup_address: z.string().optional()
 		})
 		.optional(),
-	captchaToken: z.string().optional()
+	captchaToken: z.string().min(1, 'CAPTCHA token is required')
 });
-
-// ---------------------------------------------------------------------------
-// Type guard
-// ---------------------------------------------------------------------------
 
 export const isDonationPreDeclaration = (d: unknown): d is DonationPreDeclaration =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_pre_declaration';
-
-// ---------------------------------------------------------------------------
-// Donation Intake — T-16-3.2
-// ---------------------------------------------------------------------------
-
-/** Input required for a staff member to record receiving a donation. */
-export interface DonationIntakeInput {
-	/** เหตุผลการรับของ — บังคับระบุ */
-	reason: string;
-	/** ชื่อเจ้าหน้าที่ที่ลงชื่อทำรายการ */
-	staff_name: string;
-	/**
-	 * action ของ audit:
-	 * - `manual_adjust` — รับของปกติ (walk-in / ตาม pre-declare) [default]
-	 * - `retro_edit`    — บันทึกย้อนหลังหลังรับไปแล้ว
-	 */
-	action?: Extract<AuditAction, 'manual_adjust' | 'retro_edit'>;
-}
-
-/**
- * Transition a donation from `declared` → `received` and produce an audit trail.
- *
- * Returns:
- * - `donation` — updated doc with `status: 'received'` (caller writes to PouchDB)
- * - `audit`    — immutable `type: "audit"` doc (caller writes to PouchDB in the same batch)
- *
- * Throws if the donation is not in `declared` status (state-machine guard).
- */
-export function receiveDonation(
-	donation: DonationPreDeclaration,
-	input: DonationIntakeInput
-): { donation: DonationPreDeclaration; audit: AuditEntry } {
-	if (donation.status !== 'declared') {
-		throw new Error(
-			`Cannot receive donation with status "${donation.status}". Only "declared" donations can be received.`
-		);
-	}
-
-	const action = input.action ?? 'manual_adjust';
-
-	// Transition the donation doc to 'received' (touch bumps updated_at)
-	const updatedDonation: DonationPreDeclaration = touch({
-		...donation,
-		status: 'received'
-	});
-
-	// Build the append-only audit entry — ห้ามแก้หลังสร้าง (schema.md §2.12)
-	const audit = createAuditEntry(
-		{
-			action,
-			target_type: 'donation',
-			target_id: donation._id,
-			reason: input.reason,
-			context: {
-				staff_name: input.staff_name,
-				booking_ref: donation.booking_ref ?? null,
-				item_count: donation.items.length
-			}
-		},
-		{
-			shelterCode: donation.shelter_code,
-			createdBy: input.staff_name
-		}
-	);
-
-	return { donation: updatedDonation, audit };
-}

@@ -1,9 +1,10 @@
 // Domain — documents
-export type { DonationPreDeclaration, DonationIntakeInput } from './domain/donation';
+export type { DonationPreDeclaration } from './domain/donation';
+export type { PublicDonationDoc, PublicDonor } from './domain/public-donation';
 
 // Domain — input schemas + factories + transitions + guards
 export {
 	donationPreDeclarationInputSchema,
 	isDonationPreDeclaration,
-	receiveDonation
+	PUBLIC_DONATION_CATEGORIES
 } from './domain/donation';

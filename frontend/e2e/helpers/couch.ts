@@ -72,7 +72,8 @@ export async function createCouchUser(user: TestUser): Promise<void> {
 		shelter_id: roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length) ?? null,
 		affiliation_tags: []
 	});
-	if (res.status >= 400) throw new Error(`Could not create test user "${name}" (HTTP ${res.status})`);
+	if (res.status >= 400)
+		throw new Error(`Could not create test user "${name}" (HTTP ${res.status})`);
 }
 
 /** Delete a user from CouchDB _users. Silently ignores 404 (already gone). */

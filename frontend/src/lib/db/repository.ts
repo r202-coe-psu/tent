@@ -23,7 +23,10 @@ export interface Repository {
 	put<T extends { _id: string }>(doc: T): Promise<T>;
 	get<T extends { _id: string }>(id: string): Promise<T | null>;
 	remove(doc: { _id: string; _rev?: string }): Promise<void>;
-	allByType<T extends { _id: string; type: string }>(type: string, guard: (d: unknown) => d is T): Promise<T[]>;
+	allByType<T extends { _id: string; type: string }>(
+		type: string,
+		guard: (d: unknown) => d is T
+	): Promise<T[]>;
 	pageByType<T extends { _id: string; type: string }>(
 		type: string,
 		guard: (d: unknown) => d is T,
@@ -53,7 +56,10 @@ export function createRepository(db: PouchDB.Database): Repository {
 			await db.remove(doc as PouchDB.Core.RemoveDocument);
 		},
 
-		async allByType<T extends { _id: string; type: string }>(type: string, guard: (d: unknown) => d is T): Promise<T[]> {
+		async allByType<T extends { _id: string; type: string }>(
+			type: string,
+			guard: (d: unknown) => d is T
+		): Promise<T[]> {
 			const res = await db.allDocs({
 				include_docs: true,
 				startkey: `${type}:`,
