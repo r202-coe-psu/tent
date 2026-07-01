@@ -67,10 +67,10 @@ class AuthStore {
 	 * guards pass without a network round-trip, then validates against CouchDB
 	 * in the background. Cached; safe to call repeatedly.
 	 */
-	ensureInitialized(): Promise<void> {
+	ensureInitialized(fetchFn?: typeof fetch): Promise<void> {
 		if (!browser) return Promise.resolve();
 		if (!this.initPromise) {
-			this.initPromise = getSession()
+			this.initPromise = getSession(fetchFn)
 				.then((user) => {
 					// Online + answered: CouchDB is the source of truth.
 					this.state.user = user;
