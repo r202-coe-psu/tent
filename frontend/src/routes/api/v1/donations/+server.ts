@@ -79,7 +79,7 @@ export const POST = async ({ request, getClientAddress }) => {
 			expires_at: expiresAtDate.toISOString(),
 			created_by: 'public',
 			booking_ref: bookingRef,
-			tracking_token_hash: trackingTokenHash, // store token directly as requested
+			tracking_token_hash: trackingTokenHash, // store token hash
 			kind: 'items',
 			donor: {
 				name: parsed.data.donor.name,
@@ -129,7 +129,11 @@ export const POST = async ({ request, getClientAddress }) => {
 				console.error('Invalid COUCHDB_PUBLIC_WRITER_URL format');
 			}
 		} else {
-			// Fallback if not configured yet, but should enforce via validate_doc_update
+			if (!dev) {
+				console.error('COUCHDB_PUBLIC_WRITER_URL is missing in production!');
+				return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
+			}
+			// Fallback in dev if not configured yet, but should enforce via validate_doc_update
 			const res = await adminRaw(
 				`/${shelterDb}/${encodeURIComponent(couchDoc._id)}`,
 				'PUT',

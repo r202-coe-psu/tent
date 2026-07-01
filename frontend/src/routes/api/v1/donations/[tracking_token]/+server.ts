@@ -2,7 +2,9 @@ import { json } from '@sveltejs/kit';
 import { adminRaw } from '$lib/server/couch-admin';
 import { sha256Hex } from '$lib/db/hash';
 import { donationIpLimiter } from '$lib/server/security/rate-limiter';
-import type { PublicDonationDoc } from '$lib/features/donations/domain/public-donation';
+import { env } from '$env/dynamic/private';
+import { dev } from '$app/environment';
+import type { PublicDonationDoc } from '$lib/features/donations';
 
 export const GET = async ({ params, getClientAddress }) => {
 	try {
@@ -155,13 +157,47 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		latestDoc.logistics.courier_tracking_no = payload.courier_tracking_no;
 		latestDoc.updated_at = new Date().toISOString();
 
-		const updateRes = await adminRaw(
-			`/${shelterDb}/${encodeURIComponent(docId)}`,
-			'PUT',
-			latestDoc
-		);
-		if (updateRes.status !== 201 && updateRes.status !== 200) {
-			console.error('Failed to update CouchDB', updateRes.data);
+		const writerUrl = env.COUCHDB_PUBLIC_WRITER_URL;
+		let resStatus = 500;
+		let resData = null;
+
+		if (writerUrl) {
+			const writerMatch = writerUrl.match(/^(https?:\/\/)([^:]+):([^@]+)@(.+)$/);
+			if (writerMatch) {
+				const [, scheme, user, pass, host] = writerMatch;
+				const base = `${scheme}${host}`.replace(/\/$/, '');
+				const authHeader = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
+
+				const fetchRes = await fetch(`${base}/${shelterDb}/${encodeURIComponent(docId)}`, {
+					method: 'PUT',
+					headers: {
+						Authorization: authHeader,
+						'Content-Type': 'application/json',
+						Accept: 'application/json'
+					},
+					body: JSON.stringify(latestDoc)
+				});
+				resStatus = fetchRes.status;
+				resData = await fetchRes.json().catch(() => null);
+			} else {
+				console.error('Invalid COUCHDB_PUBLIC_WRITER_URL format');
+			}
+		} else {
+			if (!dev) {
+				console.error('COUCHDB_PUBLIC_WRITER_URL is missing in production!');
+				return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
+			}
+			const updateRes = await adminRaw(
+				`/${shelterDb}/${encodeURIComponent(docId)}`,
+				'PUT',
+				latestDoc
+			);
+			resStatus = updateRes.status;
+			resData = updateRes.data;
+		}
+
+		if (resStatus !== 201 && resStatus !== 200) {
+			console.error('Failed to update CouchDB', resData);
 			return json({ success: false, error: 'Database update failed' }, { status: 500 });
 		}
 
