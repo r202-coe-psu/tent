@@ -19,9 +19,12 @@
 		stockBalance,
 		SHELTER_CODE,
 		type SpecialRequestInput,
-		type Donation
+		type Donation,
+		calculateReserved,
+		isNeedCutOff
 	} from '$lib/features/operations';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import type { NeedItem } from './components/needs-board-admin.svelte';
 
 	let activeSubTab = $state('scan'); // 'scan', 'pending', 'needs'
 	let isModalOpen = $state(false);
@@ -52,42 +55,23 @@
 	const derivedItems = $derived.by(() => {
 		const campaigns = campaignsQuery.data ?? [];
 		const donations = donationsQuery.data ?? [];
+		const stockLedgers = stockLedgersQuery.data ?? [];
 
-		const donationsByCampaign = new Map<string, Donation[]>();
-		for (const don of donations) {
-			if (don.status === 'expired' || don.status === 'cancelled') continue;
+		const reservedMap = calculateReserved(donations, stockLedgers);
 
-			if (!don.campaign_id) continue;
-			if (!donationsByCampaign.has(don.campaign_id)) {
-				donationsByCampaign.set(don.campaign_id, []);
-			}
-			donationsByCampaign.get(don.campaign_id)!.push(don);
-		}
-
-		const list: any[] = [];
+		const list: NeedItem[] = [];
 		for (const camp of campaigns) {
-			const campDonations = donationsByCampaign.get(camp._id) ?? [];
-			const needs: any[] = [];
+			const needs: NeedItem['needs'] = [];
 			let allNeedsCutOff = true;
 
 			for (const need of camp.needs) {
 				const itemId = need.item_id;
-
-				let reserved = 0;
-				for (const don of campDonations) {
-					for (const item of don.items ?? []) {
-						if (item.item_id === itemId) {
-							reserved += item.qty;
-						}
-					}
-				}
-
+				const reserved = reservedMap.get(itemId) ?? 0;
 				const onHand = balances.get(itemId) ?? 0;
 				const target = need.qty_target;
 
-				const isAutoCutOff = onHand + reserved >= target;
-				const isManualClosed = camp.status === 'closed';
-				const isCutOff = isAutoCutOff || isManualClosed;
+				const isCutOff = isNeedCutOff(target, onHand, reserved, need.status, camp.status);
+				const isNeedManualClosed = need.status === 'closed';
 
 				if (!isCutOff) {
 					allNeedsCutOff = false;
@@ -100,7 +84,8 @@
 					onHand: onHand,
 					target: target,
 					unit: need.unit,
-					isCutOff: isCutOff
+					isCutOff: isCutOff,
+					isManualClosed: isNeedManualClosed
 				});
 			}
 
@@ -128,8 +113,17 @@
 			const nextVisible = campaign.visible_on_home === false ? true : false;
 			updateCampaignMutation.mutate(
 				{
-					...campaign,
-					visible_on_home: nextVisible
+					campaign: {
+						...campaign,
+						visible_on_home: nextVisible
+					},
+					auditInput: {
+						action: 'manual_adjust',
+						reason: nextVisible
+							? `เจ้าหน้าที่เปิดแสดงแคมเปญบนหน้าแรก: ${targetItem.title}`
+							: `เจ้าหน้าที่ซ่อนแคมเปญจากหน้าแรก: ${targetItem.title}`,
+						ctx: ctx
+					}
 				},
 				{
 					onSuccess: () => {
@@ -147,22 +141,47 @@
 		}
 	}
 
-	function toggleCutOff(compoundId: string) {
+	function toggleCutOff(compoundId: string, itemId: string) {
 		const targetItem = derivedItems.find((i) => i.id === compoundId);
 		if (targetItem) {
 			const campaign = targetItem.campaignDoc;
-			const nextStatus = campaign.status === 'open' ? 'closed' : 'open';
+
+			const targetNeed = campaign.needs.find((n) => n.item_id === itemId);
+			const toggledStatus: 'open' | 'closed' = targetNeed?.status === 'closed' ? 'open' : 'closed';
+			const updatedNeeds = campaign.needs.map((need) => {
+				if (need.item_id === itemId) {
+					return {
+						...need,
+						status: toggledStatus
+					};
+				}
+				return need;
+			});
+
+			const itemName =
+				ITEM_NAMES[itemId] ?? (itemId.startsWith('item:') ? itemId.slice(5) : itemId);
+
 			updateCampaignMutation.mutate(
 				{
-					...campaign,
-					status: nextStatus
+					campaign: {
+						...campaign,
+						needs: updatedNeeds
+					},
+					auditInput: {
+						action: 'manual_adjust',
+						reason:
+							toggledStatus === 'closed'
+								? `เจ้าหน้าที่บังคับปิดรับบริจาคสำหรับพัสดุ: ${itemName} ในแคมเปญ ${targetItem.title}`
+								: `เจ้าหน้าที่เปิดรับบริจาคพัสดุอีกครั้ง: ${itemName} ในแคมเปญ ${targetItem.title}`,
+						ctx: ctx
+					}
 				},
 				{
 					onSuccess: () => {
 						toast.success(
-							nextStatus === 'closed'
-								? `ปิดรับบริจาคสำหรับ "${targetItem.title}" แล้ว`
-								: `เปิดรับบริจาคสำหรับ "${targetItem.title}" อีกครั้ง`
+							toggledStatus === 'closed'
+								? `ปิดรับบริจาคสำหรับ "${itemName}" แล้ว`
+								: `เปิดรับบริจาคสำหรับ "${itemName}" อีกครั้ง`
 						);
 					},
 					onError: (err) => {

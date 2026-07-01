@@ -5,13 +5,12 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import type { DonationCampaign } from '$lib/features/operations';
 
-	interface NeedItem {
+	export interface NeedItem {
 		id: string;
 		title: string;
 		location: string;
-		reserved: number;
-		target: number;
 		showOnHome: boolean;
 		isCutOff: boolean;
 		isManualClosed: boolean;
@@ -23,7 +22,9 @@
 			target: number;
 			unit: string;
 			isCutOff: boolean;
+			isManualClosed: boolean;
 		}[];
+		campaignDoc: DonationCampaign;
 	}
 
 	let {
@@ -35,7 +36,7 @@
 		items: NeedItem[];
 		onAddRequest: () => void;
 		onToggleShowOnHome: (id: string) => void;
-		onToggleCutOff: (id: string) => void;
+		onToggleCutOff: (id: string, itemId: string) => void;
 	} = $props();
 
 	let searchQuery = $state('');
@@ -85,7 +86,6 @@
 		</div>
 	</div>
 
-	<!-- ตารางแสดงรายการ -->
 	<div class="overflow-x-auto">
 		<Table.Root class="w-full border-collapse text-left">
 			<Table.Header>
@@ -105,7 +105,6 @@
 							? 'bg-muted/10 opacity-65'
 							: ''}"
 					>
-						<!-- แคมเปญ / สถานที่คลัง -->
 						<Table.Cell class="px-6 py-4 align-top">
 							<div class="flex items-center gap-2 font-bold text-foreground">
 								{#if item.isCutOff}
@@ -119,7 +118,6 @@
 							<div class="mt-1 text-[10px] text-muted-foreground">{item.location}</div>
 						</Table.Cell>
 
-						<!-- รายการย่อยย่อย และความคืบหน้า (Warning 3: รวมยอดจอง + ยอดคลัง) -->
 						<Table.Cell class="px-6 py-4">
 							<div class="flex flex-col gap-4">
 								{#each item.needs as need}
@@ -162,7 +160,6 @@
 							</div>
 						</Table.Cell>
 
-						<!-- ปุ่มโชว์/ซ่อน บนหน้าแรก -->
 						<Table.Cell class="px-6 py-4 text-center align-top">
 							<button
 								type="button"
@@ -177,18 +174,23 @@
 							</button>
 						</Table.Cell>
 
-						<!-- ปุ่ม Force Close / Restore -->
-						<Table.Cell class="px-6 py-4 text-center align-top">
-							<button
-								type="button"
-								onclick={() => onToggleCutOff(item.id)}
-								class="inline-flex cursor-pointer items-center justify-center rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors
-								{item.isManualClosed
-									? 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400'
-									: 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100/70 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-400'}"
-							>
-								{item.isManualClosed ? 'เปิดรับบริจาค (Restore)' : 'Force Cut-off (ปิดด่วน)'}
-							</button>
+						<Table.Cell class="px-6 py-4 align-top">
+							<div class="flex flex-col gap-4">
+								{#each item.needs as need}
+									<div class="flex h-[34px] items-center justify-center">
+										<button
+											type="button"
+											onclick={() => onToggleCutOff(item.id, need.itemId)}
+											class="inline-flex cursor-pointer items-center justify-center rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors
+											{need.isManualClosed
+												? 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400'
+												: 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100/70 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-400'}"
+										>
+											{need.isManualClosed ? 'เปิดรับบริจาค (Restore)' : 'Force Cut-off (ปิดด่วน)'}
+										</button>
+									</div>
+								{/each}
+							</div>
 						</Table.Cell>
 					</Table.Row>
 				{:else}
