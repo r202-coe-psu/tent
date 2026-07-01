@@ -81,8 +81,12 @@
 					pets: (input.pets ?? []).map((p) => ({
 						species: p.species,
 						count: Number(p.count),
-						...(p.notes ? { notes: p.notes } : {})
+						notes: p.notes ?? undefined,
+						has_cage: p.has_cage ?? undefined,
+						image_url: p.image_url ?? null
 					})),
+					assets: input.assets ?? null,
+					vehicle: input.vehicle ?? null,
 					notes: input.notes ?? undefined,
 					address_no: input.address_no || null,
 					village_no: input.village_no || null,
@@ -191,65 +195,41 @@
 	<title>{isEditMode ? 'แก้ไขข้อมูลครัวเรือน' : 'เพิ่มครัวเรือนใหม่'} · SmartShelter</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-2xl px-4 py-8 md:px-6">
-	<div class="mb-6 flex items-center justify-between">
-		<Button
-			variant="outline"
-			size="sm"
-			class="gap-2 rounded-full text-muted-foreground"
+<div class="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 space-y-6">
+	<div>
+		<button
+			type="button"
+			class="inline-flex cursor-pointer items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground hover:underline"
 			onclick={handleCancel}
 		>
 			<ArrowLeft class="size-4" />
-			<span>ย้อนกลับ</span>
-		</Button>
+			<span>กลับไปหน้ารายชื่อหลัก</span>
+		</button>
+		<h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+			{isEditMode ? 'แก้ไขข้อมูลครัวเรือน (Edit Household)' : 'เพิ่มครัวเรือนใหม่ (Create Household)'}
+		</h2>
 	</div>
 
-	<Card.Root class="overflow-hidden border border-border shadow-lg">
-		<Card.Header
-			class="border-b border-border/50 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-6 py-6"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary"
-				>
-					<Home class="size-5" />
-				</div>
-				<div>
-					<Card.Title class="text-xl font-bold text-foreground">
-						{isEditMode ? 'แก้ไขข้อมูลครัวเรือน' : 'เพิ่มครัวเรือนใหม่'}
-					</Card.Title>
-					<p class="mt-0.5 text-xs text-muted-foreground">
-						{isEditMode
-							? 'อัปเดตข้อมูล สมาชิก และสัตว์เลี้ยงของครัวเรือน'
-							: 'บันทึกข้อมูลเพื่อจัดกลุ่มสมาชิกและจัดสรรที่พัก'}
-					</p>
-				</div>
-			</div>
-		</Card.Header>
-
-		<Card.Content class="p-6">
-			{#if evacueesQuery.isLoading || householdsQuery.isLoading}
-				<div class="flex flex-col items-center justify-center gap-2 py-12">
-					<div
-						class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"
-					></div>
-					<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูลระบบ...</p>
-				</div>
-			{:else if isEditMode && !editingHousehold}
-				<div class="py-8 text-center">
-					<p class="text-sm font-semibold text-destructive">ไม่พบข้อมูลครัวเรือนที่ต้องการแก้ไข</p>
-					<Button variant="outline" class="mt-4" onclick={handleCancel}>กลับหน้าหลัก</Button>
-				</div>
-			{:else}
-				<HouseholdForm
-					onsubmit={handleFormSubmit}
-					oncancel={handleCancel}
-					pending={isSubmitting}
-					initialData={editingHousehold}
-					allEvacuees={evacueesQuery.data ?? []}
-					households={householdsQuery.data ?? []}
-				/>
-			{/if}
-		</Card.Content>
-	</Card.Root>
+	{#if evacueesQuery.isLoading || householdsQuery.isLoading}
+		<div class="flex flex-col items-center justify-center gap-2 py-12 rounded-2xl border border-border bg-card p-6 shadow-xs">
+			<div
+				class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"
+			></div>
+			<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูลระบบ...</p>
+		</div>
+	{:else if isEditMode && !editingHousehold}
+		<div class="py-12 text-center rounded-2xl border border-border bg-card p-6 shadow-xs">
+			<p class="text-sm font-semibold text-destructive">ไม่พบข้อมูลครัวเรือนที่ต้องการแก้ไข</p>
+			<Button variant="outline" class="mt-4" onclick={handleCancel}>กลับหน้าหลัก</Button>
+		</div>
+	{:else}
+		<HouseholdForm
+			onsubmit={handleFormSubmit}
+			oncancel={handleCancel}
+			pending={isSubmitting}
+			initialData={editingHousehold}
+			allEvacuees={evacueesQuery.data ?? []}
+			households={householdsQuery.data ?? []}
+		/>
+	{/if}
 </div>

@@ -6,11 +6,12 @@
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { householdInputSchema } from '../domain/people';
 	import { useMasterData } from '$lib/features/master-data';
-	import type { Household, Evacuee, HouseholdInput } from '../domain/people';
+	import type { Household, Evacuee, HouseholdInput, PetGroup } from '../domain/people';
 	import HouseholdFormHeadSection from './household-form-head-section.svelte';
 	import HouseholdFormMembersSection from './household-form-members-section.svelte';
 	import HouseholdFormLocationSection from './household-form-location-section.svelte';
 	import HouseholdFormPetsSection from './household-form-pets-section.svelte';
+	import HouseholdFormAssetsSection from './household-form-assets-section.svelte';
 
 	let {
 		onsubmit,
@@ -67,16 +68,18 @@
 	$effect(() => { $formData.community = commVal || null; });
 
 	// Member / pet state
-	let dogCount = $state(0);
-	let catCount = $state(0);
-	let birdCount = $state(0);
-	let otherCount = $state(0);
+	let petsList = $state<PetGroup[]>([]);
 	let selectedMemberIds = $state<string[]>([]);
 	let memberSearchValue = $state('');
 	let headComboValue = $state('');
 	let noHead = $state(false);
 	let emergencyContactPhone = $state('');
 	let membersInitialized = $state(false);
+
+	// Vehicle & Assets state
+	let vehicleType = $state<'car' | 'motorcycle' | 'other' | 'none'>('none');
+	let licensePlate = $state('');
+	let assetDescription = $state('');
 
 	// Pre-fill from initialData — avoids reading allEvacuees to prevent live-sync re-runs
 	$effect(() => {
@@ -94,10 +97,10 @@
 			$formData.postal_code = initialData.postal_code ?? '';
 			mzVal = initialData.municipality_zone ?? '';
 			commVal = initialData.community ?? '';
-			dogCount = initialData.pets.find((p) => p.species === 'dog')?.count ?? 0;
-			catCount = initialData.pets.find((p) => p.species === 'cat')?.count ?? 0;
-			birdCount = initialData.pets.find((p) => p.species === 'bird')?.count ?? 0;
-			otherCount = initialData.pets.find((p) => p.species === 'other')?.count ?? 0;
+			petsList = initialData.pets ? JSON.parse(JSON.stringify(initialData.pets)) : [];
+			vehicleType = initialData.vehicle?.type ?? 'none';
+			licensePlate = initialData.vehicle?.license_plate ?? '';
+			assetDescription = initialData.assets?.description ?? '';
 			membersInitialized = false;
 		} else {
 			$formData.label = '';
@@ -113,10 +116,10 @@
 			$formData.postal_code = '';
 			mzVal = '';
 			commVal = '';
-			dogCount = 0;
-			catCount = 0;
-			birdCount = 0;
-			otherCount = 0;
+			petsList = [];
+			vehicleType = 'none';
+			licensePlate = '';
+			assetDescription = '';
 			selectedMemberIds = [...initialMemberIds];
 			membersInitialized = true;
 		}
@@ -132,14 +135,27 @@
 		membersInitialized = true;
 	});
 
-	// Sync pets array to form
+	// Sync states to form
 	$effect(() => {
-		const petGroups = [];
-		if (dogCount > 0) petGroups.push({ species: 'dog' as const, count: dogCount });
-		if (catCount > 0) petGroups.push({ species: 'cat' as const, count: catCount });
-		if (birdCount > 0) petGroups.push({ species: 'bird' as const, count: birdCount });
-		if (otherCount > 0) petGroups.push({ species: 'other' as const, count: otherCount });
-		$formData.pets = petGroups;
+		$formData.pets = petsList.map((p) => ({
+			species: p.species,
+			count: Number(p.count),
+			notes: p.notes?.trim() || undefined,
+			has_cage: !!p.has_cage,
+			image_url: p.image_url || null
+		}));
+	});
+
+	$effect(() => {
+		$formData.vehicle = vehicleType !== 'none'
+			? { type: vehicleType, license_plate: licensePlate.trim() || null }
+			: null;
+	});
+
+	$effect(() => {
+		$formData.assets = assetDescription.trim()
+			? { description: assetDescription.trim(), image_url: null }
+			: null;
 	});
 
 	// Track head changes: remove old head from members, clear phone, add new head
@@ -198,68 +214,93 @@
 	}
 </script>
 
-<form method="POST" use:form.enhance>
-	<Field.FieldGroup>
-		<HouseholdFormHeadSection
-			{form}
-			{headItems}
-			bind:headComboValue
-			bind:noHead
-			{allEvacuees}
-			bind:emergencyContactPhone
-		/>
+<form method="POST" use:form.enhance class="space-y-6">
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2 items-start">
+		<!-- Left Column: General Info, Members, and Pets -->
+		<div class="space-y-6">
+			<!-- General Info & Head -->
+			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+				<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">ข้อมูลครัวเรือนเบื้องต้น</h3>
+				<HouseholdFormHeadSection
+					{form}
+					{headItems}
+					bind:headComboValue
+					bind:noHead
+					{allEvacuees}
+					bind:emergencyContactPhone
+				/>
+			</div>
 
-		<HouseholdFormMembersSection
-			{memberItems}
-			bind:memberSearchValue
-			{selectedMemberIds}
-			{allEvacuees}
-			{initialData}
-			{households}
-			headEvacueeId={$formData.head_evacuee_id}
-			onRemove={removeMember}
-		/>
+			<!-- Members Section -->
+			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+				<HouseholdFormMembersSection
+					{memberItems}
+					bind:memberSearchValue
+					{selectedMemberIds}
+					{allEvacuees}
+					{initialData}
+					{households}
+					headEvacueeId={$formData.head_evacuee_id}
+					onRemove={removeMember}
+				/>
+			</div>
 
-		<HouseholdFormLocationSection
-			{form}
-			bind:mzVal
-			bind:commVal
-			{municipalityZoneItems}
-			{communityItems}
-			mzPending={municipalityZoneQuery.isPending}
-			commPending={communityQuery.isPending}
-		/>
-
-		<HouseholdFormPetsSection
-			{form}
-			bind:dogCount
-			bind:catCount
-			bind:birdCount
-			bind:otherCount
-		/>
-
-		<!-- บันทึกเพิ่มเติม -->
-		<Form.Field {form} name="notes">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>บันทึกเพิ่มเติม</Form.Label>
-					<textarea
-						{...props}
-						bind:value={$formData.notes}
-						placeholder="ข้อมูลเพิ่มเติม เช่น เบอร์ติดต่อสำรอง, ปัญหาสุขภาพของสัตว์เลี้ยง..."
-						class="min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-					></textarea>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<!-- Actions -->
-		<div class="flex justify-end gap-2 pt-2">
-			<Button type="button" variant="outline" onclick={oncancel}>ยกเลิก</Button>
-			<Form.Button disabled={$submitting || pending}>
-				{pending ? 'กำลังบันทึก...' : 'บันทึก'}
-			</Form.Button>
+			<!-- Pets Section -->
+			<HouseholdFormPetsSection
+				{form}
+				bind:petsList
+			/>
 		</div>
-	</Field.FieldGroup>
+
+		<!-- Right Column: Location, Assets, and Notes -->
+		<div class="space-y-6">
+			<!-- Location Section -->
+			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+				<HouseholdFormLocationSection
+					{form}
+					bind:mzVal
+					bind:commVal
+					{municipalityZoneItems}
+					{communityItems}
+					mzPending={municipalityZoneQuery.isPending}
+					commPending={communityQuery.isPending}
+				/>
+			</div>
+
+			<!-- Assets Section -->
+			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+				<HouseholdFormAssetsSection
+					bind:vehicleType
+					bind:licensePlate
+					bind:assetDescription
+				/>
+			</div>
+
+			<!-- Notes Section -->
+			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+				<Form.Field {form} name="notes">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label class="text-base font-bold text-slate-800 dark:text-slate-200">บันทึกเพิ่มเติม</Form.Label>
+							<textarea
+								{...props}
+								bind:value={$formData.notes}
+								placeholder="ข้อมูลเพิ่มเติม เช่น เบอร์ติดต่อสำรอง, ปัญหาสุขภาพของสัตว์เลี้ยง..."
+								class="min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+							></textarea>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+			</div>
+		</div>
+	</div>
+
+	<!-- Actions -->
+	<div class="flex justify-end gap-2 border-t border-border pt-4">
+		<Button type="button" variant="outline" onclick={oncancel}>ยกเลิก</Button>
+		<Form.Button disabled={$submitting || pending}>
+			{pending ? 'กำลังบันทึก...' : 'บันทึก'}
+		</Form.Button>
+	</div>
 </form>

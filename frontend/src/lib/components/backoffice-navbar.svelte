@@ -40,7 +40,10 @@
 
 	function isActive(href: BackofficeNavbarNode['href']): boolean {
 		if (!href) return false;
-		const path = normalize(page.url.pathname);
+		let path = normalize(page.url.pathname);
+		if (path.startsWith('/back-office/households')) {
+			path = '/back-office/evacuee-management';
+		}
 		const target = normalize(String(href));
 		return path === target || path.startsWith(target + '/');
 	}

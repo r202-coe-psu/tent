@@ -176,8 +176,7 @@
 								<Button
 									variant="outline"
 									size="sm"
-									onclick={() => goto(resolve(`/back-office/households/edit/${h._id}`))}
-								>
+									onclick={() => goto(resolve(`/back-office/households/edit/${h._id}`))}>
 									แก้ไขข้อมูล
 								</Button>
 							</Table.Cell>
