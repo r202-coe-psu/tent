@@ -2,7 +2,12 @@ import { test, expect, type Page } from '@playwright/test';
 import { createCouchUser, deleteCouchUser, SA_ROLES } from './helpers/couch';
 
 const RUN_ID = Date.now().toString(36);
-const VALID = { username: `login_test_${RUN_ID}`, password: 'Password1!', roles: SA_ROLES, display_name: 'Login Test User' };
+const VALID = {
+	username: `login_test_${RUN_ID}`,
+	password: 'Password1!',
+	roles: SA_ROLES,
+	display_name: 'Login Test User'
+};
 const INVALID = { username: 'wrong', password: 'wrongpass' };
 
 test.describe('Login', () => {
@@ -45,12 +50,18 @@ test.describe('Login', () => {
 					const cookieStr = res.headers.get('set-cookie') || '';
 					const match = cookieStr.match(/AuthSession=([^;]+)/);
 					if (match) {
-						await page.context().addCookies([
-							{ name: 'AuthSession', value: match[1], domain: 'localhost', path: '/' }
-						]);
+						await page
+							.context()
+							.addCookies([
+								{ name: 'AuthSession', value: match[1], domain: 'localhost', path: '/' }
+							]);
 					}
 				}
-				await route.fulfill({ status: res.status, contentType: 'application/json', body: JSON.stringify(data) });
+				await route.fulfill({
+					status: res.status,
+					contentType: 'application/json',
+					body: JSON.stringify(data)
+				});
 			} else {
 				await route.continue();
 			}
@@ -63,7 +74,7 @@ test.describe('Login', () => {
 		await page.getByLabel('Username').fill(VALID.username);
 		await page.getByLabel('Password').fill(VALID.password);
 		await page.getByRole('button', { name: 'Login' }).click();
-		
+
 		await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 8000 });
 		await expect(page).toHaveURL('/');
 	});
@@ -74,7 +85,7 @@ test.describe('Login', () => {
 		await page.getByLabel('Username').fill(INVALID.username);
 		await page.getByLabel('Password').fill(INVALID.password);
 		await page.getByRole('button', { name: 'Login' }).click();
-		
+
 		// CouchDB returns "name or password is incorrect"
 		// The UI renders it inside a toast
 		await expect(page.getByText(/incorrect|failed/i)).toBeVisible({ timeout: 5000 });

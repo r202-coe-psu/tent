@@ -73,9 +73,7 @@ export const donationPreDeclarationInputSchema = z.object({
 			pickup_address: z.string().optional()
 		})
 		.optional(),
-	captchaToken: z
-		.string()
-		.min(1, 'CAPTCHA token is required')
+	captchaToken: z.string().min(1, 'CAPTCHA token is required')
 });
 
 export const isDonationPreDeclaration = (d: unknown): d is DonationPreDeclaration =>

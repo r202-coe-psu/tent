@@ -251,106 +251,9 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 	}
 
 	const newRatios = { ...prev.ratios, ...safeChanges };
-
-	const profile = catalogDoc(
-		'sop_profile',
-		2,
-		{
-			name: prev.name,
-			ratios: newRatios,
-			version: prev.version + 1,
-			active: true
-		},
-		createdBy
-	) as SopMasterProfile;
-
-	sopMasterSchema.parse(profile);
-
-	const audit = createAuditEntry(
-		{
-			action: 'manual_adjust',
-			target_type: 'sop_profile',
-			target_id: profile._id,
-			reason,
-			context: { previous_version: prev.version, previous_id: prev._id, changes: safeChanges }
-		},
-		{ shelterCode: 'catalog', createdBy }
-	);
-
-	const deactivatedPrev: SopMasterProfile = {
-		...prev,
-		updated_at: new Date().toISOString(),
-		active: false
-	};
-
-		return { deactivatedPrev, profile, audit } as CreateNewVersionResult<T>;
-	} else {
-		// prev is SopOverride: ctx is guaranteed to be AuthorContext by the public overload
-		const overrideCtx = ctx as AuthorContext;
-		const overridePrev = prev as SopOverride;
-		const profile = makeDoc(
-			'sop_override',
-			1,
-			{
-				base_profile_id: overridePrev.base_profile_id,
-				name: overridePrev.name,
-				ratios: newRatios,
-				version: overridePrev.version + 1,
-				active: true
-			},
-			overrideCtx
-		) as SopOverride;
-
-		sopOverrideSchema.parse(profile);
-
-		const audit = createAuditEntry(
-			{
-				action: 'manual_adjust',
-				target_type: 'sop_override',
-				target_id: profile._id,
-				reason,
-				context: {
-					previous_version: overridePrev.version,
-					previous_id: overridePrev._id,
-					changes: safeChanges,
-					base_profile_id: overridePrev.base_profile_id
-				}
-			},
-			overrideCtx
-		);
-
-		const deactivatedPrev = {
-			...touch(overridePrev),
-			active: false
-		} as SopOverride;
-
-		return { deactivatedPrev, profile, audit } as CreateNewVersionResult<T>;
-	}
-}
-
-export function createNewOverrideVersion(
-	prev: SopOverrideProfile,
-	changes: Partial<Record<SopRatioKey, number>>,
-	reason: string,
-	ctx: AuthorContext
-): CreateNewVersionResult<SopOverrideProfile> {
-	const safeChanges: Partial<Record<SopRatioKey, number>> = {};
-	let hasChanges = false;
-
-	for (const key of SOP_RATIO_KEYS) {
-		if (changes[key] !== undefined) {
-			safeChanges[key] = changes[key];
-			if (prev.ratios[key] !== changes[key]) hasChanges = true;
-		}
-	}
-
-	if (!hasChanges) {
-		return { deactivatedPrev: null, profile: prev, audit: null } as CreateNewVersionResult<T>;
-	}
-
-	const newRatios = { ...prev.ratios, ...safeChanges };
-
 	if (prev.type === 'sop_profile') {
+		const createdBy = ctx.createdBy;
+
 		const profile = catalogDoc(
 			'sop_profile',
 			2,
@@ -360,7 +263,7 @@ export function createNewOverrideVersion(
 				version: prev.version + 1,
 				active: true
 			},
-			ctx.createdBy
+			createdBy
 		) as SopMaster;
 
 		sopMasterSchema.parse(profile);
@@ -371,19 +274,16 @@ export function createNewOverrideVersion(
 				target_type: 'sop_profile',
 				target_id: profile._id,
 				reason,
-				context: {
-					previous_version: prev.version,
-					previous_id: prev._id,
-					changes: safeChanges
-				}
+				context: { previous_version: prev.version, previous_id: prev._id, changes: safeChanges }
 			},
-			{ shelterCode: 'catalog', createdBy: ctx.createdBy }
+			{ shelterCode: 'catalog', createdBy }
 		);
 
-		const deactivatedPrev = {
-			...touch(prev),
+		const deactivatedPrev: SopMaster = {
+			...prev,
+			updated_at: new Date().toISOString(),
 			active: false
-		} as SopMaster;
+		};
 
 		return { deactivatedPrev, profile, audit } as CreateNewVersionResult<T>;
 	} else {

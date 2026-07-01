@@ -1,4 +1,4 @@
-import type { Donation, Donor } from '$lib/features/operations/domain/operations';
+import type { Donation, Donor } from '$lib/features/operations';
 
 export interface PublicDonor extends Donor {
 	line_id?: string;

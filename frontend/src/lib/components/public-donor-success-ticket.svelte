@@ -41,11 +41,19 @@
 			</div>
 			<div class="flex justify-between">
 				<span>จุดส่งมอบ:</span>
-				<span class="font-bold text-foreground">โรงเรียนเทศบาล 2</span>
+				<span class="font-bold text-foreground"
+					>{donationStore.shelterCode || 'ศูนย์พักพิงที่เลือก'}</span
+				>
 			</div>
 			<div class="flex justify-between">
 				<span>เวลาส่งมอบ:</span>
-				<span class="font-bold text-foreground">18 มิ.ย. 2026 - 15:00 น.</span>
+				<span class="font-bold text-foreground">
+					{#if donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup'}
+						{donationStore.slotDate} - {donationStore.slotTime}
+					{:else}
+						{donationStore.eta || '-'}
+					{/if}
+				</span>
 			</div>
 		</div>
 	</div>

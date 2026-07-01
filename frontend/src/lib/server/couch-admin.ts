@@ -63,8 +63,7 @@ export async function adminFetch<T>(path: string, init: RequestInit = {}): Promi
 		}
 	});
 	const data = (await res.json().catch(() => null)) as
-		| (T & { error?: string; reason?: string })
-		| null;
+		(T & { error?: string; reason?: string }) | null;
 	if (!res.ok) {
 		throw error(res.status, data?.reason ?? data?.error ?? `CouchDB error (${res.status})`);
 	}
@@ -119,11 +118,7 @@ export async function requireShelterManagerOrSA(
 // session-cookie authorization. These helpers keep the BFF on that contract.
 
 export type ServiceErrorCode =
-	| 'UNAUTHENTICATED'
-	| 'FORBIDDEN'
-	| 'VALIDATION'
-	| 'CONFLICT'
-	| 'INTERNAL';
+	'UNAUTHENTICATED' | 'FORBIDDEN' | 'VALIDATION' | 'CONFLICT' | 'INTERNAL';
 
 const STATUS_BY_CODE: Record<ServiceErrorCode, number> = {
 	UNAUTHENTICATED: 401,

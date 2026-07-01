@@ -5,17 +5,17 @@ import type { ShelterMaster } from '$lib/features/shelters/server';
 export const GET = async () => {
 	try {
 		const masters = await listShelterMasters();
-		
+
 		const visible = masters
-			.map(m => migrate(m as ShelterMaster))
-			.filter(m => m.operation_status !== 'closed');
-		
+			.map((m) => migrate(m as ShelterMaster))
+			.filter((m) => m.operation_status !== 'closed');
+
 		return json(
 			visible.map((m) => ({
 				code: m.code,
 				name: m.name,
-                status: m.operation_status,
-                capacity: m.capacity ?? 0
+				status: m.operation_status,
+				capacity: m.capacity ?? 0
 			}))
 		);
 	} catch (e) {

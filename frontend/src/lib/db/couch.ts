@@ -26,7 +26,10 @@ interface SessionResponse {
 }
 
 /** Thin fetch wrapper: sends cookies, parses JSON, throws CouchDB's reason on error. */
-export async function couchFetch<T>(path: string, init: RequestInit & { fetch?: typeof fetch } = {}): Promise<T> {
+export async function couchFetch<T>(
+	path: string,
+	init: RequestInit & { fetch?: typeof fetch } = {}
+): Promise<T> {
 	const fetchFn = init.fetch || fetch;
 	const res = await fetchFn(`${COUCH_URL}${path}`, {
 		credentials: 'include',
@@ -39,8 +42,7 @@ export async function couchFetch<T>(path: string, init: RequestInit & { fetch?: 
 	});
 
 	const data = (await res.json().catch(() => null)) as
-		| (T & { error?: string; reason?: string })
-		| null;
+		(T & { error?: string; reason?: string }) | null;
 
 	if (!res.ok) {
 		const message = data?.reason || data?.error || `CouchDB request failed (${res.status})`;

@@ -96,7 +96,9 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 	}
 
 	async listActive(): Promise<SopMaster[]> {
-		const db = this.db as PouchDB.Database & { find?: (req: object) => Promise<{ docs: unknown[] }> };
+		const db = this.db as PouchDB.Database & {
+			find?: (req: object) => Promise<{ docs: unknown[] }>;
+		};
 		if (typeof db.find === 'function') {
 			// TODO(provisioning): Ensure secondary index on ['type', 'active'] is created during DB init per CR-006 §indexes
 			try {
@@ -224,7 +226,9 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 	}
 
 	async listActive(): Promise<SopOverride[]> {
-		const db = this.db as PouchDB.Database & { find?: (req: object) => Promise<{ docs: unknown[] }> };
+		const db = this.db as PouchDB.Database & {
+			find?: (req: object) => Promise<{ docs: unknown[] }>;
+		};
 		if (typeof db.find === 'function') {
 			// TODO(provisioning): Ensure secondary index on ['type', 'active'] is created during DB init per CR-006 §indexes
 			try {
@@ -358,7 +362,9 @@ export async function resolveEffectiveRatios(
 	// 🛡️ Defensive Fallback: ป้องกันกรณี Database เอ๋อแล้วมี Active 2 ตัว
 	// โดยการบังคับเรียง version จากมากไปน้อย แล้วหยิบตัวล่าสุด (index 0) เสมอ
 	const safeOverride =
-		activeOverrides.length > 0 ? [...activeOverrides].sort((a, b) => b.version - a.version)[0] : null;
+		activeOverrides.length > 0
+			? [...activeOverrides].sort((a, b) => b.version - a.version)[0]
+			: null;
 
 	const safeMaster =
 		activeMasters.length > 0 ? [...activeMasters].sort((a, b) => b.version - a.version)[0] : null;
@@ -406,6 +412,9 @@ export function createSopMasterRepositoryForTest(db: PouchDB.Database): SopMaste
 	return new SopMasterPouchRepository(db);
 }
 
-export function createSopOverrideRepositoryForTest(shelterCode: string, db: PouchDB.Database): SopOverridePouchRepository {
+export function createSopOverrideRepositoryForTest(
+	shelterCode: string,
+	db: PouchDB.Database
+): SopOverridePouchRepository {
 	return new SopOverridePouchRepository(shelterCode, db);
 }

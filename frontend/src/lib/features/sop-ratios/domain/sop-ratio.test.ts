@@ -125,44 +125,51 @@ describe('SOP Ratio Domain', () => {
 		});
 	});
 
-	describe('Override Profile', () => {
-		it('should create valid override profile', () => {
-			const { profile, audit } = createInitialOverrideProfile(
-				'Custom Override',
-				'sop_profile:master1',
-				{ water_l_per_person_day: 20 },
-				ctx
-			);
-
-			expect(profile.name).toBe('Custom Override');
-			expect(profile.version).toBe(1);
-			expect(profile.active).toBe(true);
-			expect(profile.ratios.water_l_per_person_day).toBe(20);
-			expect(profile.type).toBe('sop_override');
-			expect(profile.shelter_code).toBe('SH001');
-			expect(profile.base_profile_id).toBe('sop_profile:master1');
-			expect(() => sopOverrideSchema.parse(profile)).not.toThrow();
-		});
-
-		it('should create new override version', () => {
-			const { profile: prev } = createInitialOverrideProfile(
-				'Custom Override',
-				'sop_profile:master1',
-				{ water_l_per_person_day: 20 },
-				ctx
-			);
-			const { deactivatedPrev, profile: next } = createNewOverrideVersion(
-				prev,
-				{ rice_g_per_person_meal: 200 },
-				'Update rice only',
+	describe('Idempotency and Partial Updates', () => {
+		it('should abort gracefully (Idempotent no-op) if changes yield identical state', () => {
+			const { profile: prev } = createInitialProfile(
+				'sop_profile',
+				'Sphere baseline',
+				{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 				masterCtx
 			);
 
-			// Untouched key must survive the partial update
-			expect(next.ratios.water_l_per_person_day).toBe(15);
-			// Changed key must reflect new value
-			expect(next.ratios.rice_g_per_person_meal).toBe(200);
+			const {
+				deactivatedPrev,
+				profile: next,
+				audit
+			} = createNewVersion(
+				prev,
+				{ water_l_per_person_day: 15, rice_g_per_person_meal: 200 },
+				'No actual change',
+				masterCtx
+			);
+
+			expect(deactivatedPrev).toBeNull();
+			expect(audit).toBeNull();
+			expect(next).toBe(prev);
+		});
+
+		it('should keep untouched ratio keys after partial update', () => {
+			const { profile: prev } = createInitialProfile(
+				'sop_override',
+				'Custom Override',
+				{ water_l_per_person_day: 20, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+				overrideCtx
+			);
+
+			const { profile: next } = createNewVersion(
+				prev,
+				{ rice_g_per_person_meal: 250 },
+				'Update rice only',
+				overrideCtx
+			);
+
+			// Untouched keys must survive the partial update
+			expect(next.ratios.water_l_per_person_day).toBe(20);
 			expect(next.ratios.toilet_per_person).toBe(0.05);
+			// Changed key must reflect new value
+			expect(next.ratios.rice_g_per_person_meal).toBe(250);
 			// A new doc must be created
 			expect(next._id).not.toBe(prev._id);
 			expect(next.version).toBe(2);
