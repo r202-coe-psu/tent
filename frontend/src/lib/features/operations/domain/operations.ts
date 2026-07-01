@@ -109,7 +109,7 @@ export interface DonationSlot extends BaseDoc {
 	type: 'donation_slot';
 	date: string; // YYYY-MM-DD
 	from: string; // HH:mm
-	to: string;   // HH:mm
+	to: string; // HH:mm
 	capacity: number;
 	status: 'open' | 'closed';
 	note?: string;
@@ -119,6 +119,7 @@ export interface CampaignNeed {
 	item_id: string;
 	qty_target: number;
 	unit: string;
+	status?: 'open' | 'closed';
 }
 
 export interface DonationCampaign extends BaseDoc {
@@ -322,7 +323,8 @@ export const campaignInputSchema = z.object({
 			z.object({
 				item_id: z.string().min(1),
 				qty_target: z.coerce.number().positive(),
-				unit: z.string().trim().min(1)
+				unit: z.string().trim().min(1),
+				status: z.enum(['open', 'closed']).optional().default('open')
 			})
 		)
 		.min(1, 'A campaign needs at least one item'),
@@ -337,7 +339,7 @@ export function createCampaign(input: CampaignInput, ctx: AuthorContext): Donati
 	const d = campaignInputSchema.parse(input);
 	return makeDoc(
 		'donation_campaign',
-		1,
+		2,
 		{
 			title: d.title,
 			needs: d.needs,
@@ -352,35 +354,64 @@ export function createCampaign(input: CampaignInput, ctx: AuthorContext): Donati
 }
 
 /**
- * Remaining open need per item: target minus what donations (declared+received,
- * not expired/cancelled) already cover. Drives `GET /public/v1/needs`
- * (data-model.md §4, view `needs_open`).
+ * Calculates the reserved donation amount that has been quota-cleared.
+ * This reserved amount includes:
+ * - Donation documents with a 'declared' status.
+ * - Donation documents with a 'received' status that have not yet been added to the inventory stock (no referenced ledger entry).
  */
-export function openNeeds(campaign: DonationCampaign, donations: Donation[], stockLedgers: StockLedger[]): CampaignNeed[] {
-	const onHand = stockBalance(stockLedgers);
-	const reserved = new Map<string, number>();
+export function calculateReserved(
+	donations: Donation[],
+	stockLedgers: StockLedger[],
+	campaignId?: string
+): Map<string, number> {
+	const keyedDonationIds = new Set<string>();
+	for (const ledger of stockLedgers) {
+		if (ledger.reason === 'donation' && ledger.ref_id) {
+			keyedDonationIds.add(ledger.ref_id);
+		}
+	}
 
+	const reserved = new Map<string, number>();
 	for (const don of donations) {
-		if (don.campaign_id !== campaign._id) continue;
-		if (don.status !== 'declared') continue;
+		if (campaignId && don.campaign_id !== campaignId) continue;
+		if (don.status === 'expired' || don.status === 'cancelled') continue;
+		const isUnkeyedReceived = don.status === 'received' && !keyedDonationIds.has(don._id);
+		if (don.status !== 'declared' && !isUnkeyedReceived) continue;
 		for (const item of don.items ?? []) {
 			if (!item.item_id) continue;
 			reserved.set(item.item_id, (reserved.get(item.item_id) ?? 0) + item.qty);
 		}
 	}
+	return reserved;
+}
+
+/**
+ * Remaining open need per item: target minus what donations (declared+received,
+ * not expired/cancelled) already cover. Drives `GET /public/v1/needs`
+ * (data-model.md §4, view `needs_open`).
+ */
+export function openNeeds(
+	campaign: DonationCampaign,
+	donations: Donation[],
+	stockLedgers: StockLedger[]
+): CampaignNeed[] {
+	const onHand = stockBalance(stockLedgers);
+	const reserved = calculateReserved(donations, stockLedgers, campaign._id);
 
 	return campaign.needs
 		.map((need) => {
 			const currentOnHand = onHand.get(need.item_id) ?? 0;
 			const currentReserved = reserved.get(need.item_id) ?? 0;
-			const remaining = need.qty_target - (currentOnHand + currentReserved)
+			const remaining = need.qty_target - (currentOnHand + currentReserved);
 
 			return {
 				...need,
 				qty_target: Math.max(0, remaining)
-			}
+			};
 		})
-		.filter((need) => need.qty_target > 0);
+		.filter(
+			(need) => need.qty_target > 0 && need.status !== 'closed' && campaign.status !== 'closed'
+		);
 }
 
 // ---------------------------------------------------------------- type guards
@@ -409,10 +440,11 @@ export function isNeedCutOff(
 	qtyTarget: number,
 	onHandStock: number,
 	reservedQty: number,
-	campaignStatus: 'open' | 'closed'
+	needStatus?: 'open' | 'closed',
+	campaignStatus?: 'open' | 'closed'
 ): boolean {
-	if (campaignStatus === 'closed') return true;
-	return (onHandStock + reservedQty) >= qtyTarget;
+	if (campaignStatus === 'closed' || needStatus === 'closed') return true;
+	return onHandStock + reservedQty >= qtyTarget;
 }
 
 // public donation time-slot booking (R2.3)
