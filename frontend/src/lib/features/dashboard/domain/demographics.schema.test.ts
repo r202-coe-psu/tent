@@ -7,7 +7,7 @@
  *   3. DemographicsPayloadSchema — rejects missing / negative fields
  */
 import { describe, it, expect } from 'vitest';
-import { rowsToAgeGroups, rowsToCountries, DemographicsPayloadSchema } from './schema';
+import { rowsToAgeGroups, rowsToCountries, DemographicsPayloadSchema } from './demographics.schema';
 
 describe('rowsToAgeGroups', () => {
 	it('correctly maps all defined age buckets', () => {

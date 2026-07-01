@@ -13,7 +13,7 @@ import {
 	defaultDateRange,
 	RegistrationsQuerySchema,
 	RegistrationsPayloadSchema
-} from './schema';
+} from './registration.schema';
 
 describe('rowsToRegistrationsPayload', () => {
 	it('aggregates daily counts and computes total', () => {

@@ -22,7 +22,7 @@ import {
 	DemographicsPayloadSchema,
 	rowsToAgeGroups,
 	rowsToCountries
-} from '$lib/features/dashboard-demographics';
+} from '$lib/features/dashboard';
 import type { ViewResult } from '$lib/server/shelters.admin';
 
 export const prerender = false;

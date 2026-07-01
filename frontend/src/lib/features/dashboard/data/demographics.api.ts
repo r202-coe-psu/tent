@@ -4,7 +4,7 @@
  * Client-side API caller for the back-office demographics dashboard endpoint.
  * Never calls CouchDB directly from the browser.
  */
-import type { DemographicsPayload } from '../domain/schema';
+import type { DemographicsPayload } from '../domain/demographics.schema';
 import { serviceFetch } from '$lib/api/service';
 
 /**

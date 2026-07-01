@@ -27,7 +27,7 @@ import {
 	RegistrationsPayloadSchema,
 	rowsToRegistrationsPayload,
 	defaultDateRange
-} from '$lib/features/dashboard-registration';
+} from '$lib/features/dashboard';
 import type { ViewResult } from '$lib/server/shelters.admin';
 
 export const prerender = false;

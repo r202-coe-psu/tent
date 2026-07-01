@@ -4,7 +4,7 @@
  * Client-side API caller for the back-office registrations dashboard endpoint.
  * Never calls CouchDB directly from the browser.
  */
-import type { RegistrationsPayload } from '../domain/schema';
+import type { RegistrationsPayload } from '../domain/registration.schema';
 import { serviceFetch } from '$lib/api/service';
 
 /**

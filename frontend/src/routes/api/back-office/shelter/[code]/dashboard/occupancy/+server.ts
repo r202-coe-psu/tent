@@ -19,7 +19,7 @@ import {
 	serviceError,
 	ServiceError
 } from '$lib/server/couch-admin';
-import { rowsToOccupancyPayload, OccupancyPayloadSchema } from '$lib/features/dashboard-occupancy';
+import { rowsToOccupancyPayload, OccupancyPayloadSchema } from '$lib/features/dashboard';
 import type { ViewResult } from '$lib/server/shelters.admin';
 
 export const prerender = false;
