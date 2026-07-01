@@ -55,7 +55,7 @@ import { createInitialProfile } from '$lib/features/sop-ratios/domain/sop-ratio'
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
-import { SHELTER_DASHBOARD_VIEWS } from '$lib/features/shelters/server';
+import { deployShelterViewsFn } from '$lib/features/shelters/server';
 
 // ─── env ──────────────────────────────────────────────────────────────────────
 
@@ -415,7 +415,7 @@ async function seedShelter(): Promise<void> {
 		admins: { names: [], roles: ['system_admin'] },
 		members: { names: [], roles: [`shelter:${SHELTER_CODE}`] }
 	});
-	await deployShelterViews(SHELTER_DB);
+	await deployShelterViewsFn(SHELTER_DB, (path, method, body) => couchReq(method, path, body));
 
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
@@ -728,7 +728,7 @@ async function seedShelter2(): Promise<void> {
 		admins: { names: [], roles: ['system_admin'] },
 		members: { names: [], roles: [`shelter:${SHELTER_CODE_2}`] }
 	});
-	await deployShelterViews(SHELTER_DB_2);
+	await deployShelterViewsFn(SHELTER_DB_2, (path, method, body) => couchReq(method, path, body));
 
 	const { status, data } = await couchReq('GET', `/${SHELTER_DB_2}/_all_docs?limit=1`);
 	if (status === 200 && (data as { rows?: unknown[] }).rows?.length) {
@@ -869,24 +869,6 @@ async function seedDashboardData(): Promise<void> {
 	console.log(`  [Country]:`, stats.country);
 	console.log(`  [Age]    :`, stats.age);
 	console.log(`  --------------------------------------------\n`);
-}
-
-// ─── deployShelterViews ──────────────────────────────────────────────────────
-
-async function deployShelterViews(db: string): Promise<void> {
-	const appDesign = JSON.parse(JSON.stringify(SHELTER_DASHBOARD_VIEWS));
-
-	const existing = await couchReq('GET', `/${db}/_design/app`);
-	if (existing.status === 200) {
-		appDesign['_rev'] = (existing.data as { _rev: string })._rev;
-	}
-
-	const res = await couchReq('PUT', `/${db}/_design/app`, appDesign);
-	if (res.status >= 400) {
-		console.error(`  ✗ Failed to deploy views to ${db}`);
-	} else {
-		console.log(`  ✓ ${db}: views deployed`);
-	}
 }
 
 // ─── deleteDashboardData ──────────────────────────────────────────────────────

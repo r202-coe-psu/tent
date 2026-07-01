@@ -16,7 +16,7 @@ import {
 	migrateShelterV2ToCurrent,
 	type ShelterMaster,
 	type ShelterMasterV2,
-	SHELTER_DASHBOARD_VIEWS
+	deployShelterViewsFn
 } from '$lib/features/shelters/server';
 
 export interface ViewResult {
@@ -193,21 +193,10 @@ function uniq<T>(arr: T[]): T[] {
  * fetched first and sent on the PUT (Read-Modify-Write; skill §3).
  */
 export async function deployShelterViews(db: string): Promise<number> {
-	const appDesign: { _id: string; _rev?: string; views: Record<string, { map: string; reduce: string }> } = JSON.parse(JSON.stringify(SHELTER_DASHBOARD_VIEWS));
-
-	// Read-Modify-Write: fetch existing _rev to avoid 409 Conflict (skill §3).
-	const existing = await adminRaw(`/${db}/_design/app`, 'GET');
-	if (existing.status === 200) {
-		appDesign['_rev'] = (existing.data as { _rev: string })._rev;
+	try {
+		return await deployShelterViewsFn(db, (path, method, body) => adminRaw(path, method, body));
+	} catch (e: unknown) {
+		const msg = e instanceof Error ? e.message : String(e);
+		throw new ServiceError('INTERNAL', msg);
 	}
-
-	const res = await adminRaw(`/${db}/_design/app`, 'PUT', appDesign);
-	if (res.status >= 400) {
-		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
-		throw new ServiceError(
-			'INTERNAL',
-			`Failed to deploy _design/app to ${db} (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
-		);
-	}
-	return res.status;
 }

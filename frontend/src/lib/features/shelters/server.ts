@@ -25,3 +25,4 @@ export {
 } from './domain/schema';
 
 export { SHELTER_DASHBOARD_VIEWS } from './domain/views';
+export { deployShelterViewsFn, type CouchClient } from './server/deploy';
