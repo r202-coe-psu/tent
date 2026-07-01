@@ -1,7 +1,11 @@
 export interface DonationItem {
+	id: string;
+	category?: string;
 	name: string;
 	amount: number;
 	unit: string;
+	condition?: string;
+	remark?: string;
 }
 
 export type TabStep = 'needs' | 'form' | 'time' | 'ticket';
@@ -14,9 +18,27 @@ class DonationStore {
 	donorPhone = $state('');
 	donorLine = $state('');
 	donorEmail = $state('');
-	taxReceipt = $state(false);
 
-	items = $state<DonationItem[]>([]);
+	deliveryMethod = $state<'self_dropoff' | 'parcel' | 'shelter_pickup'>('self_dropoff');
+	vehicleType = $state<'motorcycle' | 'car' | 'pickup' | 'truck' | undefined>(undefined);
+	slotDate = $state('');
+	slotTime = $state('');
+	shelterCode = $state('');
+	courierTrackingNo = $state('');
+	eta = $state('');
+	pickupAddress = $state('');
+
+	items = $state<DonationItem[]>([
+		{
+			id: crypto.randomUUID(),
+			category: 'food',
+			name: '',
+			amount: 1,
+			unit: 'ชิ้น',
+			condition: '',
+			remark: ''
+		}
+	]);
 
 	captchaToken = $state('');
 	isSubmitting = $state(false);
@@ -24,11 +46,19 @@ class DonationStore {
 	trackingToken = $state('');
 
 	addItem() {
-		this.items.push({ name: '', amount: 1, unit: 'ชิ้น' });
+		this.items.push({
+			id: crypto.randomUUID(),
+			category: 'food',
+			name: '',
+			amount: 1,
+			unit: 'ชิ้น',
+			condition: '',
+			remark: ''
+		});
 	}
 
-	removeItem(index: number) {
-		this.items = this.items.filter((_, i) => i !== index);
+	removeItem(id: string) {
+		this.items = this.items.filter((item) => item.id !== id);
 	}
 
 	reset() {
@@ -38,8 +68,25 @@ class DonationStore {
 		this.donorPhone = '';
 		this.donorLine = '';
 		this.donorEmail = '';
-		this.taxReceipt = false;
-		this.items = [];
+		this.deliveryMethod = 'self_dropoff';
+		this.vehicleType = undefined;
+		this.slotDate = '';
+		this.slotTime = '';
+		this.shelterCode = '';
+		this.courierTrackingNo = '';
+		this.eta = '';
+		this.pickupAddress = '';
+		this.items = [
+			{
+				id: crypto.randomUUID(),
+				category: 'food',
+				name: '',
+				amount: 1,
+				unit: 'ชิ้น',
+				condition: '',
+				remark: ''
+			}
+		];
 		this.captchaToken = '';
 		this.isSubmitting = false;
 		this.errorMessage = '';
@@ -47,4 +94,16 @@ class DonationStore {
 	}
 }
 
-export const donationStore = new DonationStore();
+import { setContext, getContext } from 'svelte';
+const DONATION_KEY = Symbol('DONATION');
+export function setDonationStore() {
+	return setContext(DONATION_KEY, new DonationStore());
+}
+export function getDonationStore() {
+	const store = getContext<DonationStore>(DONATION_KEY);
+	if (!store)
+		throw new Error(
+			'getDonationStore must be used within a component that called setDonationStore'
+		);
+	return store;
+}

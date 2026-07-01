@@ -137,9 +137,7 @@ export function createInitialProfile(
 	// Filter out any unexpected keys for safety
 	const safeRatios = {} as Record<SopRatioKey, number>;
 	for (const key of SOP_RATIO_KEYS) {
-		if (ratios[key] !== undefined) {
-			safeRatios[key] = ratios[key];
-		}
+		if (ratios[key] !== undefined) safeRatios[key] = ratios[key];
 	}
 
 	if (targetType === 'sop_profile') {
@@ -244,9 +242,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 	for (const key of SOP_RATIO_KEYS) {
 		if (changes[key] !== undefined) {
 			safeChanges[key] = changes[key];
-			if (prev.ratios[key] !== changes[key]) {
-				hasChanges = true;
-			}
+			if (prev.ratios[key] !== changes[key]) hasChanges = true;
 		}
 	}
 
@@ -254,10 +250,10 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 		return { deactivatedPrev: null, profile: prev, audit: null } as CreateNewVersionResult<T>;
 	}
 
-	// Merge old and new ratios safely
 	const newRatios = { ...prev.ratios, ...safeChanges };
-
 	if (prev.type === 'sop_profile') {
+		const createdBy = ctx.createdBy;
+
 		const profile = catalogDoc(
 			'sop_profile',
 			2,
@@ -267,7 +263,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 				version: prev.version + 1,
 				active: true
 			},
-			ctx.createdBy
+			createdBy
 		) as SopMaster;
 
 		sopMasterSchema.parse(profile);
@@ -278,19 +274,16 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 				target_type: 'sop_profile',
 				target_id: profile._id,
 				reason,
-				context: {
-					previous_version: prev.version,
-					previous_id: prev._id,
-					changes: safeChanges
-				}
+				context: { previous_version: prev.version, previous_id: prev._id, changes: safeChanges }
 			},
-			{ shelterCode: 'catalog', createdBy: ctx.createdBy }
+			{ shelterCode: 'catalog', createdBy }
 		);
 
-		const deactivatedPrev = {
-			...touch(prev),
+		const deactivatedPrev: SopMaster = {
+			...prev,
+			updated_at: new Date().toISOString(),
 			active: false
-		} as SopMaster;
+		};
 
 		return { deactivatedPrev, profile, audit } as CreateNewVersionResult<T>;
 	} else {

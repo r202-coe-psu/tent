@@ -44,8 +44,8 @@ describe('RateLimiter', () => {
 		limiter.check('ip4');
 		limiter.check('ip4');
 		limiter.check('ip4');
-		
+
 		expect(limiter.check('ip4')).toBe(false); // ip4 blocked
-		expect(limiter.check('ip5')).toBe(true);  // ip5 allowed
+		expect(limiter.check('ip5')).toBe(true); // ip5 allowed
 	});
 });

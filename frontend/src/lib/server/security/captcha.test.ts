@@ -19,7 +19,7 @@ describe('ReCaptchaProvider', () => {
 
 		expect(result).toBe(true);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
-		
+
 		const callArgs = fetchMock.mock.calls[0];
 		expect(callArgs[0]).toBe('https://www.google.com/recaptcha/api/siteverify');
 		expect(callArgs[1].body.toString()).toContain('response=valid-token');
@@ -43,7 +43,7 @@ describe('ReCaptchaProvider', () => {
 
 		expect(result).toBe(false);
 	});
-	
+
 	it('should handle fetch errors gracefully and return false', async () => {
 		fetchMock.mockRejectedValue(new Error('Network error'));
 

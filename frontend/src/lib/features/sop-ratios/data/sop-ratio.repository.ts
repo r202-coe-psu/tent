@@ -32,7 +32,11 @@ export interface SopOverrideRepository {
 		deactivatedPrev: SopOverride | null,
 		profile: SopOverride,
 		audit: AuditEntry | null
-	): Promise<{ profile: SopOverride; deactivatedPrev: SopOverride | null; audit: AuditEntry | null }>;
+	): Promise<{
+		profile: SopOverride;
+		deactivatedPrev: SopOverride | null;
+		audit: AuditEntry | null;
+	}>;
 
 	/**
 	 * Sets the override profile as active for the shelter.
