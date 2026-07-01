@@ -1,12 +1,19 @@
 ---
+id: CR-020
+title: Back-office Dashboard API Architecture (T-52)
 status: approved
-created: 2026-06-29
-updated: 2026-06-29
+date: 2026-06-29
+requested_by: project owner
+decided_by: project owner
+layer: volatile
 affects:
   - T-52
+  - frontend/src/routes/api/back-office/shelter/[code]/dashboard/*
+  - frontend/src/lib/features/dashboard-{occupancy,demographics,registration}/*
+  - frontend/CONVENTIONS.md §5
 ---
 
-# CR-020: Back-office Dashboard API Architecture (T-52)
+# CR-020 — Back-office Dashboard API Architecture (T-52)
 
 **สรุป (TL;DR):** วางโครงสร้าง API ของ Dashboard สำหรับระบบ Back-office (T-52) เพิ่มสคริปต์สร้าง CouchDB View (MapReduce) สำหรับดึงสถิติรายศูนย์แบบ Real-time และแยก Feature Domain ให้ชัดเจนตามหลัก DDD
 

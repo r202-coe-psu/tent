@@ -17,7 +17,7 @@ affects:
   - src/routes/(protected)/registration-config/ — route ใหม่
 ---
 
-# CR-010 — Master Data Engine (Phase 1: CRUD only)
+# CR-012 — Master Data Engine (Phase 1: CRUD only)
 
 ## Why
 
@@ -218,7 +218,7 @@ interface MasterDataItem {
   | จัดการ Master Data (vulnerable/health/dietary/pet/house_damage) | new | ✓ | — | — | — | — |
   ```
 - `docs/status/schema-v3-implementation-status.md` — เพิ่ม row `master_data` ใน table "DBs ใน catalog/registry" ✗ → ✓
-- `docs/changes/_index.md` — เพิ่ม row CR-010 (proposed)
+- `docs/changes/_index.md` — เพิ่ม row CR-012 (proposed)
 
 ### Code (frontend — feature ใหม่ทั้ง feature)
 
