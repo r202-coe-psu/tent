@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, serviceError, ServiceError } from '$lib/server/couch-admin';
-import { openNeeds, type Donation, type DonationCampaign } from '$lib/features/operations';
+import { openNeeds, type Donation, type DonationCampaign } from '$lib/features/operations/domain/operations';
 
 interface ShelterMaster {
 	_id: string;
