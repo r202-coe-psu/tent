@@ -1,34 +1,33 @@
 /**
- * Dev-only seed helper — creates the initial SOP ratio profile in the shelter DB.
- * Run once per fresh DB. Safe to re-run (409 conflict = already seeded, ignored).
+ * Dev-only seed helper — creates the initial SOP master profile in the catalog DB.
+ * Idempotent: skips if any active master profile already exists.
  *
  * Usage (browser console or a dev route):
  *   import { seedDefaultSopProfile } from '$lib/features/sop-ratios/data/sop-ratio.seed';
  *   await seedDefaultSopProfile();
  */
-import { namedLocalDb } from '$lib/db/pouch';
-import { SHELTER_DB, SHELTER_CODE } from '$lib/db/shelter';
 import { createInitialProfile } from '../domain/sop-ratio';
+import { sopMasterRepository } from './sop-ratio.pouch';
 
 export async function seedDefaultSopProfile(): Promise<void> {
-	const db = namedLocalDb(SHELTER_DB);
-	const ctx = { shelterCode: SHELTER_CODE, createdBy: 'seed' };
+	const masterRepo = sopMasterRepository();
+	const existing = await masterRepo.listActive();
+	if (existing.length > 0) {
+		console.info('[seed] SOP profile already exists — skipped');
+		return;
+	}
 
 	const { profile, audit } = createInitialProfile(
+		'sop_profile',
 		'SOP มาตรฐาน',
-		{ rice_g_per_person_meal: 150 },
-		ctx
+		{
+			water_l_per_person_day: 15,
+			rice_g_per_person_meal: 150,
+			toilet_per_person: 0.05
+		},
+		{ createdBy: 'seed' }
 	);
 
-	try {
-		await db.put(profile);
-		await db.put(audit);
-		console.info('[seed] SOP profile created:', profile._id);
-	} catch (e) {
-		if ((e as { status?: number }).status === 409) {
-			console.info('[seed] SOP profile already exists — skipped');
-		} else {
-			throw e;
-		}
-	}
+	await masterRepo.createVersion(null, profile, audit);
+	console.info('[seed] SOP profile created:', profile._id);
 }

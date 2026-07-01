@@ -3,7 +3,7 @@ import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { kitchenRepository } from '../data/kitchen.pouch';
-import { sopRatioRepository } from '$lib/features/sop-ratios/data/sop-ratio.pouch';
+import { getActiveSopProfile } from '$lib/features/sop-ratios';
 import type { MealPlanInput, KitchenRequisitionInput, MealServiceInput, GasCylinderTypeInput } from '../domain/kitchen';
 import { calculateMealIngredients } from '../domain/meal-calc';
 import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
@@ -43,7 +43,7 @@ export const useCreateMealPlanCalc = () =>
 			headcount: MealPlanHeadcount;
 			ctx: AuthorContext;
 		}) => {
-			const profile = await sopRatioRepository().getActiveProfile();
+			const profile = await getActiveSopProfile();
 			if (!profile) throw new Error('No active SOP profile found — seed one first');
 			const riceG = profile.ratios.rice_g_per_person_meal;
 			if (!riceG) throw new Error('Active SOP profile missing rice_g_per_person_meal');
