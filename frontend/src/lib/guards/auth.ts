@@ -57,7 +57,7 @@ export async function requireManager() {
 
 /**
  * Kitchen guard — requires system_admin, shelter_manager, or the `kitchen_staff`
- * capability (CR-023). This is a UX gate; the data layer remains the real
+ * capability (CR-024). This is a UX gate; the data layer remains the real
  * authorization boundary. Redirects to / when authenticated but unauthorized.
  */
 export async function requireKitchen() {

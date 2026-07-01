@@ -1,5 +1,5 @@
 ---
-id: CR-023
+id: CR-024
 title: Kitchen back-office routes require kitchen_staff capability (T-25)
 status: approved
 date: 2026-07-01
@@ -13,7 +13,7 @@ affects:
   - frontend/src/routes/(protected)/back-office/kitchen/**/+page.ts
 ---
 
-# CR-023 — Kitchen route capability guard
+# CR-024 — Kitchen route capability guard
 
 ## Why
 
