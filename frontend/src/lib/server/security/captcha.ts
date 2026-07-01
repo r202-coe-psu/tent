@@ -9,9 +9,9 @@ export class ReCaptchaProvider implements CaptchaProvider {
 		this.secretKey = secretKey;
 	}
 
-	async verifyToken(token: string, ip?: string): Promise<boolean> {
+	async verifyToken(token: string, ip?: string, expectedAction?: string): Promise<boolean> {
 		if (!token) return false;
-		
+
 		try {
 			const params = new URLSearchParams();
 			params.append('secret', this.secretKey);
@@ -29,7 +29,16 @@ export class ReCaptchaProvider implements CaptchaProvider {
 			});
 
 			const data = await res.json();
-			return data.success === true;
+
+			if (data.success) {
+				// reCAPTCHA v3 returns a score
+				if (data.score !== undefined) {
+					if (data.score < 0.5) return false;
+					if (expectedAction && data.action !== expectedAction) return false;
+				}
+				return true;
+			}
+			return false;
 		} catch (err) {
 			console.error('ReCaptcha verification failed:', err);
 			return false;

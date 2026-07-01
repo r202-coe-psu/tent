@@ -9,8 +9,9 @@ services:
       - "5984:5984"
     volumes:
       - ../deployment/couchdb/data:/opt/couchdb/data
+      - ./couchdb-session.ini:/opt/couchdb/etc/local.d/session.ini
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:5984/_up" ]
+      test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -34,3 +35,5 @@ services:
 
 networks:
   default:
+
+

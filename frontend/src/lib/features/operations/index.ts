@@ -62,4 +62,3 @@ export {
 	useReceiveStock,
 	startOperationsLiveQuery
 } from './application/queries';
-
