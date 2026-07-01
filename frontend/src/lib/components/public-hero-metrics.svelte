@@ -1,6 +1,9 @@
 <script lang="ts">
 	import Search from '@lucide/svelte/icons/search';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import Input from './ui/input/input.svelte';
+	import Button from './ui/button/button.svelte';
+	import Card from './ui/card/card.svelte';
 
 	let {
 		summary,
@@ -15,9 +18,9 @@
 	} = $props();
 </script>
 
-<div class="mb-12 overflow-hidden rounded-2xl bg-primary text-white shadow-lg relative">
+<div class="mb-12 px-16 py-12 overflow-hidden rounded-2xl bg-primary text-white shadow-lg relative">
 	<div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 24px 24px;"></div>
-	<div class="relative px-6 py-12 md:px-12 md:py-16 grid grid-cols-1 lg:grid-cols-2 gap-10">
+	<div class="relative  flex flex-col md:flex-row gap-10">
 		<!-- Text Content -->
 		<div class="flex flex-col justify-center">
 			<div class="mb-4 inline-flex items-center w-fit gap-2 rounded-lg bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white/90 backdrop-blur-sm border border-white/20">
@@ -35,21 +38,7 @@
 			</p>
 
 			<!-- Mock search field -->
-			<div class="flex flex-col w-full gap-3 sm:flex-row sm:items-center max-w-md">
-				<div class="relative w-full flex-1">
-					<input
-						type="text"
-						placeholder="ค้นหาญาติด้วย ชื่อ-นามสกุล หรือ รหัสประจำตัว..."
-						class="w-full rounded-xl border-0 bg-background px-4 py-3 pl-11 text-sm text-foreground placeholder-muted-foreground shadow-md outline-hidden focus:ring-2 focus:ring-chart-2"
-					/>
-					<Search class="absolute top-3.5 left-4 h-4 w-4 text-slate-400" />
-				</div>
-				<button
-					class="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-secondary px-6 py-3 text-sm font-bold text-secondary-foreground shadow-md transition-colors hover:bg-secondary/80"
-				>
-					ค้นหาญาติเดี๋ยวนี้
-				</button>
-			</div>
+			
 		</div>
 
 		<!-- Metrics Panel -->
@@ -62,7 +51,7 @@
 					</div>
 				{/if}
 
-				<div class="mb-4 flex items-center justify-between border-b border-slate-100 pb-4">
+				<div class=" flex items-center justify-between border-b border-slate-100 pb-4">
 					<h3 class="font-bold text-card-foreground uppercase text-xs tracking-wider">สถานการณ์ปัจจุบัน ณ ขณะนี้ (Real-Time Metrics)</h3>
 					<span class="text-[10px] text-muted-foreground">อัปเดตล่าสุด: {new Date(lastUpdated).toLocaleTimeString('th-TH')}</span>
 				</div>
@@ -91,4 +80,19 @@
 			</div>
 		</div>
 	</div>
+	<Card class="flex px-4 py-2 w-full! justify-between flex-col sm:flex-row sm:items-center gap-4">
+			<div class="relative flex w-full flex-1 items-center gap-3">
+				<Search class="size-6 shrink-0 text-bold text-primary ml-2" />
+				<Input
+					type="text"
+					placeholder="ค้นหาญาติด้วย ชื่อ-นามสกุล หรือ รหัสประจำตัว..."
+					class="w-full rounded-xl h-12 border-0 bg-background px-4 py-3 text-sm text-foreground placeholder-muted-foreground shadow-md outline-hidden focus:ring-2 focus:ring-chart-2"
+				/>
+			</div>
+			<Button
+				class="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-md transition-colors hover:bg-primary/80"
+			>
+				ค้นหาญาติเดี๋ยวนี้
+			</Button>
+		</Card>
 </div>
