@@ -38,6 +38,12 @@ export const useUpdateEvacuee = () =>
 		mutationFn: (evacuee: Evacuee) => peopleRepository().updateEvacuee(evacuee)
 	}));
 
+export const useCheckInEvacuee = () =>
+	createMutation(() => ({
+		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
+			peopleRepository().checkInEvacuee(evacuee, ctx, evacuee.current_stay.zone)
+	}));
+
 export function startPeopleLiveQuery(queryClient: QueryClient): LiveQueryHandle {
 	return startLiveQuery(shelterDb(), queryClient, (type) =>
 		type === 'evacuee' ? [peopleKeys.evacuees(), [...peopleKeys.all, 'evacuees']] : []

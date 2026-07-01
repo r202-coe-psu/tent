@@ -3,14 +3,38 @@ import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { kitchenRepository } from '../data/kitchen.pouch';
-import type { MealPlanInput, KitchenRequisitionInput, MealServiceInput } from '../domain/kitchen';
+import { getActiveSopProfile } from '$lib/features/sop-ratios';
+import { peopleRepository } from '$lib/features/people';
+import type {
+	MealPlan,
+	MealPlanInput,
+	KitchenRequisitionInput,
+	MealServiceInput,
+	GasCylinderType,
+	GasCylinderTypeInput
+} from '../domain/kitchen';
+import { calculateMealIngredients } from '../domain/meal-calc';
+import { deriveHeadcountFromOccupancy } from '../domain/occupancy';
+import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
 
 export const kitchenKeys = {
 	all: ['kitchen'] as const,
 	mealPlans: () => [...kitchenKeys.all, 'meal_plans'] as const,
 	requisitions: () => [...kitchenKeys.all, 'requisitions'] as const,
-	mealServices: () => [...kitchenKeys.all, 'meal_services'] as const
+	mealServices: () => [...kitchenKeys.all, 'meal_services'] as const,
+	gasCylinderTypes: () => [...kitchenKeys.all, 'gas_cylinder_types'] as const,
+	occupancy: () => [...kitchenKeys.all, 'occupancy'] as const
 };
+
+// --- Occupancy (T-06 handoff) ---
+// Live headcount derived from currently checked-in evacuees. Re-derives on any
+// evacuee change via the kitchen live-query, so meal-plan previews re-calc.
+
+export const useOccupancyHeadcount = () =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.occupancy(),
+		queryFn: async () => deriveHeadcountFromOccupancy(await peopleRepository().listEvacuees())
+	}));
 
 // --- MealPlan ---
 
@@ -24,6 +48,44 @@ export const useCreateMealPlan = () =>
 	createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: MealPlanInput; ctx: AuthorContext }) =>
 			kitchenRepository().createMealPlan(input, ctx)
+	}));
+
+export const useCreateMealPlanCalc = () =>
+	createMutation(() => ({
+		mutationFn: async ({
+			date,
+			meal,
+			headcount,
+			override_reason,
+			ctx
+		}: {
+			date: string;
+			meal: MealPeriod;
+			headcount: MealPlanHeadcount;
+			override_reason?: string | null;
+			ctx: AuthorContext;
+		}) => {
+			const profile = await getActiveSopProfile();
+			if (!profile) throw new Error('No active SOP profile found — seed one first');
+			const riceG = profile.ratios.rice_g_per_person_meal;
+			if (!riceG) throw new Error('Active SOP profile missing rice_g_per_person_meal');
+			const { recipes, calc_source } = calculateMealIngredients(
+				headcount,
+				riceG,
+				profile._id,
+				profile.version,
+				new Date().toISOString()
+			);
+			return kitchenRepository().createMealPlan(
+				{ date, meal, headcount, recipes, calc_source, override_reason },
+				ctx
+			);
+		}
+	}));
+
+export const useConfirmMealPlan = () =>
+	createMutation(() => ({
+		mutationFn: (plan: MealPlan) => kitchenRepository().confirmMealPlan(plan)
 	}));
 
 // --- KitchenRequisition ---
@@ -54,6 +116,31 @@ export const useRecordMealService = () =>
 			kitchenRepository().recordMealService(input, ctx)
 	}));
 
+// --- GasCylinderType ---
+
+export const useGasCylinderTypes = () =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.gasCylinderTypes(),
+		queryFn: () => kitchenRepository().listGasCylinderTypes()
+	}));
+
+export const useCreateGasCylinderType = () =>
+	createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: GasCylinderTypeInput; ctx: AuthorContext }) =>
+			kitchenRepository().createGasCylinderType(input, ctx)
+	}));
+
+export const useUpdateGasCylinderType = () =>
+	createMutation(() => ({
+		mutationFn: ({ doc, input }: { doc: GasCylinderType; input: GasCylinderTypeInput }) =>
+			kitchenRepository().updateGasCylinderType(doc, input)
+	}));
+
+export const useDeleteGasCylinderType = () =>
+	createMutation(() => ({
+		mutationFn: (doc: GasCylinderType) => kitchenRepository().deleteGasCylinderType(doc)
+	}));
+
 // --- Live sync ---
 
 export function startKitchenLiveQuery(queryClient: QueryClient): LiveQueryHandle {
@@ -65,6 +152,12 @@ export function startKitchenLiveQuery(queryClient: QueryClient): LiveQueryHandle
 				return [kitchenKeys.requisitions()];
 			case 'meal_service':
 				return [kitchenKeys.mealServices()];
+			case 'gas_cylinder_type':
+				return [kitchenKeys.gasCylinderTypes()];
+			case 'evacuee':
+			case 'movement':
+				// Occupancy changes (check-in/out) → re-derive the live headcount.
+				return [kitchenKeys.occupancy()];
 			default:
 				return [];
 		}
