@@ -15,8 +15,13 @@ import { adminRaw, ServiceError } from './couch-admin';
 import {
 	migrateShelterV2ToCurrent,
 	type ShelterMaster,
-	type ShelterMasterV2
+	type ShelterMasterV2,
+	deployShelterViewsFn
 } from '$lib/features/shelters/server';
+
+export interface ViewResult {
+	rows: { key: string; value: number }[];
+}
 
 export const SHELTER_REGISTRY_DB = 'registry';
 
@@ -169,4 +174,29 @@ export async function mergeShelterSecurity(
 
 function uniq<T>(arr: T[]): T[] {
 	return [...new Set(arr)];
+}
+
+/**
+ * Deploy CouchDB Design Documents (Views) for a shelter database.
+ *
+ * CR-020 (T-52): Adds 4 MapReduce views under the single `_design/app` design
+ * document (couchdb-pouchdb-bestpractices §6 — one design doc per db).
+ *
+ * Views deployed:
+ *   - `occupancy`               — count by `current_stay.status` (total / checked_in / checked_out)
+ *   - `demographics_by_age`     — count by age-bucket string, derived from `birth_year` (พ.ศ.)
+ *   - `demographics_by_country`     — count by `country` field (req); falls back to 'unknown'
+ *   - `registrations_by_date`   — count evacuee docs by `created_at` date (YYYY-MM-DD)
+ *
+ * All views use `?group=true` for per-key breakdown (see CONVENTIONS.md §5).
+ * Views are idempotent: if `_design/app` already exists the current `_rev` is
+ * fetched first and sent on the PUT (Read-Modify-Write; skill §3).
+ */
+export async function deployShelterViews(db: string): Promise<number> {
+	try {
+		return await deployShelterViewsFn(db, (path, method, body) => adminRaw(path, method, body));
+	} catch (e: unknown) {
+		const msg = e instanceof Error ? e.message : String(e);
+		throw new ServiceError('INTERNAL', msg);
+	}
 }
