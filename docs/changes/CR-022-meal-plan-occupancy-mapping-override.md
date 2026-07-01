@@ -9,7 +9,7 @@ layer: volatile
 affects:
   - docs/data/schema.md §2.5 (meal_plan — headcount source + override_reason rule)
   - frontend/src/lib/features/kitchen/{domain,application,ui}
-  - refines CR-021 headcount sub-count invariant (sum→per-field)
+  - refines CR-025 headcount sub-count invariant (sum→per-field)
 ---
 
 # CR-022 — meal_plan occupancy→headcount mapping + override rule + T-26 handoff
@@ -29,7 +29,7 @@ override_reason, และ contract การส่งต่อ T-26.
 - `infant` = checked_in ที่ `special_needs` มี `'infant'`
 - `soft_food` = checked_in ที่ `special_needs` มีอย่างน้อยหนึ่งใน `['bedridden','chronic_illness','elderly']`
 
-**2. Sub-count invariant (refine CR-021)** — เปลี่ยนจาก "ผลรวม ≤ total" เป็น **"แต่ละช่อง ≤ total"**
+**2. Sub-count invariant (refine CR-025)** — เปลี่ยนจาก "ผลรวม ≤ total" เป็น **"แต่ละช่อง ≤ total"**
 (`halal ≤ total`, `soft_food ≤ total`, `infant ≤ total`). เหตุผล: sub-count เป็นมิติที่ตั้งฉากกัน
 (orthogonal) — คนหนึ่งเป็นได้ทั้ง muslim และ infant → ผลรวมเกิน total ได้ตามปกติ จึงบวกกันไม่ได้
 
@@ -51,7 +51,7 @@ override_reason, และ contract การส่งต่อ T-26.
   `ui/meal-plan-list.svelte` (LIVE COUNT badge + override indicator)
 - test — occupancy.test.ts, meal-calc.test.ts (handoff), kitchen.test.ts (per-field invariant)
 - ไม่ bump `schema_v` — ไม่มีการเปลี่ยน **รูปร่าง** persisted doc (headcount/override_reason/calc_source
-  มีอยู่แล้วจาก CR-021); เปลี่ยนเฉพาะ business rule ที่มาของค่า
+  มีอยู่แล้วจาก CR-025); เปลี่ยนเฉพาะ business rule ที่มาของค่า
 
 ## Migration
 

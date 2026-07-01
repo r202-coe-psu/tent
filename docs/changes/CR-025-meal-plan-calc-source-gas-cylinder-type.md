@@ -1,5 +1,5 @@
 ---
-id: CR-021
+id: CR-025
 title: meal_plan calc_source audit trail + gas_cylinder_type doc type (T-25 / T-56)
 status: approved
 date: 2026-07-01
@@ -14,7 +14,7 @@ affects:
   - frontend/src/lib/features/kitchen/{domain,data,application,ui}
 ---
 
-# CR-021 — meal_plan calc_source audit trail + gas_cylinder_type doc type
+# CR-025 — meal_plan calc_source audit trail + gas_cylinder_type doc type
 
 ## Why
 
@@ -56,3 +56,4 @@ PR #48 implement ทั้งสองไปแล้วในโค้ด (`mea
 
 - 2026-07-01 — proposed จาก PR #48 review (blocker: schema/change-management gap)
 - 2026-07-01 — approved โดย project owner; tracking method = CR file
+- 2026-07-01 — renumbered CR-021 → CR-025 (แก้เลขซ้ำกับ CR-021 SOP ratio scope)

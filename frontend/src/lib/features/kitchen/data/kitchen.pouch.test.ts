@@ -103,7 +103,7 @@ describe('KitchenPouchRepository.issueRequisition — spike: ledger deduction pa
 	});
 });
 
-describe('KitchenPouchRepository.createMealPlan — calc_source audit trail (CR-021)', () => {
+describe('KitchenPouchRepository.createMealPlan — calc_source audit trail (CR-025)', () => {
 	let repo: KitchenPouchRepository;
 
 	beforeEach(() => {
