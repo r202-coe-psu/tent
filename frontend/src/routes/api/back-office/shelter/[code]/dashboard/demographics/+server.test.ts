@@ -30,11 +30,13 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 	});
 
 	it('returns 401/403 when requireShelterScopeOrSA throws', async () => {
-		vi.mocked(requireShelterScopeOrSA).mockRejectedValue(new ServiceError('FORBIDDEN', 'Access denied'));
+		vi.mocked(requireShelterScopeOrSA).mockRejectedValue(
+			new ServiceError('FORBIDDEN', 'Access denied')
+		);
 
 		const event = createMockEvent('SH001');
-		const res = await GET(event) as Response;
-		
+		const res = (await GET(event)) as Response;
+
 		expect(res.status).toBe(403);
 		const data = await res.json();
 		expect(data.error.code).toBe('FORBIDDEN');
@@ -51,11 +53,11 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: null });
 
 		const event = createMockEvent('SH001');
-		const res = await GET(event) as Response;
+		const res = (await GET(event)) as Response;
 
 		expect(res.status).toBe(200);
 		const data = await res.json();
-		
+
 		expect(data.shelter_code).toBe('SH001');
 		expect(data.age_groups['0-4']).toBe(0);
 		expect(data.countries).toEqual({});
@@ -71,7 +73,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 		vi.mocked(adminRaw).mockResolvedValue({ status: 500, data: { reason: 'db error' } });
 
 		const event = createMockEvent('SH001');
-		const res = await GET(event) as Response;
+		const res = (await GET(event)) as Response;
 
 		expect(res.status).toBe(500);
 		const data = await res.json();
@@ -85,7 +87,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 			isSA: true,
 			shelterCode: null
 		});
-		
+
 		// First call is demographics_by_age, second is demographics_by_country
 		vi.mocked(adminRaw)
 			.mockResolvedValueOnce({
@@ -108,11 +110,11 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 			});
 
 		const event = createMockEvent('SH001');
-		const res = await GET(event) as Response;
+		const res = (await GET(event)) as Response;
 
 		expect(res.status).toBe(200);
 		const data = await res.json();
-		
+
 		expect(data.shelter_code).toBe('SH001');
 		expect(data.age_groups['18-59']).toBe(20);
 		expect(data.age_groups['0-4']).toBe(5);

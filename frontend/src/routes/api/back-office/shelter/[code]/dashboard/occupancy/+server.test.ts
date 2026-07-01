@@ -30,11 +30,13 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 	});
 
 	it('returns 401/403 when requireShelterScopeOrSA throws', async () => {
-		vi.mocked(requireShelterScopeOrSA).mockRejectedValue(new ServiceError('FORBIDDEN', 'Access denied'));
+		vi.mocked(requireShelterScopeOrSA).mockRejectedValue(
+			new ServiceError('FORBIDDEN', 'Access denied')
+		);
 
 		const event = createMockEvent('SH001');
-		const res = await GET(event) as Response;
-		
+		const res = (await GET(event)) as Response;
+
 		expect(res.status).toBe(403);
 		const data = await res.json();
 		expect(data.error.code).toBe('FORBIDDEN');
@@ -51,11 +53,11 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: null });
 
 		const event = createMockEvent('SH001');
-		const res = await GET(event) as Response;
+		const res = (await GET(event)) as Response;
 
 		expect(res.status).toBe(200);
 		const data = await res.json();
-		
+
 		expect(data.shelter_code).toBe('SH001');
 		expect(data.registered).toBe(0);
 		expect(data.checked_in).toBe(0);
@@ -74,7 +76,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 		vi.mocked(adminRaw).mockResolvedValue({ status: 500, data: { reason: 'db error' } });
 
 		const event = createMockEvent('SH001');
-		const res = await GET(event) as Response;
+		const res = (await GET(event)) as Response;
 
 		expect(res.status).toBe(500);
 		const data = await res.json();
@@ -100,11 +102,11 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 		});
 
 		const event = createMockEvent('SH001');
-		const res = await GET(event) as Response;
+		const res = (await GET(event)) as Response;
 
 		expect(res.status).toBe(200);
 		const data = await res.json();
-		
+
 		expect(data.shelter_code).toBe('SH001');
 		expect(data.checked_in).toBe(10);
 		expect(data.registered).toBe(5);

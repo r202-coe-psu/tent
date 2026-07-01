@@ -40,11 +40,13 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 
 	it('returns 401/403 when requireShelterScopeOrSA throws', async () => {
 		// e.g. caller is not authenticated or not in scope
-		vi.mocked(requireShelterScopeOrSA).mockRejectedValue(new ServiceError('FORBIDDEN', 'Access denied'));
+		vi.mocked(requireShelterScopeOrSA).mockRejectedValue(
+			new ServiceError('FORBIDDEN', 'Access denied')
+		);
 
 		const event = createMockEvent('SH001');
-		const res = await GET(event) as Response;
-		
+		const res = (await GET(event)) as Response;
+
 		expect(res.status).toBe(403);
 		const data = await res.json();
 		expect(data.error.code).toBe('FORBIDDEN');
@@ -61,11 +63,11 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: null });
 
 		const event = createMockEvent('SH001');
-		const res = await GET(event) as Response;
+		const res = (await GET(event)) as Response;
 
 		expect(res.status).toBe(200);
 		const data = await res.json();
-		
+
 		// graceful fallback yields an empty object for daily and 0 for total
 		expect(data.shelter_code).toBe('SH001');
 		expect(data.total).toBe(0);
@@ -82,7 +84,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		vi.mocked(adminRaw).mockResolvedValue({ status: 500, data: { reason: 'db error' } });
 
 		const event = createMockEvent('SH001');
-		const res = await GET(event) as Response;
+		const res = (await GET(event)) as Response;
 
 		expect(res.status).toBe(500);
 		const data = await res.json();
@@ -102,19 +104,17 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		vi.mocked(adminRaw).mockResolvedValue({
 			status: 200,
 			data: {
-				rows: [
-					{ key: mockDate, value: 5 }
-				]
+				rows: [{ key: mockDate, value: 5 }]
 			}
 		});
 
 		// Explicit date range so we know exactly what is requested
 		const event = createMockEvent('SH001', { from: mockDate, to: mockDate });
-		const res = await GET(event) as Response;
+		const res = (await GET(event)) as Response;
 
 		expect(res.status).toBe(200);
 		const data = await res.json();
-		
+
 		expect(data.shelter_code).toBe('SH001');
 		expect(data.total).toBe(5);
 		expect(data.daily).toBeTypeOf('object');
