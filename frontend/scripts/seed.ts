@@ -878,7 +878,9 @@ async function deleteDashboardData(): Promise<void> {
 	console.log(`Searching for dashboard test data in ${SHELTER_DB}...`);
 
 	const keys = Array.from({ length: 100 }, (_, i) => `evacuee:seed-genname-${i}`);
-	const { status, data } = await couchReq('POST', `/${SHELTER_DB}/_all_docs?include_docs=true`, { keys });
+	const { status, data } = await couchReq('POST', `/${SHELTER_DB}/_all_docs?include_docs=true`, {
+		keys
+	});
 	if (status !== 200) {
 		console.log(`Failed to fetch docs: HTTP ${status}`);
 		return;
