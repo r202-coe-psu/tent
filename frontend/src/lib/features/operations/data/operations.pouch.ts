@@ -1,6 +1,6 @@
 import { namedLocalDb } from '$lib/db/pouch';
 import { createRepository, type Repository } from '$lib/db/repository';
-import { SHELTER_CODE, SHELTER_DB, shelterDb as _shelterDb } from '$lib/db/shelter';
+import { SHELTER_CODE, SHELTER_DB } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import {
 	isStockLedger,
@@ -56,5 +56,3 @@ export function operationsRepository(): OperationsRepository {
 	if (!singleton) singleton = new OperationsPouchRepository();
 	return singleton;
 }
-
-export const shelterDb = _shelterDb;

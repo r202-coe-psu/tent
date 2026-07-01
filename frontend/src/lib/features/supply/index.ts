@@ -16,7 +16,7 @@ export {
 
 // Data — repository contract + PouchDB binding
 export type { SupplyRepository } from './data/supply.repository';
-export { supplyRepository, catalogDb, CATALOG_DB } from './data/supply.pouch';
+export { supplyRepository, CATALOG_DB } from './data/supply.pouch';
 
 // Application — TanStack Query hooks
 export { supplyKeys, useSupplyItems, useSupplyItem } from './application/queries';

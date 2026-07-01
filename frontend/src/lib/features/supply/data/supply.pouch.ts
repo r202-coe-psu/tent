@@ -39,8 +39,3 @@ export function supplyRepository(): SupplyRepository {
 	if (!singleton) singleton = new SupplyCatalogPouchRepository();
 	return singleton;
 }
-
-/** Raw PouchDB handle for the catalog database (for live-query wiring). */
-export function catalogDb(): PouchDB.Database {
-	return namedLocalDb(CATALOG_DB);
-}
