@@ -10,10 +10,6 @@
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Search from '@lucide/svelte/icons/search';
-	import MapPin from '@lucide/svelte/icons/map-pin';
-	import MapIcon from '@lucide/svelte/icons/map';
-	import Navigation from '@lucide/svelte/icons/navigation';
-	import Eye from '@lucide/svelte/icons/eye';
 	import Filter from '@lucide/svelte/icons/filter';
 	
 	import { Button } from '$lib/components/ui/button';
@@ -33,8 +29,8 @@
 	let searchQuery = $state(initialSearch);
 	
 	// Toggles for demo
-	let public_metrics_occupancy = $state(initialOccupancy);
-	let public_metrics_vulnerable = $state(initialVulnerable);
+	// let public_metrics_occupancy = $state(initialOccupancy);
+	// let public_metrics_vulnerable = $state(initialVulnerable);
 	
 	function getStatusColor(status: string) {
 		switch (status) {
@@ -176,7 +172,7 @@
 			</p>
 			
 			<!-- Demo Flags (For testing kill-switches) -->
-			<div class="mt-6 flex flex-wrap gap-4 rounded-xl bg-black/20 p-4 border border-white/10">
+			<!-- <div class="mt-6 flex flex-wrap gap-4 rounded-xl bg-black/20 p-4 border border-white/10">
 				<p class="text-xs font-bold text-white/50 w-full mb-1">Demo Kill-Switches (CR-005 Flags)</p>
 				<label class="flex items-center gap-2 text-xs font-medium cursor-pointer">
 					<input type="checkbox" bind:checked={public_metrics_occupancy} class="rounded border-white/30 bg-transparent" />
@@ -186,7 +182,7 @@
 					<input type="checkbox" bind:checked={public_metrics_vulnerable} class="rounded border-white/30 bg-transparent" />
 					Show Vulnerable Metric (OP-8)
 				</label>
-			</div>
+			</div> -->
 		</div>
 	</div>
 
@@ -197,50 +193,50 @@
 			value={data.summary.shelters_total} 
 			unit="แห่ง" 
 			icon={ClipboardList} 
-			iconClass="bg-muted text-muted-foreground" 
+			iconClass="border-accent-purple shadow-accent-purple/15 text-accent-purple" 
 		/>
 
 		<PublicShelterMetricCard 
-			title="เปิดใช้งาน" 
+			title="ศูนย์พักพิงที่เปิดใช้งาน" 
 			value={data.summary.shelters_open} 
 			unit="แห่ง" 
 			icon={Building2} 
-			iconClass="bg-success/15 text-success" 
+			iconClass="border-success shadow-success/15 text-success" 
 		/>
 
-		{#if public_metrics_occupancy}
+		<!-- {#if public_metrics_occupancy} -->
 			<PublicShelterMetricCard 
 				title="ผู้พักพิงปัจจุบัน" 
 				value={data.summary.occupancy_total} 
 				unit="คน" 
 				icon={Users} 
-				iconClass="bg-primary-muted text-primary" 
+				iconClass="border-primary shadow-primary/15 text-primary" 
 			/>
-		{:else}
+		<!-- {:else}
 			<div class="flex items-center gap-4 rounded-2xl border border-dashed border-border bg-muted/30 p-5 shadow-xs opacity-50">
 				<div class="flex flex-col">
 					<p class="text-xs font-medium text-muted-foreground">Occupancy Metric Hidden</p>
 					<p class="text-[10px] text-muted-foreground">(Flag Disabled)</p>
 				</div>
 			</div>
-		{/if}
+		{/if} -->
 
-		{#if public_metrics_vulnerable}
+		<!-- {#if public_metrics_vulnerable} -->
 			<PublicShelterMetricCard 
 				title="กลุ่มเปราะบาง" 
 				value={data.summary.vulnerable_count} 
 				unit="คน" 
 				icon={AlertTriangle} 
-				iconClass="bg-warning/15 text-warning-dark" 
+				iconClass="border-warning shadow-warning/15 text-warning-dark" 
 			/>
-		{:else}
+		<!-- {:else}
 			<div class="flex items-center gap-4 rounded-2xl border border-dashed border-border bg-muted/30 p-5 shadow-xs opacity-50">
 				<div class="flex flex-col">
 					<p class="text-xs font-medium text-muted-foreground">Vulnerable Metric Hidden</p>
 					<p class="text-[10px] text-muted-foreground">(Flag Disabled)</p>
 				</div>
 			</div>
-		{/if}
+		{/if} -->
 	</div>
 
 	<!-- Main Content: Filters, Map, and List -->

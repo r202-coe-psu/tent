@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
-	import * as Card from '$lib/components/ui/card';
+	import Card from './ui/card/card.svelte';
 
 	let {
 		title,
@@ -17,14 +17,16 @@
 	} = $props();
 </script>
 
-<Card.Root class="flex items-center gap-4 rounded-2xl border-border shadow-xs transition-all hover:shadow-md p-5">
-	<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl {iconClass}">
-		<IconComponent class="h-6 w-6" />
+<Card class=" items-center rounded-2xl border-border shadow-xs transition-all hover:shadow-md p-5">
+	<div class="flex items-center gap-6 w-full">
+		<div class="flex size-14 shadow-lg border-2 shrink-0 items-center justify-center rounded-xl {iconClass}">
+			<IconComponent class="size-6" />
+		</div>
+		<div class="flex flex-col">	
+			<p class="text-sm font-medium text-muted-foreground">{title}</p>
+			<p class="mt-1 text-2xl font-bold text-foreground">
+					{value} <span class="text-sm font-normal text-muted-foreground">{unit}</span>
+			</p>
+		</div>
 	</div>
-	<div>
-		<p class="text-sm font-medium text-muted-foreground">{title}</p>
-		<p class="mt-1 text-2xl font-bold text-foreground">
-			{value} <span class="text-sm font-normal text-muted-foreground">{unit}</span>
-		</p>
-	</div>
-</Card.Root>
+</Card>
