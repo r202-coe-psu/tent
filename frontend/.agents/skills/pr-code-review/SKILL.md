@@ -5,16 +5,72 @@ description: Comprehensive code review checklist and guidelines for evaluating P
 
 # PR Code Review Guidelines (Smart Shelter)
 
-## Trigger Command
+## Trigger Commands
 
-**For GitHub Pull Requests:**
-If the user prompts you with the command:
-`/pr-code-review <PR_LINK_OR_NUMBER>`
-You MUST immediately execute this skill, analyze the specified PR using `gh` CLI, and post the review comment to GitHub.
+**Default — analyze only (never auto-post):**
+- `/pr-code-review <PR_LINK_OR_NUMBER>`
+- `@[pr-code-review] review <PR>`
+- Any request to review a PR or local changes
 
-**For Local Staged Changes (Pre-PR):**
-If the user asks you to review local code or staged changes (e.g., `@[pr-code-review] review staged`):
-You MUST use `run_command` with `git diff --cached` to read the pending changes, evaluate them, and output your review directly in the chat.
+For these triggers you MUST analyze the changes and **display the review in chat only**. Do **not** call `gh pr review`, `gh pr comment`, or any other command that writes to GitHub unless the user explicitly asks you to post (see below).
+
+**Local staged changes (pre-PR):**
+- `@[pr-code-review] review staged`
+- Review local / unstaged diff when asked
+
+Use `git diff --cached` (staged) or `git diff` (unstaged) as appropriate, evaluate, and output the review in chat.
+
+**Post to GitHub — explicit command only:**
+- `/pr-code-review post <PR_LINK_OR_NUMBER>`
+- User says e.g. "post this review", "submit review to GitHub", "approve/request-changes on PR #N"
+
+Only then may you run `gh pr review`. Use the **most recent in-chat review** the user approved (or ask which items to include). Never post without an explicit post command in the same or a follow-up message.
+
+## Human Review First (mandatory)
+
+1. Analyze → display findings in chat grouped by severity.
+2. Human reads, edits, or drops items.
+3. Human explicitly commands post → then and only then post to GitHub.
+
+If the user has not said to post, end your response with a short note that the review is for human review only and that they can ask you to post when ready.
+
+## Output Format (chat)
+
+Always structure the in-chat review with these four severity levels:
+
+| Level | When to use |
+| --- | --- |
+| **Blocker** | Must fix before merge — bugs, security holes, architecture violations, missing tests for critical paths |
+| **Warning** | Should fix — likely issues, missing edge-case handling, spec drift, weak error handling |
+| **Suggestion** | Nice to have — clearer naming, small refactors, better patterns |
+| **Nitpick** | Optional polish — style, minor wording, trivial consistency |
+
+Template:
+
+```markdown
+## PR Review — <title or number>
+
+**Verdict:** <Approve / Request changes / Comment — for human context only; not posted>
+
+### Blockers
+- …
+
+### Warnings
+- …
+
+### Suggestions
+- …
+
+### Nitpicks
+- …
+
+---
+*Review displayed for human review. Say "post review to GitHub" (or `/pr-code-review post <PR>`) when ready to submit.*
+```
+
+When suggesting code changes, use **Markdown diff blocks** (` ```diff `) with `-` / `+` lines, not plain code blocks.
+
+If a section has no items, write `None.`
 
 ## 1. Architecture & Data Flow (Offline-First)
 
@@ -46,34 +102,37 @@ You MUST use `run_command` with `git diff --cached` to read the pending changes,
 - **Test Coverage**: Does the new feature or bug fix include Unit/Integration tests? Do all tests pass?
 - **Leftover Code**: Has the code been cleaned of leftover `console.log`, `debugger` statements, and commented-out code before opening the PR?
 
-## 5. Direct PR Review & Commenting (GitHub CLI)
+## 5. Fetching PR Data (GitHub CLI — read-only)
 
-When you are asked to review a specific Pull Request, you MUST use the GitHub CLI (`gh`) to inspect and comment on the PR directly:
+When reviewing a GitHub Pull Request, use `gh` to **fetch only**:
 
-- **Fetch PR Details**: Use `run_command` with `gh pr view <number>` to see the PR description and status.
-- **Analyze Diff**: Use `run_command` with `gh pr diff <number>` to inspect the code changes.
-- **Submit Feedback**: After evaluating the changes against the guidelines above, post your review directly to the PR using `gh pr review <number> --comment -b "<your markdown review summary>"`. Use `--approve` if the PR is perfect, or `--request-changes` if there are critical blockers.
+- `gh pr view <number>` — PR description, title, labels, checks
+- `gh pr diff <number>` — full diff
+
+Do **not** write to GitHub during the analyze step.
+
+## 6. Posting to GitHub (explicit command only)
+
+After the human approves posting:
+
+- `gh pr review <number> --comment -b "<markdown>"` — general review comment
+- `gh pr review <number> --approve -b "<markdown>"` — only if no blockers remain and user asked to approve
+- `gh pr review <number> --request-changes -b "<markdown>"` — only if blockers remain and user asked to request changes
+
+Confirm the PR number and review body with the user if they edited the in-chat review or if anything is ambiguous.
 
 ## Review Process Workflow
 
-1. **Fetch and Analyze the Diff**: 
-   - **For PRs**: Read the PR description and diff using the `gh` CLI commands.
-   - **For Local Changes**: Run `git diff --cached` to read the staged changes.
-2. **Load Related Skills**: Depending on the PR contents, you MUST read and apply the following agent skills before concluding the review:
-   - **General Architecture**:
-     - `project-structure-architecture` (for correct placement of files in `$lib/features`, `domain`, `data`, `ui`)
-   - **Frontend Changes (Svelte/Tailwind)**:
-     - `svelte-core-bestpractices` (for reactivity and modern Svelte 5 logic)
-     - `shadcn-svelte` (for UI component standards)
-     - `svelte-code-writer` (to optionally run Svelte CLI autofixer or look up docs)
-   - **Database / Data Model Changes**:
-     - `couchdb-pouchdb-bestpractices` (for offline-first architecture, repository pattern, and MVCC rules)
-   - **Security / Authentication**:
-     - `security-rbac-bestpractices` (for Role checks, Shelter Scope isolation, and PII Redaction)
-   - **Testing / QA**:
-     - `testing-bestpractices` (for Vitest/Playwright standards, mock data, and project DoD checks)
-3. **Check the Checklist**: Evaluate the code against the 4 sections above, cross-referencing with the relevant skills loaded in step 2.
-4. **Formulate Feedback**: Group your feedback by severity (e.g., 🔴 Critical/Blocker, 🟡 Suggestion, 🟢 Nitpick). When suggesting code changes or fixes, you MUST use **Markdown Diff Blocks** (` ```diff `) showing the `-` (removed) and `+` (added) lines, rather than just standard code blocks.
-5. **Post Review**: 
-   - **For PRs**: Execute the `gh pr review` command to post your actionable feedback directly to the PR.
-   - **For Local Changes**: Output the review summary directly into the chat for the user to read before they commit.
+1. **Fetch and analyze the diff**
+   - **PRs:** `gh pr view` + `gh pr diff`
+   - **Local:** `git diff --cached` or `git diff`
+2. **Load related skills** (read and apply before concluding):
+   - `project-structure-architecture` — feature layering, file placement
+   - `svelte-core-bestpractices` / `shadcn-svelte` / `svelte-code-writer` — Svelte/UI changes
+   - `couchdb-pouchdb-bestpractices` — data model, offline-first, MVCC
+   - `security-rbac-bestpractices` — roles, shelter scope, PII
+   - `testing-bestpractices` — Vitest/Playwright, DoD
+3. **Check the checklist** — sections 1–4 above.
+4. **Formulate feedback** — Blocker / Warning / Suggestion / Nitpick; use diff blocks for fixes.
+5. **Display in chat** — always; never skip human review.
+6. **Post to GitHub** — only when the user explicitly commands it (section 6).
