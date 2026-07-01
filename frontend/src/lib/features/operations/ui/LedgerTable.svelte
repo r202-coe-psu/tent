@@ -21,7 +21,7 @@
 	);
 
 	// Maps item_id to name
-	const itemMap = $derived(() => {
+	const itemMap = $derived.by(() => {
 		const map: Record<string, string> = {};
 		for (const item of itemsQuery.data ?? []) {
 			map[item._id] = item.name;
@@ -95,7 +95,7 @@
 					</Table.Header>
 					<Table.Body class="divide-y divide-border/40">
 						{#each sortedLedger as entry (entry._id)}
-							{@const itemName = itemMap()[entry.item_id] ?? 'ไม่ระบุชื่อสิ่งของ'}
+							{@const itemName = itemMap[entry.item_id] ?? 'ไม่ระบุชื่อสิ่งของ'}
 							<Table.Row class="hover:bg-muted/30 transition-colors">
 								<!-- DateTime -->
 								<Table.Cell class="font-mono text-xs whitespace-nowrap text-muted-foreground">

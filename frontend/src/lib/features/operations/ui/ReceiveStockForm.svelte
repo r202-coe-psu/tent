@@ -26,7 +26,7 @@
 	let container = $state<HTMLDivElement | null>(null);
 
 	// Filter items based on search query
-	const filteredItems = $derived(() => {
+	const filteredItems = $derived.by(() => {
 		const items = itemsQuery.data ?? [];
 		if (!searchQuery) return items;
 		const query = searchQuery.toLowerCase().trim();
@@ -172,10 +172,10 @@
 							>
 								{#if itemsQuery.isLoading}
 									<div class="p-3 text-xs text-muted-foreground font-medium">กำลังโหลดรายการสิ่งของ...</div>
-								{:else if filteredItems().length === 0}
+								{:else if filteredItems.length === 0}
 									<div class="p-3 text-xs text-muted-foreground font-medium">ไม่พบรายการสิ่งของ</div>
 								{:else}
-									{#each filteredItems() as item (item._id)}
+									{#each filteredItems as item (item._id)}
 										<button
 											type="button"
 											class="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm hover:bg-muted font-medium transition-colors"

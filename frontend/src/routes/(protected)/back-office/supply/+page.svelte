@@ -29,18 +29,18 @@
 	// ─── KPI Calculations ─────────────────────────────────────────────────────
 	const totalItems = $derived(items.length);
 	
-	const emptyCount = $derived(() => {
+	const emptyCount = $derived.by(() => {
 		return items.filter((i) => (balance.get(i._id) ?? 0) <= 0).length;
 	});
 
-	const lowStockCount = $derived(() => {
+	const lowStockCount = $derived.by(() => {
 		return items.filter((i) => {
 			const qty = balance.get(i._id) ?? 0;
 			return qty > 0 && i.reorder_level !== null && qty <= i.reorder_level;
 		}).length;
 	});
 
-	const recentActivityCount = $derived(() => {
+	const recentActivityCount = $derived.by(() => {
 		// Filter movements recorded today (last 24 hours)
 		const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
 		return ledger.filter(entry => Date.parse(entry.occurred_at) > oneDayAgo).length;
@@ -130,11 +130,11 @@
 		<div class="bg-card/70 border border-border/80 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300 bg-gradient-to-br from-rose-500/5 via-background to-card flex items-center justify-between">
 			<div>
 				<span class="text-xs text-muted-foreground font-bold uppercase tracking-wider block">สินค้าหมดคลัง</span>
-				<strong class="text-3xl font-extrabold mt-1.5 block font-mono {emptyCount() > 0 ? 'text-rose-600' : 'text-foreground'}">
-					{emptyCount().toLocaleString()}
+				<strong class="text-3xl font-extrabold mt-1.5 block font-mono {emptyCount > 0 ? 'text-rose-600' : 'text-foreground'}">
+					{emptyCount.toLocaleString()}
 				</strong>
 			</div>
-			<div class="p-3 rounded-xl border flex items-center justify-center {emptyCount() > 0 ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' : 'bg-muted border-border text-muted-foreground'}">
+			<div class="p-3 rounded-xl border flex items-center justify-center {emptyCount > 0 ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' : 'bg-muted border-border text-muted-foreground'}">
 				<XCircle class="h-5 w-5" />
 			</div>
 		</div>
@@ -143,11 +143,11 @@
 		<div class="bg-card/70 border border-border/80 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300 bg-gradient-to-br from-amber-500/5 via-background to-card flex items-center justify-between">
 			<div>
 				<span class="text-xs text-muted-foreground font-bold uppercase tracking-wider block">สินค้าใกล้หมด (เฝ้าระวัง)</span>
-				<strong class="text-3xl font-extrabold mt-1.5 block font-mono {lowStockCount() > 0 ? 'text-amber-600' : 'text-foreground'}">
-					{lowStockCount().toLocaleString()}
+				<strong class="text-3xl font-extrabold mt-1.5 block font-mono {lowStockCount > 0 ? 'text-amber-600' : 'text-foreground'}">
+					{lowStockCount.toLocaleString()}
 				</strong>
 			</div>
-			<div class="p-3 rounded-xl border flex items-center justify-center {lowStockCount() > 0 ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' : 'bg-muted border-border text-muted-foreground'}">
+			<div class="p-3 rounded-xl border flex items-center justify-center {lowStockCount > 0 ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' : 'bg-muted border-border text-muted-foreground'}">
 				<AlertTriangle class="h-5 w-5" />
 			</div>
 		</div>
@@ -157,7 +157,7 @@
 			<div>
 				<span class="text-xs text-muted-foreground font-bold uppercase tracking-wider block">ความเคลื่อนไหวใน 24 ชม.</span>
 				<strong class="text-3xl font-extrabold text-foreground mt-1.5 block font-mono">
-					{recentActivityCount().toLocaleString()}
+					{recentActivityCount.toLocaleString()}
 				</strong>
 			</div>
 			<div class="bg-purple-500/10 p-3 rounded-xl border border-purple-500/20 text-purple-600 dark:text-purple-400">

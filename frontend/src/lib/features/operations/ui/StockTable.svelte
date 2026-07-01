@@ -44,7 +44,7 @@
 	/**
 	 * Unique locations list extracted from ledger entries
 	 */
-	const uniqueLocations = $derived(() => {
+	const uniqueLocations = $derived.by(() => {
 		const locations = new Set<string>();
 		for (const entry of ledger) {
 			if (entry.lot?.note) {
@@ -58,7 +58,7 @@
 	 * For each item, derive the latest lot info (expiry + storage note) from
 	 * the most-recent POSITIVE ledger entry so the table can show them.
 	 */
-	const latestLotByItem = $derived(() => {
+	const latestLotByItem = $derived.by(() => {
 		const result: Record<string, { expiry?: string; note?: string }> = {};
 		const sorted = [...ledger].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
 		for (const entry of sorted) {
@@ -94,7 +94,7 @@
 	}
 
 	/** Filtered and searched items list. */
-	const displayedItems = $derived(() => {
+	const displayedItems = $derived.by(() => {
 		const q = searchQuery.toLowerCase().trim();
 		return items.filter((item) => {
 			// Search
@@ -104,7 +104,7 @@
 			
 			const qty = balance.get(item._id) ?? 0;
 			const status = getStatus(qty, item.reorder_level);
-			const lot = latestLotByItem()[item._id];
+			const lot = latestLotByItem[item._id];
 			const expired = isExpired(lot?.expiry);
 			const expiring = isExpiringSoon(lot?.expiry);
 
@@ -212,7 +212,7 @@
 						class="w-full bg-background border border-border/80 focus:border-primary transition-all rounded-lg pl-9 pr-8 py-2.5 text-sm font-semibold text-foreground outline-none cursor-pointer shadow-sm appearance-none truncate"
 					>
 						<option value="all">ทุกสถานที่จัดเก็บ</option>
-						{#each uniqueLocations() as loc (loc)}
+						{#each uniqueLocations as loc (loc)}
 							<option value={loc}>{loc}</option>
 						{/each}
 					</select>
@@ -272,17 +272,17 @@
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-border/40">
-						{#if displayedItems().length === 0}
+						{#if displayedItems.length === 0}
 							<tr>
 								<td colspan={7} class="p-12 text-center text-muted-foreground font-medium text-sm">
 									ไม่พบข้อมูลสิ่งของที่ตรงกับเงื่อนไขการค้นหา
 								</td>
 							</tr>
 						{:else}
-							{#each displayedItems() as item (item._id)}
+							{#each displayedItems as item (item._id)}
 								{@const qty = balance.get(item._id) ?? 0}
 								{@const status = getStatus(qty, item.reorder_level)}
-								{@const lot = latestLotByItem()[item._id]}
+								{@const lot = latestLotByItem[item._id]}
 								{@const expired = isExpired(lot?.expiry)}
 								{@const expiring = isExpiringSoon(lot?.expiry)}
 
@@ -408,7 +408,7 @@
 					return qty > 0 && i.reorder_level !== null && qty <= i.reorder_level;
 				}).length}
 				<div class="flex items-center justify-between border border-border/60 bg-muted/20 px-4 py-3 rounded-2xl text-xs text-muted-foreground shadow-sm">
-					<span>แสดง {displayedItems().length} จาก {items.length} รายการ</span>
+					<span>แสดง {displayedItems.length} จาก {items.length} รายการ</span>
 					<div class="flex gap-3">
 						{#if emptyCount > 0}
 							<span class="font-bold text-rose-600">🔴 หมดแล้ว: {emptyCount} รายการ</span>
