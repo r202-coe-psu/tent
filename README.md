@@ -76,6 +76,7 @@ edge เฉพาะ WAN outage, local-only ถ้าไม่เห็นทั
 ```bash
 # 1. ยก CouchDB ขึ้น (ต้องมี .env — copy จาก .env.example)
 cp .env.example .env
+cp couchdb-session-example.ini couchdb-session.ini
 docker compose up -d
 
 # 2. frontend (ใช้ pnpm)
