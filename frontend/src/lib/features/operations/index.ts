@@ -41,6 +41,7 @@ export {
 	canTransitionDonation,
 	stockBalance,
 	openNeeds,
+	calculateReserved,
 	isNeedCutOff,
 	isStockLedger,
 	isDonation,
@@ -70,4 +71,3 @@ export {
 	useUpdateCampaign,
 	startOperationsLiveQuery
 } from './application/queries';
-
