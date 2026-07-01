@@ -1,15 +1,16 @@
 ---
 id: CR-023
 title: "Shelter form v4 — shelter_type→master_data + structured address (CR-011 style) + key personnel + zone area/specifics + WASH supported count + common-area expansion + secondary muster point + section 6 (admission & pet policy)"
-status: proposed        # proposed | approved | done | rejected | superseded
+status: approved        # proposed | approved | done | rejected | superseded
 date: 2026-06-30
 requested_by: project owner (session 2026-06-30) — UI mock v5 (spec/section_1.png, section_3.png, section_3_2.png, section_5.png, section_6.png)
-decided_by: project owner (pending)
+decided_by: project owner (2026-07-01)
 layer: volatile         # เพิ่ม field ใน doc type เดิม (shelter) + enum ใหม่ 2 ตัว + section ใหม่ — volatile spec
 affects:
   - docs/data/schema.md §3.1 — shelter extend (sections 1/3/5 + section 6 ใหม่); zones[] extend (area_m2, specifics); shelter_type free-text → master_data code; area_type free-text → enum; เพิ่ม municipality_zone + community + ที่อยู่ 6 ฟิลด์ (CR-011 style)
   - schema_v shelter 3 → 4
-  - dependency — CR-019 (master_type `shelter_type` + /shelter-config) ต้อง done ก่อน wire dropdown; CR-012 (master_data municipality_zone + community) ต้อง done ก่อน wire address dropdown
+  - dependency — CR-019 (master_type `shelter_type` + /shelter-config) ต้อง done ก่อน wire dropdown; CR-012 (master_data municipality_zone + community) ต้อง done ก่อน wire address dropdown; auto-seed `vulnerable_group` 5 items (Appendix B) ใน master-data.pouch.ts
+  - frontend/src/lib/features/master-data/data/master-data.pouch.ts — idempotent auto-seed master_data:vulnerable_group (5 items, Appendix B)
   - frontend/src/lib/features/shelters/domain/schema.ts — shelter_type → master_data code; area_type → areaTypeSchema enum; เพิ่ม municipality_zone/community + ที่อยู่ 6 ฟิลด์; keyPersonnelSchema, projectLevel, zone area_m2/specifics, facilities.car_toilet_supported, commonAreas (isolation_room, women_child_friendly_space, logistics_area_m2, sub_storage[].area_m2), risk.secondary_muster_point, admissionPolicySchema (supported_vulnerable_groups = master_data vulnerable_group codes + petPolicySchema enum)
   - frontend/src/lib/features/shelters/domain/schema.test.ts — new cases
   - frontend/src/lib/features/shelters/domain/schema.ts — migrateShelterV2ToCurrent → v3→v4 default fill
@@ -33,7 +34,7 @@ affects:
 - **dev ต้อง build อะไร:** ขยาย Zod domain schema + เปลี่ยน `shelter_type` เป็น master_data code + เพิ่ม address fields + 3 section component เดิม + 1 component ใหม่ (section 6) + wire dropdown จาก live master_data query (pattern CR-019) + POST/PATCH/GET API + v3→v4 default-fill migrate.
 - **กระทบ schema/scope:** shelter `schema_v 3 → 4`; volatile; ไม่มี real data → migration ต้นทุนต่ำ. **Depends on CR-019 + CR-012** (master_data types).
 
-> ⚠️ **CR นี้ยัง `proposed`** — เหลือ 1 open decision (`supported_vulnerable_groups`: choice จาก master_data หรือ static enum) + owner **approve การ bump `schema_v 3→4`** ก่อนเริ่ม implement.
+> ✅ **`approved` (2026-07-01)** — พร้อม implement. Decisions ครบ: Option A (`supported_vulnerable_groups` จาก master_data + auto-seed Appendix B); **`schema_v 3→4` approved**. ทีมเริ่ม Phase 0 → 4 ตาม §Implementation Plan.
 
 ---
 
@@ -124,7 +125,7 @@ affects:
 
 ### Section 6 — Admission & Pet Policy (ใหม่)
 - **FR-23-13** — เพิ่ม section 6 "นโยบายการรับผู้อพยพและกลุ่มเปราะบาง" render ต่อจาก section 5 ใน `shelter-form-page.svelte`.
-- **FR-23-14** — section 6 ต้องมีกลุ่ม checkbox **multi-select** `admission_policy.supported_vulnerable_groups[]`. **[ขึ้นกับ Open Decision 1]** — option A: render จาก live master_data (`vulnerable_group`, persist code[]); option B: hardcoded enum 5 ค่า. (เนื้อหา CR ร่างตาม option A.)
+- **FR-23-14** — section 6 ต้องมีกลุ่ม checkbox **multi-select** `admission_policy.supported_vulnerable_groups[]` — render จาก live master_data (`vulnerable_group`, persist `code[]` = ULID ตาม CR-012); ต้องมี seed 5 items (Appendix B) ก่อน wire UI.
 - **FR-23-15** — section 6 ต้องมีกลุ่ม checkbox **multi-select** `admission_policy.pet_policy[]` จาก whitelist (hardcoded enum): `no_pets`, `small_only`, `all_with_restraint`, `livestock`.
 - **FR-23-16** — `pet_policy` ค่านอก whitelist → reject (Zod enum). `supported_vulnerable_groups` เก็บ code string; source of truth = master_data `vulnerable_group` (UI เลือกได้เฉพาะค่าที่มีใน master_data).
 - **FR-23-17** — `pet_policy` เป็น multi-select **อิสระ** (ไม่บังคับ mutual-exclusion) — `[no_pets]`, `[no_pets, livestock]` ฯลฯ บันทึกได้ทั้งหมด. *(Decided 2026-06-30 — option B)*
@@ -205,9 +206,11 @@ admissionPolicySchema = z.object({
 | ระดับ อปท. (ศูนย์พักพิงหลักของเทศบาล) | `lao` |
 | ระดับเมือง/จังหวัด (ศูนย์บัญชาการขนาดใหญ่/จุดยุทธศาสตร์) | `provincial` |
 
-**Vulnerable groups (section 6) — จาก master_data `vulnerable_group` (ไม่ hardcode ใน CR นี้):**
+**Vulnerable groups (section 6) — จาก master_data `vulnerable_group` (Option A — decided 2026-07-01):**
 
-ตัวเลือก render จาก live master_data; เก็บ `code`, map `label` ตอน render (เหมือน shelter_type/zone/community). seed ปัจจุบัน (master-data.ts `SLUG_DICT`) มี `elderly` (ผู้สูงอายุ), `disabled` (ผู้พิการ), `pregnant` (หญิงตั้งครรภ์), `infant` (เด็กเล็ก). **Action:** ให้ owner/SA เพิ่ม code ที่ spec ต้องการแต่ยังไม่ seed — `bedridden` (ผู้ป่วยติดเตียง) + `children` (เด็ก/มีเด็กทารก) — ผ่านหน้า `/registration-config` ก่อน demo (form จะ render เฉพาะค่าที่มีใน master_data). ใช้ vocabulary เดียวกับ `evacuee.special_needs` → match shelter capability vs ความต้องการผู้อพยพได้.
+ตัวเลือก render จาก live master_data; เก็บ `code` (ULID), map `label` ตอน render (เหมือน shelter_type/zone/community). **ไม่ hardcode enum ใน domain** — seed 5 items ตาม **Appendix B** (idempotent auto-seed ใน `master-data.pouch.ts`). Form render เฉพาะค่าที่มีใน master_data doc.
+
+> **vocabulary note:** seed ใช้ logical keys (`elderly`, `disabled`, …) สำหรับ authoring เท่านั้น — persisted `code` = ULID (CR-012). `evacuee.special_needs` ยัง hardcode enum ใน `people.ts` (`infant`, `chronic_illness` ฯลฯ) จนกว่า Phase 2 wire — matching engine ต้อง map `children` ↔ `infant` หรือรอ CR แยก wire evacuee → master_data.
 
 **Pet policy (section 6) — hardcoded enum:**
 
@@ -222,16 +225,7 @@ admissionPolicySchema = z.object({
 
 ## Open decisions
 
-> decisions อื่น ๆ ที่เคาะแล้ว (project_level/area_type = enum, pet_policy = multi อิสระ, key_personnel = free-form, car_toilet_supported = gated, migration = default-fill, EOC endpoint = เพิ่ม) ย้ายไปบันทึกใน §Decision log แล้ว. เหลือ open อยู่ข้อเดียว:
-
-1. **`supported_vulnerable_groups` (section 6) — choice (master_data) หรือ static (hardcoded enum)?** — ⏳ **pending owner**
-
-   | Option | รูปแบบ | ผล |
-   |---|---|---|
-   | **A — choice จาก master_data `vulnerable_group`** | เก็บ `code[]`, render checkboxes จาก live master_data query, map label ตอน render (pattern CR-019) | admin เพิ่ม/แก้กลุ่มได้เองที่ `/registration-config`; vocabulary เดียวกับ `evacuee.special_needs` → match shelter vs ผู้อพยพ; **ต้อง seed `bedridden`/`children` เพิ่ม** ก่อน demo |
-   | **B — static hardcoded enum** | `z.enum(['elderly','disabled','pregnant','bedridden','children'])` ตรงตาม UI mock v5 | ค่าตรง spec เป๊ะ ไม่ต้องพึ่ง master_data; แต่เพิ่ม/แก้กลุ่มต้องแก้ code + CR ใหม่; ไม่ sync กับ `evacuee.special_needs` |
-
-   **ผลต่อ schema/code:** A → `supported_vulnerable_groups: z.array(z.string())` + wire master_data + dependency seed; B → `vulnerableGroupSchema = z.enum([...5 ค่า])` hardcoded เหมือน area_type/project_level. ส่วนอื่นของ section 6 (`pet_policy` enum) ไม่กระทบ. **เนื้อหา CR ปัจจุบันร่างไว้ตาม option A** — ถ้าเลือก B ต้องสลับ schema/FR-23-14/16/label-mapping/dependency กลับเป็น hardcoded enum.
+> ไม่มี — CR **approved** 2026-07-01. ทุก decision เคาะครบ (รวม Option A + `schema_v 3→4`). ดู §Decision log.
 
 ---
 
@@ -240,7 +234,7 @@ admissionPolicySchema = z.object({
 ### Dependency
 - **CR-019** (master_type `shelter_type` + route `/shelter-config`) — ต้อง **done** ก่อน wire `shelter_type` dropdown.
 - **CR-012** (master_data `municipality_zone` + `community`) — ต้อง **done** ก่อน wire address dropdown (เหมือน household-form). ถ้ายังไม่ done → ทำ field แบบ free-input ชั่วคราว หรือรอ.
-- **master_data `vulnerable_group`** (มีอยู่แล้วใน `REGISTRATION_MASTER_TYPES`, จัดการที่ `/registration-config`) — ต้อง seed code ที่ spec ต้องการให้ครบ (`elderly`/`disabled`/`pregnant` มีแล้ว; เพิ่ม `bedridden`/`children`) ก่อน wire section 6 vulnerable-group checkboxes.
+- **master_data `vulnerable_group`** — **ต้อง implement auto-seed 5 items** (Appendix B) ใน `master-data.pouch.ts` ก่อน wire section 6; idempotent (doc ว่าง/missing → seed; มี items แล้ว → ไม่ทับ admin edit). จัดการต่อได้ที่ `/registration-config`.
 
 ### Doc
 - `docs/data/schema.md §3.1` — reconcile เป็น v4: `shelter_type` free-text → master_data code; เพิ่ม `municipality_zone` + `community` + ที่อยู่ 6 ฟิลด์ (ล้อ §1.3 household / CR-011); เพิ่ม `project_level`, `key_personnel`, `admission_policy`, zone `area_m2`/`specifics`, `facilities.car_toilet_supported`, common-area 3 field + sub_storage `area_m2`, `risk.secondary_muster_point`; bump `schema_v 3→4` + migration note. (รวมการ sync field v3 ที่ §3.1 ยังค้างเป็น v2 ด้วย.)
@@ -253,6 +247,7 @@ admissionPolicySchema = z.object({
 - `frontend/src/lib/features/shelters/domain/schema.ts` — enum/object ใหม่ (ดู §Proposed Change) + ขยาย `zoneSchema`/`facilitiesSchema`/`commonAreasSchema`/`subStorageItemSchema`/`riskSchema`/`shelterSchema` + `ShelterMaster` interface `schema_v: 3 → 4` + extend `migrateShelterV2ToCurrent` (v3→v4 default fill).
 - `frontend/src/lib/features/shelters/domain/schema.test.ts` — enum ใหม่, default, conditional, mutual-exclusion (ตามผล decision), v3→v4 migrate.
 - `frontend/src/lib/features/shelters/ui/basic-info-section.svelte` — `shelter_type` dropdown (live master_data query, pattern CR-019); `municipality_zone`/`community` dropdown + ที่อยู่ 6 ฟิลด์ (ล้อ household-form CR-011); `project_level` + key personnel block (3×{name,phone}).
+- `frontend/src/lib/features/master-data/data/master-data.pouch.ts` — **เพิ่ม idempotent auto-seed** `master_data:vulnerable_group` 5 items (Appendix B; `code = ulid()` ต่อ item).
 - master_data wiring — ใช้ barrel `$lib/features/master-data` (live query) สำหรับ `shelter_type`/`municipality_zone`/`community`/`vulnerable_group` (ห้าม hardcode constant — เหมือน CR-019).
 - `frontend/src/lib/features/shelters/ui/zones-facilities-section.svelte` — zone `area_m2`/`specifics`; `car_toilet_supported` (conditional); 3c: `isolation_room`, `women_child_friendly_space`, `logistics_area_m2`, sub_storage `area_m2`.
 - `frontend/src/lib/features/shelters/ui/capacity-section.svelte` — `area_type` free text → enum dropdown (3 ค่า).
@@ -299,13 +294,15 @@ admissionPolicySchema = z.object({
 
 ## Implementation Plan
 
-> เริ่มหลัง owner approve open decisions. ทำตามลำดับ schema-first (CLAUDE.md / spec-authoring §3: doc → domain → ui → api). 1 PR = CR-023 ทั้งก้อน (additive feature เดียว); ถ้าใหญ่เกินแยกได้ตาม phase ด้านล่าง.
+> **Approved 2026-07-01** — ทำตามลำดับ schema-first (CLAUDE.md / spec-authoring §3: doc → domain → ui → api). 1 PR = CR-023 ทั้งก้อน (additive feature เดียว); ถ้าใหญ่เกินแยกได้ตาม phase ด้านล่าง.
 
 ### Phase 0 — Decisions, dependency & doc (gate)
-1. owner เคาะ open decision 1 (`supported_vulnerable_groups`: choice จาก master_data vs static enum) + approve การ bump `schema_v 3→4`.
-2. ยืนยัน dependency: **CR-019** (master_type `shelter_type`) + **CR-012** (municipality_zone/community) done; ถ้ายังไม่ → วาง fallback (free input ชั่วคราว).
-3. อัปเดต `docs/data/schema.md §3.1` เป็น v4 (reconcile field v3 ที่ค้าง + `shelter_type`→master_data code + address fields ล้อ §1.3) + bump `schema_v 3→4` + migration note; update `updated:` = วันจริง.
-4. set CR `status: proposed → approved` (owner).
+1. ~~owner เคาะ open decision 1~~ — **done:** Option A (`supported_vulnerable_groups` จาก master_data + seed Appendix B).
+2. ~~owner approve `schema_v 3→4`~~ — **done** (2026-07-01).
+3. ยืนยัน dependency: **CR-019** (master_type `shelter_type`) + **CR-012** (municipality_zone/community) done; ถ้ายังไม่ → วาง fallback (free input ชั่วคราว).
+4. **Seed `vulnerable_group`** — implement idempotent auto-seed 5 items (Appendix B) ใน `master-data.pouch.ts` + unit test; verify `/registration-config` แสดง 5 checkboxes.
+5. อัปเดต `docs/data/schema.md §3.1` เป็น v4 (reconcile field v3 ที่ค้าง + `shelter_type`→master_data code + address fields ล้อ §1.3) + bump `schema_v 3→4` + migration note; update `updated:` = วันจริง.
+6. ~~set CR `status: proposed → approved`~~ — **done** (2026-07-01).
 
 ### Phase 1 — Domain (schema-first)
 5. `domain/schema.ts`:
@@ -349,5 +346,44 @@ admissionPolicySchema = z.object({
 - 2026-06-30 — decision 6 RESOLVED: เพิ่ม `secondary_muster_point` เข้า EOC public risk endpoint (option A)
 - 2026-06-30 — decision 1 RESOLVED: `project_level` = **enum 3 ค่า** (`community`/`lao`/`provincial`), hardcoded ใน domain (option B)
 - 2026-06-30 — `area_type` = enum 3 ค่า (`indoor`/`outdoor`/`hybrid`), hardcoded
-- 2026-06-30 — `supported_vulnerable_groups` (section 6) **เปิดเป็น open decision** (A = choice จาก master_data `vulnerable_group` / B = static hardcoded enum 5 ค่า) — CR ร่างตาม A ไว้ก่อน; **pending owner**. `pet_policy` ยัง hardcoded enum
-- 2026-06-30 — รวบ resolved decisions ออกจาก §Open decisions (เก็บประวัติใน log นี้); เหลือ open เดียว = `supported_vulnerable_groups` source; รอ owner เคาะ + approve `schema_v 3→4`
+- 2026-06-30 — `supported_vulnerable_groups` (section 6) เปิดเป็น open decision (A = master_data / B = static enum) — CR ร่างตาม A ไว้ก่อน
+- 2026-06-30 — รวบ resolved decisions ออกจาก §Open decisions; เหลือ open เดียว = `supported_vulnerable_groups` source
+- 2026-07-01 — **decision 1 RESOLVED (owner):** `supported_vulnerable_groups` = **Option A** — choice จาก master_data `vulnerable_group`; persist `code[]` (ULID); UI wire live query; **ต้อง auto-seed 5 items** (Appendix B) ใน `master-data.pouch.ts` ก่อน wire section 6
+- 2026-07-01 — **CR approved (owner):** `status: proposed → approved`; **`schema_v shelter 3→4` approved** — ทีม implement ตาม §Implementation Plan Phase 0→4
+
+---
+
+## Appendix B — Seed Data: `vulnerable_group` (CR-023)
+
+> **Decision:** amend CR-012 seed policy — `vulnerable_group` เข้ากลุ่ม **auto-seed idempotent** สำหรับ CR-023 (เดิม CR-012 = ไม่ auto-seed 5 type แรก). Pattern เดียวกับ `municipality_zone`/`community`/`shelter_type` (CR-019).
+>
+> **Identifier:** `code = ulid()` ต่อ item ตอน seed (CR-012 §Decision log 2026-06-26). ตารางด้านล่างใช้ `logical_key` สำหรับ authoring/test เท่านั้น — ไม่ persist ใน doc.
+>
+> **Idempotent rule:** ถ้า `master_data:vulnerable_group` ไม่มี หรือ `items.length === 0` → insert 5 rows ด้านล่าง; ถ้ามี items แล้ว → **ไม่ merge/ไม่ทับ** (admin edit คงอยู่).
+
+| logical_key | label (TH) | is_default |
+| --- | --- | --- |
+| `elderly` | ผู้สูงอายุ | `true` |
+| `disabled` | ผู้พิการ | `false` |
+| `pregnant` | หญิงตั้งครรภ์ | `false` |
+| `bedridden` | ผู้ป่วยติดเตียง | `false` |
+| `children` | เด็ก/มีเด็กทารก | `false` |
+
+**Implementation sketch** (`master-data.pouch.ts`):
+
+```ts
+const VULNERABLE_GROUP_SEED: { label: string; is_default: boolean }[] = [
+  { label: 'ผู้สูงอายุ', is_default: true },
+  { label: 'ผู้พิการ', is_default: false },
+  { label: 'หญิงตั้งครรภ์', is_default: false },
+  { label: 'ผู้ป่วยติดเตียง', is_default: false },
+  { label: 'เด็ก/มีเด็กทารก', is_default: false }
+];
+// mint code = ulid() per item; enforce exactly one is_default per type
+```
+
+**DoD seed:**
+- [ ] เปิดระบบครั้งแรก (หรือ doc ว่าง) → `master_data:vulnerable_group` มี 5 items
+- [ ] re-run seed → ไม่ duplicate
+- [ ] SA แก้ label ที่ `/registration-config` → seed ไม่ทับ
+- [ ] shelter form section 6 แสดง 5 checkboxes จาก live query
