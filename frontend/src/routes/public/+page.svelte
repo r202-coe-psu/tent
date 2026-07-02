@@ -1,11 +1,10 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Navigation from '@lucide/svelte/icons/navigation';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Heart from '@lucide/svelte/icons/heart';
-	import FileText from '@lucide/svelte/icons/file-text';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
-	import Compass from '@lucide/svelte/icons/compass';
 	import Search from '@lucide/svelte/icons/search';
 	import HelpCircle from '@lucide/svelte/icons/help-circle';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
@@ -47,7 +46,7 @@
 				</p>
 				<!-- Shelter Badges -->
 				<div class="mt-4 flex flex-wrap gap-3">
-					{#each alerts as alert}
+					{#each alerts as alert (alert.name)}
 						<div
 							class="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 shadow-2xs"
 						>
@@ -136,7 +135,7 @@
 				iconClass="bg-primary-muted text-primary"
 			>
 				<a
-					href="/public/donations"
+					href={resolve('/public/donations')}
 					class="flex items-center justify-between rounded-lg bg-primary px-3 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-primary-dark"
 				>
 					แจ้งบริจาคสิ่งของล่วงหน้า
@@ -159,7 +158,7 @@
 				iconClass="bg-chart-2/15 text-chart-2"
 			>
 				<a
-					href="/public/volunteers"
+					href={resolve('/public/volunteers')}
 					class="flex items-center justify-between rounded-lg bg-chart-2/10 px-3 py-2.5 text-xs font-semibold text-chart-2 transition-colors hover:bg-chart-2/20"
 				>
 					สมัคร / จองกะช่วยเหลือ
