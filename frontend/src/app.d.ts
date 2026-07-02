@@ -11,7 +11,10 @@ declare global {
 	}
 	interface Window {
 		grecaptcha?: {
-			render: (container: HTMLElement | string, parameters: { sitekey: string; callback?: string | Function }) => void;
+			render: (
+				container: HTMLElement | string,
+				parameters: { sitekey: string; callback?: string | Function }
+			) => void;
 		};
 		__captchaToken?: string;
 	}

@@ -1,5 +1,5 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-import { createUser, deleteUser, listUsers } from '../data/users.api';
+import { createUser, deleteUser, listUsers, updateUser } from '../data/users.api';
 
 export const usersKeys = {
 	all: ['users'] as const,
@@ -15,7 +15,30 @@ export const useUsers = () =>
 export const useCreateUser = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (input: { name: string; password: string; roles: string[] }) => createUser(input),
+		mutationFn: (input: {
+			name: string;
+			password: string;
+			display_name: string;
+			roles: string[];
+			affiliation_tags?: string[];
+		}) => createUser(input),
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
+	}));
+};
+
+export const useUpdateUser = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (input: {
+			name: string;
+			password?: string;
+			display_name?: string;
+			roles?: string[];
+			affiliation_tags?: string[];
+		}) => {
+			const { name, ...rest } = input;
+			return updateUser(name, rest);
+		},
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
 	}));
 };

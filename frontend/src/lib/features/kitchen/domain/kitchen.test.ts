@@ -69,6 +69,33 @@ describe('createMealPlan', () => {
 			)
 		).toThrow();
 	});
+
+	it('rejects a single sub-count exceeding total (CR-022 per-field invariant)', () => {
+		expect(() =>
+			createMealPlan(
+				{
+					date: '2026-07-15',
+					meal: 'lunch',
+					headcount: { total: 10, halal: 11, soft_food: 0, infant: 0 },
+					recipes: [{ recipe_id: 'recipe:x', planned_qty: 5 }]
+				},
+				ctx
+			)
+		).toThrow();
+	});
+
+	it('allows overlapping sub-counts whose sum exceeds total (orthogonal dimensions)', () => {
+		const plan = createMealPlan(
+			{
+				date: '2026-07-15',
+				meal: 'lunch',
+				headcount: { total: 10, halal: 8, soft_food: 5, infant: 3 },
+				recipes: [{ recipe_id: 'recipe:x', planned_qty: 5 }]
+			},
+			ctx
+		);
+		expect(plan.headcount.halal).toBe(8);
+	});
 });
 
 // ---- KitchenRequisition ----

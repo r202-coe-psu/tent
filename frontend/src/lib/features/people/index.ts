@@ -70,6 +70,7 @@ export {
 	useEvacueesPaginated,
 	useCreateEvacuee,
 	useUpdateEvacuee,
+	useCheckInEvacuee,
 	startPeopleLiveQuery
 } from './application/queries';
 

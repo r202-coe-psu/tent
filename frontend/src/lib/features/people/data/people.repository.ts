@@ -22,4 +22,10 @@ export interface PeopleRepository {
 	getEvacuee(id: string): Promise<Evacuee | null>;
 	/** Persist an edited evacuee (LWW: bumps `updated_at`). */
 	updateEvacuee(evacuee: Evacuee): Promise<Evacuee>;
+	/**
+	 * Record a check-in movement and apply it to the evacuee's `current_stay`.
+	 * Writes the append-only `movement` doc first, then the updated evacuee —
+	 * this is the only path that flips occupancy to `checked_in` (T-06).
+	 */
+	checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone?: string | null): Promise<Evacuee>;
 }
