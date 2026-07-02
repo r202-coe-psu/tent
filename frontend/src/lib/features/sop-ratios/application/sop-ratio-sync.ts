@@ -16,7 +16,7 @@
  */
 
 import { namedLocalDb } from '$lib/db/pouch';
-import { SHELTER_CODE } from '$lib/db/shelter';
+import { shelterDb } from '$lib/db/shelter';
 import type { QueryClient } from '@tanstack/svelte-query';
 import { sopRatioKeys } from './queries';
 
@@ -59,8 +59,8 @@ export function startSopRatioSync(queryClient: QueryClient): () => void {
 	// --- Override: shelter_* DB ---
 	// sop_override lives in the shelter's own DB (BaseDoc, has shelter_code).
 	// Reference: sop-ratio.pouch.ts → SopOverridePouchRepository constructor
-	const shelterDb = namedLocalDb(`shelter_${SHELTER_CODE.toLowerCase()}`);
-	const overrideFeed: ChangesHandle = shelterDb
+	const shelterDatabase = shelterDb();
+	const overrideFeed: ChangesHandle = shelterDatabase
 		.changes({ live: true, since: 'now', include_docs: false, filter: filterSopOverride })
 		.on('change', () => {
 			queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
