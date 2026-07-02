@@ -4,6 +4,7 @@ import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { operationsRepository } from '../data/operations.pouch';
 import type { ReceiveInput } from '../domain/operations';
+import { toast } from 'svelte-sonner';
 
 export const operationsKeys = {
 	all: ['operations'] as const,
@@ -45,7 +46,11 @@ export const useStockBalance = () =>
 export const useReceiveStock = () =>
 	createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) =>
-			operationsRepository().receiveStock(input, ctx)
+			operationsRepository().receiveStock(input, ctx),
+		onError: (err: unknown) => {
+			console.error('[operations] receiveStock failed:', err);
+			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการรับของเข้าคลัง');
+		}
 	}));
 
 /**

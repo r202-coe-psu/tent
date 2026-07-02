@@ -158,7 +158,14 @@ export const receiveInputSchema = z.object({
 });
 export type ReceiveInput = z.input<typeof receiveInputSchema>;
 
-// INVARIANT: caller must enforce perishable -> lot.expiry required
+/**
+ * Converts a ReceiveInput into a StockLedger entry.
+ *
+ * INVARIANT: The caller is responsible for enforcing that `lot.expiry` is provided
+ * when the corresponding SupplyItem is marked as `perishable`. This domain layer
+ * cannot validate it because it does not load the catalog item synchronously.
+ * See UI enforcement in ReceiveStockForm.svelte.
+ */
 export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): StockLedger {
 	const d = receiveInputSchema.parse(input);
 	let reason: LedgerReason;
