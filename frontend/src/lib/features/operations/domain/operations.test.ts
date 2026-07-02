@@ -10,6 +10,7 @@ import {
 	createCampaign,
 	openNeeds,
 	createReceiveEntry,
+	createDistributeEntry,
 	type Donation,
 	type ReceiveSource
 } from './operations';
@@ -245,5 +246,64 @@ describe('createReceiveEntry', () => {
 				ctx
 			)
 		).toThrow();
+	});
+});
+
+describe('createDistributeEntry', () => {
+	it('creates a distribute entry with negative quantity and distribute reason', () => {
+		const entry = createDistributeEntry(
+			{
+				item_id: 'item:rice',
+				qty: 10,
+				unit: 'kg',
+				ref_id: null
+			},
+			ctx
+		);
+		expect(entry.type).toBe('stock_ledger');
+		expect(entry.qty).toBe(-10); // Must be negative to deduct from balance
+		expect(entry.reason).toBe('distribute');
+		expect(entry.lot).toBeUndefined();
+		expect(entry.shelter_code).toBe(ctx.shelterCode);
+	});
+
+	it('rejects zero or negative quantity input', () => {
+		expect(() =>
+			createDistributeEntry(
+				{
+					item_id: 'item:rice',
+					qty: 0,
+					unit: 'kg',
+					ref_id: null
+				},
+				ctx
+			)
+		).toThrow();
+
+		expect(() =>
+			createDistributeEntry(
+				{
+					item_id: 'item:rice',
+					qty: -5,
+					unit: 'kg',
+					ref_id: null
+				},
+				ctx
+			)
+		).toThrow();
+	});
+
+	it('stores note inside lot.note if provided', () => {
+		const entry = createDistributeEntry(
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				ref_id: null,
+				note: 'Zone C, Family 12'
+			},
+			ctx
+		);
+		expect(entry.lot).toEqual({ note: 'Zone C, Family 12' });
 	});
 });
