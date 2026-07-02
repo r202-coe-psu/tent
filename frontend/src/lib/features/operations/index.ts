@@ -54,6 +54,11 @@ export {
 	receiveSourceSchema,
 	createReceiveEntry
 } from './domain/operations';
+export {
+	distributeInputSchema,
+	createDistributeEntry,
+	type DistributeInput
+} from './domain/operations';
 
 // Data — repository contract + PouchDB binding
 export type { OperationsRepository } from './data/operations.repository';
@@ -66,10 +71,12 @@ export {
 	useLedgerByItem,
 	useStockBalance,
 	useReceiveStock,
+	useDistributeStock,
 	startOperationsLiveQuery
 } from './application/queries';
 
 // UI components
 export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';
+export { default as DistributeStockForm } from './ui/DistributeStockForm.svelte';
 export { default as LedgerTable } from './ui/LedgerTable.svelte';
 export { default as StockTable } from './ui/StockTable.svelte';
