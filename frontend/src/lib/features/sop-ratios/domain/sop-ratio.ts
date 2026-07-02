@@ -4,11 +4,51 @@ import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
 
 export const SOP_RATIO_KEYS = [
 	'water_l_per_person_day',
-	'rice_g_per_person_meal',
-	'toilet_per_person'
+	'drinking_water_l_per_person_day',
+	'cooking_water_l_per_person_day',
+	'hygiene_water_l_per_person_day',
+	'kcal_per_adult_day',
+	'people_per_tap',
+	'people_per_handpump',
+	'people_per_open_well',
+	'people_per_laundry',
+	'people_per_bathing',
+	'people_per_toilet_female',
+	'people_per_toilet_male',
+	'people_per_dining_point_adult',
+	'people_per_dining_point_child',
+	'm2_per_person_living',
+	'm2_per_person_living_cold',
+	'm2_per_person_total',
+	'max_waterpoint_distance_m',
+	'max_queue_minutes',
+	'people_per_volunteer'
 ] as const;
 
 export type SopRatioKey = (typeof SOP_RATIO_KEYS)[number];
+
+export const SOP_RATIO_KIND: Record<SopRatioKey, 'multiply' | 'divide' | 'threshold'> = {
+	water_l_per_person_day: 'multiply',
+	drinking_water_l_per_person_day: 'multiply',
+	cooking_water_l_per_person_day: 'multiply',
+	hygiene_water_l_per_person_day: 'multiply',
+	kcal_per_adult_day: 'multiply',
+	people_per_tap: 'divide',
+	people_per_handpump: 'divide',
+	people_per_open_well: 'divide',
+	people_per_laundry: 'divide',
+	people_per_bathing: 'divide',
+	people_per_toilet_female: 'divide',
+	people_per_toilet_male: 'divide',
+	people_per_dining_point_adult: 'divide',
+	people_per_dining_point_child: 'divide',
+	m2_per_person_living: 'multiply',
+	m2_per_person_living_cold: 'multiply',
+	m2_per_person_total: 'multiply',
+	max_waterpoint_distance_m: 'threshold',
+	max_queue_minutes: 'threshold',
+	people_per_volunteer: 'divide'
+};
 
 const ratioShape = SOP_RATIO_KEYS.reduce(
 	(acc, key) => ({ ...acc, [key]: z.number().positive() }),
@@ -17,9 +57,10 @@ const ratioShape = SOP_RATIO_KEYS.reduce(
 
 /**
  * Validates that all keys in the record are part of the whitelist
- * and that all values are positive numbers.
+ * and that all values are positive numbers. Strict checking prevents
+ * deprecated or care-allocation keys from leaking in.
  */
-export const ratiosSchema = z.object(ratioShape);
+export const ratiosSchema = z.object(ratioShape).strict();
 
 // --- Master SOP Profile Schema (catalog DB, schema_v 2)
 export const SOP_MASTER_SCHEMA_VERSION = 2;
@@ -134,11 +175,8 @@ export function createInitialProfile(
 	ratios: Record<SopRatioKey, number>,
 	ctx: AnyProfileCtx
 ): { profile: SopMaster | SopOverride; audit: AuditEntry } {
-	// Filter out any unexpected keys for safety
-	const safeRatios = {} as Record<SopRatioKey, number>;
-	for (const key of SOP_RATIO_KEYS) {
-		if (ratios[key] !== undefined) safeRatios[key] = ratios[key];
-	}
+	// Validate ratios strictly using ratiosSchema to reject non-whitelist or deprecated keys
+	const safeRatios = ratiosSchema.parse(ratios);
 
 	if (targetType === 'sop_profile') {
 		const profile = catalogDoc(
@@ -235,14 +273,13 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 	reason: string,
 	ctx: MasterCtx | AuthorContext
 ): CreateNewVersionResult<T> {
-	// Filter incoming changes to ensure no poisoned keys leak into the merge
-	const safeChanges: Partial<Record<SopRatioKey, number>> = {};
+	// Validate partial changes strictly to reject non-whitelist or deprecated keys
+	const safeChanges = ratiosSchema.partial().strict().parse(changes);
 	let hasChanges = false;
 
 	for (const key of SOP_RATIO_KEYS) {
-		if (changes[key] !== undefined) {
-			safeChanges[key] = changes[key];
-			if (prev.ratios[key] !== changes[key]) hasChanges = true;
+		if (safeChanges[key] !== undefined) {
+			if (prev.ratios[key] !== safeChanges[key]) hasChanges = true;
 		}
 	}
 

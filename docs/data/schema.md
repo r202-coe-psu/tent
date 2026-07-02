@@ -325,7 +325,7 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 | `shelter_code` | str | req | ศูนย์ที่เป็นเจ้าของ override (ตรงกับ session) |
 | `base_profile_id` | str | req | อ้างอิง ID ของ `sop_profile` ที่เป็นต้นทางของการ override |
 | `name` | str | req | เช่น "Override ช่วงฤดูร้อน" |
-| `ratios` | {`water_l_per_person_day`:num, `rice_g_per_person_meal`:num, `toilet_per_person`:num} | req | ratios ต้องระบุคีย์ครบถ้วน (Full Ratios Requirement) |
+| `ratios` | {`water_l_per_person_day`:num, `drinking_water_l_per_person_day`:num, `cooking_water_l_per_person_day`:num, `hygiene_water_l_per_person_day`:num, `kcal_per_adult_day`:num, `people_per_tap`:num, `people_per_handpump`:num, `people_per_open_well`:num, `people_per_laundry`:num, `people_per_bathing`:num, `people_per_toilet_female`:num, `people_per_toilet_male`:num, `people_per_dining_point_adult`:num, `people_per_dining_point_child`:num, `m2_per_person_living`:num, `m2_per_person_living_cold`:num, `m2_per_person_total`:num, `max_waterpoint_distance_m`:num, `max_queue_minutes`:num, `people_per_volunteer`:num} | req | ratios ต้องระบุคีย์ครบถ้วน (Full Ratios Requirement) |
 | `version` | int | req | — |
 | `active` | bool | req | สลับใช้ profile นี้หากเป็น true |
 
@@ -446,7 +446,7 @@ interface MasterDataItem {
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `name` | str | req | เช่น "Sphere baseline", "ปภ. มาตรฐาน" |
-| `ratios` | {`water_l_per_person_day`:num, `rice_g_per_person_meal`:num, `toilet_per_person`:num} | req | ratios ต้องระบุคีย์ครบถ้วน (Full Ratios Requirement) |
+| `ratios` | {`water_l_per_person_day`:num, `drinking_water_l_per_person_day`:num, `cooking_water_l_per_person_day`:num, `hygiene_water_l_per_person_day`:num, `kcal_per_adult_day`:num, `people_per_tap`:num, `people_per_handpump`:num, `people_per_open_well`:num, `people_per_laundry`:num, `people_per_bathing`:num, `people_per_toilet_female`:num, `people_per_toilet_male`:num, `people_per_dining_point_adult`:num, `people_per_dining_point_child`:num, `m2_per_person_living`:num, `m2_per_person_living_cold`:num, `m2_per_person_total`:num, `max_waterpoint_distance_m`:num, `max_queue_minutes`:num, `people_per_volunteer`:num} | req | ratios ต้องระบุคีย์ครบถ้วน (Full Ratios Requirement) |
 | `version` | int | req | — |
 | `active` | bool | req | ศูนย์เลือกใช้ profile ที่ active |
 

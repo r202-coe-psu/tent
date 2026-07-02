@@ -31,6 +31,29 @@ const overrideCtx: AuthorContext & { base_profile_id: string } = {
 	base_profile_id: 'sop_profile:base-id'
 };
 
+const validRatios = {
+	water_l_per_person_day: 15,
+	drinking_water_l_per_person_day: 3,
+	cooking_water_l_per_person_day: 6,
+	hygiene_water_l_per_person_day: 6,
+	kcal_per_adult_day: 2000,
+	people_per_tap: 80,
+	people_per_handpump: 500,
+	people_per_open_well: 400,
+	people_per_laundry: 100,
+	people_per_bathing: 50,
+	people_per_toilet_female: 20,
+	people_per_toilet_male: 35,
+	people_per_dining_point_adult: 20,
+	people_per_dining_point_child: 10,
+	m2_per_person_living: 3.5,
+	m2_per_person_living_cold: 4.5,
+	m2_per_person_total: 45,
+	max_waterpoint_distance_m: 500,
+	max_queue_minutes: 30,
+	people_per_volunteer: 50
+};
+
 describe('SopMasterPouchRepository', () => {
 	let db: PouchDB.Database;
 	let repo: SopMasterPouchRepository;
@@ -50,13 +73,13 @@ describe('SopMasterPouchRepository', () => {
 		const { profile: p1, audit: a1 } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			validRatios,
 			masterCtx
 		);
 		const { profile: p2, audit: a2 } = createInitialProfile(
 			'sop_profile',
 			'Thai Red Cross',
-			{ water_l_per_person_day: 20, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			{ ...validRatios, water_l_per_person_day: 20 },
 			masterCtx
 		);
 
@@ -83,7 +106,7 @@ describe('SopMasterPouchRepository', () => {
 		const { profile: p1, audit: a1 } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			validRatios,
 			masterCtx
 		);
 		await repo.createVersion(null, p1, a1);
@@ -97,7 +120,7 @@ describe('SopMasterPouchRepository', () => {
 		const { profile: p2, audit: a3 } = createInitialProfile(
 			'sop_profile',
 			'Different Name',
-			{ water_l_per_person_day: 10, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			{ ...validRatios, water_l_per_person_day: 10 },
 			masterCtx
 		);
 
@@ -114,7 +137,7 @@ describe('SopMasterPouchRepository', () => {
 		const { profile, audit } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			validRatios,
 			masterCtx
 		);
 		await repo.createVersion(null, profile, audit);
@@ -131,7 +154,7 @@ describe('SopMasterPouchRepository', () => {
 		const { profile: p1, audit: a1 } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			validRatios,
 			masterCtx
 		);
 		const { profile: savedP1 } = await repo.createVersion(null, p1, a1);
@@ -160,7 +183,7 @@ describe('SopMasterPouchRepository', () => {
 		const { profile: p1, audit: a1 } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			validRatios,
 			masterCtx
 		);
 		await repo.createVersion(null, p1, a1);
@@ -203,13 +226,13 @@ describe('SopOverridePouchRepository', () => {
 		const { profile: p1, audit: a1 } = createInitialProfile(
 			'sop_override',
 			'Winter Adjust',
-			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			validRatios,
 			overrideCtx
 		);
 		const { profile: p2, audit: a2 } = createInitialProfile(
 			'sop_override',
 			'Summer Adjust',
-			{ water_l_per_person_day: 20, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			{ ...validRatios, water_l_per_person_day: 20 },
 			overrideCtx
 		);
 
@@ -236,13 +259,13 @@ describe('SopOverridePouchRepository', () => {
 		const { profile: p1, audit: a1 } = createInitialProfile(
 			'sop_override',
 			'Winter Adjust',
-			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			validRatios,
 			overrideCtx
 		);
 		const { profile: p2, audit: a2 } = createInitialProfile(
 			'sop_override',
 			'Summer Adjust',
-			{ water_l_per_person_day: 20, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			{ ...validRatios, water_l_per_person_day: 20 },
 			overrideCtx
 		);
 
@@ -299,7 +322,7 @@ describe('resolveEffective application helper', () => {
 		const { profile: masterProfile, audit: masterAudit } = createInitialProfile(
 			'sop_profile',
 			'Sphere Baseline',
-			{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			validRatios,
 			masterCtx
 		);
 		await masterRepo.createVersion(null, masterProfile, masterAudit);
@@ -313,7 +336,7 @@ describe('resolveEffective application helper', () => {
 		const { profile: overrideProfile, audit: overrideAudit } = createInitialProfile(
 			'sop_override',
 			'Local Override',
-			{ water_l_per_person_day: 20, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			{ ...validRatios, water_l_per_person_day: 20 },
 			overrideCtx
 		);
 		await overrideRepo.createVersion(null, overrideProfile, overrideAudit);
