@@ -16,6 +16,7 @@ import {
 	Calculator,
 	HandHeart,
 	MapPin,
+	UtensilsCrossed,
 	Tent,
 	Home
 } from '@lucide/svelte/icons';
@@ -54,7 +55,8 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '2. บริหารทรัพยากร',
 		items: [
 			{ label: 'การประเมินประจำวัน (Daily SOP)', href: null, icon: ClipboardList },
-			{ label: 'คลังสิ่งของและบริจาค', href: null, icon: Package }
+			{ label: 'คลังสิ่งของและบริจาค', href: null, icon: Package },
+			{ label: 'ครัวกลางและอาหาร', href: resolve('/back-office/kitchen'), icon: UtensilsCrossed }
 		]
 	},
 	{

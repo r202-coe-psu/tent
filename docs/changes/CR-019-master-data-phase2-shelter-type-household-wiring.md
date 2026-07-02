@@ -95,7 +95,7 @@ affects:
 | ไฟล์ | การเปลี่ยนแปลง |
 |------|----------------|
 | `docs/data/schema.md §3.3` | `master_type` enum 7→8 (เพิ่ม `shelter_type`); เพิ่ม seed note |
-| `docs/changes/_index.md` | เพิ่มแถว CR-018 |
+| `docs/changes/_index.md` | เพิ่มแถว CR-019 |
 | `frontend/src/lib/features/master-data/domain/master-data.ts` | เพิ่ม `shelter_type` ใน `MASTER_DATA_TYPES` + `MasterType` enum + seed items |
 | `frontend/src/lib/features/master-data/domain/master-data.test.ts` | เพิ่ม test ครอบ `shelter_type` |
 | `frontend/src/lib/components/backoffice-navbar/static.ts` | เพิ่ม 2 menu items ใหม่ใต้ "จัดการข้อมูลหลัก" |

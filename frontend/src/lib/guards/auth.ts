@@ -2,7 +2,7 @@ import { authStore } from '$lib/stores/auth.svelte';
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { resolve } from '$app/paths';
-import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+import { hasStaffCapability, isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
 export const LANDING_ROUTE = '/';
@@ -22,10 +22,10 @@ export const LOGIN_ROUTE = '/login';
  *   return {};
  * };
  */
-export async function requireAuth() {
+export async function requireAuth(fetchFn?: typeof fetch) {
 	if (!browser) return;
 
-	await authStore.ensureInitialized();
+	await authStore.ensureInitialized(fetchFn);
 
 	if (!authStore.isAuthenticated) {
 		throw redirect(302, resolve(LOGIN_ROUTE));
@@ -36,8 +36,8 @@ export async function requireAuth() {
  * Admin guard — requires a system admin (`system_admin` or the CouchDB `_admin`).
  * Redirects to / when authenticated but not an admin.
  */
-export async function requireAdmin() {
-	await requireAuth();
+export async function requireAdmin(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
 	if (!isSystemAdmin(authStore.user?.roles ?? [])) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
@@ -47,10 +47,27 @@ export async function requireAdmin() {
  * Manager guard — requires a system admin OR a shelter_manager. Used by the
  * user-management page (the BFF is the real authorization gate; this is UX).
  */
-export async function requireManager() {
-	await requireAuth();
+export async function requireManager(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
 	if (!isSystemAdmin(roles) && !isShelterManager(roles)) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Kitchen guard — requires system_admin, shelter_manager, or the `kitchen_staff`
+ * capability (CR-024). This is a UX gate; the data layer remains the real
+ * authorization boundary. Redirects to / when authenticated but unauthorized.
+ */
+export async function requireKitchen(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (
+		!isSystemAdmin(roles) &&
+		!isShelterManager(roles) &&
+		!hasStaffCapability(roles, 'kitchen_staff')
+	) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
@@ -66,10 +83,13 @@ export async function requireManager() {
  *   return {};
  * };
  */
-export async function redirectIfAuthenticated(redirectTo: typeof LANDING_ROUTE = LANDING_ROUTE) {
+export async function redirectIfAuthenticated(
+	redirectTo: typeof LANDING_ROUTE = LANDING_ROUTE,
+	fetchFn?: typeof fetch
+) {
 	if (!browser) return;
 
-	await authStore.ensureInitialized();
+	await authStore.ensureInitialized(fetchFn);
 
 	// Allow the login page through when the sync session has expired, so the
 	// user can re-authenticate even though a cached identity still exists.

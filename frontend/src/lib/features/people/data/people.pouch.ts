@@ -4,6 +4,8 @@ import { touch, type AuthorContext } from '$lib/db/model';
 import { SHELTER_CODE, SHELTER_DB, shelterDb as _shelterDb } from '$lib/db/shelter';
 import {
 	createEvacuee as buildEvacuee,
+	createMovement,
+	applyMovementToStay,
 	isEvacuee,
 	createMedical as buildMedical,
 	type Evacuee,
@@ -148,6 +150,17 @@ export class PeoplePouchRepository implements PeopleRepository {
 
 	listScreenings(): Promise<Screening[]> {
 		return this.repo.allByType('screening', isScreening);
+	}
+
+	/** Record a check-in movement, then apply it to the evacuee's current_stay. */
+	async checkInEvacuee(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		zone: string | null = null
+	): Promise<Evacuee> {
+		const movement = createMovement({ evacuee_id: evacuee._id, action: 'check_in', zone }, ctx);
+		await this.repo.put(movement);
+		return this.repo.put(applyMovementToStay(evacuee, movement));
 	}
 }
 

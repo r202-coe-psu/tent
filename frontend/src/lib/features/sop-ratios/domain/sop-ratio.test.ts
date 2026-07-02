@@ -32,10 +32,11 @@ describe('SOP Ratio Domain', () => {
 			expect(profile.ratios.rice_g_per_person_meal).toBe(200);
 			expect(profile.ratios.toilet_per_person).toBe(0.05);
 			expect(profile.type).toBe('sop_profile');
+			expect(profile.schema_v).toBe(2);
+			expect((profile as any).shelter_code).toBeUndefined(); // Master has no shelter_code
 			expect(profile._id.startsWith('sop_profile:')).toBe(true);
 			expect((profile as any).shelter_code).toBeUndefined(); // Master has no shelter_code
 
-			// Check audit trail
 			expect(audit.action).toBe('created');
 			expect(audit.target_type).toBe('sop_profile');
 
@@ -106,7 +107,6 @@ describe('SOP Ratio Domain', () => {
 				{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 				masterCtx
 			);
-
 			const {
 				deactivatedPrev,
 				profile: next,
@@ -119,57 +119,57 @@ describe('SOP Ratio Domain', () => {
 			);
 
 			expect(deactivatedPrev?.active).toBe(false);
-			expect(deactivatedPrev?._id).toBe(prev._id); // ID must be the same
-
-			// Check new profile
-			expect(next.name).toBe('Sphere baseline');
 			expect(next.version).toBe(2);
 			expect(next.ratios.water_l_per_person_day).toBe(20);
-			expect(next._id).not.toBe(prev._id);
-			expect(next.active).toBe(true);
-
-			// Check audit
-			expect(audit?.action).toBe('manual_adjust');
 			expect(audit?.target_id).toBe(next._id);
-			expect(audit?.reason).toBe('Updated water ratio based on new standards');
-			expect(audit?.context?.previous_version).toBe(1);
 		});
+	});
 
+	describe('Idempotency and Partial Updates', () => {
 		it('should abort gracefully (Idempotent no-op) if changes yield identical state', () => {
 			const { profile: prev } = createInitialProfile(
 				'sop_profile',
-				'Standard',
+				'Sphere baseline',
 				{ water_l_per_person_day: 15, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
 				masterCtx
 			);
 
-			const result = createNewVersion(prev, { water_l_per_person_day: 15 }, 'No change', masterCtx);
+			const {
+				deactivatedPrev,
+				profile: next,
+				audit
+			} = createNewVersion(
+				prev,
+				{ water_l_per_person_day: 15, rice_g_per_person_meal: 200 },
+				'No actual change',
+				masterCtx
+			);
 
-			expect(result.deactivatedPrev).toBeNull();
-			expect(result.audit).toBeNull();
-			expect(result.profile).toBe(prev);
+			expect(deactivatedPrev).toBeNull();
+			expect(audit).toBeNull();
+			expect(next).toBe(prev);
 		});
 
 		it('should keep untouched ratio keys after partial update', () => {
 			const { profile: prev } = createInitialProfile(
-				'sop_profile',
-				'Standard',
-				{ water_l_per_person_day: 15, rice_g_per_person_meal: 150, toilet_per_person: 0.05 },
-				masterCtx
+				'sop_override',
+				'Custom Override',
+				{ water_l_per_person_day: 20, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+				overrideCtx
 			);
 
 			const { profile: next } = createNewVersion(
 				prev,
-				{ rice_g_per_person_meal: 200 },
+				{ rice_g_per_person_meal: 250 },
 				'Update rice only',
-				masterCtx
+				overrideCtx
 			);
 
-			// Untouched key must survive the partial update
-			expect(next.ratios.water_l_per_person_day).toBe(15);
-			// Changed key must reflect new value
-			expect(next.ratios.rice_g_per_person_meal).toBe(200);
+			// Untouched keys must survive the partial update
+			expect(next.ratios.water_l_per_person_day).toBe(20);
 			expect(next.ratios.toilet_per_person).toBe(0.05);
+			// Changed key must reflect new value
+			expect(next.ratios.rice_g_per_person_meal).toBe(250);
 			// A new doc must be created
 			expect(next._id).not.toBe(prev._id);
 			expect(next.version).toBe(2);

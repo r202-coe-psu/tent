@@ -78,7 +78,9 @@
 	<div class="overflow-x-auto">
 		<Table.Root class="w-full border-collapse text-left">
 			<Table.Header>
-				<Table.Row class="border-b border-border bg-muted/20 text-[11px] font-bold text-muted-foreground uppercase">
+				<Table.Row
+					class="border-b border-border bg-muted/20 text-[11px] font-bold text-muted-foreground uppercase"
+				>
 					<Table.Head class="px-6 py-4">รายการพัสดุ / ประกาศพิเศษ</Table.Head>
 					<Table.Head class="px-6 py-4 text-right">ยอดจองบริจาคแล้ว</Table.Head>
 					<Table.Head class="px-6 py-4 text-right">ยอดเป้าหมาย</Table.Head>
@@ -89,10 +91,7 @@
 			</Table.Header>
 			<Table.Body class="divide-y divide-border/60 text-xs">
 				{#each filteredItems as item (item.id)}
-					{@const progressPercent = Math.min(
-						Math.round((item.reserved / item.target) * 100),
-						100
-					)}
+					{@const progressPercent = Math.min(Math.round((item.reserved / item.target) * 100), 100)}
 
 					<Table.Row
 						class="transition-colors hover:bg-muted/5 {item.isCutOff
@@ -134,9 +133,7 @@
 										style="width: {progressPercent}%"
 									></div>
 								</div>
-								<span class="text-[10px] font-bold text-muted-foreground"
-									>{progressPercent}%</span
-								>
+								<span class="text-[10px] font-bold text-muted-foreground">{progressPercent}%</span>
 							</div>
 						</Table.Cell>
 

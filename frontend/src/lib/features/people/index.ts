@@ -72,6 +72,7 @@ export {
 	useSearchEvacuees,
 	useCreateEvacuee,
 	useUpdateEvacuee,
+	useCheckInEvacuee,
 	useHouseholds,
 	useHouseholdsPaginated,
 	useCreateHousehold,
