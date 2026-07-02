@@ -5,6 +5,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import Search from '@lucide/svelte/icons/search';
 	import Filter from '@lucide/svelte/icons/filter';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Activity from '@lucide/svelte/icons/activity';
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
@@ -200,7 +201,7 @@
 						{/each}
 					</select>
 					<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground">
-						<svg class="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+						<ChevronDown class="h-4 w-4" />
 					</div>
 				</div>
 
@@ -217,7 +218,7 @@
 						{/each}
 					</select>
 					<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground">
-						<svg class="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+						<ChevronDown class="h-4 w-4" />
 					</div>
 				</div>
 
@@ -236,7 +237,7 @@
 						<option value="expired">❌ หมดอายุแล้ว (Expired)</option>
 					</select>
 					<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground">
-						<svg class="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+						<ChevronDown class="h-4 w-4" />
 					</div>
 				</div>
 			</div>
