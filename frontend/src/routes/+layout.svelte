@@ -11,6 +11,7 @@
 	import { startOperationsLiveQuery } from '$lib/features/operations';
 	import { startKitchenLiveQuery } from '$lib/features/kitchen';
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
+	import { startCatalogLiveQuery } from '$lib/features/supply';
 
 	let { children, data } = $props();
 
@@ -31,12 +32,14 @@
 		const liveOperations = startOperationsLiveQuery(data.queryClient);
 		const liveKitchen = startKitchenLiveQuery(data.queryClient);
 		const liveShelters = startSheltersLiveQuery(data.queryClient);
+		const liveCatalog = startCatalogLiveQuery(data.queryClient);
 		
 		return () => {
 			livePeople.stop();
 			liveOperations.stop();
 			liveKitchen.stop();
 			liveShelters.stop();
+			liveCatalog.stop();
 			stopNamedSync(SHELTER_DB);
 			stopNamedSync('catalog');
 			stopNamedSync(SHELTER_REGISTRY_DB);
