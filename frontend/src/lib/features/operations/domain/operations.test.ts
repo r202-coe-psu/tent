@@ -135,14 +135,14 @@ describe('createReceiveEntry', () => {
 		);
 		expect(entry.type).toBe('stock_ledger');
 		expect(entry.qty).toBe(10);
-		expect(entry.reason).toBe('receive');
+		expect(entry.reason).toBe('purchase');
 		expect(entry.shelter_code).toBe(ctx.shelterCode);
 	});
 
 	it('maps sources to correct reasons', () => {
 		const sourcesAndReasons = {
 			donation: 'donation',
-			purchase: 'receive',
+			purchase: 'purchase',
 			transfer_in: 'transfer_in',
 			manual: 'adjust'
 		} as const;
