@@ -58,6 +58,11 @@
 	/**
 	 * For each item, derive the latest lot info (expiry + storage note) from
 	 * the most-recent POSITIVE ledger entry so the table can show them.
+	 *
+	 * LIMITATION: This picks the last inbound entry's lot per item_id. After a
+	 * full distribute-then-restock cycle the table may briefly show the OLD lot's
+	 * expiry/location until the new receive entry lands. A proper fix requires
+	 * per-lot balance tracking (FIFO/FEFO), which is out of scope for T-11.
 	 */
 	const latestLotByItem = $derived.by(() => {
 		const result: Record<string, { expiry?: string; note?: string }> = {};
