@@ -7,8 +7,6 @@
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
-	import Clock from '@lucide/svelte/icons/clock';
-	import Activity from '@lucide/svelte/icons/activity';
 	import TrendingUp from '@lucide/svelte/icons/trending-up';
 	import XCircle from '@lucide/svelte/icons/x-circle';
 
