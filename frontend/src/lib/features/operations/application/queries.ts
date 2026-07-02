@@ -3,7 +3,7 @@ import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { operationsRepository } from '../data/operations.pouch';
-import type { ReceiveInput } from '../domain/operations';
+import type { ReceiveInput, DistributeInput } from '../domain/operations';
 import { toast } from 'svelte-sonner';
 
 export const operationsKeys = {
@@ -50,6 +50,19 @@ export const useReceiveStock = () =>
 		onError: (err: unknown) => {
 			console.error('[operations] receiveStock failed:', err);
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการรับของเข้าคลัง');
+		}
+	}));
+
+/**
+ * Mutation hook to distribute outbound stock, persist the ledger entry, and invalidate caches.
+ */
+export const useDistributeStock = () =>
+	createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: DistributeInput; ctx: AuthorContext }) =>
+			operationsRepository().distributeStock(input, ctx),
+		onError: (err: unknown) => {
+			console.error('[operations] distributeStock failed:', err);
+			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการแจกจ่ายพัสดุ');
 		}
 	}));
 
