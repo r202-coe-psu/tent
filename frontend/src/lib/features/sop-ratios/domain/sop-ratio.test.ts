@@ -69,19 +69,37 @@ describe('SOP Ratio Domain', () => {
 			expect(() => sopMasterSchema.parse(profile)).not.toThrow();
 		});
 
-		it('should reject profile when ratio keys are missing (Full Ratios Requirement)', () => {
+		// Master ratios use existential constraint (>=1 key), not total constraint —
+		// per CR-006 §Doc shape + CR-018 invariant #2. Override is total (see below).
+		it('should create master profile when ratios has only 1 key (partial, CR-006/CR-018 #2)', () => {
 			expect(() => {
-				// Missing many keys
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ water_l_per_person_day: 15 } as any,
+					{ water_l_per_person_day: 15 },
 					masterCtx
 				);
-			}).toThrow();
+			}).not.toThrow();
 		});
 
-		it('should reject non-whitelist or deprecated keys (strict check)', () => {
+		it('should create master profile when ratios has multiple keys but not the full 20 (partial)', () => {
+			expect(() => {
+				createInitialProfile(
+					'sop_profile',
+					'Sphere baseline',
+					{ water_l_per_person_day: 15, people_per_volunteer: 50 },
+					masterCtx
+				);
+			}).not.toThrow();
+		});
+
+		it('should reject master profile when ratios is empty {} (CR-018 invariant #2)', () => {
+			expect(() => {
+				createInitialProfile('sop_profile', 'Sphere baseline', {}, masterCtx);
+			}).toThrow(/ratios ต้องมีอย่างน้อย 1 key/);
+		});
+
+		it('should reject non-whitelist or deprecated keys (strict check) — full payload', () => {
 			expect(() => {
 				createInitialProfile(
 					'sop_profile',
@@ -105,6 +123,17 @@ describe('SOP Ratio Domain', () => {
 					'sop_profile',
 					'Sphere baseline',
 					{ ...validRatios, caregiver_per_elderly: 2 } as any,
+					masterCtx
+				);
+			}).toThrow();
+		});
+
+		it('should reject non-whitelist keys even on a partial payload (strict mode also applies to partialRatiosSchema)', () => {
+			expect(() => {
+				createInitialProfile(
+					'sop_profile',
+					'Sphere baseline',
+					{ water_l_per_person_day: 15, fake_unauthorized_key: 999 } as any,
 					masterCtx
 				);
 			}).toThrow();
@@ -153,6 +182,19 @@ describe('SOP Ratio Domain', () => {
 			expect(audit.action).toBe('created');
 			expect(audit.target_type).toBe('sop_override');
 			expect(() => sopOverrideSchema.parse(profile)).not.toThrow();
+		});
+
+		// Regression guard: override must remain a total constraint (full canonical set required,
+		// CR-006/CR-018 #1) — must NOT accidentally start accepting partial ratios like master does.
+		it('should reject override when ratios is only partial (regression: override must stay full-set required)', () => {
+			expect(() => {
+				createInitialProfile(
+					'sop_override',
+					'Winter Override',
+					{ water_l_per_person_day: 15 } as any,
+					overrideCtx
+				);
+			}).toThrow();
 		});
 	});
 

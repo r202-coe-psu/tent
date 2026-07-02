@@ -448,7 +448,7 @@ interface MasterDataItem {
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `name` | str | req | เช่น "Sphere baseline", "ปภ. มาตรฐาน" |
-| `ratios` | {`water_l_per_person_day`:num, `drinking_water_l_per_person_day`:num, `cooking_water_l_per_person_day`:num, `hygiene_water_l_per_person_day`:num, `kcal_per_adult_day`:num, `people_per_tap`:num, `people_per_handpump`:num, `people_per_open_well`:num, `people_per_laundry`:num, `people_per_bathing`:num, `people_per_toilet_female`:num, `people_per_toilet_male`:num, `people_per_dining_point_adult`:num, `people_per_dining_point_child`:num, `m2_per_person_living`:num, `m2_per_person_living_cold`:num, `m2_per_person_total`:num, `max_waterpoint_distance_m`:num, `max_queue_minutes`:num, `people_per_volunteer`:num} | req | ratios ต้องระบุคีย์ครบถ้วน (Full Ratios Requirement) |
+| `ratios` | {`water_l_per_person_day`:num, `drinking_water_l_per_person_day`:num, `cooking_water_l_per_person_day`:num, `hygiene_water_l_per_person_day`:num, `kcal_per_adult_day`:num, `people_per_tap`:num, `people_per_handpump`:num, `people_per_open_well`:num, `people_per_laundry`:num, `people_per_bathing`:num, `people_per_toilet_female`:num, `people_per_toilet_male`:num, `people_per_dining_point_adult`:num, `people_per_dining_point_child`:num, `m2_per_person_living`:num, `m2_per_person_living_cold`:num, `m2_per_person_total`:num, `max_waterpoint_distance_m`:num, `max_queue_minutes`:num, `people_per_volunteer`:num} | req | ratios แก้แบบ partial ได้ (อย่างน้อย 1 key) — ไม่บังคับครบ 20 keys ตอนสร้าง/แก้ (CR-006/CR-018 invariant #2) |
 | `version` | int | req | — |
 | `active` | bool | req | ศูนย์เลือกใช้ profile ที่ active |
 

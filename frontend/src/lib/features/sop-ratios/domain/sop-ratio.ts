@@ -59,8 +59,24 @@ const ratioShape = SOP_RATIO_KEYS.reduce(
  * Validates that all keys in the record are part of the whitelist
  * and that all values are positive numbers. Strict checking prevents
  * deprecated or care-allocation keys from leaking in.
+ *
+ * Two variants, per CR-006 / CR-018 invariant #2:
+ * - `fullRatiosSchema` — total constraint: every canonical key required. Used for
+ *   `sop_override` (override must always be a complete, full-replacement snapshot).
+ * - `partialRatiosSchema` — existential constraint: at least 1 key required, no full-set
+ *   requirement. Used for `sop_profile` (master) creation, which CR-006 explicitly allows
+ *   as `.partial()` with `>= 1` key rather than a mandatory full 20-key payload.
  */
-export const ratiosSchema = z.object(ratioShape).strict();
+export const fullRatiosSchema = z.object(ratioShape).strict();
+
+export const partialRatiosSchema = z
+	.object(ratioShape)
+	.partial()
+	.strict()
+	.refine((r) => Object.keys(r).length >= 1, { message: 'ratios ต้องมีอย่างน้อย 1 key' });
+
+// Alias preserved for backward compatibility with existing imports.
+export const ratiosSchema = fullRatiosSchema;
 
 // --- Master SOP Profile Schema (catalog DB, schema_v 3)
 // schema_v bumped 2→3 per CR-006 amendment (2026-06-25): key whitelist 3→20 canonical keys
@@ -75,7 +91,9 @@ export const sopMasterSchema = z.object({
 	updated_at: z.string().datetime(),
 	created_by: z.string().min(1),
 	name: z.string().min(1),
-	ratios: ratiosSchema,
+	// Master ratios use the partial schema (>=1 key) per CR-006/CR-018 invariant #2 —
+	// unlike sop_override, master is NOT required to hold the full canonical set.
+	ratios: partialRatiosSchema,
 	version: z.number().int().positive(),
 	active: z.boolean()
 });
@@ -137,7 +155,12 @@ type AnyProfileCtx = MasterCtx | OverrideCtx;
 export function resolveEffectiveProfile(
 	override?: SopOverride | null,
 	master?: SopMaster | null
-): { ratios: Record<SopRatioKey, number>; ratio_source: 'master' | 'override' } | null {
+):
+	| {
+			ratios: Record<SopRatioKey, number> | Partial<Record<SopRatioKey, number>>;
+			ratio_source: 'master' | 'override';
+	  }
+	| null {
 	if (override && override.active) {
 		return {
 			ratios: override.ratios,
@@ -157,7 +180,8 @@ export function resolveEffectiveProfile(
 export function createInitialProfile(
 	targetType: 'sop_profile',
 	name: string,
-	ratios: Record<SopRatioKey, number>,
+	// Master accepts a partial ratios payload (>=1 key) — see partialRatiosSchema.
+	ratios: Partial<Record<SopRatioKey, number>>,
 	ctx: { createdBy: string }
 ): { profile: SopMaster; audit: AuditEntry };
 
@@ -174,11 +198,17 @@ export function createInitialProfile(
 export function createInitialProfile(
 	targetType: 'sop_profile' | 'sop_override',
 	name: string,
-	ratios: Record<SopRatioKey, number>,
+	ratios: Partial<Record<SopRatioKey, number>>,
 	ctx: AnyProfileCtx
 ): { profile: SopMaster | SopOverride; audit: AuditEntry } {
-	// Validate ratios strictly using ratiosSchema to reject non-whitelist or deprecated keys
-	const safeRatios = ratiosSchema.parse(ratios);
+	// Validate ratios per target type: master allows partial (>=1 key, CR-006/CR-018 #2),
+	// override requires the full canonical set (CR-006/CR-018 #1). `satisfies` ensures TS
+	// flags any future targetType that isn't covered here.
+	const ratiosSchemaByTarget = {
+		sop_profile: partialRatiosSchema,
+		sop_override: fullRatiosSchema
+	} satisfies Record<'sop_profile' | 'sop_override', z.ZodTypeAny>;
+	const safeRatios = ratiosSchemaByTarget[targetType].parse(ratios) as Partial<Record<SopRatioKey, number>>;
 
 	if (targetType === 'sop_profile') {
 		const profile = catalogDoc(

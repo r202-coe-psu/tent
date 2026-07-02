@@ -353,7 +353,9 @@ export async function resolveEffectiveRatios(
 	overrideRepo: SopOverrideRepository,
 	masterRepo: SopMasterRepository
 ): Promise<{
-	ratios: Record<SopRatioKey, number>;
+	// Master ratios may be a partial set (>=1 key, CR-006/CR-018 #2) if no override is active;
+	// override ratios are always the full canonical set.
+	ratios: Record<SopRatioKey, number> | Partial<Record<SopRatioKey, number>>;
 	ratio_source: 'master' | 'override';
 } | null> {
 	const activeOverrides = await overrideRepo.listActive();
