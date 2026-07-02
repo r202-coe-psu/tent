@@ -1,5 +1,5 @@
 import type { AuthorContext } from '$lib/db/model';
-import type { StockLedger, ReceiveInput } from '../domain/operations';
+import type { StockLedger, ReceiveInput, DistributeInput } from '../domain/operations';
 
 /**
  * Repository contract for managing stock ledger entries and calculating inventory balances.
@@ -31,4 +31,10 @@ export interface OperationsRepository {
 	 * Process and persist an inbound stock receive entry.
 	 */
 	receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger>;
+
+	/**
+	 * Process and persist an outbound stock distribute entry.
+	 * Will throw an error if there is insufficient stock.
+	 */
+	distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger>;
 }
