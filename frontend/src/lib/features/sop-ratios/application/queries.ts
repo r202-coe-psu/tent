@@ -27,8 +27,11 @@ export async function getActiveSopProfile(): Promise<SopMaster | SopOverride | n
 	return activeOverride ?? activeMaster ?? null;
 }
 
-// Alias for backward compatibility — kitchen feature and other consumers import this name.
-// The canonical implementation (with staleTime: 0) lives in use-active-sop-ratio.ts.
+/**
+ * @deprecated Alias for backward compatibility — kitchen feature and other consumers import this name.
+ * The canonical implementation (with staleTime: 0) lives in use-active-sop-ratio.ts.
+ * Use `useActiveSopRatio` instead.
+ */
 export { useActiveSopRatio as useActiveSopProfile };
 
 export const useSopProfiles = () =>
