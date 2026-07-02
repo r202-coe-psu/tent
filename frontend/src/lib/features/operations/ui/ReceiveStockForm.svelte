@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
@@ -113,7 +112,7 @@
 	});
 
 	// Click outside container closes dropdown
-	onMount(() => {
+	$effect(() => {
 		function handleClickOutside(event: MouseEvent) {
 			if (container && !container.contains(event.target as Node)) {
 				isDropdownOpen = false;
