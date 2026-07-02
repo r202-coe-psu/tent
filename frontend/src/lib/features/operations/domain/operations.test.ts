@@ -250,7 +250,27 @@ describe('createReceiveEntry', () => {
 });
 
 describe('createDistributeEntry', () => {
-	it('creates a distribute entry with negative quantity and distribute reason', () => {
+	it('creates valid distribute entry with negative qty and distribute reason', () => {
+		const entry = createDistributeEntry(
+			{
+				item_id: 'item:water',
+				qty: 5,
+				unit: 'ขวด',
+				ref_id: null,
+				note: 'Zone B'
+			},
+			ctx
+		);
+
+		expect(entry.type).toBe('stock_ledger');
+		expect(entry.item_id).toBe('item:water');
+		expect(entry.qty).toBe(-5); // Must be negative
+		expect(entry.reason).toBe('distribute');
+		expect(entry.lot).toEqual({ note: 'Zone B' });
+		expect(entry.shelter_code).toBe(ctx.shelterCode);
+	});
+
+	it('creates entry without note when omitted', () => {
 		const entry = createDistributeEntry(
 			{
 				item_id: 'item:rice',
@@ -260,20 +280,18 @@ describe('createDistributeEntry', () => {
 			},
 			ctx
 		);
-		expect(entry.type).toBe('stock_ledger');
-		expect(entry.qty).toBe(-10); // Must be negative to deduct from balance
-		expect(entry.reason).toBe('distribute');
+
+		expect(entry.qty).toBe(-10);
 		expect(entry.lot).toBeUndefined();
-		expect(entry.shelter_code).toBe(ctx.shelterCode);
 	});
 
-	it('rejects zero or negative quantity input', () => {
+	it('rejects zero or negative quantity inputs', () => {
 		expect(() =>
 			createDistributeEntry(
 				{
-					item_id: 'item:rice',
+					item_id: 'item:water',
 					qty: 0,
-					unit: 'kg',
+					unit: 'ขวด',
 					ref_id: null
 				},
 				ctx
@@ -283,27 +301,13 @@ describe('createDistributeEntry', () => {
 		expect(() =>
 			createDistributeEntry(
 				{
-					item_id: 'item:rice',
+					item_id: 'item:water',
 					qty: -5,
-					unit: 'kg',
+					unit: 'ขวด',
 					ref_id: null
 				},
 				ctx
 			)
 		).toThrow();
-	});
-
-	it('stores note inside lot.note if provided', () => {
-		const entry = createDistributeEntry(
-			{
-				item_id: 'item:rice',
-				qty: 5,
-				unit: 'kg',
-				ref_id: null,
-				note: 'Zone C, Family 12'
-			},
-			ctx
-		);
-		expect(entry.lot).toEqual({ note: 'Zone C, Family 12' });
 	});
 });
