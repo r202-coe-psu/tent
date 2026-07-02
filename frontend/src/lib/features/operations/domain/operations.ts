@@ -21,6 +21,7 @@ import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '
 
 export const ledgerReasonSchema = z.enum([
 	'receive',
+	'purchase',
 	'distribute',
 	'requisition',
 	'adjust',
@@ -174,7 +175,7 @@ export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): Sto
 			reason = 'donation';
 			break;
 		case 'purchase':
-			reason = 'receive';
+			reason = 'purchase';
 			break;
 		case 'transfer_in':
 			reason = 'transfer_in';
