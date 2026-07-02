@@ -158,6 +158,7 @@ export const receiveInputSchema = z.object({
 });
 export type ReceiveInput = z.input<typeof receiveInputSchema>;
 
+// INVARIANT: caller must enforce perishable -> lot.expiry required
 export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): StockLedger {
 	const d = receiveInputSchema.parse(input);
 	let reason: LedgerReason;

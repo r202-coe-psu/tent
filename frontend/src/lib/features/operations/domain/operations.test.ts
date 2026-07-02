@@ -226,4 +226,24 @@ describe('createReceiveEntry', () => {
 		);
 		expect(entry.lot).toBeUndefined();
 	});
+
+	it.fails('fails: does not enforce perishable -> lot.expiry required (caller must enforce)', () => {
+		// INVARIANT: caller must enforce perishable -> lot.expiry required
+		// Domain layer doesn't have SupplyItem catalog access to check if it's perishable.
+		// We expect this to throw (if it were enforced), but it succeeds, making the test fail unless we use it.fails() or manually throw.
+		// using it.fails() in vitest allows the test suite to pass while documenting the failure.
+		expect(() =>
+			createReceiveEntry(
+				{
+					item_id: 'item:milk', // Pretend milk is perishable
+					qty: 5,
+					unit: 'ขวด',
+					source: 'purchase',
+					ref_id: null
+					// missing lot.expiry
+				},
+				ctx
+			)
+		).toThrow();
+	});
 });
