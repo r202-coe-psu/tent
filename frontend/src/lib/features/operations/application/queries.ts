@@ -1,4 +1,4 @@
-import { createMutation, createQuery, useQueryClient, type QueryClient } from '@tanstack/svelte-query';
+import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
 import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
@@ -42,16 +42,11 @@ export const useStockBalance = () =>
 /**
  * Mutation hook to receive inbound stock, persist the ledger entry, and invalidate caches.
  */
-export const useReceiveStock = () => {
-	const queryClient = useQueryClient();
-	return createMutation(() => ({
+export const useReceiveStock = () =>
+	createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) =>
-			operationsRepository().receiveStock(input, ctx),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
-		}
+			operationsRepository().receiveStock(input, ctx)
 	}));
-};
 
 /**
  * Starts a live query changes feed for operations (Stock Ledger documents).
