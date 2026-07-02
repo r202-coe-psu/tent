@@ -9,10 +9,10 @@
 	let { filterItemId = undefined }: { filterItemId?: string } = $props();
 
 	// Fetch stock movements ledger
-	const ledgerQuery = useLedger();
-	const itemsQuery = useSupplyItems()
-	? useLedgerByItem(() => filterItemId!)
-	: useLedger();
+	const ledgerQuery = filterItemId !== undefined
+		? useLedgerByItem(() => filterItemId!)
+		: useLedger();
+	const itemsQuery = useSupplyItems();
 
 	const ledger = $derived(ledgerQuery.data ?? []);
 	// Sort by occurred_at descending to show newest entries first
