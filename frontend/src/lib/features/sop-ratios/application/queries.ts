@@ -2,6 +2,7 @@ import { createQuery } from '@tanstack/svelte-query';
 import { SHELTER_CODE } from '$lib/db/shelter';
 import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
+import { useActiveSopRatio } from './use-active-sop-ratio';
 
 export const sopRatioKeys = {
 	all: ['sop_ratios'] as const,
@@ -26,14 +27,13 @@ export async function getActiveSopProfile(): Promise<SopMaster | SopOverride | n
 	return activeOverride ?? activeMaster ?? null;
 }
 
-export const useActiveSopProfile = () =>
-	createQuery(() => ({
-		queryKey: sopRatioKeys.active(),
-		queryFn: getActiveSopProfile
-	}));
+// Alias for backward compatibility — kitchen feature and other consumers import this name.
+// The canonical implementation (with staleTime: 0) lives in use-active-sop-ratio.ts.
+export { useActiveSopRatio as useActiveSopProfile };
 
 export const useSopProfiles = () =>
 	createQuery(() => ({
 		queryKey: sopRatioKeys.list(),
 		queryFn: () => sopMasterRepository().listActive()
 	}));
+
