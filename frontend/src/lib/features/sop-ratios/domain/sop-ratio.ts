@@ -62,8 +62,9 @@ const ratioShape = SOP_RATIO_KEYS.reduce(
  */
 export const ratiosSchema = z.object(ratioShape).strict();
 
-// --- Master SOP Profile Schema (catalog DB, schema_v 2)
-export const SOP_MASTER_SCHEMA_VERSION = 2;
+// --- Master SOP Profile Schema (catalog DB, schema_v 3)
+// schema_v bumped 2→3 per CR-006 amendment (2026-06-25): key whitelist 3→20 canonical keys
+export const SOP_MASTER_SCHEMA_VERSION = 3;
 
 export const sopMasterSchema = z.object({
 	_id: z.string().min(1),
@@ -87,8 +88,9 @@ export const isSopMaster = (d: unknown): d is SopMaster =>
 	(d as { type?: unknown }).type === 'sop_profile' &&
 	(d as { schema_v?: unknown }).schema_v === SOP_MASTER_SCHEMA_VERSION;
 
-// --- Override SOP Profile Schema (shelter_* DB, schema_v 1)
-export const SOP_OVERRIDE_SCHEMA_VERSION = 1;
+// --- Override SOP Profile Schema (shelter_* DB, schema_v 2)
+// schema_v bumped 1→2 per CR-006 amendment (2026-06-25): key whitelist 3→20 canonical keys
+export const SOP_OVERRIDE_SCHEMA_VERSION = 2;
 
 export const sopOverrideSchema = z.object({
 	_id: z.string().min(1),
@@ -181,7 +183,7 @@ export function createInitialProfile(
 	if (targetType === 'sop_profile') {
 		const profile = catalogDoc(
 			'sop_profile',
-			2,
+			SOP_MASTER_SCHEMA_VERSION,
 			{
 				name,
 				ratios: safeRatios,
@@ -212,7 +214,7 @@ export function createInitialProfile(
 		const overrideCtx = ctx as OverrideCtx;
 		const profile = makeDoc(
 			'sop_override',
-			1,
+			SOP_OVERRIDE_SCHEMA_VERSION,
 			{
 				base_profile_id: overrideCtx.base_profile_id,
 				name,
@@ -293,7 +295,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 
 		const profile = catalogDoc(
 			'sop_profile',
-			2,
+			SOP_MASTER_SCHEMA_VERSION,
 			{
 				name: prev.name,
 				ratios: newRatios,
@@ -329,7 +331,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 		const overridePrev = prev as SopOverride;
 		const profile = makeDoc(
 			'sop_override',
-			1,
+			SOP_OVERRIDE_SCHEMA_VERSION,
 			{
 				base_profile_id: overridePrev.base_profile_id,
 				name: overridePrev.name,

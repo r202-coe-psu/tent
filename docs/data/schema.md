@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-01
+updated: 2026-07-02
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -294,7 +294,7 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `action` | enum(`duplicate_override`,`retro_edit`,`export`,`purge`,`conflict_resolved`,`manual_adjust`,`other`) | req | — |
+| `action` | enum(`duplicate_override`,`retro_edit`,`export`,`purge`,`conflict_resolved`,`manual_adjust`,`created`,`other`) | req | — |
 | `target_type` / `target_id` | str / str | req | doc ที่ถูกกระทำ |
 | `reason` | str | req | — |
 | `context` | {} | opt | payload แล้วแต่ action (เช่น revision ที่แพ้ conflict) |
@@ -318,7 +318,8 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 
 ### 2.14 `sop_override` — `sop_override:{ulid}`
 
-> **schema_v 1** — สร้างเฉพาะศูนย์ที่ต้องการใช้สัดส่วนทรัพยากรต่างจาก Master Profile ส่วนกลาง (ตาม [CR-006](file:///home/ne/projects/tent/docs/changes/CR-006-sop-profile-master-override.md) และ [CR-015](file:///home/ne/projects/tent/docs/changes/CR-015-sop-ratio-schema-two-tier.md))
+> **schema_v 2** — อัปเดต ratios whitelist 3 → 20 canonical keys (CR-006 amendment 2026-06-25 + CR-021). สร้างเฉพาะศูนย์ที่ต้องการใช้สัดส่วนทรัพยากรต่างจาก Master Profile ส่วนกลาง (ตาม [CR-006](../changes/CR-006-sop-profile-master-override.md) และ [CR-015](../changes/CR-015-sop-ratio-schema-two-tier.md))
+> schema_v 1 — สร้าง doc type ใหม่ สำหรับ per-shelter override (CR-006)
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
@@ -441,7 +442,8 @@ interface MasterDataItem {
 
 ### 4.4 `sop_profile` — `sop_profile:{ulid}`
 
-> **schema_v 2** — ย้ายมาอยู่ catalog DB, ตัด `shelter_code` ออกเพื่อใช้เป็น Master Profile ส่วนกลาง (ตาม [CR-006](file:///home/ne/projects/tent/docs/changes/CR-006-sop-profile-master-override.md) และ [CR-015](file:///home/ne/projects/tent/docs/changes/CR-015-sop-ratio-schema-two-tier.md))
+> **schema_v 3** — อัปเดต ratios whitelist 3 → 20 canonical keys (CR-006 amendment 2026-06-25 + CR-021). เพิ่ม `SOP_RATIO_KIND` (multiply/divide/threshold) สำหรับ calc engine (T-31).
+> schema_v 2 — ย้ายมาอยู่ catalog DB, ตัด `shelter_code` ออกเพื่อใช้เป็น Master Profile ส่วนกลาง (ตาม [CR-006](../changes/CR-006-sop-profile-master-override.md) และ [CR-015](../changes/CR-015-sop-ratio-schema-two-tier.md))
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |

@@ -6,7 +6,9 @@ import {
 	sopOverrideSchema,
 	resolveEffectiveProfile,
 	SOP_RATIO_KEYS,
-	SOP_RATIO_KIND
+	SOP_RATIO_KIND,
+	SOP_MASTER_SCHEMA_VERSION,
+	SOP_OVERRIDE_SCHEMA_VERSION
 } from './sop-ratio';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -56,7 +58,7 @@ describe('SOP Ratio Domain', () => {
 			expect(profile.ratios.water_l_per_person_day).toBe(15);
 			expect(profile.ratios.people_per_volunteer).toBe(50);
 			expect(profile.type).toBe('sop_profile');
-			expect(profile.schema_v).toBe(2);
+			expect(profile.schema_v).toBe(SOP_MASTER_SCHEMA_VERSION);
 			expect((profile as any).shelter_code).toBeUndefined(); // Master has no shelter_code
 			expect(profile._id.startsWith('sop_profile:')).toBe(true);
 
@@ -143,6 +145,7 @@ describe('SOP Ratio Domain', () => {
 			expect(profile.active).toBe(true);
 			expect(profile.ratios.water_l_per_person_day).toBe(15);
 			expect(profile.type).toBe('sop_override');
+			expect(profile.schema_v).toBe(SOP_OVERRIDE_SCHEMA_VERSION);
 			expect(profile.shelter_code).toBe('SH001');
 			expect(profile.base_profile_id).toBe('sop_profile:base-id');
 			expect(profile._id.startsWith('sop_override:')).toBe(true);
