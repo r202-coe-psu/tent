@@ -2,7 +2,7 @@ import { authStore } from '$lib/stores/auth.svelte';
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { resolve } from '$app/paths';
-import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+import { isShelterManager, isSystemAdmin, isWarehouseStaff } from '$lib/auth/roles';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
 export const LANDING_ROUTE = '/';
@@ -51,6 +51,18 @@ export async function requireManager() {
 	await requireAuth();
 	const roles = authStore.user?.roles ?? [];
 	if (!isSystemAdmin(roles) && !isShelterManager(roles)) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Warehouse guard — requires INVENTORY_WRITE_ROLES: system_admin, shelter_manager,
+ * or warehouse_staff (role-permission-matrix.md §4). Redirects to / otherwise.
+ */
+export async function requireWarehouseAccess() {
+	await requireAuth();
+	const roles = authStore.user?.roles ?? [];
+	if (!isSystemAdmin(roles) && !isShelterManager(roles) && !isWarehouseStaff(roles)) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

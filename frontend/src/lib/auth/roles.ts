@@ -49,6 +49,11 @@ export function isShelterManager(roles: readonly string[]): boolean {
 	return roles.includes(SHELTER_MANAGER);
 }
 
+/** True when the role list includes `warehouse_staff`. */
+export function isWarehouseStaff(roles: readonly string[]): boolean {
+	return roles.includes('warehouse_staff');
+}
+
 /**
  * True when every non-shelter capability in the list is a staff capability
  * (no `shelter_manager`/`system_admin`/`_admin`). A shelter_manager may only
