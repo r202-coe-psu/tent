@@ -374,6 +374,8 @@ async function seedCatalogSopRatios(): Promise<void> {
 
 	// Idempotent check: check if the Sphere Baseline master profile already exists in catalog DB
 	// We use the deterministic ID 'master_sphere_baseline' to do an O(1) direct document lookup
+	// NOTE: If the name "Sphere Baseline" is changed in the future, remember to update this deterministicId
+	// to prevent the script from accidentally creating a duplicate master profile.
 	const deterministicId = 'master_sphere_baseline';
 	const fullDocId = `sop_profile:${deterministicId}`;
 	const { status } = await couchReq('GET', `/catalog/${encodeURIComponent(fullDocId)}`);

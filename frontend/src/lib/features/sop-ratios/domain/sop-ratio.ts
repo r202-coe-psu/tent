@@ -278,10 +278,12 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 	// Validate partial changes strictly to reject non-whitelist or deprecated keys
 	const safeChanges = ratiosSchema.partial().strict().parse(changes);
 	let hasChanges = false;
+	const definedChanges: Partial<Record<SopRatioKey, number>> = {};
 
 	for (const key of SOP_RATIO_KEYS) {
 		if (safeChanges[key] !== undefined) {
 			if (prev.ratios[key] !== safeChanges[key]) hasChanges = true;
+			definedChanges[key] = safeChanges[key];
 		}
 	}
 
@@ -289,7 +291,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 		return { deactivatedPrev: null, profile: prev, audit: null } as CreateNewVersionResult<T>;
 	}
 
-	const newRatios = { ...prev.ratios, ...safeChanges };
+	const newRatios = { ...prev.ratios, ...definedChanges } as Record<SopRatioKey, number>;
 	if (prev.type === 'sop_profile') {
 		const createdBy = ctx.createdBy;
 

@@ -7,6 +7,7 @@ export {
 	isSopOverride,
 	resolveEffectiveProfile,
 	SOP_RATIO_KEYS,
+	SOP_RATIO_KIND,
 	sopMasterSchema,
 	sopOverrideSchema,
 	type CreateNewVersionResult,
