@@ -2,12 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import PouchDB from 'pouchdb-browser';
 import memory from 'pouchdb-adapter-memory';
-import {
-	createInitialProfile,
-	createNewVersion,
-	type SopMaster,
-	type SopOverride
-} from '../domain/sop-ratio';
+import { createInitialProfile, createNewVersion } from '../domain/sop-ratio';
 import {
 	SopMasterPouchRepository,
 	SopOverridePouchRepository,
