@@ -111,4 +111,49 @@ describe('OperationsPouchRepository', () => {
 		expect(balance.get('item:rice')).toBe(70);
 		expect(balance.get('item:water')).toBe(50);
 	});
+
+	describe('distributeStock', () => {
+		it('distributes stock and reduces balance when sufficient stock exists', async () => {
+			await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 50, unit: 'bar', source: 'purchase', ref_id: null },
+				ctx
+			);
+
+			const distributeEntry = await repo.distributeStock(
+				{ item_id: 'item:soap', qty: 20, unit: 'bar', ref_id: null, note: 'Tent A' },
+				ctx
+			);
+
+			expect(distributeEntry.item_id).toBe('item:soap');
+			expect(distributeEntry.qty).toBe(-20);
+			expect(distributeEntry.reason).toBe('distribute');
+			expect(distributeEntry.lot?.note).toBe('Tent A');
+
+			const balance = await repo.getBalance();
+			expect(balance.get('item:soap')).toBe(30);
+		});
+
+		it('throws an error if attempting to distribute more than available stock', async () => {
+			await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'purchase', ref_id: null },
+				ctx
+			);
+
+			await expect(
+				repo.distributeStock(
+					{ item_id: 'item:soap', qty: 15, unit: 'bar', ref_id: null },
+					ctx
+				)
+			).rejects.toThrow('Insufficient stock');
+		});
+
+		it('throws an error if attempting to distribute stock for item with zero balance', async () => {
+			await expect(
+				repo.distributeStock(
+					{ item_id: 'item:unknown', qty: 5, unit: 'bar', ref_id: null },
+					ctx
+				)
+			).rejects.toThrow('Insufficient stock');
+		});
+	});
 });
