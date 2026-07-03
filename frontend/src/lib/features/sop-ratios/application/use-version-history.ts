@@ -22,17 +22,7 @@ import { createQuery } from '@tanstack/svelte-query';
 import { SHELTER_CODE } from '$lib/db/shelter';
 import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
-import { sopRatioKeys } from './queries';
-
-// ---------------------------------------------------------------------------
-// Query key extension — version history sub-key
-// Convention: camelCase + Keys suffix (CONVENTIONS.md §8 "Query key factory")
-// ---------------------------------------------------------------------------
-export const sopVersionKeys = {
-	masterHistory: (name: string) => [...sopRatioKeys.all, 'master', 'history', name] as const,
-	overrideHistory: (name: string) =>
-		[...sopRatioKeys.all, 'override', 'history', name, SHELTER_CODE] as const
-};
+import { sopVersionKeys } from './queries';
 
 // ---------------------------------------------------------------------------
 // Fetch functions (thin — business logic stays in repository)
@@ -75,7 +65,7 @@ async function fetchOverrideVersions(name: string): Promise<SopOverride[]> {
  */
 export const useMasterVersionHistory = (name: string) =>
 	createQuery(() => ({
-		queryKey: sopVersionKeys.masterHistory(name),
+		queryKey: [...sopVersionKeys.master(), name] as const,
 		queryFn: () => fetchMasterVersions(name),
 		enabled: name.trim().length > 0,
 		staleTime: 0
@@ -91,7 +81,7 @@ export const useMasterVersionHistory = (name: string) =>
  */
 export const useOverrideVersionHistory = (name: string) =>
 	createQuery(() => ({
-		queryKey: sopVersionKeys.overrideHistory(name),
+		queryKey: [...sopVersionKeys.override(), name, SHELTER_CODE] as const,
 		queryFn: () => fetchOverrideVersions(name),
 		enabled: name.trim().length > 0,
 		staleTime: 0

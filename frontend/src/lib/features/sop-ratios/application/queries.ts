@@ -9,6 +9,12 @@ export const sopRatioKeys = {
 	list: () => [...sopRatioKeys.all, 'list'] as const
 };
 
+export const sopVersionKeys = {
+	all: () => [...sopRatioKeys.all, 'versions'] as const,
+	master: () => [...sopVersionKeys.all(), 'master'] as const,
+	override: () => [...sopVersionKeys.all(), 'override'] as const
+};
+
 /**
  * Active SOP source for this shelter — the override wins over the catalog
  * master (per resolveEffectiveProfile precedence). Returns the winning doc
@@ -26,17 +32,17 @@ export async function getActiveSopProfile(): Promise<SopMaster | SopOverride | n
 	return activeOverride ?? activeMaster ?? null;
 }
 
-/**
- * @deprecated Use `useActiveSopRatio` from `use-active-sop-ratio.ts` instead.
- * Kept for backward compatibility with the kitchen/meal-plan features.
- * Local wrapper avoids circular dependency (queries.ts ↔ use-active-sop-ratio.ts).
- */
-export const useActiveSopProfile = () =>
+export const useActiveSopRatio = () =>
 	createQuery(() => ({
 		queryKey: sopRatioKeys.active(),
-		queryFn: getActiveSopProfile,
-		staleTime: 0
+		queryFn: getActiveSopProfile
 	}));
+
+/**
+ * @deprecated Use `useActiveSopRatio` instead.
+ * Kept for backward compatibility with the kitchen/meal-plan features.
+ */
+export const useActiveSopProfile = useActiveSopRatio;
 
 export const useSopProfiles = () =>
 	createQuery(() => ({

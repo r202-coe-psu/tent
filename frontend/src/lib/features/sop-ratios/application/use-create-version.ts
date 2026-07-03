@@ -88,6 +88,14 @@ export function useCreateMasterVersion() {
 
 	return createMutation(() => ({
 		mutationFn: async ({ prev, changes, reason, createdBy }: CreateMasterVersionInput) => {
+			const hasChanges = Object.keys(changes).some((key) => {
+				const val = changes[key as SopRatioKey];
+				return val !== undefined && prev.ratios[key as SopRatioKey] !== val;
+			});
+			if (!hasChanges) {
+				return { profile: prev, deactivatedPrev: null, audit: null };
+			}
+
 			// Step 1: Domain — pure function, no I/O.
 			// Returns { deactivatedPrev, profile, audit } or idempotent no-op.
 			const result = createNewVersion(prev, changes, reason, { createdBy });
@@ -107,8 +115,7 @@ export function useCreateMasterVersion() {
 			toast.success('บันทึกเวอร์ชัน Master SOP สำเร็จ');
 		},
 
-		onError: (err: Error) => {
-			console.error('[useCreateMasterVersion]', err);
+		onError: () => {
 			toast.error('ไม่สามารถบันทึก Master SOP ได้ — กรุณาลองใหม่อีกครั้ง');
 		}
 	}));
@@ -150,6 +157,14 @@ export function useCreateOverrideVersion() {
 				throw new Error(`shelterCode mismatch: expected ${SHELTER_CODE}, got ${ctx.shelterCode}`);
 			}
 
+			const hasChanges = Object.keys(changes).some((key) => {
+				const val = changes[key as SopRatioKey];
+				return val !== undefined && prev.ratios[key as SopRatioKey] !== val;
+			});
+			if (!hasChanges) {
+				return { profile: prev, deactivatedPrev: null, audit: null };
+			}
+
 			const result = createNewVersion(prev, changes, reason, ctx);
 
 			return sopOverrideRepository(SHELTER_CODE).createVersion(
@@ -164,8 +179,7 @@ export function useCreateOverrideVersion() {
 			toast.success('บันทึกเวอร์ชัน Override SOP สำเร็จ');
 		},
 
-		onError: (err: Error) => {
-			console.error('[useCreateOverrideVersion]', err);
+		onError: () => {
 			toast.error('ไม่สามารถบันทึก Override SOP ได้ — กรุณาลองใหม่อีกครั้ง');
 		}
 	}));

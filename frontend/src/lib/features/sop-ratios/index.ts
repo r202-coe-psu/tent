@@ -25,18 +25,16 @@ export {
 export {
 	sopRatioKeys,
 	useActiveSopProfile,
+	useActiveSopRatio,
 	useSopProfiles,
-	getActiveSopProfile
+	getActiveSopProfile,
+	sopVersionKeys
 } from './application/queries';
-
-// Active ratio (override ?? master per CR-006)
-export { useActiveSopRatio } from './application/use-active-sop-ratio';
 
 // Version history
 export {
 	useOverrideVersionHistory,
-	useMasterVersionHistory,
-	sopVersionKeys
+	useMasterVersionHistory
 } from './application/use-version-history';
 
 // Version creation mutations
