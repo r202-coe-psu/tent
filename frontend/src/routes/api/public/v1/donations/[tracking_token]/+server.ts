@@ -1,9 +1,8 @@
 import { json } from '@sveltejs/kit';
 import { adminRaw } from '$lib/server/couch-admin';
+import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
 import { donationIpLimiter } from '$lib/server/security/rate-limiter';
-import { env } from '$env/dynamic/private';
-import { dev } from '$app/environment';
 import type { PublicDonationDoc } from '$lib/features/donations';
 
 // resolve shelter db จาก token (format: TX-{SHELTER_CODE}-{UUID}; legacy TX-DON-... → SH001)
@@ -131,47 +130,16 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		latestDoc.logistics.courier_tracking_no = payload.courier_tracking_no;
 		latestDoc.updated_at = new Date().toISOString();
 
-		const writerUrl = env.COUCHDB_PUBLIC_WRITER_URL;
-		let resStatus = 500;
-		let resData = null;
-
-		if (writerUrl) {
-			const writerMatch = writerUrl.match(/^(https?:\/\/)([^:]+):([^@]+)@(.+)$/);
-			if (writerMatch) {
-				const [, scheme, user, pass, host] = writerMatch;
-				const base = `${scheme}${host}`.replace(/\/$/, '');
-				const authHeader = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
-
-				const fetchRes = await fetch(`${base}/${shelterDb}/${encodeURIComponent(latestDoc._id)}`, {
-					method: 'PUT',
-					headers: {
-						Authorization: authHeader,
-						'Content-Type': 'application/json',
-						Accept: 'application/json'
-					},
-					body: JSON.stringify(latestDoc)
-				});
-				resStatus = fetchRes.status;
-				resData = await fetchRes.json().catch(() => null);
-			} else {
-				console.error('Invalid COUCHDB_PUBLIC_WRITER_URL format');
-			}
-		} else {
-			if (!dev) {
-				console.error('COUCHDB_PUBLIC_WRITER_URL is missing in production!');
-				return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
-			}
-			const updateRes = await adminRaw(
-				`/${shelterDb}/${encodeURIComponent(latestDoc._id)}`,
-				'PUT',
-				latestDoc
-			);
-			resStatus = updateRes.status;
-			resData = updateRes.data;
+		let writeRes: { status: number; data: unknown };
+		try {
+			writeRes = await putAsPublicWriter(shelterDb, latestDoc._id, latestDoc);
+		} catch (e) {
+			console.error(e);
+			return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
 		}
 
-		if (resStatus !== 201 && resStatus !== 200) {
-			console.error('Failed to update CouchDB', resData);
+		if (writeRes.status !== 201 && writeRes.status !== 200) {
+			console.error('Failed to update CouchDB', writeRes.data);
 			return json({ success: false, error: 'Database update failed' }, { status: 500 });
 		}
 

@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
+import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn()
+}));
+
+vi.mock('$lib/server/couch-public-writer', () => ({
+	putAsPublicWriter: vi.fn(() => Promise.resolve({ status: 201, data: { ok: true } }))
 }));
 
 vi.mock('$lib/server/security/rate-limiter', () => ({
@@ -61,6 +66,20 @@ describe('POST /api/public/v1/donations', () => {
 	it('creates a donation document in CouchDB when input is valid', async () => {
 		// Mock needs recheck: remaining need is plenty (100 kg)
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			// Shelter validation: registry lookup
+			if (method === 'GET' && path.includes('/registry')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								id: 'shelter:01ABCSHELTER',
+								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
+							}
+						]
+					}
+				});
+			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
@@ -105,11 +124,9 @@ describe('POST /api/public/v1/donations', () => {
 		expect(data).toHaveProperty('trackingToken');
 		expect(data).toHaveProperty('bookingRef');
 
-		// Verify CouchDB write occurred
-		expect(adminRaw).toHaveBeenCalled();
-		const putCall = vi.mocked(adminRaw).mock.calls.find((call) => call[1] === 'PUT');
-		expect(putCall).toBeDefined();
-		const savedDoc = putCall![2] as any;
+		// Verify CouchDB write occurred via putAsPublicWriter
+		expect(putAsPublicWriter).toHaveBeenCalled();
+		const [, , savedDoc] = vi.mocked(putAsPublicWriter).mock.calls[0] as [string, string, any];
 		expect(savedDoc._id).toMatch(/^donation:/);
 		expect(savedDoc.type).toBe('donation');
 		expect(savedDoc.schema_v).toBe(2);
@@ -123,6 +140,19 @@ describe('POST /api/public/v1/donations', () => {
 
 	it('creates a donation document with shelter_pickup and pickup_address', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/registry')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								id: 'shelter:01ABCSHELTER',
+								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
+							}
+						]
+					}
+				});
+			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
@@ -174,9 +204,7 @@ describe('POST /api/public/v1/donations', () => {
 		expect(response.status).toBe(200);
 		expect(data.success).toBe(true);
 
-		const putCall = vi.mocked(adminRaw).mock.calls.find((call) => call[1] === 'PUT');
-		expect(putCall).toBeDefined();
-		const savedDoc = putCall![2] as any;
+		const [, , savedDoc] = vi.mocked(putAsPublicWriter).mock.calls[0] as [string, string, any];
 		expect(savedDoc.logistics.delivery_method).toBe('shelter_pickup');
 		expect(savedDoc.logistics.pickup_address).toBe('123/45 Sukhumvit Rd, Bangkok');
 	});
@@ -184,6 +212,19 @@ describe('POST /api/public/v1/donations', () => {
 	it('returns 409 NEED_FULL if the item need target is already fully met', async () => {
 		// Mock needs recheck: target is 50, but we already have 50 or more donated
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/registry')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								id: 'shelter:01ABCSHELTER',
+								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
+							}
+						]
+					}
+				});
+			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
@@ -240,6 +281,19 @@ describe('POST /api/public/v1/donations', () => {
 
 	it('returns 409 SLOT_FULL if the logistics slot is already fully booked', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/registry')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								id: 'shelter:01ABCSHELTER',
+								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
+							}
+						]
+					}
+				});
+			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,

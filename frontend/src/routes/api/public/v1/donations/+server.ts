@@ -2,62 +2,19 @@ import { json } from '@sveltejs/kit';
 import { randomInt } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { dev } from '$app/environment';
-import { donationPreDeclarationInputSchema } from '$lib/features/donations';
+import { donationPreDeclarationInputSchema, computeNeeds } from '$lib/features/donations';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { adminRaw } from '$lib/server/couch-admin';
+import { putAsPublicWriter } from '$lib/server/couch-public-writer';
+import { fetchDocs } from '$lib/server/donation-docs';
 import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 
-import type { Donation, DonationCampaign } from '$lib/features/operations';
+import type { DonationCampaign } from '$lib/features/operations';
 
 const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
-
-// ดึงเอกสารทั้งหมดของ type หนึ่งจาก shelter db (ใช้ pattern _all_docs เดิมของโปรเจกต์ — ไม่มี view)
-async function fetchDocs<T>(dbName: string, prefix: string): Promise<T[]> {
-	const res = await adminRaw(
-		`/${dbName}/_all_docs?include_docs=true&startkey="${prefix}"&endkey="${prefix}￰"`,
-		'GET'
-	);
-	if (res.status >= 400) return [];
-	const rows = (res.data as { rows?: { doc: T }[] })?.rows ?? [];
-	return rows.map((r) => r.doc).filter(Boolean);
-}
-
-// คำนวณความต้องการคงเหลือ + map item → campaign จาก campaign/donations ที่โหลดมาแล้ว (schema.md §2.4)
-function computeNeeds(campaigns: DonationCampaign[], donations: Donation[]) {
-	const remaining = new Map<string, number>(); // item_id → needs_open (เก็บค่า ≤ 0 เพื่อตรวจ NEED_FULL)
-	const itemCampaign = new Map<string, string>(); // item_id → campaign_id (open campaign แรกที่ต้องการ item นี้)
-
-	for (const campaign of campaigns) {
-		const covered = new Map<string, number>();
-		for (const don of donations) {
-			if (don.campaign_id !== campaign._id) continue;
-			if (don.status === 'expired' || don.status === 'cancelled') continue;
-			for (const it of don.items ?? []) {
-				if (!it.item_id) continue;
-				covered.set(it.item_id, (covered.get(it.item_id) ?? 0) + it.qty);
-			}
-		}
-		for (const need of campaign.needs) {
-			const rem = need.qty_target - (covered.get(need.item_id) ?? 0);
-			remaining.set(need.item_id, (remaining.get(need.item_id) ?? 0) + rem);
-			if (!itemCampaign.has(need.item_id)) itemCampaign.set(need.item_id, campaign._id);
-		}
-	}
-	return { remaining, itemCampaign };
-}
-
-// fallback map สำหรับของที่ผู้บริจาคพิมพ์เอง (ไม่มี item_id จากการ์ด)
-function resolveItemId(name: string | undefined): string | undefined {
-	if (!name) return undefined;
-	if (name.includes('ข้าว')) return 'item:rice';
-	if (name.includes('น้ำ')) return 'item:water';
-	if (name.includes('สบู่')) return 'item:soap';
-	if (name.includes('ผ้าห่ม')) return 'item:blanket';
-	return undefined;
-}
 
 export const POST = async ({ request, getClientAddress }) => {
 	try {
@@ -98,7 +55,35 @@ export const POST = async ({ request, getClientAddress }) => {
 			}
 		}
 
-		const dbName = `shelter_${parsed.data.shelter_code.toLowerCase()}`;
+		// 3.1 Validate shelter_code — ต้องมีศูนย์นี้ใน registry และ status === 'open'
+		// registry เก็บ shelter เป็น _id = shelter:{ulid} + field `code` → ต้อง scan by code
+		// (ไม่ใช่ GET /registry/shelter:{code} ตรงๆ — _id ไม่ใช่ code)
+		const shelterCode = parsed.data.shelter_code;
+		const regRes = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');
+		if (regRes.status >= 400) {
+			console.error('Registry lookup failed', regRes.data);
+			return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+		}
+		const regRows =
+			(regRes.data as { rows?: { id: string; doc?: { code?: string; status?: string } }[] })
+				?.rows ?? [];
+		const shelterDoc = regRows.find(
+			(r) => r.id.startsWith('shelter:') && r.doc?.code === shelterCode
+		)?.doc;
+		if (!shelterDoc) {
+			return json(
+				{ success: false, error: 'SHELTER_NOT_FOUND', shelter_code: shelterCode },
+				{ status: 404 }
+			);
+		}
+		if (shelterDoc.status !== 'open') {
+			return json(
+				{ success: false, error: 'SHELTER_CLOSED', shelter_code: shelterCode },
+				{ status: 409 }
+			);
+		}
+
+		const dbName = `shelter_${shelterCode.toLowerCase()}`;
 
 		// โหลด campaigns + donations ครั้งเดียวแล้วใช้ซ้ำทุกการตรวจ (needs / booking_ref / slot)
 		const [campaigns, donations] = await Promise.all([
@@ -112,12 +97,16 @@ export const POST = async ({ request, getClientAddress }) => {
 
 		const { remaining, itemCampaign } = computeNeeds(campaigns, donations);
 
-		// 3.5 Atomic re-check needs_open ≤ 0 → NEED_FULL (CR-005 DN-4)
+		// 3.5 Best-effort re-check needs_open vs ยอดที่ขอ → NEED_FULL (CR-005 DN-4)
+		// หมายเหตุ: read→decide→write ยังไม่ atomic จริง (ไม่มี validate_doc_update/optimistic lock)
+		// — atomicity เต็มรูปเป็นงาน T-02. ปฏิเสธเมื่อของเหลือน้อยกว่าที่ผู้บริจาคขอ (ไม่ใช่แค่ ≤ 0)
+		// ผูก campaign เฉพาะ item_id ที่ส่งมาจากการ์ด needs เท่านั้น — ไม่เดา item_id จาก free_text
+		// (เลิก substring heuristic ที่อาจ bind campaign ผิด); free-text ล้วน → ไม่นับต่อ campaign
 		let resolvedCampaignId: string | null = null;
 		for (const it of parsed.data.items) {
-			const itemId = it.item_id || resolveItemId(it.free_text);
+			const itemId = it.item_id;
 			if (!itemId) continue;
-			if (remaining.has(itemId) && (remaining.get(itemId) ?? 0) <= 0) {
+			if (remaining.has(itemId) && (remaining.get(itemId) ?? 0) < it.qty) {
 				return json({ success: false, error: 'NEED_FULL', item_id: itemId }, { status: 409 });
 			}
 			// ผูก donation เข้ากับ campaign ที่ต้องการ item นี้ เพื่อให้ needs_open ลดลงตามจริง
@@ -202,45 +191,17 @@ export const POST = async ({ request, getClientAddress }) => {
 			status: 'declared'
 		};
 
-		// Use dedicated limited-permission user for public writes instead of admin
-		const writerUrl = env.COUCHDB_PUBLIC_WRITER_URL;
-		let resStatus = 500;
-		let resData = null;
-
-		if (writerUrl) {
-			const match = writerUrl.match(/^(https?:\/\/)([^:]+):([^@]+)@(.+)$/);
-			if (match) {
-				const [, scheme, user, pass, host] = match;
-				const base = `${scheme}${host}`.replace(/\/$/, '');
-				const authHeader = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
-
-				const fetchRes = await fetch(`${base}/${dbName}/${encodeURIComponent(couchDoc._id)}`, {
-					method: 'PUT',
-					headers: {
-						Authorization: authHeader,
-						'Content-Type': 'application/json',
-						Accept: 'application/json'
-					},
-					body: JSON.stringify(couchDoc)
-				});
-				resStatus = fetchRes.status;
-				resData = await fetchRes.json().catch(() => null);
-			} else {
-				console.error('Invalid COUCHDB_PUBLIC_WRITER_URL format');
-			}
-		} else {
-			if (!dev) {
-				console.error('COUCHDB_PUBLIC_WRITER_URL is missing in production!');
-				return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
-			}
-			// Fallback in dev if not configured yet, but should enforce via validate_doc_update
-			const res = await adminRaw(`/${dbName}/${encodeURIComponent(couchDoc._id)}`, 'PUT', couchDoc);
-			resStatus = res.status;
-			resData = res.data;
+		// Write via dedicated limited-permission public writer (fail-closed in prod)
+		let writeRes: { status: number; data: unknown };
+		try {
+			writeRes = await putAsPublicWriter(dbName, couchDoc._id, couchDoc);
+		} catch (e) {
+			console.error(e);
+			return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
 		}
 
-		if (resStatus !== 201 && resStatus !== 200) {
-			console.error('Failed to save to CouchDB', resData);
+		if (writeRes.status !== 201 && writeRes.status !== 200) {
+			console.error('Failed to save to CouchDB', writeRes.data);
 			return json({ success: false, error: 'Database save failed' }, { status: 500 });
 		}
 
