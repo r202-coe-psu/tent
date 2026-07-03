@@ -11,9 +11,14 @@ export const RICE_RECIPE_ID = 'ingredient:rice';
 
 // Maps a calculated recipe_id to the stock item it draws down + its unit.
 // The bridge to T-26 (kitchen requisition → stock ledger). CR-022.
+// unit must match item_master.base_unit (schema.md §2.1) — item:rice is kg (CR-029).
 export const RECIPE_TO_STOCK_ITEM: Record<string, { item_id: string; unit: string }> = {
-	[RICE_RECIPE_ID]: { item_id: 'item:rice', unit: 'g' }
+	[RICE_RECIPE_ID]: { item_id: 'item:rice', unit: 'kg' }
 };
+
+// Grams per kg — recipes are calculated in grams (SOP ratio precision); the
+// stock ledger stores kg (item_master.base_unit). CR-029.
+const GRAMS_PER_KG = 1000;
 
 export interface MealCalcSource {
 	sop_profile_id: string;
@@ -71,6 +76,9 @@ export function calculateMealIngredients(
  *
  * Throws if a recipe has no stock mapping — a plan must not silently produce a
  * requisition that skips an ingredient.
+ *
+ * `planned_qty` is in grams (SOP ratio precision); converts to kg here to match
+ * `item_master.base_unit` before it reaches the stock ledger (CR-029).
  */
 export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
 	const items = plan.recipes.map((r) => {
@@ -80,10 +88,60 @@ export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
 		}
 		return {
 			item_id: stock.item_id,
-			qty_requested: r.planned_qty,
+			qty_requested: r.planned_qty / GRAMS_PER_KG,
 			qty_issued: 0,
 			unit: stock.unit
 		};
 	});
 	return { meal_plan_id: plan._id, items };
+}
+
+/**
+ * Whether on-hand stock covers a requested requisition line.
+ *   `ok`      — on-hand ≥ requested (can issue the full amount)
+ *   `partial` — 0 < on-hand < requested (can issue some, short the rest)
+ *   `out`     — on-hand ≤ 0 (nothing to issue)
+ */
+export type StockAvailabilityStatus = 'ok' | 'partial' | 'out';
+
+export interface RequisitionLineAssessment {
+	item_id: string;
+	unit: string;
+	qty_requested: number;
+	on_hand: number; // signed ledger balance (may be negative if over-issued elsewhere)
+	qty_issuable: number; // most that can be issued now: clamp(requested, 0..on_hand)
+	shortfall: number; // requested minus what can be issued (0 when fully covered)
+	status: StockAvailabilityStatus;
+}
+
+/**
+ * Compares each requested line against the derived `stock_balance` (on-hand =
+ * sum of signed ledger deltas — operations feature), producing the availability
+ * a requisition screen needs to show "stock not enough" and offer a partial
+ * issue (schema.md §2.6: `qty_issued < requested` = เบิกบางส่วน). Pure — no I/O.
+ *
+ * `qty_issuable` is clamped to on-hand so a requisition never drives the ledger
+ * negative; the caller may still lower it, but not raise it past stock.
+ */
+export function assessRequisition(
+	items: { item_id: string; qty_requested: number; unit: string }[],
+	balance: Map<string, number>
+): RequisitionLineAssessment[] {
+	return items.map((item) => {
+		const onHand = balance.get(item.item_id) ?? 0;
+		const available = Math.max(0, onHand);
+		const qtyIssuable = Math.min(item.qty_requested, available);
+		const shortfall = item.qty_requested - qtyIssuable;
+		const status: StockAvailabilityStatus =
+			available <= 0 ? 'out' : available >= item.qty_requested ? 'ok' : 'partial';
+		return {
+			item_id: item.item_id,
+			unit: item.unit,
+			qty_requested: item.qty_requested,
+			on_hand: onHand,
+			qty_issuable: qtyIssuable,
+			shortfall,
+			status
+		};
+	});
 }
