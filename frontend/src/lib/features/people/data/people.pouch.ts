@@ -152,7 +152,8 @@ export class PeoplePouchRepository implements PeopleRepository {
 		return this.repo.allByType('screening', isScreening);
 	}
 
-	/** Record a check-in movement, then apply it to the evacuee's current_stay. */
+	/** Record a check-in movement, then apply it to the evacuee's current_stay.
+	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
 	async checkInEvacuee(
 		evacuee: Evacuee,
 		ctx: AuthorContext,
@@ -160,18 +161,10 @@ export class PeoplePouchRepository implements PeopleRepository {
 	): Promise<Evacuee> {
 		const movement = createMovement({ evacuee_id: evacuee._id, action: 'check_in', zone }, ctx);
 		await this.repo.put(movement);
-		return this.repo.put(applyMovementToStay(evacuee, movement));
-	}
-
-	/** Record a check-in movement, then apply it to the evacuee's current_stay. */
-	async checkInEvacuee(
-		evacuee: Evacuee,
-		ctx: AuthorContext,
-		zone: string | null = null
-	): Promise<Evacuee> {
-		const movement = createMovement({ evacuee_id: evacuee._id, action: 'check_in', zone }, ctx);
-		await this.repo.put(movement);
-		return this.repo.put(applyMovementToStay(evacuee, movement));
+		const latest = await this.repo.get<Evacuee>(evacuee._id);
+		return this.repo.put(
+			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
+		);
 	}
 }
 
