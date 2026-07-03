@@ -14,51 +14,9 @@
 import { namedLocalDb, startNamedSync, stopNamedSync } from '$lib/db/pouch';
 import { ulid } from '$lib/db/ulid';
 import { compressImage, type CompressOptions } from '$lib/utils/image-compress';
+import { isImageDoc, type ImageDoc, type ImageSummary } from '../domain/poc-image';
 
 export const POC_DB = 'poc_media';
-
-// ---------------------------------------------------------------- schema
-
-export interface ImageDoc {
-	_id: string;
-	_rev?: string;
-	type: 'poc_image';
-	schema_v: 1;
-	filename: string;
-	content_type: string;
-	width: number;
-	height: number;
-	original_size: number;
-	compressed_size: number;
-	thumbnail_size: number;
-	caption: string;
-	created_at: string;
-}
-
-export function isImageDoc(d: unknown): d is ImageDoc {
-	return (
-		typeof d === 'object' &&
-		d !== null &&
-		(d as ImageDoc).type === 'poc_image' &&
-		typeof (d as ImageDoc).filename === 'string'
-	);
-}
-
-// ---------------------------------------------------------------- image summary (for listing — no attachment blobs)
-
-export interface ImageSummary {
-	_id: string;
-	_rev: string;
-	filename: string;
-	content_type: string;
-	width: number;
-	height: number;
-	original_size: number;
-	compressed_size: number;
-	thumbnail_size: number;
-	caption: string;
-	created_at: string;
-}
 
 // ---------------------------------------------------------------- repository
 

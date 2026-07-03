@@ -3,5 +3,7 @@
  * Cross-feature and route code imports ONLY from here.
  */
 
-export type { ImageDoc, ImageSummary } from './data/poc-image.pouch';
-export { pocImageRepository, POC_DB, isImageDoc } from './data/poc-image.pouch';
+export type { ImageDoc, ImageSummary } from './domain/poc-image';
+export { isImageDoc } from './domain/poc-image';
+export { pocImageRepository, POC_DB } from './data/poc-image.pouch';
+

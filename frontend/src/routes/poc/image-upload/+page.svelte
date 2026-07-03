@@ -1,8 +1,20 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { toast } from 'svelte-sonner';
+	import { Button } from '$lib/components/ui/button';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { LOGIN_ROUTE } from '$lib/guards/auth';
 	import { pocImageRepository, type ImageSummary } from '$lib/features/poc-image';
 	import { formatBytes, compressionRatio } from '$lib/utils/image-compress';
 	import SyncStatus from '$lib/features/poc-image/ui/sync-status.svelte';
+
+	async function logout() {
+		await authStore.logout();
+		toast.success('Logged out successfully');
+		await goto(resolve(LOGIN_ROUTE));
+	}
 
 	// ---------------------------------------------------------------- state
 
@@ -175,6 +187,12 @@
 
 <!-- ============================================================ LAYOUT -->
 <div class="poc-root">
+
+	<!-- ROOT HEADER -->
+	<header class="flex items-center justify-end gap-4 border-b bg-background px-6 py-3">
+		<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
+		<Button variant="outline" size="sm" onclick={logout}>Logout</Button>
+	</header>
 
 	<!-- HEADER -->
 	<header class="poc-header">
