@@ -140,7 +140,7 @@
 			<div
 				class="w-full rounded-xl border border-slate-100/50 bg-slate-100/70 px-4 py-3.5 text-sm font-medium text-slate-500 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-400"
 			>
-				หมวดหมู่สิ่งของ (Item Category)
+				สูตรอาหารมาตรฐาน (Recipe)
 			</div>
 		</div>
 
