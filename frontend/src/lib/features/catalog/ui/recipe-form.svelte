@@ -7,7 +7,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
-	import { standard, zod4 } from 'sveltekit-superforms/adapters';
+	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { recipeInputSchema, type RecipeInput, type Recipe } from '../domain/catalog';
 	import {
 		useRecipe,

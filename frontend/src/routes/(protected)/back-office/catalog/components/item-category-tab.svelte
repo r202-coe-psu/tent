@@ -1,7 +1,5 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin } from '$lib/auth/roles';
 	// Component
@@ -44,7 +42,7 @@
 	const total = $derived(query.data?.total ?? 0);
 	const totalPages = $derived(query.data?.totalPages ?? 1);
 
-	const itemCategoriesQuery = useItemCategories();
+	// const itemCategoriesQuery = useItemCategories();
 
 	// Form Page
 	let viewMode = $state<'list' | 'create' | 'edit'>('list');

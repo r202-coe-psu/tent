@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin } from '$lib/auth/roles';
 
@@ -17,7 +16,7 @@
 	import { Settings2 } from '@lucide/svelte';
 	import { Trash2 } from '@lucide/svelte';
 	// Feature
-	import { useItemMasters, useItemMastersPaginated } from '$lib/features/catalog';
+	import { useItemMastersPaginated } from '$lib/features/catalog';
 
 	import ItemMasterForm from '$lib/features/catalog/ui/item-master-form.svelte';
 
