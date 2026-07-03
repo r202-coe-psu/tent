@@ -2,7 +2,7 @@ import { namedLocalDb } from '$lib/db/pouch';
 import { createRepository, type Repository } from '$lib/db/repository';
 import { makeDocId, now, touch, type AuthorContext } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
-import { SHELTER_CODE, SHELTER_DB, shelterDb } from '$lib/db/shelter';
+import { getShelterDb, shelterDb } from '$lib/db/shelter';
 import {
 	createMealPlan,
 	createKitchenRequisition,
@@ -24,12 +24,12 @@ import {
 } from '../domain/kitchen';
 import type { KitchenRepository } from './kitchen.repository';
 
-export { SHELTER_CODE, SHELTER_DB };
+
 
 export class KitchenPouchRepository implements KitchenRepository {
 	private readonly repo: Repository;
 
-	constructor(dbName: string = SHELTER_DB) {
+	constructor(dbName: string = getShelterDb()) {
 		this.repo = createRepository(namedLocalDb(dbName));
 	}
 
@@ -146,8 +146,13 @@ export class KitchenPouchRepository implements KitchenRepository {
 }
 
 let singleton: KitchenRepository | null = null;
+let singletonDbName: string | null = null;
 
 export function kitchenRepository(): KitchenRepository {
-	if (!singleton) singleton = new KitchenPouchRepository();
+	const currentDb = getShelterDb();
+	if (!singleton || singletonDbName !== currentDb) {
+		singleton = new KitchenPouchRepository(currentDb);
+		singletonDbName = currentDb;
+	}
 	return singleton;
 }

@@ -53,7 +53,7 @@ export {
 
 // Data — repository contract + PouchDB binding
 export type { KitchenRepository } from './data/kitchen.repository';
-export { kitchenRepository, SHELTER_CODE, SHELTER_DB } from './data/kitchen.pouch';
+export { kitchenRepository } from './data/kitchen.pouch';
 
 // Application — TanStack Query hooks + live-query wiring
 export {

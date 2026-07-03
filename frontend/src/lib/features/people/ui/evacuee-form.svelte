@@ -17,9 +17,9 @@
 		useCreateHousehold,
 		useUpdateHousehold,
 		useUpdateEvacuee,
-		peopleRepository,
-		SHELTER_CODE
+		peopleRepository
 	} from '../index';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	let {
 		onsubmit,
@@ -118,7 +118,7 @@
 
 		try {
 			const ctx = {
-				shelterCode: shelterStore.selectedShelterCode ?? SHELTER_CODE,
+				shelterCode: shelterStore.selectedShelterCode ?? getShelterCode(),
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 

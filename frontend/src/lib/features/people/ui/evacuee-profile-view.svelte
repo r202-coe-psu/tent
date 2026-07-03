@@ -10,9 +10,10 @@
 		useMedicals,
 		useScreenings,
 		useUpdateEvacuee,
-		useUpdateHousehold,
-		SHELTER_CODE
+		useUpdateHousehold
 	} from '$lib/features/people';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import type { StayStatus, PetGroup, HouseholdVehicle } from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { now } from '$lib/db/model';
@@ -63,7 +64,7 @@
 	const householdsQuery = useHouseholds();
 	const medicalsQuery = useMedicals();
 	const screeningsQuery = useScreenings();
-	const shelterQuery = useShelter(() => SHELTER_CODE);
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const updateEvacueeMutation = useUpdateEvacuee();
 	const updateHouseholdMutation = useUpdateHousehold();
 

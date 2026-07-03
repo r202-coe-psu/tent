@@ -7,7 +7,8 @@
 	import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools';
 	import { startNamedSync, stopNamedSync } from '$lib/db/pouch';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_DB, startPeopleLiveQuery } from '$lib/features/people';
+	import { startPeopleLiveQuery } from '$lib/features/people';
+	import { getShelterDb } from '$lib/db/shelter';
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
 
 	let { children, data } = $props();
@@ -18,14 +19,17 @@
 	// db carries the shelter master doc + audit log; it syncs alongside.
 	$effect(() => {
 		if (!authStore.isAuthenticated) return;
-		startNamedSync(SHELTER_DB, () => authStore.markNeedsReauth());
+		// Resolve the shelter db name from the user's roles at effect-run time,
+		// so sh003 syncs shelter_sh003, sh001 syncs shelter_sh001, etc.
+		const shelterDb = getShelterDb();
+		startNamedSync(shelterDb, () => authStore.markNeedsReauth());
 		startNamedSync(SHELTER_REGISTRY_DB, () => authStore.markNeedsReauth());
 		const peopleLive = startPeopleLiveQuery(data.queryClient);
 		const sheltersLive = startSheltersLiveQuery(data.queryClient);
 		return () => {
 			peopleLive.stop();
 			sheltersLive.stop();
-			stopNamedSync(SHELTER_DB);
+			stopNamedSync(shelterDb);
 			stopNamedSync(SHELTER_REGISTRY_DB);
 		};
 	});
