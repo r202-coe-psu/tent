@@ -1,5 +1,5 @@
 ---
-id: CR-026
+id: CR-027
 title: User schema update and password policy
 status: approved
 date: 2026-07-01
@@ -15,7 +15,7 @@ affects:
   - frontend/src/lib/features/users/
 ---
 
-# CR-026 — User schema update and password policy
+# CR-027 — User schema update and password policy
 
 **สรุป (TL;DR):** เพิ่มฟิลด์ `display_name` ใน schema ของ `_users`
 
@@ -56,3 +56,8 @@ affects:
 
 - **Schema:** ปรับปรุง `docs/data/schema.md` (เพิ่ม `display_name` ลงในตาราง `_users`) — ไม่ต้องมีการ bump `schema_v` เนื่องจาก `_users` เป็น system DB ที่ไม่มีฟิลด์ `schema_v` และ `display_name` สามารถเป็น null ได้
 - **Backward Compatibility:** doc เดิมใน DB ที่ไม่มี `display_name` สามารถทำงานต่อได้ผ่าน UI ที่ให้กรอกเพิ่มเติมตอนแก้ไข
+
+## Decision log
+
+- 2026-07-03 — approved (เดิมบันทึกเป็น CR-026 ชนกับ SOP ratio ratification CR)
+- 2026-07-03 — renumbered CR-026 → **CR-027** (index ครบ CR-001..027; CR-026 คงให้ SOP governance ratification)
