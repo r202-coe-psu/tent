@@ -9,4 +9,3 @@
 </svelte:head>
 
 <CatalogFormPage entity={data.entity} mode={data.mode} id={data.id} />
-

@@ -52,14 +52,14 @@
 
 <div class="relative w-full">
 	<div class="relative">
-		<Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+		<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 		<Input
 			type="text"
 			bind:value={searchTerm}
 			onfocus={() => (isOpen = true)}
 			onblur={handleBlur}
 			placeholder="ค้นหาชื่อวัตถุดิบ..."
-			class="h-12 pl-10 text-sm rounded-xl border-slate-200/80 bg-white dark:border-zinc-800 dark:bg-zinc-950 focus-visible:ring-1 focus-visible:ring-ring"
+			class="h-12 rounded-xl border-slate-200/80 bg-white pl-10 text-sm focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
 		/>
 	</div>
 
@@ -71,14 +71,16 @@
 				<li>
 					<button
 						type="button"
-						class="w-full text-left px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
+						class="w-full cursor-pointer px-4 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
 						onmousedown={() => handleSelect(item)}
 					>
 						<span class="font-bold text-slate-700 dark:text-slate-200">{item.name}</span>
 						{#if item.sku}
 							<span class="ml-1 text-xs text-muted-foreground">({item.sku})</span>
 						{/if}
-						<span class="ml-2 text-[10px] bg-slate-100 px-2 py-0.5 rounded-lg text-slate-500 font-bold dark:bg-zinc-800 dark:text-zinc-400">
+						<span
+							class="ml-2 rounded-lg bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
+						>
 							{item.base_unit}
 						</span>
 					</button>
