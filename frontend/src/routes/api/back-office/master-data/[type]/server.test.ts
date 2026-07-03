@@ -1,22 +1,32 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { error } from '@sveltejs/kit';
 
+// GET is open to any authenticated user (requireShelterScopeOrSA, CR-012 §2);
+// PUT stays SA-only (requireAdmin).
+const caller = {
+	name: 'mgr',
+	roles: ['shelter:SH001', 'shelter_manager'],
+	isSA: false,
+	shelterCode: 'SH001'
+};
 vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/server/couch-admin')>();
 	return {
 		...actual,
 		requireAdmin: vi.fn().mockResolvedValue(undefined),
+		requireShelterScopeOrSA: vi.fn(),
 		adminRaw: vi.fn()
 	};
 });
 vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: vi.fn() }));
 
 import { GET, PUT } from './+server';
-import { requireAdmin, adminRaw } from '$lib/server/couch-admin';
+import { requireAdmin, requireShelterScopeOrSA, adminRaw } from '$lib/server/couch-admin';
 import { readMasterDoc } from '$lib/server/master-data-server';
 import type { MasterData } from '$lib/features/master-data';
 
 const requireAdminMock = vi.mocked(requireAdmin);
+const authMock = vi.mocked(requireShelterScopeOrSA);
 const adminRawMock = vi.mocked(adminRaw);
 const readMock = vi.mocked(readMasterDoc);
 
@@ -57,6 +67,7 @@ function writtenDoc(): MasterData {
 
 beforeEach(() => {
 	requireAdminMock.mockReset().mockResolvedValue(undefined);
+	authMock.mockReset().mockResolvedValue(caller);
 	adminRawMock.mockReset().mockResolvedValue({ status: 201, data: { rev: '4-new' } });
 	readMock.mockReset();
 });
@@ -85,8 +96,8 @@ describe('GET /api/back-office/master-data/[type]', () => {
 		expect((await res.json()).error.code).toBe('INTERNAL');
 	});
 
-	it('propagates the admin guard rejection', async () => {
-		requireAdminMock.mockImplementationOnce(() => {
+	it('propagates the auth guard rejection', async () => {
+		authMock.mockImplementationOnce(() => {
 			throw error(401, 'Authentication required');
 		});
 		const err = await Promise.resolve(callGET('pet_types')).catch((e: unknown) => e);

@@ -2,19 +2,26 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { error } from '@sveltejs/kit';
 
 // Partial mock: keep the real ServiceError / serviceError contract helpers,
-// stub only the CouchDB-touching auth guard.
+// stub only the CouchDB-touching auth guard. Reads are open to any authenticated
+// user (CR-012 §2), so the GET route gates on requireShelterScopeOrSA.
+const caller = {
+	name: 'mgr',
+	roles: ['shelter:SH001', 'shelter_manager'],
+	isSA: false,
+	shelterCode: 'SH001'
+};
 vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/server/couch-admin')>();
-	return { ...actual, requireAdmin: vi.fn().mockResolvedValue(undefined) };
+	return { ...actual, requireShelterScopeOrSA: vi.fn() };
 });
 vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: vi.fn() }));
 
 import { GET } from './+server';
-import { requireAdmin } from '$lib/server/couch-admin';
+import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { readMasterDoc } from '$lib/server/master-data-server';
 import { MASTER_DATA_TYPES, type MasterData } from '$lib/features/master-data';
 
-const requireAdminMock = vi.mocked(requireAdmin);
+const authMock = vi.mocked(requireShelterScopeOrSA);
 const readMock = vi.mocked(readMasterDoc);
 
 function call(cookie: string | null = 'AuthSession=abc') {
@@ -40,7 +47,7 @@ function fakeDoc(type: MasterData['master_type'], items: MasterData['items']): M
 
 describe('GET /api/back-office/master-data', () => {
 	beforeEach(() => {
-		requireAdminMock.mockReset().mockResolvedValue(undefined);
+		authMock.mockReset().mockResolvedValue(caller);
 		readMock.mockReset();
 	});
 
@@ -81,14 +88,14 @@ describe('GET /api/back-office/master-data', () => {
 		expect(body.find((e) => e.master_type === 'vulnerable_group')?.items).toEqual([]);
 	});
 
-	it('forwards the request cookie to the admin guard', async () => {
+	it('forwards the request cookie to the auth guard', async () => {
 		readMock.mockResolvedValue(null);
 		await call('AuthSession=xyz');
-		expect(requireAdminMock).toHaveBeenCalledWith('AuthSession=xyz');
+		expect(authMock).toHaveBeenCalledWith('AuthSession=xyz');
 	});
 
 	it('propagates the guard rejection (401/403) instead of swallowing it', async () => {
-		requireAdminMock.mockImplementationOnce(() => {
+		authMock.mockImplementationOnce(() => {
 			throw error(403, 'Admin privileges required');
 		});
 		const err = await Promise.resolve(call()).catch((e: unknown) => e);

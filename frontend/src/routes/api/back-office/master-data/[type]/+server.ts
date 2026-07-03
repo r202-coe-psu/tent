@@ -1,6 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
+import {
+	adminRaw,
+	requireAdmin,
+	requireShelterScopeOrSA,
+	serviceError,
+	ServiceError
+} from '$lib/server/couch-admin';
 import {
 	enforceOneDefault,
 	masterDataSchema,
@@ -13,9 +19,10 @@ export const prerender = false;
 
 const REGISTRY_DB = 'registry';
 
-/** GET — read one master_data doc (404 → empty placeholder). */
+/** GET — read one master_data doc (404 → empty placeholder). Reads are open to
+ *  any authenticated user (CR-012 §2); writes below stay SA-only. */
 export const GET: RequestHandler = async ({ params, request }) => {
-	await requireAdmin(request.headers.get('cookie'));
+	await requireShelterScopeOrSA(request.headers.get('cookie'));
 	try {
 		const type = masterTypeSchema.parse(params.type);
 		const doc = await readMasterDoc(type);
