@@ -184,8 +184,8 @@
 
 <style>
 	.sync-panel {
-		background: #1a1a2e;
-		border: 1px solid #2d2d4e;
+		background: #f8fafc;
+		border: 1px solid #e2e8f0;
 		border-radius: 12px;
 		padding: 16px;
 		font-family: 'JetBrains Mono', 'Consolas', monospace;
@@ -214,7 +214,7 @@
 	}
 
 	.status-label {
-		color: #e2e8f0;
+		color: #0f172a;
 		font-weight: 600;
 		letter-spacing: 0.05em;
 	}
@@ -226,7 +226,7 @@
 	}
 
 	.pending-badge {
-		background: #7c3aed;
+		background: #6d28d9;
 		color: white;
 		font-size: 11px;
 		padding: 2px 8px;
@@ -238,9 +238,9 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		background: #2d2d4e;
-		color: #a5b4fc;
-		border: 1px solid #4338ca;
+		background: #ffffff;
+		color: #4f46e5;
+		border: 1px solid #c7d2fe;
 		padding: 6px 12px;
 		border-radius: 8px;
 		cursor: pointer;
@@ -250,14 +250,14 @@
 	}
 
 	.sync-toggle:hover {
-		background: #4338ca;
-		color: white;
+		background: #f1f5f9;
+		color: #4338ca;
 	}
 
 	.sync-toggle.active {
-		background: #065f46;
-		border-color: #10b981;
-		color: #6ee7b7;
+		background: #dcfce7;
+		border-color: #86efac;
+		color: #166534;
 	}
 
 	.spinner {
@@ -280,13 +280,13 @@
 		letter-spacing: 0.1em;
 		margin-bottom: 8px;
 		padding-bottom: 6px;
-		border-bottom: 1px solid #1e293b;
+		border-bottom: 1px solid #e2e8f0;
 	}
 
 	.clear-btn {
 		background: none;
 		border: none;
-		color: #475569;
+		color: #94a3b8;
 		cursor: pointer;
 		font-size: 11px;
 		padding: 2px 6px;
@@ -294,7 +294,7 @@
 	}
 
 	.clear-btn:hover {
-		color: #94a3b8;
+		color: #475569;
 	}
 
 	.sync-log {
@@ -302,11 +302,11 @@
 		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
-		gap: 3px;
+		gap: 4px;
 	}
 
 	.empty-log {
-		color: #475569;
+		color: #94a3b8;
 		text-align: center;
 		padding: 16px;
 		margin: 0;
@@ -316,25 +316,36 @@
 	.log-entry {
 		display: flex;
 		gap: 10px;
-		padding: 4px 6px;
-		border-radius: 4px;
+		padding: 4px 8px;
+		border-radius: 6px;
 		font-size: 12px;
 	}
 
 	.log-time {
-		color: #475569;
+		color: #64748b;
 		white-space: nowrap;
 		flex-shrink: 0;
 	}
 
 	.log-msg {
-		color: #94a3b8;
+		color: #334155;
 	}
 
-	.log-error .log-msg { color: #fca5a5; }
-	.log-push .log-msg { color: #86efac; }
-	.log-pull .log-msg { color: #93c5fd; }
-	.log-paused .log-msg { color: #fcd34d; }
-	.log-active .log-msg { color: #6ee7b7; }
-	.log-complete .log-msg { color: #a5b4fc; }
+	.log-error { background: #fee2e2; }
+	.log-error .log-msg { color: #991b1b; }
+
+	.log-push { background: #dcfce7; }
+	.log-push .log-msg { color: #166534; }
+
+	.log-pull { background: #dbeafe; }
+	.log-pull .log-msg { color: #1e40af; }
+
+	.log-paused { background: #fef3c7; }
+	.log-paused .log-msg { color: #854d0e; }
+
+	.log-active { background: #ecfdf5; }
+	.log-active .log-msg { color: #065f46; }
+
+	.log-complete { background: #f3e8ff; }
+	.log-complete .log-msg { color: #5b21b6; }
 </style>
