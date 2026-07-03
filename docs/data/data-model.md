@@ -93,7 +93,7 @@ device (PouchDB)  ⇄ WAN ⇄  central (CouchDB)
   country: "THAILAND",                // ประเทศต้นทาง (เพิ่มใน v2 — CR-007)
   // ---- optional เติมทีหลัง ----
   nickname, birth_year,
-  person_id: { cardType: "national_id|passport|pink_card|other", number }, // เอกสารแสดงตน (v2 — CR-027)
+  person_id: { cardType: "national_id|passport|pink_card|other", number }, // เอกสารแสดงตน (v2 — CR-028)
   religion,
   special_needs: ["elderly","disabled","pregnant","infant", ...],
   emergency_contact: { name, phone, relation },

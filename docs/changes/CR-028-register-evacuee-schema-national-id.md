@@ -1,8 +1,9 @@
 ---
-id: CR-027
+id: CR-028
 title: "Evacuee Schema Reconciliation — เปลี่ยน national_id เป็น person_id"
-status: proposed
+status: approved
 date: 2026-07-02
+updated: 2026-07-03
 requested_by: development team B
 decided_by: project owner
 layer: volatile
@@ -12,7 +13,7 @@ affects:
   - frontend/src/lib/features/people/domain/people.ts
 ---
 
-# CR-027 — Evacuee Schema Reconciliation (national_id → person_id)
+# CR-028 — Evacuee Schema Reconciliation (national_id → person_id)
 
 > [!NOTE]
 > **สรุป (TL;DR):** ปรับแก้เอกสาร Canonical Schema ของ `evacuee` ให้ตรงกับโค้ดฝั่ง frontend · เปลี่ยนแปลง `national_id` (str) เป็น `person_id` (object: `cardType`, `number`) · schema_v คงที่ระดับ 2 (reconcile) · เพื่อรองรับเอกสารระบุตัวตนหลากหลายประเภท (พาสปอร์ต, บัตรสีชมพู) ของผู้อพยพ และเพิ่ม country ใน spec (data-model.md) เพื่อให้ spec มีความสอดคล้องกันทั้งระบบ
@@ -47,3 +48,5 @@ affects:
 
 ## Decision log
 - 2026-07-02 — proposed
+- 2026-07-03 — renumbered CR-027 → **CR-028** (แก้เลขซ้ำกับ CR-027 user/password policy)
+- 2026-07-03 — approved
