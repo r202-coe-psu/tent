@@ -127,10 +127,12 @@
 									{/if}
 								</Table.Cell>
 								<Table.Cell class="text-center">
-									<Button variant="outline" size="sm" onclick={() => showEditForm(e._id)}>
-										<Settings2 class="h-4 w-4" />
-										จัดการ
-									</Button>
+									{#if isSA}
+										<Button variant="outline" size="sm" onclick={() => showEditForm(e._id)}>
+											<Settings2 class="h-4 w-4" />
+											จัดการ
+										</Button>
+									{/if}
 									<Button
 										variant="outline"
 										size="sm"
