@@ -30,7 +30,7 @@ export type { CatalogRepository } from './data/catalog.repository';
 export {
 	CatalogRepository as catalogRepository,
 	CATALOG_DB,
-	shelterDb
+	catalogDb
 } from './data/catalog.pouch';
 
 // Application — TanStack Query hooks + changes-feed live-query wiring

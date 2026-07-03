@@ -7,7 +7,10 @@ import {
 	itemMasterInputSchema,
 	createItemCategory,
 	isItemCategory,
-	itemCategoryInputSchema
+	itemCategoryInputSchema,
+	createRecipe,
+	isRecipe,
+	recipeInputSchema
 } from './catalog';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -79,5 +82,40 @@ describe('catalog domain', () => {
 		expect(doc.name).toBe('เครื่องมือแพทย์');
 		expect(isItemCategory(doc)).toBe(true);
 	});
+
+	it('should validate valid recipe input', () => {
+		const input = {
+			label: 'ข้าวผัดไข่มาตรฐาน',
+			ingredients: [
+				{ item_master_id: 'item_master_rice_123', quantity: 10, uom: 'kg' },
+				{ item_master_id: 'item_master_egg_123', quantity: 100, uom: 'ชิ้น' }
+			],
+			standard_portions: 100,
+			standard_duration_hours: 1.5,
+			is_default: true
+		};
+		const parsed = recipeInputSchema.parse(input);
+		expect(parsed.label).toBe('ข้าวผัดไข่มาตรฐาน');
+		expect(parsed.ingredients).toHaveLength(2);
+		expect(parsed.standard_portions).toBe(100);
+	});
+
+	it('should create recipe doc with recipe: prefix', () => {
+		const input = {
+			label: 'แกงจืดเต้าหู้หมูสับ',
+			ingredients: [
+				{ item_master_id: 'item_master_tofu_123', quantity: 50, uom: 'หลอด' }
+			],
+			standard_portions: 50,
+			standard_duration_hours: 0.5,
+			is_default: false
+		};
+		const doc = createRecipe(input, ctx);
+		expect(doc._id).toMatch(/^recipe:[0-9A-HJKMNP-TV-Z]{26}$/);
+		expect(doc.type).toBe('recipe');
+		expect(doc.label).toBe('แกงจืดเต้าหู้หมูสับ');
+		expect(isRecipe(doc)).toBe(true);
+	});
 });
+
 

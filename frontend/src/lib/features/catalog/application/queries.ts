@@ -7,7 +7,7 @@ import {
 import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
-import { CatalogRepository, shelterDb } from '../data/catalog.pouch';
+import { CatalogRepository, catalogDb } from '../data/catalog.pouch';
 import type {
 	ItemCategory,
 	ItemCategoryInput,
@@ -164,7 +164,7 @@ export const useUpdateRecipe = () => {
 };
 
 export function startCatalogLiveQuery(queryClient: QueryClient): LiveQueryHandle {
-	return startLiveQuery(shelterDb(), queryClient, (type) => {
+	return startLiveQuery(catalogDb(), queryClient, (type) => {
 		if (type === 'item_category') {
 			return [catalogKeys.itemcategories(), [...catalogKeys.all, 'itemcategories']];
 		}

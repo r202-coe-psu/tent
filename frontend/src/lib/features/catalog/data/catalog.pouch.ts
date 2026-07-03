@@ -93,6 +93,6 @@ export function CatalogRepository(): CatalogRepository {
 	return singleton!;
 }
 
-export function shelterDb(): PouchDB.Database {
+export function catalogDb(): PouchDB.Database {
 	return namedLocalDb(CATALOG_DB);
 }
