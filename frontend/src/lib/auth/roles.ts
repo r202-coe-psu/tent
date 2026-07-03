@@ -52,7 +52,8 @@ export function isShelterManager(roles: readonly string[]): boolean {
 /** True when the role list includes `warehouse_staff`. */
 export function isWarehouseStaff(roles: readonly string[]): boolean {
 	return roles.includes('warehouse_staff');
-  
+}
+
 /** True when the roles hold a given staff capability (e.g. `kitchen_staff`). */
 export function hasStaffCapability(roles: readonly string[], cap: StaffCapability): boolean {
 	return roles.includes(cap);
