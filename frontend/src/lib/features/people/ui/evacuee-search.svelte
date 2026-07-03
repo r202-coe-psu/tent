@@ -104,7 +104,9 @@
 				กำลังค้นหา...
 			</div>
 		{:else if searchQuery.isError}
-			<p class="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+			<p
+				class="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+			>
 				เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง
 			</p>
 		{:else if hasSearched}
@@ -128,7 +130,8 @@
 										{evacuee.last_name}
 									</p>
 									<p class="text-xs text-green-700">
-										สถานะ: {STATUS_LABELS[evacuee.current_stay.status] ?? evacuee.current_stay.status}
+										สถานะ: {STATUS_LABELS[evacuee.current_stay.status] ??
+											evacuee.current_stay.status}
 										{#if evacuee.phone}
 											· {evacuee.phone}
 										{/if}

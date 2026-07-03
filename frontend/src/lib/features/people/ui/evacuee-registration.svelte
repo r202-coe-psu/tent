@@ -64,7 +64,10 @@
 			if ($formData.person_id.cardType === 'national_id' && $formData.person_id.number) {
 				const cleanId = $formData.person_id.number.replace(/\D/g, '');
 				if (cleanId.length !== 13) {
-					$errors.person_id = { ...($errors.person_id || {}), number: ['เลขประจำตัวประชาชนต้องมี 13 หลัก'] };
+					$errors.person_id = {
+						...($errors.person_id || {}),
+						number: ['เลขประจำตัวประชาชนต้องมี 13 หลัก']
+					};
 					toast.error('เลขประจำตัวประชาชนต้องมี 13 หลัก');
 					cancel();
 					return;
@@ -88,7 +91,10 @@
 				} else if (ec.phone) {
 					const cleanPhone = ec.phone.replace(/\D/g, '');
 					if (cleanPhone.length !== 10) {
-						$errors.emergency_contact = { ...($errors.emergency_contact || {}), phone: ['เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก'] };
+						$errors.emergency_contact = {
+							...($errors.emergency_contact || {}),
+							phone: ['เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก']
+						};
 						toast.error('เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก');
 						cancel();
 						return;
@@ -276,11 +282,7 @@
 					<!-- ปีเกิด (พ.ศ.) -->
 					<div class="space-y-2">
 						<Label>ปีเกิด (พ.ศ.)</Label>
-						<Input
-							type="text"
-							placeholder="เช่น 2530"
-							bind:value={birthYearBE}
-						/>
+						<Input type="text" placeholder="เช่น 2530" bind:value={birthYearBE} />
 					</div>
 
 					<!-- อายุ -->

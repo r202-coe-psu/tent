@@ -99,7 +99,10 @@
 	{@const headEvac = allEvacuees.find((e) => e._id === $formData.head_evacuee_id)}
 	{#if headEvac}
 		<div class="space-y-1.5 rounded-lg border border-primary/15 bg-primary/5 px-4 py-3">
-			<Label for="emergency-phone" class="text-xs font-semibold tracking-wide text-primary uppercase">
+			<Label
+				for="emergency-phone"
+				class="text-xs font-semibold tracking-wide text-primary uppercase"
+			>
 				เบอร์ติดต่อฉุกเฉินของหัวหน้าครัวเรือน <span class="text-destructive">*</span>
 			</Label>
 			<Input

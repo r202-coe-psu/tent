@@ -64,8 +64,12 @@
 	let mzVal = $state('');
 	let commVal = $state('');
 
-	$effect(() => { $formData.municipality_zone = mzVal || null; });
-	$effect(() => { $formData.community = commVal || null; });
+	$effect(() => {
+		$formData.municipality_zone = mzVal || null;
+	});
+	$effect(() => {
+		$formData.community = commVal || null;
+	});
 
 	// Member / pet state
 	let petsList = $state<PetGroup[]>([]);
@@ -147,9 +151,10 @@
 	});
 
 	$effect(() => {
-		$formData.vehicle = vehicleType !== 'none'
-			? { type: vehicleType, license_plate: licensePlate.trim() || null }
-			: null;
+		$formData.vehicle =
+			vehicleType !== 'none'
+				? { type: vehicleType, license_plate: licensePlate.trim() || null }
+				: null;
 	});
 
 	$effect(() => {
@@ -175,7 +180,9 @@
 	});
 
 	// Sync headComboValue → formData
-	$effect(() => { $formData.head_evacuee_id = headComboValue || null; });
+	$effect(() => {
+		$formData.head_evacuee_id = headComboValue || null;
+	});
 
 	// Add member when combobox selects
 	$effect(() => {
@@ -215,12 +222,14 @@
 </script>
 
 <form method="POST" use:form.enhance class="space-y-6">
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2 items-start">
+	<div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
 		<!-- Left Column: General Info, Members, and Pets -->
 		<div class="space-y-6">
 			<!-- General Info & Head -->
-			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
-				<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">ข้อมูลครัวเรือนเบื้องต้น</h3>
+			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
+				<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">
+					ข้อมูลครัวเรือนเบื้องต้น
+				</h3>
 				<HouseholdFormHeadSection
 					{form}
 					{headItems}
@@ -232,7 +241,7 @@
 			</div>
 
 			<!-- Members Section -->
-			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
 				<HouseholdFormMembersSection
 					{memberItems}
 					bind:memberSearchValue
@@ -246,16 +255,13 @@
 			</div>
 
 			<!-- Pets Section -->
-			<HouseholdFormPetsSection
-				{form}
-				bind:petsList
-			/>
+			<HouseholdFormPetsSection {form} bind:petsList />
 		</div>
 
 		<!-- Right Column: Location, Assets, and Notes -->
 		<div class="space-y-6">
 			<!-- Location Section -->
-			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
 				<HouseholdFormLocationSection
 					{form}
 					bind:mzVal
@@ -268,20 +274,18 @@
 			</div>
 
 			<!-- Assets Section -->
-			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
-				<HouseholdFormAssetsSection
-					bind:vehicleType
-					bind:licensePlate
-					bind:assetDescription
-				/>
+			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
+				<HouseholdFormAssetsSection bind:vehicleType bind:licensePlate bind:assetDescription />
 			</div>
 
 			<!-- Notes Section -->
-			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
 				<Form.Field {form} name="notes">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label class="text-base font-bold text-slate-800 dark:text-slate-200">บันทึกเพิ่มเติม</Form.Label>
+							<Form.Label class="text-base font-bold text-slate-800 dark:text-slate-200"
+								>บันทึกเพิ่มเติม</Form.Label
+							>
 							<textarea
 								{...props}
 								bind:value={$formData.notes}

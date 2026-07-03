@@ -69,7 +69,11 @@
 				<Command.Empty>{emptyText}</Command.Empty>
 				<Command.Group>
 					{#each items as item (item.value)}
-						<Command.Item value={item.value} keywords={[item.label]} onSelect={() => onSelect(item)}>
+						<Command.Item
+							value={item.value}
+							keywords={[item.label]}
+							onSelect={() => onSelect(item)}
+						>
 							<CheckIcon class={cn('size-4', value !== item.value && 'text-transparent')} />
 							{#if itemSnippet}
 								{@render itemSnippet({ item, selected: value === item.value })}

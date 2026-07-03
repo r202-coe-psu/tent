@@ -66,25 +66,25 @@
 					{...restProps}
 					type="text"
 					bind:value={searchTerm}
-oninput={handleInput}
-				onfocus={() => {
-					open = true;
-				}}
-				onclick={(e) => {
-					if (open) {
-						e.stopPropagation();
-					}
-				}}
-				onkeydown={(e) => {
-					if (e.key === 'Enter') {
-						const first = filteredItems[0];
-						if (first) {
-							e.preventDefault();
-							onSelect(first);
+					oninput={handleInput}
+					onfocus={() => {
+						open = true;
+					}}
+					onclick={(e) => {
+						if (open) {
+							e.stopPropagation();
 						}
-					}
-				}}
-				{placeholder}
+					}}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							const first = filteredItems[0];
+							if (first) {
+								e.preventDefault();
+								onSelect(first);
+							}
+						}
+					}}
+					{placeholder}
 					{disabled}
 					class={cn('w-full pr-8', className)}
 				/>
@@ -97,7 +97,7 @@ oninput={handleInput}
 		{/snippet}
 	</Popover.Trigger>
 	<Popover.Content
-		class="max-h-[300px] min-w-(--bits-floating-anchor-width) w-(--bits-floating-anchor-width) overflow-y-auto bg-popover p-1 text-popover-foreground"
+		class="max-h-[300px] w-(--bits-floating-anchor-width) min-w-(--bits-floating-anchor-width) overflow-y-auto bg-popover p-1 text-popover-foreground"
 		trapFocus={false}
 		onOpenAutoFocus={(e) => e.preventDefault()}
 	>

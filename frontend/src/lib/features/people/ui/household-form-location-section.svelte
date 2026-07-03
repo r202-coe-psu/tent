@@ -29,7 +29,9 @@
 
 <!-- เขต / ชุมชน -->
 <div class="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
-	<h3 class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+	<h3
+		class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+	>
 		<MapPin class="size-3.5" />
 		ที่อยู่เดิม (เขต / ชุมชน)
 	</h3>

@@ -46,20 +46,27 @@
 				</div>
 
 				{#if petsList.length === 0}
-					<div class="rounded-xl border border-dashed border-border bg-muted/10 py-6 text-center text-xs text-muted-foreground italic">
+					<div
+						class="rounded-xl border border-dashed border-border bg-muted/10 py-6 text-center text-xs text-muted-foreground italic"
+					>
 						ไม่มีสัตว์เลี้ยงที่ลงทะเบียนไว้
 					</div>
 				{:else}
 					<div class="space-y-3">
 						{#each petsList as pet, i (i)}
-							<div class="grid grid-cols-12 gap-3 items-end rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-								
+							<div
+								class="grid grid-cols-12 items-end gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900"
+							>
 								<!-- Species -->
-								<div class="col-span-12 sm:col-span-3 space-y-1.5 font-medium">
-									<Label for="pet_species_{i}" class="text-xs font-semibold text-muted-foreground">ชนิดสัตว์</Label>
+								<div class="col-span-12 space-y-1.5 font-medium sm:col-span-3">
+									<Label for="pet_species_{i}" class="text-xs font-semibold text-muted-foreground"
+										>ชนิดสัตว์</Label
+									>
 									<Select.Root type="single" bind:value={pet.species}>
 										<Select.Trigger id="pet_species_{i}" class="h-10 w-full bg-background text-sm">
-											{{ dog: '🐶 สุนัข', cat: '🐱 แมว', bird: '🐦 นก', other: '🐾 อื่นๆ' }[pet.species] ?? '— เลือก —'}
+											{{ dog: '🐶 สุนัข', cat: '🐱 แมว', bird: '🐦 นก', other: '🐾 อื่นๆ' }[
+												pet.species
+											] ?? '— เลือก —'}
 										</Select.Trigger>
 										<Select.Content>
 											<Select.Item value="dog" label="🐶 สุนัข" />
@@ -71,20 +78,24 @@
 								</div>
 
 								<!-- Count -->
-								<div class="col-span-6 sm:col-span-2 space-y-1.5 font-medium">
-									<Label for="pet_count_{i}" class="text-xs font-semibold text-muted-foreground">จำนวน (ตัว)</Label>
+								<div class="col-span-6 space-y-1.5 font-medium sm:col-span-2">
+									<Label for="pet_count_{i}" class="text-xs font-semibold text-muted-foreground"
+										>จำนวน (ตัว)</Label
+									>
 									<Input
 										id="pet_count_{i}"
 										type="number"
 										min={1}
-										class="h-10 bg-background text-sm text-center"
+										class="h-10 bg-background text-center text-sm"
 										bind:value={pet.count}
 									/>
 								</div>
 
 								<!-- Notes -->
-								<div class="col-span-6 sm:col-span-3 space-y-1.5 font-normal">
-									<Label for="pet_notes_{i}" class="text-xs font-semibold text-muted-foreground">หมายเหตุ</Label>
+								<div class="col-span-6 space-y-1.5 font-normal sm:col-span-3">
+									<Label for="pet_notes_{i}" class="text-xs font-semibold text-muted-foreground"
+										>หมายเหตุ</Label
+									>
 									<Input
 										id="pet_notes_{i}"
 										type="text"
@@ -95,17 +106,20 @@
 								</div>
 
 								<!-- Has Cage Checkbox -->
-								<div class="col-span-8 sm:col-span-3 flex items-center gap-2 h-10">
+								<div class="col-span-8 flex h-10 items-center gap-2 sm:col-span-3">
 									<Checkbox
 										id="pet_cage_{i}"
 										checked={pet.has_cage ?? false}
 										onCheckedChange={(v) => (pet.has_cage = !!v)}
 									/>
-									<Label for="pet_cage_{i}" class="cursor-pointer text-sm font-semibold text-muted-foreground">มีกรง</Label>
+									<Label
+										for="pet_cage_{i}"
+										class="cursor-pointer text-sm font-semibold text-muted-foreground">มีกรง</Label
+									>
 								</div>
 
 								<!-- Delete Button -->
-								<div class="col-span-4 sm:col-span-1 flex items-center justify-end h-10">
+								<div class="col-span-4 flex h-10 items-center justify-end sm:col-span-1">
 									<Button
 										type="button"
 										variant="ghost"

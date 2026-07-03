@@ -61,10 +61,10 @@
 				<div class="w-2.5 shrink-0 bg-red-500"></div>
 
 				<div class="flex flex-1 flex-col justify-center gap-0.5 px-3 py-2">
-					<span class="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-400">
+					<span class="font-mono text-[9px] font-bold tracking-widest text-slate-400 uppercase">
 						ZONE: {zoneName}
 					</span>
-					<p class="text-sm font-bold leading-tight text-slate-900">
+					<p class="text-sm leading-tight font-bold text-slate-900">
 						{evacuee.first_name}
 						{evacuee.last_name}
 					</p>
@@ -75,7 +75,9 @@
 							{shortId}
 						</span>
 						{#if showFastTrackBadge}
-							<span class="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
+							<span
+								class="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600"
+							>
 								กักโรค
 							</span>
 						{/if}
@@ -86,7 +88,9 @@
 					{#if qrUrl}
 						<img src={qrUrl} alt="QR Code" class="size-16 object-contain" />
 					{:else}
-						<div class="flex size-16 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400">
+						<div
+							class="flex size-16 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400"
+						>
 							...
 						</div>
 					{/if}

@@ -79,9 +79,9 @@
 			<h2 class="text-lg font-bold tracking-tight text-foreground">ทะเบียนผู้พักพิง</h2>
 			<p class="text-sm text-muted-foreground">
 				จำนวนทั้งหมด
-				<span
-					class="ml-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary"
-				>{total} คน</span>
+				<span class="ml-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary"
+					>{total} คน</span
+				>
 			</p>
 		</div>
 		<Button size="sm" onclick={() => goto(resolve('/onsite/people'))}>
@@ -107,11 +107,15 @@
 			<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูล...</p>
 		</div>
 	{:else if query.isError}
-		<div class="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+		<div
+			class="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+		>
 			เกิดข้อผิดพลาด: {query.error?.message}
 		</div>
 	{:else if filtered.length === 0}
-		<div class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-20">
+		<div
+			class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-20"
+		>
 			<UserX class="h-10 w-10 text-muted-foreground/30" />
 			<p class="text-sm text-muted-foreground">ไม่พบผู้ประสบภัยในระบบ</p>
 		</div>
@@ -144,12 +148,14 @@
 											{@const chip = SPECIAL_NEED_CHIPS[need as SpecialNeed]}
 											<span
 												class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
-											>{chip.emoji} {chip.label}</span>
+												>{chip.emoji} {chip.label}</span
+											>
 										{/each}
 									{:else}
 										<span
 											class="rounded-full bg-muted px-2.5 py-0.5 text-[11px] text-muted-foreground"
-										>ทั่วไป</span>
+											>ทั่วไป</span
+										>
 									{/if}
 								</div>
 							</Table.Cell>

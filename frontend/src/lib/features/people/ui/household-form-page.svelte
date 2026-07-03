@@ -195,7 +195,7 @@
 	<title>{isEditMode ? 'แก้ไขข้อมูลครัวเรือน' : 'เพิ่มครัวเรือนใหม่'} · SmartShelter</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 space-y-6">
+<div class="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 md:px-6">
 	<div>
 		<button
 			type="button"
@@ -206,19 +206,23 @@
 			<span>กลับไปหน้ารายชื่อหลัก</span>
 		</button>
 		<h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-			{isEditMode ? 'แก้ไขข้อมูลครัวเรือน (Edit Household)' : 'เพิ่มครัวเรือนใหม่ (Create Household)'}
+			{isEditMode
+				? 'แก้ไขข้อมูลครัวเรือน (Edit Household)'
+				: 'เพิ่มครัวเรือนใหม่ (Create Household)'}
 		</h2>
 	</div>
 
 	{#if evacueesQuery.isLoading || householdsQuery.isLoading}
-		<div class="flex flex-col items-center justify-center gap-2 py-12 rounded-2xl border border-border bg-card p-6 shadow-xs">
+		<div
+			class="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card p-6 py-12 shadow-xs"
+		>
 			<div
 				class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"
 			></div>
 			<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูลระบบ...</p>
 		</div>
 	{:else if isEditMode && !editingHousehold}
-		<div class="py-12 text-center rounded-2xl border border-border bg-card p-6 shadow-xs">
+		<div class="rounded-2xl border border-border bg-card p-6 py-12 text-center shadow-xs">
 			<p class="text-sm font-semibold text-destructive">ไม่พบข้อมูลครัวเรือนที่ต้องการแก้ไข</p>
 			<Button variant="outline" class="mt-4" onclick={handleCancel}>กลับหน้าหลัก</Button>
 		</div>

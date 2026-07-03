@@ -66,7 +66,7 @@
 		return list;
 	});
 
-		// Fetch data for HouseholdRegisterForm
+	// Fetch data for HouseholdRegisterForm
 	const evacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
 
@@ -187,7 +187,7 @@
 			// 5. Create or Join household
 			if (selectedHousehold) {
 				householdId = selectedHousehold._id;
-				
+
 				const latestHousehold = await peopleRepository().getHousehold(selectedHousehold._id);
 				if (!latestHousehold) throw new Error('ไม่พบครัวเรือนในระบบ');
 
@@ -207,7 +207,7 @@
 			} else if (isCreatingNewHousehold || pets.length > 0 || assets || vehicle) {
 				const addr = newHouseholdAddress || {};
 				const householdLabel = `ครอบครัว${registeredEvacuee.first_name} ${registeredEvacuee.last_name}`;
-				
+
 				const householdInput: any = {
 					label: householdLabel,
 					head_evacuee_id: registeredEvacuee._id,
@@ -274,7 +274,12 @@
 			});
 			toast.success('บันทึกข้อมูลและจัดสรรพื้นที่สำเร็จ');
 
-			const finishedEvacuee = latestEvacuee ? { ...latestEvacuee, current_stay: { status: 'checked_in', zone, since: new Date().toISOString() } } : newlyRegisteredEvacuee;
+			const finishedEvacuee = latestEvacuee
+				? {
+						...latestEvacuee,
+						current_stay: { status: 'checked_in', zone, since: new Date().toISOString() }
+					}
+				: newlyRegisteredEvacuee;
 
 			// Reset internal state
 			step = 1;
@@ -340,7 +345,7 @@
 			</div>
 			<!-- label below -->
 			<span
-				class="hidden text-center text-xs font-medium leading-tight sm:block {step === s
+				class="hidden text-center text-xs leading-tight font-medium sm:block {step === s
 					? 'text-foreground'
 					: step > s
 						? 'text-green-700'
@@ -366,7 +371,6 @@
 		onsubmit={handleRegistrationSubmit}
 		pending={isSubmittingEvacuee || pending}
 		onBack={() => (step = 2)}
-		
 	/>
 {:else if step === 4}
 	<div class="space-y-6">
@@ -378,7 +382,7 @@
 			pending={isSubmittingHousehold}
 			bind:showNewHouseholdForm={isCreatingNewHousehold}
 		/>
-		<div class="flex justify-between items-center border-t border-border pt-6">
+		<div class="flex items-center justify-between border-t border-border pt-6">
 			<Button
 				type="button"
 				variant="outline"
@@ -392,7 +396,7 @@
 			{#if !isCreatingNewHousehold}
 				<Button
 					type="button"
-					class="h-10 px-6 text-sm font-medium bg-[#003B71] hover:bg-[#002a50]"
+					class="h-10 bg-[#003B71] px-6 text-sm font-medium hover:bg-[#002a50]"
 					onclick={() => {
 						step = 5;
 					}}
@@ -403,10 +407,7 @@
 		</div>
 	</div>
 {:else if step === 5}
-	<EvacueePetAssetVehicle
-		onBack={() => (step = 4)}
-		onNext={handleFinalSubmit}
-	/>
+	<EvacueePetAssetVehicle onBack={() => (step = 4)} onNext={handleFinalSubmit} />
 {:else if step === 6}
 	<EvacueeSelectZone
 		evacuee={newlyRegisteredEvacuee}

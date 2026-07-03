@@ -23,14 +23,17 @@ export const COUNTRIES: Country[] = [
 	{ value: 'SOUTH KOREA', label: 'เกาหลีใต้' },
 	{ value: 'NORTH KOREA', label: 'เกาหลีเหนือ' },
 	{ value: 'CHRISTMAS ISLAND', label: 'เกาะคริสต์มาส' },
-	{ value: 'SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS', label: 'เกาะเซาท์จอร์เจียและหมู่เกาะเซาท์แซนด์วิช' },
+	{
+		value: 'SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS',
+		label: 'เกาะเซาท์จอร์เจียและหมู่เกาะเซาท์แซนด์วิช'
+	},
 	{ value: 'NORFOLK ISLAND', label: 'เกาะนอร์ฟอล์ก' },
 	{ value: 'BOUVET ISLAND', label: 'เกาะบูเวต์' },
 	{ value: 'UNITED STATES MINOR OUTLYING ISLANDS', label: 'เกาะเล็กรอบนอกของสหรัฐอเมริกา' },
 	{ value: 'HEARD ISLAND AND MCDONALD ISLANDS', label: 'เกาะเฮิร์ดและหมู่เกาะแมกดอนัลด์' },
 	{ value: 'GUERNSEY', label: 'เกิร์นซีย์' },
 	{ value: 'GAMBIA', label: 'แกมเบีย' },
-	{ value: 'CÔTE D\'IVOIRE', label: 'โกตดิวัวร์' },
+	{ value: "CÔTE D'IVOIRE", label: 'โกตดิวัวร์' },
 	{ value: 'COMOROS', label: 'คอโมโรส' },
 	{ value: 'COSTA RICA', label: 'คอสตาริกา' },
 	{ value: 'KAZAKHSTAN', label: 'คาซัคสถาน' },
@@ -253,5 +256,5 @@ export const COUNTRIES: Country[] = [
 	{ value: 'HONDURAS', label: 'ฮอนดูรัส' },
 	{ value: 'HUNGARY', label: 'ฮังการี' },
 	{ value: 'HAITI', label: 'เฮติ' },
-	{ value: 'OTHER', label: 'อื่นๆ' },
+	{ value: 'OTHER', label: 'อื่นๆ' }
 ];

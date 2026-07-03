@@ -14,7 +14,13 @@
 		headEvacueeId,
 		onRemove
 	}: {
-		memberItems: { value: string; label: string; evacuee: Evacuee; hasOther: boolean; otherLabel: string }[];
+		memberItems: {
+			value: string;
+			label: string;
+			evacuee: Evacuee;
+			hasOther: boolean;
+			otherLabel: string;
+		}[];
 		memberSearchValue: string;
 		selectedMemberIds: string[];
 		allEvacuees: Evacuee[];
