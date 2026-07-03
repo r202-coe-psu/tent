@@ -9,6 +9,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SHELTER_DB, startPeopleLiveQuery } from '$lib/features/people';
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
+	import { startCatalogLiveQuery } from '$lib/features/catalog';
 
 	let { children, data } = $props();
 
@@ -20,13 +21,17 @@
 		if (!authStore.isAuthenticated) return;
 		startNamedSync(SHELTER_DB, () => authStore.markNeedsReauth());
 		startNamedSync(SHELTER_REGISTRY_DB, () => authStore.markNeedsReauth());
+		startNamedSync('catalog', () => authStore.markNeedsReauth());
 		const peopleLive = startPeopleLiveQuery(data.queryClient);
 		const sheltersLive = startSheltersLiveQuery(data.queryClient);
+		const catalogLive = startCatalogLiveQuery(data.queryClient);
 		return () => {
 			peopleLive.stop();
 			sheltersLive.stop();
+			catalogLive.stop();
 			stopNamedSync(SHELTER_DB);
 			stopNamedSync(SHELTER_REGISTRY_DB);
+			stopNamedSync('catalog');
 		};
 	});
 </script>
