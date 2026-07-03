@@ -14,7 +14,8 @@ import {
 	listShelterMasters,
 	migrate,
 	mergeShelterSecurity,
-	nowIso
+	nowIso,
+	deployShelterViews
 } from '$lib/server/shelters.admin';
 
 export const prerender = false;
@@ -48,7 +49,7 @@ function validateDocUpdate(code: string): string {
   if (newDoc.shelter_code !== '${code}') {
     throw { forbidden: 'shelter_code must be ${code}' };
   }
-  var allowed = ['evacuee'];
+  var allowed = ['evacuee', 'donation'];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
   }
@@ -126,6 +127,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			validate_doc_update: validateDocUpdate(code)
 		});
 		steps.push({ step: 'design', status: design.status });
+
+		// 3.5. Deploy app views (CR-017)
+		const appStatus = await deployShelterViews(db);
+		steps.push({ step: 'design-app', status: appStatus });
 
 		// 4. Registry + shelter master doc (schema.md §3.1) — idempotent by `code`.
 		await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');

@@ -12,6 +12,7 @@
 	import { startKitchenLiveQuery } from '$lib/features/kitchen';
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
 	import { startCatalogLiveQuery } from '$lib/features/supply';
+	import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 
 	let { children, data } = $props();
 
@@ -33,6 +34,7 @@
 		const liveKitchen = startKitchenLiveQuery(data.queryClient);
 		const liveShelters = startSheltersLiveQuery(data.queryClient);
 		const liveCatalog = startCatalogLiveQuery(data.queryClient);
+		const sopRatioLive = startSopRatioLiveQuery(data.queryClient);
 
 		return () => {
 			livePeople.stop();
@@ -40,6 +42,7 @@
 			liveKitchen.stop();
 			liveShelters.stop();
 			liveCatalog.stop();
+			sopRatioLive.stop();
 			stopNamedSync(SHELTER_DB);
 			stopNamedSync('catalog');
 			stopNamedSync(SHELTER_REGISTRY_DB);

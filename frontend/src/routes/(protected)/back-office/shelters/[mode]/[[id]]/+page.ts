@@ -3,7 +3,7 @@ import type { PageLoad } from './$types';
 import { error } from '@sveltejs/kit';
 
 export const load = (async ({ params }) => {
-	await requireAdmin();
+	await requireAdmin(fetch);
 	if (params.mode !== 'create' && params.mode !== 'edit') {
 		error(404, 'Page not found');
 	}

@@ -1,5 +1,3 @@
-import type { BaseDoc } from './model';
-
 /**
  * Reusable primitive #1 — a thin, type-agnostic wrapper around a single local
  * PouchDB database. Feature data layers build their concrete repositories on
@@ -20,11 +18,14 @@ export interface PaginatedResult<T> {
 }
 
 export interface Repository {
-	put<T extends BaseDoc>(doc: T): Promise<T>;
-	get<T extends BaseDoc>(id: string): Promise<T | null>;
-	remove(doc: BaseDoc): Promise<void>;
-	allByType<T extends BaseDoc>(type: string, guard: (d: unknown) => d is T): Promise<T[]>;
-	pageByType<T extends BaseDoc>(
+	put<T extends { _id: string }>(doc: T): Promise<T>;
+	get<T extends { _id: string }>(id: string): Promise<T | null>;
+	remove(doc: { _id: string; _rev?: string }): Promise<void>;
+	allByType<T extends { _id: string; type: string }>(
+		type: string,
+		guard: (d: unknown) => d is T
+	): Promise<T[]>;
+	pageByType<T extends { _id: string; type: string }>(
 		type: string,
 		guard: (d: unknown) => d is T,
 		page: number,
@@ -35,12 +36,12 @@ export interface Repository {
 /** Build a {@link Repository} bound to one local PouchDB database. */
 export function createRepository(db: PouchDB.Database): Repository {
 	return {
-		async put<T extends BaseDoc>(doc: T): Promise<T> {
+		async put<T extends { _id: string }>(doc: T): Promise<T> {
 			const res = await db.put(doc as PouchDB.Core.PutDocument<T>);
 			return { ...doc, _rev: res.rev };
 		},
 
-		async get<T extends BaseDoc>(id: string): Promise<T | null> {
+		async get<T extends { _id: string }>(id: string): Promise<T | null> {
 			try {
 				return (await db.get<T>(id)) as T;
 			} catch (e) {
@@ -49,11 +50,14 @@ export function createRepository(db: PouchDB.Database): Repository {
 			}
 		},
 
-		async remove(doc: BaseDoc): Promise<void> {
+		async remove(doc: { _id: string; _rev?: string }): Promise<void> {
 			await db.remove(doc as PouchDB.Core.RemoveDocument);
 		},
 
-		async allByType<T extends BaseDoc>(type: string, guard: (d: unknown) => d is T): Promise<T[]> {
+		async allByType<T extends { _id: string; type: string }>(
+			type: string,
+			guard: (d: unknown) => d is T
+		): Promise<T[]> {
 			const res = await db.allDocs({
 				include_docs: true,
 				startkey: `${type}:`,
@@ -63,7 +67,7 @@ export function createRepository(db: PouchDB.Database): Repository {
 			return res.rows.map((r) => r.doc as unknown).filter((d): d is T => guard(d));
 		},
 
-		async pageByType<T extends BaseDoc>(
+		async pageByType<T extends { _id: string; type: string }>(
 			type: string,
 			guard: (d: unknown) => d is T,
 			page: number,
