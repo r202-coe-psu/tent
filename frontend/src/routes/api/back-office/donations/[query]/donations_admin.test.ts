@@ -1,15 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET, POST } from './+server';
-import { adminRaw } from '$lib/server/couch-admin';
+import { adminRaw, requireShelterScopeOrSA } from '$lib/server/couch-admin';
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn(),
-	requireAdmin: vi.fn() // mock authentication guard
+	requireShelterScopeOrSA: vi.fn() // mock warehouse authorization guard
 }));
 
 describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 	beforeEach(() => {
 		vi.resetAllMocks();
+		// Default caller: system admin (bypasses shelter-scope check)
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'admin',
+			roles: ['system_admin'],
+			isSA: true,
+			shelterCode: null
+		});
 	});
 
 	const mockDonation = {
