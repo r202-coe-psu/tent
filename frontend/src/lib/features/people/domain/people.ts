@@ -134,7 +134,7 @@ export interface Household extends BaseDoc {
 	community: string | null;
 	pets: PetGroup[];
 	assets?: HouseholdAsset | null;
-	vehicle?: HouseholdVehicle | null;
+	vehicles: HouseholdVehicle[];
 	notes?: string;
 	address_no: string | null;
 	village_no: string | null;
@@ -237,13 +237,14 @@ export const householdInputSchema = z.object({
 		})
 		.nullable()
 		.optional(),
-	vehicle: z
-		.object({
-			type: z.enum(['car', 'motorcycle', 'other']),
-			license_plate: z.string().trim().nullable().default(null)
-		})
-		.nullable()
-		.optional(),
+	vehicles: z
+		.array(
+			z.object({
+				type: z.enum(['car', 'motorcycle', 'other']),
+				license_plate: z.string().trim().nullable().default(null)
+			})
+		)
+		.default([]),
 	notes: z.string().trim().optional(),
 	address_no: z.string().trim().nullable().default(null),
 	village_no: z.string().trim().nullable().default(null),
@@ -339,7 +340,7 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 			community: d.community,
 			pets: d.pets,
 			assets: d.assets || null,
-			vehicle: d.vehicle || null,
+			vehicles: d.vehicles,
 			...(d.notes ? { notes: d.notes } : {}),
 			address_no: d.address_no || null,
 			village_no: d.village_no || null,

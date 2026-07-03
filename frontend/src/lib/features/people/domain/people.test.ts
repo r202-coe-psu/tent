@@ -92,7 +92,7 @@ describe('createHousehold', () => {
 					}
 				],
 				assets: { description: 'สร้อยคอทองคำ', image_url: null },
-				vehicle: { type: 'car', license_plate: 'กข 1234' },
+				vehicles: [{ type: 'car', license_plate: 'กข 1234' }],
 				notes: 'ใกล้ประตูทางออก',
 				address_no: ' 123/45 ',
 				village_no: ' หมู่ 2 ',
@@ -118,7 +118,7 @@ describe('createHousehold', () => {
 			{ species: 'dog', count: 2, notes: 'friendly', has_cage: true, image_url: 'http://image.png' }
 		]);
 		expect(h.assets).toEqual({ description: 'สร้อยคอทองคำ', image_url: null });
-		expect(h.vehicle).toEqual({ type: 'car', license_plate: 'กข 1234' });
+		expect(h.vehicles).toEqual([{ type: 'car', license_plate: 'กข 1234' }]);
 		expect(h.notes).toBe('ใกล้ประตูทางออก');
 		expect(h.address_no).toBe('123/45'); // trimmed
 		expect(h.village_no).toBe('หมู่ 2'); // trimmed
