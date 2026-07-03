@@ -60,16 +60,11 @@
 
 	const { form: formData, submitting, reset } = form;
 
-	$effect(() => {
-		if (selectedItem) {
-			$formData.item_id = selectedItem._id;
-			$formData.unit = selectedItem.unit;
-		}
-	});
-
 	// Update locked unit when item is selected
 	function selectItem(item: SupplyItem) {
 		selectedItem = item;
+		$formData.item_id = item._id;
+		$formData.unit = item.unit;
 		searchQuery = item.name;
 		isDropdownOpen = false;
 	}
