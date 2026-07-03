@@ -147,9 +147,7 @@ export function useCreateOverrideVersion() {
 			// Guard: prevent cross-shelter writes — ctx.shelterCode must match current shelter.
 			// This is a defense-in-depth check; the route guard should prevent unauthorized access.
 			if (ctx.shelterCode !== SHELTER_CODE) {
-				throw new Error(
-					`shelterCode mismatch: expected ${SHELTER_CODE}, got ${ctx.shelterCode}`
-				);
+				throw new Error(`shelterCode mismatch: expected ${SHELTER_CODE}, got ${ctx.shelterCode}`);
 			}
 
 			const result = createNewVersion(prev, changes, reason, ctx);

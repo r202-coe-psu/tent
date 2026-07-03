@@ -3,7 +3,6 @@ import { SHELTER_CODE } from '$lib/db/shelter';
 import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
 
-
 export const sopRatioKeys = {
 	all: ['sop_ratios'] as const,
 	active: () => [...sopRatioKeys.all, 'active'] as const,
@@ -44,4 +43,3 @@ export const useSopProfiles = () =>
 		queryKey: sopRatioKeys.list(),
 		queryFn: () => sopMasterRepository().listActive()
 	}));
-

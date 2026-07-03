@@ -48,5 +48,4 @@ export {
 } from './application/use-create-version';
 
 // Live-sync wiring (call once per layout, pass QueryClient)
-export { startSopRatioSync } from './application/sop-ratio-sync';
-
+export { startSopRatioLiveQuery } from './application/sop-ratio-sync';
