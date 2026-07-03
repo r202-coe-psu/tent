@@ -1,5 +1,4 @@
 import { json } from '@sveltejs/kit';
-import { adminRaw } from '$lib/server/couch-admin';
 
 export const GET = async () => {
 	try {

@@ -5,9 +5,7 @@
 	import Navigation from '@lucide/svelte/icons/navigation';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Heart from '@lucide/svelte/icons/heart';
-	import FileText from '@lucide/svelte/icons/file-text';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
-	import Compass from '@lucide/svelte/icons/compass';
 	import Search from '@lucide/svelte/icons/search';
 	import HelpCircle from '@lucide/svelte/icons/help-circle';
 	import ExternalLink from '@lucide/svelte/icons/external-link';

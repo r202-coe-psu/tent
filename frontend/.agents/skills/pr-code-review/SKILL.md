@@ -23,16 +23,121 @@ Use `git diff --cached` (staged) or `git diff` (unstaged) as appropriate, evalua
 **Post to GitHub — explicit command only:**
 - `/pr-code-review post <PR_LINK_OR_NUMBER>`
 - User says e.g. "post this review", "submit review to GitHub", "approve/request-changes on PR #N"
+- Batch: "post reviews for PR #12, #15" — load one artifact per PR (see **Review Artifacts**)
 
-Only then may you run `gh pr review`. Use the **most recent in-chat review** the user approved (or ask which items to include). Never post without an explicit post command in the same or a follow-up message.
+Only then may you run `gh pr review`. **Always read the review body from the artifact file** for that project + PR (not from chat memory). Never post without an explicit post command in the same or a follow-up message.
+
+## Review Artifacts (mandatory)
+
+Every completed review MUST be persisted as a **temporary artifact outside the workspace** so post steps are reliable across turns and support multiple PRs.
+
+### Storage location
+
+```
+$HOME/.cursor/pr-code-review/
+```
+
+- **Outside the workspace** — never under the project repo.
+- Create the directory if missing (`mkdir -p`).
+- Mode `0700` on the directory when you create it.
+
+### Filename
+
+```
+{owner}__{repo}__pr-{number}.md
+```
+
+Resolve `{owner}` and `{repo}` from the current git remote (`gh repo view --json nameWithOwner`) or `git remote get-url origin`. Example: `acme__tent__pr-42.md`.
+
+**Local / pre-PR reviews** (no GitHub PR yet):
+
+```
+{owner}__{repo}__local-{staged|unstaged|diff}.md
+```
+
+### File format
+
+Markdown with YAML frontmatter. The body (below the closing `---`) is what gets posted to GitHub.
+
+```markdown
+---
+project_owner: acme
+project_repo: tent
+project_full_name: acme/tent
+pr_number: 42
+pr_title: "feat(people): add intake form"
+pr_url: https://github.com/acme/tent/pull/42
+verdict: Request changes
+review_action: request-changes
+created_at: 2026-07-03T10:37:00+07:00
+workspace: /home/user/Projects/tent
+---
+
+## PR Review — feat(people): add intake form
+
+**Verdict:** Request changes
+
+### Blockers
+- …
+
+### Warnings
+- …
+
+### Suggestions
+- …
+
+### Nitpicks
+- …
+```
+
+**`review_action`** — one of `comment` | `approve` | `request-changes`. Set from verdict:
+- Approve, no blockers → `approve`
+- Blockers remain → `request-changes`
+- Otherwise → `comment`
+
+**`verdict`** — human-readable label for chat context only.
+
+### After review (write artifact)
+
+1. Finish analysis and format the review (see **Output Format**).
+2. Display the review in chat.
+3. **Write the artifact file** to `$HOME/.cursor/pr-code-review/{owner}__{repo}__pr-{number}.md`.
+4. Tell the user the artifact path so they can edit it before posting.
+5. If an artifact for the same project + PR already exists, **overwrite** it (latest review wins).
+
+### Before post (read artifact)
+
+1. Resolve target PR number from the user's command.
+2. Resolve `{owner}` / `{repo}` from the current repo; confirm they match the artifact frontmatter (warn if mismatch).
+3. **Read the artifact file** — use the markdown body as the `gh pr review -b` payload.
+4. Honor `review_action` in frontmatter unless the user explicitly overrides (e.g. "post as approve").
+5. If the artifact is missing, stop and ask the user to re-run the review or provide the path.
+
+### After successful post (delete artifact)
+
+1. Run `gh pr review` with the body from the artifact.
+2. **Only on success** (exit code 0): delete the artifact file (`rm`).
+3. Confirm in chat which PR was posted and that the artifact was removed.
+
+### On post failure
+
+- **Do not delete** the artifact.
+- Report the error; the user can fix the artifact or retry.
+
+### Multiple PRs
+
+- Each PR gets its **own artifact file** — safe to review many PRs in one session.
+- Posting multiple PRs: load and post **one artifact per PR** sequentially; delete each only after its post succeeds.
+- Never merge multiple PR reviews into one GitHub comment.
 
 ## Human Review First (mandatory)
 
 1. Analyze → display findings in chat grouped by severity.
-2. Human reads, edits, or drops items.
-3. Human explicitly commands post → then and only then post to GitHub.
+2. **Save artifact** to `$HOME/.cursor/pr-code-review/`.
+3. Human reads chat output and/or **edits the artifact file** directly.
+4. Human explicitly commands post → read artifact → post to GitHub → delete artifact on success.
 
-If the user has not said to post, end your response with a short note that the review is for human review only and that they can ask you to post when ready.
+If the user has not said to post, end your response with a short note that the review is for human review only, include the artifact path, and that they can ask you to post when ready.
 
 ## Output Format (chat)
 
@@ -45,7 +150,7 @@ Always structure the in-chat review with these four severity levels:
 | **Suggestion** | Nice to have — clearer naming, small refactors, better patterns |
 | **Nitpick** | Optional polish — style, minor wording, trivial consistency |
 
-Template:
+Template (chat display **and** artifact body below frontmatter):
 
 ```markdown
 ## PR Review — <title or number>
@@ -63,14 +168,18 @@ Template:
 
 ### Nitpicks
 - …
-
----
-*Review displayed for human review. Say "post review to GitHub" (or `/pr-code-review post <PR>`) when ready to submit.*
 ```
 
 When suggesting code changes, use **Markdown diff blocks** (` ```diff `) with `-` / `+` lines, not plain code blocks.
 
 If a section has no items, write `None.`
+
+End chat output with:
+
+```markdown
+---
+*Review saved to `~/.cursor/pr-code-review/{owner}__{repo}__pr-{number}.md`. Edit that file if needed, then say "post review to GitHub" (or `/pr-code-review post <PR>`) when ready.*
+```
 
 ## 1. Architecture & Data Flow (Offline-First)
 
@@ -108,6 +217,7 @@ When reviewing a GitHub Pull Request, use `gh` to **fetch only**:
 
 - `gh pr view <number>` — PR description, title, labels, checks
 - `gh pr diff <number>` — full diff
+- `gh repo view --json nameWithOwner,url` — project identity for artifact naming
 
 Do **not** write to GitHub during the analyze step.
 
@@ -115,16 +225,30 @@ Do **not** write to GitHub during the analyze step.
 
 After the human approves posting:
 
-- `gh pr review <number> --comment -b "<markdown>"` — general review comment
-- `gh pr review <number> --approve -b "<markdown>"` — only if no blockers remain and user asked to approve
-- `gh pr review <number> --request-changes -b "<markdown>"` — only if blockers remain and user asked to request changes
+1. Read artifact: `$HOME/.cursor/pr-code-review/{owner}__{repo}__pr-{number}.md`
+2. Extract body (markdown below frontmatter) and `review_action` from frontmatter
+3. Post using the body file (prefer `--body-file` over inline `-b` for long reviews):
 
-Confirm the PR number and review body with the user if they edited the in-chat review or if anything is ambiguous.
+```bash
+gh pr review <number> --comment --body-file "$HOME/.cursor/pr-code-review/{owner}__{repo}__pr-{number}.md"
+```
+
+For `--approve` or `--request-changes`, pass only the **body** (not frontmatter). Strip frontmatter before posting — e.g. write body to a temp slice or use `tail -n +N` after the closing `---` line.
+
+Mapping:
+- `review_action: comment` → `gh pr review <n> --comment --body-file <body-only-file>`
+- `review_action: approve` → `gh pr review <n> --approve --body-file <body-only-file>`
+- `review_action: request-changes` → `gh pr review <n> --request-changes --body-file <body-only-file>`
+
+4. On success: `rm` the artifact
+5. On failure: keep artifact, report error
+
+Confirm the PR number with the user if ambiguous. If they edited the artifact, use the file on disk as source of truth.
 
 ## Review Process Workflow
 
 1. **Fetch and analyze the diff**
-   - **PRs:** `gh pr view` + `gh pr diff`
+   - **PRs:** `gh pr view` + `gh pr diff` + `gh repo view`
    - **Local:** `git diff --cached` or `git diff`
 2. **Load related skills** (read and apply before concluding):
    - `project-structure-architecture` — feature layering, file placement
@@ -134,5 +258,5 @@ Confirm the PR number and review body with the user if they edited the in-chat r
    - `testing-bestpractices` — Vitest/Playwright, DoD
 3. **Check the checklist** — sections 1–4 above.
 4. **Formulate feedback** — Blocker / Warning / Suggestion / Nitpick; use diff blocks for fixes.
-5. **Display in chat** — always; never skip human review.
-6. **Post to GitHub** — only when the user explicitly commands it (section 6).
+5. **Display in chat** and **write artifact** to `~/.cursor/pr-code-review/`.
+6. **Post to GitHub** (explicit command only) — read artifact → post → delete artifact on success.

@@ -13,8 +13,9 @@ declare global {
 		grecaptcha?: {
 			render: (
 				container: HTMLElement | string,
-				parameters: { sitekey: string; callback?: string | Function }
+				parameters: { sitekey: string; callback?: string | ((...args: unknown[]) => void) }
 			) => void;
+			execute: (sitekey: string, options: { action: string }) => Promise<string>;
 		};
 		__captchaToken?: string;
 	}

@@ -1,7 +1,7 @@
 ---
 title: T-18 Clarification Questions — Round 1
 created: 2026-06-20
-updated: 2026-06-25   # Q-T18-2 resolved → CR-006 amend
+updated: 2026-07-03   # CR-026 approved — Q-T18-1 ratified
 module: B (SOP & Resource Calc) + A (Volunteer)
 status: in-progress
 ---
@@ -23,7 +23,12 @@ feature `sop-ratios` ยังไม่มีในโค้ด — ไฟล์
 
 **ที่ยังไม่ชัด (dev lead ยืนยันไม่ได้):** `catalog` DB ในระบบนี้เป็น central-only จริงไหม หรือมี mechanism ให้แต่ละ shelter แก้ได้ด้วย — ส่งผลต่อ factory, route guard, sync direction, validate_doc_update ทั้งหมด
 
-**สถานะ:** ⏳ WAITING on PO
+**✅ RESOLVED → [CR-006](../changes/CR-006-sop-profile-master-override.md)** — สองชั้น: master
+(`sop_profile`) อยู่ `catalog` (central, `system_admin` แก้) + override (`sop_override`) อยู่
+`shelter_*` (`shelter_manager` แก้เฉพาะศูนย์ตัวเอง) resolve = `override active ?? master` —
+ยืนยันซ้ำโดย PO ในที่ประชุม 2026-07-01 (ดู [CR-026](../changes/CR-026-sop-ratio-catalog-scope-and-history-ratification.md))
+
+**สถานะ:** ✅ RESOLVED → CR-006 + CR-026 (ratified 2026-07-03)
 
 ---
 
@@ -105,7 +110,7 @@ feature `sop-ratios` ยังไม่มีในโค้ด — ไฟล์
 
 | Q | คำถาม | สถานะ |
 |---|---|---|
-| Q-T18-1 | sop_profile อยู่ใน DB ไหน | ⏳ รอ PO confirm (catalog central-only หรือ per-shelter แก้ได้) |
+| Q-T18-1 | sop_profile อยู่ใน DB ไหน | ✅ RESOLVED → CR-006 + CR-026 (สองชั้น master/override, ratified 2026-07-03) |
 | Q-T18-2 | ratios canonical key list | ✅ RESOLVED 2026-06-25 → CR-006 (3→20 keys, merge ปภ.+Sphere) |
 | Q-T18-3 | rice_g_per_person_meal default | ⏳ รอ PO confirm option (override layer) |
 | Q-T18-4 | availability shape | ⏳ dev lead รอปรึกษา PO |
