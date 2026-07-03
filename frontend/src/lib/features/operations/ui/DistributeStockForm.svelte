@@ -108,18 +108,14 @@
 	});
 
 	// Click outside container closes dropdown
-	$effect(() => {
-		function handleClickOutside(event: MouseEvent) {
-			if (container && !container.contains(event.target as Node)) {
-				isDropdownOpen = false;
-			}
+	function handleClickOutside(event: MouseEvent) {
+		if (container && !container.contains(event.target as Node)) {
+			isDropdownOpen = false;
 		}
-		document.addEventListener('click', handleClickOutside);
-		return () => {
-			document.removeEventListener('click', handleClickOutside);
-		};
-	});
+	}
 </script>
+
+<svelte:document onclick={handleClickOutside} />
 
 <form
 	method="POST"
