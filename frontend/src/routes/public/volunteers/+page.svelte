@@ -1,15 +1,11 @@
 <script lang="ts">
 	import UserPlus from '@lucide/svelte/icons/user-plus';
-	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import Calendar from '@lucide/svelte/icons/calendar';
 	import Search from '@lucide/svelte/icons/search';
-	import BookOpen from '@lucide/svelte/icons/book-open';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Heart from '@lucide/svelte/icons/heart';
 	import Info from '@lucide/svelte/icons/info';
-	import Compass from '@lucide/svelte/icons/compass';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
 	import Ambulance from '@lucide/svelte/icons/ambulance';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
