@@ -12,6 +12,7 @@
 	import { startKitchenLiveQuery } from '$lib/features/kitchen';
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
 	import { startCatalogLiveQuery } from '$lib/features/supply';
+	import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 
 	let { children, data } = $props();
 
@@ -26,20 +27,22 @@
 		startNamedSync(SHELTER_DB, () => authStore.markNeedsReauth());
 		startNamedSync('catalog', () => authStore.markNeedsReauth());
 		startNamedSync(SHELTER_REGISTRY_DB, () => authStore.markNeedsReauth());
-		
+
 		// Start changes feed live-queries
 		const livePeople = startPeopleLiveQuery(data.queryClient);
 		const liveOperations = startOperationsLiveQuery(data.queryClient);
 		const liveKitchen = startKitchenLiveQuery(data.queryClient);
 		const liveShelters = startSheltersLiveQuery(data.queryClient);
 		const liveCatalog = startCatalogLiveQuery(data.queryClient);
-		
+		const sopRatioLive = startSopRatioLiveQuery(data.queryClient);
+
 		return () => {
 			livePeople.stop();
 			liveOperations.stop();
 			liveKitchen.stop();
 			liveShelters.stop();
 			liveCatalog.stop();
+			sopRatioLive.stop();
 			stopNamedSync(SHELTER_DB);
 			stopNamedSync('catalog');
 			stopNamedSync(SHELTER_REGISTRY_DB);

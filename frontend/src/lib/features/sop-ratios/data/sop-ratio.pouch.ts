@@ -108,8 +108,8 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 					selector: { type: 'sop_profile', active: true }
 				});
 				return (result.docs as unknown[]).filter(isSopMaster);
-			} catch {
-				// Fallback gracefully if find executes but fails due to environment setup
+			} catch (error) {
+				console.warn('[SopPouchRepo] Mango query failed, utilizing allByType fallback:', error);
 			}
 		}
 
@@ -238,8 +238,8 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 					selector: { type: 'sop_override', active: true }
 				});
 				return (result.docs as unknown[]).filter(isSopOverride);
-			} catch {
-				// Fallback gracefully if find executes but fails due to environment setup
+			} catch (error) {
+				console.warn('[SopPouchRepo] Mango query failed, utilizing allByType fallback:', error);
 			}
 		}
 
