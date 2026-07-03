@@ -152,7 +152,7 @@
 
 		{#if donationStore.items.length > 0}
 			<div class="mb-4 flex flex-col gap-4">
-				{#each donationStore.items as item, index (item.id)}
+				{#each donationStore.items as item (item.id)}
 					<div
 						class="relative rounded-lg border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
 					>
@@ -178,7 +178,7 @@
 										<SelectValue placeholder="เลือกหมวดหมู่" />
 									</SelectTrigger>
 									<SelectContent>
-										{#each PUBLIC_DONATION_CATEGORIES as cat}
+										{#each PUBLIC_DONATION_CATEGORIES as cat (cat.value)}
 											<SelectItem value={cat.value} label={cat.label}>{cat.label}</SelectItem>
 										{/each}
 									</SelectContent>
@@ -236,7 +236,7 @@
 				พบข้อมูลไม่ถูกต้อง:
 			</div>
 			<ul class="list-disc space-y-1 pl-5">
-				{#each validationErrors as err}
+				{#each validationErrors as err (err)}
 					<li>{err}</li>
 				{/each}
 			</ul>

@@ -33,9 +33,9 @@ describe('SOP Ratio Domain', () => {
 			expect(profile.ratios.toilet_per_person).toBe(0.05);
 			expect(profile.type).toBe('sop_profile');
 			expect(profile.schema_v).toBe(2);
-			expect((profile as any).shelter_code).toBeUndefined(); // Master has no shelter_code
+			expect((profile as Record<string, unknown>).shelter_code).toBeUndefined(); // Master has no shelter_code
 			expect(profile._id.startsWith('sop_profile:')).toBe(true);
-			expect((profile as any).shelter_code).toBeUndefined(); // Master has no shelter_code
+			expect((profile as Record<string, unknown>).shelter_code).toBeUndefined(); // Master has no shelter_code
 
 			expect(audit.action).toBe('created');
 			expect(audit.target_type).toBe('sop_profile');
