@@ -1,11 +1,11 @@
 ---
 id: CR-026
 title: User schema update and password policy
-status: proposed
+status: approved
 date: 2026-07-01
-updated: 2026-07-01
+updated: 2026-07-03
 requested_by: Soravit Sukkarn
-decided_by: project owner
+decided_by: project owner (2026-07-03)
 layer: volatile
 affects:
   - docs/data/schema.md
