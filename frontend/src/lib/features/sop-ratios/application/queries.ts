@@ -15,6 +15,11 @@ export const sopVersionKeys = {
 	override: () => [...sopVersionKeys.all(), 'override'] as const
 };
 
+function getLatestVersion<T extends { version: number }>(list: T[]): T | null {
+	if (list.length === 0) return null;
+	return [...list].sort((a, b) => b.version - a.version)[0];
+}
+
 /**
  * Active SOP source for this shelter — the override wins over the catalog
  * master (per resolveEffectiveProfile precedence). Returns the winning doc
@@ -25,10 +30,8 @@ export async function getActiveSopProfile(): Promise<SopMaster | SopOverride | n
 		sopOverrideRepository(SHELTER_CODE).listActive(),
 		sopMasterRepository().listActive()
 	]);
-	const activeOverride =
-		overrides.length > 0 ? [...overrides].sort((a, b) => b.version - a.version)[0] : null;
-	const activeMaster =
-		masters.length > 0 ? [...masters].sort((a, b) => b.version - a.version)[0] : null;
+	const activeOverride = getLatestVersion(overrides);
+	const activeMaster = getLatestVersion(masters);
 	return activeOverride ?? activeMaster ?? null;
 }
 

@@ -77,6 +77,20 @@ export const useMasterVersionHistory = (name: string) =>
  * Override history is scoped to `SHELTER_CODE` — the current shelter's DB only.
  * This enforces the shelter-scope isolation rule from CONVENTIONS.md §5
  * (never read another shelter's data).
+ *
+ * Usage in a Svelte component (e.g. version-history-drawer.svelte):
+ * ```svelte
+ * <script lang="ts">
+ *   import { useOverrideVersionHistory } from '$lib/features/sop-ratios';
+ *
+ *   const { profileName }: { profileName: string } = $props();
+ *   const query = useOverrideVersionHistory(profileName);
+ * </script>
+ *
+ * {#each $query.data ?? [] as version (version._id)}
+ *   <li>v{version.version} — {version.updated_at} — by {version.created_by}</li>
+ * {/each}
+ * ```
  */
 export const useOverrideVersionHistory = (name: string) =>
 	createQuery(() => ({

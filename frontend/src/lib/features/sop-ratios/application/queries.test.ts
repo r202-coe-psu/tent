@@ -2,7 +2,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { toast } from 'svelte-sonner';
 import { useCreateMasterVersion, useCreateOverrideVersion } from './use-create-version';
-import { sopRatioKeys } from './queries';
+import { useMasterVersionHistory, useOverrideVersionHistory } from './use-version-history';
+import { sopRatioKeys, sopVersionKeys } from './queries';
 import { SHELTER_CODE } from '$lib/db/shelter';
 
 // Mock svelte-sonner to prevent error output in tests
@@ -27,22 +28,26 @@ vi.mock('../data/sop-ratio.pouch', () => ({
 // Mock svelte-query client and hook creation
 const mockInvalidateQueries = vi.fn();
 vi.mock('@tanstack/svelte-query', () => ({
+	createQuery: (fn: () => unknown) => fn(),
 	useQueryClient: () => ({
 		invalidateQueries: mockInvalidateQueries
 	}),
-	createMutation: (fn: any) => {
+	createMutation: (fn: () => Record<string, unknown>) => {
 		const options = fn();
 		return {
-			mutate: async (variables: any) => {
+			mutate: async (variables: unknown) => {
+				const mutationFn = options.mutationFn as (v: unknown) => Promise<unknown>;
+				const onSuccess = options.onSuccess as ((d: unknown, v: unknown) => void) | undefined;
+				const onError = options.onError as ((e: unknown, v: unknown) => void) | undefined;
 				try {
-					const data = await options.mutationFn(variables);
-					if (options.onSuccess) {
-						options.onSuccess(data, variables);
+					const data = await mutationFn(variables);
+					if (onSuccess) {
+						onSuccess(data, variables);
 					}
 					return data;
 				} catch (err) {
-					if (options.onError) {
-						options.onError(err, variables);
+					if (onError) {
+						onError(err, variables);
 					}
 					throw err;
 				}
@@ -121,7 +126,9 @@ describe('SOP Ratios Application Hooks', () => {
 			expect(mockCreateVersion).not.toHaveBeenCalled();
 
 			// Verify toast notification failed or was called with error (via onError)
-			expect(toast.error).toHaveBeenCalledWith('ไม่สามารถบันทึก Override SOP ได้ — กรุณาลองใหม่อีกครั้ง');
+			expect(toast.error).toHaveBeenCalledWith(
+				'ไม่สามารถบันทึก Override SOP ได้ — กรุณาลองใหม่อีกครั้ง'
+			);
 		});
 
 		it('should short-circuit and return early if changes are identical to prev ratios', async () => {
@@ -214,6 +221,36 @@ describe('SOP Ratios Application Hooks', () => {
 				profile: validMasterInput.prev,
 				deactivatedPrev: null,
 				audit: null
+			});
+		});
+	});
+
+	describe('useMasterVersionHistory', () => {
+		it('should return enabled: false when name is empty or whitespace', () => {
+			expect(useMasterVersionHistory('')).toMatchObject({ enabled: false });
+			expect(useMasterVersionHistory('   ')).toMatchObject({ enabled: false });
+		});
+
+		it('should return enabled: true and correct queryKey for valid name', () => {
+			const result = useMasterVersionHistory('baseline');
+			expect(result).toMatchObject({
+				enabled: true,
+				queryKey: [...sopVersionKeys.master(), 'baseline']
+			});
+		});
+	});
+
+	describe('useOverrideVersionHistory', () => {
+		it('should return enabled: false when name is empty or whitespace', () => {
+			expect(useOverrideVersionHistory('')).toMatchObject({ enabled: false });
+			expect(useOverrideVersionHistory('   ')).toMatchObject({ enabled: false });
+		});
+
+		it('should return enabled: true and correctly scoped queryKey for valid name', () => {
+			const result = useOverrideVersionHistory('baseline');
+			expect(result).toMatchObject({
+				enabled: true,
+				queryKey: [...sopVersionKeys.override(), 'baseline', SHELTER_CODE]
 			});
 		});
 	});
