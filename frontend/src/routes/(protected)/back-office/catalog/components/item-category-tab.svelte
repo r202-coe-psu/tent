@@ -2,7 +2,8 @@
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { isSystemAdmin } from '$lib/auth/roles';
 	// Component
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -19,6 +20,9 @@
 	// Feature
 	import { useItemCategories, useItemCategoriesPaginated } from '$lib/features/catalog';
 	import ItemCategoryForm from '$lib/features/catalog/ui/item-category-form.svelte';
+
+	const roles = $derived(authStore.user?.roles ?? []);
+	const isSA = $derived(isSystemAdmin(roles));
 
 	// Pagination
 	const PAGE_SIZE = 10;
@@ -71,10 +75,12 @@
 					<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
 					<Input bind:value={q} type="search" placeholder="ค้นหา..." class="pl-9" />
 				</div>
-				<Button size="lg" class="flex items-center gap-2" onclick={showCreateForm}>
-					<Plus class="h-4 w-4" />
-					เพิ่มข้อมูล
-				</Button>
+				{#if isSA}
+					<Button size="lg" class="flex items-center gap-2" onclick={showCreateForm}>
+						<Plus class="h-4 w-4" />
+						เพิ่มข้อมูล
+					</Button>
+				{/if}
 			</div>
 		</div>
 

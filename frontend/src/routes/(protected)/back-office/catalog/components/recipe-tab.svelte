@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { isSystemAdmin } from '$lib/auth/roles';
 
 	// Component
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -20,6 +22,9 @@
 	import { useItemMasters, useRecipesPaginated } from '$lib/features/catalog';
 
 	import ItemRecipeForm from '$lib/features/catalog/ui/recipe-form.svelte';
+
+	const roles = $derived(authStore.user?.roles ?? []);
+	const isSA = $derived(isSystemAdmin(roles));
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
@@ -67,10 +72,12 @@
 					<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
 					<Input bind:value={q} type="search" placeholder="ค้นหา..." class="pl-9" />
 				</div>
-				<Button size="lg" class="flex items-center gap-2" onclick={showCreateForm}>
-					<Plus class="h-4 w-4" />
-					เพิ่มข้อมูล
-				</Button>
+				{#if isSA}
+					<Button size="lg" class="flex items-center gap-2" onclick={showCreateForm}>
+						<Plus class="h-4 w-4" />
+						เพิ่มข้อมูล
+					</Button>
+				{/if}
 			</div>
 		</div>
 
