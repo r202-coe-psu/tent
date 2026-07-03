@@ -6,16 +6,13 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import LogOut from '@lucide/svelte/icons/log-out';
-	import Building from '@lucide/svelte/icons/building';
-	import Warehouse from '@lucide/svelte/icons/warehouse';
-	import UserCog from '@lucide/svelte/icons/user-cog';
 	import { slide } from 'svelte/transition';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { LOGIN_ROUTE } from '$lib/guards/auth';
-	import { isShelterManager, isSystemAdmin, formatRoleList } from '$lib/auth/roles';
+	import { isSystemAdmin, formatRoleList } from '$lib/auth/roles';
 	import {
 		backofficeNavbarGroups,
 		backofficeHomePath,
@@ -28,7 +25,6 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const canManageUsers = $derived(isSA || isShelterManager(roles));
 
 	async function logout() {
 		mobileMenuOpen = false;
