@@ -81,8 +81,8 @@ export class CatalogPouchRepository implements CatalogRepository {
 	getRecipe(id: string): Promise<Recipe | null> {
 		return this.repo.get<Recipe>(id);
 	}
-	updateRecipe(Recipe: Recipe): Promise<Recipe> {
-		return this.repo.put(touch(Recipe));
+	updateRecipe(recipe: Recipe): Promise<Recipe> {
+		return this.repo.put(touch(recipe));
 	}
 }
 

@@ -44,6 +44,6 @@ export interface CatalogRepository {
 
 	getRecipe(id: string): Promise<Recipe | null>;
 
-	updateRecipe(Recipe: Recipe): Promise<Recipe>;
+	updateRecipe(recipe: Recipe): Promise<Recipe>;
 }
 
