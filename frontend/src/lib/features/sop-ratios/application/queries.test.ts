@@ -142,6 +142,23 @@ describe('SOP Ratios Application Hooks', () => {
 				audit: null
 			});
 		});
+
+		it('should short-circuit and return early if changes is an empty object', async () => {
+			const mutation = useCreateOverrideVersion();
+			const emptyInput = {
+				...validOverrideInput,
+				changes: {}
+			};
+
+			const result = await mutation.mutate(emptyInput);
+
+			expect(mockCreateVersion).not.toHaveBeenCalled();
+			expect(result).toEqual({
+				profile: validOverrideInput.prev,
+				deactivatedPrev: null,
+				audit: null
+			});
+		});
 	});
 
 	describe('useCreateMasterVersion', () => {

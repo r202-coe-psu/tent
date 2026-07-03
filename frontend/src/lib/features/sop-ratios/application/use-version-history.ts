@@ -67,8 +67,7 @@ export const useMasterVersionHistory = (name: string) =>
 	createQuery(() => ({
 		queryKey: [...sopVersionKeys.master(), name] as const,
 		queryFn: () => fetchMasterVersions(name),
-		enabled: name.trim().length > 0,
-		staleTime: 0
+		enabled: name.trim().length > 0
 	}));
 
 /**
@@ -83,6 +82,5 @@ export const useOverrideVersionHistory = (name: string) =>
 	createQuery(() => ({
 		queryKey: [...sopVersionKeys.override(), name, SHELTER_CODE] as const,
 		queryFn: () => fetchOverrideVersions(name),
-		enabled: name.trim().length > 0,
-		staleTime: 0
+		enabled: name.trim().length > 0
 	}));

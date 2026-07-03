@@ -88,6 +88,8 @@ export function useCreateMasterVersion() {
 
 	return createMutation(() => ({
 		mutationFn: async ({ prev, changes, reason, createdBy }: CreateMasterVersionInput) => {
+			// If changes is empty {}, Object.keys yields [] and hasChanges is false.
+			// This safely treats an empty payload as an implicit no-op branch.
 			const hasChanges = Object.keys(changes).some((key) => {
 				const val = changes[key as SopRatioKey];
 				return val !== undefined && prev.ratios[key as SopRatioKey] !== val;
@@ -97,7 +99,6 @@ export function useCreateMasterVersion() {
 			}
 
 			// Step 1: Domain — pure function, no I/O.
-			// Returns { deactivatedPrev, profile, audit } or idempotent no-op.
 			const result = createNewVersion(prev, changes, reason, { createdBy });
 
 			// Step 2: Persist — atomic bulkDocs write via PouchDB repository.
@@ -157,6 +158,8 @@ export function useCreateOverrideVersion() {
 				throw new Error(`shelterCode mismatch: expected ${SHELTER_CODE}, got ${ctx.shelterCode}`);
 			}
 
+			// If changes is empty {}, Object.keys yields [] and hasChanges is false.
+			// This safely treats an empty payload as an implicit no-op branch.
 			const hasChanges = Object.keys(changes).some((key) => {
 				const val = changes[key as SopRatioKey];
 				return val !== undefined && prev.ratios[key as SopRatioKey] !== val;
