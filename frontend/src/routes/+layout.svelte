@@ -10,6 +10,7 @@
 	import { SHELTER_DB, startPeopleLiveQuery } from '$lib/features/people';
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
 	import { startCatalogLiveQuery } from '$lib/features/catalog';
+	import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 
 	let { children, data } = $props();
 
@@ -29,6 +30,11 @@
 			peopleLive.stop();
 			sheltersLive.stop();
 			catalogLive.stop();
+		const sopRatioLive = startSopRatioLiveQuery(data.queryClient);
+		return () => {
+			peopleLive.stop();
+			sheltersLive.stop();
+			sopRatioLive.stop();
 			stopNamedSync(SHELTER_DB);
 			stopNamedSync(SHELTER_REGISTRY_DB);
 			stopNamedSync('catalog');

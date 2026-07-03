@@ -54,7 +54,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		items: [
 			{ label: 'การประเมินประจำวัน (Daily SOP)', href: null, icon: ClipboardList },
 			{ label: 'คลังสิ่งของและบริจาค', href: null, icon: Package },
-			{ label: 'ครัวกลางและอาหาร', href: resolve('/back-office/kitchen'), icon: UtensilsCrossed },
+			{ label: 'ครัวกลางและอาหาร', href: resolve('/back-office/kitchen'), icon: UtensilsCrossed }
 		]
 	},
 	{

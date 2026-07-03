@@ -136,7 +136,7 @@
 					</h4>
 
 					<div class="space-y-2.5">
-						{#each scannedItems as item}
+						{#each scannedItems as item (item.name)}
 							<div
 								class="flex items-center justify-between rounded-xl border border-border/40 bg-muted/30 p-3"
 							>

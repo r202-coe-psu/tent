@@ -1,9 +1,7 @@
 <script lang="ts">
-	import Package from '@lucide/svelte/icons/package';
 	import Scan from '@lucide/svelte/icons/scan';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import { toast } from 'svelte-sonner';
 	import NeedsBoardAdmin from './components/needs-board-admin.svelte';
 	import SpecialRequestDialog from './components/special-request-dialog.svelte';
