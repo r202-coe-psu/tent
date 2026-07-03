@@ -31,7 +31,11 @@
 	// Gallery / Lightbox
 	let lightboxUrl = $state<string | null>(null);
 	let lightboxImage = $state<ImageSummary | null>(null);
+
+	// เก็บ state ของ thumbnailUrl ไว้ใน urlCache ป้องกันการลบ URL ไม่หมด
+	const urlCache: Record<string, string> = {};
 	let thumbnailUrls = $state<Record<string, string>>({});
+
 	let deleting = $state<string | null>(null);
 
 	// Upload preview
@@ -48,10 +52,10 @@
 
 		// Watch for changes (e.g. sync from remote)
 		const unsubscribe = repo.watchChanges(loadImages);
+
 		return () => {
 			unsubscribe();
-			// Clean up thumbnail object URLs
-			Object.values(thumbnailUrls).forEach(URL.revokeObjectURL);
+			Object.values(urlCache).forEach(URL.revokeObjectURL);
 		};
 	});
 
@@ -59,12 +63,12 @@
 
 	async function loadImages() {
 		images = await repo.listImages();
-		// Load thumbnails for new images
 		for (const img of images) {
-			if (!thumbnailUrls[img._id]) {
+			if (!urlCache[img._id]) {
 				const url = await repo.getThumbnailUrl(img._id);
 				if (url) {
-					thumbnailUrls = { ...thumbnailUrls, [img._id]: url };
+					urlCache[img._id] = url;
+					thumbnailUrls = { ...urlCache };
 				}
 			}
 		}
@@ -129,12 +133,10 @@
 		if (!confirm(`ลบรูป "${img.filename}" ใช่ไหม?`)) return;
 		deleting = img._id;
 		try {
-			// Revoke thumbnail URL
-			if (thumbnailUrls[img._id]) {
-				URL.revokeObjectURL(thumbnailUrls[img._id]);
-				const next = { ...thumbnailUrls };
-				delete next[img._id];
-				thumbnailUrls = next;
+			if (urlCache[img._id]) {
+				URL.revokeObjectURL(urlCache[img._id]);
+				delete urlCache[img._id];
+				thumbnailUrls = { ...urlCache };
 			}
 			await repo.deleteImage(img._id);
 			await loadImages();
@@ -182,12 +184,14 @@
 
 <svelte:head>
 	<title>POC: Image Upload — Smart Shelter</title>
-	<meta name="description" content="Proof of Concept สำหรับการเก็บรูปภาพใน CouchDB ผ่าน Attachments API" />
+	<meta
+		name="description"
+		content="Proof of Concept สำหรับการเก็บรูปภาพใน CouchDB ผ่าน Attachments API"
+	/>
 </svelte:head>
 
 <!-- ============================================================ LAYOUT -->
 <div class="poc-root">
-
 	<!-- ROOT HEADER -->
 	<header class="flex items-center justify-end gap-4 border-b bg-background px-6 py-3">
 		<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
@@ -216,7 +220,9 @@
 				{#if totalSaved > 0}
 					<div class="stat stat-green">
 						<span class="stat-val">-{formatBytes(totalSaved)}</span>
-						<span class="stat-label">ประหยัด ({compressionRatio(totalOriginal, totalCompressed)})</span>
+						<span class="stat-label"
+							>ประหยัด ({compressionRatio(totalOriginal, totalCompressed)})</span
+						>
 					</div>
 				{/if}
 			</div>
@@ -226,7 +232,6 @@
 	<div class="poc-body">
 		<!-- LEFT: Upload + Sync -->
 		<aside class="poc-sidebar">
-
 			<!-- UPLOAD ZONE -->
 			<section class="upload-section card">
 				<h2 class="section-title">📤 อัปโหลดรูป</h2>
@@ -376,10 +381,15 @@
 								<div class="card-meta">
 									<span class="meta-dim">{img.width}×{img.height}</span>
 									<span class="meta-size">{formatBytes(img.compressed_size)}</span>
-									<span class="meta-saved">-{compressionRatio(img.original_size, img.compressed_size)}</span>
+									<span class="meta-saved"
+										>-{compressionRatio(img.original_size, img.compressed_size)}</span
+									>
 								</div>
 								<p class="card-date">
-									{new Date(img.created_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}
+									{new Date(img.created_at).toLocaleString('th-TH', {
+										dateStyle: 'medium',
+										timeStyle: 'short'
+									})}
 								</p>
 							</div>
 
@@ -433,7 +443,12 @@
 					<span>ต้นฉบับ: {formatBytes(lightboxImage.original_size)}</span>
 					<span>→</span>
 					<span>หลัง compress: {formatBytes(lightboxImage.compressed_size)}</span>
-					<span class="lb-saved">ประหยัด {compressionRatio(lightboxImage.original_size, lightboxImage.compressed_size)}</span>
+					<span class="lb-saved"
+						>ประหยัด {compressionRatio(
+							lightboxImage.original_size,
+							lightboxImage.compressed_size
+						)}</span
+					>
 				</div>
 			</div>
 		</div>
@@ -528,7 +543,9 @@
 		margin-top: 2px;
 	}
 
-	.stat-green .stat-val { color: #16a34a; }
+	.stat-green .stat-val {
+		color: #16a34a;
+	}
 
 	/* ===================== BODY ===================== */
 	.poc-body {
@@ -542,7 +559,10 @@
 	}
 
 	@media (max-width: 900px) {
-		.poc-body { grid-template-columns: 1fr; padding: 16px; }
+		.poc-body {
+			grid-template-columns: 1fr;
+			padding: 16px;
+		}
 	}
 
 	.card {
@@ -551,7 +571,9 @@
 		border-radius: 16px;
 		padding: 24px;
 		margin-bottom: 20px;
-		box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+		box-shadow:
+			0 4px 6px -1px rgb(0 0 0 / 0.05),
+			0 2px 4px -2px rgb(0 0 0 / 0.05);
 	}
 
 	.section-title {
@@ -573,15 +595,27 @@
 		background: #f8fafc;
 	}
 
-	.drop-zone:hover, .drop-zone.drag-over {
+	.drop-zone:hover,
+	.drop-zone.drag-over {
 		border-color: #4f46e5;
 		background: #eef2ff;
 		transform: scale(1.01);
 	}
 
-	.drop-icon { font-size: 36px; margin-bottom: 8px; }
-	.drop-text { color: #312e81; font-weight: 600; margin: 0 0 4px; }
-	.drop-hint { color: #64748b; font-size: 12px; margin: 2px 0 0; }
+	.drop-icon {
+		font-size: 36px;
+		margin-bottom: 8px;
+	}
+	.drop-text {
+		color: #312e81;
+		font-weight: 600;
+		margin: 0 0 4px;
+	}
+	.drop-hint {
+		color: #64748b;
+		font-size: 12px;
+		margin: 2px 0 0;
+	}
 
 	.camera-btn {
 		width: 100%;
@@ -603,7 +637,9 @@
 	}
 
 	/* Preview */
-	.preview-section { margin-top: 16px; }
+	.preview-section {
+		margin-top: 16px;
+	}
 
 	.preview-grid {
 		display: grid;
@@ -637,9 +673,14 @@
 		text-align: center;
 	}
 
-	.preview-size { font-size: 10px; color: #64748b; }
+	.preview-size {
+		font-size: 10px;
+		color: #64748b;
+	}
 
-	.caption-row { margin-bottom: 12px; }
+	.caption-row {
+		margin-bottom: 12px;
+	}
 
 	.caption-input {
 		width: 100%;
@@ -659,7 +700,9 @@
 		box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
 	}
 
-	.caption-input::placeholder { color: #94a3b8; }
+	.caption-input::placeholder {
+		color: #94a3b8;
+	}
 
 	.preview-actions {
 		display: flex;
@@ -679,8 +722,13 @@
 		transition: opacity 0.2s;
 	}
 
-	.btn-upload:disabled { opacity: 0.5; cursor: not-allowed; }
-	.btn-upload:not(:disabled):hover { opacity: 0.85; }
+	.btn-upload:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.btn-upload:not(:disabled):hover {
+		opacity: 0.85;
+	}
 
 	.btn-cancel {
 		background: #ffffff;
@@ -693,7 +741,10 @@
 		transition: all 0.2s;
 	}
 
-	.btn-cancel:hover { background: #f1f5f9; color: #0f172a; }
+	.btn-cancel:hover {
+		background: #f1f5f9;
+		color: #0f172a;
+	}
 
 	.progress-bar {
 		height: 6px;
@@ -710,8 +761,16 @@
 		transition: width 0.3s ease;
 	}
 
-	.progress-label { font-size: 12px; color: #4f46e5; text-align: center; }
-	.error-msg { color: #dc2626; font-size: 13px; margin-bottom: 8px; }
+	.progress-label {
+		font-size: 12px;
+		color: #4f46e5;
+		text-align: center;
+	}
+	.error-msg {
+		color: #dc2626;
+		font-size: 13px;
+		margin-bottom: 8px;
+	}
 
 	/* Sync tip */
 	.sync-tip {
@@ -724,13 +783,24 @@
 		color: #4c1d95;
 	}
 
-	.sync-tip p { margin: 0 0 8px; }
-	.sync-tip strong { color: #6d28d9; }
-	.sync-tip ol { margin: 0; padding-left: 18px; }
-	.sync-tip li { margin-bottom: 4px; }
+	.sync-tip p {
+		margin: 0 0 8px;
+	}
+	.sync-tip strong {
+		color: #6d28d9;
+	}
+	.sync-tip ol {
+		margin: 0;
+		padding-left: 18px;
+	}
+	.sync-tip li {
+		margin-bottom: 4px;
+	}
 
 	/* ===================== GALLERY ===================== */
-	.poc-main { min-height: 400px; }
+	.poc-main {
+		min-height: 400px;
+	}
 
 	.gallery-header {
 		display: flex;
@@ -748,9 +818,19 @@
 		color: #94a3b8;
 	}
 
-	.empty-icon { font-size: 64px; margin-bottom: 12px; }
-	.empty-gallery p { font-size: 16px; margin: 0; }
-	.empty-hint { font-size: 13px; color: #64748b !important; margin-top: 6px !important; }
+	.empty-icon {
+		font-size: 64px;
+		margin-bottom: 12px;
+	}
+	.empty-gallery p {
+		font-size: 16px;
+		margin: 0;
+	}
+	.empty-hint {
+		font-size: 13px;
+		color: #64748b !important;
+		margin-top: 6px !important;
+	}
 
 	.gallery-grid {
 		display: grid;
@@ -770,11 +850,16 @@
 
 	.gallery-card:hover {
 		border-color: #cbd5e1;
-		box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.1), 0 4px 6px -4px rgba(99, 102, 241, 0.1);
+		box-shadow:
+			0 10px 15px -3px rgba(99, 102, 241, 0.1),
+			0 4px 6px -4px rgba(99, 102, 241, 0.1);
 		transform: translateY(-2px);
 	}
 
-	.gallery-card.deleting { opacity: 0.5; pointer-events: none; }
+	.gallery-card.deleting {
+		opacity: 0.5;
+		pointer-events: none;
+	}
 
 	.thumb-btn {
 		display: block;
@@ -794,7 +879,9 @@
 		transition: transform 0.3s;
 	}
 
-	.gallery-card:hover .thumb-img { transform: scale(1.05); }
+	.gallery-card:hover .thumb-img {
+		transform: scale(1.05);
+	}
 
 	.thumb-loading {
 		width: 100%;
@@ -839,8 +926,15 @@
 		margin-bottom: 4px;
 	}
 
-	.meta-saved { color: #16a34a; font-weight: 600; }
-	.card-date { font-size: 10px; color: #94a3b8; margin: 0; }
+	.meta-saved {
+		color: #16a34a;
+		font-weight: 600;
+	}
+	.card-date {
+		font-size: 10px;
+		color: #94a3b8;
+		margin: 0;
+	}
 
 	.delete-btn {
 		position: absolute;
@@ -858,8 +952,13 @@
 		transition: opacity 0.2s;
 	}
 
-	.gallery-card:hover .delete-btn { opacity: 1; }
-	.delete-btn:hover { background: #fef2f2; color: #dc2626; }
+	.gallery-card:hover .delete-btn {
+		opacity: 1;
+	}
+	.delete-btn:hover {
+		background: #fef2f2;
+		color: #dc2626;
+	}
 
 	/* ===================== LIGHTBOX ===================== */
 	.lightbox-overlay {
@@ -876,8 +975,12 @@
 	}
 
 	@keyframes fadeIn {
-		from { opacity: 0; }
-		to { opacity: 1; }
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
 	}
 
 	.lightbox-content {
@@ -895,8 +998,14 @@
 	}
 
 	@keyframes scaleIn {
-		from { transform: scale(0.95); opacity: 0; }
-		to { transform: scale(1); opacity: 1; }
+		from {
+			transform: scale(0.95);
+			opacity: 0;
+		}
+		to {
+			transform: scale(1);
+			opacity: 1;
+		}
 	}
 
 	.lightbox-close {
@@ -954,7 +1063,9 @@
 	}
 
 	@keyframes spin {
-		to { transform: rotate(360deg); }
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.lightbox-meta {
