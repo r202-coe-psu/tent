@@ -94,13 +94,13 @@
 				<Table.Body>
 					{#if query.isLoading}
 						<Table.Row>
-							<Table.Cell colspan={3} class="py-6 text-center text-muted-foreground"
+							<Table.Cell colspan={2} class="py-6 text-center text-muted-foreground"
 								>กำลังโหลดข้อมูล...</Table.Cell
 							>
 						</Table.Row>
 					{:else if filtered.length === 0}
 						<Table.Row>
-							<Table.Cell colspan={3} class="py-6 text-center text-muted-foreground"
+							<Table.Cell colspan={2} class="py-6 text-center text-muted-foreground"
 								>📭 ไม่พบข้อมูลมาสเตอร์ที่ค้นหาตามเงื่อนไขนี้</Table.Cell
 							>
 						</Table.Row>
