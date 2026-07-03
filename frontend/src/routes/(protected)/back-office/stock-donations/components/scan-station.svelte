@@ -7,12 +7,13 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
+	import type { ScanDonationView } from '$lib/features/donations';
 
 	let scanState = $state<'idle' | 'scanning' | 'result'>('idle');
 	let searchQuery = $state('');
 
-	// Real scanned booking data
-	let donationDoc = $state<any>(null);
+	// Redacted scanned booking data (ScanDonationView from the back-office API)
+	let donationDoc = $state<ScanDonationView | null>(null);
 	let bookingRef = $state('');
 	let donorName = $state('');
 	let scannedItems = $state<{ name: string; qty: number; unit: string; item_id?: string }[]>([]);
@@ -23,17 +24,6 @@
 		try {
 			const res = await fetch(`/api/back-office/donations/${encodeURIComponent(query.trim())}`);
 			if (!res.ok) {
-				// Fallback to mock data for demo/offline fallback if the query matches the mock
-				if (query.trim() === 'DN-582910') {
-					bookingRef = 'DN-582910';
-					donorName = 'คุณสมชาย ใจดี';
-					scannedItems = [
-						{ name: 'น้ำดื่ม', qty: 50, unit: 'แพ็ค', item_id: 'item:water' },
-						{ name: 'ปลากระป๋อง', qty: 100, unit: 'กระป๋อง', item_id: 'item:fish' }
-					];
-					scanState = 'result';
-					return;
-				}
 				const errorData = await res.json().catch(() => ({}));
 				toast.error(errorData.error || 'ไม่พบข้อมูลการจองบริจาคนี้');
 				scanState = 'idle';
@@ -41,10 +31,10 @@
 			}
 			const data = await res.json();
 			if (data.success && data.donation) {
-				donationDoc = data.donation;
-				bookingRef = donationDoc.booking_ref || '';
-				donorName = donationDoc.donor?.name || 'ไม่ระบุชื่อ';
-				scannedItems = (donationDoc.items || []).map((it: any) => ({
+				donationDoc = data.donation as ScanDonationView;
+				bookingRef = donationDoc?.booking_ref || '';
+				donorName = donationDoc?.donor?.name || 'ไม่ระบุชื่อ';
+				scannedItems = (donationDoc?.items || []).map((it) => ({
 					name: it.free_text || it.item_id || 'ไม่ระบุชื่อสินค้า',
 					qty: it.qty || 0,
 					unit: it.unit || 'ชิ้น',
@@ -55,8 +45,7 @@
 				toast.error('ไม่พบข้อมูลการจองบริจาคนี้');
 				scanState = 'idle';
 			}
-		} catch (err) {
-			console.error(err);
+		} catch {
 			toast.error('เกิดข้อผิดพลาดในการตรวจสอบข้อมูล');
 			scanState = 'idle';
 		}
@@ -100,8 +89,7 @@
 			} else {
 				toast.error(data.error || 'บันทึกไม่สำเร็จ');
 			}
-		} catch (err) {
-			console.error(err);
+		} catch {
 			toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
 		}
 	}

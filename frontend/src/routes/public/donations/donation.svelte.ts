@@ -42,7 +42,7 @@ class DonationStore {
 	]);
 
 	// ขั้น 3 — จุดส่งมอบ + วันเวลา (เก็บไว้โช๋วบนตั๋ว)
-	selectedShelter = $state('SH001');
+	selectedShelter = $state('');
 	selectedShelterName = $state('');
 	shelterLocked = $state(false); // true = มาจากการ์ด needs board → ล็อกศูนย์ปลายทาง (DN)
 	deliveryDate = $state('');
@@ -84,7 +84,7 @@ class DonationStore {
 		this.courierTrackingNo = '';
 		this.eta = '';
 		this.pickupAddress = '';
-		this.selectedShelter = 'SH001';
+		this.selectedShelter = '';
 		this.selectedShelterName = '';
 		this.shelterLocked = false;
 		this.deliveryDate = '';

@@ -68,18 +68,18 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
 		await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 
 		// Step 3: Logistics & Time selection
-		await expect(page.locator('h1', { hasText: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })).toBeVisible();
+		await expect(
+			page.locator('h1', { hasText: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
+		).toBeVisible();
 
 		// Assert shelter is locked to SH001
-		await expect(
-			page.getByText('ล็อกตามความต้องการที่เลือก')
-		).toBeVisible();
+		await expect(page.getByText('ล็อกตามความต้องการที่เลือก')).toBeVisible();
 
 		// Choose delivery method (Button grid)
 		await page.getByRole('button', { name: 'ส่งผ่านขนส่งพัสดุ' }).click();
 
-		// Mock POST /api/v1/donations response
-		await page.route('**/api/v1/donations', async (route) => {
+		// Mock POST /api/public/v1/donations response
+		await page.route('**/api/public/v1/donations', async (route) => {
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
@@ -106,7 +106,7 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
 		await expect(page.getByText('ผู้บริจาคใจบุญ')).toBeVisible();
 
 		// Mock PATCH for courier tracking update
-		await page.route('**/api/v1/donations/TX-SH001-E2ETEST', async (route) => {
+		await page.route('**/api/public/v1/donations/TX-SH001-E2ETEST', async (route) => {
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',

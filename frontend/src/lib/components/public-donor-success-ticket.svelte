@@ -5,6 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { getDonationStore } from '../../routes/public/donations/donation.svelte';
 	import QRCode from 'qrcode';
+	import { toast } from 'svelte-sonner';
 
 	const donationStore = getDonationStore();
 
@@ -15,15 +16,11 @@
 	let qrCodeUrl = $state('');
 
 	$effect(() => {
-		if (donationStore.trackingToken) {
-			QRCode.toDataURL(donationStore.trackingToken, { margin: 1, width: 256 }, (err, url) => {
-				if (!err) {
-					qrCodeUrl = url;
-				} else {
-					console.error('Failed to generate QR code', err);
-				}
-			});
-		}
+		const token = donationStore.trackingToken;
+		if (!token) return;
+		QRCode.toDataURL(token, { margin: 1, width: 256 })
+			.then((url) => (qrCodeUrl = url))
+			.catch(() => toast.error('ไม่สามารถสร้าง QR Code ได้ กรุณาใช้รหัส Tracking Token แทน'));
 	});
 
 	async function saveCourier() {

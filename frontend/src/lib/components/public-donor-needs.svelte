@@ -77,7 +77,8 @@
 				item_id: need.item_id,
 				name: need.name,
 				amount: 1,
-				unit: formatUnit(need.unit),
+				// เก็บหน่วย canonical จาก catalog (kg/bottle/…) ลง store/payload/DB — แปลงไทยเฉพาะตอนแสดงผล
+				unit: need.unit,
 				condition: '',
 				remark: ''
 			}
