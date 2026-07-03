@@ -26,14 +26,11 @@
 		const peopleLive = startPeopleLiveQuery(data.queryClient);
 		const sheltersLive = startSheltersLiveQuery(data.queryClient);
 		const catalogLive = startCatalogLiveQuery(data.queryClient);
-		return () => {
-			peopleLive.stop();
-			sheltersLive.stop();
-			catalogLive.stop();
 		const sopRatioLive = startSopRatioLiveQuery(data.queryClient);
 		return () => {
 			peopleLive.stop();
 			sheltersLive.stop();
+			catalogLive.stop();
 			sopRatioLive.stop();
 			stopNamedSync(SHELTER_DB);
 			stopNamedSync(SHELTER_REGISTRY_DB);
