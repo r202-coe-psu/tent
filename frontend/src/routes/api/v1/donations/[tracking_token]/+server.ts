@@ -75,14 +75,24 @@ export const GET = async ({ params, getClientAddress }) => {
 				booking_ref: donation.booking_ref,
 				shelter_code: donation.shelter_code,
 				donor: maskedDonor,
-				items: (donation.items || donation.items_declared || []).map((i: any) => ({
-					free_text: i.free_text || i.item_name,
-					category: i.category,
-					qty: i.qty,
-					unit: i.unit,
-					condition: i.condition,
-					note: i.note
-				})),
+				items: (donation.items || donation.items_declared || []).map(
+					(i: {
+						free_text?: string;
+						item_name?: string;
+						category?: string;
+						qty?: number;
+						unit?: string;
+						condition?: string;
+						note?: string;
+					}) => ({
+						free_text: i.free_text || i.item_name,
+						category: i.category,
+						qty: i.qty,
+						unit: i.unit,
+						condition: i.condition,
+						note: i.note
+					})
+				),
 				logistics: donation.logistics,
 				received_summary: donation.received_summary || null,
 				created_at: donation.created_at,

@@ -64,7 +64,9 @@ async function saveBulkAtomic<T extends { _id: string; _rev?: string }>(
 			if (error instanceof Error && error.message === '409_CONFLICT') {
 				attempts++;
 				if (attempts >= MAX_RETRIES) {
-					throw new Error(`Max retries reached due to Document Conflicts (409) in ${label}.`);
+					throw new Error(`Max retries reached due to Document Conflicts (409) in ${label}.`, {
+						cause: error
+					});
 				}
 				await new Promise((resolve) => setTimeout(resolve, 50 * attempts));
 
@@ -74,7 +76,7 @@ async function saveBulkAtomic<T extends { _id: string; _rev?: string }>(
 					try {
 						const fresh = await db.get(doc._id);
 						currentDocs[i] = { ...doc, _rev: fresh._rev };
-					} catch (e) {
+					} catch {
 						// 404/not found means it's a new document being inserted, no rev yet.
 					}
 				}
@@ -106,7 +108,7 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 					selector: { type: 'sop_profile', active: true }
 				});
 				return (result.docs as unknown[]).filter(isSopMaster);
-			} catch (error) {
+			} catch {
 				// Fallback gracefully if find executes but fails due to environment setup
 			}
 		}
@@ -236,7 +238,7 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 					selector: { type: 'sop_override', active: true }
 				});
 				return (result.docs as unknown[]).filter(isSopOverride);
-			} catch (error) {
+			} catch {
 				// Fallback gracefully if find executes but fails due to environment setup
 			}
 		}
