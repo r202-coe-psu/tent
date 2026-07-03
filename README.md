@@ -74,22 +74,30 @@ edge เฉพาะ WAN outage, local-only ถ้าไม่เห็นทั
 ## เริ่มต้นใช้งาน
 
 ```bash
-# 1. ยก CouchDB และ Worker ขึ้น (ต้องมี .env — copy จาก .env.example)
+# 1. ยก CouchDB, MongoDB และ Sync Worker (ต้องมี .env — copy จาก .env.example)
 cp .env.example .env
 cp couchdb-session-example.ini couchdb-session.ini
 docker compose up -d
 
-# 2. frontend (ใช้ pnpm)
+# 2. seed CouchDB (จาก frontend/)
 cd frontend
 pnpm install
-pnpm dev          # http://localhost:5173
+pnpm seed
 
-# 3. การรัน metrics-worker (กรณีต้องการ Debug โค้ดโดยไม่รันผ่าน Docker)
-# (ปกติ Worker จะรันอัตโนมัติพร้อม docker compose up ไปแล้ว)
-cd metrics-worker
-pnpm install
-pnpm run build
-pnpm start
+# 3. Sync worker — bootstrap + continuous _changes (เลือกอย่างใดอย่างหนึ่ง)
+# ผ่าน Docker (รันอัตโนมัติเมื่อ docker compose up)
+# หรือ local debug:
+cd ..
+uv sync --project worker
+uv run --project worker sync-worker
+# re-sync ทั้งก้อน: uv run --project worker sync-worker --bootstrap
+
+# 4. ดู MongoDB ด้วย Compass: mongodb://localhost:27017/tent_public
+#    collections: public_shelters, public_persons, _sync_checkpoints
+
+# 5. frontend dev server
+cd frontend
+pnpm dev          # http://localhost:5173
 ```
 
 คำสั่งที่ใช้บ่อย (รันใน `frontend/`):
@@ -98,7 +106,13 @@ pnpm start
 - `pnpm check` — type-check (รันก่อนปิดงานทุกครั้ง)
 - `pnpm test` — unit tests (Vitest)
 - `pnpm test:e2e` — Playwright e2e
-- `pnpm seed` — Create mooc data (purge old data first)
+- `pnpm seed` — Create mock data (purge old data first)
+
+คำสั่ง worker (จาก repo root):
+
+- `uv run --project worker pytest worker/tests` — projector unit tests
+- `uv run --project worker sync-worker` — CouchDB → MongoDB sync
+- `uv run --project worker sync-worker --bootstrap` — force full re-sync
 
 ## แหล่งอ้างอิง
 

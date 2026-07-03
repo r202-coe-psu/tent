@@ -25,15 +25,53 @@ services:
     environment:
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
-    restart: on-failure
-    command: >
-      sh -c "
-        curl -sf -X POST http://$${COUCHDB_USER}:$${COUCHDB_PASSWORD}@couchdb:5984/_cluster_setup
-          -H 'Content-Type: application/json'
-          -d '{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"$${COUCHDB_USER}\",\"password\":\"$${COUCHDB_PASSWORD}\",\"port\":5984}'
-      "
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        CODE=$$(curl -s -o /tmp/couch-init.out -w '%{http_code}' -X POST \
+          "http://$${COUCHDB_USER}:$${COUCHDB_PASSWORD}@couchdb:5984/_cluster_setup" \
+          -H "Content-Type: application/json" \
+          -d "{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"$${COUCHDB_USER}\",\"password\":\"$${COUCHDB_PASSWORD}\",\"port\":5984}")
+        cat /tmp/couch-init.out || true
+        case "$$CODE" in
+          200|201) echo "CouchDB single-node setup OK" ;;
+          400) echo "CouchDB already set up (HTTP 400) — skipping" ;;
+          *) echo "CouchDB cluster setup failed (HTTP $$CODE)"; exit 1 ;;
+        esac
+
+  mongodb:
+    container_name: tent-mongodb
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./deployment/mongodb/data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: sync-worker
+    depends_on:
+      couchdb:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    environment:
+      COUCHDB_URL: http://couchdb:5984
+      COUCHDB_USER: ${COUCHDB_USER:-admin}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
+      MONGODB_URI: mongodb://mongodb:27017/tent_public
+    restart: unless-stopped
 
 networks:
   default:
-
-
