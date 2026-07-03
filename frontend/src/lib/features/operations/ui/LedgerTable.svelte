@@ -9,16 +9,14 @@
 	let { filterItemId = undefined }: { filterItemId?: string } = $props();
 
 	// Fetch stock movements ledger
-	const ledgerQuery = filterItemId !== undefined
-		? useLedgerByItem(() => filterItemId!)
-		: useLedger();
+	const ledgerQuery =
+		filterItemId !== undefined ? useLedgerByItem(() => filterItemId!) : useLedger();
 	const itemsQuery = useSupplyItems();
 
 	const ledger = $derived(ledgerQuery.data ?? []);
 	// Sort by occurred_at descending to show newest entries first
 	const sortedLedger = $derived(
-		[...ledger]
-			.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+		[...ledger].sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
 	);
 
 	// Maps item_id to name
@@ -72,9 +70,13 @@
 			{/each}
 		</div>
 	{:else if ledgerQuery.isError}
-		<p class="text-sm text-destructive font-semibold">เกิดข้อผิดพลาด: {ledgerQuery.error?.message}</p>
+		<p class="text-sm font-semibold text-destructive">
+			เกิดข้อผิดพลาด: {ledgerQuery.error?.message}
+		</p>
 	{:else if sortedLedger.length === 0}
-		<div class="rounded-2xl border border-border bg-muted/10 p-10 text-center flex flex-col justify-center items-center">
+		<div
+			class="flex flex-col items-center justify-center rounded-2xl border border-border bg-muted/10 p-10 text-center"
+		>
 			<Clock class="mb-3 h-10 w-10 text-muted-foreground/30" />
 			<p class="text-sm font-medium text-muted-foreground">ยังไม่มีรายการเคลื่อนไหวคลังในระบบ</p>
 			<p class="mt-1 text-xs text-muted-foreground/60">
@@ -85,27 +87,41 @@
 		<div class="overflow-hidden rounded-2xl border border-border/80 bg-background shadow-sm">
 			<div class="overflow-x-auto">
 				<Table.Root>
-					<Table.Header class="bg-muted/40 border-b border-border/60">
+					<Table.Header class="border-b border-border/60 bg-muted/40">
 						<Table.Row class="hover:bg-transparent">
-							<Table.Head class="w-[120px] font-bold text-[11px] uppercase tracking-wider text-foreground">วัน-เวลา</Table.Head>
-							<Table.Head class="font-bold text-[11px] uppercase tracking-wider text-foreground">รายการสิ่งของ</Table.Head>
-							<Table.Head class="font-bold text-[11px] uppercase tracking-wider text-foreground">จำนวน</Table.Head>
-							<Table.Head class="font-bold text-[11px] uppercase tracking-wider text-foreground">ประเภท</Table.Head>
-							<Table.Head class="font-bold text-[11px] uppercase tracking-wider text-foreground">สถานที่เก็บ / เลขอ้างอิง</Table.Head>
-							<Table.Head class="w-[120px] font-bold text-[11px] uppercase tracking-wider text-foreground">ผู้บันทึก</Table.Head>
+							<Table.Head
+								class="w-[120px] text-[11px] font-bold tracking-wider text-foreground uppercase"
+								>วัน-เวลา</Table.Head
+							>
+							<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase"
+								>รายการสิ่งของ</Table.Head
+							>
+							<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase"
+								>จำนวน</Table.Head
+							>
+							<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase"
+								>ประเภท</Table.Head
+							>
+							<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase"
+								>สถานที่เก็บ / เลขอ้างอิง</Table.Head
+							>
+							<Table.Head
+								class="w-[120px] text-[11px] font-bold tracking-wider text-foreground uppercase"
+								>ผู้บันทึก</Table.Head
+							>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body class="divide-y divide-border/40">
 						{#each sortedLedger as entry (entry._id)}
 							{@const itemName = itemMap[entry.item_id] ?? 'ไม่ระบุชื่อสิ่งของ'}
-							<Table.Row class="hover:bg-muted/30 transition-colors">
+							<Table.Row class="transition-colors hover:bg-muted/30">
 								<!-- DateTime -->
 								<Table.Cell class="font-mono text-xs whitespace-nowrap text-muted-foreground">
 									{formatDateTime(entry.occurred_at)}
 								</Table.Cell>
 
 								<!-- Item Name -->
-								<Table.Cell class="font-semibold text-[13px] text-foreground">
+								<Table.Cell class="text-[13px] font-semibold text-foreground">
 									{itemName}
 								</Table.Cell>
 
@@ -113,24 +129,28 @@
 								<Table.Cell class="whitespace-nowrap">
 									<span class="flex items-center gap-1">
 										{#if entry.qty > 0}
-											<span class="inline-flex items-center gap-0.5 rounded bg-emerald-500/10 px-1.5 py-0.5 text-xs font-extrabold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-sm">
+											<span
+												class="inline-flex items-center gap-0.5 rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-xs font-extrabold text-emerald-600 shadow-sm dark:text-emerald-400"
+											>
 												<ArrowDownLeft class="h-3.5 w-3.5" />
 												+{entry.qty.toLocaleString()}
 											</span>
 										{:else}
-											<span class="inline-flex items-center gap-0.5 rounded bg-rose-500/10 px-1.5 py-0.5 text-xs font-extrabold text-rose-600 dark:text-rose-400 border border-rose-500/20 shadow-sm">
+											<span
+												class="inline-flex items-center gap-0.5 rounded border border-rose-500/20 bg-rose-500/10 px-1.5 py-0.5 text-xs font-extrabold text-rose-600 shadow-sm dark:text-rose-400"
+											>
 												<ArrowUpRight class="h-3.5 w-3.5" />
 												{entry.qty.toLocaleString()}
 											</span>
 										{/if}
-										<span class="text-xs text-muted-foreground font-medium">{entry.unit}</span>
+										<span class="text-xs font-medium text-muted-foreground">{entry.unit}</span>
 									</span>
 								</Table.Cell>
 
 								<!-- Reason -->
 								<Table.Cell class="whitespace-nowrap">
 									<span
-										class="rounded-full px-2.5 py-0.5 text-[11px] font-bold border shadow-sm
+										class="rounded-full border px-2.5 py-0.5 text-[11px] font-bold shadow-sm
 										{entry.qty > 0
 											? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
 											: 'border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400'}"
@@ -143,15 +163,22 @@
 								<Table.Cell class="max-w-[220px] truncate text-xs text-muted-foreground">
 									<div class="flex flex-col gap-1 py-1">
 										{#if entry.lot?.note}
-											<span class="font-medium text-foreground text-[12px]">📍 {entry.lot.note}</span>
+											<span class="text-[12px] font-medium text-foreground"
+												>📍 {entry.lot.note}</span
+											>
 										{/if}
 										{#if entry.lot?.expiry}
-											<span class="text-[11px] text-muted-foreground/90 font-medium">
-												⌛ หมดอายุ: {new Date(entry.lot.expiry).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' })}
+											<span class="text-[11px] font-medium text-muted-foreground/90">
+												⌛ หมดอายุ: {new Date(entry.lot.expiry).toLocaleDateString('th-TH', {
+													day: '2-digit',
+													month: 'short',
+													year: '2-digit'
+												})}
 											</span>
 										{/if}
 										{#if entry.ref_id}
-											<span class="w-fit rounded border border-border/80 bg-muted/80 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80"
+											<span
+												class="w-fit rounded border border-border/80 bg-muted/80 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80"
 												>Ref: {entry.ref_id}</span
 											>
 										{/if}
@@ -162,7 +189,7 @@
 								</Table.Cell>
 
 								<!-- Author -->
-								<Table.Cell class="truncate text-xs text-muted-foreground font-medium">
+								<Table.Cell class="truncate text-xs font-medium text-muted-foreground">
 									{entry.created_by}
 								</Table.Cell>
 							</Table.Row>

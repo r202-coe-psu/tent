@@ -16,7 +16,10 @@ export const POST = async ({ request, getClientAddress }) => {
 		// 1. Validate schema
 		const parsed = donationPreDeclarationInputSchema.safeParse(payload);
 		if (!parsed.success) {
-			return json({ success: false, error: 'Invalid input', details: parsed.error.flatten() }, { status: 422 });
+			return json(
+				{ success: false, error: 'Invalid input', details: parsed.error.flatten() },
+				{ status: 422 }
+			);
 		}
 
 		// 2. Rate Limiting Check
@@ -60,8 +63,8 @@ export const POST = async ({ request, getClientAddress }) => {
 		console.log(`Tracking Token: ${saved.tracking_token}`);
 		console.log('-----------------------------------------------------\n');
 
-		return json({ 
-			success: true, 
+		return json({
+			success: true,
 			trackingToken,
 			as_of: new Date().toISOString()
 		});
@@ -70,5 +73,3 @@ export const POST = async ({ request, getClientAddress }) => {
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}
 };
-
-

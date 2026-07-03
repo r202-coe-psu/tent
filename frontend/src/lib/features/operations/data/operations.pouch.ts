@@ -56,11 +56,13 @@ export class OperationsPouchRepository implements OperationsRepository {
 		const balances = await this.getBalance();
 		const currentQty = balances.get(entry.item_id) ?? 0;
 		const requestedQty = Math.abs(entry.qty);
-		
+
 		if (currentQty < requestedQty) {
-			throw new Error(`Insufficient stock for item ${entry.item_id} (requested ${requestedQty}, have ${currentQty})`);
+			throw new Error(
+				`Insufficient stock for item ${entry.item_id} (requested ${requestedQty}, have ${currentQty})`
+			);
 		}
-		
+
 		return this.addLedgerEntry(entry);
 	}
 }

@@ -106,10 +106,11 @@
 		const q = searchQuery.toLowerCase().trim();
 		return items.filter((item) => {
 			// Search
-			if (q && !item.name.toLowerCase().includes(q) && !item._id.toLowerCase().includes(q)) return false;
+			if (q && !item.name.toLowerCase().includes(q) && !item._id.toLowerCase().includes(q))
+				return false;
 			// Category
 			if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
-			
+
 			const qty = balance.get(item._id) ?? 0;
 			const status = getStatus(qty, item.reorder_level);
 			const lot = latestLotByItem[item._id];
@@ -155,86 +156,110 @@
 
 	const CATEGORY_STYLES: Record<SupplyCategory, string> = {
 		food: 'bg-[#e8f0fe] text-[#0071e3] border-[#d2e3fc] dark:bg-[#0071e3]/10 dark:text-[#66b2ff] dark:border-[#0071e3]/20',
-		water: 'bg-[#e6f4ea] text-[#137333] border-[#ceead6] dark:bg-[#137333]/10 dark:text-[#57bb8a] dark:border-[#137333]/20',
-		medicine: 'bg-[#fce8e6] text-[#c5221f] border-[#fad2cf] dark:bg-[#c5221f]/10 dark:text-[#ff6b6b] dark:border-[#c5221f]/20',
-		clothing: 'bg-[#f3e8fd] text-[#8430ce] border-[#e8d5f9] dark:bg-[#8430ce]/10 dark:text-[#c084fc] dark:border-[#8430ce]/20',
-		hygiene: 'bg-[#e2f1f8] text-[#0288d1] border-[#b3e5fc] dark:bg-[#0288d1]/10 dark:text-[#38bdf8] dark:border-[#0288d1]/20',
-		bedding: 'bg-[#f1f8e9] text-[#558b2f] border-[#dcedc8] dark:bg-[#558b2f]/10 dark:text-[#a3e635] dark:border-[#558b2f]/20',
-		equipment: 'bg-[#f8f9fa] text-[#5f6368] border-[#dadce0] dark:bg-[#f8f9fa]/10 dark:text-[#9ca3af] dark:border-[#dadce0]/20',
-		other: 'bg-[#f8f9fa] text-[#5f6368] border-[#dadce0] dark:bg-[#f8f9fa]/10 dark:text-[#9ca3af] dark:border-[#dadce0]/20'
+		water:
+			'bg-[#e6f4ea] text-[#137333] border-[#ceead6] dark:bg-[#137333]/10 dark:text-[#57bb8a] dark:border-[#137333]/20',
+		medicine:
+			'bg-[#fce8e6] text-[#c5221f] border-[#fad2cf] dark:bg-[#c5221f]/10 dark:text-[#ff6b6b] dark:border-[#c5221f]/20',
+		clothing:
+			'bg-[#f3e8fd] text-[#8430ce] border-[#e8d5f9] dark:bg-[#8430ce]/10 dark:text-[#c084fc] dark:border-[#8430ce]/20',
+		hygiene:
+			'bg-[#e2f1f8] text-[#0288d1] border-[#b3e5fc] dark:bg-[#0288d1]/10 dark:text-[#38bdf8] dark:border-[#0288d1]/20',
+		bedding:
+			'bg-[#f1f8e9] text-[#558b2f] border-[#dcedc8] dark:bg-[#558b2f]/10 dark:text-[#a3e635] dark:border-[#558b2f]/20',
+		equipment:
+			'bg-[#f8f9fa] text-[#5f6368] border-[#dadce0] dark:bg-[#f8f9fa]/10 dark:text-[#9ca3af] dark:border-[#dadce0]/20',
+		other:
+			'bg-[#f8f9fa] text-[#5f6368] border-[#dadce0] dark:bg-[#f8f9fa]/10 dark:text-[#9ca3af] dark:border-[#dadce0]/20'
 	};
 </script>
 
 <div class="space-y-6">
 	<!-- Main Stock Inventory Card -->
-	<div class="bg-card/85 backdrop-blur-xl rounded-[24px] border border-border/80 p-6 shadow-md flex flex-col h-full min-h-[55vh] transition-all">
+	<div
+		class="flex h-full min-h-[55vh] flex-col rounded-[24px] border border-border/80 bg-card/85 p-6 shadow-md backdrop-blur-xl transition-all"
+	>
 		<!-- Title Section -->
-		<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-border/60 pb-6">
+		<div
+			class="mb-6 flex flex-col items-start justify-between gap-4 border-b border-border/60 pb-6 md:flex-row md:items-center"
+		>
 			<div>
-				<h2 class="text-2xl font-bold text-foreground flex items-center gap-2">
+				<h2 class="flex items-center gap-2 text-2xl font-bold text-foreground">
 					<Boxes class="h-6 w-6 text-primary" />
 					รายการสิ่งของในคลัง (Inventory)
 				</h2>
-				<p class="text-muted-foreground mt-2 text-sm max-w-2xl">
-					แสดงผลรายการสินค้าและยอดคงเหลือในคลัง ประเมินความเพียงพอของสต๊อกอ้างอิงตามระดับเกณฑ์เตือนภัยเพื่อป้องกันของขาดแคลน
+				<p class="mt-2 max-w-2xl text-sm text-muted-foreground">
+					แสดงผลรายการสินค้าและยอดคงเหลือในคลัง
+					ประเมินความเพียงพอของสต๊อกอ้างอิงตามระดับเกณฑ์เตือนภัยเพื่อป้องกันของขาดแคลน
 				</p>
 			</div>
 		</div>
 
 		<!-- Filter Bar -->
-		<div class="flex flex-col xl:flex-row gap-3 mb-6 bg-muted/30 p-4 rounded-xl border border-border/60">
+		<div
+			class="mb-6 flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/30 p-4 xl:flex-row"
+		>
 			<!-- Search -->
-			<div class="relative flex-1 min-w-[240px]">
-				<Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
+			<div class="relative min-w-[240px] flex-1">
+				<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 				<input
 					type="text"
 					placeholder="ค้นหารหัสข้อมูล (SKU), ชื่อรายการ..."
 					bind:value={searchQuery}
-					class="w-full bg-background border border-border/80 focus:border-primary transition-all rounded-lg pl-9 pr-4 py-2.5 text-sm outline-none shadow-sm"
+					class="w-full rounded-lg border border-border/80 bg-background py-2.5 pr-4 pl-9 text-sm shadow-sm transition-all outline-none focus:border-primary"
 				/>
 			</div>
-			
-			<div class="flex flex-col sm:flex-row gap-3 flex-wrap">
+
+			<div class="flex flex-col flex-wrap gap-3 sm:flex-row">
 				<!-- Category Dropdown -->
 				<div class="relative w-full sm:w-48">
-					<Filter class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground z-10 h-4 w-4" />
+					<Filter
+						class="pointer-events-none absolute top-1/2 left-3 z-10 h-4 w-4 -translate-y-1/2 text-foreground"
+					/>
 					<select
 						bind:value={categoryFilter}
-						class="w-full bg-background border border-border/80 focus:border-primary transition-all rounded-lg pl-9 pr-8 py-2.5 text-sm font-semibold text-foreground outline-none cursor-pointer shadow-sm appearance-none truncate"
+						class="w-full cursor-pointer appearance-none truncate rounded-lg border border-border/80 bg-background py-2.5 pr-8 pl-9 text-sm font-semibold text-foreground shadow-sm transition-all outline-none focus:border-primary"
 					>
 						<option value="all">ทุกหมวดหมู่ (Category)</option>
 						{#each CATEGORY_OPTIONS as [val, label] (val)}
 							<option value={val}>{label}</option>
 						{/each}
 					</select>
-					<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground">
+					<div
+						class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground"
+					>
 						<ChevronDown class="h-4 w-4" />
 					</div>
 				</div>
 
 				<!-- Location Dropdown -->
 				<div class="relative w-full sm:w-48">
-					<MapPin class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground z-10 h-4 w-4" />
+					<MapPin
+						class="pointer-events-none absolute top-1/2 left-3 z-10 h-4 w-4 -translate-y-1/2 text-foreground"
+					/>
 					<select
 						bind:value={locationFilter}
-						class="w-full bg-background border border-border/80 focus:border-primary transition-all rounded-lg pl-9 pr-8 py-2.5 text-sm font-semibold text-foreground outline-none cursor-pointer shadow-sm appearance-none truncate"
+						class="w-full cursor-pointer appearance-none truncate rounded-lg border border-border/80 bg-background py-2.5 pr-8 pl-9 text-sm font-semibold text-foreground shadow-sm transition-all outline-none focus:border-primary"
 					>
 						<option value="all">ทุกสถานที่จัดเก็บ</option>
 						{#each uniqueLocations as loc (loc)}
 							<option value={loc}>{loc}</option>
 						{/each}
 					</select>
-					<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground">
+					<div
+						class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground"
+					>
 						<ChevronDown class="h-4 w-4" />
 					</div>
 				</div>
 
 				<!-- Status Dropdown -->
 				<div class="relative w-full sm:w-[210px]">
-					<Activity class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground z-10 h-4 w-4" />
+					<Activity
+						class="pointer-events-none absolute top-1/2 left-3 z-10 h-4 w-4 -translate-y-1/2 text-foreground"
+					/>
 					<select
 						bind:value={statusFilter}
-						class="w-full bg-background border border-border/80 focus:border-primary transition-all rounded-lg pl-9 pr-8 py-2.5 text-sm font-semibold text-foreground outline-none cursor-pointer shadow-sm appearance-none"
+						class="w-full cursor-pointer appearance-none rounded-lg border border-border/80 bg-background py-2.5 pr-8 pl-9 text-sm font-semibold text-foreground shadow-sm transition-all outline-none focus:border-primary"
 					>
 						<option value="all">ทุกสถานะความเสี่ยง (Status)</option>
 						<option value="normal">🟢 ปกติ (Healthy)</option>
@@ -243,7 +268,9 @@
 						<option value="expiring">⏳ เสี่ยงหมดอายุ (Expiring)</option>
 						<option value="expired">❌ หมดอายุแล้ว (Expired)</option>
 					</select>
-					<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground">
+					<div
+						class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground"
+					>
 						<ChevronDown class="h-4 w-4" />
 					</div>
 				</div>
@@ -252,13 +279,15 @@
 
 		<!-- Table -->
 		{#if isLoading}
-			<div class="space-y-3 flex-1">
+			<div class="flex-1 space-y-3">
 				{#each [0, 1, 2, 3, 4] as i (i)}
 					<div class="h-16 animate-pulse rounded-xl border border-border bg-muted/20"></div>
 				{/each}
 			</div>
 		{:else if items.length === 0}
-			<div class="rounded-2xl border border-border/60 bg-muted/10 p-12 text-center flex-1 flex flex-col justify-center items-center">
+			<div
+				class="flex flex-1 flex-col items-center justify-center rounded-2xl border border-border/60 bg-muted/10 p-12 text-center"
+			>
 				<Boxes class="mb-4 h-12 w-12 text-muted-foreground/40" />
 				<h3 class="text-base font-semibold text-foreground">ยังไม่มีรายการพัสดุในระบบ</h3>
 				<p class="mt-1 text-sm text-muted-foreground">
@@ -266,23 +295,25 @@
 				</p>
 			</div>
 		{:else}
-			<div class="overflow-x-auto flex-1 rounded-2xl border border-border/60 shadow-sm bg-background">
-				<table class="w-full text-left border-collapse text-xs whitespace-nowrap min-w-[900px]">
-					<thead class="bg-muted/50 border-b border-border/60 sticky top-0 z-10">
-						<tr class="font-bold text-foreground uppercase tracking-wider text-[11px]">
+			<div
+				class="flex-1 overflow-x-auto rounded-2xl border border-border/60 bg-background shadow-sm"
+			>
+				<table class="w-full min-w-[900px] border-collapse text-left text-xs whitespace-nowrap">
+					<thead class="sticky top-0 z-10 border-b border-border/60 bg-muted/50">
+						<tr class="text-[11px] font-bold tracking-wider text-foreground uppercase">
 							<th class="p-4 px-5">รายการสินค้า (SKU)</th>
 							<th class="p-4">หมวดหมู่</th>
 							<th class="p-4 text-center">สถานที่จัดเก็บ</th>
 							<th class="p-4 text-center">วันหมดอายุ</th>
 							<th class="p-4 text-center">ยอดคงเหลือ</th>
 							<th class="p-4 text-center">สถานะ</th>
-							<th class="p-4 text-center px-5 w-[100px]">จัดการ</th>
+							<th class="w-[100px] p-4 px-5 text-center">จัดการ</th>
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-border/40">
 						{#if displayedItems.length === 0}
 							<tr>
-								<td colspan={7} class="p-12 text-center text-muted-foreground font-medium text-sm">
+								<td colspan={7} class="p-12 text-center text-sm font-medium text-muted-foreground">
 									ไม่พบข้อมูลสิ่งของที่ตรงกับเงื่อนไขการค้นหา
 								</td>
 							</tr>
@@ -296,26 +327,32 @@
 
 								<tr
 									class={[
-										'transition-all duration-200 border-l-4 hover:bg-muted/40 hover:translate-x-0.5',
-										expired ? 'border-l-rose-600 bg-rose-500/5' :
-										status === 'empty' ? 'border-l-rose-500 bg-rose-500/5' :
-										expiring ? 'border-l-orange-500 bg-orange-500/5' :
-										status === 'low' ? 'border-l-amber-500 bg-amber-500/5' :
-										'border-l-transparent'
+										'border-l-4 transition-all duration-200 hover:translate-x-0.5 hover:bg-muted/40',
+										expired
+											? 'border-l-rose-600 bg-rose-500/5'
+											: status === 'empty'
+												? 'border-l-rose-500 bg-rose-500/5'
+												: expiring
+													? 'border-l-orange-500 bg-orange-500/5'
+													: status === 'low'
+														? 'border-l-amber-500 bg-amber-500/5'
+														: 'border-l-transparent'
 									]}
 								>
 									<!-- Item name + ID -->
 									<td class="p-4 px-5">
 										<div class="flex flex-col gap-1">
-											<span class="text-foreground font-semibold text-[14px]">
+											<span class="text-[14px] font-semibold text-foreground">
 												{item.name}
 											</span>
 											<div class="flex items-center gap-2">
-												<span class="text-[11px] text-muted-foreground font-mono">
+												<span class="font-mono text-[11px] text-muted-foreground">
 													{item._id}
 												</span>
 												{#if item.perishable}
-													<span class="text-[10px] font-bold text-orange-600 dark:text-orange-400 bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded">
+													<span
+														class="rounded border border-orange-500/20 bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-bold text-orange-600 dark:text-orange-400"
+													>
 														เน่าเสียได้
 													</span>
 												{/if}
@@ -325,7 +362,11 @@
 
 									<!-- Category badge -->
 									<td class="p-4">
-										<span class="text-[10px] font-bold px-2.5 py-1 rounded-md border text-center whitespace-nowrap {CATEGORY_STYLES[item.category]}">
+										<span
+											class="rounded-md border px-2.5 py-1 text-center text-[10px] font-bold whitespace-nowrap {CATEGORY_STYLES[
+												item.category
+											]}"
+										>
 											{SUPPLY_CATEGORY_LABELS[item.category] || item.category}
 										</span>
 									</td>
@@ -333,7 +374,9 @@
 									<!-- Storage location -->
 									<td class="p-4 text-center">
 										{#if lot?.note}
-											<span class="text-[12px] text-foreground font-medium bg-muted/60 border border-border/80 px-2.5 py-1 rounded-lg">
+											<span
+												class="rounded-lg border border-border/80 bg-muted/60 px-2.5 py-1 text-[12px] font-medium text-foreground"
+											>
 												📍 {lot.note}
 											</span>
 										{:else}
@@ -344,7 +387,13 @@
 									<!-- Expiry date -->
 									<td class="p-4 text-center">
 										{#if lot?.expiry}
-											<span class="text-[12px] font-bold px-2 py-1 rounded-md {expired ? 'text-rose-600 bg-rose-500/10 border border-rose-500/20' : expiring ? 'text-orange-600 bg-orange-500/10 border border-orange-500/20' : 'text-foreground bg-muted/60 border border-border/80'}">
+											<span
+												class="rounded-md px-2 py-1 text-[12px] font-bold {expired
+													? 'border border-rose-500/20 bg-rose-500/10 text-rose-600'
+													: expiring
+														? 'border border-orange-500/20 bg-orange-500/10 text-orange-600'
+														: 'border border-border/80 bg-muted/60 text-foreground'}"
+											>
 												{expired ? '❌ ' : expiring ? '⏳ ' : '📅 '}
 												{formatExpiry(lot.expiry)}
 											</span>
@@ -354,14 +403,24 @@
 									</td>
 
 									<!-- Balance -->
-									<td class="p-4 text-center font-mono font-bold text-sm">
+									<td class="p-4 text-center font-mono text-sm font-bold">
 										<div class="flex flex-col items-center gap-0.5">
-											<span class="px-2.5 py-1 rounded-md {expired || status === 'empty' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' : status === 'low' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' : 'bg-muted/80 text-foreground border border-border/60'}">
-												{qty.toLocaleString()} <span class="text-[11px] font-normal text-muted-foreground">{item.unit}</span>
+											<span
+												class="rounded-md px-2.5 py-1 {expired || status === 'empty'
+													? 'border border-rose-500/20 bg-rose-500/10 text-rose-600'
+													: status === 'low'
+														? 'border border-amber-500/20 bg-amber-500/10 text-amber-600'
+														: 'border border-border/60 bg-muted/80 text-foreground'}"
+											>
+												{qty.toLocaleString()}
+												<span class="text-[11px] font-normal text-muted-foreground"
+													>{item.unit}</span
+												>
 											</span>
 											{#if item.reorder_level !== null}
 												<span class="text-[10px] font-normal text-muted-foreground/60">
-													เกณฑ์: {item.reorder_level} {item.unit}
+													เกณฑ์: {item.reorder_level}
+													{item.unit}
 												</span>
 											{/if}
 										</div>
@@ -370,33 +429,41 @@
 									<!-- Status -->
 									<td class="p-4 text-center">
 										{#if expired}
-											<span class="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-xs font-bold text-rose-600">
+											<span
+												class="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-xs font-bold text-rose-600"
+											>
 												<XCircle class="h-3.5 w-3.5" /> หมดอายุแล้ว
 											</span>
 										{:else if status === 'empty'}
-											<span class="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-xs font-bold text-rose-600">
+											<span
+												class="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-xs font-bold text-rose-600"
+											>
 												<XCircle class="h-3.5 w-3.5" /> วิกฤตสต๊อก
 											</span>
 										{:else if status === 'low'}
-											<span class="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-600">
+											<span
+												class="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-600"
+											>
 												<AlertTriangle class="h-3.5 w-3.5" /> เฝ้าระวัง
 											</span>
 										{:else}
-											<span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-600">
+											<span
+												class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-600"
+											>
 												<CheckCircle class="h-3.5 w-3.5" /> ปกติ
 											</span>
 										{/if}
 									</td>
 
 									<!-- Action -->
-									<td class="p-4 text-center px-5">
+									<td class="p-4 px-5 text-center">
 										<button
 											onclick={() => {
 												selectedItemId = item._id;
 												activeModalTab = 'history';
 												isManageModalOpen = true;
 											}}
-											class="bg-background hover:bg-muted text-foreground border border-border/80 p-1.5 px-3 rounded-xl transition-all hover:scale-[1.05] active:scale-[0.95] duration-200 cursor-pointer flex items-center justify-center gap-1.5 text-[12px] font-bold shadow-sm"
+											class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background p-1.5 px-3 text-[12px] font-bold text-foreground shadow-sm transition-all duration-200 hover:scale-[1.05] hover:bg-muted active:scale-[0.95]"
 										>
 											<History class="h-3.5 w-3.5 text-muted-foreground" /> จัดการ
 										</button>
@@ -415,7 +482,9 @@
 					const qty = balance.get(i._id) ?? 0;
 					return qty > 0 && i.reorder_level !== null && qty <= i.reorder_level;
 				}).length}
-				<div class="flex items-center justify-between border border-border/60 bg-muted/20 px-4 py-3 rounded-2xl text-xs text-muted-foreground shadow-sm">
+				<div
+					class="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground shadow-sm"
+				>
 					<span>แสดง {displayedItems.length} จาก {items.length} รายการ</span>
 					<div class="flex gap-3">
 						{#if emptyCount > 0}
@@ -434,7 +503,7 @@
 
 		<!-- Timing note -->
 		{#if !isLoading}
-			<p class="text-right text-[10px] text-muted-foreground/50 mt-3">
+			<p class="mt-3 text-right text-[10px] text-muted-foreground/50">
 				<Clock class="mr-0.5 inline h-3 w-3" />
 				ข้อมูลอัปเดตอัตโนมัติผ่าน PouchDB live changes feed
 			</p>
@@ -444,37 +513,48 @@
 
 <!-- Manage / History Modal (Dialog) -->
 <Dialog.Root bind:open={isManageModalOpen}>
-	<Dialog.Content class="max-h-[90vh] max-w-4xl sm:max-w-4xl overflow-y-auto rounded-[24px] border border-border bg-card shadow-2xl p-6">
-		<Dialog.Header class="border-b border-border/60 pb-4 mb-4">
+	<Dialog.Content
+		class="max-h-[90vh] max-w-4xl overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl sm:max-w-4xl"
+	>
+		<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
 			{#if selectedItemId}
 				{@const item = items.find((i) => i._id === selectedItemId)}
-				<Dialog.Title class="text-xl font-bold text-foreground flex items-center gap-2">
+				<Dialog.Title class="flex items-center gap-2 text-xl font-bold text-foreground">
 					<Boxes class="h-5 w-5 text-primary" />
 					จัดการสต็อก: {item?.name ?? ''}
 				</Dialog.Title>
-				<Dialog.Description class="text-sm text-muted-foreground font-mono mt-1">
+				<Dialog.Description class="mt-1 font-mono text-sm text-muted-foreground">
 					ID: {selectedItemId} | หน่วยนับ: {item?.unit ?? ''}
 				</Dialog.Description>
 			{/if}
 		</Dialog.Header>
 
 		<!-- Tabs Inside Modal -->
-		<div class="flex border-b border-border/60 mb-5 overflow-x-auto whitespace-nowrap">
-			<button 
-				onclick={() => activeModalTab = 'history'} 
-				class="px-4 py-2.5 border-b-2 font-bold text-sm transition-all flex items-center gap-2 cursor-pointer {activeModalTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}"
+		<div class="mb-5 flex overflow-x-auto border-b border-border/60 whitespace-nowrap">
+			<button
+				onclick={() => (activeModalTab = 'history')}
+				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
+				'history'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:text-foreground'}"
 			>
 				<Clock class="h-4 w-4" /> ประวัติความเคลื่อนไหว (Ledger)
 			</button>
-			<button 
-				onclick={() => activeModalTab = 'checkin'} 
-				class="px-4 py-2.5 border-b-2 font-bold text-sm transition-all flex items-center gap-2 cursor-pointer {activeModalTab === 'checkin' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}"
+			<button
+				onclick={() => (activeModalTab = 'checkin')}
+				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
+				'checkin'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:text-foreground'}"
 			>
 				<PlusCircle class="h-4 w-4" /> รับของเข้า (Check-in)
 			</button>
-			<button 
-				onclick={() => activeModalTab = 'distribute'} 
-				class="px-4 py-2.5 border-b-2 font-bold text-sm transition-all flex items-center gap-2 cursor-pointer {activeModalTab === 'distribute' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}"
+			<button
+				onclick={() => (activeModalTab = 'distribute')}
+				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
+				'distribute'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:text-foreground'}"
 			>
 				<MinusCircle class="h-4 w-4" /> แจกจ่ายออก (Distribute)
 			</button>
@@ -485,15 +565,15 @@
 				{#if activeModalTab === 'history'}
 					<LedgerTable filterItemId={selectedItemId} />
 				{:else if activeModalTab === 'checkin'}
-					<ReceiveStockForm 
-						preselectedItemId={selectedItemId} 
+					<ReceiveStockForm
+						preselectedItemId={selectedItemId}
 						onsuccess={() => {
 							isManageModalOpen = false;
 						}}
 					/>
 				{:else if activeModalTab === 'distribute'}
-					<DistributeStockForm 
-						preselectedItemId={selectedItemId} 
+					<DistributeStockForm
+						preselectedItemId={selectedItemId}
 						onsuccess={() => {
 							isManageModalOpen = false;
 						}}

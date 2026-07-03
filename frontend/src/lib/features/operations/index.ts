@@ -50,10 +50,7 @@ export {
 	type SpecialRequestInput
 } from './domain/operations';
 // Domain updates for receive
-export {
-	receiveSourceSchema,
-	createReceiveEntry
-} from './domain/operations';
+export { receiveSourceSchema, createReceiveEntry } from './domain/operations';
 export {
 	distributeInputSchema,
 	createDistributeEntry,

@@ -11,7 +11,7 @@ export class ReCaptchaProvider implements CaptchaProvider {
 
 	async verifyToken(token: string, ip?: string): Promise<boolean> {
 		if (!token) return false;
-		
+
 		try {
 			const params = new URLSearchParams();
 			params.append('secret', this.secretKey);

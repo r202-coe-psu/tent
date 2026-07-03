@@ -94,8 +94,4 @@ export const shelterCodeSchema = z
  * Special schema for global/system layers (e.g., Audit Trail or System Config)
  * that allows identifying the context as the central database ('catalog').
  */
-export const auditShelterCodeSchema = z.union([
-	shelterCodeSchema,
-	z.literal('catalog')
-]);
-
+export const auditShelterCodeSchema = z.union([shelterCodeSchema, z.literal('catalog')]);

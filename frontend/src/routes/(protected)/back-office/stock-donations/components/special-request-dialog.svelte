@@ -46,7 +46,7 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs animate-in fade-in duration-200"
+		class="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/40 p-4 backdrop-blur-xs duration-200 fade-in"
 		onclick={onclose}
 	>
 		<div
@@ -71,7 +71,9 @@
 				<Form.Field {form} name="name">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label class="mb-1.5 block text-[11px] font-bold text-muted-foreground uppercase">
+							<Form.Label
+								class="mb-1.5 block text-[11px] font-bold text-muted-foreground uppercase"
+							>
 								รายการพัสดุ / ประกาศพิเศษ
 							</Form.Label>
 							<Input
@@ -83,14 +85,16 @@
 							/>
 						{/snippet}
 					</Form.Control>
-					<Form.FieldErrors class="text-xs text-destructive mt-1" />
+					<Form.FieldErrors class="mt-1 text-xs text-destructive" />
 				</Form.Field>
 
 				<div class="grid grid-cols-2 gap-4">
 					<Form.Field {form} name="target">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label class="mb-1.5 block text-[11px] font-bold text-muted-foreground uppercase">
+								<Form.Label
+									class="mb-1.5 block text-[11px] font-bold text-muted-foreground uppercase"
+								>
 									เป้าหมายจำนวนที่ต้องการ
 								</Form.Label>
 								<Input
@@ -102,19 +106,21 @@
 								/>
 							{/snippet}
 						</Form.Control>
-						<Form.FieldErrors class="text-xs text-destructive mt-1" />
+						<Form.FieldErrors class="mt-1 text-xs text-destructive" />
 					</Form.Field>
 
 					<Form.Field {form} name="location">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label class="mb-1.5 block text-[11px] font-bold text-muted-foreground uppercase">
+								<Form.Label
+									class="mb-1.5 block text-[11px] font-bold text-muted-foreground uppercase"
+								>
 									คลังเป้าหมาย
 								</Form.Label>
 								<select
 									{...props}
 									bind:value={$formData.location}
-									class="w-full h-9 rounded-xl border border-border bg-muted/20 px-3 py-1.5 text-xs text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
+									class="h-9 w-full rounded-xl border border-border bg-muted/20 px-3 py-1.5 text-xs text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
 								>
 									<option value="คลังช่วยเหลือภัยพิบัติ EOC">คลัง EOC</option>
 									<option value="คลังย่อยโรงเรียนเทศบาล 2">คลังโรงเรียนเทศบาล 2</option>
@@ -122,7 +128,7 @@
 								</select>
 							{/snippet}
 						</Form.Control>
-						<Form.FieldErrors class="text-xs text-destructive mt-1" />
+						<Form.FieldErrors class="mt-1 text-xs text-destructive" />
 					</Form.Field>
 				</div>
 

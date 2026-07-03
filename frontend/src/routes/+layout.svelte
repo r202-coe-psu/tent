@@ -21,19 +21,19 @@
 	// db carries the shelter master doc + audit log; it syncs alongside.
 	$effect(() => {
 		if (!authStore.isAuthenticated) return;
-		
+
 		// Synchronize databases
 		startNamedSync(SHELTER_DB, () => authStore.markNeedsReauth());
 		startNamedSync('catalog', () => authStore.markNeedsReauth());
 		startNamedSync(SHELTER_REGISTRY_DB, () => authStore.markNeedsReauth());
-		
+
 		// Start changes feed live-queries
 		const livePeople = startPeopleLiveQuery(data.queryClient);
 		const liveOperations = startOperationsLiveQuery(data.queryClient);
 		const liveKitchen = startKitchenLiveQuery(data.queryClient);
 		const liveShelters = startSheltersLiveQuery(data.queryClient);
 		const liveCatalog = startCatalogLiveQuery(data.queryClient);
-		
+
 		return () => {
 			livePeople.stop();
 			liveOperations.stop();

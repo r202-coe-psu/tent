@@ -34,4 +34,3 @@ export const GET = async ({ params }) => {
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}
 };
-

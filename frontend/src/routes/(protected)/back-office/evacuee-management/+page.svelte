@@ -54,7 +54,6 @@
 	<title>จัดการผู้ประสบภัย · SmartShelter</title>
 </svelte:head>
 
-
 <div class="flex shrink-0 gap-2 border-b border-border bg-card px-4 py-2">
 	<Button
 		size="sm"

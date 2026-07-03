@@ -140,19 +140,13 @@ describe('OperationsPouchRepository', () => {
 			);
 
 			await expect(
-				repo.distributeStock(
-					{ item_id: 'item:soap', qty: 15, unit: 'bar', ref_id: null },
-					ctx
-				)
+				repo.distributeStock({ item_id: 'item:soap', qty: 15, unit: 'bar', ref_id: null }, ctx)
 			).rejects.toThrow('Insufficient stock');
 		});
 
 		it('throws an error if attempting to distribute stock for item with zero balance', async () => {
 			await expect(
-				repo.distributeStock(
-					{ item_id: 'item:unknown', qty: 5, unit: 'bar', ref_id: null },
-					ctx
-				)
+				repo.distributeStock({ item_id: 'item:unknown', qty: 5, unit: 'bar', ref_id: null }, ctx)
 			).rejects.toThrow('Insufficient stock');
 		});
 	});

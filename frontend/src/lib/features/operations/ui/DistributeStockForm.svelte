@@ -12,7 +12,10 @@
 	import { toast } from 'svelte-sonner';
 	import PackageMinus from '@lucide/svelte/icons/package-minus';
 
-	let { onsuccess, preselectedItemId = undefined }: { onsuccess?: () => void; preselectedItemId?: string } = $props();
+	let {
+		onsuccess,
+		preselectedItemId = undefined
+	}: { onsuccess?: () => void; preselectedItemId?: string } = $props();
 
 	// Fetch supply catalog items and stock balance
 	const itemsQuery = useSupplyItems();
@@ -50,7 +53,9 @@
 
 			// Validate sufficient stock
 			if (validated.data.qty > currentStock) {
-				toast.error(`ยอดคงเหลือไม่เพียงพอ (มี ${currentStock} ต้องการแจกจ่าย ${validated.data.qty})`);
+				toast.error(
+					`ยอดคงเหลือไม่เพียงพอ (มี ${currentStock} ต้องการแจกจ่าย ${validated.data.qty})`
+				);
 				return;
 			}
 
@@ -100,7 +105,7 @@
 	// Automatically pre-fill the selected item when preselectedItemId changes
 	$effect(() => {
 		if (preselectedItemId && itemsQuery.data) {
-			const item = itemsQuery.data.find(i => i._id === preselectedItemId);
+			const item = itemsQuery.data.find((i) => i._id === preselectedItemId);
 			if (item) {
 				selectItem(item);
 			}
@@ -120,9 +125,9 @@
 <form
 	method="POST"
 	use:form.enhance
-	class="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-md flex flex-col"
+	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-md"
 >
-	<div class="flex items-center gap-2 border-b border-border/60 pb-3 mb-2">
+	<div class="mb-2 flex items-center gap-2 border-b border-border/60 pb-3">
 		<PackageMinus class="h-4.5 w-4.5 text-primary" />
 		<h3 class="text-sm font-bold text-foreground">แจกจ่ายพัสดุออก (Outbound Stock Distribute)</h3>
 	</div>
@@ -132,7 +137,9 @@
 		<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground">ค้นหาและเลือกรายการสิ่งของ</Form.Label>
+					<Form.Label class="text-xs font-bold text-foreground"
+						>ค้นหาและเลือกรายการสิ่งของ</Form.Label
+					>
 					<div bind:this={container} class="relative w-full">
 						<Input
 							{...props}
@@ -143,14 +150,16 @@
 							autocomplete="off"
 							disabled={!!preselectedItemId}
 							class={[
-								'h-10 w-full rounded-xl border border-border/80 bg-background px-3 transition shadow-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20',
-								preselectedItemId ? "bg-muted cursor-not-allowed text-muted-foreground font-bold" : ""
+								'h-10 w-full rounded-xl border border-border/80 bg-background px-3 shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20',
+								preselectedItemId
+									? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
+									: ''
 							]}
 						/>
 						{#if selectedItem && !preselectedItemId}
 							<button
 								type="button"
-								class="absolute top-1/2 right-3 -translate-y-1/2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+								class="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
 								onclick={clearSelection}
 							>
 								ล้างค่า
@@ -159,26 +168,37 @@
 
 						{#if isDropdownOpen}
 							<div
-								class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl animate-in fade-in slide-in-from-top-1 duration-150"
+								class="absolute left-0 z-20 mt-1 max-h-60 w-full animate-in overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl duration-150 fade-in slide-in-from-top-1"
 							>
 								{#if itemsQuery.isLoading || balanceQuery.isLoading}
-									<div class="p-3 text-xs text-muted-foreground font-medium">กำลังโหลดข้อมูล...</div>
+									<div class="p-3 text-xs font-medium text-muted-foreground">
+										กำลังโหลดข้อมูล...
+									</div>
 								{:else if filteredItems.length === 0}
-									<div class="p-3 text-xs text-muted-foreground font-medium">ไม่พบรายการสิ่งของ</div>
+									<div class="p-3 text-xs font-medium text-muted-foreground">
+										ไม่พบรายการสิ่งของ
+									</div>
 								{:else}
 									{#each filteredItems as item (item._id)}
 										{@const bal = balanceQuery.data?.get(item._id) ?? 0}
 										<button
 											type="button"
-											class="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm hover:bg-muted font-medium transition-colors cursor-pointer"
+											class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted"
 											onclick={() => selectItem(item)}
 											disabled={bal <= 0}
 										>
 											<div class="flex items-center gap-2">
-												<span class="font-semibold text-foreground {bal <= 0 ? 'opacity-50' : ''}">{item.name}</span>
+												<span class="font-semibold text-foreground {bal <= 0 ? 'opacity-50' : ''}"
+													>{item.name}</span
+												>
 											</div>
-											<span class="rounded-md {bal > 0 ? 'bg-primary/10 text-primary border-primary/20' : 'bg-destructive/10 text-destructive border-destructive/20'} px-2 py-0.5 text-xs font-bold border">
-												คงเหลือ: {bal} {item.unit}
+											<span
+												class="rounded-md {bal > 0
+													? 'border-primary/20 bg-primary/10 text-primary'
+													: 'border-destructive/20 bg-destructive/10 text-destructive'} border px-2 py-0.5 text-xs font-bold"
+											>
+												คงเหลือ: {bal}
+												{item.unit}
 											</span>
 										</button>
 									{/each}
@@ -193,10 +213,13 @@
 
 		<!-- Current Stock Info -->
 		{#if selectedItem}
-			<div class="col-span-1 sm:col-span-2 p-3 bg-muted/50 rounded-xl border border-border/50 flex justify-between items-center">
+			<div
+				class="col-span-1 flex items-center justify-between rounded-xl border border-border/50 bg-muted/50 p-3 sm:col-span-2"
+			>
 				<span class="text-sm font-medium text-muted-foreground">ยอดคงเหลือในคลังขณะนี้:</span>
 				<span class="text-sm font-bold {currentStock > 0 ? 'text-primary' : 'text-destructive'}">
-					{currentStock} {selectedItem.unit}
+					{currentStock}
+					{selectedItem.unit}
 				</span>
 			</div>
 		{/if}
@@ -214,7 +237,7 @@
 						max={currentStock || undefined}
 						step="any"
 						bind:value={$formData.qty}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 transition shadow-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 font-mono text-sm font-bold"
+						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 font-mono text-sm font-bold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -231,7 +254,7 @@
 						placeholder="ระบบจะล็อกอัตโนมัติ"
 						bind:value={$formData.unit}
 						readonly
-						class="h-10 w-full rounded-xl border border-border/80 bg-muted px-3 font-semibold text-muted-foreground shadow-sm cursor-not-allowed"
+						class="h-10 w-full cursor-not-allowed rounded-xl border border-border/80 bg-muted px-3 font-semibold text-muted-foreground shadow-sm"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -242,12 +265,14 @@
 		<Form.Field {form} name="note" class="col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground">สถานที่ปลายทาง หรือ ผู้รับ (ระบุรายละเอียด)</Form.Label>
+					<Form.Label class="text-xs font-bold text-foreground"
+						>สถานที่ปลายทาง หรือ ผู้รับ (ระบุรายละเอียด)</Form.Label
+					>
 					<Input
 						{...props}
 						placeholder="เช่น แจกจ่ายโซนเต็นท์ A, หรือระบุชื่อผู้รับ..."
 						bind:value={$formData.note}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 transition shadow-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 text-sm font-semibold"
+						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -256,9 +281,9 @@
 
 		<!-- Submit Button -->
 		<div class="col-span-1 pt-3 sm:col-span-2">
-			<Form.Button 
-				disabled={$submitting || currentStock <= 0 || ($formData.qty > currentStock)} 
-				class="w-full h-11 bg-primary hover:bg-primary/95 text-primary-foreground font-extrabold text-sm rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+			<Form.Button
+				disabled={$submitting || currentStock <= 0 || $formData.qty > currentStock}
+				class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary text-sm font-extrabold text-primary-foreground shadow-md transition-all duration-300 hover:scale-[1.02] hover:bg-primary/95 hover:shadow-lg active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
 			>
 				{$submitting ? 'กำลังบันทึกรายการ...' : 'บันทึกการแจกจ่ายพัสดุ'}
 			</Form.Button>

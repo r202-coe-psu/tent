@@ -19,4 +19,9 @@ export type { SupplyRepository } from './data/supply.repository';
 export { supplyRepository, CATALOG_DB } from './data/supply.pouch';
 
 // Application — TanStack Query hooks
-export { supplyKeys, useSupplyItems, useSupplyItem, startCatalogLiveQuery } from './application/queries';
+export {
+	supplyKeys,
+	useSupplyItems,
+	useSupplyItem,
+	startCatalogLiveQuery
+} from './application/queries';

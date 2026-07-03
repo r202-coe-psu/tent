@@ -1,4 +1,9 @@
-import { createMutation, createQuery, useQueryClient, type QueryClient } from '@tanstack/svelte-query';
+import {
+	createMutation,
+	createQuery,
+	useQueryClient,
+	type QueryClient
+} from '@tanstack/svelte-query';
 import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
