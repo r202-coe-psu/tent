@@ -46,9 +46,8 @@ uniqueness ของ active override, ความสัมพันธ์ overr
 5. ปฏิเสธการลบ master `sop_profile` ที่ยังถูก `sop_override.base_profile_id` อ้างถึง
 6. resolve effective profile ตามลำดับ: `active override ของ shelter` → `active master` →
    `no_effective_profile` (ไม่ throw / ไม่ crash)
-7. `version` ต้องเพิ่มแบบ monotonic; วิธีนับ = **integer เรียง `prev.version + 1`** (เสนอ resolved โดย
-   [CR-026](CR-026-sop-ratio-catalog-scope-and-history-ratification.md) — `status: proposed`,
-   รอ approve อย่างเป็นทางการก่อนถือว่าปิดจริง; เดิม deferred)
+7. `version` ต้องเพิ่มแบบ monotonic; วิธีนับ = **integer เรียง `prev.version + 1`** (resolved โดย
+   [CR-026](CR-026-sop-ratio-catalog-scope-and-history-ratification.md), approved 2026-07-03; เดิม deferred)
 
 ### Acceptance
 
