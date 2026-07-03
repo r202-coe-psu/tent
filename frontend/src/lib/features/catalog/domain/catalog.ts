@@ -1,7 +1,5 @@
 import { z } from 'zod';
 import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '$lib/db/model';
-import { Description } from 'formsnap';
-// import type { Sop } from '$lib/features/shelters';
 
 // ---------------------------------------------------------------- enums
 export const distributionTypeSchema = z.enum(['consumable', 'one_time']);
