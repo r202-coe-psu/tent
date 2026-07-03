@@ -1,4 +1,4 @@
-import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
+import { createMutation, createQuery, useQueryClient, type QueryClient } from '@tanstack/svelte-query';
 import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
@@ -43,28 +43,39 @@ export const useStockBalance = () =>
 /**
  * Mutation hook to receive inbound stock, persist the ledger entry, and invalidate caches.
  */
-export const useReceiveStock = () =>
-	createMutation(() => ({
+export const useReceiveStock = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) =>
 			operationsRepository().receiveStock(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		},
 		onError: (err: unknown) => {
 			console.error('[operations] receiveStock failed:', err);
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการรับของเข้าคลัง');
 		}
 	}));
+};
 
 /**
  * Mutation hook to distribute outbound stock, persist the ledger entry, and invalidate caches.
  */
-export const useDistributeStock = () =>
-	createMutation(() => ({
+export const useDistributeStock = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: DistributeInput; ctx: AuthorContext }) =>
 			operationsRepository().distributeStock(input, ctx),
+		onSuccess: () => {
+			// Eagerly invalidate — live query will also fire, but this ensures instant update
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		},
 		onError: (err: unknown) => {
 			console.error('[operations] distributeStock failed:', err);
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการแจกจ่ายพัสดุ');
 		}
 	}));
+};
 
 /**
  * Starts a live query changes feed for operations (Stock Ledger documents).
