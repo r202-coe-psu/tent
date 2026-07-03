@@ -80,10 +80,19 @@
 	let emergencyContactPhone = $state('');
 	let membersInitialized = $state(false);
 
-	// Vehicle & Assets state
-	let vehicleType = $state<'car' | 'motorcycle' | 'other' | 'none'>('none');
-	let licensePlate = $state('');
+	// Vehicle & Assets state — a household may bring several vehicles (schema vehicles[]).
+	// `id` is a client-only key for the {#each}; stripped when synced to $formData.
+	type VehicleRow = { id: number; type: 'car' | 'motorcycle' | 'other'; license_plate: string };
+	let vehicleRows = $state<VehicleRow[]>([]);
+	let nextVehicleId = 0;
 	let assetDescription = $state('');
+
+	function addVehicle() {
+		vehicleRows = [...vehicleRows, { id: nextVehicleId++, type: 'car', license_plate: '' }];
+	}
+	function removeVehicle(id: number) {
+		vehicleRows = vehicleRows.filter((v) => v.id !== id);
+	}
 
 	// Pre-fill from initialData — avoids reading allEvacuees to prevent live-sync re-runs
 	$effect(() => {
@@ -102,8 +111,11 @@
 			mzVal = initialData.municipality_zone ?? '';
 			commVal = initialData.community ?? '';
 			petsList = initialData.pets ? JSON.parse(JSON.stringify(initialData.pets)) : [];
-			vehicleType = initialData.vehicle?.type ?? 'none';
-			licensePlate = initialData.vehicle?.license_plate ?? '';
+			vehicleRows = (initialData.vehicles ?? []).map((v) => ({
+				id: nextVehicleId++,
+				type: v.type,
+				license_plate: v.license_plate ?? ''
+			}));
 			assetDescription = initialData.assets?.description ?? '';
 			membersInitialized = false;
 		} else {
@@ -121,8 +133,7 @@
 			mzVal = '';
 			commVal = '';
 			petsList = [];
-			vehicleType = 'none';
-			licensePlate = '';
+			vehicleRows = [];
 			assetDescription = '';
 			selectedMemberIds = [...initialMemberIds];
 			membersInitialized = true;
@@ -151,10 +162,10 @@
 	});
 
 	$effect(() => {
-		$formData.vehicle =
-			vehicleType !== 'none'
-				? { type: vehicleType, license_plate: licensePlate.trim() || null }
-				: null;
+		$formData.vehicles = vehicleRows.map((v) => ({
+			type: v.type,
+			license_plate: v.license_plate.trim() || null
+		}));
 	});
 
 	$effect(() => {
@@ -275,7 +286,12 @@
 
 			<!-- Assets Section -->
 			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
-				<HouseholdFormAssetsSection bind:vehicleType bind:licensePlate bind:assetDescription />
+				<HouseholdFormAssetsSection
+					{vehicleRows}
+					onAddVehicle={addVehicle}
+					onRemoveVehicle={removeVehicle}
+					bind:assetDescription
+				/>
 			</div>
 
 			<!-- Notes Section -->

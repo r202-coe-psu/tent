@@ -111,8 +111,7 @@
 		hasCage: boolean;
 		petImageUrl: string | null;
 		assetDescription: string;
-		vehicleType: string;
-		licensePlate: string;
+		vehicles: { type: 'car' | 'motorcycle' | 'other'; license_plate: string | null }[];
 	}) {
 		if (isSubmittingHousehold) return;
 		isSubmittingHousehold = true;
@@ -167,20 +166,11 @@
 				};
 			}
 
-			// 4. Map vehicle
-			let vehicle: any = null;
-			if (petAssetVehicleData.vehicleType) {
-				let type: 'car' | 'motorcycle' | 'other' = 'other';
-				if (petAssetVehicleData.vehicleType === 'รถยนต์') {
-					type = 'car';
-				} else if (petAssetVehicleData.vehicleType === 'จักรยานยนต์') {
-					type = 'motorcycle';
-				}
-				vehicle = {
-					type,
-					license_plate: petAssetVehicleData.licensePlate || null
-				};
-			}
+			// 4. Map vehicles (household may bring several — schema vehicles[])
+			const vehicles = petAssetVehicleData.vehicles.map((v) => ({
+				type: v.type,
+				license_plate: v.license_plate?.trim() || null
+			}));
 
 			let householdId: string | null = null;
 
@@ -202,9 +192,9 @@
 					label: latestHousehold.label || `ครอบครัวผู้ประสบภัย ${latestHousehold._id}`,
 					pets: updatedPets,
 					assets: assets || latestHousehold.assets || null,
-					vehicle: vehicle || latestHousehold.vehicle || null
+					vehicles: vehicles.length > 0 ? vehicles : latestHousehold.vehicles || []
 				});
-			} else if (isCreatingNewHousehold || pets.length > 0 || assets || vehicle) {
+			} else if (isCreatingNewHousehold || pets.length > 0 || assets || vehicles.length > 0) {
 				const addr = newHouseholdAddress || {};
 				const householdLabel = `ครอบครัว${registeredEvacuee.first_name} ${registeredEvacuee.last_name}`;
 
@@ -215,7 +205,7 @@
 					community: null,
 					pets: pets,
 					assets: assets,
-					vehicle: vehicle,
+					vehicles: vehicles,
 					notes: '',
 					address_no: addr.address_no || null,
 					village_no: addr.village_no || null,

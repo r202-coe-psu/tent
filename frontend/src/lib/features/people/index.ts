@@ -14,6 +14,8 @@ export type {
 	CurrentStay,
 	EmergencyContact,
 	PetGroup,
+	HouseholdVehicle,
+	HouseholdAsset,
 	MovementDestination,
 	Gender,
 	Religion,

@@ -13,7 +13,7 @@
 		useUpdateHousehold,
 		SHELTER_CODE
 	} from '$lib/features/people';
-	import type { StayStatus, PetGroup } from '$lib/features/people';
+	import type { StayStatus, PetGroup, HouseholdVehicle } from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { now } from '$lib/db/model';
 
@@ -168,8 +168,7 @@
 	}
 
 	async function saveAssets(data: {
-		vehicleType: string;
-		licensePlate: string;
+		vehicles: HouseholdVehicle[];
 		valuables: string;
 		pets: PetGroup[];
 	}) {
@@ -180,13 +179,7 @@
 		try {
 			await updateHouseholdMutation.mutateAsync({
 				...household,
-				vehicle:
-					data.vehicleType !== 'none'
-						? {
-								type: data.vehicleType as 'car' | 'motorcycle' | 'other',
-								license_plate: data.licensePlate || null
-							}
-						: null,
+				vehicles: data.vehicles,
 				assets: data.valuables ? { description: data.valuables, image_url: null } : null,
 				pets: data.pets.filter((p) => p.count > 0)
 			});

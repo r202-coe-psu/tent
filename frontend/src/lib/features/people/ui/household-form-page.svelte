@@ -85,8 +85,13 @@
 						has_cage: p.has_cage ?? undefined,
 						image_url: p.image_url ?? null
 					})),
-					assets: input.assets ?? null,
-					vehicle: input.vehicle ?? null,
+					assets: input.assets
+						? { description: input.assets.description, image_url: input.assets.image_url ?? null }
+						: null,
+					vehicles: (input.vehicles ?? []).map((v) => ({
+						type: v.type,
+						license_plate: v.license_plate ?? null
+					})),
 					notes: input.notes ?? undefined,
 					address_no: input.address_no || null,
 					village_no: input.village_no || null,

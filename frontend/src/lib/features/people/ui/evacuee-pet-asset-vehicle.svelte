@@ -6,6 +6,8 @@
 	import Camera from '@lucide/svelte/icons/camera';
 	import Image from '@lucide/svelte/icons/image';
 	import X from '@lucide/svelte/icons/x';
+	import Plus from '@lucide/svelte/icons/plus';
+	import type { HouseholdVehicle } from '../domain/people';
 
 	let {
 		onBack,
@@ -18,8 +20,7 @@
 			hasCage: boolean;
 			petImageUrl: string | null;
 			assetDescription: string;
-			vehicleType: string;
-			licensePlate: string;
+			vehicles: HouseholdVehicle[];
 		}) => void;
 	} = $props();
 
@@ -28,8 +29,26 @@
 	let hasCage = $state(false);
 	let petImageUrl = $state<string | null>(null);
 	let assetDescription = $state('');
-	let vehicleType = $state('');
-	let licensePlate = $state('');
+
+	// A household may bring several vehicles (schema.md §1.3 `vehicles[]`, CR-016).
+	// `id` is a client-only key for the {#each} — stripped before onNext.
+	type VehicleRow = { id: number; type: 'car' | 'motorcycle' | 'other'; license_plate: string };
+	let vehicleRows = $state<VehicleRow[]>([]);
+	let nextVehicleId = 0;
+
+	const vehicleTypeOptions = [
+		{ value: 'car', label: 'รถยนต์' },
+		{ value: 'motorcycle', label: 'จักรยานยนต์' },
+		{ value: 'other', label: 'อื่นๆ' }
+	] as const;
+
+	function addVehicle() {
+		vehicleRows = [...vehicleRows, { id: nextVehicleId++, type: 'car', license_plate: '' }];
+	}
+
+	function removeVehicle(id: number) {
+		vehicleRows = vehicleRows.filter((v) => v.id !== id);
+	}
 </script>
 
 <div class="space-y-4">
@@ -116,20 +135,55 @@
 
 			<!-- Vehicles Section -->
 			<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-				<div class="flex items-center gap-1 text-sm font-semibold">🚗 ยานพาหนะ</div>
-				<div class="flex items-center gap-2">
-					<Select.Root type="single" bind:value={vehicleType}>
-						<Select.Trigger class="w-[120px] bg-background">
-							{vehicleType || 'ประเภท'}
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item value="รถยนต์">รถยนต์</Select.Item>
-							<Select.Item value="จักรยานยนต์">จักรยานยนต์</Select.Item>
-							<Select.Item value="อื่นๆ">อื่นๆ</Select.Item>
-						</Select.Content>
-					</Select.Root>
-					<Input bind:value={licensePlate} placeholder="ทะเบียนรถ" class="flex-1 bg-background" />
+				<div class="flex items-center justify-between gap-2">
+					<div class="flex items-center gap-1 text-sm font-semibold">🚗 ยานพาหนะ</div>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						class="h-8 shrink-0 bg-background"
+						onclick={addVehicle}
+					>
+						<Plus class="mr-1 h-3.5 w-3.5" /> เพิ่มคัน
+					</Button>
 				</div>
+
+				{#if vehicleRows.length === 0}
+					<p class="text-xs text-muted-foreground">
+						ยังไม่มียานพาหนะ — กด "เพิ่มคัน" เพื่อเพิ่มรายการ
+					</p>
+				{:else}
+					<div class="space-y-2">
+						{#each vehicleRows as vehicle (vehicle.id)}
+							<div class="flex items-center gap-2">
+								<Select.Root type="single" bind:value={vehicle.type}>
+									<Select.Trigger class="w-[120px] shrink-0 bg-background">
+										{vehicleTypeOptions.find((o) => o.value === vehicle.type)?.label ?? 'ประเภท'}
+									</Select.Trigger>
+									<Select.Content>
+										{#each vehicleTypeOptions as opt (opt.value)}
+											<Select.Item value={opt.value} label={opt.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
+								<Input
+									bind:value={vehicle.license_plate}
+									placeholder="ทะเบียนรถ"
+									class="flex-1 bg-background"
+								/>
+								<Button
+									type="button"
+									variant="outline"
+									size="icon"
+									class="h-10 w-10 shrink-0 bg-background"
+									onclick={() => removeVehicle(vehicle.id)}
+								>
+									<X class="h-4 w-4 text-muted-foreground" />
+								</Button>
+							</div>
+						{/each}
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>
@@ -154,8 +208,10 @@
 					hasCage,
 					petImageUrl,
 					assetDescription,
-					vehicleType,
-					licensePlate
+					vehicles: vehicleRows.map((v) => ({
+						type: v.type,
+						license_plate: v.license_plate.trim() || null
+					}))
 				})}
 		>
 			ลงทะเบียนสำเร็จ
