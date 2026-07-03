@@ -7,12 +7,12 @@
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/db/shelter';
 	import {
 		useIssueRequisition,
 		toRequisitionInput,
 		assessRequisition,
 		MEAL_PERIOD_LABELS,
+		SHELTER_CODE,
 		type MealPlan,
 		type RequisitionLineAssessment
 	} from '$lib/features/kitchen';
@@ -40,27 +40,20 @@
 		return assessRequisition(requested.items, balance.data ?? new Map<string, number>());
 	});
 
-	// Editable issued qty per item — defaults to what stock can actually cover.
-	let issued = $state<Record<string, number>>({});
+	// User-entered overrides of the issued qty, keyed by plan + item. Absent key
+	// ⇒ fall back to the stock-covered default, so switching plans or reopening
+	// starts fresh with no carryover — no $effect/seed needed. Cleared on close.
+	let edits = $state<Record<string, number>>({});
 
-	$effect(() => {
-		if (!open) {
-			issued = {};
-			return;
-		}
-		if (Object.keys(issued).length === 0 && assessment.length > 0) {
-			const seed: Record<string, number> = {};
-			for (const a of assessment) seed[a.item_id] = a.qty_issuable;
-			issued = seed;
-		}
-	});
-
-	// Clamp each edited qty to [0, qty_issuable] so a requisition never over-issues.
+	// Effective issued qty per line: the user override when present, else the
+	// stock-covered default; always clamped to [0, qty_issuable] so a requisition
+	// never over-issues.
 	const rows = $derived(
 		assessment.map((a) => {
-			const raw = Number(issued[a.item_id] ?? 0);
-			const qty = Math.min(Math.max(0, raw), a.qty_issuable);
-			return { a, qty };
+			const key = `${plan?._id ?? ''}::${a.item_id}`;
+			const raw = key in edits ? edits[key] : a.qty_issuable;
+			const qty = Math.min(Math.max(0, Number(raw) || 0), a.qty_issuable);
+			return { a, key, qty };
 		})
 	);
 
@@ -72,6 +65,13 @@
 		partial: { label: 'ไม่พอ — เบิกได้บางส่วน', class: 'bg-amber-100 text-amber-800' },
 		out: { label: 'ไม่มีสต็อก', class: 'bg-red-100 text-red-700' }
 	};
+
+	// Close + discard any pending overrides. Covers the button paths; the
+	// escape/overlay close is handled by onOpenChange on Dialog.Root.
+	function close() {
+		edits = {};
+		open = false;
+	}
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
@@ -88,14 +88,14 @@
 			toast.success(
 				hasShortfall ? 'เบิกวัตถุดิบบางส่วนแล้ว (สต็อกไม่พอ)' : 'เบิกวัตถุดิบและตัดสต็อกแล้ว'
 			);
-			open = false;
+			close();
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
 		}
 	}
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root {open} onOpenChange={(v) => ((open = v), v || (edits = {}))}>
 	<Dialog.Content class="sm:max-w-xl">
 		<Dialog.Header class="min-w-0">
 			<Dialog.Title>เบิกวัตถุดิบจากคลัง</Dialog.Title>
@@ -126,34 +126,35 @@
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
-							{#each assessment as a (a.item_id)}
+							{#each rows as r (r.a.item_id)}
 								<Table.Row>
-									<Table.Cell class="px-3 font-mono text-xs">{a.item_id}</Table.Cell>
+									<Table.Cell class="px-3 font-mono text-xs">{r.a.item_id}</Table.Cell>
 									<Table.Cell class="px-3 text-right text-sm">
-										{a.qty_requested.toLocaleString()}
-										<span class="text-xs text-muted-foreground">{a.unit}</span>
+										{r.a.qty_requested.toLocaleString()}
+										<span class="text-xs text-muted-foreground">{r.a.unit}</span>
 									</Table.Cell>
 									<Table.Cell class="px-3 text-right text-sm">
-										{Math.max(0, a.on_hand).toLocaleString()}
-										<span class="text-xs text-muted-foreground">{a.unit}</span>
+										{Math.max(0, r.a.on_hand).toLocaleString()}
+										<span class="text-xs text-muted-foreground">{r.a.unit}</span>
 									</Table.Cell>
 									<Table.Cell class="px-3 text-center">
 										<span
 											class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium {STATUS[
-												a.status
+												r.a.status
 											].class}"
 										>
-											{STATUS[a.status].label}
+											{STATUS[r.a.status].label}
 										</span>
 									</Table.Cell>
 									<Table.Cell class="px-3 text-right">
 										<Input
 											type="number"
 											min="0"
-											max={a.qty_issuable}
-											bind:value={issued[a.item_id]}
+											max={r.a.qty_issuable}
+											value={r.qty}
+											oninput={(e) => (edits[r.key] = Number(e.currentTarget.value))}
 											class="ml-auto h-8 w-24 [appearance:textfield] text-right text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-											disabled={a.qty_issuable <= 0}
+											disabled={r.a.qty_issuable <= 0}
 										/>
 									</Table.Cell>
 								</Table.Row>
@@ -182,7 +183,7 @@
 				{/if}
 
 				<Dialog.Footer>
-					<Button type="button" variant="outline" onclick={() => (open = false)}>ยกเลิก</Button>
+					<Button type="button" variant="outline" onclick={close}>ยกเลิก</Button>
 					<Button type="submit" disabled={issue.isPending || !canIssue}>
 						{issue.isPending ? 'กำลังเบิก...' : 'ยืนยันการเบิก + ตัดสต็อก'}
 					</Button>

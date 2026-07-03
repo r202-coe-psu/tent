@@ -46,7 +46,19 @@
 	let reqOpen = $state(false);
 	let reqPlan = $state<MealPlan | null>(null);
 
+	// Re-issuing an already-requisitioned plan is a valid case (e.g. topping up
+	// a prior partial issue once stock arrives) — so the button stays enabled,
+	// but a double-click / forgotten-already-issued mistake must not silently
+	// deduct stock twice (append-only ledger has no uniqueness on meal_plan_id).
 	function openRequisition(plan: MealPlan) {
+		if (
+			requisitionedPlanIds.has(plan._id) &&
+			!window.confirm(
+				`แผนนี้เบิกวัตถุดิบไปแล้ว ต้องการเบิกซ้ำ/เบิกเพิ่มหรือไม่?\n\nยืนยันเฉพาะกรณีเบิกเพิ่มเติม (เช่น ของครั้งก่อนไม่พอ) — หากกดผิด การเบิกซ้ำจะตัดสต็อกซ้ำ`
+			)
+		) {
+			return;
+		}
 		reqPlan = plan;
 		reqOpen = true;
 	}
@@ -243,7 +255,10 @@
 									<Table.Cell class="max-w-xs px-6">
 										<p class="text-sm font-medium">{MEAL_PERIOD_LABELS[plan.meal]}</p>
 										{#if riceGrams(plan) !== null}
-											<p class="mt-0.5 text-xs text-muted-foreground">
+											<p
+												class="mt-0.5 text-xs text-muted-foreground"
+												title="คำนวณเป็นกรัมตามสัดส่วน SOP — ตอนเบิกจะถูกแปลงเป็นกิโลกรัม (kg) ให้ตรงหน่วยคลัง"
+											>
 												ข้าวสาร: {riceGrams(plan)?.toLocaleString()} g
 											</p>
 										{/if}

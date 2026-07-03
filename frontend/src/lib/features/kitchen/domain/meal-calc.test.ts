@@ -123,58 +123,87 @@ describe('toRequisitionInput — T-26 handoff (CR-022)', () => {
 });
 
 describe('assessRequisition — stock availability (T-26)', () => {
-	const line = (qty_requested: number, item_id = 'item:rice', unit = 'g') => ({
+	// Production flow assesses requisitions in kg (item_master.base_unit, CR-029)
+	// — toRequisitionInput already converts grams → kg before this ever runs, so
+	// these units must reflect kg, not the pre-conversion gram figures.
+	const line = (qty_requested: number, item_id = 'item:rice', unit = 'kg') => ({
 		item_id,
 		qty_requested,
 		unit
 	});
 
 	it('ok: on-hand covers the full request', () => {
-		const [a] = assessRequisition([line(15000)], new Map([['item:rice', 20000]]));
+		const [a] = assessRequisition([line(15)], new Map([['item:rice', 20]]));
 		expect(a.status).toBe('ok');
-		expect(a.on_hand).toBe(20000);
-		expect(a.qty_issuable).toBe(15000);
+		expect(a.on_hand).toBe(20);
+		expect(a.qty_issuable).toBe(15);
 		expect(a.shortfall).toBe(0);
 	});
 
 	it('partial: on-hand covers only part of the request', () => {
-		const [a] = assessRequisition([line(15000)], new Map([['item:rice', 9000]]));
+		const [a] = assessRequisition([line(15)], new Map([['item:rice', 9]]));
 		expect(a.status).toBe('partial');
-		expect(a.qty_issuable).toBe(9000);
-		expect(a.shortfall).toBe(6000);
+		expect(a.qty_issuable).toBe(9);
+		expect(a.shortfall).toBe(6);
 	});
 
 	it('out: no stock on hand (missing item → 0)', () => {
-		const [a] = assessRequisition([line(15000)], new Map());
+		const [a] = assessRequisition([line(15)], new Map());
 		expect(a.status).toBe('out');
 		expect(a.on_hand).toBe(0);
 		expect(a.qty_issuable).toBe(0);
-		expect(a.shortfall).toBe(15000);
+		expect(a.shortfall).toBe(15);
 	});
 
 	it('out: negative balance never yields an issuable qty', () => {
-		const [a] = assessRequisition([line(15000)], new Map([['item:rice', -500]]));
+		const [a] = assessRequisition([line(15)], new Map([['item:rice', -0.5]]));
 		expect(a.status).toBe('out');
 		expect(a.qty_issuable).toBe(0);
-		expect(a.shortfall).toBe(15000);
+		expect(a.shortfall).toBe(15);
 	});
 
 	it('exact match counts as ok', () => {
-		const [a] = assessRequisition([line(15000)], new Map([['item:rice', 15000]]));
+		const [a] = assessRequisition([line(15)], new Map([['item:rice', 15]]));
 		expect(a.status).toBe('ok');
 		expect(a.shortfall).toBe(0);
 	});
 
 	it('assesses each line independently against its own item balance', () => {
 		const result = assessRequisition(
-			[line(100, 'item:rice'), line(50, 'item:egg', 'ฟอง')],
+			[line(10, 'item:rice'), line(5, 'item:egg', 'ฟอง')],
 			new Map([
-				['item:rice', 100],
-				['item:egg', 20]
+				['item:rice', 10],
+				['item:egg', 2]
 			])
 		);
 		expect(result[0].status).toBe('ok');
 		expect(result[1].status).toBe('partial');
-		expect(result[1].qty_issuable).toBe(20);
+		expect(result[1].qty_issuable).toBe(2);
+	});
+});
+
+describe('toRequisitionInput → assessRequisition — kg end-to-end (CR-029)', () => {
+	const plan = (recipes: MealPlan['recipes']): MealPlan => ({
+		_id: 'meal_plan:2026-07-15:lunch',
+		type: 'meal_plan',
+		schema_v: 2,
+		shelter_code: 'SH001',
+		created_at: AS_OF,
+		updated_at: AS_OF,
+		created_by: 'tester',
+		date: '2026-07-15',
+		meal: 'lunch',
+		headcount: headcount(100),
+		recipes,
+		status: 'confirmed'
+	});
+
+	it('assesses a real plan against a kg on-hand balance without unit mismatch', () => {
+		const input = toRequisitionInput(plan([{ recipe_id: RICE_RECIPE_ID, planned_qty: 15000 }]));
+		const [a] = assessRequisition(input.items, new Map([['item:rice', 200]]));
+		expect(a.qty_requested).toBe(15); // 15 000 g → 15 kg, not 15 000
+		expect(a.on_hand).toBe(200);
+		expect(a.status).toBe('ok');
+		expect(a.qty_issuable).toBe(15);
 	});
 });
