@@ -50,7 +50,9 @@ export class OperationsPouchRepository implements OperationsRepository {
 
 	async distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger> {
 		const entry = createDistributeEntry(input, ctx);
-		
+		// WARNING: This read-then-write is not atomic. Concurrent distributes
+		// may both pass the balance check before either write lands.
+		// Acceptable for single-user shelter scenario; tracked for future hardening.d
 		const balances = await this.getBalance();
 		const currentQty = balances.get(entry.item_id) ?? 0;
 		const requestedQty = Math.abs(entry.qty);
