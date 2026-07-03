@@ -17,7 +17,7 @@
 		useItemMasters
 	} from '../application/queries';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/features/people';
+	import { SHELTER_CODE } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';

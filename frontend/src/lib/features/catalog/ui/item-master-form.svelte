@@ -15,7 +15,7 @@
 		useItemCategories
 	} from '../application/queries';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/features/people';
+	import { SHELTER_CODE } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
 
 	// Icons
@@ -242,21 +242,27 @@
 
 		<Field.FieldGroup class="space-y-6">
 			<!-- SECTION 1: ข้อมูลสินค้า (Item Details) -->
-			<section class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30">
-				<div class="flex items-center space-x-2 border-b border-slate-150 pb-2 dark:border-zinc-800">
+			<section
+				class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+			>
+				<div
+					class="border-slate-150 flex items-center space-x-2 border-b pb-2 dark:border-zinc-800"
+				>
 					<span
 						class="flex h-6 w-6 items-center justify-center rounded-full bg-[#002f6c]/10 text-xs font-bold text-[#002f6c] dark:bg-blue-900/30 dark:text-blue-400"
 					>
 						1
 					</span>
-					<h2 class="text-base font-bold text-slate-800 dark:text-slate-200">ข้อมูลสินค้า (Item Details)</h2>
+					<h2 class="text-base font-bold text-slate-800 dark:text-slate-200">
+						ข้อมูลสินค้า (Item Details)
+					</h2>
 				</div>
 
 				<Form.Field {form} name="name" class="space-y-2">
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-								ชื่อสินค้า (Item Name) <span class="text-destructive font-bold">*</span>
+								ชื่อสินค้า (Item Name) <span class="font-bold text-destructive">*</span>
 							</Form.Label>
 							<Input
 								{...props}
@@ -331,14 +337,20 @@
 			</section>
 
 			<!-- SECTION 2: หน่วยฐาน (Base UOM) -->
-			<section class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30">
-				<div class="flex items-center space-x-2 border-b border-slate-150 pb-2 dark:border-zinc-800">
+			<section
+				class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+			>
+				<div
+					class="border-slate-150 flex items-center space-x-2 border-b pb-2 dark:border-zinc-800"
+				>
 					<span
 						class="flex h-6 w-6 items-center justify-center rounded-full bg-[#002f6c]/10 text-xs font-bold text-[#002f6c] dark:bg-blue-900/30 dark:text-blue-400"
 					>
 						2
 					</span>
-					<h2 class="text-base font-bold text-slate-800 dark:text-slate-200">หน่วยฐาน (Base UOM)</h2>
+					<h2 class="text-base font-bold text-slate-800 dark:text-slate-200">
+						หน่วยฐาน (Base UOM)
+					</h2>
 				</div>
 
 				<!-- Warning message -->
@@ -376,8 +388,12 @@
 			</section>
 
 			<!-- SECTION 3: หน่วยทวีคูณ (Multiple UOMs / Conversions) -->
-			<section class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30">
-				<div class="flex items-center space-x-2 border-b border-slate-150 pb-2 dark:border-zinc-800">
+			<section
+				class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+			>
+				<div
+					class="border-slate-150 flex items-center space-x-2 border-b pb-2 dark:border-zinc-800"
+				>
 					<span
 						class="flex h-6 w-6 items-center justify-center rounded-full bg-[#002f6c]/10 text-xs font-bold text-[#002f6c] dark:bg-blue-900/30 dark:text-blue-400"
 					>
@@ -391,7 +407,7 @@
 				<div class="space-y-3">
 					{#each $formData.conversions as conv, index}
 						<div
-							class="relative grid grid-cols-1 items-end gap-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950 sm:grid-cols-3"
+							class="relative grid grid-cols-1 items-end gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3 dark:border-zinc-800 dark:bg-zinc-950"
 						>
 							<div>
 								<span class="mb-1.5 block text-xs font-bold text-slate-800 dark:text-slate-200">
@@ -401,7 +417,7 @@
 									type="text"
 									bind:value={conv.uom_name}
 									placeholder="เช่น กล่อง, ลัง, แพ็ค"
-									class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950 px-4 text-sm"
+									class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 								/>
 							</div>
 							<div>
@@ -417,7 +433,7 @@
 										conv.multiplier = val === '' ? 1 : Number(val);
 									}}
 									placeholder="เช่น 12"
-									class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950 px-4 text-sm"
+									class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 								/>
 							</div>
 							<div class="flex items-center gap-2">
@@ -429,13 +445,13 @@
 										type="text"
 										bind:value={conv.barcode}
 										placeholder="สแกนหรือพิมพ์"
-										class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950 px-4 text-sm"
+										class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 									/>
 								</div>
 								<Button
 									type="button"
 									variant="ghost"
-									class="mt-6 shrink-0 h-12 w-12 rounded-xl border border-slate-200 text-destructive hover:bg-destructive/10 dark:border-zinc-800"
+									class="mt-6 h-12 w-12 shrink-0 rounded-xl border border-slate-200 text-destructive hover:bg-destructive/10 dark:border-zinc-800"
 									onclick={() => removeConversion(index)}
 								>
 									<Trash2 class="h-4 w-4" />
@@ -457,8 +473,12 @@
 			</section>
 
 			<!-- SECTION 4: การตั้งค่าหน่วยเริ่มต้น (Default Categories / Units) -->
-			<section class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30">
-				<div class="flex items-center space-x-2 border-b border-slate-150 pb-2 dark:border-zinc-800">
+			<section
+				class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+			>
+				<div
+					class="border-slate-150 flex items-center space-x-2 border-b pb-2 dark:border-zinc-800"
+				>
 					<span
 						class="flex h-6 w-6 items-center justify-center rounded-full bg-[#002f6c]/10 text-xs font-bold text-[#002f6c] dark:bg-blue-900/30 dark:text-blue-400"
 					>
@@ -536,8 +556,12 @@
 			</section>
 
 			<!-- SECTION 5: พารามิเตอร์การวางแผน (Planning Parameters) -->
-			<section class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30">
-				<div class="flex items-center space-x-2 border-b border-slate-150 pb-2 dark:border-zinc-800">
+			<section
+				class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+			>
+				<div
+					class="border-slate-150 flex items-center space-x-2 border-b pb-2 dark:border-zinc-800"
+				>
 					<span
 						class="flex h-6 w-6 items-center justify-center rounded-full bg-[#002f6c]/10 text-xs font-bold text-[#002f6c] dark:bg-blue-900/30 dark:text-blue-400"
 					>
@@ -554,7 +578,9 @@
 						<Form.Field {form} name="distribution_type" class="space-y-2">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200 min-h-[2.5rem] flex items-end pb-1.5">
+									<Form.Label
+										class="flex min-h-[2.5rem] items-end pb-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200"
+									>
 										ประเภทการแจกจ่าย (Distribution Type)
 									</Form.Label>
 									<select
@@ -574,7 +600,9 @@
 							<Form.Field {form} name="consumption_rate" class="flex-1 space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200 min-h-[2.5rem] flex items-end pb-1.5">
+										<Form.Label
+											class="flex min-h-[2.5rem] items-end pb-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200"
+										>
 											สิทธิ์ต่อหัว (Quota per person)
 										</Form.Label>
 										<Input
@@ -585,13 +613,13 @@
 												const val = e.currentTarget.value;
 												$formData.consumption_rate = val === '' ? undefined : Number(val);
 											}}
-											class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950 px-4 text-sm"
+											class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 										/>
 									{/snippet}
 								</Form.Control>
 								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 							</Form.Field>
-							<span class="text-sm font-bold text-slate-500 pb-3 shrink-0 dark:text-zinc-400">
+							<span class="shrink-0 pb-3 text-sm font-bold text-slate-500 dark:text-zinc-400">
 								{$formData.base_unit || 'ชุด'}/คน
 							</span>
 						</div>
@@ -603,7 +631,9 @@
 						<Form.Field {form} name="distribution_type" class="space-y-2">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200 min-h-[2.5rem] flex items-end pb-1.5">
+									<Form.Label
+										class="flex min-h-[2.5rem] items-end pb-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200"
+									>
 										ประเภทการแจกจ่าย (Distribution Type)
 									</Form.Label>
 									<select
@@ -622,7 +652,9 @@
 						<Form.Field {form} name="target_reserve_days" class="space-y-2">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200 min-h-[2.5rem] flex items-end pb-1.5">
+									<Form.Label
+										class="flex min-h-[2.5rem] items-end pb-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200"
+									>
 										เป้าหมายการสำรองสูงสุด (Target Reserve Days)
 									</Form.Label>
 									<Input
@@ -634,7 +666,7 @@
 											const val = e.currentTarget.value;
 											$formData.target_reserve_days = val === '' ? undefined : Number(val);
 										}}
-										class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950 px-4 text-sm"
+										class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -645,7 +677,9 @@
 							<Form.Field {form} name="consumption_rate" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200 min-h-[2.5rem] flex items-end pb-1.5">
+										<Form.Label
+											class="flex min-h-[2.5rem] items-end pb-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200"
+										>
 											อัตราการบริโภค (Rate)
 										</Form.Label>
 										<Input
@@ -658,7 +692,7 @@
 												const val = e.currentTarget.value;
 												$formData.consumption_rate = val === '' ? undefined : Number(val);
 											}}
-											class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950 px-4 text-sm"
+											class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 										/>
 									{/snippet}
 								</Form.Control>
@@ -668,7 +702,10 @@
 							<Form.Field {form} name="unit" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200 min-h-[2.5rem] flex items-end pb-1.5">หน่วย</Form.Label>
+										<Form.Label
+											class="flex min-h-[2.5rem] items-end pb-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200"
+											>หน่วย</Form.Label
+										>
 										<select
 											{...props}
 											bind:value={$formData.unit}
@@ -691,7 +728,9 @@
 						<Form.Field {form} name="timeframe" class="space-y-2">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200 min-h-[2.5rem] flex items-end pb-1.5">
+									<Form.Label
+										class="flex min-h-[2.5rem] items-end pb-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200"
+									>
 										กรอบเวลา (Timeframe)
 									</Form.Label>
 									<select
@@ -711,7 +750,9 @@
 						<Form.Field {form} name="sphere_standard" class="space-y-2">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200 min-h-[2.5rem] flex items-end pb-1.5">
+									<Form.Label
+										class="flex min-h-[2.5rem] items-end pb-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200"
+									>
 										ตัวคูณมาตรฐานดำรงชีพ (Sphere Standard / คน)
 									</Form.Label>
 									<Input
@@ -724,7 +765,7 @@
 											const val = e.currentTarget.value;
 											$formData.sphere_standard = val === '' ? undefined : Number(val);
 										}}
-										class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950 px-4 text-sm"
+										class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -734,7 +775,9 @@
 						<Form.Field {form} name="overstock_alert_days" class="space-y-2">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200 min-h-[2.5rem] flex items-end pb-1.5">
+									<Form.Label
+										class="flex min-h-[2.5rem] items-end pb-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200"
+									>
 										แจ้งเตือนสินค้าล้นสต็อก (Overstock Alert / วัน)
 									</Form.Label>
 									<Input
@@ -746,7 +789,7 @@
 											const val = e.currentTarget.value;
 											$formData.overstock_alert_days = val === '' ? undefined : Number(val);
 										}}
-										class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950 px-4 text-sm"
+										class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -779,7 +822,9 @@
 								{/if}
 							</div>
 							<div>
-								<span class="text-sm font-bold text-[#002f6c] dark:text-blue-400">แจกทุกคน (All / No Restriction)</span>
+								<span class="text-sm font-bold text-[#002f6c] dark:text-blue-400"
+									>แจกทุกคน (All / No Restriction)</span
+								>
 								<p class="mt-1 text-xs leading-relaxed text-muted-foreground">
 									ระบบจะนำจำนวนคนทั้งศูนย์มาคำนวณอัตราความต้องการ (Default)
 								</p>
@@ -991,7 +1036,8 @@
 						ตั้งค่าเป็นค่าเริ่มต้นสำหรับประเภทนี้ (Set as Default Option)
 					</label>
 					<p class="text-[11px] leading-relaxed font-medium text-slate-400 dark:text-slate-400/85">
-						เมื่อเลือก ตัวเลือกนี้จะถูกตั้งเป็นตัวเลือกเริ่มต้นอัตโนมัติในการลงทะเบียนหรือเรียกใช้งานของหัวข้อนี้
+						เมื่อเลือก
+						ตัวเลือกนี้จะถูกตั้งเป็นตัวเลือกเริ่มต้นอัตโนมัติในการลงทะเบียนหรือเรียกใช้งานของหัวข้อนี้
 					</p>
 				</div>
 			</div>
