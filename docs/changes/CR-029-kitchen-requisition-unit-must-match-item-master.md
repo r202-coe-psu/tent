@@ -7,8 +7,8 @@ requested_by: T-26 DoD verification (agent review session) — stock balance fou
 decided_by: project owner (session 2026-07-03)
 layer: volatile
 affects:
-  - docs/data/schema.md §2.5 (แก้โน้ต "unit g" ให้ตรงกฎ §2.6)
-  - docs/data/schema.md §2.6 (ยืนยันกฎเดิม: stock_ledger.unit ต้องตรง item_master.base_unit)
+  - docs/data/schema.md §2.5 (แก้โน้ต "unit g" ให้ตรงกฎ §2.1)
+  - docs/data/schema.md §2.1 (ยืนยันกฎเดิม: stock_ledger.unit ต้องตรง item_master.base_unit)
   - frontend/src/lib/features/kitchen/domain/meal-calc.ts (RECIPE_TO_STOCK_ITEM, toRequisitionInput)
   - frontend/src/lib/features/kitchen/data/kitchen.pouch.ts (issueRequisition ledger write)
 ---
@@ -23,14 +23,14 @@ affects:
 feature) รวม `qty` ดิบต่อ `item_id` โดยไม่แปลงหน่วย → ยอดคงคลังที่คำนวณได้ผิด (ตัวอย่างจริงที่เจอ:
 +200kg +200kg -30kg -30kg -150g -150g -40g รวมดิบ = 0 ทั้งที่มีข้าวเหลือจริงหลายร้อย kg)
 
-ต้นตอคือ `docs/data/schema.md` เขียนขัดกันเอง: §2.6 (กฎทั่วไปของ `stock_ledger`) บอกว่า `unit`
+ต้นตอคือ `docs/data/schema.md` เขียนขัดกันเอง: §2.1 (กฎทั่วไปของ `stock_ledger`) บอกว่า `unit`
 ต้องตรง `item_master.base_unit` เสมอ แต่ §2.5 (โน้ตอธิบาย T-26 handoff) เขียนไว้ว่า mapping
 `ingredient:rice → item:rice` ใช้ `unit: 'g'` — ไม่ได้เช็คกับ `item_master.base_unit` จริง (`kg`)
 ตอนเขียน spec นั้น. โค้ด T-26 ทำตาม §2.5 ตรงๆ จึงกลายเป็นบั๊ก
 
 ## Change
 
-- ยึด §2.6 (กฎทั่วไป, base_unit เป็น single source of truth) เป็นตัวตัดสิน — **ไม่แก้**
+- ยึด §2.1 (กฎทั่วไป, base_unit เป็น single source of truth) เป็นตัวตัดสิน — **ไม่แก้**
   `item_master.base_unit` ของ `item:rice` (ยังเป็น `kg` เหมือนเดิม กระทบ recipe/needs ที่ผูก kg
   อยู่แล้วน้อยกว่าการแก้ไปทาง g)
 - แก้โค้ด T-26 แทน: คำนวณข้าวเป็นกรัมตาม SOP ratio เหมือนเดิม (ความละเอียดที่จำเป็นสำหรับสูตร)
