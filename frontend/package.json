@@ -20,6 +20,7 @@
 		"openapi:fastapi": "openapi-typescript src/libs/api-specs/fastapi.json -o src/lib/api/openapi.d.ts",
 		"openapi:update": "pnpm openapi:fetch && pnpm openapi:fastapi",
 		"seed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts",
+		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
 		"seed:delete-dashboard": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts --delete-dashboard",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts"
 	},

@@ -2,6 +2,7 @@
  * Mock data seed script for the Smart Shelter dev environment.
  *
  * Usage:  pnpm seed  (from frontend/)
+ *         pnpm unseed [--confirm]  — remove seed docs (see scripts/unseed.ts)
  * Needs:  CouchDB running + COUCHDB_ADMIN_URL in frontend/.env
  *
  * ## Factory usage
