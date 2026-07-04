@@ -40,7 +40,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
  *  (after add/edit/delete/setDefault ran client-side). Idempotent on first
  *  write (creates the doc with a fresh envelope). */
 export const PUT: RequestHandler = async ({ params, request }) => {
-	await requireAdmin(request.headers.get('cookie'));
+	const caller = await requireAdmin(request.headers.get('cookie'));
 	try {
 		const type = masterTypeSchema.parse(params.type);
 		const body = (await request.json().catch(() => ({}))) as { items?: unknown };
@@ -64,7 +64,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 					items: cleaned,
 					created_at: now,
 					updated_at: now,
-					created_by: 'sa-bootstrap'
+					created_by: caller
 				};
 
 		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(id)}`, 'PUT', doc);

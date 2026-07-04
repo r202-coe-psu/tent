@@ -9,11 +9,17 @@
 		useHouseholds,
 		useMedicals,
 		useScreenings,
+		useMovements,
 		useUpdateEvacuee,
 		useUpdateHousehold,
 		SHELTER_CODE
 	} from '$lib/features/people';
-	import type { StayStatus, PetGroup, HouseholdVehicle } from '$lib/features/people';
+	import type {
+		StayStatus,
+		PetGroup,
+		HouseholdVehicle,
+		MovementAction
+	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { now } from '$lib/db/model';
 
@@ -63,6 +69,7 @@
 	const householdsQuery = useHouseholds();
 	const medicalsQuery = useMedicals();
 	const screeningsQuery = useScreenings();
+	const movementsQuery = useMovements();
 	const shelterQuery = useShelter(() => SHELTER_CODE);
 	const updateEvacueeMutation = useUpdateEvacuee();
 	const updateHouseholdMutation = useUpdateHousehold();
@@ -95,6 +102,22 @@
 				)
 			: []
 	);
+
+	// Append-only movement stream for this evacuee, newest first (schema.md §1.1).
+	const movements = $derived(
+		evacuee && movementsQuery.data
+			? movementsQuery.data
+					.filter((m) => m.evacuee_id === evacuee._id)
+					.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+			: []
+	);
+
+	const movementLabels: Record<MovementAction, { emoji: string; label: string }> = {
+		check_in: { emoji: '🟢', label: 'เช็คอิน (Check-in)' },
+		check_out: { emoji: '⚪', label: 'เช็คเอาท์ (Check-out)' },
+		transfer_in: { emoji: '🔵', label: 'ย้ายเข้า (Transfer in)' },
+		transfer_out: { emoji: '🟣', label: 'ย้ายออก (Transfer out)' }
+	};
 
 	const isLoading = $derived(
 		evacueesQuery.isLoading ||
@@ -288,6 +311,43 @@
 					</span>
 				{/if}
 			</div>
+		</div>
+
+		<!-- Movement history -->
+		<div class="space-y-3 rounded-3xl border border-border bg-card p-6 shadow-sm">
+			<div class="flex items-center gap-2.5 border-b border-border pb-2">
+				<Clock class="size-4.5 text-primary" />
+				<h3 class="text-sm font-bold text-slate-900 dark:text-slate-50">
+					ประวัติการเคลื่อนย้าย (Movement History)
+				</h3>
+			</div>
+			{#if movements.length === 0}
+				<p class="text-xs text-muted-foreground italic">ยังไม่มีประวัติการเคลื่อนย้าย</p>
+			{:else}
+				<ol class="space-y-2.5">
+					{#each movements as m (m._id)}
+						<li class="flex items-start gap-3 text-xs">
+							<span class="mt-0.5 text-sm">{movementLabels[m.action].emoji}</span>
+							<div class="flex-1 space-y-0.5">
+								<div class="font-semibold text-foreground">
+									{movementLabels[m.action].label}
+									{#if m.zone}
+										<span class="font-normal text-muted-foreground">
+											· โซน {m.zone.toUpperCase()}
+										</span>
+									{/if}
+								</div>
+								<div class="text-muted-foreground">
+									{formatDateTime(m.occurred_at)}
+									{#if m.reason}
+										· {m.reason}
+									{/if}
+								</div>
+							</div>
+						</li>
+					{/each}
+				</ol>
+			{/if}
 		</div>
 	</div>
 

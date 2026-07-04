@@ -13,8 +13,9 @@ import { readMasterDoc } from '$lib/server/master-data-server';
  */
 export const prerender = false;
 
-/** GET — list all 5 master_data docs (one per master_type). Missing docs come
- *  back as `{ items: [] }` placeholders so the UI can render all 5 cards. */
+/** GET — list all master_data docs (one per master_type in MASTER_DATA_TYPES).
+ *  Missing docs come back as `{ items: [] }` placeholders so the UI can render
+ *  a card for every type. */
 export const GET: RequestHandler = async ({ request }) => {
 	await requireShelterScopeOrSA(request.headers.get('cookie'));
 	try {
