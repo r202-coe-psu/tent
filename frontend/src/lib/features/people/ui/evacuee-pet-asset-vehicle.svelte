@@ -181,12 +181,6 @@
 					placeholder="รายละเอียดทรัพย์สิน/สัมภาระ"
 					class="flex-1 bg-background"
 				/>
-				<Button variant="outline" size="icon" class="h-10 w-10 shrink-0 bg-background">
-					<Camera class="h-4 w-4 text-muted-foreground" />
-				</Button>
-				<Button variant="outline" size="icon" class="h-10 w-10 shrink-0 bg-background">
-					<Image class="h-4 w-4 text-muted-foreground" />
-				</Button>
 			</div>
 		</div>
 
