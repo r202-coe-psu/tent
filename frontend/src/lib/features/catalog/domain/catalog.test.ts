@@ -114,4 +114,70 @@ describe('catalog domain', () => {
 		expect(doc.label).toBe('แกงจืดเต้าหู้หมูสับ');
 		expect(isRecipe(doc)).toBe(true);
 	});
+
+	it('should validate conversions multiplier > 0 and allow fractions like 0.5', () => {
+		const baseInput = {
+			name: 'น้ำดื่ม',
+			base_unit: 'bottle',
+			distribution_type: 'consumable' as const,
+			target_audience_type: 'all' as const,
+			target_restrictions: { genders: [], vulnerable_groups: [], diet_religions: [] },
+			is_default: false
+		};
+
+		// 0.5 is valid
+		const validParsed = itemMasterInputSchema.parse({
+			...baseInput,
+			conversions: [{ uom_name: 'pack', multiplier: 0.5 }]
+		});
+		expect(validParsed.conversions[0].multiplier).toBe(0.5);
+
+		// 0 is invalid
+		expect(() =>
+			itemMasterInputSchema.parse({
+				...baseInput,
+				conversions: [{ uom_name: 'pack', multiplier: 0 }]
+			})
+		).toThrow();
+
+		// -1 is invalid
+		expect(() =>
+			itemMasterInputSchema.parse({
+				...baseInput,
+				conversions: [{ uom_name: 'pack', multiplier: -1 }]
+			})
+		).toThrow();
+	});
+
+	it('should validate ingredients quantity > 0 and allow fractions like 0.5', () => {
+		const baseRecipeInput = {
+			label: 'น้ำพริก',
+			standard_portions: 10,
+			standard_duration_hours: 0.5,
+			is_default: false
+		};
+
+		// 0.5 is valid
+		const validParsed = recipeInputSchema.parse({
+			...baseRecipeInput,
+			ingredients: [{ item_master_id: 'item_1', quantity: 0.5, uom: 'kg' }]
+		});
+		expect(validParsed.ingredients[0].quantity).toBe(0.5);
+
+		// 0 is invalid
+		expect(() =>
+			recipeInputSchema.parse({
+				...baseRecipeInput,
+				ingredients: [{ item_master_id: 'item_1', quantity: 0, uom: 'kg' }]
+			})
+		).toThrow();
+
+		// -1 is invalid
+		expect(() =>
+			recipeInputSchema.parse({
+				...baseRecipeInput,
+				ingredients: [{ item_master_id: 'item_1', quantity: -1, uom: 'kg' }]
+			})
+		).toThrow();
+	});
 });

@@ -426,7 +426,8 @@
 								</span>
 								<Input
 									type="number"
-									min={1}
+									step="any"
+									min={0}
 									value={conv.multiplier}
 									oninput={(e) => {
 										const val = e.currentTarget.value;

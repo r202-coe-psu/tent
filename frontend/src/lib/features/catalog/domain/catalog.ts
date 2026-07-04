@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '$lib/db/model';
+import { catalogDoc, type CatalogDoc, type AuthorContext } from '$lib/db/model';
 
 // ---------------------------------------------------------------- enums
 export const distributionTypeSchema = z.enum(['consumable', 'one_time']);
@@ -39,13 +39,13 @@ export interface TargetRestrictions {
 	diet_religions?: DietReligions[];
 }
 
-export interface ItemCategory extends BaseDoc {
+export interface ItemCategory extends CatalogDoc {
 	type: 'item_category';
 	name: string;
 	is_default: boolean;
 }
 
-export interface ItemMaster extends BaseDoc {
+export interface ItemMaster extends CatalogDoc {
 	type: 'item_master';
 	name: string;
 	category?: string;
@@ -68,7 +68,7 @@ export interface ItemMaster extends BaseDoc {
 	is_default: boolean;
 }
 
-export interface Recipe extends BaseDoc {
+export interface Recipe extends CatalogDoc {
 	type: 'recipe';
 	label: string;
 	ingredients: Ingredient[];
@@ -95,7 +95,7 @@ export const itemMasterInputSchema = z.object({
 		.array(
 			z.object({
 				uom_name: z.string().trim(),
-				multiplier: z.number().min(1),
+				multiplier: z.number().positive(),
 				barcode: z.string().trim().optional()
 			})
 		)
@@ -126,7 +126,7 @@ export const recipeInputSchema = z.object({
 		.array(
 			z.object({
 				item_master_id: z.string().trim(),
-				quantity: z.number(),
+				quantity: z.number().positive(),
 				uom: z.string().trim()
 			})
 		)
@@ -142,21 +142,21 @@ export type RecipeInput = z.infer<typeof recipeInputSchema>;
 
 export function createItemCategory(input: ItemCategoryInput, ctx: AuthorContext): ItemCategory {
 	const d = itemCategoryInputSchema.parse(input);
-	const doc = makeDoc(
+	const doc = catalogDoc(
 		'item_category',
 		1,
 		{
 			name: d.name,
 			is_default: d.is_default
 		},
-		ctx
+		ctx.createdBy
 	);
 	return doc;
 }
 
 export function createItemMaster(input: ItemMasterInput, ctx: AuthorContext): ItemMaster {
 	const d = itemMasterInputSchema.parse(input);
-	const doc = makeDoc(
+	const doc = catalogDoc(
 		'item_master',
 		1,
 		{
@@ -180,14 +180,14 @@ export function createItemMaster(input: ItemMasterInput, ctx: AuthorContext): It
 			target_restrictions: d.target_restrictions,
 			is_default: d.is_default
 		},
-		ctx
+		ctx.createdBy
 	);
 	return doc;
 }
 
 export function createRecipe(input: RecipeInput, ctx: AuthorContext): Recipe {
 	const d = recipeInputSchema.parse(input);
-	return makeDoc(
+	return catalogDoc(
 		'recipe',
 		1,
 		{
@@ -197,7 +197,7 @@ export function createRecipe(input: RecipeInput, ctx: AuthorContext): Recipe {
 			standard_duration_hours: d.standard_duration_hours,
 			is_default: d.is_default
 		},
-		ctx
+		ctx.createdBy
 	);
 }
 export const isItemCategory = (d: unknown): d is ItemCategory =>

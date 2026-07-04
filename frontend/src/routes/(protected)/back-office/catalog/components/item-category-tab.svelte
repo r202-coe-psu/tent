@@ -17,7 +17,7 @@
 	import { Trash2 } from '@lucide/svelte';
 	// Feature
 	import { useItemCategories, useItemCategoriesPaginated } from '$lib/features/catalog';
-	import ItemCategoryForm from '$lib/features/catalog/ui/item-category-form.svelte';
+	import { ItemCategoryForm } from '$lib/features/catalog';
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));

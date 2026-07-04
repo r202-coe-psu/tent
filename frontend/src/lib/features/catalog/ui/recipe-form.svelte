@@ -202,7 +202,8 @@
 								<span class="text-xs font-bold text-blue-700 dark:text-blue-400">ปริมาณ</span>
 								<Input
 									type="number"
-									min={1}
+									step="any"
+									min={0}
 									value={conv.quantity}
 									oninput={(e) => {
 										const val = e.currentTarget.value;
@@ -282,6 +283,7 @@
 								<Input
 									{...props}
 									type="number"
+									step="any"
 									placeholder="เช่น 1"
 									value={$formData.standard_duration_hours ?? ''}
 									oninput={(e) => {
