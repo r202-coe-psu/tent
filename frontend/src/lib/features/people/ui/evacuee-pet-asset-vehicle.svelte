@@ -93,7 +93,7 @@
 	<!-- Form Content -->
 	<div class="space-y-6 rounded-xl border border-border bg-card p-6 shadow-sm">
 		<!-- Pets Section — a household may bring several -->
-		<div class="space-y-3">
+		<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
 			<div class="flex items-center justify-between gap-2">
 				<div class="flex items-center gap-1 text-sm font-semibold">🐶 สัตว์เลี้ยงที่นำมาด้วย</div>
 				<Button
@@ -172,77 +172,75 @@
 			{/if}
 		</div>
 
-		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-			<!-- Assets Section -->
-			<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-				<div class="flex items-center gap-1 text-sm font-semibold">🎒 ทรัพย์สินมีค่า / สัมภาระ</div>
-				<div class="flex items-center gap-2">
-					<Input
-						bind:value={assetDescription}
-						placeholder="รายละเอียดทรัพย์สิน/สัมภาระ"
-						class="flex-1 bg-background"
-					/>
-					<Button variant="outline" size="icon" class="h-10 w-10 shrink-0 bg-background">
-						<Camera class="h-4 w-4 text-muted-foreground" />
-					</Button>
-					<Button variant="outline" size="icon" class="h-10 w-10 shrink-0 bg-background">
-						<Image class="h-4 w-4 text-muted-foreground" />
-					</Button>
-				</div>
+		<!-- Assets Section -->
+		<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
+			<div class="flex items-center gap-1 text-sm font-semibold">🎒 ทรัพย์สินมีค่า / สัมภาระ</div>
+			<div class="flex items-center gap-2">
+				<Input
+					bind:value={assetDescription}
+					placeholder="รายละเอียดทรัพย์สิน/สัมภาระ"
+					class="flex-1 bg-background"
+				/>
+				<Button variant="outline" size="icon" class="h-10 w-10 shrink-0 bg-background">
+					<Camera class="h-4 w-4 text-muted-foreground" />
+				</Button>
+				<Button variant="outline" size="icon" class="h-10 w-10 shrink-0 bg-background">
+					<Image class="h-4 w-4 text-muted-foreground" />
+				</Button>
+			</div>
+		</div>
+
+		<!-- Vehicles Section -->
+		<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
+			<div class="flex items-center justify-between gap-2">
+				<div class="flex items-center gap-1 text-sm font-semibold">🚗 ยานพาหนะ</div>
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					class="h-8 shrink-0 bg-background"
+					onclick={addVehicle}
+				>
+					<Plus class="mr-1 h-3.5 w-3.5" /> เพิ่มคัน
+				</Button>
 			</div>
 
-			<!-- Vehicles Section -->
-			<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-				<div class="flex items-center justify-between gap-2">
-					<div class="flex items-center gap-1 text-sm font-semibold">🚗 ยานพาหนะ</div>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						class="h-8 shrink-0 bg-background"
-						onclick={addVehicle}
-					>
-						<Plus class="mr-1 h-3.5 w-3.5" /> เพิ่มคัน
-					</Button>
+			{#if vehicleRows.length === 0}
+				<p class="text-xs text-muted-foreground">
+					ยังไม่มียานพาหนะ — กด "เพิ่มคัน" เพื่อเพิ่มรายการ
+				</p>
+			{:else}
+				<div class="space-y-2">
+					{#each vehicleRows as vehicle (vehicle.id)}
+						<div class="flex items-center gap-2">
+							<Select.Root type="single" bind:value={vehicle.type}>
+								<Select.Trigger class="w-[120px] shrink-0 bg-background">
+									{vehicleTypeOptions.find((o) => o.value === vehicle.type)?.label ?? 'ประเภท'}
+								</Select.Trigger>
+								<Select.Content>
+									{#each vehicleTypeOptions as opt (opt.value)}
+										<Select.Item value={opt.value} label={opt.label} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
+							<Input
+								bind:value={vehicle.license_plate}
+								placeholder="ทะเบียนรถ"
+								class="flex-1 bg-background"
+							/>
+							<Button
+								type="button"
+								variant="outline"
+								size="icon"
+								class="h-10 w-10 shrink-0 bg-background"
+								onclick={() => removeVehicle(vehicle.id)}
+							>
+								<X class="h-4 w-4 text-muted-foreground" />
+							</Button>
+						</div>
+					{/each}
 				</div>
-
-				{#if vehicleRows.length === 0}
-					<p class="text-xs text-muted-foreground">
-						ยังไม่มียานพาหนะ — กด "เพิ่มคัน" เพื่อเพิ่มรายการ
-					</p>
-				{:else}
-					<div class="space-y-2">
-						{#each vehicleRows as vehicle (vehicle.id)}
-							<div class="flex items-center gap-2">
-								<Select.Root type="single" bind:value={vehicle.type}>
-									<Select.Trigger class="w-[120px] shrink-0 bg-background">
-										{vehicleTypeOptions.find((o) => o.value === vehicle.type)?.label ?? 'ประเภท'}
-									</Select.Trigger>
-									<Select.Content>
-										{#each vehicleTypeOptions as opt (opt.value)}
-											<Select.Item value={opt.value} label={opt.label} />
-										{/each}
-									</Select.Content>
-								</Select.Root>
-								<Input
-									bind:value={vehicle.license_plate}
-									placeholder="ทะเบียนรถ"
-									class="flex-1 bg-background"
-								/>
-								<Button
-									type="button"
-									variant="outline"
-									size="icon"
-									class="h-10 w-10 shrink-0 bg-background"
-									onclick={() => removeVehicle(vehicle.id)}
-								>
-									<X class="h-4 w-4 text-muted-foreground" />
-								</Button>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</div>
+			{/if}
 		</div>
 	</div>
 

@@ -17,6 +17,7 @@
 	} from '../domain/people';
 	import Camera from '@lucide/svelte/icons/camera';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { COUNTRIES } from '$lib/utils/country';
 	import { Calendar } from '$lib/components/ui/calendar/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
@@ -46,8 +47,14 @@
 	let {
 		onsubmit,
 		pending = false,
-		onBack
-	}: { onsubmit: (input: EvacueeInput) => void; pending?: boolean; onBack: () => void } = $props();
+		onBack,
+		hasSymptomsSelected = false
+	}: {
+		onsubmit: (input: EvacueeInput) => void;
+		pending?: boolean;
+		onBack: () => void;
+		hasSymptomsSelected?: boolean;
+	} = $props();
 
 	let birthYearBE = $state('');
 	let facePhotoUrl = $state<string | null>(null);
@@ -531,6 +538,21 @@
 					<Form.FieldErrors />
 				</Form.Field>
 			</div>
+
+			{#if hasSymptomsSelected}
+				<div
+					class="flex animate-in items-center justify-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-4 text-red-700 duration-300 fade-in slide-in-from-top-2 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
+					role="alert"
+				>
+					<TriangleAlert class="size-5 shrink-0" aria-hidden="true" />
+					<p class="text-sm font-bold">
+						ส่งต่อผู้ป่วยฉุกเฉิน <span class="font-extrabold">(SOS ESCALATE)</span>
+					</p>
+				</div>
+				<p class="text-center text-xs text-muted-foreground">
+					ระบบจะแจ้งเตือนไปยังแผนงควบคุมของผู้ว่าฯ และ รพ. สนามทันที
+				</p>
+			{/if}
 		</div>
 
 		<!-- Back + Submit row -->

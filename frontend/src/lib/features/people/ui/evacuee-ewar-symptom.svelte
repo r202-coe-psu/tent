@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import { EWAR_SYMPTOM_GROUPS } from '../domain/people';
 	import type { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
@@ -30,6 +31,8 @@
 		if (isHealthy) selectedSymptoms.clear();
 	}
 
+	const needsIsolation = $derived(!isHealthy && selectedSymptoms.size > 0);
+
 	function handleNext() {
 		if (!isHealthy && selectedSymptoms.size === 0) {
 			toast.error('กรุณาเลือกอาการที่พบ หรือระบุว่า "ไม่มีอาการ" ก่อนดำเนินการต่อ');
@@ -40,6 +43,24 @@
 </script>
 
 <div class="space-y-4">
+	<!-- Isolation Needed alert card -->
+	{#if needsIsolation}
+		<div
+			class="flex animate-in items-center gap-3 rounded-xl border border-red-600 bg-red-600 p-4 text-white shadow-lg duration-300 fade-in slide-in-from-top-2"
+			role="alert"
+		>
+			<ShieldAlert class="size-7 shrink-0" aria-hidden="true" />
+			<div>
+				<p class="text-base leading-snug font-bold">
+					ระวัง! กักบริเวณด่วน <span class="font-extrabold">(ISOLATION NEEDED)</span>
+				</p>
+				<p class="mt-0.5 text-sm font-medium opacity-90">
+					พบอาการกลุ่มเสี่ยงโรคระบาด ให้ส่งไปยังโซนตึกแดงทันที และทำรายการต่อ
+				</p>
+			</div>
+		</div>
+	{/if}
+
 	<!-- Healthy toggle -->
 	<Button
 		type="button"

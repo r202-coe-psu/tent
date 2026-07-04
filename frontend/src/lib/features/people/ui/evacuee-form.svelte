@@ -347,6 +347,7 @@
 		onsubmit={handleRegistrationSubmit}
 		pending={isSubmittingEvacuee || pending}
 		onBack={() => (step = 2)}
+		hasSymptomsSelected={selectedSymptoms.size > 0}
 	/>
 {:else if step === 4}
 	<div class="space-y-6">
