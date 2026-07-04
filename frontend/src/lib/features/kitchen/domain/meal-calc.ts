@@ -9,16 +9,23 @@ import type {
 // Future ingredients (egg, vegetable, etc.) will add entries here when P-02 ships.
 export const RICE_RECIPE_ID = 'ingredient:rice';
 
-// Maps a calculated recipe_id to the stock item it draws down + its unit.
-// The bridge to T-26 (kitchen requisition → stock ledger). CR-022.
-// unit must match item_master.base_unit (schema.md §2.1) — item:rice is kg (CR-029).
-export const RECIPE_TO_STOCK_ITEM: Record<string, { item_id: string; unit: string }> = {
-	[RICE_RECIPE_ID]: { item_id: 'item:rice', unit: 'kg' }
-};
-
-// Grams per kg — recipes are calculated in grams (SOP ratio precision); the
+// Grams per kg — rice recipes are calculated in grams (SOP ratio precision); the
 // stock ledger stores kg (item_master.base_unit). CR-029.
 const GRAMS_PER_KG = 1000;
+
+// Maps a calculated recipe_id to the stock item it draws down + its ledger unit
+// + how many recipe units make one stock unit. The bridge to T-26 (kitchen
+// requisition → stock ledger). CR-022. `unit` must match item_master.base_unit
+// (schema.md §2.1); `recipe_per_stock_unit` scales planned_qty (recipe units) to
+// qty_requested (stock units) at the T-25→T-26 seam. Rice: recipe grams / 1000 =
+// stock kg (CR-029). An ingredient whose recipe unit already equals its stock
+// unit (e.g. eggs in ฟอง) uses 1 — so a new item never silently gets /1000.
+export const RECIPE_TO_STOCK_ITEM: Record<
+	string,
+	{ item_id: string; unit: string; recipe_per_stock_unit: number }
+> = {
+	[RICE_RECIPE_ID]: { item_id: 'item:rice', unit: 'kg', recipe_per_stock_unit: GRAMS_PER_KG }
+};
 
 export interface MealCalcSource {
 	sop_profile_id: string;
@@ -77,8 +84,9 @@ export function calculateMealIngredients(
  * Throws if a recipe has no stock mapping — a plan must not silently produce a
  * requisition that skips an ingredient.
  *
- * `planned_qty` is in grams (SOP ratio precision); converts to kg here to match
- * `item_master.base_unit` before it reaches the stock ledger (CR-029).
+ * `planned_qty` is in recipe units (rice: grams, SOP ratio precision); scales to
+ * the stock unit here via `recipe_per_stock_unit` to match `item_master.base_unit`
+ * before it reaches the stock ledger (CR-029).
  */
 export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
 	const items = plan.recipes.map((r) => {
@@ -88,7 +96,7 @@ export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
 		}
 		return {
 			item_id: stock.item_id,
-			qty_requested: r.planned_qty / GRAMS_PER_KG,
+			qty_requested: r.planned_qty / stock.recipe_per_stock_unit,
 			qty_issued: 0,
 			unit: stock.unit
 		};

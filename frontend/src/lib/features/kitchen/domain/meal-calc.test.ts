@@ -3,7 +3,8 @@ import {
 	calculateMealIngredients,
 	toRequisitionInput,
 	assessRequisition,
-	RICE_RECIPE_ID
+	RICE_RECIPE_ID,
+	RECIPE_TO_STOCK_ITEM
 } from './meal-calc';
 import type { MealPlan, MealPlanHeadcount } from './kitchen';
 
@@ -112,7 +113,15 @@ describe('toRequisitionInput — T-26 handoff (CR-022)', () => {
 	it('produces a valid KitchenRequisitionInput (qty_issued starts at 0 for T-26)', () => {
 		const input = toRequisitionInput(plan([{ recipe_id: RICE_RECIPE_ID, planned_qty: 7500 }]));
 		expect(input.items[0].qty_issued).toBe(0);
-		expect(input.items[0].qty_requested).toBeGreaterThan(0);
+		expect(input.items[0].qty_requested).toBe(7.5); // 7 500 g → 7.5 kg (fractional kg is valid)
+	});
+
+	it('scales by the item mapping, not a hardcoded /1000 (CR-029)', () => {
+		// The divisor comes from recipe_per_stock_unit — an item whose recipe unit
+		// already equals its stock unit (scale 1) must NOT get silently divided.
+		expect(RECIPE_TO_STOCK_ITEM[RICE_RECIPE_ID].recipe_per_stock_unit).toBe(1000);
+		const input = toRequisitionInput(plan([{ recipe_id: RICE_RECIPE_ID, planned_qty: 15000 }]));
+		expect(input.items[0].qty_requested).toBe(15);
 	});
 
 	it('throws when a recipe has no stock item mapping', () => {
