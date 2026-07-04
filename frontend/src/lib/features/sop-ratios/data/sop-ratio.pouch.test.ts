@@ -27,7 +27,6 @@ const overrideCtx: AuthorContext & { base_profile_id: string } = {
 	base_profile_id: 'sop_profile:base-id'
 };
 
-
 describe('SopMasterPouchRepository', () => {
 	let db: PouchDB.Database;
 	let repo: SopMasterPouchRepository;

@@ -24,7 +24,6 @@ describe('SOP Ratio Domain', () => {
 		base_profile_id: 'sop_profile:base-id'
 	};
 
-
 	describe('createInitialProfile - Master', () => {
 		it('should create a valid initial master profile with whitelist keys and audit trail', () => {
 			const { profile, audit } = createInitialProfile(
@@ -66,7 +65,12 @@ describe('SOP Ratio Domain', () => {
 
 		it('should reject master profile when ratios is empty {}', () => {
 			expect(() => {
-				createInitialProfile('sop_profile', 'Sphere baseline', {} as Record<SopRatioKey, number>, masterCtx);
+				createInitialProfile(
+					'sop_profile',
+					'Sphere baseline',
+					{} as Record<SopRatioKey, number>,
+					masterCtx
+				);
 			}).toThrow();
 		});
 
@@ -98,8 +102,6 @@ describe('SOP Ratio Domain', () => {
 				);
 			}).toThrow();
 		});
-
-
 
 		it('should reject negative or zero values', () => {
 			expect(() => {

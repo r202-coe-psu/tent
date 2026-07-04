@@ -398,12 +398,9 @@ async function seedCatalogSopRatios(): Promise<void> {
 		throw new Error(`seedCatalogSopRatios: unexpected status ${status} checking ${fullDocId}`);
 	}
 
-	const { profile, audit } = createInitialProfile(
-		'sop_profile',
-		'Sphere Baseline',
-		validRatios,
-		{ createdBy: 'seed' }
-	);
+	const { profile, audit } = createInitialProfile('sop_profile', 'Sphere Baseline', validRatios, {
+		createdBy: 'seed'
+	});
 
 	// Override standard ULIDs with deterministic IDs for idempotency scan boundary
 	profile._id = fullDocId;
