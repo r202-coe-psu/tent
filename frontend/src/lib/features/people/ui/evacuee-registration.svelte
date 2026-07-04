@@ -408,17 +408,17 @@
 
 			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 				<div class="space-y-2">
-					<Label>ประวัติการแพ้ยา</Label>
+					<Label>ยาที่ใช้ประจำ</Label>
 					<Input
-						placeholder="เช่น พาราเซตามอล (ถ้าไม่มีให้เว้นว่าง)"
+						placeholder="เช่น ยาลดความดัน, ยาเบาหวาน (ถ้าไม่มีให้เว้นว่าง)"
 						bind:value={medicalMedicationsStr}
 					/>
 				</div>
 
 				<div class="space-y-2">
-					<Label>ประวัติการแพ้อาหาร</Label>
+					<Label>ประวัติการแพ้ (ยา/อาหาร)</Label>
 					<Input
-						placeholder="เช่น อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
+						placeholder="เช่น แพ้เพนิซิลลิน, อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
 						bind:value={medicalAllergiesStr}
 					/>
 				</div>

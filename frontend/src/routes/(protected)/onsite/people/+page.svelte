@@ -4,6 +4,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		EvacueeForm,
+		EvacueeWristbandSuccess,
 		useEvacuees,
 		useCreateEvacuee,
 		useCreateScreening,
@@ -13,8 +14,6 @@
 	import Zap from '@lucide/svelte/icons/zap';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import { page } from '$app/stores';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import EvacueeWristbandSuccess from '$lib/features/people/ui/evacuee-wristband-success.svelte';
 
 	const evacueesQuery = useEvacuees();
 	const createMutation = useCreateEvacuee();
@@ -27,7 +26,9 @@
 
 	async function handleRegister(input: EvacueeInput, symptoms: string[]) {
 		const ctx = {
-			shelterCode: shelterStore.selectedShelterCode ?? SHELTER_CODE,
+			// Repo writes to the fixed SHELTER_DB — keep shelter_code consistent with it
+			// (multi-shelter Pouch not implemented yet).
+			shelterCode: SHELTER_CODE,
 			createdBy: authStore.user?.name ?? 'unknown'
 		};
 		const track = isFastTrack ? 'fast_track' : symptoms.length > 0 ? 'fast_track' : 'normal';

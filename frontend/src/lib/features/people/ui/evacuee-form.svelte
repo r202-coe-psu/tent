@@ -15,7 +15,6 @@
 	import EvacueeSelectZone from './evacuee-select-zone.svelte';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import {
 		useEvacuees,
@@ -23,6 +22,7 @@
 		useCreateHousehold,
 		useUpdateHousehold,
 		useUpdateEvacuee,
+		useCheckInEvacuee,
 		peopleRepository,
 		SHELTER_CODE
 	} from '../index';
@@ -79,6 +79,7 @@
 	const createHouseholdMutation = useCreateHousehold();
 	const updateHouseholdMutation = useUpdateHousehold();
 	const updateEvacueeMutation = useUpdateEvacuee();
+	const checkInMutation = useCheckInEvacuee();
 
 	function handleRegistrationSubmit(input: EvacueeInput) {
 		pendingEvacueeInput = input;
@@ -121,7 +122,9 @@
 
 		try {
 			const ctx = {
-				shelterCode: shelterStore.selectedShelterCode ?? SHELTER_CODE,
+				// Repo writes to the fixed SHELTER_DB; keep shelter_code consistent with it
+				// (multi-shelter Pouch not implemented yet — do not stamp a selected shelter).
+				shelterCode: SHELTER_CODE,
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 
@@ -176,7 +179,9 @@
 					label: latestHousehold.label || `ครอบครัวผู้ประสบภัย ${latestHousehold._id}`,
 					pets: updatedPets,
 					assets: assets || latestHousehold.assets || null,
-					vehicles: vehicles.length > 0 ? vehicles : latestHousehold.vehicles || []
+					// Append the registrant's vehicles to the household's existing list (like pets),
+					// rather than replacing them.
+					vehicles: [...(latestHousehold.vehicles || []), ...vehicles]
 				});
 			} else if (isCreatingNewHousehold || pets.length > 0 || assets || vehicles.length > 0) {
 				const addr = newHouseholdAddress || {};
@@ -238,22 +243,19 @@
 				return;
 			}
 
-			await updateEvacueeMutation.mutateAsync({
-				...latestEvacuee,
-				current_stay: {
-					status: 'checked_in',
-					zone: zone,
-					since: new Date().toISOString()
-				}
+			// Check-in writes an append-only movement first, then applies current_stay —
+			// occupancy views and movement history depend on the movement stream
+			// (current_stay is only a snapshot, schema.md §1.1).
+			const ctx = {
+				shelterCode: SHELTER_CODE,
+				createdBy: authStore.user?.name ?? 'unknown'
+			};
+			const finishedEvacuee = await checkInMutation.mutateAsync({
+				evacuee: latestEvacuee,
+				ctx,
+				zone
 			});
 			toast.success('บันทึกข้อมูลและจัดสรรพื้นที่สำเร็จ');
-
-			const finishedEvacuee = latestEvacuee
-				? {
-						...latestEvacuee,
-						current_stay: { status: 'checked_in', zone, since: new Date().toISOString() }
-					}
-				: newlyRegisteredEvacuee;
 
 			// Reset internal state
 			step = 1;

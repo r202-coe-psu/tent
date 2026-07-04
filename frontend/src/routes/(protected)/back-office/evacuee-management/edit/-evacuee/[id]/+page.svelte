@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Plus from '@lucide/svelte/icons/plus';
-	import EvacueeProfileView from '$lib/features/people/ui/evacuee-profile-view.svelte';
+	import { EvacueeProfileView } from '$lib/features/people';
 
 	let { data } = $props();
 </script>
