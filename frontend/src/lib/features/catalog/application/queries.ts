@@ -8,6 +8,8 @@ import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { CatalogRepository, catalogDb } from '../data/catalog.pouch';
+import { authStore } from '$lib/stores/auth.svelte';
+import { isSystemAdmin } from '$lib/auth/roles';
 import type {
 	ItemCategory,
 	ItemCategoryInput,
@@ -53,11 +55,19 @@ export const useItemCategory = (id: () => string) =>
 		enabled: !!id()
 	}));
 
+function enforceSA() {
+	if (!isSystemAdmin(authStore.user?.roles ?? [])) {
+		throw new Error('Unauthorized: Only System Admins can write to the catalog.');
+	}
+}
+
 export const useCreateItemCategory = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: ItemCategoryInput; ctx: AuthorContext }) =>
-			CatalogRepository().createItemCategory(input, ctx),
+		mutationFn: ({ input, ctx }: { input: ItemCategoryInput; ctx: AuthorContext }) => {
+			enforceSA();
+			return CatalogRepository().createItemCategory(input, ctx);
+		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
 		}
@@ -67,8 +77,10 @@ export const useCreateItemCategory = () => {
 export const useUpdateItemCategory = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (itemCategory: ItemCategory) =>
-			CatalogRepository().updateItemCategory(itemCategory),
+		mutationFn: (itemCategory: ItemCategory) => {
+			enforceSA();
+			return CatalogRepository().updateItemCategory(itemCategory);
+		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
 		}
@@ -101,8 +113,10 @@ export const useItemMaster = (id: () => string) =>
 export const useCreateItemMaster = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: ItemMasterInput; ctx: AuthorContext }) =>
-			CatalogRepository().createItemMaster(input, ctx),
+		mutationFn: ({ input, ctx }: { input: ItemMasterInput; ctx: AuthorContext }) => {
+			enforceSA();
+			return CatalogRepository().createItemMaster(input, ctx);
+		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
 		}
@@ -112,7 +126,10 @@ export const useCreateItemMaster = () => {
 export const useUpdateItemMaster = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (itemMaster: ItemMaster) => CatalogRepository().updateItemMaster(itemMaster),
+		mutationFn: (itemMaster: ItemMaster) => {
+			enforceSA();
+			return CatalogRepository().updateItemMaster(itemMaster);
+		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
 		}
@@ -145,8 +162,10 @@ export const useRecipe = (id: () => string) =>
 export const useCreateRecipe = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: RecipeInput; ctx: AuthorContext }) =>
-			CatalogRepository().createRecipe(input, ctx),
+		mutationFn: ({ input, ctx }: { input: RecipeInput; ctx: AuthorContext }) => {
+			enforceSA();
+			return CatalogRepository().createRecipe(input, ctx);
+		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
 		}
@@ -156,7 +175,10 @@ export const useCreateRecipe = () => {
 export const useUpdateRecipe = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (recipe: Recipe) => CatalogRepository().updateRecipe(recipe),
+		mutationFn: (recipe: Recipe) => {
+			enforceSA();
+			return CatalogRepository().updateRecipe(recipe);
+		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
 		}

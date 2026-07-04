@@ -16,11 +16,13 @@
 	import { Settings2 } from '@lucide/svelte';
 	import { Trash2 } from '@lucide/svelte';
 	// Feature
-	import { useItemCategories, useItemCategoriesPaginated } from '$lib/features/catalog';
+	import { useItemCategories } from '$lib/features/catalog';
 	import { ItemCategoryForm } from '$lib/features/catalog';
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
+
+	const query = useItemCategories();
 
 	// Pagination
 	const PAGE_SIZE = 10;
@@ -28,21 +30,28 @@
 	let q = $state('');
 
 	// Data Queries
-	const query = useItemCategoriesPaginated(
-		() => currentPage,
-		() => PAGE_SIZE
-	);
+	// const query = useItemCategoriesPaginated(
+	// 	() => currentPage,
+	// 	() => PAGE_SIZE
+	// );
 
-	const filtered = $derived.by(() => {
-		const items = query.data?.items ?? [];
+	const filteredAll = $derived.by(() => {
+		const items = query.data ?? [];
 		const needle = q.trim().toLowerCase();
 		if (!needle) return items;
 		return items.filter((e) => e.name.toLowerCase().includes(needle));
 	});
-	const total = $derived(query.data?.total ?? 0);
-	const totalPages = $derived(query.data?.totalPages ?? 1);
+	const total = $derived(filteredAll.length);
+	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
 
-	// const itemCategoriesQuery = useItemCategories();
+	const paginatedItems = $derived.by(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return filteredAll.slice(start, start + PAGE_SIZE);
+	});
+
+	$effect(() => {
+		if (q) currentPage = 1;
+	});
 
 	// Form Page
 	let viewMode = $state<'list' | 'create' | 'edit'>('list');
@@ -99,14 +108,14 @@
 								>กำลังโหลดข้อมูล...</Table.Cell
 							>
 						</Table.Row>
-					{:else if filtered.length === 0}
+					{:else if filteredAll.length === 0}
 						<Table.Row>
 							<Table.Cell colspan={3} class="py-6 text-center text-muted-foreground"
 								>📭 ไม่พบข้อมูลมาสเตอร์ที่ค้นหาตามเงื่อนไขนี้</Table.Cell
 							>
 						</Table.Row>
 					{:else}
-						{#each filtered as e (e._id)}
+						{#each paginatedItems as e (e._id)}
 							<Table.Row>
 								<Table.Cell class="font-bold text-foreground">{e.name}</Table.Cell>
 								<Table.Cell class="text-muted-foreground">
@@ -193,6 +202,12 @@
 			</div>
 		</div>
 		<Separator class="my-4 bg-slate-100 dark:bg-zinc-800" />
-		<ItemCategoryForm id={selectedId} isEdit={viewMode === 'edit'} onsuccess={backToList} />
+		{#if isSA}
+			<ItemCategoryForm id={selectedId} isEdit={viewMode === 'edit'} onsuccess={backToList} />
+		{:else}
+			<div class="py-12 text-center text-sm font-bold text-destructive">
+				คุณไม่มีสิทธิ์เข้าถึงส่วนนี้ (Unauthorized)
+			</div>
+		{/if}
 	</div>
 {/if}
