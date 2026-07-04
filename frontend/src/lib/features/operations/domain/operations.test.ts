@@ -307,4 +307,5 @@ describe('createDistributeEntry', () => {
 				ctx
 			)
 		).toThrow();
+	});
 });

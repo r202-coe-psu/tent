@@ -40,6 +40,11 @@ export type TransferStatus = z.infer<typeof transferStatusSchema>;
 export const donationChannelSchema = z.enum(['public', 'walk_in']);
 export type DonationChannel = z.infer<typeof donationChannelSchema>;
 
+export interface TransferTimelineEvent {
+	at: Timestamp;
+	by: string; // _users name
+}
+
 // ---------------------------------------------------------------- documents
 
 export interface StockLot {
@@ -104,7 +109,27 @@ export interface DonationCampaign extends BaseDoc {
 	notes?: string;
 }
 
-export type OperationsDoc = StockLedger | Donation | DonationCampaign;
+export interface StockTransferItem {
+	item_id: string;
+	qty: number;
+	unit: string;
+}
+
+export interface StockTransfer extends BaseDoc {
+	type: 'stock_transfer';
+	from_shelter: string;
+	to_shelter: string;
+	items: StockTransferItem[];
+	status: TransferStatus;
+	timeline: {
+		requested: TransferTimelineEvent;
+		shipped?: TransferTimelineEvent;
+		received?: TransferTimelineEvent;
+	};
+	notes?: string;
+}
+
+export type OperationsDoc = StockLedger | Donation | DonationCampaign | StockTransfer;
 
 // ---------------------------------------------------------------- stock_ledger
 
@@ -433,6 +458,82 @@ export const isDonation = (d: unknown): d is Donation =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation';
 export const isDonationCampaign = (d: unknown): d is DonationCampaign =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_campaign';
+export const isStockTransfer = (d: unknown): d is StockTransfer =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_transfer';
+
+// ---------------------------------------------------------------- transfer
+
+export const transferItemSchema = z.object({
+	item_id: z.string().min(1),
+	qty: z.coerce.number().positive(),
+	unit: z.string().trim().min(1)
+});
+
+export const transferInputSchema = z.object({
+	from_shelter: z.string().min(1),
+	to_shelter: z.string().min(1),
+	items: z.array(transferItemSchema).min(1, 'A transfer needs at least one item'),
+	notes: z.string().trim().optional()
+});
+export type TransferInput = z.input<typeof transferInputSchema>;
+
+export function createTransfer(input: TransferInput, ctx: AuthorContext): StockTransfer {
+	const d = transferInputSchema.parse(input);
+	return makeDoc(
+		'stock_transfer',
+		1,
+		{
+			from_shelter: d.from_shelter,
+			to_shelter: d.to_shelter,
+			items: d.items,
+			status: 'requested',
+			timeline: {
+				requested: { at: now(), by: ctx.createdBy }
+			},
+			...(d.notes ? { notes: d.notes } : {})
+		},
+		ctx
+	);
+}
+
+/**
+ * Dispatches a transfer (changes status to shipped and creates corresponding transfer_out ledger entries).
+ * This function returns both the updated Transfer document and the StockLedger entries that must be persisted.
+ */
+export function dispatchTransfer(
+	transfer: StockTransfer,
+	ctx: AuthorContext
+): { transfer: StockTransfer; ledgers: StockLedger[] } {
+	if (transfer.status !== 'requested') {
+		throw new Error(`Cannot dispatch transfer in status "${transfer.status}"`);
+	}
+
+	const updatedTransfer: StockTransfer = {
+		...transfer,
+		status: 'shipped',
+		timeline: {
+			...transfer.timeline,
+			shipped: { at: now(), by: ctx.createdBy }
+		},
+		updated_at: now()
+	};
+
+	const ledgers = transfer.items.map((item) =>
+		createStockLedger(
+			{
+				item_id: item.item_id,
+				qty: -Math.abs(item.qty), // ensure negative delta for transfer out
+				unit: item.unit,
+				reason: 'transfer_out',
+				ref_id: transfer._id,
+				occurred_at: now()
+			},
+			ctx
+		)
+	);
+
+	return { transfer: updatedTransfer, ledgers };
+}
 
 // ---------------------------------------------------------------- special request form schema
 export const specialRequestSchema = z.object({
