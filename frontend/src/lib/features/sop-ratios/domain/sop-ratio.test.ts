@@ -201,12 +201,7 @@ describe('SOP Ratio Domain', () => {
 				deactivatedPrev,
 				profile: next,
 				audit
-			} = createNewVersion(
-				prev,
-				{ water_l_per_person_day: 20 },
-				'Updated water ratio',
-				masterCtx
-			);
+			} = createNewVersion(prev, { water_l_per_person_day: 20 }, 'Updated water ratio', masterCtx);
 
 			expect(deactivatedPrev?.active).toBe(false);
 			expect(next.version).toBe(2);
@@ -228,12 +223,7 @@ describe('SOP Ratio Domain', () => {
 				deactivatedPrev,
 				profile: next,
 				audit
-			} = createNewVersion(
-				prev,
-				{ water_l_per_person_day: 15 },
-				'No actual change',
-				masterCtx
-			);
+			} = createNewVersion(prev, { water_l_per_person_day: 15 }, 'No actual change', masterCtx);
 
 			expect(deactivatedPrev).toBeNull();
 			expect(audit).toBeNull();
@@ -364,7 +354,7 @@ describe('SOP Ratio Domain', () => {
 			const legacyMaster = { ...baseMasterMock, schema_v: 2 };
 
 			expect(isSopMaster(currentMaster)).toBe(true);
-			expect(isSopMaster(legacyMaster)).toBe(false); 
+			expect(isSopMaster(legacyMaster)).toBe(false);
 		});
 
 		it('should strictly reject invalid structures, wrong types, and non-objects for Master', () => {
@@ -373,7 +363,7 @@ describe('SOP Ratio Domain', () => {
 			expect(isSopMaster('string-payload')).toBe(false);
 			expect(isSopMaster([])).toBe(false);
 			expect(isSopMaster({})).toBe(false);
-			
+
 			expect(isSopMaster({ ...baseMasterMock, schema_v: 3, type: 'invalid_type' })).toBe(false);
 		});
 
@@ -396,7 +386,7 @@ describe('SOP Ratio Domain', () => {
 			const legacyOverride = { ...baseOverrideMock, schema_v: 1 };
 
 			expect(isSopOverride(currentOverride)).toBe(true);
-			expect(isSopOverride(legacyOverride)).toBe(false); 
+			expect(isSopOverride(legacyOverride)).toBe(false);
 		});
 
 		it('should strictly reject invalid structures, wrong types, and non-objects for Override', () => {
@@ -419,7 +409,7 @@ describe('SOP Ratio Domain', () => {
 			expect(isSopOverride(42)).toBe(false);
 			expect(isSopOverride([])).toBe(false);
 			expect(isSopOverride({})).toBe(false);
-			
+
 			expect(isSopOverride({ ...baseOverrideMock, schema_v: 2, type: 'invalid_type' })).toBe(false);
 		});
 	});

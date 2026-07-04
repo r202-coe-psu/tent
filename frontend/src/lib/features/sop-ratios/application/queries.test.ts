@@ -5,7 +5,12 @@ import { useCreateMasterVersion, useCreateOverrideVersion } from './use-create-v
 import { useMasterVersionHistory, useOverrideVersionHistory } from './use-version-history';
 import { sopRatioKeys, sopVersionKeys } from './queries';
 import { SHELTER_CODE } from '$lib/db/shelter';
-import { SOP_MASTER_SCHEMA_VERSION, SOP_OVERRIDE_SCHEMA_VERSION, type SopMaster, type SopOverride } from '../domain/sop-ratio';
+import {
+	SOP_MASTER_SCHEMA_VERSION,
+	SOP_OVERRIDE_SCHEMA_VERSION,
+	type SopMaster,
+	type SopOverride
+} from '../domain/sop-ratio';
 
 // Mock svelte-sonner to prevent error output in tests
 vi.mock('svelte-sonner', () => ({

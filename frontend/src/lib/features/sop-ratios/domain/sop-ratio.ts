@@ -155,12 +155,10 @@ type AnyProfileCtx = MasterCtx | OverrideCtx;
 export function resolveEffectiveProfile(
 	override?: SopOverride | null,
 	master?: SopMaster | null
-):
-	| {
-			ratios: Record<SopRatioKey, number> | Partial<Record<SopRatioKey, number>>;
-			ratio_source: 'master' | 'override';
-	  }
-	| null {
+): {
+	ratios: Record<SopRatioKey, number> | Partial<Record<SopRatioKey, number>>;
+	ratio_source: 'master' | 'override';
+} | null {
 	if (override && override.active) {
 		return {
 			ratios: override.ratios,
@@ -208,7 +206,9 @@ export function createInitialProfile(
 		sop_profile: partialRatiosSchema,
 		sop_override: fullRatiosSchema
 	} satisfies Record<'sop_profile' | 'sop_override', z.ZodTypeAny>;
-	const safeRatios = ratiosSchemaByTarget[targetType].parse(ratios) as Partial<Record<SopRatioKey, number>>;
+	const safeRatios = ratiosSchemaByTarget[targetType].parse(ratios) as Partial<
+		Record<SopRatioKey, number>
+	>;
 
 	if (targetType === 'sop_profile') {
 		const profile = catalogDoc(
