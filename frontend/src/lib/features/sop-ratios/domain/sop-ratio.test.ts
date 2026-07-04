@@ -10,8 +10,10 @@ import {
 	SOP_MASTER_SCHEMA_VERSION,
 	SOP_OVERRIDE_SCHEMA_VERSION,
 	isSopMaster,
-	isSopOverride
+	isSopOverride,
+	type SopRatioKey
 } from './sop-ratio';
+import { validRatios } from './sop-ratio.fixture';
 import type { AuthorContext } from '$lib/db/model';
 
 describe('SOP Ratio Domain', () => {
@@ -22,28 +24,6 @@ describe('SOP Ratio Domain', () => {
 		base_profile_id: 'sop_profile:base-id'
 	};
 
-	const validRatios = {
-		water_l_per_person_day: 15,
-		drinking_water_l_per_person_day: 3,
-		cooking_water_l_per_person_day: 6,
-		hygiene_water_l_per_person_day: 6,
-		kcal_per_adult_day: 2000,
-		people_per_tap: 80,
-		people_per_handpump: 500,
-		people_per_open_well: 400,
-		people_per_laundry: 100,
-		people_per_bathing: 50,
-		people_per_toilet_female: 20,
-		people_per_toilet_male: 35,
-		people_per_dining_point_adult: 20,
-		people_per_dining_point_child: 10,
-		m2_per_person_living: 3.5,
-		m2_per_person_living_cold: 4.5,
-		m2_per_person_total: 45,
-		max_waterpoint_distance_m: 500,
-		max_queue_minutes: 30,
-		people_per_volunteer: 50
-	};
 
 	describe('createInitialProfile - Master', () => {
 		it('should create a valid initial master profile with whitelist keys and audit trail', () => {
@@ -78,7 +58,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ water_l_per_person_day: 15 } as unknown as Record<string, number>,
+					{ water_l_per_person_day: 15 } as unknown as Record<SopRatioKey, number>,
 					masterCtx
 				);
 			}).toThrow();
@@ -86,7 +66,7 @@ describe('SOP Ratio Domain', () => {
 
 		it('should reject master profile when ratios is empty {}', () => {
 			expect(() => {
-				createInitialProfile('sop_profile', 'Sphere baseline', {}, masterCtx);
+				createInitialProfile('sop_profile', 'Sphere baseline', {} as Record<SopRatioKey, number>, masterCtx);
 			}).toThrow();
 		});
 
@@ -119,16 +99,7 @@ describe('SOP Ratio Domain', () => {
 			}).toThrow();
 		});
 
-		it('should reject non-whitelist keys even on a partial payload (strict mode also applies to partialRatiosSchema)', () => {
-			expect(() => {
-				createInitialProfile(
-					'sop_profile',
-					'Sphere baseline',
-					{ water_l_per_person_day: 15, fake_unauthorized_key: 999 } as unknown as Record<string, number>,
-					masterCtx
-				);
-			}).toThrow();
-		});
+
 
 		it('should reject negative or zero values', () => {
 			expect(() => {
@@ -156,14 +127,14 @@ describe('SOP Ratio Domain', () => {
 			const { profile, audit } = createInitialProfile(
 				'sop_override',
 				'Winter Override',
-				validRatios,
+				{ ...validRatios, water_l_per_person_day: 18 },
 				overrideCtx
 			);
 
 			expect(profile.name).toBe('Winter Override');
 			expect(profile.version).toBe(1);
 			expect(profile.active).toBe(true);
-			expect(profile.ratios.water_l_per_person_day).toBe(15);
+			expect(profile.ratios.water_l_per_person_day).toBe(18);
 			expect(profile.type).toBe('sop_override');
 			expect(profile.schema_v).toBe(SOP_OVERRIDE_SCHEMA_VERSION);
 			expect(profile.shelter_code).toBe('SH001');
@@ -175,14 +146,12 @@ describe('SOP Ratio Domain', () => {
 			expect(() => sopOverrideSchema.parse(profile)).not.toThrow();
 		});
 
-		// Regression guard: override must remain a total constraint (full canonical set required,
-		// CR-006/CR-018 #1) — must NOT accidentally start accepting partial ratios like master does.
 		it('should reject override when ratios is only partial (regression: override must stay full-set required)', () => {
 			expect(() => {
 				createInitialProfile(
 					'sop_override',
 					'Winter Override',
-					{ water_l_per_person_day: 15 } as unknown as Record<string, number>,
+					{ water_l_per_person_day: 15 } as unknown as Record<SopRatioKey, number>,
 					overrideCtx
 				);
 			}).toThrow();
@@ -207,6 +176,24 @@ describe('SOP Ratio Domain', () => {
 			expect(next.version).toBe(2);
 			expect(next.ratios.water_l_per_person_day).toBe(20);
 			expect(audit?.target_id).toBe(next._id);
+		});
+
+		it('should reject non-whitelist or deprecated keys (strict check)', () => {
+			const { profile: prev } = createInitialProfile(
+				'sop_profile',
+				'Sphere baseline',
+				validRatios,
+				masterCtx
+			);
+
+			expect(() => {
+				createNewVersion(
+					prev,
+					{ rice_g_per_person_meal: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
+					'Update invalid ratio',
+					masterCtx
+				);
+			}).toThrow();
 		});
 	});
 
@@ -276,11 +263,32 @@ describe('SOP Ratio Domain', () => {
 			);
 
 			expect(deactivatedPrev?.active).toBe(false);
+			expect(deactivatedPrev?._id).toBe(prev._id);
+			expect(next.name).toBe('Winter Override');
 			expect(next.version).toBe(2);
 			expect(next.ratios.water_l_per_person_day).toBe(22);
 			expect(next.active).toBe(true);
 			expect(audit?.action).toBe('manual_adjust');
+			expect(audit?.target_type).toBe('sop_override');
 			expect(audit?.target_id).toBe(next._id);
+		});
+
+		it('should reject non-whitelist or deprecated keys (strict check)', () => {
+			const { profile: prev } = createInitialProfile(
+				'sop_override',
+				'Winter Override',
+				validRatios,
+				overrideCtx
+			);
+
+			expect(() => {
+				createNewVersion(
+					prev,
+					{ rice_g_per_person_meal: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
+					'Update invalid ratio',
+					overrideCtx
+				);
+			}).toThrow();
 		});
 	});
 
