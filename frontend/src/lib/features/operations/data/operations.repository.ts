@@ -48,4 +48,18 @@ export interface OperationsRepository {
 	 * Will throw an error if there is insufficient stock.
 	 */
 	dispatchTransfer(transfer: StockTransfer, ctx: AuthorContext): Promise<{ transfer: StockTransfer; ledgers: StockLedger[] }>;
+
+	/**
+	 * Receive a transfer (change state to 'received' and add stock via transfer_in ledgers).
+	 */
+	receiveTransfer(
+		transfer: StockTransfer,
+		receivedItems: { item_id: string; qty: number }[],
+		ctx: AuthorContext
+	): Promise<{ transfer: StockTransfer; ledgers: StockLedger[] }>;
+
+	/**
+	 * List incoming transfers that are in 'shipped' state.
+	 */
+	listIncomingTransfers(): Promise<StockTransfer[]>;
 }

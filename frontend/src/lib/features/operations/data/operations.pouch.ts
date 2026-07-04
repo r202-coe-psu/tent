@@ -9,11 +9,14 @@ import {
 	createDistributeEntry,
 	createTransfer,
 	dispatchTransfer,
+	receiveTransfer,
+	isStockTransfer,
 	type StockLedger,
 	type ReceiveInput,
 	type DistributeInput,
 	type StockTransfer,
-	type TransferInput
+	type TransferInput,
+	type OperationsDoc
 } from '../domain/operations';
 import type { OperationsRepository } from './operations.repository';
 
@@ -102,6 +105,31 @@ export class OperationsPouchRepository implements OperationsRepository {
 		const savedLedgers = await Promise.all(ledgers.map((l) => this.repo.put(l)));
 
 		return { transfer: savedTransfer, ledgers: savedLedgers };
+	}
+
+	async receiveTransfer(
+		transfer: StockTransfer,
+		receivedItems: { item_id: string; qty: number }[],
+		ctx: AuthorContext
+	): Promise<{ transfer: StockTransfer; ledgers: StockLedger[] }> {
+		const { transfer: updatedTransfer, ledgers } = receiveTransfer(transfer, receivedItems, ctx);
+
+		const savedTransfer = await this.repo.put(updatedTransfer);
+		const savedLedgers = await Promise.all(ledgers.map((l) => this.repo.put(l)));
+
+		return { transfer: savedTransfer, ledgers: savedLedgers };
+	}
+
+	async listIncomingTransfers(): Promise<StockTransfer[]> {
+		const result = await this.repo.allDocs<OperationsDoc>({
+			startkey: 'stock_transfer:',
+			endkey: 'stock_transfer:\uffff',
+			include_docs: true
+		});
+		return result.rows
+			.map((row) => row.doc)
+			.filter(isStockTransfer)
+			.filter((t) => t.to_shelter === SHELTER_CODE && t.status === 'shipped');
 	}
 }
 

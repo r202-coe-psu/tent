@@ -11,6 +11,9 @@ import {
 	openNeeds,
 	createReceiveEntry,
 	createDistributeEntry,
+	createTransfer,
+	dispatchTransfer,
+	receiveTransfer,
 	type Donation,
 	type ReceiveSource
 } from './operations';
@@ -307,5 +310,86 @@ describe('createDistributeEntry', () => {
 				ctx
 			)
 		).toThrow();
+	});
+});
+
+describe('Inter-shelter Transfers', () => {
+	it('creates and dispatches a transfer', () => {
+		const t = createTransfer({
+			from_shelter: 'SH001',
+			to_shelter: 'SH002',
+			items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+		}, ctx);
+		expect(t.status).toBe('requested');
+
+		const { transfer: shipped, ledgers } = dispatchTransfer(t, ctx);
+		expect(shipped.status).toBe('shipped');
+		expect(shipped.timeline.shipped).toBeDefined();
+		expect(ledgers).toHaveLength(1);
+		expect(ledgers[0].qty).toBe(-100); // outbound
+		expect(ledgers[0].reason).toBe('transfer_out');
+	});
+
+	it('receives a transfer completely', () => {
+		const t = createTransfer({
+			from_shelter: 'SH001',
+			to_shelter: 'SH002',
+			items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+		}, ctx);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		const { transfer: received, ledgers } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: 100 }],
+			ctx
+		);
+
+		expect(received.status).toBe('received');
+		expect(received.items[0].received_qty).toBe(100);
+		expect(ledgers).toHaveLength(1);
+		expect(ledgers[0].qty).toBe(100);
+		expect(ledgers[0].reason).toBe('transfer_in');
+	});
+
+	it('handles partial receipt (loss in transit)', () => {
+		const t = createTransfer({
+			from_shelter: 'SH001',
+			to_shelter: 'SH002',
+			items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+		}, ctx);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		// Receiver only gets 85
+		const { transfer: received, ledgers } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: 85 }],
+			ctx
+		);
+
+		expect(received.status).toBe('received');
+		expect(received.items[0].received_qty).toBe(85);
+		expect(ledgers).toHaveLength(1);
+		expect(ledgers[0].qty).toBe(85); // Only 85 added to inventory
+		expect(ledgers[0].reason).toBe('transfer_in');
+	});
+
+	it('handles zero receipt (complete loss)', () => {
+		const t = createTransfer({
+			from_shelter: 'SH001',
+			to_shelter: 'SH002',
+			items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+		}, ctx);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		// Receiver gets 0
+		const { transfer: received, ledgers } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: 0 }],
+			ctx
+		);
+
+		expect(received.status).toBe('received');
+		expect(received.items[0].received_qty).toBe(0);
+		expect(ledgers).toHaveLength(0); // No ledger entry since nothing was added
 	});
 });

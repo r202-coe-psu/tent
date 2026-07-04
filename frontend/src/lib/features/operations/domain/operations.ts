@@ -113,6 +113,7 @@ export interface StockTransferItem {
 	item_id: string;
 	qty: number;
 	unit: string;
+	received_qty?: number;
 }
 
 export interface StockTransfer extends BaseDoc {
@@ -531,6 +532,56 @@ export function dispatchTransfer(
 			ctx
 		)
 	);
+
+	return { transfer: updatedTransfer, ledgers };
+}
+
+/**
+ * Receives a transfer (changes status to received and creates corresponding transfer_in ledger entries).
+ * This function supports partial receipt by allowing the user to specify actual received quantities.
+ */
+export function receiveTransfer(
+	transfer: StockTransfer,
+	receivedItems: { item_id: string; qty: number }[],
+	ctx: AuthorContext
+): { transfer: StockTransfer; ledgers: StockLedger[] } {
+	if (transfer.status !== 'shipped') {
+		throw new Error(`Cannot receive transfer in status "${transfer.status}"`);
+	}
+
+	const receivedQtyMap = new Map(receivedItems.map((i) => [i.item_id, i.qty]));
+
+	const updatedItems = transfer.items.map((item) => ({
+		...item,
+		received_qty: receivedQtyMap.get(item.item_id) ?? 0
+	}));
+
+	const updatedTransfer: StockTransfer = {
+		...transfer,
+		items: updatedItems,
+		status: 'received',
+		timeline: {
+			...transfer.timeline,
+			received: { at: now(), by: ctx.createdBy }
+		},
+		updated_at: now()
+	};
+
+	const ledgers = updatedItems
+		.filter((item) => item.received_qty != null && item.received_qty > 0)
+		.map((item) =>
+			createStockLedger(
+				{
+					item_id: item.item_id,
+					qty: Math.abs(item.received_qty!), // ensure positive delta for transfer in
+					unit: item.unit,
+					reason: 'transfer_in',
+					ref_id: transfer._id,
+					occurred_at: now()
+				},
+				ctx
+			)
+		);
 
 	return { transfer: updatedTransfer, ledgers };
 }
