@@ -187,14 +187,9 @@ export const useUpdateRecipe = () => {
 
 export function startCatalogLiveQuery(queryClient: QueryClient): LiveQueryHandle {
 	return startLiveQuery(catalogDb(), queryClient, (type) => {
-		if (type === 'item_category') {
-			return [catalogKeys.itemcategories(), [...catalogKeys.all, 'itemcategories']];
-		}
-		if (type === 'item_master') {
-			return [catalogKeys.itemmasters(), [...catalogKeys.all, 'itemmasters']];
-		}
-		if (type === 'recipe') {
-			return [catalogKeys.recipes(), [...catalogKeys.all, 'recipes']];
+		const allowed = ['item_category', 'item_master', 'recipe', 'sop_profile'];
+		if (allowed.includes(type)) {
+			return [catalogKeys.all];
 		}
 		return [];
 	});
