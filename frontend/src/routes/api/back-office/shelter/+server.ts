@@ -14,7 +14,8 @@ import {
 	listShelterMasters,
 	migrate,
 	mergeShelterSecurity,
-	nowIso
+	nowIso,
+	deployShelterViews
 } from '$lib/server/shelters.admin';
 
 export const prerender = false;
@@ -126,6 +127,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			validate_doc_update: validateDocUpdate(code)
 		});
 		steps.push({ step: 'design', status: design.status });
+
+		// 3.5. Deploy app views (CR-017)
+		const appStatus = await deployShelterViews(db);
+		steps.push({ step: 'design-app', status: appStatus });
 
 		// 4. Registry + shelter master doc (schema.md §3.1) — idempotent by `code`.
 		await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');

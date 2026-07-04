@@ -69,9 +69,11 @@ export async function injectSession(
  */
 export async function clearSession(page: Page): Promise<void> {
 	await page.context().clearCookies();
-	await page.evaluate(() => {
-		localStorage.removeItem('auth:user');
-	}).catch(() => {
-		// Ignore if page hasn't navigated yet
-	});
+	await page
+		.evaluate(() => {
+			localStorage.removeItem('auth:user');
+		})
+		.catch(() => {
+			// Ignore if page hasn't navigated yet
+		});
 }

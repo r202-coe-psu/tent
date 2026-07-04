@@ -64,7 +64,9 @@ async function saveBulkAtomic<T extends { _id: string; _rev?: string }>(
 			if (error instanceof Error && error.message === '409_CONFLICT') {
 				attempts++;
 				if (attempts >= MAX_RETRIES) {
-					throw new Error(`Max retries reached due to Document Conflicts (409) in ${label}.`);
+					throw new Error(`Max retries reached due to Document Conflicts (409) in ${label}.`, {
+						cause: error
+					});
 				}
 				await new Promise((resolve) => setTimeout(resolve, 50 * attempts));
 
@@ -74,7 +76,7 @@ async function saveBulkAtomic<T extends { _id: string; _rev?: string }>(
 					try {
 						const fresh = await db.get(doc._id);
 						currentDocs[i] = { ...doc, _rev: fresh._rev };
-					} catch (e) {
+					} catch {
 						// 404/not found means it's a new document being inserted, no rev yet.
 					}
 				}
@@ -96,7 +98,9 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 	}
 
 	async listActive(): Promise<SopMaster[]> {
-		const db = this.db as PouchDB.Database & { find?: (req: object) => Promise<{ docs: unknown[] }> };
+		const db = this.db as PouchDB.Database & {
+			find?: (req: object) => Promise<{ docs: unknown[] }>;
+		};
 		if (typeof db.find === 'function') {
 			// TODO(provisioning): Ensure secondary index on ['type', 'active'] is created during DB init per CR-006 §indexes
 			try {
@@ -105,7 +109,7 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 				});
 				return (result.docs as unknown[]).filter(isSopMaster);
 			} catch (error) {
-				// Fallback gracefully if find executes but fails due to environment setup
+				console.warn('[SopPouchRepo] Mango query failed, utilizing allByType fallback:', error);
 			}
 		}
 
@@ -224,7 +228,9 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 	}
 
 	async listActive(): Promise<SopOverride[]> {
-		const db = this.db as PouchDB.Database & { find?: (req: object) => Promise<{ docs: unknown[] }> };
+		const db = this.db as PouchDB.Database & {
+			find?: (req: object) => Promise<{ docs: unknown[] }>;
+		};
 		if (typeof db.find === 'function') {
 			// TODO(provisioning): Ensure secondary index on ['type', 'active'] is created during DB init per CR-006 §indexes
 			try {
@@ -233,7 +239,7 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 				});
 				return (result.docs as unknown[]).filter(isSopOverride);
 			} catch (error) {
-				// Fallback gracefully if find executes but fails due to environment setup
+				console.warn('[SopPouchRepo] Mango query failed, utilizing allByType fallback:', error);
 			}
 		}
 
@@ -358,7 +364,9 @@ export async function resolveEffectiveRatios(
 	// 🛡️ Defensive Fallback: ป้องกันกรณี Database เอ๋อแล้วมี Active 2 ตัว
 	// โดยการบังคับเรียง version จากมากไปน้อย แล้วหยิบตัวล่าสุด (index 0) เสมอ
 	const safeOverride =
-		activeOverrides.length > 0 ? [...activeOverrides].sort((a, b) => b.version - a.version)[0] : null;
+		activeOverrides.length > 0
+			? [...activeOverrides].sort((a, b) => b.version - a.version)[0]
+			: null;
 
 	const safeMaster =
 		activeMasters.length > 0 ? [...activeMasters].sort((a, b) => b.version - a.version)[0] : null;
@@ -406,6 +414,9 @@ export function createSopMasterRepositoryForTest(db: PouchDB.Database): SopMaste
 	return new SopMasterPouchRepository(db);
 }
 
-export function createSopOverrideRepositoryForTest(shelterCode: string, db: PouchDB.Database): SopOverridePouchRepository {
+export function createSopOverrideRepositoryForTest(
+	shelterCode: string,
+	db: PouchDB.Database
+): SopOverridePouchRepository {
 	return new SopOverridePouchRepository(shelterCode, db);
 }

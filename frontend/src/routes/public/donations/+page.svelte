@@ -3,48 +3,61 @@
 	import Heart from '@lucide/svelte/icons/heart';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import FileText from '@lucide/svelte/icons/file-text';
-	import { donationStore } from './donation.svelte';
-	import NeedsBoard from '../../../lib/components/public-donor-needs.svelte';
-	import DonorForm from '../../../lib/components/form/form-donor.svelte';
-	import TimeSelection from '../../../lib/components/form/donor-time-selection-form.svelte';
-	import SuccessTicket from '../../../lib/components/public-donor-success-ticket.svelte';
+	import { setDonationStore } from './donation.svelte';
+	import NeedsBoard from '$lib/components/public-donor-needs.svelte';
+	import DonorForm from '$lib/components/form/form-donor.svelte';
+	import TimeSelection from '$lib/components/form/donor-time-selection-form.svelte';
+	import SuccessTicket from '$lib/components/public-donor-success-ticket.svelte';
+	import { env } from '$env/dynamic/public';
 
+	const donationStore = setDonationStore();
+	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 </script>
 
 <svelte:head>
 	<title>บริจาคและจองคิว — Smart Shelter</title>
-	<script src="https://www.google.com/recaptcha/api.js" async defer></script>
-	<script>
-		// Global callback for reCAPTCHA
-		function onCaptchaSuccess(token) {
-			window.__captchaToken = token;
-		}
-	</script>
+	{#if siteKey}
+		<script src="https://www.google.com/recaptcha/api.js?render={siteKey}" async defer></script>
+	{/if}
 </svelte:head>
 
 <div class="mx-auto max-w-4xl px-4 py-8">
 	<!-- Tab Bar Navigation -->
 	<div class="mb-8 flex justify-center">
-		<div class="inline-flex rounded-xl bg-muted/60 p-1 border border-border/50 shadow-2xs">
-			<button 
-				onclick={() => { if (donationStore.reachedStep >= 1) donationStore.activeTab = 'needs'; }}
-				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all {donationStore.activeTab === 'needs' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
+		<div class="inline-flex rounded-xl border border-border/50 bg-muted/60 p-1 shadow-2xs">
+			<button
+				onclick={() => {
+					if (donationStore.reachedStep >= 1) donationStore.activeTab = 'needs';
+				}}
+				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all {donationStore.activeTab ===
+				'needs'
+					? 'bg-card text-foreground shadow-xs'
+					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				<Compass class="h-3.5 w-3.5" />
 				ความต้องการด่วน
 			</button>
-			<button 
-				onclick={() => { if (donationStore.reachedStep >= 2) donationStore.activeTab = 'form'; }}
+			<button
+				onclick={() => {
+					if (donationStore.reachedStep >= 2) donationStore.activeTab = 'form';
+				}}
 				disabled={donationStore.reachedStep < 2}
-				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all {donationStore.activeTab === 'form' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'} {donationStore.reachedStep < 2 ? 'opacity-40 cursor-not-allowed' : ''}"
+				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all {donationStore.activeTab ===
+				'form'
+					? 'bg-card text-foreground shadow-xs'
+					: 'text-muted-foreground hover:text-foreground'} {donationStore.reachedStep < 2
+					? 'cursor-not-allowed opacity-40'
+					: ''}"
 			>
 				<Heart class="h-3.5 w-3.5" />
 				ฟอร์มบริจาค
 			</button>
-			<button 
-				onclick={() => { if (donationStore.reachedStep >= 3) donationStore.activeTab = 'time'; }}
-				disabled={donationStore.reachedStep < 3}
-				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all {donationStore.activeTab === 'time' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'} {donationStore.reachedStep < 3 ? 'opacity-40 cursor-not-allowed' : ''}"
+			<button
+				disabled={true}
+				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all {donationStore.activeTab ===
+				'time'
+					? 'bg-card text-foreground shadow-xs'
+					: 'text-muted-foreground'} cursor-default"
 			>
 				<MapPin class="h-3.5 w-3.5" />
 				เวลา/สถานที่

@@ -85,13 +85,16 @@ device (PouchDB)  ⇄ WAN ⇄  central (CouchDB)
 ```js
 // evacuee:{ulid}
 {
-  type: "evacuee", schema_v: 1,
+  type: "evacuee", schema_v: 2,
   // ---- minimum (บังคับแค่นี้ — เคาะ 2026-06-11) ----
   first_name: "สมชาย", last_name: "ใจดี", gender: "male|female|other",
   phone: "0812345678" | null,         // required ใน UI — ผู้ลงทะเบียนกด/กรอก "ไม่มี" → เก็บ null
                                       // ใช้ค้นใน FAM search (เบอร์เต็มเท่านั้น) — ไม่ส่งกลับใน public response
+  country: "THAILAND",                // ประเทศต้นทาง (เพิ่มใน v2 — CR-007)
   // ---- optional เติมทีหลัง ----
-  nickname, birth_year, national_id, religion,
+  nickname, birth_year,
+  person_id: { cardType: "national_id|passport|pink_card|other", number }, // เอกสารแสดงตน (v2 — CR-028)
+  religion,
   special_needs: ["elderly","disabled","pregnant","infant", ...],
   emergency_contact: { name, phone, relation },
   household_id,                       // -> household:{ulid}

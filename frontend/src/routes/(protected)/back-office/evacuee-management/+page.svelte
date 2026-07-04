@@ -12,11 +12,14 @@
 	import Search from '@lucide/svelte/icons/search';
 	import {
 		useEvacueesPaginated,
+		useCheckInEvacuee,
 		maskNationalId,
 		zoneLabel,
 		SPECIAL_NEED_CHIPS
 	} from '$lib/features/people';
-	import type { SpecialNeed } from '$lib/features/people';
+	import type { Evacuee, SpecialNeed } from '$lib/features/people';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { SHELTER_CODE } from '$lib/db/shelter';
 
 	type TabKey = 'evacuee' | 'household';
 	let activeTab = $state<TabKey>('evacuee');
@@ -29,6 +32,28 @@
 		() => currentPage,
 		() => PAGE_SIZE
 	);
+
+	const checkIn = useCheckInEvacuee();
+
+	// Stopgap check-in action (T-06 dependency has no dedicated flow yet) — flips
+	// current_stay to checked_in so occupancy-driven features (e.g. kitchen T-25
+	// LIVE COUNT) reflect who is actually present.
+	async function handleCheckIn(evacuee: Evacuee) {
+		const ctx = { shelterCode: SHELTER_CODE, createdBy: authStore.user?.name ?? 'staff' };
+		try {
+			await checkIn.mutateAsync({ evacuee, ctx });
+			toast.success(`เช็คอิน ${evacuee.first_name} ${evacuee.last_name} แล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
+		}
+	}
+
+	const STATUS_LABEL: Record<string, string> = {
+		registered: 'ลงทะเบียนแล้ว',
+		checked_in: 'อยู่ในศูนย์',
+		checked_out: 'ออกจากศูนย์',
+		transferred: 'ย้ายศูนย์'
+	};
 
 	const filtered = $derived.by(() => {
 		const items = query.data?.items ?? [];
@@ -53,7 +78,6 @@
 <svelte:head>
 	<title>จัดการผู้ประสบภัย · SmartShelter</title>
 </svelte:head>
-
 
 <div class="flex shrink-0 gap-2 border-b border-border bg-card px-4 py-2">
 	<Button
@@ -122,6 +146,7 @@
 							<Table.Head>ชื่อ-นามสกุล</Table.Head>
 							<Table.Head>ประเภทผู้ประสบภัย</Table.Head>
 							<Table.Head>ZONE จัดสรร</Table.Head>
+							<Table.Head class="text-center">สถานะ</Table.Head>
 							<Table.Head class="text-center">จัดการ</Table.Head>
 						</Table.Row>
 					</Table.Header>
@@ -152,9 +177,31 @@
 								</Table.Cell>
 								<Table.Cell class="font-medium">{zoneLabel(e.current_stay.zone)}</Table.Cell>
 								<Table.Cell class="text-center">
-									<Button variant="outline" size="sm" onclick={() => toast.info('เร็วๆ นี้')}
-										>ตรวจประวัติ</Button
+									<span
+										class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium
+											{e.current_stay.status === 'checked_in'
+											? 'bg-green-100 text-green-800'
+											: 'bg-muted text-muted-foreground'}"
 									>
+										{STATUS_LABEL[e.current_stay.status] ?? e.current_stay.status}
+									</span>
+								</Table.Cell>
+								<Table.Cell class="text-center">
+									<div class="flex justify-center gap-1.5">
+										{#if e.current_stay.status !== 'checked_in'}
+											<Button
+												variant="outline"
+												size="sm"
+												onclick={() => handleCheckIn(e)}
+												disabled={checkIn.isPending}
+											>
+												เช็คอิน
+											</Button>
+										{/if}
+										<Button variant="outline" size="sm" onclick={() => toast.info('เร็วๆ นี้')}
+											>ตรวจประวัติ</Button
+										>
+									</div>
 								</Table.Cell>
 							</Table.Row>
 						{/each}

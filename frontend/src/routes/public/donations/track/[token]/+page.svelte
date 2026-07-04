@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
@@ -9,11 +8,8 @@
 	import User from '@lucide/svelte/icons/user';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
-	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
-	import Clock from '@lucide/svelte/icons/clock';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
-	import X from '@lucide/svelte/icons/x';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { toast } from 'svelte-sonner';
 	let { data }: { data: { token: string } } = $props();
@@ -358,7 +354,7 @@
 								</tr>
 							</thead>
 							<tbody class="divide-y divide-border/60 font-semibold text-foreground">
-								{#each request.itemsList as item}
+								{#each request.itemsList as item (item.name)}
 									<tr>
 										<td class="px-4 py-3">{item.name}</td>
 										<td class="px-4 py-3 text-right">{item.qty.toLocaleString()}</td>
