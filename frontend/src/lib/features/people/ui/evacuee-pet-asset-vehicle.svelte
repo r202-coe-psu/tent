@@ -4,8 +4,6 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import Camera from '@lucide/svelte/icons/camera';
-	import Image from '@lucide/svelte/icons/image';
 	import X from '@lucide/svelte/icons/x';
 	import Plus from '@lucide/svelte/icons/plus';
 	import type { HouseholdVehicle, PetGroup } from '../domain/people';

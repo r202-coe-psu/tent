@@ -8,10 +8,7 @@ import type {
 	EvacueeInput,
 	Household,
 	HouseholdInput,
-	ScreeningInput,
-	Medical,
-	Movement,
-	Screening
+	ScreeningInput
 } from '../domain/people';
 
 export const peopleKeys = {

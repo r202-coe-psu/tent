@@ -16,12 +16,8 @@
 		type EvacueeInput
 	} from '../domain/people';
 	import Camera from '@lucide/svelte/icons/camera';
-	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { COUNTRIES } from '$lib/utils/country';
-	import { Calendar } from '$lib/components/ui/calendar/index.js';
-	import * as Popover from '$lib/components/ui/popover/index.js';
-	import { type DateValue } from '@internationalized/date';
 
 	const cardTypeOptions = [
 		{ value: 'national_id', label: 'เลขประจำตัวประชาชน (Thai National ID)' },
@@ -118,7 +114,7 @@
 		}
 	});
 
-	const { form: formData, errors, submitting, reset } = form;
+	const { form: formData, errors, submitting } = form;
 
 	let age = $state('');
 

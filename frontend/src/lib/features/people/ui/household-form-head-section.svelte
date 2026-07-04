@@ -4,8 +4,7 @@
 	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import UserRound from '@lucide/svelte/icons/user-round';
-	import type { Evacuee } from '../domain/people';
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	import type { Evacuee, HouseholdFormData } from '../domain/people';
 	import type { SuperForm } from 'sveltekit-superforms';
 
 	let {
@@ -16,7 +15,7 @@
 		allEvacuees,
 		emergencyContactPhone = $bindable()
 	}: {
-		form: SuperForm<any>;
+		form: SuperForm<HouseholdFormData>;
 		headItems: { value: string; label: string; evacuee: Evacuee | null }[];
 		headComboValue: string;
 		noHead: boolean;

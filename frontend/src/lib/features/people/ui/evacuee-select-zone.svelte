@@ -3,13 +3,14 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter, type Zone } from '$lib/features/shelters/index.js';
+	import type { Evacuee } from '../domain/people';
 
 	let {
 		evacuee,
 		onBack,
 		onSubmit
 	}: {
-		evacuee?: any;
+		evacuee?: Evacuee | null;
 		onBack: () => void;
 		onSubmit: (zone: string) => void;
 	} = $props();

@@ -31,7 +31,7 @@
 				</Select.Trigger>
 				<Select.Content align="end" class="w-[350px]">
 					<Select.Group>
-						{#each sheltersQuery.data as shelter}
+						{#each sheltersQuery.data as shelter (shelter.code)}
 							<Select.Item value={shelter.code} label={shelter.name}>
 								{shelter.name}
 							</Select.Item>

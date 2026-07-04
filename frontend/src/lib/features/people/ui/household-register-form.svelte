@@ -238,7 +238,7 @@
 			</h3>
 
 			<div class="space-y-3">
-				{#each foundResults as result}
+				{#each foundResults as result (result.household._id)}
 					{@const isSelected = selectedHouseholdId === result.household._id}
 					<div
 						class="rounded-xl border {isSelected

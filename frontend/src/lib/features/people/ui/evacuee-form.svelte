@@ -3,6 +3,7 @@
 	import type {
 		EvacueeInput,
 		HouseholdInput,
+		HouseholdAsset,
 		Evacuee,
 		Household,
 		PetGroup
@@ -33,10 +34,10 @@
 		step = $bindable(1),
 		onComplete
 	}: {
-		onsubmit: (input: EvacueeInput, symptoms: string[]) => Promise<any> | any;
+		onsubmit: (input: EvacueeInput, symptoms: string[]) => Promise<Evacuee> | Evacuee;
 		pending?: boolean;
 		step?: 1 | 2 | 3 | 4 | 5 | 6;
-		onComplete?: (evacuee: any) => void;
+		onComplete?: (evacuee: Evacuee) => void;
 	} = $props();
 
 	const selectedSymptoms = new SvelteSet<string>();
@@ -52,7 +53,7 @@
 	let isCreatingNewHousehold = $state(false);
 	let newHouseholdAddress = $state<Partial<HouseholdInput> | null>(null);
 
-	let tempEvacuee = $derived.by(() => {
+	let tempEvacuee = $derived.by((): Evacuee | null => {
 		if (!pendingEvacueeInput) return null;
 		return {
 			_id: 'temp-new-evacuee',
@@ -61,7 +62,7 @@
 				status: 'checked_in',
 				zone: null
 			}
-		} as any;
+		} as Evacuee;
 	});
 
 	let combinedEvacuees = $derived.by(() => {
@@ -89,7 +90,7 @@
 		step = 4;
 	}
 
-	function handleHouseholdSelect(household: any) {
+	function handleHouseholdSelect(household: Household) {
 		selectedHousehold = household;
 		isCreatingNewHousehold = false;
 		newHouseholdAddress = null;
@@ -100,16 +101,6 @@
 		isCreatingNewHousehold = true;
 		selectedHousehold = null;
 		step = 5;
-	}
-
-	function handleHouseholdCancel() {
-		step = 1;
-		newlyRegisteredEvacuee = null;
-		pendingEvacueeInput = null;
-		pendingSymptoms = [];
-		selectedHousehold = null;
-		isCreatingNewHousehold = false;
-		newHouseholdAddress = null;
 	}
 
 	async function handleFinalSubmit(petAssetVehicleData: {
@@ -145,7 +136,7 @@
 			const pets = petAssetVehicleData.pets.filter((p) => p.count > 0);
 
 			// 3. Map assets
-			let assets: any = null;
+			let assets: HouseholdAsset | null = null;
 			if (petAssetVehicleData.assetDescription) {
 				assets = {
 					description: petAssetVehicleData.assetDescription,
@@ -187,7 +178,7 @@
 				const addr = newHouseholdAddress || {};
 				const householdLabel = `ครอบครัว${registeredEvacuee.first_name} ${registeredEvacuee.last_name}`;
 
-				const householdInput: any = {
+				const householdInput: HouseholdInput = {
 					label: householdLabel,
 					head_evacuee_id: registeredEvacuee._id,
 					municipality_zone: null,
@@ -222,8 +213,9 @@
 
 			// Go to step 6 (Zoning)
 			step = 6;
-		} catch (err: any) {
-			toast.error(`เกิดข้อผิดพลาดในการบันทึก: ${err.message || err}`);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			toast.error(`เกิดข้อผิดพลาดในการบันทึก: ${message}`);
 		} finally {
 			isSubmittingHousehold = false;
 		}
@@ -266,8 +258,9 @@
 
 			// Notify parent to show the success/wristband screen
 			onComplete?.(finishedEvacuee);
-		} catch (err: any) {
-			toast.error(`เกิดข้อผิดพลาดในการจัดสรรพื้นที่: ${err.message || err}`);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			toast.error(`เกิดข้อผิดพลาดในการจัดสรรพื้นที่: ${message}`);
 		}
 	}
 </script>

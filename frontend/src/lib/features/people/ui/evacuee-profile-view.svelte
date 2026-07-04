@@ -287,67 +287,55 @@
 			</div>
 		</div>
 
-		<!-- Audit log footer -->
-		<div
-			class="flex flex-wrap items-center gap-6 border-t border-border pt-6 text-xs font-medium text-muted-foreground"
-		>
-			<div class="flex items-center gap-1.5">
-				<Clock class="size-4 opacity-75" />
-				<span>ประวัติการอัปเดตข้อมูล (Audit Log)</span>
-			</div>
-			<div class="flex flex-wrap gap-x-6 gap-y-2">
-				<span>
-					ลงทะเบียนเมื่อ:
-					<strong class="font-semibold text-foreground">{formatDateTime(evacuee.created_at)}</strong
-					>
-					โดย {evacuee.created_by || 'system'}
-				</span>
-				{#if evacuee.updated_at && evacuee.updated_at !== evacuee.created_at}
-					<span>
-						แก้ไขล่าสุดเมื่อ:
-						<strong class="font-semibold text-foreground">
-							{formatDateTime(evacuee.updated_at)}
-						</strong>
-					</span>
-				{/if}
-			</div>
-		</div>
-
-		<!-- Movement history -->
+		<!-- Audit log — record metadata + movement events combined -->
 		<div class="space-y-3 rounded-3xl border border-border bg-card p-6 shadow-sm">
 			<div class="flex items-center gap-2.5 border-b border-border pb-2">
 				<Clock class="size-4.5 text-primary" />
 				<h3 class="text-sm font-bold text-slate-900 dark:text-slate-50">
-					ประวัติการเคลื่อนย้าย (Movement History)
+					บันทึกการตรวจสอบ (Audit Log)
 				</h3>
 			</div>
-			{#if movements.length === 0}
-				<p class="text-xs text-muted-foreground italic">ยังไม่มีประวัติการเคลื่อนย้าย</p>
-			{:else}
-				<ol class="space-y-2.5">
-					{#each movements as m (m._id)}
-						<li class="flex items-start gap-3 text-xs">
-							<span class="mt-0.5 text-sm">{movementLabels[m.action].emoji}</span>
-							<div class="flex-1 space-y-0.5">
-								<div class="font-semibold text-foreground">
-									{movementLabels[m.action].label}
-									{#if m.zone}
-										<span class="font-normal text-muted-foreground">
-											· โซน {m.zone.toUpperCase()}
-										</span>
-									{/if}
-								</div>
-								<div class="text-muted-foreground">
-									{formatDateTime(m.occurred_at)}
-									{#if m.reason}
-										· {m.reason}
-									{/if}
-								</div>
+			<ol class="space-y-2.5">
+				{#if evacuee.updated_at && evacuee.updated_at !== evacuee.created_at}
+					<li class="flex items-start gap-3 text-xs">
+						<span class="mt-0.5 text-sm">✏️</span>
+						<div class="flex-1 space-y-0.5">
+							<div class="font-semibold text-foreground">แก้ไขข้อมูลล่าสุด (Updated)</div>
+							<div class="text-muted-foreground">{formatDateTime(evacuee.updated_at)}</div>
+						</div>
+					</li>
+				{/if}
+				{#each movements as m (m._id)}
+					<li class="flex items-start gap-3 text-xs">
+						<span class="mt-0.5 text-sm">{movementLabels[m.action].emoji}</span>
+						<div class="flex-1 space-y-0.5">
+							<div class="font-semibold text-foreground">
+								{movementLabels[m.action].label}
+								{#if m.zone}
+									<span class="font-normal text-muted-foreground">
+										· โซน {m.zone.toUpperCase()}
+									</span>
+								{/if}
 							</div>
-						</li>
-					{/each}
-				</ol>
-			{/if}
+							<div class="text-muted-foreground">
+								{formatDateTime(m.occurred_at)}
+								{#if m.reason}
+									· {m.reason}
+								{/if}
+							</div>
+						</div>
+					</li>
+				{/each}
+				<li class="flex items-start gap-3 text-xs">
+					<span class="mt-0.5 text-sm">📝</span>
+					<div class="flex-1 space-y-0.5">
+						<div class="font-semibold text-foreground">ลงทะเบียนข้อมูล (Registered)</div>
+						<div class="text-muted-foreground">
+							{formatDateTime(evacuee.created_at)} · โดย {evacuee.created_by || 'system'}
+						</div>
+					</div>
+				</li>
+			</ol>
 		</div>
 	</div>
 
