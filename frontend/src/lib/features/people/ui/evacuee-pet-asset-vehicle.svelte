@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -7,7 +8,7 @@
 	import Image from '@lucide/svelte/icons/image';
 	import X from '@lucide/svelte/icons/x';
 	import Plus from '@lucide/svelte/icons/plus';
-	import type { HouseholdVehicle } from '../domain/people';
+	import type { HouseholdVehicle, PetGroup } from '../domain/people';
 
 	let {
 		onBack,
@@ -15,23 +16,45 @@
 	}: {
 		onBack: () => void;
 		onNext: (data: {
-			hasPets: boolean;
-			petDescription: string;
-			hasCage: boolean;
-			petImageUrl: string | null;
+			pets: PetGroup[];
 			assetDescription: string;
 			vehicles: HouseholdVehicle[];
 		}) => void;
 	} = $props();
 
-	let hasPets = $state(false);
-	let petDescription = $state('');
-	let hasCage = $state(false);
-	let petImageUrl = $state<string | null>(null);
 	let assetDescription = $state('');
 
-	// A household may bring several vehicles (schema.md §1.3 `vehicles[]`, CR-016).
+	// A household may bring several pets (schema.md §1.3 `pets[]`).
 	// `id` is a client-only key for the {#each} — stripped before onNext.
+	type PetRow = {
+		id: number;
+		species: 'dog' | 'cat' | 'bird' | 'other';
+		count: number;
+		notes: string;
+		has_cage: boolean;
+	};
+	let petRows = $state<PetRow[]>([]);
+	let nextPetId = 0;
+
+	const petSpeciesOptions = [
+		{ value: 'dog', label: '🐶 สุนัข' },
+		{ value: 'cat', label: '🐱 แมว' },
+		{ value: 'bird', label: '🐦 นก' },
+		{ value: 'other', label: '🐾 อื่นๆ' }
+	] as const;
+
+	function addPet() {
+		petRows = [
+			...petRows,
+			{ id: nextPetId++, species: 'dog', count: 1, notes: '', has_cage: false }
+		];
+	}
+
+	function removePet(id: number) {
+		petRows = petRows.filter((p) => p.id !== id);
+	}
+
+	// A household may bring several vehicles (schema.md §1.3 `vehicles[]`, CR-016).
 	type VehicleRow = { id: number; type: 'car' | 'motorcycle' | 'other'; license_plate: string };
 	let vehicleRows = $state<VehicleRow[]>([]);
 	let nextVehicleId = 0;
@@ -69,48 +92,83 @@
 
 	<!-- Form Content -->
 	<div class="space-y-6 rounded-xl border border-border bg-card p-6 shadow-sm">
-		<!-- Pets Section -->
-		<div class="space-y-4">
-			<div class="flex items-center gap-2">
-				<Checkbox
-					id="hasPets"
-					bind:checked={hasPets}
-					class="data-[state=checked]:border-[#003B71] data-[state=checked]:bg-[#003B71] data-[state=checked]:text-primary-foreground"
-				/>
-				<label for="hasPets" class="flex cursor-pointer items-center gap-1 text-sm font-semibold">
-					🐶 นำสัตว์เลี้ยงมาด้วย
-				</label>
+		<!-- Pets Section — a household may bring several -->
+		<div class="space-y-3">
+			<div class="flex items-center justify-between gap-2">
+				<div class="flex items-center gap-1 text-sm font-semibold">🐶 สัตว์เลี้ยงที่นำมาด้วย</div>
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					class="h-8 shrink-0 bg-background"
+					onclick={addPet}
+				>
+					<Plus class="mr-1 h-3.5 w-3.5" /> เพิ่มสัตว์เลี้ยง
+				</Button>
 			</div>
 
-			{#if hasPets}
-				<div class="flex items-center gap-3">
-					<Input bind:value={petDescription} placeholder="รายละเอียดสัตว์เลี้ยง" class="flex-1" />
-					<div class="flex h-10 items-center gap-2 rounded-md border bg-background px-3">
-						<Checkbox id="hasCage" bind:checked={hasCage} />
-						<label for="hasCage" class="cursor-pointer text-sm whitespace-nowrap">มีกรง</label>
-					</div>
-					<Button variant="outline" size="icon" class="h-10 w-10 shrink-0 bg-background">
-						<Camera class="h-4 w-4 text-muted-foreground" />
-					</Button>
-					<Button variant="outline" size="icon" class="h-10 w-10 shrink-0 bg-background">
-						<Image class="h-4 w-4 text-muted-foreground" />
-					</Button>
+			{#if petRows.length === 0}
+				<p class="text-xs text-muted-foreground">
+					ยังไม่มีสัตว์เลี้ยง — กด "เพิ่มสัตว์เลี้ยง" เพื่อเพิ่มรายการ
+				</p>
+			{:else}
+				<div class="space-y-2">
+					{#each petRows as pet (pet.id)}
+						<div class="flex items-end gap-2 rounded-lg border bg-muted/20 p-3">
+							<div class="w-[110px] shrink-0 space-y-1">
+								<Label class="text-[10px] text-muted-foreground">ชนิดสัตว์</Label>
+								<Select.Root type="single" bind:value={pet.species}>
+									<Select.Trigger class="h-9 w-full bg-background text-sm">
+										{petSpeciesOptions.find((o) => o.value === pet.species)?.label ?? 'ชนิด'}
+									</Select.Trigger>
+									<Select.Content>
+										{#each petSpeciesOptions as opt (opt.value)}
+											<Select.Item value={opt.value} label={opt.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							</div>
+							<div class="w-[72px] shrink-0 space-y-1">
+								<Label class="text-[10px] text-muted-foreground">จำนวน</Label>
+								<Input
+									type="number"
+									min={1}
+									class="h-9 bg-background text-sm"
+									bind:value={pet.count}
+								/>
+							</div>
+							<div class="flex-1 space-y-1">
+								<Label class="text-[10px] text-muted-foreground">หมายเหตุ</Label>
+								<Input
+									class="h-9 bg-background text-sm"
+									bind:value={pet.notes}
+									placeholder="เช่น พันธุ์ / สี"
+								/>
+							</div>
+							<div
+								class="flex h-9 shrink-0 items-center gap-1.5 rounded-md border bg-background px-3"
+							>
+								<Checkbox
+									id="pet_cage_{pet.id}"
+									checked={pet.has_cage}
+									onCheckedChange={(v) => (pet.has_cage = !!v)}
+								/>
+								<label for="pet_cage_{pet.id}" class="cursor-pointer text-xs whitespace-nowrap">
+									มีกรง
+								</label>
+							</div>
+							<Button
+								type="button"
+								variant="outline"
+								size="icon"
+								class="h-9 w-9 shrink-0 bg-background"
+								onclick={() => removePet(pet.id)}
+							>
+								<X class="h-4 w-4 text-muted-foreground" />
+							</Button>
+						</div>
+					{/each}
 				</div>
-
-				<!-- Image Preview -->
-				{#if petImageUrl}
-					<div class="relative mt-2 h-[120px] w-full overflow-hidden rounded-md border bg-muted">
-						<img src={petImageUrl} alt="Pet preview" class="h-full w-full object-cover" />
-						<Button
-							variant="secondary"
-							size="icon"
-							class="absolute top-2 right-2 h-6 w-6 rounded-full opacity-80 hover:opacity-100"
-							onclick={() => (petImageUrl = null)}
-						>
-							<X class="h-3 w-3" />
-						</Button>
-					</div>
-				{/if}
 			{/if}
 		</div>
 
@@ -203,10 +261,12 @@
 			class="h-12 w-[48%] bg-[#003B71] text-base font-medium hover:bg-[#002a50]"
 			onclick={() =>
 				onNext({
-					hasPets,
-					petDescription,
-					hasCage,
-					petImageUrl,
+					pets: petRows.map((p) => ({
+						species: p.species,
+						count: Number(p.count) || 1,
+						notes: p.notes.trim() || undefined,
+						has_cage: p.has_cage
+					})),
 					assetDescription,
 					vehicles: vehicleRows.map((v) => ({
 						type: v.type,

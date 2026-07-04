@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { SvelteSet } from 'svelte/reactivity';
-	import type { EvacueeInput, HouseholdInput, Evacuee, Household } from '../domain/people';
+	import type {
+		EvacueeInput,
+		HouseholdInput,
+		Evacuee,
+		Household,
+		PetGroup
+	} from '../domain/people';
 	import SearchSection from './evacuee-search.svelte';
 	import EwarSymptomSection from './evacuee-ewar-symptom.svelte';
 	import RegistrationSection from './evacuee-registration.svelte';
@@ -106,10 +112,7 @@
 	}
 
 	async function handleFinalSubmit(petAssetVehicleData: {
-		hasPets: boolean;
-		petDescription: string;
-		hasCage: boolean;
-		petImageUrl: string | null;
+		pets: PetGroup[];
 		assetDescription: string;
 		vehicles: { type: 'car' | 'motorcycle' | 'other'; license_plate: string | null }[];
 	}) {
@@ -135,27 +138,8 @@
 				throw new Error('ไม่พบข้อมูลผู้ประสบภัยที่กำลังลงทะเบียน');
 			}
 
-			// 2. Map pets
-			const pets: any[] = [];
-			if (petAssetVehicleData.hasPets && petAssetVehicleData.petDescription) {
-				const desc = petAssetVehicleData.petDescription.toLowerCase();
-				let species: 'dog' | 'cat' | 'bird' | 'other' = 'other';
-				if (desc.includes('dog') || desc.includes('หมา') || desc.includes('สุนัข')) {
-					species = 'dog';
-				} else if (desc.includes('cat') || desc.includes('แมว')) {
-					species = 'cat';
-				} else if (desc.includes('bird') || desc.includes('นก')) {
-					species = 'bird';
-				}
-
-				pets.push({
-					species,
-					count: 1,
-					notes: petAssetVehicleData.petDescription,
-					has_cage: petAssetVehicleData.hasCage,
-					image_url: petAssetVehicleData.petImageUrl
-				});
-			}
+			// 2. Map pets — a household may bring several (schema pets[])
+			const pets = petAssetVehicleData.pets.filter((p) => p.count > 0);
 
 			// 3. Map assets
 			let assets: any = null;
