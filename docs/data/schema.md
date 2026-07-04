@@ -321,6 +321,7 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 ### 2.14 `sop_override` — `sop_override:{ulid}`
 
 > **schema_v 2** — อัปเดต ratios whitelist 3 → 20 canonical keys (CR-006 amendment 2026-06-25 + CR-021). สร้างเฉพาะศูนย์ที่ต้องการใช้สัดส่วนทรัพยากรต่างจาก Master Profile ส่วนกลาง (ตาม [CR-006](../changes/CR-006-sop-profile-master-override.md) และ [CR-015](../changes/CR-015-sop-ratio-schema-two-tier.md))
+> **Migration Note:** `schema_v` bumped due to CR-006 / CR-021. No production backfill needed. Devs must re-run the seed script (which now auto-overwrites) or delete stale catalog docs. **Breaking Change:** The renaming to `toilet_per_person` requires manual re-entry; no auto-mapping is provided per CR-006.
 > schema_v 1 — สร้าง doc type ใหม่ สำหรับ per-shelter override (CR-006)
 
 | Field | ชนิด | req | หมายเหตุ |
@@ -445,12 +446,13 @@ interface MasterDataItem {
 ### 4.4 `sop_profile` — `sop_profile:{ulid}`
 
 > **schema_v 3** — อัปเดต ratios whitelist 3 → 20 canonical keys (CR-006 amendment 2026-06-25 + CR-021). เพิ่ม `SOP_RATIO_KIND` (multiply/divide/threshold) สำหรับ calc engine (T-31).
+> **Migration Note:** `schema_v` bumped due to CR-006 / CR-021. No production backfill needed. Devs must re-run the seed script (which now auto-overwrites) or delete stale catalog docs. **Breaking Change:** The renaming to `toilet_per_person` requires manual re-entry; no auto-mapping is provided per CR-006.
 > schema_v 2 — ย้ายมาอยู่ catalog DB, ตัด `shelter_code` ออกเพื่อใช้เป็น Master Profile ส่วนกลาง (ตาม [CR-006](../changes/CR-006-sop-profile-master-override.md) และ [CR-015](../changes/CR-015-sop-ratio-schema-two-tier.md))
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `name` | str | req | เช่น "Sphere baseline", "ปภ. มาตรฐาน" |
-| `ratios` | {`water_l_per_person_day`:num, `drinking_water_l_per_person_day`:num, `cooking_water_l_per_person_day`:num, `hygiene_water_l_per_person_day`:num, `kcal_per_adult_day`:num, `people_per_tap`:num, `people_per_handpump`:num, `people_per_open_well`:num, `people_per_laundry`:num, `people_per_bathing`:num, `people_per_toilet_female`:num, `people_per_toilet_male`:num, `people_per_dining_point_adult`:num, `people_per_dining_point_child`:num, `m2_per_person_living`:num, `m2_per_person_living_cold`:num, `m2_per_person_total`:num, `max_waterpoint_distance_m`:num, `max_queue_minutes`:num, `people_per_volunteer`:num} | req | ratios แก้แบบ partial ได้ (อย่างน้อย 1 key) — ไม่บังคับครบ 20 keys ตอนสร้าง/แก้ (CR-006/CR-018 invariant #2) |
+| `ratios` | {`water_l_per_person_day`:num, `drinking_water_l_per_person_day`:num, `cooking_water_l_per_person_day`:num, `hygiene_water_l_per_person_day`:num, `kcal_per_adult_day`:num, `people_per_tap`:num, `people_per_handpump`:num, `people_per_open_well`:num, `people_per_laundry`:num, `people_per_bathing`:num, `people_per_toilet_female`:num, `people_per_toilet_male`:num, `people_per_dining_point_adult`:num, `people_per_dining_point_child`:num, `m2_per_person_living`:num, `m2_per_person_living_cold`:num, `m2_per_person_total`:num, `max_waterpoint_distance_m`:num, `max_queue_minutes`:num, `people_per_volunteer`:num} | req | ratios ต้องระบุคีย์ครบถ้วน (Full Ratios Requirement) ใช้ 20-key strict schema ทั้ง Master และ Override |
 | `version` | int | req | — |
 | `active` | bool | req | ศูนย์เลือกใช้ profile ที่ active |
 
