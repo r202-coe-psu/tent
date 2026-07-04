@@ -8,14 +8,16 @@ import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { operationsRepository } from '../data/operations.pouch';
-import type { ReceiveInput, DistributeInput, TransferInput } from '../domain/operations';
+import type { ReceiveInput, DistributeInput, TransferInput, StockTransfer } from '../domain/operations';
 import { toast } from 'svelte-sonner';
 
 export const operationsKeys = {
 	all: ['operations'] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
-	balance: () => [...operationsKeys.all, 'balance'] as const
+	balance: () => [...operationsKeys.all, 'balance'] as const,
+	transfers: () => [...operationsKeys.all, 'transfers'] as const,
+	incomingTransfers: () => [...operationsKeys.transfers(), 'incoming'] as const
 };
 
 /**
@@ -104,6 +106,42 @@ export const useCreateAndDispatchTransfer = () => {
 };
 
 /**
+ * Query hook to retrieve incoming transfers.
+ */
+export const useIncomingTransfers = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.incomingTransfers(),
+		queryFn: () => operationsRepository().listIncomingTransfers()
+	}));
+
+/**
+ * Mutation hook to receive a transfer and record the inbound stock.
+ */
+export const useReceiveTransfer = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({
+			transfer,
+			receivedItems,
+			ctx
+		}: {
+			transfer: StockTransfer;
+			receivedItems: { item_id: string; qty: number }[];
+			ctx: AuthorContext;
+		}) => {
+			return operationsRepository().receiveTransfer(transfer, receivedItems, ctx);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		},
+		onError: (err: unknown) => {
+			console.error('[operations] receiveTransfer failed:', err);
+			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการรับพัสดุ');
+		}
+	}));
+};
+
+/**
  * Starts a live query changes feed for operations (Stock Ledger documents).
  * Automatically invalidates active queries when database changes happen.
  */
@@ -112,6 +150,8 @@ export function startOperationsLiveQuery(queryClient: QueryClient): LiveQueryHan
 		switch (type) {
 			case 'stock_ledger':
 				return [operationsKeys.ledger(), operationsKeys.balance()];
+			case 'stock_transfer':
+				return [operationsKeys.transfers()];
 			default:
 				return [];
 		}
