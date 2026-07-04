@@ -26,18 +26,16 @@ export {
 export {
 	sopRatioKeys,
 	useActiveSopProfile,
+	useActiveSopRatio,
 	useSopProfiles,
-	getActiveSopProfile
+	getActiveSopProfile,
+	sopVersionKeys
 } from './application/queries';
-
-// Active ratio (override ?? master per CR-006)
-export { useActiveSopRatio } from './application/use-active-sop-ratio';
 
 // Version history
 export {
 	useOverrideVersionHistory,
-	useMasterVersionHistory,
-	sopVersionKeys
+	useMasterVersionHistory
 } from './application/use-version-history';
 
 // Version creation mutations
@@ -49,5 +47,4 @@ export {
 } from './application/use-create-version';
 
 // Live-sync wiring (call once per layout, pass QueryClient)
-export { startSopRatioSync } from './application/sop-ratio-sync';
-
+export { startSopRatioLiveQuery } from './application/sop-ratio-sync';

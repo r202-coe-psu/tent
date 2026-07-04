@@ -88,8 +88,17 @@ export function useCreateMasterVersion() {
 
 	return createMutation(() => ({
 		mutationFn: async ({ prev, changes, reason, createdBy }: CreateMasterVersionInput) => {
+			// If changes is empty {}, Object.keys yields [] and hasChanges is false.
+			// This safely treats an empty payload as an implicit no-op branch.
+			const hasChanges = Object.keys(changes).some((key) => {
+				const val = changes[key as SopRatioKey];
+				return val !== undefined && prev.ratios[key as SopRatioKey] !== val;
+			});
+			if (!hasChanges) {
+				return { profile: prev, deactivatedPrev: null, audit: null };
+			}
+
 			// Step 1: Domain — pure function, no I/O.
-			// Returns { deactivatedPrev, profile, audit } or idempotent no-op.
 			const result = createNewVersion(prev, changes, reason, { createdBy });
 
 			// Step 2: Persist — atomic bulkDocs write via PouchDB repository.
@@ -107,8 +116,7 @@ export function useCreateMasterVersion() {
 			toast.success('บันทึกเวอร์ชัน Master SOP สำเร็จ');
 		},
 
-		onError: (err: Error) => {
-			console.error('[useCreateMasterVersion]', err);
+		onError: () => {
 			toast.error('ไม่สามารถบันทึก Master SOP ได้ — กรุณาลองใหม่อีกครั้ง');
 		}
 	}));
@@ -147,9 +155,17 @@ export function useCreateOverrideVersion() {
 			// Guard: prevent cross-shelter writes — ctx.shelterCode must match current shelter.
 			// This is a defense-in-depth check; the route guard should prevent unauthorized access.
 			if (ctx.shelterCode !== SHELTER_CODE) {
-				throw new Error(
-					`shelterCode mismatch: expected ${SHELTER_CODE}, got ${ctx.shelterCode}`
-				);
+				throw new Error(`shelterCode mismatch: expected ${SHELTER_CODE}, got ${ctx.shelterCode}`);
+			}
+
+			// If changes is empty {}, Object.keys yields [] and hasChanges is false.
+			// This safely treats an empty payload as an implicit no-op branch.
+			const hasChanges = Object.keys(changes).some((key) => {
+				const val = changes[key as SopRatioKey];
+				return val !== undefined && prev.ratios[key as SopRatioKey] !== val;
+			});
+			if (!hasChanges) {
+				return { profile: prev, deactivatedPrev: null, audit: null };
 			}
 
 			const result = createNewVersion(prev, changes, reason, ctx);
@@ -166,8 +182,7 @@ export function useCreateOverrideVersion() {
 			toast.success('บันทึกเวอร์ชัน Override SOP สำเร็จ');
 		},
 
-		onError: (err: Error) => {
-			console.error('[useCreateOverrideVersion]', err);
+		onError: () => {
 			toast.error('ไม่สามารถบันทึก Override SOP ได้ — กรุณาลองใหม่อีกครั้ง');
 		}
 	}));

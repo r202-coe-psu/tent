@@ -59,7 +59,7 @@ describe('SOP Ratio Domain', () => {
 			expect(profile.ratios.people_per_volunteer).toBe(50);
 			expect(profile.type).toBe('sop_profile');
 			expect(profile.schema_v).toBe(SOP_MASTER_SCHEMA_VERSION);
-			expect((profile as any).shelter_code).toBeUndefined(); // Master has no shelter_code
+			expect((profile as Record<string, unknown>).shelter_code).toBeUndefined(); // Master has no shelter_code
 			expect(profile._id.startsWith('sop_profile:')).toBe(true);
 
 			expect(audit.action).toBe('created');

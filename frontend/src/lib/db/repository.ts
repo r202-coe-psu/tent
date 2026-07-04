@@ -1,5 +1,3 @@
-import type { BaseDoc } from './model';
-
 /**
  * Reusable primitive #1 — a thin, type-agnostic wrapper around a single local
  * PouchDB database. Feature data layers build their concrete repositories on
