@@ -4,6 +4,7 @@
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Printer from '@lucide/svelte/icons/printer';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
+	import { maskNationalId } from '$lib/features/people';
 	import type { Evacuee, Medical, Screening } from '$lib/features/people';
 
 	interface StatusInfo {
@@ -60,7 +61,7 @@
 				{:else}
 					NATIONAL ID:
 				{/if}
-				{evacuee.person_id?.number || '—'}
+				{maskNationalId(evacuee.person_id?.number)}
 			</p>
 
 			<div class="mt-2 flex flex-wrap items-center gap-2">
