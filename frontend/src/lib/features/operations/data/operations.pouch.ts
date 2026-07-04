@@ -7,9 +7,13 @@ import {
 	stockBalance,
 	createReceiveEntry,
 	createDistributeEntry,
+	createTransfer,
+	dispatchTransfer,
 	type StockLedger,
 	type ReceiveInput,
-	type DistributeInput
+	type DistributeInput,
+	type StockTransfer,
+	type TransferInput
 } from '../domain/operations';
 import type { OperationsRepository } from './operations.repository';
 
@@ -66,6 +70,38 @@ export class OperationsPouchRepository implements OperationsRepository {
 		}
 
 		return this.addLedgerEntry(entry);
+	}
+
+	async createTransfer(input: TransferInput, ctx: AuthorContext): Promise<StockTransfer> {
+		const transfer = createTransfer(input, ctx);
+		return this.repo.put(transfer);
+	}
+
+	async dispatchTransfer(
+		transfer: StockTransfer,
+		ctx: AuthorContext
+	): Promise<{ transfer: StockTransfer; ledgers: StockLedger[] }> {
+		const { transfer: updatedTransfer, ledgers } = dispatchTransfer(transfer, ctx);
+
+		// WARNING: Similar to distributeStock, this read-then-write is not atomic.
+		const balances = await this.getBalance();
+		for (const item of updatedTransfer.items) {
+			const currentQty = balances.get(item.item_id) ?? 0;
+			const requestedQty = item.qty;
+			if (currentQty < requestedQty) {
+				throw new Error(
+					`Insufficient stock for item ${item.item_id} (requested ${requestedQty}, have ${currentQty})`
+				);
+			}
+		}
+
+		// Persist the updated transfer document
+		const savedTransfer = await this.repo.put(updatedTransfer);
+
+		// Persist the ledger entries
+		const savedLedgers = await Promise.all(ledgers.map((l) => this.repo.put(l)));
+
+		return { transfer: savedTransfer, ledgers: savedLedgers };
 	}
 }
 

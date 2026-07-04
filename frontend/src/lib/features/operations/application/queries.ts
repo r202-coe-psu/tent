@@ -8,7 +8,7 @@ import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import { shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { operationsRepository } from '../data/operations.pouch';
-import type { ReceiveInput, DistributeInput } from '../domain/operations';
+import type { ReceiveInput, DistributeInput, TransferInput } from '../domain/operations';
 import { toast } from 'svelte-sonner';
 
 export const operationsKeys = {
@@ -78,6 +78,27 @@ export const useDistributeStock = () => {
 		onError: (err: unknown) => {
 			console.error('[operations] distributeStock failed:', err);
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการแจกจ่ายพัสดุ');
+		}
+	}));
+};
+
+/**
+ * Mutation hook to create and immediately dispatch a transfer to another shelter.
+ */
+export const useCreateAndDispatchTransfer = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({ input, ctx }: { input: TransferInput; ctx: AuthorContext }) => {
+			const repo = operationsRepository();
+			const transfer = await repo.createTransfer(input, ctx);
+			return repo.dispatchTransfer(transfer, ctx);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		},
+		onError: (err: unknown) => {
+			console.error('[operations] createAndDispatchTransfer failed:', err);
+			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการสร้างรายการโอน');
 		}
 	}));
 };
