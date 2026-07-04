@@ -67,9 +67,9 @@
 		donationStore.isSubmitting = true;
 		let token = '';
 
-		if (siteKey && (window as any).grecaptcha) {
+		if (siteKey && window.grecaptcha) {
 			try {
-				token = await (window as any).grecaptcha.execute(siteKey, { action: 'donate' });
+				token = await window.grecaptcha.execute(siteKey, { action: 'donate' });
 			} catch (e) {
 				console.error('reCAPTCHA execute error:', e);
 				donationStore.errorMessage =
@@ -86,7 +86,7 @@
 		let fromTime = donationStore.slotTime.split('-')[0]?.trim() || '00:00';
 		let toTime = donationStore.slotTime.split('-')[1]?.trim() || '23:59';
 
-		let logistics: any = {
+		let logistics: Record<string, unknown> = {
 			delivery_method: donationStore.deliveryMethod
 		};
 
@@ -143,7 +143,7 @@
 				if (donationStore.reachedStep < 4) donationStore.reachedStep = 4;
 				toast.success('ยืนยันการจองคิวบริจาคสำเร็จ!');
 			}
-		} catch (err) {
+		} catch {
 			donationStore.errorMessage = 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์';
 			toast.error(donationStore.errorMessage);
 		} finally {
@@ -249,7 +249,7 @@
 					<SelectValue placeholder="เลือกศูนย์พักพิง" />
 				</SelectTrigger>
 				<SelectContent class="font-['Prompt']">
-					{#each shelters as shelter}
+					{#each shelters as shelter (shelter.code)}
 						<SelectItem value={shelter.code} label={shelter.name}>{shelter.name}</SelectItem>
 					{/each}
 					{#if isLoading}
@@ -275,10 +275,11 @@
 				ข้อมูลนี้สำคัญมาก เพื่อให้จุดรับของกะพื้นที่จอดและเตรียมคนยกของ
 			</p>
 			<div class="grid grid-cols-2 gap-4 md:grid-cols-4">
-				{#each ['motorcycle', 'car', 'pickup', 'truck'] as vtype}
+				{#each ['motorcycle', 'car', 'pickup', 'truck'] as vtype (vtype)}
 					<Button
 						variant="outline"
-						onclick={() => (donationStore.vehicleType = vtype as any)}
+						onclick={() =>
+							(donationStore.vehicleType = vtype as 'motorcycle' | 'car' | 'pickup' | 'truck')}
 						class="h-auto rounded-lg border py-3 text-sm font-medium transition 
 					{donationStore.vehicleType === vtype
 							? 'border-transparent bg-warning text-warning-foreground shadow-sm hover:bg-warning/90'
@@ -371,7 +372,7 @@
 				</div>
 
 				<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-					{#each timeSlots as slot}
+					{#each timeSlots as slot (slot.label)}
 						<Button
 							variant="outline"
 							onclick={() => {
