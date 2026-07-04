@@ -8,7 +8,9 @@ import {
 	SOP_RATIO_KEYS,
 	SOP_RATIO_KIND,
 	SOP_MASTER_SCHEMA_VERSION,
-	SOP_OVERRIDE_SCHEMA_VERSION
+	SOP_OVERRIDE_SCHEMA_VERSION,
+	isSopMaster,
+	isSopOverride
 } from './sop-ratio';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -69,34 +71,23 @@ describe('SOP Ratio Domain', () => {
 			expect(() => sopMasterSchema.parse(profile)).not.toThrow();
 		});
 
-		// Master ratios use existential constraint (>=1 key), not total constraint —
-		// per CR-006 §Doc shape + CR-018 invariant #2. Override is total (see below).
-		it('should create master profile when ratios has only 1 key (partial, CR-006/CR-018 #2)', () => {
+		// Master ratios now use total constraint (full canonical set required,
+		// CR-015 / Option 1) — must NOT accept partial ratios.
+		it('should reject master profile when ratios is only partial (CR-015 total constraint)', () => {
 			expect(() => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ water_l_per_person_day: 15 },
+					{ water_l_per_person_day: 15 } as any,
 					masterCtx
 				);
-			}).not.toThrow();
+			}).toThrow();
 		});
 
-		it('should create master profile when ratios has multiple keys but not the full 20 (partial)', () => {
-			expect(() => {
-				createInitialProfile(
-					'sop_profile',
-					'Sphere baseline',
-					{ water_l_per_person_day: 15, people_per_volunteer: 50 },
-					masterCtx
-				);
-			}).not.toThrow();
-		});
-
-		it('should reject master profile when ratios is empty {} (CR-018 invariant #2)', () => {
+		it('should reject master profile when ratios is empty {}', () => {
 			expect(() => {
 				createInitialProfile('sop_profile', 'Sphere baseline', {}, masterCtx);
-			}).toThrow(/ratios ต้องมีอย่างน้อย 1 key/);
+			}).toThrow();
 		});
 
 		it('should reject non-whitelist or deprecated keys (strict check) — full payload', () => {
@@ -352,6 +343,84 @@ describe('SOP Ratio Domain', () => {
 			expect(SOP_RATIO_KIND.people_per_volunteer).toBe('divide');
 			expect(SOP_RATIO_KIND.water_l_per_person_day).toBe('multiply');
 			expect(SOP_RATIO_KIND.max_queue_minutes).toBe('threshold');
+		});
+	});
+
+	describe('Type Guards (isSopMaster & isSopOverride) - Strict Version Rejection', () => {
+		const baseMasterMock = {
+			_id: 'sop_profile:baseline',
+			type: 'sop_profile',
+			name: 'Sphere baseline',
+			version: 1,
+			active: true,
+			created_at: '2026-07-03T00:00:00.000Z',
+			updated_at: '2026-07-03T00:00:00.000Z',
+			created_by: 'tester',
+			ratios: validRatios
+		};
+
+		it('should accept current v3 master profile and reject legacy v2 master profile', () => {
+			const currentMaster = { ...baseMasterMock, schema_v: 3 };
+			const legacyMaster = { ...baseMasterMock, schema_v: 2 };
+
+			expect(isSopMaster(currentMaster)).toBe(true);
+			expect(isSopMaster(legacyMaster)).toBe(false); 
+		});
+
+		it('should strictly reject invalid structures, wrong types, and non-objects for Master', () => {
+			expect(isSopMaster(null)).toBe(false);
+			expect(isSopMaster(undefined)).toBe(false);
+			expect(isSopMaster('string-payload')).toBe(false);
+			expect(isSopMaster([])).toBe(false);
+			expect(isSopMaster({})).toBe(false);
+			
+			expect(isSopMaster({ ...baseMasterMock, schema_v: 3, type: 'invalid_type' })).toBe(false);
+		});
+
+		it('should accept current v2 override and reject legacy v1 override', () => {
+			const baseOverrideMock = {
+				_id: 'sop_override:SH001:baseline',
+				type: 'sop_override',
+				name: 'Winter Override',
+				version: 1,
+				active: true,
+				shelter_code: 'SH001',
+				base_profile_id: 'sop_profile:baseline',
+				created_at: '2026-07-03T00:00:00.000Z',
+				updated_at: '2026-07-03T00:00:00.000Z',
+				created_by: 'tester',
+				ratios: validRatios
+			};
+
+			const currentOverride = { ...baseOverrideMock, schema_v: 2 };
+			const legacyOverride = { ...baseOverrideMock, schema_v: 1 };
+
+			expect(isSopOverride(currentOverride)).toBe(true);
+			expect(isSopOverride(legacyOverride)).toBe(false); 
+		});
+
+		it('should strictly reject invalid structures, wrong types, and non-objects for Override', () => {
+			const baseOverrideMock = {
+				_id: 'sop_override:SH001:baseline',
+				type: 'sop_override',
+				name: 'Winter Override',
+				version: 1,
+				active: true,
+				shelter_code: 'SH001',
+				base_profile_id: 'sop_profile:baseline',
+				created_at: '2026-07-03T00:00:00.000Z',
+				updated_at: '2026-07-03T00:00:00.000Z',
+				created_by: 'tester',
+				ratios: validRatios
+			};
+
+			expect(isSopOverride(null)).toBe(false);
+			expect(isSopOverride(undefined)).toBe(false);
+			expect(isSopOverride(42)).toBe(false);
+			expect(isSopOverride([])).toBe(false);
+			expect(isSopOverride({})).toBe(false);
+			
+			expect(isSopOverride({ ...baseOverrideMock, schema_v: 2, type: 'invalid_type' })).toBe(false);
 		});
 	});
 });

@@ -93,7 +93,7 @@ export const sopMasterSchema = z.object({
 	name: z.string().min(1),
 	// Master ratios use the partial schema (>=1 key) per CR-006/CR-018 invariant #2 —
 	// unlike sop_override, master is NOT required to hold the full canonical set.
-	ratios: partialRatiosSchema,
+	ratios: ratiosSchema,
 	version: z.number().int().positive(),
 	active: z.boolean()
 });
