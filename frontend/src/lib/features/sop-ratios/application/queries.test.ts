@@ -5,6 +5,7 @@ import { useCreateMasterVersion, useCreateOverrideVersion } from './use-create-v
 import { useMasterVersionHistory, useOverrideVersionHistory } from './use-version-history';
 import { sopRatioKeys, sopVersionKeys } from './queries';
 import { SHELTER_CODE } from '$lib/db/shelter';
+import { SOP_MASTER_SCHEMA_VERSION, SOP_OVERRIDE_SCHEMA_VERSION } from '../domain/sop-ratio';
 
 // Mock svelte-sonner to prevent error output in tests
 vi.mock('svelte-sonner', () => ({
@@ -61,6 +62,29 @@ describe('SOP Ratios Application Hooks', () => {
 		vi.clearAllMocks();
 	});
 
+	const mockRatios = {
+		water_l_per_person_day: 15,
+		drinking_water_l_per_person_day: 3,
+		cooking_water_l_per_person_day: 6,
+		hygiene_water_l_per_person_day: 6,
+		kcal_per_adult_day: 2000,
+		people_per_tap: 80,
+		people_per_handpump: 500,
+		people_per_open_well: 400,
+		people_per_laundry: 50,
+		people_per_bathing: 100,
+		people_per_toilet_female: 20,
+		people_per_toilet_male: 20,
+		people_per_dining_point_adult: 100,
+		people_per_dining_point_child: 50,
+		m2_per_person_living: 3.5,
+		m2_per_person_living_cold: 4.5,
+		m2_per_person_total: 45,
+		max_waterpoint_distance_m: 500,
+		max_queue_minutes: 30,
+		people_per_volunteer: 50
+	};
+
 	describe('useCreateOverrideVersion', () => {
 		const validOverrideInput = {
 			prev: {
@@ -70,17 +94,13 @@ describe('SOP Ratios Application Hooks', () => {
 				version: 1,
 				active: true,
 				type: 'sop_override' as const,
-				schema_v: 1 as const,
+				schema_v: SOP_OVERRIDE_SCHEMA_VERSION as any,
 				shelter_code: SHELTER_CODE,
 				base_profile_id: 'sop_profile:baseline',
 				created_at: '2026-07-03T00:00:00.000Z',
 				updated_at: '2026-07-03T00:00:00.000Z',
 				created_by: 'tester',
-				ratios: {
-					water_l_per_person_day: 15,
-					rice_g_per_person_meal: 200,
-					toilet_per_person: 0.05
-				}
+				ratios: mockRatios
 			},
 			changes: {
 				water_l_per_person_day: 20
@@ -177,15 +197,11 @@ describe('SOP Ratios Application Hooks', () => {
 				version: 1,
 				active: true,
 				type: 'sop_profile' as const,
-				schema_v: 2 as const,
+				schema_v: SOP_MASTER_SCHEMA_VERSION as any,
 				created_at: '2026-07-03T00:00:00.000Z',
 				updated_at: '2026-07-03T00:00:00.000Z',
 				created_by: 'tester',
-				ratios: {
-					water_l_per_person_day: 15,
-					rice_g_per_person_meal: 200,
-					toilet_per_person: 0.05
-				}
+				ratios: mockRatios
 			},
 			changes: {
 				water_l_per_person_day: 20
