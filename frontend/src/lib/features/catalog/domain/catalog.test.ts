@@ -1,5 +1,3 @@
-// Ai เขียน
-
 import { describe, it, expect } from 'vitest';
 import {
 	createItemMaster,
