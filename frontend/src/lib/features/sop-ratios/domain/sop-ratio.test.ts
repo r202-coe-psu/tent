@@ -78,7 +78,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ water_l_per_person_day: 15 } as any,
+					{ water_l_per_person_day: 15 } as unknown as Record<string, number>,
 					masterCtx
 				);
 			}).toThrow();
@@ -95,7 +95,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ ...validRatios, invalid_key: 10 } as any,
+					{ ...validRatios, invalid_key: 10 } as unknown as Record<string, number>,
 					masterCtx
 				);
 			}).toThrow();
@@ -104,7 +104,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ ...validRatios, rice_g_per_person_meal: 200 } as any,
+					{ ...validRatios, rice_g_per_person_meal: 200 } as unknown as Record<string, number>,
 					masterCtx
 				);
 			}).toThrow();
@@ -113,7 +113,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ ...validRatios, caregiver_per_elderly: 2 } as any,
+					{ ...validRatios, caregiver_per_elderly: 2 } as unknown as Record<string, number>,
 					masterCtx
 				);
 			}).toThrow();
@@ -124,7 +124,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ water_l_per_person_day: 15, fake_unauthorized_key: 999 } as any,
+					{ water_l_per_person_day: 15, fake_unauthorized_key: 999 } as unknown as Record<string, number>,
 					masterCtx
 				);
 			}).toThrow();
@@ -182,7 +182,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_override',
 					'Winter Override',
-					{ water_l_per_person_day: 15 } as any,
+					{ water_l_per_person_day: 15 } as unknown as Record<string, number>,
 					overrideCtx
 				);
 			}).toThrow();
