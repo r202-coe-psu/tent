@@ -14,8 +14,11 @@
  * Semver governance (what counts as major/minor/patch) lives in the ADR, not here.
  * NOTE: changing `GAP_EPSILON` alters observable `status` classification and is
  * therefore a FORMULA_V-governed formula change, not silent tuning.
+ *
+ * 1.1.0 (T-31.3) — added the additive `data_status` field on `ResourceCalcResult`
+ *                  (data-availability discriminator). No math/`status` change → Minor.
  */
-export const FORMULA_V = '1.0.0';
+export const FORMULA_V = '1.1.0';
 
 /** Opaque resource id. Non-empty & unique are caller invariants (engine does not validate). */
 export type ResourceKey = string;
@@ -24,6 +27,24 @@ export type ResourceKind = 'multiply' | 'divide' | 'threshold';
 
 /** BUSINESS outcome only — no validation/runtime states here (see the truth table in the plan). */
 export type ResourceStatus = 'ok' | 'gap' | 'surplus' | 'constraint' | 'insufficient_data';
+
+/**
+ * DATA-AVAILABILITY axis only — answers "was full computation possible?", orthogonal to the
+ * business `status`. Set purely from input availability + computational validity (ratio/have
+ * presence, structural validity, overflow); NEVER from the business outcome (the sign/magnitude of
+ * `gap`/`need` or the `status` value) — a valid computation yielding a huge gap is still `complete`.
+ *
+ * NOT exhaustive of business situations: valid business facts like `occupancy = 0` / `stock = 0` are
+ * successful computations and stay `complete` — do NOT add values like `zero_occupancy`/`stock_zero`
+ * here (that would recreate the axis-mixing this discriminator avoids; they are already derivable
+ * from `need`/`have`/`gap`). `invalid_input` intentionally mirrors `!input_valid` — the two must
+ * evolve together under FORMULA_V.
+ */
+export type DataStatus =
+	| 'complete' // no data-availability issue occurred (NOT "business goal achieved" — that is `status: 'ok'`)
+	| 'ratio_missing' // ratio not provided for this item → cannot compute need
+	| 'stock_unsynced' // have === null → cannot compute gap
+	| 'invalid_input'; // structurally bad datum / overflow (=== !input_valid)
 
 /** One resolved resource line — the caller supplies kind + ratio + have. */
 export interface ResourceInput {
@@ -58,6 +79,8 @@ export interface ResourceCalcResult {
 	/** RAW `need − have`; null for threshold/overflow/no-verdict. Sign→status uses `GAP_EPSILON`, not `===`. */
 	readonly gap: number | null;
 	readonly status: ResourceStatus;
+	/** Data-availability axis (orthogonal to `status`). Tells *why* a row is `insufficient_data`. */
+	readonly data_status: DataStatus;
 	readonly as_of: string;
 }
 
@@ -85,7 +108,14 @@ function assertNever(x: never): never {
 function invalidResult(
 	base: Pick<ResourceCalcResult, 'ordinal' | 'key' | 'kind' | 'ratio' | 'have' | 'as_of'>
 ): ResourceCalcResult {
-	return { ...base, input_valid: false, need: null, gap: null, status: 'insufficient_data' };
+	return {
+		...base,
+		input_valid: false,
+		need: null,
+		gap: null,
+		status: 'insufficient_data',
+		data_status: 'invalid_input'
+	};
 }
 
 function calcRow(
@@ -108,7 +138,14 @@ function calcRow(
 
 	// 2. Absent data — ratio simply not provided yet (nothing wrong, just missing).
 	if (r.ratio == null) {
-		return { ...base, input_valid: true, need: null, gap: null, status: 'insufficient_data' };
+		return {
+			...base,
+			input_valid: true,
+			need: null,
+			gap: null,
+			status: 'insufficient_data',
+			data_status: 'ratio_missing'
+		};
 	}
 
 	// 3. Kind semantics (ratio valid & present; occupancy valid).
@@ -116,7 +153,14 @@ function calcRow(
 	switch (r.kind) {
 		case 'threshold':
 			// Quality ceiling, not a quantity. `have`/`ratio` echoed but never affect status.
-			return { ...base, input_valid: true, need: null, gap: null, status: 'constraint' };
+			return {
+				...base,
+				input_valid: true,
+				need: null,
+				gap: null,
+				status: 'constraint',
+				data_status: 'complete'
+			};
 		case 'multiply':
 			need = occupancy * r.ratio;
 			break;
@@ -133,7 +177,14 @@ function calcRow(
 	}
 
 	if (r.have == null) {
-		return { ...base, input_valid: true, need, gap: null, status: 'insufficient_data' };
+		return {
+			...base,
+			input_valid: true,
+			need,
+			gap: null,
+			status: 'insufficient_data',
+			data_status: 'stock_unsynced'
+		};
 	}
 
 	const gap = need - r.have;
@@ -142,7 +193,8 @@ function calcRow(
 	else if (gap < -GAP_EPSILON) status = 'surplus';
 	else status = 'ok';
 
-	return { ...base, input_valid: true, need, gap, status };
+	// Gap computed successfully — incl. valid occupancy=0 (need 0) and stock=0 (have 0) rows.
+	return { ...base, input_valid: true, need, gap, status, data_status: 'complete' };
 }
 
 /**
