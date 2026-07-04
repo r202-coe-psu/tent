@@ -73,6 +73,13 @@
 		open = false;
 	}
 
+	// Dialog open/close from escape/overlay: mirror the flag and discard pending
+	// overrides on close, same as the cancel button's close().
+	function handleOpenChange(v: boolean) {
+		open = v;
+		if (!v) edits = {};
+	}
+
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		if (!plan || !requested || 'error' in requested) return;
@@ -95,7 +102,7 @@
 	}
 </script>
 
-<Dialog.Root {open} onOpenChange={(v) => ((open = v), v || (edits = {}))}>
+<Dialog.Root {open} onOpenChange={handleOpenChange}>
 	<Dialog.Content class="sm:max-w-xl">
 		<Dialog.Header class="min-w-0">
 			<Dialog.Title>เบิกวัตถุดิบจากคลัง</Dialog.Title>
@@ -147,15 +154,19 @@
 										</span>
 									</Table.Cell>
 									<Table.Cell class="px-3 text-right">
-										<Input
-											type="number"
-											min="0"
-											max={r.a.qty_issuable}
-											value={r.qty}
-											oninput={(e) => (edits[r.key] = Number(e.currentTarget.value))}
-											class="ml-auto h-8 w-24 [appearance:textfield] text-right text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-											disabled={r.a.qty_issuable <= 0}
-										/>
+										<div class="flex items-center justify-end gap-1.5">
+											<Input
+												type="number"
+												min="0"
+												max={r.a.qty_issuable}
+												step="any"
+												value={r.qty}
+												oninput={(e) => (edits[r.key] = Number(e.currentTarget.value))}
+												class="h-8 w-24 [appearance:textfield] text-right text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+												disabled={r.a.qty_issuable <= 0}
+											/>
+											<span class="text-xs text-muted-foreground">{r.a.unit}</span>
+										</div>
 									</Table.Cell>
 								</Table.Row>
 							{/each}
