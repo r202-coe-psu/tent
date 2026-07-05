@@ -10,7 +10,7 @@ import {
 	type ReceiveInput
 } from '../domain/operations';
 import type { OperationsRepository } from './operations.repository';
-import { supplyRepository } from '../../supply/data/supply.pouch';
+import { supplyRepository } from '$lib/features/supply';
 
 export { SHELTER_CODE, SHELTER_DB };
 
