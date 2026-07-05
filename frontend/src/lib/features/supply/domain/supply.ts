@@ -10,6 +10,8 @@ import type { BaseDoc } from '$lib/db/model';
  *
  * This module is a minimal T-10 stub: just enough to let T-11 (stock receive)
  * pick items from the catalog and lock the unit per item.
+ * NOTE (CR-013): This is an intentional transition stub. In the future, this should
+ * align with the full `item_master` spec documented in CR-013.
  */
 
 // ---------------------------------------------------------------- enums
