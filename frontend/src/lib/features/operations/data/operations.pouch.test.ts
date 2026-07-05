@@ -150,4 +150,20 @@ describe('OperationsPouchRepository', () => {
 			).rejects.toThrow('Insufficient stock');
 		});
 	});
+
+	it('maintains correct balance under concurrent writes (T-11 DoD)', async () => {
+		// Simulate parallel writes
+		const writes = Array.from({ length: 10 }).map((_, i) =>
+			repo.addLedgerEntry(
+				createReceiveEntry(
+					{ item_id: 'item:concurrent', qty: 10, unit: 'box', source: 'donation' },
+					ctx
+				)
+			)
+		);
+		await Promise.all(writes);
+
+		const balance = await repo.getBalance();
+		expect(balance.get('item:concurrent')).toBe(100);
+	});
 });

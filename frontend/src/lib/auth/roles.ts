@@ -13,11 +13,13 @@ export const SYSTEM_ADMIN = 'system_admin';
 /** Per-shelter manager — may run any staff function in their own shelter. */
 export const SHELTER_MANAGER = 'shelter_manager';
 
+export const WAREHOUSE_STAFF = 'warehouse_staff';
+
 /** Capability roles a shelter_manager is allowed to grant (per spec §1.1). */
 export const STAFF_CAPABILITIES = [
 	'registration_staff',
 	'kitchen_staff',
-	'warehouse_staff'
+	WAREHOUSE_STAFF
 ] as const;
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 
@@ -51,7 +53,7 @@ export function isShelterManager(roles: readonly string[]): boolean {
 
 /** True when the role list includes `warehouse_staff`. */
 export function isWarehouseStaff(roles: readonly string[]): boolean {
-	return roles.includes('warehouse_staff');
+	return roles.includes(WAREHOUSE_STAFF);
 }
 
 /** True when the roles hold a given staff capability (e.g. `kitchen_staff`). */

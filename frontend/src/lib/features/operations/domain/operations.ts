@@ -123,7 +123,7 @@ export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): 
 	const d = stockLedgerInputSchema.parse(input);
 	return makeDoc(
 		'stock_ledger',
-		1,
+		2,
 		{
 			item_id: d.item_id,
 			qty: d.qty,
@@ -168,6 +168,7 @@ export type ReceiveInput = z.input<typeof receiveInputSchema>;
  * when the corresponding SupplyItem is marked as `perishable`. This domain layer
  * cannot validate it because it does not load the catalog item synchronously.
  * See UI enforcement in ReceiveStockForm.svelte.
+ * NOTE: CouchDB `validate_doc_update` should eventually enforce this server-side.
  */
 export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): StockLedger {
 	const d = receiveInputSchema.parse(input);
@@ -185,6 +186,10 @@ export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): Sto
 		case 'manual':
 			reason = 'adjust';
 			break;
+		default: {
+			const _exhaustiveCheck: never = d.source;
+			throw new Error(`Unhandled receive source: ${_exhaustiveCheck}`);
+		}
 	}
 	return createStockLedger(
 		{

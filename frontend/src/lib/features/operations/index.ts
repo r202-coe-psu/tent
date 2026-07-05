@@ -47,11 +47,9 @@ export {
 	type ReceiveInput,
 	type WalkInDonationInput,
 	type CampaignInput,
-	type SpecialRequestInput
-} from './domain/operations';
-// Domain updates for receive
-export { receiveSourceSchema, createReceiveEntry } from './domain/operations';
-export {
+	type SpecialRequestInput,
+	receiveSourceSchema,
+	createReceiveEntry,
 	distributeInputSchema,
 	createDistributeEntry,
 	type DistributeInput

@@ -295,28 +295,26 @@
 				</p>
 			</div>
 		{:else}
-			<div
-				class="flex-1 overflow-x-auto rounded-2xl border border-border/60 bg-background shadow-sm"
-			>
-				<table class="w-full min-w-[900px] border-collapse text-left text-xs whitespace-nowrap">
-					<thead class="sticky top-0 z-10 border-b border-border/60 bg-muted/50">
-						<tr class="text-[11px] font-bold tracking-wider text-foreground uppercase">
-							<th class="p-4 px-5">รายการสินค้า (SKU)</th>
-							<th class="p-4">หมวดหมู่</th>
-							<th class="p-4 text-center">สถานที่จัดเก็บ</th>
-							<th class="p-4 text-center">วันหมดอายุ</th>
-							<th class="p-4 text-center">ยอดคงเหลือ</th>
-							<th class="p-4 text-center">สถานะ</th>
-							<th class="w-[100px] p-4 px-5 text-center">จัดการ</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-border/40">
+			<div class="overflow-x-auto flex-1 rounded-2xl border border-border/60 shadow-sm bg-background">
+				<Table.Root class="text-xs whitespace-nowrap min-w-[900px]">
+					<Table.Header class="bg-muted/50 border-b border-border/60 sticky top-0 z-10">
+						<Table.Row class="font-bold text-foreground uppercase tracking-wider text-[11px]">
+							<Table.Head class="p-4 px-5">รายการสินค้า (SKU)</Table.Head>
+							<Table.Head class="p-4">หมวดหมู่</Table.Head>
+							<Table.Head class="p-4 text-center">สถานที่จัดเก็บ</Table.Head>
+							<Table.Head class="p-4 text-center">วันหมดอายุ</Table.Head>
+							<Table.Head class="p-4 text-center">ยอดคงเหลือ</Table.Head>
+							<Table.Head class="p-4 text-center">สถานะ</Table.Head>
+							<Table.Head class="p-4 text-center px-5 w-[100px]">จัดการ</Table.Head>
+						</Table.Row>
+					</Table.Header>
+					<Table.Body class="divide-y divide-border/40">
 						{#if displayedItems.length === 0}
-							<tr>
-								<td colspan={7} class="p-12 text-center text-sm font-medium text-muted-foreground">
+							<Table.Row>
+								<Table.Cell colspan={7} class="p-12 text-center text-muted-foreground font-medium text-sm">
 									ไม่พบข้อมูลสิ่งของที่ตรงกับเงื่อนไขการค้นหา
-								</td>
-							</tr>
+								</Table.Cell>
+							</Table.Row>
 						{:else}
 							{#each displayedItems as item (item._id)}
 								{@const qty = balance.get(item._id) ?? 0}
@@ -325,7 +323,7 @@
 								{@const expired = isExpired(lot?.expiry)}
 								{@const expiring = isExpiringSoon(lot?.expiry)}
 
-								<tr
+								<Table.Row
 									class={[
 										'border-l-4 transition-all duration-200 hover:translate-x-0.5 hover:bg-muted/40',
 										expired
@@ -340,7 +338,7 @@
 									]}
 								>
 									<!-- Item name + ID -->
-									<td class="p-4 px-5">
+									<Table.Cell class="p-4 px-5">
 										<div class="flex flex-col gap-1">
 											<span class="text-[14px] font-semibold text-foreground">
 												{item.name}
@@ -358,10 +356,10 @@
 												{/if}
 											</div>
 										</div>
-									</td>
+									</Table.Cell>
 
 									<!-- Category badge -->
-									<td class="p-4">
+									<Table.Cell class="p-4">
 										<span
 											class="rounded-md border px-2.5 py-1 text-center text-[10px] font-bold whitespace-nowrap {CATEGORY_STYLES[
 												item.category
@@ -369,10 +367,10 @@
 										>
 											{SUPPLY_CATEGORY_LABELS[item.category] || item.category}
 										</span>
-									</td>
+									</Table.Cell>
 
 									<!-- Storage location -->
-									<td class="p-4 text-center">
+									<Table.Cell class="p-4 text-center">
 										{#if lot?.note}
 											<span
 												class="rounded-lg border border-border/80 bg-muted/60 px-2.5 py-1 text-[12px] font-medium text-foreground"
@@ -382,10 +380,10 @@
 										{:else}
 											<span class="text-xs text-muted-foreground/40">-</span>
 										{/if}
-									</td>
+									</Table.Cell>
 
 									<!-- Expiry date -->
-									<td class="p-4 text-center">
+									<Table.Cell class="p-4 text-center">
 										{#if lot?.expiry}
 											<span
 												class="rounded-md px-2 py-1 text-[12px] font-bold {expired
@@ -400,10 +398,10 @@
 										{:else}
 											<span class="text-xs text-muted-foreground/40">-</span>
 										{/if}
-									</td>
+									</Table.Cell>
 
 									<!-- Balance -->
-									<td class="p-4 text-center font-mono text-sm font-bold">
+									<Table.Cell class="p-4 text-center font-mono font-bold text-sm">
 										<div class="flex flex-col items-center gap-0.5">
 											<span
 												class="rounded-md px-2.5 py-1 {expired || status === 'empty'
@@ -424,10 +422,10 @@
 												</span>
 											{/if}
 										</div>
-									</td>
+									</Table.Cell>
 
 									<!-- Status -->
-									<td class="p-4 text-center">
+									<Table.Cell class="p-4 text-center">
 										{#if expired}
 											<span
 												class="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-xs font-bold text-rose-600"
@@ -453,10 +451,10 @@
 												<CheckCircle class="h-3.5 w-3.5" /> ปกติ
 											</span>
 										{/if}
-									</td>
+									</Table.Cell>
 
 									<!-- Action -->
-									<td class="p-4 px-5 text-center">
+									<Table.Cell class="p-4 text-center px-5">
 										<button
 											onclick={() => {
 												selectedItemId = item._id;
@@ -467,12 +465,12 @@
 										>
 											<History class="h-3.5 w-3.5 text-muted-foreground" /> จัดการ
 										</button>
-									</td>
-								</tr>
+									</Table.Cell>
+								</Table.Row>
 							{/each}
 						{/if}
-					</tbody>
-				</table>
+					</Table.Body>
+				</Table.Root>
 			</div>
 
 			<!-- Footer summary row -->
@@ -506,6 +504,9 @@
 			<p class="mt-3 text-right text-[10px] text-muted-foreground/50">
 				<Clock class="mr-0.5 inline h-3 w-3" />
 				ข้อมูลอัปเดตอัตโนมัติผ่าน PouchDB live changes feed
+			</p>
+			<p class="text-right text-[10px] text-muted-foreground/50 mt-1">
+				* หมายเหตุ: จุดจัดเก็บและวันหมดอายุจะอ้างอิงจากรายการล่าสุดที่มีการระบุข้อมูล
 			</p>
 		{/if}
 	</div>
