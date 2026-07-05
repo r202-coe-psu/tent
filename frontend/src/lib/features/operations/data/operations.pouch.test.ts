@@ -32,7 +32,7 @@ describe('OperationsPouchRepository', () => {
 				item_id: 'item:rice',
 				qty: 100,
 				unit: 'kg',
-				source: 'purchase',
+				source: 'donation',
 				ref_id: null
 			},
 			ctx
@@ -53,7 +53,7 @@ describe('OperationsPouchRepository', () => {
 				item_id: 'item:rice',
 				qty: 50,
 				unit: 'kg',
-				source: 'purchase',
+				source: 'donation',
 				ref_id: null
 			},
 			ctx
@@ -84,7 +84,7 @@ describe('OperationsPouchRepository', () => {
 	it('calculates the stock balance accurately', async () => {
 		const entries = [
 			createReceiveEntry(
-				{ item_id: 'item:rice', qty: 100, unit: 'kg', source: 'purchase', ref_id: null },
+				{ item_id: 'item:rice', qty: 100, unit: 'kg', source: 'donation', ref_id: null },
 				ctx
 			),
 			createReceiveEntry(
@@ -95,7 +95,7 @@ describe('OperationsPouchRepository', () => {
 			// We can directly mock a distribute entry
 			{
 				_id: 'stock_ledger:01J20000000000000000000002',
-				schema_v: 2,
+				schema_v: 1,
 				shelter_code: 'SH001',
 				type: 'stock_ledger' as const,
 				item_id: 'item:rice',
@@ -145,7 +145,7 @@ describe('OperationsPouchRepository', () => {
 
 			await expect(
 				repo.receiveStock(
-					{ item_id: 'item:missing', qty: 10, unit: 'kg', source: 'purchase', ref_id: null },
+					{ item_id: 'item:missing', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
 					ctx
 				)
 			).rejects.toThrow('Unknown item: item:missing');
@@ -156,7 +156,7 @@ describe('OperationsPouchRepository', () => {
 
 			await expect(
 				repo.receiveStock(
-					{ item_id: 'item:rice', qty: 10, unit: 'bag', source: 'purchase', ref_id: null },
+					{ item_id: 'item:rice', qty: 10, unit: 'bag', source: 'donation', ref_id: null },
 					ctx
 				)
 			).rejects.toThrow('Unit mismatch for item item:rice: expected kg, got bag');
@@ -167,7 +167,7 @@ describe('OperationsPouchRepository', () => {
 
 			await expect(
 				repo.receiveStock(
-					{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'purchase', ref_id: null },
+					{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
 					ctx
 				)
 			).rejects.toThrow('Perishable item item:rice requires lot.expiry to be set');
@@ -177,7 +177,7 @@ describe('OperationsPouchRepository', () => {
 			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
 
 			const result = await repo.receiveStock(
-				{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'purchase', ref_id: null },
+				{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
 				ctx
 			);
 

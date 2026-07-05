@@ -30,7 +30,6 @@
 	// Thai translation for ledger reason
 	const REASON_LABELS: Record<string, string> = {
 		receive: 'รับเข้าคลัง',
-		purchase: 'จัดซื้อ',
 		distribute: 'แจกจ่าย',
 		requisition: 'เบิกจ่ายโรงครัว',
 		adjust: 'ปรับปรุงคลัง',

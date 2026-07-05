@@ -263,7 +263,6 @@
 						class="h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
 					>
 						<option value="donation">ของบริจาค (Donation)</option>
-						<option value="purchase">การจัดซื้อจัดจ้าง (Purchase)</option>
 						<option value="transfer_in">โอนย้ายมาจากศูนย์อื่น (Transfer In)</option>
 						<option value="manual">กรอกปรับปรุงคลังด้วยตนเอง (Manual/Adjust)</option>
 					</select>
