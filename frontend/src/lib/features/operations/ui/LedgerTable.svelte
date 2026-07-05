@@ -10,7 +10,9 @@
 
 	// Fetch stock movements ledger
 	const itemsQuery = useSupplyItems();
-	const ledgerQuery = filterItemId ? useLedgerByItem(() => filterItemId as string) : useLedger();
+	const allLedgerQuery = useLedger(() => !filterItemId);
+	const filteredLedgerQuery = useLedgerByItem(() => filterItemId);
+	const ledgerQuery = $derived(filterItemId ? filteredLedgerQuery : allLedgerQuery);
 
 	const ledger = $derived(ledgerQuery.data ?? []);
 	// Sort by occurred_at descending to show newest entries first
