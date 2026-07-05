@@ -156,6 +156,19 @@ describe('createKitchenRequisition', () => {
 			)
 		).toThrow();
 	});
+
+	it('rejects qty_issued > qty_requested (over-issue) outside the UI clamp', () => {
+		expect(() =>
+			createKitchenRequisition(
+				{
+					meal_plan_id: null,
+					items: [{ item_id: 'item:rice', qty_requested: 10, qty_issued: 11, unit: 'kg' }]
+				},
+				['stock_ledger:DDDD'],
+				ctx
+			)
+		).toThrow(/qty_issued cannot exceed qty_requested/);
+	});
 });
 
 // ---- MealService ----
