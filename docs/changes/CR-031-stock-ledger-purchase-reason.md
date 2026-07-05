@@ -1,7 +1,7 @@
 ---
 id: CR-031
 title: Add purchase reason to stock_ledger
-status: proposed
+status: accepted
 date: 2026-07-05
 author: Pu2f
 impact: data-schema, application-logic
@@ -27,4 +27,4 @@ Task T-11 (Stock receive + ledger write) introduces the ability to receive stock
 
 ## 5. Review & Sign-off
 * **PO/TL:** @net-lynx
-* **Status:** Proposed
+* **Status:** Accepted
