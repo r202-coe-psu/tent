@@ -66,7 +66,9 @@ const ratioShape = SOP_RATIO_KEYS.reduce(
  */
 export const ratiosSchema = z.object(ratioShape).strict();
 
-// Alias preserved for backward compatibility with existing imports.
+/**
+ * @deprecated Use `ratiosSchema` directly. Both Master and Override now strictly require the full 20-key schema per CR-026 Option 1.
+ */
 export const fullRatiosSchema = ratiosSchema;
 
 // --- Master SOP Profile Schema (catalog DB, schema_v 3)
@@ -296,6 +298,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 	}
 
 	const newRatios = { ...prev.ratios, ...definedChanges } as Record<SopRatioKey, number>;
+	ratiosSchema.parse(newRatios);
 	if (prev.type === 'sop_profile') {
 		const createdBy = ctx.createdBy;
 
