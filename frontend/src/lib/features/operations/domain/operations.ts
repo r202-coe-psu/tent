@@ -181,6 +181,8 @@ export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): Sto
 			reason = 'purchase';
 			break;
 		case 'transfer_in':
+			// TODO(T-13): source is defined here for schema completeness but is not yet wired
+			// through a real transfer-in flow. Inter-shelter transfers land via T-13 confirm step.
 			reason = 'transfer_in';
 			break;
 		case 'manual':

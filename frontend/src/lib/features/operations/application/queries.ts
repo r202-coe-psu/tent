@@ -40,7 +40,8 @@ export const useStockBalance = () =>
 	}));
 
 /**
- * Mutation hook to receive inbound stock, persist the ledger entry, and invalidate caches.
+ * Mutation hook to receive inbound stock and persist the ledger entry.
+ * Cache invalidation is handled by `startOperationsLiveQuery` via the PouchDB changes feed.
  */
 export const useReceiveStock = () =>
 	createMutation(() => ({

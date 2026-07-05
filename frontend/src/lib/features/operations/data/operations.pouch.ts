@@ -45,8 +45,18 @@ export class OperationsPouchRepository implements OperationsRepository {
 	async receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger> {
 		const entry = createReceiveEntry(input, ctx);
 		const item = await supplyRepository().getItem(entry.item_id);
-		if (item && item.unit !== entry.unit) {
-			throw new Error(`Unit mismatch for item ${entry.item_id}: expected ${item.unit}, got ${entry.unit}`);
+		if (!item) {
+			throw new Error(
+				`Unknown item: ${entry.item_id} — item must exist in the catalog before receiving stock`
+			);
+		}
+		if (item.unit !== entry.unit) {
+			throw new Error(
+				`Unit mismatch for item ${entry.item_id}: expected ${item.unit}, got ${entry.unit}`
+			);
+		}
+		if (item.perishable && !entry.lot?.expiry) {
+			throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
 		}
 		return this.addLedgerEntry(entry);
 	}

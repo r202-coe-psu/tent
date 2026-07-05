@@ -2,7 +2,12 @@ import { authStore } from '$lib/stores/auth.svelte';
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { resolve } from '$app/paths';
-import { hasStaffCapability, isShelterManager, isWarehouseStaff, isSystemAdmin } from '$lib/auth/roles';
+import {
+	hasStaffCapability,
+	isShelterManager,
+	isWarehouseStaff,
+	isSystemAdmin
+} from '$lib/auth/roles';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
 export const LANDING_ROUTE = '/';

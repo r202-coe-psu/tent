@@ -88,7 +88,7 @@ describe('OperationsPouchRepository', () => {
 			// We can directly mock a distribute entry
 			{
 				_id: 'stock_ledger:01J20000000000000000000002',
-				schema_v: 1,
+				schema_v: 2,
 				shelter_code: 'SH001',
 				type: 'stock_ledger' as const,
 				item_id: 'item:rice',

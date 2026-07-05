@@ -22,7 +22,7 @@
 	// db carries the shelter master doc + audit log; it syncs alongside.
 	$effect(() => {
 		if (!authStore.isAuthenticated) return;
-		
+
 		// Synchronize databases
 		startNamedSync(SHELTER_DB, () => authStore.markNeedsReauth());
 		startNamedSync('catalog', () => authStore.markNeedsReauth());
