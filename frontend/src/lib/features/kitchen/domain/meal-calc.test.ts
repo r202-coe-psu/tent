@@ -102,7 +102,7 @@ describe('toRequisitionInput — T-26 handoff (CR-022)', () => {
 		status: 'confirmed'
 	});
 
-	it('maps rice recipe (grams) to a stock requisition item, converted to kg (CR-029)', () => {
+	it('maps rice recipe (grams) to a stock requisition item, converted to kg (CR-030)', () => {
 		const input = toRequisitionInput(plan([{ recipe_id: RICE_RECIPE_ID, planned_qty: 15000 }]));
 		expect(input.meal_plan_id).toBe('meal_plan:2026-07-15:lunch');
 		expect(input.items).toEqual([
@@ -116,7 +116,7 @@ describe('toRequisitionInput — T-26 handoff (CR-022)', () => {
 		expect(input.items[0].qty_requested).toBe(7.5); // 7 500 g → 7.5 kg (fractional kg is valid)
 	});
 
-	it('scales by the item mapping, not a hardcoded /1000 (CR-029)', () => {
+	it('scales by the item mapping, not a hardcoded /1000 (CR-030)', () => {
 		// The divisor comes from recipe_per_stock_unit — an item whose recipe unit
 		// already equals its stock unit (scale 1) must NOT get silently divided.
 		expect(RECIPE_TO_STOCK_ITEM[RICE_RECIPE_ID].recipe_per_stock_unit).toBe(1000);
@@ -132,7 +132,7 @@ describe('toRequisitionInput — T-26 handoff (CR-022)', () => {
 });
 
 describe('assessRequisition — stock availability (T-26)', () => {
-	// Production flow assesses requisitions in kg (item_master.base_unit, CR-029)
+	// Production flow assesses requisitions in kg (item_master.base_unit, CR-030)
 	// — toRequisitionInput already converts grams → kg before this ever runs, so
 	// these units must reflect kg, not the pre-conversion gram figures.
 	const line = (qty_requested: number, item_id = 'item:rice', unit = 'kg') => ({
@@ -191,7 +191,7 @@ describe('assessRequisition — stock availability (T-26)', () => {
 	});
 });
 
-describe('toRequisitionInput → assessRequisition — kg end-to-end (CR-029)', () => {
+describe('toRequisitionInput → assessRequisition — kg end-to-end (CR-030)', () => {
 	const plan = (recipes: MealPlan['recipes']): MealPlan => ({
 		_id: 'meal_plan:2026-07-15:lunch',
 		type: 'meal_plan',

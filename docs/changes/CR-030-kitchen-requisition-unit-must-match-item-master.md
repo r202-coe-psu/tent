@@ -1,5 +1,5 @@
 ---
-id: CR-029
+id: CR-030
 title: Kitchen requisition ledger unit must match item_master.base_unit (T-26)
 status: approved
 date: 2026-07-03
@@ -13,7 +13,7 @@ affects:
   - frontend/src/lib/features/kitchen/data/kitchen.pouch.ts (issueRequisition ledger write)
 ---
 
-# CR-029 — Kitchen requisition ledger unit must match item_master.base_unit
+# CR-030 — Kitchen requisition ledger unit must match item_master.base_unit
 
 ## Why
 

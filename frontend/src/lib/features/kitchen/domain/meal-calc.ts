@@ -10,7 +10,7 @@ import type {
 export const RICE_RECIPE_ID = 'ingredient:rice';
 
 // Grams per kg — rice recipes are calculated in grams (SOP ratio precision); the
-// stock ledger stores kg (item_master.base_unit). CR-029.
+// stock ledger stores kg (item_master.base_unit). CR-030.
 const GRAMS_PER_KG = 1000;
 
 // Maps a calculated recipe_id to the stock item it draws down + its ledger unit
@@ -18,7 +18,7 @@ const GRAMS_PER_KG = 1000;
 // requisition → stock ledger). CR-022. `unit` must match item_master.base_unit
 // (schema.md §2.1); `recipe_per_stock_unit` scales planned_qty (recipe units) to
 // qty_requested (stock units) at the T-25→T-26 seam. Rice: recipe grams / 1000 =
-// stock kg (CR-029). An ingredient whose recipe unit already equals its stock
+// stock kg (CR-030). An ingredient whose recipe unit already equals its stock
 // unit (e.g. eggs in ฟอง) uses 1 — so a new item never silently gets /1000.
 export const RECIPE_TO_STOCK_ITEM: Record<
 	string,
@@ -86,7 +86,7 @@ export function calculateMealIngredients(
  *
  * `planned_qty` is in recipe units (rice: grams, SOP ratio precision); scales to
  * the stock unit here via `recipe_per_stock_unit` to match `item_master.base_unit`
- * before it reaches the stock ledger (CR-029).
+ * before it reaches the stock ledger (CR-030).
  */
 export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
 	const items = plan.recipes.map((r) => {
