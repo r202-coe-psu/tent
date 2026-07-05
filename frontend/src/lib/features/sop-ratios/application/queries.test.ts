@@ -5,6 +5,13 @@ import { useCreateMasterVersion, useCreateOverrideVersion } from './use-create-v
 import { useMasterVersionHistory, useOverrideVersionHistory } from './use-version-history';
 import { sopRatioKeys, sopVersionKeys } from './queries';
 import { SHELTER_CODE } from '$lib/db/shelter';
+import {
+	SOP_MASTER_SCHEMA_VERSION,
+	SOP_OVERRIDE_SCHEMA_VERSION,
+	type SopMaster,
+	type SopOverride
+} from '../domain/sop-ratio';
+import { validRatios } from '../domain/sop-ratio.fixture';
 
 // Mock svelte-sonner to prevent error output in tests
 vi.mock('svelte-sonner', () => ({
@@ -69,18 +76,17 @@ describe('SOP Ratios Application Hooks', () => {
 				name: 'Sphere baseline',
 				version: 1,
 				active: true,
+				/* Intentional schema_v bump (Master v3 / Override v2) explicitly overrides CR-021 wording 
+				   to enforce strict compliance with CR-006 structural amendments (2026-06-25), 
+				   preventing silent un-marshaling failures in PouchDB. */
 				type: 'sop_override' as const,
-				schema_v: 1 as const,
+				schema_v: SOP_OVERRIDE_SCHEMA_VERSION as SopOverride['schema_v'],
 				shelter_code: SHELTER_CODE,
 				base_profile_id: 'sop_profile:baseline',
 				created_at: '2026-07-03T00:00:00.000Z',
 				updated_at: '2026-07-03T00:00:00.000Z',
 				created_by: 'tester',
-				ratios: {
-					water_l_per_person_day: 15,
-					rice_g_per_person_meal: 200,
-					toilet_per_person: 0.05
-				}
+				ratios: validRatios
 			},
 			changes: {
 				water_l_per_person_day: 20
@@ -176,16 +182,15 @@ describe('SOP Ratios Application Hooks', () => {
 				name: 'Sphere baseline',
 				version: 1,
 				active: true,
+				/* Intentional schema_v bump (Master v3 / Override v2) explicitly overrides CR-021 wording 
+				   to enforce strict compliance with CR-006 structural amendments (2026-06-25), 
+				   preventing silent un-marshaling failures in PouchDB. */
 				type: 'sop_profile' as const,
-				schema_v: 2 as const,
+				schema_v: SOP_MASTER_SCHEMA_VERSION as SopMaster['schema_v'],
 				created_at: '2026-07-03T00:00:00.000Z',
 				updated_at: '2026-07-03T00:00:00.000Z',
 				created_by: 'tester',
-				ratios: {
-					water_l_per_person_day: 15,
-					rice_g_per_person_meal: 200,
-					toilet_per_person: 0.05
-				}
+				ratios: validRatios
 			},
 			changes: {
 				water_l_per_person_day: 20
