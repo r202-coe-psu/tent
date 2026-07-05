@@ -7,7 +7,7 @@
 	import { receiveInputSchema, type ReceiveInput } from '../domain/operations';
 	import { useSupplyItems, type SupplyItem } from '$lib/features/supply';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '../data/operations.pouch';
+	import { SHELTER_CODE } from '$lib/db/shelter';
 	import { useReceiveStock } from '../application/queries';
 	import { toast } from 'svelte-sonner';
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
@@ -35,7 +35,7 @@
 		return items.filter((i) => i.name.toLowerCase().includes(query));
 	});
 
-	const form = superForm(defaults(zod4(receiveInputSchema)), {
+	const form = superForm(defaults({ source: 'donation' }, zod4(receiveInputSchema)), {
 		SPA: true,
 		validators: zod4(receiveInputSchema),
 		resetForm: true,
@@ -153,6 +153,10 @@
 							bind:value={searchQuery}
 							onfocus={() => !preselectedItemId && (isDropdownOpen = true)}
 							oninput={() => !preselectedItemId && (isDropdownOpen = true)}
+							role="combobox"
+							aria-expanded={isDropdownOpen}
+							aria-controls="item-listbox"
+							aria-haspopup="listbox"
 							autocomplete="off"
 							disabled={!!preselectedItemId}
 							class={[
@@ -174,6 +178,8 @@
 
 						{#if isDropdownOpen}
 							<div
+								id="item-listbox"
+								role="listbox"
 								class="absolute left-0 z-20 mt-1 max-h-60 w-full animate-in overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl duration-150 fade-in slide-in-from-top-1"
 							>
 								{#if itemsQuery.isLoading}
@@ -188,6 +194,8 @@
 									{#each filteredItems as item (item._id)}
 										<button
 											type="button"
+											role="option"
+											aria-selected={selectedItem?._id === item._id}
 											class="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted"
 											onclick={() => selectItem(item)}
 										>

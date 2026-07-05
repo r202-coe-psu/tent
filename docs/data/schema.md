@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-01
+updated: 2026-07-05
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 

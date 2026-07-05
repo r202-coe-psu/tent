@@ -13,6 +13,7 @@
 		filterItemId !== undefined ? useLedgerByItem(() => filterItemId!) : useLedger();
 	const itemsQuery = useSupplyItems();
 
+
 	const ledger = $derived(ledgerQuery.data ?? []);
 	// Sort by occurred_at descending to show newest entries first
 	const sortedLedger = $derived(
