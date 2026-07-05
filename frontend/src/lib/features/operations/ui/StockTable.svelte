@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SvelteSet } from 'svelte/reactivity';
 	import { useStockBalance, useLedger } from '../application/queries';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
@@ -14,8 +15,6 @@
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import History from '@lucide/svelte/icons/history';
 	import MapPin from '@lucide/svelte/icons/map-pin';
-	import Calendar from '@lucide/svelte/icons/calendar';
-	import FileText from '@lucide/svelte/icons/file-text';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import LedgerTable from './LedgerTable.svelte';
@@ -46,7 +45,7 @@
 	 * Unique locations list extracted from ledger entries
 	 */
 	const uniqueLocations = $derived.by(() => {
-		const locations = new Set<string>();
+		const locations = new SvelteSet<string>();
 		for (const entry of ledger) {
 			if (entry.lot?.note) {
 				locations.add(entry.lot.note.trim());
