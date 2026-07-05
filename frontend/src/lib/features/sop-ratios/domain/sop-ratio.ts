@@ -90,11 +90,7 @@ export const sopMasterSchema = z.object({
 
 export type SopMaster = z.infer<typeof sopMasterSchema>;
 
-export const isSopMaster = (d: unknown): d is SopMaster =>
-	!!d &&
-	typeof d === 'object' &&
-	(d as { type?: unknown }).type === 'sop_profile' &&
-	(d as { schema_v?: unknown }).schema_v === SOP_MASTER_SCHEMA_VERSION;
+export const isSopMaster = (d: unknown): d is SopMaster => sopMasterSchema.safeParse(d).success;
 
 // --- Override SOP Profile Schema (shelter_* DB, schema_v 2)
 // schema_v bumped 1→2 per CR-006 amendment (2026-06-25): key whitelist 3→20 canonical keys
@@ -119,10 +115,7 @@ export const sopOverrideSchema = z.object({
 export type SopOverride = z.infer<typeof sopOverrideSchema>;
 
 export const isSopOverride = (d: unknown): d is SopOverride =>
-	!!d &&
-	typeof d === 'object' &&
-	(d as { type?: unknown }).type === 'sop_override' &&
-	(d as { schema_v?: unknown }).schema_v === SOP_OVERRIDE_SCHEMA_VERSION;
+	sopOverrideSchema.safeParse(d).success;
 
 /**
  * Context types for the two flavours of SOP profiles.
@@ -146,7 +139,7 @@ export function resolveEffectiveProfile(
 	override?: SopOverride | null,
 	master?: SopMaster | null
 ): {
-	ratios: Record<SopRatioKey, number> | Partial<Record<SopRatioKey, number>>;
+	ratios: Record<SopRatioKey, number>;
 	ratio_source: 'master' | 'override';
 } | null {
 	if (override && override.active) {
