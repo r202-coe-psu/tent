@@ -7,6 +7,7 @@ export {
 	isSopOverride,
 	resolveEffectiveProfile,
 	SOP_RATIO_KEYS,
+	SOP_RATIO_KIND,
 	sopMasterSchema,
 	sopOverrideSchema,
 	type CreateNewVersionResult,
@@ -21,10 +22,29 @@ export {
 	resolveEffectiveRatios
 } from './data/sop-ratio.pouch';
 
-// Application — TanStack Query hooks
+// Application — TanStack Query hooks (T-30.5)
 export {
 	sopRatioKeys,
 	useActiveSopProfile,
+	useActiveSopRatio,
 	useSopProfiles,
-	getActiveSopProfile
+	getActiveSopProfile,
+	sopVersionKeys
 } from './application/queries';
+
+// Version history
+export {
+	useOverrideVersionHistory,
+	useMasterVersionHistory
+} from './application/use-version-history';
+
+// Version creation mutations
+export {
+	useCreateMasterVersion,
+	useCreateOverrideVersion,
+	type CreateMasterVersionInput,
+	type CreateOverrideVersionInput
+} from './application/use-create-version';
+
+// Live-sync wiring (call once per layout, pass QueryClient)
+export { startSopRatioLiveQuery } from './application/sop-ratio-sync';

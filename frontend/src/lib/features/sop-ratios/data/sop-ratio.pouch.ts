@@ -108,8 +108,8 @@ export class SopMasterPouchRepository implements SopMasterRepository {
 					selector: { type: 'sop_profile', active: true }
 				});
 				return (result.docs as unknown[]).filter(isSopMaster);
-			} catch {
-				// Fallback gracefully if find executes but fails due to environment setup
+			} catch (error) {
+				console.warn('[SopPouchRepo] Mango query failed, utilizing allByType fallback:', error);
 			}
 		}
 
@@ -238,8 +238,8 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 					selector: { type: 'sop_override', active: true }
 				});
 				return (result.docs as unknown[]).filter(isSopOverride);
-			} catch {
-				// Fallback gracefully if find executes but fails due to environment setup
+			} catch (error) {
+				console.warn('[SopPouchRepo] Mango query failed, utilizing allByType fallback:', error);
 			}
 		}
 
@@ -355,7 +355,9 @@ export async function resolveEffectiveRatios(
 	overrideRepo: SopOverrideRepository,
 	masterRepo: SopMasterRepository
 ): Promise<{
-	ratios: Record<SopRatioKey, number>;
+	// Master ratios may be a partial set (>=1 key, CR-006/CR-018 #2) if no override is active;
+	// override ratios are always the full canonical set.
+	ratios: Record<SopRatioKey, number> | Partial<Record<SopRatioKey, number>>;
 	ratio_source: 'master' | 'override';
 } | null> {
 	const activeOverrides = await overrideRepo.listActive();
