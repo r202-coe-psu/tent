@@ -63,7 +63,9 @@ export const facilitiesSchema = z.object({
 	showers: z.coerce.number().int().min(0).nullish(),
 	water_points: z.coerce.number().int().min(0).nullish(),
 	handwashing_stations: z.coerce.number().int().min(0).nullish(),
-	car_toilet_accessible: z.boolean().nullish()
+	car_toilet_accessible: z.boolean().nullish(),
+	// CR-023 FR-23-6/7 — supported mobile toilets, gated on car_toilet_accessible (UI hides+clears).
+	car_toilet_supported: z.coerce.number().int().min(0).nullish()
 });
 export type Facilities = z.infer<typeof facilitiesSchema>;
 
@@ -72,7 +74,9 @@ export type Facilities = z.infer<typeof facilitiesSchema>;
 export const subStorageItemSchema = z.object({
 	id: z.string().optional(),
 	name: z.string().trim().min(1, 'ชื่อสถานที่จัดเก็บต้องไม่ว่าง'),
-	type: subStorageTypeSchema
+	type: subStorageTypeSchema,
+	// CR-023 FR-23-11
+	area_m2: z.coerce.number().min(0).nullish()
 });
 export type SubStorageItem = z.infer<typeof subStorageItemSchema>;
 
@@ -80,7 +84,11 @@ export const commonAreasSchema = z.object({
 	central_kitchen: z.boolean().nullish(),
 	helipad: z.boolean().nullish(),
 	parking_capacity: z.coerce.number().int().min(0).nullish(),
-	sub_storage: z.array(subStorageItemSchema).optional().default([])
+	sub_storage: z.array(subStorageItemSchema).optional().default([]),
+	// CR-023 FR-23-8/9/10
+	isolation_room: z.boolean().nullish(),
+	women_child_friendly_space: z.boolean().nullish(),
+	logistics_area_m2: z.coerce.number().min(0).nullish()
 });
 export type CommonAreas = z.infer<typeof commonAreasSchema>;
 
@@ -107,7 +115,9 @@ export type Utilities = z.infer<typeof utilitiesSchema>;
 export const riskSchema = z.object({
 	elevation_m: z.coerce.number().min(0).nullish(),
 	entrance_description: z.string().trim().nullish(),
-	constraints: z.string().trim().nullish()
+	constraints: z.string().trim().nullish(),
+	// CR-023 FR-23-12
+	secondary_muster_point: z.string().trim().nullish()
 });
 export type Risk = z.infer<typeof riskSchema>;
 
@@ -123,26 +133,200 @@ export const zoneSchema = z.object({
 	closed_by: z.string().nullish().default(null),
 	reopened_at: z.string().datetime().nullish().default(null),
 	reopened_by: z.string().nullish().default(null),
-	reason: z.string().nullish().default(null)
+	reason: z.string().nullish().default(null),
+	// CR-023 FR-23-4/5
+	area_m2: z.coerce.number().min(0).nullish(),
+	specifics: z.string().trim().nullish()
 });
 export type Zone = z.infer<typeof zoneSchema>;
 
-// ===== Main shelter schemas (CR-008) =====
+// ===== CR-023 v4 — enums (section 1/2) =====
+
+/** Building/space type — hardcoded enum (CR-023 FR-23-0d). */
+export const areaTypeSchema = z.enum(['indoor', 'outdoor', 'hybrid']);
+export type AreaType = z.infer<typeof areaTypeSchema>;
+
+/** Shelter tier — hardcoded enum (CR-023 FR-23-1). */
+export const projectLevelSchema = z.enum(['community', 'lao', 'provincial']);
+export type ProjectLevel = z.infer<typeof projectLevelSchema>;
+
+/** Key personnel per shelter (CR-023 FR-23-2/3). */
+export const keyPersonContactSchema = z.object({
+	name: z.string().trim().nullish(),
+	phone: z.string().trim().nullish()
+});
+export type KeyPersonContact = z.infer<typeof keyPersonContactSchema>;
+
+export const keyPersonnelSchema = z.object({
+	eoc_liaison: keyPersonContactSchema.nullish(),
+	medical_lead: keyPersonContactSchema.nullish(),
+	kitchen_lead: keyPersonContactSchema.nullish()
+});
+export type KeyPersonnel = z.infer<typeof keyPersonnelSchema>;
+
+// ===== CR-023 section 6 — Admission & pet policy (v4.1 nested pet) =====
+
+/** Pet categories allowed when policy = conditional (CR-023 Addendum A FR-23-21). */
+export const petCategorySchema = z.enum(['small_general', 'large_dog', 'livestock']);
+export type PetCategory = z.infer<typeof petCategorySchema>;
+
+/**
+ * Per-category condition whitelists (CR-023 Addendum A, D-A2 revised —
+ * differentiated per category instead of one shared 5-item list).
+ */
+export const smallGeneralConditionSchema = z.enum([
+	'bring_own_cage',
+	'caged_or_leashed',
+	'vaccine_book',
+	'owner_hygiene',
+	'closed_system_only'
+]);
+export type SmallGeneralCondition = z.infer<typeof smallGeneralConditionSchema>;
+
+export const largeDogConditionSchema = z.enum([
+	'muzzle_and_leash',
+	'designated_zone_only',
+	'vaccine_book_mandatory',
+	'aggressive_behavior_expel_right'
+]);
+export type LargeDogCondition = z.infer<typeof largeDogConditionSchema>;
+
+export const livestockConditionSchema = z.enum([
+	'owner_provides_feed',
+	'tethered_designated_area_only'
+]);
+export type LivestockCondition = z.infer<typeof livestockConditionSchema>;
+
+/** Union of all per-category conditions — for generic label-lookup helpers only; runtime validation is per-category via the discriminated union below. */
+export type PetCondition = SmallGeneralCondition | LargeDogCondition | LivestockCondition;
+
+const smallGeneralEntrySchema = z.object({
+	category: z.literal('small_general'),
+	conditions: z.array(smallGeneralConditionSchema).optional().default([]),
+	other: z.string().trim().nullish()
+});
+const largeDogEntrySchema = z.object({
+	category: z.literal('large_dog'),
+	conditions: z.array(largeDogConditionSchema).optional().default([]),
+	other: z.string().trim().nullish()
+});
+/** Livestock adds capacity + location fields not applicable to the other categories. */
+const livestockEntrySchema = z.object({
+	category: z.literal('livestock'),
+	max_capacity: z.number().int().nonnegative().nullish(),
+	location: z.string().trim().nullish(),
+	conditions: z.array(livestockConditionSchema).optional().default([]),
+	other: z.string().trim().nullish()
+});
+
+export const petCategoryEntrySchema = z.discriminatedUnion('category', [
+	smallGeneralEntrySchema,
+	largeDogEntrySchema,
+	livestockEntrySchema
+]);
+export type PetCategoryEntry = z.infer<typeof petCategoryEntrySchema>;
+
+/** Nested pet policy — supersedes flat enum[] of CR-023 core (Addendum A FR-23-20/23). */
+export const petPolicySchema = z.object({
+	policy: z.enum(['no_pets', 'conditional']).nullish(),
+	categories: z.array(petCategoryEntrySchema).optional().default([])
+});
+export type PetPolicy = z.infer<typeof petPolicySchema>;
+
+export const admissionPolicySchema = z.object({
+	// master_data:vulnerable_group codes (CR-023 FR-23-14, Option A)
+	supported_vulnerable_groups: z.array(z.string()).optional().default([]),
+	pet_policy: petPolicySchema.optional().default({ policy: null, categories: [] })
+});
+export type AdmissionPolicy = z.infer<typeof admissionPolicySchema>;
+
+// ===== CR-023 section 7 — Valuables & luggage policy (Addendum A) =====
+
+/** Standard luggage/property rules — hardcoded whitelist (Appendix C.2). */
+export const luggageRuleSchema = z.enum([
+	'valuables_self_responsibility',
+	'no_hazardous_items',
+	'no_large_appliances',
+	'has_temp_storage_service'
+]);
+export type LuggageRule = z.infer<typeof luggageRuleSchema>;
+
+export const luggagePolicySchema = z.object({
+	limitation: z.enum(['no_limit', 'limited']).nullish(),
+	// gated on limitation === 'limited' (UI hides+clears)
+	max_per_family: z.coerce.number().int().min(0).nullish(),
+	rules: z.array(luggageRuleSchema).optional().default([]),
+	rules_other: z.string().trim().nullish()
+});
+export type LuggagePolicy = z.infer<typeof luggagePolicySchema>;
+
+// ===== CR-023 section 8 — Vehicle & parking policy (Addendum A) =====
+
+export const vehicleTypeSchema = z.enum(['motorcycle', 'car', 'truck', 'boat']);
+export type VehicleType = z.infer<typeof vehicleTypeSchema>;
+
+/** Parking rules — hardcoded whitelist (Appendix C.3). */
+export const parkingRuleSchema = z.enum([
+	'no_liability',
+	'first_come_first_served',
+	'key_deposit_required',
+	'no_blocking_emergency_lane',
+	'ev_emergency_charging'
+]);
+export type ParkingRule = z.infer<typeof parkingRuleSchema>;
+
+export const supportedVehicleSchema = z.object({
+	type: vehicleTypeSchema,
+	max_capacity: z.coerce.number().int().min(0).nullish()
+});
+export type SupportedVehicle = z.infer<typeof supportedVehicleSchema>;
+
+export const parkingPolicySchema = z.object({
+	availability: z.enum(['none', 'available']).nullish(),
+	// cleared to [] when availability !== 'available' (FR-23-30, D-A5)
+	supported_vehicles: z.array(supportedVehicleSchema).optional().default([]),
+	rules: z.array(parkingRuleSchema).optional().default([]),
+	rules_other: z.string().trim().nullish()
+});
+export type ParkingPolicy = z.infer<typeof parkingPolicySchema>;
+
+// ===== Main shelter schemas (CR-008 + CR-023 v4/v4.1) =====
 
 export const shelterSchema = z.object({
 	name: z.string().trim().min(1, 'ชื่อศูนย์พักพิงต้องไม่ว่าง'),
 	operation_status: operationStatusSchema.default('standby'),
+	// code จาก master_data:shelter_type (CR-023 FR-23-0a) — persist string code
 	shelter_type: z.string().trim().nullish(),
+	project_level: projectLevelSchema.nullish(),
 	location: locationSchema.optional(),
 	contact: contactSchema.optional(),
+	// Structured address (CR-023 FR-23-0b/0c, CR-011 style)
+	municipality_zone: z.string().trim().nullish(),
+	community: z.string().trim().nullish(),
+	address_no: z.string().trim().nullish(),
+	village_no: z.string().trim().nullish(),
+	subdistrict: z.string().trim().nullish(),
+	district: z.string().trim().nullish(),
+	province: z.string().trim().nullish(),
+	postal_code: z.string().trim().nullish(),
+	key_personnel: keyPersonnelSchema.nullish(),
 	capacity: z.coerce.number().int().positive('ความจุสูงสุดต้องมากกว่า 0'),
 	area_m2: z.coerce.number().min(0).nullish(),
-	area_type: z.string().trim().nullish(),
+	area_type: areaTypeSchema.nullish(),
 	facilities: facilitiesSchema,
 	common_areas: commonAreasSchema,
 	utilities: utilitiesSchema,
 	risk: riskSchema,
-	zones: z.array(zoneSchema)
+	zones: z.array(zoneSchema),
+	admission_policy: admissionPolicySchema
+		.optional()
+		.default({ supported_vulnerable_groups: [], pet_policy: { policy: null, categories: [] } }),
+	luggage_policy: luggagePolicySchema
+		.optional()
+		.default({ limitation: null, max_per_family: null, rules: [], rules_other: null }),
+	parking_policy: parkingPolicySchema
+		.optional()
+		.default({ availability: null, supported_vehicles: [], rules: [], rules_other: null })
 });
 export type Shelter = z.infer<typeof shelterSchema>;
 
@@ -194,14 +378,25 @@ export interface ShelterMaster {
 	_id: string;
 	_rev?: string;
 	type: 'shelter';
-	schema_v: 3;
+	schema_v: 4;
 	code: string;
 	name: string;
 	operation_status?: OperationStatus;
 	shelter_type?: string | null;
+	project_level?: ProjectLevel | null;
 	capacity?: number;
 	area_m2?: number | null;
-	area_type?: string | null;
+	area_type?: AreaType | string | null;
+	// Structured address (CR-023 v4)
+	municipality_zone?: string | null;
+	community?: string | null;
+	address_no?: string | null;
+	village_no?: string | null;
+	subdistrict?: string | null;
+	district?: string | null;
+	province?: string | null;
+	postal_code?: string | null;
+	key_personnel?: KeyPersonnel | null;
 	facilities?: {
 		toilets_male?: number | null;
 		toilets_female?: number | null;
@@ -210,6 +405,7 @@ export interface ShelterMaster {
 		water_points?: number | null;
 		handwashing_stations?: number | null;
 		car_toilet_accessible?: boolean | null;
+		car_toilet_supported?: number | null;
 	};
 	common_areas?: CommonAreas;
 	utilities?: {
@@ -222,8 +418,12 @@ export interface ShelterMaster {
 		elevation_m?: number | null;
 		entrance_description?: string | null;
 		constraints?: string | null;
+		secondary_muster_point?: string | null;
 	};
 	zones?: Zone[];
+	admission_policy?: AdmissionPolicy;
+	luggage_policy?: LuggagePolicy;
+	parking_policy?: ParkingPolicy;
 	location?: { address?: string | null; lat?: number | null; lng?: number | null };
 	contact?: { name?: string | null; phone?: string | null };
 	edge_url?: string | null;
@@ -233,9 +433,74 @@ export interface ShelterMaster {
 	updated_at: string;
 }
 
+/** Default-fill for CR-023 v4 policy objects — used by migration + read paths. */
+export const EMPTY_ADMISSION_POLICY: AdmissionPolicy = {
+	supported_vulnerable_groups: [],
+	pet_policy: { policy: null, categories: [] }
+};
+export const EMPTY_LUGGAGE_POLICY: LuggagePolicy = {
+	limitation: null,
+	max_per_family: null,
+	rules: [],
+	rules_other: null
+};
+export const EMPTY_PARKING_POLICY: ParkingPolicy = {
+	availability: null,
+	supported_vehicles: [],
+	rules: [],
+	rules_other: null
+};
+
+/** v3 → v4 default-fill (CR-023). Additive: fills new optional fields on read. */
+function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
+	return {
+		...v3,
+		schema_v: 4 as const,
+		project_level: v3.project_level ?? null,
+		municipality_zone: v3.municipality_zone ?? null,
+		community: v3.community ?? null,
+		address_no: v3.address_no ?? null,
+		village_no: v3.village_no ?? null,
+		subdistrict: v3.subdistrict ?? null,
+		district: v3.district ?? null,
+		province: v3.province ?? null,
+		postal_code: v3.postal_code ?? null,
+		key_personnel: v3.key_personnel ?? null,
+		facilities: {
+			...v3.facilities,
+			car_toilet_supported: v3.facilities?.car_toilet_supported ?? null
+		},
+		common_areas: {
+			central_kitchen: v3.common_areas?.central_kitchen ?? null,
+			helipad: v3.common_areas?.helipad ?? null,
+			parking_capacity: v3.common_areas?.parking_capacity ?? null,
+			sub_storage: (v3.common_areas?.sub_storage ?? []).map((s) => ({
+				...s,
+				area_m2: s.area_m2 ?? null
+			})),
+			isolation_room: v3.common_areas?.isolation_room ?? null,
+			women_child_friendly_space: v3.common_areas?.women_child_friendly_space ?? null,
+			logistics_area_m2: v3.common_areas?.logistics_area_m2 ?? null
+		},
+		risk: {
+			...v3.risk,
+			secondary_muster_point: v3.risk?.secondary_muster_point ?? null
+		},
+		zones: (v3.zones ?? []).map((z) => ({
+			...z,
+			area_m2: z.area_m2 ?? null,
+			specifics: z.specifics ?? null
+		})),
+		admission_policy: v3.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
+		luggage_policy: v3.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
+		parking_policy: v3.parking_policy ?? { ...EMPTY_PARKING_POLICY }
+	};
+}
+
 /** Idempotent v2 → current migration. Safe to call multiple times. */
 export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaster): ShelterMaster {
-	if (master.schema_v >= 3) return master as ShelterMaster;
+	if (master.schema_v >= 4) return master as ShelterMaster;
+	if (master.schema_v === 3) return migrateV3ToV4(master as ShelterMaster);
 	const v2 = master as ShelterMasterV2;
 	// Backfill shelter capacity: v2 stored capacity at the top level but v3 zones
 	// are the source of truth, so sum zone capacity (>= 0) and fall back to 100
@@ -296,5 +561,6 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	delete (v3 as Record<string, unknown>).items;
 	delete (v3 as Record<string, unknown>).rules;
 	delete (v3 as Record<string, unknown>).sops;
-	return v3 as unknown as ShelterMaster;
+	// Chain v2→v3→v4 so a v2 doc lands on the current shape in one call.
+	return migrateV3ToV4(v3 as unknown as ShelterMaster);
 }

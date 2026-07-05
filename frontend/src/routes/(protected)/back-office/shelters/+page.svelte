@@ -1,13 +1,26 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import * as Card from '$lib/components/ui/card/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import Building from '@lucide/svelte/icons/building';
+	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
 	import { ShelterList, useShelters, type ShelterSummary } from '$lib/features/shelters';
 
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+
 	const sheltersQuery = useShelters();
+	const shelters = $derived(sheltersQuery.data ?? []);
+	const total = $derived(shelters.length);
+	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
+	const pageShelters = $derived(
+		shelters.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+	);
+
+	// Clamp back to the last valid page if the list shrinks (e.g. after a delete).
+	$effect(() => {
+		if (currentPage > totalPages) currentPage = totalPages;
+	});
 
 	function handleCreateNew() {
 		goto(resolve('/back-office/shelters/create'));
@@ -23,28 +36,53 @@
 </svelte:head>
 
 <div class="flex w-full flex-1 flex-col gap-6 p-6">
-	<div class="flex items-center justify-between gap-4 border-l-4 border-border pl-3">
-		<h2 class="text-sm font-bold text-foreground">จัดการโครงสร้างศูนย์พักพิง</h2>
-		<Button size="sm" onclick={handleCreateNew}>
+	<!-- Page heading -->
+	<div class="flex flex-wrap items-end justify-between gap-4">
+		<div>
+			<h2 class="text-2xl font-bold tracking-tight text-foreground">
+				จัดการข้อมูลศูนย์พักพิง (Shelters)
+			</h2>
+			<p class="mt-1 text-sm text-muted-foreground">
+				รายชื่อศูนย์พักพิงทั้งหมดในระบบและสถานะความจุ
+			</p>
+		</div>
+		<Button onclick={handleCreateNew}>
 			<Plus class="mr-2 h-4 w-4" /> เพิ่มศูนย์พักพิงใหม่
 		</Button>
 	</div>
 
-	<Card.Root>
-		<Card.Header>
-			<div class="flex items-center gap-2">
-				<Building class="h-4 w-4 text-muted-foreground" />
-				<Card.Title class="text-sm">ศูนย์พักพิงในระบบ</Card.Title>
-			</div>
-		</Card.Header>
-		<Card.Content>
-			{#if sheltersQuery.isLoading}
-				<p class="text-sm text-muted-foreground">กำลังโหลด...</p>
-			{:else if sheltersQuery.isError}
-				<p class="text-sm text-destructive">เกิดข้อผิดพลาด: {sheltersQuery.error?.message}</p>
-			{:else}
-				<ShelterList shelters={sheltersQuery.data ?? []} onedit={handleEdit} />
+	<!-- List card (rounding matches the shelter form sections) -->
+	<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
+		{#if sheltersQuery.isLoading}
+			<p class="py-8 text-center text-sm text-muted-foreground">กำลังโหลด...</p>
+		{:else if sheltersQuery.isError}
+			<p class="py-8 text-center text-sm text-destructive">
+				เกิดข้อผิดพลาด: {sheltersQuery.error?.message}
+			</p>
+		{:else}
+			<ShelterList shelters={pageShelters} onedit={handleEdit} />
+
+			{#if totalPages > 1}
+				<div class="mt-4 flex justify-center border-t border-shelter-border pt-4">
+					<Pagination.Root bind:page={currentPage} count={total} perPage={PAGE_SIZE}>
+						{#snippet children({ pages })}
+							<Pagination.Content>
+								<Pagination.Previous />
+								{#each pages as p, i (i)}
+									<Pagination.Item>
+										{#if p.type === 'page'}
+											<Pagination.Link page={p} isActive={p.value === currentPage} />
+										{:else}
+											<Pagination.Ellipsis />
+										{/if}
+									</Pagination.Item>
+								{/each}
+								<Pagination.Next />
+							</Pagination.Content>
+						{/snippet}
+					</Pagination.Root>
+				</div>
 			{/if}
-		</Card.Content>
-	</Card.Root>
+		{/if}
+	</div>
 </div>
