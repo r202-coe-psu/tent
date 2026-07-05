@@ -10,6 +10,7 @@ import {
 	type ReceiveInput
 } from '../domain/operations';
 import type { OperationsRepository } from './operations.repository';
+import { supplyRepository } from '../../supply/data/supply.pouch';
 
 export { SHELTER_CODE, SHELTER_DB };
 
@@ -43,6 +44,10 @@ export class OperationsPouchRepository implements OperationsRepository {
 
 	async receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger> {
 		const entry = createReceiveEntry(input, ctx);
+		const item = await supplyRepository().getItem(entry.item_id);
+		if (item && item.unit !== entry.unit) {
+			throw new Error(`Unit mismatch for item ${entry.item_id}: expected ${item.unit}, got ${entry.unit}`);
+		}
 		return this.addLedgerEntry(entry);
 	}
 }
