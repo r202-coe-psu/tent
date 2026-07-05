@@ -1,30 +1,51 @@
 ---
 id: CR-032
-title: Add purchase reason to stock_ledger
+title: "Add purchase reason to stock_ledger"
 status: proposed
 date: 2026-07-05
-author: Pu2f
-impact: data-schema, application-logic
+updated: 2026-07-06
+requested_by: development team C
+decided_by: project owner
+layer: volatile
+affects:
+  - docs/data/schema.md §2.1
+  - schema_v stock_ledger 1 → 2
+  - frontend/src/lib/features/operations/domain/operations.ts
+  - frontend/src/lib/features/operations/data/operations.pouch.ts
+  - frontend/src/lib/features/operations/ui/ReceiveStockForm.svelte
 ---
 
-# CR-032: Add purchase reason to stock_ledger
+# CR-032 — Add purchase reason to stock_ledger
 
-## 1. Context and Problem Statement
-Task T-11 (Stock receive + ledger write) introduces the ability to receive stock from a "purchase" (จัดซื้อจัดจ้าง) source, in addition to donations or transfers. However, `stock_ledger.reason` in `docs/data/schema.md` only had `donation`, `transfer_in`, `receive`, and `adjust`.
+> [!NOTE]
+> **สรุป (TL;DR):** เพิ่ม `purchase` เข้าไปใน enum `reason` ของ `stock_ledger` เพื่อรองรับการรับสต็อกจากแหล่ง "จัดซื้อจัดจ้าง" แยกจากเงินบริจาค · schema_v stock_ledger 1→2 · **ยังไม่ merge เข้าโค้ด — รอ sign-off จริงจาก @net-lynx**
 
-## 2. Proposed Change
-1. Add `purchase` to the allowed `reason` values in `stock_ledger` schema.
-2. Bump `schema_v` of `stock_ledger` from `1` to `2`.
-3. Map the `purchase` source input directly to the `purchase` reason.
+## Why
 
-## 3. Scope of Impact
-* **Data Model:** `docs/data/schema.md` updated to reflect `stock_ledger` `schema_v 2` and the new reason.
-* **Domain Layer:** `receiveSourceSchema` and `createReceiveEntry` updated to handle `purchase`. `createStockLedger` now stamps `schema_v 2`.
-* **UI Layer:** Select input in `ReceiveStockForm` includes "จัดซื้อ / หน่วยงานรัฐ".
+Task T-11 (Stock receive + ledger write) ต้องรองรับการรับสต็อกจากแหล่ง "จัดซื้อจัดจ้าง" (purchase) เพิ่มจากเดิมที่มีแค่บริจาคและโอนย้าย แต่ `stock_ledger.reason` ใน `docs/data/schema.md` มีแค่ `donation`, `transfer_in`, `receive`, และ `adjust` เท่านั้น
 
-## 4. Alternatives Considered
-* **Mapping to `receive`**: Originally mapped `purchase` to `receive`, but this loses historical tracking data for dashboard and BI tools that need to distinguish between donations and purchases (T-14).
+## Change
 
-## 5. Review & Sign-off
-* **PO/TL:** @net-lynx
-* **Status:** Proposed — awaiting actual sign-off from @net-lynx (previously marked "Accepted" without a verifiable approval; reverted 2026-07-06)
+1. เพิ่ม `purchase` เข้าไปในค่า `reason` ที่อนุญาตของ `stock_ledger` schema
+2. Bump `schema_v` ของ `stock_ledger` จาก `1` เป็น `2`
+3. Map ค่า `purchase` source ตรงไปยัง reason `purchase`
+
+### Alternatives considered
+
+- **Map ไปที่ `receive` แทน**: ตอนแรก map `purchase` ไปที่ `receive` แต่จะทำให้เสียข้อมูลเชิงประวัติ ทำให้ dashboard/BI (T-14) แยกไม่ออกระหว่างเงินบริจาคกับการจัดซื้อ
+
+## Impact
+
+- **Data Model:** `docs/data/schema.md` §2.1 — `stock_ledger` `schema_v` 1→2 พร้อม reason ใหม่
+- **Domain Layer:** `receiveSourceSchema` และ `createReceiveEntry` ต้องรองรับ `purchase`; `createStockLedger` ต้อง stamp `schema_v 2`
+- **UI Layer:** ตัวเลือกใน `ReceiveStockForm` เพิ่ม "จัดซื้อ / หน่วยงานรัฐ"
+
+## Migration
+
+schema_v 1→2 เป็นการเพิ่ม enum value ใหม่เท่านั้น ไม่มีการเปลี่ยนโครงสร้างฟิลด์ — เอกสารเดิมที่มี `schema_v: 1` ยังอ่าน/ใช้งานได้ปกติ ไม่ต้อง backfill
+
+## Decision log
+
+- 2026-07-05 — proposed; renumbered CR-031 → CR-032 (CR-031 ถูกใช้โดย develop สำหรับ item master schema reconciliation)
+- 2026-07-05 — มาร์กเป็น accepted ในโค้ดโดยไม่มีหลักฐาน sign-off จริงจาก @net-lynx
+- 2026-07-06 — ตรวจพบว่าไม่มี sign-off จริง; revert สถานะกลับเป็น proposed และถอนโค้ด/schema.md ที่ ship ไปแล้ว (`purchase` reason, `schema_v 2`) ออกจนกว่าจะอนุมัติจริง
