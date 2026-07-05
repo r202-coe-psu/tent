@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-03
+updated: 2026-07-05
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -408,11 +408,14 @@ interface MasterDataItem {
 
 ### 4.2 `item_master` — `item_master:{sku}` หรือ `item_master:{ulid}` · **schema_v 2** (แทนที่ `supply_item`)
 
+> **Reconcile (CR-031):** เพิ่มฟิลด์ `category` (opt) อ้างอิง `item_category.name` — schema_v 2 คงเดิม
+
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `name` | str | req | ห้ามว่างเปล่า |
 | `SKU` | str | opt | รหัสสินค้า เช่น `P-001` |
 | `description` | str | opt | รายละเอียด / หมายเหตุ |
+| `category` | str | opt | หมวดหมู่สินค้า อ้างอิงชื่อจาก `item_category.name` เช่น `"food"`, `"medicine"`, `"hygiene"` |
 | `base_unit` | str | req | หน่วยที่เล็กที่สุด เช่น `ชิ้น`, `กรัม`, `มิลลิลิตร` |
 | `conversions` | [{`uom_name`:str, `multiplier`:num>0, `barcode`:str?}] | opt | หน่วยทวีคูณสำหรับรับ/จ่ายล็อตใหญ่ |
 | `default_purchasing_uom` | str | opt | หน่วยเริ่มต้นตอนทำใบสั่งซื้อ |

@@ -1,9 +1,9 @@
 ---
-id: CR-030
+id: CR-031
 title: "Item Master Schema Reconciliation — เพิ่มฟิลด์ category"
-status: proposed
+status: done
 date: 2026-07-04
-updated: 2026-07-04
+updated: 2026-07-05
 requested_by: development team C
 decided_by: project owner
 layer: volatile
@@ -12,7 +12,7 @@ affects:
   - frontend/src/lib/features/catalog/domain/catalog.ts
 ---
 
-# CR-030 — Item Master Schema Reconciliation (เพิ่มฟิลด์ category)
+# CR-031 — Item Master Schema Reconciliation (เพิ่มฟิลด์ category)
 
 > [!NOTE]
 > **สรุป (TL;DR):** เพิ่มฟิลด์ `category` (str, opt) ในเอกสาร Canonical Schema ของ `item_master` เพื่อจัดแนว (reconcile) ให้ตรงกับแบบจำลองจริงในโค้ดฝั่ง frontend และ Mock UI ที่ใช้ระบุประเภท/หมวดหมู่ของสินค้ามาตรฐานกลาง · schema_v คงที่ระดับ 2 (reconcile)
@@ -47,3 +47,5 @@ affects:
 ## Decision log
 
 - 2026-07-04 — proposed
+- 2026-07-05 — renumbered CR-030 → CR-031 (CR-030 ถูกใช้โดย kitchen requisition unit)
+- 2026-07-05 — approved; schema.md §4.2 updated (done)
