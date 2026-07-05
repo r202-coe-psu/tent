@@ -23,3 +23,5 @@ docs/meetings/
 couchdb-session.ini
 
 .pnpm-store/
+
+.antigravitycli/
