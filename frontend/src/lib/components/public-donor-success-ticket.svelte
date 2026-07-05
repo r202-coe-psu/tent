@@ -9,7 +9,7 @@
 	class="mx-auto max-w-md rounded-3xl border border-border bg-card p-6 text-center shadow-xs md:p-8"
 >
 	<div
-		class="bg-success-muted text-success border-success/25 mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border"
+		class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-success/25 bg-success-muted text-success"
 	>
 		<Check class="h-8 w-8" />
 	</div>

@@ -66,7 +66,7 @@
 			</a>
 
 			<a
-				href={resolve('/public/family-search')}
+				href="/public/family-search"
 				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
 			>
@@ -87,8 +87,8 @@
 			</a>
 
 			<a
-				href={resolve('/public/transparency')}
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
+				href="/public/transparency"
+				class="hidden pointer-events-none items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
 			>
 				<FileText class="h-4 w-4" />
@@ -96,8 +96,8 @@
 				<span class="text-[9px] font-bold text-muted-foreground/60">(เร็วๆ นี้)</span>
 			</a>
 
-			<!-- Dropdown for Volunteers -->
-			<div class="group relative">
+			<!-- Dropdown for Volunteers (Hidden per T-28/29 Deferrals) -->
+			<div class="group relative hidden">
 				<a
 					href={resolve('/public/volunteers')}
 					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground hover:bg-muted/50 {isActive(
@@ -122,7 +122,7 @@
 						ลงทะเบียนอาสาสมัคร
 					</a>
 					<a
-						href={resolve('/public/volunteers/shifts')}
+						href="/public/volunteers/shifts"
 						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
 					>
 						ตรวจสอบตารางกะงาน

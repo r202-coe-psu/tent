@@ -5,7 +5,7 @@
 </script>
 
 <div
-	class="mb-8 overflow-hidden rounded-xl border border-danger-border bg-danger-muted/30 shadow-xs sticky top-0 z-40 md:relative md:z-auto backdrop-blur-md"
+	class="sticky top-0 z-40 mb-8 overflow-hidden rounded-xl border border-danger-border bg-danger-muted/30 shadow-xs backdrop-blur-md md:relative md:z-auto"
 >
 	<div class="flex flex-col border-l-4 border-danger p-5 md:flex-row md:items-start md:gap-4">
 		<!-- Alert Icon -->
@@ -18,11 +18,12 @@
 		<div class="flex-1">
 			<h3 class="text-base font-bold text-danger">ประกาศด่วนระดับ 4 (อพยพทันที)</h3>
 			<p class="mt-1 text-sm leading-relaxed text-danger-subtle">
-				พื้นที่ อ.เมืองน้ำท่วมสูง 1.5 - 2 เมตร กระแสไฟถูกตัดขอให้ประชาชนในพื้นที่เสี่ยงเคลื่อนย้ายมายังศูนย์พักพิงที่เปิดรับด่วน
+				พื้นที่ อ.เมืองน้ำท่วมสูง 1.5 - 2 เมตร
+				กระแสไฟถูกตัดขอให้ประชาชนในพื้นที่เสี่ยงเคลื่อนย้ายมายังศูนย์พักพิงที่เปิดรับด่วน
 			</p>
 			<!-- Shelter Badges -->
 			<div class="mt-4 flex flex-wrap gap-3">
-				{#each alerts as alert}
+				{#each alerts as alert (alert.name)}
 					<div
 						class="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 shadow-2xs"
 					>

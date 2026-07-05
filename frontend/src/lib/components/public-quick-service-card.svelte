@@ -30,12 +30,14 @@
 			<IconComponent class="size-7" />
 		</div>
 		{#if badge}
-		<span class="rounded-full w-fit  px-2.5 py-1 text-[9px] font-bold {badgeClass} text-center">
-			{@html badge}
-		</span>
+			<span class="w-fit rounded-full px-2.5 py-1 text-[9px] font-bold {badgeClass} text-center">
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				{@html badge}
+			</span>
 		{/if}
 	</div>
-	<h3 class="text-sm w-full font-bold text-card-foreground">
+	<h3 class="w-full text-sm font-bold text-card-foreground">
+		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 		{@html title}
 	</h3>
 
