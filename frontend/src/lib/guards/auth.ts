@@ -59,8 +59,8 @@ export async function requireManager(fetchFn?: typeof fetch) {
  * Warehouse guard — requires INVENTORY_WRITE_ROLES: system_admin, shelter_manager,
  * or warehouse_staff (role-permission-matrix.md §4). Redirects to / otherwise.
  */
-export async function requireWarehouseAccess() {
-	await requireAuth();
+export async function requireWarehouseAccess(fetchFn: typeof fetch = fetch) {
+	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
 	if (!isSystemAdmin(roles) && !isShelterManager(roles) && !isWarehouseStaff(roles)) {
 		throw redirect(302, resolve(LANDING_ROUTE));

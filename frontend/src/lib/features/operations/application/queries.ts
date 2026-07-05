@@ -56,7 +56,7 @@ export function startOperationsLiveQuery(queryClient: QueryClient): LiveQueryHan
 	return startLiveQuery(shelterDb(), queryClient, (type) => {
 		switch (type) {
 			case 'stock_ledger':
-				return [operationsKeys.ledger(), operationsKeys.balance()];
+				return [operationsKeys.all];
 			default:
 				return [];
 		}

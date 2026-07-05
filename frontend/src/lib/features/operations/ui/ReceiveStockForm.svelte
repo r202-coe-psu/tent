@@ -7,7 +7,7 @@
 	import { receiveInputSchema, type ReceiveInput } from '../domain/operations';
 	import { useSupplyItems, type SupplyItem } from '$lib/features/supply';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '../data/operations.pouch';
+	import { SHELTER_CODE } from '$lib/db/shelter';
 	import { useReceiveStock } from '../application/queries';
 	import { toast } from 'svelte-sonner';
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
@@ -32,7 +32,7 @@
 		return items.filter((i) => i.name.toLowerCase().includes(query));
 	});
 
-	const form = superForm(defaults(zod4(receiveInputSchema)), {
+	const form = superForm(defaults({ source: 'donation' }, zod4(receiveInputSchema)), {
 		SPA: true,
 		validators: zod4(receiveInputSchema),
 		resetForm: true,
