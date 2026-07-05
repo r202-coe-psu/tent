@@ -1,12 +1,19 @@
 <script lang="ts">
-	import { MealPlanList, startKitchenLiveQuery } from '$lib/features/kitchen';
+	import { MealPlanList, RequisitionHistory, startKitchenLiveQuery } from '$lib/features/kitchen';
+	import { startOperationsLiveQuery } from '$lib/features/operations';
 	import { useQueryClient } from '@tanstack/svelte-query';
 
 	const queryClient = useQueryClient();
 
 	$effect(() => {
-		const handle = startKitchenLiveQuery(queryClient);
-		return () => handle.stop();
+		const kitchen = startKitchenLiveQuery(queryClient);
+		// Requisitions deduct stock via stock_ledger — keep on-hand balances live
+		// so the requisition dialog and history reflect the current stock.
+		const operations = startOperationsLiveQuery(queryClient);
+		return () => {
+			kitchen.stop();
+			operations.stop();
+		};
 	});
 </script>
 
@@ -16,4 +23,7 @@
 
 <div class="flex-1 overflow-auto">
 	<MealPlanList />
+	<div class="px-4 pb-4">
+		<RequisitionHistory />
+	</div>
 </div>
