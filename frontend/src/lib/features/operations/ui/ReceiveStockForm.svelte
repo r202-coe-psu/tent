@@ -262,7 +262,6 @@
 						bind:value={$formData.source}
 						class="h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
 					>
-						<option value="" disabled selected>เลือกแหล่งที่มา</option>
 						<option value="donation">ของบริจาค (Donation)</option>
 						<option value="purchase">การจัดซื้อจัดจ้าง (Purchase)</option>
 						<option value="transfer_in">โอนย้ายมาจากศูนย์อื่น (Transfer In)</option>
