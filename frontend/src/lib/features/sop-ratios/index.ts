@@ -27,6 +27,7 @@ export {
 	useActiveSopProfile,
 	useActiveSopRatio,
 	useSopProfiles,
+	useActiveSopOverride,
 	getActiveSopProfile,
 	sopVersionKeys
 } from './application/queries';
@@ -41,8 +42,13 @@ export {
 export {
 	useCreateMasterVersion,
 	useCreateOverrideVersion,
+	useCreateInitialOverride,
+	useSetMasterActive,
+	useSetOverrideActive,
+	useSetOverrideInactive,
 	type CreateMasterVersionInput,
-	type CreateOverrideVersionInput
+	type CreateOverrideVersionInput,
+	type CreateInitialOverrideInput
 } from './application/use-create-version';
 
 // Live-sync wiring (call once per layout, pass QueryClient)

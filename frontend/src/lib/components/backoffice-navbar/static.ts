@@ -90,7 +90,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				children: [
 					{ label: '1. ข้อมูลบุคคล', href: null, icon: Users },
 					{ label: '2. คลังสินค้า', href: null, icon: Warehouse },
-					{ label: '3. พารามิเตอร์', href: resolve('/back-office/sop-parameters'), icon: Calculator },
+					{
+						label: '3. พารามิเตอร์',
+						href: resolve('/back-office/sop-parameters'),
+						icon: Calculator
+					},
 					{ label: '4. อาสาสมัคร', href: null, icon: HandHeart },
 					{ label: '5. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]

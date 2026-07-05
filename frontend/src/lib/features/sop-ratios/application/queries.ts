@@ -25,9 +25,12 @@ function getLatestVersion<T extends { version: number }>(list: T[]): T | null {
  * master (per resolveEffectiveProfile precedence). Returns the winning doc
  * itself (not just its ratios) so callers can read _id/version for calc_source.
  */
-export async function getActiveSopProfile(): Promise<SopMaster | SopOverride | null> {
+export async function getActiveSopProfile(
+	shelterCode?: string
+): Promise<SopMaster | SopOverride | null> {
+	const code = shelterCode ?? SHELTER_CODE;
 	const [overrides, masters] = await Promise.all([
-		sopOverrideRepository(SHELTER_CODE).listActive(),
+		sopOverrideRepository(code).listActive(),
 		sopMasterRepository().listActive()
 	]);
 	const activeOverride = getLatestVersion(overrides);
@@ -35,10 +38,10 @@ export async function getActiveSopProfile(): Promise<SopMaster | SopOverride | n
 	return activeOverride ?? activeMaster ?? null;
 }
 
-export const useActiveSopRatio = () =>
+export const useActiveSopRatio = (shelterCode?: string) =>
 	createQuery(() => ({
-		queryKey: sopRatioKeys.active(),
-		queryFn: getActiveSopProfile
+		queryKey: [...sopRatioKeys.active(), shelterCode ?? SHELTER_CODE] as const,
+		queryFn: () => getActiveSopProfile(shelterCode)
 	}));
 
 /**
@@ -51,4 +54,14 @@ export const useSopProfiles = () =>
 	createQuery(() => ({
 		queryKey: sopRatioKeys.list(),
 		queryFn: () => sopMasterRepository().listActive()
+	}));
+
+export const useActiveSopOverride = (shelterCode: string) =>
+	createQuery(() => ({
+		queryKey: [...sopRatioKeys.active(), 'override', shelterCode] as const,
+		queryFn: async () => {
+			const activeOverrides = await sopOverrideRepository(shelterCode).listActive();
+			return getLatestVersion(activeOverrides);
+		},
+		enabled: shelterCode.trim().length > 0
 	}));

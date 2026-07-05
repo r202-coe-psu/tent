@@ -27,7 +27,7 @@ import { createMutation, useQueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
 import { SHELTER_CODE } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
-import { createNewVersion } from '../domain/sop-ratio';
+import { createNewVersion, createInitialProfile } from '../domain/sop-ratio';
 import type { SopMaster, SopOverride, SopRatioKey } from '../domain/sop-ratio';
 import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
 import { sopRatioKeys } from './queries';
@@ -147,15 +147,16 @@ export function useCreateMasterVersion() {
  * </script>
  * ```
  */
-export function useCreateOverrideVersion() {
+export function useCreateOverrideVersion(shelterCode?: string) {
+	const code = shelterCode ?? SHELTER_CODE;
 	const queryClient = useQueryClient();
 
 	return createMutation(() => ({
 		mutationFn: async ({ prev, changes, reason, ctx }: CreateOverrideVersionInput) => {
 			// Guard: prevent cross-shelter writes — ctx.shelterCode must match current shelter.
 			// This is a defense-in-depth check; the route guard should prevent unauthorized access.
-			if (ctx.shelterCode !== SHELTER_CODE) {
-				throw new Error(`shelterCode mismatch: expected ${SHELTER_CODE}, got ${ctx.shelterCode}`);
+			if (ctx.shelterCode !== code) {
+				throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
 			}
 
 			// If changes is empty {}, Object.keys yields [] and hasChanges is false.
@@ -170,7 +171,7 @@ export function useCreateOverrideVersion() {
 
 			const result = createNewVersion(prev, changes, reason, ctx);
 
-			return sopOverrideRepository(SHELTER_CODE).createVersion(
+			return sopOverrideRepository(code).createVersion(
 				result.deactivatedPrev,
 				result.profile,
 				result.audit
@@ -184,6 +185,90 @@ export function useCreateOverrideVersion() {
 
 		onError: () => {
 			toast.error('ไม่สามารถบันทึก Override SOP ได้ — กรุณาลองใหม่อีกครั้ง');
+		}
+	}));
+}
+
+export interface CreateInitialOverrideInput {
+	name: string;
+	ratios: Record<SopRatioKey, number>;
+	ctx: AuthorContext & { base_profile_id: string };
+}
+
+export function useCreateInitialOverride(shelterCode?: string) {
+	const code = shelterCode ?? SHELTER_CODE;
+	const queryClient = useQueryClient();
+
+	return createMutation(() => ({
+		mutationFn: async ({ name, ratios, ctx }: CreateInitialOverrideInput) => {
+			if (ctx.shelterCode !== code) {
+				throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
+			}
+			const { profile, audit } = createInitialProfile('sop_override', name, ratios, ctx);
+			return sopOverrideRepository(code).createVersion(null, profile, audit);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
+			toast.success('สร้างค่าปรับแต่งเฉพาะศูนย์สำเร็จ');
+		},
+		onError: () => {
+			toast.error('ไม่สามารถสร้างค่าปรับแต่งเฉพาะศูนย์ได้ — กรุณาลองใหม่อีกครั้ง');
+		}
+	}));
+}
+
+export function useSetMasterActive() {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({ id, createdBy }: { id: string; createdBy: string }) => {
+			return sopMasterRepository().setActive(id, { createdBy });
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
+			toast.success('เปิดใช้งานเวอร์ชัน Master SOP สำเร็จ');
+		},
+		onError: () => {
+			toast.error('ไม่สามารถเปิดใช้งาน Master SOP ได้');
+		}
+	}));
+}
+
+export function useSetOverrideActive(shelterCode?: string) {
+	const code = shelterCode ?? SHELTER_CODE;
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({ id, ctx }: { id: string; ctx: AuthorContext }) => {
+			if (ctx.shelterCode !== code) {
+				throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
+			}
+			return sopOverrideRepository(code).setActive(id, ctx);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
+			toast.success('เปิดใช้งานเวอร์ชัน Override SOP สำเร็จ');
+		},
+		onError: () => {
+			toast.error('ไม่สามารถเปิดใช้งาน Override SOP ได้');
+		}
+	}));
+}
+
+export function useSetOverrideInactive(shelterCode?: string) {
+	const code = shelterCode ?? SHELTER_CODE;
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({ id, ctx }: { id: string; ctx: AuthorContext }) => {
+			if (ctx.shelterCode !== code) {
+				throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
+			}
+			return sopOverrideRepository(code).setInactive(id, ctx);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
+			toast.success('ยกเลิกค่าปรับแต่งเฉพาะศูนย์สำเร็จ (กลับไปใช้ค่ามาตรฐาน EOC)');
+		},
+		onError: () => {
+			toast.error('ไม่สามารถยกเลิกค่าปรับแต่งเฉพาะศูนย์ได้');
 		}
 	}));
 }

@@ -342,6 +342,40 @@ export class SopOverridePouchRepository implements SopOverrideRepository {
 			await saveBulkAtomic(this.db, docsToSave, 'active override');
 		}
 	}
+
+	async setInactive(id: string, ctx?: AuthorContext): Promise<void> {
+		const target = await this.getById(id);
+		if (!target) {
+			throw new Error(`SOP override with ID ${id} not found`);
+		}
+
+		if (target.active) {
+			const docsToSave: Array<SopOverride | AuditEntry> = [
+				{
+					...touch(target),
+					active: false
+				}
+			];
+
+			if (ctx) {
+				const audit = createAuditEntry(
+					{
+						action: 'manual_adjust',
+						target_type: 'sop_override',
+						target_id: target._id,
+						reason: `Deactivate override "${target.name}"`,
+						context: {
+							base_profile_id: target.base_profile_id
+						}
+					},
+					ctx
+				);
+				docsToSave.push(audit);
+			}
+
+			await saveBulkAtomic(this.db, docsToSave, 'deactivate override');
+		}
+	}
 }
 
 /**

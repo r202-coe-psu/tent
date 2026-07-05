@@ -1,8 +1,6 @@
 <script lang="ts">
 	import type { SopMaster } from '$lib/features/sop-ratios';
 	import { SOP_RATIO_KEYS } from '$lib/features/sop-ratios';
-	import { useCreateMasterVersion } from '$lib/features/sop-ratios';
-	import { authStore } from '$lib/stores/auth.svelte';
 	import History from '@lucide/svelte/icons/history';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
@@ -11,16 +9,14 @@
 	interface Props {
 		profiles: SopMaster[];
 		onViewHistory: (profile: SopMaster) => void;
-		onEdit: (profile: SopMaster) => void;
+		onEdit?: (profile: SopMaster) => void;
 	}
 
 	const { profiles, onViewHistory, onEdit }: Props = $props();
 
 	// Only show the latest active version per profile name
 	const activeProfiles = $derived(
-		profiles
-			.filter((p) => p.active)
-			.sort((a, b) => b.version - a.version)
+		profiles.filter((p) => p.active).sort((a, b) => b.version - a.version)
 	);
 
 	const RATIO_LABELS: Record<string, string> = {
@@ -60,18 +56,24 @@
 						</td>
 					{/each}
 					<td class="px-5 py-4">
-						<span class="rounded-full bg-slate-100 px-2.5 py-1 font-mono text-[12px] font-bold text-slate-600">
+						<span
+							class="rounded-full bg-slate-100 px-2.5 py-1 font-mono text-[12px] font-bold text-slate-600"
+						>
 							v{profile.version}
 						</span>
 					</td>
 					<td class="px-5 py-4">
 						{#if profile.active}
-							<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[12px] font-bold text-emerald-700">
+							<span
+								class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[12px] font-bold text-emerald-700"
+							>
 								<CheckCircle size={13} />
 								ใช้งานอยู่
 							</span>
 						{:else}
-							<span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[12px] font-bold text-slate-500">
+							<span
+								class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[12px] font-bold text-slate-500"
+							>
 								<XCircle size={13} />
 								ปิดใช้งาน
 							</span>
@@ -87,13 +89,15 @@
 								<History size={13} />
 								ประวัติ
 							</button>
-							<button
-								onclick={() => onEdit(profile)}
-								class="inline-flex items-center gap-1.5 rounded-lg bg-[#013365] px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-[#002244]"
-							>
-								<Pencil size={13} />
-								แก้ไข
-							</button>
+							{#if onEdit}
+								<button
+									onclick={() => onEdit(profile)}
+									class="inline-flex items-center gap-1.5 rounded-lg bg-[#013365] px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-[#002244]"
+								>
+									<Pencil size={13} />
+									แก้ไข
+								</button>
+							{/if}
 						</div>
 					</td>
 				</tr>

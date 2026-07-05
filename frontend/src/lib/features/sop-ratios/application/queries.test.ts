@@ -241,13 +241,14 @@ describe('SOP Ratios Application Hooks', () => {
 	});
 
 	describe('useOverrideVersionHistory', () => {
-		it('should return enabled: false when name is empty or whitespace', () => {
-			expect(useOverrideVersionHistory('')).toMatchObject({ enabled: false });
-			expect(useOverrideVersionHistory('   ')).toMatchObject({ enabled: false });
+		it('should return enabled: false when name or shelterCode is empty or whitespace', () => {
+			expect(useOverrideVersionHistory('', 'SH001')).toMatchObject({ enabled: false });
+			expect(useOverrideVersionHistory('   ', 'SH001')).toMatchObject({ enabled: false });
+			expect(useOverrideVersionHistory('name', '')).toMatchObject({ enabled: false });
 		});
 
 		it('should return enabled: true and correctly scoped queryKey for valid name', () => {
-			const result = useOverrideVersionHistory('baseline');
+			const result = useOverrideVersionHistory('baseline', SHELTER_CODE);
 			expect(result).toMatchObject({
 				enabled: true,
 				queryKey: [...sopVersionKeys.override(), 'baseline', SHELTER_CODE]

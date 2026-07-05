@@ -1,22 +1,38 @@
 <script lang="ts">
-	import type { SopMaster } from '$lib/features/sop-ratios';
-	import { SOP_RATIO_KEYS, useCreateMasterVersion } from '$lib/features/sop-ratios';
+	import { isSopMaster, type SopMaster, type SopOverride } from '$lib/features/sop-ratios';
+	import {
+		SOP_RATIO_KEYS,
+		useCreateMasterVersion,
+		useCreateOverrideVersion,
+		useCreateInitialOverride
+	} from '$lib/features/sop-ratios';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import X from '@lucide/svelte/icons/x';
 	import Save from '@lucide/svelte/icons/save';
 
 	interface Props {
-		profile: SopMaster;
+		mode?: 'edit' | 'create_override';
+		profile?: SopMaster | SopOverride;
+		baseMasterProfile?: SopMaster;
+		shelterCode?: string;
 		onClose: () => void;
 	}
 
-	const { profile, onClose }: Props = $props();
+	const { mode = 'edit', profile, baseMasterProfile, shelterCode = '', onClose }: Props = $props();
 
-	const mutation = useCreateMasterVersion();
+	const isMaster = $derived(profile ? isSopMaster(profile) : false);
+
+	const masterMutation = useCreateMasterVersion();
+	const overrideMutation = useCreateOverrideVersion(
+		isMaster ? '' : (profile as SopOverride)?.shelter_code
+	);
+	const initialOverrideMutation = useCreateInitialOverride(shelterCode);
 
 	// Local editable copy of ratios
-	let ratios = $state({ ...profile.ratios });
-	let reason = $state('');
+	const initialRatios =
+		mode === 'edit' && profile ? profile.ratios : (baseMasterProfile?.ratios ?? {});
+	let ratios = $state({ ...initialRatios });
+	let reason = $state(mode === 'create_override' ? 'สร้างค่าปรับแต่งเฉพาะศูนย์ครั้งแรก' : '');
 
 	const RATIO_LABELS: Record<string, { label: string; unit: string; description: string }> = {
 		water_l_per_person_day: {
@@ -36,16 +52,44 @@
 		}
 	};
 
-	const isSaving = $derived(mutation.isPending);
+	const isSaving = $derived(
+		masterMutation.isPending || overrideMutation.isPending || initialOverrideMutation.isPending
+	);
 
 	async function handleSave() {
 		if (!reason.trim()) return;
-		await mutation.mutateAsync({
-			prev: profile,
-			changes: ratios,
-			reason: reason.trim(),
-			ctx: { createdBy: authStore.user?.name ?? 'unknown' }
-		});
+
+		if (mode === 'create_override' && baseMasterProfile && shelterCode) {
+			await initialOverrideMutation.mutateAsync({
+				name: baseMasterProfile.name,
+				ratios: ratios as Record<string, number>,
+				ctx: {
+					shelterCode,
+					createdBy: authStore.user?.name ?? 'unknown',
+					base_profile_id: baseMasterProfile._id
+				}
+			});
+		} else if (mode === 'edit' && profile) {
+			if (isMaster) {
+				await masterMutation.mutateAsync({
+					prev: profile as SopMaster,
+					changes: ratios,
+					reason: reason.trim(),
+					createdBy: authStore.user?.name ?? 'unknown'
+				});
+			} else {
+				const override = profile as SopOverride;
+				await overrideMutation.mutateAsync({
+					prev: override,
+					changes: ratios,
+					reason: reason.trim(),
+					ctx: {
+						shelterCode: override.shelter_code,
+						createdBy: authStore.user?.name ?? 'unknown'
+					}
+				});
+			}
+		}
 		onClose();
 	}
 </script>
@@ -63,11 +107,23 @@
 		<!-- Header -->
 		<div class="flex items-start justify-between border-b border-black/[0.06] px-6 py-5">
 			<div>
-				<p class="text-[11px] font-black uppercase tracking-wider text-[#013365]">
-					แก้ไข Master SOP Profile
+				<p class="text-[11px] font-black tracking-wider text-[#013365] uppercase">
+					{#if mode === 'create_override'}
+						สร้างค่าปรับแต่งเฉพาะศูนย์
+					{:else}
+						แก้ไข {isMaster ? 'Master' : 'Override'} SOP Profile
+					{/if}
 				</p>
-				<h3 class="mt-0.5 text-xl font-bold text-slate-900">{profile.name}</h3>
-				<p class="mt-0.5 font-mono text-[12px] text-slate-400">v{profile.version} → v{profile.version + 1}</p>
+				<h3 class="mt-0.5 text-xl font-bold text-slate-900">
+					{mode === 'create_override' ? baseMasterProfile?.name : profile?.name}
+				</h3>
+				{#if mode === 'edit' && profile}
+					<p class="mt-0.5 font-mono text-[12px] text-slate-400">
+						v{profile.version} → v{profile.version + 1}
+					</p>
+				{:else}
+					<p class="mt-0.5 font-mono text-[12px] text-slate-400">New Version 1</p>
+				{/if}
 			</div>
 			<button
 				onclick={onClose}
@@ -87,7 +143,9 @@
 							<p class="text-[14px] font-bold text-slate-800">{meta?.label ?? key}</p>
 							<p class="text-[11px] text-slate-500">{meta?.description ?? ''}</p>
 						</div>
-						<span class="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-slate-500 shadow-sm border border-black/[0.06]">
+						<span
+							class="rounded-full border border-black/[0.06] bg-white px-2.5 py-1 text-[11px] font-bold text-slate-500 shadow-sm"
+						>
 							{meta?.unit}
 						</span>
 					</div>
@@ -96,7 +154,7 @@
 						step="0.001"
 						min="0.001"
 						bind:value={ratios[key]}
-						class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[15px] font-mono font-semibold text-[#013365] outline-none transition-colors focus:border-[#013365] focus:ring-2 focus:ring-[#013365]/15"
+						class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 font-mono text-[15px] font-semibold text-[#013365] transition-colors outline-none focus:border-[#013365] focus:ring-2 focus:ring-[#013365]/15"
 					/>
 				</div>
 			{/each}
@@ -111,7 +169,7 @@
 					bind:value={reason}
 					placeholder="เช่น ปรับตามมติ EOC ประชุมวันที่ 4 ก.ค. 2568"
 					rows={2}
-					class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[14px] text-slate-700 outline-none transition-colors focus:border-[#013365] focus:ring-2 focus:ring-[#013365]/15 placeholder:text-slate-400"
+					class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[14px] text-slate-700 transition-colors outline-none placeholder:text-slate-400 focus:border-[#013365] focus:ring-2 focus:ring-[#013365]/15"
 				></textarea>
 			</div>
 		</div>

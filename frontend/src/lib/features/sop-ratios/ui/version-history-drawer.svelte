@@ -1,19 +1,31 @@
 <script lang="ts">
-	import type { SopMaster } from '$lib/features/sop-ratios';
-	import { useMasterVersionHistory } from '$lib/features/sop-ratios';
+	import {
+		isSopMaster,
+		useMasterVersionHistory,
+		useOverrideVersionHistory,
+		type SopMaster,
+		type SopOverride
+	} from '$lib/features/sop-ratios';
 	import X from '@lucide/svelte/icons/x';
 	import Clock from '@lucide/svelte/icons/clock';
 	import User from '@lucide/svelte/icons/user';
-	import Tag from '@lucide/svelte/icons/tag';
 
 	interface Props {
-		profile: SopMaster;
+		profile: SopMaster | SopOverride;
 		onClose: () => void;
 	}
 
 	const { profile, onClose }: Props = $props();
 
-	const historyQuery = useMasterVersionHistory(profile.name);
+	const isMaster = $derived(isSopMaster(profile));
+
+	const masterQuery = useMasterVersionHistory(isMaster ? profile.name : '');
+	const overrideQuery = useOverrideVersionHistory(
+		!isMaster ? profile.name : '',
+		!isMaster ? (profile as SopOverride).shelter_code : ''
+	);
+
+	const historyQuery = $derived(isMaster ? masterQuery : overrideQuery);
 
 	function formatDate(iso: string) {
 		return new Date(iso).toLocaleString('th-TH', {
@@ -38,8 +50,8 @@
 	<!-- Header -->
 	<div class="flex items-start justify-between border-b border-black/[0.06] px-6 py-5">
 		<div>
-			<p class="text-[11px] font-black uppercase tracking-wider text-[#013365]">
-				ประวัติการแก้ไข
+			<p class="text-[11px] font-black tracking-wider text-[#013365] uppercase">
+				ประวัติการแก้ไข {isMaster ? 'Master' : 'Override'}
 			</p>
 			<h3 class="mt-0.5 text-lg font-bold text-slate-900">{profile.name}</h3>
 		</div>
@@ -56,7 +68,9 @@
 		{#if historyQuery.isLoading}
 			<div class="flex items-center justify-center py-16 text-slate-400">
 				<div class="flex flex-col items-center gap-3">
-					<div class="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-[#013365]"></div>
+					<div
+						class="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-[#013365]"
+					></div>
 					<p class="text-sm font-medium">กำลังโหลดประวัติ...</p>
 				</div>
 			</div>
@@ -65,7 +79,7 @@
 		{:else if (historyQuery.data ?? []).length === 0}
 			<p class="py-12 text-center text-sm font-medium text-slate-400">ยังไม่มีประวัติการแก้ไข</p>
 		{:else}
-			<ol class="relative border-l-2 border-slate-100 pl-6 space-y-6">
+			<ol class="relative space-y-6 border-l-2 border-slate-100 pl-6">
 				{#each historyQuery.data ?? [] as version (version._id)}
 					<li class="relative">
 						<!-- Timeline dot -->

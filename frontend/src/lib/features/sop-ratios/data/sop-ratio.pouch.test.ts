@@ -262,6 +262,29 @@ describe('SopOverridePouchRepository', () => {
 		expect(doc1?.active).toBe(false);
 		expect(doc2?.active).toBe(true);
 	});
+
+	it('should deactivate active override and save audit log', async () => {
+		const { profile, audit } = createInitialProfile(
+			'sop_override',
+			'Local Override',
+			{ water_l_per_person_day: 18, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			overrideCtx
+		);
+
+		await repo.createVersion(null, profile, audit);
+
+		let doc = await repo.getById(profile._id);
+		expect(doc?.active).toBe(true);
+
+		await repo.setInactive(profile._id, overrideCtx);
+
+		doc = await repo.getById(profile._id);
+		expect(doc?.active).toBe(false);
+
+		// Verify no active overrides exist
+		const activeOverrides = await repo.listActive();
+		expect(activeOverrides.length).toBe(0);
+	});
 });
 
 describe('resolveEffective application helper', () => {

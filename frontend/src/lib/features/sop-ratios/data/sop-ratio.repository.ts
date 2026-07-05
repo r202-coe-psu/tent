@@ -44,4 +44,10 @@ export interface SopOverrideRepository {
 	 * (including shelterCode) for proper auditing.
 	 */
 	setActive(id: string, ctx?: AuthorContext): Promise<void>;
+
+	/**
+	 * Deactivates the specified override profile.
+	 * When the shelter has no active override, it falls back to the active master profile.
+	 */
+	setInactive(id: string, ctx?: AuthorContext): Promise<void>;
 }
