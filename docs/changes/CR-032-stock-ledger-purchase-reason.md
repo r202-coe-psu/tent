@@ -1,5 +1,5 @@
 ---
-id: CR-031
+id: CR-032
 title: Add purchase reason to stock_ledger
 status: accepted
 date: 2026-07-05
@@ -7,7 +7,7 @@ author: Pu2f
 impact: data-schema, application-logic
 ---
 
-# CR-031: Add purchase reason to stock_ledger
+# CR-032: Add purchase reason to stock_ledger
 
 ## 1. Context and Problem Statement
 Task T-11 (Stock receive + ledger write) introduces the ability to receive stock from a "purchase" (จัดซื้อจัดจ้าง) source, in addition to donations or transfers. However, `stock_ledger.reason` in `docs/data/schema.md` only had `donation`, `transfer_in`, `receive`, and `adjust`.
