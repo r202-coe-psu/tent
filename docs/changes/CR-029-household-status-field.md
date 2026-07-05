@@ -1,7 +1,7 @@
 ---
 id: CR-029
 title: Household Schema — เพิ่มฟิลด์สถานะ (status) และฟิลด์จุดหมายเช็คเอาต์ (checkout_destination) เพื่อรองรับวงจรชีวิตครัวเรือน (T-04/T-06); schema_v 3 → 4
-status: proposed
+status: approved
 date: 2026-07-01
 updated: 2026-07-03
 requested_by: development team B

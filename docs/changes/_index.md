@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-03 # CR-028 approved (evacuee person_id); renumbered from CR-027; index ครบ CR-001..028
+updated: 2026-07-05 # CR-029 approved (household status + checkout_destination); index ครบ CR-001..029
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -44,3 +44,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-026](CR-026-sop-ratio-catalog-scope-and-history-ratification.md) | SOP ratio governance ratification (CR-D2 / T-18.3) — ratify catalog/override two-tier (CR-006, ปิด QR-001 Q-T18-1) + history mechanism (`audit` doc type + `version: prev.version+1`, ปิด CR-018 §7 "deferred"); PO ยืนยันด้วยวาจา 2026-07-01, เอกสาร approved 2026-07-03; T-18.5 sign-off (คนละ artifact) ปิดแล้วแยกต่างหาก | approved | stable | 2026-07-01 (approved 07-03) | QR-001 Q-T18-1, CR-018 §7, T-30 (unblocked) |
 | [CR-027](CR-027-user-schema-update-and-password-policy.md) | User schema update and password policy — เพิ่ม `display_name` ใน `_users` (opt DB / req UI) · เอกสาร [password-policy.md](../data/password-policy.md) + บังคับใช้ Client (Zod) และ Server (`validatePassword`) | approved | volatile | 2026-07-01 (approved 07-03) | docs/data/schema.md §6, docs/data/password-policy.md, frontend/src/lib/auth/password-schema.ts, frontend/src/lib/server/password-policy.ts, frontend/src/routes/api/v1/users/\*, frontend/src/lib/features/users/ |
 | [CR-028](CR-028-register-evacuee-schema-national-id.md) | Evacuee Schema Reconciliation — `national_id` (str) → `person_id` ({ cardType, number }); schema_v 2 reconcile spec↔code | approved | volatile | 2026-07-02 (approved 07-03) | docs/data/schema.md §1.1, docs/data/data-model.md, features/people/domain/people.ts |
+| [CR-029](CR-029-household-status-field.md) | Household Schema — เพิ่ม `status` + `checkout_destination` รองรับวงจรชีวิตครัวเรือน (T-04/T-06); schema_v 3→4 | approved | volatile | 2026-07-01 (approved 07-03) | schema.md §1.3, task-breakdown/02-people.md T-04/T-05/T-06, schema_v household 3→4, features/people/domain/people.ts |
