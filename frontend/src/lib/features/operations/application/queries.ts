@@ -15,19 +15,22 @@ export const operationsKeys = {
 /**
  * Query hook to retrieve all stock ledger entries.
  */
-export const useLedger = () =>
+export const useLedger = (enabled: () => boolean = () => true) =>
 	createQuery(() => ({
 		queryKey: operationsKeys.ledger(),
-		queryFn: () => operationsRepository().listLedger()
+		queryFn: () => operationsRepository().listLedger(),
+		enabled: enabled()
 	}));
 
 /**
  * Query hook to retrieve stock ledger entries filtered by a specific item.
+ * Disabled (no fetch) while no item id is provided.
  */
-export const useLedgerByItem = (itemId: () => string) =>
+export const useLedgerByItem = (itemId: () => string | undefined) =>
 	createQuery(() => ({
-		queryKey: operationsKeys.byItem(itemId()),
-		queryFn: () => operationsRepository().listLedgerByItem(itemId())
+		queryKey: operationsKeys.byItem(itemId() ?? ''),
+		queryFn: () => operationsRepository().listLedgerByItem(itemId() ?? ''),
+		enabled: !!itemId()
 	}));
 
 /**
