@@ -147,46 +147,50 @@ export function useCreateMasterVersion() {
  * </script>
  * ```
  */
-export function useCreateOverrideVersion(shelterCode?: string) {
-	const code = shelterCode ?? SHELTER_CODE;
+export function useCreateOverrideVersion(shelterCode?: string | (() => string)) {
+	const getCode =
+		typeof shelterCode === 'function' ? shelterCode : () => shelterCode ?? SHELTER_CODE;
 	const queryClient = useQueryClient();
 
-	return createMutation(() => ({
-		mutationFn: async ({ prev, changes, reason, ctx }: CreateOverrideVersionInput) => {
-			// Guard: prevent cross-shelter writes — ctx.shelterCode must match current shelter.
-			// This is a defense-in-depth check; the route guard should prevent unauthorized access.
-			if (ctx.shelterCode !== code) {
-				throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
+	return createMutation(() => {
+		const code = getCode();
+		return {
+			mutationFn: async ({ prev, changes, reason, ctx }: CreateOverrideVersionInput) => {
+				// Guard: prevent cross-shelter writes — ctx.shelterCode must match current shelter.
+				// This is a defense-in-depth check; the route guard should prevent unauthorized access.
+				if (ctx.shelterCode !== code) {
+					throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
+				}
+
+				// If changes is empty {}, Object.keys yields [] and hasChanges is false.
+				// This safely treats an empty payload as an implicit no-op branch.
+				const hasChanges = Object.keys(changes).some((key) => {
+					const val = changes[key as SopRatioKey];
+					return val !== undefined && prev.ratios[key as SopRatioKey] !== val;
+				});
+				if (!hasChanges) {
+					return { profile: prev, deactivatedPrev: null, audit: null };
+				}
+
+				const result = createNewVersion(prev, changes, reason, ctx);
+
+				return sopOverrideRepository(code).createVersion(
+					result.deactivatedPrev,
+					result.profile,
+					result.audit
+				);
+			},
+
+			onSuccess: () => {
+				queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
+				toast.success('บันทึกเวอร์ชัน Override SOP สำเร็จ');
+			},
+
+			onError: () => {
+				toast.error('ไม่สามารถบันทึก Override SOP ได้ — กรุณาลองใหม่อีกครั้ง');
 			}
-
-			// If changes is empty {}, Object.keys yields [] and hasChanges is false.
-			// This safely treats an empty payload as an implicit no-op branch.
-			const hasChanges = Object.keys(changes).some((key) => {
-				const val = changes[key as SopRatioKey];
-				return val !== undefined && prev.ratios[key as SopRatioKey] !== val;
-			});
-			if (!hasChanges) {
-				return { profile: prev, deactivatedPrev: null, audit: null };
-			}
-
-			const result = createNewVersion(prev, changes, reason, ctx);
-
-			return sopOverrideRepository(code).createVersion(
-				result.deactivatedPrev,
-				result.profile,
-				result.audit
-			);
-		},
-
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
-			toast.success('บันทึกเวอร์ชัน Override SOP สำเร็จ');
-		},
-
-		onError: () => {
-			toast.error('ไม่สามารถบันทึก Override SOP ได้ — กรุณาลองใหม่อีกครั้ง');
-		}
-	}));
+		};
+	});
 }
 
 export interface CreateInitialOverrideInput {
@@ -195,26 +199,30 @@ export interface CreateInitialOverrideInput {
 	ctx: AuthorContext & { base_profile_id: string };
 }
 
-export function useCreateInitialOverride(shelterCode?: string) {
-	const code = shelterCode ?? SHELTER_CODE;
+export function useCreateInitialOverride(shelterCode?: string | (() => string)) {
+	const getCode =
+		typeof shelterCode === 'function' ? shelterCode : () => shelterCode ?? SHELTER_CODE;
 	const queryClient = useQueryClient();
 
-	return createMutation(() => ({
-		mutationFn: async ({ name, ratios, ctx }: CreateInitialOverrideInput) => {
-			if (ctx.shelterCode !== code) {
-				throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
+	return createMutation(() => {
+		const code = getCode();
+		return {
+			mutationFn: async ({ name, ratios, ctx }: CreateInitialOverrideInput) => {
+				if (ctx.shelterCode !== code) {
+					throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
+				}
+				const { profile, audit } = createInitialProfile('sop_override', name, ratios, ctx);
+				return sopOverrideRepository(code).createVersion(null, profile, audit);
+			},
+			onSuccess: () => {
+				queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
+				toast.success('สร้างค่าปรับแต่งเฉพาะศูนย์สำเร็จ');
+			},
+			onError: () => {
+				toast.error('ไม่สามารถสร้างค่าปรับแต่งเฉพาะศูนย์ได้ — กรุณาลองใหม่อีกครั้ง');
 			}
-			const { profile, audit } = createInitialProfile('sop_override', name, ratios, ctx);
-			return sopOverrideRepository(code).createVersion(null, profile, audit);
-		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
-			toast.success('สร้างค่าปรับแต่งเฉพาะศูนย์สำเร็จ');
-		},
-		onError: () => {
-			toast.error('ไม่สามารถสร้างค่าปรับแต่งเฉพาะศูนย์ได้ — กรุณาลองใหม่อีกครั้ง');
-		}
-	}));
+		};
+	});
 }
 
 export function useSetMasterActive() {
@@ -233,42 +241,50 @@ export function useSetMasterActive() {
 	}));
 }
 
-export function useSetOverrideActive(shelterCode?: string) {
-	const code = shelterCode ?? SHELTER_CODE;
+export function useSetOverrideActive(shelterCode?: string | (() => string)) {
+	const getCode =
+		typeof shelterCode === 'function' ? shelterCode : () => shelterCode ?? SHELTER_CODE;
 	const queryClient = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: async ({ id, ctx }: { id: string; ctx: AuthorContext }) => {
-			if (ctx.shelterCode !== code) {
-				throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
+	return createMutation(() => {
+		const code = getCode();
+		return {
+			mutationFn: async ({ id, ctx }: { id: string; ctx: AuthorContext }) => {
+				if (ctx.shelterCode !== code) {
+					throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
+				}
+				return sopOverrideRepository(code).setActive(id, ctx);
+			},
+			onSuccess: () => {
+				queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
+				toast.success('เปิดใช้งานเวอร์ชัน Override SOP สำเร็จ');
+			},
+			onError: () => {
+				toast.error('ไม่สามารถเปิดใช้งาน Override SOP ได้');
 			}
-			return sopOverrideRepository(code).setActive(id, ctx);
-		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
-			toast.success('เปิดใช้งานเวอร์ชัน Override SOP สำเร็จ');
-		},
-		onError: () => {
-			toast.error('ไม่สามารถเปิดใช้งาน Override SOP ได้');
-		}
-	}));
+		};
+	});
 }
 
-export function useSetOverrideInactive(shelterCode?: string) {
-	const code = shelterCode ?? SHELTER_CODE;
+export function useSetOverrideInactive(shelterCode?: string | (() => string)) {
+	const getCode =
+		typeof shelterCode === 'function' ? shelterCode : () => shelterCode ?? SHELTER_CODE;
 	const queryClient = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: async ({ id, ctx }: { id: string; ctx: AuthorContext }) => {
-			if (ctx.shelterCode !== code) {
-				throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
+	return createMutation(() => {
+		const code = getCode();
+		return {
+			mutationFn: async ({ id, ctx }: { id: string; ctx: AuthorContext }) => {
+				if (ctx.shelterCode !== code) {
+					throw new Error(`shelterCode mismatch: expected ${code}, got ${ctx.shelterCode}`);
+				}
+				return sopOverrideRepository(code).setInactive(id, ctx);
+			},
+			onSuccess: () => {
+				queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
+				toast.success('ยกเลิกค่าปรับแต่งเฉพาะศูนย์สำเร็จ (กลับไปใช้ค่ามาตรฐาน EOC)');
+			},
+			onError: () => {
+				toast.error('ไม่สามารถยกเลิกค่าปรับแต่งเฉพาะศูนย์ได้');
 			}
-			return sopOverrideRepository(code).setInactive(id, ctx);
-		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
-			toast.success('ยกเลิกค่าปรับแต่งเฉพาะศูนย์สำเร็จ (กลับไปใช้ค่ามาตรฐาน EOC)');
-		},
-		onError: () => {
-			toast.error('ไม่สามารถยกเลิกค่าปรับแต่งเฉพาะศูนย์ได้');
-		}
-	}));
+		};
+	});
 }

@@ -38,11 +38,16 @@ export async function getActiveSopProfile(
 	return activeOverride ?? activeMaster ?? null;
 }
 
-export const useActiveSopRatio = (shelterCode?: string) =>
-	createQuery(() => ({
-		queryKey: [...sopRatioKeys.active(), shelterCode ?? SHELTER_CODE] as const,
-		queryFn: () => getActiveSopProfile(shelterCode)
-	}));
+export const useActiveSopRatio = (shelterCode?: string | (() => string)) => {
+	const getCode = typeof shelterCode === 'function' ? shelterCode : () => shelterCode;
+	return createQuery(() => {
+		const code = getCode();
+		return {
+			queryKey: [...sopRatioKeys.active(), code ?? SHELTER_CODE] as const,
+			queryFn: () => getActiveSopProfile(code)
+		};
+	});
+};
 
 /**
  * @deprecated Use `useActiveSopRatio` instead.
@@ -56,12 +61,17 @@ export const useSopProfiles = () =>
 		queryFn: () => sopMasterRepository().listActive()
 	}));
 
-export const useActiveSopOverride = (shelterCode: string) =>
-	createQuery(() => ({
-		queryKey: [...sopRatioKeys.active(), 'override', shelterCode] as const,
-		queryFn: async () => {
-			const activeOverrides = await sopOverrideRepository(shelterCode).listActive();
-			return getLatestVersion(activeOverrides);
-		},
-		enabled: shelterCode.trim().length > 0
-	}));
+export const useActiveSopOverride = (shelterCode: string | (() => string)) => {
+	const getCode = typeof shelterCode === 'function' ? shelterCode : () => shelterCode;
+	return createQuery(() => {
+		const code = getCode();
+		return {
+			queryKey: [...sopRatioKeys.active(), 'override', code] as const,
+			queryFn: async () => {
+				const activeOverrides = await sopOverrideRepository(code).listActive();
+				return getLatestVersion(activeOverrides);
+			},
+			enabled: code.trim().length > 0
+		};
+	});
+};

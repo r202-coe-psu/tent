@@ -62,12 +62,17 @@ async function fetchOverrideVersions(name: string, shelterCode: string): Promise
  * {/each}
  * ```
  */
-export const useMasterVersionHistory = (name: string) =>
-	createQuery(() => ({
-		queryKey: [...sopVersionKeys.master(), name] as const,
-		queryFn: () => fetchMasterVersions(name),
-		enabled: name.trim().length > 0
-	}));
+export const useMasterVersionHistory = (name: string | (() => string)) => {
+	const getName = typeof name === 'function' ? name : () => name;
+	return createQuery(() => {
+		const resolvedName = getName();
+		return {
+			queryKey: [...sopVersionKeys.master(), resolvedName] as const,
+			queryFn: () => fetchMasterVersions(resolvedName),
+			enabled: resolvedName.trim().length > 0
+		};
+	});
+};
 
 /**
  * Returns all historical versions of the current shelter's **override** SOP profile by name,
@@ -91,9 +96,19 @@ export const useMasterVersionHistory = (name: string) =>
  * {/each}
  * ```
  */
-export const useOverrideVersionHistory = (name: string, shelterCode: string) =>
-	createQuery(() => ({
-		queryKey: [...sopVersionKeys.override(), name, shelterCode] as const,
-		queryFn: () => fetchOverrideVersions(name, shelterCode),
-		enabled: name.trim().length > 0 && shelterCode.trim().length > 0
-	}));
+export const useOverrideVersionHistory = (
+	name: string | (() => string),
+	shelterCode: string | (() => string)
+) => {
+	const getName = typeof name === 'function' ? name : () => name;
+	const getCode = typeof shelterCode === 'function' ? shelterCode : () => shelterCode;
+	return createQuery(() => {
+		const resolvedName = getName();
+		const code = getCode();
+		return {
+			queryKey: [...sopVersionKeys.override(), resolvedName, code] as const,
+			queryFn: () => fetchOverrideVersions(resolvedName, code),
+			enabled: resolvedName.trim().length > 0 && code.trim().length > 0
+		};
+	});
+};

@@ -19,10 +19,10 @@
 
 	const isMaster = $derived(isSopMaster(profile));
 
-	const masterQuery = useMasterVersionHistory(isMaster ? profile.name : '');
+	const masterQuery = useMasterVersionHistory(() => (isMaster ? profile.name : ''));
 	const overrideQuery = useOverrideVersionHistory(
-		!isMaster ? profile.name : '',
-		!isMaster ? (profile as SopOverride).shelter_code : ''
+		() => (!isMaster ? profile.name : ''),
+		() => (!isMaster ? (profile as SopOverride).shelter_code : '')
 	);
 
 	const historyQuery = $derived(isMaster ? masterQuery : overrideQuery);

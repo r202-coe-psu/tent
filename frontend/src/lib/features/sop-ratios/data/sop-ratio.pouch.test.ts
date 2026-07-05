@@ -268,7 +268,7 @@ describe('SopOverridePouchRepository', () => {
 		const { profile, audit } = createInitialProfile(
 			'sop_override',
 			'Local Override',
-			{ water_l_per_person_day: 18, rice_g_per_person_meal: 200, toilet_per_person: 0.05 },
+			{ ...validRatios, water_l_per_person_day: 18 },
 			overrideCtx
 		);
 

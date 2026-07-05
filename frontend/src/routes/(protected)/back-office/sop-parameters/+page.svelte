@@ -7,7 +7,8 @@
 		SOP_RATIO_KEYS,
 		SopMasterTable,
 		SopEditForm,
-		VersionHistoryDrawer
+		VersionHistoryDrawer,
+		RATIO_LABELS
 	} from '$lib/features/sop-ratios';
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -24,25 +25,19 @@
 	const activeMaster = $derived(masterQuery.data?.[0] ?? null);
 
 	const shelterCode = $derived(backofficeState.selectedShelter);
-	const overrideQuery = useActiveSopOverride(shelterCode);
+	const overrideQuery = useActiveSopOverride(() => shelterCode);
 	const activeOverride = $derived(overrideQuery.data ?? null);
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 
 	// Mutations
-	const setInactiveMutation = useSetOverrideInactive(shelterCode);
+	const setInactiveMutation = useSetOverrideInactive(() => shelterCode);
 
 	// Modal / Drawer state
 	let editingMode = $state<'edit' | 'create_override'>('edit');
 	let editingProfile = $state<SopMaster | SopOverride | null>(null);
 	let historyProfile = $state<SopMaster | SopOverride | null>(null);
-
-	const RATIO_LABELS: Record<string, string> = {
-		water_l_per_person_day: 'น้ำ (ลิตร/คน/วัน)',
-		rice_g_per_person_meal: 'ข้าว (กรัม/คน/มื้อ)',
-		toilet_per_person: 'ห้องน้ำ (ต่อคน)'
-	};
 
 	async function deactivateOverride() {
 		if (!activeOverride) return;
@@ -187,11 +182,16 @@
 						>
 					</div>
 
-					<div class="flex-1 p-5">
+					<div class="max-h-96 flex-1 overflow-y-auto p-5">
 						<div class="grid grid-cols-2 gap-4 md:grid-cols-3">
 							{#each SOP_RATIO_KEYS as key (key)}
 								<div class="rounded-xl border border-black/5 bg-white p-3 shadow-sm">
-									<p class="text-[11px] text-slate-500">{RATIO_LABELS[key] ?? key}</p>
+									<p class="text-[11px] text-slate-500">
+										{RATIO_LABELS[key]?.label ?? key}
+										{#if RATIO_LABELS[key]?.unit}
+											<span class="text-[10px] opacity-70">({RATIO_LABELS[key].unit})</span>
+										{/if}
+									</p>
 									<p class="mt-1 font-mono text-lg font-bold text-amber-700">
 										{activeOverride.ratios[key]}
 									</p>

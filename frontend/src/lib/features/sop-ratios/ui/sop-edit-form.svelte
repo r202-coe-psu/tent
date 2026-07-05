@@ -1,7 +1,11 @@
 <script lang="ts">
-	import { isSopMaster, type SopMaster, type SopOverride } from '$lib/features/sop-ratios';
 	import {
+		isSopMaster,
+		type SopMaster,
+		type SopOverride,
 		SOP_RATIO_KEYS,
+		type SopRatioKey,
+		RATIO_LABELS,
 		useCreateMasterVersion,
 		useCreateOverrideVersion,
 		useCreateInitialOverride
@@ -23,34 +27,18 @@
 	const isMaster = $derived(profile ? isSopMaster(profile) : false);
 
 	const masterMutation = useCreateMasterVersion();
-	const overrideMutation = useCreateOverrideVersion(
+	const overrideMutation = useCreateOverrideVersion(() =>
 		isMaster ? '' : (profile as SopOverride)?.shelter_code
 	);
-	const initialOverrideMutation = useCreateInitialOverride(shelterCode);
+	const initialOverrideMutation = useCreateInitialOverride(() => shelterCode);
 
 	// Local editable copy of ratios
+	// svelte-ignore state_referenced_locally
 	const initialRatios =
 		mode === 'edit' && profile ? profile.ratios : (baseMasterProfile?.ratios ?? {});
-	let ratios = $state({ ...initialRatios });
+	let ratios = $state<Partial<Record<SopRatioKey, number>>>({ ...initialRatios });
+	// svelte-ignore state_referenced_locally
 	let reason = $state(mode === 'create_override' ? 'สร้างค่าปรับแต่งเฉพาะศูนย์ครั้งแรก' : '');
-
-	const RATIO_LABELS: Record<string, { label: string; unit: string; description: string }> = {
-		water_l_per_person_day: {
-			label: 'น้ำดื่ม',
-			unit: 'ลิตร/คน/วัน',
-			description: 'ปริมาณน้ำดื่มมาตรฐานต่อคนต่อวัน (Sphere Standard: 15 L)'
-		},
-		rice_g_per_person_meal: {
-			label: 'ข้าว',
-			unit: 'กรัม/คน/มื้อ',
-			description: 'ปริมาณข้าวต่อคนต่อมื้อ'
-		},
-		toilet_per_person: {
-			label: 'ห้องน้ำ',
-			unit: 'ห้อง/คน',
-			description: 'อัตราส่วนห้องน้ำต่อจำนวนผู้พักพิง (Sphere Standard: 1:20)'
-		}
-	};
 
 	const isSaving = $derived(
 		masterMutation.isPending || overrideMutation.isPending || initialOverrideMutation.isPending
@@ -103,7 +91,9 @@
 
 <!-- Modal -->
 <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-	<div class="w-full max-w-lg rounded-3xl bg-white shadow-2xl">
+	<div
+		class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+	>
 		<!-- Header -->
 		<div class="flex items-start justify-between border-b border-black/[0.06] px-6 py-5">
 			<div>
@@ -134,7 +124,7 @@
 		</div>
 
 		<!-- Form Body -->
-		<div class="space-y-4 px-6 py-5">
+		<div class="flex-1 space-y-4 overflow-y-auto px-6 py-5">
 			{#each SOP_RATIO_KEYS as key (key)}
 				{@const meta = RATIO_LABELS[key]}
 				<div class="rounded-2xl border border-black/[0.06] bg-slate-50/60 p-4">

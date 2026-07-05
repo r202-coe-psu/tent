@@ -15,6 +15,8 @@ export {
 	type SopRatioKey
 } from './domain/sop-ratio';
 
+export { RATIO_LABELS } from './domain/sop-ratio.labels';
+
 export { validRatios } from './domain/sop-ratio.fixture';
 
 // Data — repositories + resolver

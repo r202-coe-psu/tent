@@ -54,9 +54,9 @@ import {
 import {
 	createInitialProfile,
 	SOP_MASTER_SCHEMA_VERSION,
-	sopMasterSchema,
-	validRatios
-} from '$lib/features/sop-ratios';
+	sopMasterSchema
+} from '$lib/features/sop-ratios/domain/sop-ratio';
+import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
