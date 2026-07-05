@@ -115,18 +115,24 @@ export class PeoplePouchRepository implements PeopleRepository {
 	}
 
 	/** Every household in this shelter database. */
-	listHouseholds(): Promise<Household[]> {
-		return this.repo.allByType('household', isHousehold);
+	async listHouseholds(): Promise<Household[]> {
+		const docs = await this.repo.allByType('household', isHousehold);
+		return docs.map(migrateHouseholdV3ToV4);
 	}
 
 	/** Paginated list of households. */
-	listHouseholdsPaginated(page: number, pageSize: number): Promise<PaginatedResult<Household>> {
-		return this.repo.pageByType('household', isHousehold, page, pageSize);
+	async listHouseholdsPaginated(page: number, pageSize: number): Promise<PaginatedResult<Household>> {
+		const result = await this.repo.pageByType('household', isHousehold, page, pageSize);
+		return {
+			...result,
+			items: result.items.map(migrateHouseholdV3ToV4)
+		};
 	}
 
 	/** One household by `_id`, or `null` when absent. */
-	getHousehold(id: string): Promise<Household | null> {
-		return this.repo.get<Household>(id);
+	async getHousehold(id: string): Promise<Household | null> {
+		const doc = await this.repo.get<Household>(id);
+		return doc ? migrateHouseholdV3ToV4(doc) : null;
 	}
 
 	/** Persist an edited household (LWW: bumps `updated_at`). Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
@@ -173,3 +179,26 @@ export function peopleRepository(): PeopleRepository {
 }
 
 export const shelterDb = _shelterDb;
+
+export function migrateHouseholdV3ToV4(doc: any): Household {
+	if (doc && doc.type === 'household' && (!doc.schema_v || doc.schema_v < 4)) {
+		let vehicles = doc.vehicles;
+		if (!vehicles) {
+			if (doc.vehicle) {
+				vehicles = [doc.vehicle];
+			} else {
+				vehicles = [];
+			}
+		}
+		const migrated = {
+			...doc,
+			schema_v: 4,
+			status: doc.status || 'checked_in',
+			checkout_destination: doc.checkout_destination || null,
+			vehicles
+		};
+		delete migrated.vehicle;
+		return migrated;
+	}
+	return doc;
+}

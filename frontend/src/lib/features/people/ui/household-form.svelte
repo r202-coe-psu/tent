@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
+	import { toast } from 'svelte-sonner';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
@@ -76,6 +77,16 @@
 	let emergencyContactPhone = $state('');
 	let membersInitialized = $state(false);
 
+	// Sync head contact phone on edit/select
+	$effect(() => {
+		if ($formData.head_evacuee_id && allEvacuees.length > 0 && !emergencyContactPhone) {
+			const head = allEvacuees.find((e) => e._id === $formData.head_evacuee_id);
+			if (head?.emergency_contact?.phone) {
+				emergencyContactPhone = head.emergency_contact.phone;
+			}
+		}
+	});
+
 	// Vehicle & Assets state
 	let vehicleType = $state<'car' | 'motorcycle' | 'other' | 'none'>('none');
 	let licensePlate = $state('');
@@ -98,8 +109,11 @@
 			mzVal = initialData.municipality_zone ?? '';
 			commVal = initialData.community ?? '';
 			petsList = initialData.pets ? JSON.parse(JSON.stringify(initialData.pets)) : [];
-			vehicleType = initialData.vehicle?.type ?? 'none';
-			licensePlate = initialData.vehicle?.license_plate ?? '';
+			const firstVehicle = initialData.vehicles && initialData.vehicles.length > 0
+				? initialData.vehicles[0]
+				: null;
+			vehicleType = firstVehicle?.type ?? 'none';
+			licensePlate = firstVehicle?.license_plate ?? '';
 			assetDescription = initialData.assets?.description ?? '';
 			membersInitialized = false;
 		} else {
@@ -147,9 +161,9 @@
 	});
 
 	$effect(() => {
-		$formData.vehicle = vehicleType !== 'none'
-			? { type: vehicleType, license_plate: licensePlate.trim() || null }
-			: null;
+		$formData.vehicles = vehicleType !== 'none'
+			? [{ type: vehicleType, license_plate: licensePlate.trim() || null }]
+			: [];
 	});
 
 	$effect(() => {
@@ -158,10 +172,23 @@
 			: null;
 	});
 
-	// Track head changes: remove old head from members, clear phone, add new head
+	// Track head changes: remove old head from members, clear phone, add new head, validate duplicate active household
 	let prevHeadId = $state<string | null>(null);
 	$effect(() => {
 		const newHead = $formData.head_evacuee_id;
+		if (newHead && newHead !== prevHeadId) {
+			const evac = allEvacuees.find((e) => e._id === newHead);
+			if (evac && evac.household_id && (!initialData || evac.household_id !== initialData._id)) {
+				const hh = households.find((h) => h._id === evac.household_id);
+				const hhStatus = hh?.status ?? 'checked_in';
+				if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
+					toast.error(`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`);
+					headComboValue = prevHeadId ?? '';
+					$formData.head_evacuee_id = prevHeadId;
+					return;
+				}
+			}
+		}
 		if (newHead !== prevHeadId) {
 			if (prevHeadId !== null) {
 				selectedMemberIds = selectedMemberIds.filter((id) => id !== prevHeadId);
@@ -177,11 +204,22 @@
 	// Sync headComboValue → formData
 	$effect(() => { $formData.head_evacuee_id = headComboValue || null; });
 
-	// Add member when combobox selects
+	// Add member when combobox selects, validate duplicate active household
 	$effect(() => {
 		if (memberSearchValue) {
-			if (!selectedMemberIds.includes(memberSearchValue))
+			if (!selectedMemberIds.includes(memberSearchValue)) {
+				const evac = allEvacuees.find((e) => e._id === memberSearchValue);
+				if (evac && evac.household_id && (!initialData || evac.household_id !== initialData._id)) {
+					const hh = households.find((h) => h._id === evac.household_id);
+					const hhStatus = hh?.status ?? 'checked_in';
+					if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
+						toast.error(`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`);
+						memberSearchValue = '';
+						return;
+					}
+				}
 				selectedMemberIds = [...selectedMemberIds, memberSearchValue];
+			}
 			memberSearchValue = '';
 		}
 	});
