@@ -11,7 +11,7 @@
 	// Fetch stock movements ledger
 	const itemsQuery = useSupplyItems();
 	const ledgerQuery = filterItemId 
-		? useLedgerByItem(() => filterItemId)
+		? useLedgerByItem(() => filterItemId as string)
 		: useLedger();
 
 	const ledger = $derived(ledgerQuery.data ?? []);

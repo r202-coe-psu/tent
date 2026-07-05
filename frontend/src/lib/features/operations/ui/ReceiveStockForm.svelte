@@ -148,6 +148,10 @@
 							bind:value={searchQuery}
 							onfocus={() => !preselectedItemId && (isDropdownOpen = true)}
 							oninput={() => !preselectedItemId && (isDropdownOpen = true)}
+							role="combobox"
+							aria-expanded={isDropdownOpen}
+							aria-controls="item-listbox"
+							aria-haspopup="listbox"
 							autocomplete="off"
 							disabled={!!preselectedItemId}
 							class={[
@@ -167,6 +171,8 @@
 
 						{#if isDropdownOpen}
 							<div
+								id="item-listbox"
+								role="listbox"
 								class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl animate-in fade-in slide-in-from-top-1 duration-150"
 							>
 								{#if itemsQuery.isLoading}
@@ -177,6 +183,8 @@
 									{#each filteredItems as item (item._id)}
 										<button
 											type="button"
+											role="option"
+											aria-selected={selectedItem?._id === item._id}
 											class="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm hover:bg-muted font-medium transition-colors"
 											onclick={() => selectItem(item)}
 										>
