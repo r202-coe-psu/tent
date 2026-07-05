@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-05 # CR-030 renumbered (kitchen unit); index ครบ CR-001..030
+updated: 2026-07-05 # CR-031 item master category; index ครบ CR-001..031
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -46,3 +46,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-028](CR-028-register-evacuee-schema-national-id.md) | Evacuee Schema Reconciliation — `national_id` (str) → `person_id` ({ cardType, number }); schema_v 2 reconcile spec↔code | approved | volatile | 2026-07-02 (approved 07-03) | docs/data/schema.md §1.1, docs/data/data-model.md, features/people/domain/people.ts |
 | [CR-029](CR-029-household-status-field.md) | Household Schema — เพิ่ม `status` + `checkout_destination` รองรับวงจรชีวิตครัวเรือน (T-04/T-06); schema_v 3→4 | approved | volatile | 2026-07-01 (approved 07-03) | schema.md §1.3, task-breakdown/02-people.md T-04/T-05/T-06, schema_v household 3→4, features/people/domain/people.ts |
 | [CR-030](CR-030-kitchen-requisition-unit-must-match-item-master.md) | Kitchen requisition ledger unit must match `item_master.base_unit` (T-26) — แก้ `RECIPE_TO_STOCK_ITEM` unit `g`→`kg` (แปลงก่อนเขียน ledger), แก้ schema.md §2.5 ให้ตรง §2.6 (ไม่แก้ base_unit/seed) | approved | volatile | 2026-07-03 | docs/data/schema.md §2.5, features/kitchen/{domain,data} |
+| [CR-031](CR-031-item-master-schema-reconciliation.md) | Item Master Schema Reconciliation — เพิ่มฟิลด์ `category` (str, opt) ใน `item_master` ให้สอดคล้อง spec↔code; schema_v 2 คงเดิม (reconcile) | done | volatile | 2026-07-04 (done 07-05) | docs/data/schema.md §4.2, features/catalog/domain/catalog.ts |
