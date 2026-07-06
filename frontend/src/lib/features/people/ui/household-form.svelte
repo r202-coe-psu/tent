@@ -1,11 +1,30 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Badge, type BadgeVariant } from '$lib/components/ui/badge/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
+	import { toast } from 'svelte-sonner';
+	import * as Field from '$lib/components/ui/field/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { householdInputSchema } from '../domain/people';
 	import { useMasterData } from '$lib/features/master-data';
-	import type { Household, Evacuee, HouseholdInput, PetGroup } from '../domain/people';
+	import type {
+		Household,
+		Evacuee,
+		HouseholdInput,
+		HouseholdStatus,
+		PetGroup
+	} from '../domain/people';
+
+	// Read-only presentation of the household lifecycle status (CR-029).
+	// Status is not free-editable here — it follows check-in/check-out flows.
+	const STATUS_DISPLAY: Record<HouseholdStatus, { label: string; variant: BadgeVariant }> = {
+		pre_registered: { label: 'ลงทะเบียนล่วงหน้า', variant: 'secondary' },
+		arriving: { label: 'กำลังเดินทางมา', variant: 'outline' },
+		checked_in: { label: 'เช็คอินแล้ว', variant: 'default' },
+		checked_out: { label: 'เช็คเอาท์แล้ว', variant: 'secondary' },
+		cancelled: { label: 'ยกเลิก', variant: 'destructive' }
+	};
 	import HouseholdFormHeadSection from './household-form-head-section.svelte';
 	import HouseholdFormMembersSection from './household-form-members-section.svelte';
 	import HouseholdFormLocationSection from './household-form-location-section.svelte';
@@ -78,6 +97,16 @@
 	let noHead = $state(false);
 	let emergencyContactPhone = $state('');
 	let membersInitialized = $state(false);
+
+	// Sync head contact phone on edit/select
+	$effect(() => {
+		if ($formData.head_evacuee_id && allEvacuees.length > 0 && !emergencyContactPhone) {
+			const head = allEvacuees.find((e) => e._id === $formData.head_evacuee_id);
+			if (head?.emergency_contact?.phone) {
+				emergencyContactPhone = head.emergency_contact.phone;
+			}
+		}
+	});
 
 	// Vehicle & Assets state — a household may bring several vehicles (schema vehicles[]).
 	// `id` is a client-only key for the {#each}; stripped when synced to $formData.
@@ -173,10 +202,25 @@
 			: null;
 	});
 
-	// Track head changes: remove old head from members, clear phone, add new head
+	// Track head changes: remove old head from members, clear phone, add new head, validate duplicate active household
 	let prevHeadId = $state<string | null>(null);
 	$effect(() => {
 		const newHead = $formData.head_evacuee_id;
+		if (newHead && newHead !== prevHeadId) {
+			const evac = allEvacuees.find((e) => e._id === newHead);
+			if (evac && evac.household_id && (!initialData || evac.household_id !== initialData._id)) {
+				const hh = households.find((h) => h._id === evac.household_id);
+				const hhStatus = hh?.status ?? 'checked_in';
+				if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
+					toast.error(
+						`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`
+					);
+					headComboValue = prevHeadId ?? '';
+					$formData.head_evacuee_id = prevHeadId;
+					return;
+				}
+			}
+		}
 		if (newHead !== prevHeadId) {
 			if (prevHeadId !== null) {
 				selectedMemberIds = selectedMemberIds.filter((id) => id !== prevHeadId);
@@ -194,11 +238,24 @@
 		$formData.head_evacuee_id = headComboValue || null;
 	});
 
-	// Add member when combobox selects
+	// Add member when combobox selects, validate duplicate active household
 	$effect(() => {
 		if (memberSearchValue) {
-			if (!selectedMemberIds.includes(memberSearchValue))
+			if (!selectedMemberIds.includes(memberSearchValue)) {
+				const evac = allEvacuees.find((e) => e._id === memberSearchValue);
+				if (evac && evac.household_id && (!initialData || evac.household_id !== initialData._id)) {
+					const hh = households.find((h) => h._id === evac.household_id);
+					const hhStatus = hh?.status ?? 'checked_in';
+					if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
+						toast.error(
+							`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`
+						);
+						memberSearchValue = '';
+						return;
+					}
+				}
 				selectedMemberIds = [...selectedMemberIds, memberSearchValue];
+			}
 			memberSearchValue = '';
 		}
 	});
@@ -237,9 +294,19 @@
 		<div class="space-y-6">
 			<!-- General Info & Head -->
 			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
-				<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">
-					ข้อมูลครัวเรือนเบื้องต้น
-				</h3>
+				<div class="flex items-center justify-between gap-2">
+					<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">
+						ข้อมูลครัวเรือนเบื้องต้น
+					</h3>
+					{#if initialData}
+						<div class="flex items-center gap-1.5">
+							<span class="text-xs text-muted-foreground">สถานะ</span>
+							<Badge variant={STATUS_DISPLAY[initialData.status].variant}>
+								{STATUS_DISPLAY[initialData.status].label}
+							</Badge>
+						</div>
+					{/if}
+				</div>
 				<HouseholdFormHeadSection
 					{form}
 					{headItems}

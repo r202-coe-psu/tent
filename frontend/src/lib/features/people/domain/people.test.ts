@@ -8,6 +8,7 @@ import {
 	createHousehold,
 	isHousehold
 } from './people';
+import { migrateHouseholdV3ToV4 } from '../data/people.pouch';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
@@ -106,7 +107,9 @@ describe('createHousehold', () => {
 
 		expect(h._id.startsWith('household:')).toBe(true);
 		expect(h.type).toBe('household');
-		expect(h.schema_v).toBe(3);
+		expect(h.schema_v).toBe(4);
+		expect(h.status).toBe('arriving');
+		expect(h.checkout_destination).toBeNull();
 		expect(h.shelter_code).toBe('SH001');
 		expect(h.created_by).toBe('staff1');
 		expect(h.label).toBe('บ้านทองดี'); // trimmed
@@ -146,5 +149,77 @@ describe('createHousehold', () => {
 		expect(h.district).toBeNull();
 		expect(h.province).toBeNull();
 		expect(h.postal_code).toBeNull();
+	});
+
+	describe('migrateHouseholdV3ToV4', () => {
+		it('performs lazy migration from v3 to v4 with defaults', () => {
+			const v3Doc = {
+				_id: 'household:123',
+				type: 'household',
+				schema_v: 3,
+				label: 'บ้านเก่า',
+				head_evacuee_id: null,
+				pets: []
+			};
+
+			const migrated = migrateHouseholdV3ToV4(v3Doc);
+			expect(migrated.schema_v).toBe(4);
+			expect(migrated.status).toBe('checked_in'); // fallback default for existing active stays
+			expect(migrated.checkout_destination).toBeNull();
+			expect(migrated.vehicles).toEqual([]);
+		});
+
+		it('performs lazy migration from v2 to v4 converting vehicle object to vehicles array', () => {
+			const v2Doc = {
+				_id: 'household:123',
+				type: 'household',
+				schema_v: 2,
+				label: 'บ้านเก่า',
+				head_evacuee_id: null,
+				vehicle: { type: 'car', license_plate: 'กข 1234' },
+				pets: []
+			};
+
+			const migrated = migrateHouseholdV3ToV4(v2Doc);
+			expect(migrated.schema_v).toBe(4);
+			expect(migrated.status).toBe('checked_in');
+			expect(migrated.checkout_destination).toBeNull();
+			expect(migrated.vehicles).toEqual([{ type: 'car', license_plate: 'กข 1234' }]);
+			expect((migrated as any).vehicle).toBeUndefined();
+		});
+
+		it('performs lazy migration from v3 to v4 keeping empty vehicles array', () => {
+			const v3Doc = {
+				_id: 'household:123',
+				type: 'household',
+				schema_v: 3,
+				label: 'บ้านเก่า',
+				head_evacuee_id: null,
+				vehicles: [],
+				pets: []
+			};
+
+			const migrated = migrateHouseholdV3ToV4(v3Doc);
+			expect(migrated.schema_v).toBe(4);
+			expect(migrated.vehicles).toEqual([]);
+			expect((migrated as any).vehicle).toBeUndefined();
+		});
+
+		it('preserves existing status and destination if already present', () => {
+			const activeDoc = {
+				_id: 'household:123',
+				type: 'household',
+				schema_v: 4,
+				label: 'บ้านใหม่',
+				head_evacuee_id: null,
+				status: 'pre_registered',
+				checkout_destination: null,
+				pets: []
+			};
+
+			const migrated = migrateHouseholdV3ToV4(activeDoc);
+			expect(migrated.schema_v).toBe(4);
+			expect(migrated.status).toBe('pre_registered');
+		});
 	});
 });

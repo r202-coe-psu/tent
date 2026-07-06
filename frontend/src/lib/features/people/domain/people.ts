@@ -49,6 +49,22 @@ export type SpecialNeed = z.infer<typeof specialNeedSchema>;
 export const stayStatusSchema = z.enum(['registered', 'checked_in', 'checked_out', 'transferred']);
 export type StayStatus = z.infer<typeof stayStatusSchema>;
 
+export const householdStatusSchema = z.enum([
+	'pre_registered',
+	'arriving',
+	'checked_in',
+	'checked_out',
+	'cancelled'
+]);
+export type HouseholdStatus = z.infer<typeof householdStatusSchema>;
+
+export const checkoutDestinationSchema = z.object({
+	type: z.enum(['returned_home', 'transferred_shelter', 'referred_facility', 'other']),
+	destination_name: z.string().trim().optional(),
+	notes: z.string().trim().optional()
+});
+export type CheckoutDestination = z.infer<typeof checkoutDestinationSchema>;
+
 export const movementActionSchema = z.enum([
 	'check_in',
 	'check_out',
@@ -130,6 +146,8 @@ export interface Household extends BaseDoc {
 	type: 'household';
 	label: string;
 	head_evacuee_id: string | null;
+	status: HouseholdStatus; // CR-029
+	checkout_destination: CheckoutDestination | null; // CR-029
 	municipality_zone: string | null;
 	community: string | null;
 	pets: PetGroup[];
@@ -217,6 +235,8 @@ export type MedicalInput = z.input<typeof medicalInputSchema>;
 export const householdInputSchema = z.object({
 	label: z.string().trim().min(1, 'Label is required'),
 	head_evacuee_id: z.string().nullable().default(null),
+	status: householdStatusSchema.default('arriving'), // CR-029
+	checkout_destination: checkoutDestinationSchema.nullable().default(null), // CR-029
 	municipality_zone: z.string().trim().nullable().default(null),
 	community: z.string().trim().nullable().default(null),
 	pets: z
@@ -333,10 +353,12 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 	const d = householdInputSchema.parse(input);
 	return makeDoc(
 		'household',
-		3, // ปรับเวอร์ชัน schema_v จาก 2 -> 3 ตาม CR-016
+		4, // ปรับเวอร์ชัน schema_v จาก 3 -> 4 ตาม CR-029
 		{
 			label: d.label,
 			head_evacuee_id: d.head_evacuee_id,
+			status: d.status, // CR-029
+			checkout_destination: d.checkout_destination, // CR-029
 			municipality_zone: d.municipality_zone,
 			community: d.community,
 			pets: d.pets,

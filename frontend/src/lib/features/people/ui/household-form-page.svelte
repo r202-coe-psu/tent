@@ -102,7 +102,22 @@
 				householdId = editingHousehold._id;
 				toast.success(`แก้ไขข้อมูลครัวเรือน "${updated.label}" สำเร็จ`);
 			} else {
-				const res = await createHouseholdMutation.mutateAsync({ input, ctx });
+				// Determine status based on members stay statuses (Path B / Path C)
+				const allEvacuees = evacueesQuery.data ?? [];
+				const selectedMembers = allEvacuees.filter((ev) => selectedMemberIds.includes(ev._id));
+				const hasCheckedInMember = selectedMembers.some(
+					(ev) => ev.current_stay?.status === 'checked_in'
+				);
+				const initialStatus = hasCheckedInMember
+					? ('checked_in' as const)
+					: ('pre_registered' as const);
+
+				const inputWithStatus = {
+					...input,
+					status: initialStatus
+				};
+
+				const res = await createHouseholdMutation.mutateAsync({ input: inputWithStatus, ctx });
 				householdId = res._id;
 				toast.success(`สร้างครัวเรือน "${res.label}" สำเร็จ`);
 			}
