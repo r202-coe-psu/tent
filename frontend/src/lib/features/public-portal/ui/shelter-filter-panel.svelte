@@ -53,17 +53,19 @@
 	let searchQuery = $state<string>('');
 	let selectedProvince = $state<string>('');
 	let selectedDistrict = $state<string>('');
+	let selectedSubdistrict = $state<string>('');
 
 	$effect(() => {
 		searchQuery = filters.search ?? '';
 		selectedProvince = filters.province ?? '';
 		selectedDistrict = filters.district ?? '';
+		selectedSubdistrict = filters.subdistrict ?? '';
 
 		if (filters.user_lat && !userLat) userLat = filters.user_lat.toString();
 		if (filters.user_lng && !userLng) userLng = filters.user_lng.toString();
 	});
 
-	let locationData = $state<{ province: string; district: string }[]>([]);
+	let locationData = $state<{ province: string; district: string; subdistrict: string }[]>([]);
 
 	let provincesList = $derived([
 		{ label: 'จังหวัด (ทั้งหมด)', value: '' },
@@ -77,6 +79,23 @@
 				locationData
 					.filter((d) => !selectedProvince || d.province === selectedProvince)
 					.map((d) => d.district)
+			)
+		]
+			.sort()
+			.map((d) => ({ label: d, value: d }))
+	]);
+
+	let subdistrictsList = $derived([
+		{ label: 'ตำบล (ทั้งหมด)', value: '' },
+		...[
+			...new Set(
+				locationData
+					.filter(
+						(d) =>
+							(!selectedProvince || d.province === selectedProvince) &&
+							(!selectedDistrict || d.district === selectedDistrict)
+					)
+					.map((d) => d.subdistrict)
 			)
 		]
 			.sort()
@@ -105,15 +124,10 @@
 		}
 
 		try {
-			const res = await fetch('/province_and_district.csv');
-			const text = await res.text();
-			const lines = text.split('\n').slice(1);
-			locationData = lines
-				.map((line) => {
-					const [p, d] = line.trim().split(',');
-					return p && d ? { province: p, district: d } : null;
-				})
-				.filter(Boolean) as { province: string; district: string }[];
+			const res = await fetch('/data/thailand_location_data.json');
+			if (res.ok) {
+				locationData = await res.json();
+			}
 		} catch (err) {
 			console.error('Failed to load location data', err);
 		}
@@ -175,19 +189,16 @@
 				</div>
 
 				<!-- Sub-district -->
-				<div class="space-y-1.5">
+				<div class="w-full space-y-1.5">
 					<Label for="subdistrict" class="text-xs font-semibold text-muted-foreground"
 						>ตำบล/แขวง</Label
 					>
-					<Select.Root type="single" name="subdistrict" value={filters.subdistrict ?? ''}>
-						<Select.Trigger class="w-full rounded-xl">
-							<Select.Value placeholder="ตำบล (ทั้งหมด)" />
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item value="">ตำบล (ทั้งหมด)</Select.Item>
-							<Select.Item value="คอหงส์">คอหงส์</Select.Item>
-						</Select.Content>
-					</Select.Root>
+					<SearchSelect
+						name="subdistrict"
+						placeholder="ตำบล (ทั้งหมด)"
+						bind:value={selectedSubdistrict}
+						options={subdistrictsList}
+					/>
 				</div>
 
 				<!-- Type -->
