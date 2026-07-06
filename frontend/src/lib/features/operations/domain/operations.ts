@@ -148,16 +148,6 @@ export const stockLedgerInputSchema = z.object({
 });
 export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
 
-export const receiveInputSchema = z.object({
-	item_id: z.string().min(1),
-	qty: z.coerce.number().positive('Quantity must be positive'),
-	unit: z.string().trim().min(1),
-	ref_id: z.string().nullable().default(null),
-	lot: z.object({ expiry: z.string().optional(), note: z.string().trim().optional() }).optional(),
-	occurred_at: z.string().optional()
-});
-export type ReceiveInput = z.input<typeof receiveInputSchema>;
-
 export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): StockLedger {
 	const d = stockLedgerInputSchema.parse(input);
 	return makeDoc(
@@ -171,6 +161,72 @@ export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): 
 			ref_id: d.ref_id,
 			...(d.lot ? { lot: d.lot } : {}),
 			occurred_at: d.occurred_at ?? now()
+		},
+		ctx
+	);
+}
+
+export const receiveSourceSchema = z.enum([
+	'donation', // บริจาค (ประชาชน / เอกชน / มูลนิธิ)
+	'transfer_in', // โอนมาจากศูนย์อื่น
+	'manual' // กรอกเอง / ปรับปรุงสต๊อก
+]);
+export type ReceiveSource = z.infer<typeof receiveSourceSchema>;
+
+export const receiveInputSchema = z.object({
+	item_id: z.string().min(1),
+	qty: z.coerce.number().positive('Quantity must be > 0'),
+	unit: z.string().trim().min(1),
+	source: receiveSourceSchema,
+	ref_id: z.string().nullable().default(null),
+	lot: z
+		.object({
+			expiry: z.string().optional(),
+			note: z.string().trim().optional()
+		})
+		.optional(),
+	occurred_at: z.string().optional()
+});
+export type ReceiveInput = z.input<typeof receiveInputSchema>;
+
+/**
+ * Converts a ReceiveInput into a StockLedger entry.
+ *
+ * INVARIANT: The caller is responsible for enforcing that `lot.expiry` is provided
+ * when the corresponding SupplyItem is marked as `perishable`. This domain layer
+ * cannot validate it because it does not load the catalog item synchronously.
+ * See UI enforcement in ReceiveStockForm.svelte.
+ * NOTE: CouchDB `validate_doc_update` should eventually enforce this server-side.
+ */
+export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): StockLedger {
+	const d = receiveInputSchema.parse(input);
+	let reason: LedgerReason;
+	switch (d.source) {
+		case 'donation':
+			reason = 'donation';
+			break;
+		case 'transfer_in':
+			// TODO(T-13): source is defined here for schema completeness but is not yet wired
+			// through a real transfer-in flow. Inter-shelter transfers land via T-13 confirm step.
+			reason = 'transfer_in';
+			break;
+		case 'manual':
+			reason = 'adjust';
+			break;
+		default: {
+			const _exhaustiveCheck: never = d.source;
+			throw new Error(`Unhandled receive source: ${_exhaustiveCheck}`);
+		}
+	}
+	return createStockLedger(
+		{
+			item_id: d.item_id,
+			qty: d.qty,
+			unit: d.unit,
+			reason,
+			ref_id: d.ref_id,
+			lot: d.lot,
+			occurred_at: d.occurred_at
 		},
 		ctx
 	);

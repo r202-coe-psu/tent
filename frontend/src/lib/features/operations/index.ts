@@ -53,7 +53,9 @@ export {
 	type ReceiveInput,
 	type WalkInDonationInput,
 	type CampaignInput,
-	type SpecialRequestInput
+	type SpecialRequestInput,
+	receiveSourceSchema,
+	createReceiveEntry
 } from './domain/operations';
 
 // Data — repository contract + PouchDB binding
@@ -64,6 +66,7 @@ export { operationsRepository, SHELTER_CODE, SHELTER_DB } from './data/operation
 export {
 	operationsKeys,
 	useLedger,
+	useLedgerByItem,
 	useStockBalance,
 	useReceiveStock,
 	useCampaigns,
@@ -73,3 +76,8 @@ export {
 	useUpdateCampaign,
 	startOperationsLiveQuery
 } from './application/queries';
+
+// UI components
+export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';
+export { default as LedgerTable } from './ui/LedgerTable.svelte';
+export { default as StockTable } from './ui/StockTable.svelte';

@@ -12,13 +12,33 @@ import type { AuditAction } from '$lib/features/shared';
 /**
  * Persistence contract for the `operations` feature (stock, campaigns, donations).
  * Allows UI and query layers to query and mutate data independent of specific PouchDB API shapes.
+ *
+ * All stock ledger entries are append-only.
  */
 export interface OperationsRepository {
-	// Ledger methods
+	/**
+	 * Persist a new stock ledger entry (append-only).
+	 */
 	addLedgerEntry(entry: StockLedger): Promise<StockLedger>;
+
+	/**
+	 * Retrieve all stock ledger entries in the current shelter database.
+	 */
 	listLedger(): Promise<StockLedger[]>;
+
+	/**
+	 * Retrieve stock ledger entries filtered by item ID.
+	 */
 	listLedgerByItem(itemId: string): Promise<StockLedger[]>;
+
+	/**
+	 * Calculate current on-hand stock balance for all items (sum of signed deltas).
+	 */
 	getBalance(): Promise<Map<string, number>>;
+
+	/**
+	 * Process and persist an inbound stock receive entry.
+	 */
 	receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger>;
 
 	// Campaign/Donation/Slot methods
