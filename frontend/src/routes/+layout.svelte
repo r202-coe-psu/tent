@@ -11,6 +11,8 @@
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
 	import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 
+	import { page } from '$app/stores';
+
 	let { children, data } = $props();
 
 	// Shelter data sync + changes-feed reactivity follow the auth lifecycle:
@@ -18,7 +20,7 @@
 	// — both bound to the SAME shelter db (CONTRIBUTING.md §4). The registry
 	// db carries the shelter master doc + audit log; it syncs alongside.
 	$effect(() => {
-		if (!authStore.isAuthenticated) return;
+		if (!authStore.isAuthenticated || $page.url.pathname.startsWith('/public')) return;
 		startNamedSync(SHELTER_DB, () => authStore.markNeedsReauth());
 		startNamedSync(SHELTER_REGISTRY_DB, () => authStore.markNeedsReauth());
 		startNamedSync('catalog', () => authStore.markNeedsReauth());

@@ -7,7 +7,10 @@ vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn(),
 	serviceError: vi.fn((e) => new Response(JSON.stringify({ error: e }), { status: 500 })),
 	ServiceError: class ServiceError extends Error {
-		constructor(public code: string, message: string) {
+		constructor(
+			public code: string,
+			message: string
+		) {
 			super(message);
 		}
 	}
@@ -127,9 +130,7 @@ describe('GET /api/public/v1/needs', () => {
 							status: 'cancelled', // Should be skipped in calculations
 							donor_name: 'Jane Cancel',
 							donor_phone: '0898765432',
-							items: [
-								{ item_id: 'item:rice', qty: 300 }
-							]
+							items: [{ item_id: 'item:rice', qty: 300 }]
 						}
 					}
 				]
@@ -144,7 +145,9 @@ describe('GET /api/public/v1/needs', () => {
 			if (path.includes('/catalog/_all_docs')) {
 				return mockCatalogResponse;
 			}
-			if (path.includes('/shelter_sh001/_all_docs?include_docs=true&startkey="donation_campaign:"')) {
+			if (
+				path.includes('/shelter_sh001/_all_docs?include_docs=true&startkey="donation_campaign:"')
+			) {
 				return mockCampaignsResponse;
 			}
 			if (path.includes('/shelter_sh001/_all_docs?include_docs=true&startkey="donation:"')) {
@@ -153,8 +156,7 @@ describe('GET /api/public/v1/needs', () => {
 			return { status: 404, data: null };
 		});
 
-		// เรียกใช้งานฟังก์ชัน GET handler
-		const response = await GET({} as any);
+		const response = await GET({} as Parameters<typeof GET>[0]);
 		expect(response.status).toBe(200);
 
 		const result = await response.json();
@@ -167,14 +169,16 @@ describe('GET /api/public/v1/needs', () => {
 		expect(shelterInfo.needs).toBeInstanceOf(Array);
 
 		// ข้าวสาร เป้าหมาย: 500, บริจาคแล้ว: 100 (หักลบเฉพาะยอดที่ใช้งานอยู่ ยอดที่ยกเลิกจะไม่นำมาคำนวณ) ความต้องการคงเหลือ = 400
-		const riceNeed = shelterInfo.needs.find((n: any) => n.item_id === 'item:rice');
+		const riceNeed = shelterInfo.needs.find((n: { item_id: string }) => n.item_id === 'item:rice');
 		expect(riceNeed).toBeDefined();
 		expect(riceNeed.qty_needed).toBe(400);
 		expect(riceNeed.name).toBe('ข้าวสาร');
 		expect(riceNeed.unit).toBe('kg');
 
 		// น้ำดื่ม เป้าหมาย: 200, บริจาคแล้ว: 50 ความต้องการคงเหลือ = 150
-		const waterNeed = shelterInfo.needs.find((n: any) => n.item_id === 'item:water');
+		const waterNeed = shelterInfo.needs.find(
+			(n: { item_id: string }) => n.item_id === 'item:water'
+		);
 		expect(waterNeed).toBeDefined();
 		expect(waterNeed.qty_needed).toBe(150);
 

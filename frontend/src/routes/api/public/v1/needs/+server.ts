@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, serviceError, ServiceError } from '$lib/server/couch-admin';
-import { openNeeds, type Donation, type DonationCampaign } from '$lib/features/operations/domain/operations';
+import { openNeeds, type Donation, type DonationCampaign } from '$lib/features/operations';
 
 interface ShelterMaster {
 	_id: string;
@@ -82,7 +82,10 @@ export const GET: RequestHandler = async () => {
 				.filter((d) => d && d.type === 'donation');
 
 			// คำนวณหาความต้องการคงเหลือ (open needs) และยุบรวมความต้องการของแต่ละแคมเปญเพื่อป้องกันข้อมูลซ้ำ
-			const needsMap = new Map<string, { item_id: string; name: string; qty_needed: number; unit: string }>();
+			const needsMap = new Map<
+				string,
+				{ item_id: string; name: string; qty_needed: number; unit: string }
+			>();
 			for (const campaign of activeCampaigns) {
 				const openCampaignNeeds = openNeeds(campaign, activeDonations);
 				for (const need of openCampaignNeeds) {
