@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { getSession, sessionLogin, sessionLogout, type SessionUser } from '$lib/db/couch';
+import { shelterStore } from '$lib/stores/shelter.svelte';
 
 const STORAGE_KEY = 'auth:user';
 
@@ -91,6 +92,7 @@ class AuthStore {
 		const user = await sessionLogin(input);
 		this.state.user = user;
 		this.state.needsReauth = false;
+		shelterStore.selectedShelterCode = undefined;
 		persistUser(user);
 		this.initPromise = Promise.resolve();
 		return user;
@@ -102,6 +104,7 @@ class AuthStore {
 		} finally {
 			this.state.user = null;
 			this.state.needsReauth = false;
+			shelterStore.selectedShelterCode = undefined;
 			persistUser(null);
 			this.initPromise = Promise.resolve();
 		}

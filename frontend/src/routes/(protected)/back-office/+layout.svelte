@@ -24,7 +24,10 @@
 
 	// Find the current page info (label, icon) dynamically
 	const currentPageNode = $derived.by(() => {
-		const currentPath = page.url.pathname;
+		let currentPath = page.url.pathname;
+		if (currentPath.startsWith('/back-office/households')) {
+			currentPath = '/back-office/evacuee-management';
+		}
 		for (const group of backofficeNavbarGroups) {
 			for (const item of group.items) {
 				if (isGroup(item)) {

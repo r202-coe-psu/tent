@@ -1,7 +1,7 @@
 import { namedLocalDb } from '$lib/db/pouch';
 import { createRepository, type Repository } from '$lib/db/repository';
-import { SHELTER_CODE, SHELTER_DB, shelterDb as _shelterDb } from '$lib/db/shelter';
-import { touch, type AuthorContext } from '$lib/db/model';
+import { getShelterDb, shelterDb as _shelterDb } from '$lib/db/shelter';
+import type { AuthorContext } from '$lib/db/model';
 import {
 	createCampaign as buildCampaign,
 	isDonationCampaign,
@@ -20,8 +20,6 @@ import {
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
-
-export { SHELTER_CODE, SHELTER_DB };
 
 /**
  * Validates a receive entry against its catalog item before it's written to the
@@ -51,7 +49,7 @@ export function assertReceiveAgainstCatalog(entry: StockLedger, item: SupplyItem
 export class OperationsPouchRepository implements OperationsRepository {
 	private readonly repo: Repository;
 
-	constructor(dbName: string = SHELTER_DB) {
+	constructor(dbName: string = getShelterDb()) {
 		this.repo = createRepository(namedLocalDb(dbName));
 	}
 
@@ -175,12 +173,14 @@ export class OperationsPouchRepository implements OperationsRepository {
 }
 
 let singleton: OperationsRepository | null = null;
+let singletonDbName: string | null = null;
 
-/**
- * Singleton accessor for the operations repository.
- */
 export function operationsRepository(): OperationsRepository {
-	if (!singleton) singleton = new OperationsPouchRepository();
+	const currentDb = getShelterDb();
+	if (!singleton || singletonDbName !== currentDb) {
+		singleton = new OperationsPouchRepository(currentDb);
+		singletonDbName = currentDb;
+	}
 	return singleton;
 }
 

@@ -7,7 +7,8 @@
 	import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools';
 	import { startNamedSync, stopNamedSync } from '$lib/db/pouch';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_DB, startPeopleLiveQuery } from '$lib/features/people';
+	import { startPeopleLiveQuery } from '$lib/features/people';
+	import { getShelterDb } from '$lib/db/shelter';
 	import { startOperationsLiveQuery } from '$lib/features/operations';
 	import { startKitchenLiveQuery } from '$lib/features/kitchen';
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
@@ -22,11 +23,12 @@
 	// db carries the shelter master doc + audit log; it syncs alongside.
 	$effect(() => {
 		if (!authStore.isAuthenticated) return;
-
-		// Synchronize databases
-		startNamedSync(SHELTER_DB, () => authStore.markNeedsReauth());
-		startNamedSync('catalog', () => authStore.markNeedsReauth());
+		// Resolve the shelter db name from the user's roles at effect-run time,
+		// so sh003 syncs shelter_sh003, sh001 syncs shelter_sh001, etc.
+		const shelterDb = getShelterDb();
+		startNamedSync(shelterDb, () => authStore.markNeedsReauth());
 		startNamedSync(SHELTER_REGISTRY_DB, () => authStore.markNeedsReauth());
+		startNamedSync('catalog', () => authStore.markNeedsReauth());
 
 		// Start changes feed live-queries
 		const livePeople = startPeopleLiveQuery(data.queryClient);
@@ -43,9 +45,9 @@
 			liveShelters.stop();
 			liveCatalog.stop();
 			sopRatioLive.stop();
-			stopNamedSync(SHELTER_DB);
 			stopNamedSync('catalog');
 			stopNamedSync(SHELTER_REGISTRY_DB);
+			data.queryClient.clear();
 		};
 	});
 </script>

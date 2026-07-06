@@ -1,5 +1,5 @@
 import { createQuery } from '@tanstack/svelte-query';
-import { SHELTER_CODE } from '$lib/db/shelter';
+import { getShelterCode } from '$lib/db/shelter';
 import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
 
@@ -27,7 +27,7 @@ function getLatestVersion<T extends { version: number }>(list: T[]): T | null {
  */
 export async function getActiveSopProfile(): Promise<SopMaster | SopOverride | null> {
 	const [overrides, masters] = await Promise.all([
-		sopOverrideRepository(SHELTER_CODE).listActive(),
+		sopOverrideRepository(getShelterCode()).listActive(),
 		sopMasterRepository().listActive()
 	]);
 	const activeOverride = getLatestVersion(overrides);
