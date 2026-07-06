@@ -21,7 +21,6 @@ import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '
 
 export const ledgerReasonSchema = z.enum([
 	'receive',
-	'purchase',
 	'distribute',
 	'requisition',
 	'adjust',
@@ -123,7 +122,7 @@ export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): 
 	const d = stockLedgerInputSchema.parse(input);
 	return makeDoc(
 		'stock_ledger',
-		2,
+		1,
 		{
 			item_id: d.item_id,
 			qty: d.qty,
@@ -139,7 +138,6 @@ export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): 
 
 export const receiveSourceSchema = z.enum([
 	'donation', // บริจาค (ประชาชน / เอกชน / มูลนิธิ)
-	'purchase', // จัดซื้อ / หน่วยงานรัฐ
 	'transfer_in', // โอนมาจากศูนย์อื่น
 	'manual' // กรอกเอง / ปรับปรุงสต๊อก
 ]);
@@ -177,10 +175,9 @@ export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): Sto
 		case 'donation':
 			reason = 'donation';
 			break;
-		case 'purchase':
-			reason = 'purchase';
-			break;
 		case 'transfer_in':
+			// TODO(T-13): source is defined here for schema completeness but is not yet wired
+			// through a real transfer-in flow. Inter-shelter transfers land via T-13 confirm step.
 			reason = 'transfer_in';
 			break;
 		case 'manual':

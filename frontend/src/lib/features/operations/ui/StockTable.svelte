@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SvelteSet } from 'svelte/reactivity';
 	import { useStockBalance, useLedger } from '../application/queries';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
@@ -14,8 +15,6 @@
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import History from '@lucide/svelte/icons/history';
 	import MapPin from '@lucide/svelte/icons/map-pin';
-	import Calendar from '@lucide/svelte/icons/calendar';
-	import FileText from '@lucide/svelte/icons/file-text';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import LedgerTable from './LedgerTable.svelte';
@@ -48,7 +47,7 @@
 	 * Unique locations list extracted from ledger entries
 	 */
 	const uniqueLocations = $derived.by(() => {
-		const locations = new Set<string>();
+		const locations = new SvelteSet<string>();
 		for (const entry of ledger) {
 			if (entry.lot?.note) {
 				locations.add(entry.lot.note.trim());
@@ -295,23 +294,28 @@
 				</p>
 			</div>
 		{:else}
-			<div class="overflow-x-auto flex-1 rounded-2xl border border-border/60 shadow-sm bg-background">
-				<Table.Root class="text-xs whitespace-nowrap min-w-[900px]">
-					<Table.Header class="bg-muted/50 border-b border-border/60 sticky top-0 z-10">
-						<Table.Row class="font-bold text-foreground uppercase tracking-wider text-[11px]">
+			<div
+				class="flex-1 overflow-x-auto rounded-2xl border border-border/60 bg-background shadow-sm"
+			>
+				<Table.Root class="min-w-[900px] text-xs whitespace-nowrap">
+					<Table.Header class="sticky top-0 z-10 border-b border-border/60 bg-muted/50">
+						<Table.Row class="text-[11px] font-bold tracking-wider text-foreground uppercase">
 							<Table.Head class="p-4 px-5">รายการสินค้า (SKU)</Table.Head>
 							<Table.Head class="p-4">หมวดหมู่</Table.Head>
 							<Table.Head class="p-4 text-center">สถานที่จัดเก็บ</Table.Head>
 							<Table.Head class="p-4 text-center">วันหมดอายุ</Table.Head>
 							<Table.Head class="p-4 text-center">ยอดคงเหลือ</Table.Head>
 							<Table.Head class="p-4 text-center">สถานะ</Table.Head>
-							<Table.Head class="p-4 text-center px-5 w-[100px]">จัดการ</Table.Head>
+							<Table.Head class="w-[100px] p-4 px-5 text-center">จัดการ</Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body class="divide-y divide-border/40">
 						{#if displayedItems.length === 0}
 							<Table.Row>
-								<Table.Cell colspan={7} class="p-12 text-center text-muted-foreground font-medium text-sm">
+								<Table.Cell
+									colspan={7}
+									class="p-12 text-center text-sm font-medium text-muted-foreground"
+								>
 									ไม่พบข้อมูลสิ่งของที่ตรงกับเงื่อนไขการค้นหา
 								</Table.Cell>
 							</Table.Row>
@@ -401,7 +405,7 @@
 									</Table.Cell>
 
 									<!-- Balance -->
-									<Table.Cell class="p-4 text-center font-mono font-bold text-sm">
+									<Table.Cell class="p-4 text-center font-mono text-sm font-bold">
 										<div class="flex flex-col items-center gap-0.5">
 											<span
 												class="rounded-md px-2.5 py-1 {expired || status === 'empty'
@@ -454,7 +458,7 @@
 									</Table.Cell>
 
 									<!-- Action -->
-									<Table.Cell class="p-4 text-center px-5">
+									<Table.Cell class="p-4 px-5 text-center">
 										<button
 											onclick={() => {
 												selectedItemId = item._id;
@@ -505,7 +509,7 @@
 				<Clock class="mr-0.5 inline h-3 w-3" />
 				ข้อมูลอัปเดตอัตโนมัติผ่าน PouchDB live changes feed
 			</p>
-			<p class="text-right text-[10px] text-muted-foreground/50 mt-1">
+			<p class="mt-1 text-right text-[10px] text-muted-foreground/50">
 				* หมายเหตุ: จุดจัดเก็บและวันหมดอายุจะอ้างอิงจากรายการล่าสุดที่มีการระบุข้อมูล
 			</p>
 		{/if}

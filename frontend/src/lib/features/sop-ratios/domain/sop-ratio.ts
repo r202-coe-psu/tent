@@ -4,11 +4,51 @@ import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
 
 export const SOP_RATIO_KEYS = [
 	'water_l_per_person_day',
-	'rice_g_per_person_meal',
-	'toilet_per_person'
+	'drinking_water_l_per_person_day',
+	'cooking_water_l_per_person_day',
+	'hygiene_water_l_per_person_day',
+	'kcal_per_adult_day',
+	'people_per_tap',
+	'people_per_handpump',
+	'people_per_open_well',
+	'people_per_laundry',
+	'people_per_bathing',
+	'people_per_toilet_female',
+	'people_per_toilet_male',
+	'people_per_dining_point_adult',
+	'people_per_dining_point_child',
+	'm2_per_person_living',
+	'm2_per_person_living_cold',
+	'm2_per_person_total',
+	'max_waterpoint_distance_m',
+	'max_queue_minutes',
+	'people_per_volunteer'
 ] as const;
 
 export type SopRatioKey = (typeof SOP_RATIO_KEYS)[number];
+
+export const SOP_RATIO_KIND: Record<SopRatioKey, 'multiply' | 'divide' | 'threshold'> = {
+	water_l_per_person_day: 'multiply',
+	drinking_water_l_per_person_day: 'multiply',
+	cooking_water_l_per_person_day: 'multiply',
+	hygiene_water_l_per_person_day: 'multiply',
+	kcal_per_adult_day: 'multiply',
+	people_per_tap: 'divide',
+	people_per_handpump: 'divide',
+	people_per_open_well: 'divide',
+	people_per_laundry: 'divide',
+	people_per_bathing: 'divide',
+	people_per_toilet_female: 'divide',
+	people_per_toilet_male: 'divide',
+	people_per_dining_point_adult: 'divide',
+	people_per_dining_point_child: 'divide',
+	m2_per_person_living: 'multiply',
+	m2_per_person_living_cold: 'multiply',
+	m2_per_person_total: 'multiply',
+	max_waterpoint_distance_m: 'threshold',
+	max_queue_minutes: 'threshold',
+	people_per_volunteer: 'divide'
+};
 
 const ratioShape = SOP_RATIO_KEYS.reduce(
 	(acc, key) => ({ ...acc, [key]: z.number().positive() }),
@@ -17,12 +57,21 @@ const ratioShape = SOP_RATIO_KEYS.reduce(
 
 /**
  * Validates that all keys in the record are part of the whitelist
- * and that all values are positive numbers.
+ * and that all values are positive numbers. Strict checking prevents
+ * deprecated or care-allocation keys from leaking in.
+ *
+ * We adopted "Option 1" (Full 20-key strict snapshot for BOTH master and override)
+ * to eliminate data drifts, simplify the compute engine, and satisfy constraints.
+ * This 20-key strict schema applies universally to Master and Override.
  */
-export const ratiosSchema = z.object(ratioShape);
+export const ratiosSchema = z.object(ratioShape).strict();
 
-// --- Master SOP Profile Schema (catalog DB, schema_v 2)
-export const SOP_MASTER_SCHEMA_VERSION = 2;
+// Alias preserved for backward compatibility with existing imports.
+export const fullRatiosSchema = ratiosSchema;
+
+// --- Master SOP Profile Schema (catalog DB, schema_v 3)
+// schema_v bumped 2→3 per CR-006 amendment (2026-06-25): key whitelist 3→20 canonical keys
+export const SOP_MASTER_SCHEMA_VERSION = 3;
 
 export const sopMasterSchema = z.object({
 	_id: z.string().min(1),
@@ -33,6 +82,7 @@ export const sopMasterSchema = z.object({
 	updated_at: z.string().datetime(),
 	created_by: z.string().min(1),
 	name: z.string().min(1),
+	// Master ratios use the unified 20-key strict schema (Option 1).
 	ratios: ratiosSchema,
 	version: z.number().int().positive(),
 	active: z.boolean()
@@ -46,8 +96,9 @@ export const isSopMaster = (d: unknown): d is SopMaster =>
 	(d as { type?: unknown }).type === 'sop_profile' &&
 	(d as { schema_v?: unknown }).schema_v === SOP_MASTER_SCHEMA_VERSION;
 
-// --- Override SOP Profile Schema (shelter_* DB, schema_v 1)
-export const SOP_OVERRIDE_SCHEMA_VERSION = 1;
+// --- Override SOP Profile Schema (shelter_* DB, schema_v 2)
+// schema_v bumped 1→2 per CR-006 amendment (2026-06-25): key whitelist 3→20 canonical keys
+export const SOP_OVERRIDE_SCHEMA_VERSION = 2;
 
 export const sopOverrideSchema = z.object({
 	_id: z.string().min(1),
@@ -94,7 +145,10 @@ type AnyProfileCtx = MasterCtx | OverrideCtx;
 export function resolveEffectiveProfile(
 	override?: SopOverride | null,
 	master?: SopMaster | null
-): { ratios: Record<SopRatioKey, number>; ratio_source: 'master' | 'override' } | null {
+): {
+	ratios: Record<SopRatioKey, number> | Partial<Record<SopRatioKey, number>>;
+	ratio_source: 'master' | 'override';
+} | null {
 	if (override && override.active) {
 		return {
 			ratios: override.ratios,
@@ -134,16 +188,13 @@ export function createInitialProfile(
 	ratios: Record<SopRatioKey, number>,
 	ctx: AnyProfileCtx
 ): { profile: SopMaster | SopOverride; audit: AuditEntry } {
-	// Filter out any unexpected keys for safety
-	const safeRatios = {} as Record<SopRatioKey, number>;
-	for (const key of SOP_RATIO_KEYS) {
-		if (ratios[key] !== undefined) safeRatios[key] = ratios[key];
-	}
+	// Both master and override require the full canonical set (Option 1).
+	const safeRatios = ratiosSchema.parse(ratios) as Record<SopRatioKey, number>;
 
 	if (targetType === 'sop_profile') {
 		const profile = catalogDoc(
 			'sop_profile',
-			2,
+			SOP_MASTER_SCHEMA_VERSION,
 			{
 				name,
 				ratios: safeRatios,
@@ -174,7 +225,7 @@ export function createInitialProfile(
 		const overrideCtx = ctx as OverrideCtx;
 		const profile = makeDoc(
 			'sop_override',
-			1,
+			SOP_OVERRIDE_SCHEMA_VERSION,
 			{
 				base_profile_id: overrideCtx.base_profile_id,
 				name,
@@ -235,14 +286,15 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 	reason: string,
 	ctx: MasterCtx | AuthorContext
 ): CreateNewVersionResult<T> {
-	// Filter incoming changes to ensure no poisoned keys leak into the merge
-	const safeChanges: Partial<Record<SopRatioKey, number>> = {};
+	// Validate partial changes strictly to reject non-whitelist or deprecated keys
+	const safeChanges = ratiosSchema.partial().strict().parse(changes);
 	let hasChanges = false;
+	const definedChanges: Partial<Record<SopRatioKey, number>> = {};
 
 	for (const key of SOP_RATIO_KEYS) {
-		if (changes[key] !== undefined) {
-			safeChanges[key] = changes[key];
-			if (prev.ratios[key] !== changes[key]) hasChanges = true;
+		if (safeChanges[key] !== undefined) {
+			if (prev.ratios[key] !== safeChanges[key]) hasChanges = true;
+			definedChanges[key] = safeChanges[key];
 		}
 	}
 
@@ -250,13 +302,13 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 		return { deactivatedPrev: null, profile: prev, audit: null } as CreateNewVersionResult<T>;
 	}
 
-	const newRatios = { ...prev.ratios, ...safeChanges };
+	const newRatios = { ...prev.ratios, ...definedChanges } as Record<SopRatioKey, number>;
 	if (prev.type === 'sop_profile') {
 		const createdBy = ctx.createdBy;
 
 		const profile = catalogDoc(
 			'sop_profile',
-			2,
+			SOP_MASTER_SCHEMA_VERSION,
 			{
 				name: prev.name,
 				ratios: newRatios,
@@ -292,7 +344,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 		const overridePrev = prev as SopOverride;
 		const profile = makeDoc(
 			'sop_override',
-			1,
+			SOP_OVERRIDE_SCHEMA_VERSION,
 			{
 				base_profile_id: overridePrev.base_profile_id,
 				name: overridePrev.name,

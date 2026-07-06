@@ -16,7 +16,7 @@ describe('SupplyCatalogPouchRepository', () => {
 		dbName = `test-catalog-${Math.random().toString(36).slice(2)}`;
 		db = new PouchDB(dbName, { adapter: 'memory' });
 		repo = new SupplyCatalogPouchRepository(dbName);
-		
+
 		// Seed some test catalog items
 		const items: SupplyItem[] = [
 			{
@@ -59,7 +59,7 @@ describe('SupplyCatalogPouchRepository', () => {
 				name: 'Invalid Item'
 			} as unknown as SupplyItem
 		];
-		
+
 		for (const item of items) {
 			await db.put(item);
 		}
@@ -68,8 +68,8 @@ describe('SupplyCatalogPouchRepository', () => {
 	it('listItems filters and returns only supply items', async () => {
 		const items = await repo.listItems();
 		expect(items).toHaveLength(2);
-		expect(items.some(i => i._id === 'item:rice01')).toBe(true);
-		expect(items.some(i => i._id === 'item:some_other_doc')).toBe(false);
+		expect(items.some((i) => i._id === 'item:rice01')).toBe(true);
+		expect(items.some((i) => i._id === 'item:some_other_doc')).toBe(false);
 	});
 
 	it('getItem retrieves a specific item by ID', async () => {
