@@ -27,12 +27,12 @@
 	let walkinDonorPhone = $state('');
 	let walkinItems = $state([{ name: '', qty: 1, unit: 'ชิ้น' }]);
 
-	let scanner: any = null;
+	let scanner: unknown = null;
 	let libReady = $state(false);
 
 	/** Dynamically inject html5-qrcode from CDN so no npm install is needed */
 	onMount(() => {
-		if ((window as any).Html5QrcodeScanner) {
+		if ((window as unknown as { Html5QrcodeScanner: unknown }).Html5QrcodeScanner) {
 			libReady = true;
 			return;
 		}
@@ -52,24 +52,29 @@
 			untrack(() => {
 				// Give Svelte one tick so #qr-reader is in the DOM
 				setTimeout(() => {
-					scanner = new (window as any).Html5QrcodeScanner(
+					scanner = new (
+						window as unknown as { Html5QrcodeScanner: new (...args: unknown[]) => unknown }
+					).Html5QrcodeScanner(
 						'qr-reader',
 						{ fps: 10, qrbox: { width: 250, height: 250 } },
 						/* verbose= */ false
 					);
-					scanner.render(onScanSuccess, onScanFailure);
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					(scanner as any).render(onScanSuccess, onScanFailure);
 				}, 50);
 			});
 		} else if (scanState !== 'scanning') {
 			if (scanner) {
-				scanner.clear().catch(console.error);
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				(scanner as any).clear().catch(console.error);
 				scanner = null;
 			}
 		}
 
 		return () => {
 			if (scanner) {
-				scanner.clear().catch(console.error);
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				(scanner as any).clear().catch(console.error);
 			}
 		};
 	});
@@ -91,12 +96,13 @@
 		];
 		scanState = 'result';
 		if (scanner) {
-			scanner.clear().catch(console.error);
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(scanner as any).clear().catch(console.error);
 			scanner = null;
 		}
 	}
 
-	function onScanFailure(_error: any) {
+	function onScanFailure() {
 		// Ignore continuous scan failures silently
 	}
 
@@ -148,7 +154,10 @@
 			<button
 				type="button"
 				onclick={() => (activeMode = 'scan')}
-				class="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-colors {activeMode === 'scan' ? 'bg-card text-primary shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
+				class="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-colors {activeMode ===
+				'scan'
+					? 'bg-card text-primary shadow-xs'
+					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				<Scan class="h-3.5 w-3.5" />
 				สแกนรับของ (แจ้งล่วงหน้า)
@@ -156,7 +165,10 @@
 			<button
 				type="button"
 				onclick={() => (activeMode = 'walkin')}
-				class="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-colors {activeMode === 'walkin' ? 'bg-card text-primary shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
+				class="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-colors {activeMode ===
+				'walkin'
+					? 'bg-card text-primary shadow-xs'
+					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				<User class="h-3.5 w-3.5" />
 				รับแบบ Walk-in
@@ -169,7 +181,7 @@
 		<div class="flex min-h-[420px] items-center justify-center bg-muted/5 p-6">
 			{#if scanState === 'idle'}
 				<div
-					class="animate-in fade-in flex w-full max-w-md flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card p-8 text-center shadow-xs duration-200"
+					class="flex w-full max-w-md animate-in flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card p-8 text-center shadow-xs duration-200 fade-in"
 				>
 					<div
 						class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-primary dark:bg-blue-950/30"
@@ -191,27 +203,31 @@
 				</div>
 			{:else if scanState === 'scanning'}
 				<div
-					class="animate-in fade-in flex w-full max-w-md flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card p-6 text-center shadow-xs duration-200"
+					class="flex w-full max-w-md animate-in flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card p-6 text-center shadow-xs duration-200 fade-in"
 				>
 					<h3 class="mb-4 text-sm font-bold text-foreground">หันกล้องไปที่คิวอาร์โค้ด</h3>
-					<div id="qr-reader" class="w-full overflow-hidden rounded-xl border border-border/50"></div>
+					<div
+						id="qr-reader"
+						class="w-full overflow-hidden rounded-xl border border-border/50"
+					></div>
 					<Button variant="outline" onclick={handleCancel} class="mt-6 w-full rounded-xl font-bold">
 						ยกเลิก
 					</Button>
 				</div>
 			{:else if scanState === 'result'}
 				<div
-					class="animate-in zoom-in-95 w-full max-w-md overflow-hidden rounded-3xl border border-border bg-card text-foreground shadow-2xl duration-200"
+					class="w-full max-w-md animate-in overflow-hidden rounded-3xl border border-border bg-card text-foreground shadow-2xl duration-200 zoom-in-95"
 				>
 					<div
 						class="flex items-start justify-between border-b border-border/20 bg-zinc-950 p-5 text-white"
 					>
 						<div>
 							<div class="mb-1.5 flex items-center gap-2">
-								<span class="text-[9px] font-bold uppercase tracking-wide text-zinc-400"
+								<span class="text-[9px] font-bold tracking-wide text-zinc-400 uppercase"
 									>BOOKING REF.</span
 								>
-								<span class="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-extrabold text-black"
+								<span
+									class="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-extrabold text-black"
 									>{bookingRef}</span
 								>
 							</div>
@@ -229,11 +245,11 @@
 					</div>
 
 					<div class="space-y-4 bg-card p-5">
-						<h4 class="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
+						<h4 class="text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase">
 							รายการที่จองไว้ (กรอกจำนวนที่รับจริง)
 						</h4>
 						<div class="space-y-2.5">
-							{#each scannedItems as item}
+							{#each scannedItems as item (item.name)}
 								<div
 									class="flex items-center justify-between rounded-xl border border-border/40 bg-muted/30 p-3"
 								>
@@ -272,14 +288,18 @@
 	{#if activeMode === 'walkin'}
 		<div class="min-h-[420px] bg-muted/5 p-6">
 			<div
-				class="animate-in fade-in mx-auto max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-xs duration-200"
+				class="mx-auto max-w-2xl animate-in rounded-2xl border border-border bg-card p-6 shadow-xs duration-200 fade-in"
 			>
 				<div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div>
-						<div class="mb-1.5 block text-xs font-bold text-muted-foreground"
-							>ชื่อผู้บริจาค <span class="text-red-500">*</span></div
-						>
-						<Input bind:value={walkinDonorName} placeholder="เช่น คุณสมชาย ใจดี" class="h-9 text-xs" />
+						<div class="mb-1.5 block text-xs font-bold text-muted-foreground">
+							ชื่อผู้บริจาค <span class="text-red-500">*</span>
+						</div>
+						<Input
+							bind:value={walkinDonorName}
+							placeholder="เช่น คุณสมชาย ใจดี"
+							class="h-9 text-xs"
+						/>
 					</div>
 					<div>
 						<div class="mb-1.5 block text-xs font-bold text-muted-foreground">เบอร์โทรติดต่อ</div>
@@ -288,7 +308,7 @@
 				</div>
 
 				<div class="mb-4 flex items-center justify-between">
-					<h4 class="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground">
+					<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
 						รายการสิ่งของที่รับบริจาค
 					</h4>
 					<Button
@@ -303,7 +323,7 @@
 				</div>
 
 				<div class="mb-8 space-y-3">
-					{#each walkinItems as item, idx}
+					{#each walkinItems as item, idx (idx)}
 						<div class="flex items-start gap-2 sm:items-center">
 							<div class="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-12">
 								<div class="sm:col-span-6">
