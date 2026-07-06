@@ -47,37 +47,37 @@ describe('donationPreDeclarationInputSchema', () => {
 		}
 	});
 
-    // 4. Invalid Case - Missing donation items
-    it('fails validation when donation items are missing', () => {
-        const result = donationPreDeclarationInputSchema.safeParse({ ...baseValid, items_declared: [] });
-        expect(result.success).toBe(false);
-        if (!result.success) {
-            expect(result.error.issues[0].message).toBe('Please add at least one item to the donation');
-        }
-    });
+	// 4. Invalid Case - Missing donation items
+	it('fails validation when donation items are missing', () => {
+		const result = donationPreDeclarationInputSchema.safeParse({ ...baseValid, items: [] });
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues[0].message).toBe('Please add at least one item to the donation');
+		}
+	});
 });
 
 describe('isDonationPreDeclaration', () => {
-    it('should return true for a valid donation_pre_declaration document', () => {
-        const mockDoc = {
-            _id: 'donation_pre_declaration:01ARZ3NDEKTSV4RRFFQ69G5FAV',
-            type: 'donation_pre_declaration',
-            schema_v: 1,
-            shelter_code: 'SH001',
-            tracking_token: 'token123',
-            items_declared: [],
-            donor_phone_hash: 'hash',
-            status: 'declared',
-            created_at: '2026-06-30T17:00:00Z',
-            updated_at: '2026-06-30T17:00:00Z',
-            created_by: 'user'
-        };
-        expect(isDonationPreDeclaration(mockDoc)).toBe(true);
-    });
+	it('should return true for a valid donation_pre_declaration document', () => {
+		const mockDoc = {
+			_id: 'donation_pre_declaration:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+			type: 'donation_pre_declaration',
+			schema_v: 2,
+			shelter_code: 'SH001',
+			tracking_token: 'token123',
+			items: [],
+			donor_phone_hash: 'hash',
+			status: 'declared',
+			created_at: '2026-06-30T17:00:00Z',
+			updated_at: '2026-06-30T17:00:00Z',
+			created_by: 'user'
+		};
+		expect(isDonationPreDeclaration(mockDoc)).toBe(true);
+	});
 
-    it('should return false for invalid documents or other types', () => {
-        expect(isDonationPreDeclaration({ type: 'donation' })).toBe(false);
-        expect(isDonationPreDeclaration(null)).toBe(false);
-        expect(isDonationPreDeclaration('string')).toBe(false);
-    });
+	it('should return false for invalid documents or other types', () => {
+		expect(isDonationPreDeclaration({ type: 'donation' })).toBe(false);
+		expect(isDonationPreDeclaration(null)).toBe(false);
+		expect(isDonationPreDeclaration('string')).toBe(false);
+	});
 });

@@ -11,6 +11,7 @@ import {
 	openNeeds,
 	calculateReserved,
 	isNeedCutOff,
+	deriveNeedAvailability,
 	type Donation
 } from './operations';
 import type { AuthorContext } from '$lib/db/model';
@@ -307,5 +308,50 @@ describe('Donation Cut-off (T-22) threshold crossing', () => {
 
 		// Case C: Both are closed -> Must cut off (true)
 		expect(isNeedCutOff(100, 10, 10, 'closed', 'closed')).toBe(true);
+	});
+});
+
+describe('deriveNeedAvailability', () => {
+	it('correctly maps campaign needs to their availability status', () => {
+		const campaign = createCampaign(
+			{
+				title: 'ของยังชีพ',
+				needs: [
+					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด', status: 'open' },
+					{ item_id: 'item:rice', qty_target: 50, unit: 'kg', status: 'open' }
+				]
+			},
+			ctx
+		);
+
+		const stockLedgers = [
+			createStockLedger({ item_id: 'item:water', qty: 30, unit: 'ขวด', reason: 'receive' }, ctx)
+		];
+
+		const donations: Donation[] = [
+			{
+				...declaredItemsDonation(),
+				campaign_id: campaign._id,
+				status: 'declared',
+				items: [{ item_id: 'item:water', qty: 40, unit: 'ขวด' }]
+			}
+		];
+
+		const availability = deriveNeedAvailability(campaign, donations, stockLedgers);
+		expect(availability).toHaveLength(2);
+
+		const waterAvail = availability.find((a) => a.item_id === 'item:water');
+		expect(waterAvail).toBeDefined();
+		expect(waterAvail?.qty_on_hand).toBe(30);
+		expect(waterAvail?.qty_reserved).toBe(40);
+		expect(waterAvail?.qty_remaining).toBe(30);
+		expect(waterAvail?.is_cut_off).toBe(false);
+
+		const riceAvail = availability.find((a) => a.item_id === 'item:rice');
+		expect(riceAvail).toBeDefined();
+		expect(riceAvail?.qty_on_hand).toBe(0);
+		expect(riceAvail?.qty_reserved).toBe(0);
+		expect(riceAvail?.qty_remaining).toBe(50);
+		expect(riceAvail?.is_cut_off).toBe(false);
 	});
 });
