@@ -36,6 +36,7 @@
 			sopRatioLive.stop();
 			stopNamedSync(SHELTER_REGISTRY_DB);
 			stopNamedSync('catalog');
+			data.queryClient.clear();
 		};
 	});
 </script>
