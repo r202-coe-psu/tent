@@ -8,32 +8,59 @@ import type { ReceiveInput } from '../domain/operations';
 export const operationsKeys = {
 	all: ['operations'] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
+	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
 	balance: () => [...operationsKeys.all, 'balance'] as const
 };
 
-export const useLedger = () =>
+/**
+ * Query hook to retrieve all stock ledger entries.
+ */
+export const useLedger = (enabled: () => boolean = () => true) =>
 	createQuery(() => ({
 		queryKey: operationsKeys.ledger(),
-		queryFn: () => operationsRepository().listLedger()
+		queryFn: () => operationsRepository().listLedger(),
+		enabled: enabled()
 	}));
 
+/**
+ * Query hook to retrieve stock ledger entries filtered by a specific item.
+ * Disabled (no fetch) while no item id is provided.
+ */
+export const useLedgerByItem = (itemId: () => string | undefined) =>
+	createQuery(() => ({
+		queryKey: operationsKeys.byItem(itemId() ?? ''),
+		queryFn: () => operationsRepository().listLedgerByItem(itemId() ?? ''),
+		enabled: !!itemId()
+	}));
+
+/**
+ * Query hook to retrieve the current on-hand stock balances (Map of itemId -> quantity).
+ */
 export const useStockBalance = () =>
 	createQuery(() => ({
 		queryKey: operationsKeys.balance(),
 		queryFn: () => operationsRepository().getBalance()
 	}));
 
+/**
+ * Mutation hook to receive inbound stock and persist the ledger entry.
+ * Cache invalidation is handled by `startOperationsLiveQuery` via the PouchDB changes feed.
+ */
 export const useReceiveStock = () =>
 	createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) =>
 			operationsRepository().receiveStock(input, ctx)
 	}));
 
+/**
+ * Starts a live query changes feed for operations (Stock Ledger documents).
+ * Automatically invalidates active queries when database changes happen.
+ */
 export function startOperationsLiveQuery(queryClient: QueryClient): LiveQueryHandle {
 	return startLiveQuery(shelterDb(), queryClient, (type) => {
 		switch (type) {
 			case 'stock_ledger':
-				return [operationsKeys.ledger(), operationsKeys.balance()];
+				return [operationsKeys.all];
 			default:
 				return [];
 		}

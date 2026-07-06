@@ -18,6 +18,18 @@ vi.mock('$lib/db/pouch', () => ({
 	namedLocalDb: () => testDb
 }));
 
+// Mock the operations barrel with its real domain logic (imported directly from
+// the domain module, bypassing the barrel's UI/Svelte exports) so this pure
+// data-layer test doesn't transitively load ReceiveStockForm.svelte and its
+// sveltekit-superforms adapter chain.
+vi.mock('$lib/features/operations', async () => {
+	const domain = await import('../../operations/domain/operations');
+	return {
+		stockBalance: domain.stockBalance,
+		isStockLedger: domain.isStockLedger
+	};
+});
+
 import { KitchenPouchRepository } from './kitchen.pouch';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
