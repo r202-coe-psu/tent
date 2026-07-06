@@ -53,23 +53,37 @@
 				หน้าแรก
 			</a>
 
-			<a
+			<!-- <a
 				href={resolve('/public/shelters' as any)}
 				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
 			>
 				<Compass class="h-4 w-4" />
 				ตรวจสอบศูนย์พักพิง
-			</a>
+			</a> -->
+			<span
+				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
+				title="เร็วๆ นี้"
+			>
+				<Compass class="h-4 w-4" />
+				ตรวจสอบศูนย์พักพิง
+			</span>
 
-			<a
+			<!-- <a
 				href={resolve('/public/family-search' as any)}
 				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
 			>
 				<Search class="h-4 w-4" />
 				สืบค้นญาติ
-			</a>
+			</a> -->
+			<span
+				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
+				title="เร็วๆ นี้"
+			>
+				<Search class="h-4 w-4" />
+				สืบค้นญาติ
+			</span>
 
 			<a
 				href={resolve('/public/donations')}
@@ -83,7 +97,7 @@
 				บริจาคและจองคิว
 			</a>
 
-			<a
+			<!-- <a
 				href={resolve('/public/transparency' as any)}
 				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
@@ -91,7 +105,15 @@
 				<FileText class="h-4 w-4" />
 				รายงานความโปร่งใส
 				<span class="text-[9px] font-bold text-muted-foreground/60">(เร็วๆ นี้)</span>
-			</a>
+			</a> -->
+			<span
+				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
+				title="เร็วๆ นี้"
+			>
+				<FileText class="h-4 w-4" />
+				รายงานความโปร่งใส
+				<span class="text-[9px] font-bold text-muted-foreground/60">(เร็วๆ นี้)</span>
+			</span>
 
 			<!-- Dropdown for Volunteers -->
 			<div class="group relative">
@@ -118,12 +140,18 @@
 					>
 						ลงทะเบียนอาสาสมัคร
 					</a>
-					<a
+					<!-- <a
 						href={resolve('/public/volunteers/shifts' as any)}
 						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
 					>
 						ตรวจสอบตารางกะงาน
-					</a>
+					</a> -->
+					<span
+						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground opacity-60"
+						title="เร็วๆ นี้"
+					>
+						ตรวจสอบตารางกะงาน
+					</span>
 				</div>
 			</div>
 		</nav>

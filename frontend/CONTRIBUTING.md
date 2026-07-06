@@ -24,17 +24,17 @@ hook is green" and "this doc is honored" should mean the same thing for lint/che
 
 - Run app commands from `frontend/`.
 
-| Task                     | Command                                              |
-| ------------------------ | ---------------------------------------------------- |
-| Dev server               | `pnpm dev` (binds `0.0.0.0`)                         |
-| Type-check               | `pnpm check`                                         |
-| Lint + format check      | `pnpm lint`                                          |
-| Auto-format              | `pnpm format`                                        |
-| Unit tests (run once)    | `pnpm test`                                          |
-| Unit tests (watch)       | `pnpm test:watch`                                    |
-| E2E (Playwright)         | `pnpm test:e2e`                                      |
-| Regenerate OpenAPI types | `pnpm openapi:update` (only when a task requires it) |
-| Pre-commit hook (dry run)| `pnpm exec lefthook run pre-commit` (from repo root) |
+| Task                      | Command                                              |
+| ------------------------- | ---------------------------------------------------- |
+| Dev server                | `pnpm dev` (binds `0.0.0.0`)                         |
+| Type-check                | `pnpm check`                                         |
+| Lint + format check       | `pnpm lint`                                          |
+| Auto-format               | `pnpm format`                                        |
+| Unit tests (run once)     | `pnpm test`                                          |
+| Unit tests (watch)        | `pnpm test:watch`                                    |
+| E2E (Playwright)          | `pnpm test:e2e`                                      |
+| Regenerate OpenAPI types  | `pnpm openapi:update` (only when a task requires it) |
+| Pre-commit hook (dry run) | `pnpm exec lefthook run pre-commit` (from repo root) |
 
 The CouchDB backend runs via the repo-root `docker compose up` (CouchDB 3.5). Copy `.env.example`
 to `.env` first.

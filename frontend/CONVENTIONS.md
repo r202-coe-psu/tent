@@ -83,11 +83,11 @@ fixed bug in shelter
 The repo root runs **[Lefthook](https://github.com/evilmartians/lefthook)** (`lefthook.yml`) as a
 pre-commit hook. When staged files touch `frontend/`, it runs — in order, fail-fast:
 
-| Step | Command       | What it catches                                      |
-| ---- | ------------- | ---------------------------------------------------- |
-| 1    | `pnpm lint`   | formatting drift, ESLint violations                |
-| 2    | `pnpm check`  | TypeScript / Svelte type errors (`svelte-check`)     |
-| 3    | `pnpm test`   | broken domain/data logic (Vitest)                    |
+| Step | Command      | What it catches                                  |
+| ---- | ------------ | ------------------------------------------------ |
+| 1    | `pnpm lint`  | formatting drift, ESLint violations              |
+| 2    | `pnpm check` | TypeScript / Svelte type errors (`svelte-check`) |
+| 3    | `pnpm test`  | broken domain/data logic (Vitest)                |
 
 This mirrors the Jenkins staging pipeline (lint → type-check → unit tests). Hooks are installed
 when you run `pnpm install` at the **repo root** (see `CONTRIBUTING.md` §1).
