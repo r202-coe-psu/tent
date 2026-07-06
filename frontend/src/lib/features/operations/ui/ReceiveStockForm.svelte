@@ -115,18 +115,22 @@
 	});
 
 	// Click outside container closes dropdown
-	$effect(() => {
-		function handleClickOutside(event: MouseEvent) {
-			if (container && !container.contains(event.target as Node)) {
-				isDropdownOpen = false;
-			}
+	function handleClickOutside(event: MouseEvent) {
+		if (container && !container.contains(event.target as Node)) {
+			isDropdownOpen = false;
 		}
-		document.addEventListener('click', handleClickOutside);
-		return () => {
-			document.removeEventListener('click', handleClickOutside);
-		};
-	});
+	}
+
+	// ref_id only applies to donation/transfer_in sources — drop any stale value
+	// left over from before the user switched to manual/adjust.
+	function handleSourceChange(e: Event & { currentTarget: HTMLSelectElement }) {
+		if (e.currentTarget.value !== 'donation' && e.currentTarget.value !== 'transfer_in') {
+			$formData.ref_id = null;
+		}
+	}
 </script>
+
+<svelte:document onclick={handleClickOutside} />
 
 <form
 	method="POST"
@@ -260,6 +264,7 @@
 					<select
 						{...props}
 						bind:value={$formData.source}
+						onchange={handleSourceChange}
 						class="h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
 					>
 						<option value="donation">ของบริจาค (Donation)</option>

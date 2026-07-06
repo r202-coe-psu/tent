@@ -9,13 +9,57 @@ vi.mock('$lib/features/supply', () => ({
 	supplyRepository: () => ({ getItem: mockGetItem })
 }));
 
-import { OperationsPouchRepository } from './operations.pouch';
+import { OperationsPouchRepository, assertReceiveAgainstCatalog } from './operations.pouch';
 import { createReceiveEntry } from '../domain/operations';
 import type { AuthorContext } from '$lib/db/model';
 
 PouchDB.plugin(memory);
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
+
+describe('assertReceiveAgainstCatalog', () => {
+	const entry = createReceiveEntry(
+		{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
+		ctx
+	);
+
+	it('throws for a missing catalog item', () => {
+		expect(() => assertReceiveAgainstCatalog(entry, null)).toThrow('Unknown item: item:rice');
+	});
+
+	it('throws on unit mismatch', () => {
+		expect(() => assertReceiveAgainstCatalog(entry, { unit: 'bag' } as SupplyItem)).toThrow(
+			'Unit mismatch for item item:rice: expected bag, got kg'
+		);
+	});
+
+	it('throws when a perishable item is missing lot.expiry', () => {
+		expect(() =>
+			assertReceiveAgainstCatalog(entry, { unit: 'kg', perishable: true } as SupplyItem)
+		).toThrow('Perishable item item:rice requires lot.expiry to be set');
+	});
+
+	it('passes for a matching, non-perishable item', () => {
+		expect(() => assertReceiveAgainstCatalog(entry, { unit: 'kg' } as SupplyItem)).not.toThrow();
+	});
+
+	it('passes for a perishable item with lot.expiry set', () => {
+		const perishableEntry = createReceiveEntry(
+			{
+				item_id: 'item:milk',
+				qty: 5,
+				unit: 'l',
+				source: 'donation',
+				ref_id: null,
+				lot: { expiry: '2026-12-31T00:00:00Z' }
+			},
+			ctx
+		);
+		expect(() =>
+			assertReceiveAgainstCatalog(perishableEntry, { unit: 'l', perishable: true } as SupplyItem)
+		).not.toThrow();
+	});
+});
 
 describe('OperationsPouchRepository', () => {
 	let dbName: string;
