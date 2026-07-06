@@ -119,7 +119,10 @@ export class PeoplePouchRepository implements PeopleRepository {
 	}
 
 	/** Paginated list of households. */
-	async listHouseholdsPaginated(page: number, pageSize: number): Promise<PaginatedResult<Household>> {
+	async listHouseholdsPaginated(
+		page: number,
+		pageSize: number
+	): Promise<PaginatedResult<Household>> {
 		const result = await this.repo.pageByType('household', isHousehold, page, pageSize);
 		return {
 			...result,

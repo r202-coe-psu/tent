@@ -6,7 +6,9 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import { useMasterData } from '$lib/features/master-data';
+	import { useProvinces, useDistricts, useSubdistricts } from '../application/queries';
 
 	let {
 		form,
@@ -61,21 +63,48 @@
 		{ key: 'kitchen_lead', label: 'หัวหน้าโรงครัว (Kitchen Lead)' }
 	];
 
-	type AddressFieldKey =
-		| 'address_no'
-		| 'village_no'
-		| 'subdistrict'
-		| 'district'
-		| 'province'
-		| 'postal_code';
+	type AddressFieldKey = 'address_no' | 'village_no';
 	const addressFields: { key: AddressFieldKey; label: string; placeholder: string }[] = [
 		{ key: 'address_no', label: 'บ้านเลขที่', placeholder: 'เช่น 99/1' },
-		{ key: 'village_no', label: 'หมู่ที่', placeholder: 'เช่น 5' },
-		{ key: 'subdistrict', label: 'ตำบล/แขวง', placeholder: 'เช่น คอหงส์' },
-		{ key: 'district', label: 'อำเภอ/เขต', placeholder: 'เช่น หาดใหญ่' },
-		{ key: 'province', label: 'จังหวัด', placeholder: 'เช่น สงขลา' },
-		{ key: 'postal_code', label: 'รหัสไปรษณีย์', placeholder: 'เช่น 90110' }
+		{ key: 'village_no', label: 'หมู่ที่', placeholder: 'เช่น 5' }
 	];
+
+	// Province → district → subdistrict cascade (each step filters/disables the
+	// next). Subdistrict selection also auto-fills postal_code from the dataset.
+	const provincesQuery = useProvinces();
+	const districtsQuery = useDistricts(() => $formData.province ?? null);
+	const subdistrictsQuery = useSubdistricts(
+		() => $formData.province ?? null,
+		() => $formData.district ?? null
+	);
+
+	// Combobox items — the raw lists are string[]/{ subdistrict, zipcode }[];
+	// Combobox wants { value, label }[].
+	const provinceItems = $derived((provincesQuery.data ?? []).map((p) => ({ value: p, label: p })));
+	const districtItems = $derived((districtsQuery.data ?? []).map((d) => ({ value: d, label: d })));
+	const subdistrictItems = $derived(
+		(subdistrictsQuery.data ?? []).map((s) => ({ value: s.subdistrict, label: s.subdistrict }))
+	);
+
+	function selectProvince(value: string | null) {
+		$formData.province = value;
+		// Downstream choices no longer apply to the new province.
+		$formData.district = null;
+		$formData.subdistrict = null;
+		$formData.postal_code = null;
+	}
+
+	function selectDistrict(value: string | null) {
+		$formData.district = value;
+		$formData.subdistrict = null;
+		$formData.postal_code = null;
+	}
+
+	function selectSubdistrict(value: string | null) {
+		$formData.subdistrict = value;
+		const match = (subdistrictsQuery.data ?? []).find((s) => s.subdistrict === value);
+		$formData.postal_code = match ? String(match.zipcode) : null;
+	}
 </script>
 
 <section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
@@ -306,7 +335,7 @@
 		</Form.Field>
 	</div>
 
-	<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 		{#each addressFields as field (field.key)}
 			<Form.Field {form} name={field.key}>
 				<Form.Control>
@@ -325,6 +354,88 @@
 			</Form.Field>
 		{/each}
 	</div>
+
+	<!-- Province → district → subdistrict cascade (largest to smallest; each
+	     step is disabled until the previous one is chosen). -->
+	<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+		<Form.Field {form} name="province">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>จังหวัด</Form.Label>
+					<Combobox
+						items={provinceItems}
+						bind:value={() => $formData.province ?? '', (v) => selectProvince(v || null)}
+						placeholder={provincesQuery.isLoading ? 'กำลังโหลด...' : 'เลือกจังหวัด...'}
+						searchPlaceholder="ค้นหาจังหวัด..."
+						emptyText="ไม่พบจังหวัด"
+						disabled={disabled || provincesQuery.isLoading}
+						controlProps={props}
+					/>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+
+		<Form.Field {form} name="district">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>อำเภอ/เขต</Form.Label>
+					<Combobox
+						items={districtItems}
+						bind:value={() => $formData.district ?? '', (v) => selectDistrict(v || null)}
+						placeholder={!$formData.province
+							? 'เลือกจังหวัดก่อน'
+							: districtsQuery.isLoading
+								? 'กำลังโหลด...'
+								: 'เลือกอำเภอ...'}
+						searchPlaceholder="ค้นหาอำเภอ..."
+						emptyText="ไม่พบอำเภอ"
+						disabled={disabled || !$formData.province || districtsQuery.isLoading}
+						controlProps={props}
+					/>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+
+		<Form.Field {form} name="subdistrict">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>ตำบล/แขวง</Form.Label>
+					<Combobox
+						items={subdistrictItems}
+						bind:value={() => $formData.subdistrict ?? '', (v) => selectSubdistrict(v || null)}
+						placeholder={!$formData.district
+							? 'เลือกอำเภอก่อน'
+							: subdistrictsQuery.isLoading
+								? 'กำลังโหลด...'
+								: 'เลือกตำบล...'}
+						searchPlaceholder="ค้นหาตำบล..."
+						emptyText="ไม่พบตำบล"
+						disabled={disabled || !$formData.district || subdistrictsQuery.isLoading}
+						controlProps={props}
+					/>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+	</div>
+
+	<Form.Field {form} name="postal_code">
+		<Form.Control>
+			{#snippet children({ props })}
+				<Form.Label>รหัสไปรษณีย์</Form.Label>
+				<Input
+					{...props}
+					value={$formData.postal_code ?? ''}
+					oninput={(e) => ($formData.postal_code = e.currentTarget.value || null)}
+					disabled={disabled || !$formData.subdistrict}
+					placeholder={!$formData.subdistrict ? 'เลือกตำบลก่อน' : 'เช่น 90110'}
+				/>
+			{/snippet}
+		</Form.Control>
+		<Form.FieldErrors />
+	</Form.Field>
 
 	<!-- Center manager (contact) -->
 	<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">

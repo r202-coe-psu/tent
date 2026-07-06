@@ -15,6 +15,7 @@ import {
 	closeZone,
 	reopenZone
 } from '../data/shelters.api';
+import { listProvinces, listDistricts, listSubdistricts } from '../data/thailand-location.api';
 import type { Shelter } from '../domain/schema';
 
 export const SHELTER_REGISTRY_DB = 'registry';
@@ -36,6 +37,39 @@ export const useShelter = (code: () => string) =>
 		queryKey: sheltersKeys.detail(code()),
 		queryFn: () => getShelter(code()),
 		enabled: !!code()
+	}));
+
+// ===== Thailand province/district/subdistrict cascade (address selects) =====
+
+export const thailandLocationKeys = {
+	all: ['thailand-location'] as const,
+	provinces: () => [...thailandLocationKeys.all, 'provinces'] as const,
+	districts: (province: string) => [...thailandLocationKeys.all, 'districts', province] as const,
+	subdistricts: (province: string, district: string) =>
+		[...thailandLocationKeys.all, 'subdistricts', province, district] as const
+};
+
+export const useProvinces = () =>
+	createQuery(() => ({
+		queryKey: thailandLocationKeys.provinces(),
+		queryFn: listProvinces,
+		staleTime: Infinity
+	}));
+
+export const useDistricts = (province: () => string | null) =>
+	createQuery(() => ({
+		queryKey: thailandLocationKeys.districts(province() ?? ''),
+		queryFn: () => listDistricts(province()!),
+		enabled: !!province(),
+		staleTime: Infinity
+	}));
+
+export const useSubdistricts = (province: () => string | null, district: () => string | null) =>
+	createQuery(() => ({
+		queryKey: thailandLocationKeys.subdistricts(province() ?? '', district() ?? ''),
+		queryFn: () => listSubdistricts(province()!, district()!),
+		enabled: !!province() && !!district(),
+		staleTime: Infinity
 	}));
 
 export const useCreateShelter = () => {

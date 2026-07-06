@@ -265,12 +265,7 @@
 							<span>ก่อนหน้า</span>
 						</Button>
 
-						{#if isLastStep}
-							<Button type="submit" disabled={$submitting || isPending}>
-								<Save class="h-4 w-4" />
-								<span>{isPending ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}</span>
-							</Button>
-						{:else}
+						{#if !isLastStep}
 							<Button type="button" onclick={goNext}>
 								<span>ถัดไป</span>
 								<ArrowRight class="h-4 w-4" />
