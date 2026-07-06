@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Badge, type BadgeVariant } from '$lib/components/ui/badge/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { toast } from 'svelte-sonner';
 	import * as Field from '$lib/components/ui/field/index.js';
@@ -7,7 +8,23 @@
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { householdInputSchema } from '../domain/people';
 	import { useMasterData } from '$lib/features/master-data';
-	import type { Household, Evacuee, HouseholdInput, PetGroup } from '../domain/people';
+	import type {
+		Household,
+		Evacuee,
+		HouseholdInput,
+		HouseholdStatus,
+		PetGroup
+	} from '../domain/people';
+
+	// Read-only presentation of the household lifecycle status (CR-029).
+	// Status is not free-editable here — it follows check-in/check-out flows.
+	const STATUS_DISPLAY: Record<HouseholdStatus, { label: string; variant: BadgeVariant }> = {
+		pre_registered: { label: 'ลงทะเบียนล่วงหน้า', variant: 'secondary' },
+		arriving: { label: 'กำลังเดินทางมา', variant: 'outline' },
+		checked_in: { label: 'เช็คอินแล้ว', variant: 'default' },
+		checked_out: { label: 'เช็คเอาท์แล้ว', variant: 'secondary' },
+		cancelled: { label: 'ยกเลิก', variant: 'destructive' }
+	};
 	import HouseholdFormHeadSection from './household-form-head-section.svelte';
 	import HouseholdFormMembersSection from './household-form-members-section.svelte';
 	import HouseholdFormLocationSection from './household-form-location-section.svelte';
@@ -285,9 +302,19 @@
 		<div class="space-y-6">
 			<!-- General Info & Head -->
 			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
-				<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">
-					ข้อมูลครัวเรือนเบื้องต้น
-				</h3>
+				<div class="flex items-center justify-between gap-2">
+					<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">
+						ข้อมูลครัวเรือนเบื้องต้น
+					</h3>
+					{#if initialData}
+						<div class="flex items-center gap-1.5">
+							<span class="text-xs text-muted-foreground">สถานะ</span>
+							<Badge variant={STATUS_DISPLAY[initialData.status].variant}>
+								{STATUS_DISPLAY[initialData.status].label}
+							</Badge>
+						</div>
+					{/if}
+				</div>
 				<HouseholdFormHeadSection
 					{form}
 					{headItems}
