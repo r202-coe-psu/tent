@@ -75,7 +75,7 @@ export class OperationsPouchRepository implements OperationsRepository {
 
 	async distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger> {
 		const entry = createDistributeEntry(input, ctx);
-		
+
 		// WARNING (C-1): This read-then-write is not atomic. Concurrent distributes
 		// may both pass the balance check before either write lands, potentially
 		// causing negative stock. Acceptable for single-user shelter scenario;
@@ -89,7 +89,6 @@ export class OperationsPouchRepository implements OperationsRepository {
 				`Insufficient stock for item ${entry.item_id} (requested ${requestedQty}, have ${currentQty})`
 			);
 		}
-
 		return this.addLedgerEntry(entry);
 	}
 }
