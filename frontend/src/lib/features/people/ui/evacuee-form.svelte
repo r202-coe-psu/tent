@@ -27,7 +27,6 @@
 		peopleRepository
 	} from '../index';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	let {
 		onsubmit,
@@ -114,7 +113,7 @@
 
 		try {
 			const ctx = {
-				shelterCode: shelterStore.selectedShelterCode ?? getShelterCode(),
+				shelterCode: getShelterCode(),
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 
@@ -238,7 +237,7 @@
 			// occupancy views and movement history depend on the movement stream
 			// (current_stay is only a snapshot, schema.md §1.1).
 			const ctx = {
-				shelterCode: shelterStore.selectedShelterCode ?? getShelterCode(),
+				shelterCode: getShelterCode(),
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 			const finishedEvacuee = await checkInMutation.mutateAsync({

@@ -1,6 +1,7 @@
 import { namedLocalDb } from './pouch';
 import { authStore } from '$lib/stores/auth.svelte';
 import { shelterCodeFromRoles } from '$lib/auth/roles';
+import { shelterStore } from '$lib/stores/shelter.svelte';
 
 /**
  * The shelter code for the currently authenticated user,
@@ -8,6 +9,9 @@ import { shelterCodeFromRoles } from '$lib/auth/roles';
  * only as a last resort (e.g. system_admin with no shelter scope).
  */
 export function getShelterCode(): string {
+	if (shelterStore.selectedShelterCode) {
+		return shelterStore.selectedShelterCode;
+	}
 	const roles = authStore.user?.roles ?? [];
 	return shelterCodeFromRoles(roles) ?? 'SH001';
 }
