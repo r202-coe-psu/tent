@@ -1,12 +1,14 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { adminRaw } from '$lib/server/couch-admin';
+import type { ShelterMaster } from '$lib/features/shelters/server';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const { id } = params;
 
 	// Mocking detailed shelter response specifically for the detailed page
 	// ⚠️ Security/PII Fix: Not exposing real staff names/phones.
-	
+
 	const mockDetailedShelter = {
 		id: id || 'S001',
 		name: 'ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)',
@@ -19,7 +21,7 @@ export const GET: RequestHandler = async ({ params }) => {
 		},
 		occupancy_rate: 1, // 1%
 		building_status: 'อาคารปิด (ในร่ม)',
-		geo: { lat: 7.0094, lng: 100.4735 }, // for google maps
+		geo: { lat: 7.009425, lng: 100.473531 }, // for google maps
 		admission_policy: {
 			pets: 'อนุญาต: สุนัขพันธุ์เล็ก, แมว (ต้องมีกรง)',
 			vulnerable_groups: ['ผู้สูงอายุ', 'ผู้ใช้วีลแชร์', 'ผู้ป่วยติดเตียงระดับต้น']
@@ -50,8 +52,8 @@ export const GET: RequestHandler = async ({ params }) => {
 		},
 		faq: [
 			{
-				q: 'ขั้นตอนสมัครเปิดบ้านตัวเองเป็น \'บ้านพี่เลี้ยง\' ทำอย่างไร มีค่าตอบแทนไหม?',
-				a: 'ผู้ที่มีพื้นที่จอดรถ พักพิง หรือมีห้องนอนประสงค์ว่างปลอดประภัย สามารถรับความจำนงผ่านระบบ \'ลงทะเบียนบ้านพี่เลี้ยง\' บนหน้าเว็บ ตัวแทนอาสาสมัคร EOC จะเข้าไปตรวจสอบมาตรฐานภัยพิบัติเพื่อทำการอนุมัติเปิดหมุดแผนที่ โดยไม่มีการเก็บค่าบริการแต่อย่างใดเพื่อร่วมสาธารณกุศลช่วยเหลือเกื้อกูลกัน'
+				q: "ขั้นตอนสมัครเปิดบ้านตัวเองเป็น 'บ้านพี่เลี้ยง' ทำอย่างไร มีค่าตอบแทนไหม?",
+				a: "ผู้ที่มีพื้นที่จอดรถ พักพิง หรือมีห้องนอนประสงค์ว่างปลอดประภัย สามารถรับความจำนงผ่านระบบ 'ลงทะเบียนบ้านพี่เลี้ยง' บนหน้าเว็บ ตัวแทนอาสาสมัคร EOC จะเข้าไปตรวจสอบมาตรฐานภัยพิบัติเพื่อทำการอนุมัติเปิดหมุดแผนที่ โดยไม่มีการเก็บค่าบริการแต่อย่างใดเพื่อร่วมสาธารณกุศลช่วยเหลือเกื้อกูลกัน"
 			},
 			{
 				q: 'ศูนย์ผู้ประสบภัย SmartShelter มีระบบป้องกันความปลอดภัยของข้อมูลประชาชนอย่างไร?',
@@ -75,6 +77,34 @@ export const GET: RequestHandler = async ({ params }) => {
 			}
 		]
 	};
+
+	try {
+		const res = await adminRaw(`/registry/${encodeURIComponent(id)}`, 'GET');
+		if (res.status === 200 && res.data) {
+			const m = res.data as ShelterMaster;
+
+			let mappedStatus = 'CLOSED';
+			if (m.operation_status === 'active') mappedStatus = 'OPEN';
+			else if (m.operation_status === 'full_capacity') mappedStatus = 'FULL';
+			else if (m.operation_status === 'standby') mappedStatus = 'PREPARE';
+
+			mockDetailedShelter.name = m.name;
+			mockDetailedShelter.address = m.location?.address || mockDetailedShelter.address;
+			mockDetailedShelter.status = mappedStatus;
+
+			if (m.location?.lat && m.location?.lng) {
+				mockDetailedShelter.geo = {
+					lat: m.location.lat,
+					lng: m.location.lng
+				};
+			}
+
+			mockDetailedShelter.capacity.total = m.capacity || mockDetailedShelter.capacity.total;
+			mockDetailedShelter.capacity.available = m.capacity || mockDetailedShelter.capacity.available;
+		}
+	} catch (e) {
+		console.error('Error fetching shelter detail:', e);
+	}
 
 	return json({
 		shelter: mockDetailedShelter
