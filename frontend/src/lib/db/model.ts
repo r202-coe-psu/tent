@@ -42,6 +42,17 @@ export function catalogDoc<T extends string, B extends object>(
 	};
 }
 
+/** Fields present on every document in a catalog database. */
+export interface CatalogDoc {
+	_id: string;
+	_rev?: string;
+	type: string;
+	schema_v: number;
+	created_at: Timestamp;
+	updated_at: Timestamp;
+	created_by: string;
+}
+
 /** Fields present on every document in a shelter database. */
 export interface BaseDoc {
 	_id: string;

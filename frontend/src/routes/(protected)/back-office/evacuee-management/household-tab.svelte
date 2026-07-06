@@ -5,7 +5,6 @@
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import Home from '@lucide/svelte/icons/home';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
@@ -63,9 +62,9 @@
 			<h2 class="text-lg font-bold tracking-tight text-foreground">ทะเบียนครัวเรือน</h2>
 			<p class="text-sm text-muted-foreground">
 				จำนวนทั้งหมด
-				<span
-					class="ml-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary"
-				>{total} ครัวเรือน</span>
+				<span class="ml-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary"
+					>{total} ครัวเรือน</span
+				>
 			</p>
 		</div>
 		<Button size="sm" onclick={() => goto(resolve('/back-office/households/new'))}>
@@ -91,11 +90,15 @@
 			<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูล...</p>
 		</div>
 	{:else if householdsQuery.isError}
-		<div class="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+		<div
+			class="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+		>
 			เกิดข้อผิดพลาด: {householdsQuery.error?.message}
 		</div>
 	{:else if filtered.length === 0}
-		<div class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-20">
+		<div
+			class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-20"
+		>
 			<FolderOpen class="h-10 w-10 text-muted-foreground/30" />
 			<p class="text-sm text-muted-foreground">ไม่พบข้อมูลครัวเรือนในระบบ</p>
 		</div>
@@ -126,10 +129,11 @@
 										{#each members as m (m._id)}
 											<span
 												class="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground"
-											>{m.first_name} {m.last_name}</span>
+												>{m.first_name} {m.last_name}</span
+											>
 										{/each}
 									{:else}
-										<span class="text-[11px] italic text-muted-foreground">ไม่มีสมาชิก</span>
+										<span class="text-[11px] text-muted-foreground italic">ไม่มีสมาชิก</span>
 									{/if}
 								</div>
 							</Table.Cell>
@@ -139,15 +143,17 @@
 										{#if h.municipality_zone}
 											<span
 												class="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700"
-											>{municipalityZoneLabels[h.municipality_zone] ?? h.municipality_zone}</span>
+												>{municipalityZoneLabels[h.municipality_zone] ?? h.municipality_zone}</span
+											>
 										{/if}
 										{#if h.community}
 											<span
 												class="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700"
-											>{communityLabels[h.community] ?? h.community}</span>
+												>{communityLabels[h.community] ?? h.community}</span
+											>
 										{/if}
 									{:else}
-										<span class="text-[11px] italic text-muted-foreground">ไม่ระบุ</span>
+										<span class="text-[11px] text-muted-foreground italic">ไม่ระบุ</span>
 									{/if}
 								</div>
 							</Table.Cell>
@@ -165,7 +171,8 @@
 															: '🐾'}
 											<span
 												class="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-secondary-foreground"
-											>{petEmoji} {p.count}</span>
+												>{petEmoji} {p.count}</span
+											>
 										{/each}
 									{:else}
 										<span class="text-[11px] text-muted-foreground">ไม่มี</span>
@@ -176,7 +183,8 @@
 								<Button
 									variant="outline"
 									size="sm"
-									onclick={() => goto(resolve(`/back-office/households/edit/${h._id}`))}>
+									onclick={() => goto(resolve(`/back-office/households/edit/${h._id}`))}
+								>
 									แก้ไขข้อมูล
 								</Button>
 							</Table.Cell>

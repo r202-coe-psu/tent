@@ -1,9 +1,9 @@
 ---
 title: SOP Ratio Reference Table — T-18.1 audit artifact
-status: draft for sign-off
+status: signed off
 created: 2026-06-29
-updated: 2026-06-29
-task: T-18.1 (Audit SOP handbooks → reference)
+updated: 2026-07-01
+task: T-18.1 (Audit SOP handbooks → reference); sign-off ปิดที่ T-18.5
 related: [CR-006, CR-021, QR-001-T18-Clarification]
 provenance:
   repo_head: c16e487
@@ -41,37 +41,38 @@ take precedence.
 
 | # | key | kind | source_basis (ปภ. / Sphere · line) | recommendation_rule | recommended_default | decision_status |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `water_l_per_person_day` | multiply | 7.5–15 (TH L2308) / ≥15 (SP L5846) | conflict → stricter | **15** | pending sign-off |
-| 2 | `drinking_water_l_per_person_day` | multiply | 2.5–3 (TH L2315) / 2.5–3 (SP L5913) | agree → upper bound | **3** | pending sign-off |
-| 3 | `cooking_water_l_per_person_day` | multiply | 3–6 (TH L2315) / 3–6 (SP L5916) | agree → upper bound | **6** | pending sign-off |
-| 4 | `hygiene_water_l_per_person_day` | multiply | 2–6 (TH L2316) / 2–6 (SP L5915) | agree → upper bound | **6** | pending sign-off |
-| 5 | `kcal_per_adult_day` | multiply | 1,500–2,000 (TH L1993) / ~2,100 (SP) | upper bound ปภ. | **2,000** | pending sign-off |
-| 6 | `people_per_tap` | divide | 80 (TH L2505) / 250 (SP L5850) | conflict → stricter (น้อยกว่า) | **80** | pending sign-off |
-| 7 | `people_per_handpump` | divide | — / 500 (SP L5851) | use source | **500** | pending sign-off |
-| 8 | `people_per_open_well` | divide | — / 400 (SP L5852) | use source | **400** | pending sign-off |
-| 9 | `people_per_laundry` | divide | ≥100 (TH L2512) / 100 (SP L5853) | agree | **100** | pending sign-off |
-| 10 | `people_per_bathing` | divide | — / 50 (SP L5854) | use source | **50** | pending sign-off |
-| 11 | `people_per_toilet_female` | divide | 20 (TH L2508) / 20 (SP L6328) | agree | **20** | pending sign-off |
-| 12 | `people_per_toilet_male` | divide | 35 (TH L2510) / — | use source (ปภ.) | **35** | pending sign-off |
-| 13 | `people_per_dining_point_adult` | divide | 20–50 (TH L2523) / — | stricter (น้อยกว่า) | **20** | pending sign-off |
-| 14 | `people_per_dining_point_child` | divide | 10–20 (TH L2525) / — | stricter (น้อยกว่า) | **10** | pending sign-off |
-| 15 | `m2_per_person_living` | multiply (min) | 3.5 (TH L2504) / 3.5 (SP L13035) | agree (min) | **3.5** | pending sign-off |
-| 16 | `m2_per_person_living_cold` | multiply (min) | — / 4.5–5.5 (SP L13037) | min requirement | **4.5** | pending sign-off |
-| 17 | `m2_per_person_total` | multiply (min) | 30–45 (TH L2502) / 30·45 (SP L12893) | upper (min ที่มากกว่า) | **45** | pending sign-off |
-| 18 | `max_waterpoint_distance_m` | threshold | 500 (TH L2505) / <500 (SP L5864) | ceiling | **500** | pending sign-off |
-| 19 | `max_queue_minutes` | threshold | — / <30 (SP L5867) | ceiling | **30** | pending sign-off |
-| 20 | `people_per_volunteer` | divide | — / — (ไม่มีใน handbook) | **no handbook source** | **—** | **expert / P-02 required** |
+| 1 | `water_l_per_person_day` | multiply | 7.5–15 (TH L2308) / ≥15 (SP L5846) | conflict → stricter | **15** | approved 2026-07-01 |
+| 2 | `drinking_water_l_per_person_day` | multiply | 2.5–3 (TH L2315) / 2.5–3 (SP L5913) | agree → upper bound | **3** | approved 2026-07-01 |
+| 3 | `cooking_water_l_per_person_day` | multiply | 3–6 (TH L2315) / 3–6 (SP L5916) | agree → upper bound | **6** | approved 2026-07-01 |
+| 4 | `hygiene_water_l_per_person_day` | multiply | 2–6 (TH L2316) / 2–6 (SP L5915) | agree → upper bound | **6** | approved 2026-07-01 |
+| 5 | `kcal_per_adult_day` | multiply | 1,500–2,000 (TH L1993) / ~2,100 (SP) | upper bound ปภ. | **2,000** | approved 2026-07-01 |
+| 6 | `people_per_tap` | divide | 80 (TH L2505) / 250 (SP L5850) | conflict → stricter (น้อยกว่า) | **80** | approved 2026-07-01 |
+| 7 | `people_per_handpump` | divide | — / 500 (SP L5851) | use source | **500** | approved 2026-07-01 |
+| 8 | `people_per_open_well` | divide | — / 400 (SP L5852) | use source | **400** | approved 2026-07-01 |
+| 9 | `people_per_laundry` | divide | ≥100 (TH L2512) / 100 (SP L5853) | agree | **100** | approved 2026-07-01 |
+| 10 | `people_per_bathing` | divide | — / 50 (SP L5854) | use source | **50** | approved 2026-07-01 |
+| 11 | `people_per_toilet_female` | divide | 20 (TH L2508) / 20 (SP L6328) | agree | **20** | approved 2026-07-01 |
+| 12 | `people_per_toilet_male` | divide | 35 (TH L2510) / — | use source (ปภ.) | **35** | approved 2026-07-01 |
+| 13 | `people_per_dining_point_adult` | divide | 20–50 (TH L2523) / — | stricter (น้อยกว่า) | **20** | approved 2026-07-01 |
+| 14 | `people_per_dining_point_child` | divide | 10–20 (TH L2525) / — | stricter (น้อยกว่า) | **10** | approved 2026-07-01 |
+| 15 | `m2_per_person_living` | multiply (min) | 3.5 (TH L2504) / 3.5 (SP L13035) | agree (min) | **3.5** | approved 2026-07-01 |
+| 16 | `m2_per_person_living_cold` | multiply (min) | — / 4.5–5.5 (SP L13037) | min requirement | **4.5** | approved 2026-07-01 |
+| 17 | `m2_per_person_total` | multiply (min) | 30–45 (TH L2502) / 30·45 (SP L12893) | upper (min ที่มากกว่า) | **45** | approved 2026-07-01 |
+| 18 | `max_waterpoint_distance_m` | threshold | 500 (TH L2505) / <500 (SP L5864) | ceiling | **500** | approved 2026-07-01 |
+| 19 | `max_queue_minutes` | threshold | — / <30 (SP L5867) | ceiling | **30** | approved 2026-07-01 |
+| 20 | `people_per_volunteer` | divide | — / — (ไม่มีใน handbook) | **project policy (ไม่ใช่ handbook)** | **50** | approved 2026-07-01 (provisional — may be revised) |
 
 > numeric guard: ไม่มี value ใน `recommended_default` ที่ trace ไม่กลับ `source_basis` หรือ
-> recommendation_rule · #20 (`people_per_volunteer`) = `—` เพราะไม่มี source (รอ P-02/expert)
+> recommendation_rule ยกเว้น #20 (`people_per_volunteer`) — ค่า **50** มาจาก PO decision (ประชุม
+> 2026-07-01) ไม่ใช่ handbook source; ทำเครื่องหมาย provisional ตามที่ PO ระบุว่า "อนาคตอาจจะแก้"
 
-## Decisions Required (Q-T18-3)
+## Decisions Required (Q-T18-3) — ปิดแล้ว (ประชุม PO 2026-07-01)
 
-| รายการ | Decision owner | Decision output | Decision deadline |
+| รายการ | Decision owner | Decision output | สถานะ |
 | --- | --- | --- | --- |
-| ค่า 19 handbook keys (#1–19) | PO / domain expert | approved reference value / unresolved | TBD |
-| `people_per_volunteer` (#20) | PO / domain expert (รอ P-02) | approved value / unresolved | หลัง P-02 ส่งมอบ |
-| rice/egg consumption (ย้ายไปครัว — CR-021) | PO + Module C/D | placement confirmed / revise | TBD |
+| ค่า 19 handbook keys (#1–19) | PO / domain expert | approved ทั้งหมดตามตาราง | ✅ ปิด 2026-07-01 |
+| `people_per_volunteer` (#20) | PO | approved = 50 คน/อาสา 1 คน (provisional) | ✅ ปิด 2026-07-01 |
+| rice/egg consumption (ย้ายไปครัว — CR-021) | PO + Module C/D | รับทราบ — ค่าจริงเป็นหน้าที่ Module C/D ต่อไป | ✅ ปิด 2026-07-01 |
 
 ## T-18.2 Unit-Fit Notes
 

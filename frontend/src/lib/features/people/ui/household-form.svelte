@@ -65,8 +65,12 @@
 	let mzVal = $state('');
 	let commVal = $state('');
 
-	$effect(() => { $formData.municipality_zone = mzVal || null; });
-	$effect(() => { $formData.community = commVal || null; });
+	$effect(() => {
+		$formData.municipality_zone = mzVal || null;
+	});
+	$effect(() => {
+		$formData.community = commVal || null;
+	});
 
 	// Member / pet state
 	let petsList = $state<PetGroup[]>([]);
@@ -87,10 +91,19 @@
 		}
 	});
 
-	// Vehicle & Assets state
-	let vehicleType = $state<'car' | 'motorcycle' | 'other' | 'none'>('none');
-	let licensePlate = $state('');
+	// Vehicle & Assets state — a household may bring several vehicles (schema vehicles[]).
+	// `id` is a client-only key for the {#each}; stripped when synced to $formData.
+	type VehicleRow = { id: number; type: 'car' | 'motorcycle' | 'other'; license_plate: string };
+	let vehicleRows = $state<VehicleRow[]>([]);
+	let nextVehicleId = 0;
 	let assetDescription = $state('');
+
+	function addVehicle() {
+		vehicleRows = [...vehicleRows, { id: nextVehicleId++, type: 'car', license_plate: '' }];
+	}
+	function removeVehicle(id: number) {
+		vehicleRows = vehicleRows.filter((v) => v.id !== id);
+	}
 
 	// Pre-fill from initialData — avoids reading allEvacuees to prevent live-sync re-runs
 	$effect(() => {
@@ -109,11 +122,15 @@
 			mzVal = initialData.municipality_zone ?? '';
 			commVal = initialData.community ?? '';
 			petsList = initialData.pets ? JSON.parse(JSON.stringify(initialData.pets)) : [];
-			const firstVehicle = initialData.vehicles && initialData.vehicles.length > 0
-				? initialData.vehicles[0]
-				: null;
+			const firstVehicle =
+				initialData.vehicles && initialData.vehicles.length > 0 ? initialData.vehicles[0] : null;
 			vehicleType = firstVehicle?.type ?? 'none';
 			licensePlate = firstVehicle?.license_plate ?? '';
+			vehicleRows = (initialData.vehicles ?? []).map((v) => ({
+				id: nextVehicleId++,
+				type: v.type,
+				license_plate: v.license_plate ?? ''
+			}));
 			assetDescription = initialData.assets?.description ?? '';
 			membersInitialized = false;
 		} else {
@@ -131,8 +148,7 @@
 			mzVal = '';
 			commVal = '';
 			petsList = [];
-			vehicleType = 'none';
-			licensePlate = '';
+			vehicleRows = [];
 			assetDescription = '';
 			selectedMemberIds = [...initialMemberIds];
 			membersInitialized = true;
@@ -161,9 +177,14 @@
 	});
 
 	$effect(() => {
-		$formData.vehicles = vehicleType !== 'none'
-			? [{ type: vehicleType, license_plate: licensePlate.trim() || null }]
-			: [];
+		$formData.vehicles =
+			vehicleType !== 'none'
+				? [{ type: vehicleType, license_plate: licensePlate.trim() || null }]
+				: [];
+		$formData.vehicles = vehicleRows.map((v) => ({
+			type: v.type,
+			license_plate: v.license_plate.trim() || null
+		}));
 	});
 
 	$effect(() => {
@@ -182,7 +203,9 @@
 				const hh = households.find((h) => h._id === evac.household_id);
 				const hhStatus = hh?.status ?? 'checked_in';
 				if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
-					toast.error(`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`);
+					toast.error(
+						`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`
+					);
 					headComboValue = prevHeadId ?? '';
 					$formData.head_evacuee_id = prevHeadId;
 					return;
@@ -202,7 +225,9 @@
 	});
 
 	// Sync headComboValue → formData
-	$effect(() => { $formData.head_evacuee_id = headComboValue || null; });
+	$effect(() => {
+		$formData.head_evacuee_id = headComboValue || null;
+	});
 
 	// Add member when combobox selects, validate duplicate active household
 	$effect(() => {
@@ -213,7 +238,9 @@
 					const hh = households.find((h) => h._id === evac.household_id);
 					const hhStatus = hh?.status ?? 'checked_in';
 					if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
-						toast.error(`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`);
+						toast.error(
+							`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`
+						);
 						memberSearchValue = '';
 						return;
 					}
@@ -253,12 +280,14 @@
 </script>
 
 <form method="POST" use:form.enhance class="space-y-6">
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2 items-start">
+	<div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
 		<!-- Left Column: General Info, Members, and Pets -->
 		<div class="space-y-6">
 			<!-- General Info & Head -->
-			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
-				<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">ข้อมูลครัวเรือนเบื้องต้น</h3>
+			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
+				<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">
+					ข้อมูลครัวเรือนเบื้องต้น
+				</h3>
 				<HouseholdFormHeadSection
 					{form}
 					{headItems}
@@ -270,7 +299,7 @@
 			</div>
 
 			<!-- Members Section -->
-			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
 				<HouseholdFormMembersSection
 					{memberItems}
 					bind:memberSearchValue
@@ -284,16 +313,13 @@
 			</div>
 
 			<!-- Pets Section -->
-			<HouseholdFormPetsSection
-				{form}
-				bind:petsList
-			/>
+			<HouseholdFormPetsSection {form} bind:petsList />
 		</div>
 
 		<!-- Right Column: Location, Assets, and Notes -->
 		<div class="space-y-6">
 			<!-- Location Section -->
-			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
 				<HouseholdFormLocationSection
 					{form}
 					bind:mzVal
@@ -306,20 +332,23 @@
 			</div>
 
 			<!-- Assets Section -->
-			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
 				<HouseholdFormAssetsSection
-					bind:vehicleType
-					bind:licensePlate
+					{vehicleRows}
+					onAddVehicle={addVehicle}
+					onRemoveVehicle={removeVehicle}
 					bind:assetDescription
 				/>
 			</div>
 
 			<!-- Notes Section -->
-			<div class="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
 				<Form.Field {form} name="notes">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label class="text-base font-bold text-slate-800 dark:text-slate-200">บันทึกเพิ่มเติม</Form.Label>
+							<Form.Label class="text-base font-bold text-slate-800 dark:text-slate-200"
+								>บันทึกเพิ่มเติม</Form.Label
+							>
 							<textarea
 								{...props}
 								bind:value={$formData.notes}

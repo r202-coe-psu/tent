@@ -14,6 +14,8 @@ export type {
 	CurrentStay,
 	EmergencyContact,
 	PetGroup,
+	HouseholdVehicle,
+	HouseholdAsset,
 	MovementDestination,
 	Gender,
 	Religion,
@@ -90,3 +92,4 @@ export { default as EvacueeForm } from './ui/evacuee-form.svelte';
 export { default as EvacueeList } from './ui/evacuee-list.svelte';
 export { default as HouseholdForm } from './ui/household-form.svelte';
 export { default as HouseholdFormPage } from './ui/household-form-page.svelte';
+export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';

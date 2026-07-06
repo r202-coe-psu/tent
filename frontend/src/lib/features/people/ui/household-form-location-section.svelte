@@ -3,8 +3,8 @@
 	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import MapPin from '@lucide/svelte/icons/map-pin';
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	import type { SuperForm } from 'sveltekit-superforms';
+	import type { HouseholdFormData } from '../domain/people';
 
 	let {
 		form,
@@ -15,7 +15,7 @@
 		mzPending,
 		commPending
 	}: {
-		form: SuperForm<any>;
+		form: SuperForm<HouseholdFormData>;
 		mzVal: string;
 		commVal: string;
 		municipalityZoneItems: { value: string; label: string }[];
@@ -29,7 +29,9 @@
 
 <!-- เขต / ชุมชน -->
 <div class="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
-	<h3 class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+	<h3
+		class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+	>
 		<MapPin class="size-3.5" />
 		ที่อยู่เดิม (เขต / ชุมชน)
 	</h3>

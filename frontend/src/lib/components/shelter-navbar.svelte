@@ -13,22 +13,25 @@
 	});
 </script>
 
-<nav class="flex h-[52px] w-full items-center justify-center bg-[#0A2647] px-6 text-white shadow-sm">
+<nav
+	class="flex h-[52px] w-full items-center justify-center bg-[#0A2647] px-6 text-white shadow-sm"
+>
 	<div class="flex items-center">
 		{#if sheltersQuery.isLoading}
-			<span class="text-sm font-medium text-white/80 pr-4">กำลังโหลด...</span>
+			<span class="pr-4 text-sm font-medium text-white/80">กำลังโหลด...</span>
 		{:else if sheltersQuery.isError}
-			<span class="text-sm font-medium text-red-400 pr-4">เกิดข้อผิดพลาดในการโหลดข้อมูล</span>
+			<span class="pr-4 text-sm font-medium text-red-400">เกิดข้อผิดพลาดในการโหลดข้อมูล</span>
 		{:else if sheltersQuery.data}
 			<Select.Root type="single" bind:value={shelterStore.selectedShelterCode}>
 				<Select.Trigger
 					class="w-auto min-w-[250px] border-none bg-transparent text-sm font-medium text-white shadow-none hover:bg-white/5 focus:ring-0 focus-visible:ring-0 [&_svg]:text-white/80"
 				>
-					{sheltersQuery.data.find((s) => s.code === shelterStore.selectedShelterCode)?.name ?? 'เลือกศูนย์พักพิง'}
+					{sheltersQuery.data.find((s) => s.code === shelterStore.selectedShelterCode)?.name ??
+						'เลือกศูนย์พักพิง'}
 				</Select.Trigger>
 				<Select.Content align="end" class="w-[350px]">
 					<Select.Group>
-						{#each sheltersQuery.data as shelter}
+						{#each sheltersQuery.data as shelter (shelter.code)}
 							<Select.Item value={shelter.code} label={shelter.name}>
 								{shelter.name}
 							</Select.Item>

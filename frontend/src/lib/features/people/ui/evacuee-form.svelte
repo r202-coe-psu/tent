@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { SvelteSet } from 'svelte/reactivity';
-	import type { EvacueeInput, HouseholdInput, Evacuee, Household } from '../domain/people';
+	import type {
+		EvacueeInput,
+		HouseholdInput,
+		HouseholdAsset,
+		Evacuee,
+		Household,
+		PetGroup
+	} from '../domain/people';
 	import SearchSection from './evacuee-search.svelte';
 	import EwarSymptomSection from './evacuee-ewar-symptom.svelte';
 	import RegistrationSection from './evacuee-registration.svelte';
@@ -9,7 +16,6 @@
 	import EvacueeSelectZone from './evacuee-select-zone.svelte';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import {
 		useEvacuees,
@@ -17,6 +23,7 @@
 		useCreateHousehold,
 		useUpdateHousehold,
 		useUpdateEvacuee,
+		useCheckInEvacuee,
 		peopleRepository,
 		SHELTER_CODE
 	} from '../index';
@@ -27,10 +34,10 @@
 		step = $bindable(1),
 		onComplete
 	}: {
-		onsubmit: (input: EvacueeInput, symptoms: string[]) => Promise<any> | any;
+		onsubmit: (input: EvacueeInput, symptoms: string[]) => Promise<Evacuee> | Evacuee;
 		pending?: boolean;
 		step?: 1 | 2 | 3 | 4 | 5 | 6;
-		onComplete?: (evacuee: any) => void;
+		onComplete?: (evacuee: Evacuee) => void;
 	} = $props();
 
 	const selectedSymptoms = new SvelteSet<string>();
@@ -46,7 +53,7 @@
 	let isCreatingNewHousehold = $state(false);
 	let newHouseholdAddress = $state<Partial<HouseholdInput> | null>(null);
 
-	let tempEvacuee = $derived.by(() => {
+	let tempEvacuee = $derived.by((): Evacuee | null => {
 		if (!pendingEvacueeInput) return null;
 		return {
 			_id: 'temp-new-evacuee',
@@ -55,7 +62,7 @@
 				status: 'checked_in',
 				zone: null
 			}
-		} as any;
+		} as Evacuee;
 	});
 
 	let combinedEvacuees = $derived.by(() => {
@@ -66,13 +73,14 @@
 		return list;
 	});
 
-		// Fetch data for HouseholdRegisterForm
+	// Fetch data for HouseholdRegisterForm
 	const evacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
 
 	const createHouseholdMutation = useCreateHousehold();
 	const updateHouseholdMutation = useUpdateHousehold();
 	const updateEvacueeMutation = useUpdateEvacuee();
+	const checkInMutation = useCheckInEvacuee();
 
 	function handleRegistrationSubmit(input: EvacueeInput) {
 		pendingEvacueeInput = input;
@@ -82,7 +90,7 @@
 		step = 4;
 	}
 
-	function handleHouseholdSelect(household: any) {
+	function handleHouseholdSelect(household: Household) {
 		selectedHousehold = household;
 		isCreatingNewHousehold = false;
 		newHouseholdAddress = null;
@@ -95,31 +103,19 @@
 		step = 5;
 	}
 
-	function handleHouseholdCancel() {
-		step = 1;
-		newlyRegisteredEvacuee = null;
-		pendingEvacueeInput = null;
-		pendingSymptoms = [];
-		selectedHousehold = null;
-		isCreatingNewHousehold = false;
-		newHouseholdAddress = null;
-	}
-
 	async function handleFinalSubmit(petAssetVehicleData: {
-		hasPets: boolean;
-		petDescription: string;
-		hasCage: boolean;
-		petImageUrl: string | null;
+		pets: PetGroup[];
 		assetDescription: string;
-		vehicleType: string;
-		licensePlate: string;
+		vehicles: { type: 'car' | 'motorcycle' | 'other'; license_plate: string | null }[];
 	}) {
 		if (isSubmittingHousehold) return;
 		isSubmittingHousehold = true;
 
 		try {
 			const ctx = {
-				shelterCode: shelterStore.selectedShelterCode ?? SHELTER_CODE,
+				// Repo writes to the fixed SHELTER_DB; keep shelter_code consistent with it
+				// (multi-shelter Pouch not implemented yet — do not stamp a selected shelter).
+				shelterCode: SHELTER_CODE,
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 
@@ -136,30 +132,11 @@
 				throw new Error('ไม่พบข้อมูลผู้ประสบภัยที่กำลังลงทะเบียน');
 			}
 
-			// 2. Map pets
-			const pets: any[] = [];
-			if (petAssetVehicleData.hasPets && petAssetVehicleData.petDescription) {
-				const desc = petAssetVehicleData.petDescription.toLowerCase();
-				let species: 'dog' | 'cat' | 'bird' | 'other' = 'other';
-				if (desc.includes('dog') || desc.includes('หมา') || desc.includes('สุนัข')) {
-					species = 'dog';
-				} else if (desc.includes('cat') || desc.includes('แมว')) {
-					species = 'cat';
-				} else if (desc.includes('bird') || desc.includes('นก')) {
-					species = 'bird';
-				}
-
-				pets.push({
-					species,
-					count: 1,
-					notes: petAssetVehicleData.petDescription,
-					has_cage: petAssetVehicleData.hasCage,
-					image_url: petAssetVehicleData.petImageUrl
-				});
-			}
+			// 2. Map pets — a household may bring several (schema pets[])
+			const pets = petAssetVehicleData.pets.filter((p) => p.count > 0);
 
 			// 3. Map assets
-			let assets: any = null;
+			let assets: HouseholdAsset | null = null;
 			if (petAssetVehicleData.assetDescription) {
 				assets = {
 					description: petAssetVehicleData.assetDescription,
@@ -167,27 +144,18 @@
 				};
 			}
 
-			// 4. Map vehicle
-			let vehicle: any = null;
-			if (petAssetVehicleData.vehicleType) {
-				let type: 'car' | 'motorcycle' | 'other' = 'other';
-				if (petAssetVehicleData.vehicleType === 'รถยนต์') {
-					type = 'car';
-				} else if (petAssetVehicleData.vehicleType === 'จักรยานยนต์') {
-					type = 'motorcycle';
-				}
-				vehicle = {
-					type,
-					license_plate: petAssetVehicleData.licensePlate || null
-				};
-			}
+			// 4. Map vehicles (household may bring several — schema vehicles[])
+			const vehicles = petAssetVehicleData.vehicles.map((v) => ({
+				type: v.type,
+				license_plate: v.license_plate?.trim() || null
+			}));
 
 			let householdId: string | null = null;
 
 			// 5. Create or Join household
 			if (selectedHousehold) {
 				householdId = selectedHousehold._id;
-				
+
 				const latestHousehold = await peopleRepository().getHousehold(selectedHousehold._id);
 				if (!latestHousehold) throw new Error('ไม่พบครัวเรือนในระบบ');
 
@@ -202,20 +170,22 @@
 					label: latestHousehold.label || `ครอบครัวผู้ประสบภัย ${latestHousehold._id}`,
 					pets: updatedPets,
 					assets: assets || latestHousehold.assets || null,
-					vehicle: vehicle || latestHousehold.vehicle || null
+					// Append the registrant's vehicles to the household's existing list (like pets),
+					// rather than replacing them.
+					vehicles: [...(latestHousehold.vehicles || []), ...vehicles]
 				});
-			} else if (isCreatingNewHousehold || pets.length > 0 || assets || vehicle) {
+			} else if (isCreatingNewHousehold || pets.length > 0 || assets || vehicles.length > 0) {
 				const addr = newHouseholdAddress || {};
 				const householdLabel = `ครอบครัว${registeredEvacuee.first_name} ${registeredEvacuee.last_name}`;
-				
-				const householdInput: any = {
+
+				const householdInput: HouseholdInput = {
 					label: householdLabel,
 					head_evacuee_id: registeredEvacuee._id,
 					municipality_zone: null,
 					community: null,
 					pets: pets,
 					assets: assets,
-					vehicle: vehicle,
+					vehicles: vehicles,
 					notes: '',
 					address_no: addr.address_no || null,
 					village_no: addr.village_no || null,
@@ -243,8 +213,9 @@
 
 			// Go to step 6 (Zoning)
 			step = 6;
-		} catch (err: any) {
-			toast.error(`เกิดข้อผิดพลาดในการบันทึก: ${err.message || err}`);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			toast.error(`เกิดข้อผิดพลาดในการบันทึก: ${message}`);
 		} finally {
 			isSubmittingHousehold = false;
 		}
@@ -264,17 +235,19 @@
 				return;
 			}
 
-			await updateEvacueeMutation.mutateAsync({
-				...latestEvacuee,
-				current_stay: {
-					status: 'checked_in',
-					zone: zone,
-					since: new Date().toISOString()
-				}
+			// Check-in writes an append-only movement first, then applies current_stay —
+			// occupancy views and movement history depend on the movement stream
+			// (current_stay is only a snapshot, schema.md §1.1).
+			const ctx = {
+				shelterCode: SHELTER_CODE,
+				createdBy: authStore.user?.name ?? 'unknown'
+			};
+			const finishedEvacuee = await checkInMutation.mutateAsync({
+				evacuee: latestEvacuee,
+				ctx,
+				zone
 			});
 			toast.success('บันทึกข้อมูลและจัดสรรพื้นที่สำเร็จ');
-
-			const finishedEvacuee = latestEvacuee ? { ...latestEvacuee, current_stay: { status: 'checked_in', zone, since: new Date().toISOString() } } : newlyRegisteredEvacuee;
 
 			// Reset internal state
 			step = 1;
@@ -285,8 +258,9 @@
 
 			// Notify parent to show the success/wristband screen
 			onComplete?.(finishedEvacuee);
-		} catch (err: any) {
-			toast.error(`เกิดข้อผิดพลาดในการจัดสรรพื้นที่: ${err.message || err}`);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			toast.error(`เกิดข้อผิดพลาดในการจัดสรรพื้นที่: ${message}`);
 		}
 	}
 </script>
@@ -340,7 +314,7 @@
 			</div>
 			<!-- label below -->
 			<span
-				class="hidden text-center text-xs font-medium leading-tight sm:block {step === s
+				class="hidden text-center text-xs leading-tight font-medium sm:block {step === s
 					? 'text-foreground'
 					: step > s
 						? 'text-green-700'
@@ -366,7 +340,7 @@
 		onsubmit={handleRegistrationSubmit}
 		pending={isSubmittingEvacuee || pending}
 		onBack={() => (step = 2)}
-		
+		hasSymptomsSelected={selectedSymptoms.size > 0}
 	/>
 {:else if step === 4}
 	<div class="space-y-6">
@@ -378,7 +352,7 @@
 			pending={isSubmittingHousehold}
 			bind:showNewHouseholdForm={isCreatingNewHousehold}
 		/>
-		<div class="flex justify-between items-center border-t border-border pt-6">
+		<div class="flex items-center justify-between border-t border-border pt-6">
 			<Button
 				type="button"
 				variant="outline"
@@ -392,7 +366,7 @@
 			{#if !isCreatingNewHousehold}
 				<Button
 					type="button"
-					class="h-10 px-6 text-sm font-medium bg-[#003B71] hover:bg-[#002a50]"
+					class="h-10 bg-[#003B71] px-6 text-sm font-medium hover:bg-[#002a50]"
 					onclick={() => {
 						step = 5;
 					}}
@@ -403,10 +377,7 @@
 		</div>
 	</div>
 {:else if step === 5}
-	<EvacueePetAssetVehicle
-		onBack={() => (step = 4)}
-		onNext={handleFinalSubmit}
-	/>
+	<EvacueePetAssetVehicle onBack={() => (step = 4)} onNext={handleFinalSubmit} />
 {:else if step === 6}
 	<EvacueeSelectZone
 		evacuee={newlyRegisteredEvacuee}

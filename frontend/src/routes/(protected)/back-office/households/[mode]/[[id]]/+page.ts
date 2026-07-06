@@ -1,9 +1,9 @@
-import { requireAuth } from '$lib/guards/auth';
+import { requireEvacueeRegistration } from '$lib/guards/auth';
 import type { PageLoad } from './$types';
 import { error } from '@sveltejs/kit';
 
 export const load = (async ({ params }) => {
-	await requireAuth();
+	await requireEvacueeRegistration();
 	if (params.mode !== 'new' && params.mode !== 'edit') {
 		error(404, 'Page not found');
 	}

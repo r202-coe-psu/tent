@@ -7,7 +7,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import type { Household, PetGroup } from '$lib/features/people';
+	import type { Household, PetGroup, HouseholdVehicle } from '$lib/features/people';
 
 	let {
 		show,
@@ -19,19 +19,42 @@
 		household: Household;
 		onClose: () => void;
 		onSave: (data: {
-			vehicleType: string;
-			licensePlate: string;
+			vehicles: HouseholdVehicle[];
 			valuables: string;
 			pets: PetGroup[];
 		}) => Promise<void>;
 	} = $props();
 
-	let vehicleType = $state(untrack(() => household.vehicle?.type ?? 'none'));
-	let licensePlate = $state(untrack(() => household.vehicle?.license_plate ?? ''));
+	// A household may bring several vehicles (schema vehicles[]); `id` keys the {#each}.
+	type VehicleRow = { id: number; type: 'car' | 'motorcycle' | 'other'; license_plate: string };
+	let vehicleRows = $state<VehicleRow[]>(
+		untrack(() =>
+			(household.vehicles ?? []).map((v, i) => ({
+				id: i,
+				type: v.type,
+				license_plate: v.license_plate ?? ''
+			}))
+		)
+	);
+	let nextVehicleId = untrack(() => household.vehicles?.length ?? 0);
 	let valuables = $state(untrack(() => household.assets?.description ?? ''));
 	let petsList = $state<PetGroup[]>(
 		untrack(() => (household.pets ? JSON.parse(JSON.stringify(household.pets)) : []))
 	);
+
+	const vehicleTypeOptions = [
+		{ value: 'car', label: 'รถยนต์' },
+		{ value: 'motorcycle', label: 'รถจักรยานยนต์' },
+		{ value: 'other', label: 'อื่นๆ' }
+	] as const;
+
+	function addVehicle() {
+		vehicleRows = [...vehicleRows, { id: nextVehicleId++, type: 'car', license_plate: '' }];
+	}
+
+	function removeVehicle(id: number) {
+		vehicleRows = vehicleRows.filter((v) => v.id !== id);
+	}
 
 	function addPetRow() {
 		petsList = [...petsList, { species: 'dog', count: 1, notes: '', has_cage: false }];
@@ -62,37 +85,64 @@
 			</div>
 
 			<div class="max-h-[400px] space-y-4 overflow-y-auto pr-1">
-				<!-- Vehicle -->
+				<!-- Vehicles — a household may bring several -->
 				<div class="space-y-2 border-b border-border/50 pb-4">
-					<h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">ข้อมูลยานพาหนะ</h4>
-					<div class="grid grid-cols-2 gap-4">
-						<div class="space-y-1.5">
-							<Label for="vehicle_type">ประเภทยานพาหนะ</Label>
-							<Select.Root type="single" bind:value={vehicleType}>
-								<Select.Trigger id="vehicle_type" class="h-9 w-full">
-									{{ none: 'ไม่มี', car: 'รถยนต์', motorcycle: 'รถจักรยานยนต์', other: 'อื่นๆ' }[
-										vehicleType
-									] ?? '— เลือก —'}
-								</Select.Trigger>
-								<Select.Content>
-									<Select.Item value="none" label="ไม่มี" />
-									<Select.Item value="car" label="รถยนต์" />
-									<Select.Item value="motorcycle" label="รถจักรยานยนต์" />
-									<Select.Item value="other" label="อื่นๆ" />
-								</Select.Content>
-							</Select.Root>
-						</div>
-						{#if vehicleType !== 'none'}
-							<div class="space-y-1.5">
-								<Label for="license_plate">เลขทะเบียนรถ</Label>
-								<Input
-									id="license_plate"
-									bind:value={licensePlate}
-									placeholder="เช่น กง 4567 สงขลา"
-								/>
-							</div>
-						{/if}
+					<div class="flex items-center justify-between">
+						<h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">ข้อมูลยานพาหนะ</h4>
+						<button
+							onclick={addVehicle}
+							class="inline-flex cursor-pointer items-center gap-1 text-xs font-bold text-primary hover:underline"
+						>
+							<Plus class="size-3.5" />
+							<span>เพิ่มคัน</span>
+						</button>
 					</div>
+
+					{#if vehicleRows.length === 0}
+						<p
+							class="rounded-xl bg-slate-50 py-4 text-center text-xs text-muted-foreground italic dark:bg-slate-900"
+						>
+							ไม่มียานพาหนะที่ลงทะเบียนไว้
+						</p>
+					{:else}
+						<div class="space-y-2.5">
+							{#each vehicleRows as vehicle (vehicle.id)}
+								<div class="flex items-end gap-3">
+									<div class="w-[150px] shrink-0 space-y-1">
+										<Label class="text-[10px]">ประเภทยานพาหนะ</Label>
+										<Select.Root type="single" bind:value={vehicle.type}>
+											<Select.Trigger class="h-9 w-full">
+												{vehicleTypeOptions.find((o) => o.value === vehicle.type)?.label ??
+													'ประเภท'}
+											</Select.Trigger>
+											<Select.Content>
+												{#each vehicleTypeOptions as opt (opt.value)}
+													<Select.Item value={opt.value} label={opt.label} />
+												{/each}
+											</Select.Content>
+										</Select.Root>
+									</div>
+									<div class="flex-1 space-y-1">
+										<Label class="text-[10px]">เลขทะเบียนรถ</Label>
+										<Input
+											class="h-9"
+											bind:value={vehicle.license_plate}
+											placeholder="เช่น กง 4567 สงขลา"
+										/>
+									</div>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon"
+										onclick={() => removeVehicle(vehicle.id)}
+										class="size-9 shrink-0 text-destructive hover:bg-destructive/10"
+									>
+										<X class="size-4" />
+									</Button>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				</div>
 
 				<!-- Assets / Valuables -->
@@ -199,7 +249,17 @@
 
 			<div class="flex justify-end gap-2 border-t border-border pt-4">
 				<Button variant="outline" onclick={onClose}>ยกเลิก</Button>
-				<Button onclick={() => onSave({ vehicleType, licensePlate, valuables, pets: petsList })}>
+				<Button
+					onclick={() =>
+						onSave({
+							vehicles: vehicleRows.map((v) => ({
+								type: v.type,
+								license_plate: v.license_plate.trim() || null
+							})),
+							valuables,
+							pets: petsList
+						})}
+				>
 					บันทึกข้อมูล
 				</Button>
 			</div>

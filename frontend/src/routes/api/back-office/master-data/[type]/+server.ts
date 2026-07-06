@@ -1,6 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
+import {
+	adminRaw,
+	requireAdmin,
+	requireShelterScopeOrSA,
+	serviceError,
+	ServiceError
+} from '$lib/server/couch-admin';
 import {
 	enforceOneDefault,
 	masterDataSchema,
@@ -13,9 +19,10 @@ export const prerender = false;
 
 const REGISTRY_DB = 'registry';
 
-/** GET — read one master_data doc (404 → empty placeholder). */
+/** GET — read one master_data doc (404 → empty placeholder). Reads are open to
+ *  any authenticated user (CR-012 §2); writes below stay SA-only. */
 export const GET: RequestHandler = async ({ params, request }) => {
-	await requireAdmin(request.headers.get('cookie'));
+	await requireShelterScopeOrSA(request.headers.get('cookie'));
 	try {
 		const type = masterTypeSchema.parse(params.type);
 		const doc = await readMasterDoc(type);
@@ -33,7 +40,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
  *  (after add/edit/delete/setDefault ran client-side). Idempotent on first
  *  write (creates the doc with a fresh envelope). */
 export const PUT: RequestHandler = async ({ params, request }) => {
-	await requireAdmin(request.headers.get('cookie'));
+	const caller = await requireAdmin(request.headers.get('cookie'));
 	try {
 		const type = masterTypeSchema.parse(params.type);
 		const body = (await request.json().catch(() => ({}))) as { items?: unknown };
@@ -57,7 +64,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 					items: cleaned,
 					created_at: now,
 					updated_at: now,
-					created_by: 'sa-bootstrap'
+					created_by: caller
 				};
 
 		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(id)}`, 'PUT', doc);

@@ -4,8 +4,7 @@
 	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import UserRound from '@lucide/svelte/icons/user-round';
-	import type { Evacuee } from '../domain/people';
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	import type { Evacuee, HouseholdFormData } from '../domain/people';
 	import type { SuperForm } from 'sveltekit-superforms';
 
 	let {
@@ -16,7 +15,7 @@
 		allEvacuees,
 		emergencyContactPhone = $bindable()
 	}: {
-		form: SuperForm<any>;
+		form: SuperForm<HouseholdFormData>;
 		headItems: { value: string; label: string; evacuee: Evacuee | null }[];
 		headComboValue: string;
 		noHead: boolean;
@@ -99,7 +98,10 @@
 	{@const headEvac = allEvacuees.find((e) => e._id === $formData.head_evacuee_id)}
 	{#if headEvac}
 		<div class="space-y-1.5 rounded-lg border border-primary/15 bg-primary/5 px-4 py-3">
-			<Label for="emergency-phone" class="text-xs font-semibold tracking-wide text-primary uppercase">
+			<Label
+				for="emergency-phone"
+				class="text-xs font-semibold tracking-wide text-primary uppercase"
+			>
 				เบอร์ติดต่อฉุกเฉินของหัวหน้าครัวเรือน <span class="text-destructive">*</span>
 			</Label>
 			<Input

@@ -12,7 +12,7 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { LOGIN_ROUTE } from '$lib/guards/auth';
-	import { isShelterManager, isSystemAdmin, formatRoleList } from '$lib/auth/roles';
+	import { isSystemAdmin, formatRoleList } from '$lib/auth/roles';
 	import {
 		backofficeNavbarGroups,
 		backofficeHomePath,
@@ -25,7 +25,6 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const canManageUsers = $derived(isSA || isShelterManager(roles));
 
 	async function logout() {
 		mobileMenuOpen = false;

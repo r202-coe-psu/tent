@@ -4,7 +4,7 @@
 	interface Props {
 		title: string;
 		description: string;
-		icon: Component<any>;
+		icon: Component<Record<string, unknown>>;
 		iconClass?: string;
 		children?: Snippet;
 	}

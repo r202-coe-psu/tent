@@ -3,10 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
-	import * as Card from '$lib/components/ui/card/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import Home from '@lucide/svelte/icons/home';
 	import HouseholdForm from './household-form.svelte';
 	import {
 		useEvacuees,
@@ -85,7 +83,9 @@
 						has_cage: p.has_cage ?? undefined,
 						image_url: p.image_url ?? null
 					})),
-					assets: input.assets ?? null,
+					assets: input.assets
+						? { description: input.assets.description, image_url: input.assets.image_url ?? null }
+						: null,
 					vehicles: (input.vehicles ?? []).map((v) => ({
 						type: v.type,
 						license_plate: v.license_plate ?? null
@@ -105,8 +105,12 @@
 				// Determine status based on members stay statuses (Path B / Path C)
 				const allEvacuees = evacueesQuery.data ?? [];
 				const selectedMembers = allEvacuees.filter((ev) => selectedMemberIds.includes(ev._id));
-				const hasCheckedInMember = selectedMembers.some((ev) => ev.current_stay?.status === 'checked_in');
-				const initialStatus = hasCheckedInMember ? ('checked_in' as const) : ('pre_registered' as const);
+				const hasCheckedInMember = selectedMembers.some(
+					(ev) => ev.current_stay?.status === 'checked_in'
+				);
+				const initialStatus = hasCheckedInMember
+					? ('checked_in' as const)
+					: ('pre_registered' as const);
 
 				const inputWithStatus = {
 					...input,
@@ -143,7 +147,7 @@
 				const evac = allEvacuees.find((ev) => ev._id === evacId);
 				if (evac) {
 					const isHead = input.head_evacuee_id === evacId;
-					const updatedEvac: any = {
+					const updatedEvac: Evacuee = {
 						...evac,
 						household_id: householdId
 					};
@@ -193,8 +197,9 @@
 
 			// Navigate back
 			await goto(backUrl);
-		} catch (err: any) {
-			toast.error(`เกิดข้อผิดพลาด: ${err.message || err}`);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			toast.error(`เกิดข้อผิดพลาด: ${message}`);
 		} finally {
 			isSubmitting = false;
 		}
@@ -209,7 +214,7 @@
 	<title>{isEditMode ? 'แก้ไขข้อมูลครัวเรือน' : 'เพิ่มครัวเรือนใหม่'} · SmartShelter</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 space-y-6">
+<div class="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 md:px-6">
 	<div>
 		<button
 			type="button"
@@ -220,19 +225,23 @@
 			<span>กลับไปหน้ารายชื่อหลัก</span>
 		</button>
 		<h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-			{isEditMode ? 'แก้ไขข้อมูลครัวเรือน (Edit Household)' : 'เพิ่มครัวเรือนใหม่ (Create Household)'}
+			{isEditMode
+				? 'แก้ไขข้อมูลครัวเรือน (Edit Household)'
+				: 'เพิ่มครัวเรือนใหม่ (Create Household)'}
 		</h2>
 	</div>
 
 	{#if evacueesQuery.isLoading || householdsQuery.isLoading}
-		<div class="flex flex-col items-center justify-center gap-2 py-12 rounded-2xl border border-border bg-card p-6 shadow-xs">
+		<div
+			class="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card p-6 py-12 shadow-xs"
+		>
 			<div
 				class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"
 			></div>
 			<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูลระบบ...</p>
 		</div>
 	{:else if isEditMode && !editingHousehold}
-		<div class="py-12 text-center rounded-2xl border border-border bg-card p-6 shadow-xs">
+		<div class="rounded-2xl border border-border bg-card p-6 py-12 text-center shadow-xs">
 			<p class="text-sm font-semibold text-destructive">ไม่พบข้อมูลครัวเรือนที่ต้องการแก้ไข</p>
 			<Button variant="outline" class="mt-4" onclick={handleCancel}>กลับหน้าหลัก</Button>
 		</div>

@@ -16,11 +16,8 @@
 		type EvacueeInput
 	} from '../domain/people';
 	import Camera from '@lucide/svelte/icons/camera';
-	import CalendarIcon from '@lucide/svelte/icons/calendar';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { COUNTRIES } from '$lib/utils/country';
-	import { Calendar } from '$lib/components/ui/calendar/index.js';
-	import * as Popover from '$lib/components/ui/popover/index.js';
-	import { type DateValue } from '@internationalized/date';
 
 	const cardTypeOptions = [
 		{ value: 'national_id', label: 'เลขประจำตัวประชาชน (Thai National ID)' },
@@ -46,8 +43,14 @@
 	let {
 		onsubmit,
 		pending = false,
-		onBack
-	}: { onsubmit: (input: EvacueeInput) => void; pending?: boolean; onBack: () => void } = $props();
+		onBack,
+		hasSymptomsSelected = false
+	}: {
+		onsubmit: (input: EvacueeInput) => void;
+		pending?: boolean;
+		onBack: () => void;
+		hasSymptomsSelected?: boolean;
+	} = $props();
 
 	let birthYearBE = $state('');
 	let facePhotoUrl = $state<string | null>(null);
@@ -64,7 +67,10 @@
 			if ($formData.person_id.cardType === 'national_id' && $formData.person_id.number) {
 				const cleanId = $formData.person_id.number.replace(/\D/g, '');
 				if (cleanId.length !== 13) {
-					$errors.person_id = { ...($errors.person_id || {}), number: ['เลขประจำตัวประชาชนต้องมี 13 หลัก'] };
+					$errors.person_id = {
+						...($errors.person_id || {}),
+						number: ['เลขประจำตัวประชาชนต้องมี 13 หลัก']
+					};
 					toast.error('เลขประจำตัวประชาชนต้องมี 13 หลัก');
 					cancel();
 					return;
@@ -88,7 +94,10 @@
 				} else if (ec.phone) {
 					const cleanPhone = ec.phone.replace(/\D/g, '');
 					if (cleanPhone.length !== 10) {
-						$errors.emergency_contact = { ...($errors.emergency_contact || {}), phone: ['เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก'] };
+						$errors.emergency_contact = {
+							...($errors.emergency_contact || {}),
+							phone: ['เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก']
+						};
 						toast.error('เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก');
 						cancel();
 						return;
@@ -105,7 +114,7 @@
 		}
 	});
 
-	const { form: formData, errors, submitting, reset } = form;
+	const { form: formData, errors, submitting } = form;
 
 	let age = $state('');
 
@@ -276,11 +285,7 @@
 					<!-- ปีเกิด (พ.ศ.) -->
 					<div class="space-y-2">
 						<Label>ปีเกิด (พ.ศ.)</Label>
-						<Input
-							type="text"
-							placeholder="เช่น 2530"
-							bind:value={birthYearBE}
-						/>
+						<Input type="text" placeholder="เช่น 2530" bind:value={birthYearBE} />
 					</div>
 
 					<!-- อายุ -->
@@ -406,17 +411,17 @@
 
 			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 				<div class="space-y-2">
-					<Label>ประวัติการแพ้ยา</Label>
+					<Label>ยาที่ใช้ประจำ</Label>
 					<Input
-						placeholder="เช่น พาราเซตามอล (ถ้าไม่มีให้เว้นว่าง)"
+						placeholder="เช่น ยาลดความดัน, ยาเบาหวาน (ถ้าไม่มีให้เว้นว่าง)"
 						bind:value={medicalMedicationsStr}
 					/>
 				</div>
 
 				<div class="space-y-2">
-					<Label>ประวัติการแพ้อาหาร</Label>
+					<Label>ประวัติการแพ้ (ยา/อาหาร)</Label>
 					<Input
-						placeholder="เช่น อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
+						placeholder="เช่น แพ้เพนิซิลลิน, อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
 						bind:value={medicalAllergiesStr}
 					/>
 				</div>
@@ -529,6 +534,21 @@
 					<Form.FieldErrors />
 				</Form.Field>
 			</div>
+
+			{#if hasSymptomsSelected}
+				<div
+					class="flex animate-in items-center justify-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-4 text-red-700 duration-300 fade-in slide-in-from-top-2 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
+					role="alert"
+				>
+					<TriangleAlert class="size-5 shrink-0" aria-hidden="true" />
+					<p class="text-sm font-bold">
+						ส่งต่อผู้ป่วยฉุกเฉิน <span class="font-extrabold">(SOS ESCALATE)</span>
+					</p>
+				</div>
+				<p class="text-center text-xs text-muted-foreground">
+					ระบบจะแจ้งเตือนไปยังแผนงควบคุมของผู้ว่าฯ และ รพ. สนามทันที
+				</p>
+			{/if}
 		</div>
 
 		<!-- Back + Submit row -->

@@ -12,6 +12,12 @@
 		readonly: boolean;
 		onOpenAssetModal: () => void;
 	} = $props();
+
+	// A household may bring several vehicles (schema vehicles[], CR-016).
+	const vehicles = $derived(household?.vehicles ?? []);
+
+	const vehicleLabel = (type: 'car' | 'motorcycle' | 'other') =>
+		type === 'car' ? 'รถยนต์' : type === 'motorcycle' ? 'จักรยานยนต์' : 'อื่นๆ';
 </script>
 
 <div class="space-y-4 rounded-3xl border border-border bg-card p-6 shadow-sm">
@@ -33,27 +39,31 @@
 	</div>
 
 	<div class="grid grid-cols-1 items-stretch gap-6 md:grid-cols-3">
-		<!-- Vehicle -->
+		<!-- Vehicles -->
 		<div class="flex flex-col justify-between space-y-1.5">
 			<span class="text-xs font-semibold text-muted-foreground">ยานพาหนะ:</span>
-			<div
-				class="flex min-h-[70px] flex-1 flex-col justify-center gap-1.5 rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900"
-			>
-				{#if household?.vehicle && household.vehicle.type}
-					<span class="text-xs font-bold text-slate-700 dark:text-slate-300">
-						🚗 {household.vehicle.type === 'car'
-							? 'รถยนต์'
-							: household.vehicle.type === 'motorcycle'
-								? 'จักรยานยนต์'
-								: 'อื่นๆ'}
-					</span>
-					{#if household.vehicle.license_plate}
-						<span class="text-xs font-bold text-slate-900 dark:text-slate-100">
-							ทะเบียน: {household.vehicle.license_plate}
-						</span>
-					{/if}
+			<div class="flex min-h-[70px] flex-1 flex-col justify-center gap-1.5">
+				{#if vehicles.length > 0}
+					{#each vehicles as vehicle, i (`${vehicle.type}-${vehicle.license_plate}-${i}`)}
+						<div
+							class="flex flex-col gap-1 rounded-2xl border border-slate-100 bg-slate-50 p-2.5 dark:border-slate-800 dark:bg-slate-900"
+						>
+							<span class="text-xs font-bold text-slate-700 dark:text-slate-300">
+								🚗 {vehicleLabel(vehicle.type)}
+							</span>
+							{#if vehicle.license_plate}
+								<span class="text-xs font-bold text-slate-900 dark:text-slate-100">
+									ทะเบียน: {vehicle.license_plate}
+								</span>
+							{/if}
+						</div>
+					{/each}
 				{:else}
-					<span class="text-xs text-muted-foreground italic">ไม่มี</span>
+					<div
+						class="flex flex-1 items-center rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900"
+					>
+						<span class="text-xs text-muted-foreground italic">ไม่มี</span>
+					</div>
 				{/if}
 			</div>
 		</div>
