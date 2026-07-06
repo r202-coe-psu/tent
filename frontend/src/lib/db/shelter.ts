@@ -17,16 +17,7 @@ export function getShelterDb(): string {
 	return `shelter_${getShelterCode().toLowerCase()}`;
 }
 
-/**
- * @deprecated Use getShelterCode() instead. Kept for non-reactive
- * callsites that read this at module-init time — those must be migrated.
- */
-export const SHELTER_CODE = 'SH001';
 
-/**
- * @deprecated Use getShelterDb() instead.
- */
-export const SHELTER_DB = `shelter_${SHELTER_CODE.toLowerCase()}`;
 
 export function shelterDb(): PouchDB.Database {
 	return namedLocalDb(getShelterDb());
