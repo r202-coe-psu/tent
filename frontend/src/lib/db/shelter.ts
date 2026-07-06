@@ -17,8 +17,6 @@ export function getShelterDb(): string {
 	return `shelter_${getShelterCode().toLowerCase()}`;
 }
 
-
-
 export function shelterDb(): PouchDB.Database {
 	return namedLocalDb(getShelterDb());
 }

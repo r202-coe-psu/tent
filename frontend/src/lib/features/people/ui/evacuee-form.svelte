@@ -24,7 +24,7 @@
 		useUpdateHousehold,
 		useUpdateEvacuee,
 		useCheckInEvacuee,
-		peopleRepository,
+		peopleRepository
 	} from '../index';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
