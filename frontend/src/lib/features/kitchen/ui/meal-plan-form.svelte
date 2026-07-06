@@ -237,7 +237,7 @@
 					</p>
 					<p class="text-xs text-muted-foreground">
 						SOP: {sopProfile.data.name} v{sopProfile.data.version}
-						· {sopProfile.data.ratios.rice_g_per_person_meal} ก./คน/มื้อ
+						· 200 ก./คน/มื้อ
 					</p>
 				</div>
 			{/if}

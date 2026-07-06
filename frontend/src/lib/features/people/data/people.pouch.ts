@@ -33,7 +33,7 @@ import type { PeopleRepository } from './people.repository';
 export class PeoplePouchRepository implements PeopleRepository {
 	private readonly repo: Repository;
 
-	constructor(dbName: string = getShelterDb()) {
+	constructor(dbName: string) {
 		this.repo = createRepository(namedLocalDb(dbName));
 	}
 

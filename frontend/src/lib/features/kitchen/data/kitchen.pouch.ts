@@ -28,7 +28,7 @@ import type { KitchenRepository } from './kitchen.repository';
 export class KitchenPouchRepository implements KitchenRepository {
 	private readonly repo: Repository;
 
-	constructor(dbName: string = getShelterDb()) {
+	constructor(dbName: string) {
 		this.repo = createRepository(namedLocalDb(dbName));
 	}
 

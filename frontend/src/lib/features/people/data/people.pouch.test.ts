@@ -41,7 +41,7 @@ describe('PeoplePouchRepository', () => {
 
 	beforeEach(() => {
 		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
-		repo = new PeoplePouchRepository();
+		repo = new PeoplePouchRepository(testDb.name);
 	});
 
 	afterEach(async () => {
