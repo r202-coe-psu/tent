@@ -1,7 +1,7 @@
 import { namedLocalDb } from '$lib/db/pouch';
 import { createRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { touch, type AuthorContext } from '$lib/db/model';
-import { getShelterCode, getShelterDb, shelterDb as _shelterDb } from '$lib/db/shelter';
+import { getShelterDb, shelterDb as _shelterDb } from '$lib/db/shelter';
 import {
 	createEvacuee as buildEvacuee,
 	createMovement,

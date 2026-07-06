@@ -12,8 +12,6 @@ import {
 } from '../domain/operations';
 import type { OperationsRepository } from './operations.repository';
 
-
-
 /**
  * PouchDB-backed repository implementation for Operations (Stock Ledger).
  */
