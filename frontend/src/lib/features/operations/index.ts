@@ -18,7 +18,8 @@ export type {
 	DonationStatus,
 	TransferStatus,
 	DonationChannel,
-	DonationSlot
+	DonationSlot,
+	NeedAvailability
 } from './domain/operations';
 
 // Domain — schemas + factories + transitions + read models + guards
@@ -43,6 +44,7 @@ export {
 	openNeeds,
 	calculateReserved,
 	isNeedCutOff,
+	deriveNeedAvailability,
 	isStockLedger,
 	isDonation,
 	isDonationCampaign,

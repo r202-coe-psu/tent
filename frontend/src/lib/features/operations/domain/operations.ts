@@ -387,6 +387,50 @@ export function calculateReserved(
 	return reserved;
 }
 
+export interface NeedAvailability {
+	item_id: string;
+	qty_target: number;
+	qty_on_hand: number;
+	qty_reserved: number;
+	qty_remaining: number;
+	is_cut_off: boolean;
+	status: 'open' | 'closed';
+	unit: string;
+}
+
+export function deriveNeedAvailability(
+	campaign: DonationCampaign,
+	donations: Donation[],
+	stockLedgers: StockLedger[]
+): NeedAvailability[] {
+	const onHand = stockBalance(stockLedgers);
+	const reserved = calculateReserved(donations, stockLedgers, campaign._id);
+
+	return campaign.needs.map((need) => {
+		const currentOnHand = onHand.get(need.item_id) ?? 0;
+		const currentReserved = reserved.get(need.item_id) ?? 0;
+		const remaining = Math.max(0, need.qty_target - (currentOnHand + currentReserved));
+		const isCutOff = isNeedCutOff(
+			need.qty_target,
+			currentOnHand,
+			currentReserved,
+			need.status,
+			campaign.status
+		);
+
+		return {
+			item_id: need.item_id,
+			qty_target: need.qty_target,
+			qty_on_hand: currentOnHand,
+			qty_reserved: currentReserved,
+			qty_remaining: remaining,
+			is_cut_off: isCutOff,
+			status: need.status ?? 'open',
+			unit: need.unit
+		};
+	});
+}
+
 /**
  * Remaining open need per item: target minus what donations (declared+received,
  * not expired/cancelled) already cover. Drives `GET /public/v1/needs`
@@ -397,23 +441,15 @@ export function openNeeds(
 	donations: Donation[],
 	stockLedgers: StockLedger[]
 ): CampaignNeed[] {
-	const onHand = stockBalance(stockLedgers);
-	const reserved = calculateReserved(donations, stockLedgers, campaign._id);
-
-	return campaign.needs
-		.map((need) => {
-			const currentOnHand = onHand.get(need.item_id) ?? 0;
-			const currentReserved = reserved.get(need.item_id) ?? 0;
-			const remaining = need.qty_target - (currentOnHand + currentReserved);
-
-			return {
-				...need,
-				qty_target: Math.max(0, remaining)
-			};
-		})
-		.filter(
-			(need) => need.qty_target > 0 && need.status !== 'closed' && campaign.status !== 'closed'
-		);
+	const availabilities = deriveNeedAvailability(campaign, donations, stockLedgers);
+	return availabilities
+		.filter((avail) => !avail.is_cut_off)
+		.map((avail) => ({
+			item_id: avail.item_id,
+			qty_target: avail.qty_remaining,
+			unit: avail.unit,
+			status: avail.status
+		}));
 }
 
 // ---------------------------------------------------------------- type guards

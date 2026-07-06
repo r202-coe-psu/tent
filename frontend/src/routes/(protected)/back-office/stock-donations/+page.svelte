@@ -8,23 +8,32 @@
 	import PendingReviewBoard from './components/pending-review-board.svelte';
 	import PendingReviewDialog from './components/pending-review-dialog.svelte';
 	import ScanStation from './components/scan-station.svelte';
+	import CreateCampaignForm from './components/create-campaign-form.svelte';
 	import {
 		useCampaigns,
 		useStockLedgers,
 		useDonations,
 		useCreateCampaign,
 		useUpdateCampaign,
-		stockBalance,
 		SHELTER_CODE,
 		type SpecialRequestInput,
 		type Donation,
-		calculateReserved,
-		isNeedCutOff
+		deriveNeedAvailability,
+		startOperationsLiveQuery
 	} from '$lib/features/operations';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import type { NeedItem } from './components/needs-board-admin.svelte';
+	import { useQueryClient } from '@tanstack/svelte-query';
+
+	const queryClient = useQueryClient();
+
+	$effect(() => {
+		const handle = startOperationsLiveQuery(queryClient);
+		return () => handle.stop();
+	});
 
 	let activeSubTab = $state('scan'); // 'scan', 'pending', 'needs'
+	let viewState = $state<'list' | 'create'>('list');
 	let isModalOpen = $state(false);
 
 	const campaignsQuery = useCampaigns();
@@ -43,8 +52,6 @@
 		'item:egg': 'ไข่ไก่สด'
 	};
 
-	const balances = $derived(stockBalance(stockLedgersQuery.data ?? []));
-
 	const ctx = $derived({
 		shelterCode: SHELTER_CODE,
 		createdBy: authStore.user?.name ?? 'system'
@@ -55,35 +62,28 @@
 		const donations = donationsQuery.data ?? [];
 		const stockLedgers = stockLedgersQuery.data ?? [];
 
-		const reservedMap = calculateReserved(donations, stockLedgers);
-
 		const list: NeedItem[] = [];
 		for (const camp of campaigns) {
+			const availabilities = deriveNeedAvailability(camp, donations, stockLedgers);
 			const needs: NeedItem['needs'] = [];
 			let allNeedsCutOff = true;
 
-			for (const need of camp.needs) {
-				const itemId = need.item_id;
-				const reserved = reservedMap.get(itemId) ?? 0;
-				const onHand = balances.get(itemId) ?? 0;
-				const target = need.qty_target;
-
-				const isCutOff = isNeedCutOff(target, onHand, reserved, need.status, camp.status);
-				const isNeedManualClosed = need.status === 'closed';
-
-				if (!isCutOff) {
+			for (const avail of availabilities) {
+				if (!avail.is_cut_off) {
 					allNeedsCutOff = false;
 				}
 
 				needs.push({
-					itemId: itemId,
-					name: ITEM_NAMES[itemId] ?? (itemId.startsWith('item:') ? itemId.slice(5) : itemId),
-					reserved: reserved,
-					onHand: onHand,
-					target: target,
-					unit: need.unit,
-					isCutOff: isCutOff,
-					isManualClosed: isNeedManualClosed
+					itemId: avail.item_id,
+					name:
+						ITEM_NAMES[avail.item_id] ??
+						(avail.item_id.startsWith('item:') ? avail.item_id.slice(5) : avail.item_id),
+					reserved: avail.qty_reserved,
+					onHand: avail.qty_on_hand,
+					target: avail.qty_target,
+					unit: avail.unit,
+					isCutOff: avail.is_cut_off,
+					isManualClosed: avail.status === 'closed'
 				});
 			}
 
@@ -237,6 +237,63 @@
 		);
 	}
 
+	function handleAddRequestFromForm(input: {
+		name: string;
+		target: number;
+		location: string;
+		category?: string;
+		unit?: string;
+		urgency?: 'critical' | 'important' | 'normal';
+		description?: string;
+	}) {
+		const lowerName = input.name.toLowerCase();
+		let itemId = 'item:custom';
+		if (lowerName.includes('ข้าว')) itemId = 'item:rice';
+		else if (lowerName.includes('น้ำ')) itemId = 'item:water';
+		else if (lowerName.includes('พารา') || lowerName.includes('ยา')) itemId = 'item:paracetamol';
+		else if (lowerName.includes('สบู่')) itemId = 'item:soap';
+		else if (lowerName.includes('ห่ม')) itemId = 'item:blanket';
+		else if (lowerName.includes('ไข่')) itemId = 'item:egg';
+		else {
+			const slug = input.name
+				.trim()
+				.toLowerCase()
+				.replace(/[^a-z0-9\u0e00-\u0e7f]+/g, '-')
+				.replace(/^-+|-+$/g, '');
+			itemId = `item:${slug || 'custom'}`;
+		}
+
+		const newCampaignInput = {
+			title: input.name,
+			needs: [
+				{
+					item_id: itemId,
+					qty_target: input.target,
+					unit: input.unit || 'ชิ้น',
+					status: 'open' as const
+				}
+			],
+			notes: input.description || `ประกาศสำหรับคลัง: ${input.location}`,
+			visible_on_home: true
+		};
+
+		createCampaignMutation.mutate(
+			{
+				input: newCampaignInput,
+				ctx: ctx
+			},
+			{
+				onSuccess: () => {
+					toast.success(`เพิ่มประกาศความต้องการ "${input.name}" สำเร็จ`);
+					viewState = 'list';
+				},
+				onError: (err) => {
+					toast.error(`ไม่สามารถสร้างประกาศได้: ${err.message}`);
+				}
+			}
+		);
+	}
+
 	let pendingRequests = $state([
 		{
 			id: '1',
@@ -310,7 +367,10 @@
 	>
 		<div class="-mb-px flex gap-2 whitespace-nowrap">
 			<button
-				onclick={() => (activeSubTab = 'scan')}
+				onclick={() => {
+					activeSubTab = 'scan';
+					viewState = 'list';
+				}}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'scan'
 					? 'border-primary text-primary'
@@ -321,7 +381,10 @@
 			</button>
 
 			<button
-				onclick={() => (activeSubTab = 'pending')}
+				onclick={() => {
+					activeSubTab = 'pending';
+					viewState = 'list';
+				}}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'pending'
 					? 'border-primary text-primary'
@@ -338,7 +401,10 @@
 			</button>
 
 			<button
-				onclick={() => (activeSubTab = 'needs')}
+				onclick={() => {
+					activeSubTab = 'needs';
+					viewState = 'list';
+				}}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'needs'
 					? 'border-primary text-primary'
@@ -361,12 +427,19 @@
 			}}
 		/>
 	{:else if activeSubTab === 'needs'}
-		<NeedsBoardAdmin
-			items={derivedItems}
-			onAddRequest={() => (isModalOpen = true)}
-			onToggleShowOnHome={toggleShowOnHome}
-			onToggleCutOff={toggleCutOff}
-		/>
+		{#if viewState === 'list'}
+			<NeedsBoardAdmin
+				items={derivedItems}
+				onAddRequest={() => (viewState = 'create')}
+				onToggleShowOnHome={toggleShowOnHome}
+				onToggleCutOff={toggleCutOff}
+			/>
+		{:else}
+			<CreateCampaignForm
+				onclose={() => (viewState = 'list')}
+				onsubmit={handleAddRequestFromForm}
+			/>
+		{/if}
 	{/if}
 </div>
 
