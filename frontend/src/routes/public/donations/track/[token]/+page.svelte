@@ -384,15 +384,22 @@
 </div>
 <!-- Cancellation Confirmation Dialog -->
 {#if isCancelModalOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/40 p-4 backdrop-blur-xs duration-200 fade-in"
+		role="button"
+		tabindex="0"
 		onclick={() => (isCancelModalOpen = false)}
+		onkeydown={(e) => {
+			if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') isCancelModalOpen = false;
+		}}
 	>
 		<div
-			class="relative w-full max-w-md animate-in rounded-3xl border border-border bg-card p-6 text-foreground shadow-2xl duration-200 zoom-in-95"
+			class="relative w-full max-w-md animate-in cursor-default rounded-3xl border border-border bg-card p-6 text-left text-foreground shadow-2xl duration-200 zoom-in-95"
+			role="dialog"
+			aria-modal="true"
+			tabindex="-1"
 			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 		>
 			<div class="mb-4 flex items-start gap-3">
 				<div
