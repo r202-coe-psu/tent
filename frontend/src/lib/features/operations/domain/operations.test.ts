@@ -123,27 +123,9 @@ describe('openNeeds', () => {
 });
 
 describe('createReceiveEntry', () => {
-	it('mints positive receive ledger entry for purchase source', () => {
-		const entry = createReceiveEntry(
-			{
-				item_id: 'item:rice',
-				qty: 10,
-				unit: 'kg',
-				source: 'purchase',
-				ref_id: null
-			},
-			ctx
-		);
-		expect(entry.type).toBe('stock_ledger');
-		expect(entry.qty).toBe(10);
-		expect(entry.reason).toBe('purchase');
-		expect(entry.shelter_code).toBe(ctx.shelterCode);
-	});
-
 	it('maps sources to correct reasons', () => {
 		const sourcesAndReasons = {
 			donation: 'donation',
-			purchase: 'purchase',
 			transfer_in: 'transfer_in',
 			manual: 'adjust'
 		} as const;
@@ -170,7 +152,7 @@ describe('createReceiveEntry', () => {
 					item_id: 'item:rice',
 					qty: 0,
 					unit: 'kg',
-					source: 'purchase',
+					source: 'donation',
 					ref_id: null
 				},
 				ctx
@@ -185,7 +167,7 @@ describe('createReceiveEntry', () => {
 					item_id: 'item:rice',
 					qty: -5,
 					unit: 'kg',
-					source: 'purchase',
+					source: 'donation',
 					ref_id: null
 				},
 				ctx
@@ -199,7 +181,7 @@ describe('createReceiveEntry', () => {
 				item_id: 'item:rice',
 				qty: 10,
 				unit: 'kg',
-				source: 'purchase',
+				source: 'donation',
 				ref_id: null,
 				lot: {
 					expiry: '2026-12-31T00:00:00Z',
@@ -220,7 +202,7 @@ describe('createReceiveEntry', () => {
 				item_id: 'item:rice',
 				qty: 10,
 				unit: 'kg',
-				source: 'purchase',
+				source: 'donation',
 				ref_id: null
 			},
 			ctx
@@ -237,7 +219,7 @@ describe('createReceiveEntry', () => {
 				item_id: 'item:milk', // Pretend milk is perishable
 				qty: 5,
 				unit: 'ขวด',
-				source: 'purchase',
+				source: 'donation',
 				ref_id: null
 				// missing lot.expiry
 			},
@@ -307,4 +289,5 @@ describe('createDistributeEntry', () => {
 				ctx
 			)
 		).toThrow();
+	});
 });

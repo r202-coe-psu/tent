@@ -1,14 +1,65 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import PouchDB from 'pouchdb-browser';
 import memory from 'pouchdb-adapter-memory';
-import { OperationsPouchRepository } from './operations.pouch';
+import type { SupplyItem } from '$lib/features/supply';
+
+const mockGetItem = vi.fn<() => Promise<SupplyItem | null>>();
+vi.mock('$lib/features/supply', () => ({
+	supplyRepository: () => ({ getItem: mockGetItem })
+}));
+
+import { OperationsPouchRepository, assertReceiveAgainstCatalog } from './operations.pouch';
 import { createReceiveEntry } from '../domain/operations';
 import type { AuthorContext } from '$lib/db/model';
 
 PouchDB.plugin(memory);
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
+
+describe('assertReceiveAgainstCatalog', () => {
+	const entry = createReceiveEntry(
+		{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
+		ctx
+	);
+
+	it('throws for a missing catalog item', () => {
+		expect(() => assertReceiveAgainstCatalog(entry, null)).toThrow('Unknown item: item:rice');
+	});
+
+	it('throws on unit mismatch', () => {
+		expect(() => assertReceiveAgainstCatalog(entry, { unit: 'bag' } as SupplyItem)).toThrow(
+			'Unit mismatch for item item:rice: expected bag, got kg'
+		);
+	});
+
+	it('throws when a perishable item is missing lot.expiry', () => {
+		expect(() =>
+			assertReceiveAgainstCatalog(entry, { unit: 'kg', perishable: true } as SupplyItem)
+		).toThrow('Perishable item item:rice requires lot.expiry to be set');
+	});
+
+	it('passes for a matching, non-perishable item', () => {
+		expect(() => assertReceiveAgainstCatalog(entry, { unit: 'kg' } as SupplyItem)).not.toThrow();
+	});
+
+	it('passes for a perishable item with lot.expiry set', () => {
+		const perishableEntry = createReceiveEntry(
+			{
+				item_id: 'item:milk',
+				qty: 5,
+				unit: 'l',
+				source: 'donation',
+				ref_id: null,
+				lot: { expiry: '2026-12-31T00:00:00Z' }
+			},
+			ctx
+		);
+		expect(() =>
+			assertReceiveAgainstCatalog(perishableEntry, { unit: 'l', perishable: true } as SupplyItem)
+		).not.toThrow();
+	});
+});
 
 describe('OperationsPouchRepository', () => {
 	let dbName: string;
@@ -25,7 +76,7 @@ describe('OperationsPouchRepository', () => {
 				item_id: 'item:rice',
 				qty: 100,
 				unit: 'kg',
-				source: 'purchase',
+				source: 'donation',
 				ref_id: null
 			},
 			ctx
@@ -46,7 +97,7 @@ describe('OperationsPouchRepository', () => {
 				item_id: 'item:rice',
 				qty: 50,
 				unit: 'kg',
-				source: 'purchase',
+				source: 'donation',
 				ref_id: null
 			},
 			ctx
@@ -77,7 +128,7 @@ describe('OperationsPouchRepository', () => {
 	it('calculates the stock balance accurately', async () => {
 		const entries = [
 			createReceiveEntry(
-				{ item_id: 'item:rice', qty: 100, unit: 'kg', source: 'purchase', ref_id: null },
+				{ item_id: 'item:rice', qty: 100, unit: 'kg', source: 'donation', ref_id: null },
 				ctx
 			),
 			createReceiveEntry(
@@ -114,8 +165,9 @@ describe('OperationsPouchRepository', () => {
 
 	describe('distributeStock', () => {
 		it('distributes stock and reduces balance when sufficient stock exists', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
 			await repo.receiveStock(
-				{ item_id: 'item:soap', qty: 50, unit: 'bar', source: 'purchase', ref_id: null },
+				{ item_id: 'item:soap', qty: 50, unit: 'bar', source: 'donation', ref_id: null },
 				ctx
 			);
 
@@ -134,8 +186,9 @@ describe('OperationsPouchRepository', () => {
 		});
 
 		it('throws an error if attempting to distribute more than available stock', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
 			await repo.receiveStock(
-				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'purchase', ref_id: null },
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: null },
 				ctx
 			);
 
@@ -153,7 +206,7 @@ describe('OperationsPouchRepository', () => {
 
 	it('maintains correct balance under concurrent writes (T-11 DoD)', async () => {
 		// Simulate parallel writes
-		const writes = Array.from({ length: 10 }).map((_, i) =>
+		const writes = Array.from({ length: 10 }).map(() =>
 			repo.addLedgerEntry(
 				createReceiveEntry(
 					{ item_id: 'item:concurrent', qty: 10, unit: 'box', source: 'donation' },
@@ -165,5 +218,57 @@ describe('OperationsPouchRepository', () => {
 
 		const balance = await repo.getBalance();
 		expect(balance.get('item:concurrent')).toBe(100);
+	});
+
+	describe('receiveStock', () => {
+		beforeEach(() => {
+			mockGetItem.mockReset();
+		});
+
+		it('throws for an unknown item_id', async () => {
+			mockGetItem.mockResolvedValue(null);
+
+			await expect(
+				repo.receiveStock(
+					{ item_id: 'item:missing', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
+					ctx
+				)
+			).rejects.toThrow('Unknown item: item:missing');
+		});
+
+		it('throws on unit mismatch against the catalog item', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			await expect(
+				repo.receiveStock(
+					{ item_id: 'item:rice', qty: 10, unit: 'bag', source: 'donation', ref_id: null },
+					ctx
+				)
+			).rejects.toThrow('Unit mismatch for item item:rice: expected kg, got bag');
+		});
+
+		it('throws when a perishable item is missing lot.expiry', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg', perishable: true } as SupplyItem);
+
+			await expect(
+				repo.receiveStock(
+					{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
+					ctx
+				)
+			).rejects.toThrow('Perishable item item:rice requires lot.expiry to be set');
+		});
+
+		it('persists the ledger entry when the item exists and units match', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			const result = await repo.receiveStock(
+				{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
+				ctx
+			);
+
+			expect(result.item_id).toBe('item:rice');
+			const list = await repo.listLedger();
+			expect(list).toHaveLength(1);
+		});
 	});
 });
