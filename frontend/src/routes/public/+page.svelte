@@ -1,10 +1,8 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import { onDestroy, onMount } from 'svelte';
+	import { onMount } from 'svelte';
 	import MapPin from '@lucide/svelte/icons/map-pin';
-	import Navigation from '@lucide/svelte/icons/navigation';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import Heart from '@lucide/svelte/icons/heart';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Search from '@lucide/svelte/icons/search';
 	import HelpCircle from '@lucide/svelte/icons/help-circle';
@@ -13,12 +11,11 @@
 	import Phone from '@lucide/svelte/icons/phone';
 	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import Globe from '@lucide/svelte/icons/globe';
-	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Package from '@lucide/svelte/icons/package';
-	import CheckCircle from '@lucide/svelte/icons/check-circle';
+	import Compass from '@lucide/svelte/icons/compass';
 	import PublicQuickServiceCard from '$lib/components/public-quick-service-card.svelte';
 	import PublicEmergencyBanner from '$lib/components/public-emergency-banner.svelte';
-	import PublicHeroMetrics from '$lib/components/public-hero-metrics.svelte';
+	import { PublicHeroMetrics } from '$lib/features/public-portal';
 	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
 
@@ -32,20 +29,31 @@
 
 	// OP-7: Polling state
 	let lastUpdated = $state(0);
-	$effect(() => { if (!lastUpdated) lastUpdated = data.lastUpdated; });
+	$effect(() => {
+		if (!lastUpdated) lastUpdated = data.lastUpdated;
+	});
 	let isStale = $state(false);
-	
+
 	onMount(() => {
-		// Mock 10-minute polling (we'll just use a shorter interval for demo)
-		const pollInterval = setInterval(() => {
-			// Mock refetching
-			lastUpdated = Date.now();
-			isStale = false;
+		const pollInterval = setInterval(async () => {
+			try {
+				const response = await fetch('/api/public/v1/transparency/summary');
+				if (response.ok) {
+					const newData = await response.json();
+					data.summary = newData.summary;
+					lastUpdated = newData.lastUpdated;
+					isStale = newData.isStale;
+					data.flags = newData.flags;
+				}
+			} catch (e) {
+				console.error('Polling failed', e);
+			}
 		}, 600000); // 10 mins
 
 		// Stale threshold 30 minutes check
 		const staleCheck = setInterval(() => {
-			if (Date.now() - lastUpdated > 1800000) { // 30 mins
+			if (Date.now() - lastUpdated > 1800000) {
+				// 30 mins
 				isStale = true;
 			}
 		}, 60000); // Check every minute
@@ -66,21 +74,20 @@
 	<PublicEmergencyBanner {alerts} />
 
 	<!-- 2. Hero & Real-Time Metrics (T-57) -->
-	<PublicHeroMetrics
-		summary={data.summary}
-		flags={data.flags}
-		{lastUpdated}
-		{isStale}
-	/>
+	<PublicHeroMetrics summary={data.summary} flags={data.flags} {lastUpdated} {isStale} />
 
 	<!-- 3. เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์ -->
 	<section class="mb-12">
 		<div class="mb-8">
-			<div class="flex items-center gap-2 mb-2">
+			<div class="mb-2 flex items-center gap-2">
 				<Compass class="h-5 w-5 text-slate-500" />
-				<h2 class="text-xl font-bold text-slate-800">เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์</h2>
+				<h2 class="text-xl font-bold text-slate-800">
+					เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์
+				</h2>
 			</div>
-			<p class="text-xs text-slate-500">ดำเนินการติดต่อ ลงทะเบียน หรือประสานขอโอนย้ายเพื่อรับรองความช่วยเหลือที่รวดเร็ว</p>
+			<p class="text-xs text-slate-500">
+				ดำเนินการติดต่อ ลงทะเบียน หรือประสานขอโอนย้ายเพื่อรับรองความช่วยเหลือที่รวดเร็ว
+			</p>
 		</div>
 
 		<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -93,9 +100,7 @@
 				icon={ShieldAlert}
 				iconClass="bg-danger-muted/30 text-danger"
 			>
-				<PublicActionBtn>
-					ลงทะเบียน
-				</PublicActionBtn>
+				<PublicActionBtn>ลงทะเบียน</PublicActionBtn>
 			</PublicQuickServiceCard>
 
 			<!-- สำหรับผู้ใจบุญ / บริจาค -->
@@ -107,27 +112,23 @@
 				icon={Package}
 				iconClass="bg-primary-muted/50 text-primary"
 			>
-				<PublicActionBtn>
-					แจ้งบริจาคสิ่งของล่วงหน้า
-				</PublicActionBtn>
-				<PublicActionBtn variant="outline">
-					ดูบัญชีรับบริจาค / บอร์ดขอของ
-				</PublicActionBtn>
+				<PublicActionBtn>แจ้งบริจาคสิ่งของล่วงหน้า</PublicActionBtn>
+				<PublicActionBtn variant="outline">ดูบัญชีรับบริจาค / บอร์ดขอของ</PublicActionBtn>
 			</PublicQuickServiceCard>
 
 			<!-- สำหรับทีมอาสาสมัคร -->
-			<PublicQuickServiceCard
-				title="สำหรับทีมอาสาสมัคร"
-				badge="ร่วมแรงกาย"
-				badgeClass="bg-chart-2/15 text-chart-2"
-				description="ร่วมลงทะเบียนจองกะงานฝ่ายสวัสดิการ แจกจ่าย ขนย้าย แพทย์สนาม หรือสนับสนุนเจ้าหน้าที่ ณ พื้นที่อุทกภัยชายแดนใต้"
-				icon={UserPlus}
-				iconClass="bg-chart-2/15 text-chart-2"
-			>
-				<PublicActionBtn>
-					สมัคร / จองกะช่วยเหลือ
-				</PublicActionBtn>
-			</PublicQuickServiceCard>
+			<div class="hidden">
+				<PublicQuickServiceCard
+					title="สำหรับทีมอาสาสมัคร"
+					badge="ร่วมแรงกาย"
+					badgeClass="bg-chart-2/15 text-chart-2"
+					description="ร่วมลงทะเบียนจองกะงานฝ่ายสวัสดิการ แจกจ่าย ขนย้าย แพทย์สนาม หรือสนับสนุนเจ้าหน้าที่ ณ พื้นที่อุทกภัยชายแดนใต้"
+					icon={UserPlus}
+					iconClass="bg-chart-2/15 text-chart-2"
+				>
+					<PublicActionBtn>สมัคร / จองกะช่วยเหลือ</PublicActionBtn>
+				</PublicQuickServiceCard>
+			</div>
 
 			<!-- สืบค้นกองสิทธิ์ญาติ -->
 			<PublicQuickServiceCard
@@ -138,9 +139,7 @@
 				icon={Search}
 				iconClass="bg-accent-purple-muted/50 text-accent-purple"
 			>
-				<PublicActionBtn>
-					ค้นหารายบุคคลด่วนที่สุด
-				</PublicActionBtn>
+				<PublicActionBtn>ค้นหารายบุคคลด่วนที่สุด</PublicActionBtn>
 			</PublicQuickServiceCard>
 		</div>
 	</section>
@@ -239,7 +238,7 @@
 				</a>
 
 				<!-- LINE / FB (Hidden per T-57 OP-2) -->
-				<div class="mt-2 grid-cols-2 gap-3 hidden">
+				<div class="mt-2 hidden grid-cols-2 gap-3">
 					<!-- LINE -->
 					<Button
 						type="button"
