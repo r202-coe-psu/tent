@@ -3,6 +3,7 @@ import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { peopleRepository, shelterDb } from '../data/people.pouch';
+import type { HouseholdSearchLabels } from '../data/people.repository';
 import type {
 	Evacuee,
 	EvacueeInput,
@@ -14,12 +15,12 @@ import type {
 export const peopleKeys = {
 	all: ['people'] as const,
 	evacuees: () => [...peopleKeys.all, 'evacuees'] as const,
-	evacueesPaginated: (page: number, pageSize: number) =>
-		[...peopleKeys.all, 'evacuees', { page, pageSize }] as const,
+	evacueesPaginated: (page: number, pageSize: number, search = '') =>
+		[...peopleKeys.all, 'evacuees', { page, pageSize, search }] as const,
 	evacueesSearch: (query: string) => [...peopleKeys.all, 'evacuees', 'search', query] as const,
 	households: () => [...peopleKeys.all, 'households'] as const,
-	householdsPaginated: (page: number, pageSize: number) =>
-		[...peopleKeys.all, 'households', { page, pageSize }] as const,
+	householdsPaginated: (page: number, pageSize: number, search = '', labelsKey = '') =>
+		[...peopleKeys.all, 'households', { page, pageSize, search, labelsKey }] as const,
 	medicals: () => [...peopleKeys.all, 'medicals'] as const,
 	movements: () => [...peopleKeys.all, 'movements'] as const,
 	screenings: () => [...peopleKeys.all, 'screenings'] as const
@@ -31,11 +32,15 @@ export const useEvacuees = () =>
 		queryFn: () => peopleRepository().listEvacuees()
 	}));
 
-export const useEvacueesPaginated = (page: () => number, pageSize: () => number) =>
+export const useEvacueesPaginated = (
+	page: () => number,
+	pageSize: () => number,
+	search?: () => string
+) =>
 	createQuery(() => ({
-		queryKey: peopleKeys.evacueesPaginated(page(), pageSize()),
+		queryKey: peopleKeys.evacueesPaginated(page(), pageSize(), search?.() ?? ''),
 		queryFn: () =>
-			peopleRepository().listEvacueesPaginated(page(), pageSize()) as Promise<
+			peopleRepository().listEvacueesPaginated(page(), pageSize(), search?.()) as Promise<
 				PaginatedResult<Evacuee>
 			>
 	}));
@@ -77,13 +82,26 @@ export const useHouseholds = () =>
 		queryFn: () => peopleRepository().listHouseholds()
 	}));
 
-export const useHouseholdsPaginated = (page: () => number, pageSize: () => number) =>
+export const useHouseholdsPaginated = (
+	page: () => number,
+	pageSize: () => number,
+	search?: () => string,
+	labels?: () => HouseholdSearchLabels
+) =>
 	createQuery(() => ({
-		queryKey: peopleKeys.householdsPaginated(page(), pageSize()),
+		queryKey: peopleKeys.householdsPaginated(
+			page(),
+			pageSize(),
+			search?.() ?? '',
+			labels ? JSON.stringify(labels()) : ''
+		),
 		queryFn: () =>
-			peopleRepository().listHouseholdsPaginated(page(), pageSize()) as Promise<
-				PaginatedResult<Household>
-			>
+			peopleRepository().listHouseholdsPaginated(
+				page(),
+				pageSize(),
+				search?.(),
+				labels?.()
+			) as Promise<PaginatedResult<Household>>
 	}));
 
 export const useCreateHousehold = () =>

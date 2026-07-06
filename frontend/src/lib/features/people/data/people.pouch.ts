@@ -21,10 +21,51 @@ import {
 	isMovement,
 	isScreening,
 	migrateHouseholdV3ToV4,
+	matchesEvacueeSearch,
 	type Medical,
 	type Movement
 } from '../domain/people';
-import type { PeopleRepository } from './people.repository';
+import type { HouseholdSearchLabels, PeopleRepository } from './people.repository';
+
+function paginateSlice<T>(matched: T[], page: number, pageSize: number): PaginatedResult<T> {
+	const total = matched.length;
+	const totalPages = Math.max(1, Math.ceil(total / pageSize));
+	const safePage = Math.max(1, Math.min(page, totalPages));
+	const start = (safePage - 1) * pageSize;
+	return {
+		items: matched.slice(start, start + pageSize),
+		total,
+		page: safePage,
+		pageSize,
+		totalPages
+	};
+}
+
+function matchesHouseholdSearch(
+	household: Household,
+	query: string,
+	headName: string,
+	labels?: HouseholdSearchLabels
+): boolean {
+	const needle = query.trim().toLowerCase();
+	if (!needle) return true;
+	const mzLabel = (
+		labels?.municipalityZone[household.municipality_zone ?? ''] ??
+		household.municipality_zone ??
+		''
+	).toLowerCase();
+	const commLabel = (
+		labels?.community[household.community ?? ''] ??
+		household.community ??
+		''
+	).toLowerCase();
+	return (
+		household.label.toLowerCase().includes(needle) ||
+		mzLabel.includes(needle) ||
+		commLabel.includes(needle) ||
+		headName.includes(needle)
+	);
+}
 
 /**
  * PouchDB-backed repository for the people feature. The only file here that
@@ -68,9 +109,16 @@ export class PeoplePouchRepository implements PeopleRepository {
 		return this.repo.allByType('evacuee', isEvacuee);
 	}
 
-	/** Paginated list of evacuees — fetches all then slices by page/pageSize. */
-	listEvacueesPaginated(page: number, pageSize: number): Promise<PaginatedResult<Evacuee>> {
-		return this.repo.pageByType('evacuee', isEvacuee, page, pageSize);
+	/** Paginated list of evacuees — filters by `search` before paging when provided. */
+	async listEvacueesPaginated(
+		page: number,
+		pageSize: number,
+		search?: string
+	): Promise<PaginatedResult<Evacuee>> {
+		const all = await this.repo.allByType('evacuee', isEvacuee);
+		const q = search?.trim();
+		const matched = q ? all.filter((e) => matchesEvacueeSearch(e, q)) : all;
+		return paginateSlice(matched, page, pageSize);
 	}
 
 	/** One evacuee by `_id`, or `null` when absent. */
@@ -86,26 +134,10 @@ export class PeoplePouchRepository implements PeopleRepository {
 
 	/** Search evacuees by name, phone, or national ID — in-memory filter over prefix scan. */
 	async searchEvacuees(query: string): Promise<Evacuee[]> {
-		const q = query.trim().toLowerCase();
+		const q = query.trim();
 		if (!q) return [];
-
 		const all = await this.repo.allByType('evacuee', isEvacuee);
-		const digitsOnly = q.replace(/\D/g, '');
-
-		return all.filter((e) => {
-			if (e.privacy?.search_excluded) return false;
-			if (
-				e.first_name.toLowerCase().includes(q) ||
-				e.last_name.toLowerCase().includes(q) ||
-				`${e.first_name} ${e.last_name}`.toLowerCase().includes(q)
-			)
-				return true;
-			if (digitsOnly) {
-				if (e.phone?.replace(/\D/g, '').includes(digitsOnly)) return true;
-				if (e.person_id?.number?.replace(/\D/g, '').includes(digitsOnly)) return true;
-			}
-			return false;
-		});
+		return all.filter((e) => matchesEvacueeSearch(e, q));
 	}
 
 	/** Mint a household from form input + author context and persist it. */
@@ -119,13 +151,26 @@ export class PeoplePouchRepository implements PeopleRepository {
 		return docs.map(migrateHouseholdV3ToV4);
 	}
 
-	/** Paginated list of households. */
-	async listHouseholdsPaginated(page: number, pageSize: number): Promise<PaginatedResult<Household>> {
-		const result = await this.repo.pageByType('household', isHousehold, page, pageSize);
-		return {
-			...result,
-			items: result.items.map(migrateHouseholdV3ToV4)
-		};
+	/** Paginated list of households — filters by `search` before paging when provided. */
+	async listHouseholdsPaginated(
+		page: number,
+		pageSize: number,
+		search?: string,
+		labels?: HouseholdSearchLabels
+	): Promise<PaginatedResult<Household>> {
+		let all = await this.repo.allByType('household', isHousehold);
+		all = all.map(migrateHouseholdV3ToV4);
+		const q = search?.trim();
+		if (q) {
+			const evacuees = await this.repo.allByType('evacuee', isEvacuee);
+			const headNames = new Map(
+				evacuees.map((e) => [e._id, `${e.first_name} ${e.last_name}`.toLowerCase()])
+			);
+			all = all.filter((h) =>
+				matchesHouseholdSearch(h, q, headNames.get(h.head_evacuee_id ?? '') ?? '', labels)
+			);
+		}
+		return paginateSlice(all, page, pageSize);
 	}
 
 	/** One household by `_id`, or `null` when absent. */

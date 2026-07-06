@@ -15,10 +15,6 @@
 	let currentPage = $state(1);
 	let search = $state('');
 
-	const householdsQuery = useHouseholdsPaginated(
-		() => currentPage,
-		() => PAGE_SIZE
-	);
 	const allEvacueesQuery = useEvacuees();
 	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
 	const communityQuery = useMasterData(() => 'community');
@@ -32,27 +28,23 @@
 		Object.fromEntries((communityQuery.data?.items ?? []).map((item) => [item.code, item.label]))
 	);
 
-	const filtered = $derived.by(() => {
-		const items = householdsQuery.data?.items ?? [];
-		const needle = search.trim().toLowerCase();
-		if (!needle) return items;
-		return items.filter((h) => {
-			const labelMatch = h.label.toLowerCase().includes(needle);
-			const mzLabel = (
-				municipalityZoneLabels[h.municipality_zone ?? ''] ??
-				h.municipality_zone ??
-				''
-			).toLowerCase();
-			const commLabel = (communityLabels[h.community ?? ''] ?? h.community ?? '').toLowerCase();
-			const zoneMatch = mzLabel.includes(needle) || commLabel.includes(needle);
-			const head = allEvacueesQuery.data?.find((e) => e._id === h.head_evacuee_id);
-			const headName = head ? `${head.first_name} ${head.last_name}`.toLowerCase() : '';
-			return labelMatch || zoneMatch || headName.includes(needle);
-		});
-	});
+	const householdsQuery = useHouseholdsPaginated(
+		() => currentPage,
+		() => PAGE_SIZE,
+		() => search,
+		() => ({
+			municipalityZone: municipalityZoneLabels,
+			community: communityLabels
+		})
+	);
 
+	const items = $derived(householdsQuery.data?.items ?? []);
 	const total = $derived(householdsQuery.data?.total ?? 0);
 	const totalPages = $derived(householdsQuery.data?.totalPages ?? 1);
+
+	function resetPageOnSearch() {
+		currentPage = 1;
+	}
 </script>
 
 <div class="flex flex-col gap-6 p-6">
@@ -80,6 +72,7 @@
 			type="text"
 			placeholder="ค้นหาชื่อครัวเรือน, เขต หรือ หัวหน้า..."
 			bind:value={search}
+			oninput={resetPageOnSearch}
 			class="rounded-full pl-9"
 		/>
 	</div>
@@ -95,7 +88,7 @@
 		>
 			เกิดข้อผิดพลาด: {householdsQuery.error?.message}
 		</div>
-	{:else if filtered.length === 0}
+	{:else if items.length === 0}
 		<div
 			class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-20"
 		>
@@ -116,7 +109,7 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each filtered as h (h._id)}
+					{#each items as h (h._id)}
 						{@const head = allEvacueesQuery.data?.find((e) => e._id === h.head_evacuee_id)}
 						{@const headName = head ? `${head.first_name} ${head.last_name}` : '—'}
 						{@const members = allEvacueesQuery.data?.filter((e) => e.household_id === h._id) ?? []}

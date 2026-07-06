@@ -476,6 +476,29 @@ export function maskNationalId(id: string | null | undefined): string {
 	return `${id.slice(0, 3)}***${id.slice(-3)}`;
 }
 
+/** True when `query` matches evacuee name, nickname, phone, or person ID (incl. masked). */
+export function matchesEvacueeSearch(evacuee: Evacuee, query: string): boolean {
+	const q = query.trim().toLowerCase();
+	if (!q) return true;
+	if (evacuee.privacy?.search_excluded) return false;
+	if (
+		evacuee.first_name.toLowerCase().includes(q) ||
+		evacuee.last_name.toLowerCase().includes(q) ||
+		`${evacuee.first_name} ${evacuee.last_name}`.toLowerCase().includes(q) ||
+		(evacuee.nickname?.toLowerCase().includes(q) ?? false)
+	) {
+		return true;
+	}
+	const masked = maskNationalId(evacuee.person_id?.number).toLowerCase();
+	if (masked.includes(q)) return true;
+	const digitsOnly = q.replace(/\D/g, '');
+	if (digitsOnly) {
+		if (evacuee.phone?.replace(/\D/g, '').includes(digitsOnly)) return true;
+		if (evacuee.person_id?.number?.replace(/\D/g, '').includes(digitsOnly)) return true;
+	}
+	return false;
+}
+
 export function zoneLabel(zone: string | null | undefined): string {
 	if (!zone) return '—';
 	return zone.toUpperCase();

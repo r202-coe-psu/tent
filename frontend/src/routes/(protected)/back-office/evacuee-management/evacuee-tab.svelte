@@ -13,7 +13,6 @@
 	import {
 		useEvacueesPaginated,
 		useCheckInEvacuee,
-		maskNationalId,
 		zoneLabel,
 		SPECIAL_NEED_CHIPS
 	} from '$lib/features/people';
@@ -27,14 +26,13 @@
 
 	const query = useEvacueesPaginated(
 		() => currentPage,
-		() => PAGE_SIZE
+		() => PAGE_SIZE,
+		() => search
 	);
 
 	const checkIn = useCheckInEvacuee();
 
-	// Stopgap check-in action (T-06 dependency has no dedicated flow yet) — flips
-	// current_stay to checked_in so occupancy-driven features (e.g. kitchen T-25
-	// LIVE COUNT) reflect who is actually present.
+	// Inline check-in until T-06 dedicated flow ships — flips current_stay to checked_in.
 	async function handleCheckIn(evacuee: Evacuee) {
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
@@ -52,24 +50,13 @@
 		transferred: 'ย้ายศูนย์'
 	};
 
-	const filtered = $derived.by(() => {
-		const items = query.data?.items ?? [];
-		const needle = search.trim().toLowerCase();
-		if (!needle) return items;
-		return items.filter((e) => {
-			const masked = maskNationalId(e.person_id?.number).toLowerCase();
-			return (
-				e.first_name.toLowerCase().includes(needle) ||
-				e.last_name.toLowerCase().includes(needle) ||
-				(e.nickname?.toLowerCase().includes(needle) ?? false) ||
-				masked.includes(needle) ||
-				(e.person_id?.number?.includes(needle) ?? false)
-			);
-		});
-	});
-
+	const items = $derived(query.data?.items ?? []);
 	const total = $derived(query.data?.total ?? 0);
 	const totalPages = $derived(query.data?.totalPages ?? 1);
+
+	function resetPageOnSearch() {
+		currentPage = 1;
+	}
 </script>
 
 <div class="flex flex-col gap-6 p-6">
@@ -97,6 +84,7 @@
 			type="text"
 			placeholder="ค้นหาชื่อ หรือ รหัสประจำตัว..."
 			bind:value={search}
+			oninput={resetPageOnSearch}
 			class="rounded-full pl-9"
 		/>
 	</div>
@@ -112,7 +100,7 @@
 		>
 			เกิดข้อผิดพลาด: {query.error?.message}
 		</div>
-	{:else if filtered.length === 0}
+	{:else if items.length === 0}
 		<div
 			class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-20"
 		>
@@ -132,7 +120,7 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each filtered as e (e._id)}
+					{#each items as e (e._id)}
 						<Table.Row class="transition-colors hover:bg-muted/20">
 							<Table.Cell class="font-semibold text-foreground">
 								{e.first_name}

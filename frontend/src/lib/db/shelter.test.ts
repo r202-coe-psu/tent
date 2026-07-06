@@ -29,14 +29,14 @@ describe('shelter database config', () => {
 
 	it('falls back to the user role (e.g. shelter:SH003) when no shelter is selected', () => {
 		mockRoles = ['user', 'shelter:SH003'];
-		
+
 		expect(getShelterCode()).toBe('SH003');
 		expect(getShelterDb()).toBe('shelter_sh003');
 	});
 
 	it('falls back to SH001 when neither selection nor shelter role is present', () => {
 		mockRoles = ['user', 'system_admin'];
-		
+
 		expect(getShelterCode()).toBe('SH001');
 		expect(getShelterDb()).toBe('shelter_sh001');
 	});

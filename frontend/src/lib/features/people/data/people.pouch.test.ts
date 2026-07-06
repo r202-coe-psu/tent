@@ -189,17 +189,17 @@ describe('peopleRepository singleton', () => {
 		mockShelterDb = 'shelter_sh001';
 		const repo1 = peopleRepository();
 		const repo1Again = peopleRepository();
-		
+
 		// Should return the exact same instance if DB hasn't changed
 		expect(repo1).toBe(repo1Again);
 
 		// Change the underlying DB name (simulating a shelter switch)
 		mockShelterDb = 'shelter_sh002';
 		const repo2 = peopleRepository();
-		
+
 		// Should return a completely new instance
 		expect(repo2).not.toBe(repo1);
-		
+
 		// Subsequent calls should return the new singleton
 		expect(repo2).toBe(peopleRepository());
 	});
