@@ -19,7 +19,7 @@
 	} from '$lib/features/people';
 	import type { Evacuee, SpecialNeed } from '$lib/features/people';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/db/shelter';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
@@ -36,7 +36,7 @@
 	// current_stay to checked_in so occupancy-driven features (e.g. kitchen T-25
 	// LIVE COUNT) reflect who is actually present.
 	async function handleCheckIn(evacuee: Evacuee) {
-		const ctx = { shelterCode: SHELTER_CODE, createdBy: authStore.user?.name ?? 'staff' };
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
 			await checkIn.mutateAsync({ evacuee, ctx });
 			toast.success(`เช็คอิน ${evacuee.first_name} ${evacuee.last_name} แล้ว`);

@@ -428,18 +428,18 @@ async function seedShelter(): Promise<void> {
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวใจดี',
-			zone: 'Z1',
+			municipality_zone: 'Z1',
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ครอบครัวใหญ่ 4 คน'
 		},
 		{
 			label: 'ครอบครัวสุขสาย',
-			zone: 'Z1',
+			municipality_zone: 'Z1',
 			head_evacuee_id: null,
 			pets: [{ species: 'dog', count: 1 }]
 		},
-		{ label: 'ครอบครัวรักสงบ', zone: 'Z2', head_evacuee_id: null, pets: [] }
+		{ label: 'ครอบครัวรักสงบ', municipality_zone: 'Z2', head_evacuee_id: null, pets: [] }
 	];
 	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, CTX));
 
@@ -747,7 +747,7 @@ async function seedShelter2(): Promise<void> {
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวปัตตานี',
-			zone: 'Z1',
+			municipality_zone: 'Z1',
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ตัวอย่าง SH002'

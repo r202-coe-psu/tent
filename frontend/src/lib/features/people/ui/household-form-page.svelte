@@ -12,10 +12,10 @@
 		useCreateHousehold,
 		useUpdateHousehold,
 		useUpdateEvacuee,
-		SHELTER_CODE,
 		type HouseholdInput,
 		type Evacuee
 	} from '../index';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 
 	let {
@@ -64,7 +64,7 @@
 
 		try {
 			const ctx = {
-				shelterCode: SHELTER_CODE,
+				shelterCode: getShelterCode(),
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 

@@ -1,7 +1,7 @@
 import { namedLocalDb } from '$lib/db/pouch';
 import { createRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { touch, type AuthorContext } from '$lib/db/model';
-import { SHELTER_CODE, SHELTER_DB, shelterDb as _shelterDb } from '$lib/db/shelter';
+import { getShelterDb, shelterDb as _shelterDb } from '$lib/db/shelter';
 import {
 	createEvacuee as buildEvacuee,
 	createMovement,
@@ -25,8 +25,6 @@ import {
 } from '../domain/people';
 import type { PeopleRepository } from './people.repository';
 
-export { SHELTER_CODE, SHELTER_DB };
-
 /**
  * PouchDB-backed repository for the people feature. The only file here that
  * knows PouchDB exists — everything goes through the {@link Repository}
@@ -35,7 +33,7 @@ export { SHELTER_CODE, SHELTER_DB };
 export class PeoplePouchRepository implements PeopleRepository {
 	private readonly repo: Repository;
 
-	constructor(dbName: string = SHELTER_DB) {
+	constructor(dbName: string) {
 		this.repo = createRepository(namedLocalDb(dbName));
 	}
 
@@ -175,10 +173,19 @@ export class PeoplePouchRepository implements PeopleRepository {
 }
 
 let singleton: PeopleRepository | null = null;
+let singletonDbName: string | null = null;
 
-/** Memoised repository over the shelter database — one local handle. */
+/**
+ * Memoised repository over the shelter database — one local handle.
+ * Resets automatically when the active shelter database name changes
+ * (e.g. a different user logs in with a different shelter scope).
+ */
 export function peopleRepository(): PeopleRepository {
-	if (!singleton) singleton = new PeoplePouchRepository();
+	const currentDb = getShelterDb();
+	if (!singleton || singletonDbName !== currentDb) {
+		singleton = new PeoplePouchRepository(currentDb);
+		singletonDbName = currentDb;
+	}
 	return singleton;
 }
 

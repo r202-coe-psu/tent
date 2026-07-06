@@ -8,9 +8,11 @@ PouchDB.plugin(memory);
 // Must declare before vi.mock — closures capture the reference, not the value.
 let testDb: PouchDB.Database;
 
+let mockShelterDb = 'shelter_sh001';
+
 vi.mock('$lib/db/shelter', () => ({
-	SHELTER_CODE: 'SH001',
-	SHELTER_DB: 'shelter_sh001',
+	getShelterCode: () => 'SH001',
+	getShelterDb: () => mockShelterDb,
 	shelterDb: () => testDb
 }));
 
@@ -18,7 +20,7 @@ vi.mock('$lib/db/pouch', () => ({
 	namedLocalDb: () => testDb
 }));
 
-import { PeoplePouchRepository } from './people.pouch';
+import { PeoplePouchRepository, peopleRepository } from './people.pouch';
 import type { EvacueeInput } from '../domain/people';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
@@ -39,7 +41,7 @@ describe('PeoplePouchRepository', () => {
 
 	beforeEach(() => {
 		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
-		repo = new PeoplePouchRepository();
+		repo = new PeoplePouchRepository(testDb.name);
 	});
 
 	afterEach(async () => {
@@ -179,5 +181,26 @@ describe('PeoplePouchRepository', () => {
 			expect(screenings[0].evacuee_id).toBe(ev._id);
 			expect(screenings[0].track).toBe('fast_track');
 		});
+	});
+});
+
+describe('peopleRepository singleton', () => {
+	it('returns a fresh instance when getShelterDb() changes', () => {
+		mockShelterDb = 'shelter_sh001';
+		const repo1 = peopleRepository();
+		const repo1Again = peopleRepository();
+		
+		// Should return the exact same instance if DB hasn't changed
+		expect(repo1).toBe(repo1Again);
+
+		// Change the underlying DB name (simulating a shelter switch)
+		mockShelterDb = 'shelter_sh002';
+		const repo2 = peopleRepository();
+		
+		// Should return a completely new instance
+		expect(repo2).not.toBe(repo1);
+		
+		// Subsequent calls should return the new singleton
+		expect(repo2).toBe(peopleRepository());
 	});
 });
