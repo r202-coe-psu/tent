@@ -18,16 +18,46 @@ vi.mock('$lib/db/pouch', () => ({
 	namedLocalDb: () => testDb
 }));
 
+// Mock the operations barrel with its real domain logic (imported directly from
+// the domain module, bypassing the barrel's UI/Svelte exports) so this pure
+// data-layer test doesn't transitively load ReceiveStockForm.svelte and its
+// sveltekit-superforms adapter chain.
+vi.mock('$lib/features/operations', async () => {
+	const domain = await import('../../operations/domain/operations');
+	return {
+		stockBalance: domain.stockBalance,
+		isStockLedger: domain.isStockLedger
+	};
+});
+
 import { KitchenPouchRepository } from './kitchen.pouch';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
 
+// Seed a positive stock_ledger receipt so issueRequisition's write-time on-hand
+// re-check (guards against concurrent over-issue) has stock to draw against.
+async function seedStock(item_id: string, qty: number, unit = 'kg') {
+	await testDb.put({
+		_id: `stock_ledger:seed-${item_id}-${Math.random().toString(36).slice(2)}`,
+		type: 'stock_ledger',
+		schema_v: 1,
+		item_id,
+		qty,
+		unit,
+		reason: 'receive'
+	});
+}
+
 describe('KitchenPouchRepository.issueRequisition — spike: ledger deduction pattern', () => {
 	let repo: KitchenPouchRepository;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
 		repo = new KitchenPouchRepository();
+		// Ample on-hand for every item these tests issue.
+		await seedStock('item:rice', 1000);
+		await seedStock('item:egg', 1000, 'ฟอง');
+		await seedStock('item:water', 1000, 'ขวด');
 	});
 
 	it('writes kitchen_requisition + stock_ledger entries in one bulkDocs call', async () => {
@@ -100,6 +130,27 @@ describe('KitchenPouchRepository.issueRequisition — spike: ledger deduction pa
 		await expect(
 			testDb.put({ _id: result.ledger_ids[0], type: 'stock_ledger', schema_v: 1, qty: -10 })
 		).rejects.toMatchObject({ status: 409 });
+	});
+
+	it('refuses to issue more than the on-hand balance (concurrent over-issue guard)', async () => {
+		// Fresh db with only 5 kg on hand — issuing 6 must be rejected before any write.
+		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
+		repo = new KitchenPouchRepository();
+		await seedStock('item:rice', 5);
+
+		await expect(
+			repo.issueRequisition(
+				{
+					meal_plan_id: null,
+					items: [{ item_id: 'item:rice', qty_requested: 6, qty_issued: 6, unit: 'kg' }]
+				},
+				ctx
+			)
+		).rejects.toThrow(/only 5 on hand/);
+
+		// Nothing was appended — no kitchen_requisition doc written.
+		const reqs = await repo.listRequisitions();
+		expect(reqs).toHaveLength(0);
 	});
 });
 
