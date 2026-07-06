@@ -88,7 +88,7 @@
 
 			<a
 				href="/public/transparency"
-				class="hidden pointer-events-none items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
+				class="pointer-events-none hidden items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
 			>
 				<FileText class="h-4 w-4" />
