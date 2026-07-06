@@ -100,6 +100,7 @@
 		class="max-h-[300px] w-(--bits-floating-anchor-width) min-w-(--bits-floating-anchor-width) overflow-y-auto bg-popover p-1 text-popover-foreground"
 		trapFocus={false}
 		onOpenAutoFocus={(e) => e.preventDefault()}
+		onCloseAutoFocus={(e) => e.preventDefault()}
 	>
 		<div class="flex flex-col gap-0.5">
 			{#if filteredItems.length === 0}

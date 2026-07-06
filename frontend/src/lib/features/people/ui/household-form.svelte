@@ -139,10 +139,6 @@
 			mzVal = initialData.municipality_zone ?? '';
 			commVal = initialData.community ?? '';
 			petsList = initialData.pets ? JSON.parse(JSON.stringify(initialData.pets)) : [];
-			const firstVehicle =
-				initialData.vehicles && initialData.vehicles.length > 0 ? initialData.vehicles[0] : null;
-			vehicleType = firstVehicle?.type ?? 'none';
-			licensePlate = firstVehicle?.license_plate ?? '';
 			vehicleRows = (initialData.vehicles ?? []).map((v) => ({
 				id: nextVehicleId++,
 				type: v.type,
@@ -194,10 +190,6 @@
 	});
 
 	$effect(() => {
-		$formData.vehicles =
-			vehicleType !== 'none'
-				? [{ type: vehicleType, license_plate: licensePlate.trim() || null }]
-				: [];
 		$formData.vehicles = vehicleRows.map((v) => ({
 			type: v.type,
 			license_plate: v.license_plate.trim() || null
