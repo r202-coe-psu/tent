@@ -16,7 +16,7 @@
 		PetGroup
 	} from '../domain/people';
 
-	// Read-only presentation of the household lifecycle status (CR-029).
+	// Read-only presentation of the household lifecycle status.
 	// Status is not free-editable here — it follows check-in/check-out flows.
 	const STATUS_DISPLAY: Record<HouseholdStatus, { label: string; variant: BadgeVariant }> = {
 		pre_registered: { label: 'ลงทะเบียนล่วงหน้า', variant: 'secondary' },

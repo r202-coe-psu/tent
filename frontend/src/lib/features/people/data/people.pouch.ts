@@ -20,6 +20,7 @@ import {
 	isMedical,
 	isMovement,
 	isScreening,
+	migrateHouseholdV3ToV4,
 	type Medical,
 	type Movement
 } from '../domain/people';
@@ -190,26 +191,3 @@ export function peopleRepository(): PeopleRepository {
 }
 
 export const shelterDb = _shelterDb;
-
-export function migrateHouseholdV3ToV4(doc: any): Household {
-	if (doc && doc.type === 'household' && (!doc.schema_v || doc.schema_v < 4)) {
-		let vehicles = doc.vehicles;
-		if (!vehicles) {
-			if (doc.vehicle) {
-				vehicles = [doc.vehicle];
-			} else {
-				vehicles = [];
-			}
-		}
-		const migrated = {
-			...doc,
-			schema_v: 4,
-			status: doc.status || 'checked_in',
-			checkout_destination: doc.checkout_destination || null,
-			vehicles
-		};
-		delete migrated.vehicle;
-		return migrated;
-	}
-	return doc;
-}

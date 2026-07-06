@@ -146,8 +146,8 @@ export interface Household extends BaseDoc {
 	type: 'household';
 	label: string;
 	head_evacuee_id: string | null;
-	status: HouseholdStatus; // CR-029
-	checkout_destination: CheckoutDestination | null; // CR-029
+	status: HouseholdStatus;
+	checkout_destination: CheckoutDestination | null;
 	municipality_zone: string | null;
 	community: string | null;
 	pets: PetGroup[];
@@ -235,8 +235,8 @@ export type MedicalInput = z.input<typeof medicalInputSchema>;
 export const householdInputSchema = z.object({
 	label: z.string().trim().min(1, 'Label is required'),
 	head_evacuee_id: z.string().nullable().default(null),
-	status: householdStatusSchema.default('arriving'), // CR-029
-	checkout_destination: checkoutDestinationSchema.nullable().default(null), // CR-029
+	status: householdStatusSchema.default('arriving'),
+	checkout_destination: checkoutDestinationSchema.nullable().default(null),
 	municipality_zone: z.string().trim().nullable().default(null),
 	community: z.string().trim().nullable().default(null),
 	pets: z
@@ -353,12 +353,12 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 	const d = householdInputSchema.parse(input);
 	return makeDoc(
 		'household',
-		4, // ปรับเวอร์ชัน schema_v จาก 3 -> 4 ตาม CR-029
+		4, // schema_v 4: adds status, checkout_destination
 		{
 			label: d.label,
 			head_evacuee_id: d.head_evacuee_id,
-			status: d.status, // CR-029
-			checkout_destination: d.checkout_destination, // CR-029
+			status: d.status,
+			checkout_destination: d.checkout_destination,
 			municipality_zone: d.municipality_zone,
 			community: d.community,
 			pets: d.pets,
@@ -374,6 +374,30 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 		},
 		ctx
 	);
+}
+
+/** Migrates a stored household doc up to schema_v 4 (adds status, checkout_destination; normalizes vehicle -> vehicles). */
+export function migrateHouseholdV3ToV4(doc: any): Household {
+	if (doc && doc.type === 'household' && (!doc.schema_v || doc.schema_v < 4)) {
+		let vehicles = doc.vehicles;
+		if (!vehicles) {
+			if (doc.vehicle) {
+				vehicles = [doc.vehicle];
+			} else {
+				vehicles = [];
+			}
+		}
+		const migrated = {
+			...doc,
+			schema_v: 4,
+			status: doc.status || 'checked_in',
+			checkout_destination: doc.checkout_destination || null,
+			vehicles
+		};
+		delete migrated.vehicle;
+		return migrated;
+	}
+	return doc;
 }
 
 export function createMovement(input: MovementInput, ctx: AuthorContext): Movement {
