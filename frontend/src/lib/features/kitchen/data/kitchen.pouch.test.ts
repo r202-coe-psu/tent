@@ -217,6 +217,63 @@ describe('KitchenPouchRepository.confirmMealPlan — state transition', () => {
 	});
 });
 
+describe('KitchenPouchRepository.recordMealService — record + read back (T-27)', () => {
+	let repo: KitchenPouchRepository;
+
+	beforeEach(() => {
+		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
+		repo = new KitchenPouchRepository();
+	});
+
+	const serviceInput = {
+		date: '2026-07-15',
+		meal: 'dinner' as const,
+		served: 95,
+		waste: 3,
+		external: { volunteers: 5, outside_evacuees: 2 },
+		notes: 'เสิร์ฟช้ากว่ากำหนด'
+	};
+
+	it('persists served / waste / external + audit actor onto the stored doc', async () => {
+		const svc = await repo.recordMealService(serviceInput, ctx);
+
+		expect(svc._id).toBe('meal_service:2026-07-15:dinner');
+		const stored = (await testDb.get(svc._id)) as Record<string, unknown>;
+		expect(stored.type).toBe('meal_service');
+		expect(stored.served).toBe(95);
+		expect(stored.waste).toBe(3);
+		expect(stored.external).toEqual({ volunteers: 5, outside_evacuees: 2 });
+		expect(stored.notes).toBe('เสิร์ฟช้ากว่ากำหนด');
+		// Audit trail (DoD #5): actor + timestamp from the envelope.
+		expect(stored.created_by).toBe('tester');
+		expect(typeof stored.created_at).toBe('string');
+	});
+
+	it('getMealService / listMealServices read the record back', async () => {
+		await repo.recordMealService(serviceInput, ctx);
+
+		const got = await repo.getMealService('2026-07-15', 'dinner');
+		expect(got?.served).toBe(95);
+
+		const all = await repo.listMealServices();
+		expect(all).toHaveLength(1);
+		expect(all[0]._id).toBe('meal_service:2026-07-15:dinner');
+	});
+
+	it('append-only: re-recording the same date+meal collides (409), no silent overwrite', async () => {
+		await repo.recordMealService(serviceInput, ctx);
+		// Deterministic _id + no _rev → the second write is a conflict, so an already
+		// recorded meal cannot be silently replaced. The UI surfaces this as 409.
+		await expect(
+			repo.recordMealService({ ...serviceInput, served: 120 }, ctx)
+		).rejects.toMatchObject({ status: 409 });
+
+		// Original value is untouched.
+		const got = await repo.getMealService('2026-07-15', 'dinner');
+		expect(got?.served).toBe(95);
+	});
+});
+
 describe('KitchenPouchRepository.gasCylinderType — CRUD', () => {
 	let repo: KitchenPouchRepository;
 
