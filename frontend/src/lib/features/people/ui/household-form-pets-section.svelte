@@ -8,13 +8,13 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import X from '@lucide/svelte/icons/x';
 	import type { SuperForm } from 'sveltekit-superforms';
-	import type { PetGroup } from '../domain/people';
+	import type { PetGroup, HouseholdFormData } from '../domain/people';
 
 	let {
 		form,
 		petsList = $bindable([])
 	}: {
-		form: SuperForm<any>;
+		form: SuperForm<HouseholdFormData>;
 		petsList: PetGroup[];
 	} = $props();
 

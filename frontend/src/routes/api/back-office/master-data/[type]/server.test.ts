@@ -66,7 +66,7 @@ function writtenDoc(): MasterData {
 }
 
 beforeEach(() => {
-	requireAdminMock.mockReset().mockResolvedValue(undefined);
+	requireAdminMock.mockReset().mockResolvedValue('sa-user');
 	authMock.mockReset().mockResolvedValue(caller);
 	adminRawMock.mockReset().mockResolvedValue({ status: 201, data: { rev: '4-new' } });
 	readMock.mockReset();
@@ -115,7 +115,7 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect(adminRawMock).not.toHaveBeenCalled();
 	});
 
-	it('creates a fresh envelope with sa-bootstrap author when the doc is absent', async () => {
+	it('creates a fresh envelope stamped with the authenticated SA name when absent', async () => {
 		readMock.mockResolvedValue(null);
 
 		const res = await callPUT('pet_types', { items });
@@ -125,7 +125,7 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		const [path, method, doc] = adminRawMock.mock.calls[0];
 		expect(path).toBe('/registry/master_data%3Apet_types');
 		expect(method).toBe('PUT');
-		expect((doc as MasterData).created_by).toBe('sa-bootstrap');
+		expect((doc as MasterData).created_by).toBe('sa-user');
 		expect((doc as MasterData).type).toBe('master_data');
 		expect((doc as MasterData).master_type).toBe('pet_types');
 	});

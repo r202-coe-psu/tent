@@ -43,7 +43,7 @@ function callDELETE(type: string, code: string) {
 }
 
 beforeEach(() => {
-	requireAdminMock.mockReset().mockResolvedValue(undefined);
+	requireAdminMock.mockReset().mockResolvedValue('sa-user');
 	adminRawMock.mockReset().mockResolvedValue({ status: 200, data: { rev: '4-new' } });
 	readMock.mockReset();
 });

@@ -3,10 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
-	import * as Card from '$lib/components/ui/card/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import Home from '@lucide/svelte/icons/home';
 	import HouseholdForm from './household-form.svelte';
 	import {
 		useEvacuees,
@@ -134,7 +132,7 @@
 				const evac = allEvacuees.find((ev) => ev._id === evacId);
 				if (evac) {
 					const isHead = input.head_evacuee_id === evacId;
-					const updatedEvac: any = {
+					const updatedEvac: Evacuee = {
 						...evac,
 						household_id: householdId
 					};
@@ -184,8 +182,9 @@
 
 			// Navigate back
 			await goto(backUrl);
-		} catch (err: any) {
-			toast.error(`เกิดข้อผิดพลาด: ${err.message || err}`);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			toast.error(`เกิดข้อผิดพลาด: ${message}`);
 		} finally {
 			isSubmitting = false;
 		}

@@ -73,6 +73,25 @@ export async function requireKitchen(fetchFn?: typeof fetch) {
 }
 
 /**
+ * Evacuee registration guard — requires system_admin, shelter_manager, or
+ * the `registration_staff` capability. Used for PII surfaces (evacuee/
+ * household CRUD) so only staff whose job is registration can reach them;
+ * this is a UX gate, the data layer remains the real authorization boundary.
+ * Not to be confused with the unrelated user-signup `register` feature.
+ */
+export async function requireEvacueeRegistration(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (
+		!isSystemAdmin(roles) &&
+		!isShelterManager(roles) &&
+		!hasStaffCapability(roles, 'registration_staff')
+	) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
  * Redirect away from auth pages (login) when a session already exists.
  *
  * @example

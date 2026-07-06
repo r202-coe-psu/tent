@@ -3,8 +3,8 @@
 	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import MapPin from '@lucide/svelte/icons/map-pin';
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	import type { SuperForm } from 'sveltekit-superforms';
+	import type { HouseholdFormData } from '../domain/people';
 
 	let {
 		form,
@@ -15,7 +15,7 @@
 		mzPending,
 		commPending
 	}: {
-		form: SuperForm<any>;
+		form: SuperForm<HouseholdFormData>;
 		mzVal: string;
 		commVal: string;
 		municipalityZoneItems: { value: string; label: string }[];

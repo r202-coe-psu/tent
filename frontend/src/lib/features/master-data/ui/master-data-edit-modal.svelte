@@ -8,7 +8,6 @@
 		type MasterDataItem,
 		type MasterDataType
 	} from '$lib/features/master-data';
-	import { slugifyLabel } from '$lib/features/master-data';
 
 	let {
 		open = $bindable(false),
@@ -27,9 +26,6 @@
 	let touched = $state(false);
 
 	const labelTrimmed = $derived(label.trim());
-	const codePreview = $derived(
-		editing ? editing.code : labelTrimmed ? slugifyLabel(labelTrimmed) : ''
-	);
 	const labelError = $derived(touched && !labelTrimmed ? 'กรุณากรอกชื่อแสดงผลภาษาไทย' : null);
 
 	$effect(() => {

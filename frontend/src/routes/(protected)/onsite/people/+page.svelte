@@ -4,26 +4,24 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		EvacueeForm,
-		useEvacuees,
+		EvacueeWristbandSuccess,
 		useCreateEvacuee,
 		useCreateScreening,
-		type EvacueeInput
+		type EvacueeInput,
+		type Evacuee
 	} from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
 	import Zap from '@lucide/svelte/icons/zap';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import { page } from '$app/stores';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import EvacueeWristbandSuccess from '$lib/features/people/ui/evacuee-wristband-success.svelte';
 
-	const evacueesQuery = useEvacuees();
 	const createMutation = useCreateEvacuee();
 	const createScreeningMutation = useCreateScreening();
 
 	let isFastTrack = $derived($page.url.searchParams.get('mode') === 'fast_track');
 
 	// Completed evacuee after zone selection — drives the success screen
-	let completedEvacuee = $state<any>(null);
+	let completedEvacuee = $state<Evacuee | null>(null);
 
 	async function handleRegister(input: EvacueeInput, symptoms: string[]) {
 		const ctx = {
@@ -50,8 +48,8 @@
 				ctx
 			});
 			return evacuee;
-		} catch (err: any) {
-			toast.error(err.message || err);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : String(err));
 			throw err;
 		}
 	}

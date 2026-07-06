@@ -10,6 +10,7 @@
 	import { startPeopleLiveQuery } from '$lib/features/people';
 	import { getShelterDb } from '$lib/db/shelter';
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
+	import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 
 	let { children, data } = $props();
 
@@ -24,13 +25,17 @@
 		const shelterDb = getShelterDb();
 		startNamedSync(shelterDb, () => authStore.markNeedsReauth());
 		startNamedSync(SHELTER_REGISTRY_DB, () => authStore.markNeedsReauth());
+		startNamedSync('catalog', () => authStore.markNeedsReauth());
 		const peopleLive = startPeopleLiveQuery(data.queryClient);
 		const sheltersLive = startSheltersLiveQuery(data.queryClient);
+		const sopRatioLive = startSopRatioLiveQuery(data.queryClient);
 		return () => {
 			peopleLive.stop();
 			sheltersLive.stop();
 			stopNamedSync(shelterDb);
+			sopRatioLive.stop();
 			stopNamedSync(SHELTER_REGISTRY_DB);
+			stopNamedSync('catalog');
 		};
 	});
 </script>

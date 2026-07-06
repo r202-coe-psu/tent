@@ -113,7 +113,7 @@ describe('createHousehold', () => {
 		expect(h.head_evacuee_id).toBe('evacuee:123');
 		expect(h.municipality_zone).toBe('zone_1');
 		expect(h.community).toBe('z1_c01');
-		expect((h as any).zone).toBeUndefined();
+		expect((h as unknown as { zone?: unknown }).zone).toBeUndefined();
 		expect(h.pets).toEqual([
 			{ species: 'dog', count: 2, notes: 'friendly', has_cage: true, image_url: 'http://image.png' }
 		]);

@@ -9,6 +9,17 @@ export const sopRatioKeys = {
 	list: () => [...sopRatioKeys.all, 'list'] as const
 };
 
+export const sopVersionKeys = {
+	all: () => [...sopRatioKeys.all, 'versions'] as const,
+	master: () => [...sopVersionKeys.all(), 'master'] as const,
+	override: () => [...sopVersionKeys.all(), 'override'] as const
+};
+
+function getLatestVersion<T extends { version: number }>(list: T[]): T | null {
+	if (list.length === 0) return null;
+	return [...list].sort((a, b) => b.version - a.version)[0];
+}
+
 /**
  * Active SOP source for this shelter — the override wins over the catalog
  * master (per resolveEffectiveProfile precedence). Returns the winning doc
@@ -19,18 +30,22 @@ export async function getActiveSopProfile(): Promise<SopMaster | SopOverride | n
 		sopOverrideRepository(getShelterCode()).listActive(),
 		sopMasterRepository().listActive()
 	]);
-	const activeOverride =
-		overrides.length > 0 ? [...overrides].sort((a, b) => b.version - a.version)[0] : null;
-	const activeMaster =
-		masters.length > 0 ? [...masters].sort((a, b) => b.version - a.version)[0] : null;
+	const activeOverride = getLatestVersion(overrides);
+	const activeMaster = getLatestVersion(masters);
 	return activeOverride ?? activeMaster ?? null;
 }
 
-export const useActiveSopProfile = () =>
+export const useActiveSopRatio = () =>
 	createQuery(() => ({
 		queryKey: sopRatioKeys.active(),
 		queryFn: getActiveSopProfile
 	}));
+
+/**
+ * @deprecated Use `useActiveSopRatio` instead.
+ * Kept for backward compatibility with the kitchen/meal-plan features.
+ */
+export const useActiveSopProfile = useActiveSopRatio;
 
 export const useSopProfiles = () =>
 	createQuery(() => ({

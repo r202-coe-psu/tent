@@ -2,12 +2,13 @@
 	import QRCode from 'qrcode';
 	import Printer from '@lucide/svelte/icons/printer';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
+	import type { Evacuee } from '../domain/people';
 
 	let {
 		evacuee,
 		onBack
 	}: {
-		evacuee: any;
+		evacuee: Evacuee;
 		onBack: () => void;
 	} = $props();
 

@@ -254,6 +254,7 @@ export const householdInputSchema = z.object({
 	postal_code: z.string().trim().nullable().default(null)
 });
 export type HouseholdInput = z.input<typeof householdInputSchema>;
+export type HouseholdFormData = z.output<typeof householdInputSchema>;
 
 export const movementInputSchema = z.object({
 	evacuee_id: z.string().min(1),
