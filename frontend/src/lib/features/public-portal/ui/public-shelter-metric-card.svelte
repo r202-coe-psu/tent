@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
-	import Card from './ui/card/card.svelte';
+	import Card from '$lib/components/ui/card/card.svelte';
 
 	let {
 		title,
