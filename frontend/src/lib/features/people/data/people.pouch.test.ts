@@ -11,6 +11,8 @@ let testDb: PouchDB.Database;
 vi.mock('$lib/db/shelter', () => ({
 	SHELTER_CODE: 'SH001',
 	SHELTER_DB: 'shelter_sh001',
+	getShelterCode: () => 'SH001',
+	getShelterDb: () => 'shelter_sh001',
 	shelterDb: () => testDb
 }));
 
