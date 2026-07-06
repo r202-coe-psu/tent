@@ -8,7 +8,7 @@ covers the _how_ — naming, structure, and coding patterns every contributor mu
 
 ## Contents
 
-1. [Git workflow](#1-git-workflow)
+1. [Git workflow](#1-git-workflow) — branches, commits, PRs, **pre-commit quality gate**
 2. [File & directory naming](#2-file--directory-naming)
 3. [TypeScript conventions](#3-typescript-conventions)
 4. [Feature architecture in practice](#4-feature-architecture-in-practice)
@@ -77,6 +77,29 @@ fixed bug in shelter
 - Rebase on `main` before requesting review — no merge commits.
 - Squash is allowed when the commit history inside the PR is noise (WIP commits);
   keep it when commits tell a meaningful story.
+
+### Pre-commit quality gate
+
+The repo root runs **[Lefthook](https://github.com/evilmartians/lefthook)** (`lefthook.yml`) as a
+pre-commit hook. When staged files touch `frontend/`, it runs — in order, fail-fast:
+
+| Step | Command       | What it catches                                      |
+| ---- | ------------- | ---------------------------------------------------- |
+| 1    | `pnpm lint`   | formatting drift, ESLint violations                |
+| 2    | `pnpm check`  | TypeScript / Svelte type errors (`svelte-check`)     |
+| 3    | `pnpm test`   | broken domain/data logic (Vitest)                    |
+
+This mirrors the Jenkins staging pipeline (lint → type-check → unit tests). Hooks are installed
+when you run `pnpm install` at the **repo root** (see `CONTRIBUTING.md` §1).
+
+- **Scope:** only runs when `frontend/` files are staged. Pure docs/config commits at the repo
+  root skip the gate.
+- **Manual run:** `pnpm exec lefthook run pre-commit` from the repo root.
+- **Bypass (emergency only):** `LEFTHOOK=0 git commit` or `git commit --no-verify`. Don't make
+  this the default — fix the failure instead.
+
+Treat a green pre-commit the same as the §2 definition-of-done checklist for items 1–3. Item 4
+(`svelte-autofixer`) is still manual before you push.
 
 ---
 
@@ -603,4 +626,4 @@ Test descriptions should read as specifications:
 
 ---
 
-_Last updated: 2026-06-10_
+_Last updated: 2026-07-07_
