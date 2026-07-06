@@ -31,6 +31,8 @@ vi.mock('$lib/features/operations', async () => {
 });
 
 import { KitchenPouchRepository } from './kitchen.pouch';
+import { toRequisitionInput } from '../domain/meal-calc';
+import { computeMealVariance } from '../domain/meal-variance';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -302,5 +304,70 @@ describe('KitchenPouchRepository.gasCylinderType — CRUD', () => {
 
 		await repo.deleteGasCylinderType(updated);
 		expect(await repo.listGasCylinderTypes()).toHaveLength(0);
+	});
+});
+
+// The ticket's demo, as reproducible evidence: requisition (deduct stock) →
+// service record → variance summary. Bypasses the SOP-calc plan entrypoint
+// (createMealPlan directly with recipes) so it stays green regardless of the
+// unrelated sop-ratios breakage on develop.
+describe('T-27 demo chain — requisition → service record → variance', () => {
+	let repo: KitchenPouchRepository;
+
+	beforeEach(async () => {
+		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
+		repo = new KitchenPouchRepository();
+		await seedStock('item:rice', 100); // 100 kg on hand
+	});
+
+	it('plans 100, issues rice, serves 85 → variance summary reads under-plan', async () => {
+		// 1. Plan a dinner for 100 people (15 kg rice = 15000 g recipe qty).
+		const plan = await repo.createMealPlan(
+			{
+				date: '2026-07-20',
+				meal: 'dinner',
+				headcount: { total: 100, halal: 0, soft_food: 0, infant: 0 },
+				recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 15000 }]
+			},
+			ctx
+		);
+		await repo.confirmMealPlan(plan);
+
+		// 2. Requisition off the plan — deducts stock via stock_ledger (T-26).
+		const reqInput = toRequisitionInput(plan);
+		const issued = reqInput.items.map((i) => ({ ...i, qty_issued: i.qty_requested }));
+		await repo.issueRequisition({ meal_plan_id: plan._id, items: issued }, ctx);
+
+		// 3. Record what actually happened at service: served 85, wasted 3, 7 external.
+		const svc = await repo.recordMealService(
+			{
+				date: '2026-07-20',
+				meal: 'dinner',
+				served: 85,
+				waste: 3,
+				external: { volunteers: 4, outside_evacuees: 3 }
+			},
+			ctx
+		);
+
+		// 4. Variance summary joins service ↔ plan (same date:meal) and compares.
+		const storedPlan = await repo.getMealPlan('2026-07-20', 'dinner');
+		const v = computeMealVariance(svc, storedPlan);
+
+		expect(v.planned).toBe(100);
+		expect(v.served).toBe(85);
+		expect(v.waste).toBe(3);
+		expect(v.external).toBe(7); // volunteers 4 + outside 3
+		expect(v.variance).toBe(-15); // served 85 − planned 100
+		expect(v.variance_pct).toBe(-15);
+		expect(v.status).toBe('under'); // −15% is beyond the ±5% band → next round can plan fewer
+
+		// Stock was really deducted: 100 kg on hand − 15 kg issued = 85 kg on hand.
+		const all = await testDb.allDocs({ include_docs: true });
+		const riceOnHand = all.rows
+			.map((r) => r.doc as unknown as Record<string, unknown>)
+			.filter((d) => d?.type === 'stock_ledger' && d.item_id === 'item:rice')
+			.reduce((sum, d) => sum + (d.qty as number), 0);
+		expect(riceOnHand).toBeCloseTo(85, 6);
 	});
 });
