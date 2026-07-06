@@ -4,7 +4,6 @@ import { toast } from 'svelte-sonner';
 import { useCreateMasterVersion, useCreateOverrideVersion } from './use-create-version';
 import { useMasterVersionHistory, useOverrideVersionHistory } from './use-version-history';
 import { sopRatioKeys, sopVersionKeys } from './queries';
-import { getShelterCode } from '$lib/db/shelter';
 
 vi.mock('$lib/db/shelter', () => ({
 	getShelterCode: vi.fn(() => 'SH001')
