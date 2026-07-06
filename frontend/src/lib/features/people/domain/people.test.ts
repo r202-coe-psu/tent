@@ -6,9 +6,9 @@ import {
 	applyMovementToStay,
 	isEvacuee,
 	createHousehold,
-	isHousehold
+	isHousehold,
+	migrateHouseholdV3ToV4
 } from './people';
-import { migrateHouseholdV3ToV4 } from '../data/people.pouch';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
