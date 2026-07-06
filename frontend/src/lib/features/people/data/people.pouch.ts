@@ -25,9 +25,6 @@ import {
 } from '../domain/people';
 import type { PeopleRepository } from './people.repository';
 
-
-
-
 /**
  * PouchDB-backed repository for the people feature. The only file here that
  * knows PouchDB exists — everything goes through the {@link Repository}
