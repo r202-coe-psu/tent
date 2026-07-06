@@ -24,8 +24,6 @@ import {
 } from '../domain/kitchen';
 import type { KitchenRepository } from './kitchen.repository';
 
-
-
 export class KitchenPouchRepository implements KitchenRepository {
 	private readonly repo: Repository;
 
