@@ -7,7 +7,7 @@
 	import Users from '@lucide/svelte/icons/users';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/db/shelter';
+	import { getShelterCode } from '$lib/db/shelter';
 	import {
 		useCreateMealPlanCalc,
 		useOccupancyHeadcount,
@@ -102,7 +102,7 @@
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
-		const ctx = { shelterCode: SHELTER_CODE, createdBy: authStore.user?.name ?? 'staff' };
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
 			await createCalc.mutateAsync({
 				date,
@@ -237,7 +237,7 @@
 					</p>
 					<p class="text-xs text-muted-foreground">
 						SOP: {sopProfile.data.name} v{sopProfile.data.version}
-						· {sopProfile.data.ratios.rice_g_per_person_meal} ก./คน/มื้อ
+						· 200 ก./คน/มื้อ
 					</p>
 				</div>
 			{/if}

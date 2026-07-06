@@ -62,9 +62,9 @@ export {
 	type ScreeningInput
 } from './domain/people';
 
-// Data — repository contract + PouchDB binding
 export type { PeopleRepository } from './data/people.repository';
-export { peopleRepository, SHELTER_CODE, SHELTER_DB } from './data/people.pouch';
+export { peopleRepository } from './data/people.pouch';
+export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
 // Application — TanStack Query hooks + changes-feed live-query wiring
 export {

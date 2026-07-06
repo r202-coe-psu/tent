@@ -24,9 +24,9 @@
 		useUpdateHousehold,
 		useUpdateEvacuee,
 		useCheckInEvacuee,
-		peopleRepository,
-		SHELTER_CODE
+		peopleRepository
 	} from '../index';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	let {
 		onsubmit,
@@ -113,9 +113,7 @@
 
 		try {
 			const ctx = {
-				// Repo writes to the fixed SHELTER_DB; keep shelter_code consistent with it
-				// (multi-shelter Pouch not implemented yet — do not stamp a selected shelter).
-				shelterCode: SHELTER_CODE,
+				shelterCode: getShelterCode(),
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 
@@ -239,7 +237,7 @@
 			// occupancy views and movement history depend on the movement stream
 			// (current_stay is only a snapshot, schema.md §1.1).
 			const ctx = {
-				shelterCode: SHELTER_CODE,
+				shelterCode: getShelterCode(),
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 			const finishedEvacuee = await checkInMutation.mutateAsync({

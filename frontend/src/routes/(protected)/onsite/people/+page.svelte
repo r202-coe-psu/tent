@@ -7,10 +7,10 @@
 		EvacueeWristbandSuccess,
 		useCreateEvacuee,
 		useCreateScreening,
-		SHELTER_CODE,
 		type EvacueeInput,
 		type Evacuee
 	} from '$lib/features/people';
+	import { getShelterCode } from '$lib/db/shelter';
 	import Zap from '@lucide/svelte/icons/zap';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import { page } from '$app/stores';
@@ -25,9 +25,7 @@
 
 	async function handleRegister(input: EvacueeInput, symptoms: string[]) {
 		const ctx = {
-			// Repo writes to the fixed SHELTER_DB — keep shelter_code consistent with it
-			// (multi-shelter Pouch not implemented yet).
-			shelterCode: SHELTER_CODE,
+			shelterCode: getShelterCode(),
 			createdBy: authStore.user?.name ?? 'unknown'
 		};
 		const track = isFastTrack ? 'fast_track' : symptoms.length > 0 ? 'fast_track' : 'normal';
