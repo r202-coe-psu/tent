@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-06 # CR-031 item master category; CR-032 reverted to proposed pending real net-lynx sign-off (renumbered from CR-031 to resolve collision with develop); index ครบ CR-001..032
+updated: 2026-07-06 # CR-032 donation campaign cutoff; CR-033 stock ledger purchase reason (renumbered from duplicate CR-032); index ครบ CR-001..033
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -48,4 +48,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-030](CR-030-kitchen-requisition-unit-must-match-item-master.md) | Kitchen requisition ledger unit must match `item_master.base_unit` (T-26) — แก้ `RECIPE_TO_STOCK_ITEM` unit `g`→`kg` (แปลงก่อนเขียน ledger), แก้ schema.md §2.5 ให้ตรง §2.6 (ไม่แก้ base_unit/seed) | approved | volatile | 2026-07-03 | docs/data/schema.md §2.5, features/kitchen/{domain,data} |
 | [CR-031](CR-031-item-master-schema-reconciliation.md) | Item Master Schema Reconciliation — เพิ่มฟิลด์ `category` (str, opt) ใน `item_master` ให้สอดคล้อง spec↔code; schema_v 2 คงเดิม (reconcile) | done | volatile | 2026-07-04 (done 07-05) | docs/data/schema.md §4.2, features/catalog/domain/catalog.ts |
 | [CR-032](CR-032-donation-campaign-cutoff-rules.md) | เพิ่ม needs[].status ใน donation_campaign สำหรับระบบ Force Cut-off และขยับ schema_v เป็น 2 | proposed | volatile | 2026-07-06 | schema.md §2.4, schema_v donation_campaign 1→2, operations.ts |
-| [CR-032](CR-032-stock-ledger-purchase-reason.md) | Add `purchase` to `stock_ledger.reason` enum; schema_v 1→2; map purchase source → purchase reason in `createReceiveEntry` (renumbered from CR-031 to resolve collision with develop) | proposed | volatile | 2026-07-05 | docs/data/schema.md §2.1, features/operations/domain/operations.ts, features/operations/data/operations.pouch.ts |
+| [CR-033](CR-033-stock-ledger-purchase-reason.md) | Add `purchase` to `stock_ledger.reason` enum; schema_v 1→2; map purchase source → purchase reason in `createReceiveEntry` (renumbered CR-032→CR-033 to resolve duplicate with donation campaign cutoff) | proposed | volatile | 2026-07-05 | docs/data/schema.md §2.1, features/operations/domain/operations.ts, features/operations/data/operations.pouch.ts |
