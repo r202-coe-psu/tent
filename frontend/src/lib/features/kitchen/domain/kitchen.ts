@@ -125,12 +125,19 @@ export const kitchenRequisitionInputSchema = z.object({
 	meal_plan_id: z.string().nullable().default(null),
 	items: z
 		.array(
-			z.object({
-				item_id: z.string().min(1),
-				qty_requested: z.number().positive(),
-				qty_issued: z.number().min(0),
-				unit: z.string().trim().min(1)
-			})
+			z
+				.object({
+					item_id: z.string().min(1),
+					qty_requested: z.number().positive(),
+					qty_issued: z.number().min(0),
+					unit: z.string().trim().min(1)
+				})
+				// Issuing more than requested is meaningless — a requisition line can
+				// short (partial issue) but never over-issue. Enforced here so the
+				// invariant holds outside the UI clamp (assessRequisition's issuable).
+				.refine((i) => i.qty_issued <= i.qty_requested, {
+					message: 'qty_issued cannot exceed qty_requested'
+				})
 		)
 		.min(1, 'At least one item required')
 });

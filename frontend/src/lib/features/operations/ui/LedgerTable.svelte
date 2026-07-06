@@ -9,10 +9,10 @@
 	let { filterItemId = undefined }: { filterItemId?: string } = $props();
 
 	// Fetch stock movements ledger
-	const ledgerQuery =
-		filterItemId !== undefined ? useLedgerByItem(() => filterItemId!) : useLedger();
 	const itemsQuery = useSupplyItems();
-
+	const allLedgerQuery = useLedger(() => !filterItemId);
+	const filteredLedgerQuery = useLedgerByItem(() => filterItemId);
+	const ledgerQuery = $derived(filterItemId ? filteredLedgerQuery : allLedgerQuery);
 
 	const ledger = $derived(ledgerQuery.data ?? []);
 	// Sort by occurred_at descending to show newest entries first
@@ -32,7 +32,6 @@
 	// Thai translation for ledger reason
 	const REASON_LABELS: Record<string, string> = {
 		receive: 'รับเข้าคลัง',
-		purchase: 'จัดซื้อ',
 		distribute: 'แจกจ่าย',
 		requisition: 'เบิกจ่ายโรงครัว',
 		adjust: 'ปรับปรุงคลัง',

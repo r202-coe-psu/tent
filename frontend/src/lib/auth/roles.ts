@@ -16,11 +16,7 @@ export const SHELTER_MANAGER = 'shelter_manager';
 export const WAREHOUSE_STAFF = 'warehouse_staff';
 
 /** Capability roles a shelter_manager is allowed to grant (per spec §1.1). */
-export const STAFF_CAPABILITIES = [
-	'registration_staff',
-	'kitchen_staff',
-	WAREHOUSE_STAFF
-] as const;
+export const STAFF_CAPABILITIES = ['registration_staff', 'kitchen_staff', WAREHOUSE_STAFF] as const;
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 
 /** Every capability an SA may grant alongside the shelter scope. */
