@@ -11,6 +11,7 @@
 		type Evacuee
 	} from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import Zap from '@lucide/svelte/icons/zap';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import { page } from '$app/stores';
