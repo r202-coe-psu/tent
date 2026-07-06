@@ -9,8 +9,8 @@ PouchDB.plugin(memory);
 let testDb: PouchDB.Database;
 
 vi.mock('$lib/db/shelter', () => ({
-	SHELTER_CODE: 'SH001',
-	SHELTER_DB: 'shelter_sh001',
+	getShelterCode: () => 'SH001',
+	getShelterDb: () => 'shelter_sh001',
 	shelterDb: () => testDb
 }));
 
@@ -53,7 +53,7 @@ describe('KitchenPouchRepository.issueRequisition — spike: ledger deduction pa
 
 	beforeEach(async () => {
 		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
-		repo = new KitchenPouchRepository();
+		repo = new KitchenPouchRepository(testDb.name);
 		// Ample on-hand for every item these tests issue.
 		await seedStock('item:rice', 1000);
 		await seedStock('item:egg', 1000, 'ฟอง');
@@ -135,7 +135,7 @@ describe('KitchenPouchRepository.issueRequisition — spike: ledger deduction pa
 	it('refuses to issue more than the on-hand balance (concurrent over-issue guard)', async () => {
 		// Fresh db with only 5 kg on hand — issuing 6 must be rejected before any write.
 		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
-		repo = new KitchenPouchRepository();
+		repo = new KitchenPouchRepository(testDb.name);
 		await seedStock('item:rice', 5);
 
 		await expect(
@@ -159,7 +159,7 @@ describe('KitchenPouchRepository.createMealPlan — calc_source audit trail (CR-
 
 	beforeEach(() => {
 		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
-		repo = new KitchenPouchRepository();
+		repo = new KitchenPouchRepository(testDb.name);
 	});
 
 	const calcSource = {
@@ -191,7 +191,7 @@ describe('KitchenPouchRepository.confirmMealPlan — state transition', () => {
 
 	beforeEach(() => {
 		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
-		repo = new KitchenPouchRepository();
+		repo = new KitchenPouchRepository(testDb.name);
 	});
 
 	const draftInput = {
@@ -222,7 +222,7 @@ describe('KitchenPouchRepository.gasCylinderType — CRUD', () => {
 
 	beforeEach(() => {
 		testDb = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
-		repo = new KitchenPouchRepository();
+		repo = new KitchenPouchRepository(testDb.name);
 	});
 
 	const input = {

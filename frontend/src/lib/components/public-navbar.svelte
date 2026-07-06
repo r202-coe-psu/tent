@@ -54,7 +54,7 @@
 			</a>
 
 			<a
-				href={resolve('/public/shelters')}
+				href={resolve('/public/shelters' as any)}
 				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
 			>
@@ -63,7 +63,7 @@
 			</a>
 
 			<a
-				href={resolve('/public/family-search')}
+				href={resolve('/public/family-search' as any)}
 				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
 			>
@@ -84,7 +84,7 @@
 			</a>
 
 			<a
-				href={resolve('/public/transparency')}
+				href={resolve('/public/transparency' as any)}
 				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
 			>
@@ -119,7 +119,7 @@
 						ลงทะเบียนอาสาสมัคร
 					</a>
 					<a
-						href={resolve('/public/volunteers/shifts')}
+						href={resolve('/public/volunteers/shifts' as any)}
 						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
 					>
 						ตรวจสอบตารางกะงาน
