@@ -1,4 +1,5 @@
 <script lang="ts">
+	import QRCode from 'qrcode';
 	import X from '@lucide/svelte/icons/x';
 	import Printer from '@lucide/svelte/icons/printer';
 	import type { Evacuee } from '$lib/features/people';
@@ -13,6 +14,20 @@
 		evacuee: Evacuee;
 		onClose: () => void;
 	} = $props();
+
+	let qrUrl = $state<string | null>(null);
+
+	$effect(() => {
+		if (!show) return;
+		qrUrl = null;
+		QRCode.toDataURL(evacuee._id, {
+			width: 160,
+			margin: 1,
+			color: { dark: '#0f172a', light: '#ffffff' }
+		}).then((url) => {
+			qrUrl = url;
+		});
+	});
 </script>
 
 {#if show}
@@ -44,26 +59,13 @@
 				<div
 					class="mx-auto flex h-40 w-40 flex-col items-center justify-center space-y-2 rounded-lg border border-slate-200 bg-slate-100 p-2"
 				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						class="size-28"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<rect width="5" height="5" x="3" y="3" rx="1" />
-						<rect width="5" height="5" x="16" y="3" rx="1" />
-						<rect width="5" height="5" x="3" y="16" rx="1" />
-						<path d="M21 16V21H16" />
-						<path d="M21 16H16" />
-						<path d="M9 3H13" />
-						<path d="M21 9V13" />
-						<path d="M9 21H13" />
-						<path d="M3 9V13" />
-					</svg>
+					{#if qrUrl}
+						<img src={qrUrl} alt="QR Code" class="size-28 object-contain" />
+					{:else}
+						<div class="flex size-28 items-center justify-center text-[10px] text-slate-400">
+							กำลังสร้าง QR...
+						</div>
+					{/if}
 					<span class="font-mono text-[9px] tracking-wider text-slate-500">
 						ID: {evacuee._id.split(':')[1] || evacuee._id}
 					</span>
