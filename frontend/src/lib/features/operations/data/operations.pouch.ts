@@ -1,18 +1,39 @@
 import { namedLocalDb } from '$lib/db/pouch';
 import { createRepository, type Repository } from '$lib/db/repository';
-import { SHELTER_CODE, SHELTER_DB, shelterDb as _shelterDb } from '$lib/db/shelter';
+import { getShelterDb } from '$lib/db/shelter';
+// import { getShelterDb, shelterDb as _shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import {
 	isStockLedger,
 	stockBalance,
-	createStockLedger,
-	receiveInputSchema,
+	createReceiveEntry,
 	type StockLedger,
 	type ReceiveInput
 } from '../domain/operations';
 import type { OperationsRepository } from './operations.repository';
+import { supplyRepository, type SupplyItem } from '$lib/features/supply';
 
-export { SHELTER_CODE, SHELTER_DB };
+/**
+ * Validates a receive entry against its catalog item before it's written to the
+ * ledger. Pulled out of `receiveStock` so the invariant is testable directly
+ * (plain inputs, no PouchDB) and easy to find when `item_master` eventually
+ * replaces `supply_item` (CR-013).
+ */
+export function assertReceiveAgainstCatalog(entry: StockLedger, item: SupplyItem | null): void {
+	if (!item) {
+		throw new Error(
+			`Unknown item: ${entry.item_id} — item must exist in the catalog before receiving stock`
+		);
+	}
+	if (item.unit !== entry.unit) {
+		throw new Error(
+			`Unit mismatch for item ${entry.item_id}: expected ${item.unit}, got ${entry.unit}`
+		);
+	}
+	if (item.perishable && !entry.lot?.expiry) {
+		throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
+	}
+}
 
 /**
  * PouchDB-backed repository implementation for Operations (Stock Ledger).
@@ -20,7 +41,7 @@ export { SHELTER_CODE, SHELTER_DB };
 export class OperationsPouchRepository implements OperationsRepository {
 	private readonly repo: Repository;
 
-	constructor(dbName: string = SHELTER_DB) {
+	constructor(dbName: string = getShelterDb()) {
 		this.repo = createRepository(namedLocalDb(dbName));
 	}
 
@@ -43,20 +64,21 @@ export class OperationsPouchRepository implements OperationsRepository {
 	}
 
 	async receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger> {
-		const d = receiveInputSchema.parse(input);
-		const entry = createStockLedger({ ...d, reason: 'receive' }, ctx);
+		const entry = createReceiveEntry(input, ctx);
+		const item = await supplyRepository().getItem(entry.item_id);
+		assertReceiveAgainstCatalog(entry, item);
 		return this.addLedgerEntry(entry);
 	}
 }
 
 let singleton: OperationsRepository | null = null;
+let singletonDbName: string | null = null;
 
-/**
- * Singleton accessor for the operations repository.
- */
 export function operationsRepository(): OperationsRepository {
-	if (!singleton) singleton = new OperationsPouchRepository();
+	const currentDb = getShelterDb();
+	if (!singleton || singletonDbName !== currentDb) {
+		singleton = new OperationsPouchRepository(currentDb);
+		singletonDbName = currentDb;
+	}
 	return singleton;
 }
-
-export const shelterDb = _shelterDb;

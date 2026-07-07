@@ -2,7 +2,7 @@
 title: "Task Breakdown — Platform/Core"
 status: active
 created: 2026-06-05
-updated: 2026-06-22
+updated: 2026-07-07
 module: core
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (2026-06-22) แก้ public-tier redaction (T-01) + donation schema_v2/donation_slot (T-02) + public read-model (T-35)
 ---
@@ -21,8 +21,8 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 > **สถานะ ณ 2026-06-14:** Legend — ✅ done · 🔄 in progress/partial · ⬜ not started
 >
 > - **T-01 🔄** — Role kernel (`$lib/auth/roles.ts`: SYSTEM_ADMIN, SHELTER_MANAGER, STAFF_CAPABILITIES, guard helpers) + auth store + route guards done; role/shelter-scope enforcement + full role-permission matrix ยังไม่ครบ DoD
-> - **T-02 🔄** — Base schema + PouchDB/live-query/repository pattern + Central-first sync design (`$lib/db/`) done; household/zone/supply/ledger/donation expansion ยังไม่ได้ build
-> - **T-03 🔄** — Shared typed errors, api-core, auth guard pattern, BFF convention (`/api/v1/`) in place; formal convention doc + phase contract freeze ยังไม่ทำ
+> - **T-02 🔄** — Base schema + remote-first data path + active endpoint strategy (Central-first, Edge fallback) วางแนวแล้ว; household/zone/supply/ledger/donation expansion ยังไม่ได้ build
+> - **T-03 🔄** — Shared typed errors, api-core, auth guard pattern, BFF convention (`/api/v1/`) in place; convention doc เรื่อง endpoint/session failover + phase contract freeze ยังไม่ทำ
 > - **T-20 ถึง Q-03 ⬜** — ยังไม่ได้เริ่ม (รอ Foundation Gate)
 
 | ID   | Status           | Feature / Task                                                              | FR        | Phase | Stage | Scope  | Raw MD | AI×    | Adj MD | Depends |
@@ -60,18 +60,19 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ### T-02 — Data-model expansion (household, zone, supply, ledger, donation) — additive (FR-34)
 
-**Description:** วาง data model ของทั้งระบบ (**greenfield** — เริ่มจาก base schema ใน walking skeleton: person, screening, movement ตาม baseline FR-1–20) แล้วขยายแบบ **additive**: household, zone, supply/ledger, donation บน Central CouchDB รวมถึง Central-first sync/conflict strategy (LAN Edge เป็น outage fallback replica เท่านั้น) — **fan-out ใหญ่สุดของโครงการ** (block T-04/08/10/17/18/19) และเป็น tech risk #1 (CouchDB/PouchDB offline-first) เจ้าของคือ Lead B ตาม schedule decision
+**Description:** วาง data model ของทั้งระบบ (**greenfield** — เริ่มจาก base schema ใน walking skeleton: person, screening, movement ตาม baseline FR-1–20) แล้วขยายแบบ **additive**: household, zone, supply/ledger, donation บน Central CouchDB ภายใต้สถาปัตยกรรม **remote-first** โดยให้ active endpoint เป็น Central ก่อนเสมอ และสลับไป Edge เฉพาะตอน Central/WAN ใช้งานไม่ได้ (LAN Edge เป็น outage fallback replica เท่านั้น) — **fan-out ใหญ่สุดของโครงการ** (block T-04/08/10/17/18/19) และเป็น tech risk #1 (endpoint failover/failback + data consistency) เจ้าของคือ Lead B ตาม schedule decision
 
 **Definition of Done:**
 
 - Schema ทุก entity ตรง data dictionary + ERD ใน `docs/data/` พร้อม validation
-- Sync/conflict design (offline-first) เขียนเป็นเอกสาร + พิสูจน์ด้วย test conflict scenario จริงบน CouchDB โดยกำหนดว่า app เขียน local PouchDB ก่อน, active remote มีครั้งละหนึ่งเป้าหมาย (Central, Edge fallback, หรือ local-only), Edge sync backlog ขึ้น Central เมื่อ WAN กลับมา และ failback ไม่สร้าง duplicate
+- Sync/conflict design (remote-first) เขียนเป็นเอกสาร + พิสูจน์ด้วย test conflict scenario จริงบน CouchDB โดยกำหนดว่า write ยิงไป active endpoint โดยตรง (Central ก่อน, Edge fallback เมื่อจำเป็น), active remote มีครั้งละหนึ่งเป้าหมายเท่านั้น, **ไม่มี local-only write queue** (ถ้า Central และ Edge ไม่พร้อมให้เข้าโหมด disconnected แบบ status-only, ไม่มี read-only local cache) และใช้ policy เดียวกันทั้งระบบ: automatic retry 3 attempts, เกินนั้นแสดงแบนเนอร์ "cannot connect" แบบชัดเจน และให้ผู้ใช้กด force retry ได้; Edge backlog ขึ้น Central เมื่อ WAN กลับมา และ failback ไม่สร้าง duplicate
 - ส่วนขยายเป็น additive ต่อ base schema — ไม่ breaking ต่อ collection ที่ทีมอื่นเริ่มใช้แล้ว (มี regression test)
 - Seed data + ตัวอย่าง query ต่อ entity ให้ทีม copy pattern, ผ่าน review แล้วทีม downstream เริ่มงานได้
 - **CR-005 §F (additive, backward-compatible):** `donation` §2.3 bump **schema_v 1→2** (+`logistics`, `booking_ref`, `donor.line_id/email`, `items[].category/condition/note` — ทั้งหมด optional/sys, ไม่ backfill) + **`donation_slot` §2.13 doc type ใหม่** (DN-5) + index + view `slot_availability`/`needs_open`; อัปเดต `validate_doc_update` (central **และ** edge) ให้รับ field/type ใหม่ก่อน rollout — feed T-60
 
+### T-03 — Shared API convention + contract freeze for phase
 
-**Description:** กำหนดมาตรฐาน API ใช้ร่วมทุกทีม (naming, error shape, pagination, auth, versioning, remote/session state) แล้ว **freeze contract ของ phase** — กันปัญหา 4 ทีมต่างคนต่างออกแบบจน integrate ไม่ได้ตอน gate
+**Description:** กำหนดมาตรฐาน API ใช้ร่วมทุกทีม (naming, error shape, pagination, auth, versioning, active endpoint/session state) แล้ว **freeze contract ของ phase** — กันปัญหา 4 ทีมต่างคนต่างออกแบบจน integrate ไม่ได้ตอน gate โดยยึด remote-first semantics: Central-first + Edge fallback, แยก session ต่อ endpoint, canonical live-update ผ่าน app-level event channel, และกำหนด failback/retry UX expectation ให้ชัด
 
 **Definition of Done:**
 

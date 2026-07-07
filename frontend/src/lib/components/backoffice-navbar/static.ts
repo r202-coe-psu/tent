@@ -16,7 +16,9 @@ import {
 	Calculator,
 	HandHeart,
 	MapPin,
-	UtensilsCrossed
+	UtensilsCrossed,
+	Tent,
+	Home
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -53,8 +55,20 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '2. บริหารทรัพยากร',
 		items: [
 			{ label: 'การประเมินประจำวัน (Daily SOP)', href: null, icon: ClipboardList },
-			{ label: 'คลังสิ่งของและบริจาค', href: null, icon: Package },
-			{ label: 'ครัวกลางและอาหาร', href: resolve('/back-office/kitchen'), icon: UtensilsCrossed }
+			{
+				label: 'คลังสิ่งของและบริจาค',
+				href: null,
+				icon: Package,
+				children: [
+					{ label: 'แผงควบคุมสต็อก', href: resolve('/back-office/supply'), icon: Warehouse },
+					{ label: 'กระดานรับบริจาค', href: null, icon: HandHeart }
+				]
+			},
+			{
+				label: 'ครัวกลางและอาหาร',
+				href: resolve('/back-office/kitchen'),
+				icon: UtensilsCrossed
+			}
 		]
 	},
 	{
@@ -88,11 +102,27 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				href: null,
 				icon: Database,
 				children: [
-					{ label: '1. ข้อมูลบุคคล', href: null, icon: Users },
-					{ label: '2. คลังสินค้า', href: resolve('/back-office/catalog'), icon: Warehouse },
-					{ label: '3. พารามิเตอร์', href: null, icon: Calculator },
-					{ label: '4. อาสาสมัคร', href: null, icon: HandHeart },
-					{ label: '5. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{
+						label: '1. ข้อมูลบุคคล',
+						href: resolve('/back-office/registration-config'),
+						icon: Users
+					},
+					{
+						label: '2. ตั้งค่าศูนย์พักพิง',
+						href: resolve('/back-office/shelter-config'),
+						icon: Tent,
+						requiresAdmin: true
+					},
+					{
+						label: '3. ตั้งค่าครัวเรือน',
+						href: resolve('/back-office/household-master-data'),
+						icon: Home,
+						requiresAdmin: true
+					},
+					{ label: '4. คลังสินค้า', href: null, icon: Warehouse },
+					{ label: '5. พารามิเตอร์', href: null, icon: Calculator },
+					{ label: '6. อาสาสมัคร', href: null, icon: HandHeart },
+					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}
 		]

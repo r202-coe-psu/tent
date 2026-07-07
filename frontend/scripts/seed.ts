@@ -51,7 +51,11 @@ import {
 	type StockLedgerInput,
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
-import { createInitialProfile } from '$lib/features/sop-ratios/domain/sop-ratio';
+import {
+	createInitialProfile,
+	SOP_MASTER_SCHEMA_VERSION
+} from '$lib/features/sop-ratios/domain/sop-ratio';
+import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
@@ -390,37 +394,42 @@ async function seedCatalogSopRatios(): Promise<void> {
 
 	// Idempotent check: check if the Sphere Baseline master profile already exists in catalog DB
 	// We use the deterministic ID 'master_sphere_baseline' to do an O(1) direct document lookup
+	// NOTE: If the name "Sphere Baseline" is changed in the future, remember to update this deterministicId
+	// to prevent the script from accidentally creating a duplicate master profile.
 	const deterministicId = 'master_sphere_baseline';
 	const fullDocId = `sop_profile:${deterministicId}`;
-	const { status } = await couchReq('GET', `/catalog/${encodeURIComponent(fullDocId)}`);
+	const { status, data } = await couchReq('GET', `/catalog/${encodeURIComponent(fullDocId)}`);
+
+	let existingRev: string | undefined = undefined;
 
 	if (status === 200) {
-		console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" already exists, skipping');
-		return;
-	}
-
-	if (status !== 404) {
+		const doc = data as { _rev?: string; schema_v?: number };
+		if (doc.schema_v === SOP_MASTER_SCHEMA_VERSION) {
+			console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" already exists, skipping');
+			return;
+		}
+		existingRev = doc._rev;
+		console.log(
+			`  ⚠ catalog: SOP Ratio "Sphere Baseline" has stale schema_v (${doc.schema_v ?? 'missing'}), preparing upgrade...`
+		);
+	} else if (status !== 404) {
 		throw new Error(`seedCatalogSopRatios: unexpected status ${status} checking ${fullDocId}`);
 	}
 
-	const { profile, audit } = createInitialProfile(
-		'sop_profile',
-		'Sphere Baseline',
-		{
-			water_l_per_person_day: 15, // liters/person/day
-			rice_g_per_person_meal: 200, // grams/person/meal
-			toilet_per_person: 0.05 // toilets/person
-		},
-		{ createdBy: 'seed' }
-	);
+	const { profile, audit } = createInitialProfile('sop_profile', 'Sphere Baseline', validRatios, {
+		createdBy: 'seed'
+	});
 
 	// Override standard ULIDs with deterministic IDs for idempotency scan boundary
 	profile._id = fullDocId;
+	if (existingRev) {
+		profile._rev = existingRev;
+	}
 	audit.target_id = fullDocId;
 	audit._id = `audit:seed_sphere_baseline`;
 
 	await bulkDocs('catalog', [profile, audit]);
-	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded');
+	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
 }
 
 // ─── seedShelter ──────────────────────────────────────────────────────────────
@@ -437,18 +446,18 @@ async function seedShelter(): Promise<void> {
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวใจดี',
-			zone: 'Z1',
+			municipality_zone: 'Z1',
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ครอบครัวใหญ่ 4 คน'
 		},
 		{
 			label: 'ครอบครัวสุขสาย',
-			zone: 'Z1',
+			municipality_zone: 'Z1',
 			head_evacuee_id: null,
 			pets: [{ species: 'dog', count: 1 }]
 		},
-		{ label: 'ครอบครัวรักสงบ', zone: 'Z2', head_evacuee_id: null, pets: [] }
+		{ label: 'ครอบครัวรักสงบ', municipality_zone: 'Z2', head_evacuee_id: null, pets: [] }
 	];
 	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, CTX));
 
@@ -756,7 +765,7 @@ async function seedShelter2(): Promise<void> {
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวปัตตานี',
-			zone: 'Z1',
+			municipality_zone: 'Z1',
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ตัวอย่าง SH002'

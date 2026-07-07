@@ -19,6 +19,9 @@ export {
 	migrateShelterV2ToCurrent,
 	createShelterSchema,
 	updateShelterSchema,
+	EMPTY_ADMISSION_POLICY,
+	EMPTY_LUGGAGE_POLICY,
+	EMPTY_PARKING_POLICY,
 	type ShelterMaster,
 	type ShelterMasterV2,
 	type Zone

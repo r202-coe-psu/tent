@@ -2,7 +2,7 @@ import { namedLocalDb } from '$lib/db/pouch';
 import { createRepository, type Repository } from '$lib/db/repository';
 import { makeDocId, now, touch, type AuthorContext } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
-import { SHELTER_CODE, SHELTER_DB, shelterDb } from '$lib/db/shelter';
+import { getShelterDb, shelterDb } from '$lib/db/shelter';
 import {
 	createMealPlan,
 	createKitchenRequisition,
@@ -22,14 +22,13 @@ import {
 	type GasCylinderType,
 	type GasCylinderTypeInput
 } from '../domain/kitchen';
+import { stockBalance, isStockLedger, type StockLedger } from '$lib/features/operations';
 import type { KitchenRepository } from './kitchen.repository';
-
-export { SHELTER_CODE, SHELTER_DB };
 
 export class KitchenPouchRepository implements KitchenRepository {
 	private readonly repo: Repository;
 
-	constructor(dbName: string = SHELTER_DB) {
+	constructor(dbName: string) {
 		this.repo = createRepository(namedLocalDb(dbName));
 	}
 
@@ -54,6 +53,25 @@ export class KitchenPouchRepository implements KitchenRepository {
 		ctx: AuthorContext
 	): Promise<KitchenRequisition> {
 		const issuedItems = (input.items ?? []).filter((i) => (i.qty_issued ?? 0) > 0);
+
+		// 0. Re-read on-hand at write time and refuse to over-issue. assessRequisition
+		//    clamps the UI to the balance it saw, but two concurrent issues (two tabs /
+		//    two devices) can both pass that check and drive the ledger negative. This
+		//    re-check closes that window on this device; the append-only ledger has no
+		//    cross-device lock, so it is best-effort, not a hard serialization.
+		if (issuedItems.length > 0) {
+			const ledger = await this.repo.allByType<StockLedger>('stock_ledger', isStockLedger);
+			const balance = stockBalance(ledger);
+			const EPSILON = 1e-9; // guard against kg float drift (200 - 200 ≠ exactly 0)
+			for (const item of issuedItems) {
+				const onHand = balance.get(item.item_id) ?? 0;
+				if (item.qty_issued > onHand + EPSILON) {
+					throw new Error(
+						`issueRequisition: cannot issue ${item.qty_issued} ${item.unit} of ${item.item_id} — only ${onHand} on hand`
+					);
+				}
+			}
+		}
 
 		// 1. Pre-generate IDs for each stock_ledger entry that will be written.
 		//    Must happen before building the requisition doc (append-only → no updates).
@@ -146,8 +164,13 @@ export class KitchenPouchRepository implements KitchenRepository {
 }
 
 let singleton: KitchenRepository | null = null;
+let singletonDbName: string | null = null;
 
 export function kitchenRepository(): KitchenRepository {
-	if (!singleton) singleton = new KitchenPouchRepository();
+	const currentDb = getShelterDb();
+	if (!singleton || singletonDbName !== currentDb) {
+		singleton = new KitchenPouchRepository(currentDb);
+		singletonDbName = currentDb;
+	}
 	return singleton;
 }

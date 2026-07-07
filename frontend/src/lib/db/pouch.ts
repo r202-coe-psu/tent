@@ -20,6 +20,7 @@ const cookieFetch: typeof fetch = (url, opts) => fetch(url, { ...opts, credentia
 // (e.g. one database per scope).
 
 const namedDbs = new Map<string, PouchDB.Database>();
+const namedRemoteDbs = new Map<string, PouchDB.Database>();
 const namedSyncs = new Map<string, PouchDB.Replication.Sync<object>>();
 
 /** Local PouchDB for a named database (offline-capable, no auth needed). */
@@ -32,13 +33,23 @@ export function namedLocalDb(name: string): PouchDB.Database {
 	return db;
 }
 
+/** Remote CouchDB handle for a named database — one instance per name. */
+function namedRemoteDb(name: string): PouchDB.Database {
+	let db = namedRemoteDbs.get(name);
+	if (!db) {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		db = new PouchDB(buildRemoteUrl(`/${name}`), { fetch: cookieFetch } as any);
+		namedRemoteDbs.set(name, db);
+	}
+	return db;
+}
+
 /** Begin live, retrying sync for a named database. Idempotent per name. */
 export function startNamedSync(name: string, onAuthError?: (status: number) => void): void {
 	if (!browser) return;
 	if (namedSyncs.has(name)) return;
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const remote = new PouchDB(buildRemoteUrl(`/${name}`), { fetch: cookieFetch } as any);
+	const remote = namedRemoteDb(name);
 	const handler = namedLocalDb(name).sync(remote, { live: true, retry: true });
 
 	handler.on('error', (err) => {

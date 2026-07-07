@@ -1,0 +1,10 @@
+{
+	"name": "tent",
+	"private": true,
+	"scripts": {
+		"prepare": "lefthook install"
+	},
+	"devDependencies": {
+		"lefthook": "^1.13.6"
+	}
+}

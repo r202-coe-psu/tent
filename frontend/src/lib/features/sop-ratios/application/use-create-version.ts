@@ -25,7 +25,7 @@
 
 import { createMutation, useQueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
-import { SHELTER_CODE } from '$lib/db/shelter';
+import { getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { createNewVersion } from '../domain/sop-ratio';
 import type { SopMaster, SopOverride, SopRatioKey } from '../domain/sop-ratio';
@@ -154,8 +154,9 @@ export function useCreateOverrideVersion() {
 		mutationFn: async ({ prev, changes, reason, ctx }: CreateOverrideVersionInput) => {
 			// Guard: prevent cross-shelter writes — ctx.shelterCode must match current shelter.
 			// This is a defense-in-depth check; the route guard should prevent unauthorized access.
-			if (ctx.shelterCode !== SHELTER_CODE) {
-				throw new Error(`shelterCode mismatch: expected ${SHELTER_CODE}, got ${ctx.shelterCode}`);
+			const currentShelter = getShelterCode();
+			if (ctx.shelterCode !== currentShelter) {
+				throw new Error(`shelterCode mismatch: expected ${currentShelter}, got ${ctx.shelterCode}`);
 			}
 
 			// If changes is empty {}, Object.keys yields [] and hasChanges is false.
@@ -170,7 +171,7 @@ export function useCreateOverrideVersion() {
 
 			const result = createNewVersion(prev, changes, reason, ctx);
 
-			return sopOverrideRepository(SHELTER_CODE).createVersion(
+			return sopOverrideRepository(currentShelter).createVersion(
 				result.deactivatedPrev,
 				result.profile,
 				result.audit
