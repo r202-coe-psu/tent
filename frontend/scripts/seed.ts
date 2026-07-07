@@ -824,7 +824,6 @@ async function seedDashboardData(): Promise<void> {
 		'PHILIPPINES',
 		'INDONESIA',
 		'INDIA',
-		'UNITED STATES',
 		'UNKNOWN'
 	];
 	const STATUSES = [
