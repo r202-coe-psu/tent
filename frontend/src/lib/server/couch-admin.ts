@@ -77,7 +77,7 @@ export async function adminFetch<T>(path: string, init: RequestInit = {}): Promi
  * the `_admin` role. Throws 401/403 otherwise. This keeps admin endpoints from
  * being usable by anonymous or non-admin authenticated users.
  */
-export async function requireAdmin(cookie: string | null): Promise<void> {
+export async function requireAdmin(cookie: string | null): Promise<string> {
 	const { base } = adminConfig();
 	const res = await fetch(`${base}/_session`, {
 		headers: { Accept: 'application/json', ...(cookie ? { Cookie: cookie } : {}) }
@@ -85,9 +85,11 @@ export async function requireAdmin(cookie: string | null): Promise<void> {
 	const data = (await res.json().catch(() => null)) as {
 		userCtx?: { name: string | null; roles: string[] };
 	} | null;
+	const name = data?.userCtx?.name;
 	const roles = data?.userCtx?.roles ?? [];
-	if (!data?.userCtx?.name) throw error(401, 'Authentication required');
+	if (!name) throw error(401, 'Authentication required');
 	if (!roles.includes('_admin')) throw error(403, 'Admin privileges required');
+	return name;
 }
 
 /**

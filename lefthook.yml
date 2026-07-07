@@ -1,0 +1,18 @@
+# Pre-commit quality gate for frontend (matches Jenkins CI stages).
+# Install: pnpm install (root) — runs `lefthook install` via prepare script.
+
+pre-commit:
+  parallel: false
+  commands:
+    frontend-lint:
+      root: frontend/
+      glob: '**/*'
+      run: pnpm lint
+    frontend-check:
+      root: frontend/
+      glob: '**/*'
+      run: pnpm check
+    frontend-test:
+      root: frontend/
+      glob: '**/*'
+      run: pnpm test

@@ -65,14 +65,13 @@
 				ตรวจสอบศูนย์พักพิง
 			</a>
 
-			<a
-				href="/public/family-search"
+			<span
 				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
 			>
 				<Search class="h-4 w-4" />
 				สืบค้นญาติ
-			</a>
+			</span>
 
 			<a
 				href={resolve('/public/donations')}
@@ -86,15 +85,14 @@
 				บริจาคและจองคิว
 			</a>
 
-			<a
-				href="/public/transparency"
-				class="pointer-events-none hidden items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
+			<span
+				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
 			>
 				<FileText class="h-4 w-4" />
 				รายงานความโปร่งใส
 				<span class="text-[9px] font-bold text-muted-foreground/60">(เร็วๆ นี้)</span>
-			</a>
+			</span>
 
 			<!-- Dropdown for Volunteers (Hidden per T-28/29 Deferrals) -->
 			<div class="group relative hidden">
@@ -121,12 +119,12 @@
 					>
 						ลงทะเบียนอาสาสมัคร
 					</a>
-					<a
-						href="/public/volunteers/shifts"
-						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+					<span
+						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground opacity-60"
+						title="เร็วๆ นี้"
 					>
 						ตรวจสอบตารางกะงาน
-					</a>
+					</span>
 				</div>
 			</div>
 		</nav>

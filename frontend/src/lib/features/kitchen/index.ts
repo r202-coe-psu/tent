@@ -11,7 +11,8 @@ export {
 	toRequisitionInput,
 	assessRequisition,
 	RICE_RECIPE_ID,
-	RECIPE_TO_STOCK_ITEM
+	RECIPE_TO_STOCK_ITEM,
+	DEFAULT_RICE_G_PER_PERSON_MEAL
 } from './domain/meal-calc';
 export type {
 	MealCalcSource,
@@ -61,7 +62,7 @@ export {
 
 // Data — repository contract + PouchDB binding
 export type { KitchenRepository } from './data/kitchen.repository';
-export { kitchenRepository, SHELTER_CODE, SHELTER_DB } from './data/kitchen.pouch';
+export { kitchenRepository } from './data/kitchen.pouch';
 
 // Application — TanStack Query hooks + live-query wiring
 export {

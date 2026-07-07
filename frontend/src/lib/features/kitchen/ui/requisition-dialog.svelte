@@ -12,11 +12,11 @@
 		toRequisitionInput,
 		assessRequisition,
 		MEAL_PERIOD_LABELS,
-		SHELTER_CODE,
 		type MealPlan,
 		type RequisitionLineAssessment
 	} from '$lib/features/kitchen';
 	import { useStockBalance } from '$lib/features/operations';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	let { open = $bindable(false), plan = null }: { open?: boolean; plan?: MealPlan | null } =
 		$props();
@@ -83,7 +83,7 @@
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		if (!plan || !requested || 'error' in requested) return;
-		const ctx = { shelterCode: SHELTER_CODE, createdBy: authStore.user?.name ?? 'staff' };
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		const items = rows.map((r) => ({
 			item_id: r.a.item_id,
 			qty_requested: r.a.qty_requested,
