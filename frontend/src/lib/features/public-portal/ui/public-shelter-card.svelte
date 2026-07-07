@@ -55,7 +55,7 @@
 			<span>{shelter.address}</span>
 		</div>
 		<div class="ml-5">
-			ระยะห่างจากจุดศูนย์กลาง: <span class="font-bold text-foreground">{shelter.distance} กม.</span>
+			ระยะห่างจากจุดผู้ใช้: <span class="font-bold text-foreground">{shelter.distance} กม.</span>
 		</div>
 	</div>
 
