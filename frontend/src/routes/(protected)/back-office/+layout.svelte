@@ -4,6 +4,7 @@
 	import { backofficeNavbarGroups, isGroup } from '$lib/components/backoffice-navbar/static';
 	import { page } from '$app/state';
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin, isShelterManager, shelterCodeFromRoles } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
@@ -67,12 +68,18 @@
 		return [];
 	});
 
-	// Auto-select the first available shelter when availableShelters list is loaded/changed
+	// Default to the user's own shelter when nothing valid is selected yet;
+	// fall back to the first available shelter for roles with no home shelter
+	// (system_admin). Bound directly to shelterStore — the store
+	// getShelterCode()/getShelterDb() actually read — so switching here
+	// re-scopes back-office data instead of being a disconnected value.
 	$effect(() => {
 		const shelters = availableShelters;
-		if (shelters.length > 0 && backofficeState.selectedShelter === '') {
-			backofficeState.selectedShelter = shelters[0].code;
-		}
+		if (shelters.length === 0) return;
+		const current = shelterStore.selectedShelterCode;
+		if (current && shelters.some((s) => s.code === current)) return;
+		const ownShelter = shelters.find((s) => s.code === userShelterCode);
+		shelterStore.selectedShelterCode = ownShelter?.code ?? shelters[0].code;
 	});
 </script>
 
@@ -96,7 +103,7 @@
 				<div class="flex items-center gap-2 md:gap-3">
 					<div class="flex items-center gap-1.5 text-xs text-muted-foreground">
 						<span class="hidden shrink-0 sm:inline">ศูนย์อพยพ:</span>
-						<Select type="single" bind:value={backofficeState.selectedShelter}>
+						<Select type="single" bind:value={shelterStore.selectedShelterCode}>
 							<SelectTrigger class="h-9 w-[200px] md:w-[280px]">
 								<SelectValue placeholder="เลือกศูนย์อพยพ" />
 							</SelectTrigger>

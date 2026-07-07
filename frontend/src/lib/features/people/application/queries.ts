@@ -1,5 +1,6 @@
 import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
 import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
+import { getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { peopleRepository, shelterDb } from '../data/people.pouch';
@@ -12,18 +13,27 @@ import type {
 	ScreeningInput
 } from '../domain/people';
 
+// Every key includes the active shelter code so switching the back-office
+// shelter selector (shelterStore.selectedShelterCode) invalidates and
+// refetches these queries against the newly selected shelter's database.
 export const peopleKeys = {
 	all: ['people'] as const,
-	evacuees: () => [...peopleKeys.all, 'evacuees'] as const,
+	evacuees: () => [...peopleKeys.all, 'evacuees', getShelterCode()] as const,
 	evacueesPaginated: (page: number, pageSize: number, search = '') =>
-		[...peopleKeys.all, 'evacuees', { page, pageSize, search }] as const,
-	evacueesSearch: (query: string) => [...peopleKeys.all, 'evacuees', 'search', query] as const,
-	households: () => [...peopleKeys.all, 'households'] as const,
+		[...peopleKeys.all, 'evacuees', getShelterCode(), { page, pageSize, search }] as const,
+	evacueesSearch: (query: string) =>
+		[...peopleKeys.all, 'evacuees', getShelterCode(), 'search', query] as const,
+	households: () => [...peopleKeys.all, 'households', getShelterCode()] as const,
 	householdsPaginated: (page: number, pageSize: number, search = '', labelsKey = '') =>
-		[...peopleKeys.all, 'households', { page, pageSize, search, labelsKey }] as const,
-	medicals: () => [...peopleKeys.all, 'medicals'] as const,
-	movements: () => [...peopleKeys.all, 'movements'] as const,
-	screenings: () => [...peopleKeys.all, 'screenings'] as const
+		[
+			...peopleKeys.all,
+			'households',
+			getShelterCode(),
+			{ page, pageSize, search, labelsKey }
+		] as const,
+	medicals: () => [...peopleKeys.all, 'medicals', getShelterCode()] as const,
+	movements: () => [...peopleKeys.all, 'movements', getShelterCode()] as const,
+	screenings: () => [...peopleKeys.all, 'screenings', getShelterCode()] as const
 };
 
 export const useEvacuees = () =>
