@@ -2,7 +2,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Pencil from '@lucide/svelte/icons/pencil';
-	import type { ShelterSummary } from '../data/shelters.api';
+	import type { ShelterSummary } from '../data/shelters.repository';
 	import type { OperationStatus } from '../domain/schema';
 
 	let {

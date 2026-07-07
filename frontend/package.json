@@ -21,6 +21,7 @@
 		"openapi:update": "pnpm openapi:fetch && pnpm openapi:fastapi",
 		"seed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts",
 		"seed:delete-dashboard": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts --delete-dashboard",
+		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts"
 	},
 	"devDependencies": {

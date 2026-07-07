@@ -7,17 +7,9 @@ import {
 import { toast } from 'svelte-sonner';
 import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
 import { namedLocalDb } from '$lib/db/pouch';
-import {
-	createShelter,
-	listShelters,
-	updateShelter,
-	getShelter,
-	closeZone,
-	reopenZone
-} from '../data/shelters.api';
+import { createShelter, updateShelter, closeZone, reopenZone } from '../data/shelters.api';
+import { sheltersRepository, SHELTER_REGISTRY_DB } from '../data/shelters.pouch';
 import type { Shelter } from '../domain/schema';
-
-export const SHELTER_REGISTRY_DB = 'registry';
 
 export const sheltersKeys = {
 	all: ['shelters'] as const,
@@ -28,13 +20,13 @@ export const sheltersKeys = {
 export const useShelters = () =>
 	createQuery(() => ({
 		queryKey: sheltersKeys.list(),
-		queryFn: listShelters
+		queryFn: () => sheltersRepository().listShelters()
 	}));
 
 export const useShelter = (code: () => string) =>
 	createQuery(() => ({
 		queryKey: sheltersKeys.detail(code()),
-		queryFn: () => getShelter(code()),
+		queryFn: () => sheltersRepository().getShelter(code()),
 		enabled: !!code()
 	}));
 
@@ -126,6 +118,8 @@ export const useReopenZone = () => {
  *
  * Hook from the root layout alongside the people live query.
  */
+export { SHELTER_REGISTRY_DB };
+
 export function startSheltersLiveQuery(queryClient: QueryClient): LiveQueryHandle {
 	return startLiveQuery(namedLocalDb(SHELTER_REGISTRY_DB), queryClient, (type) => {
 		if (type === 'shelter') {

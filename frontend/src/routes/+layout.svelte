@@ -17,38 +17,62 @@
 
 	let { children, data } = $props();
 
-	// Shelter data sync + changes-feed reactivity follow the auth lifecycle:
-	// start once authenticated, tear down on logout. One active remote, one feed
-	// — both bound to the SAME shelter db (CONTRIBUTING.md §4). The registry
-	// db carries the shelter master doc + audit log; it syncs alongside.
+	// Shared DBs (registry + catalog) follow auth only — avoid restarting sync when
+	// the active shelter changes.
 	$effect(() => {
 		if (!authStore.isAuthenticated) return;
-		// Resolve the shelter db name from the user's roles at effect-run time,
-		// so sh003 syncs shelter_sh003, sh001 syncs shelter_sh001, etc.
-		const shelterDb = getShelterDb();
-		startNamedSync(shelterDb, () => authStore.markNeedsReauth());
 		startNamedSync(SHELTER_REGISTRY_DB, () => authStore.markNeedsReauth());
 		startNamedSync('catalog', () => authStore.markNeedsReauth());
+		return () => {
+			stopNamedSync('catalog');
+			stopNamedSync(SHELTER_REGISTRY_DB);
+		};
+	});
 
-		// Start changes feed live-queries
+	// Shelter db sync follows auth + active shelter scope (CONTRIBUTING.md §4).
+	$effect(() => {
+		if (!authStore.isAuthenticated) return;
+		const shelterDb = getShelterDb();
+		startNamedSync(shelterDb, () => authStore.markNeedsReauth());
+		return () => stopNamedSync(shelterDb);
+	});
+
+	// Registry/catalog live queries follow auth only — not the active shelter.
+	$effect(() => {
+		if (!authStore.isAuthenticated) return;
+
+		const liveShelters = startSheltersLiveQuery(data.queryClient);
+		const liveCatalog = startCatalogLiveQuery(data.queryClient);
+
+		return () => {
+			liveShelters.stop();
+			liveCatalog.stop();
+		};
+	});
+
+	// Shelter-scoped live queries restart when the active shelter changes.
+	$effect(() => {
+		if (!authStore.isAuthenticated) return;
+		getShelterDb();
+
 		const livePeople = startPeopleLiveQuery(data.queryClient);
 		const liveOperations = startOperationsLiveQuery(data.queryClient);
 		const liveKitchen = startKitchenLiveQuery(data.queryClient);
-		const liveShelters = startSheltersLiveQuery(data.queryClient);
-		const liveCatalog = startCatalogLiveQuery(data.queryClient);
 		const sopRatioLive = startSopRatioLiveQuery(data.queryClient);
 
 		return () => {
 			livePeople.stop();
 			liveOperations.stop();
 			liveKitchen.stop();
-			liveShelters.stop();
-			liveCatalog.stop();
 			sopRatioLive.stop();
-			stopNamedSync('catalog');
-			stopNamedSync(SHELTER_REGISTRY_DB);
-			data.queryClient.clear();
 		};
+	});
+
+	// Drop cached queries on logout only — never on shelter switch (that was
+	// cancelling in-flight shelter-list fetches after listDefaultCode resolved).
+	$effect(() => {
+		if (authStore.isAuthenticated) return;
+		data.queryClient.clear();
 	});
 </script>
 
