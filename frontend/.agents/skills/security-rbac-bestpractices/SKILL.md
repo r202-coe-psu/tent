@@ -56,7 +56,7 @@ export async function POST({ request }) {
     // 2. Extract their assigned shelter code (DO NOT trust request body)
     const shelterCode = caller.shelterCode;
     
-    // 3. Inject this shelterCode into your PouchDB/CouchDB mutations
+    // 3. Inject this shelterCode into your CouchDB endpoint mutations
 }
 ```
 

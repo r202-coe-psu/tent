@@ -1,20 +1,20 @@
-# Agent Skill Source Log: couchdb-pouchdb-bestpractices
+# Agent Skill Source Log: couchdb-bestpractices
 
-**Location:** `frontend/.agents/skills/couchdb-pouchdb-bestpractices/SKILL.md`
+**Location:** `frontend/.agents/skills/couchdb-bestpractices/SKILL.md`
 
 ข้อมูลที่นำมาใช้สังเคราะห์เป็นกฎและคำแนะนำในไฟล์ `SKILL.md` มาจากการสืบค้นเอกสารและซอร์สโค้ดในระบบก่อนหน้านี้ครับ โดยได้ดึงเอา Best Practices ที่ถูกกำหนดไว้แล้วในโปรเจกต์ มาสรุปเป็น 6 Core Principles ดังนี้ครับ:
 
-### 1. Write to Local First และ Replication Topology (ข้อ 1 และ 3)
+### 1. Remote-First Endpoint Policy และ Topology (ข้อ 1 และ 2)
 * **แหล่งที่มา**: [README.md](../../../README.md) และ [docs/task-breakdown/_index.md](../task-breakdown/_index.md)
-* **ข้อมูลที่พบ**: แผนภาพ Topology กำหนดชัดเจนว่า `device (PouchDB) ⇄ WAN ⇄ central (CouchDB 3.5)` และมีประโยคกำกับว่า "App เขียน local PouchDB ก่อนเสมอ; sync กับ active remote เดียว (central ปกติ หรือ edge เฉพาะ WAN outage)"
+* **ข้อมูลที่พบ**: topology ปรับเป็น remote-first โดย app ส่ง write ไป active endpoint เดียว (central ปกติ, edge เฉพาะ WAN outage) และไม่ใช้ local-only write queue เป็น canonical path
 
 ### 2. Repository Pattern (ข้อ 2 และ Workflow ข้อ 2)
 * **แหล่งที่มา**: คอมเมนต์ในไฟล์ [frontend/src/lib/features/people/data/people.pouch.ts](../../../frontend/src/lib/features/people/data/people.pouch.ts) และ [frontend/src/lib/db/repository.ts](../../../frontend/src/lib/db/repository.ts)
 * **ข้อมูลที่พบ**: โค้ดระบุว่าฟีเจอร์ต่างๆ ห้ามเรียก PouchDB โดยตรง แต่จะต้องสร้าง Repository pattern โดยสืบทอดมาจาก base `createRepository` เพื่อเป็นตัวครอบการทำงาน (Abstraction layer)
 
-### 3. Live Query (ข้อ 4)
+### 3. Live Update / Invalidation Pattern (ข้อ 7)
 * **แหล่งที่มา**: ไฟล์ [frontend/src/lib/db/live-query.ts](../../../frontend/src/lib/db/live-query.ts)
-* **ข้อมูลที่พบ**: อธิบายวิธีการนำ `changes feed` ของ PouchDB มาแปลงเป็นระบบ Reactivity (TanStack Query / Svelte) เพื่อให้ UI โหลดข้อมูลเรียลไทม์
+* **ข้อมูลที่พบ**: แนวทาง reactivity ของระบบต้องไม่พึ่ง polling เป็น default และต้อง align กับกลไก invalidation/live update ที่ทีมตกลงเป็น canonical
 
 ### 4. MVCC and `_rev` (ข้อ 5 และ Workflow ข้อ 3)
 * **แหล่งที่มา**: คู่มือ [docs/create-database.html](../create-database.html) (หัวข้อ เรื่อง _rev — กฎเหล็ก)

@@ -7,7 +7,7 @@ hook is green" and "this doc is honored" should mean the same thing for lint/che
 
 > The stale `agent-role.md` still describes the original sveltekitten template (JWT + `openapi-fetch`,
 > flat `api.ts`/`queries.ts` features). **This document and the actual `src/` tree win** where they
-> disagree: this project is a local-first CouchDB app with layered features.
+> disagree: this project is a remote-first CouchDB app with layered features.
 
 ---
 
@@ -69,16 +69,16 @@ pre-commit). Run them manually (`pnpm lint`, `pnpm check`, `pnpm test` in `front
 you stage if you want faster feedback. Item **4** is not hooked — verify it yourself before opening
 a PR.
 
-## 3. Architecture: feature-sliced, local-first
+## 3. Architecture: feature-sliced, remote-first
 
 Features live in `src/lib/features/<name>/` and are split into four layers with a strict
 dependency direction (`ui → application → data → domain`):
 
 ```
 features/<name>/
-  domain/        pure entities, Zod schemas, factories, invariants — no I/O, no Svelte, no PouchDB
-  data/          repository INTERFACE + concrete PouchDB impl + seed/admin helpers
-  application/   TanStack Query hooks (createQuery/createMutation) + live-sync wiring
+  domain/        pure entities, Zod schemas, factories, invariants — no I/O, no Svelte, no DB client
+  data/          repository INTERFACE + concrete remote endpoint adapter + seed/admin helpers
+  application/   TanStack Query hooks (createQuery/createMutation) + endpoint-state wiring
   ui/            feature-specific .svelte components
   index.ts       the public barrel — the ONLY entry point other code may import
 ```
@@ -90,10 +90,10 @@ features/<name>/
   A feature may import its own internals freely.
 - **Domain is persistence-agnostic.** Put ID generation, validation, and "turn input into a valid
   entity" factories here (see `features/notes/domain/note.ts`). Keep `_id`/`_rev` tolerated but never
-  let domain code call PouchDB.
+  let domain code call database/network clients directly.
 - **The application layer depends on a repository _interface_, not a concrete store** (`note.repository.ts`
-  defines the contract; `note.pouch.ts` implements it). This is what makes the in-memory test double
-  possible — keep the repo injectable.
+  defines the contract; a concrete endpoint adapter implements it). This is what makes the in-memory
+  test double possible — keep the repo injectable.
 - **Add a new UI/query export by widening `index.ts`**, not by importing the inner module elsewhere.
 
 When you add a feature, mirror an existing one (`notes` is the reference; the quarantined
@@ -101,27 +101,21 @@ When you add a feature, mirror an existing one (`notes` is the reference; the qu
 demo code excluded from the build). Protected pages go in
 `src/routes/(protected)/<feature>/+page.svelte`.
 
-## 4. Data, sync & auth — do not bypass
+## 4. Data, endpoint & auth — do not bypass
 
-This app is **offline-first**. Treat these as load-bearing:
+สถาปัตยกรรมใหม่เป็น **remote-first**. Treat these as load-bearing:
 
-- All persistence goes through **PouchDB** (`$lib/db/pouch.ts`), which **live-syncs** to CouchDB.
-  UI never talks to a remote DB directly — it reads/writes the local PouchDB; sync propagates changes.
-- **Reactivity comes from the changes feed**, not from manual refetching: the `live-sync` hook
-  invalidates the relevant TanStack Query keys on PouchDB `change` events. Follow that pattern instead
-  of polling.
-- **Auth is the CouchDB `_session` cookie.** Identity is cached in `localStorage` so the app stays
-  usable offline; only _sync_ needs a live session. On a 401/403 the sync stops and the store flags
-  `needsReauth` — **the user is not logged out of the local experience.** Don't "fix" this by forcing
-  a logout/redirect on sync errors.
-- **Sync target has a strict priority — one active remote at a time:**
-  central CouchDB first (via `/couch` proxy); edge CouchDB on LAN only when
-  WAN/central is unreachable; local-only when neither is reachable. Never run
-  live replication to both simultaneously — stop the current sync before switching targets.
-- **Login uses the same priority:** always attempt central first. Edge fallback login
-  works because `_users` is filtered-replicated to the edge server. An edge `AuthSession`
-  cookie does NOT grant access to `/api/v1/*` service endpoints (central-only). When
-  central returns, the app must re-login against central and switch the active remote back.
+- Writes go to the **active endpoint** directly (no local-only write queue). The active endpoint
+  priority is strict and single-target: central CouchDB first (via `/couch` proxy), edge CouchDB
+  on LAN only when WAN/central is unreachable.
+- If both central and edge are unreachable, enter disconnected **status-only** mode (no read-only local cache); run automatic retry up to 3 attempts, then show a clear "cannot connect" banner with a force-retry action.
+- **Reactivity/live update** must use the canonical **app-level event channel** for endpoint-aware invalidation (mutation outcomes + endpoint transitions). Do not poll, and do not introduce alternate live-update mechanisms per feature.
+- **Auth is the CouchDB `_session` cookie.** Central and edge sessions are separate by origin/remote.
+  Always login central first; use edge login only during central outage via filtered `_users` replica.
+- Edge `AuthSession` does **not** grant `/api/v1/*` service access (central-only). When central
+  returns, re-validate/re-login against central and fail back the active endpoint to central.
+- On 401/403 from the active endpoint, stop further protected mutations and set `needsReauth`;
+  do not force an unrelated global logout/redirect loop.
 - Use the guards in `$lib/guards/auth.ts` (`requireAuth`, `requireAdmin`, `redirectIfAuthenticated`)
   from route `+layout.ts`/`+page.ts` `load` functions. Don't roll your own redirect logic.
 - **Admin credentials (`COUCHDB_ADMIN_URL`) are server-only.** They may only be used in the dev-server
@@ -144,7 +138,8 @@ This app is **offline-first**. Treat these as load-bearing:
 
 - Unit tests are **Vitest**, colocated as `*.test.ts` next to the code (`environment: node`,
   globals on). Prioritize **domain** logic (factories, invariants, guards) and **data** repositories
-  (use `pouchdb-adapter-memory` for an in-memory PouchDB rather than hitting a real CouchDB).
+  (use injectable repository doubles for fast tests; use dedicated integration tests when
+  validating CouchDB endpoint behavior).
 - E2E is **Playwright** in `e2e/`; `pnpm test:e2e` builds in `test` mode first. `e2e/mock-api.js`
   stands in for the backend during those runs.
 
@@ -157,8 +152,8 @@ This app is **offline-first**. Treat these as load-bearing:
 - Forms use **Superforms + Zod** (`zod4Client` adapter).
 - Compose UI from `src/lib/components/ui/` (vendored shadcn-svelte over `bits-ui`). That directory is
   **generated and lint-ignored — don't hand-edit it**; add components via the shadcn-svelte workflow.
-- **User feedback is toast only** (`svelte-sonner`). No `console.log` in committed code (the PouchDB
-  sync-error `console.warn` paths are the deliberate exception).
+- **User feedback is toast only** (`svelte-sonner`). No `console.log` in committed code (the
+  endpoint failover/retry `console.warn` paths are the deliberate exception).
 
 ## 8. Commits & PRs
 
