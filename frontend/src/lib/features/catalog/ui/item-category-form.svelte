@@ -3,17 +3,16 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
-	import * as Field from '$lib/components/ui/field/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { itemCategoryInputSchema, type ItemCategoryInput } from '../domain/catalog';
+	import { itemCategoryInputSchema } from '../domain/catalog';
 	import {
 		useItemCategory,
 		useCreateItemCategory,
 		useUpdateItemCategory
 	} from '../application/queries';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/db/shelter';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
 
 	let {
@@ -39,7 +38,7 @@
 			if (!validated.valid) return;
 
 			const ctx = {
-				shelterCode: SHELTER_CODE,
+				shelterCode: getShelterCode(),
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 

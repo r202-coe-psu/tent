@@ -4,10 +4,13 @@ import {
 	useQueryClient,
 	type QueryClient
 } from '@tanstack/svelte-query';
-import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
+import {
+	subscribeDataChanges,
+	type SubscribeDataChangesHandle
+} from '$lib/db/subscribe-data-changes';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
-import { CatalogRepository, catalogDb } from '../data/catalog.pouch';
+import { catalogRepository, CATALOG_DB } from '../data/catalog.remote';
 import { authStore } from '$lib/stores/auth.svelte';
 import { isSystemAdmin } from '$lib/auth/roles';
 import type {
@@ -36,14 +39,14 @@ export const catalogKeys = {
 export const useItemCategories = () =>
 	createQuery(() => ({
 		queryKey: catalogKeys.itemcategories(),
-		queryFn: () => CatalogRepository().listItemCategories()
+		queryFn: () => catalogRepository().listItemCategories()
 	}));
 
 export const useItemCategoriesPaginated = (page: () => number, pageSize: () => number) =>
 	createQuery(() => ({
 		queryKey: catalogKeys.itemcategoriesPaginated(page(), pageSize()),
 		queryFn: () =>
-			CatalogRepository().listItemCategoriesPaginated(page(), pageSize()) as Promise<
+			catalogRepository().listItemCategoriesPaginated(page(), pageSize()) as Promise<
 				PaginatedResult<ItemCategory>
 			>
 	}));
@@ -51,7 +54,7 @@ export const useItemCategoriesPaginated = (page: () => number, pageSize: () => n
 export const useItemCategory = (id: () => string) =>
 	createQuery(() => ({
 		queryKey: [...catalogKeys.all, 'itemcategory', id()],
-		queryFn: () => CatalogRepository().getItemCategory(id()),
+		queryFn: () => catalogRepository().getItemCategory(id()),
 		enabled: !!id()
 	}));
 
@@ -66,7 +69,7 @@ export const useCreateItemCategory = () => {
 	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ItemCategoryInput; ctx: AuthorContext }) => {
 			enforceSA();
-			return CatalogRepository().createItemCategory(input, ctx);
+			return catalogRepository().createItemCategory(input, ctx);
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
@@ -79,7 +82,7 @@ export const useUpdateItemCategory = () => {
 	return createMutation(() => ({
 		mutationFn: (itemCategory: ItemCategory) => {
 			enforceSA();
-			return CatalogRepository().updateItemCategory(itemCategory);
+			return catalogRepository().updateItemCategory(itemCategory);
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
@@ -91,14 +94,14 @@ export const useUpdateItemCategory = () => {
 export const useItemMasters = () =>
 	createQuery(() => ({
 		queryKey: catalogKeys.itemmasters(),
-		queryFn: () => CatalogRepository().listItemMasters()
+		queryFn: () => catalogRepository().listItemMasters()
 	}));
 
 export const useItemMastersPaginated = (page: () => number, pageSize: () => number) =>
 	createQuery(() => ({
 		queryKey: catalogKeys.itemmastersPaginated(page(), pageSize()),
 		queryFn: () =>
-			CatalogRepository().listItemMastersPaginated(page(), pageSize()) as Promise<
+			catalogRepository().listItemMastersPaginated(page(), pageSize()) as Promise<
 				PaginatedResult<ItemMaster>
 			>
 	}));
@@ -106,7 +109,7 @@ export const useItemMastersPaginated = (page: () => number, pageSize: () => numb
 export const useItemMaster = (id: () => string) =>
 	createQuery(() => ({
 		queryKey: [...catalogKeys.all, 'itemmaster', id()],
-		queryFn: () => CatalogRepository().getItemMaster(id()),
+		queryFn: () => catalogRepository().getItemMaster(id()),
 		enabled: !!id()
 	}));
 
@@ -115,7 +118,7 @@ export const useCreateItemMaster = () => {
 	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ItemMasterInput; ctx: AuthorContext }) => {
 			enforceSA();
-			return CatalogRepository().createItemMaster(input, ctx);
+			return catalogRepository().createItemMaster(input, ctx);
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
@@ -128,7 +131,7 @@ export const useUpdateItemMaster = () => {
 	return createMutation(() => ({
 		mutationFn: (itemMaster: ItemMaster) => {
 			enforceSA();
-			return CatalogRepository().updateItemMaster(itemMaster);
+			return catalogRepository().updateItemMaster(itemMaster);
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
@@ -140,14 +143,14 @@ export const useUpdateItemMaster = () => {
 export const useRecipes = () =>
 	createQuery(() => ({
 		queryKey: catalogKeys.recipes(),
-		queryFn: () => CatalogRepository().listRecipes()
+		queryFn: () => catalogRepository().listRecipes()
 	}));
 
 export const useRecipesPaginated = (page: () => number, pageSize: () => number) =>
 	createQuery(() => ({
 		queryKey: catalogKeys.recipesPaginated(page(), pageSize()),
 		queryFn: () =>
-			CatalogRepository().listRecipesPaginated(page(), pageSize()) as Promise<
+			catalogRepository().listRecipesPaginated(page(), pageSize()) as Promise<
 				PaginatedResult<Recipe>
 			>
 	}));
@@ -155,7 +158,7 @@ export const useRecipesPaginated = (page: () => number, pageSize: () => number) 
 export const useRecipe = (id: () => string) =>
 	createQuery(() => ({
 		queryKey: [...catalogKeys.all, 'recipe', id()],
-		queryFn: () => CatalogRepository().getRecipe(id()),
+		queryFn: () => catalogRepository().getRecipe(id()),
 		enabled: !!id()
 	}));
 
@@ -164,7 +167,7 @@ export const useCreateRecipe = () => {
 	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: RecipeInput; ctx: AuthorContext }) => {
 			enforceSA();
-			return CatalogRepository().createRecipe(input, ctx);
+			return catalogRepository().createRecipe(input, ctx);
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
@@ -177,7 +180,7 @@ export const useUpdateRecipe = () => {
 	return createMutation(() => ({
 		mutationFn: (recipe: Recipe) => {
 			enforceSA();
-			return CatalogRepository().updateRecipe(recipe);
+			return catalogRepository().updateRecipe(recipe);
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
@@ -185,8 +188,8 @@ export const useUpdateRecipe = () => {
 	}));
 };
 
-export function startCatalogLiveQuery(queryClient: QueryClient): LiveQueryHandle {
-	return startLiveQuery(catalogDb(), queryClient, (type) => {
+export function startCatalogMasterLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
+	return subscribeDataChanges(queryClient, CATALOG_DB, (type) => {
 		const allowed = ['item_category', 'item_master', 'recipe', 'sop_profile'];
 		if (allowed.includes(type)) {
 			return [catalogKeys.all];

@@ -17,9 +17,7 @@
 	import { Settings2 } from '@lucide/svelte';
 	import { Trash2 } from '@lucide/svelte';
 
-	import { useItemMasters, useRecipes } from '$lib/features/catalog';
-
-	import ItemRecipeForm from '$lib/features/catalog/ui/recipe-form.svelte';
+	import { useRecipes, RecipeForm } from '$lib/features/catalog';
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
@@ -181,7 +179,7 @@
 		</div>
 		<Separator class="my-4 bg-slate-100 dark:bg-zinc-800" />
 		{#if isSA}
-			<ItemRecipeForm id={selectedId} isEdit={viewMode === 'edit'} onsuccess={backToList} />
+			<RecipeForm id={selectedId} isEdit={viewMode === 'edit'} onsuccess={backToList} />
 		{:else}
 			<div class="py-12 text-center text-sm font-bold text-destructive">
 				คุณไม่มีสิทธิ์เข้าถึงส่วนนี้ (Unauthorized)

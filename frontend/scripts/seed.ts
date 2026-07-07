@@ -308,7 +308,10 @@ async function seedCatalog(): Promise<void> {
 
 	// Deploy validate_doc_update to catalog DB to enforce read-only for non-SA roles
 	const ddocId = '_design/access';
-	const { status: getStatus, data: existingDdoc } = await couchReq('GET', `/catalog/${encodeURIComponent(ddocId)}`);
+	const { status: getStatus, data: existingDdoc } = await couchReq(
+		'GET',
+		`/catalog/${encodeURIComponent(ddocId)}`
+	);
 	const rev = getStatus === 200 ? (existingDdoc as { _rev: string })._rev : undefined;
 	const validateFn = `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {

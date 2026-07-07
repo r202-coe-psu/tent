@@ -4,24 +4,21 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
-	import * as Table from '$lib/components/ui/table/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { recipeInputSchema, type RecipeInput, type Recipe } from '../domain/catalog';
+	import { recipeInputSchema, type Recipe } from '../domain/catalog';
 	import {
 		useRecipe,
 		useCreateRecipe,
 		useUpdateRecipe,
-		useRecipes,
 		useItemMasters
 	} from '../application/queries';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/db/shelter';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
-	import Search from '@lucide/svelte/icons/search';
 	import ItemSelector from './recipe/item-selector.svelte';
 
 	let {
@@ -35,7 +32,6 @@
 	} = $props();
 
 	const itemRecipeQuery = useRecipe(() => id);
-	const itemRecipesQuery = useRecipes();
 	const createMutation = useCreateRecipe();
 	const updateMutation = useUpdateRecipe();
 	const itemMastersQuery = useItemMasters();
@@ -59,7 +55,7 @@
 				if (!validated.valid) return;
 
 				const ctx = {
-					shelterCode: SHELTER_CODE,
+					shelterCode: getShelterCode(),
 					createdBy: authStore.user?.name ?? 'unknown'
 				};
 
@@ -97,7 +93,7 @@
 			}
 		}
 	);
-	const { form: formData, submitting, reset } = form;
+	const { form: formData, submitting } = form;
 
 	$effect(() => {
 		if (isEdit && itemRecipeQuery.data) {
@@ -181,7 +177,7 @@
 				</div>
 
 				<div class="space-y-3">
-					{#each $formData.ingredients as conv, index}
+					{#each $formData.ingredients as conv, index (index)}
 						<div
 							class="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm md:flex-row md:items-end dark:border-zinc-800 dark:bg-zinc-950"
 						>

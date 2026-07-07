@@ -110,7 +110,7 @@
 							class="h-2.5 w-2.5 shrink-0 rounded-[2px]"
 							style="background-color: {chartConfig[item.key as keyof typeof chartConfig]?.color}"
 						></div>
-						<div class="flex flex-1 items-center justify-between leading-none gap-4">
+						<div class="flex flex-1 items-center justify-between gap-4 leading-none">
 							<span class="text-muted-foreground">
 								{chartConfig[item.key as keyof typeof chartConfig]?.label ?? name}
 							</span>

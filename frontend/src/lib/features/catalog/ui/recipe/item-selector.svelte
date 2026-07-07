@@ -6,7 +6,7 @@
 
 	let {
 		value = $bindable(''),
-		uom = $bindable(''),
+		uom = $bindable<string>(),
 		items = []
 	}: {
 		value: string;
@@ -22,6 +22,9 @@
 		const matched = items.find((i) => i._id === value);
 		if (matched) {
 			searchTerm = matched.name;
+			if (!uom || uom !== matched.base_unit) {
+				uom = matched.base_unit;
+			}
 		} else if (!value) {
 			searchTerm = '';
 		}
@@ -35,7 +38,6 @@
 
 	function handleSelect(item: ItemMaster) {
 		value = item._id;
-		uom = item.base_unit; // Auto-populate UOM from base_unit
 		searchTerm = item.name;
 		isOpen = false;
 	}

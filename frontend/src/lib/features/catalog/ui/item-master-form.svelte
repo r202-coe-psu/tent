@@ -6,7 +6,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { itemMasterInputSchema, type ItemMasterInput, type ItemMaster } from '../domain/catalog';
+	import { itemMasterInputSchema, type ItemMaster } from '../domain/catalog';
 
 	import {
 		useItemMaster,
@@ -15,7 +15,7 @@
 		useItemCategories
 	} from '../application/queries';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/db/shelter';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
 
 	// Icons
@@ -77,7 +77,7 @@
 				if (!validated.valid) return;
 
 				const ctx = {
-					shelterCode: SHELTER_CODE,
+					shelterCode: getShelterCode(),
 					createdBy: authStore.user?.name ?? 'unknown'
 				};
 
@@ -130,7 +130,7 @@
 		}
 	);
 
-	const { form: formData, submitting, reset } = form;
+	const { form: formData, submitting } = form;
 
 	// Populate form fields when data loads in edit mode
 	$effect(() => {
@@ -306,7 +306,7 @@
 								>
 									<option value="" disabled selected>-- เลือกหมวดหมู่ --</option>
 									{#if itemCategoriesQuery.data}
-										{#each itemCategoriesQuery.data as cat}
+										{#each itemCategoriesQuery.data as cat (cat._id)}
 											<option value={cat.name}>{cat.name}</option>
 										{/each}
 									{/if}
@@ -377,7 +377,7 @@
 								class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-zinc-800 dark:bg-zinc-950 dark:disabled:bg-zinc-900"
 							>
 								<option value="" disabled selected>-- เลือกหน่วยฐาน --</option>
-								{#each ['ชิ้น', 'เม็ด', 'ซอง', 'กล่อง', 'ขวด', 'กระป๋อง', 'ถุง', 'กรัม', 'กิโลกรัม', 'มิลลิลิตร', 'ลิตร'] as unit}
+								{#each ['ชิ้น', 'เม็ด', 'ซอง', 'กล่อง', 'ขวด', 'กระป๋อง', 'ถุง', 'กรัม', 'กิโลกรัม', 'มิลลิลิตร', 'ลิตร'] as unit (unit)}
 									<option value={unit}>{unit}</option>
 								{/each}
 							</select>
@@ -405,7 +405,7 @@
 				</div>
 
 				<div class="space-y-3">
-					{#each $formData.conversions as conv, index}
+					{#each $formData.conversions as conv, index (index)}
 						<div
 							class="relative grid grid-cols-1 items-end gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3 dark:border-zinc-800 dark:bg-zinc-950"
 						>
@@ -503,7 +503,7 @@
 									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
 								>
 									<option value="">-- เลือกหน่วย --</option>
-									{#each uomOptions as unit}
+									{#each uomOptions as unit (unit)}
 										<option value={unit}>{unit}</option>
 									{/each}
 								</select>
@@ -524,7 +524,7 @@
 									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
 								>
 									<option value="">-- เลือกหน่วย --</option>
-									{#each uomOptions as unit}
+									{#each uomOptions as unit (unit)}
 										<option value={unit}>{unit}</option>
 									{/each}
 								</select>
@@ -545,7 +545,7 @@
 									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
 								>
 									<option value="">-- เลือกหน่วย --</option>
-									{#each uomOptions as unit}
+									{#each uomOptions as unit (unit)}
 										<option value={unit}>{unit}</option>
 									{/each}
 								</select>
@@ -713,7 +713,7 @@
 											class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
 										>
 											<option value="">-- เลือกหน่วย --</option>
-											{#each uomOptions as unit}
+											{#each uomOptions as unit (unit)}
 												<option value={unit}>{unit}</option>
 											{/each}
 										</select>

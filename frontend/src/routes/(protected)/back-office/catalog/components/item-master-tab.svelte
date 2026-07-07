@@ -16,9 +16,7 @@
 	import { Settings2 } from '@lucide/svelte';
 	import { Trash2 } from '@lucide/svelte';
 	// Feature
-	import { useItemMasters } from '$lib/features/catalog';
-
-	import ItemMasterForm from '$lib/features/catalog/ui/item-master-form.svelte';
+	import { useItemMasters, ItemMasterForm } from '$lib/features/catalog';
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));

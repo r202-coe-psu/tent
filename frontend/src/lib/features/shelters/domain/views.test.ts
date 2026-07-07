@@ -100,12 +100,18 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 
 		it('emits checkin for check_in and transfer_in actions with +7 offset', () => {
 			// UTC 2026-07-01 23:00 is 2026-07-02 06:00 in Thailand
-			mapFn({ type: 'movement', action: 'check_in', occurred_at: '2026-07-01T23:00:00Z' }, mockEmit);
+			mapFn(
+				{ type: 'movement', action: 'check_in', occurred_at: '2026-07-01T23:00:00Z' },
+				mockEmit
+			);
 			expect(emitted).toEqual([{ key: ['2026-07-02', 'checkin'], value: 1 }]);
 		});
 
 		it('emits checkout for check_out and transfer_out actions', () => {
-			mapFn({ type: 'movement', action: 'transfer_out', occurred_at: '2026-07-01T12:00:00Z' }, mockEmit);
+			mapFn(
+				{ type: 'movement', action: 'transfer_out', occurred_at: '2026-07-01T12:00:00Z' },
+				mockEmit
+			);
 			expect(emitted).toEqual([{ key: ['2026-07-01', 'checkout'], value: 1 }]);
 		});
 	});

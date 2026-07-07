@@ -58,7 +58,7 @@ export function rowsToRegistrationsPayload(
 	const checkout: Record<string, number> = {};
 	let total = 0;
 	for (const row of rows) {
-		// Note: BFF usually processes this instead of client directly for this endpoint, 
+		// Note: BFF usually processes this instead of client directly for this endpoint,
 		// but if this is used by BFF, it needs to handle [date, series] format.
 		// The implementation plan says BFF handles it directly in +server.ts.
 		// Let's adapt this just in case:

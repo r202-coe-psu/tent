@@ -25,18 +25,14 @@ export {
 	isRecipe
 } from './domain/catalog';
 
-// Data — repository contract + PouchDB binding
+// Data — repository contract + remote CouchDB binding
 export type { CatalogRepository } from './data/catalog.repository';
-export {
-	CatalogRepository as catalogRepository,
-	CATALOG_DB,
-	catalogDb
-} from './data/catalog.pouch';
+export { catalogRepository, CATALOG_DB } from './data/catalog.remote';
 
-// Application — TanStack Query hooks + changes-feed live-query wiring
+// Application — TanStack Query hooks + changes-feed wiring
 export {
 	catalogKeys,
-	startCatalogLiveQuery,
+	startCatalogMasterLiveQuery,
 	// Item Category
 	useItemCategories,
 	useItemCategoriesPaginated,

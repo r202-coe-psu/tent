@@ -1,5 +1,4 @@
-import { namedLocalDb } from '$lib/db/pouch';
-import { createRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
+import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { touch, type AuthorContext } from '$lib/db/model';
 import {
 	createItemCategory,
@@ -19,14 +18,17 @@ import type { CatalogRepository } from './catalog.repository';
 
 export const CATALOG_DB = 'catalog';
 
-export class CatalogPouchRepository implements CatalogRepository {
+/**
+ * Remote CouchDB implementation of the catalog master-data repository.
+ * Reads/writes the `catalog` database via the active central endpoint.
+ */
+export class CatalogRemoteRepository implements CatalogRepository {
 	private readonly repo: Repository;
 
 	constructor(dbName: string = CATALOG_DB) {
-		this.repo = createRepository(namedLocalDb(dbName));
+		this.repo = createRemoteRepository(dbName);
 	}
 
-	// Item Category
 	createItemCategory(input: ItemCategoryInput, ctx: AuthorContext): Promise<ItemCategory> {
 		return this.repo.put(createItemCategory(input, ctx));
 	}
@@ -50,7 +52,6 @@ export class CatalogPouchRepository implements CatalogRepository {
 		return this.repo.put(touch(itemCategory));
 	}
 
-	// Item Master
 	createItemMaster(input: ItemMasterInput, ctx: AuthorContext): Promise<ItemMaster> {
 		return this.repo.put(createItemMaster(input, ctx));
 	}
@@ -58,29 +59,35 @@ export class CatalogPouchRepository implements CatalogRepository {
 	listItemMasters(): Promise<ItemMaster[]> {
 		return this.repo.allByType('item_master', isItemMaster);
 	}
+
 	listItemMastersPaginated(page: number, pageSize: number): Promise<PaginatedResult<ItemMaster>> {
 		return this.repo.pageByType('item_master', isItemMaster, page, pageSize);
 	}
+
 	getItemMaster(id: string): Promise<ItemMaster | null> {
 		return this.repo.get<ItemMaster>(id);
 	}
+
 	updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster> {
 		return this.repo.put(touch(itemMaster));
 	}
 
-	// Recipe
 	createRecipe(input: RecipeInput, ctx: AuthorContext): Promise<Recipe> {
 		return this.repo.put(createRecipe(input, ctx));
 	}
+
 	listRecipes(): Promise<Recipe[]> {
 		return this.repo.allByType('recipe', isRecipe);
 	}
+
 	listRecipesPaginated(page: number, pageSize: number): Promise<PaginatedResult<Recipe>> {
 		return this.repo.pageByType('recipe', isRecipe, page, pageSize);
 	}
+
 	getRecipe(id: string): Promise<Recipe | null> {
 		return this.repo.get<Recipe>(id);
 	}
+
 	updateRecipe(recipe: Recipe): Promise<Recipe> {
 		return this.repo.put(touch(recipe));
 	}
@@ -88,11 +95,7 @@ export class CatalogPouchRepository implements CatalogRepository {
 
 let singleton: CatalogRepository | null = null;
 
-export function CatalogRepository(): CatalogRepository {
-	if (!singleton) singleton = new CatalogPouchRepository();
-	return singleton!;
-}
-
-export function catalogDb(): PouchDB.Database {
-	return namedLocalDb(CATALOG_DB);
+export function catalogRepository(): CatalogRepository {
+	if (!singleton) singleton = new CatalogRemoteRepository();
+	return singleton;
 }

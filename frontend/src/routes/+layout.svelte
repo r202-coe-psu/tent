@@ -14,6 +14,7 @@
 	import { startOperationsLiveQuery } from '$lib/features/operations';
 	import { startKitchenLiveQuery } from '$lib/features/kitchen';
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
+	import { startCatalogMasterLiveQuery } from '$lib/features/catalog';
 	import { startCatalogLiveQuery } from '$lib/features/supply';
 	import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 	import { CATALOG_DB } from '$lib/features/supply';
@@ -48,10 +49,12 @@
 
 		const liveShelters = startSheltersLiveQuery(data.queryClient);
 		const liveCatalog = startCatalogLiveQuery(data.queryClient);
+		const liveCatalogMaster = startCatalogMasterLiveQuery(data.queryClient);
 
 		return () => {
 			liveShelters.stop();
 			liveCatalog.stop();
+			liveCatalogMaster.stop();
 		};
 	});
 
