@@ -65,13 +65,17 @@
 				ตรวจสอบศูนย์พักพิง
 			</a>
 
-			<span
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
-				title="เร็วๆ นี้"
+			<a
+				href={resolve('/public/search')}
+				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+					'/public/search'
+				)
+					? 'bg-primary-muted text-primary'
+					: 'text-muted-foreground'}"
 			>
 				<Search class="h-4 w-4" />
 				สืบค้นญาติ
-			</span>
+			</a>
 
 			<a
 				href={resolve('/public/donations')}
