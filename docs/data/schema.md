@@ -1,12 +1,12 @@
 ---
-title: Smart Shelter — Database Schema v3
+title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-06
+updated: 2026-07-07
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
-# Database Schema v3 — field-level
+# Database Schema v4 — field-level
 
 Canonical ระดับ field ของทุก doc type. Zod schema ฝั่ง client และ `validate_doc_update` ฝั่ง
 CouchDB ต้อง generate/เขียนให้ตรงกับเอกสารนี้
@@ -346,6 +346,8 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 
 ### 3.1 `shelter` — `shelter:{ulid}`
 
+> **schema_v 4** — ขยาย shelter form v4/v5: structured address, project level, key personnel,
+> zone area/specifics, admission/luggage/parking policy และ risk/common-area เพิ่มเติม. CR-023.
 > **schema_v 3** — เพิ่ม `feature_flags` (allow_pets, allow_vehicles, allow_assets) ควบคุม step ลงทะเบียน. CR-016.
 > schema_v 2 — `capacity` เพิ่มเป็น required, `status` enum(`open`,`closed`). CR-004.
 
@@ -353,16 +355,36 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 | --- | --- | --- | --- |
 | `code` | str | sys | code ที่อ่านออก เช่น `SH001` — **unique**, immutable; central mint ตอน provisioning (จาก `central_ops` counter §5.3) เป็นชื่อ db `shelter_{code}` + ใช้อ้างข้ามศูนย์ทุกที่ (`shelter_code`). pattern `^SH\d{3,}$`: เลข 1–999 pad 3 หลัก (`SH001`), ≥1000 ความกว้างตามจริง (`SH1000`) |
 | `name` | str | req | — |
-| `status` | enum(`open`,`closed`) | req | `closed` → เริ่มนาฬิกา retention |
+| `operation_status` | enum(`standby`,`active`,`full_capacity`,`closed`) | req | default `standby`; ใช้แทน `status` เดิม |
 | `capacity` | int>0 | req | จำนวนคนสูงสุด — ควรสอดคล้องกับ `area_m2` (Sphere ≥3.5 m²/คน); ผลรวม zone capacity ≤ ค่านี้ |
-| `zones` | [{`code`:str, `name`:str, `capacity`:int>0}] | req | — |
-| `area_m2` | num>0\|null | opt | พื้นที่ปิดรวม (m²) — ใช้คำนวณ m²/คน เทียบ Sphere 3.5 m² minimum; `null` = ยังไม่ได้วัด |
-| `facilities` | {`toilets_female`:int≥0, `toilets_male`:int≥0, `toilets_accessible`:int≥0, `showers`:int≥0, `water_points`:int≥0, `handwashing_stations`:int≥0} | opt | นับจริงที่ศูนย์ — ใช้คำนวณ Sphere ratio vs occupancy (เช่น 1 toilet:20 คน แยกเพศ, 1 water point:250 คน); `null` = ยังไม่ได้สำรวจ |
-| `feature_flags` | {`allow_pets`:bool, `allow_vehicles`:bool, `allow_assets`:bool} | opt | default ทุก flag = `false`; ตั้งตอนสร้างศูนย์โดย shelter_manager/SA — `true` = เปิดใช้ step นั้นในฟอร์มลงทะเบียน; doc เก่าที่ไม่มี field นี้ถือเป็น `false` ทุก flag (ไม่แสดง) |
-| `location` | {`address`:str, `lat`:num?, `lng`:num?} | opt | — |
+| `shelter_type` | str\|null | opt | code จาก `master_data:shelter_type` (ไม่ใช่ free text) |
+| `project_level` | enum(`community`,`lao`,`provincial`)\|null | opt | ระดับศูนย์ |
+| `location` | {`address`:str, `lat`:num?, `lng`:num?} | opt | คงไว้เพื่อ backward compatibility |
 | `contact` | {`name`:str, `phone`:str} | opt | — |
+| `municipality_zone` | str\|null | opt | code จาก `master_data:municipality_zone` |
+| `community` | str\|null | opt | code จาก `master_data:community` |
+| `address_no` | str\|null | opt | บ้านเลขที่ |
+| `village_no` | str\|null | opt | หมู่/ซอย/ถนน |
+| `subdistrict` | str\|null | opt | ตำบล/แขวง |
+| `district` | str\|null | opt | อำเภอ/เขต |
+| `province` | str\|null | opt | จังหวัด |
+| `postal_code` | str\|null | opt | รหัสไปรษณีย์ |
+| `key_personnel` | {`eoc_liaison`:{`name`:str\|null,`phone`:str\|null}?, `medical_lead`:{`name`:str\|null,`phone`:str\|null}?, `kitchen_lead`:{`name`:str\|null,`phone`:str\|null}?}\|null | opt | ผู้ประสานงานหลักของศูนย์ |
+| `area_m2` | num≥0\|null | opt | พื้นที่ปิดรวม (m²) — ใช้คำนวณ m²/คน เทียบ Sphere 3.5 m² minimum; `null` = ยังไม่ได้วัด |
+| `area_type` | enum(`indoor`,`outdoor`,`hybrid`)\|null | opt | ชนิดพื้นที่ |
+| `facilities` | {`toilets_female`:int≥0?, `toilets_male`:int≥0?, `toilets_accessible`:int≥0?, `showers`:int≥0?, `water_points`:int≥0?, `handwashing_stations`:int≥0?, `car_toilet_accessible`:bool?, `car_toilet_supported`:int≥0?} | opt | นับจริงที่ศูนย์; ถ้า `car_toilet_accessible != true` ให้ถือ `car_toilet_supported = null` |
+| `common_areas` | {`central_kitchen`:bool?, `helipad`:bool?, `parking_capacity`:int≥0?, `sub_storage`:[{`id`:str?, `name`:str, `type`:enum(`general`,`food_dry`,`drinking_water`,`medical_supplies`), `area_m2`:num≥0?}], `isolation_room`:bool?, `women_child_friendly_space`:bool?, `logistics_area_m2`:num≥0?} | opt | ข้อมูลพื้นที่ส่วนกลาง |
+| `utilities` | {`power_source`:enum(`city_grid`,`generator`,`solar`)\|null, `water_source`:enum(`city_water`,`water_tank`,`groundwater`)\|null, `communications`:[enum(`cellular`,`wifi`,`vhf_radio`)], `vhf_channel`:str\|null} | opt | utility profile ของศูนย์ |
+| `risk` | {`elevation_m`:num≥0?, `entrance_description`:str?, `constraints`:str?, `secondary_muster_point`:str?} | opt | ความเสี่ยงและข้อจำกัดเชิงกายภาพ |
+| `zones` | [{`code`:str, `name`:str, `capacity`:int>0, `type`:enum(`general`,`male`,`female`,`vulnerable`,`pet`,`quarantine`), `status`:enum(`active`,`closed`), `closed_at`:ts\|null, `closed_by`:str\|null, `reopened_at`:ts\|null, `reopened_by`:str\|null, `reason`:str\|null, `area_m2`:num≥0?, `specifics`:str?}] | req | โครงสร้างโซน + state |
+| `admission_policy` | {`supported_vulnerable_groups`:[str], `pet_policy`:{`policy`:enum(`no_pets`,`conditional`)\|null, `categories`:[{`category`:enum(`small_general`,`large_dog`,`livestock`), `conditions`:[str]?, `max_capacity`:int≥0?, `location`:str?, `other`:str?}]}} | opt | section นโยบายการรับผู้อพยพ/สัตว์ |
+| `luggage_policy` | {`limitation`:enum(`no_limit`,`limited`)\|null, `max_per_family`:int≥0\|null, `rules`:[enum(`valuables_self_responsibility`,`no_hazardous_items`,`no_large_appliances`,`has_temp_storage_service`)], `rules_other`:str\|null} | opt | section นโยบายทรัพย์สิน/สัมภาระ |
+| `parking_policy` | {`availability`:enum(`none`,`available`)\|null, `supported_vehicles`:[{`type`:enum(`motorcycle`,`car`,`truck`,`boat`), `max_capacity`:int≥0\|null}], `rules`:[enum(`no_liability`,`first_come_first_served`,`key_deposit_required`,`no_blocking_emergency_lane`,`ev_emergency_charging`)], `rules_other`:str\|null} | opt | section นโยบายยานพาหนะ |
+| `feature_flags` | {`allow_pets`:bool, `allow_vehicles`:bool, `allow_assets`:bool} | opt | default ทุก flag = `false`; ตั้งตอนสร้างศูนย์โดย shelter_manager/SA — `true` = เปิดใช้ step นั้นในฟอร์มลงทะเบียน; doc เก่าที่ไม่มี field นี้ถือเป็น `false` ทุก flag (ไม่แสดง) |
 | `edge_url` | str\|null | sys | base URL ของ LAN Edge fallback ศูนย์นั้น — ใช้เมื่อ WAN/central เข้าไม่ได้; ไม่ใช่ normal client remote |
 | `opened_at` / `closed_at` | ts / ts\|null | sys | — |
+
+**Migration (schema_v 3 → 4):** additive default-fill บน read/write — field ใหม่เติม `null`/`[]`/default object ตาม domain schema; `status` เดิม migrate เป็น `operation_status` (`open`→`active`, `closed`→`closed`).
 
 ### 3.2 `config` — `config:app` (singleton)
 
