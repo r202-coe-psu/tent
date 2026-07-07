@@ -63,7 +63,7 @@ export {
 } from './domain/people';
 
 export type { PeopleRepository } from './data/people.repository';
-export { peopleRepository } from './data/people.pouch';
+export { peopleRepository } from './data/people.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
 // Application — TanStack Query hooks + changes-feed live-query wiring

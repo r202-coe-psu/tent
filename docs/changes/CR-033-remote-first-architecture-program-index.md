@@ -95,4 +95,5 @@ data model, API contract, planning, feature flow, conventions และ governan
 - 2026-07-07 — skill set renamed and aligned (`couchdb-bestpractices`); references updated
 - 2026-07-07 — PRD wording aligned under CR-033 (`index`, `roadmap`, `kickoff`, `phase-r2-foundation`)
 - 2026-07-07 — owner locked architecture decisions: disconnected A, live-update B, retry policy (3 attempts + banner + force retry)
-- 2026-07-07 — propagation complete across all files listed in `affects` with contradictory wording removed
+- ✅ Done — Package 8: frontend implementation — central-only remote path (`couch-db.ts`, `*.remote.ts`, event channel, ConnectionBanner)
+- ⬜ Follow-up — edge failover orchestration (deferred from Package 8)

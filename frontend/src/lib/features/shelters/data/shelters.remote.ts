@@ -1,5 +1,4 @@
-import { namedLocalDb } from '$lib/db/pouch';
-import { createRepository, type Repository } from '$lib/db/repository';
+import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { isSystemAdmin, shelterCodeFromRoles } from '$lib/auth/roles';
 import { authStore } from '$lib/stores/auth.svelte';
 import {
@@ -64,11 +63,11 @@ function visibleShelters(all: ShelterSummary[]): ShelterSummary[] {
 	return [];
 }
 
-export class SheltersPouchRepository implements SheltersRepository {
+export class SheltersRemoteRepository implements SheltersRepository {
 	private readonly repo: Repository;
 
 	constructor(dbName: string = SHELTER_REGISTRY_DB) {
-		this.repo = createRepository(namedLocalDb(dbName));
+		this.repo = createRemoteRepository(dbName);
 	}
 
 	async listShelters(): Promise<ShelterSummary[]> {
@@ -98,6 +97,6 @@ export class SheltersPouchRepository implements SheltersRepository {
 let singleton: SheltersRepository | null = null;
 
 export function sheltersRepository(): SheltersRepository {
-	if (!singleton) singleton = new SheltersPouchRepository();
+	if (!singleton) singleton = new SheltersRemoteRepository();
 	return singleton;
 }

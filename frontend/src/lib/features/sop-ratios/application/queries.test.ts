@@ -27,7 +27,7 @@ vi.mock('svelte-sonner', () => ({
 
 // Mock repositories from data layer
 const mockCreateVersion = vi.fn().mockResolvedValue({ ok: true });
-vi.mock('../data/sop-ratio.pouch', () => ({
+vi.mock('../data/sop-ratio.remote', () => ({
 	sopMasterRepository: () => ({
 		createVersion: mockCreateVersion
 	}),

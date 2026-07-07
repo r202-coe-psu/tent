@@ -1,7 +1,6 @@
-import { namedLocalDb } from '$lib/db/pouch';
-import { createRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
+import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { touch, type AuthorContext } from '$lib/db/model';
-import { getShelterDb, shelterDb as _shelterDb } from '$lib/db/shelter';
+import { getShelterDb } from '$lib/db/shelter';
 import {
 	createEvacuee as buildEvacuee,
 	createMovement,
@@ -68,18 +67,16 @@ function matchesHouseholdSearch(
 }
 
 /**
- * PouchDB-backed repository for the people feature. The only file here that
- * knows PouchDB exists — everything goes through the {@link Repository}
- * primitive, which honours the doc envelope + `{type}:{ulid}` id convention.
+ * Remote CouchDB repository for the people feature. Writes go to the active
+ * central endpoint via cookie-authenticated HTTP PUT.
  */
-export class PeoplePouchRepository implements PeopleRepository {
+export class PeopleRemoteRepository implements PeopleRepository {
 	private readonly repo: Repository;
 
-	constructor(dbName: string) {
-		this.repo = createRepository(namedLocalDb(dbName));
+	constructor(private readonly dbName: string) {
+		this.repo = createRemoteRepository(dbName);
 	}
 
-	/** Mint an evacuee from form input + author context and persist it. */
 	async createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee> {
 		const evacuee = buildEvacuee(input, ctx);
 		const saved = await this.repo.put(evacuee);
@@ -104,12 +101,11 @@ export class PeoplePouchRepository implements PeopleRepository {
 
 		return saved;
 	}
-	/** Every evacuee in this shelter database. */
+
 	listEvacuees(): Promise<Evacuee[]> {
 		return this.repo.allByType('evacuee', isEvacuee);
 	}
 
-	/** Paginated list of evacuees — filters by `search` before paging when provided. */
 	async listEvacueesPaginated(
 		page: number,
 		pageSize: number,
@@ -121,18 +117,15 @@ export class PeoplePouchRepository implements PeopleRepository {
 		return paginateSlice(matched, page, pageSize);
 	}
 
-	/** One evacuee by `_id`, or `null` when absent. */
 	getEvacuee(id: string): Promise<Evacuee | null> {
 		return this.repo.get<Evacuee>(id);
 	}
 
-	/** Persist an edited evacuee (LWW: bumps `updated_at`). Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
 	async updateEvacuee(evacuee: Evacuee): Promise<Evacuee> {
 		const latest = await this.repo.get<Evacuee>(evacuee._id);
 		return this.repo.put(touch({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }));
 	}
 
-	/** Search evacuees by name, phone, or national ID — in-memory filter over prefix scan. */
 	async searchEvacuees(query: string): Promise<Evacuee[]> {
 		const q = query.trim();
 		if (!q) return [];
@@ -140,18 +133,15 @@ export class PeoplePouchRepository implements PeopleRepository {
 		return all.filter((e) => matchesEvacueeSearch(e, q));
 	}
 
-	/** Mint a household from form input + author context and persist it. */
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household> {
 		return this.repo.put(buildHousehold(input, ctx));
 	}
 
-	/** Every household in this shelter database. */
 	async listHouseholds(): Promise<Household[]> {
 		const docs = await this.repo.allByType('household', isHousehold);
 		return docs.map(migrateHouseholdV3ToV4);
 	}
 
-	/** Paginated list of households — filters by `search` before paging when provided. */
 	async listHouseholdsPaginated(
 		page: number,
 		pageSize: number,
@@ -173,19 +163,16 @@ export class PeoplePouchRepository implements PeopleRepository {
 		return paginateSlice(all, page, pageSize);
 	}
 
-	/** One household by `_id`, or `null` when absent. */
 	async getHousehold(id: string): Promise<Household | null> {
 		const doc = await this.repo.get<Household>(id);
 		return doc ? migrateHouseholdV3ToV4(doc) : null;
 	}
 
-	/** Persist an edited household (LWW: bumps `updated_at`). Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
 	async updateHousehold(household: Household): Promise<Household> {
 		const latest = await this.repo.get<Household>(household._id);
 		return this.repo.put(touch({ ...household, _rev: latest?._rev ?? household._rev }));
 	}
 
-	/** Mint a screening from input + author context and persist it. */
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening> {
 		return this.repo.put(buildScreening(input, ctx));
 	}
@@ -202,8 +189,6 @@ export class PeoplePouchRepository implements PeopleRepository {
 		return this.repo.allByType('screening', isScreening);
 	}
 
-	/** Record a check-in movement, then apply it to the evacuee's current_stay.
-	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
 	async checkInEvacuee(
 		evacuee: Evacuee,
 		ctx: AuthorContext,
@@ -221,18 +206,11 @@ export class PeoplePouchRepository implements PeopleRepository {
 let singleton: PeopleRepository | null = null;
 let singletonDbName: string | null = null;
 
-/**
- * Memoised repository over the shelter database — one local handle.
- * Resets automatically when the active shelter database name changes
- * (e.g. a different user logs in with a different shelter scope).
- */
 export function peopleRepository(): PeopleRepository {
 	const currentDb = getShelterDb();
 	if (!singleton || singletonDbName !== currentDb) {
-		singleton = new PeoplePouchRepository(currentDb);
+		singleton = new PeopleRemoteRepository(currentDb);
 		singletonDbName = currentDb;
 	}
 	return singleton;
 }
-
-export const shelterDb = _shelterDb;

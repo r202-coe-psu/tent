@@ -505,7 +505,7 @@
 		{#if !isLoading}
 			<p class="mt-3 text-right text-[10px] text-muted-foreground/50">
 				<Clock class="mr-0.5 inline h-3 w-3" />
-				ข้อมูลอัปเดตอัตโนมัติผ่าน PouchDB live changes feed
+				ข้อมูลอัปเดตอัตโนมัติผ่าน event channel
 			</p>
 			<p class="mt-1 text-right text-[10px] text-muted-foreground/50">
 				* หมายเหตุ: จุดจัดเก็บและวันหมดอายุจะอ้างอิงจากรายการล่าสุดที่มีการระบุข้อมูล

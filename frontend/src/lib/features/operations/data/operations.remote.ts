@@ -1,7 +1,5 @@
-import { namedLocalDb } from '$lib/db/pouch';
-import { createRepository, type Repository } from '$lib/db/repository';
+import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterDb } from '$lib/db/shelter';
-// import { getShelterDb, shelterDb as _shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import {
 	isStockLedger,
@@ -13,12 +11,6 @@ import {
 import type { OperationsRepository } from './operations.repository';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
 
-/**
- * Validates a receive entry against its catalog item before it's written to the
- * ledger. Pulled out of `receiveStock` so the invariant is testable directly
- * (plain inputs, no PouchDB) and easy to find when `item_master` eventually
- * replaces `supply_item` (CR-013).
- */
 export function assertReceiveAgainstCatalog(entry: StockLedger, item: SupplyItem | null): void {
 	if (!item) {
 		throw new Error(
@@ -35,14 +27,11 @@ export function assertReceiveAgainstCatalog(entry: StockLedger, item: SupplyItem
 	}
 }
 
-/**
- * PouchDB-backed repository implementation for Operations (Stock Ledger).
- */
-export class OperationsPouchRepository implements OperationsRepository {
+export class OperationsRemoteRepository implements OperationsRepository {
 	private readonly repo: Repository;
 
 	constructor(dbName: string = getShelterDb()) {
-		this.repo = createRepository(namedLocalDb(dbName));
+		this.repo = createRemoteRepository(dbName);
 	}
 
 	async addLedgerEntry(entry: StockLedger): Promise<StockLedger> {
@@ -77,7 +66,7 @@ let singletonDbName: string | null = null;
 export function operationsRepository(): OperationsRepository {
 	const currentDb = getShelterDb();
 	if (!singleton || singletonDbName !== currentDb) {
-		singleton = new OperationsPouchRepository(currentDb);
+		singleton = new OperationsRemoteRepository(currentDb);
 		singletonDbName = currentDb;
 	}
 	return singleton;

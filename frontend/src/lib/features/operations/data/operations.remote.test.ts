@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import PouchDB from 'pouchdb-browser';
-import memory from 'pouchdb-adapter-memory';
+import { createInMemoryRepository } from '$lib/db/in-memory-repository';
 import type { SupplyItem } from '$lib/features/supply';
 
 const mockGetItem = vi.fn<() => Promise<SupplyItem | null>>();
@@ -9,11 +8,15 @@ vi.mock('$lib/features/supply', () => ({
 	supplyRepository: () => ({ getItem: mockGetItem })
 }));
 
-import { OperationsPouchRepository, assertReceiveAgainstCatalog } from './operations.pouch';
+let memoryRepo = createInMemoryRepository();
+vi.mock('$lib/db/repository', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/db/repository')>();
+	return { ...actual, createRemoteRepository: () => memoryRepo };
+});
+
+import { OperationsRemoteRepository, assertReceiveAgainstCatalog } from './operations.remote';
 import { createReceiveEntry } from '../domain/operations';
 import type { AuthorContext } from '$lib/db/model';
-
-PouchDB.plugin(memory);
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -61,13 +64,12 @@ describe('assertReceiveAgainstCatalog', () => {
 	});
 });
 
-describe('OperationsPouchRepository', () => {
-	let dbName: string;
-	let repo: OperationsPouchRepository;
+describe('OperationsRemoteRepository', () => {
+	let repo: OperationsRemoteRepository;
 
 	beforeEach(() => {
-		dbName = `test-operations-${Math.random().toString(36).slice(2)}`;
-		repo = new OperationsPouchRepository(dbName);
+		memoryRepo = createInMemoryRepository();
+		repo = new OperationsRemoteRepository('shelter_sh001');
 	});
 
 	it('persists a stock ledger entry and lists them', async () => {
