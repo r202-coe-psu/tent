@@ -1,7 +1,23 @@
 import { serviceFetch } from '$lib/api/service';
+import { shelterStore } from '$lib/stores/shelter.svelte';
 import type { Shelter } from '../domain/schema';
+import type { ShelterSummary } from './shelters.repository';
+
+export type { ShelterSummary };
 
 const SHELTER_ENDPOINT = '/api/back-office/shelter';
+
+export async function listShelters(): Promise<ShelterSummary[]> {
+	const shelters = await serviceFetch<ShelterSummary[]>(SHELTER_ENDPOINT);
+	if (shelters.length > 0 && !shelterStore.listDefaultCode) {
+		shelterStore.listDefaultCode = shelters[0].code;
+	}
+	return shelters;
+}
+
+export function getShelter(code: string): Promise<ShelterSummary> {
+	return serviceFetch<ShelterSummary>(`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}`);
+}
 
 export function createShelter(input: Shelter): Promise<{ ok: true; code: string }> {
 	return serviceFetch(SHELTER_ENDPOINT, {

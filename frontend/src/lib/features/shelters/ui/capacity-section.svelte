@@ -1,9 +1,11 @@
 <script lang="ts">
+	import Building2 from '@lucide/svelte/icons/building-2';
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
-	import type { Shelter } from '../domain/schema';
+	import type { Shelter, AreaType } from '../domain/schema';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 
 	let {
 		form,
@@ -14,14 +16,18 @@
 		formData: SuperFormData<Shelter>;
 		disabled?: boolean;
 	} = $props();
+
+	const areaTypeOptions: { value: AreaType; label: string }[] = [
+		{ value: 'indoor', label: 'อาคารปิด (Indoor)' },
+		{ value: 'outdoor', label: 'ลานเปิด (Outdoor)' },
+		{ value: 'hybrid', label: 'แบบผสม (Hybrid)' }
+	];
 </script>
 
 <section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<span
-			class="flex h-6 w-6 items-center justify-center rounded-full bg-shelter-blue-bg text-xs font-bold text-shelter-blue-text"
-			>2</span
-		>
+		<Building2 class="h-5 w-5 text-shelter-blue-text" />
+		<span class="text-sm font-bold text-muted-foreground">2.</span>
 		<h2 class="text-base font-bold text-card-foreground">
 			ข้อมูลความจุเชิงพื้นที่ (Capacity &amp; Structure)
 		</h2>
@@ -83,12 +89,26 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>สถานะพื้นที่อาคาร</Form.Label>
-					<Input
-						{...props}
-						bind:value={$formData.area_type}
+					<Select.Root
+						type="single"
+						bind:value={
+							() => $formData.area_type ?? '',
+							(v) => ($formData.area_type = (v || null) as typeof $formData.area_type)
+						}
 						{disabled}
-						placeholder="เช่น อาคารปิด (Indoor)"
-					/>
+					>
+						<Select.Trigger
+							{...props}
+							class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+						>
+							{areaTypeOptions.find((o) => o.value === $formData.area_type)?.label ?? '— เลือก —'}
+						</Select.Trigger>
+						<Select.Content>
+							{#each areaTypeOptions as opt (opt.value)}
+								<Select.Item value={opt.value} label={opt.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />

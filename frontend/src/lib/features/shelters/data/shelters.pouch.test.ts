@@ -6,15 +6,21 @@ import memory from 'pouchdb-adapter-memory';
 PouchDB.plugin(memory);
 
 let testDb: PouchDB.Database;
+const { mockAuthStore } = vi.hoisted(() => ({
+	mockAuthStore: {
+		user: { name: 'admin', roles: ['system_admin'] as string[] } as {
+			name: string;
+			roles: string[];
+		} | null
+	}
+}));
 
 vi.mock('$lib/db/pouch', () => ({
 	namedLocalDb: () => testDb
 }));
 
 vi.mock('$lib/stores/auth.svelte', () => ({
-	authStore: {
-		user: { name: 'admin', roles: ['system_admin'] }
-	}
+	authStore: mockAuthStore
 }));
 
 import { SheltersPouchRepository } from './shelters.pouch';
@@ -42,6 +48,7 @@ describe('SheltersPouchRepository', () => {
 			adapter: 'memory'
 		});
 		repo = new SheltersPouchRepository('registry');
+		mockAuthStore.user = { name: 'admin', roles: ['system_admin'] };
 	});
 
 	afterEach(async () => {
@@ -70,5 +77,28 @@ describe('SheltersPouchRepository', () => {
 
 	it('throws when shelter code is not found', async () => {
 		await expect(repo.getShelter('SH999')).rejects.toThrow('ไม่พบศูนย์พักพิง SH999');
+	});
+
+	it('allows staff in matching shelter scope', async () => {
+		await seedShelter('SH001', 'ศูนย์ A');
+		mockAuthStore.user = { name: 'staff', roles: ['registration_staff', 'shelter:SH001'] };
+
+		const shelter = await repo.getShelter('SH001');
+
+		expect(shelter.code).toBe('SH001');
+	});
+
+	it('denies staff when shelter scope does not match', async () => {
+		await seedShelter('SH001', 'ศูนย์ A');
+		mockAuthStore.user = { name: 'staff', roles: ['registration_staff', 'shelter:SH002'] };
+
+		await expect(repo.getShelter('SH001')).rejects.toThrow('ไม่มีสิทธิ์เข้าถึงศูนย์พักพิงนี้');
+	});
+
+	it('denies staff when shelter scope is missing', async () => {
+		await seedShelter('SH001', 'ศูนย์ A');
+		mockAuthStore.user = { name: 'staff', roles: ['registration_staff'] };
+
+		await expect(repo.getShelter('SH001')).rejects.toThrow('ไม่มีสิทธิ์เข้าถึงศูนย์พักพิงนี้');
 	});
 });
