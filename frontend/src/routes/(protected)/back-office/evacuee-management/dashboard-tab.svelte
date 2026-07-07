@@ -6,13 +6,10 @@
 	import Activity from '@lucide/svelte/icons/activity';
 	import Users from '@lucide/svelte/icons/users';
 	import Globe from '@lucide/svelte/icons/globe';
-	
-	import {
-		fetchOccupancy,
-		fetchDemographics,
-		fetchRegistrations
-	} from '$lib/features/dashboard';
-	
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+
+	import { fetchOccupancy, fetchDemographics, fetchRegistrations } from '$lib/features/dashboard';
+
 	import DashboardKpiCards from './dashboard-kpi-cards.svelte';
 	import DashboardRegistrationChart from './dashboard-registration-chart.svelte';
 	import DashboardAgeChart from './dashboard-age-chart.svelte';
@@ -44,7 +41,7 @@
 	const isLoading = $derived(
 		occupancyQuery.isPending || demographicsQuery.isPending || registrationsQuery.isPending
 	);
-	
+
 	const isError = $derived(
 		occupancyQuery.isError || demographicsQuery.isError || registrationsQuery.isError
 	);
@@ -76,7 +73,7 @@
 			<div class="rounded-xl border bg-card p-6 shadow-sm">
 				<div class="mb-4 flex items-center gap-2">
 					<Activity class="h-4 w-4 text-primary" />
-					<h3 class="font-semibold leading-none tracking-tight">สถิติการลงทะเบียน</h3>
+					<h3 class="leading-none font-semibold tracking-tight">สถิติการลงทะเบียน</h3>
 				</div>
 				{#if registrationsQuery.data}
 					<DashboardRegistrationChart data={registrationsQuery.data} />
@@ -88,7 +85,7 @@
 				<div class="rounded-xl border bg-card p-6 shadow-sm">
 					<div class="mb-4 flex items-center gap-2">
 						<Users class="h-4 w-4 text-primary" />
-						<h3 class="font-semibold leading-none tracking-tight">ช่วงอายุผู้อพยพทั้งหมด (Age Distribution)</h3>
+						<h3 class="leading-none font-semibold tracking-tight">ช่วงอายุผู้อพยพทั้งหมด</h3>
 					</div>
 					{#if demographicsQuery.data}
 						<DashboardAgeChart data={demographicsQuery.data.age_groups} />
@@ -100,18 +97,34 @@
 					<div>
 						<div class="mb-4 flex items-center gap-2">
 							<Globe class="h-4 w-4 text-primary" />
-							<h3 class="font-semibold leading-none tracking-tight">สัญชาติ / ประเทศ (Nationality)</h3>
+							<h3 class="leading-none font-semibold tracking-tight">ประเทศผู้อพยพ</h3>
 						</div>
 						{#if demographicsQuery.data}
-							<DashboardNationalityList
-								data={demographicsQuery.data.countries}
-							/>
+							<DashboardNationalityList data={demographicsQuery.data.countries} />
 						{/if}
 					</div>
 					<div class="mt-6">
-						<button class="w-full rounded-md border border-input bg-background py-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground">
-							ดูสัญชาติทั้งหมด
-						</button>
+						<Dialog.Root>
+							<Dialog.Trigger
+								class="w-full rounded-md border border-input bg-background py-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
+							>
+								ดูประเทศทั้งหมด
+							</Dialog.Trigger>
+							<Dialog.Content class="max-h-[85vh] overflow-y-auto sm:max-w-[500px]">
+								<Dialog.Header>
+									<Dialog.Title>ประเทศทั้งหมด</Dialog.Title>
+								</Dialog.Header>
+								<div class="py-4">
+									{#if demographicsQuery.data}
+										<DashboardNationalityList
+											data={demographicsQuery.data.countries}
+											limit={null}
+											enableSearch={true}
+										/>
+									{/if}
+								</div>
+							</Dialog.Content>
+						</Dialog.Root>
 					</div>
 				</div>
 			</div>

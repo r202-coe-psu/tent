@@ -15,8 +15,8 @@
 	let { data }: { data: RegistrationsPayload } = $props();
 
 	const chartConfig = {
-		checkin: { label: 'ผู้ลงทะเบียนเข้า', color: '#003B71' },
-		checkout: { label: 'ผู้ลงทะเบียนออก', color: '#93C5FD' }
+		checkin: { label: 'จำนวนคนลงทะเบียนเข้า', color: '#003B71' },
+		checkout: { label: 'จำนวนคนลงทะเบียนออก', color: '#93C5FD' }
 	} satisfies Chart.ChartConfig;
 
 	const dayCount = $derived(daysBetween(data.range.from, data.range.to));
@@ -80,17 +80,15 @@
 			x="date"
 			y={seriesKeys}
 			series={[
-				{ key: 'จำนวนคนลงทะเบียนเข้า', value: 'checkin' },
-				{ key: 'จำนวนคนลงทะเบียนออก', value: 'checkout' }
+				{ key: 'checkin', value: 'checkin', color: chartConfig.checkin.color },
+				{ key: 'checkout', value: 'checkout', color: chartConfig.checkout.color }
 			]}
 			seriesLayout="group"
 			xScale={scaleBand().paddingInner(0.2).paddingOuter(0.1)}
 			props={{
 				bars: {
 					radius: 4,
-					strokeWidth: 0,
-					// @ts-expect-error d3/layerchart typing for function fill
-					fill: (d: { key: string }) => chartConfig[d.key as keyof typeof chartConfig].color
+					strokeWidth: 0
 				},
 				xAxis: {
 					tickLabelProps: {
@@ -112,8 +110,10 @@
 							class="h-2.5 w-2.5 shrink-0 rounded-[2px]"
 							style="background-color: {chartConfig[item.key as keyof typeof chartConfig]?.color}"
 						></div>
-						<div class="flex flex-1 items-center justify-between leading-none">
-							<span class="text-muted-foreground">{name}</span>
+						<div class="flex flex-1 items-center justify-between leading-none gap-4">
+							<span class="text-muted-foreground">
+								{chartConfig[item.key as keyof typeof chartConfig]?.label ?? name}
+							</span>
 							<span class="font-mono font-medium text-foreground tabular-nums">
 								{value} คน
 							</span>
