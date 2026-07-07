@@ -7,6 +7,15 @@
 
 	const selectedCode = $derived(shelterStore.selectedShelterCode ?? shelterStore.listDefaultCode);
 
+	// Set after the query resolves — doing this inside listShelters() used to
+	// change getShelterDb() mid-fetch and trigger queryClient.clear() on F5.
+	$effect(() => {
+		const shelters = sheltersQuery.data;
+		if (shelters?.length && !shelterStore.listDefaultCode) {
+			shelterStore.listDefaultCode = shelters[0].code;
+		}
+	});
+
 	function onShelterChange(code: string | undefined) {
 		if (code) shelterStore.selectedShelterCode = code;
 	}
@@ -16,7 +25,7 @@
 	class="flex h-[52px] w-full items-center justify-center bg-[#0A2647] px-6 text-white shadow-sm"
 >
 	<div class="flex items-center">
-		{#if sheltersQuery.isLoading}
+		{#if sheltersQuery.isPending}
 			<span class="pr-4 text-sm font-medium text-white/80">กำลังโหลด...</span>
 		{:else if sheltersQuery.isError}
 			<span class="pr-4 text-sm font-medium text-red-400">เกิดข้อผิดพลาดในการโหลดข้อมูล</span>

@@ -1,55 +1,11 @@
 import { serviceFetch } from '$lib/api/service';
 import { shelterStore } from '$lib/stores/shelter.svelte';
-import type {
-	Shelter,
-	Zone,
-	Facilities,
-	CommonAreas,
-	Utilities,
-	Risk,
-	Location,
-	Contact,
-	OperationStatus,
-	ProjectLevel,
-	AreaType,
-	KeyPersonnel,
-	AdmissionPolicy,
-	LuggagePolicy,
-	ParkingPolicy
-} from '../domain/schema';
+import type { Shelter } from '../domain/schema';
+import type { ShelterSummary } from './shelters.repository';
+
+export type { ShelterSummary };
 
 const SHELTER_ENDPOINT = '/api/back-office/shelter';
-
-export interface ShelterSummary {
-	code: string;
-	name: string;
-	db: string;
-	operation_status: OperationStatus;
-	capacity: number;
-	shelter_type: string | null;
-	project_level: ProjectLevel | null;
-	location: Location;
-	contact: Contact;
-	municipality_zone: string | null;
-	community: string | null;
-	address_no: string | null;
-	village_no: string | null;
-	subdistrict: string | null;
-	district: string | null;
-	province: string | null;
-	postal_code: string | null;
-	key_personnel: KeyPersonnel | null;
-	area_m2: number | null;
-	area_type: AreaType | string | null;
-	facilities: Facilities;
-	common_areas: CommonAreas;
-	utilities: Utilities;
-	risk: Risk;
-	zones: Zone[];
-	admission_policy: AdmissionPolicy;
-	luggage_policy: LuggagePolicy;
-	parking_policy: ParkingPolicy;
-}
 
 export async function listShelters(): Promise<ShelterSummary[]> {
 	const shelters = await serviceFetch<ShelterSummary[]>(SHELTER_ENDPOINT);

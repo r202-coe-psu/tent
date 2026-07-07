@@ -139,4 +139,22 @@ describe('getSession', () => {
 
 		expect(await getSession()).toBeNull();
 	});
+
+	it('aborts when the session check exceeds the timeout', async () => {
+		let signal: AbortSignal | undefined;
+		fetchMock.mockImplementation((_url, init) => {
+			signal = init?.signal as AbortSignal | undefined;
+			return new Promise((_resolve, reject) => {
+				signal?.addEventListener('abort', () => {
+					reject(new DOMException('The operation was aborted.', 'AbortError'));
+				});
+			});
+		});
+
+		const pending = getSession(undefined, 50);
+		const assertion = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+		await new Promise((resolve) => setTimeout(resolve, 80));
+		expect(signal?.aborted).toBe(true);
+		await assertion;
+	});
 });

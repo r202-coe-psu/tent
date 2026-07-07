@@ -81,20 +81,13 @@ export {
 } from './domain/schema';
 
 // Data layer (public)
-export {
-	listShelters,
-	getShelter,
-	createShelter,
-	updateShelter,
-	closeZone,
-	reopenZone,
-	type ShelterSummary
-} from './data/shelters.api';
+export { createShelter, updateShelter, closeZone, reopenZone } from './data/shelters.api';
+export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.pouch';
+export type { ShelterSummary } from './data/shelters.repository';
 
 // Application (public)
 export {
 	sheltersKeys,
-	SHELTER_REGISTRY_DB,
 	startSheltersLiveQuery,
 	useShelters,
 	useShelter,

@@ -3,7 +3,7 @@
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Building from '@lucide/svelte/icons/building';
-	import type { ShelterSummary } from '../data/shelters.api';
+	import type { ShelterSummary } from '../data/shelters.repository';
 	import type { ProjectLevel } from '../domain/schema';
 
 	let {

@@ -374,6 +374,16 @@ export interface ShelterMasterV2 {
 	updated_at: string;
 }
 
+/** Type guard for shelter master docs in the `registry` database. */
+export function isShelterMasterDoc(d: unknown): d is ShelterMasterV2 | ShelterMaster {
+	return (
+		typeof d === 'object' &&
+		d !== null &&
+		(d as { type?: string }).type === 'shelter' &&
+		typeof (d as { code?: string }).code === 'string'
+	);
+}
+
 export interface ShelterMaster {
 	_id: string;
 	_rev?: string;
