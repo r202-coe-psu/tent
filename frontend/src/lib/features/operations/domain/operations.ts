@@ -545,3 +545,23 @@ export function isNeedCutOff(
 // The slot is “used” when a donation is received into it.
 export const isDonationSlot = (d: unknown): d is DonationSlot =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_slot';
+
+/**
+ * Maps a Thai item name heuristic to a slugged itemId.
+ */
+export function mapNeedItemHeuristic(name: string): string {
+	const lowerName = name.toLowerCase();
+	if (lowerName.includes('ข้าว')) return 'item:rice';
+	if (lowerName.includes('น้ำ')) return 'item:water';
+	if (lowerName.includes('พารา') || lowerName.includes('ยา')) return 'item:paracetamol';
+	if (lowerName.includes('สบู่')) return 'item:soap';
+	if (lowerName.includes('ห่ม')) return 'item:blanket';
+	if (lowerName.includes('ไข่')) return 'item:egg';
+
+	const slug = name
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9\u0e00-\u0e7f]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+	return `item:${slug || 'custom'}`;
+}

@@ -13,6 +13,7 @@ import {
 	isNeedCutOff,
 	deriveNeedAvailability,
 	createReceiveEntry,
+	mapNeedItemHeuristic,
 	type Donation,
 	type ReceiveSource
 } from './operations';
@@ -462,5 +463,21 @@ describe('createReceiveEntry', () => {
 			ctx
 		);
 		expect(entry.lot).toBeUndefined();
+	});
+});
+
+describe('mapNeedItemHeuristic', () => {
+	it('maps known items correctly', () => {
+		expect(mapNeedItemHeuristic('ข้าวสารหอมมะลิ')).toBe('item:rice');
+		expect(mapNeedItemHeuristic('น้ำดื่มสะอาด')).toBe('item:water');
+		expect(mapNeedItemHeuristic('ยาพาราเซตามอล')).toBe('item:paracetamol');
+		expect(mapNeedItemHeuristic('สบู่ถูตัว')).toBe('item:soap');
+		expect(mapNeedItemHeuristic('ผ้าห่มกันหนาว')).toBe('item:blanket');
+		expect(mapNeedItemHeuristic('ไข่ไก่สด')).toBe('item:egg');
+	});
+
+	it('slugs unknown items correctly', () => {
+		expect(mapNeedItemHeuristic('ปลากระป๋องรสเผ็ด')).toBe('item:ปลากระป๋องรสเผ็ด');
+		expect(mapNeedItemHeuristic('  Spoons & Forks  ')).toBe('item:spoons-forks');
 	});
 });

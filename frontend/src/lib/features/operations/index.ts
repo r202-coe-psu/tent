@@ -49,6 +49,7 @@ export {
 	isDonation,
 	isDonationCampaign,
 	isDonationSlot,
+	mapNeedItemHeuristic,
 	type StockLedgerInput,
 	type ReceiveInput,
 	type WalkInDonationInput,

@@ -15,12 +15,13 @@
 		useDonations,
 		useCreateCampaign,
 		useUpdateCampaign,
-		SHELTER_CODE,
 		type SpecialRequestInput,
 		type Donation,
 		deriveNeedAvailability,
-		startOperationsLiveQuery
+		startOperationsLiveQuery,
+		mapNeedItemHeuristic
 	} from '$lib/features/operations';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import type { NeedItem } from './components/needs-board-admin.svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
@@ -53,7 +54,7 @@
 	};
 
 	const ctx = $derived({
-		shelterCode: SHELTER_CODE,
+		shelterCode: getShelterCode(),
 		createdBy: authStore.user?.name ?? 'system'
 	});
 
@@ -191,22 +192,7 @@
 	}
 
 	function handleAddRequest(input: SpecialRequestInput) {
-		const lowerName = input.name.toLowerCase();
-		let itemId = 'item:custom';
-		if (lowerName.includes('ข้าว')) itemId = 'item:rice';
-		else if (lowerName.includes('น้ำ')) itemId = 'item:water';
-		else if (lowerName.includes('พารา') || lowerName.includes('ยา')) itemId = 'item:paracetamol';
-		else if (lowerName.includes('สบู่')) itemId = 'item:soap';
-		else if (lowerName.includes('ห่ม')) itemId = 'item:blanket';
-		else if (lowerName.includes('ไข่')) itemId = 'item:egg';
-		else {
-			const slug = input.name
-				.trim()
-				.toLowerCase()
-				.replace(/[^a-z0-9\u0e00-\u0e7f]+/g, '-')
-				.replace(/^-+|-+$/g, '');
-			itemId = `item:${slug || 'custom'}`;
-		}
+		const itemId = mapNeedItemHeuristic(input.name);
 
 		const newCampaignInput = {
 			title: input.name,
@@ -246,22 +232,7 @@
 		urgency?: 'critical' | 'important' | 'normal';
 		description?: string;
 	}) {
-		const lowerName = input.name.toLowerCase();
-		let itemId = 'item:custom';
-		if (lowerName.includes('ข้าว')) itemId = 'item:rice';
-		else if (lowerName.includes('น้ำ')) itemId = 'item:water';
-		else if (lowerName.includes('พารา') || lowerName.includes('ยา')) itemId = 'item:paracetamol';
-		else if (lowerName.includes('สบู่')) itemId = 'item:soap';
-		else if (lowerName.includes('ห่ม')) itemId = 'item:blanket';
-		else if (lowerName.includes('ไข่')) itemId = 'item:egg';
-		else {
-			const slug = input.name
-				.trim()
-				.toLowerCase()
-				.replace(/[^a-z0-9\u0e00-\u0e7f]+/g, '-')
-				.replace(/^-+|-+$/g, '');
-			itemId = `item:${slug || 'custom'}`;
-		}
+		const itemId = mapNeedItemHeuristic(input.name);
 
 		const newCampaignInput = {
 			title: input.name,

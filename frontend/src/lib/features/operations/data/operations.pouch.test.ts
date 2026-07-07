@@ -11,7 +11,8 @@ let testDb: PouchDB.Database;
 vi.mock('$lib/db/shelter', () => ({
 	SHELTER_CODE: 'SH001',
 	SHELTER_DB: 'shelter_sh001',
-	shelterDb: () => testDb
+	shelterDb: () => testDb,
+	getShelterDb: () => 'shelter_sh001'
 }));
 
 vi.mock('$lib/db/pouch', () => ({
@@ -277,7 +278,11 @@ describe('OperationsPouchRepository.updateCampaign', () => {
 		expect(storedCampaign?.title).toBe('น้ำดื่มและยารักษาโรค (ด่วนพิเศษ)');
 
 		const docs = await testDb.allDocs({ include_docs: true });
-		const auditDocs = docs.rows.map((r) => r.doc).filter((d: any) => d && d.type === 'audit');
+		const auditDocs = docs.rows
+			.map((r) => r.doc as Record<string, unknown> | undefined)
+			.filter((d): d is Record<string, unknown> & { type: string } => {
+				return d !== undefined && d !== null && typeof d === 'object' && d.type === 'audit';
+			});
 
 		expect(auditDocs).toHaveLength(1);
 		expect(auditDocs[0]).toMatchObject({
