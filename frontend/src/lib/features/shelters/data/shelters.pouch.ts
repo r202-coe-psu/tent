@@ -87,7 +87,7 @@ export class SheltersPouchRepository implements SheltersRepository {
 		const roles = authStore.user?.roles ?? [];
 		if (!isSystemAdmin(roles)) {
 			const scope = shelterCodeFromRoles(roles);
-			if (scope && scope !== code) {
+			if (scope || scope !== code) {
 				throw new Error('ไม่มีสิทธิ์เข้าถึงศูนย์พักพิงนี้');
 			}
 		}
