@@ -63,11 +63,11 @@
 
 	/* Warning — offline mode banner, pet-friendly zone, etc. (amber) */
 	--warning: oklch(82.233% 0.17032 79.874);
+	--warning-dark: oklch(73.738% 0.16072 68.971);
 	--warning-foreground: oklch(0.147 0.004 49.25);
 	--warning-muted: oklch(0.408 0.123 63.95);
 	--warning-subtle: oklch(0.882 0.057 95.617);
 	--warning-border: oklch(0.408 0.123 63.95);
-	--warning-dark: oklch(73.738% 0.16072 68.971);
 
 	/* Shelter Specific Colors */
 	--shelter-bg: oklch(0.982 0.009 239);
