@@ -68,7 +68,7 @@
 						{#snippet children({ pages })}
 							<Pagination.Content>
 								<Pagination.Previous />
-								{#each pages as p, i (i)}
+								{#each pages as p (p.key)}
 									<Pagination.Item>
 										{#if p.type === 'page'}
 											<Pagination.Link page={p} isActive={p.value === currentPage} />
