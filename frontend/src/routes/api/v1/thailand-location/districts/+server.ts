@@ -8,8 +8,7 @@ export const GET = async ({ url }) => {
 	}
 	try {
 		return json(listDistricts(province));
-	} catch (e) {
-		console.error('Failed to list districts:', e);
+	} catch {
 		return json({ error: 'Internal server error' }, { status: 500 });
 	}
 };

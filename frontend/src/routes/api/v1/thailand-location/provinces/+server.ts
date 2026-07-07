@@ -4,8 +4,7 @@ import { listProvinces } from '$lib/server/thailand-location';
 export const GET = async () => {
 	try {
 		return json(listProvinces());
-	} catch (e) {
-		console.error('Failed to list provinces:', e);
+	} catch {
 		return json({ error: 'Internal server error' }, { status: 500 });
 	}
 };

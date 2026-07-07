@@ -9,8 +9,7 @@ export const GET = async ({ url }) => {
 	}
 	try {
 		return json(listSubdistricts(province, district));
-	} catch (e) {
-		console.error('Failed to list subdistricts:', e);
+	} catch {
 		return json({ error: 'Internal server error' }, { status: 500 });
 	}
 };

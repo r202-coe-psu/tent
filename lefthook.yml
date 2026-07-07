@@ -2,7 +2,7 @@
 # Install: pnpm install (root) — runs `lefthook install` via prepare script.
 
 pre-commit:
-  parallel: false
+  parallel: true
   commands:
     frontend-lint:
       root: frontend/
