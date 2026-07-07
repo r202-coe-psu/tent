@@ -812,9 +812,6 @@ async function seedDashboardData(): Promise<void> {
 
 	const COUNTRIES = [
 		'THAILAND',
-		'THAILAND',
-		'THAILAND',
-		'THAILAND',
 		'MYANMAR',
 		'LAOS',
 		'CAMBODIA',
