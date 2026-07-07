@@ -75,6 +75,7 @@ export {
 	useCreateEvacuee,
 	useUpdateEvacuee,
 	useCheckInEvacuee,
+	useCheckOutEvacuee,
 	useHouseholds,
 	useHouseholdsPaginated,
 	useCreateHousehold,
@@ -93,3 +94,4 @@ export { default as EvacueeList } from './ui/evacuee-list.svelte';
 export { default as HouseholdForm } from './ui/household-form.svelte';
 export { default as HouseholdFormPage } from './ui/household-form-page.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';
+export { default as ScanCheckInOutPage } from './ui/scan-check-in-out-page.svelte';

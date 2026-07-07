@@ -20,6 +20,9 @@ importers:
       events:
         specifier: ^3.3.0
         version: 3.3.0
+      html5-qrcode:
+        specifier: ^2.3.8
+        version: 2.3.8
       jsonwebtoken:
         specifier: ^9.0.3
         version: 9.0.3
@@ -1769,6 +1772,9 @@ packages:
 
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
+
+  html5-qrcode@2.3.8:
+    resolution: {integrity: sha512-jsr4vafJhwoLVEDW3n1KvPnCCXWaQfRng0/EEYk1vNcQGcG/htAdhJX0be8YyqMoSz7+hZvOZSTAepsabiuhiQ==}
 
   https-browserify@1.0.0:
     resolution: {integrity: sha512-J+FkSdyD+0mA0N+81tMotaRMfSL9SGi+xpD3T6YApKsc3bGSXJlfXri3VyFOeYkfLRQisDk1W+jIFFKBeUBbBg==}
@@ -4690,6 +4696,8 @@ snapshots:
       minimalistic-crypto-utils: 1.0.1
 
   html-escaper@2.0.2: {}
+
+  html5-qrcode@2.3.8: {}
 
   https-browserify@1.0.0: {}
 

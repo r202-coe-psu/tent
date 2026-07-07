@@ -76,6 +76,12 @@ export const useCheckInEvacuee = () =>
 		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone)
 	}));
 
+export const useCheckOutEvacuee = () =>
+	createMutation(() => ({
+		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
+			peopleRepository().checkOutEvacuee(evacuee, ctx)
+	}));
+
 export const useHouseholds = () =>
 	createQuery(() => ({
 		queryKey: peopleKeys.households(),

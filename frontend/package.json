@@ -73,6 +73,7 @@
 		"@tanstack/svelte-query-devtools": "^6.1.29",
 		"@types/node": "^25.9.2",
 		"events": "^3.3.0",
+		"html5-qrcode": "^2.3.8",
 		"jsonwebtoken": "^9.0.3",
 		"openapi-fetch": "^0.17.0",
 		"openapi-typescript": "^7.13.0",

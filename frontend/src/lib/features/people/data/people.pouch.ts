@@ -216,6 +216,20 @@ export class PeoplePouchRepository implements PeopleRepository {
 			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
 		);
 	}
+
+	/** Record a check-out movement, then apply it to the evacuee's current_stay.
+	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
+	async checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee> {
+		const movement = createMovement(
+			{ evacuee_id: evacuee._id, action: 'check_out', zone: null },
+			ctx
+		);
+		await this.repo.put(movement);
+		const latest = await this.repo.get<Evacuee>(evacuee._id);
+		return this.repo.put(
+			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
+		);
+	}
 }
 
 let singleton: PeopleRepository | null = null;
