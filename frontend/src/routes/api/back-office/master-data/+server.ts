@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA, serviceError } from '$lib/server/couch-admin';
-import { MASTER_DATA_TYPES } from '$lib/features/master-data';
+import { MASTER_DATA_TYPES } from '$lib/features/master-data/domain';
 import { readMasterDoc } from '$lib/server/master-data-server';
 
 /**

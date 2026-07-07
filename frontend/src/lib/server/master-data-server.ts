@@ -1,5 +1,5 @@
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
-import type { MasterData, MasterDataType } from '$lib/features/master-data';
+import type { MasterData, MasterDataType } from '$lib/features/master-data/domain';
 
 const REGISTRY_DB = 'registry';
 

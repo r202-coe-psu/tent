@@ -12,7 +12,7 @@ import {
 	masterDataSchema,
 	masterTypeSchema,
 	type MasterData
-} from '$lib/features/master-data';
+} from '$lib/features/master-data/domain';
 import { readMasterDoc } from '$lib/server/master-data-server';
 
 export const prerender = false;

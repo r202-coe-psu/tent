@@ -1,4 +1,5 @@
 import { serviceFetch } from '$lib/api/service';
+import { shelterStore } from '$lib/stores/shelter.svelte';
 import type {
 	Shelter,
 	Zone,
@@ -50,8 +51,12 @@ export interface ShelterSummary {
 	parking_policy: ParkingPolicy;
 }
 
-export function listShelters(): Promise<ShelterSummary[]> {
-	return serviceFetch<ShelterSummary[]>(SHELTER_ENDPOINT);
+export async function listShelters(): Promise<ShelterSummary[]> {
+	const shelters = await serviceFetch<ShelterSummary[]>(SHELTER_ENDPOINT);
+	if (shelters.length > 0 && !shelterStore.listDefaultCode) {
+		shelterStore.listDefaultCode = shelters[0].code;
+	}
+	return shelters;
 }
 
 export function getShelter(code: string): Promise<ShelterSummary> {

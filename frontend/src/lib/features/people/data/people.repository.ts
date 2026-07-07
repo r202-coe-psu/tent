@@ -11,6 +11,11 @@ import type {
 	Movement
 } from '../domain/people';
 
+export type HouseholdSearchLabels = {
+	municipalityZone: Record<string, string>;
+	community: Record<string, string>;
+};
+
 /**
  * Persistence contract for the `people` feature. The application layer depends
  * on this interface — never on PouchDB directly — so the store can be swapped
@@ -25,8 +30,12 @@ export interface PeopleRepository {
 	createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee>;
 	/** Every evacuee in this shelter database. */
 	listEvacuees(): Promise<Evacuee[]>;
-	/** Paginated list of evacuees — fetches all then slices by page/pageSize. */
-	listEvacueesPaginated(page: number, pageSize: number): Promise<PaginatedResult<Evacuee>>;
+	/** Paginated list of evacuees — optional `search` filters before paging. */
+	listEvacueesPaginated(
+		page: number,
+		pageSize: number,
+		search?: string
+	): Promise<PaginatedResult<Evacuee>>;
 	/** One evacuee by `_id`, or `null` when absent. */
 	getEvacuee(id: string): Promise<Evacuee | null>;
 	/** Persist an edited evacuee (LWW: bumps `updated_at`). */
@@ -35,8 +44,13 @@ export interface PeopleRepository {
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household>;
 	/** Every household in this shelter database. */
 	listHouseholds(): Promise<Household[]>;
-	/** Paginated list of households — fetches all then slices by page/pageSize. */
-	listHouseholdsPaginated(page: number, pageSize: number): Promise<PaginatedResult<Household>>;
+	/** Paginated list of households — optional `search` filters before paging. */
+	listHouseholdsPaginated(
+		page: number,
+		pageSize: number,
+		search?: string,
+		labels?: HouseholdSearchLabels
+	): Promise<PaginatedResult<Household>>;
 	/** One household by `_id`, or `null` when absent. */
 	getHousehold(id: string): Promise<Household | null>;
 	/** Persist an edited household (LWW: bumps `updated_at`). */

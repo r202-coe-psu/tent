@@ -13,7 +13,8 @@ import type {
 	GasCylinderType,
 	GasCylinderTypeInput
 } from '../domain/kitchen';
-import { calculateMealIngredients } from '../domain/meal-calc';
+// import { calculateMealIngredients } from '../domain/meal-calc';
+import { calculateMealIngredients, DEFAULT_RICE_G_PER_PERSON_MEAL } from '../domain/meal-calc';
 import { deriveHeadcountFromOccupancy } from '../domain/occupancy';
 import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
 
@@ -67,11 +68,12 @@ export const useCreateMealPlanCalc = () =>
 		}) => {
 			const profile = await getActiveSopProfile();
 			if (!profile) throw new Error('No active SOP profile found — seed one first');
-			const riceG = profile.ratios.rice_g_per_person_meal;
-			if (!riceG) throw new Error('Active SOP profile missing rice_g_per_person_meal');
+			// const riceG = profile.ratios.rice_g_per_person_meal;
+			// if (!riceG) throw new Error('Active SOP profile missing rice_g_per_person_meal');
 			const { recipes, calc_source } = calculateMealIngredients(
 				headcount,
-				riceG,
+				// riceG,
+				DEFAULT_RICE_G_PER_PERSON_MEAL,
 				profile._id,
 				profile.version,
 				new Date().toISOString()

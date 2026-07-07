@@ -3,7 +3,6 @@
 	import { Badge, type BadgeVariant } from '$lib/components/ui/badge/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { toast } from 'svelte-sonner';
-	import * as Field from '$lib/components/ui/field/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { householdInputSchema } from '../domain/people';

@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
-import { masterTypeSchema, type MasterData } from '$lib/features/master-data';
+import { masterTypeSchema, type MasterData } from '$lib/features/master-data/domain';
 import { readMasterDoc } from '$lib/server/master-data-server';
 
 /**

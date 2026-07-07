@@ -1,6 +1,7 @@
 import { namedLocalDb } from '$lib/db/pouch';
 import { createRepository, type Repository } from '$lib/db/repository';
-import { getShelterDb, shelterDb as _shelterDb } from '$lib/db/shelter';
+import { getShelterDb } from '$lib/db/shelter';
+// import { getShelterDb, shelterDb as _shelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import {
 	isStockLedger,

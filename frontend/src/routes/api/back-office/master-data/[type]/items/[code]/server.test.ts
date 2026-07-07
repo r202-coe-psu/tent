@@ -14,7 +14,7 @@ vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: vi.fn() }));
 import { DELETE } from './+server';
 import { requireAdmin, adminRaw } from '$lib/server/couch-admin';
 import { readMasterDoc } from '$lib/server/master-data-server';
-import type { MasterData } from '$lib/features/master-data';
+import type { MasterData } from '$lib/features/master-data/domain';
 
 const requireAdminMock = vi.mocked(requireAdmin);
 const adminRawMock = vi.mocked(adminRaw);

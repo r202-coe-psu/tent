@@ -23,7 +23,7 @@ vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: vi.fn() }));
 import { GET, PUT } from './+server';
 import { requireAdmin, requireShelterScopeOrSA, adminRaw } from '$lib/server/couch-admin';
 import { readMasterDoc } from '$lib/server/master-data-server';
-import type { MasterData } from '$lib/features/master-data';
+import type { MasterData } from '$lib/features/master-data/domain';
 
 const requireAdminMock = vi.mocked(requireAdmin);
 const authMock = vi.mocked(requireShelterScopeOrSA);

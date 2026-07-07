@@ -69,6 +69,9 @@ pr_title: "feat(people): add intake form"
 pr_url: https://github.com/acme/tent/pull/42
 verdict: Request changes
 review_action: request-changes
+merge_ready: false
+attempt_count: 2
+escalation_required: false
 created_at: 2026-07-03T10:37:00+07:00
 workspace: /home/user/Projects/tent
 ---
@@ -76,6 +79,7 @@ workspace: /home/user/Projects/tent
 ## PR Review — feat(people): add intake form
 
 **Verdict:** Request changes
+**Merge readiness:** ❌ ยังไม่พร้อม merge
 
 ### Blockers
 - …
@@ -88,6 +92,12 @@ workspace: /home/user/Projects/tent
 
 ### Nitpicks
 - …
+
+### Merge readiness (summary)
+
+- **Status:** ❌ ยังไม่พร้อม merge / ✅ พร้อม merge / ⚠️ พร้อม merge (มีข้อควรระวัง)
+- **สรุป:** <1–2 ประโยค อธิบายว่าทำไมพร้อมหรือยังไม่พร้อม>
+- **ก่อน merge:** <สิ่งที่ต้องทำก่อน merge — หรือ `—` ถ้าพร้อมแล้ว>
 ```
 
 **`review_action`** — one of `comment` | `approve` | `request-changes`. Set from verdict:
@@ -97,13 +107,37 @@ workspace: /home/user/Projects/tent
 
 **`verdict`** — human-readable label for chat context only.
 
+**`merge_ready`** — `true` | `false` (artifact frontmatter only; not posted). Set from **Merge readiness** rules below.
+
+### Merge readiness (mandatory)
+
+Every review MUST state clearly whether the change is **ready to merge**. Include:
+
+1. **One-line badge** immediately after **Verdict** (visible at a glance):
+   - `**Merge readiness:** ✅ พร้อม merge`
+   - `**Merge readiness:** ❌ ยังไม่พร้อม merge`
+   - `**Merge readiness:** ⚠️ พร้อม merge (มีข้อควรระวัง)` — only when allowed (see table)
+2. **`### Merge readiness (summary)`** section at the **end** of every review (chat + artifact body) with **Status**, **สรุป**, and **ก่อน merge**.
+
+| Status | `merge_ready` | Condition |
+| --- | --- | --- |
+| ✅ พร้อม merge | `true` | No blockers, verdict `Approve`, `escalation_required` is false |
+| ❌ ยังไม่พร้อม merge | `false` | Any blocker, verdict `Request changes`, or `escalation_required` is true |
+| ⚠️ พร้อม merge (มีข้อควรระวัง) | `true` | No blockers, verdict `Comment`, only warnings/suggestions/nitpicks — merge acceptable but note follow-ups in **สรุป** |
+
+**สรุป** must answer in plain language: *พร้อม merge แล้วหรือยัง และทำไม* (1–2 sentences). Use Thai for **Status** / **สรุป** / **ก่อน merge**; English summary optional in parentheses.
+
+When **ยังไม่พร้อม merge**, **ก่อน merge** must list concrete next steps (e.g. แก้ blockers, รอ senior verify). When **พร้อม merge**, write `—`.
+
 ### After review (write artifact)
 
-1. Finish analysis and format the review (see **Output Format**).
-2. Display the review in chat.
-3. **Write the artifact file** to `$HOME/.cursor/pr-code-review/{owner}__{repo}__pr-{number}.md`.
-4. Tell the user the artifact path so they can edit it before posting.
-5. If an artifact for the same project + PR already exists, **overwrite** it (latest review wins).
+1. **Load / update attempt state** — see **Review Attempt Threshold** (increment on fail, reset on pass).
+2. Finish analysis and format the review (see **Output Format**).
+3. Display the review in chat (include escalation notice when `attempt_count >= 3`).
+4. **Write the artifact file** to `$HOME/.cursor/pr-code-review/{owner}__{repo}__pr-{number}.md` — include `merge_ready`, `attempt_count`, and `escalation_required` in frontmatter.
+5. **Write / update / delete** the matching `.state.json` file.
+6. Tell the user the artifact path so they can edit it before posting.
+7. If an artifact for the same project + PR already exists, **overwrite** it (latest review wins).
 
 ### Before post (read artifact)
 
@@ -111,12 +145,13 @@ workspace: /home/user/Projects/tent
 2. Resolve `{owner}` / `{repo}` from the current repo; confirm they match the artifact frontmatter (warn if mismatch).
 3. **Read the artifact file** — use the markdown body as the `gh pr review -b` payload.
 4. Honor `review_action` in frontmatter unless the user explicitly overrides (e.g. "post as approve").
-5. If the artifact is missing, stop and ask the user to re-run the review or provide the path.
+5. If `escalation_required: true`, apply **Posting under escalation** rules before posting.
+6. If the artifact is missing, stop and ask the user to re-run the review or provide the path.
 
 ### After successful post (delete artifact)
 
 1. Run `gh pr review` with the body from the artifact.
-2. **Only on success** (exit code 0): delete the artifact file (`rm`).
+2. **Only on success** (exit code 0): delete the artifact file (`rm`) **and** the matching `.state.json` if the posted review was an **Approve**.
 3. Confirm in chat which PR was posted and that the artifact was removed.
 
 ### On post failure
@@ -139,6 +174,76 @@ workspace: /home/user/Projects/tent
 
 If the user has not said to post, end your response with a short note that the review is for human review only, include the artifact path, and that they can ask you to post when ready.
 
+## Review Attempt Threshold (3 attempts)
+
+Track consecutive **non-passing** reviews per PR (or local review target). When a target fails **3 times**, escalate — a **senior developer** or **tech lead** must verify manually before merge.
+
+**Constant:** `MAX_REVIEW_ATTEMPTS = 3`
+
+### Pass / fail
+
+| Result | Condition |
+| --- | --- |
+| **Pass** | Verdict is `Approve` — no blockers |
+| **Fail** | Verdict is `Request changes`, **or** the review lists one or more **Blockers** (even if verdict is `Comment`) |
+
+### State file
+
+Persist attempt count alongside artifacts (same directory, same `{owner}__{repo}__` prefix):
+
+```
+$HOME/.cursor/pr-code-review/{owner}__{repo}__pr-{number}.state.json
+```
+
+Local / pre-PR reviews:
+
+```
+$HOME/.cursor/pr-code-review/{owner}__{repo}__local-{staged|unstaged|diff}.state.json
+```
+
+```json
+{
+  "project_full_name": "acme/tent",
+  "review_target": "pr-42",
+  "attempt_count": 2,
+  "last_verdict": "Request changes",
+  "last_review_at": "2026-07-06T15:38:00+07:00",
+  "escalation_required": false
+}
+```
+
+- Create the directory with mode `0700` if missing.
+- `review_target` — e.g. `pr-42`, `local-staged`.
+
+### Counter workflow (every analyze review)
+
+1. **Load state** — read `.state.json` for this target; if missing, treat `attempt_count` as `0`.
+2. **Analyze** — run the normal review checklist.
+3. **Update counter:**
+   - **Pass** → set `attempt_count = 0`, **delete** `.state.json`.
+   - **Fail** → increment `attempt_count`, write `.state.json` with `last_verdict`, `last_review_at`, and `escalation_required: attempt_count >= 3`.
+4. **Escalation** — when `attempt_count >= 3` after a fail:
+   - Set `escalation_required: true` in state **and** artifact frontmatter.
+   - Display the **Escalation notice** (below) at the top of chat output and in the artifact body (immediately after the verdict line).
+   - Do **not** auto-post (existing rule). Warn that senior/tech lead sign-off is required before merge.
+
+### Escalation notice (mandatory when `attempt_count >= 3`)
+
+```markdown
+> ⚠️ **ต้องให้ Senior / Tech Lead ตรวจสอบเอง (ครบ {attempt_count}/3 ครั้ง)**
+>
+> PR นี้ยังไม่ผ่านการ review หลังพยายามแก้ไขครบ 3 ครั้งแล้ว กรุณาให้ **senior developer** หรือ **tech lead** เข้ามา verify และตรวจสอบด้วยตัวเองก่อน merge
+>
+> *This change has not passed review after 3 attempts. A senior developer or tech lead must manually verify before merge.*
+```
+
+### Posting under escalation
+
+If artifact frontmatter has `escalation_required: true` and the user requests post:
+
+1. Warn that senior/tech lead manual verification is expected.
+2. Post **only** if the user explicitly confirms in the same or follow-up message (e.g. "post anyway", "senior approved").
+
 ## Output Format (chat)
 
 Always structure the in-chat review with these four severity levels:
@@ -156,6 +261,10 @@ Template (chat display **and** artifact body below frontmatter):
 ## PR Review — <title or number>
 
 **Verdict:** <Approve / Request changes / Comment — for human context only; not posted>
+**Merge readiness:** <✅ พร้อม merge / ❌ ยังไม่พร้อม merge / ⚠️ พร้อม merge (มีข้อควรระวัง)>
+**Attempt:** <attempt_count>/3> *(omit line when attempt_count is 0)*
+
+<!-- Escalation notice here when attempt_count >= 3 — see Review Attempt Threshold -->
 
 ### Blockers
 - …
@@ -168,6 +277,12 @@ Template (chat display **and** artifact body below frontmatter):
 
 ### Nitpicks
 - …
+
+### Merge readiness (summary)
+
+- **Status:** <same as one-line badge above>
+- **สรุป:** <1–2 ประโยค — พร้อม merge แล้วหรือยัง และทำไม>
+- **ก่อน merge:** <ขั้นตอนที่ต้องทำ หรือ `—` ถ้าพร้อมแล้ว>
 ```
 
 When suggesting code changes, use **Markdown diff blocks** (` ```diff `) with `-` / `+` lines, not plain code blocks.
@@ -178,7 +293,13 @@ End chat output with:
 
 ```markdown
 ---
-*Review saved to `~/.cursor/pr-code-review/{owner}__{repo}__pr-{number}.md`. Edit that file if needed, then say "post review to GitHub" (or `/pr-code-review post <PR>`) when ready.*
+*Review saved to `~/.cursor/pr-code-review/{owner}__{repo}__pr-{number}.md` (attempt {attempt_count}/3). Edit that file if needed, then say "post review to GitHub" (or `/pr-code-review post <PR>`) when ready.*
+```
+
+When `escalation_required: true`, add:
+
+```markdown
+*⚠️ ครบ 3 ครั้งแล้ว — ต้องให้ senior dev หรือ tech lead ตรวจสอบเองก่อน merge*
 ```
 
 ## 1. Architecture & Data Flow (Offline-First)
@@ -250,13 +371,16 @@ Confirm the PR number with the user if ambiguous. If they edited the artifact, u
 1. **Fetch and analyze the diff**
    - **PRs:** `gh pr view` + `gh pr diff` + `gh repo view`
    - **Local:** `git diff --cached` or `git diff`
-2. **Load related skills** (read and apply before concluding):
+2. **Load attempt state** — read `.state.json` for this review target (see **Review Attempt Threshold**).
+3. **Load related skills** (read and apply before concluding):
    - `project-structure-architecture` — feature layering, file placement
    - `svelte-core-bestpractices` / `shadcn-svelte` / `svelte-code-writer` — Svelte/UI changes
    - `couchdb-pouchdb-bestpractices` — data model, offline-first, MVCC
    - `security-rbac-bestpractices` — roles, shelter scope, PII
    - `testing-bestpractices` — Vitest/Playwright, DoD
-3. **Check the checklist** — sections 1–4 above.
-4. **Formulate feedback** — Blocker / Warning / Suggestion / Nitpick; use diff blocks for fixes.
-5. **Display in chat** and **write artifact** to `~/.cursor/pr-code-review/`.
-6. **Post to GitHub** (explicit command only) — read artifact → post → delete artifact on success.
+4. **Check the checklist** — sections 1–4 above.
+5. **Formulate feedback** — Blocker / Warning / Suggestion / Nitpick; use diff blocks for fixes.
+6. **Determine merge readiness** — set one-line badge, summary section, and `merge_ready` frontmatter (see **Merge readiness**).
+7. **Update attempt counter** — pass resets, fail increments; escalate at 3.
+8. **Display in chat** and **write artifact + state** to `~/.cursor/pr-code-review/`.
+9. **Post to GitHub** (explicit command only) — read artifact → post → delete artifact on success.

@@ -12,6 +12,9 @@ export function getShelterCode(): string {
 	if (shelterStore.selectedShelterCode) {
 		return shelterStore.selectedShelterCode;
 	}
+	if (shelterStore.listDefaultCode) {
+		return shelterStore.listDefaultCode;
+	}
 	const roles = authStore.user?.roles ?? [];
 	return shelterCodeFromRoles(roles) ?? 'SH001';
 }

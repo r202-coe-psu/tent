@@ -2,8 +2,8 @@
 
 Working agreement for the **`frontend`** package (the SvelteKit frontend of _tent / CouchDB Lab_).
 Read this before opening a PR. It captures the conventions the codebase already enforces — most
-are checked by ESLint, `svelte-check`, and tests, so "the CI is green" and "this doc is honored"
-should mean the same thing.
+are checked by ESLint, `svelte-check`, tests, and the **Lefthook pre-commit hook** (§1), so "the
+hook is green" and "this doc is honored" should mean the same thing for lint/check/test.
 
 > The stale `agent-role.md` still describes the original sveltekitten template (JWT + `openapi-fetch`,
 > flat `api.ts`/`queries.ts` features). **This document and the actual `src/` tree win** where they
@@ -13,22 +13,46 @@ should mean the same thing.
 
 ## 1. Toolchain & commands
 
-- **Package manager: pnpm only** (the lockfile is `pnpm-lock.yaml`). Don't add `package-lock.json`/`yarn.lock`.
-- Run everything from `frontend/`.
+- **Package manager: pnpm only** (lockfiles: `frontend/pnpm-lock.yaml` for the app;
+  `pnpm-lock.yaml` at repo root for Lefthook). Don't add `package-lock.json`/`yarn.lock`.
+- **First-time setup after clone** — install git hooks from the repo root, then app deps:
 
-| Task                     | Command                                              |
-| ------------------------ | ---------------------------------------------------- |
-| Dev server               | `pnpm dev` (binds `0.0.0.0`)                         |
-| Type-check               | `pnpm check`                                         |
-| Lint + format check      | `pnpm lint`                                          |
-| Auto-format              | `pnpm format`                                        |
-| Unit tests (run once)    | `pnpm test`                                          |
-| Unit tests (watch)       | `pnpm test:watch`                                    |
-| E2E (Playwright)         | `pnpm test:e2e`                                      |
-| Regenerate OpenAPI types | `pnpm openapi:update` (only when a task requires it) |
+  ```bash
+  pnpm install          # repo root — installs lefthook, runs `lefthook install`
+  cd frontend && pnpm install
+  ```
+
+- Run app commands from `frontend/`.
+
+| Task                      | Command                                              |
+| ------------------------- | ---------------------------------------------------- |
+| Dev server                | `pnpm dev` (binds `0.0.0.0`)                         |
+| Type-check                | `pnpm check`                                         |
+| Lint + format check       | `pnpm lint`                                          |
+| Auto-format               | `pnpm format`                                        |
+| Unit tests (run once)     | `pnpm test`                                          |
+| Unit tests (watch)        | `pnpm test:watch`                                    |
+| E2E (Playwright)          | `pnpm test:e2e`                                      |
+| Regenerate OpenAPI types  | `pnpm openapi:update` (only when a task requires it) |
+| Pre-commit hook (dry run) | `pnpm exec lefthook run pre-commit` (from repo root) |
 
 The CouchDB backend runs via the repo-root `docker compose up` (CouchDB 3.5). Copy `.env.example`
 to `.env` first.
+
+### Pre-commit quality gate (Lefthook)
+
+[`lefthook.yml`](../lefthook.yml) at the repo root enforces a **basic code-smell check** before
+every commit that stages `frontend/` files. Commands run sequentially (fail-fast), matching
+Jenkins staging CI:
+
+1. `pnpm lint` — Prettier + ESLint
+2. `pnpm check` — `svelte-check`
+3. `pnpm test` — Vitest
+
+Hooks register automatically via the root `prepare` script when you `pnpm install` at the repo
+root. Commits that only touch docs, infra, or other non-`frontend/` paths skip the gate.
+
+Bypass only when necessary: `LEFTHOOK=0 git commit` or `git commit --no-verify`.
 
 ## 2. Definition of done
 
@@ -39,6 +63,11 @@ A change is not ready until **all** of these pass locally:
 3. `pnpm test` — unit tests green; new domain/data logic ships with tests (see §6).
 4. Every `.svelte` file you touched has been run through the **`svelte-autofixer`** (Svelte MCP)
    until it reports no issues.
+
+Items **1–3** run automatically on `git commit` when `frontend/` files are staged (Lefthook
+pre-commit). Run them manually (`pnpm lint`, `pnpm check`, `pnpm test` in `frontend/`) before
+you stage if you want faster feedback. Item **4** is not hooked — verify it yourself before opening
+a PR.
 
 ## 3. Architecture: feature-sliced, local-first
 
