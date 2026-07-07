@@ -258,3 +258,8 @@ export const COUNTRIES: Country[] = [
 	{ value: 'HAITI', label: 'เฮติ' },
 	{ value: 'OTHER', label: 'อื่นๆ' }
 ];
+
+export function getCountryName(value: string): string {
+	const country = COUNTRIES.find((c) => c.value === value);
+	return country ? country.label : value;
+}
