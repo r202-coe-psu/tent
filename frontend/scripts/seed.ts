@@ -305,6 +305,22 @@ async function seedCatalog(): Promise<void> {
 		}
 	});
 
+	// Deploy validate_doc_update to catalog DB to enforce read-only for non-SA roles
+	const ddocId = '_design/access';
+	const { status: getStatus, data: existingDdoc } = await couchReq('GET', `/catalog/${encodeURIComponent(ddocId)}`);
+	const rev = getStatus === 200 ? (existingDdoc as { _rev: string })._rev : undefined;
+	const validateFn = `function (newDoc, oldDoc, userCtx) {
+  if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
+    return;
+  }
+  throw({ forbidden: 'Only System Admins can write to the catalog database.' });
+}`;
+	await couchReq('PUT', `/catalog/${encodeURIComponent(ddocId)}`, {
+		_id: ddocId,
+		...(rev ? { _rev: rev } : {}),
+		validate_doc_update: validateFn
+	});
+
 	const items = [
 		catalogDoc(ITEM.rice, 'supply_item', {
 			name: 'ข้าวสาร',
