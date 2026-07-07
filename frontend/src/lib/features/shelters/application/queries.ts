@@ -22,11 +22,13 @@ export const useShelters = () =>
 	createQuery(() => ({
 		queryKey: sheltersKeys.list(),
 		queryFn: () => sheltersRepository().listShelters()
+		queryFn: () => sheltersRepository().listShelters()
 	}));
 
 export const useShelter = (code: () => string) =>
 	createQuery(() => ({
 		queryKey: sheltersKeys.detail(code()),
+		queryFn: () => sheltersRepository().getShelter(code()),
 		queryFn: () => sheltersRepository().getShelter(code()),
 		enabled: !!code()
 	}));
@@ -152,6 +154,8 @@ export const useReopenZone = () => {
  *
  * Hook from the root layout alongside the people live query.
  */
+export { SHELTER_REGISTRY_DB };
+
 export { SHELTER_REGISTRY_DB };
 
 export function startSheltersLiveQuery(queryClient: QueryClient): LiveQueryHandle {
