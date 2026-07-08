@@ -1,10 +1,10 @@
 ---
 id: CR-035
 title: daily_calc doc type — persisted daily resource-calc snapshot (T-31.4)
-status: proposed        # proposed | approved | done | rejected | superseded
+status: proposed        
 date: 2026-07-08
-requested_by: T-31.4 (daily resource calc engine — data/repository layer)
-decided_by: <เจ้าของโครงการ>
+requested_by: TEAM D -- T-31.4 (daily resource calc engine — data/repository layer)
+decided_by: project owner
 layer: volatile
 affects:
   - docs/data/schema.md §2.15 (doc type ใหม่)
