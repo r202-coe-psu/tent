@@ -26,23 +26,29 @@
 	let outsideEvacuees = $state(0);
 	let notes = $state('');
 
-	// Reset the actuals whenever a fresh plan opens the dialog — no carryover
-	// between plans. Keyed on plan._id so reopening the same plan also resets.
-	let seededFor = $state<string | null>(null);
-	$effect(() => {
-		if (open && plan && seededFor !== plan._id) {
-			served = 0;
-			waste = 0;
-			volunteers = 0;
-			outsideEvacuees = 0;
-			notes = '';
-			seededFor = plan._id;
-		}
-		if (!open) seededFor = null;
-	});
-
 	const planned = $derived(plan?.headcount.total ?? 0);
 	const canSubmit = $derived(served >= 0 && waste >= 0 && volunteers >= 0 && outsideEvacuees >= 0);
+
+	// Discard the actuals on close — no carryover between plans (mirrors
+	// requisition-dialog's close() pattern instead of resetting via $effect).
+	function resetActuals() {
+		served = 0;
+		waste = 0;
+		volunteers = 0;
+		outsideEvacuees = 0;
+		notes = '';
+	}
+
+	function close() {
+		resetActuals();
+		open = false;
+	}
+
+	// Covers escape/overlay close in addition to the cancel button's close().
+	function handleOpenChange(v: boolean) {
+		open = v;
+		if (!v) resetActuals();
+	}
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
@@ -61,7 +67,7 @@
 				ctx
 			});
 			toast.success(`บันทึกบริการ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
-			open = false;
+			close();
 		} catch (err) {
 			// meal_service is append-only with a deterministic _id — a re-record of the
 			// same date+meal collides (409). Surface it as "already recorded" rather
@@ -75,7 +81,7 @@
 	}
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root {open} onOpenChange={handleOpenChange}>
 	<Dialog.Content class="max-w-lg">
 		<Dialog.Header>
 			<Dialog.Title>บันทึกผลบริการอาหาร</Dialog.Title>
@@ -142,7 +148,7 @@
 			{/if}
 
 			<Dialog.Footer>
-				<Button type="button" variant="outline" onclick={() => (open = false)}>ยกเลิก</Button>
+				<Button type="button" variant="outline" onclick={close}>ยกเลิก</Button>
 				<Button type="submit" disabled={record.isPending || !plan || !canSubmit}>
 					{record.isPending ? 'กำลังบันทึก...' : 'บันทึกผลบริการ'}
 				</Button>
