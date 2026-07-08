@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-08 # CR-033 remote-first architecture; CR-034 evacuee stay status; CR-035 donation campaign cutoff; index ครบ CR-001..035; CR-035 implementation in PR #39 pending owner sign-off
+updated: 2026-07-08 # CR-033 remote-first architecture; CR-034 donation campaign cutoff; CR-035 evacuee stay status; index ครบ CR-001..035; CR-034 implementation in PR #39 pending owner sign-off
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -49,5 +49,5 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-031](CR-031-item-master-schema-reconciliation.md) | Item Master Schema Reconciliation — เพิ่มฟิลด์ `category` (str, opt) ใน `item_master` ให้สอดคล้อง spec↔code; schema_v 2 คงเดิม (reconcile) | done | volatile | 2026-07-04 (done 07-05) | docs/data/schema.md §4.2, features/catalog/domain/catalog.ts |
 | [CR-032](CR-032-stock-ledger-purchase-reason.md) | Add `purchase` to `stock_ledger.reason` enum; schema_v 1→2; map purchase source → purchase reason in `createReceiveEntry` | proposed | volatile | 2026-07-05 | docs/data/schema.md §2.1, features/operations/domain/operations.ts, features/operations/data/operations.remote.ts |
 | [CR-033](CR-033-remote-first-architecture-program-index.md) | Remote-first architecture pivot (single comprehensive CR) — ตัด local-first/Pouch assumptions และดำเนินงานทั้งหมดภายใต้ record เดียว | approved | stable | 2026-07-07 | docs/data/data-model.md, docs/data/api-contract.md, docs/task-breakdown/01-core.md, docs/features/offline-fallback-flow-spec.html, docs/prd/*.md, frontend/CONTRIBUTING.md, frontend/CONVENTIONS.md |
-| [CR-034](CR-034-evacuee-stay-status-v3-scan-check-in-out.md) | Evacuee stay status v3 + movement action expansion for scan check-in/out (6 statuses, occupancy mapping `active`) | done | volatile | 2026-07-08 (done 07-08) | docs/data/schema.md §1.1 §1.4 §2.5, schema_v evacuee 2→3, features/people/{domain,data,application,ui}, features/dashboard/domain/occupancy.schema.ts |
-| [CR-035](CR-035-donation-campaign-cutoff-rules.md) | เพิ่ม needs[].status + visible_on_home ใน donation_campaign สำหรับระบบ Force Cut-off และขยับ schema_v เป็น 2 (renumbered CR-033→CR-035 to resolve collision with remote-first architecture CR) | proposed (implementation complete in PR #39 — pending owner sign-off) | volatile | 2026-07-06 | schema.md §2.4, schema_v donation_campaign 1→2, operations.ts |
+| [CR-034](CR-034-donation-campaign-cutoff-rules.md) | เพิ่ม needs[].status + visible_on_home ใน donation_campaign สำหรับระบบ Force Cut-off และขยับ schema_v เป็น 2 (renumbered CR-033→CR-034 to resolve collision with remote-first architecture CR) | proposed (implementation complete in PR #39 — pending owner sign-off) | volatile | 2026-07-06 | schema.md §2.4, schema_v donation_campaign 1→2, operations.ts |
+| [CR-035](CR-035-evacuee-stay-status-v3-scan-check-in-out.md) | Evacuee stay status v3 + movement action expansion for scan check-in/out (6 statuses, occupancy mapping `active`) | done | volatile | 2026-07-08 (done 07-08) | docs/data/schema.md §1.1 §1.4 §2.5, schema_v evacuee 2→3, features/people/{domain,data,application,ui}, features/dashboard/domain/occupancy.schema.ts |

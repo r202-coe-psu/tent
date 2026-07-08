@@ -1,5 +1,5 @@
 ---
-id: CR-034
+id: CR-035
 title: Evacuee stay status v3 + movement action expansion for scan check-in/out
 status: done
 date: 2026-07-08
@@ -13,7 +13,7 @@ affects:
   - frontend/src/lib/features/dashboard/domain/occupancy.schema.ts
 ---
 
-# CR-034 — Evacuee stay status v3 + movement action expansion for scan check-in/out
+# CR-035 — Evacuee stay status v3 + movement action expansion for scan check-in/out
 
 ## Why
 ต้องรองรับ flow สแกนเข้า-ออกศูนย์ (T-51) และสถานะการพักพิงที่ละเอียดขึ้นใน UI v5 โดย enum เดิม
