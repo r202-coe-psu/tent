@@ -19,8 +19,6 @@
 	import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 	import { CATALOG_DB } from '$lib/features/supply';
 
-	import { page } from '$app/stores';
-
 	let { children, data } = $props();
 
 	$effect(() => {
