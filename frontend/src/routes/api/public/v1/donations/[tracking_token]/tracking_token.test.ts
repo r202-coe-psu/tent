@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET, PATCH } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
+import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
 import type { PublicDonationDoc } from '$lib/features/donations';
 
@@ -9,6 +10,10 @@ type PatchEvent = Parameters<typeof PATCH>[0];
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn()
+}));
+
+vi.mock('$lib/server/couch-public-writer', () => ({
+	putAsPublicWriter: vi.fn()
 }));
 
 vi.mock('$lib/server/security/rate-limiter', () => ({
@@ -80,11 +85,9 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 					data: { rows: [{ doc: mockDonation }] }
 				});
 			}
-			if (method === 'PUT' && path.includes('/shelter_sh001/')) {
-				return Promise.resolve({ status: 201, data: { ok: true } });
-			}
 			return Promise.resolve({ status: 404, data: {} });
 		});
+		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 201, data: { ok: true } });
 
 		const mockRequest = {
 			json: () => Promise.resolve({ courier_tracking_no: 'TH999888' })
@@ -100,10 +103,34 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 		expect(response.status).toBe(200);
 		expect(data.success).toBe(true);
 
-		const putCall = vi.mocked(adminRaw).mock.calls.find((call) => call[1] === 'PUT');
-		expect(putCall).toBeDefined();
-		const savedDoc = putCall![2] as PublicDonationDoc;
-		expect(savedDoc.logistics?.courier_tracking_no).toBe('TH999888');
+		expect(putAsPublicWriter).toHaveBeenCalled();
+		const [, , savedDoc] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+		expect((savedDoc as PublicDonationDoc).logistics?.courier_tracking_no).toBe('TH999888');
+	});
+
+	it('PATCH returns 409 when CouchDB reports a revision conflict', async () => {
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({
+					status: 200,
+					data: { rows: [{ doc: mockDonation }] }
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 409, data: { error: 'conflict' } });
+
+		const response = await PATCH({
+			params: { tracking_token: TOKEN },
+			request: {
+				json: () => Promise.resolve({ courier_tracking_no: 'TH999888' })
+			},
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PatchEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(409);
+		expect(data.success).toBe(false);
 	});
 
 	it('PATCH rejects missing courier tracking number with 400', async () => {

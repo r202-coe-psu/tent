@@ -90,24 +90,6 @@ export async function requireKitchen(fetchFn?: typeof fetch) {
 }
 
 /**
- * Warehouse guard — requires system_admin, shelter_manager, or the `warehouse_staff`
- * capability (CR-024). UX gate for the stock-donations scan station; the BFF
- * (`/api/back-office/donations`) remains the real authorization boundary.
- * Redirects to / when authenticated but unauthorized.
- */
-export async function requireWarehouse(fetchFn?: typeof fetch) {
-	await requireAuth(fetchFn);
-	const roles = authStore.user?.roles ?? [];
-	if (
-		!isSystemAdmin(roles) &&
-		!isShelterManager(roles) &&
-		!hasStaffCapability(roles, 'warehouse_staff')
-	) {
-		throw redirect(302, resolve(LANDING_ROUTE));
-	}
-}
-
-/**
  * Evacuee registration guard — requires system_admin, shelter_manager, or
  * the `registration_staff` capability. Used for PII surfaces (evacuee/
  * household CRUD) so only staff whose job is registration can reach them;

@@ -19,6 +19,7 @@
 	import { today, getLocalTimeZone, type DateValue } from '@internationalized/date';
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
+	import { publicDonationErrorMessage } from '$lib/features/donations';
 	import { getDonationStore } from '../../../routes/public/donations/donation.svelte';
 	const donationStore = getDonationStore();
 
@@ -32,8 +33,7 @@
 			const res = await fetch('/api/v1/shelters');
 			const data = await res.json();
 			if (Array.isArray(data)) shelters = data;
-		} catch (e) {
-			console.error('Failed to load shelters:', e);
+		} catch {
 			toast.error('ไม่สามารถโหลดรายชื่อศูนย์พักพิงได้ กรุณาลองใหม่อีกครั้ง');
 		} finally {
 			isLoading = false;
@@ -63,6 +63,14 @@
 			donationStore.errorMessage = 'กรุณาระบุที่อยู่สำหรับไปรับของ';
 			return;
 		}
+		if (!donationStore.donorName.trim()) {
+			donationStore.errorMessage = 'กรุณากรอกชื่อผู้บริจาค';
+			return;
+		}
+		if (!donationStore.donorPhone.trim()) {
+			donationStore.errorMessage = 'กรุณากรอกเบอร์โทรศัพท์';
+			return;
+		}
 
 		donationStore.isSubmitting = true;
 		let token = '';
@@ -70,8 +78,7 @@
 		if (siteKey && window.grecaptcha) {
 			try {
 				token = await window.grecaptcha.execute(siteKey, { action: 'donate' });
-			} catch (e) {
-				console.error('reCAPTCHA execute error:', e);
+			} catch {
 				donationStore.errorMessage =
 					'ระบบยืนยันตัวตนขัดข้อง (reCAPTCHA) กรุณาลองใหม่อีกครั้ง หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต';
 				toast.error(donationStore.errorMessage);
@@ -110,8 +117,8 @@
 				body: JSON.stringify({
 					shelter_code: donationStore.shelterCode,
 					donor: {
-						name: donationStore.donorName || 'ไม่ระบุชื่อ',
-						phone: donationStore.donorPhone || '0000000000',
+						name: donationStore.donorName.trim(),
+						phone: donationStore.donorPhone.trim(),
 						line_id: donationStore.donorLine || undefined,
 						email: donationStore.donorEmail || undefined
 					},
@@ -133,7 +140,7 @@
 			});
 			const data = await res.json();
 			if (!data.success) {
-				donationStore.errorMessage = data.error || 'ไม่สามารถจองคิวบริจาคได้';
+				donationStore.errorMessage = publicDonationErrorMessage(data.error);
 				toast.error(donationStore.errorMessage);
 			} else {
 				donationStore.trackingToken = data.trackingToken;

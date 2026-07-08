@@ -1,6 +1,7 @@
 // Domain — documents
 export type { DonationPreDeclaration } from './domain/donation';
 export type { PublicDonationDoc, PublicDonor, ScanDonationView } from './domain/public-donation';
+export { receiveDonationInputSchema, publicDonationErrorMessage } from './domain/public-donation';
 
 // Domain — shared PURE computation (needs board + POST donations). Server-side
 // doc fetching lives in $lib/server/donation-docs (kept out of the client barrel).

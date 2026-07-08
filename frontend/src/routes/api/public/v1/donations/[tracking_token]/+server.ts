@@ -83,8 +83,7 @@ export const GET = async ({ params, getClientAddress }) => {
 				expires_at: donation.expires_at
 			}
 		});
-	} catch (e) {
-		console.error(e);
+	} catch {
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}
 };
@@ -133,19 +132,25 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		let writeRes: { status: number; data: unknown };
 		try {
 			writeRes = await putAsPublicWriter(shelterDb, latestDoc._id, latestDoc);
-		} catch (e) {
-			console.error(e);
+		} catch {
 			return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
 		}
 
+		if (writeRes.status === 409) {
+			return json(
+				{
+					success: false,
+					error: 'Donation was updated elsewhere. Please refresh and try again.'
+				},
+				{ status: 409 }
+			);
+		}
 		if (writeRes.status !== 201 && writeRes.status !== 200) {
-			console.error('Failed to update CouchDB', writeRes.data);
 			return json({ success: false, error: 'Database update failed' }, { status: 500 });
 		}
 
 		return json({ success: true, message: 'Courier tracking number updated' });
-	} catch (e) {
-		console.error(e);
+	} catch {
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}
 };

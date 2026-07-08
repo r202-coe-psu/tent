@@ -2,12 +2,16 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
 import { hasStaffCapability, isShelterManager } from '$lib/auth/roles';
-import type { PublicDonationDoc, ScanDonationView } from '$lib/features/donations';
+import {
+	type PublicDonationDoc,
+	type ScanDonationView,
+	receiveDonationInputSchema
+} from '$lib/features/donations';
+import { fetchDocs } from '$lib/server/donation-docs';
 import { sha256Hex } from '$lib/db/hash';
 
 type RegistryRow = { id: string; doc?: { code?: string } };
 type RegistryAllDocs = { rows?: RegistryRow[] };
-type FindResult = { docs?: PublicDonationDoc[] };
 
 function routeErrorResponse(e: unknown) {
 	const message = e instanceof Error ? e.message : 'Internal Server Error';
@@ -51,11 +55,11 @@ async function authorizeWarehouse(cookie: string | null): Promise<Caller> {
 	return caller;
 }
 
-// Helper to find donation doc across all shelters by booking_ref or tracking_token_hash
+// Find donation doc across all shelters by booking_ref or tracking_token_hash.
+// Uses _all_docs scan (no Mango index required — same pattern as public tracking lookup).
 async function findDonationByQuery(
 	query: string
 ): Promise<{ donation: PublicDonationDoc; dbName: string } | null> {
-	// 1. Get all shelter DBs from registry
 	const resRegistry = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');
 	if (resRegistry.status >= 400) {
 		throw new Error('Could not read registry');
@@ -67,21 +71,14 @@ async function findDonationByQuery(
 
 	const tokenHash = await sha256Hex(query);
 
-	// 2. Search in each shelter database
 	for (const code of shelterCodes) {
 		const dbName = `shelter_${code.toLowerCase()}`;
-		const findRes = await adminRaw(`/${dbName}/_find`, 'POST', {
-			selector: {
-				type: 'donation',
-				$or: [{ booking_ref: query }, { tracking_token_hash: tokenHash }]
-			}
-		});
-		if (findRes.status === 200) {
-			const docs = (findRes.data as FindResult)?.docs ?? [];
-			if (docs.length > 0) {
-				return { donation: docs[0], dbName };
-			}
-		}
+		const donations = await fetchDocs<PublicDonationDoc>(dbName, 'donation:');
+		const match = donations.find(
+			(d) =>
+				d?.type === 'donation' && (d.booking_ref === query || d.tracking_token_hash === tokenHash)
+		);
+		if (match) return { donation: match, dbName };
 	}
 	return null;
 }
@@ -104,13 +101,11 @@ export const GET: RequestHandler = async ({ params, request }) => {
 			return json({ success: false, error: 'Forbidden' }, { status: 403 });
 		}
 
-		// Redact — return only what the scan UI needs, not the raw CouchDB doc
 		return json({
 			success: true,
 			donation: toScanView(found.donation)
 		});
 	} catch (e) {
-		console.error(e);
 		return routeErrorResponse(e);
 	}
 };
@@ -134,7 +129,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		const body = await request.json();
-		const { items, status } = body;
+		const parsed = receiveDonationInputSchema.safeParse(body);
+		if (!parsed.success) {
+			return json(
+				{ success: false, error: 'Invalid input', details: parsed.error.flatten() },
+				{ status: 422 }
+			);
+		}
 
 		const { donation, dbName } = found;
 
@@ -146,25 +147,33 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		const nowStr = new Date().toISOString();
-		const updated = {
+		const updated: PublicDonationDoc = {
 			...donation,
-			status: status || 'received',
+			status: 'received',
 			received_at: nowStr,
 			updated_at: nowStr,
-			items: items || donation.items
+			items: parsed.data.items ?? donation.items
 		};
 
 		const saveRes = await adminRaw(`/${dbName}/${donation._id}`, 'PUT', updated);
+		if (saveRes.status === 409) {
+			return json(
+				{
+					success: false,
+					error: 'Donation was updated by another process. Please search again and retry.'
+				},
+				{ status: 409 }
+			);
+		}
 		if (saveRes.status >= 400) {
 			throw new Error(`Failed to update donation to CouchDB: ${JSON.stringify(saveRes.data)}`);
 		}
 
 		return json({
 			success: true,
-			donation: updated
+			donation: toScanView(updated)
 		});
 	} catch (e) {
-		console.error(e);
 		return routeErrorResponse(e);
 	}
 };

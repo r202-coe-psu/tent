@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { donationPreDeclarationInputSchema, isDonationPreDeclaration } from './donation';
+import { publicDonationErrorMessage, receiveDonationInputSchema } from './public-donation';
 
 describe('donationPreDeclarationInputSchema', () => {
 	const baseValid = {
@@ -111,5 +112,31 @@ describe('isDonationPreDeclaration', () => {
 				created_by: 'user'
 			})
 		).toBe(false);
+	});
+});
+
+describe('publicDonationErrorMessage', () => {
+	it('maps known API error codes to Thai copy', () => {
+		expect(publicDonationErrorMessage('NEED_FULL')).toContain('ครบแล้ว');
+		expect(publicDonationErrorMessage('SLOT_FULL')).toContain('คิวจัดส่งเต็ม');
+	});
+
+	it('falls back for unknown codes', () => {
+		expect(publicDonationErrorMessage('UNKNOWN')).toContain('ไม่สามารถจองคิวบริจาคได้');
+	});
+});
+
+describe('receiveDonationInputSchema', () => {
+	it('accepts received status with optional items', () => {
+		const result = receiveDonationInputSchema.safeParse({
+			status: 'received',
+			items: [{ free_text: 'ข้าวสาร', qty: 1, unit: 'kg' }]
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it('rejects non-received status values', () => {
+		const result = receiveDonationInputSchema.safeParse({ status: 'cancelled' });
+		expect(result.success).toBe(false);
 	});
 });
