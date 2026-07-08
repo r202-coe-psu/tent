@@ -51,7 +51,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '2. บริหารทรัพยากร',
 		items: [
-			{ label: 'การประเมินประจำวัน (Daily SOP)', href: null, icon: ClipboardList },
+			{
+				label: 'การประเมินประจำวัน (Daily SOP)',
+				href: resolve('/back-office/resource-dashboard'),
+				icon: ClipboardList
+			},
 			{ label: 'คลังสิ่งของและบริจาค', href: null, icon: Package }
 		]
 	},
