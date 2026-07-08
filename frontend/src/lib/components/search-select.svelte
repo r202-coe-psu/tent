@@ -15,6 +15,7 @@
 
 	let open = $state(false);
 	let searchValue = $state('');
+	let triggerWidth = $state(0);
 
 	let filteredOptions = $derived(
 		options.filter((opt) => opt.label.toLowerCase().includes(searchValue.toLowerCase()))
@@ -30,16 +31,18 @@
 </script>
 
 <Popover.Root bind:open>
-	<Popover.Trigger
-		class="flex h-10 w-full items-center justify-between rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 {value
-			? 'text-foreground'
-			: 'text-muted-foreground'}"
-	>
-		{selectedLabel}
-		<ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
-	</Popover.Trigger>
-	<Popover.Content class="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-		<div class="flex flex-col">
+	<div bind:clientWidth={triggerWidth} class="w-full">
+		<Popover.Trigger
+			class="flex h-10 w-full items-center justify-between rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 {value
+				? 'text-foreground'
+				: 'text-muted-foreground'}"
+		>
+			{selectedLabel}
+			<ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+		</Popover.Trigger>
+	</div>
+	<Popover.Content class="w-auto p-0" align="start">
+		<div style="width: {triggerWidth}px" class="flex flex-col">
 			<div class="border-b px-3">
 				<Input
 					type="text"
