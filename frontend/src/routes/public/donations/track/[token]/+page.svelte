@@ -174,23 +174,23 @@
 			<div>
 				{#if request.status === 'declared'}
 					<span
-						class="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-3.5 py-1 text-xs font-bold text-blue-500"
+						class="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1 text-xs font-bold text-primary"
 					>
-						<span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span>
+						<span class="h-1.5 w-1.5 rounded-full bg-primary"></span>
 						จองคิวบริจาคแล้ว (Declared)
 					</span>
 				{:else if request.status === 'pending'}
 					<span
-						class="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-3.5 py-1 text-xs font-bold text-amber-500"
+						class="inline-flex items-center gap-1.5 rounded-full border border-warning/20 bg-warning/10 px-3.5 py-1 text-xs font-bold text-warning"
 					>
-						<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500"></span>
+						<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-warning"></span>
 						รอตรวจสอบความเหมาะสม (Pending)
 					</span>
 				{:else if request.status === 'received'}
 					<span
-						class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-1 text-xs font-bold text-emerald-500"
+						class="inline-flex items-center gap-1.5 rounded-full border border-success/20 bg-success/10 px-3.5 py-1 text-xs font-bold text-success"
 					>
-						<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+						<span class="h-1.5 w-1.5 rounded-full bg-success"></span>
 						รับเข้าคลังเรียบร้อย (Received)
 					</span>
 				{:else if request.status === 'cancelled'}
@@ -208,12 +208,14 @@
 			<!-- 1. Safety trigger warning if pending -->
 			{#if request.status === 'pending' && request.triggerReason}
 				<div
-					class="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-amber-800 dark:text-amber-300"
+					class="flex items-start gap-3 rounded-2xl border border-warning/20 bg-warning/5 p-4 text-warning-dark dark:text-warning-subtle"
 				>
-					<ShieldAlert class="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+					<ShieldAlert
+						class="mt-0.5 h-5 w-5 shrink-0 text-warning-foreground dark:text-warning-subtle"
+					/>
 					<div>
 						<h4
-							class="text-xs font-bold tracking-wider text-amber-600 uppercase dark:text-amber-400"
+							class="text-xs font-bold tracking-wider text-warning-foreground uppercase dark:text-warning-subtle"
 						>
 							อยู่ระหว่างตรวจสอบข้อควรระวัง
 						</h4>
@@ -248,13 +250,13 @@
 					{#if request.status === 'pending'}
 						<div class="relative flex gap-4">
 							<div
-								class="absolute -left-[20px] z-10 flex h-3 w-3 animate-ping items-center justify-center rounded-full border-2 border-amber-500 bg-amber-500"
+								class="absolute -left-[20px] z-10 flex h-3 w-3 animate-ping items-center justify-center rounded-full border-2 border-warning bg-warning"
 							></div>
 							<div
-								class="absolute -left-[20px] z-10 flex h-3 w-3 items-center justify-center rounded-full border-2 border-amber-500 bg-amber-500"
+								class="absolute -left-[20px] z-10 flex h-3 w-3 items-center justify-center rounded-full border-2 border-warning bg-warning"
 							></div>
 							<div class="text-xs">
-								<span class="font-bold text-amber-600 dark:text-amber-400"
+								<span class="font-bold text-warning-foreground dark:text-warning-subtle"
 									>อยู่ระหว่างประเมินพื้นที่คลังและความเหมาะสม</span
 								>
 								<p class="mt-0.5 text-[10px] text-muted-foreground">
@@ -267,10 +269,10 @@
 					{#if request.status === 'cancelled'}
 						<div class="relative flex gap-4">
 							<div
-								class="absolute -left-[20px] z-10 flex h-3 w-3 items-center justify-center rounded-full border-2 border-red-500 bg-red-500"
+								class="absolute -left-[20px] z-10 flex h-3 w-3 items-center justify-center rounded-full border-2 border-danger bg-danger"
 							></div>
 							<div class="text-xs">
-								<span class="font-bold text-red-600">ยกเลิกรายการบริจาคนี้แล้ว (Cancelled)</span>
+								<span class="font-bold text-danger">ยกเลิกรายการบริจาคนี้แล้ว (Cancelled)</span>
 								<p class="mt-0.5 text-[10px] text-muted-foreground">
 									ผู้บริจาคขอยกเลิกคิวจองบริจาคเรียบร้อยแล้ว โควต้าถูกคืนระบบ
 								</p>
@@ -281,7 +283,7 @@
 							<div
 								class="absolute -left-[20px] z-10 flex h-3 w-3 items-center justify-center rounded-full border-2 {request.status ===
 								'received'
-									? 'border-emerald-600 bg-emerald-600'
+									? 'border-success bg-success-dark'
 									: 'border-border bg-card'}"
 							></div>
 							<div class="text-xs {request.status !== 'received' ? 'opacity-50' : ''}">
@@ -373,7 +375,7 @@
 				<Button
 					onclick={() => (isCancelModalOpen = true)}
 					variant="outline"
-					class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-red-200 px-4 py-2.5 text-xs font-bold text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-950/20"
+					class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-danger-border px-4 py-2.5 text-xs font-bold text-danger transition-colors hover:bg-danger-muted dark:hover:bg-danger/10"
 				>
 					<Trash2 class="h-4 w-4" />
 					ยกเลิกคิวจองบริจาคนี้
@@ -403,7 +405,7 @@
 		>
 			<div class="mb-4 flex items-start gap-3">
 				<div
-					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/40"
+					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-danger-muted text-danger dark:bg-danger/20"
 				>
 					<AlertCircle class="h-5 w-5" />
 				</div>
@@ -428,7 +430,7 @@
 				<button
 					type="button"
 					onclick={handleCancelDonation}
-					class="cursor-pointer rounded-xl bg-red-600 px-5 py-2.5 text-xs font-bold text-white transition-colors hover:bg-red-700"
+					class="hover:bg-danger-dark cursor-pointer rounded-xl bg-danger px-5 py-2.5 text-xs font-bold text-white transition-colors"
 				>
 					ยืนยันยกเลิกจอง
 				</button>
