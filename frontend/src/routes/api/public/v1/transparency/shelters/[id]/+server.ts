@@ -205,12 +205,14 @@ export const GET: RequestHandler = async ({ params, setHeaders }) => {
 
 			let petStatus = 'ไม่อนุญาต';
 			if (m.admission_policy?.pet_policy?.policy === 'conditional') {
-				const cats = (m.admission_policy.pet_policy.categories || []).map((c: any) => {
-					if (c.category === 'small_general') return 'สัตว์เล็กทั่วไป';
-					if (c.category === 'large_dog') return 'สุนัขพันธุ์ใหญ่';
-					if (c.category === 'livestock') return 'ปศุสัตว์';
-					return c.category;
-				});
+				const cats = (m.admission_policy.pet_policy.categories || []).map(
+					(c: { category: string }) => {
+						if (c.category === 'small_general') return 'สัตว์เล็กทั่วไป';
+						if (c.category === 'large_dog') return 'สุนัขพันธุ์ใหญ่';
+						if (c.category === 'livestock') return 'ปศุสัตว์';
+						return c.category;
+					}
+				);
 				petStatus = `อนุญาตแบบมีเงื่อนไข (${cats.join(', ')})`;
 			} else if (m.zones?.some((z) => z.type === 'pet')) {
 				petStatus = 'อนุญาต (มีโซนสัตว์เลี้ยง)';
@@ -247,7 +249,7 @@ export const GET: RequestHandler = async ({ params, setHeaders }) => {
 			if (m.parking_policy?.availability === 'available') {
 				parkingAnswer = `มีลานจอดรองรับได้ประมาณ ${m.common_areas?.parking_capacity || 0} คัน`;
 				if (m.parking_policy.supported_vehicles?.length) {
-					parkingAnswer += ` (รองรับ: ${m.parking_policy.supported_vehicles.map((v: any) => v.type).join(', ')})`;
+					parkingAnswer += ` (รองรับ: ${m.parking_policy.supported_vehicles.map((v: { type: string }) => v.type).join(', ')})`;
 				}
 			} else if (m.parking_policy?.availability === 'none') {
 				parkingAnswer = 'ไม่มีพื้นที่จอดรถให้บริการ';

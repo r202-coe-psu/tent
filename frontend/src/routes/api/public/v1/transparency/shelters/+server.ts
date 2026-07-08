@@ -164,32 +164,36 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 					pet_general:
 						(m.admission_policy?.pet_policy?.policy === 'conditional' &&
 							(m.admission_policy.pet_policy.categories || []).some(
-								(c: any) => c.category === 'small_general'
+								(c: { category: string }) => c.category === 'small_general'
 							)) ||
 						(m.zones?.some((z) => z.type === 'pet') ?? false),
 					pet_large:
 						m.admission_policy?.pet_policy?.policy === 'conditional' &&
 						(m.admission_policy.pet_policy.categories || []).some(
-							(c: any) => c.category === 'large_dog'
+							(c: { category: string }) => c.category === 'large_dog'
 						),
 					pet_livestock:
 						m.admission_policy?.pet_policy?.policy === 'conditional' &&
 						(m.admission_policy.pet_policy.categories || []).some(
-							(c: any) => c.category === 'livestock'
+							(c: { category: string }) => c.category === 'livestock'
 						),
 					parking_car:
 						(m.parking_policy?.availability === 'available' &&
-							(m.parking_policy.supported_vehicles || []).some((v: any) => v.type === 'car')) ||
+							(m.parking_policy.supported_vehicles || []).some(
+								(v: { type: string }) => v.type === 'car'
+							)) ||
 						(m.common_areas?.parking_capacity ?? 0) > 0,
 					parking_motorcycle:
 						(m.parking_policy?.availability === 'available' &&
 							(m.parking_policy.supported_vehicles || []).some(
-								(v: any) => v.type === 'motorcycle'
+								(v: { type: string }) => v.type === 'motorcycle'
 							)) ||
 						(m.common_areas?.parking_capacity ?? 0) > 0,
 					parking_boat:
 						m.parking_policy?.availability === 'available' &&
-						(m.parking_policy.supported_vehicles || []).some((v: any) => v.type === 'boat'),
+						(m.parking_policy.supported_vehicles || []).some(
+							(v: { type: string }) => v.type === 'boat'
+						),
 					utility_wifi: m.utilities?.communications?.includes('wifi') ?? false,
 					utility_high_ground: (m.risk?.elevation_m ?? 0) > 5,
 					utility_truck_access: m.risk?.entrance_description != null
@@ -197,6 +201,13 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			};
 		})
 	);
+
+	const summaryData = {
+		shelters_total: shelters.length,
+		shelters_open: shelters.filter((s) => s.status === 'OPEN').length,
+		occupancy_total: shelters.reduce((acc, s) => acc + s.occupancy, 0),
+		vulnerable_count: shelters.reduce((acc, s) => acc + (s.vulnerableCount || 0), 0)
+	};
 
 	if (search) {
 		shelters = shelters.filter(
@@ -241,13 +252,6 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 		}
 		return true;
 	});
-
-	const summaryData = {
-		shelters_total: shelters.length,
-		shelters_open: shelters.filter((s) => s.status === 'OPEN').length,
-		occupancy_total: shelters.reduce((acc, s) => acc + s.occupancy, 0),
-		vulnerable_count: shelters.reduce((acc, s) => acc + (s.vulnerableCount || 0), 0)
-	};
 
 	const flags = {
 		public_metrics_occupancy: true,

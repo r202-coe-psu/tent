@@ -2,14 +2,33 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import { adminRaw } from '$lib/server/couch-admin';
-import { maskNationalId } from '$lib/features/people/domain/people';
+import { maskNationalId } from '$lib/features/people';
+
+type EvacueeDoc = {
+	_id: string;
+	first_name: string;
+	last_name: string;
+	household_id?: string;
+	person_id?: { number: string };
+	gender?: string;
+	privacy?: { search_excluded?: boolean };
+	current_stay?: { since?: string; zone?: string; status?: string };
+};
+
+type CouchDBResponse = { docs?: EvacueeDoc[] };
+type HouseholdDoc = {
+	address_no?: string;
+	subdistrict?: string;
+	district?: string;
+	province?: string;
+};
 
 export const POST: RequestHandler = async ({ request }) => {
 	let query = '';
 	try {
 		const body = await request.json();
 		query = body.query || '';
-	} catch (e) {
+	} catch {
 		return json({ error: 'Invalid request' }, { status: 400 });
 	}
 
@@ -57,13 +76,13 @@ export const POST: RequestHandler = async ({ request }) => {
 				limit: 20
 			});
 
-			if (res.status === 200 && res.data && (res.data as any).docs) {
-				const docs = (res.data as any).docs;
+			if (res.status === 200 && res.data && (res.data as CouchDBResponse).docs) {
+				const docs = (res.data as CouchDBResponse).docs || [];
 				for (const doc of docs) {
 					if (doc.privacy?.search_excluded) continue;
 
 					let household = null;
-					let familyMembers: any[] = [];
+					let familyMembers: EvacueeDoc[] = [];
 
 					if (doc.household_id) {
 						try {
@@ -72,19 +91,20 @@ export const POST: RequestHandler = async ({ request }) => {
 								'GET'
 							);
 							if (hhRes.status === 200 && hhRes.data) {
-								household = hhRes.data;
+								household = hhRes.data as HouseholdDoc;
 							}
 
 							const fmRes = await adminRaw(`/shelter_${m.code.toLowerCase()}/_find`, 'POST', {
 								selector: { type: 'evacuee', household_id: doc.household_id }
 							});
 
-							if (fmRes.status === 200 && fmRes.data && (fmRes.data as any).docs) {
-								familyMembers = (fmRes.data as any).docs.filter(
-									(f: any) => f._id !== doc._id && !f.privacy?.search_excluded
+							if (fmRes.status === 200 && fmRes.data && (fmRes.data as CouchDBResponse).docs) {
+								const fDocs = (fmRes.data as CouchDBResponse).docs || [];
+								familyMembers = fDocs.filter(
+									(f) => f._id !== doc._id && !f.privacy?.search_excluded
 								);
 							}
-						} catch (e) {
+						} catch {
 							// ignore
 						}
 					}
@@ -109,8 +129,8 @@ export const POST: RequestHandler = async ({ request }) => {
 					});
 				}
 			}
-		} catch (e) {
-			console.error(`Error querying shelter_${m.code}`, e);
+		} catch {
+			console.error(`Error querying shelter_${m.code}`);
 		}
 	}
 
@@ -122,7 +142,7 @@ function maskLastName(lastName: string) {
 	return lastName.charAt(0) + '*'.repeat(Math.max(1, lastName.length - 1));
 }
 
-function maskAddress(household: any) {
+function maskAddress(household: HouseholdDoc | null) {
 	if (!household) return 'ไม่ระบุ';
 	let addr = '';
 	if (household.address_no) addr += '**/* ';
