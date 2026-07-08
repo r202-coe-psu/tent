@@ -14,9 +14,10 @@ export const load: PageLoad = async ({ fetch }) => {
 	// Fallback mock data if API fails
 	return {
 		summary: {
-			shelters_open: 5,
-			shelters_total: 5,
-			occupancy_total: 7
+			shelters_open: 0,
+			shelters_total: 0,
+			occupancy_total: 0,
+			vulnerable_count: 0
 		},
 		lastUpdated: Date.now(),
 		isStale: false,

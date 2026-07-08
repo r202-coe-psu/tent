@@ -63,6 +63,9 @@
 			clearInterval(staleCheck);
 		};
 	});
+
+	// Demo emergency banner switch (set to false to hide mock data in production)
+	const showDemoEmergency = false;
 </script>
 
 <svelte:head>
@@ -71,7 +74,9 @@
 
 <div class="mx-auto max-w-7xl px-4 py-8 md:px-6">
 	<!-- 1. ประกาศด่วนระดับ 4 (อพยพทันที) -->
-	<PublicEmergencyBanner {alerts} />
+	{#if showDemoEmergency}
+		<PublicEmergencyBanner {alerts} />
+	{/if}
 
 	<!-- 2. Hero & Real-Time Metrics (T-57) -->
 	<PublicHeroMetrics summary={data.summary} flags={data.flags} {lastUpdated} {isStale} />
@@ -80,12 +85,12 @@
 	<section class="mb-12">
 		<div class="mb-8">
 			<div class="mb-2 flex items-center gap-2">
-				<Compass class="h-5 w-5 text-slate-500" />
-				<h2 class="text-xl font-bold text-slate-800">
+				<Compass class="h-5 w-5 text-muted-foreground" />
+				<h2 class="text-xl font-bold text-foreground">
 					เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์
 				</h2>
 			</div>
-			<p class="text-xs text-slate-500">
+			<p class="text-xs text-muted-foreground">
 				ดำเนินการติดต่อ ลงทะเบียน หรือประสานขอโอนย้ายเพื่อรับรองความช่วยเหลือที่รวดเร็ว
 			</p>
 		</div>
@@ -117,7 +122,7 @@
 			</PublicQuickServiceCard>
 
 			<!-- สำหรับทีมอาสาสมัคร -->
-			<div class="hidden">
+			<div>
 				<PublicQuickServiceCard
 					title="สำหรับทีมอาสาสมัคร"
 					badge="ร่วมแรงกาย"
@@ -206,7 +211,7 @@
 				<PhoneCall class="h-6 w-6 text-chart-2" />
 				<h2 class="text-xl font-bold">ติดต่อฉุกเฉินและด่วน</h2>
 			</div>
-			<p class="mb-6 text-sm text-slate-300">
+			<p class="mb-6 text-sm text-muted-foreground/60">
 				ต้องการความช่วยเหลือทางการแพทย์ รถยกเคลื่อนย้าย หรือสอบถามข้อมูลเพิ่มเติม
 			</p>
 
