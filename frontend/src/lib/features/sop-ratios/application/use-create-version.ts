@@ -4,7 +4,7 @@
  * Provides mutations for creating new SOP profile versions (both master and override).
  * Each mutation:
  *   1. Calls the domain factory (`createNewVersion`) to build the new doc + deactivated prev + audit
- *   2. Persists via the PouchDB repository (`createVersion` — bulkDocs atomic write)
+ *   2. Persists via the remote repository (`createVersion` — bulkDocs atomic write)
  *   3. Invalidates the sop_ratios query key family → UI refetches automatically
  *
  * Domain logic (immutability, idempotent no-op detection, audit trail generation)
@@ -13,7 +13,7 @@
  * Source references:
  *   - sop-ratio.ts → createNewVersion, type SopMaster, type SopOverride, SOP_RATIO_KEYS
  *   - sop-ratio.repository.ts → SopMasterRepository.createVersion, SopOverrideRepository.createVersion
- *   - sop-ratio.pouch.ts → sopMasterRepository(), sopOverrideRepository()
+ *   - sop-ratio.remote.ts → sopMasterRepository(), sopOverrideRepository()
  *   - CONVENTIONS.md §8 "Mutation hooks" + toast feedback §9
  *   - CR-006 §ทุก edit = new version + audit
  *   - CR-015 §Mutability: LWW, ห้าม overwrite direct
@@ -25,11 +25,11 @@
 
 import { createMutation, useQueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
-import { SHELTER_CODE } from '$lib/db/shelter';
+import { getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { createNewVersion } from '../domain/sop-ratio';
 import type { SopMaster, SopOverride, SopRatioKey } from '../domain/sop-ratio';
-import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
+import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.remote';
 import { sopRatioKeys } from './queries';
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ export function useCreateMasterVersion() {
 			// Step 1: Domain — pure function, no I/O.
 			const result = createNewVersion(prev, changes, reason, { createdBy });
 
-			// Step 2: Persist — atomic bulkDocs write via PouchDB repository.
+			// Step 2: Persist — atomic bulkDocs write via remote repository.
 			// saveBulkAtomic inside createVersion handles MVCC 409 retry.
 			return sopMasterRepository().createVersion(
 				result.deactivatedPrev,
@@ -154,8 +154,9 @@ export function useCreateOverrideVersion() {
 		mutationFn: async ({ prev, changes, reason, ctx }: CreateOverrideVersionInput) => {
 			// Guard: prevent cross-shelter writes — ctx.shelterCode must match current shelter.
 			// This is a defense-in-depth check; the route guard should prevent unauthorized access.
-			if (ctx.shelterCode !== SHELTER_CODE) {
-				throw new Error(`shelterCode mismatch: expected ${SHELTER_CODE}, got ${ctx.shelterCode}`);
+			const currentShelter = getShelterCode();
+			if (ctx.shelterCode !== currentShelter) {
+				throw new Error(`shelterCode mismatch: expected ${currentShelter}, got ${ctx.shelterCode}`);
 			}
 
 			// If changes is empty {}, Object.keys yields [] and hasChanges is false.
@@ -170,7 +171,7 @@ export function useCreateOverrideVersion() {
 
 			const result = createNewVersion(prev, changes, reason, ctx);
 
-			return sopOverrideRepository(SHELTER_CODE).createVersion(
+			return sopOverrideRepository(currentShelter).createVersion(
 				result.deactivatedPrev,
 				result.profile,
 				result.audit

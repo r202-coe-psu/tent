@@ -10,7 +10,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/db/shelter';
+	import { getShelterCode } from '$lib/db/shelter';
 	import {
 		useGasCylinderTypes,
 		useCreateGasCylinderType,
@@ -83,7 +83,7 @@
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
-		const ctx = { shelterCode: SHELTER_CODE, createdBy: authStore.user?.name ?? 'staff' };
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
 			await createType.mutateAsync({
 				input: {

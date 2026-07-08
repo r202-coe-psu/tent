@@ -55,9 +55,9 @@ export {
 	type DistributeInput
 } from './domain/operations';
 
-// Data — repository contract + PouchDB binding
+// Data — repository contract + remote CouchDB binding
 export type { OperationsRepository } from './data/operations.repository';
-export { operationsRepository, SHELTER_CODE, SHELTER_DB } from './data/operations.pouch';
+export { operationsRepository } from './data/operations.remote';
 
 // Application — TanStack Query hooks + live-query wiring
 export {

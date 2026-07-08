@@ -11,7 +11,7 @@
  *
  * Source references:
  *   - sop-ratio.repository.ts → SopMasterRepository.listVersions, SopOverrideRepository.listVersions
- *   - sop-ratio.pouch.ts → sopMasterRepository(), sopOverrideRepository()
+ *   - sop-ratio.remote.ts → sopMasterRepository(), sopOverrideRepository()
  *   - sop-ratio.domain.ts → SopMaster, SopOverride types
  *   - queries.ts → sopRatioKeys
  *   - CONVENTIONS.md §8 "Query hooks" + §8 "Query key factory"
@@ -19,8 +19,8 @@
  */
 
 import { createQuery } from '@tanstack/svelte-query';
-import { SHELTER_CODE } from '$lib/db/shelter';
-import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
+import { getShelterCode } from '$lib/db/shelter';
+import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.remote';
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
 import { sopVersionKeys } from './queries';
 
@@ -35,7 +35,7 @@ async function fetchMasterVersions(name: string): Promise<SopMaster[]> {
 }
 
 async function fetchOverrideVersions(name: string): Promise<SopOverride[]> {
-	const all = await sopOverrideRepository(SHELTER_CODE).listVersions(name);
+	const all = await sopOverrideRepository(getShelterCode()).listVersions(name);
 	return [...all].sort((a, b) => b.version - a.version);
 }
 
@@ -94,7 +94,7 @@ export const useMasterVersionHistory = (name: string) =>
  */
 export const useOverrideVersionHistory = (name: string) =>
 	createQuery(() => ({
-		queryKey: [...sopVersionKeys.override(), name, SHELTER_CODE] as const,
+		queryKey: [...sopVersionKeys.override(), name, getShelterCode()] as const,
 		queryFn: () => fetchOverrideVersions(name),
 		enabled: name.trim().length > 0
 	}));

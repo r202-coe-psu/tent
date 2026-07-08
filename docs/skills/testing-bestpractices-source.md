@@ -13,7 +13,7 @@
 ### 2. Mocking & Isolation (Database + Context)
 * **แหล่งที่มา**: โค้ดภายใน `frontend/src/lib/db/repository.test.ts` และ `frontend/src/lib/features/operations/domain/operations.test.ts`
 * **ข้อมูลที่พบ**: 
-  - การเทสที่เกี่ยวกับฐานข้อมูล จะต้องรันผ่าน `PouchDB` ร่วมกับ `pouchdb-adapter-memory` เพื่อแยกฐานข้อมูลจำลองออกจากกัน ไม่เทสกับ CouchDB จริง 
+  - การเทสที่เกี่ยวกับฐานข้อมูลควรใช้ repository doubles/mocks ใน unit tests และใช้ integration tests แบบเจาะจงพฤติกรรม endpoint โดยไม่เทสกับ CouchDB จริงใน unit scope
   - ฟังก์ชันที่มีการปรับปรุงข้อมูลจำเป็นต้องแนบ Mock ของ `AuthorContext` (เช่น `{ shelterCode: 'SH001', createdBy: 'tester' }`)
 
 ### 3. Project-Specific Test Requirements (DoD)

@@ -7,7 +7,7 @@
 	import { receiveInputSchema, type ReceiveInput } from '../domain/operations';
 	import { useSupplyItems, type SupplyItem } from '$lib/features/supply';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/db/shelter';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { useReceiveStock } from '../application/queries';
 	import { toast } from 'svelte-sonner';
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
@@ -87,7 +87,7 @@
 	// Submit handler
 	async function handleCommit(data: ReceiveInput) {
 		const ctx = {
-			shelterCode: SHELTER_CODE,
+			shelterCode: getShelterCode(),
 			createdBy: authStore.user?.name ?? 'unknown'
 		};
 
