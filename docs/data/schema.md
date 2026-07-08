@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-07
+updated: 2026-07-08
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -189,11 +189,14 @@ action ใหม่เท่านั้น)
 
 ### 2.4 `donation_campaign` — `donation_campaign:{ulid}`
 
+> **schema_v 2** — เพิ่ม `needs[].status` (enum(`open`,`closed`), default `"open"`) และ `visible_on_home` (bool, default `true`). CR-034.
+
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `title` | str | req | — |
-| `needs` | [{`item_id`:str, `qty_target`:num>0, `unit`:str}] | req | ≥1 |
+| `needs` | [{`item_id`:str, `qty_target`:num>0, `unit`:str, `status`:enum(`open`,`closed`)?}] | req | ≥1 — `status` default `"open"` |
 | `status` | enum(`open`,`closed`) | req | — |
+| `visible_on_home` | bool | opt | default `true` — ควบคุมการโปรโมตแคมเปญบนหน้าแรก (back-office toggle) |
 | `opens_at` / `closes_at` | ts / ts\|null | opt | — |
 | `notes` | str | opt | — |
 

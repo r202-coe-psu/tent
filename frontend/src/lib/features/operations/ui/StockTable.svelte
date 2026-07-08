@@ -19,6 +19,8 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import LedgerTable from './LedgerTable.svelte';
 	import ReceiveStockForm from './ReceiveStockForm.svelte';
+	import DistributeStockForm from './DistributeStockForm.svelte';
+	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
@@ -34,7 +36,7 @@
 	// ─── Modal state ──────────────────────────────────────────────────────────
 	let selectedItemId = $state<string | null>(null);
 	let isManageModalOpen = $state(false);
-	let activeModalTab = $state<'history' | 'checkin'>('history');
+	let activeModalTab = $state<'history' | 'checkin' | 'distribute'>('history');
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
 	const items = $derived(itemsQuery.data ?? []);
@@ -533,7 +535,7 @@
 		</Dialog.Header>
 
 		<!-- Tabs Inside Modal -->
-		<div class="mb-5 flex border-b border-border/60">
+		<div class="mb-5 flex overflow-x-auto border-b border-border/60 whitespace-nowrap">
 			<button
 				onclick={() => (activeModalTab = 'history')}
 				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
@@ -550,7 +552,16 @@
 					? 'border-primary text-primary'
 					: 'border-transparent text-muted-foreground hover:text-foreground'}"
 			>
-				<PlusCircle class="h-4 w-4" /> ทำรายการรับของเข้า (Check-in)
+				<PlusCircle class="h-4 w-4" /> รับของเข้า (Check-in)
+			</button>
+			<button
+				onclick={() => (activeModalTab = 'distribute')}
+				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
+				'distribute'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:text-foreground'}"
+			>
+				<MinusCircle class="h-4 w-4" /> แจกจ่ายออก (Distribute)
 			</button>
 		</div>
 
@@ -560,6 +571,13 @@
 					<LedgerTable filterItemId={selectedItemId} />
 				{:else if activeModalTab === 'checkin'}
 					<ReceiveStockForm
+						preselectedItemId={selectedItemId}
+						onsuccess={() => {
+							isManageModalOpen = false;
+						}}
+					/>
+				{:else if activeModalTab === 'distribute'}
+					<DistributeStockForm
 						preselectedItemId={selectedItemId}
 						onsuccess={() => {
 							isManageModalOpen = false;
