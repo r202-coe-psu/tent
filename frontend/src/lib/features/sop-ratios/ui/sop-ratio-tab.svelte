@@ -8,6 +8,7 @@
 		activeContext = $bindable('master'),
 		hasOverride,
 		isSA,
+		canEditOverride,
 		shelterCode,
 		disabled,
 		onEditItem,
@@ -19,6 +20,7 @@
 		activeContext: 'master' | 'override';
 		hasOverride: boolean;
 		isSA: boolean;
+		canEditOverride: boolean;
 		shelterCode: string;
 		disabled: boolean;
 		onEditItem: (key: SopRatioKey) => void;
@@ -81,6 +83,7 @@
 			{shelterCode}
 			{hasOverride}
 			{disabled}
+			{canEditOverride}
 			{onEditItem}
 			{onCreateOverride}
 			{onDeactivateOverride}

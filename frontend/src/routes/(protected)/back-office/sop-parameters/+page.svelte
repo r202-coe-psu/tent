@@ -14,7 +14,7 @@
 
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin } from '$lib/auth/roles';
+	import { isSystemAdmin, isShelterManager, shelterCodeFromRoles } from '$lib/auth/roles';
 	import { toast } from 'svelte-sonner';
 
 	// Tab and context state
@@ -48,6 +48,9 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
+	const canEditOverride = $derived(
+		isSA || (isShelterManager(roles) && shelterCodeFromRoles(roles) === shelterCode)
+	);
 
 	// Automatically revert context to master if no shelter is selected
 	$effect(() => {
@@ -139,6 +142,7 @@
 					bind:activeContext
 					hasOverride={!!activeOverride}
 					{isSA}
+					{canEditOverride}
 					{shelterCode}
 					{disabled}
 					onEditItem={handleEditItem}

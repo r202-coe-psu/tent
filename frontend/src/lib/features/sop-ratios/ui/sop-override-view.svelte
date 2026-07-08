@@ -8,6 +8,7 @@
 		shelterCode,
 		hasOverride,
 		disabled,
+		canEditOverride,
 		onEditItem,
 		onCreateOverride,
 		onDeactivateOverride,
@@ -17,6 +18,7 @@
 		shelterCode: string;
 		hasOverride: boolean;
 		disabled: boolean;
+		canEditOverride: boolean;
 		onEditItem: (key: SopRatioKey) => void;
 		onCreateOverride: () => void;
 		onDeactivateOverride: () => void;
@@ -59,16 +61,22 @@
 		</h2>
 		<p class="mt-2 text-sm text-muted-foreground">
 			ขณะนี้กำลังใช้ค่ามาตรฐาน EOC อยู่
-			คุณสามารถกดปุ่มด้านล่างเพื่อเริ่มสร้างอัตราส่วนของศูนย์นี้ได้
+			{#if canEditOverride}
+				คุณสามารถกดปุ่มด้านล่างเพื่อเริ่มสร้างอัตราส่วนของศูนย์นี้ได้
+			{:else}
+				สิทธิ์การเข้าใช้งานของคุณเป็นแบบอ่านอย่างเดียว ไม่สามารถสร้างค่าปรับแต่งได้
+			{/if}
 		</p>
-		<Button
-			type="button"
-			onclick={onCreateOverride}
-			{disabled}
-			class="mt-4 bg-amber-500 font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
-		>
-			สร้างค่าปรับแต่งเฉพาะศูนย์
-		</Button>
+		{#if canEditOverride}
+			<Button
+				type="button"
+				onclick={onCreateOverride}
+				{disabled}
+				class="mt-4 bg-amber-500 font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+			>
+				สร้างค่าปรับแต่งเฉพาะศูนย์
+			</Button>
+		{/if}
 	</div>
 {:else if !shelterCode}
 	<div
@@ -105,16 +113,18 @@
 
 		<div class="flex items-center gap-1.5">
 			{#if profile}
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					class="border-red-200 text-red-700 hover:bg-red-50"
-					{disabled}
-					onclick={onDeactivateOverride}
-				>
-					ยกเลิกค่าปรับแต่ง
-				</Button>
+				{#if canEditOverride}
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						class="border-red-200 text-red-700 hover:bg-red-50"
+						{disabled}
+						onclick={onDeactivateOverride}
+					>
+						ยกเลิกค่าปรับแต่ง
+					</Button>
+				{/if}
 				<Button type="button" variant="outline" size="sm" onclick={onViewHistory}>
 					ประวัติ ({profile.version})
 				</Button>
@@ -152,29 +162,33 @@
 						</td>
 						<td class="px-4 py-3">
 							<div class="flex items-center justify-end gap-2">
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									class="border-blue-200 text-blue-700 hover:bg-blue-50"
-									disabled={disabled || !profile}
-									onclick={() => onEditItem(key)}
-									aria-label="จัดการ {meta?.label ?? key}"
-								>
-									<svg
-										class="mr-1 h-3.5 w-3.5"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										aria-hidden="true"
+								{#if canEditOverride}
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										class="border-blue-200 text-blue-700 hover:bg-blue-50"
+										disabled={disabled || !profile}
+										onclick={() => onEditItem(key)}
+										aria-label="จัดการ {meta?.label ?? key}"
 									>
-										<path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-									</svg>
-									จัดการ
-								</Button>
+										<svg
+											class="mr-1 h-3.5 w-3.5"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+										>
+											<path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+										</svg>
+										จัดการ
+									</Button>
+								{:else}
+									<span class="px-2 text-xs text-muted-foreground italic">อ่านอย่างเดียว</span>
+								{/if}
 							</div>
 						</td>
 					</tr>
