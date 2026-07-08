@@ -1,4 +1,5 @@
 {
   "scm.compactFolders": false,
-  "editor.suggest.showFolders": true
+  "editor.suggest.showFolders": true,
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
 }
