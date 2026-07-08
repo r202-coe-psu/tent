@@ -10,9 +10,30 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 
+	interface FamilyMember {
+		first_name: string;
+		last_name_masked: string;
+		status: string;
+		shelter_name: string;
+	}
+
+	interface SearchResult {
+		id: string;
+		first_name: string;
+		last_name_masked: string;
+		national_id: string;
+		gender: string;
+		shelter_name: string;
+		origin_address: string;
+		checked_in_at: string;
+		care_zone: string;
+		status: string;
+		family_members: FamilyMember[];
+	}
+
 	let query = $state('');
 	let isLoading = $state(false);
-	let results = $state<Record<string, unknown>[] | null>(null);
+	let results = $state<SearchResult[] | null>(null);
 	let error = $state('');
 
 	let currentPage = $state(1);
