@@ -106,7 +106,7 @@
 				const allEvacuees = evacueesQuery.data ?? [];
 				const selectedMembers = allEvacuees.filter((ev) => selectedMemberIds.includes(ev._id));
 				const hasCheckedInMember = selectedMembers.some(
-					(ev) => ev.current_stay?.status === 'checked_in'
+					(ev) => ev.current_stay?.status === 'active'
 				);
 				const initialStatus = hasCheckedInMember
 					? ('checked_in' as const)

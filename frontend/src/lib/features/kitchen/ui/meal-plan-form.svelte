@@ -8,14 +8,6 @@
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
-	// import {
-	// 	useCreateMealPlanCalc,
-	// 	useOccupancyHeadcount,
-	// 	calculateMealIngredients,
-	// 	MEAL_PERIOD_LABELS,
-	// 	type MealPeriod,
-	// 	type MealPlanHeadcount
-	// } from '$lib/features/kitchen';
 	import {
 		useCreateMealPlanCalc,
 		useOccupancyHeadcount,
@@ -94,12 +86,9 @@
 
 	const preview = $derived.by(() => {
 		if (!sopProfile.data || total <= 0) return null;
-		// const riceG = sopProfile.data.ratios.rice_g_per_person_meal;
-		// if (!riceG) return null;
 		try {
 			return calculateMealIngredients(
 				headcount,
-				// riceG,
 				DEFAULT_RICE_G_PER_PERSON_MEAL,
 				sopProfile.data._id,
 				sopProfile.data.version,
@@ -247,8 +236,7 @@
 					</p>
 					<p class="text-xs text-muted-foreground">
 						SOP: {sopProfile.data.name} v{sopProfile.data.version}
-						<!-- · 200 ก./คน/มื้อ -->
-						· {DEFAULT_RICE_G_PER_PERSON_MEAL} ก./คน/มื้อ
+						· ข้าว {DEFAULT_RICE_G_PER_PERSON_MEAL} ก./คน/มื้อ (ค่าครัว)
 					</p>
 				</div>
 			{/if}

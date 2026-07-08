@@ -53,7 +53,7 @@ describe('PeopleRemoteRepository', () => {
 
 			const fetched = await repo.getEvacuee(saved._id);
 			expect(fetched?.first_name).toBe('Somchai');
-			expect(fetched?.current_stay.status).toBe('registered');
+			expect(fetched?.current_stay.status).toBe('pre_registered');
 			expect(fetched?.privacy.search_excluded).toBe(false);
 		});
 
@@ -99,6 +99,92 @@ describe('PeopleRemoteRepository', () => {
 			const hits = await repo.searchEvacuees('SOMCHAI jaidee');
 			expect(hits).toHaveLength(1);
 		});
+	});
+});
+
+describe('check-in / check-out', () => {
+	let repo: PeopleRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new PeopleRemoteRepository('shelter_sh001');
+	});
+
+	describe('checkInEvacuee', () => {
+		it('records a check_in movement and updates current_stay to active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+
+			const updated = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+
+			expect(updated.current_stay.status).toBe('active');
+			expect(updated.current_stay.zone).toBe('zone-a');
+
+			const movements = await repo.listMovements();
+			expect(movements).toHaveLength(1);
+			expect(movements[0]).toMatchObject({
+				evacuee_id: evacuee._id,
+				action: 'check_in',
+				zone: 'zone-a'
+			});
+		});
+
+		it('persists the updated status so a fresh fetch reflects it', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			await repo.checkInEvacuee(evacuee, ctx);
+
+			const fetched = await repo.getEvacuee(evacuee._id);
+			expect(fetched?.current_stay.status).toBe('active');
+		});
+	});
+
+	describe('checkOutEvacuee', () => {
+		it('records a check_out movement and updates current_stay to checked_out', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+
+			const updated = await repo.checkOutEvacuee(checkedIn, ctx);
+
+			expect(updated.current_stay.status).toBe('checked_out');
+
+			const movements = await repo.listMovements();
+			expect(movements).toHaveLength(2);
+			expect(movements[1]).toMatchObject({
+				evacuee_id: evacuee._id,
+				action: 'check_out',
+				zone: null
+			});
+		});
+
+		it('persists the updated status so a fresh fetch reflects it', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx);
+			await repo.checkOutEvacuee(checkedIn, ctx);
+
+			const fetched = await repo.getEvacuee(evacuee._id);
+			expect(fetched?.current_stay.status).toBe('checked_out');
+		});
+
+		it('rejects check-out when the evacuee is not active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			await expect(repo.checkOutEvacuee(evacuee, ctx)).rejects.toThrow(/เช็คเอาท์/);
+			expect(await repo.listMovements()).toHaveLength(0);
+		});
+	});
+
+	it('rejects check-in when the evacuee is deceased', async () => {
+		const evacuee = await repo.createEvacuee(evInput(), ctx);
+		const deceased = {
+			...evacuee,
+			current_stay: {
+				status: 'deceased' as const,
+				zone: null,
+				since: evacuee.current_stay.since
+			}
+		};
+		await expect(repo.checkInEvacuee(deceased, ctx)).rejects.toThrow(/เสียชีวิต/);
+		expect(await repo.listMovements()).toHaveLength(0);
+		const fetched = await repo.getEvacuee(evacuee._id);
+		expect(fetched?.current_stay.status).toBe('pre_registered');
 	});
 });
 
