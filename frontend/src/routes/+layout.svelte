@@ -5,52 +5,59 @@
 	import { Toaster } from '$lib/components/ui/sonner/index.js';
 	import { PUBLIC_APP_TITLE } from '$env/static/public';
 	import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools';
-	import { startNamedSync, stopNamedSync } from '$lib/db/pouch';
+	import ConnectionBanner from '$lib/components/ConnectionBanner.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { startPeopleLiveQuery } from '$lib/features/people';
+	import { endpointStore } from '$lib/stores/endpoint.svelte';
+	import { startChangesSubscriber } from '$lib/db/changes-subscriber';
 	import { getShelterDb } from '$lib/db/shelter';
+	import { startPeopleLiveQuery } from '$lib/features/people';
 	import { startOperationsLiveQuery } from '$lib/features/operations';
 	import { startKitchenLiveQuery } from '$lib/features/kitchen';
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
+	import { startCatalogMasterLiveQuery } from '$lib/features/catalog';
 	import { startCatalogLiveQuery } from '$lib/features/supply';
 	import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
+	import { CATALOG_DB } from '$lib/features/supply';
 
 	let { children, data } = $props();
 
-	// Shared DBs (registry + catalog) follow auth only — avoid restarting sync when
-	// the active shelter changes.
 	$effect(() => {
 		if (!authStore.isAuthenticated) return;
-		startNamedSync(SHELTER_REGISTRY_DB, () => authStore.markNeedsReauth());
-		startNamedSync('catalog', () => authStore.markNeedsReauth());
+		void endpointStore.probe();
+	});
+
+	$effect(() => {
+		if (!authStore.isAuthenticated) return;
+
+		const shelterDb = getShelterDb();
+
+		// Defer live changes feed until initial page queries can claim connections.
+		// Three simultaneous longpolls (25s timeout) were starving the /couch pool on refresh.
+		let subscriber: ReturnType<typeof startChangesSubscriber> | null = null;
+		const timer = setTimeout(() => {
+			subscriber = startChangesSubscriber([SHELTER_REGISTRY_DB, CATALOG_DB, shelterDb]);
+		}, 1_500);
+
 		return () => {
-			stopNamedSync('catalog');
-			stopNamedSync(SHELTER_REGISTRY_DB);
+			clearTimeout(timer);
+			subscriber?.stop();
 		};
 	});
 
-	// Shelter db sync follows auth + active shelter scope (CONTRIBUTING.md §4).
-	$effect(() => {
-		if (!authStore.isAuthenticated) return;
-		const shelterDb = getShelterDb();
-		startNamedSync(shelterDb, () => authStore.markNeedsReauth());
-		return () => stopNamedSync(shelterDb);
-	});
-
-	// Registry/catalog live queries follow auth only — not the active shelter.
 	$effect(() => {
 		if (!authStore.isAuthenticated) return;
 
 		const liveShelters = startSheltersLiveQuery(data.queryClient);
 		const liveCatalog = startCatalogLiveQuery(data.queryClient);
+		const liveCatalogMaster = startCatalogMasterLiveQuery(data.queryClient);
 
 		return () => {
 			liveShelters.stop();
 			liveCatalog.stop();
+			liveCatalogMaster.stop();
 		};
 	});
 
-	// Shelter-scoped live queries restart when the active shelter changes.
 	$effect(() => {
 		if (!authStore.isAuthenticated) return;
 		getShelterDb();
@@ -68,8 +75,6 @@
 		};
 	});
 
-	// Drop cached queries on logout only — never on shelter switch (that was
-	// cancelling in-flight shelter-list fetches after listDefaultCode resolved).
 	$effect(() => {
 		if (authStore.isAuthenticated) return;
 		data.queryClient.clear();
@@ -86,6 +91,7 @@
 <Toaster position="bottom-center" richColors />
 
 <QueryClientProvider client={data.queryClient}>
+	<ConnectionBanner />
 	{@render children?.()}
 	<SvelteQueryDevtools />
 </QueryClientProvider>

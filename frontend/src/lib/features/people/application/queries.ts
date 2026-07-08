@@ -1,9 +1,12 @@
 import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
-import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
-import { getShelterCode } from '$lib/db/shelter';
+import {
+	subscribeDataChanges,
+	type SubscribeDataChangesHandle
+} from '$lib/db/subscribe-data-changes';
+import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
-import { peopleRepository, shelterDb } from '../data/people.pouch';
+import { peopleRepository } from '../data/people.remote';
 import type { HouseholdSearchLabels } from '../data/people.repository';
 import type {
 	Evacuee,
@@ -149,8 +152,8 @@ export const useScreenings = () =>
 		queryFn: () => peopleRepository().listScreenings()
 	}));
 
-export function startPeopleLiveQuery(queryClient: QueryClient): LiveQueryHandle {
-	return startLiveQuery(shelterDb(), queryClient, (type) => {
+export function startPeopleLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
+	return subscribeDataChanges(queryClient, getShelterDb, (type) => {
 		if (type === 'evacuee') {
 			return [[...peopleKeys.all, 'evacuees']];
 		}

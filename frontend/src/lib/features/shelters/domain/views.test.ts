@@ -85,17 +85,34 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 		});
 	});
 
-	describe('registrations_by_date', () => {
-		const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.registrations_by_date.map);
+	describe('registrations_by_date_status', () => {
+		const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.registrations_by_date_status.map);
 
-		it('ignores docs without created_at', () => {
-			mapFn({ type: 'evacuee' }, mockEmit);
+		it('ignores docs without occurred_at', () => {
+			mapFn({ type: 'movement', action: 'check_in' }, mockEmit);
 			expect(emitted).toHaveLength(0);
 		});
 
-		it('emits YYYY-MM-DD from created_at', () => {
-			mapFn({ type: 'evacuee', created_at: '2026-07-01T12:00:00Z' }, mockEmit);
-			expect(emitted).toEqual([{ key: '2026-07-01', value: 1 }]);
+		it('ignores non-movement docs', () => {
+			mapFn({ type: 'evacuee', occurred_at: '2026-07-01T12:00:00Z', action: 'check_in' }, mockEmit);
+			expect(emitted).toHaveLength(0);
+		});
+
+		it('emits checkin for check_in and transfer_in actions with +7 offset', () => {
+			// UTC 2026-07-01 23:00 is 2026-07-02 06:00 in Thailand
+			mapFn(
+				{ type: 'movement', action: 'check_in', occurred_at: '2026-07-01T23:00:00Z' },
+				mockEmit
+			);
+			expect(emitted).toEqual([{ key: ['2026-07-02', 'checkin'], value: 1 }]);
+		});
+
+		it('emits checkout for check_out and transfer_out actions', () => {
+			mapFn(
+				{ type: 'movement', action: 'transfer_out', occurred_at: '2026-07-01T12:00:00Z' },
+				mockEmit
+			);
+			expect(emitted).toEqual([{ key: ['2026-07-01', 'checkout'], value: 1 }]);
 		});
 	});
 });

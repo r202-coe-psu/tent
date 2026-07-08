@@ -18,10 +18,10 @@
 
 	// Resolve shelter_type codes to human labels via the master-data engine.
 	const shelterTypeQuery = useMasterData(() => 'shelter_type');
-	const typeLabel = $derived((code: string | null) => {
+	const typeLabel = (code: string | null) => {
 		if (!code) return '—';
 		return shelterTypeQuery.data?.items.find((i) => i.code === code)?.label ?? code;
-	});
+	};
 
 	const projectLevelLabel: Record<ProjectLevel, string> = {
 		community: 'ระดับชุมชน',
@@ -83,10 +83,8 @@
 
 						<!-- Capacity -->
 						<td class="px-4 py-4 align-top">
-							<div class="font-semibold text-foreground">0 / {shelter.capacity}</div>
-							<div class="mt-1.5 h-1.5 w-28 overflow-hidden rounded-full bg-muted">
-								<div class="h-full rounded-full bg-primary/70" style="width: 0%"></div>
-							</div>
+							<div class="font-semibold text-foreground">รองรับสูงสุด {shelter.capacity} คน</div>
+							<div class="mt-0.5 text-xs text-muted-foreground">ยังไม่แสดงจำนวนผู้พักปัจจุบัน</div>
 						</td>
 
 						<!-- Manager / phone -->

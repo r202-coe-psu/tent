@@ -302,12 +302,12 @@ When `escalation_required: true`, add:
 *⚠️ ครบ 3 ครั้งแล้ว — ต้องให้ senior dev หรือ tech lead ตรวจสอบเองก่อน merge*
 ```
 
-## 1. Architecture & Data Flow (Offline-First)
+## 1. Architecture & Data Flow (Remote-First)
 
-- **Repository Pattern**: Are database operations routed through the proper repository layer (`$lib/db/repository.ts`) rather than directly querying PouchDB/CouchDB from components?
-- **Data Mutation**: Does the code write to local PouchDB first?
+- **Repository Pattern**: Are database operations routed through the proper repository layer (`$lib/db/repository.ts`) rather than direct database calls from components?
+- **Data Mutation**: Do writes follow active-endpoint policy (central first, edge fallback) without local-only queues, and does disconnected mode stay status-only (no read-only local cache)?
 - **Concurrency & `_rev`**: Do update/delete operations properly fetch and provide the latest `_rev` to avoid `409 Conflict` errors?
-- **Live Queries**: Does the UI use the standard PouchDB changes feed (`$lib/db/live-query.ts`) to reactively update data?
+- **Live Updates**: Does the UI use the project's canonical app-level event channel invalidation/live-update mechanism (without polling as the default)?
 - **Schema Documentation**: If the PR modifies or adds data structures in the database, was `docs/data/schema.md` updated accordingly?
 
 ## 2. Security & Access Control
@@ -375,7 +375,7 @@ Confirm the PR number with the user if ambiguous. If they edited the artifact, u
 3. **Load related skills** (read and apply before concluding):
    - `project-structure-architecture` — feature layering, file placement
    - `svelte-core-bestpractices` / `shadcn-svelte` / `svelte-code-writer` — Svelte/UI changes
-   - `couchdb-pouchdb-bestpractices` — data model, offline-first, MVCC
+   - `couchdb-bestpractices` — data model, remote-first endpoint policy, MVCC
    - `security-rbac-bestpractices` — roles, shelter scope, PII
    - `testing-bestpractices` — Vitest/Playwright, DoD
 4. **Check the checklist** — sections 1–4 above.

@@ -1,4 +1,4 @@
-/** True when `err` is a PouchDB/CouchDB error with the given HTTP status code. */
+/** True when `err` is a CouchDB HTTP error with the given status code. */
 export function isPouchError(err: unknown, status: number): boolean {
 	return typeof err === 'object' && err !== null && (err as { status?: number }).status === status;
 }
@@ -52,9 +52,25 @@ export class NetworkError extends AppError {
 	}
 }
 
+/** Central CouchDB unreachable after automatic retries (CR-033 disconnected policy). */
+export class CannotConnectError extends AppError {
+	constructor(message = 'Cannot connect to the server') {
+		super(message, 'CANNOT_CONNECT');
+		this.name = 'CannotConnectError';
+	}
+}
+
+/** Alias for auth failures from the active CouchDB endpoint. */
+export class CouchAuthError extends AuthError {
+	constructor(status: 401 | 403 = 401) {
+		super(status);
+		this.name = 'CouchAuthError';
+	}
+}
+
 // ----------------------------------------------------------------- factories
 
-/** Map a raw PouchDB/CouchDB throw into a typed AppError. Re-throws AppErrors unchanged. */
+/** Map a raw CouchDB throw into a typed AppError. Re-throws AppErrors unchanged. */
 export function fromPouchError(err: unknown): AppError {
 	if (err instanceof AppError) return err;
 	if (isPouchError(err, 404)) return new NotFoundError();
@@ -74,6 +90,7 @@ export function errorMessage(err: unknown): string {
 	if (err instanceof AuthError)
 		return err.status === 403 ? 'Permission denied' : 'Session expired — please log in again';
 	if (err instanceof ValidationError) return err.message;
+	if (err instanceof CannotConnectError) return 'Cannot connect — check your network and try again';
 	if (err instanceof NetworkError) return 'No connection';
 	if (err instanceof Error) return err.message;
 	return 'Something went wrong';

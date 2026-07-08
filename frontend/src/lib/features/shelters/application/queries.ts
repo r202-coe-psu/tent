@@ -5,9 +5,11 @@ import {
 	type QueryClient
 } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
-import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
-import { namedLocalDb } from '$lib/db/pouch';
-import { sheltersRepository, SHELTER_REGISTRY_DB } from '../data/shelters.pouch';
+import {
+	subscribeDataChanges,
+	type SubscribeDataChangesHandle
+} from '$lib/db/subscribe-data-changes';
+import { sheltersRepository, SHELTER_REGISTRY_DB } from '../data/shelters.remote';
 import { createShelter, updateShelter, closeZone, reopenZone } from '../data/shelters.api';
 import { listProvinces, listDistricts, listSubdistricts } from '../data/thailand-location.api';
 import type { Shelter } from '../domain/schema';
@@ -146,7 +148,7 @@ export const useReopenZone = () => {
 };
 
 /**
- * Wire the PouchDB changes feed to TanStack Query invalidations for the
+ * Wire CouchDB changes (event channel) to TanStack Query invalidations for the
  * shelter registry. Reactivity comes from replication (and local writes),
  * not from polling — covers cross-tab writes and remote-sync refreshes.
  *
@@ -154,15 +156,10 @@ export const useReopenZone = () => {
  */
 export { SHELTER_REGISTRY_DB };
 
-export function startSheltersLiveQuery(queryClient: QueryClient): LiveQueryHandle {
-	return startLiveQuery(namedLocalDb(SHELTER_REGISTRY_DB), queryClient, (type) => {
+export function startSheltersLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
+	return subscribeDataChanges(queryClient, SHELTER_REGISTRY_DB, (type) => {
 		if (type === 'shelter') {
 			return [sheltersKeys.list(), [...sheltersKeys.all, 'detail']];
-		}
-		if (type === 'audit') {
-			// Audit log changes don't directly affect shelter queries today,
-			// but forward-compatibility: they could power a timeline view.
-			return [];
 		}
 		return [];
 	});

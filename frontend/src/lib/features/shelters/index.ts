@@ -82,7 +82,7 @@ export {
 
 // Data layer (public)
 export { createShelter, updateShelter, closeZone, reopenZone } from './data/shelters.api';
-export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.pouch';
+export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.remote';
 export type { ShelterSummary } from './data/shelters.repository';
 
 // Application (public)
