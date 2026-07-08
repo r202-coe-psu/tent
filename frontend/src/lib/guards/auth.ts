@@ -2,7 +2,12 @@ import { authStore } from '$lib/stores/auth.svelte';
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { resolve } from '$app/paths';
-import { hasStaffCapability, isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+import {
+	hasStaffCapability,
+	isShelterManager,
+	isWarehouseStaff,
+	isSystemAdmin
+} from '$lib/auth/roles';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
 export const LANDING_ROUTE = '/';
@@ -56,6 +61,18 @@ export async function requireManager(fetchFn?: typeof fetch) {
 }
 
 /**
+ * Warehouse guard — requires INVENTORY_WRITE_ROLES: system_admin, shelter_manager,
+ * or warehouse_staff (role-permission-matrix.md §4). Redirects to / otherwise.
+ */
+export async function requireWarehouseAccess(fetchFn: typeof fetch = fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!isSystemAdmin(roles) && !isShelterManager(roles) && !isWarehouseStaff(roles)) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
  * Kitchen guard — requires system_admin, shelter_manager, or the `kitchen_staff`
  * capability (CR-024). This is a UX gate; the data layer remains the real
  * authorization boundary. Redirects to / when authenticated but unauthorized.
@@ -85,6 +102,25 @@ export async function requireWarehouse(fetchFn?: typeof fetch) {
 		!isSystemAdmin(roles) &&
 		!isShelterManager(roles) &&
 		!hasStaffCapability(roles, 'warehouse_staff')
+	) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Evacuee registration guard — requires system_admin, shelter_manager, or
+ * the `registration_staff` capability. Used for PII surfaces (evacuee/
+ * household CRUD) so only staff whose job is registration can reach them;
+ * this is a UX gate, the data layer remains the real authorization boundary.
+ * Not to be confused with the unrelated user-signup `register` feature.
+ */
+export async function requireEvacueeRegistration(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (
+		!isSystemAdmin(roles) &&
+		!isShelterManager(roles) &&
+		!hasStaffCapability(roles, 'registration_staff')
 	) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}

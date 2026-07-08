@@ -7,7 +7,7 @@
 ### 1. Architecture & Data Flow (Offline-First)
 * **แหล่งที่มา**: เอกสาร [README.md](../../../README.md), [docs/task-breakdown/_index.md](../task-breakdown/_index.md), สกีมา [docs/data/schema.md](../data/schema.md), และโค้ดใน `frontend/src/lib/db/`
 * **ข้อมูลที่พบ**: 
-  - โครงการใช้สถาปัตยกรรม Offline-First เป็นหลัก จึงต้องตรวจสอบเสมอว่าโค้ดไม่มีการเรียกฐานข้อมูลตรงๆ แต่ต้องผ่าน `Repository Pattern` เสมอ มีการจัดการ `_rev` อย่างถูกต้องเพื่อกัน 409 Conflict และใช้ `live-query` เพื่อรับข้อมูลที่ sync มาจาก PouchDB
+  - โครงการใช้สถาปัตยกรรม Remote-First เป็นหลัก จึงต้องตรวจสอบเสมอว่าโค้ดไม่มีการเรียกฐานข้อมูลตรงๆ แต่ต้องผ่าน `Repository Pattern` เสมอ มีการจัดการ `_rev` อย่างถูกต้องเพื่อกัน 409 Conflict และใช้กลไก live-update/invalidation ที่เป็นมาตรฐานเดียวกันทั้งระบบ
   - มีข้อบังคับเรื่อง **Schema Documentation** หากมีการแก้โครงสร้าง DB จะต้องอัปเดตไฟล์ `schema.md` ควบคู่กันเสมอ
 
 ### 2. Security & Access Control

@@ -69,8 +69,8 @@ export const GET = async ({ params, getClientAddress }) => {
 				booking_ref: donation.booking_ref,
 				shelter_code: donation.shelter_code,
 				donor: maskedDonor,
-				items: (donation.items || donation.items_declared || []).map((i: any) => ({
-					free_text: i.free_text || i.item_name,
+				items: (donation.items || donation.items_declared || []).map((i) => ({
+					free_text: i.free_text || ('item_name' in i ? i.item_name : undefined),
 					category: i.category,
 					qty: i.qty,
 					unit: i.unit,

@@ -12,7 +12,8 @@ describe('donationPreDeclarationInputSchema', () => {
 	};
 
 	it('fails validation when logistics is missing (required for public)', () => {
-		const { logistics, ...noLogistics } = baseValid;
+		const noLogistics = { ...baseValid };
+		delete (noLogistics as Partial<typeof baseValid>).logistics;
 		const result = donationPreDeclarationInputSchema.safeParse(noLogistics);
 		expect(result.success).toBe(false);
 	});
@@ -63,11 +64,9 @@ describe('donationPreDeclarationInputSchema', () => {
 		}
 	});
 
+	// 4. Invalid Case - Missing donation items
 	it('fails validation when donation items are missing', () => {
-		const result = donationPreDeclarationInputSchema.safeParse({
-			...baseValid,
-			items: []
-		});
+		const result = donationPreDeclarationInputSchema.safeParse({ ...baseValid, items: [] });
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(result.error.issues[0].message).toBe('Please add at least one item to the donation');
@@ -75,33 +74,42 @@ describe('donationPreDeclarationInputSchema', () => {
 	});
 });
 
-describe('isDonationPreDeclaration (Type Guard)', () => {
-	it('returns true for a valid donation pre-declaration document', () => {
+describe('isDonationPreDeclaration', () => {
+	it('should return true for a valid donation_pre_declaration document', () => {
 		const mockDoc = {
-			_id: 'donation_pre_declaration:some-uuid',
+			_id: 'donation_pre_declaration:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 			type: 'donation_pre_declaration',
-			tracking_token: 'some-uuid',
-			booking_ref: 'DN-123456',
+			schema_v: 2,
 			shelter_code: 'SH001',
-			items: [{ free_text: 'Noodles', qty: 10, unit: 'box' }],
-			donor_phone_hash: 'some-sha256-hash',
+			tracking_token: 'token123',
+			items: [],
+			donor_phone_hash: 'hash',
 			status: 'declared',
-			created_at: '2026-06-19T00:00:00Z',
-			updated_at: '2026-06-19T00:00:00Z',
-			created_by: 'system',
-			schema_v: 2
+			created_at: '2026-06-30T17:00:00Z',
+			updated_at: '2026-06-30T17:00:00Z',
+			created_by: 'user'
 		};
-
 		expect(isDonationPreDeclaration(mockDoc)).toBe(true);
 	});
 
-	it('returns false for an invalid document type', () => {
-		const mockDoc = {
-			_id: 'evacuee:some-uuid',
-			type: 'evacuee',
-			first_name: 'John'
-		};
+	it('should return false for invalid documents or other types', () => {
+		expect(isDonationPreDeclaration(null)).toBe(false);
+		expect(isDonationPreDeclaration('string')).toBe(false);
+	});
 
-		expect(isDonationPreDeclaration(mockDoc)).toBe(false);
+	it('should return false for donation type documents even with items', () => {
+		expect(
+			isDonationPreDeclaration({
+				_id: 'donation:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+				type: 'donation',
+				schema_v: 2,
+				shelter_code: 'SH001',
+				items: [{ item_id: 'item:rice', qty: 10, unit: 'kg' }],
+				status: 'declared',
+				created_at: '2026-06-30T17:00:00Z',
+				updated_at: '2026-06-30T17:00:00Z',
+				created_by: 'user'
+			})
+		).toBe(false);
 	});
 });

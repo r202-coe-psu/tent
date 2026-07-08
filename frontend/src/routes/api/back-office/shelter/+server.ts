@@ -7,7 +7,13 @@ import {
 	serviceError
 } from '$lib/server/couch-admin';
 import { ulid } from '$lib/db/ulid';
-import { createShelterSchema, type ShelterMaster } from '$lib/features/shelters/server';
+import {
+	createShelterSchema,
+	EMPTY_ADMISSION_POLICY,
+	EMPTY_LUGGAGE_POLICY,
+	EMPTY_PARKING_POLICY,
+	type ShelterMaster
+} from '$lib/features/shelters/server';
 import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
 import {
 	SHELTER_REGISTRY_DB,
@@ -17,44 +23,9 @@ import {
 	nowIso,
 	deployShelterViews
 } from '$lib/server/shelters.admin';
+import { buildValidateDocUpdate, shelterDbName } from '$lib/server/shelter-access-design';
 
 export const prerender = false;
-
-/** Database name for a shelter's own per-shelter CouchDB. */
-function shelterDbName(code: string): string {
-	return `shelter_${code.toLowerCase()}`;
-}
-
-/**
- * Server-side `validate_doc_update` for a shelter db. Enforces the common
- * envelope (schema.md §0) + shelter_code match + allowed doc types. `_admin`
- * bypasses so provisioning/seed writes are not blocked. Patterned on the demo
- * shelter seed (demo/lib/features/shelter/data/shelter.seed.ts).
- */
-function validateDocUpdate(code: string): string {
-	return `function (newDoc, oldDoc, userCtx) {
-  if (userCtx.roles.indexOf('_admin') !== -1) return;
-  if (newDoc._deleted) return;
-  function require(field) {
-    if (typeof newDoc[field] === 'undefined' || newDoc[field] === null) {
-      throw { forbidden: field + ' is required' };
-    }
-  }
-  require('type');
-  require('schema_v');
-  require('shelter_code');
-  require('created_at');
-  require('updated_at');
-  require('created_by');
-  if (newDoc.shelter_code !== '${code}') {
-    throw { forbidden: 'shelter_code must be ${code}' };
-  }
-  var allowed = ['evacuee', 'donation'];
-  if (allowed.indexOf(newDoc.type) === -1) {
-    throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
-  }
-}`;
-}
 
 function seedEvacuee(
 	code: string,
@@ -124,7 +95,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const design = await adminRaw(`/${db}/_design/access`, 'PUT', {
 			_id: '_design/access',
 			...(rev ? { _rev: rev } : {}),
-			validate_doc_update: validateDocUpdate(code)
+			validate_doc_update: buildValidateDocUpdate(code)
 		});
 		steps.push({ step: 'design', status: design.status });
 
@@ -146,7 +117,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			const master = {
 				_id: `shelter:${ulid()}`,
 				type: 'shelter' as const,
-				schema_v: 3 as const,
+				schema_v: 4 as const,
 				code,
 				...input,
 				created_at: ts,
@@ -194,15 +165,28 @@ export const GET: RequestHandler = async ({ request }) => {
 					operation_status: migrated.operation_status ?? 'standby',
 					capacity: migrated.capacity ?? 0,
 					shelter_type: migrated.shelter_type ?? null,
+					project_level: migrated.project_level ?? null,
 					location: migrated.location ?? {},
 					contact: migrated.contact ?? {},
+					municipality_zone: migrated.municipality_zone ?? null,
+					community: migrated.community ?? null,
+					address_no: migrated.address_no ?? null,
+					village_no: migrated.village_no ?? null,
+					subdistrict: migrated.subdistrict ?? null,
+					district: migrated.district ?? null,
+					province: migrated.province ?? null,
+					postal_code: migrated.postal_code ?? null,
+					key_personnel: migrated.key_personnel ?? null,
 					area_m2: migrated.area_m2 ?? null,
 					area_type: migrated.area_type ?? null,
 					facilities: migrated.facilities ?? {},
 					common_areas: migrated.common_areas ?? { sub_storage: [] },
 					utilities: migrated.utilities ?? { communications: [] },
 					risk: migrated.risk ?? {},
-					zones: migrated.zones ?? []
+					zones: migrated.zones ?? [],
+					admission_policy: migrated.admission_policy ?? EMPTY_ADMISSION_POLICY,
+					luggage_policy: migrated.luggage_policy ?? EMPTY_LUGGAGE_POLICY,
+					parking_policy: migrated.parking_policy ?? EMPTY_PARKING_POLICY
 				};
 			})
 		);

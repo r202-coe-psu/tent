@@ -1,242 +1,75 @@
 <script lang="ts">
-	import { toast } from 'svelte-sonner';
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
-	import * as Table from '$lib/components/ui/table/index.js';
-	import * as Pagination from '$lib/components/ui/pagination/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
+	import { page } from '$app/state';
 	import Users from '@lucide/svelte/icons/users';
 	import Home from '@lucide/svelte/icons/home';
-	import IdCard from '@lucide/svelte/icons/id-card';
-	import Search from '@lucide/svelte/icons/search';
-	import {
-		useEvacueesPaginated,
-		useCheckInEvacuee,
-		maskNationalId,
-		zoneLabel,
-		SPECIAL_NEED_CHIPS
-	} from '$lib/features/people';
-	import type { Evacuee, SpecialNeed } from '$lib/features/people';
-	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/db/shelter';
+	import BarChart2 from '@lucide/svelte/icons/bar-chart-2';
+	import EvacueeTab from './evacuee-tab.svelte';
+	import HouseholdTab from './household-tab.svelte';
+	import DashboardTab from './dashboard-tab.svelte';
+	import { backofficeState } from '$lib/stores/backoffice.svelte';
 
-	type TabKey = 'evacuee' | 'household';
-	let activeTab = $state<TabKey>('evacuee');
-
-	const PAGE_SIZE = 10;
-	let currentPage = $state(1);
-	let q = $state('');
-
-	const query = useEvacueesPaginated(
-		() => currentPage,
-		() => PAGE_SIZE
-	);
-
-	const checkIn = useCheckInEvacuee();
-
-	// Stopgap check-in action (T-06 dependency has no dedicated flow yet) — flips
-	// current_stay to checked_in so occupancy-driven features (e.g. kitchen T-25
-	// LIVE COUNT) reflect who is actually present.
-	async function handleCheckIn(evacuee: Evacuee) {
-		const ctx = { shelterCode: SHELTER_CODE, createdBy: authStore.user?.name ?? 'staff' };
-		try {
-			await checkIn.mutateAsync({ evacuee, ctx });
-			toast.success(`เช็คอิน ${evacuee.first_name} ${evacuee.last_name} แล้ว`);
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
-		}
-	}
-
-	const STATUS_LABEL: Record<string, string> = {
-		registered: 'ลงทะเบียนแล้ว',
-		checked_in: 'อยู่ในศูนย์',
-		checked_out: 'ออกจากศูนย์',
-		transferred: 'ย้ายศูนย์'
-	};
-
-	const filtered = $derived.by(() => {
-		const items = query.data?.items ?? [];
-		const needle = q.trim().toLowerCase();
-		if (!needle) return items;
-		return items.filter((e) => {
-			const masked = maskNationalId(e.national_id).toLowerCase();
-			return (
-				e.first_name.toLowerCase().includes(needle) ||
-				e.last_name.toLowerCase().includes(needle) ||
-				(e.nickname?.toLowerCase().includes(needle) ?? false) ||
-				masked.includes(needle) ||
-				(e.national_id?.includes(needle) ?? false)
-			);
-		});
-	});
-
-	const total = $derived(query.data?.total ?? 0);
-	const totalPages = $derived(query.data?.totalPages ?? 1);
+	type TabKey = 'dashboard' | 'evacuee' | 'household';
+	let activeTab = $state<TabKey>((page.url.searchParams.get('tab') as TabKey) || 'dashboard');
 </script>
 
 <svelte:head>
 	<title>จัดการผู้ประสบภัย · SmartShelter</title>
 </svelte:head>
 
-<div class="flex shrink-0 gap-2 border-b border-border bg-card px-4 py-2">
-	<Button
-		size="sm"
-		variant={activeTab === 'evacuee' ? 'default' : 'outline'}
-		onclick={() => (activeTab = 'evacuee')}
-	>
-		<Users class="h-3.5 w-3.5" />
-		รายชื่อผู้ประสบภัย
-	</Button>
-	<Button
-		size="sm"
-		variant={activeTab === 'household' ? 'default' : 'outline'}
-		onclick={() => (activeTab = 'household')}
-	>
-		<Home class="h-3.5 w-3.5" />
-		รายชื่อครัวเรือน
-	</Button>
-</div>
+<div class="flex h-full flex-col">
+	<!-- Tab nav -->
+	<div class="shrink-0 border-b border-border bg-background px-6 pt-4">
+		<nav class="flex gap-1">
+			<button
+				type="button"
+				onclick={() => (activeTab = 'dashboard')}
+				class="flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
+					{activeTab === 'dashboard'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
+			>
+				<BarChart2 class="h-4 w-4" />
+				ภาพรวม
+			</button>
+			<button
+				type="button"
+				onclick={() => (activeTab = 'evacuee')}
+				class="flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
+					{activeTab === 'evacuee'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
+			>
+				<Users class="h-4 w-4" />
+				รายชื่อผู้ประสบภัย
+			</button>
+			<button
+				type="button"
+				onclick={() => (activeTab = 'household')}
+				class="flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
+					{activeTab === 'household'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
+			>
+				<Home class="h-4 w-4" />
+				รายชื่อครัวเรือน
+			</button>
+		</nav>
+	</div>
 
-<div class="flex w-full flex-1 flex-col gap-4 p-4">
-	{#if activeTab === 'evacuee'}
-		<div class="flex flex-col gap-1 border-l-4 border-primary pl-3">
-			<h2 class="text-sm font-bold text-foreground">ลิสต์ผู้ประสบภัย และจัดสรรโซน</h2>
-		</div>
-
-		<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-			<div>
-				<div class="flex items-center gap-2">
-					<IdCard class="h-4 w-4 text-primary" />
-					<h3 class="text-sm font-bold text-foreground">ทะเบียนผู้พักพิง (Evacuee Registry)</h3>
+	<!-- Tab content -->
+	<div class="flex-1 overflow-auto">
+		{#if activeTab === 'dashboard'}
+			{#if backofficeState.selectedShelter}
+				<DashboardTab shelterCode={backofficeState.selectedShelter} />
+			{:else}
+				<div class="flex h-full items-center justify-center text-muted-foreground">
+					กำลังโหลดข้อมูลศูนย์พักพิง...
 				</div>
-				<p class="mt-0.5 text-xs text-muted-foreground">
-					จำนวนผู้พักพิงในระบบทั้งหมด
-					<span class="rounded bg-primary/10 px-1.5 py-0.5 font-bold text-primary">{total} คน</span>
-				</p>
-			</div>
-			<Button size="sm" onclick={() => goto(resolve('/onsite/people'))}>
-				<Users class="h-3.5 w-3.5" />
-				เริ่มลงทะเบียน
-			</Button>
-		</div>
-
-		<div class="relative">
-			<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-			<Input
-				type="text"
-				placeholder="ค้นหาชื่อ หรือ รหัสประจำตัว..."
-				bind:value={q}
-				class="rounded-full pl-9"
-			/>
-		</div>
-
-		{#if query.isLoading}
-			<p class="text-sm text-muted-foreground">Loading...</p>
-		{:else if query.isError}
-			<p class="text-sm text-destructive">Error: {query.error?.message}</p>
-		{:else if filtered.length === 0}
-			<p class="text-sm text-muted-foreground">ไม่พบผู้ประสบภัยในระบบ</p>
-		{:else}
-			<div class="overflow-x-auto rounded-xl border border-border">
-				<Table.Root>
-					<Table.Header>
-						<Table.Row>
-							<Table.Head>ID CARD REF.</Table.Head>
-							<Table.Head>ชื่อ-นามสกุล</Table.Head>
-							<Table.Head>ประเภทผู้ประสบภัย</Table.Head>
-							<Table.Head>ZONE จัดสรร</Table.Head>
-							<Table.Head class="text-center">สถานะ</Table.Head>
-							<Table.Head class="text-center">จัดการ</Table.Head>
-						</Table.Row>
-					</Table.Header>
-					<Table.Body>
-						{#each filtered as e (e._id)}
-							<Table.Row>
-								<Table.Cell class="font-mono text-muted-foreground"
-									>{maskNationalId(e.national_id)}</Table.Cell
-								>
-								<Table.Cell class="font-bold text-foreground"
-									>{e.first_name} {e.last_name}</Table.Cell
-								>
-								<Table.Cell>
-									<div class="flex flex-wrap gap-1">
-										{#if e.special_needs && e.special_needs.length > 0}
-											{#each e.special_needs as need (need)}
-												{@const chip = SPECIAL_NEED_CHIPS[need as SpecialNeed]}
-												<span class="rounded bg-muted px-2 py-0.5 text-[11px]"
-													>{chip.emoji} {chip.label}</span
-												>
-											{/each}
-										{:else}
-											<span class="rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
-												>ทั่วไป</span
-											>
-										{/if}
-									</div>
-								</Table.Cell>
-								<Table.Cell class="font-medium">{zoneLabel(e.current_stay.zone)}</Table.Cell>
-								<Table.Cell class="text-center">
-									<span
-										class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium
-											{e.current_stay.status === 'checked_in'
-											? 'bg-green-100 text-green-800'
-											: 'bg-muted text-muted-foreground'}"
-									>
-										{STATUS_LABEL[e.current_stay.status] ?? e.current_stay.status}
-									</span>
-								</Table.Cell>
-								<Table.Cell class="text-center">
-									<div class="flex justify-center gap-1.5">
-										{#if e.current_stay.status !== 'checked_in'}
-											<Button
-												variant="outline"
-												size="sm"
-												onclick={() => handleCheckIn(e)}
-												disabled={checkIn.isPending}
-											>
-												เช็คอิน
-											</Button>
-										{/if}
-										<Button variant="outline" size="sm" onclick={() => toast.info('เร็วๆ นี้')}
-											>ตรวจประวัติ</Button
-										>
-									</div>
-								</Table.Cell>
-							</Table.Row>
-						{/each}
-					</Table.Body>
-				</Table.Root>
-			</div>
-
-			{#if totalPages > 1}
-				<Pagination.Root bind:page={currentPage} count={total} perPage={PAGE_SIZE}>
-					{#snippet children({ pages })}
-						<Pagination.Content>
-							<Pagination.Previous />
-							{#each pages as p, i (i)}
-								<Pagination.Item>
-									{#if p.type === 'page'}
-										<Pagination.Link page={p} isActive={p.value === currentPage} />
-									{:else}
-										<Pagination.Ellipsis />
-									{/if}
-								</Pagination.Item>
-							{/each}
-							<Pagination.Next />
-						</Pagination.Content>
-					{/snippet}
-				</Pagination.Root>
 			{/if}
+		{:else if activeTab === 'evacuee'}
+			<EvacueeTab />
+		{:else}
+			<HouseholdTab />
 		{/if}
-	{:else if activeTab === 'household'}
-		<div class="flex flex-col gap-1 border-l-4 border-primary pl-3">
-			<h2 class="text-sm font-bold text-foreground">รายชื่อครัวเรือน</h2>
-		</div>
-
-		<div class="rounded-xl border border-border bg-card p-8 text-center">
-			<Home class="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
-			<p class="text-sm text-muted-foreground">รายการครัวเรือน (Coming Soon)</p>
-		</div>
-	{/if}
+	</div>
 </div>

@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET, POST } from './+server';
 import { adminRaw, requireShelterScopeOrSA } from '$lib/server/couch-admin';
+import type { PublicDonationDoc } from '$lib/features/donations';
+
+type GetEvent = Parameters<typeof GET>[0];
+type PostEvent = Parameters<typeof POST>[0];
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn(),
@@ -35,7 +39,7 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			delivery_method: 'parcel',
 			courier_tracking_no: null
 		}
-	};
+	} as PublicDonationDoc;
 
 	it('GET returns donation details including donor PII for admin staff', async () => {
 		// Mock registry and search results
@@ -59,8 +63,8 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 
 		const response = await GET({
 			params: { query: 'DN-999999' },
-			request: { headers: { get: () => 'session-cookie' } } as any
-		} as any);
+			request: { headers: { get: () => 'session-cookie' } }
+		} as unknown as GetEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(200);
@@ -106,8 +110,8 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 
 		const response = await POST({
 			params: { query: 'DN-999999' },
-			request: mockRequest as any
-		} as any);
+			request: mockRequest
+		} as unknown as PostEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(200);
@@ -118,7 +122,7 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 		// Verify CouchDB write occurred with correct fields
 		const putCall = vi.mocked(adminRaw).mock.calls.find((call) => call[1] === 'PUT');
 		expect(putCall).toBeDefined();
-		const savedDoc = putCall![2] as any;
+		const savedDoc = putCall![2] as PublicDonationDoc;
 		expect(savedDoc.status).toBe('received');
 		expect(savedDoc.received_at).toBeDefined();
 	});

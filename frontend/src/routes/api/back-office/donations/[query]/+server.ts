@@ -2,18 +2,34 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
 import { hasStaffCapability, isShelterManager } from '$lib/auth/roles';
-import type { ScanDonationView } from '$lib/features/donations';
+import type { PublicDonationDoc, ScanDonationView } from '$lib/features/donations';
 import { sha256Hex } from '$lib/db/hash';
+
+type RegistryRow = { id: string; doc?: { code?: string } };
+type RegistryAllDocs = { rows?: RegistryRow[] };
+type FindResult = { docs?: PublicDonationDoc[] };
+
+function routeErrorResponse(e: unknown) {
+	const message = e instanceof Error ? e.message : 'Internal Server Error';
+	const status =
+		typeof e === 'object' &&
+		e !== null &&
+		'status' in e &&
+		typeof (e as { status: unknown }).status === 'number'
+			? (e as { status: number }).status
+			: 500;
+	return json({ success: false, error: message || 'Internal Server Error' }, { status });
+}
 
 // Project a raw donation doc to the redacted view the scan UI needs (no _rev,
 // tracking_token_hash, phone_hash, timestamps). Full phone kept for warehouse staff.
-function toScanView(d: any): ScanDonationView {
+function toScanView(d: PublicDonationDoc): ScanDonationView {
 	return {
 		booking_ref: d.booking_ref,
 		shelter_code: d.shelter_code,
 		status: d.status,
 		donor: { name: d.donor?.name ?? '', phone: d.donor?.phone ?? null },
-		items: (d.items ?? []).map((it: any) => ({
+		items: (d.items ?? []).map((it) => ({
 			item_id: it.item_id,
 			free_text: it.free_text,
 			qty: it.qty,
@@ -38,16 +54,16 @@ async function authorizeWarehouse(cookie: string | null): Promise<Caller> {
 // Helper to find donation doc across all shelters by booking_ref or tracking_token_hash
 async function findDonationByQuery(
 	query: string
-): Promise<{ donation: any; dbName: string } | null> {
+): Promise<{ donation: PublicDonationDoc; dbName: string } | null> {
 	// 1. Get all shelter DBs from registry
 	const resRegistry = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');
 	if (resRegistry.status >= 400) {
 		throw new Error('Could not read registry');
 	}
-	const registryRows = (resRegistry.data as any)?.rows ?? [];
+	const registryRows = (resRegistry.data as RegistryAllDocs)?.rows ?? [];
 	const shelterCodes = registryRows
-		.filter((r: any) => r.id.startsWith('shelter:') && r.doc?.code)
-		.map((r: any) => r.doc.code as string);
+		.filter((r) => r.id.startsWith('shelter:') && r.doc?.code)
+		.map((r) => r.doc!.code as string);
 
 	const tokenHash = await sha256Hex(query);
 
@@ -61,7 +77,7 @@ async function findDonationByQuery(
 			}
 		});
 		if (findRes.status === 200) {
-			const docs = (findRes.data as any)?.docs ?? [];
+			const docs = (findRes.data as FindResult)?.docs ?? [];
 			if (docs.length > 0) {
 				return { donation: docs[0], dbName };
 			}
@@ -93,12 +109,9 @@ export const GET: RequestHandler = async ({ params, request }) => {
 			success: true,
 			donation: toScanView(found.donation)
 		});
-	} catch (e: any) {
+	} catch (e) {
 		console.error(e);
-		return json(
-			{ success: false, error: e.message || 'Internal Server Error' },
-			{ status: e.status || 500 }
-		);
+		return routeErrorResponse(e);
 	}
 };
 
@@ -150,11 +163,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			success: true,
 			donation: updated
 		});
-	} catch (e: any) {
+	} catch (e) {
 		console.error(e);
-		return json(
-			{ success: false, error: e.message || 'Internal Server Error' },
-			{ status: e.status || 500 }
-		);
+		return routeErrorResponse(e);
 	}
 };

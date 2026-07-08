@@ -7,11 +7,20 @@
 	import Users from '@lucide/svelte/icons/users';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/db/shelter';
+	import { getShelterCode } from '$lib/db/shelter';
+	// import {
+	// 	useCreateMealPlanCalc,
+	// 	useOccupancyHeadcount,
+	// 	calculateMealIngredients,
+	// 	MEAL_PERIOD_LABELS,
+	// 	type MealPeriod,
+	// 	type MealPlanHeadcount
+	// } from '$lib/features/kitchen';
 	import {
 		useCreateMealPlanCalc,
 		useOccupancyHeadcount,
 		calculateMealIngredients,
+		DEFAULT_RICE_G_PER_PERSON_MEAL,
 		MEAL_PERIOD_LABELS,
 		type MealPeriod,
 		type MealPlanHeadcount
@@ -85,12 +94,13 @@
 
 	const preview = $derived.by(() => {
 		if (!sopProfile.data || total <= 0) return null;
-		const riceG = sopProfile.data.ratios.rice_g_per_person_meal;
-		if (!riceG) return null;
+		// const riceG = sopProfile.data.ratios.rice_g_per_person_meal;
+		// if (!riceG) return null;
 		try {
 			return calculateMealIngredients(
 				headcount,
-				riceG,
+				// riceG,
+				DEFAULT_RICE_G_PER_PERSON_MEAL,
 				sopProfile.data._id,
 				sopProfile.data.version,
 				new Date().toISOString()
@@ -102,7 +112,7 @@
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
-		const ctx = { shelterCode: SHELTER_CODE, createdBy: authStore.user?.name ?? 'staff' };
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
 			await createCalc.mutateAsync({
 				date,
@@ -237,7 +247,8 @@
 					</p>
 					<p class="text-xs text-muted-foreground">
 						SOP: {sopProfile.data.name} v{sopProfile.data.version}
-						· {sopProfile.data.ratios.rice_g_per_person_meal} ก./คน/มื้อ
+						<!-- · 200 ก./คน/มื้อ -->
+						· {DEFAULT_RICE_G_PER_PERSON_MEAL} ก./คน/มื้อ
 					</p>
 				</div>
 			{/if}

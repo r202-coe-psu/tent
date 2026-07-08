@@ -4,6 +4,22 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 
+type PostEvent = Parameters<typeof POST>[0];
+type SavedPublicDonation = {
+	_id: string;
+	type: string;
+	schema_v: number;
+	campaign_id: string;
+	items: Array<{ item_id?: string }>;
+	donor: { name: string; line_id?: string };
+	logistics: { delivery_method: string; pickup_address?: string };
+};
+
+function getSavedDonation(): SavedPublicDonation {
+	const [, , doc] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+	return doc as SavedPublicDonation;
+}
+
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn()
 }));
@@ -114,9 +130,9 @@ describe('POST /api/public/v1/donations', () => {
 		};
 
 		const response = await POST({
-			request: mockRequest as any,
+			request: mockRequest,
 			getClientAddress: () => '127.0.0.1'
-		} as any);
+		} as unknown as PostEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(200);
@@ -126,7 +142,7 @@ describe('POST /api/public/v1/donations', () => {
 
 		// Verify CouchDB write occurred via putAsPublicWriter
 		expect(putAsPublicWriter).toHaveBeenCalled();
-		const [, , savedDoc] = vi.mocked(putAsPublicWriter).mock.calls[0] as [string, string, any];
+		const savedDoc = getSavedDonation();
 		expect(savedDoc._id).toMatch(/^donation:/);
 		expect(savedDoc.type).toBe('donation');
 		expect(savedDoc.schema_v).toBe(2);
@@ -196,15 +212,15 @@ describe('POST /api/public/v1/donations', () => {
 		};
 
 		const response = await POST({
-			request: mockRequest as any,
+			request: mockRequest,
 			getClientAddress: () => '127.0.0.1'
-		} as any);
+		} as unknown as PostEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(200);
 		expect(data.success).toBe(true);
 
-		const [, , savedDoc] = vi.mocked(putAsPublicWriter).mock.calls[0] as [string, string, any];
+		const savedDoc = getSavedDonation();
 		expect(savedDoc.logistics.delivery_method).toBe('shelter_pickup');
 		expect(savedDoc.logistics.pickup_address).toBe('123/45 Sukhumvit Rd, Bangkok');
 	});
@@ -268,9 +284,9 @@ describe('POST /api/public/v1/donations', () => {
 		};
 
 		const response = await POST({
-			request: mockRequest as any,
+			request: mockRequest,
 			getClientAddress: () => '127.0.0.1'
-		} as any);
+		} as unknown as PostEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(409);
@@ -343,9 +359,9 @@ describe('POST /api/public/v1/donations', () => {
 		};
 
 		const response = await POST({
-			request: mockRequest as any,
+			request: mockRequest,
 			getClientAddress: () => '127.0.0.1'
-		} as any);
+		} as unknown as PostEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(409);
@@ -364,9 +380,9 @@ describe('POST /api/public/v1/donations', () => {
 		};
 
 		const response = await POST({
-			request: mockRequest as any,
+			request: mockRequest,
 			getClientAddress: () => '127.0.0.1'
-		} as any);
+		} as unknown as PostEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(422);
@@ -374,15 +390,16 @@ describe('POST /api/public/v1/donations', () => {
 	});
 
 	it('returns 422 when logistics is missing (required for public channel)', async () => {
-		const { logistics, ...noLogistics } = validPayload;
+		const noLogistics = { ...validPayload };
+		delete (noLogistics as Partial<typeof validPayload>).logistics;
 		const mockRequest = {
 			json: () => Promise.resolve(noLogistics)
 		};
 
 		const response = await POST({
-			request: mockRequest as any,
+			request: mockRequest,
 			getClientAddress: () => '127.0.0.1'
-		} as any);
+		} as unknown as PostEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(422);

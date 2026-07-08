@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET, PATCH } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { sha256Hex } from '$lib/db/hash';
+import type { PublicDonationDoc } from '$lib/features/donations';
+
+type GetEvent = Parameters<typeof GET>[0];
+type PatchEvent = Parameters<typeof PATCH>[0];
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn()
@@ -14,7 +18,7 @@ vi.mock('$lib/server/security/rate-limiter', () => ({
 const TOKEN = 'TX-SH001-TESTTOKEN';
 
 describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
-	let mockDonation: any;
+	let mockDonation: PublicDonationDoc;
 
 	beforeEach(async () => {
 		vi.resetAllMocks();
@@ -37,7 +41,7 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 				delivery_method: 'parcel',
 				courier_tracking_no: null
 			}
-		};
+		} as PublicDonationDoc;
 	});
 
 	it('GET returns donation details with masked donor PII and no phone echo', async () => {
@@ -54,7 +58,7 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 		const response = await GET({
 			params: { tracking_token: TOKEN },
 			getClientAddress: () => '127.0.0.1'
-		} as any);
+		} as unknown as GetEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(200);
@@ -88,9 +92,9 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 
 		const response = await PATCH({
 			params: { tracking_token: TOKEN },
-			request: mockRequest as any,
+			request: mockRequest,
 			getClientAddress: () => '127.0.0.1'
-		} as any);
+		} as unknown as PatchEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(200);
@@ -98,8 +102,8 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 
 		const putCall = vi.mocked(adminRaw).mock.calls.find((call) => call[1] === 'PUT');
 		expect(putCall).toBeDefined();
-		const savedDoc = putCall![2] as any;
-		expect(savedDoc.logistics.courier_tracking_no).toBe('TH999888');
+		const savedDoc = putCall![2] as PublicDonationDoc;
+		expect(savedDoc.logistics?.courier_tracking_no).toBe('TH999888');
 	});
 
 	it('PATCH rejects missing courier tracking number with 400', async () => {
@@ -109,9 +113,9 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 
 		const response = await PATCH({
 			params: { tracking_token: TOKEN },
-			request: mockRequest as any,
+			request: mockRequest,
 			getClientAddress: () => '127.0.0.1'
-		} as any);
+		} as unknown as PatchEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(400);

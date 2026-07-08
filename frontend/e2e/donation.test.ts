@@ -93,7 +93,7 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
 
 		// Mock the window captcha token to bypass captcha check
 		await page.evaluate(() => {
-			(window as any).__captchaToken = 'e2e-captcha-token';
+			(window as Window & { __captchaToken?: string }).__captchaToken = 'e2e-captcha-token';
 		});
 
 		// Click confirm submission

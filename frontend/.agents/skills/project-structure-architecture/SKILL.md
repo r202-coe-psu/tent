@@ -12,7 +12,7 @@ Business logic is grouped by feature (e.g., `people`, `operations`, `shelters`).
 
 Inside each feature (`$lib/features/<name>/`), use this structure:
 - **`domain/`**: Pure TypeScript. Zod schemas (`schema.ts`), types, business rules, and unit tests (`*.test.ts`). No Svelte, no DOM, no DB calls.
-- **`data/`**: Database interactions. Repositories (`*.pouch.ts`), API clients (`*.api.ts`), or Queries/Mutations.
+- **`data/`**: Database interactions. Repositories (`*.remote.ts`), API clients (`*.api.ts`), or Queries/Mutations.
 - **`application/`**: Use cases, Svelte stores (`*.svelte.ts`), or orchestration logic that glues domain and data together.
 - **`ui/`**: Svelte components specific to this feature (`UserList.svelte`, `CreateUserForm.svelte`).
 - **`index.ts`**: The public API (Barrel file) for the feature. Export only what other features or routes are allowed to use.
@@ -20,7 +20,7 @@ Inside each feature (`$lib/features/<name>/`), use this structure:
 ## 2. Shared Libraries (`$lib/`)
 Cross-feature code belongs in the root of `$lib`:
 - **`components/`**: Generic, reusable UI components (e.g., `shadcn-svelte` buttons, inputs, modals). These should have NO business logic.
-- **`db/`**: Base database config (`pouch.ts`), live-query wrappers, and the base `Repository` class.
+- **`db/`**: CouchDB HTTP client (`couch-db.ts`), changes subscriber, event channel, and the base `Repository` class.
 - **`auth/` & `guards/`**: The Role kernel (`roles.ts`) and SvelteKit route guards.
 - **`utils/`**: Generic helpers (e.g., date formatting, ulid generation).
 - **`server/`**: **DANGER ZONE**. Code that must ONLY run on the Node.js server (e.g., `couch-admin.ts`, secret keys). Never import `$lib/server/` into frontend components.
@@ -34,7 +34,7 @@ Routes should be as thin as possible. They act as wiring:
 ## 4. Rule of Dependency
 - **UI** depends on **Application/Data**.
 - **Application/Data** depends on **Domain**.
-- **Domain** depends on **NOTHING** (no external libraries like PouchDB or Svelte).
+- **Domain** depends on **NOTHING** (no external libraries like CouchDB clients or Svelte).
 - **Features** should rarely depend on other features. If they do, only import via the other feature's `index.ts`.
 
 ## 5. Documentation (`docs/`)

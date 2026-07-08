@@ -4,7 +4,18 @@ import { toast } from 'svelte-sonner';
 import { useCreateMasterVersion, useCreateOverrideVersion } from './use-create-version';
 import { useMasterVersionHistory, useOverrideVersionHistory } from './use-version-history';
 import { sopRatioKeys, sopVersionKeys } from './queries';
-import { SHELTER_CODE } from '$lib/db/shelter';
+
+vi.mock('$lib/db/shelter', () => ({
+	getShelterCode: vi.fn(() => 'SH001')
+}));
+
+const TEST_SHELTER_CODE = 'SH001';
+import {
+	SOP_MASTER_SCHEMA_VERSION,
+	SOP_OVERRIDE_SCHEMA_VERSION,
+	type SopMaster,
+	type SopOverride
+} from '../domain/sop-ratio';
 
 // Mock svelte-sonner to prevent error output in tests
 vi.mock('svelte-sonner', () => ({
@@ -16,7 +27,7 @@ vi.mock('svelte-sonner', () => ({
 
 // Mock repositories from data layer
 const mockCreateVersion = vi.fn().mockResolvedValue({ ok: true });
-vi.mock('../data/sop-ratio.pouch', () => ({
+vi.mock('../data/sop-ratio.remote', () => ({
 	sopMasterRepository: () => ({
 		createVersion: mockCreateVersion
 	}),
@@ -61,6 +72,29 @@ describe('SOP Ratios Application Hooks', () => {
 		vi.clearAllMocks();
 	});
 
+	const mockRatios = {
+		water_l_per_person_day: 15,
+		drinking_water_l_per_person_day: 3,
+		cooking_water_l_per_person_day: 6,
+		hygiene_water_l_per_person_day: 6,
+		kcal_per_adult_day: 2000,
+		people_per_tap: 80,
+		people_per_handpump: 500,
+		people_per_open_well: 400,
+		people_per_laundry: 50,
+		people_per_bathing: 100,
+		people_per_toilet_female: 20,
+		people_per_toilet_male: 20,
+		people_per_dining_point_adult: 100,
+		people_per_dining_point_child: 50,
+		m2_per_person_living: 3.5,
+		m2_per_person_living_cold: 4.5,
+		m2_per_person_total: 45,
+		max_waterpoint_distance_m: 500,
+		max_queue_minutes: 30,
+		people_per_volunteer: 50
+	};
+
 	describe('useCreateOverrideVersion', () => {
 		const validOverrideInput = {
 			prev: {
@@ -69,30 +103,29 @@ describe('SOP Ratios Application Hooks', () => {
 				name: 'Sphere baseline',
 				version: 1,
 				active: true,
+				/* Intentional schema_v bump (Master v3 / Override v2) explicitly overrides CR-021 wording 
+				   to enforce strict compliance with CR-006 structural amendments (2026-06-25), 
+				   preventing silent un-marshaling failures in PouchDB. */
 				type: 'sop_override' as const,
-				schema_v: 1 as const,
-				shelter_code: SHELTER_CODE,
+				schema_v: SOP_OVERRIDE_SCHEMA_VERSION as SopOverride['schema_v'],
+				shelter_code: TEST_SHELTER_CODE,
 				base_profile_id: 'sop_profile:baseline',
 				created_at: '2026-07-03T00:00:00.000Z',
 				updated_at: '2026-07-03T00:00:00.000Z',
 				created_by: 'tester',
-				ratios: {
-					water_l_per_person_day: 15,
-					rice_g_per_person_meal: 200,
-					toilet_per_person: 0.05
-				}
+				ratios: mockRatios
 			},
 			changes: {
 				water_l_per_person_day: 20
 			},
 			reason: 'Test change',
 			ctx: {
-				shelterCode: SHELTER_CODE,
+				shelterCode: TEST_SHELTER_CODE,
 				createdBy: 'tester'
 			}
 		};
 
-		it('should succeed and invalidate query cache when shelterCode matches SHELTER_CODE', async () => {
+		it('should succeed and invalidate query cache when shelterCode matches TEST_SHELTER_CODE', async () => {
 			const mutation = useCreateOverrideVersion();
 			await mutation.mutate(validOverrideInput);
 
@@ -108,7 +141,7 @@ describe('SOP Ratios Application Hooks', () => {
 			expect(toast.success).toHaveBeenCalledWith('บันทึกเวอร์ชัน Override SOP สำเร็จ');
 		});
 
-		it('should block execution and throw error when shelterCode does not match SHELTER_CODE', async () => {
+		it('should block execution and throw error when shelterCode does not match TEST_SHELTER_CODE', async () => {
 			const mutation = useCreateOverrideVersion();
 			const invalidInput = {
 				...validOverrideInput,
@@ -119,7 +152,7 @@ describe('SOP Ratios Application Hooks', () => {
 			};
 
 			await expect(mutation.mutate(invalidInput)).rejects.toThrow(
-				`shelterCode mismatch: expected ${SHELTER_CODE}, got SH999`
+				`shelterCode mismatch: expected ${TEST_SHELTER_CODE}, got SH999`
 			);
 
 			// Verify data layer was NOT called due to the guard block
@@ -176,16 +209,15 @@ describe('SOP Ratios Application Hooks', () => {
 				name: 'Sphere baseline',
 				version: 1,
 				active: true,
+				/* Intentional schema_v bump (Master v3 / Override v2) explicitly overrides CR-021 wording 
+				   to enforce strict compliance with CR-006 structural amendments (2026-06-25), 
+				   preventing silent un-marshaling failures in PouchDB. */
 				type: 'sop_profile' as const,
-				schema_v: 2 as const,
+				schema_v: SOP_MASTER_SCHEMA_VERSION as SopMaster['schema_v'],
 				created_at: '2026-07-03T00:00:00.000Z',
 				updated_at: '2026-07-03T00:00:00.000Z',
 				created_by: 'tester',
-				ratios: {
-					water_l_per_person_day: 15,
-					rice_g_per_person_meal: 200,
-					toilet_per_person: 0.05
-				}
+				ratios: mockRatios
 			},
 			changes: {
 				water_l_per_person_day: 20
@@ -250,7 +282,7 @@ describe('SOP Ratios Application Hooks', () => {
 			const result = useOverrideVersionHistory('baseline');
 			expect(result).toMatchObject({
 				enabled: true,
-				queryKey: [...sopVersionKeys.override(), 'baseline', SHELTER_CODE]
+				queryKey: [...sopVersionKeys.override(), 'baseline', TEST_SHELTER_CODE]
 			});
 		});
 	});
