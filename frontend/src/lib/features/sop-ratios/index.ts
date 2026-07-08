@@ -25,7 +25,7 @@ export {
 	sopMasterRepository,
 	sopOverrideRepository,
 	resolveEffectiveRatios
-} from './data/sop-ratio.pouch';
+} from './data/sop-ratio.remote';
 
 // Application — TanStack Query hooks (T-30.5)
 export {

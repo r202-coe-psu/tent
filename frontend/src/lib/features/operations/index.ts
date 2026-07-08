@@ -47,18 +47,26 @@ export {
 	type ReceiveInput,
 	type WalkInDonationInput,
 	type CampaignInput,
-	type SpecialRequestInput
+	type SpecialRequestInput,
+	receiveSourceSchema,
+	createReceiveEntry
 } from './domain/operations';
 
-// Data — repository contract + PouchDB binding
+// Data — repository contract + remote CouchDB binding
 export type { OperationsRepository } from './data/operations.repository';
-export { operationsRepository, SHELTER_CODE, SHELTER_DB } from './data/operations.pouch';
+export { operationsRepository } from './data/operations.remote';
 
 // Application — TanStack Query hooks + live-query wiring
 export {
 	operationsKeys,
 	useLedger,
+	useLedgerByItem,
 	useStockBalance,
 	useReceiveStock,
 	startOperationsLiveQuery
 } from './application/queries';
+
+// UI components
+export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';
+export { default as LedgerTable } from './ui/LedgerTable.svelte';
+export { default as StockTable } from './ui/StockTable.svelte';

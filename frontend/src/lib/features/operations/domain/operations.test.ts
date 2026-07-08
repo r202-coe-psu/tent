@@ -9,7 +9,9 @@ import {
 	stockBalance,
 	createCampaign,
 	openNeeds,
-	type Donation
+	createReceiveEntry,
+	type Donation,
+	type ReceiveSource
 } from './operations';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -116,5 +118,112 @@ describe('openNeeds', () => {
 		expect(remaining).toHaveLength(1);
 		expect(remaining[0].item_id).toBe('item:rice');
 		expect(remaining[0].qty_target).toBe(50);
+	});
+});
+
+describe('createReceiveEntry', () => {
+	it('maps sources to correct reasons', () => {
+		const sourcesAndReasons = {
+			donation: 'donation',
+			transfer_in: 'transfer_in',
+			manual: 'adjust'
+		} as const;
+
+		for (const [source, reason] of Object.entries(sourcesAndReasons)) {
+			const entry = createReceiveEntry(
+				{
+					item_id: 'item:rice',
+					qty: 5,
+					unit: 'kg',
+					source: source as ReceiveSource,
+					ref_id: null
+				},
+				ctx
+			);
+			expect(entry.reason).toBe(reason);
+		}
+	});
+
+	it('rejects zero quantity', () => {
+		expect(() =>
+			createReceiveEntry(
+				{
+					item_id: 'item:rice',
+					qty: 0,
+					unit: 'kg',
+					source: 'donation',
+					ref_id: null
+				},
+				ctx
+			)
+		).toThrow();
+	});
+
+	it('rejects negative quantity', () => {
+		expect(() =>
+			createReceiveEntry(
+				{
+					item_id: 'item:rice',
+					qty: -5,
+					unit: 'kg',
+					source: 'donation',
+					ref_id: null
+				},
+				ctx
+			)
+		).toThrow();
+	});
+
+	it('accepts optional lot.expiry and lot.note', () => {
+		const entry = createReceiveEntry(
+			{
+				item_id: 'item:rice',
+				qty: 10,
+				unit: 'kg',
+				source: 'donation',
+				ref_id: null,
+				lot: {
+					expiry: '2026-12-31T00:00:00Z',
+					note: 'Zone A'
+				}
+			},
+			ctx
+		);
+		expect(entry.lot).toEqual({
+			expiry: '2026-12-31T00:00:00Z',
+			note: 'Zone A'
+		});
+	});
+
+	it('accepts empty lot', () => {
+		const entry = createReceiveEntry(
+			{
+				item_id: 'item:rice',
+				qty: 10,
+				unit: 'kg',
+				source: 'donation',
+				ref_id: null
+			},
+			ctx
+		);
+		expect(entry.lot).toBeUndefined();
+	});
+
+	it('permits missing lot.expiry for perishable items (validation is deferred to UI layer)', () => {
+		// INVARIANT: caller (UI) must enforce perishable -> lot.expiry required.
+		// Domain layer doesn't have SupplyItem catalog access to check if it's perishable.
+		// We explicitly verify that the domain layer allows it.
+		const entry = createReceiveEntry(
+			{
+				item_id: 'item:milk', // Pretend milk is perishable
+				qty: 5,
+				unit: 'ขวด',
+				source: 'donation',
+				ref_id: null
+				// missing lot.expiry
+			},
+			ctx
+		);
+		expect(entry.lot).toBeUndefined();
 	});
 });

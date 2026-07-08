@@ -11,7 +11,7 @@
  *
  * Source references:
  *   - sop-ratio.repository.ts → SopMasterRepository.listVersions, SopOverrideRepository.listVersions
- *   - sop-ratio.pouch.ts → sopMasterRepository(), sopOverrideRepository()
+ *   - sop-ratio.remote.ts → sopMasterRepository(), sopOverrideRepository()
  *   - sop-ratio.domain.ts → SopMaster, SopOverride types
  *   - queries.ts → sopRatioKeys
  *   - CONVENTIONS.md §8 "Query hooks" + §8 "Query key factory"
@@ -19,7 +19,8 @@
  */
 
 import { createQuery } from '@tanstack/svelte-query';
-import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
+import { getShelterCode } from '$lib/db/shelter';
+import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.remote';
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
 import { sopVersionKeys } from './queries';
 
@@ -33,8 +34,8 @@ async function fetchMasterVersions(name: string): Promise<SopMaster[]> {
 	return [...all].sort((a, b) => b.version - a.version);
 }
 
-async function fetchOverrideVersions(name: string, shelterCode: string): Promise<SopOverride[]> {
-	const all = await sopOverrideRepository(shelterCode).listVersions(name);
+async function fetchOverrideVersions(name: string, shelterCode?: string): Promise<SopOverride[]> {
+	const all = await sopOverrideRepository(shelterCode ?? getShelterCode()).listVersions(name);
 	return [...all].sort((a, b) => b.version - a.version);
 }
 
@@ -98,10 +99,11 @@ export const useMasterVersionHistory = (name: string | (() => string)) => {
  */
 export const useOverrideVersionHistory = (
 	name: string | (() => string),
-	shelterCode: string | (() => string)
+	shelterCode?: string | (() => string)
 ) => {
 	const getName = typeof name === 'function' ? name : () => name;
-	const getCode = typeof shelterCode === 'function' ? shelterCode : () => shelterCode;
+	const getCode =
+		typeof shelterCode === 'function' ? shelterCode : () => shelterCode ?? getShelterCode();
 	return createQuery(() => {
 		const resolvedName = getName();
 		const code = getCode();

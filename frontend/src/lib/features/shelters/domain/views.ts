@@ -46,11 +46,26 @@ export const SHELTER_DASHBOARD_VIEWS = {
 			}`,
 			reduce: '_count'
 		},
-		registrations_by_date: {
+		registrations_by_date_status: {
 			map: `function (doc) {
-				if (doc.type !== 'evacuee' || !doc.created_at) return;
-				var date = doc.created_at.slice(0, 10);
-				emit(date, 1);
+				if (doc.type !== 'movement' || !doc.occurred_at) return;
+
+				// ปรับ Timezone +07:00 (Thailand) ก่อนตัดวันที่ เพื่อไม่ให้ movement ตอนเช้าตรู่ตกไปอยู่วันก่อนหน้า (UTC offset)
+				var dt = new Date(doc.occurred_at);
+				dt.setUTCHours(dt.getUTCHours() + 7);
+				var date = dt.toISOString().slice(0, 10);
+
+				var series;
+
+				if (doc.action === 'check_in' || doc.action === 'transfer_in') {
+					series = 'checkin';
+				} else if (doc.action === 'check_out' || doc.action === 'transfer_out') {
+					series = 'checkout';
+				} else {
+					return;
+				}
+
+				emit([date, series], 1);
 			}`,
 			reduce: '_count'
 		}

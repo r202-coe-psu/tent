@@ -1,6 +1,6 @@
 import { createQuery } from '@tanstack/svelte-query';
-import { SHELTER_CODE } from '$lib/db/shelter';
-import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
+import { getShelterCode } from '$lib/db/shelter';
+import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.remote';
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
 
 export const sopRatioKeys = {
@@ -28,7 +28,7 @@ function getLatestVersion<T extends { version: number }>(list: T[]): T | null {
 export async function getActiveSopProfile(
 	shelterCode?: string
 ): Promise<SopMaster | SopOverride | null> {
-	const code = shelterCode ?? SHELTER_CODE;
+	const code = shelterCode ?? getShelterCode();
 	const [overrides, masters] = await Promise.all([
 		sopOverrideRepository(code).listActive(),
 		sopMasterRepository().listActive()
@@ -43,7 +43,7 @@ export const useActiveSopRatio = (shelterCode?: string | (() => string)) => {
 	return createQuery(() => {
 		const code = getCode();
 		return {
-			queryKey: [...sopRatioKeys.active(), code ?? SHELTER_CODE] as const,
+			queryKey: [...sopRatioKeys.active(), code ?? getShelterCode()] as const,
 			queryFn: () => getActiveSopProfile(code)
 		};
 	});
