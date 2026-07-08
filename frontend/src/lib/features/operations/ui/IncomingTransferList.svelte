@@ -67,7 +67,7 @@
 <div class="space-y-6">
 	{#if transfersQuery.isLoading || itemsQuery.isLoading}
 		<div class="flex items-center justify-center p-12">
-			<div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+			<div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
 		</div>
 	{:else if transfersQuery.error}
 		<div class="rounded-xl border border-destructive/20 bg-destructive/10 p-6 text-center text-destructive">
