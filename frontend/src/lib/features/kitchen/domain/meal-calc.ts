@@ -13,9 +13,9 @@ export const RICE_RECIPE_ID = 'ingredient:rice';
 // sop_profile.ratios (SOP = shelter planning only) and moved food/ingredient
 // coefficients to the kitchen (item_master.consumption_rate / recipe, CR-013).
 // That item_master field isn't built yet, so this is the interim kitchen-owned
-// source. 150 g matches the existing calc fixtures (100 people → 15000 g).
+// default. 150 g matches the existing calc fixtures (100 people → 15000 g).
 // TODO(CR-021/CR-013): read from item_master.consumption_rate once it ships.
-export const RICE_G_PER_PERSON_MEAL = 150;
+export const DEFAULT_RICE_G_PER_PERSON_MEAL = 150;
 
 // Grams per kg — rice recipes are calculated in grams (SOP ratio precision); the
 // stock ledger stores kg (item_master.base_unit). CR-030.

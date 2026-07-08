@@ -6,12 +6,8 @@
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import {
-		useRecordMealService,
-		MEAL_PERIOD_LABELS,
-		SHELTER_CODE,
-		type MealPlan
-	} from '$lib/features/kitchen';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { useRecordMealService, MEAL_PERIOD_LABELS, type MealPlan } from '$lib/features/kitchen';
 
 	let { open = $bindable(false), plan = null }: { open?: boolean; plan?: MealPlan | null } =
 		$props();
@@ -53,9 +49,9 @@
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		if (!plan) return;
-		const ctx = { shelterCode: SHELTER_CODE, createdBy: authStore.user?.name ?? 'staff' };
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
-			await record.mutateAsync({
+			const svc = await record.mutateAsync({
 				input: {
 					date: plan.date,
 					meal: plan.meal,
@@ -66,17 +62,27 @@
 				},
 				ctx
 			});
-			toast.success(`บันทึกบริการ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
+			// meal_service is append-only with a deterministic _id — the remote
+			// repository treats a re-record of the same date+meal as an idempotent
+			// create (resolves with the ORIGINAL doc, doesn't throw and doesn't
+			// overwrite). Detect that by comparing the resolved doc against what was
+			// just submitted, so a re-record surfaces "already recorded" instead of a
+			// misleading success toast.
+			const alreadyRecorded =
+				svc.served !== served ||
+				svc.waste !== waste ||
+				svc.external.volunteers !== volunteers ||
+				svc.external.outside_evacuees !== outsideEvacuees;
+			if (alreadyRecorded) {
+				toast.error(
+					`บันทึกบริการของ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} ไว้แล้ว (เสิร์ฟ ${svc.served.toLocaleString()})`
+				);
+			} else {
+				toast.success(`บันทึกบริการ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
+			}
 			close();
 		} catch (err) {
-			// meal_service is append-only with a deterministic _id — a re-record of the
-			// same date+meal collides (409). Surface it as "already recorded" rather
-			// than a raw conflict.
-			if ((err as { status?: number })?.status === 409) {
-				toast.error(`บันทึกบริการของ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} ไว้แล้ว`);
-			} else {
-				toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
-			}
+			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
 		}
 	}
 </script>

@@ -7,12 +7,12 @@
 	import Users from '@lucide/svelte/icons/users';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '$lib/db/shelter';
+	import { getShelterCode } from '$lib/db/shelter';
 	import {
 		useCreateMealPlanCalc,
 		useOccupancyHeadcount,
 		calculateMealIngredients,
-		RICE_G_PER_PERSON_MEAL,
+		DEFAULT_RICE_G_PER_PERSON_MEAL,
 		MEAL_PERIOD_LABELS,
 		type MealPeriod,
 		type MealPlanHeadcount
@@ -86,12 +86,10 @@
 
 	const preview = $derived.by(() => {
 		if (!sopProfile.data || total <= 0) return null;
-		// Rice grams are a kitchen coefficient (CR-021), not a SOP ratio.
-		const riceG = RICE_G_PER_PERSON_MEAL;
 		try {
 			return calculateMealIngredients(
 				headcount,
-				riceG,
+				DEFAULT_RICE_G_PER_PERSON_MEAL,
 				sopProfile.data._id,
 				sopProfile.data.version,
 				new Date().toISOString()
@@ -103,7 +101,7 @@
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
-		const ctx = { shelterCode: SHELTER_CODE, createdBy: authStore.user?.name ?? 'staff' };
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
 			await createCalc.mutateAsync({
 				date,
@@ -238,7 +236,7 @@
 					</p>
 					<p class="text-xs text-muted-foreground">
 						SOP: {sopProfile.data.name} v{sopProfile.data.version}
-						· ข้าว {RICE_G_PER_PERSON_MEAL} ก./คน/มื้อ (ค่าครัว)
+						· ข้าว {DEFAULT_RICE_G_PER_PERSON_MEAL} ก./คน/มื้อ (ค่าครัว)
 					</p>
 				</div>
 			{/if}

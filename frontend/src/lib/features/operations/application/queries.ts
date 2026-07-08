@@ -1,20 +1,79 @@
-import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
-import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
-import { shelterDb } from '$lib/db/shelter';
+import {
+	createMutation,
+	createQuery,
+	useQueryClient,
+	type QueryClient
+} from '@tanstack/svelte-query';
+import {
+	subscribeDataChanges,
+	type SubscribeDataChangesHandle
+} from '$lib/db/subscribe-data-changes';
+import { getShelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
-import { operationsRepository } from '../data/operations.pouch';
-import type { ReceiveInput } from '../domain/operations';
+import type { AuditAction } from '$lib/features/shared';
+import { operationsRepository } from '../data/operations.remote';
+import type {
+	DonationCampaign,
+	CampaignInput,
+	ReceiveInput,
+	DistributeInput
+} from '../domain/operations';
 
 export const operationsKeys = {
 	all: ['operations'] as const,
+	campaigns: () => [...operationsKeys.all, 'campaigns'] as const,
+	stockLedgers: () => [...operationsKeys.all, 'stockLedgers'] as const,
+	donations: () => [...operationsKeys.all, 'donations'] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
 	balance: () => [...operationsKeys.all, 'balance'] as const
 };
 
-/**
- * Query hook to retrieve all stock ledger entries.
- */
+export const useCampaigns = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.campaigns(),
+		queryFn: () => operationsRepository().listCampaigns()
+	}));
+
+export const useStockLedgers = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.stockLedgers(),
+		queryFn: () => operationsRepository().listLedger()
+	}));
+
+export const useDonations = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.donations(),
+		queryFn: () => operationsRepository().listDonations()
+	}));
+
+export const useCreateCampaign = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: CampaignInput; ctx: AuthorContext }) =>
+			operationsRepository().createCampaign(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.campaigns() });
+		}
+	}));
+};
+
+export const useUpdateCampaign = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			campaign,
+			auditInput
+		}: {
+			campaign: DonationCampaign;
+			auditInput?: { action: AuditAction; reason: string; ctx: AuthorContext };
+		}) => operationsRepository().updateCampaign(campaign, auditInput),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.campaigns() });
+		}
+	}));
+};
+
 export const useLedger = (enabled: () => boolean = () => true) =>
 	createQuery(() => ({
 		queryKey: operationsKeys.ledger(),
@@ -22,10 +81,6 @@ export const useLedger = (enabled: () => boolean = () => true) =>
 		enabled: enabled()
 	}));
 
-/**
- * Query hook to retrieve stock ledger entries filtered by a specific item.
- * Disabled (no fetch) while no item id is provided.
- */
 export const useLedgerByItem = (itemId: () => string | undefined) =>
 	createQuery(() => ({
 		queryKey: operationsKeys.byItem(itemId() ?? ''),
@@ -33,9 +88,6 @@ export const useLedgerByItem = (itemId: () => string | undefined) =>
 		enabled: !!itemId()
 	}));
 
-/**
- * Query hook to retrieve the current on-hand stock balances (Map of itemId -> quantity).
- */
 export const useStockBalance = () =>
 	createQuery(() => ({
 		queryKey: operationsKeys.balance(),
@@ -44,25 +96,45 @@ export const useStockBalance = () =>
 
 /**
  * Mutation hook to receive inbound stock and persist the ledger entry.
- * Cache invalidation is handled by `startOperationsLiveQuery` via the PouchDB changes feed.
+ * Cache invalidation is handled by `startOperationsLiveQuery` via the changes feed.
  */
-export const useReceiveStock = () =>
-	createMutation(() => ({
+export const useReceiveStock = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) =>
-			operationsRepository().receiveStock(input, ctx)
+			operationsRepository().receiveStock(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
 	}));
+};
 
 /**
- * Starts a live query changes feed for operations (Stock Ledger documents).
- * Automatically invalidates active queries when database changes happen.
+ * Mutation hook to distribute outbound stock, persist the ledger entry, and invalidate caches.
  */
-export function startOperationsLiveQuery(queryClient: QueryClient): LiveQueryHandle {
-	return startLiveQuery(shelterDb(), queryClient, (type) => {
-		switch (type) {
-			case 'stock_ledger':
-				return [operationsKeys.all];
-			default:
-				return [];
+export const useDistributeStock = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: DistributeInput; ctx: AuthorContext }) =>
+			operationsRepository().distributeStock(input, ctx),
+		onSuccess: () => {
+			// Eagerly invalidate — live query will also fire, but this ensures instant update
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}
+	}));
+};
+
+export function startOperationsLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
+	return subscribeDataChanges(queryClient, getShelterDb, (type) => {
+		if (type === 'donation_campaign') {
+			return [operationsKeys.campaigns()];
+		}
+		if (type === 'stock_ledger') {
+			return [operationsKeys.stockLedgers(), operationsKeys.ledger(), operationsKeys.balance()];
+		}
+		if (type === 'donation') {
+			return [operationsKeys.donations()];
+		}
+		return [];
 	});
 }

@@ -18,14 +18,15 @@ import {
 describe('rowsToRegistrationsPayload', () => {
 	it('aggregates daily counts and computes total', () => {
 		const rows = [
-			{ key: '2026-06-01', value: 5 },
-			{ key: '2026-06-02', value: 8 },
-			{ key: '2026-06-03', value: 3 }
+			{ key: ['2026-06-01', 'checkin'], value: 5 },
+			{ key: ['2026-06-02', 'checkin'], value: 8 },
+			{ key: ['2026-06-03', 'checkout'], value: 3 }
 		];
 		const result = rowsToRegistrationsPayload('SH001', rows, '2026-06-01', '2026-06-03');
-		expect(result.daily['2026-06-01']).toBe(5);
-		expect(result.daily['2026-06-02']).toBe(8);
-		expect(result.total).toBe(16);
+		expect(result.checkin['2026-06-01']).toBe(5);
+		expect(result.checkin['2026-06-02']).toBe(8);
+		expect(result.checkout['2026-06-03']).toBe(3);
+		expect(result.total).toBe(13);
 		expect(result.range.from).toBe('2026-06-01');
 		expect(result.range.to).toBe('2026-06-03');
 	});
@@ -33,7 +34,8 @@ describe('rowsToRegistrationsPayload', () => {
 	it('returns zero total for empty rows', () => {
 		const result = rowsToRegistrationsPayload('SH001', [], '2026-06-01', '2026-06-30');
 		expect(result.total).toBe(0);
-		expect(result.daily).toEqual({});
+		expect(result.checkin).toEqual({});
+		expect(result.checkout).toEqual({});
 	});
 });
 
@@ -72,7 +74,8 @@ describe('RegistrationsPayloadSchema', () => {
 		const valid = {
 			shelter_code: 'SH001',
 			range: { from: '2026-06-01', to: '2026-06-30' },
-			daily: { '2026-06-01': 5, '2026-06-02': 8 },
+			checkin: { '2026-06-01': 5, '2026-06-02': 8 },
+			checkout: { '2026-06-03': 3 },
 			total: 13
 		};
 		expect(() => RegistrationsPayloadSchema.parse(valid)).not.toThrow();
@@ -82,7 +85,8 @@ describe('RegistrationsPayloadSchema', () => {
 		const withPii = {
 			shelter_code: 'SH001',
 			range: { from: '2026-06-01', to: '2026-06-30' },
-			daily: {},
+			checkin: {},
+			checkout: {},
 			total: 0,
 			first_name: 'John',
 			national_id: '1234567890123'

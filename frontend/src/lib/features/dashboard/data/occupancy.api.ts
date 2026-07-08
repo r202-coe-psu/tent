@@ -3,7 +3,7 @@
  *
  * Client-side API caller for the back-office occupancy dashboard endpoint.
  * Never calls CouchDB directly — always goes through the SvelteKit BFF
- * (couchdb-pouchdb-bestpractices: rule 1 "Write to Local First / no direct CouchDB from UI").
+ * (couchdb-bestpractices: BFF read path — no direct CouchDB from UI).
  */
 import type { OccupancyPayload } from '../domain/occupancy.schema';
 import { serviceFetch } from '$lib/api/service';

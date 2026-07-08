@@ -13,33 +13,23 @@ All domain logic, Zod schemas, and utility functions must have unit tests.
 
 ### Framework & Environment
 - **Runner**: Vitest (`import { describe, it, expect } from 'vitest'`)
-- **Browser Environment**: If the code interacts with the DOM or Browser APIs (like PouchDB), add `// @vitest-environment happy-dom` at the very top of the test file.
+- **Browser Environment**: If the code interacts with the DOM or Browser APIs, add `// @vitest-environment happy-dom` at the very top of the test file.
 
-### Mocking the Database (PouchDB)
-Never test against a real CouchDB instance in unit tests. Use the `memory` adapter for isolated, fast database tests.
+### Database Testing Strategy (Remote-First)
+Never test against a real CouchDB instance in unit tests. Prefer repository test doubles/mocks for unit tests and use focused integration tests for endpoint behavior.
 
 ```typescript
-// @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import PouchDB from 'pouchdb-browser';
-import pouchAdapterMemory from 'pouchdb-adapter-memory';
-
-// Note: Ensure the plugin is registered before creating memory instances
-PouchDB.plugin(pouchAdapterMemory);
+import { describe, it, expect, vi } from 'vitest';
 
 describe('Repository Tests', () => {
-    let db: PouchDB.Database;
+	const repo = {
+		savePerson: vi.fn()
+	};
 
-    beforeEach(() => {
-        // Use a unique random name for true isolation between tests
-        db = new PouchDB(`test-${Math.random().toString(36).slice(2)}`, { adapter: 'memory' });
-    });
-
-    afterEach(async () => {
-        await db.destroy(); // Clean up memory DB after each test to prevent memory leaks
-    });
-
-    // your tests go here
+	it('calls save through repository boundary', async () => {
+		await repo.savePerson({ _id: 'evacuee:01', type: 'evacuee' });
+		expect(repo.savePerson).toHaveBeenCalled();
+	});
 });
 ```
 
@@ -63,7 +53,7 @@ End-to-End tests are located in the `e2e/` directory and test the actual user fl
 Based on the project specifications, tests must cover these critical areas:
 1. **Security & Privacy (No-PII)**: Write tests to ensure PII (Personal Identifiable Information), medical data, or national IDs do not leak through EOC or Public APIs. Test parameter manipulation to verify RBAC boundaries.
 2. **Anti-Enumeration & Rate Limiting**: Write tests to confirm that rate limits (429) work and endpoints cannot be scraped (e.g., searching requires >3 chars).
-3. **Concurrency**: Write tests that simulate concurrent writes (especially to CouchDB/PouchDB) to ensure `409 Conflict` is handled properly via `_rev` read-modify-write loops.
+3. **Concurrency**: Write tests that simulate concurrent writes to ensure `409 Conflict` is handled properly via `_rev` read-modify-write loops.
 4. **Data Validation**: Ensure Zod schemas are tested for both valid inputs and invalid/malicious inputs.
 
 ## 4. Writing Good Tests

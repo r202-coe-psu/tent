@@ -5,19 +5,14 @@ import {
 	type QueryClient
 } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
-import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
-import { namedLocalDb } from '$lib/db/pouch';
 import {
-	createShelter,
-	listShelters,
-	updateShelter,
-	getShelter,
-	closeZone,
-	reopenZone
-} from '../data/shelters.api';
+	subscribeDataChanges,
+	type SubscribeDataChangesHandle
+} from '$lib/db/subscribe-data-changes';
+import { sheltersRepository, SHELTER_REGISTRY_DB } from '../data/shelters.remote';
+import { createShelter, updateShelter, closeZone, reopenZone } from '../data/shelters.api';
+import { listProvinces, listDistricts, listSubdistricts } from '../data/thailand-location.api';
 import type { Shelter } from '../domain/schema';
-
-export const SHELTER_REGISTRY_DB = 'registry';
 
 export const sheltersKeys = {
 	all: ['shelters'] as const,
@@ -28,14 +23,47 @@ export const sheltersKeys = {
 export const useShelters = () =>
 	createQuery(() => ({
 		queryKey: sheltersKeys.list(),
-		queryFn: listShelters
+		queryFn: () => sheltersRepository().listShelters()
 	}));
 
 export const useShelter = (code: () => string) =>
 	createQuery(() => ({
 		queryKey: sheltersKeys.detail(code()),
-		queryFn: () => getShelter(code()),
+		queryFn: () => sheltersRepository().getShelter(code()),
 		enabled: !!code()
+	}));
+
+// ===== Thailand province/district/subdistrict cascade (address selects) =====
+
+export const thailandLocationKeys = {
+	all: ['thailand-location'] as const,
+	provinces: () => [...thailandLocationKeys.all, 'provinces'] as const,
+	districts: (province: string) => [...thailandLocationKeys.all, 'districts', province] as const,
+	subdistricts: (province: string, district: string) =>
+		[...thailandLocationKeys.all, 'subdistricts', province, district] as const
+};
+
+export const useProvinces = () =>
+	createQuery(() => ({
+		queryKey: thailandLocationKeys.provinces(),
+		queryFn: listProvinces,
+		staleTime: Infinity
+	}));
+
+export const useDistricts = (province: () => string | null) =>
+	createQuery(() => ({
+		queryKey: thailandLocationKeys.districts(province() ?? ''),
+		queryFn: () => listDistricts(province()!),
+		enabled: !!province(),
+		staleTime: Infinity
+	}));
+
+export const useSubdistricts = (province: () => string | null, district: () => string | null) =>
+	createQuery(() => ({
+		queryKey: thailandLocationKeys.subdistricts(province() ?? '', district() ?? ''),
+		queryFn: () => listSubdistricts(province()!, district()!),
+		enabled: !!province() && !!district(),
+		staleTime: Infinity
 	}));
 
 export const useCreateShelter = () => {
@@ -120,21 +148,18 @@ export const useReopenZone = () => {
 };
 
 /**
- * Wire the PouchDB changes feed to TanStack Query invalidations for the
+ * Wire CouchDB changes (event channel) to TanStack Query invalidations for the
  * shelter registry. Reactivity comes from replication (and local writes),
  * not from polling — covers cross-tab writes and remote-sync refreshes.
  *
  * Hook from the root layout alongside the people live query.
  */
-export function startSheltersLiveQuery(queryClient: QueryClient): LiveQueryHandle {
-	return startLiveQuery(namedLocalDb(SHELTER_REGISTRY_DB), queryClient, (type) => {
+export { SHELTER_REGISTRY_DB };
+
+export function startSheltersLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
+	return subscribeDataChanges(queryClient, SHELTER_REGISTRY_DB, (type) => {
 		if (type === 'shelter') {
 			return [sheltersKeys.list(), [...sheltersKeys.all, 'detail']];
-		}
-		if (type === 'audit') {
-			// Audit log changes don't directly affect shelter queries today,
-			// but forward-compatibility: they could power a timeline view.
-			return [];
 		}
 		return [];
 	});
