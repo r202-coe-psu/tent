@@ -1,13 +1,31 @@
 import { describe, it, expect } from 'vitest';
 import { donationPreDeclarationInputSchema, isDonationPreDeclaration } from './donation';
+import { publicDonationErrorMessage, receiveDonationInputSchema } from './public-donation';
 
 describe('donationPreDeclarationInputSchema', () => {
 	const baseValid = {
 		shelter_code: 'SH001',
 		donor: { name: 'John Doe', phone: '0812345678' },
 		items: [{ free_text: 'Rice', qty: 10, unit: 'kg' }],
+		// logistics เป็น req เมื่อ channel=public (schema.md §2.3)
+		logistics: { delivery_method: 'self_dropoff', vehicle: 'car' },
 		captchaToken: 'test-token'
 	};
+
+	it('fails validation when logistics is missing (required for public)', () => {
+		const noLogistics = { ...baseValid };
+		delete (noLogistics as Partial<typeof baseValid>).logistics;
+		const result = donationPreDeclarationInputSchema.safeParse(noLogistics);
+		expect(result.success).toBe(false);
+	});
+
+	it('fails validation when vehicle is set on a parcel delivery', () => {
+		const result = donationPreDeclarationInputSchema.safeParse({
+			...baseValid,
+			logistics: { delivery_method: 'parcel', vehicle: 'car' }
+		});
+		expect(result.success).toBe(false);
+	});
 
 	// 1. Valid Case
 	it('passes validation with valid donor declaration data', () => {
@@ -94,5 +112,31 @@ describe('isDonationPreDeclaration', () => {
 				created_by: 'user'
 			})
 		).toBe(false);
+	});
+});
+
+describe('publicDonationErrorMessage', () => {
+	it('maps known API error codes to Thai copy', () => {
+		expect(publicDonationErrorMessage('NEED_FULL')).toContain('ครบแล้ว');
+		expect(publicDonationErrorMessage('SLOT_FULL')).toContain('คิวจัดส่งเต็ม');
+	});
+
+	it('falls back for unknown codes', () => {
+		expect(publicDonationErrorMessage('UNKNOWN')).toContain('ไม่สามารถจองคิวบริจาคได้');
+	});
+});
+
+describe('receiveDonationInputSchema', () => {
+	it('accepts received status with optional items', () => {
+		const result = receiveDonationInputSchema.safeParse({
+			status: 'received',
+			items: [{ free_text: 'ข้าวสาร', qty: 1, unit: 'kg' }]
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it('rejects non-received status values', () => {
+		const result = receiveDonationInputSchema.safeParse({ status: 'cancelled' });
+		expect(result.success).toBe(false);
 	});
 });
