@@ -40,29 +40,41 @@
 	let { evacueeId, readonly = false }: { evacueeId: string; readonly?: boolean } = $props();
 
 	const statusConfig = {
-		checked_in: {
+		active: {
 			label: 'พักพิงในศูนย์ (Active)',
 			colorClass:
 				'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800',
 			dotClass: 'bg-green-500'
 		},
-		registered: {
-			label: 'ลงทะเบียนแล้ว (Registered)',
+		pre_registered: {
+			label: 'ลงทะเบียนล่วงหน้า (Pre-registered)',
 			colorClass:
 				'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
 			dotClass: 'bg-blue-500'
 		},
-		checked_out: {
-			label: 'ออกจากศูนย์แล้ว (Checked Out)',
+		temporary_leave: {
+			label: 'ออกชั่วคราว (Temporary Leave)',
 			colorClass:
-				'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700',
-			dotClass: 'bg-gray-400'
+				'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+			dotClass: 'bg-amber-500'
 		},
 		transferred: {
-			label: 'ส่งต่อแล้ว (Transferred)',
+			label: 'ส่งต่อ / ย้ายศูนย์ (Transferred)',
 			colorClass:
 				'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800',
 			dotClass: 'bg-purple-500'
+		},
+		checked_out: {
+			label: 'ย้ายออก / กลับภูมิลำเนา (Checked-out)',
+			colorClass:
+				'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800',
+			dotClass: 'bg-red-500'
+		},
+		deceased: {
+			label: 'เสียชีวิต (Deceased)',
+			colorClass:
+				'bg-slate-200 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700',
+			dotClass: 'bg-black'
 		}
 	} satisfies Record<StayStatus, { label: string; colorClass: string; dotClass: string }>;
 
@@ -94,7 +106,7 @@
 	const shelterName = $derived(shelterQuery.data?.name ?? 'ศูนย์พักพิงชั่วคราว');
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const statusInfo = $derived(
-		evacuee ? (statusConfig[evacuee.current_stay.status] ?? statusConfig.registered) : null
+		evacuee ? (statusConfig[evacuee.current_stay.status] ?? statusConfig.pre_registered) : null
 	);
 	const familyMembers = $derived(
 		evacuee && evacuee.household_id && evacueesQuery.data
@@ -115,9 +127,12 @@
 
 	const movementLabels: Record<MovementAction, { emoji: string; label: string }> = {
 		check_in: { emoji: '🟢', label: 'เช็คอิน (Check-in)' },
-		check_out: { emoji: '⚪', label: 'เช็คเอาท์ (Check-out)' },
+		check_out: { emoji: '⚪', label: 'ย้ายออก/กลับภูมิลำเนา (Checked-out)' },
 		transfer_in: { emoji: '🔵', label: 'ย้ายเข้า (Transfer in)' },
-		transfer_out: { emoji: '🟣', label: 'ย้ายออก (Transfer out)' }
+		transfer_out: { emoji: '🟣', label: 'ย้ายออก (Transfer out)' },
+		leave_temporary: { emoji: '🟠', label: 'ออกชั่วคราว (Temporary leave)' },
+		return_from_leave: { emoji: '🟢', label: 'กลับจากออกชั่วคราว (Return from leave)' },
+		mark_deceased: { emoji: '⚫', label: 'เสียชีวิต (Deceased)' }
 	};
 
 	const isLoading = $derived(
@@ -126,6 +141,18 @@
 			medicalsQuery.isLoading ||
 			screeningsQuery.isLoading
 	);
+
+	// Audit log — show a limited page of movements at a time, expand on demand
+	const MOVEMENTS_PAGE_SIZE = 5;
+	let visibleMovementsCount = $state(MOVEMENTS_PAGE_SIZE);
+
+	$effect(() => {
+		void evacueeId;
+		visibleMovementsCount = MOVEMENTS_PAGE_SIZE;
+	});
+
+	const visibleMovements = $derived(movements.slice(0, visibleMovementsCount));
+	const hasMoreMovements = $derived(movements.length > visibleMovementsCount);
 
 	// Modal visibility state
 	let showZoneModal = $state(false);
@@ -306,7 +333,7 @@
 						</div>
 					</li>
 				{/if}
-				{#each movements as m (m._id)}
+				{#each visibleMovements as m (m._id)}
 					<li class="flex items-start gap-3 text-xs">
 						<span class="mt-0.5 text-sm">{movementLabels[m.action].emoji}</span>
 						<div class="flex-1 space-y-0.5">
@@ -327,6 +354,17 @@
 						</div>
 					</li>
 				{/each}
+				{#if hasMoreMovements}
+					<li>
+						<button
+							type="button"
+							onclick={() => (visibleMovementsCount += MOVEMENTS_PAGE_SIZE)}
+							class="cursor-pointer text-xs font-semibold text-primary transition-colors hover:text-primary/80"
+						>
+							โหลดเพิ่มเติม ({movements.length - visibleMovementsCount} รายการ)
+						</button>
+					</li>
+				{/if}
 				<li class="flex items-start gap-3 text-xs">
 					<span class="mt-0.5 text-sm">📝</span>
 					<div class="flex-1 space-y-0.5">

@@ -4,6 +4,10 @@ import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '
 /**
  * Operations domain — stock, donations, transfers (R2–R3).
  *
+ * NOTE (CR-034 scope): `DonationLogistics`, `DonationSlot`, and donation
+ * `schema_v` 2 fields pre-date CR-034 — aligned under CR-005 §F, not part of
+ * the donation_campaign cutoff change set.
+ *
  * Two invariants from the spec carry real weight here:
  *
  *  1. `stock_ledger` is append-only and event-sourced: the balance of an item
@@ -62,14 +66,30 @@ export interface DonationItem {
 	free_text?: string;
 	qty: number;
 	unit: string;
+	category?: string;
+	condition?: string;
+	note?: string;
 }
 
 export interface Donor {
 	name: string;
 	phone: string | null;
 	phone_hash: string;
-	tax_receipt?: boolean;
-	tax_id?: string;
+	line_id?: string | null;
+	email?: string | null;
+}
+
+//  public logistics & queue booking
+export interface DonationLogistics {
+	delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
+	vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+	slot?: {
+		date: string;
+		from: string;
+		to: string;
+	} | null;
+	eta?: Timestamp | null;
+	courier_tracking_no?: string | null;
 }
 
 export interface Donation extends BaseDoc {
@@ -85,12 +105,25 @@ export interface Donation extends BaseDoc {
 	declared_at: Timestamp;
 	received_at: Timestamp | null;
 	expires_at: Timestamp;
+	booking_ref?: string;
+	logistics?: DonationLogistics;
+}
+
+export interface DonationSlot extends BaseDoc {
+	type: 'donation_slot';
+	date: string; // YYYY-MM-DD
+	from: string; // HH:mm
+	to: string; // HH:mm
+	capacity: number;
+	status: 'open' | 'closed';
+	note?: string;
 }
 
 export interface CampaignNeed {
 	item_id: string;
 	qty_target: number;
 	unit: string;
+	status?: 'open' | 'closed';
 }
 
 export interface DonationCampaign extends BaseDoc {
@@ -101,6 +134,7 @@ export interface DonationCampaign extends BaseDoc {
 	opens_at?: Timestamp;
 	closes_at?: Timestamp | null;
 	notes?: string;
+	visible_on_home?: boolean;
 }
 
 export type OperationsDoc = StockLedger | Donation | DonationCampaign;
@@ -202,6 +236,32 @@ export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): Sto
 	);
 }
 
+export const distributeInputSchema = z.object({
+	item_id: z.string().min(1),
+	qty: z.coerce.number().positive('Quantity must be positive'),
+	unit: z.string().trim().min(1),
+	ref_id: z.string().nullable().default(null),
+	note: z.string().trim().optional(), // Used to store destination in lot.note
+	occurred_at: z.string().optional()
+});
+export type DistributeInput = z.input<typeof distributeInputSchema>;
+
+export function createDistributeEntry(input: DistributeInput, ctx: AuthorContext): StockLedger {
+	const d = distributeInputSchema.parse(input);
+	return createStockLedger(
+		{
+			item_id: d.item_id,
+			qty: -Math.abs(d.qty), // force outbound negative delta
+			unit: d.unit,
+			reason: 'distribute',
+			ref_id: d.ref_id,
+			...(d.note ? { lot: { note: d.note } } : {}),
+			occurred_at: d.occurred_at
+		},
+		ctx
+	);
+}
+
 /** Sum signed deltas per item — the `stock_balance` read model, computed client-side. */
 export function stockBalance(ledger: StockLedger[]): Map<string, number> {
 	const balance = new Map<string, number>();
@@ -258,7 +318,7 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	).toISOString();
 	return makeDoc(
 		'donation',
-		1,
+		2,
 		{
 			channel: 'walk_in' as const,
 			donor: d.donor,
@@ -351,13 +411,15 @@ export const campaignInputSchema = z.object({
 			z.object({
 				item_id: z.string().min(1),
 				qty_target: z.coerce.number().positive(),
-				unit: z.string().trim().min(1)
+				unit: z.string().trim().min(1),
+				status: z.enum(['open', 'closed']).optional().default('open')
 			})
 		)
 		.min(1, 'A campaign needs at least one item'),
 	opens_at: z.string().optional(),
 	closes_at: z.string().nullable().optional(),
-	notes: z.string().trim().optional()
+	notes: z.string().trim().optional(),
+	visible_on_home: z.boolean().optional().default(true)
 });
 export type CampaignInput = z.input<typeof campaignInputSchema>;
 
@@ -365,11 +427,12 @@ export function createCampaign(input: CampaignInput, ctx: AuthorContext): Donati
 	const d = campaignInputSchema.parse(input);
 	return makeDoc(
 		'donation_campaign',
-		1,
+		2,
 		{
 			title: d.title,
 			needs: d.needs,
 			status: 'open' as const,
+			visible_on_home: d.visible_on_home,
 			...(d.opens_at ? { opens_at: d.opens_at } : {}),
 			...(d.closes_at !== undefined ? { closes_at: d.closes_at } : {}),
 			...(d.notes ? { notes: d.notes } : {})
@@ -379,26 +442,104 @@ export function createCampaign(input: CampaignInput, ctx: AuthorContext): Donati
 }
 
 /**
- * Remaining open need per item: target minus what donations (declared+received,
- * not expired/cancelled) already cover. Drives `GET /public/v1/needs`
- * (data-model.md §4, view `needs_open`).
+ * Calculates the reserved donation amount that has been quota-cleared.
+ * This reserved amount includes:
+ * - Donation documents with a 'declared' status.
+ * - Donation documents with a 'received' status that have not yet been added to the inventory stock (no referenced ledger entry).
  */
-export function openNeeds(campaign: DonationCampaign, donations: Donation[]): CampaignNeed[] {
-	const covered = new Map<string, number>();
-	for (const don of donations) {
-		if (don.campaign_id !== campaign._id) continue;
-		if (don.status === 'expired' || don.status === 'cancelled') continue;
-		for (const item of don.items ?? []) {
-			if (!item.item_id) continue;
-			covered.set(item.item_id, (covered.get(item.item_id) ?? 0) + item.qty);
+export function calculateReserved(
+	donations: Donation[],
+	stockLedgers: StockLedger[],
+	campaignId?: string
+): Map<string, number> {
+	const keyedDonationIds = new Set<string>();
+	for (const ledger of stockLedgers) {
+		if (ledger.reason === 'donation' && ledger.ref_id) {
+			keyedDonationIds.add(ledger.ref_id);
 		}
 	}
-	return campaign.needs
-		.map((need) => ({
-			...need,
-			qty_target: need.qty_target - (covered.get(need.item_id) ?? 0)
-		}))
-		.filter((need) => need.qty_target > 0);
+
+	const reserved = new Map<string, number>();
+	for (const don of donations) {
+		if (campaignId && don.campaign_id !== campaignId) continue;
+		if (don.status === 'expired' || don.status === 'cancelled') continue;
+		const isUnkeyedReceived = don.status === 'received' && !keyedDonationIds.has(don._id);
+		if (don.status !== 'declared' && !isUnkeyedReceived) continue;
+		for (const item of don.items ?? []) {
+			if (!item.item_id) continue;
+			reserved.set(item.item_id, (reserved.get(item.item_id) ?? 0) + item.qty);
+		}
+	}
+	return reserved;
+}
+
+export interface NeedAvailability {
+	item_id: string;
+	qty_target: number;
+	qty_on_hand: number;
+	qty_reserved: number;
+	qty_remaining: number;
+	is_cut_off: boolean;
+	status: 'open' | 'closed';
+	unit: string;
+}
+
+export function deriveNeedAvailability(
+	campaign: DonationCampaign,
+	donations: Donation[],
+	stockLedgers: StockLedger[]
+): NeedAvailability[] {
+	const onHand = stockBalance(stockLedgers);
+	const reserved = calculateReserved(donations, stockLedgers, campaign._id);
+
+	return campaign.needs.map((need) => {
+		const currentOnHand = onHand.get(need.item_id) ?? 0;
+		const currentReserved = reserved.get(need.item_id) ?? 0;
+		const remaining = Math.max(0, need.qty_target - (currentOnHand + currentReserved));
+		const isCutOff = isNeedCutOff(
+			need.qty_target,
+			currentOnHand,
+			currentReserved,
+			need.status,
+			campaign.status
+		);
+
+		return {
+			item_id: need.item_id,
+			qty_target: need.qty_target,
+			qty_on_hand: currentOnHand,
+			qty_reserved: currentReserved,
+			qty_remaining: remaining,
+			is_cut_off: isCutOff,
+			status: need.status ?? 'open',
+			unit: need.unit
+		};
+	});
+}
+
+/**
+ * Remaining open need per item: target minus on-hand stock, active reservations,
+ * and donations (declared+received, not expired/cancelled) already cover.
+ * Drives `GET /public/v1/needs` (data-model.md §4, view `needs_open`).
+ *
+ * **Migration (CR-034):** callers must pass `stockLedgers` so cut-off reflects
+ * warehouse on-hand + reserved donations. Omit or pass `[]` only when stock
+ * context is unavailable (legacy two-arg call sites).
+ */
+export function openNeeds(
+	campaign: DonationCampaign,
+	donations: Donation[],
+	stockLedgers: StockLedger[] = []
+): CampaignNeed[] {
+	const availabilities = deriveNeedAvailability(campaign, donations, stockLedgers);
+	return availabilities
+		.filter((avail) => !avail.is_cut_off)
+		.map((avail) => ({
+			item_id: avail.item_id,
+			qty_target: avail.qty_remaining,
+			unit: avail.unit,
+			status: avail.status
+		}));
 }
 
 // ---------------------------------------------------------------- type guards
@@ -417,3 +558,44 @@ export const specialRequestSchema = z.object({
 	location: z.string().trim().min(1, 'กรุณาระบุคลังเป้าหมาย')
 });
 export type SpecialRequestInput = z.infer<typeof specialRequestSchema>;
+
+/**
+ * Determines the donation cut-off status (T-22 Cut-off Rule).
+ * Automatically closes when: On-hand inventory (onHand) + Reserved amount (reserved) >= Target (target)
+ * Or when the campaign is manually closed.
+ */
+export function isNeedCutOff(
+	qtyTarget: number,
+	onHandStock: number,
+	reservedQty: number,
+	needStatus?: 'open' | 'closed',
+	campaignStatus?: 'open' | 'closed'
+): boolean {
+	if (campaignStatus === 'closed' || needStatus === 'closed') return true;
+	return onHandStock + reservedQty >= qtyTarget;
+}
+
+// public donation time-slot booking (R2.3)
+// The slot is “used” when a donation is received into it.
+export const isDonationSlot = (d: unknown): d is DonationSlot =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_slot';
+
+/**
+ * Maps a Thai item name heuristic to a slugged itemId.
+ */
+export function mapNeedItemHeuristic(name: string): string {
+	const lowerName = name.toLowerCase();
+	if (lowerName.includes('ข้าว')) return 'item:rice';
+	if (lowerName.includes('น้ำ')) return 'item:water';
+	if (lowerName.includes('พารา') || lowerName.includes('ยา')) return 'item:paracetamol';
+	if (lowerName.includes('สบู่')) return 'item:soap';
+	if (lowerName.includes('ห่ม')) return 'item:blanket';
+	if (lowerName.includes('ไข่')) return 'item:egg';
+
+	const slug = name
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9\u0e00-\u0e7f]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+	return `item:${slug || 'custom'}`;
+}

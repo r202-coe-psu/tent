@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { MealPlanList, RequisitionHistory, startKitchenLiveQuery } from '$lib/features/kitchen';
+	import {
+		MealPlanList,
+		RequisitionHistory,
+		MealServiceSummary,
+		startKitchenLiveQuery
+	} from '$lib/features/kitchen';
 	import { startOperationsLiveQuery } from '$lib/features/operations';
 	import { useQueryClient } from '@tanstack/svelte-query';
 
@@ -23,7 +28,8 @@
 
 <div class="flex-1 overflow-auto">
 	<MealPlanList />
-	<div class="px-4 pb-4">
+	<div class="space-y-4 px-4 pb-4">
 		<RequisitionHistory />
+		<MealServiceSummary />
 	</div>
 </div>

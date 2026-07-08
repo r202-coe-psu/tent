@@ -59,10 +59,12 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 		const data = await res.json();
 
 		expect(data.shelter_code).toBe('SH001');
-		expect(data.registered).toBe(0);
-		expect(data.checked_in).toBe(0);
-		expect(data.checked_out).toBe(0);
+		expect(data.pre_registered).toBe(0);
+		expect(data.active).toBe(0);
+		expect(data.temporary_leave).toBe(0);
 		expect(data.transferred).toBe(0);
+		expect(data.checked_out).toBe(0);
+		expect(data.deceased).toBe(0);
 		expect(data.total).toBe(0);
 	});
 
@@ -95,8 +97,8 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 			status: 200,
 			data: {
 				rows: [
-					{ key: 'checked_in', value: 10 },
-					{ key: 'registered', value: 5 }
+					{ key: 'active', value: 10 },
+					{ key: 'pre_registered', value: 5 }
 				]
 			}
 		});
@@ -108,8 +110,8 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 		const data = await res.json();
 
 		expect(data.shelter_code).toBe('SH001');
-		expect(data.checked_in).toBe(10);
-		expect(data.registered).toBe(5);
+		expect(data.active).toBe(10);
+		expect(data.pre_registered).toBe(5);
 		expect(data.checked_out).toBe(0); // Defaulted to 0
 		expect(data.total).toBe(15);
 	});

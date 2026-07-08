@@ -22,6 +22,7 @@ import type {
 export const peopleKeys = {
 	all: ['people'] as const,
 	evacuees: () => [...peopleKeys.all, 'evacuees', getShelterCode()] as const,
+	evacuee: (id: string) => [...peopleKeys.all, 'evacuee', getShelterCode(), id] as const,
 	evacueesPaginated: (page: number, pageSize: number, search = '') =>
 		[...peopleKeys.all, 'evacuees', getShelterCode(), { page, pageSize, search }] as const,
 	evacueesSearch: (query: string) =>
@@ -65,6 +66,13 @@ export const useSearchEvacuees = (query: () => string, enabled: () => boolean) =
 		enabled: enabled()
 	}));
 
+export const useEvacuee = (id: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.evacuee(id()),
+		queryFn: () => peopleRepository().getEvacuee(id()),
+		enabled: enabled() && !!id()
+	}));
+
 export const useCreateEvacuee = () =>
 	createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: EvacueeInput; ctx: AuthorContext }) =>
@@ -88,6 +96,42 @@ export const useCheckInEvacuee = () =>
 			zone?: string | null;
 		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone)
 	}));
+
+export const useCheckOutEvacuee = () =>
+	createMutation(() => ({
+		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
+			peopleRepository().checkOutEvacuee(evacuee, ctx)
+	}));
+
+/** One-shot lookup used by the scan flow — goes through TanStack Query keys. */
+export async function lookupEvacueeByScanCode(
+	queryClient: QueryClient,
+	code: string
+): Promise<Evacuee | null> {
+	const cleanCode = code.trim();
+	if (!cleanCode) return null;
+
+	let lookupId = cleanCode;
+	if (!lookupId.startsWith('evacuee:')) {
+		lookupId = `evacuee:${cleanCode}`;
+	}
+
+	try {
+		const byId = await queryClient.fetchQuery({
+			queryKey: peopleKeys.evacuee(lookupId),
+			queryFn: () => peopleRepository().getEvacuee(lookupId)
+		});
+		if (byId) return byId;
+	} catch {
+		// Ignore direct ID fetch errors and fall through to search.
+	}
+
+	const matches = await queryClient.fetchQuery({
+		queryKey: peopleKeys.evacueesSearch(cleanCode),
+		queryFn: () => peopleRepository().searchEvacuees(cleanCode)
+	});
+	return matches[0] ?? null;
+}
 
 export const useHouseholds = () =>
 	createQuery(() => ({
