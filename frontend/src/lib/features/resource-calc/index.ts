@@ -28,3 +28,13 @@ export {
 	type CalcOutput,
 	type DailyCalcDoc
 } from './domain/calc.schema';
+
+// T-31.4 — data layer: the persisted daily-calc repository (occupancy × ratio → snapshot).
+export {
+	dailyCalcDocId,
+	isDailyCalcRecord,
+	DAILY_CALC_ID_PREFIX,
+	type DailyCalcRepository,
+	type DailyCalcRecord
+} from './data/daily-calc.repository';
+export { dailyCalcRepository, DailyCalcRemoteRepository } from './data/daily-calc.remote';
