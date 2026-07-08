@@ -9,8 +9,10 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from tent_read_model.public_person import PublicPerson
 from tent_read_model.public_shelter import PublicShelter
 from tent_read_model.sync_checkpoint import SyncCheckpoint
+from tent_donation.public_donation import PublicDonation
+from tent_donation.public_need import PublicNeed
 
-ALL_DOCUMENTS = [SyncCheckpoint, PublicShelter, PublicPerson]
+ALL_DOCUMENTS = [SyncCheckpoint, PublicShelter, PublicPerson, PublicDonation, PublicNeed]
 
 _client: AsyncIOMotorClient | None = None
 

@@ -14,4 +14,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/tent_read_model"]
+packages = ["src/tent_read_model", "src/tent_donation"]
