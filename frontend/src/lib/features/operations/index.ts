@@ -19,7 +19,10 @@ export type {
 	TransferStatus,
 	DonationChannel,
 	DonationSlot,
-	NeedAvailability
+	NeedAvailability,
+	StockTransfer,
+	StockTransferItem,
+	TransferInput
 } from './domain/operations';
 
 // Domain — schemas + factories + transitions + read models + guards
@@ -50,6 +53,11 @@ export {
 	isDonationCampaign,
 	isDonationSlot,
 	mapNeedItemHeuristic,
+	isStockTransfer,
+	transferInputSchema,
+	createTransfer,
+	dispatchTransfer,
+	receiveTransfer,
 	type StockLedgerInput,
 	type ReceiveInput,
 	type WalkInDonationInput,
@@ -79,6 +87,9 @@ export {
 	useDonations,
 	useCreateCampaign,
 	useUpdateCampaign,
+	useCreateAndDispatchTransfer,
+	useIncomingTransfers,
+	useReceiveTransfer,
 	startOperationsLiveQuery
 } from './application/queries';
 export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';

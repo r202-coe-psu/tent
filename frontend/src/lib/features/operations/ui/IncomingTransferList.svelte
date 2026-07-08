@@ -2,7 +2,7 @@
 	import { useIncomingTransfers, useReceiveTransfer } from '../application/queries';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '../data/operations.pouch';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { toast } from 'svelte-sonner';
@@ -52,7 +52,7 @@
 		}));
 
 		const ctx = {
-			shelterCode: SHELTER_CODE,
+			shelterCode: getShelterCode(),
 			createdBy: authStore.user?.name ?? 'unknown'
 		};
 

@@ -1,5 +1,5 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
-import { getShelterDb } from '$lib/db/shelter';
+import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import { touch, type AuthorContext } from '$lib/db/model';
 import {
 	createCampaign as buildCampaign,
@@ -10,13 +10,19 @@ import {
 	stockBalance,
 	createReceiveEntry,
 	createDistributeEntry,
+	createTransfer as buildTransfer,
+	dispatchTransfer as computeDispatchTransfer,
+	receiveTransfer as computeReceiveTransfer,
+	isStockTransfer,
 	type DonationCampaign,
 	type CampaignInput,
 	type StockLedger,
 	type ReceiveInput,
 	type DistributeInput,
 	type Donation,
-	type DonationSlot
+	type DonationSlot,
+	type StockTransfer,
+	type TransferInput
 } from '../domain/operations';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
@@ -89,6 +95,60 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			);
 		}
 		return this.addLedgerEntry(entry);
+	}
+
+	// --- Inter-shelter Transfer Methods ---
+
+	async createTransfer(input: TransferInput, ctx: AuthorContext): Promise<StockTransfer> {
+		const transfer = buildTransfer(input, ctx);
+		return this.repo.put(transfer);
+	}
+
+	async dispatchTransfer(
+		transfer: StockTransfer,
+		ctx: AuthorContext
+	): Promise<{ transfer: StockTransfer; ledgers: StockLedger[] }> {
+		const { transfer: updatedTransfer, ledgers } = computeDispatchTransfer(transfer, ctx);
+
+		// WARNING: Similar to distributeStock, this read-then-write is not atomic.
+		const balances = await this.getBalance();
+		for (const item of updatedTransfer.items) {
+			const currentQty = balances.get(item.item_id) ?? 0;
+			const requestedQty = item.qty;
+			if (currentQty < requestedQty) {
+				throw new Error(
+					`Insufficient stock for item ${item.item_id} (requested ${requestedQty}, have ${currentQty})`
+				);
+			}
+		}
+
+		const savedTransfer = await this.repo.put(updatedTransfer);
+		const savedLedgers = await Promise.all(ledgers.map((l) => this.repo.put(l)));
+
+		return { transfer: savedTransfer, ledgers: savedLedgers };
+	}
+
+	async receiveTransfer(
+		transfer: StockTransfer,
+		receivedItems: { item_id: string; qty: number }[],
+		ctx: AuthorContext
+	): Promise<{ transfer: StockTransfer; ledgers: StockLedger[] }> {
+		const { transfer: updatedTransfer, ledgers } = computeReceiveTransfer(
+			transfer,
+			receivedItems,
+			ctx
+		);
+
+		const savedTransfer = await this.repo.put(updatedTransfer);
+		const savedLedgers = await Promise.all(ledgers.map((l) => this.repo.put(l)));
+
+		return { transfer: savedTransfer, ledgers: savedLedgers };
+	}
+
+	async listIncomingTransfers(): Promise<StockTransfer[]> {
+		const transfers = await this.repo.allByType('stock_transfer', isStockTransfer);
+		const shelterCode = getShelterCode();
+		return transfers.filter((t) => t.to_shelter === shelterCode && t.status === 'shipped');
 	}
 
 	// --- Campaign/Donation/Slot Methods ---

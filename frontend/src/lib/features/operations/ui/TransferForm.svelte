@@ -7,7 +7,7 @@
 	import { transferInputSchema, type TransferInput } from '../domain/operations';
 	import { useSupplyItems, type SupplyItem } from '$lib/features/supply';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '../data/operations.pouch';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { useCreateAndDispatchTransfer, useStockBalance } from '../application/queries';
 	import { useShelters } from '$lib/features/shelters';
 	import { toast } from 'svelte-sonner';
@@ -24,7 +24,7 @@
 
 	const form = superForm(
 		defaults(
-			{ from_shelter: SHELTER_CODE, to_shelter: '', items: [{ item_id: '', qty: 0, unit: '' }] },
+			{ from_shelter: getShelterCode(), to_shelter: '', items: [{ item_id: '', qty: 0, unit: '' }] },
 			zod4(transferInputSchema)
 		),
 		{
@@ -77,7 +77,7 @@
 
 	async function handleCommit(data: TransferInput) {
 		const ctx = {
-			shelterCode: SHELTER_CODE,
+			shelterCode: getShelterCode(),
 			createdBy: authStore.user?.name ?? 'unknown'
 		};
 
@@ -93,7 +93,7 @@
 	}
 
 	const availableShelters = $derived(
-		(sheltersQuery.data ?? []).filter((s) => s.code !== SHELTER_CODE)
+		(sheltersQuery.data ?? []).filter((s) => s.code !== getShelterCode())
 	);
 </script>
 
