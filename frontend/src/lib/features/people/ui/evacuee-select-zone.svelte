@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { useShelter, type Zone } from '$lib/features/shelters/index.js';
 	import type { Evacuee } from '../domain/people';
 
@@ -18,7 +19,7 @@
 	let selectedZone = $state('');
 
 	// Query current shelter data to get zones
-	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? '');
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 
 	// Filter only active zones
 	let activeZones = $derived(
