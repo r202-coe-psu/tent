@@ -4,7 +4,22 @@
 	import Loader from '@lucide/svelte/icons/loader';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { useSearchEvacuees, maskNationalId } from '$lib/features/people';
+	import {
+		useSearchEvacuees,
+		maskNationalId,
+		canCheckInEvacuee,
+		canCheckOutEvacuee,
+		type StayStatus
+	} from '$lib/features/people';
+
+	const STATUS_SHORT: Record<StayStatus, string> = {
+		pre_registered: 'รอเช็คอิน',
+		active: 'เช็คอิน',
+		temporary_leave: 'ออกชั่วคราว',
+		transferred: 'ย้ายศูนย์',
+		checked_out: 'เช็คเอาท์',
+		deceased: 'เสียชีวิต'
+	};
 
 	let {
 		show,
@@ -107,11 +122,13 @@
 						<div class="flex items-center gap-3">
 							<span
 								class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold shadow-xs
-								{evacuee.current_stay.status === 'active'
+								{canCheckOutEvacuee(evacuee)
 									? 'bg-emerald-100 text-emerald-800'
-									: 'bg-slate-100 text-slate-800'}"
+									: canCheckInEvacuee(evacuee)
+										? 'bg-amber-100 text-amber-800'
+										: 'bg-slate-100 text-slate-800'}"
 							>
-								{evacuee.current_stay.status === 'active' ? 'เช็คอิน' : 'เช็คเอาท์'}
+								{STATUS_SHORT[evacuee.current_stay.status]}
 							</span>
 							<Button
 								size="sm"

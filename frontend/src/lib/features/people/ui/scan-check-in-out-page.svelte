@@ -17,11 +17,15 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import ScanSearchModal from './scan-search-modal.svelte';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import {
-		peopleRepository,
+		canCheckInEvacuee,
+		canCheckOutEvacuee,
+		lookupEvacueeByScanCode,
 		useCheckInEvacuee,
 		useCheckOutEvacuee,
-		type Evacuee
+		type Evacuee,
+		type StayStatus
 	} from '$lib/features/people';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -43,6 +47,7 @@
 	let lastScannedCode = '';
 	let lastScanTime = 0;
 
+	const queryClient = useQueryClient();
 	const checkIn = useCheckInEvacuee();
 	const checkOut = useCheckOutEvacuee();
 
@@ -108,26 +113,7 @@
 		scanResult = null;
 
 		try {
-			let evacuee: Evacuee | null = null;
-
-			// Find evacuee helper
-			let lookupId = cleanCode;
-			if (!lookupId.startsWith('evacuee:')) {
-				lookupId = `evacuee:${cleanCode}`;
-			}
-
-			try {
-				evacuee = await peopleRepository().getEvacuee(lookupId);
-			} catch {
-				// Ignore direct ID fetch errors and proceed to search
-			}
-
-			if (!evacuee) {
-				const matches = await peopleRepository().searchEvacuees(cleanCode);
-				if (matches.length > 0) {
-					evacuee = matches[0];
-				}
-			}
+			const evacuee = await lookupEvacueeByScanCode(queryClient, cleanCode);
 
 			if (!evacuee) {
 				scanResult = {
@@ -135,7 +121,6 @@
 					message: `ไม่พบข้อมูลผู้ประสบภัยจากรหัส/ชื่อ "${cleanCode}"`
 				};
 				toast.error('ไม่พบรหัสผู้ประสบภัยนี้ในระบบ');
-				isScanning = false;
 				return;
 			}
 
@@ -184,8 +169,8 @@
 	}
 
 	// Helper for status label translation
-	function getStatusLabel(status: string) {
-		const statusLabels: Record<string, string> = {
+	function getStatusLabel(status: StayStatus) {
+		const statusLabels: Record<StayStatus, string> = {
 			pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
 			active: 'เช็คอินเข้าพักแล้ว',
 			temporary_leave: 'ออกชั่วคราว',
@@ -193,7 +178,7 @@
 			checked_out: 'ย้ายออก/กลับภูมิลำเนาแล้ว',
 			deceased: 'เสียชีวิต'
 		};
-		return statusLabels[status] || status;
+		return statusLabels[status];
 	}
 </script>
 
@@ -247,7 +232,7 @@
 						<!-- Active Video Stream container for html5-qrcode -->
 						<div
 							id="qr-reader"
-							class="h-full w-full overflow-hidden rounded-2xl [&_video]:!h-full [&_video]:!w-full [&_video]:!rounded-2xl [&_video]:!bg-transparent [&_video]:!object-cover"
+							class="h-full w-full overflow-hidden rounded-2xl [&_video]:h-full! [&_video]:w-full! [&_video]:rounded-2xl! [&_video]:bg-transparent! [&_video]:object-cover!"
 							style="isolation: isolate; transform: translateZ(0);"
 							{@attach cameraAttachment}
 						></div>
@@ -324,50 +309,63 @@
 
 				<!-- Scan Result Card -->
 				{#if scanResult}
-					{@const isActive = scanResult.evacuee?.current_stay.status === 'active'}
+					{@const found = scanResult.success ? scanResult.evacuee : undefined}
+					{@const canCheckOut = found ? canCheckOutEvacuee(found) : false}
+					{@const canCheckIn = found ? canCheckInEvacuee(found) : false}
+					{@const isTerminal = found?.current_stay.status === 'deceased'}
 					<div
 						class="mt-6 w-full max-w-sm animate-in overflow-hidden rounded-2xl border shadow-md transition-all duration-200 fade-in slide-in-from-top-2
 						{scanResult.success
 							? 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
 							: 'border-red-200 bg-red-50/40 dark:border-red-900/50 dark:bg-red-950/10'}"
 					>
-						{#if scanResult.success && scanResult.evacuee}
+						{#if scanResult.success && found}
 							<!-- Identity header: name + status are the two things staff must confirm at a glance -->
 							<div
-								class="flex items-start gap-3 px-4 pt-4 pb-3 {isActive
+								class="flex items-start gap-3 px-4 pt-4 pb-3 {canCheckOut
 									? 'bg-emerald-500/5'
-									: 'bg-amber-500/5'}"
+									: isTerminal
+										? 'bg-slate-500/5'
+										: 'bg-amber-500/5'}"
 							>
 								<div
-									class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-bold {isActive
+									class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-bold {canCheckOut
 										? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-										: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'}"
+										: isTerminal
+											? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+											: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'}"
 								>
-									{scanResult.evacuee.first_name.charAt(0)}
+									{found.first_name.charAt(0)}
 								</div>
 								<div class="min-w-0 flex-1 pt-0.5">
 									<h4 class="truncate text-base font-bold text-slate-900 dark:text-white">
-										{scanResult.evacuee.first_name}
-										{scanResult.evacuee.last_name}
+										{found.first_name}
+										{found.last_name}
 									</h4>
 									<div class="mt-1.5 flex flex-wrap items-center gap-1.5">
 										<span
 											class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold
-											{isActive
+											{canCheckOut
 												? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-												: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}"
+												: isTerminal
+													? 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200'
+													: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}"
 										>
 											<span
-												class="size-1.5 rounded-full {isActive ? 'bg-emerald-500' : 'bg-amber-500'}"
+												class="size-1.5 rounded-full {canCheckOut
+													? 'bg-emerald-500'
+													: isTerminal
+														? 'bg-slate-500'
+														: 'bg-amber-500'}"
 											></span>
-											{getStatusLabel(scanResult.evacuee.current_stay.status)}
+											{getStatusLabel(found.current_stay.status)}
 										</span>
-										{#if scanResult.evacuee.current_stay.zone}
+										{#if found.current_stay.zone}
 											<span
 												class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 uppercase dark:bg-slate-800 dark:text-slate-300"
 											>
 												<MapPin class="size-2.5" />
-												{scanResult.evacuee.current_stay.zone}
+												{found.current_stay.zone}
 											</span>
 										{/if}
 									</div>
@@ -380,20 +378,17 @@
 							>
 								<button
 									type="button"
-									onclick={() =>
-										goto(
-											resolve(`/onsite/people/evacuee-profile-view/${scanResult?.evacuee?._id}`)
-										)}
+									onclick={() => goto(resolve(`/onsite/people/evacuee-profile-view/${found._id}`))}
 									class="flex h-11 shrink-0 items-center gap-0.5 rounded-xl px-2.5 text-[11px] font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
 								>
 									โปรไฟล์
 									<ChevronRight class="size-3.5" />
 								</button>
 
-								{#if isActive}
+								{#if canCheckOut}
 									<Button
 										class="h-11 flex-1 gap-1.5 rounded-xl bg-red-600 text-sm font-bold text-white shadow-sm transition-all hover:bg-red-700 active:scale-[0.98]"
-										onclick={() => scanResult?.evacuee && handleCheckOut(scanResult.evacuee)}
+										onclick={() => handleCheckOut(found)}
 										disabled={checkOut.isPending}
 									>
 										{#if checkOut.isPending}
@@ -403,10 +398,10 @@
 										{/if}
 										เช็คเอาท์
 									</Button>
-								{:else}
+								{:else if canCheckIn}
 									<Button
 										class="h-11 flex-1 gap-1.5 rounded-xl bg-[#22C55E] text-sm font-bold text-white shadow-sm transition-all hover:bg-[#16A34A] active:scale-[0.98]"
-										onclick={() => scanResult?.evacuee && handleCheckIn(scanResult.evacuee)}
+										onclick={() => handleCheckIn(found)}
 										disabled={checkIn.isPending}
 									>
 										{#if checkIn.isPending}
@@ -415,6 +410,13 @@
 											<LogIn class="size-4" />
 										{/if}
 										เช็คอิน
+									</Button>
+								{:else}
+									<Button
+										disabled
+										class="h-11 flex-1 rounded-xl bg-slate-200 text-sm font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+									>
+										ไม่สามารถเปลี่ยนสถานะนี้ได้
 									</Button>
 								{/if}
 							</div>

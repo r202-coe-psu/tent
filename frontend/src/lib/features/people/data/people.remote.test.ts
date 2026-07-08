@@ -163,6 +163,28 @@ describe('check-in / check-out', () => {
 			const fetched = await repo.getEvacuee(evacuee._id);
 			expect(fetched?.current_stay.status).toBe('checked_out');
 		});
+
+		it('rejects check-out when the evacuee is not active', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			await expect(repo.checkOutEvacuee(evacuee, ctx)).rejects.toThrow(/เช็คเอาท์/);
+			expect(await repo.listMovements()).toHaveLength(0);
+		});
+	});
+
+	it('rejects check-in when the evacuee is deceased', async () => {
+		const evacuee = await repo.createEvacuee(evInput(), ctx);
+		const deceased = {
+			...evacuee,
+			current_stay: {
+				status: 'deceased' as const,
+				zone: null,
+				since: evacuee.current_stay.since
+			}
+		};
+		await expect(repo.checkInEvacuee(deceased, ctx)).rejects.toThrow(/เสียชีวิต/);
+		expect(await repo.listMovements()).toHaveLength(0);
+		const fetched = await repo.getEvacuee(evacuee._id);
+		expect(fetched?.current_stay.status).toBe('pre_registered');
 	});
 });
 

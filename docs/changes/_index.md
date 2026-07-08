@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-07 # add CR-033 remote-first architecture pivot as single comprehensive CR; index ครบ CR-001..033
+updated: 2026-07-08 # add CR-034 and mark status done
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -49,3 +49,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-031](CR-031-item-master-schema-reconciliation.md) | Item Master Schema Reconciliation — เพิ่มฟิลด์ `category` (str, opt) ใน `item_master` ให้สอดคล้อง spec↔code; schema_v 2 คงเดิม (reconcile) | done | volatile | 2026-07-04 (done 07-05) | docs/data/schema.md §4.2, features/catalog/domain/catalog.ts |
 | [CR-032](CR-032-stock-ledger-purchase-reason.md) | Add `purchase` to `stock_ledger.reason` enum; schema_v 1→2; map purchase source → purchase reason in `createReceiveEntry` (renumbered from CR-031 to resolve collision with develop) | proposed | volatile | 2026-07-05 | docs/data/schema.md §2.1, features/operations/domain/operations.ts, features/operations/data/operations.pouch.ts |
 | [CR-033](CR-033-remote-first-architecture-program-index.md) | Remote-first architecture pivot (single comprehensive CR) — ตัด local-first/Pouch assumptions และดำเนินงานทั้งหมดภายใต้ record เดียว | approved | stable | 2026-07-07 | docs/data/data-model.md, docs/data/api-contract.md, docs/task-breakdown/01-core.md, docs/features/offline-fallback-flow-spec.html, docs/prd/*.md, frontend/CONTRIBUTING.md, frontend/CONVENTIONS.md |
+| [CR-034](CR-034-evacuee-stay-status-v3-scan-check-in-out.md) | Evacuee stay status v3 + movement action expansion for scan check-in/out (6 statuses, occupancy mapping `active`) | done | volatile | 2026-07-08 (done 07-08) | docs/data/schema.md §1.1 §1.4 §2.5, schema_v evacuee 2→3, features/people/{domain,data,application,ui}, features/dashboard/domain/occupancy.schema.ts |

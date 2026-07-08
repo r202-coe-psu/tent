@@ -7,7 +7,6 @@
 	import DoorOpen from '@lucide/svelte/icons/door-open';
 	import ArrowRightLeft from '@lucide/svelte/icons/arrow-right-left';
 	import Home from '@lucide/svelte/icons/home';
-	import HeartCrack from '@lucide/svelte/icons/heart-crack';
 
 	let { occupancy }: { occupancy: OccupancyPayload } = $props();
 
