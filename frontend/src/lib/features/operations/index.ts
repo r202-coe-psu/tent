@@ -56,7 +56,10 @@ export {
 	type CampaignInput,
 	type SpecialRequestInput,
 	receiveSourceSchema,
-	createReceiveEntry
+	createReceiveEntry,
+	distributeInputSchema,
+	createDistributeEntry,
+	type DistributeInput
 } from './domain/operations';
 
 // Data — repository contract + remote CouchDB binding
@@ -70,6 +73,7 @@ export {
 	useLedgerByItem,
 	useStockBalance,
 	useReceiveStock,
+	useDistributeStock,
 	useCampaigns,
 	useStockLedgers,
 	useDonations,
@@ -82,5 +86,6 @@ export type { NeedItem } from './application/need-item.types';
 
 // UI components
 export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';
+export { default as DistributeStockForm } from './ui/DistributeStockForm.svelte';
 export { default as LedgerTable } from './ui/LedgerTable.svelte';
 export { default as StockTable } from './ui/StockTable.svelte';

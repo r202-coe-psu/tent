@@ -13,6 +13,7 @@ import {
 	isNeedCutOff,
 	deriveNeedAvailability,
 	createReceiveEntry,
+	createDistributeEntry,
 	mapNeedItemHeuristic,
 	type Donation,
 	type ReceiveSource
@@ -463,6 +464,69 @@ describe('createReceiveEntry', () => {
 			ctx
 		);
 		expect(entry.lot).toBeUndefined();
+	});
+});
+
+describe('createDistributeEntry', () => {
+	it('creates valid distribute entry with negative qty and distribute reason', () => {
+		const entry = createDistributeEntry(
+			{
+				item_id: 'item:water',
+				qty: 5,
+				unit: 'ขวด',
+				ref_id: null,
+				note: 'Zone B'
+			},
+			ctx
+		);
+
+		expect(entry.type).toBe('stock_ledger');
+		expect(entry.item_id).toBe('item:water');
+		expect(entry.qty).toBe(-5); // Must be negative
+		expect(entry.reason).toBe('distribute');
+		expect(entry.lot).toEqual({ note: 'Zone B' });
+		expect(entry.shelter_code).toBe(ctx.shelterCode);
+	});
+
+	it('creates entry without note when omitted', () => {
+		const entry = createDistributeEntry(
+			{
+				item_id: 'item:rice',
+				qty: 10,
+				unit: 'kg',
+				ref_id: null
+			},
+			ctx
+		);
+
+		expect(entry.qty).toBe(-10);
+		expect(entry.lot).toBeUndefined();
+	});
+
+	it('rejects zero or negative quantity inputs', () => {
+		expect(() =>
+			createDistributeEntry(
+				{
+					item_id: 'item:water',
+					qty: 0,
+					unit: 'ขวด',
+					ref_id: null
+				},
+				ctx
+			)
+		).toThrow();
+
+		expect(() =>
+			createDistributeEntry(
+				{
+					item_id: 'item:water',
+					qty: -5,
+					unit: 'ขวด',
+					ref_id: null
+				},
+				ctx
+			)
+		).toThrow();
 	});
 });
 

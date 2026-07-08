@@ -236,6 +236,32 @@ export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): Sto
 	);
 }
 
+export const distributeInputSchema = z.object({
+	item_id: z.string().min(1),
+	qty: z.coerce.number().positive('Quantity must be positive'),
+	unit: z.string().trim().min(1),
+	ref_id: z.string().nullable().default(null),
+	note: z.string().trim().optional(), // Used to store destination in lot.note
+	occurred_at: z.string().optional()
+});
+export type DistributeInput = z.input<typeof distributeInputSchema>;
+
+export function createDistributeEntry(input: DistributeInput, ctx: AuthorContext): StockLedger {
+	const d = distributeInputSchema.parse(input);
+	return createStockLedger(
+		{
+			item_id: d.item_id,
+			qty: -Math.abs(d.qty), // force outbound negative delta
+			unit: d.unit,
+			reason: 'distribute',
+			ref_id: d.ref_id,
+			...(d.note ? { lot: { note: d.note } } : {}),
+			occurred_at: d.occurred_at
+		},
+		ctx
+	);
+}
+
 /** Sum signed deltas per item — the `stock_balance` read model, computed client-side. */
 export function stockBalance(ledger: StockLedger[]): Map<string, number> {
 	const balance = new Map<string, number>();

@@ -9,10 +9,12 @@ import {
 	isDonationSlot,
 	stockBalance,
 	createReceiveEntry,
+	createDistributeEntry,
 	type DonationCampaign,
 	type CampaignInput,
 	type StockLedger,
 	type ReceiveInput,
+	type DistributeInput,
 	type Donation,
 	type DonationSlot
 } from '../domain/operations';
@@ -67,6 +69,25 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		const entry = createReceiveEntry(input, ctx);
 		const item = await supplyRepository().getItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
+		return this.addLedgerEntry(entry);
+	}
+
+	async distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger> {
+		const entry = createDistributeEntry(input, ctx);
+
+		// WARNING (C-1): This read-then-write is not atomic. Concurrent distributes
+		// may both pass the balance check before either write lands, potentially
+		// causing negative stock. Acceptable for single-user shelter scenario;
+		// tracked for future hardening.
+		const balances = await this.getBalance();
+		const currentQty = balances.get(entry.item_id) ?? 0;
+		const requestedQty = Math.abs(entry.qty);
+
+		if (currentQty < requestedQty) {
+			throw new Error(
+				`Insufficient stock for item ${entry.item_id} (requested ${requestedQty}, have ${currentQty})`
+			);
+		}
 		return this.addLedgerEntry(entry);
 	}
 
