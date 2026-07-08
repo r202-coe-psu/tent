@@ -5,9 +5,9 @@
  * filtered to a date range via `?from=YYYY-MM-DD&to=YYYY-MM-DD`.
  * When absent the range defaults to the past 30 days (see domain/schema.ts).
  *
- * CouchDB view: `registrations_by_date?group=true`
- * Key shape: YYYY-MM-DD  →  count
- * Date-range query: ?startkey="from"&endkey="to￰"
+ * CouchDB view: `registrations_by_date_status?group=true`
+ * Key shape: [YYYY-MM-DD, series]  →  count
+ * Date-range query: ?startkey=["from", ""]&endkey=["to￰", "￰"]
  *   (the ￰ high-value sentinel includes all sub-keys; CONVENTIONS.md §5)
  *
  * Security (security-rbac-bestpractices §2 & §3):
@@ -56,11 +56,11 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 		const db = `shelter_${code.toLowerCase()}`;
 
 		// CouchDB date-range query with the high-value sentinel on endkey
-		// so all documents on the `to` date are included.
+		// so all documents on the `to` date are included. Array keys are used for [date, series].
 		const viewPath =
-			`/${db}/_design/app/_view/registrations_by_date?group=true` +
-			`&startkey=${encodeURIComponent(JSON.stringify(from))}` +
-			`&endkey=${encodeURIComponent(JSON.stringify(to + SENTINEL))}`;
+			`/${db}/_design/app/_view/registrations_by_date_status?group=true` +
+			`&startkey=${encodeURIComponent(JSON.stringify([from, '']))}` +
+			`&endkey=${encodeURIComponent(JSON.stringify([to + SENTINEL, SENTINEL]))}`;
 
 		const res = await adminRaw(viewPath, 'GET');
 
@@ -68,7 +68,7 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 			return json(RegistrationsPayloadSchema.parse(rowsToRegistrationsPayload(code, [], from, to)));
 		}
 		if (res.status >= 400) {
-			throw new ServiceError('INTERNAL', `registrations_by_date view error (${res.status})`);
+			throw new ServiceError('INTERNAL', `registrations_by_date_status view error (${res.status})`);
 		}
 
 		const rows = (res.data as ViewResult).rows ?? [];

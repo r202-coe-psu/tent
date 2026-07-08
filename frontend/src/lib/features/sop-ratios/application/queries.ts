@@ -1,6 +1,6 @@
 import { createQuery } from '@tanstack/svelte-query';
 import { getShelterCode } from '$lib/db/shelter';
-import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
+import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.remote';
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
 
 export const sopRatioKeys = {

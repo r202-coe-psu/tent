@@ -14,9 +14,9 @@ export {
 	SUPPLY_CATEGORY_LABELS
 } from './domain/supply';
 
-// Data — repository contract + PouchDB binding
+// Data — repository contract + remote CouchDB binding
 export type { SupplyRepository } from './data/supply.repository';
-export { supplyRepository, CATALOG_DB } from './data/supply.pouch';
+export { supplyRepository, CATALOG_DB } from './data/supply.remote';
 
 // Application — TanStack Query hooks
 export {

@@ -1,8 +1,11 @@
 import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
-import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
-import { shelterDb } from '$lib/db/shelter';
+import {
+	subscribeDataChanges,
+	type SubscribeDataChangesHandle
+} from '$lib/db/subscribe-data-changes';
+import { getShelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
-import { kitchenRepository } from '../data/kitchen.pouch';
+import { kitchenRepository } from '../data/kitchen.remote';
 import { getActiveSopProfile } from '$lib/features/sop-ratios';
 import { peopleRepository } from '$lib/features/people';
 import type {
@@ -145,8 +148,8 @@ export const useDeleteGasCylinderType = () =>
 
 // --- Live sync ---
 
-export function startKitchenLiveQuery(queryClient: QueryClient): LiveQueryHandle {
-	return startLiveQuery(shelterDb(), queryClient, (type) => {
+export function startKitchenLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
+	return subscribeDataChanges(queryClient, getShelterDb, (type) => {
 		switch (type) {
 			case 'meal_plan':
 				return [kitchenKeys.mealPlans()];
@@ -158,7 +161,6 @@ export function startKitchenLiveQuery(queryClient: QueryClient): LiveQueryHandle
 				return [kitchenKeys.gasCylinderTypes()];
 			case 'evacuee':
 			case 'movement':
-				// Occupancy changes (check-in/out) → re-derive the live headcount.
 				return [kitchenKeys.occupancy()];
 			default:
 				return [];

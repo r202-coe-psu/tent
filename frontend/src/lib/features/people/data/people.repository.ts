@@ -18,10 +18,10 @@ export type HouseholdSearchLabels = {
 
 /**
  * Persistence contract for the `people` feature. The application layer depends
- * on this interface — never on PouchDB directly — so the store can be swapped
+ * on this interface — never on CouchDB directly — so the store can be swapped
  * (in-memory in tests) without touching queries or UI.
  *
- * The device writes local PouchDB first; the ULID minted by the factory is the
+ * Writes go to the active central CouchDB endpoint. The ULID minted by the factory is the
  * idempotency key. Conflict resolution beyond append-only retry is a central
  * repair job (data-model.md §5) — do not merge here.
  */

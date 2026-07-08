@@ -60,9 +60,9 @@ export {
 	MEAL_PERIOD_LABELS
 } from './domain/kitchen';
 
-// Data — repository contract + PouchDB binding
+// Data — repository contract + remote CouchDB binding
 export type { KitchenRepository } from './data/kitchen.repository';
-export { kitchenRepository } from './data/kitchen.pouch';
+export { kitchenRepository } from './data/kitchen.remote';
 
 // Application — TanStack Query hooks + live-query wiring
 export {
