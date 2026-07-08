@@ -1,5 +1,5 @@
 ---
-id: CR-033
+id: CR-032
 title: "Add purchase reason to stock_ledger"
 status: proposed
 date: 2026-07-05
@@ -11,11 +11,11 @@ affects:
   - docs/data/schema.md §2.1
   - schema_v stock_ledger 1 → 2
   - frontend/src/lib/features/operations/domain/operations.ts
-  - frontend/src/lib/features/operations/data/operations.pouch.ts
+  - frontend/src/lib/features/operations/data/operations.remote.ts
   - frontend/src/lib/features/operations/ui/ReceiveStockForm.svelte
 ---
 
-# CR-033 — Add purchase reason to stock_ledger
+# CR-032 — Add purchase reason to stock_ledger
 
 > [!NOTE]
 > **สรุป (TL;DR):** เพิ่ม `purchase` เข้าไปใน enum `reason` ของ `stock_ledger` เพื่อรองรับการรับสต็อกจากแหล่ง "จัดซื้อจัดจ้าง" แยกจากเงินบริจาค · schema_v stock_ledger 1→2 · **ยังไม่ merge เข้าโค้ด — รอ sign-off จริงจาก @net-lynx**

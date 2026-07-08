@@ -134,6 +134,15 @@ export interface HouseholdVehicle {
 	license_plate: string | null;
 }
 
+/** Pre-v4 stored shape; may carry singular `vehicle` instead of `vehicles[]`. */
+type LegacyHouseholdDoc = Omit<Partial<Household>, 'vehicles'> & {
+	_id: string;
+	type: 'household';
+	schema_v?: number;
+	vehicle?: HouseholdVehicle;
+	vehicles?: HouseholdVehicle[];
+};
+
 export interface PetGroup {
 	species: 'dog' | 'cat' | 'bird' | 'other';
 	count: number;
@@ -377,27 +386,54 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 }
 
 /** Migrates a stored household doc up to schema_v 4 (adds status, checkout_destination; normalizes vehicle -> vehicles). */
-export function migrateHouseholdV3ToV4(doc: any): Household {
-	if (doc && doc.type === 'household' && (!doc.schema_v || doc.schema_v < 4)) {
-		let vehicles = doc.vehicles;
-		if (!vehicles) {
-			if (doc.vehicle) {
-				vehicles = [doc.vehicle];
-			} else {
-				vehicles = [];
-			}
+// export function migrateHouseholdV3ToV4(doc: any): Household {
+// 	if (doc && doc.type === 'household' && (!doc.schema_v || doc.schema_v < 4)) {
+// 		let vehicles = doc.vehicles;
+// 		if (!vehicles) {
+// 			if (doc.vehicle) {
+// 				vehicles = [doc.vehicle];
+// 			} else {
+// 				vehicles = [];
+// 			}
+// 		}
+// 		const migrated = {
+// 			...doc,
+// 			schema_v: 4,
+// 			status: doc.status || 'checked_in',
+// 			checkout_destination: doc.checkout_destination || null,
+// 			vehicles
+// 		};
+// 		delete migrated.vehicle;
+// 		return migrated;
+// 	}
+// 	return doc;
+// }
+export function migrateHouseholdV3ToV4(doc: unknown): Household {
+	const candidate = doc as Household | LegacyHouseholdDoc;
+	if (
+		candidate &&
+		candidate.type === 'household' &&
+		(!candidate.schema_v || candidate.schema_v < 4)
+	) {
+		const legacy = candidate as LegacyHouseholdDoc;
+		const { vehicle, ...rest } = legacy;
+		let vehicles: HouseholdVehicle[];
+		if (legacy.vehicles) {
+			vehicles = legacy.vehicles;
+		} else if (vehicle) {
+			vehicles = [vehicle];
+		} else {
+			vehicles = [];
 		}
-		const migrated = {
-			...doc,
+		return {
+			...rest,
 			schema_v: 4,
-			status: doc.status || 'checked_in',
-			checkout_destination: doc.checkout_destination || null,
+			status: legacy.status ?? 'checked_in',
+			checkout_destination: legacy.checkout_destination ?? null,
 			vehicles
-		};
-		delete migrated.vehicle;
-		return migrated;
+		} as Household;
 	}
-	return doc;
+	return candidate as Household;
 }
 
 export function createMovement(input: MovementInput, ctx: AuthorContext): Movement {

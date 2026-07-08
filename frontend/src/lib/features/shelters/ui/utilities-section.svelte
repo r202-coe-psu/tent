@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Zap from '@lucide/svelte/icons/zap';
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import type { Shelter, PowerSource, WaterSource, CommunicationChannel } from '../domain/schema';
@@ -51,10 +52,8 @@
 
 <section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<span
-			class="flex h-6 w-6 items-center justify-center rounded-full bg-shelter-blue-bg text-xs font-bold text-shelter-blue-text"
-			>4</span
-		>
+		<Zap class="h-5 w-5 text-shelter-blue-text" />
+		<span class="text-sm font-bold text-muted-foreground">4.</span>
 		<h2 class="text-base font-bold text-card-foreground">สถานะสาธารณูปโภคพื้นฐาน (Utilities)</h2>
 	</div>
 

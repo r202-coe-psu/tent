@@ -185,7 +185,8 @@ describe('createHousehold', () => {
 			expect(migrated.status).toBe('checked_in');
 			expect(migrated.checkout_destination).toBeNull();
 			expect(migrated.vehicles).toEqual([{ type: 'car', license_plate: 'กข 1234' }]);
-			expect((migrated as any).vehicle).toBeUndefined();
+			// expect((migrated as any).vehicle).toBeUndefined();
+			expect(migrated).not.toHaveProperty('vehicle');
 		});
 
 		it('performs lazy migration from v3 to v4 keeping empty vehicles array', () => {
@@ -202,7 +203,8 @@ describe('createHousehold', () => {
 			const migrated = migrateHouseholdV3ToV4(v3Doc);
 			expect(migrated.schema_v).toBe(4);
 			expect(migrated.vehicles).toEqual([]);
-			expect((migrated as any).vehicle).toBeUndefined();
+			// expect((migrated as any).vehicle).toBeUndefined();
+			expect(migrated).not.toHaveProperty('vehicle');
 		});
 
 		it('preserves existing status and destination if already present', () => {

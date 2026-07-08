@@ -9,6 +9,10 @@ import type {
 // Future ingredients (egg, vegetable, etc.) will add entries here when P-02 ships.
 export const RICE_RECIPE_ID = 'ingredient:rice';
 
+// CR-021: rice_g_per_person_meal left sop_profile.ratios → kitchen/catalog
+// (item_master.consumption_rate, CR-013). Interim default until catalog lookup ships.
+export const DEFAULT_RICE_G_PER_PERSON_MEAL = 150;
+
 // Grams per kg — rice recipes are calculated in grams (SOP ratio precision); the
 // stock ledger stores kg (item_master.base_unit). CR-030.
 const GRAMS_PER_KG = 1000;

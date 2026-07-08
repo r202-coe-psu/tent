@@ -120,7 +120,7 @@
 
 						<Table.Cell class="px-6 py-4">
 							<div class="flex flex-col gap-4">
-								{#each item.needs as need}
+								{#each item.needs as need (need.itemId)}
 									{@const totalAcquired = need.reserved + need.onHand}
 									{@const progressPercent = Math.min(
 										Math.round((totalAcquired / need.target) * 100),
@@ -176,7 +176,7 @@
 
 						<Table.Cell class="px-6 py-4 align-top">
 							<div class="flex flex-col gap-4">
-								{#each item.needs as need}
+								{#each item.needs as need (need.itemId)}
 									<div class="flex h-[34px] items-center justify-center">
 										<button
 											type="button"

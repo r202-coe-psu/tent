@@ -16,7 +16,6 @@
 		useCreateCampaign,
 		useUpdateCampaign,
 		type SpecialRequestInput,
-		type Donation,
 		deriveNeedAvailability,
 		startOperationsLiveQuery,
 		mapNeedItemHeuristic
