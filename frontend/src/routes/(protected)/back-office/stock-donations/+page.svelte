@@ -8,92 +8,260 @@
 	import PendingReviewBoard from './components/pending-review-board.svelte';
 	import PendingReviewDialog from './components/pending-review-dialog.svelte';
 	import ScanStation from './components/scan-station.svelte';
-	import type { SpecialRequestInput } from '$lib/features/operations';
+	import CreateCampaignForm from './components/create-campaign-form.svelte';
+	import {
+		useCampaigns,
+		useStockLedgers,
+		useDonations,
+		useCreateCampaign,
+		useUpdateCampaign,
+		type SpecialRequestInput,
+		deriveNeedAvailability,
+		startOperationsLiveQuery,
+		mapNeedItemHeuristic
+	} from '$lib/features/operations';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import type { NeedItem } from './components/needs-board-admin.svelte';
+	import { useQueryClient } from '@tanstack/svelte-query';
+
+	const queryClient = useQueryClient();
+
+	$effect(() => {
+		const handle = startOperationsLiveQuery(queryClient);
+		return () => handle.stop();
+	});
 
 	let activeSubTab = $state('scan'); // 'scan', 'pending', 'needs'
+	let viewState = $state<'list' | 'create'>('list');
 	let isModalOpen = $state(false);
 
-	let items = $state([
-		{
-			id: '1',
-			name: 'ข้าวสาร (ข้าวหอมมะลิ 100%)',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 450,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		},
-		{
-			id: '2',
-			name: 'เนื้อไก่สด (เนื้อส่วนอก / สะโพก)',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 150,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		},
-		{
-			id: '3',
-			name: 'น้ำดื่มบรรจุขวด 1.5L',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 600,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		},
-		{
-			id: '4',
-			name: 'ข้าวสาร (ข้าวหอมมะลิ 100%)',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 80,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		},
-		{
-			id: '5',
-			name: 'น้ำดื่มบรรจุขวด 1.5L',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 120,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		}
-	]);
+	const campaignsQuery = useCampaigns();
+	const stockLedgersQuery = useStockLedgers();
+	const donationsQuery = useDonations();
 
-	function toggleShowOnHome(itemId: string) {
-		const item = items.find((i) => i.id === itemId);
-		if (item) {
-			item.showOnHome = !item.showOnHome;
-			toast.success(
-				item.showOnHome ? `กำลังโปรโมต "${item.name}" บนหน้าแรก` : `ซ่อน "${item.name}" จากหน้าแรก`
+	const createCampaignMutation = useCreateCampaign();
+	const updateCampaignMutation = useUpdateCampaign();
+
+	const ITEM_NAMES: Record<string, string> = {
+		'item:rice': 'ข้าวสาร (ข้าวหอมมะลิ 100%)',
+		'item:water': 'น้ำดื่มบรรจุขวด 1.5L',
+		'item:paracetamol': 'ยาพาราเซตามอล',
+		'item:soap': 'สบู่ก้อน',
+		'item:blanket': 'ผ้าห่มกันหนาว',
+		'item:egg': 'ไข่ไก่สด'
+	};
+
+	const ctx = $derived({
+		shelterCode: getShelterCode(),
+		createdBy: authStore.user?.name ?? 'system'
+	});
+
+	const derivedItems = $derived.by(() => {
+		const campaigns = campaignsQuery.data ?? [];
+		const donations = donationsQuery.data ?? [];
+		const stockLedgers = stockLedgersQuery.data ?? [];
+
+		const list: NeedItem[] = [];
+		for (const camp of campaigns) {
+			const availabilities = deriveNeedAvailability(camp, donations, stockLedgers);
+			const needs: NeedItem['needs'] = [];
+			let allNeedsCutOff = true;
+
+			for (const avail of availabilities) {
+				if (!avail.is_cut_off) {
+					allNeedsCutOff = false;
+				}
+
+				needs.push({
+					itemId: avail.item_id,
+					name:
+						ITEM_NAMES[avail.item_id] ??
+						(avail.item_id.startsWith('item:') ? avail.item_id.slice(5) : avail.item_id),
+					reserved: avail.qty_reserved,
+					onHand: avail.qty_on_hand,
+					target: avail.qty_target,
+					unit: avail.unit,
+					isCutOff: avail.is_cut_off,
+					isManualClosed: avail.status === 'closed'
+				});
+			}
+
+			const isManualClosed = camp.status === 'closed';
+			const isCutOff = allNeedsCutOff || isManualClosed;
+
+			list.push({
+				id: camp._id,
+				title: camp.title || 'ประกาศช่วยเหลือภัยพิบัติ EOC',
+				location: camp.notes || 'คลังช่วยเหลือภัยพิบัติ EOC',
+				needs: needs,
+				showOnHome: camp.visible_on_home !== false,
+				isCutOff: isCutOff,
+				isManualClosed: isManualClosed,
+				campaignDoc: camp
+			});
+		}
+		return list;
+	});
+
+	function toggleShowOnHome(compoundId: string) {
+		const targetItem = derivedItems.find((i) => i.id === compoundId);
+		if (targetItem) {
+			const campaign = targetItem.campaignDoc;
+			const nextVisible = campaign.visible_on_home === false ? true : false;
+			updateCampaignMutation.mutate(
+				{
+					campaign: {
+						...campaign,
+						visible_on_home: nextVisible
+					},
+					auditInput: {
+						action: 'manual_adjust',
+						reason: nextVisible
+							? `เจ้าหน้าที่เปิดแสดงแคมเปญบนหน้าแรก: ${targetItem.title}`
+							: `เจ้าหน้าที่ซ่อนแคมเปญจากหน้าแรก: ${targetItem.title}`,
+						ctx: ctx
+					}
+				},
+				{
+					onSuccess: () => {
+						toast.success(
+							nextVisible
+								? `กำลังโปรโมต "${targetItem.title}" บนหน้าแรก`
+								: `ซ่อน "${targetItem.title}" จากหน้าแรก`
+						);
+					},
+					onError: (err) => {
+						toast.error(`ไม่สามารถแก้ไขการโปรโมตได้: ${err.message}`);
+					}
+				}
 			);
 		}
 	}
 
-	function toggleCutOff(itemId: string) {
-		const item = items.find((i) => i.id === itemId);
-		if (item) {
-			item.isCutOff = !item.isCutOff;
-			toast.success(
-				item.isCutOff
-					? `ปิดรับบริจาคสำหรับ "${item.name}" แล้ว`
-					: `เปิดรับบริจาคสำหรับ "${item.name}" อีกครั้ง`
+	function toggleCutOff(compoundId: string, itemId: string) {
+		const targetItem = derivedItems.find((i) => i.id === compoundId);
+		if (targetItem) {
+			const campaign = targetItem.campaignDoc;
+
+			const targetNeed = campaign.needs.find((n) => n.item_id === itemId);
+			const toggledStatus: 'open' | 'closed' = targetNeed?.status === 'closed' ? 'open' : 'closed';
+			const updatedNeeds = campaign.needs.map((need) => {
+				if (need.item_id === itemId) {
+					return {
+						...need,
+						status: toggledStatus
+					};
+				}
+				return need;
+			});
+
+			const itemName =
+				ITEM_NAMES[itemId] ?? (itemId.startsWith('item:') ? itemId.slice(5) : itemId);
+
+			updateCampaignMutation.mutate(
+				{
+					campaign: {
+						...campaign,
+						needs: updatedNeeds
+					},
+					auditInput: {
+						action: 'manual_adjust',
+						reason:
+							toggledStatus === 'closed'
+								? `เจ้าหน้าที่บังคับปิดรับบริจาคสำหรับพัสดุ: ${itemName} ในแคมเปญ ${targetItem.title}`
+								: `เจ้าหน้าที่เปิดรับบริจาคพัสดุอีกครั้ง: ${itemName} ในแคมเปญ ${targetItem.title}`,
+						ctx: ctx
+					}
+				},
+				{
+					onSuccess: () => {
+						toast.success(
+							toggledStatus === 'closed'
+								? `ปิดรับบริจาคสำหรับ "${itemName}" แล้ว`
+								: `เปิดรับบริจาคสำหรับ "${itemName}" อีกครั้ง`
+						);
+					},
+					onError: (err) => {
+						toast.error(`ไม่สามารถบันทึกสถานะได้: ${err.message}`);
+					}
+				}
 			);
 		}
 	}
 
 	function handleAddRequest(input: SpecialRequestInput) {
-		items.push({
-			id: String(items.length + 1),
-			name: input.name,
-			location: input.location,
-			reserved: 0,
-			target: input.target,
-			showOnHome: true,
-			isCutOff: false
-		});
-		toast.success(`เพิ่มประกาศความต้องการ "${input.name}" สำเร็จ`);
+		const itemId = mapNeedItemHeuristic(input.name);
+
+		const newCampaignInput = {
+			title: input.name,
+			needs: [
+				{
+					item_id: itemId,
+					qty_target: input.target,
+					unit: 'ชิ้น'
+				}
+			],
+			notes: `ประกาศพิเศษสำหรับคลัง: ${input.location}`
+		};
+
+		createCampaignMutation.mutate(
+			{
+				input: newCampaignInput,
+				ctx: ctx
+			},
+			{
+				onSuccess: () => {
+					toast.success(`เพิ่มประกาศความต้องการ "${input.name}" สำเร็จ`);
+					isModalOpen = false;
+				},
+				onError: (err) => {
+					toast.error(`ไม่สามารถสร้างประกาศได้: ${err.message}`);
+				}
+			}
+		);
+	}
+
+	function handleAddRequestFromForm(input: {
+		name: string;
+		target: number;
+		location: string;
+		category?: string;
+		unit?: string;
+		urgency?: 'critical' | 'important' | 'normal';
+		description?: string;
+	}) {
+		const itemId = mapNeedItemHeuristic(input.name);
+
+		const newCampaignInput = {
+			title: input.name,
+			needs: [
+				{
+					item_id: itemId,
+					qty_target: input.target,
+					unit: input.unit || 'ชิ้น',
+					status: 'open' as const
+				}
+			],
+			notes: input.description || `ประกาศสำหรับคลัง: ${input.location}`,
+			visible_on_home: true
+		};
+
+		createCampaignMutation.mutate(
+			{
+				input: newCampaignInput,
+				ctx: ctx
+			},
+			{
+				onSuccess: () => {
+					toast.success(`เพิ่มประกาศความต้องการ "${input.name}" สำเร็จ`);
+					viewState = 'list';
+				},
+				onError: (err) => {
+					toast.error(`ไม่สามารถสร้างประกาศได้: ${err.message}`);
+				}
+			}
+		);
 	}
 
 	let pendingRequests = $state([
@@ -169,7 +337,10 @@
 	>
 		<div class="-mb-px flex gap-2 whitespace-nowrap">
 			<button
-				onclick={() => (activeSubTab = 'scan')}
+				onclick={() => {
+					activeSubTab = 'scan';
+					viewState = 'list';
+				}}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'scan'
 					? 'border-primary text-primary'
@@ -180,7 +351,10 @@
 			</button>
 
 			<button
-				onclick={() => (activeSubTab = 'pending')}
+				onclick={() => {
+					activeSubTab = 'pending';
+					viewState = 'list';
+				}}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'pending'
 					? 'border-primary text-primary'
@@ -197,7 +371,10 @@
 			</button>
 
 			<button
-				onclick={() => (activeSubTab = 'needs')}
+				onclick={() => {
+					activeSubTab = 'needs';
+					viewState = 'list';
+				}}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'needs'
 					? 'border-primary text-primary'
@@ -220,12 +397,19 @@
 			}}
 		/>
 	{:else if activeSubTab === 'needs'}
-		<NeedsBoardAdmin
-			{items}
-			onAddRequest={() => (isModalOpen = true)}
-			onToggleShowOnHome={toggleShowOnHome}
-			onToggleCutOff={toggleCutOff}
-		/>
+		{#if viewState === 'list'}
+			<NeedsBoardAdmin
+				items={derivedItems}
+				onAddRequest={() => (viewState = 'create')}
+				onToggleShowOnHome={toggleShowOnHome}
+				onToggleCutOff={toggleCutOff}
+			/>
+		{:else}
+			<CreateCampaignForm
+				onclose={() => (viewState = 'list')}
+				onsubmit={handleAddRequestFromForm}
+			/>
+		{/if}
 	{/if}
 </div>
 
