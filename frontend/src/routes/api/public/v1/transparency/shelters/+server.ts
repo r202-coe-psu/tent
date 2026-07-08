@@ -4,7 +4,12 @@ import { listShelterMasters } from '$lib/server/shelters.admin';
 import type { ShelterMaster } from '$lib/features/shelters/server';
 import { adminRaw } from '$lib/server/couch-admin';
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, setHeaders }) => {
+	// Cache the response for 60 seconds on the client and CDN to mitigate N+1 query load
+	setHeaders({
+		'Cache-Control': 'public, max-age=60, s-maxage=60'
+	});
+
 	// Query params for filtering
 	const search = url.searchParams.get('q') || '';
 	const province = url.searchParams.get('province') || '';
@@ -17,12 +22,14 @@ export const GET: RequestHandler = async ({ url }) => {
 	const userLng = parseFloat(url.searchParams.get('user_lng') || '0');
 	const hideFull = url.searchParams.get('hide_full') === 'true';
 
-	// Advanced Filters
 	const advancedFilters = {
 		vulnerable_bed: url.searchParams.get('vulnerable_bed') === 'on',
 		vulnerable_wheelchair: url.searchParams.get('vulnerable_wheelchair') === 'on',
 		vulnerable_infant: url.searchParams.get('vulnerable_infant') === 'on',
+		vulnerable_elderly: url.searchParams.get('vulnerable_elderly') === 'on',
 		vulnerable_isolation: url.searchParams.get('vulnerable_isolation') === 'on',
+		facility_kitchen: url.searchParams.get('facility_kitchen') === 'on',
+		facility_women_child: url.searchParams.get('facility_women_child') === 'on',
 		pet_general: url.searchParams.get('pet_general') === 'on',
 		pet_large: url.searchParams.get('pet_large') === 'on',
 		pet_livestock: url.searchParams.get('pet_livestock') === 'on',
@@ -68,14 +75,26 @@ export const GET: RequestHandler = async ({ url }) => {
 			}
 
 			let occupancy = 0;
+			let vulnerableCount = 0;
 			if (mappedStatus === 'OPEN' || mappedStatus === 'FULL') {
 				try {
-					const res = await adminRaw(
-						`/shelter_${m.code}/_design/app/_view/occupancy?group=true`,
-						'GET'
-					);
-					if (res.status === 200 && res.data && (res.data as Record<string, unknown>).rows) {
-						const rows = (res.data as Record<string, unknown>).rows as Array<{
+					const [occRes, ageRes] = await Promise.all([
+						adminRaw(
+							`/shelter_${m.code.toLowerCase()}/_design/app/_view/occupancy?group=true`,
+							'GET'
+						),
+						adminRaw(
+							`/shelter_${m.code.toLowerCase()}/_design/app/_view/demographics_by_age?group=true`,
+							'GET'
+						)
+					]);
+
+					if (
+						occRes.status === 200 &&
+						occRes.data &&
+						(occRes.data as Record<string, unknown>).rows
+					) {
+						const rows = (occRes.data as Record<string, unknown>).rows as Array<{
 							key: string;
 							value: unknown;
 						}>;
@@ -84,8 +103,24 @@ export const GET: RequestHandler = async ({ url }) => {
 							occupancy = checkedInRow.value as number;
 						}
 					}
+
+					if (
+						ageRes.status === 200 &&
+						ageRes.data &&
+						(ageRes.data as Record<string, unknown>).rows
+					) {
+						const rows = (ageRes.data as Record<string, unknown>).rows as Array<{
+							key: string;
+							value: unknown;
+						}>;
+						for (const r of rows) {
+							if (r.key === '0-4' || r.key === '60+') {
+								vulnerableCount += r.value as number;
+							}
+						}
+					}
 				} catch (err) {
-					console.error(`Failed to fetch occupancy for shelter_${m.code}`, err);
+					console.error(`Failed to fetch stats for shelter_${m.code}`, err);
 				}
 			}
 
@@ -97,25 +132,64 @@ export const GET: RequestHandler = async ({ url }) => {
 				name: m.name,
 				status: mappedStatus,
 				address: m.location?.address || '',
+				province: m.province || '',
+				district: m.district || '',
+				subdistrict: m.subdistrict || '',
 				distance: dist ? parseFloat(dist.toFixed(1)) : 0,
 				occupancy,
+				vulnerableCount,
 				capacity,
 				available,
 				geo: { lat: m.location?.lat, lng: m.location?.lng },
 				// assuming 'type' is part of admin_type or we use a default
-				type: (m as unknown as Record<string, unknown>).admin_type || 'ศูนย์บริหารส่วนท้องถิ่น',
+				type: m.shelter_type || 'ศูนย์พักพิง/อพยพ',
 				// Advanced capabilities mapping
 				capabilities: {
-					vulnerable_bed: m.zones?.some((z) => z.type === 'vulnerable') ?? false,
-					vulnerable_wheelchair: (m.facilities?.toilets_accessible ?? 0) > 0,
-					vulnerable_infant: m.zones?.some((z) => z.type === 'vulnerable') ?? false,
+					vulnerable_bed:
+						(m.admission_policy?.supported_vulnerable_groups || []).includes('bedridden') ||
+						(m.zones?.some((z) => z.type === 'vulnerable') ?? false),
+					vulnerable_wheelchair:
+						(m.facilities?.toilets_accessible ?? 0) > 0 ||
+						(m.admission_policy?.supported_vulnerable_groups || []).includes('disabled'),
+					vulnerable_infant:
+						(m.admission_policy?.supported_vulnerable_groups || []).includes('infant') ||
+						(m.admission_policy?.supported_vulnerable_groups || []).includes('pregnant') ||
+						(m.zones?.some((z) => z.type === 'vulnerable') ?? false),
+					vulnerable_elderly:
+						(m.admission_policy?.supported_vulnerable_groups || []).includes('elderly') ||
+						(m.zones?.some((z) => z.type === 'vulnerable') ?? false),
 					vulnerable_isolation: m.zones?.some((z) => z.type === 'quarantine') ?? false,
-					pet_general: m.zones?.some((z) => z.type === 'pet') ?? false,
-					pet_large: m.zones?.some((z) => z.type === 'pet') ?? false,
-					pet_livestock: false,
-					parking_car: (m.common_areas?.parking_capacity ?? 0) > 0,
-					parking_motorcycle: (m.common_areas?.parking_capacity ?? 0) > 0,
-					parking_boat: false,
+					facility_kitchen: m.common_areas?.central_kitchen ?? false,
+					facility_women_child: m.common_areas?.women_child_friendly_space ?? false,
+					pet_general:
+						(m.admission_policy?.pet_policy?.policy === 'conditional' &&
+							(m.admission_policy.pet_policy.categories || []).some(
+								(c: any) => c.category === 'small_general'
+							)) ||
+						(m.zones?.some((z) => z.type === 'pet') ?? false),
+					pet_large:
+						m.admission_policy?.pet_policy?.policy === 'conditional' &&
+						(m.admission_policy.pet_policy.categories || []).some(
+							(c: any) => c.category === 'large_dog'
+						),
+					pet_livestock:
+						m.admission_policy?.pet_policy?.policy === 'conditional' &&
+						(m.admission_policy.pet_policy.categories || []).some(
+							(c: any) => c.category === 'livestock'
+						),
+					parking_car:
+						(m.parking_policy?.availability === 'available' &&
+							(m.parking_policy.supported_vehicles || []).some((v: any) => v.type === 'car')) ||
+						(m.common_areas?.parking_capacity ?? 0) > 0,
+					parking_motorcycle:
+						(m.parking_policy?.availability === 'available' &&
+							(m.parking_policy.supported_vehicles || []).some(
+								(v: any) => v.type === 'motorcycle'
+							)) ||
+						(m.common_areas?.parking_capacity ?? 0) > 0,
+					parking_boat:
+						m.parking_policy?.availability === 'available' &&
+						(m.parking_policy.supported_vehicles || []).some((v: any) => v.type === 'boat'),
 					utility_wifi: m.utilities?.communications?.includes('wifi') ?? false,
 					utility_high_ground: (m.risk?.elevation_m ?? 0) > 5,
 					utility_truck_access: m.risk?.entrance_description != null
@@ -125,16 +199,24 @@ export const GET: RequestHandler = async ({ url }) => {
 	);
 
 	if (search) {
-		shelters = shelters.filter((s) => s.name.includes(search) || s.address.includes(search));
+		shelters = shelters.filter(
+			(s) => s.name.includes(search) || (s.address && s.address.includes(search))
+		);
 	}
 	if (province) {
-		shelters = shelters.filter((s) => s.address.includes(province));
+		shelters = shelters.filter(
+			(s) => s.province === province || (s.address && s.address.includes(province))
+		);
 	}
 	if (district) {
-		shelters = shelters.filter((s) => s.address.includes(district));
+		shelters = shelters.filter(
+			(s) => s.district === district || (s.address && s.address.includes(district))
+		);
 	}
 	if (sub_district) {
-		shelters = shelters.filter((s) => s.address.includes(sub_district));
+		shelters = shelters.filter(
+			(s) => s.subdistrict === sub_district || (s.address && s.address.includes(sub_district))
+		);
 	}
 	if (type) {
 		shelters = shelters.filter((s) => s.type === type);
@@ -143,7 +225,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		const statusList = status.split(',');
 		shelters = shelters.filter((s) => statusList.includes(s.status));
 	}
-	if (maxDistance > 0) {
+	if (maxDistance > 0 && userLat !== 0 && userLng !== 0) {
 		shelters = shelters.filter((s) => s.distance > 0 && s.distance <= maxDistance);
 	}
 	if (hideFull) {
@@ -164,7 +246,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		shelters_total: shelters.length,
 		shelters_open: shelters.filter((s) => s.status === 'OPEN').length,
 		occupancy_total: shelters.reduce((acc, s) => acc + s.occupancy, 0),
-		vulnerable_count: 3
+		vulnerable_count: shelters.reduce((acc, s) => acc + (s.vulnerableCount || 0), 0)
 	};
 
 	const flags = {
@@ -172,14 +254,25 @@ export const GET: RequestHandler = async ({ url }) => {
 		public_metrics_vulnerable: true // OP-8 default on
 	};
 
+	const available_types = Array.from(
+		new Set(masters.map((m) => m.shelter_type || 'ศูนย์พักพิง/อพยพ'))
+	)
+		.filter(Boolean)
+		.sort();
+
 	return json({
 		summary: summaryData,
 		shelters,
+		available_types,
 		flags,
 		filters: {
 			search,
 			province,
+			district,
+			subdistrict: sub_district,
+			type,
 			status,
+			distance: maxDistance > 0 ? maxDistance.toString() : '',
 			user_lat: userLat,
 			user_lng: userLng,
 			hide_full: hideFull ? 'true' : '',
