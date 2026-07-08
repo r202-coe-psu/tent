@@ -132,14 +132,9 @@
 				bounds.extend([uLng, uLat]);
 
 				const userEl = document.createElement('div');
-				userEl.style.cssText = `
-					width: 16px; 
-					height: 16px; 
-					border-radius: 50%; 
-					background: #3b82f6; 
-					border: 3px solid white; 
-					box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3), 0 2px 6px rgba(0,0,0,0.4); 
-					cursor: pointer;
+				userEl.className = 'custom-user-marker';
+				userEl.innerHTML = `
+					<div style="width: 16px; height: 16px; border-radius: 50%; background: #3b82f6; border: 3px solid white; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3), 0 2px 6px rgba(0,0,0,0.4); cursor: pointer;"></div>
 				`;
 
 				const userPopup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
@@ -175,20 +170,17 @@
 				const icon = getTypeIcon(shelter.type);
 
 				const el = document.createElement('div');
-				el.style.cssText = `
-					position: relative;
-					display: flex;
-					flex-direction: column;
-					align-items: center;
-					justify-content: center;
-					width: 24px;
-					height: 24px;
-				`;
-
+				// Do not apply position: relative to the root element,
+				// as it overrides MapLibre's .maplibregl-marker class (which uses position: absolute).
+				el.className = 'custom-shelter-marker';
 				el.innerHTML = `
-					<div class="marker-dot" style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition: transform 0.2s;"></div>
-					<div style="position: absolute; top: 28px; white-space: nowrap; font-size: 11px; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-						${icon} ${shelter.name}
+					<div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 24px; height: 24px;">
+						<div class="marker-dot" style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition: transform 0.2s;"></div>
+						<!-- Pin pointer triangle to anchor to exact location -->
+						<div style="position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid white;"></div>
+						<div style="position: absolute; top: 28px; white-space: nowrap; font-size: 11px; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+							${icon} ${shelter.name}
+						</div>
 					</div>
 				`;
 
