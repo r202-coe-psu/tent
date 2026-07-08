@@ -1,4 +1,3 @@
-import { namedLocalDb } from './pouch';
 import { authStore } from '$lib/stores/auth.svelte';
 import { shelterCodeFromRoles } from '$lib/auth/roles';
 import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -19,11 +18,7 @@ export function getShelterCode(): string {
 	return shelterCodeFromRoles(roles) ?? 'SH001';
 }
 
-/** The CouchDB / PouchDB database name for the current user's shelter. */
+/** The CouchDB database name for the current user's shelter. */
 export function getShelterDb(): string {
 	return `shelter_${getShelterCode().toLowerCase()}`;
-}
-
-export function shelterDb(): PouchDB.Database {
-	return namedLocalDb(getShelterDb());
 }

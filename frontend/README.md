@@ -10,7 +10,7 @@ SPA/PWA frontend สำหรับ **Tent** (`เต็นท์`) เสิร
 - UI: **shadcn-svelte** บน **bits-ui** primitives (`src/lib/components/ui/`)
 - Forms: **Superforms** + **Zod** (`zod4Client`)
 - Data fetching: **TanStack Query** (`@tanstack/svelte-query`) — client-side ล้วน
-- Local/sync DB: **PouchDB** (`pouchdb-browser`) ↔ CouchDB
+- Remote DB: **CouchDB 3.5** ผ่าน `couch-db.ts` + cookie session (`/couch` proxy)
 - Toast: **svelte-sonner** (feedback ทาง toast เท่านั้น)
 
 ### Architecture
@@ -88,7 +88,7 @@ src/
 ├── app.html
 ├── lib/
 │   ├── components/ui/  # shadcn-svelte (vendored — ห้ามแก้มือ)
-│   ├── db/             # couch.ts / pouch.ts — DB clients
+│   ├── db/             # couch.ts / couch-db.ts — CouchDB HTTP client
 │   ├── features/       # feature slices (domain/data/application/ui)
 │   ├── guards/         # route guards (requireAuth)
 │   ├── stores/         # auth.svelte.ts ฯลฯ

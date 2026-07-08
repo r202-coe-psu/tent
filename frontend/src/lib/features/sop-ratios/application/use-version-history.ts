@@ -11,7 +11,7 @@
  *
  * Source references:
  *   - sop-ratio.repository.ts → SopMasterRepository.listVersions, SopOverrideRepository.listVersions
- *   - sop-ratio.pouch.ts → sopMasterRepository(), sopOverrideRepository()
+ *   - sop-ratio.remote.ts → sopMasterRepository(), sopOverrideRepository()
  *   - sop-ratio.domain.ts → SopMaster, SopOverride types
  *   - queries.ts → sopRatioKeys
  *   - CONVENTIONS.md §8 "Query hooks" + §8 "Query key factory"
@@ -20,7 +20,7 @@
 
 import { createQuery } from '@tanstack/svelte-query';
 import { getShelterCode } from '$lib/db/shelter';
-import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
+import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.remote';
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
 import { sopVersionKeys } from './queries';
 

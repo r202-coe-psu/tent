@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-06 # CR-031 item master category; CR-032 reverted to proposed pending real net-lynx sign-off (renumbered from CR-031 to resolve collision with develop); index ครบ CR-001..032
+updated: 2026-07-07 # add CR-033 remote-first architecture pivot as single comprehensive CR; index ครบ CR-001..033
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -48,3 +48,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-030](CR-030-kitchen-requisition-unit-must-match-item-master.md) | Kitchen requisition ledger unit must match `item_master.base_unit` (T-26) — แก้ `RECIPE_TO_STOCK_ITEM` unit `g`→`kg` (แปลงก่อนเขียน ledger), แก้ schema.md §2.5 ให้ตรง §2.6 (ไม่แก้ base_unit/seed) | approved | volatile | 2026-07-03 | docs/data/schema.md §2.5, features/kitchen/{domain,data} |
 | [CR-031](CR-031-item-master-schema-reconciliation.md) | Item Master Schema Reconciliation — เพิ่มฟิลด์ `category` (str, opt) ใน `item_master` ให้สอดคล้อง spec↔code; schema_v 2 คงเดิม (reconcile) | done | volatile | 2026-07-04 (done 07-05) | docs/data/schema.md §4.2, features/catalog/domain/catalog.ts |
 | [CR-032](CR-032-stock-ledger-purchase-reason.md) | Add `purchase` to `stock_ledger.reason` enum; schema_v 1→2; map purchase source → purchase reason in `createReceiveEntry` (renumbered from CR-031 to resolve collision with develop) | proposed | volatile | 2026-07-05 | docs/data/schema.md §2.1, features/operations/domain/operations.ts, features/operations/data/operations.pouch.ts |
+| [CR-033](CR-033-remote-first-architecture-program-index.md) | Remote-first architecture pivot (single comprehensive CR) — ตัด local-first/Pouch assumptions และดำเนินงานทั้งหมดภายใต้ record เดียว | approved | stable | 2026-07-07 | docs/data/data-model.md, docs/data/api-contract.md, docs/task-breakdown/01-core.md, docs/features/offline-fallback-flow-spec.html, docs/prd/*.md, frontend/CONTRIBUTING.md, frontend/CONVENTIONS.md |
