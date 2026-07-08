@@ -7,7 +7,7 @@
 	import { distributeInputSchema, type DistributeInput } from '../domain/operations';
 	import { useSupplyItems, type SupplyItem } from '$lib/features/supply';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { SHELTER_CODE } from '../data/operations.pouch';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { useDistributeStock, useStockBalance } from '../application/queries';
 	import { toast } from 'svelte-sonner';
 	import PackageMinus from '@lucide/svelte/icons/package-minus';
@@ -85,7 +85,7 @@
 	// Submit handler
 	async function handleCommit(data: DistributeInput) {
 		const ctx = {
-			shelterCode: SHELTER_CODE,
+			shelterCode: getShelterCode(),
 			createdBy: authStore.user?.name ?? 'unknown'
 		};
 
