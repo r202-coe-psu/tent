@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import { goto } from '$app/navigation';
@@ -33,7 +32,6 @@
 		success: boolean;
 		message: string;
 		evacuee?: Evacuee;
-		action?: 'check_in' | 'check_out';
 	} | null>(null);
 
 	let showSearchModal = $state(false);
@@ -88,15 +86,14 @@
 					// Silent error handler for parsing failures
 				}
 			)
-			.catch((err) => {
-				console.error('Html5Qrcode start error:', err);
+			.catch(() => {
 				cameraError = 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง';
 			});
 
 		return () => {
 			if (html5QrCode.isScanning) {
-				html5QrCode.stop().catch((err) => {
-					console.error('Html5Qrcode stop error:', err);
+				html5QrCode.stop().catch(() => {
+					// Nothing actionable to surface — the view is unmounting anyway.
 				});
 			}
 		};
@@ -150,7 +147,6 @@
 			toast.success(`พบข้อมูล ${evacuee.first_name} ${evacuee.last_name}`);
 			scanCode = ''; // Clear input
 		} catch (err) {
-			console.error(err);
 			scanResult = {
 				success: false,
 				message: `เกิดข้อผิดพลาด: ${err instanceof Error ? err.message : String(err)}`
@@ -186,18 +182,6 @@
 			toast.error(err instanceof Error ? err.message : 'เช็คเอาท์ไม่สำเร็จ');
 		}
 	}
-
-	onMount(() => {
-		const handleSearchTrigger = () => {
-			showSearchModal = true;
-		};
-
-		window.addEventListener('trigger-search', handleSearchTrigger);
-
-		return () => {
-			window.removeEventListener('trigger-search', handleSearchTrigger);
-		};
-	});
 
 	// Helper for status label translation
 	function getStatusLabel(status: string) {
