@@ -5,6 +5,8 @@
 	import Compass from '@lucide/svelte/icons/compass';
 	import Search from '@lucide/svelte/icons/search';
 	import Heart from '@lucide/svelte/icons/heart';
+	import Menu from '@lucide/svelte/icons/menu';
+	import X from '@lucide/svelte/icons/x';
 	// import FileText from '@lucide/svelte/icons/file-text';
 	// import UserPlus from '@lucide/svelte/icons/user-plus';
 	// import ChevronDown from '@lucide/svelte/icons/chevron-down';
@@ -15,6 +17,12 @@
 			return page.url.pathname === '/public' || page.url.pathname === '/public/';
 		}
 		return page.url.pathname.startsWith(path);
+	}
+
+	let mobileMenuOpen = $state(false);
+
+	function toggleMobileMenu() {
+		mobileMenuOpen = !mobileMenuOpen;
 	}
 </script>
 
@@ -38,6 +46,19 @@
 				</div>
 			</a>
 		</div>
+
+		<!-- Mobile Menu Button -->
+		<button
+			class="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted md:hidden"
+			onclick={toggleMobileMenu}
+			aria-label="Toggle mobile menu"
+		>
+			{#if mobileMenuOpen}
+				<X class="h-6 w-6" />
+			{:else}
+				<Menu class="h-6 w-6" />
+			{/if}
+		</button>
 
 		<!-- Navbar Links -->
 		<nav class="hidden items-center gap-1 md:flex">
@@ -148,4 +169,63 @@
 			</div> -->
 		</nav>
 	</div>
+
+	<!-- Mobile Menu Dropdown -->
+	{#if mobileMenuOpen}
+		<div class="absolute top-full left-0 w-full border-b border-border bg-card shadow-lg md:hidden">
+			<nav class="flex flex-col gap-2 p-4">
+				<a
+					href={resolve('/public')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/public'
+					) && !isActive('/public/')
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Home class="h-5 w-5" />
+					หน้าแรก
+				</a>
+
+				<a
+					href="/public/shelters"
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/shelters'
+					) && !isActive('/public/shelters')
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Compass class="h-5 w-5" />
+					ตรวจสอบศูนย์พักพิง
+				</a>
+
+				<a
+					href={resolve('/public/search')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/public/search'
+					)
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Search class="h-5 w-5" />
+					สืบค้นญาติ
+				</a>
+
+				<a
+					href={resolve('/public/donations')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/public/donations'
+					)
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Heart class="h-5 w-5" />
+					บริจาคและจองคิว
+				</a>
+			</nav>
+		</div>
+	{/if}
 </header>
