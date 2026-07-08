@@ -13,7 +13,7 @@ class PublicPerson(Document):
 	id: str = Field(alias="_id")
 	shelter_code: str
 	first_name: str
-	last_name_masked: str
+	last_name: str
 
 	# NNN-XXXX-XX-NNN (e.g. 390-XXXX-XX-192)
 	national_id_masked: str | None = None
@@ -40,7 +40,7 @@ class PublicPerson(Document):
 	class Settings:
 		name = "public_persons"
 		indexes = [
-			IndexModel([("first_name", TEXT), ("last_name_masked", TEXT)]),
+			IndexModel([("first_name", TEXT), ("last_name", TEXT)]),
 			IndexModel([("national_id_hash", 1)]),
 			IndexModel([("passport_hash", 1)]),
 			IndexModel([("phone_hash", 1)]),

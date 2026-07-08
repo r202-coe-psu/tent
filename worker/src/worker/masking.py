@@ -11,7 +11,6 @@ def sha256_hex(value: str) -> str:
     """UTF-8 SHA-256 hex digest — matches frontend ``$lib/db/hash.ts``."""
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
-
 def mask_last_name(last_name: str) -> str:
     """
     Mask surname for public index.
@@ -25,6 +24,7 @@ def mask_last_name(last_name: str) -> str:
     if len(graphemes) <= 4:
         return f"{graphemes[0]}****"
     return f"{graphemes[0]}{graphemes[1]}****{graphemes[-2]}{graphemes[-1]}"
+
 
 
 def phone_hash(phone: str | None) -> str | None:

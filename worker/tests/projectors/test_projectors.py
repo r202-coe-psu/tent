@@ -16,7 +16,6 @@ def test_mask_last_name_long_thai():
 def test_mask_last_name_short():
     assert mask_last_name("ดี") == "ดี****"
 
-
 def test_phone_hash_none_for_missing():
     assert phone_hash(None) is None
 
@@ -78,9 +77,8 @@ def test_project_evacuee_allow_list_and_masking():
     assert action == "upsert"
     assert payload is not None
     assert payload["first_name"] == "สมชาย"
-    assert payload["last_name_masked"] == mask_last_name("ใจดี")
+    assert payload["last_name"] == "ใจดี"
     assert payload["phone_hash"] == sha256_hex("0811111111")
-    assert "last_name" not in payload
     assert "phone" not in payload
     assert "national_id" not in payload
 

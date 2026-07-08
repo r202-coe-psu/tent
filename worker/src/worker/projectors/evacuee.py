@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from worker.masking import mask_last_name, phone_hash
+from worker.masking import phone_hash
 
 ProjectionAction = Literal["upsert", "delete"]
 
@@ -39,7 +39,7 @@ def project_evacuee(
         "_id": doc_id,
         "shelter_code": shelter_code,
         "first_name": doc.get("first_name") or "",
-        "last_name_masked": mask_last_name(last_name),
+        "last_name": last_name,
         "phone_hash": phone_hash(doc.get("phone")),
         "status": status,
         "updated_at": updated_at,
