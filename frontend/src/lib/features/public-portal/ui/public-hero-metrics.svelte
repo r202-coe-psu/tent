@@ -10,7 +10,7 @@
 		badgeText = 'LIVE DISASTER COORDINATION LINK',
 		badgeIcon: BadgeIcon = null,
 		showLivePing = true,
-		bgClass = 'bg-[#1e3264]',
+		bgClass = 'bg-primary',
 		showSearch = true,
 
 		summary,
@@ -30,12 +30,26 @@
 			shelters_open: number;
 			shelters_total: number;
 			occupancy_total: number;
-			volunteers_active: number;
+			vulnerable_count: number;
 		};
-		flags?: { public_metrics_occupancy: boolean; public_metrics_volunteers: boolean };
+		flags?: { public_metrics_occupancy: boolean; public_metrics_vulnerable: boolean };
 		lastUpdated?: number;
 		isStale?: boolean;
 	} = $props();
+
+	import { goto } from '$app/navigation';
+
+	let searchQuery = $state('');
+
+	function handleSearch() {
+		if (searchQuery.trim()) {
+			goto(`/public/search?q=${encodeURIComponent(searchQuery.trim())}`);
+		}
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') handleSearch();
+	}
 </script>
 
 <div class="mb-8 overflow-hidden rounded-2xl {bgClass} relative p-8 text-white shadow-lg lg:p-12">
@@ -80,12 +94,15 @@
 						<Search class="text-bold size-5 shrink-0 text-muted-foreground" />
 						<input
 							type="text"
+							bind:value={searchQuery}
+							onkeydown={handleKeydown}
 							placeholder="สืบค้นญาติด่วน ชื่อ-นามสกุล หรือ รหัสประ..."
 							class="h-10 w-full bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none"
 						/>
 					</div>
 					<Button
-						class="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#243c7b] px-6 py-2 text-xs font-bold text-white transition-colors hover:bg-[#1e3264]"
+						onclick={handleSearch}
+						class="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary-strong px-6 py-2 text-xs font-bold text-white transition-colors hover:bg-primary"
 					>
 						ค้นหาญาติตอนนี้
 					</Button>
@@ -106,7 +123,7 @@
 						</div>
 					{/if}
 
-					<div class=" flex items-center justify-between border-b border-slate-100 pb-4">
+					<div class=" flex items-center justify-between border-b border-border/50 pb-4">
 						<h3 class="text-xs font-bold tracking-wider text-card-foreground uppercase">
 							สถานการณ์ปัจจุบัน ณ ขณะนี้ (Real-Time Metrics)
 						</h3>
@@ -147,26 +164,26 @@
 						{/if}
 					</div>
 
-					<!-- Metric 3 (Volunteers) -->
-					{#if flags.public_metrics_volunteers}
+					<!-- Metric 3 (Vulnerable) -->
+					{#if flags.public_metrics_vulnerable}
 						<div
 							class="mt-4 flex items-center justify-between rounded-xl border border-border/50 bg-muted/30 p-4"
 						>
 							<div>
 								<span class="mb-2 block text-xs font-semibold text-muted-foreground"
-									>อาสาสมัครลงปฏิบัติงาน</span
+									>กลุ่มเปราะบาง (เด็กและผู้สูงอายุ)</span
 								>
 								<div class="flex items-baseline gap-1">
 									<span class="text-3xl font-bold text-card-foreground"
-										>{summary.volunteers_active}</span
+										>{summary.vulnerable_count}</span
 									>
-									<span class="text-sm font-medium text-muted-foreground">นาย</span>
+									<span class="text-sm font-medium text-muted-foreground">คน</span>
 								</div>
 							</div>
 							<div
-								class="flex h-fit items-center rounded-lg bg-slate-200/50 px-3 py-1.5 text-xs font-bold text-[#1e3264]"
+								class="flex h-fit items-center rounded-lg bg-danger-muted/50 px-3 py-1.5 text-xs font-bold text-danger"
 							>
-								ACTIVE DUTY
+								VULNERABLE
 							</div>
 						</div>
 					{/if}

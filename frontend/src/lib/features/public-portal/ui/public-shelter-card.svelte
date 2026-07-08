@@ -82,30 +82,30 @@
 		<div class="mt-1 flex flex-wrap gap-2">
 			{#if shelter.capabilities.pet_general || shelter.capabilities.pet_large || shelter.capabilities.pet_livestock}
 				<div
-					class="inline-flex items-center gap-1 rounded border border-[#f0c14b]/60 bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-[#c4901b]"
+					class="inline-flex items-center gap-1 rounded border border-warning/60 bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-warning-dark"
 				>
-					<Dog class="h-3.5 w-3.5 text-[#8b610c]" /> รับสัตว์เลี้ยง
+					<Dog class="h-3.5 w-3.5 text-warning-dark" /> รับสัตว์เลี้ยง
 				</div>
 			{/if}
 			{#if shelter.capabilities.parking_car || shelter.capabilities.parking_motorcycle || shelter.capabilities.parking_boat}
 				<div
-					class="inline-flex items-center gap-1 rounded border border-[#bfdbfe] bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-[#2563eb]"
+					class="inline-flex items-center gap-1 rounded border border-primary-muted bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-primary"
 				>
-					<Car class="h-3.5 w-3.5 text-[#1d4ed8]" /> ที่จอดรถ
+					<Car class="h-3.5 w-3.5 text-primary-strong" /> ที่จอดรถ
 				</div>
 			{/if}
 			{#if shelter.capabilities.vulnerable_wheelchair || shelter.capabilities.vulnerable_bed}
 				<div
-					class="inline-flex items-center gap-1 rounded border border-[#ddd6fe] bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-[#7c3aed]"
+					class="inline-flex items-center gap-1 rounded border border-accent-purple-muted bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-accent-purple"
 				>
-					<Accessibility class="h-3.5 w-3.5 text-[#6d28d9]" /> วีลแชร์/ติดเตียง
+					<Accessibility class="h-3.5 w-3.5 text-accent-purple" /> วีลแชร์/ติดเตียง
 				</div>
 			{/if}
 			{#if shelter.capabilities.utility_wifi}
 				<div
-					class="inline-flex items-center gap-1 rounded border border-[#bbf7d0] bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-[#16a34a]"
+					class="inline-flex items-center gap-1 rounded border border-success-muted bg-transparent px-1.5 py-0.5 text-[11px] font-medium text-success"
 				>
-					<Wifi class="h-3.5 w-3.5 text-[#15803d]" /> Wi-Fi
+					<Wifi class="h-3.5 w-3.5 text-success-dark" /> Wi-Fi
 				</div>
 			{/if}
 		</div>
