@@ -18,7 +18,6 @@ import type {
 	ReceiveInput,
 	DistributeInput
 } from '../domain/operations';
-import { toast } from 'svelte-sonner';
 
 export const operationsKeys = {
 	all: ['operations'] as const,
@@ -106,10 +105,6 @@ export const useReceiveStock = () => {
 			operationsRepository().receiveStock(input, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
-		},
-		onError: (err: unknown) => {
-			console.error('[operations] receiveStock failed:', err);
-			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการรับของเข้าคลัง');
 		}
 	}));
 };
@@ -125,10 +120,6 @@ export const useDistributeStock = () => {
 		onSuccess: () => {
 			// Eagerly invalidate — live query will also fire, but this ensures instant update
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
-		},
-		onError: (err: unknown) => {
-			console.error('[operations] distributeStock failed:', err);
-			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการแจกจ่ายพัสดุ');
 		}
 	}));
 };
