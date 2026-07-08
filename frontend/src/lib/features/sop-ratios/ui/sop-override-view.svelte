@@ -1,0 +1,191 @@
+<script lang="ts">
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { SOP_RATIO_KEYS, RATIO_LABELS, type SopRatioKey, type SopOverride } from '../index.js';
+
+	let {
+		profile,
+		shelterCode,
+		hasOverride,
+		disabled,
+		onEditItem,
+		onCreateOverride,
+		onDeactivateOverride,
+		onViewHistory
+	}: {
+		profile: SopOverride | null;
+		shelterCode: string;
+		hasOverride: boolean;
+		disabled: boolean;
+		onEditItem: (key: SopRatioKey) => void;
+		onCreateOverride: () => void;
+		onDeactivateOverride: () => void;
+		onViewHistory: () => void;
+	} = $props();
+
+	let search = $state('');
+
+	const filteredKeys = $derived(
+		search.trim()
+			? SOP_RATIO_KEYS.filter((key) => {
+					const label = RATIO_LABELS[key]?.label ?? key;
+					return label.toLowerCase().includes(search.trim().toLowerCase());
+				})
+			: SOP_RATIO_KEYS
+	);
+</script>
+
+{#if !hasOverride && shelterCode}
+	<!-- Context is set to Override but no override exists yet -->
+	<div
+		class="flex flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20 p-8 text-center"
+	>
+		<svg
+			class="mx-auto h-12 w-12 text-muted-foreground"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="1.5"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			aria-hidden="true"
+		>
+			<circle cx="12" cy="12" r="10" />
+			<path d="M12 16v-4" />
+			<path d="M12 8h.01" />
+		</svg>
+		<h2 class="mt-4 text-base font-semibold text-foreground">
+			ยังไม่มีการปรับแต่งสำหรับศูนย์ {shelterCode}
+		</h2>
+		<p class="mt-2 text-sm text-muted-foreground">
+			ขณะนี้กำลังใช้ค่ามาตรฐาน EOC อยู่
+			คุณสามารถกดปุ่มด้านล่างเพื่อเริ่มสร้างอัตราส่วนของศูนย์นี้ได้
+		</p>
+		<Button
+			type="button"
+			onclick={onCreateOverride}
+			{disabled}
+			class="mt-4 bg-amber-500 font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+		>
+			สร้างค่าปรับแต่งเฉพาะศูนย์
+		</Button>
+	</div>
+{:else if !shelterCode}
+	<div
+		class="flex flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20 p-8 text-center"
+	>
+		<p class="text-sm text-muted-foreground">
+			กรุณาเลือกศูนย์พักพิงในแถบด้านบนเพื่อดูหรือจัดการค่าปรับแต่ง
+		</p>
+	</div>
+{:else}
+	<div class="mb-4 flex flex-wrap items-center gap-2">
+		<div class="relative w-full sm:w-64">
+			<Input
+				bind:value={search}
+				type="search"
+				placeholder="ค้นหา..."
+				class="pl-9"
+				aria-label="ค้นหา"
+			/>
+			<svg
+				class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<circle cx="11" cy="11" r="8" />
+				<path d="m21 21-4.3-4.3" />
+			</svg>
+		</div>
+
+		<div class="flex items-center gap-1.5">
+			{#if profile}
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					class="border-red-200 text-red-700 hover:bg-red-50"
+					{disabled}
+					onclick={onDeactivateOverride}
+				>
+					ยกเลิกค่าปรับแต่ง
+				</Button>
+				<Button type="button" variant="outline" size="sm" onclick={onViewHistory}>
+					ประวัติ ({profile.version})
+				</Button>
+			{/if}
+		</div>
+	</div>
+
+	<div class="overflow-hidden rounded-lg border">
+		<table class="w-full text-sm">
+			<thead class="bg-muted/50 text-muted-foreground">
+				<tr>
+					<th class="px-4 py-3 text-left font-semibold">รายการ (Item)</th>
+					<th class="px-4 py-3 text-center font-semibold">ค่ากำหนด (Value)</th>
+					<th class="px-4 py-3 text-right font-semibold">จัดการ (Action)</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each filteredKeys as key (key)}
+					{@const meta = RATIO_LABELS[key]}
+					{@const value = profile?.ratios[key] ?? '-'}
+					<tr class="border-t hover:bg-muted/30">
+						<td class="px-4 py-3">
+							<div class="font-medium text-foreground">{meta?.label ?? key}</div>
+							{#if meta?.description}
+								<div class="mt-0.5 text-xs text-muted-foreground">{meta.description}</div>
+							{/if}
+						</td>
+						<td class="px-4 py-3 text-center">
+							<span
+								class="inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
+							>
+								{value}
+								{meta?.unit ?? ''}
+							</span>
+						</td>
+						<td class="px-4 py-3">
+							<div class="flex items-center justify-end gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									class="border-blue-200 text-blue-700 hover:bg-blue-50"
+									disabled={disabled || !profile}
+									onclick={() => onEditItem(key)}
+									aria-label="จัดการ {meta?.label ?? key}"
+								>
+									<svg
+										class="mr-1 h-3.5 w-3.5"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+									>
+										<path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+									</svg>
+									จัดการ
+								</Button>
+							</div>
+						</td>
+					</tr>
+				{:else}
+					<tr>
+						<td colspan="3" class="px-4 py-8 text-center text-muted-foreground">
+							ไม่พบรายการที่ต้องการค้นหา
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{/if}

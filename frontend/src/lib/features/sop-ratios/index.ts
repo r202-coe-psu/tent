@@ -64,3 +64,8 @@ export { startSopRatioLiveQuery } from './application/sop-ratio-sync';
 export { default as SopMasterTable } from './ui/sop-master-table.svelte';
 export { default as SopEditForm } from './ui/sop-edit-form.svelte';
 export { default as VersionHistoryDrawer } from './ui/version-history-drawer.svelte';
+export { default as SopTypeList } from './ui/sop-type-list.svelte';
+export type { SopTabType } from './ui/sop-type-list.svelte';
+export { default as SopRatioTab } from './ui/sop-ratio-tab.svelte';
+export { default as SopSingleEditModal } from './ui/sop-single-edit-modal.svelte';
+export { default as AlertThresholdStub } from './ui/alert-threshold-stub.svelte';

@@ -4,7 +4,8 @@
 		useMasterVersionHistory,
 		useOverrideVersionHistory,
 		type SopMaster,
-		type SopOverride
+		type SopOverride,
+		type SopRatioKey
 	} from '$lib/features/sop-ratios';
 	import X from '@lucide/svelte/icons/x';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -13,9 +14,10 @@
 	interface Props {
 		profile: SopMaster | SopOverride;
 		onClose: () => void;
+		activeMaster?: SopMaster | null;
 	}
 
-	const { profile, onClose }: Props = $props();
+	const { profile, onClose, activeMaster }: Props = $props();
 
 	const isMaster = $derived(isSopMaster(profile));
 
@@ -108,9 +110,25 @@
 							<!-- Ratios snapshot -->
 							<div class="mt-2 grid grid-cols-3 gap-2">
 								{#each Object.entries(version.ratios) as [k, v] (k)}
-									<div class="rounded-lg bg-slate-50 px-2 py-1.5 text-center">
-										<p class="font-mono text-[13px] font-bold text-[#013365]">{v}</p>
-										<p class="text-[10px] text-slate-500">{k.split('_')[0]}</p>
+									{@const isDifferent = activeMaster && v !== activeMaster.ratios[k as SopRatioKey]}
+									<div
+										class="rounded-lg px-2 py-1.5 text-center transition-all {isDifferent
+											? 'bg-amber-500 text-white shadow-sm'
+											: 'bg-slate-50 text-slate-900'}"
+										title={isDifferent
+											? `ค่ามาตรฐาน EOC: ${activeMaster.ratios[k as SopRatioKey]}`
+											: ''}
+									>
+										<p
+											class="font-mono text-[13px] font-bold {isDifferent
+												? 'text-white'
+												: 'text-[#013365]'}"
+										>
+											{v}
+										</p>
+										<p class="text-[10px] {isDifferent ? 'text-white/90' : 'text-slate-500'}">
+											{k.split('_')[0]}
+										</p>
 									</div>
 								{/each}
 							</div>
