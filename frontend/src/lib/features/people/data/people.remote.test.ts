@@ -53,7 +53,7 @@ describe('PeopleRemoteRepository', () => {
 
 			const fetched = await repo.getEvacuee(saved._id);
 			expect(fetched?.first_name).toBe('Somchai');
-			expect(fetched?.current_stay.status).toBe('registered');
+			expect(fetched?.current_stay.status).toBe('pre_registered');
 			expect(fetched?.privacy.search_excluded).toBe(false);
 		});
 

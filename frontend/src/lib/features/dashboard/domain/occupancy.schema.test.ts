@@ -12,30 +12,34 @@ import { rowsToOccupancyPayload, OccupancyPayloadSchema } from './occupancy.sche
 describe('rowsToOccupancyPayload', () => {
 	it('aggregates all known status keys correctly', () => {
 		const rows = [
-			{ key: 'registered', value: 5 },
-			{ key: 'checked_in', value: 10 },
+			{ key: 'pre_registered', value: 5 },
+			{ key: 'active', value: 10 },
+			{ key: 'temporary_leave', value: 1 },
+			{ key: 'transferred', value: 2 },
 			{ key: 'checked_out', value: 3 },
-			{ key: 'transferred', value: 2 }
+			{ key: 'deceased', value: 1 }
 		];
 		const result = rowsToOccupancyPayload('SH001', rows);
 		expect(result.shelter_code).toBe('SH001');
-		expect(result.registered).toBe(5);
-		expect(result.checked_in).toBe(10);
-		expect(result.checked_out).toBe(3);
+		expect(result.pre_registered).toBe(5);
+		expect(result.active).toBe(10);
+		expect(result.temporary_leave).toBe(1);
 		expect(result.transferred).toBe(2);
-		expect(result.total).toBe(20);
+		expect(result.checked_out).toBe(3);
+		expect(result.deceased).toBe(1);
+		expect(result.total).toBe(22);
 	});
 
 	it('returns all zeros for empty rows', () => {
 		const result = rowsToOccupancyPayload('SH002', []);
 		expect(result.total).toBe(0);
-		expect(result.registered).toBe(0);
-		expect(result.checked_in).toBe(0);
+		expect(result.pre_registered).toBe(0);
+		expect(result.active).toBe(0);
 	});
 
 	it('ignores unknown status keys and excludes them from total', () => {
 		const rows = [
-			{ key: 'checked_in', value: 5 },
+			{ key: 'active', value: 5 },
 			{ key: 'some_future_status', value: 99 } // unknown — should be discarded
 		];
 		const result = rowsToOccupancyPayload('SH001', rows);
@@ -48,11 +52,13 @@ describe('OccupancyPayloadSchema', () => {
 	it('accepts a valid payload', () => {
 		const valid = {
 			shelter_code: 'SH001',
-			registered: 5,
-			checked_in: 10,
-			checked_out: 3,
+			pre_registered: 5,
+			active: 10,
+			temporary_leave: 1,
 			transferred: 2,
-			total: 20
+			checked_out: 3,
+			deceased: 1,
+			total: 22
 		};
 		expect(() => OccupancyPayloadSchema.parse(valid)).not.toThrow();
 	});
@@ -60,10 +66,12 @@ describe('OccupancyPayloadSchema', () => {
 	it('rejects negative counts', () => {
 		const invalid = {
 			shelter_code: 'SH001',
-			registered: -1,
-			checked_in: 0,
-			checked_out: 0,
+			pre_registered: -1,
+			active: 0,
+			temporary_leave: 0,
 			transferred: 0,
+			checked_out: 0,
+			deceased: 0,
 			total: 0
 		};
 		expect(() => OccupancyPayloadSchema.parse(invalid)).toThrow();
@@ -74,10 +82,12 @@ describe('OccupancyPayloadSchema', () => {
 		// meaning PII fields in a malformed view response won't leak to the client.
 		const withPii = {
 			shelter_code: 'SH001',
-			registered: 1,
-			checked_in: 0,
-			checked_out: 0,
+			pre_registered: 1,
+			active: 0,
+			temporary_leave: 0,
 			transferred: 0,
+			checked_out: 0,
+			deceased: 0,
 			total: 1,
 			national_id: '1234567890123', // PII — must not be in the parsed output
 			first_name: 'John'
