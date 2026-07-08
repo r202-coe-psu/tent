@@ -10,15 +10,69 @@ import {
 } from '$lib/db/subscribe-data-changes';
 import { getShelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
+import type { AuditAction } from '$lib/features/shared';
 import { operationsRepository } from '../data/operations.remote';
-import type { ReceiveInput, DistributeInput } from '../domain/operations';
+import type {
+	DonationCampaign,
+	CampaignInput,
+	ReceiveInput,
+	DistributeInput
+} from '../domain/operations';
 import { toast } from 'svelte-sonner';
 
 export const operationsKeys = {
 	all: ['operations'] as const,
+	campaigns: () => [...operationsKeys.all, 'campaigns'] as const,
+	stockLedgers: () => [...operationsKeys.all, 'stockLedgers'] as const,
+	donations: () => [...operationsKeys.all, 'donations'] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
 	balance: () => [...operationsKeys.all, 'balance'] as const
+};
+
+export const useCampaigns = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.campaigns(),
+		queryFn: () => operationsRepository().listCampaigns()
+	}));
+
+export const useStockLedgers = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.stockLedgers(),
+		queryFn: () => operationsRepository().listLedger()
+	}));
+
+export const useDonations = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.donations(),
+		queryFn: () => operationsRepository().listDonations()
+	}));
+
+export const useCreateCampaign = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: CampaignInput; ctx: AuthorContext }) =>
+			operationsRepository().createCampaign(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.campaigns() });
+		}
+	}));
+};
+
+export const useUpdateCampaign = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			campaign,
+			auditInput
+		}: {
+			campaign: DonationCampaign;
+			auditInput?: { action: AuditAction; reason: string; ctx: AuthorContext };
+		}) => operationsRepository().updateCampaign(campaign, auditInput),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.campaigns() });
+		}
+	}));
 };
 
 export const useLedger = (enabled: () => boolean = () => true) =>
@@ -81,8 +135,14 @@ export const useDistributeStock = () => {
 
 export function startOperationsLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
 	return subscribeDataChanges(queryClient, getShelterDb, (type) => {
+		if (type === 'donation_campaign') {
+			return [operationsKeys.campaigns()];
+		}
 		if (type === 'stock_ledger') {
-			return [operationsKeys.all];
+			return [operationsKeys.stockLedgers(), operationsKeys.ledger(), operationsKeys.balance()];
+		}
+		if (type === 'donation') {
+			return [operationsKeys.donations()];
 		}
 		return [];
 	});

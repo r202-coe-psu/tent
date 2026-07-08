@@ -1,1 +1,1 @@
-export { GET, PATCH } from '../../../../../api/v1/donations/[tracking_token]/+server';
+export { GET, PATCH } from '../../../../api/public/v1/donations/[tracking_token]/+server';

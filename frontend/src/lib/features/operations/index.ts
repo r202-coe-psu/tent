@@ -17,7 +17,9 @@ export type {
 	LedgerReason,
 	DonationStatus,
 	TransferStatus,
-	DonationChannel
+	DonationChannel,
+	DonationSlot,
+	NeedAvailability
 } from './domain/operations';
 
 // Domain — schemas + factories + transitions + read models + guards
@@ -40,9 +42,14 @@ export {
 	canTransitionDonation,
 	stockBalance,
 	openNeeds,
+	calculateReserved,
+	isNeedCutOff,
+	deriveNeedAvailability,
 	isStockLedger,
 	isDonation,
 	isDonationCampaign,
+	isDonationSlot,
+	mapNeedItemHeuristic,
 	type StockLedgerInput,
 	type ReceiveInput,
 	type WalkInDonationInput,
@@ -67,8 +74,15 @@ export {
 	useStockBalance,
 	useReceiveStock,
 	useDistributeStock,
+	useCampaigns,
+	useStockLedgers,
+	useDonations,
+	useCreateCampaign,
+	useUpdateCampaign,
 	startOperationsLiveQuery
 } from './application/queries';
+export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';
+export type { NeedItem } from './application/need-item.types';
 
 // UI components
 export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';

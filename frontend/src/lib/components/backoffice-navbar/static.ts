@@ -61,7 +61,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: Package,
 				children: [
 					{ label: 'แผงควบคุมสต็อก', href: resolve('/back-office/supply'), icon: Warehouse },
-					{ label: 'กระดานรับบริจาค', href: null, icon: HandHeart }
+					{
+						label: 'กระดานรับบริจาค',
+						href: resolve('/back-office/stock-donations'),
+						icon: HandHeart
+					}
 				]
 			},
 			{

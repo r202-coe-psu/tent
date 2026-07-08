@@ -1,1 +1,1 @@
-export { POST } from '../../../../api/v1/donations/+server';
+export { POST } from '../../../api/public/v1/donations/+server';
