@@ -7,7 +7,6 @@
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 
-	import { Button } from '$lib/components/ui/button';
 	import Card from '$lib/components/ui/card/card.svelte';
 	import {
 		PublicShelterMetricCard,
@@ -36,8 +35,21 @@
 		return R * c;
 	}
 
+	type ShelterItem = {
+		name: string;
+		address: string;
+		province: string;
+		district: string;
+		subdistrict: string;
+		status: string;
+		type: string;
+		geo?: { lat: number; lng: number };
+		distance: number;
+		[key: string]: unknown;
+	};
+
 	let displayShelters = $derived(
-		data.shelters.map((s: any) => {
+		data.shelters.map((s: ShelterItem) => {
 			if (liveUserLat && liveUserLng && s.geo?.lat && s.geo?.lng) {
 				const dist = calcDistance(
 					parseFloat(liveUserLat),
