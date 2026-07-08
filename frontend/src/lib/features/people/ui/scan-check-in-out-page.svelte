@@ -164,10 +164,12 @@
 	// Helper for status label translation
 	function getStatusLabel(status: string) {
 		const statusLabels: Record<string, string> = {
-			registered: 'ลงทะเบียนแล้ว (ยังไม่เช็คอิน)',
-			checked_in: 'เช็คอินเข้าพักแล้ว',
-			checked_out: 'เช็คเอาท์ออกแล้ว',
-			transferred: 'ย้ายศูนย์พักพิงแล้ว'
+			pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
+			active: 'เช็คอินเข้าพักแล้ว',
+			temporary_leave: 'ออกชั่วคราว',
+			transferred: 'ย้ายศูนย์พักพิงแล้ว',
+			checked_out: 'ย้ายออก/กลับภูมิลำเนาแล้ว',
+			deceased: 'เสียชีวิต'
 		};
 		return statusLabels[status] || status;
 	}
@@ -337,7 +339,7 @@
 											สถานะ:
 											<span
 												class="py-0.2 inline-flex items-center gap-1 rounded-full px-2 text-[10px] font-bold shadow-xs
-												{scanResult.evacuee.current_stay.status === 'checked_in'
+												{scanResult.evacuee.current_stay.status === 'active'
 													? 'bg-emerald-100 text-emerald-800'
 													: 'bg-slate-100 text-slate-800'}"
 											>

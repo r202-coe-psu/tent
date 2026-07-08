@@ -46,7 +46,14 @@ export const specialNeedSchema = z.enum([
 ]);
 export type SpecialNeed = z.infer<typeof specialNeedSchema>;
 
-export const stayStatusSchema = z.enum(['registered', 'checked_in', 'checked_out', 'transferred']);
+export const stayStatusSchema = z.enum([
+	'pre_registered',
+	'active',
+	'temporary_leave',
+	'transferred',
+	'checked_out',
+	'deceased'
+]);
 export type StayStatus = z.infer<typeof stayStatusSchema>;
 
 export const householdStatusSchema = z.enum([
@@ -69,7 +76,10 @@ export const movementActionSchema = z.enum([
 	'check_in',
 	'check_out',
 	'transfer_out',
-	'transfer_in'
+	'transfer_in',
+	'leave_temporary',
+	'return_from_leave',
+	'mark_deceased'
 ]);
 export type MovementAction = z.infer<typeof movementActionSchema>;
 
@@ -332,7 +342,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
 			household_id: d.household_id,
-			current_stay: { status: 'registered', zone: null, since: now() },
+			current_stay: { status: 'pre_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},
@@ -480,10 +490,13 @@ export function createScreening(input: ScreeningInput, ctx: AuthorContext): Scre
  */
 export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacuee {
 	const statusByAction: Record<MovementAction, StayStatus> = {
-		check_in: 'checked_in',
+		check_in: 'active',
 		check_out: 'checked_out',
 		transfer_out: 'transferred',
-		transfer_in: 'checked_in'
+		transfer_in: 'active',
+		leave_temporary: 'temporary_leave',
+		return_from_leave: 'active',
+		mark_deceased: 'deceased'
 	};
 	return {
 		...evacuee,

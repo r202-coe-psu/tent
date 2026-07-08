@@ -84,7 +84,7 @@ function seedEvacuee(
 		phone,
 		special_needs: [],
 		household_id: null,
-		current_stay: { status: 'registered', zone: null, since: ts },
+		current_stay: { status: 'pre_registered', zone: null, since: ts },
 		privacy: { search_excluded: false },
 		registered_via: 'import'
 	};

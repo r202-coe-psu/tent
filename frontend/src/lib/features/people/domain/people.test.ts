@@ -27,7 +27,7 @@ describe('createEvacuee', () => {
 		expect(e.created_at).toBe(e.updated_at);
 		expect(e.first_name).toBe('สมชาย'); // trimmed
 		expect(e.privacy).toEqual({ search_excluded: false });
-		expect(e.current_stay.status).toBe('registered');
+		expect(e.current_stay.status).toBe('pre_registered');
 		expect(e.country).toBe('THAILAND');
 		expect(e.special_needs).toEqual([]);
 		expect(e.registered_via).toBe('app');
@@ -47,7 +47,7 @@ describe('createEvacuee', () => {
 });
 
 describe('movement → current_stay', () => {
-	it('check_in moves the snapshot to checked_in at the event time', () => {
+	it('check_in moves the snapshot to active at the event time', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		const m = createMovement(
 			{
@@ -59,7 +59,7 @@ describe('movement → current_stay', () => {
 			ctx
 		);
 		const updated = applyMovementToStay(e, m);
-		expect(updated.current_stay.status).toBe('checked_in');
+		expect(updated.current_stay.status).toBe('active');
 		expect(updated.current_stay.zone).toBe('Z1');
 		expect(updated.current_stay.since).toBe('2026-06-11T03:00:00.000Z');
 	});

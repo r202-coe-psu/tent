@@ -107,11 +107,11 @@
 						<div class="flex items-center gap-3">
 							<span
 								class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold shadow-xs
-								{evacuee.current_stay.status === 'checked_in'
+								{evacuee.current_stay.status === 'active'
 									? 'bg-emerald-100 text-emerald-800'
 									: 'bg-slate-100 text-slate-800'}"
 							>
-								{evacuee.current_stay.status === 'checked_in' ? 'เช็คอิน' : 'เช็คเอาท์'}
+								{evacuee.current_stay.status === 'active' ? 'เช็คอิน' : 'เช็คเอาท์'}
 							</span>
 							<Button
 								size="sm"
