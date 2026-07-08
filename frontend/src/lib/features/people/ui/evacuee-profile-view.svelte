@@ -142,6 +142,18 @@
 			screeningsQuery.isLoading
 	);
 
+	// Audit log — show a limited page of movements at a time, expand on demand
+	const MOVEMENTS_PAGE_SIZE = 5;
+	let visibleMovementsCount = $state(MOVEMENTS_PAGE_SIZE);
+
+	$effect(() => {
+		void evacueeId;
+		visibleMovementsCount = MOVEMENTS_PAGE_SIZE;
+	});
+
+	const visibleMovements = $derived(movements.slice(0, visibleMovementsCount));
+	const hasMoreMovements = $derived(movements.length > visibleMovementsCount);
+
 	// Modal visibility state
 	let showZoneModal = $state(false);
 	let showStatusModal = $state(false);
@@ -321,7 +333,7 @@
 						</div>
 					</li>
 				{/if}
-				{#each movements as m (m._id)}
+				{#each visibleMovements as m (m._id)}
 					<li class="flex items-start gap-3 text-xs">
 						<span class="mt-0.5 text-sm">{movementLabels[m.action].emoji}</span>
 						<div class="flex-1 space-y-0.5">
@@ -342,6 +354,17 @@
 						</div>
 					</li>
 				{/each}
+				{#if hasMoreMovements}
+					<li>
+						<button
+							type="button"
+							onclick={() => (visibleMovementsCount += MOVEMENTS_PAGE_SIZE)}
+							class="cursor-pointer text-xs font-semibold text-primary transition-colors hover:text-primary/80"
+						>
+							โหลดเพิ่มเติม ({movements.length - visibleMovementsCount} รายการ)
+						</button>
+					</li>
+				{/if}
 				<li class="flex items-start gap-3 text-xs">
 					<span class="mt-0.5 text-sm">📝</span>
 					<div class="flex-1 space-y-0.5">
