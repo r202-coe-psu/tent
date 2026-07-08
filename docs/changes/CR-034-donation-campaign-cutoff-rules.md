@@ -23,6 +23,7 @@ affects:
 - ปรับโครงสร้างของฟิลด์ `needs` ใน `donation_campaign`
   - **Before (v1):** `needs: [{ item_id: string, qty_target: number, unit: string }]`
   - **After (v2):** `needs: [{ item_id: string, qty_target: number, unit: string, status?: 'open' | 'closed' }]` (โดย `status` มีค่าเริ่มต้นเป็น `'open'`)
+- เพิ่มฟิลด์ `visible_on_home?: boolean` (default `true`) — ควบคุมการโปรโมตแคมเปญบนหน้าแรกผ่าน back-office toggle
 - ขยับ `schema_v` ของเอกสาร `donation_campaign` จาก `1` เป็น `2`
 
 ## Impact
@@ -33,7 +34,9 @@ affects:
 ## Migration
 
 - ฟิลด์ `needs[].status` เป็นฟิลด์ทางเลือก (Optional) หากเอกสารเดิมที่อยู่ในระบบไม่มีฟิลด์นี้ ให้ระบบถือว่าสถานะเป็น `'open'` (Fallback) โดยปริยาย จึงไม่จำเป็นต้องทำ Script ย้ายข้อมูล (No production backfill needed)
+- ฟิลด์ `visible_on_home` เป็นฟิลด์ทางเลือก (Optional) — reader ถือว่าไม่มีฟิลด์ = `true` (แสดงบนหน้าแรก); ไม่ต้อง backfill
 
 ## Decision log
 
 - 2026-07-06 — proposed
+- 2026-07-08 — spec alignment: เพิ่ม `visible_on_home` ใน CR + schema.md §2.4 ให้ตรงกับ implementation ที่ persist ใน `operations.ts` แล้ว (รอ owner sign-off ก่อนเปลี่ยน status เป็น `accepted`/`approved`)

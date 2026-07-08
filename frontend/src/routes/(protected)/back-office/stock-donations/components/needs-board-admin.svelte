@@ -178,16 +178,28 @@
 							<div class="flex flex-col gap-4">
 								{#each item.needs as need (need.itemId)}
 									<div class="flex h-[34px] items-center justify-center">
-										<button
-											type="button"
-											onclick={() => onToggleCutOff(item.id, need.itemId)}
-											class="inline-flex cursor-pointer items-center justify-center rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors
-											{need.isManualClosed
-												? 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400'
-												: 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100/70 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-400'}"
-										>
-											{need.isManualClosed ? 'เปิดรับบริจาค (Restore)' : 'Force Cut-off (ปิดด่วน)'}
-										</button>
+										{#if need.isCutOff && !need.isManualClosed}
+											<button
+												type="button"
+												disabled
+												class="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-muted bg-muted/50 px-3 py-1.5 text-[11px] font-bold text-muted-foreground opacity-70"
+											>
+												ปิดอัตโนมัติ (ครบเป้า)
+											</button>
+										{:else}
+											<button
+												type="button"
+												onclick={() => onToggleCutOff(item.id, need.itemId)}
+												class="inline-flex cursor-pointer items-center justify-center rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors
+												{need.isManualClosed
+													? 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400'
+													: 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100/70 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-400'}"
+											>
+												{need.isManualClosed
+													? 'เปิดรับบริจาค (Restore)'
+													: 'Force Cut-off (ปิดด่วน)'}
+											</button>
+										{/if}
 									</div>
 								{/each}
 							</div>

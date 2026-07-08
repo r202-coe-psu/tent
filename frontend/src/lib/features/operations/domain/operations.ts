@@ -488,14 +488,18 @@ export function deriveNeedAvailability(
 }
 
 /**
- * Remaining open need per item: target minus what donations (declared+received,
- * not expired/cancelled) already cover. Drives `GET /public/v1/needs`
- * (data-model.md §4, view `needs_open`).
+ * Remaining open need per item: target minus on-hand stock, active reservations,
+ * and donations (declared+received, not expired/cancelled) already cover.
+ * Drives `GET /public/v1/needs` (data-model.md §4, view `needs_open`).
+ *
+ * **Migration (CR-034):** callers must pass `stockLedgers` so cut-off reflects
+ * warehouse on-hand + reserved donations. Omit or pass `[]` only when stock
+ * context is unavailable (legacy two-arg call sites).
  */
 export function openNeeds(
 	campaign: DonationCampaign,
 	donations: Donation[],
-	stockLedgers: StockLedger[]
+	stockLedgers: StockLedger[] = []
 ): CampaignNeed[] {
 	const availabilities = deriveNeedAvailability(campaign, donations, stockLedgers);
 	return availabilities

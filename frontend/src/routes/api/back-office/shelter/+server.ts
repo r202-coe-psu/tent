@@ -55,7 +55,7 @@ function validateDocUpdate(code: string): string {
   if (newDoc.shelter_code !== '${code}') {
     throw { forbidden: 'shelter_code must be ${code}' };
   }
-  var allowed = ['evacuee', 'donation', 'donation_campaign', 'stock_ledger', 'donation_slot'];
+  var allowed = ['evacuee', 'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'audit'];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
   }
