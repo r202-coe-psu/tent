@@ -4,23 +4,443 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Offline Fallback Flow Spec</title>
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css"
+      rel="stylesheet"
+      type="text/css"
+    />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <style>body{background:#f6fbf8}.shell{max-width:1420px;margin:0 auto;padding:1rem}@media print{.no-print{display:none!important}body{background:#fff}}</style>
+    <style>
+      body {
+        background: #f6fbf8;
+      }
+      .shell {
+        max-width: 1420px;
+        margin: 0 auto;
+        padding: 1rem;
+      }
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        body {
+          background: #fff;
+        }
+      }
+    </style>
   </head>
   <body>
-    <header class="navbar bg-base-100 border-b border-base-300"><div class="flex-1"><div><p class="text-xs uppercase text-base-content/60">Feature Flow Spec</p><h1 class="text-xl font-semibold">Offline + Fallback</h1></div></div><div class="flex-none gap-2 no-print"><a class="btn btn-sm btn-outline" href="./index.html">Back</a><span class="badge badge-warning">Draft</span></div></header>
+    <header class="navbar bg-base-100 border-b border-base-300">
+      <div class="flex-1">
+        <div>
+          <p class="text-xs uppercase text-base-content/60">
+            Feature Flow Spec
+          </p>
+          <h1 class="text-xl font-semibold">Offline + Fallback</h1>
+        </div>
+      </div>
+      <div class="flex-none gap-2 no-print">
+        <a class="btn btn-sm btn-outline" href="./index.html">Back</a
+        ><span class="badge badge-warning">Draft</span>
+      </div>
+    </header>
     <main class="shell space-y-4">
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Summary</h2><p>ครอบคลุม FR-17 ถึง FR-18: offline draft/local queue, Central-first CouchDB/PouchDB sync, LAN Edge fallback, worker review/import, cleanup confirmation และ manual/Excel assisted import path</p><div class="alert alert-warning"><span>เอกสารนี้ถือ July target เป็น full offline import path: `draft -> pending_sync -> received -> validating -> imported/needs_review/rejected -> cleanup confirmation`; app writes local PouchDB first and syncs with exactly one active remote at a time</span></div></div></section>
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Screens</h2><div class="overflow-x-auto"><table class="table table-zebra"><thead><tr><th>Screen</th><th>Purpose</th><th>Main Actions</th><th>Data Layer</th></tr></thead><tbody><tr><td>Offline Draft Form</td><td>continue registration/screening when API unavailable</td><td>save local draft first, continue editing, submit to queue when ready</td><td>PouchDB local draft</td></tr><tr><td>Local Queue</td><td>show pending offline submissions and sync status</td><td>retry, inspect status, open review result, show active remote</td><td>PouchDB queue + active remote Central/Edge/none</td></tr><tr><td>Remote Status</td><td>make sync target explicit for staff and support</td><td>show Central online, Edge fallback, local-only, failback pending</td><td>sync manager state</td></tr><tr><td>Review Result</td><td>show `needs_review` or `rejected` reason from worker</td><td>correct and resubmit or escalate</td><td>`sync_review` + staged trace</td></tr><tr><td>Cleanup Confirmation State</td><td>confirm sensitive local data cleanup after import</td><td>ack cleanup completed</td><td>`cleanup_confirmation`</td></tr><tr><td>Fallback Import Review</td><td>manual/Excel assisted import path</td><td>map, review, confirm, import batch</td><td>`import_batches`</td></tr></tbody></table></div></div></section>
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Remote Mode State Machine</h2><div class="overflow-x-auto"><table class="table table-zebra"><thead><tr><th>Mode</th><th>Entry Condition</th><th>Active Remote</th><th>Exit Condition</th></tr></thead><tbody><tr><td>`central_online`</td><td>Central reachable and Central session valid</td><td>Central CouchDB only</td><td>Central unreachable or session invalid</td></tr><tr><td>`edge_fallback`</td><td>Central/WAN unavailable and LAN Edge reachable with Edge session</td><td>Edge CouchDB only</td><td>Central recovers or Edge unavailable</td></tr><tr><td>`local_only`</td><td>Neither Central nor Edge reachable</td><td>none</td><td>Central or Edge becomes reachable</td></tr><tr><td>`failback_pending`</td><td>Central recovers while client was using Edge</td><td>transition Edge -> Central</td><td>Edge replication stopped, Central session validated, Central replication started</td></tr></tbody></table></div></div></section>
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Submission State Machine</h2><div class="overflow-x-auto"><table class="table table-zebra"><thead><tr><th>State</th><th>Owner</th><th>Entry Condition</th><th>Exit Condition</th></tr></thead><tbody><tr><td>`draft`</td><td>PWA local</td><td>user saves incomplete or unsubmitted record</td><td>submit to queue or discard</td></tr><tr><td>`pending_sync`</td><td>PouchDB queue</td><td>submitted offline record with `client_submission_id` written locally first</td><td>active remote CouchDB accepts replication</td></tr><tr><td>`received`</td><td>Central or Edge CouchDB + worker trace</td><td>typed `offline_submission` stored on active remote; Edge copies backlog to Central when WAN returns</td><td>worker consumes and stages from Central</td></tr><tr><td>`validating`</td><td>sync worker</td><td>staged submission under schema/scope/duplicate checks</td><td>imported, needs_review, or rejected</td></tr><tr><td>`imported`</td><td>worker + MongoDB</td><td>official record written and ID mapped</td><td>PWA receives `sync_ack` and sends cleanup confirmation</td></tr><tr><td>`needs_review`</td><td>worker + review actor</td><td>ambiguous duplicate or permission/data issue that can be resolved</td><td>resolved resubmission or supervised import decision</td></tr><tr><td>`rejected`</td><td>worker</td><td>invalid doc or unresolvable import failure</td><td>new corrected submission only</td></tr></tbody></table></div></div></section>
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Flow Rules</h2><ul><li>Unsubmitted drafts stay local-only and must never replicate</li><li>Submitted offline records are written to local PouchDB first and must carry deterministic `client_submission_id`, `offline_evacuee_code`, shelter code, device metadata, masked sensitive payload and bounded document size</li><li>When Central is online, active remote is Central only; when Central/WAN is unavailable and LAN Edge is reachable, active remote switches to Edge only; when neither is reachable, active remote is none/local-only</li><li>Do not run long-lived replication from one device to Central and Edge simultaneously; switching remote must stop the old replication before starting the new one</li><li>Central and Edge `_session` cookies are separate; Edge fallback session does not authorize Central service API calls</li><li>Edge keeps fallback replicas and syncs backlog to Central when WAN returns; worker import reads canonical backlog from Central after failback</li><li>Worker owns import into MongoDB and official ID issuance; direct client write to MongoDB is forbidden in offline path</li><li>`sync_ack` must carry official ID mapping and cleanup requirement; UI must not silently keep sensitive local fields after import</li><li>`needs_review` must be actionable through a defined review path, not a dead-end status badge</li><li>Manual/Excel fallback exists in parallel for device failure, severe outage, or operational override</li></ul></div></section>
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Assisted Import Flow</h2><ul><li>User captures data in fixed manual form or Excel template aligned to MVP field contract</li><li>Authorized operator uploads or enters batch for `import_batches`</li><li>System maps template version and validates required fields</li><li>Rows with issues enter review before confirm; import is not blind bulk insert</li><li>Confirmed rows create/update `evacuees` and preserve `source=excel_import` or `manual_entry` metadata for audit</li></ul></div></section>
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">API and Data Intent</h2><ul><li>Data/doc types: `draft_registration`, `offline_submission`, `sync_ack`, `sync_review`, `cleanup_confirmation`, `offline_submissions`, `import_batches`</li><li>PWA queue UI needs local state merged with worker-returned review/ack docs and the current `active_remote` provenance</li><li>Review surface likely needs `GET /offline-submissions` and resolve/resubmit affordances in API contract</li><li>Fallback import needs `POST /imports/fallback` and batch/status endpoints or equivalent workflow</li><li>Every path must preserve audit metadata, shelter scope, `client_submission_id`, and remote provenance (`central`, `edge_fallback`, `local_only`)</li></ul></div></section>
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Acceptance Criteria</h2><ul><li>Central online: registration/screening writes local PouchDB first, syncs to Central as the only active remote, and does not start Edge replication</li><li>Central unavailable + LAN fallback: client switches to Edge as the only active remote, queues/syncs submitted records there, and Central API calls remain blocked until failback</li><li>No remote/local-only: client continues allowed draft/queue work locally, marks sync paused, and resumes with Central preferred when any remote returns</li><li>Remote switching stops old replication before starting the new target and preserves checkpoints/client IDs so the same offline submission never creates duplicate official records</li><li>Imported offline record returns official ID mapping and updates local queue state</li><li>Duplicate or invalid offline record surfaces explicit review/rejection state</li><li>Manual/Excel fallback can be mapped and reviewed before source-of-truth import</li></ul></div></section>
-      <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">Open Questions</h2><ul><li>Who owns the July review UI for `needs_review`: dedicated supervisor screen, admin API, or operational manual review</li><li>Fallback template artifact and reconciliation-log storage location still need explicit owner</li><li>Runbook should be reconciled if it still describes trace-only offline acceptance instead of full July import target</li></ul></div></section>
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Summary</h2>
+          <p>
+            ครอบคลุม FR-17 ถึง FR-18: central-first write path, LAN Edge
+            failover/failback, active endpoint visibility, worker review/import,
+            cleanup confirmation และ manual/Excel assisted import path
+          </p>
+          <div class="alert alert-warning">
+            <span
+              >เอกสารนี้ถือ July target เป็น remote-first import path: `submit
+              -> sending -> received -> validating ->
+              imported/needs_review/rejected -> cleanup confirmation`; app
+              submits to the active endpoint (Central preferred, Edge fallback)
+              with fail/retry when no endpoint is reachable</span
+            >
+          </div>
+        </div>
+      </section>
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Screens</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Screen</th>
+                  <th>Purpose</th>
+                  <th>Main Actions</th>
+                  <th>Data Layer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Submission Form</td>
+                  <td>
+                    capture registration/screening and submit through active
+                    endpoint
+                  </td>
+                  <td>edit, submit, retry failed send, view endpoint status</td>
+                  <td>client form state + request envelope</td>
+                </tr>
+                <tr>
+                  <td>Submission Status</td>
+                  <td>
+                    show per-submission delivery and worker processing status
+                  </td>
+                  <td>
+                    retry send, inspect status, open review result, show active
+                    endpoint
+                  </td>
+                  <td>status docs + active endpoint Central/Edge/none</td>
+                </tr>
+                <tr>
+                  <td>Remote Status</td>
+                  <td>
+                    make failover/failback target explicit for staff and support
+                  </td>
+                  <td>
+                    show Central online, Edge fallback, disconnected, failback
+                    pending
+                  </td>
+                  <td>sync manager state</td>
+                </tr>
+                <tr>
+                  <td>Review Result</td>
+                  <td>show `needs_review` or `rejected` reason from worker</td>
+                  <td>correct and resubmit or escalate</td>
+                  <td>`sync_review` + staged trace</td>
+                </tr>
+                <tr>
+                  <td>Cleanup Confirmation State</td>
+                  <td>confirm sensitive local data cleanup after import</td>
+                  <td>ack cleanup completed</td>
+                  <td>`cleanup_confirmation`</td>
+                </tr>
+                <tr>
+                  <td>Fallback Import Review</td>
+                  <td>manual/Excel assisted import path</td>
+                  <td>map, review, confirm, import batch</td>
+                  <td>`import_batches`</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Remote Mode State Machine</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Mode</th>
+                  <th>Entry Condition</th>
+                  <th>Active Endpoint</th>
+                  <th>Exit Condition</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>`central_online`</td>
+                  <td>Central reachable and Central session valid</td>
+                  <td>Central CouchDB only</td>
+                  <td>Central unreachable or Central session invalid</td>
+                </tr>
+                <tr>
+                  <td>`edge_fallback`</td>
+                  <td>
+                    Central unavailable and LAN Edge reachable with Edge session
+                  </td>
+                  <td>Edge CouchDB only</td>
+                  <td>Central recovers or Edge unavailable</td>
+                </tr>
+                <tr>
+                  <td>`disconnected`</td>
+                  <td>Neither Central nor Edge reachable</td>
+                  <td>none (no write endpoint)</td>
+                  <td>Central or Edge becomes reachable with valid session</td>
+                </tr>
+                <tr>
+                  <td>`failback_pending`</td>
+                  <td>Central recovers while client was using Edge</td>
+                  <td>transition Edge -> Central</td>
+                  <td>
+                    Edge flow stopped, Central session validated, Central flow
+                    resumed
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Submission State Machine</h2>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>State</th>
+                  <th>Owner</th>
+                  <th>Entry Condition</th>
+                  <th>Exit Condition</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>`editing`</td>
+                  <td>PWA UI</td>
+                  <td>user is filling registration/screening payload</td>
+                  <td>submit or cancel</td>
+                </tr>
+                <tr>
+                  <td>`sending`</td>
+                  <td>PWA + active endpoint</td>
+                  <td>
+                    client posts typed `offline_submission` with deterministic
+                    `client_submission_id` to active endpoint
+                  </td>
+                  <td>accepted by Central/Edge or send fails</td>
+                </tr>
+                <tr>
+                  <td>`retry_waiting`</td>
+                  <td>PWA + sync manager</td>
+                  <td>
+                    send failed because endpoint/session/network unavailable
+                  </td>
+                  <td>
+                    automatic retry (max 3 attempts) after reconnect/session
+                    restore, then show cannot-connect banner; user can force retry
+                  </td>
+                </tr>
+                <tr>
+                  <td>`received`</td>
+                  <td>Central or Edge CouchDB + worker trace</td>
+                  <td>
+                    `offline_submission` accepted on active endpoint; Edge
+                    backlog forwards to Central after failback
+                  </td>
+                  <td>worker consumes and stages from Central</td>
+                </tr>
+                <tr>
+                  <td>`validating`</td>
+                  <td>sync worker</td>
+                  <td>staged submission under schema/scope/duplicate checks</td>
+                  <td>imported, needs_review, or rejected</td>
+                </tr>
+                <tr>
+                  <td>`imported`</td>
+                  <td>worker + MongoDB</td>
+                  <td>official record written and ID mapped</td>
+                  <td>
+                    PWA receives `sync_ack` and sends cleanup confirmation
+                  </td>
+                </tr>
+                <tr>
+                  <td>`needs_review`</td>
+                  <td>worker + review actor</td>
+                  <td>
+                    ambiguous duplicate or permission/data issue that can be
+                    resolved
+                  </td>
+                  <td>resolved resubmission or supervised import decision</td>
+                </tr>
+                <tr>
+                  <td>`rejected`</td>
+                  <td>worker</td>
+                  <td>invalid doc or unresolvable import failure</td>
+                  <td>new corrected submission only</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Flow Rules</h2>
+          <ul>
+            <li>
+              Unsubmitted form data is UI state only and must not be treated as
+              a durable write queue
+            </li>
+            <li>
+              Submitted records must be sent to the active endpoint immediately
+              and carry deterministic `client_submission_id`,
+              `offline_evacuee_code`, shelter code, device metadata, masked
+              sensitive payload, and bounded document size
+            </li>
+            <li>
+              When Central is online, active endpoint is Central only; when
+              Central is unavailable and LAN Edge is reachable, active endpoint
+              switches to Edge only; when neither is reachable, active endpoint
+              is none and writes remain pending retry
+            </li>
+            <li>
+              Do not run active write/sync flow to Central and Edge
+              simultaneously; failover/failback must stop the old flow before
+              starting the new one
+            </li>
+            <li>
+              Central and Edge `_session` cookies are separate; Edge fallback
+              session does not authorize Central service API calls
+            </li>
+            <li>
+              Edge keeps fallback replicas and syncs backlog to Central when WAN
+              returns; worker import reads canonical backlog from Central after
+              failback
+            </li>
+            <li>
+              When no endpoint is reachable, submission attempts must fail with
+              explicit disconnected status-only mode (no read-only local cache),
+              run automatic retry up to 3 attempts, then show a clear cannot-connect
+              banner with force retry action
+            </li>
+            <li>
+              Worker owns import into MongoDB and official ID issuance; direct
+              client write to MongoDB is forbidden in this path
+            </li>
+            <li>
+              `sync_ack` must carry official ID mapping and cleanup requirement;
+              UI must not silently keep sensitive local fields after import
+            </li>
+            <li>
+              `needs_review` must be actionable through a defined review path,
+              not a dead-end status badge
+            </li>
+            <li>
+              Manual/Excel fallback exists in parallel for device failure,
+              severe outage, or operational override
+            </li>
+          </ul>
+        </div>
+      </section>
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Assisted Import Flow</h2>
+          <ul>
+            <li>
+              User captures data in fixed manual form or Excel template aligned
+              to MVP field contract
+            </li>
+            <li>
+              Authorized operator uploads or enters batch for `import_batches`
+            </li>
+            <li>System maps template version and validates required fields</li>
+            <li>
+              Rows with issues enter review before confirm; import is not blind
+              bulk insert
+            </li>
+            <li>
+              Confirmed rows create/update `evacuees` and preserve
+              `source=excel_import` or `manual_entry` metadata for audit
+            </li>
+          </ul>
+        </div>
+      </section>
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">API and Data Intent</h2>
+          <ul>
+            <li>
+              Data/doc types: `offline_submission`, `sync_ack`, `sync_review`,
+              `cleanup_confirmation`, `offline_submissions`, `import_batches`
+            </li>
+            <li>
+              Submission status UI needs send/retry/bannering state merged with
+              worker-returned review/ack docs, current `active_endpoint`
+              provenance, and app-level event channel updates
+            </li>
+            <li>
+              Review surface likely needs `GET /offline-submissions` and
+              resolve/resubmit affordances in API contract
+            </li>
+            <li>
+              Fallback import needs `POST /imports/fallback` and batch/status
+              endpoints or equivalent workflow
+            </li>
+            <li>
+              Every path must preserve audit metadata, shelter scope,
+              `client_submission_id`, and endpoint provenance (`central`,
+              `edge_fallback`, `disconnected`)
+            </li>
+          </ul>
+        </div>
+      </section>
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Acceptance Criteria</h2>
+          <ul>
+            <li>
+              Central online: registration/screening submits to Central as the
+              only active endpoint and does not start Edge write flow
+            </li>
+            <li>
+              Central unavailable + LAN fallback: client fails over to Edge as
+              the only active endpoint, submits there, and Central API calls
+              remain blocked until failback
+            </li>
+            <li>
+              Neither endpoint reachable: submission attempt returns explicit
+              disconnected status-only mode (no read-only local cache); client
+              automatically retries up to 3 attempts, then shows clear cannot-connect
+              banner and allows force retry
+            </li>
+            <li>
+              Failover/failback stops old flow before starting the new target
+              and preserves `client_submission_id` so the same submission never
+              creates duplicate official records
+            </li>
+            <li>
+              Imported offline record returns official ID mapping and updates
+              submission status
+            </li>
+            <li>
+              Duplicate or invalid offline record surfaces explicit
+              review/rejection state
+            </li>
+            <li>
+              Manual/Excel fallback can be mapped and reviewed before
+              source-of-truth import
+            </li>
+          </ul>
+        </div>
+      </section>
+      <section class="card bg-base-100 border border-base-300">
+        <div class="card-body prose max-w-none">
+          <h2 class="card-title">Open Questions</h2>
+          <ul>
+            <li>
+              Who owns the July review UI for `needs_review`: dedicated
+              supervisor screen, admin API, or operational manual review
+            </li>
+            <li>
+              Fallback template artifact and reconciliation-log storage location
+              still need explicit owner
+            </li>
+            <li>
+              In `disconnected` mode the app is status-only with no read-only
+              local cache (owner-locked via CR-033)
+            </li>
+            <li>
+              Runbook should be reconciled if it still describes trace-only
+              offline acceptance instead of full July import target
+            </li>
+          </ul>
+        </div>
+      </section>
     </main>
   </body>
 </html>

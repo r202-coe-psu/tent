@@ -1,3 +1,6 @@
+# Dependencies
+node_modules/
+
 # Env
 .env
 .env.*
@@ -25,3 +28,5 @@ couchdb-session.ini
 .pnpm-store/
 
 .antigravitycli/
+
+node_modules/

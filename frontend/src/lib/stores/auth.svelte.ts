@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { getSession, sessionLogin, sessionLogout, type SessionUser } from '$lib/db/couch';
+import { shelterStore } from '$lib/stores/shelter.svelte';
 
 const STORAGE_KEY = 'auth:user';
 
@@ -63,34 +64,51 @@ class AuthStore {
 	}
 
 	/**
-	 * Resolve the current session. Optimistically trusts the cached identity so
-	 * guards pass without a network round-trip, then validates against CouchDB
-	 * in the background. Cached; safe to call repeatedly.
+	 * Resolve the current session. When a cached identity exists, route guards
+	 * return immediately and CouchDB validation runs in the background. Without
+	 * a cache, this awaits a bounded `getSession` round-trip (see couch.ts).
+	 * Cached; safe to call repeatedly.
 	 */
 	ensureInitialized(fetchFn?: typeof fetch): Promise<void> {
 		if (!browser) return Promise.resolve();
 		if (!this.initPromise) {
-			this.initPromise = getSession(fetchFn)
-				.then((user) => {
-					// Online + answered: CouchDB is the source of truth.
-					this.state.user = user;
-					persistUser(user);
-					if (user) {
-						this.state.needsReauth = false;
-					}
-				})
-				.catch(() => {
-					// Offline / server unreachable — keep the cached identity so the
-					// user stays in the app. Sync retries automatically once online.
-				});
+			const hadCachedUser = this.state.user !== null;
+			if (hadCachedUser) {
+				this.initPromise = Promise.resolve();
+				void this.refreshSession(fetchFn, true);
+			} else {
+				this.initPromise = this.refreshSession(fetchFn, false);
+			}
 		}
 		return this.initPromise;
+	}
+
+	private async refreshSession(fetchFn?: typeof fetch, hadCachedUser = false): Promise<void> {
+		try {
+			const user = await getSession(fetchFn);
+			if (user) {
+				this.state.user = user;
+				persistUser(user);
+				this.state.needsReauth = false;
+				return;
+			}
+			if (hadCachedUser) {
+				// Cookie expired — keep the cached identity and prompt re-login for sync.
+				this.state.needsReauth = true;
+				return;
+			}
+			this.state.user = null;
+			persistUser(null);
+		} catch {
+			// Offline / timeout / server unreachable — keep the cached identity.
+		}
 	}
 
 	async login(input: { name: string; password: string }): Promise<SessionUser> {
 		const user = await sessionLogin(input);
 		this.state.user = user;
 		this.state.needsReauth = false;
+		shelterStore.selectedShelterCode = undefined;
 		persistUser(user);
 		this.initPromise = Promise.resolve();
 		return user;
@@ -102,8 +120,9 @@ class AuthStore {
 		} finally {
 			this.state.user = null;
 			this.state.needsReauth = false;
+			shelterStore.selectedShelterCode = undefined;
 			persistUser(null);
-			this.initPromise = Promise.resolve();
+			this.initPromise = null;
 		}
 	}
 }

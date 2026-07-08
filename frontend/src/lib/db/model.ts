@@ -42,6 +42,17 @@ export function catalogDoc<T extends string, B extends object>(
 	};
 }
 
+/** Fields present on every document in a catalog database. */
+export interface CatalogDoc {
+	_id: string;
+	_rev?: string;
+	type: string;
+	schema_v: number;
+	created_at: Timestamp;
+	updated_at: Timestamp;
+	created_by: string;
+}
+
 /** Fields present on every document in a shelter database. */
 export interface BaseDoc {
 	_id: string;
@@ -95,7 +106,6 @@ export function makeDoc<T extends string, B extends object>(
 	};
 }
 
-
 /** Return a copy of a mutable doc with a fresh `updated_at` (LWW conflict key). */
 export function touch<T extends { updated_at: Timestamp }>(doc: T): T {
 	return { ...doc, updated_at: now() };
@@ -120,6 +130,7 @@ export const registeredViaSchema = z.enum(['app', 'import', 'paper']);
 export const shelterCodeSchema = z
 	.string()
 	.regex(/^SH\d{3,}$/, 'Shelter code must look like SH001');
+
 /**
  * Special schema for global/system layers (e.g., Audit Trail or System Config)
  * that allows identifying the context as the central database ('catalog').

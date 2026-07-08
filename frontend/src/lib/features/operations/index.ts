@@ -17,7 +17,9 @@ export type {
 	LedgerReason,
 	DonationStatus,
 	TransferStatus,
-	DonationChannel
+	DonationChannel,
+	DonationSlot,
+	NeedAvailability
 } from './domain/operations';
 
 // Domain — schemas + factories + transitions + read models + guards
@@ -40,9 +42,14 @@ export {
 	canTransitionDonation,
 	stockBalance,
 	openNeeds,
+	calculateReserved,
+	isNeedCutOff,
+	deriveNeedAvailability,
 	isStockLedger,
 	isDonation,
 	isDonationCampaign,
+	isDonationSlot,
+	mapNeedItemHeuristic,
 	type StockLedgerInput,
 	type ReceiveInput,
 	type WalkInDonationInput,
@@ -55,9 +62,9 @@ export {
 	type DistributeInput
 } from './domain/operations';
 
-// Data — repository contract + PouchDB binding
+// Data — repository contract + remote CouchDB binding
 export type { OperationsRepository } from './data/operations.repository';
-export { operationsRepository, SHELTER_CODE, SHELTER_DB } from './data/operations.pouch';
+export { operationsRepository } from './data/operations.remote';
 
 // Application — TanStack Query hooks + live-query wiring
 export {
@@ -67,8 +74,15 @@ export {
 	useStockBalance,
 	useReceiveStock,
 	useDistributeStock,
+	useCampaigns,
+	useStockLedgers,
+	useDonations,
+	useCreateCampaign,
+	useUpdateCampaign,
 	startOperationsLiveQuery
 } from './application/queries';
+export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';
+export type { NeedItem } from './application/need-item.types';
 
 // UI components
 export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';

@@ -1,8 +1,20 @@
 import type { AuthorContext } from '$lib/db/model';
-import type { StockLedger, ReceiveInput, DistributeInput, StockTransfer, TransferInput } from '../domain/operations';
+import type {
+	DonationCampaign,
+	CampaignInput,
+	StockLedger,
+	ReceiveInput,
+	DistributeInput,
+	Donation,
+	DonationSlot,
+	StockTransfer,
+	TransferInput
+} from '../domain/operations';
+import type { AuditAction } from '$lib/features/shared';
 
 /**
- * Repository contract for managing stock ledger entries and calculating inventory balances.
+ * Persistence contract for the `operations` feature (stock, campaigns, donations, transfers).
+ * Allows UI and query layers to query and mutate data independent of specific PouchDB API shapes.
  *
  * All stock ledger entries are append-only.
  */
@@ -47,7 +59,10 @@ export interface OperationsRepository {
 	 * Dispatch a transfer (change state to 'shipped' and deduct stock via transfer_out ledgers).
 	 * Will throw an error if there is insufficient stock.
 	 */
-	dispatchTransfer(transfer: StockTransfer, ctx: AuthorContext): Promise<{ transfer: StockTransfer; ledgers: StockLedger[] }>;
+	dispatchTransfer(
+		transfer: StockTransfer,
+		ctx: AuthorContext
+	): Promise<{ transfer: StockTransfer; ledgers: StockLedger[] }>;
 
 	/**
 	 * Receive a transfer (change state to 'received' and add stock via transfer_in ledgers).
@@ -62,4 +77,22 @@ export interface OperationsRepository {
 	 * List incoming transfers that are in 'shipped' state.
 	 */
 	listIncomingTransfers(): Promise<StockTransfer[]>;
+
+	// Campaign/Donation/Slot methods
+	listCampaigns(): Promise<DonationCampaign[]>;
+	getCampaign(id: string): Promise<DonationCampaign | null>;
+	createCampaign(input: CampaignInput, ctx: AuthorContext): Promise<DonationCampaign>;
+	updateCampaign(
+		campaign: DonationCampaign,
+		auditInput?: { action: AuditAction; reason: string; ctx: AuthorContext }
+	): Promise<DonationCampaign>;
+	listDonations(): Promise<Donation[]>;
+
+	getDonation(id: string): Promise<Donation | null>;
+	createDonation(donation: Donation): Promise<Donation>;
+	updateDonation(donation: Donation): Promise<Donation>;
+
+	listDonationSlots(): Promise<DonationSlot[]>;
+	getDonationSlot(id: string): Promise<DonationSlot | null>;
+	updateDonationSlot(slot: DonationSlot): Promise<DonationSlot>;
 }
