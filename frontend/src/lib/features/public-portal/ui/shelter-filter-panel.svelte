@@ -26,7 +26,10 @@
 		vulnerable_bed?: boolean;
 		vulnerable_wheelchair?: boolean;
 		vulnerable_infant?: boolean;
+		vulnerable_elderly?: boolean;
 		vulnerable_isolation?: boolean;
+		facility_kitchen?: boolean;
+		facility_women_child?: boolean;
 		pet_general?: boolean;
 		pet_large?: boolean;
 		pet_livestock?: boolean;
@@ -40,11 +43,13 @@
 
 	let {
 		filters = {},
+		availableTypes = [],
 		action = '/public/shelters',
 		userLat = $bindable(''),
 		userLng = $bindable('')
 	}: {
 		filters?: Filters;
+		availableTypes?: string[];
 		action?: string;
 		userLat?: string;
 		userLng?: string;
@@ -54,12 +59,14 @@
 	let selectedProvince = $state<string>('');
 	let selectedDistrict = $state<string>('');
 	let selectedSubdistrict = $state<string>('');
+	let distanceValue = $state<string>('5');
 
 	$effect(() => {
 		searchQuery = filters.search ?? '';
 		selectedProvince = filters.province ?? '';
 		selectedDistrict = filters.district ?? '';
 		selectedSubdistrict = filters.subdistrict ?? '';
+		distanceValue = filters.distance || '5';
 
 		if (filters.user_lat && !userLat) userLat = filters.user_lat.toString();
 		if (filters.user_lng && !userLng) userLng = filters.user_lng.toString();
@@ -140,7 +147,7 @@
 </script>
 
 <div
-	class="flex h-[85vh] max-h-[800px] flex-col rounded-2xl border border-border bg-card p-5 shadow-xs"
+	class="flex h-[85vh] max-h-200 flex-col rounded-2xl border border-border bg-card p-5 shadow-xs"
 >
 	<div class="mb-4 flex shrink-0 items-center gap-2">
 		<Filter class="h-4 w-4 text-primary" />
@@ -212,8 +219,9 @@
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Item value="">ประเภท (ทั้งหมด)</Select.Item>
-							<Select.Item value="ศูนย์บริหารส่วนท้องถิ่น">ศูนย์บริหารส่วนท้องถิ่น</Select.Item>
-							<Select.Item value="ศูนย์อพยพชั่วคราว">ศูนย์อพยพชั่วคราว</Select.Item>
+							{#each availableTypes as t (t)}
+								<Select.Item value={t}>{t}</Select.Item>
+							{/each}
 						</Select.Content>
 					</Select.Root>
 				</div>
@@ -222,21 +230,21 @@
 				<div class="space-y-3">
 					<div class="text-xs font-bold text-foreground">รัศมีจากตำแหน่งของคุณ (GPS)</div>
 					<div class="flex gap-2 rounded-lg border border-border bg-muted/20 p-1">
+						<input type="hidden" name="distance" value={distanceValue} />
 						{#each ['5', '10', '20'] as km (km)}
-							<label class="flex-1 cursor-pointer">
-								<input
-									type="radio"
-									name="distance"
-									value={km}
-									class="peer sr-only"
-									checked={filters.distance === km}
-								/>
-								<div
-									class="rounded-md py-1.5 text-center text-[13px] font-medium text-muted-foreground transition-all peer-checked:bg-primary-dark peer-checked:font-bold peer-checked:text-white"
-								>
-									{km} กม.
-								</div>
-							</label>
+							<button
+								type="button"
+								class="flex-1 rounded-md py-1.5 text-center text-[13px] font-medium transition-all {distanceValue ===
+								km
+									? 'bg-primary-dark font-bold text-white'
+									: 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
+								onclick={() => {
+									if (distanceValue === km) distanceValue = '';
+									else distanceValue = km;
+								}}
+							>
+								{km} กม.
+							</button>
 						{/each}
 					</div>
 				</div>
@@ -279,7 +287,7 @@
 							<Accordion.Content class="pb-2">
 								<div class="space-y-6 px-2 pt-2 pb-2">
 									<!-- Category 1 -->
-									<div class="space-y-3 rounded-lg bg-slate-50 p-4">
+									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
 										<div class="text-[13px] font-bold text-foreground">1. การดูแลกลุ่มเปราะบาง</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -290,7 +298,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>ต้องการเตียงสำหรับผู้ป่วยติดเตียง</span
+													>มีเตียงสำหรับผู้ป่วยติดเตียง</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -312,7 +320,18 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>ต้องการพื้นที่สำหรับเด็กอ่อน / หญิงตั้งครรภ์</span
+													>มีพื้นที่สำหรับเด็กอ่อน / หญิงตั้งครรภ์</span
+												>
+											</label>
+											<label class="group flex cursor-pointer items-start gap-3">
+												<Checkbox
+													name="vulnerable_elderly"
+													checked={filters.vulnerable_elderly === true}
+													class="mt-0.5 rounded shadow-sm"
+												/>
+												<span
+													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
+													>รองรับผู้สูงอายุ</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -323,13 +342,13 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>ต้องการห้องแยกกักโรค (Isolation Zone)</span
+													>มีห้องแยกกักโรค (Isolation Zone)</span
 												>
 											</label>
 										</div>
 									</div>
 									<!-- Category 2 -->
-									<div class="space-y-3 rounded-lg bg-slate-50 p-4">
+									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
 										<div class="text-[13px] font-bold text-foreground">2. นโยบายสัตว์เลี้ยง</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -368,7 +387,7 @@
 										</div>
 									</div>
 									<!-- Category 3 -->
-									<div class="space-y-3 rounded-lg bg-slate-50 p-4">
+									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
 										<div class="text-[13px] font-bold text-foreground">3. พื้นที่จอดยานพาหนะ</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -407,7 +426,7 @@
 										</div>
 									</div>
 									<!-- Category 4 -->
-									<div class="space-y-3 rounded-lg bg-slate-50 p-4">
+									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
 										<div class="text-[13px] font-bold text-foreground">
 											4. สาธารณูปโภคและความปลอดภัย
 										</div>
@@ -425,24 +444,24 @@
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
-													name="utility_high_ground"
-													checked={filters.utility_high_ground === true}
+													name="facility_kitchen"
+													checked={filters.facility_kitchen === true}
 													class="mt-0.5 rounded shadow-sm"
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>⛰️ อยู่ในพื้นที่สูง (หนีน้ำท่วมขัง)</span
+													>🍲 มีโรงครัวกลาง (อาหาร)</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
-													name="utility_truck_access"
-													checked={filters.utility_truck_access === true}
+													name="facility_women_child"
+													checked={filters.facility_women_child === true}
 													class="mt-0.5 rounded shadow-sm"
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>🛣️ รถบรรทุก / รถใหญ่สามารถขับเข้าถึงได้</span
+													>🛡️ มีพื้นที่ปลอดภัยสำหรับเด็กและสตรี</span
 												>
 											</label>
 										</div>
@@ -456,10 +475,18 @@
 		</div>
 
 		<!-- Submit -->
-		<div class="shrink-0 border-t border-border pt-4">
-			<Button type="submit" size="lg" class="w-full rounded-xl font-bold shadow-sm"
-				>ค้นหาและกรองข้อมูล</Button
+		<div class="flex shrink-0 gap-2 border-t border-border pt-4">
+			<Button
+				variant="outline"
+				href={action}
+				size="lg"
+				class="w-1/3 rounded-xl font-bold text-muted-foreground shadow-sm hover:bg-muted"
 			>
+				ล้างค่า
+			</Button>
+			<Button type="submit" size="lg" class="w-2/3 rounded-xl font-bold shadow-sm">
+				ค้นหาและกรองข้อมูล
+			</Button>
 		</div>
 	</form>
 </div>
