@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { BaseDoc, Timestamp, AuthorContext } from '$lib/db/model';
 import { makeDoc } from '$lib/db/model';
+import type { MealCalcSource } from './meal-calc';
 
 // ---- enums ----
 
@@ -41,17 +42,24 @@ export interface MealPlan extends BaseDoc {
 	recipes: MealPlanRecipe[];
 	status: MealPlanStatus;
 	override_reason?: string | null;
+	calc_source?: MealCalcSource | null;
 }
 
 export const mealPlanInputSchema = z.object({
 	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
 	meal: mealPeriodSchema,
-	headcount: z.object({
-		total: z.number().int().min(0),
-		halal: z.number().int().min(0),
-		soft_food: z.number().int().min(0),
-		infant: z.number().int().min(0)
-	}),
+	headcount: z
+		.object({
+			total: z.number().int().min(0),
+			halal: z.number().int().min(0),
+			soft_food: z.number().int().min(0),
+			infant: z.number().int().min(0)
+		})
+		.refine((h) => h.halal <= h.total && h.soft_food <= h.total && h.infant <= h.total, {
+			// Sub-counts are orthogonal dimensions (a person may be both muslim and
+			// an infant), so each is bounded by total independently — not their sum. CR-022.
+			message: 'Each sub-count (halal / soft_food / infant) cannot exceed total headcount'
+		}),
 	recipes: z
 		.array(
 			z.object({
@@ -61,7 +69,15 @@ export const mealPlanInputSchema = z.object({
 		)
 		.min(1, 'At least one recipe required'),
 	status: mealPlanStatusSchema.default('draft'),
-	override_reason: z.string().nullable().optional()
+	override_reason: z.string().nullable().optional(),
+	calc_source: z
+		.object({
+			sop_profile_id: z.string().min(1),
+			sop_profile_version: z.number().int().positive(),
+			headcount_as_of: z.string().datetime()
+		})
+		.nullable()
+		.optional()
 });
 export type MealPlanInput = z.input<typeof mealPlanInputSchema>;
 
@@ -69,14 +85,15 @@ export function createMealPlan(input: MealPlanInput, ctx: AuthorContext): MealPl
 	const d = mealPlanInputSchema.parse(input);
 	return makeDoc(
 		'meal_plan',
-		1,
+		2,
 		{
 			date: d.date,
 			meal: d.meal,
 			headcount: d.headcount,
 			recipes: d.recipes,
 			status: d.status,
-			...(d.override_reason != null ? { override_reason: d.override_reason } : {})
+			...(d.override_reason != null ? { override_reason: d.override_reason } : {}),
+			...(d.calc_source != null ? { calc_source: d.calc_source } : {})
 		},
 		ctx,
 		`${d.date}:${d.meal}` // deterministic suffix
@@ -108,12 +125,19 @@ export const kitchenRequisitionInputSchema = z.object({
 	meal_plan_id: z.string().nullable().default(null),
 	items: z
 		.array(
-			z.object({
-				item_id: z.string().min(1),
-				qty_requested: z.number().positive(),
-				qty_issued: z.number().min(0),
-				unit: z.string().trim().min(1)
-			})
+			z
+				.object({
+					item_id: z.string().min(1),
+					qty_requested: z.number().positive(),
+					qty_issued: z.number().min(0),
+					unit: z.string().trim().min(1)
+				})
+				// Issuing more than requested is meaningless — a requisition line can
+				// short (partial issue) but never over-issue. Enforced here so the
+				// invariant holds outside the UI clamp (assessRequisition's issuable).
+				.refine((i) => i.qty_issued <= i.qty_requested, {
+					message: 'qty_issued cannot exceed qty_requested'
+				})
 		)
 		.min(1, 'At least one item required')
 });
@@ -194,3 +218,43 @@ export const isMealService = (d: unknown): d is MealService =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'meal_service';
 
 export type KitchenDoc = MealPlan | KitchenRequisition | MealService;
+
+// ---- GasCylinderType — mutable config, LWW via touch() ------------------
+// _id: "gas_cylinder_type:{ulid}" — one doc per stove/tank combo.
+
+export interface GasCylinderType extends BaseDoc {
+	type: 'gas_cylinder_type';
+	name: string;
+	capacity_kg: number;
+	burn_rate_kg_per_hour: number;
+	time_multiplier: number;
+}
+
+export const gasCylinderTypeInputSchema = z.object({
+	name: z.string().trim().min(1, 'Name required'),
+	capacity_kg: z.number().positive('Must be > 0'),
+	burn_rate_kg_per_hour: z.number().positive('Must be > 0'),
+	time_multiplier: z.number().positive('Must be > 0').default(1)
+});
+export type GasCylinderTypeInput = z.input<typeof gasCylinderTypeInputSchema>;
+
+export function createGasCylinderType(
+	input: GasCylinderTypeInput,
+	ctx: AuthorContext
+): GasCylinderType {
+	const d = gasCylinderTypeInputSchema.parse(input);
+	return makeDoc(
+		'gas_cylinder_type',
+		1,
+		{
+			name: d.name,
+			capacity_kg: d.capacity_kg,
+			burn_rate_kg_per_hour: d.burn_rate_kg_per_hour,
+			time_multiplier: d.time_multiplier
+		},
+		ctx
+	);
+}
+
+export const isGasCylinderType = (d: unknown): d is GasCylinderType =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'gas_cylinder_type';

@@ -74,19 +74,55 @@ edge เฉพาะ WAN outage, local-only ถ้าไม่เห็นทั
 ## เริ่มต้นใช้งาน
 
 ```bash
-# 1. ยก CouchDB ขึ้น (ต้องมี .env — copy จาก .env.example)
+# 0. Git hooks (repo root — ครั้งแรกหลัง clone)
+pnpm install          # ติดตั้ง lefthook + register pre-commit hook
+
+# 1. ยก CouchDB และ Worker ขึ้น (ต้องมี .env — copy จาก .env.example)
 cp .env.example .env
+cp couchdb-session-example.ini couchdb-session.ini
 docker compose up -d
 
 # 2. frontend (ใช้ pnpm)
 cd frontend
 pnpm install
 pnpm dev          # http://localhost:5173
+
+# 3. การรัน metrics-worker (กรณีต้องการ Debug โค้ดโดยไม่รันผ่าน Docker)
+# (ปกติ Worker จะรันอัตโนมัติพร้อม docker compose up ไปแล้ว)
+cd metrics-worker
+pnpm install
+pnpm run build
+pnpm start
 ```
+
+## การตรวจคุณภาพโค้ด (pre-commit)
+
+repo root ใช้ **[Lefthook](https://github.com/evilmartians/lefthook)** เป็น quality gate ก่อน commit
+— ตรวจ code smell เบื้องต้นของ frontend ตามลำดับเดียวกับ Jenkins CI:
+
+1. `pnpm lint` — Prettier + ESLint
+2. `pnpm check` — `svelte-check` (type-check)
+3. `pnpm test` — Vitest unit tests
+
+Hook รันเฉพาะเมื่อมีไฟล์ใน `frontend/` ถูก stage; commit ที่แตะแค่ docs/config ที่ root จะข้าม
+การตรวจนี้
+
+```bash
+# ทดสอบ hook โดยไม่ commit
+pnpm exec lefthook run pre-commit
+
+# ข้าม hook ชั่วคราว (กรณีจำเป็น)
+LEFTHOOK=0 git commit -m "..."
+# หรือ git commit --no-verify
+```
+
+ตั้งค่าอยู่ใน [`lefthook.yml`](lefthook.yml) ที่ repo root — ต้อง `pnpm install` ที่ root
+(แยกจาก `frontend/`) หลัง clone เพื่อให้ hook ทำงาน
 
 คำสั่งที่ใช้บ่อย (รันใน `frontend/`):
 
 - `pnpm dev` — Vite dev server
+- `pnpm lint` — format + ESLint check
 - `pnpm check` — type-check (รันก่อนปิดงานทุกครั้ง)
 - `pnpm test` — unit tests (Vitest)
 - `pnpm test:e2e` — Playwright e2e

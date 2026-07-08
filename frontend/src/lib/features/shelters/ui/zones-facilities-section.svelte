@@ -17,6 +17,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Power from '@lucide/svelte/icons/power';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import Users from '@lucide/svelte/icons/users';
 
 	let {
 		form,
@@ -141,6 +142,7 @@
 
 	let newSubStorageName = $state('');
 	let newSubStorageType = $state<SubStorageType>('general');
+	let newSubStorageArea = $state('');
 
 	function addSubStorage() {
 		if (!newSubStorageName.trim()) {
@@ -155,11 +157,17 @@
 			...$formData.common_areas,
 			sub_storage: [
 				...withIds,
-				{ id: ulid(), name: newSubStorageName.trim(), type: newSubStorageType }
+				{
+					id: ulid(),
+					name: newSubStorageName.trim(),
+					type: newSubStorageType,
+					area_m2: newSubStorageArea === '' ? null : Number(newSubStorageArea)
+				}
 			]
 		};
 		newSubStorageName = '';
 		newSubStorageType = 'general';
+		newSubStorageArea = '';
 	}
 
 	function removeSubStorage(index: number) {
@@ -172,13 +180,11 @@
 </script>
 
 <section
-	class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border bg-shelter-amber-bg/30 p-6 shadow-sm"
+	class="border-shelter-amber mt-6 mb-6 space-y-6 rounded-2xl border bg-shelter-amber-bg/30 p-6"
 >
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<span
-			class="bg-shelter-orange-bg text-shelter-orange-text flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold"
-			>3</span
-		>
+		<Users class="text-shelter-orange-text h-5 w-5" />
+		<span class="text-shelter-orange-text text-sm font-bold">3.</span>
 		<h2 class="text-base font-bold text-card-foreground">การจัดการโซนและสิ่งอำนวยความสะดวก</h2>
 	</div>
 	<!-- 3a. Living Zones -->
@@ -201,88 +207,114 @@
 
 		<div class="space-y-3">
 			{#each $formData.zones ?? [] as zone, index (zone.code)}
-				<div
-					class="flex items-center gap-3 rounded-xl border border-shelter-border bg-muted/30 p-2"
-				>
-					<Form.Field {form} name={`zones[${index}].name`} class="flex-1 space-y-0">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Input
-									{...props}
-									bind:value={zone.name}
-									placeholder="ชื่อโซน"
-									class="bg-white"
-									{disabled}
-								/>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
-					<Select.Root type="single" bind:value={zone.type} {disabled}>
-						<Select.Trigger
-							class="flex !h-9 w-[200px] items-start rounded-md border border-input bg-white px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
-						>
-							{zoneTypeOptions.find((o) => o.value === zone.type)?.label ?? '— เลือก —'}
-						</Select.Trigger>
-						<Select.Content>
-							{#each zoneTypeOptions as opt (opt.value)}
-								<Select.Item value={opt.value} label={opt.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
-					<Form.Field {form} name={`zones[${index}].capacity`} class="w-[140px] space-y-0">
-						<Form.Control>
-							{#snippet children({ props })}
-								<div class="relative">
+				<div class="space-y-2 rounded-xl border border-shelter-border bg-muted/30 p-2">
+					<div class="flex items-center gap-3">
+						<Form.Field {form} name={`zones[${index}].name`} class="flex-1 space-y-0">
+							<Form.Control>
+								{#snippet children({ props })}
 									<Input
 										{...props}
-										type="number"
-										bind:value={zone.capacity}
-										class="bg-white pr-10 text-right"
+										bind:value={zone.name}
+										placeholder="ชื่อโซน"
+										class="bg-white"
 										{disabled}
 									/>
-									<span
-										class="absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground"
-										>คน</span
-									>
-								</div>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
-					<Button
-						variant="ghost"
-						size="icon"
-						class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-						onclick={() => deleteZone(zone.code)}
-						{disabled}
-						title="ลบโซน"
-					>
-						<Trash2 class="h-4 w-4" />
-					</Button>
-					{#if zone.status === 'closed'}
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+						<Select.Root type="single" bind:value={zone.type} {disabled}>
+							<Select.Trigger
+								class="flex !h-9 w-[200px] items-start rounded-md border border-input bg-white px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+							>
+								{zoneTypeOptions.find((o) => o.value === zone.type)?.label ?? '— เลือก —'}
+							</Select.Trigger>
+							<Select.Content>
+								{#each zoneTypeOptions as opt (opt.value)}
+									<Select.Item value={opt.value} label={opt.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+						<Form.Field {form} name={`zones[${index}].capacity`} class="w-[140px] space-y-0">
+							<Form.Control>
+								{#snippet children({ props })}
+									<div class="relative">
+										<Input
+											{...props}
+											type="number"
+											bind:value={zone.capacity}
+											class="bg-white pr-10 text-right"
+											{disabled}
+										/>
+										<span
+											class="absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground"
+											>คน</span
+										>
+									</div>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 						<Button
 							variant="ghost"
 							size="icon"
-							class="text-green-600 hover:bg-green-50 hover:text-green-700"
-							onclick={() => openConfirm('reopen', zone.code)}
-							disabled={disabled || closeZoneMutation.isPending || reopenZoneMutation.isPending}
-							title="เปิดโซนอีกครั้ง"
+							class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+							onclick={() => deleteZone(zone.code)}
+							{disabled}
+							title="ลบโซน"
 						>
-							<RotateCcw class="h-4 w-4" />
+							<Trash2 class="h-4 w-4" />
 						</Button>
-					{:else}
-						<Button
-							variant="ghost"
-							size="icon"
-							class="text-orange-600 hover:bg-orange-50 hover:text-orange-700"
-							onclick={() => openConfirm('close', zone.code)}
-							disabled={disabled || closeZoneMutation.isPending || reopenZoneMutation.isPending}
-							title="ปิดโซน"
-						>
-							<Power class="h-4 w-4" />
-						</Button>
-					{/if}
+						{#if zone.status === 'closed'}
+							<Button
+								variant="ghost"
+								size="icon"
+								class="text-green-600 hover:bg-green-50 hover:text-green-700"
+								onclick={() => openConfirm('reopen', zone.code)}
+								disabled={disabled || closeZoneMutation.isPending || reopenZoneMutation.isPending}
+								title="เปิดโซนอีกครั้ง"
+							>
+								<RotateCcw class="h-4 w-4" />
+							</Button>
+						{:else}
+							<Button
+								variant="ghost"
+								size="icon"
+								class="text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+								onclick={() => openConfirm('close', zone.code)}
+								disabled={disabled || closeZoneMutation.isPending || reopenZoneMutation.isPending}
+								title="ปิดโซน"
+							>
+								<Power class="h-4 w-4" />
+							</Button>
+						{/if}
+					</div>
+					<div class="grid grid-cols-1 gap-2 px-1 md:grid-cols-[160px_1fr]">
+						<div class="relative">
+							<Input
+								type="number"
+								min="0"
+								step="any"
+								value={zone.area_m2 ?? ''}
+								oninput={(e) =>
+									(zone.area_m2 =
+										e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+								class="bg-white pr-12 text-right"
+								placeholder="ขนาดพื้นที่"
+								{disabled}
+							/>
+							<span class="absolute top-1/2 right-3 -translate-y-1/2 text-xs text-muted-foreground"
+								>ตร.ม.</span
+							>
+						</div>
+						<Input
+							value={zone.specifics ?? ''}
+							oninput={(e) => (zone.specifics = e.currentTarget.value || null)}
+							class="bg-white"
+							placeholder="ข้อจำกัด/สิ่งอำนวยความสะดวกเฉพาะโซน (Zone Specifics)"
+							{disabled}
+						/>
+					</div>
 				</div>
 			{/each}
 			{#if ($formData.zones ?? []).length === 0}
@@ -411,12 +443,45 @@
 			<Checkbox
 				bind:checked={
 					() => $formData.facilities.car_toilet_accessible ?? false,
-					(v) => ($formData.facilities.car_toilet_accessible = v)
+					(v) => {
+						$formData.facilities.car_toilet_accessible = v;
+						// FR-23-7 — clear supported count when accessibility is turned off.
+						if (!v) $formData.facilities.car_toilet_supported = null;
+					}
 				}
 				{disabled}
 			/>
 			<span>✅ รถสุขาเคลื่อนที่สามารถเข้าถึงได้</span>
 		</label>
+
+		{#if $formData.facilities.car_toilet_accessible}
+			<Form.Field {form} name="facilities.car_toilet_supported">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>จำนวนที่ได้รับการสนับสนุนแล้ว</Form.Label>
+						<div class="flex max-w-xs">
+							<Input
+								{...props}
+								type="number"
+								min="0"
+								value={$formData.facilities.car_toilet_supported ?? ''}
+								oninput={(e) =>
+									($formData.facilities.car_toilet_supported =
+										e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+								{disabled}
+								placeholder="0"
+								class="rounded-r-none"
+							/>
+							<span
+								class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
+								>ห้อง</span
+							>
+						</div>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		{/if}
 	</div>
 
 	<!-- 3c. Common Areas -->
@@ -450,6 +515,30 @@
 				/>
 				<span>🚁 พื้นที่จอดเฮลิคอปเตอร์ (Helipad)</span>
 			</label>
+			<label
+				class="flex items-center space-x-2 rounded-lg border border-shelter-border p-3 text-sm"
+			>
+				<Checkbox
+					bind:checked={
+						() => $formData.common_areas.isolation_room ?? false,
+						(v) => ($formData.common_areas.isolation_room = v)
+					}
+					{disabled}
+				/>
+				<span>🔴 ห้องแยกกักโรค (Isolation Room)</span>
+			</label>
+			<label
+				class="flex items-center space-x-2 rounded-lg border border-shelter-border p-3 text-sm"
+			>
+				<Checkbox
+					bind:checked={
+						() => $formData.common_areas.women_child_friendly_space ?? false,
+						(v) => ($formData.common_areas.women_child_friendly_space = v)
+					}
+					{disabled}
+				/>
+				<span>🧸 พื้นที่สำหรับเด็ก/สตรี (Women &amp; Child Friendly Space)</span>
+			</label>
 		</div>
 
 		<div>
@@ -465,7 +554,8 @@
 							<div class="flex items-center gap-2">
 								<span class="font-medium">{item.name}</span>
 								<span class="text-xs text-muted-foreground">
-									({subStorageOptions.find((o) => o.value === item.type)?.label ?? item.type})
+									({subStorageOptions.find((o) => o.value === item.type)?.label ??
+										item.type}{item.area_m2 ? ` · ${item.area_m2} ตร.ม.` : ''})
 								</span>
 							</div>
 							<Button
@@ -489,6 +579,15 @@
 					placeholder="ชื่อสถานที่จัดเก็บ (เช่น อาหารแห้ง (เสธียง))"
 					class="flex-1"
 				/>
+				<Input
+					type="number"
+					min="0"
+					step="any"
+					bind:value={newSubStorageArea}
+					{disabled}
+					placeholder="ตร.ม."
+					class="w-[100px]"
+				/>
 				<Select.Root type="single" bind:value={newSubStorageType} {disabled}>
 					<Select.Trigger
 						class="flex !h-9 w-[180px] items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
@@ -508,25 +607,55 @@
 			</div>
 		</div>
 
-		<Form.Field {form} name="common_areas.parking_capacity">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>🚗 พื้นที่จอดรถ (คัน)</Form.Label>
-					<Input
-						{...props}
-						type="number"
-						min="0"
-						value={$formData.common_areas.parking_capacity ?? ''}
-						oninput={(e) =>
-							($formData.common_areas.parking_capacity =
-								e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
-						{disabled}
-						placeholder="0"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
+		<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+			<Form.Field {form} name="common_areas.parking_capacity">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>🚗 พื้นที่จอดรถ (คัน)</Form.Label>
+						<Input
+							{...props}
+							type="number"
+							min="0"
+							value={$formData.common_areas.parking_capacity ?? ''}
+							oninput={(e) =>
+								($formData.common_areas.parking_capacity =
+									e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+							{disabled}
+							placeholder="0"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+
+			<Form.Field {form} name="common_areas.logistics_area_m2">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>📦 พื้นที่จัดการโลจิสติกส์รวม (Drop-off &amp; Sorting)</Form.Label>
+						<div class="flex">
+							<Input
+								{...props}
+								type="number"
+								min="0"
+								step="any"
+								value={$formData.common_areas.logistics_area_m2 ?? ''}
+								oninput={(e) =>
+									($formData.common_areas.logistics_area_m2 =
+										e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+								{disabled}
+								placeholder="0"
+								class="rounded-r-none"
+							/>
+							<span
+								class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
+								>ตร.ม.</span
+							>
+						</div>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		</div>
 	</div>
 
 	<Dialog.Root open={confirmOpen} onOpenChange={(open) => !open && cancelConfirm()}>

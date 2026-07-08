@@ -26,8 +26,12 @@ interface SessionResponse {
 }
 
 /** Thin fetch wrapper: sends cookies, parses JSON, throws CouchDB's reason on error. */
-export async function couchFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-	const res = await fetch(`${COUCH_URL}${path}`, {
+export async function couchFetch<T>(
+	path: string,
+	init: RequestInit & { fetch?: typeof fetch } = {}
+): Promise<T> {
+	const fetchFn = init.fetch || fetch;
+	const res = await fetchFn(`${COUCH_URL}${path}`, {
 		credentials: 'include',
 		...init,
 		headers: {
@@ -66,9 +70,23 @@ export async function sessionLogout(): Promise<void> {
 	await couchFetch('/_session', { method: 'DELETE' });
 }
 
+const DEFAULT_SESSION_TIMEOUT_MS = 8_000;
+
 /** Current user from the session cookie, or null when anonymous. */
-export async function getSession(): Promise<SessionUser | null> {
-	const res = await couchFetch<SessionResponse>('/_session');
-	if (!res.userCtx?.name) return null;
-	return { name: res.userCtx.name, roles: res.userCtx.roles };
+export async function getSession(
+	fetchFn?: typeof fetch,
+	timeoutMs = DEFAULT_SESSION_TIMEOUT_MS
+): Promise<SessionUser | null> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		const res = await couchFetch<SessionResponse>('/_session', {
+			fetch: fetchFn,
+			signal: controller.signal
+		});
+		if (!res.userCtx?.name) return null;
+		return { name: res.userCtx.name, roles: res.userCtx.roles };
+	} finally {
+		clearTimeout(timer);
+	}
 }

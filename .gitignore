@@ -1,3 +1,6 @@
+# Dependencies
+node_modules/
+
 # Env
 .env
 .env.*
@@ -20,3 +23,10 @@ Thumbs.db
 
 # Meeting notes (not shared with team)
 docs/meetings/
+couchdb-session.ini
+
+.pnpm-store/
+
+.antigravitycli/
+
+node_modules/

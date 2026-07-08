@@ -4,7 +4,9 @@ import type {
 	KitchenRequisition,
 	KitchenRequisitionInput,
 	MealService,
-	MealServiceInput
+	MealServiceInput,
+	GasCylinderType,
+	GasCylinderTypeInput
 } from '../domain/kitchen';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -13,6 +15,7 @@ export interface KitchenRepository {
 	createMealPlan(input: MealPlanInput, ctx: AuthorContext): Promise<MealPlan>;
 	getMealPlan(date: string, meal: string): Promise<MealPlan | null>;
 	listMealPlans(): Promise<MealPlan[]>;
+	confirmMealPlan(plan: MealPlan): Promise<MealPlan>;
 
 	// KitchenRequisition — append-only; writes stock_ledger entries atomically
 	issueRequisition(input: KitchenRequisitionInput, ctx: AuthorContext): Promise<KitchenRequisition>;
@@ -22,4 +25,13 @@ export interface KitchenRepository {
 	recordMealService(input: MealServiceInput, ctx: AuthorContext): Promise<MealService>;
 	getMealService(date: string, meal: string): Promise<MealService | null>;
 	listMealServices(): Promise<MealService[]>;
+
+	// GasCylinderType — reference data
+	createGasCylinderType(input: GasCylinderTypeInput, ctx: AuthorContext): Promise<GasCylinderType>;
+	listGasCylinderTypes(): Promise<GasCylinderType[]>;
+	updateGasCylinderType(
+		doc: GasCylinderType,
+		input: GasCylinderTypeInput
+	): Promise<GasCylinderType>;
+	deleteGasCylinderType(doc: GasCylinderType): Promise<void>;
 }

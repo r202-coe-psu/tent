@@ -273,7 +273,7 @@ describe('migrateShelterV2ToCurrent', () => {
 	it('migrates status open → operation_status active', () => {
 		const migrated = migrateShelterV2ToCurrent(v2Master);
 		expect(migrated.operation_status).toBe('active');
-		expect(migrated.schema_v).toBe(3);
+		expect(migrated.schema_v).toBe(4);
 	});
 
 	it('migrates status closed → operation_status closed', () => {
@@ -352,13 +352,304 @@ describe('migrateShelterV2ToCurrent', () => {
 	it('is idempotent — calling twice on v2 produces same result', () => {
 		const first = migrateShelterV2ToCurrent(v2Master);
 		const second = migrateShelterV2ToCurrent(first);
-		expect(second.schema_v).toBe(3);
+		expect(second.schema_v).toBe(4);
 		expect(second.operation_status).toBe(first.operation_status);
 	});
 
-	it('is idempotent — calling on v3 returns as-is', () => {
-		const v3 = migrateShelterV2ToCurrent(v2Master);
-		const again = migrateShelterV2ToCurrent(v3);
-		expect(again).toBe(v3);
+	it('is idempotent — calling on current (v4) returns as-is', () => {
+		const current = migrateShelterV2ToCurrent(v2Master);
+		const again = migrateShelterV2ToCurrent(current);
+		expect(again).toBe(current);
+	});
+});
+
+// ===== CR-023 v4 / Addendum A (v4.1) =====
+
+describe('CR-023 v4 — section 1/2 enums & fields', () => {
+	it('accepts area_type + project_level enums', () => {
+		const r = shelterSchema.parse({
+			...validShelterInput,
+			area_type: 'indoor',
+			project_level: 'lao'
+		});
+		expect(r.area_type).toBe('indoor');
+		expect(r.project_level).toBe('lao');
+	});
+
+	it('rejects area_type / project_level outside enum', () => {
+		expect(() => shelterSchema.parse({ ...validShelterInput, area_type: 'castle' })).toThrow();
+		expect(() => shelterSchema.parse({ ...validShelterInput, project_level: 'galaxy' })).toThrow();
+	});
+
+	it('accepts structured address + key personnel', () => {
+		const r = shelterSchema.parse({
+			...validShelterInput,
+			municipality_zone: 'MZ1',
+			community: 'C1',
+			address_no: '99/1',
+			postal_code: '90110',
+			key_personnel: { eoc_liaison: { name: 'A', phone: '08' } }
+		});
+		expect(r.municipality_zone).toBe('MZ1');
+		expect(r.key_personnel?.eoc_liaison?.name).toBe('A');
+	});
+});
+
+describe('CR-023 — empty submit fills policy defaults', () => {
+	it('defaults admission/luggage/parking policies when omitted', () => {
+		const r = shelterSchema.parse(validShelterInput);
+		expect(r.admission_policy).toEqual({
+			supported_vulnerable_groups: [],
+			pet_policy: { policy: null, categories: [] }
+		});
+		expect(r.luggage_policy).toEqual({
+			limitation: null,
+			max_per_family: null,
+			rules: [],
+			rules_other: null
+		});
+		expect(r.parking_policy).toEqual({
+			availability: null,
+			supported_vehicles: [],
+			rules: [],
+			rules_other: null
+		});
+	});
+});
+
+describe('CR-023 Addendum A — section 6 nested pet policy', () => {
+	it('accepts conditional policy with categories + conditions + other', () => {
+		const r = shelterSchema.parse({
+			...validShelterInput,
+			admission_policy: {
+				supported_vulnerable_groups: ['V1', 'V2'],
+				pet_policy: {
+					policy: 'conditional',
+					categories: [
+						{
+							category: 'small_general',
+							conditions: ['vaccine_book', 'caged_or_leashed'],
+							other: 'x'
+						},
+						{ category: 'livestock', conditions: [], other: null }
+					]
+				}
+			}
+		});
+		expect(r.admission_policy.pet_policy.policy).toBe('conditional');
+		expect(r.admission_policy.pet_policy.categories).toHaveLength(2);
+		expect(r.admission_policy.supported_vulnerable_groups).toEqual(['V1', 'V2']);
+	});
+
+	it('rejects pet category / condition outside whitelist', () => {
+		expect(() =>
+			shelterSchema.parse({
+				...validShelterInput,
+				admission_policy: {
+					pet_policy: { policy: 'conditional', categories: [{ category: 'dragon' }] }
+				}
+			})
+		).toThrow();
+		expect(() =>
+			shelterSchema.parse({
+				...validShelterInput,
+				admission_policy: {
+					pet_policy: {
+						policy: 'conditional',
+						categories: [{ category: 'small_general', conditions: ['must_be_cute'] }]
+					}
+				}
+			})
+		).toThrow();
+	});
+
+	it('rejects a condition from another category (per-category whitelist, D-A2 revised)', () => {
+		expect(() =>
+			shelterSchema.parse({
+				...validShelterInput,
+				admission_policy: {
+					pet_policy: {
+						policy: 'conditional',
+						// muzzle_and_leash is a large_dog condition, not valid for small_general.
+						categories: [{ category: 'small_general', conditions: ['muzzle_and_leash'] }]
+					}
+				}
+			})
+		).toThrow();
+	});
+
+	it('accepts large_dog with its own condition whitelist', () => {
+		const r = shelterSchema.parse({
+			...validShelterInput,
+			admission_policy: {
+				pet_policy: {
+					policy: 'conditional',
+					categories: [
+						{
+							category: 'large_dog',
+							conditions: ['muzzle_and_leash', 'aggressive_behavior_expel_right'],
+							other: null
+						}
+					]
+				}
+			}
+		});
+		expect(r.admission_policy.pet_policy.categories[0]).toEqual({
+			category: 'large_dog',
+			conditions: ['muzzle_and_leash', 'aggressive_behavior_expel_right'],
+			other: null
+		});
+	});
+
+	it('accepts livestock with max_capacity + location + its own condition whitelist', () => {
+		const r = shelterSchema.parse({
+			...validShelterInput,
+			admission_policy: {
+				pet_policy: {
+					policy: 'conditional',
+					categories: [
+						{
+							category: 'livestock',
+							max_capacity: 5,
+							location: 'สนามหญ้าหลังอาคารเรียน',
+							conditions: ['owner_provides_feed'],
+							other: null
+						}
+					]
+				}
+			}
+		});
+		const entry = r.admission_policy.pet_policy.categories[0];
+		expect(entry).toMatchObject({
+			category: 'livestock',
+			max_capacity: 5,
+			location: 'สนามหญ้าหลังอาคารเรียน',
+			conditions: ['owner_provides_feed']
+		});
+	});
+});
+
+describe('CR-023 Addendum A — section 7 luggage policy', () => {
+	it('accepts limited + max_per_family + rules', () => {
+		const r = shelterSchema.parse({
+			...validShelterInput,
+			luggage_policy: {
+				limitation: 'limited',
+				max_per_family: 5,
+				rules: ['no_hazardous_items', 'has_temp_storage_service'],
+				rules_other: 'note'
+			}
+		});
+		expect(r.luggage_policy.max_per_family).toBe(5);
+		expect(r.luggage_policy.rules).toContain('no_hazardous_items');
+	});
+
+	it('rejects luggage rule outside whitelist', () => {
+		expect(() =>
+			shelterSchema.parse({
+				...validShelterInput,
+				luggage_policy: { rules: ['free_pizza'] }
+			})
+		).toThrow();
+	});
+});
+
+describe('CR-023 Addendum A — section 8 parking policy', () => {
+	it('accepts available + supported vehicles + rules', () => {
+		const r = shelterSchema.parse({
+			...validShelterInput,
+			parking_policy: {
+				availability: 'available',
+				supported_vehicles: [
+					{ type: 'car', max_capacity: 20 },
+					{ type: 'boat', max_capacity: null }
+				],
+				rules: ['no_liability', 'ev_emergency_charging'],
+				rules_other: null
+			}
+		});
+		expect(r.parking_policy.supported_vehicles).toHaveLength(2);
+		expect(r.parking_policy.rules).toContain('ev_emergency_charging');
+	});
+
+	it('rejects vehicle type / parking rule outside whitelist', () => {
+		expect(() =>
+			shelterSchema.parse({
+				...validShelterInput,
+				parking_policy: { supported_vehicles: [{ type: 'spaceship' }] }
+			})
+		).toThrow();
+		expect(() =>
+			shelterSchema.parse({
+				...validShelterInput,
+				parking_policy: { rules: ['free_valet'] }
+			})
+		).toThrow();
+	});
+});
+
+describe('CR-023 — zone / facilities / common-area additions', () => {
+	it('accepts zone area_m2 + specifics', () => {
+		const r = zoneSchema.parse({
+			code: 'Z1',
+			name: 'A',
+			capacity: 10,
+			area_m2: 50,
+			specifics: 'x'
+		});
+		expect(r.area_m2).toBe(50);
+		expect(r.specifics).toBe('x');
+	});
+
+	it('accepts facilities.car_toilet_supported + common-area additions', () => {
+		const f = facilitiesSchema.parse({ car_toilet_accessible: true, car_toilet_supported: 2 });
+		expect(f.car_toilet_supported).toBe(2);
+		const c = commonAreasSchema.parse({
+			isolation_room: true,
+			women_child_friendly_space: false,
+			logistics_area_m2: 150,
+			sub_storage: [{ name: 'S', type: 'general', area_m2: 20 }]
+		});
+		expect(c.logistics_area_m2).toBe(150);
+		expect(c.sub_storage[0].area_m2).toBe(20);
+	});
+
+	it('accepts risk.secondary_muster_point', () => {
+		const r = riskSchema.parse({ secondary_muster_point: 'field B' });
+		expect(r.secondary_muster_point).toBe('field B');
+	});
+});
+
+describe('CR-023 — migrate v3 → v4 default-fill', () => {
+	it('fills new v4 fields on a v3 doc without them', () => {
+		const v3doc = {
+			_id: 'shelter:x',
+			type: 'shelter' as const,
+			schema_v: 3,
+			code: 'SH001',
+			name: 'X',
+			operation_status: 'standby' as const,
+			capacity: 10,
+			facilities: { toilets_male: 1 },
+			common_areas: { sub_storage: [{ name: 'S', type: 'general' }] },
+			utilities: { communications: [] },
+			risk: { elevation_m: 5 },
+			zones: [{ code: 'Z1', name: 'A', capacity: 10 }],
+			created_at: '2024-01-01T00:00:00Z',
+			updated_at: '2024-01-01T00:00:00Z'
+		} as unknown as ShelterMasterV2;
+		const m = migrateShelterV2ToCurrent(v3doc);
+		expect(m.schema_v).toBe(4);
+		expect(m.project_level).toBeNull();
+		expect(m.municipality_zone).toBeNull();
+		expect(m.admission_policy).toEqual({
+			supported_vulnerable_groups: [],
+			pet_policy: { policy: null, categories: [] }
+		});
+		expect(m.luggage_policy?.limitation).toBeNull();
+		expect(m.parking_policy?.availability).toBeNull();
+		expect(m.facilities?.car_toilet_supported).toBeNull();
+		expect(m.risk?.secondary_muster_point).toBeNull();
+		expect(m.zones?.[0].area_m2).toBeNull();
 	});
 });

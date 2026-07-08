@@ -1,6 +1,6 @@
-import { requireAuth } from '$lib/guards/auth';
+import { requireEvacueeRegistration } from '$lib/guards/auth';
 import type { PageLoad } from './$types';
 
-export const load = (async () => {
-	await requireAuth();
+export const load = (async ({ fetch }) => {
+	await requireEvacueeRegistration(fetch);
 }) satisfies PageLoad;

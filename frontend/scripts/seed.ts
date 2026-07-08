@@ -36,6 +36,8 @@ import {
 	createMedical,
 	createMovement,
 	createScreening,
+	type Evacuee,
+	type PeopleDoc,
 	type EvacueeInput,
 	type HouseholdInput,
 	type MedicalInput,
@@ -50,8 +52,15 @@ import {
 	type StockLedgerInput,
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
+import {
+	createInitialProfile,
+	SOP_MASTER_SCHEMA_VERSION
+} from '$lib/features/sop-ratios/domain/sop-ratio';
+import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
+
+import { deployShelterViewsFn } from '$lib/features/shelters/server';
 
 // ─── env ──────────────────────────────────────────────────────────────────────
 
@@ -77,7 +86,8 @@ function loadEnv(): Record<string, string> {
 }
 
 const env = loadEnv();
-const rawCouchUrl = env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984';
+const rawCouchUrl =
+	process.env.COUCHDB_ADMIN_URL ?? env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984';
 
 // Node's native fetch rejects URLs with embedded credentials — split them out.
 function parseCouchUrl(raw: string): { baseUrl: string; authHeader: string } {
@@ -186,6 +196,10 @@ const SHELTER_CODE = 'SH001';
 const SHELTER_DB = 'shelter_sh001';
 const CTX: AuthorContext = { shelterCode: SHELTER_CODE, createdBy: 'seed' };
 
+const SHELTER_CODE_2 = 'SH002';
+const SHELTER_DB_2 = 'shelter_sh002';
+const CTX_2: AuthorContext = { shelterCode: SHELTER_CODE_2, createdBy: 'seed' };
+
 // Supply item IDs — referenced by operations seed data below.
 const ITEM = {
 	rice: 'item:rice',
@@ -202,47 +216,82 @@ async function seedRegistry(): Promise<void> {
 	await ensureDb('registry');
 	await setSecurity('registry', {
 		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [] }
+		members: {
+			names: [],
+			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
+		}
 	});
 
-	// Idempotent by code-check (matching the admin endpoint pattern) — not by fixed _id.
 	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
+	let hasSH001 = false;
+	let hasSH002 = false;
 	if (status === 200) {
 		const rows = (data as { rows?: { doc?: { type?: string; code?: string } }[] }).rows ?? [];
-		if (rows.some((r) => r.doc?.type === 'shelter' && r.doc?.code === SHELTER_CODE)) {
-			console.log('  ✓ registry: shelter SH001 already exists, skipping');
-			return;
-		}
+		hasSH001 = rows.some((r) => r.doc?.type === 'shelter' && r.doc?.code === SHELTER_CODE);
+		hasSH002 = rows.some((r) => r.doc?.type === 'shelter' && r.doc?.code === SHELTER_CODE_2);
 	}
 
 	const ts = now();
-	await putDoc('registry', {
-		_id: `shelter:${ulid()}`,
-		type: 'shelter',
-		schema_v: 1,
-		code: SHELTER_CODE,
-		name: 'ศูนย์พักพิงสงขลา (ทดสอบ)',
-		status: 'open',
-		capacity: 200,
-		zones: [
-			{ code: 'Z1', name: 'โซน A', capacity: 100 },
-			{ code: 'Z2', name: 'โซน B', capacity: 100 }
-		],
-		area_m2: 800,
-		facilities: {
-			toilets_female: 4,
-			toilets_male: 4,
-			toilets_accessible: 2,
-			showers: 8,
-			water_points: 6,
-			handwashing_stations: 10
-		},
-		opened_at: ts,
-		created_at: ts,
-		updated_at: ts,
-		created_by: 'seed'
-	});
-	console.log('  ✓ registry: 1 shelter master (SH001)');
+	if (!hasSH001) {
+		await putDoc('registry', {
+			_id: `shelter:${ulid()}`,
+			type: 'shelter',
+			schema_v: 1,
+			code: SHELTER_CODE,
+			name: 'ศูนย์พักพิงสงขลา (ทดสอบ)',
+			status: 'open',
+			capacity: 200,
+			zones: [
+				{ code: 'Z1', name: 'โซน A', capacity: 100 },
+				{ code: 'Z2', name: 'โซน B', capacity: 100 }
+			],
+			area_m2: 800,
+			facilities: {
+				toilets_female: 4,
+				toilets_male: 4,
+				toilets_accessible: 2,
+				showers: 8,
+				water_points: 6,
+				handwashing_stations: 10
+			},
+			opened_at: ts,
+			created_at: ts,
+			updated_at: ts,
+			created_by: 'seed'
+		});
+		console.log('  ✓ registry: 1 shelter master (SH001)');
+	} else {
+		console.log('  ✓ registry: shelter SH001 already exists, skipping');
+	}
+
+	if (!hasSH002) {
+		await putDoc('registry', {
+			_id: `shelter:${ulid()}`,
+			type: 'shelter',
+			schema_v: 1,
+			code: SHELTER_CODE_2,
+			name: 'ศูนย์พักพิงปัตตานี (ทดสอบ)',
+			status: 'open',
+			capacity: 100,
+			zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 100 }],
+			area_m2: 400,
+			facilities: {
+				toilets_female: 2,
+				toilets_male: 2,
+				toilets_accessible: 1,
+				showers: 4,
+				water_points: 2,
+				handwashing_stations: 4
+			},
+			opened_at: ts,
+			created_at: ts,
+			updated_at: ts,
+			created_by: 'seed'
+		});
+		console.log('  ✓ registry: 1 shelter master (SH002)');
+	} else {
+		console.log('  ✓ registry: shelter SH002 already exists, skipping');
+	}
 }
 
 // ─── seedCatalog ──────────────────────────────────────────────────────────────
@@ -251,7 +300,29 @@ async function seedCatalog(): Promise<void> {
 	await ensureDb('catalog');
 	await setSecurity('catalog', {
 		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [] }
+		members: {
+			names: [],
+			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
+		}
+	});
+
+	// Deploy validate_doc_update to catalog DB to enforce read-only for non-SA roles
+	const ddocId = '_design/access';
+	const { status: getStatus, data: existingDdoc } = await couchReq(
+		'GET',
+		`/catalog/${encodeURIComponent(ddocId)}`
+	);
+	const rev = getStatus === 200 ? (existingDdoc as { _rev: string })._rev : undefined;
+	const validateFn = `function (newDoc, oldDoc, userCtx) {
+  if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
+    return;
+  }
+  throw({ forbidden: 'Only System Admins can write to the catalog database.' });
+}`;
+	await couchReq('PUT', `/catalog/${encodeURIComponent(ddocId)}`, {
+		_id: ddocId,
+		...(rev ? { _rev: rev } : {}),
+		validate_doc_update: validateFn
 	});
 
 	const items = [
@@ -322,6 +393,49 @@ async function seedCatalog(): Promise<void> {
 	console.log(`  ✓ catalog: ${items.length} supply items, ${recipes.length} recipes`);
 }
 
+async function seedCatalogSopRatios(): Promise<void> {
+	await ensureDb('catalog');
+
+	// Idempotent check: check if the Sphere Baseline master profile already exists in catalog DB
+	// We use the deterministic ID 'master_sphere_baseline' to do an O(1) direct document lookup
+	// NOTE: If the name "Sphere Baseline" is changed in the future, remember to update this deterministicId
+	// to prevent the script from accidentally creating a duplicate master profile.
+	const deterministicId = 'master_sphere_baseline';
+	const fullDocId = `sop_profile:${deterministicId}`;
+	const { status, data } = await couchReq('GET', `/catalog/${encodeURIComponent(fullDocId)}`);
+
+	let existingRev: string | undefined = undefined;
+
+	if (status === 200) {
+		const doc = data as { _rev?: string; schema_v?: number };
+		if (doc.schema_v === SOP_MASTER_SCHEMA_VERSION) {
+			console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" already exists, skipping');
+			return;
+		}
+		existingRev = doc._rev;
+		console.log(
+			`  ⚠ catalog: SOP Ratio "Sphere Baseline" has stale schema_v (${doc.schema_v ?? 'missing'}), preparing upgrade...`
+		);
+	} else if (status !== 404) {
+		throw new Error(`seedCatalogSopRatios: unexpected status ${status} checking ${fullDocId}`);
+	}
+
+	const { profile, audit } = createInitialProfile('sop_profile', 'Sphere Baseline', validRatios, {
+		createdBy: 'seed'
+	});
+
+	// Override standard ULIDs with deterministic IDs for idempotency scan boundary
+	profile._id = fullDocId;
+	if (existingRev) {
+		profile._rev = existingRev;
+	}
+	audit.target_id = fullDocId;
+	audit._id = `audit:seed_sphere_baseline`;
+
+	await bulkDocs('catalog', [profile, audit]);
+	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
+}
+
 // ─── seedShelter ──────────────────────────────────────────────────────────────
 
 async function seedShelter(): Promise<void> {
@@ -330,23 +444,24 @@ async function seedShelter(): Promise<void> {
 		admins: { names: [], roles: ['system_admin'] },
 		members: { names: [], roles: [`shelter:${SHELTER_CODE}`] }
 	});
+	await deployShelterViewsFn(SHELTER_DB, (path, method, body) => couchReq(method, path, body));
 
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวใจดี',
-			zone: 'Z1',
+			municipality_zone: 'Z1',
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ครอบครัวใหญ่ 4 คน'
 		},
 		{
 			label: 'ครอบครัวสุขสาย',
-			zone: 'Z1',
+			municipality_zone: 'Z1',
 			head_evacuee_id: null,
 			pets: [{ species: 'dog', count: 1 }]
 		},
-		{ label: 'ครอบครัวรักสงบ', zone: 'Z2', head_evacuee_id: null, pets: [] }
+		{ label: 'ครอบครัวรักสงบ', municipality_zone: 'Z2', head_evacuee_id: null, pets: [] }
 	];
 	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, CTX));
 
@@ -636,15 +751,276 @@ async function seedShelter(): Promise<void> {
 	);
 }
 
+async function seedShelter2(): Promise<void> {
+	await ensureDb(SHELTER_DB_2);
+	await setSecurity(SHELTER_DB_2, {
+		admins: { names: [], roles: ['system_admin'] },
+		members: { names: [], roles: [`shelter:${SHELTER_CODE_2}`] }
+	});
+	await deployShelterViewsFn(SHELTER_DB_2, (path, method, body) => couchReq(method, path, body));
+
+	const { status, data } = await couchReq('GET', `/${SHELTER_DB_2}/_all_docs?limit=1`);
+	if (status === 200 && (data as { rows?: unknown[] }).rows?.length) {
+		console.log(`  ✓ ${SHELTER_DB_2}: already seeded, skipping`);
+		return;
+	}
+
+	// — households ——————————————————————————————————————————————————————————————
+	const hhInputs: HouseholdInput[] = [
+		{
+			label: 'ครอบครัวปัตตานี',
+			municipality_zone: 'Z1',
+			head_evacuee_id: null,
+			pets: [],
+			notes: 'ตัวอย่าง SH002'
+		}
+	];
+	const [hh1] = hhInputs.map((h) => createHousehold(h, CTX_2));
+
+	// — evacuees ————————————————————————————————————————————————————————————————
+	const evacueeInputs: EvacueeInput[] = [
+		{
+			first_name: 'ดานียา',
+			last_name: 'มานะ',
+			gender: 'female',
+			phone: '0899998888',
+			birth_year: 1995,
+			religion: 'muslim',
+			special_needs: [],
+			household_id: hh1._id,
+			registered_via: 'import'
+		}
+	];
+	const evacuees = evacueeInputs.map((e) => createEvacuee(e, CTX_2));
+
+	const movementInputs: MovementInput[] = evacuees.map((e) => ({
+		evacuee_id: e._id,
+		action: 'check_in' as const,
+		zone: 'Z1'
+	}));
+	const movements = movementInputs.map((m) => createMovement(m, CTX_2));
+	const checkedInEvacuees = evacuees.map((e, i) => applyMovementToStay(e, movements[i]));
+
+	const stockInputs: StockLedgerInput[] = [
+		{ item_id: ITEM.water, qty: 100, unit: 'bottle', reason: 'receive', ref_id: null }
+	];
+	const stockEntries = stockInputs.map((s) => createStockLedger(s, CTX_2));
+
+	const allDocs = [hh1, ...checkedInEvacuees, ...movements, ...stockEntries];
+	await bulkDocs(SHELTER_DB_2, allDocs);
+
+	console.log(`  ✓ ${SHELTER_DB_2}: 1 household, 1 evacuee, 1 movement, 1 stock entry`);
+}
+
+// ─── seedDashboardData ────────────────────────────────────────────────────────
+async function seedDashboardData(): Promise<void> {
+	await ensureDb(SHELTER_DB);
+
+	// Check if already seeded by looking specifically for our generated mock docs
+	const { status, data } = await couchReq('GET', `/${SHELTER_DB}/_all_docs?limit=200`);
+	if (status === 200) {
+		const rows = (data as { rows?: { id: string }[] }).rows ?? [];
+		const mockCount = rows.filter((r) => r.id.startsWith('evacuee:seed-genname')).length;
+		if (mockCount > 10) {
+			console.log(
+				`  ✓ ${SHELTER_DB}: dashboard data already seeded (${mockCount} mock evacuees found), skipping`
+			);
+			return;
+		}
+	}
+
+	const COUNTRIES = [
+		'THAILAND',
+		'MYANMAR',
+		'LAOS',
+		'CAMBODIA',
+		'VIETNAM',
+		'MALAYSIA',
+		'SINGAPORE',
+		'CHINA',
+		'JAPAN',
+		'SOUTH KOREA',
+		'PHILIPPINES',
+		'INDONESIA',
+		'INDIA',
+		'UNKNOWN'
+	];
+	const STATUSES = [
+		'registered',
+		'checked_in',
+		'checked_in',
+		'checked_out',
+		'transferred'
+	] as const;
+	const CURRENT_YEAR = new Date().getFullYear();
+
+	function rnd(min: number, max: number) {
+		return Math.floor(Math.random() * (max - min + 1)) + min;
+	}
+
+	function randomDatePast30Days() {
+		const date = new Date();
+		date.setDate(date.getDate() - rnd(0, 30));
+		return date.toISOString();
+	}
+
+	const NUM_DOCS = 100;
+	const docs: PeopleDoc[] = [];
+	const stats = {
+		status: {} as Record<string, number>,
+		country: {} as Record<string, number>,
+		age: { '0-4': 0, '5-11': 0, '12-17': 0, '18-59': 0, '60+': 0 } as Record<string, number>
+	};
+
+	for (let i = 0; i < NUM_DOCS; i++) {
+		const birth_year = CURRENT_YEAR + 543 - rnd(0, 80);
+		const age = CURRENT_YEAR + 543 - birth_year;
+		let ageBucket = '60+';
+		if (age <= 4) ageBucket = '0-4';
+		else if (age <= 11) ageBucket = '5-11';
+		else if (age <= 17) ageBucket = '12-17';
+		else if (age <= 59) ageBucket = '18-59';
+
+		const country = COUNTRIES[rnd(0, COUNTRIES.length - 1)];
+		const status = STATUSES[rnd(0, STATUSES.length - 1)];
+
+		stats.status[status] = (stats.status[status] || 0) + 1;
+		stats.country[country] = (stats.country[country] || 0) + 1;
+		stats.age[ageBucket] = (stats.age[ageBucket] || 0) + 1;
+		const input: EvacueeInput = {
+			first_name: `GenName${i}`,
+			last_name: `GenSurname${i}`,
+			gender: i % 2 === 0 ? 'male' : 'female',
+			phone: null,
+			birth_year,
+			registered_via: 'import'
+		};
+
+		const doc = createEvacuee(input, CTX);
+
+		// Force override for views & identification
+		doc._id = `evacuee:seed-genname-${i}`;
+		(doc as Evacuee & { country: string }).country = country;
+		doc.current_stay.status = status;
+
+		const createdDate = randomDatePast30Days();
+		doc.created_at = createdDate;
+		doc.updated_at = createdDate;
+
+		docs.push(doc);
+
+		// Generate check-in movement for everyone
+		const checkInMove = createMovement(
+			{
+				evacuee_id: doc._id,
+				action: 'check_in',
+				zone: 'Z1'
+			},
+			CTX
+		);
+		checkInMove._id = `movement:seed-genname-${i}-in`;
+		checkInMove.occurred_at = createdDate;
+		docs.push(checkInMove);
+
+		// Generate check-out or transfer-out if applicable
+		if (status === 'checked_out' || status === 'transferred') {
+			const outDate = new Date(createdDate);
+			outDate.setDate(outDate.getDate() + rnd(1, 5));
+			if (outDate > new Date()) {
+				outDate.setTime(new Date().getTime()); // Clamp to today
+			}
+
+			const action = status === 'checked_out' ? 'check_out' : 'transfer_out';
+			const outMove = createMovement(
+				{
+					evacuee_id: doc._id,
+					action
+				},
+				CTX
+			);
+			outMove._id = `movement:seed-genname-${i}-out`;
+			outMove.occurred_at = outDate.toISOString();
+			docs.push(outMove);
+		}
+	}
+
+	await bulkDocs(SHELTER_DB, docs);
+	console.log(`\n  --- 📊 Dashboard Seed Stats (${NUM_DOCS} docs) ---`);
+	console.log(`  [Status] :`, stats.status);
+	console.log(`  [Country]:`, stats.country);
+	console.log(`  [Age]    :`, stats.age);
+	console.log(`  --------------------------------------------\n`);
+}
+
+// ─── deleteDashboardData ──────────────────────────────────────────────────────
+
+async function deleteDashboardData(): Promise<void> {
+	await ensureDb(SHELTER_DB);
+	console.log(`Searching for dashboard test data in ${SHELTER_DB}...`);
+
+	const keys = Array.from({ length: 100 }, (_, i) => `evacuee:seed-genname-${i}`);
+	const { status, data } = await couchReq('POST', `/${SHELTER_DB}/_all_docs?include_docs=true`, {
+		keys
+	});
+	if (status !== 200) {
+		console.log(`Failed to fetch docs: HTTP ${status}`);
+		return;
+	}
+
+	const rows = (
+		data as { rows: { doc: { type?: string; first_name?: string } & Record<string, unknown> }[] }
+	).rows;
+	const toDelete = rows
+		.filter((r) => r.doc && r.doc._id)
+		.map((r) => ({ ...r.doc, _deleted: true }));
+
+	// Also find and delete movements generated by seed
+	const movementKeys = [];
+	for (let i = 0; i < 100; i++) {
+		movementKeys.push(`movement:seed-genname-${i}-in`);
+		movementKeys.push(`movement:seed-genname-${i}-out`);
+	}
+	const { status: mStatus, data: mData } = await couchReq(
+		'POST',
+		`/${SHELTER_DB}/_all_docs?include_docs=true`,
+		{
+			keys: movementKeys
+		}
+	);
+	if (mStatus === 200) {
+		const mRows = (mData as { rows: { doc: { type?: string } & Record<string, unknown> }[] }).rows;
+		const movesToDelete = mRows
+			.filter((r) => r.doc && r.doc._id)
+			.map((r) => ({ ...r.doc, _deleted: true }));
+		toDelete.push(...movesToDelete);
+	}
+
+	if (toDelete.length === 0) {
+		console.log(`  ✓ No dashboard test data found to delete.`);
+		return;
+	}
+
+	await bulkDocs(SHELTER_DB, toDelete);
+	console.log(`  ✓ Deleted ${toDelete.length} dashboard test documents.`);
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+	if (process.argv.includes('--delete-dashboard')) {
+		await deleteDashboardData();
+		process.exit(0);
+	}
+
 	const displayUrl = rawCouchUrl.replace(/\/\/([^:]+):[^@]+@/, '//$1:***@');
 	console.log(`\nSeeding mock data → ${displayUrl}\n`);
 	try {
 		await seedRegistry();
 		await seedCatalog();
+		await seedCatalogSopRatios();
 		await seedShelter();
+		await seedShelter2();
+		await seedDashboardData();
 		console.log('\nDone.\n');
 	} catch (err) {
 		console.error('\nSeed failed:', err);
