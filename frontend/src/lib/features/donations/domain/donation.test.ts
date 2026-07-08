@@ -76,8 +76,23 @@ describe('isDonationPreDeclaration', () => {
 	});
 
 	it('should return false for invalid documents or other types', () => {
-		expect(isDonationPreDeclaration({ type: 'donation' })).toBe(false);
 		expect(isDonationPreDeclaration(null)).toBe(false);
 		expect(isDonationPreDeclaration('string')).toBe(false);
+	});
+
+	it('should return false for donation type documents even with items', () => {
+		expect(
+			isDonationPreDeclaration({
+				_id: 'donation:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+				type: 'donation',
+				schema_v: 2,
+				shelter_code: 'SH001',
+				items: [{ item_id: 'item:rice', qty: 10, unit: 'kg' }],
+				status: 'declared',
+				created_at: '2026-06-30T17:00:00Z',
+				updated_at: '2026-06-30T17:00:00Z',
+				created_by: 'user'
+			})
+		).toBe(false);
 	});
 });

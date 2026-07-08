@@ -5,27 +5,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import type { DonationCampaign } from '$lib/features/operations';
-
-	export interface NeedItem {
-		id: string;
-		title: string;
-		location: string;
-		showOnHome: boolean;
-		isCutOff: boolean;
-		isManualClosed: boolean;
-		needs: {
-			itemId: string;
-			name: string;
-			reserved: number;
-			onHand: number;
-			target: number;
-			unit: string;
-			isCutOff: boolean;
-			isManualClosed: boolean;
-		}[];
-		campaignDoc: DonationCampaign;
-	}
+	import type { NeedItem } from '$lib/features/operations';
 
 	let {
 		items = [],

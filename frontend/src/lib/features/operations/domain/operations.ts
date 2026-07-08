@@ -4,6 +4,10 @@ import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '
 /**
  * Operations domain — stock, donations, transfers (R2–R3).
  *
+ * NOTE (CR-034 scope): `DonationLogistics`, `DonationSlot`, and donation
+ * `schema_v` 2 fields pre-date CR-034 — aligned under CR-005 §F, not part of
+ * the donation_campaign cutoff change set.
+ *
  * Two invariants from the spec carry real weight here:
  *
  *  1. `stock_ledger` is append-only and event-sourced: the balance of an item

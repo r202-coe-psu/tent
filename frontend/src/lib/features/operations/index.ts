@@ -77,6 +77,8 @@ export {
 	useUpdateCampaign,
 	startOperationsLiveQuery
 } from './application/queries';
+export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';
+export type { NeedItem } from './application/need-item.types';
 
 // UI components
 export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';
