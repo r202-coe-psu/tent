@@ -59,7 +59,7 @@
 			_id: 'temp-new-evacuee',
 			...pendingEvacueeInput,
 			current_stay: {
-				status: 'checked_in',
+				status: 'active',
 				zone: null
 			}
 		} as Evacuee;
