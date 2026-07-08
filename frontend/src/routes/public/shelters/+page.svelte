@@ -19,8 +19,37 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let liveUserLat = $state(data.filters.user_lat?.toString() || '');
-	let liveUserLng = $state(data.filters.user_lng?.toString() || '');
+	let liveUserLat = $state('');
+	let liveUserLng = $state('');
+
+	function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+		const R = 6371; // km
+		const dLat = ((lat2 - lat1) * Math.PI) / 180;
+		const dLon = ((lon2 - lon1) * Math.PI) / 180;
+		const a =
+			Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+			Math.cos((lat1 * Math.PI) / 180) *
+				Math.cos((lat2 * Math.PI) / 180) *
+				Math.sin(dLon / 2) *
+				Math.sin(dLon / 2);
+		const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+		return R * c;
+	}
+
+	let displayShelters = $derived(
+		data.shelters.map((s: any) => {
+			if (liveUserLat && liveUserLng && s.geo?.lat && s.geo?.lng) {
+				const dist = calcDistance(
+					parseFloat(liveUserLat),
+					parseFloat(liveUserLng),
+					s.geo.lat,
+					s.geo.lng
+				);
+				return { ...s, distance: parseFloat(dist.toFixed(1)) };
+			}
+			return s;
+		})
+	);
 
 	$effect(() => {
 		if (data.filters.user_lat) liveUserLat = data.filters.user_lat.toString();
@@ -115,6 +144,7 @@
 		<div class="flex flex-col gap-5 lg:col-span-3">
 			<ShelterFilterPanel
 				filters={data.filters}
+				availableTypes={data.available_types}
 				action="/public/shelters"
 				bind:userLat={liveUserLat}
 				bind:userLng={liveUserLng}
@@ -124,33 +154,33 @@
 		<!-- Middle: Map (5 columns on desktop) -->
 		<div class="h-100 min-h-125 lg:col-span-5 lg:h-auto">
 			<div
-				class="relative z-0 h-full w-full overflow-hidden rounded-2xl border border-border bg-slate-100 shadow-inner"
+				class="relative z-0 h-full w-full overflow-hidden rounded-2xl border border-border bg-muted shadow-inner"
 			>
 				<ShelterMap
-					shelters={data.shelters}
+					shelters={displayShelters}
 					userLocation={{ lat: parseFloat(liveUserLat), lng: parseFloat(liveUserLng) }}
 				/>
 			</div>
 		</div>
 
 		<!-- Right: Shelter List (4 columns on desktop) -->
-		<div class="flex flex-col gap-4 lg:col-span-4">
+		<div class="flex h-100 min-h-125 flex-col gap-4 lg:col-span-4 lg:h-auto">
 			<div class="flex items-center justify-between rounded-t-2xl bg-card px-1 py-1">
 				<h3 class="font-bold text-foreground">
 					รายชื่อศูนย์พักพิง <span class="ml-1 text-sm font-medium text-muted-foreground"
-						>{data.shelters.length} แห่ง</span
+						>{displayShelters.length} แห่ง</span
 					>
 				</h3>
-				<Button size="sm" class="h-8 rounded-xl bg-primary-dark px-4 text-xs font-bold"
+				<!-- <Button size="sm" class="h-8 rounded-xl bg-primary-dark px-4 text-xs font-bold"
 					>ดูรายการทั้งหมด</Button
-				>
+				> -->
 			</div>
 
 			<div
 				class="custom-scrollbar flex flex-col gap-4 overflow-y-auto pr-2"
-				style="max-height: 600px;"
+				style="max-height: 700px;"
 			>
-				{#each data.shelters as shelter (shelter.id)}
+				{#each displayShelters as shelter (shelter.id)}
 					<PublicShelterCard {shelter} {getStatusColor} {getStatusText} />
 				{/each}
 			</div>
