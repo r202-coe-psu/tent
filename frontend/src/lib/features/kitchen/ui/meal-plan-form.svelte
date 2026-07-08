@@ -12,6 +12,7 @@
 		useCreateMealPlanCalc,
 		useOccupancyHeadcount,
 		calculateMealIngredients,
+		RICE_G_PER_PERSON_MEAL,
 		MEAL_PERIOD_LABELS,
 		type MealPeriod,
 		type MealPlanHeadcount
@@ -85,8 +86,8 @@
 
 	const preview = $derived.by(() => {
 		if (!sopProfile.data || total <= 0) return null;
-		const riceG = sopProfile.data.ratios.rice_g_per_person_meal;
-		if (!riceG) return null;
+		// Rice grams are a kitchen coefficient (CR-021), not a SOP ratio.
+		const riceG = RICE_G_PER_PERSON_MEAL;
 		try {
 			return calculateMealIngredients(
 				headcount,
@@ -237,7 +238,7 @@
 					</p>
 					<p class="text-xs text-muted-foreground">
 						SOP: {sopProfile.data.name} v{sopProfile.data.version}
-						· {sopProfile.data.ratios.rice_g_per_person_meal} ก./คน/มื้อ
+						· ข้าว {RICE_G_PER_PERSON_MEAL} ก./คน/มื้อ (ค่าครัว)
 					</p>
 				</div>
 			{/if}

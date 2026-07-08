@@ -13,7 +13,7 @@ import type {
 	GasCylinderType,
 	GasCylinderTypeInput
 } from '../domain/kitchen';
-import { calculateMealIngredients } from '../domain/meal-calc';
+import { calculateMealIngredients, RICE_G_PER_PERSON_MEAL } from '../domain/meal-calc';
 import { deriveHeadcountFromOccupancy } from '../domain/occupancy';
 import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
 
@@ -67,8 +67,10 @@ export const useCreateMealPlanCalc = () =>
 		}) => {
 			const profile = await getActiveSopProfile();
 			if (!profile) throw new Error('No active SOP profile found — seed one first');
-			const riceG = profile.ratios.rice_g_per_person_meal;
-			if (!riceG) throw new Error('Active SOP profile missing rice_g_per_person_meal');
+			// Rice ratio is a kitchen coefficient, not a SOP ratio (CR-021). The SOP
+			// profile is still read to stamp calc_source provenance (which planning
+			// profile was active), but the rice grams come from the kitchen constant.
+			const riceG = RICE_G_PER_PERSON_MEAL;
 			const { recipes, calc_source } = calculateMealIngredients(
 				headcount,
 				riceG,
