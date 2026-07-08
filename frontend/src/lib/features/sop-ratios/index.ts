@@ -14,7 +14,6 @@ export {
 	type SopRatioKey
 } from './domain/sop-ratio';
 
-<<<<<<< HEAD
 // Trend series shapes (shared by chart + resource-calc snapshot)
 export type { TrendPoint, TrendSeries } from './domain/trend';
 
@@ -45,7 +44,7 @@ export {
 	type RatioSource,
 	type Severity
 } from './domain/resource-calc';
-=======
+
 // Data — repositories + resolver
 export type { SopMasterRepository, SopOverrideRepository } from './data/sop-ratio.repository';
 export {
@@ -80,4 +79,3 @@ export {
 
 // Live-sync wiring (call once per layout, pass QueryClient)
 export { startSopRatioLiveQuery } from './application/sop-ratio-sync';
->>>>>>> 2ce0377d1e315b6a742ad22992349ef627d1b510
