@@ -8,15 +8,24 @@
 	import Scan from '@lucide/svelte/icons/scan';
 	import Search from '@lucide/svelte/icons/search';
 	import CameraOff from '@lucide/svelte/icons/camera-off';
-	import User from '@lucide/svelte/icons/user';
-	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Loader from '@lucide/svelte/icons/loader';
+	import LogIn from '@lucide/svelte/icons/log-in';
+	import LogOut from '@lucide/svelte/icons/log-out';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import ScanSearchModal from './scan-search-modal.svelte';
-	import { peopleRepository, type Evacuee } from '$lib/features/people';
+	import {
+		peopleRepository,
+		useCheckInEvacuee,
+		useCheckOutEvacuee,
+		type Evacuee
+	} from '$lib/features/people';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	let scanCode = $state('');
 	let isScanning = $state(false);
@@ -35,6 +44,9 @@
 
 	let lastScannedCode = '';
 	let lastScanTime = 0;
+
+	const checkIn = useCheckInEvacuee();
+	const checkOut = useCheckOutEvacuee();
 
 	function cameraAttachment(node: HTMLDivElement) {
 		const html5QrCode = new Html5Qrcode(node.id);
@@ -146,6 +158,32 @@
 			toast.error('เกิดข้อผิดพลาดในการดำเนินการ');
 		} finally {
 			isScanning = false;
+		}
+	}
+
+	async function handleCheckIn(evacuee: Evacuee) {
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		try {
+			const updated = await checkIn.mutateAsync({ evacuee, ctx });
+			if (scanResult?.evacuee?._id === evacuee._id) {
+				scanResult = { ...scanResult, evacuee: updated };
+			}
+			toast.success(`เช็คอิน ${evacuee.first_name} ${evacuee.last_name} แล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
+		}
+	}
+
+	async function handleCheckOut(evacuee: Evacuee) {
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		try {
+			const updated = await checkOut.mutateAsync({ evacuee, ctx });
+			if (scanResult?.evacuee?._id === evacuee._id) {
+				scanResult = { ...scanResult, evacuee: updated };
+			}
+			toast.success(`เช็คเอาท์ ${evacuee.first_name} ${evacuee.last_name} แล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เช็คเอาท์ไม่สำเร็จ');
 		}
 	}
 
@@ -300,81 +338,115 @@
 					</Button>
 				</form>
 
-				<!-- Scan Result Banner (inside Card) -->
+				<!-- Scan Result Card -->
 				{#if scanResult}
+					{@const isActive = scanResult.evacuee?.current_stay.status === 'active'}
 					<div
-						class="mt-6 w-full max-w-sm animate-in overflow-hidden rounded-xl border shadow-sm transition-all duration-200 fade-in slide-in-from-top-2
+						class="mt-6 w-full max-w-sm animate-in overflow-hidden rounded-2xl border shadow-md transition-all duration-200 fade-in slide-in-from-top-2
 						{scanResult.success
-							? 'border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/10'
-							: 'border-red-200 bg-red-50/40 dark:bg-red-950/10'}"
+							? 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
+							: 'border-red-200 bg-red-50/40 dark:border-red-900/50 dark:bg-red-950/10'}"
 					>
-						<div
-							class="flex items-center gap-2 border-b border-inherit px-4 py-2.5 {scanResult.success
-								? 'bg-emerald-500/10'
-								: 'bg-red-500/10'}"
-						>
-							{#if scanResult.success}
-								<CircleCheck class="size-4 text-emerald-500" />
-							{:else}
-								<AlertCircle class="size-4 text-red-500" />
-							{/if}
-							<span class="text-xs font-bold text-slate-900 dark:text-white">
-								{scanResult.message}
-							</span>
-						</div>
-						<div class="space-y-3 p-4">
-							{#if scanResult.success && scanResult.evacuee}
-								<div class="flex items-start gap-3">
-									<div
-										class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-									>
-										<User class="size-5" />
-									</div>
-									<div class="min-w-0 flex-1 space-y-1">
-										<h4 class="truncate text-sm font-bold text-slate-900 dark:text-white">
-											{scanResult.evacuee.first_name}
-											{scanResult.evacuee.last_name}
-										</h4>
-										<p class="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-											สถานะ:
+						{#if scanResult.success && scanResult.evacuee}
+							<!-- Identity header: name + status are the two things staff must confirm at a glance -->
+							<div
+								class="flex items-start gap-3 px-4 pt-4 pb-3 {isActive
+									? 'bg-emerald-500/5'
+									: 'bg-amber-500/5'}"
+							>
+								<div
+									class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-bold {isActive
+										? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+										: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'}"
+								>
+									{scanResult.evacuee.first_name.charAt(0)}
+								</div>
+								<div class="min-w-0 flex-1 pt-0.5">
+									<h4 class="truncate text-base font-bold text-slate-900 dark:text-white">
+										{scanResult.evacuee.first_name}
+										{scanResult.evacuee.last_name}
+									</h4>
+									<div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+										<span
+											class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold
+											{isActive
+												? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+												: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}"
+										>
 											<span
-												class="py-0.2 inline-flex items-center gap-1 rounded-full px-2 text-[10px] font-bold shadow-xs
-												{scanResult.evacuee.current_stay.status === 'active'
-													? 'bg-emerald-100 text-emerald-800'
-													: 'bg-slate-100 text-slate-800'}"
-											>
-												{getStatusLabel(scanResult.evacuee.current_stay.status)}
-											</span>
-										</p>
+												class="size-1.5 rounded-full {isActive ? 'bg-emerald-500' : 'bg-amber-500'}"
+											></span>
+											{getStatusLabel(scanResult.evacuee.current_stay.status)}
+										</span>
 										{#if scanResult.evacuee.current_stay.zone}
-											<p class="text-[10px] font-medium text-slate-500">
-												โซนพักพิง: <span
-													class="font-bold text-slate-700 uppercase dark:text-slate-300"
-													>{scanResult.evacuee.current_stay.zone}</span
-												>
-											</p>
+											<span
+												class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 uppercase dark:bg-slate-800 dark:text-slate-300"
+											>
+												<MapPin class="size-2.5" />
+												{scanResult.evacuee.current_stay.zone}
+											</span>
 										{/if}
 									</div>
 								</div>
-								<div class="flex justify-end border-t border-slate-100 pt-2 dark:border-slate-800">
+							</div>
+
+							<!-- Action row: primary tap target sits on the right, within thumb reach -->
+							<div
+								class="flex items-center gap-2 border-t border-slate-100 p-3 dark:border-slate-800"
+							>
+								<button
+									type="button"
+									onclick={() =>
+										goto(
+											resolve(`/onsite/people/evacuee-profile-view/${scanResult?.evacuee?._id}`)
+										)}
+									class="flex h-11 shrink-0 items-center gap-0.5 rounded-xl px-2.5 text-[11px] font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+								>
+									โปรไฟล์
+									<ChevronRight class="size-3.5" />
+								</button>
+
+								{#if isActive}
 									<Button
-										variant="outline"
-										size="sm"
-										class="h-7 rounded-lg px-2.5 text-[10px] font-bold"
-										onclick={() =>
-											goto(
-												resolve(`/onsite/people/evacuee-profile-view/${scanResult?.evacuee?._id}`)
-											)}
+										class="h-11 flex-1 gap-1.5 rounded-xl bg-red-600 text-sm font-bold text-white shadow-sm transition-all hover:bg-red-700 active:scale-[0.98]"
+										onclick={() => scanResult?.evacuee && handleCheckOut(scanResult.evacuee)}
+										disabled={checkOut.isPending}
 									>
-										ดูโปรไฟล์แบบละเอียด
+										{#if checkOut.isPending}
+											<Loader class="size-4 animate-spin" />
+										{:else}
+											<LogOut class="size-4" />
+										{/if}
+										เช็คเอาท์
 									</Button>
+								{:else}
+									<Button
+										class="h-11 flex-1 gap-1.5 rounded-xl bg-[#22C55E] text-sm font-bold text-white shadow-sm transition-all hover:bg-[#16A34A] active:scale-[0.98]"
+										onclick={() => scanResult?.evacuee && handleCheckIn(scanResult.evacuee)}
+										disabled={checkIn.isPending}
+									>
+										{#if checkIn.isPending}
+											<Loader class="size-4 animate-spin" />
+										{:else}
+											<LogIn class="size-4" />
+										{/if}
+										เช็คอิน
+									</Button>
+								{/if}
+							</div>
+						{:else}
+							<div class="flex items-center gap-2.5 p-4">
+								<AlertCircle class="size-5 shrink-0 text-red-500" />
+								<div class="min-w-0">
+									<p class="text-xs font-bold text-slate-900 dark:text-white">
+										{scanResult.message}
+									</p>
+									<p class="mt-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+										โปรดตรวจสอบข้อมูลรหัสบัตรประชาชน หรือ QR code ของผู้ประสบภัยอีกครั้ง
+									</p>
 								</div>
-							{:else}
-								<p class="text-xs font-medium text-slate-500 dark:text-slate-400">
-									โปรดตรวจสอบข้อมูลรหัสบัตรประชาชน หรือ QR code ของผู้ประสบภัยอีกครั้ง
-								</p>
-							{/if}
-						</div>
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</Card.Content>
