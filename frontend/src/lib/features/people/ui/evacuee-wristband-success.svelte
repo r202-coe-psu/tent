@@ -2,6 +2,8 @@
 	import QRCode from 'qrcode';
 	import Printer from '@lucide/svelte/icons/printer';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
+	import { toast } from 'svelte-sonner';
+	import { previewElementAsPdf } from '$lib/utils/pdf';
 	import type { Evacuee } from '../domain/people';
 
 	let {
@@ -13,6 +15,20 @@
 	} = $props();
 
 	let qrUrl = $state<string | null>(null);
+	let wristbandEl = $state<HTMLDivElement | null>(null);
+	let isExportingPdf = $state(false);
+
+	async function handlePrintPreview() {
+		if (!wristbandEl) return;
+		isExportingPdf = true;
+		try {
+			await previewElementAsPdf(wristbandEl, `wristband-${fullId}`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ');
+		} finally {
+			isExportingPdf = false;
+		}
+	}
 
 	$effect(() => {
 		QRCode.toDataURL(evacuee._id, {
@@ -54,6 +70,7 @@
 		<div class="mb-6 rounded-2xl bg-slate-100 p-6 dark:bg-slate-800">
 			<div
 				id="wristband-card"
+				bind:this={wristbandEl}
 				class="mx-auto flex min-h-[90px] max-w-[340px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md dark:border-slate-700"
 			>
 				<div class="w-2.5 shrink-0 bg-red-500"></div>
@@ -101,11 +118,12 @@
 		<!-- Actions -->
 		<div class="flex flex-col gap-3">
 			<button
-				onclick={() => window.print()}
-				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#0d2240] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#1a3a5c]"
+				onclick={handlePrintPreview}
+				disabled={isExportingPdf}
+				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#0d2240] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#1a3a5c] disabled:cursor-not-allowed disabled:opacity-60"
 			>
 				<Printer class="size-4" />
-				พิมพ์บาร์โค้ดสายรัดข้อมือ (เสร็จสิ้น)
+				{isExportingPdf ? 'กำลังสร้าง PDF...' : 'พิมพ์บาร์โค้ดสายรัดข้อมือ (เสร็จสิ้น)'}
 			</button>
 			<button
 				onclick={onBack}
