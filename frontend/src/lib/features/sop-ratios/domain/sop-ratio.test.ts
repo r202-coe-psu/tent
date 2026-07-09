@@ -88,15 +88,6 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ ...validRatios, rice_g_per_person_meal: 200 } as unknown as Record<string, number>,
-					masterCtx
-				);
-			}).toThrow();
-
-			expect(() => {
-				createInitialProfile(
-					'sop_profile',
-					'Sphere baseline',
 					{ ...validRatios, caregiver_per_elderly: 2 } as unknown as Record<string, number>,
 					masterCtx
 				);
@@ -191,7 +182,7 @@ describe('SOP Ratio Domain', () => {
 			expect(() => {
 				createNewVersion(
 					prev,
-					{ rice_g_per_person_meal: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
+					{ invalid_key: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
 					'Update invalid ratio',
 					masterCtx
 				);
@@ -286,7 +277,7 @@ describe('SOP Ratio Domain', () => {
 			expect(() => {
 				createNewVersion(
 					prev,
-					{ rice_g_per_person_meal: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
+					{ invalid_key: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
 					'Update invalid ratio',
 					overrideCtx
 				);
@@ -334,8 +325,8 @@ describe('SOP Ratio Domain', () => {
 	});
 
 	describe('Calculation Kinds', () => {
-		it('should have all 20 whitelist keys mapped to their exact calculation kind', () => {
-			expect(SOP_RATIO_KEYS.length).toBe(20);
+		it('should have all 21 whitelist keys mapped to their exact calculation kind', () => {
+			expect(SOP_RATIO_KEYS.length).toBe(21);
 			for (const key of SOP_RATIO_KEYS) {
 				expect(SOP_RATIO_KIND[key]).toBeDefined();
 				expect(['multiply', 'divide', 'threshold'].includes(SOP_RATIO_KIND[key])).toBe(true);
