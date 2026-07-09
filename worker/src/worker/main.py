@@ -7,7 +7,7 @@ import asyncio
 import logging
 import signal
 
-from tent_read_model import close_db, init_db
+from tent_model import close_db, init_db
 
 from worker.config import load_settings
 from worker.couch.bootstrap import bootstrap_all, needs_bootstrap

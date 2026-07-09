@@ -3,13 +3,13 @@ name = "sync-worker"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "tent-public-read-model",
+    "tent-model",
     "httpx>=0.27",
     "grapheme>=0.6",
 ]
 
 [tool.uv.sources]
-tent-public-read-model = { workspace = true }
+tent-model = { workspace = true }
 
 [project.scripts]
 sync-worker = "worker.main:main"

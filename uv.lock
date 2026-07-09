@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 [manifest]
 members = [
     "sync-worker",
-    "tent-public-read-model",
+    "tent-model",
     "tent-python",
 ]
 
@@ -375,7 +375,7 @@ source = { editable = "worker" }
 dependencies = [
     { name = "grapheme" },
     { name = "httpx" },
-    { name = "tent-public-read-model" },
+    { name = "tent-model" },
 ]
 
 [package.dev-dependencies]
@@ -388,7 +388,7 @@ dev = [
 requires-dist = [
     { name = "grapheme", specifier = ">=0.6" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "tent-public-read-model", editable = "packages/public-read-model" },
+    { name = "tent-model", editable = "packages/tent-model" },
 ]
 
 [package.metadata.requires-dev]
@@ -398,9 +398,9 @@ dev = [
 ]
 
 [[package]]
-name = "tent-public-read-model"
+name = "tent-model"
 version = "0.1.0"
-source = { editable = "packages/public-read-model" }
+source = { editable = "packages/tent-model" }
 dependencies = [
     { name = "beanie" },
     { name = "motor" },

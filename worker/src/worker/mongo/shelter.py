@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tent_read_model import PublicShelter
+from tent_model import PublicShelter
 
 from worker.mongo.upsert import apply_document
 

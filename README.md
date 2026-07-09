@@ -95,7 +95,7 @@ uv sync --project worker
 uv run --project worker sync-worker
 # re-sync ทั้งก้อน: uv run --project worker sync-worker --bootstrap
 
-# 4. ดู MongoDB ด้วย Compass: mongodb://localhost:27017/tent_public
+# 4. ดู MongoDB ด้วย Compass: mongodb://localhost:27017/tentdb
 #    collections: public_shelters, public_persons, _sync_checkpoints
 
 # 5. frontend dev server

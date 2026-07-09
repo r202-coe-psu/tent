@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from tent_read_model import SyncCheckpoint
+from tent_model import SyncCheckpoint
 
 
 async def get_checkpoint(database: str) -> SyncCheckpoint | None:

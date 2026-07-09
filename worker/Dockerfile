@@ -5,7 +5,7 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 COPY pyproject.toml /app/pyproject.toml
-COPY packages/public-read-model /app/packages/public-read-model
+COPY packages/tent-model /app/packages/tent-model
 COPY worker /app/worker
 
 RUN uv sync --project worker --no-dev
