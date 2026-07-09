@@ -4,14 +4,19 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { untrack } from 'svelte';
 	import X from '@lucide/svelte/icons/x';
 	import Plus from '@lucide/svelte/icons/plus';
-	import type { HouseholdVehicle, PetGroup } from '../domain/people';
+	import type { Household, HouseholdVehicle, PetGroup } from '../domain/people';
 
 	let {
+		household = null,
 		onBack,
 		onNext
 	}: {
+		// When an existing household is selected in step 4, its pets/assets/vehicles
+		// are fetched in so the user edits them in place instead of creating over.
+		household?: Household | null;
 		onBack: () => void;
 		onNext: (data: {
 			pets: PetGroup[];
@@ -19,8 +24,6 @@
 			vehicles: HouseholdVehicle[];
 		}) => void;
 	} = $props();
-
-	let assetDescription = $state('');
 
 	// A household may bring several pets (schema.md §1.3 `pets[]`).
 	// `id` is a client-only key for the {#each} — stripped before onNext.
@@ -31,8 +34,23 @@
 		notes: string;
 		has_cage: boolean;
 	};
-	let petRows = $state<PetRow[]>([]);
 	let nextPetId = 0;
+
+	// Prefill from the selected household (edit mode); otherwise start empty (new).
+	// The prop is stable for this component's lifetime (mounted fresh at step 5),
+	// so this init-only read is intentional — untrack keeps it non-reactive.
+	let assetDescription = $state(untrack(() => household?.assets?.description ?? ''));
+	let petRows = $state<PetRow[]>(
+		untrack(() =>
+			(household?.pets ?? []).map((p) => ({
+				id: nextPetId++,
+				species: p.species,
+				count: p.count,
+				notes: p.notes ?? '',
+				has_cage: p.has_cage ?? false
+			}))
+		)
+	);
 
 	const petSpeciesOptions = [
 		{ value: 'dog', label: '🐶 สุนัข' },
@@ -54,8 +72,16 @@
 
 	// A household may bring several vehicles (schema.md §1.3 `vehicles[]`, CR-016).
 	type VehicleRow = { id: number; type: 'car' | 'motorcycle' | 'other'; license_plate: string };
-	let vehicleRows = $state<VehicleRow[]>([]);
 	let nextVehicleId = 0;
+	let vehicleRows = $state<VehicleRow[]>(
+		untrack(() =>
+			(household?.vehicles ?? []).map((v) => ({
+				id: nextVehicleId++,
+				type: v.type,
+				license_plate: v.license_plate ?? ''
+			}))
+		)
+	);
 
 	const vehicleTypeOptions = [
 		{ value: 'car', label: 'รถยนต์' },

@@ -157,20 +157,15 @@
 				const latestHousehold = await peopleRepository().getHousehold(selectedHousehold._id);
 				if (!latestHousehold) throw new Error('ไม่พบครัวเรือนในระบบ');
 
-				// Append new pets if any
-				let updatedPets = [...(latestHousehold.pets || [])];
-				if (pets.length > 0) {
-					updatedPets.push(...pets);
-				}
-
+				// Edit in place: the step 5 form was prefilled with the household's existing
+				// pets/assets/vehicles, so the submitted data is the full edited set — replace,
+				// don't append (which would duplicate the prefilled entries).
 				await updateHouseholdMutation.mutateAsync({
 					...latestHousehold,
 					label: latestHousehold.label || `ครอบครัวผู้ประสบภัย ${latestHousehold._id}`,
-					pets: updatedPets,
-					assets: assets || latestHousehold.assets || null,
-					// Append the registrant's vehicles to the household's existing list (like pets),
-					// rather than replacing them.
-					vehicles: [...(latestHousehold.vehicles || []), ...vehicles]
+					pets,
+					assets,
+					vehicles
 				});
 			} else if (isCreatingNewHousehold || pets.length > 0 || assets || vehicles.length > 0) {
 				const addr = newHouseholdAddress || {};
@@ -375,7 +370,11 @@
 		</div>
 	</div>
 {:else if step === 5}
-	<EvacueePetAssetVehicle onBack={() => (step = 4)} onNext={handleFinalSubmit} />
+	<EvacueePetAssetVehicle
+		household={selectedHousehold}
+		onBack={() => (step = 4)}
+		onNext={handleFinalSubmit}
+	/>
 {:else if step === 6}
 	<EvacueeSelectZone
 		evacuee={newlyRegisteredEvacuee}
