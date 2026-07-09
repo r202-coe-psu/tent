@@ -4,6 +4,8 @@ export { default as MealPlanForm } from './ui/meal-plan-form.svelte';
 export { default as GasManagement } from './ui/gas-management.svelte';
 export { default as RequisitionDialog } from './ui/requisition-dialog.svelte';
 export { default as RequisitionHistory } from './ui/requisition-history.svelte';
+export { default as MealServiceForm } from './ui/meal-service-form.svelte';
+export { default as MealServiceSummary } from './ui/meal-service-summary.svelte';
 
 // Domain — meal calculation + T-26 handoff (T-25)
 export {
@@ -11,7 +13,8 @@ export {
 	toRequisitionInput,
 	assessRequisition,
 	RICE_RECIPE_ID,
-	RECIPE_TO_STOCK_ITEM
+	RECIPE_TO_STOCK_ITEM,
+	DEFAULT_RICE_G_PER_PERSON_MEAL
 } from './domain/meal-calc';
 export type {
 	MealCalcSource,
@@ -19,6 +22,10 @@ export type {
 	StockAvailabilityStatus,
 	RequisitionLineAssessment
 } from './domain/meal-calc';
+
+// Domain — plan vs actual variance (T-27)
+export { computeMealVariance, VARIANCE_TOLERANCE_PCT } from './domain/meal-variance';
+export type { MealVariance, MealVarianceStatus } from './domain/meal-variance';
 
 // Domain — occupancy → headcount (T-06 source)
 export { deriveHeadcountFromOccupancy, SOFT_FOOD_NEEDS } from './domain/occupancy';
@@ -59,9 +66,9 @@ export {
 	MEAL_PERIOD_LABELS
 } from './domain/kitchen';
 
-// Data — repository contract + PouchDB binding
+// Data — repository contract + remote CouchDB binding
 export type { KitchenRepository } from './data/kitchen.repository';
-export { kitchenRepository, SHELTER_CODE, SHELTER_DB } from './data/kitchen.pouch';
+export { kitchenRepository } from './data/kitchen.remote';
 
 // Application — TanStack Query hooks + live-query wiring
 export {

@@ -7,6 +7,7 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
+	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import { resolve } from '$app/paths';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
@@ -19,10 +20,12 @@
 		useConfirmMealPlan,
 		useGasCylinderTypes,
 		useRequisitions,
+		useMealServices,
 		MEAL_PERIOD_LABELS,
 		RICE_RECIPE_ID,
 		MealPlanForm,
 		RequisitionDialog,
+		MealServiceForm,
 		type MealPlan
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
@@ -34,6 +37,14 @@
 	const gasTypes = useGasCylinderTypes();
 	const occupancy = useOccupancyHeadcount();
 	const requisitions = useRequisitions();
+	const mealServices = useMealServices();
+
+	// Plans that already have a recorded service — drives the "✓ บันทึกแล้ว" hint.
+	// meal_service _id shares the plan's deterministic date:meal key (append-only,
+	// one record per meal), so a matching date+meal means service is logged.
+	const servicedPlanKeys = $derived(
+		new Set((mealServices.data ?? []).map((s) => `${s.date}:${s.meal}`))
+	);
 
 	// Meal plans that already have at least one requisition — drives the
 	// "เบิกแล้ว" hint so staff don't accidentally double-deduct stock.
@@ -45,6 +56,14 @@
 
 	let reqOpen = $state(false);
 	let reqPlan = $state<MealPlan | null>(null);
+
+	let serviceOpen = $state(false);
+	let servicePlan = $state<MealPlan | null>(null);
+
+	function openService(plan: MealPlan) {
+		servicePlan = plan;
+		serviceOpen = true;
+	}
 
 	// Re-issuing an already-requisitioned plan is a valid case (e.g. topping up
 	// a prior partial issue once stock arrives) — so the button stays enabled,
@@ -301,13 +320,24 @@
 											</Button>
 										{:else}
 											<div class="flex flex-col items-center gap-1">
-												<Button size="sm" variant="outline" onclick={() => openRequisition(plan)}>
-													<PackageCheck class="mr-1 h-3.5 w-3.5" />
-													เบิกวัตถุดิบ
-												</Button>
-												{#if requisitionedPlanIds.has(plan._id)}
-													<span class="text-[11px] text-emerald-600">✓ เบิกแล้ว</span>
-												{/if}
+												<div class="flex items-center gap-1.5">
+													<Button size="sm" variant="outline" onclick={() => openRequisition(plan)}>
+														<PackageCheck class="mr-1 h-3.5 w-3.5" />
+														เบิกวัตถุดิบ
+													</Button>
+													<Button size="sm" variant="outline" onclick={() => openService(plan)}>
+														<ClipboardCheck class="mr-1 h-3.5 w-3.5" />
+														บันทึกบริการ
+													</Button>
+												</div>
+												<div class="flex items-center gap-2">
+													{#if requisitionedPlanIds.has(plan._id)}
+														<span class="text-[11px] text-emerald-600">✓ เบิกแล้ว</span>
+													{/if}
+													{#if servicedPlanKeys.has(`${plan.date}:${plan.meal}`)}
+														<span class="text-[11px] text-indigo-600">✓ บันทึกบริการแล้ว</span>
+													{/if}
+												</div>
 											</div>
 										{/if}
 									</Table.Cell>
@@ -323,3 +353,4 @@
 
 <MealPlanForm bind:open={createOpen} />
 <RequisitionDialog bind:open={reqOpen} plan={reqPlan} />
+<MealServiceForm bind:open={serviceOpen} plan={servicePlan} />

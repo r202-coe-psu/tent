@@ -52,9 +52,6 @@ export default defineConfig(({ mode }) => {
 				}
 			}
 		},
-		optimizeDeps: {
-			include: ['pouchdb-browser']
-		},
 		test: {
 			globals: true,
 			environment: 'node',

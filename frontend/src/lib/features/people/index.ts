@@ -14,6 +14,8 @@ export type {
 	CurrentStay,
 	EmergencyContact,
 	PetGroup,
+	HouseholdVehicle,
+	HouseholdAsset,
 	MovementDestination,
 	Gender,
 	Religion,
@@ -43,10 +45,16 @@ export {
 	createHousehold,
 	createMovement,
 	createScreening,
+	assertMovementAllowed,
+	canCheckInEvacuee,
+	canCheckOutEvacuee,
+	CHECK_IN_ELIGIBLE_STATUSES,
+	CHECK_OUT_ELIGIBLE_STATUSES,
 	applyMovementToStay,
 	maskNationalId,
 	zoneLabel,
 	SPECIAL_NEED_CHIPS,
+	EWAR_SYMPTOM_GROUPS,
 	isEvacuee,
 	isMedical,
 	isHousehold,
@@ -59,21 +67,38 @@ export {
 	type ScreeningInput
 } from './domain/people';
 
-// Data — repository contract + PouchDB binding
 export type { PeopleRepository } from './data/people.repository';
-export { peopleRepository, SHELTER_CODE, SHELTER_DB } from './data/people.pouch';
+export { peopleRepository } from './data/people.remote';
+export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
 // Application — TanStack Query hooks + changes-feed live-query wiring
 export {
 	peopleKeys,
 	useEvacuees,
+	useEvacuee,
 	useEvacueesPaginated,
+	useSearchEvacuees,
 	useCreateEvacuee,
 	useUpdateEvacuee,
 	useCheckInEvacuee,
+	useCheckOutEvacuee,
+	lookupEvacueeByScanCode,
+	useHouseholds,
+	useHouseholdsPaginated,
+	useCreateHousehold,
+	useUpdateHousehold,
+	useCreateScreening,
+	useMedicals,
+	useMovements,
+	useScreenings,
 	startPeopleLiveQuery
 } from './application/queries';
 
 // UI — feature components
+export { default as EvacueeProfileView } from './ui/evacuee-profile-view.svelte';
 export { default as EvacueeForm } from './ui/evacuee-form.svelte';
 export { default as EvacueeList } from './ui/evacuee-list.svelte';
+export { default as HouseholdForm } from './ui/household-form.svelte';
+export { default as HouseholdFormPage } from './ui/household-form-page.svelte';
+export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';
+export { default as ScanCheckInOutPage } from './ui/scan-check-in-out-page.svelte';

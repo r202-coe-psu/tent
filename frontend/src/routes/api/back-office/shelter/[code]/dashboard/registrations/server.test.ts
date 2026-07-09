@@ -68,10 +68,11 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		expect(res.status).toBe(200);
 		const data = await res.json();
 
-		// graceful fallback yields an empty object for daily and 0 for total
+		// graceful fallback yields an empty object for checkin/checkout and 0 for total
 		expect(data.shelter_code).toBe('SH001');
 		expect(data.total).toBe(0);
-		expect(data.daily).toEqual({});
+		expect(data.checkin).toEqual({});
+		expect(data.checkout).toEqual({});
 	});
 
 	it('returns 500 on CouchDB view error (status >= 400)', async () => {
@@ -89,7 +90,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		expect(res.status).toBe(500);
 		const data = await res.json();
 		expect(data.error.code).toBe('INTERNAL');
-		expect(data.error.message).toContain('registrations_by_date view error');
+		expect(data.error.message).toContain('registrations_by_date_status view error');
 	});
 
 	it('returns successful data payload when view succeeds', async () => {
@@ -104,7 +105,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		vi.mocked(adminRaw).mockResolvedValue({
 			status: 200,
 			data: {
-				rows: [{ key: mockDate, value: 5 }]
+				rows: [{ key: [mockDate, 'checkin'], value: 5 }]
 			}
 		});
 
@@ -117,7 +118,8 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 
 		expect(data.shelter_code).toBe('SH001');
 		expect(data.total).toBe(5);
-		expect(data.daily).toBeTypeOf('object');
-		expect(data.daily[mockDate]).toBe(5);
+		expect(data.checkin).toBeTypeOf('object');
+		expect(data.checkin[mockDate]).toBe(5);
+		expect(data.checkout).toBeTypeOf('object');
 	});
 });

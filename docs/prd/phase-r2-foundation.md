@@ -5,7 +5,7 @@ phase: R2
 month: มิ.ย.–ก.ค. 2026 (Foundation Gate 17 ก.ค.)
 gate: Backoffice Foundation Gate
 created: 2026-06-03
-updated: 2026-06-18
+updated: 2026-07-07
 ---
 
 # Phase R2 PRD: Foundation — Baseline, Household, Zoning & Inventory
@@ -48,7 +48,7 @@ R2 เติมสามอย่างที่ทำให้ศูนย์ "
   - **Path:** สร้าง Household → เพิ่มสมาชิกเป็น Person ทีละคน (หัวหน้าครัวเรือน + อีก 4) → ระบุความสัมพันธ์ขั้นต่ำ → บันทึกสัตว์เลี้ยง/ทรัพย์สินที่นำมา → submit
   - **Climax:** ระบบออก **Household Shelter ID/QR** หนึ่งใบ + Person ID รายคน และเสนอโซนที่เหมาะ (โซนครอบครัว)
   - **Resolution:** ทั้งครัวเรือน check-in เข้าโซนได้ในสแกนเดียว; dashboard นับเป็น 5 คน 1 ครัวเรือน
-  - **Edge case:** เน็ตหลุด → บันทึกเป็น offline draft ทั้ง household แล้ว sync ภายหลังโดย ID mapping ไม่ซ้ำ
+  - **Edge case:** เน็ตหลุด → เข้า disconnected status-only (ไม่มี read-only local cache), automatic retry 3 attempts; เกินนั้นแสดง cannot-connect banner และให้ force retry เมื่อพร้อมกลับมา โดย ID mapping ไม่ซ้ำ
 
 - **UJ-6. บอลรับรถบรรทุกน้ำดื่ม 500 แพ็คเข้าคลัง.**
   - **Persona + context:** บอล เป็น Warehouse/Supply Officer ศูนย์ระดับเทศบาล

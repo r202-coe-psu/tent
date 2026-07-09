@@ -21,6 +21,14 @@ import {
  */
 
 // ---------------------------------------------------------------- enums
+export const cardTypeSchema = z.enum(['national_id', 'passport', 'pink_card', 'other']);
+export type CardType = z.infer<typeof cardTypeSchema>;
+
+export const personIdSchema = z.object({
+	cardType: cardTypeSchema.default('national_id'),
+	number: z.string().trim().optional()
+});
+export type PersonId = z.infer<typeof personIdSchema>;
 
 export const genderSchema = z.enum(['male', 'female', 'other']);
 export type Gender = z.infer<typeof genderSchema>;
@@ -38,14 +46,40 @@ export const specialNeedSchema = z.enum([
 ]);
 export type SpecialNeed = z.infer<typeof specialNeedSchema>;
 
-export const stayStatusSchema = z.enum(['registered', 'checked_in', 'checked_out', 'transferred']);
+export const stayStatusSchema = z.enum([
+	'pre_registered',
+	'active',
+	'temporary_leave',
+	'transferred',
+	'checked_out',
+	'deceased'
+]);
 export type StayStatus = z.infer<typeof stayStatusSchema>;
+
+export const householdStatusSchema = z.enum([
+	'pre_registered',
+	'arriving',
+	'checked_in',
+	'checked_out',
+	'cancelled'
+]);
+export type HouseholdStatus = z.infer<typeof householdStatusSchema>;
+
+export const checkoutDestinationSchema = z.object({
+	type: z.enum(['returned_home', 'transferred_shelter', 'referred_facility', 'other']),
+	destination_name: z.string().trim().optional(),
+	notes: z.string().trim().optional()
+});
+export type CheckoutDestination = z.infer<typeof checkoutDestinationSchema>;
 
 export const movementActionSchema = z.enum([
 	'check_in',
 	'check_out',
 	'transfer_out',
-	'transfer_in'
+	'transfer_in',
+	'leave_temporary',
+	'return_from_leave',
+	'mark_deceased'
 ]);
 export type MovementAction = z.infer<typeof movementActionSchema>;
 
@@ -77,7 +111,8 @@ export interface Evacuee extends BaseDoc {
 	phone: string | null;
 	nickname?: string;
 	birth_year?: number;
-	national_id?: string;
+	person_id?: PersonId;
+	country: string;
 	religion?: Religion;
 	special_needs: SpecialNeed[];
 	emergency_contact?: EmergencyContact;
@@ -99,19 +134,51 @@ export interface Medical extends BaseDoc {
 	notes?: string;
 }
 
+export interface HouseholdAsset {
+	description: string;
+	image_url: string | null;
+}
+
+export interface HouseholdVehicle {
+	type: 'car' | 'motorcycle' | 'other';
+	license_plate: string | null;
+}
+
+/** Pre-v4 stored shape; may carry singular `vehicle` instead of `vehicles[]`. */
+type LegacyHouseholdDoc = Omit<Partial<Household>, 'vehicles'> & {
+	_id: string;
+	type: 'household';
+	schema_v?: number;
+	vehicle?: HouseholdVehicle;
+	vehicles?: HouseholdVehicle[];
+};
+
 export interface PetGroup {
 	species: 'dog' | 'cat' | 'bird' | 'other';
 	count: number;
 	notes?: string;
+	has_cage?: boolean;
+	image_url?: string | null;
 }
 
 export interface Household extends BaseDoc {
 	type: 'household';
 	label: string;
 	head_evacuee_id: string | null;
-	zone: string | null;
+	status: HouseholdStatus;
+	checkout_destination: CheckoutDestination | null;
+	municipality_zone: string | null;
+	community: string | null;
 	pets: PetGroup[];
+	assets?: HouseholdAsset | null;
+	vehicles: HouseholdVehicle[];
 	notes?: string;
+	address_no: string | null;
+	village_no: string | null;
+	subdistrict: string | null;
+	district: string | null;
+	province: string | null;
+	postal_code: string | null;
 }
 
 export interface MovementDestination {
@@ -152,11 +219,14 @@ export const evacueeInputSchema = z.object({
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
 	birth_year: z.coerce.number().int().optional(),
-	national_id: z
-		.string()
-		.regex(/^\d{13}$/, 'National ID must be 13 digits')
-		.optional(),
-	religion: religionSchema.optional(),
+	person_id: personIdSchema.default({ cardType: 'national_id', number: '' }),
+	country: z.string().trim().min(1, 'Country is required').default('THAILAND'),
+	religion: religionSchema.default('buddhist'),
+	medical_conditions: z.array(z.string().trim().min(1)).default([]),
+	medical_allergies: z.array(z.string().trim().min(1)).default([]),
+	medical_medications: z.array(z.string().trim().min(1)).default([]),
+	medical_note: z.string().trim().optional(),
+	track: careTrackSchema.optional(),
 	special_needs: z.array(specialNeedSchema).default([]),
 	emergency_contact: z
 		.object({
@@ -184,19 +254,46 @@ export type MedicalInput = z.input<typeof medicalInputSchema>;
 export const householdInputSchema = z.object({
 	label: z.string().trim().min(1, 'Label is required'),
 	head_evacuee_id: z.string().nullable().default(null),
-	zone: z.string().trim().nullable().default(null),
+	status: householdStatusSchema.default('arriving'),
+	checkout_destination: checkoutDestinationSchema.nullable().default(null),
+	municipality_zone: z.string().trim().nullable().default(null),
+	community: z.string().trim().nullable().default(null),
 	pets: z
 		.array(
 			z.object({
 				species: z.enum(['dog', 'cat', 'bird', 'other']),
 				count: z.coerce.number().int().positive(),
-				notes: z.string().trim().optional()
+				notes: z.string().trim().optional(),
+				has_cage: z.boolean().optional(),
+				image_url: z.string().trim().nullable().optional()
 			})
 		)
 		.default([]),
-	notes: z.string().trim().optional()
+	assets: z
+		.object({
+			description: z.string().trim(),
+			image_url: z.string().trim().nullable().default(null)
+		})
+		.nullable()
+		.optional(),
+	vehicles: z
+		.array(
+			z.object({
+				type: z.enum(['car', 'motorcycle', 'other']),
+				license_plate: z.string().trim().nullable().default(null)
+			})
+		)
+		.default([]),
+	notes: z.string().trim().optional(),
+	address_no: z.string().trim().nullable().default(null),
+	village_no: z.string().trim().nullable().default(null),
+	subdistrict: z.string().trim().nullable().default(null),
+	district: z.string().trim().nullable().default(null),
+	province: z.string().trim().nullable().default(null),
+	postal_code: z.string().trim().nullable().default(null)
 });
 export type HouseholdInput = z.input<typeof householdInputSchema>;
+export type HouseholdFormData = z.output<typeof householdInputSchema>;
 
 export const movementInputSchema = z.object({
 	evacuee_id: z.string().min(1),
@@ -231,7 +328,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		1,
+		2,
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -239,12 +336,13 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			phone: d.phone,
 			...(d.nickname ? { nickname: d.nickname } : {}),
 			...(d.birth_year !== undefined ? { birth_year: d.birth_year } : {}),
-			...(d.national_id ? { national_id: d.national_id } : {}),
+			...(d.person_id ? { person_id: d.person_id } : {}),
 			...(d.religion ? { religion: d.religion } : {}),
+			country: d.country,
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
 			household_id: d.household_id,
-			current_stay: { status: 'registered', zone: null, since: now() },
+			current_stay: { status: 'pre_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},
@@ -274,16 +372,78 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 	const d = householdInputSchema.parse(input);
 	return makeDoc(
 		'household',
-		1,
+		4, // schema_v 4: adds status, checkout_destination
 		{
 			label: d.label,
 			head_evacuee_id: d.head_evacuee_id,
-			zone: d.zone,
+			status: d.status,
+			checkout_destination: d.checkout_destination,
+			municipality_zone: d.municipality_zone,
+			community: d.community,
 			pets: d.pets,
-			...(d.notes ? { notes: d.notes } : {})
+			assets: d.assets || null,
+			vehicles: d.vehicles,
+			...(d.notes ? { notes: d.notes } : {}),
+			address_no: d.address_no || null,
+			village_no: d.village_no || null,
+			subdistrict: d.subdistrict || null,
+			district: d.district || null,
+			province: d.province || null,
+			postal_code: d.postal_code || null
 		},
 		ctx
 	);
+}
+
+/** Migrates a stored household doc up to schema_v 4 (adds status, checkout_destination; normalizes vehicle -> vehicles). */
+// export function migrateHouseholdV3ToV4(doc: any): Household {
+// 	if (doc && doc.type === 'household' && (!doc.schema_v || doc.schema_v < 4)) {
+// 		let vehicles = doc.vehicles;
+// 		if (!vehicles) {
+// 			if (doc.vehicle) {
+// 				vehicles = [doc.vehicle];
+// 			} else {
+// 				vehicles = [];
+// 			}
+// 		}
+// 		const migrated = {
+// 			...doc,
+// 			schema_v: 4,
+// 			status: doc.status || 'checked_in',
+// 			checkout_destination: doc.checkout_destination || null,
+// 			vehicles
+// 		};
+// 		delete migrated.vehicle;
+// 		return migrated;
+// 	}
+// 	return doc;
+// }
+export function migrateHouseholdV3ToV4(doc: unknown): Household {
+	const candidate = doc as Household | LegacyHouseholdDoc;
+	if (
+		candidate &&
+		candidate.type === 'household' &&
+		(!candidate.schema_v || candidate.schema_v < 4)
+	) {
+		const legacy = candidate as LegacyHouseholdDoc;
+		const { vehicle, ...rest } = legacy;
+		let vehicles: HouseholdVehicle[];
+		if (legacy.vehicles) {
+			vehicles = legacy.vehicles;
+		} else if (vehicle) {
+			vehicles = [vehicle];
+		} else {
+			vehicles = [];
+		}
+		return {
+			...rest,
+			schema_v: 4,
+			status: legacy.status ?? 'checked_in',
+			checkout_destination: legacy.checkout_destination ?? null,
+			vehicles
+		} as Household;
+	}
+	return candidate as Household;
 }
 
 export function createMovement(input: MovementInput, ctx: AuthorContext): Movement {
@@ -323,17 +483,61 @@ export function createScreening(input: ScreeningInput, ctx: AuthorContext): Scre
 
 // ---------------------------------------------------------------- transitions
 
+/** Stay statuses that may receive a scan/check-in (`check_in`) action. */
+export const CHECK_IN_ELIGIBLE_STATUSES = [
+	'pre_registered',
+	'temporary_leave',
+	'checked_out',
+	'transferred'
+] as const satisfies readonly StayStatus[];
+
+/** Stay statuses that may receive a scan/check-out (`check_out`) action. */
+export const CHECK_OUT_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
+
+export function canCheckInEvacuee(evacuee: Evacuee): boolean {
+	return (CHECK_IN_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+export function canCheckOutEvacuee(evacuee: Evacuee): boolean {
+	return (CHECK_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+/**
+ * Guard movement transitions against impossible / terminal stay states.
+ * `deceased` is terminal (schema.md §1.4) — no reverse action except staying deceased.
+ */
+export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction): void {
+	const status = evacuee.current_stay.status;
+	if (status === 'deceased' && action !== 'mark_deceased') {
+		throw new Error('สถานะเสียชีวิตเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก');
+	}
+	if (action === 'check_in' && !canCheckInEvacuee(evacuee)) {
+		throw new Error(`ไม่สามารถเช็คอินจากสถานะ ${status} ได้`);
+	}
+	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
+		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
+	}
+}
+
 /**
  * Apply a movement to an evacuee's denormalized `current_stay` snapshot. The
  * authoritative history is the append-only movement stream; this just keeps the
  * UI snapshot in step (movement events win on conflict — data-model.md §5).
  */
 export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacuee {
+	assertMovementAllowed(evacuee, movement.action);
 	const statusByAction: Record<MovementAction, StayStatus> = {
-		check_in: 'checked_in',
+		check_in: 'active',
 		check_out: 'checked_out',
 		transfer_out: 'transferred',
-		transfer_in: 'checked_in'
+		transfer_in: 'active',
+		leave_temporary: 'temporary_leave',
+		return_from_leave: 'active',
+		mark_deceased: 'deceased'
 	};
 	return {
 		...evacuee,
@@ -362,6 +566,29 @@ export function maskNationalId(id: string | null | undefined): string {
 	return `${id.slice(0, 3)}***${id.slice(-3)}`;
 }
 
+/** True when `query` matches evacuee name, nickname, phone, or person ID (incl. masked). */
+export function matchesEvacueeSearch(evacuee: Evacuee, query: string): boolean {
+	const q = query.trim().toLowerCase();
+	if (!q) return true;
+	if (evacuee.privacy?.search_excluded) return false;
+	if (
+		evacuee.first_name.toLowerCase().includes(q) ||
+		evacuee.last_name.toLowerCase().includes(q) ||
+		`${evacuee.first_name} ${evacuee.last_name}`.toLowerCase().includes(q) ||
+		(evacuee.nickname?.toLowerCase().includes(q) ?? false)
+	) {
+		return true;
+	}
+	const masked = maskNationalId(evacuee.person_id?.number).toLowerCase();
+	if (masked.includes(q)) return true;
+	const digitsOnly = q.replace(/\D/g, '');
+	if (digitsOnly) {
+		if (evacuee.phone?.replace(/\D/g, '').includes(digitsOnly)) return true;
+		if (evacuee.person_id?.number?.replace(/\D/g, '').includes(digitsOnly)) return true;
+	}
+	return false;
+}
+
 export function zoneLabel(zone: string | null | undefined): string {
 	if (!zone) return '—';
 	return zone.toUpperCase();
@@ -379,3 +606,143 @@ export const isMovement = (d: unknown): d is Movement =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'movement';
 export const isScreening = (d: unknown): d is Screening =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'screening';
+
+export interface EwarSymptom {
+	id: string;
+	emoji: string;
+	label: string;
+	sublabel?: string;
+}
+
+export interface EwarSymptomGroup {
+	title: string;
+	symptoms: EwarSymptom[];
+}
+
+export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
+	{
+		title: 'กลุ่มอาการทางเดินอาหาร',
+		symptoms: [
+			{
+				id: 'acute_watery_diarrhea',
+				emoji: '💧',
+				label: 'อุจจาระร่วงเฉียบพลันแบบเป็นน้ำ/อหิวาตกโรค (Acute watery diarrhoea / Cholera)'
+			},
+			{
+				id: 'acute_bloody_diarrhea',
+				emoji: '🩸',
+				label: 'ท้องร่วงเป็นเลือด/โรคบิด (Acute bloody diarrhoea / Shigellosis)'
+			},
+			{
+				id: 'typhoid',
+				emoji: '🌡️',
+				label: 'ไทฟอยด์ (Typhoid)'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มอาการทางเดินหายใจ',
+		symptoms: [
+			{
+				id: 'acute_respiratory',
+				emoji: '😷',
+				label: 'การติดเชื้อระบบทางเดินหายใจเฉียบพลัน (Acute respiratory infection)'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มโรคที่มีพาหะนำโรค',
+		symptoms: [
+			{
+				id: 'malaria',
+				emoji: '🤒',
+				label: 'ไข้มาลาเรีย (Malaria)'
+			},
+			{
+				id: 'dengue',
+				emoji: '🦟',
+				label: 'ไข้เลือดออก (Dengue)'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มโรคติดต่อรุนแรงและไข้ออกผื่น',
+		symptoms: [
+			{
+				id: 'measles',
+				emoji: '🔴',
+				label: 'โรคหัด (Measles)'
+			},
+			{
+				id: 'meningitis',
+				emoji: '🧠',
+				label: 'เยื่อหุ้มสมองอักเสบ (Meningitis)'
+			},
+			{
+				id: 'diphtheria',
+				emoji: '🗣️',
+				label: 'คอตีบ (Diphtheria)'
+			},
+			{
+				id: 'pertussis',
+				emoji: '😮‍💨',
+				label: 'ไอกรน (Pertussis)'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มอาการตับอักเสบ',
+		symptoms: [
+			{
+				id: 'acute_jaundice_syndrome',
+				emoji: '🟡',
+				label: 'ภาวะดีซ่านเฉียบพลัน (Acute Jaundice Syndrome)'
+			},
+			{
+				id: 'Hepatitis A or E',
+				emoji: '🦠',
+				label: 'ไวรัสตับอักเสบชนิด เอ หรือ อี (Hepatitis A or E)'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มอาการทางระบบประสาทและอื่นๆ',
+		symptoms: [
+			{
+				id: 'acute_flaccid_paralysis',
+				emoji: '🦿',
+				label: 'ภาวะกล้ามเนื้ออ่อนปวกเปียกเฉียบพลันหรือโรคโปลิโอ (Acute Flaccid Paralysis / Polio)'
+			},
+			{
+				id: 'tetanus',
+				emoji: '🩹',
+				label: 'บาดทะยัก (Tetanus)'
+			},
+			{
+				id: 'acute_haemorrhagic_fever_syndrome',
+				emoji: '🩸',
+				label: 'กลุ่มอาการไข้เลือดออกรุงแรง (Acute Haemorrhagic Fever Syndrome)'
+			}
+		]
+	},
+	{
+		title: 'อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ',
+		symptoms: [
+			{
+				id: 'high_fever',
+				emoji: '🔥',
+				label: 'อาการไข้สูงกว่า 38.5 องศาเซลเซียส'
+			},
+			{
+				id: 'trauma',
+				emoji: '💥',
+				label: 'การบาดเจ็บ (Trauma)'
+			},
+			{
+				id: 'chemical_poisoning',
+				emoji: '☠️',
+				label: 'สารเคมีเป็นพิษ (Chemical Poisoning)'
+			}
+		]
+	}
+];
