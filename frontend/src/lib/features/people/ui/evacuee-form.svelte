@@ -157,17 +157,22 @@
 				const latestHousehold = await peopleRepository().getHousehold(selectedHousehold._id);
 				if (!latestHousehold) throw new Error('ไม่พบครัวเรือนในระบบ');
 
-				// Edit in place: the step 5 form was prefilled with the household's existing
-				// pets/assets/vehicles, so the submitted data is the full edited set — replace,
-				// don't append (which would duplicate the prefilled entries).
+				// Append new pets if any
+				let updatedPets = [...(latestHousehold.pets || [])];
+				if (pets.length > 0) {
+					updatedPets.push(...pets);
+				}
+
 				await updateHouseholdMutation.mutateAsync({
 					...latestHousehold,
 					label: latestHousehold.label || `ครอบครัวผู้ประสบภัย ${latestHousehold._id}`,
-					pets,
-					assets,
-					vehicles
+					pets: updatedPets,
+					assets: assets || latestHousehold.assets || null,
+					// Append the registrant's vehicles to the household's existing list (like pets),
+					// rather than replacing them.
+					vehicles: [...(latestHousehold.vehicles || []), ...vehicles]
 				});
-			} else if (isCreatingNewHousehold || pets.length > 0 || assets || vehicles.length > 0) {
+			} else if (isCreatingNewHousehold) {
 				const addr = newHouseholdAddress || {};
 				const householdLabel = `ครอบครัว${registeredEvacuee.first_name} ${registeredEvacuee.last_name}`;
 
@@ -360,8 +365,27 @@
 				<Button
 					type="button"
 					class="h-10 bg-[#003B71] px-6 text-sm font-medium hover:bg-[#002a50]"
-					onclick={() => {
-						step = 5;
+					disabled={isSubmittingHousehold}
+					onclick={async () => {
+						if (selectedHousehold) {
+							step = 5;
+						} else {
+							if (isSubmittingHousehold) return;
+							isSubmittingHousehold = true;
+							try {
+								if (pendingEvacueeInput) {
+									newlyRegisteredEvacuee = await onsubmit(pendingEvacueeInput, pendingSymptoms);
+									pendingEvacueeInput = null;
+									pendingSymptoms = [];
+								}
+								step = 6;
+							} catch (err) {
+								const message = err instanceof Error ? err.message : String(err);
+								toast.error(`เกิดข้อผิดพลาดในการบันทึก: ${message}`);
+							} finally {
+								isSubmittingHousehold = false;
+							}
+						}
 					}}
 				>
 					{selectedHousehold ? 'ถัดไป ⏩' : 'ข้าม / ถัดไป'}
@@ -370,15 +394,17 @@
 		</div>
 	</div>
 {:else if step === 5}
-	<EvacueePetAssetVehicle
-		household={selectedHousehold}
-		onBack={() => (step = 4)}
-		onNext={handleFinalSubmit}
-	/>
+	<EvacueePetAssetVehicle onBack={() => (step = 4)} onNext={handleFinalSubmit} />
 {:else if step === 6}
 	<EvacueeSelectZone
 		evacuee={newlyRegisteredEvacuee}
-		onBack={() => (step = 5)}
+		onBack={() => {
+			if (selectedHousehold || isCreatingNewHousehold) {
+				step = 5;
+			} else {
+				step = 4;
+			}
+		}}
 		onSubmit={handleZoneSubmit}
 	/>
 {/if}
