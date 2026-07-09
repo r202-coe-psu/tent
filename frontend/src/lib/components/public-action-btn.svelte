@@ -1,13 +1,20 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import type { HTMLButtonAttributes, HTMLAnchorAttributes } from 'svelte/elements';
 
 	let {
 		variant = 'solid',
-		children
+		disabled = false,
+		href,
+		children,
+		...rest
 	}: {
 		variant?: 'solid' | 'outline';
+		disabled?: boolean;
+		href?: string;
 		children: Snippet;
-	} = $props();
+	} & HTMLButtonAttributes &
+		HTMLAnchorAttributes = $props();
 
 	const baseClasses =
 		'flex w-full items-center justify-center rounded-xl px-3 py-3 font-bold transition-colors shadow-sm';
@@ -16,8 +23,20 @@
 		solid: 'bg-primary text-white hover:bg-primary-dark text-xs',
 		outline: 'bg-transparent border border-primary/20 text-[11px] text-primary hover:bg-slate-50'
 	};
+
+	const disabledClasses = 'opacity-50 cursor-not-allowed pointer-events-none grayscale';
 </script>
 
-<button class="{baseClasses} {variants[variant]}">
-	{@render children()}
-</button>
+{#if href && !disabled}
+	<a {href} class="{baseClasses} {variants[variant]} {disabled ? disabledClasses : ''}" {...rest}>
+		{@render children()}
+	</a>
+{:else}
+	<button
+		{disabled}
+		class="{baseClasses} {variants[variant]} {disabled ? disabledClasses : ''}"
+		{...rest}
+	>
+		{@render children()}
+	</button>
+{/if}
