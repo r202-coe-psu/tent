@@ -1,5 +1,6 @@
-from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 import bson
+from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+
 from .database import beanie_client
 
 
@@ -45,7 +46,10 @@ class File:
 
         return self.fs
 
-    async def put(self, data, metadata={}):
+    async def put(self, data, metadata=None):
+        if metadata is None:
+            metadata = {}
+
         fs = await self.get_gridfs()
 
         if "filename" not in metadata and data is not bytes:
@@ -55,13 +59,9 @@ class File:
             metadata["content_type"] = data.content_type
 
         if data is bytes:
-            file_id = await fs.upload_from_stream(
-                bson.ObjectId, data, metadata=metadata
-            )
+            file_id = await fs.upload_from_stream(bson.ObjectId, data, metadata=metadata)
         else:
-            file_id = await fs.upload_from_stream(
-                data.filename, data.file, metadata=metadata
-            )
+            file_id = await fs.upload_from_stream(data.filename, data.file, metadata=metadata)
         self.file_id = file_id
         return file_id
 

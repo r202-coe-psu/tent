@@ -2,9 +2,10 @@
 Forge CLI - FastAPI Module Generator and Development Tools
 """
 
-import typer
 import subprocess
 from pathlib import Path
+
+import typer
 from jinja2 import Environment, FileSystemLoader
 from rich.console import Console
 from rich.panel import Panel
@@ -37,7 +38,7 @@ def dev():
         subprocess.run([str(script_path)], check=True)
     except subprocess.CalledProcessError as e:
         console.print(f"[red]❌ Failed to start dev server: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
     except KeyboardInterrupt:
         console.print("[yellow]🛑 Development server stopped[/yellow]")
 
@@ -76,9 +77,7 @@ def generate(
     name: str = typer.Argument(
         ..., help="Name of the module to generate (e.g., 'product', 'user', 'category')"
     ),
-    overwrite: bool = typer.Option(
-        False, "--overwrite", help="Overwrite existing files"
-    ),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing files"),
 ):
     """
     Generate a new FastAPI module with CRUD operations.
@@ -111,41 +110,31 @@ def generate(
     console.print(f"[green]✓[/green] Created {init_file}")
 
     # Create __init__.py
-    create_file_from_template(
-        "__init__.py.j2", module_dir / "__init__.py", context, overwrite
-    )
+    create_file_from_template("__init__.py.j2", module_dir / "__init__.py", context, overwrite)
 
     # Create model.py
-    create_file_from_template(
-        "model.py.j2", module_dir / "model.py", context, overwrite
-    )
+    create_file_from_template("model.py.j2", module_dir / "model.py", context, overwrite)
 
     # Create schemas.py
-    create_file_from_template(
-        "schemas.py.j2", module_dir / "schemas.py", context, overwrite
-    )
+    create_file_from_template("schemas.py.j2", module_dir / "schemas.py", context, overwrite)
 
     # Create use_case.py
-    create_file_from_template(
-        "use_case.py.j2", module_dir / "use_case.py", context, overwrite
-    )
+    create_file_from_template("use_case.py.j2", module_dir / "use_case.py", context, overwrite)
 
     # Create router.py
-    create_file_from_template(
-        "router.py.j2", module_dir / "router.py", context, overwrite
-    )
+    create_file_from_template("router.py.j2", module_dir / "router.py", context, overwrite)
 
     # Success message
-    success_text = Text(
-        f"Module '{snake_case}' generated successfully!", style="bold green"
-    )
+    success_text = Text(f"Module '{snake_case}' generated successfully!", style="bold green")
     console.print(Panel(success_text, title="✅ Success", border_style="green"))
 
     console.print(f"[blue]📁[/blue] Location: {module_dir}")
 
     console.print("\n[bold cyan]Next steps:[/bold cyan]")
+    generated_router_path = f"apiapp/modules/{snake_case}/router.py"
     console.print(
-        f"1. Implement business logic in the generated routes in [code]apiapp/modules/{snake_case}/router.py[/code]"
+        "1. Implement business logic in the generated routes in "
+        f"[code]{generated_router_path}[/code]"
     )
 
 

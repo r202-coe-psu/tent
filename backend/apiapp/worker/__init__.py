@@ -1,1 +1,1 @@
-from .server import WorkerSettings
+from .server import WorkerSettings as WorkerSettings

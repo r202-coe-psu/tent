@@ -1,17 +1,18 @@
+import os
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi_pagination import add_pagination
-
-from .core.router import init_routers
-from .core import http_error, validation_error
-from contextlib import asynccontextmanager
-from .middlewares.base import init_all_middlewares
-from .infrastructure.database import init_beanie
 from loguru import logger
+
+from .core import http_error, validation_error
 from .core.config import get_settings
-from dotenv import load_dotenv
-import os
-from pathlib import Path
+from .core.router import init_routers
+from .infrastructure.database import init_beanie
+from .middlewares.base import init_all_middlewares
 
 
 def create_app() -> FastAPI:
@@ -43,10 +44,7 @@ def create_app() -> FastAPI:
             s = str(value)
         except Exception:
             return "<unrepresentable>"
-        if any(
-            t in key.upper()
-            for t in ("SECRET", "KEY", "PASSWORD", "TOKEN", "DATABASE", "URI")
-        ):
+        if any(t in key.upper() for t in ("SECRET", "KEY", "PASSWORD", "TOKEN", "DATABASE", "URI")):
             return "<sensitive>"
         return s
 
@@ -62,9 +60,7 @@ def create_app() -> FastAPI:
 
     logger.debug(f"Settings loaded from: {env_path}")
     if fields_set:
-        logger.debug(
-            f"Fields loaded from env ({len(fields_set)}): {', '.join(sorted(fields_set))}"
-        )
+        logger.debug(f"Fields loaded from env ({len(fields_set)}): {', '.join(sorted(fields_set))}")
         for k in sorted(fields_set):
             v = _mask_sensitive(k, all_settings[k])
             logger.debug(f"{k}={v}")
@@ -73,9 +69,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(lifespan=lifespan, **settings.fastapi_kwargs)
     app.add_exception_handler(HTTPException, http_error.http_error_handler)
-    app.add_exception_handler(
-        RequestValidationError, validation_error.http422_error_handler
-    )
+    app.add_exception_handler(RequestValidationError, validation_error.http422_error_handler)
     init_all_middlewares(app, settings=settings)
     app.router.lifespan_context = lifespan
 

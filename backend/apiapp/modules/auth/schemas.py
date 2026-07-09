@@ -2,8 +2,8 @@ from pydantic import BaseModel
 
 
 class Message(BaseModel):
-	detail: str
+    detail: str
 
 
 class VerifyResponse(BaseModel):
-	status: str = "ok"
+    status: str = "ok"

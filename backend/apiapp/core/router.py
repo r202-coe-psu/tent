@@ -4,7 +4,6 @@ Router initialization - auto-discovery from modules
 
 import importlib
 import pkgutil
-from typing import List
 
 from fastapi import APIRouter, FastAPI
 from loguru import logger
@@ -12,7 +11,7 @@ from loguru import logger
 from ..core.config import Settings
 
 
-def _discover_routers() -> List[tuple[str, APIRouter]]:
+def _discover_routers() -> list[tuple[str, APIRouter]]:
     """Discover all routers from modules/*/router.py"""
     routers = []
     modules_package_name = "apiapp.modules"
@@ -29,7 +28,7 @@ def _discover_routers() -> List[tuple[str, APIRouter]]:
             try:
                 router_module = importlib.import_module(f"{module_name}.router")
                 if hasattr(router_module, "router"):
-                    router = getattr(router_module, "router")
+                    router = router_module.router
                     if isinstance(router, APIRouter):
                         name = module_name.split(".")[-1]
                         routers.append((name, router))

@@ -3,14 +3,13 @@ Base use case - Generic CRUD operations for Beanie documents
 Provides common CRUD functionality to reduce code duplication
 """
 
-from datetime import datetime, timezone
-from typing import Generic, TypeVar, Optional, Type
+from datetime import UTC, datetime
+from typing import Generic, TypeVar
 
 from beanie import Document, PydanticObjectId
 from fastapi_pagination import Page
 from fastapi_pagination.ext.beanie import paginate
 from pydantic import BaseModel
-
 
 # Type variables for generic types
 ModelType = TypeVar("ModelType", bound=Document)
@@ -19,9 +18,7 @@ UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 ResponseSchemaType = TypeVar("ResponseSchemaType", bound=BaseModel)
 
 
-class BaseUseCase(
-    Generic[ModelType, CreateSchemaType, UpdateSchemaType, ResponseSchemaType]
-):
+class BaseUseCase(Generic[ModelType, CreateSchemaType, UpdateSchemaType, ResponseSchemaType]):
     """
     Base use case with generic CRUD operations.
 
@@ -31,8 +28,8 @@ class BaseUseCase(
             response_schema = PetResponse
     """
 
-    model: Type[ModelType]
-    response_schema: Type[ResponseSchemaType]
+    model: type[ModelType]
+    response_schema: type[ResponseSchemaType]
 
     # ==================== Create Operations ====================
 
@@ -40,14 +37,14 @@ class BaseUseCase(
         """Create a new document"""
         doc = self.model(
             **data.model_dump(),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await doc.insert()
         return self._to_response(doc)
 
     # ==================== Read Operations ====================
 
-    async def get_by_id(self, doc_id: str) -> Optional[ResponseSchemaType]:
+    async def get_by_id(self, doc_id: str) -> ResponseSchemaType | None:
         """Get document by ID"""
         doc = await self.model.get(PydanticObjectId(doc_id))
         return self._to_response(doc) if doc else None
@@ -60,9 +57,7 @@ class BaseUseCase(
 
     # ==================== Update Operations ====================
 
-    async def update(
-        self, doc_id: str, data: UpdateSchemaType
-    ) -> Optional[ResponseSchemaType]:
+    async def update(self, doc_id: str, data: UpdateSchemaType) -> ResponseSchemaType | None:
         """Update document with validation"""
         doc = await self.model.get(PydanticObjectId(doc_id))
         if not doc:
@@ -76,7 +71,7 @@ class BaseUseCase(
 
         # Update timestamp if model has updated_at field
         if hasattr(doc, "updated_at"):
-            setattr(doc, "updated_at", datetime.now(timezone.utc))
+            doc.updated_at = datetime.now(UTC)
 
         await doc.save()
 

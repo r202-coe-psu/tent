@@ -1,4 +1,4 @@
-# Pre-commit quality gate for frontend (matches Jenkins CI stages).
+# Pre-commit quality gate (frontend + backend).
 # Install: pnpm install (root) — runs `lefthook install` via prepare script.
 
 pre-commit:
@@ -16,3 +16,11 @@ pre-commit:
       root: frontend/
       glob: '**/*'
       run: pnpm test
+    backend-check:
+      root: backend/
+      glob: '**/*.py'
+      run: poetry run ruff check . && poetry run ruff format --check .
+    backend-test:
+      root: backend/
+      glob: '**/*.py'
+      run: poetry run pytest

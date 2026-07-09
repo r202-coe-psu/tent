@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+
 from ..core.config import Settings
 from .cors import init_cors_middleware
 from .security import init_security_middleware

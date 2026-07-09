@@ -1,5 +1,7 @@
-from apiapp.infrastructure import database
 import logging
+
+from apiapp.infrastructure import database
+
 from ..core.config import get_settings
 
 logger = logging.getLogger(__name__)

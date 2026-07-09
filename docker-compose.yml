@@ -70,6 +70,7 @@ services:
       COUCHDB_URL: http://couchdb:5984
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/tentdb}
     restart: unless-stopped
 
 networks:

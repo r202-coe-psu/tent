@@ -1,12 +1,13 @@
 import logging
-import sys
-from typing import Any, Dict, List, Tuple
-from functools import lru_cache
-from pydantic_settings import BaseSettings, SettingsConfigDict
 import os
+import sys
+from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from ..utils.logging import InterceptHandler
 
 ENV: str = os.getenv("APP_ENV", "")
@@ -41,16 +42,16 @@ class Settings(BaseSettings):
 
     # CORS
     ALLOW_CREDENTIALS: bool = True
-    ALLOW_HOSTS: List[str] = ["*"]
-    ALLOW_METHODS: List[str] = ["*"]
-    ALLOW_HEADERS: List[str] = ["*"]
-    DISALLOW_AGENTS: List[str] = [
+    ALLOW_HOSTS: list[str] = ["*"]
+    ALLOW_METHODS: list[str] = ["*"]
+    ALLOW_HEADERS: list[str] = ["*"]
+    DISALLOW_AGENTS: list[str] = [
         "zgrab",
         "wget",
     ]
 
     LOGGING_LEVEL: int = logging.INFO
-    LOGGERS: Tuple[str, str] = ("uvicorn.asgi", "uvicorn.access")
+    LOGGERS: tuple[str, str] = ("uvicorn.asgi", "uvicorn.access")
 
     # find query
     DEFAULT_PAGE_SIZE: int = 20
@@ -74,7 +75,7 @@ class Settings(BaseSettings):
     )
 
     @property
-    def fastapi_kwargs(self) -> Dict[str, Any]:
+    def fastapi_kwargs(self) -> dict[str, Any]:
         """FastAPI application configuration"""
         return {
             "debug": self.DEBUG,

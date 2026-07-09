@@ -2,31 +2,31 @@
 Base schemas for the application
 """
 
+from datetime import UTC, datetime
+from typing import TypeVar
+
 from beanie import PydanticObjectId
 from pydantic import BaseModel, Field
-from datetime import UTC, datetime
-from typing import Optional, TypeVar, Union
-
 
 T = TypeVar("T", bound="BaseSchema")
 
 
 class BaseSchema(BaseModel):
-    id: Optional[Union[PydanticObjectId, str]] = Field(default=None)
+    id: PydanticObjectId | str | None = Field(default=None)
 
 
 class TimestampMixin(BaseModel):
     """Mixin for timestamp fields"""
 
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
 
 class ErrorResponse(BaseModel):
     """Standard error response"""
 
     detail: str
-    code: Optional[str] = None
+    code: str | None = None
     timestamp: datetime = lambda: datetime.now(UTC)
 
 
@@ -34,4 +34,4 @@ class SuccessResponse(BaseModel):
     """Standard success response"""
 
     message: str
-    data: Optional[dict] = None
+    data: dict | None = None

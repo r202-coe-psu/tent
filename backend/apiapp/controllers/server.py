@@ -1,7 +1,6 @@
 import asyncio
-import logging
-import json
 import datetime
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +48,11 @@ class ControllerServer:
         loop = asyncio.get_event_loop()
         loop.set_debug(True)
         loop.run_until_complete(self.set_up())
-        daily_run = loop.create_task(self.run_daily())
+        loop.create_task(self.run_daily())
 
         try:
             loop.run_forever()
-        except Exception as e:
+        except Exception:
             self.running = False
         finally:
             loop.close()
