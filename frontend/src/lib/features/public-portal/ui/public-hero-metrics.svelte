@@ -96,7 +96,7 @@
 							type="text"
 							bind:value={searchQuery}
 							onkeydown={handleKeydown}
-							placeholder="สืบค้นญาติด่วน ชื่อ-นามสกุล หรือ รหัสประ..."
+							placeholder="สืบค้นญาติด้วย ชื่อ-สกุล หรือ รหัสบัตรประชาชน"
 							class="h-10 w-full bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none"
 						/>
 					</div>
@@ -137,7 +137,9 @@
 						<div
 							class="flex flex-col justify-center rounded-xl border border-border/50 bg-muted/30 p-4"
 						>
-							<span class="mb-2 text-xs font-semibold text-muted-foreground">ศูนย์อพยพหลัก</span>
+							<span class="mb-2 text-xs font-semibold text-muted-foreground"
+								>ศูนย์พักพิงพร้อมให้บริการ</span
+							>
 							<div class="flex items-baseline gap-1">
 								<span class="text-3xl font-bold text-card-foreground">{summary.shelters_open}</span>
 								<span class="text-sm font-medium text-muted-foreground"
