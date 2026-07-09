@@ -12,7 +12,7 @@
 		VersionHistoryDrawer
 	} from '$lib/features/sop-ratios';
 
-	import { backofficeState } from '$lib/stores/backoffice.svelte';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin, isShelterManager, shelterCodeFromRoles } from '$lib/auth/roles';
 	import { toast } from 'svelte-sonner';
@@ -35,7 +35,7 @@
 			: null
 	);
 
-	const shelterCode = $derived(backofficeState.selectedShelter);
+	const shelterCode = $derived(shelterStore.selectedShelterCode ?? '');
 	const overrideQuery = useActiveSopOverride(() => shelterCode);
 	const activeOverride = $derived(overrideQuery.data ?? null);
 

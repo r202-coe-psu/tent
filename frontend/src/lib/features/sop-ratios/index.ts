@@ -49,7 +49,6 @@ export {
 	type Severity
 } from './domain/resource-calc';
 
-
 // Data — repositories + resolver
 export type { SopMasterRepository, SopOverrideRepository } from './data/sop-ratio.repository';
 export {
@@ -91,7 +90,6 @@ export {
 // Live-sync wiring (call once per layout, pass QueryClient)
 export { startSopRatioLiveQuery } from './application/sop-ratio-sync';
 
-// UI — Svelte components (T-30.6)
 export { default as SopMasterTable } from './ui/sop-master-table.svelte';
 export { default as SopEditForm } from './ui/sop-edit-form.svelte';
 export { default as VersionHistoryDrawer } from './ui/version-history-drawer.svelte';
