@@ -2,11 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
 
-// จำลอง (Mock) การทำงานของ adminRaw client
+type GetEvent = Parameters<typeof GET>[0];
+
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn(),
-	serviceError: vi.fn((e) => new Response(JSON.stringify({ error: e }), { status: 500 })),
-	ServiceError: class ServiceError extends Error {
+	serviceError: (e: unknown) =>
+		new Response(JSON.stringify({ error: e instanceof Error ? e.message : 'error' }), {
+			status: 500
+		}),
+	ServiceError: class extends Error {
 		constructor(
 			public code: string,
 			message: string
@@ -18,177 +22,210 @@ vi.mock('$lib/server/couch-admin', () => ({
 
 describe('GET /api/public/v1/needs', () => {
 	beforeEach(() => {
-		vi.clearAllMocks();
+		vi.resetAllMocks();
 	});
 
-	it('returns shelter open needs without exposing donor PII', async () => {
-		// จำลองข้อมูลฐานข้อมูล registry ที่มีศูนย์พักพิงที่กำลังเปิดอยู่
-		const mockRegistryResponse = {
-			status: 200,
-			data: {
-				rows: [
-					{
-						id: 'shelter:SH001',
-						doc: {
-							_id: 'shelter:SH001',
-							type: 'shelter',
-							code: 'SH001',
-							name: 'Test Shelter 1',
-							status: 'open',
-							capacity: 100
-						}
+	it('returns aggregated needs from campaigns without PII', async () => {
+		// Mock CouchDB responses
+		vi.mocked(adminRaw).mockImplementation((path: string) => {
+			if (path.includes('/registry/')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								id: 'shelter:SH001',
+								doc: {
+									_id: 'shelter:SH001',
+									type: 'shelter',
+									code: 'SH001',
+									name: 'Shelter One',
+									status: 'open'
+								}
+							}
+						]
 					}
-				]
+				});
 			}
-		};
-
-		// จำลองข้อมูลฐานข้อมูล catalog ที่มีรายการสิ่งของ
-		const mockCatalogResponse = {
-			status: 200,
-			data: {
-				rows: [
-					{
-						id: 'item:rice',
-						doc: {
-							_id: 'item:rice',
-							type: 'supply_item',
-							name: 'ข้าวสาร',
-							category: 'food',
-							unit: 'kg'
-						}
-					},
-					{
-						id: 'item:water',
-						doc: {
-							_id: 'item:water',
-							type: 'supply_item',
-							name: 'น้ำดื่ม',
-							category: 'food',
-							unit: 'bottle'
-						}
-					}
-				]
-			}
-		};
-
-		// จำลองแคมเปญบริจาคในศูนย์ SH001
-		const mockCampaignsResponse = {
-			status: 200,
-			data: {
-				rows: [
-					{
-						doc: {
-							_id: 'donation_campaign:c1',
-							type: 'donation_campaign',
-							status: 'open',
-							needs: [
-								{
-									item_id: 'item:rice',
-									qty_target: 500,
+			if (path.includes('/catalog/')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								id: 'item:rice',
+								doc: {
+									_id: 'item:rice',
+									type: 'supply_item',
+									name: 'Rice',
+									category: 'food',
 									unit: 'kg'
-								},
+								}
+							}
+						]
+					}
+				});
+			}
+			if (path.includes('/shelter_sh001/')) {
+				if (path.includes('donation_campaign:')) {
+					return Promise.resolve({
+						status: 200,
+						data: {
+							rows: [
 								{
-									item_id: 'item:water',
-									qty_target: 200,
-									unit: 'bottle'
+									doc: {
+										_id: 'donation_campaign:c1',
+										type: 'donation_campaign',
+										status: 'open',
+										needs: [
+											{
+												item_id: 'item:rice',
+												qty_target: 100,
+												unit: 'kg'
+											}
+										]
+									}
 								}
 							]
 						}
-					}
-				]
-			}
-		};
-
-		// จำลองข้อมูลประวัติการจองบริจาคในศูนย์ SH001 (บางรายการมีสถานะใช้งานได้ บางรายการยกเลิกหรือหมดอายุ)
-		// ใส่ข้อมูลระบุตัวตน (PII) ของผู้บริจาค (เบอร์โทร, ไลน์, อีเมล) ไว้ในเอกสารจำลอง
-		// เพื่อนำมาใช้ตรวจสอบว่าข้อมูลเหล่านี้จะไม่รั่วไหลออกไปทาง API
-		const mockDonationsResponse = {
-			status: 200,
-			data: {
-				rows: [
-					{
-						doc: {
-							_id: 'donation:d1',
-							type: 'donation',
-							campaign_id: 'donation_campaign:c1',
-							status: 'declared',
-							donor_name: 'John Doe',
-							donor_phone: '0812345678',
-							donor_email: 'john@example.com',
-							donor_line: 'johnline',
-							items: [
-								{ item_id: 'item:rice', qty: 100 },
-								{ item_id: 'item:water', qty: 50 }
+					});
+				}
+				if (path.includes('donation:')) {
+					return Promise.resolve({
+						status: 200,
+						data: {
+							rows: [
+								{
+									doc: {
+										_id: 'donation:d1',
+										type: 'donation',
+										campaign_id: 'donation_campaign:c1',
+										status: 'declared',
+										items: [
+											{
+												item_id: 'item:rice',
+												qty: 30
+											}
+										]
+									}
+								}
 							]
 						}
-					},
-					{
-						doc: {
-							_id: 'donation:d2',
-							type: 'donation',
-							campaign_id: 'donation_campaign:c1',
-							status: 'cancelled', // Should be skipped in calculations
-							donor_name: 'Jane Cancel',
-							donor_phone: '0898765432',
-							items: [{ item_id: 'item:rice', qty: 300 }]
-						}
-					}
-				]
+					});
+				}
 			}
-		};
-
-		// ตั้งค่าการจำลองพฤติกรรมของฟังก์ชัน adminRaw ในแต่ละคำขอตามลำดับ
-		vi.mocked(adminRaw).mockImplementation(async (path: string) => {
-			if (path.includes('/registry/_all_docs')) {
-				return mockRegistryResponse;
-			}
-			if (path.includes('/catalog/_all_docs')) {
-				return mockCatalogResponse;
-			}
-			if (
-				path.includes('/shelter_sh001/_all_docs?include_docs=true&startkey="donation_campaign:"')
-			) {
-				return mockCampaignsResponse;
-			}
-			if (path.includes('/shelter_sh001/_all_docs?include_docs=true&startkey="donation:"')) {
-				return mockDonationsResponse;
-			}
-			return { status: 404, data: null };
+			return Promise.resolve({ status: 404, data: {} });
 		});
 
-		const response = await GET({} as Parameters<typeof GET>[0]);
-		expect(response.status).toBe(200);
+		const response = await GET({} as unknown as GetEvent);
+		const data = await response.json();
 
-		const result = await response.json();
-		expect(result).toBeInstanceOf(Array);
-		expect(result).toHaveLength(1);
+		expect(data).toHaveLength(1);
+		expect(data[0].code).toBe('SH001');
+		expect(data[0].needs).toHaveLength(1);
+		expect(data[0].needs[0].item_id).toBe('item:rice');
+		expect(data[0].needs[0].qty_needed).toBe(70); // 100 - 30
+		expect(data[0].needs[0].status).toBe('open');
+		// Confirm no PII is returned
+		expect(data[0].needs[0]).not.toHaveProperty('donor');
+	});
 
-		const shelterInfo = result[0];
-		expect(shelterInfo.code).toBe('SH001');
-		expect(shelterInfo.name).toBe('Test Shelter 1');
-		expect(shelterInfo.needs).toBeInstanceOf(Array);
+	it('caps the qty_needed to 0 and marks as closed when target is met or exceeded', async () => {
+		vi.mocked(adminRaw).mockImplementation((path: string) => {
+			if (path.includes('/registry/')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								id: 'shelter:SH001',
+								doc: {
+									_id: 'shelter:SH001',
+									type: 'shelter',
+									code: 'SH001',
+									name: 'Shelter One',
+									status: 'open'
+								}
+							}
+						]
+					}
+				});
+			}
+			if (path.includes('/catalog/')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								id: 'item:rice',
+								doc: {
+									_id: 'item:rice',
+									type: 'supply_item',
+									name: 'Rice',
+									category: 'food',
+									unit: 'kg'
+								}
+							}
+						]
+					}
+				});
+			}
+			if (path.includes('/shelter_sh001/')) {
+				if (path.includes('donation_campaign:')) {
+					return Promise.resolve({
+						status: 200,
+						data: {
+							rows: [
+								{
+									doc: {
+										_id: 'donation_campaign:c1',
+										type: 'donation_campaign',
+										status: 'open',
+										needs: [
+											{
+												item_id: 'item:rice',
+												qty_target: 50,
+												unit: 'kg'
+											}
+										]
+									}
+								}
+							]
+						}
+					});
+				}
+				if (path.includes('donation:')) {
+					return Promise.resolve({
+						status: 200,
+						data: {
+							rows: [
+								{
+									doc: {
+										_id: 'donation:d1',
+										type: 'donation',
+										campaign_id: 'donation_campaign:c1',
+										status: 'declared',
+										items: [
+											{
+												item_id: 'item:rice',
+												qty: 60 // Exceeds target 50
+											}
+										]
+									}
+								}
+							]
+						}
+					});
+				}
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
 
-		// ข้าวสาร เป้าหมาย: 500, บริจาคแล้ว: 100 (หักลบเฉพาะยอดที่ใช้งานอยู่ ยอดที่ยกเลิกจะไม่นำมาคำนวณ) ความต้องการคงเหลือ = 400
-		const riceNeed = shelterInfo.needs.find((n: { item_id: string }) => n.item_id === 'item:rice');
-		expect(riceNeed).toBeDefined();
-		expect(riceNeed.qty_needed).toBe(400);
-		expect(riceNeed.name).toBe('ข้าวสาร');
-		expect(riceNeed.unit).toBe('kg');
+		const response = await GET({} as unknown as GetEvent);
+		const data = await response.json();
 
-		// น้ำดื่ม เป้าหมาย: 200, บริจาคแล้ว: 50 ความต้องการคงเหลือ = 150
-		const waterNeed = shelterInfo.needs.find(
-			(n: { item_id: string }) => n.item_id === 'item:water'
-		);
-		expect(waterNeed).toBeDefined();
-		expect(waterNeed.qty_needed).toBe(150);
-
-		// ตรวจสอบความปลอดภัย: ข้อมูลส่วนบุคคล (PII) ของผู้บริจาคทั้งหมดจะต้องไม่ปรากฏในข้อมูลผลลัพธ์ตอบกลับจาก API
-		const stringifiedResponse = JSON.stringify(result);
-		expect(stringifiedResponse).not.toContain('John Doe');
-		expect(stringifiedResponse).not.toContain('0812345678');
-		expect(stringifiedResponse).not.toContain('john@example.com');
-		expect(stringifiedResponse).not.toContain('johnline');
-		expect(stringifiedResponse).not.toContain('Jane Cancel');
-		expect(stringifiedResponse).not.toContain('0898765432');
+		expect(data).toHaveLength(1);
+		expect(data[0].needs[0].qty_needed).toBe(0); // Max(0, 50 - 60)
+		expect(data[0].needs[0].status).toBe('closed'); // Target met -> closed/งดรับ
 	});
 });

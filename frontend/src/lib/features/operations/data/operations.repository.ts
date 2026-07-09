@@ -1,8 +1,18 @@
 import type { AuthorContext } from '$lib/db/model';
-import type { StockLedger, ReceiveInput } from '../domain/operations';
+import type {
+	DonationCampaign,
+	CampaignInput,
+	StockLedger,
+	ReceiveInput,
+	DistributeInput,
+	Donation,
+	DonationSlot
+} from '../domain/operations';
+import type { AuditAction } from '$lib/features/shared';
 
 /**
- * Repository contract for managing stock ledger entries and calculating inventory balances.
+ * Persistence contract for the `operations` feature (stock, campaigns, donations).
+ * Allows UI and query layers to query and mutate data independent of specific PouchDB API shapes.
  *
  * All stock ledger entries are append-only.
  */
@@ -31,4 +41,28 @@ export interface OperationsRepository {
 	 * Process and persist an inbound stock receive entry.
 	 */
 	receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger>;
+
+	/**
+	 * Process and persist an outbound stock distribute entry.
+	 * Will throw an error if there is insufficient stock.
+	 */
+	distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger>;
+
+	// Campaign/Donation/Slot methods
+	listCampaigns(): Promise<DonationCampaign[]>;
+	getCampaign(id: string): Promise<DonationCampaign | null>;
+	createCampaign(input: CampaignInput, ctx: AuthorContext): Promise<DonationCampaign>;
+	updateCampaign(
+		campaign: DonationCampaign,
+		auditInput?: { action: AuditAction; reason: string; ctx: AuthorContext }
+	): Promise<DonationCampaign>;
+	listDonations(): Promise<Donation[]>;
+
+	getDonation(id: string): Promise<Donation | null>;
+	createDonation(donation: Donation): Promise<Donation>;
+	updateDonation(donation: Donation): Promise<Donation>;
+
+	listDonationSlots(): Promise<DonationSlot[]>;
+	getDonationSlot(id: string): Promise<DonationSlot | null>;
+	updateDonationSlot(slot: DonationSlot): Promise<DonationSlot>;
 }

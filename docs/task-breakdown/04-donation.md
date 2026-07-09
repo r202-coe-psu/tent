@@ -80,6 +80,8 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - Stock ลด (แจกออก) จนต่ำกว่าเป้า → **เปิดรับใหม่อัตโนมัติ** (FR-36)
 - Test threshold crossing ทั้งสองทิศ + demo
 
+> **PR #39 partial (2026-07-08):** back-office needs board + domain slice (`isNeedCutOff`, `openNeeds`, `needs[].status`, `visible_on_home`, manual override + audit on `updateCampaign`) — **done in PR #39**. ยังไม่ครบ T-22 ทั้งหมด: public API wiring (`/donate`, `POST /public/v1/donations` quota check, `openNeeds` ที่ public API) เป็น follow-up แยกจาก PR นี้
+
 ### T-23 — Smart redirect to under-threshold shelters (FR-37)
 
 **Description:** เมื่อ item ที่ผู้บริจาคต้องการให้ถูกปิดรับที่ศูนย์หนึ่ง ระบบแนะนำศูนย์อื่นที่ยังขาด item นั้น (ดูจาก threshold ข้ามศูนย์ T-14) — เกลี่ยของบริจาคทั้งเครือข่ายศูนย์ แก้ปัญหา "ล้นศูนย์หนึ่ง ขาดอีกศูนย์" ตรงตาม source proposal

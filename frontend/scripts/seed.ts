@@ -866,11 +866,13 @@ async function seedDashboardData(): Promise<void> {
 		'UNKNOWN'
 	];
 	const STATUSES = [
-		'registered',
-		'checked_in',
-		'checked_in',
+		'pre_registered',
+		'active',
+		'active',
+		'temporary_leave',
+		'transferred',
 		'checked_out',
-		'transferred'
+		'deceased'
 	] as const;
 	const CURRENT_YEAR = new Date().getFullYear();
 

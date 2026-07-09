@@ -27,7 +27,7 @@ import {
 import { injectSession, clearSession } from '../helpers/login';
 
 const USERS_URL_PATTERN = '**/api/v1/users';
-const SHELTERS_URL_PATTERN = '**/api/back-office/shelter';
+const SHELTERS_URL_PATTERN = '**/registry/_all_docs*';
 
 /** Mock GET /api/v1/users; write mutations pass through to real BFF. */
 async function mockUserList(page: Page, users: Record<string, unknown>[]): Promise<void> {
@@ -46,9 +46,17 @@ async function mockUserList(page: Page, users: Record<string, unknown>[]): Promi
 
 /** Mock shelters endpoint with fixed data. */
 async function mockShelters(page: Page, shelters: Record<string, unknown>[] = []): Promise<void> {
-	await page.route(SHELTERS_URL_PATTERN, (route) =>
-		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(shelters) })
-	);
+	await page.route(SHELTERS_URL_PATTERN, (route) => {
+		const rows = shelters.map((s) => ({
+			id: `shelter:${s.code}`,
+			doc: {
+				_id: `shelter:${s.code}`,
+				type: 'shelter',
+				...s
+			}
+		}));
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ rows }) });
+	});
 }
 
 // ─── fixture users ─────────────────────────────────────────────────────────────

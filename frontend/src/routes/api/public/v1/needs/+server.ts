@@ -1,7 +1,9 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, serviceError, ServiceError } from '$lib/server/couch-admin';
-import { openNeeds, type Donation, type DonationCampaign } from '$lib/features/operations';
+import type { Donation, DonationCampaign } from '$lib/features/operations';
+import { computeNeeds } from '$lib/features/donations';
+import { fetchDocs } from '$lib/server/donation-docs';
 
 interface ShelterMaster {
 	_id: string;
@@ -20,9 +22,14 @@ interface SupplyItem {
 	unit: string;
 }
 
+// T-60 ขั้น 1 (DN-4): needs board — aggregate ความต้องการคงเหลือทุกศูนย์จาก view needs_open
+// (campaign qty_target − donations). คืนเฉพาะ aggregate ไม่มี PII ของผู้บริจาค
+//
+// ⚠️ BREAKING CHANGE: renamed from /api/v1/needs → /api/public/v1/needs
+// Any external consumer must update their endpoint. See release notes.
 export const GET: RequestHandler = async () => {
 	try {
-		// 1. ดึงข้อมูลศูนย์พักพิงทั้งหมดจากฐานข้อมูล registry
+		// 1. ดึงรายชื่อศูนย์ที่เปิดอยู่จาก registry
 		const resRegistry = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');
 		if (resRegistry.status === 404) {
 			return json([]);
@@ -36,7 +43,7 @@ export const GET: RequestHandler = async () => {
 			.filter((r) => r.id.startsWith('shelter:') && r.doc && r.doc.status === 'open')
 			.map((r) => r.doc);
 
-		// 2. ดึงข้อมูลรายการสิ่งของสนับสนุนทั้งหมดจากฐานข้อมูล catalog
+		// 2. ดึง catalog เพื่อ map item_id → ชื่อ/หน่วย
 		const resCatalog = await adminRaw('/catalog/_all_docs?include_docs=true', 'GET');
 		const catalogRows =
 			resCatalog.status === 200
@@ -45,65 +52,37 @@ export const GET: RequestHandler = async () => {
 		const itemMap = new Map<string, { name: string; unit: string }>();
 		for (const row of catalogRows) {
 			if (row.id.startsWith('item:') && row.doc) {
-				itemMap.set(row.doc._id, {
-					name: row.doc.name,
-					unit: row.doc.unit
-				});
+				itemMap.set(row.doc._id, { name: row.doc.name, unit: row.doc.unit });
 			}
 		}
 
-		// 3. สำหรับแต่ละศูนย์พักพิงที่เปิดอยู่ ทำการดึงข้อมูลแคมเปญและยอดบริจาคที่เกิดขึ้นจริงเพื่อนำมาคำนวณความต้องการคงเหลือ
+		// 3. แต่ละศูนย์ — คำนวณ open needs จาก shared computeNeeds
 		const result = [];
 		for (const shelter of openShelters) {
 			const dbName = `shelter_${shelter.code.toLowerCase()}`;
 
-			// ดึงข้อมูลแคมเปญบริจาค
-			const resCampaigns = await adminRaw(
-				`/${dbName}/_all_docs?include_docs=true&startkey="donation_campaign:"&endkey="donation_campaign:￰"`,
-				'GET'
-			);
-			if (resCampaigns.status >= 400 && resCampaigns.status !== 404) {
-				continue; // ข้ามศูนย์นี้หากฐานข้อมูลยังไม่พร้อมใช้งานหรือเกิดข้อผิดพลาด
-			}
-			const campaignRows =
-				(resCampaigns.data as { rows?: { doc: DonationCampaign }[] })?.rows ?? [];
-			const activeCampaigns = campaignRows
-				.map((r) => r.doc)
-				.filter((c) => c && c.type === 'donation_campaign' && c.status === 'open');
+			const [activeCampaigns, activeDonations] = await Promise.all([
+				fetchDocs<DonationCampaign>(dbName, 'donation_campaign:').then((docs) =>
+					docs.filter((c) => c && c.type === 'donation_campaign' && c.status === 'open')
+				),
+				fetchDocs<Donation>(dbName, 'donation:').then((docs) =>
+					docs.filter((d) => d && d.type === 'donation')
+				)
+			]);
 
-			// ดึงข้อมูลประวัติการจองบริจาค
-			const resDonations = await adminRaw(
-				`/${dbName}/_all_docs?include_docs=true&startkey="donation:"&endkey="donation:￰"`,
-				'GET'
-			);
-			const donationRows = (resDonations.data as { rows?: { doc: Donation }[] })?.rows ?? [];
-			const activeDonations = donationRows
-				.map((r) => r.doc)
-				.filter((d) => d && d.type === 'donation');
+			const { remaining } = computeNeeds(activeCampaigns, activeDonations);
 
-			// คำนวณหาความต้องการคงเหลือ (open needs) และยุบรวมความต้องการของแต่ละแคมเปญเพื่อป้องกันข้อมูลซ้ำ
-			const needsMap = new Map<
-				string,
-				{ item_id: string; name: string; qty_needed: number; unit: string }
-			>();
-			for (const campaign of activeCampaigns) {
-				const openCampaignNeeds = openNeeds(campaign, activeDonations);
-				for (const need of openCampaignNeeds) {
-					const itemDetails = itemMap.get(need.item_id);
-					const existing = needsMap.get(need.item_id);
-					if (existing) {
-						existing.qty_needed += need.qty_target;
-					} else {
-						needsMap.set(need.item_id, {
-							item_id: need.item_id,
-							name: itemDetails?.name ?? need.item_id,
-							qty_needed: need.qty_target,
-							unit: itemDetails?.unit ?? need.unit
-						});
-					}
-				}
-			}
-			const shelterNeeds = Array.from(needsMap.values());
+			// DN-4: "ขาด N" = max(0, needs_open); "งดรับ" เมื่อ needs_open ≤ 0
+			const shelterNeeds = Array.from(remaining.entries()).map(([itemId, qtyOpen]) => {
+				const itemDetails = itemMap.get(itemId);
+				return {
+					item_id: itemId,
+					name: itemDetails?.name ?? itemId,
+					qty_needed: Math.max(0, qtyOpen),
+					unit: itemDetails?.unit ?? 'unit',
+					status: qtyOpen <= 0 ? ('closed' as const) : ('open' as const)
+				};
+			});
 
 			result.push({
 				code: shelter.code,

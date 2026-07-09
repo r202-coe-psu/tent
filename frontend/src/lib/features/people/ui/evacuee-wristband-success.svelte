@@ -29,6 +29,8 @@
 		return `EV-${raw.slice(-4).toUpperCase()}`;
 	});
 
+	const fullId = $derived(evacuee._id.split(':')[1] ?? evacuee._id);
+
 	const zoneName = $derived(evacuee.current_stay?.zone?.toUpperCase() ?? 'GENERAL');
 	const showFastTrackBadge = $derived(evacuee.special_needs?.length > 0);
 </script>
@@ -53,6 +55,18 @@
 			</div>
 		</div>
 
+		<!-- Prominent code display -->
+		<div class="mb-6 flex flex-col items-center gap-1.5">
+			<span class="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+				รหัสประจำตัวผู้ประสบภัย
+			</span>
+			<span
+				class="rounded-xl bg-slate-900 px-5 py-2.5 font-mono text-2xl font-black tracking-[0.2em] text-white dark:bg-slate-100 dark:text-slate-900"
+			>
+				{shortId}
+			</span>
+		</div>
+
 		<!-- Wristband preview -->
 		<div class="mb-6 rounded-2xl bg-slate-100 p-6 dark:bg-slate-800">
 			<div
@@ -71,9 +85,9 @@
 					</p>
 					<div class="mt-0.5 flex items-center gap-1.5">
 						<span
-							class="inline-block rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-wide text-slate-700"
+							class="inline-block rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-bold tracking-wide text-slate-700"
 						>
-							{shortId}
+							{fullId}
 						</span>
 						{#if showFastTrackBadge}
 							<span

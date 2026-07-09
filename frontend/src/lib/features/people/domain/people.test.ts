@@ -4,6 +4,11 @@ import {
 	createMovement,
 	createScreening,
 	applyMovementToStay,
+	assertMovementAllowed,
+	canCheckInEvacuee,
+	canCheckOutEvacuee,
+	CHECK_IN_ELIGIBLE_STATUSES,
+	CHECK_OUT_ELIGIBLE_STATUSES,
 	isEvacuee,
 	createHousehold,
 	isHousehold,
@@ -27,7 +32,7 @@ describe('createEvacuee', () => {
 		expect(e.created_at).toBe(e.updated_at);
 		expect(e.first_name).toBe('สมชาย'); // trimmed
 		expect(e.privacy).toEqual({ search_excluded: false });
-		expect(e.current_stay.status).toBe('registered');
+		expect(e.current_stay.status).toBe('pre_registered');
 		expect(e.country).toBe('THAILAND');
 		expect(e.special_needs).toEqual([]);
 		expect(e.registered_via).toBe('app');
@@ -47,7 +52,7 @@ describe('createEvacuee', () => {
 });
 
 describe('movement → current_stay', () => {
-	it('check_in moves the snapshot to checked_in at the event time', () => {
+	it('check_in moves the snapshot to active at the event time', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		const m = createMovement(
 			{
@@ -59,9 +64,43 @@ describe('movement → current_stay', () => {
 			ctx
 		);
 		const updated = applyMovementToStay(e, m);
-		expect(updated.current_stay.status).toBe('checked_in');
+		expect(updated.current_stay.status).toBe('active');
 		expect(updated.current_stay.zone).toBe('Z1');
 		expect(updated.current_stay.since).toBe('2026-06-11T03:00:00.000Z');
+	});
+
+	it('rejects check_in from deceased (terminal status)', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const deceased = {
+			...e,
+			current_stay: { status: 'deceased' as const, zone: null, since: e.current_stay.since }
+		};
+		expect(canCheckInEvacuee(deceased)).toBe(false);
+		expect(canCheckOutEvacuee(deceased)).toBe(false);
+		expect(() => assertMovementAllowed(deceased, 'check_in')).toThrow(/เสียชีวิต/);
+
+		const m = createMovement({ evacuee_id: e._id, action: 'check_in', zone: null }, ctx);
+		expect(() => applyMovementToStay(deceased, m)).toThrow(/เสียชีวิต/);
+	});
+
+	it('rejects check_out unless status is active', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		expect(canCheckOutEvacuee(e)).toBe(false);
+		expect(() => assertMovementAllowed(e, 'check_out')).toThrow(/เช็คเอาท์/);
+	});
+
+	it('allows check_in from eligible stay statuses only', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		expect(canCheckInEvacuee(e)).toBe(true); // pre_registered
+		expect(CHECK_IN_ELIGIBLE_STATUSES).toContain('pre_registered');
+		expect(CHECK_OUT_ELIGIBLE_STATUSES).toEqual(['active']);
+
+		const active = {
+			...e,
+			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
+		};
+		expect(canCheckInEvacuee(active)).toBe(false);
+		expect(canCheckOutEvacuee(active)).toBe(true);
 	});
 });
 

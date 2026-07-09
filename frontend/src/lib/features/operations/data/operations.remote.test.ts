@@ -2,6 +2,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createInMemoryRepository } from '$lib/db/in-memory-repository';
 import type { SupplyItem } from '$lib/features/supply';
+import { isAuditEntry } from '$lib/features/shared';
+
+vi.mock('$lib/db/shelter', () => ({
+	SHELTER_CODE: 'SH001',
+	SHELTER_DB: 'shelter_sh001',
+	getShelterDb: () => 'shelter_sh001'
+}));
 
 const mockGetItem = vi.fn<() => Promise<SupplyItem | null>>();
 vi.mock('$lib/features/supply', () => ({
@@ -137,8 +144,6 @@ describe('OperationsRemoteRepository', () => {
 				{ item_id: 'item:water', qty: 50, unit: 'bottle', source: 'donation', ref_id: null },
 				ctx
 			),
-			// Let's create a negative entry (distribute) using the helper domain logic or raw ledger object
-			// We can directly mock a distribute entry
 			{
 				_id: 'stock_ledger:01J20000000000000000000002',
 				schema_v: 1,
@@ -165,8 +170,48 @@ describe('OperationsRemoteRepository', () => {
 		expect(balance.get('item:water')).toBe(50);
 	});
 
+	describe('distributeStock', () => {
+		it('distributes stock and reduces balance when sufficient stock exists', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 50, unit: 'bar', source: 'donation', ref_id: null },
+				ctx
+			);
+
+			const distributeEntry = await repo.distributeStock(
+				{ item_id: 'item:soap', qty: 20, unit: 'bar', ref_id: null, note: 'Tent A' },
+				ctx
+			);
+
+			expect(distributeEntry.item_id).toBe('item:soap');
+			expect(distributeEntry.qty).toBe(-20);
+			expect(distributeEntry.reason).toBe('distribute');
+			expect(distributeEntry.lot?.note).toBe('Tent A');
+
+			const balance = await repo.getBalance();
+			expect(balance.get('item:soap')).toBe(30);
+		});
+
+		it('throws an error if attempting to distribute more than available stock', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: null },
+				ctx
+			);
+
+			await expect(
+				repo.distributeStock({ item_id: 'item:soap', qty: 15, unit: 'bar', ref_id: null }, ctx)
+			).rejects.toThrow('Insufficient stock');
+		});
+
+		it('throws an error if attempting to distribute stock for item with zero balance', async () => {
+			await expect(
+				repo.distributeStock({ item_id: 'item:unknown', qty: 5, unit: 'bar', ref_id: null }, ctx)
+			).rejects.toThrow('Insufficient stock');
+		});
+	});
+
 	it('maintains correct balance under concurrent writes (T-11 DoD)', async () => {
-		// Simulate parallel writes
 		const writes = Array.from({ length: 10 }).map(() =>
 			repo.addLedgerEntry(
 				createReceiveEntry(
@@ -230,6 +275,52 @@ describe('OperationsRemoteRepository', () => {
 			expect(result.item_id).toBe('item:rice');
 			const list = await repo.listLedger();
 			expect(list).toHaveLength(1);
+		});
+	});
+});
+
+describe('OperationsRemoteRepository.updateCampaign', () => {
+	let repo: OperationsRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new OperationsRemoteRepository('shelter_sh001');
+	});
+
+	it('should update campaign and create an audit log entry', async () => {
+		const created = await repo.createCampaign(
+			{
+				title: 'น้ำดื่มและยารักษาโรค',
+				needs: [{ item_id: 'item:water', qty_target: 100, unit: 'ขวด', status: 'open' }]
+			},
+			ctx
+		);
+
+		const updatedCampaign = {
+			...created,
+			title: 'น้ำดื่มและยารักษาโรค (ด่วนพิเศษ)'
+		};
+
+		const auditInput = {
+			action: 'manual_adjust' as const,
+			reason: 'อัปเดตชื่อแคมเปญเพื่อความชัดเจน',
+			ctx
+		};
+
+		const result = await repo.updateCampaign(updatedCampaign, auditInput);
+
+		expect(result.title).toBe('น้ำดื่มและยารักษาโรค (ด่วนพิเศษ)');
+		const storedCampaign = await repo.getCampaign(created._id);
+		expect(storedCampaign?.title).toBe('น้ำดื่มและยารักษาโรค (ด่วนพิเศษ)');
+
+		const auditDocs = await memoryRepo.allByType('audit', isAuditEntry);
+		expect(auditDocs).toHaveLength(1);
+		expect(auditDocs[0]).toMatchObject({
+			action: 'manual_adjust',
+			target_type: 'donation_campaign',
+			target_id: created._id,
+			reason: 'อัปเดตชื่อแคมเปญเพื่อความชัดเจน',
+			created_by: 'tester'
 		});
 	});
 });

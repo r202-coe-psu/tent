@@ -71,7 +71,13 @@ export interface PeopleRepository {
 	/**
 	 * Record a check-in movement and apply it to the evacuee's `current_stay`.
 	 * Writes the append-only `movement` doc first, then the updated evacuee —
-	 * this is the only path that flips occupancy to `checked_in` (T-06).
+	 * this is the only path that flips occupancy to `active` (T-06).
 	 */
 	checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone?: string | null): Promise<Evacuee>;
+	/**
+	 * Record a check-out movement and apply it to the evacuee's `current_stay`.
+	 * Writes the append-only `movement` doc first, then the updated evacuee —
+	 * this is the only path that flips occupancy to `checked_out` (T-06).
+	 */
+	checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
 }

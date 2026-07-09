@@ -17,7 +17,9 @@ export type {
 	LedgerReason,
 	DonationStatus,
 	TransferStatus,
-	DonationChannel
+	DonationChannel,
+	DonationSlot,
+	NeedAvailability
 } from './domain/operations';
 
 // Domain — schemas + factories + transitions + read models + guards
@@ -40,16 +42,24 @@ export {
 	canTransitionDonation,
 	stockBalance,
 	openNeeds,
+	calculateReserved,
+	isNeedCutOff,
+	deriveNeedAvailability,
 	isStockLedger,
 	isDonation,
 	isDonationCampaign,
+	isDonationSlot,
+	mapNeedItemHeuristic,
 	type StockLedgerInput,
 	type ReceiveInput,
 	type WalkInDonationInput,
 	type CampaignInput,
 	type SpecialRequestInput,
 	receiveSourceSchema,
-	createReceiveEntry
+	createReceiveEntry,
+	distributeInputSchema,
+	createDistributeEntry,
+	type DistributeInput
 } from './domain/operations';
 
 // Data — repository contract + remote CouchDB binding
@@ -63,10 +73,19 @@ export {
 	useLedgerByItem,
 	useStockBalance,
 	useReceiveStock,
+	useDistributeStock,
+	useCampaigns,
+	useStockLedgers,
+	useDonations,
+	useCreateCampaign,
+	useUpdateCampaign,
 	startOperationsLiveQuery
 } from './application/queries';
+export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';
+export type { NeedItem } from './application/need-item.types';
 
 // UI components
 export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';
+export { default as DistributeStockForm } from './ui/DistributeStockForm.svelte';
 export { default as LedgerTable } from './ui/LedgerTable.svelte';
 export { default as StockTable } from './ui/StockTable.svelte';
