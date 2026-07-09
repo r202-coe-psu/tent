@@ -376,3 +376,36 @@ describe('calculateResources — T-31.3 edge-case data_status (data-availability
 		}
 	});
 });
+
+describe('calculateResources — T-31.9 idempotency (pure function, same input ⇒ same output)', () => {
+	it('calling calculateResources twice with the same input yields identical output', () => {
+		const input: CalcInput = {
+			occupancy: 120,
+			as_of: AS_OF,
+			resources: [
+				r('water', 'multiply', 15, 1000), // ok/gap path
+				r('toilet_f', 'divide', 20, 4), // divide/ceil path
+				r('max_queue', 'threshold', 30, 25), // constraint path
+				r('missing_ratio', 'multiply', null, 500), // ratio_missing path
+				r('unsynced', 'divide', 10, null), // stock_unsynced path
+				r('bad', 'multiply', -1, 100) // invalid_input path
+			]
+		};
+
+		expect(calculateResources(input)).toEqual(calculateResources(input));
+	});
+
+	it('idempotent across kinds/statuses individually (not just array-level equality)', () => {
+		const input: CalcInput = {
+			occupancy: 0,
+			as_of: AS_OF,
+			resources: [r('water', 'multiply', 15, 0)]
+		};
+
+		const first = calculateResources(input);
+		const second = calculateResources(input);
+
+		expect(first).toHaveLength(second.length);
+		first.forEach((row, i) => expect(row).toEqual(second[i]));
+	});
+});
