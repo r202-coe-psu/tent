@@ -197,11 +197,13 @@
 								>
 								<span class="text-sm font-bold text-foreground">{shelter.travel.altitude}</span>
 							</div>
-							<div class="bg-danger-muted/50 p-4">
-								<div class="flex items-center gap-2 text-sm font-bold text-danger">
-									⚠️ {shelter.travel.flood_warning}
+							{#if shelter.travel.flood_warning}
+								<div class="bg-danger-muted/50 p-4">
+									<div class="flex items-center gap-2 text-sm font-bold text-danger">
+										⚠️ {shelter.travel.flood_warning}
+									</div>
 								</div>
-							</div>
+							{/if}
 						</div>
 					</section>
 				</div>
@@ -239,11 +241,19 @@
 										<span class="font-bold">{shelter.facilities.hygiene.shower}</span>
 									</div>
 								</div>
-								<div
-									class="inline-flex items-center gap-1.5 rounded-md bg-success-muted px-2 py-1 text-xs font-bold text-success-dark"
-								>
-									+ รถสุขาเคลื่อนที่ ({shelter.facilities.hygiene.mobile_toilet} คัน)
-								</div>
+								{#if shelter.facilities.hygiene.mobile_toilet > 0}
+									<div class="flex flex-wrap gap-2">
+										<div
+											class="inline-flex items-center gap-1.5 rounded-md bg-success-muted px-2 py-1 text-xs font-bold text-success-dark"
+										>
+											<CheckCircle2 class="h-3 w-3" />
+											มีรถสุขาเคลื่อนที่ให้บริการ
+										</div>
+										<span class="text-xs text-muted-foreground"
+											>จำนวน {shelter.facilities.hygiene.mobile_toilet} คัน</span
+										>
+									</div>
+								{/if}
 							</div>
 
 							<!-- Power & Comms Grid -->
@@ -309,7 +319,7 @@
 					<section>
 						<div class="mb-4 flex items-center gap-2">
 							<Phone class="h-5 w-5 text-success-dark" />
-							<h2 class="text-lg font-bold text-foreground">ติดต่อสอบถาม & คำถามที่พบบ่อย</h2>
+							<h2 class="text-lg font-bold text-foreground">ติดต่อสอบถาม</h2>
 						</div>
 
 						<div
