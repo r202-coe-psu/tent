@@ -80,11 +80,13 @@
 				}
 			}
 
-			if ($formData.phone) {
-				const cleanPhone = $formData.phone.replace(/\D/g, '');
+			if (noPhone) {
+				$formData.phone = null;
+			} else {
+				const cleanPhone = ($formData.phone ?? '').replace(/\D/g, '');
 				if (cleanPhone.length !== 10) {
-					$errors.phone = ['เบอร์โทรศัพท์ต้องมี 10 หลัก'];
-					toast.error('เบอร์โทรศัพท์ต้องมี 10 หลัก');
+					$errors.phone = ['กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"'];
+					toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"');
 					cancel();
 					return;
 				}
@@ -341,13 +343,27 @@
 									inputmode="numeric"
 									maxlength={10}
 									placeholder="08X-XXX-XXXX"
-									value={$formData.phone ?? ''}
+									disabled={noPhone}
+									value={noPhone ? '' : ($formData.phone ?? '')}
 									oninput={(e) => {
 										const val = e.currentTarget.value.replace(/\D/g, '');
 										e.currentTarget.value = val;
 										$formData.phone = val === '' ? null : val;
 									}}
 								/>
+								<label class="mt-1.5 flex cursor-pointer items-center gap-2 text-xs">
+									<Checkbox
+										checked={noPhone}
+										onCheckedChange={(v) => {
+											noPhone = !!v;
+											if (noPhone) {
+												$formData.phone = null;
+												$errors.phone = undefined;
+											}
+										}}
+									/>
+									<span class="text-muted-foreground">ไม่มีเบอร์โทร</span>
+								</label>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
