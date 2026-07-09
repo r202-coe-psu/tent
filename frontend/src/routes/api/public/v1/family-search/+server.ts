@@ -40,13 +40,14 @@ export const POST: RequestHandler = async ({ request }) => {
 		const selector: Record<string, unknown> = { type: 'evacuee' };
 
 		if (isNumeric && cleanQ.length === 13) {
-			const regexPattern = `^\\D*${cleanQ.split('').join('\\D*')}\\D*$`;
-			selector['person_id.number'] = { $regex: regexPattern };
+			const formattedId = `${cleanQ.substring(0, 1)}-${cleanQ.substring(1, 5)}-${cleanQ.substring(5, 10)}-${cleanQ.substring(10, 12)}-${cleanQ.substring(12, 13)}`;
+			selector['person_id.number'] = { $in: [cleanQ, formattedId] };
 		} else if (isNumeric && cleanQ.length >= 9) {
-			const regexPattern = `^\\D*${cleanQ.split('').join('\\D*')}\\D*$`;
-			selector['phone'] = { $regex: regexPattern };
+			const formattedPhone1 = `${cleanQ.substring(0, 3)}-${cleanQ.substring(3, 6)}-${cleanQ.substring(6)}`;
+			const formattedPhone2 = `${cleanQ.substring(0, 2)}-${cleanQ.substring(2, 6)}-${cleanQ.substring(6)}`;
+			selector['phone'] = { $in: [cleanQ, formattedPhone1, formattedPhone2] };
 		} else if (isPassport && cleanQ.length >= 7 && cleanQ.length <= 9) {
-			selector['person_id.number'] = { $regex: `(?i).*${cleanQ}.*` };
+			selector['person_id.number'] = { $in: [cleanQ, cleanQ.toUpperCase(), cleanQ.toLowerCase()] };
 		} else {
 			if (q.length < 3) {
 				return json({ error: 'Query must be at least 3 characters long' }, { status: 400 });
