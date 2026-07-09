@@ -32,7 +32,7 @@
 
 	const checkIn = useCheckInEvacuee();
 
-	// Inline check-in until T-06 dedicated flow ships — flips current_stay to checked_in.
+	// Inline check-in until T-06 dedicated flow ships — flips current_stay to active.
 	async function handleCheckIn(evacuee: Evacuee) {
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
@@ -44,10 +44,12 @@
 	}
 
 	const STATUS_LABEL: Record<string, string> = {
-		registered: 'ลงทะเบียนแล้ว',
-		checked_in: 'อยู่ในศูนย์',
-		checked_out: 'ออกจากศูนย์',
-		transferred: 'ย้ายศูนย์'
+		pre_registered: 'ลงทะเบียนล่วงหน้า',
+		active: 'อยู่ในศูนย์',
+		temporary_leave: 'ออกชั่วคราว',
+		transferred: 'ย้ายศูนย์',
+		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
+		deceased: 'เสียชีวิต'
 	};
 
 	const items = $derived(query.data?.items ?? []);
@@ -155,7 +157,7 @@
 							<Table.Cell class="text-center">
 								<span
 									class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium
-										{e.current_stay.status === 'checked_in'
+										{e.current_stay.status === 'active'
 										? 'bg-green-100 text-green-800'
 										: 'bg-muted text-muted-foreground'}"
 								>
@@ -164,7 +166,7 @@
 							</Table.Cell>
 							<Table.Cell class="text-center">
 								<div class="flex justify-center gap-1.5">
-									{#if e.current_stay.status !== 'checked_in'}
+									{#if e.current_stay.status !== 'active'}
 										<Button
 											variant="outline"
 											size="sm"

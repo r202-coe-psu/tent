@@ -26,18 +26,9 @@
 <div class="flex h-svh flex-col overflow-hidden">
 	{#if !page.url.pathname.startsWith('/back-office')}
 		<header class="flex shrink-0 items-center justify-between border-b bg-background px-6 py-3">
-			<a href={resolve('/')} class="font-semibold">App</a>
+			<a href={resolve('/')} class="font-semibold">Smart Shelter</a>
 			<div class="flex items-center gap-4">
 				<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
-				<Separator orientation="vertical" class="h-4" />
-				<a href={resolve('/onsite/people')} class="text-sm hover:underline">People</a>
-				{#if isSA}
-					<Separator orientation="vertical" class="h-4" />
-					<a href={resolve('/back-office/shelters')} class="text-sm hover:underline">Shelters</a>
-				{/if}
-				{#if canManageUsers}
-					<a href={resolve('/back-office/users')} class="text-sm hover:underline">Users</a>
-				{/if}
 				<Separator orientation="vertical" class="h-4" />
 				<Button variant="outline" size="sm" onclick={logout}>Logout</Button>
 			</div>
