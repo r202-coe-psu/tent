@@ -40,7 +40,7 @@ affects:
 | `formula_v` | str | req | เวอร์ชันสูตร (`FORMULA_V`) ที่ผลิตผลชุดนี้ — algorithm version ไม่ใช่ schema |
 | `sop_profile_version` | int>0 | req | `version` ของ effective SOP profile (override active ?? master) ที่ใช้ (CR-006) |
 | `ratio_snapshot` | {str:num} | req | ratio ทุกคีย์ที่ freeze ตอนคำนวณ. คีย์ **generic string** (ไม่ผูก whitelist 20 keys — engine domain-agnostic); `{}` ว่างได้ |
-| `occupancy_snapshot` | num≥0 | req | headcount ที่ `current_stay.status = checked_in` ณ เวลาคำนวณ |
+| `occupancy_snapshot` | num≥0 | req | headcount ที่ `current_stay.status = active` (physically present, CR-035 stay-status v3) ณ เวลาคำนวณ |
 | `as_of` | ts | req | ISO-8601 UTC ตอนจัดทำ snapshot |
 | `stock_snapshot` | {str:num\|null} | req | ยอดคงเหลือต่อ resource ที่ใช้; `null` = ไม่ sync / ไม่มี mapping |
 | `results` | ResourceCalcResult[] | req | ผลรายแถว: `ordinal,key,kind,input_valid,ratio,need,have,gap,status,data_status,as_of` (T-31.1/31.3) |
@@ -51,7 +51,7 @@ affects:
 ## Impact
 - **docs:** schema.md §2.15 ใหม่ (หลังจากเคาะ). ไม่แตะ §2.12 `audit` — action `retro_edit` มีอยู่ใน enum แล้ว
 - **code:** `features/resource-calc/data/daily-calc.repository.ts` (interface + `DailyCalcRecord` envelope + guard), `daily-calc.remote.ts` (impl), `index.ts` (barrel widen), `daily-calc.remote.test.ts`
-- **peers (อ่านผ่าน barrel):** `people` (`listEvacuees` → count checked_in), `sop-ratios` (`getActiveSopProfile`, `SOP_RATIO_KIND`), `operations` (`getBalance`), `shared` (`createAuditEntry`)
+- **peers (อ่านผ่าน barrel):** `people` (`listEvacuees` → count `active`/present, CR-035), `sop-ratios` (`getActiveSopProfile`, `SOP_RATIO_KIND`), `operations` (`getBalance`), `shared` (`createAuditEntry`)
 - **downstream:** T-32 dashboard / drill-down (FR-46) จะอ่าน `daily_calc` แทน provisional provider ปัจจุบัน
 
 ## Migration
