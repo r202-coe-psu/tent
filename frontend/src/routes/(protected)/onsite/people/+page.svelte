@@ -150,11 +150,11 @@
 							<Card.Description class="text-sm">กรอกข้อมูลพื้นฐานและประเมินสถานะ</Card.Description>
 						</div>
 					</div>
-					<button
+					<!-- <button
 						class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#003B71] px-3 py-2 text-sm font-medium text-white hover:bg-[#002a50]"
 					>
 						<CreditCard class="size-4" /> ดึงข้อมูลบัตรประชาชน
-					</button>
+					</button> -->
 				</Card.Header>
 			</Card.Root>
 		{:else if step === 4}
