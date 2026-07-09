@@ -38,3 +38,10 @@ export {
 	type DailyCalcRecord
 } from './data/daily-calc.repository';
 export { dailyCalcRepository, DailyCalcRemoteRepository } from './data/daily-calc.remote';
+
+// T-31.5 — application layer: TanStack Query hooks + live-sync wiring.
+export { calcKeys } from './application/queries';
+export { useDailyCalc } from './application/use-daily-calc';
+export { useRunCalc } from './application/use-run-calc';
+export { useCalcRange } from './application/use-calc-range';
+export { startDailyCalcLiveQuery } from './application/calc-sync';
