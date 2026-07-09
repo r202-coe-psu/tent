@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
 	import { SOP_RATIO_KEYS, RATIO_LABELS, type SopRatioKey, type SopMaster } from '../index.js';
 
 	let {
@@ -8,16 +7,14 @@
 		isSA,
 		disabled,
 		onEditItem,
-		onViewHistory
+		search = ''
 	}: {
 		profile: SopMaster | null;
 		isSA: boolean;
 		disabled: boolean;
 		onEditItem: (key: SopRatioKey) => void;
-		onViewHistory: () => void;
+		search?: string;
 	} = $props();
-
-	let search = $state('');
 
 	const filteredKeys = $derived(
 		search.trim()
@@ -28,39 +25,6 @@
 			: SOP_RATIO_KEYS
 	);
 </script>
-
-<div class="mb-4 flex flex-wrap items-center gap-2">
-	<div class="relative w-full sm:w-64">
-		<Input
-			bind:value={search}
-			type="search"
-			placeholder="ค้นหา..."
-			class="pl-9"
-			aria-label="ค้นหา"
-		/>
-		<svg
-			class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<circle cx="11" cy="11" r="8" />
-			<path d="m21 21-4.3-4.3" />
-		</svg>
-	</div>
-
-	<div class="flex items-center gap-1.5">
-		{#if profile}
-			<Button type="button" variant="outline" size="sm" onclick={onViewHistory}>
-				ประวัติ ({profile.version})
-			</Button>
-		{/if}
-	</div>
-</div>
 
 <div class="overflow-hidden rounded-lg border">
 	<table class="w-full text-sm">
