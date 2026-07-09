@@ -71,7 +71,9 @@ export {
 // Version history
 export {
 	useOverrideVersionHistory,
-	useMasterVersionHistory
+	useMasterVersionHistory,
+	type SopMasterWithReason,
+	type SopOverrideWithReason
 } from './application/use-version-history';
 
 // Version creation mutations
@@ -96,5 +98,4 @@ export { default as VersionHistoryDrawer } from './ui/version-history-drawer.sve
 export { default as SopTypeList } from './ui/sop-type-list.svelte';
 export type { SopTabType } from './ui/sop-type-list.svelte';
 export { default as SopRatioTab } from './ui/sop-ratio-tab.svelte';
-export { default as SopSingleEditModal } from './ui/sop-single-edit-modal.svelte';
 export { default as AlertThresholdStub } from './ui/alert-threshold-stub.svelte';

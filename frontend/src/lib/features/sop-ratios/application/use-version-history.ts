@@ -24,19 +24,53 @@ import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.re
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
 import { sopVersionKeys } from './queries';
 
+export type SopMasterWithReason = SopMaster & { audit_reason: string | null };
+export type SopOverrideWithReason = SopOverride & { audit_reason: string | null };
+
 // ---------------------------------------------------------------------------
 // Fetch functions (thin — business logic stays in repository)
 // ---------------------------------------------------------------------------
 
-async function fetchMasterVersions(name: string): Promise<SopMaster[]> {
-	const all = await sopMasterRepository().listVersions(name);
-	// Sort newest-first by version number for timeline display in UI drawer
-	return [...all].sort((a, b) => b.version - a.version);
+async function fetchMasterVersions(name: string): Promise<SopMasterWithReason[]> {
+	const repo = sopMasterRepository();
+	const all = await repo.listVersions(name);
+	const sorted = [...all].sort((a, b) => b.version - a.version);
+	if (sorted.length === 0) return [];
+
+	const ids = sorted.map((v) => v._id);
+	const audits = await repo.listAuditsByTargetIds(ids);
+	const reasonMap = new Map<string, string>();
+	for (const a of audits) {
+		reasonMap.set(a.target_id, a.reason);
+	}
+
+	return sorted.map((v) => ({
+		...v,
+		audit_reason: reasonMap.get(v._id) ?? null
+	}));
 }
 
-async function fetchOverrideVersions(name: string, shelterCode?: string): Promise<SopOverride[]> {
-	const all = await sopOverrideRepository(shelterCode ?? getShelterCode()).listVersions(name);
-	return [...all].sort((a, b) => b.version - a.version);
+async function fetchOverrideVersions(
+	name: string,
+	shelterCode?: string
+): Promise<SopOverrideWithReason[]> {
+	const code = shelterCode ?? getShelterCode();
+	const repo = sopOverrideRepository(code);
+	const all = await repo.listVersions(name);
+	const sorted = [...all].sort((a, b) => b.version - a.version);
+	if (sorted.length === 0) return [];
+
+	const ids = sorted.map((v) => v._id);
+	const audits = await repo.listAuditsByTargetIds(ids);
+	const reasonMap = new Map<string, string>();
+	for (const a of audits) {
+		reasonMap.set(a.target_id, a.reason);
+	}
+
+	return sorted.map((v) => ({
+		...v,
+		audit_reason: reasonMap.get(v._id) ?? null
+	}));
 }
 
 // ---------------------------------------------------------------------------

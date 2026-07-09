@@ -1,7 +1,7 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { saveBulkAtomic } from '$lib/db/couch-db';
 import { touch, type AuthorContext } from '$lib/db/model';
-import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
+import { createAuditEntry, type AuditEntry, isAuditEntry } from '$lib/features/shared';
 import {
 	isSopMaster,
 	isSopOverride,
@@ -33,6 +33,12 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 
 	async getById(id: string): Promise<SopMaster | null> {
 		return this.repo.get<SopMaster>(id);
+	}
+
+	async listAuditsByTargetIds(ids: string[]): Promise<AuditEntry[]> {
+		if (ids.length === 0) return [];
+		const all = await this.repo.allByType('audit', isAuditEntry);
+		return all.filter((a) => ids.includes(a.target_id));
 	}
 
 	async createVersion(
@@ -120,6 +126,12 @@ export class SopOverrideRemoteRepository implements SopOverrideRepository {
 
 	async getById(id: string): Promise<SopOverride | null> {
 		return this.repo.get<SopOverride>(id);
+	}
+
+	async listAuditsByTargetIds(ids: string[]): Promise<AuditEntry[]> {
+		if (ids.length === 0) return [];
+		const all = await this.repo.allByType('audit', isAuditEntry);
+		return all.filter((a) => ids.includes(a.target_id));
 	}
 
 	async createVersion(

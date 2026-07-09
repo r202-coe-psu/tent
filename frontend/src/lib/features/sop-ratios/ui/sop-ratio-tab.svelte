@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { SopRatioKey, SopMaster, SopOverride } from '../index.js';
+	import type { SopMaster, SopOverride } from '../index.js';
 	import SopMasterView from './sop-master-view.svelte';
 	import SopOverrideView from './sop-override-view.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -13,7 +13,7 @@
 		canEditOverride,
 		shelterCode,
 		disabled,
-		onEditItem,
+		onEditAll,
 		onCreateOverride,
 		onDeactivateOverride,
 		onViewHistory
@@ -25,7 +25,7 @@
 		canEditOverride: boolean;
 		shelterCode: string;
 		disabled: boolean;
-		onEditItem: (key: SopRatioKey) => void;
+		onEditAll: () => void;
 		onCreateOverride: () => void;
 		onDeactivateOverride: () => void;
 		onViewHistory: () => void;
@@ -100,7 +100,7 @@
 				</button>
 			</div>
 
-			<!-- Right aligned Actions (Audit/Cancel Override) -->
+			<!-- Right aligned Actions (Audit/Cancel Override/Edit All) -->
 			<div class="flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">
 				{#if activeContext === 'override' && profile && canEditOverride && hasOverride}
 					<Button
@@ -115,6 +115,17 @@
 					</Button>
 				{/if}
 				{#if profile}
+					{#if (activeContext === 'master' && isSA) || (activeContext === 'override' && canEditOverride && hasOverride)}
+						<Button
+							type="button"
+							size="sm"
+							onclick={onEditAll}
+							{disabled}
+							class="h-8 bg-[#013365] font-semibold text-white shadow-sm hover:bg-[#002244]"
+						>
+							✏ แก้ไขพารามิเตอร์
+						</Button>
+					{/if}
 					<Button type="button" variant="outline" size="sm" onclick={onViewHistory} class="h-8">
 						ประวัติ ({profile.version})
 					</Button>
@@ -124,7 +135,7 @@
 	</header>
 
 	{#if activeContext === 'master'}
-		<SopMasterView profile={profile as SopMaster | null} {isSA} {disabled} {onEditItem} {search} />
+		<SopMasterView profile={profile as SopMaster | null} {search} />
 	{:else}
 		<SopOverrideView
 			profile={profile as SopOverride | null}
@@ -132,7 +143,6 @@
 			{hasOverride}
 			{disabled}
 			{canEditOverride}
-			{onEditItem}
 			{onCreateOverride}
 			{search}
 		/>

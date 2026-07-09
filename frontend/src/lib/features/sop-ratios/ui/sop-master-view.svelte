@@ -1,18 +1,11 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button/index.js';
-	import { SOP_RATIO_KEYS, RATIO_LABELS, type SopRatioKey, type SopMaster } from '../index.js';
+	import { SOP_RATIO_KEYS, RATIO_LABELS, type SopMaster } from '../index.js';
 
 	let {
 		profile,
-		isSA,
-		disabled,
-		onEditItem,
 		search = ''
 	}: {
 		profile: SopMaster | null;
-		isSA: boolean;
-		disabled: boolean;
-		onEditItem: (key: SopRatioKey) => void;
 		search?: string;
 	} = $props();
 
@@ -32,7 +25,6 @@
 			<tr>
 				<th class="px-4 py-3 text-left font-semibold">รายการ (Item)</th>
 				<th class="px-4 py-3 text-center font-semibold">ค่ากำหนด (Value)</th>
-				<th class="px-4 py-3 text-right font-semibold">จัดการ (Action)</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -54,41 +46,10 @@
 							{meta?.unit ?? ''}
 						</span>
 					</td>
-					<td class="px-4 py-3">
-						<div class="flex items-center justify-end gap-2">
-							{#if isSA}
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									class="border-blue-200 text-blue-700 hover:bg-blue-50"
-									disabled={disabled || !profile}
-									onclick={() => onEditItem(key)}
-									aria-label="จัดการ {meta?.label ?? key}"
-								>
-									<svg
-										class="mr-1 h-3.5 w-3.5"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										aria-hidden="true"
-									>
-										<path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-									</svg>
-									จัดการ
-								</Button>
-							{:else}
-								<span class="px-2 text-xs text-muted-foreground italic">อ่านอย่างเดียว</span>
-							{/if}
-						</div>
-					</td>
 				</tr>
 			{:else}
 				<tr>
-					<td colspan="3" class="px-4 py-8 text-center text-muted-foreground">
+					<td colspan="2" class="px-4 py-8 text-center text-muted-foreground">
 						ไม่พบรายการที่ต้องการค้นหา
 					</td>
 				</tr>

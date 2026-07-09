@@ -9,6 +9,8 @@ export interface SopMasterRepository {
 
 	getById(id: string): Promise<SopMaster | null>;
 
+	listAuditsByTargetIds(ids: string[]): Promise<AuditEntry[]>;
+
 	createVersion(
 		deactivatedPrev: SopMaster | null,
 		profile: SopMaster,
@@ -28,6 +30,7 @@ export interface SopOverrideRepository {
 	listActive(): Promise<SopOverride[]>;
 	listVersions(name: string): Promise<SopOverride[]>;
 	getById(id: string): Promise<SopOverride | null>;
+	listAuditsByTargetIds(ids: string[]): Promise<AuditEntry[]>;
 	createVersion(
 		deactivatedPrev: SopOverride | null,
 		profile: SopOverride,

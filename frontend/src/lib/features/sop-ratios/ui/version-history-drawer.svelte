@@ -10,6 +10,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import Clock from '@lucide/svelte/icons/clock';
 	import User from '@lucide/svelte/icons/user';
+	import { fade, fly } from 'svelte/transition';
 
 	interface Props {
 		profile: SopMaster | SopOverride;
@@ -42,13 +43,17 @@
 
 <!-- Backdrop -->
 <div
+	transition:fade={{ duration: 150 }}
 	class="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
 	role="presentation"
 	onclick={onClose}
 ></div>
 
 <!-- Drawer from right -->
-<div class="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-white shadow-2xl">
+<div
+	transition:fly={{ x: 448, duration: 250 }}
+	class="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-white shadow-2xl"
+>
 	<!-- Header -->
 	<div class="flex items-start justify-between border-b border-black/[0.06] px-6 py-5">
 		<div>
@@ -134,6 +139,15 @@
 							</div>
 
 							<div class="mt-3 space-y-1 border-t border-black/[0.04] pt-3">
+								{#if version.audit_reason}
+									<p
+										class="mb-2 rounded-lg bg-slate-50 p-2 text-xs break-words whitespace-pre-wrap text-slate-600 italic"
+									>
+										💬 {version.audit_reason}
+									</p>
+								{:else}
+									<p class="mb-2 text-xs text-slate-400 italic">ไม่มีเหตุผลที่บันทึกไว้</p>
+								{/if}
 								<p class="flex items-center gap-1.5 text-[12px] text-slate-500">
 									<User size={12} />
 									{version.created_by}

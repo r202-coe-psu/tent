@@ -34,7 +34,7 @@
 
 	// Local editable copy of ratios
 	// svelte-ignore state_referenced_locally
-	const initialRatios =
+	const initialRatios: Partial<Record<SopRatioKey, number>> =
 		mode === 'edit' && profile ? profile.ratios : (baseMasterProfile?.ratios ?? {});
 	let ratios = $state<Partial<Record<SopRatioKey, number>>>({ ...initialRatios });
 	// svelte-ignore state_referenced_locally
@@ -43,6 +43,16 @@
 	const isSaving = $derived(
 		masterMutation.isPending || overrideMutation.isPending || initialOverrideMutation.isPending
 	);
+
+	const hasAnyChange = $derived.by(() => {
+		if (mode === 'create_override') return true;
+		if (!profile) return false;
+		return SOP_RATIO_KEYS.some((key) => {
+			const currentVal = ratios[key];
+			const initialVal = initialRatios[key];
+			return currentVal !== undefined && Number(currentVal) !== Number(initialVal);
+		});
+	});
 
 	async function handleSave() {
 		if (!reason.trim()) return;
@@ -58,10 +68,19 @@
 				}
 			});
 		} else if (mode === 'edit' && profile) {
+			const changes: Partial<Record<SopRatioKey, number>> = {};
+			for (const key of SOP_RATIO_KEYS) {
+				const currentVal = ratios[key];
+				const initialVal = initialRatios[key];
+				if (currentVal !== undefined && Number(currentVal) !== Number(initialVal)) {
+					changes[key] = Number(currentVal);
+				}
+			}
+
 			if (isMaster) {
 				await masterMutation.mutateAsync({
 					prev: profile as SopMaster,
-					changes: ratios,
+					changes,
 					reason: reason.trim(),
 					createdBy: authStore.user?.name ?? 'unknown'
 				});
@@ -69,7 +88,7 @@
 				const override = profile as SopOverride;
 				await overrideMutation.mutateAsync({
 					prev: override,
-					changes: ratios,
+					changes,
 					reason: reason.trim(),
 					ctx: {
 						shelterCode: override.shelter_code,
@@ -161,6 +180,11 @@
 					rows={2}
 					class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[14px] text-slate-700 transition-colors outline-none placeholder:text-slate-400 focus:border-[#013365] focus:ring-2 focus:ring-[#013365]/15"
 				></textarea>
+				{#if !hasAnyChange && mode === 'edit'}
+					<p class="mt-1 text-[12px] font-medium text-amber-600">
+						⚠️ ยังไม่มีข้อมูลพารามิเตอร์ใดเปลี่ยนแปลง
+					</p>
+				{/if}
 			</div>
 		</div>
 
@@ -174,7 +198,7 @@
 			</button>
 			<button
 				onclick={handleSave}
-				disabled={isSaving || !reason.trim()}
+				disabled={isSaving || !reason.trim() || !hasAnyChange}
 				class="inline-flex items-center gap-2 rounded-xl bg-[#013365] px-5 py-2 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-[#002244] disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				<Save size={15} />

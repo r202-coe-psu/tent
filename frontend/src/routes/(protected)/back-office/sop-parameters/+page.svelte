@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { SopMaster, SopOverride, SopRatioKey, SopTabType } from '$lib/features/sop-ratios';
+	import type { SopMaster, SopOverride, SopTabType } from '$lib/features/sop-ratios';
 	import {
 		useSopProfiles,
 		useActiveSopOverride,
@@ -7,7 +7,7 @@
 		useCreateInitialOverride,
 		SopTypeList,
 		SopRatioTab,
-		SopSingleEditModal,
+		SopEditForm,
 		AlertThresholdStub,
 		VersionHistoryDrawer
 	} from '$lib/features/sop-ratios';
@@ -23,9 +23,7 @@
 	let activeContext = $state<'master' | 'override'>('master');
 
 	// Modal / Drawer state
-	let modalOpen = $state(false);
-	let editingProfile = $state<SopMaster | SopOverride | null>(null);
-	let editingKey = $state<SopRatioKey | null>(null);
+	let bulkEditOpen = $state(false);
 	let historyProfile = $state<SopMaster | SopOverride | null>(null);
 
 	// Queries
@@ -93,19 +91,12 @@
 		}
 	}
 
-	function handleEditItem(key: SopRatioKey) {
+	function handleEditAll() {
 		if (!activeProfile) {
 			toast.error('ไม่สามารถแก้ไขพารามิเตอร์ได้ เนื่องจากยังโหลดข้อมูล SOP ไม่สำเร็จ');
 			return;
 		}
-		editingProfile = activeProfile;
-		editingKey = key;
-		modalOpen = true;
-	}
-
-	function handleCloseModal() {
-		editingProfile = null;
-		editingKey = null;
+		bulkEditOpen = true;
 	}
 
 	function handleViewHistory() {
@@ -143,7 +134,7 @@
 					{canEditOverride}
 					{shelterCode}
 					{disabled}
-					onEditItem={handleEditItem}
+					onEditAll={handleEditAll}
 					onCreateOverride={createInitialOverride}
 					onDeactivateOverride={deactivateOverride}
 					onViewHistory={handleViewHistory}
@@ -155,13 +146,8 @@
 	</div>
 </div>
 
-{#if modalOpen && editingProfile && editingKey}
-	<SopSingleEditModal
-		bind:open={modalOpen}
-		profile={editingProfile}
-		ratioKey={editingKey}
-		onClose={handleCloseModal}
-	/>
+{#if bulkEditOpen && activeProfile}
+	<SopEditForm profile={activeProfile} onClose={() => (bulkEditOpen = false)} />
 {/if}
 
 {#if historyProfile}
