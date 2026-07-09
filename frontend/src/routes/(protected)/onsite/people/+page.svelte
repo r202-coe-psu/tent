@@ -12,7 +12,7 @@
 	} from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
 	import Zap from '@lucide/svelte/icons/zap';
-	import CreditCard from '@lucide/svelte/icons/credit-card';
+	// import CreditCard from '@lucide/svelte/icons/credit-card';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
