@@ -4,4 +4,4 @@
 	let { data } = $props();
 </script>
 
-<HouseholdFormPage id={data.id ?? ''} isEdit={data.mode === 'edit'} />
+<HouseholdFormPage id={data.id} isEdit={true} />

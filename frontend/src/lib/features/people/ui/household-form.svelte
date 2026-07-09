@@ -69,6 +69,10 @@
 		validators: zod4(householdInputSchema),
 		resetForm: false,
 		onUpdate: async ({ form }) => {
+			if (!form.data.head_evacuee_id) {
+				toast.error('กรุณาระบุหัวหน้าครัวเรือน');
+				return;
+			}
 			if (!form.valid) return;
 			if ($formData.head_evacuee_id && !emergencyContactPhone.trim()) return;
 			onsubmit(form.data, selectedMemberIds, emergencyContactPhone.trim());
@@ -93,7 +97,6 @@
 	let selectedMemberIds = $state<string[]>([]);
 	let memberSearchValue = $state('');
 	let headComboValue = $state('');
-	let noHead = $state(false);
 	let emergencyContactPhone = $state('');
 	let membersInitialized = $state(false);
 
@@ -121,49 +124,55 @@
 		vehicleRows = vehicleRows.filter((v) => v.id !== id);
 	}
 
+	let initialized = $state(false);
+
 	// Pre-fill from initialData — avoids reading allEvacuees to prevent live-sync re-runs
 	$effect(() => {
 		if (initialData) {
-			$formData.label = initialData.label;
-			$formData.head_evacuee_id = initialData.head_evacuee_id;
-			headComboValue = initialData.head_evacuee_id ?? '';
-			noHead = initialData.head_evacuee_id === null;
-			$formData.notes = initialData.notes ?? '';
-			$formData.address_no = initialData.address_no ?? '';
-			$formData.village_no = initialData.village_no ?? '';
-			$formData.subdistrict = initialData.subdistrict ?? '';
-			$formData.district = initialData.district ?? '';
-			$formData.province = initialData.province ?? '';
-			$formData.postal_code = initialData.postal_code ?? '';
-			mzVal = initialData.municipality_zone ?? '';
-			commVal = initialData.community ?? '';
-			petsList = initialData.pets ? JSON.parse(JSON.stringify(initialData.pets)) : [];
-			vehicleRows = (initialData.vehicles ?? []).map((v) => ({
-				id: nextVehicleId++,
-				type: v.type,
-				license_plate: v.license_plate ?? ''
-			}));
-			assetDescription = initialData.assets?.description ?? '';
-			membersInitialized = false;
+			if (!initialized) {
+				$formData.label = initialData.label;
+				$formData.head_evacuee_id = initialData.head_evacuee_id;
+				headComboValue = initialData.head_evacuee_id ?? '';
+				$formData.notes = initialData.notes ?? '';
+				$formData.address_no = initialData.address_no ?? '';
+				$formData.village_no = initialData.village_no ?? '';
+				$formData.subdistrict = initialData.subdistrict ?? '';
+				$formData.district = initialData.district ?? '';
+				$formData.province = initialData.province ?? '';
+				$formData.postal_code = initialData.postal_code ?? '';
+				mzVal = initialData.municipality_zone ?? '';
+				commVal = initialData.community ?? '';
+				petsList = initialData.pets ? JSON.parse(JSON.stringify(initialData.pets)) : [];
+				vehicleRows = (initialData.vehicles ?? []).map((v) => ({
+					id: nextVehicleId++,
+					type: v.type,
+					license_plate: v.license_plate ?? ''
+				}));
+				assetDescription = initialData.assets?.description ?? '';
+				membersInitialized = false;
+				initialized = true;
+			}
 		} else {
-			$formData.label = '';
-			$formData.head_evacuee_id = null;
-			headComboValue = '';
-			noHead = false;
-			$formData.notes = '';
-			$formData.address_no = '';
-			$formData.village_no = '';
-			$formData.subdistrict = '';
-			$formData.district = '';
-			$formData.province = '';
-			$formData.postal_code = '';
-			mzVal = '';
-			commVal = '';
-			petsList = [];
-			vehicleRows = [];
-			assetDescription = '';
-			selectedMemberIds = [...initialMemberIds];
-			membersInitialized = true;
+			if (!initialized) {
+				$formData.label = 'ครอบครัว';
+				$formData.head_evacuee_id = null;
+				headComboValue = '';
+				$formData.notes = '';
+				$formData.address_no = '';
+				$formData.village_no = '';
+				$formData.subdistrict = '';
+				$formData.district = '';
+				$formData.province = '';
+				$formData.postal_code = '';
+				mzVal = '';
+				commVal = '';
+				petsList = [];
+				vehicleRows = [];
+				assetDescription = '';
+				selectedMemberIds = [...initialMemberIds];
+				membersInitialized = true;
+				initialized = true;
+			}
 		}
 	});
 
@@ -202,7 +211,7 @@
 	});
 
 	// Track head changes: remove old head from members, clear phone, add new head, validate duplicate active household
-	let prevHeadId = $state<string | null>(null);
+	let prevHeadId: string | null = null;
 	$effect(() => {
 		const newHead = $formData.head_evacuee_id;
 		if (newHead && newHead !== prevHeadId) {
@@ -226,6 +235,19 @@
 			}
 			emergencyContactPhone = '';
 			prevHeadId = newHead;
+
+			// Update label automatically when the head changes
+			if (newHead) {
+				const headEvac = allEvacuees.find((e) => e._id === newHead);
+				if (headEvac) {
+					const isInitialHead = initialData && initialData.head_evacuee_id === newHead;
+					if (!initialData || !isInitialHead) {
+						$formData.label = `ครอบครัว${headEvac.first_name} ${headEvac.last_name}`.trim();
+					}
+				}
+			} else {
+				$formData.label = 'ครอบครัว';
+			}
 		}
 		if (newHead && !selectedMemberIds.includes(newHead)) {
 			selectedMemberIds = [...selectedMemberIds, newHead];
@@ -310,7 +332,6 @@
 					{form}
 					{headItems}
 					bind:headComboValue
-					bind:noHead
 					{allEvacuees}
 					bind:emergencyContactPhone
 				/>

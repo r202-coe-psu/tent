@@ -1,0 +1,368 @@
+<script lang="ts">
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { useCreateEvacuee, useUpdateEvacuee, useCreateHousehold } from '../application/queries';
+	import { getShelterCode } from '$lib/db/shelter';
+	import type {
+		Evacuee,
+		Household,
+		PetGroup,
+		SpecialNeed,
+		Gender,
+		Religion,
+		CardType,
+		HouseholdVehicle
+	} from '../domain/people';
+	import EvacueePetAssetVehicle from './evacuee-pet-asset-vehicle.svelte';
+	import HouseholdPreRegisterHead from './household-pre-register-head.svelte';
+	import HouseholdPreRegisterAddress from './household-pre-register-address.svelte';
+	import HouseholdPreRegisterSummary from './household-pre-register-summary.svelte';
+	import { useMasterData } from '$lib/features/master-data';
+	import { toast } from 'svelte-sonner';
+
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+
+	// --- Step Tracking ---
+	let step = $state<1 | 2 | 3 | 4>(1);
+	let isSubmitting = $state(false);
+
+	// --- Queries and Mutations ---
+	const createEvacueeMutation = useCreateEvacuee();
+	const createHouseholdMutation = useCreateHousehold();
+	const updateEvacueeMutation = useUpdateEvacuee();
+
+	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
+	const communityQuery = useMasterData(() => 'community');
+
+	const municipalityZoneItems = $derived(
+		(municipalityZoneQuery.data?.items ?? []).map((z) => ({ value: z.code, label: z.label }))
+	);
+	const communityItems = $derived(
+		(communityQuery.data?.items ?? []).map((c) => ({ value: c.code, label: c.label }))
+	);
+
+	// --- Created State ---
+	let createdHousehold = $state<Household | null>(null);
+	let createdHead = $state<Evacuee | null>(null);
+
+	// --- Form State (Head Evacuee) ---
+	let headForm = $state({
+		firstName: '',
+		lastName: '',
+		nickname: '',
+		gender: 'male' as Gender,
+		phone: '',
+		birthYear: '',
+		age: '',
+		cardType: 'national_id' as CardType,
+		cardNumber: '',
+		country: 'THAILAND',
+		religion: 'buddhist' as Religion,
+		specialNeeds: new Set<SpecialNeed>(),
+		emergencyName: '',
+		emergencyPhone: '',
+		emergencyRelation: 'ญาติ/ผู้ใกล้ชิด',
+		medicalConditions: '',
+		medicalAllergies: '',
+		medicalMedications: '',
+		medicalNote: ''
+	});
+
+	// --- Form State (Household Info) ---
+	const householdLabel = $derived(
+		headForm.firstName.trim() || headForm.lastName.trim()
+			? `ครอบครัว${headForm.firstName.trim()} ${headForm.lastName.trim()}`.trim()
+			: ''
+	);
+
+	// --- Form State (Address Info) ---
+	let addressForm = $state({
+		addressNo: '',
+		villageNo: '',
+		subdistrict: '',
+		district: '',
+		province: '',
+		postalCode: '',
+		municipalityZone: '',
+		community: ''
+	});
+
+	// --- Form State (Pets, Vehicles, Assets) ---
+	let petsList = $state<PetGroup[]>([]);
+	let vehicleRows = $state<HouseholdVehicle[]>([]);
+	let assetDescription = $state('');
+
+	// Sync birth year and age two-way
+	let prevBirthYear = '';
+	let prevAge = '';
+	$effect(() => {
+		const by = headForm.birthYear;
+		const age = headForm.age;
+		if (by !== prevBirthYear) {
+			prevBirthYear = by;
+			if (by && by.length === 4 && !isNaN(Number(by))) {
+				const computed = String(new Date().getFullYear() + 543 - Number(by));
+				if (headForm.age !== computed) {
+					headForm.age = computed;
+					prevAge = computed;
+				}
+			} else if (!by) {
+				headForm.age = '';
+				prevAge = '';
+			}
+		} else if (age !== prevAge) {
+			prevAge = age;
+			if (age && !isNaN(Number(age))) {
+				const computed = String(new Date().getFullYear() + 543 - Number(age));
+				if (headForm.birthYear !== computed) {
+					headForm.birthYear = computed;
+					prevBirthYear = computed;
+				}
+			} else if (!age) {
+				headForm.birthYear = '';
+				prevBirthYear = '';
+			}
+		}
+	});
+
+	async function handleRegisterHousehold() {
+		if (isSubmitting) return;
+
+		// Validation
+		if (!headForm.firstName.trim() || !headForm.lastName.trim()) {
+			toast.error('กรุณากรอกชื่อและนามสกุลของหัวหน้าครัวเรือน');
+			return;
+		}
+		if (
+			!addressForm.addressNo.trim() ||
+			!addressForm.subdistrict.trim() ||
+			!addressForm.district.trim() ||
+			!addressForm.province.trim()
+		) {
+			toast.error('กรุณากรอกข้อมูลที่อยู่ให้ครบถ้วน (บ้านเลขที่, ตำบล, อำเภอ, จังหวัด)');
+			return;
+		}
+
+		isSubmitting = true;
+
+		try {
+			const ctx = {
+				shelterCode: getShelterCode(),
+				createdBy: authStore.user?.name ?? 'staff'
+			};
+
+			// 1. Create Head Evacuee (registered state)
+			const parsedPhone = headForm.phone.trim() ? headForm.phone.trim().replace(/\D/g, '') : null;
+			const parsedEmergencyPhone = headForm.emergencyPhone.trim()
+				? headForm.emergencyPhone.trim().replace(/\D/g, '')
+				: '';
+
+			const headInput = {
+				first_name: headForm.firstName.trim(),
+				last_name: headForm.lastName.trim(),
+				gender: headForm.gender,
+				phone: parsedPhone,
+				nickname: headForm.nickname.trim() || undefined,
+				birth_year: headForm.birthYear ? Number(headForm.birthYear) : undefined,
+				person_id: {
+					cardType: headForm.cardType,
+					number: headForm.cardNumber.trim() || undefined
+				},
+				country: headForm.country,
+				religion: headForm.religion,
+				special_needs: Array.from(headForm.specialNeeds),
+				registered_via: 'app' as const,
+				household_id: null,
+				medical_conditions: headForm.medicalConditions
+					? headForm.medicalConditions
+							.split(',')
+							.map((s) => s.trim())
+							.filter(Boolean)
+					: [],
+				medical_allergies: headForm.medicalAllergies
+					? headForm.medicalAllergies
+							.split(',')
+							.map((s) => s.trim())
+							.filter(Boolean)
+					: [],
+				medical_medications: headForm.medicalMedications
+					? headForm.medicalMedications
+							.split(',')
+							.map((s) => s.trim())
+							.filter(Boolean)
+					: [],
+				medical_note: headForm.medicalNote.trim() || undefined,
+				emergency_contact:
+					headForm.emergencyName.trim() && parsedEmergencyPhone
+						? {
+								name: headForm.emergencyName.trim(),
+								phone: parsedEmergencyPhone,
+								relation: headForm.emergencyRelation.trim()
+							}
+						: undefined
+			};
+
+			const headDoc = await createEvacueeMutation.mutateAsync({
+				input: headInput,
+				ctx
+			});
+
+			createdHead = headDoc;
+
+			// 2. Create Household (pre_registered state)
+			const householdInput = {
+				label: householdLabel.trim(),
+				head_evacuee_id: headDoc._id,
+				status: 'pre_registered' as const,
+				checkout_destination: null,
+				municipality_zone: addressForm.municipalityZone || null,
+				community: addressForm.community || null,
+				pets: petsList,
+				vehicles: vehicleRows,
+				assets: assetDescription.trim()
+					? { description: assetDescription.trim(), image_url: null }
+					: null,
+				notes: '',
+				address_no: addressForm.addressNo.trim() || null,
+				village_no: addressForm.villageNo.trim() || null,
+				subdistrict: addressForm.subdistrict.trim() || null,
+				district: addressForm.district.trim() || null,
+				province: addressForm.province.trim() || null,
+				postal_code: addressForm.postalCode.trim() || null
+			};
+
+			const hhDoc = await createHouseholdMutation.mutateAsync({
+				input: householdInput,
+				ctx
+			});
+
+			createdHousehold = hhDoc;
+
+			// 3. Update Head Evacuee with household_id
+			await updateEvacueeMutation.mutateAsync({
+				...headDoc,
+				household_id: hhDoc._id
+			});
+
+			toast.success(`ลงทะเบียนหัวหน้าครัวเรือนและสร้างครัวเรือน "${hhDoc.label}" สำเร็จ`);
+			step = 4;
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			toast.error(`เกิดข้อผิดพลาด: ${msg}`);
+		} finally {
+			isSubmitting = false;
+		}
+	}
+</script>
+
+<svelte:head>
+	<title>ลงทะเบียนครัวเรือนล่วงหน้า · SmartShelter</title>
+</svelte:head>
+
+<div class="mx-auto w-full max-w-7xl px-4 py-8 md:px-6">
+	<!-- Top Navigation -->
+	<div class="mb-6">
+		<button
+			type="button"
+			class="inline-flex cursor-pointer items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground hover:underline"
+			onclick={() => goto(resolve('/back-office/evacuee-management?tab=household'))}
+		>
+			<ArrowLeft class="size-4" />
+			<span>กลับหน้ารายการครัวเรือนหลัก</span>
+		</button>
+		<h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+			ลงทะเบียนครัวเรือนล่วงหน้า (Household Pre-registration)
+		</h2>
+	</div>
+
+	<!-- Step Progress Indicator -->
+	<div class="mx-auto mb-8 flex max-w-5xl items-start">
+		{#each [1, 2, 3, 4] as s (s)}
+			<div class="flex flex-1 flex-col items-center gap-2">
+				<div class="flex w-full items-center">
+					<!-- left connector -->
+					<div
+						class="h-0.5 flex-1 transition-colors {s === 1
+							? 'invisible'
+							: step >= s
+								? 'bg-green-500'
+								: 'bg-border'}"
+					></div>
+					<!-- circle -->
+					<div
+						class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors {step ===
+						s
+							? 'bg-primary text-primary-foreground ring-4 ring-primary/20'
+							: step > s
+								? 'bg-green-600 text-white'
+								: 'bg-muted text-muted-foreground'}"
+					>
+						{step > s ? '✓' : s}
+					</div>
+					<!-- right connector -->
+					<div
+						class="h-0.5 flex-1 transition-colors {s === 4
+							? 'invisible'
+							: step > s
+								? 'bg-green-500'
+								: 'bg-border'}"
+					></div>
+				</div>
+				<!-- label below -->
+				<span
+					class="hidden text-center text-xs leading-tight font-medium sm:block {step === s
+						? 'font-semibold text-foreground'
+						: step > s
+							? 'text-green-700'
+							: 'text-muted-foreground'}"
+				>
+					{s === 1
+						? 'ข้อมูลหัวหน้าครัวเรือน'
+						: s === 2
+							? 'ข้อมูลที่อยู่ครัวเรือน'
+							: s === 3
+								? 'ทรัพย์สินและสัตว์เลี้ยง'
+								: 'จัดการสมาชิกและ QR Code'}
+				</span>
+			</div>
+		{/each}
+	</div>
+
+	<!-- ────────────────── STEP 1: Head info Form ────────────────── -->
+	{#if step === 1}
+		<HouseholdPreRegisterHead bind:form={headForm} onNext={() => (step = 2)} />
+	{/if}
+
+	<!-- ────────────────── STEP 2: Address info Form ────────────────── -->
+	{#if step === 2}
+		<HouseholdPreRegisterAddress
+			bind:form={addressForm}
+			{householdLabel}
+			{municipalityZoneItems}
+			{communityItems}
+			onBack={() => (step = 1)}
+			onNext={() => (step = 3)}
+		/>
+	{/if}
+
+	<!-- ────────────────── STEP 3: Assets & Pets Form ────────────────── -->
+	{#if step === 3}
+		<div class="mx-auto w-full max-w-5xl">
+			<EvacueePetAssetVehicle
+				onBack={() => (step = 2)}
+				onNext={(data) => {
+					petsList = data.pets;
+					assetDescription = data.assetDescription;
+					vehicleRows = data.vehicles;
+					handleRegisterHousehold();
+				}}
+			/>
+		</div>
+	{/if}
+
+	<!-- ────────────────── STEP 4: Summary & Add Members ────────────────── -->
+	{#if step === 4 && createdHousehold}
+		<HouseholdPreRegisterSummary {createdHousehold} {createdHead} />
+	{/if}
+</div>

@@ -1,4 +1,9 @@
-import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
+import {
+	createMutation,
+	createQuery,
+	useQueryClient,
+	type QueryClient
+} from '@tanstack/svelte-query';
 import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
@@ -64,19 +69,30 @@ export const useEvacuee = (id: () => string, enabled: () => boolean = () => true
 		enabled: enabled() && !!id()
 	}));
 
-export const useCreateEvacuee = () =>
-	createMutation(() => ({
+export const useCreateEvacuee = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: EvacueeInput; ctx: AuthorContext }) =>
-			peopleRepository().createEvacuee(input, ctx)
+			peopleRepository().createEvacuee(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		}
 	}));
+};
 
-export const useUpdateEvacuee = () =>
-	createMutation(() => ({
-		mutationFn: (evacuee: Evacuee) => peopleRepository().updateEvacuee(evacuee)
+export const useUpdateEvacuee = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (evacuee: Evacuee) => peopleRepository().updateEvacuee(evacuee),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		}
 	}));
+};
 
-export const useCheckInEvacuee = () =>
-	createMutation(() => ({
+export const useCheckInEvacuee = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({
 			evacuee,
 			ctx,
@@ -85,14 +101,23 @@ export const useCheckInEvacuee = () =>
 			evacuee: Evacuee;
 			ctx: AuthorContext;
 			zone?: string | null;
-		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone)
+		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		}
 	}));
+};
 
-export const useCheckOutEvacuee = () =>
-	createMutation(() => ({
+export const useCheckOutEvacuee = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
-			peopleRepository().checkOutEvacuee(evacuee, ctx)
+			peopleRepository().checkOutEvacuee(evacuee, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		}
 	}));
+};
 
 /** One-shot lookup used by the scan flow — goes through TanStack Query keys. */
 export async function lookupEvacueeByScanCode(
@@ -152,22 +177,37 @@ export const useHouseholdsPaginated = (
 			) as Promise<PaginatedResult<Household>>
 	}));
 
-export const useCreateHousehold = () =>
-	createMutation(() => ({
+export const useCreateHousehold = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: HouseholdInput; ctx: AuthorContext }) =>
-			peopleRepository().createHousehold(input, ctx)
+			peopleRepository().createHousehold(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		}
 	}));
+};
 
-export const useUpdateHousehold = () =>
-	createMutation(() => ({
-		mutationFn: (household: Household) => peopleRepository().updateHousehold(household)
+export const useUpdateHousehold = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (household: Household) => peopleRepository().updateHousehold(household),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		}
 	}));
+};
 
-export const useCreateScreening = () =>
-	createMutation(() => ({
+export const useCreateScreening = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ScreeningInput; ctx: AuthorContext }) =>
-			peopleRepository().createScreening(input, ctx)
+			peopleRepository().createScreening(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		}
 	}));
+};
 
 export const useMedicals = () =>
 	createQuery(() => ({

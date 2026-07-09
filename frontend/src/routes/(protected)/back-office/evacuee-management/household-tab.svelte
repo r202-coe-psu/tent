@@ -59,10 +59,20 @@
 				>
 			</p>
 		</div>
-		<Button size="sm" onclick={() => goto(resolve('/back-office/households/new'))}>
-			<Plus class="h-3.5 w-3.5" />
-			เพิ่มครัวเรือน
-		</Button>
+		<div class="flex gap-2">
+			<Button
+				variant="outline"
+				size="sm"
+				onclick={() => goto(resolve('/back-office/households/pre-register'))}
+			>
+				<Plus class="h-3.5 w-3.5" />
+				ลงทะเบียนล่วงหน้า
+			</Button>
+			<Button size="sm" onclick={() => goto(resolve('/back-office/households/new'))}>
+				<Plus class="h-3.5 w-3.5" />
+				เพิ่มครัวเรือน
+			</Button>
+		</div>
 	</div>
 
 	<!-- Search -->

@@ -23,7 +23,8 @@ export type {
 	StayStatus,
 	MovementAction,
 	CareTrack,
-	BloodGroup
+	BloodGroup,
+	CardType
 } from './domain/people';
 
 // Domain — input schemas + factories + transitions + guards
@@ -102,3 +103,6 @@ export { default as HouseholdForm } from './ui/household-form.svelte';
 export { default as HouseholdFormPage } from './ui/household-form-page.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';
 export { default as ScanCheckInOutPage } from './ui/scan-check-in-out-page.svelte';
+export { default as EvacueePetAssetVehicle } from './ui/evacuee-pet-asset-vehicle.svelte';
+export { default as HouseholdPreRegister } from './ui/household-pre-register.svelte';
+export { default as HouseholdPreRegisterSummary } from './ui/household-pre-register-summary.svelte';
