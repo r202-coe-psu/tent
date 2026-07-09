@@ -23,6 +23,8 @@
 			occupancy: number;
 			capacity: number;
 			available: number;
+			province: string;
+			district: string;
 			geo: { lat: number; lng: number };
 			capabilities?: Record<string, boolean>;
 		};
@@ -52,7 +54,7 @@
 	<div class=" flex flex-col gap-1.5 text-xs text-muted-foreground">
 		<div class="flex items-start gap-1.5">
 			<MapPin class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-			<span>{shelter.address}</span>
+			<span>{shelter.address} อ.{shelter.district}, จ.{shelter.province} </span>
 		</div>
 		<div class="ml-5">
 			ระยะห่างจากจุดผู้ใช้: <span class="font-bold text-foreground">{shelter.distance} กม.</span>
