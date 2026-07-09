@@ -91,10 +91,10 @@ beforeEach(() => {
 	mockGetActive.mockReset();
 
 	mockListEvacuees.mockResolvedValue([
-		evacuee('checked_in'),
-		evacuee('checked_in'),
+		evacuee('active'),
+		evacuee('active'),
 		evacuee('checked_out'),
-		evacuee('registered')
+		evacuee('pre_registered')
 	]);
 	mockGetBalance.mockResolvedValue(new Map<string, number>([['water_l_per_person_day', 100]]));
 	mockGetActive.mockResolvedValue(activeProfile);
@@ -107,7 +107,7 @@ describe('DailyCalcRemoteRepository.runOnDemand', () => {
 		expect(rec._id).toBe('daily_calc:2026-07-08');
 		expect(rec.type).toBe('daily_calc');
 		expect(rec.shelter_code).toBe('SH001');
-		expect(rec.occupancy_snapshot).toBe(2); // only checked_in counts
+		expect(rec.occupancy_snapshot).toBe(2); // only active (present) counts
 		expect(rec.sop_profile_version).toBe(3);
 		expect(rec.formula_v).toBe(FORMULA_V);
 		expect(rec.results).toHaveLength(3);
@@ -142,7 +142,7 @@ describe('DailyCalcRemoteRepository.runOnDemand', () => {
 		putDoc.mockClear();
 
 		// occupancy changes → a genuine retroactive recalculation
-		mockListEvacuees.mockResolvedValue([evacuee('checked_in')]);
+		mockListEvacuees.mockResolvedValue([evacuee('active')]);
 		await repo().runOnDemand('2026-07-08', ctx);
 
 		// order: audit persisted first, THEN the daily_calc overwrite

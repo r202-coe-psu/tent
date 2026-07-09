@@ -3,7 +3,7 @@
  *
  * Reads the three calc inputs through peer BARRELS only (never raw peer docs, never
  * a whole-collection `_all_docs` scan of another feature):
- *   - occupancy       → `people`      (checked-in headcount)
+ *   - occupancy       → `people`      (active/present headcount)
  *   - effective ratio → `sop-ratios`  (`getActiveSopProfile`: override ?? master)
  *   - stock balance   → `operations`  (`getBalance`)
  * feeds them to the pure engine (`resource-calc/domain`), then persists a
@@ -34,9 +34,9 @@ interface AllDocsResponse {
 	rows: Array<{ id: string; doc?: unknown }>;
 }
 
-/** Count of evacuees currently checked in — the occupancy input (T-06 denormalized stay). */
-export function countCheckedIn(evacuees: Evacuee[]): number {
-	return evacuees.filter((e) => e.current_stay?.status === 'checked_in').length;
+/** Count of evacuees physically present (`active`) — the occupancy input (T-06 denormalized stay). */
+export function countActive(evacuees: Evacuee[]): number {
+	return evacuees.filter((e) => e.current_stay?.status === 'active').length;
 }
 
 /**
@@ -105,7 +105,7 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 			);
 		}
 
-		const occupancy = countCheckedIn(evacuees);
+		const occupancy = countActive(evacuees);
 		const { resources, ratioSnapshot, stockSnapshot } = buildResources(active.ratios, stock);
 
 		// 2. Pure engine.
