@@ -24,7 +24,9 @@ export const load: PageLoad = async ({ fetch }) => {
 		flags: {
 			public_metrics_occupancy: true,
 			public_metrics_vulnerable: true,
-			public_metrics_volunteers: false
-		}
+			public_metrics_volunteers: false,
+			emergency_mode: false
+		},
+		isError: true
 	};
 };
