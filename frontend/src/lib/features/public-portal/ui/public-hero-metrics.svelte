@@ -141,9 +141,9 @@
 								>ศูนย์พักพิงพร้อมให้บริการ</span
 							>
 							<div class="flex items-baseline gap-1">
-								<span class="text-3xl font-bold text-card-foreground">{summary.shelters_open}</span>
+								<span class="text-3xl font-bold text-card-foreground">{summary?.shelters_open ?? '-'}</span>
 								<span class="text-sm font-medium text-muted-foreground"
-									>/{summary.shelters_total} แห่ง</span
+									>/{summary?.shelters_total ?? '-'} แห่ง</span
 								>
 							</div>
 						</div>
@@ -158,7 +158,7 @@
 								>
 								<div class="flex items-baseline gap-1">
 									<span class="text-3xl font-bold text-card-foreground"
-										>{summary.occupancy_total}</span
+										>{summary?.occupancy_total ?? '-'}</span
 									>
 									<span class="text-sm font-medium text-muted-foreground">คน</span>
 								</div>
@@ -177,7 +177,7 @@
 								>
 								<div class="flex items-baseline gap-1">
 									<span class="text-3xl font-bold text-card-foreground"
-										>{summary.vulnerable_count}</span
+										>{summary?.vulnerable_count ?? '-'}</span
 									>
 									<span class="text-sm font-medium text-muted-foreground">คน</span>
 								</div>
