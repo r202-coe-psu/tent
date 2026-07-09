@@ -1,7 +1,6 @@
 import type { PageLoad } from './$types';
 
 export const load: PageLoad = async ({ url, fetch }) => {
-	// Mocking query params reading (can be used to pre-filter data)
 	const search = url.searchParams.get('q') || '';
 	const province = url.searchParams.get('province') || '';
 	const district = url.searchParams.get('district') || '';
