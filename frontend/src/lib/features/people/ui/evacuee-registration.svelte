@@ -3,10 +3,11 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { Combobox } from '$lib/components/ui/combobox/index.js';
+	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -54,6 +55,8 @@
 
 	let birthYearBE = $state('');
 	let facePhotoUrl = $state<string | null>(null);
+	// "ไม่มีเบอร์โทร" — เก็บ phone เป็น null ตาม spec (schema.md §evacuee: phone str|null, req)
+	let noPhone = $state(false);
 	let medicalConditionsStr = $state('');
 	let medicalMedicationsStr = $state('');
 	let medicalAllergiesStr = $state('');
@@ -356,11 +359,10 @@
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>ประเทศ <span class="text-destructive">*</span></Form.Label>
-								<Combobox
+								<SearchSelect
 									items={COUNTRIES}
 									bind:value={$formData.country}
-									placeholder="เลือกประเทศ..."
-									searchPlaceholder="ค้นหาประเทศ..."
+									placeholder="ค้นหาประเทศ..."
 									emptyText="ไม่พบประเทศ"
 									controlProps={props}
 									class="h-9"
