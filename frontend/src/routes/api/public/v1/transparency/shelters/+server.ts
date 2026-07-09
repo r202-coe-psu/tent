@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { listShelterMasters } from '$lib/server/shelters.admin';
+import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import type { ShelterMaster } from '$lib/features/shelters/server';
 import { adminRaw } from '$lib/server/couch-admin';
 
@@ -44,6 +44,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 	let masters: ShelterMaster[] = [];
 	try {
 		masters = await listShelterMasters();
+		masters = masters.map(migrate);
 	} catch (e) {
 		console.error('Failed to load shelter masters', e);
 	}
@@ -69,10 +70,10 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			else if (m.operation_status === 'full_capacity') mappedStatus = 'FULL';
 			else if (m.operation_status === 'standby') mappedStatus = 'PREPARE';
 
-			let dist = 0;
-			if (userLat && userLng && m.location?.lat && m.location?.lng) {
-				dist = calcDistance(userLat, userLng, m.location.lat, m.location.lng);
-			}
+			const dist =
+				m.location?.lat && m.location?.lng && userLat !== 0 && userLng !== 0
+					? calcDistance(userLat, userLng, m.location.lat, m.location.lng)
+					: null;
 
 			let occupancy = 0;
 			let vulnerableCount = 0;
@@ -135,7 +136,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 				province: m.province || '',
 				district: m.district || '',
 				subdistrict: m.subdistrict || '',
-				distance: dist ? parseFloat(dist.toFixed(1)) : 0,
+				distance: dist !== null ? parseFloat(dist.toFixed(1)) : -1,
 				occupancy,
 				vulnerableCount,
 				capacity,
@@ -237,10 +238,10 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 		shelters = shelters.filter((s) => statusList.includes(s.status));
 	}
 	if (maxDistance > 0 && userLat !== 0 && userLng !== 0) {
-		shelters = shelters.filter((s) => s.distance > 0 && s.distance <= maxDistance);
+		shelters = shelters.filter((s) => s.distance >= 0 && s.distance <= maxDistance);
 	}
 	if (hideFull) {
-		shelters = shelters.filter((s) => s.available > 0);
+		shelters = shelters.filter((s) => s.status !== 'FULL' && (s.capacity === 0 || s.available > 0));
 	}
 
 	// Apply advanced filters
