@@ -164,8 +164,8 @@
 								<div>
 									<div class="flex items-center gap-3">
 										<h3 class="text-xl font-bold text-foreground">
-											{person.first_name}
-											{person.last_name}
+											{person?.first_name || 'ไม่ระบุชื่อ'}
+											{person?.last_name || ''}
 										</h3>
 										{#if person.family_members && person.family_members.length > 0}
 											<span
@@ -180,18 +180,18 @@
 										{/if}
 									</div>
 									<div class="mt-2 flex gap-4 text-sm text-muted-foreground">
-										<span>ID: <span class="font-mono">{person.national_id}</span></span>
+										<span>ID: <span class="font-mono">{person?.national_id || '-'}</span></span>
 										<span
-											>เพศ: {person.gender === 'male'
+											>เพศ: {person?.gender === 'male'
 												? 'ชาย'
-												: person.gender === 'female'
+												: person?.gender === 'female'
 													? 'หญิง'
 													: 'อื่นๆ'}</span
 										>
 									</div>
 								</div>
 
-								{#if person.status === 'checked_in' || person.status === 'registered'}
+								{#if person?.status === 'checked_in' || person?.status === 'registered'}
 									<div
 										class="flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-bold text-green-700"
 									>
@@ -214,14 +214,14 @@
 									<MapPin class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
 										<div class="text-xs text-muted-foreground">พำนักอยู่ที่ศูนย์พักพิง</div>
-										<div class="font-medium text-foreground">{person.shelter_name}</div>
+										<div class="font-medium text-foreground">{person?.shelter_name || '-'}</div>
 									</div>
 								</div>
 								<div class="flex gap-3">
 									<MapPin class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
 										<div class="text-xs text-muted-foreground">ภูมิลำเนาเดิม</div>
-										<div class="font-medium text-foreground">{person.origin_address}</div>
+										<div class="font-medium text-foreground">{person?.origin_address || '-'}</div>
 									</div>
 								</div>
 								<div class="flex gap-3">
@@ -229,7 +229,7 @@
 									<div>
 										<div class="text-xs text-muted-foreground">เวลาลงทะเบียนเข้าพัก</div>
 										<div class="font-medium text-foreground">
-											{formatDateTime(person.checked_in_at)}
+											{person?.checked_in_at ? formatDateTime(person.checked_in_at) : '-'}
 										</div>
 									</div>
 								</div>
@@ -237,7 +237,7 @@
 									<User class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
 										<div class="text-xs text-muted-foreground">สถานะความดูแล (โซน)</div>
-										<div class="font-medium text-foreground">โซนที่ {person.care_zone}</div>
+										<div class="font-medium text-foreground">โซนที่ {person?.care_zone || '-'}</div>
 									</div>
 								</div>
 							</div>
@@ -256,8 +256,8 @@
 											>
 												<div>
 													<div class="font-bold text-foreground">
-														{member.first_name}
-														{member.last_name}
+														{member?.first_name || '-'}
+														{member?.last_name || ''}
 													</div>
 													<div class="mt-1 flex gap-2">
 														<span
@@ -267,9 +267,9 @@
 													</div>
 												</div>
 
-												{#if member.status === 'checked_in'}
+												{#if member?.status === 'checked_in'}
 													<div class="text-sm font-bold text-green-600">
-														ปลอดภัยอยู่ในศูนย์ ({member.shelter_name})
+														ปลอดภัยอยู่ในศูนย์ ({member?.shelter_name || '-'})
 													</div>
 												{:else}
 													<div class="text-sm font-bold text-danger">พลัดหลง (ไม่อยู่ในศูนย์)</div>
