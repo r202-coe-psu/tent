@@ -7,6 +7,17 @@
 	import { untrack } from 'svelte';
 	import X from '@lucide/svelte/icons/x';
 	import Plus from '@lucide/svelte/icons/plus';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import {
+		useShelter,
+		luggageRuleLabels,
+		parkingRuleLabels,
+		petCategoryLabels,
+		petConditionLabels,
+		type PetCondition
+	} from '$lib/features/shelters/index.js';
 	import type { Household, HouseholdVehicle, PetGroup } from '../domain/people';
 
 	let {
@@ -96,6 +107,71 @@
 	function removeVehicle(id: number) {
 		vehicleRows = vehicleRows.filter((v) => v.id !== id);
 	}
+
+	// Disclaimer text is not free-form — it's read from this shelter's configured
+	// luggage_policy / parking_policy / admission_policy.pet_policy (CR-023 Addendum A),
+	// so it reflects what the shelter admin actually selected, not a hardcoded list.
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelter = $derived(shelterQuery.data);
+
+	// Generic fallback bullets shown when the shelter hasn't configured a relevant
+	// policy yet — so the disclaimer never silently disappears just because CR-023
+	// admin setup is incomplete for this shelter.
+	const FALLBACK_ASSET_ITEM =
+		'ทรัพย์สินมีค่าที่นำติดตัวมา ผู้พักพิงต้องเก็บและรับผิดชอบด้วยตนเอง ศูนย์ไม่รับผิดชอบกรณีสูญหาย';
+	const FALLBACK_VEHICLE_ITEM = 'ต้องลงทะเบียนยานพาหนะทุกคัน และจอดในพื้นที่ที่ศูนย์กำหนดเท่านั้น';
+	const FALLBACK_PET_ITEM =
+		'ต้องดูแลควบคุมสัตว์เลี้ยง (กรง/สายจูง) ตลอดเวลา และรับผิดชอบต่อสัตว์เลี้ยงของตนเอง';
+
+	// Grouped by section — everything the shelter admin actually configured across the
+	// three CR-023 policies this step touches (assets/luggage, vehicles/parking, pets),
+	// falling back to a generic notice per section when the shelter has nothing configured.
+	type DisclaimerGroup = { label: string; items: string[] };
+	const disclaimerGroups = $derived.by(() => {
+		const groups: DisclaimerGroup[] = [];
+
+		if (assetDescription.trim() || petRows.length > 0 || vehicleRows.length > 0) {
+			const items: string[] = [];
+			const rules = shelter?.luggage_policy?.rules ?? [];
+			for (const rule of rules) items.push(luggageRuleLabels[rule]);
+			if (shelter?.luggage_policy?.rules_other) items.push(shelter.luggage_policy.rules_other);
+			if (items.length === 0) items.push(FALLBACK_ASSET_ITEM);
+			groups.push({ label: '🎒 ทรัพย์สินมีค่า / สัมภาระ', items });
+		}
+
+		if (vehicleRows.length > 0) {
+			const items: string[] = [];
+			const rules = shelter?.parking_policy?.rules ?? [];
+			for (const rule of rules) items.push(parkingRuleLabels[rule]);
+			if (shelter?.parking_policy?.rules_other) items.push(shelter.parking_policy.rules_other);
+			if (items.length === 0) items.push(FALLBACK_VEHICLE_ITEM);
+			groups.push({ label: '🚗 ยานพาหนะ', items });
+		}
+
+		if (petRows.length > 0) {
+			const items: string[] = [];
+			const petPolicy = shelter?.admission_policy?.pet_policy;
+			if (petPolicy?.policy === 'no_pets') {
+				items.push('ศูนย์นี้ไม่อนุญาตให้นำสัตว์เลี้ยงเข้าพัก (No Pets Allowed)');
+			} else {
+				const categories = petPolicy?.categories ?? [];
+				for (const entry of categories) {
+					items.push(petCategoryLabels[entry.category]);
+					for (const cond of entry.conditions ?? []) {
+						items.push(petConditionLabels[cond as PetCondition]);
+					}
+					if (entry.other) items.push(entry.other);
+				}
+				if (categories.length === 0) items.push(FALLBACK_PET_ITEM);
+			}
+			groups.push({ label: '🐶 สัตว์เลี้ยง', items });
+		}
+
+		return groups;
+	});
+
+	let disclaimerAcknowledged = $state(false);
+	const disclaimerRequired = $derived(disclaimerGroups.length > 0);
 </script>
 
 <div class="space-y-4">
@@ -262,6 +338,40 @@
 		</div>
 	</div>
 
+	{#if disclaimerRequired}
+		<!-- Shelter Disclaimer — sourced from this shelter's configured policies -->
+		<div class="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+			<div class="flex items-center gap-2">
+				<ShieldAlert class="h-5 w-5 text-amber-600" />
+				<h3 class="text-sm font-bold text-amber-800">
+					ข้อตกลงและเงื่อนไขของศูนย์พักพิง (Disclaimer)
+				</h3>
+			</div>
+			<div class="space-y-3">
+				{#each disclaimerGroups as group (group.label)}
+					<div>
+						<h4 class="mb-1 text-sm font-semibold text-amber-800">{group.label}</h4>
+						<ul class="list-disc space-y-1 pl-6 text-sm text-amber-900">
+							{#each group.items as item (item)}
+								<li>{item}</li>
+							{/each}
+						</ul>
+					</div>
+				{/each}
+			</div>
+			<label class="flex items-start gap-2 pt-1 text-sm">
+				<Checkbox
+					checked={disclaimerAcknowledged}
+					onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
+				/>
+				<span class="font-bold text-amber-900">
+					ข้าพเจ้าและครอบครัวรับทราบและยินยอมปฏิบัติตามกฎระเบียบของศูนย์พักพิง
+					รวมถึงรับผิดชอบต่อทรัพย์สินมีค่าของตนเองหากเกิดการสูญหาย
+				</span>
+			</label>
+		</div>
+	{/if}
+
 	<!-- Bottom Actions -->
 	<div class="flex items-center justify-between rounded-xl border bg-card p-6 shadow-sm">
 		<Button
@@ -274,6 +384,7 @@
 		</Button>
 		<Button
 			type="button"
+			disabled={disclaimerRequired && !disclaimerAcknowledged}
 			class="h-12 w-[48%] bg-[#003B71] text-base font-medium hover:bg-[#002a50]"
 			onclick={() =>
 				onNext({
