@@ -12,7 +12,7 @@
 
 	interface FamilyMember {
 		first_name: string;
-		last_name_masked: string;
+		last_name: string;
 		status: string;
 		shelter_name: string;
 	}
@@ -20,7 +20,7 @@
 	interface SearchResult {
 		id: string;
 		first_name: string;
-		last_name_masked: string;
+		last_name: string;
 		national_id: string;
 		gender: string;
 		shelter_name: string;
@@ -113,20 +113,6 @@
 			รองรับการค้นหาด้วยหมายเลขบัตรประชาชน 13 หลัก, ชื่อ-นามสกุล หรือ หมายเลขหนังสือเดินทาง
 		</p>
 
-		<!-- PDPA Warning -->
-		<div
-			class="mb-6 flex gap-3 rounded-r-lg border-6 border-warning/5 border-l-warning bg-warning/5 p-4 text-warning-dark"
-		>
-			<ShieldAlert class="mt-0.5 h-5 w-5 shrink-0 text-warning" />
-			<div>
-				<h3 class="font-bold text-warning-dark">ประกาศความเป็นส่วนตัว (PDPA / Data Privacy)</h3>
-				<p class="mt-1 text-sm">
-					เพื่อความปลอดภัยของข้อมูลผู้ประสบภัย ระบบจะทำ <span class="font-bold">Data Masking</span> ปกปิดข้อมูลบางส่วน
-					เช่น ชื่อ-สกุล และรหัสบัตรประชาชน ตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล
-				</p>
-			</div>
-		</div>
-
 		<!-- Input -->
 		<div class="flex flex-col gap-3 sm:flex-row">
 			<div
@@ -179,13 +165,19 @@
 									<div class="flex items-center gap-3">
 										<h3 class="text-xl font-bold text-foreground">
 											{person.first_name}
-											{person.last_name_masked}
+											{person.last_name}
 										</h3>
-										<!-- Dummy badge since we don't know who is head from evacuee alone easily without more logic -->
-										<span
-											class="rounded-md bg-primary/20 px-2 py-0.5 text-xs font-bold text-primary"
-											>ครอบครัว</span
-										>
+										{#if person.family_members && person.family_members.length > 0}
+											<span
+												class="rounded-md bg-primary/20 px-2 py-0.5 text-xs font-bold text-primary"
+												>มากับครอบครัว</span
+											>
+										{:else}
+											<span
+												class="rounded-md bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground"
+												>มาเดี่ยว</span
+											>
+										{/if}
 									</div>
 									<div class="mt-2 flex gap-4 text-sm text-muted-foreground">
 										<span>ID: <span class="font-mono">{person.national_id}</span></span>
@@ -265,7 +257,7 @@
 												<div>
 													<div class="font-bold text-foreground">
 														{member.first_name}
-														{member.last_name_masked}
+														{member.last_name}
 													</div>
 													<div class="mt-1 flex gap-2">
 														<span
