@@ -115,7 +115,7 @@
 	<div class="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-6">
 		<PublicShelterMetricCard
 			title="ศูนย์พักพิงทั้งหมด"
-			value={data.summary.shelters_total}
+			value={data.summary?.shelters_total ?? '-'}
 			unit="แห่ง"
 			icon={ClipboardList}
 			iconClass="border-accent-purple shadow-accent-purple/15 text-accent-purple"
@@ -123,7 +123,7 @@
 
 		<PublicShelterMetricCard
 			title="ศูนย์พักพิงที่เปิดใช้งาน"
-			value={data.summary.shelters_open}
+			value={data.summary?.shelters_open ?? '-'}
 			unit="แห่ง"
 			icon={Building2}
 			iconClass="border-success shadow-success/15 text-success"
@@ -132,7 +132,7 @@
 		{#if data.flags?.public_metrics_occupancy}
 			<PublicShelterMetricCard
 				title="ผู้พักพิงปัจจุบัน"
-				value={data.summary.occupancy_total}
+				value={data.summary?.occupancy_total ?? '-'}
 				unit="คน"
 				icon={Users}
 				iconClass="border-primary shadow-primary/15 text-primary"
@@ -142,7 +142,7 @@
 		{#if data.flags?.public_metrics_vulnerable}
 			<PublicShelterMetricCard
 				title="กลุ่มเปราะบาง"
-				value={data.summary.vulnerable_count}
+				value={data.summary?.vulnerable_count ?? '-'}
 				unit="คน"
 				icon={AlertTriangle}
 				iconClass="border-warning shadow-warning/15 text-warning-dark"
