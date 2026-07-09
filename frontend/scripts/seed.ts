@@ -200,6 +200,14 @@ const SH001_CODE = 'SH001';
 const SH001_DB = 'shelter_sh001';
 const SH001_CTX: AuthorContext = { shelterCode: SH001_CODE, createdBy: 'seed' };
 
+// Aliases for SH001 to fix broken references in seedShelter and seedDashboardData
+const SHELTER_CODE = SH001_CODE;
+const SHELTER_DB = SH001_DB;
+const ctx = SH001_CTX;
+const CTX = SH001_CTX;
+const code = SH001_CODE;
+const dbName = SH001_DB;
+
 const SH002_CODE = 'SH002';
 const SH002_DB = 'shelter_sh002';
 const SH002_CTX: AuthorContext = { shelterCode: SH002_CODE, createdBy: 'seed' };
