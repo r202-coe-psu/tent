@@ -24,11 +24,6 @@
 		});
 	});
 
-	const shortId = $derived.by(() => {
-		const raw = evacuee._id.split(':')[1] ?? evacuee._id;
-		return `EV-${raw.slice(-4).toUpperCase()}`;
-	});
-
 	const fullId = $derived(evacuee._id.split(':')[1] ?? evacuee._id);
 
 	const zoneName = $derived(evacuee.current_stay?.zone?.toUpperCase() ?? 'GENERAL');
@@ -55,56 +50,46 @@
 			</div>
 		</div>
 
-		<!-- Prominent code display -->
-		<div class="mb-6 flex flex-col items-center gap-1.5">
-			<span class="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-				รหัสประจำตัวผู้ประสบภัย
-			</span>
-			<span
-				class="rounded-xl bg-slate-900 px-5 py-2.5 font-mono text-2xl font-black tracking-[0.2em] text-white dark:bg-slate-100 dark:text-slate-900"
-			>
-				{shortId}
-			</span>
-		</div>
-
 		<!-- Wristband preview -->
 		<div class="mb-6 rounded-2xl bg-slate-100 p-6 dark:bg-slate-800">
 			<div
 				id="wristband-card"
-				class="mx-auto flex h-[90px] max-w-[340px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md dark:border-slate-700"
+				class="mx-auto flex min-h-[90px] max-w-[340px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md dark:border-slate-700"
 			>
 				<div class="w-2.5 shrink-0 bg-red-500"></div>
 
-				<div class="flex flex-1 flex-col justify-center gap-0.5 px-3 py-2">
+				<div class="flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-3 py-2">
 					<span class="font-mono text-[9px] font-bold tracking-widest text-slate-400 uppercase">
 						ZONE: {zoneName}
 					</span>
-					<p class="text-sm leading-tight font-bold text-slate-900">
+					<p class="truncate text-sm leading-tight font-bold text-slate-900">
 						{evacuee.first_name}
 						{evacuee.last_name}
 					</p>
-					<div class="mt-0.5 flex items-center gap-1.5">
-						<span
-							class="inline-block rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-bold tracking-wide text-slate-700"
-						>
-							{fullId}
-						</span>
-						{#if showFastTrackBadge}
+					<!-- id — own line -->
+					<span
+						class="inline-block w-fit rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-bold tracking-wide text-slate-700"
+					>
+						{fullId}
+					</span>
+					<!-- tags — own line -->
+					{#if showFastTrackBadge}
+						<div class="flex flex-wrap items-center gap-1">
 							<span
 								class="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600"
 							>
 								กักโรค
 							</span>
-						{/if}
-					</div>
+						</div>
+					{/if}
 				</div>
 
 				<div class="flex shrink-0 items-center justify-center px-2">
 					{#if qrUrl}
-						<img src={qrUrl} alt="QR Code" class="size-16 object-contain" />
+						<img src={qrUrl} alt="QR Code" class="size-16 shrink-0 object-contain" />
 					{:else}
 						<div
-							class="flex size-16 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400"
+							class="flex size-16 shrink-0 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400"
 						>
 							...
 						</div>
