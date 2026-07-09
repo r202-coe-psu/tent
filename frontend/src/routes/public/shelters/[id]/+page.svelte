@@ -63,21 +63,23 @@
 							></span>
 							<span class="relative inline-flex h-2 w-2 rounded-full bg-success"></span>
 						</span>
-						{shelter.status === 'OPEN' ? 'เปิดรับผู้อพยพ' : shelter.status}
+						{shelter?.status === 'OPEN' ? 'เปิดรับผู้อพยพ' : shelter?.status || '-'}
 					</div>
 
 					<!-- Title & Subtitle -->
-					<h1 class="mb-3 text-3xl font-bold tracking-tight md:text-4xl">{shelter.name}</h1>
+					<h1 class="mb-3 text-3xl font-bold tracking-tight md:text-4xl">{shelter?.name || 'ไม่มีชื่อศูนย์'}</h1>
 					<div class="mb-10 flex flex-wrap items-center gap-3 text-sm text-muted-foreground/60">
 						<div class="flex items-center gap-1.5 text-accent">
 							<MapPin class="h-4 w-4 text-warning" />
-							{shelter.address}
+							{shelter?.address || 'ไม่ระบุที่อยู่'}
 						</div>
-						<span
-							class="rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white/90"
-						>
-							{shelter.admin_type}
-						</span>
+						{#if shelter?.admin_type}
+							<span
+								class="rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white/90"
+							>
+								{shelter.admin_type}
+							</span>
+						{/if}
 					</div>
 
 					<!-- Stats Grid -->
@@ -91,40 +93,42 @@
 								</div>
 								<div class="flex items-baseline gap-1.5">
 									<span class="text-3xl font-bold text-success-subtle"
-										>{shelter.capacity.available}</span
+										>{shelter?.capacity?.available ?? '-'}</span
 									>
 									<span class="text-xl font-medium text-secondary">/</span>
-									<span class="text-xl font-bold text-white">{shelter.capacity.total}</span>
+									<span class="text-xl font-bold text-white">{shelter?.capacity?.total ?? '-'}</span>
 									<span class="text-sm font-medium text-secondary/80">คน</span>
 								</div>
 							</div>
 
 							<div>
 								<div class="mb-1 text-xs font-semibold text-secondary/80">อัตราครองเตียง</div>
-								<div class="text-3xl font-bold text-white">{shelter.occupancy_rate}%</div>
+								<div class="text-3xl font-bold text-white">{shelter?.occupancy_rate ?? '-'}%</div>
 							</div>
 
 							<div class="col-span-2 items-center justify-around md:col-span-1 md:space-y-2">
 								<div class="text-xs font-semibold text-secondary/80">สถานะอาคาร</div>
 								<div class="flex items-end gap-2 self-end text-xl font-bold text-white">
 									<CheckCircle2 class="h-5 w-5 text-warning-subtle" />
-									{shelter.building_status}
+									{shelter?.building_status || '-'}
 								</div>
 							</div>
 						</div>
 
-						<Button
-							onclick={() =>
-								window.open(
-									`https://www.google.com/maps/dir/?api=1&destination=${shelter.geo.lat},${shelter.geo.lng}`,
-									'_blank'
-								)}
-							target="_blank"
-							class="flex w-fit items-center gap-2 rounded-xl bg-warning px-6 py-3.5 text-sm font-bold text-warning-foreground shadow-lg transition-colors hover:bg-warning-subtle"
-						>
-							<Navigation class="h-4.5 w-4.5" />
-							นำทางด้วย Google Maps
-						</Button>
+						{#if shelter?.geo?.lat && shelter?.geo?.lng}
+							<Button
+								onclick={() =>
+									window.open(
+										`https://www.google.com/maps/dir/?api=1&destination=${shelter.geo.lat},${shelter.geo.lng}`,
+										'_blank'
+									)}
+								target="_blank"
+								class="flex w-fit items-center gap-2 rounded-xl bg-warning px-6 py-3.5 text-sm font-bold text-warning-foreground shadow-lg transition-colors hover:bg-warning-subtle"
+							>
+								<Navigation class="h-4.5 w-4.5" />
+								นำทางด้วย Google Maps
+							</Button>
+						{/if}
 					</div>
 				</div>
 			</div>
@@ -154,7 +158,7 @@
 								</div>
 								<div>
 									<h3 class="mb-1 text-sm font-bold text-foreground">นโยบายสัตว์เลี้ยง</h3>
-									<p class="text-sm text-muted-foreground">{shelter.admission_policy.pets}</p>
+									<p class="text-sm text-muted-foreground">{shelter?.admission_policy?.pets || '-'}</p>
 								</div>
 							</div>
 
@@ -172,7 +176,11 @@
 										กลุ่มเปราะบางที่รองรับได้เป็นพิเศษ
 									</h3>
 									<p class="text-sm text-muted-foreground">
-										{shelter.admission_policy.vulnerable_groups.join(', ')}
+										{#if shelter?.admission_policy?.vulnerable_groups?.length > 0}
+											{shelter.admission_policy.vulnerable_groups.join(', ')}
+										{:else}
+											-
+										{/if}
 									</p>
 								</div>
 							</div>
@@ -189,15 +197,15 @@
 						<div class="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
 							<div class="flex items-center justify-between border-b border-border/50 p-4">
 								<span class="text-sm font-semibold text-muted-foreground">เส้นทางเข้าศูนย์</span>
-								<span class="text-sm font-bold text-foreground">{shelter.travel.route}</span>
+								<span class="text-sm font-bold text-foreground text-right ml-4">{shelter?.travel?.route || '-'}</span>
 							</div>
 							<div class="flex items-center justify-between border-b border-border/50 p-4">
 								<span class="text-sm font-semibold text-muted-foreground"
 									>ระดับความสูงจากน้ำทะเล</span
 								>
-								<span class="text-sm font-bold text-foreground">{shelter.travel.altitude}</span>
+								<span class="text-sm font-bold text-foreground text-right ml-4">{shelter?.travel?.altitude || '-'}</span>
 							</div>
-							{#if shelter.travel.flood_warning}
+							{#if shelter?.travel?.flood_warning}
 								<div class="bg-danger-muted/50 p-4">
 									<div class="flex items-center gap-2 text-sm font-bold text-danger">
 										⚠️ {shelter.travel.flood_warning}
@@ -226,22 +234,22 @@
 								<div class="mb-3 flex flex-wrap gap-4 text-sm">
 									<div class="rounded-lg border border-border/50 bg-muted/50 px-3 py-1.5">
 										<span class="text-muted-foreground">ชาย:</span>
-										<span class="font-bold">{shelter.facilities.hygiene.male}</span>
+										<span class="font-bold">{shelter?.facilities?.hygiene?.male ?? '-'}</span>
 									</div>
 									<div class="rounded-lg border border-border/50 bg-muted/50 px-3 py-1.5">
 										<span class="text-muted-foreground">หญิง:</span>
-										<span class="font-bold">{shelter.facilities.hygiene.female}</span>
+										<span class="font-bold">{shelter?.facilities?.hygiene?.female ?? '-'}</span>
 									</div>
 									<div class="rounded-lg border border-border/50 bg-muted/50 px-3 py-1.5">
 										<span class="text-muted-foreground">คนพิการ:</span>
-										<span class="font-bold">{shelter.facilities.hygiene.accessible}</span>
+										<span class="font-bold">{shelter?.facilities?.hygiene?.accessible ?? '-'}</span>
 									</div>
 									<div class="rounded-lg border border-border/50 bg-muted/50 px-3 py-1.5">
 										<span class="text-muted-foreground">อาบน้ำ:</span>
-										<span class="font-bold">{shelter.facilities.hygiene.shower}</span>
+										<span class="font-bold">{shelter?.facilities?.hygiene?.shower ?? '-'}</span>
 									</div>
 								</div>
-								{#if shelter.facilities.hygiene.mobile_toilet > 0}
+								{#if (shelter?.facilities?.hygiene?.mobile_toilet ?? 0) > 0}
 									<div class="flex flex-wrap gap-2">
 										<div
 											class="inline-flex items-center gap-1.5 rounded-md bg-success-muted px-2 py-1 text-xs font-bold text-success-dark"
@@ -266,11 +274,11 @@
 									<div class="space-y-2 text-xs">
 										<div class="flex justify-between border-b border-border/50 pb-1">
 											<span class="text-muted-foreground">ไฟฟ้าหลัก:</span>
-											<span class="font-bold">{shelter.facilities.power}</span>
+											<span class="font-bold text-right ml-2">{shelter?.facilities?.power || '-'}</span>
 										</div>
 										<div class="flex justify-between">
 											<span class="text-muted-foreground">น้ำประปา:</span>
-											<span class="font-bold">{shelter.facilities.water}</span>
+											<span class="font-bold text-right ml-2">{shelter?.facilities?.water || '-'}</span>
 										</div>
 									</div>
 								</div>
@@ -283,14 +291,14 @@
 									<div class="space-y-2 text-xs">
 										<div class="flex justify-between border-b border-border/50 pb-1">
 											<span class="text-muted-foreground">สัญญาณมือถือ</span>
-											<span class="font-bold"
-												>{shelter.facilities.comms.includes('สัญญาณมือถือ') ? 'มี' : 'ไม่มี'}</span
+											<span class="font-bold text-right ml-2"
+												>{shelter?.facilities?.comms?.includes('สัญญาณมือถือ') ? 'มี' : 'ไม่มี'}</span
 											>
 										</div>
 										<div class="flex justify-between">
 											<span class="text-muted-foreground">VHF</span>
-											<span class="font-bold"
-												>{shelter.facilities.comms.includes('VHF') ? 'มี' : 'ไม่มี'}</span
+											<span class="font-bold text-right ml-2"
+												>{shelter?.facilities?.comms?.includes('VHF') ? 'มี' : 'ไม่มี'}</span
 											>
 										</div>
 									</div>
@@ -299,18 +307,22 @@
 
 							<!-- Badges -->
 							<div class="mt-1 flex flex-wrap gap-3">
-								<div
-									class="flex items-center gap-1.5 rounded-xl bg-warning px-3 py-2 text-sm font-bold text-warning-foreground shadow-sm"
-								>
-									<ChefHat class="h-4 w-4" />
-									{shelter.facilities.kitchen}
-								</div>
-								<div
-									class="flex items-center gap-1.5 rounded-xl border border-border bg-muted px-3 py-2 text-sm font-bold text-foreground/90 shadow-sm"
-								>
-									<Car class="h-4 w-4" />
-									{shelter.facilities.parking}
-								</div>
+								{#if shelter?.facilities?.kitchen}
+									<div
+										class="flex items-center gap-1.5 rounded-xl bg-warning px-3 py-2 text-sm font-bold text-warning-foreground shadow-sm"
+									>
+										<ChefHat class="h-4 w-4 shrink-0" />
+										{shelter.facilities.kitchen}
+									</div>
+								{/if}
+								{#if shelter?.facilities?.parking}
+									<div
+										class="flex items-center gap-1.5 rounded-xl border border-border bg-muted px-3 py-2 text-sm font-bold text-foreground/90 shadow-sm"
+									>
+										<Car class="h-4 w-4 shrink-0" />
+										{shelter.facilities.parking}
+									</div>
+								{/if}
 							</div>
 						</div>
 					</section>
@@ -332,14 +344,14 @@
 							</div>
 							<div>
 								<div class="text-sm font-bold text-success-dark">
-									ผู้ดูแลศูนย์: {shelter.contact.manager}
+									ผู้ดูแลศูนย์: {shelter?.contact?.manager || '-'}
 								</div>
-								<div class="text-xl font-bold text-success-dark">{shelter.contact.phone}</div>
+								<div class="text-xl font-bold text-success-dark">{shelter?.contact?.phone || '-'}</div>
 							</div>
 						</div>
 
 						<div class="flex flex-col gap-2">
-							{#each shelter.faq as item (item.q)}
+							{#each shelter?.faq || [] as item (item.q)}
 								<details
 									class="group overflow-hidden rounded-xl border border-border bg-white shadow-sm"
 								>
