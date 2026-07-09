@@ -28,7 +28,7 @@
 </script>
 
 {#if href && !disabled}
-	<a {href} class="{baseClasses} {variants[variant]} {disabled ? disabledClasses : ''}" {...rest}>
+	<a {href} class="{baseClasses} {variants[variant]}" {...rest}>
 		{@render children()}
 	</a>
 {:else}
