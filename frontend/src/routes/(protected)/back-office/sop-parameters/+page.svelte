@@ -16,6 +16,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin, isShelterManager, shelterCodeFromRoles } from '$lib/auth/roles';
 	import { toast } from 'svelte-sonner';
+	import ConsoleBanner from '$lib/components/console-banner.svelte';
 
 	// Tab and context state
 	let activeTab = $state<SopTabType>('sphere_standard');
@@ -118,13 +119,10 @@
 </svelte:head>
 
 <div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-	<header>
-		<h1 class="text-2xl font-semibold tracking-tight">ตั้งค่าพารามิเตอร์และกฎเกณฑ์</h1>
-		<p class="mt-1 text-sm text-muted-foreground">
-			กำหนดพารามิเตอร์ SOP มาตรฐาน (Sphere Standard) สำหรับการคำนวณทรัพยากร
-			และค่าปรับแต่งเฉพาะศูนย์พักพิง
-		</p>
-	</header>
+	<ConsoleBanner
+		title="5. พารามิเตอร์มาตรฐานและกฎเกณฑ์ (SOP Parameters & Rules)"
+		description="กำหนดพารามิเตอร์ SOP มาตรฐาน (Sphere Standard) สำหรับการคำนวณทรัพยากร และค่าปรับแต่งเฉพาะศูนย์พักพิง"
+	/>
 
 	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
 		<SopTypeList bind:activeTab />
