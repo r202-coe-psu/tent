@@ -37,8 +37,17 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 
 	async listAuditsByTargetIds(ids: string[]): Promise<AuditEntry[]> {
 		if (ids.length === 0) return [];
-		const all = await this.repo.allByType('audit', isAuditEntry);
-		return all.filter((a) => ids.includes(a.target_id));
+		const chunkSize = 50;
+		const results: AuditEntry[] = [];
+		for (let i = 0; i < ids.length; i += chunkSize) {
+			const chunk = ids.slice(i, i + chunkSize);
+			const result = await this.repo.find<AuditEntry>({
+				selector: { type: 'audit', target_id: { $in: chunk } },
+				limit: chunk.length * 2
+			});
+			results.push(...result.filter(isAuditEntry));
+		}
+		return results;
 	}
 
 	async createVersion(
@@ -130,8 +139,17 @@ export class SopOverrideRemoteRepository implements SopOverrideRepository {
 
 	async listAuditsByTargetIds(ids: string[]): Promise<AuditEntry[]> {
 		if (ids.length === 0) return [];
-		const all = await this.repo.allByType('audit', isAuditEntry);
-		return all.filter((a) => ids.includes(a.target_id));
+		const chunkSize = 50;
+		const results: AuditEntry[] = [];
+		for (let i = 0; i < ids.length; i += chunkSize) {
+			const chunk = ids.slice(i, i + chunkSize);
+			const result = await this.repo.find<AuditEntry>({
+				selector: { type: 'audit', target_id: { $in: chunk } },
+				limit: chunk.length * 2
+			});
+			results.push(...result.filter(isAuditEntry));
+		}
+		return results;
 	}
 
 	async createVersion(
