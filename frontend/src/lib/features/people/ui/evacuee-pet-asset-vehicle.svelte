@@ -352,7 +352,7 @@
 					<div>
 						<h4 class="mb-1 text-sm font-semibold text-amber-800">{group.label}</h4>
 						<ul class="list-disc space-y-1 pl-6 text-sm text-amber-900">
-							{#each group.items as item (item)}
+							{#each group.items as item, i (i)}
 								<li>{item}</li>
 							{/each}
 						</ul>
