@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { listShelterMasters } from '$lib/server/shelters.admin';
+import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import { adminRaw } from '$lib/server/couch-admin';
 
 // In-memory read-model cache (T-35)
@@ -13,7 +13,8 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 		'Cache-Control': 'public, max-age=60, s-maxage=60'
 	});
 
-	const now = Date.now();
+	let now = Date.now();
+	lastFetchTime = 0; // FORCE REFRESH
 
 	// Poll DB / update read-model if older than 10 mins (600,000 ms)
 	if (!cachedSummary || now - lastFetchTime > 600000) {
@@ -22,7 +23,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 
 			let totalOpen = 0;
 
-			const activeShelters = masters.filter((m) => {
+			const activeShelters = masters.map(migrate).filter((m) => {
 				let mappedStatus = 'CLOSED';
 				if (m.operation_status === 'active') mappedStatus = 'OPEN';
 				else if (m.operation_status === 'full_capacity') mappedStatus = 'FULL';
@@ -50,6 +51,8 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 							'GET'
 						)
 					]);
+					if (m.code === 'SH001' || m.code === 'SH002')
+						console.log('RAW RES:', m.code, occRes.status, occRes.data);
 
 					if (
 						occRes.status === 200 &&
@@ -62,6 +65,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 						}>;
 						const checkedInRow = rows.find((r) => r.key === 'checked_in');
 						occ = checkedInRow ? (checkedInRow.value as number) : 0;
+						if (m.code === 'SH001') console.log('SH001 occ:', occ, occRes.data);
 					}
 
 					if (
@@ -115,7 +119,8 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 		isStale,
 		flags: {
 			public_metrics_occupancy: true,
-			public_metrics_vulnerable: true
+			public_metrics_vulnerable: true,
+			emergency_mode: true
 		}
 	});
 };
