@@ -61,7 +61,7 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
 
 		// Select item category
 		// Click category select trigger
-		await page.getByRole('combobox').first().click();
+		await page.locator('[data-slot="select-trigger"]').first().click();
 		await page.getByRole('option', { name: 'อาหาร/เครื่องดื่ม' }).click();
 
 		// Click Next to Step 3

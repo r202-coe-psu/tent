@@ -46,7 +46,14 @@ export const specialNeedSchema = z.enum([
 ]);
 export type SpecialNeed = z.infer<typeof specialNeedSchema>;
 
-export const stayStatusSchema = z.enum(['registered', 'checked_in', 'checked_out', 'transferred']);
+export const stayStatusSchema = z.enum([
+	'pre_registered',
+	'active',
+	'temporary_leave',
+	'transferred',
+	'checked_out',
+	'deceased'
+]);
 export type StayStatus = z.infer<typeof stayStatusSchema>;
 
 export const householdStatusSchema = z.enum([
@@ -69,7 +76,10 @@ export const movementActionSchema = z.enum([
 	'check_in',
 	'check_out',
 	'transfer_out',
-	'transfer_in'
+	'transfer_in',
+	'leave_temporary',
+	'return_from_leave',
+	'mark_deceased'
 ]);
 export type MovementAction = z.infer<typeof movementActionSchema>;
 
@@ -332,7 +342,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
 			household_id: d.household_id,
-			current_stay: { status: 'registered', zone: null, since: now() },
+			current_stay: { status: 'pre_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},
@@ -473,17 +483,61 @@ export function createScreening(input: ScreeningInput, ctx: AuthorContext): Scre
 
 // ---------------------------------------------------------------- transitions
 
+/** Stay statuses that may receive a scan/check-in (`check_in`) action. */
+export const CHECK_IN_ELIGIBLE_STATUSES = [
+	'pre_registered',
+	'temporary_leave',
+	'checked_out',
+	'transferred'
+] as const satisfies readonly StayStatus[];
+
+/** Stay statuses that may receive a scan/check-out (`check_out`) action. */
+export const CHECK_OUT_ELIGIBLE_STATUSES = ['active'] as const satisfies readonly StayStatus[];
+
+export function canCheckInEvacuee(evacuee: Evacuee): boolean {
+	return (CHECK_IN_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+export function canCheckOutEvacuee(evacuee: Evacuee): boolean {
+	return (CHECK_OUT_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
+		evacuee.current_stay.status
+	);
+}
+
+/**
+ * Guard movement transitions against impossible / terminal stay states.
+ * `deceased` is terminal (schema.md §1.4) — no reverse action except staying deceased.
+ */
+export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction): void {
+	const status = evacuee.current_stay.status;
+	if (status === 'deceased' && action !== 'mark_deceased') {
+		throw new Error('สถานะเสียชีวิตเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก');
+	}
+	if (action === 'check_in' && !canCheckInEvacuee(evacuee)) {
+		throw new Error(`ไม่สามารถเช็คอินจากสถานะ ${status} ได้`);
+	}
+	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
+		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
+	}
+}
+
 /**
  * Apply a movement to an evacuee's denormalized `current_stay` snapshot. The
  * authoritative history is the append-only movement stream; this just keeps the
  * UI snapshot in step (movement events win on conflict — data-model.md §5).
  */
 export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacuee {
+	assertMovementAllowed(evacuee, movement.action);
 	const statusByAction: Record<MovementAction, StayStatus> = {
-		check_in: 'checked_in',
+		check_in: 'active',
 		check_out: 'checked_out',
 		transfer_out: 'transferred',
-		transfer_in: 'checked_in'
+		transfer_in: 'active',
+		leave_temporary: 'temporary_leave',
+		return_from_leave: 'active',
+		mark_deceased: 'deceased'
 	};
 	return {
 		...evacuee,

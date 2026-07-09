@@ -91,7 +91,7 @@
 	</title>
 </svelte:head>
 
-<Toaster position="bottom-center" richColors />
+<Toaster position="top-center" richColors />
 
 <QueryClientProvider client={data.queryClient}>
 	<ConnectionBanner />

@@ -1,8 +1,9 @@
 /**
  * GET /api/back-office/shelter/[code]/dashboard/occupancy
  *
- * Returns aggregate occupancy counts (registered / checked_in / checked_out /
- * transferred / total) by querying the `occupancy` CouchDB view with ?group=true.
+ * Returns aggregate occupancy counts (pre_registered / active / temporary_leave /
+ * transferred / checked_out / deceased / total) by querying the `occupancy`
+ * CouchDB view with ?group=true.
  *
  * Security (security-rbac-bestpractices §2):
  *  - Caller must be authenticated and scoped to this shelter or be a SA.
@@ -34,7 +35,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 		const db = `shelter_${code.toLowerCase()}`;
 
 		// Query the occupancy view with group=true to get per-status counts.
-		// All keys: 'registered' | 'checked_in' | 'checked_out' | 'transferred'
+		// All keys: 'pre_registered' | 'active' | 'temporary_leave' | 'transferred' | 'checked_out' | 'deceased'
 		const res = await adminRaw(`/${db}/_design/app/_view/occupancy?group=true`, 'GET');
 
 		if (res.status === 404) {

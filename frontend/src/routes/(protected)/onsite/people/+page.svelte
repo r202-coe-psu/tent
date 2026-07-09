@@ -13,7 +13,10 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import Zap from '@lucide/svelte/icons/zap';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 
 	const createMutation = useCreateEvacuee();
 	const createScreeningMutation = useCreateScreening();
@@ -67,6 +70,14 @@
 		/>
 	{:else}
 		<!-- ── Registration Flow ─────────────────────────────────────────────── -->
+		<button
+			onclick={() => goto(resolve('/onsite'))}
+			class="mb-4 inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+		>
+			<ArrowLeft class="size-4" />
+			<span>กลับ</span>
+		</button>
+
 		<h1 class="mb-6 text-3xl font-bold">ลงทะเบียนผู้ประสบภัย</h1>
 
 		{#if isFastTrack}
