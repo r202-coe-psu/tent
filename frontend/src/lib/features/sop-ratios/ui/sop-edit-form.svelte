@@ -7,67 +7,46 @@
 		type SopRatioKey,
 		RATIO_LABELS,
 		useCreateMasterVersion,
-		useCreateOverrideVersion,
-		useCreateInitialOverride
+		useCreateOverrideVersion
 	} from '$lib/features/sop-ratios';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import X from '@lucide/svelte/icons/x';
 	import Save from '@lucide/svelte/icons/save';
 
 	interface Props {
-		mode?: 'edit' | 'create_override';
-		profile?: SopMaster | SopOverride;
-		baseMasterProfile?: SopMaster;
-		shelterCode?: string;
+		profile: SopMaster | SopOverride;
 		onClose: () => void;
 	}
 
-	const { mode = 'edit', profile, baseMasterProfile, shelterCode = '', onClose }: Props = $props();
+	const { profile, onClose }: Props = $props();
 
-	const isMaster = $derived(profile ? isSopMaster(profile) : false);
+	const isMaster = $derived(isSopMaster(profile));
 
 	const masterMutation = useCreateMasterVersion();
 	const overrideMutation = useCreateOverrideVersion(() =>
-		isMaster ? '' : (profile as SopOverride)?.shelter_code
+		isMaster ? '' : (profile as SopOverride).shelter_code
 	);
-	const initialOverrideMutation = useCreateInitialOverride(() => shelterCode);
 
 	// Local editable copy of ratios
 	// svelte-ignore state_referenced_locally
-	const initialRatios: Partial<Record<SopRatioKey, number>> =
-		mode === 'edit' && profile ? profile.ratios : (baseMasterProfile?.ratios ?? {});
+	const initialRatios: Partial<Record<SopRatioKey, number>> = profile.ratios;
 	let ratios = $state<Partial<Record<SopRatioKey, number>>>({ ...initialRatios });
-	// svelte-ignore state_referenced_locally
-	let reason = $state(mode === 'create_override' ? 'สร้างค่าปรับแต่งเฉพาะศูนย์ครั้งแรก' : '');
+	let reason = $state('');
 
-	const isSaving = $derived(
-		masterMutation.isPending || overrideMutation.isPending || initialOverrideMutation.isPending
-	);
+	const isSaving = $derived(masterMutation.isPending || overrideMutation.isPending);
 
-	const hasAnyChange = $derived.by(() => {
-		if (mode === 'create_override') return true;
-		if (!profile) return false;
-		return SOP_RATIO_KEYS.some((key) => {
+	const hasAnyChange = $derived(
+		SOP_RATIO_KEYS.some((key) => {
 			const currentVal = ratios[key];
 			const initialVal = initialRatios[key];
 			return currentVal !== undefined && Number(currentVal) !== Number(initialVal);
-		});
-	});
+		})
+	);
 
 	async function handleSave() {
 		if (!reason.trim()) return;
 
-		if (mode === 'create_override' && baseMasterProfile && shelterCode) {
-			await initialOverrideMutation.mutateAsync({
-				name: baseMasterProfile.name,
-				ratios: ratios as Record<string, number>,
-				ctx: {
-					shelterCode,
-					createdBy: authStore.user?.name ?? 'unknown',
-					base_profile_id: baseMasterProfile._id
-				}
-			});
-		} else if (mode === 'edit' && profile) {
+		try {
 			const changes: Partial<Record<SopRatioKey, number>> = {};
 			for (const key of SOP_RATIO_KEYS) {
 				const currentVal = ratios[key];
@@ -96,8 +75,10 @@
 					}
 				});
 			}
+			onClose();
+		} catch (err) {
+			console.error('Failed to save bulk SOP parameters:', err);
 		}
-		onClose();
 	}
 </script>
 
@@ -117,22 +98,14 @@
 		<div class="flex items-start justify-between border-b border-black/[0.06] px-6 py-5">
 			<div>
 				<p class="text-[11px] font-black tracking-wider text-[#013365] uppercase">
-					{#if mode === 'create_override'}
-						สร้างค่าปรับแต่งเฉพาะศูนย์
-					{:else}
-						แก้ไข {isMaster ? 'Master' : 'Override'} SOP Profile
-					{/if}
+					แก้ไข {isMaster ? 'Master' : 'Override'} SOP Profile
 				</p>
 				<h3 class="mt-0.5 text-xl font-bold text-slate-900">
-					{mode === 'create_override' ? baseMasterProfile?.name : profile?.name}
+					{profile.name}
 				</h3>
-				{#if mode === 'edit' && profile}
-					<p class="mt-0.5 font-mono text-[12px] text-slate-400">
-						v{profile.version} → v{profile.version + 1}
-					</p>
-				{:else}
-					<p class="mt-0.5 font-mono text-[12px] text-slate-400">New Version 1</p>
-				{/if}
+				<p class="mt-0.5 font-mono text-[12px] text-slate-400">
+					v{profile.version} → v{profile.version + 1}
+				</p>
 			</div>
 			<button
 				onclick={onClose}
@@ -180,7 +153,7 @@
 					rows={2}
 					class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[14px] text-slate-700 transition-colors outline-none placeholder:text-slate-400 focus:border-[#013365] focus:ring-2 focus:ring-[#013365]/15"
 				></textarea>
-				{#if !hasAnyChange && mode === 'edit'}
+				{#if !hasAnyChange}
 					<p class="mt-1 text-[12px] font-medium text-amber-600">
 						⚠️ ยังไม่มีข้อมูลพารามิเตอร์ใดเปลี่ยนแปลง
 					</p>
