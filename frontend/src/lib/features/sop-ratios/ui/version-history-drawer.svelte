@@ -64,6 +64,8 @@
 			<h3 class="mt-0.5 text-lg font-bold text-slate-900">{profile.name}</h3>
 		</div>
 		<button
+			type="button"
+			aria-label="Close"
 			onclick={onClose}
 			class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
 		>

@@ -20,7 +20,7 @@ async function fetchAuditsByTargetIds(repo: Repository, ids: string[]): Promise<
 		const chunk = ids.slice(i, i + chunkSize);
 		const result = await repo.find<AuditEntry>({
 			selector: { type: 'audit', target_id: { $in: chunk } },
-			limit: chunk.length * 2
+			limit: 1000
 		});
 		results.push(...result.filter(isAuditEntry));
 	}

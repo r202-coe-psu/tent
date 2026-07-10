@@ -41,7 +41,10 @@ async function fetchMasterVersions(name: string): Promise<SopMasterWithReason[]>
 	const audits = await repo.listAuditsByTargetIds(ids);
 	const reasonMap = new Map<string, string>();
 	for (const a of audits) {
-		reasonMap.set(a.target_id, a.reason);
+		const ctx = a.context as Record<string, unknown> | undefined;
+		// Only stitch audits that represent version creation
+		const isVersionChange = a.action === 'created' || typeof ctx?.previous_id === 'string';
+		if (isVersionChange) reasonMap.set(a.target_id, a.reason);
 	}
 
 	return sorted.map((v) => ({
@@ -64,7 +67,10 @@ async function fetchOverrideVersions(
 	const audits = await repo.listAuditsByTargetIds(ids);
 	const reasonMap = new Map<string, string>();
 	for (const a of audits) {
-		reasonMap.set(a.target_id, a.reason);
+		const ctx = a.context as Record<string, unknown> | undefined;
+		// Only stitch audits that represent version creation
+		const isVersionChange = a.action === 'created' || typeof ctx?.previous_id === 'string';
+		if (isVersionChange) reasonMap.set(a.target_id, a.reason);
 	}
 
 	return sorted.map((v) => ({
