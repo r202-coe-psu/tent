@@ -10,8 +10,9 @@
 		useCreateOverrideVersion
 	} from '$lib/features/sop-ratios';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import X from '@lucide/svelte/icons/x';
 	import Save from '@lucide/svelte/icons/save';
+	import { toast } from 'svelte-sonner';
+	import * as Dialog from '$lib/components/ui/dialog';
 
 	interface Props {
 		profile: SopMaster | SopOverride;
@@ -77,45 +78,37 @@
 			onClose();
 		} catch (err) {
 			console.error('Failed to save bulk SOP parameters:', err);
+			toast.error('ไม่สามารถบันทึกพารามิเตอร์ได้ — กรุณาลองใหม่อีกครั้ง');
 		}
 	}
 </script>
 
-<!-- Backdrop -->
-<div
-	class="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
-	role="presentation"
-	onclick={onClose}
-></div>
-
-<!-- Modal -->
-<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-	<div
-		class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+<Dialog.Root
+	open={true}
+	onOpenChange={(open) => {
+		if (!open) onClose();
+	}}
+>
+	<Dialog.Content
+		class="flex max-h-[90vh] w-full max-w-lg flex-col gap-0 overflow-hidden rounded-3xl border-none p-0"
 	>
 		<!-- Header -->
-		<div class="flex items-start justify-between border-b border-black/[0.06] px-6 py-5">
+		<Dialog.Header class="border-b border-black/[0.06] px-6 py-5">
 			<div>
 				<p class="text-[11px] font-black tracking-wider text-brand uppercase">
 					แก้ไข {isMaster ? 'Master' : 'Override'} SOP Profile
 				</p>
-				<h3 class="mt-0.5 text-xl font-bold text-slate-900">
+				<Dialog.Title class="mt-0.5 text-xl font-bold text-slate-900">
 					{profile.name}
-				</h3>
-				<p class="mt-0.5 font-mono text-[12px] text-slate-400">
+				</Dialog.Title>
+				<Dialog.Description class="mt-0.5 font-mono text-[12px] text-slate-400">
 					v{profile.version} → v{profile.version + 1}
-				</p>
+				</Dialog.Description>
 			</div>
-			<button
-				onclick={onClose}
-				class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-			>
-				<X size={18} />
-			</button>
-		</div>
+		</Dialog.Header>
 
 		<!-- Form Body -->
-		<div class="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+		<div class="flex-1 space-y-4 overflow-y-auto px-6 pt-5 pb-10">
 			{#each SOP_RATIO_KEYS as key (key)}
 				{@const meta = RATIO_LABELS[key]}
 				<div class="rounded-2xl border border-black/[0.06] bg-slate-50/60 p-4">
@@ -130,7 +123,9 @@
 							{meta?.unit}
 						</span>
 					</div>
+					<label for={`ratio-input-${key}`} class="sr-only">{meta?.label ?? key}</label>
 					<input
+						id={`ratio-input-${key}`}
 						type="number"
 						step="0.001"
 						min="0.001"
@@ -160,8 +155,9 @@
 			</div>
 		</div>
 
-		<!-- Footer -->
-		<div class="flex items-center justify-end gap-3 border-t border-black/[0.06] px-6 py-4">
+		<Dialog.Footer
+			class="mx-0 mb-0 flex items-center justify-end gap-3 border-t border-black/[0.06] px-6 py-4"
+		>
 			<button
 				onclick={onClose}
 				class="rounded-xl px-4 py-2 text-[14px] font-bold text-slate-600 transition-colors hover:bg-slate-100"
@@ -176,6 +172,6 @@
 				<Save size={15} />
 				{isSaving ? 'กำลังบันทึก...' : 'บันทึกเวอร์ชันใหม่'}
 			</button>
-		</div>
-	</div>
-</div>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

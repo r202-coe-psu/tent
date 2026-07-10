@@ -105,13 +105,13 @@ export const sopOverrideSchema = z.object({
 	schema_v: z.literal(SOP_OVERRIDE_SCHEMA_VERSION),
 	shelter_code: shelterCodeSchema,
 	base_profile_id: z.string().min(1),
+	created_at: z.string().datetime(),
+	updated_at: z.string().datetime(),
+	created_by: z.string().min(1),
 	name: z.string().min(1),
 	ratios: ratiosSchema,
 	version: z.number().int().positive(),
-	active: z.boolean(),
-	created_at: z.string().datetime(),
-	updated_at: z.string().datetime(),
-	created_by: z.string().min(1)
+	active: z.boolean()
 });
 
 export type SopOverride = z.infer<typeof sopOverrideSchema>;

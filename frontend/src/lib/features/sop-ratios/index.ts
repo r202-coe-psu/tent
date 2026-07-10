@@ -17,8 +17,6 @@ export {
 } from './domain/sop-ratio';
 export { RATIO_LABELS } from './domain/sop-ratio.labels';
 
-export { validRatios } from './domain/sop-ratio.fixture';
-
 // Trend series shapes (shared by chart + resource-calc snapshot)
 export type { TrendPoint, TrendSeries } from './domain/trend';
 

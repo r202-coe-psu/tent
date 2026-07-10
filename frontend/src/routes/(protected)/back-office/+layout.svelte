@@ -2,6 +2,9 @@
 	import BackofficeNavbar from '$lib/components/backoffice-navbar.svelte';
 	import type { LayoutProps } from './$types';
 	import { backofficeNavbarGroups, isGroup } from '$lib/components/backoffice-navbar/static';
+	import { onDestroy } from 'svelte';
+	import { useQueryClient } from '@tanstack/svelte-query';
+	import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 	import { page } from '$app/state';
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -80,6 +83,14 @@
 		if (current && shelters.some((s) => s.code === current)) return;
 		const ownShelter = shelters.find((s) => s.code === userShelterCode);
 		shelterStore.selectedShelterCode = ownShelter?.code ?? shelters[0].code;
+	});
+
+	// SOP Ratio live-sync initialization
+	const queryClient = useQueryClient();
+	const sopSyncHandle = startSopRatioLiveQuery(queryClient);
+
+	onDestroy(() => {
+		sopSyncHandle.stop();
 	});
 </script>
 
