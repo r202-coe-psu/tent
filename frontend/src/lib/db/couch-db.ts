@@ -65,8 +65,7 @@ async function couchDbFetchRaw<T>(
 	});
 
 	const data = (await res.json().catch(() => null)) as
-		| (T & { error?: string; reason?: string })
-		| null;
+		(T & { error?: string; reason?: string }) | null;
 
 	return { data, status: res.status, ok: res.ok };
 }

@@ -150,8 +150,7 @@ describe('DailyCalcRemoteRepository.runOnDemand', () => {
 		expect(order).toEqual(['audit', 'daily_calc']);
 
 		const audit = [...store.values()].find((d) => d.type === 'audit') as
-			| { action: string; target_id: string; context: { overwritten_rev: string } }
-			| undefined;
+			{ action: string; target_id: string; context: { overwritten_rev: string } } | undefined;
 		expect(audit?.action).toBe('retro_edit');
 		expect(audit?.target_id).toBe('daily_calc:2026-07-08');
 		expect(audit?.context.overwritten_rev).toBe(first._rev);

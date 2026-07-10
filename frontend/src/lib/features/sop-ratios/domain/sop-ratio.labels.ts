@@ -103,5 +103,10 @@ export const RATIO_LABELS: Record<
 		label: 'อาสาสมัคร',
 		unit: 'คน/อาสา 1 คน',
 		description: 'อัตราส่วนผู้พักพิงต่ออาสาสมัคร 1 คน'
+	},
+	rice_g_per_person_meal: {
+		label: 'ข้าวสาร',
+		unit: 'กรัม/คน/มื้อ',
+		description: 'ปริมาณข้าวสารต่อคนต่อมื้อ'
 	}
 };
