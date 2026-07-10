@@ -1,3 +1,4 @@
+// Public barrel for the sop-ratios feature. Domain-only (types, repository contracts, and TanStack query hooks).
 export type { SopMaster, SopOverride } from './domain/sop-ratio';
 
 export {
@@ -10,24 +11,22 @@ export {
 	SOP_RATIO_KIND,
 	sopMasterSchema,
 	sopOverrideSchema,
+	SOP_MASTER_SCHEMA_VERSION,
 	type CreateNewVersionResult,
 	type SopRatioKey
 } from './domain/sop-ratio';
+export { RATIO_LABELS } from './domain/sop-ratio.labels';
 
 // Trend series shapes (shared by chart + resource-calc snapshot)
 export type { TrendPoint, TrendSeries } from './domain/trend';
 
 // Resource-shortage trend chart (T-32.4)
-export { default as TrendChart } from './ui/trend-chart.svelte';
 export {
 	MAX_TREND_ROWS,
 	capSeries,
 	downsamplePoints,
 	wasAggregated
 } from './ui/trend-chart.aggregate';
-
-// Resource calculation dashboard (T-32 / FR-46)
-export { default as ResourceDashboard } from './ui/resource-dashboard.svelte';
 export { useResourceCalc, resourceCalcKeys } from './application/resource-calc';
 export {
 	computeGap,
@@ -59,6 +58,7 @@ export {
 	useActiveSopProfile,
 	useActiveSopRatio,
 	useSopProfiles,
+	useActiveSopOverride,
 	getActiveSopProfile,
 	sopVersionKeys
 } from './application/queries';
@@ -66,15 +66,22 @@ export {
 // Version history
 export {
 	useOverrideVersionHistory,
-	useMasterVersionHistory
+	useMasterVersionHistory,
+	type SopMasterWithReason,
+	type SopOverrideWithReason
 } from './application/use-version-history';
 
 // Version creation mutations
 export {
 	useCreateMasterVersion,
 	useCreateOverrideVersion,
+	useCreateInitialOverride,
+	useSetMasterActive,
+	useSetOverrideActive,
+	useSetOverrideInactive,
 	type CreateMasterVersionInput,
-	type CreateOverrideVersionInput
+	type CreateOverrideVersionInput,
+	type CreateInitialOverrideInput
 } from './application/use-create-version';
 
 // Live-sync wiring (call once per layout, pass QueryClient)
