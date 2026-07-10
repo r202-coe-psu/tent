@@ -14,6 +14,17 @@ import type { DailyCalcDoc } from '../domain/calc.schema';
  *
  * `_id` is DETERMINISTIC — `daily_calc:{date}` (date = calendar day `YYYY-MM-DD`)
  * — so re-running a day's calc is IDEMPOTENT: exactly one doc per shelter per day.
+ *
+ * `updated_at` (inherited from `BaseDoc`) — public semantic contract, not incidental DB
+ * bookkeeping: timestamp of the most recent successful calculation for this date, bumped on
+ * every `runOnDemand` call including overwrites of an existing record. Consumers (e.g. T-31.7's
+ * `CalcStatusBadge`) MUST treat this as the canonical "last recalculated at" value. `as_of`
+ * (from `DailyCalcDoc`) is a DIFFERENT concept — the time the calc *inputs* were snapshotted —
+ * do not conflate the two. `created_by` (also inherited) is NOT a reliable "who last triggered
+ * recalc": on overwrite it freezes at the original creator (see `runOnDemand`'s doc below);
+ * accurate per-run authorship only lives in `audit:retro_edit` entries, not exposed here.
+ * Changing this semantic later needs a CR per `docs/change-management.md` (this project's
+ * governance mechanism — team review process, not tooling/CI enforced).
  */
 export interface DailyCalcRecord extends BaseDoc, DailyCalcDoc {
 	type: 'daily_calc';
