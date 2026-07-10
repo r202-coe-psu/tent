@@ -28,9 +28,8 @@
 	);
 
 	// Local editable copy of ratios
-	// svelte-ignore state_referenced_locally
-	const initialRatios: Partial<Record<SopRatioKey, number>> = profile.ratios;
-	let ratios = $state<Partial<Record<SopRatioKey, number>>>({ ...initialRatios });
+	const getInitial = () => ({ ...profile.ratios });
+	let ratios = $state<Partial<Record<SopRatioKey, number>>>(getInitial());
 	let reason = $state('');
 
 	const isSaving = $derived(masterMutation.isPending || overrideMutation.isPending);
@@ -38,7 +37,7 @@
 	const hasAnyChange = $derived(
 		SOP_RATIO_KEYS.some((key) => {
 			const currentVal = ratios[key];
-			const initialVal = initialRatios[key];
+			const initialVal = profile.ratios[key];
 			return currentVal !== undefined && Number(currentVal) !== Number(initialVal);
 		})
 	);
@@ -50,7 +49,7 @@
 			const changes: Partial<Record<SopRatioKey, number>> = {};
 			for (const key of SOP_RATIO_KEYS) {
 				const currentVal = ratios[key];
-				const initialVal = initialRatios[key];
+				const initialVal = profile.ratios[key];
 				if (currentVal !== undefined && Number(currentVal) !== Number(initialVal)) {
 					changes[key] = Number(currentVal);
 				}
@@ -97,7 +96,7 @@
 		<!-- Header -->
 		<div class="flex items-start justify-between border-b border-black/[0.06] px-6 py-5">
 			<div>
-				<p class="text-[11px] font-black tracking-wider text-[#013365] uppercase">
+				<p class="text-[11px] font-black tracking-wider text-brand uppercase">
 					แก้ไข {isMaster ? 'Master' : 'Override'} SOP Profile
 				</p>
 				<h3 class="mt-0.5 text-xl font-bold text-slate-900">
@@ -136,7 +135,7 @@
 						step="0.001"
 						min="0.001"
 						bind:value={ratios[key]}
-						class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 font-mono text-[15px] font-semibold text-[#013365] transition-colors outline-none focus:border-[#013365] focus:ring-2 focus:ring-[#013365]/15"
+						class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 font-mono text-[15px] font-semibold text-brand transition-colors outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
 					/>
 				</div>
 			{/each}
@@ -151,7 +150,7 @@
 					bind:value={reason}
 					placeholder="เช่น ปรับตามมติ EOC ประชุมวันที่ 4 ก.ค. 2568"
 					rows={2}
-					class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[14px] text-slate-700 transition-colors outline-none placeholder:text-slate-400 focus:border-[#013365] focus:ring-2 focus:ring-[#013365]/15"
+					class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[14px] text-slate-700 transition-colors outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/15"
 				></textarea>
 				{#if !hasAnyChange}
 					<p class="mt-1 text-[12px] font-medium text-amber-600">
@@ -172,7 +171,7 @@
 			<button
 				onclick={handleSave}
 				disabled={isSaving || !reason.trim() || !hasAnyChange}
-				class="inline-flex items-center gap-2 rounded-xl bg-[#013365] px-5 py-2 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-[#002244] disabled:cursor-not-allowed disabled:opacity-50"
+				class="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				<Save size={15} />
 				{isSaving ? 'กำลังบันทึก...' : 'บันทึกเวอร์ชันใหม่'}

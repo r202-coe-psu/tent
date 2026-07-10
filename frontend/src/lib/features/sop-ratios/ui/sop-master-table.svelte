@@ -30,7 +30,7 @@
 			>
 				<div class="flex items-center gap-3">
 					<span
-						class="inline-flex items-center gap-1.5 rounded-full bg-[#013365] px-2.5 py-1 text-[11px] font-bold text-white shadow-sm"
+						class="inline-flex items-center gap-1.5 rounded-full bg-brand px-2.5 py-1 text-[11px] font-bold text-white shadow-sm"
 					>
 						<ShieldAlert size={12} />
 						ใช้งานอยู่
@@ -58,7 +58,7 @@
 									<span class="text-[10px] opacity-70">({RATIO_LABELS[key].unit})</span>
 								{/if}
 							</p>
-							<p class="mt-1 font-mono text-lg font-bold text-[#013365]">
+							<p class="mt-1 font-mono text-lg font-bold text-brand">
 								{profile.ratios[key]}
 							</p>
 						</div>
@@ -80,7 +80,7 @@
 				{#if onEdit}
 					<button
 						onclick={() => onEdit(profile)}
-						class="inline-flex items-center gap-1.5 rounded-lg bg-[#013365] px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-[#002244]"
+						class="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-brand-hover"
 					>
 						<Pencil size={13} />
 						แก้ไข

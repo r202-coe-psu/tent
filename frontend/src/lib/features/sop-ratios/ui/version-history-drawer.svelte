@@ -58,7 +58,7 @@
 	<!-- Header -->
 	<div class="flex items-start justify-between border-b border-black/[0.06] px-6 py-5">
 		<div>
-			<p class="text-[11px] font-black tracking-wider text-[#013365] uppercase">
+			<p class="text-[11px] font-black tracking-wider text-brand uppercase">
 				ประวัติการแก้ไข {isMaster ? 'Master' : 'Override'}
 			</p>
 			<h3 class="mt-0.5 text-lg font-bold text-slate-900">{profile.name}</h3>
@@ -91,7 +91,7 @@
 			<div class="flex items-center justify-center py-16 text-slate-400">
 				<div class="flex flex-col items-center gap-3">
 					<div
-						class="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-[#013365]"
+						class="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-brand"
 					></div>
 					<p class="text-sm font-medium">กำลังโหลดประวัติ...</p>
 				</div>
@@ -107,7 +107,7 @@
 						<!-- Timeline dot -->
 						<span
 							class="absolute -left-[29px] flex h-4 w-4 items-center justify-center rounded-full border-2 {version.active
-								? 'border-[#013365] bg-[#013365]'
+								? 'border-brand bg-brand'
 								: 'border-slate-300 bg-white'}"
 						>
 							{#if version.active}
@@ -119,7 +119,7 @@
 							<div class="mb-2 flex items-center justify-between">
 								<span
 									class="rounded-full px-2.5 py-0.5 font-mono text-[12px] font-bold {version.active
-										? 'bg-[#013365]/10 text-[#013365]'
+										? 'bg-brand/10 text-brand'
 										: 'bg-slate-100 text-slate-500'}"
 								>
 									v{version.version}
@@ -142,7 +142,7 @@
 										<p
 											class="font-mono text-[13px] font-bold {isDifferent
 												? 'text-white'
-												: 'text-[#013365]'}"
+												: 'text-brand'}"
 										>
 											{v}
 										</p>

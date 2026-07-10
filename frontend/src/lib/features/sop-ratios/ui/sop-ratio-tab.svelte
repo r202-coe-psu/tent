@@ -121,7 +121,7 @@
 							size="sm"
 							onclick={onEditAll}
 							{disabled}
-							class="h-8 bg-[#013365] font-semibold text-white shadow-sm hover:bg-[#002244]"
+							class="h-8 bg-brand font-semibold text-white shadow-sm hover:bg-brand-hover"
 						>
 							✏ แก้ไขพารามิเตอร์
 						</Button>
