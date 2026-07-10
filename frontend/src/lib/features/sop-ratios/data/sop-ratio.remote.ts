@@ -12,6 +12,21 @@ import {
 } from '../domain/sop-ratio';
 import type { SopMasterRepository, SopOverrideRepository } from './sop-ratio.repository';
 
+async function fetchAuditsByTargetIds(repo: Repository, ids: string[]): Promise<AuditEntry[]> {
+	if (ids.length === 0) return [];
+	const chunkSize = 50;
+	const results: AuditEntry[] = [];
+	for (let i = 0; i < ids.length; i += chunkSize) {
+		const chunk = ids.slice(i, i + chunkSize);
+		const result = await repo.find<AuditEntry>({
+			selector: { type: 'audit', target_id: { $in: chunk } },
+			limit: chunk.length * 2
+		});
+		results.push(...result.filter(isAuditEntry));
+	}
+	return results;
+}
+
 export class SopMasterRemoteRepository implements SopMasterRepository {
 	private readonly dbName: string;
 	private readonly repo: Repository;
@@ -27,8 +42,11 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 	}
 
 	async listVersions(name: string): Promise<SopMaster[]> {
-		const all = await this.repo.allByType('sop_profile', isSopMaster);
-		return all.filter((p) => p.name === name);
+		const results = await this.repo.find<SopMaster>({
+			selector: { type: 'sop_profile', name: name },
+			limit: 1000
+		});
+		return results.filter(isSopMaster);
 	}
 
 	async getById(id: string): Promise<SopMaster | null> {
@@ -36,18 +54,7 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 	}
 
 	async listAuditsByTargetIds(ids: string[]): Promise<AuditEntry[]> {
-		if (ids.length === 0) return [];
-		const chunkSize = 50;
-		const results: AuditEntry[] = [];
-		for (let i = 0; i < ids.length; i += chunkSize) {
-			const chunk = ids.slice(i, i + chunkSize);
-			const result = await this.repo.find<AuditEntry>({
-				selector: { type: 'audit', target_id: { $in: chunk } },
-				limit: chunk.length * 2
-			});
-			results.push(...result.filter(isAuditEntry));
-		}
-		return results;
+		return fetchAuditsByTargetIds(this.repo, ids);
 	}
 
 	async createVersion(
@@ -129,8 +136,11 @@ export class SopOverrideRemoteRepository implements SopOverrideRepository {
 	}
 
 	async listVersions(name: string): Promise<SopOverride[]> {
-		const all = await this.repo.allByType('sop_override', isSopOverride);
-		return all.filter((p) => p.name === name);
+		const results = await this.repo.find<SopOverride>({
+			selector: { type: 'sop_override', name: name },
+			limit: 1000
+		});
+		return results.filter(isSopOverride);
 	}
 
 	async getById(id: string): Promise<SopOverride | null> {
@@ -138,18 +148,7 @@ export class SopOverrideRemoteRepository implements SopOverrideRepository {
 	}
 
 	async listAuditsByTargetIds(ids: string[]): Promise<AuditEntry[]> {
-		if (ids.length === 0) return [];
-		const chunkSize = 50;
-		const results: AuditEntry[] = [];
-		for (let i = 0; i < ids.length; i += chunkSize) {
-			const chunk = ids.slice(i, i + chunkSize);
-			const result = await this.repo.find<AuditEntry>({
-				selector: { type: 'audit', target_id: { $in: chunk } },
-				limit: chunk.length * 2
-			});
-			results.push(...result.filter(isAuditEntry));
-		}
-		return results;
+		return fetchAuditsByTargetIds(this.repo, ids);
 	}
 
 	async createVersion(

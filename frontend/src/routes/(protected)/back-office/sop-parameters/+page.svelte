@@ -56,7 +56,7 @@
 		isSA || (isShelterManager(roles) && shelterCodeFromRoles(roles) === shelterCode)
 	);
 
-	// Automatically revert context to master if no shelter is selected
+	// Revert to Master context automatically if no shelter is selected
 	$effect(() => {
 		if (!shelterCode && activeContext === 'override') {
 			activeContext = 'master';

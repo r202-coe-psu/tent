@@ -2,6 +2,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Loader from '@lucide/svelte/icons/loader';
+	import { toast } from 'svelte-sonner';
 
 	interface Props {
 		open: boolean;
@@ -18,6 +19,7 @@
 			open = false;
 		} catch (err) {
 			console.error('Failed to confirm deactivation:', err);
+			toast.error('เกิดข้อผิดพลาด — กรุณาลองอีกครั้ง');
 		}
 	}
 </script>

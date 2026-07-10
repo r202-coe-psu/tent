@@ -124,8 +124,8 @@
 									variant="outline"
 									size="sm"
 									class="border-blue-200 text-blue-700 hover:bg-blue-50"
-									onclick={() =>
-										alert('ฟังก์ชันเกณฑ์การแจ้งเตือน (Alert Threshold) กำลังอยู่ระหว่างการพัฒนา')}
+									disabled
+									title="ฟังก์ชันนี้กำลังอยู่ระหว่างการพัฒนา (Team C)"
 									aria-label="จัดการ {item.label}"
 								>
 									<svg

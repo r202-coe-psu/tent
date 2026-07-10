@@ -1,3 +1,6 @@
+// UI-component barrel for the sop-ratios feature.
+// Import Svelte components from this file; domain types/hooks come from ./index.ts
+
 export { default as ResourceDashboard } from './ui/resource-dashboard.svelte';
 export { default as SopTypeList } from './ui/sop-type-list.svelte';
 export type { SopTabType } from './ui/sop-type-list.svelte';
