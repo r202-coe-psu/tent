@@ -68,9 +68,9 @@
 				<Plus class="h-3.5 w-3.5" />
 				ลงทะเบียนล่วงหน้า
 			</Button>
-			<Button size="sm" onclick={() => goto(resolve('/back-office/households/new'))}>
+			<Button size="sm" onclick={() => goto(resolve('/back-office/households/new?path=c'))}>
 				<Plus class="h-3.5 w-3.5" />
-				เพิ่มครัวเรือน
+				จัดกลุ่มหลังเข้าพัก (Path C)
 			</Button>
 		</div>
 	</div>
@@ -115,7 +115,6 @@
 						<Table.Head class="font-semibold text-foreground">สมาชิก</Table.Head>
 						<Table.Head class="font-semibold text-foreground">เขต / ชุมชน</Table.Head>
 						<Table.Head class="font-semibold text-foreground">สัตว์เลี้ยง</Table.Head>
-						<Table.Head class="text-center font-semibold text-foreground">จัดการ</Table.Head>
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
@@ -181,15 +180,6 @@
 										<span class="text-[11px] text-muted-foreground">ไม่มี</span>
 									{/if}
 								</div>
-							</Table.Cell>
-							<Table.Cell class="text-center">
-								<Button
-									variant="outline"
-									size="sm"
-									onclick={() => goto(resolve(`/back-office/households/edit/${h._id}`))}
-								>
-									แก้ไขข้อมูล
-								</Button>
 							</Table.Cell>
 						</Table.Row>
 					{/each}

@@ -198,6 +198,17 @@ export const useUpdateHousehold = () => {
 	}));
 };
 
+export const useCancelPreRegistration = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ householdId, ctx }: { householdId: string; ctx: AuthorContext }) =>
+			peopleRepository().cancelPreRegistration(householdId, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		}
+	}));
+};
+
 export const useCreateScreening = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({

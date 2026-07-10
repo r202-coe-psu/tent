@@ -16,7 +16,8 @@
 		temporary_leave: 'ออกชั่วคราว',
 		transferred: 'ย้ายไปแล้ว',
 		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
-		deceased: 'เสียชีวิต'
+		deceased: 'เสียชีวิต',
+		cancelled: 'ยกเลิกการจอง'
 	};
 
 	let { onNext }: { onNext: () => void } = $props();

@@ -12,6 +12,7 @@
 		useCreateHousehold,
 		useUpdateHousehold,
 		useUpdateEvacuee,
+		peopleRepository,
 		type HouseholdInput,
 		type Evacuee
 	} from '../index';
@@ -27,6 +28,7 @@
 	} = $props();
 
 	const isEditMode = $derived(isEdit);
+	const isPathC = $derived($page.url.searchParams.get('path') === 'c');
 
 	// Fetch data
 	const evacueesQuery = useEvacuees();
@@ -68,6 +70,33 @@
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 
+			// Validate that no selected member belongs to another active household
+			const allEvacuees = evacueesQuery.data ?? [];
+			const households = householdsQuery.data ?? [];
+			for (const evacId of selectedMemberIds) {
+				const evac = allEvacuees.find((e) => e._id === evacId);
+				if (
+					evac &&
+					evac.household_id &&
+					(!isEditMode || evac.household_id !== editingHousehold?._id)
+				) {
+					const hh = households.find((h) => h._id === evac.household_id);
+					const hhStatus = hh?.status ?? 'checked_in';
+					if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
+						const otherMembers = allEvacuees.filter(
+							(m) => m.household_id === evac.household_id && m._id !== evac._id
+						);
+						if (otherMembers.length > 0) {
+							toast.error(
+								`ไม่สามารถบันทึกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+							);
+							isSubmitting = false;
+							return;
+						}
+					}
+				}
+			}
+
 			let householdId = '';
 			if (isEditMode && editingHousehold) {
 				const updated = {
@@ -103,14 +132,15 @@
 				toast.success(`แก้ไขข้อมูลครัวเรือน "${updated.label}" สำเร็จ`);
 			} else {
 				// Determine status based on members stay statuses (Path B / Path C)
-				const allEvacuees = evacueesQuery.data ?? [];
 				const selectedMembers = allEvacuees.filter((ev) => selectedMemberIds.includes(ev._id));
 				const hasCheckedInMember = selectedMembers.some(
 					(ev) => ev.current_stay?.status === 'active'
 				);
-				const initialStatus = hasCheckedInMember
+				const initialStatus = isPathC
 					? ('checked_in' as const)
-					: ('pre_registered' as const);
+					: hasCheckedInMember
+						? ('checked_in' as const)
+						: ('pre_registered' as const);
 
 				const inputWithStatus = {
 					...input,
@@ -123,7 +153,6 @@
 			}
 
 			// Sync membership
-			const allEvacuees = evacueesQuery.data ?? [];
 			const currentMembers = allEvacuees.filter((ev) => ev.household_id === householdId);
 			const currentMemberIds = currentMembers.map((ev) => ev._id);
 
@@ -174,6 +203,25 @@
 				}
 			}
 
+			// Clean up old households that have become empty
+			for (const evacId of toAdd) {
+				const evac = allEvacuees.find((ev) => ev._id === evacId);
+				if (evac && evac.household_id) {
+					const remaining = allEvacuees.filter(
+						(e) => e.household_id === evac.household_id && !selectedMemberIds.includes(e._id)
+					);
+					if (remaining.length === 0) {
+						const freshHh = await peopleRepository().getHousehold(evac.household_id);
+						if (freshHh && freshHh.status !== 'cancelled' && freshHh.status !== 'checked_out') {
+							await updateHouseholdMutation.mutateAsync({
+								...freshHh,
+								status: 'cancelled'
+							});
+						}
+					}
+				}
+			}
+
 			// If the head evacuee was already a member (not in toAdd), update their contact phone if changed
 			if (input.head_evacuee_id && !toAdd.includes(input.head_evacuee_id)) {
 				const headEvac = allEvacuees.find((ev) => ev._id === input.head_evacuee_id);
@@ -211,7 +259,13 @@
 </script>
 
 <svelte:head>
-	<title>{isEditMode ? 'แก้ไขข้อมูลครัวเรือน' : 'เพิ่มครัวเรือนใหม่'} · SmartShelter</title>
+	<title
+		>{isEditMode
+			? 'แก้ไขข้อมูลครัวเรือน'
+			: isPathC
+				? 'จัดกลุ่มครัวเรือนหลังเข้าพัก (Path C)'
+				: 'เพิ่มครัวเรือนใหม่'} · SmartShelter</title
+	>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 md:px-6">
@@ -227,7 +281,9 @@
 		<h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
 			{isEditMode
 				? 'แก้ไขข้อมูลครัวเรือน (Edit Household)'
-				: 'เพิ่มครัวเรือนใหม่ (Create Household)'}
+				: isPathC
+					? 'จัดกลุ่มครัวเรือนหลังเข้าพัก (Post-arrival grouping - Path C)'
+					: 'เพิ่มครัวเรือนใหม่ (Create Household)'}
 		</h2>
 	</div>
 

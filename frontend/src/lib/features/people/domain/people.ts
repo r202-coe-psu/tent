@@ -52,7 +52,8 @@ export const stayStatusSchema = z.enum([
 	'temporary_leave',
 	'transferred',
 	'checked_out',
-	'deceased'
+	'deceased',
+	'cancelled'
 ]);
 export type StayStatus = z.infer<typeof stayStatusSchema>;
 

@@ -34,6 +34,7 @@
 	import EvacueeZoneModal from './evacuee-zone-modal.svelte';
 	import EvacueeStatusModal from './evacuee-status-modal.svelte';
 	import EvacueeQrModal from './evacuee-qr-modal.svelte';
+	import HouseholdQrModal from './household-qr-modal.svelte';
 	import EvacueeAddressModal from './evacuee-address-modal.svelte';
 	import EvacueeAssetsModal from './evacuee-assets-modal.svelte';
 
@@ -75,6 +76,12 @@
 			colorClass:
 				'bg-slate-200 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700',
 			dotClass: 'bg-black'
+		},
+		cancelled: {
+			label: 'ยกเลิกการจอง (Cancelled)',
+			colorClass:
+				'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800',
+			dotClass: 'bg-slate-400'
 		}
 	} satisfies Record<StayStatus, { label: string; colorClass: string; dotClass: string }>;
 
@@ -113,6 +120,16 @@
 			? evacueesQuery.data.filter(
 					(e) => e.household_id === evacuee.household_id && e._id !== evacuee._id
 				)
+			: []
+	);
+	const selectedHead = $derived(
+		household && evacueesQuery.data
+			? (evacueesQuery.data.find((e) => e._id === household.head_evacuee_id) ?? null)
+			: null
+	);
+	const allHouseholdMembers = $derived(
+		evacuee && evacuee.household_id && evacueesQuery.data
+			? evacueesQuery.data.filter((e) => e.household_id === evacuee.household_id)
 			: []
 	);
 
@@ -158,6 +175,7 @@
 	let showZoneModal = $state(false);
 	let showStatusModal = $state(false);
 	let showQrModal = $state(false);
+	let showHouseholdQrModal = $state(false);
 	let showAddressModal = $state(false);
 	let showAssetModal = $state(false);
 
@@ -286,6 +304,7 @@
 			onOpenZoneModal={() => (showZoneModal = true)}
 			onOpenStatusModal={() => (showStatusModal = true)}
 			onOpenQrModal={() => (showQrModal = true)}
+			onOpenHouseholdQrModal={() => (showHouseholdQrModal = true)}
 		/>
 
 		<!-- Two-column body -->
@@ -397,6 +416,16 @@
 		/>
 
 		<EvacueeQrModal show={showQrModal} {evacuee} onClose={() => (showQrModal = false)} />
+
+		{#if household}
+			<HouseholdQrModal
+				show={showHouseholdQrModal}
+				{household}
+				{selectedHead}
+				allMembers={allHouseholdMembers}
+				onClose={() => (showHouseholdQrModal = false)}
+			/>
+		{/if}
 
 		{#if showAddressModal && household}
 			<EvacueeAddressModal

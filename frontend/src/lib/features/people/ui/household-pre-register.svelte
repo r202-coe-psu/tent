@@ -62,7 +62,7 @@
 		specialNeeds: new Set<SpecialNeed>(),
 		emergencyName: '',
 		emergencyPhone: '',
-		emergencyRelation: 'ญาติ/ผู้ใกล้ชิด',
+		emergencyRelation: '',
 		medicalConditions: '',
 		medicalAllergies: '',
 		medicalMedications: '',

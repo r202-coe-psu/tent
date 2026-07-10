@@ -104,8 +104,9 @@
 	$effect(() => {
 		if ($formData.head_evacuee_id && allEvacuees.length > 0 && !emergencyContactPhone) {
 			const head = allEvacuees.find((e) => e._id === $formData.head_evacuee_id);
-			if (head?.emergency_contact?.phone) {
-				emergencyContactPhone = head.emergency_contact.phone;
+			const phone = head?.emergency_contact?.phone || head?.phone || '';
+			if (phone) {
+				emergencyContactPhone = phone;
 			}
 		}
 	});
@@ -220,12 +221,17 @@
 				const hh = households.find((h) => h._id === evac.household_id);
 				const hhStatus = hh?.status ?? 'checked_in';
 				if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
-					toast.error(
-						`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`
+					const otherMembers = allEvacuees.filter(
+						(m) => m.household_id === evac.household_id && m._id !== evac._id
 					);
-					headComboValue = prevHeadId ?? '';
-					$formData.head_evacuee_id = prevHeadId;
-					return;
+					if (otherMembers.length > 0) {
+						toast.error(
+							`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+						);
+						headComboValue = prevHeadId ?? '';
+						$formData.head_evacuee_id = prevHeadId;
+						return;
+					}
 				}
 			}
 		}
@@ -268,11 +274,16 @@
 					const hh = households.find((h) => h._id === evac.household_id);
 					const hhStatus = hh?.status ?? 'checked_in';
 					if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
-						toast.error(
-							`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`
+						const otherMembers = allEvacuees.filter(
+							(m) => m.household_id === evac.household_id && m._id !== evac._id
 						);
-						memberSearchValue = '';
-						return;
+						if (otherMembers.length > 0) {
+							toast.error(
+								`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+							);
+							memberSearchValue = '';
+							return;
+						}
 					}
 				}
 				selectedMemberIds = [...selectedMemberIds, memberSearchValue];

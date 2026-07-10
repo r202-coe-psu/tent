@@ -172,7 +172,7 @@
 					// rather than replacing them.
 					vehicles: [...(latestHousehold.vehicles || []), ...vehicles]
 				});
-			} else if (isCreatingNewHousehold || pets.length > 0 || assets || vehicles.length > 0) {
+			} else {
 				const addr = newHouseholdAddress || {};
 				const householdLabel = `ครอบครัว${registeredEvacuee.first_name} ${registeredEvacuee.last_name}`;
 

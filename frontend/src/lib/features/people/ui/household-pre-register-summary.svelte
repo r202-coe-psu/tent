@@ -424,11 +424,11 @@
 
 			<div class="mt-4 flex flex-col gap-2">
 				<Button
-					onclick={() => window.print()}
+					disabled={true}
 					class="flex h-10 w-full items-center justify-center gap-1.5 bg-[#0d2240] text-white hover:bg-[#1a3a5c]"
 				>
 					<Printer class="size-4" />
-					<span>พิมพ์บัตรประจำครอบครัว</span>
+					<span>พิมพ์บัตรประจำครอบครัว (ปิดใช้งานชั่วคราว)</span>
 				</Button>
 			</div>
 		</div>

@@ -13,12 +13,15 @@
 	import {
 		useEvacueesPaginated,
 		useCheckInEvacuee,
+		useCancelPreRegistration,
+		canCheckInEvacuee,
 		zoneLabel,
 		SPECIAL_NEED_CHIPS
 	} from '$lib/features/people';
 	import type { Evacuee, SpecialNeed } from '$lib/features/people';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { isSystemAdmin, isShelterManager } from '$lib/auth/roles';
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
@@ -31,6 +34,13 @@
 	);
 
 	const checkIn = useCheckInEvacuee();
+	const cancelRegistration = useCancelPreRegistration();
+
+	const isSM = $derived(
+		authStore.user
+			? isSystemAdmin(authStore.user.roles) || isShelterManager(authStore.user.roles)
+			: false
+	);
 
 	// Inline check-in until T-06 dedicated flow ships — flips current_stay to active.
 	async function handleCheckIn(evacuee: Evacuee) {
@@ -43,13 +53,34 @@
 		}
 	}
 
+	async function handleCancelRegistration(evacuee: Evacuee) {
+		if (!evacuee.household_id) {
+			toast.error('ไม่พบข้อมูลครัวเรือนสำหรับผู้ประสบภัยรายนี้');
+			return;
+		}
+		const name = `${evacuee.first_name} ${evacuee.last_name}`;
+		const confirmed = confirm(
+			`คุณต้องการยกเลิกการลงทะเบียนล่วงหน้าของครอบครัวคุณ ${name} ใช่หรือไม่?\n(การดำเนินการนี้จะมีผลยกเลิกกับสมาชิกทุกคนในครัวเรือน)`
+		);
+		if (!confirmed) return;
+
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		try {
+			await cancelRegistration.mutateAsync({ householdId: evacuee.household_id, ctx });
+			toast.success(`ยกเลิกการลงทะเบียนล่วงหน้าของครอบครัวคุณ ${name} เรียบร้อยแล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ยกเลิกไม่สำเร็จ');
+		}
+	}
+
 	const STATUS_LABEL: Record<string, string> = {
 		pre_registered: 'ลงทะเบียนล่วงหน้า',
 		active: 'อยู่ในศูนย์',
 		temporary_leave: 'ออกชั่วคราว',
 		transferred: 'ย้ายศูนย์',
 		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
-		deceased: 'เสียชีวิต'
+		deceased: 'เสียชีวิต',
+		cancelled: 'ยกเลิกการจอง'
 	};
 
 	const items = $derived(query.data?.items ?? []);
@@ -159,14 +190,18 @@
 									class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium
 										{e.current_stay.status === 'active'
 										? 'bg-green-100 text-green-800'
-										: 'bg-muted text-muted-foreground'}"
+										: e.current_stay.status === 'pre_registered'
+											? 'bg-blue-100 text-blue-800'
+											: e.current_stay.status === 'cancelled'
+												? 'bg-red-100 text-red-800'
+												: 'bg-muted text-muted-foreground'}"
 								>
 									{STATUS_LABEL[e.current_stay.status] ?? e.current_stay.status}
 								</span>
 							</Table.Cell>
 							<Table.Cell class="text-center">
 								<div class="flex justify-center gap-1.5">
-									{#if e.current_stay.status !== 'active'}
+									{#if canCheckInEvacuee(e)}
 										<Button
 											variant="outline"
 											size="sm"
@@ -174,6 +209,16 @@
 											disabled={checkIn.isPending}
 										>
 											เช็คอิน
+										</Button>
+									{/if}
+									{#if isSM && e.current_stay.status === 'pre_registered'}
+										<Button
+											variant="destructive"
+											size="sm"
+											onclick={() => handleCancelRegistration(e)}
+											disabled={cancelRegistration.isPending}
+										>
+											ยกเลิกการจอง
 										</Button>
 									{/if}
 									<Button

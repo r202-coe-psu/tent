@@ -1,5 +1,5 @@
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
-import { touch, type AuthorContext } from '$lib/db/model';
+import { touch, type AuthorContext, now } from '$lib/db/model';
 import { getShelterDb } from '$lib/db/shelter';
 import {
 	createEvacuee as buildEvacuee,
@@ -140,7 +140,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	async listHouseholds(): Promise<Household[]> {
 		const docs = await this.repo.allByType('household', isHousehold);
-		return docs.map(migrateHouseholdV3ToV4);
+		return docs
+			.map(migrateHouseholdV3ToV4)
+			.filter((h) => h.status !== 'cancelled' && h.status !== 'checked_out');
 	}
 
 	async listHouseholdsPaginated(
@@ -150,7 +152,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		labels?: HouseholdSearchLabels
 	): Promise<PaginatedResult<Household>> {
 		let all = await this.repo.allByType('household', isHousehold);
-		all = all.map(migrateHouseholdV3ToV4);
+		all = all
+			.map(migrateHouseholdV3ToV4)
+			.filter((h) => h.status !== 'cancelled' && h.status !== 'checked_out');
 		const q = search?.trim();
 		if (q) {
 			const evacuees = await this.repo.allByType('evacuee', isEvacuee);
@@ -198,6 +202,17 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		assertMovementAllowed(evacuee, 'check_in');
 		const movement = createMovement({ evacuee_id: evacuee._id, action: 'check_in', zone }, ctx);
 		await this.repo.put(movement);
+
+		if (evacuee.household_id) {
+			const hh = await this.repo.get<Household>(evacuee.household_id);
+			if (hh && (hh.status === 'pre_registered' || hh.status === 'arriving')) {
+				await this.repo.put({
+					...hh,
+					status: 'checked_in' as const
+				});
+			}
+		}
+
 		const latest = await this.repo.get<Evacuee>(evacuee._id);
 		return this.repo.put(
 			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
@@ -217,6 +232,44 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return this.repo.put(
 			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
 		);
+	}
+
+	async cancelPreRegistration(householdId: string, ctx: AuthorContext): Promise<void> {
+		void ctx;
+		const household = await this.getHousehold(householdId);
+		if (!household) {
+			throw new Error('ไม่พบข้อมูลครัวเรือน');
+		}
+		if (household.status !== 'pre_registered') {
+			throw new Error('สามารถยกเลิกได้เฉพาะครัวเรือนที่อยู่ในสถานะลงทะเบียนล่วงหน้าเท่านั้น');
+		}
+
+		// Update household status to 'cancelled'
+		const updatedHousehold = touch({
+			...household,
+			status: 'cancelled' as const
+		});
+		await this.repo.put(updatedHousehold);
+
+		// Get members of this household
+		const evacuees = await this.listEvacuees();
+		const members = evacuees.filter((e) => e.household_id === householdId);
+
+		// Update all members' current_stay.status to 'cancelled'
+		for (const member of members) {
+			const latestMember = await this.repo.get<Evacuee>(member._id);
+			if (latestMember) {
+				const updatedMember = touch({
+					...latestMember,
+					current_stay: {
+						...latestMember.current_stay,
+						status: 'cancelled' as const,
+						since: now()
+					}
+				});
+				await this.repo.put(updatedMember);
+			}
+		}
 	}
 }
 

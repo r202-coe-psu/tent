@@ -186,6 +186,56 @@ describe('check-in / check-out', () => {
 		const fetched = await repo.getEvacuee(evacuee._id);
 		expect(fetched?.current_stay.status).toBe('pre_registered');
 	});
+
+	describe('cancelPreRegistration', () => {
+		it('cancels the pre-registered household and all its members', async () => {
+			const member = await repo.createEvacuee(evInput(), ctx);
+			const hh = await repo.createHousehold(
+				{
+					label: 'บ้านทดสอบ',
+					head_evacuee_id: member._id,
+					status: 'pre_registered',
+					municipality_zone: null,
+					community: null,
+					pets: [],
+					vehicles: []
+				},
+				ctx
+			);
+
+			// Link member to household
+			await repo.updateEvacuee({
+				...member,
+				household_id: hh._id
+			});
+
+			await repo.cancelPreRegistration(hh._id, ctx);
+
+			const fetchedHh = await repo.getHousehold(hh._id);
+			expect(fetchedHh?.status).toBe('cancelled');
+
+			const fetchedMember = await repo.getEvacuee(member._id);
+			expect(fetchedMember?.current_stay.status).toBe('cancelled');
+		});
+
+		it('throws an error if the household is not in pre_registered status', async () => {
+			const member = await repo.createEvacuee(evInput(), ctx);
+			const hh = await repo.createHousehold(
+				{
+					label: 'บ้านทดสอบ',
+					head_evacuee_id: member._id,
+					status: 'arriving',
+					municipality_zone: null,
+					community: null,
+					pets: [],
+					vehicles: []
+				},
+				ctx
+			);
+
+			await expect(repo.cancelPreRegistration(hh._id, ctx)).rejects.toThrow(/สามารถยกเลิกได้เฉพาะ/);
+		});
+	});
 });
 
 describe('peopleRepository singleton', () => {

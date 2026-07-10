@@ -176,7 +176,8 @@
 			temporary_leave: 'ออกชั่วคราว',
 			transferred: 'ย้ายศูนย์พักพิงแล้ว',
 			checked_out: 'ย้ายออก/กลับภูมิลำเนาแล้ว',
-			deceased: 'เสียชีวิต'
+			deceased: 'เสียชีวิต',
+			cancelled: 'ยกเลิกการจอง'
 		};
 		return statusLabels[status];
 	}

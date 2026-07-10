@@ -80,4 +80,9 @@ export interface PeopleRepository {
 	 * this is the only path that flips occupancy to `checked_out` (T-06).
 	 */
 	checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
+	/**
+	 * Cancel the pre-registration of a household and all its members.
+	 * Flips household status to 'cancelled' and all members' current_stay.status to 'cancelled'.
+	 */
+	cancelPreRegistration(householdId: string, ctx: AuthorContext): Promise<void>;
 }
