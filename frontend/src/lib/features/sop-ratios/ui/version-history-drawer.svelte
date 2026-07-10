@@ -11,6 +11,7 @@
 	import Clock from '@lucide/svelte/icons/clock';
 	import User from '@lucide/svelte/icons/user';
 	import { fade, fly } from 'svelte/transition';
+	import { RATIO_LABELS } from '../domain/sop-ratio.labels';
 
 	interface Props {
 		profile: SopMaster | SopOverride;
@@ -72,6 +73,20 @@
 
 	<!-- Timeline -->
 	<div class="flex-1 overflow-y-auto px-6 py-5">
+		{#if !isMaster && !activeMaster}
+			<div
+				class="mb-4 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"
+			>
+				<span>⚠️</span>
+				<div>
+					<p class="font-bold">เปรียบเทียบค่ามาตรฐานไม่ได้</p>
+					<p class="mt-0.5 text-amber-700/95">
+						ไม่สามารถดึงข้อมูลค่ามาตรฐาน EOC มาเปรียบเทียบได้ในขณะนี้
+					</p>
+				</div>
+			</div>
+		{/if}
+
 		{#if historyQuery.isLoading}
 			<div class="flex items-center justify-center py-16 text-slate-400">
 				<div class="flex flex-col items-center gap-3">
@@ -131,8 +146,13 @@
 										>
 											{v}
 										</p>
-										<p class="text-[10px] {isDifferent ? 'text-white/90' : 'text-slate-500'}">
-											{k.split('_')[0]}
+										<p
+											class="block w-full truncate text-[10px] {isDifferent
+												? 'text-white/90'
+												: 'text-slate-500'}"
+											title={RATIO_LABELS[k as SopRatioKey]?.label ?? k}
+										>
+											{RATIO_LABELS[k as SopRatioKey]?.label ?? k}
 										</p>
 									</div>
 								{/each}

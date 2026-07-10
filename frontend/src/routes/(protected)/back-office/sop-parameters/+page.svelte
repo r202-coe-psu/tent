@@ -1,16 +1,20 @@
 <script lang="ts">
-	import type { SopMaster, SopOverride, SopTabType } from '$lib/features/sop-ratios';
+	import type { SopMaster, SopOverride } from '$lib/features/sop-ratios';
 	import {
 		useSopProfiles,
 		useActiveSopOverride,
 		useSetOverrideInactive,
-		useCreateInitialOverride,
+		useCreateInitialOverride
+	} from '$lib/features/sop-ratios';
+	import {
 		SopTypeList,
 		SopRatioTab,
 		SopEditForm,
 		AlertThresholdStub,
-		VersionHistoryDrawer
-	} from '$lib/features/sop-ratios';
+		VersionHistoryDrawer,
+		DeactivateConfirmDialog,
+		type SopTabType
+	} from '$lib/features/sop-ratios/components';
 
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -24,6 +28,7 @@
 
 	// Modal / Drawer state
 	let bulkEditOpen = $state(false);
+	let deactivateConfirmOpen = $state(false);
 	let historyProfile = $state<SopMaster | SopOverride | null>(null);
 
 	// Queries
@@ -75,19 +80,18 @@
 		activeContext = 'override';
 	}
 
-	async function deactivateOverride() {
+	function deactivateOverride() {
 		if (!activeOverride) return;
-		if (
-			confirm(
-				`คุณต้องการยกเลิกค่าปรับแต่งและกลับไปใช้ค่ามาตรฐาน EOC สำหรับศูนย์ ${shelterCode} ใช่หรือไม่?`
-			)
-		) {
-			await setInactiveMutation.mutateAsync({
-				id: activeOverride._id,
-				ctx: { shelterCode, createdBy: authStore.user?.name ?? 'unknown' }
-			});
-			activeContext = 'master';
-		}
+		deactivateConfirmOpen = true;
+	}
+
+	async function handleConfirmDeactivate() {
+		if (!activeOverride) return;
+		await setInactiveMutation.mutateAsync({
+			id: activeOverride._id,
+			ctx: { shelterCode, createdBy: authStore.user?.name ?? 'unknown' }
+		});
+		activeContext = 'master';
 	}
 
 	function handleEditAll() {
@@ -158,3 +162,10 @@
 		}}
 	/>
 {/if}
+
+<DeactivateConfirmDialog
+	bind:open={deactivateConfirmOpen}
+	{shelterCode}
+	onConfirm={handleConfirmDeactivate}
+	isPending={setInactiveMutation.isPending}
+/>

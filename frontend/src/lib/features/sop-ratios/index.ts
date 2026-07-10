@@ -1,3 +1,4 @@
+// Public barrel for the sop-ratios feature. Domain-only (types, repository contracts, and TanStack query hooks).
 export type { SopMaster, SopOverride } from './domain/sop-ratio';
 
 export {
@@ -22,16 +23,12 @@ export { validRatios } from './domain/sop-ratio.fixture';
 export type { TrendPoint, TrendSeries } from './domain/trend';
 
 // Resource-shortage trend chart (T-32.4)
-export { default as TrendChart } from './ui/trend-chart.svelte';
 export {
 	MAX_TREND_ROWS,
 	capSeries,
 	downsamplePoints,
 	wasAggregated
 } from './ui/trend-chart.aggregate';
-
-// Resource calculation dashboard (T-32 / FR-46)
-export { default as ResourceDashboard } from './ui/resource-dashboard.svelte';
 export { useResourceCalc, resourceCalcKeys } from './application/resource-calc';
 export {
 	computeGap,
@@ -91,11 +88,3 @@ export {
 
 // Live-sync wiring (call once per layout, pass QueryClient)
 export { startSopRatioLiveQuery } from './application/sop-ratio-sync';
-
-export { default as SopMasterTable } from './ui/sop-master-table.svelte';
-export { default as SopEditForm } from './ui/sop-edit-form.svelte';
-export { default as VersionHistoryDrawer } from './ui/version-history-drawer.svelte';
-export { default as SopTypeList } from './ui/sop-type-list.svelte';
-export type { SopTabType } from './ui/sop-type-list.svelte';
-export { default as SopRatioTab } from './ui/sop-ratio-tab.svelte';
-export { default as AlertThresholdStub } from './ui/alert-threshold-stub.svelte';
