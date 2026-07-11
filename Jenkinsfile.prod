@@ -21,7 +21,7 @@ pipeline {
                             echo '==> Deploying Tent...'
                             cd /home/projects/tent
                             git -C /home/projects/tent pull
-                            docker compose -f docker-compose.staging.yml up -d --build --force-recreate
+                            docker compose -f docker-compose.production.no-nginx.yml up -d --build --force-recreate
                         "
                         echo "Deployment process finished successfully!"
                     '''
