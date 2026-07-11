@@ -88,15 +88,6 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ ...validRatios, rice_g_per_person_meal: 200 } as unknown as Record<string, number>,
-					masterCtx
-				);
-			}).toThrow();
-
-			expect(() => {
-				createInitialProfile(
-					'sop_profile',
-					'Sphere baseline',
 					{ ...validRatios, caregiver_per_elderly: 2 } as unknown as Record<string, number>,
 					masterCtx
 				);
@@ -191,7 +182,7 @@ describe('SOP Ratio Domain', () => {
 			expect(() => {
 				createNewVersion(
 					prev,
-					{ rice_g_per_person_meal: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
+					{ invalid_key: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
 					'Update invalid ratio',
 					masterCtx
 				);
@@ -286,7 +277,7 @@ describe('SOP Ratio Domain', () => {
 			expect(() => {
 				createNewVersion(
 					prev,
-					{ rice_g_per_person_meal: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
+					{ invalid_key: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
 					'Update invalid ratio',
 					overrideCtx
 				);
@@ -334,8 +325,8 @@ describe('SOP Ratio Domain', () => {
 	});
 
 	describe('Calculation Kinds', () => {
-		it('should have all 20 whitelist keys mapped to their exact calculation kind', () => {
-			expect(SOP_RATIO_KEYS.length).toBe(20);
+		it('should have all 21 whitelist keys mapped to their exact calculation kind', () => {
+			expect(SOP_RATIO_KEYS.length).toBe(21);
 			for (const key of SOP_RATIO_KEYS) {
 				expect(SOP_RATIO_KIND[key]).toBeDefined();
 				expect(['multiply', 'divide', 'threshold'].includes(SOP_RATIO_KIND[key])).toBe(true);
@@ -375,6 +366,22 @@ describe('SOP Ratio Domain', () => {
 			expect(isSopMaster({})).toBe(false);
 
 			expect(isSopMaster({ ...baseMasterMock, schema_v: 3, type: 'invalid_type' })).toBe(false);
+		});
+
+		it('should strictly reject malformed ratios (empty, missing keys, deprecated keys) for Master', () => {
+			expect(isSopMaster({ ...baseMasterMock, schema_v: 3, ratios: {} })).toBe(false);
+			expect(
+				isSopMaster({
+					...baseMasterMock,
+					schema_v: 3,
+					ratios: { ...validRatios, caregiver_per_elderly: 2 }
+				} as unknown)
+			).toBe(false);
+			const missingKeyRatios = { ...validRatios };
+			delete (missingKeyRatios as Partial<typeof validRatios>).water_l_per_person_day;
+			expect(
+				isSopMaster({ ...baseMasterMock, schema_v: 3, ratios: missingKeyRatios } as unknown)
+			).toBe(false);
 		});
 
 		it('should accept current v2 override and reject legacy v1 override', () => {
@@ -421,6 +428,36 @@ describe('SOP Ratio Domain', () => {
 			expect(isSopOverride({})).toBe(false);
 
 			expect(isSopOverride({ ...baseOverrideMock, schema_v: 2, type: 'invalid_type' })).toBe(false);
+		});
+
+		it('should strictly reject malformed ratios (empty, missing keys, deprecated keys) for Override', () => {
+			const baseOverrideMock = {
+				_id: 'sop_override:SH001:baseline',
+				type: 'sop_override',
+				name: 'Winter Override',
+				version: 1,
+				active: true,
+				shelter_code: 'SH001',
+				base_profile_id: 'sop_profile:baseline',
+				created_at: '2026-07-03T00:00:00.000Z',
+				updated_at: '2026-07-03T00:00:00.000Z',
+				created_by: 'tester',
+				ratios: validRatios
+			};
+
+			expect(isSopOverride({ ...baseOverrideMock, schema_v: 2, ratios: {} })).toBe(false);
+			expect(
+				isSopOverride({
+					...baseOverrideMock,
+					schema_v: 2,
+					ratios: { ...validRatios, caregiver_per_elderly: 2 }
+				} as unknown)
+			).toBe(false);
+			const missingKeyRatios = { ...validRatios };
+			delete (missingKeyRatios as Partial<typeof validRatios>).water_l_per_person_day;
+			expect(
+				isSopOverride({ ...baseOverrideMock, schema_v: 2, ratios: missingKeyRatios } as unknown)
+			).toBe(false);
 		});
 	});
 });

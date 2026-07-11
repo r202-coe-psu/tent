@@ -184,7 +184,7 @@ function uniq<T>(arr: T[]): T[] {
  * document (couchdb-pouchdb-bestpractices §6 — one design doc per db).
  *
  * Views deployed:
- *   - `occupancy`               — count by `current_stay.status` (total / checked_in / checked_out)
+ *   - `occupancy`               — count by `current_stay.status` (total / active / temporary_leave / checked_out / transferred / deceased)
  *   - `demographics_by_age`     — count by age-bucket string, derived from `birth_year` (พ.ศ.)
  *   - `demographics_by_country`     — count by `country` field (req); falls back to 'unknown'
  *   - `registrations_by_date`   — count evacuee docs by `created_at` date (YYYY-MM-DD)

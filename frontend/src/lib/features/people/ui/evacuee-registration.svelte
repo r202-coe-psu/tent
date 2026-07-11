@@ -251,7 +251,7 @@
 					<Form.Field {form} name="first_name">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ชื่อ (First Name)</Form.Label>
+								<Form.Label>ชื่อ (First Name) <span class="text-destructive">*</span></Form.Label>
 								<Input {...props} placeholder="ชื่อจริง" bind:value={$formData.first_name} />
 							{/snippet}
 						</Form.Control>
@@ -262,7 +262,7 @@
 					<Form.Field {form} name="last_name">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>นามสกุล (Last Name)</Form.Label>
+								<Form.Label>นามสกุล (Last Name) <span class="text-destructive">*</span></Form.Label>
 								<Input {...props} placeholder="นามสกุล" bind:value={$formData.last_name} />
 							{/snippet}
 						</Form.Control>
@@ -307,7 +307,7 @@
 					<Form.Field {form} name="gender">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เพศ</Form.Label>
+								<Form.Label>เพศ <span class="text-destructive">*</span></Form.Label>
 								<Select.Root type="single" bind:value={$formData.gender}>
 									<Select.Trigger
 										{...props}
@@ -330,7 +330,9 @@
 					<Form.Field {form} name="phone">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เบอร์โทรศัพท์ยืนยันตัวตน</Form.Label>
+								<Form.Label
+									>เบอร์โทรศัพท์ยืนยันตัวตน <span class="text-destructive">*</span></Form.Label
+								>
 								<Input
 									{...props}
 									inputmode="numeric"
@@ -353,7 +355,7 @@
 					<Form.Field {form} name="country">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ประเทศ</Form.Label>
+								<Form.Label>ประเทศ <span class="text-destructive">*</span></Form.Label>
 								<Combobox
 									items={COUNTRIES}
 									bind:value={$formData.country}
@@ -371,7 +373,7 @@
 					<Form.Field {form} name="religion">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ศาสนา *</Form.Label>
+								<Form.Label>ศาสนา</Form.Label>
 								<Select.Root type="single" bind:value={$formData.religion}>
 									<Select.Trigger
 										{...props}

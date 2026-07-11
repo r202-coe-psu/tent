@@ -1,8 +1,6 @@
 import { authStore } from './auth.svelte';
 
 export class BackofficeState {
-	selectedShelter = $state(''); // empty = "ยังไม่เลือก", layout effect จะ auto-fill ครั้งแรก
-
 	/**
 	 * True when the user is effectively offline: the cached identity exists but
 	 * the CouchDB sync session is no longer valid (authStore.needsReauth). The

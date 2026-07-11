@@ -9,7 +9,7 @@
  * Secondary-key lookups (by phone, status, …) graduate to Mango `find()` once
  * indexes land (schema.md §6) — a later step.
  */
-import { allDocsByType, deleteDoc, getDoc, putDoc } from './couch-db';
+import { allDocsByType, deleteDoc, findDocs, getDoc, putDoc } from './couch-db';
 
 export interface PaginatedResult<T> {
 	items: T[];
@@ -33,6 +33,7 @@ export interface Repository {
 		page: number,
 		pageSize: number
 	): Promise<PaginatedResult<T>>;
+	find<T>(query: { selector: Record<string, unknown>; [key: string]: unknown }): Promise<T[]>;
 }
 
 /** Build a {@link Repository} bound to one remote CouchDB database. */
@@ -70,6 +71,13 @@ export function createRemoteRepository(dbName: string): Repository {
 			const start = (safePage - 1) * pageSize;
 			const items = matched.slice(start, start + pageSize);
 			return { items, total, page: safePage, pageSize, totalPages };
+		},
+
+		async find<T>(query: {
+			selector: Record<string, unknown>;
+			[key: string]: unknown;
+		}): Promise<T[]> {
+			return findDocs<T>(dbName, query);
 		}
 	};
 }

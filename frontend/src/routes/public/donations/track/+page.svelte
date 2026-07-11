@@ -81,7 +81,7 @@
 				<Button
 					onclick={() => handleSearch('cancel')}
 					variant="outline"
-					class="inline-flex h-12 flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-red-200 px-5 py-3 text-sm font-bold text-red-600 transition-all hover:bg-red-50 dark:hover:bg-red-950/20"
+					class="inline-flex h-12 flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-danger-border px-5 py-3 text-sm font-bold text-danger transition-all hover:bg-danger-muted dark:hover:bg-danger/10"
 				>
 					<Trash2 class="h-4 w-4" />
 					ยกเลิกการบริจาค (Cancel Booking)
@@ -91,7 +91,7 @@
 		<!-- Mock Guide Info Box -->
 		<div class="mt-8 space-y-3 border-t border-border/60 pt-6">
 			<div class="flex items-start gap-2.5 text-[11px] leading-relaxed text-muted-foreground">
-				<AlertCircle class="mt-0.5 h-4.5 w-4.5 shrink-0 text-amber-500" />
+				<AlertCircle class="mt-0.5 h-4.5 w-4.5 shrink-0 text-warning" />
 				<div>
 					<span class="font-bold text-foreground"
 						>รหัสสำหรับการจำลองทดสอบระบบ (Mock Tracking Tokens):</span
@@ -102,7 +102,7 @@
 							class="group cursor-pointer rounded-lg border border-border/30 bg-muted/50 p-2 text-left transition-all hover:border-primary hover:bg-muted/80"
 						>
 							<div
-								class="text-[10px] font-bold text-blue-600 group-hover:underline dark:text-blue-400"
+								class="text-[10px] font-bold text-primary group-hover:underline dark:text-primary"
 							>
 								DN-582910
 							</div>
@@ -113,7 +113,7 @@
 							class="group cursor-pointer rounded-lg border border-border/30 bg-muted/50 p-2 text-left transition-all hover:border-primary hover:bg-muted/80"
 						>
 							<div
-								class="text-[10px] font-bold text-amber-600 group-hover:underline dark:text-amber-400"
+								class="text-[10px] font-bold text-warning-foreground group-hover:underline dark:text-warning-subtle"
 							>
 								RQ-9901
 							</div>
@@ -126,7 +126,7 @@
 							class="group cursor-pointer rounded-lg border border-border/30 bg-muted/50 p-2 text-left transition-all hover:border-primary hover:bg-muted/80"
 						>
 							<div
-								class="text-[10px] font-bold text-emerald-600 group-hover:underline dark:text-emerald-400"
+								class="text-[10px] font-bold text-success-dark group-hover:underline dark:text-success-subtle"
 							>
 								DN-111111
 							</div>
