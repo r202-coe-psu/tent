@@ -20,3 +20,21 @@ export function listSubdistricts(province: string, district: string): Promise<Su
 		`${BASE}/subdistricts?province=${encodeURIComponent(province)}&district=${encodeURIComponent(district)}`
 	);
 }
+
+export interface LocationRecord {
+	province: string;
+	district: string;
+	subdistrict: string;
+	zipcode: number;
+}
+
+let cachedLocationData: LocationRecord[] | null = null;
+
+export async function getAllLocations(): Promise<LocationRecord[]> {
+	if (!cachedLocationData) {
+		const res = await fetch('/data/thailand_location_data.json');
+		if (!res.ok) throw new Error('Failed to load location data');
+		cachedLocationData = (await res.json()) as LocationRecord[];
+	}
+	return cachedLocationData;
+}
