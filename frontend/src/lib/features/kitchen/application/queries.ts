@@ -1,8 +1,11 @@
 import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
-import { startLiveQuery, type LiveQueryHandle } from '$lib/db/live-query';
-import { shelterDb } from '$lib/db/shelter';
+import {
+	subscribeDataChanges,
+	type SubscribeDataChangesHandle
+} from '$lib/db/subscribe-data-changes';
+import { getShelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
-import { kitchenRepository } from '../data/kitchen.pouch';
+import { kitchenRepository } from '../data/kitchen.remote';
 import { getActiveSopProfile } from '$lib/features/sop-ratios';
 import { peopleRepository } from '$lib/features/people';
 import type {
@@ -13,7 +16,7 @@ import type {
 	GasCylinderType,
 	GasCylinderTypeInput
 } from '../domain/kitchen';
-import { calculateMealIngredients } from '../domain/meal-calc';
+import { calculateMealIngredients, DEFAULT_RICE_G_PER_PERSON_MEAL } from '../domain/meal-calc';
 import { deriveHeadcountFromOccupancy } from '../domain/occupancy';
 import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
 
@@ -67,11 +70,12 @@ export const useCreateMealPlanCalc = () =>
 		}) => {
 			const profile = await getActiveSopProfile();
 			if (!profile) throw new Error('No active SOP profile found — seed one first');
-			const riceG = profile.ratios.rice_g_per_person_meal;
-			if (!riceG) throw new Error('Active SOP profile missing rice_g_per_person_meal');
+			// Rice ratio is a kitchen coefficient, not a SOP ratio (CR-021). The SOP
+			// profile is still read to stamp calc_source provenance (which planning
+			// profile was active), but the rice grams come from the kitchen constant.
 			const { recipes, calc_source } = calculateMealIngredients(
 				headcount,
-				riceG,
+				DEFAULT_RICE_G_PER_PERSON_MEAL,
 				profile._id,
 				profile.version,
 				new Date().toISOString()
@@ -143,8 +147,8 @@ export const useDeleteGasCylinderType = () =>
 
 // --- Live sync ---
 
-export function startKitchenLiveQuery(queryClient: QueryClient): LiveQueryHandle {
-	return startLiveQuery(shelterDb(), queryClient, (type) => {
+export function startKitchenLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
+	return subscribeDataChanges(queryClient, getShelterDb, (type) => {
 		switch (type) {
 			case 'meal_plan':
 				return [kitchenKeys.mealPlans()];
@@ -156,7 +160,6 @@ export function startKitchenLiveQuery(queryClient: QueryClient): LiveQueryHandle
 				return [kitchenKeys.gasCylinderTypes()];
 			case 'evacuee':
 			case 'movement':
-				// Occupancy changes (check-in/out) → re-derive the live headcount.
 				return [kitchenKeys.occupancy()];
 			default:
 				return [];

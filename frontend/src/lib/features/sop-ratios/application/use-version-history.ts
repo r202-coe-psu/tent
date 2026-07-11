@@ -11,7 +11,7 @@
  *
  * Source references:
  *   - sop-ratio.repository.ts → SopMasterRepository.listVersions, SopOverrideRepository.listVersions
- *   - sop-ratio.pouch.ts → sopMasterRepository(), sopOverrideRepository()
+ *   - sop-ratio.remote.ts → sopMasterRepository(), sopOverrideRepository()
  *   - sop-ratio.domain.ts → SopMaster, SopOverride types
  *   - queries.ts → sopRatioKeys
  *   - CONVENTIONS.md §8 "Query hooks" + §8 "Query key factory"
@@ -19,24 +19,64 @@
  */
 
 import { createQuery } from '@tanstack/svelte-query';
-import { SHELTER_CODE } from '$lib/db/shelter';
-import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
+import { getShelterCode } from '$lib/db/shelter';
+import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.remote';
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
 import { sopVersionKeys } from './queries';
+
+export type SopMasterWithReason = SopMaster & { audit_reason: string | null };
+export type SopOverrideWithReason = SopOverride & { audit_reason: string | null };
 
 // ---------------------------------------------------------------------------
 // Fetch functions (thin — business logic stays in repository)
 // ---------------------------------------------------------------------------
 
-async function fetchMasterVersions(name: string): Promise<SopMaster[]> {
-	const all = await sopMasterRepository().listVersions(name);
-	// Sort newest-first by version number for timeline display in UI drawer
-	return [...all].sort((a, b) => b.version - a.version);
+async function fetchMasterVersions(name: string): Promise<SopMasterWithReason[]> {
+	const repo = sopMasterRepository();
+	const all = await repo.listVersions(name);
+	const sorted = [...all].sort((a, b) => b.version - a.version);
+	if (sorted.length === 0) return [];
+
+	const ids = sorted.map((v) => v._id);
+	const audits = await repo.listAuditsByTargetIds(ids);
+	const reasonMap = new Map<string, string>();
+	for (const a of audits) {
+		const ctx = a.context as Record<string, unknown> | undefined;
+		// Only stitch audits that represent version creation
+		const isVersionChange = a.action === 'created' || typeof ctx?.previous_id === 'string';
+		if (isVersionChange) reasonMap.set(a.target_id, a.reason);
+	}
+
+	return sorted.map((v) => ({
+		...v,
+		audit_reason: reasonMap.get(v._id) ?? null
+	}));
 }
 
-async function fetchOverrideVersions(name: string): Promise<SopOverride[]> {
-	const all = await sopOverrideRepository(SHELTER_CODE).listVersions(name);
-	return [...all].sort((a, b) => b.version - a.version);
+async function fetchOverrideVersions(
+	name: string,
+	shelterCode?: string
+): Promise<SopOverrideWithReason[]> {
+	const code = shelterCode ?? getShelterCode();
+	const repo = sopOverrideRepository(code);
+	const all = await repo.listVersions(name);
+	const sorted = [...all].sort((a, b) => b.version - a.version);
+	if (sorted.length === 0) return [];
+
+	const ids = sorted.map((v) => v._id);
+	const audits = await repo.listAuditsByTargetIds(ids);
+	const reasonMap = new Map<string, string>();
+	for (const a of audits) {
+		const ctx = a.context as Record<string, unknown> | undefined;
+		// Only stitch audits that represent version creation
+		const isVersionChange = a.action === 'created' || typeof ctx?.previous_id === 'string';
+		if (isVersionChange) reasonMap.set(a.target_id, a.reason);
+	}
+
+	return sorted.map((v) => ({
+		...v,
+		audit_reason: reasonMap.get(v._id) ?? null
+	}));
 }
 
 // ---------------------------------------------------------------------------
@@ -63,12 +103,17 @@ async function fetchOverrideVersions(name: string): Promise<SopOverride[]> {
  * {/each}
  * ```
  */
-export const useMasterVersionHistory = (name: string) =>
-	createQuery(() => ({
-		queryKey: [...sopVersionKeys.master(), name] as const,
-		queryFn: () => fetchMasterVersions(name),
-		enabled: name.trim().length > 0
-	}));
+export const useMasterVersionHistory = (name: string | (() => string)) => {
+	const getName = typeof name === 'function' ? name : () => name;
+	return createQuery(() => {
+		const resolvedName = getName();
+		return {
+			queryKey: [...sopVersionKeys.master(), resolvedName] as const,
+			queryFn: () => fetchMasterVersions(resolvedName),
+			enabled: resolvedName.trim().length > 0
+		};
+	});
+};
 
 /**
  * Returns all historical versions of the current shelter's **override** SOP profile by name,
@@ -92,9 +137,20 @@ export const useMasterVersionHistory = (name: string) =>
  * {/each}
  * ```
  */
-export const useOverrideVersionHistory = (name: string) =>
-	createQuery(() => ({
-		queryKey: [...sopVersionKeys.override(), name, SHELTER_CODE] as const,
-		queryFn: () => fetchOverrideVersions(name),
-		enabled: name.trim().length > 0
-	}));
+export const useOverrideVersionHistory = (
+	name: string | (() => string),
+	shelterCode?: string | (() => string)
+) => {
+	const getName = typeof name === 'function' ? name : () => name;
+	const getCode =
+		typeof shelterCode === 'function' ? shelterCode : () => shelterCode ?? getShelterCode();
+	return createQuery(() => {
+		const resolvedName = getName();
+		const code = getCode();
+		return {
+			queryKey: [...sopVersionKeys.override(), resolvedName, code] as const,
+			queryFn: () => fetchOverrideVersions(resolvedName, code),
+			enabled: resolvedName.trim().length > 0 && code.trim().length > 0
+		};
+	});
+};

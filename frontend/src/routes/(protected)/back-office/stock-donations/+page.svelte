@@ -3,98 +3,34 @@
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
 	import { toast } from 'svelte-sonner';
-	import NeedsBoardAdmin from './components/needs-board-admin.svelte';
-	import SpecialRequestDialog from './components/special-request-dialog.svelte';
-	import PendingReviewBoard from './components/pending-review-board.svelte';
-	import PendingReviewDialog from './components/pending-review-dialog.svelte';
+	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
+	import SpecialRequestDialog from '$lib/components/special-request-dialog.svelte';
+	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
+	import PendingReviewDialog from '$lib/components/pending-review-dialog.svelte';
 	import ScanStation from './components/scan-station.svelte';
-	import type { SpecialRequestInput } from '$lib/features/operations';
+	import CreateCampaignForm from './components/create-campaign-form.svelte';
+	import { startOperationsLiveQuery, useDonationNeedsBoard } from '$lib/features/operations';
+	import { useQueryClient } from '@tanstack/svelte-query';
+
+	const queryClient = useQueryClient();
+
+	$effect(() => {
+		const handle = startOperationsLiveQuery(queryClient);
+		return () => handle.stop();
+	});
 
 	let activeSubTab = $state('scan'); // 'scan', 'pending', 'needs'
+	let viewState = $state<'list' | 'create'>('list');
 	let isModalOpen = $state(false);
 
-	let items = $state([
-		{
-			id: '1',
-			name: 'ข้าวสาร (ข้าวหอมมะลิ 100%)',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 450,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
+	const needsBoard = useDonationNeedsBoard({
+		onRequestCreated: () => {
+			isModalOpen = false;
 		},
-		{
-			id: '2',
-			name: 'เนื้อไก่สด (เนื้อส่วนอก / สะโพก)',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 150,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		},
-		{
-			id: '3',
-			name: 'น้ำดื่มบรรจุขวด 1.5L',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 600,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		},
-		{
-			id: '4',
-			name: 'ข้าวสาร (ข้าวหอมมะลิ 100%)',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 80,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
-		},
-		{
-			id: '5',
-			name: 'น้ำดื่มบรรจุขวด 1.5L',
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			reserved: 120,
-			target: 1000,
-			showOnHome: true,
-			isCutOff: false
+		onFormCreated: () => {
+			viewState = 'list';
 		}
-	]);
-
-	function toggleShowOnHome(itemId: string) {
-		const item = items.find((i) => i.id === itemId);
-		if (item) {
-			item.showOnHome = !item.showOnHome;
-			toast.success(
-				item.showOnHome ? `กำลังโปรโมต "${item.name}" บนหน้าแรก` : `ซ่อน "${item.name}" จากหน้าแรก`
-			);
-		}
-	}
-
-	function toggleCutOff(itemId: string) {
-		const item = items.find((i) => i.id === itemId);
-		if (item) {
-			item.isCutOff = !item.isCutOff;
-			toast.success(
-				item.isCutOff
-					? `ปิดรับบริจาคสำหรับ "${item.name}" แล้ว`
-					: `เปิดรับบริจาคสำหรับ "${item.name}" อีกครั้ง`
-			);
-		}
-	}
-
-	function handleAddRequest(input: SpecialRequestInput) {
-		items.push({
-			id: String(items.length + 1),
-			name: input.name,
-			location: input.location,
-			reserved: 0,
-			target: input.target,
-			showOnHome: true,
-			isCutOff: false
-		});
-		toast.success(`เพิ่มประกาศความต้องการ "${input.name}" สำเร็จ`);
-	}
+	});
 
 	let pendingRequests = $state([
 		{
@@ -169,7 +105,10 @@
 	>
 		<div class="-mb-px flex gap-2 whitespace-nowrap">
 			<button
-				onclick={() => (activeSubTab = 'scan')}
+				onclick={() => {
+					activeSubTab = 'scan';
+					viewState = 'list';
+				}}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'scan'
 					? 'border-primary text-primary'
@@ -180,7 +119,10 @@
 			</button>
 
 			<button
-				onclick={() => (activeSubTab = 'pending')}
+				onclick={() => {
+					activeSubTab = 'pending';
+					viewState = 'list';
+				}}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'pending'
 					? 'border-primary text-primary'
@@ -197,7 +139,10 @@
 			</button>
 
 			<button
-				onclick={() => (activeSubTab = 'needs')}
+				onclick={() => {
+					activeSubTab = 'needs';
+					viewState = 'list';
+				}}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'needs'
 					? 'border-primary text-primary'
@@ -220,19 +165,26 @@
 			}}
 		/>
 	{:else if activeSubTab === 'needs'}
-		<NeedsBoardAdmin
-			{items}
-			onAddRequest={() => (isModalOpen = true)}
-			onToggleShowOnHome={toggleShowOnHome}
-			onToggleCutOff={toggleCutOff}
-		/>
+		{#if viewState === 'list'}
+			<NeedsBoardAdmin
+				items={needsBoard.derivedItems}
+				onAddRequest={() => (viewState = 'create')}
+				onToggleShowOnHome={needsBoard.toggleShowOnHome}
+				onToggleCutOff={needsBoard.toggleCutOff}
+			/>
+		{:else}
+			<CreateCampaignForm
+				onclose={() => (viewState = 'list')}
+				onsubmit={needsBoard.handleAddRequestFromForm}
+			/>
+		{/if}
 	{/if}
 </div>
 
 <SpecialRequestDialog
 	open={isModalOpen}
 	onclose={() => (isModalOpen = false)}
-	onsubmit={handleAddRequest}
+	onsubmit={needsBoard.handleAddRequest}
 />
 
 <PendingReviewDialog

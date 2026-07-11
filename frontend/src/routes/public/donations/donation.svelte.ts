@@ -1,5 +1,6 @@
 export interface DonationItem {
 	id: string;
+	item_id?: string; // catalog item id from a picked need card → lets needs_open decrease
 	category?: string;
 	name: string;
 	amount: number;
@@ -40,10 +41,17 @@ class DonationStore {
 		}
 	]);
 
+	// ขั้น 3 — จุดส่งมอบ + วันเวลา (เก็บไว้โช๋วบนตั๋ว)
+	selectedShelter = $state('');
+	selectedShelterName = $state('');
+	shelterLocked = $state(false); // true = มาจากการ์ด needs board → ล็อกศูนย์ปลายทาง (DN)
+	deliveryDate = $state('');
+
 	captchaToken = $state('');
 	isSubmitting = $state(false);
 	errorMessage = $state('');
 	trackingToken = $state('');
+	bookingRef = $state('');
 
 	addItem() {
 		this.items.push({
@@ -76,6 +84,10 @@ class DonationStore {
 		this.courierTrackingNo = '';
 		this.eta = '';
 		this.pickupAddress = '';
+		this.selectedShelter = '';
+		this.selectedShelterName = '';
+		this.shelterLocked = false;
+		this.deliveryDate = '';
 		this.items = [
 			{
 				id: crypto.randomUUID(),
@@ -91,6 +103,7 @@ class DonationStore {
 		this.isSubmitting = false;
 		this.errorMessage = '';
 		this.trackingToken = '';
+		this.bookingRef = '';
 	}
 }
 

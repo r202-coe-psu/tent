@@ -2,15 +2,7 @@
 	import Flame from '@lucide/svelte/icons/flame';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { resolve } from '$app/paths';
-	import { GasManagement, startKitchenLiveQuery } from '$lib/features/kitchen';
-	import { useQueryClient } from '@tanstack/svelte-query';
-
-	const queryClient = useQueryClient();
-
-	$effect(() => {
-		const handle = startKitchenLiveQuery(queryClient);
-		return () => handle.stop();
-	});
+	import { GasManagement } from '$lib/features/kitchen';
 </script>
 
 <svelte:head>

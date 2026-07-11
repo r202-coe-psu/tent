@@ -8,11 +8,11 @@ covers the _how_ — naming, structure, and coding patterns every contributor mu
 
 ## Contents
 
-1. [Git workflow](#1-git-workflow)
+1. [Git workflow](#1-git-workflow) — branches, commits, PRs, **pre-commit quality gate**
 2. [File & directory naming](#2-file--directory-naming)
 3. [TypeScript conventions](#3-typescript-conventions)
 4. [Feature architecture in practice](#4-feature-architecture-in-practice)
-5. [CouchDB / PouchDB document patterns](#5-couchdb--pouchdb-document-patterns)
+5. [CouchDB document patterns](#5-couchdb-document-patterns)
 6. [Svelte 5 component patterns](#6-svelte-5-component-patterns)
 7. [Forms (Superforms + Zod)](#7-forms-superforms--zod)
 8. [Data fetching (TanStack Query)](#8-data-fetching-tanstack-query)
@@ -78,6 +78,29 @@ fixed bug in shelter
 - Squash is allowed when the commit history inside the PR is noise (WIP commits);
   keep it when commits tell a meaningful story.
 
+### Pre-commit quality gate
+
+The repo root runs **[Lefthook](https://github.com/evilmartians/lefthook)** (`lefthook.yml`) as a
+pre-commit hook. When staged files touch `frontend/`, it runs — in order, fail-fast:
+
+| Step | Command      | What it catches                                  |
+| ---- | ------------ | ------------------------------------------------ |
+| 1    | `pnpm lint`  | formatting drift, ESLint violations              |
+| 2    | `pnpm check` | TypeScript / Svelte type errors (`svelte-check`) |
+| 3    | `pnpm test`  | broken domain/data logic (Vitest)                |
+
+This mirrors the Jenkins staging pipeline (lint → type-check → unit tests). Hooks are installed
+when you run `pnpm install` at the **repo root** (see `CONTRIBUTING.md` §1).
+
+- **Scope:** only runs when `frontend/` files are staged. Pure docs/config commits at the repo
+  root skip the gate.
+- **Manual run:** `pnpm exec lefthook run pre-commit` from the repo root.
+- **Bypass (emergency only):** `LEFTHOOK=0 git commit` or `git commit --no-verify`. Don't make
+  this the default — fix the failure instead.
+
+Treat a green pre-commit the same as the §2 definition-of-done checklist for items 1–3. Item 4
+(`svelte-autofixer`) is still manual before you push.
+
 ---
 
 ## 2. File & directory naming
@@ -101,7 +124,7 @@ domain entity and a repository interface of the same feature. Use plain kebab fo
 ```
 shelter.ts             ← domain entity / factories
 shelter.repository.ts  ← data layer interface  (dot: layer qualifier)
-shelter.pouch.ts       ← data layer concrete impl
+shelter.remote.ts      ← data layer concrete endpoint adapter
 shelter.admin.ts       ← data layer admin helpers
 shelter.seed.ts        ← data layer seed metadata
 shelter-sync.ts        ← application sync wiring (kebab: compound word, not a layer suffix)
@@ -132,15 +155,15 @@ type Occupant = { _id: string; name: string }; // prefer interface for domain sh
 
 ### Naming
 
-| Kind                 | Style                          | Example                          |
-| -------------------- | ------------------------------ | -------------------------------- |
-| Type / Interface     | PascalCase                     | `ShelterConfig`, `OccupantInput` |
-| Zod schema           | camelCase + `Schema` suffix    | `occupantInputSchema`            |
-| Inferred Zod type    | PascalCase (same stem)         | `OccupantInput`                  |
-| Enum-like const      | SCREAMING_SNAKE + `as const`   | `SHELTER_IDS`                    |
-| Query key factory    | camelCase + `Keys` suffix      | `shelterKeys`                    |
-| Repository interface | PascalCase + `Repository`      | `ShelterRepository`              |
-| Concrete impl        | PascalCase + `PouchRepository` | `ShelterPouchRepository`         |
+| Kind                 | Style                           | Example                          |
+| -------------------- | ------------------------------- | -------------------------------- |
+| Type / Interface     | PascalCase                      | `ShelterConfig`, `OccupantInput` |
+| Zod schema           | camelCase + `Schema` suffix     | `occupantInputSchema`            |
+| Inferred Zod type    | PascalCase (same stem)          | `OccupantInput`                  |
+| Enum-like const      | SCREAMING_SNAKE + `as const`    | `SHELTER_IDS`                    |
+| Query key factory    | camelCase + `Keys` suffix       | `shelterKeys`                    |
+| Repository interface | PascalCase + `Repository`       | `ShelterRepository`              |
+| Concrete impl        | PascalCase + `RemoteRepository` | `ShelterRemoteRepository`        |
 
 ### Prefer explicit return types on exported functions
 
@@ -155,7 +178,7 @@ export const isShelterConfig = (d: unknown): d is ShelterConfig => …
 ### No `any`; prefer `unknown` at boundaries
 
 ```ts
-// Boundary (PouchDB `allDocs` result, raw API response)
+// Boundary (CouchDB/endpoint doc result, raw API response)
 function parseDoc(raw: unknown): ShelterDoc { … }
 
 // Type guards narrow from unknown
@@ -175,24 +198,24 @@ this doc come from it.
 ```
 features/<name>/
   domain/        pure logic — entities, schemas, factories, type guards, derived computations
-  data/          repository interface + PouchDB implementation + seed/admin helpers
-  application/   TanStack Query hooks + live-sync wiring
+  data/          repository interface + remote endpoint adapter + seed/admin helpers
+  application/   TanStack Query hooks + endpoint-state wiring
   ui/            .svelte components
   index.ts       THE only public barrel
 ```
 
 ### Layer rules (summary)
 
-- **domain** — zero I/O, zero PouchDB, zero Svelte. Only imports from `zod` and
+- **domain** — zero I/O, zero DB/network client, zero Svelte. Only imports from `zod` and
   other domain modules. Contains: entity interfaces, Zod input schemas, factory functions
   (`create*`, `make*`), type guards (`is*`), and pure derived computations.
 - **data** — defines a repository interface (`*.repository.ts`) that the application layer
-  depends on. The concrete PouchDB implementation (`*.pouch.ts`) is injected via the
+  depends on. The concrete remote endpoint implementation (`*.remote.ts`) is injected via the
   application layer or a DI helper. Never imported directly by routes or UI.
-- **application** — `createQuery`/`createMutation` hooks (TanStack Query) and the live-sync
-  wiring that invalidates query keys on PouchDB change events. Depends on the repository
-  _interface_, never on the concrete PouchDB class.
-- **ui** — `.svelte` components that consume application hooks. No direct PouchDB calls,
+- **application** — `createQuery`/`createMutation` hooks (TanStack Query) plus active-endpoint
+  state handling and query invalidation wiring. Depends on the repository _interface_, never on
+  the concrete endpoint adapter.
+- **ui** — `.svelte` components that consume application hooks. No direct DB/network client calls,
   no direct `fetch`. Only imports from `application/` and shared `$lib/components/ui/`.
 - **index.ts** — the barrel re-exports everything routes and other features may use.
   Adding a new export = widening `index.ts`, not importing the inner path elsewhere.
@@ -210,13 +233,13 @@ features/<name>/
 2. Create features/<name>/data/<name>.repository.ts
    - Define the ShelterRepository-style interface
 
-3. Create features/<name>/data/<name>.pouch.ts
-   - Implement the repository using PouchDB
+3. Create features/<name>/data/<name>.remote.ts
+   - Implement the repository against the active endpoint contract (central first, edge fallback)
 
 4. Create features/<name>/application/queries.ts
    - Define a queryKeys factory
    - Write createQuery / createMutation hooks
-   - Wire invalidation via PouchDB changes feed (see shelter-sync pattern)
+   - Wire invalidation from mutation outcomes + endpoint-state updates (avoid polling)
 
 5. Create features/<name>/ui/*.svelte
    - Compose from application hooks + $lib/components/ui/
@@ -230,7 +253,7 @@ features/<name>/
 
 ---
 
-## 5. CouchDB / PouchDB document patterns
+## 5. CouchDB document patterns
 
 ### Document `_id` conventions
 
@@ -274,17 +297,16 @@ Never store a running total. Use append-only transactions (see `StockTxn`) and c
 current values in domain functions (`deriveQuantities`). This avoids write conflicts when
 two clients go offline and both update stock.
 
-### Live sync reactivity
+### Live update reactivity
 
-Do not poll. Invalidate TanStack Query keys from the PouchDB changes feed:
+Do not poll. Canonical live updates use the app-level event channel; invalidate TanStack Query keys from that channel plus endpoint transition events (central↔edge failover/failback), with one shared wiring per feature:
 
 ```ts
-db.changes({ live: true, since: 'now', include_docs: false }).on('change', () =>
-	queryClient.invalidateQueries({ queryKey: featureKeys.all })
-);
+mutation.onSuccess(() => queryClient.invalidateQueries({ queryKey: featureKeys.all }));
+endpointState.onChange(() => queryClient.invalidateQueries({ queryKey: featureKeys.all }));
 ```
 
-See `shelter-sync.ts` for the complete pattern including cleanup on unmount.
+Canonical mechanism is locked: use the app-level event channel for near-real-time push updates and keep one shared pattern across features.
 
 ### CouchDB View naming conventions
 
@@ -504,7 +526,7 @@ export function useCheckIn(shelterId: string) {
 
 ### Rules
 
-- **Never use `refetchInterval`** for live data — use PouchDB changes feed invalidation.
+- **Never use `refetchInterval`** for live data — use mutation/endpoint-driven invalidation wiring.
 - Keep `queryFn` thin: it calls a repository method, nothing else.
 - Business logic (factory calls, validation) belongs in the mutation function or the domain layer.
 - Handle loading and error states in the UI — every `createQuery` result has `.isLoading` and `.isError`.
@@ -553,12 +575,12 @@ Always show an explicit empty state — never render an empty list silently:
 
 ### What to test
 
-| Layer       | Test focus                                                      | Adapter                          |
-| ----------- | --------------------------------------------------------------- | -------------------------------- |
-| domain      | factories, invariants, derived computations, type guards        | Node (no DOM)                    |
-| data        | repository CRUD, conflict handling, seed helpers                | `pouchdb-adapter-memory`         |
-| application | query hooks behaviour under success / error                     | in-memory repo                   |
-| ui          | only if there is significant render logic (conditional renders) | jsdom via Svelte Testing Library |
+| Layer       | Test focus                                                      | Adapter                                           |
+| ----------- | --------------------------------------------------------------- | ------------------------------------------------- |
+| domain      | factories, invariants, derived computations, type guards        | Node (no DOM)                                     |
+| data        | repository CRUD, conflict handling, failover behavior           | in-memory repo double + mocked endpoint responses |
+| application | query hooks behaviour under success / error                     | in-memory repo                                    |
+| ui          | only if there is significant render logic (conditional renders) | jsdom via Svelte Testing Library                  |
 
 ### File placement
 
@@ -589,7 +611,8 @@ describe('createOccupant', () => {
   multi-concern tests that are hard to diagnose.
 - Prefer `expect(result).toEqual(…)` for data shapes; use `.toMatchObject` when
   you only care about a subset of properties.
-- Do not mock PouchDB — use `pouchdb-adapter-memory` for a real (in-memory) database.
+- Do not bind unit tests to one storage engine. Prefer repository contract tests with deterministic doubles;
+  add integration tests for central/edge endpoint behavior where needed.
 
 ### Naming
 
@@ -603,4 +626,4 @@ Test descriptions should read as specifications:
 
 ---
 
-_Last updated: 2026-06-10_
+_Last updated: 2026-07-07_

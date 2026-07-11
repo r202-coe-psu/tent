@@ -12,12 +12,12 @@
 	--card-foreground: oklch(0.147 0.004 49.25);
 	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.147 0.004 49.25);
-	/* Primary = SmartShelter brand blue (logo + primary actions) */
-	--primary: oklch(0.546 0.245 262.881);
-	--primary-dark: oklch(21.131% 0.08121 261.931);
+	/* Primary = SmartShelter brand blue #0A2647 */
+	--primary: oklch(39.035% 0.11534 256.004);
+	--primary-dark: oklch(0.2675 0.0701 255.6);
 	--primary-foreground: oklch(0.985 0.001 106.423);
-	--primary-muted: oklch(0.97 0.014 254.604);
-	--primary-strong: oklch(0.424 0.199 265.638);
+	--primary-muted: oklch(0.95 0.025 255.6);
+	--primary-strong: oklch(0.45 0.12 255.6);
 	--secondary: oklch(0.97 0.001 106.424);
 	--secondary-foreground: oklch(0.216 0.006 56.043);
 	--muted: oklch(0.97 0.001 106.424);
@@ -27,7 +27,7 @@
 	--destructive: oklch(0.577 0.245 27.325);
 	--border: oklch(0.923 0.003 48.717);
 	--input: oklch(0.923 0.003 48.717);
-	--ring: oklch(0.709 0.01 56.259);
+	--ring: oklch(0.5 0.08 255.6);
 	--chart-1: oklch(0.646 0.222 41.116);
 	--chart-2: oklch(0.6 0.118 184.704);
 	--chart-3: oklch(0.398 0.07 227.392);
@@ -53,12 +53,21 @@
 	--danger-subtle: oklch(0.704 0.191 22.216);
 	--danger-border: oklch(0.936 0.032 17.717);
 
+	/* Success — operational status (green) */
+	--success: oklch(60.35% 0.1905 139.079);
+	--success-dark: oklch(28.809% 0.08753 137.159);
+	--success-foreground: oklch(0.985 0.001 106.423);
+	--success-muted: oklch(0.971 0.013 137.38);
+	--success-subtle: oklch(0.704 0.191 132.216);
+	--success-border: oklch(0.936 0.032 137.717);
+
 	/* Warning — offline mode banner, pet-friendly zone, etc. (amber) */
-	--warning: oklch(0.769 0.188 70.08);
-	--warning-foreground: oklch(0.985 0.001 106.423);
-	--warning-muted: oklch(0.962 0.059 95.617);
-	--warning-subtle: oklch(0.555 0.163 60.682);
-	--warning-border: oklch(0.882 0.057 95.617);
+	--warning: oklch(82.233% 0.17032 79.874);
+	--warning-dark: oklch(73.738% 0.16072 68.971);
+	--warning-foreground: oklch(0.147 0.004 49.25);
+	--warning-muted: oklch(0.408 0.123 63.95);
+	--warning-subtle: oklch(0.882 0.057 95.617);
+	--warning-border: oklch(0.408 0.123 63.95);
 
 	/* Shelter Specific Colors */
 	--shelter-bg: oklch(0.982 0.009 239);
@@ -123,11 +132,12 @@
 	--danger-border: oklch(0.271 0.105 24.938);
 
 	/* Warning — offline / amber (dark mode) */
-	--warning: oklch(0.769 0.188 70.08);
+	--warning: oklch(82.233% 0.17032 79.874);
 	--warning-foreground: oklch(0.147 0.004 49.25);
 	--warning-muted: oklch(0.408 0.123 63.95);
 	--warning-subtle: oklch(0.882 0.057 95.617);
 	--warning-border: oklch(0.408 0.123 63.95);
+	--warning-dark: oklch(77.085% 0.16457 71.779);
 
 	/* Shelter Specific Colors (Dark Mode) */
 	--shelter-bg: oklch(0.18 0.005 240);
@@ -184,6 +194,10 @@
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-ring: var(--sidebar-ring);
 
+	/* Brand colors (SOP / SmartShelter) */
+	--color-brand: #013365;
+	--color-brand-hover: #002244;
+
 	/* Accent (EOC) */
 	--color-accent-purple: var(--accent-purple);
 	--color-accent-purple-muted: var(--accent-purple-muted);
@@ -195,8 +209,17 @@
 	--color-danger-subtle: var(--danger-subtle);
 	--color-danger-border: var(--danger-border);
 
+	/* Success (operational status) */
+	--color-success: var(--success);
+	--color-success-dark: var(--success-dark);
+	--color-success-foreground: var(--success-foreground);
+	--color-success-muted: var(--success-muted);
+	--color-success-subtle: var(--success-subtle);
+	--color-success-border: var(--success-border);
+
 	/* Warning (offline / amber) */
 	--color-warning: var(--warning);
+	--color-warning-dark: var(--warning-dark);
 	--color-warning-foreground: var(--warning-foreground);
 	--color-warning-muted: var(--warning-muted);
 	--color-warning-subtle: var(--warning-subtle);

@@ -5,6 +5,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 
 	let {
 		form,
@@ -18,13 +19,11 @@
 </script>
 
 <section
-	class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border bg-shelter-rose-bg/10 p-6 shadow-sm"
+	class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border bg-shelter-rose-bg/10 p-6"
 >
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<span
-			class="flex h-6 w-6 items-center justify-center rounded-full bg-shelter-rose-bg text-xs font-bold text-shelter-rose-text"
-			>5</span
-		>
+		<ShieldAlert class="h-5 w-5 text-shelter-rose-text" />
+		<span class="text-sm font-bold text-shelter-rose-text">5.</span>
 		<h2 class="text-base font-bold text-card-foreground">
 			ข้อมูลการประเมินความเสี่ยงและโครงสร้าง (Risk &amp; Structure)
 		</h2>
@@ -74,6 +73,22 @@
 			<Form.FieldErrors />
 		</Form.Field>
 	</div>
+
+	<Form.Field {form} name="risk.secondary_muster_point">
+		<Form.Control>
+			{#snippet children({ props })}
+				<Form.Label>จุดรวมพลสำรอง (Secondary Muster Point)</Form.Label>
+				<Input
+					{...props}
+					value={$formData.risk.secondary_muster_point ?? ''}
+					oninput={(e) => ($formData.risk.secondary_muster_point = e.currentTarget.value || null)}
+					{disabled}
+					placeholder="เช่น ลานหน้าอาคารเรียน 2 / สนามกีฬากลาง"
+				/>
+			{/snippet}
+		</Form.Control>
+		<Form.FieldErrors />
+	</Form.Field>
 
 	<Form.Field {form} name="risk.constraints">
 		<Form.Control>

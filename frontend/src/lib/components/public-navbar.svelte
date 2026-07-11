@@ -5,9 +5,11 @@
 	import Compass from '@lucide/svelte/icons/compass';
 	import Search from '@lucide/svelte/icons/search';
 	import Heart from '@lucide/svelte/icons/heart';
-	import FileText from '@lucide/svelte/icons/file-text';
-	import UserPlus from '@lucide/svelte/icons/user-plus';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import Menu from '@lucide/svelte/icons/menu';
+	import X from '@lucide/svelte/icons/x';
+	// import FileText from '@lucide/svelte/icons/file-text';
+	// import UserPlus from '@lucide/svelte/icons/user-plus';
+	// import ChevronDown from '@lucide/svelte/icons/chevron-down';
 
 	// Function to check if route is active
 	function isActive(path: string) {
@@ -15,6 +17,12 @@
 			return page.url.pathname === '/public' || page.url.pathname === '/public/';
 		}
 		return page.url.pathname.startsWith(path);
+	}
+
+	let mobileMenuOpen = $state(false);
+
+	function toggleMobileMenu() {
+		mobileMenuOpen = !mobileMenuOpen;
 	}
 </script>
 
@@ -39,6 +47,19 @@
 			</a>
 		</div>
 
+		<!-- Mobile Menu Button -->
+		<button
+			class="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted md:hidden"
+			onclick={toggleMobileMenu}
+			aria-label="Toggle mobile menu"
+		>
+			{#if mobileMenuOpen}
+				<X class="h-6 w-6" />
+			{:else}
+				<Menu class="h-6 w-6" />
+			{/if}
+		</button>
+
 		<!-- Navbar Links -->
 		<nav class="hidden items-center gap-1 md:flex">
 			<a
@@ -54,18 +75,24 @@
 			</a>
 
 			<a
-				href={resolve('/public/shelters')}
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
-				title="เร็วๆ นี้"
+				href="/public/shelters"
+				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+					'/shelters'
+				) && !isActive('/public/shelters')
+					? 'bg-primary-muted text-primary'
+					: 'text-muted-foreground'}"
 			>
 				<Compass class="h-4 w-4" />
 				ตรวจสอบศูนย์พักพิง
 			</a>
 
 			<a
-				href={resolve('/public/family-search')}
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
-				title="เร็วๆ นี้"
+				href={resolve('/public/search')}
+				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+					'/public/search'
+				)
+					? 'bg-primary-muted text-primary'
+					: 'text-muted-foreground'}"
 			>
 				<Search class="h-4 w-4" />
 				สืบค้นญาติ
@@ -83,18 +110,26 @@
 				บริจาคและจองคิว
 			</a>
 
-			<a
-				href={resolve('/public/transparency')}
+			<!-- <a
+				href={resolve('/public/transparency' as any)}
 				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
 				title="เร็วๆ นี้"
 			>
 				<FileText class="h-4 w-4" />
 				รายงานความโปร่งใส
 				<span class="text-[9px] font-bold text-muted-foreground/60">(เร็วๆ นี้)</span>
-			</a>
+			</a> -->
+			<!-- <span
+				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
+				title="เร็วๆ นี้"
+			>
+				<FileText class="h-4 w-4" />
+				รายงานความโปร่งใส
+				<span class="text-[9px] font-bold text-muted-foreground/60">(เร็วๆ นี้)</span>
+			</span> -->
 
 			<!-- Dropdown for Volunteers -->
-			<div class="group relative">
+			<!-- <div class="group relative">
 				<a
 					href={resolve('/public/volunteers')}
 					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground hover:bg-muted/50 {isActive(
@@ -119,13 +154,78 @@
 						ลงทะเบียนอาสาสมัคร
 					</a>
 					<a
-						href={resolve('/public/volunteers/shifts')}
+						href={resolve('/public/volunteers/shifts' as any)}
 						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
 					>
 						ตรวจสอบตารางกะงาน
 					</a>
+					<span
+						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground opacity-60"
+						title="เร็วๆ นี้"
+					>
+						ตรวจสอบตารางกะงาน
+					</span>
 				</div>
-			</div>
+			</div> -->
 		</nav>
 	</div>
+
+	<!-- Mobile Menu Dropdown -->
+	{#if mobileMenuOpen}
+		<div class="absolute top-full left-0 w-full border-b border-border bg-card shadow-lg md:hidden">
+			<nav class="flex flex-col gap-2 p-4">
+				<a
+					href={resolve('/public')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/public'
+					) && !isActive('/public/')
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Home class="h-5 w-5" />
+					หน้าแรก
+				</a>
+
+				<a
+					href="/public/shelters"
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/shelters'
+					) && !isActive('/public/shelters')
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Compass class="h-5 w-5" />
+					ตรวจสอบศูนย์พักพิง
+				</a>
+
+				<a
+					href={resolve('/public/search')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/public/search'
+					)
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Search class="h-5 w-5" />
+					สืบค้นญาติ
+				</a>
+
+				<a
+					href={resolve('/public/donations')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/public/donations'
+					)
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Heart class="h-5 w-5" />
+					บริจาคและจองคิว
+				</a>
+			</nav>
+		</div>
+	{/if}
 </header>

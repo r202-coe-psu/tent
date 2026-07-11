@@ -37,6 +37,7 @@ import {
 	createMovement,
 	createScreening,
 	type Evacuee,
+	type PeopleDoc,
 	type EvacueeInput,
 	type HouseholdInput,
 	type MedicalInput,
@@ -54,9 +55,9 @@ import {
 import {
 	createInitialProfile,
 	SOP_MASTER_SCHEMA_VERSION,
-	sopMasterSchema,
-	validRatios
-} from '$lib/features/sop-ratios';
+	sopMasterSchema
+} from '$lib/features/sop-ratios/domain/sop-ratio';
+import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 import { type AuthorContext, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
@@ -177,6 +178,10 @@ async function bulkDocs(db: string, docs: unknown[]): Promise<void> {
 
 // ─── catalog helpers ──────────────────────────────────────────────────────────
 
+function nowIso(): string {
+	return now();
+}
+
 function catalogDoc(id: string, type: string, body: Record<string, unknown>) {
 	const ts = now();
 	return {
@@ -192,9 +197,21 @@ function catalogDoc(id: string, type: string, body: Record<string, unknown>) {
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const SHELTER_CODE = 'SH001';
-const SHELTER_DB = 'shelter_sh001';
-const CTX: AuthorContext = { shelterCode: SHELTER_CODE, createdBy: 'seed' };
+const SH001_CODE = 'SH001';
+const SH001_DB = 'shelter_sh001';
+const SH001_CTX: AuthorContext = { shelterCode: SH001_CODE, createdBy: 'seed' };
+
+// Aliases for SH001 to fix broken references in seedShelter and seedDashboardData
+const SHELTER_CODE = SH001_CODE;
+const SHELTER_DB = SH001_DB;
+const ctx = SH001_CTX;
+const CTX = SH001_CTX;
+const code = SH001_CODE;
+const dbName = SH001_DB;
+
+const SH002_CODE = 'SH002';
+const SH002_DB = 'shelter_sh002';
+const SH002_CTX: AuthorContext = { shelterCode: SH002_CODE, createdBy: 'seed' };
 
 const SHELTER_CODE_2 = 'SH002';
 const SHELTER_DB_2 = 'shelter_sh002';
@@ -304,6 +321,25 @@ async function seedCatalog(): Promise<void> {
 			names: [],
 			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
 		}
+	});
+
+	// Deploy validate_doc_update to catalog DB to enforce read-only for non-SA roles
+	const ddocId = '_design/access';
+	const { status: getStatus, data: existingDdoc } = await couchReq(
+		'GET',
+		`/catalog/${encodeURIComponent(ddocId)}`
+	);
+	const rev = getStatus === 200 ? (existingDdoc as { _rev: string })._rev : undefined;
+	const validateFn = `function (newDoc, oldDoc, userCtx) {
+  if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
+    return;
+  }
+  throw({ forbidden: 'Only System Admins can write to the catalog database.' });
+}`;
+	await couchReq('PUT', `/catalog/${encodeURIComponent(ddocId)}`, {
+		_id: ddocId,
+		...(rev ? { _rev: rev } : {}),
+		validate_doc_update: validateFn
 	});
 
 	const items = [
@@ -431,20 +467,20 @@ async function seedShelter(): Promise<void> {
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวใจดี',
-			zone: 'Z1',
+			municipality_zone: 'Z1',
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ครอบครัวใหญ่ 4 คน'
 		},
 		{
 			label: 'ครอบครัวสุขสาย',
-			zone: 'Z1',
+			municipality_zone: 'Z1',
 			head_evacuee_id: null,
 			pets: [{ species: 'dog', count: 1 }]
 		},
-		{ label: 'ครอบครัวรักสงบ', zone: 'Z2', head_evacuee_id: null, pets: [] }
+		{ label: 'ครอบครัวรักสงบ', municipality_zone: 'Z2', head_evacuee_id: null, pets: [] }
 	];
-	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, CTX));
+	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, ctx));
 
 	// — evacuees ————————————————————————————————————————————————————————————————
 	const evacueeInputs: EvacueeInput[] = [
@@ -564,15 +600,15 @@ async function seedShelter(): Promise<void> {
 			registered_via: 'import'
 		}
 	];
-	const evacuees = evacueeInputs.map((e) => createEvacuee(e, CTX));
+	const evacuees = evacueeInputs.map((e) => createEvacuee(e, ctx));
 
 	// — movements (check_in for every evacuee) —————————————————————————————————
 	const movementInputs: MovementInput[] = evacuees.map((e) => ({
 		evacuee_id: e._id,
 		action: 'check_in' as const,
-		zone: evacueeInputs[evacuees.indexOf(e)].household_id === hh3._id ? 'Z2' : 'Z1'
+		zone: 'Z1'
 	}));
-	const movements = movementInputs.map((m) => createMovement(m, CTX));
+	const movements = movementInputs.map((m) => createMovement(m, ctx));
 
 	// Apply check-in to each evacuee's current_stay snapshot.
 	const checkedInEvacuees = evacuees.map((e, i) => applyMovementToStay(e, movements[i]));
@@ -613,7 +649,7 @@ async function seedShelter(): Promise<void> {
 			track: 'fast_track'
 		}
 	];
-	const medicals = medicalInputs.map((m) => createMedical(m, CTX));
+	const medicals = medicalInputs.map((m) => createMedical(m, ctx));
 
 	// — screenings ————————————————————————————————————————————————————————————
 	const screeningInputs: ScreeningInput[] = [
@@ -647,27 +683,39 @@ async function seedShelter(): Promise<void> {
 			needs_referral: false
 		}
 	];
-	const screenings = screeningInputs.map((s) => createScreening(s, CTX));
+	const screenings = screeningInputs.map((s) => createScreening(s, ctx));
 
 	// — stock ledger ——————————————————————————————————————————————————————————
 	const stockInputs: StockLedgerInput[] = [
-		{ item_id: ITEM.rice, qty: 200, unit: 'kg', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.water, qty: 500, unit: 'bottle', reason: 'receive', ref_id: null },
+		{
+			item_id: ITEM.rice,
+			qty: code === SH001_CODE ? 200 : 100,
+			unit: 'kg',
+			reason: 'receive',
+			ref_id: null
+		},
+		{
+			item_id: ITEM.water,
+			qty: code === SH001_CODE ? 500 : 300,
+			unit: 'bottle',
+			reason: 'receive',
+			ref_id: null
+		},
 		{ item_id: ITEM.paracetamol, qty: 1000, unit: 'tablet', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.soap, qty: 150, unit: 'bar', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.blanket, qty: 80, unit: 'piece', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.rice, qty: -30, unit: 'kg', reason: 'distribute', ref_id: null },
 		{ item_id: ITEM.water, qty: -100, unit: 'bottle', reason: 'distribute', ref_id: null }
 	];
-	const stockEntries = stockInputs.map((s) => createStockLedger(s, CTX));
+	const stockEntries = stockInputs.map((s) => createStockLedger(s, ctx));
 
 	// — donation campaigns ————————————————————————————————————————————————————
 	const campaignInputs: CampaignInput[] = [
 		{
 			title: 'รับบริจาคอาหารและน้ำดื่ม',
 			needs: [
-				{ item_id: ITEM.rice, qty_target: 500, unit: 'kg' },
-				{ item_id: ITEM.water, qty_target: 1000, unit: 'bottle' }
+				{ item_id: ITEM.rice, qty_target: code === SH001_CODE ? 500 : 300, unit: 'kg' },
+				{ item_id: ITEM.water, qty_target: code === SH001_CODE ? 1000 : 500, unit: 'bottle' }
 			],
 			notes: 'เปิดรับบริจาคเพื่อผู้ประสบภัยน้ำท่วม'
 		},
@@ -679,14 +727,14 @@ async function seedShelter(): Promise<void> {
 			]
 		}
 	];
-	const campaigns = campaignInputs.map((c) => createCampaign(c, CTX));
+	const campaigns = campaignInputs.map((c) => createCampaign(c, ctx));
 
 	// — donations ——————————————————————————————————————————————————————————————
 	const donationInputs: WalkInDonationInput[] = [
 		{
 			donor: { name: 'บริษัท ซีพีเอฟ จำกัด', phone: '022222222', phone_hash: 'mock-hash-cpf' },
 			kind: 'items',
-			items: [{ item_id: ITEM.rice, qty: 50, unit: 'kg' }],
+			items: [{ item_id: ITEM.rice, qty: code === SH001_CODE ? 50 : 20, unit: 'kg' }],
 			campaign_id: campaigns[0]._id,
 			tracking_token_hash: 'mock-track-001'
 		},
@@ -694,7 +742,7 @@ async function seedShelter(): Promise<void> {
 			donor: { name: 'วัดท่าสะอ้าน', phone: null, phone_hash: 'mock-hash-wat' },
 			kind: 'items',
 			items: [
-				{ item_id: ITEM.water, qty: 100, unit: 'bottle' },
+				{ item_id: ITEM.water, qty: code === SH001_CODE ? 100 : 50, unit: 'bottle' },
 				{ item_id: ITEM.blanket, qty: 20, unit: 'piece' }
 			],
 			campaign_id: campaigns[0]._id,
@@ -708,7 +756,7 @@ async function seedShelter(): Promise<void> {
 			tracking_token_hash: 'mock-track-003'
 		}
 	];
-	const donations = donationInputs.map((d) => createWalkInDonation(d, CTX));
+	const donations = donationInputs.map((d) => createWalkInDonation(d, ctx));
 
 	// — bulk insert ——————————————————————————————————————————————————————————
 	const allDocs = [
@@ -721,14 +769,14 @@ async function seedShelter(): Promise<void> {
 		...campaigns,
 		...donations
 	];
-	await bulkDocs(SHELTER_DB, allDocs);
+	await bulkDocs(dbName, allDocs);
 
 	console.log(
-		`  ✓ ${SHELTER_DB}: 3 households, ${evacuees.length} evacuees, ${movements.length} movements`
+		`  ✓ ${dbName}: 3 households, ${evacuees.length} evacuees, ${movements.length} movements`
 	);
-	console.log(`  ✓ ${SHELTER_DB}: ${medicals.length} medicals, ${screenings.length} screenings`);
+	console.log(`  ✓ ${dbName}: ${medicals.length} medicals, ${screenings.length} screenings`);
 	console.log(
-		`  ✓ ${SHELTER_DB}: ${stockEntries.length} stock entries, ${campaigns.length} campaigns, ${donations.length} donations`
+		`  ✓ ${dbName}: ${stockEntries.length} stock entries, ${campaigns.length} campaigns, ${donations.length} donations`
 	);
 }
 
@@ -750,7 +798,7 @@ async function seedShelter2(): Promise<void> {
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวปัตตานี',
-			zone: 'Z1',
+			municipality_zone: 'Z1',
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ตัวอย่าง SH002'
@@ -810,13 +858,30 @@ async function seedDashboardData(): Promise<void> {
 		}
 	}
 
-	const COUNTRIES = ['THAILAND', 'THAILAND', 'THAILAND', 'MYANMAR', 'LAOS', 'CAMBODIA', 'UNKNOWN'];
+	const COUNTRIES = [
+		'THAILAND',
+		'MYANMAR',
+		'LAOS',
+		'CAMBODIA',
+		'VIETNAM',
+		'MALAYSIA',
+		'SINGAPORE',
+		'CHINA',
+		'JAPAN',
+		'SOUTH KOREA',
+		'PHILIPPINES',
+		'INDONESIA',
+		'INDIA',
+		'UNKNOWN'
+	];
 	const STATUSES = [
-		'registered',
-		'checked_in',
-		'checked_in',
+		'pre_registered',
+		'active',
+		'active',
+		'temporary_leave',
+		'transferred',
 		'checked_out',
-		'transferred'
+		'deceased'
 	] as const;
 	const CURRENT_YEAR = new Date().getFullYear();
 
@@ -831,7 +896,7 @@ async function seedDashboardData(): Promise<void> {
 	}
 
 	const NUM_DOCS = 100;
-	const docs: Evacuee[] = [];
+	const docs: PeopleDoc[] = [];
 	const stats = {
 		status: {} as Record<string, number>,
 		country: {} as Record<string, number>,
@@ -868,9 +933,46 @@ async function seedDashboardData(): Promise<void> {
 		doc._id = `evacuee:seed-genname-${i}`;
 		(doc as Evacuee & { country: string }).country = country;
 		doc.current_stay.status = status;
-		doc.created_at = randomDatePast30Days();
+
+		const createdDate = randomDatePast30Days();
+		doc.created_at = createdDate;
+		doc.updated_at = createdDate;
 
 		docs.push(doc);
+
+		// Generate check-in movement for everyone
+		const checkInMove = createMovement(
+			{
+				evacuee_id: doc._id,
+				action: 'check_in',
+				zone: 'Z1'
+			},
+			CTX
+		);
+		checkInMove._id = `movement:seed-genname-${i}-in`;
+		checkInMove.occurred_at = createdDate;
+		docs.push(checkInMove);
+
+		// Generate check-out or transfer-out if applicable
+		if (status === 'checked_out' || status === 'transferred') {
+			const outDate = new Date(createdDate);
+			outDate.setDate(outDate.getDate() + rnd(1, 5));
+			if (outDate > new Date()) {
+				outDate.setTime(new Date().getTime()); // Clamp to today
+			}
+
+			const action = status === 'checked_out' ? 'check_out' : 'transfer_out';
+			const outMove = createMovement(
+				{
+					evacuee_id: doc._id,
+					action
+				},
+				CTX
+			);
+			outMove._id = `movement:seed-genname-${i}-out`;
+			outMove.occurred_at = outDate.toISOString();
+			docs.push(outMove);
+		}
 	}
 
 	await bulkDocs(SHELTER_DB, docs);
@@ -902,6 +1004,27 @@ async function deleteDashboardData(): Promise<void> {
 	const toDelete = rows
 		.filter((r) => r.doc && r.doc._id)
 		.map((r) => ({ ...r.doc, _deleted: true }));
+
+	// Also find and delete movements generated by seed
+	const movementKeys = [];
+	for (let i = 0; i < 100; i++) {
+		movementKeys.push(`movement:seed-genname-${i}-in`);
+		movementKeys.push(`movement:seed-genname-${i}-out`);
+	}
+	const { status: mStatus, data: mData } = await couchReq(
+		'POST',
+		`/${SHELTER_DB}/_all_docs?include_docs=true`,
+		{
+			keys: movementKeys
+		}
+	);
+	if (mStatus === 200) {
+		const mRows = (mData as { rows: { doc: { type?: string } & Record<string, unknown> }[] }).rows;
+		const movesToDelete = mRows
+			.filter((r) => r.doc && r.doc._id)
+			.map((r) => ({ ...r.doc, _deleted: true }));
+		toDelete.push(...movesToDelete);
+	}
 
 	if (toDelete.length === 0) {
 		console.log(`  ✓ No dashboard test data found to delete.`);

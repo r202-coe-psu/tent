@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-06-18
+updated: 2026-07-07
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้
 ---
 
@@ -12,13 +12,13 @@ note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: 
 
 | Plane | ใคร | ผ่านอะไร |
 | --- | --- | --- |
-| **A. Sync plane** | staff app (login แล้ว) | PouchDB เขียน local ก่อน แล้ว sync กับ active remote เดียว: **central CouchDB** ปกติ; **edge CouchDB @ศูนย์** เฉพาะ WAN/central outage; local-only ถ้าไม่เห็นทั้งคู่ (topology ดู data-model.md §1) |
+| **A. Sync plane** | staff app (login แล้ว) | **Remote-first** กับ active endpoint เดียว: **central CouchDB** ปกติ; **edge CouchDB @ศูนย์** เฉพาะ WAN/central outage; ถ้าไม่เห็นทั้งคู่ให้ fail/retry (ไม่มี local-only write queue) (topology ดู data-model.md §1) |
 | **B. Service plane** | staff app เรียกเสริม | REST `/api/v1/*` ที่ **central เท่านั้น** (ต้องมี WAN + central session) — เฉพาะงานที่ CouchDB ทำไม่ได้: export, provisioning |
 | **C. Public plane** | ไม่ login | REST `/public/v1/*` ที่ central — ดู [public-tier-flow-spec](../features/public-tier-flow-spec.html) |
 
 ผลที่ตามมา: endpoint อย่าง `POST /evacuees` ใน feature specs เดิม **ไม่มีอยู่จริง** — การ
-"สร้าง evacuee" = `db.put(evacueeDoc)` ใน PouchDB แล้ว sync เอง; validation ระดับ field อยู่ที่
-Zod ฝั่ง client + `validate_doc_update` ฝั่ง server. Error 422/403 ใน specs map เป็น
+"สร้าง evacuee" = เขียน doc ไปที่ CouchDB endpoint ที่ active (central ก่อน, edge ตอน failover);
+validation ระดับ field อยู่ที่ Zod ฝั่ง client + `validate_doc_update` ฝั่ง server. Error 422/403 ใน specs map เป็น
 Zod error / CouchDB `forbidden` ตามลำดับ
 
 ---
@@ -36,30 +36,29 @@ DELETE /couch/_session          → logout
 
 - login ทำกับ **central** ก่อนเสมอ; ถ้า WAN/central เข้าไม่ได้จึง login กับ **edge fallback** ของศูนย์ตน
   เพราะ `_users` ถูก filtered-replicate ลง edge (data-model.md §6)
-- central และ edge `_session` cookies แยกกันตาม origin/remote — edge fallback session ใช้ sync กับ edge
+- central และ edge `_session` cookies แยกกันตาม origin/remote — edge fallback session ใช้เรียก edge endpoint
   เท่านั้น และ **ไม่** grant สิทธิ์เรียก `/api/v1/*` หรือ service API ของ central
 - สร้าง/แก้ user และเปลี่ยนรหัสผ่านต้องทำผ่าน central (`/api/v1/users`)
 - ไม่มี JWT, ไม่มี refresh token — cookie อายุ ตาม `couch_httpd_auth.timeout` (ตั้ง 8 ชม. + sliding)
 - app อ่าน `userCtx.roles` เพื่อ derive shelter scope + เมนูตาม role — enforcement จริงอยู่ที่
   `_security` + `validate_doc_update` (UI เป็นแค่ความสะดวก)
-- เมื่อ central กลับมา app ตรวจ/ขอ central session แล้ว fail back active remote ไป central
-- offline ที่ cookie หมดอายุ: PouchDB local ใช้ต่อได้ (อ่าน/เขียน local) — sync จะ resume เมื่อ login ใหม่กับ remote ที่ active
+- เมื่อ central กลับมา app ตรวจ/ขอ central session แล้ว fail back active endpoint ไป central
+- ถ้า cookie หมดอายุและไม่มี central/edge session ที่ใช้ได้ ให้หยุด mutation และบังคับ re-auth ก่อนส่งคำขอใหม่
 
 ### 1.2 Databases ที่ app sync
 
-Remote ของ device เลือกตาม precedence และมี **active remote เดียวต่อเวลา**:
+Endpoint ของ device เลือกตาม precedence และมี **active endpoint เดียวต่อเวลา**:
 
 | ลำดับ | Active remote | ใช้เมื่อ | DB ที่ sync |
 | --- | --- | --- | --- |
-| 1 | `https://central.example/couch` | central reachable | `shelter_{shelter_code}` ⇄ live+retry · `registry`/`catalog` ← pull ตอน start + ทุก 5 นาที |
-| 2 | `https://edge.local/couch` | WAN/central เข้าไม่ได้ แต่ LAN edge reachable | `shelter_{shelter_code}` ⇄ live+retry · `registry`/`catalog` ← pull จาก edge replica |
-| 3 | — | ไม่เห็นทั้ง central และ edge | local PouchDB only; queue changes จนกว่า remote กลับมา |
+| 1 | `https://central.example/couch` | central reachable | `shelter_{shelter_code}` read/write (live+retry) · `registry`/`catalog` pull/read-through |
+| 2 | `https://edge.local/couch` | WAN/central เข้าไม่ได้ แต่ LAN edge reachable | `shelter_{shelter_code}` read/write (live+retry) · `registry`/`catalog` อ่านจาก edge replica |
+| 3 | — | ไม่เห็นทั้ง central และ edge | disconnected status-only (ไม่มี read-only local cache); automatic retry 3 attempts, เกินนั้นแสดงแบนเนอร์ cannot connect และเปิด force retry |
 
-- ห้าม run long-lived replication จาก device ไปทั้ง central และ edge พร้อมกัน; switching remote ต้องหยุด
-  replication เดิมก่อนเริ่มตัวใหม่
+- ห้ามยิง write พร้อมกันไปทั้ง central และ edge; switching endpoint ต้องหยุด traffic ไป endpoint เดิมก่อน
 - edge ⇄ central เป็น replication ระดับ server สำหรับ fallback replica/backlog (provisioning ตั้งให้ — app ไม่เกี่ยว)
 - เมื่อ central กลับมา app fail back ไป central; edge จะ sync backlog ช่วง outage ขึ้น central เอง
-- การเขียนทุกชนิด = เขียน local ก่อนเสมอ (offline-first) — UI ห้าม block รอ network
+- การเขียนทุกชนิดเป็น remote-first ไป active endpoint — UI แสดงสถานะส่งข้อมูล/ลองใหม่ตามผลจริง (auto retry 3 attempts ก่อนขึ้น cannot-connect banner และเปิด force retry)
 - conflict ดู data-model.md §5 — app ไม่ resolve เองนอกจาก append-only retry (409 = สำเร็จ)
 
 ### 1.3 สัญญาเชิง doc (สรุป — รายละเอียด field อยู่ data-model.md §3)
@@ -67,11 +66,11 @@ Remote ของ device เลือกตาม precedence และมี **ac
 | งานใน feature spec | การกระทำจริง |
 | --- | --- |
 | สร้าง/แก้คน (FR-4..6) | `put evacuee:{ulid}` — required `first_name` + `last_name` + `gender` + `phone`; phone เป็น `null` ได้เมื่อไม่มี |
-| duplicate hint (FR-5) | query Mango index ชื่อ/phone ฝั่ง local ก่อน put; override → `put audit:{ulid}` |
+| duplicate hint (FR-5) | query Mango index ชื่อ/phone ผ่าน active endpoint ก่อน put; override → `put audit:{ulid}` |
 | screening (FR-7..9) | `put screening:{ulid}` (append-only) |
 | check-in/out (FR-11..12) | `put movement:{ulid}` + update `evacuee.current_stay` |
-| ค้นหา/QR (FR-10,13) | local Mango query (ชื่อ หรือ evacuee ULID จาก QR) — ไม่มี network call |
-| dashboard (FR-14) | query views `occupancy`, `stock_balance`, ... ฝั่ง local |
+| ค้นหา/QR (FR-10,13) | Mango query ที่ active endpoint (ชื่อ หรือ evacuee ULID จาก QR) |
+| dashboard (FR-14) | query views `occupancy`, `stock_balance`, ... ที่ active endpoint |
 | stock/donation/kitchen/ฯลฯ | put doc ตาม type ใน data-model.md §3.2 |
 
 ## 2. Service plane `/api/v1` — conventions

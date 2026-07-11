@@ -4,7 +4,12 @@ import { toast } from 'svelte-sonner';
 import { useCreateMasterVersion, useCreateOverrideVersion } from './use-create-version';
 import { useMasterVersionHistory, useOverrideVersionHistory } from './use-version-history';
 import { sopRatioKeys, sopVersionKeys } from './queries';
-import { SHELTER_CODE } from '$lib/db/shelter';
+
+vi.mock('$lib/db/shelter', () => ({
+	getShelterCode: vi.fn(() => 'SH001')
+}));
+
+const TEST_SHELTER_CODE = 'SH001';
 import {
 	SOP_MASTER_SCHEMA_VERSION,
 	SOP_OVERRIDE_SCHEMA_VERSION,
@@ -23,7 +28,7 @@ vi.mock('svelte-sonner', () => ({
 
 // Mock repositories from data layer
 const mockCreateVersion = vi.fn().mockResolvedValue({ ok: true });
-vi.mock('../data/sop-ratio.pouch', () => ({
+vi.mock('../data/sop-ratio.remote', () => ({
 	sopMasterRepository: () => ({
 		createVersion: mockCreateVersion
 	}),
@@ -81,7 +86,7 @@ describe('SOP Ratios Application Hooks', () => {
 				   preventing silent un-marshaling failures in PouchDB. */
 				type: 'sop_override' as const,
 				schema_v: SOP_OVERRIDE_SCHEMA_VERSION as SopOverride['schema_v'],
-				shelter_code: SHELTER_CODE,
+				shelter_code: TEST_SHELTER_CODE,
 				base_profile_id: 'sop_profile:baseline',
 				created_at: '2026-07-03T00:00:00.000Z',
 				updated_at: '2026-07-03T00:00:00.000Z',
@@ -93,12 +98,12 @@ describe('SOP Ratios Application Hooks', () => {
 			},
 			reason: 'Test change',
 			ctx: {
-				shelterCode: SHELTER_CODE,
+				shelterCode: TEST_SHELTER_CODE,
 				createdBy: 'tester'
 			}
 		};
 
-		it('should succeed and invalidate query cache when shelterCode matches SHELTER_CODE', async () => {
+		it('should succeed and invalidate query cache when shelterCode matches TEST_SHELTER_CODE', async () => {
 			const mutation = useCreateOverrideVersion();
 			await mutation.mutate(validOverrideInput);
 
@@ -114,7 +119,7 @@ describe('SOP Ratios Application Hooks', () => {
 			expect(toast.success).toHaveBeenCalledWith('บันทึกเวอร์ชัน Override SOP สำเร็จ');
 		});
 
-		it('should block execution and throw error when shelterCode does not match SHELTER_CODE', async () => {
+		it('should block execution and throw error when shelterCode does not match TEST_SHELTER_CODE', async () => {
 			const mutation = useCreateOverrideVersion();
 			const invalidInput = {
 				...validOverrideInput,
@@ -125,7 +130,7 @@ describe('SOP Ratios Application Hooks', () => {
 			};
 
 			await expect(mutation.mutate(invalidInput)).rejects.toThrow(
-				`shelterCode mismatch: expected ${SHELTER_CODE}, got SH999`
+				`shelterCode mismatch: expected ${TEST_SHELTER_CODE}, got SH999`
 			);
 
 			// Verify data layer was NOT called due to the guard block
@@ -246,16 +251,17 @@ describe('SOP Ratios Application Hooks', () => {
 	});
 
 	describe('useOverrideVersionHistory', () => {
-		it('should return enabled: false when name is empty or whitespace', () => {
-			expect(useOverrideVersionHistory('')).toMatchObject({ enabled: false });
-			expect(useOverrideVersionHistory('   ')).toMatchObject({ enabled: false });
+		it('should return enabled: false when name or shelterCode is empty or whitespace', () => {
+			expect(useOverrideVersionHistory('', 'SH001')).toMatchObject({ enabled: false });
+			expect(useOverrideVersionHistory('   ', 'SH001')).toMatchObject({ enabled: false });
+			expect(useOverrideVersionHistory('name', '')).toMatchObject({ enabled: false });
 		});
 
 		it('should return enabled: true and correctly scoped queryKey for valid name', () => {
-			const result = useOverrideVersionHistory('baseline');
+			const result = useOverrideVersionHistory('baseline', TEST_SHELTER_CODE);
 			expect(result).toMatchObject({
 				enabled: true,
-				queryKey: [...sopVersionKeys.override(), 'baseline', SHELTER_CODE]
+				queryKey: [...sopVersionKeys.override(), 'baseline', TEST_SHELTER_CODE]
 			});
 		});
 	});

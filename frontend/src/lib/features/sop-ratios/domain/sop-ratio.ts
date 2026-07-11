@@ -22,7 +22,8 @@ export const SOP_RATIO_KEYS = [
 	'm2_per_person_total',
 	'max_waterpoint_distance_m',
 	'max_queue_minutes',
-	'people_per_volunteer'
+	'people_per_volunteer',
+	'rice_g_per_person_meal'
 ] as const;
 
 export type SopRatioKey = (typeof SOP_RATIO_KEYS)[number];
@@ -47,7 +48,8 @@ export const SOP_RATIO_KIND: Record<SopRatioKey, 'multiply' | 'divide' | 'thresh
 	m2_per_person_total: 'multiply',
 	max_waterpoint_distance_m: 'threshold',
 	max_queue_minutes: 'threshold',
-	people_per_volunteer: 'divide'
+	people_per_volunteer: 'divide',
+	rice_g_per_person_meal: 'multiply'
 };
 
 const ratioShape = SOP_RATIO_KEYS.reduce(
@@ -105,13 +107,13 @@ export const sopOverrideSchema = z.object({
 	schema_v: z.literal(SOP_OVERRIDE_SCHEMA_VERSION),
 	shelter_code: shelterCodeSchema,
 	base_profile_id: z.string().min(1),
+	created_at: z.string().datetime(),
+	updated_at: z.string().datetime(),
+	created_by: z.string().min(1),
 	name: z.string().min(1),
 	ratios: ratiosSchema,
 	version: z.number().int().positive(),
-	active: z.boolean(),
-	created_at: z.string().datetime(),
-	updated_at: z.string().datetime(),
-	created_by: z.string().min(1)
+	active: z.boolean()
 });
 
 export type SopOverride = z.infer<typeof sopOverrideSchema>;

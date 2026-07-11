@@ -26,14 +26,14 @@
 		<div class="flex flex-col justify-between gap-6 md:flex-row md:items-center">
 			<div class="max-w-2xl">
 				<span
-					class="mb-3 inline-block rounded-md bg-white/10 px-2.5 py-1 text-[10px] font-black tracking-wider text-slate-300 uppercase"
+					class="mb-3 inline-block rounded-md bg-white/10 px-2.5 py-1 text-[10px] font-black tracking-wider text-muted-foreground/60 uppercase"
 				>
 					# RESCUE VOLUNTEER PLATFORM
 				</span>
 				<h1 class="text-xl font-black tracking-tight text-white md:text-2xl">
 					ระบบงานข้อมูลอาสาสมัครร่วมบูรณาการภัยพิบัติ
 				</h1>
-				<p class="mt-2 text-xs leading-relaxed text-slate-300">
+				<p class="mt-2 text-xs leading-relaxed text-muted-foreground/60">
 					เชื่อมประสานความดี ขจัดปัญหาร่วมกระจุกตัว ด้วยการคัดกรองทักษะ (Skill Matching)
 					ออกรหัสลงทะเบียน (Role Card) ปฏิบัติอาสา และติดตามสวัสดิการตามมาตรฐาน Sphere
 				</p>
@@ -42,7 +42,7 @@
 			<!-- Stats -->
 			<div class="flex shrink-0 gap-4">
 				<div class="min-w-28 rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
-					<div class="text-[10px] font-bold text-slate-400">ลงทะเบียนแล้ว</div>
+					<div class="text-[10px] font-bold text-muted-foreground/80">ลงทะเบียนแล้ว</div>
 					<div class="mt-1 text-xl font-black text-white">6 คน</div>
 				</div>
 				<div class="min-w-28 rounded-2xl border border-chart-2/30 bg-chart-2/15 p-4 text-center">
@@ -169,7 +169,7 @@
 									/>
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
-											<ChefHat class="h-3.5 w-3.5 text-orange-500" />
+											<ChefHat class="h-3.5 w-3.5 text-warning" />
 											ประกอบอาหาร (Cooking)
 										</span>
 										<p class="mt-1 text-[10px] text-muted-foreground">
@@ -187,7 +187,7 @@
 									/>
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
-											<Ambulance class="h-3.5 w-3.5 text-red-500" />
+											<Ambulance class="h-3.5 w-3.5 text-danger" />
 											การแพทย์/ปฐมพยาบาล (Medical)
 										</span>
 										<p class="mt-1 text-[10px] text-muted-foreground">
@@ -205,7 +205,7 @@
 									/>
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
-											<FileText class="h-3.5 w-3.5 text-blue-500" />
+											<FileText class="h-3.5 w-3.5 text-primary" />
 											คัดกรองประวัติ (Screening)
 										</span>
 										<p class="mt-1 text-[10px] text-muted-foreground">
@@ -223,7 +223,7 @@
 									/>
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
-											<Truck class="h-3.5 w-3.5 text-amber-600" />
+											<Truck class="h-3.5 w-3.5 text-warning-foreground" />
 											ขนย้ายสิ่งของ (Lifting/Logistics)
 										</span>
 										<p class="mt-1 text-[10px] text-muted-foreground">
@@ -288,12 +288,12 @@
 				</div>
 
 				<!-- Safety Info -->
-				<div class="rounded-3xl border border-warning-border/40 bg-amber-500/5 p-5">
-					<h4 class="flex items-center gap-1.5 text-xs font-bold text-amber-700">
-						<Info class="h-4 w-4 text-amber-600" />
+				<div class="rounded-3xl border border-warning-border/40 bg-warning/5 p-5">
+					<h4 class="flex items-center gap-1.5 text-xs font-bold text-warning-foreground">
+						<Info class="h-4 w-4 text-warning-foreground" />
 						ข้อทดสอบความปลอดภัย
 					</h4>
-					<p class="mt-2 text-[10.5px] leading-relaxed text-slate-500">
+					<p class="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
 						อาสาสมัครทุกคนจะต้องปฏิบัติตามแผนคำสั่งและคำแนะนำของหัวหน้าเวรศูนย์พักพิงหลัก
 						หากพบอาการไม่สบาย มีไข้ หรือเกิดอุบัติเหตุแจ้งทีมแพทย์ส่วนหลังทันที!
 					</p>
@@ -333,7 +333,7 @@
 			<!-- Search Placeholder Card -->
 			<div class="mt-8 rounded-2xl border border-dashed border-border bg-muted/10 p-10 text-center">
 				<div
-					class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-slate-400"
+					class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground/80"
 				>
 					<QrCode class="h-6 w-6" />
 				</div>

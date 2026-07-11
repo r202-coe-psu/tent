@@ -1,6 +1,6 @@
 import { createQuery } from '@tanstack/svelte-query';
-import { SHELTER_CODE } from '$lib/db/shelter';
-import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.pouch';
+import { getShelterCode } from '$lib/db/shelter';
+import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.remote';
 import type { SopMaster, SopOverride } from '../domain/sop-ratio';
 
 export const sopRatioKeys = {
@@ -25,9 +25,12 @@ function getLatestVersion<T extends { version: number }>(list: T[]): T | null {
  * master (per resolveEffectiveProfile precedence). Returns the winning doc
  * itself (not just its ratios) so callers can read _id/version for calc_source.
  */
-export async function getActiveSopProfile(): Promise<SopMaster | SopOverride | null> {
+export async function getActiveSopProfile(
+	shelterCode?: string
+): Promise<SopMaster | SopOverride | null> {
+	const code = shelterCode ?? getShelterCode();
 	const [overrides, masters] = await Promise.all([
-		sopOverrideRepository(SHELTER_CODE).listActive(),
+		sopOverrideRepository(code).listActive(),
 		sopMasterRepository().listActive()
 	]);
 	const activeOverride = getLatestVersion(overrides);
@@ -35,11 +38,16 @@ export async function getActiveSopProfile(): Promise<SopMaster | SopOverride | n
 	return activeOverride ?? activeMaster ?? null;
 }
 
-export const useActiveSopRatio = () =>
-	createQuery(() => ({
-		queryKey: sopRatioKeys.active(),
-		queryFn: getActiveSopProfile
-	}));
+export const useActiveSopRatio = (shelterCode?: string | (() => string)) => {
+	const getCode = typeof shelterCode === 'function' ? shelterCode : () => shelterCode;
+	return createQuery(() => {
+		const code = getCode();
+		return {
+			queryKey: [...sopRatioKeys.active(), code ?? getShelterCode()] as const,
+			queryFn: () => getActiveSopProfile(code)
+		};
+	});
+};
 
 /**
  * @deprecated Use `useActiveSopRatio` instead.
@@ -52,3 +60,18 @@ export const useSopProfiles = () =>
 		queryKey: sopRatioKeys.list(),
 		queryFn: () => sopMasterRepository().listActive()
 	}));
+
+export const useActiveSopOverride = (shelterCode: string | (() => string)) => {
+	const getCode = typeof shelterCode === 'function' ? shelterCode : () => shelterCode;
+	return createQuery(() => {
+		const code = getCode();
+		return {
+			queryKey: [...sopRatioKeys.active(), 'override', code] as const,
+			queryFn: async () => {
+				const activeOverrides = await sopOverrideRepository(code).listActive();
+				return getLatestVersion(activeOverrides);
+			},
+			enabled: code.trim().length > 0
+		};
+	});
+};
