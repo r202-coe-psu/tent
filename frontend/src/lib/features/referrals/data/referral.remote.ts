@@ -1,0 +1,80 @@
+import { createRemoteRepository, type Repository } from '$lib/db/repository';
+import { touch, makeDoc, type AuthorContext } from '$lib/db/model';
+import { getShelterDb } from '$lib/db/shelter';
+import {
+	isReferral,
+	type Referral,
+	type ReferralInput,
+	type ReferralStatus
+} from '../domain/referral.schema';
+import { applyTransition } from '../domain/referral.transitions';
+import type { ReferralRepository } from './referral.repository';
+
+export class ReferralRemoteRepository implements ReferralRepository {
+	private readonly repo: Repository;
+
+	constructor(private readonly dbName: string) {
+		this.repo = createRemoteRepository(dbName);
+	}
+
+	async list(filter?: { status?: ReferralStatus; evacuee_id?: string }): Promise<Referral[]> {
+		const selector: Record<string, unknown> = { type: 'referral' };
+		if (filter?.status) {
+			selector.status = filter.status;
+		}
+		if (filter?.evacuee_id) {
+			selector.evacuee_id = filter.evacuee_id;
+		}
+
+		const results = await this.repo.find<Referral>({
+			selector,
+			limit: 1000
+		});
+
+		return results.filter(isReferral);
+	}
+
+	async get(id: string): Promise<Referral | null> {
+		const doc = await this.repo.get<Referral>(id);
+		return doc && isReferral(doc) ? doc : null;
+	}
+
+	async create(input: ReferralInput, ctx: AuthorContext): Promise<Referral> {
+		const body = {
+			evacuee_id: input.evacuee_id,
+			to_org: input.to_org,
+			reason: input.reason,
+			urgency: input.urgency,
+			status: 'draft' as const,
+			timeline: {},
+			notes: input.notes
+		};
+
+		// makeDoc stamps the common BaseDoc fields (schema_v, shelter_code, created_at, updated_at, created_by)
+		const doc = makeDoc('referral', 1, body, ctx) as unknown as Referral;
+		return this.repo.put(doc) as Promise<Referral>;
+	}
+
+	async transition(id: string, to: ReferralStatus, actor: string): Promise<Referral> {
+		const latest = await this.repo.get<Referral>(id);
+		if (!latest || !isReferral(latest)) {
+			throw new Error(`Referral ${id} not found or invalid`);
+		}
+
+		const updated = applyTransition(latest, to, actor, new Date().toISOString());
+		// touch() fresh stamps updated_at
+		return this.repo.put(touch(updated)) as Promise<Referral>;
+	}
+}
+
+let singleton: ReferralRepository | null = null;
+let singletonDbName: string | null = null;
+
+export function referralRepository(): ReferralRepository {
+	const currentDb = getShelterDb();
+	if (!singleton || singletonDbName !== currentDb) {
+		singleton = new ReferralRemoteRepository(currentDb);
+		singletonDbName = currentDb;
+	}
+	return singleton;
+}
