@@ -13,7 +13,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 		'Cache-Control': 'public, max-age=60, s-maxage=60'
 	});
 
-	let now = Date.now();
+	const now = Date.now();
 	lastFetchTime = 0; // FORCE REFRESH
 
 	// Poll DB / update read-model if older than 10 mins (600,000 ms)

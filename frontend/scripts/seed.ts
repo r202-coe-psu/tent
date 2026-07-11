@@ -19,10 +19,12 @@
  * | seedRegistry — shelter master| plain object          | no factory (server-side only) |
  * | seedCatalog — supply items   | plain object          | no factory (no catalog feature) |
  * | seedCatalog — recipes        | plain object          | no factory (no catalog feature) |
+ * | seedUsers — _users staff     | plain CouchDB user    | staff01–staff03 test logins     |
  *
  * Safe to re-run: catalog and registry docs use deterministic IDs
  * (PUT → 409 = already exists → skip). Shelter docs use ULIDs so
  * re-running adds another batch — useful for volume testing.
+ * Test users (staff01–03) are also idempotent (409 → skip).
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -178,10 +180,6 @@ async function bulkDocs(db: string, docs: unknown[]): Promise<void> {
 
 // ─── catalog helpers ──────────────────────────────────────────────────────────
 
-function nowIso(): string {
-	return now();
-}
-
 function catalogDoc(id: string, type: string, body: Record<string, unknown>) {
 	const ts = now();
 	return {
@@ -209,10 +207,6 @@ const CTX = SH001_CTX;
 const code = SH001_CODE;
 const dbName = SH001_DB;
 
-const SH002_CODE = 'SH002';
-const SH002_DB = 'shelter_sh002';
-const SH002_CTX: AuthorContext = { shelterCode: SH002_CODE, createdBy: 'seed' };
-
 const SHELTER_CODE_2 = 'SH002';
 const SHELTER_DB_2 = 'shelter_sh002';
 const CTX_2: AuthorContext = { shelterCode: SHELTER_CODE_2, createdBy: 'seed' };
@@ -226,6 +220,42 @@ const ITEM = {
 	blanket: 'item:blanket',
 	egg: 'item:egg'
 } as const;
+
+// ─── seedUsers ────────────────────────────────────────────────────────────────
+
+const USER_PREFIX = 'org.couchdb.user:';
+const SEED_STAFF_PASSWORD = '!Q2w3e4r5t';
+const SEED_STAFF_ROLES = ['shelter:SH001', 'registration_staff'] as const;
+
+/** Create staff01–staff03 test logins in CouchDB `_users` (idempotent). */
+async function seedUsers(): Promise<void> {
+	const names = ['staff01', 'staff02', 'staff03'] as const;
+	let created = 0;
+	let skipped = 0;
+
+	for (const name of names) {
+		const { status } = await couchReq('PUT', `/_users/${USER_PREFIX}${encodeURIComponent(name)}`, {
+			name,
+			password: SEED_STAFF_PASSWORD,
+			display_name: name,
+			roles: [...SEED_STAFF_ROLES],
+			type: 'user',
+			shelter_id: SH001_CODE,
+			affiliation_tags: []
+		});
+		if (status === 201) {
+			created += 1;
+		} else if (status === 409) {
+			skipped += 1;
+		} else {
+			throw new Error(`PUT _users/${name} failed (HTTP ${status})`);
+		}
+	}
+
+	console.log(
+		`  ✓ _users: staff01–staff03 (password shared; ${created} created, ${skipped} already exist)`
+	);
+}
 
 // ─── seedRegistry ─────────────────────────────────────────────────────────────
 
@@ -1046,6 +1076,7 @@ async function main() {
 	const displayUrl = rawCouchUrl.replace(/\/\/([^:]+):[^@]+@/, '//$1:***@');
 	console.log(`\nSeeding mock data → ${displayUrl}\n`);
 	try {
+		await seedUsers();
 		await seedRegistry();
 		await seedCatalog();
 		await seedCatalogSopRatios();
