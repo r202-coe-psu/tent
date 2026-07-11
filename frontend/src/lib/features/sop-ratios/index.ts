@@ -7,11 +7,15 @@ export {
 	isSopOverride,
 	resolveEffectiveProfile,
 	SOP_RATIO_KEYS,
+	SOP_RATIO_KIND,
 	sopMasterSchema,
 	sopOverrideSchema,
+	SOP_MASTER_SCHEMA_VERSION,
 	type CreateNewVersionResult,
 	type SopRatioKey
 } from './domain/sop-ratio';
+
+export { validRatios } from './domain/sop-ratio.fixture';
 
 // Data — repositories + resolver
 export type { SopMasterRepository, SopOverrideRepository } from './data/sop-ratio.repository';

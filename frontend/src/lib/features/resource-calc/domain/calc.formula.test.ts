@@ -87,6 +87,7 @@ describe('calculateResources — happy path', () => {
 			have: 1000,
 			gap: 800,
 			status: 'gap',
+			data_status: 'complete',
 			as_of: AS_OF
 		});
 		expect(results[1]).toEqual({
@@ -99,6 +100,7 @@ describe('calculateResources — happy path', () => {
 			have: 4,
 			gap: 2,
 			status: 'gap',
+			data_status: 'complete',
 			as_of: AS_OF
 		});
 		expect(results[2]).toEqual({
@@ -111,6 +113,7 @@ describe('calculateResources — happy path', () => {
 			have: 25,
 			gap: null,
 			status: 'constraint',
+			data_status: 'complete',
 			as_of: AS_OF
 		});
 	});
@@ -258,8 +261,8 @@ describe('calculateResources — structural', () => {
 		expect(input).toEqual(snapshot); // input unchanged
 	});
 
-	it('exports FORMULA_V = 1.0.0 and carries as_of through unchanged', () => {
-		expect(FORMULA_V).toBe('1.0.0');
+	it('exports FORMULA_V = 1.1.0 and carries as_of through unchanged', () => {
+		expect(FORMULA_V).toBe('1.1.0'); // bumped in T-31.3 (additive data_status field)
 		const [row] = calc(10, [r('water', 'multiply', 15, null)], '2026-01-01T00:00:00.000Z');
 		expect(row.as_of).toBe('2026-01-01T00:00:00.000Z');
 	});
@@ -270,5 +273,106 @@ describe('calculateResources — structural', () => {
 		expect(Number.isFinite(row.need as number)).toBe(true);
 		expect(row.input_valid).toBe(true);
 		expect(row.status).toBe('insufficient_data'); // have unresolved, not an overflow
+	});
+});
+
+describe('calculateResources — T-31.3 edge-case data_status (data-availability axis)', () => {
+	// The two "business" edge cases: handled correctly AND stay `complete` (valid results, not missing data).
+	it('occupancy = 0 → status ok, need 0, data_status complete (not an anomaly)', () => {
+		const [row] = calc(0, [r('water', 'multiply', 15, 0)]);
+		expect(row.status).toBe('ok');
+		expect(row.need).toBe(0);
+		expect(row.data_status).toBe('complete');
+		expect(row.input_valid).toBe(true);
+	});
+
+	it('stock = 0 (have 0) → status gap, gap === need, data_status complete', () => {
+		const [row] = calc(120, [r('water', 'multiply', 15, 0)]);
+		expect(row.status).toBe('gap');
+		expect(row.gap).toBe(row.need);
+		expect(row.data_status).toBe('complete');
+	});
+
+	// The two "availability" edge cases: distinguished by data_status under a shared status.
+	it('ratio missing → insufficient_data + data_status ratio_missing (input_valid true)', () => {
+		const [row] = calc(120, [r('water', 'multiply', null, 500)]);
+		expect(row.status).toBe('insufficient_data');
+		expect(row.data_status).toBe('ratio_missing');
+		expect(row.input_valid).toBe(true);
+		expect(row.need).toBeNull();
+	});
+
+	it('stock unsynced (have null) → insufficient_data + data_status stock_unsynced (need computed)', () => {
+		const [row] = calc(120, [r('water', 'multiply', 15, null)]);
+		expect(row.status).toBe('insufficient_data');
+		expect(row.data_status).toBe('stock_unsynced');
+		expect(row.need).toBe(1800);
+	});
+
+	it('distinguishability: ratio_missing vs stock_unsynced share status but differ in data_status', () => {
+		const [missingRatio, unsynced] = calc(120, [
+			r('a', 'multiply', null, 500),
+			r('b', 'multiply', 15, null)
+		]);
+		expect(missingRatio.status).toBe('insufficient_data');
+		expect(unsynced.status).toBe('insufficient_data');
+		expect(missingRatio.data_status).toBe('ratio_missing');
+		expect(unsynced.data_status).toBe('stock_unsynced');
+	});
+
+	it('precedence: have=null on an occupancy=0 row → stock_unsynced (branch 4 before gap branch)', () => {
+		const [row] = calc(0, [r('water', 'multiply', 15, null)]);
+		expect(row.data_status).toBe('stock_unsynced');
+	});
+
+	it('invalid input → data_status invalid_input', () => {
+		const rows = calc(100, [
+			r('a', 'multiply', -5, 10), // bad ratio
+			r('b', 'divide', 0, 10), // divide-by-zero
+			r('c', 'multiply', 15, -5) // bad have
+		]);
+		for (const row of rows) {
+			expect(row.data_status).toBe('invalid_input');
+			expect(row.input_valid).toBe(false);
+		}
+	});
+
+	// Invariant 1: invalid_input mirrors !input_valid exactly.
+	it('invariant: (data_status === invalid_input) === !input_valid, every row', () => {
+		const rows = calc(120, [
+			r('ok', 'multiply', 15, 100),
+			r('miss', 'multiply', null, 100),
+			r('unsynced', 'divide', 20, null),
+			r('bad', 'multiply', -1, 100),
+			r('thr', 'threshold', 30, 10)
+		]);
+		for (const row of rows) {
+			expect(row.data_status === 'invalid_input').toBe(!row.input_valid);
+		}
+	});
+
+	// Invariant 2: the two axes are coupled as a biconditional — written as two directional assertions
+	// (v1.1.0 contract; adding a data_status that co-occurs with a non-insufficient_data status is a
+	// FORMULA_V change that revisits these).
+	const mixed = () =>
+		calc(120, [
+			r('ok', 'multiply', 15, 100), // ok / complete
+			r('gap', 'multiply', 15, 0), // gap / complete
+			r('miss', 'multiply', null, 100), // insufficient_data / ratio_missing
+			r('unsynced', 'divide', 20, null), // insufficient_data / stock_unsynced
+			r('bad', 'multiply', -1, 100), // insufficient_data / invalid_input
+			r('thr', 'threshold', 30, 10) // constraint / complete
+		]);
+
+	it('invariant forward: status insufficient_data ⇒ data_status !== complete', () => {
+		for (const row of mixed()) {
+			if (row.status === 'insufficient_data') expect(row.data_status).not.toBe('complete');
+		}
+	});
+
+	it('invariant backward: data_status !== complete ⇒ status insufficient_data', () => {
+		for (const row of mixed()) {
+			if (row.data_status !== 'complete') expect(row.status).toBe('insufficient_data');
+		}
 	});
 });
