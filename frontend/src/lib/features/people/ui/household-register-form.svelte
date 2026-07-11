@@ -44,6 +44,7 @@
 		zipcode: number;
 	} | null>(null);
 	let locationItems = $state<{ value: string; label: string }[]>([]);
+	let locationsLoading = $state(true);
 
 	onMount(async () => {
 		try {
@@ -57,6 +58,8 @@
 			});
 		} catch (err) {
 			console.error('Failed to load locations', err);
+		} finally {
+			locationsLoading = false;
 		}
 	});
 
@@ -182,19 +185,22 @@
 				}
 
 				if (selectedLocation) {
+					const subdistrict = (h.subdistrict || '').toLowerCase();
+					const district = (h.district || '').toLowerCase();
+					const province = (h.province || '').toLowerCase();
+
 					const matchSub =
-						(h.subdistrict || '')
-							.toLowerCase()
-							.includes(selectedLocation.subdistrict.toLowerCase()) ||
-						selectedLocation.subdistrict
-							.toLowerCase()
-							.includes((h.subdistrict || '').toLowerCase());
+						!!subdistrict &&
+						(subdistrict.includes(selectedLocation.subdistrict.toLowerCase()) ||
+							selectedLocation.subdistrict.toLowerCase().includes(subdistrict));
 					const matchDist =
-						(h.district || '').toLowerCase().includes(selectedLocation.district.toLowerCase()) ||
-						selectedLocation.district.toLowerCase().includes((h.district || '').toLowerCase());
+						!!district &&
+						(district.includes(selectedLocation.district.toLowerCase()) ||
+							selectedLocation.district.toLowerCase().includes(district));
 					const matchProv =
-						(h.province || '').toLowerCase().includes(selectedLocation.province.toLowerCase()) ||
-						selectedLocation.province.toLowerCase().includes((h.province || '').toLowerCase());
+						!!province &&
+						(province.includes(selectedLocation.province.toLowerCase()) ||
+							selectedLocation.province.toLowerCase().includes(province));
 					if (!matchSub || !matchDist || !matchProv) {
 						return false;
 					}
@@ -327,6 +333,8 @@
 							items={locationItems}
 							bind:value={selectedLocationValue}
 							placeholder="พิมพ์เพื่อค้นหา เช่น บ้านพรุ หรือ 90250"
+							loading={locationsLoading}
+							loadingText="กำลังโหลดข้อมูลที่อยู่..."
 							class="h-11 border-border bg-muted/20"
 						/>
 					</div>
