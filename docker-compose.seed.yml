@@ -2,6 +2,9 @@ services:
   couchdb-init:
     container_name: tent-couchdb-init
     image: curlimages/curl:latest
+    depends_on:
+      couchdb:
+        condition: service_healthy
     environment:
       COUCHDB_USER: ${COUCHDB_USER}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
@@ -11,6 +14,7 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - "curl -sf -X POST http://$${COUCHDB_USER}:$${COUCHDB_PASSWORD}@$${COUCHDB_HOST}:$${COUCHDB_PORT}/_cluster_setup -H 'Content-Type: application/json' -d '{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"$${COUCHDB_USER}\",\"password\":\"$${COUCHDB_PASSWORD}\",\"port\":$${COUCHDB_PORT}}'"
+
 
   seed:
     container_name: tent-seed
