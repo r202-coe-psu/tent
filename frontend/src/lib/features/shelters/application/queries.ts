@@ -12,6 +12,7 @@ import {
 import { sheltersRepository, SHELTER_REGISTRY_DB } from '../data/shelters.remote';
 import { createShelter, updateShelter, closeZone, reopenZone } from '../data/shelters.api';
 import { listProvinces, listDistricts, listSubdistricts } from '../data/thailand-location.api';
+import { fetchOccupancy } from '$lib/features/dashboard';
 import type { Shelter } from '../domain/schema';
 
 export const sheltersKeys = {
@@ -30,6 +31,15 @@ export const useShelter = (code: () => string) =>
 	createQuery(() => ({
 		queryKey: sheltersKeys.detail(code()),
 		queryFn: () => sheltersRepository().getShelter(code()),
+		enabled: !!code()
+	}));
+
+// Live headcount for the back-office shelter list — shares the query key/cache
+// with the shelter dashboard's occupancy tab (dashboard-tab.svelte).
+export const useShelterOccupancy = (code: () => string) =>
+	createQuery(() => ({
+		queryKey: ['dashboard', 'occupancy', code()],
+		queryFn: () => fetchOccupancy(code()),
 		enabled: !!code()
 	}));
 
