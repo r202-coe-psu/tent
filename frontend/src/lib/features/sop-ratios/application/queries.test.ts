@@ -16,6 +16,7 @@ import {
 	type SopMaster,
 	type SopOverride
 } from '../domain/sop-ratio';
+import { validRatios } from '../domain/sop-ratio.fixture';
 
 // Mock svelte-sonner to prevent error output in tests
 vi.mock('svelte-sonner', () => ({
@@ -72,29 +73,6 @@ describe('SOP Ratios Application Hooks', () => {
 		vi.clearAllMocks();
 	});
 
-	const mockRatios = {
-		water_l_per_person_day: 15,
-		drinking_water_l_per_person_day: 3,
-		cooking_water_l_per_person_day: 6,
-		hygiene_water_l_per_person_day: 6,
-		kcal_per_adult_day: 2000,
-		people_per_tap: 80,
-		people_per_handpump: 500,
-		people_per_open_well: 400,
-		people_per_laundry: 50,
-		people_per_bathing: 100,
-		people_per_toilet_female: 20,
-		people_per_toilet_male: 20,
-		people_per_dining_point_adult: 100,
-		people_per_dining_point_child: 50,
-		m2_per_person_living: 3.5,
-		m2_per_person_living_cold: 4.5,
-		m2_per_person_total: 45,
-		max_waterpoint_distance_m: 500,
-		max_queue_minutes: 30,
-		people_per_volunteer: 50
-	};
-
 	describe('useCreateOverrideVersion', () => {
 		const validOverrideInput = {
 			prev: {
@@ -113,7 +91,7 @@ describe('SOP Ratios Application Hooks', () => {
 				created_at: '2026-07-03T00:00:00.000Z',
 				updated_at: '2026-07-03T00:00:00.000Z',
 				created_by: 'tester',
-				ratios: mockRatios
+				ratios: validRatios
 			},
 			changes: {
 				water_l_per_person_day: 20
@@ -217,7 +195,7 @@ describe('SOP Ratios Application Hooks', () => {
 				created_at: '2026-07-03T00:00:00.000Z',
 				updated_at: '2026-07-03T00:00:00.000Z',
 				created_by: 'tester',
-				ratios: mockRatios
+				ratios: validRatios
 			},
 			changes: {
 				water_l_per_person_day: 20
@@ -273,13 +251,14 @@ describe('SOP Ratios Application Hooks', () => {
 	});
 
 	describe('useOverrideVersionHistory', () => {
-		it('should return enabled: false when name is empty or whitespace', () => {
-			expect(useOverrideVersionHistory('')).toMatchObject({ enabled: false });
-			expect(useOverrideVersionHistory('   ')).toMatchObject({ enabled: false });
+		it('should return enabled: false when name or shelterCode is empty or whitespace', () => {
+			expect(useOverrideVersionHistory('', 'SH001')).toMatchObject({ enabled: false });
+			expect(useOverrideVersionHistory('   ', 'SH001')).toMatchObject({ enabled: false });
+			expect(useOverrideVersionHistory('name', '')).toMatchObject({ enabled: false });
 		});
 
 		it('should return enabled: true and correctly scoped queryKey for valid name', () => {
-			const result = useOverrideVersionHistory('baseline');
+			const result = useOverrideVersionHistory('baseline', TEST_SHELTER_CODE);
 			expect(result).toMatchObject({
 				enabled: true,
 				queryKey: [...sopVersionKeys.override(), 'baseline', TEST_SHELTER_CODE]

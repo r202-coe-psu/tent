@@ -338,7 +338,7 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 ### 2.14 `sop_override` — `sop_override:{ulid}`
 
 > **schema_v 2** — อัปเดต ratios whitelist 3 → 20 canonical keys (CR-006 amendment 2026-06-25 + CR-021). สร้างเฉพาะศูนย์ที่ต้องการใช้สัดส่วนทรัพยากรต่างจาก Master Profile ส่วนกลาง (ตาม [CR-006](../changes/CR-006-sop-profile-master-override.md) และ [CR-015](../changes/CR-015-sop-ratio-schema-two-tier.md))
-> **Migration Note:** `schema_v` bumped due to CR-006 / CR-021. No production backfill needed. Devs must re-run the seed script (which now auto-overwrites) or delete stale catalog docs. **Breaking Change:** The renaming to `toilet_per_person` requires manual re-entry; no auto-mapping is provided per CR-006.
+> **Migration Note:** `schema_v` bumped due to CR-006 / CR-021. No production backfill needed. Devs must re-run the seed script (which now auto-overwrites) or delete stale catalog docs. **Breaking Change:** Legacy 3-key ratios (rice_g_per_person_meal, toilet_per_person) removed. All 20 canonical keys required; no auto-mapping from legacy keys. Devs must re-run seed or delete stale docs.
 > schema_v 1 — สร้าง doc type ใหม่ สำหรับ per-shelter override (CR-006)
 
 | Field | ชนิด | req | หมายเหตุ |
@@ -488,7 +488,7 @@ interface MasterDataItem {
 ### 4.4 `sop_profile` — `sop_profile:{ulid}`
 
 > **schema_v 3** — อัปเดต ratios whitelist 3 → 20 canonical keys (CR-006 amendment 2026-06-25 + CR-021). เพิ่ม `SOP_RATIO_KIND` (multiply/divide/threshold) สำหรับ calc engine (T-31).
-> **Migration Note:** `schema_v` bumped due to CR-006 / CR-021. No production backfill needed. Devs must re-run the seed script (which now auto-overwrites) or delete stale catalog docs. **Breaking Change:** The renaming to `toilet_per_person` requires manual re-entry; no auto-mapping is provided per CR-006.
+> **Migration Note:** `schema_v` bumped due to CR-006 / CR-021. No production backfill needed. Devs must re-run the seed script (which now auto-overwrites) or delete stale catalog docs. **Breaking Change:** Legacy 3-key ratios (rice_g_per_person_meal, toilet_per_person) removed. All 20 canonical keys required; no auto-mapping from legacy keys. Devs must re-run seed or delete stale docs.
 > schema_v 2 — ย้ายมาอยู่ catalog DB, ตัด `shelter_code` ออกเพื่อใช้เป็น Master Profile ส่วนกลาง (ตาม [CR-006](../changes/CR-006-sop-profile-master-override.md) และ [CR-015](../changes/CR-015-sop-ratio-schema-two-tier.md))
 
 | Field | ชนิด | req | หมายเหตุ |

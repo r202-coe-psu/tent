@@ -42,40 +42,66 @@
 	);
 </script>
 
-<svelte:element
-	this={href && !disabled ? 'a' : 'div'}
-	href={href && !disabled ? href : undefined}
-	aria-disabled={disabled || undefined}
-	class="group relative flex min-h-[320px] flex-col items-start rounded-2xl {cardBorderClass} bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all {href &&
-	!disabled
-		? 'cursor-pointer hover:-translate-y-1 hover:shadow-md'
-		: ''} {disabled ? 'cursor-not-allowed opacity-60' : ''} {className}"
->
-	{#if badge}
-		<div
-			class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl bg-primary-muted px-3 py-1 text-[11px] font-bold text-primary-strong"
-		>
-			{badge}
-		</div>
-	{/if}
-
-	<div
-		class="mt-2 mb-6 flex h-12 w-12 items-center justify-center rounded-xl text-xl {iconWrapperClass} {href &&
-		!disabled
-			? 'group-hover:bg-primary-muted group-hover:text-primary'
-			: ''} transition-colors"
+{#if href && !disabled}
+	<a
+		{href}
+		class="group relative flex min-h-[320px] flex-col items-start rounded-2xl {cardBorderClass} cursor-pointer bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md {className}"
 	>
-		<Icon class="size-5" />
-	</div>
+		{#if badge}
+			<div
+				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl bg-primary-muted px-3 py-1 text-[11px] font-bold text-primary-strong"
+			>
+				{badge}
+			</div>
+		{/if}
 
-	<h2 class="mb-4 text-xl font-bold text-foreground">{title}</h2>
-	<p class="flex-1 text-sm leading-relaxed text-muted-foreground">
-		{description}
-	</p>
-
-	{#if actions}
-		<div class="mt-6 flex items-center gap-2">
-			{@render actions()}
+		<div
+			class="mt-2 mb-6 flex h-12 w-12 items-center justify-center rounded-xl text-xl {iconWrapperClass} transition-colors group-hover:bg-primary-muted group-hover:text-primary"
+		>
+			<Icon class="size-5" />
 		</div>
-	{/if}
-</svelte:element>
+
+		<h2 class="mb-4 text-xl font-bold text-foreground">{title}</h2>
+		<p class="flex-1 text-sm leading-relaxed text-muted-foreground">
+			{description}
+		</p>
+
+		{#if actions}
+			<div class="mt-6 flex items-center gap-2">
+				{@render actions()}
+			</div>
+		{/if}
+	</a>
+{:else}
+	<div
+		aria-disabled={disabled || undefined}
+		class="group relative flex min-h-[320px] flex-col items-start rounded-2xl {cardBorderClass} bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all {disabled
+			? 'cursor-not-allowed opacity-60'
+			: ''} {className}"
+	>
+		{#if badge}
+			<div
+				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl bg-primary-muted px-3 py-1 text-[11px] font-bold text-primary-strong"
+			>
+				{badge}
+			</div>
+		{/if}
+
+		<div
+			class="mt-2 mb-6 flex h-12 w-12 items-center justify-center rounded-xl text-xl {iconWrapperClass} transition-colors"
+		>
+			<Icon class="size-5" />
+		</div>
+
+		<h2 class="mb-4 text-xl font-bold text-foreground">{title}</h2>
+		<p class="flex-1 text-sm leading-relaxed text-muted-foreground">
+			{description}
+		</p>
+
+		{#if actions}
+			<div class="mt-6 flex items-center gap-2">
+				{@render actions()}
+			</div>
+		{/if}
+	</div>
+{/if}

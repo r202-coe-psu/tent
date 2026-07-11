@@ -55,7 +55,8 @@ import {
 } from '$lib/features/operations/domain/operations';
 import {
 	createInitialProfile,
-	SOP_MASTER_SCHEMA_VERSION
+	SOP_MASTER_SCHEMA_VERSION,
+	sopMasterSchema
 } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 import { type AuthorContext, now } from '$lib/db/model';
@@ -193,9 +194,17 @@ function catalogDoc(id: string, type: string, body: Record<string, unknown>) {
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const SHELTER_CODE = 'SH001';
-const SHELTER_DB = 'shelter_sh001';
-const CTX: AuthorContext = { shelterCode: SHELTER_CODE, createdBy: 'seed' };
+const SH001_CODE = 'SH001';
+const SH001_DB = 'shelter_sh001';
+const SH001_CTX: AuthorContext = { shelterCode: SH001_CODE, createdBy: 'seed' };
+
+// Aliases for SH001 to fix broken references in seedShelter and seedDashboardData
+const SHELTER_CODE = SH001_CODE;
+const SHELTER_DB = SH001_DB;
+const ctx = SH001_CTX;
+const CTX = SH001_CTX;
+const code = SH001_CODE;
+const dbName = SH001_DB;
 
 const SHELTER_CODE_2 = 'SH002';
 const SHELTER_DB_2 = 'shelter_sh002';
@@ -442,7 +451,7 @@ async function seedCatalogSopRatios(): Promise<void> {
 
 	if (status === 200) {
 		const doc = data as { _rev?: string; schema_v?: number };
-		if (doc.schema_v === SOP_MASTER_SCHEMA_VERSION) {
+		if (doc.schema_v === SOP_MASTER_SCHEMA_VERSION && sopMasterSchema.safeParse(data).success) {
 			console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" already exists, skipping');
 			return;
 		}
@@ -497,7 +506,7 @@ async function seedShelter(): Promise<void> {
 		},
 		{ label: 'ครอบครัวรักสงบ', municipality_zone: 'Z2', head_evacuee_id: null, pets: [] }
 	];
-	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, CTX));
+	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, ctx));
 
 	// — evacuees ————————————————————————————————————————————————————————————————
 	const evacueeInputs: EvacueeInput[] = [
@@ -617,15 +626,15 @@ async function seedShelter(): Promise<void> {
 			registered_via: 'import'
 		}
 	];
-	const evacuees = evacueeInputs.map((e) => createEvacuee(e, CTX));
+	const evacuees = evacueeInputs.map((e) => createEvacuee(e, ctx));
 
 	// — movements (check_in for every evacuee) —————————————————————————————————
 	const movementInputs: MovementInput[] = evacuees.map((e) => ({
 		evacuee_id: e._id,
 		action: 'check_in' as const,
-		zone: evacueeInputs[evacuees.indexOf(e)].household_id === hh3._id ? 'Z2' : 'Z1'
+		zone: 'Z1'
 	}));
-	const movements = movementInputs.map((m) => createMovement(m, CTX));
+	const movements = movementInputs.map((m) => createMovement(m, ctx));
 
 	// Apply check-in to each evacuee's current_stay snapshot.
 	const checkedInEvacuees = evacuees.map((e, i) => applyMovementToStay(e, movements[i]));
@@ -666,7 +675,7 @@ async function seedShelter(): Promise<void> {
 			track: 'fast_track'
 		}
 	];
-	const medicals = medicalInputs.map((m) => createMedical(m, CTX));
+	const medicals = medicalInputs.map((m) => createMedical(m, ctx));
 
 	// — screenings ————————————————————————————————————————————————————————————
 	const screeningInputs: ScreeningInput[] = [
@@ -700,27 +709,39 @@ async function seedShelter(): Promise<void> {
 			needs_referral: false
 		}
 	];
-	const screenings = screeningInputs.map((s) => createScreening(s, CTX));
+	const screenings = screeningInputs.map((s) => createScreening(s, ctx));
 
 	// — stock ledger ——————————————————————————————————————————————————————————
 	const stockInputs: StockLedgerInput[] = [
-		{ item_id: ITEM.rice, qty: 200, unit: 'kg', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.water, qty: 500, unit: 'bottle', reason: 'receive', ref_id: null },
+		{
+			item_id: ITEM.rice,
+			qty: code === SH001_CODE ? 200 : 100,
+			unit: 'kg',
+			reason: 'receive',
+			ref_id: null
+		},
+		{
+			item_id: ITEM.water,
+			qty: code === SH001_CODE ? 500 : 300,
+			unit: 'bottle',
+			reason: 'receive',
+			ref_id: null
+		},
 		{ item_id: ITEM.paracetamol, qty: 1000, unit: 'tablet', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.soap, qty: 150, unit: 'bar', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.blanket, qty: 80, unit: 'piece', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.rice, qty: -30, unit: 'kg', reason: 'distribute', ref_id: null },
 		{ item_id: ITEM.water, qty: -100, unit: 'bottle', reason: 'distribute', ref_id: null }
 	];
-	const stockEntries = stockInputs.map((s) => createStockLedger(s, CTX));
+	const stockEntries = stockInputs.map((s) => createStockLedger(s, ctx));
 
 	// — donation campaigns ————————————————————————————————————————————————————
 	const campaignInputs: CampaignInput[] = [
 		{
 			title: 'รับบริจาคอาหารและน้ำดื่ม',
 			needs: [
-				{ item_id: ITEM.rice, qty_target: 500, unit: 'kg' },
-				{ item_id: ITEM.water, qty_target: 1000, unit: 'bottle' }
+				{ item_id: ITEM.rice, qty_target: code === SH001_CODE ? 500 : 300, unit: 'kg' },
+				{ item_id: ITEM.water, qty_target: code === SH001_CODE ? 1000 : 500, unit: 'bottle' }
 			],
 			notes: 'เปิดรับบริจาคเพื่อผู้ประสบภัยน้ำท่วม'
 		},
@@ -732,14 +753,14 @@ async function seedShelter(): Promise<void> {
 			]
 		}
 	];
-	const campaigns = campaignInputs.map((c) => createCampaign(c, CTX));
+	const campaigns = campaignInputs.map((c) => createCampaign(c, ctx));
 
 	// — donations ——————————————————————————————————————————————————————————————
 	const donationInputs: WalkInDonationInput[] = [
 		{
 			donor: { name: 'บริษัท ซีพีเอฟ จำกัด', phone: '022222222', phone_hash: 'mock-hash-cpf' },
 			kind: 'items',
-			items: [{ item_id: ITEM.rice, qty: 50, unit: 'kg' }],
+			items: [{ item_id: ITEM.rice, qty: code === SH001_CODE ? 50 : 20, unit: 'kg' }],
 			campaign_id: campaigns[0]._id,
 			tracking_token_hash: 'mock-track-001'
 		},
@@ -747,7 +768,7 @@ async function seedShelter(): Promise<void> {
 			donor: { name: 'วัดท่าสะอ้าน', phone: null, phone_hash: 'mock-hash-wat' },
 			kind: 'items',
 			items: [
-				{ item_id: ITEM.water, qty: 100, unit: 'bottle' },
+				{ item_id: ITEM.water, qty: code === SH001_CODE ? 100 : 50, unit: 'bottle' },
 				{ item_id: ITEM.blanket, qty: 20, unit: 'piece' }
 			],
 			campaign_id: campaigns[0]._id,
@@ -761,7 +782,7 @@ async function seedShelter(): Promise<void> {
 			tracking_token_hash: 'mock-track-003'
 		}
 	];
-	const donations = donationInputs.map((d) => createWalkInDonation(d, CTX));
+	const donations = donationInputs.map((d) => createWalkInDonation(d, ctx));
 
 	// — bulk insert ——————————————————————————————————————————————————————————
 	const allDocs = [
@@ -774,14 +795,14 @@ async function seedShelter(): Promise<void> {
 		...campaigns,
 		...donations
 	];
-	await bulkDocs(SHELTER_DB, allDocs);
+	await bulkDocs(dbName, allDocs);
 
 	console.log(
-		`  ✓ ${SHELTER_DB}: 3 households, ${evacuees.length} evacuees, ${movements.length} movements`
+		`  ✓ ${dbName}: 3 households, ${evacuees.length} evacuees, ${movements.length} movements`
 	);
-	console.log(`  ✓ ${SHELTER_DB}: ${medicals.length} medicals, ${screenings.length} screenings`);
+	console.log(`  ✓ ${dbName}: ${medicals.length} medicals, ${screenings.length} screenings`);
 	console.log(
-		`  ✓ ${SHELTER_DB}: ${stockEntries.length} stock entries, ${campaigns.length} campaigns, ${donations.length} donations`
+		`  ✓ ${dbName}: ${stockEntries.length} stock entries, ${campaigns.length} campaigns, ${donations.length} donations`
 	);
 }
 

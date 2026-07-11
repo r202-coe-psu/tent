@@ -237,3 +237,6 @@ N/A — ไม่มี persisted `sop_profile` / `sop_override` ใน producti
   ใน SOP; rice ownership → Module C/D ([CR-013](CR-013-catalog-schema-definition.md))
 - 2026-07-01 — rewrite ตาม spec-authoring contract: เพิ่ม Requirements/Acceptance, ตาราง 20 keys,
   ขยาย `affects`, mark NEEDS DECISION (`people_per_volunteer` unset vs full-ratios)
+- 2026-07-05 — **PR Review Update:** Option 1 (Strict 20-Key Snapshot) adopted, overriding CR-018 partial master invariant.
+
+> **Architectural Note:** Per CR-026 ratification, "Option 1" (Strict 20-Key Snapshot) has been adopted. This officially overrides and deprecates the CR-018 invariant that previously allowed partial schemas (>= 1 key) for Master profiles. Both Master and Override profiles now strictly require the full canonical 20-key schema.

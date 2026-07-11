@@ -65,8 +65,7 @@ async function couchDbFetchRaw<T>(
 	});
 
 	const data = (await res.json().catch(() => null)) as
-		| (T & { error?: string; reason?: string })
-		| null;
+		(T & { error?: string; reason?: string }) | null;
 
 	return { data, status: res.status, ok: res.ok };
 }
@@ -207,6 +206,28 @@ export async function allDocsByType<T>(
 		init
 	);
 	return res.rows.map((r) => r.doc).filter((d): d is T => guard(d));
+}
+
+interface FindResponse<T> {
+	docs: T[];
+	bookmark?: string;
+	warning?: string;
+}
+
+export async function findDocs<T>(
+	dbName: string,
+	query: { selector: Record<string, unknown>; [key: string]: unknown },
+	init?: CouchFetchInit
+): Promise<T[]> {
+	const res = await couchDbFetch<FindResponse<T>>(dbName, '/_find', {
+		method: 'POST',
+		body: JSON.stringify(query),
+		...init
+	});
+	if (res.warning) {
+		console.warn(`[CouchDB Warning] /_find query on "${dbName}" produced warning: ${res.warning}`);
+	}
+	return res.docs;
 }
 
 export async function bulkDocs<T extends { _id: string; _rev?: string }>(

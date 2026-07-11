@@ -54,7 +54,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '2. บริหารทรัพยากร',
 		items: [
-			{ label: 'การประเมินประจำวัน (Daily SOP)', href: null, icon: ClipboardList },
+			{
+				label: 'การประเมินประจำวัน (Daily SOP)',
+				href: resolve('/back-office/resource-dashboard'),
+				icon: ClipboardList
+			},
 			{
 				label: 'คลังสิ่งของและบริจาค',
 				href: null,
@@ -124,7 +128,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						requiresAdmin: true
 					},
 					{ label: '4. คลังสินค้า', href: null, icon: Warehouse },
-					{ label: '5. พารามิเตอร์', href: null, icon: Calculator },
+					{
+						label: '5. พารามิเตอร์',
+						href: resolve('/back-office/sop-parameters'),
+						icon: Calculator
+					},
 					{ label: '6. อาสาสมัคร', href: null, icon: HandHeart },
 					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
