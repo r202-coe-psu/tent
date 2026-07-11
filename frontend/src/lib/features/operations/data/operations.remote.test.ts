@@ -7,7 +7,8 @@ import { isAuditEntry } from '$lib/features/shared';
 vi.mock('$lib/db/shelter', () => ({
 	SHELTER_CODE: 'SH001',
 	SHELTER_DB: 'shelter_sh001',
-	getShelterDb: () => 'shelter_sh001'
+	getShelterDb: () => 'shelter_sh001',
+	getShelterCode: () => 'SH001'
 }));
 
 const mockGetItem = vi.fn<() => Promise<SupplyItem | null>>();
@@ -24,6 +25,8 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 import { OperationsRemoteRepository, assertReceiveAgainstCatalog } from './operations.remote';
 import { createReceiveEntry } from '../domain/operations';
 import type { AuthorContext } from '$lib/db/model';
+
+const otherShelterCtx: AuthorContext = { shelterCode: 'SH002', createdBy: 'sh002-tester' };
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -275,6 +278,154 @@ describe('OperationsRemoteRepository', () => {
 			expect(result.item_id).toBe('item:rice');
 			const list = await repo.listLedger();
 			expect(list).toHaveLength(1);
+		});
+	});
+
+	describe('Inter-shelter Transfer methods', () => {
+		it('creates a transfer in requested status', async () => {
+			const transfer = await repo.createTransfer(
+				{
+					from_shelter: 'SH001',
+					to_shelter: 'SH002',
+					items: [{ item_id: 'item:rice', qty: 20, unit: 'kg' }]
+				},
+				ctx
+			);
+
+			expect(transfer.status).toBe('requested');
+			expect(transfer.from_shelter).toBe('SH001');
+			expect(transfer.to_shelter).toBe('SH002');
+		});
+
+		it('dispatches a transfer, deducts stock, and persists an outbound ledger entry', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+			await repo.receiveStock(
+				{ item_id: 'item:rice', qty: 100, unit: 'kg', source: 'donation', ref_id: null },
+				ctx
+			);
+
+			const transfer = await repo.createTransfer(
+				{
+					from_shelter: 'SH001',
+					to_shelter: 'SH002',
+					items: [{ item_id: 'item:rice', qty: 30, unit: 'kg' }]
+				},
+				ctx
+			);
+
+			const { transfer: dispatched, ledgers } = await repo.dispatchTransfer(transfer, ctx);
+
+			expect(dispatched.status).toBe('shipped');
+			expect(ledgers).toHaveLength(1);
+			expect(ledgers[0].reason).toBe('transfer_out');
+			expect(ledgers[0].qty).toBe(-30);
+
+			const balance = await repo.getBalance();
+			expect(balance.get('item:rice')).toBe(70);
+		});
+
+		it('throws and does not write anything when dispatching with insufficient stock', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+			await repo.receiveStock(
+				{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
+				ctx
+			);
+
+			const transfer = await repo.createTransfer(
+				{
+					from_shelter: 'SH001',
+					to_shelter: 'SH002',
+					items: [{ item_id: 'item:rice', qty: 50, unit: 'kg' }]
+				},
+				ctx
+			);
+
+			await expect(repo.dispatchTransfer(transfer, ctx)).rejects.toThrow('Insufficient stock');
+
+			const balance = await repo.getBalance();
+			expect(balance.get('item:rice')).toBe(10);
+			const ledger = await repo.listLedger();
+			expect(ledger.filter((l) => l.reason === 'transfer_out')).toHaveLength(0);
+		});
+
+		it('receives a transfer completely and credits stock via an inbound ledger entry', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+			await repo.receiveStock(
+				{ item_id: 'item:rice', qty: 100, unit: 'kg', source: 'donation', ref_id: null },
+				ctx
+			);
+			const transfer = await repo.createTransfer(
+				{
+					from_shelter: 'SH001',
+					to_shelter: 'SH002',
+					items: [{ item_id: 'item:rice', qty: 40, unit: 'kg' }]
+				},
+				ctx
+			);
+			const { transfer: dispatched } = await repo.dispatchTransfer(transfer, ctx);
+
+			const { transfer: received, ledgers } = await repo.receiveTransfer(
+				dispatched,
+				[{ item_id: 'item:rice', qty: 40 }],
+				otherShelterCtx
+			);
+
+			expect(received.status).toBe('received');
+			expect(received.items[0].received_qty).toBe(40);
+			expect(ledgers).toHaveLength(1);
+			expect(ledgers[0].reason).toBe('transfer_in');
+			expect(ledgers[0].qty).toBe(40);
+
+			const balance = await repo.getBalance();
+			expect(balance.get('item:rice')).toBe(100);
+		});
+
+		it('lists only shipped transfers addressed to the current shelter', async () => {
+			// getShelterCode() is mocked to 'SH001' for the whole file, so
+			// listIncomingTransfers() on this repo instance represents SH001's inbox.
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+			await repo.receiveStock(
+				{ item_id: 'item:rice', qty: 100, unit: 'kg', source: 'donation', ref_id: null },
+				ctx
+			);
+
+			// Requested but not yet shipped — should be excluded.
+			await repo.createTransfer(
+				{
+					from_shelter: 'SH002',
+					to_shelter: 'SH001',
+					items: [{ item_id: 'item:rice', qty: 10, unit: 'kg' }]
+				},
+				otherShelterCtx
+			);
+
+			// Shipped to SH001 (the current shelter under mock) — should be included.
+			const toSH001 = await repo.createTransfer(
+				{
+					from_shelter: 'SH002',
+					to_shelter: 'SH001',
+					items: [{ item_id: 'item:rice', qty: 20, unit: 'kg' }]
+				},
+				otherShelterCtx
+			);
+			await repo.dispatchTransfer(toSH001, otherShelterCtx);
+
+			// Shipped to a different shelter (SH003) — should be excluded.
+			const toSH003 = await repo.createTransfer(
+				{
+					from_shelter: 'SH002',
+					to_shelter: 'SH003',
+					items: [{ item_id: 'item:rice', qty: 15, unit: 'kg' }]
+				},
+				otherShelterCtx
+			);
+			await repo.dispatchTransfer(toSH003, otherShelterCtx);
+
+			const incoming = await repo.listIncomingTransfers();
+
+			expect(incoming).toHaveLength(1);
+			expect(incoming[0].to_shelter).toBe('SH001');
+			expect(incoming[0].status).toBe('shipped');
 		});
 	});
 });

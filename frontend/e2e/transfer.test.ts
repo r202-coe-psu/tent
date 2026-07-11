@@ -1,10 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import {
-	createCouchUser,
-	deleteCouchUser,
-	SM_SH001_ROLES,
-	SM_SH002_ROLES
-} from './helpers/couch';
+import { createCouchUser, deleteCouchUser, SM_SH001_ROLES, SM_SH002_ROLES } from './helpers/couch';
 
 const RUN_ID = Date.now().toString(36);
 const USER_SH001 = {
@@ -46,7 +41,7 @@ test.describe('Inter-Shelter Transfer E2E', () => {
 		try {
 			await deleteCouchUser(USER_SH001.username);
 			await deleteCouchUser(USER_SH002.username);
-		} catch (e) {
+		} catch {
 			// ignore
 		}
 	});
@@ -68,9 +63,11 @@ test.describe('Inter-Shelter Transfer E2E', () => {
 					const cookieStr = res.headers.get('set-cookie') || '';
 					const match = cookieStr.match(/AuthSession=([^;]+)/);
 					if (match) {
-						await page.context().addCookies([
-							{ name: 'AuthSession', value: match[1], domain: 'localhost', path: '/' }
-						]);
+						await page
+							.context()
+							.addCookies([
+								{ name: 'AuthSession', value: match[1], domain: 'localhost', path: '/' }
+							]);
 					}
 				}
 				await route.fulfill({
@@ -97,14 +94,14 @@ test.describe('Inter-Shelter Transfer E2E', () => {
 		// Test assumption: The catalog has an item and SH001 has some stock.
 		// If CouchDB is empty, this UI test will fail to find items to select.
 		// We use a robust UI interaction pattern.
-		
+
 		// 1. Context A: Login as SH001 and create transfer
 		const contextA = await browser.newContext();
 		const pageA = await contextA.newPage();
 		await login(pageA, USER_SH001.username);
 
 		await pageA.goto('/onsite/supply/transfers/out');
-		
+
 		// Note: Using broad locators to avoid strict test failures if specific IDs change
 		const toShelterSelect = pageA.locator('button[role="combobox"]');
 		await toShelterSelect.click();
@@ -113,15 +110,15 @@ test.describe('Inter-Shelter Transfer E2E', () => {
 
 		// Click Add Item
 		await pageA.getByRole('button', { name: /เพิ่มรายการพัสดุ/i }).click();
-		
+
 		// We mock the supply items to ensure the dropdown works regardless of DB state
-		await pageA.route('**/api/catalog/items*', async route => {
+		await pageA.route('**/api/catalog/items*', async (route) => {
 			await route.fulfill({ json: [{ _id: 'item:test', name: 'Test Water', unit: 'Bottle' }] });
 		});
 
 		// Select the item
 		const itemSelects = pageA.locator('button:has-text("เลือกพัสดุ")');
-		if (await itemSelects.count() > 0) {
+		if ((await itemSelects.count()) > 0) {
 			await itemSelects.first().click();
 			// We try to pick any item that appears
 			await pageA.keyboard.press('ArrowDown');
@@ -130,7 +127,7 @@ test.describe('Inter-Shelter Transfer E2E', () => {
 
 		// Fill quantity
 		const qtyInputs = pageA.locator('input[type="number"]');
-		if (await qtyInputs.count() > 0) {
+		if ((await qtyInputs.count()) > 0) {
 			await qtyInputs.first().fill('100');
 		}
 
@@ -150,15 +147,15 @@ test.describe('Inter-Shelter Transfer E2E', () => {
 
 		// PouchDB replication takes a moment, we go to incoming transfers
 		await pageB.goto('/onsite/supply/transfers/in');
-		
+
 		// Look for the receive button
 		const receiveButton = pageB.getByRole('button', { name: /ยืนยันรับเข้าคลัง/i });
-		
+
 		// If the DB isn't actually syncing (e.g., CouchDB not running), this will timeout.
 		// We use a soft assertion or wait to gracefully handle environment issues.
 		try {
 			await receiveButton.first().waitFor({ state: 'visible', timeout: 5000 });
-			
+
 			// Test partial receipt: change quantity to 90
 			const qtyInput = pageB.locator('input[type="number"]').first();
 			if (await qtyInput.isVisible()) {
@@ -168,11 +165,13 @@ test.describe('Inter-Shelter Transfer E2E', () => {
 			// Submit receipt
 			await receiveButton.first().click();
 			await expect(pageB.getByText(/รับพัสดุสำเร็จ/i)).toBeVisible();
-			
+
 			// Verify it disappears from the list (prevent duplicate confirm)
-			await expect(receiveButton).toHaveCount(await receiveButton.count() - 1);
-		} catch (e) {
-			console.log('Test skipped the assertion portion due to missing local backend data sync. Please verify manually.');
+			await expect(receiveButton).toHaveCount((await receiveButton.count()) - 1);
+		} catch {
+			console.log(
+				'Test skipped the assertion portion due to missing local backend data sync. Please verify manually.'
+			);
 		}
 		await contextB.close();
 	});

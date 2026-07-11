@@ -110,7 +110,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	): Promise<{ transfer: StockTransfer; ledgers: StockLedger[] }> {
 		const { transfer: updatedTransfer, ledgers } = computeDispatchTransfer(transfer, ctx);
 
-		// WARNING: Similar to distributeStock, this read-then-write is not atomic.
+		// WARNING (C-1): Same accepted risk as distributeStock — this read-then-write
+		// is not atomic. Concurrent dispatches may both pass the balance check before
+		// either write lands, potentially causing negative stock. Acceptable for
+		// single-user shelter scenario; tracked for future hardening.
 		const balances = await this.getBalance();
 		for (const item of updatedTransfer.items) {
 			const currentQty = balances.get(item.item_id) ?? 0;
