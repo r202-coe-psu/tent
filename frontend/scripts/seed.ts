@@ -453,6 +453,20 @@ async function seedCatalogSopRatios(): Promise<void> {
 	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
 }
 
+async function deployMangoIndexes(db: string): Promise<void> {
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'status'] },
+		name: 'referral-type-status-idx',
+		type: 'json'
+	});
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'evacuee_id'] },
+		name: 'referral-type-evacuee-idx',
+		type: 'json'
+	});
+	console.log(`  ✓ ${db}: Mango indexes for referral deployed`);
+}
+
 // ─── seedShelter ──────────────────────────────────────────────────────────────
 
 async function seedShelter(): Promise<void> {
@@ -462,6 +476,7 @@ async function seedShelter(): Promise<void> {
 		members: { names: [], roles: [`shelter:${SHELTER_CODE}`] }
 	});
 	await deployShelterViewsFn(SHELTER_DB, (path, method, body) => couchReq(method, path, body));
+	await deployMangoIndexes(SHELTER_DB);
 
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
@@ -787,6 +802,7 @@ async function seedShelter2(): Promise<void> {
 		members: { names: [], roles: [`shelter:${SHELTER_CODE_2}`] }
 	});
 	await deployShelterViewsFn(SHELTER_DB_2, (path, method, body) => couchReq(method, path, body));
+	await deployMangoIndexes(SHELTER_DB_2);
 
 	const { status, data } = await couchReq('GET', `/${SHELTER_DB_2}/_all_docs?limit=1`);
 	if (status === 200 && (data as { rows?: unknown[] }).rows?.length) {

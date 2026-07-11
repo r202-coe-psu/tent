@@ -19,6 +19,7 @@
 	import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 	import { startDailyCalcLiveQuery } from '$lib/features/resource-calc';
 	import { CATALOG_DB } from '$lib/features/supply';
+	import { startReferralsLiveQuery } from '$lib/features/referrals';
 
 	let { children, data } = $props();
 
@@ -68,6 +69,7 @@
 		const liveKitchen = startKitchenLiveQuery(data.queryClient);
 		const sopRatioLive = startSopRatioLiveQuery(data.queryClient);
 		const dailyCalcLive = startDailyCalcLiveQuery(data.queryClient);
+		const liveReferrals = startReferralsLiveQuery(data.queryClient);
 
 		return () => {
 			livePeople.stop();
@@ -75,6 +77,7 @@
 			liveKitchen.stop();
 			sopRatioLive.stop();
 			dailyCalcLive.stop();
+			liveReferrals.stop();
 		};
 	});
 
