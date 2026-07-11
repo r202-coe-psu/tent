@@ -172,7 +172,7 @@
 					// rather than replacing them.
 					vehicles: [...(latestHousehold.vehicles || []), ...vehicles]
 				});
-			} else {
+			} else if (isCreatingNewHousehold) {
 				const addr = newHouseholdAddress || {};
 				const householdLabel = `ครอบครัว${registeredEvacuee.first_name} ${registeredEvacuee.last_name}`;
 
