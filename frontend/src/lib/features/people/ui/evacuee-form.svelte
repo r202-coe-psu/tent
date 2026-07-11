@@ -365,8 +365,27 @@
 				<Button
 					type="button"
 					class="h-10 bg-[#003B71] px-6 text-sm font-medium hover:bg-[#002a50]"
-					onclick={() => {
-						step = 5;
+					disabled={isSubmittingHousehold}
+					onclick={async () => {
+						if (selectedHousehold) {
+							step = 5;
+						} else {
+							if (isSubmittingHousehold) return;
+							isSubmittingHousehold = true;
+							try {
+								if (pendingEvacueeInput) {
+									newlyRegisteredEvacuee = await onsubmit(pendingEvacueeInput, pendingSymptoms);
+									pendingEvacueeInput = null;
+									pendingSymptoms = [];
+								}
+								step = 6;
+							} catch (err) {
+								const message = err instanceof Error ? err.message : String(err);
+								toast.error(`เกิดข้อผิดพลาดในการบันทึก: ${message}`);
+							} finally {
+								isSubmittingHousehold = false;
+							}
+						}
 					}}
 				>
 					{selectedHousehold ? 'ถัดไป ⏩' : 'ข้าม / ถัดไป'}
@@ -379,7 +398,13 @@
 {:else if step === 6}
 	<EvacueeSelectZone
 		evacuee={newlyRegisteredEvacuee}
-		onBack={() => (step = 5)}
+		onBack={() => {
+			if (selectedHousehold || isCreatingNewHousehold) {
+				step = 5;
+			} else {
+				step = 4;
+			}
+		}}
 		onSubmit={handleZoneSubmit}
 	/>
 {/if}

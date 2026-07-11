@@ -12,8 +12,7 @@ export async function serviceFetch<T>(path: string, init: RequestInit = {}): Pro
 		headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...init.headers }
 	});
 	const data = (await res.json().catch(() => null)) as
-		| (T & { error?: { code: string; message: string } })
-		| null;
+		(T & { error?: { code: string; message: string } }) | null;
 	if (!res.ok) {
 		throw new Error(data?.error?.message || `Request failed (${res.status})`);
 	}

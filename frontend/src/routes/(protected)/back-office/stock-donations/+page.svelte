@@ -3,10 +3,10 @@
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
 	import { toast } from 'svelte-sonner';
-	import NeedsBoardAdmin from './components/needs-board-admin.svelte';
-	import SpecialRequestDialog from './components/special-request-dialog.svelte';
-	import PendingReviewBoard from './components/pending-review-board.svelte';
-	import PendingReviewDialog from './components/pending-review-dialog.svelte';
+	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
+	import SpecialRequestDialog from '$lib/components/special-request-dialog.svelte';
+	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
+	import PendingReviewDialog from '$lib/components/pending-review-dialog.svelte';
 	import ScanStation from './components/scan-station.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
 	import { startOperationsLiveQuery, useDonationNeedsBoard } from '$lib/features/operations';

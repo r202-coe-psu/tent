@@ -162,7 +162,7 @@
 							<Table.Cell>
 								<div class="flex flex-wrap gap-1">
 									{#if h.pets && h.pets.length > 0}
-										{#each h.pets as p (p.species)}
+										{#each h.pets as p, i (i)}
 											{@const petEmoji =
 												p.species === 'dog'
 													? '🐶'

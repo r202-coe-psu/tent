@@ -22,7 +22,8 @@ export const SOP_RATIO_KEYS = [
 	'm2_per_person_total',
 	'max_waterpoint_distance_m',
 	'max_queue_minutes',
-	'people_per_volunteer'
+	'people_per_volunteer',
+	'rice_g_per_person_meal'
 ] as const;
 
 export type SopRatioKey = (typeof SOP_RATIO_KEYS)[number];
@@ -47,7 +48,8 @@ export const SOP_RATIO_KIND: Record<SopRatioKey, 'multiply' | 'divide' | 'thresh
 	m2_per_person_total: 'multiply',
 	max_waterpoint_distance_m: 'threshold',
 	max_queue_minutes: 'threshold',
-	people_per_volunteer: 'divide'
+	people_per_volunteer: 'divide',
+	rice_g_per_person_meal: 'multiply'
 };
 
 const ratioShape = SOP_RATIO_KEYS.reduce(

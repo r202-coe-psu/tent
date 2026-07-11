@@ -52,7 +52,7 @@
 	class="mx-auto max-w-md rounded-3xl border border-border bg-card p-6 text-center shadow-xs md:p-8"
 >
 	<div
-		class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-50 text-emerald-600 dark:border-emerald-500/30 dark:bg-emerald-950/30 dark:text-emerald-400"
+		class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-success/25 bg-success-muted text-success"
 	>
 		<Check class="h-8 w-8" />
 	</div>

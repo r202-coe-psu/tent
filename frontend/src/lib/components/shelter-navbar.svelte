@@ -2,18 +2,20 @@
 	import * as Select from '$lib/components/ui/select';
 	import { useShelters } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { shelterCodeFromRoles } from '$lib/auth/roles';
 
 	const sheltersQuery = useShelters();
 
-	const selectedCode = $derived(shelterStore.selectedShelterCode ?? shelterStore.listDefaultCode);
+	const selectedCode = $derived(shelterStore.selectedShelterCode);
 
-	// Set after the query resolves — doing this inside listShelters() used to
-	// change getShelterDb() mid-fetch and trigger queryClient.clear() on F5.
+	const userShelterCode = $derived(shelterCodeFromRoles(authStore.user?.roles ?? []));
+
 	$effect(() => {
 		const shelters = sheltersQuery.data;
-		if (shelters?.length && !shelterStore.listDefaultCode) {
-			shelterStore.listDefaultCode = shelters[0].code;
-		}
+		if (!shelters?.length || shelterStore.selectedShelterCode) return;
+		const own = userShelterCode ? shelters.find((s) => s.code === userShelterCode) : undefined;
+		shelterStore.selectedShelterCode = (own ?? shelters[0]).code;
 	});
 
 	function onShelterChange(code: string | undefined) {
