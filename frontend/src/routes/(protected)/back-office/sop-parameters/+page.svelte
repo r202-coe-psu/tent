@@ -1,0 +1,171 @@
+<script lang="ts">
+	import type { SopMaster, SopOverride } from '$lib/features/sop-ratios';
+	import {
+		useSopProfiles,
+		useActiveSopOverride,
+		useSetOverrideInactive,
+		useCreateInitialOverride
+	} from '$lib/features/sop-ratios';
+	import {
+		SopTypeList,
+		SopRatioTab,
+		SopEditForm,
+		AlertThresholdStub,
+		VersionHistoryDrawer,
+		DeactivateConfirmDialog,
+		type SopTabType
+	} from '$lib/features/sop-ratios/components';
+
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { isSystemAdmin, isShelterManager, shelterCodeFromRoles } from '$lib/auth/roles';
+	import { toast } from 'svelte-sonner';
+	import ConsoleBanner from '$lib/components/console-banner.svelte';
+
+	// Tab and context state
+	let activeTab = $state<SopTabType>('sphere_standard');
+	let activeContext = $state<'master' | 'override'>('master');
+
+	// Modal / Drawer state
+	let bulkEditOpen = $state(false);
+	let deactivateConfirmOpen = $state(false);
+	let historyProfile = $state<SopMaster | SopOverride | null>(null);
+
+	// Queries
+	const masterQuery = useSopProfiles();
+	const activeMaster = $derived(
+		masterQuery.data != null && masterQuery.data.length > 0
+			? [...masterQuery.data].sort((a, b) => b.version - a.version)[0]
+			: null
+	);
+
+	const shelterCode = $derived(shelterStore.selectedShelterCode ?? '');
+	const overrideQuery = useActiveSopOverride(() => shelterCode);
+	const activeOverride = $derived(overrideQuery.data ?? null);
+
+	const activeProfile = $derived(activeContext === 'master' ? activeMaster : activeOverride);
+	// Mutations
+	const setInactiveMutation = useSetOverrideInactive(() => shelterCode);
+	const initialOverrideMutation = useCreateInitialOverride(() => shelterCode);
+
+	const disabled = $derived(setInactiveMutation.isPending || initialOverrideMutation.isPending);
+
+	const roles = $derived(authStore.user?.roles ?? []);
+	const isSA = $derived(isSystemAdmin(roles));
+	const canEditOverride = $derived(
+		isSA || (isShelterManager(roles) && shelterCodeFromRoles(roles) === shelterCode)
+	);
+
+	// Revert to Master context automatically if no shelter is selected
+	$effect(() => {
+		if (!shelterCode && activeContext === 'override') {
+			activeContext = 'master';
+		}
+	});
+
+	async function createInitialOverride() {
+		if (!activeMaster || !shelterCode) {
+			toast.error('ไม่สามารถสร้างค่าปรับแต่งได้ เนื่องจากยังโหลดค่ามาตรฐาน EOC ไม่สำเร็จ');
+			return;
+		}
+		await initialOverrideMutation.mutateAsync({
+			name: activeMaster.name,
+			ratios: activeMaster.ratios,
+			ctx: {
+				shelterCode,
+				createdBy: authStore.user?.name ?? 'unknown',
+				base_profile_id: activeMaster._id
+			}
+		});
+		activeContext = 'override';
+	}
+
+	function deactivateOverride() {
+		if (!activeOverride) return;
+		deactivateConfirmOpen = true;
+	}
+
+	async function handleConfirmDeactivate() {
+		if (!activeOverride) return;
+		await setInactiveMutation.mutateAsync({
+			id: activeOverride._id,
+			ctx: { shelterCode, createdBy: authStore.user?.name ?? 'unknown' }
+		});
+		activeContext = 'master';
+	}
+
+	function handleEditAll() {
+		if (!activeProfile) {
+			toast.error('ไม่สามารถแก้ไขพารามิเตอร์ได้ เนื่องจากยังโหลดข้อมูล SOP ไม่สำเร็จ');
+			return;
+		}
+		bulkEditOpen = true;
+	}
+
+	function handleViewHistory() {
+		historyProfile = activeProfile;
+	}
+</script>
+
+<svelte:head>
+	<title>พารามิเตอร์ SOP มาตรฐาน — SmartShelter</title>
+	<meta name="description" content="จัดการค่า SOP ratio มาตรฐานและการปรับแต่งเฉพาะศูนย์พักพิง" />
+</svelte:head>
+
+<div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
+	<ConsoleBanner
+		title="5. พารามิเตอร์มาตรฐานและกฎเกณฑ์ (SOP Parameters & Rules)"
+		description="กำหนดพารามิเตอร์ SOP มาตรฐาน (Sphere Standard) สำหรับการคำนวณทรัพยากร และค่าปรับแต่งเฉพาะศูนย์พักพิง"
+	/>
+
+	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
+		<SopTypeList bind:activeTab />
+
+		{#if activeTab === 'sphere_standard'}
+			{#if masterQuery.isLoading || (shelterCode && overrideQuery.isLoading)}
+				<div class="flex h-64 items-center justify-center rounded-xl border bg-card p-6 shadow-sm">
+					<div
+						class="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary"
+					></div>
+				</div>
+			{:else}
+				<SopRatioTab
+					profile={activeProfile}
+					bind:activeContext
+					hasOverride={!!activeOverride}
+					{isSA}
+					{canEditOverride}
+					{shelterCode}
+					{disabled}
+					onEditAll={handleEditAll}
+					onCreateOverride={createInitialOverride}
+					onDeactivateOverride={deactivateOverride}
+					onViewHistory={handleViewHistory}
+				/>
+			{/if}
+		{:else if activeTab === 'alert_threshold'}
+			<AlertThresholdStub />
+		{/if}
+	</div>
+</div>
+
+{#if bulkEditOpen && activeProfile}
+	<SopEditForm profile={activeProfile} onClose={() => (bulkEditOpen = false)} />
+{/if}
+
+{#if historyProfile}
+	<VersionHistoryDrawer
+		profile={historyProfile}
+		{activeMaster}
+		onClose={() => {
+			historyProfile = null;
+		}}
+	/>
+{/if}
+
+<DeactivateConfirmDialog
+	bind:open={deactivateConfirmOpen}
+	{shelterCode}
+	onConfirm={handleConfirmDeactivate}
+	isPending={setInactiveMutation.isPending}
+/>

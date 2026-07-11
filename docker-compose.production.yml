@@ -1,6 +1,6 @@
 services:
   couchdb:
-    container_name: tent-couchdb-staging
+    container_name: tent-couchdb-production
     image: couchdb:3.5
     environment:
       COUCHDB_USER: ${COUCHDB_USER}
@@ -16,7 +16,7 @@ services:
       start_period: 10s
 
   frontend:
-    container_name: tent-frontend-staging
+    container_name: tent-frontend-production
     image: tent/frontend:latest
     build:
       context: ./frontend
@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
 
   nginx:
-    container_name: tent-nginx-staging
+    container_name: tent-nginx-production
     image: nginx:alpine
     ports:
       - "${NGINX_HOST:-127.0.0.1}:${NGINX_PORT:-80}:80"

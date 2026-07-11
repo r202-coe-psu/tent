@@ -48,6 +48,42 @@ export function createInMemoryRepository(): Repository {
 				pageSize,
 				totalPages
 			};
+		},
+
+		async find<T>(query: {
+			selector: Record<string, unknown>;
+			[key: string]: unknown;
+		}): Promise<T[]> {
+			const matchesSelector = (
+				doc: Record<string, unknown>,
+				selector: Record<string, unknown>
+			): boolean => {
+				for (const [key, cond] of Object.entries(selector)) {
+					const val = doc[key];
+					if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
+						const condRecord = cond as Record<string, unknown>;
+						for (const [op, opVal] of Object.entries(condRecord)) {
+							if (op === '$in') {
+								if (!Array.isArray(opVal) || !opVal.includes(val)) {
+									return false;
+								}
+							} else if (op === '$eq') {
+								if (val !== opVal) return false;
+							} else {
+								if (val !== cond) return false;
+							}
+						}
+					} else {
+						if (val !== cond) return false;
+					}
+				}
+				return true;
+			};
+
+			const docs = [...store.values()];
+			return docs.filter((d) =>
+				matchesSelector(d as Record<string, unknown>, query.selector)
+			) as unknown as T[];
 		}
 	};
 }

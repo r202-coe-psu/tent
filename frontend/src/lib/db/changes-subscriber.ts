@@ -3,6 +3,7 @@ import { COUCH_URL } from './couch';
 import { eventChannel, type DataChangeEvent } from './event-channel';
 import { CouchAuthError } from '$lib/utils/errors';
 import { endpointStore } from '$lib/stores/endpoint.svelte';
+import { authStore } from '$lib/stores/auth.svelte';
 
 interface ChangesResponse {
 	results: Array<{
@@ -117,6 +118,7 @@ async function pollDb(
 		} catch (err) {
 			if (signal.aborted) return;
 			if (err instanceof CouchAuthError) {
+				authStore.markNeedsReauth();
 				await sleep(AUTH_BACKOFF_MS, signal);
 				continue;
 			}

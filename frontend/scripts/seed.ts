@@ -54,7 +54,8 @@ import {
 } from '$lib/features/operations/domain/operations';
 import {
 	createInitialProfile,
-	SOP_MASTER_SCHEMA_VERSION
+	SOP_MASTER_SCHEMA_VERSION,
+	sopMasterSchema
 } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 import { type AuthorContext, now } from '$lib/db/model';
@@ -424,7 +425,7 @@ async function seedCatalogSopRatios(): Promise<void> {
 
 	if (status === 200) {
 		const doc = data as { _rev?: string; schema_v?: number };
-		if (doc.schema_v === SOP_MASTER_SCHEMA_VERSION) {
+		if (doc.schema_v === SOP_MASTER_SCHEMA_VERSION && sopMasterSchema.safeParse(data).success) {
 			console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" already exists, skipping');
 			return;
 		}
