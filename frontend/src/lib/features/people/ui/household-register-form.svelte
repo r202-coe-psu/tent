@@ -43,7 +43,7 @@
 		subdistrict: string;
 		zipcode: number;
 	} | null>(null);
-	let locationItems = $state<{ value: string; label: string }[]>([]);
+	let locationItems = $state.raw<{ value: string; label: string }[]>([]);
 	let locationsLoading = $state(true);
 
 	onMount(async () => {
