@@ -138,15 +138,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		return json({ results });
-	} catch (error: any) {
-		return json({ error: error.message, stack: error.stack }, { status: 500 });
+	} catch (error: unknown) {
+		const err = error instanceof Error ? error : new Error(String(error));
+		return json({ error: err.message, stack: err.stack }, { status: 500 });
 	}
 };
-
-function maskLastName(lastName: string) {
-	if (!lastName) return '';
-	return lastName;
-}
 
 function maskAddress(household: HouseholdDoc | null) {
 	if (!household) return 'ไม่ระบุ';

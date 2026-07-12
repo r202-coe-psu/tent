@@ -24,12 +24,12 @@
 	let { children, data } = $props();
 
 	$effect(() => {
-		if (!authStore.isAuthenticated) return;
+		if (!authStore.isAuthenticated || authStore.needsReauth) return;
 		void endpointStore.probe();
 	});
 
 	$effect(() => {
-		if (!authStore.isAuthenticated) return;
+		if (!authStore.isAuthenticated || authStore.needsReauth) return;
 
 		const shelterDb = getShelterDb();
 

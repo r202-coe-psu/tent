@@ -7,6 +7,7 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { LOGIN_ROUTE } from '$lib/guards/auth';
+	import { SessionExpiredBar } from '$lib/features/login';
 
 	import type { LayoutProps } from './$types';
 
@@ -31,22 +32,7 @@
 		</header>
 	{/if}
 
-	{#if authStore.needsReauth}
-		<div
-			class="flex items-center justify-between gap-4 border-b border-amber-300 bg-amber-50 px-6 py-2 text-sm text-amber-900"
-			role="status"
-		>
-			<span
-				>Your session expired — changes are saved locally but won't sync until you log in again.</span
-			>
-			<a
-				href={resolve('/login')}
-				class="shrink-0 font-medium underline underline-offset-4 hover:text-amber-950"
-			>
-				Log in to sync
-			</a>
-		</div>
-	{/if}
+	<SessionExpiredBar />
 
 	<main class="flex min-h-0 flex-1 flex-col">
 		{@render children()}

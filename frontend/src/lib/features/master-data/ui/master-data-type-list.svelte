@@ -25,7 +25,6 @@
 	);
 
 	function navigateToType(type: MasterDataType) {
-		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		goto(`${resolvedBasePath}?type=${encodeURIComponent(type)}`, { replaceState: true });
 	}
 </script>

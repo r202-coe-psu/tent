@@ -8,9 +8,6 @@
 	import HelpCircle from '@lucide/svelte/icons/help-circle';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import PhoneCall from '@lucide/svelte/icons/phone-call';
-	import Phone from '@lucide/svelte/icons/phone';
-	import MessageCircle from '@lucide/svelte/icons/message-circle';
-	import Globe from '@lucide/svelte/icons/globe';
 	import Package from '@lucide/svelte/icons/package';
 	import Compass from '@lucide/svelte/icons/compass';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
@@ -18,7 +15,6 @@
 	import PublicEmergencyBanner from '$lib/components/public-emergency-banner.svelte';
 	import { PublicHeroMetrics } from '$lib/features/public-portal';
 	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
-	import Button from '$lib/components/ui/button/button.svelte';
 
 	let { data }: { data: PageData } = $props();
 
