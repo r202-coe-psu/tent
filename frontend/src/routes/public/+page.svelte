@@ -128,7 +128,7 @@
 				icon={Package}
 				iconClass="bg-primary-muted/50 text-primary"
 			>
-				<PublicActionBtn disabled>แจ้งบริจาคสิ่งของล่วงหน้า (เร็วๆนี้)</PublicActionBtn>
+				<PublicActionBtn href="/public/donations">แจ้งบริจาคสิ่งของล่วงหน้า</PublicActionBtn>
 				<PublicActionBtn variant="outline" disabled
 					>ดูบัญชีรับบริจาค / บอร์ดขอของ (เร็วๆนี้)</PublicActionBtn
 				>
