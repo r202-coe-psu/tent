@@ -1,8 +1,23 @@
 <script lang="ts">
-	/* eslint-disable @typescript-eslint/no-explicit-any */
 	import { onMount, onDestroy } from 'svelte';
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import type {
+		Map as MapLibreMap,
+		Marker as MapLibreMarker,
+		NavigationControl,
+		MapMouseEvent
+	} from 'maplibre-gl';
+
+	// The dynamic import's `.default` is the UMD-style namespace object (Map,
+	// Marker, NavigationControl, …) that Vite's dep pre-bundling synthesizes —
+	// not the same shape as the named-exports module type, so we only type the
+	// handful of members this component actually uses.
+	type MapLibreNamespace = {
+		Map: typeof MapLibreMap;
+		Marker: typeof MapLibreMarker;
+		NavigationControl: typeof NavigationControl;
+	};
 
 	let {
 		lat = null,
@@ -21,10 +36,11 @@
 	} = $props();
 
 	let mapElement: HTMLElement;
-	let mapInstance: any = null;
-	let marker: any = null;
-	let L: any = null;
+	let mapInstance: MapLibreMap | null = null;
+	let marker: MapLibreMarker | null = null;
+	let L: MapLibreNamespace | null = null;
 	let mapLoaded = $state(false);
+	let destroyed = false;
 
 	function setMarker(lngLat: [number, number]) {
 		if (!L || !mapInstance) return;
@@ -41,14 +57,16 @@
 				</svg>
 			</div>
 		`;
-		marker = new L.Marker({ element: el, draggable: !disabled, anchor: 'bottom' })
+		const newMarker = new L.Marker({ element: el, draggable: !disabled, anchor: 'bottom' })
 			.setLngLat(lngLat)
 			.addTo(mapInstance);
 
-		marker.on('dragend', () => {
-			const { lng: newLng, lat: newLat } = marker.getLngLat();
+		newMarker.on('dragend', () => {
+			const { lng: newLng, lat: newLat } = newMarker.getLngLat();
 			onchange(Number(newLat.toFixed(6)), Number(newLng.toFixed(6)));
 		});
+
+		marker = newMarker;
 	}
 
 	function removeMarker() {
@@ -60,7 +78,8 @@
 
 	onMount(async () => {
 		const maplibre = await import('maplibre-gl');
-		L = maplibre.default;
+		if (destroyed) return;
+		L = maplibre.default as unknown as MapLibreNamespace;
 
 		const initialCenter: [number, number] =
 			lat != null && lng != null ? [Number(lng), Number(lat)] : center;
@@ -100,7 +119,7 @@
 			}
 		});
 
-		mapInstance.on('click', (e: any) => {
+		mapInstance.on('click', (e: MapMouseEvent) => {
 			if (disabled) return;
 			const { lng: clickLng, lat: clickLat } = e.lngLat;
 			setMarker([clickLng, clickLat]);
@@ -109,6 +128,7 @@
 	});
 
 	onDestroy(() => {
+		destroyed = true;
 		if (mapInstance) {
 			mapInstance.remove();
 			mapInstance = null;
@@ -139,7 +159,7 @@
 </svelte:head>
 
 <div class="space-y-2">
-	<div class="relative h-120 w-full overflow-hidden rounded-lg border border-input">
+	<div class="relative h-[480px] w-full overflow-hidden rounded-lg border border-input">
 		<div bind:this={mapElement} class="absolute inset-0 h-full w-full"></div>
 	</div>
 	<div class="flex items-center justify-between text-xs text-muted-foreground">
