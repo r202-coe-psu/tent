@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-08
+updated: 2026-07-12
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -349,6 +349,24 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 | `ratios` | {`water_l_per_person_day`:num, `drinking_water_l_per_person_day`:num, `cooking_water_l_per_person_day`:num, `hygiene_water_l_per_person_day`:num, `kcal_per_adult_day`:num, `people_per_tap`:num, `people_per_handpump`:num, `people_per_open_well`:num, `people_per_laundry`:num, `people_per_bathing`:num, `people_per_toilet_female`:num, `people_per_toilet_male`:num, `people_per_dining_point_adult`:num, `people_per_dining_point_child`:num, `m2_per_person_living`:num, `m2_per_person_living_cold`:num, `m2_per_person_total`:num, `max_waterpoint_distance_m`:num, `max_queue_minutes`:num, `people_per_volunteer`:num} | req | ratios ต้องระบุคีย์ครบถ้วน (Full Ratios Requirement) |
 | `version` | int | req | — |
 | `active` | bool | req | สลับใช้ profile นี้หากเป็น true |
+
+### 2.15 `daily_calc` — `daily_calc:{date}` (deterministic — 1 doc/วัน/ศูนย์) · **schema_v 1**
+
+> **schema_v 1** — doc type ใหม่ ([CR-036](../changes/CR-036-daily-calc-doc-type.md)); ยังไม่มี doc เดิมในฐานข้อมูล — ไม่ต้อง backfill. `ratio_source`/`sop_override_id` (CR-006 drill-down traceability) **เลื่อนเป็น follow-up** (CR-036 Open decision #1) — ยังไม่รวมใน baseline นี้.
+> Snapshot ผลการคำนวณทรัพยากรประจำวันของ engine T-31 (FR-45). `_id` deterministic ต่อวัน (`daily_calc:2026-07-08`) → **idempotent**: รันซ้ำวันเดียวกันเขียนทับ doc เดิม (ไม่สร้างซ้ำ). Input ทั้ง 3 (occupancy, effective ratio, stock) อ่านผ่าน barrel ของ peer feature เท่านั้น (people / sop-ratios / operations). ค่าทุกตัวถูก freeze ณ เวลาคำนวณเพื่อให้ผล reproducible. ทับข้อมูลเดิม → เขียน `audit:{action:retro_edit}` (เก็บ `_rev` + ผลเดิม) **ก่อน** เขียนทับ.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `formula_v` | str | req | เวอร์ชันสูตร (`FORMULA_V`) ที่ผลิตผลชุดนี้ — algorithm version ไม่ใช่ schema |
+| `sop_profile_version` | int>0 | req | `version` ของ effective SOP profile (override active ?? master) ที่ใช้ ([CR-006](../changes/CR-006-sop-profile-master-override.md)) |
+| `ratio_snapshot` | {str:num} | req | ratio ทุกคีย์ที่ freeze ตอนคำนวณ. คีย์ **generic string** (ไม่ผูก whitelist 20 keys — engine domain-agnostic); `{}` ว่างได้ |
+| `occupancy_snapshot` | num≥0 | req | headcount ที่ `current_stay.status = active` (physically present, [CR-035](../changes/CR-035-evacuee-stay-status-v3-scan-check-in-out.md) stay-status v3) ณ เวลาคำนวณ |
+| `as_of` | ts | req | ISO-8601 UTC ตอนจัดทำ snapshot (เวลาที่ freeze input — ต่างจาก `updated_at` ที่เป็นเวลาคำนวณล่าสุด) |
+| `stock_snapshot` | {str:num\|null} | req | ยอดคงเหลือต่อ resource ที่ใช้; `null` = ไม่ sync / ไม่มี mapping (`have` seam — CR-036 Open decision #2) |
+| `results` | ResourceCalcResult[] | req | ผลรายแถว: `ordinal,key,kind,input_valid,ratio,need,have,gap,status,data_status,as_of` (T-31.1/31.3) |
+
+> ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`). append หรือ overwrite เท่านั้น — ไม่ mutate in place.
+> **Index:** `(_id)` (deterministic; `listRange` ใช้ bounded `startkey`/`endkey` = `daily_calc:{from}`..`daily_calc:{to}` ไม่สแกนทั้ง collection)
 
 ---
 
