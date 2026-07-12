@@ -177,9 +177,9 @@
 	}
 </script>
 
-<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm text-left">
-	<div class="flex items-center gap-3 border-b border-slate-100 pb-4 mb-6">
-		<div class="w-10 h-10 bg-amber-50 rounded-full flex items-center justify-center text-amber-600">
+<div class="rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm">
+	<div class="mb-6 flex items-center gap-3 border-b border-slate-100 pb-4">
+		<div class="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-600">
 			<Navigation class="h-5 w-5" />
 		</div>
 		<div>
@@ -191,31 +191,34 @@
 	<div class="space-y-8">
 		<!-- Review Selected Items preview -->
 		<div class="border-b border-slate-100 pb-5 text-left">
-			<div class="text-xs font-bold text-slate-500 mb-2.5 flex items-center justify-between">
-				<span class="flex items-center gap-1 text-slate-700">📦 รายการสิ่งของที่คุณเลือกบริจาค ({donationStore.items.length} รายการ)</span>
+			<div class="mb-2.5 flex items-center justify-between text-xs font-bold text-slate-500">
+				<span class="flex items-center gap-1 text-slate-700"
+					>📦 รายการสิ่งของที่คุณเลือกบริจาค ({donationStore.items.length} รายการ)</span
+				>
 				<button
 					type="button"
-					onclick={() => isItemsModalOpen = true}
-					class="text-xs text-primary hover:underline font-black flex items-center gap-0.5 cursor-pointer"
+					onclick={() => (isItemsModalOpen = true)}
+					class="flex cursor-pointer items-center gap-0.5 text-xs font-black text-primary hover:underline"
 				>
 					ดูทั้งหมด
 				</button>
 			</div>
-			<div 
-				onclick={() => isItemsModalOpen = true}
-				class="space-y-2 cursor-pointer hover:opacity-80 transition pl-1"
+			<div
+				onclick={() => (isItemsModalOpen = true)}
+				class="cursor-pointer space-y-2 pl-1 transition hover:opacity-80"
 			>
 				{#each donationStore.items.slice(0, 5) as item, index (item.id)}
 					{@const dotClass = getDotColor(index)}
 					<div class="flex items-center gap-2 text-xs font-bold">
-						<span class="w-2 h-2 rounded-full shrink-0 {dotClass.split(' ')[0]}" />
+						<span class="h-2 w-2 shrink-0 rounded-full {dotClass.split(' ')[0]}" />
 						<span class="{dotClass.split(' ')[1]} truncate">
-							{item.name || 'ไม่ได้ระบุ'} — {item.amount} {item.unit}
+							{item.name || 'ไม่ได้ระบุ'} — {item.amount}
+							{item.unit}
 						</span>
 					</div>
 				{/each}
 				{#if donationStore.items.length > 5}
-					<div class="text-[11px] font-black text-primary hover:underline pl-4 text-left">
+					<div class="pl-4 text-left text-[11px] font-black text-primary hover:underline">
 						+ ดูทั้งหมดอีก {donationStore.items.length - 5} รายการ (กดเพื่อดูทั้งหมด)
 					</div>
 				{/if}
@@ -224,28 +227,37 @@
 
 		<!-- 1. วิธีการจัดส่ง -->
 		<div>
-			<label class="text-sm font-bold text-slate-800 block mb-3">
+			<label class="mb-3 block text-sm font-bold text-slate-800">
 				วิธีการจัดส่ง <span class="text-red-500">*</span>
 			</label>
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+			<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
 				<button
 					type="button"
-					onclick={() => donationStore.deliveryMethod = 'self_dropoff'}
-					class="p-4 rounded-xl border-2 text-left font-bold transition-all cursor-pointer {donationStore.deliveryMethod === 'self_dropoff' ? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]' : 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+					onclick={() => (donationStore.deliveryMethod = 'self_dropoff')}
+					class="cursor-pointer rounded-xl border-2 p-4 text-left font-bold transition-all {donationStore.deliveryMethod ===
+					'self_dropoff'
+						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
+						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
 				>
 					นำมาส่งด้วยตนเอง
 				</button>
 				<button
 					type="button"
-					onclick={() => donationStore.deliveryMethod = 'parcel'}
-					class="p-4 rounded-xl border-2 text-left font-bold transition-all cursor-pointer {donationStore.deliveryMethod === 'parcel' ? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]' : 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+					onclick={() => (donationStore.deliveryMethod = 'parcel')}
+					class="cursor-pointer rounded-xl border-2 p-4 text-left font-bold transition-all {donationStore.deliveryMethod ===
+					'parcel'
+						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
+						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
 				>
 					ส่งผ่านขนส่งพัสดุ
 				</button>
 				<button
 					type="button"
-					onclick={() => donationStore.deliveryMethod = 'shelter_pickup'}
-					class="p-4 rounded-xl border-2 text-left font-bold transition-all cursor-pointer {donationStore.deliveryMethod === 'shelter_pickup' ? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]' : 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+					onclick={() => (donationStore.deliveryMethod = 'shelter_pickup')}
+					class="cursor-pointer rounded-xl border-2 p-4 text-left font-bold transition-all {donationStore.deliveryMethod ===
+					'shelter_pickup'
+						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
+						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
 				>
 					ต้องการให้รถศูนย์ไปรับ (ของเยอะมาก)
 				</button>
@@ -254,19 +266,25 @@
 
 		<!-- กรณีส่งไปรษณีย์ -->
 		{#if donationStore.deliveryMethod === 'parcel'}
-			<div class="space-y-4 animate-in fade-in duration-200">
-				<h2 class="text-sm font-bold text-slate-800 block">ข้อมูลขนส่งพัสดุ</h2>
+			<div class="animate-in space-y-4 duration-200 fade-in">
+				<h2 class="block text-sm font-bold text-slate-800">ข้อมูลขนส่งพัสดุ</h2>
 				<div class="grid gap-4 md:grid-cols-2">
 					<div>
 						<Label class="mb-1.5 block text-xs font-bold text-slate-600">คาดว่าจะถึง (ETA)</Label>
-						<Input bind:value={donationStore.eta} placeholder="เช่น พรุ่งนี้ช่วงบ่าย" class="h-12 border-2 border-slate-200 focus:border-[#ff9f0a] rounded-xl" />
+						<Input
+							bind:value={donationStore.eta}
+							placeholder="เช่น พรุ่งนี้ช่วงบ่าย"
+							class="h-12 rounded-xl border-2 border-slate-200 focus:border-[#ff9f0a]"
+						/>
 					</div>
 					<div>
-						<Label class="mb-1.5 block text-xs font-bold text-slate-600">เลขพัสดุ (Tracking No.)</Label>
+						<Label class="mb-1.5 block text-xs font-bold text-slate-600"
+							>เลขพัสดุ (Tracking No.)</Label
+						>
 						<Input
 							bind:value={donationStore.courierTrackingNo}
 							placeholder="ระบุภายหลังได้"
-							class="h-12 border-2 border-slate-200 focus:border-[#ff9f0a] rounded-xl"
+							class="h-12 rounded-xl border-2 border-slate-200 focus:border-[#ff9f0a]"
 						/>
 					</div>
 				</div>
@@ -275,19 +293,23 @@
 
 		<!-- กรณีมาส่งเอง -->
 		{#if donationStore.deliveryMethod === 'self_dropoff'}
-			<div class="space-y-3 animate-in fade-in duration-200">
-				<label class="text-sm font-bold text-slate-800 block">
+			<div class="animate-in space-y-3 duration-200 fade-in">
+				<label class="block text-sm font-bold text-slate-800">
 					ประเภทยานพาหนะที่จะนำมาส่ง <span class="text-red-500">*</span>
 				</label>
-				<p class="text-xs text-slate-500 leading-relaxed">
+				<p class="text-xs leading-relaxed text-slate-500">
 					ข้อมูลนี้สำคัญมาก เพื่อให้จุดรับของกะพื้นที่จอดและเตรียมคนยกของ
 				</p>
-				<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+				<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
 					{#each ['motorcycle', 'car', 'pickup', 'truck'] as vtype (vtype)}
 						<button
 							type="button"
-							onclick={() => donationStore.vehicleType = vtype as 'motorcycle' | 'car' | 'pickup' | 'truck'}
-							class="p-3 rounded-xl border-2 text-center text-sm font-bold transition-all cursor-pointer {donationStore.vehicleType === vtype ? 'border-[#ff9f0a] bg-[#ff9f0a] text-white shadow-xs' : 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+							onclick={() =>
+								(donationStore.vehicleType = vtype as 'motorcycle' | 'car' | 'pickup' | 'truck')}
+							class="cursor-pointer rounded-xl border-2 p-3 text-center text-sm font-bold transition-all {donationStore.vehicleType ===
+							vtype
+								? 'border-[#ff9f0a] bg-[#ff9f0a] text-white shadow-xs'
+								: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
 						>
 							{#if vtype === 'motorcycle'}
 								รถจักรยานยนต์
@@ -306,26 +328,29 @@
 
 		<!-- กรณีให้รถศูนย์ไปรับ -->
 		{#if donationStore.deliveryMethod === 'shelter_pickup'}
-			<div class="space-y-2 animate-in fade-in duration-200">
-				<label class="text-sm font-bold text-slate-800 block" for="pickup-address">
+			<div class="animate-in space-y-2 duration-200 fade-in">
+				<label class="block text-sm font-bold text-slate-800" for="pickup-address">
 					ที่อยู่ / จุดนัดรับของ <span class="text-red-500">*</span>
 				</label>
 				<textarea
 					id="pickup-address"
 					placeholder="ระบุบ้านเลขที่ ซอย ถนน หรือจุดสังเกตเพื่อความสะดวกในการเข้ารับของ..."
 					bind:value={donationStore.pickupAddress}
-					class="w-full border-2 border-slate-200 focus:border-[#ff9f0a] rounded-xl p-3 bg-white font-medium text-slate-800 outline-hidden min-h-[100px] resize-none transition-all"
+					class="min-h-[100px] w-full resize-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-all focus:border-[#ff9f0a]"
 				></textarea>
 			</div>
 		{/if}
 
 		<!-- 2. เลือกศูนย์ -->
-		<div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-6">
+		<div class="space-y-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
 			<div>
-				<label class="text-sm font-bold text-slate-800 block mb-3 flex items-center gap-2">
-					<MapPin class="h-4.5 w-4.5 text-slate-500" /> เลือกศูนย์รับบริจาค <span class="text-red-500">*</span>
+				<label class="mb-3 block flex items-center gap-2 text-sm font-bold text-slate-800">
+					<MapPin class="h-4.5 w-4.5 text-slate-500" /> เลือกศูนย์รับบริจาค
+					<span class="text-red-500">*</span>
 					{#if donationStore.shelterLocked}
-						<span class="ml-2 inline-flex items-center gap-1 rounded-md bg-slate-200/60 px-2 py-0.5 text-xs font-semibold text-slate-600">
+						<span
+							class="ml-2 inline-flex items-center gap-1 rounded-md bg-slate-200/60 px-2 py-0.5 text-xs font-semibold text-slate-600"
+						>
 							<Lock class="h-3 w-3" />
 							ล็อกตามความต้องการที่เลือก
 						</span>
@@ -335,7 +360,7 @@
 				<select
 					bind:value={donationStore.shelterCode}
 					disabled={donationStore.shelterLocked}
-					class="w-full border-2 border-slate-200 focus:border-[#ff9f0a] rounded-xl p-4 bg-white font-bold text-slate-800 outline-hidden appearance-none shadow-2xs disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
+					class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-4 font-bold text-slate-800 shadow-2xs outline-hidden focus:border-[#ff9f0a] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
 				>
 					<option value="" disabled selected>-- เลือกศูนย์พักพิงปลายทาง --</option>
 					{#each shelters as shelter (shelter.code)}
@@ -346,9 +371,12 @@
 
 			<!-- 3. เลือกเวลา -->
 			{#if donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup'}
-				<div class="space-y-4 animate-in fade-in duration-200">
-					<label class="text-sm font-bold text-slate-800 block flex items-center gap-2">
-						<CalendarIcon class="h-4.5 w-4.5 text-slate-500" /> เลือกวันที่และช่วงเวลา {donationStore.deliveryMethod === 'shelter_pickup' ? 'ที่ต้องการให้ไปรับ' : 'ที่จะนำของมาส่ง'} <span class="text-red-500">*</span>
+				<div class="animate-in space-y-4 duration-200 fade-in">
+					<label class="block flex items-center gap-2 text-sm font-bold text-slate-800">
+						<CalendarIcon class="h-4.5 w-4.5 text-slate-500" /> เลือกวันที่และช่วงเวลา {donationStore.deliveryMethod ===
+						'shelter_pickup'
+							? 'ที่ต้องการให้ไปรับ'
+							: 'ที่จะนำของมาส่ง'} <span class="text-red-500">*</span>
 					</label>
 
 					<div class="w-full">
@@ -356,7 +384,7 @@
 							<PopoverTrigger class="w-full">
 								<Button
 									variant="outline"
-									class="h-auto w-full! justify-start border-2 border-slate-200 bg-white py-3.5 text-left font-bold text-slate-800 shadow-2xs hover:border-[#ff9f0a] rounded-xl"
+									class="h-auto w-full! justify-start rounded-xl border-2 border-slate-200 bg-white py-3.5 text-left font-bold text-slate-800 shadow-2xs hover:border-[#ff9f0a]"
 								>
 									<CalendarIcon class="mr-2 h-4.5 w-4.5 text-slate-400" />
 									{#if selectedDate}
@@ -382,15 +410,17 @@
 								onclick={() => {
 									if (!isFull) donationStore.slotTime = slot.label;
 								}}
-								class="p-3 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1
+								class="flex flex-col items-center justify-center gap-1 rounded-xl border-2 p-3 transition-all
 									{isFull
-										? 'opacity-50 bg-slate-50 border-slate-200 cursor-not-allowed text-slate-400'
-										: isSelected
-											? 'bg-[#ff9f0a] border-[#ff9f0a] text-white shadow-xs'
-											: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a] bg-white cursor-pointer'}"
+									? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 opacity-50'
+									: isSelected
+										? 'border-[#ff9f0a] bg-[#ff9f0a] text-white shadow-xs'
+										: 'cursor-pointer border-slate-200 bg-white text-slate-600 hover:border-[#ff9f0a]'}"
 							>
-								<span class="font-bold text-sm">{slot.label}</span>
-								<span class="text-[10px] font-bold {isSelected ? 'text-white/80' : 'text-slate-400'}">
+								<span class="text-sm font-bold">{slot.label}</span>
+								<span
+									class="text-[10px] font-bold {isSelected ? 'text-white/80' : 'text-slate-400'}"
+								>
 									{isFull ? 'คิวเต็ม (งด)' : 'ว่าง'}
 								</span>
 							</button>
@@ -402,24 +432,31 @@
 	</div>
 
 	{#if donationStore.errorMessage}
-		<div class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm font-semibold text-red-600">
+		<div
+			class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm font-semibold text-red-600"
+		>
 			{donationStore.errorMessage}
 		</div>
 	{/if}
 
-	<div class="pt-6 border-t border-slate-100 flex gap-4 mt-8">
+	<div class="mt-8 flex gap-4 border-t border-slate-100 pt-6">
 		<button
 			type="button"
-			onclick={() => donationStore.activeTab = 'form'}
-			class="bg-slate-100 text-slate-600 px-6 py-4 rounded-xl font-bold text-lg hover:bg-slate-200 transition-colors cursor-pointer"
+			onclick={() => (donationStore.activeTab = 'form')}
+			class="cursor-pointer rounded-xl bg-slate-100 px-6 py-4 text-lg font-bold text-slate-600 transition-colors hover:bg-slate-200"
 		>
 			กลับ
 		</button>
 		<button
 			type="button"
-			disabled={donationStore.isSubmitting || !donationStore.shelterCode || ((donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup') && !donationStore.slotTime) || (donationStore.deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress.trim())}
+			disabled={donationStore.isSubmitting ||
+				!donationStore.shelterCode ||
+				((donationStore.deliveryMethod === 'self_dropoff' ||
+					donationStore.deliveryMethod === 'shelter_pickup') &&
+					!donationStore.slotTime) ||
+				(donationStore.deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress.trim())}
 			onclick={submitDonation}
-			class="flex-1 bg-[#013481] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 transition-all hover:bg-[#002244] shadow-md flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+			class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013481] py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-[#002244] active:scale-95 disabled:opacity-50"
 		>
 			{#if donationStore.isSubmitting}
 				กำลังดำเนินการ...
@@ -432,17 +469,21 @@
 
 <!-- Items Modal Dialog -->
 {#if isItemsModalOpen}
-	<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-		<div class="flex flex-col max-h-[80vh] w-full max-w-md overflow-hidden rounded-3xl border border-slate-100 bg-white text-left shadow-2xl animate-in zoom-in-95 duration-200">
+	<div
+		class="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/60 p-4 backdrop-blur-xs duration-200 fade-in"
+	>
+		<div
+			class="flex max-h-[80vh] w-full max-w-md animate-in flex-col overflow-hidden rounded-3xl border border-slate-100 bg-white text-left shadow-2xl duration-200 zoom-in-95"
+		>
 			<!-- Header -->
-			<div class="flex items-center justify-between bg-slate-900 text-white p-5 shrink-0">
+			<div class="flex shrink-0 items-center justify-between bg-slate-900 p-5 text-white">
 				<div class="flex items-center gap-2">
 					<Package class="h-5 w-5 text-white" />
 					<h4 class="text-lg font-black tracking-tight">รายการสิ่งของบริจาคทั้งหมด</h4>
 				</div>
 				<button
 					type="button"
-					onclick={() => isItemsModalOpen = false}
+					onclick={() => (isItemsModalOpen = false)}
 					class="rounded-lg p-1 text-white/80 transition hover:bg-white/10 hover:text-white"
 				>
 					<X class="h-6 w-6" />
@@ -450,29 +491,43 @@
 			</div>
 
 			<!-- Content -->
-			<div class="flex-1 overflow-y-auto p-6 space-y-4">
-				<div class="text-xs font-bold text-slate-400 uppercase tracking-wider pb-1 border-b border-slate-100">
+			<div class="flex-1 space-y-4 overflow-y-auto p-6">
+				<div
+					class="border-b border-slate-100 pb-1 text-xs font-bold tracking-wider text-slate-400 uppercase"
+				>
 					รายการที่คุณเลือก ({donationStore.items.length} รายการ)
 				</div>
 				<div class="divide-y divide-slate-100 font-['Prompt']">
 					{#each donationStore.items as item, index (item.id)}
 						{@const dotClass = getDotColor(index)}
-						<div class="py-3 flex items-start gap-3 text-left first:pt-0 last:pb-0">
-							<span class="h-2.5 w-2.5 shrink-0 rounded-full mt-1.5 {dotClass.split(' ')[0]}"></span>
-							<div class="space-y-0.5 flex-1">
+						<div class="flex items-start gap-3 py-3 text-left first:pt-0 last:pb-0">
+							<span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full {dotClass.split(' ')[0]}"
+							></span>
+							<div class="flex-1 space-y-0.5">
 								<div class="flex items-baseline justify-between gap-2">
-									<span class="font-black text-sm text-slate-800">
+									<span class="text-sm font-black text-slate-800">
 										{item.name || 'ไม่ได้ระบุ'}
 									</span>
-									<span class="text-xs font-black text-slate-800 bg-slate-100 px-2 py-0.5 rounded-full">
-										{item.amount} {item.unit}
+									<span
+										class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-800"
+									>
+										{item.amount}
+										{item.unit}
 									</span>
 								</div>
-								<div class="text-xs text-slate-500 font-bold flex flex-wrap items-center gap-x-2 gap-y-1">
-									<span>สภาพ: {item.condition === 'new' ? 'ของใหม่ 100%' : item.condition === 'used' ? 'ของมือสอง สภาพดี' : 'ไม่ได้ระบุ'}</span>
+								<div
+									class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold text-slate-500"
+								>
+									<span
+										>สภาพ: {item.condition === 'new'
+											? 'ของใหม่ 100%'
+											: item.condition === 'used'
+												? 'ของมือสอง สภาพดี'
+												: 'ไม่ได้ระบุ'}</span
+									>
 									{#if item.remark}
 										<span class="text-slate-300">|</span>
-										<span class="text-slate-500 font-medium italic">"{item.remark}"</span>
+										<span class="font-medium text-slate-500 italic">"{item.remark}"</span>
 									{/if}
 								</div>
 							</div>
@@ -482,11 +537,11 @@
 			</div>
 
 			<!-- Footer -->
-			<div class="bg-slate-50 p-4 border-t border-slate-100 flex justify-end shrink-0">
+			<div class="flex shrink-0 justify-end border-t border-slate-100 bg-slate-50 p-4">
 				<button
 					type="button"
-					onclick={() => isItemsModalOpen = false}
-					class="bg-slate-900 text-white hover:bg-slate-800 font-bold px-6 py-2.5 rounded-xl text-sm transition cursor-pointer"
+					onclick={() => (isItemsModalOpen = false)}
+					class="cursor-pointer rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
 				>
 					ปิดหน้าต่าง
 				</button>

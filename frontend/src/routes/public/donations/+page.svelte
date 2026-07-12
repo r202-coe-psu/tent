@@ -39,23 +39,28 @@
 	{/if}
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 space-y-6">
+<div class="mx-auto max-w-4xl space-y-6 px-4 py-8">
 	<!-- Hero Banner (Only when activeTab is 'needs') -->
 	{#if donationStore.activeTab === 'needs'}
-		<div class="w-full animate-in fade-in duration-300">
-			<div class="relative flex flex-col justify-start items-start gap-6 overflow-hidden rounded-3xl bg-[#013481] p-6 text-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-10 text-left">
-				<div class="absolute inset-0 bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-10 pointer-events-none [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
+		<div class="w-full animate-in duration-300 fade-in">
+			<div
+				class="relative flex flex-col items-start justify-start gap-6 overflow-hidden rounded-3xl bg-[#013481] p-6 text-left text-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-10"
+			>
+				<div
+					class="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] bg-[size:4rem_4rem] opacity-10"
+				></div>
 
-				<div class="relative z-10 space-y-3 max-w-2xl">
-					<div class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold tracking-wider text-blue-100 uppercase">
+				<div class="relative z-10 max-w-2xl space-y-3">
+					<div
+						class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold tracking-wider text-blue-100 uppercase"
+					>
 						<HeartHandshake class="h-3.5 w-3.5 text-blue-200" /> DONATION BOARD
 					</div>
 					<h1 class="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
 						กระดาน<span class="text-blue-200">ความต้องการด่วน</span>
 					</h1>
-					<p class="text-sm font-medium text-blue-100/80 leading-relaxed sm:text-base">
-						อัปเดตข้อมูลแบบเรียลไทม์จากทุกศูนย์พักพิง
-						คุณสามารถช่วยเติมเต็มในส่วนที่ขาดแคลนได้ทันที
+					<p class="text-sm leading-relaxed font-medium text-blue-100/80 sm:text-base">
+						อัปเดตข้อมูลแบบเรียลไทม์จากทุกศูนย์พักพิง คุณสามารถช่วยเติมเต็มในส่วนที่ขาดแคลนได้ทันที
 					</p>
 				</div>
 			</div>
@@ -64,19 +69,21 @@
 
 	<!-- Full-width Step Navigation / Flow Progress -->
 	<div class="w-full rounded-2xl border border-black/[0.04] bg-white p-4 shadow-sm sm:px-8">
-		<div class="relative mx-auto flex w-full justify-between items-center">
+		<div class="relative mx-auto flex w-full items-center justify-between">
 			<!-- Progress Bar Background -->
-			<div class="absolute left-[10%] right-[10%] top-5 h-1 bg-slate-100 rounded-full sm:top-1/2 sm:-translate-y-1/2"></div>
+			<div
+				class="absolute top-5 right-[10%] left-[10%] h-1 rounded-full bg-slate-100 sm:top-1/2 sm:-translate-y-1/2"
+			></div>
 			<!-- Active Progress Bar -->
 			<div
-				class="absolute left-[10%] top-5 h-1 bg-[#013365] rounded-full transition-all duration-500 sm:top-1/2 sm:-translate-y-1/2"
+				class="absolute top-5 left-[10%] h-1 rounded-full bg-[#013365] transition-all duration-500 sm:top-1/2 sm:-translate-y-1/2"
 				style:width={progressWidth}
 			></div>
 
 			{#each steps as step, idx (step.id)}
 				{@const isActive = donationStore.activeTab === step.id}
 				{@const isCompleted = activeIndex > idx}
-				{@const isClickable = donationStore.reachedStep >= (idx + 1) && step.id !== 'ticket'}
+				{@const isClickable = donationStore.reachedStep >= idx + 1 && step.id !== 'ticket'}
 				<button
 					type="button"
 					onclick={() => {
@@ -85,25 +92,31 @@
 						}
 					}}
 					disabled={!(isClickable || (step.id === 'ticket' && donationStore.reachedStep >= 4))}
-					class="relative z-10 flex flex-col items-center gap-2 rounded-xl p-1 transition-all sm:flex-row sm:bg-white sm:px-4 sm:py-2.5 
-						{isActive ? 'sm:shadow-md sm:ring-1 sm:ring-black/5 ring-[#013365]/20 sm:-translate-y-0.5' : 'hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer'}"
+					class="relative z-10 flex flex-col items-center gap-2 rounded-xl p-1 transition-all sm:flex-row sm:bg-white sm:px-4 sm:py-2.5
+						{isActive
+						? 'ring-[#013365]/20 sm:-translate-y-0.5 sm:shadow-md sm:ring-1 sm:ring-black/5'
+						: 'cursor-pointer hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30'}"
 				>
 					<div
-						class="flex h-8 w-8 items-center justify-center rounded-full transition-colors sm:h-10 sm:w-10 
-						{isActive ? 'bg-[#013365] text-white shadow-md' : isCompleted ? 'bg-[#013365] text-white' : 'bg-slate-100 text-slate-400 border-2 border-white'}"
+						class="flex h-8 w-8 items-center justify-center rounded-full transition-colors sm:h-10 sm:w-10
+						{isActive
+							? 'bg-[#013365] text-white shadow-md'
+							: isCompleted
+								? 'bg-[#013365] text-white'
+								: 'border-2 border-white bg-slate-100 text-slate-400'}"
 					>
 						<step.icon class={isActive || isCompleted ? 'h-[18px] w-[18px]' : 'h-4 w-4'} />
 					</div>
 					<div class="mt-1 flex flex-col items-center sm:mt-0 sm:items-start">
 						<span
-							class="hidden text-[10px] font-bold tracking-widest uppercase sm:block 
+							class="hidden text-[10px] font-bold tracking-widest uppercase sm:block
 							{isActive || isCompleted ? 'text-[#013365]' : 'text-slate-400'}"
 						>
 							STEP 0{idx + 1}
 						</span>
 						<span
-							class="text-xs sm:text-sm font-semibold whitespace-nowrap 
-							{isActive ? 'text-slate-900 font-bold' : isCompleted ? 'text-slate-700' : 'text-slate-500'}"
+							class="text-xs font-semibold whitespace-nowrap sm:text-sm
+							{isActive ? 'font-bold text-slate-900' : isCompleted ? 'text-slate-700' : 'text-slate-500'}"
 						>
 							{step.label}
 						</span>

@@ -56,11 +56,11 @@
 	}
 </script>
 
-<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm text-left">
+<div class="rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm">
 	<!-- ส่วนที่ 1: ข้อมูลผู้บริจาค -->
 	<div class="mb-8">
-		<div class="flex items-center gap-3 border-b border-slate-100 pb-4 mb-6">
-			<div class="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center text-primary">
+		<div class="mb-6 flex items-center gap-3 border-b border-slate-100 pb-4">
+			<div class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-primary">
 				<ShieldCheck class="h-5 w-5" />
 			</div>
 			<div>
@@ -70,9 +70,9 @@
 		</div>
 
 		<div class="space-y-4">
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div>
-					<label class="text-xs font-bold text-slate-700 block mb-1.5" for="donor-name">
+					<label class="mb-1.5 block text-xs font-bold text-slate-700" for="donor-name">
 						ชื่อ-นามสกุล / นามแฝง / องค์กร <span class="text-red-500">*</span>
 					</label>
 					<input
@@ -80,11 +80,11 @@
 						id="donor-name"
 						bind:value={donationStore.donorName}
 						placeholder="เช่น บจก. ใจดี หรือ นางสาว รักดี"
-						class="w-full border-2 border-slate-200 focus:border-primary rounded-xl p-3 bg-white text-slate-800 outline-hidden transition-all"
+						class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 text-slate-800 outline-hidden transition-all focus:border-primary"
 					/>
 				</div>
 				<div>
-					<label class="text-xs font-bold text-slate-700 block mb-1.5" for="donor-phone">
+					<label class="mb-1.5 block text-xs font-bold text-slate-700" for="donor-phone">
 						เบอร์โทรศัพท์มือถือ <span class="text-red-500">*</span>
 					</label>
 					<input
@@ -92,14 +92,14 @@
 						id="donor-phone"
 						bind:value={donationStore.donorPhone}
 						placeholder="สำหรับส่ง SMS ยืนยัน"
-						class="w-full border-2 border-slate-200 focus:border-primary rounded-xl p-3 bg-white font-bold text-slate-800 outline-hidden transition-all"
+						class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-bold text-slate-800 outline-hidden transition-all focus:border-primary"
 					/>
 				</div>
 			</div>
 
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div>
-					<label class="text-xs font-bold text-slate-700 block mb-1.5" for="donor-line">
+					<label class="mb-1.5 block text-xs font-bold text-slate-700" for="donor-line">
 						Line ID (ไม่บังคับ)
 					</label>
 					<input
@@ -107,11 +107,11 @@
 						id="donor-line"
 						bind:value={donationStore.donorLine}
 						placeholder="ระบุไอดีไลน์ (ถ้ามี)"
-						class="w-full border-2 border-slate-200 focus:border-primary rounded-xl p-3 bg-white text-slate-800 outline-hidden transition-all"
+						class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 text-slate-800 outline-hidden transition-all focus:border-primary"
 					/>
 				</div>
 				<div>
-					<label class="text-xs font-bold text-slate-700 block mb-1.5" for="donor-email">
+					<label class="mb-1.5 block text-xs font-bold text-slate-700" for="donor-email">
 						อีเมล (ไม่บังคับ)
 					</label>
 					<input
@@ -119,7 +119,7 @@
 						id="donor-email"
 						bind:value={donationStore.donorEmail}
 						placeholder="ระบุที่อยู่อีเมล (ถ้ามี)"
-						class="w-full border-2 border-slate-200 focus:border-primary rounded-xl p-3 bg-white text-slate-800 outline-hidden transition-all"
+						class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 text-slate-800 outline-hidden transition-all focus:border-primary"
 					/>
 				</div>
 			</div>
@@ -128,39 +128,43 @@
 
 	<!-- ส่วนที่ 2: รายละเอียดสิ่งของบริจาค -->
 	<div class="mb-8">
-		<div class="flex items-center gap-3 border-b border-slate-100 pb-4 mb-6">
-			<div class="w-10 h-10 bg-amber-50 rounded-full flex items-center justify-center text-amber-600">
+		<div class="mb-6 flex items-center gap-3 border-b border-slate-100 pb-4">
+			<div
+				class="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-600"
+			>
 				<Package class="h-5 w-5" />
 			</div>
 			<div>
 				<h3 class="text-xl font-bold text-slate-800">ส่วนที่ 2: รายละเอียดสิ่งของบริจาค</h3>
-				<p class="text-xs font-medium text-[#013365] mt-1 bg-[#013365]/10 px-3 py-1 rounded inline-block">
+				<p
+					class="mt-1 inline-block rounded bg-[#013365]/10 px-3 py-1 text-xs font-medium text-[#013365]"
+				>
 					💡 เลือกลบรายการที่ไม่ต้องการบริจาคออก และปรับระบุจำนวนที่คุณต้องการบริจาคได้ตามสะดวก
 				</p>
 			</div>
 		</div>
 
 		{#if donationStore.items.length > 0}
-			<div class="space-y-4 mb-6">
+			<div class="mb-6 space-y-4">
 				{#each donationStore.items as item, idx (item.id)}
-					<div class="flex flex-col gap-3 bg-slate-50 p-5 rounded-xl border border-slate-200 relative">
+					<div
+						class="relative flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-5"
+					>
 						<button
 							type="button"
 							onclick={() => donationStore.removeItem(item.id)}
-							class="absolute top-2 right-2 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+							class="absolute top-2 right-2 rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
 							title="ลบรายการ"
 						>
 							<Trash2 class="h-5.5 w-5.5" />
 						</button>
 
-						<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+						<div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
 							<div>
-								<label class="text-xs font-bold text-slate-600 block mb-1">
-									หมวดหมู่
-								</label>
+								<label class="mb-1 block text-xs font-bold text-slate-600"> หมวดหมู่ </label>
 								<select
 									bind:value={item.category}
-									class="w-full border-2 border-slate-200 focus:border-primary rounded-xl p-3 bg-white font-medium text-slate-800 outline-hidden appearance-none"
+									class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden focus:border-primary"
 								>
 									<option value="" disabled selected>เลือกหมวดหมู่</option>
 									{#each PUBLIC_DONATION_CATEGORIES as cat (cat.value)}
@@ -169,48 +173,40 @@
 								</select>
 							</div>
 							<div>
-								<label class="text-xs font-bold text-slate-600 block mb-1">
-									ชื่อสิ่งของ
-								</label>
+								<label class="mb-1 block text-xs font-bold text-slate-600"> ชื่อสิ่งของ </label>
 								<input
 									type="text"
 									placeholder="เช่น น้ำดื่มขวด 600ml"
 									bind:value={item.name}
-									class="w-full border-2 border-slate-200 focus:border-primary rounded-xl p-3 bg-white text-slate-800 outline-hidden"
+									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 text-slate-800 outline-hidden focus:border-primary"
 								/>
 							</div>
 						</div>
 
-						<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+						<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
 							<div class="col-span-1">
-								<label class="text-xs font-bold text-slate-600 block mb-1">
-									ปริมาณ
-								</label>
+								<label class="mb-1 block text-xs font-bold text-slate-600"> ปริมาณ </label>
 								<input
 									type="number"
 									min="1"
 									bind:value={item.amount}
-									class="w-full border-2 border-slate-200 focus:border-primary rounded-xl p-3 bg-white font-bold text-slate-800 outline-hidden"
+									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-bold text-slate-800 outline-hidden focus:border-primary"
 								/>
 							</div>
 							<div class="col-span-1">
-								<label class="text-xs font-bold text-slate-600 block mb-1">
-									หน่วย
-								</label>
+								<label class="mb-1 block text-xs font-bold text-slate-600"> หน่วย </label>
 								<input
 									type="text"
 									placeholder="เช่น แพ็ค, ลัง, ชิ้น"
 									bind:value={item.unit}
-									class="w-full border-2 border-slate-200 focus:border-primary rounded-xl p-3 bg-white font-medium text-slate-800 outline-hidden"
+									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden focus:border-primary"
 								/>
 							</div>
 							<div class="col-span-2 md:col-span-1">
-								<label class="text-xs font-bold text-slate-600 block mb-1">
-									สภาพสิ่งของ
-								</label>
+								<label class="mb-1 block text-xs font-bold text-slate-600"> สภาพสิ่งของ </label>
 								<select
 									bind:value={item.condition}
-									class="w-full border-2 border-slate-200 focus:border-primary rounded-xl p-3 bg-white font-medium text-slate-800 outline-hidden appearance-none"
+									class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden focus:border-primary"
 								>
 									<option value="">เลือกสภาพสิ่งของ</option>
 									<option value="new">ของใหม่ 100%</option>
@@ -220,14 +216,14 @@
 						</div>
 
 						<div>
-							<label class="text-xs font-bold text-slate-600 block mb-1">
+							<label class="mb-1 block text-xs font-bold text-slate-600">
 								หมายเหตุเพิ่มเติม (Optional)
 							</label>
 							<input
 								type="text"
 								placeholder="เช่น ข้าวกล่องมังสวิรัติ, เสื้อผ้าเด็ก 5 ขวบ"
 								bind:value={item.remark}
-								class="w-full border-2 border-slate-200 focus:border-primary rounded-xl p-3 bg-white font-medium text-slate-800 outline-hidden"
+								class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden focus:border-primary"
 							/>
 						</div>
 					</div>
@@ -238,7 +234,7 @@
 		<button
 			type="button"
 			onclick={() => donationStore.addItem()}
-			class="flex items-center justify-center gap-2 text-primary font-bold py-4 hover:bg-muted/10 rounded-xl w-full border-2 border-dashed border-primary/30 transition-colors bg-blue-50/50 cursor-pointer"
+			class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/30 bg-blue-50/50 py-4 font-bold text-primary transition-colors hover:bg-muted/10"
 		>
 			<PlusCircle class="h-5 w-5" /> เพิ่มรายการสิ่งของ
 		</button>
@@ -262,7 +258,7 @@
 	<button
 		type="button"
 		onclick={handleNext}
-		class="bg-[#013481] text-white w-full py-4 rounded-xl font-bold text-lg disabled:opacity-50 transition-all hover:bg-[#002244] shadow-md flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+		class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013481] py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-[#002244] active:scale-95 disabled:opacity-50"
 	>
 		ถัดไป: เลือกจุดส่งมอบ <ArrowRight class="h-5 w-5" />
 	</button>
