@@ -1,5 +1,14 @@
 <script lang="ts">
-	import { RegistrationConfigPage, REGISTRATION_MASTER_TYPES } from '$lib/features/master-data';
+	import { MasterDataConfigPage, REGISTRATION_MASTER_TYPES } from '$lib/features/master-data';
 </script>
 
-<RegistrationConfigPage allowedTypes={REGISTRATION_MASTER_TYPES} />
+<svelte:head>
+	<title>ข้อมูลหลักบุคคล — SmartShelter</title>
+	<meta name="description" content="จัดการค่ามาตรฐานสำหรับฟอร์มลงทะเบียนบุคคล" />
+</svelte:head>
+
+<MasterDataConfigPage
+	allowedTypes={REGISTRATION_MASTER_TYPES}
+	title="1. ข้อมูลหลักบุคคล (Person Master Data)"
+	description="จัดการค่ามาตรฐานสำหรับฟอร์มลงทะเบียนบุคคล — เพิ่ม แก้ไข หรือลบตัวเลือกที่ใช้ในแต่ละหมวดหมู่"
+/>
