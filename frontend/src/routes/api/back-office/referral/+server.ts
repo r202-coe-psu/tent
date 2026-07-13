@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports */
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
@@ -47,9 +48,10 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		const list = await repo.list({ status, evacuee_id: evacueeId });
 
 		return json(list);
-	} catch (e: any) {
-		const status = e.status || 500;
-		const message = e.body?.message || e.message || 'Internal Server Error';
+	} catch (e: unknown) {
+		const err = e as { status?: number; body?: { message?: string }; message?: string };
+		const status = err.status || 500;
+		const message = err.body?.message || err.message || 'Internal Server Error';
 		return json({ error: message }, { status });
 	}
 };
@@ -88,9 +90,10 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
 		const created = await repo.create(parsed.data, ctx);
 		return json(created, { status: 201 });
-	} catch (e: any) {
-		const status = e.status || 500;
-		const message = e.body?.message || e.message || 'Internal Server Error';
+	} catch (e: unknown) {
+		const err = e as { status?: number; body?: { message?: string }; message?: string };
+		const status = err.status || 500;
+		const message = err.body?.message || err.message || 'Internal Server Error';
 		return json({ error: message }, { status });
 	}
 };

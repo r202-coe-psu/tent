@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -7,12 +6,13 @@
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 
-	import { useReferrals, useReferral } from '$lib/features/referrals';
-	import ReferralCreateForm from '$lib/features/referrals/ui/referral-create-form.svelte';
-	import ReferralList from '$lib/features/referrals/ui/referral-list.svelte';
-	import ReferralDetail from '$lib/features/referrals/ui/referral-detail.svelte';
-
-	const queryClient = useQueryClient();
+	import {
+		useReferrals,
+		useReferral,
+		ReferralCreateForm,
+		ReferralList,
+		ReferralDetail
+	} from '$lib/features/referrals';
 
 	let viewMode = $state<'list' | 'create'>('list');
 	let selectedId = $state<string | null>(null);

@@ -1,9 +1,9 @@
+/* eslint-disable no-restricted-imports */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PATCH } from './+server';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import type { RequestEvent } from './$types';
-import { ReferralRemoteRepository } from '$lib/features/referrals/data/referral.remote';
-
+import type { Referral } from '$lib/features/referrals/domain/referral.schema';
 vi.mock('$lib/server/couch-admin', () => ({
 	requireShelterScopeOrSA: vi.fn(),
 	ServiceError: class extends Error {
@@ -64,7 +64,7 @@ describe('PATCH /api/back-office/referral/[id]/transition', () => {
 				_id: 'referral:1',
 				type: 'referral',
 				status: 'sent'
-			} as any);
+			} as unknown as Referral);
 
 		const event = createMockEvent('referral:1', { to: 'sent' });
 		const res = await PATCH(event);

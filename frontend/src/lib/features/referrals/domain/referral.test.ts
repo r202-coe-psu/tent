@@ -173,7 +173,19 @@ describe('Referral Domain', () => {
 						notes: 'Allergic to penicillin'
 					});
 
-					const redacted = redactForScope(doc, scope) as any;
+					interface RedactedHospitalDoc {
+						to_org: {
+							kind: string;
+							name?: string;
+							contact?: string;
+						};
+						reason?: string;
+						notes?: string;
+						evacuee_id?: string;
+						national_id?: string;
+					}
+
+					const redacted = redactForScope(doc, scope) as unknown as RedactedHospitalDoc;
 
 					expect(redacted.to_org.kind).toBe('hospital');
 					// Redacted fields
@@ -192,7 +204,19 @@ describe('Referral Domain', () => {
 						notes: 'Has 3 children'
 					});
 
-					const redacted = redactForScope(doc, scope) as any;
+					interface RedactedSocialDoc {
+						to_org: {
+							kind: string;
+							name?: string;
+							contact?: string;
+						};
+						reason?: string;
+						notes?: string;
+						evacuee_id?: string;
+						national_id?: string;
+					}
+
+					const redacted = redactForScope(doc, scope) as unknown as RedactedSocialDoc;
 
 					expect(redacted.to_org.kind).toBe('social_services');
 					// Kept fields

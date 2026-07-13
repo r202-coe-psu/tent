@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports */
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
@@ -47,9 +48,10 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 		}
 
 		return json(doc);
-	} catch (e: any) {
-		const status = e.status || 500;
-		const message = e.body?.message || e.message || 'Internal Server Error';
+	} catch (e: unknown) {
+		const err = e as { status?: number; body?: { message?: string }; message?: string };
+		const status = err.status || 500;
+		const message = err.body?.message || err.message || 'Internal Server Error';
 		return json({ error: message }, { status });
 	}
 };

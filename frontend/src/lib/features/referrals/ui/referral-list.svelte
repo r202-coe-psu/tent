@@ -1,5 +1,4 @@
 <script lang="ts">
-	import * as Card from '$lib/components/ui/card/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
@@ -90,7 +89,7 @@
 <div class="space-y-4">
 	<!-- Tab Bar -->
 	<div class="flex flex-wrap gap-1.5 border-b border-border pb-px">
-		{#each tabs as tab}
+		{#each tabs as tab (tab.value)}
 			<button
 				onclick={() => (activeTab = tab.value)}
 				class="-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-all hover:text-foreground

@@ -3,7 +3,6 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
-	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
@@ -12,7 +11,6 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Loader from '@lucide/svelte/icons/loader';
 	import Check from '@lucide/svelte/icons/check';
-	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 
 	import { referralInputSchema } from '../domain/referral.schema';
 	import { useCreateReferral } from '../application/queries';
@@ -166,7 +164,7 @@
 								<div
 									class="max-h-48 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-sm"
 								>
-									{#each foundEvacuees as person}
+									{#each foundEvacuees as person (person._id)}
 										<button
 											type="button"
 											onclick={() =>

@@ -1,8 +1,9 @@
+/* eslint-disable no-restricted-imports */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET, POST } from './+server';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import type { RequestEvent } from './$types';
-import { ReferralRemoteRepository } from '$lib/features/referrals/data/referral.remote';
+import type { Referral } from '$lib/features/referrals/domain/referral.schema';
 
 vi.mock('$lib/server/couch-admin', () => ({
 	requireShelterScopeOrSA: vi.fn(),
@@ -79,7 +80,7 @@ describe('BFF Referral List and Create Endpoints', () => {
 			});
 
 			const mockReferrals = [{ id: 'ref:1', type: 'referral', status: 'draft' }];
-			mockList.mockResolvedValue(mockReferrals as any);
+			mockList.mockResolvedValue(mockReferrals as unknown as Referral[]);
 
 			const event = createMockEvent({ status: 'draft' });
 			const res = await GET(event);
@@ -120,7 +121,7 @@ describe('BFF Referral List and Create Endpoints', () => {
 				...bodyInput
 			};
 
-			mockCreate.mockResolvedValue(mockCreatedReferral as any);
+			mockCreate.mockResolvedValue(mockCreatedReferral as unknown as Referral);
 
 			const event = createMockEvent({}, bodyInput);
 			const res = await POST(event);

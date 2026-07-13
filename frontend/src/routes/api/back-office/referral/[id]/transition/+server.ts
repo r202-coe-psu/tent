@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports */
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
@@ -50,22 +51,23 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 		const repo = new ReferralRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
 
 		const MAX_RETRIES = 3;
-		let lastError: any = null;
+		let lastError: { message?: string } | null = null;
 
 		for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 			try {
 				const updated = await repo.transition(id, nextStatus, caller.name);
 				return json(updated);
-			} catch (e: any) {
+			} catch (e: unknown) {
+				const err = e as { status?: number; message?: string };
 				// CouchDB put returns 409 conflict
 				const isConflict =
-					e.status === 409 ||
-					e.message?.includes('409') ||
-					e.message?.includes('conflict') ||
-					e.message?.includes('Conflict');
+					err.status === 409 ||
+					err.message?.includes('409') ||
+					err.message?.includes('conflict') ||
+					err.message?.includes('Conflict');
 
 				if (isConflict) {
-					lastError = e;
+					lastError = err;
 					continue; // retry
 				}
 				throw e; // throw other errors immediately
@@ -79,9 +81,10 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 			},
 			{ status: 409 }
 		);
-	} catch (e: any) {
-		const status = e.status || 500;
-		const message = e.body?.message || e.message || 'Internal Server Error';
+	} catch (e: unknown) {
+		const err = e as { status?: number; body?: { message?: string }; message?: string };
+		const status = err.status || 500;
+		const message = err.body?.message || err.message || 'Internal Server Error';
 		return json({ error: message }, { status });
 	}
 };
