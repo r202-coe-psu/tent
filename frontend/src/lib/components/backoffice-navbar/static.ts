@@ -147,6 +147,6 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	}
 ];
 
-export const backofficeHomePath: ResolvedPathname = resolve('/');
+export const backofficeHomePath: ResolvedPathname = resolve('/portal');
 
 export { isGroup };
