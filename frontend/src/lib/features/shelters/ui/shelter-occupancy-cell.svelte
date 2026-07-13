@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { useShelterOccupancy } from '../application/queries';
+	import { useDashboardOccupancy } from '$lib/features/dashboard';
 
 	let { code, capacity }: { code: string; capacity: number } = $props();
 
-	const occupancyQuery = useShelterOccupancy(() => code);
+	const occupancyQuery = useDashboardOccupancy(() => code);
 
 	const active = $derived(occupancyQuery.data?.active ?? 0);
 	const ratio = $derived(capacity > 0 ? active / capacity : 0);
