@@ -8,7 +8,7 @@ export const GET = async ({ url }) => {
 		return json({ error: 'province and district query params are required' }, { status: 400 });
 	}
 	try {
-		return json(listSubdistricts(province, district));
+		return json(await listSubdistricts(province, district));
 	} catch {
 		return json({ error: 'Internal server error' }, { status: 500 });
 	}

@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-09 # CR-036 daily_calc doc type (T-31.4) proposed (renumbered CR-035→CR-036 to resolve collision with evacuee-stay-status CR, per PM); CR-035 evacuee stay status; CR-033 remote-first architecture; CR-034 donation campaign cutoff; index ครบ CR-001..036; CR-034 implementation in PR #39 pending owner sign-off
+updated: 2026-07-12 # CR-036 daily_calc doc type (T-31.4) approved + schema.md §2.15 applied baseline 2026-07-12 (renumbered CR-035→CR-036 to resolve collision with evacuee-stay-status CR, per PM; Open decisions #1/#2 deferred to follow-up); CR-035 evacuee stay status; CR-033 remote-first architecture; CR-034 donation campaign cutoff; index ครบ CR-001..036; CR-034 implementation in PR #39 pending owner sign-off
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 

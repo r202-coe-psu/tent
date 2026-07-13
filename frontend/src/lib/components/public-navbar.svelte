@@ -5,6 +5,7 @@
 	import Compass from '@lucide/svelte/icons/compass';
 	import Search from '@lucide/svelte/icons/search';
 	import Heart from '@lucide/svelte/icons/heart';
+	import Building2 from '@lucide/svelte/icons/building-2';
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	// import FileText from '@lucide/svelte/icons/file-text';
@@ -108,6 +109,18 @@
 			>
 				<Heart class="h-4 w-4" />
 				บริจาคและจองคิว
+			</a>
+
+			<a
+				href={resolve('/login')}
+				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
+					'/login'
+				)
+					? 'bg-primary-muted text-primary'
+					: ''}"
+			>
+				<Building2 class="h-4 w-4" />
+				ระบบหลังบ้าน
 			</a>
 
 			<!-- <a
@@ -224,6 +237,19 @@
 				>
 					<Heart class="h-5 w-5" />
 					บริจาคและจองคิว
+				</a>
+
+				<a
+					href={resolve('/login')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
+						'/login'
+					)
+						? 'bg-primary-muted text-primary'
+						: ''}"
+				>
+					<Building2 class="h-5 w-5" />
+					ระบบหลังบ้าน
 				</a>
 			</nav>
 		</div>
