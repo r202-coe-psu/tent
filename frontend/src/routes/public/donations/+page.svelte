@@ -83,15 +83,12 @@
 			{#each steps as step, idx (step.id)}
 				{@const isActive = donationStore.activeTab === step.id}
 				{@const isCompleted = activeIndex > idx}
-				{@const isClickable = donationStore.reachedStep >= idx + 1 && step.id !== 'ticket'}
 				<button
 					type="button"
 					onclick={() => {
-						if (isClickable || (step.id === 'ticket' && donationStore.reachedStep >= 4)) {
-							donationStore.activeTab = step.id;
-						}
+						donationStore.activeTab = step.id;
 					}}
-					disabled={!(isClickable || (step.id === 'ticket' && donationStore.reachedStep >= 4))}
+					disabled={donationStore.reachedStep < idx + 1}
 					class="relative z-10 flex flex-col items-center gap-2 rounded-xl p-1 transition-all sm:flex-row sm:bg-white sm:px-4 sm:py-2.5
 						{isActive
 						? 'ring-[#013365]/20 sm:-translate-y-0.5 sm:shadow-md sm:ring-1 sm:ring-black/5'
