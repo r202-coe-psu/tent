@@ -7,14 +7,10 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { LOGIN_ROUTE } from '$lib/guards/auth';
-	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
-
-	const roles = $derived(authStore.user?.roles ?? []);
-	const isSA = $derived(isSystemAdmin(roles));
-	const canManageUsers = $derived(isSA || isShelterManager(roles));
 
 	async function logout() {
 		await authStore.logout();

@@ -1,7 +1,7 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { saveBulkAtomic } from '$lib/db/couch-db';
 import { touch, type AuthorContext } from '$lib/db/model';
-import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
+import { createAuditEntry, type AuditEntry, isAuditEntry } from '$lib/features/shared';
 import {
 	isSopMaster,
 	isSopOverride,
@@ -11,6 +11,21 @@ import {
 	type SopRatioKey
 } from '../domain/sop-ratio';
 import type { SopMasterRepository, SopOverrideRepository } from './sop-ratio.repository';
+
+async function fetchAuditsByTargetIds(repo: Repository, ids: string[]): Promise<AuditEntry[]> {
+	if (ids.length === 0) return [];
+	const chunkSize = 50;
+	const results: AuditEntry[] = [];
+	for (let i = 0; i < ids.length; i += chunkSize) {
+		const chunk = ids.slice(i, i + chunkSize);
+		const result = await repo.find<AuditEntry>({
+			selector: { type: 'audit', target_id: { $in: chunk } },
+			limit: 1000
+		});
+		results.push(...result.filter(isAuditEntry));
+	}
+	return results;
+}
 
 export class SopMasterRemoteRepository implements SopMasterRepository {
 	private readonly dbName: string;
@@ -27,12 +42,19 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 	}
 
 	async listVersions(name: string): Promise<SopMaster[]> {
-		const all = await this.repo.allByType('sop_profile', isSopMaster);
-		return all.filter((p) => p.name === name);
+		const results = await this.repo.find<SopMaster>({
+			selector: { type: 'sop_profile', name: name },
+			limit: 1000
+		});
+		return results.filter(isSopMaster);
 	}
 
 	async getById(id: string): Promise<SopMaster | null> {
 		return this.repo.get<SopMaster>(id);
+	}
+
+	async listAuditsByTargetIds(ids: string[]): Promise<AuditEntry[]> {
+		return fetchAuditsByTargetIds(this.repo, ids);
 	}
 
 	async createVersion(
@@ -114,12 +136,19 @@ export class SopOverrideRemoteRepository implements SopOverrideRepository {
 	}
 
 	async listVersions(name: string): Promise<SopOverride[]> {
-		const all = await this.repo.allByType('sop_override', isSopOverride);
-		return all.filter((p) => p.name === name);
+		const results = await this.repo.find<SopOverride>({
+			selector: { type: 'sop_override', name: name },
+			limit: 1000
+		});
+		return results.filter(isSopOverride);
 	}
 
 	async getById(id: string): Promise<SopOverride | null> {
 		return this.repo.get<SopOverride>(id);
+	}
+
+	async listAuditsByTargetIds(ids: string[]): Promise<AuditEntry[]> {
+		return fetchAuditsByTargetIds(this.repo, ids);
 	}
 
 	async createVersion(
@@ -184,6 +213,40 @@ export class SopOverrideRemoteRepository implements SopOverrideRepository {
 
 		if (docsToSave.length > 0) {
 			await saveBulkAtomic(this.dbName, docsToSave, 'active override');
+		}
+	}
+
+	async setInactive(id: string, ctx?: AuthorContext): Promise<void> {
+		const target = await this.getById(id);
+		if (!target) {
+			throw new Error(`SOP override with ID ${id} not found`);
+		}
+
+		if (target.active) {
+			const docsToSave: Array<SopOverride | AuditEntry> = [
+				{
+					...touch(target),
+					active: false
+				}
+			];
+
+			if (ctx) {
+				const audit = createAuditEntry(
+					{
+						action: 'manual_adjust',
+						target_type: 'sop_override',
+						target_id: target._id,
+						reason: `Deactivate override "${target.name}"`,
+						context: {
+							base_profile_id: target.base_profile_id
+						}
+					},
+					ctx
+				);
+				docsToSave.push(audit);
+			}
+
+			await saveBulkAtomic(this.dbName, docsToSave, 'deactivate override');
 		}
 	}
 }

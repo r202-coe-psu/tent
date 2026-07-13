@@ -67,7 +67,9 @@
 					</div>
 
 					<!-- Title & Subtitle -->
-					<h1 class="mb-3 text-3xl font-bold tracking-tight md:text-4xl">{shelter?.name || 'ไม่มีชื่อศูนย์'}</h1>
+					<h1 class="mb-3 text-3xl font-bold tracking-tight md:text-4xl">
+						{shelter?.name || 'ไม่มีชื่อศูนย์'}
+					</h1>
 					<div class="mb-10 flex flex-wrap items-center gap-3 text-sm text-muted-foreground/60">
 						<div class="flex items-center gap-1.5 text-accent">
 							<MapPin class="h-4 w-4 text-warning" />
@@ -96,7 +98,8 @@
 										>{shelter?.capacity?.available ?? '-'}</span
 									>
 									<span class="text-xl font-medium text-secondary">/</span>
-									<span class="text-xl font-bold text-white">{shelter?.capacity?.total ?? '-'}</span>
+									<span class="text-xl font-bold text-white">{shelter?.capacity?.total ?? '-'}</span
+									>
 									<span class="text-sm font-medium text-secondary/80">คน</span>
 								</div>
 							</div>
@@ -158,7 +161,9 @@
 								</div>
 								<div>
 									<h3 class="mb-1 text-sm font-bold text-foreground">นโยบายสัตว์เลี้ยง</h3>
-									<p class="text-sm text-muted-foreground">{shelter?.admission_policy?.pets || '-'}</p>
+									<p class="text-sm text-muted-foreground">
+										{shelter?.admission_policy?.pets || '-'}
+									</p>
 								</div>
 							</div>
 
@@ -197,13 +202,17 @@
 						<div class="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
 							<div class="flex items-center justify-between border-b border-border/50 p-4">
 								<span class="text-sm font-semibold text-muted-foreground">เส้นทางเข้าศูนย์</span>
-								<span class="text-sm font-bold text-foreground text-right ml-4">{shelter?.travel?.route || '-'}</span>
+								<span class="ml-4 text-right text-sm font-bold text-foreground"
+									>{shelter?.travel?.route || '-'}</span
+								>
 							</div>
 							<div class="flex items-center justify-between border-b border-border/50 p-4">
 								<span class="text-sm font-semibold text-muted-foreground"
 									>ระดับความสูงจากน้ำทะเล</span
 								>
-								<span class="text-sm font-bold text-foreground text-right ml-4">{shelter?.travel?.altitude || '-'}</span>
+								<span class="ml-4 text-right text-sm font-bold text-foreground"
+									>{shelter?.travel?.altitude || '-'}</span
+								>
 							</div>
 							{#if shelter?.travel?.flood_warning}
 								<div class="bg-danger-muted/50 p-4">
@@ -274,11 +283,15 @@
 									<div class="space-y-2 text-xs">
 										<div class="flex justify-between border-b border-border/50 pb-1">
 											<span class="text-muted-foreground">ไฟฟ้าหลัก:</span>
-											<span class="font-bold text-right ml-2">{shelter?.facilities?.power || '-'}</span>
+											<span class="ml-2 text-right font-bold"
+												>{shelter?.facilities?.power || '-'}</span
+											>
 										</div>
 										<div class="flex justify-between">
 											<span class="text-muted-foreground">น้ำประปา:</span>
-											<span class="font-bold text-right ml-2">{shelter?.facilities?.water || '-'}</span>
+											<span class="ml-2 text-right font-bold"
+												>{shelter?.facilities?.water || '-'}</span
+											>
 										</div>
 									</div>
 								</div>
@@ -291,13 +304,15 @@
 									<div class="space-y-2 text-xs">
 										<div class="flex justify-between border-b border-border/50 pb-1">
 											<span class="text-muted-foreground">สัญญาณมือถือ</span>
-											<span class="font-bold text-right ml-2"
-												>{shelter?.facilities?.comms?.includes('สัญญาณมือถือ') ? 'มี' : 'ไม่มี'}</span
+											<span class="ml-2 text-right font-bold"
+												>{shelter?.facilities?.comms?.includes('สัญญาณมือถือ')
+													? 'มี'
+													: 'ไม่มี'}</span
 											>
 										</div>
 										<div class="flex justify-between">
 											<span class="text-muted-foreground">VHF</span>
-											<span class="font-bold text-right ml-2"
+											<span class="ml-2 text-right font-bold"
 												>{shelter?.facilities?.comms?.includes('VHF') ? 'มี' : 'ไม่มี'}</span
 											>
 										</div>
@@ -346,7 +361,9 @@
 								<div class="text-sm font-bold text-success-dark">
 									ผู้ดูแลศูนย์: {shelter?.contact?.manager || '-'}
 								</div>
-								<div class="text-xl font-bold text-success-dark">{shelter?.contact?.phone || '-'}</div>
+								<div class="text-xl font-bold text-success-dark">
+									{shelter?.contact?.phone || '-'}
+								</div>
 							</div>
 						</div>
 

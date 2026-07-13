@@ -7,27 +7,34 @@ vi.mock('$lib/db/shelter', () => ({
 	getShelterCode: () => 'SH001'
 }));
 
-// --- In-memory CouchDB stand-in (the impl talks to the low-level couch-db helpers) ---
-const store = new Map<
-	string,
-	{ _id: string; _rev?: string; type?: string; [k: string]: unknown }
->();
+/**
+ * T-31.9 — the "memory adapter" for daily-calc repository tests: an in-memory CouchDB double.
+ * `daily-calc.remote.ts` bypasses the generic `Repository`/`createInMemoryRepository` interface
+ * (it talks to `$lib/db/couch-db`'s low-level `getDoc`/`putDoc`/`couchDbFetch` directly), so this
+ * feature's memory adapter is this hand-rolled `Map`-backed double rather than the canonical one
+ * used by `people`/`kitchen`/`operations` — a deliberate, scoped decision (see the T-31.9 plan),
+ * not an oversight. Extracted into a named function purely for readability; behavior unchanged.
+ */
+function createFakeCouchDb() {
+	const store = new Map<
+		string,
+		{ _id: string; _rev?: string; type?: string; [k: string]: unknown }
+	>();
 
-function nextRev(rev?: string): string {
-	const n = rev ? Number(rev.split('-')[0]) : 0;
-	return `${n + 1}-x`;
-}
+	function nextRev(rev?: string): string {
+		const n = rev ? Number(rev.split('-')[0]) : 0;
+		return `${n + 1}-x`;
+	}
 
-const putDoc = vi.fn(async (_db: string, doc: { _id: string; _rev?: string }) => {
-	const saved = { ...doc, _rev: nextRev(doc._rev) };
-	store.set(doc._id, saved);
-	return saved;
-});
+	const putDoc = vi.fn(async (_db: string, doc: { _id: string; _rev?: string }) => {
+		const saved = { ...doc, _rev: nextRev(doc._rev) };
+		store.set(doc._id, saved);
+		return saved;
+	});
 
-vi.mock('$lib/db/couch-db', () => ({
-	getDoc: vi.fn(async (_db: string, id: string) => store.get(id) ?? null),
-	putDoc: (db: string, doc: { _id: string; _rev?: string }) => putDoc(db, doc),
-	couchDbFetch: vi.fn(async (_db: string, path: string) => {
+	const getDoc = vi.fn(async (_db: string, id: string) => store.get(id) ?? null);
+
+	const couchDbFetch = vi.fn(async (_db: string, path: string) => {
 		const url = new URL('http://x/' + path.replace(/^\//, ''));
 		const startkey = JSON.parse(decodeURIComponent(url.searchParams.get('startkey')!));
 		const endkey = JSON.parse(decodeURIComponent(url.searchParams.get('endkey')!));
@@ -35,7 +42,21 @@ vi.mock('$lib/db/couch-db', () => ({
 			.filter((d) => d._id >= startkey && d._id <= endkey)
 			.map((d) => ({ id: d._id, doc: d }));
 		return { rows };
-	})
+	});
+
+	return { store, getDoc, putDoc, couchDbFetch };
+}
+
+// --- In-memory CouchDB stand-in (the impl talks to the low-level couch-db helpers) ---
+// vi.hoisted is required here (not a plain top-level const): vi.mock() factories are hoisted
+// above normal module code, so anything they close over must be initialized via vi.hoisted to
+// avoid a TDZ "Cannot access before initialization" error.
+const { store, getDoc, putDoc, couchDbFetch } = vi.hoisted(() => createFakeCouchDb());
+
+vi.mock('$lib/db/couch-db', () => ({
+	getDoc,
+	putDoc: (db: string, doc: { _id: string; _rev?: string }) => putDoc(db, doc),
+	couchDbFetch
 }));
 
 // --- Peer barrels ---
@@ -150,8 +171,7 @@ describe('DailyCalcRemoteRepository.runOnDemand', () => {
 		expect(order).toEqual(['audit', 'daily_calc']);
 
 		const audit = [...store.values()].find((d) => d.type === 'audit') as
-			| { action: string; target_id: string; context: { overwritten_rev: string } }
-			| undefined;
+			{ action: string; target_id: string; context: { overwritten_rev: string } } | undefined;
 		expect(audit?.action).toBe('retro_edit');
 		expect(audit?.target_id).toBe('daily_calc:2026-07-08');
 		expect(audit?.context.overwritten_rev).toBe(first._rev);

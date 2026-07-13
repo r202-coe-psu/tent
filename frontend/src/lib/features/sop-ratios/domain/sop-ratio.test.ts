@@ -368,6 +368,22 @@ describe('SOP Ratio Domain', () => {
 			expect(isSopMaster({ ...baseMasterMock, schema_v: 3, type: 'invalid_type' })).toBe(false);
 		});
 
+		it('should strictly reject malformed ratios (empty, missing keys, deprecated keys) for Master', () => {
+			expect(isSopMaster({ ...baseMasterMock, schema_v: 3, ratios: {} })).toBe(false);
+			expect(
+				isSopMaster({
+					...baseMasterMock,
+					schema_v: 3,
+					ratios: { ...validRatios, caregiver_per_elderly: 2 }
+				} as unknown)
+			).toBe(false);
+			const missingKeyRatios = { ...validRatios };
+			delete (missingKeyRatios as Partial<typeof validRatios>).water_l_per_person_day;
+			expect(
+				isSopMaster({ ...baseMasterMock, schema_v: 3, ratios: missingKeyRatios } as unknown)
+			).toBe(false);
+		});
+
 		it('should accept current v2 override and reject legacy v1 override', () => {
 			const baseOverrideMock = {
 				_id: 'sop_override:SH001:baseline',
@@ -412,6 +428,36 @@ describe('SOP Ratio Domain', () => {
 			expect(isSopOverride({})).toBe(false);
 
 			expect(isSopOverride({ ...baseOverrideMock, schema_v: 2, type: 'invalid_type' })).toBe(false);
+		});
+
+		it('should strictly reject malformed ratios (empty, missing keys, deprecated keys) for Override', () => {
+			const baseOverrideMock = {
+				_id: 'sop_override:SH001:baseline',
+				type: 'sop_override',
+				name: 'Winter Override',
+				version: 1,
+				active: true,
+				shelter_code: 'SH001',
+				base_profile_id: 'sop_profile:baseline',
+				created_at: '2026-07-03T00:00:00.000Z',
+				updated_at: '2026-07-03T00:00:00.000Z',
+				created_by: 'tester',
+				ratios: validRatios
+			};
+
+			expect(isSopOverride({ ...baseOverrideMock, schema_v: 2, ratios: {} })).toBe(false);
+			expect(
+				isSopOverride({
+					...baseOverrideMock,
+					schema_v: 2,
+					ratios: { ...validRatios, caregiver_per_elderly: 2 }
+				} as unknown)
+			).toBe(false);
+			const missingKeyRatios = { ...validRatios };
+			delete (missingKeyRatios as Partial<typeof validRatios>).water_l_per_person_day;
+			expect(
+				isSopOverride({ ...baseOverrideMock, schema_v: 2, ratios: missingKeyRatios } as unknown)
+			).toBe(false);
 		});
 	});
 });

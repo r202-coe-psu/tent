@@ -128,7 +128,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						requiresAdmin: true
 					},
 					{ label: '4. คลังสินค้า', href: null, icon: Warehouse },
-					{ label: '5. พารามิเตอร์', href: null, icon: Calculator },
+					{
+						label: '5. พารามิเตอร์',
+						href: resolve('/back-office/sop-parameters'),
+						icon: Calculator
+					},
 					{ label: '6. อาสาสมัคร', href: null, icon: HandHeart },
 					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
