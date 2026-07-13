@@ -41,7 +41,7 @@
 				if (!item.amount || item.amount <= 0) {
 					validationErrors.push(`รายการที่ ${index + 1}: จำนวนสิ่งของต้องมีค่ามากกว่า 0`);
 				}
-				if (!item.unit.trim()) {
+				if (!item.unit || !item.unit.trim()) {
 					validationErrors.push(`รายการที่ ${index + 1}: กรุณาระบุหน่วยนับ`);
 				}
 			});
@@ -73,7 +73,7 @@
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div>
 					<label class="mb-1.5 block text-xs font-bold text-slate-700" for="donor-name">
-						ชื่อ-นามสกุล / นามแฝง / องค์กร <span class="text-red-500">*</span>
+						ชื่อ-นามสกุล / นามแฝง / องค์กร <span class="text-danger">*</span>
 					</label>
 					<input
 						type="text"
@@ -85,7 +85,7 @@
 				</div>
 				<div>
 					<label class="mb-1.5 block text-xs font-bold text-slate-700" for="donor-phone">
-						เบอร์โทรศัพท์มือถือ <span class="text-red-500">*</span>
+						เบอร์โทรศัพท์มือถือ <span class="text-danger">*</span>
 					</label>
 					<input
 						type="tel"
@@ -161,8 +161,11 @@
 
 						<div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
 							<div>
-								<label class="mb-1 block text-xs font-bold text-slate-600"> หมวดหมู่ </label>
+								<label class="mb-1 block text-xs font-bold text-slate-600" for="category-{item.id}">
+									หมวดหมู่
+								</label>
 								<select
+									id="category-{item.id}"
 									bind:value={item.category}
 									class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden focus:border-primary"
 								>
@@ -173,9 +176,12 @@
 								</select>
 							</div>
 							<div>
-								<label class="mb-1 block text-xs font-bold text-slate-600"> ชื่อสิ่งของ </label>
+								<label class="mb-1 block text-xs font-bold text-slate-600" for="name-{item.id}">
+									ชื่อสิ่งของ
+								</label>
 								<input
 									type="text"
+									id="name-{item.id}"
 									placeholder="เช่น น้ำดื่มขวด 600ml"
 									bind:value={item.name}
 									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 text-slate-800 outline-hidden focus:border-primary"
@@ -185,26 +191,38 @@
 
 						<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
 							<div class="col-span-1">
-								<label class="mb-1 block text-xs font-bold text-slate-600"> ปริมาณ </label>
+								<label class="mb-1 block text-xs font-bold text-slate-600" for="amount-{item.id}">
+									ปริมาณ
+								</label>
 								<input
 									type="number"
+									id="amount-{item.id}"
 									min="1"
 									bind:value={item.amount}
 									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-bold text-slate-800 outline-hidden focus:border-primary"
 								/>
 							</div>
 							<div class="col-span-1">
-								<label class="mb-1 block text-xs font-bold text-slate-600"> หน่วย </label>
+								<label class="mb-1 block text-xs font-bold text-slate-600" for="unit-{item.id}">
+									หน่วย
+								</label>
 								<input
 									type="text"
+									id="unit-{item.id}"
 									placeholder="เช่น แพ็ค, ลัง, ชิ้น"
 									bind:value={item.unit}
 									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden focus:border-primary"
 								/>
 							</div>
 							<div class="col-span-2 md:col-span-1">
-								<label class="mb-1 block text-xs font-bold text-slate-600"> สภาพสิ่งของ </label>
+								<label
+									class="mb-1 block text-xs font-bold text-slate-600"
+									for="condition-{item.id}"
+								>
+									สภาพสิ่งของ
+								</label>
 								<select
+									id="condition-{item.id}"
 									bind:value={item.condition}
 									class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden focus:border-primary"
 								>
@@ -216,11 +234,12 @@
 						</div>
 
 						<div>
-							<label class="mb-1 block text-xs font-bold text-slate-600">
+							<label class="mb-1 block text-xs font-bold text-slate-600" for="remark-{item.id}">
 								หมายเหตุเพิ่มเติม (Optional)
 							</label>
 							<input
 								type="text"
+								id="remark-{item.id}"
 								placeholder="เช่น ข้าวกล่องมังสวิรัติ, เสื้อผ้าเด็ก 5 ขวบ"
 								bind:value={item.remark}
 								class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden focus:border-primary"
