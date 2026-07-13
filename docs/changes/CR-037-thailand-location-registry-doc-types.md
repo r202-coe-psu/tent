@@ -131,7 +131,7 @@ CRUD surface ครบ — **ทั้งหมด SA only** (guard `requireAdmi
 - **Write API** `frontend/src/routes/api/back-office/thailand-location/+server.ts` — `prerender = false`:
   - `POST` — สร้าง province / district / subdistrict (body `{ level, name, province?, district?, zipcode? }`);
     ตรวจ parent มีอยู่จริงก่อนสร้างลูก; 409 = "มีอยู่แล้ว"
-  - `PATCH` — แก้ `zipcode` ของ subdistrict เท่านั้น (field เดียวที่แก้ได้; validate 5 หลัก 10000–99999)
+  - `PUT` — แก้ `zipcode` ของ subdistrict เท่านั้น (body `{ id, zipcode }`; field เดียวที่แก้ได้; validate 5 หลัก 10000–99999)
   - `DELETE` — ลบ doc; **guarded** — province/district ที่ยังมีลูก (ผ่าน Mango `province_id`/`district_id`)
     ถูกปฏิเสธ; ลบ subdistrict ได้เสมอ; idempotent (doc หายแล้ว = ผ่าน)
 - **Rename = delete + create** — เพราะ `_id` เป็น deterministic natural-key path การเปลี่ยนชื่อจึงไม่ใช่
