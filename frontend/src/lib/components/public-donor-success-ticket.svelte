@@ -191,26 +191,29 @@
 							ดูทั้งหมด
 						</button>
 					</div>
-					<div
+					<button
+						type="button"
 						onclick={() => (isItemsModalOpen = true)}
-						class="cursor-pointer space-y-2 pl-1 transition hover:opacity-80"
+						class="block w-full cursor-pointer space-y-2 pl-1 text-left transition hover:opacity-80"
 					>
 						{#each donationStore.items.slice(0, 5) as item, index (item.id)}
 							{@const dotClass = getDotColor(index)}
-							<div class="flex items-center gap-2 text-xs font-bold">
-								<span class="h-2 w-2 shrink-0 rounded-full {dotClass.split(' ')[0]}" />
+							<span class="flex items-center gap-2 text-xs font-bold">
+								<span class="h-2 w-2 shrink-0 rounded-full {dotClass.split(' ')[0]}"></span>
 								<span class="{dotClass.split(' ')[1]} truncate">
 									{item.name || 'ไม่ได้ระบุ'} — {item.amount}
 									{item.unit}
 								</span>
-							</div>
+							</span>
 						{/each}
 						{#if donationStore.items.length > 5}
-							<div class="pl-4 text-left text-[11px] font-black text-primary hover:underline">
+							<span
+								class="block pl-4 text-left text-[11px] font-black text-primary hover:underline"
+							>
 								+ ดูทั้งหมดอีก {donationStore.items.length - 5} รายการ
-							</div>
+							</span>
 						{/if}
-					</div>
+					</button>
 				</div>
 			</div>
 		</div>

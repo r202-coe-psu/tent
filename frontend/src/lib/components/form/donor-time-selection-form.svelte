@@ -9,7 +9,6 @@
 	import { env } from '$env/dynamic/public';
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
-	import { Textarea } from '$lib/components/ui/textarea';
 	import { Button } from '$lib/components/ui/button';
 	import { Calendar } from '$lib/components/ui/calendar';
 	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
@@ -203,33 +202,34 @@
 					ดูทั้งหมด
 				</button>
 			</div>
-			<div
+			<button
+				type="button"
 				onclick={() => (isItemsModalOpen = true)}
-				class="cursor-pointer space-y-2 pl-1 transition hover:opacity-80"
+				class="block w-full cursor-pointer space-y-2 pl-1 text-left transition hover:opacity-80"
 			>
 				{#each donationStore.items.slice(0, 5) as item, index (item.id)}
 					{@const dotClass = getDotColor(index)}
-					<div class="flex items-center gap-2 text-xs font-bold">
-						<span class="h-2 w-2 shrink-0 rounded-full {dotClass.split(' ')[0]}" />
+					<span class="flex items-center gap-2 text-xs font-bold">
+						<span class="h-2 w-2 shrink-0 rounded-full {dotClass.split(' ')[0]}"></span>
 						<span class="{dotClass.split(' ')[1]} truncate">
 							{item.name || 'ไม่ได้ระบุ'} — {item.amount}
 							{item.unit}
 						</span>
-					</div>
+					</span>
 				{/each}
 				{#if donationStore.items.length > 5}
-					<div class="pl-4 text-left text-[11px] font-black text-primary hover:underline">
+					<span class="block pl-4 text-left text-[11px] font-black text-primary hover:underline">
 						+ ดูทั้งหมดอีก {donationStore.items.length - 5} รายการ (กดเพื่อดูทั้งหมด)
-					</div>
+					</span>
 				{/if}
-			</div>
+			</button>
 		</div>
 
 		<!-- 1. วิธีการจัดส่ง -->
 		<div>
-			<label class="mb-3 block text-sm font-bold text-slate-800">
-				วิธีการจัดส่ง <span class="text-red-500">*</span>
-			</label>
+			<span class="mb-3 block text-sm font-bold text-slate-800">
+				วิธีการจัดส่ง <span class="text-danger">*</span>
+			</span>
 			<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
 				<button
 					type="button"
@@ -294,9 +294,9 @@
 		<!-- กรณีมาส่งเอง -->
 		{#if donationStore.deliveryMethod === 'self_dropoff'}
 			<div class="animate-in space-y-3 duration-200 fade-in">
-				<label class="block text-sm font-bold text-slate-800">
-					ประเภทยานพาหนะที่จะนำมาส่ง <span class="text-red-500">*</span>
-				</label>
+				<span class="block text-sm font-bold text-slate-800">
+					ประเภทยานพาหนะที่จะนำมาส่ง <span class="text-danger">*</span>
+				</span>
 				<p class="text-xs leading-relaxed text-slate-500">
 					ข้อมูลนี้สำคัญมาก เพื่อให้จุดรับของกะพื้นที่จอดและเตรียมคนยกของ
 				</p>
@@ -330,7 +330,7 @@
 		{#if donationStore.deliveryMethod === 'shelter_pickup'}
 			<div class="animate-in space-y-2 duration-200 fade-in">
 				<label class="block text-sm font-bold text-slate-800" for="pickup-address">
-					ที่อยู่ / จุดนัดรับของ <span class="text-red-500">*</span>
+					ที่อยู่ / จุดนัดรับของ <span class="text-danger">*</span>
 				</label>
 				<textarea
 					id="pickup-address"
@@ -344,9 +344,12 @@
 		<!-- 2. เลือกศูนย์ -->
 		<div class="space-y-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
 			<div>
-				<label class="mb-3 block flex items-center gap-2 text-sm font-bold text-slate-800">
+				<label
+					class="mb-3 block flex items-center gap-2 text-sm font-bold text-slate-800"
+					for="shelter-select"
+				>
 					<MapPin class="h-4.5 w-4.5 text-slate-500" /> เลือกศูนย์รับบริจาค
-					<span class="text-red-500">*</span>
+					<span class="text-danger">*</span>
 					{#if donationStore.shelterLocked}
 						<span
 							class="ml-2 inline-flex items-center gap-1 rounded-md bg-slate-200/60 px-2 py-0.5 text-xs font-semibold text-slate-600"
@@ -358,6 +361,7 @@
 				</label>
 
 				<select
+					id="shelter-select"
 					bind:value={donationStore.shelterCode}
 					disabled={donationStore.shelterLocked}
 					class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-4 font-bold text-slate-800 shadow-2xs outline-hidden focus:border-[#ff9f0a] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
@@ -372,12 +376,12 @@
 			<!-- 3. เลือกเวลา -->
 			{#if donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup'}
 				<div class="animate-in space-y-4 duration-200 fade-in">
-					<label class="block flex items-center gap-2 text-sm font-bold text-slate-800">
+					<span class="block flex items-center gap-2 text-sm font-bold text-slate-800">
 						<CalendarIcon class="h-4.5 w-4.5 text-slate-500" /> เลือกวันที่และช่วงเวลา {donationStore.deliveryMethod ===
 						'shelter_pickup'
 							? 'ที่ต้องการให้ไปรับ'
-							: 'ที่จะนำของมาส่ง'} <span class="text-red-500">*</span>
-					</label>
+							: 'ที่จะนำของมาส่ง'} <span class="text-danger">*</span>
+					</span>
 
 					<div class="w-full">
 						<Popover>

@@ -224,6 +224,7 @@
 					onfocus={() => (isSearchFocused = true)}
 					onblur={() => setTimeout(() => (isSearchFocused = false), 200)}
 					placeholder="ค้นหาศูนย์ หรือ สิ่งของ เช่น น้ำดื่ม..."
+					aria-label="ค้นหาศูนย์พักพิงหรือสิ่งของ"
 					class="w-full rounded-xl border-2 border-slate-200 bg-slate-50 py-3.5 pr-4 pl-12 text-base font-semibold text-[#1d1d1f] shadow-sm outline-hidden transition-all placeholder:font-medium placeholder:text-slate-400 focus:border-[#013365] focus:ring-2 focus:ring-[#013365]/20"
 				/>
 				<Search class="absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-slate-400" />
