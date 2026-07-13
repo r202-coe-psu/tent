@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { Household, Evacuee, HouseholdInput } from '../domain/people';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -12,6 +13,8 @@
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import CheckSquare from '@lucide/svelte/icons/check-square';
 	import Check from '@lucide/svelte/icons/check';
+	import SearchSelect from '$lib/components/ui/search-select/search-select.svelte';
+	import { getAllLocations } from '$lib/features/shelters/data/thailand-location.api';
 
 	let {
 		allEvacuees = [],
@@ -31,6 +34,47 @@
 
 	let searchMode: 'exact' | 'fuzzy' = $state('exact');
 	let searchQuery = $state('');
+	let searchAddressNo = $state('');
+
+	let selectedLocationValue = $state('');
+	let selectedLocation = $state<{
+		province: string;
+		district: string;
+		subdistrict: string;
+		zipcode: number;
+	} | null>(null);
+	let locationItems = $state.raw<{ value: string; label: string }[]>([]);
+	let locationsLoading = $state(true);
+
+	onMount(async () => {
+		try {
+			const data = await getAllLocations();
+			locationItems = data.map((item) => {
+				const label = `ต.${item.subdistrict} อ.${item.district} จ.${item.province} ${item.zipcode}`;
+				return {
+					value: JSON.stringify(item),
+					label
+				};
+			});
+		} catch (err) {
+			console.error('Failed to load locations', err);
+		} finally {
+			locationsLoading = false;
+		}
+	});
+
+	$effect(() => {
+		if (selectedLocationValue) {
+			try {
+				selectedLocation = JSON.parse(selectedLocationValue);
+			} catch (err) {
+				console.error(err);
+				selectedLocation = null;
+			}
+		} else {
+			selectedLocation = null;
+		}
+	});
 
 	let searchState: 'idle' | 'found' | 'not_found' = $state('idle');
 
@@ -54,6 +98,15 @@
 		district: '',
 		province: '',
 		postal_code: ''
+	});
+
+	$effect(() => {
+		if (showNewHouseholdForm && selectedLocation) {
+			formData.subdistrict = selectedLocation.subdistrict;
+			formData.district = selectedLocation.district;
+			formData.province = selectedLocation.province;
+			formData.postal_code = String(selectedLocation.zipcode);
+		}
 	});
 
 	function formatAddress(h: Household) {
@@ -83,13 +136,12 @@
 	}
 
 	function doSearch() {
-		if (!searchQuery.trim()) {
-			searchState = 'idle';
-			return;
-		}
-		const query = searchQuery.trim().toLowerCase();
-
 		if (searchMode === 'exact') {
+			if (!searchQuery.trim()) {
+				searchState = 'idle';
+				return;
+			}
+			const query = searchQuery.trim().toLowerCase();
 			const hhList = households.filter((h) => {
 				if (!h.head_evacuee_id) return false;
 				const head = allEvacuees.find(
@@ -117,11 +169,45 @@
 				return;
 			}
 		} else {
+			const addressNoQuery = searchAddressNo.trim().toLowerCase();
+
+			if (!addressNoQuery && !selectedLocation) {
+				searchState = 'idle';
+				return;
+			}
+
 			const hhList = households.filter((h) => {
-				const addr =
-					`${h.address_no || ''} ${h.village_no || ''} ${h.subdistrict || ''} ${h.district || ''} ${h.province || ''}`.toLowerCase();
-				return addr.includes(query);
+				if (addressNoQuery) {
+					const houseAddr = `${h.address_no || ''} ${h.village_no || ''}`.toLowerCase();
+					if (!houseAddr.includes(addressNoQuery)) {
+						return false;
+					}
+				}
+
+				if (selectedLocation) {
+					const subdistrict = (h.subdistrict || '').toLowerCase();
+					const district = (h.district || '').toLowerCase();
+					const province = (h.province || '').toLowerCase();
+
+					const matchSub =
+						!!subdistrict &&
+						(subdistrict.includes(selectedLocation.subdistrict.toLowerCase()) ||
+							selectedLocation.subdistrict.toLowerCase().includes(subdistrict));
+					const matchDist =
+						!!district &&
+						(district.includes(selectedLocation.district.toLowerCase()) ||
+							selectedLocation.district.toLowerCase().includes(district));
+					const matchProv =
+						!!province &&
+						(province.includes(selectedLocation.province.toLowerCase()) ||
+							selectedLocation.province.toLowerCase().includes(province));
+					if (!matchSub || !matchDist || !matchProv) {
+						return false;
+					}
+				}
+				return true;
 			});
+
 			if (hhList.length > 0) {
 				foundResults = hhList.map((hh) => {
 					const members = allEvacuees.filter((e) => e.household_id === hh._id);
@@ -173,6 +259,9 @@
 				onclick={() => {
 					searchMode = 'exact';
 					searchQuery = '';
+					searchAddressNo = '';
+					selectedLocationValue = '';
+					selectedLocation = null;
 					searchState = 'idle';
 					showNewHouseholdForm = false;
 				}}
@@ -190,6 +279,9 @@
 				onclick={() => {
 					searchMode = 'fuzzy';
 					searchQuery = '';
+					searchAddressNo = '';
+					selectedLocationValue = '';
+					selectedLocation = null;
 					searchState = 'idle';
 					showNewHouseholdForm = false;
 				}}
@@ -200,34 +292,66 @@
 			</button>
 		</div>
 
-		<div class="space-y-3">
-			<Label class="text-sm font-medium">
-				{searchMode === 'exact'
-					? 'เบอร์โทรศัพท์ หรือ เลขบัตรประจำตัวประชาชน'
-					: 'ที่อยู่, ถนน, ตำบล, หรืออำเภอ'}
-			</Label>
-			<div class="flex gap-3">
-				<div class="relative flex-1">
-					<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-					<Input
-						bind:value={searchQuery}
-						placeholder={searchMode === 'exact' ? '089-999-9999' : 'เช่น บ้านพรุ หาดใหญ่'}
-						class="h-11 bg-muted/20 pl-9"
-					/>
+		{#if searchMode === 'exact'}
+			<div class="space-y-3">
+				<Label class="text-sm font-medium">เบอร์โทรศัพท์ หรือ เลขบัตรประจำตัวประชาชน</Label>
+				<div class="flex gap-3">
+					<div class="relative flex-1">
+						<Search
+							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+						/>
+						<Input
+							bind:value={searchQuery}
+							placeholder="089-999-9999"
+							class="h-11 bg-muted/20 pl-9"
+						/>
+					</div>
+					<Button type="submit" class="h-11 bg-[#003B71] px-6 hover:bg-[#002a50]">
+						<Search class="mr-2 h-4 w-4" /> ค้นหาครอบครัว
+					</Button>
 				</div>
-				<Button type="submit" class="h-11 bg-[#003B71] px-6 hover:bg-[#002a50]">
-					<Search class="mr-2 h-4 w-4" /> ค้นหาครอบครัว
-				</Button>
-			</div>
 
-			<p class="mt-2 text-xs text-muted-foreground">
-				{#if searchMode === 'exact'}
+				<p class="mt-2 text-xs text-muted-foreground">
 					💡 ข้อดี: ค้นหาได้รวดเร็ว จับคู่ข้อมูลแบบ 1-to-1 แม่นยำ
-				{:else}
+				</p>
+			</div>
+		{:else}
+			<div class="space-y-4">
+				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+					<div class="space-y-2">
+						<Label class="text-sm font-medium">บ้านเลขที่ / ซอย / ถนน</Label>
+						<Input
+							bind:value={searchAddressNo}
+							placeholder="พิมพ์ตัวเลขนำหน้า เช่น 12/3 หรือ 45"
+							class="h-11 bg-muted/20"
+						/>
+					</div>
+					<div class="relative space-y-2">
+						<Label class="text-sm font-medium">ค้นหา ตำบล / อำเภอ / รหัสไปรษณีย์ ( dropdown )</Label
+						>
+						<SearchSelect
+							items={locationItems}
+							bind:value={selectedLocationValue}
+							placeholder="พิมพ์เพื่อค้นหา เช่น บ้านพรุ หรือ 90250"
+							loading={locationsLoading}
+							loadingText="กำลังโหลดข้อมูลที่อยู่..."
+							class="h-11 border-border bg-muted/20"
+						/>
+					</div>
+				</div>
+
+				<Button
+					type="submit"
+					class="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#003B71] font-bold text-white hover:bg-[#002a50]"
+				>
+					<Search class="mr-2 h-4 w-4" /> ค้นหาครอบครัวจากที่อยู่ (Fuzzy Match)
+				</Button>
+
+				<p class="mt-2 text-xs text-muted-foreground">
 					💡 ข้อดี: ใช้เมื่อไม่ทราบข้อมูลส่วนบุคคลที่แน่ชัด
-				{/if}
-			</p>
-		</div>
+				</p>
+			</div>
+		{/if}
 	</form>
 
 	<!-- Found Alert -->
