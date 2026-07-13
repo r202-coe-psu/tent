@@ -1,7 +1,7 @@
 ---
 id: CR-037
 title: "Thailand location reference data → CouchDB registry (province/district/subdistrict doc types, Mango-style ref)"
-status: proposed
+status: approved
 date: 2026-07-12
 requested_by: development team B 
 decided_by: <เจ้าของโครงการ>
@@ -182,5 +182,5 @@ CRUD surface ครบ — **ทั้งหมด SA only** (guard `requireAdmi
   (write API `/api/back-office/thailand-location` SA-only + feature `features/locations/` + `LocationManager`
   + หน้า `/back-office/location-config`). เดิม CR วางเป็น read-only migration; ของจริงมี CRUD ครบ
   → เป็น API/permission surface ที่ต้อง track
-- **รอ owner:** เคาะ `approved`; ยืนยันว่า (1) track เป็น CR ไฟล์นี้เพียงพอ (2) รับ scope §6 (write/admin
-  surface, SA-only) เข้า CR-037 หรือแยกเป็น CR ใหม่
+- 2026-07-13 — approved (เจ้าของโครงการเคาะ approved และยืนยันแนวทางสะท้อนในเอกสารนี้)
+
