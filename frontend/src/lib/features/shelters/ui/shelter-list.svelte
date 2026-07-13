@@ -5,6 +5,7 @@
 	import Building from '@lucide/svelte/icons/building';
 	import type { ShelterSummary } from '../data/shelters.repository';
 	import type { ProjectLevel } from '../domain/schema';
+	import ShelterOccupancyCell from './shelter-occupancy-cell.svelte';
 
 	let {
 		shelters,
@@ -51,7 +52,7 @@
 				>
 					<th class="px-4 py-3">ชื่อศูนย์พักพิง</th>
 					<th class="px-4 py-3">ประเภท / ที่ตั้ง</th>
-					<th class="px-4 py-3">ความจุ (คน)</th>
+					<th class="px-4 py-3">ผู้พักปัจจุบัน / ความจุ (คน)</th>
 					<th class="px-4 py-3">ผู้จัดการ / เบอร์โทร</th>
 					<th class="px-4 py-3 text-right">จัดการ</th>
 				</tr>
@@ -81,10 +82,9 @@
 							{/if}
 						</td>
 
-						<!-- Capacity -->
+						<!-- Capacity / live occupancy -->
 						<td class="px-4 py-4 align-top">
-							<div class="font-semibold text-foreground">รองรับสูงสุด {shelter.capacity} คน</div>
-							<div class="mt-0.5 text-xs text-muted-foreground">ยังไม่แสดงจำนวนผู้พักปัจจุบัน</div>
+							<ShelterOccupancyCell code={shelter.code} capacity={shelter.capacity} />
 						</td>
 
 						<!-- Manager / phone -->
