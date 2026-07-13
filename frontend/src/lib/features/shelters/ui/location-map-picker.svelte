@@ -2,6 +2,8 @@
 	import { onMount, onDestroy } from 'svelte';
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import type {
 		Map as MapLibreMap,
 		Marker as MapLibreMarker,
@@ -135,7 +137,9 @@
 		}
 	});
 
-	// Keep the marker in sync if lat/lng change from outside (e.g. form reset).
+	// Keep the marker in sync if lat/lng change from outside (form reset, manual
+	// coordinate entry). Compare at the same 6-dp precision the marker emits, so a
+	// round-trip through onchange doesn't trigger a redundant setMarker.
 	$effect(() => {
 		if (!mapLoaded || !L || !mapInstance) return;
 		if (lat == null || lng == null) {
@@ -143,14 +147,29 @@
 			return;
 		}
 		const current = marker?.getLngLat();
-		if (!current || current.lat !== lat || current.lng !== lng) {
+		if (
+			!current ||
+			Number(current.lat.toFixed(6)) !== lat ||
+			Number(current.lng.toFixed(6)) !== lng
+		) {
 			setMarker([Number(lng), Number(lat)]);
 		}
+		// Dragability must track `disabled` even after the marker is created.
+		marker?.setDraggable(!disabled);
 	});
 
 	function clearLocation() {
 		removeMarker();
 		onchange(null, null);
+	}
+
+	// Manual coordinate entry — keyboard/screen-reader accessible alternative to
+	// dropping a pin on the map. Empty/invalid input maps to null for that axis.
+	function parseCoord(value: string): number | null {
+		const trimmed = value.trim();
+		if (trimmed === '') return null;
+		const n = Number(trimmed);
+		return Number.isFinite(n) ? n : null;
 	}
 </script>
 
@@ -162,20 +181,40 @@
 	<div class="relative h-[480px] w-full overflow-hidden rounded-lg border border-input">
 		<div bind:this={mapElement} class="absolute inset-0 h-full w-full"></div>
 	</div>
-	<div class="flex items-center justify-between text-xs text-muted-foreground">
-		<span>
-			{#if lat != null && lng != null}
-				พิกัด: {lat.toFixed(6)}, {lng.toFixed(6)}
-			{:else}
-				แตะบนแผนที่เพื่อปักหมุดตำแหน่งศูนย์พักพิง (ลากหมุดเพื่อปรับตำแหน่ง)
-			{/if}
-		</span>
+	<!-- Accessible manual entry — keyboard/screen-reader alternative to the map pin. -->
+	<div class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+		<div class="space-y-1">
+			<Label for="location-lat" class="text-xs">ละติจูด (Latitude)</Label>
+			<Input
+				id="location-lat"
+				type="number"
+				step="any"
+				inputmode="decimal"
+				value={lat ?? ''}
+				oninput={(e) => onchange(parseCoord(e.currentTarget.value), lng)}
+				{disabled}
+				placeholder="เช่น 7.009425"
+			/>
+		</div>
+		<div class="space-y-1">
+			<Label for="location-lng" class="text-xs">ลองจิจูด (Longitude)</Label>
+			<Input
+				id="location-lng"
+				type="number"
+				step="any"
+				inputmode="decimal"
+				value={lng ?? ''}
+				oninput={(e) => onchange(lat, parseCoord(e.currentTarget.value))}
+				{disabled}
+				placeholder="เช่น 100.473531"
+			/>
+		</div>
 		{#if lat != null && lng != null && !disabled}
 			<Button
 				type="button"
 				variant="ghost"
 				size="sm"
-				class="h-6 px-2 text-xs"
+				class="h-9 px-2 text-xs"
 				onclick={clearLocation}
 			>
 				<X class="mr-1 h-3 w-3" />
@@ -183,4 +222,7 @@
 			</Button>
 		{/if}
 	</div>
+	<p class="text-xs text-muted-foreground">
+		แตะบนแผนที่เพื่อปักหมุด ลากหมุดเพื่อปรับตำแหน่ง หรือกรอกพิกัดในช่องด้านบน
+	</p>
 </div>
