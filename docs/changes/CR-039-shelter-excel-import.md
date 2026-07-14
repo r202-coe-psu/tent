@@ -18,6 +18,12 @@ affects:
 
 # CR-039 — Import ศูนย์พักพิงจาก Excel
 
+> **สรุป (TL;DR):**
+> - **เปลี่ยนอะไร:** เพิ่มฟังก์ชันดาวน์โหลดเทมเพลต Excel และอัปโหลดเพื่อนำเข้า (import) ข้อมูลศูนย์พักพิงเป็นชุด
+> - **เพื่อใคร/ทำไม:** ช่วยให้ System Admin สามารถติดตั้งข้อมูลศูนย์พักพิงจำนวนมากพร้อมกันได้อย่างรวดเร็วและปลอดภัย
+> - **dev ต้อง build อะไร:** พัฒนา feature slice ใหม่ `shelter-import`, หน้านำเข้าข้อมูลที่รองรับ drag & drop, การตรวจสอบข้อมูลรายแถว (validation), และหน้าประวัติการนำเข้า
+> - **กระทบ schema/scope ไหน:** เพิ่ม document type `shelter_import_log` (schema_v 1) ใน `registry` db (ไม่เปลี่ยน shelter schema_v)
+
 ## Why
 - ปัจจุบันสร้างศูนย์พักพิงได้ทีละแห่งผ่านฟอร์ม (`POST /api/back-office/shelter`) เท่านั้น. onboarding
   หลายศูนย์พร้อมกัน (เช่น setup พื้นที่ใหม่) ทำด้วยมือช้าและ error-prone.
@@ -61,7 +67,7 @@ affects:
 | 14 | รหัสไปรษณีย์ | `postal_code` | string | — | — |
 | 15 | ผู้จัดการศูนย์ | `contact.name` | string | — | — |
 | 16 | เบอร์โทรผู้จัดการศูนย์ | `contact.phone` | string | — | — |
-| 17 | ความจุสูงสุด (คน) | `capacity` | int > 0 | ✅ | — |
+| 17 | ความจุสูงสุด (คน) | `capacity` | integer > 0 | ✅ | — |
 | 18 | พื้นที่ใช้สอยรวม (ตร.ม.) | `area_m2` | number ≥ 0 | — | — |
 | 19 | สถานะพื้นที่อาคาร | `area_type` | enum | — | indoor=อาคารปิด · outdoor=ลานเปิด · hybrid=แบบผสม |
 
@@ -92,6 +98,25 @@ affects:
 ### 5. Dependency
 - เพิ่ม `exceljs` (pnpm) — เขียน data-validation dropdown ใน template ได้ (SheetJS community ทำไม่ได้)
   และอ่าน `.xlsx`. เป็น dep เดียวที่เพิ่ม.
+
+## Requirements
+
+### Functional Requirements (FR)
+- **FR-01 (Access Control):** หน้าจอ `/shelters/import` ต้องถูกจำกัดสิทธิ์ให้เข้าถึงได้เฉพาะกลุ่มผู้ใช้งานที่เป็น System Admin เท่านั้น (guard `requireAdmin`)
+- **FR-02 (Template Download):** ระบบต้องมีบริการสร้างและดาวน์โหลดเทมเพลตไฟล์ Excel (`.xlsx`) ที่ใช้ไลบรารี `exceljs` เพื่อฝัง Data Validation dropdown ภาษาไทยสำหรับฟิลด์ที่เป็น Enum (operation_status, project_level, area_type) และ Master Data (โซนเทศบาล, ชุมชน)
+- **FR-03 (Dropdown Resolution):** ก่อนการตรวจสอบข้อมูล (Validation) ระบบต้องทำการแมป (resolve) ค่า dropdown ภาษาไทยใน Excel ให้เป็นโค้ดในระบบก่อน (เช่น โซนเทศบาล/ชุมชน แปลงจาก label เป็น code ของ master_data) หากไม่มีในระบบให้ถือเป็นความผิดพลาด (validation error) รายช่อง
+- **FR-04 (File Upload & Parsing):** ระบบต้องรองรับการอัปโหลดไฟล์ Excel ผ่าน drag & drop หรือ file selector และทำความเข้าใจข้อมูล (parsing) ข้อมูลในระดับ Client
+- **FR-05 (Row-by-Row Validation):** ระบบต้องตรวจสอบข้อมูลทุกแถวด้วย `shelterSchema` โดยไม่ต้องแตะต้องหรืออัปเดตเวอร์ชันของ `shelterSchema` (คงที่ v4) และแสดงรายการข้อผิดพลาด (validation error) แยกตามรายแถวและรายฟิลด์ในตาราง Preview ก่อนกดยืนยันอิมพอร์ต
+- **FR-06 (Sequential Committing):** เมื่อกดยืนยันการอิมพอร์ต ระบบต้องส่งคำขอสร้างศูนย์พักพิง (`POST /api/back-office/shelter`) แบบลำดับเดียว (sequential) ทีละแถว ห้ามยิงขนานกันเนื่องจากติดเงื่อนไขการออกรหัสศูนย์พักพิง (`max(SHxxx)+1`)
+- **FR-07 (Audit Logging):** เมื่อการอิมพอร์ตเสร็จสิ้น ระบบต้องเขียนเอกสารบันทึกประวัติการนำเข้า (`shelter_import_log` schema_v 1) จำนวน 1 doc ต่อ batch ลงในฐานข้อมูล `registry` โดยจัดเก็บชื่อไฟล์, รหัสผู้นำเข้า, จำนวนแถวทั้งหมด, แถวที่สำเร็จ/ล้มเหลว และผลลัพธ์รายแถวอย่างละเอียด
+- **FR-08 (Live Query & Invalidation):** ระบบต้อง invalidate cache ของคีย์ `sheltersKeys` และอัปเดต UI หน้าประวัติการนำเข้าอัตโนมัติผ่าน Changes Feed invalidation (`startShelterImportLiveQuery`) โดยห้ามใช้วิธีการทำ Polling
+
+### Acceptance Criteria (DoD)
+- **AC-01 (Template Integrity):** ดาวน์โหลดเทมเพลต Excel แล้ว ฟิลด์ประเภท Enum และ Master Data จะต้องแสดง dropdown ตัวเลือกภาษาไทยถูกต้องตรงตามระบบ
+- **AC-02 (Validation Accuracy):** หากมีค่านอกเงื่อนไข หรือไม่สอดคล้องกับ schema เช่น required field ว่าง หรือพิกัด lat/lng เกินขอบเขต จะต้องแสดงผลผิดพลาดรายช่องอย่างชัดเจนในหน้า Preview และไม่อนุญาตให้กดส่งข้อมูล
+- **AC-03 (Partial Success Import):** ในการอิมพอร์ต หากมีแถวที่ผ่านเกณฑ์บางส่วน แถวที่ผ่านเกณฑ์ต้องถูกสร้างเป็นศูนย์พักพิงสำเร็จ ส่วนแถวที่ล้มเหลวจะต้องแสดงสาเหตุ (validation/server error) และบันทึกลงใน log โดยไม่เกิดการ rollback ของแถวที่สำเร็จไปแล้ว
+- **AC-04 (Log persistence):** หลังนำเข้า ระบบจะต้องสร้างเอกสาร `shelter_import_log` ในฐานข้อมูล `registry` ได้ถูกต้อง และสามารถดึงรายการประวัติมาอัปเดตบนหน้า UI ผ่าน live query โดยอัตโนมัติ
+- **AC-05 (Test Coverage):** โค้ดส่วน column-mapping, row-validation, enum mapping (label -> code) และ import-log factory/guard จะต้องมี unit test ครอบคลุม และรันผ่านทั้งหมด
 
 ## Impact
 - **docs:** `docs/data/schema.md` เพิ่ม §3.7 `shelter_import_log` (registry doc type ใหม่) + ลง §7
