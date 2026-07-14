@@ -144,9 +144,9 @@
 				</PublicQuickServiceCard>
 			</div>
 
-			<!-- สืบค้นกองสิทธิ์ญาติ -->
+			<!-- สืบค้นญาติ -->
 			<PublicQuickServiceCard
-				title="สืบค้นกองสิทธิ์ญาติ"
+				title="สืบค้นญาติ"
 				badge="PDPA Shield"
 				badgeClass="bg-accent-purple-muted text-accent-purple"
 				description="เช็ครายชื่อผู้ประสบภัย ปลอดภัยในพิกัดศูนย์ควบคุม ตรึงระบบเก็บรวบรวมหลักฐานและส่งต่ออย่างเป็นความลับขั้นสูงสุด"
@@ -197,7 +197,7 @@
 							</div>
 						</Accordion.Trigger>
 						<Accordion.Content class="pt-2 text-sm leading-relaxed text-muted-foreground">
-							ท่านสามารถไปที่เมนู <strong>"สืบค้นกองสิทธิ์ญาติ"</strong> และใช้หมายเลขบัตรประชาชน 13 หลัก,
+							ท่านสามารถไปที่เมนู <strong>"สืบค้นญาติ"</strong> และใช้หมายเลขบัตรประชาชน 13 หลัก,
 							ชื่อ-นามสกุล หรือหมายเลขหนังสือเดินทางในการค้นหา ระบบจะแสดงสถานะความปลอดภัยและศูนย์พักพิงที่ญาติของท่านพักอาศัยอยู่ปัจจุบัน
 							โดยมีการปกปิดข้อมูลบางส่วนเพื่อความปลอดภัยตามหลัก PDPA
 						</Accordion.Content>
