@@ -99,9 +99,9 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 							key: string;
 							value: unknown;
 						}>;
-						const checkedInRow = rows.find((r) => r.key === 'checked_in');
-						if (checkedInRow) {
-							occupancy = checkedInRow.value as number;
+						const activeRow = rows.find((r) => r.key === 'active');
+						if (activeRow) {
+							occupancy = activeRow.value as number;
 						}
 					}
 

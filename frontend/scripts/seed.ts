@@ -421,8 +421,8 @@ async function seedCatalog(): Promise<void> {
 			name: 'ข้าวไข่เจียว',
 			serving_unit: 'box',
 			ingredients: [
-				{ item_id: ITEM.rice, qty: 0.2, unit: 'kg' },
-				{ item_id: ITEM.egg, qty: 2, unit: 'piece' }
+				{ item_id: ITEM.rice, qty: '0.2', unit: 'kg' },
+				{ item_id: ITEM.egg, qty: '2', unit: 'piece' }
 			],
 			tags: [],
 			active: true
@@ -430,7 +430,7 @@ async function seedCatalog(): Promise<void> {
 		catalogDoc('recipe:congee', 'recipe', {
 			name: 'ข้าวต้ม',
 			serving_unit: 'bowl',
-			ingredients: [{ item_id: ITEM.rice, qty: 0.15, unit: 'kg' }],
+			ingredients: [{ item_id: ITEM.rice, qty: '0.15', unit: 'kg' }],
 			tags: ['soft_food'],
 			active: true
 		})
@@ -734,23 +734,23 @@ async function seedShelter(): Promise<void> {
 	const stockInputs: StockLedgerInput[] = [
 		{
 			item_id: ITEM.rice,
-			qty: code === SH001_CODE ? 200 : 100,
+			qty: code === SH001_CODE ? '200' : '100',
 			unit: 'kg',
 			reason: 'receive',
 			ref_id: null
 		},
 		{
 			item_id: ITEM.water,
-			qty: code === SH001_CODE ? 500 : 300,
+			qty: code === SH001_CODE ? '500' : '300',
 			unit: 'bottle',
 			reason: 'receive',
 			ref_id: null
 		},
-		{ item_id: ITEM.paracetamol, qty: 1000, unit: 'tablet', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.soap, qty: 150, unit: 'bar', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.blanket, qty: 80, unit: 'piece', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.rice, qty: -30, unit: 'kg', reason: 'distribute', ref_id: null },
-		{ item_id: ITEM.water, qty: -100, unit: 'bottle', reason: 'distribute', ref_id: null }
+		{ item_id: ITEM.paracetamol, qty: '1000', unit: 'tablet', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.soap, qty: '150', unit: 'bar', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.blanket, qty: '80', unit: 'piece', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.rice, qty: '-30', unit: 'kg', reason: 'distribute', ref_id: null },
+		{ item_id: ITEM.water, qty: '-100', unit: 'bottle', reason: 'distribute', ref_id: null }
 	];
 	const stockEntries = stockInputs.map((s) => createStockLedger(s, ctx));
 
@@ -759,16 +759,16 @@ async function seedShelter(): Promise<void> {
 		{
 			title: 'รับบริจาคอาหารและน้ำดื่ม',
 			needs: [
-				{ item_id: ITEM.rice, qty_target: code === SH001_CODE ? 500 : 300, unit: 'kg' },
-				{ item_id: ITEM.water, qty_target: code === SH001_CODE ? 1000 : 500, unit: 'bottle' }
+				{ item_id: ITEM.rice, qty_target: code === SH001_CODE ? '500' : '300', unit: 'kg' },
+				{ item_id: ITEM.water, qty_target: code === SH001_CODE ? '1000' : '500', unit: 'bottle' }
 			],
 			notes: 'เปิดรับบริจาคเพื่อผู้ประสบภัยน้ำท่วม'
 		},
 		{
 			title: 'รับบริจาคของใช้ส่วนตัว',
 			needs: [
-				{ item_id: ITEM.soap, qty_target: 200, unit: 'bar' },
-				{ item_id: ITEM.blanket, qty_target: 100, unit: 'piece' }
+				{ item_id: ITEM.soap, qty_target: '200', unit: 'bar' },
+				{ item_id: ITEM.blanket, qty_target: '100', unit: 'piece' }
 			]
 		}
 	];
@@ -779,7 +779,7 @@ async function seedShelter(): Promise<void> {
 		{
 			donor: { name: 'บริษัท ซีพีเอฟ จำกัด', phone: '022222222', phone_hash: 'mock-hash-cpf' },
 			kind: 'items',
-			items: [{ item_id: ITEM.rice, qty: code === SH001_CODE ? 50 : 20, unit: 'kg' }],
+			items: [{ item_id: ITEM.rice, qty: code === SH001_CODE ? '50' : '20', unit: 'kg' }],
 			campaign_id: campaigns[0]._id,
 			tracking_token_hash: 'mock-track-001'
 		},
@@ -787,8 +787,8 @@ async function seedShelter(): Promise<void> {
 			donor: { name: 'วัดท่าสะอ้าน', phone: null, phone_hash: 'mock-hash-wat' },
 			kind: 'items',
 			items: [
-				{ item_id: ITEM.water, qty: code === SH001_CODE ? 100 : 50, unit: 'bottle' },
-				{ item_id: ITEM.blanket, qty: 20, unit: 'piece' }
+				{ item_id: ITEM.water, qty: code === SH001_CODE ? '100' : '50', unit: 'bottle' },
+				{ item_id: ITEM.blanket, qty: '20', unit: 'piece' }
 			],
 			campaign_id: campaigns[0]._id,
 			tracking_token_hash: 'mock-track-002'
@@ -877,7 +877,7 @@ async function seedShelter2(): Promise<void> {
 	const checkedInEvacuees = evacuees.map((e, i) => applyMovementToStay(e, movements[i]));
 
 	const stockInputs: StockLedgerInput[] = [
-		{ item_id: ITEM.water, qty: 100, unit: 'bottle', reason: 'receive', ref_id: null }
+		{ item_id: ITEM.water, qty: '100', unit: 'bottle', reason: 'receive', ref_id: null }
 	];
 	const stockEntries = stockInputs.map((s) => createStockLedger(s, CTX_2));
 

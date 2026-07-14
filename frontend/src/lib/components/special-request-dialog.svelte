@@ -21,7 +21,7 @@
 		defaults(
 			{
 				name: '',
-				target: 1000,
+				target: '1000',
 				location: 'คลังช่วยเหลือภัยพิบัติ EOC'
 			},
 			zod4(specialRequestSchema)
@@ -99,8 +99,8 @@
 								</Form.Label>
 								<Input
 									{...props}
-									type="number"
-									min="1"
+									type="text"
+									inputmode="decimal"
 									bind:value={$formData.target}
 									class="w-full rounded-xl border border-border bg-muted/20 px-3.5 py-2.5 text-xs text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
 								/>

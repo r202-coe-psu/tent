@@ -7,3 +7,6 @@ export * from './domain/registration.schema';
 export * from './data/occupancy.api';
 export * from './data/demographics.api';
 export * from './data/registration.api';
+
+// Application (query hooks + key factory)
+export * from './application/queries';

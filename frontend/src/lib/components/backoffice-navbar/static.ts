@@ -135,7 +135,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: Calculator
 					},
 					{ label: '6. อาสาสมัคร', href: null, icon: HandHeart },
-					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin },
+					{
+						label: '8. ข้อมูลที่อยู่ไทย',
+						href: resolve('/back-office/location-config'),
+						icon: MapPin,
+						requiresAdmin: true
+					}
 				]
 			}
 		]

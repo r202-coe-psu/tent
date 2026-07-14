@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { catalogDoc, type CatalogDoc, type AuthorContext } from '$lib/db/model';
+import { persistQty, qtyStrCoercePositiveSchema, qtyStrCoerceSchema } from '$lib/utils/qty';
 
 // ---------------------------------------------------------------- enums
 export const distributionTypeSchema = z.enum(['consumable', 'one_time']);
@@ -23,13 +24,13 @@ export type DietReligions = z.infer<typeof dietReligions>;
 // ---------------------------------------------------------------- documents
 export interface Ingredient {
 	item_master_id: string;
-	quantity: number;
+	quantity: string; // qty_str
 	uom: string;
 }
 
 export interface UomConversion {
 	uom_name: string;
-	multiplier: number;
+	multiplier: string; // qty_str
 	barcode?: string;
 }
 
@@ -58,7 +59,7 @@ export interface ItemMaster extends CatalogDoc {
 	default_issue_uom?: string;
 	distribution_type: DistributionType;
 	target_reserve_days?: number;
-	consumption_rate?: number;
+	consumption_rate?: string; // qty_str
 	unit?: string;
 	timeframe?: string;
 	sphere_standard?: number;
@@ -72,8 +73,8 @@ export interface Recipe extends CatalogDoc {
 	type: 'recipe';
 	label: string;
 	ingredients: Ingredient[];
-	standard_portions: number;
-	standard_duration_hours: number;
+	standard_portions: string; // qty_str
+	standard_duration_hours: string; // qty_str
 	is_default: boolean;
 }
 
@@ -95,7 +96,7 @@ export const itemMasterInputSchema = z.object({
 		.array(
 			z.object({
 				uom_name: z.string().trim(),
-				multiplier: z.number().positive(),
+				multiplier: qtyStrCoercePositiveSchema,
 				barcode: z.string().trim().optional()
 			})
 		)
@@ -105,7 +106,7 @@ export const itemMasterInputSchema = z.object({
 	default_issue_uom: z.string().trim().optional(),
 	distribution_type: distributionTypeSchema,
 	target_reserve_days: z.number().optional(),
-	consumption_rate: z.number().optional(),
+	consumption_rate: qtyStrCoerceSchema.optional(),
 	unit: z.string().trim().optional(),
 	timeframe: timeFrameSchema.optional(),
 	sphere_standard: z.number().optional(),
@@ -126,13 +127,13 @@ export const recipeInputSchema = z.object({
 		.array(
 			z.object({
 				item_master_id: z.string().trim(),
-				quantity: z.number().positive(),
+				quantity: qtyStrCoercePositiveSchema,
 				uom: z.string().trim()
 			})
 		)
 		.default([]),
-	standard_portions: z.number().positive(),
-	standard_duration_hours: z.number().positive(),
+	standard_portions: qtyStrCoercePositiveSchema,
+	standard_duration_hours: qtyStrCoercePositiveSchema,
 	is_default: z.boolean()
 });
 
@@ -158,20 +159,23 @@ export function createItemMaster(input: ItemMasterInput, ctx: AuthorContext): It
 	const d = itemMasterInputSchema.parse(input);
 	const doc = catalogDoc(
 		'item_master',
-		1,
+		3,
 		{
 			name: d.name,
 			category: d.category,
 			sku: d.sku,
 			description: d.description,
 			base_unit: d.base_unit,
-			conversions: d.conversions,
+			conversions: d.conversions.map((c) => ({
+				...c,
+				multiplier: persistQty(c.multiplier)
+			})),
 			default_purchasing_uom: d.default_purchasing_uom,
 			default_inventory_uom: d.default_inventory_uom,
 			default_issue_uom: d.default_issue_uom,
 			distribution_type: d.distribution_type,
 			target_reserve_days: d.target_reserve_days,
-			consumption_rate: d.consumption_rate,
+			consumption_rate: d.consumption_rate != null ? persistQty(d.consumption_rate) : undefined,
 			unit: d.unit,
 			timeframe: d.timeframe,
 			sphere_standard: d.sphere_standard,
@@ -189,12 +193,15 @@ export function createRecipe(input: RecipeInput, ctx: AuthorContext): Recipe {
 	const d = recipeInputSchema.parse(input);
 	return catalogDoc(
 		'recipe',
-		1,
+		3,
 		{
 			label: d.label,
-			ingredients: d.ingredients,
-			standard_portions: d.standard_portions,
-			standard_duration_hours: d.standard_duration_hours,
+			ingredients: d.ingredients.map((i) => ({
+				...i,
+				quantity: persistQty(i.quantity)
+			})),
+			standard_portions: persistQty(d.standard_portions),
+			standard_duration_hours: persistQty(d.standard_duration_hours),
 			is_default: d.is_default
 		},
 		ctx.createdBy
