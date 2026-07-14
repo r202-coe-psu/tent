@@ -13,6 +13,7 @@
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import TrendingUp from '@lucide/svelte/icons/trending-up';
 	import XCircle from '@lucide/svelte/icons/x-circle';
+	import { qtyGt, qtyLte } from '$lib/utils/qty';
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const balanceQuery = useStockBalance();
@@ -20,7 +21,7 @@
 	const ledgerQuery = useLedger();
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
-	const balance = $derived(balanceQuery.data ?? new Map<string, number>());
+	const balance = $derived(balanceQuery.data ?? new Map<string, string>());
 	const items = $derived(itemsQuery.data ?? []);
 	const ledger = $derived(ledgerQuery.data ?? []);
 
@@ -31,13 +32,13 @@
 	const totalItems = $derived(items.length);
 
 	const emptyCount = $derived.by(() => {
-		return items.filter((i) => (balance.get(i._id) ?? 0) <= 0).length;
+		return items.filter((i) => qtyLte(balance.get(i._id) ?? '0', 0)).length;
 	});
 
 	const lowStockCount = $derived.by(() => {
 		return items.filter((i) => {
-			const qty = balance.get(i._id) ?? 0;
-			return qty > 0 && i.reorder_level !== null && qty <= i.reorder_level;
+			const qty = balance.get(i._id) ?? '0';
+			return qtyGt(qty, 0) && i.reorder_level !== null && qtyLte(qty, i.reorder_level);
 		}).length;
 	});
 

@@ -78,6 +78,7 @@
 		"@tanstack/svelte-query": "^6.1.29",
 		"@tanstack/svelte-query-devtools": "^6.1.29",
 		"@types/node": "^25.9.2",
+		"decimal.js": "^10.6.0",
 		"events": "^3.3.0",
 		"html2canvas-pro": "^2.2.3",
 		"html5-qrcode": "^2.3.8",

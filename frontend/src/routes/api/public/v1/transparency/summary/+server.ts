@@ -51,6 +51,18 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 							'GET'
 						)
 					]);
+					if (
+						occRes.status === 200 &&
+						occRes.data &&
+						(occRes.data as Record<string, unknown>).rows
+					) {
+						const rows = (occRes.data as Record<string, unknown>).rows as Array<{
+							key: string;
+							value: unknown;
+						}>;
+						const activeRow = rows.find((r) => r.key === 'active');
+						occ = activeRow ? (activeRow.value as number) : 0;
+					}
 
 					if (
 						ageRes.status === 200 &&

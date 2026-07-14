@@ -7,12 +7,13 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
+	import { persistQty, qtyGt } from '$lib/utils/qty';
 
 	interface Props {
 		onclose: () => void;
 		onsubmit: (input: {
 			name: string;
-			target: number;
+			target: string;
 			location: string;
 			category?: string;
 			unit?: string;
@@ -25,7 +26,7 @@
 
 	let itemTitle = $state('');
 	let category = $state('ถูกกำหนดอัตโนมัติ');
-	let targetQty = $state<number | ''>('');
+	let targetQty = $state('');
 	let unit = $state('-- โปรดเลือกรายการสิ่งของก่อน --');
 	let urgency = $state<'critical' | 'important' | 'normal'>('normal');
 	let description = $state('');
@@ -68,7 +69,7 @@
 			toast.error('กรุณาระบุชื่อรายการสิ่งของ');
 			return;
 		}
-		if (!targetQty || targetQty <= 0) {
+		if (!targetQty.trim() || !qtyGt(targetQty, 0)) {
 			toast.error('กรุณาระบุจำนวนเป้าหมายที่ถูกต้อง');
 			return;
 		}
@@ -79,7 +80,7 @@
 
 		onsubmit({
 			name: itemTitle,
-			target: Number(targetQty),
+			target: persistQty(targetQty),
 			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
 			category,
 			unit: unit.startsWith('--') ? 'ชิ้น' : unit,
@@ -220,8 +221,8 @@
 					</label>
 					<Input
 						id="target-qty"
-						type="number"
-						min="1"
+						type="text"
+						inputmode="decimal"
 						bind:value={targetQty}
 						placeholder="ระบุตัวเลข"
 						class="h-10 text-xs"

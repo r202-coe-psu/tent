@@ -23,6 +23,7 @@ import {
 	type GasCylinderTypeInput
 } from '../domain/kitchen';
 import { stockBalance, isStockLedger, type StockLedger } from '$lib/features/operations';
+import { qtyGt, qtyNeg } from '$lib/utils/qty';
 import type { KitchenRepository } from './kitchen.repository';
 
 export class KitchenRemoteRepository implements KitchenRepository {
@@ -50,15 +51,14 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		input: KitchenRequisitionInput,
 		ctx: AuthorContext
 	): Promise<KitchenRequisition> {
-		const issuedItems = (input.items ?? []).filter((i) => (i.qty_issued ?? 0) > 0);
+		const issuedItems = (input.items ?? []).filter((i) => qtyGt(i.qty_issued ?? '0', 0));
 
 		if (issuedItems.length > 0) {
 			const ledger = await this.repo.allByType<StockLedger>('stock_ledger', isStockLedger);
 			const balance = stockBalance(ledger);
-			const EPSILON = 1e-9;
 			for (const item of issuedItems) {
-				const onHand = balance.get(item.item_id) ?? 0;
-				if (item.qty_issued > onHand + EPSILON) {
+				const onHand = balance.get(item.item_id) ?? '0';
+				if (qtyGt(item.qty_issued, onHand)) {
 					throw new Error(
 						`issueRequisition: cannot issue ${item.qty_issued} ${item.unit} of ${item.item_id} — only ${onHand} on hand`
 					);
@@ -72,13 +72,13 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		const ledgerEntries = issuedItems.map((item, i) => ({
 			_id: ledgerIds[i],
 			type: 'stock_ledger' as const,
-			schema_v: 1,
+			schema_v: 2,
 			shelter_code: ctx.shelterCode,
 			created_at: ts,
 			updated_at: ts,
 			created_by: ctx.createdBy,
 			item_id: item.item_id,
-			qty: -item.qty_issued,
+			qty: qtyNeg(item.qty_issued),
 			unit: item.unit,
 			reason: 'requisition' as const,
 			ref_id: requisition._id,
