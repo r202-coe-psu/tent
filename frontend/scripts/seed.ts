@@ -1162,7 +1162,8 @@ async function deleteDashboardData(): Promise<void> {
 		`/${SHELTER_DB}/_all_docs?include_docs=true&startkey=${dcStart}&endkey=${dcEnd}`
 	);
 	if (dcStatus === 200) {
-		const dcRows = (dcData as { rows: { doc: { type?: string } & Record<string, unknown> }[] }).rows;
+		const dcRows = (dcData as { rows: { doc: { type?: string } & Record<string, unknown> }[] })
+			.rows;
 		const dcToDelete = dcRows
 			.filter((r) => r.doc && r.doc._id)
 			.map((r) => ({ ...r.doc, _deleted: true }));
