@@ -1,7 +1,7 @@
 ---
 id: CR-039
 title: Import ศูนย์พักพิงจาก Excel — download template + upload/validate + shelter_import_log doc type
-status: proposed        # proposed | approved | done | rejected | superseded
+status: approved        # proposed | approved | done | rejected | superseded
 date: 2026-07-14
 requested_by: Dev Team-B
 decided_by: เจ้าของโครงการ
@@ -140,4 +140,4 @@ affects:
 4. วิธี track → **CR file** (เอกสารนี้).
 
 ## Decision log
-- 2026-07-14 — proposed (รอเจ้าของโครงการเคาะก่อนแตะ schema.md + เขียน code)
+- 2026-07-14 — approved by เจ้าของโครงการ (อนุมัติให้แก้ไข schema.md และเริ่มเขียนโค้ดได้)
