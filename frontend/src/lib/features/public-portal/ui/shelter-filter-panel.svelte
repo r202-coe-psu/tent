@@ -76,14 +76,14 @@
 
 	let provincesList = $derived([
 		{ label: 'จังหวัด (ทั้งหมด)', value: '' },
-		...[...new Set(locationData.map((d) => d.province))].sort().map((p) => ({ label: p, value: p }))
+		...[...new Set((locationData || []).map((d) => d.province))].sort().map((p) => ({ label: p, value: p }))
 	]);
 
 	let districtsList = $derived([
 		{ label: 'อำเภอ (ทั้งหมด)', value: '' },
 		...[
 			...new Set(
-				locationData
+				(locationData || [])
 					.filter((d) => !selectedProvince || d.province === selectedProvince)
 					.map((d) => d.district)
 			)
@@ -96,7 +96,7 @@
 		{ label: 'ตำบล (ทั้งหมด)', value: '' },
 		...[
 			...new Set(
-				locationData
+				(locationData || [])
 					.filter(
 						(d) =>
 							(!selectedProvince || d.province === selectedProvince) &&
