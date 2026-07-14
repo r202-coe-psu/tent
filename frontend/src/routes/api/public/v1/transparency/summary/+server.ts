@@ -51,22 +51,6 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 							'GET'
 						)
 					]);
-					if (m.code === 'SH001' || m.code === 'SH002')
-						console.log('RAW RES:', m.code, occRes.status, occRes.data);
-
-					if (
-						occRes.status === 200 &&
-						occRes.data &&
-						(occRes.data as Record<string, unknown>).rows
-					) {
-						const rows = (occRes.data as Record<string, unknown>).rows as Array<{
-							key: string;
-							value: unknown;
-						}>;
-						const checkedInRow = rows.find((r) => r.key === 'checked_in');
-						occ = checkedInRow ? (checkedInRow.value as number) : 0;
-						if (m.code === 'SH001') console.log('SH001 occ:', occ, occRes.data);
-					}
 
 					if (
 						ageRes.status === 200 &&
@@ -83,9 +67,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 							}
 						}
 					}
-				} catch (err) {
-					console.error(`Failed to fetch stats for shelter_${m.code}`, err);
-				}
+				} catch (err) {}
 				return { occ, vuln };
 			});
 
@@ -100,10 +82,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 				vulnerable_count: totalVulnerable
 			};
 			lastFetchTime = now;
-		} catch (e) {
-			console.error('Failed to update read-model', e);
-			// keep using stale cache if available
-		}
+		} catch (e) {}
 	}
 
 	const isStale = now - lastFetchTime > 1800000; // > 30 mins stale threshold (OP-7)
