@@ -101,8 +101,24 @@
 			zoom
 		});
 
+		// Add zoom and rotation controls to the map.
+		mapInstance.addControl(new L.NavigationControl(), 'bottom-right');
+
+		const updateLabelsVisibility = () => {
+			if (mapInstance && mapElement) {
+				if (mapInstance.getZoom() >= 12) {
+					mapElement.classList.add('show-labels');
+				} else {
+					mapElement.classList.remove('show-labels');
+				}
+			}
+		};
+
+		mapInstance.on('zoom', updateLabelsVisibility);
+
 		mapInstance.on('load', () => {
 			mapLoaded = true;
+			updateLabelsVisibility(); // Initial check
 		});
 	});
 
@@ -178,7 +194,7 @@
 						<div class="marker-dot" style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition: transform 0.2s;"></div>
 						<!-- Pin pointer triangle to anchor to exact location -->
 						<div style="position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid white;"></div>
-						<div style="position: absolute; top: 28px; white-space: nowrap; font-size: 11px; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+						<div class="marker-label" style="position: absolute; top: 28px; white-space: nowrap; font-size: 11px; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
 							${icon} ${shelter.name}
 						</div>
 					</div>
@@ -229,3 +245,15 @@
 </svelte:head>
 
 <div bind:this={mapElement} class="absolute inset-0 z-0 h-full w-full"></div>
+
+<style>
+	:global(.marker-label) {
+		opacity: 0;
+		visibility: hidden;
+		transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+	}
+	:global(.show-labels .marker-label) {
+		opacity: 1;
+		visibility: visible;
+	}
+</style>
