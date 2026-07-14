@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs';
 import { COLUMN_HEADERS } from '../domain/columns';
 import type { RawRow } from '../domain/import-row';
 
@@ -9,8 +8,12 @@ import type { RawRow } from '../domain/import-row';
  * Thai headers by exact text (unknown columns are ignored). Cell values are read
  * as display text (`cell.text`) and trimmed. Fully-empty rows are skipped so
  * trailing blank rows don't become phantom import errors.
+ *
+ * `exceljs` is dynamically imported (see `template.ts`) to keep it out of the
+ * shared app bundle.
  */
 export async function parseShelterWorkbook(file: File): Promise<RawRow[]> {
+	const ExcelJS = (await import('exceljs')).default;
 	const wb = new ExcelJS.Workbook();
 	await wb.xlsx.load(await file.arrayBuffer());
 	const ws = wb.worksheets[0];

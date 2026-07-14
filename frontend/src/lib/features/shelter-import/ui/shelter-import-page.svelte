@@ -25,6 +25,7 @@
 	const communityQuery = useMasterData(() => 'community');
 	const zoneItems = $derived(zoneQuery.data?.items ?? []);
 	const communityItems = $derived(communityQuery.data?.items ?? []);
+	const masterDataLoading = $derived(zoneQuery.isLoading || communityQuery.isLoading);
 
 	const lookups = $derived<Lookups>({
 		municipality_zone: buildMasterLookup(zoneItems),
@@ -102,7 +103,7 @@
 				ดาวน์โหลด template กรอกข้อมูล แล้วอัปโหลดเพื่อสร้างศูนย์พักพิงหลายแห่งพร้อมกัน
 			</p>
 		</div>
-		<Button variant="outline" onclick={downloadTemplate}>
+		<Button variant="outline" onclick={downloadTemplate} disabled={masterDataLoading}>
 			<Download class="mr-2 h-4 w-4" /> ดาวน์โหลด Template
 		</Button>
 	</div>
@@ -122,6 +123,10 @@
 					<X class="mr-1 h-4 w-4" /> ล้างไฟล์
 				</Button>
 			</div>
+		{:else if masterDataLoading}
+			<p class="py-10 text-center text-sm text-muted-foreground">
+				กำลังโหลดข้อมูลโซนเทศบาล/ชุมชน...
+			</p>
 		{:else}
 			<label
 				class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border px-6 py-10 text-center transition-colors hover:bg-muted/40"

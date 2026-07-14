@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs';
 import { COLUMNS, type EnumChoice, type MasterColumn } from '../domain/columns';
 
 /**
@@ -10,6 +9,10 @@ import { COLUMNS, type EnumChoice, type MasterColumn } from '../domain/columns';
  * on the commas and length of the Thai labels. A second `คำแนะนำ` sheet
  * documents each field. Cells store the human label; the importer resolves
  * label → code on upload.
+ *
+ * `exceljs` is ~1 MB with its own deps (jszip, saxes) and is only needed on this
+ * one interactive action, so it is dynamically imported rather than pulled into
+ * the shared app bundle via the feature barrel.
  */
 
 /** Master-data option labels injected at download time. */
@@ -31,6 +34,7 @@ function colLetter(n: number): string {
 }
 
 export async function buildShelterTemplateBlob(masters: TemplateMasters): Promise<Blob> {
+	const ExcelJS = (await import('exceljs')).default;
 	const wb = new ExcelJS.Workbook();
 	wb.creator = 'SmartShelter';
 
