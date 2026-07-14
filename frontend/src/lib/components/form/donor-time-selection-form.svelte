@@ -23,7 +23,6 @@
 
 	let selectedDate = $state<DateValue>(today(getLocalTimeZone()));
 	let shelters = $state<Array<{ code: string; name: string }>>([]);
-	let isLoading = $state(true);
 	let isItemsModalOpen = $state(false);
 
 	onMount(async () => {
@@ -33,8 +32,6 @@
 			if (Array.isArray(data)) shelters = data;
 		} catch {
 			toast.error('ไม่สามารถโหลดรายชื่อศูนย์พักพิงได้ กรุณาลองใหม่อีกครั้ง');
-		} finally {
-			isLoading = false;
 		}
 	});
 

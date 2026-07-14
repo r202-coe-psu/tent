@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
-	import Compass from '@lucide/svelte/icons/compass';
+	import { SvelteSet } from 'svelte/reactivity';
 	import Search from '@lucide/svelte/icons/search';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
@@ -38,7 +37,7 @@
 	const suggestions = $derived.by(() => {
 		const q = search.trim().toLowerCase();
 		if (!q) return [];
-		const set = new Set<string>();
+		const set = new SvelteSet<string>();
 		shelters.forEach((s) => {
 			s.needs.forEach((n) => {
 				if (n.name.toLowerCase().includes(q)) {
@@ -234,7 +233,7 @@
 					<div
 						class="absolute top-[calc(100%+8px)] left-0 z-50 w-full overflow-hidden rounded-xl border border-slate-200 bg-white py-2 text-left shadow-lg"
 					>
-						{#each suggestions as sug}
+						{#each suggestions as sug (sug)}
 							<button
 								type="button"
 								onmousedown={() => {
@@ -455,7 +454,7 @@
 			<!-- Content -->
 			<div class="flex-1 space-y-4 overflow-y-auto bg-slate-50 p-6">
 				<div class="space-y-1 rounded-2xl border border-slate-100 bg-white p-4 shadow-xs">
-					{#each activeShelter.needs as need, index}
+					{#each activeShelter.needs as need, index (need.item_id)}
 						{#if need.status === 'closed'}
 							<div
 								class="flex items-center gap-2 py-2 opacity-50 grayscale {index > 0

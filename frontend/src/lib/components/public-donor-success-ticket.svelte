@@ -1,5 +1,4 @@
 <script lang="ts">
-	import Check from '@lucide/svelte/icons/check';
 	import Truck from '@lucide/svelte/icons/truck';
 	import Clock from '@lucide/svelte/icons/clock';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';

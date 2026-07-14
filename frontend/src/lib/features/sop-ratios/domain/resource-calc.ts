@@ -11,6 +11,8 @@
  * data layer fills it in — see `data/resource-calc.provider.ts`.
  */
 
+import Decimal from 'decimal.js';
+import { parseQty, qtyGte, roundQtyNumber, subQty } from '$lib/utils/qty';
 import type { TrendSeries } from './trend';
 
 export type ResourceCategory = 'food' | 'supply' | 'volunteer';
@@ -75,13 +77,16 @@ export interface ResourceCalcSnapshot {
 }
 
 export function computeGap(need: number, have: number): number {
-	return Math.max(need - have, 0);
+	const gap = subQty(need, have);
+	return qtyGte(gap, 0) ? roundQtyNumber(gap) : 0;
 }
 
 /** have/need clamped to [0, 1]; a zero/negative need counts as fully covered. */
 export function coverage(need: number, have: number): number {
-	if (need <= 0) return 1;
-	return Math.max(0, Math.min(have / need, 1));
+	const n = parseQty(need);
+	if (n.lte(0)) return 1;
+	const ratio = parseQty(have).div(n);
+	return Decimal.max(0, Decimal.min(1, ratio)).toNumber();
 }
 
 /** ok when nothing is short; critical under 50% coverage; otherwise low. */

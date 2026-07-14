@@ -16,7 +16,7 @@
 	let donationDoc = $state<ScanDonationView | null>(null);
 	let bookingRef = $state('');
 	let donorName = $state('');
-	let scannedItems = $state<{ name: string; qty: number; unit: string; item_id?: string }[]>([]);
+	let scannedItems = $state<{ name: string; qty: string; unit: string; item_id?: string }[]>([]);
 
 	async function performLookup(query: string) {
 		if (!query.trim()) return;
@@ -36,7 +36,7 @@
 				donorName = donationDoc?.donor?.name || 'ไม่ระบุชื่อ';
 				scannedItems = (donationDoc?.items || []).map((it) => ({
 					name: it.free_text || it.item_id || 'ไม่ระบุชื่อสินค้า',
-					qty: it.qty || 0,
+					qty: it.qty != null && it.qty !== '' ? String(it.qty) : '0',
 					unit: it.unit || 'ชิ้น',
 					item_id: it.item_id
 				}));

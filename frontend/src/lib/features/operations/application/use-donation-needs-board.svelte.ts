@@ -238,7 +238,7 @@ export function useDonationNeedsBoard(options?: {
 
 	function handleAddRequestFromForm(input: {
 		name: string;
-		target: number;
+		target: string;
 		location: string;
 		category?: string;
 		unit?: string;

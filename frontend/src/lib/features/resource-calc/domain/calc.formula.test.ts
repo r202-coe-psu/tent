@@ -187,18 +187,17 @@ describe('calculateResources — absent vs invalid', () => {
 });
 
 describe('calculateResources — floating point vs status', () => {
-	it('float noise does not flip ok→gap; gap stays raw', () => {
-		// 3 × 0.1 = 0.30000000000000004; have 0.3 → |gap| < GAP_EPSILON → ok
+	it('float noise does not flip ok→gap; rounded need/gap wash residue', () => {
+		// 3 × 0.1 = 0.30000000000000004; rounded need 0.3 − have 0.3 → gap 0 → ok
 		const [row] = calc(3, [r('x', 'multiply', 0.1, 0.3)]);
 		expect(row.status).toBe('ok');
-		expect(row.need).toBeCloseTo(0.3);
-		expect(row.gap).not.toBe(0); // RAW residual retained
-		expect(Math.abs(row.gap as number)).toBeLessThan(1e-9);
+		expect(row.need).toBe(0.3);
+		expect(row.gap).toBe(0);
 	});
 
-	it('multiply result is raw (no rounding)', () => {
+	it('multiply result is rounded to quantity decimals', () => {
 		const [row] = calc(3, [r('x', 'multiply', 0.2, null)]);
-		expect(row.need).toBeCloseTo(0.6);
+		expect(row.need).toBe(0.6);
 	});
 
 	it('large-magnitude near-equal: representation noise only, status stays ok', () => {
@@ -207,10 +206,7 @@ describe('calculateResources — floating point vs status', () => {
 		const noisyNeed = 1_000_000 + (0.1 + 0.2 - 0.3);
 		const [row] = calc(1, [r('x', 'multiply', noisyNeed, 1_000_000)]);
 		expect(row.status).toBe('ok');
-		expect(row.gap).not.toBeNull();
-		// 1e-9 intentionally duplicates GAP_EPSILON (private/unexported) — this test documents the
-		// public tolerance behavior, not the implementation; if GAP_EPSILON ever changes, update both.
-		expect(Math.abs(row.gap as number)).toBeLessThan(1e-9);
+		expect(row.gap).toBe(0);
 	});
 });
 
@@ -261,8 +257,8 @@ describe('calculateResources — structural', () => {
 		expect(input).toEqual(snapshot); // input unchanged
 	});
 
-	it('exports FORMULA_V = 1.1.0 and carries as_of through unchanged', () => {
-		expect(FORMULA_V).toBe('1.1.0'); // bumped in T-31.3 (additive data_status field)
+	it('exports FORMULA_V = 1.2.0 and carries as_of through unchanged', () => {
+		expect(FORMULA_V).toBe('1.2.0'); // bumped for fixed-decimal gap classification
 		const [row] = calc(10, [r('water', 'multiply', 15, null)], '2026-01-01T00:00:00.000Z');
 		expect(row.as_of).toBe('2026-01-01T00:00:00.000Z');
 	});

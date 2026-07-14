@@ -58,12 +58,12 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			phone: '0812345678',
 			email: 'john@donor.com'
 		},
-		items: [{ free_text: 'ข้าวสาร', qty: 10, unit: 'kg' }],
+		items: [{ free_text: 'ข้าวสาร', qty: '10', unit: 'kg' }],
 		logistics: {
 			delivery_method: 'parcel',
 			courier_tracking_no: null
 		}
-	} as PublicDonationDoc;
+	} as unknown as PublicDonationDoc;
 
 	it('GET returns donation details including donor PII for admin staff', async () => {
 		mockRegistryAndDonations(mockDonation);
@@ -124,7 +124,7 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 		expect(response.status).toBe(200);
 		expect(data.success).toBe(true);
 		expect(data.donation.status).toBe('received');
-		expect(data.donation.items[0].qty).toBe(9);
+		expect(data.donation.items[0].qty).toBe('9');
 		expect(data.donation).not.toHaveProperty('tracking_token_hash');
 		expect(data.donation).not.toHaveProperty('_rev');
 

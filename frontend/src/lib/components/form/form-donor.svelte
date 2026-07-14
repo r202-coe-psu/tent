@@ -146,7 +146,7 @@
 
 		{#if donationStore.items.length > 0}
 			<div class="mb-6 space-y-4">
-				{#each donationStore.items as item, idx (item.id)}
+				{#each donationStore.items as item (item.id)}
 					<div
 						class="relative flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-5"
 					>

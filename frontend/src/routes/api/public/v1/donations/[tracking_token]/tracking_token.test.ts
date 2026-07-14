@@ -41,12 +41,12 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 				phone_hash: 'abc',
 				email: 'secret@donor.com'
 			},
-			items: [{ free_text: 'ข้าวสาร', qty: 10, unit: 'kg' }],
+			items: [{ free_text: 'ข้าวสาร', qty: '10', unit: 'kg' }],
 			logistics: {
 				delivery_method: 'parcel',
 				courier_tracking_no: null
 			}
-		} as PublicDonationDoc;
+		} as unknown as PublicDonationDoc;
 	});
 
 	it('GET returns donation details with masked donor PII and no phone echo', async () => {
