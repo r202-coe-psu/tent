@@ -53,26 +53,23 @@ function resolveHave(
 	key: SopRatioKey,
 	kind: (typeof SOP_RATIO_KIND)[SopRatioKey],
 	stock: Map<string, string>
-): number | null {
+): string | null {
 	if (kind === 'threshold') return null;
 	const raw = stock.get(key);
-	if (raw == null) return null;
-	// daily_calc still snapshots IEEE numbers (CR-038 follow-up); coerce at boundary
-	const n = Number(raw);
-	return Number.isFinite(n) ? n : null;
+	return raw ?? null;
 }
 
 function buildResources(
-	ratios: Record<SopRatioKey, number>,
+	ratios: Record<SopRatioKey, string>,
 	stock: Map<string, string>
 ): {
 	resources: ResourceInput[];
-	ratioSnapshot: Record<string, number>;
-	stockSnapshot: Record<string, number | null>;
+	ratioSnapshot: Record<string, string>;
+	stockSnapshot: Record<string, string | null>;
 } {
 	const resources: ResourceInput[] = [];
-	const ratioSnapshot: Record<string, number> = {};
-	const stockSnapshot: Record<string, number | null> = {};
+	const ratioSnapshot: Record<string, string> = {};
+	const stockSnapshot: Record<string, string | null> = {};
 
 	for (const key of Object.keys(ratios) as SopRatioKey[]) {
 		const ratio = ratios[key];

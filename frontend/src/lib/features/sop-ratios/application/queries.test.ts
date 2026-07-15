@@ -94,7 +94,7 @@ describe('SOP Ratios Application Hooks', () => {
 				ratios: validRatios
 			},
 			changes: {
-				water_l_per_person_day: 20
+				water_l_per_person_day: '20'
 			},
 			reason: 'Test change',
 			ctx: {
@@ -147,7 +147,7 @@ describe('SOP Ratios Application Hooks', () => {
 			const noOpInput = {
 				...validOverrideInput,
 				changes: {
-					water_l_per_person_day: 15
+					water_l_per_person_day: '15'
 				}
 			};
 
@@ -198,7 +198,7 @@ describe('SOP Ratios Application Hooks', () => {
 				ratios: validRatios
 			},
 			changes: {
-				water_l_per_person_day: 20
+				water_l_per_person_day: '20'
 			},
 			reason: 'Test change',
 			createdBy: 'tester'
@@ -220,7 +220,7 @@ describe('SOP Ratios Application Hooks', () => {
 			const noOpInput = {
 				...validMasterInput,
 				changes: {
-					water_l_per_person_day: 15
+					water_l_per_person_day: '15'
 				}
 			};
 

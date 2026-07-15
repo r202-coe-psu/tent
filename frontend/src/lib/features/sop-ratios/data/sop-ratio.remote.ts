@@ -255,7 +255,7 @@ export async function resolveEffectiveRatios(
 	overrideRepo: SopOverrideRepository,
 	masterRepo: SopMasterRepository
 ): Promise<{
-	ratios: Record<SopRatioKey, number> | Partial<Record<SopRatioKey, number>>;
+	ratios: Record<SopRatioKey, string> | Partial<Record<SopRatioKey, string>>;
 	ratio_source: 'master' | 'override';
 } | null> {
 	const activeOverrides = await overrideRepo.listActive();
