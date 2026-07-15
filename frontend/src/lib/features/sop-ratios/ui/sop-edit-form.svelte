@@ -31,6 +31,7 @@
 	// Local editable copy of ratios
 	const getInitial = () => ({ ...profile.ratios });
 	let ratios = $state<Partial<Record<SopRatioKey, string>>>(getInitial());
+	let errors = $state<Partial<Record<SopRatioKey, string>>>({});
 	let reason = $state('');
 
 	const isSaving = $derived(masterMutation.isPending || overrideMutation.isPending);
@@ -45,6 +46,24 @@
 
 	async function handleSave() {
 		if (!reason.trim()) return;
+
+		errors = {};
+		for (const key of SOP_RATIO_KEYS) {
+			const currentVal = ratios[key];
+			if (currentVal === undefined || currentVal === null || currentVal.trim() === '') {
+				errors[key] = 'กรุณาระบุตัวเลขทศนิยมที่ถูกต้อง (ต้องมากกว่า 0)';
+				continue;
+			}
+			const n = Number(currentVal);
+			if (Number.isNaN(n) || n <= 0 || !/^\d+(\.\d+)?$/.test(currentVal.trim())) {
+				errors[key] = 'กรุณาระบุตัวเลขทศนิยมที่ถูกต้อง (ต้องมากกว่า 0)';
+			}
+		}
+
+		if (Object.keys(errors).length > 0) {
+			toast.error('กรุณาตรวจสอบข้อมูลที่กรอกให้ถูกต้อง');
+			return;
+		}
 
 		try {
 			const changes: Partial<Record<SopRatioKey, string>> = {};
@@ -134,8 +153,18 @@
 							const val = e.currentTarget.value;
 							ratios[key] = val;
 						}}
-						class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 font-mono text-[15px] font-semibold text-brand transition-colors outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+						class={[
+							'w-full rounded-xl border bg-white px-4 py-2.5 font-mono text-[15px] font-semibold transition-colors outline-none',
+							errors[key]
+								? 'border-red-500 text-red-600 focus:border-red-600 focus:ring-2 focus:ring-red-600/15'
+								: 'border-black/10 text-brand focus:border-brand focus:ring-2 focus:ring-brand/15'
+						]}
 					/>
+					{#if errors[key]}
+						<p class="mt-1.5 text-[12px] font-medium text-red-500">
+							{errors[key]}
+						</p>
+					{/if}
 				</div>
 			{/each}
 
