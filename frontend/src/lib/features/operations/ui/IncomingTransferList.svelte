@@ -16,13 +16,13 @@
 	const receiveMutation = useReceiveTransfer();
 
 	// Local state to hold the editable quantities for each transfer
-	// transfer_id -> item_id -> received_qty
-	let receivedQuantities = $state<Record<string, Record<string, number>>>({});
+	// transfer_id -> item_id -> received_qty (qty_str — CR-038)
+	let receivedQuantities = $state<Record<string, Record<string, string>>>({});
 
 	// Initialize state when transfers load
 	$effect(() => {
 		if (transfersQuery.data) {
-			const newQtys: Record<string, Record<string, number>> = {};
+			const newQtys: Record<string, Record<string, string>> = {};
 			for (const transfer of transfersQuery.data) {
 				newQtys[transfer._id] = {};
 				for (const item of transfer.items) {
@@ -49,7 +49,7 @@
 
 		const receivedItems = transfer.items.map((item) => ({
 			item_id: item.item_id,
-			qty: qtys[item.item_id] ?? 0
+			qty: qtys[item.item_id] ?? '0'
 		}));
 
 		const ctx = {

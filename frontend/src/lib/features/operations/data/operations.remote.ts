@@ -117,9 +117,9 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// single-user shelter scenario; tracked for future hardening.
 		const balances = await this.getBalance();
 		for (const item of updatedTransfer.items) {
-			const currentQty = balances.get(item.item_id) ?? 0;
-			const requestedQty = item.qty;
-			if (currentQty < requestedQty) {
+			const currentQty = balances.get(item.item_id) ?? '0';
+			const requestedQty = qtyAbs(item.qty);
+			if (!qtyGte(currentQty, requestedQty)) {
 				throw new Error(
 					`Insufficient stock for item ${item.item_id} (requested ${requestedQty}, have ${currentQty})`
 				);
@@ -134,7 +134,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 	async receiveTransfer(
 		transfer: StockTransfer,
-		receivedItems: { item_id: string; qty: number }[],
+		receivedItems: { item_id: string; qty: string | number }[],
 		ctx: AuthorContext
 	): Promise<{ transfer: StockTransfer; ledgers: StockLedger[] }> {
 		const { transfer: updatedTransfer, ledgers } = computeReceiveTransfer(

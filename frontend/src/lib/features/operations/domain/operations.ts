@@ -4,6 +4,7 @@ import {
 	addQty,
 	persistQty,
 	qtyAbs,
+	qtyGt,
 	qtyGte,
 	qtyNeg,
 	qtyStrCoercePositiveSchema,
@@ -154,9 +155,9 @@ export interface DonationCampaign extends BaseDoc {
 
 export interface StockTransferItem {
 	item_id: string;
-	qty: number;
+	qty: string; // qty_str > 0, as dispatched by the source shelter
 	unit: string;
-	received_qty?: number;
+	received_qty?: string; // qty_str >= 0, as counted at the destination
 }
 
 export interface StockTransfer extends BaseDoc {
@@ -595,7 +596,7 @@ export const isStockTransfer = (d: unknown): d is StockTransfer =>
 
 export const transferItemSchema = z.object({
 	item_id: z.string().min(1),
-	qty: z.coerce.number().positive(),
+	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1)
 });
 
@@ -611,11 +612,11 @@ export function createTransfer(input: TransferInput, ctx: AuthorContext): StockT
 	const d = transferInputSchema.parse(input);
 	return makeDoc(
 		'stock_transfer',
-		1,
+		2,
 		{
 			from_shelter: d.from_shelter,
 			to_shelter: d.to_shelter,
-			items: d.items,
+			items: d.items.map((i) => ({ ...i, qty: persistQty(i.qty) })),
 			status: 'requested',
 			timeline: {
 				requested: { at: now(), by: ctx.createdBy }
@@ -652,7 +653,7 @@ export function dispatchTransfer(
 		createStockLedger(
 			{
 				item_id: item.item_id,
-				qty: -Math.abs(item.qty), // ensure negative delta for transfer out
+				qty: qtyNeg(qtyAbs(item.qty)), // ensure negative delta for transfer out
 				unit: item.unit,
 				reason: 'transfer_out',
 				ref_id: transfer._id,
@@ -671,18 +672,18 @@ export function dispatchTransfer(
  */
 export function receiveTransfer(
 	transfer: StockTransfer,
-	receivedItems: { item_id: string; qty: number }[],
+	receivedItems: { item_id: string; qty: string | number }[],
 	ctx: AuthorContext
 ): { transfer: StockTransfer; ledgers: StockLedger[] } {
 	if (transfer.status !== 'shipped') {
 		throw new Error(`Cannot receive transfer in status "${transfer.status}"`);
 	}
 
-	const receivedQtyMap = new Map(receivedItems.map((i) => [i.item_id, i.qty]));
+	const receivedQtyMap = new Map(receivedItems.map((i) => [i.item_id, persistQty(i.qty)]));
 
 	const updatedItems = transfer.items.map((item) => ({
 		...item,
-		received_qty: receivedQtyMap.get(item.item_id) ?? 0
+		received_qty: receivedQtyMap.get(item.item_id) ?? '0'
 	}));
 
 	const updatedTransfer: StockTransfer = {
@@ -697,12 +698,12 @@ export function receiveTransfer(
 	};
 
 	const ledgers = updatedItems
-		.filter((item) => item.received_qty != null && item.received_qty > 0)
+		.filter((item) => qtyGt(item.received_qty, 0))
 		.map((item) =>
 			createStockLedger(
 				{
 					item_id: item.item_id,
-					qty: Math.abs(item.received_qty!), // ensure positive delta for transfer in
+					qty: qtyAbs(item.received_qty), // ensure positive delta for transfer in
 					unit: item.unit,
 					reason: 'transfer_in',
 					ref_id: transfer._id,

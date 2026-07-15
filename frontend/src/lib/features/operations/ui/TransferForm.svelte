@@ -13,6 +13,7 @@
 	import Truck from '@lucide/svelte/icons/truck';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import { qtyGt, qtyLte } from '$lib/utils/qty';
 
 	let { onsuccess }: { onsuccess?: () => void } = $props();
 
@@ -26,7 +27,7 @@
 			{
 				from_shelter: getShelterCode(),
 				to_shelter: '',
-				items: [{ item_id: '', qty: 0, unit: '' }]
+				items: [{ item_id: '', qty: '', unit: '' }]
 			},
 			zod4(transferInputSchema)
 		),
@@ -48,8 +49,8 @@
 
 				// Validate sufficient stock for all items
 				for (const item of validated.data.items) {
-					const currentStock = balanceQuery.data?.get(item.item_id) ?? 0;
-					if (item.qty > currentStock) {
+					const currentStock = balanceQuery.data?.get(item.item_id) ?? '0';
+					if (qtyGt(item.qty, currentStock)) {
 						const itemName =
 							itemsQuery.data?.find((i) => i._id === item.item_id)?.name ?? item.item_id;
 						toast.error(
@@ -67,7 +68,7 @@
 	const { form: formData, submitting, reset, errors } = form;
 
 	function addItem() {
-		$formData.items = [...$formData.items, { item_id: '', qty: 0, unit: '' }];
+		$formData.items = [...$formData.items, { item_id: '', qty: '', unit: '' }];
 	}
 
 	function removeItem(index: number) {
@@ -174,16 +175,19 @@
 			<div class="grid grid-cols-12 items-end gap-3">
 				<!-- Item Selector -->
 				<div class="col-span-12 sm:col-span-6">
-					<label class="mb-1 block text-xs font-bold text-foreground">รายการที่ {i + 1}</label>
+					<label for="transfer-item-{i}" class="mb-1 block text-xs font-bold text-foreground"
+						>รายการที่ {i + 1}</label
+					>
 					<select
+						id="transfer-item-{i}"
 						class="flex h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm shadow-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
 						value={$formData.items[i].item_id}
 						onchange={(e) => selectItem(i, e.currentTarget.value)}
 					>
 						<option value="" disabled>-- เลือกพัสดุ --</option>
 						{#each itemsQuery.data ?? [] as supplyItem (supplyItem._id)}
-							{@const bal = balanceQuery.data?.get(supplyItem._id) ?? 0}
-							<option value={supplyItem._id} disabled={bal <= 0}>
+							{@const bal = balanceQuery.data?.get(supplyItem._id) ?? '0'}
+							<option value={supplyItem._id} disabled={qtyLte(bal, 0)}>
 								{supplyItem.name} (คงเหลือ: {bal}
 								{supplyItem.unit})
 							</option>
@@ -196,8 +200,11 @@
 
 				<!-- Quantity -->
 				<div class="col-span-6 sm:col-span-3">
-					<label class="mb-1 block text-xs font-bold text-foreground">จำนวน</label>
+					<label for="transfer-qty-{i}" class="mb-1 block text-xs font-bold text-foreground"
+						>จำนวน</label
+					>
 					<Input
+						id="transfer-qty-{i}"
 						type="number"
 						placeholder="0"
 						min="0.01"
@@ -212,8 +219,11 @@
 
 				<!-- Unit -->
 				<div class="col-span-4 sm:col-span-2">
-					<label class="mb-1 block text-xs font-bold text-foreground">หน่วย</label>
+					<label for="transfer-unit-{i}" class="mb-1 block text-xs font-bold text-foreground"
+						>หน่วย</label
+					>
 					<Input
+						id="transfer-unit-{i}"
 						value={$formData.items[i].unit}
 						readonly
 						class="h-10 cursor-not-allowed rounded-xl bg-muted font-semibold text-muted-foreground"

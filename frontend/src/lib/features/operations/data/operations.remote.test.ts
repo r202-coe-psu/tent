@@ -318,10 +318,10 @@ describe('OperationsRemoteRepository', () => {
 			expect(dispatched.status).toBe('shipped');
 			expect(ledgers).toHaveLength(1);
 			expect(ledgers[0].reason).toBe('transfer_out');
-			expect(ledgers[0].qty).toBe(-30);
+			expect(ledgers[0].qty).toBe('-30');
 
 			const balance = await repo.getBalance();
-			expect(balance.get('item:rice')).toBe(70);
+			expect(balance.get('item:rice')).toBe('70');
 		});
 
 		it('throws and does not write anything when dispatching with insufficient stock', async () => {
@@ -343,7 +343,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(repo.dispatchTransfer(transfer, ctx)).rejects.toThrow('Insufficient stock');
 
 			const balance = await repo.getBalance();
-			expect(balance.get('item:rice')).toBe(10);
+			expect(balance.get('item:rice')).toBe('10');
 			const ledger = await repo.listLedger();
 			expect(ledger.filter((l) => l.reason === 'transfer_out')).toHaveLength(0);
 		});
@@ -371,13 +371,13 @@ describe('OperationsRemoteRepository', () => {
 			);
 
 			expect(received.status).toBe('received');
-			expect(received.items[0].received_qty).toBe(40);
+			expect(received.items[0].received_qty).toBe('40');
 			expect(ledgers).toHaveLength(1);
 			expect(ledgers[0].reason).toBe('transfer_in');
-			expect(ledgers[0].qty).toBe(40);
+			expect(ledgers[0].qty).toBe('40');
 
 			const balance = await repo.getBalance();
-			expect(balance.get('item:rice')).toBe(100);
+			expect(balance.get('item:rice')).toBe('100');
 		});
 
 		it('lists only shipped transfers addressed to the current shelter', async () => {

@@ -563,7 +563,7 @@ describe('Inter-shelter Transfers', () => {
 		expect(shipped.status).toBe('shipped');
 		expect(shipped.timeline.shipped).toBeDefined();
 		expect(ledgers).toHaveLength(1);
-		expect(ledgers[0].qty).toBe(-100); // outbound
+		expect(ledgers[0].qty).toBe('-100'); // outbound
 		expect(ledgers[0].reason).toBe('transfer_out');
 	});
 
@@ -585,9 +585,9 @@ describe('Inter-shelter Transfers', () => {
 		);
 
 		expect(received.status).toBe('received');
-		expect(received.items[0].received_qty).toBe(100);
+		expect(received.items[0].received_qty).toBe('100');
 		expect(ledgers).toHaveLength(1);
-		expect(ledgers[0].qty).toBe(100);
+		expect(ledgers[0].qty).toBe('100');
 		expect(ledgers[0].reason).toBe('transfer_in');
 	});
 
@@ -610,9 +610,9 @@ describe('Inter-shelter Transfers', () => {
 		);
 
 		expect(received.status).toBe('received');
-		expect(received.items[0].received_qty).toBe(85);
+		expect(received.items[0].received_qty).toBe('85');
 		expect(ledgers).toHaveLength(1);
-		expect(ledgers[0].qty).toBe(85); // Only 85 added to inventory
+		expect(ledgers[0].qty).toBe('85'); // Only 85 added to inventory
 		expect(ledgers[0].reason).toBe('transfer_in');
 	});
 
@@ -635,8 +635,33 @@ describe('Inter-shelter Transfers', () => {
 		);
 
 		expect(received.status).toBe('received');
-		expect(received.items[0].received_qty).toBe(0);
+		expect(received.items[0].received_qty).toBe('0');
 		expect(ledgers).toHaveLength(0); // No ledger entry since nothing was added
+	});
+
+	it('keeps decimal qty exact through dispatch and receive (CR-038)', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: '0.1', unit: 'kg' }]
+			},
+			ctx
+		);
+		expect(t.items[0].qty).toBe('0.1');
+
+		const { transfer: shipped, ledgers: out } = dispatchTransfer(t, ctx);
+		expect(out[0].qty).toBe('-0.1');
+
+		const { ledgers: incoming } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: '0.2' }],
+			ctx
+		);
+		expect(incoming[0].qty).toBe('0.2');
+
+		// The float trap CR-038 exists to close: 0.1 + 0.2 must not drift to 0.30000000000000004
+		expect(stockBalance([out[0], incoming[0]])).toEqual(new Map([['item:rice', '0.1']]));
 	});
 });
 

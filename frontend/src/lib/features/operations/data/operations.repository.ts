@@ -69,7 +69,7 @@ export interface OperationsRepository {
 	 */
 	receiveTransfer(
 		transfer: StockTransfer,
-		receivedItems: { item_id: string; qty: number }[],
+		receivedItems: { item_id: string; qty: string | number }[],
 		ctx: AuthorContext
 	): Promise<{ transfer: StockTransfer; ledgers: StockLedger[] }>;
 
