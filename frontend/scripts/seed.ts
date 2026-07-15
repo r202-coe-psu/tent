@@ -1072,20 +1072,22 @@ async function seedDailyCalc(): Promise<void> {
 		const occupancy = Math.max(0, Math.round(120 + 25 * Math.sin(phase) + jitter));
 
 		const resources: ResourceInput[] = [];
-		const ratioSnapshot: Record<string, number> = {};
-		const stockSnapshot: Record<string, number | null> = {};
+		const ratioSnapshot: Record<string, string> = {};
+		const stockSnapshot: Record<string, string | null> = {};
 
 		for (const key of Object.keys(ratios) as SopRatioKey[]) {
 			const ratioStr = ratios[key];
-			const ratio = Number(ratioStr);
+			const ratioNum = Number(ratioStr);
 			const kind = SOP_RATIO_KIND[key];
-			const roughNeed = kind === 'multiply' ? occupancy * ratio : Math.ceil(occupancy / ratio);
+			const roughNeed =
+				kind === 'multiply' ? occupancy * ratioNum : Math.ceil(occupancy / ratioNum);
 			// have oscillates across a deficit/surplus band so the dashboard shows real gaps;
 			// threshold ratios are quality ceilings → no stock (null), same as `resolveHave`.
 			const factor = 0.7 + 0.6 * (0.5 + 0.5 * Math.sin(phase + key.length));
-			const have = kind === 'threshold' ? null : Math.max(0, Math.round(roughNeed * factor));
-			resources.push({ key, kind, ratio, have });
-			ratioSnapshot[key] = ratio;
+			const have =
+				kind === 'threshold' ? null : String(Math.max(0, Math.round(roughNeed * factor)));
+			resources.push({ key, kind, ratio: ratioStr, have });
+			ratioSnapshot[key] = ratioStr;
 			stockSnapshot[key] = have;
 		}
 
