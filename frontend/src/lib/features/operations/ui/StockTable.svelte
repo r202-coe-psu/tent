@@ -18,6 +18,7 @@
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import LedgerTable from './LedgerTable.svelte';
+	import { qtyGt, qtyLte } from '$lib/utils/qty';
 	import ReceiveStockForm from './ReceiveStockForm.svelte';
 	import DistributeStockForm from './DistributeStockForm.svelte';
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
@@ -40,7 +41,7 @@
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
 	const items = $derived(itemsQuery.data ?? []);
-	const balance = $derived(balanceQuery.data ?? new Map<string, number>());
+	const balance = $derived(balanceQuery.data ?? new Map<string, string>());
 	const ledger = $derived(ledgerQuery.data ?? []);
 
 	/**
@@ -69,7 +70,7 @@
 		const result: Record<string, { expiry?: string; note?: string }> = {};
 		const sorted = [...ledger].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
 		for (const entry of sorted) {
-			if (entry.qty > 0 && (entry.lot?.expiry || entry.lot?.note)) {
+			if (qtyGt(entry.qty, 0) && (entry.lot?.expiry || entry.lot?.note)) {
 				result[entry.item_id] = {
 					expiry: entry.lot?.expiry,
 					note: entry.lot?.note
@@ -80,9 +81,9 @@
 	});
 
 	/** Determine stock status based on qty vs reorder_level. */
-	function getStatus(qty: number, reorderLevel: number | null): 'empty' | 'low' | 'normal' {
-		if (qty <= 0) return 'empty';
-		if (reorderLevel !== null && qty <= reorderLevel) return 'low';
+	function getStatus(qty: string, reorderLevel: number | null): 'empty' | 'low' | 'normal' {
+		if (qtyLte(qty, 0)) return 'empty';
+		if (reorderLevel !== null && qtyLte(qty, reorderLevel)) return 'low';
 		return 'normal';
 	}
 
@@ -110,7 +111,7 @@
 			// Category
 			if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
 
-			const qty = balance.get(item._id) ?? 0;
+			const qty = balance.get(item._id) ?? '0';
 			const status = getStatus(qty, item.reorder_level);
 			const lot = latestLotByItem[item._id];
 			const expired = isExpired(lot?.expiry);
@@ -321,7 +322,7 @@
 							</Table.Row>
 						{:else}
 							{#each displayedItems as item (item._id)}
-								{@const qty = balance.get(item._id) ?? 0}
+								{@const qty = balance.get(item._id) ?? '0'}
 								{@const status = getStatus(qty, item.reorder_level)}
 								{@const lot = latestLotByItem[item._id]}
 								{@const expired = isExpired(lot?.expiry)}
@@ -414,7 +415,7 @@
 														? 'border border-amber-500/20 bg-amber-500/10 text-amber-600'
 														: 'border border-border/60 bg-muted/80 text-foreground'}"
 											>
-												{qty.toLocaleString()}
+												{qty}
 												<span class="text-[11px] font-normal text-muted-foreground"
 													>{item.unit}</span
 												>
@@ -479,10 +480,10 @@
 
 			<!-- Footer summary row -->
 			{#if !isLoading && items.length > 0}
-				{@const emptyCount = items.filter((i) => (balance.get(i._id) ?? 0) <= 0).length}
+				{@const emptyCount = items.filter((i) => qtyLte(balance.get(i._id) ?? '0', 0)).length}
 				{@const lowCount = items.filter((i) => {
-					const qty = balance.get(i._id) ?? 0;
-					return qty > 0 && i.reorder_level !== null && qty <= i.reorder_level;
+					const qty = balance.get(i._id) ?? '0';
+					return qtyGt(qty, 0) && i.reorder_level !== null && qtyLte(qty, i.reorder_level);
 				}).length}
 				<div
 					class="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground shadow-sm"

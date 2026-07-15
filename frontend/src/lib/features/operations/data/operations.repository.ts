@@ -37,7 +37,7 @@ export interface OperationsRepository {
 	/**
 	 * Calculate current on-hand stock balance for all items (sum of signed deltas).
 	 */
-	getBalance(): Promise<Map<string, number>>;
+	getBalance(): Promise<Map<string, string>>;
 
 	/**
 	 * Process and persist an inbound stock receive entry.

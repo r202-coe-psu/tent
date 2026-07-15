@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { type BaseDoc } from '$lib/db/model';
+import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
 
 export const PUBLIC_DONATION_CATEGORIES = [
 	{ value: 'food', label: 'อาหาร/เครื่องดื่ม' },
@@ -17,7 +18,7 @@ export interface DonationPreDeclaration extends BaseDoc {
 		item_id?: string;
 		free_text: string;
 		category?: string;
-		qty: number;
+		qty: string; // qty_str
 		unit: string;
 		condition?: string;
 		note?: string;
@@ -51,10 +52,7 @@ export const donationPreDeclarationInputSchema = z.object({
 				item_id: z.string().optional(),
 				free_text: z.string().min(1, 'Please enter an item name'),
 				category: z.string().optional(),
-				qty: z
-					.number()
-					.int('Please enter a valid quantity')
-					.positive('Please enter a valid quantity'),
+				qty: qtyStrCoercePositiveSchema,
 				unit: z.string().min(1, 'Please enter a unit'),
 				condition: z.string().optional(),
 				note: z.string().optional()

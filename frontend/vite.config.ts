@@ -43,6 +43,9 @@ export default defineConfig(({ mode }) => {
 			devtoolsJson(),
 			couchInit(env.COUCHDB_USER ?? 'admin', env.COUCHDB_PASSWORD ?? 'password', couchTarget)
 		],
+		ssr: {
+			noExternal: ['decimal.js', 'jsonwebtoken', 'openapi-fetch', 'qrcode']
+		},
 		server: {
 			proxy: {
 				'/couch': {

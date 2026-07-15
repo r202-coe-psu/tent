@@ -31,9 +31,6 @@ const MISSING_DB_BACKOFF_MS = 15_000;
 /** Transient network or 5xx errors — retry quickly. */
 const ERROR_BACKOFF_MS = 2_000;
 
-/** Session expired or forbidden — wait before retrying. */
-const AUTH_BACKOFF_MS = 5_000;
-
 function isMissingDatabase(status: number): boolean {
 	return status === 404;
 }
@@ -52,6 +49,9 @@ export function classifyChangesPollStatus(
  * Long-poll CouchDB `_changes` on the active central endpoint and emit to the
  * app-level event channel. Not TanStack refetchInterval — canonical live-update
  * mechanism (CR-033 decision B).
+ *
+ * On 401/403 the entire subscriber hard-stops (abort all pollers) and sets
+ * `needsReauth`. The root layout restarts the feed only after a successful login.
  */
 export function startChangesSubscriber(dbNames: string[]): ChangesSubscriberHandle {
 	if (!browser) return { stop: () => {} };
@@ -60,10 +60,15 @@ export function startChangesSubscriber(dbNames: string[]): ChangesSubscriberHand
 	const sinceByDb = new Map<string, string>();
 	const staggerTimers: ReturnType<typeof setTimeout>[] = [];
 
+	const haltOnAuthError = () => {
+		authStore.markNeedsReauth();
+		abort.abort();
+	};
+
 	for (const [index, dbName] of dbNames.entries()) {
 		sinceByDb.set(dbName, 'now');
 		const timer = setTimeout(() => {
-			if (!abort.signal.aborted) void pollDb(dbName, sinceByDb, abort.signal);
+			if (!abort.signal.aborted) void pollDb(dbName, sinceByDb, abort.signal, haltOnAuthError);
 		}, index * POLL_STAGGER_MS);
 		staggerTimers.push(timer);
 	}
@@ -79,7 +84,8 @@ export function startChangesSubscriber(dbNames: string[]): ChangesSubscriberHand
 async function pollDb(
 	dbName: string,
 	sinceByDb: Map<string, string>,
-	signal: AbortSignal
+	signal: AbortSignal,
+	haltOnAuthError: () => void
 ): Promise<void> {
 	while (!signal.aborted) {
 		try {
@@ -118,9 +124,8 @@ async function pollDb(
 		} catch (err) {
 			if (signal.aborted) return;
 			if (err instanceof CouchAuthError) {
-				authStore.markNeedsReauth();
-				await sleep(AUTH_BACKOFF_MS, signal);
-				continue;
+				haltOnAuthError();
+				return;
 			}
 			endpointStore.markDisconnected();
 			await sleep(ERROR_BACKOFF_MS, signal);

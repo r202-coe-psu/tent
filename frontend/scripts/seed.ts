@@ -16,13 +16,16 @@
  * | seedShelter — stock ledger   | createStockLedger     | operations domain   |
  * | seedShelter — donations      | createWalkInDonation  | operations domain   |
  * | seedShelter — campaigns      | createCampaign        | operations domain   |
+ * | seedDailyCalc — daily_calc   | calculateResources    | resource-calc domain (real engine; mock T-31.6 worker output) |
  * | seedRegistry — shelter master| plain object          | no factory (server-side only) |
  * | seedCatalog — supply items   | plain object          | no factory (no catalog feature) |
  * | seedCatalog — recipes        | plain object          | no factory (no catalog feature) |
+ * | seedUsers — _users staff     | plain CouchDB user    | staff01–staff03 test logins     |
  *
  * Safe to re-run: catalog and registry docs use deterministic IDs
  * (PUT → 409 = already exists → skip). Shelter docs use ULIDs so
  * re-running adds another batch — useful for volume testing.
+ * Test users (staff01–03) are also idempotent (409 → skip).
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -55,10 +58,21 @@ import {
 import {
 	createInitialProfile,
 	SOP_MASTER_SCHEMA_VERSION,
-	sopMasterSchema
+	SOP_RATIO_KIND,
+	sopMasterSchema,
+	type SopRatioKey
 } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
-import { type AuthorContext, now } from '$lib/db/model';
+import {
+	calculateResources,
+	FORMULA_V,
+	type ResourceInput
+} from '$lib/features/resource-calc/domain/calc.formula';
+import {
+	dailyCalcDocSchema,
+	DAILY_CALC_SCHEMA_VERSION
+} from '$lib/features/resource-calc/domain/calc.schema';
+import { type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
 import { deployShelterViewsFn } from '$lib/features/shelters/server';
@@ -178,10 +192,6 @@ async function bulkDocs(db: string, docs: unknown[]): Promise<void> {
 
 // ─── catalog helpers ──────────────────────────────────────────────────────────
 
-function nowIso(): string {
-	return now();
-}
-
 function catalogDoc(id: string, type: string, body: Record<string, unknown>) {
 	const ts = now();
 	return {
@@ -209,10 +219,6 @@ const CTX = SH001_CTX;
 const code = SH001_CODE;
 const dbName = SH001_DB;
 
-const SH002_CODE = 'SH002';
-const SH002_DB = 'shelter_sh002';
-const SH002_CTX: AuthorContext = { shelterCode: SH002_CODE, createdBy: 'seed' };
-
 const SHELTER_CODE_2 = 'SH002';
 const SHELTER_DB_2 = 'shelter_sh002';
 const CTX_2: AuthorContext = { shelterCode: SHELTER_CODE_2, createdBy: 'seed' };
@@ -226,6 +232,42 @@ const ITEM = {
 	blanket: 'item:blanket',
 	egg: 'item:egg'
 } as const;
+
+// ─── seedUsers ────────────────────────────────────────────────────────────────
+
+const USER_PREFIX = 'org.couchdb.user:';
+const SEED_STAFF_PASSWORD = '!Q2w3e4r5t';
+const SEED_STAFF_ROLES = ['shelter:SH001', 'registration_staff'] as const;
+
+/** Create staff01–staff03 test logins in CouchDB `_users` (idempotent). */
+async function seedUsers(): Promise<void> {
+	const names = ['staff01', 'staff02', 'staff03'] as const;
+	let created = 0;
+	let skipped = 0;
+
+	for (const name of names) {
+		const { status } = await couchReq('PUT', `/_users/${USER_PREFIX}${encodeURIComponent(name)}`, {
+			name,
+			password: SEED_STAFF_PASSWORD,
+			display_name: name,
+			roles: [...SEED_STAFF_ROLES],
+			type: 'user',
+			shelter_id: SH001_CODE,
+			affiliation_tags: []
+		});
+		if (status === 201) {
+			created += 1;
+		} else if (status === 409) {
+			skipped += 1;
+		} else {
+			throw new Error(`PUT _users/${name} failed (HTTP ${status})`);
+		}
+	}
+
+	console.log(
+		`  ✓ _users: staff01–staff03 (password shared; ${created} created, ${skipped} already exist)`
+	);
+}
 
 // ─── seedRegistry ─────────────────────────────────────────────────────────────
 
@@ -391,8 +433,8 @@ async function seedCatalog(): Promise<void> {
 			name: 'ข้าวไข่เจียว',
 			serving_unit: 'box',
 			ingredients: [
-				{ item_id: ITEM.rice, qty: 0.2, unit: 'kg' },
-				{ item_id: ITEM.egg, qty: 2, unit: 'piece' }
+				{ item_id: ITEM.rice, qty: '0.2', unit: 'kg' },
+				{ item_id: ITEM.egg, qty: '2', unit: 'piece' }
 			],
 			tags: [],
 			active: true
@@ -400,7 +442,7 @@ async function seedCatalog(): Promise<void> {
 		catalogDoc('recipe:congee', 'recipe', {
 			name: 'ข้าวต้ม',
 			serving_unit: 'bowl',
-			ingredients: [{ item_id: ITEM.rice, qty: 0.15, unit: 'kg' }],
+			ingredients: [{ item_id: ITEM.rice, qty: '0.15', unit: 'kg' }],
 			tags: ['soft_food'],
 			active: true
 		})
@@ -689,23 +731,23 @@ async function seedShelter(): Promise<void> {
 	const stockInputs: StockLedgerInput[] = [
 		{
 			item_id: ITEM.rice,
-			qty: code === SH001_CODE ? 200 : 100,
+			qty: code === SH001_CODE ? '200' : '100',
 			unit: 'kg',
 			reason: 'receive',
 			ref_id: null
 		},
 		{
 			item_id: ITEM.water,
-			qty: code === SH001_CODE ? 500 : 300,
+			qty: code === SH001_CODE ? '500' : '300',
 			unit: 'bottle',
 			reason: 'receive',
 			ref_id: null
 		},
-		{ item_id: ITEM.paracetamol, qty: 1000, unit: 'tablet', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.soap, qty: 150, unit: 'bar', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.blanket, qty: 80, unit: 'piece', reason: 'receive', ref_id: null },
-		{ item_id: ITEM.rice, qty: -30, unit: 'kg', reason: 'distribute', ref_id: null },
-		{ item_id: ITEM.water, qty: -100, unit: 'bottle', reason: 'distribute', ref_id: null }
+		{ item_id: ITEM.paracetamol, qty: '1000', unit: 'tablet', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.soap, qty: '150', unit: 'bar', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.blanket, qty: '80', unit: 'piece', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.rice, qty: '-30', unit: 'kg', reason: 'distribute', ref_id: null },
+		{ item_id: ITEM.water, qty: '-100', unit: 'bottle', reason: 'distribute', ref_id: null }
 	];
 	const stockEntries = stockInputs.map((s) => createStockLedger(s, ctx));
 
@@ -714,16 +756,16 @@ async function seedShelter(): Promise<void> {
 		{
 			title: 'รับบริจาคอาหารและน้ำดื่ม',
 			needs: [
-				{ item_id: ITEM.rice, qty_target: code === SH001_CODE ? 500 : 300, unit: 'kg' },
-				{ item_id: ITEM.water, qty_target: code === SH001_CODE ? 1000 : 500, unit: 'bottle' }
+				{ item_id: ITEM.rice, qty_target: code === SH001_CODE ? '500' : '300', unit: 'kg' },
+				{ item_id: ITEM.water, qty_target: code === SH001_CODE ? '1000' : '500', unit: 'bottle' }
 			],
 			notes: 'เปิดรับบริจาคเพื่อผู้ประสบภัยน้ำท่วม'
 		},
 		{
 			title: 'รับบริจาคของใช้ส่วนตัว',
 			needs: [
-				{ item_id: ITEM.soap, qty_target: 200, unit: 'bar' },
-				{ item_id: ITEM.blanket, qty_target: 100, unit: 'piece' }
+				{ item_id: ITEM.soap, qty_target: '200', unit: 'bar' },
+				{ item_id: ITEM.blanket, qty_target: '100', unit: 'piece' }
 			]
 		}
 	];
@@ -734,7 +776,7 @@ async function seedShelter(): Promise<void> {
 		{
 			donor: { name: 'บริษัท ซีพีเอฟ จำกัด', phone: '022222222', phone_hash: 'mock-hash-cpf' },
 			kind: 'items',
-			items: [{ item_id: ITEM.rice, qty: code === SH001_CODE ? 50 : 20, unit: 'kg' }],
+			items: [{ item_id: ITEM.rice, qty: code === SH001_CODE ? '50' : '20', unit: 'kg' }],
 			campaign_id: campaigns[0]._id,
 			tracking_token_hash: 'mock-track-001'
 		},
@@ -742,8 +784,8 @@ async function seedShelter(): Promise<void> {
 			donor: { name: 'วัดท่าสะอ้าน', phone: null, phone_hash: 'mock-hash-wat' },
 			kind: 'items',
 			items: [
-				{ item_id: ITEM.water, qty: code === SH001_CODE ? 100 : 50, unit: 'bottle' },
-				{ item_id: ITEM.blanket, qty: 20, unit: 'piece' }
+				{ item_id: ITEM.water, qty: code === SH001_CODE ? '100' : '50', unit: 'bottle' },
+				{ item_id: ITEM.blanket, qty: '20', unit: 'piece' }
 			],
 			campaign_id: campaigns[0]._id,
 			tracking_token_hash: 'mock-track-002'
@@ -831,7 +873,7 @@ async function seedShelter2(): Promise<void> {
 	const checkedInEvacuees = evacuees.map((e, i) => applyMovementToStay(e, movements[i]));
 
 	const stockInputs: StockLedgerInput[] = [
-		{ item_id: ITEM.water, qty: 100, unit: 'bottle', reason: 'receive', ref_id: null }
+		{ item_id: ITEM.water, qty: '100', unit: 'bottle', reason: 'receive', ref_id: null }
 	];
 	const stockEntries = stockInputs.map((s) => createStockLedger(s, CTX_2));
 
@@ -983,6 +1025,91 @@ async function seedDashboardData(): Promise<void> {
 	console.log(`  --------------------------------------------\n`);
 }
 
+// ─── seedDailyCalc ──────────────────────────────────────────────────────────────
+//
+// Stand-in for the Central auto-daily-run worker (T-31.6 — PM decided "Central"), which
+// lives in a separate service, NOT this repo. It writes a trend of `daily_calc:{date}`
+// snapshots so the T-32 resource dashboard has real data to render before that worker exists.
+//
+// vithi A — the need/have/gap/status numbers come from the REAL engine (`calculateResources`,
+// FORMULA_V) fed the active master SOP ratios, so the persisted shape matches production exactly.
+// Only the two inputs the past cannot give us are mocked: historical occupancy (headcount per day)
+// and stock `have` (the ratio-key → stock mapping is a documented SEAM — CR-036 Open decision #2).
+// `threshold` ratios carry no `have`, mirroring the impl's `resolveHave`. This does NOT replace the
+// real worker; when it lands, output shape is already identical.
+
+const DAILY_CALC_DAYS = 14;
+
+function isoDay(d: Date): string {
+	return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+async function seedDailyCalc(): Promise<void> {
+	await ensureDb(SHELTER_DB);
+
+	// Effective ratios = active master profile (SH001 has no override) — the real resolution.
+	const { status, data } = await couchReq(
+		'GET',
+		`/catalog/${encodeURIComponent('sop_profile:master_sphere_baseline')}`
+	);
+	const master =
+		status === 200 ? (data as { ratios?: Record<SopRatioKey, number>; version?: number }) : null;
+	const ratios: Record<SopRatioKey, number> = master?.ratios ?? validRatios;
+	const sopVersion = master?.version ?? 1;
+
+	const today = new Date();
+	const records: unknown[] = [];
+
+	for (let back = DAILY_CALC_DAYS - 1; back >= 0; back--) {
+		const day = new Date(today);
+		day.setDate(day.getDate() - back);
+		const date = isoDay(day);
+		const asOf = `${date}T09:00:00.000Z`;
+
+		// Mock occupancy — a gentle deterministic wave (historical headcount is unknowable).
+		const phase = ((DAILY_CALC_DAYS - 1 - back) / DAILY_CALC_DAYS) * Math.PI * 2;
+		const jitter = ((back * 7) % 11) - 5;
+		const occupancy = Math.max(0, Math.round(120 + 25 * Math.sin(phase) + jitter));
+
+		const resources: ResourceInput[] = [];
+		const ratioSnapshot: Record<string, number> = {};
+		const stockSnapshot: Record<string, number | null> = {};
+
+		for (const key of Object.keys(ratios) as SopRatioKey[]) {
+			const ratio = ratios[key];
+			const kind = SOP_RATIO_KIND[key];
+			const roughNeed = kind === 'multiply' ? occupancy * ratio : Math.ceil(occupancy / ratio);
+			// have oscillates across a deficit/surplus band so the dashboard shows real gaps;
+			// threshold ratios are quality ceilings → no stock (null), same as `resolveHave`.
+			const factor = 0.7 + 0.6 * (0.5 + 0.5 * Math.sin(phase + key.length));
+			const have = kind === 'threshold' ? null : Math.max(0, Math.round(roughNeed * factor));
+			resources.push({ key, kind, ratio, have });
+			ratioSnapshot[key] = ratio;
+			stockSnapshot[key] = have;
+		}
+
+		// REAL engine — need/gap/status computed exactly as production would.
+		const results = calculateResources({ occupancy, as_of: asOf, resources });
+
+		const body = dailyCalcDocSchema.parse({
+			formula_v: FORMULA_V,
+			sop_profile_version: sopVersion,
+			ratio_snapshot: ratioSnapshot,
+			occupancy_snapshot: occupancy,
+			as_of: asOf,
+			stock_snapshot: stockSnapshot,
+			results
+		});
+
+		records.push(makeDoc('daily_calc', DAILY_CALC_SCHEMA_VERSION, body, CTX, date));
+	}
+
+	await bulkDocs(SHELTER_DB, records);
+	console.log(
+		`  ✓ ${SHELTER_DB}: ${records.length} daily_calc snapshots seeded (mock T-31.6 output, real engine ${FORMULA_V})`
+	);
+}
+
 // ─── deleteDashboardData ──────────────────────────────────────────────────────
 
 async function deleteDashboardData(): Promise<void> {
@@ -1026,6 +1153,23 @@ async function deleteDashboardData(): Promise<void> {
 		toDelete.push(...movesToDelete);
 	}
 
+	// Also find and delete daily_calc snapshots (mock T-31.6 worker output) — bounded range scan.
+	// Upper bound ';' (0x3B) sorts just after ':' (0x3A), covering every `daily_calc:*` id (ASCII-only).
+	const dcStart = encodeURIComponent(JSON.stringify('daily_calc:'));
+	const dcEnd = encodeURIComponent(JSON.stringify('daily_calc;'));
+	const { status: dcStatus, data: dcData } = await couchReq(
+		'GET',
+		`/${SHELTER_DB}/_all_docs?include_docs=true&startkey=${dcStart}&endkey=${dcEnd}`
+	);
+	if (dcStatus === 200) {
+		const dcRows = (dcData as { rows: { doc: { type?: string } & Record<string, unknown> }[] })
+			.rows;
+		const dcToDelete = dcRows
+			.filter((r) => r.doc && r.doc._id)
+			.map((r) => ({ ...r.doc, _deleted: true }));
+		toDelete.push(...dcToDelete);
+	}
+
 	if (toDelete.length === 0) {
 		console.log(`  ✓ No dashboard test data found to delete.`);
 		return;
@@ -1046,12 +1190,14 @@ async function main() {
 	const displayUrl = rawCouchUrl.replace(/\/\/([^:]+):[^@]+@/, '//$1:***@');
 	console.log(`\nSeeding mock data → ${displayUrl}\n`);
 	try {
+		await seedUsers();
 		await seedRegistry();
 		await seedCatalog();
 		await seedCatalogSopRatios();
 		await seedShelter();
 		await seedShelter2();
 		await seedDashboardData();
+		await seedDailyCalc();
 		console.log('\nDone.\n');
 	} catch (err) {
 		console.error('\nSeed failed:', err);

@@ -11,13 +11,18 @@
 	import MasterDataTypeList from './master-data-type-list.svelte';
 	import MasterDataItemList from './master-data-item-list.svelte';
 	import MasterDataEditModal from './master-data-edit-modal.svelte';
+	import ConsoleBanner from '$lib/components/console-banner.svelte';
 
 	let {
 		allowedTypes,
-		basePath
+		basePath,
+		title,
+		description
 	}: {
 		allowedTypes?: readonly MasterDataType[];
 		basePath?: string;
+		title: string;
+		description?: string;
 	} = $props();
 
 	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/registration-config'));
@@ -77,12 +82,7 @@
 </script>
 
 <div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-	<header>
-		<h1 class="text-2xl font-semibold tracking-tight">ตั้งค่าการลงทะเบียน</h1>
-		<p class="mt-1 text-sm text-muted-foreground">
-			จัดการค่ามาตรฐานสำหรับฟอร์มลงทะเบียน — เพิ่ม แก้ไข หรือลบตัวเลือกที่ใช้ในแต่ละหมวดหมู่
-		</p>
-	</header>
+	<ConsoleBanner {title} {description} />
 
 	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
 		<MasterDataTypeList {activeType} {counts} {allowedTypes} basePath={resolvedBasePath} />

@@ -1,5 +1,15 @@
 import { z } from 'zod';
 import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '$lib/db/model';
+import {
+	addQty,
+	persistQty,
+	qtyAbs,
+	qtyGte,
+	qtyNeg,
+	qtyStrCoercePositiveSchema,
+	qtyStrCoerceSignedNonZeroSchema,
+	subQty
+} from '$lib/utils/qty';
 
 /**
  * Operations domain — stock, donations, transfers (R2–R3).
@@ -58,7 +68,7 @@ export interface StockLot {
 export interface StockLedger extends BaseDoc {
 	type: 'stock_ledger';
 	item_id: string;
-	qty: number; // signed: + in, − out; never 0
+	qty: string; // qty_str signed: + in, − out; never 0
 	unit: string;
 	reason: LedgerReason;
 	ref_id: string | null; // originating doc (donation/transfer/requisition)
@@ -69,7 +79,7 @@ export interface StockLedger extends BaseDoc {
 export interface DonationItem {
 	item_id?: string;
 	free_text?: string;
-	qty: number;
+	qty: string; // qty_str
 	unit: string;
 	category?: string;
 	condition?: string;
@@ -126,7 +136,7 @@ export interface DonationSlot extends BaseDoc {
 
 export interface CampaignNeed {
 	item_id: string;
-	qty_target: number;
+	qty_target: string; // qty_str
 	unit: string;
 	status?: 'open' | 'closed';
 }
@@ -169,7 +179,7 @@ export type OperationsDoc = StockLedger | Donation | DonationCampaign | StockTra
 
 export const stockLedgerInputSchema = z.object({
 	item_id: z.string().min(1),
-	qty: z.coerce.number().refine((n) => n !== 0, 'Quantity cannot be zero'),
+	qty: qtyStrCoerceSignedNonZeroSchema,
 	unit: z.string().trim().min(1),
 	reason: ledgerReasonSchema,
 	ref_id: z.string().nullable().default(null),
@@ -182,10 +192,10 @@ export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): 
 	const d = stockLedgerInputSchema.parse(input);
 	return makeDoc(
 		'stock_ledger',
-		1,
+		2,
 		{
 			item_id: d.item_id,
-			qty: d.qty,
+			qty: persistQty(d.qty),
 			unit: d.unit,
 			reason: d.reason,
 			ref_id: d.ref_id,
@@ -205,7 +215,7 @@ export type ReceiveSource = z.infer<typeof receiveSourceSchema>;
 
 export const receiveInputSchema = z.object({
 	item_id: z.string().min(1),
-	qty: z.coerce.number().positive('Quantity must be > 0'),
+	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1),
 	source: receiveSourceSchema,
 	ref_id: z.string().nullable().default(null),
@@ -264,7 +274,7 @@ export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): Sto
 
 export const distributeInputSchema = z.object({
 	item_id: z.string().min(1),
-	qty: z.coerce.number().positive('Quantity must be positive'),
+	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1),
 	ref_id: z.string().nullable().default(null),
 	note: z.string().trim().optional(), // Used to store destination in lot.note
@@ -277,7 +287,7 @@ export function createDistributeEntry(input: DistributeInput, ctx: AuthorContext
 	return createStockLedger(
 		{
 			item_id: d.item_id,
-			qty: -Math.abs(d.qty), // force outbound negative delta
+			qty: qtyNeg(qtyAbs(d.qty)), // force outbound negative delta
 			unit: d.unit,
 			reason: 'distribute',
 			ref_id: d.ref_id,
@@ -289,10 +299,10 @@ export function createDistributeEntry(input: DistributeInput, ctx: AuthorContext
 }
 
 /** Sum signed deltas per item — the `stock_balance` read model, computed client-side. */
-export function stockBalance(ledger: StockLedger[]): Map<string, number> {
-	const balance = new Map<string, number>();
+export function stockBalance(ledger: StockLedger[]): Map<string, string> {
+	const balance = new Map<string, string>();
 	for (const entry of ledger) {
-		balance.set(entry.item_id, (balance.get(entry.item_id) ?? 0) + entry.qty);
+		balance.set(entry.item_id, addQty(balance.get(entry.item_id) ?? '0', entry.qty));
 	}
 	return balance;
 }
@@ -303,7 +313,7 @@ const donationItemSchema = z
 	.object({
 		item_id: z.string().optional(),
 		free_text: z.string().trim().optional(),
-		qty: z.coerce.number().positive(),
+		qty: qtyStrCoercePositiveSchema,
 		unit: z.string().trim().min(1)
 	})
 	.refine((i) => Boolean(i.item_id) !== Boolean(i.free_text), {
@@ -344,12 +354,12 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	).toISOString();
 	return makeDoc(
 		'donation',
-		2,
+		3,
 		{
 			channel: 'walk_in' as const,
 			donor: d.donor,
 			kind: d.kind,
-			...(d.items ? { items: d.items } : {}),
+			...(d.items ? { items: d.items.map((i) => ({ ...i, qty: persistQty(i.qty) })) } : {}),
 			...(d.amount_thb != null ? { amount_thb: d.amount_thb } : {}),
 			campaign_id: d.campaign_id,
 			status: 'declared' as const,
@@ -397,7 +407,7 @@ export function expireDonation(donation: Donation): Donation {
 /** A line staff actually counted when the goods arrived — may differ from what was declared. */
 export interface CountedItem {
 	item_id: string;
-	qty: number; // positive, as physically counted
+	qty: string; // qty_str positive, as physically counted
 	unit: string;
 	lot?: StockLot;
 }
@@ -417,7 +427,7 @@ export function keyDonationReceipt(
 		createStockLedger(
 			{
 				item_id: c.item_id,
-				qty: Math.abs(c.qty),
+				qty: qtyAbs(c.qty),
 				unit: c.unit,
 				reason: 'donation',
 				ref_id: donation._id,
@@ -436,7 +446,7 @@ export const campaignInputSchema = z.object({
 		.array(
 			z.object({
 				item_id: z.string().min(1),
-				qty_target: z.coerce.number().positive(),
+				qty_target: qtyStrCoercePositiveSchema,
 				unit: z.string().trim().min(1),
 				status: z.enum(['open', 'closed']).optional().default('open')
 			})
@@ -453,10 +463,10 @@ export function createCampaign(input: CampaignInput, ctx: AuthorContext): Donati
 	const d = campaignInputSchema.parse(input);
 	return makeDoc(
 		'donation_campaign',
-		2,
+		3,
 		{
 			title: d.title,
-			needs: d.needs,
+			needs: d.needs.map((n) => ({ ...n, qty_target: persistQty(n.qty_target) })),
 			status: 'open' as const,
 			visible_on_home: d.visible_on_home,
 			...(d.opens_at ? { opens_at: d.opens_at } : {}),
@@ -477,7 +487,7 @@ export function calculateReserved(
 	donations: Donation[],
 	stockLedgers: StockLedger[],
 	campaignId?: string
-): Map<string, number> {
+): Map<string, string> {
 	const keyedDonationIds = new Set<string>();
 	for (const ledger of stockLedgers) {
 		if (ledger.reason === 'donation' && ledger.ref_id) {
@@ -485,7 +495,7 @@ export function calculateReserved(
 		}
 	}
 
-	const reserved = new Map<string, number>();
+	const reserved = new Map<string, string>();
 	for (const don of donations) {
 		if (campaignId && don.campaign_id !== campaignId) continue;
 		if (don.status === 'expired' || don.status === 'cancelled') continue;
@@ -493,7 +503,7 @@ export function calculateReserved(
 		if (don.status !== 'declared' && !isUnkeyedReceived) continue;
 		for (const item of don.items ?? []) {
 			if (!item.item_id) continue;
-			reserved.set(item.item_id, (reserved.get(item.item_id) ?? 0) + item.qty);
+			reserved.set(item.item_id, addQty(reserved.get(item.item_id) ?? '0', item.qty));
 		}
 	}
 	return reserved;
@@ -501,10 +511,10 @@ export function calculateReserved(
 
 export interface NeedAvailability {
 	item_id: string;
-	qty_target: number;
-	qty_on_hand: number;
-	qty_reserved: number;
-	qty_remaining: number;
+	qty_target: string;
+	qty_on_hand: string;
+	qty_reserved: string;
+	qty_remaining: string;
 	is_cut_off: boolean;
 	status: 'open' | 'closed';
 	unit: string;
@@ -519,9 +529,11 @@ export function deriveNeedAvailability(
 	const reserved = calculateReserved(donations, stockLedgers, campaign._id);
 
 	return campaign.needs.map((need) => {
-		const currentOnHand = onHand.get(need.item_id) ?? 0;
-		const currentReserved = reserved.get(need.item_id) ?? 0;
-		const remaining = Math.max(0, need.qty_target - (currentOnHand + currentReserved));
+		const currentOnHand = onHand.get(need.item_id) ?? '0';
+		const currentReserved = reserved.get(need.item_id) ?? '0';
+		const covered = addQty(currentOnHand, currentReserved);
+		const rem = subQty(need.qty_target, covered);
+		const remaining = qtyGte(rem, 0) ? rem : '0';
 		const isCutOff = isNeedCutOff(
 			need.qty_target,
 			currentOnHand,
@@ -706,7 +718,7 @@ export function receiveTransfer(
 // ---------------------------------------------------------------- special request form schema
 export const specialRequestSchema = z.object({
 	name: z.string().trim().min(1, 'กรุณาระบุชื่อพัสดุ / ประกาศ'),
-	target: z.coerce.number().int().positive('เป้าหมายต้องมากกว่า 0'),
+	target: qtyStrCoercePositiveSchema,
 	location: z.string().trim().min(1, 'กรุณาระบุคลังเป้าหมาย')
 });
 export type SpecialRequestInput = z.infer<typeof specialRequestSchema>;
@@ -717,14 +729,14 @@ export type SpecialRequestInput = z.infer<typeof specialRequestSchema>;
  * Or when the campaign is manually closed.
  */
 export function isNeedCutOff(
-	qtyTarget: number,
-	onHandStock: number,
-	reservedQty: number,
+	qtyTarget: string | number,
+	onHandStock: string | number,
+	reservedQty: string | number,
 	needStatus?: 'open' | 'closed',
 	campaignStatus?: 'open' | 'closed'
 ): boolean {
 	if (campaignStatus === 'closed' || needStatus === 'closed') return true;
-	return onHandStock + reservedQty >= qtyTarget;
+	return qtyGte(addQty(onHandStock, reservedQty), qtyTarget);
 }
 
 // public donation time-slot booking (R2.3)

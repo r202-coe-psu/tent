@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
@@ -8,7 +7,11 @@
 	import Globe from '@lucide/svelte/icons/globe';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 
-	import { fetchOccupancy, fetchDemographics, fetchRegistrations } from '$lib/features/dashboard';
+	import {
+		useDashboardOccupancy,
+		useDashboardDemographics,
+		useDashboardRegistrations
+	} from '$lib/features/dashboard';
 
 	import DashboardKpiCards from './dashboard-kpi-cards.svelte';
 	import DashboardRegistrationChart from './dashboard-registration-chart.svelte';
@@ -17,26 +20,11 @@
 
 	let { shelterCode }: { shelterCode: string } = $props();
 
-	// 1. Fetch Occupancy (KPIs)
-	const occupancyQuery = createQuery(() => ({
-		queryKey: ['dashboard', 'occupancy', shelterCode],
-		queryFn: () => fetchOccupancy(shelterCode),
-		staleTime: 60 * 1000 // 1 นาที
-	}));
-
-	// 2. Fetch Demographics
-	const demographicsQuery = createQuery(() => ({
-		queryKey: ['dashboard', 'demographics', shelterCode],
-		queryFn: () => fetchDemographics(shelterCode),
-		staleTime: 60 * 1000
-	}));
-
-	// 3. Fetch Registrations
-	const registrationsQuery = createQuery(() => ({
-		queryKey: ['dashboard', 'registrations', shelterCode],
-		queryFn: () => fetchRegistrations(shelterCode), // default range 14 days
-		staleTime: 60 * 1000
-	}));
+	// KPIs, demographics, and registration trend — keyed via dashboardKeys so the
+	// cache stays consistent with the shelter-list occupancy cell.
+	const occupancyQuery = useDashboardOccupancy(() => shelterCode);
+	const demographicsQuery = useDashboardDemographics(() => shelterCode);
+	const registrationsQuery = useDashboardRegistrations(() => shelterCode); // default range
 
 	const isLoading = $derived(
 		occupancyQuery.isPending || demographicsQuery.isPending || registrationsQuery.isPending

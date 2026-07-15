@@ -5,6 +5,7 @@
 	import Clock from '@lucide/svelte/icons/clock';
 	import ArrowDownLeft from '@lucide/svelte/icons/arrow-down-left';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
+	import { qtyGt } from '$lib/utils/qty';
 
 	let { filterItemId = undefined }: { filterItemId?: string } = $props();
 
@@ -128,19 +129,19 @@
 								<!-- Quantity & Signed Color -->
 								<Table.Cell class="whitespace-nowrap">
 									<span class="flex items-center gap-1">
-										{#if entry.qty > 0}
+										{#if qtyGt(entry.qty, 0)}
 											<span
 												class="inline-flex items-center gap-0.5 rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-xs font-extrabold text-emerald-600 shadow-sm dark:text-emerald-400"
 											>
 												<ArrowDownLeft class="h-3.5 w-3.5" />
-												+{entry.qty.toLocaleString()}
+												+{entry.qty}
 											</span>
 										{:else}
 											<span
 												class="inline-flex items-center gap-0.5 rounded border border-rose-500/20 bg-rose-500/10 px-1.5 py-0.5 text-xs font-extrabold text-rose-600 shadow-sm dark:text-rose-400"
 											>
 												<ArrowUpRight class="h-3.5 w-3.5" />
-												{entry.qty.toLocaleString()}
+												{entry.qty}
 											</span>
 										{/if}
 										<span class="text-xs font-medium text-muted-foreground">{entry.unit}</span>
@@ -151,7 +152,7 @@
 								<Table.Cell class="whitespace-nowrap">
 									<span
 										class="rounded-full border px-2.5 py-0.5 text-[11px] font-bold shadow-sm
-										{entry.qty > 0
+										{qtyGt(entry.qty, 0)
 											? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
 											: 'border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400'}"
 									>

@@ -4,14 +4,24 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { untrack } from 'svelte';
 	import X from '@lucide/svelte/icons/x';
 	import Plus from '@lucide/svelte/icons/plus';
-	import type { HouseholdVehicle, PetGroup } from '../domain/people';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { useShelter } from '$lib/features/shelters/index.js';
+	import { buildDisclaimerGroups } from '../domain/disclaimer';
+	import type { Household, HouseholdVehicle, PetGroup } from '../domain/people';
 
 	let {
+		household = null,
 		onBack,
 		onNext
 	}: {
+		// When an existing household is selected in step 4, its pets/assets/vehicles
+		// are fetched in so the user edits them in place instead of creating over.
+		household?: Household | null;
 		onBack: () => void;
 		onNext: (data: {
 			pets: PetGroup[];
@@ -19,8 +29,6 @@
 			vehicles: HouseholdVehicle[];
 		}) => void;
 	} = $props();
-
-	let assetDescription = $state('');
 
 	// A household may bring several pets (schema.md §1.3 `pets[]`).
 	// `id` is a client-only key for the {#each} — stripped before onNext.
@@ -31,8 +39,23 @@
 		notes: string;
 		has_cage: boolean;
 	};
-	let petRows = $state<PetRow[]>([]);
 	let nextPetId = 0;
+
+	// Prefill from the selected household (edit mode); otherwise start empty (new).
+	// The prop is stable for this component's lifetime (mounted fresh at step 5),
+	// so this init-only read is intentional — untrack keeps it non-reactive.
+	let assetDescription = $state(untrack(() => household?.assets?.description ?? ''));
+	let petRows = $state<PetRow[]>(
+		untrack(() =>
+			(household?.pets ?? []).map((p) => ({
+				id: nextPetId++,
+				species: p.species,
+				count: p.count,
+				notes: p.notes ?? '',
+				has_cage: p.has_cage ?? false
+			}))
+		)
+	);
 
 	const petSpeciesOptions = [
 		{ value: 'dog', label: '🐶 สุนัข' },
@@ -54,8 +77,16 @@
 
 	// A household may bring several vehicles (schema.md §1.3 `vehicles[]`, CR-016).
 	type VehicleRow = { id: number; type: 'car' | 'motorcycle' | 'other'; license_plate: string };
-	let vehicleRows = $state<VehicleRow[]>([]);
 	let nextVehicleId = 0;
+	let vehicleRows = $state<VehicleRow[]>(
+		untrack(() =>
+			(household?.vehicles ?? []).map((v) => ({
+				id: nextVehicleId++,
+				type: v.type,
+				license_plate: v.license_plate ?? ''
+			}))
+		)
+	);
 
 	const vehicleTypeOptions = [
 		{ value: 'car', label: 'รถยนต์' },
@@ -70,6 +101,28 @@
 	function removeVehicle(id: number) {
 		vehicleRows = vehicleRows.filter((v) => v.id !== id);
 	}
+
+	// Disclaimer text is not free-form — it's read from this shelter's configured
+	// luggage_policy / parking_policy / admission_policy.pet_policy (CR-023 Addendum A),
+	// so it reflects what the shelter admin actually selected, not a hardcoded list.
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelter = $derived(shelterQuery.data);
+
+	// Grouped by section — everything the shelter admin actually configured across the
+	// three CR-023 policies this step touches (assets/luggage, vehicles/parking, pets),
+	// falling back to a generic notice per section when the shelter has nothing configured.
+	// Grouping rules live in ../domain/disclaimer so they're unit-testable.
+	const disclaimerGroups = $derived(
+		buildDisclaimerGroups({
+			assetDescription,
+			petCount: petRows.length,
+			vehicleCount: vehicleRows.length,
+			shelter
+		})
+	);
+
+	let disclaimerAcknowledged = $state(false);
+	const disclaimerRequired = $derived(disclaimerGroups.length > 0);
 </script>
 
 <div class="space-y-4">
@@ -236,6 +289,40 @@
 		</div>
 	</div>
 
+	{#if disclaimerRequired}
+		<!-- Shelter Disclaimer — sourced from this shelter's configured policies -->
+		<div class="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+			<div class="flex items-center gap-2">
+				<ShieldAlert class="h-5 w-5 text-amber-600" />
+				<h3 class="text-sm font-bold text-amber-800">
+					ข้อตกลงและเงื่อนไขของศูนย์พักพิง (Disclaimer)
+				</h3>
+			</div>
+			<div class="space-y-3">
+				{#each disclaimerGroups as group (group.label)}
+					<div>
+						<h4 class="mb-1 text-sm font-semibold text-amber-800">{group.label}</h4>
+						<ul class="list-disc space-y-1 pl-6 text-sm text-amber-900">
+							{#each group.items as item, i (i)}
+								<li>{item}</li>
+							{/each}
+						</ul>
+					</div>
+				{/each}
+			</div>
+			<label class="flex items-start gap-2 pt-1 text-sm">
+				<Checkbox
+					checked={disclaimerAcknowledged}
+					onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
+				/>
+				<span class="font-bold text-amber-900">
+					ข้าพเจ้าและครอบครัวรับทราบและยินยอมปฏิบัติตามกฎระเบียบของศูนย์พักพิง
+					รวมถึงรับผิดชอบต่อทรัพย์สินมีค่าของตนเองหากเกิดการสูญหาย
+				</span>
+			</label>
+		</div>
+	{/if}
+
 	<!-- Bottom Actions -->
 	<div class="flex items-center justify-between rounded-xl border bg-card p-6 shadow-sm">
 		<Button
@@ -248,6 +335,7 @@
 		</Button>
 		<Button
 			type="button"
+			disabled={disclaimerRequired && !disclaimerAcknowledged}
 			class="h-12 w-[48%] bg-[#003B71] text-base font-medium hover:bg-[#002a50]"
 			onclick={() =>
 				onNext({

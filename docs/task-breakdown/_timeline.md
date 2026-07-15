@@ -2,8 +2,8 @@
 title: "Task Breakdown — Dependencies & Timeline"
 status: active
 created: 2026-06-05
-updated: 2026-06-22
-note: deps maintained directly in Markdown. Schedule เคาะ 2026-06-09 (compress build → มิ.ย.–ส.ค., go-live ก.ย.) · baseline T-47..55 เพิ่ม 2026-06-11 · public-tier T-57..60 เพิ่มตาม CR-005 2026-06-22
+updated: 2026-07-15
+note: deps maintained directly in Markdown. Schedule เคาะ 2026-06-09 · baseline T-47..55 · public-tier T-57..60 (CR-005) · topology/T-54 wording CR-033 2026-07-15
 ---
 
 # Dependencies & Timeline
@@ -28,7 +28,7 @@ note: deps maintained directly in Markdown. Schedule เคาะ 2026-06-09 (co
 - **In-scope (จบ ส.ค.):** **Baseline FR-1–20 (T-47..T-55, ดู [00-baseline](00-baseline.md))** + R2 Foundation + R3 Operations + **Family Search (T-40/41)** core public feature + **Public Portal (T-57/58/59) + public `/donate` (T-60)** ตาม CR-005 + **T-43 RoPA/retention (minimal)** เพราะ public tier (family search/portal/donate) เปิด public = PII/data exposure จริง
 - **Deferred (หลัง go-live, cap 14/09/2026):** EOC aggregate API (T-37/38), Open API (T-39), SOP simulation (T-42), inventory polish (T-45)
 
-**Walking skeleton — Lead 2 คนต้องส่งก่อน 17/06** (greenfield risk): repo + branch/PR convention + CI/CD, auth/RBAC skeleton (T-01), Central CouchDB base schema + Central-first sync/conflict design (T-02 ตั้งต้น; LAN Edge เป็น outage fallback เท่านั้น), 1 vertical slice end-to-end ให้ทีม copy pattern, seed data. ใช้ `docs/architecture/` + `docs/data/` เป็น input อย่า redesign จากศูนย์. **CouchDB/PouchDB (local write, one active remote, failback, conflict, RBAC) = tech risk #1 → Lead B (technical/integration) เป็นเจ้าของ T-02 + CouchDB**.
+**Walking skeleton — Lead 2 คนต้องส่งก่อน 17/06** (greenfield risk): repo + branch/PR convention + CI/CD, auth/RBAC skeleton (T-01), Central CouchDB base schema + Central-first remote write / conflict design (T-02 ตั้งต้น; LAN Edge เป็น outage fallback เท่านั้น), 1 vertical slice end-to-end ให้ทีม copy pattern, seed data. ใช้ `docs/architecture/` + `docs/data/` เป็น input อย่า redesign จากศูนย์. **Remote-first CouchDB (active endpoint เดียว, Central→Edge failover, failback, conflict, RBAC) = tech risk #1 → Lead B เป็นเจ้าของ T-02 + T-54; deny PouchDB/local-first ([CR-033](../changes/CR-033-remote-first-architecture-program-index.md))**.
 
 **เงื่อนไขฝั่งบริษัท (เน็ท):** P-02 (R3 design) ต้องเสร็จก่อน ก.ค. (ทีมแตะ R3 ~ต้น ก.ค.). P-03 ดึงเฉพาะ **ส่วน Family Search** มา design ล่วงหน้า; EOC/Open API design ยัง defer.
 
@@ -95,7 +95,7 @@ flowchart LR
     T16[T-16 intake audit]
     T17[T-17 kitchen groundwork]
     T18[T-18 SOP groundwork]
-    T19[T-19 security groundwork]
+    T19[T-19 report-case groundwork]
     G2{{T-20 Foundation Gate}}:::gate
   end
 
@@ -112,7 +112,7 @@ flowchart LR
     T30[T-30 SOP config]
     T31[T-31 resource calc]:::crit
     T32[T-32 calc dashboard]
-    T33[T-33 security checkin]
+    T33[T-33 report-case UI]
     T34[T-34 referral]
     T35[T-35 calc backbone]
     T60[T-60 public /donate]
@@ -227,7 +227,7 @@ gantt
   T-26/27 kitchen (crit)             :crit, t2627, after t25, 6d
   donation flows (T-21..24)          :t2124, 2026-07-21, 12d
   volunteer/SOP (T-28..32)           :t2832, 2026-07-21, 16d
-  security/referral (T-33/34)        :t3334, 2026-07-25, 10d
+  report-case/referral (T-33/34)     :t3334, 2026-07-25, 10d
   public tier — portal+/donate (T-57..60, CR-005) :pub, 2026-08-01, 18d
   T-36 Operations Gate               :milestone, g3, 2026-08-22, 0d
 
@@ -252,8 +252,8 @@ gantt
 ```
 
 > **เส้นวิกฤต (in-scope, จบ ส.ค.):** walking skeleton (T-01/02/03) → T-11 → T-14 → T-31 → T-25 → T-26/27 → (R3 gate) → T-44 UAT → ส่งมอบ 31 ส.ค.
-> **Baseline (T-47..55)** รันขนาน มิ.ย.–ก.ค. ต้องจบใน Foundation Gate; T-54 Central-first offline sync/failback = tech risk #1.
+> **Baseline (T-47..55)** รันขนาน มิ.ย.–ก.ค. ต้องจบใน Foundation Gate; T-54 remote-first Central→Edge failover/failback = tech risk #1 ([CR-033](../changes/CR-033-remote-first-architecture-program-index.md)).
 > Family Search (T-40/41) = branch ขนานออกจาก household — core public feature, อยู่ใน scope. T-43 (minimal) บังคับเพราะ public PII.
-> **Greenfield:** 10–17 มิ.ย. Lead ส่ง walking skeleton ก่อนทีม 12 คนเข้า; Central-first PouchDB/CouchDB sync, Edge fallback, failback และ conflict = technical risk อันดับ 1.
+> **Greenfield:** 10–17 มิ.ย. Lead ส่ง walking skeleton ก่อนทีม 12 คนเข้า; remote-first CouchDB, Edge fallback, failback และ conflict = technical risk อันดับ 1 (deny PouchDB).
 > **Deferred** (EOC / Open API / SOP sim / polish) = หลัง go-live, **hard deadline งาน feature 14/09/2026** (สัปดาห์ที่ 2 ก.ย.) — หลังจากนั้นเป็น maintenance/feedback จนครบโครงการ 12 เดือน. P-02 ต้องเสร็จก่อน ก.ค. มิฉะนั้นทีมรอ design.
 > วันใน gantt = ประมาณการ sequencing บนเส้นวิกฤต — งานราย module รันขนาน (4 teams × 3 + Lead pair, part-time academic).
