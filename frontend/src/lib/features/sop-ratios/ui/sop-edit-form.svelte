@@ -30,7 +30,7 @@
 
 	// Local editable copy of ratios
 	const getInitial = () => ({ ...profile.ratios });
-	let ratios = $state<Partial<Record<SopRatioKey, number>>>(getInitial());
+	let ratios = $state<Partial<Record<SopRatioKey, string>>>(getInitial());
 	let reason = $state('');
 
 	const isSaving = $derived(masterMutation.isPending || overrideMutation.isPending);
@@ -47,12 +47,12 @@
 		if (!reason.trim()) return;
 
 		try {
-			const changes: Partial<Record<SopRatioKey, number>> = {};
+			const changes: Partial<Record<SopRatioKey, string>> = {};
 			for (const key of SOP_RATIO_KEYS) {
 				const currentVal = ratios[key];
 				const initialVal = profile.ratios[key];
 				if (currentVal !== undefined && Number(currentVal) !== Number(initialVal)) {
-					changes[key] = Number(currentVal);
+					changes[key] = String(currentVal);
 				}
 			}
 
@@ -127,9 +127,13 @@
 					<input
 						id={`ratio-input-${key}`}
 						type="number"
-						step="0.001"
+						step="any"
 						min="0.001"
-						bind:value={ratios[key]}
+						value={ratios[key]}
+						oninput={(e) => {
+							const val = e.currentTarget.value;
+							ratios[key] = val;
+						}}
 						class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 font-mono text-[15px] font-semibold text-brand transition-colors outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
 					/>
 				</div>

@@ -63,7 +63,7 @@ function resolveHave(
 }
 
 function buildResources(
-	ratios: Record<SopRatioKey, number>,
+	ratios: Record<SopRatioKey, string>,
 	stock: Map<string, string>
 ): {
 	resources: ResourceInput[];
@@ -75,7 +75,8 @@ function buildResources(
 	const stockSnapshot: Record<string, number | null> = {};
 
 	for (const key of Object.keys(ratios) as SopRatioKey[]) {
-		const ratio = ratios[key];
+		const ratioStr = ratios[key];
+		const ratio = Number(ratioStr);
 		const kind = SOP_RATIO_KIND[key];
 		const have = resolveHave(key, kind, stock);
 		resources.push({ key, kind, ratio, have });

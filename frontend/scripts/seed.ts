@@ -1053,8 +1053,8 @@ async function seedDailyCalc(): Promise<void> {
 		`/catalog/${encodeURIComponent('sop_profile:master_sphere_baseline')}`
 	);
 	const master =
-		status === 200 ? (data as { ratios?: Record<SopRatioKey, number>; version?: number }) : null;
-	const ratios: Record<SopRatioKey, number> = master?.ratios ?? validRatios;
+		status === 200 ? (data as { ratios?: Record<SopRatioKey, string>; version?: number }) : null;
+	const ratios: Record<SopRatioKey, string> = master?.ratios ?? validRatios;
 	const sopVersion = master?.version ?? 1;
 
 	const today = new Date();
@@ -1076,7 +1076,8 @@ async function seedDailyCalc(): Promise<void> {
 		const stockSnapshot: Record<string, number | null> = {};
 
 		for (const key of Object.keys(ratios) as SopRatioKey[]) {
-			const ratio = ratios[key];
+			const ratioStr = ratios[key];
+			const ratio = Number(ratioStr);
 			const kind = SOP_RATIO_KIND[key];
 			const roughNeed = kind === 'multiply' ? occupancy * ratio : Math.ceil(occupancy / ratio);
 			// have oscillates across a deficit/surplus band so the dashboard shows real gaps;
