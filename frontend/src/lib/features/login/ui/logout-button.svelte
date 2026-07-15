@@ -4,12 +4,12 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
-	import { LOGIN_ROUTE } from '$lib/guards/auth';
+	import { LOGOUT_ROUTE } from '$lib/guards/auth';
 
 	async function logout() {
 		await authStore.logout();
 		toast.success('Logged out successfully');
-		await goto(resolve(LOGIN_ROUTE));
+		await goto(resolve(LOGOUT_ROUTE));
 	}
 </script>
 

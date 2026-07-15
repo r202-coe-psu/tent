@@ -13,6 +13,7 @@ import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 
 import type { DonationCampaign } from '$lib/features/operations';
+import { qtyGt } from '$lib/utils/qty';
 
 const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
 
@@ -106,7 +107,7 @@ export const POST = async ({ request, getClientAddress }) => {
 		for (const it of parsed.data.items) {
 			const itemId = it.item_id;
 			if (!itemId) continue;
-			if (remaining.has(itemId) && (remaining.get(itemId) ?? 0) < it.qty) {
+			if (remaining.has(itemId) && qtyGt(it.qty, remaining.get(itemId) ?? '0')) {
 				return json({ success: false, error: 'NEED_FULL', item_id: itemId }, { status: 409 });
 			}
 			// ผูก donation เข้ากับ campaign ที่ต้องการ item นี้ เพื่อให้ needs_open ลดลงตามจริง

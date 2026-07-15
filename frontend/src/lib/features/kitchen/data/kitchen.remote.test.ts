@@ -50,13 +50,13 @@ const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
 
 // Seed a positive stock_ledger receipt so issueRequisition's write-time on-hand
 // re-check (guards against concurrent over-issue) has stock to draw against.
-async function seedStock(item_id: string, qty: number, unit = 'kg') {
+async function seedStock(item_id: string, qty: string | number, unit = 'kg') {
 	await memoryRepo.put({
 		_id: `stock_ledger:seed-${item_id}-${Math.random().toString(36).slice(2)}`,
 		type: 'stock_ledger',
-		schema_v: 1,
+		schema_v: 2,
 		item_id,
-		qty,
+		qty: String(qty),
 		unit,
 		reason: 'receive'
 	});
@@ -91,13 +91,13 @@ describe('KitchenRemoteRepository.issueRequisition — ledger deduction pattern'
 
 		const l0 = (await memoryRepo.get(result.ledger_ids[0])) as Record<string, unknown>;
 		expect(l0.type).toBe('stock_ledger');
-		expect(l0.qty).toBe(-50);
+		expect(l0.qty).toBe('-50');
 		expect(l0.item_id).toBe('item:rice');
 		expect(l0.reason).toBe('requisition');
 		expect(l0.ref_id).toBe(result._id);
 
 		const l1 = (await memoryRepo.get(result.ledger_ids[1])) as Record<string, unknown>;
-		expect(l1.qty).toBe(-180);
+		expect(l1.qty).toBe('-180');
 		expect(l1.item_id).toBe('item:egg');
 	});
 
@@ -279,9 +279,9 @@ describe('KitchenRemoteRepository.gasCylinderType — CRUD', () => {
 
 	const input = {
 		name: 'เตาแรงดันสูง + ถัง 15kg',
-		capacity_kg: 15,
-		burn_rate_kg_per_hour: 0.5,
-		time_multiplier: 1
+		capacity_kg: '15',
+		burn_rate_kg_per_hour: '0.5',
+		time_multiplier: '1'
 	};
 
 	it('create → list → update → delete round-trips', async () => {
@@ -291,8 +291,8 @@ describe('KitchenRemoteRepository.gasCylinderType — CRUD', () => {
 		const listed = await repo.listGasCylinderTypes();
 		expect(listed).toHaveLength(1);
 
-		const updated = await repo.updateGasCylinderType(created, { ...input, capacity_kg: 48 });
-		expect(updated.capacity_kg).toBe(48);
+		const updated = await repo.updateGasCylinderType(created, { ...input, capacity_kg: '48' });
+		expect(updated.capacity_kg).toBe('48');
 		expect(updated.updated_at >= created.updated_at).toBe(true);
 
 		await repo.deleteGasCylinderType(updated);
@@ -359,7 +359,7 @@ describe('T-27 demo chain — requisition → service record → variance', () =
 		const ledger = await memoryRepo.allByType('stock_ledger', isStockLedger);
 		const riceOnHand = ledger
 			.filter((d) => d.item_id === 'item:rice')
-			.reduce((sum, d) => sum + d.qty, 0);
+			.reduce((sum, d) => sum + Number(d.qty), 0);
 		expect(riceOnHand).toBeCloseTo(85, 6);
 	});
 });

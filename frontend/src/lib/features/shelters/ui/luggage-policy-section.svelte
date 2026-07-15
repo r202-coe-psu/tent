@@ -2,6 +2,7 @@
 	import Briefcase from '@lucide/svelte/icons/briefcase';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import type { Shelter, LuggageRule } from '../domain/schema';
+	import { luggageRuleLabels } from '../domain/policy-labels';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 
@@ -13,26 +14,9 @@
 		disabled?: boolean;
 	} = $props();
 
-	const luggageRules: { value: LuggageRule; label: string }[] = [
-		{
-			value: 'valuables_self_responsibility',
-			label:
-				'ทรัพย์สินมีค่า (เช่น เงินสด, ทอง, เครื่องประดับ, สมาร์ทโฟน) ผู้พักพิงต้องเก็บติดตัวและรับผิดชอบด้วยตนเอง 100% ศูนย์ไม่รับผิดชอบกรณีสูญหายทุกกรณี'
-		},
-		{
-			value: 'no_hazardous_items',
-			label:
-				'ห้ามนำวัตถุไวไฟ สารเคมีอันตราย ยาเสพติด หรืออาวุธทุกชนิดเข้าศูนย์โดยเด็ดขาด (ตรวจพบแจ้งตำรวจทันที)'
-		},
-		{
-			value: 'no_large_appliances',
-			label: 'ห้ามนำเครื่องใช้ไฟฟ้าขนาดใหญ่ (เช่น ตู้เย็น, ทีวี, เครื่องซักผ้า) เข้ามาในโซนพักอาศัย'
-		},
-		{
-			value: 'has_temp_storage_service',
-			label: 'มีบริการ "จุดรับฝากของขนาดใหญ่" ชั่วคราว (พร้อมระบบลงทะเบียนรับ-ส่งคืน)'
-		}
-	];
+	const luggageRules: { value: LuggageRule; label: string }[] = Object.entries(
+		luggageRuleLabels
+	).map(([value, label]) => ({ value: value as LuggageRule, label }));
 
 	function ensurePolicy() {
 		if (!$formData.luggage_policy) {

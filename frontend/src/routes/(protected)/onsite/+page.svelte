@@ -13,7 +13,7 @@
 <div class="mx-auto w-full max-w-6xl px-6 py-8">
 	<div class="mb-6">
 		<a
-			href={resolve('/')}
+			href={resolve('/portal')}
 			class="inline-flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
 		>
 			<ArrowLeft class="size-3.5" />

@@ -2,7 +2,7 @@
 title: Smart Shelter — Database ER Diagram v3
 status: draft for review
 created: 2026-06-17
-updated: 2026-06-18
+updated: 2026-07-14
 source: docs/data/schema.md
 ---
 
@@ -178,7 +178,7 @@ erDiagram
         string default_issue_uom "opt"
         enum distribution_type "consumable one_time"
         float target_reserve_days "opt"
-        float consumption_rate "opt"
+        string consumption_rate "qty_str opt"
         string unit "opt unit of consumption_rate"
         enum timeframe "daily weekly"
         float sphere_standard "opt Sphere per person"
@@ -191,7 +191,7 @@ erDiagram
     STOCK_LEDGER {
         string _id PK "stock_ledger:ulid"
         string item_id FK "item_master:sku or item_master:ulid"
-        float qty "signed nonzero"
+        string qty "qty_str signed nonzero"
         string unit "must match item base_unit"
         enum reason "receive distribute requisition adjust transfer_out transfer_in donation"
         string ref_id FK "nullable source doc"
@@ -212,7 +212,7 @@ erDiagram
     STOCK_TRANSFER_ITEM {
         string stock_transfer_id FK "logical parent"
         string item_id FK "item_master:sku or item_master:ulid"
-        float qty "positive"
+        string qty "qty_str positive"
         string unit "must match item base_unit"
     }
 
@@ -235,7 +235,7 @@ erDiagram
         string donation_id FK "logical parent"
         string item_id FK "nullable"
         string free_text "nullable"
-        float qty "positive"
+        string qty "qty_str positive"
         string unit "req"
     }
 
@@ -252,7 +252,7 @@ erDiagram
     DONATION_CAMPAIGN_NEED {
         string campaign_id FK "logical parent"
         string item_id FK "item_master:sku or item_master:ulid"
-        float qty_target "positive"
+        string qty_target "qty_str positive"
         string unit "req"
     }
 
@@ -260,15 +260,15 @@ erDiagram
         string _id PK "recipe:ulid"
         string label "req Thai display name"
         json ingredients "embedded array item_master_id quantity uom"
-        float standard_portions "positive servings per batch"
-        float standard_duration_hours "positive hours to prepare"
+        string standard_portions "qty_str positive servings per batch"
+        string standard_duration_hours "qty_str positive hours to prepare"
         boolean is_default "default false"
     }
 
     RECIPE_INGREDIENT {
         string recipe_id FK "logical parent"
         string item_master_id FK "item_master:sku or item_master:ulid"
-        float quantity "positive per batch"
+        string quantity "qty_str positive per batch"
         string uom "unit of measure"
     }
 
@@ -299,8 +299,8 @@ erDiagram
     REQUISITION_ITEM {
         string requisition_id FK "logical parent"
         string item_id FK "item_master:sku or item_master:ulid"
-        float qty_requested "positive"
-        float qty_issued "nonnegative"
+        string qty_requested "qty_str positive"
+        string qty_issued "qty_str nonnegative"
         string unit "must match item base_unit"
     }
 
@@ -519,7 +519,7 @@ erDiagram
     STOCK_LEDGER {
         string _id PK "stock_ledger:ulid"
         string item_id FK
-        float qty "signed"
+        string qty "qty_str signed"
         datetime occurred_at
     }
 
@@ -554,7 +554,7 @@ erDiagram
 
     STOCK_BALANCE_VIEW {
         string key "item_id"
-        float qty_sum "reduce sum"
+        string qty_sum "client Decimal sum qty_str"
     }
 
     MEALS_SERVED_VIEW {

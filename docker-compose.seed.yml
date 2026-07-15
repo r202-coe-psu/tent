@@ -1,0 +1,40 @@
+services:
+  couchdb-init:
+    container_name: tent-couchdb-init
+    image: curlimages/curl:latest
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+      COUCHDB_HOST: ${COUCHDB_HOST:-couchdb}
+      COUCHDB_PORT: ${COUCHDB_PORT:-5984}
+    restart: on-failure
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        sh -c '
+        CODE=$$(curl -s -o /dev/null -w "%{http_code}" -X POST http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@${COUCHDB_HOST:-couchdb}:${COUCHDB_PORT:-5984}/_cluster_setup -H "Content-Type: application/json" -d "{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"${COUCHDB_USER}\",\"password\":\"${COUCHDB_PASSWORD}\",\"port\":${COUCHDB_PORT:-5984}}")
+        echo "CouchDB setup response code: $$CODE"
+        if [ "$$CODE" = "200" ] || [ "$$CODE" = "201" ] || [ "$$CODE" = "400" ] || [ "$$CODE" = "409" ]; then
+          exit 0
+        else
+          exit 1
+        fi
+        '
+
+
+
+  seed:
+    container_name: tent-seed
+    image: node:24-slim
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    environment:
+      COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@${COUCHDB_HOST:-couchdb}:${COUCHDB_PORT:-5984}
+    depends_on:
+      couchdb-init:
+        condition: service_completed_successfully
+    command: sh -c "corepack enable && pnpm seed"

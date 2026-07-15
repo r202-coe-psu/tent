@@ -4,7 +4,7 @@ pipeline {
     stages {
         stage('Deploy to Production') {
             when {
-                branch 'staging'
+                branch 'main'
             }
             steps {
                 withCredentials([
@@ -16,12 +16,10 @@ pipeline {
                         echo "Starting deployment to Production server..."
                         
                         ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
-                            
-                            # [1] Deploy Tent (Web & API & CouchDB)
                             echo '==> Deploying Tent...'
                             cd /home/projects/tent
                             git -C /home/projects/tent pull
-                            docker compose -f docker-compose.staging.yml up -d --build --force-recreate
+                            docker compose -f docker-compose.production.no-nginx.yml up -d --build --force-recreate
                         "
                         echo "Deployment process finished successfully!"
                     '''
