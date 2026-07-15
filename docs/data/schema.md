@@ -515,6 +515,33 @@ insert. Idempotent: `_id` เป็น deterministic → re-seed ไม่เก
 
 ---
 
+### 3.7 `shelter_import_log` — `shelter_import_log:{ulid}` · **schema_v 1** · **append-only** (CR-039)
+
+Log 1 doc ต่อ 1 batch ของการ import ศูนย์พักพิงจาก Excel. envelope กลาง (ไม่มี `shelter_code` —
+เป็น registry doc). เขียนหลัง commit เสร็จ; ไม่แก้ย้อนหลัง.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `source` | enum(`shelter`) | req | ชนิดข้อมูลที่ import (ตอนนี้มีแค่ shelter) |
+| `filename` | str | req | ชื่อไฟล์ที่อัปโหลด |
+| `imported_by` | str | req | `name` ของผู้ import (จาก session) |
+| `total_rows` | int | req | จำนวนแถวข้อมูล (ไม่รวม header) |
+| `success_count` | int | req | จำนวนศูนย์ที่สร้างสำเร็จ |
+| `error_count` | int | req | จำนวนแถวที่ล้มเหลว (validation + server) |
+| `results` | array | req | ผลราย row — ดูรูปด้านล่าง |
+| `started_at` | str (ISO) | req | เวลาเริ่ม commit |
+| `finished_at` | str (ISO) | req | เวลาเสร็จ |
+
+`results[]`: `{ row: int, name: str|null, status: 'created'|'validation_error'|'server_error',
+code?: str (เมื่อ created), errors?: [{ column: str, message: str }] }`
+
+**เขียน/อ่าน:** system_admin เท่านั้น (เป็น member ของ registry). อ่านตรงจาก browser ผ่าน
+`createRemoteRepository('registry')`; live-sync ผ่าน changes feed ของ registry (เหมือน `shelter`).
+
+**Index:** ไม่ต้องมี secondary index — prefix scan `import_log:` ผ่าน `_all_docs` เพียงพอ.
+
+---
+
 ## 4. DB `catalog` (central-managed → pull ลง device; edge fallback replica)
 
 > **schema_v bump (CR-013):** `item_category` ใหม่ (v1), `item_master` แทนที่ `supply_item` เดิม (v2), `recipe` ขยาย field (v2), `sop_profile` ย้ายออกจาก catalog ไปอยู่ใน `sop-ratios` feature แยกต่างหาก

@@ -80,6 +80,7 @@
 		"@types/node": "^25.9.2",
 		"decimal.js": "^10.6.0",
 		"events": "^3.3.0",
+		"exceljs": "^4.4.0",
 		"html2canvas-pro": "^2.2.3",
 		"html5-qrcode": "^2.3.8",
 		"jsonwebtoken": "^9.0.3",

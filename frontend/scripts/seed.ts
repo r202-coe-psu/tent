@@ -16,6 +16,7 @@
  * | seedShelter — stock ledger   | createStockLedger     | operations domain   |
  * | seedShelter — donations      | createWalkInDonation  | operations domain   |
  * | seedShelter — campaigns      | createCampaign        | operations domain   |
+ * | seedDailyCalc — daily_calc   | calculateResources    | resource-calc domain (real engine; mock T-31.6 worker output) |
  * | seedRegistry — shelter master| plain object          | no factory (server-side only) |
  * | seedCatalog — supply items   | plain object          | no factory (no catalog feature) |
  * | seedCatalog — recipes        | plain object          | no factory (no catalog feature) |
@@ -57,10 +58,21 @@ import {
 import {
 	createInitialProfile,
 	SOP_MASTER_SCHEMA_VERSION,
-	sopMasterSchema
+	SOP_RATIO_KIND,
+	sopMasterSchema,
+	type SopRatioKey
 } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
-import { type AuthorContext, now } from '$lib/db/model';
+import {
+	calculateResources,
+	FORMULA_V,
+	type ResourceInput
+} from '$lib/features/resource-calc/domain/calc.formula';
+import {
+	dailyCalcDocSchema,
+	DAILY_CALC_SCHEMA_VERSION
+} from '$lib/features/resource-calc/domain/calc.schema';
+import { type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
 import { deployShelterViewsFn } from '$lib/features/shelters/server';
@@ -1029,6 +1041,91 @@ async function seedDashboardData(): Promise<void> {
 	console.log(`  --------------------------------------------\n`);
 }
 
+// ─── seedDailyCalc ──────────────────────────────────────────────────────────────
+//
+// Stand-in for the Central auto-daily-run worker (T-31.6 — PM decided "Central"), which
+// lives in a separate service, NOT this repo. It writes a trend of `daily_calc:{date}`
+// snapshots so the T-32 resource dashboard has real data to render before that worker exists.
+//
+// vithi A — the need/have/gap/status numbers come from the REAL engine (`calculateResources`,
+// FORMULA_V) fed the active master SOP ratios, so the persisted shape matches production exactly.
+// Only the two inputs the past cannot give us are mocked: historical occupancy (headcount per day)
+// and stock `have` (the ratio-key → stock mapping is a documented SEAM — CR-036 Open decision #2).
+// `threshold` ratios carry no `have`, mirroring the impl's `resolveHave`. This does NOT replace the
+// real worker; when it lands, output shape is already identical.
+
+const DAILY_CALC_DAYS = 14;
+
+function isoDay(d: Date): string {
+	return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+async function seedDailyCalc(): Promise<void> {
+	await ensureDb(SHELTER_DB);
+
+	// Effective ratios = active master profile (SH001 has no override) — the real resolution.
+	const { status, data } = await couchReq(
+		'GET',
+		`/catalog/${encodeURIComponent('sop_profile:master_sphere_baseline')}`
+	);
+	const master =
+		status === 200 ? (data as { ratios?: Record<SopRatioKey, number>; version?: number }) : null;
+	const ratios: Record<SopRatioKey, number> = master?.ratios ?? validRatios;
+	const sopVersion = master?.version ?? 1;
+
+	const today = new Date();
+	const records: unknown[] = [];
+
+	for (let back = DAILY_CALC_DAYS - 1; back >= 0; back--) {
+		const day = new Date(today);
+		day.setDate(day.getDate() - back);
+		const date = isoDay(day);
+		const asOf = `${date}T09:00:00.000Z`;
+
+		// Mock occupancy — a gentle deterministic wave (historical headcount is unknowable).
+		const phase = ((DAILY_CALC_DAYS - 1 - back) / DAILY_CALC_DAYS) * Math.PI * 2;
+		const jitter = ((back * 7) % 11) - 5;
+		const occupancy = Math.max(0, Math.round(120 + 25 * Math.sin(phase) + jitter));
+
+		const resources: ResourceInput[] = [];
+		const ratioSnapshot: Record<string, number> = {};
+		const stockSnapshot: Record<string, number | null> = {};
+
+		for (const key of Object.keys(ratios) as SopRatioKey[]) {
+			const ratio = ratios[key];
+			const kind = SOP_RATIO_KIND[key];
+			const roughNeed = kind === 'multiply' ? occupancy * ratio : Math.ceil(occupancy / ratio);
+			// have oscillates across a deficit/surplus band so the dashboard shows real gaps;
+			// threshold ratios are quality ceilings → no stock (null), same as `resolveHave`.
+			const factor = 0.7 + 0.6 * (0.5 + 0.5 * Math.sin(phase + key.length));
+			const have = kind === 'threshold' ? null : Math.max(0, Math.round(roughNeed * factor));
+			resources.push({ key, kind, ratio, have });
+			ratioSnapshot[key] = ratio;
+			stockSnapshot[key] = have;
+		}
+
+		// REAL engine — need/gap/status computed exactly as production would.
+		const results = calculateResources({ occupancy, as_of: asOf, resources });
+
+		const body = dailyCalcDocSchema.parse({
+			formula_v: FORMULA_V,
+			sop_profile_version: sopVersion,
+			ratio_snapshot: ratioSnapshot,
+			occupancy_snapshot: occupancy,
+			as_of: asOf,
+			stock_snapshot: stockSnapshot,
+			results
+		});
+
+		records.push(makeDoc('daily_calc', DAILY_CALC_SCHEMA_VERSION, body, CTX, date));
+	}
+
+	await bulkDocs(SHELTER_DB, records);
+	console.log(
+		`  ✓ ${SHELTER_DB}: ${records.length} daily_calc snapshots seeded (mock T-31.6 output, real engine ${FORMULA_V})`
+	);
+}
+
 // ─── deleteDashboardData ──────────────────────────────────────────────────────
 
 async function deleteDashboardData(): Promise<void> {
@@ -1072,6 +1169,23 @@ async function deleteDashboardData(): Promise<void> {
 		toDelete.push(...movesToDelete);
 	}
 
+	// Also find and delete daily_calc snapshots (mock T-31.6 worker output) — bounded range scan.
+	// Upper bound ';' (0x3B) sorts just after ':' (0x3A), covering every `daily_calc:*` id (ASCII-only).
+	const dcStart = encodeURIComponent(JSON.stringify('daily_calc:'));
+	const dcEnd = encodeURIComponent(JSON.stringify('daily_calc;'));
+	const { status: dcStatus, data: dcData } = await couchReq(
+		'GET',
+		`/${SHELTER_DB}/_all_docs?include_docs=true&startkey=${dcStart}&endkey=${dcEnd}`
+	);
+	if (dcStatus === 200) {
+		const dcRows = (dcData as { rows: { doc: { type?: string } & Record<string, unknown> }[] })
+			.rows;
+		const dcToDelete = dcRows
+			.filter((r) => r.doc && r.doc._id)
+			.map((r) => ({ ...r.doc, _deleted: true }));
+		toDelete.push(...dcToDelete);
+	}
+
 	if (toDelete.length === 0) {
 		console.log(`  ✓ No dashboard test data found to delete.`);
 		return;
@@ -1099,6 +1213,7 @@ async function main() {
 		await seedShelter();
 		await seedShelter2();
 		await seedDashboardData();
+		await seedDailyCalc();
 		console.log('\nDone.\n');
 	} catch (err) {
 		console.error('\nSeed failed:', err);
