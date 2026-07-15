@@ -14,20 +14,22 @@
 	import { startOperationsLiveQuery } from '$lib/features/operations';
 	import { startKitchenLiveQuery } from '$lib/features/kitchen';
 	import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
+	import { startShelterImportLiveQuery } from '$lib/features/shelter-import';
 	import { startCatalogMasterLiveQuery } from '$lib/features/catalog';
 	import { startCatalogLiveQuery } from '$lib/features/supply';
 	import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
+	import { startDailyCalcLiveQuery } from '$lib/features/resource-calc';
 	import { CATALOG_DB } from '$lib/features/supply';
 
 	let { children, data } = $props();
 
 	$effect(() => {
-		if (!authStore.isAuthenticated) return;
+		if (!authStore.isAuthenticated || authStore.needsReauth) return;
 		void endpointStore.probe();
 	});
 
 	$effect(() => {
-		if (!authStore.isAuthenticated) return;
+		if (!authStore.isAuthenticated || authStore.needsReauth) return;
 
 		const shelterDb = getShelterDb();
 
@@ -48,11 +50,13 @@
 		if (!authStore.isAuthenticated) return;
 
 		const liveShelters = startSheltersLiveQuery(data.queryClient);
+		const liveShelterImport = startShelterImportLiveQuery(data.queryClient);
 		const liveCatalog = startCatalogLiveQuery(data.queryClient);
 		const liveCatalogMaster = startCatalogMasterLiveQuery(data.queryClient);
 
 		return () => {
 			liveShelters.stop();
+			liveShelterImport.stop();
 			liveCatalog.stop();
 			liveCatalogMaster.stop();
 		};
@@ -66,12 +70,14 @@
 		const liveOperations = startOperationsLiveQuery(data.queryClient);
 		const liveKitchen = startKitchenLiveQuery(data.queryClient);
 		const sopRatioLive = startSopRatioLiveQuery(data.queryClient);
+		const dailyCalcLive = startDailyCalcLiveQuery(data.queryClient);
 
 		return () => {
 			livePeople.stop();
 			liveOperations.stop();
 			liveKitchen.stop();
 			sopRatioLive.stop();
+			dailyCalcLive.stop();
 		};
 	});
 
@@ -88,7 +94,7 @@
 	</title>
 </svelte:head>
 
-<Toaster position="bottom-center" richColors />
+<Toaster position="top-center" richColors />
 
 <QueryClientProvider client={data.queryClient}>
 	<ConnectionBanner />

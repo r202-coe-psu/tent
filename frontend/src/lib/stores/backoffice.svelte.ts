@@ -1,13 +1,10 @@
 import { authStore } from './auth.svelte';
 
 export class BackofficeState {
-	selectedShelter = $state(''); // empty = "ยังไม่เลือก", layout effect จะ auto-fill ครั้งแรก
-
 	/**
-	 * True when the user is effectively offline: the cached identity exists but
-	 * the CouchDB sync session is no longer valid (authStore.needsReauth). The
-	 * banner lives in the back-office layout, and the toggle button was removed
-	 * because this state is derived from real auth state, not user preference.
+	 * True when the cached identity exists but the CouchDB session cookie is no
+	 * longer valid (`authStore.needsReauth`). UI shows a session-expired badge
+	 * and re-login dialog — not a local/offline write mode.
 	 */
 	get isOffline(): boolean {
 		return authStore.needsReauth;

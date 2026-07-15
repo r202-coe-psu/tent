@@ -3,7 +3,7 @@ import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
-import { getShelterDb } from '$lib/db/shelter';
+import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { peopleRepository } from '../data/people.remote';
@@ -16,18 +16,28 @@ import type {
 	ScreeningInput
 } from '../domain/people';
 
+// Every key includes the active shelter code so switching the back-office
+// shelter selector (shelterStore.selectedShelterCode) invalidates and
+// refetches these queries against the newly selected shelter's database.
 export const peopleKeys = {
 	all: ['people'] as const,
-	evacuees: () => [...peopleKeys.all, 'evacuees'] as const,
+	evacuees: () => [...peopleKeys.all, 'evacuees', getShelterCode()] as const,
+	evacuee: (id: string) => [...peopleKeys.all, 'evacuee', getShelterCode(), id] as const,
 	evacueesPaginated: (page: number, pageSize: number, search = '') =>
-		[...peopleKeys.all, 'evacuees', { page, pageSize, search }] as const,
-	evacueesSearch: (query: string) => [...peopleKeys.all, 'evacuees', 'search', query] as const,
-	households: () => [...peopleKeys.all, 'households'] as const,
+		[...peopleKeys.all, 'evacuees', getShelterCode(), { page, pageSize, search }] as const,
+	evacueesSearch: (query: string) =>
+		[...peopleKeys.all, 'evacuees', getShelterCode(), 'search', query] as const,
+	households: () => [...peopleKeys.all, 'households', getShelterCode()] as const,
 	householdsPaginated: (page: number, pageSize: number, search = '', labelsKey = '') =>
-		[...peopleKeys.all, 'households', { page, pageSize, search, labelsKey }] as const,
-	medicals: () => [...peopleKeys.all, 'medicals'] as const,
-	movements: () => [...peopleKeys.all, 'movements'] as const,
-	screenings: () => [...peopleKeys.all, 'screenings'] as const
+		[
+			...peopleKeys.all,
+			'households',
+			getShelterCode(),
+			{ page, pageSize, search, labelsKey }
+		] as const,
+	medicals: () => [...peopleKeys.all, 'medicals', getShelterCode()] as const,
+	movements: () => [...peopleKeys.all, 'movements', getShelterCode()] as const,
+	screenings: () => [...peopleKeys.all, 'screenings', getShelterCode()] as const
 };
 
 export const useEvacuees = () =>
@@ -56,6 +66,13 @@ export const useSearchEvacuees = (query: () => string, enabled: () => boolean) =
 		enabled: enabled()
 	}));
 
+export const useEvacuee = (id: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.evacuee(id()),
+		queryFn: () => peopleRepository().getEvacuee(id()),
+		enabled: enabled() && !!id()
+	}));
+
 export const useCreateEvacuee = () =>
 	createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: EvacueeInput; ctx: AuthorContext }) =>
@@ -79,6 +96,42 @@ export const useCheckInEvacuee = () =>
 			zone?: string | null;
 		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone)
 	}));
+
+export const useCheckOutEvacuee = () =>
+	createMutation(() => ({
+		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
+			peopleRepository().checkOutEvacuee(evacuee, ctx)
+	}));
+
+/** One-shot lookup used by the scan flow — goes through TanStack Query keys. */
+export async function lookupEvacueeByScanCode(
+	queryClient: QueryClient,
+	code: string
+): Promise<Evacuee | null> {
+	const cleanCode = code.trim();
+	if (!cleanCode) return null;
+
+	let lookupId = cleanCode;
+	if (!lookupId.startsWith('evacuee:')) {
+		lookupId = `evacuee:${cleanCode}`;
+	}
+
+	try {
+		const byId = await queryClient.fetchQuery({
+			queryKey: peopleKeys.evacuee(lookupId),
+			queryFn: () => peopleRepository().getEvacuee(lookupId)
+		});
+		if (byId) return byId;
+	} catch {
+		// Ignore direct ID fetch errors and fall through to search.
+	}
+
+	const matches = await queryClient.fetchQuery({
+		queryKey: peopleKeys.evacueesSearch(cleanCode),
+		queryFn: () => peopleRepository().searchEvacuees(cleanCode)
+	});
+	return matches[0] ?? null;
+}
 
 export const useHouseholds = () =>
 	createQuery(() => ({

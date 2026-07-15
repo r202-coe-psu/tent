@@ -11,10 +11,12 @@
 	import type { StayStatus } from '$lib/features/people';
 
 	const STATUS_LABELS: Record<StayStatus, string> = {
-		registered: 'ลงทะเบียนแล้ว',
-		checked_in: 'เข้าพักแล้ว',
-		checked_out: 'ออกไปแล้ว',
-		transferred: 'ย้ายไปแล้ว'
+		pre_registered: 'ลงทะเบียนล่วงหน้า',
+		active: 'เข้าพักแล้ว',
+		temporary_leave: 'ออกชั่วคราว',
+		transferred: 'ย้ายไปแล้ว',
+		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
+		deceased: 'เสียชีวิต'
 	};
 
 	let { onNext }: { onNext: () => void } = $props();

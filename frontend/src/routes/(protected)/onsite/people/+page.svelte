@@ -12,8 +12,10 @@
 	} from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
 	import Zap from '@lucide/svelte/icons/zap';
-	import CreditCard from '@lucide/svelte/icons/credit-card';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 
 	const createMutation = useCreateEvacuee();
 	const createScreeningMutation = useCreateScreening();
@@ -67,6 +69,14 @@
 		/>
 	{:else}
 		<!-- ── Registration Flow ─────────────────────────────────────────────── -->
+		<button
+			onclick={() => goto(resolve('/onsite'))}
+			class="mb-4 inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+		>
+			<ArrowLeft class="size-4" />
+			<span>กลับ</span>
+		</button>
+
 		<h1 class="mb-6 text-3xl font-bold">ลงทะเบียนผู้ประสบภัย</h1>
 
 		{#if isFastTrack}
@@ -139,11 +149,6 @@
 							<Card.Description class="text-sm">กรอกข้อมูลพื้นฐานและประเมินสถานะ</Card.Description>
 						</div>
 					</div>
-					<button
-						class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#003B71] px-3 py-2 text-sm font-medium text-white hover:bg-[#002a50]"
-					>
-						<CreditCard class="size-4" /> ดึงข้อมูลบัตรประชาชน
-					</button>
 				</Card.Header>
 			</Card.Root>
 		{:else if step === 4}

@@ -2,6 +2,8 @@
 	import QRCode from 'qrcode';
 	import X from '@lucide/svelte/icons/x';
 	import Printer from '@lucide/svelte/icons/printer';
+	import { toast } from 'svelte-sonner';
+	import { previewElementAsPdf } from '$lib/utils/pdf';
 	import type { Evacuee } from '$lib/features/people';
 	import { maskNationalId } from '$lib/features/people';
 
@@ -16,18 +18,36 @@
 	} = $props();
 
 	let qrUrl = $state<string | null>(null);
+	let cardEl = $state<HTMLDivElement | null>(null);
+	let isExportingPdf = $state(false);
+
+	async function handlePrintPreview() {
+		if (!cardEl) return;
+		isExportingPdf = true;
+		try {
+			await previewElementAsPdf(cardEl, `evacuee-id-${fullId}`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ');
+		} finally {
+			isExportingPdf = false;
+		}
+	}
 
 	$effect(() => {
 		if (!show) return;
 		qrUrl = null;
 		QRCode.toDataURL(evacuee._id, {
-			width: 160,
+			width: 128,
 			margin: 1,
 			color: { dark: '#0f172a', light: '#ffffff' }
 		}).then((url) => {
 			qrUrl = url;
 		});
 	});
+
+	const fullId = $derived(evacuee._id.split(':')[1] ?? evacuee._id);
+
+	const zoneName = $derived(evacuee.current_stay?.zone?.toUpperCase() ?? 'GENERAL');
 </script>
 
 {#if show}
@@ -35,9 +55,9 @@
 		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
 	>
 		<div
-			class="w-full max-w-sm animate-in space-y-6 rounded-3xl border border-border bg-card p-6 text-center shadow-xl duration-150 zoom-in-95 fade-in"
+			class="w-full max-w-lg animate-in rounded-3xl border border-border bg-white px-8 py-10 shadow-sm duration-150 zoom-in-95 fade-in dark:bg-card"
 		>
-			<div class="flex justify-end">
+			<div class="mb-2 flex justify-end">
 				<button
 					onclick={onClose}
 					class="cursor-pointer rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground"
@@ -46,59 +66,75 @@
 				</button>
 			</div>
 
-			<div
-				id="qr-identity-card"
-				class="mx-auto max-w-[280px] space-y-4 rounded-2xl border-2 border-slate-900 bg-white p-6 text-slate-900 shadow-md dark:border-slate-100"
-			>
-				<div class="border-b-2 border-slate-900 pb-2">
-					<h4 class="text-xs font-bold tracking-widest text-slate-500 uppercase">
-						Smart Shelter ID Card
-					</h4>
-					<h3 class="mt-0.5 text-base font-bold">บัตรประจำตัวผู้ประสบภัย</h3>
-				</div>
+			<!-- Header -->
+			<div class="mb-8 flex flex-col items-center gap-1 text-center">
+				<h2 class="text-2xl font-bold text-slate-900 dark:text-slate-50">
+					บัตรประจำตัวผู้ประสบภัย
+				</h2>
+				<p class="text-sm text-muted-foreground">
+					{evacuee.first_name}
+					{evacuee.last_name}
+				</p>
+			</div>
+
+			<!-- ID card preview -->
+			<div class="mb-6 rounded-2xl bg-slate-100 p-6 dark:bg-slate-800">
 				<div
-					class="mx-auto flex h-40 w-40 flex-col items-center justify-center space-y-2 rounded-lg border border-slate-200 bg-slate-100 p-2"
+					id="qr-identity-card"
+					bind:this={cardEl}
+					class="mx-auto flex min-h-[90px] max-w-[420px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md dark:border-slate-700"
 				>
-					{#if qrUrl}
-						<img src={qrUrl} alt="QR Code" class="size-28 object-contain" />
-					{:else}
-						<div class="flex size-28 items-center justify-center text-[10px] text-slate-400">
-							กำลังสร้าง QR...
+					<div class="w-2.5 shrink-0 bg-red-500"></div>
+
+					<div class="flex flex-1 flex-col justify-center gap-0.5 px-3 py-2.5">
+						<span class="font-mono text-[9px] font-bold tracking-widest text-slate-400 uppercase">
+							ZONE: {zoneName}
+						</span>
+						<p class="text-sm leading-tight font-bold text-slate-900">
+							{evacuee.first_name}
+							{evacuee.last_name}
+						</p>
+						<div class="mt-1 flex flex-wrap items-center gap-1.5">
+							<span
+								class="inline-block rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-wide whitespace-nowrap text-slate-700"
+							>
+								{fullId}
+							</span>
+							<span
+								class="inline-block rounded bg-slate-900 px-1.5 py-0.5 text-[9px] font-bold tracking-wide whitespace-nowrap text-white uppercase"
+							>
+								{maskNationalId(evacuee.person_id?.number)}
+							</span>
 						</div>
-					{/if}
-					<span class="font-mono text-[9px] tracking-wider text-slate-500">
-						ID: {evacuee._id.split(':')[1] || evacuee._id}
-					</span>
-				</div>
-				<div class="space-y-1 text-center">
-					<h3 class="text-base font-bold text-slate-900">
-						{evacuee.first_name}
-						{evacuee.last_name}
-					</h3>
-					<p class="font-mono text-[10px] text-slate-500">
-						ID CARD: {maskNationalId(evacuee.person_id?.number)}
-					</p>
-					{#if evacuee.current_stay.zone}
-						<div
-							class="mt-1.5 inline-block rounded bg-slate-900 px-2 py-0.5 text-[10px] font-bold tracking-wider text-white uppercase"
-						>
-							Zone: {evacuee.current_stay.zone.toUpperCase()}
-						</div>
-					{/if}
+					</div>
+
+					<div class="flex shrink-0 items-center justify-center px-2">
+						{#if qrUrl}
+							<img src={qrUrl} alt="QR Code" class="size-16 object-contain" />
+						{:else}
+							<div
+								class="flex size-16 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400"
+							>
+								...
+							</div>
+						{/if}
+					</div>
 				</div>
 			</div>
 
-			<div class="flex justify-center gap-2 border-t border-border pt-4">
+			<!-- Actions -->
+			<div class="flex flex-col gap-3">
 				<button
-					onclick={() => window.print()}
-					class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+					onclick={handlePrintPreview}
+					disabled={isExportingPdf}
+					class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#0d2240] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#1a3a5c] disabled:cursor-not-allowed disabled:opacity-60"
 				>
 					<Printer class="size-4" />
-					<span>สั่งพิมพ์บัตร</span>
+					{isExportingPdf ? 'กำลังสร้าง PDF...' : 'พิมพ์บัตรประจำตัว'}
 				</button>
 				<button
 					onclick={onClose}
-					class="cursor-pointer rounded-xl border border-border bg-background px-4 py-2 text-xs font-semibold text-slate-800 transition-colors hover:bg-muted dark:text-slate-200"
+					class="cursor-pointer py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
 				>
 					ปิดหน้าต่าง
 				</button>
@@ -120,11 +156,10 @@
 			position: absolute;
 			left: 50%;
 			top: 50%;
-			transform: translate(-50%, -50%) scale(1.5);
-			border: 2px solid #000 !important;
+			transform: translate(-50%, -50%) scale(2.5);
+			border: 1px solid #ccc !important;
 			box-shadow: none !important;
 			background-color: #fff !important;
-			color: #000 !important;
 		}
 	}
 </style>

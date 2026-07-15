@@ -7,12 +7,13 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
+	import { persistQty, qtyGt } from '$lib/utils/qty';
 
 	interface Props {
 		onclose: () => void;
 		onsubmit: (input: {
 			name: string;
-			target: number;
+			target: string;
 			location: string;
 			category?: string;
 			unit?: string;
@@ -25,7 +26,7 @@
 
 	let itemTitle = $state('');
 	let category = $state('ถูกกำหนดอัตโนมัติ');
-	let targetQty = $state<number | ''>('');
+	let targetQty = $state('');
 	let unit = $state('-- โปรดเลือกรายการสิ่งของก่อน --');
 	let urgency = $state<'critical' | 'important' | 'normal'>('normal');
 	let description = $state('');
@@ -68,14 +69,18 @@
 			toast.error('กรุณาระบุชื่อรายการสิ่งของ');
 			return;
 		}
-		if (!targetQty || targetQty <= 0) {
+		if (!targetQty.trim() || !qtyGt(targetQty, 0)) {
 			toast.error('กรุณาระบุจำนวนเป้าหมายที่ถูกต้อง');
+			return;
+		}
+		if (!description.trim()) {
+			toast.error('กรุณาระบุเหตุผลความจำเป็น');
 			return;
 		}
 
 		onsubmit({
 			name: itemTitle,
-			target: Number(targetQty),
+			target: persistQty(targetQty),
 			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
 			category,
 			unit: unit.startsWith('--') ? 'ชิ้น' : unit,
@@ -109,12 +114,14 @@
 			กลับหน้าจัดการความต้องการ
 		</button>
 
-		<div class="flex flex-col justify-start rounded-2xl bg-[#033B6C] p-6 text-white shadow-xs">
+		<div
+			class="flex flex-col justify-start rounded-2xl bg-primary p-6 text-primary-foreground shadow-xs"
+		>
 			<h2 class="flex items-center gap-2 text-lg font-bold">
-				<Megaphone class="h-5 w-5 text-white" />
+				<Megaphone class="h-5 w-5 text-primary-foreground" />
 				สร้างประกาศขอรับบริจาค
 			</h2>
-			<p class="mt-1.5 text-xs text-zinc-300">
+			<p class="mt-1.5 text-xs text-primary-foreground/70">
 				กำหนดรายการสั่งของและจำนวนที่ต้องการ เพื่อประกาศให้ประชาชนทราบผ่านหน้าเว็บไซต์
 			</p>
 		</div>
@@ -129,7 +136,7 @@
 		<div class="space-y-4">
 			<h3 class="flex items-center gap-2 text-sm font-bold text-foreground">
 				<span
-					class="flex h-5 w-5 items-center justify-center rounded-full bg-[#033B6C] text-[11px] font-bold text-white"
+					class="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground"
 					>1</span
 				>
 				ข้อมูลสิ่งของ (Item Details)
@@ -200,7 +207,7 @@
 		<div class="space-y-4">
 			<h3 class="flex items-center gap-2 text-sm font-bold text-foreground">
 				<span
-					class="flex h-5 w-5 items-center justify-center rounded-full bg-[#033B6C] text-[11px] font-bold text-white"
+					class="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground"
 					>2</span
 				>
 				เป้าหมายและเหตุผล (Target & Storytelling)
@@ -214,8 +221,8 @@
 					</label>
 					<Input
 						id="target-qty"
-						type="number"
-						min="1"
+						type="text"
+						inputmode="decimal"
 						bind:value={targetQty}
 						placeholder="ระบุตัวเลข"
 						class="h-10 text-xs"
@@ -316,7 +323,7 @@
 			</Button>
 			<Button
 				type="submit"
-				class="flex h-10 items-center gap-1.5 rounded-xl bg-[#033B6C] px-6 text-xs font-bold text-white transition-colors hover:bg-[#033B6C]/90"
+				class="flex h-10 items-center gap-1.5 rounded-xl bg-primary px-6 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90"
 			>
 				<Megaphone class="h-4 w-4" />
 				ประกาศขอรับบริจาคผ่านหน้าหลัก

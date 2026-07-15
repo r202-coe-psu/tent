@@ -3,10 +3,11 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { Combobox } from '$lib/components/ui/combobox/index.js';
+	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -54,6 +55,8 @@
 
 	let birthYearBE = $state('');
 	let facePhotoUrl = $state<string | null>(null);
+	// "ไม่มีเบอร์โทร" — เก็บ phone เป็น null ตาม spec (schema.md §evacuee: phone str|null, req)
+	let noPhone = $state(false);
 	let medicalConditionsStr = $state('');
 	let medicalMedicationsStr = $state('');
 	let medicalAllergiesStr = $state('');
@@ -77,11 +80,13 @@
 				}
 			}
 
-			if ($formData.phone) {
-				const cleanPhone = $formData.phone.replace(/\D/g, '');
+			if (noPhone) {
+				$formData.phone = null;
+			} else {
+				const cleanPhone = ($formData.phone ?? '').replace(/\D/g, '');
 				if (cleanPhone.length !== 10) {
-					$errors.phone = ['เบอร์โทรศัพท์ต้องมี 10 หลัก'];
-					toast.error('เบอร์โทรศัพท์ต้องมี 10 หลัก');
+					$errors.phone = ['กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"'];
+					toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"');
 					cancel();
 					return;
 				}
@@ -251,7 +256,7 @@
 					<Form.Field {form} name="first_name">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ชื่อ (First Name)</Form.Label>
+								<Form.Label>ชื่อ (First Name) <span class="text-destructive">*</span></Form.Label>
 								<Input {...props} placeholder="ชื่อจริง" bind:value={$formData.first_name} />
 							{/snippet}
 						</Form.Control>
@@ -262,7 +267,7 @@
 					<Form.Field {form} name="last_name">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>นามสกุล (Last Name)</Form.Label>
+								<Form.Label>นามสกุล (Last Name) <span class="text-destructive">*</span></Form.Label>
 								<Input {...props} placeholder="นามสกุล" bind:value={$formData.last_name} />
 							{/snippet}
 						</Form.Control>
@@ -307,7 +312,7 @@
 					<Form.Field {form} name="gender">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เพศ</Form.Label>
+								<Form.Label>เพศ <span class="text-destructive">*</span></Form.Label>
 								<Select.Root type="single" bind:value={$formData.gender}>
 									<Select.Trigger
 										{...props}
@@ -330,19 +335,35 @@
 					<Form.Field {form} name="phone">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เบอร์โทรศัพท์ยืนยันตัวตน</Form.Label>
+								<Form.Label
+									>เบอร์โทรศัพท์ยืนยันตัวตน <span class="text-destructive">*</span></Form.Label
+								>
 								<Input
 									{...props}
 									inputmode="numeric"
 									maxlength={10}
 									placeholder="08X-XXX-XXXX"
-									value={$formData.phone ?? ''}
+									disabled={noPhone}
+									value={noPhone ? '' : ($formData.phone ?? '')}
 									oninput={(e) => {
 										const val = e.currentTarget.value.replace(/\D/g, '');
 										e.currentTarget.value = val;
 										$formData.phone = val === '' ? null : val;
 									}}
 								/>
+								<label class="mt-1.5 flex cursor-pointer items-center gap-2 text-xs">
+									<Checkbox
+										checked={noPhone}
+										onCheckedChange={(v) => {
+											noPhone = !!v;
+											if (noPhone) {
+												$formData.phone = null;
+												$errors.phone = undefined;
+											}
+										}}
+									/>
+									<span class="text-muted-foreground">ไม่มีเบอร์โทร</span>
+								</label>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
@@ -353,12 +374,11 @@
 					<Form.Field {form} name="country">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ประเทศ</Form.Label>
-								<Combobox
+								<Form.Label>ประเทศ <span class="text-destructive">*</span></Form.Label>
+								<SearchSelect
 									items={COUNTRIES}
 									bind:value={$formData.country}
-									placeholder="เลือกประเทศ..."
-									searchPlaceholder="ค้นหาประเทศ..."
+									placeholder="ค้นหาประเทศ..."
 									emptyText="ไม่พบประเทศ"
 									controlProps={props}
 									class="h-9"
@@ -371,7 +391,7 @@
 					<Form.Field {form} name="religion">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ศาสนา *</Form.Label>
+								<Form.Label>ศาสนา</Form.Label>
 								<Select.Root type="single" bind:value={$formData.religion}>
 									<Select.Trigger
 										{...props}

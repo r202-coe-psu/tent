@@ -6,7 +6,7 @@
 	import EvacueeTab from './evacuee-tab.svelte';
 	import HouseholdTab from './household-tab.svelte';
 	import DashboardTab from './dashboard-tab.svelte';
-	import { backofficeState } from '$lib/stores/backoffice.svelte';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	type TabKey = 'dashboard' | 'evacuee' | 'household';
 	let activeTab = $state<TabKey>((page.url.searchParams.get('tab') as TabKey) || 'dashboard');
@@ -59,8 +59,8 @@
 	<!-- Tab content -->
 	<div class="flex-1 overflow-auto">
 		{#if activeTab === 'dashboard'}
-			{#if backofficeState.selectedShelter}
-				<DashboardTab shelterCode={backofficeState.selectedShelter} />
+			{#if shelterStore.selectedShelterCode}
+				<DashboardTab shelterCode={shelterStore.selectedShelterCode} />
 			{:else}
 				<div class="flex h-full items-center justify-center text-muted-foreground">
 					กำลังโหลดข้อมูลศูนย์พักพิง...

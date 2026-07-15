@@ -1,0 +1,39 @@
+services:
+  couchdb:
+    container_name: tent-couchdb-staging
+    image: couchdb:3.5
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+    volumes:
+      - /mnt/tent-data/couchdb/data:/opt/couchdb/data
+    ports:
+      - "${COUCHDB_BIND_IP:-127.0.0.1}:${COUCHDB_PORT:-5984}:5984"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  frontend:
+    container_name: tent-frontend-staging
+    image: tent/frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        PUBLIC_APP_TITLE: ${PUBLIC_APP_TITLE:-Tent}
+        PUBLIC_COUCHDB_URL: ${PUBLIC_ORIGIN:-http://localhost}
+        PUBLIC_COUCH_PROXY: /couch
+    ports:
+      - "${FRONTEND_BIND_IP:-127.0.0.1}:${FRONTEND_PORT:-3000}:3000"
+    environment:
+      # adapter-node requires ORIGIN in production
+      ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
+      # Server-only — never bundled into the browser
+      COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@couchdb:5984
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    restart: unless-stopped

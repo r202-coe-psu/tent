@@ -175,7 +175,7 @@
 	function addConversion() {
 		$formData.conversions = [
 			...$formData.conversions,
-			{ uom_name: '', multiplier: 1, barcode: '' }
+			{ uom_name: '', multiplier: '1', barcode: '' }
 		];
 	}
 
@@ -431,7 +431,7 @@
 									value={conv.multiplier}
 									oninput={(e) => {
 										const val = e.currentTarget.value;
-										conv.multiplier = val === '' ? 1 : Number(val);
+										conv.multiplier = val === '' ? '1' : val;
 									}}
 									placeholder="เช่น 12"
 									class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
@@ -612,7 +612,7 @@
 											value={$formData.consumption_rate ?? ''}
 											oninput={(e) => {
 												const val = e.currentTarget.value;
-												$formData.consumption_rate = val === '' ? undefined : Number(val);
+												$formData.consumption_rate = val === '' ? undefined : val;
 											}}
 											class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 										/>
@@ -691,7 +691,7 @@
 											value={$formData.consumption_rate ?? ''}
 											oninput={(e) => {
 												const val = e.currentTarget.value;
-												$formData.consumption_rate = val === '' ? undefined : Number(val);
+												$formData.consumption_rate = val === '' ? undefined : val;
 											}}
 											class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
 										/>

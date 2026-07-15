@@ -54,14 +54,22 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '2. บริหารทรัพยากร',
 		items: [
-			{ label: 'การประเมินประจำวัน (Daily SOP)', href: null, icon: ClipboardList },
+			{
+				label: 'การประเมินประจำวัน (Daily SOP)',
+				href: resolve('/back-office/resource-dashboard'),
+				icon: ClipboardList
+			},
 			{
 				label: 'คลังสิ่งของและบริจาค',
 				href: null,
 				icon: Package,
 				children: [
 					{ label: 'แผงควบคุมสต็อก', href: resolve('/back-office/supply'), icon: Warehouse },
-					{ label: 'กระดานรับบริจาค', href: null, icon: HandHeart }
+					{
+						label: 'กระดานรับบริจาค',
+						href: resolve('/back-office/stock-donations'),
+						icon: HandHeart
+					}
 				]
 			},
 			{
@@ -120,15 +128,25 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						requiresAdmin: true
 					},
 					{ label: '4. คลังสินค้า', href: null, icon: Warehouse },
-					{ label: '5. พารามิเตอร์', href: null, icon: Calculator },
+					{
+						label: '5. พารามิเตอร์',
+						href: resolve('/back-office/sop-parameters'),
+						icon: Calculator
+					},
 					{ label: '6. อาสาสมัคร', href: null, icon: HandHeart },
-					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin },
+					{
+						label: '8. ข้อมูลที่อยู่ไทย',
+						href: resolve('/back-office/location-config'),
+						icon: MapPin,
+						requiresAdmin: true
+					}
 				]
 			}
 		]
 	}
 ];
 
-export const backofficeHomePath: ResolvedPathname = resolve('/');
+export const backofficeHomePath: ResolvedPathname = resolve('/portal');
 
 export { isGroup };

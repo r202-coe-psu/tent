@@ -3,26 +3,13 @@
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
 	import { toast } from 'svelte-sonner';
-	import NeedsBoardAdmin from './components/needs-board-admin.svelte';
-	import SpecialRequestDialog from './components/special-request-dialog.svelte';
-	import PendingReviewBoard from './components/pending-review-board.svelte';
-	import PendingReviewDialog from './components/pending-review-dialog.svelte';
+	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
+	import SpecialRequestDialog from '$lib/components/special-request-dialog.svelte';
+	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
+	import PendingReviewDialog from '$lib/components/pending-review-dialog.svelte';
 	import ScanStation from './components/scan-station.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
-	import {
-		useCampaigns,
-		useStockLedgers,
-		useDonations,
-		useCreateCampaign,
-		useUpdateCampaign,
-		type SpecialRequestInput,
-		deriveNeedAvailability,
-		startOperationsLiveQuery,
-		mapNeedItemHeuristic
-	} from '$lib/features/operations';
-	import { getShelterCode } from '$lib/db/shelter';
-	import { authStore } from '$lib/stores/auth.svelte';
-	import type { NeedItem } from './components/needs-board-admin.svelte';
+	import { startOperationsLiveQuery, useDonationNeedsBoard } from '$lib/features/operations';
 	import { useQueryClient } from '@tanstack/svelte-query';
 
 	const queryClient = useQueryClient();
@@ -36,233 +23,14 @@
 	let viewState = $state<'list' | 'create'>('list');
 	let isModalOpen = $state(false);
 
-	const campaignsQuery = useCampaigns();
-	const stockLedgersQuery = useStockLedgers();
-	const donationsQuery = useDonations();
-
-	const createCampaignMutation = useCreateCampaign();
-	const updateCampaignMutation = useUpdateCampaign();
-
-	const ITEM_NAMES: Record<string, string> = {
-		'item:rice': 'ข้าวสาร (ข้าวหอมมะลิ 100%)',
-		'item:water': 'น้ำดื่มบรรจุขวด 1.5L',
-		'item:paracetamol': 'ยาพาราเซตามอล',
-		'item:soap': 'สบู่ก้อน',
-		'item:blanket': 'ผ้าห่มกันหนาว',
-		'item:egg': 'ไข่ไก่สด'
-	};
-
-	const ctx = $derived({
-		shelterCode: getShelterCode(),
-		createdBy: authStore.user?.name ?? 'system'
+	const needsBoard = useDonationNeedsBoard({
+		onRequestCreated: () => {
+			isModalOpen = false;
+		},
+		onFormCreated: () => {
+			viewState = 'list';
+		}
 	});
-
-	const derivedItems = $derived.by(() => {
-		const campaigns = campaignsQuery.data ?? [];
-		const donations = donationsQuery.data ?? [];
-		const stockLedgers = stockLedgersQuery.data ?? [];
-
-		const list: NeedItem[] = [];
-		for (const camp of campaigns) {
-			const availabilities = deriveNeedAvailability(camp, donations, stockLedgers);
-			const needs: NeedItem['needs'] = [];
-			let allNeedsCutOff = true;
-
-			for (const avail of availabilities) {
-				if (!avail.is_cut_off) {
-					allNeedsCutOff = false;
-				}
-
-				needs.push({
-					itemId: avail.item_id,
-					name:
-						ITEM_NAMES[avail.item_id] ??
-						(avail.item_id.startsWith('item:') ? avail.item_id.slice(5) : avail.item_id),
-					reserved: avail.qty_reserved,
-					onHand: avail.qty_on_hand,
-					target: avail.qty_target,
-					unit: avail.unit,
-					isCutOff: avail.is_cut_off,
-					isManualClosed: avail.status === 'closed'
-				});
-			}
-
-			const isManualClosed = camp.status === 'closed';
-			const isCutOff = allNeedsCutOff || isManualClosed;
-
-			list.push({
-				id: camp._id,
-				title: camp.title || 'ประกาศช่วยเหลือภัยพิบัติ EOC',
-				location: camp.notes || 'คลังช่วยเหลือภัยพิบัติ EOC',
-				needs: needs,
-				showOnHome: camp.visible_on_home !== false,
-				isCutOff: isCutOff,
-				isManualClosed: isManualClosed,
-				campaignDoc: camp
-			});
-		}
-		return list;
-	});
-
-	function toggleShowOnHome(compoundId: string) {
-		const targetItem = derivedItems.find((i) => i.id === compoundId);
-		if (targetItem) {
-			const campaign = targetItem.campaignDoc;
-			const nextVisible = campaign.visible_on_home === false ? true : false;
-			updateCampaignMutation.mutate(
-				{
-					campaign: {
-						...campaign,
-						visible_on_home: nextVisible
-					},
-					auditInput: {
-						action: 'manual_adjust',
-						reason: nextVisible
-							? `เจ้าหน้าที่เปิดแสดงแคมเปญบนหน้าแรก: ${targetItem.title}`
-							: `เจ้าหน้าที่ซ่อนแคมเปญจากหน้าแรก: ${targetItem.title}`,
-						ctx: ctx
-					}
-				},
-				{
-					onSuccess: () => {
-						toast.success(
-							nextVisible
-								? `กำลังโปรโมต "${targetItem.title}" บนหน้าแรก`
-								: `ซ่อน "${targetItem.title}" จากหน้าแรก`
-						);
-					},
-					onError: (err) => {
-						toast.error(`ไม่สามารถแก้ไขการโปรโมตได้: ${err.message}`);
-					}
-				}
-			);
-		}
-	}
-
-	function toggleCutOff(compoundId: string, itemId: string) {
-		const targetItem = derivedItems.find((i) => i.id === compoundId);
-		if (targetItem) {
-			const campaign = targetItem.campaignDoc;
-
-			const targetNeed = campaign.needs.find((n) => n.item_id === itemId);
-			const toggledStatus: 'open' | 'closed' = targetNeed?.status === 'closed' ? 'open' : 'closed';
-			const updatedNeeds = campaign.needs.map((need) => {
-				if (need.item_id === itemId) {
-					return {
-						...need,
-						status: toggledStatus
-					};
-				}
-				return need;
-			});
-
-			const itemName =
-				ITEM_NAMES[itemId] ?? (itemId.startsWith('item:') ? itemId.slice(5) : itemId);
-
-			updateCampaignMutation.mutate(
-				{
-					campaign: {
-						...campaign,
-						needs: updatedNeeds
-					},
-					auditInput: {
-						action: 'manual_adjust',
-						reason:
-							toggledStatus === 'closed'
-								? `เจ้าหน้าที่บังคับปิดรับบริจาคสำหรับพัสดุ: ${itemName} ในแคมเปญ ${targetItem.title}`
-								: `เจ้าหน้าที่เปิดรับบริจาคพัสดุอีกครั้ง: ${itemName} ในแคมเปญ ${targetItem.title}`,
-						ctx: ctx
-					}
-				},
-				{
-					onSuccess: () => {
-						toast.success(
-							toggledStatus === 'closed'
-								? `ปิดรับบริจาคสำหรับ "${itemName}" แล้ว`
-								: `เปิดรับบริจาคสำหรับ "${itemName}" อีกครั้ง`
-						);
-					},
-					onError: (err) => {
-						toast.error(`ไม่สามารถบันทึกสถานะได้: ${err.message}`);
-					}
-				}
-			);
-		}
-	}
-
-	function handleAddRequest(input: SpecialRequestInput) {
-		const itemId = mapNeedItemHeuristic(input.name);
-
-		const newCampaignInput = {
-			title: input.name,
-			needs: [
-				{
-					item_id: itemId,
-					qty_target: input.target,
-					unit: 'ชิ้น'
-				}
-			],
-			notes: `ประกาศพิเศษสำหรับคลัง: ${input.location}`
-		};
-
-		createCampaignMutation.mutate(
-			{
-				input: newCampaignInput,
-				ctx: ctx
-			},
-			{
-				onSuccess: () => {
-					toast.success(`เพิ่มประกาศความต้องการ "${input.name}" สำเร็จ`);
-					isModalOpen = false;
-				},
-				onError: (err) => {
-					toast.error(`ไม่สามารถสร้างประกาศได้: ${err.message}`);
-				}
-			}
-		);
-	}
-
-	function handleAddRequestFromForm(input: {
-		name: string;
-		target: number;
-		location: string;
-		category?: string;
-		unit?: string;
-		urgency?: 'critical' | 'important' | 'normal';
-		description?: string;
-	}) {
-		const itemId = mapNeedItemHeuristic(input.name);
-
-		const newCampaignInput = {
-			title: input.name,
-			needs: [
-				{
-					item_id: itemId,
-					qty_target: input.target,
-					unit: input.unit || 'ชิ้น',
-					status: 'open' as const
-				}
-			],
-			notes: input.description || `ประกาศสำหรับคลัง: ${input.location}`,
-			visible_on_home: true
-		};
-
-		createCampaignMutation.mutate(
-			{
-				input: newCampaignInput,
-				ctx: ctx
-			},
-			{
-				onSuccess: () => {
-					toast.success(`เพิ่มประกาศความต้องการ "${input.name}" สำเร็จ`);
-					viewState = 'list';
-				},
-				onError: (err) => {
-					toast.error(`ไม่สามารถสร้างประกาศได้: ${err.message}`);
-				}
-			}
-		);
-	}
 
 	let pendingRequests = $state([
 		{
@@ -399,15 +167,15 @@
 	{:else if activeSubTab === 'needs'}
 		{#if viewState === 'list'}
 			<NeedsBoardAdmin
-				items={derivedItems}
+				items={needsBoard.derivedItems}
 				onAddRequest={() => (viewState = 'create')}
-				onToggleShowOnHome={toggleShowOnHome}
-				onToggleCutOff={toggleCutOff}
+				onToggleShowOnHome={needsBoard.toggleShowOnHome}
+				onToggleCutOff={needsBoard.toggleCutOff}
 			/>
 		{:else}
 			<CreateCampaignForm
 				onclose={() => (viewState = 'list')}
-				onsubmit={handleAddRequestFromForm}
+				onsubmit={needsBoard.handleAddRequestFromForm}
 			/>
 		{/if}
 	{/if}
@@ -416,7 +184,7 @@
 <SpecialRequestDialog
 	open={isModalOpen}
 	onclose={() => (isModalOpen = false)}
-	onsubmit={handleAddRequest}
+	onsubmit={needsBoard.handleAddRequest}
 />
 
 <PendingReviewDialog

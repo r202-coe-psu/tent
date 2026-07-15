@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-07
+updated: 2026-07-14
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -119,7 +119,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 
 | type | mutability | สาระ |
 | --- | --- | --- |
-| `stock_ledger` | **append-only** | รับ/จ่าย/ปรับ stock ราย item (+qty/−qty) — balance = reduce view |
+| `stock_ledger` | **append-only** | รับ/จ่าย/ปรับ stock ราย item (+qty/−qty เป็น `qty_str`) — balance = **client** Decimal sum (CR-038; ไม่พึ่ง `_sum` ของ float) |
 | `stock_transfer` | state machine | โอนของข้ามศูนย์: `requested→shipped→received` (เขียนฝั่งต้นทาง replicate ผ่าน central) |
 | `donation` | state machine | pre-declaration จาก public tier หรือบันทึกหน้างาน: `declared→received→expired` |
 | `donation_campaign` | mutable (LWW) | ความต้องการของศูนย์ (needs ที่ public เห็นเป็น aggregate) |
@@ -161,7 +161,7 @@ State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc 
 { type: "sop_profile", name, ratios: { water_l_per_person_day: 3, ... } }
 // catalog:   recipe:{ulid}   — สูตรต่อ 1 หน่วยเสิร์ฟ (กล่อง) ใช้ทั้งคำนวณแผนและประมาณการจาก stock
 { type: "recipe", name: "ข้าวไข่เจียว", serving_unit: "box",
-  ingredients: [ { item_id: "item:01H...", qty: 0.15, unit: "kg" }, ... ],
+  ingredients: [ { item_id: "item:01H...", quantity: "0.15", uom: "kg" }, ... ],
   tags: ["halal", "soft_food"] }
 ```
 
@@ -170,12 +170,12 @@ State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc 
 | View (design doc `_design/app`) | ใช้ทำ |
 | --- | --- |
 | `occupancy` — map movement → reduce `_count` ตาม status | dashboard FR-14, occupancy guard FR-12 |
-| `stock_balance` — map stock_ledger (item, ±qty) → reduce `_sum` | stock dashboard, reorder alert |
+| `stock_balance` — **client** Decimal sum ของ `stock_ledger.qty` (`qty_str`) ต่อ item (CR-038; อย่าพึ่ง `_sum` ของ float) | stock dashboard, reorder alert |
 | `latest_screening` — map screening by (evacuee, ts) | ผลคัดกรองล่าสุด |
 | `meals_served` — reduce `_sum` ต่อวัน/มื้อ | kitchen dashboard |
 | `needs_open` — donation_campaign − donation(declared+received) | GET /public/v1/needs |
 
-**Producible boxes (FR-39 ส่วนขยาย — "stock ทำได้กี่กล่อง"):** คำนวณฝั่ง client ไม่ใช่ view
+**Producible boxes (FR-39 ส่วนขยาย — "stock ทำได้กี่กล่อง"):** คำนวณฝั่ง client ด้วย Decimal ไม่ใช่ view
 (ต้อง join ข้าม db) — `producible(recipe) = min( stock_balance[item] / qty_per_box[item] )`
 ต่อทุก ingredient ของ recipe; UI หน้า meal plan แสดงต่อเมนูว่า stock ปัจจุบันทำได้สูงสุดกี่กล่อง
 เทียบกับจำนวนที่แผนต้องการ (occupancy × ratio) — ขาดเท่าไรส่งเข้า requisition/จัดหา

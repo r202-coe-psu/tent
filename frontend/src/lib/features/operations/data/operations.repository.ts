@@ -4,6 +4,7 @@ import type {
 	CampaignInput,
 	StockLedger,
 	ReceiveInput,
+	DistributeInput,
 	Donation,
 	DonationSlot
 } from '../domain/operations';
@@ -34,12 +35,18 @@ export interface OperationsRepository {
 	/**
 	 * Calculate current on-hand stock balance for all items (sum of signed deltas).
 	 */
-	getBalance(): Promise<Map<string, number>>;
+	getBalance(): Promise<Map<string, string>>;
 
 	/**
 	 * Process and persist an inbound stock receive entry.
 	 */
 	receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger>;
+
+	/**
+	 * Process and persist an outbound stock distribute entry.
+	 * Will throw an error if there is insufficient stock.
+	 */
+	distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger>;
 
 	// Campaign/Donation/Slot methods
 	listCampaigns(): Promise<DonationCampaign[]>;

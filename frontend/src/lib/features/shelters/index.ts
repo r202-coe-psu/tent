@@ -80,6 +80,15 @@ export {
 	type ShelterMaster
 } from './domain/schema';
 
+export {
+	luggageRuleLabels,
+	parkingRuleLabels,
+	petCategoryLabels,
+	petConditionLabels,
+	petCategoryConditions,
+	petCategoryOrder
+} from './domain/policy-labels';
+
 // Data layer (public)
 export { createShelter, updateShelter, closeZone, reopenZone } from './data/shelters.api';
 export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.remote';

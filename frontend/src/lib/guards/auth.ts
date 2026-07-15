@@ -10,10 +10,13 @@ import {
 } from '$lib/auth/roles';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
-export const LANDING_ROUTE = '/';
+export const LANDING_ROUTE = '/portal';
 
-/** The login page — where unauthenticated and just-logged-out users are sent. */
+/** The login page — where unauthenticated users are sent. */
 export const LOGIN_ROUTE = '/login';
+
+/** Where users land after logout. */
+export const LOGOUT_ROUTE = '/public';
 
 /**
  * Auth guard for protected routes. Resolves the CouchDB `_session` cookie and

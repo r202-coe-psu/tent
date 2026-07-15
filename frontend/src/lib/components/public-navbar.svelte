@@ -5,6 +5,9 @@
 	import Compass from '@lucide/svelte/icons/compass';
 	import Search from '@lucide/svelte/icons/search';
 	import Heart from '@lucide/svelte/icons/heart';
+	import Building2 from '@lucide/svelte/icons/building-2';
+	import Menu from '@lucide/svelte/icons/menu';
+	import X from '@lucide/svelte/icons/x';
 	// import FileText from '@lucide/svelte/icons/file-text';
 	// import UserPlus from '@lucide/svelte/icons/user-plus';
 	// import ChevronDown from '@lucide/svelte/icons/chevron-down';
@@ -15,6 +18,12 @@
 			return page.url.pathname === '/public' || page.url.pathname === '/public/';
 		}
 		return page.url.pathname.startsWith(path);
+	}
+
+	let mobileMenuOpen = $state(false);
+
+	function toggleMobileMenu() {
+		mobileMenuOpen = !mobileMenuOpen;
 	}
 </script>
 
@@ -39,6 +48,19 @@
 			</a>
 		</div>
 
+		<!-- Mobile Menu Button -->
+		<button
+			class="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted md:hidden"
+			onclick={toggleMobileMenu}
+			aria-label="Toggle mobile menu"
+		>
+			{#if mobileMenuOpen}
+				<X class="h-6 w-6" />
+			{:else}
+				<Menu class="h-6 w-6" />
+			{/if}
+		</button>
+
 		<!-- Navbar Links -->
 		<nav class="hidden items-center gap-1 md:flex">
 			<a
@@ -53,37 +75,29 @@
 				หน้าแรก
 			</a>
 
-			<!-- <a
-				href={resolve('/public/shelters' as any)}
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
-				title="เร็วๆ นี้"
+			<a
+				href="/public/shelters"
+				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+					'/shelters'
+				) && !isActive('/public/shelters')
+					? 'bg-primary-muted text-primary'
+					: 'text-muted-foreground'}"
 			>
 				<Compass class="h-4 w-4" />
 				ตรวจสอบศูนย์พักพิง
-			</a> -->
-			<span
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
-				title="เร็วๆ นี้"
-			>
-				<Compass class="h-4 w-4" />
-				ตรวจสอบศูนย์พักพิง
-			</span>
+			</a>
 
-			<!-- <a
-				href={resolve('/public/family-search' as any)}
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
-				title="เร็วๆ นี้"
+			<a
+				href={resolve('/public/search')}
+				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+					'/public/search'
+				)
+					? 'bg-primary-muted text-primary'
+					: 'text-muted-foreground'}"
 			>
 				<Search class="h-4 w-4" />
 				สืบค้นญาติ
-			</a> -->
-			<span
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
-				title="เร็วๆ นี้"
-			>
-				<Search class="h-4 w-4" />
-				สืบค้นญาติ
-			</span>
+			</a>
 
 			<a
 				href={resolve('/public/donations')}
@@ -95,6 +109,18 @@
 			>
 				<Heart class="h-4 w-4" />
 				บริจาคและจองคิว
+			</a>
+
+			<a
+				href={resolve('/login')}
+				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
+					'/login'
+				)
+					? 'bg-primary-muted text-primary'
+					: ''}"
+			>
+				<Building2 class="h-4 w-4" />
+				ระบบหลังบ้าน
 			</a>
 
 			<!-- <a
@@ -156,4 +182,76 @@
 			</div> -->
 		</nav>
 	</div>
+
+	<!-- Mobile Menu Dropdown -->
+	{#if mobileMenuOpen}
+		<div class="absolute top-full left-0 w-full border-b border-border bg-card shadow-lg md:hidden">
+			<nav class="flex flex-col gap-2 p-4">
+				<a
+					href={resolve('/public')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/public'
+					) && !isActive('/public/')
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Home class="h-5 w-5" />
+					หน้าแรก
+				</a>
+
+				<a
+					href="/public/shelters"
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/shelters'
+					) && !isActive('/public/shelters')
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Compass class="h-5 w-5" />
+					ตรวจสอบศูนย์พักพิง
+				</a>
+
+				<a
+					href={resolve('/public/search')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/public/search'
+					)
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Search class="h-5 w-5" />
+					สืบค้นญาติ
+				</a>
+
+				<a
+					href={resolve('/public/donations')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/public/donations'
+					)
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Heart class="h-5 w-5" />
+					บริจาคและจองคิว
+				</a>
+
+				<a
+					href={resolve('/login')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
+						'/login'
+					)
+						? 'bg-primary-muted text-primary'
+						: ''}"
+				>
+					<Building2 class="h-5 w-5" />
+					ระบบหลังบ้าน
+				</a>
+			</nav>
+		</div>
+	{/if}
 </header>

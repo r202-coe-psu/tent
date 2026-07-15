@@ -42,8 +42,7 @@ export async function couchFetch<T>(
 	});
 
 	const data = (await res.json().catch(() => null)) as
-		| (T & { error?: string; reason?: string })
-		| null;
+		(T & { error?: string; reason?: string }) | null;
 
 	if (!res.ok) {
 		const message = data?.reason || data?.error || `CouchDB request failed (${res.status})`;

@@ -289,12 +289,17 @@ that must not be called from the browser.
 - **Admin credentials (`COUCHDB_ADMIN_URL`) are server-only.** They may only be used in
   `src/routes/api/**` and `$lib/server/couch-admin.ts`. Never import server code into client
   bundles, and never put credentials behind a `PUBLIC_` env var.
+- **Transactional quantities** (stock, donation items, requisition, recipe qty, UOM multiplier, …)
+  must go through `$lib/utils/qty` and persist as `qty_str` (decimal string, ≤4 fractional digits).
+  Details and do/don’t examples: `CONVENTIONS.md` §6 (CR-038).
 
 **Do not:**
 
 - Import or recreate PouchDB / `pouch.ts` / `*.pouch.ts`
 - Build a local offline database or write queue
 - Call `_design/app/_view/*` from the browser
+- Persist transactional qty as a JSON `number`, or add/compare qty with native `number` arithmetic
+  (`+`, `*`, `Math.min` on floats, `Number(input)` then accumulate)
 
 ### 4.1 Live updates — how data refreshes automatically
 

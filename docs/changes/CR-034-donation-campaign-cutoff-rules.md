@@ -35,8 +35,10 @@ affects:
 
 - ฟิลด์ `needs[].status` เป็นฟิลด์ทางเลือก (Optional) หากเอกสารเดิมที่อยู่ในระบบไม่มีฟิลด์นี้ ให้ระบบถือว่าสถานะเป็น `'open'` (Fallback) โดยปริยาย จึงไม่จำเป็นต้องทำ Script ย้ายข้อมูล (No production backfill needed)
 - ฟิลด์ `visible_on_home` เป็นฟิลด์ทางเลือก (Optional) — reader ถือว่าไม่มีฟิลด์ = `true` (แสดงบนหน้าแรก); ไม่ต้อง backfill
+- **Existing shelter DBs:** หลัง merge ต้อง re-deploy `_design/access` บน shelter DB ที่มีอยู่แล้ว เพื่อให้ `validate_doc_update` whitelist รวม `audit` (และ doc types อื่นที่อัปเดต) — ใช้ `redeployShelterAccessDesign(db, shelterCode)` ใน `$lib/server/shelters.admin.ts` (idempotent re-PUT) จาก dev script หรือ admin endpoint; shelter ใหม่ที่ provision ผ่าน `POST /api/back-office/shelter` ได้ design doc ล่าสุดอัตโนมัติ
 
 ## Decision log
 
 - 2026-07-06 — proposed
 - 2026-07-08 — spec alignment: เพิ่ม `visible_on_home` ใน CR + schema.md §2.4 ให้ตรงกับ implementation ที่ persist ใน `operations.ts` แล้ว (รอ owner sign-off ก่อนเปลี่ยน status เป็น `accepted`/`approved`)
+- 2026-07-08 — implementation complete pending owner sign-off (PR #39): back-office needs board, `visible_on_home` toggle, auto cut-off UX, manual override + audit trail on `updateCampaign`, `validate_doc_update` whitelist รวม `audit`; `DonationLogistics`/`DonationSlot`/donation `schema_v` 2 เป็นของเดิมจาก CR-005 §F ไม่ใช่ scope CR-034

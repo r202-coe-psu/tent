@@ -44,9 +44,9 @@
 					<SearchSelect
 						items={municipalityZoneItems}
 						bind:value={mzVal}
-						placeholder={mzPending ? 'กำลังโหลด...' : 'เลือกเขต...'}
+						placeholder="เลือกเขต..."
 						emptyText="ไม่พบเขตที่ค้นหา"
-						disabled={mzPending}
+						loading={mzPending}
 						controlProps={props}
 						class="h-9 w-full"
 					/>
@@ -62,9 +62,9 @@
 					<SearchSelect
 						items={communityItems}
 						bind:value={commVal}
-						placeholder={commPending ? 'กำลังโหลด...' : 'เลือกชุมชน...'}
+						placeholder="เลือกชุมชน..."
 						emptyText="ไม่พบชุมชนที่ค้นหา"
-						disabled={commPending}
+						loading={commPending}
 						controlProps={props}
 						class="h-9 w-full"
 					/>

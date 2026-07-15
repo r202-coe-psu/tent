@@ -187,18 +187,17 @@ describe('calculateResources — absent vs invalid', () => {
 });
 
 describe('calculateResources — floating point vs status', () => {
-	it('float noise does not flip ok→gap; gap stays raw', () => {
-		// 3 × 0.1 = 0.30000000000000004; have 0.3 → |gap| < GAP_EPSILON → ok
+	it('float noise does not flip ok→gap; rounded need/gap wash residue', () => {
+		// 3 × 0.1 = 0.30000000000000004; rounded need 0.3 − have 0.3 → gap 0 → ok
 		const [row] = calc(3, [r('x', 'multiply', 0.1, 0.3)]);
 		expect(row.status).toBe('ok');
-		expect(row.need).toBeCloseTo(0.3);
-		expect(row.gap).not.toBe(0); // RAW residual retained
-		expect(Math.abs(row.gap as number)).toBeLessThan(1e-9);
+		expect(row.need).toBe(0.3);
+		expect(row.gap).toBe(0);
 	});
 
-	it('multiply result is raw (no rounding)', () => {
+	it('multiply result is rounded to quantity decimals', () => {
 		const [row] = calc(3, [r('x', 'multiply', 0.2, null)]);
-		expect(row.need).toBeCloseTo(0.6);
+		expect(row.need).toBe(0.6);
 	});
 
 	it('large-magnitude near-equal: representation noise only, status stays ok', () => {
@@ -207,10 +206,7 @@ describe('calculateResources — floating point vs status', () => {
 		const noisyNeed = 1_000_000 + (0.1 + 0.2 - 0.3);
 		const [row] = calc(1, [r('x', 'multiply', noisyNeed, 1_000_000)]);
 		expect(row.status).toBe('ok');
-		expect(row.gap).not.toBeNull();
-		// 1e-9 intentionally duplicates GAP_EPSILON (private/unexported) — this test documents the
-		// public tolerance behavior, not the implementation; if GAP_EPSILON ever changes, update both.
-		expect(Math.abs(row.gap as number)).toBeLessThan(1e-9);
+		expect(row.gap).toBe(0);
 	});
 });
 
@@ -261,8 +257,8 @@ describe('calculateResources — structural', () => {
 		expect(input).toEqual(snapshot); // input unchanged
 	});
 
-	it('exports FORMULA_V = 1.1.0 and carries as_of through unchanged', () => {
-		expect(FORMULA_V).toBe('1.1.0'); // bumped in T-31.3 (additive data_status field)
+	it('exports FORMULA_V = 1.2.0 and carries as_of through unchanged', () => {
+		expect(FORMULA_V).toBe('1.2.0'); // bumped for fixed-decimal gap classification
 		const [row] = calc(10, [r('water', 'multiply', 15, null)], '2026-01-01T00:00:00.000Z');
 		expect(row.as_of).toBe('2026-01-01T00:00:00.000Z');
 	});
@@ -374,5 +370,38 @@ describe('calculateResources — T-31.3 edge-case data_status (data-availability
 		for (const row of mixed()) {
 			if (row.data_status !== 'complete') expect(row.status).toBe('insufficient_data');
 		}
+	});
+});
+
+describe('calculateResources — T-31.9 idempotency (pure function, same input ⇒ same output)', () => {
+	it('calling calculateResources twice with the same input yields identical output', () => {
+		const input: CalcInput = {
+			occupancy: 120,
+			as_of: AS_OF,
+			resources: [
+				r('water', 'multiply', 15, 1000), // ok/gap path
+				r('toilet_f', 'divide', 20, 4), // divide/ceil path
+				r('max_queue', 'threshold', 30, 25), // constraint path
+				r('missing_ratio', 'multiply', null, 500), // ratio_missing path
+				r('unsynced', 'divide', 10, null), // stock_unsynced path
+				r('bad', 'multiply', -1, 100) // invalid_input path
+			]
+		};
+
+		expect(calculateResources(input)).toEqual(calculateResources(input));
+	});
+
+	it('idempotent across kinds/statuses individually (not just array-level equality)', () => {
+		const input: CalcInput = {
+			occupancy: 0,
+			as_of: AS_OF,
+			resources: [r('water', 'multiply', 15, 0)]
+		};
+
+		const first = calculateResources(input);
+		const second = calculateResources(input);
+
+		expect(first).toHaveLength(second.length);
+		first.forEach((row, i) => expect(row).toEqual(second[i]));
 	});
 });

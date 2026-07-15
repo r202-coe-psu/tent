@@ -13,6 +13,7 @@ import {
 	isNeedCutOff,
 	deriveNeedAvailability,
 	createReceiveEntry,
+	createDistributeEntry,
 	mapNeedItemHeuristic,
 	type Donation,
 	type ReceiveSource
@@ -68,12 +69,12 @@ describe('keyDonationReceipt — the only donation→stock path', () => {
 		// staff counted 8kg actually arrived, not the declared 10kg
 		const ledger = keyDonationReceipt(
 			donation,
-			[{ item_id: 'item:rice', qty: 8, unit: 'kg' }],
+			[{ item_id: 'item:rice', qty: '8', unit: 'kg' }],
 			ctx
 		);
 		expect(ledger).toHaveLength(1);
 		expect(ledger[0].type).toBe('stock_ledger');
-		expect(ledger[0].qty).toBe(8); // physical count, not declared 10
+		expect(ledger[0].qty).toBe('8'); // physical count, not declared 10
 		expect(ledger[0].reason).toBe('donation');
 		expect(ledger[0].ref_id).toBe(donation._id);
 	});
@@ -87,8 +88,16 @@ describe('stockBalance', () => {
 			createStockLedger({ item_id: 'item:water', qty: 5, unit: 'ขวด', reason: 'receive' }, ctx)
 		];
 		const balance = stockBalance(ledger);
-		expect(balance.get('item:rice')).toBe(7);
-		expect(balance.get('item:water')).toBe(5);
+		expect(balance.get('item:rice')).toBe('7');
+		expect(balance.get('item:water')).toBe('5');
+	});
+
+	it('rounds float residue so 0.1 + 0.2 balances to 0.3', () => {
+		const ledger = [
+			createStockLedger({ item_id: 'item:rice', qty: 0.1, unit: 'kg', reason: 'receive' }, ctx),
+			createStockLedger({ item_id: 'item:rice', qty: 0.2, unit: 'kg', reason: 'receive' }, ctx)
+		];
+		expect(stockBalance(ledger).get('item:rice')).toBe('0.3');
 	});
 
 	it('rejects a zero-quantity ledger entry', () => {
@@ -115,14 +124,14 @@ describe('openNeeds', () => {
 				...declaredItemsDonation(),
 				campaign_id: campaign._id,
 				status: 'declared',
-				items: [{ item_id: 'item:water', qty: 100, unit: 'ขวด' }]
+				items: [{ item_id: 'item:water', qty: '100', unit: 'ขวด' }]
 			}
 		];
 		const remaining = openNeeds(campaign, donations, []);
 		// water fully covered → dropped; rice untouched → remains
 		expect(remaining).toHaveLength(1);
 		expect(remaining[0].item_id).toBe('item:rice');
-		expect(remaining[0].qty_target).toBe(50);
+		expect(remaining[0].qty_target).toBe('50');
 	});
 
 	it('subtracts on-hand stock and active reservations correctly', () => {
@@ -146,7 +155,7 @@ describe('openNeeds', () => {
 				...declaredItemsDonation(),
 				campaign_id: campaign._id,
 				status: 'declared',
-				items: [{ item_id: 'item:water', qty: 40, unit: 'ขวด' }]
+				items: [{ item_id: 'item:water', qty: '40', unit: 'ขวด' }]
 			}
 		];
 
@@ -154,7 +163,7 @@ describe('openNeeds', () => {
 
 		expect(remaining).toHaveLength(2);
 		const waterNeed = remaining.find((r) => r.item_id === 'item:water');
-		expect(waterNeed?.qty_target).toBe(30);
+		expect(waterNeed?.qty_target).toBe('30');
 	});
 
 	it('filters out closed needs and closed campaigns', () => {
@@ -195,7 +204,7 @@ describe('calculateReserved', () => {
 			_id: 'don:declared-A',
 			campaign_id: campaignA,
 			status: 'declared',
-			items: [{ item_id: 'item:water', qty: 50, unit: 'ขวด' }]
+			items: [{ item_id: 'item:water', qty: '50', unit: 'ขวด' }]
 		};
 
 		// 2. Unkeyed received donation for Campaign A
@@ -204,7 +213,7 @@ describe('calculateReserved', () => {
 			_id: 'don:unkeyed-A',
 			campaign_id: campaignA,
 			status: 'received',
-			items: [{ item_id: 'item:water', qty: 30, unit: 'ขวด' }]
+			items: [{ item_id: 'item:water', qty: '30', unit: 'ขวด' }]
 		};
 
 		// 3. Keyed received donation for Campaign A (has ledger entry)
@@ -213,7 +222,7 @@ describe('calculateReserved', () => {
 			_id: 'don:keyed-A',
 			campaign_id: campaignA,
 			status: 'received',
-			items: [{ item_id: 'item:water', qty: 20, unit: 'ขวด' }]
+			items: [{ item_id: 'item:water', qty: '20', unit: 'ขวด' }]
 		};
 
 		// 4. Mismatched campaign donation
@@ -222,7 +231,7 @@ describe('calculateReserved', () => {
 			_id: 'don:other-B',
 			campaign_id: campaignB,
 			status: 'declared',
-			items: [{ item_id: 'item:water', qty: 100, unit: 'ขวด' }]
+			items: [{ item_id: 'item:water', qty: '100', unit: 'ขวด' }]
 		};
 
 		// 5. Expired donation
@@ -231,7 +240,7 @@ describe('calculateReserved', () => {
 			_id: 'don:expired-A',
 			campaign_id: campaignA,
 			status: 'expired',
-			items: [{ item_id: 'item:water', qty: 40, unit: 'ขวด' }]
+			items: [{ item_id: 'item:water', qty: '40', unit: 'ขวด' }]
 		};
 
 		// 6. Cancelled donation
@@ -240,7 +249,7 @@ describe('calculateReserved', () => {
 			_id: 'don:cancelled-A',
 			campaign_id: campaignA,
 			status: 'cancelled',
-			items: [{ item_id: 'item:water', qty: 40, unit: 'ขวด' }]
+			items: [{ item_id: 'item:water', qty: '40', unit: 'ขวด' }]
 		};
 
 		const donations = [
@@ -269,16 +278,16 @@ describe('calculateReserved', () => {
 		// When campaignId matches campaignA
 		const reservedA = calculateReserved(donations, stockLedgers, campaignA);
 		// Should include declared (50) + unkeyed received (30) = 80
-		expect(reservedA.get('item:water')).toBe(80);
+		expect(reservedA.get('item:water')).toBe('80');
 
 		// When campaignId matches campaignB
 		const reservedB = calculateReserved(donations, stockLedgers, campaignB);
-		expect(reservedB.get('item:water')).toBe(100);
+		expect(reservedB.get('item:water')).toBe('100');
 
 		// When no campaignId is passed, should sum all campaigns
 		const reservedAll = calculateReserved(donations, stockLedgers);
 		// Should include campaignA (80) + campaignB (100) = 180
-		expect(reservedAll.get('item:water')).toBe(180);
+		expect(reservedAll.get('item:water')).toBe('180');
 	});
 });
 
@@ -292,6 +301,12 @@ describe('Donation Cut-off (T-22) threshold crossing', () => {
 
 		// Case C: Total exceeds the target (On-hand 60 + Reserved 50 = 110 >= 100) -> Cut off immediately (true)
 		expect(isNeedCutOff(100, 60, 50, 'open', 'open')).toBe(true);
+
+		// Case D: float residue that undershoots target without rounding still cuts off
+		let noisySum = 0;
+		for (let i = 0; i < 10; i++) noisySum += 0.1; // 0.999…9 in IEEE-754
+		expect(noisySum < 1).toBe(true);
+		expect(isNeedCutOff(1, noisySum, 0, 'open', 'open')).toBe(true);
 	});
 
 	it('Should automatically reopen when inventory drops below target due to distribution', () => {
@@ -336,7 +351,7 @@ describe('deriveNeedAvailability', () => {
 				...declaredItemsDonation(),
 				campaign_id: campaign._id,
 				status: 'declared',
-				items: [{ item_id: 'item:water', qty: 40, unit: 'ขวด' }]
+				items: [{ item_id: 'item:water', qty: '40', unit: 'ขวด' }]
 			}
 		];
 
@@ -345,16 +360,16 @@ describe('deriveNeedAvailability', () => {
 
 		const waterAvail = availability.find((a) => a.item_id === 'item:water');
 		expect(waterAvail).toBeDefined();
-		expect(waterAvail?.qty_on_hand).toBe(30);
-		expect(waterAvail?.qty_reserved).toBe(40);
-		expect(waterAvail?.qty_remaining).toBe(30);
+		expect(waterAvail?.qty_on_hand).toBe('30');
+		expect(waterAvail?.qty_reserved).toBe('40');
+		expect(waterAvail?.qty_remaining).toBe('30');
 		expect(waterAvail?.is_cut_off).toBe(false);
 
 		const riceAvail = availability.find((a) => a.item_id === 'item:rice');
 		expect(riceAvail).toBeDefined();
-		expect(riceAvail?.qty_on_hand).toBe(0);
-		expect(riceAvail?.qty_reserved).toBe(0);
-		expect(riceAvail?.qty_remaining).toBe(50);
+		expect(riceAvail?.qty_on_hand).toBe('0');
+		expect(riceAvail?.qty_reserved).toBe('0');
+		expect(riceAvail?.qty_remaining).toBe('50');
 		expect(riceAvail?.is_cut_off).toBe(false);
 	});
 });
@@ -463,6 +478,69 @@ describe('createReceiveEntry', () => {
 			ctx
 		);
 		expect(entry.lot).toBeUndefined();
+	});
+});
+
+describe('createDistributeEntry', () => {
+	it('creates valid distribute entry with negative qty and distribute reason', () => {
+		const entry = createDistributeEntry(
+			{
+				item_id: 'item:water',
+				qty: 5,
+				unit: 'ขวด',
+				ref_id: null,
+				note: 'Zone B'
+			},
+			ctx
+		);
+
+		expect(entry.type).toBe('stock_ledger');
+		expect(entry.item_id).toBe('item:water');
+		expect(entry.qty).toBe('-5'); // Must be negative
+		expect(entry.reason).toBe('distribute');
+		expect(entry.lot).toEqual({ note: 'Zone B' });
+		expect(entry.shelter_code).toBe(ctx.shelterCode);
+	});
+
+	it('creates entry without note when omitted', () => {
+		const entry = createDistributeEntry(
+			{
+				item_id: 'item:rice',
+				qty: 10,
+				unit: 'kg',
+				ref_id: null
+			},
+			ctx
+		);
+
+		expect(entry.qty).toBe('-10');
+		expect(entry.lot).toBeUndefined();
+	});
+
+	it('rejects zero or negative quantity inputs', () => {
+		expect(() =>
+			createDistributeEntry(
+				{
+					item_id: 'item:water',
+					qty: 0,
+					unit: 'ขวด',
+					ref_id: null
+				},
+				ctx
+			)
+		).toThrow();
+
+		expect(() =>
+			createDistributeEntry(
+				{
+					item_id: 'item:water',
+					qty: -5,
+					unit: 'ขวด',
+					ref_id: null
+				},
+				ctx
+			)
+		).toThrow();
 	});
 });
 

@@ -1,3 +1,5 @@
+import Decimal from 'decimal.js';
+import { persistQty, qtyGte, qtyLte, roundQty, subQty } from '$lib/utils/qty';
 import type {
 	KitchenRequisitionInput,
 	MealPlan,
@@ -9,8 +11,12 @@ import type {
 // Future ingredients (egg, vegetable, etc.) will add entries here when P-02 ships.
 export const RICE_RECIPE_ID = 'ingredient:rice';
 
-// CR-021: rice_g_per_person_meal left sop_profile.ratios → kitchen/catalog
-// (item_master.consumption_rate, CR-013). Interim default until catalog lookup ships.
+// Rice consumption per person per meal (grams). CR-021 removed rice from
+// sop_profile.ratios (SOP = shelter planning only) and moved food/ingredient
+// coefficients to the kitchen (item_master.consumption_rate / recipe, CR-013).
+// That item_master field isn't built yet, so this is the interim kitchen-owned
+// default. 150 g matches the existing calc fixtures (100 people → 15000 g).
+// TODO(CR-021/CR-013): read from item_master.consumption_rate once it ships.
 export const DEFAULT_RICE_G_PER_PERSON_MEAL = 150;
 
 // Grams per kg — rice recipes are calculated in grams (SOP ratio precision); the
@@ -98,10 +104,11 @@ export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
 		if (!stock) {
 			throw new Error(`toRequisitionInput: no stock item mapping for recipe "${r.recipe_id}"`);
 		}
+		const qtyRequested = persistQty(new Decimal(r.planned_qty).div(stock.recipe_per_stock_unit));
 		return {
 			item_id: stock.item_id,
-			qty_requested: r.planned_qty / stock.recipe_per_stock_unit,
-			qty_issued: 0,
+			qty_requested: qtyRequested,
+			qty_issued: '0',
 			unit: stock.unit
 		};
 	});
@@ -119,10 +126,10 @@ export type StockAvailabilityStatus = 'ok' | 'partial' | 'out';
 export interface RequisitionLineAssessment {
 	item_id: string;
 	unit: string;
-	qty_requested: number;
-	on_hand: number; // signed ledger balance (may be negative if over-issued elsewhere)
-	qty_issuable: number; // most that can be issued now: clamp(requested, 0..on_hand)
-	shortfall: number; // requested minus what can be issued (0 when fully covered)
+	qty_requested: string;
+	on_hand: string; // signed ledger balance (may be negative if over-issued elsewhere)
+	qty_issuable: string; // most that can be issued now: clamp(requested, 0..on_hand)
+	shortfall: string; // requested minus what can be issued (0 when fully covered)
 	status: StockAvailabilityStatus;
 }
 
@@ -136,20 +143,24 @@ export interface RequisitionLineAssessment {
  * negative; the caller may still lower it, but not raise it past stock.
  */
 export function assessRequisition(
-	items: { item_id: string; qty_requested: number; unit: string }[],
-	balance: Map<string, number>
+	items: { item_id: string; qty_requested: string | number; unit: string }[],
+	balance: Map<string, string>
 ): RequisitionLineAssessment[] {
 	return items.map((item) => {
-		const onHand = balance.get(item.item_id) ?? 0;
-		const available = Math.max(0, onHand);
-		const qtyIssuable = Math.min(item.qty_requested, available);
-		const shortfall = item.qty_requested - qtyIssuable;
-		const status: StockAvailabilityStatus =
-			available <= 0 ? 'out' : available >= item.qty_requested ? 'ok' : 'partial';
+		const onHand = roundQty(balance.get(item.item_id) ?? '0');
+		const available = qtyGte(onHand, 0) ? onHand : '0';
+		const requested = roundQty(item.qty_requested);
+		const qtyIssuable = qtyLte(requested, available) ? requested : available;
+		const shortfall = subQty(requested, qtyIssuable);
+		const status: StockAvailabilityStatus = qtyLte(available, 0)
+			? 'out'
+			: qtyGte(available, requested)
+				? 'ok'
+				: 'partial';
 		return {
 			item_id: item.item_id,
 			unit: item.unit,
-			qty_requested: item.qty_requested,
+			qty_requested: requested,
 			on_hand: onHand,
 			qty_issuable: qtyIssuable,
 			shortfall,

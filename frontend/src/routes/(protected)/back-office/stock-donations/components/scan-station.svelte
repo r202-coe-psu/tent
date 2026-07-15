@@ -7,35 +7,91 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
+	import type { ScanDonationView } from '$lib/features/donations';
 
 	let scanState = $state<'idle' | 'scanning' | 'result'>('idle');
+	let searchQuery = $state('');
 
-	// Mocked scanned booking data
-	let bookingRef = $state('DN-582910');
-	let donorName = $state('คุณสมชาย ใจดี');
-	let scannedItems = $state([
-		{ name: 'น้ำดื่ม', qty: 50, unit: 'แพ็ค' },
-		{ name: 'ปลากระป๋อง', qty: 100, unit: 'กระป๋อง' }
-	]);
+	// Redacted scanned booking data (ScanDonationView from the back-office API)
+	let donationDoc = $state<ScanDonationView | null>(null);
+	let bookingRef = $state('');
+	let donorName = $state('');
+	let scannedItems = $state<{ name: string; qty: string; unit: string; item_id?: string }[]>([]);
+
+	async function performLookup(query: string) {
+		if (!query.trim()) return;
+		scanState = 'scanning';
+		try {
+			const res = await fetch(`/api/back-office/donations/${encodeURIComponent(query.trim())}`);
+			if (!res.ok) {
+				const errorData = await res.json().catch(() => ({}));
+				toast.error(errorData.error || 'ไม่พบข้อมูลการจองบริจาคนี้');
+				scanState = 'idle';
+				return;
+			}
+			const data = await res.json();
+			if (data.success && data.donation) {
+				donationDoc = data.donation as ScanDonationView;
+				bookingRef = donationDoc?.booking_ref || '';
+				donorName = donationDoc?.donor?.name || 'ไม่ระบุชื่อ';
+				scannedItems = (donationDoc?.items || []).map((it) => ({
+					name: it.free_text || it.item_id || 'ไม่ระบุชื่อสินค้า',
+					qty: it.qty != null && it.qty !== '' ? String(it.qty) : '0',
+					unit: it.unit || 'ชิ้น',
+					item_id: it.item_id
+				}));
+				scanState = 'result';
+			} else {
+				toast.error('ไม่พบข้อมูลการจองบริจาคนี้');
+				scanState = 'idle';
+			}
+		} catch {
+			toast.error('เกิดข้อผิดพลาดในการตรวจสอบข้อมูล');
+			scanState = 'idle';
+		}
+	}
 
 	function startScan() {
-		scanState = 'scanning';
-		setTimeout(() => {
-			scanState = 'result';
-		}, 1500); // 1.5s simulated scan processing
+		performLookup('DN-582910');
 	}
 
 	function handleCancel() {
 		scanState = 'idle';
+		searchQuery = '';
+		donationDoc = null;
 	}
 
-	function handleSave() {
-		toast.success(`บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef})`);
-		// Print saved quantities for demo purposes
-		scannedItems.forEach((item) => {
-			toast.info(`รับเข้า: ${item.name} จำนวน ${item.qty} ${item.unit}`);
-		});
-		scanState = 'idle';
+	async function handleSave() {
+		if (!bookingRef) return;
+		try {
+			const res = await fetch(`/api/back-office/donations/${encodeURIComponent(bookingRef)}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					status: 'received',
+					items: scannedItems.map((it) => ({
+						item_id: it.item_id,
+						free_text: it.name,
+						qty: it.qty,
+						unit: it.unit
+					}))
+				})
+			});
+			const data = await res.json();
+			if (data.success) {
+				toast.success(`บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef})`);
+				scannedItems.forEach((item) => {
+					toast.info(`รับเข้า: ${item.name} จำนวน ${item.qty} ${item.unit}`);
+				});
+				scanState = 'idle';
+				searchQuery = '';
+				donationDoc = null;
+			} else {
+				toast.error(data.error || 'บันทึกไม่สำเร็จ');
+			}
+		} catch {
+			toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+		}
 	}
 </script>
 
@@ -68,16 +124,43 @@
 				>
 					<Camera class="h-8 w-8" />
 				</div>
-				<h3 class="mb-1 text-sm font-bold text-foreground">เปิดกล้องสแกนคิวอาร์โค้ด</h3>
+				<h3 class="mb-1 text-sm font-bold text-foreground">สแกนหรือค้นหาใบจองบริจาค</h3>
 				<p class="mb-6 max-w-xs text-xs leading-relaxed text-muted-foreground">
-					เปิดกล้องหรือจำลองการอ่าน QR Code บนฟอร์มส่งมอบพัสดุและเสบียงอาหาร
+					กรอกรหัสการจอง (เช่น DN-xxxxxx) หรือสแกน QR Code จากมือถือผู้บริจาค
 				</p>
+
+				<div class="mb-4 flex w-full gap-2">
+					<Input
+						type="text"
+						placeholder="รหัสการจอง (e.g. DN-123456) หรือ Token"
+						bind:value={searchQuery}
+						onkeydown={(e) => e.key === 'Enter' && performLookup(searchQuery)}
+						class="h-10 rounded-xl text-xs"
+					/>
+					<Button
+						onclick={() => performLookup(searchQuery)}
+						disabled={!searchQuery.trim()}
+						class="h-10 shrink-0 rounded-xl px-4 text-xs font-bold"
+					>
+						ค้นหา
+					</Button>
+				</div>
+
+				<div class="relative my-2 flex w-full items-center justify-center">
+					<div class="absolute inset-x-0 h-px bg-border"></div>
+					<span
+						class="relative bg-card px-3 text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
+						>หรือ</span
+					>
+				</div>
+
 				<Button
 					onclick={startScan}
-					class="flex items-center gap-2 rounded-xl px-5 py-2.5 font-bold"
+					variant="outline"
+					class="mt-2 flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold"
 				>
 					<Scan class="h-4 w-4" />
-					จำลองการสแกน (Mock Scan)
+					จำลองสแกนใบจองตัวอย่าง (DN-582910)
 				</Button>
 			</div>
 		{:else if scanState === 'scanning'}
