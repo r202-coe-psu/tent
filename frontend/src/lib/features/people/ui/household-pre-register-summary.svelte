@@ -8,6 +8,7 @@
 	import {
 		SPECIAL_NEED_CHIPS,
 		maskNationalId,
+		zoneLabel,
 		type Evacuee,
 		type Household,
 		type SpecialNeed,
@@ -16,6 +17,7 @@
 		type CardType
 	} from '../domain/people';
 	import { toast } from 'svelte-sonner';
+	import { previewElementAsPdf } from '$lib/utils/pdf';
 	import QRCode from 'qrcode';
 	import Camera from '@lucide/svelte/icons/camera';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -45,6 +47,28 @@
 
 	let qrUrl = $state<string | null>(null);
 	let isSubmitting = $state(false);
+
+	let cardEl = $state<HTMLDivElement | null>(null);
+	let isExportingPdf = $state(false);
+
+	const fullId = $derived(createdHousehold._id.split(':')[1] ?? createdHousehold._id);
+	const zoneName = $derived(
+		createdHead?.current_stay?.zone
+			? zoneLabel(createdHead.current_stay.zone).toUpperCase()
+			: 'PRE-REGISTERED'
+	);
+
+	async function handlePrintPreview() {
+		if (!cardEl) return;
+		isExportingPdf = true;
+		try {
+			await previewElementAsPdf(cardEl, `household-id-${fullId}`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ');
+		} finally {
+			isExportingPdf = false;
+		}
+	}
 
 	// --- Form State (Subsequent Members) ---
 	let showAddMemberForm = $state(false);
@@ -406,43 +430,46 @@
 			<div class="rounded-2xl bg-slate-100 p-4 dark:bg-slate-800">
 				<div
 					id="qr-identity-card"
-					class="mx-auto flex max-w-[280px] flex-col items-stretch overflow-hidden rounded-xl border border-slate-200 bg-white p-5 text-slate-900 shadow-md"
+					bind:this={cardEl}
+					class="mx-auto flex min-h-[90px] max-w-[340px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md dark:border-slate-700"
 				>
-					<div class="border-b pb-2 text-center">
-						<h4 class="text-[10px] font-bold tracking-widest text-slate-500 uppercase">
-							Smart Shelter Card
-						</h4>
-						<h3 class="mt-0.5 text-sm font-bold text-slate-800">
-							ลงทะเบียนล่วงหน้า (Pre-registered)
-						</h3>
+					<div class="w-2.5 shrink-0 bg-emerald-500"></div>
+
+					<div class="flex flex-1 flex-col justify-center gap-0.5 px-3 py-2 text-left">
+						<span class="font-mono text-[9px] font-bold tracking-widest text-slate-400 uppercase">
+							ZONE: {zoneName}
+						</span>
+						<p class="truncate text-sm leading-tight font-bold text-slate-900">
+							{createdHousehold.label}
+						</p>
+						<div class="mt-1 flex flex-col gap-0.5 text-xs text-slate-600">
+							<p>
+								<span class="font-semibold">หัวหน้า:</span>
+								{createdHead ? `${createdHead.first_name} ${createdHead.last_name}` : '—'}
+							</p>
+							<p>
+								<span class="font-semibold">จำนวนสมาชิก:</span>
+								{householdMembers.length} คน
+							</p>
+						</div>
+						<div class="mt-1">
+							<span
+								class="inline-block rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wide whitespace-nowrap text-slate-700"
+							>
+								{fullId}
+							</span>
+						</div>
 					</div>
 
-					<div class="my-4 flex items-center justify-center">
+					<div class="flex shrink-0 items-center justify-center px-2">
 						{#if qrUrl}
-							<img src={qrUrl} alt="QR Code" class="size-36 object-contain" />
+							<img src={qrUrl} alt="QR Code" class="size-16 shrink-0 object-contain" />
 						{:else}
 							<div
-								class="flex size-36 items-center justify-center rounded bg-slate-100 text-xs text-slate-400"
+								class="flex size-16 shrink-0 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400"
 							>
-								กำลังสร้าง QR...
+								...
 							</div>
-						{/if}
-					</div>
-
-					<div class="space-y-2 border-t pt-3 text-center">
-						<h3 class="text-sm font-bold text-slate-900">
-							🏡 {createdHousehold.label}
-						</h3>
-						<div
-							class="inline-block rounded bg-slate-900 px-2 py-0.5 font-mono text-[9px] font-bold text-white uppercase"
-						>
-							ID: {createdHousehold._id.split(':')[1] ?? createdHousehold._id}
-						</div>
-						{#if createdHead}
-							<p class="text-[10px] text-slate-500">
-								หัวหน้า: {createdHead.first_name}
-								{createdHead.last_name}
-							</p>
 						{/if}
 					</div>
 				</div>
@@ -450,11 +477,12 @@
 
 			<div class="mt-4 flex flex-col gap-2">
 				<Button
-					onclick={() => window.print()}
+					onclick={handlePrintPreview}
+					disabled={isExportingPdf}
 					class="flex h-10 w-full items-center justify-center gap-1.5 bg-[#0d2240] text-white hover:bg-[#1a3a5c]"
 				>
 					<Printer class="size-4" />
-					<span>พิมพ์บัตรประจำครอบครัว</span>
+					<span>{isExportingPdf ? 'กำลังสร้าง PDF...' : 'พิมพ์บัตรประจำครอบครัว'}</span>
 				</Button>
 			</div>
 		</div>

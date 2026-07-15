@@ -15,6 +15,7 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Users from '@lucide/svelte/icons/users';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
+	import Eye from '@lucide/svelte/icons/eye';
 
 	let {
 		selectedHead,
@@ -23,7 +24,8 @@
 		allEvacuees = [],
 		onScanClick,
 		onBack,
-		onNext
+		onNext,
+		onViewProfile
 	}: {
 		selectedHead: Evacuee | null;
 		selectedMembers: Evacuee[];
@@ -32,6 +34,7 @@
 		onScanClick: () => void;
 		onBack: () => void;
 		onNext: () => void;
+		onViewProfile: (id: string) => void;
 	} = $props();
 
 	// Search states
@@ -106,8 +109,7 @@
 		temporary_leave: 'ออกชั่วคราว',
 		transferred: 'ย้ายศูนย์',
 		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
-		deceased: 'เสียชีวิต',
-		cancelled: 'ยกเลิกการจอง'
+		deceased: 'เสียชีวิต'
 	};
 </script>
 
@@ -179,24 +181,34 @@
 									</p>
 								</div>
 
-								{#if conflict.conflicted}
-									<Badge variant="destructive" class="flex items-center gap-1 py-0.5 text-[10px]">
-										<ShieldAlert class="size-3" />
-										สังกัด: {conflict.label}
-									</Badge>
-								{:else}
+								<div class="flex items-center gap-2">
 									<Button
 										type="button"
 										variant="outline"
 										size="sm"
-										onclick={() => addMember(evacuee)}
-										disabled={selectedMembers.some((m) => m._id === evacuee._id)}
+										onclick={() => onViewProfile(evacuee._id)}
 									>
-										{selectedMembers.some((m) => m._id === evacuee._id)
-											? 'เพิ่มแล้ว ✓'
-											: 'เพิ่มสมาชิก'}
+										<Eye class="mr-1 size-4" /> ดูโปรไฟล์
 									</Button>
-								{/if}
+									{#if conflict.conflicted}
+										<Badge variant="destructive" class="flex items-center gap-1 py-0.5 text-[10px]">
+											<ShieldAlert class="size-3" />
+											สังกัด: {conflict.label}
+										</Badge>
+									{:else}
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											onclick={() => addMember(evacuee)}
+											disabled={selectedMembers.some((m) => m._id === evacuee._id)}
+										>
+											{selectedMembers.some((m) => m._id === evacuee._id)
+												? 'เพิ่มแล้ว ✓'
+												: 'เพิ่มสมาชิก'}
+										</Button>
+									{/if}
+								</div>
 							</div>
 						{/each}
 					</div>
@@ -228,16 +240,26 @@
 									{/if}
 								</p>
 							</div>
-							{#if selectedHead?._id !== evac._id}
+							<div class="flex items-center gap-1">
 								<Button
 									variant="ghost"
 									size="sm"
-									class="h-8 w-8 shrink-0 p-0 text-destructive hover:bg-destructive/10"
-									onclick={() => removeMember(evac._id)}
+									class="h-8 px-2 text-xs font-semibold text-primary hover:bg-primary/10"
+									onclick={() => onViewProfile(evac._id)}
 								>
-									<Trash class="size-4" />
+									<Eye class="mr-1 size-3.5" /> ดูโปรไฟล์
 								</Button>
-							{/if}
+								{#if selectedHead?._id !== evac._id}
+									<Button
+										variant="ghost"
+										size="sm"
+										class="h-8 w-8 shrink-0 p-0 text-destructive hover:bg-destructive/10"
+										onclick={() => removeMember(evac._id)}
+									>
+										<Trash class="size-4" />
+									</Button>
+								{/if}
+							</div>
 						</div>
 					{/each}
 				</div>

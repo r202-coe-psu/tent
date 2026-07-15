@@ -13,6 +13,7 @@
 	import Trash from '@lucide/svelte/icons/trash';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
+	import Eye from '@lucide/svelte/icons/eye';
 
 	let {
 		selectedHead = $bindable(null),
@@ -20,7 +21,8 @@
 		allEvacuees = [],
 		onScanClick,
 		onCancel,
-		onNext
+		onNext,
+		onViewProfile
 	}: {
 		selectedHead: Evacuee | null;
 		allHouseholds: Household[];
@@ -28,6 +30,7 @@
 		onScanClick: () => void;
 		onCancel: () => void;
 		onNext: () => void;
+		onViewProfile: (id: string) => void;
 	} = $props();
 
 	// Search states
@@ -88,8 +91,7 @@
 		temporary_leave: 'ออกชั่วคราว',
 		transferred: 'ย้ายศูนย์',
 		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
-		deceased: 'เสียชีวิต',
-		cancelled: 'ยกเลิกการจอง'
+		deceased: 'เสียชีวิต'
 	};
 </script>
 
@@ -117,16 +119,21 @@
 						เลขบัตร: {selectedHead.person_id?.number || 'ไม่มีข้อมูล'}
 					</p>
 				</div>
-				<Button
-					variant="outline"
-					size="sm"
-					class="border-destructive text-destructive hover:bg-destructive/10"
-					onclick={() => {
-						selectedHead = null;
-					}}
-				>
-					<Trash class="mr-1 size-4" /> เปลี่ยนคน
-				</Button>
+				<div class="flex gap-2">
+					<Button variant="outline" size="sm" onclick={() => onViewProfile(selectedHead!._id)}>
+						<Eye class="mr-1 size-4" /> ดูโปรไฟล์
+					</Button>
+					<Button
+						variant="outline"
+						size="sm"
+						class="border-destructive text-destructive hover:bg-destructive/10"
+						onclick={() => {
+							selectedHead = null;
+						}}
+					>
+						<Trash class="mr-1 size-4" /> เปลี่ยนคน
+					</Button>
+				</div>
 			</div>
 		</div>
 	{:else}
@@ -189,18 +196,28 @@
 								</p>
 							</div>
 
-							{#if conflict.conflicted}
-								<div class="flex flex-col items-end gap-1">
-									<Badge variant="destructive" class="flex items-center gap-1 py-0.5">
-										<ShieldAlert class="size-3" />
-										สังกัด: {conflict.label}
-									</Badge>
-								</div>
-							{:else}
-								<Button type="button" size="sm" onclick={() => selectHead(evacuee)}>
-									เลือกเป็นหัวหน้า
+							<div class="flex items-center gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onclick={() => onViewProfile(evacuee._id)}
+								>
+									<Eye class="mr-1 size-4" /> ดูโปรไฟล์
 								</Button>
-							{/if}
+								{#if conflict.conflicted}
+									<div class="flex flex-col items-end gap-1">
+										<Badge variant="destructive" class="flex items-center gap-1 py-0.5">
+											<ShieldAlert class="size-3" />
+											สังกัด: {conflict.label}
+										</Badge>
+									</div>
+								{:else}
+									<Button type="button" size="sm" onclick={() => selectHead(evacuee)}>
+										เลือกเป็นหัวหน้า
+									</Button>
+								{/if}
+							</div>
 						</div>
 					{/each}
 				</div>

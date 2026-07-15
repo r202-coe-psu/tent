@@ -2,6 +2,8 @@
 	import QRCode from 'qrcode';
 	import X from '@lucide/svelte/icons/x';
 	import Printer from '@lucide/svelte/icons/printer';
+	import { toast } from 'svelte-sonner';
+	import { previewElementAsPdf } from '$lib/utils/pdf';
 	import type { Evacuee, Household } from '../domain/people';
 	import { zoneLabel } from '../index';
 
@@ -20,6 +22,20 @@
 	} = $props();
 
 	let qrUrl = $state<string | null>(null);
+	let cardEl = $state<HTMLDivElement | null>(null);
+	let isExportingPdf = $state(false);
+
+	async function handlePrintPreview() {
+		if (!cardEl) return;
+		isExportingPdf = true;
+		try {
+			await previewElementAsPdf(cardEl, `household-id-${fullId}`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ');
+		} finally {
+			isExportingPdf = false;
+		}
+	}
 
 	$effect(() => {
 		if (!show) return;
@@ -67,6 +83,7 @@
 			<div class="mb-6 rounded-2xl bg-slate-100 p-6 dark:bg-slate-800">
 				<div
 					id="qr-household-card"
+					bind:this={cardEl}
 					class="mx-auto flex min-h-[90px] max-w-[420px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md dark:border-slate-700"
 				>
 					<div class="w-2.5 shrink-0 bg-emerald-500"></div>
@@ -114,11 +131,12 @@
 			<!-- Actions -->
 			<div class="flex flex-col gap-3">
 				<button
-					onclick={() => window.print()}
-					class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#003B71] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#002a50]"
+					onclick={handlePrintPreview}
+					disabled={isExportingPdf}
+					class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#003B71] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#002a50] disabled:cursor-not-allowed disabled:opacity-60"
 				>
 					<Printer class="size-4" />
-					พิมพ์บัตรครัวเรือน
+					{isExportingPdf ? 'กำลังสร้าง PDF...' : 'พิมพ์บัตรครัวเรือน'}
 				</button>
 				<button
 					onclick={onClose}

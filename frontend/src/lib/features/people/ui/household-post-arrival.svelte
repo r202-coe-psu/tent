@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { browser } from '$app/environment';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import {
@@ -42,8 +43,48 @@
 		useSubdistricts
 	} from '$lib/features/shelters/application/queries';
 
+	const STORAGE_KEY = 'smart_shelter_post_arrival_wizard_state';
+
+	interface SavedWizardState {
+		step: 1 | 2 | 3 | 4 | 5 | 6;
+		selectedHead: Evacuee | null;
+		selectedMembers: Evacuee[];
+		createdHousehold: Household | null;
+		qrUrl: string | null;
+		addressForm: {
+			addressNo: string;
+			villageNo: string;
+			subdistrict: string;
+			district: string;
+			province: string;
+			postalCode: string;
+			municipalityZone: string;
+			community: string;
+			notes: string;
+		};
+		petsList: PetGroup[];
+		vehicleRows: HouseholdVehicle[];
+		assetDescription: string;
+	}
+
+	function loadSavedState(): SavedWizardState | null {
+		if (!browser) return null;
+		try {
+			const saved = sessionStorage.getItem(STORAGE_KEY);
+			if (saved) {
+				sessionStorage.removeItem(STORAGE_KEY);
+				return JSON.parse(saved) as SavedWizardState;
+			}
+		} catch (e) {
+			console.error('Failed to load saved wizard state', e);
+		}
+		return null;
+	}
+
+	const savedState = loadSavedState();
+
 	// --- Step Tracking ---
-	let step = $state<1 | 2 | 3 | 4 | 5 | 6>(1);
+	let step = $state<1 | 2 | 3 | 4 | 5 | 6>(savedState?.step ?? 1);
 	let isSubmitting = $state(false);
 
 	// --- Queries and Mutations ---
@@ -67,10 +108,36 @@
 	const allHouseholds = $derived(householdsQuery.data ?? []);
 
 	// --- State variables ---
-	let selectedHead = $state<Evacuee | null>(null);
-	let selectedMembers = $state<Evacuee[]>([]);
-	let createdHousehold = $state<Household | null>(null);
-	let qrUrl = $state<string | null>(null);
+	let selectedHead = $state<Evacuee | null>(savedState?.selectedHead ?? null);
+	let selectedMembers = $state<Evacuee[]>(savedState?.selectedMembers ?? []);
+	let createdHousehold = $state<Household | null>(savedState?.createdHousehold ?? null);
+	let qrUrl = $state<string | null>(savedState?.qrUrl ?? null);
+
+	function handleViewProfile(id: string) {
+		const stateToSave = {
+			step,
+			selectedHead,
+			selectedMembers,
+			createdHousehold,
+			qrUrl,
+			addressForm,
+			petsList,
+			vehicleRows,
+			assetDescription
+		};
+		if (browser) {
+			try {
+				sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+			} catch (e) {
+				console.error('Failed to save wizard state', e);
+			}
+		}
+		goto(
+			resolve(
+				`/back-office/evacuee-management/edit/-evacuee/${id}?from=/back-office/households/new?path=c`
+			)
+		);
+	}
 
 	let showScanner = $state(false);
 	let scannerTarget = $state<'head' | 'member'>('head');
@@ -189,15 +256,15 @@
 
 	// --- Step 3: Address Form ---
 	let addressForm = $state({
-		addressNo: '',
-		villageNo: '',
-		subdistrict: '',
-		district: '',
-		province: '',
-		postalCode: '',
-		municipalityZone: '',
-		community: '',
-		notes: ''
+		addressNo: savedState?.addressForm?.addressNo ?? '',
+		villageNo: savedState?.addressForm?.villageNo ?? '',
+		subdistrict: savedState?.addressForm?.subdistrict ?? '',
+		district: savedState?.addressForm?.district ?? '',
+		province: savedState?.addressForm?.province ?? '',
+		postalCode: savedState?.addressForm?.postalCode ?? '',
+		municipalityZone: savedState?.addressForm?.municipalityZone ?? '',
+		community: savedState?.addressForm?.community ?? '',
+		notes: savedState?.addressForm?.notes ?? ''
 	});
 
 	const provincesQuery = useProvinces();
@@ -232,9 +299,9 @@
 		addressForm.postalCode = match ? String(match.zipcode) : '';
 	}
 
-	let petsList = $state<PetGroup[]>([]);
-	let vehicleRows = $state<HouseholdVehicle[]>([]);
-	let assetDescription = $state('');
+	let petsList = $state<PetGroup[]>(savedState?.petsList ?? []);
+	let vehicleRows = $state<HouseholdVehicle[]>(savedState?.vehicleRows ?? []);
+	let assetDescription = $state(savedState?.assetDescription ?? '');
 
 	const householdLabel = $derived(
 		selectedHead ? `ครอบครัว${selectedHead.first_name} ${selectedHead.last_name}` : 'ครอบครัวใหม่'
@@ -451,6 +518,7 @@
 			}}
 			onCancel={() => goto(resolve('/back-office/evacuee-management?tab=household'))}
 			onNext={() => (step = 2)}
+			onViewProfile={handleViewProfile}
 		/>
 	{/if}
 
@@ -468,6 +536,7 @@
 			}}
 			onBack={() => (step = 1)}
 			onNext={() => (step = 3)}
+			onViewProfile={handleViewProfile}
 		/>
 	{/if}
 
