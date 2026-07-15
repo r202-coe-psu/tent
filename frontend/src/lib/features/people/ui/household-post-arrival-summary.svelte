@@ -56,6 +56,12 @@
 				{selectedHead?.first_name}
 				{selectedHead?.last_name}
 			</p>
+			{#if selectedHead?.current_stay?.zone}
+				<p>
+					<span class="font-semibold">โซนที่จัดสรร:</span>
+					{zoneLabel(selectedHead.current_stay.zone)}
+				</p>
+			{/if}
 			<p>
 				<span class="font-semibold">เขตพื้นที่:</span>
 				{createdHousehold.municipality_zone

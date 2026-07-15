@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { useCreateEvacuee, useEvacuees } from '../application/queries';
+	import { useCreateEvacuee, useEvacuees, useUpdateEvacuee } from '../application/queries';
 	import { getShelterCode } from '$lib/db/shelter';
 	import {
 		SPECIAL_NEED_CHIPS,
@@ -17,11 +17,8 @@
 	} from '../domain/people';
 	import { toast } from 'svelte-sonner';
 	import QRCode from 'qrcode';
-	import CreditCard from '@lucide/svelte/icons/credit-card';
-
-	function handlePullMemberIdCard() {
-		// Mock UI only for now
-	}
+	import Camera from '@lucide/svelte/icons/camera';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 
 	import Plus from '@lucide/svelte/icons/plus';
 	import Printer from '@lucide/svelte/icons/printer';
@@ -43,6 +40,7 @@
 
 	// --- Queries and Mutations ---
 	const createEvacueeMutation = useCreateEvacuee();
+	const updateEvacueeMutation = useUpdateEvacuee();
 	const allEvacueesQuery = useEvacuees();
 
 	let qrUrl = $state<string | null>(null);
@@ -50,6 +48,14 @@
 
 	// --- Form State (Subsequent Members) ---
 	let showAddMemberForm = $state(false);
+	let memberNoPhone = $state(false);
+	let memberFacePhotoUrl = $state<string | null>(null);
+
+	$effect(() => {
+		if (memberNoPhone) {
+			memberPhone = '';
+		}
+	});
 	let memberFirstName = $state('');
 	let memberLastName = $state('');
 	let memberNickname = $state('');
@@ -132,6 +138,14 @@
 			return;
 		}
 
+		if (
+			!memberNoPhone &&
+			(!memberPhone.trim() || memberPhone.trim().replace(/\D/g, '').length !== 10)
+		) {
+			toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"');
+			return;
+		}
+
 		isSubmitting = true;
 
 		try {
@@ -179,10 +193,20 @@
 				medical_note: memberMedicalNote.trim() || undefined
 			};
 
-			await createEvacueeMutation.mutateAsync({
+			const memberDoc = await createEvacueeMutation.mutateAsync({
 				input: memberInput,
 				ctx
 			});
+
+			if (createdHead?.current_stay?.zone) {
+				await updateEvacueeMutation.mutateAsync({
+					...memberDoc,
+					current_stay: {
+						...memberDoc.current_stay,
+						zone: createdHead.current_stay.zone
+					}
+				});
+			}
 
 			toast.success(`ลงทะเบียนสมาชิก "${memberFirstName} ${memberLastName}" เรียบร้อยแล้ว`);
 
@@ -195,6 +219,8 @@
 			memberAge = '';
 			memberCardNumber = '';
 			memberPhone = '';
+			memberNoPhone = false;
+			memberFacePhotoUrl = null;
 			memberSpecialNeeds.clear();
 			memberMedicalConditions = '';
 			memberMedicalAllergies = '';
@@ -424,11 +450,11 @@
 
 			<div class="mt-4 flex flex-col gap-2">
 				<Button
-					disabled={true}
+					onclick={() => window.print()}
 					class="flex h-10 w-full items-center justify-center gap-1.5 bg-[#0d2240] text-white hover:bg-[#1a3a5c]"
 				>
 					<Printer class="size-4" />
-					<span>พิมพ์บัตรประจำครอบครัว (ปิดใช้งานชั่วคราว)</span>
+					<span>พิมพ์บัตรประจำครอบครัว</span>
 				</Button>
 			</div>
 		</div>
@@ -450,13 +476,6 @@
 			<div class="flex items-center gap-3">
 				<button
 					type="button"
-					onclick={handlePullMemberIdCard}
-					class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#003B71] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#002a50]"
-				>
-					<CreditCard class="size-4" /> ดึงข้อมูลบัตรประชาชน
-				</button>
-				<button
-					type="button"
 					class="text-sm font-medium text-muted-foreground hover:text-foreground"
 					onclick={() => (showAddMemberForm = false)}
 				>
@@ -465,9 +484,61 @@
 			</div>
 		</div>
 
-		<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+		<div class="grid grid-cols-1 items-start gap-6 md:grid-cols-[200px_1fr]">
+			<!-- Column 1: Face Photo mockup -->
+			<div class="space-y-2">
+				<p class="text-sm leading-none font-medium text-foreground">
+					ภาพถ่ายใบหน้า (Face Recognition)
+				</p>
+				<input
+					type="file"
+					accept="image/*"
+					class="hidden"
+					id="member-face-photo-input"
+					onchange={(e) => {
+						const file = e.currentTarget.files?.[0];
+						if (file) {
+							memberFacePhotoUrl = URL.createObjectURL(file);
+						}
+					}}
+				/>
+				<label
+					for="member-face-photo-input"
+					class="block cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
+				>
+					{#if memberFacePhotoUrl}
+						<img src={memberFacePhotoUrl} alt="Face" class="h-40 w-full rounded-lg object-cover" />
+					{:else}
+						<div class="flex h-40 flex-col items-center justify-center">
+							<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
+							<span class="text-xs text-muted-foreground">แตะเพื่อถ่ายภาพ</span>
+						</div>
+					{/if}
+				</label>
+			</div>
+
+			<!-- Column 2: Fields grid -->
 			<div class="space-y-4">
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<div class="space-y-2">
+						<Label>ประเภทบัตรประจำตัว</Label>
+						<select
+							class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+							bind:value={memberCardType}
+						>
+							<option value="national_id">บัตรประชาชน</option>
+							<option value="passport">พาสปอร์ต</option>
+							<option value="pink_card">บัตรสีชมพู</option>
+							<option value="other">อื่นๆ</option>
+						</select>
+					</div>
+					<div class="space-y-2">
+						<Label for="mem-cardno">เลขบัตร / หนังสือเดินทาง</Label>
+						<Input id="mem-cardno" placeholder="หมายเลขบัตร" bind:value={memberCardNumber} />
+					</div>
+				</div>
+
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<div class="space-y-2">
 						<Label for="mem-fn">ชื่อจริง <span class="text-destructive">*</span></Label>
 						<Input id="mem-fn" placeholder="ชื่อจริง" bind:value={memberFirstName} required />
@@ -478,34 +549,14 @@
 					</div>
 				</div>
 
-				<div class="grid grid-cols-3 gap-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<div class="space-y-2">
 						<Label for="mem-nn">ชื่อเล่น</Label>
 						<Input id="mem-nn" placeholder="ชื่อเล่น" bind:value={memberNickname} />
 					</div>
-					<div class="space-y-2">
-						<Label>เพศ</Label>
-						<select
-							class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							bind:value={memberGender}
-						>
-							<option value="male">ชาย</option>
-							<option value="female">หญิง</option>
-							<option value="other">อื่นๆ</option>
-						</select>
-					</div>
-					<div class="space-y-2">
-						<Label for="mem-phone">เบอร์โทรศัพท์</Label>
-						<Input
-							id="mem-phone"
-							placeholder="เบอร์โทรศัพท์"
-							bind:value={memberPhone}
-							maxlength={10}
-						/>
-					</div>
 				</div>
 
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
 					<div class="space-y-2">
 						<Label for="mem-by">ปีเกิด (พ.ศ.)</Label>
 						<Input id="mem-by" placeholder="เช่น 2530" bind:value={memberBirthYear} />
@@ -525,29 +576,41 @@
 							}}
 						/>
 					</div>
-				</div>
-
-				<div class="grid grid-cols-2 gap-4">
 					<div class="space-y-2">
-						<Label>ประเภทบัตรประจำตัว</Label>
+						<Label>เพศ</Label>
 						<select
 							class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							bind:value={memberCardType}
+							bind:value={memberGender}
 						>
-							<option value="national_id">บัตรประชาชน</option>
-							<option value="passport">พาสปอร์ต</option>
-							<option value="pink_card">บัตรสีชมพู</option>
+							<option value="male">ชาย</option>
+							<option value="female">หญิง</option>
 							<option value="other">อื่นๆ</option>
 						</select>
 					</div>
 					<div class="space-y-2">
-						<Label for="mem-cardno">เลขบัตร / หนังสือเดินทาง</Label>
-						<Input id="mem-cardno" placeholder="หมายเลขบัตร" bind:value={memberCardNumber} />
+						<Label>เบอร์โทรศัพท์ <span class="text-destructive">*</span></Label>
+						<Input
+							id="mem-phone"
+							placeholder="เบอร์โทรศัพท์"
+							disabled={memberNoPhone}
+							bind:value={memberPhone}
+							maxlength={10}
+						/>
+						<label class="mt-1.5 flex cursor-pointer items-center gap-2 text-xs">
+							<Checkbox
+								checked={memberNoPhone}
+								onCheckedChange={(v) => {
+									memberNoPhone = !!v;
+									if (memberNoPhone) {
+										memberPhone = '';
+									}
+								}}
+							/>
+							<span class="text-muted-foreground">ไม่มีเบอร์โทร</span>
+						</label>
 					</div>
 				</div>
-			</div>
 
-			<div class="space-y-4">
 				<div class="grid grid-cols-2 gap-4">
 					<div class="space-y-2">
 						<Label>สัญชาติ</Label>

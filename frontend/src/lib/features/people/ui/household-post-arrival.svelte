@@ -21,6 +21,7 @@
 	import HouseholdPostArrivalHead from './household-post-arrival-head.svelte';
 	import HouseholdPostArrivalMembers from './household-post-arrival-members.svelte';
 	import HouseholdPostArrivalSummary from './household-post-arrival-summary.svelte';
+	import EvacueeSelectZone from './evacuee-select-zone.svelte';
 
 	// Icons
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
@@ -34,9 +35,15 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import EvacueePetAssetVehicle from './evacuee-pet-asset-vehicle.svelte';
+	import { Combobox } from '$lib/components/ui/combobox/index.js';
+	import {
+		useProvinces,
+		useDistricts,
+		useSubdistricts
+	} from '$lib/features/shelters/application/queries';
 
 	// --- Step Tracking ---
-	let step = $state<1 | 2 | 3 | 4>(1);
+	let step = $state<1 | 2 | 3 | 4 | 5 | 6>(1);
 	let isSubmitting = $state(false);
 
 	// --- Queries and Mutations ---
@@ -193,6 +200,38 @@
 		notes: ''
 	});
 
+	const provincesQuery = useProvinces();
+	const districtsQuery = useDistricts(() => addressForm.province || null);
+	const subdistrictsQuery = useSubdistricts(
+		() => addressForm.province || null,
+		() => addressForm.district || null
+	);
+
+	const provinceItems = $derived((provincesQuery.data ?? []).map((p) => ({ value: p, label: p })));
+	const districtItems = $derived((districtsQuery.data ?? []).map((d) => ({ value: d, label: d })));
+	const subdistrictItems = $derived(
+		(subdistrictsQuery.data ?? []).map((s) => ({ value: s.subdistrict, label: s.subdistrict }))
+	);
+
+	function selectProvince(value: string | null) {
+		addressForm.province = value ?? '';
+		addressForm.district = '';
+		addressForm.subdistrict = '';
+		addressForm.postalCode = '';
+	}
+
+	function selectDistrict(value: string | null) {
+		addressForm.district = value ?? '';
+		addressForm.subdistrict = '';
+		addressForm.postalCode = '';
+	}
+
+	function selectSubdistrict(value: string | null) {
+		addressForm.subdistrict = value ?? '';
+		const match = (subdistrictsQuery.data ?? []).find((s) => s.subdistrict === value);
+		addressForm.postalCode = match ? String(match.zipcode) : '';
+	}
+
 	let petsList = $state<PetGroup[]>([]);
 	let vehicleRows = $state<HouseholdVehicle[]>([]);
 	let assetDescription = $state('');
@@ -202,7 +241,7 @@
 	);
 
 	// --- Save / Group Action ---
-	async function handleSaveGrouping() {
+	async function handleSaveGrouping(zone: string) {
 		if (isSubmitting) return;
 
 		if (!selectedHead) {
@@ -272,7 +311,7 @@
 
 			createdHousehold = hhDoc;
 
-			// 3. Link all selected members to the new household
+			// 3. Link all selected members to the new household and assign zone
 			const oldHouseholdIds: string[] = [];
 			for (const evac of selectedMembers) {
 				if (evac.household_id && !oldHouseholdIds.includes(evac.household_id)) {
@@ -281,10 +320,18 @@
 
 				const updatedEvac: Evacuee = {
 					...evac,
-					household_id: hhDoc._id
+					household_id: hhDoc._id,
+					current_stay: {
+						...(evac.current_stay ?? {}),
+						zone: zone || null
+					}
 				};
 
-				await updateEvacueeMutation.mutateAsync(updatedEvac);
+				const res = await updateEvacueeMutation.mutateAsync(updatedEvac);
+				if (evac._id === selectedHead._id) {
+					selectedHead = res;
+				}
+				selectedMembers = selectedMembers.map((m) => (m._id === evac._id ? res : m));
 			}
 
 			// 4. Soft-delete / Cancel old households that have become empty
@@ -304,7 +351,7 @@
 			}
 
 			toast.success(`จัดกลุ่มครัวเรือน "${hhDoc.label}" สำเร็จ`);
-			step = 4;
+			step = 6;
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			toast.error(`เกิดข้อผิดพลาดในการบันทึก: ${msg}`);
@@ -336,7 +383,7 @@
 
 	<!-- Step Progress Indicator -->
 	<div class="mx-auto mb-8 flex max-w-5xl items-start">
-		{#each [1, 2, 3, 4] as s (s)}
+		{#each [1, 2, 3, 4, 5, 6] as s (s)}
 			<div class="flex flex-1 flex-col items-center gap-2">
 				<div class="flex w-full items-center">
 					<!-- left connector -->
@@ -360,7 +407,7 @@
 					</div>
 					<!-- right connector -->
 					<div
-						class="h-0.5 flex-1 transition-colors {s === 4
+						class="h-0.5 flex-1 transition-colors {s === 6
 							? 'invisible'
 							: step > s
 								? 'bg-green-500'
@@ -380,8 +427,12 @@
 						: s === 2
 							? 'เลือกสมาชิกครัวเรือน'
 							: s === 3
-								? 'ระบุข้อมูลครัวเรือน'
-								: 'จัดกลุ่มสำเร็จ & QR Code'}
+								? 'ระบุที่อยู่ครัวเรือน'
+								: s === 4
+									? 'ทรัพย์สินและสัตว์เลี้ยง'
+									: s === 5
+										? 'เลือกโซนพักพิง'
+										: 'จัดกลุ่มสำเร็จ & QR Code'}
 				</span>
 			</div>
 		{/each}
@@ -420,141 +471,202 @@
 		/>
 	{/if}
 
-	<!-- ────────────────── STEP 3: Household Details Form ────────────────── -->
+	<!-- ────────────────── STEP 3: Household Address Form ────────────────── -->
 	{#if step === 3}
-		<div class="mx-auto w-full max-w-5xl space-y-6">
+		<div class="mx-auto w-full max-w-3xl space-y-6">
 			<div class="space-y-2">
-				<h3 class="text-lg font-bold text-foreground">3. ระบุข้อมูลรายละเอียดครัวเรือน</h3>
+				<h3 class="text-lg font-bold text-foreground">3. ระบุข้อมูลที่อยู่ครัวเรือน</h3>
 				<p class="text-sm text-muted-foreground">
-					กรอกข้อมูลที่อยู่หลัก, สัตว์เลี้ยง, ทรัพย์สิน และการจัดสรรโซนของครัวเรือนนี้
+					กรอกข้อมูลที่อยู่หลักตามภูมิลำเนา และข้อมูลโซนหรือชุมชนในศูนย์ของครัวเรือนนี้
 				</p>
 			</div>
 
-			<div class="grid grid-cols-1 items-start gap-6 md:grid-cols-3">
-				<!-- Left Form: Address and Zone details -->
-				<div class="space-y-6 md:col-span-2">
-					<!-- ที่อยู่หลัก -->
-					<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
-						<h4 class="text-base font-bold text-slate-800">ข้อมูลที่อยู่หลักตามภูมิลำเนา</h4>
-						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-							<div class="space-y-1.5">
-								<Label for="address-no">บ้านเลขที่ <span class="text-destructive">*</span></Label>
-								<Input
-									id="address-no"
-									placeholder="เช่น 12/34"
-									bind:value={addressForm.addressNo}
-									required
-								/>
-							</div>
-							<div class="space-y-1.5">
-								<Label for="village-no">หมู่ที่ / ชุมชน</Label>
-								<Input
-									id="village-no"
-									placeholder="เช่น หมู่ที่ 5"
-									bind:value={addressForm.villageNo}
-								/>
-							</div>
-							<div class="space-y-1.5">
-								<Label for="subdistrict">ตำบล / แขวง <span class="text-destructive">*</span></Label>
-								<Input
-									id="subdistrict"
-									placeholder="ระบุตำบล"
-									bind:value={addressForm.subdistrict}
-									required
-								/>
-							</div>
-							<div class="space-y-1.5">
-								<Label for="district">อำเภอ / เขต <span class="text-destructive">*</span></Label>
-								<Input
-									id="district"
-									placeholder="ระบุอำเภอ"
-									bind:value={addressForm.district}
-									required
-								/>
-							</div>
-							<div class="space-y-1.5">
-								<Label for="province">จังหวัด <span class="text-destructive">*</span></Label>
-								<Input
-									id="province"
-									placeholder="ระบุจังหวัด"
-									bind:value={addressForm.province}
-									required
-								/>
-							</div>
-							<div class="space-y-1.5">
-								<Label for="postal-code">รหัสไปรษณีย์</Label>
-								<Input
-									id="postal-code"
-									placeholder="ระบุรหัสไปรษณีย์"
-									bind:value={addressForm.postalCode}
-								/>
-							</div>
-						</div>
+			<!-- ข้อมูลครัวเรือนเบื้องต้น -->
+			<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
+				<h4 class="text-base font-bold text-slate-800">ข้อมูลครัวเรือนเบื้องต้น</h4>
+				<div class="space-y-4">
+					<div class="space-y-1.5">
+						<Label for="hh-label">ชื่อเรียกครัวเรือน</Label>
+						<Input
+							id="hh-label"
+							value={householdLabel}
+							disabled
+							class="bg-muted text-muted-foreground"
+						/>
 					</div>
 
-					<!-- โซนที่จัดสรร -->
-					<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
-						<h4 class="text-base font-bold text-slate-800">ข้อมูลโซน/ชุมชนพักพิง</h4>
-						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-							<div class="space-y-1.5">
-								<Label for="municipality-zone">เขตเทศบาล (Zone)</Label>
-								<select
-									id="municipality-zone"
-									bind:value={addressForm.municipalityZone}
-									class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-								>
-									<option value="">-- ไม่ระบุ --</option>
-									{#each municipalityZoneItems as mz (mz.value)}
-										<option value={mz.value}>{mz.label}</option>
-									{/each}
-								</select>
-							</div>
-							<div class="space-y-1.5">
-								<Label for="community">ชุมชนในศูนย์ (Community)</Label>
-								<select
-									id="community"
-									bind:value={addressForm.community}
-									class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-								>
-									<option value="">-- ไม่ระบุ --</option>
-									{#each communityItems as comm (comm.value)}
-										<option value={comm.value}>{comm.label}</option>
-									{/each}
-								</select>
-							</div>
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+						<div class="space-y-1.5">
+							<Label for="municipality-zone">เขตเทศบาล (Zone)</Label>
+							<select
+								id="municipality-zone"
+								bind:value={addressForm.municipalityZone}
+								class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								<option value="">-- ไม่ระบุ --</option>
+								{#each municipalityZoneItems as mz (mz.value)}
+									<option value={mz.value}>{mz.label}</option>
+								{/each}
+							</select>
+						</div>
+						<div class="space-y-1.5">
+							<Label for="community">ชุมชนในศูนย์ (Community)</Label>
+							<select
+								id="community"
+								bind:value={addressForm.community}
+								class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								<option value="">-- ไม่ระบุ --</option>
+								{#each communityItems as comm (comm.value)}
+									<option value={comm.value}>{comm.label}</option>
+								{/each}
+							</select>
 						</div>
 					</div>
+				</div>
+			</div>
 
-					<!-- บันทึกเพิ่มเติม -->
-					<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
-						<Label for="notes" class="text-base font-bold text-slate-800">บันทึกเพิ่มเติม</Label>
-						<Textarea
-							id="notes"
-							placeholder="ระบุหมายเหตุ หรือรายละเอียดอื่นๆ..."
-							bind:value={addressForm.notes}
-							class="min-h-[80px]"
+			<!-- ที่อยู่หลักตามภูมิลำเนา -->
+			<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
+				<h4 class="text-base font-bold text-slate-800">ข้อมูลที่อยู่หลักตามภูมิลำเนา</h4>
+				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+					<div class="space-y-1.5">
+						<Label for="address-no">บ้านเลขที่ <span class="text-destructive">*</span></Label>
+						<Input
+							id="address-no"
+							placeholder="เช่น 12/34"
+							bind:value={addressForm.addressNo}
+							required
+						/>
+					</div>
+					<div class="space-y-1.5">
+						<Label for="village-no">หมู่ที่ / ซอย / ถนน</Label>
+						<Input
+							id="village-no"
+							placeholder="เช่น หมู่ที่ 5"
+							bind:value={addressForm.villageNo}
+						/>
+					</div>
+					<div class="space-y-1.5">
+						<Label>จังหวัด <span class="text-destructive">*</span></Label>
+						<Combobox
+							items={provinceItems}
+							bind:value={() => addressForm.province, selectProvince}
+							placeholder={provincesQuery.isLoading ? 'กำลังโหลด...' : 'เลือกจังหวัด...'}
+							searchPlaceholder="ค้นหาจังหวัด..."
+							emptyText="ไม่พบจังหวัด"
+							disabled={provincesQuery.isLoading}
+						/>
+					</div>
+					<div class="space-y-1.5">
+						<Label>อำเภอ / เขต <span class="text-destructive">*</span></Label>
+						<Combobox
+							items={districtItems}
+							bind:value={() => addressForm.district, selectDistrict}
+							placeholder={!addressForm.province
+								? 'เลือกจังหวัดก่อน'
+								: districtsQuery.isLoading
+									? 'กำลังโหลด...'
+									: 'เลือกอำเภอ...'}
+							searchPlaceholder="ค้นหาอำเภอ..."
+							emptyText="ไม่พบอำเภอ"
+							disabled={!addressForm.province || districtsQuery.isLoading}
+						/>
+					</div>
+					<div class="space-y-1.5">
+						<Label>ตำบล / แขวง <span class="text-destructive">*</span></Label>
+						<Combobox
+							items={subdistrictItems}
+							bind:value={() => addressForm.subdistrict, selectSubdistrict}
+							placeholder={!addressForm.district
+								? 'เลือกอำเภอก่อน'
+								: subdistrictsQuery.isLoading
+									? 'กำลังโหลด...'
+									: 'เลือกตำบล...'}
+							searchPlaceholder="ค้นหาตำบล..."
+							emptyText="ไม่พบตำบล"
+							disabled={!addressForm.district || subdistrictsQuery.isLoading}
+						/>
+					</div>
+					<div class="space-y-1.5">
+						<Label for="postal-code">รหัสไปรษณีย์</Label>
+						<Input
+							id="postal-code"
+							placeholder={!addressForm.subdistrict ? 'เลือกตำบลก่อน' : 'เช่น 90110'}
+							disabled={!addressForm.subdistrict}
+							bind:value={addressForm.postalCode}
 						/>
 					</div>
 				</div>
+			</div>
 
-				<!-- Right Form: Pets and Assets -->
-				<div class="space-y-6">
-					<EvacueePetAssetVehicle
-						onBack={() => (step = 2)}
-						onNext={(data) => {
-							petsList = data.pets;
-							assetDescription = data.assetDescription;
-							vehicleRows = data.vehicles;
-							handleSaveGrouping();
-						}}
-					/>
-				</div>
+			<!-- บันทึกเพิ่มเติม -->
+			<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
+				<Label for="notes" class="text-base font-bold text-slate-800">บันทึกเพิ่มเติม</Label>
+				<Textarea
+					id="notes"
+					placeholder="ระบุหมายเหตุ หรือรายละเอียดอื่นๆ..."
+					bind:value={addressForm.notes}
+					class="min-h-[80px]"
+				/>
+			</div>
+
+			<!-- Navigation -->
+			<div class="mt-8 flex justify-between border-t border-border pt-4">
+				<Button variant="outline" onclick={() => (step = 2)} class="h-11 px-8 font-semibold">
+					ย้อนกลับ
+				</Button>
+				<Button
+					onclick={() => {
+						if (
+							!addressForm.addressNo.trim() ||
+							!addressForm.subdistrict.trim() ||
+							!addressForm.district.trim() ||
+							!addressForm.province.trim()
+						) {
+							toast.error('กรุณากรอกข้อมูลที่อยู่ให้ครบถ้วน (บ้านเลขที่, ตำบล, อำเภอ, จังหวัด)');
+							return;
+						}
+						step = 4;
+					}}
+					class="h-11 bg-[#0d2240] px-8 font-semibold text-white hover:bg-[#1a3a5c]"
+				>
+					ถัดไป (ทรัพย์สินและสัตว์เลี้ยง) →
+				</Button>
 			</div>
 		</div>
 	{/if}
 
-	<!-- ────────────────── STEP 4: Success & Summary ────────────────── -->
-	{#if step === 4 && createdHousehold}
+	<!-- ────────────────── STEP 4: Assets & Pets Form ────────────────── -->
+	{#if step === 4}
+		<div class="mx-auto w-full max-w-5xl">
+			<EvacueePetAssetVehicle
+				onBack={() => (step = 3)}
+				onNext={(data) => {
+					petsList = data.pets;
+					assetDescription = data.assetDescription;
+					vehicleRows = data.vehicles;
+					step = 5;
+				}}
+			/>
+		</div>
+	{/if}
+
+	<!-- ────────────────── STEP 5: Zone Selection ────────────────── -->
+	{#if step === 5}
+		<div class="mx-auto max-w-xl">
+			<EvacueeSelectZone
+				evacuee={selectedHead}
+				onBack={() => (step = 4)}
+				onSubmit={(zone) => {
+					handleSaveGrouping(zone);
+				}}
+			/>
+		</div>
+	{/if}
+
+	<!-- ────────────────── STEP 6: Success & Summary ────────────────── -->
+	{#if step === 6 && createdHousehold}
 		<HouseholdPostArrivalSummary
 			{createdHousehold}
 			{selectedHead}

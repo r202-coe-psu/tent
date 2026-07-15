@@ -20,11 +20,12 @@
 	import HouseholdPreRegisterSummary from './household-pre-register-summary.svelte';
 	import { useMasterData } from '$lib/features/master-data';
 	import { toast } from 'svelte-sonner';
+	import EvacueeSelectZone from './evacuee-select-zone.svelte';
 
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 
 	// --- Step Tracking ---
-	let step = $state<1 | 2 | 3 | 4>(1);
+	let step = $state<1 | 2 | 3 | 4 | 5>(1);
 	let isSubmitting = $state(false);
 
 	// --- Queries and Mutations ---
@@ -126,7 +127,7 @@
 		}
 	});
 
-	async function handleRegisterHousehold() {
+	async function handleRegisterHousehold(zone: string) {
 		if (isSubmitting) return;
 
 		// Validation
@@ -208,7 +209,14 @@
 				ctx
 			});
 
-			createdHead = headDoc;
+			const updatedHeadDoc = await updateEvacueeMutation.mutateAsync({
+				...headDoc,
+				current_stay: {
+					...headDoc.current_stay,
+					zone: zone || null
+				}
+			});
+			createdHead = updatedHeadDoc;
 
 			// 2. Create Household (pre_registered state)
 			const householdInput = {
@@ -240,13 +248,14 @@
 			createdHousehold = hhDoc;
 
 			// 3. Update Head Evacuee with household_id
-			await updateEvacueeMutation.mutateAsync({
-				...headDoc,
+			const finalHeadDoc = await updateEvacueeMutation.mutateAsync({
+				...updatedHeadDoc,
 				household_id: hhDoc._id
 			});
+			createdHead = finalHeadDoc;
 
 			toast.success(`ลงทะเบียนหัวหน้าครัวเรือนและสร้างครัวเรือน "${hhDoc.label}" สำเร็จ`);
-			step = 4;
+			step = 5;
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			toast.error(`เกิดข้อผิดพลาด: ${msg}`);
@@ -278,7 +287,7 @@
 
 	<!-- Step Progress Indicator -->
 	<div class="mx-auto mb-8 flex max-w-5xl items-start">
-		{#each [1, 2, 3, 4] as s (s)}
+		{#each [1, 2, 3, 4, 5] as s (s)}
 			<div class="flex flex-1 flex-col items-center gap-2">
 				<div class="flex w-full items-center">
 					<!-- left connector -->
@@ -302,7 +311,7 @@
 					</div>
 					<!-- right connector -->
 					<div
-						class="h-0.5 flex-1 transition-colors {s === 4
+						class="h-0.5 flex-1 transition-colors {s === 5
 							? 'invisible'
 							: step > s
 								? 'bg-green-500'
@@ -323,7 +332,9 @@
 							? 'ข้อมูลที่อยู่ครัวเรือน'
 							: s === 3
 								? 'ทรัพย์สินและสัตว์เลี้ยง'
-								: 'จัดการสมาชิกและ QR Code'}
+								: s === 4
+									? 'เลือกโซนพักพิง'
+									: 'จัดการสมาชิกและ QR Code'}
 				</span>
 			</div>
 		{/each}
@@ -355,14 +366,30 @@
 					petsList = data.pets;
 					assetDescription = data.assetDescription;
 					vehicleRows = data.vehicles;
-					handleRegisterHousehold();
+					step = 4;
 				}}
 			/>
 		</div>
 	{/if}
 
-	<!-- ────────────────── STEP 4: Summary & Add Members ────────────────── -->
-	{#if step === 4 && createdHousehold}
+	<!-- ────────────────── STEP 4: Zone Selection ────────────────── -->
+	{#if step === 4}
+		{@const mockHeadEvacuee = {
+			special_needs: Array.from(headForm.specialNeeds)
+		} as unknown as Evacuee}
+		<div class="mx-auto max-w-xl">
+			<EvacueeSelectZone
+				evacuee={mockHeadEvacuee}
+				onBack={() => (step = 3)}
+				onSubmit={(zone) => {
+					handleRegisterHousehold(zone);
+				}}
+			/>
+		</div>
+	{/if}
+
+	<!-- ────────────────── STEP 5: Summary & Add Members ────────────────── -->
+	{#if step === 5 && createdHousehold}
 		<HouseholdPreRegisterSummary {createdHousehold} {createdHead} />
 	{/if}
 </div>

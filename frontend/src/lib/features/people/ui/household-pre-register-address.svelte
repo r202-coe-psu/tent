@@ -3,6 +3,12 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Combobox } from '$lib/components/ui/combobox/index.js';
+	import {
+		useProvinces,
+		useDistricts,
+		useSubdistricts
+	} from '$lib/features/shelters/application/queries';
 	import { toast } from 'svelte-sonner';
 
 	interface AddressFormState {
@@ -31,6 +37,38 @@
 		onBack: () => void;
 		onNext: () => void;
 	} = $props();
+
+	const provincesQuery = useProvinces();
+	const districtsQuery = useDistricts(() => form.province || null);
+	const subdistrictsQuery = useSubdistricts(
+		() => form.province || null,
+		() => form.district || null
+	);
+
+	const provinceItems = $derived((provincesQuery.data ?? []).map((p) => ({ value: p, label: p })));
+	const districtItems = $derived((districtsQuery.data ?? []).map((d) => ({ value: d, label: d })));
+	const subdistrictItems = $derived(
+		(subdistrictsQuery.data ?? []).map((s) => ({ value: s.subdistrict, label: s.subdistrict }))
+	);
+
+	function selectProvince(value: string | null) {
+		form.province = value ?? '';
+		form.district = '';
+		form.subdistrict = '';
+		form.postalCode = '';
+	}
+
+	function selectDistrict(value: string | null) {
+		form.district = value ?? '';
+		form.subdistrict = '';
+		form.postalCode = '';
+	}
+
+	function selectSubdistrict(value: string | null) {
+		form.subdistrict = value ?? '';
+		const match = (subdistrictsQuery.data ?? []).find((s) => s.subdistrict === value);
+		form.postalCode = match ? String(match.zipcode) : '';
+	}
 
 	function handleNext() {
 		if (
@@ -100,21 +138,56 @@
 				<Label for="village-no">หมู่ที่ / ซอย / ถนน</Label>
 				<Input id="village-no" placeholder="เช่น หมู่ 2" bind:value={form.villageNo} />
 			</div>
+
 			<div class="space-y-2">
-				<Label for="subdistrict">ตำบล / แขวง <span class="text-destructive">*</span></Label>
-				<Input id="subdistrict" placeholder="เช่น บ้านพรุ" bind:value={form.subdistrict} required />
+				<Label>จังหวัด <span class="text-destructive">*</span></Label>
+				<Combobox
+					items={provinceItems}
+					bind:value={() => form.province, selectProvince}
+					placeholder={provincesQuery.isLoading ? 'กำลังโหลด...' : 'เลือกจังหวัด...'}
+					searchPlaceholder="ค้นหาจังหวัด..."
+					emptyText="ไม่พบจังหวัด"
+					disabled={provincesQuery.isLoading}
+				/>
 			</div>
 			<div class="space-y-2">
-				<Label for="district">อำเภอ / เขต <span class="text-destructive">*</span></Label>
-				<Input id="district" placeholder="เช่น หาดใหญ่" bind:value={form.district} required />
+				<Label>อำเภอ / เขต <span class="text-destructive">*</span></Label>
+				<Combobox
+					items={districtItems}
+					bind:value={() => form.district, selectDistrict}
+					placeholder={!form.province
+						? 'เลือกจังหวัดก่อน'
+						: districtsQuery.isLoading
+							? 'กำลังโหลด...'
+							: 'เลือกอำเภอ...'}
+					searchPlaceholder="ค้นหาอำเภอ..."
+					emptyText="ไม่พบอำเภอ"
+					disabled={!form.province || districtsQuery.isLoading}
+				/>
 			</div>
 			<div class="space-y-2">
-				<Label for="province">จังหวัด <span class="text-destructive">*</span></Label>
-				<Input id="province" placeholder="เช่น สงขลา" bind:value={form.province} required />
+				<Label>ตำบล / แขวง <span class="text-destructive">*</span></Label>
+				<Combobox
+					items={subdistrictItems}
+					bind:value={() => form.subdistrict, selectSubdistrict}
+					placeholder={!form.district
+						? 'เลือกอำเภอก่อน'
+						: subdistrictsQuery.isLoading
+							? 'กำลังโหลด...'
+							: 'เลือกตำบล...'}
+					searchPlaceholder="ค้นหาตำบล..."
+					emptyText="ไม่พบตำบล"
+					disabled={!form.district || subdistrictsQuery.isLoading}
+				/>
 			</div>
 			<div class="space-y-2">
 				<Label for="postal-code">รหัสไปรษณีย์</Label>
-				<Input id="postal-code" placeholder="เช่น 90250" bind:value={form.postalCode} />
+				<Input
+					id="postal-code"
+					placeholder={!form.subdistrict ? 'เลือกตำบลก่อน' : 'เช่น 90110'}
+					disabled={!form.subdistrict}
+					bind:value={form.postalCode}
+				/>
 			</div>
 		</div>
 	</div>
