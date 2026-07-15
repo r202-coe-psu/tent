@@ -119,11 +119,11 @@ export async function seedThailandLocation(): Promise<void> {
 	);
 }
 
-const isMain = process.argv[1] && (
-	process.argv[1] === fileURLToPath(import.meta.url) ||
-	process.argv[1].endsWith('seed-thailand-location.ts') ||
-	process.argv[1].endsWith('seed-thailand-location.js')
-);
+const isMain =
+	process.argv[1] &&
+	(process.argv[1] === fileURLToPath(import.meta.url) ||
+		process.argv[1].endsWith('seed-thailand-location.ts') ||
+		process.argv[1].endsWith('seed-thailand-location.js'));
 
 if (isMain) {
 	seedThailandLocation().catch((err) => {

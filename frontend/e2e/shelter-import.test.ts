@@ -286,7 +286,9 @@ test('warns for empty or unrecognized workbooks and reports unreadable files', a
 		mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 		buffer: Buffer.from('not an xlsx file')
 	});
-	await expect(page.getByText('อ่านไฟล์ไม่สำเร็จ — ตรวจสอบว่าเป็นไฟล์ .xlsx ที่ถูกต้อง')).toBeVisible();
+	await expect(
+		page.getByText('อ่านไฟล์ไม่สำเร็จ — ตรวจสอบว่าเป็นไฟล์ .xlsx ที่ถูกต้อง')
+	).toBeVisible();
 	await expect(page.getByText('เลือกไฟล์ .xlsx')).toBeVisible();
 });
 
