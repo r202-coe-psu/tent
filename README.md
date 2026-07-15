@@ -162,6 +162,43 @@ LEFTHOOK=0 git commit -m "..."
 - `uv run --project worker sync-worker --bootstrap` — force full re-sync แล้ววิ่ง continuous
 - `uv run --project worker sync-worker --bootstrap-only` — bootstrap แล้ว exit (ใช้ใน compose reset)
 
+## Staging deploy (public plane)
+
+Jenkins staging ใช้ `docker-compose.staging.no-nginx.yml` (nginx อยู่บน **host**):
+
+```bash
+docker compose -f docker-compose.staging.no-nginx.yml up -d --build
+```
+
+Services: CouchDB, frontend, MongoDB, sync worker, FastAPI (`127.0.0.1:9000`).
+ต้องมี volume dirs บน server เช่น `/mnt/tent-data/couchdb/data` และ `/mnt/tent-data/mongodb/data`,
+และตั้ง `SECRET_KEY` / `EXTERNAL_API_SECRET` ใน `.env` บน server
+
+Host nginx ต้อง proxy exact-path ไป FastAPI (อย่า proxy ทั้ง `/public`):
+
+```nginx
+location = /public/v1/family-search {
+    proxy_pass http://127.0.0.1:9000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+location = /public/v1/shelters {
+    proxy_pass http://127.0.0.1:9000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+ตัวอย่างเต็มสำหรับ compose-nginx อยู่ที่ [`nginx/nginx.conf`](nginx/nginx.conf)
+(`docker-compose.staging.yml` — proxy ไป `http://fastapi:9000`)
+
 ## แหล่งอ้างอิง
 
 - ข้อเสนอโครงการฉบับสมบูรณ์: [docs/source/psu-smart-shelter-f-20260522.txt](docs/source/psu-smart-shelter-f-20260522.txt)
