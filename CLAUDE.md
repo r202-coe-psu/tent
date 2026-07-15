@@ -4,25 +4,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project State
 
-This repo (`tent`, app title **"CouchDB Lab"**) is a local-first **CouchDB** app built from the
-**sveltekitten** SPA template. The frontend now lives under `frontend/src/` with a working
-layered feature set (`login`, `me`, `users`, `register`, `health`, `people`, `operations`, …), a
-`$lib/db/` PouchDB/CouchDB layer, and dev-server admin API routes. The original template demos
-(RBAC `demo` + the shelter A/B/C `shelter` demo) have been quarantined under the repo-root `demo/`
-directory — reference only, excluded from the build (see `demo/README.md`).
+This repo (`tent`, app title **"CouchDB Lab"**) is a **remote-first CouchDB** staff app plus a
+**public plane** (MongoDB projections + FastAPI). The frontend lives under `frontend/src/` with a
+layered feature set (`login`, `me`, `users`, `people`, `operations`, `public-portal`, …), a
+`$lib/db/` CouchDB layer, and Node `/api/*` BFF routes. Quarantined template demos sit under
+repo-root `demo/` (see `demo/README.md`).
 
-The backend is **CouchDB 3.5** (see `docker-compose.yml`), reached from the browser with
-cookie-based `_session` auth via a same-origin dev proxy (`PUBLIC_COUCH_PROXY=/couch`).
+**Two data planes:**
+
+| Plane | Who | Path | Store |
+| --- | --- | --- | --- |
+| Staff (sync) | logged-in UI | `/couch` → CouchDB | CouchDB SoR |
+| Public | anonymous SPA `/public/*` | `/public/v1/*` → FastAPI | MongoDB `public_*` (via sync worker) |
+
+Staff CouchDB is reached with cookie `_session` via same-origin proxy (`PUBLIC_COUCH_PROXY=/couch`).
+Public FastAPI is same-origin via **path-specific** Vite proxies (`PUBLIC_FASTAPI_PROXY`).
 
 > **Stale docs — ignore where they disagree:** `frontend/agent-role.md` (and `AGENTS.md`) still
-> describe the original template (JWT + `openapi-fetch`, flat `api.ts`/`queries.ts` features). The
-> JWT/`openapi-fetch` bits are leftover boilerplate. The binding specs are
-> **`frontend/CONTRIBUTING.md`** (toolchain, definition of done, architecture, data/sync/auth rules)
-> and **`frontend/CONVENTIONS.md`** (naming, structure, coding patterns) — plus the actual `src/`
-> tree. When anything here is thinner than those two, **they win; follow them.**
+> describe the original template (JWT + flat `api.ts`/`queries.ts`). The binding specs are
+> **`frontend/CONTRIBUTING.md`** and **`frontend/CONVENTIONS.md`** — plus the actual `src/` tree.
+> **`openapi-fetch` is used for the public plane** (`$lib/api/public-client.ts`); it is **not**
+> used for staff CouchDB CRUD. When anything here is thinner than those two docs, **they win.**
 
-Data model / domain specs for the Smart Shelter system live in `docs/data/` (`data-model.md`,
-`schema.md`, `api-contract.md`, `couchdb-mongodb-sync.md`) and `docs/features/`.
+Data model / domain specs live in `docs/data/` (`data-model.md`, `schema.md`, `api-contract.md`,
+`couchdb-mongodb-sync.md`) and `docs/features/`.
 
 ## Change Management — track every spec change, ask first
 
@@ -45,8 +50,10 @@ the change log lives in **`docs/changes/`**.
 
 ## Commands
 
-Run all frontend commands from `frontend/`. Package manager is **pnpm only** (lockfile
-`pnpm-lock.yaml`; enforced via corepack in the Dockerfile). Don't add npm/yarn lockfiles.
+### Frontend (`frontend/`)
+
+Package manager is **pnpm only** (lockfile `pnpm-lock.yaml`; enforced via corepack in the
+Dockerfile). Don't add npm/yarn lockfiles.
 
 | Task | Command |
 | --- | --- |
@@ -56,21 +63,50 @@ Run all frontend commands from `frontend/`. Package manager is **pnpm only** (lo
 | Auto-format | `pnpm format` |
 | Unit tests (once / watch) | `pnpm test` / `pnpm test:watch` |
 | E2E (Playwright) | `pnpm test:e2e` |
-| Regenerate OpenAPI types | `pnpm openapi:update` (only when a task requires it) |
+| Regenerate OpenAPI types from FastAPI | `pnpm openapi:update` (backend must be on `:9000`) |
 
 **Definition of done (all must pass locally — see CONTRIBUTING.md §2):** `pnpm lint`, `pnpm check`
 (zero errors), `pnpm test` (new domain/data logic ships with tests), and every `.svelte` file you
 touched run through **`svelte-autofixer`** (Svelte MCP) until clean.
 
-Bring up CouchDB from repo root: `docker compose up` (needs a `.env` with `COUCHDB_USER`/
-`COUCHDB_PASSWORD`; copy from `.env.example`). The frontend also needs `frontend/.env`
-(copy `frontend/.env.example`) for the `PUBLIC_*` vars. Data persists to `../deployment/couchdb/data`.
+### Infra + public plane (repo root / `backend/` / `worker/`)
+
+```
+docker compose up -d          # CouchDB + MongoDB + sync worker
+# frontend/: pnpm seed        # optional — populate CouchDB for projections
+uv run --project worker sync-worker [--bootstrap]   # if debugging worker locally
+cd backend && ./scripts/run-dev                     # FastAPI :9000
+cd frontend && pnpm dev                             # Vite :5173 + proxies
+```
+
+Env: repo-root `.env` from `.env.example`; `frontend/.env` from `frontend/.env.example`
+(needs `PUBLIC_FASTAPI_PROXY=http://localhost:9000`). Data persists under `deployment/`.
 
 To seed mock data:
 `docker compose -f docker-compose.yml -f docker-compose.seed.yml up seed`
 
 To unseed (wipe) data:
 `docker compose -f docker-compose.yml -f docker-compose.unseed.yml run --rm unseed`
+
+### Public plane develop loop (worker ↔ backend ↔ frontend)
+
+Full workflow: **`frontend/CONTRIBUTING.md` §4.2** + coding patterns **`frontend/CONVENTIONS.md` §12**.
+
+1. **Change CouchDB docs / projectors** (`worker/`) → projections land in Mongo `public_*`.
+2. **Change FastAPI** (`backend/apiapp/modules/…`) — keep paths on contract
+   (`/public/v1/family-search`, `/public/v1/shelters`, …); add tests under `backend/tests/`.
+3. **Regenerate types** from `frontend/`: `pnpm openapi:update` → commit `fastapi.json` +
+   `openapi.d.ts`.
+4. **Wire UI** via `$lib/api/public-client.ts` and `$lib/features/public-portal/` barrel only —
+   never raw untyped `fetch` for routes already on FastAPI; never `serviceFetch` for public plane.
+5. **Vite proxy**: add an **exact-path** entry only (do not proxy all of `/public` — SPA +
+   donations/risk BFF must stay on SvelteKit).
+
+```
+staff → CouchDB → worker → MongoDB → FastAPI :9000
+                                      ↑
+                         public SPA (/public/v1/* via Vite proxy)
+```
 
 ## Architecture
 
@@ -119,6 +155,8 @@ the deliberate exception).
   Never import server code into client bundles; never put credentials behind a `PUBLIC_` env var.
 - Keep CouchDB same-origin in dev via the Vite `/couch` proxy (`PUBLIC_COUCH_PROXY`) so the session
   cookie is first-party — don't hardcode absolute CouchDB URLs in feature code.
+- **Public plane** reads Mongo via FastAPI — use `$lib/api/public-client.ts` +
+  `features/public-portal` (CONTRIBUTING.md §4.2). Do not hit CouchDB admin from public UI.
 
 ### Feature-sliced layering (lint-enforced)
 
