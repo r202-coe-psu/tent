@@ -13,6 +13,7 @@
 	import Save from '@lucide/svelte/icons/save';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import { qtyStrPositiveSchema } from '$lib/utils/qty';
 
 	interface Props {
 		profile: SopMaster | SopOverride;
@@ -50,13 +51,9 @@
 		errors = {};
 		for (const key of SOP_RATIO_KEYS) {
 			const currentVal = ratios[key];
-			if (currentVal === undefined || currentVal === null || currentVal.trim() === '') {
-				errors[key] = 'กรุณาระบุตัวเลขทศนิยมที่ถูกต้อง (ต้องมากกว่า 0)';
-				continue;
-			}
-			const n = Number(currentVal);
-			if (Number.isNaN(n) || n <= 0 || !/^\d+(\.\d+)?$/.test(currentVal.trim())) {
-				errors[key] = 'กรุณาระบุตัวเลขทศนิยมที่ถูกต้อง (ต้องมากกว่า 0)';
+			const result = qtyStrPositiveSchema.safeParse(currentVal);
+			if (!result.success) {
+				errors[key] = 'กรุณาระบุตัวเลขทศนิยมที่ถูกต้อง (ต้องมากกว่า 0 และไม่เกิน 4 ตำแหน่ง)';
 			}
 		}
 
