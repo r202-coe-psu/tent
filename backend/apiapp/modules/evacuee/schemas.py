@@ -12,7 +12,7 @@ class SearchRequest(BaseModel):
         ...,
         min_length=1,
         max_length=200,
-        validation_alias=AliasChoices("search", "q"),
+        validation_alias=AliasChoices("search", "q", "query"),
     )
 
 

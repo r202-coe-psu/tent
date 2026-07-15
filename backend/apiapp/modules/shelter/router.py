@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from .schemas import ShelterListResponse
 from .use_case import ShelterUseCase, get_shelter_use_case
 
-router = APIRouter(prefix="/public/v1/shelter", tags=["Shelter"])
+router = APIRouter(prefix="/public/v1/shelters", tags=["Shelters"])
 
 CACHE_CONTROL = "public, max-age=600"
 

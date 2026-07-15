@@ -55,7 +55,7 @@ async def test_list_shelters_returns_open_shelters(
         },
     )
 
-    response = await client.get("/public/v1/shelter")
+    response = await client.get("/public/v1/shelters")
     assert response.status_code == 200
     assert response.headers["cache-control"] == "public, max-age=600"
 
@@ -99,7 +99,7 @@ async def test_list_shelters_filters_by_province(
         },
     )
 
-    response = await client.get("/public/v1/shelter", params={"province": "สงขลา"})
+    response = await client.get("/public/v1/shelters", params={"province": "สงขลา"})
     assert response.status_code == 200
     body = response.json()
     assert body["count"] == 1

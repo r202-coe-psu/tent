@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from .schemas import ApiErrorResponse, SearchRequest, SearchResponse
 from .use_case import EvacueeUseCase, get_evacuee_use_case
 
-router = APIRouter(prefix="/public/v1/evacuee", tags=["Evacuee"])
+router = APIRouter(prefix="/public/v1/family-search", tags=["Family Search"])
 
 RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX_REQUESTS = 30

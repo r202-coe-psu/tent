@@ -66,7 +66,7 @@ async def test_evacuee_search_by_phone_returns_masked_result(
         },
     )
 
-    response = await client.post("/public/v1/evacuee", json={"q": phone})
+    response = await client.post("/public/v1/family-search", json={"q": phone})
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
 
@@ -116,7 +116,7 @@ async def test_evacuee_search_by_national_id_exact_match(
     )
 
     response = await client.post(
-        "/public/v1/evacuee",
+        "/public/v1/family-search",
         json={"q": "3900-1002-4419-2"},
     )
     assert response.status_code == 200
@@ -147,11 +147,11 @@ async def test_evacuee_search_hides_opted_out_records(
         },
     )
 
-    response = await client.post("/public/v1/evacuee", json={"q": phone})
+    response = await client.post("/public/v1/family-search", json={"q": phone})
     assert response.status_code == 200
     assert response.json()["count"] == 0
 
 
 async def test_evacuee_search_rejects_invalid_query(client: AsyncClient):
-    response = await client.post("/public/v1/evacuee", json={"q": "ab"})
+    response = await client.post("/public/v1/family-search", json={"q": "ab"})
     assert response.status_code == 422

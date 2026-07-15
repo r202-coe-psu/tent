@@ -11,11 +11,10 @@
 		id: string;
 		name: string;
 		status: string;
-		occupancy: number;
 		capacity: number;
 		distance: number;
 		type?: string;
-		geo?: ShelterGeo;
+		geo?: ShelterGeo | null;
 	}
 
 	let {
@@ -44,6 +43,8 @@
 				return '#ef4444'; // red
 			case 'PREPARE':
 				return '#f59e0b'; // amber
+			case 'CLOSED':
+				return '#94a3b8'; // slate
 			default:
 				return '#94a3b8'; // slate
 		}
@@ -57,6 +58,8 @@
 				return 'เต็มความจุ';
 			case 'PREPARE':
 				return 'เตรียมพร้อม';
+			case 'CLOSED':
+				return 'ปิดทำการ';
 			default:
 				return 'ปิดทำการ';
 		}
@@ -198,8 +201,8 @@
 						<strong style="font-size:14px;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
 						<div style="margin-bottom:2px;font-size:11px;color:#64748b;">${shelter.type || 'ศูนย์พักพิง'}</div>
 						สถานะ: <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
-						ผู้พักพิง: <strong>${shelter.occupancy}/${shelter.capacity}</strong> คน<br/>
-						ระยะทาง: <strong>${shelter.distance}</strong> กม.
+						ความจุ: <strong>${shelter.capacity}</strong> คน<br/>
+						${shelter.distance > 0 ? `ระยะทาง: <strong>${shelter.distance}</strong> กม.` : ''}
 					</div>
 				`);
 
