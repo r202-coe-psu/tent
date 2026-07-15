@@ -1,3 +1,5 @@
+import { setContext, getContext } from 'svelte';
+
 export interface DonationItem {
 	id: string;
 	item_id?: string; // catalog item id from a picked need card → lets needs_open decrease
@@ -107,7 +109,6 @@ class DonationStore {
 	}
 }
 
-import { setContext, getContext } from 'svelte';
 const DONATION_KEY = Symbol('DONATION');
 export function setDonationStore() {
 	return setContext(DONATION_KEY, new DonationStore());

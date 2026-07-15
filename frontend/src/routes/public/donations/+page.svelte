@@ -28,7 +28,9 @@
 		ticket: 3
 	} as const;
 
-	const activeIndex = $derived(stepIndexMap[donationStore.activeTab] ?? 0);
+	const activeIndex = $derived(
+		stepIndexMap[donationStore.activeTab as keyof typeof stepIndexMap] ?? 0
+	);
 	const progressWidth = $derived(`${activeIndex * 33.33}%`);
 </script>
 
