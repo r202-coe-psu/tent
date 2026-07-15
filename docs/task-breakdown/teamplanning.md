@@ -64,7 +64,7 @@
 ### 3.1. ความเชี่ยวชาญด้าน Architectue Stack
 - เนื่องจากสมาชิกหลายคนในทีมไม่มีประสบการณ์ใน svelte, svelte kit, javascript และ typescript โดยเฉพาะ typescript ซึ่งอาจจะงงในช่วงแรก ทำให้มี learning curve สูง ดังนั้นมีโอกาสทีจะใช้เวลาทำแต่ละ task มากกว่า adj. MD ที่ประเมิน   
 - คนอื่นๆที่เขียนเป็นมี แจ็ก (ไม่ได้เขียนนานแล้ว) พีค ก้อง ชิโน 
-- CouchDB และ PouchDB เป็น tools ที่ไม่เคยใช้อาจจะเวลาคลาดเคลื่อนเพิ่มไปจาก Adj. MD
+- CouchDB remote-first + Edge failover เป็น tools/patterns ที่อาจคลาดเคลื่อนจาก Adj. MD (PouchDB ตัดออกตาม CR-033)
 
 ### 3.2. ความเสี่ยงด้าน Tech Knowhow
 - ใน task ที่มีการทำ OTP, Rate limit, Captcha นั้น ไม่เคยมีประสบการณ์การทำ ดังนั้น จะขอความช่วยเหลือจากพี่ๆที่บอ ในส่วนนี้
