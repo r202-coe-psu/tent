@@ -11,9 +11,9 @@ export interface NeedItem {
 	needs: {
 		itemId: string;
 		name: string;
-		reserved: number;
-		onHand: number;
-		target: number;
+		reserved: string;
+		onHand: string;
+		target: string;
 		unit: string;
 		isCutOff: boolean;
 		isManualClosed: boolean;

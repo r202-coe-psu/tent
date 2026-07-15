@@ -18,10 +18,14 @@ async function couchReq(method: string, path: string, body?: unknown) {
 
 const mockProvinces = ['Bangkok', 'Chiang Mai', 'Phuket', 'Khon Kaen', 'Songkhla'];
 const mockDistricts = ['Muang', 'Bang Kapi', 'Phra Nakhon', 'Thalang', 'Hat Yai'];
-const mockCapabilities = [
-	{ pet: 'no_pets' as const, car: 'none' as const, wheel: 0 },
-	{ pet: 'conditional' as const, car: 'available' as const, wheel: 1 },
-	{ pet: 'no_pets' as const, car: 'available' as const, wheel: 2 }
+const mockCapabilities: {
+	pet: 'no_pets' | 'conditional';
+	car: 'none' | 'available';
+	wheel: number;
+}[] = [
+	{ pet: 'no_pets', car: 'none', wheel: 0 },
+	{ pet: 'conditional', car: 'available', wheel: 1 },
+	{ pet: 'no_pets', car: 'available', wheel: 2 }
 ];
 
 async function seed() {

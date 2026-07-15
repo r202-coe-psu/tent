@@ -68,7 +68,7 @@ test.describe('Login', () => {
 		});
 	}
 
-	test('redirects to / on valid credentials', async ({ page }) => {
+	test('redirects to /portal on valid credentials', async ({ page }) => {
 		await mockProxy(page);
 		await page.goto('/login');
 		await page.getByLabel('Username').fill(VALID.username);
@@ -76,7 +76,7 @@ test.describe('Login', () => {
 		await page.getByRole('button', { name: 'Login' }).click();
 
 		await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 8000 });
-		await expect(page).toHaveURL('/');
+		await expect(page).toHaveURL('/portal');
 	});
 
 	test('shows error toast on invalid credentials', async ({ page }) => {

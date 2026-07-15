@@ -135,6 +135,12 @@ LEFTHOOK=0 git commit -m "..."
 - `pnpm test` — unit tests (Vitest)
 - `pnpm test:e2e` — Playwright e2e
 - `pnpm seed` — Create mock data (purge old data first)
+- `pnpm unseed --confirm` — Wipe all CouchDB databases except `_users`
+
+การจัดการข้อมูลตัวอย่างด้วย Docker Compose (รันที่ repo root):
+
+- **Seed**: `docker compose -f docker-compose.yml -f docker-compose.seed.yml up seed`
+- **Unseed**: `docker compose -f docker-compose.yml -f docker-compose.unseed.yml run --rm unseed`
 
 คำสั่ง worker (จาก repo root):
 

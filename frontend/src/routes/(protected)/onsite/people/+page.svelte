@@ -12,7 +12,6 @@
 	} from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
 	import Zap from '@lucide/svelte/icons/zap';
-	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -150,11 +149,6 @@
 							<Card.Description class="text-sm">กรอกข้อมูลพื้นฐานและประเมินสถานะ</Card.Description>
 						</div>
 					</div>
-					<button
-						class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#003B71] px-3 py-2 text-sm font-medium text-white hover:bg-[#002a50]"
-					>
-						<CreditCard class="size-4" /> ดึงข้อมูลบัตรประชาชน
-					</button>
 				</Card.Header>
 			</Card.Root>
 		{:else if step === 4}

@@ -3,6 +3,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import { useRequisitions, type KitchenRequisition } from '$lib/features/kitchen';
+	import { qtyGte } from '$lib/utils/qty';
 
 	const requisitions = useRequisitions();
 
@@ -14,7 +15,7 @@
 	// A requisition is complete when every line issued the full requested qty;
 	// otherwise stock was short and it was a partial withdrawal (schema.md §2.6).
 	function isComplete(req: KitchenRequisition): boolean {
-		return req.items.every((i) => i.qty_issued >= i.qty_requested);
+		return req.items.every((i) => qtyGte(i.qty_issued, i.qty_requested));
 	}
 
 	function planLabel(id: string | null): string {
@@ -79,13 +80,13 @@
 											<li>
 												<span class="font-mono">{item.item_id}</span>:
 												<span
-													class="font-semibold {item.qty_issued < item.qty_requested
+													class="font-semibold {!qtyGte(item.qty_issued, item.qty_requested)
 														? 'text-amber-700'
 														: ''}"
 												>
-													{item.qty_issued.toLocaleString()}
+													{item.qty_issued}
 												</span>
-												/ {item.qty_requested.toLocaleString()}
+												/ {item.qty_requested}
 												{item.unit}
 											</li>
 										{/each}

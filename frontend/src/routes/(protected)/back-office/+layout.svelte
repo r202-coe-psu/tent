@@ -16,9 +16,10 @@
 		SelectValue
 	} from '$lib/components/ui/select';
 	import Building from '@lucide/svelte/icons/building';
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
+	import { ReauthDialog } from '$lib/features/login';
 
 	let { children }: LayoutProps = $props();
+	let reauthOpen = $state(false);
 
 	// Fetch shelters list dynamically
 	const sheltersQuery = useShelters();
@@ -121,20 +122,21 @@
 						</Select>
 					</div>
 
-					<!-- Offline Mode Badge -->
 					{#if backofficeState.isOffline}
-						<span
-							class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-600"
+						<button
+							type="button"
+							class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-600 hover:bg-amber-500/20"
+							onclick={() => (reauthOpen = true)}
 						>
 							<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500"></span>
-							Offline Mode
-						</span>
+							Session หมดอายุ
+						</button>
 					{:else}
 						<span
 							class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-600"
 						>
 							<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-							Online Mode
+							Online
 						</span>
 					{/if}
 				</div>
@@ -143,26 +145,9 @@
 
 		<!-- Content Area -->
 		<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
-			<!-- Offline Banner -->
-			{#if backofficeState.isOffline}
-				<div class="shrink-0 px-4 pt-4 md:px-6 md:pt-6">
-					<div
-						class="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-amber-800 md:p-4 dark:text-amber-300"
-					>
-						<AlertTriangle class="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500" />
-						<div>
-							<h4 class="text-xs font-bold">Offline Mode: เปิดใช้งานระบบบันทึกในเครื่อง</h4>
-							<p class="mt-1 text-[11px] leading-relaxed opacity-90">
-								ระบบอ่าน-เขียนข้อมูลไปยังคอมพิวเตอร์ของคุณโดยตรง
-								จะทำการซิงก์ข้อมูลขึ้นคลาวด์อัตโนมัติเมื่อตรวจพบการเชื่อมต่อออนไลน์
-							</p>
-						</div>
-					</div>
-				</div>
-			{/if}
-
-			<!-- Inner Page Content -->
 			{@render children()}
 		</div>
 	</div>
 </div>
+
+<ReauthDialog bind:open={reauthOpen} />

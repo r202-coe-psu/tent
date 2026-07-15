@@ -6,15 +6,15 @@ pre-commit:
   commands:
     frontend-lint:
       root: frontend/
-      glob: '**/*'
-      run: pnpm lint
+      glob: "*.{js,ts,svelte,css,json,md}"
+      run: pnpm exec prettier --check {staged_files} && pnpm exec eslint {staged_files}
     frontend-check:
       root: frontend/
-      glob: '**/*'
+      glob: "**/*"
       run: pnpm check
     frontend-test:
       root: frontend/
-      glob: '**/*'
+      glob: "**/*"
       run: pnpm test
     backend-check:
       root: backend/

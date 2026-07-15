@@ -4,6 +4,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
+	import Upload from '@lucide/svelte/icons/upload';
 	import { ShelterList, useShelters, type ShelterSummary } from '$lib/features/shelters';
 
 	const PAGE_SIZE = 10;
@@ -29,6 +30,10 @@
 	function handleEdit(shelter: ShelterSummary) {
 		goto(resolve(`/back-office/shelters/edit/${encodeURIComponent(shelter.code)}`));
 	}
+
+	function handleImport() {
+		goto(resolve('/back-office/shelters/import'));
+	}
 </script>
 
 <svelte:head>
@@ -46,9 +51,14 @@
 				รายชื่อศูนย์พักพิงทั้งหมดในระบบและสถานะความจุ
 			</p>
 		</div>
-		<Button onclick={handleCreateNew}>
-			<Plus class="mr-2 h-4 w-4" /> เพิ่มศูนย์พักพิงใหม่
-		</Button>
+		<div class="flex flex-wrap gap-2">
+			<Button variant="outline" onclick={handleImport}>
+				<Upload class="mr-2 h-4 w-4" /> นำเข้าจาก Excel
+			</Button>
+			<Button onclick={handleCreateNew}>
+				<Plus class="mr-2 h-4 w-4" /> เพิ่มศูนย์พักพิงใหม่
+			</Button>
+		</div>
 	</div>
 
 	<!-- List card (rounding matches the shelter form sections) -->

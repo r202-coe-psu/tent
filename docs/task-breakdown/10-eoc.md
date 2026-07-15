@@ -2,16 +2,16 @@
 title: "Task Breakdown — EOC + Open API (Part 3)"
 status: active
 created: 2026-06-05
-updated: 2026-06-15
+updated: 2026-07-15
 module: eoc
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; MongoDB read-model selected for K-17
+note: decision-synced 2026-07-15 — CR-033 remote-first wording; MongoDB read-model selected for K-17
 ---
 
 # EOC + Open API (Part 3)
 
 > EOC cross-shelter aggregate API + API-key (FD-14), Open API tier to One Data/Hat Yai ROD
 
-**Architecture (เคาะ 2026-06-11; K-17 ปิด 2026-06-15):** โมดูลนี้เป็น **service แยก** ออกจากระบบหลัก — worker/ETL อ่านข้อมูลจาก Central CouchDB (ระบบหลัก offline-first; LAN Edge เป็น fallback replica ไม่ใช่ API source) มาคำนวณสรุปเป็น **MongoDB aggregate projection** แล้ว expose ผ่าน EOC API + Open API tier; ระบบหลักไม่มี EOC dashboard/role. Payload เป็น aggregate/no-PII/no-medical/no-national-ID เท่านั้น และไม่มี person-level drilldown
+**Architecture (เคาะ 2026-06-11; K-17 ปิด 2026-06-15; CR-033 2026-07-07):** โมดูลนี้เป็น **service แยก** ออกจากระบบหลัก — worker/ETL อ่านข้อมูลจาก Central CouchDB (ระบบหลัก **remote-first**; LAN Edge เป็น fallback replica ไม่ใช่ API source) มาคำนวณสรุปเป็น **MongoDB aggregate projection** แล้ว expose ผ่าน EOC API + Open API tier; ระบบหลักไม่มี EOC dashboard/role. Payload เป็น aggregate/no-PII/no-medical/no-national-ID เท่านั้น และไม่มี person-level drilldown
 
 - **Team owner:** Lead pair — แจ็ก/เด่น; Team D support หลัง SOP/Referral stabilized (ดู [Squad Roster](../prd/squad-roster.md))
 - **Phase:** R4

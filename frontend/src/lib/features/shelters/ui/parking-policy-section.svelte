@@ -2,6 +2,7 @@
 	import Car from '@lucide/svelte/icons/car';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import type { Shelter, VehicleType, ParkingRule } from '../domain/schema';
+	import { parkingRuleLabels } from '../domain/policy-labels';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 
@@ -20,29 +21,9 @@
 		{ value: 'boat', label: 'เรืออพยพ / เรือเล็ก (Boats)', unit: 'ลำ' }
 	];
 
-	const parkingRules: { value: ParkingRule; label: string }[] = [
-		{
-			value: 'no_liability',
-			label: 'ศูนย์ไม่รับผิดชอบต่อความสูญหายหรือความเสียหายของยานพาหนะในทุกกรณี'
-		},
-		{
-			value: 'first_come_first_served',
-			label: 'ให้สิทธิ์การจอดแบบ มาก่อนได้ก่อน (First come, First served) จนกว่าพื้นที่จะเต็ม'
-		},
-		{
-			value: 'key_deposit_required',
-			label:
-				'เจ้าของรถต้อง ฝากกุญแจรถไว้ที่กองอำนวยการ (เพื่อความรวดเร็วในการเคลื่อนย้ายกรณีฉุกเฉิน)'
-		},
-		{
-			value: 'no_blocking_emergency_lane',
-			label: 'ห้ามจอดกีดขวางเส้นทางเดินรถฉุกเฉิน / รถพยาบาล โดยเด็ดขาด'
-		},
-		{
-			value: 'ev_emergency_charging',
-			label: 'เฉพาะรถยนต์ EV: ศูนย์มีจุดรองรับการชาร์จฉุกเฉิน (จำกัดเวลา)'
-		}
-	];
+	const parkingRules: { value: ParkingRule; label: string }[] = Object.entries(
+		parkingRuleLabels
+	).map(([value, label]) => ({ value: value as ParkingRule, label }));
 
 	function ensurePolicy() {
 		if (!$formData.parking_policy) {
