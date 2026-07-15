@@ -83,10 +83,13 @@ Env: repo-root `.env` from `.env.example`; `frontend/.env` from `frontend/.env.e
 (needs `PUBLIC_FASTAPI_PROXY=http://localhost:9000`). Data persists under `deployment/`.
 
 To seed mock data:
-`docker compose -f docker-compose.yml -f docker-compose.seed.yml up seed`
+`docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm seed`
 
-To unseed (wipe) data:
-`docker compose -f docker-compose.yml -f docker-compose.unseed.yml run --rm unseed`
+To unseed CouchDB:
+`docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed`
+
+Full reset (Couch unseed + Mongo wipe + seed + bootstrap — stop worker first):
+`docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile reset run --rm reset`
 
 ### Public plane develop loop (worker ↔ backend ↔ frontend)
 

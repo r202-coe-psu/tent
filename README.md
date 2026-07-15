@@ -137,16 +137,30 @@ LEFTHOOK=0 git commit -m "..."
 - `pnpm seed` — Create mock data (purge old data first)
 - `pnpm unseed --confirm` — Wipe all CouchDB databases except `_users`
 
-การจัดการข้อมูลตัวอย่างด้วย Docker Compose (รันที่ repo root):
+การจัดการข้อมูลตัวอย่างด้วย Docker Compose (รันที่ repo root; ต้องมี `couchdb` / `mongodb` จาก base compose):
 
-- **Seed**: `docker compose -f docker-compose.yml -f docker-compose.seed.yml up seed`
-- **Unseed**: `docker compose -f docker-compose.yml -f docker-compose.unseed.yml run --rm unseed`
+- **Seed** (Couch อย่างเดียว):
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm seed`
+- **Unseed** (ลบ Couch DBs ยกเว้น `_users`):
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed`
+- **Wipe Mongo** (`dropDatabase` ตาม `MONGODB_URI`):
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm mongo-wipe`
+- **Bootstrap Mongo** (project จาก Couch แล้ว exit):
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm bootstrap`
+- **Full reset** (unseed → wipe Mongo → seed → bootstrap; **หยุด worker ก่อน**):
+  ```bash
+  docker compose -f docker-compose.yml stop worker
+  docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile reset run --rm reset
+  docker compose -f docker-compose.yml start worker
+  ```
+  ใช้กับ staging ได้เช่นกัน ถ้า base compose มี service ชื่อ `couchdb` + `mongodb` (และ ideally `worker`)
 
 คำสั่ง worker (จาก repo root):
 
 - `uv run --project worker pytest worker/tests` — projector unit tests
 - `uv run --project worker sync-worker` — CouchDB → MongoDB sync
-- `uv run --project worker sync-worker --bootstrap` — force full re-sync
+- `uv run --project worker sync-worker --bootstrap` — force full re-sync แล้ววิ่ง continuous
+- `uv run --project worker sync-worker --bootstrap-only` — bootstrap แล้ว exit (ใช้ใน compose reset)
 
 ## แหล่งอ้างอิง
 

@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def run(*, force_bootstrap: bool) -> None:
+async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
     settings = load_settings()
     await init_db(settings.mongodb_uri)
     couch = CouchClient(settings)
@@ -38,8 +38,11 @@ async def run(*, force_bootstrap: bool) -> None:
         loop.add_signal_handler(sig, _handle_signal)
 
     try:
-        if force_bootstrap or await needs_bootstrap():
+        if force_bootstrap or bootstrap_only or await needs_bootstrap():
             await bootstrap_all(couch)
+        if bootstrap_only:
+            logger.info("Bootstrap-only complete — exiting")
+            return
         await manager.start()
         logger.info("Sync worker running — Ctrl+C to stop")
         await stop.wait()
@@ -56,8 +59,13 @@ def main() -> None:
         action="store_true",
         help="Force full bootstrap scan before starting continuous sync",
     )
+    parser.add_argument(
+        "--bootstrap-only",
+        action="store_true",
+        help="Run a full bootstrap scan then exit (no continuous _changes tail)",
+    )
     args = parser.parse_args()
-    asyncio.run(run(force_bootstrap=args.bootstrap))
+    asyncio.run(run(force_bootstrap=args.bootstrap, bootstrap_only=args.bootstrap_only))
 
 
 if __name__ == "__main__":
