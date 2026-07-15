@@ -295,6 +295,94 @@ describe('POST /api/public/v1/donations', () => {
 		expect(data.item_id).toBe('item:rice');
 	});
 
+	// Race guard: a concurrent donor consumed most of the quota before this
+	// submission read state. The re-check must reject when the requested qty
+	// exceeds what remains — not only when the need is fully closed.
+	function needsMock(qtyTarget: number, existingDeclaredQty: number) {
+		return (path: string, method: string) => {
+			if (method === 'GET' && path.includes('/registry')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								id: 'shelter:01ABCSHELTER',
+								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
+							}
+						]
+					}
+				});
+			}
+			if (method === 'GET' && path.includes('donation_campaign:')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									_id: 'donation_campaign:c1',
+									type: 'donation_campaign',
+									status: 'open',
+									needs: [{ item_id: 'item:rice', qty_target: qtyTarget, unit: 'kg' }]
+								}
+							}
+						]
+					}
+				});
+			}
+			if (method === 'GET' && path.includes('donation:')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									_id: 'donation:d1',
+									type: 'donation',
+									campaign_id: 'donation_campaign:c1',
+									status: 'declared',
+									items: [{ item_id: 'item:rice', qty: existingDeclaredQty }]
+								}
+							}
+						]
+					}
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		};
+	}
+
+	it('returns 409 NEED_FULL when the requested qty exceeds the remaining quota', async () => {
+		// target 50, already 48 declared → only 2 left, but payload asks for 5
+		vi.mocked(adminRaw).mockImplementation(needsMock(50, 48));
+
+		const response = await POST({
+			request: { json: () => Promise.resolve(validPayload) },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(409);
+		expect(data.error).toBe('NEED_FULL');
+		expect(data.item_id).toBe('item:rice');
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	it('accepts the booking when the requested qty exactly fits the remaining quota', async () => {
+		// target 50, already 45 declared → exactly 5 left, payload asks for 5
+		vi.mocked(adminRaw).mockImplementation(needsMock(50, 45));
+
+		const response = await POST({
+			request: { json: () => Promise.resolve(validPayload) },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(200);
+		expect(data.success).toBe(true);
+		expect(putAsPublicWriter).toHaveBeenCalled();
+	});
+
 	it('returns 409 SLOT_FULL if the logistics slot is already fully booked', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 			if (method === 'GET' && path.includes('/registry')) {
