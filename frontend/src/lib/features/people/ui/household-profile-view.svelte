@@ -26,7 +26,6 @@
 	// Modals
 	import EvacueeAddressModal from './evacuee-address-modal.svelte';
 	import EvacueeAssetsModal from './evacuee-assets-modal.svelte';
-	import HouseholdQrModal from './household-qr-modal.svelte';
 	import HouseholdHeadModal from './household-head-modal.svelte';
 	import HouseholdMembersModal from './household-members-modal.svelte';
 	import EvacueeZoneModal from './evacuee-zone-modal.svelte';
@@ -52,7 +51,6 @@
 	let showStatusModal = $state(false);
 	let showMembersModal = $state(false);
 	let showHeadModal = $state(false);
-	let showQrModal = $state(false);
 	let showAddressModal = $state(false);
 	let showAssetsModal = $state(false);
 	let showZoneModal = $state(false);
@@ -273,7 +271,6 @@
 			{household}
 			{statusConfig}
 			onOpenStatusModal={() => (showStatusModal = true)}
-			onOpenQrModal={() => (showQrModal = true)}
 			onOpenZoneModal={() => (showZoneModal = true)}
 		/>
 
@@ -355,16 +352,6 @@
 			{household}
 			onClose={() => (showAssetsModal = false)}
 			onSave={saveAssets}
-		/>
-	{/if}
-
-	{#if showQrModal}
-		<HouseholdQrModal
-			show={showQrModal}
-			{household}
-			selectedHead={head}
-			allMembers={members}
-			onClose={() => (showQrModal = false)}
 		/>
 	{/if}
 

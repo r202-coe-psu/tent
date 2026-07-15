@@ -1,19 +1,16 @@
 <script lang="ts">
 	import Pencil from '@lucide/svelte/icons/pencil';
-	import Printer from '@lucide/svelte/icons/printer';
 	import type { Household, HouseholdStatus } from '../domain/people';
 
 	let {
 		household,
 		statusConfig,
 		onOpenStatusModal,
-		onOpenQrModal,
 		onOpenZoneModal
 	}: {
 		household: Household;
 		statusConfig: Record<HouseholdStatus, { label: string; colorClass: string; dotClass: string }>;
 		onOpenStatusModal: () => void;
-		onOpenQrModal: () => void;
 		onOpenZoneModal: () => void;
 	} = $props();
 </script>
@@ -55,13 +52,5 @@
 				<Pencil class="ml-0.5 size-3.5 opacity-60" />
 			</button>
 		{/if}
-
-		<button
-			class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:bg-muted dark:text-slate-200"
-			onclick={onOpenQrModal}
-		>
-			<Printer class="size-4 opacity-75" />
-			<span>พิมพ์ QR</span>
-		</button>
 	</div>
 </div>

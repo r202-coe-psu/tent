@@ -21,8 +21,7 @@
 		readonly,
 		onOpenZoneModal,
 		onOpenStatusModal,
-		onOpenQrModal,
-		onOpenHouseholdQrModal
+		onOpenQrModal
 	}: {
 		evacuee: Evacuee;
 		medical: Medical | null;
@@ -32,7 +31,6 @@
 		onOpenZoneModal: () => void;
 		onOpenStatusModal: () => void;
 		onOpenQrModal: () => void;
-		onOpenHouseholdQrModal: () => void;
 	} = $props();
 </script>
 
@@ -114,16 +112,6 @@
 				<Printer class="size-4 opacity-75" />
 				<span>พิมพ์ QR</span>
 			</button>
-
-			{#if evacuee.household_id}
-				<button
-					class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:bg-muted dark:text-slate-200"
-					onclick={onOpenHouseholdQrModal}
-				>
-					<Printer class="size-4 opacity-75" />
-					<span>พิมพ์ QR ครัวเรือน</span>
-				</button>
-			{/if}
 		{:else}
 			<span
 				class="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold {statusInfo?.colorClass}"

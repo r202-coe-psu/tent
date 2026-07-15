@@ -21,7 +21,6 @@
 	} from '../domain/people';
 	import { useMasterData } from '$lib/features/master-data';
 	import { toast } from 'svelte-sonner';
-	import QRCode from 'qrcode';
 	import { Html5Qrcode } from 'html5-qrcode';
 
 	// Sub-components
@@ -48,7 +47,6 @@
 		selectedHead: Evacuee | null;
 		selectedMembers: Evacuee[];
 		createdHousehold: Household | null;
-		qrUrl: string | null;
 		addressData: HouseholdPostArrivalAddressForm | null;
 		petsList: PetGroup[];
 		vehicleRows: HouseholdVehicle[];
@@ -99,7 +97,6 @@
 	let selectedHead = $state<Evacuee | null>(savedState?.selectedHead ?? null);
 	let selectedMembers = $state<Evacuee[]>(savedState?.selectedMembers ?? []);
 	let createdHousehold = $state<Household | null>(savedState?.createdHousehold ?? null);
-	let qrUrl = $state<string | null>(savedState?.qrUrl ?? null);
 
 	function handleViewProfile(id: string) {
 		const stateToSave = {
@@ -107,7 +104,6 @@
 			selectedHead,
 			selectedMembers,
 			createdHousehold,
-			qrUrl,
 			addressData,
 			petsList,
 			vehicleRows,
@@ -218,29 +214,6 @@
 		}
 		return { conflicted: false };
 	}
-
-	$effect(() => {
-		if (createdHousehold?._id) {
-			QRCode.toDataURL(
-				createdHousehold._id,
-				{
-					margin: 0,
-					width: 180,
-					color: {
-						dark: '#000000',
-						light: '#ffffff'
-					}
-				},
-				(err, url) => {
-					if (err) {
-						console.error(err);
-						return;
-					}
-					qrUrl = url;
-				}
-			);
-		}
-	});
 
 	// --- Step 3: Address (validated once the address step's form passes Zod validation) ---
 	let addressData = $state<HouseholdPostArrivalAddressForm | null>(savedState?.addressData ?? null);
@@ -370,7 +343,7 @@
 </script>
 
 <svelte:head>
-	<title>จัดกลุ่มครัวเรือนหลังเข้าพัก (Path C) · SmartShelter</title>
+	<title>จัดกลุ่มผู้ประสบภัยเป็นครัวเรือน · SmartShelter</title>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-7xl px-4 py-8 md:px-6">
@@ -385,7 +358,7 @@
 			<span>กลับหน้ารายการครัวเรือนหลัก</span>
 		</button>
 		<h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-			จัดกลุ่มครัวเรือนหลังเข้าพัก (Post-arrival grouping - Path C)
+			จัดกลุ่มผู้ประสบภัยเป็นครัวเรือน (Household Post-arrival Grouping)
 		</h2>
 	</div>
 
@@ -440,7 +413,7 @@
 									? 'ทรัพย์สินและสัตว์เลี้ยง'
 									: s === 5
 										? 'เลือกโซนพักพิง'
-										: 'จัดกลุ่มสำเร็จ & QR Code'}
+										: 'จัดกลุ่มสำเร็จ'}
 				</span>
 			</div>
 		{/each}
@@ -530,7 +503,6 @@
 			{createdHousehold}
 			{selectedHead}
 			{selectedMembers}
-			{qrUrl}
 			onFinish={() => goto(resolve('/back-office/evacuee-management?tab=household'))}
 		/>
 	{/if}

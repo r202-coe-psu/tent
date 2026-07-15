@@ -34,7 +34,6 @@
 	import EvacueeZoneModal from './evacuee-zone-modal.svelte';
 	import EvacueeStatusModal from './evacuee-status-modal.svelte';
 	import EvacueeQrModal from './evacuee-qr-modal.svelte';
-	import HouseholdQrModal from './household-qr-modal.svelte';
 	import EvacueeAddressModal from './evacuee-address-modal.svelte';
 	import EvacueeAssetsModal from './evacuee-assets-modal.svelte';
 
@@ -125,16 +124,6 @@
 				)
 			: []
 	);
-	const selectedHead = $derived(
-		household && evacueesQuery.data
-			? (evacueesQuery.data.find((e) => e._id === household.head_evacuee_id) ?? null)
-			: null
-	);
-	const allHouseholdMembers = $derived(
-		evacuee && evacuee.household_id && evacueesQuery.data
-			? evacueesQuery.data.filter((e) => e.household_id === evacuee.household_id)
-			: []
-	);
 
 	// Append-only movement stream for this evacuee, newest first (schema.md §1.1).
 	const movements = $derived(
@@ -178,7 +167,6 @@
 	let showZoneModal = $state(false);
 	let showStatusModal = $state(false);
 	let showQrModal = $state(false);
-	let showHouseholdQrModal = $state(false);
 	let showAddressModal = $state(false);
 	let showAssetModal = $state(false);
 
@@ -307,7 +295,6 @@
 			onOpenZoneModal={() => (showZoneModal = true)}
 			onOpenStatusModal={() => (showStatusModal = true)}
 			onOpenQrModal={() => (showQrModal = true)}
-			onOpenHouseholdQrModal={() => (showHouseholdQrModal = true)}
 		/>
 
 		<!-- Two-column body -->
@@ -419,16 +406,6 @@
 		/>
 
 		<EvacueeQrModal show={showQrModal} {evacuee} onClose={() => (showQrModal = false)} />
-
-		{#if household}
-			<HouseholdQrModal
-				show={showHouseholdQrModal}
-				{household}
-				{selectedHead}
-				allMembers={allHouseholdMembers}
-				onClose={() => (showHouseholdQrModal = false)}
-			/>
-		{/if}
 
 		{#if showAddressModal && household}
 			<EvacueeAddressModal

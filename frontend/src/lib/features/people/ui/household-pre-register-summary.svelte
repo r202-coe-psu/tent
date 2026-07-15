@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -8,22 +7,22 @@
 	import {
 		SPECIAL_NEED_CHIPS,
 		maskNationalId,
-		zoneLabel,
 		type Evacuee,
 		type Household,
-		type SpecialNeed,
-		type Gender,
-		type Religion,
-		type CardType
+		evacueeInputSchema,
+		specialNeedSchema
 	} from '../domain/people';
 	import { toast } from 'svelte-sonner';
-	import { previewElementAsPdf } from '$lib/utils/pdf';
-	import QRCode from 'qrcode';
 	import Camera from '@lucide/svelte/icons/camera';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import * as Form from '$lib/components/ui/form/index.js';
+	import * as Field from '$lib/components/ui/field/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
+	import { defaults, superForm } from 'sveltekit-superforms';
+	import { zod4 } from 'sveltekit-superforms/adapters';
 
 	import Plus from '@lucide/svelte/icons/plus';
-	import Printer from '@lucide/svelte/icons/printer';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import User from '@lucide/svelte/icons/user';
 	import Users from '@lucide/svelte/icons/users';
@@ -45,63 +44,123 @@
 	const updateEvacueeMutation = useUpdateEvacuee();
 	const allEvacueesQuery = useEvacuees();
 
-	let qrUrl = $state<string | null>(null);
 	let isSubmitting = $state(false);
 
-	let cardEl = $state<HTMLDivElement | null>(null);
-	let isExportingPdf = $state(false);
+	const cardTypeOptions = [
+		{ value: 'national_id', label: 'เลขประจำตัวประชาชน (Thai National ID)' },
+		{ value: 'passport', label: 'หนังสือเดินทาง (Passport)' },
+		{ value: 'pink_card', label: 'บัตรประจำตัวคนซึ่งไม่มีสัญชาติไทย (Pink Card)' },
+		{ value: 'other', label: 'อื่นๆ (Other)' }
+	];
 
-	const fullId = $derived(createdHousehold._id.split(':')[1] ?? createdHousehold._id);
-	const zoneName = $derived(
-		createdHead?.current_stay?.zone
-			? zoneLabel(createdHead.current_stay.zone).toUpperCase()
-			: 'PRE-REGISTERED'
-	);
+	const genderOptions = [
+		{ value: 'male', label: 'ชาย (Male)' },
+		{ value: 'female', label: 'หญิง (Female)' },
+		{ value: 'other', label: 'อื่นๆ (Other)' }
+	];
 
-	async function handlePrintPreview() {
-		if (!cardEl) return;
-		isExportingPdf = true;
-		try {
-			await previewElementAsPdf(cardEl, `household-id-${fullId}`);
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ');
-		} finally {
-			isExportingPdf = false;
-		}
-	}
+	const religionOptions = [
+		{ value: 'buddhist', label: 'พุทธ (Buddhism)' },
+		{ value: 'muslim', label: 'อิสลาม (Islam)' },
+		{ value: 'christian', label: 'คริสต์ (Christianity)' },
+		{ value: 'other', label: 'อื่นๆ (Other)' },
+		{ value: 'unknown', label: 'ไม่ระบุ (Unknown)' }
+	];
 
 	// --- Form State (Subsequent Members) ---
 	let showAddMemberForm = $state(false);
 	let memberNoPhone = $state(false);
 	let memberFacePhotoUrl = $state<string | null>(null);
 
-	$effect(() => {
-		if (memberNoPhone) {
-			memberPhone = '';
+	let memberBirthYearBE = $state('');
+	let memberAge = $state('');
+	let memberMedicalConditionsStr = $state('');
+	let memberMedicalMedicationsStr = $state('');
+	let memberMedicalAllergiesStr = $state('');
+
+	const memberForm = superForm(defaults(zod4(evacueeInputSchema)), {
+		SPA: true,
+		dataType: 'json',
+		validators: zod4(evacueeInputSchema),
+		resetForm: false,
+		onSubmit: ({ cancel }) => {
+			if (memberNoPhone) {
+				$memberFormData.phone = null;
+			} else {
+				const cleanPhone = ($memberFormData.phone ?? '').replace(/\D/g, '');
+				if (cleanPhone.length !== 10) {
+					$memberErrors.phone = ['กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"'];
+					toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"');
+					cancel();
+					return;
+				}
+			}
+		},
+		onUpdate: async ({ form: f }) => {
+			if (!f.valid) {
+				toast.error('กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน');
+				return;
+			}
+
+			isSubmitting = true;
+
+			try {
+				const ctx = {
+					shelterCode: getShelterCode(),
+					createdBy: authStore.user?.name ?? 'staff'
+				};
+
+				f.data.household_id = createdHousehold._id;
+
+				const memberDoc = await createEvacueeMutation.mutateAsync({
+					input: f.data,
+					ctx
+				});
+
+				if (createdHead?.current_stay?.zone) {
+					await updateEvacueeMutation.mutateAsync({
+						...memberDoc,
+						current_stay: {
+							...memberDoc.current_stay,
+							zone: createdHead.current_stay.zone
+						}
+					});
+				}
+
+				toast.success(`ลงทะเบียนสมาชิก "${f.data.first_name} ${f.data.last_name}" เรียบร้อยแล้ว`);
+
+				// Reset member form
+				memberForm.reset();
+				memberFacePhotoUrl = null;
+				memberBirthYearBE = '';
+				memberAge = '';
+				memberMedicalConditionsStr = '';
+				memberMedicalMedicationsStr = '';
+				memberMedicalAllergiesStr = '';
+				memberNoPhone = false;
+
+				showAddMemberForm = false;
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				toast.error(`เกิดข้อผิดพลาดในการลงทะเบียนสมาชิก: ${msg}`);
+			} finally {
+				isSubmitting = false;
+			}
 		}
 	});
-	let memberFirstName = $state('');
-	let memberLastName = $state('');
-	let memberNickname = $state('');
-	let memberGender = $state<Gender>('male');
-	let memberBirthYear = $state('');
-	let memberAge = $state('');
-	let memberCardType = $state<CardType>('national_id');
-	let memberCardNumber = $state('');
-	let memberCountry = $state('THAILAND');
-	let memberReligion = $state<Religion>('buddhist');
-	let memberPhone = $state('');
-	let memberSpecialNeeds = new SvelteSet<SpecialNeed>();
-	let memberMedicalConditions = $state('');
-	let memberMedicalAllergies = $state('');
-	let memberMedicalMedications = $state('');
-	let memberMedicalNote = $state('');
+
+	const {
+		form: memberFormData,
+		errors: memberErrors,
+		submitting: memberSubmitting,
+		enhance: memberEnhance
+	} = memberForm;
 
 	// Sync birth year and age two-way
 	let prevMemberBirthYear = '';
 	let prevMemberAge = '';
 	$effect(() => {
-		const by = memberBirthYear;
+		const by = memberBirthYearBE;
 		const age = memberAge;
 		if (by !== prevMemberBirthYear) {
 			prevMemberBirthYear = by;
@@ -111,154 +170,60 @@
 					memberAge = computed;
 					prevMemberAge = computed;
 				}
+				$memberFormData.birth_year = Number(by);
 			} else if (!by) {
 				memberAge = '';
 				prevMemberAge = '';
+				$memberFormData.birth_year = undefined;
 			}
 		} else if (age !== prevMemberAge) {
 			prevMemberAge = age;
 			if (age && !isNaN(Number(age))) {
 				const computed = String(new Date().getFullYear() + 543 - Number(age));
-				if (memberBirthYear !== computed) {
-					memberBirthYear = computed;
+				if (memberBirthYearBE !== computed) {
+					memberBirthYearBE = computed;
 					prevMemberBirthYear = computed;
 				}
+				$memberFormData.birth_year = new Date().getFullYear() + 543 - Number(age);
 			} else if (!age) {
-				memberBirthYear = '';
+				memberBirthYearBE = '';
 				prevMemberBirthYear = '';
+				$memberFormData.birth_year = undefined;
 			}
 		}
+	});
+
+	$effect(() => {
+		$memberFormData.medical_conditions = memberMedicalConditionsStr
+			? memberMedicalConditionsStr
+					.split(',')
+					.map((s) => s.trim())
+					.filter(Boolean)
+			: [];
+	});
+
+	$effect(() => {
+		$memberFormData.medical_medications = memberMedicalMedicationsStr
+			? memberMedicalMedicationsStr
+					.split(',')
+					.map((s) => s.trim())
+					.filter(Boolean)
+			: [];
+	});
+
+	$effect(() => {
+		$memberFormData.medical_allergies = memberMedicalAllergiesStr
+			? memberMedicalAllergiesStr
+					.split(',')
+					.map((s) => s.trim())
+					.filter(Boolean)
+			: [];
 	});
 
 	// Get household members dynamically
 	const householdMembers = $derived(
 		(allEvacueesQuery.data ?? []).filter((e) => e.household_id === createdHousehold?._id)
 	);
-
-	// Generate QR URL once Household is created
-	$effect(() => {
-		if (createdHousehold) {
-			QRCode.toDataURL(createdHousehold._id, {
-				width: 160,
-				margin: 1,
-				color: { dark: '#0f172a', light: '#ffffff' }
-			}).then((url) => {
-				qrUrl = url;
-			});
-		}
-	});
-
-	function toggleSpecialNeed(set: SvelteSet<SpecialNeed>, need: SpecialNeed) {
-		if (set.has(need)) {
-			set.delete(need);
-		} else {
-			set.add(need);
-		}
-	}
-
-	async function handleAddMember() {
-		if (!memberFirstName.trim() || !memberLastName.trim()) {
-			toast.error('กรุณากรอกชื่อและนามสกุลของสมาชิก');
-			return;
-		}
-
-		if (
-			!memberNoPhone &&
-			(!memberPhone.trim() || memberPhone.trim().replace(/\D/g, '').length !== 10)
-		) {
-			toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"');
-			return;
-		}
-
-		isSubmitting = true;
-
-		try {
-			const ctx = {
-				shelterCode: getShelterCode(),
-				createdBy: authStore.user?.name ?? 'staff'
-			};
-
-			const parsedPhone = memberPhone.trim() ? memberPhone.trim().replace(/\D/g, '') : null;
-
-			const memberInput = {
-				first_name: memberFirstName.trim(),
-				last_name: memberLastName.trim(),
-				gender: memberGender,
-				phone: parsedPhone,
-				nickname: memberNickname.trim() || undefined,
-				birth_year: memberBirthYear ? Number(memberBirthYear) : undefined,
-				person_id: {
-					cardType: memberCardType,
-					number: memberCardNumber.trim() || undefined
-				},
-				country: memberCountry,
-				religion: memberReligion,
-				special_needs: Array.from(memberSpecialNeeds),
-				registered_via: 'app' as const,
-				household_id: createdHousehold._id,
-				medical_conditions: memberMedicalConditions
-					? memberMedicalConditions
-							.split(',')
-							.map((s) => s.trim())
-							.filter(Boolean)
-					: [],
-				medical_allergies: memberMedicalAllergies
-					? memberMedicalAllergies
-							.split(',')
-							.map((s) => s.trim())
-							.filter(Boolean)
-					: [],
-				medical_medications: memberMedicalMedications
-					? memberMedicalMedications
-							.split(',')
-							.map((s) => s.trim())
-							.filter(Boolean)
-					: [],
-				medical_note: memberMedicalNote.trim() || undefined
-			};
-
-			const memberDoc = await createEvacueeMutation.mutateAsync({
-				input: memberInput,
-				ctx
-			});
-
-			if (createdHead?.current_stay?.zone) {
-				await updateEvacueeMutation.mutateAsync({
-					...memberDoc,
-					current_stay: {
-						...memberDoc.current_stay,
-						zone: createdHead.current_stay.zone
-					}
-				});
-			}
-
-			toast.success(`ลงทะเบียนสมาชิก "${memberFirstName} ${memberLastName}" เรียบร้อยแล้ว`);
-
-			// Reset member form
-			memberFirstName = '';
-			memberLastName = '';
-			memberNickname = '';
-			memberGender = 'male';
-			memberBirthYear = '';
-			memberAge = '';
-			memberCardNumber = '';
-			memberPhone = '';
-			memberNoPhone = false;
-			memberFacePhotoUrl = null;
-			memberSpecialNeeds.clear();
-			memberMedicalConditions = '';
-			memberMedicalAllergies = '';
-			memberMedicalMedications = '';
-			memberMedicalNote = '';
-
-			showAddMemberForm = false;
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			toast.error(`เกิดข้อผิดพลาดในการลงทะเบียนสมาชิก: ${msg}`);
-		} finally {
-			isSubmitting = false;
-		}
-	}
 
 	function formatAddress(h: Household) {
 		const parts = [];
@@ -284,14 +249,11 @@
 	}
 </script>
 
-<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-	<!-- Column 1 & 2: Household Info Card & Registered Members Table -->
-	<div class="space-y-6 lg:col-span-2">
+<div class="mx-auto w-full max-w-4xl space-y-6">
+	<!-- Household Info Card & Registered Members Table -->
+	<div class="space-y-6">
 		<!-- Household Card Details -->
 		<div class="relative overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
-			<div
-				class="absolute top-0 right-0 size-24 translate-x-8 -translate-y-8 rounded-full bg-emerald-500/10"
-			></div>
 			<div class="flex items-start gap-4">
 				<div
 					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-500"
@@ -418,312 +380,382 @@
 			</div>
 		</div>
 	</div>
-
-	<!-- Column 3: Printable QR Card Summary -->
-	<div class="space-y-6">
-		<!-- Wristband / QR Card Preview -->
-		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
-			<h3 class="mb-4 text-sm font-bold text-slate-800 dark:text-slate-200">
-				สลิปบัตรประจำตัวครอบครัว (Household Card)
-			</h3>
-
-			<div class="rounded-2xl bg-slate-100 p-4 dark:bg-slate-800">
-				<div
-					id="qr-identity-card"
-					bind:this={cardEl}
-					class="mx-auto flex min-h-[90px] max-w-[340px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md dark:border-slate-700"
-				>
-					<div class="w-2.5 shrink-0 bg-emerald-500"></div>
-
-					<div class="flex flex-1 flex-col justify-center gap-0.5 px-3 py-2 text-left">
-						<span class="font-mono text-[9px] font-bold tracking-widest text-slate-400 uppercase">
-							ZONE: {zoneName}
-						</span>
-						<p class="truncate text-sm leading-tight font-bold text-slate-900">
-							{createdHousehold.label}
-						</p>
-						<div class="mt-1 flex flex-col gap-0.5 text-xs text-slate-600">
-							<p>
-								<span class="font-semibold">หัวหน้า:</span>
-								{createdHead ? `${createdHead.first_name} ${createdHead.last_name}` : '—'}
-							</p>
-							<p>
-								<span class="font-semibold">จำนวนสมาชิก:</span>
-								{householdMembers.length} คน
-							</p>
-						</div>
-						<div class="mt-1">
-							<span
-								class="inline-block rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wide whitespace-nowrap text-slate-700"
-							>
-								{fullId}
-							</span>
-						</div>
-					</div>
-
-					<div class="flex shrink-0 items-center justify-center px-2">
-						{#if qrUrl}
-							<img src={qrUrl} alt="QR Code" class="size-16 shrink-0 object-contain" />
-						{:else}
-							<div
-								class="flex size-16 shrink-0 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400"
-							>
-								...
-							</div>
-						{/if}
-					</div>
-				</div>
-			</div>
-
-			<div class="mt-4 flex flex-col gap-2">
-				<Button
-					onclick={handlePrintPreview}
-					disabled={isExportingPdf}
-					class="flex h-10 w-full items-center justify-center gap-1.5 bg-[#0d2240] text-white hover:bg-[#1a3a5c]"
-				>
-					<Printer class="size-4" />
-					<span>{isExportingPdf ? 'กำลังสร้าง PDF...' : 'พิมพ์บัตรประจำครอบครัว'}</span>
-				</Button>
-			</div>
-		</div>
-	</div>
 </div>
 
 <!-- ────────────────── MODAL/INLINE FORM: Add Member Form ────────────────── -->
 {#if showAddMemberForm}
-	<div
+	<form
+		method="POST"
+		use:memberEnhance
 		class="mt-8 animate-in rounded-3xl border border-border bg-card p-6 shadow-md duration-200 slide-in-from-top-3"
 	>
-		<div
-			class="mb-6 flex flex-col gap-4 border-b pb-3 sm:flex-row sm:items-center sm:justify-between"
-		>
-			<h3 class="flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-slate-200">
-				<User class="size-5 text-primary" />
-				ลงทะเบียนสมาชิกคนใหม่ในครอบครัว
-			</h3>
-			<div class="flex items-center gap-3">
-				<button
-					type="button"
-					class="text-sm font-medium text-muted-foreground hover:text-foreground"
-					onclick={() => (showAddMemberForm = false)}
-				>
-					✖ ปิด
-				</button>
+		<Field.FieldGroup>
+			<div
+				class="mb-6 flex flex-col gap-4 border-b pb-3 sm:flex-row sm:items-center sm:justify-between"
+			>
+				<h3 class="flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-slate-200">
+					<User class="size-5 text-primary" />
+					ลงทะเบียนสมาชิกคนใหม่ในครอบครัว
+				</h3>
+				<div class="flex items-center gap-3">
+					<button
+						type="button"
+						class="text-sm font-medium text-muted-foreground hover:text-foreground"
+						onclick={() => {
+							memberForm.reset();
+							showAddMemberForm = false;
+						}}
+					>
+						✖ ปิด
+					</button>
+				</div>
 			</div>
-		</div>
 
-		<div class="grid grid-cols-1 items-start gap-6 md:grid-cols-[200px_1fr]">
-			<!-- Column 1: Face Photo mockup -->
-			<div class="space-y-2">
-				<p class="text-sm leading-none font-medium text-foreground">
-					ภาพถ่ายใบหน้า (Face Recognition)
-				</p>
-				<input
-					type="file"
-					accept="image/*"
-					class="hidden"
-					id="member-face-photo-input"
-					onchange={(e) => {
-						const file = e.currentTarget.files?.[0];
-						if (file) {
-							memberFacePhotoUrl = URL.createObjectURL(file);
-						}
-					}}
-				/>
-				<label
-					for="member-face-photo-input"
-					class="block cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
-				>
-					{#if memberFacePhotoUrl}
-						<img src={memberFacePhotoUrl} alt="Face" class="h-40 w-full rounded-lg object-cover" />
-					{:else}
-						<div class="flex h-40 flex-col items-center justify-center">
-							<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
-							<span class="text-xs text-muted-foreground">แตะเพื่อถ่ายภาพ</span>
+			<div class="grid grid-cols-1 items-start gap-6 md:grid-cols-[200px_1fr]">
+				<!-- Column 1: Face Photo mockup -->
+				<div class="space-y-2">
+					<p class="text-sm leading-none font-medium text-foreground">
+						ภาพถ่ายใบหน้า (Face Recognition)
+					</p>
+					<input
+						type="file"
+						accept="image/*"
+						class="hidden"
+						id="member-face-photo-input"
+						onchange={(e) => {
+							const file = e.currentTarget.files?.[0];
+							if (file) {
+								memberFacePhotoUrl = URL.createObjectURL(file);
+							}
+						}}
+					/>
+					<label
+						for="member-face-photo-input"
+						class="block cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
+					>
+						{#if memberFacePhotoUrl}
+							<img
+								src={memberFacePhotoUrl}
+								alt="Face"
+								class="h-40 w-full rounded-lg object-cover"
+							/>
+						{:else}
+							<div class="flex h-40 flex-col items-center justify-center">
+								<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
+								<span class="text-xs text-muted-foreground">แตะเพื่อถ่ายภาพ</span>
+							</div>
+						{/if}
+					</label>
+				</div>
+
+				<!-- Column 2: Fields grid -->
+				<div class="space-y-4">
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<div class="space-y-2">
+							<Label>ประเภทบัตร</Label>
+							<Select.Root type="single" bind:value={$memberFormData.person_id.cardType}>
+								<Select.Trigger
+									class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+								>
+									{cardTypeOptions.find((o) => o.value === $memberFormData.person_id.cardType)
+										?.label ?? '— เลือก —'}
+								</Select.Trigger>
+								<Select.Content>
+									{#each cardTypeOptions as opt (opt.value)}
+										<Select.Item value={opt.value} label={opt.label} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
 						</div>
-					{/if}
-				</label>
-			</div>
+						<Form.Field form={memberForm} name="person_id.number">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>
+										{#if $memberFormData.person_id.cardType === 'national_id'}
+											เลขประจำตัวประชาชน
+										{:else if $memberFormData.person_id.cardType === 'passport'}
+											เลขที่พาสปอร์ต
+										{:else if $memberFormData.person_id.cardType === 'pink_card'}
+											เลขประจำตัวคนซึ่งไม่มีสัญชาติไทย
+										{:else}
+											เลขหมายบัตร
+										{/if}
+									</Form.Label>
+									<Input
+										{...props}
+										maxlength={$memberFormData.person_id.cardType === 'national_id'
+											? 13
+											: $memberFormData.person_id.cardType === 'passport'
+												? 9
+												: undefined}
+										placeholder={$memberFormData.person_id.cardType === 'national_id'
+											? 'X-XXXX-XXXXX-XX-X'
+											: $memberFormData.person_id.cardType === 'passport'
+												? 'Passport Number'
+												: 'หมายเลขบัตร'}
+										bind:value={$memberFormData.person_id.number}
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+					</div>
 
-			<!-- Column 2: Fields grid -->
-			<div class="space-y-4">
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<div class="space-y-2">
-						<Label>ประเภทบัตรประจำตัว</Label>
-						<select
-							class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							bind:value={memberCardType}
-						>
-							<option value="national_id">บัตรประชาชน</option>
-							<option value="passport">พาสปอร์ต</option>
-							<option value="pink_card">บัตรสีชมพู</option>
-							<option value="other">อื่นๆ</option>
-						</select>
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<Form.Field form={memberForm} name="first_name">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>ชื่อ (First Name) <span class="text-destructive">*</span></Form.Label>
+									<Input
+										{...props}
+										placeholder="ชื่อจริง"
+										bind:value={$memberFormData.first_name}
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+						<Form.Field form={memberForm} name="last_name">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label
+										>นามสกุล (Last Name) <span class="text-destructive">*</span></Form.Label
+									>
+									<Input {...props} placeholder="นามสกุล" bind:value={$memberFormData.last_name} />
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 					</div>
-					<div class="space-y-2">
-						<Label for="mem-cardno">เลขบัตร / หนังสือเดินทาง</Label>
-						<Input id="mem-cardno" placeholder="หมายเลขบัตร" bind:value={memberCardNumber} />
-					</div>
-				</div>
 
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<div class="space-y-2">
-						<Label for="mem-fn">ชื่อจริง <span class="text-destructive">*</span></Label>
-						<Input id="mem-fn" placeholder="ชื่อจริง" bind:value={memberFirstName} required />
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<Form.Field form={memberForm} name="nickname">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>ชื่อเล่น</Form.Label>
+									<Input
+										{...props}
+										placeholder="ชื่อเล่น (ถ้ามี)"
+										bind:value={$memberFormData.nickname}
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 					</div>
-					<div class="space-y-2">
-						<Label for="mem-ln">นามสกุล <span class="text-destructive">*</span></Label>
-						<Input id="mem-ln" placeholder="นามสกุล" bind:value={memberLastName} required />
-					</div>
-				</div>
 
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<div class="space-y-2">
-						<Label for="mem-nn">ชื่อเล่น</Label>
-						<Input id="mem-nn" placeholder="ชื่อเล่น" bind:value={memberNickname} />
-					</div>
-				</div>
-
-				<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-					<div class="space-y-2">
-						<Label for="mem-by">ปีเกิด (พ.ศ.)</Label>
-						<Input id="mem-by" placeholder="เช่น 2530" bind:value={memberBirthYear} />
-					</div>
-					<div class="space-y-2">
-						<Label for="mem-age">อายุ (ปี)</Label>
-						<Input
-							id="mem-age"
-							placeholder="อายุ"
-							bind:value={memberAge}
-							inputmode="numeric"
-							maxlength={3}
-							oninput={(e) => {
-								const val = e.currentTarget.value.replace(/\D/g, '');
-								e.currentTarget.value = val;
-								memberAge = val;
-							}}
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label>เพศ</Label>
-						<select
-							class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							bind:value={memberGender}
-						>
-							<option value="male">ชาย</option>
-							<option value="female">หญิง</option>
-							<option value="other">อื่นๆ</option>
-						</select>
-					</div>
-					<div class="space-y-2">
-						<Label>เบอร์โทรศัพท์ <span class="text-destructive">*</span></Label>
-						<Input
-							id="mem-phone"
-							placeholder="เบอร์โทรศัพท์"
-							disabled={memberNoPhone}
-							bind:value={memberPhone}
-							maxlength={10}
-						/>
-						<label class="mt-1.5 flex cursor-pointer items-center gap-2 text-xs">
-							<Checkbox
-								checked={memberNoPhone}
-								onCheckedChange={(v) => {
-									memberNoPhone = !!v;
-									if (memberNoPhone) {
-										memberPhone = '';
-									}
+					<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+						<div class="space-y-2">
+							<Label>ปีเกิด (พ.ศ.)</Label>
+							<Input placeholder="เช่น 2530" bind:value={memberBirthYearBE} />
+						</div>
+						<div class="space-y-2">
+							<Label>อายุ (ปี)</Label>
+							<Input
+								placeholder="อายุ"
+								value={memberAge}
+								inputmode="numeric"
+								maxlength={3}
+								oninput={(e) => {
+									const val = e.currentTarget.value.replace(/\D/g, '');
+									e.currentTarget.value = val;
+									memberAge = val;
 								}}
 							/>
-							<span class="text-muted-foreground">ไม่มีเบอร์โทร</span>
-						</label>
+						</div>
+						<Form.Field form={memberForm} name="gender">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>เพศ <span class="text-destructive">*</span></Form.Label>
+									<Select.Root type="single" bind:value={$memberFormData.gender}>
+										<Select.Trigger
+											{...props}
+											class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+										>
+											{genderOptions.find((o) => o.value === $memberFormData.gender)?.label ??
+												'— เลือก —'}
+										</Select.Trigger>
+										<Select.Content>
+											{#each genderOptions as opt (opt.value)}
+												<Select.Item value={opt.value} label={opt.label} />
+											{/each}
+										</Select.Content>
+									</Select.Root>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+						<Form.Field form={memberForm} name="phone">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label
+										>เบอร์โทรศัพท์ยืนยันตัวตน <span class="text-destructive">*</span></Form.Label
+									>
+									<Input
+										{...props}
+										inputmode="numeric"
+										maxlength={10}
+										placeholder="08X-XXX-XXXX"
+										disabled={memberNoPhone}
+										value={memberNoPhone ? '' : ($memberFormData.phone ?? '')}
+										oninput={(e) => {
+											const val = e.currentTarget.value.replace(/\D/g, '');
+											e.currentTarget.value = val;
+											$memberFormData.phone = val === '' ? null : val;
+										}}
+									/>
+									<label class="mt-1.5 flex cursor-pointer items-center gap-2 text-xs">
+										<Checkbox
+											checked={memberNoPhone}
+											onCheckedChange={(v) => {
+												memberNoPhone = !!v;
+												if (memberNoPhone) {
+													$memberFormData.phone = null;
+													$memberErrors.phone = undefined;
+												}
+											}}
+										/>
+										<span class="text-muted-foreground">ไม่มีเบอร์โทร</span>
+									</label>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 					</div>
-				</div>
 
-				<div class="grid grid-cols-2 gap-4">
-					<div class="space-y-2">
-						<Label>สัญชาติ</Label>
-						<select
-							class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							bind:value={memberCountry}
-						>
-							{#each COUNTRIES as c (c.value)}
-								<option value={c.value}>{c.label}</option>
-							{/each}
-						</select>
-					</div>
-					<div class="space-y-2">
-						<Label>ศาสนา</Label>
-						<select
-							class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							bind:value={memberReligion}
-						>
-							<option value="buddhist">พุทธ</option>
-							<option value="muslim">อิสลาม</option>
-							<option value="christian">คริสต์</option>
-							<option value="other">อื่นๆ</option>
-							<option value="unknown">ไม่ระบุ</option>
-						</select>
-					</div>
-				</div>
-
-				<!-- Special Needs Chips -->
-				<div class="space-y-2 border-t pt-4">
-					<Label class="text-sm font-semibold">ความต้องการพิเศษ / กลุ่มเปราะบาง</Label>
-					<div class="flex flex-wrap gap-2 pt-1">
-						{#each Object.entries(SPECIAL_NEED_CHIPS) as [key, chip] (key)}
-							{@const checked = memberSpecialNeeds.has(key as SpecialNeed)}
-							<Button
-								type="button"
-								variant="outline"
-								onclick={() => toggleSpecialNeed(memberSpecialNeeds, key as SpecialNeed)}
-								class="inline-flex h-auto items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-normal transition-colors 
-								{checked
-									? 'border-primary bg-primary/10 font-medium text-primary hover:bg-primary/15'
-									: 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-primary/5'}"
-							>
-								<span>{chip.emoji}</span>
-								<span>{chip.label}</span>
-							</Button>
-						{/each}
-					</div>
-				</div>
-
-				<!-- Health & Medical Details -->
-				<div class="space-y-3 border-t pt-4">
-					<Label class="text-sm font-semibold">ข้อมูลสุขภาพ & ยาประจำตัว</Label>
 					<div class="grid grid-cols-2 gap-4">
+						<Form.Field form={memberForm} name="country">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>ประเทศ <span class="text-destructive">*</span></Form.Label>
+									<SearchSelect
+										items={COUNTRIES}
+										bind:value={$memberFormData.country}
+										placeholder="ค้นหาประเทศ..."
+										emptyText="ไม่พบประเทศ"
+										controlProps={props}
+										class="h-9"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+						<Form.Field form={memberForm} name="religion">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>ศาสนา</Form.Label>
+									<Select.Root type="single" bind:value={$memberFormData.religion}>
+										<Select.Trigger
+											{...props}
+											class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+										>
+											{religionOptions.find((o) => o.value === $memberFormData.religion)?.label ??
+												'— เลือก —'}
+										</Select.Trigger>
+										<Select.Content>
+											{#each religionOptions as opt (opt.value)}
+												<Select.Item value={opt.value} label={opt.label} />
+											{/each}
+										</Select.Content>
+									</Select.Root>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+					</div>
+
+					<!-- Special Needs Chips -->
+					<div class="space-y-2 border-t pt-4">
+						<Label class="text-sm font-semibold">แท็กกลุ่มเปราะบางและความต้องการพิเศษ</Label>
+						<div class="flex flex-wrap gap-2 pt-1">
+							{#each specialNeedSchema.options as need (need)}
+								{@const chip = SPECIAL_NEED_CHIPS[need]}
+								{@const checked = ($memberFormData.special_needs ?? []).includes(need)}
+								<Button
+									type="button"
+									variant="outline"
+									onclick={() => {
+										const current = $memberFormData.special_needs ?? [];
+										$memberFormData.special_needs = checked
+											? current.filter((n) => n !== need)
+											: [...current, need];
+									}}
+									class="inline-flex h-auto items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-normal transition-colors
+									{checked
+										? 'border-primary bg-primary/10 font-medium text-primary hover:bg-primary/15'
+										: 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-primary/5'}"
+								>
+									<span>{chip.emoji}</span>
+									<span>{chip.label}</span>
+								</Button>
+							{/each}
+						</div>
+					</div>
+
+					<!-- Health & Medical Details -->
+					<div class="space-y-3 border-t pt-4">
+						<Label class="text-sm font-semibold">🏥 โรคประจำตัว & ข้อมูลสุขภาพ</Label>
 						<div class="space-y-2">
-							<Label for="mem-med-cond" class="text-xs text-muted-foreground">โรคประจำตัว</Label>
+							<Label class="text-xs text-muted-foreground">โรคประจำตัว</Label>
 							<Input
-								id="mem-med-cond"
-								placeholder="เช่น โรคหอบหืด"
-								bind:value={memberMedicalConditions}
+								placeholder="เช่น เบาหวาน, ความดัน (ถ้าไม่มีให้เว้นว่าง)"
+								bind:value={memberMedicalConditionsStr}
 							/>
 						</div>
 						<div class="space-y-2">
-							<Label for="mem-med-all" class="text-xs text-muted-foreground">ประวัติการแพ้</Label>
+							<Label class="text-xs text-muted-foreground">ยาที่ใช้ประจำ</Label>
 							<Input
-								id="mem-med-all"
-								placeholder="แพ้ยา/อาหาร"
-								bind:value={memberMedicalAllergies}
+								placeholder="เช่น ยาลดความดัน, ยาเบาหวาน (ถ้าไม่มีให้เว้นว่าง)"
+								bind:value={memberMedicalMedicationsStr}
 							/>
 						</div>
+						<div class="space-y-2">
+							<Label class="text-xs text-muted-foreground">ประวัติการแพ้ (ยา/อาหาร)</Label>
+							<Input
+								placeholder="เช่น แพ้เพนิซิลลิน, อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
+								bind:value={memberMedicalAllergiesStr}
+							/>
+						</div>
+						<Form.Field form={memberForm} name="medical_note">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label class="text-xs text-muted-foreground"
+										>ความต้องการพิเศษ (ถ้ามี)</Form.Label
+									>
+									<textarea
+										{...props}
+										bind:value={$memberFormData.medical_note}
+										placeholder="เช่น ผู้ป่วยที่ต้องรับยาเฉพาะทาง หรือต้องการการดูแลพิเศษ"
+										class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+									></textarea>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 					</div>
 				</div>
 			</div>
-		</div>
 
-		<div class="mt-6 flex justify-end gap-3 border-t pt-4">
-			<Button variant="outline" onclick={() => (showAddMemberForm = false)}>ยกเลิก</Button>
-			<Button
-				onclick={handleAddMember}
-				disabled={isSubmitting || !memberFirstName || !memberLastName}
-				class="bg-primary font-semibold text-primary-foreground hover:bg-primary/90"
-			>
-				{isSubmitting ? 'กำลังบันทึก...' : 'เพิ่มสมาชิกเข้าร่วมครัวเรือน'}
-			</Button>
-		</div>
-	</div>
+			<div class="mt-6 flex justify-end gap-3 border-t pt-4">
+				<Button
+					type="button"
+					variant="outline"
+					onclick={() => {
+						memberForm.reset();
+						showAddMemberForm = false;
+					}}
+				>
+					ยกเลิก
+				</Button>
+				<Form.Button
+					disabled={$memberSubmitting || isSubmitting}
+					class="bg-primary font-semibold text-primary-foreground hover:bg-primary/90"
+				>
+					{$memberSubmitting || isSubmitting ? 'กำลังบันทึก...' : 'เพิ่มสมาชิกเข้าร่วมครัวเรือน'}
+				</Form.Button>
+			</div>
+		</Field.FieldGroup>
+	</form>
 {/if}
 
 <!-- Action Row Step 4 -->
@@ -738,25 +770,3 @@
 		เสร็จสิ้นการลงทะเบียนล่วงหน้า ✔
 	</Button>
 </div>
-
-<style>
-	@media print {
-		:global(body *) {
-			visibility: hidden;
-		}
-		#qr-identity-card,
-		#qr-identity-card * {
-			visibility: visible;
-		}
-		#qr-identity-card {
-			position: absolute;
-			left: 50%;
-			top: 50%;
-			transform: translate(-50%, -50%) scale(1.6);
-			border: 2px solid #000 !important;
-			box-shadow: none !important;
-			background-color: #fff !important;
-			color: #000 !important;
-		}
-	}
-</style>
