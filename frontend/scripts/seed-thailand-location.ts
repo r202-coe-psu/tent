@@ -84,7 +84,7 @@ async function ensureDb(name: string): Promise<void> {
 
 // ─── seed ─────────────────────────────────────────────────────────────────────
 
-async function main(): Promise<void> {
+export async function seedThailandLocation(): Promise<void> {
 	const displayUrl = rawCouchUrl.replace(/\/\/([^:]+):[^@]+@/, '//$1:***@');
 	console.log(`\nSeeding Thailand location → ${displayUrl}\n`);
 
@@ -119,7 +119,15 @@ async function main(): Promise<void> {
 	);
 }
 
-main().catch((err) => {
-	console.error('\nThailand location seed failed:', err);
-	process.exit(1);
-});
+const isMain = process.argv[1] && (
+	process.argv[1] === fileURLToPath(import.meta.url) ||
+	process.argv[1].endsWith('seed-thailand-location.ts') ||
+	process.argv[1].endsWith('seed-thailand-location.js')
+);
+
+if (isMain) {
+	seedThailandLocation().catch((err) => {
+		console.error('\nThailand location seed failed:', err);
+		process.exit(1);
+	});
+}
