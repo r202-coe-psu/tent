@@ -57,10 +57,10 @@ test.afterEach(async ({ page }) => {
 	await clearSession(page);
 });
 
-async function workbook(rows: string[][]): Promise<Buffer> {
+async function workbook(rows: string[][], headers = HEADERS): Promise<Buffer> {
 	const wb = new ExcelJS.Workbook();
 	const ws = wb.addWorksheet('ศูนย์พักพิง');
-	ws.addRow(HEADERS);
+	ws.addRow(headers);
 	rows.forEach((row) => ws.addRow(row));
 	return Buffer.from(await wb.xlsx.writeBuffer());
 }
@@ -83,8 +83,11 @@ async function mockMasterData(page: Page): Promise<void> {
 }
 
 /** Mock registry prefix scans and PUTs so logs are asserted without shared CouchDB state. */
-async function mockRegistry(page: Page): Promise<{ logs: Record<string, unknown>[] }> {
-	const logs: Record<string, unknown>[] = [];
+async function mockRegistry(
+	page: Page,
+	initialLogs: Record<string, unknown>[] = []
+): Promise<{ logs: Record<string, unknown>[] }> {
+	const logs = [...initialLogs];
 	await page.route('**/registry/**', async (route) => {
 		const request = route.request();
 		const url = new URL(request.url());
@@ -113,15 +116,22 @@ async function mockRegistry(page: Page): Promise<{ logs: Record<string, unknown>
 	return { logs };
 }
 
-async function mockShelterCreate(page: Page): Promise<{ bodies: Record<string, unknown>[] }> {
+async function mockShelterCreate(
+	page: Page,
+	outcome: (index: number) => { status: number; body: unknown } = (index) => ({
+		status: 200,
+		body: { ok: true, code: `SH9${index}` }
+	})
+): Promise<{ bodies: Record<string, unknown>[] }> {
 	const bodies: Record<string, unknown>[] = [];
 	await page.route('**/api/back-office/shelter', async (route) => {
 		if (route.request().method() !== 'POST') return route.continue();
 		bodies.push(route.request().postDataJSON() as Record<string, unknown>);
+		const response = outcome(bodies.length);
 		await route.fulfill({
-			status: 200,
+			status: response.status,
 			contentType: 'application/json',
-			body: JSON.stringify({ ok: true, code: `SH9${bodies.length}` })
+			body: JSON.stringify(response.body)
 		});
 	});
 	return { bodies };
@@ -183,4 +193,131 @@ test('imports valid spreadsheet rows, skips invalid rows, and records the outcom
 	});
 	await expect(page.getByText('SH91')).toBeVisible();
 	await expect(page.getByText('แถว 2')).toBeVisible();
+});
+
+test('records a server error and continues importing later valid rows', async ({ page }) => {
+	await mockMasterData(page);
+	const registry = await mockRegistry(page);
+	const created = await mockShelterCreate(page, (index) =>
+		index === 1
+			? { status: 409, body: { error: { code: 'DUPLICATE', message: 'ชื่อศูนย์ซ้ำ' } } }
+			: { status: 200, body: { ok: true, code: 'SH92' } }
+	);
+	await injectSession(page, SA, session);
+	await page.goto(`${BASE}${IMPORT_PATH}`);
+
+	const first = Array(HEADERS.length).fill('');
+	first[0] = 'ศูนย์พักพิง E2E ซ้ำ';
+	first[16] = '50';
+	const second = Array(HEADERS.length).fill('');
+	second[0] = 'ศูนย์พักพิง E2E แถวถัดไป';
+	second[16] = '75';
+
+	await page.locator('input[type="file"]').setInputFiles({
+		name: 'server-error.xlsx',
+		mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+		buffer: await workbook([first, second])
+	});
+	await page.getByRole('button', { name: 'นำเข้า 2 ศูนย์' }).click();
+
+	await expect(page.getByText(/นำเข้าสำเร็จ 1 แห่ง, ล้มเหลว 1 แถว/)).toBeVisible();
+	expect(created.bodies).toHaveLength(2);
+	expect(registry.logs).toHaveLength(1);
+	expect(registry.logs[0]).toMatchObject({ success_count: 1, error_count: 1 });
+	expect(registry.logs[0].results).toEqual([
+		{
+			row: 1,
+			name: 'ศูนย์พักพิง E2E ซ้ำ',
+			status: 'server_error',
+			errors: [{ column: '-', message: 'ชื่อศูนย์ซ้ำ' }]
+		},
+		{ row: 2, name: 'ศูนย์พักพิง E2E แถวถัดไป', status: 'created', code: 'SH92' }
+	]);
+	await expect(page.getByText('ชื่อศูนย์ซ้ำ')).toBeVisible();
+	await expect(page.getByText('SH92')).toBeVisible();
+});
+
+test('does not submit or log an all-invalid workbook', async ({ page }) => {
+	await mockMasterData(page);
+	const registry = await mockRegistry(page);
+	const created = await mockShelterCreate(page);
+	await injectSession(page, SA, session);
+	await page.goto(`${BASE}${IMPORT_PATH}`);
+
+	const invalid = Array(HEADERS.length).fill('');
+	invalid[0] = 'ศูนย์พักพิง E2E ไม่มีความจุ';
+	await page.locator('input[type="file"]').setInputFiles({
+		name: 'all-invalid.xlsx',
+		mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+		buffer: await workbook([invalid])
+	});
+
+	await expect(page.getByText('พร้อมนำเข้า 0')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'นำเข้า 0 ศูนย์' })).toBeDisabled();
+	expect(created.bodies).toHaveLength(0);
+	expect(registry.logs).toHaveLength(0);
+});
+
+test('warns for empty or unrecognized workbooks and reports unreadable files', async ({ page }) => {
+	await mockMasterData(page);
+	await mockRegistry(page);
+	await injectSession(page, SA, session);
+	await page.goto(`${BASE}${IMPORT_PATH}`);
+
+	const input = page.locator('input[type="file"]');
+	await input.setInputFiles({
+		name: 'empty.xlsx',
+		mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+		buffer: await workbook([])
+	});
+	await expect(page.getByText('ไม่พบข้อมูลในไฟล์')).toBeVisible();
+	await page.getByRole('button', { name: 'ล้างไฟล์' }).click();
+
+	await input.setInputFiles({
+		name: 'unrecognized.xlsx',
+		mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+		buffer: await workbook([['ข้อมูล']], ['คอลัมน์อื่น'])
+	});
+	await expect(page.getByText('ไม่พบข้อมูลในไฟล์')).toBeVisible();
+	await page.getByRole('button', { name: 'ล้างไฟล์' }).click();
+
+	await input.setInputFiles({
+		name: 'broken.xlsx',
+		mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+		buffer: Buffer.from('not an xlsx file')
+	});
+	await expect(page.getByText('อ่านไฟล์ไม่สำเร็จ — ตรวจสอบว่าเป็นไฟล์ .xlsx ที่ถูกต้อง')).toBeVisible();
+	await expect(page.getByText('เลือกไฟล์ .xlsx')).toBeVisible();
+});
+
+test('renders import history that existed before the current visit', async ({ page }) => {
+	await mockMasterData(page);
+	await mockRegistry(page, [
+		{
+			_id: 'shelter_import_log:01HISTORY',
+			type: 'shelter_import_log',
+			filename: 'previous-import.xlsx',
+			imported_by: 'previous_admin',
+			total_rows: 2,
+			success_count: 1,
+			error_count: 1,
+			finished_at: '2026-07-15T00:00:00.000Z',
+			results: [
+				{ row: 1, name: 'ศูนย์เดิม', status: 'created', code: 'SH777' },
+				{
+					row: 2,
+					name: 'ศูนย์ผิดพลาด',
+					status: 'server_error',
+					errors: [{ column: '-', message: 'สร้างไม่สำเร็จ' }]
+				}
+			]
+		}
+	]);
+	await injectSession(page, SA, session);
+	await page.goto(`${BASE}${IMPORT_PATH}`);
+
+	await expect(page.getByText('previous-import.xlsx')).toBeVisible();
+	await expect(page.getByText('SH777')).toBeVisible();
+	await expect(page.getByText('แถว 2')).toBeVisible();
+	await expect(page.getByText('สร้างไม่สำเร็จ')).toBeVisible();
 });
