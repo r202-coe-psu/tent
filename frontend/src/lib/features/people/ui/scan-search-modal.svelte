@@ -18,8 +18,7 @@
 		temporary_leave: 'ออกชั่วคราว',
 		transferred: 'ย้ายศูนย์',
 		checked_out: 'เช็คเอาท์',
-		deceased: 'เสียชีวิต',
-		cancelled: 'ยกเลิก'
+		deceased: 'เสียชีวิต'
 	};
 
 	let {

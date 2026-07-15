@@ -1,11 +1,18 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
 	import X from '@lucide/svelte/icons/x';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import type { Household } from '../domain/people';
+	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
+	import * as Form from '$lib/components/ui/form/index.js';
+	import * as Field from '$lib/components/ui/field/index.js';
+	import { defaults, superForm } from 'sveltekit-superforms';
+	import { zod4 } from 'sveltekit-superforms/adapters';
+	import {
+		householdBasicInfoFormSchema,
+		type Household,
+		type HouseholdBasicInfoForm
+	} from '../domain/people';
 
 	let {
 		show,
@@ -20,18 +27,45 @@
 		municipalityZoneItems: { value: string; label: string }[];
 		communityItems: { value: string; label: string }[];
 		onClose: () => void;
-		onSave: (data: {
-			label: string;
-			notes: string;
-			municipalityZone: string;
-			community: string;
-		}) => Promise<void>;
+		onSave: (data: HouseholdBasicInfoForm) => Promise<void>;
 	} = $props();
 
-	let label = $state(untrack(() => household.label));
-	let notes = $state(untrack(() => household.notes ?? ''));
-	let municipalityZone = $state(untrack(() => household.municipality_zone ?? ''));
-	let community = $state(untrack(() => household.community ?? ''));
+	const form = superForm(defaults(zod4(householdBasicInfoFormSchema)), {
+		SPA: true,
+		validators: zod4(householdBasicInfoFormSchema),
+		resetForm: false,
+		onUpdate: async ({ form }) => {
+			if (!form.valid) return;
+			await onSave(form.data);
+		}
+	});
+
+	const { form: formData, submitting } = form;
+
+	// SearchSelect binds a plain string; bridge to the schema's nullable field (mirrors
+	// household-form-location-section.svelte).
+	let mzVal = $state('');
+	let commVal = $state('');
+
+	let initialized = $state(false);
+	$effect(() => {
+		if (initialized) return;
+		initialized = true;
+		$formData = {
+			...$formData,
+			label: household.label,
+			notes: household.notes ?? ''
+		};
+		mzVal = household.municipality_zone ?? '';
+		commVal = household.community ?? '';
+	});
+
+	$effect(() => {
+		$formData.municipality_zone = mzVal || null;
+	});
+	$effect(() => {
+		$formData.community = commVal || null;
+	});
 </script>
 
 {#if show}
@@ -53,69 +87,74 @@
 				</button>
 			</div>
 
-			<div class="space-y-4">
-				<div class="space-y-1.5">
-					<Label for="household_label"
-						>ชื่อเรียกครัวเรือน <span class="text-destructive">*</span></Label
-					>
-					<Input id="household_label" bind:value={label} placeholder="เช่น ครอบครัวใจดี" />
-				</div>
+			<form method="POST" use:form.enhance class="space-y-4">
+				<Field.FieldGroup>
+					<Form.Field {form} name="label">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>ชื่อเรียกครัวเรือน <span class="text-destructive">*</span></Form.Label>
+								<Input {...props} bind:value={$formData.label} placeholder="เช่น ครอบครัวใจดี" />
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 
-				<div class="grid grid-cols-2 gap-4">
-					<div class="space-y-1.5">
-						<Label for="basic_zone">เขตเทศบาล (Zone)</Label>
-						<select
-							id="basic_zone"
-							bind:value={municipalityZone}
-							class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
-						>
-							<option value="">-- ไม่ระบุ --</option>
-							{#each municipalityZoneItems as mz (mz.value)}
-								<option value={mz.value}>{mz.label}</option>
-							{/each}
-						</select>
+					<div class="grid grid-cols-2 gap-4">
+						<Form.Field {form} name="municipality_zone">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>เขตเทศบาล (Zone)</Form.Label>
+									<SearchSelect
+										items={municipalityZoneItems}
+										bind:value={mzVal}
+										placeholder="เลือกเขตเทศบาล..."
+										emptyText="ไม่พบเขตเทศบาล"
+										controlProps={props}
+										class="h-9"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+						<Form.Field {form} name="community">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>ชุมชนในศูนย์ (Community)</Form.Label>
+									<SearchSelect
+										items={communityItems}
+										bind:value={commVal}
+										placeholder="เลือกชุมชน..."
+										emptyText="ไม่พบชุมชน"
+										controlProps={props}
+										class="h-9"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 					</div>
-					<div class="space-y-1.5">
-						<Label for="basic_comm">ชุมชนในศูนย์ (Community)</Label>
-						<select
-							id="basic_comm"
-							bind:value={community}
-							class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
-						>
-							<option value="">-- ไม่ระบุ --</option>
-							{#each communityItems as c (c.value)}
-								<option value={c.value}>{c.label}</option>
-							{/each}
-						</select>
-					</div>
-				</div>
 
-				<div class="space-y-1.5">
-					<Label for="household_notes">หมายเหตุเพิ่มเติม</Label>
-					<Textarea
-						id="household_notes"
-						bind:value={notes}
-						placeholder="ระบุรายละเอียดเพิ่มเติม..."
-						rows={3}
-					/>
-				</div>
-			</div>
+					<Form.Field {form} name="notes">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>หมายเหตุเพิ่มเติม</Form.Label>
+								<Textarea
+									{...props}
+									bind:value={$formData.notes}
+									placeholder="ระบุรายละเอียดเพิ่มเติม..."
+									rows={3}
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+				</Field.FieldGroup>
 
-			<div class="flex justify-end gap-2 border-t border-border pt-4">
-				<Button variant="outline" onclick={onClose}>ยกเลิก</Button>
-				<Button
-					disabled={!label.trim()}
-					onclick={() =>
-						onSave({
-							label,
-							notes,
-							municipalityZone,
-							community
-						})}
-				>
-					บันทึกข้อมูล
-				</Button>
-			</div>
+				<div class="flex justify-end gap-2 border-t border-border pt-4">
+					<Button type="button" variant="outline" onclick={onClose}>ยกเลิก</Button>
+					<Form.Button disabled={$submitting}>บันทึกข้อมูล</Form.Button>
+				</div>
+			</form>
 		</div>
 	</div>
 {/if}

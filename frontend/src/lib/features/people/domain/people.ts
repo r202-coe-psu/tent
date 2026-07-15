@@ -52,8 +52,7 @@ export const stayStatusSchema = z.enum([
 	'temporary_leave',
 	'transferred',
 	'checked_out',
-	'deceased',
-	'cancelled'
+	'deceased'
 ]);
 export type StayStatus = z.infer<typeof stayStatusSchema>;
 
@@ -295,6 +294,34 @@ export const householdInputSchema = z.object({
 });
 export type HouseholdInput = z.input<typeof householdInputSchema>;
 export type HouseholdFormData = z.output<typeof householdInputSchema>;
+
+/** Household wizard step schema — original domicile address + in-shelter zone/community. */
+export const householdAddressFormSchema = z.object({
+	addressNo: z.string().trim().min(1, 'กรุณากรอกบ้านเลขที่'),
+	villageNo: z.string().trim().default(''),
+	subdistrict: z.string().trim().min(1, 'กรุณาเลือกตำบล/แขวง'),
+	district: z.string().trim().min(1, 'กรุณาเลือกอำเภอ/เขต'),
+	province: z.string().trim().min(1, 'กรุณาเลือกจังหวัด'),
+	postalCode: z.string().trim().default(''),
+	municipalityZone: z.string().trim().default(''),
+	community: z.string().trim().default('')
+});
+export type HouseholdAddressForm = z.infer<typeof householdAddressFormSchema>;
+
+/** Path-C (post-arrival grouping) adds a free-text notes field to the same address step. */
+export const householdPostArrivalAddressFormSchema = householdAddressFormSchema.extend({
+	notes: z.string().trim().default('')
+});
+export type HouseholdPostArrivalAddressForm = z.infer<typeof householdPostArrivalAddressFormSchema>;
+
+/** Household basic-info edit modal — a subset of householdInputSchema's fields. */
+export const householdBasicInfoFormSchema = householdInputSchema.pick({
+	label: true,
+	notes: true,
+	municipality_zone: true,
+	community: true
+});
+export type HouseholdBasicInfoForm = z.infer<typeof householdBasicInfoFormSchema>;
 
 export const movementInputSchema = z.object({
 	evacuee_id: z.string().min(1),

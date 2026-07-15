@@ -140,9 +140,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	async listHouseholds(): Promise<Household[]> {
 		const docs = await this.repo.allByType('household', isHousehold);
-		return docs
-			.map(migrateHouseholdV3ToV4)
-			.filter((h) => h.status !== 'cancelled' && h.status !== 'checked_out');
+		return docs.map(migrateHouseholdV3ToV4).filter((h) => h.status !== 'checked_out');
 	}
 
 	async listHouseholdsPaginated(
@@ -152,9 +150,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		labels?: HouseholdSearchLabels
 	): Promise<PaginatedResult<Household>> {
 		let all = await this.repo.allByType('household', isHousehold);
-		all = all
-			.map(migrateHouseholdV3ToV4)
-			.filter((h) => h.status !== 'cancelled' && h.status !== 'checked_out');
+		all = all.map(migrateHouseholdV3ToV4).filter((h) => h.status !== 'checked_out');
 		const q = search?.trim();
 		if (q) {
 			const evacuees = await this.repo.allByType('evacuee', isEvacuee);

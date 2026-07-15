@@ -9,12 +9,40 @@
 	import Search from '@lucide/svelte/icons/search';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
 	import Pencil from '@lucide/svelte/icons/pencil';
-	import { useHouseholdsPaginated, useEvacuees } from '$lib/features/people';
+	import { useHouseholdsPaginated, useEvacuees, type HouseholdStatus } from '$lib/features/people';
 	import { useMasterData } from '$lib/features/master-data';
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
 	let search = $state('');
+
+	const statusConfig = {
+		pre_registered: {
+			label: 'ลงทะเบียนล่วงหน้า',
+			colorClass:
+				'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+		},
+		arriving: {
+			label: 'กำลังเดินทาง',
+			colorClass:
+				'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+		},
+		checked_in: {
+			label: 'อยู่ในศูนย์',
+			colorClass:
+				'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800'
+		},
+		checked_out: {
+			label: 'ย้ายออก / กลับภูมิลำเนา',
+			colorClass:
+				'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+		},
+		cancelled: {
+			label: 'ยกเลิกการจอง',
+			colorClass:
+				'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800'
+		}
+	} satisfies Record<HouseholdStatus, { label: string; colorClass: string }>;
 
 	const allEvacueesQuery = useEvacuees();
 	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
@@ -116,6 +144,7 @@
 						<Table.Head class="font-semibold text-foreground">สมาชิก</Table.Head>
 						<Table.Head class="font-semibold text-foreground">เขต / ชุมชน</Table.Head>
 						<Table.Head class="font-semibold text-foreground">สัตว์เลี้ยง</Table.Head>
+						<Table.Head class="font-semibold text-foreground">สถานะ</Table.Head>
 						<Table.Head class="text-center font-semibold text-foreground">จัดการ</Table.Head>
 					</Table.Row>
 				</Table.Header>
@@ -182,6 +211,14 @@
 										<span class="text-[11px] text-muted-foreground">ไม่มี</span>
 									{/if}
 								</div>
+							</Table.Cell>
+							<Table.Cell>
+								{@const config = statusConfig[h.status]}
+								<span
+									class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {config.colorClass}"
+								>
+									{config.label}
+								</span>
 							</Table.Cell>
 							<Table.Cell class="text-center">
 								<Button

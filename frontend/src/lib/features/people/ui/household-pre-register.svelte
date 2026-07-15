@@ -8,11 +8,9 @@
 		Evacuee,
 		Household,
 		PetGroup,
-		SpecialNeed,
-		Gender,
-		Religion,
-		CardType,
-		HouseholdVehicle
+		HouseholdVehicle,
+		EvacueeInput,
+		HouseholdAddressForm
 	} from '../domain/people';
 	import EvacueePetAssetVehicle from './evacuee-pet-asset-vehicle.svelte';
 	import HouseholdPreRegisterHead from './household-pre-register-head.svelte';
@@ -47,103 +45,21 @@
 	let createdHousehold = $state<Household | null>(null);
 	let createdHead = $state<Evacuee | null>(null);
 
-	// --- Form State (Head Evacuee) ---
-	let headForm = $state({
-		firstName: '',
-		lastName: '',
-		nickname: '',
-		gender: 'male' as Gender,
-		phone: '',
-		birthYear: '',
-		age: '',
-		cardType: 'national_id' as CardType,
-		cardNumber: '',
-		country: 'THAILAND',
-		religion: 'buddhist' as Religion,
-		specialNeeds: new Set<SpecialNeed>(),
-		emergencyName: '',
-		emergencyPhone: '',
-		emergencyRelation: '',
-		medicalConditions: '',
-		medicalAllergies: '',
-		medicalMedications: '',
-		medicalNote: ''
-	});
+	// --- Validated step data (filled once each step's form passes Zod validation) ---
+	let headData = $state<EvacueeInput | null>(null);
+	let addressData = $state<HouseholdAddressForm | null>(null);
 
-	// --- Form State (Household Info) ---
 	const householdLabel = $derived(
-		headForm.firstName.trim() || headForm.lastName.trim()
-			? `ครอบครัว${headForm.firstName.trim()} ${headForm.lastName.trim()}`.trim()
-			: ''
+		headData ? `ครอบครัว${headData.first_name} ${headData.last_name}`.trim() : ''
 	);
-
-	// --- Form State (Address Info) ---
-	let addressForm = $state({
-		addressNo: '',
-		villageNo: '',
-		subdistrict: '',
-		district: '',
-		province: '',
-		postalCode: '',
-		municipalityZone: '',
-		community: ''
-	});
 
 	// --- Form State (Pets, Vehicles, Assets) ---
 	let petsList = $state<PetGroup[]>([]);
 	let vehicleRows = $state<HouseholdVehicle[]>([]);
 	let assetDescription = $state('');
 
-	// Sync birth year and age two-way
-	let prevBirthYear = '';
-	let prevAge = '';
-	$effect(() => {
-		const by = headForm.birthYear;
-		const age = headForm.age;
-		if (by !== prevBirthYear) {
-			prevBirthYear = by;
-			if (by && by.length === 4 && !isNaN(Number(by))) {
-				const computed = String(new Date().getFullYear() + 543 - Number(by));
-				if (headForm.age !== computed) {
-					headForm.age = computed;
-					prevAge = computed;
-				}
-			} else if (!by) {
-				headForm.age = '';
-				prevAge = '';
-			}
-		} else if (age !== prevAge) {
-			prevAge = age;
-			if (age && !isNaN(Number(age))) {
-				const computed = String(new Date().getFullYear() + 543 - Number(age));
-				if (headForm.birthYear !== computed) {
-					headForm.birthYear = computed;
-					prevBirthYear = computed;
-				}
-			} else if (!age) {
-				headForm.birthYear = '';
-				prevBirthYear = '';
-			}
-		}
-	});
-
 	async function handleRegisterHousehold(zone: string) {
-		if (isSubmitting) return;
-
-		// Validation
-		if (!headForm.firstName.trim() || !headForm.lastName.trim()) {
-			toast.error('กรุณากรอกชื่อและนามสกุลของหัวหน้าครัวเรือน');
-			return;
-		}
-		if (
-			!addressForm.addressNo.trim() ||
-			!addressForm.subdistrict.trim() ||
-			!addressForm.district.trim() ||
-			!addressForm.province.trim()
-		) {
-			toast.error('กรุณากรอกข้อมูลที่อยู่ให้ครบถ้วน (บ้านเลขที่, ตำบล, อำเภอ, จังหวัด)');
-			return;
-		}
+		if (isSubmitting || !headData || !addressData) return;
 
 		isSubmitting = true;
 
@@ -154,58 +70,8 @@
 			};
 
 			// 1. Create Head Evacuee (registered state)
-			const parsedPhone = headForm.phone.trim() ? headForm.phone.trim().replace(/\D/g, '') : null;
-			const parsedEmergencyPhone = headForm.emergencyPhone.trim()
-				? headForm.emergencyPhone.trim().replace(/\D/g, '')
-				: '';
-
-			const headInput = {
-				first_name: headForm.firstName.trim(),
-				last_name: headForm.lastName.trim(),
-				gender: headForm.gender,
-				phone: parsedPhone,
-				nickname: headForm.nickname.trim() || undefined,
-				birth_year: headForm.birthYear ? Number(headForm.birthYear) : undefined,
-				person_id: {
-					cardType: headForm.cardType,
-					number: headForm.cardNumber.trim() || undefined
-				},
-				country: headForm.country,
-				religion: headForm.religion,
-				special_needs: Array.from(headForm.specialNeeds),
-				registered_via: 'app' as const,
-				household_id: null,
-				medical_conditions: headForm.medicalConditions
-					? headForm.medicalConditions
-							.split(',')
-							.map((s) => s.trim())
-							.filter(Boolean)
-					: [],
-				medical_allergies: headForm.medicalAllergies
-					? headForm.medicalAllergies
-							.split(',')
-							.map((s) => s.trim())
-							.filter(Boolean)
-					: [],
-				medical_medications: headForm.medicalMedications
-					? headForm.medicalMedications
-							.split(',')
-							.map((s) => s.trim())
-							.filter(Boolean)
-					: [],
-				medical_note: headForm.medicalNote.trim() || undefined,
-				emergency_contact:
-					headForm.emergencyName.trim() && parsedEmergencyPhone
-						? {
-								name: headForm.emergencyName.trim(),
-								phone: parsedEmergencyPhone,
-								relation: headForm.emergencyRelation.trim()
-							}
-						: undefined
-			};
-
 			const headDoc = await createEvacueeMutation.mutateAsync({
-				input: headInput,
+				input: headData,
 				ctx
 			});
 
@@ -220,24 +86,24 @@
 
 			// 2. Create Household (pre_registered state)
 			const householdInput = {
-				label: householdLabel.trim(),
+				label: householdLabel,
 				head_evacuee_id: headDoc._id,
 				status: 'pre_registered' as const,
 				checkout_destination: null,
-				municipality_zone: addressForm.municipalityZone || null,
-				community: addressForm.community || null,
+				municipality_zone: addressData.municipalityZone || null,
+				community: addressData.community || null,
 				pets: petsList,
 				vehicles: vehicleRows,
 				assets: assetDescription.trim()
 					? { description: assetDescription.trim(), image_url: null }
 					: null,
 				notes: '',
-				address_no: addressForm.addressNo.trim() || null,
-				village_no: addressForm.villageNo.trim() || null,
-				subdistrict: addressForm.subdistrict.trim() || null,
-				district: addressForm.district.trim() || null,
-				province: addressForm.province.trim() || null,
-				postal_code: addressForm.postalCode.trim() || null
+				address_no: addressData.addressNo || null,
+				village_no: addressData.villageNo || null,
+				subdistrict: addressData.subdistrict || null,
+				district: addressData.district || null,
+				province: addressData.province || null,
+				postal_code: addressData.postalCode || null
 			};
 
 			const hhDoc = await createHouseholdMutation.mutateAsync({
@@ -342,18 +208,27 @@
 
 	<!-- ────────────────── STEP 1: Head info Form ────────────────── -->
 	{#if step === 1}
-		<HouseholdPreRegisterHead bind:form={headForm} onNext={() => (step = 2)} />
+		<HouseholdPreRegisterHead
+			initialData={headData}
+			onNext={(data) => {
+				headData = data;
+				step = 2;
+			}}
+		/>
 	{/if}
 
 	<!-- ────────────────── STEP 2: Address info Form ────────────────── -->
 	{#if step === 2}
 		<HouseholdPreRegisterAddress
-			bind:form={addressForm}
+			initialData={addressData}
 			{householdLabel}
 			{municipalityZoneItems}
 			{communityItems}
 			onBack={() => (step = 1)}
-			onNext={() => (step = 3)}
+			onNext={(data) => {
+				addressData = data;
+				step = 3;
+			}}
 		/>
 	{/if}
 
@@ -375,7 +250,7 @@
 	<!-- ────────────────── STEP 4: Zone Selection ────────────────── -->
 	{#if step === 4}
 		{@const mockHeadEvacuee = {
-			special_needs: Array.from(headForm.specialNeeds)
+			special_needs: headData?.special_needs ?? []
 		} as unknown as Evacuee}
 		<div class="mx-auto max-w-xl">
 			<EvacueeSelectZone

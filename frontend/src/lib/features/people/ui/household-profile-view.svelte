@@ -398,7 +398,7 @@
 				</div>
 
 				<div class="grid grid-cols-1 gap-2 py-2">
-					{#each Object.entries(statusConfig).filter(([key]) => key !== 'cancelled') as [key, config] (key)}
+					{#each Object.entries(statusConfig) as [key, config] (key)}
 						<button
 							type="button"
 							class="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border p-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-900"

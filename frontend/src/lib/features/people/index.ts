@@ -21,6 +21,7 @@ export type {
 	Religion,
 	SpecialNeed,
 	StayStatus,
+	HouseholdStatus,
 	MovementAction,
 	CareTrack,
 	BloodGroup,

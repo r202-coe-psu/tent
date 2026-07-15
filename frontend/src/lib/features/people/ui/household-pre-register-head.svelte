@@ -1,354 +1,537 @@
 <script lang="ts">
-	import {
-		SPECIAL_NEED_CHIPS,
-		type SpecialNeed,
-		type Gender,
-		type Religion,
-		type CardType
-	} from '../domain/people';
+	import { toast } from 'svelte-sonner';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import * as Form from '$lib/components/ui/form/index.js';
+	import * as Field from '$lib/components/ui/field/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
+	import { defaults, superForm } from 'sveltekit-superforms';
+	import { zod4 } from 'sveltekit-superforms/adapters';
+	import {
+		evacueeInputSchema,
+		specialNeedSchema,
+		SPECIAL_NEED_CHIPS,
+		type EvacueeInput
+	} from '../domain/people';
 	import { COUNTRIES } from '$lib/utils/country';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Camera from '@lucide/svelte/icons/camera';
-	import { toast } from 'svelte-sonner';
+
+	const cardTypeOptions = [
+		{ value: 'national_id', label: 'เลขประจำตัวประชาชน (Thai National ID)' },
+		{ value: 'passport', label: 'หนังสือเดินทาง (Passport)' },
+		{ value: 'pink_card', label: 'บัตรประจำตัวคนซึ่งไม่มีสัญชาติไทย (Pink Card)' },
+		{ value: 'other', label: 'อื่นๆ (Other)' }
+	];
+
+	const genderOptions = [
+		{ value: 'male', label: 'ชาย (Male)' },
+		{ value: 'female', label: 'หญิง (Female)' },
+		{ value: 'other', label: 'อื่นๆ (Other)' }
+	];
+
+	const religionOptions = [
+		{ value: 'buddhist', label: 'พุทธ (Buddhism)' },
+		{ value: 'muslim', label: 'อิสลาม (Islam)' },
+		{ value: 'christian', label: 'คริสต์ (Christianity)' },
+		{ value: 'other', label: 'อื่นๆ (Other)' },
+		{ value: 'unknown', label: 'ไม่ระบุ (Unknown)' }
+	];
+
+	let {
+		initialData = null,
+		onNext
+	}: {
+		initialData?: Partial<EvacueeInput> | null;
+		onNext: (data: EvacueeInput) => void;
+	} = $props();
 
 	let facePhotoUrl = $state<string | null>(null);
 	let noPhone = $state(false);
+	let birthYearBE = $state('');
+	let age = $state('');
+	let medicalConditionsStr = $state('');
+	let medicalMedicationsStr = $state('');
+	let medicalAllergiesStr = $state('');
 
-	$effect(() => {
-		if (noPhone) {
-			form.phone = '';
+	const form = superForm(defaults(zod4(evacueeInputSchema)), {
+		SPA: true,
+		dataType: 'json',
+		validators: zod4(evacueeInputSchema),
+		resetForm: false,
+		onSubmit: ({ cancel }) => {
+			if (noPhone) {
+				$formData.phone = null;
+			} else {
+				const cleanPhone = ($formData.phone ?? '').replace(/\D/g, '');
+				if (cleanPhone.length !== 10) {
+					$errors.phone = ['กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"'];
+					toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"');
+					cancel();
+					return;
+				}
+			}
+		},
+		onUpdate: async ({ form }) => {
+			if (!form.valid) {
+				toast.error('กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน');
+				return;
+			}
+			onNext(form.data);
 		}
 	});
 
-	interface HeadFormState {
-		firstName: string;
-		lastName: string;
-		nickname: string;
-		gender: Gender;
-		phone: string;
-		birthYear: string;
-		age: string;
-		cardType: CardType;
-		cardNumber: string;
-		country: string;
-		religion: Religion;
-		specialNeeds: Set<SpecialNeed>;
-		emergencyName: string;
-		emergencyPhone: string;
-		emergencyRelation: string;
-		medicalConditions: string;
-		medicalAllergies: string;
-		medicalMedications: string;
-		medicalNote: string;
-	}
+	const { form: formData, errors, submitting } = form;
 
-	let {
-		form = $bindable(),
-		onNext
-	}: {
-		form: HeadFormState;
-		onNext: () => void;
-	} = $props();
+	let initialized = $state(false);
+	$effect(() => {
+		if (initialized || !initialData) return;
+		initialized = true;
+		$formData = {
+			...$formData,
+			...initialData,
+			birth_year: typeof initialData.birth_year === 'number' ? initialData.birth_year : undefined,
+			person_id: {
+				cardType: initialData.person_id?.cardType ?? 'national_id',
+				number: initialData.person_id?.number ?? ''
+			}
+		};
+		noPhone = !initialData.phone;
+		birthYearBE = String(initialData.birth_year ?? '');
+		medicalConditionsStr = (initialData.medical_conditions ?? []).join(', ');
+		medicalMedicationsStr = (initialData.medical_medications ?? []).join(', ');
+		medicalAllergiesStr = (initialData.medical_allergies ?? []).join(', ');
+	});
 
-	function toggleSpecialNeed(need: SpecialNeed) {
-		if (form.specialNeeds.has(need)) {
-			form.specialNeeds.delete(need);
+	$effect(() => {
+		if (birthYearBE && !isNaN(Number(birthYearBE))) {
+			$formData.birth_year = Number(birthYearBE);
+		} else if (age && !isNaN(Number(age))) {
+			$formData.birth_year = new Date().getFullYear() + 543 - Number(age);
 		} else {
-			form.specialNeeds.add(need);
+			$formData.birth_year = undefined;
 		}
-		// Trigger Svelte reactivity
-		form.specialNeeds = new Set(form.specialNeeds);
-	}
+	});
 
-	function handleNext() {
-		if (!form.firstName.trim() || !form.lastName.trim()) {
-			toast.error('กรุณากรอกชื่อและนามสกุลของหัวหน้าครัวเรือน');
-			return;
-		}
-		if (!noPhone && (!form.phone.trim() || form.phone.trim().replace(/\D/g, '').length !== 10)) {
-			toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"');
-			return;
-		}
-		onNext();
-	}
+	$effect(() => {
+		$formData.medical_conditions = medicalConditionsStr
+			? medicalConditionsStr
+					.split(',')
+					.map((s) => s.trim())
+					.filter(Boolean)
+			: [];
+	});
+
+	$effect(() => {
+		$formData.medical_medications = medicalMedicationsStr
+			? medicalMedicationsStr
+					.split(',')
+					.map((s) => s.trim())
+					.filter(Boolean)
+			: [];
+	});
+
+	$effect(() => {
+		$formData.medical_allergies = medicalAllergiesStr
+			? medicalAllergiesStr
+					.split(',')
+					.map((s) => s.trim())
+					.filter(Boolean)
+			: [];
+	});
 </script>
 
-<div class="mx-auto w-full max-w-5xl space-y-6">
-	<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
-		<div class="mb-6 border-b pb-4">
-			<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">ข้อมูลหัวหน้าครัวเรือน</h3>
-		</div>
-
-		<div class="grid grid-cols-1 items-start gap-6 md:grid-cols-[200px_1fr]">
-			<!-- Column 1: Face Photo mockup -->
-			<div class="space-y-2">
-				<p class="text-sm leading-none font-medium text-foreground">
-					ภาพถ่ายใบหน้า (Face Recognition)
-				</p>
-				<input
-					type="file"
-					accept="image/*"
-					class="hidden"
-					id="face-photo-input"
-					onchange={(e) => {
-						const file = e.currentTarget.files?.[0];
-						if (file) {
-							facePhotoUrl = URL.createObjectURL(file);
-						}
-					}}
-				/>
-				<label
-					for="face-photo-input"
-					class="block cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
-				>
-					{#if facePhotoUrl}
-						<img src={facePhotoUrl} alt="Face" class="h-40 w-full rounded-lg object-cover" />
-					{:else}
-						<div class="flex h-40 flex-col items-center justify-center">
-							<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
-							<span class="text-xs text-muted-foreground">แตะเพื่อถ่ายภาพ</span>
-						</div>
-					{/if}
-				</label>
+<form method="POST" use:form.enhance class="mx-auto w-full max-w-5xl space-y-6">
+	<Field.FieldGroup>
+		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
+			<div class="mb-6 border-b pb-4">
+				<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">
+					ข้อมูลหัวหน้าครัวเรือน
+				</h3>
 			</div>
 
-			<!-- Column 2: Fields grid -->
-			<div class="space-y-4">
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<div class="space-y-2">
-						<Label>ประเภทบัตรประจำตัว</Label>
-						<select
-							class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							bind:value={form.cardType}
-						>
-							<option value="national_id">บัตรประชาชน</option>
-							<option value="passport">พาสปอร์ต</option>
-							<option value="pink_card">บัตรสีชมพู</option>
-							<option value="other">อื่นๆ</option>
-						</select>
-					</div>
-					<div class="space-y-2">
-						<Label for="head-cardno">เลขบัตร / หนังสือเดินทาง</Label>
-						<Input id="head-cardno" placeholder="หมายเลขบัตร" bind:value={form.cardNumber} />
-					</div>
+			<div class="grid grid-cols-1 items-start gap-6 md:grid-cols-[200px_1fr]">
+				<!-- Column 1: Face Photo mockup -->
+				<div class="space-y-2">
+					<p class="text-sm leading-none font-medium text-foreground">
+						ภาพถ่ายใบหน้า (Face Recognition)
+					</p>
+					<input
+						type="file"
+						accept="image/*"
+						class="hidden"
+						id="face-photo-input"
+						onchange={(e) => {
+							const file = e.currentTarget.files?.[0];
+							if (file) {
+								facePhotoUrl = URL.createObjectURL(file);
+							}
+						}}
+					/>
+					<label
+						for="face-photo-input"
+						class="block cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
+					>
+						{#if facePhotoUrl}
+							<img src={facePhotoUrl} alt="Face" class="h-40 w-full rounded-lg object-cover" />
+						{:else}
+							<div class="flex h-40 flex-col items-center justify-center">
+								<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
+								<span class="text-xs text-muted-foreground">แตะเพื่อถ่ายภาพ</span>
+							</div>
+						{/if}
+					</label>
 				</div>
 
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<div class="space-y-2">
-						<Label for="head-fn">ชื่อจริง <span class="text-destructive">*</span></Label>
-						<Input id="head-fn" placeholder="ชื่อจริง" bind:value={form.firstName} required />
+				<!-- Column 2: Fields grid -->
+				<div class="space-y-4">
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<div class="space-y-2">
+							<Label>ประเภทบัตร</Label>
+							<Select.Root type="single" bind:value={$formData.person_id.cardType}>
+								<Select.Trigger
+									class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+								>
+									{cardTypeOptions.find((o) => o.value === $formData.person_id.cardType)?.label ??
+										'— เลือก —'}
+								</Select.Trigger>
+								<Select.Content>
+									{#each cardTypeOptions as opt (opt.value)}
+										<Select.Item value={opt.value} label={opt.label} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						</div>
+						<Form.Field {form} name="person_id.number">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>
+										{#if $formData.person_id.cardType === 'national_id'}
+											เลขประจำตัวประชาชน
+										{:else if $formData.person_id.cardType === 'passport'}
+											เลขที่พาสปอร์ต
+										{:else if $formData.person_id.cardType === 'pink_card'}
+											เลขประจำตัวคนซึ่งไม่มีสัญชาติไทย
+										{:else}
+											เลขหมายบัตร
+										{/if}
+									</Form.Label>
+									<Input
+										{...props}
+										maxlength={$formData.person_id.cardType === 'national_id'
+											? 13
+											: $formData.person_id.cardType === 'passport'
+												? 9
+												: undefined}
+										placeholder={$formData.person_id.cardType === 'national_id'
+											? 'X-XXXX-XXXXX-XX-X'
+											: $formData.person_id.cardType === 'passport'
+												? 'Passport Number'
+												: 'หมายเลขบัตร'}
+										bind:value={$formData.person_id.number}
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 					</div>
-					<div class="space-y-2">
-						<Label for="head-ln">นามสกุล <span class="text-destructive">*</span></Label>
-						<Input id="head-ln" placeholder="นามสกุล" bind:value={form.lastName} required />
-					</div>
-				</div>
 
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<div class="space-y-2">
-						<Label for="head-nn">ชื่อเล่น</Label>
-						<Input id="head-nn" placeholder="ชื่อเล่น" bind:value={form.nickname} />
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<Form.Field {form} name="first_name">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>ชื่อ (First Name) <span class="text-destructive">*</span></Form.Label>
+									<Input {...props} placeholder="ชื่อจริง" bind:value={$formData.first_name} />
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+						<Form.Field {form} name="last_name">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label
+										>นามสกุล (Last Name) <span class="text-destructive">*</span></Form.Label
+									>
+									<Input {...props} placeholder="นามสกุล" bind:value={$formData.last_name} />
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 					</div>
-				</div>
 
-				<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-					<div class="space-y-2">
-						<Label>ปีเกิด (พ.ศ.)</Label>
-						<Input id="head-birthyear" placeholder="เช่น 2530" bind:value={form.birthYear} />
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<Form.Field {form} name="nickname">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>ชื่อเล่น</Form.Label>
+									<Input
+										{...props}
+										placeholder="ชื่อเล่น (ถ้ามี)"
+										bind:value={$formData.nickname}
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 					</div>
-					<div class="space-y-2">
-						<Label>อายุ (ปี)</Label>
-						<Input
-							id="head-age"
-							placeholder="อายุ"
-							bind:value={form.age}
-							inputmode="numeric"
-							maxlength={3}
-							oninput={(e) => {
-								const val = e.currentTarget.value.replace(/\D/g, '');
-								e.currentTarget.value = val;
-								form.age = val;
-							}}
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label>เพศ <span class="text-destructive">*</span></Label>
-						<select
-							class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							bind:value={form.gender}
-						>
-							<option value="male">ชาย</option>
-							<option value="female">หญิง</option>
-							<option value="other">อื่นๆ</option>
-						</select>
-					</div>
-					<div class="space-y-2">
-						<Label>เบอร์โทรศัพท์ <span class="text-destructive">*</span></Label>
-						<Input
-							id="head-phone"
-							placeholder="เบอร์โทรศัพท์"
-							disabled={noPhone}
-							bind:value={form.phone}
-							maxlength={10}
-						/>
-						<label class="mt-1.5 flex cursor-pointer items-center gap-2 text-xs">
-							<Checkbox
-								checked={noPhone}
-								onCheckedChange={(v) => {
-									noPhone = !!v;
-									if (noPhone) {
-										form.phone = '';
-									}
+
+					<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+						<div class="space-y-2">
+							<Label>ปีเกิด (พ.ศ.)</Label>
+							<Input placeholder="เช่น 2530" bind:value={birthYearBE} />
+						</div>
+						<div class="space-y-2">
+							<Label>อายุ (ปี)</Label>
+							<Input
+								placeholder="อายุ"
+								value={age}
+								inputmode="numeric"
+								maxlength={3}
+								oninput={(e) => {
+									const val = e.currentTarget.value.replace(/\D/g, '');
+									e.currentTarget.value = val;
+									age = val;
 								}}
 							/>
-							<span class="text-muted-foreground">ไม่มีเบอร์โทร</span>
-						</label>
+						</div>
+						<Form.Field {form} name="gender">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>เพศ <span class="text-destructive">*</span></Form.Label>
+									<Select.Root type="single" bind:value={$formData.gender}>
+										<Select.Trigger
+											{...props}
+											class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+										>
+											{genderOptions.find((o) => o.value === $formData.gender)?.label ??
+												'— เลือก —'}
+										</Select.Trigger>
+										<Select.Content>
+											{#each genderOptions as opt (opt.value)}
+												<Select.Item value={opt.value} label={opt.label} />
+											{/each}
+										</Select.Content>
+									</Select.Root>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+						<Form.Field {form} name="phone">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label
+										>เบอร์โทรศัพท์ยืนยันตัวตน <span class="text-destructive">*</span></Form.Label
+									>
+									<Input
+										{...props}
+										inputmode="numeric"
+										maxlength={10}
+										placeholder="08X-XXX-XXXX"
+										disabled={noPhone}
+										value={noPhone ? '' : ($formData.phone ?? '')}
+										oninput={(e) => {
+											const val = e.currentTarget.value.replace(/\D/g, '');
+											e.currentTarget.value = val;
+											$formData.phone = val === '' ? null : val;
+										}}
+									/>
+									<label class="mt-1.5 flex cursor-pointer items-center gap-2 text-xs">
+										<Checkbox
+											checked={noPhone}
+											onCheckedChange={(v) => {
+												noPhone = !!v;
+												if (noPhone) {
+													$formData.phone = null;
+													$errors.phone = undefined;
+												}
+											}}
+										/>
+										<span class="text-muted-foreground">ไม่มีเบอร์โทร</span>
+									</label>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+					</div>
+
+					<div class="grid grid-cols-2 gap-4">
+						<Form.Field {form} name="country">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>ประเทศ <span class="text-destructive">*</span></Form.Label>
+									<SearchSelect
+										items={COUNTRIES}
+										bind:value={$formData.country}
+										placeholder="ค้นหาประเทศ..."
+										emptyText="ไม่พบประเทศ"
+										controlProps={props}
+										class="h-9"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+						<Form.Field {form} name="religion">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>ศาสนา</Form.Label>
+									<Select.Root type="single" bind:value={$formData.religion}>
+										<Select.Trigger
+											{...props}
+											class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+										>
+											{religionOptions.find((o) => o.value === $formData.religion)?.label ??
+												'— เลือก —'}
+										</Select.Trigger>
+										<Select.Content>
+											{#each religionOptions as opt (opt.value)}
+												<Select.Item value={opt.value} label={opt.label} />
+											{/each}
+										</Select.Content>
+									</Select.Root>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 					</div>
 				</div>
+			</div>
 
+			<!-- Special Needs Chips -->
+			<div class="mt-6 space-y-2 border-t pt-4">
+				<Label class="text-sm font-semibold">แท็กกลุ่มเปราะบางและความต้องการพิเศษ</Label>
+				<div class="flex flex-wrap gap-2 pt-1">
+					{#each specialNeedSchema.options as need (need)}
+						{@const chip = SPECIAL_NEED_CHIPS[need]}
+						{@const checked = ($formData.special_needs ?? []).includes(need)}
+						<Button
+							type="button"
+							variant="outline"
+							onclick={() => {
+								const current = $formData.special_needs ?? [];
+								$formData.special_needs = checked
+									? current.filter((n) => n !== need)
+									: [...current, need];
+							}}
+							class="inline-flex h-auto items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-normal transition-colors
+							{checked
+								? 'border-primary bg-primary/10 font-medium text-primary hover:bg-primary/15'
+								: 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-primary/5'}"
+						>
+							<span>{chip.emoji}</span>
+							<span>{chip.label}</span>
+						</Button>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Emergency Contact -->
+			<div class="mt-6 space-y-4 rounded-xl border border-border bg-slate-50/50 p-4">
+				<h4
+					class="flex items-center gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase"
+				>
+					<ShieldAlert class="size-4 text-amber-500" />
+					ข้อมูลผู้ติดต่อฉุกเฉิน
+				</h4>
 				<div class="grid grid-cols-2 gap-4">
-					<div class="space-y-2">
-						<Label>สัญชาติ</Label>
-						<select
-							class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							bind:value={form.country}
-						>
-							{#each COUNTRIES as c (c.value)}
-								<option value={c.value}>{c.label}</option>
-							{/each}
-						</select>
-					</div>
-					<div class="space-y-2">
-						<Label>ศาสนา</Label>
-						<select
-							class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							bind:value={form.religion}
-						>
-							<option value="buddhist">พุทธ</option>
-							<option value="muslim">อิสลาม</option>
-							<option value="christian">คริสต์</option>
-							<option value="other">อื่นๆ</option>
-							<option value="unknown">ไม่ระบุ</option>
-						</select>
-					</div>
+					<Form.Field {form} name="emergency_contact.name">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>ชื่อ-นามสกุล บุคคลติดต่อฉุกเฉิน</Form.Label>
+								<Input
+									{...props}
+									placeholder="ชื่อนามสกุล ญาติ/ผู้ใกล้ชิด"
+									value={$formData.emergency_contact?.name ?? ''}
+									oninput={(e) => {
+										if (!$formData.emergency_contact) {
+											$formData.emergency_contact = { name: '', phone: '', relation: 'contact' };
+										}
+										$formData.emergency_contact.name = e.currentTarget.value;
+									}}
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Form.Field {form} name="emergency_contact.phone">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>เบอร์ติดต่อฉุกเฉิน</Form.Label>
+								<Input
+									{...props}
+									inputmode="numeric"
+									maxlength={10}
+									placeholder="08X-XXX-XXXX"
+									value={$formData.emergency_contact?.phone ?? ''}
+									oninput={(e) => {
+										const val = e.currentTarget.value.replace(/\D/g, '');
+										e.currentTarget.value = val;
+										if (!$formData.emergency_contact) {
+											$formData.emergency_contact = { name: '', phone: '', relation: 'contact' };
+										}
+										$formData.emergency_contact.phone = val;
+									}}
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 				</div>
 			</div>
-		</div>
 
-		<!-- Special Needs Chips -->
-		<div class="mt-6 space-y-2 border-t pt-4">
-			<Label class="text-sm font-semibold">ความต้องการพิเศษ / กลุ่มเปราะบาง</Label>
-			<div class="flex flex-wrap gap-2 pt-1">
-				{#each Object.entries(SPECIAL_NEED_CHIPS) as [key, chip] (key)}
-					{@const checked = form.specialNeeds.has(key as SpecialNeed)}
-					<Button
-						type="button"
-						variant="outline"
-						onclick={() => toggleSpecialNeed(key as SpecialNeed)}
-						class="inline-flex h-auto items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-normal transition-colors 
-						{checked
-							? 'border-primary bg-primary/10 font-medium text-primary hover:bg-primary/15'
-							: 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-primary/5'}"
-					>
-						<span>{chip.emoji}</span>
-						<span>{chip.label}</span>
-					</Button>
-				{/each}
+			<!-- Medical Info -->
+			<div class="mt-6 space-y-3 border-t pt-4">
+				<Label class="text-sm font-semibold">🏥 โรคประจำตัว & ข้อมูลสุขภาพ</Label>
+				<div class="space-y-2">
+					<Label class="text-xs text-muted-foreground">โรคประจำตัว</Label>
+					<Input
+						placeholder="เช่น เบาหวาน, ความดัน (ถ้าไม่มีให้เว้นว่าง)"
+						bind:value={medicalConditionsStr}
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label class="text-xs text-muted-foreground">ยาที่ใช้ประจำ</Label>
+					<Input
+						placeholder="เช่น ยาลดความดัน, ยาเบาหวาน (ถ้าไม่มีให้เว้นว่าง)"
+						bind:value={medicalMedicationsStr}
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label class="text-xs text-muted-foreground">ประวัติการแพ้ (ยา/อาหาร)</Label>
+					<Input
+						placeholder="เช่น แพ้เพนิซิลลิน, อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
+						bind:value={medicalAllergiesStr}
+					/>
+				</div>
+				<Form.Field {form} name="medical_note">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label class="text-xs text-muted-foreground">ความต้องการพิเศษ (ถ้ามี)</Form.Label
+							>
+							<textarea
+								{...props}
+								bind:value={$formData.medical_note}
+								placeholder="เช่น ผู้ป่วยที่ต้องรับยาเฉพาะทาง หรือต้องการการดูแลพิเศษ"
+								class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+							></textarea>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
 			</div>
 		</div>
 
-		<!-- Emergency Contact -->
-		<div class="mt-6 space-y-4 rounded-xl border border-border bg-slate-50/50 p-4">
-			<h4
-				class="flex items-center gap-1.5 text-xs font-bold tracking-wider text-slate-500 uppercase"
+		<!-- Navigation -->
+		<div class="mt-8 flex justify-end border-t border-border pt-4">
+			<Form.Button
+				disabled={$submitting}
+				class="h-11 bg-[#0d2240] px-8 font-semibold text-white hover:bg-[#1a3a5c]"
 			>
-				<ShieldAlert class="size-4 text-amber-500" />
-				ข้อมูลผู้ติดต่อฉุกเฉิน
-			</h4>
-			<div class="grid grid-cols-3 gap-4">
-				<div class="space-y-2">
-					<Label for="head-ec-name">ชื่อผู้ติดต่อ</Label>
-					<Input id="head-ec-name" placeholder="ชื่อ-นามสกุล" bind:value={form.emergencyName} />
-				</div>
-				<div class="space-y-2">
-					<Label for="head-ec-relation">ความสัมพันธ์</Label>
-					<Input
-						id="head-ec-relation"
-						placeholder="เช่น ญาติ, เพื่อน"
-						bind:value={form.emergencyRelation}
-					/>
-				</div>
-				<div class="space-y-2">
-					<Label for="head-ec-phone">เบอร์ติดต่อ</Label>
-					<Input
-						id="head-ec-phone"
-						placeholder="เบอร์โทรศัพท์"
-						bind:value={form.emergencyPhone}
-						maxlength={10}
-					/>
-				</div>
-			</div>
+				ถัดไป (ข้อมูลที่อยู่ครัวเรือน) →
+			</Form.Button>
 		</div>
-
-		<!-- Medical Info -->
-		<div class="mt-6 space-y-3 border-t pt-4">
-			<Label class="text-sm font-semibold">ข้อมูลสุขภาพ & ยาประจำตัว</Label>
-			<div class="space-y-2">
-				<Label for="head-med-cond" class="text-xs text-muted-foreground"
-					>โรคประจำตัว (คั่นด้วยจุลภาค `,` ถ้ามีหลายโรค)</Label
-				>
-				<Input
-					id="head-med-cond"
-					placeholder="เช่น เบาหวาน, ความดัน"
-					bind:value={form.medicalConditions}
-				/>
-			</div>
-			<div class="space-y-2">
-				<Label for="head-med-all" class="text-xs text-muted-foreground"
-					>ประวัติการแพ้ยา/แพ้อาหาร</Label
-				>
-				<Input
-					id="head-med-all"
-					placeholder="เช่น แพ้เพนิซิลลิน, แพ้อาหารทะเล"
-					bind:value={form.medicalAllergies}
-				/>
-			</div>
-			<div class="space-y-2">
-				<Label for="head-med-meds" class="text-xs text-muted-foreground"
-					>ยาที่ต้องใช้เป็นประจำ</Label
-				>
-				<Input
-					id="head-med-meds"
-					placeholder="เช่น ยาอินซูลิน"
-					bind:value={form.medicalMedications}
-				/>
-			</div>
-			<div class="space-y-2">
-				<Label for="head-med-note" class="text-xs text-muted-foreground"
-					>ข้อมูลการดูแลพิเศษเพิ่มเติม</Label
-				>
-				<textarea
-					id="head-med-note"
-					placeholder="ระบุข้อมูลเพิ่มเติมในการช่วยเหลือและส่งต่อ"
-					class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-					bind:value={form.medicalNote}
-				></textarea>
-			</div>
-		</div>
-	</div>
-
-	<!-- Navigation -->
-	<div class="mt-8 flex justify-end border-t border-border pt-4">
-		<Button
-			onclick={handleNext}
-			disabled={!form.firstName || !form.lastName}
-			class="h-11 bg-[#0d2240] px-8 font-semibold text-white hover:bg-[#1a3a5c]"
-		>
-			ถัดไป (ข้อมูลที่อยู่ครัวเรือน) →
-		</Button>
-	</div>
-</div>
+	</Field.FieldGroup>
+</form>

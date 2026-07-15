@@ -12,7 +12,13 @@
 		useUpdateHousehold,
 		peopleRepository
 	} from '../index';
-	import type { Evacuee, Household, PetGroup, HouseholdVehicle } from '../domain/people';
+	import type {
+		Evacuee,
+		Household,
+		PetGroup,
+		HouseholdVehicle,
+		HouseholdPostArrivalAddressForm
+	} from '../domain/people';
 	import { useMasterData } from '$lib/features/master-data';
 	import { toast } from 'svelte-sonner';
 	import QRCode from 'qrcode';
@@ -21,6 +27,7 @@
 	// Sub-components
 	import HouseholdPostArrivalHead from './household-post-arrival-head.svelte';
 	import HouseholdPostArrivalMembers from './household-post-arrival-members.svelte';
+	import HouseholdPostArrivalAddress from './household-post-arrival-address.svelte';
 	import HouseholdPostArrivalSummary from './household-post-arrival-summary.svelte';
 	import EvacueeSelectZone from './evacuee-select-zone.svelte';
 
@@ -31,17 +38,8 @@
 
 	// UI Component Library
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
-	import { Label } from '$lib/components/ui/label/index.js';
-	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import EvacueePetAssetVehicle from './evacuee-pet-asset-vehicle.svelte';
-	import { Combobox } from '$lib/components/ui/combobox/index.js';
-	import {
-		useProvinces,
-		useDistricts,
-		useSubdistricts
-	} from '$lib/features/shelters/application/queries';
 
 	const STORAGE_KEY = 'smart_shelter_post_arrival_wizard_state';
 
@@ -51,17 +49,7 @@
 		selectedMembers: Evacuee[];
 		createdHousehold: Household | null;
 		qrUrl: string | null;
-		addressForm: {
-			addressNo: string;
-			villageNo: string;
-			subdistrict: string;
-			district: string;
-			province: string;
-			postalCode: string;
-			municipalityZone: string;
-			community: string;
-			notes: string;
-		};
+		addressData: HouseholdPostArrivalAddressForm | null;
 		petsList: PetGroup[];
 		vehicleRows: HouseholdVehicle[];
 		assetDescription: string;
@@ -120,7 +108,7 @@
 			selectedMembers,
 			createdHousehold,
 			qrUrl,
-			addressForm,
+			addressData,
 			petsList,
 			vehicleRows,
 			assetDescription
@@ -254,50 +242,8 @@
 		}
 	});
 
-	// --- Step 3: Address Form ---
-	let addressForm = $state({
-		addressNo: savedState?.addressForm?.addressNo ?? '',
-		villageNo: savedState?.addressForm?.villageNo ?? '',
-		subdistrict: savedState?.addressForm?.subdistrict ?? '',
-		district: savedState?.addressForm?.district ?? '',
-		province: savedState?.addressForm?.province ?? '',
-		postalCode: savedState?.addressForm?.postalCode ?? '',
-		municipalityZone: savedState?.addressForm?.municipalityZone ?? '',
-		community: savedState?.addressForm?.community ?? '',
-		notes: savedState?.addressForm?.notes ?? ''
-	});
-
-	const provincesQuery = useProvinces();
-	const districtsQuery = useDistricts(() => addressForm.province || null);
-	const subdistrictsQuery = useSubdistricts(
-		() => addressForm.province || null,
-		() => addressForm.district || null
-	);
-
-	const provinceItems = $derived((provincesQuery.data ?? []).map((p) => ({ value: p, label: p })));
-	const districtItems = $derived((districtsQuery.data ?? []).map((d) => ({ value: d, label: d })));
-	const subdistrictItems = $derived(
-		(subdistrictsQuery.data ?? []).map((s) => ({ value: s.subdistrict, label: s.subdistrict }))
-	);
-
-	function selectProvince(value: string | null) {
-		addressForm.province = value ?? '';
-		addressForm.district = '';
-		addressForm.subdistrict = '';
-		addressForm.postalCode = '';
-	}
-
-	function selectDistrict(value: string | null) {
-		addressForm.district = value ?? '';
-		addressForm.subdistrict = '';
-		addressForm.postalCode = '';
-	}
-
-	function selectSubdistrict(value: string | null) {
-		addressForm.subdistrict = value ?? '';
-		const match = (subdistrictsQuery.data ?? []).find((s) => s.subdistrict === value);
-		addressForm.postalCode = match ? String(match.zipcode) : '';
-	}
+	// --- Step 3: Address (validated once the address step's form passes Zod validation) ---
+	let addressData = $state<HouseholdPostArrivalAddressForm | null>(savedState?.addressData ?? null);
 
 	let petsList = $state<PetGroup[]>(savedState?.petsList ?? []);
 	let vehicleRows = $state<HouseholdVehicle[]>(savedState?.vehicleRows ?? []);
@@ -316,12 +262,7 @@
 			return;
 		}
 
-		if (
-			!addressForm.addressNo.trim() ||
-			!addressForm.subdistrict.trim() ||
-			!addressForm.district.trim() ||
-			!addressForm.province.trim()
-		) {
+		if (!addressData) {
 			toast.error('กรุณากรอกข้อมูลที่อยู่ให้ครบถ้วน (บ้านเลขที่, ตำบล, อำเภอ, จังหวัด)');
 			return;
 		}
@@ -355,20 +296,20 @@
 				head_evacuee_id: selectedHead._id,
 				status: 'checked_in' as const,
 				checkout_destination: null,
-				municipality_zone: addressForm.municipalityZone || null,
-				community: addressForm.community || null,
+				municipality_zone: addressData.municipalityZone || null,
+				community: addressData.community || null,
 				pets: petsList,
 				vehicles: vehicleRows,
 				assets: assetDescription.trim()
 					? { description: assetDescription.trim(), image_url: null }
 					: null,
-				notes: addressForm.notes.trim() || undefined,
-				address_no: addressForm.addressNo.trim() || null,
-				village_no: addressForm.villageNo.trim() || null,
-				subdistrict: addressForm.subdistrict.trim() || null,
-				district: addressForm.district.trim() || null,
-				province: addressForm.province.trim() || null,
-				postal_code: addressForm.postalCode.trim() || null
+				notes: addressData.notes.trim() || undefined,
+				address_no: addressData.addressNo || null,
+				village_no: addressData.villageNo || null,
+				subdistrict: addressData.subdistrict || null,
+				district: addressData.district || null,
+				province: addressData.province || null,
+				postal_code: addressData.postalCode || null
 			};
 
 			const hhDoc = await createHouseholdMutation.mutateAsync({
@@ -542,168 +483,17 @@
 
 	<!-- ────────────────── STEP 3: Household Address Form ────────────────── -->
 	{#if step === 3}
-		<div class="mx-auto w-full max-w-3xl space-y-6">
-			<div class="space-y-2">
-				<h3 class="text-lg font-bold text-foreground">3. ระบุข้อมูลที่อยู่ครัวเรือน</h3>
-				<p class="text-sm text-muted-foreground">
-					กรอกข้อมูลที่อยู่หลักตามภูมิลำเนา และข้อมูลโซนหรือชุมชนในศูนย์ของครัวเรือนนี้
-				</p>
-			</div>
-
-			<!-- ข้อมูลครัวเรือนเบื้องต้น -->
-			<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
-				<h4 class="text-base font-bold text-slate-800">ข้อมูลครัวเรือนเบื้องต้น</h4>
-				<div class="space-y-4">
-					<div class="space-y-1.5">
-						<Label for="hh-label">ชื่อเรียกครัวเรือน</Label>
-						<Input
-							id="hh-label"
-							value={householdLabel}
-							disabled
-							class="bg-muted text-muted-foreground"
-						/>
-					</div>
-
-					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-						<div class="space-y-1.5">
-							<Label for="municipality-zone">เขตเทศบาล (Zone)</Label>
-							<select
-								id="municipality-zone"
-								bind:value={addressForm.municipalityZone}
-								class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-							>
-								<option value="">-- ไม่ระบุ --</option>
-								{#each municipalityZoneItems as mz (mz.value)}
-									<option value={mz.value}>{mz.label}</option>
-								{/each}
-							</select>
-						</div>
-						<div class="space-y-1.5">
-							<Label for="community">ชุมชนในศูนย์ (Community)</Label>
-							<select
-								id="community"
-								bind:value={addressForm.community}
-								class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-							>
-								<option value="">-- ไม่ระบุ --</option>
-								{#each communityItems as comm (comm.value)}
-									<option value={comm.value}>{comm.label}</option>
-								{/each}
-							</select>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<!-- ที่อยู่หลักตามภูมิลำเนา -->
-			<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
-				<h4 class="text-base font-bold text-slate-800">ข้อมูลที่อยู่หลักตามภูมิลำเนา</h4>
-				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-					<div class="space-y-1.5">
-						<Label for="address-no">บ้านเลขที่ <span class="text-destructive">*</span></Label>
-						<Input
-							id="address-no"
-							placeholder="เช่น 12/34"
-							bind:value={addressForm.addressNo}
-							required
-						/>
-					</div>
-					<div class="space-y-1.5">
-						<Label for="village-no">หมู่ที่ / ซอย / ถนน</Label>
-						<Input
-							id="village-no"
-							placeholder="เช่น หมู่ที่ 5"
-							bind:value={addressForm.villageNo}
-						/>
-					</div>
-					<div class="space-y-1.5">
-						<Label>จังหวัด <span class="text-destructive">*</span></Label>
-						<Combobox
-							items={provinceItems}
-							bind:value={() => addressForm.province, selectProvince}
-							placeholder={provincesQuery.isLoading ? 'กำลังโหลด...' : 'เลือกจังหวัด...'}
-							searchPlaceholder="ค้นหาจังหวัด..."
-							emptyText="ไม่พบจังหวัด"
-							disabled={provincesQuery.isLoading}
-						/>
-					</div>
-					<div class="space-y-1.5">
-						<Label>อำเภอ / เขต <span class="text-destructive">*</span></Label>
-						<Combobox
-							items={districtItems}
-							bind:value={() => addressForm.district, selectDistrict}
-							placeholder={!addressForm.province
-								? 'เลือกจังหวัดก่อน'
-								: districtsQuery.isLoading
-									? 'กำลังโหลด...'
-									: 'เลือกอำเภอ...'}
-							searchPlaceholder="ค้นหาอำเภอ..."
-							emptyText="ไม่พบอำเภอ"
-							disabled={!addressForm.province || districtsQuery.isLoading}
-						/>
-					</div>
-					<div class="space-y-1.5">
-						<Label>ตำบล / แขวง <span class="text-destructive">*</span></Label>
-						<Combobox
-							items={subdistrictItems}
-							bind:value={() => addressForm.subdistrict, selectSubdistrict}
-							placeholder={!addressForm.district
-								? 'เลือกอำเภอก่อน'
-								: subdistrictsQuery.isLoading
-									? 'กำลังโหลด...'
-									: 'เลือกตำบล...'}
-							searchPlaceholder="ค้นหาตำบล..."
-							emptyText="ไม่พบตำบล"
-							disabled={!addressForm.district || subdistrictsQuery.isLoading}
-						/>
-					</div>
-					<div class="space-y-1.5">
-						<Label for="postal-code">รหัสไปรษณีย์</Label>
-						<Input
-							id="postal-code"
-							placeholder={!addressForm.subdistrict ? 'เลือกตำบลก่อน' : 'เช่น 90110'}
-							disabled={!addressForm.subdistrict}
-							bind:value={addressForm.postalCode}
-						/>
-					</div>
-				</div>
-			</div>
-
-			<!-- บันทึกเพิ่มเติม -->
-			<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
-				<Label for="notes" class="text-base font-bold text-slate-800">บันทึกเพิ่มเติม</Label>
-				<Textarea
-					id="notes"
-					placeholder="ระบุหมายเหตุ หรือรายละเอียดอื่นๆ..."
-					bind:value={addressForm.notes}
-					class="min-h-[80px]"
-				/>
-			</div>
-
-			<!-- Navigation -->
-			<div class="mt-8 flex justify-between border-t border-border pt-4">
-				<Button variant="outline" onclick={() => (step = 2)} class="h-11 px-8 font-semibold">
-					ย้อนกลับ
-				</Button>
-				<Button
-					onclick={() => {
-						if (
-							!addressForm.addressNo.trim() ||
-							!addressForm.subdistrict.trim() ||
-							!addressForm.district.trim() ||
-							!addressForm.province.trim()
-						) {
-							toast.error('กรุณากรอกข้อมูลที่อยู่ให้ครบถ้วน (บ้านเลขที่, ตำบล, อำเภอ, จังหวัด)');
-							return;
-						}
-						step = 4;
-					}}
-					class="h-11 bg-[#0d2240] px-8 font-semibold text-white hover:bg-[#1a3a5c]"
-				>
-					ถัดไป (ทรัพย์สินและสัตว์เลี้ยง) →
-				</Button>
-			</div>
-		</div>
+		<HouseholdPostArrivalAddress
+			initialData={addressData}
+			{householdLabel}
+			{municipalityZoneItems}
+			{communityItems}
+			onBack={() => (step = 2)}
+			onNext={(data) => {
+				addressData = data;
+				step = 4;
+			}}
+		/>
 	{/if}
 
 	<!-- ────────────────── STEP 4: Assets & Pets Form ────────────────── -->

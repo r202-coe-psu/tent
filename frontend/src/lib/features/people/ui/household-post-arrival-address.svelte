@@ -4,6 +4,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
@@ -13,7 +14,10 @@
 		useDistricts,
 		useSubdistricts
 	} from '$lib/features/shelters/application/queries';
-	import { householdAddressFormSchema, type HouseholdAddressForm } from '../domain/people';
+	import {
+		householdPostArrivalAddressFormSchema,
+		type HouseholdPostArrivalAddressForm
+	} from '../domain/people';
 
 	let {
 		initialData = null,
@@ -23,17 +27,17 @@
 		onBack,
 		onNext
 	}: {
-		initialData?: Partial<HouseholdAddressForm> | null;
+		initialData?: Partial<HouseholdPostArrivalAddressForm> | null;
 		householdLabel?: string;
 		municipalityZoneItems?: { value: string; label: string }[];
 		communityItems?: { value: string; label: string }[];
 		onBack: () => void;
-		onNext: (data: HouseholdAddressForm) => void;
+		onNext: (data: HouseholdPostArrivalAddressForm) => void;
 	} = $props();
 
-	const form = superForm(defaults(zod4(householdAddressFormSchema)), {
+	const form = superForm(defaults(zod4(householdPostArrivalAddressFormSchema)), {
 		SPA: true,
-		validators: zod4(householdAddressFormSchema),
+		validators: zod4(householdPostArrivalAddressFormSchema),
 		resetForm: false,
 		onUpdate: async ({ form }) => {
 			if (!form.valid) return;
@@ -83,34 +87,39 @@
 	}
 </script>
 
-<form method="POST" use:form.enhance class="mx-auto w-full max-w-5xl space-y-6">
+<form method="POST" use:form.enhance class="mx-auto w-full max-w-3xl space-y-6">
 	<Field.FieldGroup>
+		<div class="space-y-2">
+			<h3 class="text-lg font-bold text-foreground">3. ระบุข้อมูลที่อยู่ครัวเรือน</h3>
+			<p class="text-sm text-muted-foreground">
+				กรอกข้อมูลที่อยู่หลักตามภูมิลำเนา และข้อมูลโซนหรือชุมชนในศูนย์ของครัวเรือนนี้
+			</p>
+		</div>
+
 		<!-- ข้อมูลครัวเรือนเบื้องต้น -->
-		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
-			<h3 class="mb-4 text-base font-bold text-slate-800 dark:text-slate-200">
-				ข้อมูลครัวเรือนเบื้องต้น
-			</h3>
+		<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
+			<h4 class="text-base font-bold text-slate-800">ข้อมูลครัวเรือนเบื้องต้น</h4>
 			<div class="space-y-4">
-				<div class="space-y-2">
+				<div class="space-y-1.5">
 					<Label for="hh-label">ชื่อเรียกครัวเรือน</Label>
 					<Input
 						id="hh-label"
-						value={householdLabel || 'กรุณากรอกชื่อและนามสกุลหัวหน้าครัวเรือน...'}
+						value={householdLabel}
 						disabled
 						class="bg-muted text-muted-foreground"
 					/>
 				</div>
 
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<Form.Field {form} name="municipalityZone">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เขตการปกครอง</Form.Label>
+								<Form.Label>เขตเทศบาล (Zone)</Form.Label>
 								<SearchSelect
 									items={municipalityZoneItems}
 									bind:value={$formData.municipalityZone}
-									placeholder="เลือกเขตการปกครอง..."
-									emptyText="ไม่พบเขตการปกครอง"
+									placeholder="เลือกเขตเทศบาล..."
+									emptyText="ไม่พบเขตเทศบาล"
 									controlProps={props}
 								/>
 							{/snippet}
@@ -120,7 +129,7 @@
 					<Form.Field {form} name="community">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ชุมชน</Form.Label>
+								<Form.Label>ชุมชนในศูนย์ (Community)</Form.Label>
 								<SearchSelect
 									items={communityItems}
 									bind:value={$formData.community}
@@ -136,12 +145,10 @@
 			</div>
 		</div>
 
-		<!-- ที่อยู่ครัวเรือนเดิม -->
-		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
-			<h3 class="mb-4 text-base font-bold text-slate-800 dark:text-slate-200">
-				ที่อยู่ครัวเรือนเดิม (ก่อนอพยพ)
-			</h3>
-			<div class="grid grid-cols-2 gap-4">
+		<!-- ที่อยู่หลักตามภูมิลำเนา -->
+		<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
+			<h4 class="text-base font-bold text-slate-800">ข้อมูลที่อยู่หลักตามภูมิลำเนา</h4>
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<Form.Field {form} name="addressNo">
 					<Form.Control>
 						{#snippet children({ props })}
@@ -160,7 +167,6 @@
 					</Form.Control>
 					<Form.FieldErrors />
 				</Form.Field>
-
 				<Form.Field {form} name="province">
 					<Form.Control>
 						{#snippet children({ props })}
@@ -235,6 +241,24 @@
 					<Form.FieldErrors />
 				</Form.Field>
 			</div>
+		</div>
+
+		<!-- บันทึกเพิ่มเติม -->
+		<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
+			<Form.Field {form} name="notes">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label class="text-base font-bold text-slate-800">บันทึกเพิ่มเติม</Form.Label>
+						<Textarea
+							{...props}
+							placeholder="ระบุหมายเหตุ หรือรายละเอียดอื่นๆ..."
+							bind:value={$formData.notes}
+							class="min-h-[80px]"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 		</div>
 
 		<!-- Navigation -->
