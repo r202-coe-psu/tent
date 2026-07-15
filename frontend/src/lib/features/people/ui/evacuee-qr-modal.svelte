@@ -37,7 +37,8 @@
 		if (!show) return;
 		qrUrl = null;
 		QRCode.toDataURL(evacuee._id, {
-			width: 128,
+			// Generate a larger source image so the QR remains crisp at every responsive size.
+			width: 384,
 			margin: 1,
 			color: { dark: '#0f172a', light: '#ffffff' }
 		}).then((url) => {
@@ -52,10 +53,10 @@
 
 {#if show}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
+		class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-xs sm:p-6"
 	>
 		<div
-			class="w-full max-w-lg animate-in rounded-3xl border border-border bg-white px-8 py-10 shadow-sm duration-150 zoom-in-95 fade-in dark:bg-card"
+			class="my-auto w-full max-w-2xl animate-in rounded-3xl border border-border bg-white px-4 py-6 shadow-sm duration-150 zoom-in-95 fade-in sm:px-8 sm:py-10 dark:bg-card"
 		>
 			<div class="mb-2 flex justify-end">
 				<button
@@ -67,7 +68,7 @@
 			</div>
 
 			<!-- Header -->
-			<div class="mb-8 flex flex-col items-center gap-1 text-center">
+			<div class="mb-6 flex flex-col items-center gap-1 text-center sm:mb-8">
 				<h2 class="text-2xl font-bold text-slate-900 dark:text-slate-50">
 					บัตรประจำตัวผู้ประสบภัย
 				</h2>
@@ -78,42 +79,46 @@
 			</div>
 
 			<!-- ID card preview -->
-			<div class="mb-6 rounded-2xl bg-slate-100 p-6 dark:bg-slate-800">
+			<div class="mb-6 rounded-2xl bg-slate-100 p-3 sm:p-6 dark:bg-slate-800">
 				<div
 					id="qr-identity-card"
 					bind:this={cardEl}
-					class="mx-auto flex min-h-[90px] max-w-[420px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md dark:border-slate-700"
+					class="mx-auto flex min-h-36 w-full max-w-[560px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md sm:min-h-44 dark:border-slate-700"
 				>
 					<div class="w-2.5 shrink-0 bg-red-500"></div>
 
-					<div class="flex flex-1 flex-col justify-center gap-0.5 px-3 py-2.5">
-						<span class="font-mono text-[9px] font-bold tracking-widest text-slate-400 uppercase">
+					<div class="flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-3 py-3 sm:px-5">
+						<span class="font-mono text-[11px] font-bold tracking-widest text-slate-400 uppercase sm:text-xs">
 							ZONE: {zoneName}
 						</span>
-						<p class="text-sm leading-tight font-bold text-slate-900">
+						<p class="text-base leading-tight font-bold text-slate-900 sm:text-xl">
 							{evacuee.first_name}
 							{evacuee.last_name}
 						</p>
 						<div class="mt-1 flex flex-wrap items-center gap-1.5">
 							<span
-								class="inline-block rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-wide whitespace-nowrap text-slate-700"
+								class="inline-block rounded border border-slate-200 bg-slate-100 px-2 py-1 font-mono text-xs font-bold tracking-wide whitespace-nowrap text-slate-700 sm:text-sm"
 							>
 								{fullId}
 							</span>
 							<span
-								class="inline-block rounded bg-slate-900 px-1.5 py-0.5 text-[9px] font-bold tracking-wide whitespace-nowrap text-white uppercase"
+								class="inline-block rounded bg-slate-900 px-2 py-1 text-[11px] font-bold tracking-wide whitespace-nowrap text-white uppercase sm:text-xs"
 							>
 								{maskNationalId(evacuee.person_id?.number)}
 							</span>
 						</div>
 					</div>
 
-					<div class="flex shrink-0 items-center justify-center px-2">
+					<div class="flex shrink-0 items-center justify-center px-3 py-3 sm:px-5">
 						{#if qrUrl}
-							<img src={qrUrl} alt="QR Code" class="size-16 object-contain" />
+							<img
+								src={qrUrl}
+								alt="QR Code"
+								class="size-28 object-contain sm:size-36 md:size-40"
+							/>
 						{:else}
 							<div
-								class="flex size-16 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400"
+								class="flex size-28 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400 sm:size-36 md:size-40"
 							>
 								...
 							</div>
