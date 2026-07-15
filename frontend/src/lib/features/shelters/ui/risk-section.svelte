@@ -99,7 +99,7 @@
 					bind:value={$formData.risk.constraints}
 					{disabled}
 					rows="3"
-					placeholder="เช่น อายุผู้คุ้มได้สะดวก ไม่มีน้ำท่วมขัง"
+					placeholder="เช่น เข้าถึงได้สะดวก ไม่มีน้ำท่วมขัง"
 					class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
 				></textarea>
 			{/snippet}
@@ -111,6 +111,6 @@
 		class="flex items-start gap-2 rounded-lg border border-shelter-border bg-muted/30 p-3 text-sm text-shelter-rose-text"
 	>
 		<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-shelter-rose-text" />
-		<p>ข้อมูลส่วนนี้จะถูกใช้เพื่อช่วย EOC กราบถึงข้อจำกัดของศูนย์แบบ Real-time</p>
+		<p>ข้อมูลส่วนนี้จะถูกใช้เพื่อช่วย EOC ทราบถึงข้อจำกัดของศูนย์แบบ Real-time</p>
 	</div>
 </section>

@@ -62,7 +62,7 @@ affects:
 | 5 | `constraints` | ❌ | textarea | **ADD** |
 
 **Cross-cutting (Section 5 note in image):**
-> "ข้อมูลส่วนนี้จะถูกใช้เพื่อช่วย EOC กราบถึงข้อจำกัดของศูนย์แบบ Real-time"
+> "ข้อมูลส่วนนี้จะถูกใช้เพื่อช่วย EOC ทราบถึงข้อจำกัดของศูนย์แบบ Real-time"
 
 → section 5 fields (`elevation_m`, `entrance_description`, `constraints`) ต้อง expose ผ่าน public
 API สำหรับ EOC consumption — feature ใหม่, cross-link ไป feature spec
@@ -174,7 +174,7 @@ closed → (terminal)     (open decision 1: reopen ได้มั้ย — เ
 | --- | --- | --- | --- |
 | `elevation_m` | `num ≥ 0` | opt | ระดับความสูงจากทะเล (เมตร); image "8 เมตร" |
 | `entrance_description` | `str` | opt | ลักษณะโรงสร้างทางเข้า; image "ถนนคอนกรีต 2 เลน" |
-| `constraints` | `str` (textarea) | opt | ข้อจำกัดพิเศษ; image "อายุผู้คุ้มได้สะดวก ไม่มีน้ำท่วมขัง" |
+| `constraints` | `str` (textarea) | opt | ข้อจำกัดพิเศษ; image "เข้าถึงได้สะดวก ไม่มีน้ำท่วมขัง" |
 
 **EOC real-time use case** (per image red callout):
 - 3 field นี้ต้อง expose ผ่าน public API สำหรับ EOC (Emergency Operation Center) อ่าน real-time
