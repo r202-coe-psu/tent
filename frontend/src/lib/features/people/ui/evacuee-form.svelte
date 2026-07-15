@@ -394,7 +394,11 @@
 		</div>
 	</div>
 {:else if step === 5}
-	<EvacueePetAssetVehicle onBack={() => (step = 4)} onNext={handleFinalSubmit} />
+	<EvacueePetAssetVehicle
+		household={selectedHousehold}
+		onBack={() => (step = 4)}
+		onNext={handleFinalSubmit}
+	/>
 {:else if step === 6}
 	<EvacueeSelectZone
 		evacuee={newlyRegisteredEvacuee}

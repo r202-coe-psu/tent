@@ -9,16 +9,20 @@
  * quantity) and passes them in; the engine is domain-agnostic and reusable.
  */
 
+import { roundQtyNumber } from '$lib/utils/qty';
+
 /**
  * ALGORITHM/formula version (semver) — NOT an API or schema version.
  * Semver governance (what counts as major/minor/patch) lives in the ADR, not here.
- * NOTE: changing `GAP_EPSILON` alters observable `status` classification and is
- * therefore a FORMULA_V-governed formula change, not silent tuning.
+ * NOTE: changing quantity rounding ({@link roundQtyNumber}) alters observable `status`
+ * classification and is therefore a FORMULA_V-governed formula change, not silent tuning.
  *
+ * 1.2.0 — classify gap/surplus/ok via fixed-decimal rounding (`roundQtyNumber`) instead of
+ *         `GAP_EPSILON`; `need`/`gap` are also rounded to the same scale.
  * 1.1.0 (T-31.3) — added the additive `data_status` field on `ResourceCalcResult`
  *                  (data-availability discriminator). No math/`status` change → Minor.
  */
-export const FORMULA_V = '1.1.0';
+export const FORMULA_V = '1.2.0';
 
 /** Opaque resource id. Non-empty & unique are caller invariants (engine does not validate). */
 export type ResourceKey = string;
@@ -76,24 +80,13 @@ export interface ResourceCalcResult {
 	readonly need: number | null;
 	/** Echoed for ALL kinds; for threshold it is INFORMATIONAL only — never affects `status`. */
 	readonly have: number | null;
-	/** RAW `need − have`; null for threshold/overflow/no-verdict. Sign→status uses `GAP_EPSILON`, not `===`. */
+	/** `need − have`, rounded to quantity decimals; null for threshold/overflow/no-verdict. */
 	readonly gap: number | null;
 	readonly status: ResourceStatus;
 	/** Data-availability axis (orthogonal to `status`). Tells *why* a row is `insufficient_data`. */
 	readonly data_status: DataStatus;
 	readonly as_of: string;
 }
-
-/**
- * Absolute tolerance for gap→status classification. Raw numeric fields are NOT rounded.
- *
- * This exists ONLY to suppress IEEE-754 representation noise (e.g. `3 * 0.1 - 0.3 !== 0`) —
- * it is deliberately absolute, not scaled to magnitude, because a relative/scaled tolerance
- * would silently absorb genuinely meaningful shortfalls at large quantities. Any change from
- * an absolute tolerance to a relative/scaled tolerance is a business-rule change and therefore
- * belongs to `FORMULA_V`, not a numerical-analysis tweak.
- */
-const GAP_EPSILON = 1e-9;
 
 /**
  * Exhaustiveness guard. Compile-time: adding a `ResourceKind` fails to type-check here.
@@ -162,7 +155,7 @@ function calcRow(
 				data_status: 'complete'
 			};
 		case 'multiply':
-			need = occupancy * r.ratio;
+			need = roundQtyNumber(occupancy * r.ratio);
 			break;
 		case 'divide':
 			need = Math.ceil(occupancy / r.ratio);
@@ -187,10 +180,10 @@ function calcRow(
 		};
 	}
 
-	const gap = need - r.have;
+	const gap = roundQtyNumber(need - r.have);
 	let status: ResourceStatus;
-	if (gap > GAP_EPSILON) status = 'gap';
-	else if (gap < -GAP_EPSILON) status = 'surplus';
+	if (gap > 0) status = 'gap';
+	else if (gap < 0) status = 'surplus';
 	else status = 'ok';
 
 	// Gap computed successfully — incl. valid occupancy=0 (need 0) and stock=0 (have 0) rows.
@@ -203,8 +196,9 @@ function calcRow(
  *
  * Duplicate `key`s are preserved 1:1 (dedup belongs to the adapter). Pair results back by `ordinal`.
  *
- * Floating point: `need`/`gap` are RAW — precision is delegated to the presentation layer; consumers
- * MUST NOT compare them with `===`. `status` already absorbs float noise via `GAP_EPSILON`.
+ * Floating point: `need`/`gap` for multiply rows are rounded via `roundQtyNumber` (fixed
+ * decimal scale) so status classification can use ordinary `>`, `<`, `=== 0` without
+ * an epsilon band. Divide rows stay integer (`Math.ceil`).
  *
  * Never throws on data problems (reports via `input_valid` + `status`); throws only via `assertNever`.
  */

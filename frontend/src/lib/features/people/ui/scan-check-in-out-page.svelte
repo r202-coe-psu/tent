@@ -118,9 +118,9 @@
 			if (!evacuee) {
 				scanResult = {
 					success: false,
-					message: `ไม่พบข้อมูลผู้ประสบภัยจากรหัส/ชื่อ "${cleanCode}"`
+					message: `ไม่พบข้อมูลผู้ประสบภัยจากรหัส/ชื่อ "${cleanCode}" ในศูนย์ ${getShelterCode()}`
 				};
-				toast.error('ไม่พบรหัสผู้ประสบภัยนี้ในระบบ');
+				toast.error(`ไม่พบรหัสนี้ในศูนย์ ${getShelterCode()} — โปรดตรวจสอบศูนย์ที่เลือกด้านบน`);
 				return;
 			}
 
@@ -311,9 +311,9 @@
 				<!-- Scan Result Card -->
 				{#if scanResult}
 					{@const found = scanResult.success ? scanResult.evacuee : undefined}
-					{@const canCheckOut = found ? canCheckOutEvacuee(found) : false}
-					{@const canCheckIn = found ? canCheckInEvacuee(found) : false}
-					{@const isTerminal = found?.current_stay.status === 'deceased'}
+					{@const canCheckOut = found?.current_stay ? canCheckOutEvacuee(found) : false}
+					{@const canCheckIn = found?.current_stay ? canCheckInEvacuee(found) : false}
+					{@const isTerminal = found?.current_stay?.status === 'deceased'}
 					<div
 						class="mt-6 w-full max-w-sm animate-in overflow-hidden rounded-2xl border shadow-md transition-all duration-200 fade-in slide-in-from-top-2
 						{scanResult.success
@@ -359,9 +359,11 @@
 														? 'bg-slate-500'
 														: 'bg-amber-500'}"
 											></span>
-											{getStatusLabel(found.current_stay.status)}
+											{found.current_stay
+												? getStatusLabel(found.current_stay.status)
+												: 'ไม่มีข้อมูลสถานะ'}
 										</span>
-										{#if found.current_stay.zone}
+										{#if found.current_stay?.zone}
 											<span
 												class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 uppercase dark:bg-slate-800 dark:text-slate-300"
 											>

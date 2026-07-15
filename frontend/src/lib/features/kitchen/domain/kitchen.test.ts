@@ -140,7 +140,7 @@ describe('createKitchenRequisition', () => {
 			[],
 			ctx
 		);
-		expect(req.items[0].qty_issued).toBe(0);
+		expect(req.items[0].qty_issued).toBe('0');
 		expect(req.ledger_ids).toHaveLength(0);
 	});
 

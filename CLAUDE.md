@@ -66,6 +66,12 @@ Bring up CouchDB from repo root: `docker compose up` (needs a `.env` with `COUCH
 `COUCHDB_PASSWORD`; copy from `.env.example`). The frontend also needs `frontend/.env`
 (copy `frontend/.env.example`) for the `PUBLIC_*` vars. Data persists to `../deployment/couchdb/data`.
 
+To seed mock data:
+`docker compose -f docker-compose.yml -f docker-compose.seed.yml up seed`
+
+To unseed (wipe) data:
+`docker compose -f docker-compose.yml -f docker-compose.unseed.yml run --rm unseed`
+
 ## Architecture
 
 **SPA/PWA on Node** — `@sveltejs/adapter-node` (`ssr = false`). The app stays a

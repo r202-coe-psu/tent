@@ -18,7 +18,11 @@ async function couchReq(method: string, path: string, body?: unknown) {
 
 const mockProvinces = ['Bangkok', 'Chiang Mai', 'Phuket', 'Khon Kaen', 'Songkhla'];
 const mockDistricts = ['Muang', 'Bang Kapi', 'Phra Nakhon', 'Thalang', 'Hat Yai'];
-const mockCapabilities = [
+const mockCapabilities: {
+	pet: 'no_pets' | 'conditional';
+	car: 'none' | 'available';
+	wheel: number;
+}[] = [
 	{ pet: 'no_pets', car: 'none', wheel: 0 },
 	{ pet: 'conditional', car: 'available', wheel: 1 },
 	{ pet: 'no_pets', car: 'available', wheel: 2 }
@@ -53,7 +57,7 @@ async function seed() {
 			admission_policy: {
 				supported_vulnerable_groups: [],
 				pet_policy: {
-					policy: cap.pet as any,
+					policy: cap.pet,
 					categories:
 						cap.pet === 'conditional'
 							? [{ category: 'small_general' as const, conditions: [] }]
@@ -61,7 +65,7 @@ async function seed() {
 				}
 			},
 			parking_policy: {
-				availability: cap.car as any,
+				availability: cap.car,
 				supported_vehicles: cap.car === 'available' ? [{ type: 'car' }] : [],
 				rules: []
 			},

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Search from '@lucide/svelte/icons/search';
-	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import User from '@lucide/svelte/icons/user';
 	import Users from '@lucide/svelte/icons/users';
 	import MapPin from '@lucide/svelte/icons/map-pin';

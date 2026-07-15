@@ -1,0 +1,13 @@
+services:
+  unseed:
+    container_name: tent-unseed
+    image: node:24-slim
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    environment:
+      COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@${COUCHDB_HOST:-couchdb}:${COUCHDB_PORT:-5984}
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    command: sh -c "corepack enable && pnpm unseed --confirm"

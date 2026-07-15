@@ -4,6 +4,7 @@ import { adminRaw, serviceError, ServiceError } from '$lib/server/couch-admin';
 import type { Donation, DonationCampaign } from '$lib/features/operations';
 import { computeNeeds } from '$lib/features/donations';
 import { fetchDocs } from '$lib/server/donation-docs';
+import { qtyGte, qtyLte } from '$lib/utils/qty';
 
 interface ShelterMaster {
 	_id: string;
@@ -78,9 +79,9 @@ export const GET: RequestHandler = async () => {
 				return {
 					item_id: itemId,
 					name: itemDetails?.name ?? itemId,
-					qty_needed: Math.max(0, qtyOpen),
+					qty_needed: qtyGte(qtyOpen, 0) ? qtyOpen : '0',
 					unit: itemDetails?.unit ?? 'unit',
-					status: qtyOpen <= 0 ? ('closed' as const) : ('open' as const)
+					status: qtyLte(qtyOpen, 0) ? ('closed' as const) : ('open' as const)
 				};
 			});
 

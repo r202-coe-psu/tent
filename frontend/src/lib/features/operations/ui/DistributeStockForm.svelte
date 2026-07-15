@@ -11,6 +11,7 @@
 	import { useDistributeStock, useStockBalance } from '../application/queries';
 	import { toast } from 'svelte-sonner';
 	import PackageMinus from '@lucide/svelte/icons/package-minus';
+	import { qtyGt, qtyGte, qtyIsZero, qtyLte } from '$lib/utils/qty';
 
 	let {
 		onsuccess,
@@ -29,8 +30,8 @@
 	let container = $state<HTMLDivElement | null>(null);
 
 	const currentStock = $derived.by(() => {
-		if (!selectedItem || !balanceQuery.data) return 0;
-		return balanceQuery.data.get(selectedItem._id) ?? 0;
+		if (!selectedItem || !balanceQuery.data) return '0';
+		return balanceQuery.data.get(selectedItem._id) ?? '0';
 	});
 
 	// Filter items based on search query
@@ -52,7 +53,7 @@
 			}
 
 			// Validate sufficient stock
-			if (validated.data.qty > currentStock) {
+			if (qtyGt(validated.data.qty, currentStock)) {
 				toast.error(
 					`ยอดคงเหลือไม่เพียงพอ (มี ${currentStock} ต้องการแจกจ่าย ${validated.data.qty})`
 				);
@@ -180,20 +181,21 @@
 									</div>
 								{:else}
 									{#each filteredItems as item (item._id)}
-										{@const bal = balanceQuery.data?.get(item._id) ?? 0}
+										{@const bal = balanceQuery.data?.get(item._id) ?? '0'}
 										<button
 											type="button"
 											class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted"
 											onclick={() => selectItem(item)}
-											disabled={bal <= 0}
+											disabled={qtyLte(bal, 0)}
 										>
 											<div class="flex items-center gap-2">
-												<span class="font-semibold text-foreground {bal <= 0 ? 'opacity-50' : ''}"
+												<span
+													class="font-semibold text-foreground {qtyLte(bal, 0) ? 'opacity-50' : ''}"
 													>{item.name}</span
 												>
 											</div>
 											<span
-												class="rounded-md {bal > 0
+												class="rounded-md {qtyGt(bal, 0)
 													? 'border-primary/20 bg-primary/10 text-primary'
 													: 'border-destructive/20 bg-destructive/10 text-destructive'} border px-2 py-0.5 text-xs font-bold"
 											>
@@ -217,7 +219,11 @@
 				class="col-span-1 flex items-center justify-between rounded-xl border border-border/50 bg-muted/50 p-3 sm:col-span-2"
 			>
 				<span class="text-sm font-medium text-muted-foreground">ยอดคงเหลือในคลังขณะนี้:</span>
-				<span class="text-sm font-bold {currentStock > 0 ? 'text-primary' : 'text-destructive'}">
+				<span
+					class="text-sm font-bold {!qtyIsZero(currentStock) && qtyGte(currentStock, 0)
+						? 'text-primary'
+						: 'text-destructive'}"
+				>
 					{currentStock}
 					{selectedItem.unit}
 				</span>
@@ -282,7 +288,7 @@
 		<!-- Submit Button -->
 		<div class="col-span-1 pt-3 sm:col-span-2">
 			<Form.Button
-				disabled={$submitting || currentStock <= 0 || $formData.qty > currentStock}
+				disabled={$submitting || !qtyGt(currentStock, 0) || qtyGt($formData.qty, currentStock)}
 				class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary text-sm font-extrabold text-primary-foreground shadow-md transition-all duration-300 hover:scale-[1.02] hover:bg-primary/95 hover:shadow-lg active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
 			>
 				{$submitting ? 'กำลังบันทึกรายการ...' : 'บันทึกการแจกจ่ายพัสดุ'}

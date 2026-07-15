@@ -95,15 +95,15 @@ describe('catalog domain', () => {
 		const parsed = recipeInputSchema.parse(input);
 		expect(parsed.label).toBe('ข้าวผัดไข่มาตรฐาน');
 		expect(parsed.ingredients).toHaveLength(2);
-		expect(parsed.standard_portions).toBe(100);
+		expect(parsed.standard_portions).toBe('100');
 	});
 
 	it('should create recipe doc with recipe: prefix', () => {
 		const input = {
 			label: 'แกงจืดเต้าหู้หมูสับ',
-			ingredients: [{ item_master_id: 'item_master_tofu_123', quantity: 50, uom: 'หลอด' }],
-			standard_portions: 50,
-			standard_duration_hours: 0.5,
+			ingredients: [{ item_master_id: 'item_master_tofu_123', quantity: '50', uom: 'หลอด' }],
+			standard_portions: '50',
+			standard_duration_hours: '0.5',
 			is_default: false
 		};
 		const doc = createRecipe(input, ctx);
@@ -128,7 +128,7 @@ describe('catalog domain', () => {
 			...baseInput,
 			conversions: [{ uom_name: 'pack', multiplier: 0.5 }]
 		});
-		expect(validParsed.conversions[0].multiplier).toBe(0.5);
+		expect(validParsed.conversions[0].multiplier).toBe('0.5');
 
 		// 0 is invalid
 		expect(() =>
@@ -160,7 +160,7 @@ describe('catalog domain', () => {
 			...baseRecipeInput,
 			ingredients: [{ item_master_id: 'item_1', quantity: 0.5, uom: 'kg' }]
 		});
-		expect(validParsed.ingredients[0].quantity).toBe(0.5);
+		expect(validParsed.ingredients[0].quantity).toBe('0.5');
 
 		// 0 is invalid
 		expect(() =>

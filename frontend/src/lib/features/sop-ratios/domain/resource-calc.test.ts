@@ -24,6 +24,11 @@ describe('computeGap', () => {
 		expect(computeGap(100, 60)).toBe(40);
 		expect(computeGap(50, 80)).toBe(0);
 	});
+
+	it('treats float-noisy need − have as zero', () => {
+		expect(computeGap(0.1 + 0.2, 0.3)).toBe(0);
+		expect(severityOf(0.1 + 0.2, 0.3)).toBe('ok');
+	});
 });
 
 describe('coverage', () => {

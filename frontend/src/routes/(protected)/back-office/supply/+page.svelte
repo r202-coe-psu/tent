@@ -6,7 +6,6 @@
 		useLedger
 	} from '$lib/features/operations';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { authStore } from '$lib/stores/auth.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import Package from '@lucide/svelte/icons/package';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
@@ -14,6 +13,7 @@
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import TrendingUp from '@lucide/svelte/icons/trending-up';
 	import XCircle from '@lucide/svelte/icons/x-circle';
+	import { qtyGt, qtyLte } from '$lib/utils/qty';
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const balanceQuery = useStockBalance();
@@ -21,10 +21,9 @@
 	const ledgerQuery = useLedger();
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
-	const balance = $derived(balanceQuery.data ?? new Map<string, number>());
+	const balance = $derived(balanceQuery.data ?? new Map<string, string>());
 	const items = $derived(itemsQuery.data ?? []);
 	const ledger = $derived(ledgerQuery.data ?? []);
-	const isOffline = $derived(authStore.needsReauth);
 
 	// ─── Modal state ──────────────────────────────────────────────────────────
 	let isReceiveModalOpen = $state(false);
@@ -33,13 +32,13 @@
 	const totalItems = $derived(items.length);
 
 	const emptyCount = $derived.by(() => {
-		return items.filter((i) => (balance.get(i._id) ?? 0) <= 0).length;
+		return items.filter((i) => qtyLte(balance.get(i._id) ?? '0', 0)).length;
 	});
 
 	const lowStockCount = $derived.by(() => {
 		return items.filter((i) => {
-			const qty = balance.get(i._id) ?? 0;
-			return qty > 0 && i.reorder_level !== null && qty <= i.reorder_level;
+			const qty = balance.get(i._id) ?? '0';
+			return qtyGt(qty, 0) && i.reorder_level !== null && qtyLte(qty, i.reorder_level);
 		}).length;
 	});
 
@@ -61,19 +60,6 @@
 </header>
 
 <div class="flex w-full flex-1 flex-col gap-6 bg-background p-6">
-	<!-- Offline banner -->
-	{#if isOffline}
-		<div
-			class="flex animate-pulse items-center gap-3 rounded-2xl border border-yellow-300/40 bg-yellow-500/10 px-4 py-3.5 text-sm text-yellow-800 shadow-sm dark:text-yellow-200"
-		>
-			<AlertTriangle class="h-5 w-5 shrink-0 text-yellow-500" />
-			<div>
-				<span class="font-bold">Offline Mode:</span>
-				ระบบกำลังทำงานในโหมดออฟไลน์ ข้อมูลสต็อกจะถูกบันทึกไว้ในเครื่องก่อน และทำการซิงค์อัตโนมัติเมื่อสัญญาณอินเทอร์เน็ตกลับมาใช้งานได้ปกติ
-			</div>
-		</div>
-	{/if}
-
 	<!-- Title & Inbound Trigger Button -->
 	<div class="flex w-full flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
 		<div>
