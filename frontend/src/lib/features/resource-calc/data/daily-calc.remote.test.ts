@@ -117,7 +117,7 @@ beforeEach(() => {
 		evacuee('checked_out'),
 		evacuee('pre_registered')
 	]);
-	mockGetBalance.mockResolvedValue(new Map<string, number>([['water_l_per_person_day', 100]]));
+	mockGetBalance.mockResolvedValue(new Map<string, string>([['water_l_per_person_day', '100']]));
 	mockGetActive.mockResolvedValue(activeProfile);
 });
 

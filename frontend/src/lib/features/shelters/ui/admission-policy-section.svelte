@@ -2,6 +2,12 @@
 	import PawPrint from '@lucide/svelte/icons/paw-print';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import type { Shelter, PetCategory, PetCategoryEntry, PetCondition } from '../domain/schema';
+	import {
+		petCategoryLabels,
+		petCategoryConditions,
+		petConditionLabels,
+		petCategoryOrder
+	} from '../domain/policy-labels';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { useMasterData } from '$lib/features/master-data';
@@ -24,52 +30,14 @@
 		value: PetCategory;
 		label: string;
 		conditions: { value: PetCondition; label: string }[];
-	}[] = [
-		{
-			value: 'small_general',
-			label: '🐾 สัตว์เลี้ยงทั่วไป / ขนาดเล็ก (สุนัขพันธุ์เล็ก, แมว, นก, สัตว์น้ำ)',
-			conditions: [
-				{
-					value: 'bring_own_cage',
-					label: 'ผู้พักพิงต้องเตรียมกรง / กระเป๋า / โหล มาเอง (ศูนย์ไม่มีอุปกรณ์รองรับ)'
-				},
-				{ value: 'caged_or_leashed', label: 'สัตว์ต้องอยู่ในกรง หรือมีสายจูงตลอดเวลา' },
-				{ value: 'vaccine_book', label: 'ต้องแสดงสมุดวัคซีน (เช่น วัคซีนพิษสุนัขบ้า)' },
-				{
-					value: 'owner_hygiene',
-					label: 'เจ้าของต้องเป็นผู้ดูแลเรื่องความสะอาดและมูลสัตว์อย่างเคร่งครัด'
-				},
-				{ value: 'closed_system_only', label: 'อนุญาตเฉพาะระบบปิด (ไม่อนุญาตให้ปล่อยเดินอิสระ)' }
-			]
-		},
-		{
-			value: 'large_dog',
-			label: '🐕 สุนัขขนาดใหญ่ / สัตว์ที่ต้องควบคุมพิเศษ',
-			conditions: [
-				{ value: 'muzzle_and_leash', label: 'ต้องสวมตะกร้อครอบปาก (Muzzle) และมีสายจูงตลอดเวลา' },
-				{
-					value: 'designated_zone_only',
-					label: 'เจ้าของต้องผูก/ควบคุมสัตว์ไว้ในโซนที่กำหนดให้เท่านั้น'
-				},
-				{ value: 'vaccine_book_mandatory', label: 'ต้องแสดงสมุดวัคซีน (บังคับ)' },
-				{
-					value: 'aggressive_behavior_expel_right',
-					label: 'หากสัตว์มีพฤติกรรมก้าวร้าว ศูนย์ขอสงวนสิทธิ์ในการเชิญออก'
-				}
-			]
-		},
-		{
-			value: 'livestock',
-			label: '🐄 ปศุสัตว์ / สัตว์เพื่อการเกษตร (วัว, ควาย, แพะ, หมู)',
-			conditions: [
-				{
-					value: 'owner_provides_feed',
-					label: 'เจ้าของต้องเตรียมอาหาร/ฟางหญ้ามาเอง (ศูนย์ไม่มีเสบียงสัตว์)'
-				},
-				{ value: 'tethered_designated_area_only', label: 'ต้องผูกล่ามในพื้นที่ที่กำหนดเท่านั้น' }
-			]
-		}
-	];
+	}[] = petCategoryOrder.map((cat) => ({
+		value: cat,
+		label: petCategoryLabels[cat],
+		conditions: petCategoryConditions[cat].map((cond) => ({
+			value: cond,
+			label: petConditionLabels[cond]
+		}))
+	}));
 
 	function ensurePolicy() {
 		if (!$formData.admission_policy) {

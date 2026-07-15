@@ -51,9 +51,6 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 							'GET'
 						)
 					]);
-					if (m.code === 'SH001' || m.code === 'SH002')
-						console.log('RAW RES:', m.code, occRes.status, occRes.data);
-
 					if (
 						occRes.status === 200 &&
 						occRes.data &&
@@ -63,9 +60,8 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 							key: string;
 							value: unknown;
 						}>;
-						const checkedInRow = rows.find((r) => r.key === 'checked_in');
-						occ = checkedInRow ? (checkedInRow.value as number) : 0;
-						if (m.code === 'SH001') console.log('SH001 occ:', occ, occRes.data);
+						const activeRow = rows.find((r) => r.key === 'active');
+						occ = activeRow ? (activeRow.value as number) : 0;
 					}
 
 					if (

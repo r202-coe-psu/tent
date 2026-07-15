@@ -29,16 +29,16 @@
 
 	// Add form state
 	let name = $state('');
-	let capacityKg = $state(15);
-	let burnRateKgPerHour = $state(0.5);
-	let timeMultiplier = $state(1);
+	let capacityKg = $state('15');
+	let burnRateKgPerHour = $state('0.5');
+	let timeMultiplier = $state('1');
 
 	// Inline edit state — keyed by doc _id
 	let editingId = $state<string | null>(null);
 	let editName = $state('');
-	let editCapacity = $state(0);
-	let editBurnRate = $state(0);
-	let editMultiplier = $state(0);
+	let editCapacity = $state('0');
+	let editBurnRate = $state('0');
+	let editMultiplier = $state('0');
 
 	function startEdit(g: GasCylinderType) {
 		editingId = g._id;
@@ -97,9 +97,9 @@
 			await queryClient.invalidateQueries({ queryKey: kitchenKeys.gasCylinderTypes() });
 			toast.success(`เพิ่ม "${name}" แล้ว`);
 			name = '';
-			capacityKg = 15;
-			burnRateKgPerHour = 0.5;
-			timeMultiplier = 1;
+			capacityKg = '15';
+			burnRateKgPerHour = '0.5';
+			timeMultiplier = '1';
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
 		}
@@ -135,7 +135,8 @@
 										<div class="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2">
 											<p class="text-[10px] text-gray-400">ความจุ (kg)</p>
 											<input
-												type="number"
+												type="text"
+												inputmode="decimal"
 												min="0.1"
 												step="0.1"
 												class="mt-1 w-full bg-transparent text-sm font-bold text-gray-900 focus:outline-none"
@@ -145,7 +146,8 @@
 										<div class="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2">
 											<p class="text-[10px] text-gray-400">Burn Rate (kg/ชม.)</p>
 											<input
-												type="number"
+												type="text"
+												inputmode="decimal"
 												min="0.01"
 												step="0.01"
 												class="mt-1 w-full bg-transparent text-sm font-semibold text-blue-600 focus:outline-none"
@@ -155,7 +157,8 @@
 										<div class="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2">
 											<p class="text-[10px] text-gray-400">Multiplier</p>
 											<input
-												type="number"
+												type="text"
+												inputmode="decimal"
 												min="0.1"
 												step="0.1"
 												class="mt-1 w-full bg-transparent text-sm font-bold text-purple-600 focus:outline-none"
@@ -265,7 +268,8 @@
 						>
 						<Input
 							id="gas-capacity"
-							type="number"
+							type="text"
+							inputmode="decimal"
 							min="0.1"
 							step="0.1"
 							bind:value={capacityKg}
@@ -277,7 +281,8 @@
 						<Label for="gas-burn" class="text-sm text-gray-700">อัตราสิ้นเปลือง (kg/ชม.)</Label>
 						<Input
 							id="gas-burn"
-							type="number"
+							type="text"
+							inputmode="decimal"
 							min="0.01"
 							step="0.01"
 							bind:value={burnRateKgPerHour}
@@ -289,7 +294,8 @@
 						<Label for="gas-mult" class="text-sm text-gray-700">ตัวคูณเวลา (Time Multiplier)</Label>
 						<Input
 							id="gas-mult"
-							type="number"
+							type="text"
+							inputmode="decimal"
 							min="0.1"
 							step="0.1"
 							bind:value={timeMultiplier}

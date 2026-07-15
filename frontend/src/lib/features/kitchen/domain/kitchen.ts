@@ -2,6 +2,12 @@ import { z } from 'zod';
 import type { BaseDoc, Timestamp, AuthorContext } from '$lib/db/model';
 import { makeDoc } from '$lib/db/model';
 import type { MealCalcSource } from './meal-calc';
+import {
+	persistQty,
+	qtyGte,
+	qtyStrCoerceNonNegativeSchema,
+	qtyStrCoercePositiveSchema
+} from '$lib/utils/qty';
 
 // ---- enums ----
 
@@ -108,8 +114,8 @@ export const isMealPlan = (d: unknown): d is MealPlan =>
 
 export interface KitchenRequisitionItem {
 	item_id: string;
-	qty_requested: number;
-	qty_issued: number;
+	qty_requested: string; // qty_str
+	qty_issued: string; // qty_str
 	unit: string;
 }
 
@@ -128,14 +134,14 @@ export const kitchenRequisitionInputSchema = z.object({
 			z
 				.object({
 					item_id: z.string().min(1),
-					qty_requested: z.number().positive(),
-					qty_issued: z.number().min(0),
+					qty_requested: qtyStrCoercePositiveSchema,
+					qty_issued: qtyStrCoerceNonNegativeSchema,
 					unit: z.string().trim().min(1)
 				})
 				// Issuing more than requested is meaningless — a requisition line can
 				// short (partial issue) but never over-issue. Enforced here so the
 				// invariant holds outside the UI clamp (assessRequisition's issuable).
-				.refine((i) => i.qty_issued <= i.qty_requested, {
+				.refine((i) => qtyGte(i.qty_requested, i.qty_issued), {
 					message: 'qty_issued cannot exceed qty_requested'
 				})
 		)
@@ -151,10 +157,14 @@ export function createKitchenRequisition(
 	const d = kitchenRequisitionInputSchema.parse(input);
 	return makeDoc(
 		'kitchen_requisition',
-		1,
+		2,
 		{
 			meal_plan_id: d.meal_plan_id,
-			items: d.items,
+			items: d.items.map((i) => ({
+				...i,
+				qty_requested: persistQty(i.qty_requested),
+				qty_issued: persistQty(i.qty_issued)
+			})),
 			ledger_ids: ledgerIds,
 			issued_at: new Date().toISOString()
 		},
@@ -225,16 +235,16 @@ export type KitchenDoc = MealPlan | KitchenRequisition | MealService;
 export interface GasCylinderType extends BaseDoc {
 	type: 'gas_cylinder_type';
 	name: string;
-	capacity_kg: number;
-	burn_rate_kg_per_hour: number;
-	time_multiplier: number;
+	capacity_kg: string; // qty_str
+	burn_rate_kg_per_hour: string; // qty_str
+	time_multiplier: string; // qty_str
 }
 
 export const gasCylinderTypeInputSchema = z.object({
 	name: z.string().trim().min(1, 'Name required'),
-	capacity_kg: z.number().positive('Must be > 0'),
-	burn_rate_kg_per_hour: z.number().positive('Must be > 0'),
-	time_multiplier: z.number().positive('Must be > 0').default(1)
+	capacity_kg: qtyStrCoercePositiveSchema,
+	burn_rate_kg_per_hour: qtyStrCoercePositiveSchema,
+	time_multiplier: qtyStrCoercePositiveSchema.default('1')
 });
 export type GasCylinderTypeInput = z.input<typeof gasCylinderTypeInputSchema>;
 
@@ -245,12 +255,12 @@ export function createGasCylinderType(
 	const d = gasCylinderTypeInputSchema.parse(input);
 	return makeDoc(
 		'gas_cylinder_type',
-		1,
+		2,
 		{
 			name: d.name,
-			capacity_kg: d.capacity_kg,
-			burn_rate_kg_per_hour: d.burn_rate_kg_per_hour,
-			time_multiplier: d.time_multiplier
+			capacity_kg: persistQty(d.capacity_kg),
+			burn_rate_kg_per_hour: persistQty(d.burn_rate_kg_per_hour),
+			time_multiplier: persistQty(d.time_multiplier)
 		},
 		ctx
 	);

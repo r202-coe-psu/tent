@@ -95,7 +95,7 @@ flowchart LR
     T16[T-16 intake audit]
     T17[T-17 kitchen groundwork]
     T18[T-18 SOP groundwork]
-    T19[T-19 security groundwork]
+    T19[T-19 report-case groundwork]
     G2{{T-20 Foundation Gate}}:::gate
   end
 
@@ -112,7 +112,7 @@ flowchart LR
     T30[T-30 SOP config]
     T31[T-31 resource calc]:::crit
     T32[T-32 calc dashboard]
-    T33[T-33 security checkin]
+    T33[T-33 report-case UI]
     T34[T-34 referral]
     T35[T-35 calc backbone]
     T60[T-60 public /donate]
@@ -227,7 +227,7 @@ gantt
   T-26/27 kitchen (crit)             :crit, t2627, after t25, 6d
   donation flows (T-21..24)          :t2124, 2026-07-21, 12d
   volunteer/SOP (T-28..32)           :t2832, 2026-07-21, 16d
-  security/referral (T-33/34)        :t3334, 2026-07-25, 10d
+  report-case/referral (T-33/34)     :t3334, 2026-07-25, 10d
   public tier — portal+/donate (T-57..60, CR-005) :pub, 2026-08-01, 18d
   T-36 Operations Gate               :milestone, g3, 2026-08-22, 0d
 

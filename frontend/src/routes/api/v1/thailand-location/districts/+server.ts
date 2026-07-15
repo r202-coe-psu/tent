@@ -7,7 +7,7 @@ export const GET = async ({ url }) => {
 		return json({ error: 'province query param is required' }, { status: 400 });
 	}
 	try {
-		return json(listDistricts(province));
+		return json(await listDistricts(province));
 	} catch {
 		return json({ error: 'Internal server error' }, { status: 500 });
 	}

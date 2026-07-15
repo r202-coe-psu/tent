@@ -21,6 +21,7 @@
 		"openapi:fastapi": "openapi-typescript src/libs/api-specs/fastapi.json -o src/lib/api/openapi.d.ts",
 		"openapi:update": "pnpm openapi:fetch && pnpm openapi:fastapi",
 		"seed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts",
+		"seed:thailand": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-thailand-location.ts",
 		"seed:delete-dashboard": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts --delete-dashboard",
 		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts"
@@ -77,9 +78,13 @@
 		"@tanstack/svelte-query": "^6.1.29",
 		"@tanstack/svelte-query-devtools": "^6.1.29",
 		"@types/node": "^25.9.2",
+		"decimal.js": "^10.6.0",
 		"events": "^3.3.0",
+		"exceljs": "^4.4.0",
+		"html2canvas-pro": "^2.2.3",
 		"html5-qrcode": "^2.3.8",
 		"jsonwebtoken": "^9.0.3",
+		"jspdf": "^4.2.1",
 		"maplibre-gl": "^5.24.0",
 		"openapi-fetch": "^0.17.0",
 		"qrcode": "^1.5.4"

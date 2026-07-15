@@ -74,7 +74,7 @@ Planning source ปัจจุบัน = Markdown ใน `docs/task-breakdown/
 | 5   | [Module D — Kitchen & Food](05-D.md)      | 4     | 15.5    | R2, R3     | ส.ค.                   |
 | 6   | [Module A — Volunteer](06-A.md)           | 2     | 7.5     | R3         | ส.ค.                   |
 | 7   | [Module B — SOP & Resource Calc](07-B.md) | 5     | 21.5    | R2, R3, R4 | ส.ค. + deferred tail   |
-| 8   | [Module E — Security](08-E.md)            | 2     | 9       | R2, R3     | ส.ค.                   |
+| 8   | [Module E — Shelter Report Cases](08-E.md) | 2    | 9       | R2, R3     | ส.ค. (CR-040)          |
 | 9   | [Module F — Referral](09-F.md)            | 1     | 4       | R3         | ส.ค.                   |
 | 10  | [EOC + Open API (Part 3)](10-eoc.md)      | 3     | 13.5    | R4         | ก.ย. wk2 (deferred)    |
 | 11  | [Family Search](11-famsearch.md)          | 2     | 9       | R4         | ส.ค.                   |

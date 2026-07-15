@@ -16,8 +16,8 @@
 	<title>SmartShelter Thailand</title>
 </svelte:head>
 
-<div class="grid flex-1 place-items-center p-6">
-	<div class="w-full max-w-7xl px-4">
+<div class="flex flex-1 flex-col justify-start p-6 lg:justify-center">
+	<div class="mx-auto w-full max-w-7xl px-4">
 		<header class="mb-12 text-center">
 			<h1 class="mb-3 text-4xl font-bold tracking-wide">
 				Smart<span class="text-primary">Shelter</span> Thailand

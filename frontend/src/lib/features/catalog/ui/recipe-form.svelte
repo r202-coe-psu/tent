@@ -40,9 +40,9 @@
 		defaults(zod4(recipeInputSchema), {
 			defaults: {
 				label: '',
-				ingredients: [{ item_master_id: '', quantity: 1, uom: '' }],
-				standard_portions: 100,
-				standard_duration_hours: 1,
+				ingredients: [{ item_master_id: '', quantity: '1', uom: '' }],
+				standard_portions: '100',
+				standard_duration_hours: '1',
 				is_default: false
 			}
 		}),
@@ -116,7 +116,7 @@
 	function addIngredient() {
 		$formData.ingredients = [
 			...$formData.ingredients,
-			{ item_master_id: '', quantity: 1, uom: '' }
+			{ item_master_id: '', quantity: '1', uom: '' }
 		];
 	}
 
@@ -203,7 +203,7 @@
 									value={conv.quantity}
 									oninput={(e) => {
 										const val = e.currentTarget.value;
-										conv.quantity = val === '' ? 1 : Number(val);
+										conv.quantity = val === '' ? '1' : val;
 									}}
 									class="h-12 rounded-xl border-slate-200/80 bg-white text-center dark:border-zinc-800 dark:bg-zinc-950"
 								/>
@@ -261,7 +261,7 @@
 									value={$formData.standard_portions ?? ''}
 									oninput={(e) => {
 										const val = e.currentTarget.value;
-										$formData.standard_portions = val === '' ? 0 : Number(val);
+										$formData.standard_portions = val === '' ? '0' : val;
 									}}
 									class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
 								/>
@@ -284,7 +284,7 @@
 									value={$formData.standard_duration_hours ?? ''}
 									oninput={(e) => {
 										const val = e.currentTarget.value;
-										$formData.standard_duration_hours = val === '' ? 0 : Number(val);
+										$formData.standard_duration_hours = val === '' ? '0' : val;
 									}}
 									class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
 								/>

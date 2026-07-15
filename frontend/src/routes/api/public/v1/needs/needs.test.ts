@@ -124,7 +124,7 @@ describe('GET /api/public/v1/needs', () => {
 		expect(data[0].code).toBe('SH001');
 		expect(data[0].needs).toHaveLength(1);
 		expect(data[0].needs[0].item_id).toBe('item:rice');
-		expect(data[0].needs[0].qty_needed).toBe(70); // 100 - 30
+		expect(data[0].needs[0].qty_needed).toBe('70'); // 100 - 30
 		expect(data[0].needs[0].status).toBe('open');
 		// Confirm no PII is returned
 		expect(data[0].needs[0]).not.toHaveProperty('donor');
@@ -225,7 +225,7 @@ describe('GET /api/public/v1/needs', () => {
 		const data = await response.json();
 
 		expect(data).toHaveLength(1);
-		expect(data[0].needs[0].qty_needed).toBe(0); // Max(0, 50 - 60)
+		expect(data[0].needs[0].qty_needed).toBe('0'); // Max(0, 50 - 60)
 		expect(data[0].needs[0].status).toBe('closed'); // Target met -> closed/งดรับ
 	});
 });

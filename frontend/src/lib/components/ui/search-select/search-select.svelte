@@ -4,14 +4,18 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import SearchIcon from '@lucide/svelte/icons/search';
+	import Loader from '@lucide/svelte/icons/loader';
 
 	let {
 		items = [],
 		value = $bindable(''),
 		placeholder = 'Select...',
 		emptyText = 'No results found.',
+		loadingText = 'กำลังโหลด...',
 		class: className,
 		disabled = false,
+		loading = false,
+		maxResults = 100,
 		controlProps = {},
 		...restProps
 	}: {
@@ -19,8 +23,11 @@
 		value?: string;
 		placeholder?: string;
 		emptyText?: string;
+		loadingText?: string;
 		class?: string;
 		disabled?: boolean;
+		loading?: boolean;
+		maxResults?: number;
 		controlProps?: Record<string, unknown>;
 	} = $props();
 
@@ -35,11 +42,13 @@
 		}
 	});
 
-	const filteredItems = $derived(
+	const matchedItems = $derived(
 		searchTerm.trim() === ''
 			? items
 			: items.filter((item) => item.label.toLowerCase().includes(searchTerm.trim().toLowerCase()))
 	);
+	const filteredItems = $derived(matchedItems.slice(0, maxResults));
+	const truncatedCount = $derived(matchedItems.length - filteredItems.length);
 
 	function onSelect(item: T) {
 		value = item.value;
@@ -84,14 +93,18 @@
 							}
 						}
 					}}
-					{placeholder}
-					{disabled}
+					placeholder={loading ? loadingText : placeholder}
+					disabled={disabled || loading}
 					class={cn('w-full pr-8', className)}
 				/>
 				<div
 					class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground/50"
 				>
-					<SearchIcon class="size-4" />
+					{#if loading}
+						<Loader class="size-4 animate-spin" />
+					{:else}
+						<SearchIcon class="size-4" />
+					{/if}
 				</div>
 			</div>
 		{/snippet}
@@ -103,7 +116,12 @@
 		onCloseAutoFocus={(e) => e.preventDefault()}
 	>
 		<div class="flex flex-col gap-0.5">
-			{#if filteredItems.length === 0}
+			{#if loading}
+				<div class="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+					<Loader class="size-4 animate-spin" />
+					{loadingText}
+				</div>
+			{:else if filteredItems.length === 0}
 				<div class="py-6 text-center text-sm text-muted-foreground">
 					{emptyText}
 				</div>
@@ -130,6 +148,11 @@
 						</span>
 					</button>
 				{/each}
+				{#if truncatedCount > 0}
+					<div class="py-1.5 text-center text-xs text-muted-foreground">
+						พิมพ์เพื่อค้นหาต่ออีก {truncatedCount} รายการ
+					</div>
+				{/if}
 			{/if}
 		</div>
 	</Popover.Content>

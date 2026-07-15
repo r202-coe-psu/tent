@@ -13,11 +13,12 @@ covers the _how_ — naming, structure, and coding patterns every contributor mu
 3. [TypeScript conventions](#3-typescript-conventions)
 4. [Feature architecture in practice](#4-feature-architecture-in-practice)
 5. [CouchDB document patterns](#5-couchdb-document-patterns)
-6. [Svelte 5 component patterns](#6-svelte-5-component-patterns)
-7. [Forms (Superforms + Zod)](#7-forms-superforms--zod)
-8. [Data fetching (TanStack Query)](#8-data-fetching-tanstack-query)
-9. [UI & feedback patterns](#9-ui--feedback-patterns)
-10. [Testing conventions](#10-testing-conventions)
+6. [Quantity arithmetic (`qty_str` + Decimal)](#6-quantity-arithmetic-qty_str--decimal)
+7. [Svelte 5 component patterns](#7-svelte-5-component-patterns)
+8. [Forms (Superforms + Zod)](#8-forms-superforms--zod)
+9. [Data fetching (TanStack Query)](#9-data-fetching-tanstack-query)
+10. [UI & feedback patterns](#10-ui--feedback-patterns)
+11. [Testing conventions](#11-testing-conventions)
 
 ---
 
@@ -294,8 +295,9 @@ export const isOccupant = (d: unknown): d is Occupant =>
 ### Event-sourced quantities
 
 Never store a running total. Use append-only transactions (see `StockTxn`) and compute
-current values in domain functions (`deriveQuantities`). This avoids write conflicts when
-two clients go offline and both update stock.
+current values in domain functions (`deriveQuantities` / `stockBalance`). This avoids write
+conflicts when two clients update stock concurrently. Sum ledger deltas with `$lib/utils/qty`
+(see §6) — never native `number` arithmetic.
 
 ### Live update reactivity
 
@@ -339,12 +341,72 @@ Map key conventions:
 | Latest-per-entity | `emit([doc.entity_id, doc.occurred_at], null)`                    |
 
 Value: `1` for count, numeric field for sum, `null` for map-only views.
+For transactional stock balances prefer **client** Decimal sum of `qty_str` (CR-038 / §6) over
+relying on CouchDB `_sum` of floats for correctness.
 
 Views are called **server-side only** from `+server.ts` via `adminRaw`. Never call `_design/app/_view/*` from the browser.
 
 ---
 
-## 6. Svelte 5 component patterns
+## 6. Quantity arithmetic (`qty_str` + Decimal)
+
+Transactional quantities (stock ledger, donation items, campaign targets, kitchen
+requisition, recipe ingredient qty, UOM multipliers, gas cylinder rates, …) follow CR-038.
+
+### Persist as `qty_str`
+
+- CouchDB fields are JSON **strings** matching `^-?\d+(\.\d{1,4})?$` (≤4 fractional digits).
+- Scale constant: `QTY_DECIMALS` in `$lib/utils/qty`.
+- Canonical write: `persistQty(value)` before put. Never store transactional qty as a JSON
+  `number` (IEEE-754).
+- Ledger `qty` is always in `item_master.base_unit`.
+- Counts / grams stay **int**: `meal_plan.recipes[].planned_qty`, headcount, capacity, etc.
+
+### Compute only through `$lib/utils/qty`
+
+| Helper                              | Use                                             |
+| ----------------------------------- | ----------------------------------------------- |
+| `parseQty` / `persistQty`           | boundary in/out                                 |
+| `addQty` / `subQty`                 | sum / shortfall                                 |
+| `qtyGt` / `qtyGte` / `qtyLte`       | comparisons (issue vs on-hand, needs remaining) |
+| `qtyAbs` / `qtyNeg`                 | signed ledger deltas                            |
+| `qtyStrCoercePositiveSchema` (etc.) | Zod input schemas                               |
+
+**Do:**
+
+```ts
+import { addQty, persistQty, qtyGte, qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import Decimal from 'decimal.js';
+
+const qty = qtyStrCoercePositiveSchema.parse(raw); // → "7.5"
+balance.set(id, addQty(balance.get(id) ?? '0', entry.qty));
+if (qtyGte(onHand, requested)) {
+	/* issue full */
+}
+// grams (int) → kg (qty_str)
+qty_requested: persistQty(new Decimal(planned_qty).div(1000));
+```
+
+**Don't:**
+
+```ts
+z.coerce.number().positive(); // for transactional qty
+Number(input.value); // then add / compare
+onHand + delta; // native number math
+// CouchDB `_sum` of floats as source of truth for stock_balance
+```
+
+- Prefer constructing from **strings** (`'0.1'`), not floats already damaged by IEEE-754.
+- UI: read `<input>` as string → Zod / `parseQty`; write docs with `persistQty`.
+- SOP ratios / `daily_calc` numeric snapshots are still `number` for now — use
+  `roundQtyNumber` only at that boundary; anything that enters a ledger/requisition must become
+  `qty_str` via `persistQty`.
+
+Spec: `docs/data/schema.md` (`qty_str`), CR-038.
+
+---
+
+## 7. Svelte 5 component patterns
 
 ### Component file structure
 
@@ -433,7 +495,7 @@ toast.error('Failed to save — check your connection');
 
 ---
 
-## 7. Forms (Superforms + Zod)
+## 8. Forms (Superforms + Zod)
 
 ### Schema location
 
@@ -485,7 +547,7 @@ export type OccupantInput = z.infer<typeof occupantInputSchema>;
 
 ---
 
-## 8. Data fetching (TanStack Query)
+## 9. Data fetching (TanStack Query)
 
 ### Query key factory
 
@@ -533,7 +595,7 @@ export function useCheckIn(shelterId: string) {
 
 ---
 
-## 9. UI & feedback patterns
+## 10. UI & feedback patterns
 
 ### Loading state
 
@@ -571,7 +633,7 @@ Always show an explicit empty state — never render an empty list silently:
 
 ---
 
-## 10. Testing conventions
+## 11. Testing conventions
 
 ### What to test
 
