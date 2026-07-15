@@ -11,11 +11,15 @@
 	let {
 		show,
 		evacuee,
-		onClose
+		onClose,
+		embedded = false,
+		closeLabel = 'ปิดหน้าต่าง'
 	}: {
 		show: boolean;
 		evacuee: Evacuee;
 		onClose: () => void;
+		embedded?: boolean;
+		closeLabel?: string;
 	} = $props();
 
 	let qrUrl = $state<string | null>(null);
@@ -68,19 +72,25 @@
 
 {#if show}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-xs sm:p-6"
+		class={embedded
+			? 'flex min-h-[70vh] items-center justify-center py-6'
+			: 'fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-xs sm:p-6'}
 	>
 		<div
-			class="my-auto w-full max-w-2xl animate-in rounded-3xl border border-border bg-white px-4 py-6 shadow-sm duration-150 zoom-in-95 fade-in sm:px-8 sm:py-10 dark:bg-card"
+			class={embedded
+				? 'w-full max-w-2xl rounded-3xl border border-border bg-white px-4 py-6 shadow-sm sm:px-8 sm:py-10 dark:bg-card'
+				: 'my-auto w-full max-w-2xl animate-in rounded-3xl border border-border bg-white px-4 py-6 shadow-sm duration-150 zoom-in-95 fade-in sm:px-8 sm:py-10 dark:bg-card'}
 		>
-			<div class="mb-2 flex justify-end">
-				<button
-					onclick={onClose}
-					class="cursor-pointer rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground"
-				>
-					<X class="size-5" />
-				</button>
-			</div>
+			{#if !embedded}
+				<div class="mb-2 flex justify-end">
+					<button
+						onclick={onClose}
+						class="cursor-pointer rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground"
+					>
+						<X class="size-5" />
+					</button>
+				</div>
+			{/if}
 
 			<!-- Header -->
 			<div class="mb-6 flex flex-col items-center gap-1 text-center sm:mb-8">
@@ -165,7 +175,7 @@
 					onclick={onClose}
 					class="cursor-pointer py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
 				>
-					ปิดหน้าต่าง
+					{closeLabel}
 				</button>
 			</div>
 		</div>
