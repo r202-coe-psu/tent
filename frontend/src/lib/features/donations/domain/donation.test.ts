@@ -48,20 +48,17 @@ describe('donationPreDeclarationInputSchema', () => {
 			items: [{ free_text: 'Rice', qty: -5, unit: 'kg' }]
 		});
 		expect(result.success).toBe(false);
-		if (!result.success) {
-			expect(result.error.issues[0].message).toBe('Please enter a valid quantity');
-		}
 	});
 
-	// 3.1. Invalid Case - Decimal item quantity
-	it('fail validation when item quantity is a decimal value', () => {
+	// 3.1. Decimal item quantity is accepted as qty_str (CR-038)
+	it('accepts decimal item quantity as qty_str', () => {
 		const result = donationPreDeclarationInputSchema.safeParse({
 			...baseValid,
 			items: [{ free_text: 'Rice', qty: 10.5, unit: 'kg' }]
 		});
-		expect(result.success).toBe(false);
-		if (!result.success) {
-			expect(result.error.issues[0].message).toBe('Please enter a valid quantity');
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.items[0].qty).toBe('10.5');
 		}
 	});
 

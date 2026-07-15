@@ -52,15 +52,19 @@ export function countActive(evacuees: Evacuee[]): number {
 function resolveHave(
 	key: SopRatioKey,
 	kind: (typeof SOP_RATIO_KIND)[SopRatioKey],
-	stock: Map<string, number>
+	stock: Map<string, string>
 ): number | null {
 	if (kind === 'threshold') return null;
-	return stock.get(key) ?? null;
+	const raw = stock.get(key);
+	if (raw == null) return null;
+	// daily_calc still snapshots IEEE numbers (CR-038 follow-up); coerce at boundary
+	const n = Number(raw);
+	return Number.isFinite(n) ? n : null;
 }
 
 function buildResources(
 	ratios: Record<SopRatioKey, number>,
-	stock: Map<string, number>
+	stock: Map<string, string>
 ): {
 	resources: ResourceInput[];
 	ratioSnapshot: Record<string, number>;

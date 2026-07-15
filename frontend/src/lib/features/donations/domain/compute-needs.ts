@@ -1,4 +1,5 @@
 import type { Donation, DonationCampaign } from '$lib/features/operations';
+import { addQty, subQty } from '$lib/utils/qty';
 
 /**
  * Compute remaining needs (remaining = target − donated) and a map of item → campaign.
@@ -15,23 +16,23 @@ import type { Donation, DonationCampaign } from '$lib/features/operations';
 export function computeNeeds(
 	campaigns: DonationCampaign[],
 	donations: Donation[]
-): { remaining: Map<string, number>; itemCampaign: Map<string, string> } {
-	const remaining = new Map<string, number>();
+): { remaining: Map<string, string>; itemCampaign: Map<string, string> } {
+	const remaining = new Map<string, string>();
 	const itemCampaign = new Map<string, string>();
 
 	for (const campaign of campaigns) {
-		const covered = new Map<string, number>();
+		const covered = new Map<string, string>();
 		for (const don of donations) {
 			if (don.campaign_id !== campaign._id) continue;
 			if (don.status === 'expired' || don.status === 'cancelled') continue;
 			for (const it of don.items ?? []) {
 				if (!it.item_id) continue;
-				covered.set(it.item_id, (covered.get(it.item_id) ?? 0) + it.qty);
+				covered.set(it.item_id, addQty(covered.get(it.item_id) ?? '0', it.qty));
 			}
 		}
 		for (const need of campaign.needs) {
-			const rem = need.qty_target - (covered.get(need.item_id) ?? 0);
-			remaining.set(need.item_id, (remaining.get(need.item_id) ?? 0) + rem);
+			const rem = subQty(need.qty_target, covered.get(need.item_id) ?? '0');
+			remaining.set(need.item_id, addQty(remaining.get(need.item_id) ?? '0', rem));
 			if (!itemCampaign.has(need.item_id)) itemCampaign.set(need.item_id, campaign._id);
 		}
 	}

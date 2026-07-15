@@ -1,0 +1,175 @@
+---
+id: CR-040
+title: "Module E reframe — Security check-in/out → Shelter Report Case (ร้องเรียน/ร้องทุกข์ + ติดตามเคส)"
+status: proposed
+date: 2026-07-15
+requested_by: project owner
+decided_by: project owner
+layer: volatile
+affects:
+  - docs/prd/phase-r3-operations.md FR-47 (+ JTBD §2.1)
+  - docs/prd/role-permission-matrix.md FR-47 row / wording
+  - docs/task-breakdown/08-E.md T-19 / T-33
+  - docs/sitemap.md §2.8 `/security-events` → `/cases`
+  - docs/data/schema.md §2.10 (`security_event` → `shelter_report_case`)
+  - docs/data/data-model.md · schema-er-diagram.md
+  - docs/features/shelter-case-grievance-flow.md
+  - schema_v shelter_report_case 1 (ตั้งต้น; แทน security_event ที่ยังไม่ implement)
+  - frontend → features/shelter-report-cases (หลัง approve)
+  - Notion T-19 / T-33 wording (sync หลัง approve)
+---
+
+# CR-040 — Module E: Shelter Report Case (ร้องเรียน / ร้องทุกข์ / ติดตามเคส)
+
+## สรุป (TL;DR)
+
+- **เปลี่ยนอะไร:** Reframe Module E (FR-47) จาก “security check-in/out + safety monitoring” เป็น **ระบบเปิดและติดตามเคสในศูนย์** (`shelter_report_case`) — ตัดหน้าที่ซ้ำกับ People movement/occupancy
+- **เพื่อใคร/ทำไม:** SM เป็นผู้ดูแลศูนย์โดยไม่มี Security Officer role; product ที่ใช้จริงคือ **รับเรื่อง → มอบหมาย → ปิด / escalate (atomic กับ referral)**
+- **dev ต้อง build อะไร:** feature `shelter-report-cases` — list/สร้าง/อัปเดต + timeline · persist `shelter_report_case:{ulid}` · route `/cases` · mutate = SM (allow-list scalable) + SA platform override
+- **กระทบ schema/scope:** แทน `security_event` (§2.10) ด้วย `shelter_report_case` (state machine, schema_v 1) · **ยังไม่ apply จนกว่า CR `approved`**
+
+## Why
+
+- FR-47 + DoD T-33 วาง “security check-in/out” และ monitoring present/overdue ซึ่ง **ซ้อนกับ movement + occupancy**
+- `security_event` เป็น incident log ไม่ใช่ gate check-in — ชื่อ FR กับ data model ไม่ตรงกัน
+- ไม่มี role `security_officer` (CR-002) → โมเดลเคสร้องเรียน/เหตุการณ์เข้ากับงาน SM
+- “ดูแลคนและสัตว์” คงเป็น **related refs บนเคส** ไม่ใช่ live roster
+- ยังไม่มี implementation ของ `security_event` → เปลี่ยน shape ได้โดยไม่ migrate data จริง
+
+## Decisions locked (2026-07-15)
+
+| # | หัวข้อ | คำตัดสิน |
+| --- | --- | --- |
+| 1 | Doc naming | **`shelter_report_case`** (`_id` / `type`) |
+| 2 | Public / self-service | **ปิด** — staff intake เท่านั้น (ไม่มี PUB endpoint) |
+| 3 | ใคร mutate ได้ | **R3: `shelter_manager` เท่านั้น** (shelter ops) · สิทธิ์ผ่าน **allow-list คงที่ในโค้ด** เพื่อขยายบทบาทภายหลังโดยไม่ redesign · **`system_admin` = platform override** ตามแพทเทิร์นโปรเจกต์ |
+| 4 | `pet_refs` | **`(household_id, pet_index)`** อ้าง `household.pets[]` |
+| 5 | Escalate | **Atomic** — สร้าง `referral` สำเร็จแล้วค่อยตั้ง `status=escalated` + `escalation.referral_id` ในลำดับ fail-safe เดียวกัน |
+| 6 | List sort | **`severity` ก่อน** (critical → warning → info) แล้ว `occurred_at` ใหม่→เก่า |
+
+## Change
+
+### A. FR-47 (before → after)
+
+| | Before | After |
+| --- | --- | --- |
+| ชื่อ | Security Check-in/out & Safety Monitoring | **Shelter Report Case — grievance / incident tracking** |
+| หน้าที่หลัก | เฝ้าเข้า–ออก + monitoring present + log เหตุ | **เปิดเคส · ติดตามสถานะ · timeline · ปิดหรือ escalate** |
+| Occupancy / overdue | อยู่ใน DoD Module E | **อยู่นอก Module E** — People/movement |
+| สัตว์เลี้ยง | monitoring คน+สัตว์ | **related party** บนเคส (`pet_refs`) |
+| CCTV / hardware | open question | **นอก scope** — manual intake |
+
+**Consequences (testable):**
+
+1. SM เปิดเคสใน scope ศูนย์ได้ (ผู้พักร้องผ่านปากเปล่า / staff พบเองที่ SM บันทึก)
+2. สถานะ forward-only ตาม §C
+3. เก็บ kind/category/severity/zone/ผู้เกี่ยวข้อง/actions
+4. Escalate → สร้าง `referral` **atomic** แล้วตั้ง `escalated` (medical detail ไม่หลุดนอก shelter scope)
+5. ไม่มี write path ใน Module E สำหรับ check-in/out หรือนับ occupancy
+
+### B. Doc type (before → after)
+
+| | Before (`security_event`) | After (`shelter_report_case`) |
+| --- | --- | --- |
+| `_id` | `security_event:{ulid}` | `shelter_report_case:{ulid}` |
+| Mutability | append-only | **state machine** (forward-only; pattern `referral`) |
+| Focus | snapshot เหตุ | เคสติดตามจนปิด/escalate |
+
+### C. `shelter_report_case` — `shelter_report_case:{ulid}` · schema_v 1
+
+> Apply ลง `schema.md §2.10` หลัง approve. Flow เต็ม: [`docs/features/shelter-case-grievance-flow.md`](../features/shelter-case-grievance-flow.md)
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `kind` | enum(`grievance`,`incident`) | req | grievance = ร้องเรียน/ร้องทุกข์; incident = เหตุที่ staff/SM บันทึก |
+| `category` | enum (whitelist) | req | ดูด้านล่าง |
+| `severity` | enum(`info`,`warning`,`critical`) | req | ความเร่งด่วน / ความรุนแรง |
+| `status` | enum(`open`,`in_progress`,`resolved`,`closed`,`escalated`) | req | forward-only |
+| `subject` | str | req | หัวข้อสั้น |
+| `description` | str | req | รายละเอียด |
+| `zone` | str\|null | opt | โซนที่เกี่ยวข้อง |
+| `reporter` | `{ source: enum(evacuee,staff,anonymous,other), evacuee_id?:str, display_name?:str, contact?:str }` | req | ใครร้อง/ใครพบ |
+| `evacuee_ids` | [str] | opt | default `[]` |
+| `pet_refs` | [{`household_id`:str, `pet_index`:int≥0}] | opt | อ้าง `household.pets[]` — ไม่ duplicate pet doc |
+| `assignee_user_id` | str\|null | opt | Couch `_users` name |
+| `actions` | [{`at`:ts, `by`:str, `note`:str}] | req | timeline — append เท่านั้น |
+| `escalation` | `{ referral_id:str, reason?:str }\|null` | opt | เมื่อ `escalated` **ต้องมี** `referral_id` |
+| `occurred_at` | ts | req | เวลาเกิดเหตุ / เวลาร้อง |
+| `closed_at` | ts\|null | opt | ตั้งเมื่อ `resolved`/`closed` |
+
+**Category whitelist:**
+
+`theft` · `violence` · `fire` · `intrusion` · `lost_person` · `pet_related` · `facility` · `food_service` · `staff_conduct` · `noise` · `privacy` · `other`
+
+**Status transitions (forward-only):**
+
+```
+open → in_progress → resolved → closed
+open → in_progress → escalated
+open → resolved → closed
+open → escalated
+* ห้ามย้อนกลับ — แก้ผิด = เปิดเคสใหม่ + อ้างเคสเดิมใน description/actions
+```
+
+**Escalate (atomic):**
+
+1. สร้าง `referral` (draft→… ตาม Module F) ให้สำเร็จก่อน  
+2. อัปเดตเคส: `escalation.referral_id` + `status=escalated` (+ action note)  
+3. ถ้าข้อ 2 ล้มเหลวหลังข้อ 1 สำเร็จ → ต้องมี recovery path ที่ระบุใน T-19 (เช่น เก็บ referral_id ใน action / ไม่ทิ้ง orphan โดยเงียบ) — **ห้าม** ตั้ง `escalated` โดยไม่มี `referral_id`
+
+**Index:** `(status, occurred_at)` · `(severity, status)` · `(assignee_user_id, status)`
+
+### D. Task / planning (T-19 / T-33)
+
+| Task | After (หลัง approve) |
+| --- | --- |
+| T-19 | Groundwork: `shelter_report_case` schema + atomic escalate↔referral + allow-list permission note |
+| T-33 | Intake + list (sort severity) + detail timeline + escalate |
+
+### E. Routes / naming
+
+| Before | After |
+| --- | --- |
+| `/security-events` | `/cases` |
+| Module “Security” | Module E — **Shelter Report Cases** (feature dir: `shelter-report-cases`) |
+
+### F. Permissions (scalable allow-list)
+
+```
+SHELTER_REPORT_CASE_MUTATE_ROLES = ['shelter_manager']   // R3 — ขยาย array เมื่อมี CR permission
+// system_admin: อนุญาตผ่าน platform override (requireAdmin ∥ role ∈ MUTATE_ROLES)
+```
+
+- **อ่าน/เขียน/escalate ชั้นศูนย์:** เฉพาะ role ใน `SHELTER_REPORT_CASE_MUTATE_ROLES` ที่อยู่ใน shelter scope  
+- **R3 ค่าเริ่มต้น:** เฉพาะ `shelter_manager`  
+- **ขยายภายหลัง** (เช่น เพิ่ม `registration_staff`): แก้ allow-list + role-permission-matrix ผ่าน CR ใหม่ — **ไม่ต้องเปลี่ยน schema**  
+- **ไม่เปิด PUB** · ไม่มี RoleKey ใหม่
+
+## Impact
+
+| Artifact | หลัง approve |
+| --- | --- |
+| `schema.md` §2.10 | แทน `security_event` → `shelter_report_case`; ถอดจาก append-only list; เพิ่ม forward-only status rule |
+| data-model / ER | rename + mutability |
+| PRD R3 FR-47 + JTBD | ข้อความเคส / ตัด security check-in wording |
+| role-permission-matrix | แถว FR-47 = Shelter report case; หมายเหตุ mutate = SM (+ SA override) |
+| `08-E.md` | DoD T-19/T-33 |
+| `sitemap.md` | `/cases` |
+| feature flow | draft → active เมื่อ CR approved |
+| Code | `features/shelter-report-cases/` ใหม่ |
+
+## Migration
+
+- ไม่มี `security_event` จาก production feature → ไม่ backfill  
+- หลัง approve: `schema_v shelter_report_case = 1`; ห้ามสร้าง `security_event` ใหม่  
+
+## Open decisions
+
+*ไม่มีค้าง* — ล็อกครบ 2026-07-15 (ตาราง Decisions locked)
+
+## Decision log
+
+- 2026-07-15 — proposed (reframe Module E → report case). Track = ไฟล์ CR + feature flow
+- 2026-07-15 — owner ล็อก: (1) `shelter_report_case` (2) no PUB (3) SM mutate + scalable allow-list + SA override (4) pet_refs household_id+index (5) escalate atomic (6) list sort by severity then occurred_at
+- 2026-07-15 — sync **task-breakdown** `08-E.md` (T-19/T-33) + cross-refs `_index` / `09-F` / `02-people` / `_timeline` / `teamplanning` + Notion T-19/T-33 title+DoD
+- 2026-07-15 — **ยังไม่ apply** schema.md / PRD FR-47 / role-matrix / sitemap จนกว่า `status: approved`

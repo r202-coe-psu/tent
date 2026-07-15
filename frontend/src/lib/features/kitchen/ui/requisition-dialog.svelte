@@ -17,6 +17,7 @@
 	} from '$lib/features/kitchen';
 	import { useStockBalance } from '$lib/features/operations';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { persistQty, qtyGte, qtyGt, qtyIsZero, qtyLte } from '$lib/utils/qty';
 
 	let { open = $bindable(false), plan = null }: { open?: boolean; plan?: MealPlan | null } =
 		$props();
@@ -37,13 +38,13 @@
 
 	const assessment = $derived.by<RequisitionLineAssessment[]>(() => {
 		if (!requested || 'error' in requested) return [];
-		return assessRequisition(requested.items, balance.data ?? new Map<string, number>());
+		return assessRequisition(requested.items, balance.data ?? new Map<string, string>());
 	});
 
 	// User-entered overrides of the issued qty, keyed by plan + item. Absent key
 	// ⇒ fall back to the stock-covered default, so switching plans or reopening
 	// starts fresh with no carryover — no $effect/seed needed. Cleared on close.
-	let edits = $state<Record<string, number>>({});
+	let edits = $state<Record<string, string>>({});
 
 	// Effective issued qty per line: the user override when present, else the
 	// stock-covered default; always clamped to [0, qty_issuable] so a requisition
@@ -52,13 +53,20 @@
 		assessment.map((a) => {
 			const key = `${plan?._id ?? ''}::${a.item_id}`;
 			const raw = key in edits ? edits[key] : a.qty_issuable;
-			const qty = Math.min(Math.max(0, Number(raw) || 0), a.qty_issuable);
+			let qty: string;
+			try {
+				qty = persistQty(raw);
+			} catch {
+				qty = '0';
+			}
+			if (qtyLte(qty, 0)) qty = '0';
+			if (qtyGt(qty, a.qty_issuable)) qty = a.qty_issuable;
 			return { a, key, qty };
 		})
 	);
 
-	const hasShortfall = $derived(assessment.some((a) => a.shortfall > 0));
-	const canIssue = $derived(rows.some((r) => r.qty > 0));
+	const hasShortfall = $derived(assessment.some((a) => qtyGt(a.shortfall, 0)));
+	const canIssue = $derived(rows.some((r) => qtyGt(r.qty, 0)));
 
 	const STATUS: Record<string, { label: string; class: string }> = {
 		ok: { label: 'สต็อกพอ', class: 'bg-green-100 text-green-800' },
@@ -137,11 +145,11 @@
 								<Table.Row>
 									<Table.Cell class="px-3 font-mono text-xs">{r.a.item_id}</Table.Cell>
 									<Table.Cell class="px-3 text-right text-sm">
-										{r.a.qty_requested.toLocaleString()}
+										{r.a.qty_requested}
 										<span class="text-xs text-muted-foreground">{r.a.unit}</span>
 									</Table.Cell>
 									<Table.Cell class="px-3 text-right text-sm">
-										{Math.max(0, r.a.on_hand).toLocaleString()}
+										{qtyGte(r.a.on_hand, 0) ? r.a.on_hand : '0'}
 										<span class="text-xs text-muted-foreground">{r.a.unit}</span>
 									</Table.Cell>
 									<Table.Cell class="px-3 text-center">
@@ -156,14 +164,12 @@
 									<Table.Cell class="px-3 text-right">
 										<div class="flex items-center justify-end gap-1.5">
 											<Input
-												type="number"
-												min="0"
-												max={r.a.qty_issuable}
-												step="any"
+												type="text"
+												inputmode="decimal"
 												value={r.qty}
-												oninput={(e) => (edits[r.key] = Number(e.currentTarget.value))}
+												oninput={(e) => (edits[r.key] = e.currentTarget.value)}
 												class="h-8 w-24 [appearance:textfield] text-right text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-												disabled={r.a.qty_issuable <= 0}
+												disabled={qtyLte(r.a.qty_issuable, 0) || qtyIsZero(r.a.qty_issuable)}
 											/>
 											<span class="text-xs text-muted-foreground">{r.a.unit}</span>
 										</div>

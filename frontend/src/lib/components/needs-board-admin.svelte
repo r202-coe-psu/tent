@@ -6,6 +6,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { NeedItem } from '$lib/features/operations';
+	import { addQty, parseQty, qtyIsZero } from '$lib/utils/qty';
 
 	let {
 		items = [],
@@ -101,11 +102,13 @@
 						<Table.Cell class="px-6 py-4">
 							<div class="flex flex-col gap-4">
 								{#each item.needs as need (need.itemId)}
-									{@const totalAcquired = need.reserved + need.onHand}
-									{@const progressPercent = Math.min(
-										Math.round((totalAcquired / need.target) * 100),
-										100
-									)}
+									{@const totalAcquired = addQty(need.reserved, need.onHand)}
+									{@const progressPercent = qtyIsZero(need.target)
+										? 0
+										: Math.min(
+												Math.round(parseQty(totalAcquired).div(need.target).times(100).toNumber()),
+												100
+											)}
 									<div class="flex flex-col gap-1">
 										<div
 											class="flex items-center justify-between text-[11px] font-medium text-foreground"

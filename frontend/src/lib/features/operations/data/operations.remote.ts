@@ -21,6 +21,7 @@ import {
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
+import { qtyAbs, qtyGte } from '$lib/utils/qty';
 
 export function assertReceiveAgainstCatalog(entry: StockLedger, item: SupplyItem | null): void {
 	if (!item) {
@@ -60,7 +61,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		return ledger.filter((entry) => entry.item_id === itemId);
 	}
 
-	async getBalance(): Promise<Map<string, number>> {
+	async getBalance(): Promise<Map<string, string>> {
 		const ledger = await this.listLedger();
 		return stockBalance(ledger);
 	}
@@ -80,10 +81,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// causing negative stock. Acceptable for single-user shelter scenario;
 		// tracked for future hardening.
 		const balances = await this.getBalance();
-		const currentQty = balances.get(entry.item_id) ?? 0;
-		const requestedQty = Math.abs(entry.qty);
+		const currentQty = balances.get(entry.item_id) ?? '0';
+		const requestedQty = qtyAbs(entry.qty);
 
-		if (currentQty < requestedQty) {
+		if (!qtyGte(currentQty, requestedQty)) {
 			throw new Error(
 				`Insufficient stock for item ${entry.item_id} (requested ${requestedQty}, have ${currentQty})`
 			);

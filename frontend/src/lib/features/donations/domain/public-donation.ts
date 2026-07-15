@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Donation, Donor } from '$lib/features/operations';
+import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
 
 export interface PublicDonor extends Donor {
 	line_id?: string;
@@ -26,7 +27,7 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 		item_id?: string;
 		free_text?: string;
 		category?: string;
-		qty: number;
+		qty: string;
 		unit: string;
 		condition?: string;
 		note?: string;
@@ -44,7 +45,7 @@ export interface ScanDonationView {
 	shelter_code: string;
 	status: string;
 	donor: { name: string; phone: string | null };
-	items: Array<{ item_id?: string; free_text?: string; qty: number; unit: string }>;
+	items: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
 	logistics?: PublicDonationDoc['logistics'];
 }
 
@@ -56,7 +57,7 @@ export const receiveDonationInputSchema = z.object({
 			z.object({
 				item_id: z.string().optional(),
 				free_text: z.string().optional(),
-				qty: z.number().int().positive(),
+				qty: qtyStrCoercePositiveSchema,
 				unit: z.string().min(1)
 			})
 		)

@@ -172,7 +172,7 @@
 					// rather than replacing them.
 					vehicles: [...(latestHousehold.vehicles || []), ...vehicles]
 				});
-			} else if (isCreatingNewHousehold || pets.length > 0 || assets || vehicles.length > 0) {
+			} else if (isCreatingNewHousehold) {
 				const addr = newHouseholdAddress || {};
 				const householdLabel = `ครอบครัว${registeredEvacuee.first_name} ${registeredEvacuee.last_name}`;
 
@@ -365,8 +365,27 @@
 				<Button
 					type="button"
 					class="h-10 bg-[#003B71] px-6 text-sm font-medium hover:bg-[#002a50]"
-					onclick={() => {
-						step = 5;
+					disabled={isSubmittingHousehold}
+					onclick={async () => {
+						if (selectedHousehold) {
+							step = 5;
+						} else {
+							if (isSubmittingHousehold) return;
+							isSubmittingHousehold = true;
+							try {
+								if (pendingEvacueeInput) {
+									newlyRegisteredEvacuee = await onsubmit(pendingEvacueeInput, pendingSymptoms);
+									pendingEvacueeInput = null;
+									pendingSymptoms = [];
+								}
+								step = 6;
+							} catch (err) {
+								const message = err instanceof Error ? err.message : String(err);
+								toast.error(`เกิดข้อผิดพลาดในการบันทึก: ${message}`);
+							} finally {
+								isSubmittingHousehold = false;
+							}
+						}
 					}}
 				>
 					{selectedHousehold ? 'ถัดไป ⏩' : 'ข้าม / ถัดไป'}
@@ -375,11 +394,21 @@
 		</div>
 	</div>
 {:else if step === 5}
-	<EvacueePetAssetVehicle onBack={() => (step = 4)} onNext={handleFinalSubmit} />
+	<EvacueePetAssetVehicle
+		household={selectedHousehold}
+		onBack={() => (step = 4)}
+		onNext={handleFinalSubmit}
+	/>
 {:else if step === 6}
 	<EvacueeSelectZone
 		evacuee={newlyRegisteredEvacuee}
-		onBack={() => (step = 5)}
+		onBack={() => {
+			if (selectedHousehold || isCreatingNewHousehold) {
+				step = 5;
+			} else {
+				step = 4;
+			}
+		}}
 		onSubmit={handleZoneSubmit}
 	/>
 {/if}

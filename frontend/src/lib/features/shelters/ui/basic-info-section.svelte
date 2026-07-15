@@ -9,6 +9,7 @@
 	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import { useMasterData } from '$lib/features/master-data';
 	import { useProvinces, useDistricts, useSubdistricts } from '../application/queries';
+	import LocationMapPicker from './location-map-picker.svelte';
 
 	let {
 		form,
@@ -227,55 +228,25 @@
 		<Form.FieldErrors />
 	</Form.Field>
 
-	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-		<Form.Field {form} name="location.lat">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>ละติจูด (Latitude)</Form.Label>
-					<Input
-						{...props}
-						type="number"
-						step="any"
-						min="-90"
-						max="90"
-						value={$formData.location?.lat ?? ''}
-						oninput={(e) => {
-							if (!$formData.location) $formData.location = {};
-							$formData.location.lat =
-								e.currentTarget.value === '' ? null : Number(e.currentTarget.value);
-						}}
-						{disabled}
-						placeholder="เช่น 7.0251"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="location.lng">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>ลองจิจูด (Longitude)</Form.Label>
-					<Input
-						{...props}
-						type="number"
-						step="any"
-						min="-180"
-						max="180"
-						value={$formData.location?.lng ?? ''}
-						oninput={(e) => {
-							if (!$formData.location) $formData.location = {};
-							$formData.location.lng =
-								e.currentTarget.value === '' ? null : Number(e.currentTarget.value);
-						}}
-						{disabled}
-						placeholder="เช่น 100.4851"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-	</div>
+	<Form.Field {form} name="location.lat">
+		<Form.Control>
+			<Form.Label>ตำแหน่งพิกัด (Location Pin)</Form.Label>
+			<LocationMapPicker
+				lat={$formData.location?.lat ?? null}
+				lng={$formData.location?.lng ?? null}
+				{disabled}
+				onchange={(newLat, newLng) => {
+					if (!$formData.location) $formData.location = {};
+					$formData.location.lat = newLat;
+					$formData.location.lng = newLng;
+				}}
+			/>
+		</Form.Control>
+		<Form.FieldErrors />
+	</Form.Field>
+	<Form.Field {form} name="location.lng">
+		<Form.FieldErrors />
+	</Form.Field>
 
 	<!-- Structured address (CR-023 FR-23-0b/0c) -->
 	<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">

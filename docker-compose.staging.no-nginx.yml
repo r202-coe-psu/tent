@@ -6,7 +6,7 @@ services:
       COUCHDB_USER: ${COUCHDB_USER}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
     volumes:
-      - ../deployment/tent/data:/opt/couchdb/data
+      - /mnt/tent-data/couchdb/data:/opt/couchdb/data
     ports:
       - "${COUCHDB_BIND_IP:-127.0.0.1}:${COUCHDB_PORT:-5984}:5984"
     healthcheck:
