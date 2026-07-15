@@ -289,6 +289,46 @@ describe('calculateReserved', () => {
 		// Should include campaignA (80) + campaignB (100) = 180
 		expect(reservedAll.get('item:water')).toBe('180');
 	});
+
+	it('correctly maps and sums public donations without campaign_id and using free_text', () => {
+		const donations: Donation[] = [
+			{
+				...declaredItemsDonation(),
+				_id: 'don:public-1',
+				campaign_id: null,
+				status: 'declared',
+				items: [{ free_text: 'ข้าวสาร', qty: '15', unit: 'kg' }] // Maps to item:rice
+			},
+			{
+				...declaredItemsDonation(),
+				_id: 'don:public-2',
+				campaign_id: null,
+				status: 'declared',
+				items: [{ free_text: 'น้ำดื่ม', qty: '25', unit: 'bottle' }] // Maps to item:water
+			}
+		];
+
+		const reserved = calculateReserved(donations, [], 'camp-any');
+		expect(reserved.get('item:rice')).toBe('15');
+		expect(reserved.get('item:water')).toBe('25');
+	});
+
+	it('returns the reserved quota once a donation is expired past its TTL (T-21)', () => {
+		const donation: Donation = {
+			...declaredItemsDonation(),
+			_id: 'don:ttl',
+			campaign_id: 'camp-ttl',
+			status: 'declared',
+			items: [{ item_id: 'item:rice', qty: '30', unit: 'kg' }]
+		};
+
+		// While declared, the quota is held.
+		expect(calculateReserved([donation], [], 'camp-ttl').get('item:rice')).toBe('30');
+
+		// After the TTL job flips it to expired, the quota is released.
+		const expired = expireDonation(donation);
+		expect(calculateReserved([expired], [], 'camp-ttl').get('item:rice')).toBeUndefined();
+	});
 });
 
 describe('Donation Cut-off (T-22) threshold crossing', () => {

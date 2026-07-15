@@ -471,13 +471,15 @@ export function calculateReserved(
 
 	const reserved = new Map<string, string>();
 	for (const don of donations) {
-		if (campaignId && don.campaign_id !== campaignId) continue;
+		if (campaignId && don.campaign_id && don.campaign_id !== campaignId) continue;
 		if (don.status === 'expired' || don.status === 'cancelled') continue;
 		const isUnkeyedReceived = don.status === 'received' && !keyedDonationIds.has(don._id);
 		if (don.status !== 'declared' && !isUnkeyedReceived) continue;
 		for (const item of don.items ?? []) {
-			if (!item.item_id) continue;
-			reserved.set(item.item_id, addQty(reserved.get(item.item_id) ?? '0', item.qty));
+			const itemId =
+				item.item_id || (item.free_text ? mapNeedItemHeuristic(item.free_text) : undefined);
+			if (!itemId) continue;
+			reserved.set(itemId, addQty(reserved.get(itemId) ?? '0', item.qty));
 		}
 	}
 	return reserved;
