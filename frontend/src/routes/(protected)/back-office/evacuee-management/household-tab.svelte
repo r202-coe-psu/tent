@@ -8,6 +8,7 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
+	import Pencil from '@lucide/svelte/icons/pencil';
 	import { useHouseholdsPaginated, useEvacuees } from '$lib/features/people';
 	import { useMasterData } from '$lib/features/master-data';
 
@@ -115,6 +116,7 @@
 						<Table.Head class="font-semibold text-foreground">สมาชิก</Table.Head>
 						<Table.Head class="font-semibold text-foreground">เขต / ชุมชน</Table.Head>
 						<Table.Head class="font-semibold text-foreground">สัตว์เลี้ยง</Table.Head>
+						<Table.Head class="text-center font-semibold text-foreground">จัดการ</Table.Head>
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
@@ -180,6 +182,21 @@
 										<span class="text-[11px] text-muted-foreground">ไม่มี</span>
 									{/if}
 								</div>
+							</Table.Cell>
+							<Table.Cell class="text-center">
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={() =>
+										goto(
+											resolve(
+												`/back-office/households/edit/${h._id}?from=/back-office/evacuee-management?tab=household`
+											)
+										)}
+								>
+									<Pencil class="h-3.5 w-3.5" />
+									แก้ไข
+								</Button>
 							</Table.Cell>
 						</Table.Row>
 					{/each}

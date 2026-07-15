@@ -109,3 +109,4 @@ export { default as EvacueePetAssetVehicle } from './ui/evacuee-pet-asset-vehicl
 export { default as HouseholdPreRegister } from './ui/household-pre-register.svelte';
 export { default as HouseholdPreRegisterSummary } from './ui/household-pre-register-summary.svelte';
 export { default as HouseholdQrModal } from './ui/household-qr-modal.svelte';
+export { default as HouseholdProfileView } from './ui/household-profile-view.svelte';
