@@ -154,3 +154,65 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}
 };
+
+export const DELETE = async ({ params, getClientAddress }) => {
+	try {
+		const { tracking_token } = params;
+		if (!tracking_token) {
+			return json({ success: false, error: 'Tracking token is required' }, { status: 400 });
+		}
+
+		const ip = getClientAddress();
+		if (!donationIpLimiter.check(ip)) {
+			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
+		}
+
+		const shelterDb = shelterDbFromToken(tracking_token);
+		if (!shelterDb) {
+			return json({ success: false, error: 'Invalid tracking token format' }, { status: 400 });
+		}
+		const trackingTokenHash = await sha256Hex(tracking_token);
+
+		const latestDoc = await findByTokenHash(shelterDb, trackingTokenHash);
+		if (!latestDoc) {
+			return json({ success: false, error: 'Donation record not found' }, { status: 404 });
+		}
+
+		if (latestDoc.status !== 'declared') {
+			return json(
+				{
+					success: false,
+					error: `Cannot cancel donation in status "${latestDoc.status}"`
+				},
+				{ status: 400 }
+			);
+		}
+
+		latestDoc.status = 'cancelled';
+		latestDoc.updated_at = new Date().toISOString();
+
+		let writeRes: { status: number; data: unknown };
+		try {
+			writeRes = await putAsPublicWriter(shelterDb, latestDoc._id, latestDoc);
+		} catch {
+			return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
+		}
+
+		if (writeRes.status === 409) {
+			return json(
+				{
+					success: false,
+					error: 'Donation was updated elsewhere. Please refresh and try again.'
+				},
+				{ status: 409 }
+			);
+		}
+		if (writeRes.status !== 201 && writeRes.status !== 200) {
+			return json({ success: false, error: 'Database update failed' }, { status: 500 });
+		}
+
+		return json({ success: true, message: 'Donation cancelled successfully' });
+	} catch {
+		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+	}
+};

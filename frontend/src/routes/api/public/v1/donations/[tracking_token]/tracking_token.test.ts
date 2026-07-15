@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GET, PATCH } from './+server';
+import { GET, PATCH, DELETE } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
@@ -7,6 +7,7 @@ import type { PublicDonationDoc } from '$lib/features/donations';
 
 type GetEvent = Parameters<typeof GET>[0];
 type PatchEvent = Parameters<typeof PATCH>[0];
+type DeleteEvent = Parameters<typeof DELETE>[0];
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn()
@@ -22,7 +23,7 @@ vi.mock('$lib/server/security/rate-limiter', () => ({
 
 const TOKEN = 'TX-SH001-TESTTOKEN';
 
-describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
+describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () => {
 	let mockDonation: PublicDonationDoc;
 
 	beforeEach(async () => {
@@ -143,6 +144,54 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 			request: mockRequest,
 			getClientAddress: () => '127.0.0.1'
 		} as unknown as PatchEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(400);
+		expect(data.success).toBe(false);
+	});
+
+	it('DELETE sets status to cancelled and calls putAsPublicWriter', async () => {
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({
+					status: 200,
+					data: { rows: [{ doc: mockDonation }] }
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 201, data: { ok: true } });
+
+		const response = await DELETE({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as DeleteEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(200);
+		expect(data.success).toBe(true);
+
+		expect(putAsPublicWriter).toHaveBeenCalled();
+		const [, , savedDoc] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+		expect((savedDoc as PublicDonationDoc).status).toBe('cancelled');
+	});
+
+	it('DELETE returns 400 if donation is not in declared status', async () => {
+		mockDonation.status = 'received';
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({
+					status: 200,
+					data: { rows: [{ doc: mockDonation }] }
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await DELETE({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as DeleteEvent);
 
 		const data = await response.json();
 		expect(response.status).toBe(400);
