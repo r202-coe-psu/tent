@@ -51,6 +51,25 @@ export interface MealPlan extends BaseDoc {
 	calc_source?: MealCalcSource | null;
 }
 
+// meal_plan:{date}:{meal} is a deterministic _id, and the shared repository
+// primitive (putDoc, $lib/db/couch-db.ts) treats a create-time 409 on a
+// deterministic id as an idempotent success — resolving with the pre-existing
+// doc instead of throwing. That's correct for append-only docs (meal_service),
+// but a meal plan must NOT silently reuse an old plan when someone tries to
+// create a second one for the same date+meal. The application layer detects
+// the replay (returned doc's calc_source.headcount_as_of won't match what was
+// just computed) and throws this instead, so the UI shows an error rather than
+// a false "created" toast.
+export class MealPlanAlreadyExistsError extends Error {
+	constructor(
+		public readonly date: string,
+		public readonly meal: MealPeriod
+	) {
+		super(`meal_plan already exists for ${date}:${meal}`);
+		this.name = 'MealPlanAlreadyExistsError';
+	}
+}
+
 export const mealPlanInputSchema = z.object({
 	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
 	meal: mealPeriodSchema,

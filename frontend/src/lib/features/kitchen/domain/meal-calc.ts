@@ -8,8 +8,9 @@ import type {
 } from './kitchen';
 
 // Conventional recipe_id for rice — T-26 maps this to the stock item_id.
-// Future ingredients (egg, vegetable, etc.) will add entries here when P-02 ships.
 export const RICE_RECIPE_ID = 'ingredient:rice';
+export const EGG_RECIPE_ID = 'ingredient:egg';
+export const VEGETABLE_RECIPE_ID = 'ingredient:vegetable';
 
 // Rice consumption per person per meal (grams). CR-021 removed rice from
 // sop_profile.ratios (SOP = shelter planning only) and moved food/ingredient
@@ -19,23 +20,75 @@ export const RICE_RECIPE_ID = 'ingredient:rice';
 // TODO(CR-021/CR-013): read from item_master.consumption_rate once it ships.
 export const DEFAULT_RICE_G_PER_PERSON_MEAL = 150;
 
-// Grams per kg — rice recipes are calculated in grams (SOP ratio precision); the
-// stock ledger stores kg (item_master.base_unit). CR-030.
+// Egg/vegetable per-person defaults — demo widening of the T-25 calc ahead of
+// P-02's real special-needs/multi-recipe design (owner-requested, not tracked
+// as a Change Record; revisit once P-02 ships).
+export const DEFAULT_EGG_PER_PERSON_MEAL = 2; // pieces
+export const DEFAULT_VEGETABLE_G_PER_PERSON_MEAL = 100; // grams
+
+// Grams per kg — rice/vegetable recipes are calculated in grams (SOP ratio
+// precision); the stock ledger stores kg (item_master.base_unit). CR-030.
 const GRAMS_PER_KG = 1000;
+
+// Display label/unit for a recipe row — covers every id calculateMealIngredients
+// can produce; a recipe_id missing here just falls back to showing its raw id.
+export const RECIPE_LABELS: Record<string, { label: string; unit: string }> = {
+	[RICE_RECIPE_ID]: { label: 'ข้าวสาร', unit: 'g' },
+	[EGG_RECIPE_ID]: { label: 'ไข่ไก่', unit: 'ฟอง' },
+	[VEGETABLE_RECIPE_ID]: { label: 'ผักรวม', unit: 'g' }
+};
 
 // Maps a calculated recipe_id to the stock item it draws down + its ledger unit
 // + how many recipe units make one stock unit. The bridge to T-26 (kitchen
 // requisition → stock ledger). CR-022. `unit` must match item_master.base_unit
 // (schema.md §2.1); `recipe_per_stock_unit` scales planned_qty (recipe units) to
-// qty_requested (stock units) at the T-25→T-26 seam. Rice: recipe grams / 1000 =
-// stock kg (CR-030). An ingredient whose recipe unit already equals its stock
-// unit (e.g. eggs in ฟอง) uses 1 — so a new item never silently gets /1000.
+// qty_requested (stock units) at the T-25→T-26 seam. Rice/vegetable: recipe
+// grams / 1000 = stock kg (CR-030). An ingredient whose recipe unit already
+// equals its stock unit (e.g. eggs in ฟอง) uses 1 — so a new item never
+// silently gets /1000.
 export const RECIPE_TO_STOCK_ITEM: Record<
 	string,
 	{ item_id: string; unit: string; recipe_per_stock_unit: number }
 > = {
-	[RICE_RECIPE_ID]: { item_id: 'item:rice', unit: 'kg', recipe_per_stock_unit: GRAMS_PER_KG }
+	[RICE_RECIPE_ID]: { item_id: 'item:rice', unit: 'kg', recipe_per_stock_unit: GRAMS_PER_KG },
+	[EGG_RECIPE_ID]: { item_id: 'item:egg', unit: 'piece', recipe_per_stock_unit: 1 },
+	[VEGETABLE_RECIPE_ID]: {
+		item_id: 'item:vegetable',
+		unit: 'kg',
+		recipe_per_stock_unit: GRAMS_PER_KG
+	}
 };
+
+// Menu presets — which non-rice ingredients a meal plan includes. Rice is
+// always present (its qty comes from riceGPerMeal, not the menu); egg/vegetable
+// qty always use the fixed per-person defaults above. Same demo-widening
+// disclaimer as above: 3 fixed presets, not a real recipe/BOM catalog yet.
+export type MealMenuId = 'menu:rice-egg' | 'menu:congee-vegetable' | 'menu:rice-egg-vegetable';
+
+export interface MealMenu {
+	id: MealMenuId;
+	label: string;
+	includesEgg: boolean;
+	includesVegetable: boolean;
+}
+
+export const MEAL_MENUS: MealMenu[] = [
+	{ id: 'menu:rice-egg', label: 'ข้าวสวย + ไข่ต้ม', includesEgg: true, includesVegetable: false },
+	{
+		id: 'menu:congee-vegetable',
+		label: 'ข้าวต้ม + ผัก',
+		includesEgg: false,
+		includesVegetable: true
+	},
+	{
+		id: 'menu:rice-egg-vegetable',
+		label: 'ข้าวสวย + ไข่เจียว + ผัก (มาตรฐาน)',
+		includesEgg: true,
+		includesVegetable: true
+	}
+];
+
+export const DEFAULT_MENU_ID: MealMenuId = 'menu:rice-egg-vegetable';
 
 export interface MealCalcSource {
 	sop_profile_id: string;
@@ -51,9 +104,11 @@ export interface MealCalcResult {
 /**
  * Derives the ingredient list for one meal from headcount × SOP ratios.
  *
- * Only rice is calculated now (T-25 scope). P-02 special-needs logic
- * (halal preparation, soft-food, infant formula) will extend this once
- * the design spec ships.
+ * Rice is always included; egg/vegetable are added per the selected menu
+ * preset (demo widening of T-25 scope requested by the owner, using fixed
+ * per-person defaults — not yet driven by a real recipe/BOM catalog). P-02
+ * special-needs logic (halal preparation, soft-food, infant formula) will
+ * extend this once the design spec ships.
  *
  * Throws if headcount.total is 0 — a meal plan with no occupancy is
  * meaningless and would produce a qty_required = 0 which violates the
@@ -64,7 +119,8 @@ export function calculateMealIngredients(
 	riceGPerMeal: number,
 	sopProfileId: string,
 	sopProfileVersion: number,
-	headcountAsOf: string
+	headcountAsOf: string,
+	menuId: MealMenuId = DEFAULT_MENU_ID
 ): MealCalcResult {
 	if (headcount.total <= 0) {
 		throw new Error('calculateMealIngredients: headcount.total must be > 0');
@@ -73,10 +129,24 @@ export function calculateMealIngredients(
 		throw new Error('calculateMealIngredients: riceGPerMeal must be > 0');
 	}
 
+	const menu = MEAL_MENUS.find((m) => m.id === menuId) ?? MEAL_MENUS[MEAL_MENUS.length - 1];
 	const riceGrams = Math.ceil(headcount.total * riceGPerMeal);
+	const recipes: MealPlanRecipe[] = [{ recipe_id: RICE_RECIPE_ID, planned_qty: riceGrams }];
+	if (menu.includesEgg) {
+		recipes.push({
+			recipe_id: EGG_RECIPE_ID,
+			planned_qty: Math.ceil(headcount.total * DEFAULT_EGG_PER_PERSON_MEAL)
+		});
+	}
+	if (menu.includesVegetable) {
+		recipes.push({
+			recipe_id: VEGETABLE_RECIPE_ID,
+			planned_qty: Math.ceil(headcount.total * DEFAULT_VEGETABLE_G_PER_PERSON_MEAL)
+		});
+	}
 
 	return {
-		recipes: [{ recipe_id: RICE_RECIPE_ID, planned_qty: riceGrams }],
+		recipes,
 		calc_source: {
 			sop_profile_id: sopProfileId,
 			sop_profile_version: sopProfileVersion,

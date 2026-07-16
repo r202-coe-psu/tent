@@ -230,7 +230,8 @@ const ITEM = {
 	paracetamol: 'item:paracetamol',
 	soap: 'item:soap',
 	blanket: 'item:blanket',
-	egg: 'item:egg'
+	egg: 'item:egg',
+	vegetable: 'item:vegetable'
 } as const;
 
 // ─── seedUsers ────────────────────────────────────────────────────────────────
@@ -426,6 +427,13 @@ async function seedCatalog(): Promise<void> {
 			unit: 'piece',
 			perishable: true,
 			reorder_level: 100
+		}),
+		catalogDoc(ITEM.vegetable, 'supply_item', {
+			name: 'ผักรวม',
+			category: 'food',
+			unit: 'kg',
+			perishable: true,
+			reorder_level: 30
 		})
 	];
 	const recipes = [
@@ -746,6 +754,8 @@ async function seedShelter(): Promise<void> {
 		{ item_id: ITEM.paracetamol, qty: '1000', unit: 'tablet', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.soap, qty: '150', unit: 'bar', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.blanket, qty: '80', unit: 'piece', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.egg, qty: '2000', unit: 'piece', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.vegetable, qty: '150', unit: 'kg', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.rice, qty: '-30', unit: 'kg', reason: 'distribute', ref_id: null },
 		{ item_id: ITEM.water, qty: '-100', unit: 'bottle', reason: 'distribute', ref_id: null }
 	];

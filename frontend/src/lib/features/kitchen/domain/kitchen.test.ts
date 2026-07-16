@@ -5,7 +5,8 @@ import {
 	createMealService,
 	isMealPlan,
 	isKitchenRequisition,
-	isMealService
+	isMealService,
+	MealPlanAlreadyExistsError
 } from './kitchen';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -219,5 +220,18 @@ describe('type guards', () => {
 		expect(isMealService(plan)).toBe(false);
 		expect(isMealPlan(null)).toBe(false);
 		expect(isMealPlan({ type: 'something_else' })).toBe(false);
+	});
+});
+
+// ---- MealPlanAlreadyExistsError ----
+
+describe('MealPlanAlreadyExistsError', () => {
+	it('carries date/meal and a distinguishable name for instanceof checks', () => {
+		const err = new MealPlanAlreadyExistsError('2026-07-16', 'lunch');
+		expect(err).toBeInstanceOf(Error);
+		expect(err.name).toBe('MealPlanAlreadyExistsError');
+		expect(err.date).toBe('2026-07-16');
+		expect(err.meal).toBe('lunch');
+		expect(err.message).toContain('2026-07-16:lunch');
 	});
 });

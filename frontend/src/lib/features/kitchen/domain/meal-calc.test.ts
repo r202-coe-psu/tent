@@ -4,6 +4,8 @@ import {
 	toRequisitionInput,
 	assessRequisition,
 	RICE_RECIPE_ID,
+	EGG_RECIPE_ID,
+	VEGETABLE_RECIPE_ID,
 	RECIPE_TO_STOCK_ITEM
 } from './meal-calc';
 import type { MealPlan, MealPlanHeadcount } from './kitchen';
@@ -22,8 +24,39 @@ const headcount = (total: number, halal = 0, soft_food = 0, infant = 0): MealPla
 describe('calculateMealIngredients', () => {
 	it('manual check: 100 people × 150 g/meal = 15 000 g rice', () => {
 		const result = calculateMealIngredients(headcount(100), 150, SOP_ID, SOP_VERSION, AS_OF);
-		expect(result.recipes).toHaveLength(1);
+		expect(result.recipes).toHaveLength(3);
 		expect(result.recipes[0]).toEqual({ recipe_id: RICE_RECIPE_ID, planned_qty: 15000 });
+	});
+
+	it('also computes egg + vegetable alongside rice (demo widening of T-25 scope)', () => {
+		const result = calculateMealIngredients(headcount(100), 150, SOP_ID, SOP_VERSION, AS_OF);
+		expect(result.recipes[1]).toEqual({ recipe_id: EGG_RECIPE_ID, planned_qty: 200 });
+		expect(result.recipes[2]).toEqual({ recipe_id: VEGETABLE_RECIPE_ID, planned_qty: 10000 });
+	});
+
+	it('menu preset controls which non-rice ingredients are included', () => {
+		const riceEgg = calculateMealIngredients(
+			headcount(100),
+			150,
+			SOP_ID,
+			SOP_VERSION,
+			AS_OF,
+			'menu:rice-egg'
+		);
+		expect(riceEgg.recipes.map((r) => r.recipe_id)).toEqual([RICE_RECIPE_ID, EGG_RECIPE_ID]);
+
+		const congeeVeg = calculateMealIngredients(
+			headcount(100),
+			150,
+			SOP_ID,
+			SOP_VERSION,
+			AS_OF,
+			'menu:congee-vegetable'
+		);
+		expect(congeeVeg.recipes.map((r) => r.recipe_id)).toEqual([
+			RICE_RECIPE_ID,
+			VEGETABLE_RECIPE_ID
+		]);
 	});
 
 	it('manual check: 53 people × 150 g/meal = 7 950 g rice', () => {

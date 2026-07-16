@@ -8,15 +8,21 @@ import type { AuthorContext } from '$lib/db/model';
 import { kitchenRepository } from '../data/kitchen.remote';
 import { getActiveSopProfile } from '$lib/features/sop-ratios';
 import { peopleRepository } from '$lib/features/people';
-import type {
-	MealPlan,
-	MealPlanInput,
-	KitchenRequisitionInput,
-	MealServiceInput,
-	GasCylinderType,
-	GasCylinderTypeInput
+import {
+	MealPlanAlreadyExistsError,
+	type MealPlan,
+	type MealPlanInput,
+	type KitchenRequisitionInput,
+	type MealServiceInput,
+	type GasCylinderType,
+	type GasCylinderTypeInput
 } from '../domain/kitchen';
-import { calculateMealIngredients, DEFAULT_RICE_G_PER_PERSON_MEAL } from '../domain/meal-calc';
+import {
+	calculateMealIngredients,
+	DEFAULT_RICE_G_PER_PERSON_MEAL,
+	DEFAULT_MENU_ID,
+	type MealMenuId
+} from '../domain/meal-calc';
 import { deriveHeadcountFromOccupancy } from '../domain/occupancy';
 import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
 
@@ -60,12 +66,14 @@ export const useCreateMealPlanCalc = () =>
 			meal,
 			headcount,
 			override_reason,
+			menuId,
 			ctx
 		}: {
 			date: string;
 			meal: MealPeriod;
 			headcount: MealPlanHeadcount;
 			override_reason?: string | null;
+			menuId?: MealMenuId;
 			ctx: AuthorContext;
 		}) => {
 			const profile = await getActiveSopProfile();
@@ -73,17 +81,28 @@ export const useCreateMealPlanCalc = () =>
 			// Rice ratio is a kitchen coefficient, not a SOP ratio (CR-021). The SOP
 			// profile is still read to stamp calc_source provenance (which planning
 			// profile was active), but the rice grams come from the kitchen constant.
+			const headcountAsOf = new Date().toISOString();
 			const { recipes, calc_source } = calculateMealIngredients(
 				headcount,
 				DEFAULT_RICE_G_PER_PERSON_MEAL,
 				profile._id,
 				profile.version,
-				new Date().toISOString()
+				headcountAsOf,
+				menuId ?? DEFAULT_MENU_ID
 			);
-			return kitchenRepository().createMealPlan(
+			const created = await kitchenRepository().createMealPlan(
 				{ date, meal, headcount, recipes, calc_source, override_reason },
 				ctx
 			);
+			// meal_plan:{date}:{meal} is deterministic — putDoc (couch-db.ts) treats a
+			// create-time 409 as idempotent success and resolves with the PRE-EXISTING
+			// doc instead of throwing. Detect that replay here (its calc_source won't
+			// carry the headcount_as_of we just generated) so the caller sees a real
+			// error instead of a false "created" result.
+			if (created.calc_source?.headcount_as_of !== headcountAsOf) {
+				throw new MealPlanAlreadyExistsError(date, meal);
+			}
+			return created;
 		}
 	}));
 

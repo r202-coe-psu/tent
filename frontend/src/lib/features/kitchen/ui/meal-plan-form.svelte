@@ -13,9 +13,14 @@
 		useOccupancyHeadcount,
 		calculateMealIngredients,
 		DEFAULT_RICE_G_PER_PERSON_MEAL,
+		RECIPE_LABELS,
 		MEAL_PERIOD_LABELS,
+		MEAL_MENUS,
+		DEFAULT_MENU_ID,
+		MealPlanAlreadyExistsError,
 		type MealPeriod,
-		type MealPlanHeadcount
+		type MealPlanHeadcount,
+		type MealMenuId
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
 
@@ -23,6 +28,7 @@
 
 	let date = $state(new Date().toISOString().slice(0, 10));
 	let meal = $state<MealPeriod>('lunch');
+	let menuId = $state<MealMenuId>(DEFAULT_MENU_ID);
 	let total = $state(0);
 	let halal = $state(0);
 	let softFood = $state(0);
@@ -92,7 +98,8 @@
 				DEFAULT_RICE_G_PER_PERSON_MEAL,
 				sopProfile.data._id,
 				sopProfile.data.version,
-				new Date().toISOString()
+				new Date().toISOString(),
+				menuId
 			);
 		} catch {
 			return null;
@@ -108,13 +115,17 @@
 				meal,
 				headcount,
 				override_reason: isOverridden ? overrideReason.trim() : null,
+				menuId,
 				ctx
 			});
 			toast.success(`สร้างแผน ${MEAL_PERIOD_LABELS[meal]} วันที่ ${date} แล้ว`);
 			open = false;
 			overrideReason = '';
 		} catch (err) {
-			if ((err as { status?: number })?.status === 409) {
+			if (
+				err instanceof MealPlanAlreadyExistsError ||
+				(err as { status?: number })?.status === 409
+			) {
 				toast.error(`มีแผน ${MEAL_PERIOD_LABELS[meal]} ของวันที่ ${date} อยู่แล้ว`);
 			} else {
 				toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
@@ -150,6 +161,19 @@
 						{/each}
 					</select>
 				</div>
+			</div>
+
+			<div class="space-y-1.5">
+				<Label for="mp-menu">ตำรับอาหาร</Label>
+				<select
+					id="mp-menu"
+					bind:value={menuId}
+					class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+				>
+					{#each MEAL_MENUS as m (m.id)}
+						<option value={m.id}>{m.label}</option>
+					{/each}
+				</select>
 			</div>
 
 			<!-- Live occupancy source (T-06) -->
@@ -228,12 +252,14 @@
 			{:else if preview}
 				<div class="space-y-1 rounded-md border bg-muted/50 p-3">
 					<p class="text-xs font-medium text-muted-foreground">ผลการคำนวณ</p>
-					<p class="text-sm font-semibold">
-						ข้าว {preview.recipes[0]?.planned_qty.toLocaleString()} กรัม
-						<span class="font-normal text-muted-foreground">
-							({((preview.recipes[0]?.planned_qty ?? 0) / 1000).toFixed(2)} กก.)
-						</span>
-					</p>
+					{#each preview.recipes as recipe (recipe.recipe_id)}
+						{@const meta = RECIPE_LABELS[recipe.recipe_id] ?? { label: recipe.recipe_id, unit: '' }}
+						<p class="text-sm font-semibold">
+							{meta.label}
+							{recipe.planned_qty.toLocaleString()}
+							{meta.unit}
+						</p>
+					{/each}
 					<p class="text-xs text-muted-foreground">
 						SOP: {sopProfile.data.name} v{sopProfile.data.version}
 						· ข้าว {DEFAULT_RICE_G_PER_PERSON_MEAL} ก./คน/มื้อ (ค่าครัว)

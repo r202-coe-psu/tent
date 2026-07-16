@@ -25,6 +25,7 @@
 		useMealServices,
 		MEAL_PERIOD_LABELS,
 		RICE_RECIPE_ID,
+		RECIPE_LABELS,
 		MealPlanForm,
 		RequisitionDialog,
 		MealServiceForm,
@@ -131,10 +132,11 @@
 		return parts.slice(1).join(':') || id;
 	}
 
-	// Rice qty (grams) from the calculated recipes — the actual ingredient output.
-	function riceGrams(plan: MealPlan): number | null {
-		const rice = plan.recipes?.find((r) => r.recipe_id === RICE_RECIPE_ID);
-		return rice ? rice.planned_qty : null;
+	// Display label + unit for a recipe row. Only rice is actually calculated
+	// (T-25 scope) — other ids may appear on mock/demo plans ahead of P-02's
+	// multi-recipe calc; falls back to the raw id when unknown.
+	function recipeLabel(recipeId: string): { label: string; unit: string } {
+		return RECIPE_LABELS[recipeId] ?? { label: recipeId, unit: '' };
 	}
 
 	function formatTime(iso: string): string {
@@ -292,14 +294,18 @@
 									</Table.Cell>
 									<Table.Cell class="max-w-xs px-6">
 										<p class="text-sm font-medium">{MEAL_PERIOD_LABELS[plan.meal]}</p>
-										{#if riceGrams(plan) !== null}
+										{#each plan.recipes ?? [] as recipe (recipe.recipe_id)}
+											{@const meta = recipeLabel(recipe.recipe_id)}
 											<p
 												class="mt-0.5 text-xs text-muted-foreground"
-												title="คำนวณเป็นกรัมตามสัดส่วน SOP — ตอนเบิกจะถูกแปลงเป็นกิโลกรัม (kg) ให้ตรงหน่วยคลัง"
+												title={recipe.recipe_id === RICE_RECIPE_ID
+													? 'คำนวณเป็นกรัมตามสัดส่วน SOP — ตอนเบิกจะถูกแปลงเป็นกิโลกรัม (kg) ให้ตรงหน่วยคลัง'
+													: undefined}
 											>
-												ข้าวสาร: {riceGrams(plan)?.toLocaleString()} g
+												{meta.label}: {recipe.planned_qty.toLocaleString()}
+												{meta.unit}
 											</p>
-										{/if}
+										{/each}
 										{#if plan.override_reason}
 											<p class="mt-0.5 text-xs text-amber-700" title={plan.override_reason}>
 												⚑ แก้ยอด: {plan.override_reason}

@@ -13,12 +13,21 @@ export {
 	toRequisitionInput,
 	assessRequisition,
 	RICE_RECIPE_ID,
+	EGG_RECIPE_ID,
+	VEGETABLE_RECIPE_ID,
 	RECIPE_TO_STOCK_ITEM,
-	DEFAULT_RICE_G_PER_PERSON_MEAL
+	RECIPE_LABELS,
+	DEFAULT_RICE_G_PER_PERSON_MEAL,
+	DEFAULT_EGG_PER_PERSON_MEAL,
+	DEFAULT_VEGETABLE_G_PER_PERSON_MEAL,
+	MEAL_MENUS,
+	DEFAULT_MENU_ID
 } from './domain/meal-calc';
 export type {
 	MealCalcSource,
 	MealCalcResult,
+	MealMenuId,
+	MealMenu,
 	StockAvailabilityStatus,
 	RequisitionLineAssessment
 } from './domain/meal-calc';
@@ -63,7 +72,8 @@ export {
 	isMealPlan,
 	isKitchenRequisition,
 	isMealService,
-	MEAL_PERIOD_LABELS
+	MEAL_PERIOD_LABELS,
+	MealPlanAlreadyExistsError
 } from './domain/kitchen';
 
 // Data — repository contract + remote CouchDB binding
