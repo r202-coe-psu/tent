@@ -64,7 +64,7 @@
 				</div>
 				<h2 id="master-data-modal-title" class="mt-1 flex items-center gap-2 text-lg font-semibold">
 					<span aria-hidden="true">🛠️</span>
-					{editing ? 'แก้ไขข้อมูล' : 'เพิ่มข้อมูล'}พารามิเตอร์มาตรฐาน / สูตรเสมือน
+					{editing ? 'แก้ไขข้อมูล' : 'เพิ่มข้อมูล'} {MASTER_DATA_TYPE_LABELS[masterType]}
 				</h2>
 			</header>
 
