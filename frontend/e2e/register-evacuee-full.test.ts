@@ -23,9 +23,10 @@
  *   PW_SLOWMO=500 pnpm playwright test e2e/register-evacuee-full.test.ts --headed
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { createCouchUser, deleteCouchUser, couchLogin, STAFF_SH001_ROLES } from './helpers/couch';
 import { injectSession } from './helpers/login';
+import { mockCouchRoutes } from './helpers/mock-couch';
 
 // ─── Shared fixtures ───────────────────────────────────────────────────────────
 
@@ -37,9 +38,6 @@ const TEST_USER = {
 	roles: STAFF_SH001_ROLES,
 	display_name: 'Reg Staff E2E'
 };
-
-// TEST_USER's `shelter:SH001` role resolves to this CouchDB database (db/shelter.ts).
-const SHELTER_DB = 'shelter_sh001';
 
 // ─── Deterministic fixtures (stable failure output across runs) ────────────────
 
@@ -68,186 +66,12 @@ test.describe('Evacuee Registration', () => {
 		await deleteCouchUser(TEST_USER.name);
 	});
 
-	/**
-	 * Mount all CouchDB / BFF route mocks needed to drive all 6 steps.
-	 * Keeps the test self-contained — no real CouchDB data is mutated.
-	 * Skill note: "Avoid mocking where possible" — we only mock the DB/BFF
-	 * layer; the full SvelteKit BFF and Svelte UI run against the real preview
-	 * server.
-	 */
-	async function mockCouchRoutes(page: Page) {
-		// CouchDB _changes (live-sync) — return empty immediately to avoid timeouts
-		await page.route('**/_changes**', async (route) => {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ results: [], last_seq: '0' })
-			});
-		});
-
-		// Mango _find (search) — default: return empty list (no prior registrations)
-		await page.route('**/_find**', async (route) => {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ docs: [], bookmark: 'nil' })
-			});
-		});
-
-		// CouchDB _all_docs — listEvacuees()/listHouseholds()/searchEvacuees() scan by
-		// type prefix via _all_docs; default to empty (no prior registrations), so
-		// step 4's household search reliably falls into the "not found" path.
-		await page.route('**/_all_docs**', async (route) => {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ rows: [] })
-			});
-		});
-
-		// Shelter registry — useShelter() scans the `registry` db's _all_docs for
-		// `shelter:*` docs (not a BFF route). One shelter (SH001) with one open zone,
-		// needed for step 6's zone recommendation/selection. Registered after the
-		// generic _all_docs mock above so it takes precedence for this path.
-		await page.route('**/registry/_all_docs**', async (route) => {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					rows: [
-						{
-							id: 'shelter:SH001',
-							doc: {
-								_id: 'shelter:SH001',
-								_rev: '1-mock',
-								type: 'shelter',
-								schema_v: 4,
-								code: 'SH001',
-								name: 'ศูนย์พักพิง E2E',
-								operation_status: 'active',
-								capacity: 100,
-								zones: [
-									{
-										code: 'A',
-										name: 'โซน A (ทั่วไป)',
-										capacity: 50,
-										type: 'general',
-										status: 'active'
-									}
-								],
-								admission_policy: {
-									supported_vulnerable_groups: [],
-									pet_policy: { policy: null, categories: [] }
-								},
-								luggage_policy: {
-									limitation: null,
-									max_per_family: null,
-									rules: [],
-									rules_other: null
-								},
-								parking_policy: {
-									availability: null,
-									supported_vehicles: [],
-									rules: [],
-									rules_other: null
-								}
-							}
-						}
-					]
-				})
-			});
-		});
-
-		// Shelter DB (evacuee/household/movement/medical/screening docs) — a tiny
-		// in-memory doc store so the GET-after-PUT rev lookups used throughout the
-		// flow (updateEvacuee, checkInEvacuee, …) resolve against what was actually
-		// written, instead of a fixed canned response.
-		const docs = new Map<string, Record<string, unknown>>();
-		let revCounter = 0;
-		await page.route(`**/${SHELTER_DB}/**`, async (route) => {
-			const req = route.request();
-			const segments = new URL(req.url()).pathname.split('/').filter(Boolean);
-			const last = segments[segments.length - 1] ?? '';
-			if (last.startsWith('_')) {
-				// Not a single-doc path (_all_docs, _find, _changes, …) — defer to
-				// the generic mocks registered above.
-				await route.fallback();
-				return;
-			}
-
-			const docId = decodeURIComponent(last);
-			if (req.method() === 'GET') {
-				const doc = docs.get(docId);
-				if (doc) {
-					await route.fulfill({
-						status: 200,
-						contentType: 'application/json',
-						body: JSON.stringify(doc)
-					});
-				} else {
-					await route.fulfill({
-						status: 404,
-						contentType: 'application/json',
-						body: JSON.stringify({ error: 'not_found', reason: 'missing' })
-					});
-				}
-				return;
-			}
-			if (req.method() === 'PUT') {
-				const body = (req.postDataJSON() ?? {}) as Record<string, unknown>;
-				const isCreate = !docs.has(docId);
-				revCounter += 1;
-				const rev = `${revCounter}-mock`;
-				docs.set(docId, { ...body, _id: docId, _rev: rev });
-				await route.fulfill({
-					status: isCreate ? 201 : 200,
-					contentType: 'application/json',
-					body: JSON.stringify({ ok: true, id: docId, rev })
-				});
-				return;
-			}
-			await route.fallback();
-		});
-
-		// BFF catch-all with special-cases inside (Playwright matches last-registered
-		// route first — separate specific /api routes registered *after* this would
-		// never run if we registered a blanket /api/** last).
-		await page.route('/api/**', async (route) => {
-			const url = route.request().url();
-			if (url.includes('/api/v1/thailand-location/all')) {
-				await route.fulfill({
-					status: 200,
-					contentType: 'application/json',
-					body: JSON.stringify([
-						{ province: 'สงขลา', district: 'หาดใหญ่', subdistrict: 'บ้านพรุ', zipcode: 90250 }
-					])
-				});
-				return;
-			}
-			if (url.includes('/api/back-office/master-data/vulnerable_group')) {
-				await route.fulfill({
-					status: 200,
-					contentType: 'application/json',
-					body: JSON.stringify({
-						_id: 'master_data:vulnerable_group',
-						master_type: 'vulnerable_group',
-						items: []
-					})
-				});
-				return;
-			}
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ ok: true })
-			});
-		});
-	}
-
 	test('should complete evacuee registration end-to-end across all 6 steps', async ({ page }) => {
-		// Arrange — mount mocks before navigation, then land on the wizard already
-		// authenticated (no login-form / logout roundtrip needed for this flow).
-		await mockCouchRoutes(page);
+		// Arrange — mount the shared mocks (helpers/mock-couch.ts) before navigation,
+		// then land on the wizard already authenticated (no login-form / logout
+		// roundtrip needed for this flow). The registry shelter fixture is needed
+		// for step 6's zone recommendation/selection.
+		await mockCouchRoutes(page, { withRegistryShelter: true });
 		await injectSession(page, TEST_USER, authSession);
 		await page.goto('/onsite/people');
 
