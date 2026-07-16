@@ -67,16 +67,6 @@
 
 			<form onsubmit={handleSubmit} class="space-y-4">
 				<div class="space-y-2">
-					<Label for="master-data-type">หมวดหมู่ข้อมูล (Type)</Label>
-					<div
-						id="master-data-type"
-						class="rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-muted-foreground"
-					>
-						{MASTER_DATA_TYPE_LABELS[masterType]}
-					</div>
-				</div>
-
-				<div class="space-y-2">
 					<Label for="master-data-label">
 						Label (ชื่อแสดงผลภาษาไทย) <span class="text-destructive">*</span>
 					</Label>
