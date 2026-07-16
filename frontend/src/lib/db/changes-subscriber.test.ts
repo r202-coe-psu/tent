@@ -4,6 +4,7 @@ import { classifyChangesPollStatus, startChangesSubscriber } from './changes-sub
 const markNeedsReauth = vi.fn();
 const markConnected = vi.fn();
 const markDisconnected = vi.fn();
+const emit = vi.fn();
 
 vi.mock('$app/environment', () => ({ browser: true }));
 
@@ -25,7 +26,7 @@ vi.mock('./couch', () => ({
 }));
 
 vi.mock('./event-channel', () => ({
-	eventChannel: { emit: vi.fn() }
+	eventChannel: { emit: (...args: unknown[]) => emit(...args) }
 }));
 
 describe('classifyChangesPollStatus', () => {
@@ -94,6 +95,59 @@ describe('startChangesSubscriber auth hard-stop', () => {
 		const callsAfterHalt = fetchMock.mock.calls.length;
 		await vi.advanceTimersByTimeAsync(5_000);
 		expect(fetchMock.mock.calls.length).toBe(callsAfterHalt);
+
+		handle.stop();
+	});
+});
+
+describe('startChangesSubscriber deleted-doc handling', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		emit.mockReset();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.unstubAllGlobals();
+	});
+
+	it('derives docType from the _id prefix when a delete tombstone has no `type` field', async () => {
+		// CouchDB's deleted-doc tombstone is only { _id, _rev, _deleted } — no
+		// other fields survive — so docType must fall back to the "{type}:{rest}"
+		// _id convention instead of silently dropping the change.
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						results: [
+							{
+								seq: '5',
+								id: 'meal_plan:2026-12-16:lunch',
+								changes: [{ rev: '2-deleted' }],
+								deleted: true,
+								doc: { _id: 'meal_plan:2026-12-16:lunch', _rev: '2-deleted', _deleted: true }
+							}
+						],
+						last_seq: '5'
+					}),
+					{ status: 200 }
+				)
+			)
+			// Hang forever after the first poll so the subscriber's non-delaying
+			// success loop doesn't spin the mock unbounded times.
+			.mockImplementation(() => new Promise(() => {}));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const handle = startChangesSubscriber(['testdb']);
+		await vi.advanceTimersByTimeAsync(0);
+		await vi.waitFor(() => expect(emit).toHaveBeenCalledTimes(1));
+
+		expect(emit).toHaveBeenCalledWith({
+			db: 'testdb',
+			docType: 'meal_plan',
+			docId: 'meal_plan:2026-12-16:lunch'
+		});
 
 		handle.stop();
 	});
