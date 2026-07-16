@@ -8,13 +8,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin, isShelterManager, shelterCodeFromRoles } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
-	import {
-		Select,
-		SelectTrigger,
-		SelectContent,
-		SelectItem,
-		SelectValue
-	} from '$lib/components/ui/select';
+	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
 	import Building from '@lucide/svelte/icons/building';
 	import { ReauthDialog } from '$lib/features/login';
 
@@ -23,6 +17,10 @@
 
 	// Fetch shelters list dynamically
 	const sheltersQuery = useShelters();
+
+	function shelterLabel(code: string, name: string) {
+		return `${code} — ${name}`;
+	}
 
 	// Find the current page info (label, icon) dynamically
 	const currentPageNode = $derived.by(() => {
@@ -82,6 +80,15 @@
 		const ownShelter = shelters.find((s) => s.code === userShelterCode);
 		shelterStore.selectedShelterCode = ownShelter?.code ?? shelters[0].code;
 	});
+
+	const selectedShelter = $derived(
+		availableShelters.find((s) => s.code === shelterStore.selectedShelterCode)
+	);
+	const selectedShelterLabel = $derived(
+		selectedShelter
+			? shelterLabel(selectedShelter.code, selectedShelter.name)
+			: (shelterStore.selectedShelterCode ?? 'เลือกศูนย์อพยพ')
+	);
 </script>
 
 <div
@@ -106,7 +113,7 @@
 						<span class="hidden shrink-0 sm:inline">ศูนย์อพยพ:</span>
 						<Select type="single" bind:value={shelterStore.selectedShelterCode}>
 							<SelectTrigger class="h-9 w-[200px] md:w-[280px]">
-								<SelectValue placeholder="เลือกศูนย์อพยพ" />
+								<span class="truncate">{selectedShelterLabel}</span>
 							</SelectTrigger>
 							<SelectContent>
 								{#if sheltersQuery.isLoading}
@@ -115,7 +122,10 @@
 									<SelectItem value="" disabled label="ไม่มีศูนย์พักพิงที่เข้าถึงได้" />
 								{:else}
 									{#each availableShelters as shelter (shelter.code)}
-										<SelectItem value={shelter.code} label={shelter.name} />
+										<SelectItem
+											value={shelter.code}
+											label={shelterLabel(shelter.code, shelter.name)}
+										/>
 									{/each}
 								{/if}
 							</SelectContent>

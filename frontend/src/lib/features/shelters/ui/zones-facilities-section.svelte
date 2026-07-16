@@ -576,7 +576,7 @@
 				<Input
 					bind:value={newSubStorageName}
 					{disabled}
-					placeholder="ชื่อสถานที่จัดเก็บ (เช่น อาหารแห้ง (เสธียง))"
+					placeholder="ชื่อสถานที่จัดเก็บ (เช่น สนามปิงปอง: เก็บอาหารแห้ง)"
 					class="flex-1"
 				/>
 				<Input
