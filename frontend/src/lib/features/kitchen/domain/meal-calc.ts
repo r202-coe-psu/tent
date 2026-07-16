@@ -90,6 +90,19 @@ export const MEAL_MENUS: MealMenu[] = [
 
 export const DEFAULT_MENU_ID: MealMenuId = 'menu:rice-egg-vegetable';
 
+/** Reverse-maps a stored plan's recipes back to the menu preset that would have
+ * produced them (by which non-rice ids are present) — used to prefill the edit
+ * form. Falls back to the default menu when nothing matches. */
+export function menuIdFromRecipes(recipes: MealPlanRecipe[]): MealMenuId {
+	const ids = new Set(recipes.map((r) => r.recipe_id));
+	const hasEgg = ids.has(EGG_RECIPE_ID);
+	const hasVegetable = ids.has(VEGETABLE_RECIPE_ID);
+	const match = MEAL_MENUS.find(
+		(m) => m.includesEgg === hasEgg && m.includesVegetable === hasVegetable
+	);
+	return match?.id ?? DEFAULT_MENU_ID;
+}
+
 export interface MealCalcSource {
 	sop_profile_id: string;
 	sop_profile_version: number;

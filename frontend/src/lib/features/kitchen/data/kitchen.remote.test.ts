@@ -216,6 +216,61 @@ describe('KitchenRemoteRepository.confirmMealPlan — state transition', () => {
 	});
 });
 
+describe('KitchenRemoteRepository.updateMealPlanDraft / deleteMealPlanDraft (draft-only)', () => {
+	let repo: KitchenRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new KitchenRemoteRepository('shelter_sh001');
+	});
+
+	const draftInput = {
+		date: '2026-07-15',
+		meal: 'lunch' as const,
+		headcount: { total: 50, halal: 0, soft_food: 0, infant: 0 },
+		recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 7500 }]
+	};
+
+	it('patches headcount/recipes in place, keeping the same _id', async () => {
+		const draft = await repo.createMealPlan(draftInput, ctx);
+		const patched = await repo.updateMealPlanDraft(draft, {
+			headcount: { total: 80, halal: 0, soft_food: 0, infant: 0 },
+			recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 12000 }],
+			calc_source: draft.calc_source,
+			override_reason: null
+		});
+
+		expect(patched._id).toBe(draft._id);
+		expect(patched.headcount.total).toBe(80);
+		expect(patched.recipes).toEqual([{ recipe_id: 'ingredient:rice', planned_qty: 12000 }]);
+	});
+
+	it('rejects editing a non-draft plan', async () => {
+		const draft = await repo.createMealPlan(draftInput, ctx);
+		const confirmed = await repo.confirmMealPlan(draft);
+		await expect(
+			repo.updateMealPlanDraft(confirmed, {
+				headcount: draft.headcount,
+				recipes: draft.recipes,
+				calc_source: draft.calc_source,
+				override_reason: null
+			})
+		).rejects.toThrow(/only draft/i);
+	});
+
+	it('deletes a draft plan', async () => {
+		const draft = await repo.createMealPlan(draftInput, ctx);
+		await repo.deleteMealPlanDraft(draft);
+		expect(await memoryRepo.get(draft._id)).toBeNull();
+	});
+
+	it('rejects deleting a non-draft plan', async () => {
+		const draft = await repo.createMealPlan(draftInput, ctx);
+		const confirmed = await repo.confirmMealPlan(draft);
+		await expect(repo.deleteMealPlanDraft(confirmed)).rejects.toThrow(/only draft/i);
+	});
+});
+
 // Append-only creates are idempotent under the remote-first repository, not
 // throw-on-conflict: `putDoc` (couch-db.ts) swallows a create-time 409 and
 // returns the already-stored doc (see couch-db.test.ts — "putDoc treats 409 on

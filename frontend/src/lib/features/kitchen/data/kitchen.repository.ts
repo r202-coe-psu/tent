@@ -16,6 +16,13 @@ export interface KitchenRepository {
 	getMealPlan(date: string, meal: string): Promise<MealPlan | null>;
 	listMealPlans(): Promise<MealPlan[]>;
 	confirmMealPlan(plan: MealPlan): Promise<MealPlan>;
+	// Draft-only — a confirmed plan may already be requisitioned/serviced, so
+	// editing or deleting it would orphan those records' meal_plan_id reference.
+	updateMealPlanDraft(
+		plan: MealPlan,
+		patch: Pick<MealPlan, 'headcount' | 'recipes' | 'calc_source' | 'override_reason'>
+	): Promise<MealPlan>;
+	deleteMealPlanDraft(plan: MealPlan): Promise<void>;
 
 	// KitchenRequisition — append-only; writes stock_ledger entries atomically
 	issueRequisition(input: KitchenRequisitionInput, ctx: AuthorContext): Promise<KitchenRequisition>;

@@ -8,6 +8,8 @@
 	import FileText from '@lucide/svelte/icons/file-text';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+	import Pencil from '@lucide/svelte/icons/pencil';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import { resolve } from '$app/paths';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
@@ -20,6 +22,7 @@
 		useMealPlans,
 		useOccupancyHeadcount,
 		useConfirmMealPlan,
+		useDeleteMealPlanDraft,
 		useGasCylinderTypes,
 		useRequisitions,
 		useMealServices,
@@ -36,6 +39,7 @@
 	const plans = useMealPlans();
 	let createOpen = $state(false);
 	const confirm = useConfirmMealPlan();
+	const deletePlan = useDeleteMealPlanDraft();
 	const sopProfile = useActiveSopProfile();
 	const gasTypes = useGasCylinderTypes();
 	const occupancy = useOccupancyHeadcount();
@@ -95,15 +99,56 @@
 		reissueConfirmOpen = false;
 	}
 
+	// Edit/delete are draft-only (in-code guard in useDeleteMealPlanDraft /
+	// updateMealPlanDraft mirrors this — a confirmed plan may already be
+	// requisitioned/serviced, so changing or removing it would orphan those
+	// records' meal_plan_id reference).
+	let editOpen = $state(false);
+	let editPlan = $state<MealPlan | null>(null);
+
+	function openEdit(plan: MealPlan) {
+		editPlan = plan;
+		editOpen = true;
+	}
+
+	let deleteConfirmOpen = $state(false);
+	let pendingDeletePlan = $state<MealPlan | null>(null);
+
+	function openDeleteConfirm(plan: MealPlan) {
+		pendingDeletePlan = plan;
+		deleteConfirmOpen = true;
+	}
+
+	async function confirmDelete() {
+		if (!pendingDeletePlan) return;
+		const plan = pendingDeletePlan;
+		try {
+			await deletePlan.mutateAsync(plan);
+			toast.success(`ลบแผน ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
+		} finally {
+			pendingDeletePlan = null;
+			deleteConfirmOpen = false;
+		}
+	}
+
 	const today = new Date().toISOString().slice(0, 10);
 
 	const todayPlans = $derived((plans.data ?? []).filter((p) => p.date === today));
+
+	// Newest meal date first; same-date plans break ties by created_at (newest first).
+	const sortedPlans = $derived(
+		[...(plans.data ?? [])].sort(
+			(a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at)
+		)
+	);
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
 	const paginatedPlans = $derived.by(() => {
 		const start = (currentPage - 1) * PAGE_SIZE;
-		return (plans.data ?? []).slice(start, start + PAGE_SIZE);
+		return sortedPlans.slice(start, start + PAGE_SIZE);
 	});
 
 	const stats = $derived.by(() => {
@@ -335,14 +380,34 @@
 									</Table.Cell>
 									<Table.Cell class="px-6 text-center">
 										{#if plan.status === 'draft'}
-											<Button
-												size="sm"
-												variant="outline"
-												onclick={() => handleConfirm(plan)}
-												disabled={confirm.isPending}
-											>
-												ยืนยันแผน
-											</Button>
+											<div class="flex items-center justify-center gap-1.5">
+												<Button
+													size="sm"
+													variant="outline"
+													onclick={() => handleConfirm(plan)}
+													disabled={confirm.isPending}
+												>
+													ยืนยันแผน
+												</Button>
+												<Button
+													size="sm"
+													variant="outline"
+													title="แก้ไขแผน (draft)"
+													onclick={() => openEdit(plan)}
+												>
+													<Pencil class="h-3.5 w-3.5" />
+												</Button>
+												<Button
+													size="sm"
+													variant="outline"
+													title="ลบแผน (draft)"
+													class="text-destructive hover:text-destructive"
+													onclick={() => openDeleteConfirm(plan)}
+													disabled={deletePlan.isPending}
+												>
+													<Trash2 class="h-3.5 w-3.5" />
+												</Button>
+											</div>
 										{:else}
 											<div class="flex flex-col items-center gap-1">
 												<div class="flex items-center gap-1.5">
@@ -402,6 +467,7 @@
 </div>
 
 <MealPlanForm bind:open={createOpen} />
+<MealPlanForm bind:open={editOpen} plan={editPlan} />
 <RequisitionDialog bind:open={reqOpen} plan={reqPlan} />
 <MealServiceForm bind:open={serviceOpen} plan={servicePlan} />
 
@@ -417,6 +483,29 @@
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel onclick={() => (pendingReissuePlan = null)}>ยกเลิก</AlertDialog.Cancel>
 			<AlertDialog.Action onclick={confirmReissue}>ยืนยันเบิกเพิ่ม</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
+
+<AlertDialog.Root bind:open={deleteConfirmOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>ลบแผนอาหารนี้?</AlertDialog.Title>
+			<AlertDialog.Description>
+				{#if pendingDeletePlan}
+					ลบแผน {MEAL_PERIOD_LABELS[pendingDeletePlan.meal]} วันที่ {pendingDeletePlan.date}
+					(draft) — ยังไม่เบิกวัตถุดิบหรือบันทึกบริการ ลบได้โดยไม่กระทบสต็อก แต่กู้คืนไม่ได้
+				{/if}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel onclick={() => (pendingDeletePlan = null)}>ยกเลิก</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="bg-destructive text-white hover:bg-destructive/90"
+				onclick={confirmDelete}
+			>
+				ลบแผน
+			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>

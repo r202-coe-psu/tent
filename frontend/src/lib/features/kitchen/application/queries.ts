@@ -111,6 +111,45 @@ export const useConfirmMealPlan = () =>
 		mutationFn: (plan: MealPlan) => kitchenRepository().confirmMealPlan(plan)
 	}));
 
+// Draft-only edit — recomputes recipes the same way useCreateMealPlanCalc does,
+// then patches the existing doc in place (date/meal/_id stay fixed).
+export const useUpdateMealPlanCalc = () =>
+	createMutation(() => ({
+		mutationFn: async ({
+			plan,
+			headcount,
+			override_reason,
+			menuId
+		}: {
+			plan: MealPlan;
+			headcount: MealPlanHeadcount;
+			override_reason?: string | null;
+			menuId?: MealMenuId;
+		}) => {
+			const profile = await getActiveSopProfile();
+			if (!profile) throw new Error('No active SOP profile found — seed one first');
+			const { recipes, calc_source } = calculateMealIngredients(
+				headcount,
+				DEFAULT_RICE_G_PER_PERSON_MEAL,
+				profile._id,
+				profile.version,
+				new Date().toISOString(),
+				menuId ?? DEFAULT_MENU_ID
+			);
+			return kitchenRepository().updateMealPlanDraft(plan, {
+				headcount,
+				recipes,
+				calc_source,
+				override_reason
+			});
+		}
+	}));
+
+export const useDeleteMealPlanDraft = () =>
+	createMutation(() => ({
+		mutationFn: (plan: MealPlan) => kitchenRepository().deleteMealPlanDraft(plan)
+	}));
+
 // --- KitchenRequisition ---
 
 export const useRequisitions = () =>

@@ -3,6 +3,7 @@ import {
 	calculateMealIngredients,
 	toRequisitionInput,
 	assessRequisition,
+	menuIdFromRecipes,
 	RICE_RECIPE_ID,
 	EGG_RECIPE_ID,
 	VEGETABLE_RECIPE_ID,
@@ -254,5 +255,43 @@ describe('toRequisitionInput → assessRequisition — kg end-to-end (CR-030)', 
 		expect(a.on_hand).toBe('200');
 		expect(a.status).toBe('ok');
 		expect(a.qty_issuable).toBe('15');
+	});
+});
+
+describe('menuIdFromRecipes — reverse-map a stored plan to its menu preset', () => {
+	it('identifies rice-only as rice-egg-vegetable minus both (falls back to default when no match)', () => {
+		// A plan with rice only doesn't match any of the 3 presets exactly (all of
+		// them add at least one non-rice ingredient) — falls back to the default.
+		expect(menuIdFromRecipes([{ recipe_id: RICE_RECIPE_ID, planned_qty: 15000 }])).toBe(
+			'menu:rice-egg-vegetable'
+		);
+	});
+
+	it('identifies rice + egg as menu:rice-egg', () => {
+		expect(
+			menuIdFromRecipes([
+				{ recipe_id: RICE_RECIPE_ID, planned_qty: 15000 },
+				{ recipe_id: EGG_RECIPE_ID, planned_qty: 200 }
+			])
+		).toBe('menu:rice-egg');
+	});
+
+	it('identifies rice + vegetable as menu:congee-vegetable', () => {
+		expect(
+			menuIdFromRecipes([
+				{ recipe_id: RICE_RECIPE_ID, planned_qty: 15000 },
+				{ recipe_id: VEGETABLE_RECIPE_ID, planned_qty: 10000 }
+			])
+		).toBe('menu:congee-vegetable');
+	});
+
+	it('identifies rice + egg + vegetable as menu:rice-egg-vegetable', () => {
+		expect(
+			menuIdFromRecipes([
+				{ recipe_id: RICE_RECIPE_ID, planned_qty: 15000 },
+				{ recipe_id: EGG_RECIPE_ID, planned_qty: 200 },
+				{ recipe_id: VEGETABLE_RECIPE_ID, planned_qty: 10000 }
+			])
+		).toBe('menu:rice-egg-vegetable');
 	});
 });

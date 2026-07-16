@@ -112,6 +112,23 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.put({ ...touch(plan), status: 'confirmed' });
 	}
 
+	async updateMealPlanDraft(
+		plan: MealPlan,
+		patch: Pick<MealPlan, 'headcount' | 'recipes' | 'calc_source' | 'override_reason'>
+	): Promise<MealPlan> {
+		if (plan.status !== 'draft') {
+			throw new Error('updateMealPlanDraft: only draft plans can be edited');
+		}
+		return this.repo.put({ ...touch(plan), ...patch });
+	}
+
+	async deleteMealPlanDraft(plan: MealPlan): Promise<void> {
+		if (plan.status !== 'draft') {
+			throw new Error('deleteMealPlanDraft: only draft plans can be deleted');
+		}
+		await this.repo.remove(plan);
+	}
+
 	createGasCylinderType(input: GasCylinderTypeInput, ctx: AuthorContext): Promise<GasCylinderType> {
 		return this.repo.put(createGasCylinderType(input, ctx));
 	}

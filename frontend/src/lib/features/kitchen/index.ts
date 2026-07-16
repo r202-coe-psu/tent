@@ -21,7 +21,8 @@ export {
 	DEFAULT_EGG_PER_PERSON_MEAL,
 	DEFAULT_VEGETABLE_G_PER_PERSON_MEAL,
 	MEAL_MENUS,
-	DEFAULT_MENU_ID
+	DEFAULT_MENU_ID,
+	menuIdFromRecipes
 } from './domain/meal-calc';
 export type {
 	MealCalcSource,
@@ -88,6 +89,8 @@ export {
 	useCreateMealPlan,
 	useCreateMealPlanCalc,
 	useConfirmMealPlan,
+	useUpdateMealPlanCalc,
+	useDeleteMealPlanDraft,
 	useRequisitions,
 	useIssueRequisition,
 	useMealServices,

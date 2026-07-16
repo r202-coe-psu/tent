@@ -10,8 +10,10 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import {
 		useCreateMealPlanCalc,
+		useUpdateMealPlanCalc,
 		useOccupancyHeadcount,
 		calculateMealIngredients,
+		menuIdFromRecipes,
 		DEFAULT_RICE_G_PER_PERSON_MEAL,
 		RECIPE_LABELS,
 		MEAL_PERIOD_LABELS,
@@ -19,12 +21,17 @@
 		DEFAULT_MENU_ID,
 		MealPlanAlreadyExistsError,
 		type MealPeriod,
+		type MealPlan,
 		type MealPlanHeadcount,
 		type MealMenuId
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
 
-	let { open = $bindable(false) }: { open: boolean } = $props();
+	// `plan` present ⇒ edit an existing draft in place (date/meal/_id stay fixed,
+	// since meal_plan:{date}:{meal} is deterministic); absent ⇒ create a new one.
+	let { open = $bindable(false), plan = null }: { open: boolean; plan?: MealPlan | null } =
+		$props();
+	const isEdit = $derived(plan !== null);
 
 	let date = $state(new Date().toISOString().slice(0, 10));
 	let meal = $state<MealPeriod>('lunch');
@@ -38,10 +45,13 @@
 	const sopProfile = useActiveSopProfile();
 	const occupancy = useOccupancyHeadcount();
 	const createCalc = useCreateMealPlanCalc();
+	const updateCalc = useUpdateMealPlanCalc();
 
-	// Auto-fill headcount from live occupancy once per open (T-06 source). After
-	// that the fields are the user's to edit; the "ใช้ยอดล่าสุด" button re-syncs.
+	// Auto-fill headcount from live occupancy once per open (T-06 source, create
+	// mode only). After that the fields are the user's to edit; the "ใช้ยอดล่าสุด"
+	// button re-syncs. Edit mode prefills from the plan being edited instead.
 	let applied = $state(false);
+	let editedPlanId = $state<string | null>(null);
 
 	function fillFromOccupancy(h: MealPlanHeadcount) {
 		total = h.total;
@@ -53,6 +63,18 @@
 	$effect(() => {
 		if (!open) {
 			applied = false;
+			editedPlanId = null;
+			return;
+		}
+		if (plan) {
+			if (editedPlanId !== plan._id) {
+				date = plan.date;
+				meal = plan.meal;
+				menuId = menuIdFromRecipes(plan.recipes);
+				fillFromOccupancy(plan.headcount);
+				overrideReason = plan.override_reason ?? '';
+				editedPlanId = plan._id;
+			}
 			return;
 		}
 		if (!applied && occupancy.data) {
@@ -110,21 +132,31 @@
 		e.preventDefault();
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
-			await createCalc.mutateAsync({
-				date,
-				meal,
-				headcount,
-				override_reason: isOverridden ? overrideReason.trim() : null,
-				menuId,
-				ctx
-			});
-			toast.success(`สร้างแผน ${MEAL_PERIOD_LABELS[meal]} วันที่ ${date} แล้ว`);
+			if (plan) {
+				await updateCalc.mutateAsync({
+					plan,
+					headcount,
+					override_reason: isOverridden ? overrideReason.trim() : null,
+					menuId
+				});
+				toast.success(`แก้ไขแผน ${MEAL_PERIOD_LABELS[meal]} วันที่ ${date} แล้ว`);
+			} else {
+				await createCalc.mutateAsync({
+					date,
+					meal,
+					headcount,
+					override_reason: isOverridden ? overrideReason.trim() : null,
+					menuId,
+					ctx
+				});
+				toast.success(`สร้างแผน ${MEAL_PERIOD_LABELS[meal]} วันที่ ${date} แล้ว`);
+			}
 			open = false;
 			overrideReason = '';
 		} catch (err) {
 			if (
-				err instanceof MealPlanAlreadyExistsError ||
-				(err as { status?: number })?.status === 409
+				!plan &&
+				(err instanceof MealPlanAlreadyExistsError || (err as { status?: number })?.status === 409)
 			) {
 				toast.error(`มีแผน ${MEAL_PERIOD_LABELS[meal]} ของวันที่ ${date} อยู่แล้ว`);
 			} else {
@@ -137,7 +169,7 @@
 <Dialog.Root bind:open>
 	<Dialog.Content class="max-w-lg">
 		<Dialog.Header>
-			<Dialog.Title>สร้างแผนอาหาร</Dialog.Title>
+			<Dialog.Title>{isEdit ? 'แก้ไขแผนอาหาร (draft)' : 'สร้างแผนอาหาร'}</Dialog.Title>
 			<Dialog.Description
 				>คำนวณรายการวัตถุดิบอัตโนมัติจากยอดผู้พักพิงจริง × SOP ratio</Dialog.Description
 			>
@@ -147,14 +179,15 @@
 			<div class="grid grid-cols-2 gap-4">
 				<div class="space-y-1.5">
 					<Label for="mp-date">วันที่</Label>
-					<Input id="mp-date" type="date" bind:value={date} required />
+					<Input id="mp-date" type="date" bind:value={date} required disabled={isEdit} />
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-meal">มื้ออาหาร</Label>
 					<select
 						id="mp-meal"
 						bind:value={meal}
-						class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+						disabled={isEdit}
+						class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none disabled:opacity-50"
 					>
 						{#each Object.entries(MEAL_PERIOD_LABELS) as [value, label] (value)}
 							<option {value}>{label}</option>
@@ -272,12 +305,17 @@
 				<Button
 					type="submit"
 					disabled={createCalc.isPending ||
+						updateCalc.isPending ||
 						total <= 0 ||
 						!sopProfile.data ||
 						!subCountsValid ||
 						!overrideReasonValid}
 				>
-					{createCalc.isPending ? 'กำลังบันทึก...' : 'สร้างแผน (draft)'}
+					{#if isEdit}
+						{updateCalc.isPending ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
+					{:else}
+						{createCalc.isPending ? 'กำลังบันทึก...' : 'สร้างแผน (draft)'}
+					{/if}
 				</Button>
 			</Dialog.Footer>
 		</form>
