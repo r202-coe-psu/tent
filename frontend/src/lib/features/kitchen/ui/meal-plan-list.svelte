@@ -11,6 +11,7 @@
 	import { resolve } from '$app/paths';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -69,17 +70,27 @@
 	// a prior partial issue once stock arrives) — so the button stays enabled,
 	// but a double-click / forgotten-already-issued mistake must not silently
 	// deduct stock twice (append-only ledger has no uniqueness on meal_plan_id).
+	// Confirmation runs through AlertDialog below, not window.confirm.
+	let reissueConfirmOpen = $state(false);
+	let pendingReissuePlan = $state<MealPlan | null>(null);
+
 	function openRequisition(plan: MealPlan) {
-		if (
-			requisitionedPlanIds.has(plan._id) &&
-			!window.confirm(
-				`แผนนี้เบิกวัตถุดิบไปแล้ว ต้องการเบิกซ้ำ/เบิกเพิ่มหรือไม่?\n\nยืนยันเฉพาะกรณีเบิกเพิ่มเติม (เช่น ของครั้งก่อนไม่พอ) — หากกดผิด การเบิกซ้ำจะตัดสต็อกซ้ำ`
-			)
-		) {
+		if (requisitionedPlanIds.has(plan._id)) {
+			pendingReissuePlan = plan;
+			reissueConfirmOpen = true;
 			return;
 		}
 		reqPlan = plan;
 		reqOpen = true;
+	}
+
+	function confirmReissue() {
+		if (pendingReissuePlan) {
+			reqPlan = pendingReissuePlan;
+			reqOpen = true;
+		}
+		pendingReissuePlan = null;
+		reissueConfirmOpen = false;
 	}
 
 	const today = new Date().toISOString().slice(0, 10);
@@ -354,3 +365,19 @@
 <MealPlanForm bind:open={createOpen} />
 <RequisitionDialog bind:open={reqOpen} plan={reqPlan} />
 <MealServiceForm bind:open={serviceOpen} plan={servicePlan} />
+
+<AlertDialog.Root bind:open={reissueConfirmOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>แผนนี้เบิกวัตถุดิบไปแล้ว</AlertDialog.Title>
+			<AlertDialog.Description>
+				ต้องการเบิกซ้ำ/เบิกเพิ่มหรือไม่? ยืนยันเฉพาะกรณีเบิกเพิ่มเติม (เช่น ของครั้งก่อนไม่พอ) —
+				หากกดผิด การเบิกซ้ำจะตัดสต็อกซ้ำ
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel onclick={() => (pendingReissuePlan = null)}>ยกเลิก</AlertDialog.Cancel>
+			<AlertDialog.Action onclick={confirmReissue}>ยืนยันเบิกเพิ่ม</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
