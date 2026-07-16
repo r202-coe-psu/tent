@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
+	import * as Pagination from '$lib/components/ui/pagination';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import { useRequisitions, type KitchenRequisition } from '$lib/features/kitchen';
 	import { qtyGte } from '$lib/utils/qty';
@@ -11,6 +12,13 @@
 	const rows = $derived(
 		[...(requisitions.data ?? [])].sort((a, b) => b.issued_at.localeCompare(a.issued_at))
 	);
+
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+	const paginatedRows = $derived.by(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return rows.slice(start, start + PAGE_SIZE);
+	});
 
 	// A requisition is complete when every line issued the full requested qty;
 	// otherwise stock was short and it was a partial withdrawal (schema.md §2.6).
@@ -66,7 +74,7 @@
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
-						{#each rows as req (req._id)}
+						{#each paginatedRows as req (req._id)}
 							<Table.Row>
 								<Table.Cell class="px-6 text-xs text-muted-foreground">
 									{formatTime(req.issued_at)}
@@ -112,6 +120,27 @@
 					</Table.Body>
 				</Table.Root>
 			</div>
+			{#if rows.length > PAGE_SIZE}
+				<div class="flex justify-end p-4">
+					<Pagination.Root bind:page={currentPage} count={rows.length} perPage={PAGE_SIZE}>
+						{#snippet children({ pages })}
+							<Pagination.Content>
+								<Pagination.Previous />
+								{#each pages as p, i (i)}
+									<Pagination.Item>
+										{#if p.type === 'page'}
+											<Pagination.Link page={p} isActive={p.value === currentPage} />
+										{:else}
+											<Pagination.Ellipsis />
+										{/if}
+									</Pagination.Item>
+								{/each}
+								<Pagination.Next />
+							</Pagination.Content>
+						{/snippet}
+					</Pagination.Root>
+				</div>
+			{/if}
 		{/if}
 	</Card.Content>
 </Card.Root>

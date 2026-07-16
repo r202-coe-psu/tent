@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
+	import * as Pagination from '$lib/components/ui/pagination';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import {
 		useMealServices,
@@ -52,6 +53,13 @@
 	function signed(n: number): string {
 		return `${n >= 0 ? '+' : ''}${n.toLocaleString()}`;
 	}
+
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+	const paginatedRows = $derived.by(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return rows.slice(start, start + PAGE_SIZE);
+	});
 </script>
 
 <Card.Root class="border-0 shadow-sm">
@@ -90,7 +98,7 @@
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
-						{#each rows as { svc, v } (svc._id)}
+						{#each paginatedRows as { svc, v } (svc._id)}
 							<Table.Row>
 								<Table.Cell class="px-6">
 									<p class="text-sm font-medium">{MEAL_PERIOD_LABELS[svc.meal]}</p>
@@ -144,6 +152,27 @@
 					</Table.Body>
 				</Table.Root>
 			</div>
+			{#if rows.length > PAGE_SIZE}
+				<div class="flex justify-end p-4">
+					<Pagination.Root bind:page={currentPage} count={rows.length} perPage={PAGE_SIZE}>
+						{#snippet children({ pages })}
+							<Pagination.Content>
+								<Pagination.Previous />
+								{#each pages as p, i (i)}
+									<Pagination.Item>
+										{#if p.type === 'page'}
+											<Pagination.Link page={p} isActive={p.value === currentPage} />
+										{:else}
+											<Pagination.Ellipsis />
+										{/if}
+									</Pagination.Item>
+								{/each}
+								<Pagination.Next />
+							</Pagination.Content>
+						{/snippet}
+					</Pagination.Root>
+				</div>
+			{/if}
 		{/if}
 	</Card.Content>
 </Card.Root>

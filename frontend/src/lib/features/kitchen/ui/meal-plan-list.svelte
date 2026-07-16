@@ -12,6 +12,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import * as Pagination from '$lib/components/ui/pagination';
 	import { Button } from '$lib/components/ui/button';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -96,6 +97,13 @@
 	const today = new Date().toISOString().slice(0, 10);
 
 	const todayPlans = $derived((plans.data ?? []).filter((p) => p.date === today));
+
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+	const paginatedPlans = $derived.by(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return (plans.data ?? []).slice(start, start + PAGE_SIZE);
+	});
 
 	const stats = $derived.by(() => {
 		const all = plans.data ?? [];
@@ -269,7 +277,7 @@
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
-							{#each plans.data as plan (plan._id)}
+							{#each paginatedPlans as plan (plan._id)}
 								<Table.Row>
 									<Table.Cell class="px-6 font-mono text-xs">
 										<p class="font-semibold text-foreground">{formatId(plan._id)}</p>
@@ -357,6 +365,31 @@
 						</Table.Body>
 					</Table.Root>
 				</div>
+				{#if (plans.data?.length ?? 0) > PAGE_SIZE}
+					<div class="flex justify-end p-4">
+						<Pagination.Root
+							bind:page={currentPage}
+							count={plans.data?.length ?? 0}
+							perPage={PAGE_SIZE}
+						>
+							{#snippet children({ pages })}
+								<Pagination.Content>
+									<Pagination.Previous />
+									{#each pages as p, i (i)}
+										<Pagination.Item>
+											{#if p.type === 'page'}
+												<Pagination.Link page={p} isActive={p.value === currentPage} />
+											{:else}
+												<Pagination.Ellipsis />
+											{/if}
+										</Pagination.Item>
+									{/each}
+									<Pagination.Next />
+								</Pagination.Content>
+							{/snippet}
+						</Pagination.Root>
+					</div>
+				{/if}
 			{/if}
 		</Card.Content>
 	</Card.Root>
