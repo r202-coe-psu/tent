@@ -2,7 +2,7 @@
 title: "Task Breakdown — Baseline (FR-1–20)"
 status: active
 created: 2026-06-11
-updated: 2026-07-15
+updated: 2026-07-16
 module: baseline
 note: decision-synced 2026-07-15 — T-54 realigned to CR-033 remote-first (deny PouchDB / local-first / offline draft queue); planning source = Markdown
 ---
@@ -28,16 +28,21 @@ note: decision-synced 2026-07-15 — T-54 realigned to CR-033 remote-first (deny
 
 | ID   | Status           | Feature / Task                                                                                                  | FR        | Stage | Scope    | Raw MD | AI×    | Adj MD | Depends   |
 | ---- | ---------------- | --------------------------------------------------------------------------------------------------------------- | --------- | ----- | -------- | ------ | ------ | ------ | --------- |
-| T-47 | 🔄               | Shelter master + config + seed data                                                                             | FR-2..3   | prod  | in-scope | 3      | ÷1.6   | 2      | T-02      |
-| T-48 | ⬜               | Person registration (required `first_name`+`last_name`+`gender`+`phone`; phone เป็น `null` ได้เมื่อไม่มี) + แก้ไขข้อมูล | FR-4..5   | prod  | in-scope | 6      | ÷1.6   | 4      | T-01,T-02 |
-| T-49 | ⬜               | Screening: vulnerability flags / medical notes / fast-track ตาม role                                            | FR-6..8   | prod  | in-scope | 6      | ÷1.6   | 4      | T-48      |
-| T-50 | ⬜               | Person Shelter ID/QR generation (payload ไม่มี PII/health)                                                      | FR-9      | prod  | in-scope | 4      | ÷1.6   | 2.5    | T-48      |
-| T-51 | ⬜               | Search + QR scan check-in/out + movement history + occupancy guardrail (warning-only)                           | FR-10..13 | prod  | in-scope | 7      | ÷1.6   | 4.5    | T-50      |
-| T-52 | ⬜               | Dashboard v1 (occupancy, capacity, vulnerable/fast-track count, in/out today, last-updated)                     | FR-14     | prod  | in-scope | 6      | ÷1.6   | 4      | T-51      |
-| T-53 | ⬜               | Export ตาม shelter/date/role + audit log + masking ตาม role                                                     | FR-15..16 | prod  | in-scope | 5      | ÷1.25  | 4      | T-48      |
-| T-54 | 🔄               | Remote-first write path + Central-first + LAN Edge fallback/conflict (registration/screening) — **deny PouchDB / local-only / offline draft queue** | FR-17..18 | prod  | in-scope | 10     | ÷1.25  | 8      | T-02,T-48 |
-| T-55 | ⬜               | Manual/Excel fallback + assisted import                                                                         | FR-19..20 | prod  | in-scope | 5      | ÷1.25  | 4      | T-48      |
-|      | **รวมทั้งโมดูล** |                                                                                                                 |           |       | **52**   |        | **37** |        |
+| T-47 | 🔄 | Shelter master + config + seed data | FR-2..3 | prod | in-scope | 3 | ÷1.6 | 2 | T-02 |
+| T-48 | 🔄 | Person registration (required `first_name`+`last_name`+`gender`+`phone`; phone เป็น `null` ได้เมื่อไม่มี) + แก้ไขข้อมูล | FR-4..5 | prod | in-scope | 6 | ÷1.6 | 4 | T-01,T-02 |
+| T-49 | 🔄 | Screening: vulnerability flags / medical notes / fast-track ตาม role | FR-6..8 | prod | in-scope | 6 | ÷1.6 | 4 | T-48 |
+| T-50 | 🔄 | Person Shelter ID/QR generation (payload ไม่มี PII/health) | FR-9 | prod | in-scope | 4 | ÷1.6 | 2.5 | T-48 |
+| T-51 | 🔄 | Search + QR scan check-in/out + movement history + occupancy guardrail (warning-only) | FR-10..13 | prod | in-scope | 7 | ÷1.6 | 4.5 | T-50 |
+| T-52 | 🔄 | Dashboard v1 (occupancy, capacity, vulnerable/fast-track count, in/out today, last-updated) | FR-14 | prod | in-scope | 6 | ÷1.6 | 4 | T-51 |
+| T-53 | ⬜ | Export ตาม shelter/date/role + audit log + masking ตาม role | FR-15..16 | prod | in-scope | 5 | ÷1.25 | 4 | T-48 |
+| T-54 | 🔄 | Remote-first write path + Central-first + LAN Edge fallback/conflict (registration/screening) — **deny PouchDB / local-only / offline draft queue** | FR-17..18 | prod | in-scope | 10 | ÷1.25 | 8 | T-02,T-48 |
+| T-55 | ⬜ | Manual/Excel fallback + assisted import | FR-19..20 | prod | in-scope | 5 | ÷1.25 | 4 | T-48 |
+| T-61 | 🔄 | T-61 — Master config ข้อมูลบุคคลและการลงทะเบียน (Demographic & Registration) | - | prod | in-scope | - | - | - | - |
+| T-62 | 🔄 | T-62 — Back Office User Management | - | prod | in-scope | - | - | - | - |
+| T-63 | 🔄 | T-63 — Master config Shelter  && Household field | - | prod | in-scope | - | - | - | - |
+| T-64 | 🔄 | T-64 — Export shelter data excel | - | prod | in-scope | - | - | - | - |
+| T-65 | 🔄 | T-65 — Thailand master data config data | - | prod | in-scope | - | - | - | - |
+|  | **รวมทั้งโมดูล** |  |  |  | **52** |  | **37** |  |
 
 > FR mapping accepted for planning จาก kickoff §2 / `docs/features/`; estimate ทั้งชุดใช้เป็น baseline planning แล้ว recalibrate หลัง sprint แรก (K-16). **T-54 scope เคาะใหม่ตาม [CR-033](../changes/CR-033-remote-first-architecture-program-index.md) (2026-07-07/15).**
 
@@ -69,6 +74,35 @@ note: decision-synced 2026-07-15 — T-54 realigned to CR-033 remote-first (deny
 - T-48 registration minimum ต้องตรง [Database Schema](../data/schema.md): `first_name`, `last_name`, `gender`, `phone`; phone เป็น required UI field แต่เลือก/กรอก "ไม่มี" แล้วเก็บ `null`
 - T-48/T-49/T-51 คือเส้นหลักของ flow หน้างาน (register → screen → check-in) — เป็น vertical slice ที่ทีม copy pattern จาก walking skeleton
 - T-52/T-53 ปิดท้าย เพราะต้องมี movement/audit data จริงให้แสดง/ตรวจ
+
+
+### T-61 — Master config ข้อมูลบุคคลและการลงทะเบียน (Demographic & Registration)
+
+**Status:** Ready for Testing / QA Ready
+
+### T-62 — Back Office User Management
+
+**Status:** Ready for Testing / QA Ready
+
+### T-63 — Master config Shelter && Household field
+
+**Status:** Ready for Testing / QA Ready
+
+**Definition of Done:**
+- [ ] เปิด `/back-office/shelter-config` → เห็น card + default seed items ของ shelter_type
+- [ ] คลิก card → เพิ่ม/แก้ไข/ลบ item ได้ผ่าน modal เดิม
+- [ ] เปิด `/back-office/household-master-data` → เห็น municipality_zone + community cards เท่านั้น
+- [ ] แก้ label ของ zone item ใน household-master-data → reload household form → dropdown แสดง label ใหม่
+- [ ] เลือก zone → community dropdown กรองเฉพาะ community ที่มี `parent_code` ตรงกัน
+- [ ] ปิด network (offline) → household form แสดง loading/empty state ไม่ throw
+
+### T-64 — Export shelter data excel
+
+**Status:** Ready for Testing / QA Ready
+
+### T-65 — Thailand master data config data
+
+**Status:** Ready for Testing / QA Ready
 
 ## Effort by phase (Adj MD)
 

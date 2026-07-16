@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-15 # Package 9 sync (CR-033/034/035/036); CR-040, CR-041, CR-042 proposed
+updated: 2026-07-16 # CR-043 Notion task status and T-61..T-65 sync
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -60,3 +60,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-040](CR-040-shelter-case-grievance-reframe.md) | Module E reframe → `shelter_report_case` (ร้องเรียน/ร้องทุกข์ + ติดตามเคส); SM mutate + scalable allow-list; escalate atomic; sort by severity; ตัด occupancy monitoring | proposed | volatile | 2026-07-15 | FR-47, 08-E T-19/T-33, schema.md §2.10, sitemap `/cases`, features/shelter-case-grievance-flow.md, role-permission-matrix wording |
 | [CR-041](CR-041-module-a-volunteer-job-board.md) | Module A expand — Volunteer Job Board + กะตั้งค่าได้ + D-AFFIL (อาสา vs staff ประจำ); SM owns job ops; open: D-TIER/D-DUTY-ACCESS/D-SHIFT/… | proposed | volatile | 2026-07-15 | FR-42/43, 06-A T-28/T-29, schema job/job_application + shift_assignment, features/volunteer-job-board-flow.md, affiliation_tags UI (CR-002), CR-005 ถ้าเปิด public |
 | [CR-042](CR-042-daily-sop-calc-follow-up.md) | Daily SOP follow-up — ปิด CR-036 open decisions (ratio_source, have-mapping) + OD-3 scheduled run + OD-4 downstream feed; คู่ feature flow Module B | proposed | volatile | 2026-07-15 | features/daily-sop-resource-calc-flow.md, CR-036 OD#1/#2, schema.md §2.15 (ถ้า OD-1 bump), 07-B T-31/T-32, resource-calc + sop-ratios |
+| [CR-043](CR-043-notion-tasks-sync.md) | Notion Projects Tasks — July 16 sync checklist (T-48..T-52 status alignment, add T-61..T-65 config tasks) | done | stable | 2026-07-16 | docs/task-breakdown/ |

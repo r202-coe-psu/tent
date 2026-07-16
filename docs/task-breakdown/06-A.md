@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module A — Volunteer"
 status: active
 created: 2026-06-05
-updated: 2026-06-18
+updated: 2026-07-16
 module: A
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---
@@ -20,11 +20,11 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ## Features / Tasks
 
-| ID | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-28 | Volunteer registration + skills + availability | FR-42 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-18 |
-| T-29 | Skill match + task/shift assignment | FR-43 | R3 | prod | ส.ค. | 6 | ÷1.4 | 4.5 | T-28 |
-| | **รวมทั้งโมดูล** | | | | | **11** | | **7.5** | |
+| ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-28 | ⬜ | Volunteer registration + skills + availability | FR-42 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-18 |
+| T-29 | ⬜ | Skill match + task/shift assignment | FR-43 | R3 | prod | ส.ค. | 6 | ÷1.4 | 4.5 | T-28 |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **11** |  | **7.5** |  |
 
 ## Task Details
 

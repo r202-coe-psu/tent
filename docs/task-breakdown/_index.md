@@ -2,7 +2,7 @@
 title: "Task Breakdown by Module — Index"
 status: active
 created: 2026-06-05
-updated: 2026-07-15
+updated: 2026-07-16
 note: decision-synced 2026-07-15 — CR-033 remote-first; Markdown task-breakdown = planning source; technical source = docs/data/schema.md + data-model.md + api-contract.md
 ---
 
@@ -66,7 +66,7 @@ Planning source ปัจจุบัน = Markdown ใน `docs/task-breakdown/
 
 | #   | Module                                    | Tasks | Adj MD  | Phase      | Target                 |
 | --- | ----------------------------------------- | ----- | ------- | ---------- | ---------------------- |
-| 0   | [Baseline (FR-1–20)](00-baseline.md)      | 9     | 37      | Foundation | ก.ค. (Foundation Gate) |
+| 0   | [Baseline (FR-1–20)](00-baseline.md)      | 14    | 37      | Foundation | ก.ค. (Foundation Gate) |
 | 1   | [Platform/Core](01-core.md)               | 12    | 78      | R2, R3, R4 | ส.ค.                   |
 | 2   | [Household & Zoning](02-people.md)        | 6     | 18.5    | R2         | ส.ค.                   |
 | 3   | [Module C — Supply & Inventory](03-C.md)  | 6     | 19.5    | R2, R4     | ส.ค. + deferred tail   |

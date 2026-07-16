@@ -2,7 +2,7 @@
 title: "Task Breakdown — Public Portal (PUB tier)"
 status: active
 created: 2026-06-22
-updated: 2026-06-22
+updated: 2026-07-16
 module: public
 note: เพิ่มตาม CR-005 (2026-06-22) — public/no-login portal surface (landing + /shelters + FAQ) ที่ task-breakdown เดิมยังไม่มี module รองรับ
 ---
@@ -22,12 +22,12 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 
 ## Features / Tasks
 
-| ID | Feature / Task | Ref | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-57 | Public Portal landing + real-time metrics panel | CR-005 §A/B/C | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-52,T-35,T-01 |
-| T-58 | Public Shelter Dashboard (`/shelters`) — cards + map + filter | CR-005 §D | R3 | prod | ส.ค. | 7 | ÷1.4 | 5 | T-57,T-47 |
-| T-59 | Public FAQ (dynamic) + EOC FAQ setup screen | CR-005 OP-1 | R3 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-03 |
-| | **รวมทั้งโมดูล** | | | | | **17** | | **11.5** | |
+| ID | Status | Feature / Task | Ref | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-57 | 🔄 | Public Portal landing + real-time metrics panel | CR-005 §A/B/C | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-52,T-35,T-01 |
+| T-58 | 🔄 | Public Shelter Dashboard (`/shelters`) — cards + map + filter | CR-005 §D | R3 | prod | ส.ค. | 7 | ÷1.4 | 5 | T-57,T-47 |
+| T-59 | 🔄 | Public FAQ (dynamic) + EOC FAQ setup screen | CR-005 OP-1 | R3 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-03 |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **17** |  | **11.5** |  |
 
 ## Task Details
 
