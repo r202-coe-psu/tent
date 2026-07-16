@@ -41,23 +41,16 @@ const TEST_USER = {
 // TEST_USER's `shelter:SH001` role resolves to this CouchDB database (db/shelter.ts).
 const SHELTER_DB = 'shelter_sh001';
 
-// ─── Random test data ──────────────────────────────────────────────────────────
-// Small pools of plausible Thai values — randomized per run so the flow isn't
-// tied to one fixed name/address, while staying readable in failure output.
+// ─── Deterministic fixtures (stable failure output across runs) ────────────────
 
-const FIRST_NAMES = ['สมชาย', 'สมหญิง', 'วิชัย', 'มาลี', 'ประยุทธ์'] as const;
-const LAST_NAMES = ['ใจดี', 'รักไทย', 'สุขสันต์', 'แสงทอง', 'ศรีสุข'] as const;
-const SUBDISTRICTS = ['บ้านพรุ', 'คอหงส์', 'ควนลัง', 'ท่าข้าม'] as const;
-const DISTRICTS = ['หาดใหญ่', 'เมืองสงขลา', 'สะเดา'] as const;
-const PROVINCES = ['สงขลา', 'ปัตตานี', 'สตูล'] as const;
-
-function randomInt(min: number, max: number): number {
-	return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function pick<T>(items: readonly T[]): T {
-	return items[randomInt(0, items.length - 1)];
-}
+const FIRST_NAME = 'สมชาย';
+const LAST_NAME = 'ใจดี';
+const ADDRESS_NO = '12/3';
+const VILLAGE_NO = 'หมู่ 2';
+const SUBDISTRICT = 'บ้านพรุ';
+const DISTRICT = 'หาดใหญ่';
+const PROVINCE = 'สงขลา';
+const POSTAL_CODE = '90250';
 
 // ─── Test suite ────────────────────────────────────────────────────────────────
 
@@ -216,34 +209,33 @@ test.describe('Evacuee Registration', () => {
 			await route.fallback();
 		});
 
-		// Thailand location lookup (address dropdown — not used by the exact-match
-		// household path this test drives through, but harmless to mock).
-		await page.route('**/api/v1/thailand-location/all**', async (route) => {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([
-					{ province: 'สงขลา', district: 'หาดใหญ่', subdistrict: 'บ้านพรุ', zipcode: 90250 }
-				])
-			});
-		});
-
-		// Vulnerable-group master data (step 3 tags section) — no groups configured,
-		// this flow doesn't select any.
-		await page.route('**/api/back-office/master-data/vulnerable_group**', async (route) => {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					_id: 'master_data:vulnerable_group',
-					master_type: 'vulnerable_group',
-					items: []
-				})
-			});
-		});
-
-		// BFF passthrough (any other SvelteKit server route)
+		// BFF catch-all with special-cases inside (Playwright matches last-registered
+		// route first — separate specific /api routes registered *after* this would
+		// never run if we registered a blanket /api/** last).
 		await page.route('/api/**', async (route) => {
+			const url = route.request().url();
+			if (url.includes('/api/v1/thailand-location/all')) {
+				await route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify([
+						{ province: 'สงขลา', district: 'หาดใหญ่', subdistrict: 'บ้านพรุ', zipcode: 90250 }
+					])
+				});
+				return;
+			}
+			if (url.includes('/api/back-office/master-data/vulnerable_group')) {
+				await route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({
+						_id: 'master_data:vulnerable_group',
+						master_type: 'vulnerable_group',
+						items: []
+					})
+				});
+				return;
+			}
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
@@ -253,16 +245,6 @@ test.describe('Evacuee Registration', () => {
 	}
 
 	test('should complete evacuee registration end-to-end across all 6 steps', async ({ page }) => {
-		// Arrange — randomize the evacuee name and new-household address per run
-		const firstName = pick(FIRST_NAMES);
-		const lastName = pick(LAST_NAMES);
-		const addressNo = `${randomInt(1, 300)}/${randomInt(1, 20)}`;
-		const villageNo = `หมู่ ${randomInt(1, 15)}`;
-		const subdistrict = pick(SUBDISTRICTS);
-		const district = pick(DISTRICTS);
-		const province = pick(PROVINCES);
-		const postalCode = String(randomInt(10000, 99999));
-
 		// Arrange — mount mocks before navigation, then land on the wizard already
 		// authenticated (no login-form / logout roundtrip needed for this flow).
 		await mockCouchRoutes(page);
@@ -284,8 +266,8 @@ test.describe('Evacuee Registration', () => {
 
 		// ── Step 3: ข้อมูลผู้ประสบภัย — minimal valid registration form ──────
 		await expect(page.getByText('ชื่อ (First Name)')).toBeVisible({ timeout: 5_000 });
-		await page.getByPlaceholder('ชื่อจริง').fill(firstName);
-		await page.getByPlaceholder('นามสกุล', { exact: true }).fill(lastName);
+		await page.getByPlaceholder('ชื่อจริง').fill(FIRST_NAME);
+		await page.getByPlaceholder('นามสกุล', { exact: true }).fill(LAST_NAME);
 		await page
 			.locator('[data-slot="form-item"]')
 			.filter({ has: page.locator('label', { hasText: 'เพศ' }) })
@@ -305,12 +287,12 @@ test.describe('Evacuee Registration', () => {
 			timeout: 5_000
 		});
 		await page.getByRole('button', { name: 'ลงทะเบียนเป็นครอบครัวใหม่ที่อยู่นี้' }).click();
-		await page.getByPlaceholder('เช่น 12/3').fill(addressNo);
-		await page.getByPlaceholder('เช่น หมู่ 2').fill(villageNo);
-		await page.getByPlaceholder('เช่น บ้านพรุ').fill(subdistrict);
-		await page.getByPlaceholder('เช่น หาดใหญ่').fill(district);
-		await page.getByPlaceholder('เช่น สงขลา').fill(province);
-		await page.getByPlaceholder('เช่น 90250').fill(postalCode);
+		await page.getByPlaceholder('เช่น 12/3').fill(ADDRESS_NO);
+		await page.getByPlaceholder('เช่น หมู่ 2').fill(VILLAGE_NO);
+		await page.getByPlaceholder('เช่น บ้านพรุ').fill(SUBDISTRICT);
+		await page.getByPlaceholder('เช่น หาดใหญ่').fill(DISTRICT);
+		await page.getByPlaceholder('เช่น สงขลา').fill(PROVINCE);
+		await page.getByPlaceholder('เช่น 90250').fill(POSTAL_CODE);
 		await page.getByRole('button', { name: 'ถัดไป (ข้อมูลสัตว์เลี้ยง/ยานพาหนะ)' }).click();
 
 		// ── Step 5: ทรัพย์สินและสัตว์เลี้ยง — nothing to declare, submit as-is ──
@@ -321,7 +303,7 @@ test.describe('Evacuee Registration', () => {
 
 		// Assert — evacuee creation and household-link toasts both fire (this
 		// step registers the evacuee, then links it to the new household)
-		await expect(page.getByText(`Registered ${firstName} ${lastName}`)).toBeVisible({
+		await expect(page.getByText(`Registered ${FIRST_NAME} ${LAST_NAME}`)).toBeVisible({
 			timeout: 8_000
 		});
 		await expect(page.getByText('ลงทะเบียนผู้ประสบภัยและครัวเรือนสำเร็จ')).toBeVisible({
