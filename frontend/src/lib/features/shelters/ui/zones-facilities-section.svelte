@@ -184,8 +184,8 @@
 >
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<Users class="text-shelter-orange-text h-5 w-5" />
-		<span class="text-shelter-orange-text text-sm font-bold">3.</span>
-		<h2 class="text-base font-bold text-card-foreground">การจัดการโซนและสิ่งอำนวยความสะดวก</h2>
+		<span class="text-black text-sm font-bold">3.</span>
+		<h2 class="text-base font-bold text-black">การจัดการโซนและสิ่งอำนวยความสะดวก</h2>
 	</div>
 	<!-- 3a. Living Zones -->
 

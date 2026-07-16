@@ -152,7 +152,7 @@ export type ProjectLevel = z.infer<typeof projectLevelSchema>;
 
 /** Key personnel per shelter (CR-023 FR-23-2/3). */
 export const keyPersonContactSchema = z.object({
-	name: z.string().trim().nullish(),
+	name: z.string().nullish(),
 	phone: z.string().trim().nullish()
 });
 export type KeyPersonContact = z.infer<typeof keyPersonContactSchema>;

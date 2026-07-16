@@ -37,7 +37,7 @@
 </script>
 
 <svelte:head>
-	<title>ตั้งค่าศูนย์พักพิง · SmartShelter</title>
+	<title>จัดการศูนย์พักพิง · SmartShelter</title>
 </svelte:head>
 
 <div class="flex w-full flex-1 flex-col gap-6 p-6">
@@ -45,7 +45,7 @@
 	<div class="flex flex-wrap items-end justify-between gap-4">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight text-foreground">
-				จัดการข้อมูลศูนย์พักพิง (Shelters)
+				จัดการศูนย์พักพิง (Shelters)
 			</h2>
 			<p class="mt-1 text-sm text-muted-foreground">
 				รายชื่อศูนย์พักพิงทั้งหมดในระบบและสถานะความจุ
