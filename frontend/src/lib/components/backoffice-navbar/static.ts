@@ -96,7 +96,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				requiresAdmin: true,
 				children: [
 					{
-						label: 'ตั้งค่าศูนย์พักพิง',
+						label: 'จัดการศูนย์พักพิง',
 						href: resolve('/back-office/shelters'),
 						icon: Building,
 						requiresAdmin: true
