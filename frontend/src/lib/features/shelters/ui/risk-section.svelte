@@ -23,10 +23,8 @@
 >
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<ShieldAlert class="h-5 w-5 text-shelter-rose-text" />
-		<span class="text-sm font-bold text-shelter-rose-text">5.</span>
-		<h2 class="text-base font-bold text-card-foreground">
-			ข้อมูลการประเมินความเสี่ยงและโครงสร้าง (Risk &amp; Structure)
-		</h2>
+		<span class="text-sm font-bold text-black">5.</span>
+		<h2 class="text-base font-bold text-black">ข้อมูลการประเมินความเสี่ยงและโครงสร้าง</h2>
 	</div>
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">

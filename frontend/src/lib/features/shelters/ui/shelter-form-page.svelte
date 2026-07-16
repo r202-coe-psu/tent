@@ -73,7 +73,7 @@
 		}
 	});
 
-	const { form: formData, submitting, enhance } = form;
+	const { form: formData, submitting, enhance, validateForm } = form;
 
 	// Ensure nested optional objects exist so child sections can bind safely.
 	// Done synchronously at form-init time (not inside $effect) to avoid the
@@ -143,8 +143,30 @@
 	function goPrev() {
 		if (step > 0) step -= 1;
 	}
-	function goNext() {
-		if (step < steps.length - 1) step += 1;
+	const stepFields = [
+		['name'],
+		['capacity'],
+		['zones', 'facilities', 'common_areas'],
+		['utilities'],
+		['risk'],
+		['admission_policy'],
+		['luggage_policy'],
+		['parking_policy']
+	];
+
+	async function goNext() {
+		if (step >= steps.length - 1) return;
+
+		const result = await validateForm({ update: true, focusOnError: true });
+		const errors = result.errors as Record<string, unknown> | undefined;
+		const hasStepErrors = stepFields[step].some((field) => errors && field in errors);
+
+		if (hasStepErrors) {
+			toast.error('กรุณากรอกข้อมูลในขั้นตอนนี้ให้ครบถ้วนและถูกต้อง');
+			return;
+		}
+
+		step += 1;
 	}
 
 	// Guard native implicit submit: Enter in a text input must not save/redirect
