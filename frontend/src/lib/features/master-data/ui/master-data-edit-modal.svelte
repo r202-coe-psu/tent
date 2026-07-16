@@ -59,12 +59,9 @@
 	>
 		<div class="w-full max-w-2xl rounded-xl bg-card p-6 shadow-xl">
 			<header class="mb-4">
-				<div class="text-xs font-medium text-muted-foreground">
-					ฐานข้อมูลมาสเตอร์ล่วงกลาง (MASTER DATA ENGINE)
-				</div>
 				<h2 id="master-data-modal-title" class="mt-1 flex items-center gap-2 text-lg font-semibold">
-					<span aria-hidden="true">🛠️</span>
-					{editing ? 'แก้ไขข้อมูล' : 'เพิ่มข้อมูล'} {MASTER_DATA_TYPE_LABELS[masterType]}
+					{editing ? 'แก้ไขข้อมูล' : 'เพิ่มข้อมูล'}
+					{MASTER_DATA_TYPE_LABELS[masterType]}
 				</h2>
 			</header>
 
