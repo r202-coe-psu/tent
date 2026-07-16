@@ -40,7 +40,7 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 **Definition of Done:**
 - Metrics panel อ่าน `GET /public/v1/transparency/summary` (aggregate ระบบ): `occupancy_total` (OP-6) + `shelters_open/total`; **กั้นด้วย flag `public_metrics_occupancy` = kill-switch default on** — ปิด flag แล้ว metric ซ่อน, หน้าไม่พัง
 - **Polling 10 นาที, stale-threshold 30 นาที (OP-7):** เกิน 30 นาทีโชว์ค่าเก่า + ป้าย "ข้อมูลอาจไม่เป็นปัจจุบัน"; **ไม่ poll DB ตรง** (อ่าน read-model T-35)
-- **Deferrals (CR-005 §B):** ซ่อน nav "รายงานความโปร่งใส" (`/transparency`) + nav/card "อาสาสมัคร" (`/volunteer*`) + metric `volunteers_active` — เปิดภายหลัง (ไม่กระทบ scope ภายในของ [Module A — Volunteer](06-A.md))
+- **Deferrals (CR-005 §B):** ซ่อน nav "รายงานความโปร่งใส" (`/transparency`) + nav/card "อาสาสมัคร" (`/volunteer*`) + metric `volunteers_active` — เปิดภายหลัง (ไม่กระทบ scope ภายในของ [Module A — Volunteer](06-A-volunteer.md))
 - **UX (CR-005 §C):** alert level 4 บน mobile = sticky top (OP-4); ลิงก์ "ตรวจสอบพิกัด..." = internal `/shelters` (OP-5); ปุ่ม LINE OA/FB ซ่อน เหลือปุ่มโทร 1669/1784 (OP-2)
 - aggregate-only, no PII/no person-level (test ยืนยัน) + demo เปิด/ปิด kill-switch flag
 

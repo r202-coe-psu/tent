@@ -14,7 +14,7 @@ affects:
   - docs/data/api-contract.md — POST/PATCH /api/v1/shelters extend (5 sections); close/reopen zone endpoint
   - docs/prd/role-permission-matrix.md §3 — close/reopen zone row
   - docs/task-breakdown/02-people.md T-08 (zone def + type) + T-09 (assignment gate + suggestion filter by type)
-  - docs/task-breakdown/05-D.md (Module D: Kitchen) — T-25/T-56 อ่าน `common_areas.central_kitchen` + `sub_storage[food_dry]`
+  - docs/task-breakdown/05-D-kitchen.md (Module D: Kitchen) — T-25/T-56 อ่าน `common_areas.central_kitchen` + `sub_storage[food_dry]`
   - docs/features/* — note ใหม่: EOC real-time risk/structure visibility (section 5)
   - frontend/src/lib/features/shelters/domain/schema.ts — เพิ่ม shelterTypeSchema, areaTypeSchema, powerSourceSchema, waterSourceSchema, communicationsSchema, vhfChannelSchema, elevationMSchema, entranceDescriptionSchema, constraintsSchema, zoneStatusSchema, zoneTypeSchema, commonAreasSchema, facilitiesAccessibleSchema
   - frontend/src/lib/features/shelters/domain/schema.test.ts — new cases
@@ -330,7 +330,7 @@ closed → (terminal)     (open decision 1: reopen ได้มั้ย — เ
 - `docs/data/schema-er-diagram.md` — SHELTER_ZONE fix + extend; SHELTER extend (5 sections)
 - `docs/prd/role-permission-matrix.md` §3 — close/reopen row
 - `docs/task-breakdown/02-people.md` T-08 + T-09 (type filter)
-- `docs/task-breakdown/05-D.md` — T-25/T-56 cross-ref `common_areas.central_kitchen` + `sub_storage[food_dry]`
+- `docs/task-breakdown/05-D-kitchen.md` — T-25/T-56 cross-ref `common_areas.central_kitchen` + `sub_storage[food_dry]`
 - `docs/features/*` — note ใหม่: EOC real-time risk/structure visibility (section 5)
 
 ### Code
