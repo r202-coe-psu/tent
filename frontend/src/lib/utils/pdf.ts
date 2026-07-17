@@ -21,7 +21,7 @@ const PX_TO_MM = 25.4 / 96;
 export async function previewElementAsPdf(
 	element: HTMLElement,
 	title: string,
-	options: { scale?: number; maxWidthMm?: number } = {}
+	options: { scale?: number; maxWidthMm?: number; previewWindow?: Window } = {}
 ): Promise<void> {
 	const scale = options.scale ?? 3;
 	const maxWidthMm = options.maxWidthMm ?? 70;
@@ -48,5 +48,15 @@ export async function previewElementAsPdf(
 	doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, widthMm, heightMm);
 
 	const blobUrl = doc.output('bloburl');
-	window.open(blobUrl, '_blank');
+	if (options.previewWindow) {
+		if (options.previewWindow.closed) {
+			throw new Error('หน้าต่างตัวอย่าง PDF ถูกปิด กรุณาลองใหม่อีกครั้ง');
+		}
+		options.previewWindow.location.href = blobUrl.toString();
+		return;
+	}
+
+	if (!window.open(blobUrl, '_blank')) {
+		throw new Error('เบราว์เซอร์บล็อกหน้าต่าง PDF กรุณาอนุญาตป๊อปอัปแล้วลองใหม่');
+	}
 }

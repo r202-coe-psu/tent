@@ -29,7 +29,7 @@ describe('previewElementAsPdf', () => {
 		vi.clearAllMocks();
 		canvasWidth = 300;
 		canvasHeight = 200;
-		vi.spyOn(window, 'open').mockImplementation(() => null);
+		vi.spyOn(window, 'open').mockImplementation(() => window);
 	});
 
 	it('rasterizes the element with the default scale and a white background', async () => {
@@ -103,7 +103,7 @@ describe('previewElementAsPdf', () => {
 
 	it('sets the document title, draws the rasterized image, and opens the result in a new tab', async () => {
 		const element = document.createElement('div');
-		const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+		const openSpy = vi.spyOn(window, 'open').mockImplementation(() => window);
 
 		await previewElementAsPdf(element, 'ป้ายข้อมูลผู้พักพิง');
 
@@ -117,5 +117,39 @@ describe('previewElementAsPdf', () => {
 			expect.any(Number)
 		);
 		expect(openSpy).toHaveBeenCalledWith('blob:mock-url', '_blank');
+	});
+
+	it('navigates a pre-opened preview window after the PDF is ready', async () => {
+		const element = document.createElement('div');
+		const previewWindow = {
+			closed: false,
+			location: { href: 'about:blank' }
+		} as unknown as Window;
+
+		await previewElementAsPdf(element, 'ป้ายข้อมูลผู้พักพิง', { previewWindow });
+
+		expect(previewWindow.location.href).toBe('blob:mock-url');
+		expect(window.open).not.toHaveBeenCalled();
+	});
+
+	it('throws when the browser blocks a new preview window', async () => {
+		const element = document.createElement('div');
+		vi.mocked(window.open).mockReturnValue(null);
+
+		await expect(previewElementAsPdf(element, 'ป้ายข้อมูลผู้พักพิง')).rejects.toThrow(
+			'เบราว์เซอร์บล็อกหน้าต่าง PDF'
+		);
+	});
+
+	it('throws when the pre-opened preview window was closed during generation', async () => {
+		const element = document.createElement('div');
+		const previewWindow = {
+			closed: true,
+			location: { href: 'about:blank' }
+		} as unknown as Window;
+
+		await expect(
+			previewElementAsPdf(element, 'ป้ายข้อมูลผู้พักพิง', { previewWindow })
+		).rejects.toThrow('หน้าต่างตัวอย่าง PDF ถูกปิด');
 	});
 });
