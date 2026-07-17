@@ -5,6 +5,28 @@ import html2canvas from 'html2canvas-pro';
 
 const PX_TO_MM = 25.4 / 96;
 
+function inlineComputedStyles(source: Element, target: Element): void {
+	const sourceWindow = source.ownerDocument.defaultView;
+	if (sourceWindow && 'style' in target) {
+		const computedStyle = sourceWindow.getComputedStyle(source);
+		const targetStyle = (target as HTMLElement | SVGElement).style;
+
+		for (let index = 0; index < computedStyle.length; index += 1) {
+			const property = computedStyle.item(index);
+			targetStyle.setProperty(
+				property,
+				computedStyle.getPropertyValue(property),
+				computedStyle.getPropertyPriority(property)
+			);
+		}
+	}
+
+	const childCount = Math.min(source.children.length, target.children.length);
+	for (let index = 0; index < childCount; index += 1) {
+		inlineComputedStyles(source.children[index], target.children[index]);
+	}
+}
+
 /**
  * Rasterizes a DOM element (via html2canvas) and drops it into a jsPDF page
  * sized to match the element's aspect ratio — so the PDF is a pixel-faithful
@@ -28,7 +50,11 @@ export async function previewElementAsPdf(
 	const canvas = await html2canvas(element, {
 		scale,
 		backgroundColor: '#ffffff',
-		useCORS: true
+		useCORS: true,
+		// Production serves the compiled Tailwind/Svelte CSS as external stylesheets.
+		// Freeze the resolved styles into the cloned tree so PDF rendering does not
+		// depend on those stylesheets loading again inside html2canvas's hidden iframe.
+		onclone: (_document, clonedElement) => inlineComputedStyles(element, clonedElement)
 	});
 
 	const naturalWidthMm = (canvas.width / scale) * PX_TO_MM;

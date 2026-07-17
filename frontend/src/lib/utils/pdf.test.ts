@@ -39,8 +39,35 @@ describe('previewElementAsPdf', () => {
 		expect(html2canvasMock).toHaveBeenCalledWith(element, {
 			scale: 3,
 			backgroundColor: '#ffffff',
-			useCORS: true
+			useCORS: true,
+			onclone: expect.any(Function)
 		});
+	});
+
+	it('inlines computed styles into the cloned capture tree', async () => {
+		const element = document.createElement('div');
+		const child = document.createElement('span');
+		element.style.display = 'flex';
+		element.style.backgroundColor = 'rgb(255, 255, 255)';
+		child.style.fontSize = '20px';
+		element.append(child);
+		document.body.append(element);
+
+		await previewElementAsPdf(element, 'title');
+
+		const [, options] = html2canvasMock.mock.calls[0] as unknown as [
+			HTMLElement,
+			{ onclone: (document: Document, clonedElement: HTMLElement) => void }
+		];
+		const clonedElement = element.cloneNode(true) as HTMLElement;
+		clonedElement.removeAttribute('style');
+		(clonedElement.firstElementChild as HTMLElement).removeAttribute('style');
+
+		options.onclone(document, clonedElement);
+
+		expect(clonedElement.style.display).toBe('flex');
+		expect(clonedElement.style.backgroundColor).toBe('rgb(255, 255, 255)');
+		expect((clonedElement.firstElementChild as HTMLElement).style.fontSize).toBe('20px');
 	});
 
 	it('honors a custom scale option', async () => {
