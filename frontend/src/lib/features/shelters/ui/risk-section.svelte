@@ -23,10 +23,8 @@
 >
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<ShieldAlert class="h-5 w-5 text-shelter-rose-text" />
-		<span class="text-sm font-bold text-shelter-rose-text">5.</span>
-		<h2 class="text-base font-bold text-card-foreground">
-			ข้อมูลการประเมินความเสี่ยงและโครงสร้าง (Risk &amp; Structure)
-		</h2>
+		<span class="text-sm font-bold text-black">5.</span>
+		<h2 class="text-base font-bold text-black">ข้อมูลการประเมินความเสี่ยงและโครงสร้าง</h2>
 	</div>
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -99,7 +97,7 @@
 					bind:value={$formData.risk.constraints}
 					{disabled}
 					rows="3"
-					placeholder="เช่น อายุผู้คุ้มได้สะดวก ไม่มีน้ำท่วมขัง"
+					placeholder="เช่น เข้าถึงได้สะดวก ไม่มีน้ำท่วมขัง"
 					class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
 				></textarea>
 			{/snippet}
@@ -111,6 +109,6 @@
 		class="flex items-start gap-2 rounded-lg border border-shelter-border bg-muted/30 p-3 text-sm text-shelter-rose-text"
 	>
 		<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-shelter-rose-text" />
-		<p>ข้อมูลส่วนนี้จะถูกใช้เพื่อช่วย EOC กราบถึงข้อจำกัดของศูนย์แบบ Real-time</p>
+		<p>ข้อมูลส่วนนี้จะถูกใช้เพื่อช่วย EOC ทราบถึงข้อจำกัดของศูนย์แบบ Real-time</p>
 	</div>
 </section>

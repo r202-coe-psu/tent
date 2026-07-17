@@ -14,7 +14,7 @@ affects:
   - docs/data/api-contract.md — POST/PATCH /api/v1/shelters extend (5 sections); close/reopen zone endpoint
   - docs/prd/role-permission-matrix.md §3 — close/reopen zone row
   - docs/task-breakdown/02-people.md T-08 (zone def + type) + T-09 (assignment gate + suggestion filter by type)
-  - docs/task-breakdown/05-D.md (Module D: Kitchen) — T-25/T-56 อ่าน `common_areas.central_kitchen` + `sub_storage[food_dry]`
+  - docs/task-breakdown/05-D-kitchen.md (Module D: Kitchen) — T-25/T-56 อ่าน `common_areas.central_kitchen` + `sub_storage[food_dry]`
   - docs/features/* — note ใหม่: EOC real-time risk/structure visibility (section 5)
   - frontend/src/lib/features/shelters/domain/schema.ts — เพิ่ม shelterTypeSchema, areaTypeSchema, powerSourceSchema, waterSourceSchema, communicationsSchema, vhfChannelSchema, elevationMSchema, entranceDescriptionSchema, constraintsSchema, zoneStatusSchema, zoneTypeSchema, commonAreasSchema, facilitiesAccessibleSchema
   - frontend/src/lib/features/shelters/domain/schema.test.ts — new cases
@@ -62,7 +62,7 @@ affects:
 | 5 | `constraints` | ❌ | textarea | **ADD** |
 
 **Cross-cutting (Section 5 note in image):**
-> "ข้อมูลส่วนนี้จะถูกใช้เพื่อช่วย EOC กราบถึงข้อจำกัดของศูนย์แบบ Real-time"
+> "ข้อมูลส่วนนี้จะถูกใช้เพื่อช่วย EOC ทราบถึงข้อจำกัดของศูนย์แบบ Real-time"
 
 → section 5 fields (`elevation_m`, `entrance_description`, `constraints`) ต้อง expose ผ่าน public
 API สำหรับ EOC consumption — feature ใหม่, cross-link ไป feature spec
@@ -174,7 +174,7 @@ closed → (terminal)     (open decision 1: reopen ได้มั้ย — เ
 | --- | --- | --- | --- |
 | `elevation_m` | `num ≥ 0` | opt | ระดับความสูงจากทะเล (เมตร); image "8 เมตร" |
 | `entrance_description` | `str` | opt | ลักษณะโรงสร้างทางเข้า; image "ถนนคอนกรีต 2 เลน" |
-| `constraints` | `str` (textarea) | opt | ข้อจำกัดพิเศษ; image "อายุผู้คุ้มได้สะดวก ไม่มีน้ำท่วมขัง" |
+| `constraints` | `str` (textarea) | opt | ข้อจำกัดพิเศษ; image "เข้าถึงได้สะดวก ไม่มีน้ำท่วมขัง" |
 
 **EOC real-time use case** (per image red callout):
 - 3 field นี้ต้อง expose ผ่าน public API สำหรับ EOC (Emergency Operation Center) อ่าน real-time
@@ -330,7 +330,7 @@ closed → (terminal)     (open decision 1: reopen ได้มั้ย — เ
 - `docs/data/schema-er-diagram.md` — SHELTER_ZONE fix + extend; SHELTER extend (5 sections)
 - `docs/prd/role-permission-matrix.md` §3 — close/reopen row
 - `docs/task-breakdown/02-people.md` T-08 + T-09 (type filter)
-- `docs/task-breakdown/05-D.md` — T-25/T-56 cross-ref `common_areas.central_kitchen` + `sub_storage[food_dry]`
+- `docs/task-breakdown/05-D-kitchen.md` — T-25/T-56 cross-ref `common_areas.central_kitchen` + `sub_storage[food_dry]`
 - `docs/features/*` — note ใหม่: EOC real-time risk/structure visibility (section 5)
 
 ### Code

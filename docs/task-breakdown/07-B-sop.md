@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module B — SOP & Resource Calc"
 status: active
 created: 2026-06-05
-updated: 2026-06-22
+updated: 2026-07-16
 module: B
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-006 (SOP master/override) applied 2026-06-22
 ---
@@ -18,14 +18,14 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ## Features / Tasks
 
-| ID | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-18 | Groundwork: SOP ratio data gathering + volunteer schema | prep R3 | R2 | prod | ส.ค. | 6 | ÷1.25 | 5 | T-02 |
-| T-30 | SOP ratio configuration (master + per-shelter override) | FR-44 | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-18 |
-| T-31 | Daily resource calculation engine | FR-45 | R3 | prod | ส.ค. | 7 | ÷1.4 | 5 | T-30,T-14 |
-| T-32 | Resource calculation dashboard | FR-46 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-31 |
-| T-42 | SOP what-if simulation | FR-54 | R4 | prod | deferred | 6 | ÷1.4 | 4.5 | T-31 |
-| | **รวมทั้งโมดูล** | | | | | **30** | | **21.5** | |
+| ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-18 | 🔄 | Groundwork: SOP ratio data gathering + volunteer schema | prep R3 | R2 | prod | ส.ค. | 6 | ÷1.25 | 5 | T-02 |
+| T-30 | 🔄 | SOP ratio configuration (master + per-shelter override) | FR-44 | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-18 |
+| T-31 | 🔄 | Daily resource calculation engine | FR-45 | R3 | prod | ส.ค. | 7 | ÷1.4 | 5 | T-30,T-14 |
+| T-32 | 🔄 | Resource calculation dashboard | FR-46 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-31 |
+| T-42 | ⬜ | SOP what-if simulation | FR-54 | R4 | prod | deferred | 6 | ÷1.4 | 4.5 | T-31 |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **30** |  | **21.5** |  |
 
 > **Deferred** (ส่งมอบหลัง go-live, ภายในสัปดาห์ที่ 2 กันยายน 2026): T-42
 

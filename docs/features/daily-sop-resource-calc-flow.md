@@ -323,7 +323,7 @@ sequenceDiagram
 
 | Artifact | Path |
 | --- | --- |
-| Task breakdown | [`docs/task-breakdown/07-B.md`](../task-breakdown/07-B.md) |
+| Task breakdown | [`docs/task-breakdown/07-B-sop.md`](../task-breakdown/07-B-sop.md) |
 | PRD R3 | [`docs/prd/phase-r3-operations.md`](../prd/phase-r3-operations.md) §4.4 |
 | Schema | [`docs/data/schema.md`](../data/schema.md) §2.14 §2.15 §4.4 |
 | CR master/override | [CR-006](../changes/CR-006-sop-profile-master-override.md), [CR-018](../changes/CR-018-sop-override-invariants.md), [CR-021](../changes/CR-021-sop-ratio-scope-handbook-plus-volunteer.md) |

@@ -76,6 +76,7 @@ import { type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
 import { deployShelterViewsFn } from '$lib/features/shelters/server';
+import { seedThailandLocation } from './seed-thailand-location';
 
 // ─── env ──────────────────────────────────────────────────────────────────────
 
@@ -1192,6 +1193,7 @@ async function main() {
 	try {
 		await seedUsers();
 		await seedRegistry();
+		await seedThailandLocation();
 		await seedCatalog();
 		await seedCatalogSopRatios();
 		await seedShelter();

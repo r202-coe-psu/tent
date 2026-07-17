@@ -9,7 +9,7 @@ layer: volatile
 affects:
   - docs/prd/phase-r3-operations.md FR-47 (+ JTBD §2.1)
   - docs/prd/role-permission-matrix.md FR-47 row / wording
-  - docs/task-breakdown/08-E.md T-19 / T-33
+  - docs/task-breakdown/08-E-cases.md T-19 / T-33
   - docs/sitemap.md §2.8 `/security-events` → `/cases`
   - docs/data/schema.md §2.10 (`security_event` → `shelter_report_case`)
   - docs/data/data-model.md · schema-er-diagram.md
@@ -153,7 +153,7 @@ SHELTER_REPORT_CASE_MUTATE_ROLES = ['shelter_manager']   // R3 — ขยาย 
 | data-model / ER | rename + mutability |
 | PRD R3 FR-47 + JTBD | ข้อความเคส / ตัด security check-in wording |
 | role-permission-matrix | แถว FR-47 = Shelter report case; หมายเหตุ mutate = SM (+ SA override) |
-| `08-E.md` | DoD T-19/T-33 |
+| `08-E-cases.md` | DoD T-19/T-33 |
 | `sitemap.md` | `/cases` |
 | feature flow | draft → active เมื่อ CR approved |
 | Code | `features/shelter-report-cases/` ใหม่ |
@@ -171,5 +171,5 @@ SHELTER_REPORT_CASE_MUTATE_ROLES = ['shelter_manager']   // R3 — ขยาย 
 
 - 2026-07-15 — proposed (reframe Module E → report case). Track = ไฟล์ CR + feature flow
 - 2026-07-15 — owner ล็อก: (1) `shelter_report_case` (2) no PUB (3) SM mutate + scalable allow-list + SA override (4) pet_refs household_id+index (5) escalate atomic (6) list sort by severity then occurred_at
-- 2026-07-15 — sync **task-breakdown** `08-E.md` (T-19/T-33) + cross-refs `_index` / `09-F` / `02-people` / `_timeline` / `teamplanning` + Notion T-19/T-33 title+DoD
+- 2026-07-15 — sync **task-breakdown** `08-E-cases.md` (T-19/T-33) + cross-refs `_index` / `09-F` / `02-people` / `_timeline` / `teamplanning` + Notion T-19/T-33 title+DoD
 - 2026-07-15 — **ยังไม่ apply** schema.md / PRD FR-47 / role-matrix / sitemap จนกว่า `status: approved`
