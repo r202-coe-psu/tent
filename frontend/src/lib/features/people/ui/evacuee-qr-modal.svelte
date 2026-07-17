@@ -37,13 +37,25 @@
 
 	async function handlePrintPreview() {
 		if (!cardEl) return;
+		// Open while the click still has user activation. Opening after html2canvas finishes
+		// can be treated as an unsolicited popup, especially outside localhost.
+		const previewWindow = window.open('', '_blank');
+		if (!previewWindow) {
+			toast.error('เบราว์เซอร์บล็อกหน้าต่าง PDF กรุณาอนุญาตป๊อปอัปแล้วลองใหม่');
+			return;
+		}
+
 		isExportingPdf = true;
 		cardEl.classList.add('print-capture');
 		try {
 			await tick();
 			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-			await previewElementAsPdf(cardEl, `evacuee-id-${fullId}`, { maxWidthMm: 100 });
+			await previewElementAsPdf(cardEl, `evacuee-id-${fullId}`, {
+				maxWidthMm: 100,
+				previewWindow
+			});
 		} catch (err) {
+			previewWindow.close();
 			toast.error(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ');
 		} finally {
 			cardEl.classList.remove('print-capture');
