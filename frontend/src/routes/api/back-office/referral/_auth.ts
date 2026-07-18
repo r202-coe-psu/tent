@@ -1,6 +1,17 @@
-import { error } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import { requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
 import { isShelterManager } from '$lib/auth/roles';
+
+/**
+ * Shared helper to format, log, and return standardized SvelteKit API endpoint error responses.
+ */
+export function handleEndpointError(e: unknown, label: string) {
+	console.error(`🔴 [${label}]:`, e);
+	const err = e as { status?: number; body?: { message?: string }; message?: string };
+	const status = err.status || 500;
+	const message = err.body?.message || err.message || 'Internal Server Error';
+	return json({ error: message }, { status });
+}
 
 /**
  * Shared helper to authorize a referral action (Shelter Manager or System Admin only).

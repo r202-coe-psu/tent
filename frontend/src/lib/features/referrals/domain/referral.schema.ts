@@ -56,11 +56,14 @@ export const referralSchema = z.object({
 
 	evacuee_id: z.string().startsWith('evacuee:'),
 	to_org: toOrgSchema,
-	reason: z.string().min(1, 'Reason is required'),
+	reason: z
+		.string()
+		.min(1, 'Reason is required')
+		.max(2000, 'Reason must not exceed 2000 characters'),
 	urgency: referralUrgencySchema,
 	status: referralStatusSchema,
 	timeline: referralTimelineSchema,
-	notes: z.string().optional()
+	notes: z.string().max(2000, 'Notes must not exceed 2000 characters').optional()
 });
 
 export type Referral = z.infer<typeof referralSchema>;

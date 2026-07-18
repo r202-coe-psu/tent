@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authorizeReferral, resolveShelterCode } from '../_auth';
+import { authorizeReferral, resolveShelterCode, handleEndpointError } from '../_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 
 export const prerender = false;
@@ -28,10 +28,6 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 
 		return json(doc);
 	} catch (e: unknown) {
-		console.error('🔴 [Referral API GET ID Error]:', e);
-		const err = e as { status?: number; body?: { message?: string }; message?: string };
-		const status = err.status || 500;
-		const message = err.body?.message || err.message || 'Internal Server Error';
-		return json({ error: message }, { status });
+		return handleEndpointError(e, 'Referral API ID GET');
 	}
 };

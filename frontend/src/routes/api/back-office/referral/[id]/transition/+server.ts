@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-imports */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authorizeReferral, resolveShelterCode } from '../../_auth';
+import { authorizeReferral, resolveShelterCode, handleEndpointError } from '../../_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import { referralStatusSchema } from '$lib/features/referrals/domain/referral.schema';
 
@@ -48,6 +48,8 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 
 				if (isConflict) {
 					lastError = err;
+					// Wait 50ms before retrying to mitigate write contention
+					await new Promise((resolve) => setTimeout(resolve, 50));
 					continue; // retry
 				}
 				throw e; // throw other errors immediately
@@ -62,10 +64,6 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 			{ status: 409 }
 		);
 	} catch (e: unknown) {
-		console.error('🔴 [Referral API Transition Error]:', e);
-		const err = e as { status?: number; body?: { message?: string }; message?: string };
-		const status = err.status || 500;
-		const message = err.body?.message || err.message || 'Internal Server Error';
-		return json({ error: message }, { status });
+		return handleEndpointError(e, 'Referral API Transition PATCH');
 	}
 };

@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-imports */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authorizeReferral, resolveShelterCode } from './_auth';
+import { authorizeReferral, resolveShelterCode, handleEndpointError } from './_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import {
 	referralInputSchema,
@@ -28,11 +28,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
 		return json(list);
 	} catch (e: unknown) {
-		console.error('🔴 [Referral API GET Error]:', e);
-		const err = e as { status?: number; body?: { message?: string }; message?: string };
-		const status = err.status || 500;
-		const message = err.body?.message || err.message || 'Internal Server Error';
-		return json({ error: message }, { status });
+		return handleEndpointError(e, 'Referral API GET');
 	}
 };
 
@@ -88,10 +84,6 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
 		return json(created, { status: 201 });
 	} catch (e: unknown) {
-		console.error('🔴 [Referral API POST Error]:', e);
-		const err = e as { status?: number; body?: { message?: string }; message?: string };
-		const status = err.status || 500;
-		const message = err.body?.message || err.message || 'Internal Server Error';
-		return json({ error: message }, { status });
+		return handleEndpointError(e, 'Referral API POST');
 	}
 };
