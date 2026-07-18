@@ -80,3 +80,18 @@ export type ReferralInput = z.infer<typeof referralInputSchema>;
 // ---------------------------------------------------------------------------
 
 export const isReferral = (d: unknown): d is Referral => referralSchema.safeParse(d).success;
+
+/**
+ * Shared factory function to construct a new draft referral body.
+ */
+export function buildReferralBody(input: ReferralInput) {
+	return {
+		evacuee_id: input.evacuee_id,
+		to_org: input.to_org,
+		reason: input.reason,
+		urgency: input.urgency,
+		status: 'draft' as const,
+		timeline: {},
+		notes: input.notes
+	};
+}
