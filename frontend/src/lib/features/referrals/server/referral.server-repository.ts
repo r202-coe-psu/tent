@@ -27,7 +27,7 @@ export class CouchDbReferralError extends Error {
 }
 
 interface MangoFindResponse {
-	docs: unknown[];
+	docs: Record<string, unknown>[];
 	warning?: string;
 }
 

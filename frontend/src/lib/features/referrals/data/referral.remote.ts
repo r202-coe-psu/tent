@@ -19,6 +19,9 @@ export class ReferralRemoteRepository implements ReferralRepository {
 	}
 
 	async list(filter?: { status?: ReferralStatus; evacuee_id?: string }): Promise<Referral[]> {
+		// Note: Since this is querying the local PouchDB client-side cache,
+		// an _all_docs prefix scan (allByType) mapped in memory is acceptable
+		// and doesn't pose the performance risks of a server-side CouchDB scan.
 		const all = await this.repo.allByType<Referral>('referral', isReferral);
 
 		return all.filter((r) => {
