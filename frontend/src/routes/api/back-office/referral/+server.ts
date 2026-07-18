@@ -1,8 +1,7 @@
 /* eslint-disable no-restricted-imports */
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
-import { isShelterManager } from '$lib/auth/roles';
+import { authorizeReferral } from './_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import {
 	referralInputSchema,
@@ -10,16 +9,6 @@ import {
 } from '$lib/features/referrals/domain/referral.schema';
 
 export const prerender = false;
-
-// Helper to authorize a referral action (SM or SA only)
-async function authorizeReferral(cookie: string | null) {
-	const caller = await requireShelterScopeOrSA(cookie);
-	const allowed = caller.isSA || isShelterManager(caller.roles);
-	if (!allowed) {
-		throw error(403, 'Requires shelter_manager or system_admin role');
-	}
-	return caller;
-}
 
 /**
  * GET /api/back-office/referral
