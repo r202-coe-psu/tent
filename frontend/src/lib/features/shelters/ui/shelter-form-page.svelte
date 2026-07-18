@@ -225,10 +225,17 @@
 	{:else}
 		<div class="flex flex-col gap-6 p-6 md:flex-row">
 			<!-- Sidebar category nav -->
-			<nav class="shrink-0 md:w-64">
-				<p class="mb-2 px-2 text-xs font-bold tracking-wider text-muted-foreground uppercase">
-					หมวดหมู่ข้อมูล
-				</p>
+			<nav
+				class="shrink-0 md:sticky md:top-20 md:max-h-[calc(100dvh-6rem)] md:w-64 md:self-start md:overflow-y-auto md:rounded-2xl md:border md:border-shelter-border md:bg-background/90 md:p-3 md:shadow-sm md:backdrop-blur-sm"
+			>
+				<div class="mb-3 flex items-center justify-between gap-3 px-2">
+					<p class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+						หมวดหมู่ข้อมูล
+					</p>
+					<span class="text-[11px] font-semibold text-muted-foreground tabular-nums">
+						{step + 1} / {steps.length}
+					</span>
+				</div>
 				<ul class="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
 					{#each steps as s, i (s.label)}
 						{@const Icon = s.icon}
@@ -238,8 +245,10 @@
 								onclick={() => (step = i)}
 								aria-current={step === i ? 'step' : undefined}
 								class={[
-									'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition',
-									step === i ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-muted/50'
+									'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
+									step === i
+										? 'bg-primary text-white shadow-sm'
+										: 'text-muted-foreground hover:-translate-y-px hover:bg-muted/50 hover:text-foreground'
 								]}
 							>
 								<Icon class="h-4 w-4 shrink-0" />
