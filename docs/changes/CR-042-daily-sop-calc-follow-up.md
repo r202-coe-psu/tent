@@ -11,7 +11,7 @@ affects:
   - docs/changes/CR-036-daily-calc-doc-type.md (open decisions #1–#2 → close via this CR)
   - docs/data/schema.md §2.15 daily_calc (ถ้า OD-1 เลือก bump)
   - schema_v daily_calc 1 → 2 (เฉพาะเมื่อ OD-1 = เพิ่ม field ใน doc)
-  - docs/task-breakdown/07-B.md T-31 / T-32 DoD (หลังเคาะ OD)
+  - docs/task-breakdown/07-B-sop.md T-31 / T-32 DoD (หลังเคาะ OD)
   - docs/prd/phase-r3-operations.md FR-45 / FR-46 (clarity เท่านั้นถ้าจำเป็น)
   - docs/sitemap.md §2.7 /resources (ถ้าควรระบุ run + dashboard ชัดขึ้น)
   - frontend/src/lib/features/resource-calc/ (snapshot builder, resolveHave, Zod dailyCalcDocSchema)

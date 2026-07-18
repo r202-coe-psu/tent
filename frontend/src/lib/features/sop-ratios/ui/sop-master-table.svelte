@@ -38,7 +38,6 @@
 					<div>
 						<h3 class="font-bold text-slate-900">
 							{profile.name}
-							<span class="ml-1 font-mono text-xs text-slate-500">v{profile.version}</span>
 						</h3>
 						<p class="font-mono text-[11px] text-slate-400">{profile._id}</p>
 					</div>

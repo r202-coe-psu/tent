@@ -2,7 +2,7 @@
 title: "Task Breakdown — Donation"
 status: active
 created: 2026-06-05
-updated: 2026-06-22
+updated: 2026-07-16
 module: donation
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (§F, 2026-06-22) เพิ่ม public `/donate` wizard (T-60) + donation schema_v 1→2 — ดู T-60
 ---
@@ -18,16 +18,16 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ## Features / Tasks
 
-| ID | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-15 | Donor pre-declaration (QR/form, no-auth: tracking_token + phone OTP + rate-limit/CAPTCHA) | FR-32 | R2 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-11 |
-| T-16 | Donation intake audit trail | FR-33 | R2 | prod | ส.ค. | 4 | ÷1.25 | 3 | T-15 |
-| T-21 | Donation reservation (quota vs stock, no-auth via tracking_token + TTL) | FR-35 | R3 | prod | ส.ค. | 5 | ÷1.4 | 3.5 | T-14,T-16 |
-| T-22 | Donation cut-off (auto close at target) | FR-36 | R3 | prod | ส.ค. | 4 | ÷1.4 | 3 | T-21 |
-| T-23 | Smart redirect to under-threshold shelters | FR-37 | R3 | prod | ส.ค. | 5 | ÷1.4 | 3.5 | T-22,T-14 |
-| T-24 | Donation transparency report (24h, public, QR) | FR-38 | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-16 |
-| T-60 | Public donation & queue booking (`/donate`) — needs board + logistics + slot booking + ticket (**CR-005 §F**) | FR-32,35,36 | R3 | prod | ส.ค. | 8 | ÷1.4 | 5.5 | T-15,T-21,T-22,T-02 |
-| | **รวมทั้งโมดูล** | | | | | **37** | | **25.5** | |
+| ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-15 | 🔄 | Donor pre-declaration (QR/form, no-auth: tracking_token + phone OTP + rate-limit/CAPTCHA) | FR-32 | R2 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-11 |
+| T-16 | 🔄 | Donation intake audit trail | FR-33 | R2 | prod | ส.ค. | 4 | ÷1.25 | 3 | T-15 |
+| T-21 | 🔄 | Donation reservation (quota vs stock, no-auth via tracking_token + TTL) | FR-35 | R3 | prod | ส.ค. | 5 | ÷1.4 | 3.5 | T-14,T-16 |
+| T-22 | 🔄 | Donation cut-off (auto close at target) | FR-36 | R3 | prod | ส.ค. | 4 | ÷1.4 | 3 | T-21 |
+| T-23 | ⬜ | Smart redirect to under-threshold shelters | FR-37 | R3 | prod | ส.ค. | 5 | ÷1.4 | 3.5 | T-22,T-14 |
+| T-24 | ⬜ | Donation transparency report (24h, public, QR) | FR-38 | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-16 |
+| T-60 | 🔄 | Public donation & queue booking (`/donate`) — needs board + logistics + slot booking + ticket (**CR-005 §F**) | FR-32,35,36 | R3 | prod | ส.ค. | 8 | ÷1.4 | 5.5 | T-15,T-21,T-22,T-02 |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **37** |  | **25.5** |  |
 
 ## Task Details
 

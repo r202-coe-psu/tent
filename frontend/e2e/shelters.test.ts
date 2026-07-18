@@ -138,7 +138,7 @@ test.describe('Shelter Form — Access Guard', () => {
 		await page.goto('http://localhost:4173/back-office/shelters/create');
 
 		await page.waitForURL((url) => !url.pathname.includes('/shelters/create'), { timeout: 8000 });
-		await expect(page).toHaveURL('http://localhost:4173/');
+		await expect(page).toHaveURL('http://localhost:4173/portal');
 	});
 });
 
