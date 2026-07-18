@@ -18,7 +18,7 @@
 		activeTab = 'all',
 		searchQuery = '',
 		totalItems = null,
-		pageSize = 10,
+		pageSize = 5,
 		evacuees = null
 	}: {
 		referrals: Referral[];

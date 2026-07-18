@@ -38,7 +38,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		const tab = (url.searchParams.get('tab') || 'all') as 'all' | ReferralStatus;
 		const page = parseInt(url.searchParams.get('page') || '1', 10);
 		const selectedId = url.searchParams.get('selectedId') || null;
-		const pageSize = 10;
+		const pageSize = 5;
 
 		// Fetch referrals using the server repository
 		const repo = new ReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
