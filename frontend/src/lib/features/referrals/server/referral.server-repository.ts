@@ -5,7 +5,8 @@ import {
 	type Referral,
 	type ReferralInput,
 	type ReferralStatus,
-	buildReferralBody
+	buildReferralBody,
+	referralSchema
 } from '../domain/referral.schema';
 import { applyTransition } from '../domain/referral.transitions';
 import type { ReferralRepository } from '../data/referral.repository';
@@ -108,8 +109,9 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 
 	async create(input: ReferralInput, ctx: AuthorContext): Promise<Referral> {
 		const body = buildReferralBody(input);
+		const rawDoc = makeDoc('referral', 1, body, ctx);
 
-		const doc = makeDoc('referral', 1, body, ctx) as unknown as Referral;
+		const doc = referralSchema.parse(rawDoc);
 
 		const { status, data } = await this.couchPut<PutResultResponse>(
 			`/${encodeURIComponent(doc._id)}`,

@@ -6,7 +6,8 @@ import {
 	type Referral,
 	type ReferralInput,
 	type ReferralStatus,
-	buildReferralBody
+	buildReferralBody,
+	referralSchema
 } from '../domain/referral.schema';
 import { applyTransition } from '../domain/referral.transitions';
 import type { ReferralRepository } from './referral.repository';
@@ -38,9 +39,10 @@ export class ReferralRemoteRepository implements ReferralRepository {
 
 	async create(input: ReferralInput, ctx: AuthorContext): Promise<Referral> {
 		const body = buildReferralBody(input);
+		const rawDoc = makeDoc('referral', 1, body, ctx);
 
-		// makeDoc stamps the common BaseDoc fields (schema_v, shelter_code, created_at, updated_at, created_by)
-		const doc = makeDoc('referral', 1, body, ctx) as unknown as Referral;
+		// Validate at runtime to satisfy TS compiler constraints without explicit unsafe casting
+		const doc = referralSchema.parse(rawDoc);
 		return this.repo.put(doc) as Promise<Referral>;
 	}
 
