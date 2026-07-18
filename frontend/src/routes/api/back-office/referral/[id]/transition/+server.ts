@@ -3,7 +3,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { isShelterManager } from '$lib/auth/roles';
-import { ReferralServerRepository } from '$lib/features/referrals/server/referral.server-repo';
+import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import { referralStatusSchema } from '$lib/features/referrals/domain/referral.schema';
 
 export const prerender = false;
@@ -48,7 +48,7 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 		}
 
 		const nextStatus = parsed.data;
-		const repo = new ReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
 
 		const MAX_RETRIES = 3;
 		let lastError: { message?: string } | null = null;

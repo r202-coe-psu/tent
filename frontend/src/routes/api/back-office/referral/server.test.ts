@@ -20,13 +20,13 @@ vi.mock('$lib/server/couch-admin', () => ({
 const mockList = vi.fn();
 const mockCreate = vi.fn();
 
-vi.mock('$lib/features/referrals/server/referral.server-repo', () => {
+vi.mock('$lib/features/referrals/server/referral.server-repository', () => {
 	class MockReferralServerRepository {
 		list = mockList;
 		create = mockCreate;
 	}
 	return {
-		ReferralServerRepository: MockReferralServerRepository
+		CouchDbReferralServerRepository: MockReferralServerRepository
 	};
 });
 

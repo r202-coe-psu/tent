@@ -1,9 +1,8 @@
-/* eslint-disable no-restricted-imports */
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { isShelterManager } from '$lib/auth/roles';
-import { ReferralServerRepository } from '$lib/features/referrals/server/referral.server-repo';
+import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 
 export const prerender = false;
 
@@ -40,7 +39,7 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 			return json({ error: 'Missing shelter_code scope' }, { status: 400 });
 		}
 
-		const repo = new ReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
 		const doc = await repo.get(id);
 
 		if (!doc) {

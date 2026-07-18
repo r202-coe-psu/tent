@@ -83,19 +83,7 @@
 							>เลือกรายการเพื่อเปิดหน้าดูรายละเอียดและดำเนินการส่งต่อ</Card.Description
 						>
 					</Card.Header>
-					<Card.Content
-						class="px-6 pt-4 pb-4"
-						onclick={(e) => {
-							const target = e.target as HTMLElement;
-							const card = target.closest('[data-referral-id]');
-							if (card) {
-								const id = card.getAttribute('data-referral-id');
-								if (id) {
-									selectedId = id;
-								}
-							}
-						}}
-					>
+					<Card.Content class="px-6 pt-4 pb-4">
 						{#if isLoadingList}
 							<div
 								class="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground"

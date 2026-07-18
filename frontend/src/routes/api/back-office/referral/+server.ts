@@ -3,7 +3,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { isShelterManager } from '$lib/auth/roles';
-import { ReferralServerRepository } from '$lib/features/referrals/server/referral.server-repo';
+import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import {
 	referralInputSchema,
 	type ReferralStatus
@@ -44,7 +44,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		const status = (url.searchParams.get('status') as ReferralStatus) || undefined;
 		const evacueeId = url.searchParams.get('evacuee_id') || undefined;
 
-		const repo = new ReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
 		const list = await repo.list({ status, evacuee_id: evacueeId });
 
 		return json(list);
@@ -103,7 +103,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			return json({ error: 'Validation failed', details: parsed.error.format() }, { status: 400 });
 		}
 
-		const repo = new ReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
 		const ctx = {
 			shelterCode,
 			createdBy: caller.name
