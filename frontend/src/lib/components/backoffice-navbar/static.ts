@@ -49,7 +49,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		items: [
 			{ label: 'จัดการผู้ประสบภัย', href: resolve('/back-office/evacuee-management'), icon: Users },
 			{ label: 'จัดการอาสาสมัคร', href: null, icon: HeartHandshake },
-			{ label: 'การส่งต่อผู้ลี้ภัย', href: resolve('/back-office/referrals'), icon: ClipboardList }
+			{
+				label: 'การส่งต่อผู้ประสบภัย',
+				href: resolve('/back-office/referrals'),
+				icon: ClipboardList
+			}
 		]
 	},
 	{

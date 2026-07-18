@@ -34,7 +34,7 @@
 				return;
 			}
 			if (!f.data.evacuee_id) {
-				toast.error('กรุณาเลือกผู้ลี้ภัยสำหรับทำรายการส่งต่อ');
+				toast.error('กรุณาเลือกผู้ประสบภัยสำหรับทำรายการส่งต่อ');
 				return;
 			}
 
@@ -103,17 +103,17 @@
 	<Card.Root class="overflow-hidden border border-border/80 shadow-md">
 		<Card.Header class="bg-muted/40 pb-4">
 			<Card.Title class="text-xl font-bold"
-				>สร้างรายการส่งต่อผู้ลี้ภัย (New Referral Request)</Card.Title
+				>สร้างรายการส่งต่อผู้ประสบภัย (New Referral Request)</Card.Title
 			>
 			<Card.Description
-				>กรอกข้อมูลรายละเอียดหน่วยงานปลายทางและผู้ลี้ภัยที่ต้องการส่งตัว</Card.Description
+				>กรอกข้อมูลรายละเอียดหน่วยงานปลายทางและผู้ประสบภัยที่ต้องการส่งตัว</Card.Description
 			>
 		</Card.Header>
 		<Card.Content class="pt-6">
 			<form method="POST" use:form.enhance class="space-y-6">
 				<!-- Step 1: Evacuee Selection -->
 				<div class="space-y-2">
-					<span class="text-sm font-semibold text-foreground">1. ค้นหาและเลือกผู้ลี้ภัย *</span>
+					<span class="text-sm font-semibold text-foreground">1. ค้นหาและเลือกผู้ประสบภัย *</span>
 
 					{#if $formData.evacuee_id}
 						<div
@@ -154,7 +154,7 @@
 								{/if}
 								<Input
 									type="text"
-									placeholder="พิมพ์ ชื่อ-นามสกุล, บัตรประชาชน หรือเบอร์โทร เพื่อค้นหาผู้ลี้ภัย..."
+									placeholder="พิมพ์ ชื่อ-นามสกุล, บัตรประชาชน หรือเบอร์โทร เพื่อค้นหาผู้ประสบภัย..."
 									bind:value={searchQuery}
 									class="pl-9"
 								/>
@@ -183,7 +183,7 @@
 								</div>
 							{:else if debouncedSearchQuery && !isSearching}
 								<p class="px-2 py-1 text-xs text-muted-foreground">
-									ไม่พบรายชื่อผู้ลี้ภัยที่ตรงกับคำค้นหา
+									ไม่พบรายชื่อผู้ประสบภัยที่ตรงกับคำค้นหา
 								</p>
 							{/if}
 						</div>
@@ -281,7 +281,7 @@
 								<Textarea
 									{...props}
 									bind:value={$formData.reason}
-									placeholder="ระบุรายละเอียดทางอาการแพทย์ หรือเหตุผลความจำเป็นในการส่งต่อผู้ลี้ภัย"
+									placeholder="ระบุรายละเอียดทางอาการแพทย์ หรือเหตุผลความจำเป็นในการส่งต่อผู้ประสบภัย"
 									rows={3}
 								/>
 							{/snippet}

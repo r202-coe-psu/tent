@@ -18,20 +18,13 @@ export class ReferralRemoteRepository implements ReferralRepository {
 	}
 
 	async list(filter?: { status?: ReferralStatus; evacuee_id?: string }): Promise<Referral[]> {
-		const selector: Record<string, unknown> = { type: 'referral' };
-		if (filter?.status) {
-			selector.status = filter.status;
-		}
-		if (filter?.evacuee_id) {
-			selector.evacuee_id = filter.evacuee_id;
-		}
+		const all = await this.repo.allByType<Referral>('referral', isReferral);
 
-		const results = await this.repo.find<Referral>({
-			selector,
-			limit: 1000
+		return all.filter((r) => {
+			if (filter?.status && r.status !== filter.status) return false;
+			if (filter?.evacuee_id && r.evacuee_id !== filter.evacuee_id) return false;
+			return true;
 		});
-
-		return results.filter(isReferral);
 	}
 
 	async get(id: string): Promise<Referral | null> {

@@ -79,7 +79,7 @@
 			<div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
 				<div>
 					<Card.Title class="flex items-center gap-2 text-xl font-bold">
-						รายละเอียดใบส่งตัวผู้ลี้ภัย
+						รายละเอียดใบส่งตัวผู้ประสบภัย
 					</Card.Title>
 					<p class="mt-1 text-xs text-muted-foreground">ID: {referral._id}</p>
 				</div>
@@ -98,12 +98,12 @@
 			<!-- Section 1: Evacuee Info -->
 			<div class="space-y-3">
 				<h3 class="text-sm font-semibold tracking-wider text-foreground uppercase">
-					ผู้ลี้ภัยที่ส่งตัว
+					ผู้ประสบภัยที่ส่งตัว
 				</h3>
 				<div class="rounded-lg border border-border/60 bg-muted/40 p-4">
 					<div class="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
 						<div>
-							<p class="text-xs text-muted-foreground">รหัสผู้ลี้ภัย (Evacuee ID)</p>
+							<p class="text-xs text-muted-foreground">รหัสผู้ประสบภัย (Evacuee ID)</p>
 							<p class="mt-0.5 font-mono font-medium">{referral.evacuee_id}</p>
 						</div>
 						<!-- In standard production, PII redacted by backend will hide first_name/last_name inside the JSON if Hospital scope is applied. -->
