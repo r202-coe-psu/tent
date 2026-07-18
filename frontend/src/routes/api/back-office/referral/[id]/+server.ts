@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authorizeReferral } from '../_auth';
+import { authorizeReferral, resolveShelterCode } from '../_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 
 export const prerender = false;
@@ -17,17 +17,7 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 			return json({ error: 'Missing ID parameter' }, { status: 400 });
 		}
 
-		// Resolve which shelter db to query
-		let shelterCode = url.searchParams.get('shelter_code') || undefined;
-		if (!caller.isSA) {
-			shelterCode = caller.shelterCode || undefined;
-		} else {
-			shelterCode = shelterCode || 'SH001';
-		}
-
-		if (!shelterCode) {
-			return json({ error: 'Missing shelter_code scope' }, { status: 400 });
-		}
+		const shelterCode = resolveShelterCode(caller, url.searchParams.get('shelter_code'));
 
 		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
 		const doc = await repo.get(id);

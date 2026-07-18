@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-imports */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authorizeReferral } from '../../_auth';
+import { authorizeReferral, resolveShelterCode } from '../../_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import { referralStatusSchema } from '$lib/features/referrals/domain/referral.schema';
 
@@ -19,17 +19,7 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 			return json({ error: 'Missing ID parameter' }, { status: 400 });
 		}
 
-		// Resolve which shelter db to write to
-		let shelterCode = url.searchParams.get('shelter_code') || undefined;
-		if (!caller.isSA) {
-			shelterCode = caller.shelterCode || undefined;
-		} else {
-			shelterCode = shelterCode || 'SH001';
-		}
-
-		if (!shelterCode) {
-			return json({ error: 'Missing shelter_code scope' }, { status: 400 });
-		}
+		const shelterCode = resolveShelterCode(caller, url.searchParams.get('shelter_code'));
 
 		const body = await request.json().catch(() => ({}));
 		const parsed = referralStatusSchema.safeParse(body.to);
