@@ -20,13 +20,13 @@ vi.mock('$lib/server/couch-admin', () => ({
 const mockList = vi.fn();
 const mockCreate = vi.fn();
 
-vi.mock('$lib/features/referrals/data/referral.remote', () => {
-	class MockReferralRemoteRepository {
+vi.mock('$lib/features/referrals/server/referral.server-repo', () => {
+	class MockReferralServerRepository {
 		list = mockList;
 		create = mockCreate;
 	}
 	return {
-		ReferralRemoteRepository: MockReferralRemoteRepository
+		ReferralServerRepository: MockReferralServerRepository
 	};
 });
 
@@ -135,7 +135,7 @@ describe('BFF Referral List and Create Endpoints', () => {
 			);
 		});
 
-		it('returns 422 on validation failure', async () => {
+		it('returns 400 on validation failure', async () => {
 			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 				name: 'sm_user',
 				roles: ['shelter_manager', 'shelter:SH001'],
@@ -146,7 +146,7 @@ describe('BFF Referral List and Create Endpoints', () => {
 			// invalid schema input (missing evacuee_id and to_org)
 			const event = createMockEvent({}, { urgency: 'high' });
 			const res = await POST(event);
-			expect(res.status).toBe(422);
+			expect(res.status).toBe(400);
 
 			const data = await res.json();
 			expect(data.error).toBe('Validation failed');

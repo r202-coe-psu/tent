@@ -3,7 +3,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { isShelterManager } from '$lib/auth/roles';
-import { ReferralRemoteRepository } from '$lib/features/referrals/data/referral.remote';
+import { ReferralServerRepository } from '$lib/features/referrals/server/referral.server-repo';
 import {
 	referralInputSchema,
 	type ReferralStatus
@@ -44,11 +44,12 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		const status = (url.searchParams.get('status') as ReferralStatus) || undefined;
 		const evacueeId = url.searchParams.get('evacuee_id') || undefined;
 
-		const repo = new ReferralRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new ReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
 		const list = await repo.list({ status, evacuee_id: evacueeId });
 
 		return json(list);
 	} catch (e: unknown) {
+		console.error('🔴 [Referral API GET Error]:', e);
 		const err = e as { status?: number; body?: { message?: string }; message?: string };
 		const status = err.status || 500;
 		const message = err.body?.message || err.message || 'Internal Server Error';
@@ -62,7 +63,27 @@ export const GET: RequestHandler = async ({ request, url }) => {
  */
 export const POST: RequestHandler = async ({ request, url }) => {
 	try {
-		const caller = await authorizeReferral(request.headers.get('cookie'));
+		const cookie = request.headers.get('cookie');
+		if (!cookie) {
+			return json({ error: 'Authentication required' }, { status: 401 });
+		}
+
+		let caller;
+		try {
+			caller = await authorizeReferral(cookie);
+		} catch (authErr: unknown) {
+			const err = authErr as { status?: number; body?: { message?: string }; message?: string };
+			const status = err.status || 401;
+			const message = err.body?.message || err.message || 'Unauthorized';
+			return json({ error: message }, { status });
+		}
+
+		if (!caller) {
+			return json({ error: 'Unauthorized: Session missing' }, { status: 401 });
+		}
+		if (!caller.name) {
+			return json({ error: 'Forbidden: Missing user details' }, { status: 403 });
+		}
 
 		// Resolve which shelter db to write to
 		let shelterCode = url.searchParams.get('shelter_code') || undefined;
@@ -79,18 +100,26 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		const body = await request.json().catch(() => ({}));
 		const parsed = referralInputSchema.safeParse(body);
 		if (!parsed.success) {
-			return json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 422 });
+			return json({ error: 'Validation failed', details: parsed.error.format() }, { status: 400 });
 		}
 
-		const repo = new ReferralRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new ReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
 		const ctx = {
 			shelterCode,
 			createdBy: caller.name
 		};
 
-		const created = await repo.create(parsed.data, ctx);
+		let created;
+		try {
+			created = await repo.create(parsed.data, ctx);
+		} catch (dbError: unknown) {
+			console.error('Failed to create referral in CouchDB:', dbError);
+			return json({ error: 'Failed to create referral' }, { status: 500 });
+		}
+
 		return json(created, { status: 201 });
 	} catch (e: unknown) {
+		console.error('🔴 [Referral API POST Error]:', e);
 		const err = e as { status?: number; body?: { message?: string }; message?: string };
 		const status = err.status || 500;
 		const message = err.body?.message || err.message || 'Internal Server Error';

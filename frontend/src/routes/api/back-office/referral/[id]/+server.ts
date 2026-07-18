@@ -3,7 +3,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { isShelterManager } from '$lib/auth/roles';
-import { ReferralRemoteRepository } from '$lib/features/referrals/data/referral.remote';
+import { ReferralServerRepository } from '$lib/features/referrals/server/referral.server-repo';
 
 export const prerender = false;
 
@@ -40,7 +40,7 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 			return json({ error: 'Missing shelter_code scope' }, { status: 400 });
 		}
 
-		const repo = new ReferralRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new ReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
 		const doc = await repo.get(id);
 
 		if (!doc) {
@@ -49,6 +49,7 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 
 		return json(doc);
 	} catch (e: unknown) {
+		console.error('🔴 [Referral API GET ID Error]:', e);
 		const err = e as { status?: number; body?: { message?: string }; message?: string };
 		const status = err.status || 500;
 		const message = err.body?.message || err.message || 'Internal Server Error';

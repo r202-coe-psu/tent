@@ -3,7 +3,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { isShelterManager } from '$lib/auth/roles';
-import { ReferralRemoteRepository } from '$lib/features/referrals/data/referral.remote';
+import { ReferralServerRepository } from '$lib/features/referrals/server/referral.server-repo';
 import { referralStatusSchema } from '$lib/features/referrals/domain/referral.schema';
 
 export const prerender = false;
@@ -48,7 +48,7 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 		}
 
 		const nextStatus = parsed.data;
-		const repo = new ReferralRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new ReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
 
 		const MAX_RETRIES = 3;
 		let lastError: { message?: string } | null = null;
@@ -82,6 +82,7 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 			{ status: 409 }
 		);
 	} catch (e: unknown) {
+		console.error('🔴 [Referral API Transition Error]:', e);
 		const err = e as { status?: number; body?: { message?: string }; message?: string };
 		const status = err.status || 500;
 		const message = err.body?.message || err.message || 'Internal Server Error';

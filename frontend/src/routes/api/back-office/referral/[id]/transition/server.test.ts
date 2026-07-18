@@ -18,12 +18,12 @@ vi.mock('$lib/server/couch-admin', () => ({
 
 const mockTransition = vi.fn();
 
-vi.mock('$lib/features/referrals/data/referral.remote', () => {
-	class MockReferralRemoteRepository {
+vi.mock('$lib/features/referrals/server/referral.server-repo', () => {
+	class MockReferralServerRepository {
 		transition = mockTransition;
 	}
 	return {
-		ReferralRemoteRepository: MockReferralRemoteRepository
+		ReferralServerRepository: MockReferralServerRepository
 	};
 });
 
