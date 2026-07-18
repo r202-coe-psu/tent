@@ -44,11 +44,11 @@
 			<h1
 				class="bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-3xl font-extrabold tracking-tight text-transparent"
 			>
-				ระบบส่งต่อผู้ลี้ภัย (Referral System)
+				ระบบส่งต่อผู้ประสบภัย
 			</h1>
 			<p class="text-sm text-muted-foreground">
 				จัดการคัดกรอง ยื่นเรื่องส่งต่อ
-				และอัปเดตสถานะการส่งตัวผู้ลี้ภัยไปยังสถานพยาบาลหรือสังคมสงเคราะห์ภายนอก
+				และอัปเดตสถานะการส่งตัวผู้ประสบภัยไปยังสถานพยาบาลหรือหน่วยงานสังคมสงเคราะห์ภายนอก
 			</p>
 		</div>
 
@@ -83,7 +83,19 @@
 							>เลือกรายการเพื่อเปิดหน้าดูรายละเอียดและดำเนินการส่งต่อ</Card.Description
 						>
 					</Card.Header>
-					<Card.Content class="max-h-[70vh] overflow-y-auto pt-4">
+					<Card.Content
+						class="px-6 pt-4 pb-4"
+						onclick={(e) => {
+							const target = e.target as HTMLElement;
+							const card = target.closest('[data-referral-id]');
+							if (card) {
+								const id = card.getAttribute('data-referral-id');
+								if (id) {
+									selectedId = id;
+								}
+							}
+						}}
+					>
 						{#if isLoadingList}
 							<div
 								class="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground"
@@ -126,7 +138,7 @@
 							<h3 class="mb-1 text-lg font-bold text-foreground">ยังไม่มีการเลือกรายการ</h3>
 							<p class="max-w-sm text-sm">
 								กรุณาเลือกรายการส่งตัวจากรายชื่อด้านซ้ายเพื่อเปิดดูรายละเอียดประวัติการส่งตัว
-								หรือกดปุ่ม "สร้างรายการส่งต่อ" เพื่อเริ่มร่างบันทึกส่งต่อผู้ลี้ภัยรายใหม่
+								หรือกดปุ่ม "สร้างรายการส่งต่อ" เพื่อเริ่มร่างบันทึกส่งต่อผู้ประสบภัยรายใหม่
 							</p>
 						</Card.Content>
 					</Card.Root>
