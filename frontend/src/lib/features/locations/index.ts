@@ -1,7 +1,7 @@
 /**
- * Public API of the `locations` feature — Thailand province/district/subdistrict
- * reference data in the `registry` database (CR-037). Cross-feature and route
- * code (BFF handlers, seed script) import ONLY from here.
+ * Public API of the `locations` feature. Active reads temporarily use the
+ * bundled JSON snapshot; CouchDB document types remain here for the seed and a
+ * future restoration of central editing. Cross-feature code imports only here.
  */
 
 // Domain — persisted doc shapes + flat record
