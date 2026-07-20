@@ -96,9 +96,9 @@
 	});
 </script>
 
-<div class="flex flex-col gap-6 p-6">
+<div class="flex h-full min-h-0 flex-col gap-6 overflow-hidden p-6">
 	<!-- Header -->
-	<div class="flex items-start justify-between gap-4">
+	<div class="flex shrink-0 items-start justify-between gap-4">
 		<div class="space-y-1">
 			<h2 class="text-lg font-bold tracking-tight text-foreground">ทะเบียนผู้พักพิง</h2>
 			<p class="text-sm text-muted-foreground">
@@ -115,7 +115,7 @@
 	</div>
 
 	<!-- Filters -->
-	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))]">
+	<div class="grid w-full shrink-0 grid-cols-1 gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))]">
 		<div class="relative w-full min-w-0">
 			<label for="evacuee-search" class="sr-only">ค้นหาผู้ประสบภัย</label>
 			<Search
@@ -212,15 +212,25 @@
 			<p class="text-sm text-muted-foreground">ไม่พบผู้ประสบภัยในระบบ</p>
 		</div>
 	{:else}
-		<div class="overflow-hidden rounded-xl border border-border shadow-sm">
-			<Table.Root>
-				<Table.Header>
-					<Table.Row class="bg-muted/40 hover:bg-muted/40">
-						<Table.Head class="font-semibold text-foreground">ชื่อ-นามสกุล</Table.Head>
-						<Table.Head class="font-semibold text-foreground">ประเภทผู้ประสบภัย</Table.Head>
-						<Table.Head class="font-semibold text-foreground">ZONE จัดสรร</Table.Head>
-						<Table.Head class="text-center font-semibold text-foreground">สถานะ</Table.Head>
-						<Table.Head class="text-center font-semibold text-foreground">จัดการ</Table.Head>
+		<div class="max-h-full min-h-0 min-w-0 overflow-auto rounded-xl border border-border shadow-sm">
+			<Table.Root class="min-w-max" containerClass="overflow-x-visible overflow-y-visible">
+				<Table.Header class="sticky top-0 z-10 border-b border-border bg-muted">
+					<Table.Row class="bg-muted hover:bg-muted">
+						<Table.Head class="sticky top-0 z-20 bg-muted font-semibold text-foreground"
+							>ชื่อ-นามสกุล</Table.Head
+						>
+						<Table.Head class="sticky top-0 z-20 bg-muted font-semibold text-foreground"
+							>ประเภทผู้ประสบภัย</Table.Head
+						>
+						<Table.Head class="sticky top-0 z-20 bg-muted font-semibold text-foreground"
+							>ZONE จัดสรร</Table.Head
+						>
+						<Table.Head class="sticky top-0 z-20 bg-muted text-center font-semibold text-foreground"
+							>สถานะ</Table.Head
+						>
+						<Table.Head class="sticky top-0 z-20 bg-muted text-center font-semibold text-foreground"
+							>จัดการ</Table.Head
+						>
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
@@ -296,7 +306,7 @@
 		</div>
 
 		{#if totalPages > 1}
-			<Pagination.Root bind:page={currentPage} count={total} perPage={PAGE_SIZE}>
+			<Pagination.Root class="shrink-0" bind:page={currentPage} count={total} perPage={PAGE_SIZE}>
 				{#snippet children({ pages })}
 					<Pagination.Content>
 						<Pagination.Previous />
