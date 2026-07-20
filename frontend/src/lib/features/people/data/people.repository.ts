@@ -16,6 +16,11 @@ export type HouseholdSearchLabels = {
 	community: Record<string, string>;
 };
 
+export type EvacueeFilters = {
+	specialNeed?: string;
+	zone?: string;
+};
+
 /**
  * Persistence contract for the `people` feature. The application layer depends
  * on this interface — never on CouchDB directly — so the store can be swapped
@@ -34,7 +39,8 @@ export interface PeopleRepository {
 	listEvacueesPaginated(
 		page: number,
 		pageSize: number,
-		search?: string
+		search?: string,
+		filters?: EvacueeFilters
 	): Promise<PaginatedResult<Evacuee>>;
 	/** One evacuee by `_id`, or `null` when absent. */
 	getEvacuee(id: string): Promise<Evacuee | null>;

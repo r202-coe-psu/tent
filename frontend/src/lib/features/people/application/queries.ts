@@ -7,7 +7,7 @@ import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { peopleRepository } from '../data/people.remote';
-import type { HouseholdSearchLabels } from '../data/people.repository';
+import type { EvacueeFilters, HouseholdSearchLabels } from '../data/people.repository';
 import type {
 	Evacuee,
 	EvacueeInput,
@@ -23,8 +23,13 @@ export const peopleKeys = {
 	all: ['people'] as const,
 	evacuees: () => [...peopleKeys.all, 'evacuees', getShelterCode()] as const,
 	evacuee: (id: string) => [...peopleKeys.all, 'evacuee', getShelterCode(), id] as const,
-	evacueesPaginated: (page: number, pageSize: number, search = '') =>
-		[...peopleKeys.all, 'evacuees', getShelterCode(), { page, pageSize, search }] as const,
+	evacueesPaginated: (page: number, pageSize: number, search = '', filtersKey = '') =>
+		[
+			...peopleKeys.all,
+			'evacuees',
+			getShelterCode(),
+			{ page, pageSize, search, filtersKey }
+		] as const,
 	evacueesSearch: (query: string) =>
 		[...peopleKeys.all, 'evacuees', getShelterCode(), 'search', query] as const,
 	households: () => [...peopleKeys.all, 'households', getShelterCode()] as const,
@@ -49,14 +54,23 @@ export const useEvacuees = () =>
 export const useEvacueesPaginated = (
 	page: () => number,
 	pageSize: () => number,
-	search?: () => string
+	search?: () => string,
+	filters?: () => EvacueeFilters
 ) =>
 	createQuery(() => ({
-		queryKey: peopleKeys.evacueesPaginated(page(), pageSize(), search?.() ?? ''),
+		queryKey: peopleKeys.evacueesPaginated(
+			page(),
+			pageSize(),
+			search?.() ?? '',
+			filters ? JSON.stringify(filters()) : ''
+		),
 		queryFn: () =>
-			peopleRepository().listEvacueesPaginated(page(), pageSize(), search?.()) as Promise<
-				PaginatedResult<Evacuee>
-			>
+			peopleRepository().listEvacueesPaginated(
+				page(),
+				pageSize(),
+				search?.(),
+				filters?.()
+			) as Promise<PaginatedResult<Evacuee>>
 	}));
 
 export const useSearchEvacuees = (query: () => string, enabled: () => boolean) =>
