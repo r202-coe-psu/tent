@@ -79,7 +79,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 							}
 						}
 					}
-				} catch (err) {}
+				} catch {}
 				return { occ, vuln };
 			});
 
@@ -94,7 +94,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 				vulnerable_count: totalVulnerable
 			};
 			lastFetchTime = now;
-		} catch (e) {}
+		} catch {}
 	}
 
 	const isStale = now - lastFetchTime > 1800000; // > 30 mins stale threshold (OP-7)
