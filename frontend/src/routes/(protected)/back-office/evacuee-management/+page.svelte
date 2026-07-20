@@ -57,11 +57,7 @@
 	</div>
 
 	<!-- Tab content -->
-	<div
-		class="min-h-0 flex-1 overflow-x-hidden {activeTab === 'evacuee'
-			? 'overflow-hidden'
-			: 'overflow-y-auto'}"
-	>
+	<div class="min-h-0 flex-1 [scrollbar-gutter:stable] overflow-x-hidden overflow-y-scroll">
 		{#if activeTab === 'dashboard'}
 			{#if shelterStore.selectedShelterCode}
 				<DashboardTab shelterCode={shelterStore.selectedShelterCode} />
