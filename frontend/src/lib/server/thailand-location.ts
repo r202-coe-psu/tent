@@ -3,15 +3,15 @@
  * selects on the shelter form and the combined search-select on the household
  * register form.
  *
- * Reference data lives in the central `registry` database as three doc levels
- * (`location_province` / `location_district` / `location_subdistrict`), modeled
- * MongoDB-style (child docs carry a parent `_id` foreign key queried via a Mango
- * index). CR-037 moved this off the bundled static JSON so it can be edited
- * centrally without a redeploy. Seed with `pnpm seed:thailand`.
+ * HOTFIX: reads use the bundled static JSON snapshot. The CouchDB-backed location
+ * editor is temporarily disabled while production persistence is investigated.
+ * Keeping the existing API contract means shelter and household forms continue
+ * to work without depending on `registry` location documents.
  *
  * Server-only: uses the CouchDB admin client. Never import from a client bundle.
  */
 
+import rows from '../../../static/data/thailand_location_data.json';
 import { adminRaw, ServiceError } from './couch-admin';
 import {
 	LOCATION_DB,
@@ -24,60 +24,24 @@ import {
 	makeProvinceDoc,
 	makeDistrictDoc,
 	makeSubdistrictDoc,
-	isProvinceDoc,
-	isDistrictDoc,
-	isSubdistrictDoc,
 	type ProvinceDoc,
 	type DistrictDoc,
 	type SubdistrictDoc,
-	type LocationDoc
+	type LocationDoc,
+	type LocationRow
 } from '$lib/features/locations';
 
-const TYPE_PREFIX_END = '￰';
+const DATA = rows as LocationRow[];
 const thCompare = (a: string, b: string) => a.localeCompare(b, 'th');
 
-/** Read every doc whose `_id` starts with `{type}:` from the registry. */
-async function allDocsByType<T>(type: string, guard: (d: unknown) => d is T): Promise<T[]> {
-	const startkey = encodeURIComponent(JSON.stringify(`${type}:`));
-	const endkey = encodeURIComponent(JSON.stringify(`${type}:${TYPE_PREFIX_END}`));
-	const { status, data } = await adminRaw(
-		`/${LOCATION_DB}/_all_docs?include_docs=true&startkey=${startkey}&endkey=${endkey}`,
-		'GET'
-	);
-	if (status === 404) return []; // registry not provisioned yet
-	if (status >= 400) throw new Error(`registry _all_docs failed (HTTP ${status})`);
-	const rows = (data as { rows?: { doc?: unknown }[] })?.rows ?? [];
-	return rows.map((r) => r.doc).filter((d): d is T => guard(d));
+export async function listProvinces(): Promise<string[]> {
+	return [...new Set(DATA.map((row) => row.province))].sort(thCompare);
 }
 
-/** Mango `_find` on the registry, scoped to a single doc type. */
-async function findByType<T>(
-	type: string,
-	selector: Record<string, unknown>,
-	guard: (d: unknown) => d is T
-): Promise<T[]> {
-	const { status, data } = await adminRaw(`/${LOCATION_DB}/_find`, 'POST', {
-		selector: { type, ...selector },
-		limit: 100_000
-	});
-	if (status === 404) return [];
-	if (status >= 400) throw new Error(`registry _find failed (HTTP ${status})`);
-	const docs = (data as { docs?: unknown[] })?.docs ?? [];
-	return docs.filter((d): d is T => guard(d));
-}
-
-export function listProvinces(): Promise<string[]> {
-	return allDocsByType<ProvinceDoc>('location_province', isProvinceDoc).then((docs) =>
-		docs.map((d) => d.name).sort(thCompare)
-	);
-}
-
-export function listDistricts(province: string): Promise<string[]> {
-	return findByType<DistrictDoc>(
-		'location_district',
-		{ province_id: provinceDocId(province) },
-		isDistrictDoc
-	).then((docs) => docs.map((d) => d.name).sort(thCompare));
+export async function listDistricts(province: string): Promise<string[]> {
+	return [
+		...new Set(DATA.filter((row) => row.province === province).map((row) => row.district))
+	].sort(thCompare);
 }
 
 export interface Subdistrict {
@@ -85,16 +49,10 @@ export interface Subdistrict {
 	zipcode: number;
 }
 
-export function listSubdistricts(province: string, district: string): Promise<Subdistrict[]> {
-	return findByType<SubdistrictDoc>(
-		'location_subdistrict',
-		{ district_id: districtDocId(province, district) },
-		isSubdistrictDoc
-	).then((docs) =>
-		docs
-			.map((d) => ({ subdistrict: d.name, zipcode: d.zipcode }))
-			.sort((a, b) => thCompare(a.subdistrict, b.subdistrict))
-	);
+export async function listSubdistricts(province: string, district: string): Promise<Subdistrict[]> {
+	return DATA.filter((row) => row.province === province && row.district === district)
+		.map((row) => ({ subdistrict: row.subdistrict, zipcode: row.zipcode }))
+		.sort((a, b) => thCompare(a.subdistrict, b.subdistrict));
 }
 
 export interface LocationRecord {
@@ -104,19 +62,9 @@ export interface LocationRecord {
 	zipcode: number;
 }
 
-/** Flat list of every subdistrict (province/district denormalized) — backs the
- * household form's combined search-select. */
-export function listAllLocations(): Promise<LocationRecord[]> {
-	return allDocsByType<SubdistrictDoc>('location_subdistrict', isSubdistrictDoc).then((docs) =>
-		docs
-			.map((d) => ({
-				province: d.province,
-				district: d.district,
-				subdistrict: d.name,
-				zipcode: d.zipcode
-			}))
-			.sort((a, b) => thCompare(a.subdistrict, b.subdistrict))
-	);
+/** Flat list backing the household form's combined search-select. */
+export async function listAllLocations(): Promise<LocationRecord[]> {
+	return DATA.map((row) => ({ ...row })).sort((a, b) => thCompare(a.subdistrict, b.subdistrict));
 }
 
 // ── writes (SA-only; callers must requireAdmin first) ────────────────────────

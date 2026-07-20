@@ -12,7 +12,7 @@ affects:
   - frontend/src/lib/features/resource-calc/data/daily-calc.repository.ts
   - frontend/src/lib/features/resource-calc/data/daily-calc.remote.ts
   - frontend/src/lib/features/resource-calc/index.ts
-  - docs/task-breakdown/07-B.md T-31 (DoD — persistence)
+  - docs/task-breakdown/07-B-sop.md T-31 (DoD — persistence)
 ---
 
 # CR-036 — daily_calc doc type (persisted daily resource-calc snapshot)

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildLocationDocs } from '$lib/features/locations';
 
-// Fixture rows → valid registry docs via the domain factory (same shape the
-// seed writes). The BFF reads these back through the admin client.
+// Fixtures are retained for write-path tests. Read-path tests exercise the
+// bundled production JSON snapshot directly.
 const ROWS = [
 	{ province: 'B-Province', district: 'B-District', subdistrict: 'B-Sub', zipcode: 20000 },
 	{ province: 'A-Province', district: 'A-District-2', subdistrict: 'A-Sub-2', zipcode: 10002 },
@@ -40,51 +40,23 @@ const {
 
 beforeEach(() => {
 	adminRaw.mockReset();
-	adminRaw.mockImplementation(
-		async (path: string, method: string, body?: { selector: Record<string, string> }) => {
-			if (method === 'GET' && path.includes('_all_docs')) {
-				if (path.includes('location_province'))
-					return { status: 200, data: { rows: provinces.map((doc) => ({ doc })) } };
-				if (path.includes('location_subdistrict'))
-					return { status: 200, data: { rows: subdistricts.map((doc) => ({ doc })) } };
-				return { status: 200, data: { rows: [] } };
-			}
-			if (method === 'POST' && path.endsWith('/_find')) {
-				const sel = body!.selector;
-				if (sel.type === 'location_district')
-					return {
-						status: 200,
-						data: { docs: districts.filter((d) => d.province_id === sel.province_id) }
-					};
-				if (sel.type === 'location_subdistrict')
-					return {
-						status: 200,
-						data: { docs: subdistricts.filter((s) => s.district_id === sel.district_id) }
-					};
-			}
-			return { status: 404, data: {} };
-		}
-	);
 });
 
 describe('listProvinces', () => {
-	it('returns deduped provinces sorted', async () => {
-		expect(await listProvinces()).toEqual(['A-Province', 'B-Province']);
-	});
-
-	it('returns an empty array when the registry is not provisioned', async () => {
-		adminRaw.mockResolvedValueOnce({ status: 404, data: {} });
-		expect(await listProvinces()).toEqual([]);
+	it('returns all 77 deduped provinces from the bundled JSON, sorted', async () => {
+		const result = await listProvinces();
+		expect(result).toHaveLength(77);
+		expect(result).toContain('สงขลา');
+		expect(result).toEqual([...result].sort((a, b) => a.localeCompare(b, 'th')));
+		expect(adminRaw).not.toHaveBeenCalled();
 	});
 });
 
 describe('listDistricts', () => {
-	it('returns districts for the given province, sorted', async () => {
-		expect(await listDistricts('A-Province')).toEqual(['A-District-1', 'A-District-2']);
-	});
-
-	it('does not leak districts from another province with the same name', async () => {
-		expect(await listDistricts('B-Province')).toEqual(['A-District-1', 'B-District']);
+	it('returns districts for the given province from the bundled JSON', async () => {
+		const result = await listDistricts('สงขลา');
+		expect(result).toContain('หาดใหญ่');
+		expect(adminRaw).not.toHaveBeenCalled();
 	});
 
 	it('returns an empty array for an unknown province', async () => {
@@ -93,17 +65,10 @@ describe('listDistricts', () => {
 });
 
 describe('listSubdistricts', () => {
-	it('returns subdistrict + zipcode pairs for the given province/district, sorted by name', async () => {
-		expect(await listSubdistricts('A-Province', 'A-District-1')).toEqual([
-			{ subdistrict: 'A-Sub-1', zipcode: 10001 },
-			{ subdistrict: 'A-Sub-1-Dup', zipcode: 10001 }
-		]);
-	});
-
-	it('scopes by both province and district, not district alone', async () => {
-		expect(await listSubdistricts('B-Province', 'A-District-1')).toEqual([
-			{ subdistrict: 'B-Sub-2', zipcode: 20001 }
-		]);
+	it('returns subdistrict + zipcode pairs for the given province/district', async () => {
+		const result = await listSubdistricts('สงขลา', 'หาดใหญ่');
+		expect(result).toContainEqual({ subdistrict: 'คอหงส์', zipcode: 90110 });
+		expect(adminRaw).not.toHaveBeenCalled();
 	});
 
 	it('returns an empty array for an unknown province/district combination', async () => {
@@ -112,15 +77,16 @@ describe('listSubdistricts', () => {
 });
 
 describe('listAllLocations', () => {
-	it('returns every subdistrict flattened with province/district names', async () => {
+	it('returns all 7,426 locations from the bundled JSON', async () => {
 		const all = await listAllLocations();
-		expect(all).toHaveLength(ROWS.length);
+		expect(all).toHaveLength(7426);
 		expect(all).toContainEqual({
-			province: 'A-Province',
-			district: 'A-District-1',
-			subdistrict: 'A-Sub-1',
-			zipcode: 10001
+			province: 'สงขลา',
+			district: 'หาดใหญ่',
+			subdistrict: 'คอหงส์',
+			zipcode: 90110
 		});
+		expect(adminRaw).not.toHaveBeenCalled();
 	});
 });
 

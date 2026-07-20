@@ -9,7 +9,13 @@ layer: stable
 affects:
   - docs/data/data-model.md §1, §6, §8
   - docs/data/api-contract.md §1, §2, §6
-  - docs/task-breakdown/01-core.md (T-02, T-03)
+  - docs/task-breakdown/01-core.md (T-02, T-03, T-43)
+  - docs/task-breakdown/00-baseline.md (T-54)
+  - docs/task-breakdown/_index.md
+  - docs/task-breakdown/_timeline.md
+  - docs/task-breakdown/glossary.md
+  - docs/task-breakdown/10-eoc.md
+  - docs/task-breakdown/teamplanning.md
   - docs/features/offline-fallback-flow-spec.html
   - docs/prd/index.md
   - docs/prd/roadmap.md
@@ -19,6 +25,7 @@ affects:
   - frontend/CONVENTIONS.md
   - frontend/.agents/skills/couchdb-bestpractices/SKILL.md
   - frontend/.agents/skills/pr-code-review/SKILL.md
+  - Notion Projects Tasks (T-02, T-54 scope realign — owner sync 2026-07-15)
 ---
 
 # CR-033 — Remote-first Architecture Pivot (Single Comprehensive CR)
@@ -48,7 +55,7 @@ data model, API contract, planning, feature flow, conventions และ governan
 6. Technical conventions alignment (`frontend/CONTRIBUTING.md`, `frontend/CONVENTIONS.md`, docs skills sources)
 7. Legacy CR supersession map and terminology cleanup (`docs/changes/_index.md` + superseded links)
 
-## Progress status (2026-07-07)
+## Progress status (2026-07-15)
 - ✅ Done — Package 1: `docs/data/data-model.md` ปรับเป็น remote-first + active endpoint
 - ✅ Done — Package 2: `docs/data/api-contract.md` ปรับ sync/service/public plane ให้ตรงกับ active endpoint policy
 - ✅ Done — Package 3: `docs/task-breakdown/01-core.md` ปรับ T-02/T-03 ให้ตัด local-first baseline
@@ -57,6 +64,9 @@ data model, API contract, planning, feature flow, conventions และ governan
 - ✅ Done — Package 6 (ส่วน frontend docs): `frontend/CONTRIBUTING.md` และ `frontend/CONVENTIONS.md` align กับ remote-first + canonical app-level event channel + retry UX policy
 - ✅ Done — Skill alignment: rename `couchdb-pouchdb-bestpractices` -> `couchdb-bestpractices` และอัปเดต skill references ที่เกี่ยวข้อง รวม review checklist ให้ enforce locked decisions
 - ✅ Done — Package 7 (propagation status): locked decisions propagated across data/api/task/flow/PRD/frontend docs and skills listed in `affects`
+- ✅ Done — Package 8: frontend implementation — central-only remote path (`couch-db.ts`, `*.remote.ts`, event channel, ConnectionBanner)
+- ✅ Done — Package 9 (2026-07-15): task-breakdown baseline/index/glossary/timeline/T-54 realign (deny PouchDB); Notion T-54/T-02 synced via `ntn` (`docs/changes/CR-033-notion-sync-checklist.md`)
+- ⬜ Follow-up — edge failover orchestration (deferred from Package 8)
 
 ## Owner decisions (locked)
 - ✅ `disconnected` policy: เลือก **A** = status-only (ไม่อนุญาต read-only local cache)
@@ -96,4 +106,6 @@ data model, API contract, planning, feature flow, conventions และ governan
 - 2026-07-07 — PRD wording aligned under CR-033 (`index`, `roadmap`, `kickoff`, `phase-r2-foundation`)
 - 2026-07-07 — owner locked architecture decisions: disconnected A, live-update B, retry policy (3 attempts + banner + force retry)
 - ✅ Done — Package 8: frontend implementation — central-only remote path (`couch-db.ts`, `*.remote.ts`, event channel, ConnectionBanner)
+- 2026-07-15 — owner directed Package 9: finish task-breakdown + Notion track for T-54/T-02 under CR-033
+- ✅ Done — Package 9: task-breakdown docs + Notion T-54/T-02 + board comment synced (`ntn` CLI)
 - ⬜ Follow-up — edge failover orchestration (deferred from Package 8)

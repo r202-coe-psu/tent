@@ -96,7 +96,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				requiresAdmin: true,
 				children: [
 					{
-						label: 'ตั้งค่าศูนย์พักพิง',
+						label: 'จัดการศูนย์พักพิง',
 						href: resolve('/back-office/shelters'),
 						icon: Building,
 						requiresAdmin: true
@@ -134,13 +134,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: Calculator
 					},
 					{ label: '6. อาสาสมัคร', href: null, icon: HandHeart },
-					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin },
-					{
-						label: '8. ข้อมูลที่อยู่ไทย',
-						href: resolve('/back-office/location-config'),
-						icon: MapPin,
-						requiresAdmin: true
-					}
+					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}
 		]

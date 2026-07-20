@@ -109,7 +109,7 @@
 	<div class="rounded-2xl border border-border bg-white p-6 shadow-sm">
 		<h2 class="mb-2 text-center text-xl font-bold">กรอกข้อมูลเพื่อค้นหา</h2>
 		<p class="mb-6 text-center text-sm text-muted-foreground">
-			รองรับการค้นหาด้วยหมายเลขบัตรประชาชน 13 หลัก, ชื่อ-นามสกุล หรือ หมายเลขหนังสือเดินทาง
+			รองรับการค้นหาด้วย ชื่อ สกุล เบอร์โทรศัพท์ หรือ รหัสบัตรประชาชน
 		</p>
 
 		<!-- Input -->
@@ -122,7 +122,7 @@
 					type="text"
 					bind:value={query}
 					onkeydown={handleKeydown}
-					placeholder="พิมพ์เลขบัตรประชาชน หรือ ชื่อ-นามสกุล..."
+					placeholder="พิมพ์ชื่อ สกุล เบอร์โทรศัพท์ หรือ รหัสบัตรประชาชน..."
 					class="h-12 w-full bg-transparent outline-none"
 				/>
 			</div>
@@ -330,7 +330,9 @@
 				<Search class=" size-10 text-muted-foreground" />
 			</div>
 			<h3 class="mb-2 text-lg font-bold text-foreground/90">เริ่มการค้นหา</h3>
-			<p class="text-sm">พิมพ์เลขบัตรประชาชน หรือชื่อ นามสกุล เพื่อทำการสืบค้นข้อมูล</p>
+			<p class="text-sm">
+				พิมพ์ชื่อ สกุล เบอร์โทรศัพท์ หรือ รหัสบัตรประชาชน เพื่อทำการสืบค้นข้อมูล
+			</p>
 		</div>
 	{/if}
 </div>
