@@ -84,7 +84,8 @@
 						type: 'raster',
 						tiles: ['https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png'],
 						tileSize: 256,
-						attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a>'
+						attribution:
+							'&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a>'
 					}
 				},
 				layers: [
@@ -247,23 +248,25 @@
 <div bind:this={mapElement} class="absolute inset-0 z-0 h-full w-full"></div>
 
 <!-- Legend overlay -->
-<div class="absolute bottom-8 left-2 z-10 rounded-xl border border-border/50 bg-black/70 px-3 py-2.5 text-xs shadow-lg backdrop-blur-md">
+<div
+	class="absolute bottom-8 left-2 z-10 rounded-xl border border-border/50 bg-black/70 px-3 py-2.5 text-xs shadow-lg backdrop-blur-md"
+>
 	<div class="mb-2 font-bold text-white">สถานะศูนย์พักพิง</div>
 	<div class="flex flex-col gap-1.5">
 		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full bg-[#22c55e] border border-white/80 shadow-sm"></div>
+			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#22c55e] shadow-sm"></div>
 			<span class="font-medium text-slate-200">เปิดใช้งาน</span>
 		</div>
 		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full bg-[#f59e0b] border border-white/80 shadow-sm"></div>
+			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#f59e0b] shadow-sm"></div>
 			<span class="font-medium text-slate-200">เตรียมพร้อม</span>
 		</div>
 		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full bg-[#ef4444] border border-white/80 shadow-sm"></div>
+			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#ef4444] shadow-sm"></div>
 			<span class="font-medium text-slate-200">เต็มความจุ</span>
 		</div>
 		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full bg-[#94a3b8] border border-white/80 shadow-sm"></div>
+			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#94a3b8] shadow-sm"></div>
 			<span class="font-medium text-slate-200">ปิดทำการ</span>
 		</div>
 	</div>
@@ -273,7 +276,9 @@
 	:global(.marker-label) {
 		opacity: 0;
 		visibility: hidden;
-		transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+		transition:
+			opacity 0.2s ease-in-out,
+			visibility 0.2s ease-in-out;
 	}
 	:global(.show-labels .marker-label) {
 		opacity: 1;
