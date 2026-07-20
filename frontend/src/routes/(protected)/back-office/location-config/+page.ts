@@ -1,6 +1,6 @@
-import { requireAdmin } from '$lib/guards/auth';
+import { redirect } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 
-export const load = (async () => {
-	await requireAdmin();
+export const load = (() => {
+	redirect(307, '/portal');
 }) satisfies PageLoad;
