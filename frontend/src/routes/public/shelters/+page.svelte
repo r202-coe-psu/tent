@@ -194,6 +194,14 @@
 			>
 				{#each displayShelters as shelter (shelter.id)}
 					<PublicShelterCard {shelter} {getStatusColor} {getStatusText} />
+				{:else}
+					<div
+						class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border p-8 text-center text-muted-foreground"
+					>
+						<AlertTriangle class="mb-2 h-8 w-8 text-muted-foreground/50" />
+						<p class="font-medium">ไม่พบข้อมูลศูนย์พักพิง</p>
+						<p class="text-sm">ลองเปลี่ยนเงื่อนไขการค้นหาอีกครั้ง</p>
+					</div>
 				{/each}
 			</div>
 		</div>
