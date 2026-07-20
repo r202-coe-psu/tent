@@ -69,7 +69,7 @@
 	<title>Smart Shelter — Public & RFL Portal</title>
 </svelte:head>
 
-<div class="mx-auto max-w-7xl px-4 py-8 md:px-6">
+<div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
 	<!-- 1. ประกาศด่วนระดับ 4 (อพยพทันที) -->
 	{#if showDemoEmergency}
 		<PublicEmergencyBanner {alerts} />
