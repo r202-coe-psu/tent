@@ -57,7 +57,7 @@
 			<span>{shelter.address} อ.{shelter.district}, จ.{shelter.province} </span>
 		</div>
 		<div class="ml-5">
-			ระยะห่างจากจุดผู้ใช้: 
+			ระยะห่างจากจุดผู้ใช้:
 			{#if shelter.distance !== undefined && shelter.distance !== null && !isNaN(shelter.distance)}
 				<span class="font-bold text-foreground">{shelter.distance} กม.</span>
 			{:else}
