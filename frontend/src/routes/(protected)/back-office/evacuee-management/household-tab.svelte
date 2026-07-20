@@ -224,12 +224,7 @@
 								<Button
 									variant="outline"
 									size="sm"
-									onclick={() =>
-										goto(
-											resolve(
-												`/back-office/households/edit/${h._id}?from=/back-office/evacuee-management?tab=household`
-											)
-										)}
+									onclick={() => goto(resolve(`/back-office/households/edit/${h._id}`))}
 								>
 									<Pencil class="h-3.5 w-3.5" />
 									แก้ไข
