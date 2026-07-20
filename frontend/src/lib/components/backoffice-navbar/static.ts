@@ -134,7 +134,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: Calculator
 					},
 					{ label: '6. อาสาสมัคร', href: null, icon: HandHeart },
-					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin },
+					{
+						label: '8. ตั้งค่า Public Portal (FAQ)',
+						href: resolve('/back-office/public-portal-config'),
+						icon: FileText
+					}
 				]
 			}
 		]
