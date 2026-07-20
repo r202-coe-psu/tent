@@ -7,7 +7,7 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { Combobox } from '$lib/components/ui/combobox/index.js';
+	import SearchSelect from '$lib/components/search-select.svelte';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -375,8 +375,9 @@
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>ประเทศ <span class="text-destructive">*</span></Form.Label>
-								<Combobox
-									items={COUNTRIES}
+								<SearchSelect
+									name="country"
+									options={COUNTRIES}
 									bind:value={$formData.country}
 									placeholder="เลือกประเทศ..."
 									searchPlaceholder="ค้นหาประเทศ..."

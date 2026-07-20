@@ -13,7 +13,7 @@
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import CheckSquare from '@lucide/svelte/icons/check-square';
 	import Check from '@lucide/svelte/icons/check';
-	import SearchSelect from '$lib/components/ui/search-select/search-select.svelte';
+	import SearchSelect from '$lib/components/search-select.svelte';
 	import { getAllLocations } from '$lib/features/shelters/data/thailand-location.api';
 
 	let {
@@ -330,7 +330,8 @@
 						<Label class="text-sm font-medium">ค้นหา ตำบล / อำเภอ / รหัสไปรษณีย์ ( dropdown )</Label
 						>
 						<SearchSelect
-							items={locationItems}
+							name="household_location"
+							options={locationItems}
 							bind:value={selectedLocationValue}
 							placeholder="พิมพ์เพื่อค้นหา เช่น บ้านพรุ หรือ 90250"
 							loading={locationsLoading}
