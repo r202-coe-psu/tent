@@ -42,3 +42,12 @@ class DonationCreateResponse(BaseModel):
 class DonationTrackingResponse(BaseModel):
     success: bool = True
     donation: dict[str, Any]
+
+
+class DonationCourierPatchRequest(BaseModel):
+    courier_tracking_no: str
+
+
+class DonationCourierPatchResponse(BaseModel):
+    success: bool = True
+    message: str = "Courier tracking number updated"

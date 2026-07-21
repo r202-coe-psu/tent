@@ -76,9 +76,14 @@ services:
       ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
       # Server-only — never bundled into the browser
       COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@couchdb:5984
+      # BFF donations/needs → FastAPI on the compose network (not localhost)
+      PUBLIC_FASTAPI_PROXY: http://fastapi:9000
+      SECRET_RECAPTCHA_KEY: ${SECRET_RECAPTCHA_KEY}
     depends_on:
       couchdb:
         condition: service_healthy
+      fastapi:
+        condition: service_started
     restart: unless-stopped
 
   nginx:

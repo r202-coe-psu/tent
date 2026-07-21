@@ -121,6 +121,41 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 		expect((savedDoc as PublicDonationDoc).logistics?.courier_tracking_no).toBe('TH999888');
 	});
 
+	it('PATCH falls back to FastAPI when donation is not yet in CouchDB', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({
+			status: 200,
+			data: { rows: [] }
+		});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					message: 'Courier tracking number updated'
+				})
+			})
+		);
+
+		const response = await PATCH({
+			params: { tracking_token: TOKEN },
+			request: {
+				json: () => Promise.resolve({ courier_tracking_no: 'TH111222' })
+			},
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PatchEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(200);
+		expect(data.success).toBe(true);
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
+		expect(fetch).toHaveBeenCalledWith(
+			'http://localhost:9000/public/v1/donations/TX-SH001-TESTTOKEN',
+			expect.objectContaining({ method: 'PATCH' })
+		);
+	});
+
 	it('PATCH returns 409 when CouchDB reports a revision conflict', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {

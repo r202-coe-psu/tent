@@ -8,7 +8,13 @@ from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from .schemas import DonationCreateRequest, DonationCreateResponse, DonationTrackingResponse
+from .schemas import (
+    DonationCourierPatchRequest,
+    DonationCourierPatchResponse,
+    DonationCreateRequest,
+    DonationCreateResponse,
+    DonationTrackingResponse,
+)
 from .use_case import DonationsUseCase, get_donations_use_case
 
 router = APIRouter(prefix="/public/v1/donations", tags=["Donations"])
@@ -69,3 +75,17 @@ async def get_donation(
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.get_by_tracking_token(tracking_token)
+
+
+@router.patch("/{tracking_token}", response_model=DonationCourierPatchResponse)
+async def patch_donation_courier(
+    request: Request,
+    response: Response,
+    tracking_token: str,
+    payload: DonationCourierPatchRequest,
+    use_case: DonationsUseCase = Depends(get_donations_use_case),  # noqa: B008
+) -> DonationCourierPatchResponse:
+    """Update courier tracking on the Mongo intake buffer (pre-inbound only)."""
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.update_courier_tracking(tracking_token, payload.courier_tracking_no)

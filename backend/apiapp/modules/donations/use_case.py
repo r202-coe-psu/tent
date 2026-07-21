@@ -13,7 +13,12 @@ from tent_model.public_shelter import PublicShelter
 
 from ...utils.masking import sha256_hex
 from ...utils.ulid import new_ulid
-from .schemas import DonationCreateRequest, DonationCreateResponse, DonationTrackingResponse
+from .schemas import (
+    DonationCourierPatchResponse,
+    DonationCreateRequest,
+    DonationCreateResponse,
+    DonationTrackingResponse,
+)
 
 
 def _declared_items(raw_items: list[dict[str, Any]]) -> list[DeclaredItem]:
@@ -144,6 +149,47 @@ class DonationsUseCase:
                 updated_at=buffer.created_at,
             )
         )
+
+    async def update_courier_tracking(
+        self, tracking_token: str, courier_tracking_no: str
+    ) -> DonationCourierPatchResponse:
+        """Update courier tracking on the intake buffer before inbound persists to Couch.
+
+        Once ``synced_to_couch`` is true the SoR is CouchDB — callers should PATCH via
+        the SvelteKit BFF Couch path (or retry shortly after inbound).
+        """
+        token_hash = sha256_hex(tracking_token)
+        buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
+        if buffer is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"success": False, "error": "Donation record not found"},
+            )
+
+        if buffer.synced_to_couch:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "success": False,
+                    "error": "SYNCED_TO_COUCH",
+                    "message": "Donation already in CouchDB; update via shelter record",
+                },
+            )
+
+        logistics = dict(buffer.logistics or {})
+        if logistics.get("delivery_method") != "parcel":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "success": False,
+                    "error": "Courier tracking number can only be updated for parcel deliveries",
+                },
+            )
+
+        logistics["courier_tracking_no"] = courier_tracking_no
+        buffer.logistics = logistics
+        await buffer.save()
+        return DonationCourierPatchResponse()
 
 
 def get_donations_use_case() -> DonationsUseCase:

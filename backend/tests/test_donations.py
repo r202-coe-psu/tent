@@ -100,6 +100,67 @@ async def test_get_tracking_falls_back_to_buffer(client: AsyncClient) -> None:
     assert body["donation"]["items"][0]["item_name"] == "น้ำดื่ม"
 
 
+async def test_patch_courier_updates_unsynced_buffer(client: AsyncClient) -> None:
+    token = "TX-SH001-PATCH001"
+    token_hash = sha256_hex(token)
+    now = datetime.now(UTC)
+    await DonationBuffer(
+        id=f"donation:{new_ulid()}",
+        shelter_code="SH001",
+        donor=DonorBuffer(name="Parcel Donor", phone="0811111111"),
+        items_declared=[{"free_text": "ผ้าห่ม", "qty": 1, "unit": "pcs"}],
+        logistics={"delivery_method": "parcel", "courier_tracking_no": None},
+        campaign_id=None,
+        booking_ref="DN-888001",
+        tracking_token=token,
+        tracking_token_hash=token_hash,
+        status="declared",
+        synced_to_couch=False,
+        created_at=now,
+        expires_at=now + timedelta(hours=72),
+    ).insert()
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}",
+        json={"courier_tracking_no": "TH123456789TH"},
+    )
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
+    assert buffer is not None
+    assert buffer.logistics is not None
+    assert buffer.logistics["courier_tracking_no"] == "TH123456789TH"
+
+
+async def test_patch_courier_rejects_already_synced_buffer(client: AsyncClient) -> None:
+    token = "TX-SH001-PATCH002"
+    token_hash = sha256_hex(token)
+    now = datetime.now(UTC)
+    await DonationBuffer(
+        id=f"donation:{new_ulid()}",
+        shelter_code="SH001",
+        donor=DonorBuffer(name="Synced", phone="0822222222"),
+        items_declared=[],
+        logistics={"delivery_method": "parcel"},
+        campaign_id=None,
+        booking_ref="DN-888002",
+        tracking_token=token,
+        tracking_token_hash=token_hash,
+        status="declared",
+        synced_to_couch=True,
+        created_at=now,
+        expires_at=now + timedelta(hours=72),
+    ).insert()
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}",
+        json={"courier_tracking_no": "TH999"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"] == "SYNCED_TO_COUCH"
+
+
 async def test_new_ulid_shape() -> None:
     value = new_ulid()
     assert len(value) == 26

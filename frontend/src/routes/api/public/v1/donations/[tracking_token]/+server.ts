@@ -28,6 +28,20 @@ async function findByTokenHash(shelterDb: string, hash: string): Promise<PublicD
 	return null;
 }
 
+/** Pre-inbound: update courier tracking on the Mongo intake buffer via FastAPI. */
+async function patchCourierViaFastApi(trackingToken: string, courierTrackingNo: string) {
+	const res = await fetch(
+		`${FASTAPI_BASE}/public/v1/donations/${encodeURIComponent(trackingToken)}`,
+		{
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ courier_tracking_no: courierTrackingNo })
+		}
+	);
+	const body = await res.json().catch(() => ({}));
+	return { status: res.status, body };
+}
+
 export const GET = async ({ params, getClientAddress }) => {
 	try {
 		const { tracking_token } = params;
@@ -93,7 +107,29 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 
 		const latestDoc = await findByTokenHash(shelterDb, trackingTokenHash);
 		if (!latestDoc) {
-			return json({ success: false, error: 'Donation record not found' }, { status: 404 });
+			// Not in Couch yet (inbound poll lag) — update Mongo buffer so inbound persists it.
+			const { status, body } = await patchCourierViaFastApi(
+				tracking_token,
+				payload.courier_tracking_no
+			);
+			if (status === 409) {
+				return json(
+					{
+						success: false,
+						error: 'Donation is syncing. Please refresh and try again in a moment.'
+					},
+					{ status: 409 }
+				);
+			}
+			if (!status || status >= 400) {
+				return json(
+					typeof body === 'object' && body !== null
+						? body
+						: { success: false, error: 'Donation record not found' },
+					{ status: status || 404 }
+				);
+			}
+			return json({ success: true, message: 'Courier tracking number updated' });
 		}
 
 		if (!latestDoc.logistics || latestDoc.logistics.delivery_method !== 'parcel') {
