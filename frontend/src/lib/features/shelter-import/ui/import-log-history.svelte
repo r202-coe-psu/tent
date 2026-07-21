@@ -5,6 +5,9 @@
 	import { useImportLogs } from '../application/queries';
 	import type { ImportRowResult } from '../domain/import-log';
 
+	let { basePath }: { basePath?: string } = $props();
+	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/shelters'));
+
 	const logsQuery = useImportLogs();
 	const logs = $derived(logsQuery.data ?? []);
 
@@ -52,9 +55,7 @@
 							{#each createdRows(log.results) as row (row.row)}
 								<li>
 									<a
-										href={resolve(
-											`/back-office/shelters/edit/${encodeURIComponent(row.code ?? '')}`
-										)}
+										href={`${resolvedBasePath}/edit/${encodeURIComponent(row.code ?? '')}`}
 										class="inline-flex items-center gap-1 rounded-lg border border-border bg-muted/40 px-2 py-1 text-sm transition-colors hover:bg-muted"
 									>
 										<span class="font-medium">{row.code}</span>

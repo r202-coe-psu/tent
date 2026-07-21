@@ -21,7 +21,7 @@
 </script>
 
 <div class="flex h-[calc(100svh-1.5rem)] min-h-0 flex-col overflow-hidden">
-	{#if !page.url.pathname.startsWith('/back-office')}
+	{#if !page.url.pathname.startsWith('/back-office') && !page.url.pathname.startsWith('/portal/system-management')}
 		<header class="flex shrink-0 items-center justify-between border-b bg-background px-6 py-3">
 			<a href={resolve('/portal')} class="font-semibold">Smart Shelter</a>
 			<div class="flex items-center gap-4">

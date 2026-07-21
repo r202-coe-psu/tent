@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Download from '@lucide/svelte/icons/download';
 	import Upload from '@lucide/svelte/icons/upload';
@@ -20,6 +21,9 @@
 	import { useImportShelters } from '../application/queries';
 	import ImportPreviewTable from './import-preview-table.svelte';
 	import ImportLogHistory from './import-log-history.svelte';
+
+	let { basePath }: { basePath?: string } = $props();
+	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/shelters'));
 
 	const zoneQuery = useMasterData(() => 'municipality_zone');
 	const communityQuery = useMasterData(() => 'community');
@@ -169,6 +173,6 @@
 	<!-- History -->
 	<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
 		<h3 class="mb-4 text-lg font-semibold text-foreground">ประวัติการนำเข้า</h3>
-		<ImportLogHistory />
+		<ImportLogHistory basePath={resolvedBasePath} />
 	</div>
 </div>
