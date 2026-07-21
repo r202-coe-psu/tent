@@ -14,7 +14,11 @@ import {
 	masterTypeSchema,
 	type MasterData
 } from '$lib/features/master-data/domain';
-import { readMasterDoc } from '$lib/server/master-data-server';
+import {
+	mergeMasterDataItems,
+	readMasterDoc,
+	splitMasterDataItems
+} from '$lib/server/master-data-server';
 
 export const prerender = false;
 
@@ -33,15 +37,31 @@ export const GET: RequestHandler = async ({ params, request }) => {
 	}
 	await requireShelterScopeOrSA(request.headers.get('cookie'), scope.shelterCode);
 	try {
+		const global = scope.mode === 'shelter' ? null : await readMasterDoc(type);
 		const local = scope.shelterCode ? await readMasterDoc(type, scope.shelterCode) : null;
-		const doc = local ?? (scope.mode === 'shelter' ? null : await readMasterDoc(type));
+		const effective =
+			scope.mode === 'effective' ? mergeMasterDataItems(global, local, scope.shelterCode) : null;
+		const doc = local ?? global;
+		const items = effective?.items ?? doc?.items ?? [];
+		const itemSources =
+			effective?.itemSources ??
+			Object.fromEntries(
+				items.map((item) => [
+					item.code,
+					{
+						scope: scope.mode === 'shelter' ? 'shelter' : 'global',
+						shelter_code: scope.shelterCode ?? null
+					}
+				])
+			);
 		return json({
 			_id: doc?._id ?? masterDocId(type, scope.mode === 'shelter' ? scope.shelterCode : undefined),
 			master_type: type,
-			items: doc?.items ?? [],
-			scope: doc?.shelter_code ? 'shelter' : 'global',
-			shelter_code: doc?.shelter_code ?? null,
-			source_shelter_code: doc?.shelter_code ?? null
+			items,
+			scope: scope.mode,
+			shelter_code: scope.shelterCode ?? null,
+			source_shelter_code: local?.shelter_code ?? null,
+			item_sources: itemSources
 		});
 	} catch (e) {
 		return serviceError(e);
@@ -71,27 +91,55 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		);
 
 		const id = masterDocId(type, scope.shelterCode);
+		const global = scope.shelterCode ? await readMasterDoc(type) : null;
 		const existing = await readMasterDoc(type, scope.shelterCode);
 		const now = new Date().toISOString();
-		const doc: MasterData = existing
-			? {
-					...existing,
-					schema_v: 2,
-					...(scope.shelterCode ? { shelter_code: scope.shelterCode } : {}),
-					items: cleaned,
-					updated_at: now
-				}
-			: {
-					_id: id,
-					type: 'master_data',
-					schema_v: 2,
-					master_type: type,
-					...(scope.shelterCode ? { shelter_code: scope.shelterCode } : {}),
-					items: cleaned,
-					created_at: now,
-					updated_at: now,
-					created_by: caller
-				};
+		let doc: MasterData;
+		if (scope.shelterCode) {
+			const overlay = splitMasterDataItems(cleaned, global);
+			doc = existing
+				? {
+						...existing,
+						schema_v: 2,
+						shelter_code: scope.shelterCode,
+						items: overlay.items,
+						updated_at: now,
+						...(overlay.excludedCodes.length ? { excluded_codes: overlay.excludedCodes } : {})
+					}
+				: {
+						_id: id,
+						type: 'master_data',
+						schema_v: 2,
+						master_type: type,
+						shelter_code: scope.shelterCode,
+						items: overlay.items,
+						...(overlay.excludedCodes.length ? { excluded_codes: overlay.excludedCodes } : {}),
+						created_at: now,
+						updated_at: now,
+						created_by: caller
+					};
+			if (!overlay.excludedCodes.length) delete doc.excluded_codes;
+		} else {
+			doc = existing
+				? {
+						...existing,
+						schema_v: 2,
+						items: cleaned,
+						updated_at: now
+					}
+				: {
+						_id: id,
+						type: 'master_data',
+						schema_v: 2,
+						master_type: type,
+						items: cleaned,
+						created_at: now,
+						updated_at: now,
+						created_by: caller
+					};
+			delete doc.shelter_code;
+			delete doc.excluded_codes;
+		}
 
 		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(id)}`, 'PUT', doc);
 		if (res.status === 409) {

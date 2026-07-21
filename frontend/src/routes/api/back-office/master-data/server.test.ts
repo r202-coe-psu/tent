@@ -14,7 +14,10 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/server/couch-admin')>();
 	return { ...actual, requireShelterScopeOrSA: vi.fn() };
 });
-vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: vi.fn() }));
+vi.mock('$lib/server/master-data-server', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/server/master-data-server')>()),
+	readMasterDoc: vi.fn()
+}));
 
 import { GET } from './+server';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
@@ -164,12 +167,14 @@ describe('GET /api/back-office/master-data', () => {
 			items: unknown[];
 			scope: string;
 			shelter_code: string | null;
+			item_sources: Record<string, { scope: string }>;
 		}>;
 
 		expect(body.find((entry) => entry.master_type === 'pet_types')).toMatchObject({
 			items: [{ code: 'dog', label: 'Dog', is_default: true }],
-			scope: 'global',
-			shelter_code: null
+			scope: 'effective',
+			shelter_code: 'SH001',
+			item_sources: { dog: { scope: 'global' } }
 		});
 	});
 });

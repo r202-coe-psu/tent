@@ -112,6 +112,7 @@
 			type={activeType}
 			{items}
 			context={writeContext}
+			itemSources={detail.data?.item_sources}
 			onAdd={openAdd}
 			onEdit={openEdit}
 		/>

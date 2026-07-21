@@ -3,6 +3,7 @@ import { getShelterCode } from '$lib/db/shelter';
 import type {
 	MasterData,
 	MasterDataItem,
+	MasterDataItemSource,
 	MasterDataQueryContext,
 	MasterDataScope,
 	MasterDataType
@@ -27,6 +28,7 @@ export type MasterDataSummary = Pick<
 > & {
 	scope?: MasterDataScope;
 	source_shelter_code?: string | null;
+	item_sources?: Record<string, MasterDataItemSource>;
 };
 
 function effectiveContext(context?: MasterDataQueryContext): Required<

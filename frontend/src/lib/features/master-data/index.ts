@@ -27,6 +27,8 @@ export {
 	isMasterData,
 	type MasterDataType,
 	type MasterDataScope,
+	type MasterDataRecordScope,
+	type MasterDataItemSource,
 	type MasterDataQueryContext,
 	type MasterDataItem,
 	type MasterData,

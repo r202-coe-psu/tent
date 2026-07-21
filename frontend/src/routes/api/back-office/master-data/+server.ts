@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { MASTER_DATA_TYPES, masterDocId } from '$lib/features/master-data/domain';
-import { readMasterDoc } from '$lib/server/master-data-server';
+import { mergeMasterDataItems, readMasterDoc } from '$lib/server/master-data-server';
 
 /**
  * Dev-only admin API for the Master Data Engine (CR-012). Never prerendered
@@ -34,15 +34,31 @@ export const GET: RequestHandler = async ({ request }) => {
 	try {
 		const out = await Promise.all(
 			MASTER_DATA_TYPES.map(async (type) => {
+				const global = scope.scope === 'shelter' ? null : await readMasterDoc(type);
 				const local = shelterCode ? await readMasterDoc(type, shelterCode) : null;
-				const doc = local ?? (scope.scope === 'shelter' ? null : await readMasterDoc(type));
+				const effective =
+					scope.scope === 'effective' ? mergeMasterDataItems(global, local, shelterCode) : null;
+				const doc = local ?? global;
+				const items = effective?.items ?? doc?.items ?? [];
+				const itemSources =
+					effective?.itemSources ??
+					Object.fromEntries(
+						items.map((item) => [
+							item.code,
+							{
+								scope: scope.scope === 'shelter' ? 'shelter' : 'global',
+								shelter_code: shelterCode ?? null
+							}
+						])
+					);
 				return {
 					_id: doc?._id ?? masterDocId(type, scope.scope === 'shelter' ? shelterCode : undefined),
 					master_type: type,
-					items: doc?.items ?? [],
-					scope: doc?.shelter_code ? 'shelter' : 'global',
-					shelter_code: doc?.shelter_code ?? null,
-					source_shelter_code: doc?.shelter_code ?? null
+					items,
+					scope: scope.scope,
+					shelter_code: shelterCode ?? null,
+					source_shelter_code: local?.shelter_code ?? null,
+					item_sources: itemSources
 				};
 			})
 		);

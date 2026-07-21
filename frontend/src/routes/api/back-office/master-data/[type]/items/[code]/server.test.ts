@@ -9,7 +9,10 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 		adminRaw: vi.fn()
 	};
 });
-vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: vi.fn() }));
+vi.mock('$lib/server/master-data-server', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/server/master-data-server')>()),
+	readMasterDoc: vi.fn()
+}));
 
 import { DELETE } from './+server';
 import { requireAdmin, adminRaw } from '$lib/server/couch-admin';
@@ -110,7 +113,8 @@ describe('DELETE /api/back-office/master-data/[type]/items/[code]', () => {
 		expect(path).toBe('/registry/master_data%3Apet_types%3ASH001');
 		expect((doc as MasterData)._rev).toBeUndefined();
 		expect((doc as MasterData).created_by).toBe('sa-user');
-		expect((doc as MasterData).items.map((i) => i.code)).toEqual(['cat']);
+		expect((doc as MasterData).items).toEqual([]);
+		expect((doc as MasterData).excluded_codes).toEqual(['dog']);
 	});
 
 	it('is idempotent — a missing code returns ok without writing', async () => {

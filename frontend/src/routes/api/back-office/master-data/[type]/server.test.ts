@@ -18,7 +18,10 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 		adminRaw: vi.fn()
 	};
 });
-vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: vi.fn() }));
+vi.mock('$lib/server/master-data-server', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/server/master-data-server')>()),
+	readMasterDoc: vi.fn()
+}));
 
 import { GET, PUT } from './+server';
 import { requireAdmin, requireShelterScopeOrSA, adminRaw } from '$lib/server/couch-admin';
@@ -103,7 +106,18 @@ describe('GET /api/back-office/master-data/[type]', () => {
 		);
 
 		const res = await callGET('pet_types', '?scope=effective&shelter_code=SH001');
-		expect((await res.json()).items).toEqual([{ code: 'cat', label: 'Cat', is_default: true }]);
+		const body = (await res.json()) as {
+			items: unknown[];
+			item_sources: Record<string, { scope: string; shelter_code?: string | null }>;
+		};
+		expect(body.items).toEqual([
+			{ code: 'dog', label: 'Dog', is_default: true },
+			{ code: 'cat', label: 'Cat', is_default: true }
+		]);
+		expect(body.item_sources).toEqual({
+			dog: { scope: 'global', shelter_code: null },
+			cat: { scope: 'shelter', shelter_code: 'SH001' }
+		});
 		expect(readMock).toHaveBeenCalledWith('pet_types', 'SH001');
 	});
 
@@ -161,6 +175,34 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect(method).toBe('PUT');
 		expect((doc as MasterData).schema_v).toBe(2);
 		expect((doc as MasterData).shelter_code).toBe('SH001');
+	});
+
+	it('stores only shelter-specific items when effective values include global items', async () => {
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode
+				? null
+				: existingDoc([
+						{ code: 'dog', label: 'Dog', is_default: false },
+						{ code: 'cat', label: 'Cat', is_default: true }
+					])
+		);
+
+		await callPUT(
+			'pet_types',
+			{
+				shelter_code: 'SH001',
+				items: [
+					{ code: 'dog', label: 'Dog', is_default: false },
+					{ code: 'cat', label: 'Cat', is_default: true },
+					{ code: 'local_dog', label: 'Local dog', is_default: false }
+				]
+			},
+			'?scope=shelter&shelter_code=SH001'
+		);
+
+		const doc = writtenDoc();
+		expect(doc.items).toEqual([{ code: 'local_dog', label: 'Local dog', is_default: false }]);
+		expect(doc.excluded_codes).toBeUndefined();
 	});
 
 	it('rejects shelter_code on a global write', async () => {

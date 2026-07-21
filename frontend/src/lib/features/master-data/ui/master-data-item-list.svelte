@@ -3,22 +3,26 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import type {
 		MasterDataItem,
+		MasterDataItemSource,
 		MasterDataQueryContext,
 		MasterDataType
 	} from '$lib/features/master-data';
 	import { MASTER_DATA_TYPE_LABELS } from '$lib/features/master-data';
 	import { useDeleteMasterItem } from '$lib/features/master-data';
+	import { Badge } from '$lib/components/ui/badge/index.js';
 
 	let {
 		type,
 		items,
 		context,
+		itemSources,
 		onAdd,
 		onEdit
 	}: {
 		type: MasterDataType;
 		items: readonly MasterDataItem[];
 		context?: MasterDataQueryContext;
+		itemSources?: Record<string, MasterDataItemSource>;
 		onAdd: () => void;
 		onEdit: (item: MasterDataItem) => void;
 	} = $props();
@@ -96,9 +100,17 @@
 			</thead>
 			<tbody>
 				{#each filtered as item (item.code)}
+					{@const source = itemSources?.[item.code]}
 					<tr class="border-t hover:bg-muted/30">
 						<td class="px-4 py-3">
-							<div class="font-medium">{item.label}</div>
+							<div class="flex flex-wrap items-center gap-2">
+								<div class="font-medium">{item.label}</div>
+								<Badge variant={source?.scope === 'shelter' ? 'default' : 'secondary'}>
+									{source?.scope === 'shelter'
+										? `SHELTER · ${source.shelter_code ?? 'ไม่ระบุศูนย์'}`
+										: 'GLOBAL · ทุกศูนย์'}
+								</Badge>
+							</div>
 							{#if item.is_default}
 								<span
 									class="mt-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"

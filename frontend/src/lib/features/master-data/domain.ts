@@ -24,6 +24,8 @@ export {
 	isMasterData,
 	type MasterDataType,
 	type MasterDataItem,
+	type MasterDataRecordScope,
+	type MasterDataItemSource,
 	type MasterData,
 	type ItemInput,
 	type ItemOp,

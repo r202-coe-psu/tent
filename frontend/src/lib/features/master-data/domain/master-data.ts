@@ -42,6 +42,13 @@ export interface MasterDataQueryContext {
 	shelterCode?: string | null;
 }
 
+export type MasterDataRecordScope = 'global' | 'shelter';
+
+export interface MasterDataItemSource {
+	scope: MasterDataRecordScope;
+	shelter_code?: string | null;
+}
+
 /** Types shown on the Registration Config page (ตั้งค่าการลงทะเบียน). */
 export const REGISTRATION_MASTER_TYPES = [
 	'vulnerable_group',
@@ -112,6 +119,8 @@ export interface MasterData {
 	master_type: MasterDataType;
 	shelter_code?: string;
 	items: MasterDataItem[];
+	/** Shelter-local item codes hidden from the global effective view. */
+	excluded_codes?: string[];
 	created_at: string;
 	updated_at: string;
 	created_by: string;
@@ -125,6 +134,7 @@ export const masterDataSchema = z.object({
 	master_type: masterTypeSchema,
 	shelter_code: z.string().trim().min(1).optional(),
 	items: z.array(masterDataItemSchema).min(0),
+	excluded_codes: z.array(z.string().trim().min(1)).optional(),
 	created_at: z.string().datetime(),
 	updated_at: z.string().datetime(),
 	created_by: z.string().min(1)

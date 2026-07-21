@@ -2,7 +2,11 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { masterDocId, masterTypeSchema, type MasterData } from '$lib/features/master-data/domain';
-import { readMasterDoc } from '$lib/server/master-data-server';
+import {
+	mergeMasterDataItems,
+	readMasterDoc,
+	splitMasterDataItems
+} from '$lib/server/master-data-server';
 
 /**
  * Dev-only admin API: hard-delete a single item from a master_data doc.
@@ -29,59 +33,75 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 		if (scope.mode === 'effective') {
 			throw new ServiceError('VALIDATION', 'DELETE requires global or shelter scope');
 		}
-		const localDoc = await readMasterDoc(type, scope.shelterCode);
-		const creatingLocalFromGlobal = !localDoc && scope.mode === 'shelter' && !!scope.shelterCode;
-		const doc = localDoc ?? (creatingLocalFromGlobal ? await readMasterDoc(type) : null);
-		if (!doc) {
-			throw new ServiceError('CONFLICT', `master_data:${type} does not exist yet`);
-		}
-		const before = doc.items.length;
-		const filtered = doc.items.filter((i) => i.code !== code);
-		if (filtered.length === before) {
-			// Idempotent: item already gone, treat as success.
-			return json({ ok: true, rev: doc._rev ?? '' });
+
+		const globalDoc = await readMasterDoc(type);
+		if (scope.mode === 'global') {
+			if (!globalDoc) {
+				throw new ServiceError('CONFLICT', `master_data:${type} does not exist yet`);
+			}
+			const filtered = globalDoc.items.filter((item) => item.code !== code);
+			if (filtered.length === globalDoc.items.length) {
+				return json({ ok: true, rev: globalDoc._rev ?? '' });
+			}
+			const next: MasterData = {
+				...globalDoc,
+				schema_v: 2,
+				items: filtered,
+				updated_at: new Date().toISOString()
+			};
+			delete next.shelter_code;
+			delete next.excluded_codes;
+			return await writeMasterDoc(next);
 		}
 
+		const localDoc = scope.shelterCode ? await readMasterDoc(type, scope.shelterCode) : null;
+		const effective = mergeMasterDataItems(globalDoc, localDoc, scope.shelterCode);
+		if (!effective.items.some((item) => item.code === code)) {
+			return json({ ok: true, rev: localDoc?._rev ?? '' });
+		}
+
+		const nextEffectiveItems = effective.items.filter((item) => item.code !== code);
+		const overlay = splitMasterDataItems(nextEffectiveItems, globalDoc);
 		const now = new Date().toISOString();
-		let next: MasterData;
-		if (creatingLocalFromGlobal && scope.shelterCode) {
-			const globalWithoutRev = { ...doc };
-			delete globalWithoutRev._rev;
-			next = {
-				...globalWithoutRev,
-				_id: masterDocId(type, scope.shelterCode),
-				schema_v: 2,
-				shelter_code: scope.shelterCode,
-				items: filtered,
-				created_at: now,
-				updated_at: now,
-				created_by: caller
-			};
-		} else {
-			next = {
-				...doc,
-				schema_v: 2,
-				items: filtered,
-				updated_at: now
-			};
-		}
-		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
-		if (res.status === 409) {
-			throw new ServiceError(
-				'CONFLICT',
-				'Document was modified by another user — reload and retry'
-			);
-		}
-		if (res.status >= 400) {
-			throw new ServiceError('INTERNAL', `CouchDB write failed (${res.status})`);
-		}
-		const rev = (res.data as { rev?: string })?.rev;
-		if (!rev) throw new ServiceError('INTERNAL', 'CouchDB did not return a rev');
-		return json({ ok: true, rev });
+		const next: MasterData = localDoc
+			? {
+					...localDoc,
+					schema_v: 2,
+					items: overlay.items,
+					updated_at: now,
+					...(overlay.excludedCodes.length ? { excluded_codes: overlay.excludedCodes } : {})
+				}
+			: {
+					_id: masterDocId(type, scope.shelterCode),
+					type: 'master_data',
+					schema_v: 2,
+					master_type: type,
+					shelter_code: scope.shelterCode!,
+					items: overlay.items,
+					...(overlay.excludedCodes.length ? { excluded_codes: overlay.excludedCodes } : {}),
+					created_at: now,
+					updated_at: now,
+					created_by: caller
+				};
+		if (!overlay.excludedCodes.length) delete next.excluded_codes;
+		return await writeMasterDoc(next);
 	} catch (e) {
 		return serviceError(e);
 	}
 };
+
+async function writeMasterDoc(next: MasterData): Promise<Response> {
+	const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(next._id)}`, 'PUT', next);
+	if (res.status === 409) {
+		throw new ServiceError('CONFLICT', 'Document was modified by another user — reload and retry');
+	}
+	if (res.status >= 400) {
+		throw new ServiceError('INTERNAL', `CouchDB write failed (${res.status})`);
+	}
+	const rev = (res.data as { rev?: string })?.rev;
+	if (!rev) throw new ServiceError('INTERNAL', 'CouchDB did not return a rev');
+	return json({ ok: true, rev });
+}
 
 function parseScope(request: Request): {
 	mode: 'global' | 'shelter' | 'effective';
