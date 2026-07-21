@@ -486,7 +486,7 @@ describe('SOP Ratio Domain', () => {
 			expect(profile.ratios.m2_per_person_living).toBe('0.001');
 		});
 
-		it('should verify daily calc boundary logic correctly converts strings to standard IEEE-754 numbers', () => {
+		it('should verify daily calc boundary logic preserves and calculates values as exact decimal strings', () => {
 			const mockRatios = {
 				...validRatios,
 				water_l_per_person_day: '15.5',
