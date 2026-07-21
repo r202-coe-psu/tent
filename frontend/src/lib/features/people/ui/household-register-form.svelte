@@ -567,7 +567,7 @@
 					<Input
 						bind:value={formData.address_no}
 						placeholder="เช่น 12/3"
-						class="h-11 bg-background"
+						class="h-9 bg-background"
 						required
 					/>
 				</div>
@@ -576,7 +576,7 @@
 					<Input
 						bind:value={formData.village_no}
 						placeholder="เช่น หมู่ 2"
-						class="h-11 bg-background"
+						class="h-9 bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
@@ -589,7 +589,7 @@
 						searchPlaceholder="ค้นหาจังหวัด..."
 						emptyText="ไม่พบจังหวัด"
 						disabled={pending || provincesQuery.isLoading}
-						class="h-11 border-border bg-background"
+						class="h-9 rounded-md border-border bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
@@ -606,7 +606,7 @@
 						searchPlaceholder="ค้นหาอำเภอ..."
 						emptyText="ไม่พบอำเภอ"
 						disabled={pending || !formData.province || districtsQuery.isLoading}
-						class="h-11 border-border bg-background"
+						class="h-9 rounded-md border-border bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
@@ -623,7 +623,7 @@
 						searchPlaceholder="ค้นหาตำบล..."
 						emptyText="ไม่พบตำบล"
 						disabled={pending || !formData.district || subdistrictsQuery.isLoading}
-						class="h-11 border-border bg-background"
+						class="h-9 rounded-md border-border bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
@@ -632,7 +632,7 @@
 						bind:value={formData.postal_code}
 						disabled={pending || !formData.subdistrict}
 						placeholder={!formData.subdistrict ? 'เลือกตำบลก่อน' : 'เช่น 90110'}
-						class="h-11 bg-background"
+						class="h-9 rounded-md border-border bg-background"
 						required
 					/>
 				</div>
