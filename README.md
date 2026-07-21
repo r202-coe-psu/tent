@@ -82,17 +82,25 @@ cp .env.example .env
 cp couchdb-session-example.ini couchdb-session.ini
 docker compose up -d
 
-# 2. frontend (ใช้ pnpm)
+# 2. seed CouchDB (จาก frontend/)
 cd frontend
 pnpm install
-pnpm dev          # http://localhost:5173
+pnpm seed
 
-# 3. การรัน metrics-worker (กรณีต้องการ Debug โค้ดโดยไม่รันผ่าน Docker)
-# (ปกติ Worker จะรันอัตโนมัติพร้อม docker compose up ไปแล้ว)
-cd metrics-worker
-pnpm install
-pnpm run build
-pnpm start
+# 3. Sync worker — bootstrap + continuous _changes (เลือกอย่างใดอย่างหนึ่ง)
+# ผ่าน Docker (รันอัตโนมัติเมื่อ docker compose up)
+# หรือ local debug:
+cd ..
+uv sync --project worker
+uv run --project worker sync-worker
+# re-sync ทั้งก้อน: uv run --project worker sync-worker --bootstrap
+
+# 4. ดู MongoDB ด้วย Compass: mongodb://localhost:27017/tentdb
+#    collections: public_shelters, public_persons, _sync_checkpoints
+
+# 5. frontend dev server
+cd frontend
+pnpm dev          # http://localhost:5173
 ```
 
 ## การตรวจคุณภาพโค้ด (pre-commit)
@@ -129,11 +137,67 @@ LEFTHOOK=0 git commit -m "..."
 - `pnpm seed` — Create mock data (purge old data first)
 - `pnpm unseed --confirm` — Wipe all CouchDB databases except `_users`
 
-การจัดการข้อมูลตัวอย่างด้วย Docker Compose (รันที่ repo root):
+การจัดการข้อมูลตัวอย่างด้วย Docker Compose (รันที่ repo root; ต้องมี `couchdb` / `mongodb` จาก base compose):
 
-- **Seed**: `docker compose -f docker-compose.yml -f docker-compose.seed.yml up seed`
-- **Unseed**: `docker compose -f docker-compose.yml -f docker-compose.unseed.yml run --rm unseed`
+- **Seed** (Couch อย่างเดียว):
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm seed`
+- **Unseed** (ลบ Couch DBs ยกเว้น `_users`):
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed`
+- **Wipe Mongo** (`dropDatabase` ตาม `MONGODB_URI`):
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm mongo-wipe`
+- **Bootstrap Mongo** (project จาก Couch แล้ว exit):
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm bootstrap`
+- **Full reset** (unseed → wipe Mongo → seed → bootstrap; **หยุด worker ก่อน**):
+  ```bash
+  docker compose -f docker-compose.yml stop worker
+  docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile reset run --rm reset
+  docker compose -f docker-compose.yml start worker
+  ```
+  ใช้กับ staging ได้เช่นกัน ถ้า base compose มี service ชื่อ `couchdb` + `mongodb` (และ ideally `worker`)
 
+คำสั่ง worker (จาก repo root):
+
+- `uv run --project worker pytest worker/tests` — projector unit tests
+- `uv run --project worker sync-worker` — CouchDB → MongoDB sync
+- `uv run --project worker sync-worker --bootstrap` — force full re-sync แล้ววิ่ง continuous
+- `uv run --project worker sync-worker --bootstrap-only` — bootstrap แล้ว exit (ใช้ใน compose reset)
+
+## Staging deploy (public plane)
+
+Jenkins staging ใช้ `docker-compose.staging.no-nginx.yml` (nginx อยู่บน **host**):
+
+```bash
+docker compose -f docker-compose.staging.no-nginx.yml up -d --build
+```
+
+Services: CouchDB, frontend, MongoDB, sync worker, FastAPI (`127.0.0.1:9000`).
+ต้องมี volume dirs บน server เช่น `/mnt/tent-data/couchdb/data` และ `/mnt/tent-data/mongodb/data`,
+และตั้ง `SECRET_KEY` / `EXTERNAL_API_SECRET` ใน `.env` บน server
+
+Host nginx ต้อง proxy exact-path ไป FastAPI (อย่า proxy ทั้ง `/public`):
+
+```nginx
+location = /public/v1/family-search {
+    proxy_pass http://127.0.0.1:9000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+location = /public/v1/shelters {
+    proxy_pass http://127.0.0.1:9000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+ตัวอย่างเต็มสำหรับ compose-nginx อยู่ที่ [`nginx/nginx.conf`](nginx/nginx.conf)
+(`docker-compose.staging.yml` — proxy ไป `http://fastapi:9000`)
 
 ## แหล่งอ้างอิง
 
