@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module C — Supply & Inventory"
 status: active
 created: 2026-06-05
-updated: 2026-06-10
+updated: 2026-07-16
 module: C
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---
@@ -18,15 +18,15 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ## Features / Tasks
 
-| ID | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-10 | Supply Item catalog (master) | FR-27 | R2 | prod | ส.ค. | 3 | ÷1.6 | 2 | T-02 |
-| T-11 | Stock receive (inbound) + ledger write | FR-28 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-10 |
-| T-12 | Stock distribute (outbound) | FR-29 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-11 |
-| T-13 | Inter-shelter transfer + receive confirm | FR-30 | R2 | prod | ส.ค. | 6 | ÷1.4 | 4.5 | T-11 |
-| T-14 | Stock dashboard + reorder threshold | FR-31 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-11 |
-| T-45 | Donation/kitchen/inventory polish + UAT support | - | R4 | post | deferred | 5 | ÷1.3 | 4 | - |
-| | **รวมทั้งโมดูล** | | | | | **28** | | **19.5** | |
+| ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-10 | 🔄 | Supply Item catalog (master) | FR-27 | R2 | prod | ส.ค. | 3 | ÷1.6 | 2 | T-02 |
+| T-11 | 🔄 | Stock receive (inbound) + ledger write | FR-28 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-10 |
+| T-12 | 🔄 | Stock distribute (outbound) | FR-29 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-11 |
+| T-13 | 🔄 | Inter-shelter transfer + receive confirm | FR-30 | R2 | prod | ส.ค. | 6 | ÷1.4 | 4.5 | T-11 |
+| T-14 | 🔄 | Stock dashboard + reorder threshold | FR-31 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-11 |
+| T-45 | ⬜ | Donation/kitchen/inventory polish + UAT support | - | R4 | post | deferred | 5 | ÷1.3 | 4 | - |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **28** |  | **19.5** |  |
 
 > **Deferred** (ส่งมอบหลัง go-live, ภายในสัปดาห์ที่ 2 กันยายน 2026): T-45
 

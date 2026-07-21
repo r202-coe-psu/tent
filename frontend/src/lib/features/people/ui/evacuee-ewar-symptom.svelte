@@ -31,7 +31,12 @@
 		if (isHealthy) selectedSymptoms.clear();
 	}
 
-	const needsIsolation = $derived(!isHealthy && selectedSymptoms.size > 0);
+	// don't warrant isolation on their own.
+	const NON_ISOLATION_SYMPTOMS = new Set(['trauma', 'chemical_poisoning', 'tetanus']);
+
+	const needsIsolation = $derived(
+		!isHealthy && [...selectedSymptoms].some((id) => !NON_ISOLATION_SYMPTOMS.has(id))
+	);
 
 	function handleNext() {
 		if (!isHealthy && selectedSymptoms.size === 0) {
@@ -52,10 +57,10 @@
 			<ShieldAlert class="size-7 shrink-0" aria-hidden="true" />
 			<div>
 				<p class="text-base leading-snug font-bold">
-					ระวัง! กักบริเวณด่วน <span class="font-extrabold">(ISOLATION NEEDED)</span>
+					ระวัง! ต้องส่งไปยังโซนกักกันโรคด่วน <span class="font-extrabold">(ISOLATION NEEDED)</span>
 				</p>
 				<p class="mt-0.5 text-sm font-medium opacity-90">
-					พบอาการกลุ่มเสี่ยงโรคระบาด ให้ส่งไปยังโซนตึกแดงทันที และทำรายการต่อ
+					พบอาการกลุ่มเสี่ยงโรคระบาด ให้ดำเนินการย้ายไปยังโซนกักกันโรคทันที และทำรายการต่อ
 				</p>
 			</div>
 		</div>

@@ -79,9 +79,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 							}
 						}
 					}
-				} catch (err) {
-					console.error(`Failed to fetch stats for shelter_${m.code}`, err);
-				}
+				} catch {}
 				return { occ, vuln };
 			});
 
@@ -96,10 +94,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 				vulnerable_count: totalVulnerable
 			};
 			lastFetchTime = now;
-		} catch (e) {
-			console.error('Failed to update read-model', e);
-			// keep using stale cache if available
-		}
+		} catch {}
 	}
 
 	const isStale = now - lastFetchTime > 1800000; // > 30 mins stale threshold (OP-7)

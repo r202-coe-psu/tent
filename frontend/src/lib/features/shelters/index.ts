@@ -93,6 +93,7 @@ export {
 export { createShelter, updateShelter, closeZone, reopenZone } from './data/shelters.api';
 export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.remote';
 export type { ShelterSummary } from './data/shelters.repository';
+export { getAllLocations } from './data/thailand-location.api';
 
 // Application (public)
 export {

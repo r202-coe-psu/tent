@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module E — Shelter Report Cases"
 status: active
 created: 2026-06-05
-updated: 2026-07-15
+updated: 2026-07-16
 module: E
 note: >
   CR-040 (2026-07-15) — reframe จาก Security check-in/out → Shelter Report Case
@@ -23,11 +23,11 @@ note: >
 
 ## Features / Tasks
 
-| ID | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-19 | Groundwork: shelter_report_case schema + case↔referral handoff | prep R3 | R2 | prod | ส.ค. | 6 | ÷1.25 | 5 | T-02 |
-| T-33 | Shelter report case intake + list/detail + escalate (atomic) | FR-47 | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-19 |
-| | **รวมทั้งโมดูล** | | | | | **12** | | **9** | |
+| ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-19 | ⬜ | Groundwork: shelter_report_case schema + case↔referral handoff | prep R3 | R2 | prod | ส.ค. | 6 | ÷1.25 | 5 | T-02 |
+| T-33 | ⬜ | Shelter report case intake + list/detail + escalate (atomic) | FR-47 | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-19 |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **12** |  | **9** |  |
 
 ## Task Details
 

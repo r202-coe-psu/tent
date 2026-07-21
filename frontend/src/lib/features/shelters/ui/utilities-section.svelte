@@ -53,8 +53,8 @@
 <section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<Zap class="h-5 w-5 text-shelter-blue-text" />
-		<span class="text-sm font-bold text-muted-foreground">4.</span>
-		<h2 class="text-base font-bold text-card-foreground">สถานะสาธารณูปโภคพื้นฐาน (Utilities)</h2>
+		<span class="text-sm font-bold text-black">4.</span>
+		<h2 class="text-base font-bold text-black">สถานะสาธารณูปโภคพื้นฐาน</h2>
 	</div>
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
