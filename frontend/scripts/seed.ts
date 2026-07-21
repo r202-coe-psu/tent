@@ -451,6 +451,8 @@ async function seedCatalog(): Promise<void> {
 
 	for (const doc of [...items, ...recipes]) await putDoc('catalog', doc);
 	console.log(`  ✓ catalog: ${items.length} supply items, ${recipes.length} recipes`);
+
+	await deployCatalogMangoIndexes('catalog');
 }
 
 async function seedCatalogSopRatios(): Promise<void> {
@@ -508,6 +510,20 @@ async function deployMangoIndexes(db: string): Promise<void> {
 		type: 'json'
 	});
 	console.log(`  ✓ ${db}: Mango indexes for referral deployed`);
+}
+
+async function deployCatalogMangoIndexes(db: string): Promise<void> {
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'name'] },
+		name: 'catalog-type-name-idx',
+		type: 'json'
+	});
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'target_id'] },
+		name: 'catalog-type-target-idx',
+		type: 'json'
+	});
+	console.log(`  ✓ ${db}: Mango indexes for sop_profile and audit queries deployed`);
 }
 
 // ─── seedShelter ──────────────────────────────────────────────────────────────
