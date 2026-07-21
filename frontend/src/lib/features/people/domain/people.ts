@@ -213,14 +213,18 @@ export type PeopleDoc = Evacuee | Medical | Household | Movement | Screening;
 // ---------------------------------------------------------------- input schemas
 
 export const evacueeInputSchema = z.object({
-	first_name: z.string().trim().min(1, 'First name is required'),
-	last_name: z.string().trim().min(1, 'Last name is required'),
-	gender: genderSchema,
+	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
+	last_name: z.string({ error: 'กรุณากรอกนามสกุล' }).trim().min(1, 'กรุณากรอกนามสกุล'),
+	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }),
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
 	birth_year: z.coerce.number().int().optional(),
 	person_id: personIdSchema.default({ cardType: 'national_id', number: '' }),
-	country: z.string().trim().min(1, 'Country is required').default('THAILAND'),
+	country: z
+		.string({ error: 'กรุณาเลือกประเทศ' })
+		.trim()
+		.min(1, 'กรุณาเลือกประเทศ')
+		.default('THAILAND'),
 	religion: religionSchema.default('buddhist'),
 	medical_conditions: z.array(z.string().trim().min(1)).default([]),
 	medical_allergies: z.array(z.string().trim().min(1)).default([]),
@@ -230,15 +234,58 @@ export const evacueeInputSchema = z.object({
 	special_needs: z.array(specialNeedSchema).default([]),
 	emergency_contact: z
 		.object({
-			name: z.string().trim().min(1),
-			phone: z.string().trim().min(1),
-			relation: z.string().trim().min(1)
+			name: z.string().trim().min(1, 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน'),
+			phone: z
+				.string()
+				.trim()
+				.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
+			relation: z.string().trim().min(1, 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน')
 		})
 		.optional(),
 	household_id: z.string().nullable().default(null),
 	registered_via: registeredViaSchema.default('app')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
+
+/** Required identity/contact fields used by the household pre-registration wizard. */
+export const householdPreRegisterEvacueeSchema = evacueeInputSchema.extend({
+	person_id: z
+		.object({
+			cardType: z
+				.enum(['national_id', 'passport', 'pink_card', 'other'], {
+					error: 'กรุณาเลือกประเภทบัตร'
+				})
+				.default('national_id'),
+			number: z
+				.string({ error: 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร' })
+				.trim()
+				.min(1, 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร')
+		})
+		.default({ cardType: 'national_id', number: '' }),
+	religion: z
+		.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown'], {
+			error: 'กรุณาเลือกศาสนา'
+		})
+		.default('buddhist'),
+	emergency_contact: z.object(
+		{
+			name: z
+				.string({ error: 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน' })
+				.trim()
+				.min(1, 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน'),
+			phone: z
+				.string({ error: 'กรุณากรอกเบอร์ติดต่อฉุกเฉิน' })
+				.trim()
+				.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
+			relation: z
+				.string({ error: 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน' })
+				.trim()
+				.min(1, 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน')
+				.default('contact')
+		},
+		{ error: 'กรุณากรอกข้อมูลผู้ติดต่อฉุกเฉิน' }
+	)
+});
 
 export const medicalInputSchema = z.object({
 	evacuee_id: z.string().min(1),
@@ -306,7 +353,28 @@ export const householdAddressFormSchema = z.object({
 	municipalityZone: z.string().trim().default(''),
 	community: z.string().trim().default('')
 });
-export type HouseholdAddressForm = z.infer<typeof householdAddressFormSchema>;
+
+/** All address selectors/inputs shown as required in household pre-registration. */
+export const householdPreRegisterAddressFormSchema = householdAddressFormSchema.extend({
+	addressNo: z.string({ error: 'กรุณากรอกบ้านเลขที่' }).trim().min(1, 'กรุณากรอกบ้านเลขที่'),
+	villageNo: z
+		.string({ error: 'กรุณากรอกหมู่ที่ ตรอก ซอย หรือถนน' })
+		.trim()
+		.min(1, 'กรุณากรอกหมู่ที่ ตรอก ซอย หรือถนน'),
+	subdistrict: z.string({ error: 'กรุณาเลือกตำบล/แขวง' }).trim().min(1, 'กรุณาเลือกตำบล/แขวง'),
+	district: z.string({ error: 'กรุณาเลือกอำเภอ/เขต' }).trim().min(1, 'กรุณาเลือกอำเภอ/เขต'),
+	province: z.string({ error: 'กรุณาเลือกจังหวัด' }).trim().min(1, 'กรุณาเลือกจังหวัด'),
+	postalCode: z
+		.string({ error: 'กรุณากรอกรหัสไปรษณีย์' })
+		.trim()
+		.regex(/^\d{5}$/, 'กรุณากรอกรหัสไปรษณีย์ 5 หลัก'),
+	municipalityZone: z
+		.string({ error: 'กรุณาเลือกเขตการปกครอง' })
+		.trim()
+		.min(1, 'กรุณาเลือกเขตการปกครอง'),
+	community: z.string({ error: 'กรุณาเลือกชุมชน' }).trim().min(1, 'กรุณาเลือกชุมชน')
+});
+export type HouseholdAddressForm = z.infer<typeof householdPreRegisterAddressFormSchema>;
 
 /** Path-C (post-arrival grouping) adds a free-text notes field to the same address step. */
 export const householdPostArrivalAddressFormSchema = householdAddressFormSchema.extend({

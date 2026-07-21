@@ -13,7 +13,10 @@
 		useDistricts,
 		useSubdistricts
 	} from '$lib/features/shelters/application/queries';
-	import { householdAddressFormSchema, type HouseholdAddressForm } from '../domain/people';
+	import {
+		householdPreRegisterAddressFormSchema,
+		type HouseholdAddressForm
+	} from '../domain/people';
 
 	let {
 		initialData = null,
@@ -31,9 +34,9 @@
 		onNext: (data: HouseholdAddressForm) => void;
 	} = $props();
 
-	const form = superForm(defaults(zod4(householdAddressFormSchema)), {
+	const form = superForm(defaults(zod4(householdPreRegisterAddressFormSchema)), {
 		SPA: true,
-		validators: zod4(householdAddressFormSchema),
+		validators: zod4(householdPreRegisterAddressFormSchema),
 		resetForm: false,
 		onUpdate: async ({ form }) => {
 			if (!form.valid) return;
@@ -105,7 +108,7 @@
 					<Form.Field {form} name="municipalityZone">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เขตการปกครอง</Form.Label>
+								<Form.Label>เขตการปกครอง <span class="text-destructive">*</span></Form.Label>
 								<SearchSelect
 									items={municipalityZoneItems}
 									bind:value={$formData.municipalityZone}
@@ -120,7 +123,7 @@
 					<Form.Field {form} name="community">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ชุมชน</Form.Label>
+								<Form.Label>ชุมชน <span class="text-destructive">*</span></Form.Label>
 								<SearchSelect
 									items={communityItems}
 									bind:value={$formData.community}
@@ -154,7 +157,9 @@
 				<Form.Field {form} name="villageNo">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label>หมู่ที่ / ตรอก / ซอย / ถนน</Form.Label>
+							<Form.Label
+								>หมู่ที่ / ตรอก / ซอย / ถนน <span class="text-destructive">*</span></Form.Label
+							>
 							<Input {...props} placeholder="เช่น หมู่ 2" bind:value={$formData.villageNo} />
 						{/snippet}
 					</Form.Control>
@@ -223,7 +228,7 @@
 				<Form.Field {form} name="postalCode">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label>รหัสไปรษณีย์</Form.Label>
+							<Form.Label>รหัสไปรษณีย์ <span class="text-destructive">*</span></Form.Label>
 							<Input
 								{...props}
 								placeholder={!$formData.subdistrict ? 'เลือกตำบลก่อน' : 'เช่น 90110'}

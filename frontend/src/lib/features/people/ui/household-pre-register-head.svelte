@@ -11,7 +11,7 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
-		evacueeInputSchema,
+		householdPreRegisterEvacueeSchema,
 		specialNeedSchema,
 		SPECIAL_NEED_CHIPS,
 		type EvacueeInput
@@ -57,10 +57,10 @@
 	let medicalMedicationsStr = $state('');
 	let medicalAllergiesStr = $state('');
 
-	const form = superForm(defaults(zod4(evacueeInputSchema)), {
+	const form = superForm(defaults(zod4(householdPreRegisterEvacueeSchema)), {
 		SPA: true,
 		dataType: 'json',
-		validators: zod4(evacueeInputSchema),
+		validators: zod4(householdPreRegisterEvacueeSchema),
 		resetForm: false,
 		onSubmit: ({ cancel }) => {
 			if (noPhone) {
@@ -190,7 +190,7 @@
 				<div class="space-y-4">
 					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						<div class="space-y-2">
-							<Label>ประเภทบัตร</Label>
+							<Label>ประเภทบัตร <span class="text-destructive">*</span></Label>
 							<Select.Root type="single" bind:value={$formData.person_id.cardType}>
 								<Select.Trigger
 									class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
@@ -210,13 +210,13 @@
 								{#snippet children({ props })}
 									<Form.Label>
 										{#if $formData.person_id.cardType === 'national_id'}
-											เลขประจำตัวประชาชน
+											เลขประจำตัวประชาชน <span class="text-destructive">*</span>
 										{:else if $formData.person_id.cardType === 'passport'}
-											เลขที่พาสปอร์ต
+											เลขที่พาสปอร์ต <span class="text-destructive">*</span>
 										{:else if $formData.person_id.cardType === 'pink_card'}
-											เลขประจำตัวคนซึ่งไม่มีสัญชาติไทย
+											เลขประจำตัวคนซึ่งไม่มีสัญชาติไทย <span class="text-destructive">*</span>
 										{:else}
-											เลขหมายบัตร
+											เลขหมายบัตร <span class="text-destructive">*</span>
 										{/if}
 									</Form.Label>
 									<Input
@@ -377,7 +377,7 @@
 						<Form.Field {form} name="religion">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label>ศาสนา</Form.Label>
+									<Form.Label>ศาสนา <span class="text-destructive">*</span></Form.Label>
 									<Select.Root type="single" bind:value={$formData.religion}>
 										<Select.Trigger
 											{...props}
@@ -440,7 +440,10 @@
 					<Form.Field {form} name="emergency_contact.name">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ชื่อ-นามสกุล บุคคลติดต่อฉุกเฉิน</Form.Label>
+								<Form.Label
+									>ชื่อ-นามสกุล บุคคลติดต่อฉุกเฉิน <span class="text-destructive">*</span
+									></Form.Label
+								>
 								<Input
 									{...props}
 									placeholder="ชื่อนามสกุล ญาติ/ผู้ใกล้ชิด"
@@ -459,7 +462,7 @@
 					<Form.Field {form} name="emergency_contact.phone">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เบอร์ติดต่อฉุกเฉิน</Form.Label>
+								<Form.Label>เบอร์ติดต่อฉุกเฉิน <span class="text-destructive">*</span></Form.Label>
 								<Input
 									{...props}
 									inputmode="numeric"
