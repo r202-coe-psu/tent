@@ -6,8 +6,9 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
+	import SearchSelect from '$lib/components/search-select.svelte';
+	import { SearchSelect as UiSearchSelect } from '$lib/components/ui/search-select/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -183,17 +184,16 @@
 						<div class="space-y-2">
 							<Label>ประเภทบัตร <span class="text-destructive">*</span></Label>
 							<Select.Root type="single" bind:value={$formData.person_id.cardType}>
-								<Select.Trigger
-									class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+								<Select.Trigger class="h-9 w-full"
+									>{cardTypeOptions.find((o) => o.value === $formData.person_id.cardType)?.label ??
+										'— เลือก —'}</Select.Trigger
 								>
-									{cardTypeOptions.find((o) => o.value === $formData.person_id.cardType)?.label ??
-										'— เลือก —'}
-								</Select.Trigger>
-								<Select.Content>
-									{#each cardTypeOptions as opt (opt.value)}
-										<Select.Item value={opt.value} label={opt.label} />
-									{/each}
-								</Select.Content>
+								<Select.Content
+									>{#each cardTypeOptions as opt (opt.value)}<Select.Item
+											value={opt.value}
+											label={opt.label}
+										/>{/each}</Select.Content
+								>
 							</Select.Root>
 						</div>
 						<Form.Field {form} name="person_id.number">
@@ -296,20 +296,17 @@
 							<Form.Control>
 								{#snippet children({ props })}
 									<Form.Label>เพศ <span class="text-destructive">*</span></Form.Label>
-									<Select.Root type="single" bind:value={$formData.gender}>
-										<Select.Trigger
-											{...props}
-											class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
-										>
-											{genderOptions.find((o) => o.value === $formData.gender)?.label ??
-												'— เลือก —'}
-										</Select.Trigger>
-										<Select.Content>
-											{#each genderOptions as opt (opt.value)}
-												<Select.Item value={opt.value} label={opt.label} />
-											{/each}
-										</Select.Content>
-									</Select.Root>
+									<Select.Root type="single" bind:value={$formData.gender}
+										><Select.Trigger {...props} class="h-9 w-full"
+											>{genderOptions.find((o) => o.value === $formData.gender)?.label ??
+												'— เลือก —'}</Select.Trigger
+										><Select.Content
+											>{#each genderOptions as opt (opt.value)}<Select.Item
+													value={opt.value}
+													label={opt.label}
+												/>{/each}</Select.Content
+										></Select.Root
+									>
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors />
@@ -358,12 +355,10 @@
 								{#snippet children({ props })}
 									<Form.Label>ประเทศ <span class="text-destructive">*</span></Form.Label>
 									<SearchSelect
-										items={COUNTRIES}
+										name={props.name}
+										options={COUNTRIES}
 										bind:value={$formData.country}
 										placeholder="ค้นหาประเทศ..."
-										emptyText="ไม่พบประเทศ"
-										controlProps={props}
-										class="h-9"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -373,20 +368,17 @@
 							<Form.Control>
 								{#snippet children({ props })}
 									<Form.Label>ศาสนา <span class="text-destructive">*</span></Form.Label>
-									<Select.Root type="single" bind:value={$formData.religion}>
-										<Select.Trigger
-											{...props}
-											class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
-										>
-											{religionOptions.find((o) => o.value === $formData.religion)?.label ??
-												'— เลือก —'}
-										</Select.Trigger>
-										<Select.Content>
-											{#each religionOptions as opt (opt.value)}
-												<Select.Item value={opt.value} label={opt.label} />
-											{/each}
-										</Select.Content>
-									</Select.Root>
+									<Select.Root type="single" bind:value={$formData.religion}
+										><Select.Trigger {...props} class="h-9 w-full"
+											>{religionOptions.find((o) => o.value === $formData.religion)?.label ??
+												'— เลือก —'}</Select.Trigger
+										><Select.Content
+											>{#each religionOptions as opt (opt.value)}<Select.Item
+													value={opt.value}
+													label={opt.label}
+												/>{/each}</Select.Content
+										></Select.Root
+									>
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors />

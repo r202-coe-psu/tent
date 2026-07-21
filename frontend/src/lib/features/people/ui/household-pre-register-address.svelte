@@ -2,8 +2,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Combobox } from '$lib/components/ui/combobox/index.js';
-	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
+	import SearchSelect from '$lib/components/search-select.svelte';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
@@ -110,11 +109,10 @@
 							{#snippet children({ props })}
 								<Form.Label>เขตการปกครอง <span class="text-destructive">*</span></Form.Label>
 								<SearchSelect
-									items={municipalityZoneItems}
+									name={props.name}
+									options={municipalityZoneItems}
 									bind:value={$formData.municipalityZone}
 									placeholder="เลือกเขตการปกครอง..."
-									emptyText="ไม่พบเขตการปกครอง"
-									controlProps={props}
 								/>
 							{/snippet}
 						</Form.Control>
@@ -125,11 +123,10 @@
 							{#snippet children({ props })}
 								<Form.Label>ชุมชน <span class="text-destructive">*</span></Form.Label>
 								<SearchSelect
-									items={communityItems}
+									name={props.name}
+									options={communityItems}
 									bind:value={$formData.community}
 									placeholder="เลือกชุมชน..."
-									emptyText="ไม่พบชุมชน"
-									controlProps={props}
 								/>
 							{/snippet}
 						</Form.Control>
@@ -170,14 +167,12 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label>จังหวัด <span class="text-destructive">*</span></Form.Label>
-							<Combobox
-								items={provinceItems}
+							<SearchSelect
+								name={props.name}
+								options={provinceItems}
 								bind:value={() => $formData.province, selectProvince}
 								placeholder={provincesQuery.isLoading ? 'กำลังโหลด...' : 'เลือกจังหวัด...'}
-								searchPlaceholder="ค้นหาจังหวัด..."
-								emptyText="ไม่พบจังหวัด"
 								disabled={provincesQuery.isLoading}
-								controlProps={props}
 							/>
 						{/snippet}
 					</Form.Control>
@@ -187,18 +182,16 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label>อำเภอ / เขต <span class="text-destructive">*</span></Form.Label>
-							<Combobox
-								items={districtItems}
+							<SearchSelect
+								name={props.name}
+								options={districtItems}
 								bind:value={() => $formData.district, selectDistrict}
 								placeholder={!$formData.province
 									? 'เลือกจังหวัดก่อน'
 									: districtsQuery.isLoading
 										? 'กำลังโหลด...'
 										: 'เลือกอำเภอ...'}
-								searchPlaceholder="ค้นหาอำเภอ..."
-								emptyText="ไม่พบอำเภอ"
 								disabled={!$formData.province || districtsQuery.isLoading}
-								controlProps={props}
 							/>
 						{/snippet}
 					</Form.Control>
@@ -208,18 +201,16 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label>ตำบล / แขวง <span class="text-destructive">*</span></Form.Label>
-							<Combobox
-								items={subdistrictItems}
+							<SearchSelect
+								name={props.name}
+								options={subdistrictItems}
 								bind:value={() => $formData.subdistrict, selectSubdistrict}
 								placeholder={!$formData.district
 									? 'เลือกอำเภอก่อน'
 									: subdistrictsQuery.isLoading
 										? 'กำลังโหลด...'
 										: 'เลือกตำบล...'}
-								searchPlaceholder="ค้นหาตำบล..."
-								emptyText="ไม่พบตำบล"
 								disabled={!$formData.district || subdistrictsQuery.isLoading}
-								controlProps={props}
 							/>
 						{/snippet}
 					</Form.Control>
