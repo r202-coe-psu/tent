@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Search from '@lucide/svelte/icons/search';
 	import User from '@lucide/svelte/icons/user';
+	import Users from '@lucide/svelte/icons/users';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Clock from '@lucide/svelte/icons/clock';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
@@ -146,6 +147,17 @@
 										<h3 class="text-xl font-bold text-foreground">
 											{person.name || 'ไม่ระบุชื่อ'}
 										</h3>
+										{#if person.family_members && person.family_members.length > 0}
+											<span
+												class="rounded-md bg-primary/20 px-2 py-0.5 text-xs font-bold text-primary"
+												>มากับครอบครัว</span
+											>
+										{:else}
+											<span
+												class="rounded-md bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground"
+												>มาเดี่ยว</span
+											>
+										{/if}
 									</div>
 									<div class="mt-2 flex gap-4 text-sm text-muted-foreground">
 										<span>ID: <span class="font-mono">{person.national_id || '-'}</span></span>
@@ -203,6 +215,35 @@
 									</div>
 								</div>
 							</div>
+
+							{#if person.family_members && person.family_members.length > 0}
+								<div class="border-t border-border/50 p-5">
+									<div class="mb-4 flex items-center gap-2 font-bold text-foreground/90">
+										<Users class="h-5 w-5" />
+										ข้อมูลสมาชิกในครอบครัว ({person.family_members.length} คน)
+									</div>
+									<div class="flex flex-col gap-3">
+										{#each person.family_members as member, i (i)}
+											<div
+												class="flex items-center justify-between rounded-xl border border-border p-4"
+											>
+												<div>
+													<div class="font-bold text-foreground">
+														{member.name || '-'}
+													</div>
+												</div>
+												{#if isInShelterStatus(member.status)}
+													<div class="text-sm font-bold text-green-600">
+														ปลอดภัยอยู่ในศูนย์ ({member.shelter_name || '-'})
+													</div>
+												{:else}
+													<div class="text-sm font-bold text-danger">พลัดหลง (ไม่อยู่ในศูนย์)</div>
+												{/if}
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
 						</div>
 					{/each}
 				</div>

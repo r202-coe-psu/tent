@@ -45,6 +45,7 @@ services:
   mongodb:
     container_name: tent-mongodb
     image: mongo:7
+    # Dev only — no auth; do not expose host port in production (staging uses internal network).
     ports:
       - "27017:27017"
     volumes:
@@ -71,6 +72,23 @@ services:
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/tentdb}
+    restart: unless-stopped
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: tent-fastapi
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      APP_ENV: dev
+      DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
+      EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET:-dev-external-secret}
+    ports:
+      - "9000:9000"
     restart: unless-stopped
 
 networks:

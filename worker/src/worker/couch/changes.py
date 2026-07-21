@@ -31,7 +31,7 @@ async def tail_database(
                     break
                 if "last_seq" in change and "results" not in change:
                     continue
-                await process_change(database, change)
+                await process_change(couch, database, change)
         except asyncio.CancelledError:
             raise
         except Exception:

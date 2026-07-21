@@ -8,14 +8,9 @@ from fastapi import HTTPException, status
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 
-from ...utils.masking import (
-    mask_last_name,
-    national_id_hash,
-    passport_hash,
-    phone_hash,
-)
+from ...utils.masking import national_id_hash, passport_hash, phone_hash
 from ...utils.search_query import ParsedSearchQuery, SearchQueryKind, parse_search_query
-from .schemas import SearchResponse, SearchResult
+from .schemas import FamilyMember, SearchResponse, SearchResult
 
 NAME_RESULT_LIMIT = 10
 
@@ -52,7 +47,9 @@ class EvacueeUseCase:
         shelter_names = await self._load_shelter_names({person.shelter_code for person in persons})
 
         results = [
-            self._to_result(person, shelter_names.get(person.shelter_code, person.shelter_code))
+            await self._to_result(
+                person, shelter_names.get(person.shelter_code, person.shelter_code)
+            )
             for person in persons
         ]
 
@@ -100,9 +97,31 @@ class EvacueeUseCase:
         shelters = await PublicShelter.find({"shelter_code": {"$in": list(codes)}}).to_list()
         return {shelter.shelter_code: shelter.name for shelter in shelters}
 
-    def _to_result(self, person: PublicPerson, shelter_name: str) -> SearchResult:
+    async def _load_family_members(
+        self, person: PublicPerson, shelter_name: str
+    ) -> list[FamilyMember]:
+        if not person.household_id:
+            return []
+
+        members = await PublicPerson.find(
+            PublicPerson.household_id == person.household_id,
+            PublicPerson.shelter_code == person.shelter_code,
+            {"search_excluded": {"$ne": True}},
+        ).to_list()
+
+        return [
+            FamilyMember(
+                name=f"{member.first_name} {member.last_name_masked}",
+                status=map_public_status(member.status),
+                shelter_name=shelter_name,
+            )
+            for member in members
+            if member.id != person.id
+        ]
+
+    async def _to_result(self, person: PublicPerson, shelter_name: str) -> SearchResult:
         return SearchResult(
-            name=f"{person.first_name} {mask_last_name(person.last_name)}",
+            name=f"{person.first_name} {person.last_name_masked}",
             status=map_public_status(person.status),
             national_id=person.national_id_masked,
             gender=person.gender,
@@ -110,6 +129,7 @@ class EvacueeUseCase:
             origin_address=person.address_masked,
             checked_in_at=person.checked_in_at,
             care_zone=person.care_zone,
+            family_members=await self._load_family_members(person, shelter_name),
         )
 
 

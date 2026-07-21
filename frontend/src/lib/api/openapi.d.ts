@@ -134,6 +134,15 @@ export interface components {
 			 */
 			as_of: string;
 		};
+		/** FamilyMember */
+		FamilyMember: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** Shelter Name */
+			shelter_name: string;
+		};
 		/** SearchResult */
 		SearchResult: {
 			/** Name */
@@ -152,6 +161,8 @@ export interface components {
 			checked_in_at?: string | null;
 			/** Care Zone */
 			care_zone?: string | null;
+			/** Family Members */
+			family_members?: components['schemas']['FamilyMember'][];
 		};
 		/** ShelterItem */
 		ShelterItem: {

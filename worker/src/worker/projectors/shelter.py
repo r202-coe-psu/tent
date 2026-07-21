@@ -31,6 +31,13 @@ def is_shelter_open(doc: dict[str, Any]) -> bool:
     return status != "closed"
 
 
+def map_public_shelter_status(doc: dict[str, Any]) -> str:
+    status = resolve_operation_status(doc)
+    if status in CLOSED_STATUSES:
+        return "closed"
+    return "open"
+
+
 def backfill_capacity(doc: dict[str, Any]) -> int:
     capacity = doc.get("capacity")
     if isinstance(capacity, (int, float)) and capacity > 0:
@@ -50,8 +57,13 @@ def project_shelter(doc: dict[str, Any]) -> tuple[ProjectionAction, dict[str, An
     if not code:
         return ("delete", None)
 
+    registry_id = doc.get("_id")
+
     if not is_shelter_open(doc):
-        return ("delete", {"_id": code})
+        payload: dict[str, Any] = {"_id": code}
+        if registry_id:
+            payload["registry_id"] = registry_id
+        return ("delete", payload)
 
     location = doc.get("location") or {}
     lat = location.get("lat")
@@ -70,8 +82,9 @@ def project_shelter(doc: dict[str, Any]) -> tuple[ProjectionAction, dict[str, An
     payload = {
         "_id": code,
         "shelter_code": code,
+        "registry_id": registry_id,
         "name": doc.get("name") or code,
-        "status": "open",
+        "status": map_public_shelter_status(doc),
         "capacity": backfill_capacity(doc),
         "province": doc.get("province"),
         "district": doc.get("district"),

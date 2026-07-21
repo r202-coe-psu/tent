@@ -1,3 +1,3 @@
-from apiapp.api import create_app
+from apiapp.run import create_app
 
 app = create_app()

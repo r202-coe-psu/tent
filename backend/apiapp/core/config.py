@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     OPENAPI_PREFIX: str = ""
     OPENAPI_URL: str = "/openapi.json"
     REDOC_URL: str = "/redoc"
-    TITLE: str = "IMPs FastAPI"
+    TITLE: str = "CouchDB Lab Public API"
     VERSION: str = "0.1.0"
 
     DATABASE_URI: str = ""
@@ -77,12 +77,15 @@ class Settings(BaseSettings):
     @property
     def fastapi_kwargs(self) -> dict[str, Any]:
         """FastAPI application configuration"""
+        docs_url = None if self.APP_ENV == "prod" else self.DOCS_URL
+        redoc_url = None if self.APP_ENV == "prod" else self.REDOC_URL
+        openapi_url = None if self.APP_ENV == "prod" else self.OPENAPI_URL
         return {
             "debug": self.DEBUG,
-            "docs_url": self.DOCS_URL,
+            "docs_url": docs_url,
             "openapi_prefix": self.OPENAPI_PREFIX,
-            "openapi_url": self.OPENAPI_URL,
-            "redoc_url": self.REDOC_URL,
+            "openapi_url": openapi_url,
+            "redoc_url": redoc_url,
             "title": self.TITLE,
             "version": self.VERSION,
         }

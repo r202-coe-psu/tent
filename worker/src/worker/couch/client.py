@@ -28,6 +28,21 @@ class CouchClient:
         response.raise_for_status()
         return response.json()
 
+    async def get_doc(self, database: str, doc_id: str) -> dict[str, Any] | None:
+        response = await self._client.get(f"/{database}/{doc_id}")
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json()
+
+    async def put_doc(self, database: str, doc: dict[str, Any]) -> dict[str, Any]:
+        doc_id = doc["_id"]
+        response = await self._client.put(f"/{database}/{doc_id}", json=doc)
+        if response.status_code == 409:
+            return response.json()
+        response.raise_for_status()
+        return response.json()
+
     async def database_exists(self, database: str) -> bool:
         response = await self._client.get(f"/{database}")
         return response.status_code == 200

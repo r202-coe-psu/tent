@@ -2,8 +2,8 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-06-12
-note: คู่กับ data-model.md v3 + api-contract.md v1 — กำหนดว่า public tier (family-search / donate / needs / transparency) ทำงานบน MongoDB ไม่แตะ CouchDB central ตรง; CouchDB central = system of record, MongoDB = derived public store + intake buffer
+updated: 2026-07-21
+note: คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B)
 ---
 
 # Smart Shelter — CouchDB ⇄ MongoDB Sync
@@ -50,7 +50,7 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 
 | Plane | ทิศ | กลไก | ใช้ทำ |
 | --- | --- | --- | --- |
-| **Outbound** | CouchDB central → Mongo | tail `_changes` (CDC) → project → upsert | person index, needs, transparency, donation status |
+| **Outbound** | CouchDB central → Mongo | tail `_changes` (CDC) → project → upsert | person index, shelters, needs, donation status |
 | **Inbound** | Mongo → CouchDB central | poll Mongo `donations` ใหม่ → `db.put(donation:{ulid})` | บันทึก donation ที่ public ประกาศเข้าระบบจริง |
 
 ทั้งสอง plane **idempotent** และมี **checkpoint** — restart worker ได้ปลอดภัย ไม่ซ้ำ ไม่หาย.
@@ -78,10 +78,16 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
   first_name: "สมชาย",              // ชื่อจริงเต็ม
   last_name_masked: "ใจ****ดี",      // mask ตอน project (≥5: 2หน้า+****+2ท้าย; ≤4: ตัวแรก+****; นับ grapheme)
   phone_hash: "sha256(0812345678)", // ค้นด้วยเบอร์เต็ม = hash แล้วเทียบ — เบอร์จริงไม่ลง Mongo
-  status: "checked_in",             // จาก current_stay
+  status: "active",                 // จาก current_stay (CR-035 v3)
+  national_id_hash, national_id_masked, passport_hash, passport_id_masked,
+  address_masked, gender, checked_in_at, care_zone, household_id,
   updated_at: "..." }
 // projector: ถ้า evacuee.privacy.search_excluded == true → ลบ doc นี้ออกจาก Mongo (opt-out = หายทั้ง record)
-// ไม่มี: นามสกุลเต็ม, เบอร์ดิบ, medical, national_id, household — ไม่ project เด็ดขาด
+// ไม่มี: นามสกุลเต็ม, เบอร์ดิบ, medical, national_id plaintext — ไม่ project เด็ดขาด
+
+// public_shelters — shelter list (จาก registry)
+{ _id: "SH001", shelter_code: "SH001", registry_id: "shelter:{ulid}", name, status: "open|closed",
+  geo, capacity, province, district, subdistrict, updated_at }
 
 // public_needs — ความต้องการรวม (จาก donation_campaign − donation ที่รับแล้ว)
 { _id: "{shelter_code}:item:01H...", shelter_code, item_name, category, qty_needed, unit, updated_at }
@@ -92,8 +98,7 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
   items_declared: [...], received_summary: {...} | null, updated_at }
 // projector: sync สถานะ donation กลับมาให้ public ดูผ่าน GET /public/v1/donations/{token}
 
-// public_transparency — aggregate ต่อศูนย์ (donations รับแล้ว, occupancy ระดับนับ)
-{ _id: "{shelter_code}", shelter_code, name, status, total_donations_received, occupancy_count, updated_at }
+// public_transparency — ตัดออก (CR-017 Decision B); ใช้ public_shelters แทนสำหรับ shelter list
 ```
 
 **หลักการ projection:** allow-list field เท่านั้น — projector มี whitelist ตายตัวต่อ type; field

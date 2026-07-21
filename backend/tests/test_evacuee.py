@@ -53,7 +53,7 @@ async def test_evacuee_search_by_phone_returns_masked_result(
             "_id": "evacuee:test1",
             "shelter_code": "SH001",
             "first_name": "สมชาย",
-            "last_name": "ใจดี",
+            "last_name_masked": mask_last_name("ใจดี"),
             "phone_hash": phone_hash(phone),
             "national_id_masked": "390-XXXX-XX-192",
             "gender": "male",
@@ -106,7 +106,7 @@ async def test_evacuee_search_by_national_id_exact_match(
             "_id": "evacuee:test2",
             "shelter_code": "SH001",
             "first_name": "สมหญิง",
-            "last_name": "รักดี",
+            "last_name_masked": mask_last_name("รักดี"),
             "national_id_hash": national_id_hash(national_id),
             "national_id_masked": "390-XXXX-XX-192",
             "search_excluded": False,
@@ -125,6 +125,52 @@ async def test_evacuee_search_by_national_id_exact_match(
     assert body["results"][0]["status"] == "moved"
 
 
+async def test_evacuee_search_includes_family_members(
+    client: AsyncClient,
+    db_client: AsyncIOMotorClient,
+    settings: Settings,
+):
+    phone = "0811111111"
+    now = datetime.now(UTC)
+    await _insert_shelter(
+        db_client,
+        settings,
+        {
+            "_id": "SH001",
+            "shelter_code": "SH001",
+            "name": "ศูนย์ทดสอบ",
+            "status": "open",
+            "capacity": 100,
+            "updated_at": now,
+        },
+    )
+    for doc_id, first_name, last_name in [
+        ("evacuee:parent", "พ่อ", "ใจดี"),
+        ("evacuee:child", "ลูก", "ใจดี"),
+    ]:
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": doc_id,
+                "shelter_code": "SH001",
+                "first_name": first_name,
+                "last_name_masked": mask_last_name(last_name),
+                "phone_hash": phone_hash(phone) if doc_id == "evacuee:parent" else None,
+                "household_id": "household:01",
+                "search_excluded": False,
+                "status": "active",
+                "updated_at": now,
+            },
+        )
+
+    response = await client.post("/public/v1/family-search", json={"q": phone})
+    assert response.status_code == 200
+    members = response.json()["results"][0]["family_members"]
+    assert len(members) == 1
+    assert members[0]["name"] == f"ลูก {mask_last_name('ใจดี')}"
+
+
 async def test_evacuee_search_hides_opted_out_records(
     client: AsyncClient,
     db_client: AsyncIOMotorClient,
@@ -139,7 +185,7 @@ async def test_evacuee_search_hides_opted_out_records(
             "_id": "evacuee:hidden",
             "shelter_code": "SH001",
             "first_name": "ซ่อน",
-            "last_name": "ตัว",
+            "last_name_masked": mask_last_name("ตัว"),
             "phone_hash": phone_hash(phone),
             "search_excluded": True,
             "status": "active",

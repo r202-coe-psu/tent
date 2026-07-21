@@ -1,11 +1,13 @@
 import { json } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
+import { donationIpLimiter } from '$lib/server/security/rate-limiter';
 import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
-import { donationIpLimiter } from '$lib/server/security/rate-limiter';
 import type { PublicDonationDoc } from '$lib/features/donations';
 
-// resolve shelter db จาก token (format: TX-{SHELTER_CODE}-{UUID}; legacy TX-DON-... → SH001)
+const FASTAPI_BASE = env.PUBLIC_FASTAPI_PROXY || 'http://localhost:9000';
+
 function shelterDbFromToken(token: string): string | null {
 	const match = token.match(/^TX-([A-Z0-9]+)-/);
 	if (!match) return null;
@@ -13,10 +15,9 @@ function shelterDbFromToken(token: string): string | null {
 	return `shelter_${code.toLowerCase()}`;
 }
 
-// donation _id = donation:{ulid} → ค้นด้วย tracking_token_hash (schema.md §2.3 index (tracking_token_hash))
 async function findByTokenHash(shelterDb: string, hash: string): Promise<PublicDonationDoc | null> {
 	const res = await adminRaw(
-		`/${shelterDb}/_all_docs?include_docs=true&startkey="donation:"&endkey="donation:￰"`,
+		`/${shelterDb}/_all_docs?include_docs=true&startkey="donation:"&endkey="donation:\ufff0"`,
 		'GET'
 	);
 	if (res.status >= 400) return null;
@@ -39,48 +40,27 @@ export const GET = async ({ params, getClientAddress }) => {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
-		const shelterDb = shelterDbFromToken(tracking_token);
-		if (!shelterDb) {
-			return json({ success: false, error: 'Invalid tracking token format' }, { status: 400 });
-		}
-		const trackingTokenHash = await sha256Hex(tracking_token);
-
-		const donation = await findByTokenHash(shelterDb, trackingTokenHash);
-		if (!donation) {
-			return json({ success: false, error: 'Donation record not found' }, { status: 404 });
+		const res = await fetch(
+			`${FASTAPI_BASE}/public/v1/donations/${encodeURIComponent(tracking_token)}`
+		);
+		const body = await res.json();
+		if (!res.ok) {
+			return json(body, { status: res.status });
 		}
 
-		// Mask PII; ห้าม echo phone/phone_hash สู่ public (schema.md §2.3)
-		const rawDonor = donation.donor ?? ({} as PublicDonationDoc['donor']);
-		const maskedDonor: Record<string, unknown> = {};
-		if (rawDonor.name) maskedDonor.name = rawDonor.name.substring(0, 1) + '***';
-		if (rawDonor.line_id && rawDonor.line_id.length >= 3) {
-			maskedDonor.line_id = rawDonor.line_id.substring(0, 2) + '***';
-		}
-		if (rawDonor.email && rawDonor.email.includes('@')) {
-			const parts = rawDonor.email.split('@');
-			maskedDonor.email = parts[0].substring(0, 2) + '***@' + parts[1];
-		}
-
+		const donation = body.donation as Record<string, unknown>;
 		return json({
 			success: true,
 			donation: {
 				status: donation.status,
 				booking_ref: donation.booking_ref,
 				shelter_code: donation.shelter_code,
-				donor: maskedDonor,
-				items: (donation.items || donation.items_declared || []).map((i) => ({
-					free_text: i.free_text || ('item_name' in i ? i.item_name : undefined),
-					category: i.category,
-					qty: i.qty,
-					unit: i.unit,
-					condition: i.condition,
-					note: i.note
-				})),
-				logistics: donation.logistics,
-				received_summary: donation.received_summary || null,
-				created_at: donation.created_at,
-				expires_at: donation.expires_at
+				donor: donation.donor ?? {},
+				items: donation.items ?? [],
+				logistics: donation.logistics ?? null,
+				received_summary: donation.received_summary ?? null,
+				created_at: donation.updated_at,
+				expires_at: donation.expires_at ?? null
 			}
 		});
 	} catch {

@@ -16,6 +16,12 @@ class SearchRequest(BaseModel):
     )
 
 
+class FamilyMember(BaseModel):
+    name: str
+    status: str
+    shelter_name: str
+
+
 class SearchResult(BaseModel):
     name: str
     status: str
@@ -25,6 +31,7 @@ class SearchResult(BaseModel):
     origin_address: str | None = None
     checked_in_at: datetime | None = None
     care_zone: str | None = None
+    family_members: list[FamilyMember] = Field(default_factory=list)
 
 
 class SearchResponse(BaseModel):

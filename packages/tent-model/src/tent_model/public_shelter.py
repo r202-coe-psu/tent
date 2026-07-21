@@ -17,6 +17,7 @@ class PublicShelter(Document):
 
 	id: str = Field(alias="_id")
 	shelter_code: str
+	registry_id: str | None = None
 	name: str
 	status: str = "open"
 	geo: GeoPoint | None = None
@@ -30,6 +31,7 @@ class PublicShelter(Document):
 		name = "public_shelters"
 		indexes = [
 			IndexModel([("shelter_code", 1)]),
+			IndexModel([("registry_id", 1)]),
 			IndexModel([("province", 1), ("district", 1), ("subdistrict", 1)]),
 			IndexModel([("status", 1)]),
 		]

@@ -24,3 +24,7 @@ pre-commit:
       root: backend/
       glob: '**/*.py'
       run: poetry run pytest
+    worker-test:
+      root: worker/
+      glob: '**/*.py'
+      run: uv run pytest tests
