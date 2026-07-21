@@ -396,7 +396,7 @@
 									searchPlaceholder="ค้นหาประเทศ..."
 									emptyText="ไม่พบประเทศ"
 									controlProps={props}
-									class="h-9"
+									class="h-9 rounded-md"
 								/>
 							{/snippet}
 						</Form.Control>
