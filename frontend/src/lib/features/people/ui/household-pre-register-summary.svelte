@@ -158,69 +158,33 @@
 		enhance: memberEnhance
 	} = memberForm;
 
-	// Sync birth year and age two-way
-	let prevMemberBirthYear = '';
-	let prevMemberAge = '';
-	$effect(() => {
-		const by = memberBirthYearBE;
-		const age = memberAge;
-		if (by !== prevMemberBirthYear) {
-			prevMemberBirthYear = by;
-			if (by && by.length === 4 && !isNaN(Number(by))) {
-				const computed = String(new Date().getFullYear() + 543 - Number(by));
-				if (memberAge !== computed) {
-					memberAge = computed;
-					prevMemberAge = computed;
-				}
-				$memberFormData.birth_year = Number(by);
-			} else if (!by) {
-				memberAge = '';
-				prevMemberAge = '';
-				$memberFormData.birth_year = undefined;
-			}
-		} else if (age !== prevMemberAge) {
-			prevMemberAge = age;
-			if (age && !isNaN(Number(age))) {
-				const computed = String(new Date().getFullYear() + 543 - Number(age));
-				if (memberBirthYearBE !== computed) {
-					memberBirthYearBE = computed;
-					prevMemberBirthYear = computed;
-				}
-				$memberFormData.birth_year = new Date().getFullYear() + 543 - Number(age);
-			} else if (!age) {
-				memberBirthYearBE = '';
-				prevMemberBirthYear = '';
-				$memberFormData.birth_year = undefined;
-			}
+	function updateMemberBirthYear(value: string) {
+		memberBirthYearBE = value;
+		$memberFormData.birth_year = value && !isNaN(Number(value)) ? Number(value) : undefined;
+	}
+
+	function updateMemberAge(value: string) {
+		memberAge = value;
+		if (value && !isNaN(Number(value))) {
+			$memberFormData.birth_year = new Date().getFullYear() + 543 - Number(value);
+		} else if (!memberBirthYearBE) {
+			$memberFormData.birth_year = undefined;
 		}
-	});
+	}
 
-	$effect(() => {
-		$memberFormData.medical_conditions = memberMedicalConditionsStr
-			? memberMedicalConditionsStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
-
-	$effect(() => {
-		$memberFormData.medical_medications = memberMedicalMedicationsStr
-			? memberMedicalMedicationsStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
-
-	$effect(() => {
-		$memberFormData.medical_allergies = memberMedicalAllergiesStr
-			? memberMedicalAllergiesStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
+	function updateMemberMedicalField(
+		field: 'medical_conditions' | 'medical_medications' | 'medical_allergies',
+		value: string
+	) {
+		const values = value
+			.split(',')
+			.map((item) => item.trim())
+			.filter(Boolean);
+		if (field === 'medical_conditions') memberMedicalConditionsStr = value;
+		if (field === 'medical_medications') memberMedicalMedicationsStr = value;
+		if (field === 'medical_allergies') memberMedicalAllergiesStr = value;
+		$memberFormData[field] = values;
+	}
 
 	// Get household members dynamically
 	const householdMembers = $derived(
@@ -549,7 +513,11 @@
 					<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
 						<div class="space-y-2">
 							<Label>ปีเกิด (พ.ศ.)</Label>
-							<Input placeholder="เช่น 2530" bind:value={memberBirthYearBE} />
+							<Input
+								placeholder="เช่น 2530"
+								value={memberBirthYearBE}
+								oninput={(event) => updateMemberBirthYear(event.currentTarget.value)}
+							/>
 						</div>
 						<div class="space-y-2">
 							<Label>อายุ (ปี)</Label>
@@ -561,7 +529,7 @@
 								oninput={(e) => {
 									const val = e.currentTarget.value.replace(/\D/g, '');
 									e.currentTarget.value = val;
-									memberAge = val;
+									updateMemberAge(val);
 								}}
 							/>
 						</div>
@@ -701,21 +669,27 @@
 							<Label class="text-xs text-muted-foreground">โรคประจำตัว</Label>
 							<Input
 								placeholder="เช่น เบาหวาน, ความดัน (ถ้าไม่มีให้เว้นว่าง)"
-								bind:value={memberMedicalConditionsStr}
+								value={memberMedicalConditionsStr}
+								oninput={(event) =>
+									updateMemberMedicalField('medical_conditions', event.currentTarget.value)}
 							/>
 						</div>
 						<div class="space-y-2">
 							<Label class="text-xs text-muted-foreground">ยาที่ใช้ประจำ</Label>
 							<Input
 								placeholder="เช่น ยาลดความดัน, ยาเบาหวาน (ถ้าไม่มีให้เว้นว่าง)"
-								bind:value={memberMedicalMedicationsStr}
+								value={memberMedicalMedicationsStr}
+								oninput={(event) =>
+									updateMemberMedicalField('medical_medications', event.currentTarget.value)}
 							/>
 						</div>
 						<div class="space-y-2">
 							<Label class="text-xs text-muted-foreground">ประวัติการแพ้ (ยา/อาหาร)</Label>
 							<Input
 								placeholder="เช่น แพ้เพนิซิลลิน, อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
-								bind:value={memberMedicalAllergiesStr}
+								value={memberMedicalAllergiesStr}
+								oninput={(event) =>
+									updateMemberMedicalField('medical_allergies', event.currentTarget.value)}
 							/>
 						</div>
 						<Form.Field form={memberForm} name="medical_note">

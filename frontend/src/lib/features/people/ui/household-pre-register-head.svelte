@@ -106,42 +106,33 @@
 		medicalAllergiesStr = (initialData.medical_allergies ?? []).join(', ');
 	});
 
-	$effect(() => {
-		if (birthYearBE && !isNaN(Number(birthYearBE))) {
-			$formData.birth_year = Number(birthYearBE);
-		} else if (age && !isNaN(Number(age))) {
-			$formData.birth_year = new Date().getFullYear() + 543 - Number(age);
-		} else {
+	function updateBirthYear(value: string) {
+		birthYearBE = value;
+		$formData.birth_year = value && !isNaN(Number(value)) ? Number(value) : undefined;
+	}
+
+	function updateAge(value: string) {
+		age = value;
+		if (value && !isNaN(Number(value))) {
+			$formData.birth_year = new Date().getFullYear() + 543 - Number(value);
+		} else if (!birthYearBE) {
 			$formData.birth_year = undefined;
 		}
-	});
+	}
 
-	$effect(() => {
-		$formData.medical_conditions = medicalConditionsStr
-			? medicalConditionsStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
-
-	$effect(() => {
-		$formData.medical_medications = medicalMedicationsStr
-			? medicalMedicationsStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
-
-	$effect(() => {
-		$formData.medical_allergies = medicalAllergiesStr
-			? medicalAllergiesStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
+	function updateMedicalField(
+		field: 'medical_conditions' | 'medical_medications' | 'medical_allergies',
+		value: string
+	) {
+		const values = value
+			.split(',')
+			.map((item) => item.trim())
+			.filter(Boolean);
+		if (field === 'medical_conditions') medicalConditionsStr = value;
+		if (field === 'medical_medications') medicalMedicationsStr = value;
+		if (field === 'medical_allergies') medicalAllergiesStr = value;
+		$formData[field] = values;
+	}
 </script>
 
 <form method="POST" use:form.enhance class="mx-auto w-full max-w-5xl space-y-6">
@@ -281,7 +272,11 @@
 					<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
 						<div class="space-y-2">
 							<Label>ปีเกิด (พ.ศ.)</Label>
-							<Input placeholder="เช่น 2530" bind:value={birthYearBE} />
+							<Input
+								placeholder="เช่น 2530"
+								value={birthYearBE}
+								oninput={(event) => updateBirthYear(event.currentTarget.value)}
+							/>
 						</div>
 						<div class="space-y-2">
 							<Label>อายุ (ปี)</Label>
@@ -293,7 +288,7 @@
 								oninput={(e) => {
 									const val = e.currentTarget.value.replace(/\D/g, '');
 									e.currentTarget.value = val;
-									age = val;
+									updateAge(val);
 								}}
 							/>
 						</div>
@@ -492,21 +487,25 @@
 					<Label class="text-xs text-muted-foreground">โรคประจำตัว</Label>
 					<Input
 						placeholder="เช่น เบาหวาน, ความดัน (ถ้าไม่มีให้เว้นว่าง)"
-						bind:value={medicalConditionsStr}
+						value={medicalConditionsStr}
+						oninput={(event) => updateMedicalField('medical_conditions', event.currentTarget.value)}
 					/>
 				</div>
 				<div class="space-y-2">
 					<Label class="text-xs text-muted-foreground">ยาที่ใช้ประจำ</Label>
 					<Input
 						placeholder="เช่น ยาลดความดัน, ยาเบาหวาน (ถ้าไม่มีให้เว้นว่าง)"
-						bind:value={medicalMedicationsStr}
+						value={medicalMedicationsStr}
+						oninput={(event) =>
+							updateMedicalField('medical_medications', event.currentTarget.value)}
 					/>
 				</div>
 				<div class="space-y-2">
 					<Label class="text-xs text-muted-foreground">ประวัติการแพ้ (ยา/อาหาร)</Label>
 					<Input
 						placeholder="เช่น แพ้เพนิซิลลิน, อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
-						bind:value={medicalAllergiesStr}
+						value={medicalAllergiesStr}
+						oninput={(event) => updateMedicalField('medical_allergies', event.currentTarget.value)}
 					/>
 				</div>
 				<Form.Field {form} name="medical_note">

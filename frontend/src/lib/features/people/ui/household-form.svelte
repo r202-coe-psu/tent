@@ -68,6 +68,9 @@
 		SPA: true,
 		validators: zod4(householdInputSchema),
 		resetForm: false,
+		onSubmit: () => {
+			syncFormDataFromUiState();
+		},
 		onUpdate: async ({ form }) => {
 			if (!form.data.head_evacuee_id) {
 				toast.error('กรุณาระบุหัวหน้าครัวเรือน');
@@ -84,13 +87,6 @@
 	// Combobox bridge state
 	let mzVal = $state('');
 	let commVal = $state('');
-
-	$effect(() => {
-		$formData.municipality_zone = mzVal || null;
-	});
-	$effect(() => {
-		$formData.community = commVal || null;
-	});
 
 	// Member / pet state
 	let petsList = $state<PetGroup[]>([]);
@@ -187,8 +183,10 @@
 		membersInitialized = true;
 	});
 
-	// Sync states to form
-	$effect(() => {
+	function syncFormDataFromUiState() {
+		$formData.municipality_zone = mzVal || null;
+		$formData.community = commVal || null;
+		$formData.head_evacuee_id = headComboValue || null;
 		$formData.pets = petsList.map((p) => ({
 			species: p.species,
 			count: Number(p.count),
@@ -196,20 +194,14 @@
 			has_cage: !!p.has_cage,
 			image_url: p.image_url || null
 		}));
-	});
-
-	$effect(() => {
 		$formData.vehicles = vehicleRows.map((v) => ({
 			type: v.type,
 			license_plate: v.license_plate.trim() || null
 		}));
-	});
-
-	$effect(() => {
 		$formData.assets = assetDescription.trim()
 			? { description: assetDescription.trim(), image_url: null }
 			: null;
-	});
+	}
 
 	// Track head changes: remove old head from members, clear phone, add new head, validate duplicate active household
 	let prevHeadId: string | null = null;
@@ -258,11 +250,6 @@
 		if (newHead && !selectedMemberIds.includes(newHead)) {
 			selectedMemberIds = [...selectedMemberIds, newHead];
 		}
-	});
-
-	// Sync headComboValue → formData
-	$effect(() => {
-		$formData.head_evacuee_id = headComboValue || null;
 	});
 
 	// Add member when combobox selects, validate duplicate active household
