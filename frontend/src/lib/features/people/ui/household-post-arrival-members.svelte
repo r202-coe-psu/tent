@@ -3,7 +3,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { useSearchEvacuees } from '../index';
+	import { checkEvacueeHouseholdConflict, useSearchEvacuees } from '../index';
 	import type { Evacuee, Household } from '../domain/people';
 	import { toast } from 'svelte-sonner';
 
@@ -64,23 +64,13 @@
 	);
 	const isSearchingMember = $derived(memberSearch.isFetching && !!debouncedMemberQuery);
 
-	function checkEvacueeHhConflict(evacuee: Evacuee): { conflicted: boolean; label?: string } {
-		if (!evacuee.household_id) return { conflicted: false };
-		const hh = allHouseholds.find((h) => h._id === evacuee.household_id);
-		if (!hh || hh.status === 'cancelled' || hh.status === 'checked_out') {
-			return { conflicted: false };
-		}
-		const otherMembers = allEvacuees.filter(
-			(e) => e.household_id === evacuee.household_id && e._id !== evacuee._id
-		);
-		if (otherMembers.length > 0) {
-			return { conflicted: true, label: hh.label };
-		}
-		return { conflicted: false };
-	}
-
 	function addMember(evacuee: Evacuee) {
-		const conflict = checkEvacueeHhConflict(evacuee);
+		const conflict = checkEvacueeHouseholdConflict(
+			evacuee,
+			'household:new',
+			allHouseholds,
+			allEvacuees
+		);
 		if (conflict.conflicted) {
 			toast.error(
 				`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evacuee.first_name} ${evacuee.last_name} สังกัดครัวเรือน "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
@@ -164,7 +154,12 @@
 				{:else if memberSearchResults.length > 0}
 					<div class="max-h-[350px] space-y-2 overflow-y-auto pr-1">
 						{#each memberSearchResults as evacuee (evacuee._id)}
-							{@const conflict = checkEvacueeHhConflict(evacuee)}
+							{@const conflict = checkEvacueeHouseholdConflict(
+								evacuee,
+								'household:new',
+								allHouseholds,
+								allEvacuees
+							)}
 							<div
 								class="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/5 p-2.5 text-sm"
 							>

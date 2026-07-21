@@ -65,6 +65,22 @@ export const householdStatusSchema = z.enum([
 ]);
 export type HouseholdStatus = z.infer<typeof householdStatusSchema>;
 
+export const ACTIVE_HOUSEHOLD_STATUSES: readonly HouseholdStatus[] = [
+	'pre_registered',
+	'arriving',
+	'checked_in'
+];
+
+export const HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
+	Record<HouseholdStatus, readonly HouseholdStatus[]>
+> = {
+	pre_registered: ['arriving', 'checked_in'],
+	arriving: ['checked_in'],
+	checked_in: ['checked_out'],
+	checked_out: [],
+	cancelled: []
+};
+
 export const checkoutDestinationSchema = z.object({
 	type: z.enum(['returned_home', 'transferred_shelter', 'referred_facility', 'other']),
 	destination_name: z.string().trim().optional(),
@@ -179,6 +195,80 @@ export interface Household extends BaseDoc {
 	district: string | null;
 	province: string | null;
 	postal_code: string | null;
+}
+
+export type EvacueeHouseholdConflict = {
+	conflicted: boolean;
+	householdId?: string;
+	label?: string;
+};
+
+export function isActiveHouseholdStatus(status: HouseholdStatus): boolean {
+	return ACTIVE_HOUSEHOLD_STATUSES.includes(status);
+}
+
+/**
+ * Returns a conflict only when assigning an evacuee away from an active household
+ * that still has other members. A solo membership can be moved and the repository
+ * will cancel the old empty household after the assignment succeeds.
+ */
+export function checkEvacueeHouseholdConflict(
+	evacuee: Evacuee,
+	targetHouseholdId: string | null,
+	households: readonly Household[],
+	evacuees: readonly Evacuee[]
+): EvacueeHouseholdConflict {
+	if (!targetHouseholdId || !evacuee.household_id || evacuee.household_id === targetHouseholdId) {
+		return { conflicted: false };
+	}
+
+	const currentHousehold = households.find((household) => household._id === evacuee.household_id);
+	if (!currentHousehold || !isActiveHouseholdStatus(currentHousehold.status)) {
+		return { conflicted: false };
+	}
+
+	const hasOtherMembers = evacuees.some(
+		(member) => member.household_id === currentHousehold._id && member._id !== evacuee._id
+	);
+	return hasOtherMembers
+		? {
+				conflicted: true,
+				householdId: currentHousehold._id,
+				label: currentHousehold.label
+			}
+		: { conflicted: false };
+}
+
+export function assertEvacueeHouseholdAssignment(
+	evacuee: Evacuee,
+	targetHouseholdId: string | null,
+	households: readonly Household[],
+	evacuees: readonly Evacuee[]
+): void {
+	if (!targetHouseholdId || targetHouseholdId === evacuee.household_id) return;
+
+	const targetHousehold = households.find((household) => household._id === targetHouseholdId);
+	if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
+	if (!isActiveHouseholdStatus(targetHousehold.status)) {
+		throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+	}
+
+	const conflict = checkEvacueeHouseholdConflict(evacuee, targetHouseholdId, households, evacuees);
+	if (conflict.conflicted) {
+		throw new Error(
+			`${evacuee.first_name} ${evacuee.last_name} สังกัดครัวเรือน "${conflict.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+		);
+	}
+}
+
+export function assertHouseholdStatusTransition(
+	currentStatus: HouseholdStatus,
+	nextStatus: HouseholdStatus
+): void {
+	if (currentStatus === nextStatus) return;
+	if (!HOUSEHOLD_STATUS_TRANSITIONS[currentStatus].includes(nextStatus)) {
+		throw new Error(`ไม่สามารถเปลี่ยนสถานะครัวเรือนจาก ${currentStatus} เป็น ${nextStatus} ได้`);
+	}
 }
 
 export interface MovementDestination {

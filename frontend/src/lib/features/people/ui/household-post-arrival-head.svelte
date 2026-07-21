@@ -2,7 +2,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { useSearchEvacuees, zoneLabel } from '../index';
+	import { checkEvacueeHouseholdConflict, useSearchEvacuees, zoneLabel } from '../index';
 	import type { Evacuee, Household } from '../domain/people';
 	import { toast } from 'svelte-sonner';
 
@@ -58,24 +58,13 @@
 	const headSearchResults = $derived(headSearch.data ?? []);
 	const isSearchingHead = $derived(headSearch.isFetching && !!debouncedHeadQuery);
 
-	function checkEvacueeHhConflict(evacuee: Evacuee): { conflicted: boolean; label?: string } {
-		if (!evacuee.household_id) return { conflicted: false };
-		const hh = allHouseholds.find((h) => h._id === evacuee.household_id);
-		if (!hh || hh.status === 'cancelled' || hh.status === 'checked_out') {
-			return { conflicted: false };
-		}
-		// If household has other members, it's a real duplicate active household
-		const otherMembers = allEvacuees.filter(
-			(e) => e.household_id === evacuee.household_id && e._id !== evacuee._id
-		);
-		if (otherMembers.length > 0) {
-			return { conflicted: true, label: hh.label };
-		}
-		return { conflicted: false };
-	}
-
 	function selectHead(evacuee: Evacuee) {
-		const conflict = checkEvacueeHhConflict(evacuee);
+		const conflict = checkEvacueeHouseholdConflict(
+			evacuee,
+			'household:new',
+			allHouseholds,
+			allEvacuees
+		);
 		if (conflict.conflicted) {
 			toast.error(
 				`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evacuee.first_name} ${evacuee.last_name} สังกัดครัวเรือน "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
@@ -178,7 +167,12 @@
 			{:else if headSearchResults.length > 0}
 				<div class="max-h-[300px] space-y-2 overflow-y-auto">
 					{#each headSearchResults as evacuee (evacuee._id)}
-						{@const conflict = checkEvacueeHhConflict(evacuee)}
+						{@const conflict = checkEvacueeHouseholdConflict(
+							evacuee,
+							'household:new',
+							allHouseholds,
+							allEvacuees
+						)}
 						<div
 							class="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/10 p-3"
 						>

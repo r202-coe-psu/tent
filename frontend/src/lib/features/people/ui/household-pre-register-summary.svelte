@@ -30,6 +30,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { COUNTRIES } from '$lib/utils/country';
+	import EvacueeQrModal from './evacuee-qr-modal.svelte';
 
 	let {
 		createdHousehold,
@@ -45,6 +46,7 @@
 	const allEvacueesQuery = useEvacuees();
 
 	let isSubmitting = $state(false);
+	let showQrModal = $state(false);
 
 	const cardTypeOptions = [
 		{ value: 'national_id', label: 'เลขประจำตัวประชาชน (Thai National ID)' },
@@ -763,10 +765,25 @@
 	<p class="text-xs text-muted-foreground">
 		💡 บันทึกสมาชิกสำเร็จแล้ว สมาชิกทุกคนจะผูกอยู่กับครัวเรือนนี้
 	</p>
-	<Button
-		onclick={() => goto(resolve('/back-office/evacuee-management?tab=household'))}
-		class="h-11 bg-emerald-600 px-8 font-semibold text-white hover:bg-emerald-700"
-	>
-		เสร็จสิ้นการลงทะเบียนล่วงหน้า ✔
-	</Button>
+	<div class="flex items-center gap-2">
+		{#if createdHead}
+			<Button
+				variant="outline"
+				class="h-11 px-6 font-semibold"
+				onclick={() => (showQrModal = true)}
+			>
+				ออกและพิมพ์ QR ประจำตัว
+			</Button>
+		{/if}
+		<Button
+			onclick={() => goto(resolve('/back-office/evacuee-management?tab=household'))}
+			class="h-11 bg-emerald-600 px-8 font-semibold text-white hover:bg-emerald-700"
+		>
+			เสร็จสิ้นการลงทะเบียนล่วงหน้า ✔
+		</Button>
+	</div>
 </div>
+
+{#if showQrModal && createdHead}
+	<EvacueeQrModal show={showQrModal} evacuee={createdHead} onClose={() => (showQrModal = false)} />
+{/if}

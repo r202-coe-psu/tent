@@ -6,12 +6,16 @@
 		household,
 		statusConfig,
 		onOpenStatusModal,
-		onOpenZoneModal
+		onOpenZoneModal,
+		onCancelPreRegistration,
+		isCancelling = false
 	}: {
 		household: Household;
 		statusConfig: Record<HouseholdStatus, { label: string; colorClass: string; dotClass: string }>;
 		onOpenStatusModal: () => void;
 		onOpenZoneModal: () => void;
+		onCancelPreRegistration: () => void;
+		isCancelling?: boolean;
 	} = $props();
 </script>
 
@@ -34,6 +38,16 @@
 	</div>
 
 	<div class="flex flex-wrap items-center gap-2">
+		{#if household.status === 'pre_registered'}
+			<button
+				class="inline-flex cursor-pointer items-center justify-center rounded-xl border border-destructive bg-transparent px-4 py-2 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+				disabled={isCancelling}
+				onclick={onCancelPreRegistration}
+			>
+				{isCancelling ? 'กำลังยกเลิก...' : 'ยกเลิกการลงทะเบียนล่วงหน้า'}
+			</button>
+		{/if}
+
 		<button
 			class="inline-flex cursor-pointer items-center justify-center rounded-xl border border-amber-400 bg-transparent px-4 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
 			onclick={onOpenZoneModal}

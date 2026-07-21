@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createInMemoryRepository } from '$lib/db/in-memory-repository';
+import { isAuditEntry } from '$lib/features/shared';
 
 let mockShelterDb = 'shelter_sh001';
 let memoryRepo = createInMemoryRepository();
@@ -74,6 +75,71 @@ describe('PeopleRemoteRepository', () => {
 		});
 	});
 
+	describe('household membership invariant', () => {
+		it('rejects moving a member away from an active household with other members', async () => {
+			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
+			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
+			const oldHousehold = await repo.createHousehold(
+				{ label: 'ครัวเรือนเดิม', head_evacuee_id: first._id, status: 'checked_in' },
+				ctx
+			);
+			const targetHousehold = await repo.createHousehold(
+				{ label: 'ครัวเรือนใหม่', head_evacuee_id: null, status: 'checked_in' },
+				ctx
+			);
+			const linkedFirst = await repo.updateEvacuee({ ...first, household_id: oldHousehold._id });
+			await repo.updateEvacuee({ ...second, household_id: oldHousehold._id });
+
+			await expect(
+				repo.updateEvacuee({ ...linkedFirst, household_id: targetHousehold._id })
+			).rejects.toThrow(/ยังมีสมาชิกอื่นอยู่/);
+			expect((await repo.getEvacuee(first._id))?.household_id).toBe(oldHousehold._id);
+		});
+
+		it('moves a solo member and cancels the old household using fresh persisted data', async () => {
+			const member = await repo.createEvacuee(evInput(), ctx);
+			const oldHousehold = await repo.createHousehold(
+				{ label: 'ครัวเรือนเดิม', head_evacuee_id: member._id, status: 'checked_in' },
+				ctx
+			);
+			const targetHousehold = await repo.createHousehold(
+				{ label: 'ครัวเรือนใหม่', head_evacuee_id: member._id, status: 'checked_in' },
+				ctx
+			);
+			const linked = await repo.updateEvacuee({ ...member, household_id: oldHousehold._id });
+
+			const moved = await repo.updateEvacuee({ ...linked, household_id: targetHousehold._id });
+
+			expect(moved.household_id).toBe(targetHousehold._id);
+			expect((await repo.getHousehold(oldHousehold._id))?.status).toBe('cancelled');
+		});
+	});
+
+	describe('household history and status transitions', () => {
+		it('keeps checked-out households available for direct profile/edit lookups', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือนเก่า', head_evacuee_id: null, status: 'checked_out' },
+				ctx
+			);
+
+			expect((await repo.listHouseholds()).map((item) => item._id)).toContain(household._id);
+			expect((await repo.listHouseholdsPaginated(1, 10)).items.map((item) => item._id)).toContain(
+				household._id
+			);
+		});
+
+		it('rejects reopening a terminal household through the generic update path', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือนเก่า', head_evacuee_id: null, status: 'checked_out' },
+				ctx
+			);
+
+			await expect(repo.updateHousehold({ ...household, status: 'checked_in' })).rejects.toThrow(
+				/ไม่สามารถเปลี่ยนสถานะ/
+			);
+		});
+	});
+
 	describe('searchEvacuees', () => {
 		beforeEach(async () => {
 			await repo.createEvacuee(
@@ -135,6 +201,29 @@ describe('check-in / check-out', () => {
 			const fetched = await repo.getEvacuee(evacuee._id);
 			expect(fetched?.current_stay.status).toBe('active');
 		});
+
+		it('touches updated_at when promoting a pre-registered household', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const createdHousehold = await repo.createHousehold(
+				{
+					label: 'บ้านทดสอบ',
+					head_evacuee_id: evacuee._id,
+					status: 'pre_registered'
+				},
+				ctx
+			);
+			const household = await memoryRepo.put({
+				...createdHousehold,
+				updated_at: '2000-01-01T00:00:00.000Z'
+			});
+			const linked = await repo.updateEvacuee({ ...evacuee, household_id: household._id });
+
+			await repo.checkInEvacuee(linked, ctx);
+
+			const promoted = await repo.getHousehold(household._id);
+			expect(promoted?.status).toBe('checked_in');
+			expect(promoted?.updated_at).not.toBe('2000-01-01T00:00:00.000Z');
+		});
 	});
 
 	describe('checkOutEvacuee', () => {
@@ -188,8 +277,9 @@ describe('check-in / check-out', () => {
 	});
 
 	describe('cancelPreRegistration', () => {
-		it('cancels the pre-registered household and all its members', async () => {
+		it('cancels the household, preserves valid person stay status, and records the actor', async () => {
 			const member = await repo.createEvacuee(evInput(), ctx);
+			await repo.createEvacuee(evInput({ first_name: 'บุคคลนอกครัวเรือน' }), ctx);
 			const hh = await repo.createHousehold(
 				{
 					label: 'บ้านทดสอบ',
@@ -209,13 +299,34 @@ describe('check-in / check-out', () => {
 				household_id: hh._id
 			});
 
+			const findSpy = vi.spyOn(memoryRepo, 'find');
 			await repo.cancelPreRegistration(hh._id, ctx);
 
 			const fetchedHh = await repo.getHousehold(hh._id);
 			expect(fetchedHh?.status).toBe('cancelled');
 
 			const fetchedMember = await repo.getEvacuee(member._id);
-			expect(fetchedMember?.current_stay.status).toBe('cancelled');
+			expect(fetchedMember?.current_stay.status).toBe('pre_registered');
+			expect((await repo.listEvacuees()).map((evacuee) => evacuee._id)).toContain(member._id);
+			expect(findSpy).toHaveBeenCalledWith({
+				selector: { type: 'evacuee', household_id: hh._id },
+				limit: 10_000
+			});
+
+			const audits = await memoryRepo.allByType('audit', isAuditEntry);
+			expect(audits).toHaveLength(1);
+			expect(audits[0]).toMatchObject({
+				action: 'other',
+				target_type: 'household',
+				target_id: hh._id,
+				created_by: 'tester',
+				reason: 'ยกเลิกการลงทะเบียนครัวเรือนล่วงหน้า',
+				context: {
+					previous_status: 'pre_registered',
+					next_status: 'cancelled',
+					member_count: 1
+				}
+			});
 		});
 
 		it('throws an error if the household is not in pre_registered status', async () => {

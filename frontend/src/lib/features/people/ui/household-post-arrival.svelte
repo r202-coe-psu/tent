@@ -9,8 +9,7 @@
 		useHouseholds,
 		useCreateHousehold,
 		useUpdateEvacuee,
-		useUpdateHousehold,
-		peopleRepository
+		checkEvacueeHouseholdConflict
 	} from '../index';
 	import type {
 		Evacuee,
@@ -61,8 +60,8 @@
 				sessionStorage.removeItem(STORAGE_KEY);
 				return JSON.parse(saved) as SavedWizardState;
 			}
-		} catch (e) {
-			console.error('Failed to load saved wizard state', e);
+		} catch {
+			toast.error('ไม่สามารถโหลดข้อมูลแบบร่างการจัดกลุ่มครัวเรือนได้');
 		}
 		return null;
 	}
@@ -75,7 +74,6 @@
 
 	// --- Queries and Mutations ---
 	const createHouseholdMutation = useCreateHousehold();
-	const updateHouseholdMutation = useUpdateHousehold();
 	const updateEvacueeMutation = useUpdateEvacuee();
 
 	const evacueesQuery = useEvacuees();
@@ -112,13 +110,13 @@
 		if (browser) {
 			try {
 				sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
-			} catch (e) {
-				console.error('Failed to save wizard state', e);
+			} catch {
+				toast.error('ไม่สามารถบันทึกข้อมูลแบบร่างการจัดกลุ่มครัวเรือนได้');
 			}
 		}
 		goto(
 			resolve(
-				`/back-office/evacuee-management/edit/-evacuee/${id}?from=/back-office/households/new?path=c`
+				`/back-office/evacuee-management/edit/-evacuee/${id}?from=/back-office/households/new`
 			)
 		);
 	}
@@ -174,7 +172,12 @@
 		}
 
 		// Double check duplicate active household with other members
-		const conflict = checkEvacueeHhConflict(evac);
+		const conflict = checkEvacueeHouseholdConflict(
+			evac,
+			'household:new',
+			allHouseholds,
+			allEvacuees
+		);
 		if (conflict.conflicted) {
 			toast.error(
 				`ไม่สามารถเพิ่มได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
@@ -198,21 +201,6 @@
 
 		// Close scanner modal
 		showScanner = false;
-	}
-
-	function checkEvacueeHhConflict(evacuee: Evacuee): { conflicted: boolean; label?: string } {
-		if (!evacuee.household_id) return { conflicted: false };
-		const hh = allHouseholds.find((h) => h._id === evacuee.household_id);
-		if (!hh || hh.status === 'cancelled' || hh.status === 'checked_out') {
-			return { conflicted: false };
-		}
-		const otherMembers = allEvacuees.filter(
-			(e) => e.household_id === evacuee.household_id && e._id !== evacuee._id
-		);
-		if (otherMembers.length > 0) {
-			return { conflicted: true, label: hh.label };
-		}
-		return { conflicted: false };
 	}
 
 	// --- Step 3: Address (validated once the address step's form passes Zod validation) ---
@@ -254,7 +242,12 @@
 			for (const evacId of selectedMemberIds) {
 				const evac = allEvacuees.find((e) => e._id === evacId);
 				if (evac) {
-					const conflict = checkEvacueeHhConflict(evac);
+					const conflict = checkEvacueeHouseholdConflict(
+						evac,
+						'household:new',
+						allHouseholds,
+						allEvacuees
+					);
 					if (conflict.conflicted) {
 						throw new Error(
 							`${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
@@ -293,12 +286,7 @@
 			createdHousehold = hhDoc;
 
 			// 3. Link all selected members to the new household and assign zone
-			const oldHouseholdIds: string[] = [];
 			for (const evac of selectedMembers) {
-				if (evac.household_id && !oldHouseholdIds.includes(evac.household_id)) {
-					oldHouseholdIds.push(evac.household_id);
-				}
-
 				const updatedEvac: Evacuee = {
 					...evac,
 					household_id: hhDoc._id,
@@ -313,22 +301,6 @@
 					selectedHead = res;
 				}
 				selectedMembers = selectedMembers.map((m) => (m._id === evac._id ? res : m));
-			}
-
-			// 4. Soft-delete / Cancel old households that have become empty
-			for (const oldHhId of oldHouseholdIds) {
-				const remaining = allEvacuees.filter(
-					(e) => e.household_id === oldHhId && !selectedMemberIds.includes(e._id)
-				);
-				if (remaining.length === 0) {
-					const freshHh = await peopleRepository().getHousehold(oldHhId);
-					if (freshHh && freshHh.status !== 'cancelled' && freshHh.status !== 'checked_out') {
-						await updateHouseholdMutation.mutateAsync({
-							...freshHh,
-							status: 'cancelled'
-						});
-					}
-				}
 			}
 
 			toast.success(`จัดกลุ่มครัวเรือน "${hhDoc.label}" สำเร็จ`);

@@ -97,7 +97,7 @@
 				<Plus class="h-3.5 w-3.5" />
 				ลงทะเบียนล่วงหน้า
 			</Button>
-			<Button size="sm" onclick={() => goto(resolve('/back-office/households/new?path=c'))}>
+			<Button size="sm" onclick={() => goto(resolve('/back-office/households/new'))}>
 				<Plus class="h-3.5 w-3.5" />
 				จัดกลุ่มผู้ประสบภัยเป็นครัวเรือน
 			</Button>

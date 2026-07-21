@@ -12,7 +12,7 @@
 		useCreateHousehold,
 		useUpdateHousehold,
 		useUpdateEvacuee,
-		peopleRepository,
+		checkEvacueeHouseholdConflict,
 		type HouseholdInput,
 		type Evacuee
 	} from '../index';
@@ -28,7 +28,6 @@
 	} = $props();
 
 	const isEditMode = $derived(isEdit);
-	const isPathC = $derived($page.url.searchParams.get('path') === 'c');
 
 	// Fetch data
 	const evacueesQuery = useEvacuees();
@@ -70,30 +69,24 @@
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 
-			// Validate that no selected member belongs to another active household
+			// Early UI feedback; the repository repeats this check against fresh data before writing.
 			const allEvacuees = evacueesQuery.data ?? [];
 			const households = householdsQuery.data ?? [];
 			for (const evacId of selectedMemberIds) {
 				const evac = allEvacuees.find((e) => e._id === evacId);
-				if (
-					evac &&
-					evac.household_id &&
-					(!isEditMode || evac.household_id !== editingHousehold?._id)
-				) {
-					const hh = households.find((h) => h._id === evac.household_id);
-					const hhStatus = hh?.status ?? 'checked_in';
-					if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
-						const otherMembers = allEvacuees.filter(
-							(m) => m.household_id === evac.household_id && m._id !== evac._id
-						);
-						if (otherMembers.length > 0) {
-							toast.error(
-								`ไม่สามารถบันทึกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
-							);
-							isSubmitting = false;
-							return;
-						}
-					}
+				if (evac) {
+					const conflict = checkEvacueeHouseholdConflict(
+						evac,
+						editingHousehold?._id ?? 'household:new',
+						households,
+						allEvacuees
+					);
+					if (!conflict.conflicted) continue;
+					toast.error(
+						`ไม่สามารถบันทึกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${conflict.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+					);
+					isSubmitting = false;
+					return;
 				}
 			}
 
@@ -136,11 +129,9 @@
 				const hasCheckedInMember = selectedMembers.some(
 					(ev) => ev.current_stay?.status === 'active'
 				);
-				const initialStatus = isPathC
+				const initialStatus = hasCheckedInMember
 					? ('checked_in' as const)
-					: hasCheckedInMember
-						? ('checked_in' as const)
-						: ('pre_registered' as const);
+					: ('pre_registered' as const);
 
 				const inputWithStatus = {
 					...input,
@@ -203,25 +194,6 @@
 				}
 			}
 
-			// Clean up old households that have become empty
-			for (const evacId of toAdd) {
-				const evac = allEvacuees.find((ev) => ev._id === evacId);
-				if (evac && evac.household_id) {
-					const remaining = allEvacuees.filter(
-						(e) => e.household_id === evac.household_id && !selectedMemberIds.includes(e._id)
-					);
-					if (remaining.length === 0) {
-						const freshHh = await peopleRepository().getHousehold(evac.household_id);
-						if (freshHh && freshHh.status !== 'cancelled' && freshHh.status !== 'checked_out') {
-							await updateHouseholdMutation.mutateAsync({
-								...freshHh,
-								status: 'cancelled'
-							});
-						}
-					}
-				}
-			}
-
 			// If the head evacuee was already a member (not in toAdd), update their contact phone if changed
 			if (input.head_evacuee_id && !toAdd.includes(input.head_evacuee_id)) {
 				const headEvac = allEvacuees.find((ev) => ev._id === input.head_evacuee_id);
@@ -259,13 +231,7 @@
 </script>
 
 <svelte:head>
-	<title
-		>{isEditMode
-			? 'แก้ไขข้อมูลครัวเรือน'
-			: isPathC
-				? 'จัดกลุ่มผู้ประสบภัยเป็นครัวเรือน'
-				: 'เพิ่มครัวเรือนใหม่'} · SmartShelter</title
-	>
+	<title>{isEditMode ? 'แก้ไขข้อมูลครัวเรือน' : 'เพิ่มครัวเรือนใหม่'} · SmartShelter</title>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 md:px-6">
@@ -281,9 +247,7 @@
 		<h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
 			{isEditMode
 				? 'แก้ไขข้อมูลครัวเรือน (Edit Household)'
-				: isPathC
-					? 'จัดกลุ่มผู้ประสบภัยเป็นครัวเรือน'
-					: 'เพิ่มครัวเรือนใหม่ (Create Household)'}
+				: 'เพิ่มครัวเรือนใหม่ (Create Household)'}
 		</h2>
 	</div>
 

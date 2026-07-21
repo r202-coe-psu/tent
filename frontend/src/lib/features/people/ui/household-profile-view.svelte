@@ -9,12 +9,21 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 
 	// Queries & mutations
-	import { useEvacuees, useHouseholds, useUpdateHousehold, useUpdateEvacuee } from '../index';
+	import {
+		HOUSEHOLD_STATUS_TRANSITIONS,
+		useCancelPreRegistration,
+		useEvacuees,
+		useHousehold,
+		useHouseholds,
+		useUpdateHousehold,
+		useUpdateEvacuee
+	} from '../index';
 	import type { Evacuee, PetGroup, HouseholdVehicle, HouseholdStatus } from '../domain/people';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
 	import { now } from '$lib/db/model';
+	import { authStore } from '$lib/stores/auth.svelte';
 
 	// Sub-components
 	import HouseholdProfileHeaderCard from './household-profile-header-card.svelte';
@@ -34,18 +43,25 @@
 
 	// Tanstack queries
 	const evacueesQuery = useEvacuees();
+	const householdQuery = useHousehold(() => householdId);
 	const householdsQuery = useHouseholds();
 	const updateHouseholdMutation = useUpdateHousehold();
 	const updateEvacueeMutation = useUpdateEvacuee();
+	const cancelPreRegistrationMutation = useCancelPreRegistration();
 
 	// Derived data
 	const allEvacuees = $derived(evacueesQuery.data ?? []);
 	const allHouseholds = $derived(householdsQuery.data ?? []);
-	const household = $derived(allHouseholds.find((h) => h._id === householdId) ?? null);
+	const household = $derived(householdQuery.data ?? null);
 	const members = $derived(allEvacuees.filter((e) => e.household_id === householdId));
 	const head = $derived(allEvacuees.find((e) => e._id === household?.head_evacuee_id) ?? null);
 
-	const isLoading = $derived(evacueesQuery.isLoading || householdsQuery.isLoading);
+	const isLoading = $derived(
+		evacueesQuery.isLoading || householdQuery.isLoading || householdsQuery.isLoading
+	);
+	const allowedStatusTransitions = $derived(
+		household ? HOUSEHOLD_STATUS_TRANSITIONS[household.status] : []
+	);
 
 	// Modal controls
 	let showStatusModal = $state(false);
@@ -179,6 +195,25 @@
 		}
 	}
 
+	async function cancelPreRegistration() {
+		if (!household || household.status !== 'pre_registered') return;
+		if (!window.confirm(`ยืนยันยกเลิกการลงทะเบียนล่วงหน้าของ "${household.label}" หรือไม่?`)) {
+			return;
+		}
+		try {
+			await cancelPreRegistrationMutation.mutateAsync({
+				householdId: household._id,
+				ctx: {
+					shelterCode: getShelterCode(),
+					createdBy: authStore.user?.name ?? 'staff'
+				}
+			});
+			toast.success('ยกเลิกการลงทะเบียนล่วงหน้าเรียบร้อยแล้ว');
+		} catch (e: unknown) {
+			toast.error(`ไม่สามารถยกเลิกการลงทะเบียนได้: ${e instanceof Error ? e.message : String(e)}`);
+		}
+	}
+
 	async function addMemberToHousehold(evacuee: Evacuee) {
 		if (!household) return;
 		try {
@@ -272,6 +307,8 @@
 			{statusConfig}
 			onOpenStatusModal={() => (showStatusModal = true)}
 			onOpenZoneModal={() => (showZoneModal = true)}
+			onCancelPreRegistration={cancelPreRegistration}
+			isCancelling={cancelPreRegistrationMutation.isPending}
 		/>
 
 		<!-- Grid Layout -->
@@ -385,11 +422,12 @@
 				</div>
 
 				<div class="grid grid-cols-1 gap-2 py-2">
-					{#each Object.entries(statusConfig) as [key, config] (key)}
+					{#each allowedStatusTransitions as status (status)}
+						{@const config = statusConfig[status]}
 						<button
 							type="button"
 							class="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border p-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-900"
-							onclick={() => saveStatus(key as HouseholdStatus)}
+							onclick={() => saveStatus(status)}
 						>
 							<span class="h-3.5 w-3.5 rounded-full border {config.dotClass}"></span>
 							<span class="text-sm font-semibold text-slate-800 dark:text-slate-200">
@@ -397,6 +435,11 @@
 							</span>
 						</button>
 					{/each}
+					{#if allowedStatusTransitions.length === 0}
+						<p class="py-3 text-center text-sm text-muted-foreground">
+							สถานะนี้ไม่สามารถเปลี่ยนต่อได้
+						</p>
+					{/if}
 				</div>
 
 				<div class="flex justify-end gap-2 border-t border-border pt-4">

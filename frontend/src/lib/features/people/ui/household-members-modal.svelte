@@ -5,6 +5,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { checkEvacueeHouseholdConflict } from '../index';
 	import type { Evacuee, Household } from '../domain/people';
 
 	let {
@@ -34,13 +35,8 @@
 		if (!q) return [];
 		return allEvacuees.filter((e) => {
 			if (e.household_id === household._id) return false; // already in this hh
-			// ignore cancelled/checked out unless they have no household
-			if (e.household_id) {
-				const hh = allHouseholds.find((h) => h._id === e.household_id);
-				if (hh && hh.status !== 'cancelled' && hh.status !== 'checked_out') {
-					return false; // belongs to another active household
-				}
-			}
+			const conflict = checkEvacueeHouseholdConflict(e, household._id, allHouseholds, allEvacuees);
+			if (conflict.conflicted) return false;
 			return (
 				e.first_name.toLowerCase().includes(q) ||
 				e.last_name.toLowerCase().includes(q) ||

@@ -33,6 +33,7 @@ export const peopleKeys = {
 	evacueesSearch: (query: string) =>
 		[...peopleKeys.all, 'evacuees', getShelterCode(), 'search', query] as const,
 	households: () => [...peopleKeys.all, 'households', getShelterCode()] as const,
+	household: (id: string) => [...peopleKeys.all, 'household', getShelterCode(), id] as const,
 	householdsPaginated: (page: number, pageSize: number, search = '', labelsKey = '') =>
 		[
 			...peopleKeys.all,
@@ -84,7 +85,7 @@ export const useCreateEvacuee = () => {
 		mutationFn: ({ input, ctx }: { input: EvacueeInput; ctx: AuthorContext }) =>
 			peopleRepository().createEvacuee(input, ctx),
 		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
 		}
 	}));
 };
@@ -93,8 +94,10 @@ export const useUpdateEvacuee = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: (evacuee: Evacuee) => peopleRepository().updateEvacuee(evacuee),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		onSuccess: (evacuee) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
 		}
 	}));
 };
@@ -111,8 +114,11 @@ export const useCheckInEvacuee = () => {
 			ctx: AuthorContext;
 			zone?: string | null;
 		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		onSuccess: (evacuee) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.movements() });
 		}
 	}));
 };
@@ -122,8 +128,10 @@ export const useCheckOutEvacuee = () => {
 	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
 			peopleRepository().checkOutEvacuee(evacuee, ctx),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		onSuccess: (evacuee) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.movements() });
 		}
 	}));
 };
@@ -164,6 +172,13 @@ export const useHouseholds = () =>
 		queryFn: () => peopleRepository().listHouseholds()
 	}));
 
+export const useHousehold = (id: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.household(id()),
+		queryFn: () => peopleRepository().getHousehold(id()),
+		enabled: enabled() && !!id()
+	}));
+
 export const useHouseholdsPaginated = (
 	page: () => number,
 	pageSize: () => number,
@@ -192,7 +207,7 @@ export const useCreateHousehold = () => {
 		mutationFn: ({ input, ctx }: { input: HouseholdInput; ctx: AuthorContext }) =>
 			peopleRepository().createHousehold(input, ctx),
 		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
 		}
 	}));
 };
@@ -201,8 +216,9 @@ export const useUpdateHousehold = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: (household: Household) => peopleRepository().updateHousehold(household),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		onSuccess: (household) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.household(household._id) });
 		}
 	}));
 };
@@ -212,8 +228,10 @@ export const useCancelPreRegistration = () => {
 	return createMutation(() => ({
 		mutationFn: ({ householdId, ctx }: { householdId: string; ctx: AuthorContext }) =>
 			peopleRepository().cancelPreRegistration(householdId, ctx),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+		onSuccess: (_data, variables) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.household(variables.householdId) });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
 		}
 	}));
 };
@@ -224,7 +242,7 @@ export const useCreateScreening = () => {
 		mutationFn: ({ input, ctx }: { input: ScreeningInput; ctx: AuthorContext }) =>
 			peopleRepository().createScreening(input, ctx),
 		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.screenings() });
 		}
 	}));
 };
