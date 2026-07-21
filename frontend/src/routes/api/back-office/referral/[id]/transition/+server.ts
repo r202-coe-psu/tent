@@ -64,6 +64,9 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 			{ status: 409 }
 		);
 	} catch (e: unknown) {
+		if (e instanceof Error && e.message.includes('Invalid referral transition')) {
+			return json({ error: e.message }, { status: 422 });
+		}
 		return handleEndpointError(e, 'Referral API Transition PATCH');
 	}
 };

@@ -91,6 +91,26 @@ describe('PATCH /api/back-office/referral/[id]/transition', () => {
 		expect(data.error).toContain('Invalid transition status');
 	});
 
+	it('returns 422 for forbidden transitions from domain state machine', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'sm_user',
+			roles: ['shelter_manager', 'shelter:SH001'],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+
+		mockTransition.mockRejectedValue(
+			new Error("Invalid referral transition: 'draft' → 'accepted'")
+		);
+
+		const event = createMockEvent('referral:1', { to: 'accepted' });
+		const res = await PATCH(event);
+		expect(res.status).toBe(422);
+
+		const data = await res.json();
+		expect(data.error).toContain("Invalid referral transition: 'draft' → 'accepted'");
+	});
+
 	it('fails after 3 retries on conflict', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 			name: 'sm_user',
