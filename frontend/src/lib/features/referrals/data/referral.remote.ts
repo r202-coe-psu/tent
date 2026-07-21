@@ -21,16 +21,19 @@ export class ReferralRemoteRepository implements ReferralRepository {
 	}
 
 	async list(filter?: { status?: ReferralStatus; evacuee_id?: string }): Promise<Referral[]> {
-		// Note: Under the remote-first architecture, this queries CouchDB directly via the
-		// browser HTTP session. An allByType scan mapped in memory is acceptable here
-		// since the dataset is scoped per shelter and bounded in size.
-		const all = await this.repo.allByType<Referral>('referral', isReferral);
+		const selector: Record<string, unknown> = {
+			type: 'referral'
+		};
 
-		return all.filter((r) => {
-			if (filter?.status && r.status !== filter.status) return false;
-			if (filter?.evacuee_id && r.evacuee_id !== filter.evacuee_id) return false;
-			return true;
-		});
+		if (filter?.status) {
+			selector.status = filter.status;
+		}
+		if (filter?.evacuee_id) {
+			selector.evacuee_id = filter.evacuee_id;
+		}
+
+		const docs = await this.repo.find<Referral>({ selector });
+		return docs.filter(isReferral);
 	}
 
 	async get(id: string): Promise<Referral | null> {
