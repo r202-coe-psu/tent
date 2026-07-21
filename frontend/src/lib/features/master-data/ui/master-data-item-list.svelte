@@ -1,18 +1,24 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import type { MasterDataItem, MasterDataType } from '$lib/features/master-data';
+	import type {
+		MasterDataItem,
+		MasterDataQueryContext,
+		MasterDataType
+	} from '$lib/features/master-data';
 	import { MASTER_DATA_TYPE_LABELS } from '$lib/features/master-data';
 	import { useDeleteMasterItem } from '$lib/features/master-data';
 
 	let {
 		type,
 		items,
+		context,
 		onAdd,
 		onEdit
 	}: {
 		type: MasterDataType;
 		items: readonly MasterDataItem[];
+		context?: MasterDataQueryContext;
 		onAdd: () => void;
 		onEdit: (item: MasterDataItem) => void;
 	} = $props();
@@ -29,7 +35,7 @@
 
 	function handleDelete(item: MasterDataItem) {
 		if (!confirm(`ลบ "${item.label}" ออกจาก ${MASTER_DATA_TYPE_LABELS[type]}?`)) return;
-		deleteMutation.mutate({ type, code: item.code });
+		deleteMutation.mutate({ type, code: item.code, context });
 	}
 </script>
 

@@ -33,6 +33,15 @@ export type MasterDataType = (typeof MASTER_DATA_TYPES)[number];
 
 export const masterTypeSchema = z.enum(MASTER_DATA_TYPES);
 
+/** Where a master-data document is resolved from. */
+export const masterDataScopeSchema = z.enum(['global', 'shelter', 'effective']);
+export type MasterDataScope = z.infer<typeof masterDataScopeSchema>;
+
+export interface MasterDataQueryContext {
+	scope?: MasterDataScope;
+	shelterCode?: string | null;
+}
+
 /** Types shown on the Registration Config page (ตั้งค่าการลงทะเบียน). */
 export const REGISTRATION_MASTER_TYPES = [
 	'vulnerable_group',
@@ -63,9 +72,9 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)'
 };
 
-/** Stable `code` used as the doc id — registry has no `shelter_code` (global). */
-export function masterDocId(type: MasterDataType): string {
-	return `master_data:${type}`;
+/** Stable id: global docs use `master_data:{type}`, local docs append the shelter code. */
+export function masterDocId(type: MasterDataType, shelterCode?: string | null): string {
+	return shelterCode ? `master_data:${type}:${shelterCode}` : `master_data:${type}`;
 }
 
 // ---------------------------------------------------------------- items
@@ -90,7 +99,7 @@ export type MasterDataItem = z.infer<typeof masterDataItemSchema>;
 
 // ---------------------------------------------------------------- document
 
-/** Author context for a registry doc (no `shelter_code` — global). */
+/** Author context for a registry doc. Global docs omit `shelter_code`. */
 export interface RegistryAuthorContext {
 	createdBy: string;
 }
@@ -99,8 +108,9 @@ export interface MasterData {
 	_id: string;
 	_rev?: string;
 	type: 'master_data';
-	schema_v: 1;
+	schema_v: 1 | 2;
 	master_type: MasterDataType;
+	shelter_code?: string;
 	items: MasterDataItem[];
 	created_at: string;
 	updated_at: string;
@@ -111,8 +121,9 @@ export const masterDataSchema = z.object({
 	_id: z.string().min(1),
 	_rev: z.string().optional(),
 	type: z.literal('master_data'),
-	schema_v: z.literal(1),
+	schema_v: z.union([z.literal(1), z.literal(2)]),
 	master_type: masterTypeSchema,
+	shelter_code: z.string().trim().min(1).optional(),
 	items: z.array(masterDataItemSchema).min(0),
 	created_at: z.string().datetime(),
 	updated_at: z.string().datetime(),
@@ -244,14 +255,19 @@ export function makeRegistryDoc<T extends string, B extends object>(
 export function createMasterData(
 	type: MasterDataType,
 	items: readonly MasterDataItem[],
-	ctx: RegistryAuthorContext
+	ctx: RegistryAuthorContext,
+	shelterCode?: string | null
 ): MasterData {
 	return makeRegistryDoc(
 		'master_data',
-		1,
-		{ master_type: type, items: enforceOneDefault(items) },
+		2,
+		{
+			master_type: type,
+			...(shelterCode ? { shelter_code: shelterCode } : {}),
+			items: enforceOneDefault(items)
+		},
 		ctx,
-		masterDocId(type)
+		masterDocId(type, shelterCode)
 	) as MasterData;
 }
 

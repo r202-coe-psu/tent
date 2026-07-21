@@ -11,6 +11,7 @@
 <MasterDataConfigPage
 	allowedTypes={SHELTER_MASTER_TYPES}
 	basePath={resolve('/portal/system-management/shelter-config')}
+	scope="global"
 	title="2. ตั้งค่าศูนย์พักพิง (Shelter Master Data)"
 	description="จัดการค่ามาตรฐานสำหรับตั้งค่าศูนย์พักพิง — เพิ่ม แก้ไข หรือลบตัวเลือกที่ใช้ในแต่ละหมวดหมู่"
 />

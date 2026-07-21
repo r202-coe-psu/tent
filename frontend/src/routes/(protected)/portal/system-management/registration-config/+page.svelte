@@ -11,6 +11,7 @@
 <MasterDataConfigPage
 	allowedTypes={REGISTRATION_MASTER_TYPES}
 	basePath={resolve('/portal/system-management/registration-config')}
+	scope="global"
 	title="1. ข้อมูลหลักบุคคล (Person Master Data)"
 	description="จัดการค่ามาตรฐานสำหรับฟอร์มลงทะเบียนบุคคล — เพิ่ม แก้ไข หรือลบตัวเลือกที่ใช้ในแต่ละหมวดหมู่"
 />

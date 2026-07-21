@@ -34,9 +34,9 @@ function docWith(items: MasterData['items']): MasterData {
 	};
 }
 
-function callDELETE(type: string, code: string) {
+function callDELETE(type: string, code: string, query = '') {
 	const request = new Request(
-		`http://localhost/api/back-office/master-data/${type}/items/${code}`,
+		`http://localhost/api/back-office/master-data/${type}/items/${code}${query}`,
 		{ method: 'DELETE', headers: { cookie: 'AuthSession=abc' } }
 	);
 	return DELETE({ request, params: { type, code } } as unknown as Parameters<typeof DELETE>[0]);
@@ -78,6 +78,38 @@ describe('DELETE /api/back-office/master-data/[type]/items/[code]', () => {
 		const [path, method, doc] = adminRawMock.mock.calls[0];
 		expect(path).toBe('/registry/master_data%3Apet_types');
 		expect(method).toBe('PUT');
+		expect((doc as MasterData).items.map((i) => i.code)).toEqual(['cat']);
+	});
+
+	it('deletes from the shelter-local document when scoped', async () => {
+		readMock.mockResolvedValue({
+			...docWith([{ code: 'dog', label: 'Dog', is_default: false }]),
+			_id: 'master_data:pet_types:SH001',
+			schema_v: 2,
+			shelter_code: 'SH001'
+		});
+
+		await callDELETE('pet_types', 'dog', '?scope=shelter&shelter_code=SH001');
+		const [path, , doc] = adminRawMock.mock.calls[0];
+		expect(path).toBe('/registry/master_data%3Apet_types%3ASH001');
+		expect((doc as MasterData).shelter_code).toBe('SH001');
+	});
+
+	it('creates a local override when deleting an item inherited from global', async () => {
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode
+				? null
+				: docWith([
+						{ code: 'dog', label: 'Dog', is_default: false },
+						{ code: 'cat', label: 'Cat', is_default: true }
+					])
+		);
+
+		await callDELETE('pet_types', 'dog', '?scope=shelter&shelter_code=SH001');
+		const [path, , doc] = adminRawMock.mock.calls[0];
+		expect(path).toBe('/registry/master_data%3Apet_types%3ASH001');
+		expect((doc as MasterData)._rev).toBeUndefined();
+		expect((doc as MasterData).created_by).toBe('sa-user');
 		expect((doc as MasterData).items.map((i) => i.code)).toEqual(['cat']);
 	});
 

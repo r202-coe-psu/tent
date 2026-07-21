@@ -95,7 +95,7 @@ describe('createMasterData', () => {
 		const doc = createMasterData('vulnerable_group', [makeItem()], ctx);
 		expect(doc._id).toBe('master_data:vulnerable_group');
 		expect(doc.type).toBe('master_data');
-		expect(doc.schema_v).toBe(1);
+		expect(doc.schema_v).toBe(2);
 		expect(doc.master_type).toBe('vulnerable_group');
 		expect(doc.items).toHaveLength(1);
 		expect(doc.created_by).toBe('sa-user');
@@ -195,5 +195,17 @@ describe('parent_code (community type)', () => {
 		);
 		expect(doc._id).toBe('master_data:shelter_type');
 		expect(doc.master_type).toBe('shelter_type');
+	});
+
+	it('creates a shelter-local document when a shelter code is supplied', () => {
+		const doc = createMasterData(
+			'shelter_type',
+			[makeItem({ code: 'school', label: 'โรงเรียน', is_default: true })],
+			ctx,
+			'SH001'
+		);
+		expect(doc._id).toBe('master_data:shelter_type:SH001');
+		expect(doc.schema_v).toBe(2);
+		expect(doc.shelter_code).toBe('SH001');
 	});
 });

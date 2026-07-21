@@ -44,15 +44,15 @@ function existingDoc(items: MasterData['items']): MasterData {
 	};
 }
 
-function callGET(type: string) {
-	const request = new Request(`http://localhost/api/back-office/master-data/${type}`, {
+function callGET(type: string, query = '') {
+	const request = new Request(`http://localhost/api/back-office/master-data/${type}${query}`, {
 		headers: { cookie: 'AuthSession=abc' }
 	});
 	return GET({ request, params: { type } } as unknown as Parameters<typeof GET>[0]);
 }
 
-function callPUT(type: string, body: unknown) {
-	const request = new Request(`http://localhost/api/back-office/master-data/${type}`, {
+function callPUT(type: string, body: unknown, query = '') {
+	const request = new Request(`http://localhost/api/back-office/master-data/${type}${query}`, {
 		method: 'PUT',
 		headers: { cookie: 'AuthSession=abc', 'content-type': 'application/json' },
 		body: JSON.stringify(body)
@@ -88,6 +88,23 @@ describe('GET /api/back-office/master-data/[type]', () => {
 		readMock.mockResolvedValue(null);
 		const res = await callGET('pet_types');
 		expect((await res.json()).items).toEqual([]);
+	});
+
+	it('resolves a shelter-local document before the global document', async () => {
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode === 'SH001'
+				? {
+						...existingDoc([{ code: 'cat', label: 'Cat', is_default: true }]),
+						_id: 'master_data:pet_types:SH001',
+						shelter_code: 'SH001',
+						schema_v: 2
+					}
+				: { ...existingDoc([{ code: 'dog', label: 'Dog', is_default: true }]) }
+		);
+
+		const res = await callGET('pet_types', '?scope=effective&shelter_code=SH001');
+		expect((await res.json()).items).toEqual([{ code: 'cat', label: 'Cat', is_default: true }]);
+		expect(readMock).toHaveBeenCalledWith('pet_types', 'SH001');
 	});
 
 	it('rejects an unknown master type via the contract envelope', async () => {
@@ -128,6 +145,29 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect((doc as MasterData).created_by).toBe('sa-user');
 		expect((doc as MasterData).type).toBe('master_data');
 		expect((doc as MasterData).master_type).toBe('pet_types');
+	});
+
+	it('writes a shelter-local document when shelter scope is supplied', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT(
+			'pet_types',
+			{ shelter_code: 'SH001', items },
+			'?scope=shelter&shelter_code=SH001'
+		);
+		expect(res.status).toBe(200);
+		const [path, method, doc] = adminRawMock.mock.calls[0];
+		expect(path).toBe('/registry/master_data%3Apet_types%3ASH001');
+		expect(method).toBe('PUT');
+		expect((doc as MasterData).schema_v).toBe(2);
+		expect((doc as MasterData).shelter_code).toBe('SH001');
+	});
+
+	it('rejects shelter_code on a global write', async () => {
+		const res = await callPUT('pet_types', { shelter_code: 'SH001', items }, '?scope=global');
+		expect(res.status).toBe(422);
+		expect((await res.json()).error.code).toBe('VALIDATION');
+		expect(adminRawMock).not.toHaveBeenCalled();
 	});
 
 	it('preserves the existing envelope (created_by, _rev) on update', async () => {
