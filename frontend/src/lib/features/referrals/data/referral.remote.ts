@@ -10,6 +10,7 @@ import {
 	referralSchema
 } from '../domain/referral.schema';
 import { applyTransition } from '../domain/referral.transitions';
+import { peopleRepository } from '$lib/features/people';
 import type { ReferralRepository } from './referral.repository';
 
 export class ReferralRemoteRepository implements ReferralRepository {
@@ -38,6 +39,11 @@ export class ReferralRemoteRepository implements ReferralRepository {
 	}
 
 	async create(input: ReferralInput, ctx: AuthorContext): Promise<Referral> {
+		const evacuee = await peopleRepository().getEvacuee(input.evacuee_id);
+		if (!evacuee) {
+			throw new Error(`Evacuee with ID ${input.evacuee_id} was not found in the active shelter.`);
+		}
+
 		const body = buildReferralBody(input);
 		const rawDoc = makeDoc('referral', 1, body, ctx);
 
