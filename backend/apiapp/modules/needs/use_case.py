@@ -13,7 +13,7 @@ from .schemas import NeedItemResponse, NeedsListResponse, ShelterNeedsResponse
 class NeedsUseCase:
     async def list_needs(self) -> NeedsListResponse:
         needs = await PublicNeed.find_all().to_list()
-        shelters = await PublicShelter.find(PublicShelter.status == "open").to_list()
+        shelters = await PublicShelter.find({"status": {"$in": ["open", "full"]}}).to_list()
         shelter_names = {shelter.shelter_code: shelter.name for shelter in shelters}
 
         grouped: dict[str, list[NeedItemResponse]] = {}

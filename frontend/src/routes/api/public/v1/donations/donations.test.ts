@@ -139,6 +139,9 @@ describe('POST /api/public/v1/donations', () => {
 			'http://localhost:9000/public/v1/donations',
 			expect.objectContaining({ method: 'POST' })
 		);
+		const [, init] = vi.mocked(fetch).mock.calls[0]!;
+		const body = JSON.parse(String((init as RequestInit).body));
+		expect(body.campaign_id).toBe('donation_campaign:c1');
 	});
 
 	it('forwards shelter_pickup logistics to FastAPI', async () => {

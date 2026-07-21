@@ -1,5 +1,4 @@
 import hashlib
-from datetime import UTC, datetime
 
 from worker.masking import (
     mask_last_name,
@@ -74,7 +73,8 @@ def test_project_shelter_closed_deletes():
 
 
 def test_map_public_shelter_status():
-    assert map_public_shelter_status({"operation_status": "full_capacity"}) == "open"
+    assert map_public_shelter_status({"operation_status": "full_capacity"}) == "full"
+    assert map_public_shelter_status({"operation_status": "active"}) == "open"
     assert map_public_shelter_status({"operation_status": "closed"}) == "closed"
 
 
@@ -138,6 +138,40 @@ def test_project_evacuee_passport():
     assert payload is not None
     assert payload["passport_hash"] == passport_hash("AB1234567")
     assert payload["passport_id_masked"] == mask_passport("AB1234567")
+
+
+def test_project_evacuee_pink_card_hashes_national_id_field():
+    doc = {
+        "_id": "evacuee:03PINK",
+        "type": "evacuee",
+        "first_name": "สมหญิง",
+        "last_name": "ใจดี",
+        "person_id": {"cardType": "pink_card", "number": "3900100244192"},
+        "current_stay": {"status": "active"},
+        "updated_at": "2026-01-01T00:00:00.000Z",
+    }
+    action, payload = project_evacuee(doc, shelter_code="SH001")
+    assert action == "upsert"
+    assert payload is not None
+    assert payload["national_id_hash"] == national_id_hash("3900100244192")
+    assert payload["national_id_masked"] == mask_national_id("3900100244192")
+
+
+def test_project_evacuee_other_card_hashes_national_id_field():
+    doc = {
+        "_id": "evacuee:04OTHER",
+        "type": "evacuee",
+        "first_name": "สมปอง",
+        "last_name": "ใจดี",
+        "person_id": {"cardType": "other", "number": "DOC-999"},
+        "current_stay": {"status": "active"},
+        "updated_at": "2026-01-01T00:00:00.000Z",
+    }
+    action, payload = project_evacuee(doc, shelter_code="SH001")
+    assert action == "upsert"
+    assert payload is not None
+    assert payload["national_id_hash"] == national_id_hash("DOC-999")
+    assert payload["national_id_masked"] == mask_national_id("DOC-999")
 
 
 def test_project_evacuee_search_excluded_deletes():

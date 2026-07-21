@@ -62,6 +62,16 @@ def _project_person_id(person_id: dict[str, Any] | None) -> dict[str, str | None
             "passport_id_masked": None,
         }
 
+    # pink_card / other — hash into national_id_hash so 13-digit (and
+    # normalized) public search still finds the person.
+    if card_type in {"pink_card", "other"}:
+        return {
+            "national_id_hash": national_id_hash(number),
+            "national_id_masked": mask_national_id(number),
+            "passport_hash": None,
+            "passport_id_masked": None,
+        }
+
     return {
         "national_id_hash": None,
         "national_id_masked": None,

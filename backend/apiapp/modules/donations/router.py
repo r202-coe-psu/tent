@@ -29,6 +29,11 @@ def _client_ip(request: Request) -> str:
 
 
 def _enforce_rate_limit(request: Request) -> None:
+    """In-process sliding window — not shared across replicas.
+
+    Captcha lives on the SvelteKit BFF; this FastAPI route must not be exposed
+    publicly (bind localhost / reverse-proxy only) or captcha is bypassable.
+    """
     ip = _client_ip(request)
     now = time.monotonic()
     with _rate_lock:

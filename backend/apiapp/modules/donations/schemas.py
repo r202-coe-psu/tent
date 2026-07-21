@@ -26,6 +26,7 @@ class DonationItemInput(BaseModel):
 
 class DonationCreateRequest(BaseModel):
     shelter_code: str
+    campaign_id: str | None = None
     donor: DonorInput
     items: list[DonationItemInput] = Field(default_factory=list)
     logistics: dict[str, Any] | None = None

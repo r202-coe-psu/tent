@@ -142,6 +142,7 @@ export const POST = async ({ request, getClientAddress }) => {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				shelter_code: parsed.data.shelter_code,
+				campaign_id: resolvedCampaignId,
 				donor: parsed.data.donor,
 				items: parsed.data.items,
 				logistics: parsed.data.logistics

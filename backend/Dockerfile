@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir "poetry==$POETRY_VERSION"
 # Path dep must exist before poetry install (relative from backend = ../packages/tent-model).
 # Build context is the repo root (see docker-compose fastapi.build).
 COPY packages/tent-model /app/packages/tent-model
-COPY backend/pyproject.toml /app/backend/
+COPY backend/pyproject.toml backend/poetry.lock /app/backend/
 
 WORKDIR /app/backend
 RUN poetry install --no-root --without dev

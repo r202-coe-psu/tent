@@ -35,6 +35,8 @@ def map_public_shelter_status(doc: dict[str, Any]) -> str:
     status = resolve_operation_status(doc)
     if status in CLOSED_STATUSES:
         return "closed"
+    if status == "full_capacity":
+        return "full"
     return "open"
 
 
