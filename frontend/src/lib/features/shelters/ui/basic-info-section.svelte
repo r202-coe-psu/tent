@@ -339,6 +339,7 @@
 						emptyText="ไม่พบจังหวัด"
 						disabled={disabled || provincesQuery.isLoading}
 						controlProps={props}
+						class="h-9 rounded-md"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -362,6 +363,7 @@
 						emptyText="ไม่พบอำเภอ"
 						disabled={disabled || !$formData.province || districtsQuery.isLoading}
 						controlProps={props}
+						class="h-9 rounded-md"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -385,6 +387,7 @@
 						emptyText="ไม่พบตำบล"
 						disabled={disabled || !$formData.district || subdistrictsQuery.isLoading}
 						controlProps={props}
+						class="h-9 rounded-md"
 					/>
 				{/snippet}
 			</Form.Control>
