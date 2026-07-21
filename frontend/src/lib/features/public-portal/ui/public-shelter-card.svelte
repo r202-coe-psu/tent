@@ -19,7 +19,7 @@
 			name: string;
 			status: string;
 			address: string;
-			distance: number;
+			distance?: number;
 			occupancy: number;
 			capacity: number;
 			available: number;
@@ -57,7 +57,12 @@
 			<span>{shelter.address} อ.{shelter.district}, จ.{shelter.province} </span>
 		</div>
 		<div class="ml-5">
-			ระยะห่างจากจุดผู้ใช้: <span class="font-bold text-foreground">{shelter.distance} กม.</span>
+			ระยะห่างจากจุดผู้ใช้:
+			{#if shelter.distance !== undefined && shelter.distance !== null && !isNaN(shelter.distance)}
+				<span class="font-bold text-foreground">{shelter.distance} กม.</span>
+			{:else}
+				<span class="font-medium text-muted-foreground">-</span>
+			{/if}
 		</div>
 	</div>
 
@@ -124,13 +129,14 @@
 			<Eye class="mr-1.5 h-3.5 w-3.5" /> ดูรายละเอียด
 		</Button>
 		<Button
-			href={shelter.geo
+			href={shelter.geo?.lat != null && shelter.geo?.lng != null
 				? `https://www.google.com/maps/dir/?api=1&destination=${shelter.geo.lat},${shelter.geo.lng}`
-				: '#'}
-			target={shelter.geo ? '_blank' : null}
-			rel={shelter.geo ? 'noopener noreferrer' : null}
+				: undefined}
+			target={shelter.geo?.lat != null && shelter.geo?.lng != null ? '_blank' : null}
+			rel={shelter.geo?.lat != null && shelter.geo?.lng != null ? 'noopener noreferrer' : null}
+			disabled={shelter.geo?.lat == null || shelter.geo?.lng == null}
 			size="sm"
-			class="h-9 flex-1 rounded-xl bg-primary-dark text-xs font-bold text-primary-foreground hover:bg-primary"
+			class="h-9 flex-1 rounded-xl bg-primary-dark text-xs font-bold text-primary-foreground hover:bg-primary disabled:opacity-50"
 		>
 			<Navigation class="mr-1.5 h-3.5 w-3.5" /> นำทาง
 		</Button>

@@ -418,10 +418,13 @@
 					<Form.Label>ผู้จัดการศูนย์</Form.Label>
 					<Input
 						{...props}
-						bind:value={() => $formData.contact?.name ?? '', (value) => {
-							if (!$formData.contact) $formData.contact = {};
-							$formData.contact.name = value;
-						}}
+						bind:value={
+							() => $formData.contact?.name ?? '',
+							(value) => {
+								if (!$formData.contact) $formData.contact = {};
+								$formData.contact.name = value;
+							}
+						}
 						{disabled}
 						placeholder="เช่น นาย สมชาย ใจดี"
 					/>
@@ -462,13 +465,16 @@
 				<div class="space-y-1">
 					<span class="text-sm font-medium">{row.label}</span>
 					<Input
-						bind:value={() => $formData.key_personnel?.[row.key]?.name ?? '', (value) => {
-							ensureKeyPersonnel();
-							$formData.key_personnel![row.key] = {
-								...$formData.key_personnel![row.key],
-								name: value || null
-							};
-						}}
+						bind:value={
+							() => $formData.key_personnel?.[row.key]?.name ?? '',
+							(value) => {
+								ensureKeyPersonnel();
+								$formData.key_personnel![row.key] = {
+									...$formData.key_personnel![row.key],
+									name: value || null
+								};
+							}
+						}
 						{disabled}
 						placeholder="ชื่อ-สกุล"
 					/>
