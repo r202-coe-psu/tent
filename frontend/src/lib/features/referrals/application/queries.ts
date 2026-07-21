@@ -4,12 +4,8 @@ import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
-import {
-	listReferrals,
-	getReferral,
-	createReferral,
-	transitionReferral
-} from '../data/referral.api';
+import { referralRepository } from '../data/referral.remote';
+import { authStore } from '$lib/stores/auth.svelte';
 import type { ReferralInput, ReferralStatus } from '../domain/referral.schema';
 
 export const referralKeys = {
@@ -24,19 +20,23 @@ export const referralKeys = {
 export const useReferrals = (filter?: { status?: ReferralStatus; evacuee_id?: string }) =>
 	createQuery(() => ({
 		queryKey: referralKeys.list(filter),
-		queryFn: () => listReferrals(filter)
+		queryFn: () => referralRepository().list(filter)
 	}));
 
 export const useReferral = (id: () => string, enabled: () => boolean = () => true) =>
 	createQuery(() => ({
 		queryKey: referralKeys.detail(id()),
-		queryFn: () => getReferral(id()),
+		queryFn: () => referralRepository().get(id()),
 		enabled: enabled() && !!id()
 	}));
 
 export const useCreateReferral = (queryClient: QueryClient) =>
 	createMutation(() => ({
-		mutationFn: (input: ReferralInput) => createReferral(input),
+		mutationFn: (input: ReferralInput) =>
+			referralRepository().create(input, {
+				shelterCode: getShelterCode(),
+				createdBy: authStore.user?.name ?? 'unknown'
+			}),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: referralKeys.all });
 		}
@@ -44,7 +44,8 @@ export const useCreateReferral = (queryClient: QueryClient) =>
 
 export const useTransitionReferral = (queryClient: QueryClient) =>
 	createMutation(() => ({
-		mutationFn: ({ id, to }: { id: string; to: ReferralStatus }) => transitionReferral(id, to),
+		mutationFn: ({ id, to }: { id: string; to: ReferralStatus }) =>
+			referralRepository().transition(id, to, authStore.user?.name ?? 'unknown'),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: referralKeys.all });
 		}
