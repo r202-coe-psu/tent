@@ -58,8 +58,8 @@ describe('BFF Referral List and Create Endpoints', () => {
 	describe('GET /api/back-office/referral', () => {
 		it('returns 403 when caller is not SA and not shelter_manager', async () => {
 			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
-				name: 'volunteer_user',
-				roles: ['volunteer'],
+				name: 'staff_user',
+				roles: ['registration_staff'],
 				isSA: false,
 				shelterCode: 'SH001'
 			});
