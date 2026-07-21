@@ -72,7 +72,7 @@ class DonationsUseCase:
             )
 
         donation_id = f"donation:{new_ulid()}"
-        tracking_token = f"TX-{payload.shelter_code.upper()}-{secrets.token_hex(4).upper()}"
+        tracking_token = f"TX-{payload.shelter_code.upper()}-{secrets.token_hex(16).upper()}"
         booking_ref = f"DN-{secrets.randbelow(900000) + 100000}"
         now = datetime.now(UTC)
         expires_at = now + timedelta(hours=72)

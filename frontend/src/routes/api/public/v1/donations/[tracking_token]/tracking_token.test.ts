@@ -21,7 +21,10 @@ vi.mock('$lib/server/security/rate-limiter', () => ({
 }));
 
 vi.mock('$env/dynamic/private', () => ({
-	env: { PUBLIC_FASTAPI_PROXY: 'http://localhost:9000' }
+	env: {
+		FASTAPI_INTERNAL_URL: 'http://localhost:9000',
+		EXTERNAL_API_SECRET: 'test-external-secret'
+	}
 }));
 
 const TOKEN = 'TX-SH001-TESTTOKEN';
@@ -152,7 +155,12 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 		expect(putAsPublicWriter).not.toHaveBeenCalled();
 		expect(fetch).toHaveBeenCalledWith(
 			'http://localhost:9000/public/v1/donations/TX-SH001-TESTTOKEN',
-			expect.objectContaining({ method: 'PATCH' })
+			expect.objectContaining({
+				method: 'PATCH',
+				headers: expect.objectContaining({
+					Authorization: 'Bearer test-external-secret'
+				})
+			})
 		);
 	});
 

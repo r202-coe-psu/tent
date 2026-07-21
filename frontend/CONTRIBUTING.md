@@ -43,8 +43,8 @@ coding details beyond this doc live in `CONVENTIONS.md`.
 
 The CouchDB + MongoDB + sync worker stack runs via the repo-root `docker compose up` (CouchDB 3.5).
 Copy `.env.example` to `.env` first. The frontend also needs `frontend/.env` (copy
-`frontend/.env.example`) — include `PUBLIC_FASTAPI_PROXY=http://localhost:9000` for the public
-plane Vite proxies.
+`frontend/.env.example`) — include `PUBLIC_FASTAPI_PROXY=http://localhost:9000` for Vite
+proxies and `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET` for the BFF → FastAPI donation path.
 
 ### Pre-commit quality gate (Lefthook)
 
@@ -384,7 +384,8 @@ Coding patterns (client wrappers, mappers, query keys): **`CONVENTIONS.md` §12*
   for when you actually need one.
 - Keep CouchDB same-origin in dev via the Vite `/couch` proxy (`PUBLIC_COUCH_PROXY`) so the session
   cookie is first-party — don't hardcode absolute CouchDB URLs in feature code.
-- Keep FastAPI public routes same-origin via the path-specific Vite proxies (`PUBLIC_FASTAPI_PROXY`)
+- Keep FastAPI public routes same-origin via the path-specific Vite proxies (`PUBLIC_FASTAPI_PROXY`);
+  BFF server calls use `FASTAPI_INTERNAL_URL` (+ `EXTERNAL_API_SECRET` for donations)
   — see §4.2. Don't hardcode `http://localhost:9000` in feature code.
 
 ## 6. Testing

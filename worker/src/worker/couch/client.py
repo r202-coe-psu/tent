@@ -36,12 +36,27 @@ class CouchClient:
         return response.json()
 
     async def put_doc(self, database: str, doc: dict[str, Any]) -> dict[str, Any]:
+        """PUT a document. On 409, retry once with the latest ``_rev``.
+
+        Returns CouchDB's ``{"ok": true, "id": ..., "rev": ...}`` on success.
+        Raises ``httpx.HTTPStatusError`` if the write cannot complete.
+        """
         doc_id = doc["_id"]
         response = await self._client.put(f"/{database}/{doc_id}", json=doc)
-        if response.status_code == 409:
+        if response.status_code != 409:
+            response.raise_for_status()
             return response.json()
-        response.raise_for_status()
-        return response.json()
+
+        existing = await self.get_doc(database, doc_id)
+        if existing is None or not existing.get("_rev"):
+            response.raise_for_status()
+            msg = f"CouchDB 409 for {database}/{doc_id} but document is missing"
+            raise RuntimeError(msg)
+
+        retry_doc = {**doc, "_rev": existing["_rev"]}
+        retry = await self._client.put(f"/{database}/{doc_id}", json=retry_doc)
+        retry.raise_for_status()
+        return retry.json()
 
     async def database_exists(self, database: str) -> bool:
         response = await self._client.get(f"/{database}")

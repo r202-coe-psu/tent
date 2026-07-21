@@ -51,6 +51,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    # Host-only bind — donation routes require EXTERNAL_API_SECRET (BFF); do not
+    # publish 0.0.0.0 or captcha on the SvelteKit BFF is bypassable.
     ports:
       - "${FASTAPI_BIND_IP:-127.0.0.1}:${FASTAPI_PORT:-9000}:9000"
     depends_on:
@@ -81,7 +83,8 @@ services:
       # Server-only — never bundled into the browser
       COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@couchdb:5984
       # BFF donations/needs → FastAPI on the compose network (not localhost)
-      PUBLIC_FASTAPI_PROXY: http://fastapi:9000
+      FASTAPI_INTERNAL_URL: http://fastapi:9000
+      EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
       SECRET_RECAPTCHA_KEY: ${SECRET_RECAPTCHA_KEY}
     depends_on:
       couchdb:

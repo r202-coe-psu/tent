@@ -21,6 +21,20 @@ logger = logging.getLogger(__name__)
 RETENTION_INTERVAL_SECONDS = 300
 
 
+def classify_expired_buffer(
+	*,
+	synced_to_couch: bool,
+	expires_at: datetime | None,
+	now: datetime,
+) -> str:
+	"""Return ``purge``, ``stuck``, or ``keep`` for an intake buffer row."""
+	if expires_at is None or expires_at >= now:
+		return "keep"
+	if synced_to_couch:
+		return "purge"
+	return "stuck"
+
+
 async def _audit_and_delete(
 	*,
 	job_run_id: str,
@@ -92,12 +106,34 @@ async def reconcile_closed_shelters(job_run_id: str) -> None:
 
 
 async def purge_expired_buffers(job_run_id: str) -> None:
+	"""Purge expired intake buffers that already reached CouchDB.
+
+	Never delete ``synced_to_couch=False`` rows — Mongo still owns them until
+	inbound persists (sync contract). Log stuck expired-unsynced for ops.
+	"""
 	now = datetime.now(UTC)
-	expired = await DonationBuffer.find(
+	candidates = await DonationBuffer.find(
 		DonationBuffer.expires_at != None,  # noqa: E711
 		DonationBuffer.expires_at < now,
 	).to_list()
-	for donation in expired:
+
+	for donation in candidates:
+		action = classify_expired_buffer(
+			synced_to_couch=donation.synced_to_couch,
+			expires_at=donation.expires_at,
+			now=now,
+		)
+		if action == "stuck":
+			logger.warning(
+				"Skipping retention of unsynced donation buffer %s "
+				"(expired %s but not yet in CouchDB)",
+				donation.id,
+				donation.expires_at,
+			)
+			continue
+		if action != "purge":
+			continue
+
 		await _audit_and_delete(
 			job_run_id=job_run_id,
 			trigger="scheduled",

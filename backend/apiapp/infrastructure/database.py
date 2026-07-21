@@ -25,16 +25,16 @@ class BeanieClient:
         """Initialize Beanie with MongoDB connection"""
         try:
             self.settings = settings
-            logger.info(f"Connecting to MongoDB: {settings.DATABASE_URI}")
+            db_name = _database_name(settings.DATABASE_URI)
+            # Log db name only — URI may embed credentials.
+            logger.info(f"Connecting to MongoDB database: {db_name}")
 
             self.client = motor.motor_asyncio.AsyncIOMotorClient(
                 settings.DATABASE_URI, connect=True
             )
 
-            db_name = _database_name(settings.DATABASE_URI)
             self.database = self.client[db_name]
             logger.debug(f"Using database: {self.database.name}")
-
             logger.info(f"Initializing Beanie with {len(ALL_DOCUMENTS)} models:")
             for document in ALL_DOCUMENTS:
                 logger.info(f"  - {document.__name__}")

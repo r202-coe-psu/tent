@@ -1,12 +1,10 @@
 import { json } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
 import { donationIpLimiter } from '$lib/server/security/rate-limiter';
 import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
+import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import type { PublicDonationDoc } from '$lib/features/donations';
-
-const FASTAPI_BASE = env.PUBLIC_FASTAPI_PROXY || 'http://localhost:9000';
 
 function shelterDbFromToken(token: string): string | null {
 	const match = token.match(/^TX-([A-Z0-9]+)-/);
@@ -31,10 +29,10 @@ async function findByTokenHash(shelterDb: string, hash: string): Promise<PublicD
 /** Pre-inbound: update courier tracking on the Mongo intake buffer via FastAPI. */
 async function patchCourierViaFastApi(trackingToken: string, courierTrackingNo: string) {
 	const res = await fetch(
-		`${FASTAPI_BASE}/public/v1/donations/${encodeURIComponent(trackingToken)}`,
+		`${fastapiBaseUrl()}/public/v1/donations/${encodeURIComponent(trackingToken)}`,
 		{
 			method: 'PATCH',
-			headers: { 'Content-Type': 'application/json' },
+			headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
 			body: JSON.stringify({ courier_tracking_no: courierTrackingNo })
 		}
 	);
@@ -55,7 +53,8 @@ export const GET = async ({ params, getClientAddress }) => {
 		}
 
 		const res = await fetch(
-			`${FASTAPI_BASE}/public/v1/donations/${encodeURIComponent(tracking_token)}`
+			`${fastapiBaseUrl()}/public/v1/donations/${encodeURIComponent(tracking_token)}`,
+			{ headers: fastapiServiceHeaders() }
 		);
 		const body = await res.json();
 		if (!res.ok) {

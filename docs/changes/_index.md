@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-16 # CR-043 Notion task status and T-61..T-65 sync
+updated: 2026-07-22 # CR-044 FastAPI public plane (PR #112)
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 

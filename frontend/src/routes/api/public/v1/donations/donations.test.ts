@@ -23,7 +23,11 @@ vi.mock('$lib/server/security/captcha', () => ({
 }));
 
 vi.mock('$env/dynamic/private', () => ({
-	env: { SECRET_RECAPTCHA_KEY: 'dummy-secret', PUBLIC_FASTAPI_PROXY: 'http://localhost:9000' }
+	env: {
+		SECRET_RECAPTCHA_KEY: 'dummy-secret',
+		FASTAPI_INTERNAL_URL: 'http://localhost:9000',
+		EXTERNAL_API_SECRET: 'test-external-secret'
+	}
 }));
 
 function mockFastapiCreate(body: Record<string, unknown> = {}) {
@@ -137,7 +141,12 @@ describe('POST /api/public/v1/donations', () => {
 		expect(data.bookingRef).toBe('DN-123456');
 		expect(fetch).toHaveBeenCalledWith(
 			'http://localhost:9000/public/v1/donations',
-			expect.objectContaining({ method: 'POST' })
+			expect.objectContaining({
+				method: 'POST',
+				headers: expect.objectContaining({
+					Authorization: 'Bearer test-external-secret'
+				})
+			})
 		);
 		const [, init] = vi.mocked(fetch).mock.calls[0]!;
 		const body = JSON.parse(String((init as RequestInit).body));

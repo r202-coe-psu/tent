@@ -54,9 +54,17 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
     }
 
     try:
-        await couch.put_doc(database, couch_doc)
+        result = await couch.put_doc(database, couch_doc)
     except Exception:
         logger.exception("Failed to persist donation %s to CouchDB", donation.id)
+        return False
+
+    if not result.get("ok"):
+        logger.error(
+            "CouchDB put for donation %s did not acknowledge ok: %s",
+            donation.id,
+            result,
+        )
         return False
 
     donation.synced_to_couch = True

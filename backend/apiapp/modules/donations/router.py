@@ -8,6 +8,7 @@ from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
+from ...core.security import verify_external_secret
 from .schemas import (
     DonationCourierPatchRequest,
     DonationCourierPatchResponse,
@@ -37,8 +38,9 @@ def _client_ip(request: Request) -> str:
 def _enforce_rate_limit(request: Request) -> None:
     """In-process sliding window — not shared across replicas.
 
-    Captcha lives on the SvelteKit BFF; this FastAPI route must not be exposed
-    publicly (bind localhost / reverse-proxy only) or captcha is bypassable.
+    Captcha lives on the SvelteKit BFF. Donation routes also require
+    ``EXTERNAL_API_SECRET`` Bearer (service-to-service) so a publicly
+    reachable FastAPI cannot bypass captcha.
     """
     ip = _client_ip(request)
     now = time.monotonic()
@@ -53,7 +55,12 @@ def _enforce_rate_limit(request: Request) -> None:
         _rate_buckets[ip] = bucket
 
 
-@router.post("", response_model=DonationCreateResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=DonationCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_external_secret)],
+)
 async def create_donation(
     request: Request,
     response: Response,
@@ -65,7 +72,11 @@ async def create_donation(
     return await use_case.create(payload)
 
 
-@router.get("/{tracking_token}", response_model=DonationTrackingResponse)
+@router.get(
+    "/{tracking_token}",
+    response_model=DonationTrackingResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
 async def get_donation(
     request: Request,
     response: Response,
@@ -77,7 +88,11 @@ async def get_donation(
     return await use_case.get_by_tracking_token(tracking_token)
 
 
-@router.patch("/{tracking_token}", response_model=DonationCourierPatchResponse)
+@router.patch(
+    "/{tracking_token}",
+    response_model=DonationCourierPatchResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
 async def patch_donation_courier(
     request: Request,
     response: Response,

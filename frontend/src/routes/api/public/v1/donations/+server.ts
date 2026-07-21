@@ -7,11 +7,15 @@ import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/ra
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { adminRaw } from '$lib/server/couch-admin';
 import { fetchDocs } from '$lib/server/donation-docs';
+import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
 import type { DonationCampaign } from '$lib/features/operations';
 import { qtyGt } from '$lib/utils/qty';
 
 const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
+
+/** Registry / public_shelters statuses that still accept public donations. */
+const DONATION_OPEN_STATUSES = new Set(['open', 'full']);
 
 export const POST = async ({ request, getClientAddress }) => {
 	try {
@@ -52,9 +56,8 @@ export const POST = async ({ request, getClientAddress }) => {
 			}
 		}
 
-		// 3.1 Validate shelter_code — ต้องมีศูนย์นี้ใน registry และ status === 'open'
-		// registry เก็บ shelter เป็น _id = shelter:{ulid} + field `code` → ต้อง scan by code
-		// (ไม่ใช่ GET /registry/shelter:{code} ตรงๆ — _id ไม่ใช่ code)
+		// 3.1 Validate shelter_code — ต้องมีศูนย์นี้ใน registry และ status เป็น open|full
+		// (สอดคล้อง FastAPI PublicShelter ที่รับ open|full; registry scan by `code`)
 		const shelterCode = parsed.data.shelter_code;
 		const regRes = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');
 		if (regRes.status >= 400) {
@@ -73,7 +76,7 @@ export const POST = async ({ request, getClientAddress }) => {
 				{ status: 404 }
 			);
 		}
-		if (shelterDoc.status !== 'open') {
+		if (!shelterDoc.status || !DONATION_OPEN_STATUSES.has(shelterDoc.status)) {
 			return json(
 				{ success: false, error: 'SHELTER_CLOSED', shelter_code: shelterCode },
 				{ status: 409 }
@@ -136,10 +139,9 @@ export const POST = async ({ request, getClientAddress }) => {
 		}
 
 		// 4. Persist via FastAPI → MongoDB donations buffer (inbound worker → CouchDB)
-		const fastapiBase = env.PUBLIC_FASTAPI_PROXY || 'http://localhost:9000';
-		const apiRes = await fetch(`${fastapiBase}/public/v1/donations`, {
+		const apiRes = await fetch(`${fastapiBaseUrl()}/public/v1/donations`, {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
+			headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
 			body: JSON.stringify({
 				shelter_code: parsed.data.shelter_code,
 				campaign_id: resolvedCampaignId,

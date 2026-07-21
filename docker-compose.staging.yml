@@ -77,7 +77,8 @@ services:
       # Server-only — never bundled into the browser
       COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@couchdb:5984
       # BFF donations/needs → FastAPI on the compose network (not localhost)
-      PUBLIC_FASTAPI_PROXY: http://fastapi:9000
+      FASTAPI_INTERNAL_URL: http://fastapi:9000
+      EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
       SECRET_RECAPTCHA_KEY: ${SECRET_RECAPTCHA_KEY}
     depends_on:
       couchdb:
