@@ -201,3 +201,85 @@ async def test_evacuee_search_hides_opted_out_records(
 async def test_evacuee_search_rejects_invalid_query(client: AsyncClient):
     response = await client.post("/public/v1/family-search", json={"q": "ab"})
     assert response.status_code == 422
+
+
+async def test_evacuee_search_writes_search_audit(
+    client: AsyncClient,
+    db_client: AsyncIOMotorClient,
+    settings: Settings,
+):
+    from tent_model.search_audit import SearchAudit
+
+    from apiapp.utils.masking import sha256_hex
+
+    phone = "0812345670"
+    now = datetime.now(UTC)
+    await _insert_shelter(
+        db_client,
+        settings,
+        {
+            "_id": "SH001",
+            "shelter_code": "SH001",
+            "name": "ศูนย์ทดสอบ",
+            "status": "open",
+            "capacity": 100,
+            "updated_at": now,
+        },
+    )
+    await _insert_person(
+        db_client,
+        settings,
+        {
+            "_id": "evacuee:audit1",
+            "shelter_code": "SH001",
+            "first_name": "สมชาย",
+            "last_name_masked": mask_last_name("ใจดี"),
+            "phone_hash": phone_hash(phone),
+            "search_excluded": False,
+            "status": "active",
+            "updated_at": now,
+        },
+    )
+
+    response = await client.post(
+        "/public/v1/family-search",
+        json={"q": phone},
+        headers={"X-Real-IP": "203.0.113.10"},
+    )
+    assert response.status_code == 200
+
+    audits = await SearchAudit.find_all().to_list()
+    assert len(audits) == 1
+    audit = audits[0]
+    assert audit.query_kind == "phone"
+    assert audit.query_hash == sha256_hex(phone)
+    assert audit.ip_hash == sha256_hex("203.0.113.10")
+    assert audit.result_count == 1
+    assert audit.synced_to_couch is False
+
+
+async def test_evacuee_search_rate_limited(client: AsyncClient):
+    from apiapp.modules.evacuee import router as evacuee_router
+
+    evacuee_router._request_log.clear()
+    original_max = evacuee_router.RATE_LIMIT_MAX_REQUESTS
+    evacuee_router.RATE_LIMIT_MAX_REQUESTS = 3
+    try:
+        headers = {"X-Real-IP": "198.51.100.7"}
+        for _ in range(3):
+            ok = await client.post(
+                "/public/v1/family-search",
+                json={"q": "0811111111"},
+                headers=headers,
+            )
+            assert ok.status_code in (200, 422)
+        limited = await client.post(
+            "/public/v1/family-search",
+            json={"q": "0811111111"},
+            headers=headers,
+        )
+        assert limited.status_code == 429
+        assert limited.json()["detail"]["error"]["code"] == "RATE_LIMITED"
+    finally:
+        evacuee_router.RATE_LIMIT_MAX_REQUESTS = original_max
+        evacuee_router._request_log.clear()

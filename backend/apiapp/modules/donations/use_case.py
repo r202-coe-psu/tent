@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
+from pymongo.errors import DuplicateKeyError
 from tent_model.donation_buffer import DonationBuffer, DonorBuffer
 from tent_model.public_donation import DeclaredItem, PublicDonation
 from tent_model.public_shelter import PublicShelter
@@ -19,6 +20,13 @@ from .schemas import (
     DonationCreateResponse,
     DonationTrackingResponse,
 )
+
+_MAX_BOOKING_REF_ATTEMPTS = 8
+
+
+def _new_booking_ref() -> str:
+    """Human-readable ``DN-######`` — uniqueness enforced by Mongo unique index."""
+    return f"DN-{secrets.randbelow(900000) + 100000}"
 
 
 def _declared_items(raw_items: list[dict[str, Any]]) -> list[DeclaredItem]:
@@ -73,7 +81,6 @@ class DonationsUseCase:
 
         donation_id = f"donation:{new_ulid()}"
         tracking_token = f"TX-{payload.shelter_code.upper()}-{secrets.token_hex(16).upper()}"
-        booking_ref = f"DN-{secrets.randbelow(900000) + 100000}"
         now = datetime.now(UTC)
         expires_at = now + timedelta(hours=72)
         token_hash = sha256_hex(tracking_token)
@@ -81,22 +88,41 @@ class DonationsUseCase:
         items_declared = [item.model_dump(exclude_none=True) for item in payload.items]
         declared = _declared_items(items_declared)
 
-        buffer = DonationBuffer(
-            id=donation_id,
-            shelter_code=payload.shelter_code.upper(),
-            donor=DonorBuffer(**payload.donor.model_dump()),
-            items_declared=items_declared,
-            logistics=payload.logistics,
-            campaign_id=payload.campaign_id,
-            booking_ref=booking_ref,
-            tracking_token=tracking_token,
-            tracking_token_hash=token_hash,
-            status="declared",
-            synced_to_couch=False,
-            created_at=now,
-            expires_at=expires_at,
-        )
-        await buffer.insert()
+        buffer: DonationBuffer | None = None
+        booking_ref = ""
+        for attempt in range(_MAX_BOOKING_REF_ATTEMPTS):
+            booking_ref = _new_booking_ref()
+            candidate = DonationBuffer(
+                id=donation_id,
+                shelter_code=payload.shelter_code.upper(),
+                donor=DonorBuffer(**payload.donor.model_dump()),
+                items_declared=items_declared,
+                logistics=payload.logistics,
+                campaign_id=payload.campaign_id,
+                booking_ref=booking_ref,
+                tracking_token=tracking_token,
+                tracking_token_hash=token_hash,
+                status="declared",
+                synced_to_couch=False,
+                created_at=now,
+                expires_at=expires_at,
+            )
+            try:
+                await candidate.insert()
+                buffer = candidate
+                break
+            except DuplicateKeyError:
+                # Unique index on booking_ref (and tracking_token_hash). New token each
+                # call — practically only booking_ref collisions need a retry.
+                if attempt < _MAX_BOOKING_REF_ATTEMPTS - 1:
+                    continue
+                raise
+
+        if buffer is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"success": False, "error": "BOOKING_REF_EXHAUSTED"},
+            )
 
         # Stub public_donations so GET tracking works before outbound CDC catches up.
         stub = PublicDonation(

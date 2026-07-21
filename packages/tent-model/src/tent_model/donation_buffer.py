@@ -37,4 +37,5 @@ class DonationBuffer(Document):
 		indexes = [
 			IndexModel([("synced_to_couch", 1)]),
 			IndexModel([("tracking_token_hash", 1)], unique=True),
+			IndexModel([("booking_ref", 1)], unique=True),
 		]

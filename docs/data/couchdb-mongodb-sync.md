@@ -110,11 +110,26 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 
 ---
 
-## 4. Inbound — MongoDB → CouchDB (donation intake)
+## 4. Inbound — MongoDB → CouchDB (donation intake + search_audit)
 
 public ประกาศบริจาคผ่าน `POST /public/v1/donations` → เขียน Mongo ก่อน → worker ค่อย persist เข้า CouchDB.
+family-search เขียน Mongo `search_audits` (hash เท่านั้น) → worker persist เข้า `central_ops`.
 
-### 4.1 ลำดับ
+### 4.0 search_audit inbound
+
+```
+1. POST /public/v1/family-search
+   → FastAPI เขียน Mongo `search_audits`:
+     { _id: search_audit:{ULID}, query_kind, query_hash, ip_hash,
+       result_count, occurred_at, synced_to_couch: false }
+   → ไม่เก็บ raw query / IP
+
+2. inbound worker poll `search_audits` where synced_to_couch=false
+   → ensure DB `central_ops` → put search_audit:{ULID}
+   → mark synced_to_couch=true
+```
+
+### 4.1 ลำดับ (donations)
 
 ```
 1. public POST /public/v1/donations

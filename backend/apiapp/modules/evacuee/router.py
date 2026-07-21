@@ -8,6 +8,7 @@ from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
+from ...utils.request_meta import client_ip
 from .schemas import ApiErrorResponse, SearchRequest, SearchResponse
 from .use_case import EvacueeUseCase, get_evacuee_use_case
 
@@ -19,16 +20,8 @@ _request_log: dict[str, list[float]] = defaultdict(list)
 _rate_limit_lock = Lock()
 
 
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return "unknown"
-
-
 def _check_rate_limit(ip: str) -> None:
+    """In-process sliding window — not shared across replicas (see ``client_ip``)."""
     now = time.time()
     with _rate_limit_lock:
         timestamps = [ts for ts in _request_log[ip] if now - ts < RATE_LIMIT_WINDOW_SECONDS]
@@ -61,6 +54,7 @@ async def search_evacuees(
     use_case: EvacueeUseCase = Depends(get_evacuee_use_case),  # noqa: B008
 ) -> SearchResponse:
     """Search evacuees in the public read model (masked, no PII leakage)."""
-    _check_rate_limit(_client_ip(request))
+    ip = client_ip(request)
+    _check_rate_limit(ip)
     response.headers["Cache-Control"] = "no-store"
-    return await use_case.search(payload.search)
+    return await use_case.search(payload.search, client_ip=ip)

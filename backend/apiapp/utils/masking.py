@@ -49,7 +49,17 @@ def mask_national_id(national_id: str) -> str:
     return f"{digits[:3]}***{digits[-3:]}"
 
 
+def normalize_phone(phone: str) -> str:
+    """Digit-only Thai local form — strips spaces/dashes; ``+66`` → leading ``0``."""
+    digits = re.sub(r"[\s\-()]+", "", phone)
+    if digits.startswith("+66"):
+        digits = f"0{digits[3:]}"
+    elif digits.startswith("66") and len(digits) >= 11:
+        digits = f"0{digits[2:]}"
+    return digits
+
+
 def phone_hash(phone: str | None) -> str | None:
     if not phone:
         return None
-    return sha256_hex(phone)
+    return sha256_hex(normalize_phone(phone))

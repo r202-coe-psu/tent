@@ -7,13 +7,16 @@ export const GET: RequestHandler = async () => {
 	try {
 		const res = await fetch(`${fastapiBaseUrl()}/public/v1/needs`);
 		if (!res.ok) {
-			return json([], { status: res.status });
+			return json(
+				{ success: false, error: 'NEEDS_UNAVAILABLE' },
+				{ status: res.status >= 400 ? res.status : 502 }
+			);
 		}
 		const body = (await res.json()) as {
 			shelters?: Array<{ code: string; name: string; needs: unknown[] }>;
 		};
 		return json(body.shelters ?? []);
 	} catch {
-		return json([], { status: 503 });
+		return json({ success: false, error: 'NEEDS_UNAVAILABLE' }, { status: 503 });
 	}
 };

@@ -13,6 +13,7 @@ from worker.config import load_settings
 from worker.couch.bootstrap import bootstrap_all, needs_bootstrap
 from worker.couch.client import CouchClient
 from worker.inbound.donations import run_inbound_loop
+from worker.inbound.search_audit import run_search_audit_inbound_loop
 from worker.listeners.registry import ListenerManager
 from worker.retention.job import run_retention_loop
 
@@ -40,6 +41,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
         loop.add_signal_handler(sig, _handle_signal)
 
     inbound_task: asyncio.Task[None] | None = None
+    search_audit_task: asyncio.Task[None] | None = None
     retention_task: asyncio.Task[None] | None = None
 
     try:
@@ -51,13 +53,17 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
         inbound_task = asyncio.create_task(
             run_inbound_loop(couch, stop_event=stop), name="inbound-donations"
         )
+        search_audit_task = asyncio.create_task(
+            run_search_audit_inbound_loop(couch, stop_event=stop),
+            name="inbound-search-audit",
+        )
         retention_task = asyncio.create_task(run_retention_loop(stop_event=stop), name="retention")
         await manager.start()
         logger.info("Sync worker running — Ctrl+C to stop")
         await stop.wait()
     finally:
         await manager.stop_all()
-        for task in (inbound_task, retention_task):
+        for task in (inbound_task, search_audit_task, retention_task):
             if task:
                 task.cancel()
                 try:

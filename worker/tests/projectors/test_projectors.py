@@ -35,6 +35,11 @@ def test_phone_hash_none_for_missing():
     assert phone_hash(None) is None
 
 
+def test_phone_hash_normalizes_formatting():
+    assert phone_hash("081-111-1111") == sha256_hex("0811111111")
+    assert phone_hash("+66811111111") == sha256_hex("0811111111")
+
+
 def test_shelter_code_from_db_name():
     assert shelter_code_from_db_name("shelter_sh001") == "SH001"
 

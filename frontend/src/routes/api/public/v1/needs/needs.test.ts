@@ -43,7 +43,7 @@ describe('GET /api/public/v1/needs', () => {
 		expect(data[0].needs[0]).not.toHaveProperty('donor');
 	});
 
-	it('returns empty array when FastAPI is unavailable', async () => {
+	it('returns structured error when FastAPI is unavailable', async () => {
 		vi.stubGlobal(
 			'fetch',
 			vi.fn().mockResolvedValue({
@@ -55,7 +55,16 @@ describe('GET /api/public/v1/needs', () => {
 
 		const response = await GET({} as unknown as GetEvent);
 		const data = await response.json();
-		expect(data).toEqual([]);
+		expect(data).toEqual({ success: false, error: 'NEEDS_UNAVAILABLE' });
+		expect(response.status).toBe(503);
+	});
+
+	it('returns 503 when FastAPI fetch throws', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connection refused')));
+
+		const response = await GET({} as unknown as GetEvent);
+		const data = await response.json();
+		expect(data).toEqual({ success: false, error: 'NEEDS_UNAVAILABLE' });
 		expect(response.status).toBe(503);
 	});
 });

@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
+from tent_model.search_audit import SearchAudit
 
-from ...utils.masking import national_id_hash, passport_hash, phone_hash
+from ...utils.masking import national_id_hash, passport_hash, phone_hash, sha256_hex
 from ...utils.search_query import ParsedSearchQuery, SearchQueryKind, parse_search_query
+from ...utils.ulid import new_ulid
 from .schemas import FamilyMember, SearchResponse, SearchResult
+
+logger = logging.getLogger(__name__)
 
 NAME_RESULT_LIMIT = 10
 
@@ -30,7 +35,7 @@ def map_public_status(stay_status: str) -> str:
 
 
 class EvacueeUseCase:
-    async def search(self, raw_query: str) -> SearchResponse:
+    async def search(self, raw_query: str, *, client_ip: str = "unknown") -> SearchResponse:
         parsed = parse_search_query(raw_query)
         if parsed is None:
             raise HTTPException(
@@ -53,11 +58,39 @@ class EvacueeUseCase:
             for person in persons
         ]
 
+        await self._write_search_audit(
+            parsed=parsed,
+            client_ip=client_ip,
+            result_count=len(results),
+        )
+
         return SearchResponse(
             results=results,
             count=len(results),
             as_of=datetime.now(UTC),
         )
+
+    async def _write_search_audit(
+        self,
+        *,
+        parsed: ParsedSearchQuery,
+        client_ip: str,
+        result_count: int,
+    ) -> None:
+        """Append-only audit buffer — never store raw query or IP (hashes only)."""
+        try:
+            await SearchAudit(
+                id=f"search_audit:{new_ulid()}",
+                query_kind=parsed.kind.value,
+                query_hash=sha256_hex(parsed.normalized),
+                ip_hash=sha256_hex(client_ip),
+                result_count=result_count,
+                occurred_at=datetime.now(UTC),
+                synced_to_couch=False,
+            ).insert()
+        except Exception:
+            # Search availability > audit durability; inbound/ops can alert on gaps.
+            logger.exception("Failed to write search_audit for kind=%s", parsed.kind.value)
 
     async def _find_persons(self, parsed: ParsedSearchQuery) -> list[PublicPerson]:
         if parsed.kind == SearchQueryKind.NATIONAL_ID:

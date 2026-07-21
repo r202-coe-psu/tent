@@ -9,6 +9,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from ...core.security import verify_external_secret
+from ...utils.request_meta import client_ip
 from .schemas import (
     DonationCourierPatchRequest,
     DonationCourierPatchResponse,
@@ -26,23 +27,15 @@ _rate_buckets: dict[str, list[float]] = defaultdict(list)
 _rate_lock = threading.Lock()
 
 
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return "unknown"
-
-
 def _enforce_rate_limit(request: Request) -> None:
     """In-process sliding window — not shared across replicas.
 
     Captcha lives on the SvelteKit BFF. Donation routes also require
     ``EXTERNAL_API_SECRET`` Bearer (service-to-service) so a publicly
-    reachable FastAPI cannot bypass captcha.
+    reachable FastAPI cannot bypass captcha. Prefer ``X-Real-IP`` via
+    ``client_ip`` when behind nginx.
     """
-    ip = _client_ip(request)
+    ip = client_ip(request)
     now = time.monotonic()
     with _rate_lock:
         bucket = [ts for ts in _rate_buckets[ip] if now - ts < _RATE_WINDOW_SECONDS]

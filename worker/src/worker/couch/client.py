@@ -62,6 +62,15 @@ class CouchClient:
         response = await self._client.get(f"/{database}")
         return response.status_code == 200
 
+    async def ensure_database(self, database: str) -> None:
+        """Create DB if missing. CouchDB returns 201 (created) or 412 (already exists)."""
+        if await self.database_exists(database):
+            return
+        response = await self._client.put(f"/{database}")
+        if response.status_code in (201, 202, 412):
+            return
+        response.raise_for_status()
+
     async def db_update_seq(self, database: str) -> str | int:
         info = await self.get_json(f"/{database}")
         return info.get("update_seq", 0)
