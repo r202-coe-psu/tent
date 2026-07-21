@@ -36,16 +36,6 @@ export type Gender = z.infer<typeof genderSchema>;
 export const religionSchema = z.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown']);
 export type Religion = z.infer<typeof religionSchema>;
 
-export const specialNeedSchema = z.enum([
-	'elderly',
-	'disabled',
-	'pregnant',
-	'infant',
-	'chronic_illness',
-	'bedridden'
-]);
-export type SpecialNeed = z.infer<typeof specialNeedSchema>;
-
 export const stayStatusSchema = z.enum([
 	'pre_registered',
 	'active',
@@ -114,7 +104,7 @@ export interface Evacuee extends BaseDoc {
 	person_id?: PersonId;
 	country: string;
 	religion?: Religion;
-	special_needs: SpecialNeed[];
+	special_needs: string[];
 	emergency_contact?: EmergencyContact;
 	household_id: string | null;
 	current_stay: CurrentStay;
@@ -227,7 +217,7 @@ export const evacueeInputSchema = z.object({
 	medical_medications: z.array(z.string().trim().min(1)).default([]),
 	medical_note: z.string().trim().optional(),
 	track: careTrackSchema.optional(),
-	special_needs: z.array(specialNeedSchema).default([]),
+	special_needs: z.array(z.string().trim().min(1)).default([]),
 	emergency_contact: z
 		.object({
 			name: z.string().trim().min(1),
@@ -551,15 +541,6 @@ export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacu
 }
 
 // ---------------------------------------------------------------- display helpers
-
-export const SPECIAL_NEED_CHIPS: Record<SpecialNeed, { emoji: string; label: string }> = {
-	elderly: { emoji: '👴', label: 'ผู้สูงอายุ' },
-	disabled: { emoji: '♿', label: 'พิการ' },
-	pregnant: { emoji: '🤰', label: 'ครรภ์' },
-	infant: { emoji: '👶', label: 'เด็กเล็ก' },
-	chronic_illness: { emoji: '🩺', label: 'โรคเรื้อรัง' },
-	bedridden: { emoji: '🛏️', label: 'ผู้ป่วยติดเตียง' }
-} as const;
 
 export function maskNationalId(id: string | null | undefined): string {
 	if (!id || id.length < 6) return '—';

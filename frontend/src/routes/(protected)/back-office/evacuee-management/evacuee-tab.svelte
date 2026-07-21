@@ -11,13 +11,8 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import UserX from '@lucide/svelte/icons/user-x';
-	import {
-		useEvacueesPaginated,
-		useCheckInEvacuee,
-		zoneLabel,
-		SPECIAL_NEED_CHIPS
-	} from '$lib/features/people';
-	import type { Evacuee, SpecialNeed } from '$lib/features/people';
+	import { useEvacueesPaginated, useCheckInEvacuee, zoneLabel } from '$lib/features/people';
+	import type { Evacuee } from '$lib/features/people';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -38,8 +33,7 @@
 		const masterItems = vulnerableGroupQuery.data?.items ?? [];
 		return supported.map((code) => {
 			const masterItem = masterItems.find((item) => item.code === code);
-			const fallback = SPECIAL_NEED_CHIPS[code as SpecialNeed];
-			return { value: code, label: masterItem?.label ?? fallback?.label ?? code };
+			return { value: code, label: masterItem?.label ?? code };
 		});
 	});
 
@@ -237,10 +231,12 @@
 								<div class="flex flex-wrap gap-1">
 									{#if e.special_needs && e.special_needs.length > 0}
 										{#each e.special_needs as need (need)}
-											{@const chip = SPECIAL_NEED_CHIPS[need as SpecialNeed]}
+											{@const label =
+												vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label ??
+												need}
 											<span
 												class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
-												>{chip.emoji} {chip.label}</span
+												>{label}</span
 											>
 										{/each}
 									{:else}
