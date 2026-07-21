@@ -58,7 +58,7 @@ then add a separate metadata field for user affiliation tags such as `volunteer`
 - `docs/data/schema-er-diagram.md`: update logical user relationship notes/examples.
 - `docs/task-breakdown/01-core.md`, `_index.md`, `00-baseline.md`, and `02-people.md`: replace
   RBAC references from VOL/volunteer to REG/registration_staff.
-- `docs/task-breakdown/06-A.md` and `07-B.md`: keep Volunteer module wording, but clarify that
+- `docs/task-breakdown/06-A-volunteer.md` and `07-B-sop.md`: keep Volunteer module wording, but clarify that
   volunteer is a domain/profile concept and not a RoleKey.
 - `docs/prd/phase-r2-foundation.md`: align Registration Officer/persona wording with
   `registration_staff`.

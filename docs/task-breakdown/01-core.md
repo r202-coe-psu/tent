@@ -2,7 +2,7 @@
 title: "Task Breakdown — Platform/Core"
 status: active
 created: 2026-06-05
-updated: 2026-07-15
+updated: 2026-07-16
 module: core
 note: decision-synced 2026-07-15 — CR-033 remote-first; CR-005 public-tier redaction (T-01) + donation schema_v2/donation_slot (T-02) + public read-model (T-35)
 ---
@@ -27,19 +27,19 @@ note: decision-synced 2026-07-15 — CR-033 remote-first; CR-005 public-tier red
 
 | ID   | Status           | Feature / Task                                                              | FR        | Phase | Stage | Scope  | Raw MD | AI×    | Adj MD | Depends |
 | ---- | ---------------- | --------------------------------------------------------------------------- | --------- | ----- | ----- | ------ | ------ | ------ | ------ | ------- |
-| T-01 | 🔄               | RBAC extension: approved 5 roles + shelter-scope enforcement + public/API redaction | FR-34     | R2    | prod  | ส.ค.   | 8      | ÷1.25  | 6.5    | P-01    |
-| T-02 | 🔄               | Data-model expansion (household, zone, supply, ledger, donation) — additive | FR-34     | R2    | prod  | ส.ค.   | 10     | ÷1.25  | 8      | P-01    |
-| T-03 | 🔄               | Shared API convention + contract freeze for phase                           | -         | R2    | prod  | ส.ค.   | 4      | ÷1.25  | 3      | P-01    |
-| T-20 | ⬜               | R2 integration + Backoffice Foundation Gate UAT                             | gate      | R2    | post  | ส.ค.   | 5      | ÷1.3   | 4      | all R2  |
-| T-35 | ⬜               | Resource-calc backbone + read-model perf (cross-squad)                      | NFR-18,21 | R3    | prod  | ส.ค.   | 6      | ÷1.25  | 5      | T-31    |
-| T-36 | ⬜               | R3 integration + Operations Gate UAT                                        | gate      | R3    | post  | ส.ค.   | 6      | ÷1.3   | 4.5    | all R3  |
-| T-43 | ⬜               | RoPA / consent / retention finalization                                     | FR-55     | R4    | post  | ส.ค.   | 6      | ÷1.1   | 5.5    | all     |
-| T-44 | ⬜               | Cross-module UAT + production hardening + handover package                  | FR-56     | R4    | post  | ส.ค.   | 10     | ÷1.1   | 9      | all     |
-| T-46 | ⬜               | Final Handover Gate sign-off + training delivery                            | gate      | R4    | post  | ส.ค.   | 5      | ÷1.1   | 4.5    | T-44    |
-| Q-01 | ⬜               | Deployment + release automation (staging/prod, rollback)                    | NFR-25    | R4    | post  | ส.ค.   | 6      | ÷1.25  | 5      | -       |
-| Q-02 | ⬜               | Post-launch support / warranty buffer (~2 wks bugfix after go-live)         | -         | R4    | post  | ส.ค.   | 20     | ÷1.3   | 15.5   | T-44    |
-| Q-03 | ⬜               | User manual (full) + ops runbook                                            | -         | R4    | post  | ส.ค.   | 8      | ÷1.1   | 7.5    | T-44    |
-|      | **รวมทั้งโมดูล** |                                                                             |           |       |       | **94** |        | **78** |        |
+| T-01 | 🔄 | RBAC extension: approved 5 roles + shelter-scope enforcement + public/API redaction | FR-34 | R2 | prod | ส.ค. | 8 | ÷1.25 | 6.5 | P-01 |
+| T-02 | 🔄 | Data-model expansion (household, zone, supply, ledger, donation) — additive | FR-34 | R2 | prod | ส.ค. | 10 | ÷1.25 | 8 | P-01 |
+| T-03 | 🔄 | Shared API convention + contract freeze for phase | - | R2 | prod | ส.ค. | 4 | ÷1.25 | 3 | P-01 |
+| T-20 | ⬜ | R2 integration + Backoffice Foundation Gate UAT | gate | R2 | post | ส.ค. | 5 | ÷1.3 | 4 | all R2 |
+| T-35 | ⬜ | Resource-calc backbone + read-model perf (cross-squad) | NFR-18,21 | R3 | prod | ส.ค. | 6 | ÷1.25 | 5 | T-31 |
+| T-36 | ⬜ | R3 integration + Operations Gate UAT | gate | R3 | post | ส.ค. | 6 | ÷1.3 | 4.5 | all R3 |
+| T-43 | ⬜ | RoPA / consent / retention finalization | FR-55 | R4 | post | ส.ค. | 6 | ÷1.1 | 5.5 | all |
+| T-44 | ⬜ | Cross-module UAT + production hardening + handover package | FR-56 | R4 | post | ส.ค. | 10 | ÷1.1 | 9 | all |
+| T-46 | ⬜ | Final Handover Gate sign-off + training delivery | gate | R4 | post | ส.ค. | 5 | ÷1.1 | 4.5 | T-44 |
+| Q-01 | ⬜ | Deployment + release automation (staging/prod, rollback) | NFR-25 | R4 | post | ส.ค. | 6 | ÷1.25 | 5 | - |
+| Q-02 | ⬜ | Post-launch support / warranty buffer (~2 wks bugfix after go-live) | - | R4 | post | ส.ค. | 20 | ÷1.3 | 15.5 | T-44 |
+| Q-03 | ⬜ | User manual (full) + ops runbook | - | R4 | post | ส.ค. | 8 | ÷1.1 | 7.5 | T-44 |
+|  | **รวมทั้งโมดูล** |  |  |  |  | **94** |  | **78** |  |
 
 ## Task Details
 

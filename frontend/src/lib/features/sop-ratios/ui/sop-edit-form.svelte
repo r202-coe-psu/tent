@@ -101,11 +101,8 @@
 				<Dialog.Title class="mt-0.5 text-xl font-bold text-slate-900">
 					{profile.name}
 				</Dialog.Title>
-				<Dialog.Description class="mt-0.5 font-mono text-[12px] text-slate-400">
-					v{profile.version} → v{profile.version + 1}
-				</Dialog.Description>
-			</div>
-		</Dialog.Header>
+			</div></Dialog.Header
+		>
 
 		<!-- Form Body -->
 		<div class="flex-1 space-y-4 overflow-y-auto px-6 pt-5 pb-10">

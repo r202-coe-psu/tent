@@ -111,10 +111,8 @@
 <section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<MapPin class="h-5 w-5 text-shelter-blue-text" />
-		<span class="text-sm font-bold text-muted-foreground">1.</span>
-		<h2 class="text-base font-bold text-card-foreground">
-			ข้อมูลพื้นฐานและที่ตั้ง (Basic Info &amp; Location)
-		</h2>
+		<span class="text-sm font-bold text-black">1.</span>
+		<h2 class="text-base font-bold text-black">ข้อมูลพื้นฐานและที่ตั้ง</h2>
 	</div>
 
 	<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">ข้อมูลหลัก</h3>
@@ -420,11 +418,13 @@
 					<Form.Label>ผู้จัดการศูนย์</Form.Label>
 					<Input
 						{...props}
-						value={$formData.contact?.name ?? ''}
-						oninput={(e) => {
-							if (!$formData.contact) $formData.contact = {};
-							$formData.contact.name = e.currentTarget.value;
-						}}
+						bind:value={
+							() => $formData.contact?.name ?? '',
+							(value) => {
+								if (!$formData.contact) $formData.contact = {};
+								$formData.contact.name = value;
+							}
+						}
 						{disabled}
 						placeholder="เช่น นาย สมชาย ใจดี"
 					/>
@@ -465,14 +465,16 @@
 				<div class="space-y-1">
 					<span class="text-sm font-medium">{row.label}</span>
 					<Input
-						value={$formData.key_personnel?.[row.key]?.name ?? ''}
-						oninput={(e) => {
-							ensureKeyPersonnel();
-							$formData.key_personnel![row.key] = {
-								...$formData.key_personnel![row.key],
-								name: e.currentTarget.value || null
-							};
-						}}
+						bind:value={
+							() => $formData.key_personnel?.[row.key]?.name ?? '',
+							(value) => {
+								ensureKeyPersonnel();
+								$formData.key_personnel![row.key] = {
+									...$formData.key_personnel![row.key],
+									name: value || null
+								};
+							}
+						}
 						{disabled}
 						placeholder="ชื่อ-สกุล"
 					/>

@@ -3,6 +3,7 @@
 
 	// Icons
 	import Building2 from '@lucide/svelte/icons/building-2';
+	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 
 	import Card from '$lib/components/ui/card/card.svelte';
@@ -35,7 +36,7 @@
 	}
 
 	let displayShelters = $derived(
-		(data.shelters as PublicShelterCardModel[]).map((s) => {
+		((data?.shelters ?? []) as PublicShelterCardModel[]).map((s) => {
 			if (liveUserLat && liveUserLng && s.geo?.lat && s.geo?.lng) {
 				const dist = calcDistance(
 					parseFloat(liveUserLat),
@@ -50,8 +51,8 @@
 	);
 
 	$effect(() => {
-		if (data.filters.user_lat) liveUserLat = data.filters.user_lat.toString();
-		if (data.filters.user_lng) liveUserLng = data.filters.user_lng.toString();
+		if (data?.filters?.user_lat) liveUserLat = data.filters.user_lat.toString();
+		if (data?.filters?.user_lng) liveUserLng = data.filters.user_lng.toString();
 	});
 
 	function getStatusColor(status: string) {
@@ -101,7 +102,7 @@
 	<div class="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-6">
 		<PublicShelterMetricCard
 			title="ศูนย์พักพิงทั้งหมด"
-			value={data.summary?.shelters_total ?? '-'}
+			value={data?.summary?.shelters_total ?? '-'}
 			unit="แห่ง"
 			icon={ClipboardList}
 			iconClass="border-accent-purple shadow-accent-purple/15 text-accent-purple"
@@ -109,7 +110,7 @@
 
 		<PublicShelterMetricCard
 			title="ศูนย์พักพิงที่เปิดใช้งาน"
-			value={data.summary?.shelters_open ?? '-'}
+			value={data?.summary?.shelters_open ?? '-'}
 			unit="แห่ง"
 			icon={Building2}
 			iconClass="border-success shadow-success/15 text-success"
@@ -121,8 +122,8 @@
 		<!-- Left: Filters (3 columns on desktop) -->
 		<div class="flex flex-col gap-5 lg:col-span-3">
 			<ShelterFilterPanel
-				filters={data.filters}
-				availableTypes={data.available_types}
+				filters={data?.filters || {}}
+				availableTypes={data?.available_types || []}
 				action="/public/shelters"
 				bind:userLat={liveUserLat}
 				bind:userLng={liveUserLng}
@@ -157,6 +158,14 @@
 			>
 				{#each displayShelters as shelter (shelter.id)}
 					<PublicShelterCard {shelter} {getStatusColor} {getStatusText} />
+				{:else}
+					<div
+						class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border p-8 text-center text-muted-foreground"
+					>
+						<AlertTriangle class="mb-2 h-8 w-8 text-muted-foreground/50" />
+						<p class="font-medium">ไม่พบข้อมูลศูนย์พักพิง</p>
+						<p class="text-sm">ลองเปลี่ยนเงื่อนไขการค้นหาอีกครั้ง</p>
+					</div>
 				{/each}
 			</div>
 		</div>

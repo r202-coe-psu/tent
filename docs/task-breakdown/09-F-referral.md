@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module F — Referral"
 status: active
 created: 2026-06-05
-updated: 2026-06-10
+updated: 2026-07-16
 module: F
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---
@@ -18,10 +18,10 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ## Features / Tasks
 
-| ID | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-34 | Referral & hand-off (capacity/resource/medical) | FR-48 | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-19 |
-| | **รวมทั้งโมดูล** | | | | | **6** | | **4** | |
+| ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-34 | 🔄 | Referral & hand-off (capacity/resource/medical) | FR-48 | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-19 |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **6** |  | **4** |  |
 
 ## Task Details
 

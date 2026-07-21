@@ -59,26 +59,13 @@
 	>
 		<div class="w-full max-w-2xl rounded-xl bg-card p-6 shadow-xl">
 			<header class="mb-4">
-				<div class="text-xs font-medium text-muted-foreground">
-					ฐานข้อมูลมาสเตอร์ล่วงกลาง (MASTER DATA ENGINE)
-				</div>
 				<h2 id="master-data-modal-title" class="mt-1 flex items-center gap-2 text-lg font-semibold">
-					<span aria-hidden="true">🛠️</span>
-					{editing ? 'แก้ไขข้อมูล' : 'เพิ่มข้อมูล'}พารามิเตอร์มาตรฐาน / สูตรเสมือน
+					{editing ? 'แก้ไขข้อมูล' : 'เพิ่มข้อมูล'}
+					{MASTER_DATA_TYPE_LABELS[masterType]}
 				</h2>
 			</header>
 
 			<form onsubmit={handleSubmit} class="space-y-4">
-				<div class="space-y-2">
-					<Label for="master-data-type">หมวดหมู่ข้อมูล (Type)</Label>
-					<div
-						id="master-data-type"
-						class="rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-muted-foreground"
-					>
-						{MASTER_DATA_TYPE_LABELS[masterType]}
-					</div>
-				</div>
-
 				<div class="space-y-2">
 					<Label for="master-data-label">
 						Label (ชื่อแสดงผลภาษาไทย) <span class="text-destructive">*</span>

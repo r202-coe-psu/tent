@@ -2,7 +2,7 @@
 title: "Task Breakdown — Family Search"
 status: active
 created: 2026-06-05
-updated: 2026-06-22
+updated: 2026-07-16
 module: famsearch
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (§E, 2026-06-22) ขยาย exposure surface ของ /search — ดู T-41
 ---
@@ -18,11 +18,11 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ## Features / Tasks
 
-| ID | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-40 | Search consent / opt-out | FR-52 | R4 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-04 |
-| T-41 | Privacy-preserving public family search (`/search`) + anti-enumeration — **scope ขยายตาม CR-005 §E** | FR-53 | R4 | prod | ส.ค. | 9 | ÷1.4 | 6.5 | T-40,P-03 |
-| | **รวมทั้งโมดูล** | | | | | **13** | | **9** | |
+| ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-40 | ⬜ | Search consent / opt-out | FR-52 | R4 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-04 |
+| T-41 | ⬜ | Privacy-preserving public family search (`/search`) + anti-enumeration — **scope ขยายตาม CR-005 §E** | FR-53 | R4 | prod | ส.ค. | 9 | ÷1.4 | 6.5 | T-40,P-03 |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **13** |  | **9** |  |
 
 ## Task Details
 

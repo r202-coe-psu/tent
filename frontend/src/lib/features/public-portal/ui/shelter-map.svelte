@@ -85,9 +85,10 @@
 				sources: {
 					osm: {
 						type: 'raster',
-						tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+						tiles: ['https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png'],
 						tileSize: 256,
-						attribution: '&copy; OpenStreetMap contributors'
+						attribution:
+							'&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a>'
 					}
 				},
 				layers: [
@@ -104,8 +105,24 @@
 			zoom
 		});
 
+		// Add zoom and rotation controls to the map.
+		mapInstance.addControl(new L.NavigationControl(), 'bottom-right');
+
+		const updateLabelsVisibility = () => {
+			if (mapInstance && mapElement) {
+				if (mapInstance.getZoom() >= 12) {
+					mapElement.classList.add('show-labels');
+				} else {
+					mapElement.classList.remove('show-labels');
+				}
+			}
+		};
+
+		mapInstance.on('zoom', updateLabelsVisibility);
+
 		mapInstance.on('load', () => {
 			mapLoaded = true;
+			updateLabelsVisibility(); // Initial check
 		});
 	});
 
@@ -181,7 +198,7 @@
 						<div class="marker-dot" style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition: transform 0.2s;"></div>
 						<!-- Pin pointer triangle to anchor to exact location -->
 						<div style="position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid white;"></div>
-						<div style="position: absolute; top: 28px; white-space: nowrap; font-size: 11px; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+						<div class="marker-label" style="position: absolute; top: 28px; white-space: nowrap; font-size: 11px; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
 							${icon} ${shelter.name}
 						</div>
 					</div>
@@ -232,3 +249,42 @@
 </svelte:head>
 
 <div bind:this={mapElement} class="absolute inset-0 z-0 h-full w-full"></div>
+
+<!-- Legend overlay -->
+<div
+	class="absolute bottom-8 left-2 z-10 rounded-xl border border-border/50 bg-black/70 px-3 py-2.5 text-xs shadow-lg backdrop-blur-md"
+>
+	<div class="mb-2 font-bold text-white">สถานะศูนย์พักพิง</div>
+	<div class="flex flex-col gap-1.5">
+		<div class="flex items-center gap-2">
+			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#22c55e] shadow-sm"></div>
+			<span class="font-medium text-slate-200">เปิดใช้งาน</span>
+		</div>
+		<div class="flex items-center gap-2">
+			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#f59e0b] shadow-sm"></div>
+			<span class="font-medium text-slate-200">เตรียมพร้อม</span>
+		</div>
+		<div class="flex items-center gap-2">
+			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#ef4444] shadow-sm"></div>
+			<span class="font-medium text-slate-200">เต็มความจุ</span>
+		</div>
+		<div class="flex items-center gap-2">
+			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#94a3b8] shadow-sm"></div>
+			<span class="font-medium text-slate-200">ปิดทำการ</span>
+		</div>
+	</div>
+</div>
+
+<style>
+	:global(.marker-label) {
+		opacity: 0;
+		visibility: hidden;
+		transition:
+			opacity 0.2s ease-in-out,
+			visibility 0.2s ease-in-out;
+	}
+	:global(.show-labels .marker-label) {
+		opacity: 1;
+		visibility: visible;
+	}
+</style>

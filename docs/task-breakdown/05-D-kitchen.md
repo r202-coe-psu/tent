@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module D — Kitchen & Food"
 status: active
 created: 2026-06-05
-updated: 2026-06-10
+updated: 2026-07-16
 module: D
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---
@@ -18,13 +18,13 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ## Features / Tasks
 
-| ID | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-17 | Groundwork: kitchen schema + Inventory linkage spike | prep R3 | R2 | prod | ส.ค. | 6 | ÷1.25 | 5 | T-02 |
-| T-25 | Meal plan from occupancy x SOP ratio | FR-39 | R3 | prod | ส.ค. | 6 | ÷1.4 | 4.5 | T-17,T-31 |
-| T-26 | Kitchen requisition (deduct stock) | FR-40 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-25,T-12 |
-| T-27 | Meal service record (served / waste / external) | FR-41 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-26 |
-| | **รวมทั้งโมดูล** | | | | | **22** | | **15.5** | |
+| ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-17 | 🔄 | Groundwork: kitchen schema + Inventory linkage spike | prep R3 | R2 | prod | ส.ค. | 6 | ÷1.25 | 5 | T-02 |
+| T-25 | 🔄 | Meal plan from occupancy x SOP ratio | FR-39 | R3 | prod | ส.ค. | 6 | ÷1.4 | 4.5 | T-17,T-31 |
+| T-26 | 🔄 | Kitchen requisition (deduct stock) | FR-40 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-25,T-12 |
+| T-27 | 🔄 | Meal service record (served / waste / external) | FR-41 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-26 |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **22** |  | **15.5** |  |
 
 ## Task Details
 

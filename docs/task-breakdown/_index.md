@@ -2,7 +2,7 @@
 title: "Task Breakdown by Module — Index"
 status: active
 created: 2026-06-05
-updated: 2026-07-15
+updated: 2026-07-16
 note: decision-synced 2026-07-15 — CR-033 remote-first; Markdown task-breakdown = planning source; technical source = docs/data/schema.md + data-model.md + api-contract.md
 ---
 
@@ -66,16 +66,16 @@ Planning source ปัจจุบัน = Markdown ใน `docs/task-breakdown/
 
 | #   | Module                                    | Tasks | Adj MD  | Phase      | Target                 |
 | --- | ----------------------------------------- | ----- | ------- | ---------- | ---------------------- |
-| 0   | [Baseline (FR-1–20)](00-baseline.md)      | 9     | 37      | Foundation | ก.ค. (Foundation Gate) |
+| 0   | [Baseline (FR-1–20)](00-baseline.md)      | 14    | 37      | Foundation | ก.ค. (Foundation Gate) |
 | 1   | [Platform/Core](01-core.md)               | 12    | 78      | R2, R3, R4 | ส.ค.                   |
 | 2   | [Household & Zoning](02-people.md)        | 6     | 18.5    | R2         | ส.ค.                   |
-| 3   | [Module C — Supply & Inventory](03-C.md)  | 6     | 19.5    | R2, R4     | ส.ค. + deferred tail   |
+| 3   | [Module C — Supply & Inventory](03-C-supply.md)  | 6     | 19.5    | R2, R4     | ส.ค. + deferred tail   |
 | 4   | [Donation](04-donation.md)                | 7     | 25.5    | R2, R3     | ส.ค.                   |
-| 5   | [Module D — Kitchen & Food](05-D.md)      | 4     | 15.5    | R2, R3     | ส.ค.                   |
-| 6   | [Module A — Volunteer](06-A.md)           | 2     | 7.5     | R3         | ส.ค.                   |
-| 7   | [Module B — SOP & Resource Calc](07-B.md) | 5     | 21.5    | R2, R3, R4 | ส.ค. + deferred tail   |
-| 8   | [Module E — Shelter Report Cases](08-E.md) | 2    | 9       | R2, R3     | ส.ค. (CR-040)          |
-| 9   | [Module F — Referral](09-F.md)            | 1     | 4       | R3         | ส.ค.                   |
+| 5   | [Module D — Kitchen & Food](05-D-kitchen.md)      | 4     | 15.5    | R2, R3     | ส.ค.                   |
+| 6   | [Module A — Volunteer](06-A-volunteer.md)           | 2     | 7.5     | R3         | ส.ค.                   |
+| 7   | [Module B — SOP & Resource Calc](07-B-sop.md) | 5     | 21.5    | R2, R3, R4 | ส.ค. + deferred tail   |
+| 8   | [Module E — Shelter Report Cases](08-E-cases.md) | 2    | 9       | R2, R3     | ส.ค. (CR-040)          |
+| 9   | [Module F — Referral](09-F-referral.md)            | 1     | 4       | R3         | ส.ค.                   |
 | 10  | [EOC + Open API (Part 3)](10-eoc.md)      | 3     | 13.5    | R4         | ก.ย. wk2 (deferred)    |
 | 11  | [Family Search](11-famsearch.md)          | 2     | 9       | R4         | ส.ค.                   |
 | 12  | [Public Portal (PUB tier)](12-public.md)  | 3     | 11.5    | R3         | ส.ค. (CR-005)          |

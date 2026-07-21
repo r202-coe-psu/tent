@@ -2,7 +2,7 @@
 title: "Task Breakdown — Household & Zoning"
 status: active
 created: 2026-06-05
-updated: 2026-06-24
+updated: 2026-07-16
 module: people
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; updated 2026-06-18 per CR-001 (permission cross-ref, lifecycle, screening inline, pre-registration, bulk ops, UI split); updated 2026-06-24 per CR-009 (T-04 — Household management ย้ายไป Stage 3, 2-box search/create flow)
 ---
@@ -18,15 +18,15 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ## Features / Tasks
 
-| ID | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-04 | Household create + attach members + head | FR-21 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-02 |
-| T-05 | Household Shelter ID/QR generation | FR-22 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-04 |
-| T-06 | Household search + household check-in/out | FR-23 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-05 |
-| T-07 | Pet / asset / vehicle records | FR-24 | R2 | prod | ส.ค. | 3 | ÷1.6 | 2 | T-04 |
-| T-08 | Zone definition + capacity | FR-25 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-02 |
-| T-09 | Zone allocation + suggest (warning-only) | FR-26 | R2 | prod | ส.ค. | 5 | ÷1.4 | 3.5 | T-08 |
-| | **รวมทั้งโมดูล** | | | | | **28** | | **18.5** | |
+| ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-04 | 🔄 | Household create + attach members + head | FR-21 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-02 |
+| T-05 | ⬜ | Household Shelter ID/QR generation | FR-22 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-04 |
+| T-06 | 🔄 | Household search + household check-in/out | FR-23 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-05 |
+| T-07 | 🔄 | Pet / asset / vehicle records | FR-24 | R2 | prod | ส.ค. | 3 | ÷1.6 | 2 | T-04 |
+| T-08 | 🔄 | Zone definition + capacity | FR-25 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-02 |
+| T-09 | 🔄 | Zone allocation + suggest (warning-only) | FR-26 | R2 | prod | ส.ค. | 5 | ÷1.4 | 3.5 | T-08 |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **28** |  | **18.5** |  |
 
 ## Task Details
 
