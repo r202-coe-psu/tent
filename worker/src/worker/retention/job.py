@@ -61,6 +61,9 @@ async def _audit_and_delete(
 
 
 async def reconcile_closed_shelters(job_run_id: str) -> None:
+	# Safety net only: CDC already deletes closed shelters from public_shelters
+	# (project_shelter returns "delete"). This path cleans orphaned rows if any
+	# still carry status "closed" (legacy / missed cascade).
 	closed = await PublicShelter.find(PublicShelter.status == "closed").to_list()
 	for shelter in closed:
 		persons = await PublicPerson.find(PublicPerson.shelter_code == shelter.shelter_code).to_list()

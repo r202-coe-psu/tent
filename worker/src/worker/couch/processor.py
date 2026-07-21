@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from worker.couch.checkpoint import save_checkpoint
-from worker.masking import shelter_code_from_db_name, shelter_db_name
+from worker.masking import shelter_code_from_db_name
 from worker.mongo import (
     apply_donation,
     apply_need,
@@ -24,6 +24,13 @@ from worker.projectors.shelter import project_shelter
 logger = logging.getLogger(__name__)
 
 REGISTRY_DB = "registry"
+
+
+async def _reproject_needs(couch: Any, shelter_code: str) -> None:
+    """Recompute public_needs from open campaigns − donations for one shelter."""
+    need_actions = await project_needs_for_shelter(couch, shelter_code)
+    for action, payload in need_actions:
+        await apply_need(action, payload)
 
 
 async def process_change(couch: Any, database: str, change: dict[str, Any]) -> None:
@@ -51,6 +58,8 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 await apply_person("delete", {"_id": doc_id})
                 if doc_id.startswith("donation:"):
                     await apply_donation("delete", {"_id": doc_id})
+                    # Declared qty left the board — recompute remaining needs.
+                    await _reproject_needs(couch, shelter_code)
         await save_checkpoint(database, seq)
         return
 
@@ -82,9 +91,9 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
             elif doc_type == "donation":
                 action, payload = project_donation(doc, shelter_code=shelter_code)
                 await apply_donation(action, payload)
+                # New/updated declared items change remaining qty on the public board.
+                await _reproject_needs(couch, shelter_code)
             elif doc_type in {"donation_campaign", "supply_item"}:
-                need_actions = await project_needs_for_shelter(couch, shelter_code)
-                for action, payload in need_actions:
-                    await apply_need(action, payload)
+                await _reproject_needs(couch, shelter_code)
 
     await save_checkpoint(database, seq)
