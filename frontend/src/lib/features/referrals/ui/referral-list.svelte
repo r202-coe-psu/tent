@@ -40,7 +40,6 @@
 
 	// Reset currentPage automatically when activeTab or searchQuery changes
 	$effect(() => {
-		// Read dependencies to register Svelte 5 reactivity
 		if (searchQuery !== undefined || activeTab !== undefined) {
 			currentPage = 1;
 		}
@@ -57,7 +56,7 @@
 			const query = searchQuery.toLowerCase().trim();
 			list = list.filter((r) => {
 				const evacName = getEvacueeName(r.evacuee_id).toLowerCase();
-				const orgName = r.to_org.name.toLowerCase();
+				const orgName = r.to_org?.name?.toLowerCase() ?? r.to_shelter_code?.toLowerCase() ?? '';
 				const evacId = r.evacuee_id.toLowerCase();
 				return evacName.includes(query) || orgName.includes(query) || evacId.includes(query);
 			});
@@ -117,6 +116,18 @@
 		}
 	}
 
+	function getKindBadge(type?: string) {
+		switch (type) {
+			case 'capacity':
+				return 'ย้ายศูนย์';
+			case 'resource':
+				return 'ขอสิ่งของ';
+			case 'medical-emergency':
+			default:
+				return 'พยาบาล';
+		}
+	}
+
 	function formatDate(isoString: string) {
 		try {
 			const d = new Date(isoString);
@@ -142,7 +153,7 @@
 		<input
 			type="text"
 			bind:value={searchQuery}
-			placeholder="ค้นหาชื่อผู้ประสบภัย หรือหน่วยงานปลายทาง..."
+			placeholder="ค้นหาชื่อผู้ประสบภัย หรือหน่วยงาน/ศูนย์พักพิงปลายทาง..."
 			class="flex h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 pl-9 text-base shadow-xs ring-offset-background transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:ring-destructive/40"
 		/>
 	</div>
@@ -186,6 +197,9 @@
 					<!-- Block 1: Content Envelope (Left Side) -->
 					<div class="flex flex-1 flex-col gap-1.5 font-sans">
 						<div class="flex flex-wrap items-center gap-2">
+							<Badge variant="outline" class="text-xs">
+								{getKindBadge(referral.referral_type)}
+							</Badge>
 							<Badge class={getUrgencyStyle(referral.urgency)}>
 								{referral.urgency === 'urgent' ? 'ด่วนมาก' : 'ปกติ'}
 							</Badge>
@@ -207,11 +221,9 @@
 							<!-- Subtext Block -->
 							<div class="mt-1.5 space-y-1 text-xs font-semibold text-foreground/80">
 								<p>
-									ส่งตัวไปยัง: {referral.to_org.name} ({referral.to_org.kind === 'hospital'
-										? 'โรงพยาบาล'
-										: referral.to_org.kind === 'social_services'
-											? 'สังคมสงเคราะห์'
-											: 'อื่น ๆ'})
+									ส่งตัวไปยัง: {referral.to_shelter_code
+										? referral.to_shelter_code
+										: referral.to_org?.name || '-'}
 								</p>
 								<p>เหตุผล: {referral.reason}</p>
 							</div>

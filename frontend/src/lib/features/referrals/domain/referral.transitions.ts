@@ -44,7 +44,8 @@ export function applyTransition(
 	doc: Referral,
 	to: ReferralStatus,
 	actor: string,
-	nowIso: string
+	nowIso: string,
+	responseReason?: string
 ): Referral {
 	if (!canTransition(doc.status, to)) {
 		throw new Error(
@@ -72,6 +73,7 @@ export function applyTransition(
 		...doc,
 		status: to,
 		timeline,
+		response_reason: responseReason ?? doc.response_reason,
 		updated_at: nowIso
 	};
 }

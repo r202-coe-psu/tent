@@ -14,6 +14,7 @@ function mockReferral(overrides?: Partial<Referral>): Referral {
 		updated_at: '2026-07-11T05:00:00.000Z',
 		created_by: 'Staff A',
 		evacuee_id: 'evacuee:01F8MECHEVACUEEID1234567',
+		referral_type: 'medical-emergency',
 		to_org: {
 			name: 'General Hospital',
 			kind: 'hospital',
@@ -29,10 +30,31 @@ function mockReferral(overrides?: Partial<Referral>): Referral {
 
 describe('Referral Domain', () => {
 	describe('Schema Validation & Type Guard', () => {
-		it('should validate a correct referral document', () => {
+		it('should validate a correct medical-emergency referral document', () => {
 			const doc = mockReferral();
 			expect(isReferral(doc)).toBe(true);
 			expect(() => referralSchema.parse(doc)).not.toThrow();
+		});
+
+		it('should validate a capacity referral document with to_shelter_code', () => {
+			const doc = mockReferral({
+				referral_type: 'capacity',
+				to_shelter_code: 'SH002',
+				to_org: undefined,
+				reason: 'Shelter SH001 reached maximum capacity'
+			});
+			expect(isReferral(doc)).toBe(true);
+			expect(doc.referral_type).toBe('capacity');
+			expect(doc.to_shelter_code).toBe('SH002');
+		});
+
+		it('should validate a resource referral document', () => {
+			const doc = mockReferral({
+				referral_type: 'resource',
+				reason: 'Requesting 50 emergency blanket kits'
+			});
+			expect(isReferral(doc)).toBe(true);
+			expect(doc.referral_type).toBe('resource');
 		});
 
 		it('should reject when id format is wrong', () => {
@@ -44,22 +66,11 @@ describe('Referral Domain', () => {
 			const doc = mockReferral({ evacuee_id: 'evac:123' });
 			expect(isReferral(doc)).toBe(false);
 		});
-
-		it('should reject when to_org name is empty', () => {
-			const doc = mockReferral({
-				to_org: {
-					name: '',
-					kind: 'hospital'
-				}
-			});
-			expect(isReferral(doc)).toBe(false);
-		});
 	});
 
-	describe('State Machine transitions (25-cell Matrix Coverage)', () => {
+	describe('State Machine transitions (25-cell Matrix Coverage & Response Reason)', () => {
 		const statuses: ReferralStatus[] = ['draft', 'sent', 'accepted', 'rejected', 'closed'];
 
-		// Test canTransition for all 25 combinations
 		describe('canTransition combinations', () => {
 			const expectedTransitions: Record<ReferralStatus, ReferralStatus[]> = {
 				draft: ['sent'],
@@ -79,8 +90,7 @@ describe('Referral Domain', () => {
 			});
 		});
 
-		// Test applyTransition for valid paths
-		describe('applyTransition behavior', () => {
+		describe('applyTransition behavior with response_reason', () => {
 			it('should apply draft → sent', () => {
 				const doc = mockReferral({ status: 'draft' });
 				const nowIso = '2026-07-11T05:10:00.000Z';
@@ -92,7 +102,7 @@ describe('Referral Domain', () => {
 				expect(updated.timeline.responded).toBeUndefined();
 			});
 
-			it('should apply sent → accepted', () => {
+			it('should apply sent → accepted with response_reason', () => {
 				const doc = mockReferral({
 					status: 'sent',
 					timeline: {
@@ -100,13 +110,15 @@ describe('Referral Domain', () => {
 					}
 				});
 				const nowIso = '2026-07-11T05:20:00.000Z';
-				const updated = applyTransition(doc, 'accepted', 'Hospital Staff B', nowIso);
+				const reason = 'Bed space confirmed in Zone B';
+				const updated = applyTransition(doc, 'accepted', 'Hospital Staff B', nowIso, reason);
 
 				expect(updated.status).toBe('accepted');
+				expect(updated.response_reason).toBe(reason);
 				expect(updated.timeline.responded).toEqual({ at: nowIso, by: 'Hospital Staff B' });
 			});
 
-			it('should apply sent → rejected', () => {
+			it('should apply sent → rejected with response_reason', () => {
 				const doc = mockReferral({
 					status: 'sent',
 					timeline: {
@@ -114,9 +126,11 @@ describe('Referral Domain', () => {
 					}
 				});
 				const nowIso = '2026-07-11T05:20:00.000Z';
-				const updated = applyTransition(doc, 'rejected', 'Hospital Staff B', nowIso);
+				const reason = 'ICU capacity full';
+				const updated = applyTransition(doc, 'rejected', 'Hospital Staff B', nowIso, reason);
 
 				expect(updated.status).toBe('rejected');
+				expect(updated.response_reason).toBe(reason);
 				expect(updated.timeline.responded).toEqual({ at: nowIso, by: 'Hospital Staff B' });
 			});
 
@@ -168,14 +182,15 @@ describe('Referral Domain', () => {
 			externalScopes.forEach((scope) => {
 				it(`hospital referral: redacts target details and medical info for ${scope}`, () => {
 					const doc = mockReferral({
+						referral_type: 'medical-emergency',
 						to_org: { name: 'Emergency Clinic', kind: 'hospital', contact: '911' },
 						reason: 'Sprained ankle with swelling',
 						notes: 'Allergic to penicillin'
 					});
 
 					interface RedactedHospitalDoc {
-						to_org: {
-							kind: string;
+						to_org?: {
+							kind?: string;
 							name?: string;
 							contact?: string;
 						};
@@ -187,10 +202,10 @@ describe('Referral Domain', () => {
 
 					const redacted = redactForScope(doc, scope) as unknown as RedactedHospitalDoc;
 
-					expect(redacted.to_org.kind).toBe('hospital');
+					expect(redacted.to_org?.kind).toBe('hospital');
 					// Redacted fields
-					expect(redacted.to_org.name).toBeUndefined();
-					expect(redacted.to_org.contact).toBeUndefined();
+					expect(redacted.to_org?.name).toBeUndefined();
+					expect(redacted.to_org?.contact).toBeUndefined();
 					expect(redacted.reason).toBeUndefined();
 					expect(redacted.notes).toBeUndefined();
 					expect(redacted.evacuee_id).toBeUndefined();
@@ -199,14 +214,15 @@ describe('Referral Domain', () => {
 
 				it(`non-hospital referral: keeps org details/reason but strips PII for ${scope}`, () => {
 					const doc = mockReferral({
+						referral_type: 'resource',
 						to_org: { name: 'Red Cross Shelter', kind: 'social_services', contact: '123' },
 						reason: 'Need emergency family pack',
 						notes: 'Has 3 children'
 					});
 
 					interface RedactedSocialDoc {
-						to_org: {
-							kind: string;
+						to_org?: {
+							kind?: string;
 							name?: string;
 							contact?: string;
 						};
@@ -218,10 +234,10 @@ describe('Referral Domain', () => {
 
 					const redacted = redactForScope(doc, scope) as unknown as RedactedSocialDoc;
 
-					expect(redacted.to_org.kind).toBe('social_services');
+					expect(redacted.to_org?.kind).toBe('social_services');
 					// Kept fields
-					expect(redacted.to_org.name).toBe('Red Cross Shelter');
-					expect(redacted.to_org.contact).toBe('123');
+					expect(redacted.to_org?.name).toBe('Red Cross Shelter');
+					expect(redacted.to_org?.contact).toBe('123');
 					expect(redacted.reason).toBe('Need emergency family pack');
 					expect(redacted.notes).toBe('Has 3 children');
 					// Redacted PII

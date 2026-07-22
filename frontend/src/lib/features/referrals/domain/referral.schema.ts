@@ -2,10 +2,12 @@
  * T-34.1 — Referral domain schema
  *
  * Pure TypeScript / Zod — No I/O, No PouchDB, No Svelte.
- * Aligned with schema.md §2.11 and CR-D1 (External Only, R3 scope).
+ * Aligned with schema.md §2.11 & Option A (Full T-34 DoD).
  *
- * CR-D1 scope: `to_org` = external organisation only (hospital, social_services, other).
- * Inter-shelter capacity transfer is deferred to R4.
+ * Supports 3 referral kinds:
+ * - `capacity`: inter-shelter transfer due to capacity limits.
+ * - `resource`: requesting external/inter-shelter resource support.
+ * - `medical-emergency`: medical referral to healthcare organization.
  */
 
 import { z } from 'zod';
@@ -14,16 +16,19 @@ import { z } from 'zod';
 // Sub-schemas
 // ---------------------------------------------------------------------------
 
+export const referralTypeSchema = z.enum(['capacity', 'resource', 'medical-emergency']);
+export type ReferralType = z.infer<typeof referralTypeSchema>;
+
 export const referralStatusSchema = z.enum(['draft', 'sent', 'accepted', 'rejected', 'closed']);
 export type ReferralStatus = z.infer<typeof referralStatusSchema>;
 
 export const referralUrgencySchema = z.enum(['normal', 'urgent']);
 export type ReferralUrgency = z.infer<typeof referralUrgencySchema>;
 
-/** Target external organisation (CR-D1: external only in R3) */
+/** Target external organisation (used when sending to hospital / social services) */
 export const toOrgSchema = z.object({
-	name: z.string().min(1, 'Organisation name is required'),
-	kind: z.enum(['hospital', 'social_services', 'other']),
+	name: z.string().optional(),
+	kind: z.enum(['hospital', 'social_services', 'other']).optional(),
 	contact: z.string().optional()
 });
 export type ToOrg = z.infer<typeof toOrgSchema>;
@@ -55,11 +60,17 @@ export const referralSchema = z.object({
 	created_by: z.string().min(1),
 
 	evacuee_id: z.string().startsWith('evacuee:'),
-	to_org: toOrgSchema,
+	referral_type: referralTypeSchema.default('medical-emergency'),
+	to_shelter_code: z.string().optional(),
+	to_org: toOrgSchema.optional(),
 	reason: z
 		.string()
 		.min(1, 'Reason is required')
 		.max(2000, 'Reason must not exceed 2000 characters'),
+	response_reason: z
+		.string()
+		.max(2000, 'Response reason must not exceed 2000 characters')
+		.optional(),
 	urgency: referralUrgencySchema,
 	status: referralStatusSchema,
 	timeline: referralTimelineSchema,
@@ -71,6 +82,8 @@ export type Referral = z.infer<typeof referralSchema>;
 /** Fields required to create a new referral draft. */
 export const referralInputSchema = referralSchema.pick({
 	evacuee_id: true,
+	referral_type: true,
+	to_shelter_code: true,
 	to_org: true,
 	reason: true,
 	urgency: true,
@@ -90,6 +103,8 @@ export const isReferral = (d: unknown): d is Referral => referralSchema.safePars
 export function buildReferralBody(input: ReferralInput) {
 	return {
 		evacuee_id: input.evacuee_id,
+		referral_type: input.referral_type ?? 'medical-emergency',
+		to_shelter_code: input.to_shelter_code,
 		to_org: input.to_org,
 		reason: input.reason,
 		urgency: input.urgency,

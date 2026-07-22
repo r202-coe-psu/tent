@@ -2,6 +2,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
@@ -21,12 +22,27 @@
 	const queryClient = useQueryClient();
 	const transitionMutation = useTransitionReferral(queryClient);
 
-	async function handleTransition(to: ReferralStatus, label: string) {
-		await toast.promise(transitionMutation.mutateAsync({ id: referral._id, to }), {
+	let responseReasonInput = $state('');
+	let showReasonPrompt = $state<'accepted' | 'rejected' | null>(null);
+
+	async function handleTransition(to: ReferralStatus, label: string, reason?: string) {
+		await toast.promise(transitionMutation.mutateAsync({ id: referral._id, to, reason }), {
 			loading: `กำลังเปลี่ยนสถานะเป็น "${label}"...`,
 			success: `เปลี่ยนสถานะเป็น "${label}" สำเร็จ`,
 			error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
 		});
+		showReasonPrompt = null;
+		responseReasonInput = '';
+	}
+
+	function triggerActionWithReason(to: 'accepted' | 'rejected') {
+		showReasonPrompt = to;
+	}
+
+	function submitWithReason() {
+		if (!showReasonPrompt) return;
+		const label = showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ';
+		handleTransition(showReasonPrompt, label, responseReasonInput.trim());
 	}
 
 	function getStatusLabel(status: ReferralStatus) {
@@ -41,6 +57,18 @@
 				return 'ปฏิเสธรับการส่งต่อ (Rejected)';
 			case 'closed':
 				return 'ปิดการส่งตัวแล้ว (Closed)';
+		}
+	}
+
+	function getKindLabel(type?: string) {
+		switch (type) {
+			case 'capacity':
+				return 'ย้ายศูนย์พักพิง (Capacity Transfer)';
+			case 'resource':
+				return 'ขอสนับสนุนทรัพยากร (Resource Request)';
+			case 'medical-emergency':
+			default:
+				return 'การรักษาพยาบาล (Medical Emergency)';
 		}
 	}
 
@@ -70,7 +98,7 @@
 
 <div class="space-y-6">
 	<!-- Redaction warning for hospitals -->
-	{#if referral.to_org.kind === 'hospital'}
+	{#if referral.referral_type === 'medical-emergency' || referral.to_org?.kind === 'hospital'}
 		<RedactionBanner />
 	{/if}
 
@@ -84,6 +112,9 @@
 					<p class="mt-1 text-xs text-muted-foreground">ID: {referral._id}</p>
 				</div>
 				<div class="flex items-center gap-2">
+					<Badge variant="secondary" class="font-medium">
+						{getKindLabel(referral.referral_type)}
+					</Badge>
 					<Badge class={getUrgencyStyle(referral.urgency)}>
 						{referral.urgency === 'urgent' ? 'ด่วนมาก' : 'ปกติ'}
 					</Badge>
@@ -106,39 +137,51 @@
 							<p class="text-xs text-muted-foreground">รหัสผู้ประสบภัย (Evacuee ID)</p>
 							<p class="mt-0.5 font-mono font-medium">{referral.evacuee_id}</p>
 						</div>
-						<!-- In standard production, PII redacted by backend will hide first_name/last_name inside the JSON if Hospital scope is applied. -->
 					</div>
 				</div>
 			</div>
 
-			<!-- Section 2: Destination Org -->
+			<!-- Section 2: Destination Org / Shelter -->
 			<div class="space-y-3">
 				<h3 class="text-sm font-semibold tracking-wider text-foreground uppercase">
 					ปลายทางที่ส่งต่อ
 				</h3>
 				<div class="grid grid-cols-1 gap-4 text-sm md:grid-cols-3">
-					<div>
-						<p class="text-xs text-muted-foreground">ชื่อหน่วยงาน</p>
-						<p class="mt-0.5 font-medium">{referral.to_org.name}</p>
-					</div>
-					<div>
-						<p class="text-xs text-muted-foreground">ประเภทหน่วยงาน</p>
-						<p class="mt-0.5 font-medium">
-							{#if referral.to_org.kind === 'hospital'}
-								สถานพยาบาล
-							{:else}
-								{referral.to_org.kind}
-							{/if}
-						</p>
-					</div>
-					<div>
-						<p class="text-xs text-muted-foreground">เบอร์โทรศัพท์ติดต่อ</p>
-						<p class="mt-0.5 font-medium">{referral.to_org.contact || '-'}</p>
-					</div>
+					{#if referral.referral_type === 'capacity' || referral.to_shelter_code}
+						<div>
+							<p class="text-xs text-muted-foreground">ศูนย์พักพิงปลายทาง (Target Shelter)</p>
+							<p class="mt-0.5 font-mono font-semibold text-primary">
+								{referral.to_shelter_code || '-'}
+							</p>
+						</div>
+					{/if}
+
+					{#if referral.to_org}
+						<div>
+							<p class="text-xs text-muted-foreground">ชื่อหน่วยงาน</p>
+							<p class="mt-0.5 font-medium">{referral.to_org.name || '-'}</p>
+						</div>
+						<div>
+							<p class="text-xs text-muted-foreground">ประเภทหน่วยงาน</p>
+							<p class="mt-0.5 font-medium">
+								{#if referral.to_org.kind === 'hospital'}
+									สถานพยาบาล
+								{:else if referral.to_org.kind === 'social_services'}
+									หน่วยงานสังคมสงเคราะห์
+								{:else}
+									{referral.to_org.kind || '-'}
+								{/if}
+							</p>
+						</div>
+						<div>
+							<p class="text-xs text-muted-foreground">เบอร์โทรศัพท์ติดต่อ</p>
+							<p class="mt-0.5 font-medium">{referral.to_org.contact || '-'}</p>
+						</div>
+					{/if}
 				</div>
 			</div>
 
-			<!-- Section 3: Referral Medical Reason -->
+			<!-- Section 3: Referral Medical / Resource Reason -->
 			<div class="space-y-3">
 				<h3 class="text-sm font-semibold tracking-wider text-foreground uppercase">
 					เหตุผลความจำเป็นในการส่งต่อ
@@ -149,6 +192,22 @@
 					{referral.reason}
 				</p>
 			</div>
+
+			<!-- Response Reason if present -->
+			{#if referral.response_reason}
+				<div class="space-y-3">
+					<h3
+						class="text-sm font-semibold tracking-wider text-emerald-700 uppercase dark:text-emerald-400"
+					>
+						เหตุผลการตอบรับ/ปฏิเสธจากปลายทาง (Response Reason)
+					</h3>
+					<p
+						class="rounded-md border border-emerald-200 bg-emerald-50/50 p-3 text-sm font-medium whitespace-pre-wrap text-emerald-900 dark:border-emerald-900/30 dark:bg-emerald-950/30 dark:text-emerald-200"
+					>
+						{referral.response_reason}
+					</p>
+				</div>
+			{/if}
 
 			<!-- Notes -->
 			{#if referral.notes}
@@ -161,6 +220,32 @@
 					>
 						{referral.notes}
 					</p>
+				</div>
+			{/if}
+
+			<!-- Prompt for Response Reason before Accept/Reject -->
+			{#if showReasonPrompt}
+				<div class="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-4">
+					<h4 class="text-sm font-semibold text-foreground">
+						ระบุเหตุผลการ{showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ'} (Response Reason)
+					</h4>
+					<Input
+						type="text"
+						placeholder="ระบุเหตุผลหรือคำอธิบายประกอบการพิจารณา..."
+						bind:value={responseReasonInput}
+					/>
+					<div class="flex justify-end gap-2">
+						<Button variant="ghost" size="sm" onclick={() => (showReasonPrompt = null)}>
+							ยกเลิก
+						</Button>
+						<Button
+							size="sm"
+							variant={showReasonPrompt === 'accepted' ? 'default' : 'destructive'}
+							onclick={submitWithReason}
+						>
+							ยืนยันการ{showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ'}
+						</Button>
+					</div>
 				</div>
 			{/if}
 
@@ -271,7 +356,7 @@
 				<Button
 					size="sm"
 					class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
-					onclick={() => handleTransition('accepted', 'ตอบรับ')}
+					onclick={() => triggerActionWithReason('accepted')}
 				>
 					<CheckCircle2 class="h-4 w-4" />
 					ตอบรับการส่งต่อ (Accept)
@@ -283,7 +368,7 @@
 					size="sm"
 					variant="outline"
 					class="gap-1.5 border-rose-300 text-rose-600 hover:bg-rose-50"
-					onclick={() => handleTransition('rejected', 'ปฏิเสธ')}
+					onclick={() => triggerActionWithReason('rejected')}
 				>
 					<XCircle class="h-4 w-4" />
 					ปฏิเสธรับการส่งต่อ (Reject)

@@ -23,34 +23,48 @@
 	const createReferralMutation = useCreateReferral(queryClient);
 
 	// Setup Superform
-	const form = superForm(defaults(zod4(referralInputSchema)), {
-		SPA: true,
-		dataType: 'json',
-		validators: zod4(referralInputSchema),
-		resetForm: true,
-		onUpdate: async ({ form: f }) => {
-			if (!f.valid) {
-				toast.error('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
-				return;
-			}
-			if (!f.data.evacuee_id) {
-				toast.error('กรุณาเลือกผู้ประสบภัยสำหรับทำรายการส่งต่อ');
-				return;
-			}
-
-			await toast.promise(
-				(async () => {
-					const res = await createReferralMutation.mutateAsync(f.data);
-					onCreated(res._id);
-				})(),
-				{
-					loading: 'กำลังบันทึกข้อมูลการส่งต่อ...',
-					success: 'สร้างรายการส่งต่อสำเร็จ!',
-					error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการสร้างรายการ')
+	const form = superForm(
+		defaults(
+			{
+				referral_type: 'medical-emergency',
+				urgency: 'normal',
+				to_org: { kind: 'hospital' }
+			},
+			zod4(referralInputSchema)
+		),
+		{
+			SPA: true,
+			dataType: 'json',
+			validators: zod4(referralInputSchema),
+			resetForm: true,
+			onUpdate: async ({ form: f }) => {
+				if (!f.valid) {
+					toast.error('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
+					return;
 				}
-			);
+				if (!f.data.evacuee_id) {
+					toast.error('กรุณาเลือกผู้ประสบภัยสำหรับทำรายการส่งต่อ');
+					return;
+				}
+				if (f.data.referral_type === 'capacity' && !f.data.to_shelter_code) {
+					toast.error('กรุณาระบุรหัสศูนย์พักพิงปลายทางสำหรับการย้ายศูนย์');
+					return;
+				}
+
+				await toast.promise(
+					(async () => {
+						const res = await createReferralMutation.mutateAsync(f.data);
+						onCreated(res._id);
+					})(),
+					{
+						loading: 'กำลังบันทึกข้อมูลการส่งต่อ...',
+						success: 'สร้างรายการส่งต่อสำเร็จ!',
+						error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการสร้างรายการ')
+					}
+				);
+			}
 		}
-	});
+	);
 
 	const { form: formData, submitting, errors } = form;
 
@@ -96,7 +110,7 @@
 
 <div class="space-y-6">
 	<!-- Warning Banner when Hospital destination is chosen -->
-	{#if $formData.to_org?.kind === 'hospital'}
+	{#if $formData.referral_type === 'medical-emergency' || $formData.to_org?.kind === 'hospital'}
 		<RedactionBanner />
 	{/if}
 
@@ -106,14 +120,103 @@
 				>สร้างรายการส่งต่อผู้ประสบภัย (New Referral Request)</Card.Title
 			>
 			<Card.Description
-				>กรอกข้อมูลรายละเอียดหน่วยงานปลายทางและผู้ประสบภัยที่ต้องการส่งตัว</Card.Description
+				>เลือกประเภทการส่งต่อและกรอกข้อมูลปลายทางรวมถึงรายละเอียดผู้ประสบภัยที่ต้องการส่งตัว</Card.Description
 			>
 		</Card.Header>
 		<Card.Content class="pt-6">
 			<form method="POST" use:form.enhance class="space-y-6">
-				<!-- Step 1: Evacuee Selection -->
+				<!-- Step 1: Referral Kind Selection -->
+				<div class="space-y-3">
+					<span class="text-sm font-semibold text-foreground"
+						>1. ประเภทการส่งต่อ (Referral Kind) *</span
+					>
+					<Form.Field {form} name="referral_type">
+						<Form.Control>
+							{#snippet children({ props })}
+								<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+									<label
+										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 transition-all hover:bg-muted/50 {$formData.referral_type ===
+										'medical-emergency'
+											? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+											: 'border-border'}"
+									>
+										<div class="space-y-1">
+											<div class="text-sm font-semibold text-foreground">
+												🏥 การรักษาพยาบาล (Medical)
+											</div>
+											<div class="text-xs text-muted-foreground">
+												ส่งตัวผู้ป่วยฉุกเฉินเข้ารับการรักษาพยาบาล
+											</div>
+										</div>
+										<input
+											{...props}
+											type="radio"
+											name="referral_type"
+											value="medical-emergency"
+											bind:group={$formData.referral_type}
+											class="h-4 w-4 text-primary"
+										/>
+									</label>
+
+									<label
+										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 transition-all hover:bg-muted/50 {$formData.referral_type ===
+										'capacity'
+											? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+											: 'border-border'}"
+									>
+										<div class="space-y-1">
+											<div class="text-sm font-semibold text-foreground">
+												🏘️ ย้ายศูนย์พักพิง (Capacity)
+											</div>
+											<div class="text-xs text-muted-foreground">
+												ย้ายผู้พักพิงไปศูนย์อื่นเนื่องจากศูนย์เต็ม
+											</div>
+										</div>
+										<input
+											{...props}
+											type="radio"
+											name="referral_type"
+											value="capacity"
+											bind:group={$formData.referral_type}
+											class="h-4 w-4 text-primary"
+										/>
+									</label>
+
+									<label
+										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 transition-all hover:bg-muted/50 {$formData.referral_type ===
+										'resource'
+											? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+											: 'border-border'}"
+									>
+										<div class="space-y-1">
+											<div class="text-sm font-semibold text-foreground">
+												📦 ขอสนับสนุนสิ่งของ (Resource)
+											</div>
+											<div class="text-xs text-muted-foreground">
+												ขอสนับสนุนทรัพยากร/สิ่งของจำเป็นพิเศษ
+											</div>
+										</div>
+										<input
+											{...props}
+											type="radio"
+											name="referral_type"
+											value="resource"
+											bind:group={$formData.referral_type}
+											class="h-4 w-4 text-primary"
+										/>
+									</label>
+								</div>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+				</div>
+
+				<hr class="border-border/60" />
+
+				<!-- Step 2: Evacuee Selection -->
 				<div class="space-y-2">
-					<span class="text-sm font-semibold text-foreground">1. ค้นหาและเลือกผู้ประสบภัย *</span>
+					<span class="text-sm font-semibold text-foreground">2. ค้นหาและเลือกผู้ประสบภัย *</span>
 
 					{#if $formData.evacuee_id}
 						<div
@@ -196,64 +299,80 @@
 
 				<hr class="border-border/60" />
 
-				<!-- Step 2: Target Destination -->
+				<!-- Step 3: Target Destination -->
 				<div class="space-y-4">
-					<span class="text-sm font-semibold text-foreground">2. ข้อมูลปลายทางที่ส่งต่อ</span>
+					<span class="text-sm font-semibold text-foreground">3. ข้อมูลปลายทางที่ส่งต่อ</span>
 
-					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-						<Form.Field {form} name="to_org.kind">
+					{#if $formData.referral_type === 'capacity'}
+						<Form.Field {form} name="to_shelter_code">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label>ประเภทหน่วยงาน *</Form.Label>
-									<select
-										{...props}
-										bind:value={$formData.to_org.kind}
-										class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-									>
-										<option value="hospital">สถานพยาบาล / โรงพยาบาล</option>
-										<option value="social_services">หน่วยงานสังคมสงเคราะห์ / พัฒนาสังคม</option>
-										<option value="other">อื่น ๆ</option>
-									</select>
-								{/snippet}
-							</Form.Control>
-							<Form.FieldErrors />
-						</Form.Field>
-
-						<Form.Field {form} name="to_org.name">
-							<Form.Control>
-								{#snippet children({ props })}
-									<Form.Label>ชื่อหน่วยงานปลายทาง *</Form.Label>
+									<Form.Label>รหัสศูนย์พักพิงปลายทาง (Target Shelter Code) *</Form.Label>
 									<Input
 										{...props}
-										bind:value={$formData.to_org.name}
-										placeholder="ระบุชื่อหน่วยงาน/สถานที่"
+										bind:value={$formData.to_shelter_code}
+										placeholder="เช่น SH002"
 									/>
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors />
 						</Form.Field>
+					{:else}
+						<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+							<Form.Field {form} name="to_org.kind">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>ประเภทหน่วยงาน *</Form.Label>
+										<select
+											{...props}
+											bind:value={$formData.to_org!.kind}
+											class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+										>
+											<option value="hospital">สถานพยาบาล / โรงพยาบาล</option>
+											<option value="social_services">หน่วยงานสังคมสงเคราะห์ / พัฒนาสังคม</option>
+											<option value="other">อื่น ๆ</option>
+										</select>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
 
-						<Form.Field {form} name="to_org.contact">
-							<Form.Control>
-								{#snippet children({ props })}
-									<Form.Label>เบอร์โทรติดต่อ (ถ้ามี)</Form.Label>
-									<Input
-										{...props}
-										bind:value={$formData.to_org.contact}
-										placeholder="เบอร์โทรศัพท์ติดต่อ"
-									/>
-								{/snippet}
-							</Form.Control>
-							<Form.FieldErrors />
-						</Form.Field>
-					</div>
+							<Form.Field {form} name="to_org.name">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>ชื่อหน่วยงานปลายทาง *</Form.Label>
+										<Input
+											{...props}
+											bind:value={$formData.to_org!.name}
+											placeholder="ระบุชื่อหน่วยงาน/สถานที่"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+
+							<Form.Field {form} name="to_org.contact">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>เบอร์โทรติดต่อ (ถ้ามี)</Form.Label>
+										<Input
+											{...props}
+											bind:value={$formData.to_org!.contact}
+											placeholder="เบอร์โทรศัพท์ติดต่อ"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+						</div>
+					{/if}
 				</div>
 
 				<hr class="border-border/60" />
 
-				<!-- Step 3: Referral Details -->
+				<!-- Step 4: Referral Details -->
 				<div class="space-y-4">
-					<span class="text-sm font-semibold text-foreground">3. รายละเอียดการส่งต่อ</span>
+					<span class="text-sm font-semibold text-foreground">4. รายละเอียดความจำเป็น</span>
 
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 						<Form.Field {form} name="urgency">
@@ -277,11 +396,11 @@
 					<Form.Field {form} name="reason">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เหตุผลการส่งต่อการรักษา / ความช่วยเหลือ *</Form.Label>
+								<Form.Label>เหตุผลการส่งต่อ / ความจำเป็น *</Form.Label>
 								<Textarea
 									{...props}
 									bind:value={$formData.reason}
-									placeholder="ระบุรายละเอียดทางอาการแพทย์ หรือเหตุผลความจำเป็นในการส่งต่อผู้ประสบภัย"
+									placeholder="ระบุรายละเอียดเหตุผลความจำเป็นในการส่งต่อผู้ประสบภัย"
 									rows={3}
 								/>
 							{/snippet}

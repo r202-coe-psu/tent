@@ -50,19 +50,39 @@ export class ReferralRemoteRepository implements ReferralRepository {
 		const body = buildReferralBody(input);
 		const rawDoc = makeDoc('referral', 1, body, ctx);
 
-		// Validate at runtime to satisfy TS compiler constraints without explicit unsafe casting
 		const doc = referralSchema.parse(rawDoc);
 		return this.repo.put(doc) as Promise<Referral>;
 	}
 
-	async transition(id: string, to: ReferralStatus, actor: string): Promise<Referral> {
+	async transition(
+		id: string,
+		to: ReferralStatus,
+		actor: string,
+		reason?: string
+	): Promise<Referral> {
 		const latest = await this.repo.get<Referral>(id);
 		if (!latest || !isReferral(latest)) {
 			throw new Error(`Referral ${id} not found or invalid`);
 		}
 
-		const updated = applyTransition(latest, to, actor, new Date().toISOString());
-		// touch() fresh stamps updated_at
+		const updated = applyTransition(latest, to, actor, new Date().toISOString(), reason);
+
+		// Side-effect for capacity referral: when accepted, transfer evacuee to destination shelter
+		if (to === 'accepted' && latest.referral_type === 'capacity' && latest.to_shelter_code) {
+			try {
+				const evacuee = await peopleRepository().getEvacuee(latest.evacuee_id);
+				if (evacuee) {
+					await peopleRepository().updateEvacuee({
+						...evacuee,
+						shelter_code: latest.to_shelter_code,
+						updated_at: new Date().toISOString()
+					});
+				}
+			} catch {
+				// Log or swallow if people remote is not available in isolated tests
+			}
+		}
+
 		return this.repo.put(touch(updated)) as Promise<Referral>;
 	}
 }

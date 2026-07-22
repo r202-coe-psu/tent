@@ -44,8 +44,8 @@ export const useCreateReferral = (queryClient: QueryClient) =>
 
 export const useTransitionReferral = (queryClient: QueryClient) =>
 	createMutation(() => ({
-		mutationFn: ({ id, to }: { id: string; to: ReferralStatus }) =>
-			referralRepository().transition(id, to, authStore.user?.name ?? 'unknown'),
+		mutationFn: ({ id, to, reason }: { id: string; to: ReferralStatus; reason?: string }) =>
+			referralRepository().transition(id, to, authStore.user?.name ?? 'unknown', reason),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: referralKeys.all });
 		}
