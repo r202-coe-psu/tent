@@ -5,9 +5,10 @@ Read this before opening a PR. It captures the conventions the codebase already 
 are checked by ESLint, `svelte-check`, tests, and the **Lefthook pre-commit hook** (§1), so "the
 hook is green" and "this doc is honored" should mean the same thing for lint/check/test.
 
-> The stale `agent-role.md` still describes the original sveltekitten template (JWT + `openapi-fetch`,
-> flat `api.ts`/`queries.ts` features). **This document and the actual `src/` tree win** where they
-> disagree: this project is a remote-first CouchDB app with layered features.
+> The stale `agent-role.md` still describes the original sveltekitten template (JWT auth, flat
+> `api.ts`/`queries.ts` features). **This document and the actual `src/` tree win** where they
+> disagree: staff data is remote-first CouchDB; the **public plane** uses FastAPI +
+> `openapi-fetch` (see §4.2) — that is intentional, not leftover template code.
 
 **New to the codebase?** Start with §3.1 (step-by-step walkthrough). Copy patterns from
 `src/lib/features/people/` — that is the canonical reference feature. Naming, file layout, and
@@ -28,20 +29,22 @@ coding details beyond this doc live in `CONVENTIONS.md`.
 
 - Run app commands from `frontend/`.
 
-| Task                      | Command                                              |
-| ------------------------- | ---------------------------------------------------- |
-| Dev server                | `pnpm dev` (binds `0.0.0.0`)                         |
-| Type-check                | `pnpm check`                                         |
-| Lint + format check       | `pnpm lint`                                          |
-| Auto-format               | `pnpm format`                                        |
-| Unit tests (run once)     | `pnpm test`                                          |
-| Unit tests (watch)        | `pnpm test:watch`                                    |
-| E2E (Playwright)          | `pnpm test:e2e`                                      |
-| Regenerate OpenAPI types  | `pnpm openapi:update` (only when a task requires it) |
-| Pre-commit hook (dry run) | `pnpm exec lefthook run pre-commit` (from repo root) |
+| Task                      | Command                                                       |
+| ------------------------- | ------------------------------------------------------------- |
+| Dev server                | `pnpm dev` (binds `0.0.0.0`)                                  |
+| Type-check                | `pnpm check`                                                  |
+| Lint + format check       | `pnpm lint`                                                   |
+| Auto-format               | `pnpm format`                                                 |
+| Unit tests (run once)     | `pnpm test`                                                   |
+| Unit tests (watch)        | `pnpm test:watch`                                             |
+| E2E (Playwright)          | `pnpm test:e2e`                                               |
+| Regenerate OpenAPI types  | `pnpm openapi:update` (requires FastAPI on `:9000`; see §4.2) |
+| Pre-commit hook (dry run) | `pnpm exec lefthook run pre-commit` (from repo root)          |
 
-The CouchDB backend runs via the repo-root `docker compose up` (CouchDB 3.5). Copy `.env.example`
-to `.env` first. The frontend also needs `frontend/.env` (copy `frontend/.env.example`).
+The CouchDB + MongoDB + sync worker stack runs via the repo-root `docker compose up` (CouchDB 3.5).
+Copy `.env.example` to `.env` first. The frontend also needs `frontend/.env` (copy
+`frontend/.env.example`) — include `PUBLIC_FASTAPI_PROXY=http://localhost:9000` for Vite
+proxies and `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET` for the BFF → FastAPI donation path.
 
 ### Pre-commit quality gate (Lefthook)
 
@@ -319,6 +322,56 @@ CouchDB _changes (longpoll)  →  eventChannel.emit()  →  subscribeDataChanges
 Copy `startPeopleLiveQuery` from `features/people/application/queries.ts` when adding a new
 feature with live lists.
 
+### 4.2 Public plane — worker, FastAPI, OpenAPI (do not bypass)
+
+Public routes under `/public/*` (family search, shelter directory, …) are **not** CouchDB session
+traffic. Contract: [`docs/data/api-contract.md`](../docs/data/api-contract.md) §5 +
+[`docs/data/couchdb-mongodb-sync.md`](../docs/data/couchdb-mongodb-sync.md).
+
+```
+staff UI  →  CouchDB (SoR)
+                ↓ sync worker (CDC)
+             MongoDB public_* collections
+                ↓
+             FastAPI :9000  (/public/v1/*)
+                ↑
+public SPA  →  same-origin /public/v1/*  (Vite proxy in dev)
+```
+
+**Local stack (all three must run for public features that read Mongo):**
+
+| Step                       | Where                                  | Command / note                                                                                   |
+| -------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 1. Infra                   | repo root                              | `docker compose up -d` — CouchDB, MongoDB, sync worker                                           |
+| 2. Seed / write staff data | `frontend/`                            | `pnpm seed` (or normal staff UI writes) so CouchDB has docs to project                           |
+| 3. Sync                    | automatic via compose worker, or local | `uv run --project worker sync-worker` / `--bootstrap` for full re-sync                           |
+| 4. Public API              | `backend/`                             | `./scripts/run-dev` → FastAPI on **:9000** (`APP_ENV=dev`)                                       |
+| 5. SPA                     | `frontend/`                            | `pnpm dev` → :5173; proxies only `/public/v1/family-search` and `/public/v1/shelters` to FastAPI |
+
+Verify projections in Compass: `mongodb://localhost:27017/tentdb` (`public_persons`, `public_shelters`, …).
+
+**Frontend rules for this plane:**
+
+- Call FastAPI through **`$lib/api/public-client.ts`** (`openapi-fetch` + generated
+  `$lib/api/openapi.d.ts`). Feature code lives in `$lib/features/public-portal/` (layers + barrel).
+- Do **not** use `serviceFetch` / `$lib/api/service.ts` for `/public/v1/*` (that helper is staff
+  `/api/v1/*` + BFF).
+- Do **not** proxy all of `/public` — SPA pages and remaining BFF aliases
+  (`/public/v1/donations`, `/public/v1/shelters/{code}/risk`) must stay on SvelteKit. Vite config
+  uses **exact-path** bypass for the two FastAPI routes only.
+- Needs / donations / transparency may still be SvelteKit BFF (`src/routes/api/public/v1/**`) until
+  migrated — do not invent a second untyped `fetch` path for endpoints already on FastAPI.
+- After changing FastAPI request/response schemas: start backend, then from `frontend/`:
+
+  ```bash
+  pnpm openapi:update   # curl :9000/openapi.json → api-specs/fastapi.json → openapi.d.ts
+  ```
+
+  Commit both `src/lib/api-specs/fastapi.json` and `src/lib/api/openapi.d.ts` so CI/`pnpm check`
+  does not require a running FastAPI.
+
+Coding patterns (client wrappers, mappers, query keys): **`CONVENTIONS.md` §12**.
+
 ---
 
 ## 5. SPA / SvelteKit constraints
@@ -331,6 +384,9 @@ feature with live lists.
   for when you actually need one.
 - Keep CouchDB same-origin in dev via the Vite `/couch` proxy (`PUBLIC_COUCH_PROXY`) so the session
   cookie is first-party — don't hardcode absolute CouchDB URLs in feature code.
+- Keep FastAPI public routes same-origin via the path-specific Vite proxies (`PUBLIC_FASTAPI_PROXY`);
+  BFF server calls use `FASTAPI_INTERNAL_URL` (+ `EXTERNAL_API_SECRET` for donations)
+  — see §4.2. Don't hardcode `http://localhost:9000` in feature code.
 
 ## 6. Testing
 

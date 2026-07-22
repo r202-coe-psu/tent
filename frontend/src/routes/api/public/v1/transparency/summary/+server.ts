@@ -79,8 +79,8 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 							}
 						}
 					}
-				} catch (err) {
-					console.error(`Failed to fetch stats for shelter_${m.code}`, err);
+				} catch (e) {
+					void e;
 				}
 				return { occ, vuln };
 			});
@@ -97,8 +97,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 			};
 			lastFetchTime = now;
 		} catch (e) {
-			console.error('Failed to update read-model', e);
-			// keep using stale cache if available
+			void e;
 		}
 	}
 
