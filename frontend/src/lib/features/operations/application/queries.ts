@@ -16,7 +16,8 @@ import type {
 	DonationCampaign,
 	CampaignInput,
 	ReceiveInput,
-	DistributeInput
+	DistributeInput,
+	AdjustInput
 } from '../domain/operations';
 
 export const operationsKeys = {
@@ -119,6 +120,20 @@ export const useDistributeStock = () => {
 			operationsRepository().distributeStock(input, ctx),
 		onSuccess: () => {
 			// Eagerly invalidate — live query will also fire, but this ensures instant update
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/**
+ * Mutation hook to adjust stock (positive/negative), persist ledger entry, and invalidate caches.
+ */
+export const useAdjustStock = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: AdjustInput; ctx: AuthorContext }) =>
+			operationsRepository().adjustStock(input, ctx),
+		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}
 	}));

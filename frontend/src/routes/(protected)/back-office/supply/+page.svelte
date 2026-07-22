@@ -7,6 +7,8 @@
 	} from '$lib/features/operations';
 	import { useSupplyItems } from '$lib/features/supply';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { qtyGt, qtyLte } from '$lib/utils/qty';
 	import Package from '@lucide/svelte/icons/package';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Boxes from '@lucide/svelte/icons/boxes';
@@ -16,6 +18,7 @@
 	import Scale from '@lucide/svelte/icons/scale';
 	import { ResourceDashboard } from '$lib/features/sop-ratios/components';
 	import { shelterCodeFromRoles } from '$lib/auth/roles';
+	import { useDashboardOccupancy } from '$lib/features/dashboard';
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const balanceQuery = useStockBalance();
@@ -26,9 +29,13 @@
 	const balance = $derived(balanceQuery.data ?? new Map<string, string>());
 	const items = $derived(itemsQuery.data ?? []);
 	const ledger = $derived(ledgerQuery.data ?? []);
+	const isOffline = $derived(authStore.needsReauth);
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const shelterCode = $derived(shelterCodeFromRoles(roles));
+
+	const occupancyQuery = useDashboardOccupancy(() => shelterCode ?? '');
+	const occupancy = $derived(occupancyQuery.data?.active ?? 120);
 
 	// ─── Active Tab State ─────────────────────────────────────────────────────
 	let activeTab = $state<'inventory' | 'sphere'>('inventory');
@@ -115,7 +122,7 @@
 	<!-- Dynamic Tab Content -->
 	{#if activeTab === 'inventory'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
-			<StockTable />
+			<StockTable {occupancy} />
 		</div>
 	{:else if activeTab === 'sphere'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">

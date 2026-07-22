@@ -85,7 +85,7 @@ export { useDonationNeedsBoard } from './application/use-donation-needs-board.sv
 export type { NeedItem } from './application/need-item.types';
 
 // UI components
-export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';
-export { default as DistributeStockForm } from './ui/DistributeStockForm.svelte';
-export { default as LedgerTable } from './ui/LedgerTable.svelte';
+export { default as ReceiveStockForm } from './ui/receive-stock-form.svelte';
+export { default as DistributeStockForm } from './ui/distribute-stock-form.svelte';
+export { default as LedgerTable } from './ui/ledger-table.svelte';
 export { default as StockTable } from './ui/stock-table.svelte';
