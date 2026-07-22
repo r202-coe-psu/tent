@@ -33,10 +33,12 @@
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
 	import { useSupplyItems } from '$lib/features/supply';
+	import { useItemMasters } from '$lib/features/catalog';
 	import { useStockBalance } from '$lib/features/operations';
 
 	const plans = useMealPlans();
 	const supplyItems = useSupplyItems();
+	const itemMasters = useItemMasters();
 	const stockBalance = useStockBalance();
 	let createOpen = $state(false);
 	let createDefaultMode = $state<'sop' | 'recipe' | 'custom'>('sop');
@@ -89,13 +91,13 @@
 		return 'awaiting_requisition';
 	}
 
-	// BOM-sourced recipes (calculateMealIngredientsFromRecipe) reference a
-	// catalog `item_master:*` id, which has no stock_ledger linkage yet (catalog
-	// item_master and the operations `supply` stock system are separate,
-	// unmigrated catalogs) — เบิก would just show "ของหมด" for every line, so
-	// block it here with an explanation instead. Custom-mode recipes also carry
-	// `unit` but reference a real `supply_item` (`item:*`, already stock-linked)
-	// — only the item_master prefix means "not withdrawable yet".
+	// A BOM ingredient resolves to a real `supply_item` id when its item_master's
+	// name auto-matches one (resolveItemMasterStock, meal-calc.ts) — otherwise
+	// calculateMealIngredientsFromRecipe falls back to the item_master_id itself
+	// (`item_master:*` prefix), which has no stock_ledger entry to draw down.
+	// A plan blocks เบิก only while at least one of its ingredients is still
+	// unresolved; a later name match un-blocks it automatically (no other code
+	// to change) since recipe_id no longer carries that prefix once resolved.
 	function isBomSourced(plan: MealPlan): boolean {
 		return plan.recipes.some((r) => r.recipe_id.startsWith('item_master:'));
 	}
@@ -158,6 +160,15 @@
 	});
 
 	async function handleConfirm(plan: MealPlan) {
+		// Fail fast at confirm instead of only at เบิก — a plan with unresolved
+		// BOM ingredients can never actually be withdrawn, so don't let it move
+		// past draft and look "ready" when it isn't.
+		if (isBomSourced(plan)) {
+			toast.error(
+				'ยืนยันไม่ได้ — แผนนี้มีวัตถุดิบที่ยังไม่เชื่อมกับสต็อกจริง (ชื่อในสูตรกับชื่อในคลังไม่ตรงกัน) แก้ชื่อให้ตรงกันก่อนแล้วค่อยยืนยัน'
+			);
+			return;
+		}
 		try {
 			await confirm.mutateAsync(plan);
 			toast.success(`ยืนยันแผน ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
@@ -173,12 +184,15 @@
 	}
 
 	// Display label + unit for a recipe row: fixed SOP ids first, then a
-	// custom-mode supply_item lookup, else fall back to the raw id (BOM rows —
-	// item_master isn't loaded here since they can't be withdrawn anyway).
+	// supply_item lookup (custom mode, or a resolved/linked BOM ingredient),
+	// then an item_master lookup (an unresolved BOM ingredient — still shows a
+	// real name even though it can't be withdrawn yet), else the raw id.
 	function recipeLabel(recipeId: string): { label: string; unit: string } {
 		if (RECIPE_LABELS[recipeId]) return RECIPE_LABELS[recipeId];
 		const supplyItem = supplyItems.data?.find((i) => i._id === recipeId);
 		if (supplyItem) return { label: supplyItem.name, unit: supplyItem.unit };
+		const itemMaster = itemMasters.data?.find((im) => im._id === recipeId);
+		if (itemMaster) return { label: itemMaster.name, unit: itemMaster.base_unit };
 		return { label: recipeId, unit: '' };
 	}
 
@@ -279,21 +293,28 @@
 										</p>
 										{#each plan.recipes ?? [] as recipe (recipe.recipe_id)}
 											{@const meta = recipeLabel(recipe.recipe_id)}
+											{@const unresolved = recipe.recipe_id.startsWith('item_master:')}
 											{@const shortfall = stockShortfall(recipe)}
 											<p
 												class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
-												title={shortfall > 0
-													? 'ของขาดสต็อก — คลังมีไม่พอตามยอดที่ต้องใช้'
-													: recipe.recipe_id === RICE_RECIPE_ID
-														? 'คำนวณเป็นกรัมตามสัดส่วน SOP — ตอนเบิกจะถูกแปลงเป็นกิโลกรัม (kg) ให้ตรงหน่วยคลัง'
-														: undefined}
+												title={unresolved
+													? 'ชื่อวัตถุดิบในสูตรไม่ตรงกับชื่อในคลัง — แก้ชื่อให้ตรงกันเพื่อให้เบิกได้'
+													: shortfall > 0
+														? 'ของขาดสต็อก — คลังมีไม่พอตามยอดที่ต้องใช้'
+														: recipe.recipe_id === RICE_RECIPE_ID
+															? 'คำนวณเป็นกรัมตามสัดส่วน SOP — ตอนเบิกจะถูกแปลงเป็นกิโลกรัม (kg) ให้ตรงหน่วยคลัง'
+															: undefined}
 											>
-												{#if shortfall > 0}
+												{#if unresolved || shortfall > 0}
 													<TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
 												{/if}
 												{meta.label}: {recipe.planned_qty.toLocaleString()}
 												{meta.unit}
-												{#if shortfall > 0}
+												{#if unresolved}
+													<span class="text-amber-600"
+														>(ยังไม่เชื่อมกับสต็อกจริง — ชื่อไม่ตรงกับคลัง)</span
+													>
+												{:else if shortfall > 0}
 													<span class="text-amber-600"
 														>(ขาดอีก {shortfall.toLocaleString()} {meta.unit})</span
 													>
@@ -380,7 +401,7 @@
 													onclick={() => openRequisition(plan)}
 													disabled={isBomSourced(plan)}
 													title={isBomSourced(plan)
-														? 'แผนนี้มาจากสูตรมาตรฐาน (BOM) — ยังเบิกไม่ได้จริง เพราะวัตถุดิบยังไม่เชื่อมกับระบบคลังสินค้า (item_master กับ supply เป็นคนละชุดกันตอนนี้)'
+														? 'แผนนี้มีวัตถุดิบจากสูตร BOM ที่ยังไม่เชื่อมกับสต็อกจริง (ชื่อในสูตรกับชื่อในคลังไม่ตรงกัน) เบิกไม่ได้จนกว่าจะแก้ชื่อให้ตรงกัน'
 														: undefined}
 												>
 													<PackageCheck class="mr-1 h-3.5 w-3.5" />
@@ -388,7 +409,7 @@
 												</Button>
 												{#if isBomSourced(plan)}
 													<p class="max-w-[220px] text-center text-[11px] text-amber-600">
-														สูตร BOM ยังเบิกสต็อกไม่ได้จริง (รอเชื่อม item_master ↔ คลังสินค้า)
+														มีวัตถุดิบยังไม่เชื่อมกับสต็อกจริง (ชื่อไม่ตรงกับคลัง)
 													</p>
 												{/if}
 											</div>
