@@ -8,7 +8,6 @@
 	import { toast } from 'svelte-sonner';
 	import { LOGOUT_ROUTE } from '$lib/guards/auth';
 	import { SessionExpiredBar } from '$lib/features/login';
-
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();

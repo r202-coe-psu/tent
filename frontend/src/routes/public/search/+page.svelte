@@ -8,31 +8,16 @@
 	import Button from '$lib/components/ui/button/button.svelte';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-
-	interface FamilyMember {
-		first_name: string;
-		last_name: string;
-		status: string;
-		shelter_name: string;
-	}
-
-	interface SearchResult {
-		id: string;
-		first_name: string;
-		last_name: string;
-		national_id: string;
-		gender: string;
-		shelter_name: string;
-		origin_address: string;
-		checked_in_at: string;
-		care_zone: string;
-		status: string;
-		family_members: FamilyMember[];
-	}
+	import {
+		familySearch,
+		isInShelterStatus,
+		searchResultKey,
+		type FamilySearchResult
+	} from '$lib/features/public-portal';
 
 	let query = $state('');
 	let isLoading = $state(false);
-	let results = $state<SearchResult[] | null>(null);
+	let results = $state<FamilySearchResult[] | null>(null);
 	let error = $state('');
 
 	let currentPage = $state(1);
@@ -61,20 +46,11 @@
 		results = null;
 
 		try {
-			const res = await fetch('/api/public/v1/family-search', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ query })
-			});
-			const data = await res.json();
-			if (res.ok) {
-				results = data.results;
-				currentPage = 1;
-			} else {
-				error = data.error || 'เกิดข้อผิดพลาดในการค้นหา';
-			}
-		} catch {
-			error = 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้';
+			const data = await familySearch(query);
+			results = data.results;
+			currentPage = 1;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้';
 		} finally {
 			isLoading = false;
 		}
@@ -87,6 +63,12 @@
 	function formatDateTime(isoString: string) {
 		if (!isoString) return 'ไม่ระบุเวลา';
 		return new Date(isoString).toLocaleString('th-TH') + ' น.';
+	}
+
+	function genderLabel(gender: string | null | undefined) {
+		if (gender === 'male') return 'ชาย';
+		if (gender === 'female') return 'หญิง';
+		return 'อื่นๆ';
 	}
 </script>
 
@@ -156,15 +138,14 @@
 				</div>
 
 				<div class="flex flex-col gap-6">
-					{#each paginatedResults as person (person.id)}
+					{#each paginatedResults ?? [] as person, i (searchResultKey(person, i))}
 						<div class="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
 							<!-- Card Header -->
 							<div class="flex items-start justify-between border-b border-border/50 p-5">
 								<div>
 									<div class="flex items-center gap-3">
 										<h3 class="text-xl font-bold text-foreground">
-											{person?.first_name || 'ไม่ระบุชื่อ'}
-											{person?.last_name || ''}
+											{person.name || 'ไม่ระบุชื่อ'}
 										</h3>
 										{#if person.family_members && person.family_members.length > 0}
 											<span
@@ -179,18 +160,12 @@
 										{/if}
 									</div>
 									<div class="mt-2 flex gap-4 text-sm text-muted-foreground">
-										<span>ID: <span class="font-mono">{person?.national_id || '-'}</span></span>
-										<span
-											>เพศ: {person?.gender === 'male'
-												? 'ชาย'
-												: person?.gender === 'female'
-													? 'หญิง'
-													: 'อื่นๆ'}</span
-										>
+										<span>ID: <span class="font-mono">{person.national_id || '-'}</span></span>
+										<span>เพศ: {genderLabel(person.gender)}</span>
 									</div>
 								</div>
 
-								{#if person?.status === 'checked_in' || person?.status === 'registered'}
+								{#if isInShelterStatus(person.status)}
 									<div
 										class="flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-bold text-green-700"
 									>
@@ -213,14 +188,14 @@
 									<MapPin class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
 										<div class="text-xs text-muted-foreground">พำนักอยู่ที่ศูนย์พักพิง</div>
-										<div class="font-medium text-foreground">{person?.shelter_name || '-'}</div>
+										<div class="font-medium text-foreground">{person.shelter_name || '-'}</div>
 									</div>
 								</div>
 								<div class="flex gap-3">
 									<MapPin class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
 										<div class="text-xs text-muted-foreground">ภูมิลำเนาเดิม</div>
-										<div class="font-medium text-foreground">{person?.origin_address || '-'}</div>
+										<div class="font-medium text-foreground">{person.origin_address || '-'}</div>
 									</div>
 								</div>
 								<div class="flex gap-3">
@@ -228,7 +203,7 @@
 									<div>
 										<div class="text-xs text-muted-foreground">เวลาลงทะเบียนเข้าพัก</div>
 										<div class="font-medium text-foreground">
-											{person?.checked_in_at ? formatDateTime(person.checked_in_at) : '-'}
+											{person.checked_in_at ? formatDateTime(person.checked_in_at) : '-'}
 										</div>
 									</div>
 								</div>
@@ -236,12 +211,11 @@
 									<User class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
 										<div class="text-xs text-muted-foreground">สถานะความดูแล (โซน)</div>
-										<div class="font-medium text-foreground">โซนที่ {person?.care_zone || '-'}</div>
+										<div class="font-medium text-foreground">{person.care_zone || '-'}</div>
 									</div>
 								</div>
 							</div>
 
-							<!-- Family Members -->
 							{#if person.family_members && person.family_members.length > 0}
 								<div class="border-t border-border/50 p-5">
 									<div class="mb-4 flex items-center gap-2 font-bold text-foreground/90">
@@ -255,20 +229,12 @@
 											>
 												<div>
 													<div class="font-bold text-foreground">
-														{member?.first_name || '-'}
-														{member?.last_name || ''}
-													</div>
-													<div class="mt-1 flex gap-2">
-														<span
-															class="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-															>ความสัมพันธ์: ญาติ</span
-														>
+														{member.name || '-'}
 													</div>
 												</div>
-
-												{#if member?.status === 'checked_in'}
+												{#if isInShelterStatus(member.status)}
 													<div class="text-sm font-bold text-green-600">
-														ปลอดภัยอยู่ในศูนย์ ({member?.shelter_name || '-'})
+														ปลอดภัยอยู่ในศูนย์ ({member.shelter_name || '-'})
 													</div>
 												{:else}
 													<div class="text-sm font-bold text-danger">พลัดหลง (ไม่อยู่ในศูนย์)</div>
