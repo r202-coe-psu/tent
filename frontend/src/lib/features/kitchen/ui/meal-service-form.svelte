@@ -88,7 +88,7 @@
 </script>
 
 <Dialog.Root {open} onOpenChange={handleOpenChange}>
-	<Dialog.Content class="max-w-lg">
+	<Dialog.Content class="sm:max-w-lg">
 		<Dialog.Header>
 			<Dialog.Title>บันทึกผลบริการอาหาร</Dialog.Title>
 			<Dialog.Description class="break-words">
