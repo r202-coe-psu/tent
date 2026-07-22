@@ -10,6 +10,8 @@ export { default as MealServiceSummary } from './ui/meal-service-summary.svelte'
 // Domain — meal calculation + T-26 handoff (T-25)
 export {
 	calculateMealIngredients,
+	calculateMealIngredientsFromRecipe,
+	calculateMealIngredientsFromCustom,
 	toRequisitionInput,
 	assessRequisition,
 	RICE_RECIPE_ID,
@@ -17,18 +19,12 @@ export {
 	VEGETABLE_RECIPE_ID,
 	RECIPE_TO_STOCK_ITEM,
 	RECIPE_LABELS,
-	DEFAULT_RICE_G_PER_PERSON_MEAL,
-	DEFAULT_EGG_PER_PERSON_MEAL,
-	DEFAULT_VEGETABLE_G_PER_PERSON_MEAL,
-	MEAL_MENUS,
-	DEFAULT_MENU_ID,
-	menuIdFromRecipes
+	DEFAULT_RICE_G_PER_PERSON_MEAL
 } from './domain/meal-calc';
 export type {
 	MealCalcSource,
 	MealCalcResult,
-	MealMenuId,
-	MealMenu,
+	CustomIngredientInput,
 	StockAvailabilityStatus,
 	RequisitionLineAssessment
 } from './domain/meal-calc';
