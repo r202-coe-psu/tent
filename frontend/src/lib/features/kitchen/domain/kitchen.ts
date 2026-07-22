@@ -193,8 +193,13 @@ export function createKitchenRequisition(
 export const isKitchenRequisition = (d: unknown): d is KitchenRequisition =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'kitchen_requisition';
 
-// ---- MealService (schema.md §2.7) — deterministic _id, append-only ----
-// _id: "meal_service:{date}:{meal}" — same deterministic pattern as meal_plan.
+// ---- MealService (schema.md §2.7) — ulid _id, append-only -------------
+// meal_plan_id links a service record back to the specific plan it reports
+// on (nullable — same as KitchenRequisition.meal_plan_id — for a service
+// recorded without a plan). Multiple plans can now share a date+meal, so the
+// old deterministic "meal_service:{date}:{meal}" id (one record per meal,
+// period, full stop) could no longer tell which plan a record belonged to;
+// a plan's service status is looked up by meal_plan_id, not date+meal.
 
 export interface MealServiceExternal {
 	volunteers: number;
@@ -205,6 +210,7 @@ export interface MealService extends BaseDoc {
 	type: 'meal_service';
 	date: string;
 	meal: MealPeriod;
+	meal_plan_id: string | null;
 	served: number;
 	waste: number;
 	external: MealServiceExternal;
@@ -214,6 +220,7 @@ export interface MealService extends BaseDoc {
 export const mealServiceInputSchema = z.object({
 	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
 	meal: mealPeriodSchema,
+	meal_plan_id: z.string().nullable().default(null),
 	served: z.number().int().min(0),
 	waste: z.number().int().min(0),
 	external: z.object({
@@ -228,17 +235,17 @@ export function createMealService(input: MealServiceInput, ctx: AuthorContext): 
 	const d = mealServiceInputSchema.parse(input);
 	return makeDoc(
 		'meal_service',
-		1,
+		2,
 		{
 			date: d.date,
 			meal: d.meal,
+			meal_plan_id: d.meal_plan_id,
 			served: d.served,
 			waste: d.waste,
 			external: d.external,
 			...(d.notes ? { notes: d.notes } : {})
 		},
-		ctx,
-		`${d.date}:${d.meal}` // deterministic suffix
+		ctx
 	);
 }
 

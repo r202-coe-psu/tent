@@ -102,8 +102,9 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.put(createMealService(input, ctx));
 	}
 
-	getMealService(date: string, meal: string): Promise<MealService | null> {
-		return this.repo.get<MealService>(`meal_service:${date}:${meal}`);
+	async getMealService(date: string, meal: string): Promise<MealService | null> {
+		const services = await this.listMealServices();
+		return services.find((s) => s.date === date && s.meal === meal) ?? null;
 	}
 
 	listMealServices(): Promise<MealService[]> {

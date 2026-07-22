@@ -54,10 +54,14 @@
 	const mealServices = useMealServices();
 
 	// Plans that already have a recorded service — drives the "✓ บันทึกแล้ว" hint.
-	// meal_service _id shares the plan's deterministic date:meal key (append-only,
-	// one record per meal), so a matching date+meal means service is logged.
-	const servicedPlanKeys = $derived(
-		new Set((mealServices.data ?? []).map((s) => `${s.date}:${s.meal}`))
+	// meal_service.meal_plan_id links a service record to the specific plan it
+	// reports on (same convention as requisitionedPlanIds below) — matching by
+	// plan._id, not date+meal, since multiple plans can now share a date+meal
+	// and only the one actually serviced should flip to "done".
+	const servicedPlanIds = $derived(
+		new Set(
+			(mealServices.data ?? []).map((s) => s.meal_plan_id).filter((id): id is string => Boolean(id))
+		)
 	);
 
 	// Meal plans that already have at least one requisition — drives the
@@ -86,7 +90,7 @@
 	type PlanStage = 'draft' | 'awaiting_requisition' | 'awaiting_service' | 'done';
 	function planStage(plan: MealPlan): PlanStage {
 		if (plan.status === 'draft') return 'draft';
-		if (servicedPlanKeys.has(`${plan.date}:${plan.meal}`)) return 'done';
+		if (servicedPlanIds.has(plan._id)) return 'done';
 		if (requisitionedPlanIds.has(plan._id)) return 'awaiting_service';
 		return 'awaiting_requisition';
 	}

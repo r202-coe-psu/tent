@@ -51,10 +51,11 @@
 		if (!plan) return;
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
-			const svc = await record.mutateAsync({
+			await record.mutateAsync({
 				input: {
 					date: plan.date,
 					meal: plan.meal,
+					meal_plan_id: plan._id,
 					served,
 					waste,
 					external: { volunteers, outside_evacuees: outsideEvacuees },
@@ -62,24 +63,7 @@
 				},
 				ctx
 			});
-			// meal_service is append-only with a deterministic _id — the remote
-			// repository treats a re-record of the same date+meal as an idempotent
-			// create (resolves with the ORIGINAL doc, doesn't throw and doesn't
-			// overwrite). Detect that by comparing the resolved doc against what was
-			// just submitted, so a re-record surfaces "already recorded" instead of a
-			// misleading success toast.
-			const alreadyRecorded =
-				svc.served !== served ||
-				svc.waste !== waste ||
-				svc.external.volunteers !== volunteers ||
-				svc.external.outside_evacuees !== outsideEvacuees;
-			if (alreadyRecorded) {
-				toast.error(
-					`บันทึกบริการของ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} ไว้แล้ว (เสิร์ฟ ${svc.served.toLocaleString()})`
-				);
-			} else {
-				toast.success(`บันทึกบริการ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
-			}
+			toast.success(`บันทึกบริการ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
 			close();
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');

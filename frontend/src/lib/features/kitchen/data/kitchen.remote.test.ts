@@ -271,15 +271,11 @@ describe('KitchenRemoteRepository.updateMealPlanDraft / deleteMealPlanDraft (dra
 	});
 });
 
-// Append-only creates are idempotent under the remote-first repository, not
-// throw-on-conflict: `putDoc` (couch-db.ts) swallows a create-time 409 and
-// returns the already-stored doc (see couch-db.test.ts — "putDoc treats 409 on
-// create as idempotent success"). That primitive-level guarantee is what makes
-// meal_service append-only in practice (a second recordMealService call cannot
-// overwrite the first); it isn't re-tested here because the in-memory
-// Repository test double used in this file doesn't simulate CouchDB's 409
-// semantics (it always accepts a `put`), so re-asserting it against the double
-// would test the double, not the real behavior.
+// meal_service is a ulid-_id, append-only record (like kitchen_requisition) —
+// a second recordMealService call for the same plan creates a distinct doc
+// rather than colliding; the UI (not the doc id) is what stops a plan from
+// being serviced twice (meal-plan-list.svelte hides the button once
+// meal_plan_id shows up in a recorded service).
 describe('KitchenRemoteRepository.recordMealService — record + read back (T-27)', () => {
 	let repo: KitchenRemoteRepository;
 
@@ -291,6 +287,7 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 	const serviceInput = {
 		date: '2026-07-15',
 		meal: 'dinner' as const,
+		meal_plan_id: 'meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 		served: 95,
 		waste: 3,
 		external: { volunteers: 5, outside_evacuees: 2 },
@@ -300,9 +297,10 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 	it('persists served / waste / external + audit actor onto the stored doc', async () => {
 		const svc = await repo.recordMealService(serviceInput, ctx);
 
-		expect(svc._id).toBe('meal_service:2026-07-15:dinner');
+		expect(svc._id).toMatch(/^meal_service:[0-9A-Z]{26}$/);
 		const stored = (await memoryRepo.get(svc._id)) as Record<string, unknown>;
 		expect(stored.type).toBe('meal_service');
+		expect(stored.meal_plan_id).toBe('meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV');
 		expect(stored.served).toBe(95);
 		expect(stored.waste).toBe(3);
 		expect(stored.external).toEqual({ volunteers: 5, outside_evacuees: 2 });
@@ -320,7 +318,7 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 
 		const all = await repo.listMealServices();
 		expect(all).toHaveLength(1);
-		expect(all[0]._id).toBe('meal_service:2026-07-15:dinner');
+		expect(all[0]._id).toMatch(/^meal_service:[0-9A-Z]{26}$/);
 	});
 });
 
@@ -391,6 +389,7 @@ describe('T-27 demo chain — requisition → service record → variance', () =
 			{
 				date: '2026-07-20',
 				meal: 'dinner',
+				meal_plan_id: plan._id,
 				served: 85,
 				waste: 3,
 				external: { volunteers: 4, outside_evacuees: 3 }
@@ -398,7 +397,7 @@ describe('T-27 demo chain — requisition → service record → variance', () =
 			ctx
 		);
 
-		// 4. Variance summary joins service ↔ plan (same date:meal) and compares.
+		// 4. Variance summary joins service ↔ plan via meal_plan_id and compares.
 		const storedPlan = await repo.getMealPlan('2026-07-20', 'dinner');
 		const v = computeMealVariance(svc, storedPlan);
 
