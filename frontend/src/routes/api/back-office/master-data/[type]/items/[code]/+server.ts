@@ -1,6 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, requireAdmin, serviceError, ServiceError } from '$lib/server/couch-admin';
+import {
+	adminRaw,
+	requireAdmin,
+	requireShelterScopeOrSA,
+	serviceError,
+	ServiceError
+} from '$lib/server/couch-admin';
 import { masterDocId, masterTypeSchema, type MasterData } from '$lib/features/master-data/domain';
 import {
 	mergeMasterDataItems,
@@ -23,7 +29,6 @@ const REGISTRY_DB = 'registry';
 /** DELETE — remove the item with the given code from the array. Idempotent:
  *  if the code isn't in the array, returns 200 with the current rev. */
 export const DELETE: RequestHandler = async ({ params, request }) => {
-	const caller = await requireAdmin(request.headers.get('cookie'));
 	try {
 		const type = masterTypeSchema.parse(params.type);
 		const code = String(params.code ?? '').trim();
@@ -33,6 +38,10 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 		if (scope.mode === 'effective') {
 			throw new ServiceError('VALIDATION', 'DELETE requires global or shelter scope');
 		}
+		const caller =
+			scope.mode === 'shelter'
+				? (await requireShelterScopeOrSA(request.headers.get('cookie'), scope.shelterCode!)).name
+				: await requireAdmin(request.headers.get('cookie'));
 
 		const globalDoc = await readMasterDoc(type);
 		if (scope.mode === 'global') {
@@ -86,6 +95,7 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 		if (!overlay.excludedCodes.length) delete next.excluded_codes;
 		return await writeMasterDoc(next);
 	} catch (e) {
+		if (e && typeof e === 'object' && 'status' in e) throw e;
 		return serviceError(e);
 	}
 };

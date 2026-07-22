@@ -24,8 +24,7 @@ export const prerender = false;
 
 const REGISTRY_DB = 'registry';
 
-/** GET — read one master_data doc (404 → empty placeholder). Reads are open to
- *  any authenticated user (CR-012 §2); writes below stay SA-only. */
+/** GET — read one master_data doc (404 → empty placeholder). */
 export const GET: RequestHandler = async ({ params, request }) => {
 	let type: ReturnType<typeof masterTypeSchema.parse>;
 	let scope: ParsedScope;
@@ -64,6 +63,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 			item_sources: itemSources
 		});
 	} catch (e) {
+		if (e && typeof e === 'object' && 'status' in e) throw e;
 		return serviceError(e);
 	}
 };
@@ -72,7 +72,6 @@ export const GET: RequestHandler = async ({ params, request }) => {
  *  (after add/edit/delete/setDefault ran client-side). Idempotent on first
  *  write (creates the doc with a fresh envelope). */
 export const PUT: RequestHandler = async ({ params, request }) => {
-	const caller = await requireAdmin(request.headers.get('cookie'));
 	try {
 		const type = masterTypeSchema.parse(params.type);
 		const body = (await request.json().catch(() => ({}))) as {
@@ -83,6 +82,10 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		if (scope.mode === 'effective') {
 			throw new ServiceError('VALIDATION', 'PUT requires global or shelter scope');
 		}
+		const caller =
+			scope.mode === 'shelter'
+				? (await requireShelterScopeOrSA(request.headers.get('cookie'), scope.shelterCode!)).name
+				: await requireAdmin(request.headers.get('cookie'));
 		if (!Array.isArray(body.items)) {
 			throw new ServiceError('VALIDATION', 'items[] is required');
 		}
@@ -155,6 +158,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		if (!rev) throw new ServiceError('INTERNAL', 'CouchDB did not return a rev');
 		return json({ ok: true, rev });
 	} catch (e) {
+		if (e && typeof e === 'object' && 'status' in e) throw e;
 		return serviceError(e);
 	}
 };
