@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-22 # CR-044 FastAPI public plane (PR #112)
+updated: 2026-07-22 # CR-045 kitchen meal-plan workflow rework
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -62,3 +62,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-042](CR-042-daily-sop-calc-follow-up.md) | Daily SOP follow-up — ปิด CR-036 open decisions (ratio_source, have-mapping) + OD-3 scheduled run + OD-4 downstream feed; คู่ feature flow Module B | proposed | volatile | 2026-07-15 | features/daily-sop-resource-calc-flow.md, CR-036 OD#1/#2, schema.md §2.15 (ถ้า OD-1 bump), 07-B T-31/T-32, resource-calc + sop-ratios |
 | [CR-043](CR-043-notion-tasks-sync.md) | Notion Projects Tasks — July 16 sync checklist (T-48..T-52 status alignment, add T-61..T-65 config tasks) | done | stable | 2026-07-16 | docs/task-breakdown/ |
 | [CR-044](CR-044-fastapi-public-plane-pr112.md) | CR-017 amendment — FastAPI public plane in PR #112; `last_name_masked` in Mongo; worker loops 1–3 | approved | volatile | 2026-07-21 | CR-017, backend/, worker/, public-portal, couchdb-mongodb-sync.md |
+| [CR-045](CR-045-kitchen-meal-plan-workflow-rework.md) | Kitchen meal-plan rework — BOM/Custom recipe modes, linear เบิก/บันทึกบริการ workflow (no reissue), duplicate plans per date+meal (`meal_plan` _id → ulid), `meal_service` ↔ plan link (`meal_plan_id`, schema_v 1→2) | proposed (implementation complete — pending sign-off) | stable | 2026-07-22 | docs/data/schema.md §2.5 §2.7, schema_v meal_service 1→2, features/kitchen/{domain,data,application,ui} |
