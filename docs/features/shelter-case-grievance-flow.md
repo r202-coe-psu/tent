@@ -280,5 +280,5 @@ erDiagram
 
 - 2026-07-15 — draft คู่ CR-040  
 - 2026-07-15 — ล็อก D-NAME=`shelter_report_case`, D-PUB=off, D-WHO-CREATE=SM+allow-list (+SA override), D-PET=default, D-ESCALE=atomic, D-SORT=severity  
-- 2026-07-15 — sync task-breakdown `08-E.md` + Notion T-19/T-33 ให้ตรง CR-040
+- 2026-07-15 — sync task-breakdown `08-E-cases.md` + Notion T-19/T-33 ให้ตรง CR-040
 - รอ `CR-040` **approved** ก่อน apply schema/PRD/role-matrix/sitemap และ implement

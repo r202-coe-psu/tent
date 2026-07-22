@@ -220,7 +220,7 @@ export const SOP_RATIO_KEYS = [
 
 **Volunteer schema — `affiliation_tags` กับ `availability` วางยังไง?**
 
-สถานการณ์ตอนนี้: CR-002 (06-A.md verified) บอกชัด: "Volunteer = domain concept ไม่ใช่ RBAC role"; login users มี `affiliation_tags: ["volunteer"]` เป็น metadata schema.md §2.8 มี volunteer doc แล้วแต่ไม่มี `availability` field ซึ่ง T-28 ต้องใช้จัดตาราง shift
+สถานการณ์ตอนนี้: CR-002 (06-A-volunteer.md verified) บอกชัด: "Volunteer = domain concept ไม่ใช่ RBAC role"; login users มี `affiliation_tags: ["volunteer"]` เป็น metadata schema.md §2.8 มี volunteer doc แล้วแต่ไม่มี `availability` field ซึ่ง T-28 ต้องใช้จัดตาราง shift
 
 คำถาม:
 - `affiliation_tags` อยู่บน `_users` (auth layer) หรือบน `volunteer:{ulid}` doc?

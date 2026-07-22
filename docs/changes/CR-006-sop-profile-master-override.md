@@ -17,7 +17,7 @@ affects:
   - docs/data/data-model.md — sync direction ของ master (catalog → shelter read-only)
   - docs/data/schema.md §7 — index: catalog sop_profile, shelter_* sop_override(active)
   - docs/data/schema.md §8 — validate_doc_update: master = SA only, override = shelter_code ตรง session
-  - docs/task-breakdown/07-B.md — T-30 (แยก master/override CRUD + permission), T-31 (resolve override ?? master), T-32 (drill-down ระบุ source)
+  - docs/task-breakdown/07-B-sop.md — T-30 (แยก master/override CRUD + permission), T-31 (resolve override ?? master), T-32 (drill-down ระบุ source)
 ---
 
 # CR-006 — SOP profile สองชั้น: master (catalog) + override (shelter_*)
@@ -182,7 +182,7 @@ dependencies เดิม) — เปลี่ยนแค่ขนาด whitel
   `ratiosSchema`, key นอก whitelist ถูก reject, `SOP_RATIO_KIND` ครบทุก key, ไม่มี `toilet_per_person`
   หลงเหลือ
 
-**Task-breakdown** (`docs/task-breakdown/07-B.md` — Module B)
+**Task-breakdown** (`docs/task-breakdown/07-B-sop.md` — Module B)
 - **T-30 SOP ratio configuration (FR-44)** — เดิม DoD เป็น CRUD ratio หน้าเดียว "จำกัดสิทธิ์ตาม
   role-permission matrix" → ตอนนี้ scope แยก **2 surface**: (a) master CRUD = `system_admin`
   ที่ catalog, (b) override CRUD = `shelter_manager` ที่ shelter ตัวเอง (set active เองได้);
@@ -236,7 +236,7 @@ dependencies เดิม) — เปลี่ยนแค่ขนาด whitel
   `catalog` (SA คุม, replicate read-only); (3) **override ทั้ง profile** (ไม่ใช่ per-key merge);
   (4) **shelter set active override ได้เอง**; tracking method = CR file
 - 2026-06-22 — CR-006 proposed + approved (เอกสารนี้)
-- 2026-06-22 — applied to `task-breakdown/07-B.md` (T-30/T-31/T-32 DoD + effort) + `task-breakdown/_index.md`
+- 2026-06-22 — applied to `task-breakdown/07-B-sop.md` (T-30/T-31/T-32 DoD + effort) + `task-breakdown/_index.md`
   (Module B 20→21.5, total 250→251.5); implementation schema.md + sop-ratios code = งานถัดไป
 - 2026-06-25 — **OQ-2 / Q-T18-2 resolved** (project owner): ratios whitelist 3 → 20 canonical keys
   (merge ปภ.2565 + Sphere 2018), คงรูปเลขเดียวต่อคีย์ (ไม่ใช่ range), เพิ่ม `SOP_RATIO_KIND`

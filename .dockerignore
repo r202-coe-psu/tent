@@ -12,6 +12,17 @@ docs/
 *.md
 !README.md
 
+# Local Python envs / caches (backend + worker image builds use repo-root context)
+**/.venv/
+**/venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/htmlcov/
+**/.coverage
+backend/tests/
+backend/.agents/
+
 # OS
 .DS_Store
 Thumbs.db
