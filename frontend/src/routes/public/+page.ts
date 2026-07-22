@@ -1,11 +1,11 @@
 import type { PageLoad } from './$types';
 
-export const load: PageLoad = async ({ fetch }) => {
+export const load: PageLoad = async ({ fetch, data: serverData }) => {
 	try {
 		const response = await fetch('/api/public/v1/transparency/summary');
 		if (response.ok) {
 			const data = await response.json();
-			return data;
+			return { ...data, faqs: serverData.faqs };
 		}
 	} catch (e) {
 		console.error('Failed to fetch summary metrics', e);
@@ -27,6 +27,7 @@ export const load: PageLoad = async ({ fetch }) => {
 			public_metrics_volunteers: false,
 			emergency_mode: false
 		},
-		isError: true
+		isError: true,
+		faqs: serverData.faqs || []
 	};
 };
