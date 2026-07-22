@@ -17,6 +17,7 @@
 		calculateMealIngredients,
 		calculateMealIngredientsFromRecipe,
 		calculateMealIngredientsFromCustom,
+		resolveItemMasterStock,
 		DEFAULT_RICE_G_PER_PERSON_MEAL,
 		RECIPE_LABELS,
 		MEAL_PERIOD_LABELS,
@@ -50,8 +51,12 @@
 	let sourceMode = $state<'sop' | 'recipe' | 'custom'>('sop');
 	let recipeId = $state<string | null>(null);
 	let customLabel = $state('');
-	let customRows = $state<{ itemId: string | null; qtyPerPerson: number }[]>([
-		{ itemId: null, qtyPerPerson: 0 }
+	// `unit` is carried on the row itself (set when picking an item, or preloaded
+	// verbatim when locked-editing an existing plan) so recomputing ingredients
+	// never needs a supply_item lookup — that lookup fails for a still-unresolved
+	// BOM ingredient (item_master:* id) and would silently drop the row.
+	let customRows = $state<{ itemId: string | null; unit: string; qtyPerPerson: number }[]>([
+		{ itemId: null, unit: '', qtyPerPerson: 0 }
 	]);
 	let total = $state(0);
 	let halal = $state(0);
@@ -68,8 +73,24 @@
 	const supplyItems = useSupplyItems();
 	const stockBalance = useStockBalance();
 
-	function itemLabel(itemMasterId: string): string {
-		return itemMasters.data?.find((im) => im._id === itemMasterId)?.name ?? itemMasterId;
+	// Kitchen only cooks with food supply — hide water/medicine/clothing/etc.
+	// from the ingredient picker so staff can't accidentally build a menu out
+	// of non-food stock.
+	const foodSupplyItems = $derived((supplyItems.data ?? []).filter((i) => i.category === 'food'));
+
+	// Same resolveItemMasterStock() as application/queries.ts's resolveMealPlanCalc,
+	// so the live preview here matches what actually gets saved.
+	const itemInfo = $derived(resolveItemMasterStock(itemMasters.data ?? [], supplyItems.data ?? []));
+
+	// A resolved BOM row's recipe_id is a real supply_item id (linked via the
+	// item_master), not the item_master_id — check both so the label is right
+	// either way.
+	function itemLabel(id: string): string {
+		return (
+			itemMasters.data?.find((im) => im._id === id)?.name ??
+			supplyItems.data?.find((si) => si._id === id)?.name ??
+			id
+		);
 	}
 
 	function supplyItemLabel(itemId: string): string {
@@ -81,11 +102,19 @@
 	}
 
 	function addCustomRow() {
-		customRows = [...customRows, { itemId: null, qtyPerPerson: 0 }];
+		customRows = [...customRows, { itemId: null, unit: '', qtyPerPerson: 0 }];
 	}
 
 	function removeCustomRow(index: number) {
 		customRows = customRows.filter((_, i) => i !== index);
+	}
+
+	// Sets a row's unit from the picked supply_item (locked-edit rows already
+	// have their unit preloaded and never show this dropdown, so this only
+	// fires for a genuine new/free custom row).
+	function onCustomItemPick(row: { itemId: string | null; unit: string }) {
+		const item = foodSupplyItems.find((i) => i._id === row.itemId);
+		row.unit = item?.unit ?? '';
 	}
 
 	// Only rows with both a picked item and a positive qty become real
@@ -94,9 +123,7 @@
 	const customIngredients = $derived.by((): CustomIngredientInput[] => {
 		return customRows.flatMap((row) => {
 			if (!row.itemId || row.qtyPerPerson <= 0) return [];
-			const item = supplyItems.data?.find((i) => i._id === row.itemId);
-			if (!item) return [];
-			return [{ item_id: item._id, unit: item.unit, qty_per_person: row.qtyPerPerson }];
+			return [{ item_id: row.itemId, unit: row.unit, qty_per_person: row.qtyPerPerson }];
 		});
 	});
 
@@ -125,6 +152,13 @@
 		return 'sop';
 	}
 
+	// Editing a BOM plan can't re-run calculateMealIngredientsFromRecipe (the
+	// catalog Recipe id isn't stored) — so a BOM plan being edited reuses the
+	// exact same free-form row editor as sourceMode 'custom' (pick item, qty,
+	// add/remove), prefilled from its existing recipes. Only affects which
+	// calc/submit path runs (custom-style), not which UI controls render.
+	const isLockedEdit = $derived(isEdit && sourceMode === 'recipe');
+
 	$effect(() => {
 		if (!open) {
 			applied = false;
@@ -137,18 +171,21 @@
 				date = plan.date;
 				meal = plan.meal;
 				sourceMode = planSourceMode(plan);
-				// BOM mode: which catalog Recipe produced it isn't stored — needs a
-				// re-pick, recipeId stays null. Custom mode: each row IS fully
-				// reconstructable (qty_per_person = planned_qty / headcount.total).
+				// Which catalog Recipe produced a BOM plan isn't stored, so its
+				// ingredient *set* is locked on edit (isLockedEdit below) — but
+				// every row IS fully reconstructable the same way custom rows are
+				// (qty_per_person = planned_qty ÷ headcount.total), so both origins
+				// reuse the same custom-row editor instead of forcing a re-pick.
 				recipeId = null;
 				customLabel = plan.label ?? '';
 				customRows =
-					sourceMode === 'custom'
+					sourceMode === 'custom' || sourceMode === 'recipe'
 						? plan.recipes.map((r) => ({
 								itemId: r.recipe_id,
+								unit: r.unit ?? '',
 								qtyPerPerson: r.planned_qty / plan.headcount.total
 							}))
-						: [{ itemId: null, qtyPerPerson: 0 }];
+						: [{ itemId: null, unit: '', qtyPerPerson: 0 }];
 				fillFromOccupancy(plan.headcount);
 				overrideReason = plan.override_reason ?? '';
 				editedPlanId = plan._id;
@@ -159,7 +196,7 @@
 			sourceMode = defaultMode;
 			recipeId = null;
 			customLabel = '';
-			customRows = [{ itemId: null, qtyPerPerson: 0 }];
+			customRows = [{ itemId: null, unit: '', qtyPerPerson: 0 }];
 			appliedMode = true;
 		}
 		if (!applied && occupancy.data) {
@@ -202,21 +239,18 @@
 	const preview = $derived.by(() => {
 		if (!sopProfile.data || total <= 0) return null;
 		try {
-			if (sourceMode === 'recipe') {
+			if (sourceMode === 'recipe' && !isLockedEdit) {
 				if (!selectedRecipe) return null;
-				const itemUnits = Object.fromEntries(
-					(itemMasters.data ?? []).map((im) => [im._id, im.base_unit])
-				);
 				return calculateMealIngredientsFromRecipe(
 					selectedRecipe,
 					headcount,
-					itemUnits,
+					itemInfo,
 					sopProfile.data._id,
 					sopProfile.data.version,
 					new Date().toISOString()
 				);
 			}
-			if (sourceMode === 'custom') {
+			if (sourceMode === 'custom' || isLockedEdit) {
 				if (!customIngredients.length) return null;
 				return calculateMealIngredientsFromCustom(
 					customIngredients,
@@ -242,7 +276,7 @@
 		e.preventDefault();
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		const label =
-			sourceMode === 'custom'
+			sourceMode === 'custom' || isLockedEdit
 				? customLabel.trim() || undefined
 				: sourceMode === 'recipe'
 					? (selectedRecipe?.label ?? undefined)
@@ -254,8 +288,8 @@
 					label,
 					headcount,
 					override_reason: isOverridden ? overrideReason.trim() : null,
-					recipeId: sourceMode === 'recipe' ? (recipeId ?? undefined) : undefined,
-					custom: sourceMode === 'custom' ? customIngredients : undefined
+					recipeId: sourceMode === 'recipe' && !isLockedEdit ? (recipeId ?? undefined) : undefined,
+					custom: sourceMode === 'custom' || isLockedEdit ? customIngredients : undefined
 				});
 				toast.success(`แก้ไขแผน ${MEAL_PERIOD_LABELS[meal]} วันที่ ${date} แล้ว`);
 			} else {
@@ -280,7 +314,7 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="max-w-lg">
+	<Dialog.Content class="sm:max-w-lg">
 		<Dialog.Header>
 			<Dialog.Title>
 				{#if sourceMode === 'recipe'}
@@ -324,27 +358,37 @@
 				</div>
 			</div>
 
-			{#if sourceMode === 'custom'}
+			{#if sourceMode === 'custom' || isLockedEdit}
 				<div class="space-y-2">
 					<div class="space-y-1.5">
 						<Label for="mp-custom-label">ชื่อเมนู (ไม่บังคับ)</Label>
 						<Input id="mp-custom-label" placeholder="เช่น ข้าวไก่กรอบ" bind:value={customLabel} />
 					</div>
-					<Label>วัตถุดิบ</Label>
+					<Label>วัตถุดิบ (เฉพาะหมวดหมู่อาหาร)</Label>
 					{#if supplyItems.isPending}
 						<p class="text-xs text-muted-foreground">กำลังโหลดรายการสินค้า...</p>
-					{:else if !supplyItems.data?.length}
-						<p class="text-xs text-destructive">ยังไม่มีรายการสินค้าในคลัง</p>
+					{:else if !foodSupplyItems.length}
+						<p class="text-xs text-destructive">
+							ยังไม่มีรายการสินค้าหมวดหมู่ "อาหาร" ในคลัง — เพิ่มที่หน้า "รายการสินค้า" ก่อน
+						</p>
 					{:else}
 						<div class="space-y-2">
 							{#each customRows as row, i (i)}
+								{@const currentUnresolved =
+									row.itemId && !foodSupplyItems.some((item) => item._id === row.itemId)}
 								<div class="flex items-center gap-2">
 									<select
 										bind:value={row.itemId}
-										class="flex h-9 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+										onchange={() => onCustomItemPick(row)}
+										class="flex h-9 min-w-0 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
 									>
 										<option value={null} disabled>เลือกวัตถุดิบ...</option>
-										{#each supplyItems.data as item (item._id)}
+										{#if currentUnresolved}
+											<option value={row.itemId}>
+												{itemLabel(row.itemId ?? '')} — ยังไม่เชื่อมสต็อกจริง (เลือกใหม่เพื่อแก้)
+											</option>
+										{/if}
+										{#each foodSupplyItems as item (item._id)}
 											<option value={item._id}>{item.name} ({item.unit})</option>
 										{/each}
 									</select>
@@ -367,12 +411,12 @@
 										<Trash2 class="h-3.5 w-3.5" />
 									</Button>
 								</div>
-								{#if row.itemId}
+								{#if row.itemId && !currentUnresolved}
 									<p class="pl-0.5 text-xs text-muted-foreground">
 										ยอดคลังสแตนบาย ณ ศูนย์: <span class="font-medium text-foreground"
 											>{onHand(row.itemId)}</span
 										>
-										{supplyItems.data.find((i) => i._id === row.itemId)?.unit}
+										{row.unit}
 									</p>
 								{/if}
 							{/each}
@@ -385,14 +429,9 @@
 				</div>
 			{/if}
 
-			{#if sourceMode === 'recipe'}
+			{#if sourceMode === 'recipe' && !isLockedEdit}
 				<div class="space-y-1.5">
 					<Label for="mp-recipe">สูตรมาตรฐาน (จากฐานสูตร BOM)</Label>
-					{#if isEdit}
-						<p class="text-xs text-amber-600">
-							แผนเดิมไม่ได้เก็บว่าใช้สูตรไหน — กรุณาเลือกสูตรใหม่อีกครั้ง
-						</p>
-					{/if}
 					{#if recipes.isPending}
 						<p class="text-xs text-muted-foreground">กำลังโหลดสูตร...</p>
 					{:else if !recipes.data?.length}
@@ -490,6 +529,16 @@
 			{:else if preview}
 				<div class="space-y-1 rounded-md border bg-muted/50 p-3">
 					<p class="text-xs font-medium text-muted-foreground">ผลการคำนวณ</p>
+					<p class="text-xs text-muted-foreground">
+						{#if sourceMode === 'recipe' && !isLockedEdit}
+							สูตร: {selectedRecipe?.label} · มาตรฐาน {selectedRecipe?.standard_portions} ที่
+						{:else if sourceMode === 'custom' || isLockedEdit}
+							{customLabel.trim() || 'เมนูกำหนดเอง'} · วัตถุดิบจากคลังสินค้าจริง
+						{:else}
+							SOP: {sopProfile.data.name} v{sopProfile.data.version}
+							· ข้าว {DEFAULT_RICE_G_PER_PERSON_MEAL} ก./คน/มื้อ (ค่าครัว)
+						{/if}
+					</p>
 					{#each preview.recipes as recipe (recipe.recipe_id)}
 						{@const meta =
 							sourceMode === 'recipe'
@@ -497,8 +546,11 @@
 								: sourceMode === 'custom'
 									? { label: supplyItemLabel(recipe.recipe_id), unit: recipe.unit ?? '' }
 									: (RECIPE_LABELS[recipe.recipe_id] ?? { label: recipe.recipe_id, unit: '' })}
+						{@const resolved = !recipe.recipe_id.startsWith('item_master:')}
 						{@const shortfall =
-							sourceMode === 'custom' ? recipe.planned_qty - Number(onHand(recipe.recipe_id)) : 0}
+							sourceMode === 'custom' || (sourceMode === 'recipe' && resolved)
+								? recipe.planned_qty - Number(onHand(recipe.recipe_id))
+								: 0}
 						<p class="text-sm font-semibold">
 							{meta.label}
 							{recipe.planned_qty.toLocaleString()}
@@ -512,19 +564,10 @@
 							</p>
 						{/if}
 					{/each}
-					<p class="text-xs text-muted-foreground">
-						{#if sourceMode === 'recipe'}
-							สูตร: {selectedRecipe?.label} · มาตรฐาน {selectedRecipe?.standard_portions} ที่
-						{:else if sourceMode === 'custom'}
-							{customLabel.trim() || 'เมนูกำหนดเอง'} · วัตถุดิบจากคลังสินค้าจริง
-						{:else}
-							SOP: {sopProfile.data.name} v{sopProfile.data.version}
-							· ข้าว {DEFAULT_RICE_G_PER_PERSON_MEAL} ก./คน/มื้อ (ค่าครัว)
-						{/if}
-					</p>
-					{#if sourceMode === 'recipe'}
+					{#if sourceMode === 'recipe' && preview.recipes.some( (r) => r.recipe_id.startsWith('item_master:') )}
 						<p class="text-xs text-amber-600">
-							⚠ แผนจากสูตร BOM ยังเบิกวัตถุดิบไม่ได้จริง — วัตถุดิบยังไม่เชื่อมกับระบบคลังสินค้า
+							⚠ สูตรนี้มีวัตถุดิบที่ยังไม่เชื่อมกับสต็อกจริง (ชื่อในสูตรกับชื่อในคลังไม่ตรงกัน) —
+							แผนนี้จะเบิกวัตถุดิบไม่ได้จนกว่าจะแก้ชื่อให้ตรงกัน
 						</p>
 					{/if}
 				</div>
@@ -540,8 +583,8 @@
 						!sopProfile.data ||
 						!subCountsValid ||
 						!overrideReasonValid ||
-						(sourceMode === 'recipe' && !recipeId) ||
-						(sourceMode === 'custom' && customIngredients.length === 0)}
+						(sourceMode === 'recipe' && !isLockedEdit && !recipeId) ||
+						((sourceMode === 'custom' || isLockedEdit) && customIngredients.length === 0)}
 				>
 					{#if isEdit}
 						{updateCalc.isPending ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
