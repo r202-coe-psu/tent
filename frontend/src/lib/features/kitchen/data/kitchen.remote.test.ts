@@ -31,7 +31,7 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 
 // Mock the operations barrel with its real domain logic (imported directly from
 // the domain module, bypassing the barrel's UI/Svelte exports) so this pure
-// data-layer test doesn't transitively load ReceiveStockForm.svelte and its
+// data-layer test doesn't transitively load receive-stock-form.svelte and its
 // sveltekit-superforms adapter chain.
 vi.mock('$lib/features/operations', async () => {
 	const domain = await import('../../operations/domain/operations');
