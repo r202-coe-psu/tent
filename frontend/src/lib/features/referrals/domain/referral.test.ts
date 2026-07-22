@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { referralSchema, isReferral, type Referral, type ReferralStatus } from './referral.schema';
+import {
+	referralSchema,
+	referralInputSchema,
+	isReferral,
+	isCapacityReferral,
+	isResourceReferral,
+	isMedicalReferral,
+	type Referral,
+	type ReferralStatus
+} from './referral.schema';
 import { canTransition, applyTransition, allowedTransitions } from './referral.transitions';
 import { redactForScope, type ReferralScope } from './referral.redaction';
 
@@ -25,14 +34,15 @@ function mockReferral(overrides?: Partial<Referral>): Referral {
 		status: 'draft',
 		timeline: {},
 		...overrides
-	};
+	} as Referral;
 }
 
 describe('Referral Domain', () => {
-	describe('Schema Validation & Type Guard', () => {
+	describe('Schema Validation & Discriminated Union Type Guards', () => {
 		it('should validate a correct medical-emergency referral document', () => {
 			const doc = mockReferral();
 			expect(isReferral(doc)).toBe(true);
+			expect(isMedicalReferral(doc)).toBe(true);
 			expect(() => referralSchema.parse(doc)).not.toThrow();
 		});
 
@@ -44,6 +54,7 @@ describe('Referral Domain', () => {
 				reason: 'Shelter SH001 reached maximum capacity'
 			});
 			expect(isReferral(doc)).toBe(true);
+			expect(isCapacityReferral(doc)).toBe(true);
 			expect(doc.referral_type).toBe('capacity');
 			expect(doc.to_shelter_code).toBe('SH002');
 		});
@@ -51,10 +62,53 @@ describe('Referral Domain', () => {
 		it('should validate a resource referral document', () => {
 			const doc = mockReferral({
 				referral_type: 'resource',
+				to_org: { name: 'Social Welfare', kind: 'social_services' },
 				reason: 'Requesting 50 emergency blanket kits'
 			});
 			expect(isReferral(doc)).toBe(true);
+			expect(isResourceReferral(doc)).toBe(true);
 			expect(doc.referral_type).toBe('resource');
+		});
+
+		it('should reject creation input for capacity referral when to_shelter_code is missing', () => {
+			const input = {
+				referral_type: 'capacity',
+				evacuee_id: 'evacuee:01F8MECHEVACUEEID1234567',
+				reason: 'Capacity full',
+				urgency: 'normal'
+			};
+			const result = referralInputSchema.safeParse(input);
+			expect(result.success).toBe(false);
+		});
+
+		it('should reject creation input for medical referral when to_org name is missing', () => {
+			const input = {
+				referral_type: 'medical-emergency',
+				evacuee_id: 'evacuee:01F8MECHEVACUEEID1234567',
+				to_org: { kind: 'hospital' },
+				reason: 'Emergency care needed',
+				urgency: 'urgent'
+			};
+			const result = referralInputSchema.safeParse(input);
+			expect(result.success).toBe(false);
+		});
+
+		it('should validate legacy documents via read schema fallback', () => {
+			const legacyDoc = {
+				_id: 'referral:01F8MECHEXAMPLEDOCID12345',
+				type: 'referral',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-07-11T05:00:00.000Z',
+				updated_at: '2026-07-11T05:00:00.000Z',
+				created_by: 'Staff A',
+				evacuee_id: 'evacuee:01F8MECHEVACUEEID1234567',
+				reason: 'Legacy record without referral_type',
+				urgency: 'normal',
+				status: 'draft',
+				timeline: {}
+			};
+			expect(isReferral(legacyDoc)).toBe(true);
 		});
 
 		it('should reject when id format is wrong', () => {

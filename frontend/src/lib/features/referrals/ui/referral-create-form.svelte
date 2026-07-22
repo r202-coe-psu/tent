@@ -28,7 +28,7 @@
 			{
 				referral_type: 'medical-emergency',
 				urgency: 'normal',
-				to_org: { kind: 'hospital' }
+				to_org: { name: '', kind: 'hospital' }
 			},
 			zod4(referralInputSchema)
 		),
@@ -44,10 +44,6 @@
 				}
 				if (!f.data.evacuee_id) {
 					toast.error('กรุณาเลือกผู้ประสบภัยสำหรับทำรายการส่งต่อ');
-					return;
-				}
-				if (f.data.referral_type === 'capacity' && !f.data.to_shelter_code) {
-					toast.error('กรุณาระบุรหัสศูนย์พักพิงปลายทางสำหรับการย้ายศูนย์');
 					return;
 				}
 
@@ -67,6 +63,22 @@
 	);
 
 	const { form: formData, submitting, errors } = form;
+
+	// Reset destination fields when referral_type changes
+	$effect(() => {
+		const type = $formData.referral_type;
+		if (type === 'capacity') {
+			$formData.to_org = undefined;
+		} else if (type === 'resource' || type === 'medical-emergency') {
+			$formData.to_shelter_code = undefined;
+			if (!$formData.to_org) {
+				$formData.to_org = {
+					name: '',
+					kind: type === 'medical-emergency' ? 'hospital' : 'social_services'
+				};
+			}
+		}
+	});
 
 	// Evacuee search and selection state
 	let searchQuery = $state('');
@@ -317,7 +329,7 @@
 							</Form.Control>
 							<Form.FieldErrors />
 						</Form.Field>
-					{:else}
+					{:else if $formData.to_org}
 						<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 							<Form.Field {form} name="to_org.kind">
 								<Form.Control>
