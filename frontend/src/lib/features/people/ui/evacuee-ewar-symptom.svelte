@@ -77,6 +77,13 @@
 	>
 		{isHealthy ? '✅' : '🟩'} ไม่มีอาการป่วย (Healthy / No Symptoms)
 	</Button>
+	{#if isHealthy}
+		<div class="flex items-center justify-end pt-6">
+			<Button type="button" onclick={handleNext} class="h-10 px-6 text-sm font-semibold">
+				ถัดไป →
+			</Button>
+		</div>
+	{/if}
 
 	<!-- Symptom groups -->
 	{#each EWAR_SYMPTOM_GROUPS as group (group.title)}
