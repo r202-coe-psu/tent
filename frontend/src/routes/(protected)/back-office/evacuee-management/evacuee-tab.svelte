@@ -80,6 +80,7 @@
 	}
 
 	$effect(() => {
+		if (shelterQuery.isLoading || vulnerableGroupQuery.isLoading) return;
 		if (selectedType && !vulnerableTypeOptions.some((option) => option.value === selectedType)) {
 			selectedType = '';
 			resetPageOnFilter();
