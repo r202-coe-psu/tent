@@ -145,35 +145,6 @@ export const isMasterData = (d: unknown): d is MasterData =>
 
 // ---------------------------------------------------------------- slugify
 
-/**
- * Hand-curated dictionary for labels that don't transliterate cleanly from Thai
- * to a readable lower_snake `code`. Keep this list short — only seeds that
- * field study has already committed to. Anything not in the dict falls through
- * to `slugifyAscii()` (transliterate) and a `_<ulid>` suffix on collision.
- */
-const SLUG_DICT: Record<string, string> = {
-	ผู้สูงอายุ: 'elderly',
-	ผู้พิการ: 'disabled',
-	หญิงตั้งครรภ์: 'pregnant',
-	เด็กเล็ก: 'infant',
-	โรคเรื้อรัง: 'chronic_illness',
-	แพ้อาหาร: 'allergy_food',
-	แพ้ยา: 'allergy_drug',
-	หอบหืด: 'asthma',
-	'อิสลาม (Halal)': 'halal',
-	มังสวิรัติ: 'vegetarian',
-	อาหารอ่อน: 'soft_food',
-	ไม่ทานหมู: 'no_pork',
-	เบาหวาน: 'diabetic',
-	สุนัข: 'dog',
-	แมว: 'cat',
-	นก: 'bird',
-	อื่นๆ: 'other',
-	เสียหายบางส่วน: 'partial',
-	เสียหายหนัก: 'severe',
-	เสียหายทั้งหมด: 'total_loss'
-};
-
 /** Lightweight transliteration — keeps ascii lower_snake; non-mappable → ''. */
 function slugifyAscii(label: string): string {
 	return label
@@ -189,10 +160,9 @@ function slugifyAscii(label: string): string {
  *  uniqueness check (append ULID if collision). */
 export function slugifyLabel(label: string): string {
 	const trimmed = label.trim();
-	if (SLUG_DICT[trimmed]) return SLUG_DICT[trimmed];
 	const ascii = slugifyAscii(trimmed);
 	if (ascii) return ascii;
-	// All-non-ascii label with no dict entry → stable fallback via ULID.
+	// All-non-ascii label → fallback via ULID.
 	return `item_${ulid().toLowerCase()}`;
 }
 

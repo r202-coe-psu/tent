@@ -40,32 +40,25 @@ describe('masterTypeSchema', () => {
 });
 
 describe('slugifyLabel', () => {
-	it('uses the dict for known Thai labels', () => {
-		expect(slugifyLabel('ผู้สูงอายุ')).toBe('elderly');
-		expect(slugifyLabel('อิสลาม (Halal)')).toBe('halal');
-		expect(slugifyLabel('สุนัข')).toBe('dog');
-		expect(slugifyLabel('เสียหายทั้งหมด')).toBe('total_loss');
-	});
-
 	it('slugifies ASCII input', () => {
 		expect(slugifyLabel('Chronic illness')).toBe('chronic_illness');
 		expect(slugifyLabel('  Hal al  ')).toBe('hal_al');
 	});
 
-	it('falls back to item_<ulid> for non-ascii Thai without dict entry', () => {
-		const code = slugifyLabel('สภาพอากาศหนาวมาก');
+	it('falls back to item_<ulid> for non-ascii Thai labels', () => {
+		const code = slugifyLabel('ผู้สูงอายุ');
 		expect(code).toMatch(/^item_[0-9a-z]{26}$/);
 	});
 });
 
 describe('uniqueCode', () => {
 	it('returns base when no collision', () => {
-		expect(uniqueCode('ผู้สูงอายุ', [makeItem({ code: 'disabled' })])).toBe('elderly');
+		expect(uniqueCode('Chronic illness', [makeItem({ code: 'disabled' })])).toBe('chronic_illness');
 	});
 
 	it('appends ULID on collision', () => {
-		const code = uniqueCode('ผู้สูงอายุ', [makeItem()]);
-		expect(code).toMatch(/^elderly_[0-9a-z]{26}$/);
+		const code = uniqueCode('Chronic illness', [makeItem({ code: 'chronic_illness' })]);
+		expect(code).toMatch(/^chronic_illness_[0-9a-z]{26}$/);
 	});
 });
 
@@ -135,7 +128,7 @@ describe('applyItemOp', () => {
 		const items = [makeItem()];
 		const out = applyItemOp(items, { kind: 'add', label: 'ผู้พิการ' });
 		expect(out).toHaveLength(2);
-		expect(out[1].code).toBe('disabled');
+		expect(out[1].code).toMatch(/^item_[0-9a-z]{26}$/);
 	});
 
 	it('add with is_default unsets previous default', () => {
@@ -145,8 +138,8 @@ describe('applyItemOp', () => {
 			label: 'ผู้พิการ',
 			is_default: true
 		});
-		expect(out.find((i) => i.code === 'elderly')?.is_default).toBe(false);
-		expect(out.find((i) => i.code === 'disabled')?.is_default).toBe(true);
+		expect(out[0].is_default).toBe(false);
+		expect(out[1].is_default).toBe(true);
 	});
 
 	it('edit updates label only', () => {
