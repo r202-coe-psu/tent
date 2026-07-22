@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module F — Referral"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
+updated: 2026-07-22 # CR-045 referral schema & full DoD alignment
 module: F
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---

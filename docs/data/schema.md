@@ -323,13 +323,16 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 | `actions_taken` | str | opt | — |
 | `occurred_at` | ts | req | — |
 
-### 2.11 `referral` — `referral:{ulid}` · state machine
+### 2.11 `referral` — `referral:{ulid}` · state machine (CR-045)
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `evacuee_id` | str | req | — |
-| `to_org` | {`name`:str, `kind`:enum(`hospital`,`social_services`,`other`), `contact`:str?} | req | — |
+| `referral_type` | enum(`capacity`,`resource`,`medical-emergency`) | req | default `medical-emergency` (CR-045) |
+| `to_shelter_code` | str | opt | รหัสศูนย์พักพิงปลายทาง (ระบุเมื่อ `referral_type` = `capacity`) |
+| `to_org` | {`name`:str?, `kind`:enum(`hospital`,`social_services`,`other`)?, `contact`:str?} | opt | หน่วยงานปลายทาง (ระบุเมื่อ `referral_type` ≠ `capacity`) |
 | `reason` | str | req | — |
+| `response_reason` | str | opt | เหตุผลประกอบการตอบรับ (`accepted`) หรือปฏิเสธ (`rejected`) (CR-045) |
 | `urgency` | enum(`normal`,`urgent`) | req | — |
 | `status` | enum(`draft`,`sent`,`accepted`,`rejected`,`closed`) | req | forward-only |
 | `timeline` | {`sent`:{at,by}?, `responded`:{at,by}?, `closed`:{at,by}?} | sys | — |
