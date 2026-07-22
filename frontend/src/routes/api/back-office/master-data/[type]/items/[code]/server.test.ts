@@ -6,6 +6,12 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 	return {
 		...actual,
 		requireAdmin: vi.fn().mockResolvedValue(undefined),
+		requireShelterScopeOrSA: vi.fn().mockResolvedValue({
+			name: 'mgr',
+			roles: ['shelter:SH001', 'shelter_manager'],
+			isSA: false,
+			shelterCode: 'SH001'
+		}),
 		adminRaw: vi.fn()
 	};
 });
@@ -15,11 +21,12 @@ vi.mock('$lib/server/master-data-server', async (importOriginal) => ({
 }));
 
 import { DELETE } from './+server';
-import { requireAdmin, adminRaw } from '$lib/server/couch-admin';
+import { requireAdmin, requireShelterScopeOrSA, adminRaw } from '$lib/server/couch-admin';
 import { readMasterDoc } from '$lib/server/master-data-server';
 import type { MasterData } from '$lib/features/master-data/domain';
 
 const requireAdminMock = vi.mocked(requireAdmin);
+const scopeAuthMock = vi.mocked(requireShelterScopeOrSA);
 const adminRawMock = vi.mocked(adminRaw);
 const readMock = vi.mocked(readMasterDoc);
 
@@ -47,6 +54,12 @@ function callDELETE(type: string, code: string, query = '') {
 
 beforeEach(() => {
 	requireAdminMock.mockReset().mockResolvedValue('sa-user');
+	scopeAuthMock.mockReset().mockResolvedValue({
+		name: 'mgr',
+		roles: ['shelter:SH001', 'shelter_manager'],
+		isSA: false,
+		shelterCode: 'SH001'
+	});
 	adminRawMock.mockReset().mockResolvedValue({ status: 200, data: { rev: '4-new' } });
 	readMock.mockReset();
 });
@@ -93,6 +106,7 @@ describe('DELETE /api/back-office/master-data/[type]/items/[code]', () => {
 		});
 
 		await callDELETE('pet_types', 'dog', '?scope=shelter&shelter_code=SH001');
+		expect(scopeAuthMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
 		const [path, , doc] = adminRawMock.mock.calls[0];
 		expect(path).toBe('/registry/master_data%3Apet_types%3ASH001');
 		expect((doc as MasterData).shelter_code).toBe('SH001');
@@ -112,7 +126,7 @@ describe('DELETE /api/back-office/master-data/[type]/items/[code]', () => {
 		const [path, , doc] = adminRawMock.mock.calls[0];
 		expect(path).toBe('/registry/master_data%3Apet_types%3ASH001');
 		expect((doc as MasterData)._rev).toBeUndefined();
-		expect((doc as MasterData).created_by).toBe('sa-user');
+		expect((doc as MasterData).created_by).toBe('mgr');
 		expect((doc as MasterData).items).toEqual([]);
 		expect((doc as MasterData).excluded_codes).toEqual(['dog']);
 	});

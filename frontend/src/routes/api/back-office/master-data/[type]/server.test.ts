@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { error } from '@sveltejs/kit';
 
-// GET is open to any authenticated user (requireShelterScopeOrSA, CR-012 §2);
-// PUT stays SA-only (requireAdmin).
+// GET and shelter-scoped writes use requireShelterScopeOrSA; global writes stay
+// SA-only (requireAdmin).
 const caller = {
 	name: 'mgr',
 	roles: ['shelter:SH001', 'shelter_manager'],
@@ -14,7 +14,12 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 	return {
 		...actual,
 		requireAdmin: vi.fn().mockResolvedValue(undefined),
-		requireShelterScopeOrSA: vi.fn(),
+		requireShelterScopeOrSA: vi.fn().mockResolvedValue({
+			name: 'mgr',
+			roles: ['shelter:SH001', 'shelter_manager'],
+			isSA: false,
+			shelterCode: 'SH001'
+		}),
 		adminRaw: vi.fn()
 	};
 });
@@ -175,6 +180,7 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect(method).toBe('PUT');
 		expect((doc as MasterData).schema_v).toBe(2);
 		expect((doc as MasterData).shelter_code).toBe('SH001');
+		expect(authMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
 	});
 
 	it('stores only shelter-specific items when effective values include global items', async () => {
