@@ -49,7 +49,6 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 			isSA: true,
 			shelterCode: null
 		});
-		// adminRaw is called twice (age, country), return 404 for both
 		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: null });
 
 		const event = createMockEvent('SH001');
@@ -88,26 +87,28 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 			shelterCode: null
 		});
 
-		// First call is demographics_by_age, second is demographics_by_country
-		vi.mocked(adminRaw)
-			.mockResolvedValueOnce({
-				status: 200,
-				data: {
-					rows: [
-						{ key: '18-59', value: 20 },
-						{ key: '0-4', value: 5 }
-					]
-				}
-			})
-			.mockResolvedValueOnce({
-				status: 200,
-				data: {
-					rows: [
-						{ key: 'THAILAND', value: 20 },
-						{ key: 'LAOS', value: 5 }
-					]
-				}
-			});
+		vi.mocked(adminRaw).mockResolvedValueOnce({
+			status: 200,
+			data: {
+				docs: [
+					{
+						current_stay: { status: 'active' },
+						birth_year: 2026 + 543 - 30,
+						country: 'THAILAND'
+					},
+					{
+						current_stay: { status: 'active' },
+						birth_year: 2026 + 543 - 2,
+						country: 'THAILAND'
+					},
+					{
+						current_stay: { status: 'pre_registered' },
+						birth_year: 2026 + 543 - 40,
+						country: 'LAOS'
+					}
+				]
+			}
+		});
 
 		const event = createMockEvent('SH001');
 		const res = (await GET(event)) as Response;
@@ -116,9 +117,17 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 		const data = await res.json();
 
 		expect(data.shelter_code).toBe('SH001');
-		expect(data.age_groups['18-59']).toBe(20);
-		expect(data.age_groups['0-4']).toBe(5);
-		expect(data.countries['THAILAND']).toBe(20);
-		expect(data.countries['LAOS']).toBe(5);
+		expect(data.age_groups['18-59']).toBe(1);
+		expect(data.age_groups['0-4']).toBe(1);
+		expect(data.countries['THAILAND']).toBe(2);
+		expect(data.countries['LAOS']).toBeUndefined();
+
+		const [path, method, body] = vi.mocked(adminRaw).mock.calls[0];
+		expect(path).toBe('/shelter_sh001/_find');
+		expect(method).toBe('POST');
+		expect(body).toMatchObject({
+			selector: { type: 'evacuee', 'current_stay.status': 'active' },
+			fields: ['current_stay', 'birth_year', 'country']
+		});
 	});
 });

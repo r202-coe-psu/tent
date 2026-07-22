@@ -96,7 +96,7 @@
 							type="text"
 							bind:value={searchQuery}
 							onkeydown={handleKeydown}
-							placeholder="สืบค้นญาติด้วย ชื่อ-สกุล หรือ รหัสบัตรประชาชน"
+							placeholder="สืบค้นด้วย ชื่อ สกุล เบอร์โทรศัพท์ หรือ รหัสบัตรประชาชน"
 							class="h-10 w-full bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none"
 						/>
 					</div>

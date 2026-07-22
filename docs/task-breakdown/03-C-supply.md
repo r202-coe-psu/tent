@@ -1,0 +1,109 @@
+---
+title: "Task Breakdown — Module C — Supply & Inventory"
+status: active
+created: 2026-06-05
+updated: 2026-07-16
+module: C
+note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
+---
+
+# Module C — Supply & Inventory
+
+> supply catalog, stock ledger (receive/distribute/transfer), dashboard + reorder
+
+- **Team owner:** Team C — ก้อง, มิว, พัฟ (Supply/Inventory; ดู [Squad Roster](../prd/squad-roster.md))
+- **Phase:** R2, R4
+- **Design input (บริษัท):** P-01 (ส่งมอบแล้ว), P-03 (Family Search ส่งล่วงหน้า; EOC/Open API ตาม deferred)
+- **Target ส่งมอบ:** in-scope ภายในสิงหาคม 2026 · deferred (T-45) ภายในสัปดาห์ที่ 2 กันยายน 2026
+
+## Features / Tasks
+
+| ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-10 | 🔄 | Supply Item catalog (master) | FR-27 | R2 | prod | ส.ค. | 3 | ÷1.6 | 2 | T-02 |
+| T-11 | 🔄 | Stock receive (inbound) + ledger write | FR-28 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-10 |
+| T-12 | 🔄 | Stock distribute (outbound) | FR-29 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-11 |
+| T-13 | 🔄 | Inter-shelter transfer + receive confirm | FR-30 | R2 | prod | ส.ค. | 6 | ÷1.4 | 4.5 | T-11 |
+| T-14 | 🔄 | Stock dashboard + reorder threshold | FR-31 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-11 |
+| T-45 | ⬜ | Donation/kitchen/inventory polish + UAT support | - | R4 | post | deferred | 5 | ÷1.3 | 4 | - |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **28** |  | **19.5** |  |
+
+> **Deferred** (ส่งมอบหลัง go-live, ภายในสัปดาห์ที่ 2 กันยายน 2026): T-45
+
+## Task Details
+
+> DoD ทุก prod task ยึด [Standard DoD](_index.md#standard-dod): **UI + data/write path + validation + permission + test + demo ของ slice** — รายการด้านล่างคือเกณฑ์เฉพาะของ task นั้นเพิ่มจากมาตรฐานกลาง
+
+### T-10 — Supply Item catalog (master) (FR-27)
+
+**Description:** Master catalog ของสิ่งของ (หมวดหมู่ เช่น อาหารแห้ง/น้ำ/ยา/เครื่องนุ่งห่ม, หน่วยนับ, รายละเอียด item) ใช้ร่วมกันทุกศูนย์ เป็นฐานอ้างอิงของ ledger (T-11), donation (T-15/21) และ resource calc (T-31)
+
+**Definition of Done:**
+- CRUD item + หมวดหมู่ + หน่วยนับ ตามรายการตั้งต้นจาก design P-01
+- Item ที่ถูกใช้ใน ledger แล้วห้ามลบ (ทำได้แค่ deactivate)
+- Seed data หมวด/item หลักพร้อมใช้ และ test + demo ผ่าน
+
+### T-11 — Stock receive (inbound) + ledger write (FR-28)
+
+**Description:** บันทึกการรับสิ่งของเข้าคลังศูนย์ (จากบริจาค/จัดซื้อ/โอนมา) โดยทุก movement เขียนเป็น **append-only ledger** — ยอดคงเหลือคำนวณจาก ledger ไม่แก้ตัวเลขตรงๆ task นี้เป็น hub ของ critical path (block T-12/13/14/15)
+
+**Definition of Done:**
+- รับเข้า: เลือก item + จำนวน + source marker (donation / transfer-in / manual) → ledger entry ถูกสร้าง + on-hand เพิ่มทันที พร้อม audit (ใคร/เมื่อไร) — `purchase` source ถอนกลับ pending CR-033 sign-off จาก net-lynx
+- ปริมาณศูนย์หรือติดลบถูก validate ปฏิเสธ
+- Ledger แก้ไขย้อนหลังไม่ได้ — ผิดต้องทำรายการ adjust ใหม่ (correction entry)
+- ยอดคงเหลือต่อ item คำนวณจาก ledger ถูกต้อง (test ครอบ concurrent writes บน CouchDB)
+- Demo รับของเข้าคลัง → ยอดอัปเดต end-to-end
+
+### T-12 — Stock distribute (outbound) (FR-29)
+
+**Description:** บันทึกการแจกจ่ายสิ่งของให้ผู้พักพิง ตัดยอดผ่าน ledger — R2 บันทึกระดับรวม/ต่อโซนเป็นหลัก การผูกผู้รับราย household/person เป็น optional (ตาม ASSUMPTION ใน PRD FR-29) ใช้เป็นข้อมูลการแจกและฐานของ kitchen requisition (T-26)
+
+**Definition of Done:**
+- บันทึกแจกจ่ายแล้ว on-hand ลดทันทีผ่าน ledger entry พร้อม actor/timestamp
+- แจกเกิน on-hand → **เตือน/ปฏิเสธ — ห้ามทำให้ stock ติดลบ** (PRD FR-29 + NFR-7/NFR-13 ไม่ใช่ warning-only)
+- ผูกผู้รับระดับโซนได้เป็นอย่างน้อย; ราย household (scan QR) เป็น optional ตาม design
+- ประวัติการแจกจ่าย query ได้ และ test + demo ผ่าน
+
+### T-13 — Inter-shelter transfer + receive confirm (FR-30)
+
+**Description:** โอนสิ่งของระหว่างศูนย์เป็นธุรกรรม 2 ขา: ศูนย์ต้นทางส่งออก (in-transit) → ศูนย์ปลายทางยืนยันรับ ยอดจริงเข้าคลังเมื่อ confirm เท่านั้น แก้ปัญหาของหายระหว่างทาง/ยอดไม่ตรงตาม pain point ใน source proposal
+
+**Definition of Done:**
+- สร้าง transfer → ต้นทางตัดยอดเป็น in-transit, ปลายทาง confirm → รับเข้า ledger ปลายทาง
+- Confirm ยอดไม่ตรงกับที่ส่ง (ของหาย/เสียหาย) บันทึกส่วนต่าง + เหตุผลได้
+- ยกเลิก transfer ก่อน confirm ได้ ยอดคืนต้นทางถูกต้อง
+- Test state machine ครบ (pending/in-transit/confirmed/cancelled) + demo โอนข้ามศูนย์จริง
+
+### T-14 — Stock dashboard + reorder threshold (FR-31)
+
+**Description:** Dashboard ยอดคงเหลือต่อศูนย์ + ตั้ง reorder threshold ต่อ item เพื่อแจ้งเตือนของใกล้หมด — เป็นแหล่งข้อมูล "ความต้องการคงค้าง" ให้ donation reservation/cut-off/redirect (T-21/22/23) และ resource calc (T-31) จึงอยู่บน critical path
+
+**Definition of Done:**
+- Dashboard แสดง on-hand ต่อประเภท **ต่อศูนย์และยอดรวมข้ามศูนย์** พร้อม last-updated timestamp (PRD FR-31)
+- ตั้ง reorder threshold ต่อ item ต่อศูนย์ได้ ต่ำกว่าเกณฑ์ → flag "ขาดแคลน" ชัดเจนบน dashboard
+- ตัวเลข dashboard reconcile กับ Stock Ledger ได้เสมอ (ผลต่าง = 0 ใน UAT — SM-8)
+- ข้อมูล "ขาด/เกิน" expose เป็น API ให้ module Donation และ B ใช้ (ตาม contract T-03)
+- Perf ตามที่ตกลงกับ T-35 (read-model) และ test + demo ผ่าน
+
+### T-45 — Donation/kitchen/inventory polish + UAT support (deferred)
+
+**Description:** เก็บงานหลัง go-live ของสาย donation/kitchen/inventory: bugfix จาก UAT/การใช้จริง, ปรับ UX จุดที่ผู้ใช้สะดุด, สนับสนุน UAT รอบ cross-module (T-44) — ไม่มี feature ใหม่
+
+**Definition of Done:**
+- Defect list จาก UAT + go-live สาย C/D/donation ถูก triage และปิดระดับ critical/major ครบ
+- การปรับ UX ผ่านการยืนยันจากผู้ใช้หน้างานหรือ PO
+- ไม่มี regression (test suite เดิมผ่าน) และส่งมอบภายใน 14/09/2026
+
+## Effort by phase (Adj MD)
+
+| Phase | Raw MD | Adj MD |
+| --- | --- | --- |
+| R2 | 23 | 15.5 |
+| R4 | 5 | 4 |
+| **รวม** | **28** | **19.5** |
+
+## Dependencies
+
+**Cross-module dependency (ขึ้นกับโมดูลอื่น):**
+
+- `T-02` (Data-model expansion (household, zone, supply, ledger, donation) — additive) — module **Platform/Core**
