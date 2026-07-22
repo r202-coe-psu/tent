@@ -25,6 +25,18 @@
 	const planned = $derived(plan?.headcount.total ?? 0);
 	const canSubmit = $derived(served >= 0 && waste >= 0 && volunteers >= 0 && outsideEvacuees >= 0);
 
+	// Soft warnings only — over-planned service is a real, expected scenario
+	// (computeMealVariance's `over` status covers it, e.g. the plan
+	// under-estimated demand), so these flag the numbers for a second look
+	// instead of blocking the record. Checked both per-field and combined,
+	// since a set of individually-fine numbers can still add up past plan.
+	const servedExceeds = $derived(planned > 0 && served > planned);
+	const wasteExceeds = $derived(planned > 0 && waste > planned);
+	const volunteersExceeds = $derived(planned > 0 && volunteers > planned);
+	const outsideExceeds = $derived(planned > 0 && outsideEvacuees > planned);
+	const total = $derived(served + waste + volunteers + outsideEvacuees);
+	const totalExceeds = $derived(planned > 0 && total > planned);
+
 	// Discard the actuals on close — no carryover between plans (mirrors
 	// requisition-dialog's close() pattern instead of resetting via $effect).
 	function resetActuals() {
@@ -90,10 +102,20 @@
 				<div class="space-y-1.5">
 					<Label for="ms-served">เสิร์ฟในศูนย์ (คน/กล่อง)</Label>
 					<Input id="ms-served" type="number" min="0" bind:value={served} required />
+					{#if servedExceeds}
+						<p class="text-xs text-amber-600">
+							⚠ เกินยอดที่วางแผนไว้ ({planned.toLocaleString()} คน) — ตรวจสอบยอดก่อนบันทึก
+						</p>
+					{/if}
 				</div>
 				<div class="space-y-1.5">
 					<Label for="ms-waste">เหลือทิ้ง (กล่อง)</Label>
 					<Input id="ms-waste" type="number" min="0" bind:value={waste} required />
+					{#if wasteExceeds}
+						<p class="text-xs text-amber-600">
+							⚠ เกินยอดที่วางแผนไว้ ({planned.toLocaleString()}) — ตรวจสอบยอดก่อนบันทึก
+						</p>
+					{/if}
 				</div>
 			</div>
 
@@ -103,13 +125,30 @@
 					<div class="space-y-1.5">
 						<Label for="ms-vol" class="text-xs">อาสาสมัคร</Label>
 						<Input id="ms-vol" type="number" min="0" bind:value={volunteers} />
+						{#if volunteersExceeds}
+							<p class="text-xs text-amber-600">
+								⚠ เกินยอดที่วางแผนไว้ ({planned.toLocaleString()})
+							</p>
+						{/if}
 					</div>
 					<div class="space-y-1.5">
 						<Label for="ms-outside" class="text-xs">ผู้อพยพนอกศูนย์</Label>
 						<Input id="ms-outside" type="number" min="0" bind:value={outsideEvacuees} />
+						{#if outsideExceeds}
+							<p class="text-xs text-amber-600">
+								⚠ เกินยอดที่วางแผนไว้ ({planned.toLocaleString()})
+							</p>
+						{/if}
 					</div>
 				</div>
 			</div>
+
+			{#if totalExceeds}
+				<p class="text-xs text-amber-600">
+					⚠ รวมทุกช่อง ({total.toLocaleString()}) เกินยอดที่วางแผนไว้ ({planned.toLocaleString()}
+					คน) — ตรวจสอบยอดก่อนบันทึก
+				</p>
+			{/if}
 
 			<div class="space-y-1.5">
 				<Label for="ms-notes" class="text-xs">หมายเหตุ (ไม่บังคับ)</Label>
