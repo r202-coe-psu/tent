@@ -3,10 +3,26 @@
 	import * as Table from '$lib/components/ui/table';
 	import * as Pagination from '$lib/components/ui/pagination';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
-	import { useRequisitions, type KitchenRequisition } from '$lib/features/kitchen';
+	import {
+		useRequisitions,
+		useMealPlans,
+		MEAL_PERIOD_LABELS,
+		type KitchenRequisition,
+		type MealPlan
+	} from '$lib/features/kitchen';
 	import { qtyGte } from '$lib/utils/qty';
 
 	const requisitions = useRequisitions();
+	const plans = useMealPlans();
+
+	// meal_plan_id is a ulid _id (not a deterministic date:meal string) — look
+	// the plan up directly by id instead of parsing it out of the id, same
+	// display convention as meal-service-summary's "แผนต้นทาง" column.
+	const planById = $derived.by(() => {
+		const m: Record<string, MealPlan> = {};
+		for (const p of plans.data ?? []) m[p._id] = p;
+		return m;
+	});
 
 	// Newest first — issued_at is the audit timestamp of the withdrawal.
 	const rows = $derived(
@@ -24,11 +40,6 @@
 	// otherwise stock was short and it was a partial withdrawal (schema.md §2.6).
 	function isComplete(req: KitchenRequisition): boolean {
 		return req.items.every((i) => qtyGte(i.qty_issued, i.qty_requested));
-	}
-
-	function planLabel(id: string | null): string {
-		if (!id) return 'เบิกนอกแผน';
-		return id.split(':').slice(1).join(':') || id;
 	}
 
 	function formatTime(iso: string): string {
@@ -75,13 +86,27 @@
 					</Table.Header>
 					<Table.Body>
 						{#each paginatedRows as req (req._id)}
+							{@const plan = req.meal_plan_id ? (planById[req.meal_plan_id] ?? null) : null}
 							<Table.Row>
 								<Table.Cell class="px-6 text-xs text-muted-foreground">
 									{formatTime(req.issued_at)}
 								</Table.Cell>
 								<Table.Cell class="px-6 text-sm">{req.created_by}</Table.Cell>
-								<Table.Cell class="px-6 font-mono text-xs">{planLabel(req.meal_plan_id)}</Table.Cell
-								>
+								<Table.Cell class="px-6">
+									{#if !req.meal_plan_id}
+										<p class="text-sm text-muted-foreground">เบิกนอกแผน</p>
+									{:else if !plan}
+										<p class="text-sm text-muted-foreground">ไม่พบแผน</p>
+									{:else}
+										<p class="text-sm font-medium">
+											{plan.label ?? MEAL_PERIOD_LABELS[plan.meal]}
+										</p>
+										<p class="text-xs text-muted-foreground">
+											{#if plan.label}{MEAL_PERIOD_LABELS[plan.meal]} ·
+											{/if}<span class="font-mono">{plan.date}</span>
+										</p>
+									{/if}
+								</Table.Cell>
 								<Table.Cell class="px-6">
 									<ul class="space-y-0.5 text-xs">
 										{#each req.items as item (item.item_id)}
