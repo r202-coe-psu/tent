@@ -13,7 +13,9 @@
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import TrendingUp from '@lucide/svelte/icons/trending-up';
 	import XCircle from '@lucide/svelte/icons/x-circle';
-	import { qtyGt, qtyLte } from '$lib/utils/qty';
+	import Scale from '@lucide/svelte/icons/scale';
+	import { ResourceDashboard } from '$lib/features/sop-ratios/components';
+	import { shelterCodeFromRoles } from '$lib/auth/roles';
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const balanceQuery = useStockBalance();
@@ -24,6 +26,12 @@
 	const balance = $derived(balanceQuery.data ?? new Map<string, string>());
 	const items = $derived(itemsQuery.data ?? []);
 	const ledger = $derived(ledgerQuery.data ?? []);
+
+	const roles = $derived(authStore.user?.roles ?? []);
+	const shelterCode = $derived(shelterCodeFromRoles(roles));
+
+	// ─── Active Tab State ─────────────────────────────────────────────────────
+	let activeTab = $state<'inventory' | 'sphere'>('inventory');
 
 	// ─── Modal state ──────────────────────────────────────────────────────────
 	let isReceiveModalOpen = $state(false);
@@ -60,141 +68,58 @@
 </header>
 
 <div class="flex w-full flex-1 flex-col gap-6 bg-background p-6">
-	<!-- Title & Inbound Trigger Button -->
-	<div class="flex w-full flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-		<div>
-			<h2 class="flex items-center gap-2 text-3xl font-extrabold tracking-tight text-foreground">
-				<Boxes class="h-8 w-8 text-primary" />
-				แผงควบคุมคลังและเสบียง
-			</h2>
-			<p class="mt-1.5 text-sm text-muted-foreground">
-				จัดการรับพัสดุเข้าคลัง ค้นหาสินค้า
-				และเรียกตรวจสอบบัญชีความเคลื่อนไหวสินค้าทั้งหมดในศูนย์พักพิง
-			</p>
+	<!-- Offline banner -->
+	{#if isOffline}
+		<div
+			class="flex animate-pulse items-center gap-3 rounded-2xl border border-yellow-300/40 bg-yellow-500/10 px-4 py-3.5 text-sm text-yellow-800 shadow-sm dark:text-yellow-200"
+		>
+			<AlertTriangle class="h-5 w-5 shrink-0 text-yellow-500" />
+			<div>
+				<span class="font-bold">Offline Mode:</span>
+				ระบบกำลังทำงานในโหมดออฟไลน์ ข้อมูลสต็อกจะถูกบันทึกไว้ในเครื่องก่อน และทำการซิงค์อัตโนมัติเมื่อสัญญาณอินเทอร์เน็ตกลับมาใช้งานได้ปกติ
+			</div>
 		</div>
+	{/if}
 
-		<!-- Dialog to Receive Stock -->
-		<Dialog.Root bind:open={isReceiveModalOpen}>
-			<Dialog.Trigger
-				class="inline-flex w-full shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-lg transition-all duration-300 hover:scale-[1.03] hover:bg-primary/95 hover:shadow-xl active:scale-[0.97] sm:w-auto"
-			>
-				<PackagePlus class="h-4.5 w-4.5" /> รับของเข้าคลัง
-			</Dialog.Trigger>
-			<Dialog.Content
-				class="max-h-[90vh] max-w-2xl overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl sm:max-w-2xl"
-			>
-				<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
-					<Dialog.Title class="flex items-center gap-2 text-xl font-bold text-foreground">
-						<PackagePlus class="h-5 w-5 text-primary" />
-						ลงทะเบียนรับของเข้าคลัง (Check-in)
-					</Dialog.Title>
-					<Dialog.Description class="mt-1 text-sm text-muted-foreground">
-						บันทึกการรับเข้าสิ่งของพัสดุจากผู้บริจาค การจัดซื้อ หรือการโอนย้าย โดยระบบจะบันทึกลงใน
-						Ledger โดยอัตโนมัติ
-					</Dialog.Description>
-				</Dialog.Header>
-				<div class="mt-2">
-					<ReceiveStockForm
-						onsuccess={() => {
-							isReceiveModalOpen = false;
-						}}
-					/>
-				</div>
-			</Dialog.Content>
-		</Dialog.Root>
+	<!-- Title with Accent Line -->
+	<div class="flex items-center gap-3 border-l-4 border-orange-500 pl-3">
+		<h2 class="text-xl font-bold text-foreground">คลังทรัพยากร (Stock & Donations)</h2>
 	</div>
 
-	<!-- KPI Summary Widgets (Depth Design) -->
-	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-		<!-- Total items card -->
-		<div
-			class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-primary/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
-		>
-			<div>
-				<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
-					>รายการสิ่งของทั้งหมด</span
-				>
-				<strong class="mt-1.5 block font-mono text-3xl font-extrabold text-foreground">
-					{totalItems.toLocaleString()}
-				</strong>
-			</div>
-			<div class="rounded-xl border border-primary/20 bg-primary/10 p-3 text-primary">
-				<Boxes class="h-5 w-5" />
-			</div>
-		</div>
-
-		<!-- Out of stock card -->
-		<div
-			class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-rose-500/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
-		>
-			<div>
-				<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
-					>สินค้าหมดคลัง</span
-				>
-				<strong
-					class="mt-1.5 block font-mono text-3xl font-extrabold {emptyCount > 0
-						? 'text-rose-600'
-						: 'text-foreground'}"
-				>
-					{emptyCount.toLocaleString()}
-				</strong>
-			</div>
-			<div
-				class="flex items-center justify-center rounded-xl border p-3 {emptyCount > 0
-					? 'border-rose-500/20 bg-rose-500/10 text-rose-600'
-					: 'border-border bg-muted text-muted-foreground'}"
+	<!-- Segmented Tabs (Pills Control) -->
+	<div class="flex">
+		<div class="inline-flex rounded-xl border border-border/40 bg-muted/60 p-1 shadow-sm">
+			<button
+				onclick={() => (activeTab = 'inventory')}
+				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold tracking-wide transition-all duration-300 active:scale-[0.98] md:px-5 md:py-2.5 {activeTab ===
+				'inventory'
+					? 'border border-border/60 bg-background text-primary shadow-sm'
+					: 'border border-transparent text-muted-foreground hover:text-foreground'}"
 			>
-				<XCircle class="h-5 w-5" />
-			</div>
-		</div>
-
-		<!-- Low stock card -->
-		<div
-			class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-amber-500/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
-		>
-			<div>
-				<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
-					>สินค้าใกล้หมด (เฝ้าระวัง)</span
-				>
-				<strong
-					class="mt-1.5 block font-mono text-3xl font-extrabold {lowStockCount > 0
-						? 'text-amber-600'
-						: 'text-foreground'}"
-				>
-					{lowStockCount.toLocaleString()}
-				</strong>
-			</div>
-			<div
-				class="flex items-center justify-center rounded-xl border p-3 {lowStockCount > 0
-					? 'border-amber-500/20 bg-amber-500/10 text-amber-600'
-					: 'border-border bg-muted text-muted-foreground'}"
+				<Boxes class="h-4 w-4" />
+				รายการพัสดุในคลัง (Stock Inventory)
+			</button>
+			<button
+				onclick={() => (activeTab = 'sphere')}
+				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold tracking-wide transition-all duration-300 active:scale-[0.98] md:px-5 md:py-2.5 {activeTab ===
+				'sphere'
+					? 'border border-border/60 bg-background text-primary shadow-sm'
+					: 'border border-transparent text-muted-foreground hover:text-foreground'}"
 			>
-				<AlertTriangle class="h-5 w-5" />
-			</div>
-		</div>
-
-		<!-- Transactions count card -->
-		<div
-			class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-purple-500/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
-		>
-			<div>
-				<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
-					>ความเคลื่อนไหวใน 24 ชม.</span
-				>
-				<strong class="mt-1.5 block font-mono text-3xl font-extrabold text-foreground">
-					{recentActivityCount.toLocaleString()}
-				</strong>
-			</div>
-			<div
-				class="rounded-xl border border-purple-500/20 bg-purple-500/10 p-3 text-purple-600 dark:text-purple-400"
-			>
-				<TrendingUp class="h-5 w-5" />
-			</div>
+				<Scale class="h-4 w-4" />
+				วิเคราะห์ความต้องการเสบียง (Sphere Standard)
+			</button>
 		</div>
 	</div>
 
-	<!-- Main Inventory Table -->
-	<div class="animate-in duration-300 fade-in slide-in-from-bottom-3">
-		<StockTable />
-	</div>
+	<!-- Dynamic Tab Content -->
+	{#if activeTab === 'inventory'}
+		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
+			<StockTable />
+		</div>
+	{:else if activeTab === 'sphere'}
+		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
+			<ResourceDashboard {shelterCode} />
+		</div>
+	{/if}
 </div>

@@ -3,7 +3,23 @@
 	import { useStockBalance, useLedger } from '../application/queries';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
+	import { useItemMasters } from '$lib/features/catalog';
+	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import { cn } from '$lib/utils/shadcn.js';
+	import LedgerTable from './ledger-table.svelte';
+	import ReceiveStockForm from './receive-stock-form.svelte';
+	import DistributeStockForm from './distribute-stock-form.svelte';
+	import AdjustStockForm from './adjust-stock-form.svelte';
+	import MinusCircle from '@lucide/svelte/icons/minus-circle';
+	import Settings from '@lucide/svelte/icons/settings';
+	import { qtyGt, qtyLte } from '$lib/utils/qty';
+	import { calculateReorderLevel } from '$lib/features/supply/domain/threshold-calc';
+	import type { ItemMaster } from '$lib/features/catalog/domain/catalog';
+
+	// Icon
+	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
 	import Filter from '@lucide/svelte/icons/filter';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
@@ -16,31 +32,48 @@
 	import History from '@lucide/svelte/icons/history';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import LedgerTable from './LedgerTable.svelte';
-	import { qtyGt, qtyLte } from '$lib/utils/qty';
-	import ReceiveStockForm from './ReceiveStockForm.svelte';
-	import DistributeStockForm from './DistributeStockForm.svelte';
-	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
+	const itemMastersQuery = useItemMasters();
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 
 	// ─── Filter state ─────────────────────────────────────────────────────────
 	let searchQuery = $state('');
-	let categoryFilter = $state<SupplyCategory | 'all'>('all');
+	let categoryFilter = $state<string>('all');
 	let locationFilter = $state<string | 'all'>('all');
 	let statusFilter = $state<'all' | 'normal' | 'low' | 'empty' | 'expiring' | 'expired'>('all');
 
 	// ─── Modal state ──────────────────────────────────────────────────────────
 	let selectedItemId = $state<string | null>(null);
 	let isManageModalOpen = $state(false);
-	let activeModalTab = $state<'history' | 'checkin' | 'distribute'>('history');
+	let activeModalTab = $state<'history' | 'checkin' | 'distribute' | 'adjust'>('history');
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
-	const items = $derived(itemsQuery.data ?? []);
+	const items = $derived.by(() => {
+		const supplyItems = (itemsQuery.data ?? []).map((si) => ({
+			...si,
+			target_reserve_days: (si as any).target_reserve_days,
+			consumption_rate: (si as any).consumption_rate,
+			timeframe: (si as any).timeframe
+		}));
+		const itemMasters = itemMastersQuery.data ?? [];
+
+		const mappedItemMasters = itemMasters.map((im) => ({
+			_id: im._id,
+			name: im.name,
+			category: im.category || 'other',
+			unit: im.base_unit || im.unit || 'ชิ้น',
+			reorder_level: null,
+			perishable: false,
+			target_reserve_days: im.target_reserve_days,
+			consumption_rate: im.consumption_rate,
+			timeframe: im.timeframe
+		}));
+
+		return [...supplyItems, ...mappedItemMasters];
+	});
 	const balance = $derived(balanceQuery.data ?? new Map<string, string>());
 	const ledger = $derived(ledgerQuery.data ?? []);
 
@@ -104,15 +137,13 @@
 	/** Filtered and searched items list. */
 	const displayedItems = $derived.by(() => {
 		const q = searchQuery.toLowerCase().trim();
-		return items.filter((item) => {
+		return itemsWithCalculatedStatus.filter((item) => {
 			// Search
 			if (q && !item.name.toLowerCase().includes(q) && !item._id.toLowerCase().includes(q))
 				return false;
 			// Category
 			if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
 
-			const qty = balance.get(item._id) ?? '0';
-			const status = getStatus(qty, item.reorder_level);
 			const lot = latestLotByItem[item._id];
 			const expired = isExpired(lot?.expiry);
 			const expiring = isExpiringSoon(lot?.expiry);
@@ -124,9 +155,9 @@
 
 			// Status Filter
 			if (statusFilter !== 'all') {
-				if (statusFilter === 'normal' && status !== 'normal') return false;
-				if (statusFilter === 'low' && status !== 'low') return false;
-				if (statusFilter === 'empty' && status !== 'empty') return false;
+				if (statusFilter === 'normal' && item.status !== 'normal') return false;
+				if (statusFilter === 'low' && item.status !== 'low') return false;
+				if (statusFilter === 'empty' && item.status !== 'empty') return false;
 				if (statusFilter === 'expired' && !expired) return false;
 				if (statusFilter === 'expiring' && !expiring) return false;
 			}
@@ -135,11 +166,35 @@
 	});
 
 	const isLoading = $derived(
-		itemsQuery.isLoading || balanceQuery.isLoading || ledgerQuery.isLoading
+		itemsQuery.isLoading ||
+			balanceQuery.isLoading ||
+			ledgerQuery.isLoading ||
+			itemMastersQuery.isLoading
 	);
 
 	// ─── Helpers ──────────────────────────────────────────────────────────────
-	const CATEGORY_OPTIONS = Object.entries(SUPPLY_CATEGORY_LABELS) as [SupplyCategory, string][];
+	function getCategoryStyle(category: string): string {
+		return CATEGORY_STYLES[category as SupplyCategory] || CATEGORY_STYLES.other;
+	}
+
+	function getCategoryLabel(category: string): string {
+		return SUPPLY_CATEGORY_LABELS[category as SupplyCategory] || category;
+	}
+
+	const uniqueCategories = $derived.by(() => {
+		const cats = new SvelteSet<string>();
+		for (const item of items) {
+			if (item.category) {
+				cats.add(item.category);
+			}
+		}
+		return Array.from(cats)
+			.map((cat) => ({
+				value: cat,
+				label: getCategoryLabel(cat)
+			}))
+			.sort((a, b) => a.label.localeCompare(b.label, 'th'));
+	});
 
 	function formatExpiry(expiryStr: string | undefined): string {
 		if (!expiryStr) return '-';
@@ -171,6 +226,37 @@
 		other:
 			'bg-[#f8f9fa] text-[#5f6368] border-[#dadce0] dark:bg-[#f8f9fa]/10 dark:text-[#9ca3af] dark:border-[#dadce0]/20'
 	};
+
+	// ─── Props ────────────────────────────────────────────────────────────────
+	let { occupancy = 120 } = $props();
+
+	// calculate reorder level and evaluate status
+	const itemsWithCalculatedStatus = $derived(
+		items.map((item) => {
+			const qtyOnHand = balance.get(item._id) ?? '0';
+			let reorderThreshold = calculateReorderLevel(occupancy, item);
+
+			// Fallback to static reorder_level if dynamic calculation is not set
+			if (reorderThreshold === null && item.reorder_level !== null) {
+				reorderThreshold = String(item.reorder_level);
+			}
+
+			let status: 'normal' | 'low' | 'empty' = 'normal';
+
+			if (qtyLte(qtyOnHand, 0)) {
+				status = 'empty';
+			} else if (reorderThreshold !== null && qtyLte(qtyOnHand, reorderThreshold)) {
+				status = 'low';
+			}
+
+			return {
+				...item,
+				qtyOnHand,
+				reorderThreshold,
+				status
+			};
+		})
+	);
 </script>
 
 <div class="space-y-6">
@@ -191,6 +277,15 @@
 					แสดงผลรายการสินค้าและยอดคงเหลือในคลัง
 					ประเมินความเพียงพอของสต๊อกอ้างอิงตามระดับเกณฑ์เตือนภัยเพื่อป้องกันของขาดแคลน
 				</p>
+			</div>
+			<div>
+				<a
+					href="/back-office/catalog?tab=item_master&action=create"
+					class={cn(buttonVariants({ size: 'lg' }), 'flex items-center gap-2')}
+				>
+					<Plus class="h-4 w-4" />
+					เพิ่มของใหม่
+				</a>
 			</div>
 		</div>
 
@@ -220,8 +315,8 @@
 						class="w-full cursor-pointer appearance-none truncate rounded-lg border border-border/80 bg-background py-2.5 pr-8 pl-9 text-sm font-semibold text-foreground shadow-sm transition-all outline-none focus:border-primary"
 					>
 						<option value="all">ทุกหมวดหมู่ (Category)</option>
-						{#each CATEGORY_OPTIONS as [val, label] (val)}
-							<option value={val}>{label}</option>
+						{#each uniqueCategories as cat (cat.value)}
+							<option value={cat.value}>{cat.label}</option>
 						{/each}
 					</select>
 					<div
@@ -322,8 +417,8 @@
 							</Table.Row>
 						{:else}
 							{#each displayedItems as item (item._id)}
-								{@const qty = balance.get(item._id) ?? '0'}
-								{@const status = getStatus(qty, item.reorder_level)}
+								{@const qty = item.qtyOnHand}
+								{@const status = item.status}
 								{@const lot = latestLotByItem[item._id]}
 								{@const expired = isExpired(lot?.expiry)}
 								{@const expiring = isExpiringSoon(lot?.expiry)}
@@ -366,11 +461,11 @@
 									<!-- Category badge -->
 									<Table.Cell class="p-4">
 										<span
-											class="rounded-md border px-2.5 py-1 text-center text-[10px] font-bold whitespace-nowrap {CATEGORY_STYLES[
+											class="rounded-md border px-2.5 py-1 text-center text-[10px] font-bold whitespace-nowrap {getCategoryStyle(
 												item.category
-											]}"
+											)}"
 										>
-											{SUPPLY_CATEGORY_LABELS[item.category] || item.category}
+											{getCategoryLabel(item.category)}
 										</span>
 									</Table.Cell>
 
@@ -420,9 +515,9 @@
 													>{item.unit}</span
 												>
 											</span>
-											{#if item.reorder_level !== null}
+											{#if item.reorderThreshold !== null}
 												<span class="text-[10px] font-normal text-muted-foreground/60">
-													เกณฑ์: {item.reorder_level}
+													เกณฑ์: {item.reorderThreshold}
 													{item.unit}
 												</span>
 											{/if}
@@ -480,11 +575,8 @@
 
 			<!-- Footer summary row -->
 			{#if !isLoading && items.length > 0}
-				{@const emptyCount = items.filter((i) => qtyLte(balance.get(i._id) ?? '0', 0)).length}
-				{@const lowCount = items.filter((i) => {
-					const qty = balance.get(i._id) ?? '0';
-					return qtyGt(qty, 0) && i.reorder_level !== null && qtyLte(qty, i.reorder_level);
-				}).length}
+				{@const emptyCount = itemsWithCalculatedStatus.filter((i) => i.status === 'empty').length}
+				{@const lowCount = itemsWithCalculatedStatus.filter((i) => i.status === 'low').length}
 				<div
 					class="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground shadow-sm"
 				>
@@ -564,6 +656,15 @@
 			>
 				<MinusCircle class="h-4 w-4" /> แจกจ่ายออก (Distribute)
 			</button>
+			<button
+				onclick={() => (activeModalTab = 'adjust')}
+				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
+				'adjust'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:text-foreground'}"
+			>
+				<Settings class="h-4 w-4" /> ปรับปรุงสต๊อก (Adjust)
+			</button>
 		</div>
 
 		<div class="mt-2">
@@ -579,6 +680,13 @@
 					/>
 				{:else if activeModalTab === 'distribute'}
 					<DistributeStockForm
+						preselectedItemId={selectedItemId}
+						onsuccess={() => {
+							isManageModalOpen = false;
+						}}
+					/>
+				{:else if activeModalTab === 'adjust'}
+					<AdjustStockForm
 						preselectedItemId={selectedItemId}
 						onsuccess={() => {
 							isManageModalOpen = false;

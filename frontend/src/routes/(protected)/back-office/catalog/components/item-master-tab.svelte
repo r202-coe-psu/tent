@@ -15,6 +15,10 @@
 	import X from '@lucide/svelte/icons/x';
 	import { Settings2 } from '@lucide/svelte';
 	import { Trash2 } from '@lucide/svelte';
+	// Navigation / Routing
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	// Feature
 	import { useItemMasters, ItemMasterForm } from '$lib/features/catalog';
 
@@ -51,6 +55,13 @@
 	let viewMode = $state<'list' | 'create' | 'edit'>('list');
 	let selectedId = $state<string | undefined>(undefined);
 
+	$effect(() => {
+		const action = page.url.searchParams.get('action');
+		if (action === 'create') {
+			viewMode = 'create';
+		}
+	});
+
 	function showCreateForm() {
 		selectedId = undefined;
 		viewMode = 'create';
@@ -64,6 +75,7 @@
 	function backToList() {
 		viewMode = 'list';
 		selectedId = undefined;
+		goto(resolve('/back-office/catalog?tab=item_master'), { replaceState: true });
 	}
 </script>
 
