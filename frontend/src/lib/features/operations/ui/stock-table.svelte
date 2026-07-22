@@ -12,6 +12,7 @@
 	import ReceiveStockForm from './receive-stock-form.svelte';
 	import DistributeStockForm from './distribute-stock-form.svelte';
 	import AdjustStockForm from './adjust-stock-form.svelte';
+	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 	import Settings from '@lucide/svelte/icons/settings';
 	import { qtyGt, qtyLte } from '$lib/utils/qty';
@@ -44,6 +45,19 @@
 	let categoryFilter = $state<string>('all');
 	let locationFilter = $state<string | 'all'>('all');
 	let statusFilter = $state<'all' | 'normal' | 'low' | 'empty' | 'expiring' | 'expired'>('all');
+	
+	// ─── Pagination state ─────────────────────────────────────────────────────
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+
+	$effect(() => {
+		// Reset to page 1 on filter/search change
+		searchQuery;
+		categoryFilter;
+		locationFilter;
+		statusFilter;
+		currentPage = 1;
+	});
 
 	// ─── Modal state ──────────────────────────────────────────────────────────
 	let selectedItemId = $state<string | null>(null);
@@ -164,6 +178,13 @@
 			return true;
 		});
 	});
+
+	const paginatedItems = $derived.by(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return displayedItems.slice(start, start + PAGE_SIZE);
+	});
+
+	const totalPages = $derived(Math.max(1, Math.ceil(displayedItems.length / PAGE_SIZE)));
 
 	const isLoading = $derived(
 		itemsQuery.isLoading ||
@@ -416,7 +437,7 @@
 								</Table.Cell>
 							</Table.Row>
 						{:else}
-							{#each displayedItems as item (item._id)}
+							{#each paginatedItems as item (item._id)}
 								{@const qty = item.qtyOnHand}
 								{@const status = item.status}
 								{@const lot = latestLotByItem[item._id]}
@@ -573,6 +594,29 @@
 				</Table.Root>
 			</div>
 
+			<!-- Pagination -->
+			{#if totalPages > 1}
+				<div class="mt-4 flex justify-end">
+					<Pagination.Root bind:page={currentPage} count={displayedItems.length} perPage={PAGE_SIZE}>
+						{#snippet children({ pages })}
+							<Pagination.Content>
+								<Pagination.Previous />
+								{#each pages as p, i (i)}
+									<Pagination.Item>
+										{#if p.type === 'page'}
+											<Pagination.Link page={p} isActive={p.value === currentPage} />
+										{:else}
+											<Pagination.Ellipsis />
+										{/if}
+									</Pagination.Item>
+								{/each}
+								<Pagination.Next />
+							</Pagination.Content>
+						{/snippet}
+					</Pagination.Root>
+				</div>
+			{/if}
+
 			<!-- Footer summary row -->
 			{#if !isLoading && items.length > 0}
 				{@const emptyCount = itemsWithCalculatedStatus.filter((i) => i.status === 'empty').length}
@@ -580,7 +624,7 @@
 				<div
 					class="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground shadow-sm"
 				>
-					<span>แสดง {displayedItems.length} จาก {items.length} รายการ</span>
+					<span>แสดง {paginatedItems.length} จากทั้งหมด {displayedItems.length} รายการที่ตรงเงื่อนไข (ในคลังมี {items.length} รายการ)</span>
 					<div class="flex gap-3">
 						{#if emptyCount > 0}
 							<span class="font-bold text-rose-600">🔴 หมดแล้ว: {emptyCount} รายการ</span>
