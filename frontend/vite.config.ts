@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
 		/^(https?:\/\/)[^@/]+@/,
 		'$1'
 	);
+	const fastapiTarget = env.PUBLIC_FASTAPI_PROXY || 'http://localhost:9000';
 
 	return {
 		plugins: [
@@ -52,6 +53,26 @@ export default defineConfig(({ mode }) => {
 					target: couchTarget,
 					changeOrigin: true,
 					rewrite: (path) => path.replace(/^\/couch/, '')
+				},
+				// Public plane endpoints moved to FastAPI — exact path only so
+				// /public SPA routes and /public/v1/shelters/{code}/risk BFF stay on SvelteKit.
+				'/public/v1/family-search': {
+					target: fastapiTarget,
+					changeOrigin: true,
+					bypass(req) {
+						const path = (req.url ?? '').split('?')[0].replace(/\/$/, '');
+						if (path === '/public/v1/family-search') return;
+						return false;
+					}
+				},
+				'/public/v1/shelters': {
+					target: fastapiTarget,
+					changeOrigin: true,
+					bypass(req) {
+						const path = (req.url ?? '').split('?')[0].replace(/\/$/, '');
+						if (path === '/public/v1/shelters') return;
+						return false;
+					}
 				}
 			}
 		},

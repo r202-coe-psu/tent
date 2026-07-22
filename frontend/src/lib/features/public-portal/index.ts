@@ -3,5 +3,25 @@ export { default as PublicShelterMetricCard } from './ui/public-shelter-metric-c
 export { default as ShelterFilterPanel } from './ui/shelter-filter-panel.svelte';
 export { default as ShelterMap } from './ui/shelter-map.svelte';
 export { default as PublicHeroMetrics } from './ui/public-hero-metrics.svelte';
-export { default as PublicPortalConfigForm } from './ui/public-portal-config-form.svelte';
-export * from './domain/config';
+
+export type {
+	FamilySearchResponse,
+	FamilySearchResult,
+	ListPublicSheltersParams,
+	PublicGeoPoint,
+	PublicShelterCardModel,
+	PublicShelterItem,
+	PublicShelterListResponse
+} from './domain/types';
+export {
+	isInShelterStatus,
+	searchResultKey,
+	toPublicShelterCard,
+	toUiShelterStatus
+} from './domain/mappers';
+export { familySearch, listPublicShelters } from './data/public-api';
+export {
+	publicPortalKeys,
+	useFamilySearchMutation,
+	usePublicShelters
+} from './application/queries';

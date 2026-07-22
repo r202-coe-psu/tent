@@ -1,31 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
-import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 
 type PostEvent = Parameters<typeof POST>[0];
-type SavedPublicDonation = {
-	_id: string;
-	type: string;
-	schema_v: number;
-	campaign_id: string;
-	items: Array<{ item_id?: string }>;
-	donor: { name: string; line_id?: string };
-	logistics: { delivery_method: string; pickup_address?: string };
-};
-
-function getSavedDonation(): SavedPublicDonation {
-	const [, , doc] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
-	return doc as SavedPublicDonation;
-}
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn()
-}));
-
-vi.mock('$lib/server/couch-public-writer', () => ({
-	putAsPublicWriter: vi.fn(() => Promise.resolve({ status: 201, data: { ok: true } }))
 }));
 
 vi.mock('$lib/server/security/rate-limiter', () => ({
@@ -42,12 +23,33 @@ vi.mock('$lib/server/security/captcha', () => ({
 }));
 
 vi.mock('$env/dynamic/private', () => ({
-	env: { SECRET_RECAPTCHA_KEY: 'dummy-secret' }
+	env: {
+		SECRET_RECAPTCHA_KEY: 'dummy-secret',
+		FASTAPI_INTERNAL_URL: 'http://localhost:9000',
+		EXTERNAL_API_SECRET: 'test-external-secret'
+	}
 }));
+
+function mockFastapiCreate(body: Record<string, unknown> = {}) {
+	vi.stubGlobal(
+		'fetch',
+		vi.fn().mockResolvedValue({
+			ok: true,
+			status: 201,
+			json: async () => ({
+				success: true,
+				tracking_token: 'TX-SH001-TESTTOK1',
+				booking_ref: 'DN-123456',
+				...body
+			})
+		})
+	);
+}
 
 describe('POST /api/public/v1/donations', () => {
 	beforeEach(() => {
 		vi.resetAllMocks();
+		vi.unstubAllGlobals();
 		vi.mocked(donationIpLimiter.check).mockReturnValue(true);
 		vi.mocked(donationPhoneLimiter.check).mockReturnValue(true);
 	});
@@ -79,7 +81,7 @@ describe('POST /api/public/v1/donations', () => {
 		captchaToken: 'dummy-token'
 	};
 
-	it('creates a donation document in CouchDB when input is valid', async () => {
+	it('creates a donation via FastAPI buffer when input is valid', async () => {
 		// Mock needs recheck: remaining need is plenty (100 kg)
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 			// Shelter validation: registry lookup
@@ -119,11 +121,9 @@ describe('POST /api/public/v1/donations', () => {
 					data: { rows: [] }
 				});
 			}
-			if (method === 'PUT') {
-				return Promise.resolve({ status: 201, data: { ok: true } });
-			}
 			return Promise.resolve({ status: 404, data: {} });
 		});
+		mockFastapiCreate();
 
 		const mockRequest = {
 			json: () => Promise.resolve(validPayload)
@@ -137,24 +137,23 @@ describe('POST /api/public/v1/donations', () => {
 		const data = await response.json();
 		expect(response.status).toBe(200);
 		expect(data.success).toBe(true);
-		expect(data).toHaveProperty('trackingToken');
-		expect(data).toHaveProperty('bookingRef');
-
-		// Verify CouchDB write occurred via putAsPublicWriter
-		expect(putAsPublicWriter).toHaveBeenCalled();
-		const savedDoc = getSavedDonation();
-		expect(savedDoc._id).toMatch(/^donation:/);
-		expect(savedDoc.type).toBe('donation');
-		expect(savedDoc.schema_v).toBe(2);
-		// donation is linked to the campaign so needs_open can decrease (DN-4)
-		expect(savedDoc.campaign_id).toBe('donation_campaign:c1');
-		expect(savedDoc.items[0].item_id).toBe('item:rice');
-		expect(savedDoc.donor.name).toBe('John Doe');
-		expect(savedDoc.donor.line_id).toBe('john_line');
-		expect(savedDoc.logistics.delivery_method).toBe('self_dropoff');
+		expect(data.trackingToken).toBe('TX-SH001-TESTTOK1');
+		expect(data.bookingRef).toBe('DN-123456');
+		expect(fetch).toHaveBeenCalledWith(
+			'http://localhost:9000/public/v1/donations',
+			expect.objectContaining({
+				method: 'POST',
+				headers: expect.objectContaining({
+					Authorization: 'Bearer test-external-secret'
+				})
+			})
+		);
+		const [, init] = vi.mocked(fetch).mock.calls[0]!;
+		const body = JSON.parse(String((init as RequestInit).body));
+		expect(body.campaign_id).toBe('donation_campaign:c1');
 	});
 
-	it('creates a donation document with shelter_pickup and pickup_address', async () => {
+	it('forwards shelter_pickup logistics to FastAPI', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 			if (method === 'GET' && path.includes('/registry')) {
 				return Promise.resolve({
@@ -192,23 +191,18 @@ describe('POST /api/public/v1/donations', () => {
 					data: { rows: [] }
 				});
 			}
-			if (method === 'PUT') {
-				return Promise.resolve({ status: 201, data: { ok: true } });
-			}
 			return Promise.resolve({ status: 404, data: {} });
 		});
+		mockFastapiCreate();
 
+		const logistics = {
+			delivery_method: 'shelter_pickup',
+			vehicle: 'car',
+			eta: '2026-06-27T10:00:00Z',
+			pickup_address: '123/45 Sukhumvit Rd, Bangkok'
+		};
 		const mockRequest = {
-			json: () =>
-				Promise.resolve({
-					...validPayload,
-					logistics: {
-						delivery_method: 'shelter_pickup',
-						vehicle: 'car',
-						eta: '2026-06-27T10:00:00Z',
-						pickup_address: '123/45 Sukhumvit Rd, Bangkok'
-					}
-				})
+			json: () => Promise.resolve({ ...validPayload, logistics })
 		};
 
 		const response = await POST({
@@ -219,10 +213,10 @@ describe('POST /api/public/v1/donations', () => {
 		const data = await response.json();
 		expect(response.status).toBe(200);
 		expect(data.success).toBe(true);
-
-		const savedDoc = getSavedDonation();
-		expect(savedDoc.logistics.delivery_method).toBe('shelter_pickup');
-		expect(savedDoc.logistics.pickup_address).toBe('123/45 Sukhumvit Rd, Bangkok');
+		const [, init] = vi.mocked(fetch).mock.calls[0]!;
+		const body = JSON.parse(String((init as RequestInit).body));
+		expect(body.logistics.delivery_method).toBe('shelter_pickup');
+		expect(body.logistics.pickup_address).toBe('123/45 Sukhumvit Rd, Bangkok');
 	});
 
 	it('returns 409 NEED_FULL if the item need target is already fully met', async () => {
