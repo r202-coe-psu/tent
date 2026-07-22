@@ -373,7 +373,7 @@
 							placeholder="พิมพ์เพื่อค้นหา เช่น บ้านพรุ หรือ 90250"
 							loading={locationsLoading}
 							loadingText="กำลังโหลดข้อมูลที่อยู่..."
-							class="h-11 border-border bg-muted/20"
+							class="h-11 rounded-md border-border bg-muted/20"
 						/>
 					</div>
 				</div>
