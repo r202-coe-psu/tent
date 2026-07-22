@@ -1,8 +1,6 @@
 <script lang="ts">
-	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import Clock from '@lucide/svelte/icons/clock';
-	import Flame from '@lucide/svelte/icons/flame';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Plus from '@lucide/svelte/icons/plus';
 	import FileText from '@lucide/svelte/icons/file-text';
@@ -10,20 +8,16 @@
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
-	import { resolve } from '$app/paths';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import * as Pagination from '$lib/components/ui/pagination';
 	import { Button } from '$lib/components/ui/button';
 	import { toast } from 'svelte-sonner';
-	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		useMealPlans,
-		useOccupancyHeadcount,
 		useConfirmMealPlan,
 		useDeleteMealPlanDraft,
-		useGasCylinderTypes,
 		useRequisitions,
 		useMealServices,
 		MEAL_PERIOD_LABELS,
@@ -41,8 +35,6 @@
 	const confirm = useConfirmMealPlan();
 	const deletePlan = useDeleteMealPlanDraft();
 	const sopProfile = useActiveSopProfile();
-	const gasTypes = useGasCylinderTypes();
-	const occupancy = useOccupancyHeadcount();
 	const requisitions = useRequisitions();
 	const mealServices = useMealServices();
 
@@ -151,17 +143,6 @@
 		return sortedPlans.slice(start, start + PAGE_SIZE);
 	});
 
-	const stats = $derived.by(() => {
-		const all = plans.data ?? [];
-		const totalBoxes = all.reduce((sum, p) => sum + p.headcount.total, 0);
-		const confirmed = all.filter((p) => p.status === 'confirmed').length;
-		return {
-			totalBoxes,
-			confirmed,
-			total: all.length
-		};
-	});
-
 	async function handleConfirm(plan: MealPlan) {
 		try {
 			await confirm.mutateAsync(plan);
@@ -190,74 +171,6 @@
 </script>
 
 <div class="flex flex-col gap-4 p-4">
-	<!-- Header card -->
-	<Card.Root class="border-0 shadow-sm">
-		<Card.Content class="flex flex-wrap items-start justify-between gap-4 pt-4">
-			<div class="flex items-start gap-3">
-				<div class="rounded-lg bg-primary/10 p-2">
-					<UtensilsCrossed class="h-5 w-5 text-primary" />
-				</div>
-				<div>
-					<h2 class="text-base font-bold">ประวัติประกอบโรงครัว (Meal Production Logs)</h2>
-					<p class="mt-0.5 text-xs text-muted-foreground">
-						บันทึกการวางแผนอาหารและรายการวัตถุดิบที่ต้องเบิกต่อมื้อ
-					</p>
-				</div>
-			</div>
-			<div class="flex flex-wrap items-center gap-2">
-				<span
-					class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800"
-				>
-					<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
-					ผู้พักพิง (LIVE COUNT): {occupancy.data?.total ?? 0} คน
-				</span>
-				<a
-					href={resolve('/back-office/kitchen/gas')}
-					class="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-3 py-1 text-xs font-medium text-orange-800 transition-colors hover:bg-orange-200"
-					title="จัดการทรัพยากรแก๊ส"
-				>
-					<Flame class="h-3.5 w-3.5" />
-					ถังแก๊ส ({gasTypes.data?.length ?? 0})
-				</a>
-				<span
-					class="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-dashed border-muted-foreground/40 px-3 py-1 text-xs font-medium text-muted-foreground/60"
-					title="ยังไม่พร้อมใช้งาน"
-				>
-					ฐานสูตร BOM
-				</span>
-				<span
-					class="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium"
-				>
-					{authStore.user?.name ?? '—'}
-				</span>
-			</div>
-		</Card.Content>
-	</Card.Root>
-
-	<!-- Stats — borderless cards, shadow only -->
-	<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-		<div class="rounded-xl bg-white px-5 py-4 shadow-sm">
-			<p class="text-xs text-muted-foreground">กล่องอาหารสำเร็จรวม</p>
-			<p class="mt-1 text-2xl font-bold">{stats.totalBoxes.toLocaleString()}</p>
-			<p class="text-xs text-muted-foreground">กล่อง</p>
-		</div>
-		<div class="rounded-xl bg-white px-5 py-4 shadow-sm">
-			<p class="text-xs text-muted-foreground">แก๊สหุงต้มใช้ไปรวม</p>
-			<p class="mt-1 text-2xl font-bold text-muted-foreground">—</p>
-			<p class="text-xs text-muted-foreground">กก.</p>
-		</div>
-		<div class="rounded-xl bg-white px-5 py-4 shadow-sm">
-			<p class="text-xs text-muted-foreground">เตาประกอบพร้อมลุย</p>
-			<p class="mt-1 text-2xl font-bold">{stats.confirmed} / {stats.total}</p>
-			<p class="text-xs text-muted-foreground">หัว</p>
-		</div>
-		<div class="rounded-xl bg-white px-5 py-4 shadow-sm">
-			<p class="text-xs text-muted-foreground">เวลาเฉลี่ยประกอบเสบียง</p>
-			<p class="mt-1 text-2xl font-bold text-muted-foreground">~ —</p>
-			<p class="text-xs text-muted-foreground">นาที</p>
-		</div>
-	</div>
-
 	<!-- SOP setup notice — master profiles are seeded by system_admin, not from here (CR-006) -->
 	{#if !sopProfile.isPending && !sopProfile.data}
 		<Card.Root class="border-amber-300 bg-amber-50">
