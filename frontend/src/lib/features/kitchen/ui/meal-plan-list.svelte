@@ -77,13 +77,17 @@
 		serviceOpen = true;
 	}
 
-	// Re-issuing an already-requisitioned plan is a valid case (e.g. topping up
-	// a prior partial issue once stock arrives) — so the button stays enabled,
-	// but a double-click / forgotten-already-issued mistake must not silently
-	// deduct stock twice (append-only ledger has no uniqueness on meal_plan_id).
-	// Confirmation runs through AlertDialog below, not window.confirm.
-	let reissueConfirmOpen = $state(false);
-	let pendingReissuePlan = $state<MealPlan | null>(null);
+	// Linear workflow, one action at a time — owner decision: re-issuing a
+	// requisition is no longer offered (previously allowed for topping up a
+	// short partial issue); a plan can only be เบิก once. Progress is driven
+	// entirely by these two derived sets, not a manual step field.
+	type PlanStage = 'draft' | 'awaiting_requisition' | 'awaiting_service' | 'done';
+	function planStage(plan: MealPlan): PlanStage {
+		if (plan.status === 'draft') return 'draft';
+		if (servicedPlanKeys.has(`${plan.date}:${plan.meal}`)) return 'done';
+		if (requisitionedPlanIds.has(plan._id)) return 'awaiting_service';
+		return 'awaiting_requisition';
+	}
 
 	// BOM-sourced recipes (calculateMealIngredientsFromRecipe) reference a
 	// catalog `item_master:*` id, which has no stock_ledger linkage yet (catalog
@@ -97,22 +101,8 @@
 	}
 
 	function openRequisition(plan: MealPlan) {
-		if (requisitionedPlanIds.has(plan._id)) {
-			pendingReissuePlan = plan;
-			reissueConfirmOpen = true;
-			return;
-		}
 		reqPlan = plan;
 		reqOpen = true;
-	}
-
-	function confirmReissue() {
-		if (pendingReissuePlan) {
-			reqPlan = pendingReissuePlan;
-			reqOpen = true;
-		}
-		pendingReissuePlan = null;
-		reissueConfirmOpen = false;
 	}
 
 	// Edit/delete are draft-only (in-code guard in useDeleteMealPlanDraft /
@@ -176,10 +166,10 @@
 		}
 	}
 
-	// meal_plan:{date}:{meal} — the real deterministic reference, not a fabricated code.
-	function formatId(id: string): string {
-		const parts = id.split(':');
-		return parts.slice(1).join(':') || id;
+	// _id is a ulid now (multiple plans may share a date+meal) — show the plan's
+	// own date+meal fields directly instead of parsing them back out of the id.
+	function planRef(plan: MealPlan): string {
+		return `${plan.date}:${plan.meal}`;
 	}
 
 	// Display label + unit for a recipe row: fixed SOP ids first, then a
@@ -273,7 +263,7 @@
 							{#each paginatedPlans as plan (plan._id)}
 								<Table.Row>
 									<Table.Cell class="px-6 font-mono text-xs">
-										<p class="font-semibold text-foreground">{formatId(plan._id)}</p>
+										<p class="font-semibold text-foreground">{planRef(plan)}</p>
 										<p class="text-muted-foreground">
 											{new Date(plan.created_at).toLocaleDateString('th-TH', {
 												day: '2-digit',
@@ -320,25 +310,40 @@
 										<p class="font-semibold">{plan.headcount.total.toLocaleString()}</p>
 										<p class="text-xs text-muted-foreground">คน</p>
 									</Table.Cell>
+									{@const stage = planStage(plan)}
 									<Table.Cell class="px-6 text-center">
-										{#if plan.status === 'confirmed'}
-											<span
-												class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800"
-											>
-												<CheckCircle class="h-3 w-3" />
-												สำเร็จสมบูรณ์
-											</span>
-										{:else}
+										{#if stage === 'draft'}
 											<span
 												class="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-800"
 											>
 												<Clock class="h-3 w-3" />
-												รอดำเนินการ
+												รอยืนยัน
+											</span>
+										{:else if stage === 'awaiting_requisition'}
+											<span
+												class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800"
+											>
+												<Clock class="h-3 w-3" />
+												รอเบิก
+											</span>
+										{:else if stage === 'awaiting_service'}
+											<span
+												class="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-1 text-xs font-medium text-purple-800"
+											>
+												<Clock class="h-3 w-3" />
+												รอบันทึก
+											</span>
+										{:else}
+											<span
+												class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800"
+											>
+												<CheckCircle class="h-3 w-3" />
+												สำเร็จ
 											</span>
 										{/if}
 									</Table.Cell>
 									<Table.Cell class="px-6 text-center">
-										{#if plan.status === 'draft'}
+										{#if stage === 'draft'}
 											<div class="flex items-center justify-center gap-1.5">
 												<Button
 													size="sm"
@@ -367,40 +372,31 @@
 													<Trash2 class="h-3.5 w-3.5" />
 												</Button>
 											</div>
-										{:else}
+										{:else if stage === 'awaiting_requisition'}
 											<div class="flex flex-col items-center gap-1">
-												<div class="flex items-center gap-1.5">
-													<Button
-														size="sm"
-														variant="outline"
-														onclick={() => openRequisition(plan)}
-														disabled={isBomSourced(plan)}
-														title={isBomSourced(plan)
-															? 'แผนนี้มาจากสูตรมาตรฐาน (BOM) — ยังเบิกไม่ได้จริง เพราะวัตถุดิบยังไม่เชื่อมกับระบบคลังสินค้า (item_master กับ supply เป็นคนละชุดกันตอนนี้)'
-															: undefined}
-													>
-														<PackageCheck class="mr-1 h-3.5 w-3.5" />
-														เบิกวัตถุดิบ
-													</Button>
-													<Button size="sm" variant="outline" onclick={() => openService(plan)}>
-														<ClipboardCheck class="mr-1 h-3.5 w-3.5" />
-														บันทึกบริการ
-													</Button>
-												</div>
+												<Button
+													size="sm"
+													variant="outline"
+													onclick={() => openRequisition(plan)}
+													disabled={isBomSourced(plan)}
+													title={isBomSourced(plan)
+														? 'แผนนี้มาจากสูตรมาตรฐาน (BOM) — ยังเบิกไม่ได้จริง เพราะวัตถุดิบยังไม่เชื่อมกับระบบคลังสินค้า (item_master กับ supply เป็นคนละชุดกันตอนนี้)'
+														: undefined}
+												>
+													<PackageCheck class="mr-1 h-3.5 w-3.5" />
+													เบิกวัตถุดิบ
+												</Button>
 												{#if isBomSourced(plan)}
 													<p class="max-w-[220px] text-center text-[11px] text-amber-600">
 														สูตร BOM ยังเบิกสต็อกไม่ได้จริง (รอเชื่อม item_master ↔ คลังสินค้า)
 													</p>
 												{/if}
-												<div class="flex items-center gap-2">
-													{#if requisitionedPlanIds.has(plan._id)}
-														<span class="text-[11px] text-emerald-600">✓ เบิกแล้ว</span>
-													{/if}
-													{#if servicedPlanKeys.has(`${plan.date}:${plan.meal}`)}
-														<span class="text-[11px] text-indigo-600">✓ บันทึกบริการแล้ว</span>
-													{/if}
-												</div>
 											</div>
+										{:else if stage === 'awaiting_service'}
+											<Button size="sm" variant="outline" onclick={() => openService(plan)}>
+												<ClipboardCheck class="mr-1 h-3.5 w-3.5" />
+												บันทึกบริการ
+											</Button>
 										{/if}
 									</Table.Cell>
 								</Table.Row>
@@ -442,22 +438,6 @@
 <MealPlanForm bind:open={editOpen} plan={editPlan} />
 <RequisitionDialog bind:open={reqOpen} plan={reqPlan} />
 <MealServiceForm bind:open={serviceOpen} plan={servicePlan} />
-
-<AlertDialog.Root bind:open={reissueConfirmOpen}>
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>แผนนี้เบิกวัตถุดิบไปแล้ว</AlertDialog.Title>
-			<AlertDialog.Description>
-				ต้องการเบิกซ้ำ/เบิกเพิ่มหรือไม่? ยืนยันเฉพาะกรณีเบิกเพิ่มเติม (เช่น ของครั้งก่อนไม่พอ) —
-				หากกดผิด การเบิกซ้ำจะตัดสต็อกซ้ำ
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel onclick={() => (pendingReissuePlan = null)}>ยกเลิก</AlertDialog.Cancel>
-			<AlertDialog.Action onclick={confirmReissue}>ยืนยันเบิกเพิ่ม</AlertDialog.Action>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
 
 <AlertDialog.Root bind:open={deleteConfirmOpen}>
 	<AlertDialog.Content>
