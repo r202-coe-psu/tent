@@ -8,7 +8,7 @@ import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
-import { getShelterDb } from '$lib/db/shelter';
+import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { AuditAction } from '$lib/features/shared';
 import { operationsRepository } from '../data/operations.remote';
@@ -21,12 +21,12 @@ import type {
 
 export const operationsKeys = {
 	all: ['operations'] as const,
-	campaigns: () => [...operationsKeys.all, 'campaigns'] as const,
-	stockLedgers: () => [...operationsKeys.all, 'stockLedgers'] as const,
-	donations: () => [...operationsKeys.all, 'donations'] as const,
-	ledger: () => [...operationsKeys.all, 'ledger'] as const,
+	campaigns: () => [...operationsKeys.all, 'campaigns', getShelterCode()] as const,
+	stockLedgers: () => [...operationsKeys.all, 'stockLedgers', getShelterCode()] as const,
+	donations: () => [...operationsKeys.all, 'donations', getShelterCode()] as const,
+	ledger: () => [...operationsKeys.all, 'ledger', getShelterCode()] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
-	balance: () => [...operationsKeys.all, 'balance'] as const
+	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const
 };
 
 export const useCampaigns = () =>

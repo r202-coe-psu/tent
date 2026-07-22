@@ -9,15 +9,7 @@
 	import PendingReviewDialog from '$lib/components/pending-review-dialog.svelte';
 	import ScanStation from './components/scan-station.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
-	import { startOperationsLiveQuery, useDonationNeedsBoard } from '$lib/features/operations';
-	import { useQueryClient } from '@tanstack/svelte-query';
-
-	const queryClient = useQueryClient();
-
-	$effect(() => {
-		const handle = startOperationsLiveQuery(queryClient);
-		return () => handle.stop();
-	});
+	import { useDonationNeedsBoard } from '$lib/features/operations';
 
 	let activeSubTab = $state('scan'); // 'scan', 'pending', 'needs'
 	let viewState = $state<'list' | 'create'>('list');
