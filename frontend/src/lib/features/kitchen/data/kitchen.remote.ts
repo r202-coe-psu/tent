@@ -102,6 +102,10 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.put(createMealService(input, ctx));
 	}
 
+	// Ambiguous when more than one meal_service shares the date+meal (e.g. two
+	// plans for the same slot each get their own recorded service) — returns
+	// whichever `listMealServices` yields first. Prefer matching by
+	// meal_plan_id when a specific plan is known (see meal-plan-list.svelte).
 	async getMealService(date: string, meal: string): Promise<MealService | null> {
 		const services = await this.listMealServices();
 		return services.find((s) => s.date === date && s.meal === meal) ?? null;
