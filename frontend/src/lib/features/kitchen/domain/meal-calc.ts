@@ -1,6 +1,7 @@
 import Decimal from 'decimal.js';
 import { persistQty, qtyGte, qtyLte, roundQty, subQty } from '$lib/utils/qty';
-import type { Recipe } from '$lib/features/catalog';
+import type { Recipe, ItemMaster } from '$lib/features/catalog';
+import type { SupplyItem } from '$lib/features/supply';
 import type {
 	KitchenRequisitionInput,
 	MealPlan,
@@ -104,16 +105,52 @@ export function calculateMealIngredients(
 	};
 }
 
+export interface ResolvedItemMaster {
+	// The real, stock-tracked item_id to draw down (a `supply_item` `item:*`
+	// id); falls back to the item_master_id itself (unresolved — stays
+	// blocked, see toRequisitionInput/isBomSourced).
+	stockItemId: string;
+	unit: string;
+}
+
+/**
+ * Resolves each item_master to a real stock item so BOM recipes built from it
+ * can be checked/withdrawn without a manual trip to `/back-office/catalog`
+ * (catalog's item_master schema is out of kitchen's scope — no explicit-link
+ * field there, so this only matches by name):
+ *   1. same `name` (trimmed, case-insensitive) as a `supply_item` — automatic,
+ *      no setup needed as long as the two catalogs happen to name it the same
+ *   2. unresolved — recipe_id falls back to the item_master_id itself
+ *
+ * Pure — no I/O; caller (application layer / UI) fetches both lists first.
+ */
+export function resolveItemMasterStock(
+	itemMasters: ItemMaster[],
+	supplyItems: SupplyItem[]
+): Record<string, ResolvedItemMaster> {
+	const supplyByName = new Map(supplyItems.map((si) => [si.name.trim().toLowerCase(), si]));
+
+	const info: Record<string, ResolvedItemMaster> = {};
+	for (const im of itemMasters) {
+		const matched = supplyByName.get(im.name.trim().toLowerCase());
+		info[im._id] = matched
+			? { stockItemId: matched._id, unit: matched.unit }
+			: { stockItemId: im._id, unit: im.base_unit };
+	}
+	return info;
+}
+
 /**
  * Derives the ingredient list for one meal from a catalog Recipe (BOM) instead
  * of the fixed SOP-ratio menus — each recipe.ingredient scales from its
- * standard_portions to the plan's actual headcount. `itemUnits` supplies the
- * base_unit of each referenced item_master (catalog Ingredient.uom is not
- * guaranteed to match it); falls back to the ingredient's own uom if missing.
+ * standard_portions to the plan's actual headcount.
  *
- * Owner decision: a catalog item_master_id is used as-is for the stock_ledger
- * item_id (no separate stock-item mapping) — see toRequisitionInput's
- * RECIPE_TO_STOCK_ITEM-less fallback branch below.
+ * `itemInfo` (keyed by item_master_id, from {@link resolveItemMasterStock})
+ * resolves each ingredient to its real stock item — that ingredient can then
+ * be checked/withdrawn like any other real stock item. An ingredient whose
+ * item_master has no match stays unresolved (recipe_id falls back to the
+ * item_master_id itself, unit to the recipe's own uom) — toRequisitionInput/
+ * isBomSourced still block เบิก for those.
  *
  * Throws if headcount.total is 0 or the recipe's standard_portions isn't a
  * positive number — same invariant as {@link calculateMealIngredients}.
@@ -121,7 +158,7 @@ export function calculateMealIngredients(
 export function calculateMealIngredientsFromRecipe(
 	recipe: Recipe,
 	headcount: MealPlanHeadcount,
-	itemUnits: Record<string, string>,
+	itemInfo: Record<string, ResolvedItemMaster>,
 	sopProfileId: string,
 	sopProfileVersion: number,
 	headcountAsOf: string
@@ -135,11 +172,14 @@ export function calculateMealIngredientsFromRecipe(
 	}
 
 	const scale = new Decimal(headcount.total).div(portions);
-	const recipes: MealPlanRecipe[] = recipe.ingredients.map((ing) => ({
-		recipe_id: ing.item_master_id,
-		planned_qty: new Decimal(ing.quantity).mul(scale).ceil().toNumber(),
-		unit: itemUnits[ing.item_master_id] ?? ing.uom
-	}));
+	const recipes: MealPlanRecipe[] = recipe.ingredients.map((ing) => {
+		const resolved = itemInfo[ing.item_master_id];
+		return {
+			recipe_id: resolved?.stockItemId ?? ing.item_master_id,
+			planned_qty: new Decimal(ing.quantity).mul(scale).ceil().toNumber(),
+			unit: resolved?.unit ?? ing.uom
+		};
+	});
 
 	return {
 		recipes,

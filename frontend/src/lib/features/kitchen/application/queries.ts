@@ -9,6 +9,7 @@ import { kitchenRepository } from '../data/kitchen.remote';
 import { getActiveSopProfile } from '$lib/features/sop-ratios';
 import { peopleRepository } from '$lib/features/people';
 import { catalogRepository } from '$lib/features/catalog';
+import { supplyRepository } from '$lib/features/supply';
 import type {
 	MealPlan,
 	MealPlanInput,
@@ -21,6 +22,7 @@ import {
 	calculateMealIngredients,
 	calculateMealIngredientsFromRecipe,
 	calculateMealIngredientsFromCustom,
+	resolveItemMasterStock,
 	DEFAULT_RICE_G_PER_PERSON_MEAL,
 	type CustomIngredientInput
 } from '../domain/meal-calc';
@@ -76,12 +78,15 @@ async function resolveMealPlanCalc(
 	if (recipeId) {
 		const recipe = await catalogRepository().getRecipe(recipeId);
 		if (!recipe) throw new Error(`resolveMealPlanCalc: recipe "${recipeId}" not found`);
-		const itemMasters = await catalogRepository().listItemMasters();
-		const itemUnits = Object.fromEntries(itemMasters.map((im) => [im._id, im.base_unit]));
+		const [itemMasters, supplyItems] = await Promise.all([
+			catalogRepository().listItemMasters(),
+			supplyRepository().listItems()
+		]);
+		const itemInfo = resolveItemMasterStock(itemMasters, supplyItems);
 		return calculateMealIngredientsFromRecipe(
 			recipe,
 			headcount,
-			itemUnits,
+			itemInfo,
 			profile._id,
 			profile.version,
 			headcountAsOf

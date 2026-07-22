@@ -12,6 +12,7 @@ export {
 	calculateMealIngredients,
 	calculateMealIngredientsFromRecipe,
 	calculateMealIngredientsFromCustom,
+	resolveItemMasterStock,
 	toRequisitionInput,
 	assessRequisition,
 	RICE_RECIPE_ID,
@@ -25,6 +26,7 @@ export type {
 	MealCalcSource,
 	MealCalcResult,
 	CustomIngredientInput,
+	ResolvedItemMaster,
 	StockAvailabilityStatus,
 	RequisitionLineAssessment
 } from './domain/meal-calc';
