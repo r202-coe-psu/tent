@@ -9,7 +9,7 @@ layer: volatile
 affects:
   - docs/prd/phase-r3-operations.md FR-42 / FR-43 (+ JTBD volunteer)
   - docs/prd/role-permission-matrix.md FR-42/43 rows + affiliate UI notes (D-DUTY-ACCESS ถ้าเลือกนอกทาง A/C)
-  - docs/task-breakdown/06-A.md T-28 / T-29 (+ task ย่อยถ้าเคาะหลังประชุม)
+  - docs/task-breakdown/06-A-volunteer.md T-28 / T-29 (+ task ย่อยถ้าเคาะหลังประชุม)
   - docs/sitemap.md — routes Job Board / volunteer schedule (หลังเคาะ path)
   - docs/data/schema.md §2.8 volunteer · §2.9 shift_assignment (+ doc types job / job_application ใหม่)
   - docs/data/data-model.md · schema-er-diagram.md
@@ -101,7 +101,7 @@ affects:
 
 ไม่แก้สัญญา CR-002 (metadata only)
 
-### D. Task / planning (`06-A.md` — หลัง approve; รายละเอียด DoD ปรับตาม open decisions)
+### D. Task / planning (`06-A-volunteer.md` — หลัง approve; รายละเอียด DoD ปรับตาม open decisions)
 
 | Task | ทิศทางหลัง approve |
 | --- | --- |
@@ -109,7 +109,7 @@ affects:
 | **T-29** | ขยาย DoD: Job Board + กะตาม D-SHIFT + application ตาม D-APP + adjust job · skill match คง |
 | (opt) task ย่อย | แยก groundwork schema job/* ถ้าทีมต้องการ slice เล็กลง — ตั้ง ID หลังปิด open decisions |
 
-**ยังไม่แก้** `06-A.md` จนกว่า `status: approved` (และอย่างน้อยปิด D-SHIFT / D-APP ที่กระทบ DoD)
+**ยังไม่แก้** `06-A-volunteer.md` จนกว่า `status: approved` (และอย่างน้อยปิด D-SHIFT / D-APP ที่กระทบ DoD)
 
 ### E. Permissions
 
@@ -135,7 +135,7 @@ affects:
 | data-model / ER | sync doc types |
 | PRD R3 FR-42/43 | consequences Job Board + D-AFFIL + owner SM |
 | role-permission-matrix | หมายเหตุ D-OWNER / D-AFFIL; แก้เพิ่มถ้า D-DUTY-ACCESS = B หรือ D-LEAD = C |
-| `06-A.md` | ขยาย DoD T-28/T-29 |
+| `06-A-volunteer.md` | ขยาย DoD T-28/T-29 |
 | `sitemap.md` | routes Module A |
 | feature flow | `draft for review` → `active` เมื่อ CR approved + open decisions ที่บังคับปิดครบ (หรือ mark deferred ใน CR) |
 | Code | `features/` สำหรับ volunteers / job-board |
@@ -160,4 +160,4 @@ affects:
 - 2026-07-15 — **proposed**. Track = ไฟล์ CR ใน `docs/changes/` (เจ้าของโครงการสั่งเพิ่ม CR)
 - 2026-07-15 — lock: D-OWNER (SM owns job ops; SA ไม่ดูแล board) · D-AFFIL (`affiliation_tags`) · ไม่มี RoleKey `volunteer`
 - 2026-07-15 — ร่าง flow/journeys ใน `docs/features/volunteer-job-board-flow.md` (ยัง `draft for review`)
-- 2026-07-15 — **ยังไม่ apply** schema.md / PRD / `06-A.md` / sitemap / role-matrix จนกว่า `approved` + ปิด open decisions ที่บล็อก schema
+- 2026-07-15 — **ยังไม่ apply** schema.md / PRD / `06-A-volunteer.md` / sitemap / role-matrix จนกว่า `approved` + ปิด open decisions ที่บล็อก schema

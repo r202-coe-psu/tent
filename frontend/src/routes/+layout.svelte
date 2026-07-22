@@ -6,6 +6,7 @@
 	import { PUBLIC_APP_TITLE } from '$env/static/public';
 	import { SvelteQueryDevtools } from '@tanstack/svelte-query-devtools';
 	import ConnectionBanner from '$lib/components/ConnectionBanner.svelte';
+	import TestingBanner from '$lib/components/testing-banner.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import { startChangesSubscriber } from '$lib/db/changes-subscriber';
@@ -97,6 +98,7 @@
 <Toaster position="top-center" richColors />
 
 <QueryClientProvider client={data.queryClient}>
+	<TestingBanner />
 	<ConnectionBanner />
 	{@render children?.()}
 	<SvelteQueryDevtools />

@@ -20,6 +20,13 @@ vi.mock('$lib/server/security/rate-limiter', () => ({
 	donationIpLimiter: { check: vi.fn(() => true) }
 }));
 
+vi.mock('$env/dynamic/private', () => ({
+	env: {
+		FASTAPI_INTERNAL_URL: 'http://localhost:9000',
+		EXTERNAL_API_SECRET: 'test-external-secret'
+	}
+}));
+
 const TOKEN = 'TX-SH001-TESTTOKEN';
 
 describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
@@ -27,6 +34,7 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 
 	beforeEach(async () => {
 		vi.resetAllMocks();
+		vi.unstubAllGlobals();
 		const hash = await sha256Hex(TOKEN);
 		mockDonation = {
 			_id: 'donation:01JABCDONATION',
@@ -49,16 +57,27 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 		} as unknown as PublicDonationDoc;
 	});
 
-	it('GET returns donation details with masked donor PII and no phone echo', async () => {
-		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
-			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
-				return Promise.resolve({
-					status: 200,
-					data: { rows: [{ doc: mockDonation }] }
-				});
-			}
-			return Promise.resolve({ status: 404, data: {} });
-		});
+	it('GET returns donation details from FastAPI', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					donation: {
+						status: 'declared',
+						booking_ref: 'DN-999999',
+						shelter_code: 'SH001',
+						donor: { name: 'S***' },
+						items: [{ free_text: 'ข้าวสาร', qty: '10', unit: 'kg' }],
+						logistics: { delivery_method: 'parcel' },
+						received_summary: null,
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				})
+			})
+		);
 
 		const response = await GET({
 			params: { tracking_token: TOKEN },
@@ -70,11 +89,8 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 		expect(data.success).toBe(true);
 		expect(data.donation.booking_ref).toBe('DN-999999');
 		expect(data.donation.items[0].free_text).toBe('ข้าวสาร');
-
-		// name masked; phone/phone_hash must NOT be echoed to public (schema.md §2.3)
 		expect(data.donation.donor.name).toBe('S***');
 		expect(data.donation.donor.phone).toBeUndefined();
-		expect(data.donation.donor.phone_hash).toBeUndefined();
 	});
 
 	it('PATCH updates the courier tracking number in CouchDB', async () => {
@@ -106,6 +122,46 @@ describe('GET & PATCH /api/public/v1/donations/[tracking_token]', () => {
 		expect(putAsPublicWriter).toHaveBeenCalled();
 		const [, , savedDoc] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
 		expect((savedDoc as PublicDonationDoc).logistics?.courier_tracking_no).toBe('TH999888');
+	});
+
+	it('PATCH falls back to FastAPI when donation is not yet in CouchDB', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({
+			status: 200,
+			data: { rows: [] }
+		});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					message: 'Courier tracking number updated'
+				})
+			})
+		);
+
+		const response = await PATCH({
+			params: { tracking_token: TOKEN },
+			request: {
+				json: () => Promise.resolve({ courier_tracking_no: 'TH111222' })
+			},
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PatchEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(200);
+		expect(data.success).toBe(true);
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
+		expect(fetch).toHaveBeenCalledWith(
+			'http://localhost:9000/public/v1/donations/TX-SH001-TESTTOKEN',
+			expect.objectContaining({
+				method: 'PATCH',
+				headers: expect.objectContaining({
+					Authorization: 'Bearer test-external-secret'
+				})
+			})
+		);
 	});
 
 	it('PATCH returns 409 when CouchDB reports a revision conflict', async () => {

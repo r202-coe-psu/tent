@@ -50,8 +50,8 @@
 <section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<Briefcase class="h-5 w-5 text-shelter-blue-text" />
-		<span class="text-sm font-bold text-muted-foreground">7.</span>
-		<h2 class="text-base font-bold text-card-foreground">
+		<span class="text-sm font-bold text-black">7.</span>
+		<h2 class="text-base font-bold text-black">
 			นโยบายทรัพย์สินมีค่า / สัมภาระ (Valuables &amp; Luggage Policy)
 		</h2>
 	</div>

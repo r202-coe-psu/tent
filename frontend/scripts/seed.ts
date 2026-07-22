@@ -2,6 +2,7 @@
  * Mock data seed script for the Smart Shelter dev environment.
  *
  * Usage:  pnpm seed  (from frontend/)
+ *         pnpm unseed [--confirm]  — remove seed docs (see scripts/unseed.ts)
  * Needs:  CouchDB running + COUCHDB_ADMIN_URL in frontend/.env
  *
  * ## Factory usage
@@ -76,6 +77,7 @@ import { type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
 import { deployShelterViewsFn } from '$lib/features/shelters/server';
+import { seedThailandLocation } from './seed-thailand-location';
 
 // ─── env ──────────────────────────────────────────────────────────────────────
 
@@ -223,6 +225,63 @@ const SHELTER_CODE_2 = 'SH002';
 const SHELTER_DB_2 = 'shelter_sh002';
 const CTX_2: AuthorContext = { shelterCode: SHELTER_CODE_2, createdBy: 'seed' };
 
+const SHELTER_CODE_3 = 'SH003';
+
+/** Registry master records — upserted on every seed run (name + location always applied). */
+const REGISTRY_SHELTERS = [
+	{
+		code: SHELTER_CODE,
+		name: 'ศูนย์อพยพศูนย์กีฬามหาวิทยาลัยสงขลานครินทร์',
+		location: { lat: 7.010027132382802, lng: 100.50024358303605 },
+		capacity: 200,
+		zones: [
+			{ code: 'Z1', name: 'โซน A', capacity: 100 },
+			{ code: 'Z2', name: 'โซน B', capacity: 100 }
+		],
+		area_m2: 800,
+		facilities: {
+			toilets_female: 4,
+			toilets_male: 4,
+			toilets_accessible: 2,
+			showers: 8,
+			water_points: 6,
+			handwashing_stations: 10
+		}
+	},
+	{
+		code: SHELTER_CODE_2,
+		name: 'ศูนย์อพยพสำนักงานเทศบาลนครหาดใหญ่',
+		location: { lat: 7.015427802879699, lng: 100.47291623646029 },
+		capacity: 100,
+		zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 100 }],
+		area_m2: 400,
+		facilities: {
+			toilets_female: 2,
+			toilets_male: 2,
+			toilets_accessible: 1,
+			showers: 4,
+			water_points: 2,
+			handwashing_stations: 4
+		}
+	},
+	{
+		code: SHELTER_CODE_3,
+		name: 'ศูนย์อพยพสำนักงานเทศบาลเมืองบ้านพรุ',
+		location: { lat: 6.948086391528152, lng: 100.47963181135452 },
+		capacity: 100,
+		zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 100 }],
+		area_m2: 400,
+		facilities: {
+			toilets_female: 2,
+			toilets_male: 2,
+			toilets_accessible: 1,
+			showers: 4,
+			water_points: 2,
+			handwashing_stations: 4
+		}
+	}
+] as const;
+
 // Supply item IDs — referenced by operations seed data below.
 const ITEM = {
 	rice: 'item:rice',
@@ -283,74 +342,50 @@ async function seedRegistry(): Promise<void> {
 	});
 
 	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
-	let hasSH001 = false;
-	let hasSH002 = false;
+	const existingByCode = new Map<string, Record<string, unknown>>();
 	if (status === 200) {
-		const rows = (data as { rows?: { doc?: { type?: string; code?: string } }[] }).rows ?? [];
-		hasSH001 = rows.some((r) => r.doc?.type === 'shelter' && r.doc?.code === SHELTER_CODE);
-		hasSH002 = rows.some((r) => r.doc?.type === 'shelter' && r.doc?.code === SHELTER_CODE_2);
+		const rows =
+			(data as { rows?: { doc?: { type?: string; code?: string } & Record<string, unknown> }[] })
+				.rows ?? [];
+		for (const row of rows) {
+			const doc = row.doc;
+			if (doc?.type === 'shelter' && typeof doc.code === 'string') {
+				existingByCode.set(doc.code, doc);
+			}
+		}
 	}
 
 	const ts = now();
-	if (!hasSH001) {
-		await putDoc('registry', {
-			_id: `shelter:${ulid()}`,
-			type: 'shelter',
-			schema_v: 1,
-			code: SHELTER_CODE,
-			name: 'ศูนย์พักพิงสงขลา (ทดสอบ)',
-			status: 'open',
-			capacity: 200,
-			zones: [
-				{ code: 'Z1', name: 'โซน A', capacity: 100 },
-				{ code: 'Z2', name: 'โซน B', capacity: 100 }
-			],
-			area_m2: 800,
-			facilities: {
-				toilets_female: 4,
-				toilets_male: 4,
-				toilets_accessible: 2,
-				showers: 8,
-				water_points: 6,
-				handwashing_stations: 10
-			},
-			opened_at: ts,
-			created_at: ts,
-			updated_at: ts,
-			created_by: 'seed'
-		});
-		console.log('  ✓ registry: 1 shelter master (SH001)');
-	} else {
-		console.log('  ✓ registry: shelter SH001 already exists, skipping');
-	}
-
-	if (!hasSH002) {
-		await putDoc('registry', {
-			_id: `shelter:${ulid()}`,
-			type: 'shelter',
-			schema_v: 1,
-			code: SHELTER_CODE_2,
-			name: 'ศูนย์พักพิงปัตตานี (ทดสอบ)',
-			status: 'open',
-			capacity: 100,
-			zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 100 }],
-			area_m2: 400,
-			facilities: {
-				toilets_female: 2,
-				toilets_male: 2,
-				toilets_accessible: 1,
-				showers: 4,
-				water_points: 2,
-				handwashing_stations: 4
-			},
-			opened_at: ts,
-			created_at: ts,
-			updated_at: ts,
-			created_by: 'seed'
-		});
-		console.log('  ✓ registry: 1 shelter master (SH002)');
-	} else {
-		console.log('  ✓ registry: shelter SH002 already exists, skipping');
+	for (const shelter of REGISTRY_SHELTERS) {
+		const existing = existingByCode.get(shelter.code);
+		if (existing) {
+			await putDoc('registry', {
+				...existing,
+				name: shelter.name,
+				location: { ...shelter.location },
+				updated_at: ts
+			});
+			console.log(`  ✓ registry: updated shelter ${shelter.code} (name + location)`);
+		} else {
+			await putDoc('registry', {
+				_id: `shelter:${ulid()}`,
+				type: 'shelter',
+				schema_v: 1,
+				code: shelter.code,
+				name: shelter.name,
+				location: { ...shelter.location },
+				status: 'open',
+				capacity: shelter.capacity,
+				zones: shelter.zones.map((z) => ({ ...z })),
+				area_m2: shelter.area_m2,
+				facilities: { ...shelter.facilities },
+				opened_at: ts,
+				created_at: ts,
+				updated_at: ts,
+				created_by: 'seed'
+			});
+			console.log(`  ✓ registry: 1 shelter master (${shelter.code})`);
+		}
 	}
 }
 
@@ -1202,6 +1237,7 @@ async function main() {
 	try {
 		await seedUsers();
 		await seedRegistry();
+		await seedThailandLocation();
 		await seedCatalog();
 		await seedCatalogSopRatios();
 		await seedShelter();

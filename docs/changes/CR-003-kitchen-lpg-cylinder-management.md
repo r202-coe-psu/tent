@@ -7,7 +7,7 @@ requested_by: project owner (session 2026-06-18)
 decided_by: project owner (session 2026-06-18)
 layer: volatile
 affects:
-  - docs/task-breakdown/05-D.md — เพิ่ม task T-56 + update effort table
+  - docs/task-breakdown/05-D-kitchen.md — เพิ่ม task T-56 + update effort table
   - docs/task-breakdown/_index.md — update module 5 task count (4 → 5) และ Adj MD (15.5 → 18.5)
 ---
 
@@ -22,7 +22,7 @@ Module D ปัจจุบัน (T-17, T-25, T-26, T-27) ครอบคลุ
 
 ## Change
 
-เพิ่ม task ใหม่ **T-56 — LPG cylinder management** เข้า Module D ใน `docs/task-breakdown/05-D.md`:
+เพิ่ม task ใหม่ **T-56 — LPG cylinder management** เข้า Module D ใน `docs/task-breakdown/05-D-kitchen.md`:
 
 - ติดตาม stock ถังแก๊ส (เต็ม/เปล่า/ใช้งาน) ใน kitchen context
 - บันทึกการใช้งานต่อมื้อ/วัน (ถังที่เปิดใช้ + ประมาณการหน่วยที่ใช้)
@@ -34,7 +34,7 @@ Module D ปัจจุบัน (T-17, T-25, T-26, T-27) ครอบคลุ
 
 ## Impact
 
-- `docs/task-breakdown/05-D.md` — เพิ่มแถว T-56 ในตาราง Features/Tasks, เพิ่ม task detail section,
+- `docs/task-breakdown/05-D-kitchen.md` — เพิ่มแถว T-56 ในตาราง Features/Tasks, เพิ่ม task detail section,
   อัปเดต effort table (R3 +5/+3, รวม Raw 22→27, Adj 15.5→18.5)
 - `docs/task-breakdown/_index.md` — อัปเดต module 5 row: Tasks 4→5, Adj MD 15.5→18.5;
   อัปเดตยอดรวม 250→253
@@ -47,4 +47,4 @@ N/A — ไม่มีการเปลี่ยนรูปร่าง persi
 ## Decision log
 
 - 2026-06-18 — proposed และ approved โดย project owner; tracking method = CR file
-- 2026-06-18 — implemented: 05-D.md + _index.md updated
+- 2026-06-18 — implemented: 05-D-kitchen.md + _index.md updated

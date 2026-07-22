@@ -1,3 +1,38 @@
+# Seed / reset helpers — merge with a base compose that provides `couchdb` (+ `mongodb` for wipe/bootstrap).
+#
+# Seed only (CouchDB):
+#   docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm seed
+#
+# One-shots:
+#   docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed
+#   docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm mongo-wipe
+#   docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm bootstrap
+#
+# Full reset (stop the long-running worker first so it does not rewrite Mongo mid-wipe):
+#   docker compose -f docker-compose.yml stop worker
+#   docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile reset run --rm reset
+#   docker compose -f docker-compose.yml start worker
+
+x-node-seed: &node-seed
+  image: node:24-slim
+  working_dir: /app
+  volumes:
+    - ./frontend:/app
+  environment:
+    COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@${COUCHDB_HOST:-couchdb}:${COUCHDB_PORT:-5984}
+
+x-worker-bootstrap: &worker-bootstrap
+  build:
+    context: .
+    dockerfile: worker/Dockerfile
+  environment:
+    COUCHDB_URL: http://${COUCHDB_HOST:-couchdb}:${COUCHDB_PORT:-5984}
+    COUCHDB_USER: ${COUCHDB_USER:-admin}
+    COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
+    DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+  restart: "no"
+  command: ["uv", "run", "--project", "worker", "sync-worker", "--bootstrap-only"]
+
 services:
   couchdb-init:
     container_name: tent-couchdb-init
@@ -24,17 +59,89 @@ services:
         fi
         '
 
+  unseed:
+    <<: *node-seed
+    profiles: ["reset", "unseed"]
+    container_name: tent-unseed
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    restart: "no"
+    command: sh -c "corepack enable && pnpm unseed --confirm"
 
+  mongo-wipe:
+    profiles: ["reset", "mongo-wipe"]
+    container_name: tent-mongo-wipe
+    image: mongo:7
+    environment:
+      DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        mongosh --quiet "$$DATABASE_URI" --eval 'db.dropDatabase(); print("Dropped " + db.getName())'
 
   seed:
+    <<: *node-seed
     container_name: tent-seed
-    image: node:24-slim
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-    environment:
-      COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@${COUCHDB_HOST:-couchdb}:${COUCHDB_PORT:-5984}
     depends_on:
       couchdb-init:
         condition: service_completed_successfully
+    restart: "no"
     command: sh -c "corepack enable && pnpm seed"
+
+  # Project current CouchDB docs into Mongo, then exit (no continuous sync).
+  bootstrap:
+    <<: *worker-bootstrap
+    profiles: ["bootstrap"]
+    container_name: tent-bootstrap
+    depends_on:
+      couchdb:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
+  # Same as seed, but ordered after unseed + mongo-wipe (reset profile only).
+  reset-seed:
+    <<: *node-seed
+    profiles: ["reset"]
+    container_name: tent-reset-seed
+    depends_on:
+      couchdb-init:
+        condition: service_completed_successfully
+      unseed:
+        condition: service_completed_successfully
+      mongo-wipe:
+        condition: service_completed_successfully
+    restart: "no"
+    command: sh -c "corepack enable && pnpm seed"
+
+  reset-bootstrap:
+    <<: *worker-bootstrap
+    profiles: ["reset"]
+    container_name: tent-reset-bootstrap
+    depends_on:
+      reset-seed:
+        condition: service_completed_successfully
+      couchdb:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
+  # One-shot full reset: unseed Couch → wipe Mongo → seed Couch → bootstrap Mongo.
+  reset:
+    profiles: ["reset"]
+    container_name: tent-reset
+    image: alpine:3.21
+    depends_on:
+      reset-bootstrap:
+        condition: service_completed_successfully
+    restart: "no"
+    command:
+      [
+        "echo",
+        "Reset complete (Couch re-seeded, Mongo bootstrapped). Start/restart worker for continuous sync."
+      ]

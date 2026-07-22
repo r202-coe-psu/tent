@@ -1,6 +1,6 @@
 # Roadmap & Detailed Task Breakdown สำหรับทีม A (Donation & Volunteer)
 
-เอกสารฉบับนี้จัดทำขึ้นเพื่อวิเคราะห์และแจกแจงแผนงานของ **ทีม A** (ชิโน, นัท, กาน) ที่ต้องดูแล **Module 4 ([Donation](file:///home/kanjicool/kanjicool/projects/tent/docs/task-breakdown/04-donation.md))** และ **Module 6 ([Module A — Volunteer](file:///home/kanjicool/kanjicool/projects/tent/docs/task-breakdown/06-A.md))** ตามข้อสรุปใน [teamplanning.md](file:///home/kanjicool/kanjicool/projects/tent/docs/task-breakdown/teamplanning.md) และ [_timeline.md](file:///home/kanjicool/kanjicool/projects/tent/docs/task-breakdown/_timeline.md)
+เอกสารฉบับนี้จัดทำขึ้นเพื่อวิเคราะห์และแจกแจงแผนงานของ **ทีม A** (ชิโน, นัท, กาน) ที่ต้องดูแล **Module 4 ([Donation](file:///home/kanjicool/kanjicool/projects/tent/docs/task-breakdown/04-donation.md))** และ **Module 6 ([Module A — Volunteer](file:///home/kanjicool/kanjicool/projects/tent/docs/task-breakdown/06-A-volunteer.md))** ตามข้อสรุปใน [teamplanning.md](file:///home/kanjicool/kanjicool/projects/tent/docs/task-breakdown/teamplanning.md) และ [_timeline.md](file:///home/kanjicool/kanjicool/projects/tent/docs/task-breakdown/_timeline.md)
 
 ---
 

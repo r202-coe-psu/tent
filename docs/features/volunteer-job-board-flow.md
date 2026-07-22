@@ -32,7 +32,7 @@ note: >
 | **จุดประสงค์** | ให้ทีมและ stakeholder มีภาพ flow / journey / ข้อตัดสินใจเดียวกันก่อนลงมือออกแบบ schema และ UI |
 | **ในขอบเขตรอบคุยนี้** | Job board ต่อ shelter · สมัครอาสาเข้าระบบ · กะตั้งค่าได้ต่อ job · ปรับแต่ง job ได้ตลอด · roles ที่เกี่ยวข้อง |
 | **นอกขอบเขตรอบนี้** | schema field ละเอียด, API contract, UI wireframe, effort estimate, Change Record |
-| **Baseline ที่อิง** | [Module A](../task-breakdown/06-A.md) T-28/T-29 · [R3 FR-42/43](../prd/phase-r3-operations.md) · [role matrix](../prd/role-permission-matrix.md) · schema `volunteer` / `shift_assignment` |
+| **Baseline ที่อิง** | [Module A](../task-breakdown/06-A-volunteer.md) T-28/T-29 · [R3 FR-42/43](../prd/phase-r3-operations.md) · [role matrix](../prd/role-permission-matrix.md) · schema `volunteer` / `shift_assignment` |
 
 ### 1.1 สิ่งที่มีใน baseline แล้ว vs สิ่งที่เสนอเพิ่ม
 
@@ -686,7 +686,7 @@ flowchart TB
 
 | Doc | สถานะความสอดคล้องหลังคุย |
 | --- | --- |
-| `docs/task-breakdown/06-A.md` | อาจขยาย DoD T-28/T-29 หรือแยก task ย่อยเมื่อเคาะ C-02..C-07 |
+| `docs/task-breakdown/06-A-volunteer.md` | อาจขยาย DoD T-28/T-29 หรือแยก task ย่อยเมื่อเคาะ C-02..C-07 |
 | `docs/prd/phase-r3-operations.md` FR-42/43 | อาจขยาย consequences: job board + configurable shifts |
 | `docs/prd/role-permission-matrix.md` | แก้ถ้า D-LEAD = C หรือ D-DUTY-ACCESS = B; D-AFFIL สอดคล้อง CR-002 อยู่แล้ว (metadata only) |
 | `docs/data/schema.md` §6 `_users` | ใช้ `affiliation_tags` ตามสัญญาเดิม — **ไม่ต้อง field ใหม่** สำหรับ D-AFFIL พื้นฐาน |
@@ -713,7 +713,7 @@ flowchart TB
 
 1. ปิด open decisions ใน [CR-041](../changes/CR-041-module-a-volunteer-job-board.md) (§ Open decisions)  
 2. PO ตั้ง CR-041 เป็น `approved`  
-3. Apply canonical: schema · FR-42/43 · `06-A.md` · sitemap · matrix (ถ้าต้อง) · ตั้ง feature flow เป็น `active`  
+3. Apply canonical: schema · FR-42/43 · `06-A-volunteer.md` · sitemap · matrix (ถ้าต้อง) · ตั้ง feature flow เป็น `active`  
 4. แตก/ขยาย task แล้วค่อย implement  
 
 ---

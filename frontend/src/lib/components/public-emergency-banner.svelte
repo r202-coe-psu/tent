@@ -5,7 +5,7 @@
 </script>
 
 <div
-	class="sticky top-0 z-40 mb-8 overflow-hidden rounded-xl border border-danger-border bg-danger-muted/30 shadow-xs backdrop-blur-md md:relative md:z-auto"
+	class="mb-8 overflow-hidden rounded-xl border border-danger-border bg-danger-muted/30 shadow-xs backdrop-blur-md md:relative md:z-auto"
 >
 	<div class="flex flex-col border-l-4 border-danger p-5 md:flex-row md:items-start md:gap-4">
 		<!-- Alert Icon -->

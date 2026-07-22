@@ -191,7 +191,7 @@ for (const cfg of PAGES) {
 			await injectSession(page, STAFF, sessions[STAFF.name]);
 			await mockMasterData(page, {});
 			await page.goto(`${BASE}${cfg.path}`);
-			await expect(page).toHaveURL(`${BASE}/`, { timeout: 8000 });
+			await expect(page).toHaveURL(`${BASE}/portal`, { timeout: 8000 });
 		});
 
 		test('renders the page-specific header and only its allowed master types', async ({ page }) => {
