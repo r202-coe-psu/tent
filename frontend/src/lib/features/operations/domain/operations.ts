@@ -209,7 +209,7 @@ export type ReceiveInput = z.input<typeof receiveInputSchema>;
  * INVARIANT: The caller is responsible for enforcing that `lot.expiry` is provided
  * when the corresponding SupplyItem is marked as `perishable`. This domain layer
  * cannot validate it because it does not load the catalog item synchronously.
- * See UI enforcement in ReceiveStockForm.svelte.
+ * See UI enforcement in receive-stock-form.svelte.
  * NOTE: CouchDB `validate_doc_update` should eventually enforce this server-side.
  */
 export function createReceiveEntry(input: ReceiveInput, ctx: AuthorContext): StockLedger {
@@ -271,6 +271,38 @@ export function createDistributeEntry(input: DistributeInput, ctx: AuthorContext
 		ctx
 	);
 }
+
+export const adjustInputSchema = z.object({
+	item_id: z.string().min(1),
+	qty: qtyStrCoerceSignedNonZeroSchema,
+	unit: z.string().trim().min(1),
+	ref_id: z.string().nullable().default(null),
+	lot: z
+		.object({
+			expiry: z.string().optional(),
+			note: z.string().trim().optional()
+		})
+		.optional(),
+	occurred_at: z.string().optional()
+});
+export type AdjustInput = z.input<typeof adjustInputSchema>;
+
+export function createAdjustEntry(input: AdjustInput, ctx: AuthorContext): StockLedger {
+	const d = adjustInputSchema.parse(input);
+	return createStockLedger(
+		{
+			item_id: d.item_id,
+			qty: d.qty, // Keep signed quantity as is (+ for add, - for write-off)
+			unit: d.unit,
+			reason: 'adjust',
+			ref_id: d.ref_id,
+			lot: d.lot,
+			occurred_at: d.occurred_at
+		},
+		ctx
+	);
+}
+
 
 /** Sum signed deltas per item — the `stock_balance` read model, computed client-side. */
 export function stockBalance(ledger: StockLedger[]): Map<string, string> {

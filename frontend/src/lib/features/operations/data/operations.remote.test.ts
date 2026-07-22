@@ -277,6 +277,101 @@ describe('OperationsRemoteRepository', () => {
 			expect(list).toHaveLength(1);
 		});
 	});
+
+	describe('adjustStock', () => {
+		beforeEach(() => {
+			mockGetItem.mockReset();
+		});
+
+		it('adjusts stock up successfully', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			const result = await repo.adjustStock(
+				{ item_id: 'item:rice', qty: '10', unit: 'kg', ref_id: null },
+				ctx
+			);
+
+			expect(result.item_id).toBe('item:rice');
+			expect(result.qty).toBe('10');
+			expect(result.reason).toBe('adjust');
+
+			const balance = await repo.getBalance();
+			expect(balance.get('item:rice')).toBe('10');
+		});
+
+		it('adjusts stock down successfully when there is sufficient stock', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			// Init stock
+			await repo.adjustStock(
+				{ item_id: 'item:rice', qty: '15', unit: 'kg', ref_id: null },
+				ctx
+			);
+
+			// Adjust down
+			const result = await repo.adjustStock(
+				{ item_id: 'item:rice', qty: '-5', unit: 'kg', ref_id: null },
+				ctx
+			);
+
+			expect(result.qty).toBe('-5');
+			expect(result.reason).toBe('adjust');
+
+			const balance = await repo.getBalance();
+			expect(balance.get('item:rice')).toBe('10');
+		});
+
+		it('throws an error when adjusting down below available stock', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			// Init stock
+			await repo.adjustStock(
+				{ item_id: 'item:rice', qty: '5', unit: 'kg', ref_id: null },
+				ctx
+			);
+
+			// Adjust down too much
+			await expect(
+				repo.adjustStock(
+					{ item_id: 'item:rice', qty: '-10', unit: 'kg', ref_id: null },
+					ctx
+				)
+			).rejects.toThrow('Insufficient stock');
+		});
+
+		it('throws on unknown item_id', async () => {
+			mockGetItem.mockResolvedValue(null);
+
+			await expect(
+				repo.adjustStock(
+					{ item_id: 'item:missing', qty: '10', unit: 'kg', ref_id: null },
+					ctx
+				)
+			).rejects.toThrow('Unknown item: item:missing');
+		});
+
+		it('throws on unit mismatch', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			await expect(
+				repo.adjustStock(
+					{ item_id: 'item:rice', qty: '10', unit: 'bag', ref_id: null },
+					ctx
+				)
+			).rejects.toThrow('Unit mismatch for item item:rice: expected kg, got bag');
+		});
+
+		it('throws when a perishable item is missing lot.expiry', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg', perishable: true } as SupplyItem);
+
+			await expect(
+				repo.adjustStock(
+					{ item_id: 'item:rice', qty: '10', unit: 'kg', ref_id: null },
+					ctx
+				)
+			).rejects.toThrow('Perishable item item:rice requires lot.expiry to be set');
+		});
+	});
 });
 
 describe('OperationsRemoteRepository.updateCampaign', () => {

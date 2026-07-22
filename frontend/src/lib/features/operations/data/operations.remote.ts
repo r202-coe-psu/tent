@@ -10,18 +10,20 @@ import {
 	stockBalance,
 	createReceiveEntry,
 	createDistributeEntry,
+	createAdjustEntry,
 	type DonationCampaign,
 	type CampaignInput,
 	type StockLedger,
 	type ReceiveInput,
 	type DistributeInput,
+	type AdjustInput,
 	type Donation,
 	type DonationSlot
 } from '../domain/operations';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
-import { qtyAbs, qtyGte } from '$lib/utils/qty';
+import { qtyAbs, qtyGte, qtyLte } from '$lib/utils/qty';
 
 export function assertReceiveAgainstCatalog(entry: StockLedger, item: SupplyItem | null): void {
 	if (!item) {
@@ -88,6 +90,38 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			throw new Error(
 				`Insufficient stock for item ${entry.item_id} (requested ${requestedQty}, have ${currentQty})`
 			);
+		}
+		return this.addLedgerEntry(entry);
+	}
+
+	async adjustStock(input: AdjustInput, ctx: AuthorContext): Promise<StockLedger> {
+		const entry = createAdjustEntry(input, ctx);
+		const item = await supplyRepository().getItem(entry.item_id);
+		if (!item) {
+			throw new Error(
+				`Unknown item: ${entry.item_id} — item must exist in the catalog before adjusting stock`
+			);
+		}
+		if (item.unit !== entry.unit) {
+			throw new Error(
+				`Unit mismatch for item ${entry.item_id}: expected ${item.unit}, got ${entry.unit}`
+			);
+		}
+		if (item.perishable && !entry.lot?.expiry) {
+			throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
+		}
+
+		// If adjustment is negative (reduction), ensure we have enough stock overall
+		if (qtyLte(entry.qty, 0)) {
+			const balances = await this.getBalance();
+			const currentQty = balances.get(entry.item_id) ?? '0';
+			const requestedQty = qtyAbs(entry.qty);
+
+			if (!qtyGte(currentQty, requestedQty)) {
+				throw new Error(
+					`Insufficient stock for item ${entry.item_id} (requested adjustment ${entry.qty}, have ${currentQty})`
+				);
+			}
 		}
 		return this.addLedgerEntry(entry);
 	}

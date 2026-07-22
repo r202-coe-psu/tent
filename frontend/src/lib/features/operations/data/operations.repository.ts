@@ -5,6 +5,7 @@ import type {
 	StockLedger,
 	ReceiveInput,
 	DistributeInput,
+	AdjustInput,
 	Donation,
 	DonationSlot
 } from '../domain/operations';
@@ -47,6 +48,11 @@ export interface OperationsRepository {
 	 * Will throw an error if there is insufficient stock.
 	 */
 	distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger>;
+
+	/**
+	 * Process and persist a stock adjustment entry (increases or decreases stock).
+	 */
+	adjustStock(input: AdjustInput, ctx: AuthorContext): Promise<StockLedger>;
 
 	// Campaign/Donation/Slot methods
 	listCampaigns(): Promise<DonationCampaign[]>;
