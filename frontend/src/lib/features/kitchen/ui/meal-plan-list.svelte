@@ -2,12 +2,13 @@
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import Clock from '@lucide/svelte/icons/clock';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
-	import Plus from '@lucide/svelte/icons/plus';
+	import Play from '@lucide/svelte/icons/play';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
@@ -23,15 +24,27 @@
 		MEAL_PERIOD_LABELS,
 		RICE_RECIPE_ID,
 		RECIPE_LABELS,
+		RECIPE_TO_STOCK_ITEM,
 		MealPlanForm,
 		RequisitionDialog,
 		MealServiceForm,
-		type MealPlan
+		type MealPlan,
+		type MealPlanRecipe
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
+	import { useSupplyItems } from '$lib/features/supply';
+	import { useStockBalance } from '$lib/features/operations';
 
 	const plans = useMealPlans();
+	const supplyItems = useSupplyItems();
+	const stockBalance = useStockBalance();
 	let createOpen = $state(false);
+	let createDefaultMode = $state<'sop' | 'recipe' | 'custom'>('sop');
+
+	function openCreate(mode: 'sop' | 'recipe' | 'custom') {
+		createDefaultMode = mode;
+		createOpen = true;
+	}
 	const confirm = useConfirmMealPlan();
 	const deletePlan = useDeleteMealPlanDraft();
 	const sopProfile = useActiveSopProfile();
@@ -71,6 +84,17 @@
 	// Confirmation runs through AlertDialog below, not window.confirm.
 	let reissueConfirmOpen = $state(false);
 	let pendingReissuePlan = $state<MealPlan | null>(null);
+
+	// BOM-sourced recipes (calculateMealIngredientsFromRecipe) reference a
+	// catalog `item_master:*` id, which has no stock_ledger linkage yet (catalog
+	// item_master and the operations `supply` stock system are separate,
+	// unmigrated catalogs) — เบิก would just show "ของหมด" for every line, so
+	// block it here with an explanation instead. Custom-mode recipes also carry
+	// `unit` but reference a real `supply_item` (`item:*`, already stock-linked)
+	// — only the item_master prefix means "not withdrawable yet".
+	function isBomSourced(plan: MealPlan): boolean {
+		return plan.recipes.some((r) => r.recipe_id.startsWith('item_master:'));
+	}
 
 	function openRequisition(plan: MealPlan) {
 		if (requisitionedPlanIds.has(plan._id)) {
@@ -158,15 +182,31 @@
 		return parts.slice(1).join(':') || id;
 	}
 
-	// Display label + unit for a recipe row. Only rice is actually calculated
-	// (T-25 scope) — other ids may appear on mock/demo plans ahead of P-02's
-	// multi-recipe calc; falls back to the raw id when unknown.
+	// Display label + unit for a recipe row: fixed SOP ids first, then a
+	// custom-mode supply_item lookup, else fall back to the raw id (BOM rows —
+	// item_master isn't loaded here since they can't be withdrawn anyway).
 	function recipeLabel(recipeId: string): { label: string; unit: string } {
-		return RECIPE_LABELS[recipeId] ?? { label: recipeId, unit: '' };
+		if (RECIPE_LABELS[recipeId]) return RECIPE_LABELS[recipeId];
+		const supplyItem = supplyItems.data?.find((i) => i._id === recipeId);
+		if (supplyItem) return { label: supplyItem.name, unit: supplyItem.unit };
+		return { label: recipeId, unit: '' };
 	}
 
 	function formatTime(iso: string): string {
 		return new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+	}
+
+	// How much more than the shelter's current on-hand stock this recipe row
+	// needs (0 = fully covered) — in the same display unit as planned_qty/meta.unit
+	// (converted back from the stock unit when a static mapping applies, e.g.
+	// rice: on-hand kg × 1000 → g). BOM rows (item_master:*) are skipped — they
+	// already show their own "ยังเบิกไม่ได้จริง" note regardless of qty.
+	function stockShortfall(recipe: MealPlanRecipe): number {
+		if (recipe.recipe_id.startsWith('item_master:')) return 0;
+		const stock = RECIPE_TO_STOCK_ITEM[recipe.recipe_id];
+		const onHand = Number(stockBalance.data?.get(stock?.item_id ?? recipe.recipe_id) ?? '0');
+		const onHandDisplayUnit = stock ? onHand * stock.recipe_per_stock_unit : onHand;
+		return Math.max(0, recipe.planned_qty - onHandDisplayUnit);
 	}
 </script>
 
@@ -201,21 +241,14 @@
 				</div>
 			</div>
 			<div class="flex items-center gap-2">
-				<Button
-					onclick={() => (createOpen = true)}
-					class="rounded-full bg-green-600 px-5 text-white hover:bg-green-700"
-				>
-					<Plus class="mr-1.5 h-3.5 w-3.5" />
-					สร้างแผนอาหารใหม่
+				<Button onclick={() => openCreate('recipe')} class="rounded-full px-5">
+					<Play class="mr-1.5 h-3.5 w-3.5" />
+					เพิ่มสูตรมาตรฐาน (BOM)
 				</Button>
-				<!-- BOM / production-board ยังไม่พร้อม (coming soon) — ซ่อนปุ่มไว้ก่อนกันหลงทาง -->
-				<span
-					class="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-dashed border-muted-foreground/40 px-4 py-2 text-xs font-medium text-muted-foreground/60"
-					title="ยังไม่พร้อมใช้งาน"
-				>
-					<FileText class="h-3.5 w-3.5" />
-					ฐานสูตร BOM (เร็วๆ นี้)
-				</span>
+				<Button variant="outline" onclick={() => openCreate('custom')} class="rounded-full px-4">
+					<FileText class="mr-1.5 h-3.5 w-3.5" />
+					กำหนดสูตรเอง (Custom)
+				</Button>
 			</div>
 		</Card.Header>
 
@@ -251,17 +284,30 @@
 										</p>
 									</Table.Cell>
 									<Table.Cell class="max-w-xs px-6">
-										<p class="text-sm font-medium">{MEAL_PERIOD_LABELS[plan.meal]}</p>
+										<p class="text-sm font-medium">
+											{plan.label ?? MEAL_PERIOD_LABELS[plan.meal]}
+										</p>
 										{#each plan.recipes ?? [] as recipe (recipe.recipe_id)}
 											{@const meta = recipeLabel(recipe.recipe_id)}
+											{@const shortfall = stockShortfall(recipe)}
 											<p
-												class="mt-0.5 text-xs text-muted-foreground"
-												title={recipe.recipe_id === RICE_RECIPE_ID
-													? 'คำนวณเป็นกรัมตามสัดส่วน SOP — ตอนเบิกจะถูกแปลงเป็นกิโลกรัม (kg) ให้ตรงหน่วยคลัง'
-													: undefined}
+												class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
+												title={shortfall > 0
+													? 'ของขาดสต็อก — คลังมีไม่พอตามยอดที่ต้องใช้'
+													: recipe.recipe_id === RICE_RECIPE_ID
+														? 'คำนวณเป็นกรัมตามสัดส่วน SOP — ตอนเบิกจะถูกแปลงเป็นกิโลกรัม (kg) ให้ตรงหน่วยคลัง'
+														: undefined}
 											>
+												{#if shortfall > 0}
+													<TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+												{/if}
 												{meta.label}: {recipe.planned_qty.toLocaleString()}
 												{meta.unit}
+												{#if shortfall > 0}
+													<span class="text-amber-600"
+														>(ขาดอีก {shortfall.toLocaleString()} {meta.unit})</span
+													>
+												{/if}
 											</p>
 										{/each}
 										{#if plan.override_reason}
@@ -324,7 +370,15 @@
 										{:else}
 											<div class="flex flex-col items-center gap-1">
 												<div class="flex items-center gap-1.5">
-													<Button size="sm" variant="outline" onclick={() => openRequisition(plan)}>
+													<Button
+														size="sm"
+														variant="outline"
+														onclick={() => openRequisition(plan)}
+														disabled={isBomSourced(plan)}
+														title={isBomSourced(plan)
+															? 'แผนนี้มาจากสูตรมาตรฐาน (BOM) — ยังเบิกไม่ได้จริง เพราะวัตถุดิบยังไม่เชื่อมกับระบบคลังสินค้า (item_master กับ supply เป็นคนละชุดกันตอนนี้)'
+															: undefined}
+													>
 														<PackageCheck class="mr-1 h-3.5 w-3.5" />
 														เบิกวัตถุดิบ
 													</Button>
@@ -333,6 +387,11 @@
 														บันทึกบริการ
 													</Button>
 												</div>
+												{#if isBomSourced(plan)}
+													<p class="max-w-[220px] text-center text-[11px] text-amber-600">
+														สูตร BOM ยังเบิกสต็อกไม่ได้จริง (รอเชื่อม item_master ↔ คลังสินค้า)
+													</p>
+												{/if}
 												<div class="flex items-center gap-2">
 													{#if requisitionedPlanIds.has(plan._id)}
 														<span class="text-[11px] text-emerald-600">✓ เบิกแล้ว</span>
@@ -379,7 +438,7 @@
 	</Card.Root>
 </div>
 
-<MealPlanForm bind:open={createOpen} />
+<MealPlanForm bind:open={createOpen} defaultMode={createDefaultMode} />
 <MealPlanForm bind:open={editOpen} plan={editPlan} />
 <RequisitionDialog bind:open={reqOpen} plan={reqPlan} />
 <MealServiceForm bind:open={serviceOpen} plan={servicePlan} />

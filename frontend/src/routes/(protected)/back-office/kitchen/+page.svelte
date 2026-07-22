@@ -83,12 +83,12 @@
 						<Flame class="h-3.5 w-3.5" />
 						ถังแก๊ส ({gasTypes.data?.length ?? 0})
 					</a>
-					<span
-						class="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-dashed border-muted-foreground/40 px-3 py-1 text-xs font-medium text-muted-foreground/60"
-						title="ยังไม่พร้อมใช้งาน"
+					<a
+						href={resolve('/back-office/catalog')}
+						class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-muted"
 					>
 						ฐานสูตร BOM
-					</span>
+					</a>
 					<span
 						class="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium"
 					>
