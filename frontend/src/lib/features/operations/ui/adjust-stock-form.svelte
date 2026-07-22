@@ -261,7 +261,7 @@
 	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-md"
 >
 	<div class="mb-2 flex items-center gap-2 border-b border-border/60 pb-3">
-		<Settings class="h-4.5 w-4.5 text-primary animate-spin" style="animation-duration: 4s;" />
+		<Settings class="h-4.5 w-4.5 text-primary"/>
 		<h3 class="text-sm font-bold text-foreground">ปรับปรุงยอดสต๊อก (Stock Adjustment)</h3>
 	</div>
 
