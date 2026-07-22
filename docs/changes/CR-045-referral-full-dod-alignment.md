@@ -44,6 +44,14 @@ affects:
 - เมื่อมีการเปลี่ยนสถานะเป็น `accepted` หรือ `rejected` จะต้องรองรับการส่งผ่านและบันทึก `response_reason`
 - เมื่อ `referral_type` = `capacity` และเปลี่ยนสถานะเป็น `accepted` ระบบจะทำการย้ายศูนย์อพยพของผู้พักพิง (`evacuee.shelter_code = to_shelter_code`) ให้อัตโนมัติ
 
+### 3. Query & Performance Optimizations (A-4 & A-5)
+- **A-4 Pagination & Filtering:** ปรับปรุง `referralFilterSchema` และ `ReferralRepository.list()` รองรับ:
+  - `limit`: กำหนดจำนวนรายการต่อหน้า (default: `50`, max: `1000`) ป้องกันปัญหา Silent Truncation 25 รายการเดิม
+  - `skip`: รองรับจำนวนรายการที่ต้องการข้ามสำหรับ Pagination
+  - `sort`: รองรับการเรียงลำดับรายการ (`created_at_desc` เป็น default หรือ `created_at_asc`)
+  - `referralFilterSchema`: Zod schema สำหรับทำ Type Validation ความถูกต้องของพารามิเตอร์การค้นหา
+- **A-5 Mango Index Deployment:** เพิ่มและลงทะเบียน CouchDB Mango Index `referral-list-sort-idx` (`['type', 'created_at', 'status', 'evacuee_id']`) ใน `scripts/seed.ts` เพื่อรองรับการเรียงลำดับและค้นหาประสิทธิภาพสูง
+
 ---
 
 ## Impact & Affected System Component
