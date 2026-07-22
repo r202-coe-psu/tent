@@ -29,7 +29,7 @@ x-worker-bootstrap: &worker-bootstrap
     COUCHDB_URL: http://${COUCHDB_HOST:-couchdb}:${COUCHDB_PORT:-5984}
     COUCHDB_USER: ${COUCHDB_USER:-admin}
     COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
-    MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/tentdb}
+    DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
   restart: "no"
   command: ["uv", "run", "--project", "worker", "sync-worker", "--bootstrap-only"]
 
@@ -74,7 +74,7 @@ services:
     container_name: tent-mongo-wipe
     image: mongo:7
     environment:
-      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/tentdb}
+      DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -82,7 +82,7 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - |
-        mongosh --quiet "$$MONGODB_URI" --eval 'db.dropDatabase(); print("Dropped " + db.getName())'
+        mongosh --quiet "$$DATABASE_URI" --eval 'db.dropDatabase(); print("Dropped " + db.getName())'
 
   seed:
     <<: *node-seed

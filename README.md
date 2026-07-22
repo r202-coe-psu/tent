@@ -143,7 +143,7 @@ LEFTHOOK=0 git commit -m "..."
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm seed`
 - **Unseed** (ลบ Couch DBs ยกเว้น `_users`):
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed`
-- **Wipe Mongo** (`dropDatabase` ตาม `MONGODB_URI`):
+- **Wipe Mongo** (`dropDatabase` ตาม `DATABASE_URI`):
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm mongo-wipe`
 - **Bootstrap Mongo** (project จาก Couch แล้ว exit):
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm bootstrap`
@@ -162,17 +162,23 @@ LEFTHOOK=0 git commit -m "..."
 - `uv run --project worker sync-worker --bootstrap` — force full re-sync แล้ววิ่ง continuous
 - `uv run --project worker sync-worker --bootstrap-only` — bootstrap แล้ว exit (ใช้ใน compose reset)
 
-## Staging deploy (public plane)
+## Staging / production deploy (public plane)
 
-Jenkins staging ใช้ `docker-compose.staging.no-nginx.yml` (nginx อยู่บน **host**):
+Jenkins staging ใช้ `docker-compose.staging.no-nginx.yml`; production ใช้
+`docker-compose.production.no-nginx.yml` (nginx อยู่บน **host** ทั้งคู่):
 
 ```bash
 docker compose -f docker-compose.staging.no-nginx.yml up -d --build
+docker compose -f docker-compose.production.no-nginx.yml up -d --build
 ```
 
 Services: CouchDB, frontend, MongoDB, sync worker, FastAPI (`127.0.0.1:9000`).
-ต้องมี volume dirs บน server เช่น `/mnt/tent-data/couchdb/data` และ `/mnt/tent-data/mongodb/data`,
-และตั้ง `SECRET_KEY` / `EXTERNAL_API_SECRET` ใน `.env` บน server
+ตั้ง `DATABASE_URI` / `SECRET_KEY` / `EXTERNAL_API_SECRET` ใน `.env` บน server
+(ค่าเดียวสำหรับ worker + FastAPI).
+
+Volume dirs:
+- staging: `/mnt/tent-data/couchdb/data`, `/mnt/tent-data/mongodb/data`
+- production: `../deployment/tent/data` (Couch), `../deployment/tent/mongodb/data` (Mongo)
 
 Host nginx ต้อง proxy exact-path ไป FastAPI (อย่า proxy ทั้ง `/public`):
 
@@ -197,7 +203,7 @@ location = /public/v1/shelters {
 ```
 
 ตัวอย่างเต็มสำหรับ compose-nginx อยู่ที่ [`nginx/nginx.conf`](nginx/nginx.conf)
-(`docker-compose.staging.yml` — proxy ไป `http://fastapi:9000`)
+(`docker-compose.staging.yml` / `docker-compose.production.yml` — proxy ไป `http://fastapi:9000`)
 
 ## แหล่งอ้างอิง
 
