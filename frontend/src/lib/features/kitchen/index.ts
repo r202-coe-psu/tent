@@ -69,8 +69,7 @@ export {
 	isMealPlan,
 	isKitchenRequisition,
 	isMealService,
-	MEAL_PERIOD_LABELS,
-	MealPlanAlreadyExistsError
+	MEAL_PERIOD_LABELS
 } from './domain/kitchen';
 
 // Data — repository contract + remote CouchDB binding

@@ -20,7 +20,6 @@
 		DEFAULT_RICE_G_PER_PERSON_MEAL,
 		RECIPE_LABELS,
 		MEAL_PERIOD_LABELS,
-		MealPlanAlreadyExistsError,
 		type MealPeriod,
 		type MealPlan,
 		type MealPlanHeadcount,
@@ -275,14 +274,7 @@
 			open = false;
 			overrideReason = '';
 		} catch (err) {
-			if (
-				!plan &&
-				(err instanceof MealPlanAlreadyExistsError || (err as { status?: number })?.status === 409)
-			) {
-				toast.error(`มีแผน ${MEAL_PERIOD_LABELS[meal]} ของวันที่ ${date} อยู่แล้ว`);
-			} else {
-				toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
-			}
+			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
 		}
 	}
 </script>

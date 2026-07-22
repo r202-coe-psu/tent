@@ -11,7 +11,7 @@ import type {
 import type { AuthorContext } from '$lib/db/model';
 
 export interface KitchenRepository {
-	// MealPlan — deterministic _id: meal_plan:{date}:{meal}
+	// MealPlan — ulid _id; multiple plans may share a date+meal (extra batches)
 	createMealPlan(input: MealPlanInput, ctx: AuthorContext): Promise<MealPlan>;
 	getMealPlan(date: string, meal: string): Promise<MealPlan | null>;
 	listMealPlans(): Promise<MealPlan[]>;

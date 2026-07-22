@@ -39,8 +39,13 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.put(createMealPlan(input, ctx));
 	}
 
-	getMealPlan(date: string, meal: string): Promise<MealPlan | null> {
-		return this.repo.get<MealPlan>(`meal_plan:${date}:${meal}`);
+	// _id is a ulid, not deterministic from date+meal (multiple plans per
+	// date+meal are allowed) — scans listMealPlans instead of a direct get.
+	// Ambiguous when more than one plan shares the date+meal; returns whichever
+	// `allByType` yields first.
+	async getMealPlan(date: string, meal: string): Promise<MealPlan | null> {
+		const plans = await this.listMealPlans();
+		return plans.find((p) => p.date === date && p.meal === meal) ?? null;
 	}
 
 	listMealPlans(): Promise<MealPlan[]> {

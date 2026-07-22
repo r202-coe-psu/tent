@@ -9,14 +9,13 @@ import { kitchenRepository } from '../data/kitchen.remote';
 import { getActiveSopProfile } from '$lib/features/sop-ratios';
 import { peopleRepository } from '$lib/features/people';
 import { catalogRepository } from '$lib/features/catalog';
-import {
-	MealPlanAlreadyExistsError,
-	type MealPlan,
-	type MealPlanInput,
-	type KitchenRequisitionInput,
-	type MealServiceInput,
-	type GasCylinderType,
-	type GasCylinderTypeInput
+import type {
+	MealPlan,
+	MealPlanInput,
+	KitchenRequisitionInput,
+	MealServiceInput,
+	GasCylinderType,
+	GasCylinderTypeInput
 } from '../domain/kitchen';
 import {
 	calculateMealIngredients,
@@ -134,7 +133,9 @@ export const useCreateMealPlanCalc = () =>
 				custom,
 				headcountAsOf
 			);
-			const created = await kitchenRepository().createMealPlan(
+			// _id is a fresh ulid (kitchen.ts createMealPlan) — always a genuine new
+			// doc, multiple plans for the same date+meal are allowed by design.
+			return kitchenRepository().createMealPlan(
 				{
 					date,
 					meal,
@@ -146,15 +147,6 @@ export const useCreateMealPlanCalc = () =>
 				},
 				ctx
 			);
-			// meal_plan:{date}:{meal} is deterministic — putDoc (couch-db.ts) treats a
-			// create-time 409 as idempotent success and resolves with the PRE-EXISTING
-			// doc instead of throwing. Detect that replay here (its calc_source won't
-			// carry the headcount_as_of we just generated) so the caller sees a real
-			// error instead of a false "created" result.
-			if (created.calc_source?.headcount_as_of !== headcountAsOf) {
-				throw new MealPlanAlreadyExistsError(date, meal);
-			}
-			return created;
 		}
 	}));
 

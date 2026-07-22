@@ -15,9 +15,11 @@
 	const services = useMealServices();
 	const plans = useMealPlans();
 
-	// Index plans by "date:meal" — the shared deterministic key both meal_plan and
-	// meal_service ids are built from — so each service finds its source plan. Plain
-	// record (not a Map): a throwaway lookup table, no reactive-collection semantics.
+	// Index plans by "date:meal" so each service finds its source plan. meal_plan
+	// _id is a ulid, not deterministic — multiple plans may share a date+meal
+	// (extra batches), so this picks whichever one iterates last; variance for
+	// that slot then only reflects that one plan, not the combined batches.
+	// meal_service itself is still one deterministic record per date+meal.
 	const planByKey = $derived.by(() => {
 		const m: Record<string, MealPlan> = {};
 		for (const p of plans.data ?? []) m[`${p.date}:${p.meal}`] = p;

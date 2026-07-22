@@ -5,8 +5,7 @@ import {
 	createMealService,
 	isMealPlan,
 	isKitchenRequisition,
-	isMealService,
-	MealPlanAlreadyExistsError
+	isMealService
 } from './kitchen';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -15,7 +14,7 @@ const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'kitchen_staff' };
 // ---- MealPlan ----
 
 describe('createMealPlan', () => {
-	it('generates deterministic _id from date + meal', () => {
+	it('generates a ulid-based _id (meal_plan:{ulid})', () => {
 		const plan = createMealPlan(
 			{
 				date: '2026-07-15',
@@ -25,13 +24,13 @@ describe('createMealPlan', () => {
 			},
 			ctx
 		);
-		expect(plan._id).toBe('meal_plan:2026-07-15:dinner');
+		expect(plan._id).toMatch(/^meal_plan:[0-9A-Z]{26}$/);
 		expect(plan.type).toBe('meal_plan');
 		expect(plan.status).toBe('draft');
 		expect(plan.shelter_code).toBe('SH001');
 	});
 
-	it('two plans with same date+meal have identical _id (deterministic collision)', () => {
+	it('two plans with the same date+meal get different _id (extra batches allowed)', () => {
 		const input = {
 			date: '2026-07-15',
 			meal: 'lunch' as const,
@@ -40,7 +39,9 @@ describe('createMealPlan', () => {
 		};
 		const a = createMealPlan(input, ctx);
 		const b = createMealPlan(input, ctx);
-		expect(a._id).toBe(b._id);
+		expect(a._id).not.toBe(b._id);
+		expect(a.date).toBe(b.date);
+		expect(a.meal).toBe(b.meal);
 	});
 
 	it('rejects invalid date format', () => {
@@ -220,18 +221,5 @@ describe('type guards', () => {
 		expect(isMealService(plan)).toBe(false);
 		expect(isMealPlan(null)).toBe(false);
 		expect(isMealPlan({ type: 'something_else' })).toBe(false);
-	});
-});
-
-// ---- MealPlanAlreadyExistsError ----
-
-describe('MealPlanAlreadyExistsError', () => {
-	it('carries date/meal and a distinguishable name for instanceof checks', () => {
-		const err = new MealPlanAlreadyExistsError('2026-07-16', 'lunch');
-		expect(err).toBeInstanceOf(Error);
-		expect(err.name).toBe('MealPlanAlreadyExistsError');
-		expect(err.date).toBe('2026-07-16');
-		expect(err.meal).toBe('lunch');
-		expect(err.message).toContain('2026-07-16:lunch');
 	});
 });
