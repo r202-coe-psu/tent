@@ -4,6 +4,7 @@ import { PATCH } from './+server';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import type { RequestEvent } from './$types';
 import type { Referral } from '$lib/features/referrals/domain/referral.schema';
+
 vi.mock('$lib/server/couch-admin', () => ({
 	requireShelterScopeOrSA: vi.fn(),
 	ServiceError: class extends Error {
@@ -73,6 +74,53 @@ describe('PATCH /api/back-office/referral/[id]/transition', () => {
 		const data = await res.json();
 		expect(data.status).toBe('sent');
 		expect(mockTransition).toHaveBeenCalledTimes(2);
+	});
+
+	it('extracts and forwards response_reason to repository transition method', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'sm_user',
+			roles: ['shelter_manager', 'shelter:SH001'],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+
+		mockTransition.mockResolvedValueOnce({
+			_id: 'referral:1',
+			type: 'referral',
+			status: 'accepted',
+			response_reason: 'Bed space confirmed'
+		} as unknown as Referral);
+
+		const event = createMockEvent('referral:1', {
+			to: 'accepted',
+			reason: '  Bed space confirmed  '
+		});
+
+		const res = await PATCH(event);
+		expect(res.status).toBe(200);
+		expect(mockTransition).toHaveBeenCalledWith(
+			'referral:1',
+			'accepted',
+			'sm_user',
+			'Bed space confirmed'
+		);
+	});
+
+	it('returns 422 if reason exceeds 2000 characters', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'sm_user',
+			roles: ['shelter_manager', 'shelter:SH001'],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+
+		const longReason = 'a'.repeat(2001);
+		const event = createMockEvent('referral:1', { to: 'accepted', reason: longReason });
+		const res = await PATCH(event);
+
+		expect(res.status).toBe(422);
+		const data = await res.json();
+		expect(data.error).toContain('Reason exceeds maximum length');
 	});
 
 	it('returns 422 for invalid transition target status', async () => {

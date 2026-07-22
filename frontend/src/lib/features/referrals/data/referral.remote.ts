@@ -65,24 +65,25 @@ export class ReferralRemoteRepository implements ReferralRepository {
 			throw new Error(`Referral ${id} not found or invalid`);
 		}
 
-		const updated = applyTransition(latest, to, actor, new Date().toISOString(), reason);
+		const nowIso = new Date().toISOString();
 
 		// Side-effect for capacity referral: when accepted, transfer evacuee to destination shelter
 		if (to === 'accepted' && latest.referral_type === 'capacity' && latest.to_shelter_code) {
-			try {
-				const evacuee = await peopleRepository().getEvacuee(latest.evacuee_id);
-				if (evacuee) {
-					await peopleRepository().updateEvacuee({
-						...evacuee,
-						shelter_code: latest.to_shelter_code,
-						updated_at: new Date().toISOString()
-					});
-				}
-			} catch {
-				// Log or swallow if people remote is not available in isolated tests
+			const evacuee = await peopleRepository().getEvacuee(latest.evacuee_id);
+			if (!evacuee) {
+				throw new Error(
+					`Evacuee ${latest.evacuee_id} not found — cannot complete shelter transfer`
+				);
 			}
+
+			await peopleRepository().updateEvacuee({
+				...evacuee,
+				shelter_code: latest.to_shelter_code,
+				updated_at: nowIso
+			});
 		}
 
+		const updated = applyTransition(latest, to, actor, nowIso, reason);
 		return this.repo.put(touch(updated)) as Promise<Referral>;
 	}
 }

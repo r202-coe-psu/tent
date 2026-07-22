@@ -125,13 +125,19 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		return { ...doc, _rev: data.rev };
 	}
 
-	async transition(id: string, to: ReferralStatus, actor: string): Promise<Referral> {
+	async transition(
+		id: string,
+		to: ReferralStatus,
+		actor: string,
+		reason?: string
+	): Promise<Referral> {
 		const latest = await this.get(id);
 		if (!latest) {
 			throw new CouchDbReferralError(`Referral not found`, HTTP_NOT_FOUND);
 		}
 
-		const updated = applyTransition(latest, to, actor, new Date().toISOString());
+		const nowIso = new Date().toISOString();
+		const updated = applyTransition(latest, to, actor, nowIso, reason);
 		const touched = touch(updated);
 
 		const { status, data } = await this.couchPut<PutResultResponse>(

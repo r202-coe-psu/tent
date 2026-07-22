@@ -28,6 +28,12 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 		}
 
 		const nextStatus = parsed.data;
+
+		const reason = typeof body.reason === 'string' ? body.reason.trim() : undefined;
+		if (reason && reason.length > 2000) {
+			return json({ error: 'Reason exceeds maximum length of 2000 characters' }, { status: 422 });
+		}
+
 		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
 
 		const MAX_RETRIES = 3;
@@ -35,7 +41,7 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 
 		for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 			try {
-				const updated = await repo.transition(id, nextStatus, caller.name);
+				const updated = await repo.transition(id, nextStatus, caller.name, reason);
 				return json(updated);
 			} catch (e: unknown) {
 				const err = e as { status?: number; message?: string };
