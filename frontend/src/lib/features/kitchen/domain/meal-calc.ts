@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js';
 import { persistQty, qtyGte, qtyLte, roundQty, subQty } from '$lib/utils/qty';
+import type { Recipe } from '$lib/features/catalog';
 import type {
 	KitchenRequisitionInput,
 	MealPlan,
@@ -19,12 +20,6 @@ export const VEGETABLE_RECIPE_ID = 'ingredient:vegetable';
 // default. 150 g matches the existing calc fixtures (100 people → 15000 g).
 // TODO(CR-021/CR-013): read from item_master.consumption_rate once it ships.
 export const DEFAULT_RICE_G_PER_PERSON_MEAL = 150;
-
-// Egg/vegetable per-person defaults — demo widening of the T-25 calc ahead of
-// P-02's real special-needs/multi-recipe design (owner-requested, not tracked
-// as a Change Record; revisit once P-02 ships).
-export const DEFAULT_EGG_PER_PERSON_MEAL = 2; // pieces
-export const DEFAULT_VEGETABLE_G_PER_PERSON_MEAL = 100; // grams
 
 // Grams per kg — rice/vegetable recipes are calculated in grams (SOP ratio
 // precision); the stock ledger stores kg (item_master.base_unit). CR-030.
@@ -59,50 +54,6 @@ export const RECIPE_TO_STOCK_ITEM: Record<
 	}
 };
 
-// Menu presets — which non-rice ingredients a meal plan includes. Rice is
-// always present (its qty comes from riceGPerMeal, not the menu); egg/vegetable
-// qty always use the fixed per-person defaults above. Same demo-widening
-// disclaimer as above: 3 fixed presets, not a real recipe/BOM catalog yet.
-export type MealMenuId = 'menu:rice-egg' | 'menu:congee-vegetable' | 'menu:rice-egg-vegetable';
-
-export interface MealMenu {
-	id: MealMenuId;
-	label: string;
-	includesEgg: boolean;
-	includesVegetable: boolean;
-}
-
-export const MEAL_MENUS: MealMenu[] = [
-	{ id: 'menu:rice-egg', label: 'ข้าวสวย + ไข่ต้ม', includesEgg: true, includesVegetable: false },
-	{
-		id: 'menu:congee-vegetable',
-		label: 'ข้าวต้ม + ผัก',
-		includesEgg: false,
-		includesVegetable: true
-	},
-	{
-		id: 'menu:rice-egg-vegetable',
-		label: 'ข้าวสวย + ไข่เจียว + ผัก (มาตรฐาน)',
-		includesEgg: true,
-		includesVegetable: true
-	}
-];
-
-export const DEFAULT_MENU_ID: MealMenuId = 'menu:rice-egg-vegetable';
-
-/** Reverse-maps a stored plan's recipes back to the menu preset that would have
- * produced them (by which non-rice ids are present) — used to prefill the edit
- * form. Falls back to the default menu when nothing matches. */
-export function menuIdFromRecipes(recipes: MealPlanRecipe[]): MealMenuId {
-	const ids = new Set(recipes.map((r) => r.recipe_id));
-	const hasEgg = ids.has(EGG_RECIPE_ID);
-	const hasVegetable = ids.has(VEGETABLE_RECIPE_ID);
-	const match = MEAL_MENUS.find(
-		(m) => m.includesEgg === hasEgg && m.includesVegetable === hasVegetable
-	);
-	return match?.id ?? DEFAULT_MENU_ID;
-}
-
 export interface MealCalcSource {
 	sop_profile_id: string;
 	sop_profile_version: number;
@@ -115,13 +66,12 @@ export interface MealCalcResult {
 }
 
 /**
- * Derives the ingredient list for one meal from headcount × SOP ratios.
- *
- * Rice is always included; egg/vegetable are added per the selected menu
- * preset (demo widening of T-25 scope requested by the owner, using fixed
- * per-person defaults — not yet driven by a real recipe/BOM catalog). P-02
- * special-needs logic (halal preparation, soft-food, infant formula) will
- * extend this once the design spec ships.
+ * Derives the ingredient list for one meal from headcount × SOP ratio (rice
+ * only — the sole ingredient with a real per-person coefficient today). The
+ * previous 3 fixed egg/vegetable menu presets were demo-only mock data with no
+ * SOP ratio backing them; removed per owner request. A real multi-ingredient
+ * menu now comes from a catalog Recipe (BOM) — see
+ * {@link calculateMealIngredientsFromRecipe} — authored on `/back-office/catalog`.
  *
  * Throws if headcount.total is 0 — a meal plan with no occupancy is
  * meaningless and would produce a qty_required = 0 which violates the
@@ -132,8 +82,7 @@ export function calculateMealIngredients(
 	riceGPerMeal: number,
 	sopProfileId: string,
 	sopProfileVersion: number,
-	headcountAsOf: string,
-	menuId: MealMenuId = DEFAULT_MENU_ID
+	headcountAsOf: string
 ): MealCalcResult {
 	if (headcount.total <= 0) {
 		throw new Error('calculateMealIngredients: headcount.total must be > 0');
@@ -142,21 +91,101 @@ export function calculateMealIngredients(
 		throw new Error('calculateMealIngredients: riceGPerMeal must be > 0');
 	}
 
-	const menu = MEAL_MENUS.find((m) => m.id === menuId) ?? MEAL_MENUS[MEAL_MENUS.length - 1];
 	const riceGrams = Math.ceil(headcount.total * riceGPerMeal);
 	const recipes: MealPlanRecipe[] = [{ recipe_id: RICE_RECIPE_ID, planned_qty: riceGrams }];
-	if (menu.includesEgg) {
-		recipes.push({
-			recipe_id: EGG_RECIPE_ID,
-			planned_qty: Math.ceil(headcount.total * DEFAULT_EGG_PER_PERSON_MEAL)
-		});
+
+	return {
+		recipes,
+		calc_source: {
+			sop_profile_id: sopProfileId,
+			sop_profile_version: sopProfileVersion,
+			headcount_as_of: headcountAsOf
+		}
+	};
+}
+
+/**
+ * Derives the ingredient list for one meal from a catalog Recipe (BOM) instead
+ * of the fixed SOP-ratio menus — each recipe.ingredient scales from its
+ * standard_portions to the plan's actual headcount. `itemUnits` supplies the
+ * base_unit of each referenced item_master (catalog Ingredient.uom is not
+ * guaranteed to match it); falls back to the ingredient's own uom if missing.
+ *
+ * Owner decision: a catalog item_master_id is used as-is for the stock_ledger
+ * item_id (no separate stock-item mapping) — see toRequisitionInput's
+ * RECIPE_TO_STOCK_ITEM-less fallback branch below.
+ *
+ * Throws if headcount.total is 0 or the recipe's standard_portions isn't a
+ * positive number — same invariant as {@link calculateMealIngredients}.
+ */
+export function calculateMealIngredientsFromRecipe(
+	recipe: Recipe,
+	headcount: MealPlanHeadcount,
+	itemUnits: Record<string, string>,
+	sopProfileId: string,
+	sopProfileVersion: number,
+	headcountAsOf: string
+): MealCalcResult {
+	if (headcount.total <= 0) {
+		throw new Error('calculateMealIngredientsFromRecipe: headcount.total must be > 0');
 	}
-	if (menu.includesVegetable) {
-		recipes.push({
-			recipe_id: VEGETABLE_RECIPE_ID,
-			planned_qty: Math.ceil(headcount.total * DEFAULT_VEGETABLE_G_PER_PERSON_MEAL)
-		});
+	const portions = Number(recipe.standard_portions);
+	if (!(portions > 0)) {
+		throw new Error('calculateMealIngredientsFromRecipe: recipe.standard_portions must be > 0');
 	}
+
+	const scale = new Decimal(headcount.total).div(portions);
+	const recipes: MealPlanRecipe[] = recipe.ingredients.map((ing) => ({
+		recipe_id: ing.item_master_id,
+		planned_qty: new Decimal(ing.quantity).mul(scale).ceil().toNumber(),
+		unit: itemUnits[ing.item_master_id] ?? ing.uom
+	}));
+
+	return {
+		recipes,
+		calc_source: {
+			sop_profile_id: sopProfileId,
+			sop_profile_version: sopProfileVersion,
+			headcount_as_of: headcountAsOf
+		}
+	};
+}
+
+export interface CustomIngredientInput {
+	item_id: string; // a real `supply_item` `_id` (item:*) — already stock-linked
+	unit: string; // the supply_item's fixed unit, so no conversion is needed later
+	qty_per_person: number;
+}
+
+/**
+ * Derives the ingredient list for one meal from an ad-hoc, staff-typed
+ * ingredient list ("กำหนดสูตรเอง (Custom)") instead of the fixed SOP-ratio rice
+ * calc or a saved catalog Recipe (BOM) — each `qty_per_person` scales by the
+ * plan's headcount, same mental model as rice's `riceGPerMeal`. Ingredients
+ * must reference a real `supply_item` (not a free-typed name) so the plan can
+ * actually be เบิก later — unlike BOM-sourced plans, these have real stock.
+ *
+ * Throws if headcount.total is 0 or the item list is empty.
+ */
+export function calculateMealIngredientsFromCustom(
+	items: CustomIngredientInput[],
+	headcount: MealPlanHeadcount,
+	sopProfileId: string,
+	sopProfileVersion: number,
+	headcountAsOf: string
+): MealCalcResult {
+	if (headcount.total <= 0) {
+		throw new Error('calculateMealIngredientsFromCustom: headcount.total must be > 0');
+	}
+	if (items.length === 0) {
+		throw new Error('calculateMealIngredientsFromCustom: at least one ingredient required');
+	}
+
+	const recipes: MealPlanRecipe[] = items.map((i) => ({
+		recipe_id: i.item_id,
+		planned_qty: Math.ceil(headcount.total * i.qty_per_person),
+		unit: i.unit
+	}));
 
 	return {
 		recipes,
@@ -184,15 +213,27 @@ export function calculateMealIngredients(
 export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
 	const items = plan.recipes.map((r) => {
 		const stock = RECIPE_TO_STOCK_ITEM[r.recipe_id];
-		if (!stock) {
+		if (stock) {
+			const qtyRequested = persistQty(new Decimal(r.planned_qty).div(stock.recipe_per_stock_unit));
+			return {
+				item_id: stock.item_id,
+				qty_requested: qtyRequested,
+				qty_issued: '0',
+				unit: stock.unit
+			};
+		}
+		// BOM (calculateMealIngredientsFromRecipe) or custom
+		// (calculateMealIngredientsFromCustom) recipe — no static mapping,
+		// recipe_id IS the stock item_id already and planned_qty is already in
+		// that item's stock unit, so no conversion.
+		if (!r.unit) {
 			throw new Error(`toRequisitionInput: no stock item mapping for recipe "${r.recipe_id}"`);
 		}
-		const qtyRequested = persistQty(new Decimal(r.planned_qty).div(stock.recipe_per_stock_unit));
 		return {
-			item_id: stock.item_id,
-			qty_requested: qtyRequested,
+			item_id: r.recipe_id,
+			qty_requested: persistQty(r.planned_qty),
 			qty_issued: '0',
-			unit: stock.unit
+			unit: r.unit
 		};
 	});
 	return { meal_plan_id: plan._id, items };
