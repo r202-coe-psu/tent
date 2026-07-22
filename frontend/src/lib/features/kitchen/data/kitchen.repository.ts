@@ -20,7 +20,7 @@ export interface KitchenRepository {
 	// editing or deleting it would orphan those records' meal_plan_id reference.
 	updateMealPlanDraft(
 		plan: MealPlan,
-		patch: Pick<MealPlan, 'headcount' | 'recipes' | 'calc_source' | 'override_reason'>
+		patch: Pick<MealPlan, 'headcount' | 'recipes' | 'calc_source' | 'override_reason' | 'label'>
 	): Promise<MealPlan>;
 	deleteMealPlanDraft(plan: MealPlan): Promise<void>;
 

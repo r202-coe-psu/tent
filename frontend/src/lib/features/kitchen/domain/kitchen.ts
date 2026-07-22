@@ -38,12 +38,23 @@ export interface MealPlanHeadcount {
 export interface MealPlanRecipe {
 	recipe_id: string;
 	planned_qty: number;
+	// Present when the plan was built from a catalog Recipe (BOM) or a custom
+	// ad-hoc ingredient list instead of the fixed SOP-ratio rice calc — in both
+	// cases recipe_id is used as-is for the stock_ledger item_id (no static
+	// RECIPE_TO_STOCK_ITEM mapping for it) and unit carries its real stock unit.
+	// A BOM recipe_id is a catalog `item_master:*` id (no stock link yet); a
+	// custom recipe_id is a `supply_item` `item:*` id (already stock-linked) —
+	// see meal-plan-list.svelte's isBomSourced for how these are told apart.
+	unit?: string;
 }
 
 export interface MealPlan extends BaseDoc {
 	type: 'meal_plan';
 	date: string;
 	meal: MealPeriod;
+	// Optional display name for a custom/BOM-sourced menu (e.g. "ข้าวไก่กรอบ") —
+	// the SOP rice-only path has no name, so this stays unset there.
+	label?: string;
 	headcount: MealPlanHeadcount;
 	recipes: MealPlanRecipe[];
 	status: MealPlanStatus;
@@ -73,6 +84,7 @@ export class MealPlanAlreadyExistsError extends Error {
 export const mealPlanInputSchema = z.object({
 	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
 	meal: mealPeriodSchema,
+	label: z.string().trim().min(1).optional(),
 	headcount: z
 		.object({
 			total: z.number().int().min(0),
@@ -89,7 +101,8 @@ export const mealPlanInputSchema = z.object({
 		.array(
 			z.object({
 				recipe_id: z.string().min(1),
-				planned_qty: z.number().int().positive()
+				planned_qty: z.number().int().positive(),
+				unit: z.string().trim().min(1).optional()
 			})
 		)
 		.min(1, 'At least one recipe required'),
@@ -117,6 +130,7 @@ export function createMealPlan(input: MealPlanInput, ctx: AuthorContext): MealPl
 			headcount: d.headcount,
 			recipes: d.recipes,
 			status: d.status,
+			...(d.label != null ? { label: d.label } : {}),
 			...(d.override_reason != null ? { override_reason: d.override_reason } : {}),
 			...(d.calc_source != null ? { calc_source: d.calc_source } : {})
 		},

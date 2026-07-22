@@ -114,7 +114,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 
 	async updateMealPlanDraft(
 		plan: MealPlan,
-		patch: Pick<MealPlan, 'headcount' | 'recipes' | 'calc_source' | 'override_reason'>
+		patch: Pick<MealPlan, 'headcount' | 'recipes' | 'calc_source' | 'override_reason' | 'label'>
 	): Promise<MealPlan> {
 		if (plan.status !== 'draft') {
 			throw new Error('updateMealPlanDraft: only draft plans can be edited');
