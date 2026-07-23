@@ -45,7 +45,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		if (typeof process !== 'undefined' && !process.env.COUCHDB_ADMIN_URL) {
 			console.warn(
 				`⚠️ [CouchDbReferralServerRepository]: COUCHDB_ADMIN_URL is not set. ` +
-				`Server-side database operations on "${this.dbName}" will fail.`
+					`Server-side database operations on "${this.dbName}" will fail.`
 			);
 		}
 	}
