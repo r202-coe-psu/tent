@@ -77,6 +77,7 @@ import { type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
 import { deployShelterViewsFn } from '$lib/features/shelters/server';
+import { buildValidateDocUpdate, REFERRAL_MANGO_INDEXES } from '$lib/server/shelter-access-design';
 import { seedThailandLocation } from './seed-thailand-location';
 
 // ─── env ──────────────────────────────────────────────────────────────────────
@@ -532,27 +533,25 @@ async function seedCatalogSopRatios(): Promise<void> {
 	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
 }
 
+async function deployShelterAccessDesign(db: string, shelterCode: string): Promise<void> {
+	const ddocId = '_design/access';
+	const { status: getStatus, data: existingDdoc } = await couchReq(
+		'GET',
+		`/${db}/${encodeURIComponent(ddocId)}`
+	);
+	const rev = getStatus === 200 ? (existingDdoc as { _rev: string })._rev : undefined;
+	await couchReq('PUT', `/${db}/${encodeURIComponent(ddocId)}`, {
+		_id: ddocId,
+		...(rev ? { _rev: rev } : {}),
+		validate_doc_update: buildValidateDocUpdate(shelterCode)
+	});
+	console.log(`  ✓ ${db}: _design/access deployed (referral whitelist)`);
+}
+
 async function deployMangoIndexes(db: string): Promise<void> {
-	await couchReq('POST', `/${db}/_index`, {
-		index: { fields: ['type', 'status'] },
-		name: 'referral-type-status-idx',
-		type: 'json'
-	});
-	await couchReq('POST', `/${db}/_index`, {
-		index: { fields: ['type', 'evacuee_id'] },
-		name: 'referral-type-evacuee-idx',
-		type: 'json'
-	});
-	await couchReq('POST', `/${db}/_index`, {
-		index: { fields: ['type', 'created_at', 'status', 'evacuee_id'] },
-		name: 'referral-list-sort-idx',
-		type: 'json'
-	});
-	await couchReq('POST', `/${db}/_index`, {
-		index: { fields: ['type', 'created_at'] },
-		name: 'referral-list-basic-idx',
-		type: 'json'
-	});
+	for (const def of REFERRAL_MANGO_INDEXES) {
+		await couchReq('POST', `/${db}/_index`, def);
+	}
 	console.log(`  ✓ ${db}: Mango indexes for referral deployed`);
 }
 
@@ -579,6 +578,7 @@ async function seedShelter(): Promise<void> {
 		members: { names: [], roles: [`shelter:${SHELTER_CODE}`] }
 	});
 	await deployShelterViewsFn(SHELTER_DB, (path, method, body) => couchReq(method, path, body));
+	await deployShelterAccessDesign(SHELTER_DB, SHELTER_CODE);
 	await deployMangoIndexes(SHELTER_DB);
 
 	// — households ——————————————————————————————————————————————————————————————
@@ -905,6 +905,7 @@ async function seedShelter2(): Promise<void> {
 		members: { names: [], roles: [`shelter:${SHELTER_CODE_2}`] }
 	});
 	await deployShelterViewsFn(SHELTER_DB_2, (path, method, body) => couchReq(method, path, body));
+	await deployShelterAccessDesign(SHELTER_DB_2, SHELTER_CODE_2);
 	await deployMangoIndexes(SHELTER_DB_2);
 
 	const { status, data } = await couchReq('GET', `/${SHELTER_DB_2}/_all_docs?limit=1`);

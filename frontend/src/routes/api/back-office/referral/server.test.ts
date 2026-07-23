@@ -1,12 +1,13 @@
 /* eslint-disable no-restricted-imports */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET, POST } from './+server';
-import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
+import { requireShelterScopeOrSA, adminRaw } from '$lib/server/couch-admin';
 import type { RequestEvent } from './$types';
 import type { Referral } from '$lib/features/referrals/domain/referral.schema';
 
 vi.mock('$lib/server/couch-admin', () => ({
 	requireShelterScopeOrSA: vi.fn(),
+	adminRaw: vi.fn(),
 	ServiceError: class extends Error {
 		constructor(
 			public code: string,
@@ -50,6 +51,26 @@ function createMockEvent(
 	} as unknown as RequestEvent;
 }
 
+const sampleEvacuee = {
+	_id: 'evacuee:1',
+	type: 'evacuee',
+	schema_v: 2,
+	shelter_code: 'SH001',
+	created_at: '2026-07-11T05:00:00.000Z',
+	updated_at: '2026-07-11T05:00:00.000Z',
+	created_by: 'seed',
+	first_name: 'A',
+	last_name: 'B',
+	gender: 'male',
+	phone: '0811111111',
+	country: 'THAILAND',
+	special_needs: [],
+	household_id: null,
+	current_stay: { status: 'active', zone: 'A', since: '2026-07-11T05:00:00.000Z' },
+	privacy: { search_excluded: false },
+	registered_via: 'app'
+};
+
 describe('BFF Referral List and Create Endpoints', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -79,7 +100,23 @@ describe('BFF Referral List and Create Endpoints', () => {
 				shelterCode: 'SH002'
 			});
 
-			const mockReferrals = [{ id: 'ref:1', type: 'referral', status: 'draft' }];
+			const mockReferrals = [
+				{
+					_id: 'referral:1',
+					type: 'referral',
+					schema_v: 1,
+					shelter_code: 'SH002',
+					created_at: '2026-07-11T05:00:00.000Z',
+					updated_at: '2026-07-11T05:00:00.000Z',
+					created_by: 'sm_user',
+					evacuee_id: 'evacuee:1',
+					referral_type: 'medical-emergency',
+					reason: 'x',
+					urgency: 'normal',
+					status: 'draft',
+					timeline: {}
+				}
+			];
 			mockList.mockResolvedValue(mockReferrals as unknown as Referral[]);
 
 			const event = createMockEvent({ status: 'draft' });
@@ -100,6 +137,7 @@ describe('BFF Referral List and Create Endpoints', () => {
 				isSA: false,
 				shelterCode: 'SH001'
 			});
+			vi.mocked(adminRaw).mockResolvedValue({ status: 200, data: sampleEvacuee });
 
 			const bodyInput = {
 				evacuee_id: 'evacuee:1',
@@ -117,7 +155,13 @@ describe('BFF Referral List and Create Endpoints', () => {
 				_id: 'referral:01F8MECHJCZGWFCP',
 				type: 'referral',
 				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-07-11T05:00:00.000Z',
+				updated_at: '2026-07-11T05:00:00.000Z',
+				created_by: 'sm_user',
 				status: 'draft',
+				referral_type: 'medical-emergency',
+				timeline: {},
 				...bodyInput
 			};
 
@@ -133,6 +177,29 @@ describe('BFF Referral List and Create Endpoints', () => {
 				expect.objectContaining({ evacuee_id: 'evacuee:1' }),
 				{ shelterCode: 'SH001', createdBy: 'sm_user' }
 			);
+		});
+
+		it('returns 422 when evacuee_id is missing from the shelter DB', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'sm_user',
+				roles: ['shelter_manager', 'shelter:SH001'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: { error: 'not_found' } });
+
+			const event = createMockEvent(
+				{},
+				{
+					evacuee_id: 'evacuee:missing',
+					to_org: { kind: 'hospital', name: 'H' },
+					reason: 'need care',
+					urgency: 'normal'
+				}
+			);
+			const res = await POST(event);
+			expect(res.status).toBe(422);
+			expect(mockCreate).not.toHaveBeenCalled();
 		});
 
 		it('returns 400 on validation failure', async () => {

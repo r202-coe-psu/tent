@@ -52,14 +52,7 @@ interface PutResultResponse {
 }
 
 export class CouchDbReferralServerRepository implements ReferralRepository {
-	constructor(private readonly dbName: string) {
-		if (typeof process !== 'undefined' && !process.env.COUCHDB_ADMIN_URL) {
-			console.warn(
-				`[CouchDbReferralServerRepository]: COUCHDB_ADMIN_URL is not set. ` +
-					`Server-side database operations on "${this.dbName}" will fail.`
-			);
-		}
-	}
+	constructor(private readonly dbName: string) {}
 
 	private async couchGet<T>(dbName: string, path: string): Promise<{ status: number; data: T }> {
 		const res = await adminRaw(`/${dbName}${path}`, 'GET');
@@ -94,6 +87,23 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			throw new CouchDbReferralError(`Failed to write ${doc._id} in ${dbName}`, status, data);
 		}
 		return data.rev;
+	}
+
+	/** PUT that reuses an existing `_rev` when the deterministic id already exists. */
+	private async putDocIdempotent(
+		dbName: string,
+		doc: { _id: string; _rev?: string }
+	): Promise<string> {
+		if (!doc._rev) {
+			const { status, data } = await this.couchGet<{ _rev?: string }>(
+				dbName,
+				`/${encodeURIComponent(doc._id)}`
+			);
+			if (status === HTTP_OK && data._rev) {
+				return this.putDoc(dbName, { ...doc, _rev: data._rev });
+			}
+		}
+		return this.putDoc(dbName, doc);
 	}
 
 	/**
@@ -148,6 +158,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 				toShelterCode: toCode,
 				actor,
 				nowIso,
+				referralId: referral._id,
 				reason
 			});
 			await this.writeDestTransfer(toDb, docs.destEvacuee, docs.destMovement, destRaw);
@@ -160,12 +171,13 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			toShelterCode: toCode,
 			actor,
 			nowIso,
+			referralId: referral._id,
 			reason
 		});
 
 		// Dest already active but source not closed — finish source only (avoid duplicate transfer_in).
 		if (destActive) {
-			await this.putDoc(fromDb, docs.sourceMovement);
+			await this.putDocIdempotent(fromDb, docs.sourceMovement);
 			await this.putDoc(fromDb, {
 				...docs.sourceEvacuee,
 				_rev: sourceEvacuee._rev
@@ -174,7 +186,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		}
 
 		await this.writeDestTransfer(toDb, docs.destEvacuee, docs.destMovement, destRaw);
-		await this.putDoc(fromDb, docs.sourceMovement);
+		await this.putDocIdempotent(fromDb, docs.sourceMovement);
 		await this.putDoc(fromDb, {
 			...docs.sourceEvacuee,
 			_rev: sourceEvacuee._rev
@@ -192,7 +204,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 				? { ...destEvacuee, _rev: existingDest._rev }
 				: destEvacuee;
 		await this.putDoc(toDb, withRev);
-		await this.putDoc(toDb, destMovement);
+		await this.putDocIdempotent(toDb, destMovement);
 	}
 
 	/** Mirror referral into destination shelter DB (same _id; keeps source shelter_code). */
@@ -283,10 +295,6 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 
 		if (status !== HTTP_OK) {
 			throw new CouchDbReferralError(`CouchDB _find query failed`, status, data);
-		}
-
-		if (data.warning) {
-			console.warn(`[CouchDB Mango Warning]: ${data.warning}`);
 		}
 
 		return (data.docs || []).filter((d): d is Referral => isReferral(d));

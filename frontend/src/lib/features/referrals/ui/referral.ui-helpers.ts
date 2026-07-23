@@ -28,7 +28,7 @@ export function getStatusBadgeVariant(status: ReferralStatus): string {
 
 export function getUrgencyStyle(urgency: ReferralUrgency | string): string {
 	if (urgency === 'urgent') {
-		return 'bg-red-500 hover:bg-red-600 text-white animate-pulse';
+		return 'bg-red-500 hover:bg-red-600 text-white motion-safe:animate-pulse';
 	}
 	return 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200';
 }

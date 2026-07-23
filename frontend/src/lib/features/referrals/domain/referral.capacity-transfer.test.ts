@@ -35,10 +35,12 @@ describe('buildCapacityTransferDocs', () => {
 			toShelterCode: 'SH002',
 			actor: 'manager1',
 			nowIso: NOW,
+			referralId: 'referral:01CAPACITY',
 			reason: 'Capacity full'
 		});
 
 		expect(docs.sourceMovement.action).toBe('transfer_out');
+		expect(docs.sourceMovement._id).toBe('movement:capacity_transfer_out:01CAPACITY');
 		expect(docs.sourceMovement.shelter_code).toBe('SH001');
 		expect(docs.sourceMovement.destination).toEqual({
 			kind: 'shelter',
@@ -49,6 +51,7 @@ describe('buildCapacityTransferDocs', () => {
 		expect(docs.sourceEvacuee.current_stay.status).toBe('transferred');
 
 		expect(docs.destMovement.action).toBe('transfer_in');
+		expect(docs.destMovement._id).toBe('movement:capacity_transfer_in:01CAPACITY');
 		expect(docs.destMovement.shelter_code).toBe('SH002');
 		expect(docs.destEvacuee.shelter_code).toBe('SH002');
 		expect(docs.destEvacuee.current_stay.status).toBe('active');
@@ -64,7 +67,8 @@ describe('buildCapacityTransferDocs', () => {
 				fromShelterCode: 'SH001',
 				toShelterCode: 'SH001',
 				actor: 'manager1',
-				nowIso: NOW
+				nowIso: NOW,
+				referralId: 'referral:01CAPACITY'
 			})
 		).toThrow(CapacityTransferError);
 
@@ -78,7 +82,8 @@ describe('buildCapacityTransferDocs', () => {
 				fromShelterCode: 'SH001',
 				toShelterCode: 'SH002',
 				actor: 'manager1',
-				nowIso: NOW
+				nowIso: NOW,
+				referralId: 'referral:01CAPACITY'
 			})
 		).toThrow(/already transferred/);
 	});
@@ -95,10 +100,12 @@ describe('buildDestinationIntakeDocs', () => {
 			fromShelterCode: 'SH001',
 			toShelterCode: 'SH002',
 			actor: 'manager1',
-			nowIso: NOW
+			nowIso: NOW,
+			referralId: 'referral:01CAPACITY'
 		});
 		expect(docs.destEvacuee.shelter_code).toBe('SH002');
 		expect(docs.destEvacuee.current_stay.status).toBe('active');
 		expect(docs.destMovement.action).toBe('transfer_in');
+		expect(docs.destMovement._id).toBe('movement:capacity_transfer_in:01CAPACITY');
 	});
 });

@@ -4,6 +4,9 @@
  * Never rewrite `shelter_code` inside the source DB (validate_doc_update forbids it).
  * Source: transfer_out → stay `transferred` (occupancy −1).
  * Destination: new/updated evacuee + transfer_in → stay `active` (occupancy +1).
+ *
+ * Movement `_id`s are deterministic from the referral id so retries overwrite
+ * the same docs instead of minting duplicate transfer_in / transfer_out rows.
  */
 
 import {
@@ -28,6 +31,22 @@ export interface CapacityTransferDocs {
 	destMovement: Movement;
 }
 
+/** Strip `referral:` prefix for embedding in movement ids. */
+export function bareReferralId(referralId: string): string {
+	return referralId.replace(/^referral:/, '');
+}
+
+/**
+ * Deterministic movement id for a capacity transfer step.
+ * Example: `movement:capacity_transfer_in:01CAPACITY`
+ */
+export function capacityTransferMovementId(
+	referralId: string,
+	action: 'transfer_in' | 'transfer_out'
+): string {
+	return `movement:capacity_${action}:${bareReferralId(referralId)}`;
+}
+
 /**
  * Build the four docs required to complete an inter-shelter capacity transfer.
  * Does not perform I/O — callers write via admin (cross-DB) or session (source-only).
@@ -38,9 +57,10 @@ export function buildCapacityTransferDocs(params: {
 	toShelterCode: string;
 	actor: string;
 	nowIso: string;
+	referralId: string;
 	reason?: string;
 }): CapacityTransferDocs {
-	const { evacuee, fromShelterCode, toShelterCode, actor, nowIso, reason } = params;
+	const { evacuee, fromShelterCode, toShelterCode, actor, nowIso, referralId, reason } = params;
 
 	if (!toShelterCode.trim()) {
 		throw new CapacityTransferError('Target shelter code is required for capacity transfer');
@@ -71,17 +91,20 @@ export function buildCapacityTransferDocs(params: {
 
 	const sourceCtx: AuthorContext = { shelterCode: fromShelterCode, createdBy: actor };
 
-	const sourceMovement = createMovement(
-		{
-			evacuee_id: evacuee._id,
-			action: 'transfer_out',
-			zone: null,
-			destination: { kind: 'shelter', shelter_code: toShelterCode },
-			...(reason ? { reason } : {}),
-			occurred_at: nowIso
-		},
-		sourceCtx
-	);
+	const sourceMovement: Movement = {
+		...createMovement(
+			{
+				evacuee_id: evacuee._id,
+				action: 'transfer_out',
+				zone: null,
+				destination: { kind: 'shelter', shelter_code: toShelterCode },
+				...(reason ? { reason } : {}),
+				occurred_at: nowIso
+			},
+			sourceCtx
+		),
+		_id: capacityTransferMovementId(referralId, 'transfer_out')
+	};
 
 	const sourceEvacuee = {
 		...applyMovementToStay(evacuee, sourceMovement),
@@ -96,6 +119,7 @@ export function buildCapacityTransferDocs(params: {
 		toShelterCode,
 		actor,
 		nowIso,
+		referralId,
 		reason
 	});
 
@@ -112,9 +136,10 @@ export function buildDestinationIntakeDocs(params: {
 	toShelterCode: string;
 	actor: string;
 	nowIso: string;
+	referralId: string;
 	reason?: string;
 }): { destEvacuee: Evacuee; destMovement: Movement } {
-	const { evacuee, fromShelterCode, toShelterCode, actor, nowIso, reason } = params;
+	const { evacuee, fromShelterCode, toShelterCode, actor, nowIso, referralId, reason } = params;
 	const destCtx: AuthorContext = { shelterCode: toShelterCode, createdBy: actor };
 
 	const { _rev: _, ...evacueeWithoutRev } = evacuee;
@@ -133,17 +158,20 @@ export function buildDestinationIntakeDocs(params: {
 		}
 	};
 
-	const destMovement = createMovement(
-		{
-			evacuee_id: evacuee._id,
-			action: 'transfer_in',
-			zone: null,
-			destination: { kind: 'shelter', shelter_code: fromShelterCode },
-			...(reason ? { reason } : {}),
-			occurred_at: nowIso
-		},
-		destCtx
-	);
+	const destMovement: Movement = {
+		...createMovement(
+			{
+				evacuee_id: evacuee._id,
+				action: 'transfer_in',
+				zone: null,
+				destination: { kind: 'shelter', shelter_code: fromShelterCode },
+				...(reason ? { reason } : {}),
+				occurred_at: nowIso
+			},
+			destCtx
+		),
+		_id: capacityTransferMovementId(referralId, 'transfer_in')
+	};
 
 	const destEvacuee = {
 		...applyMovementToStay(destSeed, destMovement),

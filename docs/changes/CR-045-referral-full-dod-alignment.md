@@ -12,7 +12,7 @@ affects:
 
 # CR-045 — Referral Schema & Implementation Alignment (Full T-34 DoD)
 
-> **สรุป (TL;DR):** ปรับปรุง `referral` schema และการทำงานของโมดูล Referral (T-34) ให้รองรับ 3 Referral Kinds (`capacity`, `resource`, `medical-emergency`), การบันทึกเหตุผลการตอบกลับ (`response_reason`), และ Side-effect ย้ายศูนย์พักพิงกรณี `capacity` referral โดย **ปลายทางต้องกดตอบรับก่อนจึงย้าย** เพื่อเติมเต็ม Definition of Done (DoD) ของ T-34
+> **สรุป (TL;DR):** ปรับปรุง `referral` schema และการทำงานของโมดูล Referral (T-34) ให้รองรับ 3 Referral Kinds (`capacity`, `resource`, `medical-emergency`), การบันทึกเหตุผลการตอบกลับ (`response_reason`), และ Side-effect ย้ายศูนย์พักพิงกรณี `capacity` referral โดย **ปลายทางต้องกดตอบรับก่อนจึงย้าย** และ **ย้ายทีละ `evacuee_id` (ไม่ทั้งครัวเรือนใน R3)** เพื่อเติมเต็ม Definition of Done (DoD) ของ T-34
 
 ---
 
@@ -58,7 +58,8 @@ affects:
   - `skip`: รองรับจำนวนรายการที่ต้องการข้ามสำหรับ Pagination
   - `sort`: รองรับการเรียงลำดับรายการ (`created_at_desc` เป็น default หรือ `created_at_asc`)
   - `referralFilterSchema`: Zod schema สำหรับทำ Type Validation ความถูกต้องของพารามิเตอร์การค้นหา
-- **Mango Index Deployment:** เพิ่มและลงทะเบียน CouchDB Mango Index `referral-list-sort-idx` (`['type', 'created_at', 'status', 'evacuee_id']`) และ `referral-list-basic-idx` (`['type', 'created_at']`) ใน `scripts/seed.ts` เพื่อรองรับการค้นหา เรียงลำดับ และป้องกันข้อผิดพลาด 400 Bad Request ประสิทธิภาพสูง
+- **Mango Index Deployment:** เพิ่มและลงทะเบียน CouchDB Mango Index `referral-list-sort-idx` (`['type', 'created_at', 'status', 'evacuee_id']`) และ `referral-list-basic-idx` (`['type', 'created_at']`) ใน `scripts/seed.ts` / shelter provision / `pnpm redeploy:referral-db` เพื่อรองรับการค้นหา เรียงลำดับ และป้องกันข้อผิดพลาด 400 Bad Request
+- **Ops (existing DBs):** หลัง merge ต้องรัน `pnpm redeploy:referral-db --write --confirm` บน staging/prod (ชี้ `COUCHDB_ADMIN_URL`) เพื่อ re-PUT `_design/access` (whitelist `referral`) + mango indexes — มิฉะนั้น session create จะโดน `doc type not allowed` / list อาจ 400
 
 ---
 

@@ -12,13 +12,15 @@
  */
 
 import { adminRaw, ServiceError } from './couch-admin';
-import { buildValidateDocUpdate } from './shelter-access-design';
+import { buildValidateDocUpdate, REFERRAL_MANGO_INDEXES } from './shelter-access-design';
 import {
 	migrateShelterV2ToCurrent,
 	type ShelterMaster,
 	type ShelterMasterV2,
 	deployShelterViewsFn
 } from '$lib/features/shelters/server';
+
+export { REFERRAL_MANGO_INDEXES } from './shelter-access-design';
 
 export interface ViewResult {
 	rows: { key: string; value: number }[];
@@ -204,8 +206,9 @@ export async function deployShelterViews(db: string): Promise<number> {
 
 /**
  * Idempotent re-PUT of `_design/access` (validate_doc_update) on an existing
- * shelter database. Use after whitelist changes (e.g. CR-034 `audit` type) when
- * provisioning did not re-run. Callable from dev scripts or admin endpoints.
+ * shelter database. Use after whitelist changes (e.g. CR-034 `audit` type,
+ * CR-045 `referral` type) when provisioning did not re-run. Callable from
+ * `pnpm redeploy:referral-db` or admin endpoints.
  */
 export async function redeployShelterAccessDesign(
 	db: string,
@@ -226,4 +229,21 @@ export async function redeployShelterAccessDesign(
 		);
 	}
 	return res.status;
+}
+
+/**
+ * Idempotent deploy of referral Mango indexes on a shelter DB.
+ * CouchDB returns 200 when an identical named index already exists.
+ */
+export async function deployReferralMangoIndexes(db: string): Promise<void> {
+	for (const def of REFERRAL_MANGO_INDEXES) {
+		const res = await adminRaw(`/${db}/_index`, 'POST', def);
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	}
 }

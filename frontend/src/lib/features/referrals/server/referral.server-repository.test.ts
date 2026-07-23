@@ -69,6 +69,9 @@ describe('CouchDbReferralServerRepository capacity destination-gated accept', ()
 			if (method === 'GET' && decoded.includes('/shelter_sh002/evacuee:')) {
 				return { status: 404, data: { error: 'not_found' } };
 			}
+			if (method === 'GET' && decoded.includes('/movement:capacity_')) {
+				return { status: 404, data: { error: 'not_found' } };
+			}
 			if (method === 'PUT') {
 				return { status: 201, data: { ok: true, id: 'x', rev: '2-new' } };
 			}
@@ -86,6 +89,10 @@ describe('CouchDbReferralServerRepository capacity destination-gated accept', ()
 		const sourceEvacueePut = putCalls.find((c) =>
 			decodeURIComponent(String(c[0])).startsWith('/shelter_sh001/evacuee:')
 		);
+		const destMovementPut = putCalls.find(
+			(c) => (c[2] as { _id?: string })?._id === 'movement:capacity_transfer_in:01CAPACITY'
+		);
+		expect(destMovementPut).toBeTruthy();
 		expect(destEvacueePut?.[2]).toEqual(
 			expect.objectContaining({
 				shelter_code: 'SH002',
@@ -114,6 +121,9 @@ describe('CouchDbReferralServerRepository capacity destination-gated accept', ()
 			if (method === 'GET' && decoded.includes('/shelter_sh002/evacuee:')) {
 				return { status: 200, data: destActive };
 			}
+			if (method === 'GET' && decoded.includes('/movement:capacity_transfer_out:')) {
+				return { status: 404, data: { error: 'not_found' } };
+			}
 			if (method === 'PUT') {
 				return { status: 201, data: { ok: true, id: 'x', rev: '3-new' } };
 			}
@@ -126,6 +136,65 @@ describe('CouchDbReferralServerRepository capacity destination-gated accept', ()
 		expect(putCalls.length).toBe(2); // source movement + source evacuee only
 		expect(
 			putCalls.every((c) => decodeURIComponent(String(c[0])).startsWith('/shelter_sh001/'))
+		).toBe(true);
+		expect(putCalls[0]?.[2]).toEqual(
+			expect.objectContaining({
+				_id: 'movement:capacity_transfer_out:01CAPACITY',
+				action: 'transfer_out'
+			})
+		);
+	});
+
+	it('no-ops when source already transferred and dest already active', async () => {
+		const transferred = activeEvacuee({
+			current_stay: { status: 'transferred', zone: null, since: '2026-07-24T03:00:00.000Z' }
+		});
+		const destActive = activeEvacuee({ shelter_code: 'SH002', _rev: '2-dest' });
+		adminRaw.mockImplementation(async (path: string, method: string) => {
+			const decoded = decodeURIComponent(path);
+			if (method === 'GET' && decoded.includes('/shelter_sh001/evacuee:')) {
+				return { status: 200, data: transferred };
+			}
+			if (method === 'GET' && decoded.includes('/shelter_sh002/evacuee:')) {
+				return { status: 200, data: destActive };
+			}
+			return { status: 500, data: { error: 'unexpected', path, method } };
+		});
+
+		await repo.completeCapacityTransfer(capacitySent, 'Staff B', '2026-07-24T04:00:00.000Z');
+		expect(adminRaw.mock.calls.every((c) => c[1] !== 'PUT')).toBe(true);
+	});
+
+	it('repairs dest when source transferred but dest missing', async () => {
+		const transferred = activeEvacuee({
+			current_stay: { status: 'transferred', zone: null, since: '2026-07-24T03:00:00.000Z' }
+		});
+		adminRaw.mockImplementation(async (path: string, method: string) => {
+			const decoded = decodeURIComponent(path);
+			if (method === 'GET' && decoded.includes('/shelter_sh001/evacuee:')) {
+				return { status: 200, data: transferred };
+			}
+			if (method === 'GET' && decoded.includes('/shelter_sh002/evacuee:')) {
+				return { status: 404, data: { error: 'not_found' } };
+			}
+			if (method === 'GET' && decoded.includes('/movement:capacity_transfer_in:')) {
+				return { status: 404, data: { error: 'not_found' } };
+			}
+			if (method === 'PUT') {
+				return { status: 201, data: { ok: true, id: 'x', rev: '2-new' } };
+			}
+			return { status: 500, data: { error: 'unexpected', path, method } };
+		});
+
+		await repo.completeCapacityTransfer(capacitySent, 'Staff B', '2026-07-24T04:00:00.000Z');
+
+		const putCalls = adminRaw.mock.calls.filter((c) => c[1] === 'PUT');
+		expect(putCalls.length).toBe(2);
+		expect(
+			putCalls.every((c) => decodeURIComponent(String(c[0])).startsWith('/shelter_sh002/'))
+		).toBe(true);
+		expect(
+			putCalls.some((c) => (c[2] as { _id: string })._id.includes('capacity_transfer_in'))
 		).toBe(true);
 	});
 
