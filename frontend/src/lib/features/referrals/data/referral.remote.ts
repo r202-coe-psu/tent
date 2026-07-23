@@ -1,6 +1,6 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { touch, makeDoc, type AuthorContext } from '$lib/db/model';
-import { getShelterDb } from '$lib/db/shelter';
+import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import {
 	isReferral,
 	type Referral,
@@ -14,6 +14,39 @@ import {
 import { applyTransition } from '../domain/referral.transitions';
 import { peopleRepository } from '$lib/features/people';
 import type { ReferralRepository } from './referral.repository';
+
+/**
+ * Capacity accept requires writing the destination shelter DB, which is outside
+ * the caller's session scope — delegate to the BFF (adminRaw) transition route.
+ */
+async function transitionCapacityAcceptViaBff(
+	id: string,
+	to: ReferralStatus,
+	reason: string | undefined,
+	shelterCode: string
+): Promise<Referral> {
+	const qs = new URLSearchParams({ shelter_code: shelterCode });
+	const res = await fetch(`/api/back-office/referral/${encodeURIComponent(id)}/transition?${qs}`, {
+		method: 'PATCH',
+		credentials: 'include',
+		headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+		body: JSON.stringify({ to, reason })
+	});
+
+	const payload = await res.json().catch(() => null);
+	if (!res.ok) {
+		const message =
+			payload && typeof payload === 'object' && 'error' in payload
+				? String((payload as { error: unknown }).error)
+				: `Capacity transfer failed (${res.status})`;
+		throw new Error(message);
+	}
+
+	if (!isReferral(payload)) {
+		throw new Error('Capacity transfer returned an invalid referral document');
+	}
+	return payload;
+}
 
 export class ReferralRemoteRepository implements ReferralRepository {
 	private readonly repo: Repository;
@@ -78,24 +111,17 @@ export class ReferralRemoteRepository implements ReferralRepository {
 			throw new Error(`Referral ${id} not found or invalid`);
 		}
 
-		const nowIso = new Date().toISOString();
-
-		// Side-effect for capacity referral: when accepted, transfer evacuee to destination shelter
+		// Cross-DB capacity accept cannot run over the shelter session cookie.
 		if (to === 'accepted' && latest.referral_type === 'capacity' && latest.to_shelter_code) {
-			const evacuee = await peopleRepository().getEvacuee(latest.evacuee_id);
-			if (!evacuee) {
-				throw new Error(
-					`Evacuee ${latest.evacuee_id} not found — cannot complete shelter transfer`
-				);
-			}
-
-			await peopleRepository().updateEvacuee({
-				...evacuee,
-				shelter_code: latest.to_shelter_code,
-				updated_at: nowIso
-			});
+			return transitionCapacityAcceptViaBff(
+				id,
+				to,
+				reason,
+				latest.shelter_code || getShelterCode()
+			);
 		}
 
+		const nowIso = new Date().toISOString();
 		const updated = applyTransition(latest, to, actor, nowIso, reason);
 		return this.repo.put<Referral>(touch(updated));
 	}

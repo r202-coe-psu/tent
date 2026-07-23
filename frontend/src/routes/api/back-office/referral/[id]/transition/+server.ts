@@ -10,6 +10,10 @@ export const prerender = false;
 /**
  * PATCH /api/back-office/referral/[id]/transition
  * Transition the referral state with conflict (409) retry.
+ *
+ * Capacity accept (`referral_type=capacity` → `accepted`) runs cross-DB transfer
+ * via adminRaw (source transfer_out + dest transfer_in). SPA remote repo delegates
+ * that case here because destination writes are outside the shelter session scope.
  */
 export const PATCH: RequestHandler = async ({ request, params, url }) => {
 	try {

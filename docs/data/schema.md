@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-23
+updated: 2026-07-24
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -364,6 +364,7 @@ open → escalated
 | `timeline` | {`sent`:{at,by}?, `responded`:{at,by}?, `closed`:{at,by}?} | sys | — |
 | `notes` | str | opt | — |
 
+> **Capacity accept side-effect (CR-045):** cross-DB — dest `transfer_in` (stay `active`) แล้ว source `transfer_out` (stay `transferred`); **ห้าม** rewrite `shelter_code` ใน DB ต้นทาง. Write path = BFF admin.
 > **Index:** Mango indexes deployed: `referral-type-status-idx` (`['type', 'status']`), `referral-type-evacuee-idx` (`['type', 'evacuee_id']`), `referral-list-sort-idx` (`['type', 'created_at', 'status', 'evacuee_id']`), `referral-list-basic-idx` (`['type', 'created_at']`).
 
 ### 2.12 `audit` — `audit:{ulid}` · **append-only**

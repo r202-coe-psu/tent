@@ -1,5 +1,7 @@
 import { adminRaw } from '$lib/server/couch-admin';
 import { makeDoc, touch, type AuthorContext } from '$lib/db/model';
+import { shelterDbName } from '$lib/server/shelter-access-design';
+import { isEvacuee, type Evacuee, type Movement } from '$lib/features/people/domain/people';
 import {
 	isReferral,
 	type Referral,
@@ -11,6 +13,11 @@ import {
 	referralSchema
 } from '../domain/referral.schema';
 import { applyTransition } from '../domain/referral.transitions';
+import {
+	buildCapacityTransferDocs,
+	buildDestinationIntakeDocs,
+	CapacityTransferError
+} from '../domain/referral.capacity-transfer';
 import type { ReferralRepository } from '../data/referral.repository';
 
 // HTTP Constants
@@ -44,7 +51,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 	constructor(private readonly dbName: string) {
 		if (typeof process !== 'undefined' && !process.env.COUCHDB_ADMIN_URL) {
 			console.warn(
-				`⚠️ [CouchDbReferralServerRepository]: COUCHDB_ADMIN_URL is not set. ` +
+				`[CouchDbReferralServerRepository]: COUCHDB_ADMIN_URL is not set. ` +
 					`Server-side database operations on "${this.dbName}" will fail.`
 			);
 		}
@@ -52,19 +59,130 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 
 	// ── Private fetch wrappers ───────────────────────────────────
 
-	private async couchGet<T>(path: string): Promise<{ status: number; data: T }> {
-		const res = await adminRaw(`/${this.dbName}${path}`, 'GET');
+	private async couchGet<T>(dbName: string, path: string): Promise<{ status: number; data: T }> {
+		const res = await adminRaw(`/${dbName}${path}`, 'GET');
 		return { status: res.status, data: res.data as T };
 	}
 
-	private async couchPost<T>(path: string, body: unknown): Promise<{ status: number; data: T }> {
-		const res = await adminRaw(`/${this.dbName}${path}`, 'POST', body);
+	private async couchPost<T>(
+		dbName: string,
+		path: string,
+		body: unknown
+	): Promise<{ status: number; data: T }> {
+		const res = await adminRaw(`/${dbName}${path}`, 'POST', body);
 		return { status: res.status, data: res.data as T };
 	}
 
-	private async couchPut<T>(path: string, body: unknown): Promise<{ status: number; data: T }> {
-		const res = await adminRaw(`/${this.dbName}${path}`, 'PUT', body);
+	private async couchPut<T>(
+		dbName: string,
+		path: string,
+		body: unknown
+	): Promise<{ status: number; data: T }> {
+		const res = await adminRaw(`/${dbName}${path}`, 'PUT', body);
 		return { status: res.status, data: res.data as T };
+	}
+
+	private async putDoc(dbName: string, doc: { _id: string; _rev?: string }): Promise<string> {
+		const { status, data } = await this.couchPut<PutResultResponse>(
+			dbName,
+			`/${encodeURIComponent(doc._id)}`,
+			doc
+		);
+		if (status !== HTTP_CREATED && status !== HTTP_OK) {
+			throw new CouchDbReferralError(`Failed to write ${doc._id} in ${dbName}`, status, data);
+		}
+		return data.rev;
+	}
+
+	/**
+	 * Cross-DB capacity transfer (admin path — required because destination DB
+	 * is outside the caller's shelter session scope).
+	 *
+	 * Order: destination first, then source — prefer brief double-count over a lost person.
+	 * Idempotent when source is already `transferred` and dest already has an active copy.
+	 */
+	async completeCapacityTransfer(
+		referral: Referral,
+		actor: string,
+		nowIso: string,
+		reason?: string
+	): Promise<void> {
+		if (referral.referral_type !== 'capacity' || !referral.to_shelter_code) {
+			throw new CapacityTransferError('Referral is not a capacity transfer with to_shelter_code');
+		}
+
+		const fromCode = referral.shelter_code;
+		const toCode = referral.to_shelter_code;
+		const fromDb = shelterDbName(fromCode);
+		const toDb = shelterDbName(toCode);
+
+		const { status: srcStatus, data: srcRaw } = await this.couchGet<unknown>(
+			fromDb,
+			`/${encodeURIComponent(referral.evacuee_id)}`
+		);
+		if (srcStatus === HTTP_NOT_FOUND || !isEvacuee(srcRaw)) {
+			throw new CapacityTransferError(
+				`Evacuee ${referral.evacuee_id} not found in ${fromDb} — cannot complete shelter transfer`
+			);
+		}
+		const sourceEvacuee = srcRaw;
+
+		const { status: destStatus, data: destRaw } = await this.couchGet<unknown>(
+			toDb,
+			`/${encodeURIComponent(referral.evacuee_id)}`
+		);
+		const destExists = destStatus === HTTP_OK && isEvacuee(destRaw);
+		const destActive = destExists && (destRaw as Evacuee).current_stay.status === 'active';
+		const sourceAlreadyTransferred = sourceEvacuee.current_stay.status === 'transferred';
+
+		// Fully done previously — nothing to write.
+		if (sourceAlreadyTransferred && destActive) {
+			return;
+		}
+
+		if (sourceAlreadyTransferred && !destActive) {
+			// Source already closed occupancy; finish / repair destination only.
+			const docs = buildDestinationIntakeDocs({
+				evacuee: sourceEvacuee,
+				fromShelterCode: fromCode,
+				toShelterCode: toCode,
+				actor,
+				nowIso,
+				reason
+			});
+			await this.writeDestTransfer(toDb, docs.destEvacuee, docs.destMovement, destRaw);
+			return;
+		}
+
+		const docs = buildCapacityTransferDocs({
+			evacuee: sourceEvacuee,
+			fromShelterCode: fromCode,
+			toShelterCode: toCode,
+			actor,
+			nowIso,
+			reason
+		});
+
+		await this.writeDestTransfer(toDb, docs.destEvacuee, docs.destMovement, destRaw);
+		await this.putDoc(fromDb, docs.sourceMovement);
+		await this.putDoc(fromDb, {
+			...docs.sourceEvacuee,
+			_rev: sourceEvacuee._rev
+		});
+	}
+
+	private async writeDestTransfer(
+		toDb: string,
+		destEvacuee: Evacuee,
+		destMovement: Movement,
+		existingDest: unknown
+	): Promise<void> {
+		const withRev: Evacuee =
+			isEvacuee(existingDest) && existingDest._rev
+				? { ...destEvacuee, _rev: existingDest._rev }
+				: destEvacuee;
+		await this.putDoc(toDb, withRev);
+		await this.putDoc(toDb, destMovement);
 	}
 
 	// ── Interface Methods ────────────────────────────────────────
@@ -94,7 +212,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			sort
 		};
 
-		const { status, data } = await this.couchPost<MangoFindResponse>('/_find', body);
+		const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', body);
 
 		if (status !== HTTP_OK) {
 			throw new CouchDbReferralError(`CouchDB _find query failed`, status, data);
@@ -108,7 +226,10 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 	}
 
 	async get(id: string): Promise<Referral | null> {
-		const { status, data } = await this.couchGet<unknown>(`/${encodeURIComponent(id)}`);
+		const { status, data } = await this.couchGet<unknown>(
+			this.dbName,
+			`/${encodeURIComponent(id)}`
+		);
 
 		if (status === HTTP_NOT_FOUND) {
 			return null;
@@ -127,6 +248,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		const doc = referralSchema.parse(rawDoc);
 
 		const { status, data } = await this.couchPut<PutResultResponse>(
+			this.dbName,
 			`/${encodeURIComponent(doc._id)}`,
 			doc
 		);
@@ -150,10 +272,24 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		}
 
 		const nowIso = new Date().toISOString();
+
+		// Capacity accept: cross-DB transfer BEFORE marking referral accepted (fail-fast).
+		if (to === 'accepted' && latest.referral_type === 'capacity' && latest.to_shelter_code) {
+			try {
+				await this.completeCapacityTransfer(latest, actor, nowIso, reason);
+			} catch (e: unknown) {
+				if (e instanceof CapacityTransferError) {
+					throw new CouchDbReferralError(e.message, 422);
+				}
+				throw e;
+			}
+		}
+
 		const updated = applyTransition(latest, to, actor, nowIso, reason);
 		const touched = touch(updated);
 
 		const { status, data } = await this.couchPut<PutResultResponse>(
+			this.dbName,
 			`/${encodeURIComponent(touched._id)}`,
 			touched
 		);

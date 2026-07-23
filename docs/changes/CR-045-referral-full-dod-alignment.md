@@ -2,7 +2,7 @@
 title: CR-045 — Referral Schema & Implementation Alignment (Full T-34 DoD)
 status: approved
 created: 2026-07-22
-updated: 2026-07-22
+updated: 2026-07-24
 layer: volatile
 affects:
   - docs/data/schema.md §2.11 (referral schema definition)
@@ -41,8 +41,13 @@ affects:
 | `notes` | str | opt | — |
 
 ### 2. Side-Effects & State Machine Rules
-- เมื่อมีการเปลี่ยนสถานะเป็น `accepted` หรือ `rejected` จะต้องรองรับการส่งผ่านและบันทึก `response_reason`
-- เมื่อ `referral_type` = `capacity` และเปลี่ยนสถานะเป็น `accepted` ระบบจะทำการย้ายศูนย์อพยพของผู้พักพิง (`evacuee.shelter_code = to_shelter_code`) ให้อัตโนมัติ
+- เมื่อมีการเปลี่ยนสถานะเป็น `accepted` หรือ `rejected` จะจะต้องรองรับการส่งผ่านและบันทึก `response_reason`
+- เมื่อ `referral_type` = `capacity` และเปลี่ยนสถานะเป็น `accepted` ระบบทำ **cross-DB transfer** (ห้าม rewrite `shelter_code` ใน DB ต้นทาง — ขัด `validate_doc_update`):
+  1. **Destination** `shelter_{to}`: สร้าง/อัปเดต `evacuee` (คง `_id` เดิม) + `movement:transfer_in` → `current_stay.status = active` (occupancy +1)
+  2. **Source** `shelter_{from}`: `movement:transfer_out` + อัปเดต stay เป็น `transferred` โดยคง `shelter_code` ของต้นทาง (occupancy −1)
+  3. จากนั้นค่อยอัปเดต referral → `accepted`
+  - Write path = BFF `/api/back-office/referral/[id]/transition` ผ่าน `adminRaw` (session cookie เขียนข้าม shelter DB ไม่ได้)
+  - SPA `referral.remote` ส่งเฉพาะ capacity-accept ไป BFF; transition อื่นยังใช้ remote session path
 
 ### 3. Query & Performance Optimizations
 - **Pagination & Filtering:** ปรับปรุง `referralFilterSchema` และ `ReferralRepository.list()` รองรับ:
@@ -64,6 +69,8 @@ affects:
    - `domain/referral.schema.ts` — เพิ่ม Zod schemas (`referralTypeSchema`, `to_shelter_code`, `response_reason`)
    - `domain/referral.transitions.ts` — รับ `responseReason?: string` ใน `applyTransition`
    - `domain/referral.redaction.ts` — Redaction handling สำหรับ `referral_type` และ `response_reason`
-   - `data/referral.remote.ts` & `data/referral.repository.ts` — เพิ่มการส่งผ่าน `reason` และ side-effect ย้ายศูนย์พักพิง
+   - `domain/referral.capacity-transfer.ts` — builders สำหรับ cross-DB transfer_out / transfer_in (ไม่ rewrite `shelter_code` ใน source DB)
+   - `data/referral.remote.ts` — capacity-accept มอบหมายไป BFF; transition อื่นใช้ session remote
+   - `server/referral.server-repository.ts` — `completeCapacityTransfer` ผ่าน `adminRaw`
    - `application/queries.ts` — อัปเดต `useTransitionReferral` mutation
    - `ui/referral-create-form.svelte`, `ui/referral-detail.svelte`, `ui/referral-list.svelte` — อัปเดตการแสดงผลและฟอร์ม

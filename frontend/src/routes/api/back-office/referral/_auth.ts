@@ -5,8 +5,8 @@ import { isShelterManager } from '$lib/auth/roles';
 /**
  * Shared helper to format, log, and return standardized SvelteKit API endpoint error responses.
  */
-export function handleEndpointError(e: unknown, label: string) {
-	console.error(`🔴 [${label}]:`, e);
+export function handleEndpointError(e: unknown, label?: string) {
+	void label;
 	const err = e as { status?: number; body?: { message?: string }; message?: string };
 	const status = err.status || 500;
 	const message = err.body?.message || err.message || 'Internal Server Error';

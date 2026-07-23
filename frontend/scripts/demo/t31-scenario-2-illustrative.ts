@@ -17,12 +17,12 @@ const OCCUPANCY = 10;
 const AS_OF = new Date().toISOString();
 
 const resources: ResourceInput[] = [
-	{ key: 'water_l_per_person_day', kind: 'multiply', ratio: 15, have: 100 }, // need 150 > have 100 -> gap
-	{ key: 'drinking_water_l_per_person_day', kind: 'multiply', ratio: 3, have: 50 }, // need 30 < have 50 -> surplus
-	{ key: 'cooking_water_l_per_person_day', kind: 'multiply', ratio: 6, have: 60 }, // need 60 = have 60 -> ok
-	{ key: 'people_per_toilet_female', kind: 'divide', ratio: 20, have: 0 }, // need 1 > have 0 -> gap
-	{ key: 'people_per_tap', kind: 'divide', ratio: 80, have: 1 }, // need 1 = have 1 -> ok
-	{ key: 'people_per_volunteer', kind: 'divide', ratio: 50, have: 2 } // need 1 < have 2 -> surplus
+	{ key: 'water_l_per_person_day', kind: 'multiply', ratio: '15', have: '100' }, // need 150 > have 100 -> gap
+	{ key: 'drinking_water_l_per_person_day', kind: 'multiply', ratio: '3', have: '50' }, // need 30 < have 50 -> surplus
+	{ key: 'cooking_water_l_per_person_day', kind: 'multiply', ratio: '6', have: '60' }, // need 60 = have 60 -> ok
+	{ key: 'people_per_toilet_female', kind: 'divide', ratio: '20', have: '0' }, // need 1 > have 0 -> gap
+	{ key: 'people_per_tap', kind: 'divide', ratio: '80', have: '1' }, // need 1 = have 1 -> ok
+	{ key: 'people_per_volunteer', kind: 'divide', ratio: '50', have: '2' } // need 1 < have 2 -> surplus
 ];
 
 const results = calculateResources({ occupancy: OCCUPANCY, as_of: AS_OF, resources });
