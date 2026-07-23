@@ -2,7 +2,6 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
-	import Clock from '@lucide/svelte/icons/clock';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Search from '@lucide/svelte/icons/search';
 	import type { Referral, ReferralStatus } from '../domain/referral.schema';
@@ -10,7 +9,6 @@
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import {
 		formatReferralDate,
-		getKindLabel,
 		getStatusBadgeVariant,
 		getStatusLabel,
 		getUrgencyLabel,
@@ -46,7 +44,7 @@
 	let activeTab = $state<'all' | ReferralStatus>('all');
 	let searchQuery = $state('');
 	let currentPage = $state(1);
-	const PAGE_SIZE = 5;
+	const PAGE_SIZE = 10;
 
 	// Reset currentPage automatically when activeTab or searchQuery changes
 	$effect(() => {
@@ -132,52 +130,46 @@
 			<p class="text-sm">ไม่มีข้อมูลการส่งต่อที่ตรงกับเงื่อนไขในขณะนี้</p>
 		</div>
 	{:else}
-		<div class="grid gap-3">
+		<div class="space-y-2">
 			{#each paginatedReferrals as referral (referral._id)}
 				<button
 					type="button"
 					onclick={() => onSelect?.(referral._id)}
-					class="group relative flex w-full cursor-pointer flex-col justify-between gap-4 rounded-xl border border-border/80 bg-card p-4 text-left shadow-sm transition-all hover:border-primary/50 md:flex-row md:items-center
+					class="group relative flex w-full cursor-pointer flex-col justify-between gap-1.5 rounded-lg border border-border/80 bg-card p-3 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-accent/50
 					{selectedId === referral._id ? 'border-primary ring-2 ring-primary/10' : ''}"
 				>
-					<!-- Block 1: Content Envelope (Left Side) -->
-					<div class="flex flex-1 flex-col gap-1.5 font-sans">
-						<div class="flex flex-wrap items-center gap-2">
-							<Badge variant="outline" class="text-xs">
-								{getKindLabel(referral.referral_type, { short: true })}
-							</Badge>
-							<Badge class={getUrgencyStyle(referral.urgency)}>
-								{getUrgencyLabel(referral.urgency)}
-							</Badge>
-							<Badge class={getStatusBadgeVariant(referral.status)}>
-								{getStatusLabel(referral.status)}
-							</Badge>
-							<span class="flex items-center gap-1 text-xs text-muted-foreground">
-								<Clock class="h-3.5 w-3.5" />
-								{formatReferralDate(referral.created_at)}
+					<!-- Line 1: Primary Info -->
+					<div class="flex flex-wrap items-center gap-2">
+						<Badge class="{getUrgencyStyle(referral.urgency)} h-5 px-1.5 text-[10px] font-semibold">
+							{getUrgencyLabel(referral.urgency)}
+						</Badge>
+						<span class="truncate text-sm font-bold text-foreground">
+							{getEvacueeName(referral.evacuee_id)}
+						</span>
+						<span class="text-xs text-muted-foreground">→</span>
+						<span class="truncate text-xs font-medium text-muted-foreground">
+							{referral.to_shelter_code || referral.to_org?.name || '-'}
+						</span>
+						{#if referral.reason}
+							<span class="hidden max-w-[200px] truncate text-xs text-muted-foreground sm:inline">
+								| {referral.reason}
 							</span>
-						</div>
-
-						<div class="min-w-0">
-							<!-- Heading -->
-							<h4 class="text-base font-bold text-foreground">
-								{getEvacueeName(referral.evacuee_id)}
-							</h4>
-
-							<!-- Subtext Block -->
-							<div class="mt-1.5 space-y-1 text-xs font-semibold text-foreground/80">
-								<p>
-									ส่งตัวไปยัง: {referral.to_shelter_code
-										? referral.to_shelter_code
-										: referral.to_org?.name || '-'}
-								</p>
-								<p>เหตุผล: {referral.reason}</p>
-							</div>
-						</div>
+						{/if}
 					</div>
 
-					<!-- Block 2: Action Button Envelope (Right Side) -->
-					<div class="flex shrink-0 items-center justify-end md:justify-center">
+					<!-- Line 2: Meta Info + Action -->
+					<div class="flex w-full items-center justify-between gap-2">
+						<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+							<span>{formatReferralDate(referral.created_at)}</span>
+							<Badge class="{getStatusBadgeVariant(referral.status)} h-4 px-1 text-[10px]">
+								{getStatusLabel(referral.status)}
+							</Badge>
+							{#if referral.reason}
+								<span class="inline truncate text-xs text-muted-foreground sm:hidden">
+									| {referral.reason}
+								</span>
+							{/if}
+						</div>
 						<Button
 							variant="ghost"
 							size="sm"
@@ -185,10 +177,10 @@
 								e.stopPropagation();
 								onSelect?.(referral._id);
 							}}
-							class="gap-1.5 text-xs text-muted-foreground group-hover:text-primary"
+							class="h-6 shrink-0 gap-1 px-2 text-xs text-muted-foreground group-hover:text-primary"
 						>
-							<Eye class="h-4 w-4" />
-							รายละเอียด
+							<Eye class="h-3.5 w-3.5" />
+							รายละเอียด →
 						</Button>
 					</div>
 				</button>

@@ -6,7 +6,12 @@ import {
 } from '$lib/db/subscribe-data-changes';
 import { referralRepository } from '../data/referral.remote';
 import { authStore } from '$lib/stores/auth.svelte';
-import type { ReferralFilter, ReferralInput, ReferralStatus } from '../domain/referral.schema';
+import type {
+	Referral,
+	ReferralFilter,
+	ReferralInput,
+	ReferralStatus
+} from '../domain/referral.schema';
 
 export const referralKeys = {
 	all: ['referrals'] as const,
@@ -45,7 +50,17 @@ export const useTransitionReferral = (queryClient: QueryClient) =>
 	createMutation(() => ({
 		mutationFn: ({ id, to, reason }: { id: string; to: ReferralStatus; reason?: string }) =>
 			referralRepository().transition(id, to, authStore.user?.name ?? 'unknown', reason),
-		onSuccess: () => {
+		onSuccess: (updatedDoc) => {
+			// 1. Update detail cache instantly
+			queryClient.setQueryData(referralKeys.detail(updatedDoc._id), updatedDoc);
+
+			// 2. Update list caches (if any exist) — replace matching doc with updated
+			queryClient.setQueriesData<Referral[]>(
+				{ queryKey: referralKeys.lists() },
+				(oldList) => oldList?.map((r) => (r._id === updatedDoc._id ? updatedDoc : r)) ?? oldList
+			);
+
+			// 3. Background invalidate to ensure eventual consistency with CouchDB sync
 			queryClient.invalidateQueries({ queryKey: referralKeys.all });
 		}
 	}));
