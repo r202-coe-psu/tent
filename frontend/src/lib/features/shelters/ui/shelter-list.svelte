@@ -21,7 +21,11 @@
 	const shelterTypeQuery = useMasterData(() => 'shelter_type');
 	const typeLabel = (code: string | null) => {
 		if (!code) return '—';
-		return shelterTypeQuery.data?.items.find((i) => i.code === code)?.label ?? code;
+		const items = shelterTypeQuery.data?.items;
+		// Still loading — show the raw code rather than falsely reporting it as deleted.
+		if (!items) return code;
+		// Not found once the master list has loaded means it was deleted upstream.
+		return items.find((i) => i.code === code)?.label ?? '—';
 	};
 
 	const projectLevelLabel: Record<ProjectLevel, string> = {

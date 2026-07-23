@@ -124,14 +124,16 @@
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 
 	// Vulnerable-group chips — restricted to this shelter's admission_policy.supported_vulnerable_groups
-	// (shelter config), label from master data.
+	// (shelter config), label from master data. Codes no longer present in the master list are
+	// orphans (deleted upstream) and must not be offered for new registrations — that cleanup
+	// happens on the shelter admission-policy form instead.
 	const specialNeedChipOptions = $derived.by(() => {
+		if (!vulnerableGroupQuery.isSuccess) return [];
 		const supported = shelterQuery.data?.admission_policy?.supported_vulnerable_groups ?? [];
-		const masterItems = vulnerableGroupQuery.data?.items ?? [];
-		return supported.map((code) => {
-			const masterItem = masterItems.find((item) => item.code === code);
-			return { code, label: masterItem?.label ?? code };
-		});
+		const masterByCode = new Map(vulnerableGroupQuery.data.items.map((item) => [item.code, item]));
+		return supported
+			.filter((code) => masterByCode.has(code))
+			.map((code) => ({ code, label: masterByCode.get(code)!.label }));
 	});
 
 	let age = $state('');

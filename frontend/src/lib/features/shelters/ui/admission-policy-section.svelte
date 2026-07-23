@@ -25,6 +25,19 @@
 		(vulnerableGroupQuery.data?.items ?? []).map((i) => ({ value: i.code, label: i.label }))
 	);
 
+	const selectedVulnerable = $derived(
+		$formData.admission_policy?.supported_vulnerable_groups ?? []
+	);
+	const knownVulnerableCodes = $derived(new Set(vulnerableGroups.map((g) => g.value)));
+	// Codes stored on this shelter that no longer exist in the master list.
+	// Gate on `isSuccess` so valid selections are not flagged as orphans while
+	// the master query is still loading (empty list → everything looks orphaned).
+	const orphanVulnerable = $derived(
+		vulnerableGroupQuery.isSuccess
+			? selectedVulnerable.filter((code) => !knownVulnerableCodes.has(code))
+			: []
+	);
+
 	/** Each pet category has its own condition whitelist (CR-023 Addendum A, D-A2 revised). */
 	const petCategories: {
 		value: PetCategory;
@@ -170,7 +183,7 @@
 		<h3 class="text-sm font-bold text-card-foreground">
 			กลุ่มเปราะบางที่ศูนย์รองรับได้ (Supported Vulnerable Groups)
 		</h3>
-		{#if vulnerableGroups.length === 0}
+		{#if vulnerableGroups.length === 0 && orphanVulnerable.length === 0}
 			<p class="text-sm text-muted-foreground">
 				ยังไม่มีข้อมูลกลุ่มเปราะบาง — เพิ่มได้ที่หน้า “ตั้งค่าข้อมูลลงทะเบียน”
 			</p>
@@ -181,13 +194,27 @@
 						class="flex items-center space-x-3 rounded-lg border border-shelter-border bg-background p-3 text-sm"
 					>
 						<Checkbox
-							checked={($formData.admission_policy?.supported_vulnerable_groups ?? []).includes(
-								group.value
-							)}
+							checked={selectedVulnerable.includes(group.value)}
 							onCheckedChange={(v) => toggleVulnerable(group.value, v === true)}
 							{disabled}
 						/>
 						<span>{group.label}</span>
+					</label>
+				{/each}
+
+				{#each orphanVulnerable as code (code)}
+					<label
+						class="flex items-center space-x-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm"
+					>
+						<Checkbox
+							checked={true}
+							onCheckedChange={(v) => toggleVulnerable(code, v === true)}
+							{disabled}
+						/>
+						<span class="flex flex-col">
+							<span class="font-mono text-xs">{code}</span>
+							<span class="text-xs text-destructive">ถูกลบจากมาสเตอร์แล้ว — ติ๊กออกเพื่อลบ</span>
+						</span>
 					</label>
 				{/each}
 			</div>
