@@ -338,6 +338,8 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 | `timeline` | {`sent`:{at,by}?, `responded`:{at,by}?, `closed`:{at,by}?} | sys | — |
 | `notes` | str | opt | — |
 
+> **Index:** Mango indexes deployed: `referral-type-status-idx` (`['type', 'status']`), `referral-type-evacuee-idx` (`['type', 'evacuee_id']`), `referral-list-sort-idx` (`['type', 'created_at', 'status', 'evacuee_id']`), `referral-list-basic-idx` (`['type', 'created_at']`).
+
 ### 2.12 `audit` — `audit:{ulid}` · **append-only**
 
 | Field | ชนิด | req | หมายเหตุ |
