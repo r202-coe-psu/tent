@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -200,90 +199,88 @@
 					>
 					<Form.Field {form} name="referral_type">
 						<Form.Control>
-							{#snippet children()}
-								<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-									<button
-										type="button"
-										onclick={() => {
-											setReferralType('medical-emergency');
-										}}
-										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted/50 {$formData.referral_type ===
-										'medical-emergency'
-											? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-											: 'border-border'}"
-									>
-										<div class="space-y-1">
-											<div class="text-sm font-semibold text-foreground">
-												🏥 การรักษาพยาบาล (Medical)
-											</div>
-											<div class="text-xs text-muted-foreground">
-												ส่งตัวผู้ป่วยฉุกเฉินเข้ารับการรักษาพยาบาล
-											</div>
+							<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+								<button
+									type="button"
+									onclick={() => {
+										setReferralType('medical-emergency');
+									}}
+									class="flex cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted/50 {$formData.referral_type ===
+									'medical-emergency'
+										? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+										: 'border-border'}"
+								>
+									<div class="space-y-1">
+										<div class="text-sm font-semibold text-foreground">
+											🏥 การรักษาพยาบาล (Medical)
 										</div>
-										<input
-											type="radio"
-											name="referral_type"
-											value="medical-emergency"
-											checked={$formData.referral_type === 'medical-emergency'}
-											class="h-4 w-4 text-primary"
-										/>
-									</button>
+										<div class="text-xs text-muted-foreground">
+											ส่งตัวผู้ป่วยฉุกเฉินเข้ารับการรักษาพยาบาล
+										</div>
+									</div>
+									<input
+										type="radio"
+										name="referral_type"
+										value="medical-emergency"
+										checked={$formData.referral_type === 'medical-emergency'}
+										class="h-4 w-4 text-primary"
+									/>
+								</button>
 
-									<button
-										type="button"
-										onclick={() => {
-											setReferralType('capacity');
-										}}
-										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted/50 {$formData.referral_type ===
-										'capacity'
-											? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-											: 'border-border'}"
-									>
-										<div class="space-y-1">
-											<div class="text-sm font-semibold text-foreground">
-												🏘️ ย้ายศูนย์พักพิง (Capacity)
-											</div>
-											<div class="text-xs text-muted-foreground">
-												ย้ายผู้พักพิงไปศูนย์อื่นเนื่องจากศูนย์เต็ม
-											</div>
+								<button
+									type="button"
+									onclick={() => {
+										setReferralType('capacity');
+									}}
+									class="flex cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted/50 {$formData.referral_type ===
+									'capacity'
+										? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+										: 'border-border'}"
+								>
+									<div class="space-y-1">
+										<div class="text-sm font-semibold text-foreground">
+											🏘️ ย้ายศูนย์พักพิง (Capacity)
 										</div>
-										<input
-											type="radio"
-											name="referral_type"
-											value="capacity"
-											checked={$formData.referral_type === 'capacity'}
-											class="h-4 w-4 text-primary"
-										/>
-									</button>
+										<div class="text-xs text-muted-foreground">
+											ย้ายผู้พักพิงไปศูนย์อื่นเนื่องจากศูนย์เต็ม
+										</div>
+									</div>
+									<input
+										type="radio"
+										name="referral_type"
+										value="capacity"
+										checked={$formData.referral_type === 'capacity'}
+										class="h-4 w-4 text-primary"
+									/>
+								</button>
 
-									<button
-										type="button"
-										onclick={() => {
-											setReferralType('resource');
-										}}
-										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted/50 {$formData.referral_type ===
-										'resource'
-											? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-											: 'border-border'}"
-									>
-										<div class="space-y-1">
-											<div class="text-sm font-semibold text-foreground">
-												📦 ขอสนับสนุนสิ่งของ (Resource)
-											</div>
-											<div class="text-xs text-muted-foreground">
-												ขอสนับสนุนทรัพยากร/สิ่งของจำเป็นพิเศษ
-											</div>
+								<button
+									type="button"
+									onclick={() => {
+										setReferralType('resource');
+									}}
+									class="flex cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted/50 {$formData.referral_type ===
+									'resource'
+										? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+										: 'border-border'}"
+								>
+									<div class="space-y-1">
+										<div class="text-sm font-semibold text-foreground">
+											📦 ขอสนับสนุนสิ่งของ (Resource)
 										</div>
-										<input
-											type="radio"
-											name="referral_type"
-											value="resource"
-											checked={$formData.referral_type === 'resource'}
-											class="h-4 w-4 text-primary"
-										/>
-									</button>
-								</div>
-							{/snippet}
+										<div class="text-xs text-muted-foreground">
+											ขอสนับสนุนทรัพยากร/สิ่งของจำเป็นพิเศษ
+										</div>
+									</div>
+									<input
+										type="radio"
+										name="referral_type"
+										value="resource"
+										checked={$formData.referral_type === 'resource'}
+										class="h-4 w-4 text-primary"
+									/>
+								</button>
+							</div>
 						</Form.Control>
 						<Form.FieldErrors />
 					</Form.Field>
