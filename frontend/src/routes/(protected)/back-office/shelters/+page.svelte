@@ -2,26 +2,16 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Upload from '@lucide/svelte/icons/upload';
-	import { ShelterList, useShelters, type ShelterSummary } from '$lib/features/shelters';
+	import { ShelterList, useShelter, type ShelterSummary } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 
-	const PAGE_SIZE = 10;
-	let currentPage = $state(1);
-
-	const sheltersQuery = useShelters();
-	const shelters = $derived(sheltersQuery.data ?? []);
-	const total = $derived(shelters.length);
-	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
-	const pageShelters = $derived(
-		shelters.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
-	);
-
-	// Clamp back to the last valid page if the list shrinks (e.g. after a delete).
-	$effect(() => {
-		if (currentPage > totalPages) currentPage = totalPages;
-	});
+	// Back-office is a per-shelter workspace — show only the shelter the staff
+	// is currently scoped/selected to, not the full system-wide registry.
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelters = $derived(shelterQuery.data ? [shelterQuery.data] : []);
 
 	function handleCreateNew() {
 		goto(resolve('/back-office/shelters/create'));
@@ -47,9 +37,7 @@
 			<h2 class="text-2xl font-bold tracking-tight text-foreground">
 				จัดการศูนย์พักพิง (Shelters)
 			</h2>
-			<p class="mt-1 text-sm text-muted-foreground">
-				รายชื่อศูนย์พักพิงทั้งหมดในระบบและสถานะความจุ
-			</p>
+			<p class="mt-1 text-sm text-muted-foreground">ข้อมูลศูนย์พักพิงปัจจุบันและสถานะความจุ</p>
 		</div>
 		<div class="flex flex-wrap gap-2">
 			<Button variant="outline" onclick={handleImport}>
@@ -61,38 +49,16 @@
 		</div>
 	</div>
 
-	<!-- List card (rounding matches the shelter form sections) -->
+	<!-- Current shelter card (rounding matches the shelter form sections) -->
 	<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
-		{#if sheltersQuery.isLoading}
+		{#if shelterQuery.isLoading}
 			<p class="py-8 text-center text-sm text-muted-foreground">กำลังโหลด...</p>
-		{:else if sheltersQuery.isError}
+		{:else if shelterQuery.isError}
 			<p class="py-8 text-center text-sm text-destructive">
-				เกิดข้อผิดพลาด: {sheltersQuery.error?.message}
+				เกิดข้อผิดพลาด: {shelterQuery.error?.message}
 			</p>
 		{:else}
-			<ShelterList shelters={pageShelters} onedit={handleEdit} />
-
-			{#if totalPages > 1}
-				<div class="mt-4 flex justify-center border-t border-shelter-border pt-4">
-					<Pagination.Root bind:page={currentPage} count={total} perPage={PAGE_SIZE}>
-						{#snippet children({ pages })}
-							<Pagination.Content>
-								<Pagination.Previous />
-								{#each pages as p (p.key)}
-									<Pagination.Item>
-										{#if p.type === 'page'}
-											<Pagination.Link page={p} isActive={p.value === currentPage} />
-										{:else}
-											<Pagination.Ellipsis />
-										{/if}
-									</Pagination.Item>
-								{/each}
-								<Pagination.Next />
-							</Pagination.Content>
-						{/snippet}
-					</Pagination.Root>
-				</div>
-			{/if}
+			<ShelterList {shelters} onedit={handleEdit} />
 		{/if}
 	</div>
 </div>
