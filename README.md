@@ -180,19 +180,13 @@ Volume dirs:
 - staging: `/mnt/tent-data/couchdb/data`, `/mnt/tent-data/mongodb/data`
 - production: `../deployment/tent/data` (Couch), `../deployment/tent/mongodb/data` (Mongo)
 
-Host nginx ต้อง proxy exact-path ไป FastAPI (อย่า proxy ทั้ง `/public`):
+Host nginx ต้อง proxy `/public-api/` ไป FastAPI (strip prefix → `/public/v1/*`;
+อย่า proxy ทั้ง `/public` — SPA อยู่ที่ SvelteKit). Compose stack ที่ใช้ `nginx/` ใน repo
+ทำให้อยู่แล้ว; ถ้า host nginx แยก ให้ mirror:
 
 ```nginx
-location = /public/v1/family-search {
-    proxy_pass http://127.0.0.1:9000;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-
-location = /public/v1/shelters {
+location /public-api/ {
+    rewrite ^/public-api/(.*)$ /$1 break;
     proxy_pass http://127.0.0.1:9000;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
