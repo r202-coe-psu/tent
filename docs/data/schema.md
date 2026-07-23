@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-22
+updated: 2026-07-23
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -376,19 +376,23 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 | `version` | int | req | — |
 | `active` | bool | req | สลับใช้ profile นี้หากเป็น true |
 
-### 2.15 `daily_calc` — `daily_calc:{date}` (deterministic — 1 doc/วัน/ศูนย์) · **schema_v 1**
+### 2.15 `daily_calc` — `daily_calc:{date}` (deterministic — 1 doc/วัน/ศูนย์) · **schema_v 2**
 
-> **schema_v 1** — doc type ใหม่ ([CR-036](../changes/CR-036-daily-calc-doc-type.md)); ยังไม่มี doc เดิมในฐานข้อมูล — ไม่ต้อง backfill. `ratio_source`/`sop_override_id` (CR-006 drill-down traceability) **เลื่อนเป็น follow-up** (CR-036 Open decision #1) — ยังไม่รวมใน baseline นี้.
-> Snapshot ผลการคำนวณทรัพยากรประจำวันของ engine T-31 (FR-45). `_id` deterministic ต่อวัน (`daily_calc:2026-07-08`) → **idempotent**: รันซ้ำวันเดียวกันเขียนทับ doc เดิม (ไม่สร้างซ้ำ). Input ทั้ง 3 (occupancy, effective ratio, stock) อ่านผ่าน barrel ของ peer feature เท่านั้น (people / sop-ratios / operations). ค่าทุกตัวถูก freeze ณ เวลาคำนวณเพื่อให้ผล reproducible. ทับข้อมูลเดิม → เขียน `audit:{action:retro_edit}` (เก็บ `_rev` + ผลเดิม) **ก่อน** เขียนทับ.
+> **schema_v 2** — เพิ่ม `ratio_source` + `sop_override_id` + `sop_override_version` สำหรับ drill-down T-32 ([CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) OD-1=A). Pre-prod: wipe หรือ re-run on-demand — ไม่มี lazy migration.
+> **schema_v 1** — baseline doc type ([CR-036](../changes/CR-036-daily-calc-doc-type.md)).
+> Snapshot ผลการคำนวณทรัพยากรประจำวันของ engine T-31 (FR-45). `_id` deterministic ต่อวัน (`daily_calc:2026-07-08`) → **idempotent**: รันซ้ำวันเดียวกันเขียนทับ doc เดิม (ไม่สร้างซ้ำ). Input (occupancy, effective ratio, stock, shelter facilities/area ตาม hardcode map [CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) OD-2=B) อ่านผ่าน barrel ของ peer feature เท่านั้น. ค่าทุกตัวถูก freeze ณ เวลาคำนวณ. ทับข้อมูลเดิม → เขียน `audit:{action:retro_edit}` **ก่อน** เขียนทับ. R3 runtime = **on-demand อย่างเดียว** (CR-042 OD-3=A).
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `formula_v` | str | req | เวอร์ชันสูตร (`FORMULA_V`) ที่ผลิตผลชุดนี้ — algorithm version ไม่ใช่ schema |
 | `sop_profile_version` | int>0 | req | `version` ของ effective SOP profile (override active ?? master) ที่ใช้ ([CR-006](../changes/CR-006-sop-profile-master-override.md)) |
+| `ratio_source` | enum(`master`,`override`) | req | ที่มาของ effective ratio ที่ freeze ใน snapshot ([CR-042](../changes/CR-042-daily-sop-calc-follow-up.md)) |
+| `sop_override_id` | str\|null | req | `_id` ของ `sop_override` ที่ใช้; **ต้อง `null` เมื่อ `ratio_source=master`**; บังคับมีค่าเมื่อ `override` |
+| `sop_override_version` | int\|null | req | `version` ของ override ที่ใช้; **ต้อง `null` เมื่อ `ratio_source=master`**; บังคับมีค่าเมื่อ `override` |
 | `ratio_snapshot` | {str:num} | req | ratio ทุกคีย์ที่ freeze ตอนคำนวณ. คีย์ **generic string** (ไม่ผูก whitelist 20 keys — engine domain-agnostic); `{}` ว่างได้ |
 | `occupancy_snapshot` | num≥0 | req | headcount ที่ `current_stay.status = active` (physically present, [CR-035](../changes/CR-035-evacuee-stay-status-v3-scan-check-in-out.md) stay-status v3) ณ เวลาคำนวณ |
 | `as_of` | ts | req | ISO-8601 UTC ตอนจัดทำ snapshot (เวลาที่ freeze input — ต่างจาก `updated_at` ที่เป็นเวลาคำนวณล่าสุด) |
-| `stock_snapshot` | {str:num\|null} | req | ยอดคงเหลือต่อ resource ที่ใช้; `null` = ไม่ sync / ไม่มี mapping (`have` seam — CR-036 Open decision #2) |
+| `stock_snapshot` | {str:num\|null} | req | ยอดคงเหลือ/`have` ต่อ resource ตาม hardcode map; `null` = ไม่ sync / ไม่มี mapping |
 | `results` | ResourceCalcResult[] | req | ผลรายแถว: `ordinal,key,kind,input_valid,ratio,need,have,gap,status,data_status,as_of` (T-31.1/31.3) |
 
 > ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`). append หรือ overwrite เท่านั้น — ไม่ mutate in place.
