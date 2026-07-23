@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-14
+updated: 2026-07-22
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -624,7 +624,7 @@ code?: str (เมื่อ created), errors?: [{ column: str, message: str }] }
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `query_kind` | enum(`name`,`phone`) | req | — |
+| `query_kind` | enum(`name`,`phone`,`national_id`,`passport`) | req | ชนิด query ที่ parse ได้จาก public family-search (CR-044) |
 | `query_hash` | str | req | SHA-256 ของ query (normalize แล้ว) — ไม่เก็บ query ตรง |
 | `ip_hash` | str | req | — |
 | `result_count` | int≥0 | req | — |

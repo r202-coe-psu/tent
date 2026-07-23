@@ -1,0 +1,528 @@
+{
+	"openapi": "3.1.0",
+	"info": {
+		"title": "IMPs FastAPI",
+		"version": "0.1.0"
+	},
+	"paths": {
+		"/v1/auth/verify": {
+			"get": {
+				"tags": ["Authentication"],
+				"summary": "Verify Auth",
+				"description": "Verify connectivity using EXTERNAL_API_SECRET Bearer token.",
+				"operationId": "verify_auth",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VerifyResponse"
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"HTTPBearer": []
+					}
+				]
+			}
+		},
+		"/public/v1/family-search": {
+			"post": {
+				"tags": ["Family Search"],
+				"summary": "Search Evacuees",
+				"description": "Search evacuees in the public read model (masked, no PII leakage).",
+				"operationId": "search_evacuees",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SearchRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SearchResponse"
+								}
+							}
+						}
+					},
+					"429": {
+						"description": "Too Many Requests",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ApiErrorResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Unprocessable Content",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ApiErrorResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/health": {
+			"get": {
+				"tags": ["Health"],
+				"summary": "Health Check",
+				"description": "Health check endpoint to verify the service is running.\nReturns a simple message indicating the service is healthy.",
+				"operationId": "health_check",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HealthCheckResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/shelters": {
+			"get": {
+				"tags": ["Shelters"],
+				"summary": "List Shelters",
+				"description": "List shelters from the MongoDB read model.",
+				"operationId": "list_shelters",
+				"parameters": [
+					{
+						"name": "province",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Province"
+						}
+					},
+					{
+						"name": "district",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "District"
+						}
+					},
+					{
+						"name": "subdistrict",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Subdistrict"
+						}
+					},
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Status"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ShelterListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"components": {
+		"schemas": {
+			"ApiErrorBody": {
+				"properties": {
+					"code": {
+						"type": "string",
+						"title": "Code"
+					},
+					"message": {
+						"type": "string",
+						"title": "Message"
+					}
+				},
+				"type": "object",
+				"required": ["code", "message"],
+				"title": "ApiErrorBody"
+			},
+			"ApiErrorResponse": {
+				"properties": {
+					"error": {
+						"$ref": "#/components/schemas/ApiErrorBody"
+					}
+				},
+				"type": "object",
+				"required": ["error"],
+				"title": "ApiErrorResponse"
+			},
+			"GeoPoint": {
+				"properties": {
+					"lat": {
+						"type": "number",
+						"title": "Lat"
+					},
+					"lng": {
+						"type": "number",
+						"title": "Lng"
+					}
+				},
+				"type": "object",
+				"required": ["lat", "lng"],
+				"title": "GeoPoint"
+			},
+			"HTTPValidationError": {
+				"properties": {
+					"errors": {
+						"items": {
+							"$ref": "#/components/schemas/ValidationError"
+						},
+						"type": "array",
+						"title": "Errors"
+					}
+				},
+				"type": "object",
+				"title": "HTTPValidationError"
+			},
+			"HealthCheckResponse": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"title": "Status"
+					}
+				},
+				"type": "object",
+				"required": ["status"],
+				"title": "HealthCheckResponse"
+			},
+			"SearchRequest": {
+				"properties": {
+					"search": {
+						"type": "string",
+						"maxLength": 200,
+						"minLength": 1,
+						"title": "Search"
+					}
+				},
+				"type": "object",
+				"required": ["search"],
+				"title": "SearchRequest"
+			},
+			"SearchResponse": {
+				"properties": {
+					"results": {
+						"items": {
+							"$ref": "#/components/schemas/SearchResult"
+						},
+						"type": "array",
+						"title": "Results"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					},
+					"as_of": {
+						"type": "string",
+						"format": "date-time",
+						"title": "As Of"
+					}
+				},
+				"type": "object",
+				"required": ["results", "count", "as_of"],
+				"title": "SearchResponse"
+			},
+			"SearchResult": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"national_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "National Id"
+					},
+					"gender": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Gender"
+					},
+					"shelter_name": {
+						"type": "string",
+						"title": "Shelter Name"
+					},
+					"origin_address": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Origin Address"
+					},
+					"checked_in_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Checked In At"
+					},
+					"care_zone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Care Zone"
+					}
+				},
+				"type": "object",
+				"required": ["name", "status", "shelter_name"],
+				"title": "SearchResult"
+			},
+			"ShelterItem": {
+				"properties": {
+					"code": {
+						"type": "string",
+						"title": "Code",
+						"description": "Shelter code, e.g. SH001"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"capacity": {
+						"type": "integer",
+						"title": "Capacity",
+						"default": 0
+					},
+					"geo": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/GeoPoint"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"province": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Province"
+					},
+					"district": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "District"
+					},
+					"subdistrict": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Subdistrict"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": ["code", "name", "status", "updated_at"],
+				"title": "ShelterItem"
+			},
+			"ShelterListResponse": {
+				"properties": {
+					"shelters": {
+						"items": {
+							"$ref": "#/components/schemas/ShelterItem"
+						},
+						"type": "array",
+						"title": "Shelters"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					},
+					"as_of": {
+						"type": "string",
+						"format": "date-time",
+						"title": "As Of"
+					}
+				},
+				"type": "object",
+				"required": ["shelters", "count", "as_of"],
+				"title": "ShelterListResponse"
+			},
+			"ValidationError": {
+				"properties": {
+					"loc": {
+						"items": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "integer"
+								}
+							]
+						},
+						"type": "array",
+						"title": "Location"
+					},
+					"msg": {
+						"type": "string",
+						"title": "Message"
+					},
+					"type": {
+						"type": "string",
+						"title": "Error Type"
+					},
+					"input": {
+						"title": "Input"
+					},
+					"ctx": {
+						"type": "object",
+						"title": "Context"
+					}
+				},
+				"type": "object",
+				"required": ["loc", "msg", "type"],
+				"title": "ValidationError"
+			},
+			"VerifyResponse": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"title": "Status",
+						"default": "ok"
+					}
+				},
+				"type": "object",
+				"title": "VerifyResponse"
+			}
+		},
+		"securitySchemes": {
+			"HTTPBearer": {
+				"type": "http",
+				"scheme": "bearer"
+			}
+		}
+	}
+}

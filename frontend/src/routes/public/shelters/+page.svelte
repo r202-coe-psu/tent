@@ -3,7 +3,6 @@
 
 	// Icons
 	import Building2 from '@lucide/svelte/icons/building-2';
-	import Users from '@lucide/svelte/icons/users';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 
@@ -13,7 +12,8 @@
 		PublicShelterCard,
 		ShelterFilterPanel,
 		ShelterMap,
-		PublicHeroMetrics
+		PublicHeroMetrics,
+		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
 
 	let { data }: { data: PageData } = $props();
@@ -35,21 +35,8 @@
 		return R * c;
 	}
 
-	type ShelterItem = {
-		name: string;
-		address: string;
-		province: string;
-		district: string;
-		subdistrict: string;
-		status: string;
-		type: string;
-		geo?: { lat: number; lng: number };
-		distance: number;
-		[key: string]: unknown;
-	};
-
 	let displayShelters = $derived(
-		(data?.shelters || []).map((s: ShelterItem) => {
+		((data?.shelters ?? []) as PublicShelterCardModel[]).map((s) => {
 			if (liveUserLat && liveUserLng && s.geo?.lat && s.geo?.lng) {
 				const dist = calcDistance(
 					parseFloat(liveUserLat),
@@ -64,8 +51,8 @@
 	);
 
 	$effect(() => {
-		if (data?.filters?.user_lat) liveUserLat = data?.filters?.user_lat.toString();
-		if (data?.filters?.user_lng) liveUserLng = data?.filters?.user_lng.toString();
+		if (data?.filters?.user_lat) liveUserLat = data.filters.user_lat.toString();
+		if (data?.filters?.user_lng) liveUserLng = data.filters.user_lng.toString();
 	});
 
 	function getStatusColor(status: string) {
@@ -103,7 +90,7 @@
 	<!-- Header / Hero Section -->
 	<PublicHeroMetrics
 		title="ตรวจสอบสถานะศูนย์พักพิง"
-		description="ข้อมูลรวมศูนย์พักพิง สถานะความจุ และเปอร์เซ็นต์ความหนาแน่นของผู้ประสบภัยตามเวลาจริง เพื่อประกอบการตัดสินใจเคลื่อนย้ายและขอรับความช่วยเหลือ"
+		description="ข้อมูลศูนย์พักพิงจากระบบสาธารณะ — ชื่อ พิกัด สถานะ และความจุ เพื่อประกอบการตัดสินใจเคลื่อนย้ายและขอรับความช่วยเหลือ"
 		badgeText="Public Shelter Dashboard"
 		badgeIcon={Building2}
 		showLivePing={false}
@@ -111,7 +98,7 @@
 		showSearch={false}
 	/>
 
-	<!-- 4 Metric Cards -->
+	<!-- Metric Cards (capacity directory — no occupancy aggregates per CR-017) -->
 	<div class="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-6">
 		<PublicShelterMetricCard
 			title="ศูนย์พักพิงทั้งหมด"
@@ -128,26 +115,6 @@
 			icon={Building2}
 			iconClass="border-success shadow-success/15 text-success"
 		/>
-
-		{#if data?.flags?.public_metrics_occupancy}
-			<PublicShelterMetricCard
-				title="ผู้พักพิงปัจจุบัน"
-				value={data?.summary?.occupancy_total ?? '-'}
-				unit="คน"
-				icon={Users}
-				iconClass="border-primary shadow-primary/15 text-primary"
-			/>
-		{/if}
-
-		{#if data?.flags?.public_metrics_vulnerable}
-			<PublicShelterMetricCard
-				title="กลุ่มเปราะบาง"
-				value={data?.summary?.vulnerable_count ?? '-'}
-				unit="คน"
-				icon={AlertTriangle}
-				iconClass="border-warning shadow-warning/15 text-warning-dark"
-			/>
-		{/if}
 	</div>
 
 	<!-- Main Content: Filters, Map, and List -->
@@ -183,9 +150,6 @@
 						>{displayShelters.length} แห่ง</span
 					>
 				</h3>
-				<!-- <Button size="sm" class="h-8 rounded-xl bg-primary-dark px-4 text-xs font-bold"
-					>ดูรายการทั้งหมด</Button
-				> -->
 			</div>
 
 			<div

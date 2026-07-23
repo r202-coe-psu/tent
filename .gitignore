@@ -10,7 +10,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Deployment data (CouchDB volume)
+# Deployment data (CouchDB volume is ../deployment/couchdb — outside repo)
 /deployment
 
 # Claude Code (keep shared settings.json, ignore local + ephemeral)
@@ -27,6 +27,12 @@ couchdb-session.ini
 
 .pnpm-store/
 
+# Python (worker + packages)
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
 .antigravitycli/
 
 node_modules/

@@ -79,7 +79,10 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 							}
 						}
 					}
-				} catch {}
+				} catch (e) {
+					// ignore fallback error
+					void e;
+				}
 				return { occ, vuln };
 			});
 
@@ -94,7 +97,10 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 				vulnerable_count: totalVulnerable
 			};
 			lastFetchTime = now;
-		} catch {}
+		} catch (e) {
+			// ignore fallback error
+			void e;
+		}
 	}
 
 	const isStale = now - lastFetchTime > 1800000; // > 30 mins stale threshold (OP-7)
