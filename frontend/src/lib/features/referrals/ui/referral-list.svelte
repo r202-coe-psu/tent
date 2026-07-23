@@ -8,6 +8,14 @@
 	import type { Referral, ReferralStatus } from '../domain/referral.schema';
 	import { useEvacuees, type Evacuee } from '$lib/features/people';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
+	import {
+		formatReferralDate,
+		getKindLabel,
+		getStatusBadgeVariant,
+		getStatusLabel,
+		getUrgencyLabel,
+		getUrgencyStyle
+	} from './referral.ui-helpers';
 
 	let {
 		referrals,
@@ -22,6 +30,8 @@
 	} = $props();
 
 	// Load evacuees client-side if not provided
+	// Note: Client-side preloading is acceptable for active shelter scope (< 100 evacuees).
+	// For large multi-shelter deployments (R4), consider server-side name join or lazy lookup.
 	const evacueesQuery = useEvacuees();
 	const resolvedEvacuees = $derived(
 		evacuees !== null ? evacuees : (evacueesQuery.data ?? [])
@@ -40,9 +50,9 @@
 
 	// Reset currentPage automatically when activeTab or searchQuery changes
 	$effect(() => {
-		if (searchQuery !== undefined || activeTab !== undefined) {
-			currentPage = 1;
-		}
+		void searchQuery;
+		void activeTab;
+		currentPage = 1;
 	});
 
 	// Filter pipeline
@@ -78,70 +88,6 @@
 		{ value: 'rejected', label: 'ปฏิเสธ (Rejected)' },
 		{ value: 'closed', label: 'ปิดรายการ (Closed)' }
 	];
-
-	function getUrgencyStyle(urgency: string) {
-		if (urgency === 'urgent') {
-			return 'bg-red-500 hover:bg-red-600 text-white animate-pulse';
-		}
-		return 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200';
-	}
-
-	function getStatusBadgeVariant(status: ReferralStatus) {
-		switch (status) {
-			case 'draft':
-				return 'bg-orange-100 text-orange-800 hover:bg-orange-200 dark:bg-orange-950/20 dark:text-orange-400';
-			case 'sent':
-				return 'bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-950/20 dark:text-blue-400';
-			case 'accepted':
-				return 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400';
-			case 'rejected':
-				return 'bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/20 dark:text-rose-400';
-			case 'closed':
-				return 'bg-slate-100 text-slate-800 hover:bg-slate-200 dark:bg-slate-800/40 dark:text-slate-400';
-		}
-	}
-
-	function getStatusLabel(status: ReferralStatus) {
-		switch (status) {
-			case 'draft':
-				return 'ฉบับร่าง';
-			case 'sent':
-				return 'ส่งตัวแล้ว';
-			case 'accepted':
-				return 'ตอบรับแล้ว';
-			case 'rejected':
-				return 'ปฏิเสธรับ';
-			case 'closed':
-				return 'ปิดการส่งตัว';
-		}
-	}
-
-	function getKindBadge(type?: string) {
-		switch (type) {
-			case 'capacity':
-				return 'ย้ายศูนย์';
-			case 'resource':
-				return 'ขอสิ่งของ';
-			case 'medical-emergency':
-			default:
-				return 'พยาบาล';
-		}
-	}
-
-	function formatDate(isoString: string) {
-		try {
-			const d = new Date(isoString);
-			return d.toLocaleString('th-TH', {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric',
-				hour: '2-digit',
-				minute: '2-digit'
-			});
-		} catch {
-			return isoString;
-		}
-	}
 </script>
 
 <div class="space-y-4">
@@ -198,17 +144,17 @@
 					<div class="flex flex-1 flex-col gap-1.5 font-sans">
 						<div class="flex flex-wrap items-center gap-2">
 							<Badge variant="outline" class="text-xs">
-								{getKindBadge(referral.referral_type)}
+								{getKindLabel(referral.referral_type, { short: true })}
 							</Badge>
 							<Badge class={getUrgencyStyle(referral.urgency)}>
-								{referral.urgency === 'urgent' ? 'ด่วนมาก' : 'ปกติ'}
+								{getUrgencyLabel(referral.urgency)}
 							</Badge>
 							<Badge class={getStatusBadgeVariant(referral.status)}>
 								{getStatusLabel(referral.status)}
 							</Badge>
 							<span class="flex items-center gap-1 text-xs text-muted-foreground">
 								<Clock class="h-3.5 w-3.5" />
-								{formatDate(referral.created_at)}
+								{formatReferralDate(referral.created_at)}
 							</span>
 						</div>
 
@@ -239,7 +185,7 @@
 								e.stopPropagation();
 								onSelect?.(referral._id);
 							}}
-							class="group/button inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-[min(var(--radius-md),12px)] border border-transparent bg-clip-padding px-2.5 text-xs font-medium whitespace-nowrap text-muted-foreground transition-all outline-none select-none group-hover:text-primary hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-expanded:bg-muted aria-expanded:text-foreground aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:hover:bg-muted/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5"
+							class="gap-1.5 text-xs text-muted-foreground group-hover:text-primary"
 						>
 							<Eye class="h-4 w-4" />
 							รายละเอียด

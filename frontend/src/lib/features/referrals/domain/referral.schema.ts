@@ -34,10 +34,8 @@ export const toOrgSchema = z.object({
 export type ToOrg = z.infer<typeof toOrgSchema>;
 
 /** Required target external organisation for non-capacity referrals */
-export const requiredToOrgSchema = z.object({
-	name: z.string().min(1, 'ชื่อหน่วยงานจำเป็นต้องระบุ'),
-	kind: z.enum(['hospital', 'social_services', 'other']).optional(),
-	contact: z.string().optional()
+export const requiredToOrgSchema = toOrgSchema.extend({
+	name: z.string().min(1, 'ชื่อหน่วยงานจำเป็นต้องระบุ')
 });
 
 export const timelineStampSchema = z.object({
@@ -214,41 +212,36 @@ export function isMedicalReferral(r: Referral): r is MedicalReferral {
  * Shared factory function to construct a new draft referral body.
  */
 export function buildReferralBody(input: ReferralInput) {
-	if (input.referral_type === 'capacity') {
-		return {
-			evacuee_id: input.evacuee_id,
-			referral_type: 'capacity' as const,
-			to_shelter_code: input.to_shelter_code,
-			to_org: undefined,
-			reason: input.reason,
-			urgency: input.urgency,
-			status: 'draft' as const,
-			timeline: {},
-			notes: input.notes
-		};
-	} else if (input.referral_type === 'resource') {
-		return {
-			evacuee_id: input.evacuee_id,
-			referral_type: 'resource' as const,
-			to_shelter_code: undefined,
-			to_org: input.to_org,
-			reason: input.reason,
-			urgency: input.urgency,
-			status: 'draft' as const,
-			timeline: {},
-			notes: input.notes
-		};
-	} else {
-		return {
-			evacuee_id: input.evacuee_id,
-			referral_type: 'medical-emergency' as const,
-			to_shelter_code: undefined,
-			to_org: input.to_org,
-			reason: input.reason,
-			urgency: input.urgency,
-			status: 'draft' as const,
-			timeline: {},
-			notes: input.notes
-		};
+	const base = {
+		evacuee_id: input.evacuee_id,
+		reason: input.reason,
+		urgency: input.urgency,
+		status: 'draft' as const,
+		timeline: {},
+		notes: input.notes
+	};
+
+	switch (input.referral_type) {
+		case 'capacity':
+			return {
+				...base,
+				referral_type: 'capacity' as const,
+				to_shelter_code: input.to_shelter_code,
+				to_org: undefined
+			};
+		case 'resource':
+		case 'medical-emergency':
+			return {
+				...base,
+				referral_type: input.referral_type,
+				to_shelter_code: undefined,
+				to_org: input.to_org
+			};
+		default: {
+			const _exhaustive: never = input;
+			throw new Error(
+				`Unknown referral type: ${(_exhaustive as { referral_type: string }).referral_type}`
+			);
+		}
 	}
 }

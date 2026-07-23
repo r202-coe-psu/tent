@@ -64,7 +64,7 @@ export class ReferralRemoteRepository implements ReferralRepository {
 		const rawDoc = makeDoc('referral', 1, body, ctx);
 
 		const doc = referralSchema.parse(rawDoc);
-		return this.repo.put(doc) as Promise<Referral>;
+		return this.repo.put<Referral>(doc);
 	}
 
 	async transition(
@@ -97,7 +97,7 @@ export class ReferralRemoteRepository implements ReferralRepository {
 		}
 
 		const updated = applyTransition(latest, to, actor, nowIso, reason);
-		return this.repo.put(touch(updated)) as Promise<Referral>;
+		return this.repo.put<Referral>(touch(updated));
 	}
 }
 

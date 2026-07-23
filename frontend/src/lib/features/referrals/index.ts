@@ -6,4 +6,5 @@ export { default as ReferralCreateForm } from './ui/referral-create-form.svelte'
 export { default as ReferralList } from './ui/referral-list.svelte';
 export { default as ReferralDetail } from './ui/referral-detail.svelte';
 export { default as RedactionBanner } from './ui/redaction-banner.svelte';
+export * from './ui/referral.ui-helpers';
 export * from './data/referral.remote';

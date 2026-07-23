@@ -125,9 +125,7 @@
 		() => debouncedTerm.trim().length >= 2
 	);
 
-	const foundEvacuees: Evacuee[] = $derived(
-		(searchResults.data ? (searchResults.data as Evacuee[]) : []) as Evacuee[]
-	);
+	const foundEvacuees = $derived<Evacuee[]>(searchResults.data ?? []);
 	const isSearching = $derived(searchResults.isFetching && debouncedTerm.trim().length >= 2);
 
 	// Sync superform state when selection is updated

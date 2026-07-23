@@ -11,7 +11,7 @@ import {
 	type ReferralStatus
 } from './referral.schema';
 import { canTransition, applyTransition, allowedTransitions } from './referral.transitions';
-import { redactForScope, type ReferralScope } from './referral.redaction';
+import { redactForScope, type ReferralScope, type RedactedReferral } from './referral.redaction';
 
 // Helper to create a valid base Referral document for tests
 function mockReferral(overrides?: Partial<Referral>): Referral {
@@ -271,19 +271,7 @@ describe('Referral Domain', () => {
 						notes: 'Allergic to penicillin'
 					});
 
-					interface RedactedHospitalDoc {
-						to_org?: {
-							kind?: string;
-							name?: string;
-							contact?: string;
-						};
-						reason?: string;
-						notes?: string;
-						evacuee_id?: string;
-						national_id?: string;
-					}
-
-					const redacted = redactForScope(doc, scope) as unknown as RedactedHospitalDoc;
+					const redacted = redactForScope(doc, scope) as RedactedReferral;
 
 					expect(redacted.to_org?.kind).toBe('hospital');
 					// Redacted fields
@@ -303,19 +291,7 @@ describe('Referral Domain', () => {
 						notes: 'Has 3 children'
 					});
 
-					interface RedactedSocialDoc {
-						to_org?: {
-							kind?: string;
-							name?: string;
-							contact?: string;
-						};
-						reason?: string;
-						notes?: string;
-						evacuee_id?: string;
-						national_id?: string;
-					}
-
-					const redacted = redactForScope(doc, scope) as unknown as RedactedSocialDoc;
+					const redacted = redactForScope(doc, scope) as RedactedReferral;
 
 					expect(redacted.to_org?.kind).toBe('social_services');
 					// Kept fields

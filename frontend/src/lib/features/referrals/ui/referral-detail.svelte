@@ -16,6 +16,13 @@
 	import { canTransition } from '../domain/referral.transitions';
 	import { useTransitionReferral } from '../application/queries';
 	import RedactionBanner from './redaction-banner.svelte';
+	import {
+		formatReferralDate as formatDate,
+		getKindLabel,
+		getStatusLabel,
+		getUrgencyLabel,
+		getUrgencyStyle
+	} from './referral.ui-helpers';
 
 	let { referral }: { referral: Referral } = $props();
 
@@ -44,56 +51,6 @@
 		const label = showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ';
 		await handleTransition(showReasonPrompt, label, responseReasonInput.trim());
 	}
-
-	function getStatusLabel(status: ReferralStatus) {
-		switch (status) {
-			case 'draft':
-				return 'ฉบับร่าง (Draft)';
-			case 'sent':
-				return 'ส่งตัวแล้ว (Sent)';
-			case 'accepted':
-				return 'ตอบรับการส่งต่อแล้ว (Accepted)';
-			case 'rejected':
-				return 'ปฏิเสธรับการส่งต่อ (Rejected)';
-			case 'closed':
-				return 'ปิดการส่งตัวแล้ว (Closed)';
-		}
-	}
-
-	function getKindLabel(type?: string) {
-		switch (type) {
-			case 'capacity':
-				return 'ย้ายศูนย์พักพิง (Capacity Transfer)';
-			case 'resource':
-				return 'ขอสนับสนุนทรัพยากร (Resource Request)';
-			case 'medical-emergency':
-			default:
-				return 'การรักษาพยาบาล (Medical Emergency)';
-		}
-	}
-
-	function getUrgencyStyle(urgency: string) {
-		if (urgency === 'urgent') {
-			return 'bg-red-500 hover:bg-red-600 text-white animate-pulse';
-		}
-		return 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200';
-	}
-
-	function formatDate(isoString?: string) {
-		if (!isoString) return '-';
-		try {
-			const d = new Date(isoString);
-			return d.toLocaleString('th-TH', {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric',
-				hour: '2-digit',
-				minute: '2-digit'
-			});
-		} catch {
-			return isoString;
-		}
-	}
 </script>
 
 <div class="space-y-6">
@@ -116,10 +73,10 @@
 						{getKindLabel(referral.referral_type)}
 					</Badge>
 					<Badge class={getUrgencyStyle(referral.urgency)}>
-						{referral.urgency === 'urgent' ? 'ด่วนมาก' : 'ปกติ'}
+						{getUrgencyLabel(referral.urgency)}
 					</Badge>
 					<Badge variant="outline" class="font-semibold">
-						{getStatusLabel(referral.status)}
+						{getStatusLabel(referral.status, { verbose: true })}
 					</Badge>
 				</div>
 			</div>
