@@ -26,7 +26,7 @@ vi.mock('$lib/db/shelter', () => ({
 	getShelterCode: () => 'SH001'
 }));
 
-describe('ReferralRemoteRepository — capacity accept via BFF', () => {
+describe('ReferralRemoteRepository — capacity via BFF', () => {
 	let repo: ReferralRemoteRepository;
 	const fetchMock = vi.fn();
 
@@ -53,7 +53,7 @@ describe('ReferralRemoteRepository — capacity accept via BFF', () => {
 		timeline: { sent: { at: '2026-07-11T05:00:00.000Z', by: 'Staff A' } }
 	};
 
-	it('delegates capacity accept to BFF and does not rewrite shelter_code locally', async () => {
+	it('delegates all capacity transitions to BFF (not local put)', async () => {
 		mockRepoGet.mockResolvedValue(capacitySent);
 		const accepted: Referral = {
 			...capacitySent,
@@ -82,22 +82,33 @@ describe('ReferralRemoteRepository — capacity accept via BFF', () => {
 		);
 		expect(mockRepoPut).not.toHaveBeenCalled();
 		expect(result.status).toBe('accepted');
-		expect(result.response_reason).toBe('Accepted by SH002');
+	});
+
+	it('delegates capacity send (draft→sent) to BFF for destination mirror', async () => {
+		const draft: Referral = { ...capacitySent, status: 'draft', timeline: {} };
+		mockRepoGet.mockResolvedValue(draft);
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({ ...draft, status: 'sent' })
+		});
+
+		await repo.transition(draft._id, 'sent', 'Staff A');
+		expect(fetchMock).toHaveBeenCalled();
+		expect(mockRepoPut).not.toHaveBeenCalled();
 	});
 
 	it('fail-fast: does not put referral when BFF capacity transfer fails', async () => {
 		mockRepoGet.mockResolvedValue(capacitySent);
 		fetchMock.mockResolvedValue({
 			ok: false,
-			status: 422,
+			status: 403,
 			json: async () => ({
-				error:
-					'Evacuee evacuee:MISSING not found in shelter_sh001 — cannot complete shelter transfer'
+				error: 'Only the destination shelter can accept or reject a capacity referral'
 			})
 		});
 
-		await expect(repo.transition(capacitySent._id, 'accepted', 'Staff B')).rejects.toThrow(
-			/cannot complete shelter transfer/
+		await expect(repo.transition(capacitySent._id, 'accepted', 'Staff A')).rejects.toThrow(
+			/destination shelter/
 		);
 
 		expect(mockRepoPut).not.toHaveBeenCalled();

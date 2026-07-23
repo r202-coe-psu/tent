@@ -77,3 +77,16 @@ export function formatReferralDate(isoString?: string | null): string {
 		return isoString;
 	}
 }
+
+/** List badge: incoming capacity mirror targeting this shelter. */
+export function isIncomingListItem(
+	referral: { referral_type?: string; shelter_code: string; to_shelter_code?: string },
+	actorShelter: string
+): boolean {
+	return (
+		referral.referral_type === 'capacity' &&
+		!!referral.to_shelter_code &&
+		referral.to_shelter_code.toUpperCase() === actorShelter.toUpperCase() &&
+		referral.shelter_code.toUpperCase() !== actorShelter.toUpperCase()
+	);
+}

@@ -14,16 +14,20 @@ import {
 } from '../domain/referral.schema';
 import { applyTransition } from '../domain/referral.transitions';
 import {
+	assertActorMayTransition,
+	ReferralAuthorizationError
+} from '../domain/referral.authorization';
+import {
 	buildCapacityTransferDocs,
 	buildDestinationIntakeDocs,
 	CapacityTransferError
 } from '../domain/referral.capacity-transfer';
 import type { ReferralRepository } from '../data/referral.repository';
 
-// HTTP Constants
 const HTTP_OK = 200;
 const HTTP_CREATED = 201;
 const HTTP_NOT_FOUND = 404;
+const HTTP_FORBIDDEN = 403;
 
 export class CouchDbReferralError extends Error {
 	constructor(
@@ -56,8 +60,6 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			);
 		}
 	}
-
-	// ── Private fetch wrappers ───────────────────────────────────
 
 	private async couchGet<T>(dbName: string, path: string): Promise<{ status: number; data: T }> {
 		const res = await adminRaw(`/${dbName}${path}`, 'GET');
@@ -135,13 +137,11 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		const destActive = destExists && (destRaw as Evacuee).current_stay.status === 'active';
 		const sourceAlreadyTransferred = sourceEvacuee.current_stay.status === 'transferred';
 
-		// Fully done previously — nothing to write.
 		if (sourceAlreadyTransferred && destActive) {
 			return;
 		}
 
 		if (sourceAlreadyTransferred && !destActive) {
-			// Source already closed occupancy; finish / repair destination only.
 			const docs = buildDestinationIntakeDocs({
 				evacuee: sourceEvacuee,
 				fromShelterCode: fromCode,
@@ -162,6 +162,16 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			nowIso,
 			reason
 		});
+
+		// Dest already active but source not closed — finish source only (avoid duplicate transfer_in).
+		if (destActive) {
+			await this.putDoc(fromDb, docs.sourceMovement);
+			await this.putDoc(fromDb, {
+				...docs.sourceEvacuee,
+				_rev: sourceEvacuee._rev
+			});
+			return;
+		}
 
 		await this.writeDestTransfer(toDb, docs.destEvacuee, docs.destMovement, destRaw);
 		await this.putDoc(fromDb, docs.sourceMovement);
@@ -185,7 +195,64 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		await this.putDoc(toDb, destMovement);
 	}
 
-	// ── Interface Methods ────────────────────────────────────────
+	/** Mirror referral into destination shelter DB (same _id; keeps source shelter_code). */
+	async mirrorCapacityReferralToDestination(referral: Referral): Promise<void> {
+		if (referral.referral_type !== 'capacity' || !referral.to_shelter_code) {
+			return;
+		}
+		const toDb = shelterDbName(referral.to_shelter_code);
+		const { status, data } = await this.couchGet<unknown>(
+			toDb,
+			`/${encodeURIComponent(referral._id)}`
+		);
+
+		const { _rev: _, ...withoutRev } = referral;
+		void _;
+		const mirror: Referral =
+			status === HTTP_OK && isReferral(data) && data._rev
+				? { ...withoutRev, _rev: data._rev }
+				: withoutRev;
+
+		await this.putDoc(toDb, mirror);
+	}
+
+	/** Keep the peer copy in sync after accept/reject/close (source ↔ destination). */
+	async syncCapacityReferralPeer(referral: Referral, actorShelter: string): Promise<void> {
+		if (referral.referral_type !== 'capacity' || !referral.to_shelter_code) {
+			return;
+		}
+
+		const sourceDb = shelterDbName(referral.shelter_code);
+		const destDb = shelterDbName(referral.to_shelter_code);
+		const peerDb =
+			shelterDbName(actorShelter) === sourceDb
+				? destDb
+				: shelterDbName(actorShelter) === destDb
+					? sourceDb
+					: null;
+
+		if (!peerDb) {
+			return;
+		}
+
+		const { status, data } = await this.couchGet<unknown>(
+			peerDb,
+			`/${encodeURIComponent(referral._id)}`
+		);
+
+		const { _rev: _, ...withoutRev } = referral;
+		void _;
+
+		if (status === HTTP_NOT_FOUND) {
+			// Peer missing (e.g. closed before mirror) — create from current state.
+			await this.putDoc(peerDb, withoutRev);
+			return;
+		}
+
+		if (status === HTTP_OK && isReferral(data) && data._rev) {
+			await this.putDoc(peerDb, { ...withoutRev, _rev: data._rev });
+		}
+	}
 
 	async list(filter?: ReferralFilter): Promise<Referral[]> {
 		const parsed = referralFilterSchema.parse(filter ?? {});
@@ -260,20 +327,35 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		return { ...doc, _rev: data.rev };
 	}
 
+	/**
+	 * @param actorShelter — caller's shelter scope (destination must accept capacity).
+	 */
 	async transition(
 		id: string,
 		to: ReferralStatus,
 		actor: string,
-		reason?: string
+		reason?: string,
+		actorShelter?: string
 	): Promise<Referral> {
 		const latest = await this.get(id);
 		if (!latest) {
 			throw new CouchDbReferralError(`Referral not found`, HTTP_NOT_FOUND);
 		}
 
+		const scope = actorShelter ?? latest.shelter_code;
+		try {
+			assertActorMayTransition(latest, to, scope);
+		} catch (e: unknown) {
+			if (e instanceof ReferralAuthorizationError) {
+				throw new CouchDbReferralError(e.message, HTTP_FORBIDDEN);
+			}
+			throw e;
+		}
+
 		const nowIso = new Date().toISOString();
 
 		// Capacity accept: cross-DB transfer BEFORE marking referral accepted (fail-fast).
+		// Only reachable when actorShelter === to_shelter_code (asserted above).
 		if (to === 'accepted' && latest.referral_type === 'capacity' && latest.to_shelter_code) {
 			try {
 				await this.completeCapacityTransfer(latest, actor, nowIso, reason);
@@ -298,6 +380,16 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			throw new CouchDbReferralError(`Failed to update referral transition`, status, data);
 		}
 
-		return { ...touched, _rev: data.rev };
+		const saved: Referral = { ...touched, _rev: data.rev };
+
+		if (saved.referral_type === 'capacity' && saved.to_shelter_code) {
+			if (to === 'sent') {
+				await this.mirrorCapacityReferralToDestination(saved);
+			} else if (to === 'accepted' || to === 'rejected' || to === 'closed') {
+				await this.syncCapacityReferralPeer(saved, scope);
+			}
+		}
+
+		return saved;
 	}
 }

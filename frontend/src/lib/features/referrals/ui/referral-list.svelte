@@ -6,13 +6,15 @@
 	import Search from '@lucide/svelte/icons/search';
 	import type { Referral, ReferralStatus } from '../domain/referral.schema';
 	import { useEvacuees, type Evacuee } from '$lib/features/people';
+	import { getShelterCode } from '$lib/db/shelter';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import {
 		formatReferralDate,
 		getStatusBadgeVariant,
 		getStatusLabel,
 		getUrgencyLabel,
-		getUrgencyStyle
+		getUrgencyStyle,
+		isIncomingListItem
 	} from './referral.ui-helpers';
 
 	let {
@@ -26,6 +28,8 @@
 		selectedId?: string | null;
 		evacuees?: Evacuee[] | null;
 	} = $props();
+
+	const actorShelter = $derived(getShelterCode());
 
 	// Load evacuees client-side if not provided
 	// Note: Client-side preloading is acceptable for active shelter scope (< 100 evacuees).
@@ -140,6 +144,13 @@
 				>
 					<!-- Line 1: Primary Info -->
 					<div class="flex flex-wrap items-center gap-2">
+						{#if isIncomingListItem(referral, actorShelter)}
+							<Badge
+								class="h-5 bg-violet-100 px-1.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-950/40 dark:text-violet-300"
+							>
+								ขาเข้า
+							</Badge>
+						{/if}
 						<Badge class="{getUrgencyStyle(referral.urgency)} h-5 px-1.5 text-[10px] font-semibold">
 							{getUrgencyLabel(referral.urgency)}
 						</Badge>

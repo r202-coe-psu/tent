@@ -364,7 +364,11 @@ open → escalated
 | `timeline` | {`sent`:{at,by}?, `responded`:{at,by}?, `closed`:{at,by}?} | sys | — |
 | `notes` | str | opt | — |
 
-> **Capacity accept side-effect (CR-045):** cross-DB — dest `transfer_in` (stay `active`) แล้ว source `transfer_out` (stay `transferred`); **ห้าม** rewrite `shelter_code` ใน DB ต้นทาง. Write path = BFF admin.
+> **Capacity hand-off (CR-045, destination-gated):**
+> 1. ต้นทาง `draft → sent` ผ่าน BFF → **mirror** referral (same `_id`, คง `shelter_code` ต้นทาง) เข้า `shelter_{to}` เป็น inbox ปลายทาง
+> 2. **เฉพาะศูนย์ปลายทาง** (`caller.shelter === to_shelter_code`) กด `accepted` / `rejected`
+> 3. ตอน `accepted` เท่านั้น: cross-DB transfer — dest `transfer_in` แล้ว source `transfer_out` (**ห้าม** rewrite `shelter_code` ใน DB ต้นทาง) จากนั้น sync สถานะกลับต้นทาง
+> Write path = BFF `/api/back-office/referral/[id]/transition` ผ่าน `adminRaw`
 > **Index:** Mango indexes deployed: `referral-type-status-idx` (`['type', 'status']`), `referral-type-evacuee-idx` (`['type', 'evacuee_id']`), `referral-list-sort-idx` (`['type', 'created_at', 'status', 'evacuee_id']`), `referral-list-basic-idx` (`['type', 'created_at']`).
 
 ### 2.12 `audit` — `audit:{ulid}` · **append-only**

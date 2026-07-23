@@ -102,7 +102,8 @@ describe('PATCH /api/back-office/referral/[id]/transition', () => {
 			'referral:1',
 			'accepted',
 			'sm_user',
-			'Bed space confirmed'
+			'Bed space confirmed',
+			'SH001'
 		);
 	});
 

@@ -16,10 +16,12 @@ import { peopleRepository } from '$lib/features/people';
 import type { ReferralRepository } from './referral.repository';
 
 /**
- * Capacity accept requires writing the destination shelter DB, which is outside
- * the caller's session scope — delegate to the BFF (adminRaw) transition route.
+ * Capacity referrals need BFF/admin for:
+ * - `sent` → mirror into destination shelter DB (inbox)
+ * - `accepted`/`rejected` → destination-only; accept runs cross-DB transfer
+ * - `closed` → sync peer copy
  */
-async function transitionCapacityAcceptViaBff(
+async function transitionCapacityViaBff(
 	id: string,
 	to: ReferralStatus,
 	reason: string | undefined,
@@ -38,12 +40,12 @@ async function transitionCapacityAcceptViaBff(
 		const message =
 			payload && typeof payload === 'object' && 'error' in payload
 				? String((payload as { error: unknown }).error)
-				: `Capacity transfer failed (${res.status})`;
+				: `Capacity referral transition failed (${res.status})`;
 		throw new Error(message);
 	}
 
 	if (!isReferral(payload)) {
-		throw new Error('Capacity transfer returned an invalid referral document');
+		throw new Error('Capacity referral transition returned an invalid referral document');
 	}
 	return payload;
 }
@@ -111,14 +113,9 @@ export class ReferralRemoteRepository implements ReferralRepository {
 			throw new Error(`Referral ${id} not found or invalid`);
 		}
 
-		// Cross-DB capacity accept cannot run over the shelter session cookie.
-		if (to === 'accepted' && latest.referral_type === 'capacity' && latest.to_shelter_code) {
-			return transitionCapacityAcceptViaBff(
-				id,
-				to,
-				reason,
-				latest.shelter_code || getShelterCode()
-			);
+		// All capacity transitions go through BFF (mirror / dest-gated accept / peer sync).
+		if (latest.referral_type === 'capacity') {
+			return transitionCapacityViaBff(id, to, reason, getShelterCode());
 		}
 
 		const nowIso = new Date().toISOString();
