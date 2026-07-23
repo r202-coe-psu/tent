@@ -9,3 +9,6 @@ export { default as ReferralCreateForm } from './ui/referral-create-form.svelte'
 export { default as ReferralList } from './ui/referral-list.svelte';
 export { default as ReferralDetail } from './ui/referral-detail.svelte';
 export { default as RedactionBanner } from './ui/redaction-banner.svelte';
+export { default as MedicalReferralForm } from './ui/medical-referral-form.svelte';
+export { default as CapacityReferralForm } from './ui/capacity-referral-form.svelte';
+export { default as ResourceReferralForm } from './ui/resource-referral-form.svelte';
