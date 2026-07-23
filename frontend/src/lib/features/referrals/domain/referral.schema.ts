@@ -178,6 +178,21 @@ export const referralInputSchema = z.preprocess((val) => {
 export type ReferralInput = z.infer<typeof rawReferralInputSchema>;
 
 // ---------------------------------------------------------------------------
+// Query / Filter Schemas
+// ---------------------------------------------------------------------------
+
+export const referralFilterSchema = z.object({
+	status: referralStatusSchema.optional(),
+	evacuee_id: z.string().optional(),
+	limit: z.number().int().positive().max(1000).default(50),
+	skip: z.number().int().nonnegative().default(0),
+	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc')
+});
+
+export type ReferralFilter = z.input<typeof referralFilterSchema>;
+export type ParsedReferralFilter = z.infer<typeof referralFilterSchema>;
+
+// ---------------------------------------------------------------------------
 // Type guards & Helpers
 // ---------------------------------------------------------------------------
 

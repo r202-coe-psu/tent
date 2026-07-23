@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	referralSchema,
 	referralInputSchema,
+	referralFilterSchema,
 	isReferral,
 	isCapacityReferral,
 	isResourceReferral,
@@ -119,6 +120,34 @@ describe('Referral Domain', () => {
 		it('should reject when evacuee_id does not have evacuee: prefix', () => {
 			const doc = mockReferral({ evacuee_id: 'evac:123' });
 			expect(isReferral(doc)).toBe(false);
+		});
+	});
+
+	describe('ReferralFilter Schema Validation & Pagination Defaults', () => {
+		it('should apply default limit: 50, skip: 0, and sort: created_at_desc when empty filter is passed', () => {
+			const parsed = referralFilterSchema.parse({});
+			expect(parsed.limit).toBe(50);
+			expect(parsed.skip).toBe(0);
+			expect(parsed.sort).toBe('created_at_desc');
+		});
+
+		it('should accept valid custom limit, skip, and sort values', () => {
+			const parsed = referralFilterSchema.parse({
+				status: 'sent',
+				limit: 100,
+				skip: 20,
+				sort: 'created_at_asc'
+			});
+			expect(parsed.status).toBe('sent');
+			expect(parsed.limit).toBe(100);
+			expect(parsed.skip).toBe(20);
+			expect(parsed.sort).toBe('created_at_asc');
+		});
+
+		it('should reject negative limit or skip values', () => {
+			expect(referralFilterSchema.safeParse({ limit: -5 }).success).toBe(false);
+			expect(referralFilterSchema.safeParse({ skip: -1 }).success).toBe(false);
+			expect(referralFilterSchema.safeParse({ limit: 5000 }).success).toBe(false);
 		});
 	});
 

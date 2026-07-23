@@ -3,6 +3,8 @@ import { makeDoc, touch, type AuthorContext } from '$lib/db/model';
 import {
 	isReferral,
 	type Referral,
+	type ReferralFilter,
+	referralFilterSchema,
 	type ReferralInput,
 	type ReferralStatus,
 	buildReferralBody,
@@ -43,7 +45,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		if (typeof process !== 'undefined' && !process.env.COUCHDB_ADMIN_URL) {
 			console.warn(
 				`⚠️ [CouchDbReferralServerRepository]: COUCHDB_ADMIN_URL is not set. ` +
-					`Server-side database operations on "${this.dbName}" will fail.`
+				`Server-side database operations on "${this.dbName}" will fail.`
 			);
 		}
 	}
@@ -67,21 +69,32 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 
 	// ── Interface Methods ────────────────────────────────────────
 
-	async list(filter?: { status?: ReferralStatus; evacuee_id?: string }): Promise<Referral[]> {
+	async list(filter?: ReferralFilter): Promise<Referral[]> {
+		const parsed = referralFilterSchema.parse(filter ?? {});
 		const selector: Record<string, unknown> = {
 			type: 'referral'
 		};
 
-		if (filter?.status) {
-			selector.status = filter.status;
+		if (parsed.status) {
+			selector.status = parsed.status;
 		}
-		if (filter?.evacuee_id) {
-			selector.evacuee_id = filter.evacuee_id;
+		if (parsed.evacuee_id) {
+			selector.evacuee_id = parsed.evacuee_id;
 		}
 
-		const { status, data } = await this.couchPost<MangoFindResponse>('/_find', {
-			selector
-		});
+		const sort =
+			parsed.sort === 'created_at_asc'
+				? [{ type: 'asc' }, { created_at: 'asc' }]
+				: [{ type: 'desc' }, { created_at: 'desc' }];
+
+		const body: Record<string, unknown> = {
+			selector,
+			limit: parsed.limit,
+			skip: parsed.skip,
+			sort
+		};
+
+		const { status, data } = await this.couchPost<MangoFindResponse>('/_find', body);
 
 		if (status !== HTTP_OK) {
 			throw new CouchDbReferralError(`CouchDB _find query failed`, status, data);

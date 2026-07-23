@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -10,11 +11,12 @@
 	import { toast } from 'svelte-sonner';
 	import Search from '@lucide/svelte/icons/search';
 	import Loader from '@lucide/svelte/icons/loader';
-	import Check from '@lucide/svelte/icons/check';
+	import X from '@lucide/svelte/icons/x';
+	import User from '@lucide/svelte/icons/user';
 
 	import { referralInputSchema } from '../domain/referral.schema';
 	import { useCreateReferral } from '../application/queries';
-	import { useSearchEvacuees } from '$lib/features/people';
+	import { useSearchEvacuees, type Evacuee } from '$lib/features/people';
 	import RedactionBanner from './redaction-banner.svelte';
 
 	let { onCreated }: { onCreated: (referralId: string) => void } = $props();
@@ -33,13 +35,27 @@
 			zod4(referralInputSchema)
 		),
 		{
+			id: 'referral-create-form',
 			SPA: true,
 			dataType: 'json',
 			validators: zod4(referralInputSchema),
 			resetForm: true,
+			onUpdated: ({ form: f }) => {
+				if (!f.valid) {
+					if (f.errors.evacuee_id) {
+						toast.error('กรุณาเลือกผู้ประสบภัย');
+					} else {
+						toast.error('กรุณากรอกข้อมูลบังคับให้ครบถ้วนก่อนบันทึกร่าง');
+					}
+				}
+			},
 			onUpdate: async ({ form: f }) => {
 				if (!f.valid) {
-					toast.error('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
+					if (f.errors.evacuee_id) {
+						toast.error('กรุณาเลือกผู้ประสบภัย');
+					} else {
+						toast.error('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
+					}
 					return;
 				}
 				if (!f.data.evacuee_id) {
@@ -50,6 +66,8 @@
 				await toast.promise(
 					(async () => {
 						const res = await createReferralMutation.mutateAsync(f.data);
+						selectedEvacuee = null;
+						searchTerm = '';
 						onCreated(res._id);
 					})(),
 					{
@@ -65,8 +83,8 @@
 	const { form: formData, submitting, errors } = form;
 
 	// Reset destination fields when referral_type changes
-	$effect(() => {
-		const type = $formData.referral_type;
+	function setReferralType(type: 'medical-emergency' | 'capacity' | 'resource') {
+		$formData.referral_type = type;
 		if (type === 'capacity') {
 			$formData.to_org = undefined;
 		} else if (type === 'resource' || type === 'medical-emergency') {
@@ -76,47 +94,85 @@
 					name: '',
 					kind: type === 'medical-emergency' ? 'hospital' : 'social_services'
 				};
+			} else {
+				$formData.to_org.kind = type === 'medical-emergency' ? 'hospital' : 'social_services';
 			}
 		}
-	});
+	}
 
-	// Evacuee search and selection state
-	let searchQuery = $state('');
-	let debouncedSearchQuery = $state('');
+	let searchTerm = $state('');
+	let debouncedTerm = $state('');
 	let searchTimeout: ReturnType<typeof setTimeout>;
-	let selectedEvacueeName = $state('');
+	let selectedEvacuee: Evacuee | null = $state(null);
+	let showDropdown: boolean = $state(false);
+	let searchInputRef: HTMLInputElement | null = $state(null);
 
 	$effect(() => {
-		const q = searchQuery.trim();
+		const q = searchTerm.trim();
 		clearTimeout(searchTimeout);
 		if (!q) {
-			debouncedSearchQuery = '';
+			debouncedTerm = '';
 			return;
 		}
 		searchTimeout = setTimeout(() => {
-			debouncedSearchQuery = q;
+			debouncedTerm = q;
 		}, 300);
 		return () => clearTimeout(searchTimeout);
 	});
 
+	// Lazy search query: only executes when user types at least 2 characters
 	const searchResults = useSearchEvacuees(
-		() => debouncedSearchQuery,
-		() => !!debouncedSearchQuery
+		() => debouncedTerm,
+		() => debouncedTerm.trim().length >= 2
 	);
 
-	const foundEvacuees = $derived(searchResults.data ?? []);
-	const isSearching = $derived(searchResults.isFetching && !!debouncedSearchQuery);
+	const foundEvacuees: Evacuee[] = $derived(
+		(searchResults.data ? (searchResults.data as Evacuee[]) : []) as Evacuee[]
+	);
+	const isSearching = $derived(searchResults.isFetching && debouncedTerm.trim().length >= 2);
 
-	function selectEvacuee(id: string, name: string) {
-		$formData.evacuee_id = id;
-		selectedEvacueeName = name;
-		searchQuery = '';
-		debouncedSearchQuery = '';
+	// Sync superform state when selection is updated
+	$effect(() => {
+		if (selectedEvacuee) {
+			$formData.evacuee_id = selectedEvacuee._id;
+		}
+	});
+
+	function selectEvacuee(evacuee: Evacuee) {
+		selectedEvacuee = evacuee;
+		searchTerm = `${evacuee.first_name} ${evacuee.last_name}`;
+		showDropdown = false;
 	}
 
-	function clearSelectedEvacuee() {
+	function clearSelection() {
+		selectedEvacuee = null;
+		searchTerm = '';
 		$formData.evacuee_id = '';
-		selectedEvacueeName = '';
+		showDropdown = true;
+		setTimeout(() => searchInputRef?.focus(), 0);
+	}
+
+	function handleKeyDown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			showDropdown = false;
+		}
+	}
+
+	// Click outside handler to dismiss dropdown
+	$effect(() => {
+		const handleClickOutside = (e: MouseEvent) => {
+			const target = e.target as HTMLElement;
+			if (!target.closest('.evacuee-search-container')) {
+				showDropdown = false;
+			}
+		};
+		document.addEventListener('click', handleClickOutside);
+		return () => document.removeEventListener('click', handleClickOutside);
+	});
+
+	// Helper to check if a specific evacuee is currently selected (safe from template compiler type inference bugs)
+	function isSelected(evacueeId: string): boolean {
+		return selectedEvacuee ? selectedEvacuee._id === evacueeId : false;
 	}
 </script>
 
@@ -144,10 +200,14 @@
 					>
 					<Form.Field {form} name="referral_type">
 						<Form.Control>
-							{#snippet children({ props })}
+							{#snippet children()}
 								<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-									<label
-										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 transition-all hover:bg-muted/50 {$formData.referral_type ===
+									<button
+										type="button"
+										onclick={() => {
+											setReferralType('medical-emergency');
+										}}
+										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted/50 {$formData.referral_type ===
 										'medical-emergency'
 											? 'border-primary bg-primary/5 ring-2 ring-primary/20'
 											: 'border-border'}"
@@ -161,17 +221,20 @@
 											</div>
 										</div>
 										<input
-											{...props}
 											type="radio"
 											name="referral_type"
 											value="medical-emergency"
-											bind:group={$formData.referral_type}
+											checked={$formData.referral_type === 'medical-emergency'}
 											class="h-4 w-4 text-primary"
 										/>
-									</label>
+									</button>
 
-									<label
-										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 transition-all hover:bg-muted/50 {$formData.referral_type ===
+									<button
+										type="button"
+										onclick={() => {
+											setReferralType('capacity');
+										}}
+										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted/50 {$formData.referral_type ===
 										'capacity'
 											? 'border-primary bg-primary/5 ring-2 ring-primary/20'
 											: 'border-border'}"
@@ -185,17 +248,20 @@
 											</div>
 										</div>
 										<input
-											{...props}
 											type="radio"
 											name="referral_type"
 											value="capacity"
-											bind:group={$formData.referral_type}
+											checked={$formData.referral_type === 'capacity'}
 											class="h-4 w-4 text-primary"
 										/>
-									</label>
+									</button>
 
-									<label
-										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 transition-all hover:bg-muted/50 {$formData.referral_type ===
+									<button
+										type="button"
+										onclick={() => {
+											setReferralType('resource');
+										}}
+										class="flex cursor-pointer items-center justify-between rounded-lg border p-4 text-left transition-all hover:bg-muted/50 {$formData.referral_type ===
 										'resource'
 											? 'border-primary bg-primary/5 ring-2 ring-primary/20'
 											: 'border-border'}"
@@ -209,14 +275,13 @@
 											</div>
 										</div>
 										<input
-											{...props}
 											type="radio"
 											name="referral_type"
 											value="resource"
-											bind:group={$formData.referral_type}
+											checked={$formData.referral_type === 'resource'}
 											class="h-4 w-4 text-primary"
 										/>
-									</label>
+									</button>
 								</div>
 							{/snippet}
 						</Form.Control>
@@ -226,86 +291,104 @@
 
 				<hr class="border-border/60" />
 
-				<!-- Step 2: Evacuee Selection -->
-				<div class="space-y-2">
-					<span class="text-sm font-semibold text-foreground">2. ค้นหาและเลือกผู้ประสบภัย *</span>
-
-					{#if $formData.evacuee_id}
-						<div
-							class="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900/30 dark:bg-emerald-950/20"
-						>
-							<div class="flex items-center gap-2">
-								<Check class="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-								<div>
-									<p class="text-sm font-medium text-emerald-900 dark:text-emerald-300">
-										{selectedEvacueeName}
-									</p>
-									<p class="text-xs text-emerald-700 dark:text-emerald-400/80">
-										ID: {$formData.evacuee_id}
-									</p>
-								</div>
-							</div>
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								onclick={clearSelectedEvacuee}
-								class="text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
-							>
-								เปลี่ยน
-							</Button>
+				<!-- Step 2: Evacuee Selection (Lazy Search) -->
+				<div class="evacuee-search-container relative space-y-2">
+					<label
+						for="evacuee-search"
+						class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+						>2. ค้นหาและเลือกผู้ประสบภัย *</label
+					>
+					<div class="relative">
+						<Input
+							id="evacuee-search"
+							type="text"
+							placeholder="พิมพ์ ชื่อ-นามสกุล, บัตรประชาชน หรือเบอร์โทร (อย่างน้อย 2 ตัวอักษร)..."
+							bind:value={searchTerm}
+							bind:ref={searchInputRef}
+							onfocus={() => {
+								showDropdown = true;
+							}}
+							onkeydown={handleKeyDown}
+							disabled={!!selectedEvacuee}
+							class="pr-9 pl-9 {$errors.evacuee_id ? 'border-destructive' : ''}"
+						/>
+						<div class="absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">
+							{#if isSearching}
+								<Loader class="h-4 w-4 animate-spin" />
+							{:else}
+								<Search class="h-4 w-4" />
+							{/if}
 						</div>
-					{:else}
-						<div class="space-y-3">
-							<div class="relative">
-								{#if isSearching}
-									<Loader
-										class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground"
-									/>
-								{:else}
-									<Search
-										class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-									/>
-								{/if}
-								<Input
-									type="text"
-									placeholder="พิมพ์ ชื่อ-นามสกุล, บัตรประชาชน หรือเบอร์โทร เพื่อค้นหาผู้ประสบภัย..."
-									bind:value={searchQuery}
-									class="pl-9"
-								/>
-							</div>
+						{#if selectedEvacuee}
+							<button
+								type="button"
+								class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+								onclick={clearSelection}
+							>
+								<X class="h-4 w-4" />
+							</button>
+						{/if}
+					</div>
 
-							{#if foundEvacuees.length > 0}
-								<div
-									class="max-h-48 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-sm"
-								>
-									{#each foundEvacuees as person (person._id)}
-										<button
-											type="button"
-											onclick={() =>
-												selectEvacuee(person._id, `${person.first_name} ${person.last_name}`)}
-											class="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
-										>
-											<div>
-												<span class="font-medium">{person.first_name} {person.last_name}</span>
-												{#if person.phone}
-													<span class="ml-2 text-xs text-muted-foreground">({person.phone})</span>
-												{/if}
-											</div>
-											<span class="text-xs font-semibold text-primary">เลือก</span>
-										</button>
-									{/each}
-								</div>
-							{:else if debouncedSearchQuery && !isSearching}
-								<p class="px-2 py-1 text-xs text-muted-foreground">
-									ไม่พบรายชื่อผู้ประสบภัยที่ตรงกับคำค้นหา
-								</p>
+					{#if $errors.evacuee_id}
+						<p class="text-xs font-medium text-destructive">{$errors.evacuee_id}</p>
+					{/if}
+
+					<!-- Selected state chip -->
+					{#if selectedEvacuee}
+						<div
+							class="mt-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-sm font-semibold text-primary"
+						>
+							<User class="h-3.5 w-3.5" />
+							{selectedEvacuee.first_name}
+							{selectedEvacuee.last_name}
+							{#if selectedEvacuee.phone}
+								<span class="text-xs opacity-80">({selectedEvacuee.phone})</span>
 							{/if}
 						</div>
 					{/if}
 
-					{#if $errors.evacuee_id}
-						<p class="text-xs font-medium text-destructive">{$errors.evacuee_id}</p>
+					<!-- Autocomplete dropdown -->
+					{#if showDropdown && !selectedEvacuee && debouncedTerm.trim().length >= 2}
+						<div
+							class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-popover shadow-lg"
+							role="listbox"
+						>
+							{#if searchResults.isLoading}
+								<div class="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
+									<Loader class="h-3.5 w-3.5 animate-spin" />
+									กำลังค้นหา...
+								</div>
+							{:else if foundEvacuees.length > 0}
+								{#each foundEvacuees as evacuee (evacuee._id)}
+									<button
+										type="button"
+										role="option"
+										aria-selected={isSelected(evacuee._id)}
+										class="w-full border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-accent hover:text-accent-foreground"
+										onclick={() => selectEvacuee(evacuee)}
+									>
+										<div class="font-medium text-foreground">
+											{evacuee.first_name}
+											{evacuee.last_name}
+										</div>
+										<div class="mt-0.5 text-xs text-muted-foreground">
+											{#if evacuee.phone}เบอร์โทร: {evacuee.phone} ·
+											{/if}
+											ID: {evacuee._id}
+										</div>
+									</button>
+								{/each}
+							{:else}
+								<div class="px-3 py-2 text-sm text-muted-foreground">
+									ไม่พบผู้ประสบภัย "{debouncedTerm}"
+								</div>
+							{/if}
+						</div>
+					{:else if searchTerm.trim().length > 0 && searchTerm.trim().length < 2}
+						<p class="px-2 py-1 text-xs text-muted-foreground">
+							พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหาผู้ประสบภัย
+						</p>
 					{/if}
 				</div>
 
@@ -329,53 +412,37 @@
 							</Form.Control>
 							<Form.FieldErrors />
 						</Form.Field>
-					{:else if $formData.to_org}
-						<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-							<Form.Field {form} name="to_org.kind">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>ประเภทหน่วยงาน *</Form.Label>
-										<select
-											{...props}
-											bind:value={$formData.to_org!.kind}
-											class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-										>
-											<option value="hospital">สถานพยาบาล / โรงพยาบาล</option>
-											<option value="social_services">หน่วยงานสังคมสงเคราะห์ / พัฒนาสังคม</option>
-											<option value="other">อื่น ๆ</option>
-										</select>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
+					{:else}
+						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+							{#if $formData.to_org}
+								<Form.Field {form} name="to_org.name">
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label>ชื่อหน่วยงาน/สถานพยาบาล ปลายทาง *</Form.Label>
+											<Input
+												{...props}
+												bind:value={$formData.to_org.name}
+												placeholder="เช่น โรงพยาบาลมหาราช"
+											/>
+										{/snippet}
+									</Form.Control>
+									<Form.FieldErrors />
+								</Form.Field>
 
-							<Form.Field {form} name="to_org.name">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>ชื่อหน่วยงานปลายทาง *</Form.Label>
-										<Input
-											{...props}
-											bind:value={$formData.to_org!.name}
-											placeholder="ระบุชื่อหน่วยงาน/สถานที่"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
-
-							<Form.Field {form} name="to_org.contact">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label>เบอร์โทรติดต่อ (ถ้ามี)</Form.Label>
-										<Input
-											{...props}
-											bind:value={$formData.to_org!.contact}
-											placeholder="เบอร์โทรศัพท์ติดต่อ"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors />
-							</Form.Field>
+								<Form.Field {form} name="to_org.contact">
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label>ข้อมูลการติดต่อ / เบอร์โทรศัพท์</Form.Label>
+											<Input
+												{...props}
+												bind:value={$formData.to_org.contact}
+												placeholder="เช่น 053-123456"
+											/>
+										{/snippet}
+									</Form.Control>
+									<Form.FieldErrors />
+								</Form.Field>
+							{/if}
 						</div>
 					{/if}
 				</div>
@@ -437,12 +504,13 @@
 				</div>
 
 				<div class="flex items-center justify-end gap-3 border-t border-border/60 pt-4">
-					<Form.Button
+					<Button
+						type="submit"
 						disabled={$submitting}
 						class="w-32 bg-primary text-primary-foreground hover:bg-primary/95"
 					>
 						บันทึกร่าง
-					</Form.Button>
+					</Button>
 				</div>
 			</form>
 		</Card.Content>

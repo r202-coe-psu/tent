@@ -4,6 +4,8 @@ import { getShelterDb } from '$lib/db/shelter';
 import {
 	isReferral,
 	type Referral,
+	type ReferralFilter,
+	referralFilterSchema,
 	type ReferralInput,
 	type ReferralStatus,
 	buildReferralBody,
@@ -20,19 +22,30 @@ export class ReferralRemoteRepository implements ReferralRepository {
 		this.repo = createRemoteRepository(dbName);
 	}
 
-	async list(filter?: { status?: ReferralStatus; evacuee_id?: string }): Promise<Referral[]> {
+	async list(filter?: ReferralFilter): Promise<Referral[]> {
+		const parsed = referralFilterSchema.parse(filter ?? {});
 		const selector: Record<string, unknown> = {
 			type: 'referral'
 		};
 
-		if (filter?.status) {
-			selector.status = filter.status;
+		if (parsed.status) {
+			selector.status = parsed.status;
 		}
-		if (filter?.evacuee_id) {
-			selector.evacuee_id = filter.evacuee_id;
+		if (parsed.evacuee_id) {
+			selector.evacuee_id = parsed.evacuee_id;
 		}
 
-		const docs = await this.repo.find<Referral>({ selector });
+		const sort =
+			parsed.sort === 'created_at_asc'
+				? [{ type: 'asc' }, { created_at: 'asc' }]
+				: [{ type: 'desc' }, { created_at: 'desc' }];
+
+		const docs = await this.repo.find<Referral>({
+			selector,
+			limit: parsed.limit,
+			skip: parsed.skip,
+			sort
+		});
 		return docs.filter(isReferral);
 	}
 

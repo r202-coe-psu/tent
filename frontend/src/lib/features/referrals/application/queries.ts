@@ -6,18 +6,17 @@ import {
 } from '$lib/db/subscribe-data-changes';
 import { referralRepository } from '../data/referral.remote';
 import { authStore } from '$lib/stores/auth.svelte';
-import type { ReferralInput, ReferralStatus } from '../domain/referral.schema';
+import type { ReferralFilter, ReferralInput, ReferralStatus } from '../domain/referral.schema';
 
 export const referralKeys = {
 	all: ['referrals'] as const,
 	lists: () => [...referralKeys.all, 'list', getShelterCode()] as const,
-	list: (filter?: { status?: ReferralStatus; evacuee_id?: string }) =>
-		[...referralKeys.lists(), filter] as const,
+	list: (filter?: ReferralFilter) => [...referralKeys.lists(), filter] as const,
 	details: () => [...referralKeys.all, 'detail', getShelterCode()] as const,
 	detail: (id: string) => [...referralKeys.details(), id] as const
 };
 
-export const useReferrals = (filter?: { status?: ReferralStatus; evacuee_id?: string }) =>
+export const useReferrals = (filter?: ReferralFilter) =>
 	createQuery(() => ({
 		queryKey: referralKeys.list(filter),
 		queryFn: () => referralRepository().list(filter)

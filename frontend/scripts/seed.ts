@@ -543,6 +543,16 @@ async function deployMangoIndexes(db: string): Promise<void> {
 		name: 'referral-type-evacuee-idx',
 		type: 'json'
 	});
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'created_at', 'status', 'evacuee_id'] },
+		name: 'referral-list-sort-idx',
+		type: 'json'
+	});
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'created_at'] },
+		name: 'referral-list-basic-idx',
+		type: 'json'
+	});
 	console.log(`  ✓ ${db}: Mango indexes for referral deployed`);
 }
 

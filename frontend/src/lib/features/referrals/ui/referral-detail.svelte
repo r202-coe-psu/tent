@@ -39,10 +39,10 @@
 		showReasonPrompt = to;
 	}
 
-	function submitWithReason() {
+	async function submitWithReason() {
 		if (!showReasonPrompt) return;
 		const label = showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ';
-		handleTransition(showReasonPrompt, label, responseReasonInput.trim());
+		await handleTransition(showReasonPrompt, label, responseReasonInput.trim());
 	}
 
 	function getStatusLabel(status: ReferralStatus) {
