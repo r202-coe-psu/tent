@@ -188,3 +188,4 @@ SHELTER_REPORT_MUTATE_ROLES = ['shelter_manager']   // R3 — ขยาย array
 - 2026-07-23 — **rename ผลิตภัณฑ์:** หน่วยหลัก = **Report** · doc type **`shelter_report`** · `kind` = grievance|incident · route `/reports` · feature `shelter-reports` — supersede `shelter_report_case` / `/cases` / Shelter Report Case · sync `08-E-reports.md` + `shelter-report-flow.md`
 - 2026-07-23 — **approved** โดย project owner · ขั้นถัดไป: apply schema.md / PRD FR-47 / role-matrix / sitemap + feature flow `active` → แล้วปิด `done`
 - 2026-07-23 — **apply canonical + `done`:** schema.md §2.10 · data-model · ER · PRD FR-47/JTBD/glossary/scope · role-matrix · sitemap `/reports` · kickoff · squad-roster · schema-v3 status · feature flow active
+- 2026-07-23 — **Notion sync:** Project `08-E — Shelter Reports` · T-19/T-33 title+Brief+DoD+Tags · tag option rename · T-34/T-07 dependency wording
