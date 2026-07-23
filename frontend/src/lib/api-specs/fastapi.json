@@ -1,9 +1,6 @@
 {
 	"openapi": "3.1.0",
-	"info": {
-		"title": "IMPs FastAPI",
-		"version": "0.1.0"
-	},
+	"info": { "title": "IMPs FastAPI", "version": "0.1.0" },
 	"paths": {
 		"/v1/auth/verify": {
 			"get": {
@@ -15,19 +12,120 @@
 					"200": {
 						"description": "Successful Response",
 						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/VerifyResponse" } }
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/donations": {
+			"post": {
+				"tags": ["Donations"],
+				"summary": "Create Donation",
+				"operationId": "create_donation",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/DonationCreateRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
 							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/VerifyResponse"
-								}
+								"schema": { "$ref": "#/components/schemas/DonationCreateResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
 							}
 						}
 					}
 				},
-				"security": [
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/donations/{tracking_token}": {
+			"get": {
+				"tags": ["Donations"],
+				"summary": "Get Donation",
+				"operationId": "get_donation",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
 					{
-						"HTTPBearer": []
+						"name": "tracking_token",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Tracking Token" }
 					}
-				]
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/DonationTrackingResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			},
+			"patch": {
+				"tags": ["Donations"],
+				"summary": "Patch Donation Courier",
+				"description": "Update courier tracking on the Mongo intake buffer (pre-inbound only).",
+				"operationId": "patch_donation_courier",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "tracking_token",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Tracking Token" }
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/DonationCourierPatchRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/DonationCourierPatchResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
 			}
 		},
 		"/public/v1/family-search": {
@@ -38,11 +136,7 @@
 				"operationId": "search_evacuees",
 				"requestBody": {
 					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/SearchRequest"
-							}
-						}
+						"application/json": { "schema": { "$ref": "#/components/schemas/SearchRequest" } }
 					},
 					"required": true
 				},
@@ -50,31 +144,19 @@
 					"200": {
 						"description": "Successful Response",
 						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/SearchResponse"
-								}
-							}
+							"application/json": { "schema": { "$ref": "#/components/schemas/SearchResponse" } }
 						}
 					},
 					"429": {
 						"description": "Too Many Requests",
 						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ApiErrorResponse"
-								}
-							}
+							"application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } }
 						}
 					},
 					"422": {
-						"description": "Unprocessable Content",
+						"description": "Unprocessable Entity",
 						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ApiErrorResponse"
-								}
-							}
+							"application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } }
 						}
 					}
 				}
@@ -91,10 +173,23 @@
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HealthCheckResponse"
-								}
+								"schema": { "$ref": "#/components/schemas/HealthCheckResponse" }
 							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/needs": {
+			"get": {
+				"tags": ["Needs"],
+				"summary": "List Needs",
+				"operationId": "list_needs",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/NeedsListResponse" } }
 						}
 					}
 				}
@@ -111,47 +206,20 @@
 						"name": "province",
 						"in": "query",
 						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "Province"
-						}
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" }
 					},
 					{
 						"name": "district",
 						"in": "query",
 						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "District"
-						}
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" }
 					},
 					{
 						"name": "subdistrict",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
 							"title": "Subdistrict"
 						}
 					},
@@ -159,17 +227,7 @@
 						"name": "status",
 						"in": "query",
 						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "Status"
-						}
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Status" }
 					}
 				],
 				"responses": {
@@ -177,9 +235,7 @@
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ShelterListResponse"
-								}
+								"schema": { "$ref": "#/components/schemas/ShelterListResponse" }
 							}
 						}
 					},
@@ -187,9 +243,7 @@
 						"description": "Validation Error",
 						"content": {
 							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
 							}
 						}
 					}
@@ -201,39 +255,132 @@
 		"schemas": {
 			"ApiErrorBody": {
 				"properties": {
-					"code": {
-						"type": "string",
-						"title": "Code"
-					},
-					"message": {
-						"type": "string",
-						"title": "Message"
-					}
+					"code": { "type": "string", "title": "Code" },
+					"message": { "type": "string", "title": "Message" }
 				},
 				"type": "object",
 				"required": ["code", "message"],
 				"title": "ApiErrorBody"
 			},
 			"ApiErrorResponse": {
-				"properties": {
-					"error": {
-						"$ref": "#/components/schemas/ApiErrorBody"
-					}
-				},
+				"properties": { "error": { "$ref": "#/components/schemas/ApiErrorBody" } },
 				"type": "object",
 				"required": ["error"],
 				"title": "ApiErrorResponse"
 			},
+			"DonationCourierPatchRequest": {
+				"properties": {
+					"courier_tracking_no": { "type": "string", "title": "Courier Tracking No" }
+				},
+				"type": "object",
+				"required": ["courier_tracking_no"],
+				"title": "DonationCourierPatchRequest"
+			},
+			"DonationCourierPatchResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"message": {
+						"type": "string",
+						"title": "Message",
+						"default": "Courier tracking number updated"
+					}
+				},
+				"type": "object",
+				"title": "DonationCourierPatchResponse"
+			},
+			"DonationCreateRequest": {
+				"properties": {
+					"shelter_code": { "type": "string", "title": "Shelter Code" },
+					"campaign_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Campaign Id"
+					},
+					"donor": { "$ref": "#/components/schemas/DonorInput" },
+					"items": {
+						"items": { "$ref": "#/components/schemas/DonationItemInput" },
+						"type": "array",
+						"title": "Items"
+					},
+					"logistics": {
+						"anyOf": [{ "additionalProperties": true, "type": "object" }, { "type": "null" }],
+						"title": "Logistics"
+					},
+					"captchaToken": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Captchatoken"
+					}
+				},
+				"type": "object",
+				"required": ["shelter_code", "donor"],
+				"title": "DonationCreateRequest"
+			},
+			"DonationCreateResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"tracking_token": { "type": "string", "title": "Tracking Token" },
+					"booking_ref": { "type": "string", "title": "Booking Ref" }
+				},
+				"type": "object",
+				"required": ["tracking_token", "booking_ref"],
+				"title": "DonationCreateResponse"
+			},
+			"DonationItemInput": {
+				"properties": {
+					"item_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Item Id" },
+					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" },
+					"free_text": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Free Text"
+					},
+					"qty": {
+						"anyOf": [{ "type": "string" }, { "type": "number" }, { "type": "integer" }],
+						"title": "Qty"
+					},
+					"unit": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Unit" },
+					"condition": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Condition"
+					},
+					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" }
+				},
+				"type": "object",
+				"required": ["qty"],
+				"title": "DonationItemInput"
+			},
+			"DonationTrackingResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"donation": { "additionalProperties": true, "type": "object", "title": "Donation" }
+				},
+				"type": "object",
+				"required": ["donation"],
+				"title": "DonationTrackingResponse"
+			},
+			"DonorInput": {
+				"properties": {
+					"name": { "type": "string", "title": "Name" },
+					"phone": { "type": "string", "title": "Phone" },
+					"line_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Line Id" },
+					"email": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Email" }
+				},
+				"type": "object",
+				"required": ["name", "phone"],
+				"title": "DonorInput"
+			},
+			"FamilyMember": {
+				"properties": {
+					"name": { "type": "string", "title": "Name" },
+					"status": { "type": "string", "title": "Status" },
+					"shelter_name": { "type": "string", "title": "Shelter Name" }
+				},
+				"type": "object",
+				"required": ["name", "status", "shelter_name"],
+				"title": "FamilyMember"
+			},
 			"GeoPoint": {
 				"properties": {
-					"lat": {
-						"type": "number",
-						"title": "Lat"
-					},
-					"lng": {
-						"type": "number",
-						"title": "Lng"
-					}
+					"lat": { "type": "number", "title": "Lat" },
+					"lng": { "type": "number", "title": "Lng" }
 				},
 				"type": "object",
 				"required": ["lat", "lng"],
@@ -242,9 +389,7 @@
 			"HTTPValidationError": {
 				"properties": {
 					"errors": {
-						"items": {
-							"$ref": "#/components/schemas/ValidationError"
-						},
+						"items": { "$ref": "#/components/schemas/ValidationError" },
 						"type": "array",
 						"title": "Errors"
 					}
@@ -253,24 +398,39 @@
 				"title": "HTTPValidationError"
 			},
 			"HealthCheckResponse": {
-				"properties": {
-					"status": {
-						"type": "string",
-						"title": "Status"
-					}
-				},
+				"properties": { "status": { "type": "string", "title": "Status" } },
 				"type": "object",
 				"required": ["status"],
 				"title": "HealthCheckResponse"
 			},
+			"NeedItemResponse": {
+				"properties": {
+					"item_id": { "type": "string", "title": "Item Id" },
+					"name": { "type": "string", "title": "Name" },
+					"qty_needed": { "type": "string", "title": "Qty Needed" },
+					"unit": { "type": "string", "title": "Unit" },
+					"status": { "type": "string", "title": "Status" }
+				},
+				"type": "object",
+				"required": ["item_id", "name", "qty_needed", "unit", "status"],
+				"title": "NeedItemResponse"
+			},
+			"NeedsListResponse": {
+				"properties": {
+					"shelters": {
+						"items": { "$ref": "#/components/schemas/ShelterNeedsResponse" },
+						"type": "array",
+						"title": "Shelters"
+					},
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
+				},
+				"type": "object",
+				"required": ["shelters", "as_of"],
+				"title": "NeedsListResponse"
+			},
 			"SearchRequest": {
 				"properties": {
-					"search": {
-						"type": "string",
-						"maxLength": 200,
-						"minLength": 1,
-						"title": "Search"
-					}
+					"search": { "type": "string", "maxLength": 200, "minLength": 1, "title": "Search" }
 				},
 				"type": "object",
 				"required": ["search"],
@@ -279,21 +439,12 @@
 			"SearchResponse": {
 				"properties": {
 					"results": {
-						"items": {
-							"$ref": "#/components/schemas/SearchResult"
-						},
+						"items": { "$ref": "#/components/schemas/SearchResult" },
 						"type": "array",
 						"title": "Results"
 					},
-					"count": {
-						"type": "integer",
-						"title": "Count"
-					},
-					"as_of": {
-						"type": "string",
-						"format": "date-time",
-						"title": "As Of"
-					}
+					"count": { "type": "integer", "title": "Count" },
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
 				},
 				"type": "object",
 				"required": ["results", "count", "as_of"],
@@ -301,73 +452,30 @@
 			},
 			"SearchResult": {
 				"properties": {
-					"name": {
-						"type": "string",
-						"title": "Name"
-					},
-					"status": {
-						"type": "string",
-						"title": "Status"
-					},
+					"name": { "type": "string", "title": "Name" },
+					"status": { "type": "string", "title": "Status" },
 					"national_id": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "National Id"
 					},
-					"gender": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Gender"
-					},
-					"shelter_name": {
-						"type": "string",
-						"title": "Shelter Name"
-					},
+					"gender": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Gender" },
+					"shelter_name": { "type": "string", "title": "Shelter Name" },
 					"origin_address": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Origin Address"
 					},
 					"checked_in_at": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
 						"title": "Checked In At"
 					},
 					"care_zone": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Care Zone"
+					},
+					"family_members": {
+						"items": { "$ref": "#/components/schemas/FamilyMember" },
+						"type": "array",
+						"title": "Family Members"
 					}
 				},
 				"type": "object",
@@ -376,72 +484,18 @@
 			},
 			"ShelterItem": {
 				"properties": {
-					"code": {
-						"type": "string",
-						"title": "Code",
-						"description": "Shelter code, e.g. SH001"
-					},
-					"name": {
-						"type": "string",
-						"title": "Name"
-					},
-					"status": {
-						"type": "string",
-						"title": "Status"
-					},
-					"capacity": {
-						"type": "integer",
-						"title": "Capacity",
-						"default": 0
-					},
-					"geo": {
-						"anyOf": [
-							{
-								"$ref": "#/components/schemas/GeoPoint"
-							},
-							{
-								"type": "null"
-							}
-						]
-					},
-					"province": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Province"
-					},
-					"district": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "District"
-					},
+					"code": { "type": "string", "title": "Code", "description": "Shelter code, e.g. SH001" },
+					"name": { "type": "string", "title": "Name" },
+					"status": { "type": "string", "title": "Status" },
+					"capacity": { "type": "integer", "title": "Capacity", "default": 0 },
+					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
+					"province": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" },
+					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
 					"subdistrict": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Subdistrict"
 					},
-					"updated_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Updated At"
-					}
+					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},
 				"type": "object",
 				"required": ["code", "name", "status", "updated_at"],
@@ -450,79 +504,53 @@
 			"ShelterListResponse": {
 				"properties": {
 					"shelters": {
-						"items": {
-							"$ref": "#/components/schemas/ShelterItem"
-						},
+						"items": { "$ref": "#/components/schemas/ShelterItem" },
 						"type": "array",
 						"title": "Shelters"
 					},
-					"count": {
-						"type": "integer",
-						"title": "Count"
-					},
-					"as_of": {
-						"type": "string",
-						"format": "date-time",
-						"title": "As Of"
-					}
+					"count": { "type": "integer", "title": "Count" },
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
 				},
 				"type": "object",
 				"required": ["shelters", "count", "as_of"],
 				"title": "ShelterListResponse"
 			},
+			"ShelterNeedsResponse": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"name": { "type": "string", "title": "Name" },
+					"needs": {
+						"items": { "$ref": "#/components/schemas/NeedItemResponse" },
+						"type": "array",
+						"title": "Needs"
+					}
+				},
+				"type": "object",
+				"required": ["code", "name", "needs"],
+				"title": "ShelterNeedsResponse"
+			},
 			"ValidationError": {
 				"properties": {
 					"loc": {
-						"items": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "integer"
-								}
-							]
-						},
+						"items": { "anyOf": [{ "type": "string" }, { "type": "integer" }] },
 						"type": "array",
 						"title": "Location"
 					},
-					"msg": {
-						"type": "string",
-						"title": "Message"
-					},
-					"type": {
-						"type": "string",
-						"title": "Error Type"
-					},
-					"input": {
-						"title": "Input"
-					},
-					"ctx": {
-						"type": "object",
-						"title": "Context"
-					}
+					"msg": { "type": "string", "title": "Message" },
+					"type": { "type": "string", "title": "Error Type" },
+					"input": { "title": "Input" },
+					"ctx": { "type": "object", "title": "Context" }
 				},
 				"type": "object",
 				"required": ["loc", "msg", "type"],
 				"title": "ValidationError"
 			},
 			"VerifyResponse": {
-				"properties": {
-					"status": {
-						"type": "string",
-						"title": "Status",
-						"default": "ok"
-					}
-				},
+				"properties": { "status": { "type": "string", "title": "Status", "default": "ok" } },
 				"type": "object",
 				"title": "VerifyResponse"
 			}
 		},
-		"securitySchemes": {
-			"HTTPBearer": {
-				"type": "http",
-				"scheme": "bearer"
-			}
-		}
+		"securitySchemes": { "HTTPBearer": { "type": "http", "scheme": "bearer" } }
 	}
 }
