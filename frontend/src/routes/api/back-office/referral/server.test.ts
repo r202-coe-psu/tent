@@ -20,11 +20,13 @@ vi.mock('$lib/server/couch-admin', () => ({
 
 const mockList = vi.fn();
 const mockCreate = vi.fn();
+const mockHasActiveReferral = vi.fn();
 
 vi.mock('$lib/features/referrals/server/referral.server-repository', () => {
 	class MockReferralServerRepository {
 		list = mockList;
 		create = mockCreate;
+		hasActiveReferral = mockHasActiveReferral;
 	}
 	return {
 		CouchDbReferralServerRepository: MockReferralServerRepository
@@ -74,6 +76,7 @@ const sampleEvacuee = {
 describe('BFF Referral List and Create Endpoints', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		mockHasActiveReferral.mockResolvedValue(false);
 	});
 
 	describe('GET /api/back-office/referral', () => {
@@ -217,6 +220,60 @@ describe('BFF Referral List and Create Endpoints', () => {
 
 			const data = await res.json();
 			expect(data.error).toBe('Validation failed');
+		});
+
+		it('returns 422 on self-referral capacity request (FR-001)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'sm_user',
+				roles: ['shelter_manager', 'shelter:SH001'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+
+			const event = createMockEvent(
+				{},
+				{
+					referral_type: 'capacity',
+					evacuee_id: 'evacuee:1',
+					to_shelter_code: 'SH001',
+					reason: 'Capacity transfer',
+					urgency: 'normal'
+				}
+			);
+			const res = await POST(event);
+			expect(res.status).toBe(422);
+
+			const data = await res.json();
+			expect(data.error).toBe('ไม่สามารถส่งต่อผู้ประสบภัยไปยังศูนย์พักพิงเดียวกันได้');
+		});
+
+		it('returns 409 when duplicate active referral exists (FR-002)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'sm_user',
+				roles: ['shelter_manager', 'shelter:SH001'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			vi.mocked(adminRaw).mockResolvedValue({ status: 200, data: sampleEvacuee });
+			mockHasActiveReferral.mockResolvedValue(true);
+
+			const event = createMockEvent(
+				{},
+				{
+					referral_type: 'capacity',
+					evacuee_id: 'evacuee:1',
+					to_shelter_code: 'SH002',
+					reason: 'Capacity transfer',
+					urgency: 'normal'
+				}
+			);
+			const res = await POST(event);
+			expect(res.status).toBe(409);
+
+			const data = await res.json();
+			expect(data.error).toBe(
+				'ผู้ประสบภัยรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน'
+			);
 		});
 	});
 });

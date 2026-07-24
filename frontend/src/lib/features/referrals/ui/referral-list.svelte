@@ -14,7 +14,10 @@
 		getStatusLabel,
 		getUrgencyLabel,
 		getUrgencyStyle,
-		isIncomingListItem
+		isIncomingListItem,
+		getReferralDirection,
+		getDirectionLabel,
+		getDirectionBadgeVariant
 	} from './referral.ui-helpers';
 
 	let {
@@ -175,6 +178,19 @@
 							<Badge class="{getStatusBadgeVariant(referral.status)} h-4 px-1 text-[10px]">
 								{getStatusLabel(referral.status)}
 							</Badge>
+							{#if referral.referral_type === 'capacity'}
+								{@const direction = getReferralDirection(referral)}
+								{#if direction !== 'internal'}
+									<Badge class="{getDirectionBadgeVariant(direction)} h-4 px-1 text-[10px]">
+										{getDirectionLabel(direction)}
+										{#if direction === 'outgoing'}
+											→ {referral.to_shelter_code}
+										{:else if direction === 'incoming'}
+											← {referral.shelter_code}
+										{/if}
+									</Badge>
+								{/if}
+							{/if}
 							{#if referral.reason}
 								<span class="inline truncate text-xs text-muted-foreground sm:hidden">
 									| {referral.reason}

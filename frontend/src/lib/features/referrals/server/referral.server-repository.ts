@@ -300,6 +300,20 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		return (data.docs || []).filter((d): d is Referral => isReferral(d));
 	}
 
+	async hasActiveReferral(evacueeId: string): Promise<boolean> {
+		const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', {
+			selector: {
+				type: 'referral',
+				evacuee_id: evacueeId,
+				status: { $nin: ['closed', 'rejected'] }
+			},
+			limit: 1,
+			fields: ['_id']
+		});
+		if (status !== HTTP_OK) return false;
+		return (data.docs || []).length > 0;
+	}
+
 	async get(id: string): Promise<Referral | null> {
 		const { status, data } = await this.couchGet<unknown>(
 			this.dbName,

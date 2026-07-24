@@ -1,4 +1,10 @@
-import type { ReferralStatus, ReferralType, ReferralUrgency } from '../domain/referral.schema';
+import type {
+	Referral,
+	ReferralStatus,
+	ReferralType,
+	ReferralUrgency
+} from '../domain/referral.schema';
+import { getShelterCode } from '$lib/db/shelter';
 
 export function getStatusLabel(status: ReferralStatus, options?: { verbose?: boolean }): string {
 	const labels: Record<ReferralStatus, { short: string; verbose: string }> = {
@@ -89,4 +95,27 @@ export function isIncomingListItem(
 		referral.to_shelter_code.toUpperCase() === actorShelter.toUpperCase() &&
 		referral.shelter_code.toUpperCase() !== actorShelter.toUpperCase()
 	);
+}
+
+export function getReferralDirection(referral: Referral): 'outgoing' | 'incoming' | 'internal' {
+	const currentShelter = getShelterCode();
+	if (referral.referral_type !== 'capacity') return 'internal';
+	if (referral.shelter_code === currentShelter && referral.to_shelter_code) return 'outgoing';
+	if (referral.to_shelter_code === currentShelter) return 'incoming';
+	return 'internal';
+}
+
+export function getDirectionLabel(direction: 'outgoing' | 'incoming' | 'internal'): string {
+	const labels = { outgoing: 'ขาออก', incoming: 'ขาเข้า', internal: 'ภายใน' };
+	return labels[direction];
+}
+
+export function getDirectionBadgeVariant(direction: 'outgoing' | 'incoming' | 'internal'): string {
+	const variants = {
+		outgoing: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300',
+		incoming:
+			'bg-green-100 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300',
+		internal: 'bg-gray-100 text-gray-600 border-gray-200'
+	};
+	return variants[direction];
 }

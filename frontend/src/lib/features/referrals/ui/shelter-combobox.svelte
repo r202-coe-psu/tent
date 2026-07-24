@@ -9,13 +9,15 @@
 		error,
 		onSelect,
 		validate,
-		id
+		id,
+		excludeCode
 	}: {
 		value?: string;
 		error?: string | string[];
 		onSelect?: (code: string) => void;
 		validate?: () => void;
 		id?: string;
+		excludeCode?: string;
 	} = $props();
 
 	const errorMessage = $derived(Array.isArray(error) ? error[0] : error);
@@ -26,6 +28,7 @@
 	const availableShelters = $derived(
 		allShelters
 			.filter((s) => s.operation_status !== 'closed')
+			.filter((s) => !excludeCode || s.code.toUpperCase() !== excludeCode.toUpperCase())
 			.sort((a, b) => a.name.localeCompare(b.name, 'th'))
 	);
 
