@@ -2,6 +2,8 @@
 	import { tick } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
 	import X from '@lucide/svelte/icons/x';
+	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { useShelters, type ShelterSummary } from '$lib/features/shelters';
 
 	let {
@@ -150,7 +152,7 @@
 			aria-expanded={isOpen}
 			aria-controls="shelter-listbox"
 			aria-autocomplete="list"
-			aria-invalid={!!errorMessage}
+			aria-invalid={!!errorMessage || sheltersQuery.isError}
 			disabled={sheltersQuery.isPending}
 			value={isOpen ? searchTerm : displayValue()}
 			onfocus={() => {
@@ -168,9 +170,11 @@
 			onkeydown={handleKeyDown}
 			placeholder={sheltersQuery.isPending
 				? 'กำลังโหลดรายชื่อศูนย์พักพิง...'
-				: 'เลือกศูนย์พักพิงปลายทาง...'}
+				: sheltersQuery.isError
+					? 'เกิดข้อผิดพลาดในการโหลดรายชื่อศูนย์พักพิง'
+					: 'เลือกศูนย์พักพิงปลายทาง...'}
 			class="flex h-10 w-full rounded-md border bg-background px-3 py-2 pr-8 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50
-			{errorMessage
+			{errorMessage || sheltersQuery.isError
 				? 'border-destructive focus-visible:ring-destructive'
 				: 'border-input focus-visible:ring-ring'}"
 		/>
@@ -193,6 +197,26 @@
 			{#if sheltersQuery.isPending}
 				<div class="p-4 text-center text-sm text-muted-foreground">
 					กำลังโหลดรายชื่อศูนย์พักพิง...
+				</div>
+			{:else if sheltersQuery.isError}
+				<div
+					class="flex flex-col items-center justify-center gap-2 p-4 text-center text-sm text-destructive"
+				>
+					<div class="flex items-center gap-1.5 font-medium">
+						<AlertCircle class="h-4 w-4 shrink-0" />
+						<span>ไม่สามารถโหลดรายชื่อศูนย์พักพิงได้</span>
+					</div>
+					<p class="text-xs text-muted-foreground">
+						{sheltersQuery.error?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ'}
+					</p>
+					<button
+						type="button"
+						onclick={() => sheltersQuery.refetch()}
+						class="mt-1 inline-flex items-center gap-1.5 rounded-md bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 focus:outline-none"
+					>
+						<RefreshCw class="h-3.5 w-3.5" />
+						ลองอีกครั้ง
+					</button>
 				</div>
 			{:else if availableShelters.length === 0}
 				<div class="p-4 text-center text-sm text-muted-foreground">
@@ -254,7 +278,21 @@
 		</div>
 	{/if}
 
-	{#if errorMessage}
+	{#if sheltersQuery.isError && !isOpen}
+		<div class="mt-1 flex items-center justify-between text-xs text-destructive">
+			<span class="flex items-center gap-1">
+				<AlertCircle class="h-3.5 w-3.5" />
+				โหลดรายชื่อศูนย์พักพิงไม่สำเร็จ
+			</span>
+			<button
+				type="button"
+				onclick={() => sheltersQuery.refetch()}
+				class="font-medium underline hover:text-destructive/80"
+			>
+				ลองอีกครั้ง
+			</button>
+		</div>
+	{:else if errorMessage}
 		<p class="mt-1 text-sm text-destructive">{errorMessage}</p>
 	{/if}
 </div>
