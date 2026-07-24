@@ -57,13 +57,15 @@ affects:
 ## Migration
 Doc type ใหม่ — **ยังไม่มี doc เดิมในฐานข้อมูล ไม่ต้อง backfill**. `schema_v` ตั้งต้น = 1 (`DAILY_CALC_SCHEMA_VERSION`). Zod `dailyCalcDocSchema` (T-31.2) เป็น validation boundary; repository `.parse()` ก่อน persist.
 
-## Open decisions — ต้องเคาะก่อน approve
-> [NEEDS DECISION 1 — CR-006 drill-down traceability] schema ปัจจุบันเก็บแค่ `sop_profile_version` แต่ **ไม่มี** `ratio_source` (`master`|`override`) และ `sop_override_id`/`sop_override_version`. แต่ 07-B T-32 (drill-down) + CR-006 ระบุว่าต้อง "ระบุด้วยว่า ratio มาจาก master หรือ override ของศูนย์". → ตัดสินว่าจะเพิ่ม 3 field นี้ใน `daily_calc` หรือไม่ (กระทบ §2.15 + snapshot builder + Zod schema). ถ้าเพิ่ม = ขยาย `dailyCalcDocSchema` (แก้ code T-31.2 ด้วย)
+## Open decisions — ปิดแล้ว
 
-> [NEEDS DECISION 2 — `have` (stock/facility) mapping] mapping "SOP ratio key → item ในคลัง / จำนวน facility" ยังไม่มี spec. ปัจจุบัน `resolveHave` lookup ตรงด้วยชื่อ ratio key; key ที่ยัง map ไม่ได้ → `have=null` → `data_status:stock_unsynced` (ไม่ใส่ 0 มั่ว). `divide`/`threshold` หลายตัว (toilet/tap/volunteer/queue) ต้องการ facility count ไม่ใช่ stock — ต้อง define แหล่งข้อมูล. → ระบุ mapping (อาจแยกเป็น CR ของ T-32 หรือ task ต่อ)
+> ~~NEEDS DECISION 1~~ → **ปิดที่ [CR-042](CR-042-daily-sop-calc-follow-up.md) OD-1=A** (เพิ่ม `ratio_source` + `sop_override_id` + `sop_override_version` · schema_v 2)
+
+> ~~NEEDS DECISION 2~~ → **ปิดที่ [CR-042](CR-042-daily-sop-calc-follow-up.md) OD-2=B** (hardcode `have` map ใน code + ตารางใน CR-042)
 
 ## Decision log
 - 2026-07-08 — proposed as CR-035; renumbered CR-035→CR-036 (2026-07-09) to resolve number collision (PM). track = ไฟล์ CR ตามที่เจ้าของสั่ง; code T-31.4 พร้อมและผ่าน gate (`pnpm check` 0 error, unit test 8/8, lint สะอาด) รอเคาะ Open decisions + approve ก่อน apply schema.md §2.15
 - 2026-07-09 — approved by project owner. Open decisions will be resolved in a follow-up task.
 - 2026-07-12 — applied `schema.md §2.15` (baseline: 7 fields ตรงกับ `dailyCalcDocSchema` ที่ code persist จริง). Open decision #1 (`ratio_source`/`sop_override_id`) + #2 (`have` mapping) ยังเลื่อนเป็น follow-up — ไม่รวมใน baseline นี้.
 - 2026-07-15 — Open decision #1/#2 ย้ายไปปิดที่ [CR-042](CR-042-daily-sop-calc-follow-up.md) (`proposed`) พร้อม OD-3 scheduled run + OD-4 downstream feed; คู่ feature flow `docs/features/daily-sop-resource-calc-flow.md`.
+- 2026-07-23 — Open decision #1/#2 **ปิด** ผ่าน CR-042 `approved` (OD-1=A · OD-2=B · OD-3=A · OD-4=C). schema.md §2.15 bump เป็น schema_v 2.

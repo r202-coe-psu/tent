@@ -164,7 +164,7 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 
 **Roles:** `SA ✓ · SM scope · VOL scope` — ดู [role-permission-matrix §3](../prd/role-permission-matrix.md#3-action-matrix--r2)
 
-**Description:** บันทึกสัตว์เลี้ยง (ประเภท, จำนวน, กรง), ทรัพย์สิน และยานพาหนะที่นำติดตัวมา ผูกกับ **person หรือ household** (source ส่วนที่ 1 ข้อ 3 — Assets & Pets) ข้อมูลสัตว์เลี้ยงเป็น input การจัดโซนสัตว์เลี้ยง (T-09) และ related `pet_refs` ของ shelter report case (T-33 / CR-040)
+**Description:** บันทึกสัตว์เลี้ยง (ประเภท, จำนวน, กรง), ทรัพย์สิน และยานพาหนะที่นำติดตัวมา ผูกกับ **person หรือ household** (source ส่วนที่ 1 ข้อ 3 — Assets & Pets) ข้อมูลสัตว์เลี้ยงเป็น input การจัดโซนสัตว์เลี้ยง (T-09) และ related `pet_refs` ของ shelter report (T-33 / CR-040)
 
 **Definition of Done:**
 - CRUD pet/asset/vehicle ผูก person หรือ household พร้อมประเภทตามรายการที่ design (P-01) กำหนด — บันทึกได้โดยไม่ block registration flow

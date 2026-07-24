@@ -2,7 +2,7 @@
 title: Full-System PRD Artifacts Index
 status: active
 created: 2026-06-03
-updated: 2026-07-07
+updated: 2026-07-23
 ---
 
 # Smart Shelter — Full-System PRD
@@ -20,7 +20,7 @@ updated: 2026-07-07
 - [**Full-System Kickoff**](kickoff.html) — เอกสารตัวเดียวรวม full scope + timeline + team + man-power + สิ่งที่ทีมต้องรู้ ฐานสำหรับทำ slide ประชุม kickoff
 - [**Release Roadmap**](roadmap.html) — master timeline มิ.ย.–ก.ย. + maintenance, gates, team model, dependency order, risks
 - [**Phase R2 — Foundation**](phase-r2-foundation.html) *(มิ.ย.–ก.ค. · Foundation Gate 17 ก.ค.)* — Baseline FR-1–20, Household, Zoning, Inventory/Supply (Module C), Donation intake, RBAC extension. FR-21..FR-34
-- [**Phase R3 — Operations**](phase-r3-operations.html) *(ก.ค.–ส.ค. · Operations Gate 22 ส.ค.)* — Donation full, Kitchen (Module D), Volunteer (Module A), SOP calculator (Module B), Security+Referral (Modules E+F). FR-35..FR-48
+- [**Phase R3 — Operations**](phase-r3-operations.html) *(ก.ค.–ส.ค. · Operations Gate 22 ส.ค.)* — Donation full, Kitchen (Module D), Volunteer (Module A), SOP calculator (Module B), Shelter Reports+Referral (Modules E+F). FR-35..FR-48
 - [**Phase R4 — Integration & Handover**](phase-r4-integration-handover.html) *(in-scope ส.ค.: Family Search + governance + handover · deferred ≤14 ก.ย.: EOC API + Open API + SOP simulation)* — FR-49..FR-56
 - [**Task Breakdown by Module**](../task-breakdown/_index.md) — **master WBS** ทุก task (T-01..T-55) + effort/AI uplift + dependencies/gantt *(แทนที่ task-breakdown.md เดิมในชุดนี้ — ลบแล้ว 2026-06-11)*
 

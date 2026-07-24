@@ -2,7 +2,7 @@
 title: "Full-System Kickoff — Smart Shelter (มิ.ย.–ก.ย. 2026 + maintenance)"
 status: active
 created: 2026-06-03
-updated: 2026-07-07
+updated: 2026-07-23
 purpose: Single source for full-scope + timeline kickoff; basis for presentation slides
 note: ปรับตาม schedule decision 2026-06-09 + decision sync 2026-06-15 (teams, RBAC approved, MongoDB EOC read-model)
 ---
@@ -50,10 +50,10 @@ note: ปรับตาม schedule decision 2026-06-09 + decision sync 2026-06
 
 | หัวข้อ | สาระ |
 | --- | --- |
-| **ทำอะไร** | build **full software platform จากศูนย์ (greenfield)**: Baseline registration-first (FR-1–20), Household, Inventory, Donation, Kitchen, Volunteer, SOP, Security, Referral, Family Search + (deferred) EOC/Open API |
+| **ทำอะไร** | build **full software platform จากศูนย์ (greenfield)**: Baseline registration-first (FR-1–20), Household, Inventory, Donation, Kitchen, Volunteer, SOP, Shelter Reports, Referral, Family Search + (deferred) EOC/Open API |
 | **เมื่อไร** | **build = มิ.ย.–ส.ค. 2026** · in-scope ส่งมอบ **31 ส.ค.** · **go-live full program ก.ย.** (สัปดาห์ 1) · deferred tail ≤ **14 ก.ย.** (hard deadline งาน feature) |
 | **หลัง go-live** | รับ feedback + แก้ไข (maintenance) จนครบกำหนดโครงการ **12 เดือน** — ไม่มี feature ใหม่หลัง 14 ก.ย. |
-| **ใคร** | นักศึกษา **14 คน = 2 Lead (Platform/Core) + 4 ทีม × 3** — Lead แจ็ก/เด่น; Team A Donation+Volunteer; Team B People+Family Search+Security; Team C Supply+Kitchen; Team D SOP+Referral |
+| **ใคร** | นักศึกษา **14 คน = 2 Lead (Platform/Core) + 4 ทีม × 3** — Lead แจ็ก/เด่น; Team A Donation+Volunteer; Team B People+Family Search+Shelter Reports; Team C Supply+Kitchen; Team D SOP+Referral |
 | **stack หลัก** | **remote-first บน CouchDB ด้วย active endpoint model** (Central-first, Edge fallback เมื่อจำเป็น, active endpoint เดียวต่อช่วงเวลา, disconnected status-only (no read-only local cache)); public tier และ EOC/Open API read-model ใช้ **MongoDB projection** จาก Central CouchDB |
 | **scope** | in-scope ส.ค.: Baseline + R2 + R3 + Family Search + governance · deferred ≤14 ก.ย.: EOC aggregate API, Open API, SOP simulation, inventory polish |
 | **งานรวม** | นักศึกษา (prod+post) **250 Adj MD** หลัง AI uplift + pre-production บริษัท 30 — ดู [Task Breakdown](../task-breakdown/_index.md) |
@@ -104,7 +104,7 @@ Baseline build เสร็จเมื่อ scenarios เหล่านี้
 | Back | **Module D: Kitchen & Food** (meal plan, requisition, service) | ก.ค.–ส.ค. (R3) | 🔜 |
 | Back | **Module A: Volunteer** (register, skill match, shift) | ก.ค.–ส.ค. (R3) | 🔜 |
 | Back | **Module B: SOP Resource Calculator** | ก.ค.–ส.ค. (R3) | 🔜 |
-| Back | **Module E: Security** + **Module F: Referral** | ก.ค.–ส.ค. (R3) | 🔜 |
+| Back | **Module E: Shelter Reports** + **Module F: Referral** | ก.ค.–ส.ค. (R3) | 🔜 |
 | Top | **Public family search** (privacy-preserving) + RoPA minimal | ส.ค. (R4 in-scope) | 🔜 |
 | Top | **EOC aggregate API + Open API** → One Data / Hat Yai ROD *(service แยก, FD-14)* | deferred ≤14 ก.ย. | 🔜 |
 | Cross | Cross-module UAT, hardening, handover | ส.ค. | 🔜 |
@@ -120,7 +120,7 @@ Baseline build เสร็จเมื่อ scenarios เหล่านี้
 | 10 มิ.ย. | Kickoff Lead — walking skeleton เริ่มทันที | repo/CI, auth/RBAC skeleton, CouchDB schema + sync design, 1 vertical slice | — |
 | 17 มิ.ย. | Workshop — 4 ทีมเริ่มงาน | Baseline + R2 ขนาน | 1–20 |
 | มิ.ย.–ก.ค. | **Foundation Gate 17 ก.ค.** | Baseline เต็ม + Household, Zoning, Inventory(C), Donation intake, RBAC ext | 1–34 |
-| ก.ค.–ส.ค. | **Operations Gate 22 ส.ค.** | Donation full, Kitchen(D), Volunteer(A), SOP(B), Security+Referral(E+F) | 35–48 |
+| ก.ค.–ส.ค. | **Operations Gate 22 ส.ค.** | Donation full, Kitchen(D), Volunteer(A), SOP(B), Shelter Reports+Referral(E+F) | 35–48 |
 | ส.ค. (ขนาน) | — | Family search + consent, RoPA minimal, cross-module UAT, hardening, handover | 52, 53, 55, 56 |
 | **31 ส.ค.** | **In-scope ส่งมอบ** | ทั้งหมดข้างต้นครบ | — |
 | **ก.ย. wk1** | **Go-live full program** | ใช้งานจริงก่อนฤดูเสี่ยง | — |
@@ -164,7 +164,7 @@ Baseline build เสร็จเมื่อ scenarios เหล่านี้
 | --- | --- | --- | --- |
 | **Lead pair** Platform/Core ⭐ | 2 | แจ็ก/เด่น — auth, RBAC, data model, shared API, remote-first CouchDB active-endpoint orchestration (Central-first + Edge fallback), DevOps, integration + integrator/review; EOC deferred owner | ตลอด |
 | **Team A** | 3 | ชิโน/นัท/กาน — Donation + Volunteer | R2-R3 |
-| **Team B** | 3 | พีค/โฮป/ปิ๊ก — People/Household + Family Search + Security | R2-R4 |
+| **Team B** | 3 | พีค/โฮป/ปิ๊ก — People/Household + Family Search + Shelter Reports | R2-R4 |
 | **Team C** | 3 | ก้อง/มิว/พัฟ — Supply/Inventory + Kitchen/Food | R2-R3 |
 | **Team D** | 3 | เน/ภูดิท/วิลเลียม — SOP/Resource Calc + Referral; support EOC after SOP/Referral stabilized | R2-R4 |
 
@@ -177,7 +177,7 @@ Baseline build เสร็จเมื่อ scenarios เหล่านี้
 | Donation | 24.5 | feed inventory |
 | Kitchen & Food | 15.5 | ขึ้นกับ Supply (requisition) |
 | Volunteer & SOP | 24.5 | SOP calc ขึ้นกับ resource (T-31) |
-| Security/Referral/EOC | 26 | EOC = aggregate API service แยก (FD-14), deferred |
+| Shelter Reports/Referral/EOC | 26 | EOC = aggregate API service แยก (FD-14), deferred |
 | _Platform/Core (Lead pair)_ | 58 | คอขวด ทุกทีมขึ้นกับ |
 | _Q-02 support buffer_ | 15.5 | เฉลี่ยทุกทีม |
 | **รวม** | **250** | |
@@ -186,7 +186,7 @@ Baseline build เสร็จเมื่อ scenarios เหล่านี้
 
 **ข้อควรจัดการ:**
 - **Pre-production (บริษัท): P-01 ส่งแล้ว ไม่ block; P-02 ต้องเสร็จก่อน ก.ค.** มิฉะนั้นทีมรอ design
-- มิ.ย.–ก.ค.: ทีมที่ยังไม่มี module หลัก (Kitchen/Volunteer/Security) → มอบ **groundwork จริง** (schema, prototype, เก็บค่า SOP) อย่าให้ idle
+- มิ.ย.–ก.ค.: ทีมที่ยังไม่มี module หลัก (Kitchen/Volunteer/Shelter Reports) → มอบ **groundwork จริง** (schema, prototype, เก็บค่า SOP) อย่าให้ idle
 - ทีม 3 คน ต้อง cross-train ในทีม; **Lead pair floating** ช่วยทีมที่ติด dependency
 
 ---

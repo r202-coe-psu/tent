@@ -24,6 +24,44 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/donations': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Create Donation */
+		post: operations['create_donation'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/donations/{tracking_token}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Donation */
+		get: operations['get_donation'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		/**
+		 * Patch Donation Courier
+		 * @description Update courier tracking on the Mongo intake buffer (pre-inbound only).
+		 */
+		patch: operations['patch_donation_courier'];
+		trace?: never;
+	};
 	'/public/v1/family-search': {
 		parameters: {
 			query?: never;
@@ -57,6 +95,23 @@ export interface paths {
 		 *     Returns a simple message indicating the service is healthy.
 		 */
 		get: operations['health_check'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/needs': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** List Needs */
+		get: operations['list_needs'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -100,6 +155,101 @@ export interface components {
 		ApiErrorResponse: {
 			error: components['schemas']['ApiErrorBody'];
 		};
+		/** DonationCourierPatchRequest */
+		DonationCourierPatchRequest: {
+			/** Courier Tracking No */
+			courier_tracking_no: string;
+		};
+		/** DonationCourierPatchResponse */
+		DonationCourierPatchResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Message
+			 * @default Courier tracking number updated
+			 */
+			message: string;
+		};
+		/** DonationCreateRequest */
+		DonationCreateRequest: {
+			/** Shelter Code */
+			shelter_code: string;
+			/** Campaign Id */
+			campaign_id?: string | null;
+			donor: components['schemas']['DonorInput'];
+			/** Items */
+			items?: components['schemas']['DonationItemInput'][];
+			/** Logistics */
+			logistics?: {
+				[key: string]: unknown;
+			} | null;
+			/** Captchatoken */
+			captchaToken?: string | null;
+		};
+		/** DonationCreateResponse */
+		DonationCreateResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Tracking Token */
+			tracking_token: string;
+			/** Booking Ref */
+			booking_ref: string;
+		};
+		/** DonationItemInput */
+		DonationItemInput: {
+			/** Item Id */
+			item_id?: string | null;
+			/** Category */
+			category?: string | null;
+			/** Free Text */
+			free_text?: string | null;
+			/** Qty */
+			qty: string | number;
+			/** Unit */
+			unit?: string | null;
+			/** Condition */
+			condition?: string | null;
+			/** Note */
+			note?: string | null;
+		};
+		/** DonationTrackingResponse */
+		DonationTrackingResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Donation */
+			donation: {
+				[key: string]: unknown;
+			};
+		};
+		/** DonorInput */
+		DonorInput: {
+			/** Name */
+			name: string;
+			/** Phone */
+			phone: string;
+			/** Line Id */
+			line_id?: string | null;
+			/** Email */
+			email?: string | null;
+		};
+		/** FamilyMember */
+		FamilyMember: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** Shelter Name */
+			shelter_name: string;
+		};
 		/** GeoPoint */
 		GeoPoint: {
 			/** Lat */
@@ -117,6 +267,29 @@ export interface components {
 			/** Status */
 			status: string;
 		};
+		/** NeedItemResponse */
+		NeedItemResponse: {
+			/** Item Id */
+			item_id: string;
+			/** Name */
+			name: string;
+			/** Qty Needed */
+			qty_needed: string;
+			/** Unit */
+			unit: string;
+			/** Status */
+			status: string;
+		};
+		/** NeedsListResponse */
+		NeedsListResponse: {
+			/** Shelters */
+			shelters: components['schemas']['ShelterNeedsResponse'][];
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
 		/** SearchRequest */
 		SearchRequest: {
 			/** Search */
@@ -133,15 +306,6 @@ export interface components {
 			 * Format: date-time
 			 */
 			as_of: string;
-		};
-		/** FamilyMember */
-		FamilyMember: {
-			/** Name */
-			name: string;
-			/** Status */
-			status: string;
-			/** Shelter Name */
-			shelter_name: string;
 		};
 		/** SearchResult */
 		SearchResult: {
@@ -205,6 +369,15 @@ export interface components {
 			 */
 			as_of: string;
 		};
+		/** ShelterNeedsResponse */
+		ShelterNeedsResponse: {
+			/** Code */
+			code: string;
+			/** Name */
+			name: string;
+			/** Needs */
+			needs: components['schemas']['NeedItemResponse'][];
+		};
 		/** ValidationError */
 		ValidationError: {
 			/** Location */
@@ -255,6 +428,105 @@ export interface operations {
 			};
 		};
 	};
+	create_donation: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DonationCreateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DonationCreateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_donation: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				tracking_token: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DonationTrackingResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	patch_donation_courier: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				tracking_token: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DonationCourierPatchRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DonationCourierPatchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
 	search_evacuees: {
 		parameters: {
 			query?: never;
@@ -277,7 +549,7 @@ export interface operations {
 					'application/json': components['schemas']['SearchResponse'];
 				};
 			};
-			/** @description Unprocessable Content */
+			/** @description Unprocessable Entity */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -313,6 +585,26 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['HealthCheckResponse'];
+				};
+			};
+		};
+	};
+	list_needs: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['NeedsListResponse'];
 				};
 			};
 		};
