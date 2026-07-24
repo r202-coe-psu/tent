@@ -3,10 +3,10 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import * as Form from '$lib/components/ui/form/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { capacityInputSchema, type ReferralInput } from '../domain/referral.schema';
+	import ShelterCombobox from './shelter-combobox.svelte';
 
 	let {
 		evacueeId,
@@ -39,7 +39,7 @@
 		}
 	});
 
-	const { form: formData, enhance } = form;
+	const { form: formData, errors, enhance, validate } = form;
 
 	$effect(() => {
 		$formData.evacuee_id = evacueeId;
@@ -53,8 +53,16 @@
 		<Form.Field {form} name="to_shelter_code">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>รหัสศูนย์พักพิงปลายทาง (Target Shelter Code) *</Form.Label>
-					<Input {...props} bind:value={$formData.to_shelter_code} placeholder="เช่น SH002" />
+					<Form.Label>ศูนย์พักพิงปลายทาง (Target Shelter) *</Form.Label>
+					<ShelterCombobox
+						id={props.id}
+						bind:value={$formData.to_shelter_code}
+						error={$errors.to_shelter_code}
+						validate={() => validate('to_shelter_code')}
+						onSelect={(code) => {
+							$formData.to_shelter_code = code;
+						}}
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
