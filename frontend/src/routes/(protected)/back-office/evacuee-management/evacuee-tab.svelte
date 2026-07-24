@@ -55,7 +55,6 @@
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
 			await checkIn.mutateAsync({ evacuee, ctx });
-			await query.refetch();
 			toast.success(`เช็คอิน ${evacuee.first_name} ${evacuee.last_name} แล้ว`);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');

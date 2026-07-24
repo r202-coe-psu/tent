@@ -1,4 +1,9 @@
-import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
+import {
+	createMutation,
+	createQuery,
+	useQueryClient,
+	type QueryClient
+} from '@tanstack/svelte-query';
 import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
@@ -98,8 +103,9 @@ export const useUpdateEvacuee = () =>
 		mutationFn: (evacuee: Evacuee) => peopleRepository().updateEvacuee(evacuee)
 	}));
 
-export const useCheckInEvacuee = () =>
-	createMutation(() => ({
+export const useCheckInEvacuee = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({
 			evacuee,
 			ctx,
@@ -108,14 +114,25 @@ export const useCheckInEvacuee = () =>
 			evacuee: Evacuee;
 			ctx: AuthorContext;
 			zone?: string | null;
-		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone)
+		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+		}
 	}));
+};
 
-export const useCheckOutEvacuee = () =>
-	createMutation(() => ({
+export const useCheckOutEvacuee = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
-			peopleRepository().checkOutEvacuee(evacuee, ctx)
+			peopleRepository().checkOutEvacuee(evacuee, ctx),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+		}
 	}));
+};
 
 /** One-shot lookup used by the scan flow — goes through TanStack Query keys. */
 export async function lookupEvacueeByScanCode(
