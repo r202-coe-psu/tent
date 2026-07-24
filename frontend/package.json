@@ -25,7 +25,8 @@
 		"seed:thailand": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-thailand-location.ts",
 		"seed:delete-dashboard": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts --delete-dashboard",
 		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
-		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts"
+		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts",
+		"redeploy:referral-db": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/redeploy-referral-db.ts"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.1.0",

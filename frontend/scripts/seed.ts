@@ -77,6 +77,7 @@ import { type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
 import { deployShelterViewsFn } from '$lib/features/shelters/server';
+import { buildValidateDocUpdate, REFERRAL_MANGO_INDEXES } from '$lib/server/shelter-access-design';
 import { seedThailandLocation } from './seed-thailand-location';
 
 // ─── env ──────────────────────────────────────────────────────────────────────
@@ -485,6 +486,8 @@ async function seedCatalog(): Promise<void> {
 
 	for (const doc of [...items, ...recipes]) await putDoc('catalog', doc);
 	console.log(`  ✓ catalog: ${items.length} supply items, ${recipes.length} recipes`);
+
+	await deployCatalogMangoIndexes('catalog');
 }
 
 async function seedCatalogSopRatios(): Promise<void> {
@@ -530,6 +533,42 @@ async function seedCatalogSopRatios(): Promise<void> {
 	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
 }
 
+async function deployShelterAccessDesign(db: string, shelterCode: string): Promise<void> {
+	const ddocId = '_design/access';
+	const { status: getStatus, data: existingDdoc } = await couchReq(
+		'GET',
+		`/${db}/${encodeURIComponent(ddocId)}`
+	);
+	const rev = getStatus === 200 ? (existingDdoc as { _rev: string })._rev : undefined;
+	await couchReq('PUT', `/${db}/${encodeURIComponent(ddocId)}`, {
+		_id: ddocId,
+		...(rev ? { _rev: rev } : {}),
+		validate_doc_update: buildValidateDocUpdate(shelterCode)
+	});
+	console.log(`  ✓ ${db}: _design/access deployed (referral whitelist)`);
+}
+
+async function deployMangoIndexes(db: string): Promise<void> {
+	for (const def of REFERRAL_MANGO_INDEXES) {
+		await couchReq('POST', `/${db}/_index`, def);
+	}
+	console.log(`  ✓ ${db}: Mango indexes for referral deployed`);
+}
+
+async function deployCatalogMangoIndexes(db: string): Promise<void> {
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'name'] },
+		name: 'catalog-type-name-idx',
+		type: 'json'
+	});
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'target_id'] },
+		name: 'catalog-type-target-idx',
+		type: 'json'
+	});
+	console.log(`  ✓ ${db}: Mango indexes for sop_profile and audit queries deployed`);
+}
+
 // ─── seedShelter ──────────────────────────────────────────────────────────────
 
 async function seedShelter(): Promise<void> {
@@ -539,6 +578,8 @@ async function seedShelter(): Promise<void> {
 		members: { names: [], roles: [`shelter:${SHELTER_CODE}`] }
 	});
 	await deployShelterViewsFn(SHELTER_DB, (path, method, body) => couchReq(method, path, body));
+	await deployShelterAccessDesign(SHELTER_DB, SHELTER_CODE);
+	await deployMangoIndexes(SHELTER_DB);
 
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
@@ -864,6 +905,8 @@ async function seedShelter2(): Promise<void> {
 		members: { names: [], roles: [`shelter:${SHELTER_CODE_2}`] }
 	});
 	await deployShelterViewsFn(SHELTER_DB_2, (path, method, body) => couchReq(method, path, body));
+	await deployShelterAccessDesign(SHELTER_DB_2, SHELTER_CODE_2);
+	await deployMangoIndexes(SHELTER_DB_2);
 
 	const { status, data } = await couchReq('GET', `/${SHELTER_DB_2}/_all_docs?limit=1`);
 	if (status === 200 && (data as { rows?: unknown[] }).rows?.length) {
@@ -1088,8 +1131,8 @@ async function seedDailyCalc(): Promise<void> {
 		`/catalog/${encodeURIComponent('sop_profile:master_sphere_baseline')}`
 	);
 	const master =
-		status === 200 ? (data as { ratios?: Record<SopRatioKey, number>; version?: number }) : null;
-	const ratios: Record<SopRatioKey, number> = master?.ratios ?? validRatios;
+		status === 200 ? (data as { ratios?: Record<SopRatioKey, string>; version?: number }) : null;
+	const ratios: Record<SopRatioKey, string> = master?.ratios ?? validRatios;
 	const sopVersion = master?.version ?? 1;
 
 	const today = new Date();
@@ -1107,19 +1150,22 @@ async function seedDailyCalc(): Promise<void> {
 		const occupancy = Math.max(0, Math.round(120 + 25 * Math.sin(phase) + jitter));
 
 		const resources: ResourceInput[] = [];
-		const ratioSnapshot: Record<string, number> = {};
-		const stockSnapshot: Record<string, number | null> = {};
+		const ratioSnapshot: Record<string, string> = {};
+		const stockSnapshot: Record<string, string | null> = {};
 
 		for (const key of Object.keys(ratios) as SopRatioKey[]) {
-			const ratio = ratios[key];
+			const ratioStr = ratios[key];
+			const ratioNum = Number(ratioStr);
 			const kind = SOP_RATIO_KIND[key];
-			const roughNeed = kind === 'multiply' ? occupancy * ratio : Math.ceil(occupancy / ratio);
+			const roughNeed =
+				kind === 'multiply' ? occupancy * ratioNum : Math.ceil(occupancy / ratioNum);
 			// have oscillates across a deficit/surplus band so the dashboard shows real gaps;
 			// threshold ratios are quality ceilings → no stock (null), same as `resolveHave`.
 			const factor = 0.7 + 0.6 * (0.5 + 0.5 * Math.sin(phase + key.length));
-			const have = kind === 'threshold' ? null : Math.max(0, Math.round(roughNeed * factor));
-			resources.push({ key, kind, ratio, have });
-			ratioSnapshot[key] = ratio;
+			const have =
+				kind === 'threshold' ? null : String(Math.max(0, Math.round(roughNeed * factor)));
+			resources.push({ key, kind, ratio: ratioStr, have });
+			ratioSnapshot[key] = ratioStr;
 			stockSnapshot[key] = have;
 		}
 

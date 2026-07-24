@@ -21,7 +21,8 @@ import {
 	migrate,
 	mergeShelterSecurity,
 	nowIso,
-	deployShelterViews
+	deployShelterViews,
+	deployReferralMangoIndexes
 } from '$lib/server/shelters.admin';
 import { buildValidateDocUpdate, shelterDbName } from '$lib/server/shelter-access-design';
 
@@ -102,6 +103,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		// 3.5. Deploy app views (CR-017)
 		const appStatus = await deployShelterViews(db);
 		steps.push({ step: 'design-app', status: appStatus });
+
+		// 3.6. Referral Mango indexes (CR-045 / T-34 list/find)
+		await deployReferralMangoIndexes(db);
+		steps.push({ step: 'referral-mango', status: 200 });
 
 		// 4. Registry + shelter master doc (schema.md §3.1) — idempotent by `code`.
 		await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
