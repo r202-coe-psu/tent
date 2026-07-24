@@ -12,7 +12,7 @@ import { createCouchUser, deleteCouchUser, couchLogin, SA_ROLES } from './helper
 import { injectSession, clearSession } from './helpers/login';
 
 const BASE = 'http://localhost:4173';
-const IMPORT_PATH = '/back-office/shelters/import';
+const IMPORT_PATH = '/portal/system-management/shelters/import';
 const HEADERS = [
 	'ชื่อศูนย์พักพิง',
 	'สถานะ',

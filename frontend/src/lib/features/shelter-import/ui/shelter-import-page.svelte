@@ -23,7 +23,7 @@
 	import ImportLogHistory from './import-log-history.svelte';
 
 	let { basePath }: { basePath?: string } = $props();
-	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/shelters'));
+	const resolvedBasePath = $derived(basePath ?? resolve('/portal/system-management/shelters'));
 
 	const zoneQuery = useMasterData(() => 'municipality_zone');
 	const communityQuery = useMasterData(() => 'community');

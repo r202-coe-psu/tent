@@ -6,7 +6,7 @@
 	import type { ImportRowResult } from '../domain/import-log';
 
 	let { basePath }: { basePath?: string } = $props();
-	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/shelters'));
+	const resolvedBasePath = $derived(basePath ?? resolve('/portal/system-management/shelters'));
 
 	const logsQuery = useImportLogs();
 	const logs = $derived(logsQuery.data ?? []);
