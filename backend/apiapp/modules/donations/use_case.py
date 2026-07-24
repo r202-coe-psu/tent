@@ -15,6 +15,7 @@ from tent_model.public_shelter import PublicShelter
 from ...utils.masking import sha256_hex
 from ...utils.ulid import new_ulid
 from .schemas import (
+    DonationCancelResponse,
     DonationCourierPatchResponse,
     DonationCreateRequest,
     DonationCreateResponse,
@@ -216,6 +217,51 @@ class DonationsUseCase:
         buffer.logistics = logistics
         await buffer.save()
         return DonationCourierPatchResponse()
+
+    async def cancel(self, tracking_token: str) -> DonationCancelResponse:
+        """Cancel on the Mongo intake buffer before inbound persists it to Couch.
+
+        Once ``synced_to_couch`` is true the SoR is CouchDB — callers should DELETE via
+        the SvelteKit BFF Couch path instead.
+        """
+        token_hash = sha256_hex(tracking_token)
+        buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
+        if buffer is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"success": False, "error": "Donation record not found"},
+            )
+
+        if buffer.synced_to_couch:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "success": False,
+                    "error": "SYNCED_TO_COUCH",
+                    "message": "Donation already in CouchDB; cancel via shelter record",
+                },
+            )
+
+        if buffer.status != "declared":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "success": False,
+                    "error": f'Cannot cancel donation in status "{buffer.status}"',
+                },
+            )
+
+        buffer.status = "cancelled"
+        await buffer.save()
+
+        # Keep the tracking stub in step so GET reflects the cancellation immediately,
+        # instead of waiting for outbound CDC sync to catch up.
+        stub = await PublicDonation.find_one(PublicDonation.tracking_token_hash == token_hash)
+        if stub is not None:
+            stub.status = "cancelled"
+            await stub.save()
+
+        return DonationCancelResponse()
 
 
 def get_donations_use_case() -> DonationsUseCase:

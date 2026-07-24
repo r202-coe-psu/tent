@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from ...core.security import verify_external_secret
 from ...utils.request_meta import client_ip
 from .schemas import (
+    DonationCancelResponse,
     DonationCourierPatchRequest,
     DonationCourierPatchResponse,
     DonationCreateRequest,
@@ -97,3 +98,20 @@ async def patch_donation_courier(
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.update_courier_tracking(tracking_token, payload.courier_tracking_no)
+
+
+@router.delete(
+    "/{tracking_token}",
+    response_model=DonationCancelResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def cancel_donation(
+    request: Request,
+    response: Response,
+    tracking_token: str,
+    use_case: DonationsUseCase = Depends(get_donations_use_case),  # noqa: B008
+) -> DonationCancelResponse:
+    """Cancel on the Mongo intake buffer (pre-inbound only)."""
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.cancel(tracking_token)

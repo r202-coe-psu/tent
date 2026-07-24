@@ -51,3 +51,8 @@ class DonationCourierPatchRequest(BaseModel):
 class DonationCourierPatchResponse(BaseModel):
     success: bool = True
     message: str = "Courier tracking number updated"
+
+
+class DonationCancelResponse(BaseModel):
+    success: bool = True
+    message: str = "Donation cancelled successfully"

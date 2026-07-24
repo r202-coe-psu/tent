@@ -189,7 +189,115 @@ async def test_patch_courier_rejects_already_synced_buffer(
         json={"courier_tracking_no": "TH999"},
     )
     assert response.status_code == 409
-    assert response.json()["detail"]["error"] == "SYNCED_TO_COUCH"
+    assert response.json()["errors"][0]["error"] == "SYNCED_TO_COUCH"
+
+
+async def test_cancel_updates_unsynced_buffer_and_stub(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    token = "TX-SH001-CANCEL001"
+    token_hash = sha256_hex(token)
+    now = datetime.now(UTC)
+    await DonationBuffer(
+        id=f"donation:{new_ulid()}",
+        shelter_code="SH001",
+        donor=DonorBuffer(name="Cancel Donor", phone="0833333333"),
+        items_declared=[{"free_text": "ผ้าห่ม", "qty": 1, "unit": "pcs"}],
+        campaign_id=None,
+        booking_ref="DN-777001",
+        tracking_token=token,
+        tracking_token_hash=token_hash,
+        status="declared",
+        synced_to_couch=False,
+        created_at=now,
+        expires_at=now + timedelta(hours=72),
+    ).insert()
+    await PublicDonation(
+        id=f"donation:{new_ulid()}",
+        tracking_token_hash=token_hash,
+        shelter_code="SH001",
+        status="declared",
+        booking_ref="DN-777001",
+        items_declared=[],
+        received_summary=None,
+        updated_at=now,
+    ).insert()
+
+    response = await client.delete(f"/public/v1/donations/{token}", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
+    assert buffer is not None
+    assert buffer.status == "cancelled"
+
+    stub = await PublicDonation.find_one(PublicDonation.tracking_token_hash == token_hash)
+    assert stub is not None
+    assert stub.status == "cancelled"
+
+    track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
+    assert track.json()["donation"]["status"] == "cancelled"
+
+
+async def test_cancel_rejects_already_synced_buffer(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    token = "TX-SH001-CANCEL002"
+    token_hash = sha256_hex(token)
+    now = datetime.now(UTC)
+    await DonationBuffer(
+        id=f"donation:{new_ulid()}",
+        shelter_code="SH001",
+        donor=DonorBuffer(name="Synced", phone="0844444444"),
+        items_declared=[],
+        campaign_id=None,
+        booking_ref="DN-777002",
+        tracking_token=token,
+        tracking_token_hash=token_hash,
+        status="declared",
+        synced_to_couch=True,
+        created_at=now,
+        expires_at=now + timedelta(hours=72),
+    ).insert()
+
+    response = await client.delete(f"/public/v1/donations/{token}", headers=auth_headers)
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["error"] == "SYNCED_TO_COUCH"
+
+
+async def test_cancel_rejects_non_declared_status(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    token = "TX-SH001-CANCEL003"
+    token_hash = sha256_hex(token)
+    now = datetime.now(UTC)
+    await DonationBuffer(
+        id=f"donation:{new_ulid()}",
+        shelter_code="SH001",
+        donor=DonorBuffer(name="Received", phone="0855555555"),
+        items_declared=[],
+        campaign_id=None,
+        booking_ref="DN-777003",
+        tracking_token=token,
+        tracking_token_hash=token_hash,
+        status="received",
+        synced_to_couch=False,
+        created_at=now,
+        expires_at=now + timedelta(hours=72),
+    ).insert()
+
+    response = await client.delete(f"/public/v1/donations/{token}", headers=auth_headers)
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["success"] is False
+
+
+async def test_cancel_missing_donation_returns_404(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await client.delete(
+        "/public/v1/donations/TX-SH001-NOPE0000", headers=auth_headers
+    )
+    assert response.status_code == 404
 
 
 async def test_new_ulid_shape() -> None:
