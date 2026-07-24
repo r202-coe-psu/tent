@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4)"
 status: approved
 created: 2026-06-04
-updated: 2026-06-18
+updated: 2026-07-23
 closes: K-12 (A1 RBAC phase-blocker)
 ---
 
@@ -96,7 +96,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 
 ---
 
-## 4. Action Matrix — R3 (Donation full, Kitchen, Volunteer, SOP, Security, Referral)
+## 4. Action Matrix — R3 (Donation full, Kitchen, Volunteer, SOP, Shelter Reports, Referral)
 
 | Action | FR | SA | SM | WS | KS | REG | DN | PUB |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -112,13 +112,13 @@ closes: K-12 (A1 RBAC phase-blocker)
 | SOP ratio configuration | FR-44 | ✓ | — | — | — | — | — | — |
 | Daily resource calculation (run/ดู) | FR-45 | ✓ | scope | scope (ดู) | scope (ดู) | scope (ดู) | — | — |
 | Resource calc dashboard | FR-46 | ✓ | scope | — | — | — | — | — |
-| Security event + safety monitoring | FR-47 | ✓ | scope | — | — | — | — | — |
+| Shelter report (grievance / incident) | FR-47 | ✓ | scope | — | — | — | — | — |
 | Referral & hand-off | FR-48 | ✓ | scope | — | — | — | — | — |
 
 **หมายเหตุ:**
 - **Kitchen requisition (FR-40)** ✅ **CONFIRMED option A (2026-06-05)**: KS เขียน requisition ตัด on-hand ตรง ผ่าน Stock Ledger เดียวกับ WS (FR-29 pattern). KS เขียนได้เฉพาะ requisition-type entry; WS own receive/transfer/adjust. SM สามารถเขียน KS entries ได้ (SM ⊇ KS)
 - Volunteer/VC responsibilities (FR-42/43) ย้ายมาที่ SM — **ไม่มี volunteer_coordinator role แยก**; คำว่า Volunteer ใน FR-42/43 คือ domain/profile ไม่ใช่ RoleKey
-- Security events (FR-47) = SM เท่านั้น — **ไม่มี security_officer role แยก**
+- Shelter reports (FR-47) = SM เท่านั้น (allow-list `SHELTER_REPORT_MUTATE_ROLES`; SA = platform override) — **ไม่มี security_officer role แยก** · [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md)
 - **Referral & hand-off (FR-48)** ✅ **CONFIRMED (FD-13):** `shelter_manager` เป็นเจ้าของ referral; medical detail อยู่ใน internal shelter scope เท่านั้น และไม่ออก public/API/EOC (§6)
 - SOP ratio config (FR-44) = master ข้ามศูนย์ → SA only
 
@@ -155,7 +155,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 | Supply item / stock on-hand | NFR-13 | ✓ | ✓ | — | ✓ (ดู) | ✓ | agg | agg (transparency) |
 | Donor identity / contact | NFR-5 | ✓ | scope | — | — | scope | — | — |
 | Volunteer PII (contact, skills) | NFR-20 | ✓ | scope | — | — | — | — | — |
-| Security event detail | — | ✓ | scope | — | — | — | — | — |
+| Shelter report detail | — | ✓ | scope | — | — | — | — | — |
 | Referral medical-emergency detail | NFR-20 | ✓ | scope | — | — | — | never | never |
 | Person medical | NFR-5/6 | ✓ | scope | scope | scope | — | never | never |
 | Person national_id | NFR-5/6 | ✓ | scope | scope | — | — | never | never |
@@ -221,7 +221,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 - `MOVEMENT_ROLES` = {system_admin, shelter_manager, registration_staff}
 - เพิ่ม `INVENTORY_WRITE_ROLES` = {system_admin, shelter_manager, warehouse_staff}
 - เพิ่ม `KITCHEN_ROLES` = {system_admin, shelter_manager, kitchen_staff}
-- เพิ่ม `SECURITY_EVENT_ROLES` = {system_admin, shelter_manager}
+- เพิ่ม `SHELTER_REPORT_MUTATE_ROLES` = {shelter_manager} (+ system_admin platform override) — CR-040; แทน SECURITY_EVENT_ROLES
 - เพิ่ม `VOLUNTEER_RECRUIT_ROLES` = {system_admin, shelter_manager}
 - อัปเดต `ensure_shelter_scope()` ให้ใช้ `shelter_id` (single field แทน array)
 - medical visibility: internal staff ใช้ shelter scope; public/API serializers redact เสมอ

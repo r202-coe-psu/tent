@@ -15,6 +15,52 @@ services:
       retries: 10
       start_period: 10s
 
+  mongodb:
+    container_name: tent-mongodb-staging
+    image: mongo:7
+    volumes:
+      - /mnt/tent-data/mongodb/data:/data/db
+    # No port binding — reachable only inside Docker network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  worker:
+    container_name: tent-worker-staging
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    depends_on:
+      couchdb:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    environment:
+      COUCHDB_URL: http://couchdb:5984
+      COUCHDB_USER: ${COUCHDB_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+      DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+    restart: unless-stopped
+
+  fastapi:
+    container_name: tent-fastapi-staging
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      APP_ENV: prod
+      DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+      SECRET_KEY: ${SECRET_KEY}
+      EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
+    # No port binding — reachable only inside Docker network (nginx proxies)
+    restart: unless-stopped
+
   frontend:
     container_name: tent-frontend-staging
     image: tent/frontend:latest
@@ -30,9 +76,15 @@ services:
       ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
       # Server-only — never bundled into the browser
       COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@couchdb:5984
+      # BFF donations/needs → FastAPI on the compose network (not localhost)
+      FASTAPI_INTERNAL_URL: http://fastapi:9000
+      EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
+      SECRET_RECAPTCHA_KEY: ${SECRET_RECAPTCHA_KEY}
     depends_on:
       couchdb:
         condition: service_healthy
+      fastapi:
+        condition: service_started
     restart: unless-stopped
 
   nginx:
@@ -45,5 +97,5 @@ services:
     depends_on:
       - frontend
       - couchdb
+      - fastapi
     restart: unless-stopped
-

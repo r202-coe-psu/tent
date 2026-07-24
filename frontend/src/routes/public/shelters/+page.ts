@@ -1,62 +1,92 @@
 import type { PageLoad } from './$types';
+import { listPublicShelters, toPublicShelterCard } from '$lib/features/public-portal';
 
-export const load: PageLoad = async ({ url, fetch }) => {
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+	const R = 6371;
+	const dLat = ((lat2 - lat1) * Math.PI) / 180;
+	const dLon = ((lon2 - lon1) * Math.PI) / 180;
+	const a =
+		Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+		Math.cos((lat1 * Math.PI) / 180) *
+			Math.cos((lat2 * Math.PI) / 180) *
+			Math.sin(dLon / 2) *
+			Math.sin(dLon / 2);
+	const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+	return R * c;
+}
+
+export const load: PageLoad = async ({ url }) => {
 	const search = url.searchParams.get('q') || '';
 	const province = url.searchParams.get('province') || '';
 	const district = url.searchParams.get('district') || '';
 	const subdistrict = url.searchParams.get('subdistrict') || '';
-	const status = url.searchParams.getAll('status').join(',') || '';
-	const type = url.searchParams.get('type') || '';
-
-	let distance = url.searchParams.get('distance');
-	if (distance === null) {
-		distance = '5'; // Default to 5 km if not explicitly set
-	}
+	const statusParam = url.searchParams.getAll('status').join(',') || '';
+	const distance = url.searchParams.get('distance') ?? '5';
 	const user_lat = url.searchParams.get('user_lat') || '';
 	const user_lng = url.searchParams.get('user_lng') || '';
-	const hide_full = url.searchParams.get('hide_full') || '';
 
-	const advancedFilterKeys = [
-		'vulnerable_bed',
-		'vulnerable_wheelchair',
-		'vulnerable_infant',
-		'vulnerable_elderly',
-		'vulnerable_isolation',
-		'facility_kitchen',
-		'facility_women_child',
-		'pet_general',
-		'pet_large',
-		'pet_livestock',
-		'parking_car',
-		'parking_motorcycle',
-		'parking_boat',
-		'utility_wifi',
-		'utility_high_ground',
-		'utility_truck_access'
-	];
+	// FastAPI accepts a single status; map common UI values to Mongo status.
+	const status =
+		statusParam
+			.split(',')
+			.map((s) => s.trim().toLowerCase())
+			.find((s) => s === 'open' || s === 'closed' || s === 'full' || s === 'prepare') || '';
 
-	const params = new URLSearchParams({
-		q: search,
-		province,
-		district,
-		subdistrict,
-		type,
-		status,
-		distance,
-		user_lat,
-		user_lng,
-		hide_full
+	const data = await listPublicShelters({
+		province: province || undefined,
+		district: district || undefined,
+		subdistrict: subdistrict || undefined,
+		status: status || undefined
 	});
 
-	for (const key of advancedFilterKeys) {
-		const val = url.searchParams.get(key);
-		if (val) {
-			params.append(key, val);
+	const userLatNum = user_lat ? parseFloat(user_lat) : NaN;
+	const userLngNum = user_lng ? parseFloat(user_lng) : NaN;
+	const hasUser = !Number.isNaN(userLatNum) && !Number.isNaN(userLngNum);
+	const maxDistance = distance ? parseFloat(distance) : NaN;
+
+	let shelters = data.shelters.map((item) => {
+		let dist = 0;
+		if (hasUser && item.geo) {
+			dist = parseFloat(haversineKm(userLatNum, userLngNum, item.geo.lat, item.geo.lng).toFixed(1));
 		}
+		return toPublicShelterCard(item, dist);
+	});
+
+	if (search.trim()) {
+		const q = search.trim().toLowerCase();
+		shelters = shelters.filter(
+			(s) =>
+				s.name.toLowerCase().includes(q) ||
+				s.code.toLowerCase().includes(q) ||
+				s.province.toLowerCase().includes(q) ||
+				s.district.toLowerCase().includes(q)
+		);
 	}
 
-	const response = await fetch(`/api/public/v1/transparency/shelters?${params.toString()}`);
-	const data = await response.json();
+	if (hasUser && !Number.isNaN(maxDistance) && maxDistance > 0) {
+		shelters = shelters.filter((s) => !s.geo || s.distance <= maxDistance);
+	}
 
-	return data;
+	const openCount = shelters.filter((s) => s.status === 'OPEN').length;
+
+	return {
+		shelters,
+		count: shelters.length,
+		as_of: data.as_of,
+		summary: {
+			shelters_total: shelters.length,
+			shelters_open: openCount
+		},
+		filters: {
+			search,
+			province,
+			district,
+			subdistrict,
+			status: statusParam,
+			distance,
+			user_lat,
+			user_lng
+		},
+		available_types: [] as string[]
+	};
 };

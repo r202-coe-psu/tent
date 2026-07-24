@@ -11,6 +11,7 @@
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import Search from '@lucide/svelte/icons/search';
 	import Filter from '@lucide/svelte/icons/filter';
+	import { getAllLocations } from '$lib/features/shelters';
 
 	interface Filters {
 		search?: string;
@@ -76,14 +77,16 @@
 
 	let provincesList = $derived([
 		{ label: 'จังหวัด (ทั้งหมด)', value: '' },
-		...[...new Set(locationData.map((d) => d.province))].sort().map((p) => ({ label: p, value: p }))
+		...[...new Set((locationData || []).map((d) => d.province))]
+			.sort()
+			.map((p) => ({ label: p, value: p }))
 	]);
 
 	let districtsList = $derived([
 		{ label: 'อำเภอ (ทั้งหมด)', value: '' },
 		...[
 			...new Set(
-				locationData
+				(locationData || [])
 					.filter((d) => !selectedProvince || d.province === selectedProvince)
 					.map((d) => d.district)
 			)
@@ -96,7 +99,7 @@
 		{ label: 'ตำบล (ทั้งหมด)', value: '' },
 		...[
 			...new Set(
-				locationData
+				(locationData || [])
 					.filter(
 						(d) =>
 							(!selectedProvince || d.province === selectedProvince) &&
@@ -131,10 +134,7 @@
 		}
 
 		try {
-			const res = await fetch('/data/thailand_location_data.json');
-			if (res.ok) {
-				locationData = await res.json();
-			}
+			locationData = await getAllLocations();
 		} catch (err) {
 			console.error('Failed to load location data', err);
 		}
@@ -166,7 +166,7 @@
 							name="q"
 							type="text"
 							bind:value={searchQuery}
-							placeholder="ชื่อศูนย์, ตำบล..."
+							placeholder="ชื่อศูนย์..."
 							class="w-full rounded-xl pl-9"
 						/>
 						<Search class="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />

@@ -161,7 +161,7 @@
 >
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<PawPrint class="text-shelter-orange-text h-5 w-5" />
-		<span class="text-black text-sm font-bold">6.</span>
+		<span class="text-sm font-bold text-black">6.</span>
 		<h2 class="text-base font-bold text-black">นโยบายการรับผู้อพยพและกลุ่มเปราะบาง</h2>
 	</div>
 

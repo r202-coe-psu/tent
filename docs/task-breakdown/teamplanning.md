@@ -38,7 +38,7 @@
 | ทีม | สมาชิก | โมดูลที่รับผิดชอบ | จำนวน Tasks | Adj MD สุทธิ |
 | :---: | :--- | :--- | :---: | :---: |
 | **ทีม A** | ชิโน, นัท, กาน | 04 (Donation) + 06 (Volunteer) | **8** | **27.5** |
-| **ทีม B** | พีค, โฮป, ปิ๊ก | 02 (Household) + 11 (Family Search) + 08 (Security) | **10** | **35.0** |
+| **ทีม B** | พีค, โฮป, ปิ๊ก | 02 (Household) + 11 (Family Search) + 08 (Shelter Reports) | **10** | **35.0** |
 | **ทีม C** | ก้อง, มิว, พัฟ | 03 (Supply) + 05 (Kitchen & Food) | **10** | **35.0** |
 | **ทีม D** | เน, ภูดิท, วิลเลียม | 07 (SOP & Resource Calc) + 09 (Referral) | **6** | **24.0** |
 | **รวม** | | | **34** | **121.5** |
@@ -48,7 +48,7 @@
    - ดูแลระบบรับของบริจาค [04-donation.md](04-donation.md) และระบบจัดการอาสาสมัคร [06-A-volunteer.md](06-A-volunteer.md)
    - *จุดเด่น (Public Inbound)*: เป็นทีมที่เน้นระบบหน้าบ้านสำหรับคนนอก (Public-Facing) ดูแลทรัพยากรขาเข้าจากภายนอกศูนย์ทั้งหมด ทั้งในรูปแบบสิ่งของ (บริจาค) และแรงงาน (อาสาสมัคร)
 2. **ทีม B (พีค, โฮป, ปิ๊ก) — 35.0 MD / 10 Tasks**: 
-   - ดูแลระบบลงทะเบียนผู้อพยพ [02-people.md](02-people.md), หน้าสืบค้นครอบครัว [11-famsearch.md](11-famsearch.md), และ shelter report cases [08-E-cases.md](08-E-cases.md) (CR-040)
+   - ดูแลระบบลงทะเบียนผู้อพยพ [02-people.md](02-people.md), หน้าสืบค้นครอบครัว [11-famsearch.md](11-famsearch.md), และ shelter reports [08-E-reports.md](08-E-reports.md) (CR-040)
    - *จุดเด่น (Resident Lifecycle & Cases)*: คุมโดเมน "บุคคล" ตั้งแต่ลงทะเบียน สแกน QR เข้าออกศูนย์ สืบค้นชื่อ (Consent) และเคสร้องเรียน/เหตุการณ์ในศูนย์ — รวม schema คนไว้ทีมเดียว
 3. **ทีม C (ก้อง, มิว, พัฟ) — 35.0 MD / 10 Tasks**:
    - ดูแลคลังพัสดุสิ่งของ [03-C-supply.md](03-C-supply.md) และระบบอาหาร/โรงครัว [05-D-kitchen.md](05-D-kitchen.md)

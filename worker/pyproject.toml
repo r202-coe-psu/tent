@@ -1,0 +1,29 @@
+[project]
+name = "sync-worker"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "tent-model",
+    "httpx>=0.27",
+    "grapheme>=0.6",
+]
+
+[tool.uv.sources]
+tent-model = { workspace = true }
+
+[project.scripts]
+sync-worker = "worker.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/worker"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]

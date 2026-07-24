@@ -1,0 +1,94 @@
+"""Sync worker entry point."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+import signal
+
+from tent_model import close_db, init_db
+
+from worker.config import load_settings
+from worker.couch.bootstrap import bootstrap_all, needs_bootstrap
+from worker.couch.client import CouchClient
+from worker.inbound.donations import run_inbound_loop
+from worker.inbound.search_audit import run_search_audit_inbound_loop
+from worker.listeners.registry import ListenerManager
+from worker.retention.job import run_retention_loop
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
+    settings = load_settings()
+    await init_db(settings.mongodb_uri)
+    couch = CouchClient(settings)
+    manager = ListenerManager(couch)
+
+    stop = asyncio.Event()
+
+    def _handle_signal() -> None:
+        logger.info("Shutdown requested")
+        stop.set()
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, _handle_signal)
+
+    inbound_task: asyncio.Task[None] | None = None
+    search_audit_task: asyncio.Task[None] | None = None
+    retention_task: asyncio.Task[None] | None = None
+
+    try:
+        if force_bootstrap or bootstrap_only or await needs_bootstrap():
+            await bootstrap_all(couch)
+        if bootstrap_only:
+            logger.info("Bootstrap-only complete — exiting")
+            return
+        inbound_task = asyncio.create_task(
+            run_inbound_loop(couch, stop_event=stop), name="inbound-donations"
+        )
+        search_audit_task = asyncio.create_task(
+            run_search_audit_inbound_loop(couch, stop_event=stop),
+            name="inbound-search-audit",
+        )
+        retention_task = asyncio.create_task(run_retention_loop(stop_event=stop), name="retention")
+        await manager.start()
+        logger.info("Sync worker running — Ctrl+C to stop")
+        await stop.wait()
+    finally:
+        await manager.stop_all()
+        for task in (inbound_task, search_audit_task, retention_task):
+            if task:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        await couch.close()
+        await close_db()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="CouchDB → MongoDB public read-model sync worker")
+    parser.add_argument(
+        "--bootstrap",
+        action="store_true",
+        help="Force full bootstrap scan before starting continuous sync",
+    )
+    parser.add_argument(
+        "--bootstrap-only",
+        action="store_true",
+        help="Run a full bootstrap scan then exit (no continuous _changes tail)",
+    )
+    args = parser.parse_args()
+    asyncio.run(run(force_bootstrap=args.bootstrap, bootstrap_only=args.bootstrap_only))
+
+
+if __name__ == "__main__":
+    main()

@@ -40,7 +40,7 @@ export interface CreateMasterVersionInput {
 	/** The current active master profile to create a new version from. */
 	prev: SopMaster;
 	/** Only the changed ratio keys need to be provided — others are preserved from prev. */
-	changes: Partial<Record<SopRatioKey, number>>;
+	changes: Partial<Record<SopRatioKey, string>>;
 	/** Free-text reason for the audit trail — mandatory per CR-006. */
 	reason: string;
 	/** Who is making this change (from the auth session). */
@@ -51,7 +51,7 @@ export interface CreateOverrideVersionInput {
 	/** The current active override to create a new version from. */
 	prev: SopOverride;
 	/** Only the changed ratio keys need to be provided. */
-	changes: Partial<Record<SopRatioKey, number>>;
+	changes: Partial<Record<SopRatioKey, string>>;
 	reason: string;
 	/** Full AuthorContext — shelterCode is mandatory for override auditing. */
 	ctx: AuthorContext;
@@ -195,7 +195,7 @@ export function useCreateOverrideVersion(shelterCode?: string | (() => string)) 
 
 export interface CreateInitialOverrideInput {
 	name: string;
-	ratios: Record<SopRatioKey, number>;
+	ratios: Record<SopRatioKey, string>;
 	ctx: AuthorContext & { base_profile_id: string };
 }
 

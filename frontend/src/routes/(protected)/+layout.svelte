@@ -8,7 +8,6 @@
 	import { toast } from 'svelte-sonner';
 	import { LOGOUT_ROUTE } from '$lib/guards/auth';
 	import { SessionExpiredBar } from '$lib/features/login';
-
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
@@ -20,7 +19,7 @@
 	}
 </script>
 
-<div class="flex h-svh flex-col overflow-hidden">
+<div class="flex h-[var(--app-shell-height)] flex-col overflow-hidden">
 	{#if !page.url.pathname.startsWith('/back-office')}
 		<header class="flex shrink-0 items-center justify-between border-b bg-background px-6 py-3">
 			<a href={resolve('/portal')} class="font-semibold">Smart Shelter</a>
