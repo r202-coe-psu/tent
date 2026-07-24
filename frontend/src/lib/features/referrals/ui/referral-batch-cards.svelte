@@ -203,11 +203,7 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
-	<div
-		class="min-h-0 flex-1 space-y-6 overflow-y-auto {showBatchActions || pendingAction
-			? 'pb-28'
-			: 'pb-4'}"
-	>
+	<div class="min-h-0 flex-1 space-y-6 overflow-y-auto pb-4">
 		{#if mode === 'created'}
 			<div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
 				<div class="space-y-1">
@@ -227,13 +223,21 @@
 				{/if}
 			</div>
 		{:else}
-			<div class="space-y-1">
-				<h2 class="text-xl font-bold tracking-tight">รายละเอียดชุดส่งต่อ</h2>
-				<p class="text-sm text-muted-foreground">
-					{items.length} คนในชุดนี้{#if onSelectReferral}
-						— กดแถวเพื่อเปิดรายละเอียดรายบุคคล
-					{/if}
-				</p>
+			<div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+				<div class="space-y-1">
+					<h2 class="text-xl font-bold tracking-tight">รายละเอียดชุดส่งต่อ</h2>
+					<p class="text-sm text-muted-foreground">
+						{items.length} คนในชุดนี้{#if onSelectReferral}
+							— กดแถวเพื่อเปิดรายละเอียดรายบุคคล
+						{/if}
+					</p>
+				</div>
+				{#if onBack}
+					<Button variant="outline" size="sm" onclick={onBack} class="gap-2 lg:hidden">
+						<ArrowLeft class="h-4 w-4" />
+						กลับไปหน้ารายการ
+					</Button>
+				{/if}
 			</div>
 		{/if}
 
@@ -562,11 +566,9 @@
 
 	{#if showBatchActions || pendingAction}
 		<div
-			class="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+			class="shrink-0 border-t border-border/80 bg-background/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-[backdrop-filter]:bg-background/90"
 		>
-			<div
-				class="pointer-events-auto w-full max-w-3xl space-y-3 rounded-xl border border-border/80 bg-background/95 p-3 shadow-[0_-4px_24px_rgba(0,0,0,0.12)] backdrop-blur-md supports-[backdrop-filter]:bg-background/90"
-			>
+			<div class="space-y-3">
 				{#if pendingAction}
 					<div class="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
 						<h4 class="text-sm font-semibold text-foreground">

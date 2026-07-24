@@ -81,11 +81,15 @@
 	function clearMemberSelection() {
 		selectedMemberId = null;
 	}
+
+	function clearGroupSelection() {
+		selectedGroupKey = null;
+		selectedMemberId = null;
+		selectedGroupReferrals = [];
+	}
 </script>
 
-<div
-	class="mx-auto flex h-full min-h-0 max-w-7xl flex-col gap-6 overflow-y-auto p-1 md:p-6 lg:overflow-hidden"
->
+<div class="mx-auto flex h-full min-h-0 max-w-7xl flex-col gap-6 overflow-hidden p-1 md:p-6">
 	<div
 		class="flex shrink-0 flex-col justify-between gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center"
 	>
@@ -128,7 +132,9 @@
 		</div>
 	{:else}
 		<div class="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-12 lg:overflow-hidden">
-			<div class="min-h-0 lg:col-span-5 lg:overflow-y-auto">
+			<div
+				class="min-h-0 lg:col-span-5 lg:overflow-y-auto {selectedGroupKey ? 'hidden lg:block' : ''}"
+			>
 				<Card.Root class="border border-border/80 shadow-sm">
 					<Card.Header class="bg-muted/20 pb-3">
 						<Card.Title class="text-lg font-bold">รายการส่งตัวทั้งหมด</Card.Title>
@@ -155,7 +161,11 @@
 				</Card.Root>
 			</div>
 
-			<div class="flex min-h-0 flex-col lg:col-span-7 lg:overflow-hidden">
+			<div
+				class="flex min-h-0 flex-col lg:col-span-7 lg:overflow-hidden {selectedGroupKey
+					? 'min-h-0 flex-1 overflow-hidden'
+					: 'hidden lg:flex'}"
+			>
 				{#if selectedGroupKey}
 					{#if selectedMemberId}
 						{#if isLoadingDetail && !selectedReferral}
@@ -181,6 +191,13 @@
 											กลับไปชุดส่งต่อ
 										</Button>
 									</div>
+								{:else}
+									<div class="flex justify-start lg:hidden">
+										<Button variant="outline" size="sm" onclick={clearGroupSelection} class="gap-2">
+											<ArrowLeft class="h-4 w-4" />
+											กลับไปหน้ารายการ
+										</Button>
+									</div>
 								{/if}
 								<ReferralDetail referral={selectedReferral} />
 							</div>
@@ -191,6 +208,7 @@
 							mode="view"
 							selectedId={selectedMemberId}
 							onSelectReferral={(id) => (selectedMemberId = id)}
+							onBack={clearGroupSelection}
 						/>
 					{/if}
 				{:else}
