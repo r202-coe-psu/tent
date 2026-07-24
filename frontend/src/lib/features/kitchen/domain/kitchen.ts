@@ -25,8 +25,9 @@ export const MEAL_PERIOD_LABELS: Record<MealPeriod, string> = {
 };
 
 // ---- MealPlan (schema.md §2.5) ----------------------------------------
-// _id is deterministic: "meal_plan:{date}:{meal}" — one doc per day+meal.
-// Collision on two devices → CouchDB conflict, not a duplicate doc.
+// _id is a plain ulid (CR-045): multiple plans may share a date+meal (e.g. an
+// extra prep batch), each running its own เบิก→บันทึกบริการ cycle. See
+// createMealPlan below for the history behind the change.
 
 export interface MealPlanHeadcount {
 	total: number;

@@ -31,8 +31,8 @@
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
 
-	// `plan` present ⇒ edit an existing draft in place (date/meal/_id stay fixed,
-	// since meal_plan:{date}:{meal} is deterministic); absent ⇒ create a new one.
+	// `plan` present ⇒ edit an existing draft in place (date/meal/_id stay fixed
+	// because the doc is patched in place, not re-created); absent ⇒ create a new one.
 	// `defaultMode` only applies the first time the dialog opens in create mode —
 	// after that the toggle below is the user's to change.
 	let {
@@ -77,6 +77,14 @@
 	// from the ingredient picker so staff can't accidentally build a menu out
 	// of non-food stock.
 	const foodSupplyItems = $derived((supplyItems.data ?? []).filter((i) => i.category === 'food'));
+
+	// Only schema_v-3 recipes (label + positive standard_portions) can drive the
+	// BOM calc — a legacy/half-written recipe would render as "undefined (undefined
+	// ที่)" and throw on select. Filter them out of the dropdown so BOM never lists
+	// a broken option; if that leaves nothing, the empty-state CTA shows instead.
+	const validRecipes = $derived(
+		(recipes.data ?? []).filter((r) => r.label && Number(r.standard_portions) > 0)
+	);
 
 	// Same resolveItemMasterStock() as application/queries.ts's resolveMealPlanCalc,
 	// so the live preview here matches what actually gets saved.
@@ -234,7 +242,7 @@
 		}
 	}
 
-	const selectedRecipe = $derived(recipes.data?.find((r) => r._id === recipeId) ?? null);
+	const selectedRecipe = $derived(validRecipes.find((r) => r._id === recipeId) ?? null);
 
 	const preview = $derived.by(() => {
 		if (!sopProfile.data || total <= 0) return null;
@@ -434,7 +442,7 @@
 					<Label for="mp-recipe">สูตรมาตรฐาน (จากฐานสูตร BOM)</Label>
 					{#if recipes.isPending}
 						<p class="text-xs text-muted-foreground">กำลังโหลดสูตร...</p>
-					{:else if !recipes.data?.length}
+					{:else if !validRecipes.length}
 						<p class="text-xs text-destructive">
 							ยังไม่มีสูตรในฐานสูตร BOM — สร้างที่หน้า "ฐานสูตร BOM" ก่อน
 						</p>
@@ -445,7 +453,7 @@
 							class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
 						>
 							<option value={null} disabled>เลือกสูตร...</option>
-							{#each recipes.data as r (r._id)}
+							{#each validRecipes as r (r._id)}
 								<option value={r._id}>{r.label} ({r.standard_portions} ที่)</option>
 							{/each}
 						</select>
