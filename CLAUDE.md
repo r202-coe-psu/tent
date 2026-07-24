@@ -18,7 +18,8 @@ repo-root `demo/` (see `demo/README.md`).
 | Public | anonymous SPA `/public/*` | `/public/v1/*` → FastAPI | MongoDB `public_*` (via sync worker) |
 
 Staff CouchDB is reached with cookie `_session` via same-origin proxy (`PUBLIC_COUCH_PROXY=/couch`).
-Public FastAPI is same-origin via **path-specific** Vite proxies (`PUBLIC_FASTAPI_PROXY`).
+Public FastAPI is same-origin via **`/public-api`** (Vite proxy in dev via `PUBLIC_FASTAPI_PROXY`;
+nginx in prod/staging). FastAPI route paths remain `/public/v1/*` behind the gateway strip.
 
 > **Stale docs — ignore where they disagree:** `frontend/agent-role.md` (and `AGENTS.md`) still
 > describe the original template (JWT + flat `api.ts`/`queries.ts`). The binding specs are
@@ -102,13 +103,13 @@ Full workflow: **`frontend/CONTRIBUTING.md` §4.2** + coding patterns **`fronten
    `openapi.d.ts`.
 4. **Wire UI** via `$lib/api/public-client.ts` and `$lib/features/public-portal/` barrel only —
    never raw untyped `fetch` for routes already on FastAPI; never `serviceFetch` for public plane.
-5. **Vite proxy**: add an **exact-path** entry only (do not proxy all of `/public` — SPA +
-   donations/risk BFF must stay on SvelteKit).
+5. **Gateway `/public-api`**: Vite (dev) and nginx (prod) strip the prefix and forward to FastAPI.
+   Do not proxy `/public` (SPA) or `/api` (BFF).
 
 ```
 staff → CouchDB → worker → MongoDB → FastAPI :9000
                                       ↑
-                         public SPA (/public/v1/* via Vite proxy)
+                         public SPA (/public-api/* via Vite or nginx)
 ```
 
 ## Architecture

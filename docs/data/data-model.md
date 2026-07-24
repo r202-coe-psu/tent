@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-14
+updated: 2026-07-23
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -128,7 +128,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `meal_service` | **append-only** | บันทึกแจกอาหารจริงต่อมื้อ |
 | `volunteer` | mutable (LWW) | อาสาสมัคร (คนละ doc กับ `_users` — อาสาไม่มี login ก็ได้) |
 | `shift_assignment` | mutable (LWW) | ตารางเวร |
-| `security_event` | **append-only** | เหตุการณ์ความปลอดภัย |
+| `shelter_report` | state machine | รายงานในศูนย์ (`kind`: grievance \| incident) — [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md) |
 | `referral` | state machine | ส่งต่อหน่วยงานนอก: `draft→sent→accepted|rejected→closed` |
 | `audit` | **append-only** | การกระทำสำคัญ (override duplicate-hint, แก้ retroactive, export, ลบ) |
 
