@@ -25,8 +25,9 @@ export const MEAL_PERIOD_LABELS: Record<MealPeriod, string> = {
 };
 
 // ---- MealPlan (schema.md §2.5) ----------------------------------------
-// _id is deterministic: "meal_plan:{date}:{meal}" — one doc per day+meal.
-// Collision on two devices → CouchDB conflict, not a duplicate doc.
+// _id is a plain ulid (CR-045): multiple plans may share a date+meal (e.g. an
+// extra prep batch), each running its own เบิก→บันทึกบริการ cycle. See
+// createMealPlan below for the history behind the change.
 
 export interface MealPlanHeadcount {
 	total: number;
@@ -38,12 +39,23 @@ export interface MealPlanHeadcount {
 export interface MealPlanRecipe {
 	recipe_id: string;
 	planned_qty: number;
+	// Present when the plan was built from a catalog Recipe (BOM) or a custom
+	// ad-hoc ingredient list instead of the fixed SOP-ratio rice calc — in both
+	// cases recipe_id is used as-is for the stock_ledger item_id (no static
+	// RECIPE_TO_STOCK_ITEM mapping for it) and unit carries its real stock unit.
+	// A BOM recipe_id is a catalog `item_master:*` id (no stock link yet); a
+	// custom recipe_id is a `supply_item` `item:*` id (already stock-linked) —
+	// see meal-plan-list.svelte's isBomSourced for how these are told apart.
+	unit?: string;
 }
 
 export interface MealPlan extends BaseDoc {
 	type: 'meal_plan';
 	date: string;
 	meal: MealPeriod;
+	// Optional display name for a custom/BOM-sourced menu (e.g. "ข้าวไก่กรอบ") —
+	// the SOP rice-only path has no name, so this stays unset there.
+	label?: string;
 	headcount: MealPlanHeadcount;
 	recipes: MealPlanRecipe[];
 	status: MealPlanStatus;
@@ -54,6 +66,7 @@ export interface MealPlan extends BaseDoc {
 export const mealPlanInputSchema = z.object({
 	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
 	meal: mealPeriodSchema,
+	label: z.string().trim().min(1).optional(),
 	headcount: z
 		.object({
 			total: z.number().int().min(0),
@@ -70,7 +83,8 @@ export const mealPlanInputSchema = z.object({
 		.array(
 			z.object({
 				recipe_id: z.string().min(1),
-				planned_qty: z.number().int().positive()
+				planned_qty: z.number().int().positive(),
+				unit: z.string().trim().min(1).optional()
 			})
 		)
 		.min(1, 'At least one recipe required'),
@@ -87,6 +101,11 @@ export const mealPlanInputSchema = z.object({
 });
 export type MealPlanInput = z.input<typeof mealPlanInputSchema>;
 
+// _id is a plain ulid (makeDoc's default) — owner decision: multiple meal
+// plans may exist for the same date+meal (e.g. a second prep batch when the
+// first wasn't enough), each running its own independent เบิก→บันทึกบริการ
+// cycle. Previously deterministic (`meal_plan:{date}:{meal}`, one per slot);
+// changed back when that turned out to block the "extra batch" workflow.
 export function createMealPlan(input: MealPlanInput, ctx: AuthorContext): MealPlan {
 	const d = mealPlanInputSchema.parse(input);
 	return makeDoc(
@@ -98,11 +117,11 @@ export function createMealPlan(input: MealPlanInput, ctx: AuthorContext): MealPl
 			headcount: d.headcount,
 			recipes: d.recipes,
 			status: d.status,
+			...(d.label != null ? { label: d.label } : {}),
 			...(d.override_reason != null ? { override_reason: d.override_reason } : {}),
 			...(d.calc_source != null ? { calc_source: d.calc_source } : {})
 		},
-		ctx,
-		`${d.date}:${d.meal}` // deterministic suffix
+		ctx
 	);
 }
 
@@ -175,8 +194,13 @@ export function createKitchenRequisition(
 export const isKitchenRequisition = (d: unknown): d is KitchenRequisition =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'kitchen_requisition';
 
-// ---- MealService (schema.md §2.7) — deterministic _id, append-only ----
-// _id: "meal_service:{date}:{meal}" — same deterministic pattern as meal_plan.
+// ---- MealService (schema.md §2.7) — ulid _id, append-only -------------
+// meal_plan_id links a service record back to the specific plan it reports
+// on (nullable — same as KitchenRequisition.meal_plan_id — for a service
+// recorded without a plan). Multiple plans can now share a date+meal, so the
+// old deterministic "meal_service:{date}:{meal}" id (one record per meal,
+// period, full stop) could no longer tell which plan a record belonged to;
+// a plan's service status is looked up by meal_plan_id, not date+meal.
 
 export interface MealServiceExternal {
 	volunteers: number;
@@ -187,6 +211,7 @@ export interface MealService extends BaseDoc {
 	type: 'meal_service';
 	date: string;
 	meal: MealPeriod;
+	meal_plan_id: string | null;
 	served: number;
 	waste: number;
 	external: MealServiceExternal;
@@ -196,6 +221,7 @@ export interface MealService extends BaseDoc {
 export const mealServiceInputSchema = z.object({
 	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
 	meal: mealPeriodSchema,
+	meal_plan_id: z.string().nullable().default(null),
 	served: z.number().int().min(0),
 	waste: z.number().int().min(0),
 	external: z.object({
@@ -210,17 +236,17 @@ export function createMealService(input: MealServiceInput, ctx: AuthorContext): 
 	const d = mealServiceInputSchema.parse(input);
 	return makeDoc(
 		'meal_service',
-		1,
+		2,
 		{
 			date: d.date,
 			meal: d.meal,
+			meal_plan_id: d.meal_plan_id,
 			served: d.served,
 			waste: d.waste,
 			external: d.external,
 			...(d.notes ? { notes: d.notes } : {})
 		},
-		ctx,
-		`${d.date}:${d.meal}` // deterministic suffix
+		ctx
 	);
 }
 

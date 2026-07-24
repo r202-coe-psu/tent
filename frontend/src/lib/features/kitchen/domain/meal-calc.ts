@@ -1,5 +1,7 @@
 import Decimal from 'decimal.js';
 import { persistQty, qtyGte, qtyLte, roundQty, subQty } from '$lib/utils/qty';
+import type { Recipe, ItemMaster } from '$lib/features/catalog';
+import type { SupplyItem } from '$lib/features/supply';
 import type {
 	KitchenRequisitionInput,
 	MealPlan,
@@ -8,7 +10,6 @@ import type {
 } from './kitchen';
 
 // Conventional recipe_id for rice — T-26 maps this to the stock item_id.
-// Future ingredients (egg, vegetable, etc.) will add entries here when P-02 ships.
 export const RICE_RECIPE_ID = 'ingredient:rice';
 
 // Rice consumption per person per meal (grams). CR-021 removed rice from
@@ -19,17 +20,24 @@ export const RICE_RECIPE_ID = 'ingredient:rice';
 // TODO(CR-021/CR-013): read from item_master.consumption_rate once it ships.
 export const DEFAULT_RICE_G_PER_PERSON_MEAL = 150;
 
-// Grams per kg — rice recipes are calculated in grams (SOP ratio precision); the
-// stock ledger stores kg (item_master.base_unit). CR-030.
+// Grams per kg — rice/vegetable recipes are calculated in grams (SOP ratio
+// precision); the stock ledger stores kg (item_master.base_unit). CR-030.
 const GRAMS_PER_KG = 1000;
+
+// Display label/unit for a recipe row — covers every id calculateMealIngredients
+// can produce; a recipe_id missing here just falls back to showing its raw id.
+export const RECIPE_LABELS: Record<string, { label: string; unit: string }> = {
+	[RICE_RECIPE_ID]: { label: 'ข้าวสาร', unit: 'g' }
+};
 
 // Maps a calculated recipe_id to the stock item it draws down + its ledger unit
 // + how many recipe units make one stock unit. The bridge to T-26 (kitchen
 // requisition → stock ledger). CR-022. `unit` must match item_master.base_unit
 // (schema.md §2.1); `recipe_per_stock_unit` scales planned_qty (recipe units) to
-// qty_requested (stock units) at the T-25→T-26 seam. Rice: recipe grams / 1000 =
-// stock kg (CR-030). An ingredient whose recipe unit already equals its stock
-// unit (e.g. eggs in ฟอง) uses 1 — so a new item never silently gets /1000.
+// qty_requested (stock units) at the T-25→T-26 seam. Rice/vegetable: recipe
+// grams / 1000 = stock kg (CR-030). An ingredient whose recipe unit already
+// equals its stock unit (e.g. eggs in ฟอง) uses 1 — so a new item never
+// silently gets /1000.
 export const RECIPE_TO_STOCK_ITEM: Record<
 	string,
 	{ item_id: string; unit: string; recipe_per_stock_unit: number }
@@ -49,11 +57,12 @@ export interface MealCalcResult {
 }
 
 /**
- * Derives the ingredient list for one meal from headcount × SOP ratios.
- *
- * Only rice is calculated now (T-25 scope). P-02 special-needs logic
- * (halal preparation, soft-food, infant formula) will extend this once
- * the design spec ships.
+ * Derives the ingredient list for one meal from headcount × SOP ratio (rice
+ * only — the sole ingredient with a real per-person coefficient today). The
+ * previous 3 fixed egg/vegetable menu presets were demo-only mock data with no
+ * SOP ratio backing them; removed per owner request. A real multi-ingredient
+ * menu now comes from a catalog Recipe (BOM) — see
+ * {@link calculateMealIngredientsFromRecipe} — authored on `/back-office/catalog`.
  *
  * Throws if headcount.total is 0 — a meal plan with no occupancy is
  * meaningless and would produce a qty_required = 0 which violates the
@@ -74,9 +83,154 @@ export function calculateMealIngredients(
 	}
 
 	const riceGrams = Math.ceil(headcount.total * riceGPerMeal);
+	const recipes: MealPlanRecipe[] = [{ recipe_id: RICE_RECIPE_ID, planned_qty: riceGrams }];
 
 	return {
-		recipes: [{ recipe_id: RICE_RECIPE_ID, planned_qty: riceGrams }],
+		recipes,
+		calc_source: {
+			sop_profile_id: sopProfileId,
+			sop_profile_version: sopProfileVersion,
+			headcount_as_of: headcountAsOf
+		}
+	};
+}
+
+export interface ResolvedItemMaster {
+	// The real, stock-tracked item_id to draw down (a `supply_item` `item:*`
+	// id); falls back to the item_master_id itself (unresolved — stays
+	// blocked, see toRequisitionInput/isBomSourced).
+	stockItemId: string;
+	unit: string;
+}
+
+/**
+ * Resolves each item_master to a real stock item so BOM recipes built from it
+ * can be checked/withdrawn without a manual trip to `/back-office/catalog`
+ * (catalog's item_master schema is out of kitchen's scope — no explicit-link
+ * field there, so this only matches by name):
+ *   1. same `name` (trimmed, case-insensitive) AND same base_unit as a
+ *      `supply_item` — automatic, no setup needed as long as the two catalogs
+ *      happen to name+measure it the same
+ *   2. unresolved — recipe_id falls back to the item_master_id itself
+ *
+ * The unit guard is deliberate (CR-045): a name-only match whose units differ
+ * (recipe `kg` vs supply `g`) would draw the wrong amount down from the ledger,
+ * because this interim resolver does NO uom conversion — planned_qty stays
+ * recipe-scaled and only inherits the supply unit. Requiring the units to be
+ * equal keeps the drawdown honest; a mismatch stays blocked (unresolved) until
+ * the catalog is fixed, rather than silently under/over-issuing stock.
+ * Invariant: a resolved ingredient's recipe `uom` must equal its item_master
+ * `base_unit` (which now equals the supply unit) — enforced upstream by the
+ * catalog Recipe editor.
+ *
+ * Pure — no I/O; caller (application layer / UI) fetches both lists first.
+ */
+export function resolveItemMasterStock(
+	itemMasters: ItemMaster[],
+	supplyItems: SupplyItem[]
+): Record<string, ResolvedItemMaster> {
+	const supplyByName = new Map(supplyItems.map((si) => [si.name.trim().toLowerCase(), si]));
+
+	const info: Record<string, ResolvedItemMaster> = {};
+	for (const im of itemMasters) {
+		const matched = supplyByName.get(im.name.trim().toLowerCase());
+		info[im._id] =
+			matched && matched.unit === im.base_unit
+				? { stockItemId: matched._id, unit: matched.unit }
+				: { stockItemId: im._id, unit: im.base_unit };
+	}
+	return info;
+}
+
+/**
+ * Derives the ingredient list for one meal from a catalog Recipe (BOM) instead
+ * of the fixed SOP-ratio menus — each recipe.ingredient scales from its
+ * standard_portions to the plan's actual headcount.
+ *
+ * `itemInfo` (keyed by item_master_id, from {@link resolveItemMasterStock})
+ * resolves each ingredient to its real stock item — that ingredient can then
+ * be checked/withdrawn like any other real stock item. An ingredient whose
+ * item_master has no match stays unresolved (recipe_id falls back to the
+ * item_master_id itself, unit to the recipe's own uom) — toRequisitionInput/
+ * isBomSourced still block เบิก for those.
+ *
+ * Throws if headcount.total is 0 or the recipe's standard_portions isn't a
+ * positive number — same invariant as {@link calculateMealIngredients}.
+ */
+export function calculateMealIngredientsFromRecipe(
+	recipe: Recipe,
+	headcount: MealPlanHeadcount,
+	itemInfo: Record<string, ResolvedItemMaster>,
+	sopProfileId: string,
+	sopProfileVersion: number,
+	headcountAsOf: string
+): MealCalcResult {
+	if (headcount.total <= 0) {
+		throw new Error('calculateMealIngredientsFromRecipe: headcount.total must be > 0');
+	}
+	const portions = Number(recipe.standard_portions);
+	if (!(portions > 0)) {
+		throw new Error('calculateMealIngredientsFromRecipe: recipe.standard_portions must be > 0');
+	}
+
+	const scale = new Decimal(headcount.total).div(portions);
+	const recipes: MealPlanRecipe[] = recipe.ingredients.map((ing) => {
+		const resolved = itemInfo[ing.item_master_id];
+		return {
+			recipe_id: resolved?.stockItemId ?? ing.item_master_id,
+			planned_qty: new Decimal(ing.quantity).mul(scale).ceil().toNumber(),
+			unit: resolved?.unit ?? ing.uom
+		};
+	});
+
+	return {
+		recipes,
+		calc_source: {
+			sop_profile_id: sopProfileId,
+			sop_profile_version: sopProfileVersion,
+			headcount_as_of: headcountAsOf
+		}
+	};
+}
+
+export interface CustomIngredientInput {
+	item_id: string; // a real `supply_item` `_id` (item:*) — already stock-linked
+	unit: string; // the supply_item's fixed unit, so no conversion is needed later
+	qty_per_person: number;
+}
+
+/**
+ * Derives the ingredient list for one meal from an ad-hoc, staff-typed
+ * ingredient list ("กำหนดสูตรเอง (Custom)") instead of the fixed SOP-ratio rice
+ * calc or a saved catalog Recipe (BOM) — each `qty_per_person` scales by the
+ * plan's headcount, same mental model as rice's `riceGPerMeal`. Ingredients
+ * must reference a real `supply_item` (not a free-typed name) so the plan can
+ * actually be เบิก later — unlike BOM-sourced plans, these have real stock.
+ *
+ * Throws if headcount.total is 0 or the item list is empty.
+ */
+export function calculateMealIngredientsFromCustom(
+	items: CustomIngredientInput[],
+	headcount: MealPlanHeadcount,
+	sopProfileId: string,
+	sopProfileVersion: number,
+	headcountAsOf: string
+): MealCalcResult {
+	if (headcount.total <= 0) {
+		throw new Error('calculateMealIngredientsFromCustom: headcount.total must be > 0');
+	}
+	if (items.length === 0) {
+		throw new Error('calculateMealIngredientsFromCustom: at least one ingredient required');
+	}
+
+	const recipes: MealPlanRecipe[] = items.map((i) => ({
+		recipe_id: i.item_id,
+		planned_qty: Math.ceil(headcount.total * i.qty_per_person),
+		unit: i.unit
+	}));
+
+	return {
+		recipes,
 		calc_source: {
 			sop_profile_id: sopProfileId,
 			sop_profile_version: sopProfileVersion,
@@ -101,15 +255,27 @@ export function calculateMealIngredients(
 export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
 	const items = plan.recipes.map((r) => {
 		const stock = RECIPE_TO_STOCK_ITEM[r.recipe_id];
-		if (!stock) {
+		if (stock) {
+			const qtyRequested = persistQty(new Decimal(r.planned_qty).div(stock.recipe_per_stock_unit));
+			return {
+				item_id: stock.item_id,
+				qty_requested: qtyRequested,
+				qty_issued: '0',
+				unit: stock.unit
+			};
+		}
+		// BOM (calculateMealIngredientsFromRecipe) or custom
+		// (calculateMealIngredientsFromCustom) recipe — no static mapping,
+		// recipe_id IS the stock item_id already and planned_qty is already in
+		// that item's stock unit, so no conversion.
+		if (!r.unit) {
 			throw new Error(`toRequisitionInput: no stock item mapping for recipe "${r.recipe_id}"`);
 		}
-		const qtyRequested = persistQty(new Decimal(r.planned_qty).div(stock.recipe_per_stock_unit));
 		return {
-			item_id: stock.item_id,
-			qty_requested: qtyRequested,
+			item_id: r.recipe_id,
+			qty_requested: persistQty(r.planned_qty),
 			qty_issued: '0',
-			unit: stock.unit
+			unit: r.unit
 		};
 	});
 	return { meal_plan_id: plan._id, items };

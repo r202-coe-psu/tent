@@ -195,12 +195,12 @@ async function bulkDocs(db: string, docs: unknown[]): Promise<void> {
 
 // ─── catalog helpers ──────────────────────────────────────────────────────────
 
-function catalogDoc(id: string, type: string, body: Record<string, unknown>) {
+function catalogDoc(id: string, type: string, body: Record<string, unknown>, schemaV = 1) {
 	const ts = now();
 	return {
 		_id: id,
 		type,
-		schema_v: 1,
+		schema_v: schemaV,
 		created_at: ts,
 		updated_at: ts,
 		created_by: 'seed',
@@ -290,7 +290,8 @@ const ITEM = {
 	paracetamol: 'item:paracetamol',
 	soap: 'item:soap',
 	blanket: 'item:blanket',
-	egg: 'item:egg'
+	egg: 'item:egg',
+	vegetable: 'item:vegetable'
 } as const;
 
 // ─── seedUsers ────────────────────────────────────────────────────────────────
@@ -462,30 +463,105 @@ async function seedCatalog(): Promise<void> {
 			unit: 'piece',
 			perishable: true,
 			reorder_level: 100
+		}),
+		catalogDoc(ITEM.vegetable, 'supply_item', {
+			name: 'ผักรวม',
+			category: 'food',
+			unit: 'kg',
+			perishable: true,
+			reorder_level: 30
 		})
+	];
+	// item_master docs (catalog schema_v 3) — BOM recipes reference these, and the
+	// kitchen resolves each to real stock (supply_item) by matching name AND unit
+	// (resolveItemMasterStock). rice/egg/vegetable names+units match the
+	// supply_items above, so BOM plans from them เบิก against real stock; the
+	// canned-fish master has no supply_item counterpart, so a recipe using it
+	// stays "unresolved" (demonstrates the block-on-unlinked-ingredient path).
+	const itemMasterBase = {
+		conversions: [],
+		distribution_type: 'consumable',
+		target_audience_type: 'all',
+		target_restrictions: {},
+		is_default: false
+	} as const;
+	const itemMasters = [
+		catalogDoc(
+			'item_master:rice',
+			'item_master',
+			{ name: 'ข้าวสาร', category: 'food', base_unit: 'kg', ...itemMasterBase },
+			3
+		),
+		catalogDoc(
+			'item_master:egg',
+			'item_master',
+			{ name: 'ไข่ไก่', category: 'food', base_unit: 'piece', ...itemMasterBase },
+			3
+		),
+		catalogDoc(
+			'item_master:vegetable',
+			'item_master',
+			{ name: 'ผักรวม', category: 'food', base_unit: 'kg', ...itemMasterBase },
+			3
+		),
+		catalogDoc(
+			'item_master:canned-fish',
+			'item_master',
+			{ name: 'ปลากระป๋อง', category: 'food', base_unit: 'can', ...itemMasterBase },
+			3
+		)
 	];
 	const recipes = [
-		catalogDoc('recipe:fried-egg-rice', 'recipe', {
-			name: 'ข้าวไข่เจียว',
-			serving_unit: 'box',
-			ingredients: [
-				{ item_id: ITEM.rice, qty: '0.2', unit: 'kg' },
-				{ item_id: ITEM.egg, qty: '2', unit: 'piece' }
-			],
-			tags: [],
-			active: true
-		}),
-		catalogDoc('recipe:congee', 'recipe', {
-			name: 'ข้าวต้ม',
-			serving_unit: 'bowl',
-			ingredients: [{ item_id: ITEM.rice, qty: '0.15', unit: 'kg' }],
-			tags: ['soft_food'],
-			active: true
-		})
+		catalogDoc(
+			'recipe:fried-egg-rice',
+			'recipe',
+			{
+				label: 'ข้าวไข่เจียว',
+				standard_portions: '1',
+				standard_duration_hours: '1',
+				ingredients: [
+					{ item_master_id: 'item_master:rice', quantity: '0.2', uom: 'kg' },
+					{ item_master_id: 'item_master:egg', quantity: '2', uom: 'piece' }
+				],
+				is_default: false
+			},
+			3
+		),
+		catalogDoc(
+			'recipe:congee',
+			'recipe',
+			{
+				label: 'ข้าวต้ม',
+				standard_portions: '1',
+				standard_duration_hours: '1',
+				ingredients: [{ item_master_id: 'item_master:rice', quantity: '0.15', uom: 'kg' }],
+				is_default: false
+			},
+			3
+		),
+		// Uses canned-fish (no matching supply_item) → BOM stays unresolved, so the
+		// plan can't be confirmed/withdrawn until the name is linked (demo step 2).
+		catalogDoc(
+			'recipe:canned-fish-rice',
+			'recipe',
+			{
+				label: 'ข้าวปลากระป๋อง',
+				standard_portions: '1',
+				standard_duration_hours: '1',
+				ingredients: [
+					{ item_master_id: 'item_master:rice', quantity: '0.2', uom: 'kg' },
+					{ item_master_id: 'item_master:canned-fish', quantity: '0.5', uom: 'can' }
+				],
+				is_default: false
+			},
+			3
+		)
 	];
 
-	for (const doc of [...items, ...recipes]) await putDoc('catalog', doc);
-	console.log(`  ✓ catalog: ${items.length} supply items, ${recipes.length} recipes`);
+	for (const doc of [...items, ...itemMasters, ...recipes]) await putDoc('catalog', doc);
+	console.log(
+		`  ✓ catalog: ${items.length} supply items, ${itemMasters.length} item masters, ${recipes.length} recipes`
+	);
 
 	await deployCatalogMangoIndexes('catalog');
 }
@@ -822,6 +898,8 @@ async function seedShelter(): Promise<void> {
 		{ item_id: ITEM.paracetamol, qty: '1000', unit: 'tablet', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.soap, qty: '150', unit: 'bar', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.blanket, qty: '80', unit: 'piece', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.egg, qty: '2000', unit: 'piece', reason: 'receive', ref_id: null },
+		{ item_id: ITEM.vegetable, qty: '150', unit: 'kg', reason: 'receive', ref_id: null },
 		{ item_id: ITEM.rice, qty: '-30', unit: 'kg', reason: 'distribute', ref_id: null },
 		{ item_id: ITEM.water, qty: '-100', unit: 'bottle', reason: 'distribute', ref_id: null }
 	];
