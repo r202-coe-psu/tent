@@ -232,6 +232,122 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect((savedDoc as PublicDonationDoc).status).toBe('cancelled');
 	});
 
+	it('DELETE falls back to FastAPI when donation is not yet in CouchDB', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({
+			status: 200,
+			data: { rows: [] }
+		});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					message: 'Donation cancelled successfully'
+				})
+			})
+		);
+
+		const response = await DELETE({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as DeleteEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(200);
+		expect(data.success).toBe(true);
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
+		expect(fetch).toHaveBeenCalledWith(
+			'http://localhost:9000/public/v1/donations/TX-SH001-TESTTOKEN',
+			expect.objectContaining({
+				method: 'DELETE',
+				headers: expect.objectContaining({
+					Authorization: 'Bearer test-external-secret'
+				})
+			})
+		);
+	});
+
+	it('DELETE returns 409 when the FastAPI buffer is already synced to CouchDB', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({
+			status: 200,
+			data: { rows: [] }
+		});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: false,
+				status: 409,
+				json: async () => ({
+					success: false,
+					error: 'SYNCED_TO_COUCH',
+					message: 'Donation already in CouchDB; cancel via shelter record'
+				})
+			})
+		);
+
+		const response = await DELETE({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as DeleteEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(409);
+		expect(data.success).toBe(false);
+	});
+
+	it('DELETE returns 400 when the FastAPI buffer is not in a cancellable status', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({
+			status: 200,
+			data: { rows: [] }
+		});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: false,
+				status: 400,
+				json: async () => ({
+					success: false,
+					error: 'Cannot cancel donation in status "received"'
+				})
+			})
+		);
+
+		const response = await DELETE({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as DeleteEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(400);
+		expect(data.success).toBe(false);
+	});
+
+	it('DELETE returns 404 when the token matches no donation anywhere', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({
+			status: 200,
+			data: { rows: [] }
+		});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: false,
+				status: 404,
+				json: async () => ({ success: false, error: 'Donation record not found' })
+			})
+		);
+
+		const response = await DELETE({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as DeleteEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(404);
+		expect(data.success).toBe(false);
+	});
+
 	it('DELETE returns 400 if donation is not in declared status', async () => {
 		mockDonation.status = 'received';
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {

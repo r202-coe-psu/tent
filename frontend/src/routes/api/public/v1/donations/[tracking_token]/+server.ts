@@ -40,6 +40,16 @@ async function patchCourierViaFastApi(trackingToken: string, courierTrackingNo: 
 	return { status: res.status, body };
 }
 
+/** Pre-inbound: cancel on the Mongo intake buffer via FastAPI. */
+async function cancelViaFastApi(trackingToken: string) {
+	const res = await fetch(
+		`${fastapiBaseUrl()}/public/v1/donations/${encodeURIComponent(trackingToken)}`,
+		{ method: 'DELETE', headers: fastapiServiceHeaders() }
+	);
+	const body = await res.json().catch(() => ({}));
+	return { status: res.status, body };
+}
+
 export const GET = async ({ params, getClientAddress }) => {
 	try {
 		const { tracking_token } = params;
@@ -190,7 +200,26 @@ export const DELETE = async ({ params, getClientAddress }) => {
 
 		const latestDoc = await findByTokenHash(shelterDb, trackingTokenHash);
 		if (!latestDoc) {
-			return json({ success: false, error: 'Donation record not found' }, { status: 404 });
+			// Not in Couch yet (inbound poll lag) — cancel the Mongo buffer directly.
+			const { status, body } = await cancelViaFastApi(tracking_token);
+			if (status === 409) {
+				return json(
+					{
+						success: false,
+						error: 'Donation is syncing. Please refresh and try again in a moment.'
+					},
+					{ status: 409 }
+				);
+			}
+			if (!status || status >= 400) {
+				return json(
+					typeof body === 'object' && body !== null
+						? body
+						: { success: false, error: 'Donation record not found' },
+					{ status: status || 404 }
+				);
+			}
+			return json({ success: true, message: 'Donation cancelled successfully' });
 		}
 
 		if (latestDoc.status !== 'declared') {
