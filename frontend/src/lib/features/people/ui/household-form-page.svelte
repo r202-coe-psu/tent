@@ -12,6 +12,7 @@
 		useCreateHousehold,
 		useUpdateHousehold,
 		useUpdateEvacuee,
+		checkEvacueeHouseholdConflict,
 		type HouseholdInput,
 		type Evacuee
 	} from '../index';
@@ -68,6 +69,27 @@
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 
+			// Early UI feedback; the repository repeats this check against fresh data before writing.
+			const allEvacuees = evacueesQuery.data ?? [];
+			const households = householdsQuery.data ?? [];
+			for (const evacId of selectedMemberIds) {
+				const evac = allEvacuees.find((e) => e._id === evacId);
+				if (evac) {
+					const conflict = checkEvacueeHouseholdConflict(
+						evac,
+						editingHousehold?._id ?? 'household:new',
+						households,
+						allEvacuees
+					);
+					if (!conflict.conflicted) continue;
+					toast.error(
+						`ไม่สามารถบันทึกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${conflict.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+					);
+					isSubmitting = false;
+					return;
+				}
+			}
+
 			let householdId = '';
 			if (isEditMode && editingHousehold) {
 				const updated = {
@@ -103,7 +125,6 @@
 				toast.success(`แก้ไขข้อมูลครัวเรือน "${updated.label}" สำเร็จ`);
 			} else {
 				// Determine status based on members stay statuses (Path B / Path C)
-				const allEvacuees = evacueesQuery.data ?? [];
 				const selectedMembers = allEvacuees.filter((ev) => selectedMemberIds.includes(ev._id));
 				const hasCheckedInMember = selectedMembers.some(
 					(ev) => ev.current_stay?.status === 'active'
@@ -123,7 +144,6 @@
 			}
 
 			// Sync membership
-			const allEvacuees = evacueesQuery.data ?? [];
 			const currentMembers = allEvacuees.filter((ev) => ev.household_id === householdId);
 			const currentMemberIds = currentMembers.map((ev) => ev._id);
 

@@ -30,6 +30,8 @@ export interface PeopleRepository {
 	createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee>;
 	/** Every evacuee in this shelter database. */
 	listEvacuees(): Promise<Evacuee[]>;
+	/** Members linked to one household, resolved through the household_id Mango index. */
+	listHouseholdMembers(householdId: string): Promise<Evacuee[]>;
 	/** Paginated list of evacuees — optional `search` filters before paging. */
 	listEvacueesPaginated(
 		page: number,
@@ -80,4 +82,9 @@ export interface PeopleRepository {
 	 * this is the only path that flips occupancy to `checked_out` (T-06).
 	 */
 	checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
+	/**
+	 * Cancel a pre-registered household and persist an actor-attributed audit entry.
+	 * Person stay status is unchanged because `cancelled` belongs to HouseholdStatus only.
+	 */
+	cancelPreRegistration(householdId: string, ctx: AuthorContext): Promise<void>;
 }

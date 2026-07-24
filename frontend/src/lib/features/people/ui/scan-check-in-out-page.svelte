@@ -170,7 +170,7 @@
 
 	// Helper for status label translation
 	function getStatusLabel(status: StayStatus) {
-		const statusLabels: Record<StayStatus, string> = {
+		const statusLabels: Record<string, string> = {
 			pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
 			active: 'เช็คอินเข้าพักแล้ว',
 			temporary_leave: 'ออกชั่วคราว',

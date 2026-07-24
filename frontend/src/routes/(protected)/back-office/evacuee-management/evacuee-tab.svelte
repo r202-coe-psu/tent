@@ -13,6 +13,7 @@
 	import {
 		useEvacueesPaginated,
 		useCheckInEvacuee,
+		canCheckInEvacuee,
 		zoneLabel,
 		SPECIAL_NEED_CHIPS
 	} from '$lib/features/people';
@@ -159,14 +160,16 @@
 									class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium
 										{e.current_stay.status === 'active'
 										? 'bg-green-100 text-green-800'
-										: 'bg-muted text-muted-foreground'}"
+										: e.current_stay.status === 'pre_registered'
+											? 'bg-blue-100 text-blue-800'
+											: 'bg-muted text-muted-foreground'}"
 								>
 									{STATUS_LABEL[e.current_stay.status] ?? e.current_stay.status}
 								</span>
 							</Table.Cell>
 							<Table.Cell class="text-center">
 								<div class="flex justify-center gap-1.5">
-									{#if e.current_stay.status !== 'active'}
+									{#if canCheckInEvacuee(e)}
 										<Button
 											variant="outline"
 											size="sm"
@@ -176,6 +179,7 @@
 											เช็คอิน
 										</Button>
 									{/if}
+
 									<Button
 										variant="outline"
 										size="sm"

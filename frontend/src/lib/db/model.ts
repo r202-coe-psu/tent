@@ -115,9 +115,9 @@ export function touch<T extends { updated_at: Timestamp }>(doc: T): T {
 
 /** Thai-friendly phone field: UI requires it, but "ไม่มี" maps to null. */
 export const phoneSchema = z
-	.string()
+	.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
 	.trim()
-	.regex(/^[0-9]+$/, 'Phone must be digits only')
+	.regex(/^[0-9]+$/, 'กรุณากรอกเบอร์โทรศัพท์เป็นตัวเลขเท่านั้น')
 	.nullable();
 
 /** Reusable enum for the registration channel. */

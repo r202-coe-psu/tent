@@ -9,9 +9,16 @@
 		value?: string;
 		placeholder?: string;
 		options: { label: string; value: string }[];
+		disabled?: boolean;
 	}
 
-	let { name, value = $bindable(''), placeholder = 'เลือก...', options = [] }: Props = $props();
+	let {
+		name,
+		value = $bindable(''),
+		placeholder = 'เลือก...',
+		options = [],
+		disabled = false
+	}: Props = $props();
 
 	let open = $state(false);
 	let searchValue = $state('');
@@ -33,7 +40,8 @@
 <Popover.Root bind:open>
 	<div bind:clientWidth={triggerWidth} class="w-full">
 		<Popover.Trigger
-			class="flex h-10 w-full items-center justify-between rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 {value
+			{disabled}
+			class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 {value
 				? 'text-foreground'
 				: 'text-muted-foreground'}"
 		>

@@ -68,7 +68,14 @@
 		SPA: true,
 		validators: zod4(householdInputSchema),
 		resetForm: false,
+		onSubmit: () => {
+			syncFormDataFromUiState();
+		},
 		onUpdate: async ({ form }) => {
+			if (!form.data.head_evacuee_id) {
+				toast.error('กรุณาระบุหัวหน้าครัวเรือน');
+				return;
+			}
 			if (!form.valid) return;
 			if ($formData.head_evacuee_id && !emergencyContactPhone.trim()) return;
 			onsubmit(form.data, selectedMemberIds, emergencyContactPhone.trim());
@@ -81,19 +88,11 @@
 	let mzVal = $state('');
 	let commVal = $state('');
 
-	$effect(() => {
-		$formData.municipality_zone = mzVal || null;
-	});
-	$effect(() => {
-		$formData.community = commVal || null;
-	});
-
 	// Member / pet state
 	let petsList = $state<PetGroup[]>([]);
 	let selectedMemberIds = $state<string[]>([]);
 	let memberSearchValue = $state('');
 	let headComboValue = $state('');
-	let noHead = $state(false);
 	let emergencyContactPhone = $state('');
 	let membersInitialized = $state(false);
 
@@ -101,8 +100,9 @@
 	$effect(() => {
 		if ($formData.head_evacuee_id && allEvacuees.length > 0 && !emergencyContactPhone) {
 			const head = allEvacuees.find((e) => e._id === $formData.head_evacuee_id);
-			if (head?.emergency_contact?.phone) {
-				emergencyContactPhone = head.emergency_contact.phone;
+			const phone = head?.emergency_contact?.phone || head?.phone || '';
+			if (phone) {
+				emergencyContactPhone = phone;
 			}
 		}
 	});
@@ -121,49 +121,55 @@
 		vehicleRows = vehicleRows.filter((v) => v.id !== id);
 	}
 
+	let initialized = $state(false);
+
 	// Pre-fill from initialData — avoids reading allEvacuees to prevent live-sync re-runs
 	$effect(() => {
 		if (initialData) {
-			$formData.label = initialData.label;
-			$formData.head_evacuee_id = initialData.head_evacuee_id;
-			headComboValue = initialData.head_evacuee_id ?? '';
-			noHead = initialData.head_evacuee_id === null;
-			$formData.notes = initialData.notes ?? '';
-			$formData.address_no = initialData.address_no ?? '';
-			$formData.village_no = initialData.village_no ?? '';
-			$formData.subdistrict = initialData.subdistrict ?? '';
-			$formData.district = initialData.district ?? '';
-			$formData.province = initialData.province ?? '';
-			$formData.postal_code = initialData.postal_code ?? '';
-			mzVal = initialData.municipality_zone ?? '';
-			commVal = initialData.community ?? '';
-			petsList = initialData.pets ? JSON.parse(JSON.stringify(initialData.pets)) : [];
-			vehicleRows = (initialData.vehicles ?? []).map((v) => ({
-				id: nextVehicleId++,
-				type: v.type,
-				license_plate: v.license_plate ?? ''
-			}));
-			assetDescription = initialData.assets?.description ?? '';
-			membersInitialized = false;
+			if (!initialized) {
+				$formData.label = initialData.label;
+				$formData.head_evacuee_id = initialData.head_evacuee_id;
+				headComboValue = initialData.head_evacuee_id ?? '';
+				$formData.notes = initialData.notes ?? '';
+				$formData.address_no = initialData.address_no ?? '';
+				$formData.village_no = initialData.village_no ?? '';
+				$formData.subdistrict = initialData.subdistrict ?? '';
+				$formData.district = initialData.district ?? '';
+				$formData.province = initialData.province ?? '';
+				$formData.postal_code = initialData.postal_code ?? '';
+				mzVal = initialData.municipality_zone ?? '';
+				commVal = initialData.community ?? '';
+				petsList = initialData.pets ? JSON.parse(JSON.stringify(initialData.pets)) : [];
+				vehicleRows = (initialData.vehicles ?? []).map((v) => ({
+					id: nextVehicleId++,
+					type: v.type,
+					license_plate: v.license_plate ?? ''
+				}));
+				assetDescription = initialData.assets?.description ?? '';
+				membersInitialized = false;
+				initialized = true;
+			}
 		} else {
-			$formData.label = '';
-			$formData.head_evacuee_id = null;
-			headComboValue = '';
-			noHead = false;
-			$formData.notes = '';
-			$formData.address_no = '';
-			$formData.village_no = '';
-			$formData.subdistrict = '';
-			$formData.district = '';
-			$formData.province = '';
-			$formData.postal_code = '';
-			mzVal = '';
-			commVal = '';
-			petsList = [];
-			vehicleRows = [];
-			assetDescription = '';
-			selectedMemberIds = [...initialMemberIds];
-			membersInitialized = true;
+			if (!initialized) {
+				$formData.label = 'ครอบครัว';
+				$formData.head_evacuee_id = null;
+				headComboValue = '';
+				$formData.notes = '';
+				$formData.address_no = '';
+				$formData.village_no = '';
+				$formData.subdistrict = '';
+				$formData.district = '';
+				$formData.province = '';
+				$formData.postal_code = '';
+				mzVal = '';
+				commVal = '';
+				petsList = [];
+				vehicleRows = [];
+				assetDescription = '';
+				selectedMemberIds = [...initialMemberIds];
+				membersInitialized = true;
+				initialized = true;
+			}
 		}
 	});
 
@@ -177,8 +183,10 @@
 		membersInitialized = true;
 	});
 
-	// Sync states to form
-	$effect(() => {
+	function syncFormDataFromUiState() {
+		$formData.municipality_zone = mzVal || null;
+		$formData.community = commVal || null;
+		$formData.head_evacuee_id = headComboValue || null;
 		$formData.pets = petsList.map((p) => ({
 			species: p.species,
 			count: Number(p.count),
@@ -186,23 +194,17 @@
 			has_cage: !!p.has_cage,
 			image_url: p.image_url || null
 		}));
-	});
-
-	$effect(() => {
 		$formData.vehicles = vehicleRows.map((v) => ({
 			type: v.type,
 			license_plate: v.license_plate.trim() || null
 		}));
-	});
-
-	$effect(() => {
 		$formData.assets = assetDescription.trim()
 			? { description: assetDescription.trim(), image_url: null }
 			: null;
-	});
+	}
 
 	// Track head changes: remove old head from members, clear phone, add new head, validate duplicate active household
-	let prevHeadId = $state<string | null>(null);
+	let prevHeadId: string | null = null;
 	$effect(() => {
 		const newHead = $formData.head_evacuee_id;
 		if (newHead && newHead !== prevHeadId) {
@@ -211,12 +213,17 @@
 				const hh = households.find((h) => h._id === evac.household_id);
 				const hhStatus = hh?.status ?? 'checked_in';
 				if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
-					toast.error(
-						`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`
+					const otherMembers = allEvacuees.filter(
+						(m) => m.household_id === evac.household_id && m._id !== evac._id
 					);
-					headComboValue = prevHeadId ?? '';
-					$formData.head_evacuee_id = prevHeadId;
-					return;
+					if (otherMembers.length > 0) {
+						toast.error(
+							`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+						);
+						headComboValue = prevHeadId ?? '';
+						$formData.head_evacuee_id = prevHeadId;
+						return;
+					}
 				}
 			}
 		}
@@ -226,15 +233,23 @@
 			}
 			emergencyContactPhone = '';
 			prevHeadId = newHead;
+
+			// Update label automatically when the head changes
+			if (newHead) {
+				const headEvac = allEvacuees.find((e) => e._id === newHead);
+				if (headEvac) {
+					const isInitialHead = initialData && initialData.head_evacuee_id === newHead;
+					if (!initialData || !isInitialHead) {
+						$formData.label = `ครอบครัว${headEvac.first_name} ${headEvac.last_name}`.trim();
+					}
+				}
+			} else {
+				$formData.label = 'ครอบครัว';
+			}
 		}
 		if (newHead && !selectedMemberIds.includes(newHead)) {
 			selectedMemberIds = [...selectedMemberIds, newHead];
 		}
-	});
-
-	// Sync headComboValue → formData
-	$effect(() => {
-		$formData.head_evacuee_id = headComboValue || null;
 	});
 
 	// Add member when combobox selects, validate duplicate active household
@@ -246,11 +261,16 @@
 					const hh = households.find((h) => h._id === evac.household_id);
 					const hhStatus = hh?.status ?? 'checked_in';
 					if (hhStatus !== 'cancelled' && hhStatus !== 'checked_out') {
-						toast.error(
-							`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสถานะใช้งานอยู่`
+						const otherMembers = allEvacuees.filter(
+							(m) => m.household_id === evac.household_id && m._id !== evac._id
 						);
-						memberSearchValue = '';
-						return;
+						if (otherMembers.length > 0) {
+							toast.error(
+								`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+							);
+							memberSearchValue = '';
+							return;
+						}
 					}
 				}
 				selectedMemberIds = [...selectedMemberIds, memberSearchValue];
@@ -310,7 +330,6 @@
 					{form}
 					{headItems}
 					bind:headComboValue
-					bind:noHead
 					{allEvacuees}
 					bind:emergencyContactPhone
 				/>

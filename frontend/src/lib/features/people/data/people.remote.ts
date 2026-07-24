@@ -1,6 +1,7 @@
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { touch, type AuthorContext } from '$lib/db/model';
 import { getShelterDb } from '$lib/db/shelter';
+import { createAuditEntry } from '$lib/features/shared';
 import {
 	createEvacuee as buildEvacuee,
 	createMovement,
@@ -22,6 +23,9 @@ import {
 	isScreening,
 	migrateHouseholdV3ToV4,
 	matchesEvacueeSearch,
+	assertEvacueeHouseholdAssignment,
+	assertHouseholdStatusTransition,
+	isActiveHouseholdStatus,
 	type Medical,
 	type Movement
 } from '../domain/people';
@@ -107,6 +111,14 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return this.repo.allByType('evacuee', isEvacuee);
 	}
 
+	async listHouseholdMembers(householdId: string): Promise<Evacuee[]> {
+		const docs = await this.repo.find<Evacuee>({
+			selector: { type: 'evacuee', household_id: householdId },
+			limit: 10_000
+		});
+		return docs.filter(isEvacuee);
+	}
+
 	async listEvacueesPaginated(
 		page: number,
 		pageSize: number,
@@ -124,7 +136,27 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	async updateEvacuee(evacuee: Evacuee): Promise<Evacuee> {
 		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		return this.repo.put(touch({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }));
+		if (!latest) throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+
+		const oldHouseholdId = latest.household_id;
+		if (oldHouseholdId !== evacuee.household_id) {
+			const [households, evacuees] = await Promise.all([
+				this.repo.allByType('household', isHousehold),
+				this.repo.allByType('evacuee', isEvacuee)
+			]);
+			assertEvacueeHouseholdAssignment(
+				latest,
+				evacuee.household_id,
+				households.map(migrateHouseholdV3ToV4),
+				evacuees
+			);
+		}
+
+		const saved = await this.repo.put(touch({ ...evacuee, _rev: latest._rev }));
+		if (oldHouseholdId && oldHouseholdId !== saved.household_id) {
+			await this.cancelHouseholdIfEmpty(oldHouseholdId);
+		}
+		return saved;
 	}
 
 	async searchEvacuees(query: string): Promise<Evacuee[]> {
@@ -170,8 +202,24 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	}
 
 	async updateHousehold(household: Household): Promise<Household> {
-		const latest = await this.repo.get<Household>(household._id);
-		return this.repo.put(touch({ ...household, _rev: latest?._rev ?? household._rev }));
+		const latestDoc = await this.repo.get<Household>(household._id);
+		if (!latestDoc) throw new Error('ไม่พบข้อมูลครัวเรือน');
+		const latest = migrateHouseholdV3ToV4(latestDoc);
+		assertHouseholdStatusTransition(latest.status, household.status);
+		return this.repo.put(touch({ ...household, _rev: latest._rev }));
+	}
+
+	private async cancelHouseholdIfEmpty(householdId: string): Promise<void> {
+		const [household, evacuees] = await Promise.all([
+			this.repo.get<Household>(householdId),
+			this.repo.allByType('evacuee', isEvacuee)
+		]);
+		if (!household || !isActiveHouseholdStatus(migrateHouseholdV3ToV4(household).status)) return;
+		if (evacuees.some((evacuee) => evacuee.household_id === householdId)) return;
+
+		const latest = await this.repo.get<Household>(householdId);
+		if (!latest || !isActiveHouseholdStatus(migrateHouseholdV3ToV4(latest).status)) return;
+		await this.repo.put(touch({ ...latest, status: 'cancelled' as const }));
 	}
 
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening> {
@@ -198,6 +246,19 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		assertMovementAllowed(evacuee, 'check_in');
 		const movement = createMovement({ evacuee_id: evacuee._id, action: 'check_in', zone }, ctx);
 		await this.repo.put(movement);
+
+		if (evacuee.household_id) {
+			const hh = await this.repo.get<Household>(evacuee.household_id);
+			if (hh && (hh.status === 'pre_registered' || hh.status === 'arriving')) {
+				await this.repo.put(
+					touch({
+						...hh,
+						status: 'checked_in' as const
+					})
+				);
+			}
+		}
+
 		const latest = await this.repo.get<Evacuee>(evacuee._id);
 		return this.repo.put(
 			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
@@ -217,6 +278,40 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return this.repo.put(
 			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
 		);
+	}
+
+	async cancelPreRegistration(householdId: string, ctx: AuthorContext): Promise<void> {
+		const household = await this.getHousehold(householdId);
+		if (!household) {
+			throw new Error('ไม่พบข้อมูลครัวเรือน');
+		}
+		if (household.status !== 'pre_registered') {
+			throw new Error('สามารถยกเลิกได้เฉพาะครัวเรือนที่อยู่ในสถานะลงทะเบียนล่วงหน้าเท่านั้น');
+		}
+
+		const members = await this.listHouseholdMembers(householdId);
+
+		const updatedHousehold = touch({
+			...household,
+			status: 'cancelled' as const
+		});
+		await this.repo.put(updatedHousehold);
+
+		const audit = createAuditEntry(
+			{
+				action: 'other',
+				target_type: 'household',
+				target_id: householdId,
+				reason: 'ยกเลิกการลงทะเบียนครัวเรือนล่วงหน้า',
+				context: {
+					previous_status: household.status,
+					next_status: 'cancelled',
+					member_count: members.length
+				}
+			},
+			ctx
+		);
+		await this.repo.put(audit);
 	}
 }
 

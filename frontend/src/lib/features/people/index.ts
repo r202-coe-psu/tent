@@ -21,9 +21,11 @@ export type {
 	Religion,
 	SpecialNeed,
 	StayStatus,
+	HouseholdStatus,
 	MovementAction,
 	CareTrack,
-	BloodGroup
+	BloodGroup,
+	CardType
 } from './domain/people';
 
 // Domain — input schemas + factories + transitions + guards
@@ -50,6 +52,12 @@ export {
 	canCheckOutEvacuee,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
+	ACTIVE_HOUSEHOLD_STATUSES,
+	HOUSEHOLD_STATUS_TRANSITIONS,
+	isActiveHouseholdStatus,
+	checkEvacueeHouseholdConflict,
+	assertEvacueeHouseholdAssignment,
+	assertHouseholdStatusTransition,
 	applyMovementToStay,
 	maskNationalId,
 	matchesEvacueeSearch,
@@ -85,9 +93,11 @@ export {
 	useCheckOutEvacuee,
 	lookupEvacueeByScanCode,
 	useHouseholds,
+	useHousehold,
 	useHouseholdsPaginated,
 	useCreateHousehold,
 	useUpdateHousehold,
+	useCancelPreRegistration,
 	useCreateScreening,
 	useMedicals,
 	useMovements,
@@ -101,5 +111,10 @@ export { default as EvacueeForm } from './ui/evacuee-form.svelte';
 export { default as EvacueeList } from './ui/evacuee-list.svelte';
 export { default as HouseholdForm } from './ui/household-form.svelte';
 export { default as HouseholdFormPage } from './ui/household-form-page.svelte';
+export { default as HouseholdPostArrival } from './ui/household-post-arrival.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/evacuee-wristband-success.svelte';
 export { default as ScanCheckInOutPage } from './ui/scan-check-in-out-page.svelte';
+export { default as EvacueePetAssetVehicle } from './ui/evacuee-pet-asset-vehicle.svelte';
+export { default as HouseholdPreRegister } from './ui/household-pre-register.svelte';
+export { default as HouseholdPreRegisterSummary } from './ui/household-pre-register-summary.svelte';
+export { default as HouseholdProfileView } from './ui/household-profile-view.svelte';
