@@ -335,30 +335,30 @@ staff UI  →  CouchDB (SoR)
                 ↓
              FastAPI :9000  (/public/v1/*)
                 ↑
-public SPA  →  same-origin /public/v1/*  (Vite proxy in dev)
+public SPA  →  same-origin /public-api/*  (Vite proxy in dev; nginx in prod)
 ```
 
 **Local stack (all three must run for public features that read Mongo):**
 
-| Step                       | Where                                  | Command / note                                                                                   |
-| -------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 1. Infra                   | repo root                              | `docker compose up -d` — CouchDB, MongoDB, sync worker                                           |
-| 2. Seed / write staff data | `frontend/`                            | `pnpm seed` (or normal staff UI writes) so CouchDB has docs to project                           |
-| 3. Sync                    | automatic via compose worker, or local | `uv run --project worker sync-worker` / `--bootstrap` for full re-sync                           |
-| 4. Public API              | `backend/`                             | `./scripts/run-dev` → FastAPI on **:9000** (`APP_ENV=dev`)                                       |
-| 5. SPA                     | `frontend/`                            | `pnpm dev` → :5173; proxies only `/public/v1/family-search` and `/public/v1/shelters` to FastAPI |
+| Step                       | Where                                  | Command / note                                                                        |
+| -------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------- |
+| 1. Infra                   | repo root                              | `docker compose up -d` — CouchDB, MongoDB, sync worker                                |
+| 2. Seed / write staff data | `frontend/`                            | `pnpm seed` (or normal staff UI writes) so CouchDB has docs to project                |
+| 3. Sync                    | automatic via compose worker, or local | `uv run --project worker sync-worker` / `--bootstrap` for full re-sync                |
+| 4. Public API              | `backend/`                             | `./scripts/run-dev` → FastAPI on **:9000** (`APP_ENV=dev`)                            |
+| 5. SPA                     | `frontend/`                            | `pnpm dev` → :5173; proxies `/public-api` → FastAPI (strips prefix to `/public/v1/*`) |
 
 Verify projections in Compass: `mongodb://localhost:27017/tentdb` (`public_persons`, `public_shelters`, …).
 
 **Frontend rules for this plane:**
 
 - Call FastAPI through **`$lib/api/public-client.ts`** (`openapi-fetch` + generated
-  `$lib/api/openapi.d.ts`). Feature code lives in `$lib/features/public-portal/` (layers + barrel).
-- Do **not** use `serviceFetch` / `$lib/api/service.ts` for `/public/v1/*` (that helper is staff
-  `/api/v1/*` + BFF).
-- Do **not** proxy all of `/public` — SPA pages and remaining BFF aliases
-  (`/public/v1/donations`, `/public/v1/shelters/{code}/risk`) must stay on SvelteKit. Vite config
-  uses **exact-path** bypass for the two FastAPI routes only.
+  `$lib/api/openapi.d.ts`, `baseUrl: '/public-api'`). Feature code lives in
+  `$lib/features/public-portal/` (layers + barrel).
+- Do **not** use `serviceFetch` / `$lib/api/service.ts` for public-plane routes (that helper is
+  staff `/api/v1/*` + BFF).
+- Gateway is **`/public-api` only** — do **not** proxy `/public` (SPA) or `/api` (BFF). FastAPI
+  route paths remain `/public/v1/*` behind the gateway strip.
 - Needs / donations / transparency may still be SvelteKit BFF (`src/routes/api/public/v1/**`) until
   migrated — do not invent a second untyped `fetch` path for endpoints already on FastAPI.
 - After changing FastAPI request/response schemas: start backend, then from `frontend/`:
@@ -384,9 +384,10 @@ Coding patterns (client wrappers, mappers, query keys): **`CONVENTIONS.md` §12*
   for when you actually need one.
 - Keep CouchDB same-origin in dev via the Vite `/couch` proxy (`PUBLIC_COUCH_PROXY`) so the session
   cookie is first-party — don't hardcode absolute CouchDB URLs in feature code.
-- Keep FastAPI public routes same-origin via the path-specific Vite proxies (`PUBLIC_FASTAPI_PROXY`);
-  BFF server calls use `FASTAPI_INTERNAL_URL` (+ `EXTERNAL_API_SECRET` for donations)
-  — see §4.2. Don't hardcode `http://localhost:9000` in feature code.
+- Keep FastAPI public routes same-origin via `/public-api` (Vite proxy in dev via
+  `PUBLIC_FASTAPI_PROXY`; nginx in prod/staging). BFF server calls use `FASTAPI_INTERNAL_URL`
+  (+ `EXTERNAL_API_SECRET` for donations) — see §4.2. Don't hardcode `http://localhost:9000`
+  in feature code.
 
 ## 6. Testing
 

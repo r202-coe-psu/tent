@@ -33,7 +33,7 @@ def _database_name(mongodb_uri: str) -> str:
 	path = urlparse(mongodb_uri).path.lstrip("/")
 	name = path.split("?")[0] if path else ""
 	if not name:
-		msg = "MONGODB_URI must include a database name, e.g. mongodb://localhost:27017/tentdb"
+		msg = "DATABASE_URI must include a database name, e.g. mongodb://localhost:27017/tentdb"
 		raise ValueError(msg)
 	return name
 

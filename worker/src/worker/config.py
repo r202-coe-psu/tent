@@ -22,7 +22,7 @@ def load_settings() -> Settings:
     couch_url = os.environ.get("COUCHDB_URL", "http://localhost:5984")
     user = os.environ.get("COUCHDB_USER", "admin")
     password = os.environ.get("COUCHDB_PASSWORD", "password")
-    mongo = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/tentdb")
+    mongo = os.environ.get("DATABASE_URI", "mongodb://localhost:27017/tentdb")
     return Settings(
         couchdb_url=couch_url,
         couchdb_user=user,
