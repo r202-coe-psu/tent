@@ -39,10 +39,13 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.put(createMealPlan(input, ctx));
 	}
 
-	// _id is a ulid, not deterministic from date+meal (multiple plans per
-	// date+meal are allowed) — scans listMealPlans instead of a direct get.
-	// Ambiguous when more than one plan shares the date+meal; returns whichever
-	// `allByType` yields first.
+	getMealPlanById(id: string): Promise<MealPlan | null> {
+		return this.repo.get<MealPlan>(id);
+	}
+
+	// @deprecated Ambiguous once multiple plans can share a date+meal — returns
+	// whichever `allByType` yields first. Prefer getMealPlanById when the specific
+	// plan is known; kept only for callers that still key off date+meal.
 	async getMealPlan(date: string, meal: string): Promise<MealPlan | null> {
 		const plans = await this.listMealPlans();
 		return plans.find((p) => p.date === date && p.meal === meal) ?? null;
@@ -98,14 +101,32 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.allByType('kitchen_requisition', isKitchenRequisition);
 	}
 
-	recordMealService(input: MealServiceInput, ctx: AuthorContext): Promise<MealService> {
+	// One recorded service per plan: ulid _id lost the idempotence the old
+	// deterministic id gave, so a double-submit/race could otherwise write two
+	// services for the same meal_plan_id (summary would then double-count). This
+	// repo-level guard rejects the second write — a real uniqueness check, not
+	// just the UI button's isPending. Only guards plan-linked services; a
+	// planless service (meal_plan_id null) has no plan to be unique against.
+	async recordMealService(input: MealServiceInput, ctx: AuthorContext): Promise<MealService> {
+		if (input.meal_plan_id) {
+			const existing = await this.getMealServiceByPlanId(input.meal_plan_id);
+			if (existing) {
+				throw new Error('recordMealService: a service is already recorded for this meal plan');
+			}
+		}
 		return this.repo.put(createMealService(input, ctx));
 	}
 
-	// Ambiguous when more than one meal_service shares the date+meal (e.g. two
-	// plans for the same slot each get their own recorded service) — returns
-	// whichever `listMealServices` yields first. Prefer matching by
-	// meal_plan_id when a specific plan is known (see meal-plan-list.svelte).
+	// Looks up the service recorded against a specific plan (the reliable join now
+	// that multiple plans share a date+meal). Returns null when none exists yet.
+	async getMealServiceByPlanId(mealPlanId: string): Promise<MealService | null> {
+		const services = await this.listMealServices();
+		return services.find((s) => s.meal_plan_id === mealPlanId) ?? null;
+	}
+
+	// @deprecated Ambiguous when more than one meal_service shares the date+meal
+	// (each plan for a slot gets its own record) — returns whichever
+	// `listMealServices` yields first. Prefer getMealServiceByPlanId.
 	async getMealService(date: string, meal: string): Promise<MealService | null> {
 		const services = await this.listMealServices();
 		return services.find((s) => s.date === date && s.meal === meal) ?? null;
@@ -129,7 +150,11 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		if (plan.status !== 'draft') {
 			throw new Error('updateMealPlanDraft: only draft plans can be edited');
 		}
-		return this.repo.put({ ...touch(plan), ...patch });
+		const next = { ...touch(plan), ...patch };
+		// An explicit `label: undefined` in the patch means "clear it" — drop the
+		// key so the stored doc loses the old label instead of keeping it.
+		if (patch.label === undefined) delete next.label;
+		return this.repo.put(next);
 	}
 
 	async deleteMealPlanDraft(plan: MealPlan): Promise<void> {

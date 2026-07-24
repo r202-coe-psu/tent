@@ -320,6 +320,29 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 		expect(all).toHaveLength(1);
 		expect(all[0]._id).toMatch(/^meal_service:[0-9A-Z]{26}$/);
 	});
+
+	it('getMealServiceByPlanId finds the record joined to a specific plan', async () => {
+		await repo.recordMealService(serviceInput, ctx);
+
+		const got = await repo.getMealServiceByPlanId('meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV');
+		expect(got?.served).toBe(95);
+		expect(await repo.getMealServiceByPlanId('meal_plan:does-not-exist')).toBeNull();
+	});
+
+	it('rejects a second service for a plan that already has one (one-shot)', async () => {
+		await repo.recordMealService(serviceInput, ctx);
+		await expect(repo.recordMealService(serviceInput, ctx)).rejects.toThrow(
+			/already recorded for this meal plan/
+		);
+		expect(await repo.listMealServices()).toHaveLength(1);
+	});
+
+	it('allows multiple planless services (no meal_plan_id to be unique against)', async () => {
+		const planless = { ...serviceInput, meal_plan_id: null };
+		await repo.recordMealService(planless, ctx);
+		await repo.recordMealService(planless, ctx);
+		expect(await repo.listMealServices()).toHaveLength(2);
+	});
 });
 
 describe('KitchenRemoteRepository.gasCylinderType — CRUD', () => {
@@ -398,7 +421,7 @@ describe('T-27 demo chain — requisition → service record → variance', () =
 		);
 
 		// 4. Variance summary joins service ↔ plan via meal_plan_id and compares.
-		const storedPlan = await repo.getMealPlan('2026-07-20', 'dinner');
+		const storedPlan = await repo.getMealPlanById(plan._id);
 		const v = computeMealVariance(svc, storedPlan);
 
 		expect(v.planned).toBe(100);

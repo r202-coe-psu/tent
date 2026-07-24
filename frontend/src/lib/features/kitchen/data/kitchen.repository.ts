@@ -13,6 +13,8 @@ import type { AuthorContext } from '$lib/db/model';
 export interface KitchenRepository {
 	// MealPlan — ulid _id; multiple plans may share a date+meal (extra batches)
 	createMealPlan(input: MealPlanInput, ctx: AuthorContext): Promise<MealPlan>;
+	getMealPlanById(id: string): Promise<MealPlan | null>;
+	/** @deprecated Ambiguous with multiple plans per date+meal — use getMealPlanById. */
 	getMealPlan(date: string, meal: string): Promise<MealPlan | null>;
 	listMealPlans(): Promise<MealPlan[]>;
 	confirmMealPlan(plan: MealPlan): Promise<MealPlan>;
@@ -28,8 +30,11 @@ export interface KitchenRepository {
 	issueRequisition(input: KitchenRequisitionInput, ctx: AuthorContext): Promise<KitchenRequisition>;
 	listRequisitions(): Promise<KitchenRequisition[]>;
 
-	// MealService — deterministic _id: meal_service:{date}:{meal}, append-only
+	// MealService — ulid _id, append-only; recordMealService rejects a second
+	// service for a plan that already has one (one-shot per meal_plan_id).
 	recordMealService(input: MealServiceInput, ctx: AuthorContext): Promise<MealService>;
+	getMealServiceByPlanId(mealPlanId: string): Promise<MealService | null>;
+	/** @deprecated Ambiguous with multiple plans per date+meal — use getMealServiceByPlanId. */
 	getMealService(date: string, meal: string): Promise<MealService | null>;
 	listMealServices(): Promise<MealService[]>;
 

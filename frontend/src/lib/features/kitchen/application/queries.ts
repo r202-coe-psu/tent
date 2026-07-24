@@ -185,12 +185,15 @@ export const useUpdateMealPlanCalc = () =>
 				custom,
 				new Date().toISOString()
 			);
+			// Pass `label` unconditionally (not a conditional spread): editing to an
+			// empty label must actually clear the old one. `undefined` is dropped on
+			// persist, so the stored doc loses `label` rather than keeping the stale value.
 			return kitchenRepository().updateMealPlanDraft(plan, {
 				headcount,
 				recipes,
 				calc_source,
 				override_reason,
-				...(label ? { label } : {})
+				label
 			});
 		}
 	}));
