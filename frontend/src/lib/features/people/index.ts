@@ -52,6 +52,7 @@ export {
 	CHECK_OUT_ELIGIBLE_STATUSES,
 	applyMovementToStay,
 	maskNationalId,
+	matchesEvacueeSearch,
 	zoneLabel,
 	SPECIAL_NEED_CHIPS,
 	EWAR_SYMPTOM_GROUPS,
