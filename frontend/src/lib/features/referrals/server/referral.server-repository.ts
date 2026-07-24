@@ -393,7 +393,10 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		if (saved.referral_type === 'capacity' && saved.to_shelter_code) {
 			if (to === 'sent') {
 				await this.mirrorCapacityReferralToDestination(saved);
-			} else if (to === 'accepted' || to === 'rejected' || to === 'closed') {
+			} else if (to === 'accepted' || to === 'rejected') {
+				await this.syncCapacityReferralPeer(saved, scope);
+			} else if (to === 'closed' && latest.status !== 'draft') {
+				// CR-046: draft→closed never mirrored — do not create a peer on destination.
 				await this.syncCapacityReferralPeer(saved, scope);
 			}
 		}

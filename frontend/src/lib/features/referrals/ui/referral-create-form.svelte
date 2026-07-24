@@ -4,55 +4,76 @@
 	import { toast } from 'svelte-sonner';
 
 	import { type Referral, type ReferralInput } from '../domain/referral.schema';
-	import { useCreateReferral } from '../application/queries';
+	import type { ReferralBatchFailure, ReferralSubmitIntent } from '../data/referral.repository';
+	import { useCreateReferralBatch } from '../application/queries';
 	import RedactionBanner from './redaction-banner.svelte';
-	import EvacueeSearchInput from './evacuee-search-input.svelte';
+	import EvacueePickerTable from './evacuee-picker-table.svelte';
 	import MedicalReferralForm from './medical-referral-form.svelte';
 	import CapacityReferralForm from './capacity-referral-form.svelte';
 	import ResourceReferralForm from './resource-referral-form.svelte';
 
 	let {
-		onCreated,
-		onSuccess
+		onBatchDone
 	}: {
-		onCreated?: (referralId: string) => void;
-		onSuccess?: (doc: Referral) => void;
+		onBatchDone?: (result: { created: Referral[]; failed: ReferralBatchFailure[] }) => void;
 	} = $props();
 
 	const queryClient = useQueryClient();
-	const createMutation = useCreateReferral(queryClient);
+	const batchMutation = useCreateReferralBatch(queryClient);
 
-	let evacuee_id = $state('');
+	let selectedIds = $state<string[]>([]);
 	let selectedType = $state<'medical-emergency' | 'capacity' | 'resource'>('medical-emergency');
-	let evacueeError = $state<string | undefined>(undefined);
+	let selectionAttempted = $state(false);
 
-	$effect(() => {
-		if (evacuee_id) {
-			evacueeError = undefined;
-		}
-	});
+	const evacueeError = $derived(
+		selectionAttempted && selectedIds.length === 0
+			? 'กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน'
+			: undefined
+	);
 
-	async function handleSubmit(formData: ReferralInput) {
-		if (!evacuee_id) {
-			evacueeError = 'กรุณาเลือกผู้ประสบภัย';
-			toast.error('กรุณาเลือกผู้ประสบภัย');
+	const formEvacueeId = $derived(selectedIds[0] ?? '');
+
+	async function handleSubmit(formData: ReferralInput, intent: ReferralSubmitIntent) {
+		if (selectedIds.length === 0) {
+			selectionAttempted = true;
+			toast.error('กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน');
 			return;
 		}
 
-		await toast.promise(createMutation.mutateAsync(formData), {
-			loading: 'กำลังบันทึกรายการส่งต่อ...',
-			success: (doc) => {
-				onCreated?.(doc._id);
-				onSuccess?.(doc);
-				return 'สร้างรายการส่งต่อผู้ประสบภัยเรียบร้อยแล้ว';
-			},
-			error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึก')
+		selectionAttempted = false;
+		const actionLabel = intent === 'send' ? 'สร้างและส่ง' : 'บันทึกร่าง';
+		const mutation = batchMutation.mutateAsync({
+			template: formData,
+			evacueeIds: [...selectedIds],
+			intent
 		});
+
+		try {
+			void toast.promise(mutation, {
+				loading: `กำลัง${actionLabel} ${selectedIds.length} รายการ...`,
+				success: (res) => {
+					if (res.failed.length === 0) {
+						return intent === 'send'
+							? `ส่งข้อมูลสำเร็จ ${res.created.length} รายการ`
+							: `บันทึกร่างสำเร็จ ${res.created.length} รายการ`;
+					}
+					if (res.created.length === 0) {
+						return `สร้างไม่สำเร็จทั้ง ${res.failed.length} รายการ`;
+					}
+					return `สำเร็จบางส่วน: สร้างได้ ${res.created.length} / ล้มเหลว ${res.failed.length}`;
+				},
+				error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึก')
+			});
+
+			const result = await mutation;
+			onBatchDone?.(result);
+		} catch {
+			// toast.promise already surfaced the error
+		}
 	}
 </script>
 
 <div class="space-y-6">
-	<!-- Warning Banner when Hospital destination is chosen -->
 	{#if selectedType === 'medical-emergency'}
 		<RedactionBanner />
 	{/if}
@@ -63,11 +84,10 @@
 				>สร้างรายการส่งต่อผู้ประสบภัย (New Referral Request)</Card.Title
 			>
 			<Card.Description
-				>เลือกประเภทการส่งต่อและกรอกข้อมูลปลายทางให้ครบถ้วนก่อนส่งให้เจ้าหน้าที่</Card.Description
+				>เลือกผู้ประสบภัยได้หลายคน — ระบบจะสร้าง 1 ใบต่อคนด้วยข้อมูลปลายทางชุดเดียวกัน</Card.Description
 			>
 		</Card.Header>
 		<Card.Content class="space-y-6 p-6">
-			<!-- Step 1: Select Referral Type -->
 			<div class="space-y-3">
 				<span class="text-sm font-semibold text-foreground"
 					>1. เลือกประเภทการส่งต่อ (Referral Type) *</span
@@ -134,30 +154,28 @@
 
 			<hr class="border-border/60" />
 
-			<!-- Step 2: Evacuee Selection (Shared Sub-component) -->
-			<EvacueeSearchInput bind:value={evacuee_id} error={evacueeError} />
+			<EvacueePickerTable bind:selectedIds error={evacueeError} />
 
 			<hr class="border-border/60" />
 
-			<!-- Step 3 & 4: Type-Specific Form Component -->
 			{#key selectedType}
 				{#if selectedType === 'medical-emergency'}
 					<MedicalReferralForm
-						evacueeId={evacuee_id}
+						evacueeId={formEvacueeId}
 						onSubmit={handleSubmit}
-						submitting={createMutation.isPending}
+						submitting={batchMutation.isPending}
 					/>
 				{:else if selectedType === 'capacity'}
 					<CapacityReferralForm
-						evacueeId={evacuee_id}
+						evacueeId={formEvacueeId}
 						onSubmit={handleSubmit}
-						submitting={createMutation.isPending}
+						submitting={batchMutation.isPending}
 					/>
 				{:else if selectedType === 'resource'}
 					<ResourceReferralForm
-						evacueeId={evacuee_id}
+						evacueeId={formEvacueeId}
 						onSubmit={handleSubmit}
-						submitting={createMutation.isPending}
+						submitting={batchMutation.isPending}
 					/>
 				{/if}
 			{/key}

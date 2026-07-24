@@ -5,7 +5,7 @@
  * Implements the forward-only state matrix from T-34.md §3.4.
  *
  * State matrix (valid transitions only):
- *   draft    → sent
+ *   draft    → sent | closed   (closed = cancel draft before send — CR-046)
  *   sent     → accepted | rejected
  *   accepted → closed
  *   rejected → closed
@@ -19,7 +19,7 @@ import type { Referral, ReferralStatus, ReferralTimeline } from './referral.sche
 // ---------------------------------------------------------------------------
 
 const VALID_TRANSITIONS: Record<ReferralStatus, readonly ReferralStatus[]> = {
-	draft: ['sent'],
+	draft: ['sent', 'closed'],
 	sent: ['accepted', 'rejected'],
 	accepted: ['closed'],
 	rejected: ['closed'],

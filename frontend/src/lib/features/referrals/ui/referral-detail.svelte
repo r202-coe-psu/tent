@@ -8,6 +8,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import Archive from '@lucide/svelte/icons/archive';
+	import Ban from '@lucide/svelte/icons/ban';
 	import Send from '@lucide/svelte/icons/send';
 	import Clock from '@lucide/svelte/icons/clock';
 	import User from '@lucide/svelte/icons/user';
@@ -323,7 +324,7 @@
 								class="absolute top-1.5 -left-[30px] flex h-4 w-4 items-center justify-center rounded-full border-2 border-slate-500 bg-background p-1"
 							></div>
 							<div class="text-xs">
-								<span class="font-semibold text-slate-600">ปิดงานสมบูรณ์ (Closed):</span>
+								<span class="font-semibold text-slate-600">ปิดรายการ (Closed):</span>
 								<span class="text-muted-foreground">{formatDate(referral.timeline.closed.at)}</span>
 								<span
 									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
@@ -377,15 +378,27 @@
 			{/if}
 
 			{#if canClose}
-				<Button
-					size="sm"
-					variant="outline"
-					class="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
-					onclick={() => handleTransition('closed', 'ปิดรายการ')}
-				>
-					<Archive class="h-4 w-4" />
-					ปิดรายการ (Close)
-				</Button>
+				{#if referral.status === 'draft'}
+					<Button
+						size="sm"
+						variant="outline"
+						class="gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
+						onclick={() => handleTransition('closed', 'ยกเลิกร่าง')}
+					>
+						<Ban class="h-4 w-4" />
+						ยกเลิกร่าง
+					</Button>
+				{:else}
+					<Button
+						size="sm"
+						variant="outline"
+						class="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
+						onclick={() => handleTransition('closed', 'ปิดรายการ')}
+					>
+						<Archive class="h-4 w-4" />
+						ปิดรายการ (Close)
+					</Button>
+				{/if}
 			{/if}
 		</Card.Footer>
 	</Card.Root>

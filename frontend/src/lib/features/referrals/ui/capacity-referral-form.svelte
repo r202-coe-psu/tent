@@ -6,6 +6,7 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { capacityInputSchema, type ReferralInput } from '../domain/referral.schema';
+	import type { ReferralSubmitIntent } from '../data/referral.repository';
 	import ShelterCombobox from './shelter-combobox.svelte';
 
 	let {
@@ -14,9 +15,11 @@
 		submitting = false
 	}: {
 		evacueeId: string;
-		onSubmit: (data: ReferralInput) => void;
+		onSubmit: (data: ReferralInput, intent: ReferralSubmitIntent) => void;
 		submitting?: boolean;
 	} = $props();
+
+	let submitIntent = $state<ReferralSubmitIntent>('draft');
 
 	const initialData = {
 		referral_type: 'capacity' as const,
@@ -34,7 +37,7 @@
 		validators: zod4(capacityInputSchema),
 		onUpdate: ({ form: f }) => {
 			if (f.valid) {
-				onSubmit(f.data);
+				onSubmit(f.data, submitIntent);
 			}
 		}
 	});
@@ -139,13 +142,23 @@
 		</Form.Field>
 	</div>
 
-	<div class="flex items-center justify-end gap-3 border-t border-border/60 pt-4">
+	<div class="flex flex-wrap items-center justify-end gap-3 border-t border-border/60 pt-4">
+		<Button
+			type="submit"
+			variant="outline"
+			disabled={submitting}
+			class="min-w-28"
+			onclick={() => (submitIntent = 'draft')}
+		>
+			บันทึกร่าง
+		</Button>
 		<Button
 			type="submit"
 			disabled={submitting}
-			class="w-32 bg-primary text-primary-foreground hover:bg-primary/95"
+			class="min-w-28 bg-primary text-primary-foreground hover:bg-primary/95"
+			onclick={() => (submitIntent = 'send')}
 		>
-			บันทึกร่าง
+			ส่งข้อมูล
 		</Button>
 	</div>
 </form>

@@ -349,7 +349,7 @@ open → escalated
 
 **Migration:** ไม่มี `security_event` จาก production → ไม่ backfill; ห้ามสร้าง `security_event` ใหม่
 
-### 2.11 `referral` — `referral:{ulid}` · state machine (CR-045)
+### 2.11 `referral` — `referral:{ulid}` · state machine (CR-045, CR-046)
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
@@ -360,15 +360,26 @@ open → escalated
 | `reason` | str | req | — |
 | `response_reason` | str | opt | เหตุผลประกอบการตอบรับ (`accepted`) หรือปฏิเสธ (`rejected`) (CR-045) |
 | `urgency` | enum(`normal`,`urgent`) | req | — |
-| `status` | enum(`draft`,`sent`,`accepted`,`rejected`,`closed`) | req | forward-only |
+| `status` | enum(`draft`,`sent`,`accepted`,`rejected`,`closed`) | req | forward-only — ดู transitions ด้านล่าง |
 | `timeline` | {`sent`:{at,by}?, `responded`:{at,by}?, `closed`:{at,by}?} | sys | — |
 | `notes` | str | opt | — |
+
+**Status transitions (forward-only):**
+
+```
+draft    → sent | closed     (closed = ยกเลิกร่างก่อนส่ง — CR-046)
+sent     → accepted | rejected
+accepted → closed
+rejected → closed
+closed   → (terminal)
+```
 
 > **Capacity hand-off (CR-045, destination-gated):**
 > 1. ต้นทาง `draft → sent` ผ่าน BFF → **mirror** referral (same `_id`, คง `shelter_code` ต้นทาง) เข้า `shelter_{to}` เป็น inbox ปลายทาง
 > 2. **เฉพาะศูนย์ปลายทาง** (`caller.shelter === to_shelter_code`) กด `accepted` / `rejected`
 > 3. ตอน `accepted` เท่านั้น: cross-DB transfer — dest `transfer_in` แล้ว source `transfer_out` (**ห้าม** rewrite `shelter_code` ใน DB ต้นทาง) จากนั้น sync สถานะกลับต้นทาง
-> Write path = BFF `/api/back-office/referral/[id]/transition` ผ่าน `adminRaw`
+> 4. ต้นทาง `draft → closed` (CR-046): ปิดที่ source เท่านั้น — **ห้าม** สร้าง/sync peer ที่ปลายทาง (ยังไม่เคย mirror)
+> Write path = BFF `/api/back-office/referral/[id]/transition` ผ่าน `adminRaw` (capacity ทุก transition รวม cancel draft)
 > **Index:** Mango indexes deployed: `referral-type-status-idx` (`['type', 'status']`), `referral-type-evacuee-idx` (`['type', 'evacuee_id']`), `referral-list-sort-idx` (`['type', 'created_at', 'status', 'evacuee_id']`), `referral-list-basic-idx` (`['type', 'created_at']`).
 
 ### 2.12 `audit` — `audit:{ulid}` · **append-only**

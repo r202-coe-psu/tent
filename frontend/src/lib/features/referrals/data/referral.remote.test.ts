@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ReferralRemoteRepository } from './referral.remote';
-import type { Referral } from '../domain/referral.schema';
+import { createReferralBatch, ReferralRemoteRepository } from './referral.remote';
+import type { Referral, ReferralInput } from '../domain/referral.schema';
+import type { ReferralRepository } from './referral.repository';
 
 const mockRepoPut = vi.fn();
 const mockRepoGet = vi.fn();
@@ -129,5 +130,117 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 		expect(mockRepoPut).toHaveBeenCalled();
 		expect(result.status).toBe('accepted');
+	});
+});
+
+describe('createReferralBatch', () => {
+	const template: ReferralInput = {
+		referral_type: 'medical-emergency',
+		evacuee_id: 'evacuee:placeholder000000000001',
+		reason: 'Need hospital care',
+		urgency: 'normal',
+		to_org: { name: 'Hospital A', kind: 'hospital' },
+		notes: 'batch test'
+	};
+
+	const ctx = { shelterCode: 'SH001', createdBy: 'Staff A' };
+
+	function makeDraft(evacueeId: string, idSuffix: string): Referral {
+		return {
+			_id: `referral:01BATCH${idSuffix}`,
+			type: 'referral',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			created_at: '2026-07-24T05:00:00.000Z',
+			updated_at: '2026-07-24T05:00:00.000Z',
+			created_by: 'Staff A',
+			evacuee_id: evacueeId,
+			referral_type: 'medical-emergency',
+			to_org: { name: 'Hospital A', kind: 'hospital' },
+			reason: 'Need hospital care',
+			urgency: 'normal',
+			status: 'draft',
+			timeline: {},
+			notes: 'batch test'
+		};
+	}
+
+	it('creates one draft referral per evacuee', async () => {
+		const ids = ['evacuee:01AAA000000000000000001', 'evacuee:01AAA000000000000000002'];
+		const create = vi
+			.fn()
+			.mockImplementationOnce(async (input: ReferralInput) => makeDraft(input.evacuee_id, 'A'))
+			.mockImplementationOnce(async (input: ReferralInput) => makeDraft(input.evacuee_id, 'B'));
+		const transition = vi.fn();
+		const repo = { create, transition } as unknown as ReferralRepository;
+
+		const result = await createReferralBatch(template, ids, { intent: 'draft', ctx, repo });
+
+		expect(create).toHaveBeenCalledTimes(2);
+		expect(transition).not.toHaveBeenCalled();
+		expect(result.created).toHaveLength(2);
+		expect(result.failed).toHaveLength(0);
+		expect(result.created.map((r) => r.evacuee_id)).toEqual(ids);
+		expect(create.mock.calls[0]![0].evacuee_id).toBe(ids[0]);
+		expect(create.mock.calls[1]![0].evacuee_id).toBe(ids[1]);
+	});
+
+	it('creates then transitions each referral to sent when intent is send', async () => {
+		const ids = ['evacuee:01BBB000000000000000001'];
+		const draft = makeDraft(ids[0]!, 'C');
+		const create = vi.fn().mockResolvedValue(draft);
+		const transition = vi.fn().mockResolvedValue({
+			...draft,
+			status: 'sent',
+			timeline: { sent: { at: '2026-07-24T05:01:00.000Z', by: 'Staff A' } }
+		});
+		const repo = { create, transition } as unknown as ReferralRepository;
+
+		const result = await createReferralBatch(template, ids, { intent: 'send', ctx, repo });
+
+		expect(create).toHaveBeenCalledTimes(1);
+		expect(transition).toHaveBeenCalledWith(draft._id, 'sent', 'Staff A');
+		expect(result.created).toHaveLength(1);
+		expect(result.created[0]!.status).toBe('sent');
+		expect(result.failed).toHaveLength(0);
+	});
+
+	it('continues on partial failure and reports created + failed', async () => {
+		const ids = [
+			'evacuee:01CCC000000000000000001',
+			'evacuee:01CCC000000000000000002',
+			'evacuee:01CCC000000000000000003'
+		];
+		const create = vi
+			.fn()
+			.mockImplementationOnce(async (input: ReferralInput) => makeDraft(input.evacuee_id, 'D'))
+			.mockRejectedValueOnce(new Error('Evacuee not found'))
+			.mockImplementationOnce(async (input: ReferralInput) => makeDraft(input.evacuee_id, 'E'));
+		const transition = vi.fn();
+		const repo = { create, transition } as unknown as ReferralRepository;
+
+		const result = await createReferralBatch(template, ids, { intent: 'draft', ctx, repo });
+
+		expect(create).toHaveBeenCalledTimes(3);
+		expect(result.created).toHaveLength(2);
+		expect(result.failed).toEqual([{ evacuee_id: ids[1], error: 'Evacuee not found' }]);
+	});
+
+	it('records send failure after create when transition fails', async () => {
+		const ids = ['evacuee:01DDD000000000000000001', 'evacuee:01DDD000000000000000002'];
+		const draftA = makeDraft(ids[0]!, 'F');
+		const draftB = makeDraft(ids[1]!, 'G');
+		const create = vi.fn().mockResolvedValueOnce(draftA).mockResolvedValueOnce(draftB);
+		const transition = vi
+			.fn()
+			.mockResolvedValueOnce({ ...draftA, status: 'sent' })
+			.mockRejectedValueOnce(new Error('BFF mirror failed'));
+		const repo = { create, transition } as unknown as ReferralRepository;
+
+		const result = await createReferralBatch(template, ids, { intent: 'send', ctx, repo });
+
+		expect(result.created).toHaveLength(1);
+		expect(result.created[0]!._id).toBe(draftA._id);
+		expect(result.failed).toEqual([{ evacuee_id: ids[1], error: 'BFF mirror failed' }]);
 	});
 });

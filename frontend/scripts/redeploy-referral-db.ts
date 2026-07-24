@@ -12,10 +12,23 @@
  *
  * Needs: COUCHDB_ADMIN_URL in frontend/.env
  *   Format: http://admin:<password>@<host>:<port>
+ *
+ * Runs under plain `tsx` (not the SvelteKit runtime), so this script must NOT
+ * import `$lib/server/couch-admin` / `shelters.admin` — those pull `$env` and
+ * `@sveltejs/kit`. Couch HTTP + env loading live here; design payloads come
+ * from the pure `$lib/server/shelter-access-design` module.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+import {
+	buildValidateDocUpdate,
+	REFERRAL_MANGO_INDEXES,
+	shelterDbName
+} from '$lib/server/shelter-access-design';
+
+// ─── env loader ─────────────────────────────────────────────────────────────
 
 function loadEnv(): Record<string, string> {
 	const envPath = resolve(process.cwd(), '.env');
@@ -47,8 +60,18 @@ if (!rawCouchUrl) {
 	process.exit(1);
 }
 
-// Point process.env so $lib/server/couch-admin picks up the same admin URL.
-process.env.COUCHDB_ADMIN_URL = rawCouchUrl;
+function parseCouchUrl(raw: string): { baseUrl: string; authHeader: string } {
+	const url = new URL(raw);
+	const authHeader =
+		url.username || url.password
+			? `Basic ${Buffer.from(`${decodeURIComponent(url.username)}:${decodeURIComponent(url.password)}`).toString('base64')}`
+			: '';
+	url.username = '';
+	url.password = '';
+	return { baseUrl: url.toString().replace(/\/$/, ''), authHeader };
+}
+
+const { baseUrl: COUCH_URL, authHeader: COUCH_AUTH } = parseCouchUrl(rawCouchUrl);
 
 const DRY_RUN = !process.argv.includes('--write');
 const CONFIRMED = process.argv.includes('--confirm');
@@ -59,9 +82,76 @@ if (!DRY_RUN && !CONFIRMED) {
 	process.exit(1);
 }
 
-const { listShelterMasters, redeployShelterAccessDesign, deployReferralMangoIndexes } =
-	await import('../src/lib/server/shelters.admin');
-const { shelterDbName } = await import('../src/lib/server/shelter-access-design');
+// ─── CouchDB helpers (tsx-safe; mirror seed/migrate-shelter) ────────────────
+
+async function couchReq(
+	method: string,
+	path: string,
+	body?: unknown
+): Promise<{ status: number; data: unknown }> {
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json',
+		Accept: 'application/json'
+	};
+	if (COUCH_AUTH) headers['Authorization'] = COUCH_AUTH;
+	const res = await fetch(`${COUCH_URL}${path}`, {
+		method,
+		headers,
+		...(body !== undefined ? { body: JSON.stringify(body) } : {})
+	});
+	const data = res.status === 204 ? null : await res.json().catch(() => null);
+	return { status: res.status, data };
+}
+
+interface ShelterMasterRow {
+	code: string;
+}
+
+async function listShelterMasters(): Promise<ShelterMasterRow[]> {
+	const res = await couchReq('GET', '/registry/_all_docs?include_docs=true');
+	if (res.status === 404) return [];
+	if (res.status >= 400) {
+		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+		throw new Error(
+			`Could not read registry (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
+	}
+	const rows = (res.data as { rows?: { id: string; doc?: { code?: string } }[] })?.rows ?? [];
+	return rows
+		.filter((r) => r.id.startsWith('shelter:') && r.doc?.code)
+		.map((r) => ({ code: r.doc!.code! }));
+}
+
+async function redeployShelterAccessDesign(db: string, shelterCode: string): Promise<number> {
+	const existing = await couchReq('GET', `/${db}/_design/access`);
+	const rev = existing.status === 200 ? (existing.data as { _rev: string })._rev : undefined;
+	const res = await couchReq('PUT', `/${db}/_design/access`, {
+		_id: '_design/access',
+		...(rev ? { _rev: rev } : {}),
+		validate_doc_update: buildValidateDocUpdate(shelterCode)
+	});
+	if (res.status >= 400) {
+		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+		throw new Error(
+			`validate_doc_update redeploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
+	}
+	return res.status;
+}
+
+async function deployReferralMangoIndexes(db: string): Promise<void> {
+	for (const def of REFERRAL_MANGO_INDEXES) {
+		const res = await couchReq('POST', `/${db}/_index`, def);
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	}
+}
+
+// ─── main ───────────────────────────────────────────────────────────────────
 
 async function main() {
 	console.log('🔄 Redeploy _design/access + referral Mango indexes');
@@ -86,7 +176,9 @@ async function main() {
 		console.log(`  → ${code} (${db})`);
 
 		if (DRY_RUN) {
-			console.log(`    would redeploy _design/access + ${4} mango indexes`);
+			console.log(
+				`    would redeploy _design/access + ${REFERRAL_MANGO_INDEXES.length} mango indexes`
+			);
 			ok++;
 			continue;
 		}

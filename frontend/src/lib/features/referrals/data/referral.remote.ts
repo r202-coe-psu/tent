@@ -13,7 +13,11 @@ import {
 } from '../domain/referral.schema';
 import { applyTransition } from '../domain/referral.transitions';
 import { peopleRepository } from '$lib/features/people';
-import type { ReferralRepository } from './referral.repository';
+import type {
+	ReferralBatchResult,
+	ReferralRepository,
+	ReferralSubmitIntent
+} from './referral.repository';
 
 /**
  * Capacity referrals need BFF/admin for:
@@ -134,4 +138,40 @@ export function referralRepository(): ReferralRepository {
 		singletonDbName = currentDb;
 	}
 	return singleton;
+}
+
+/**
+ * Create one referral per evacuee (shared template fields), optionally transition each to `sent`.
+ * Continues on per-person failure so the UI can show partial success.
+ */
+export async function createReferralBatch(
+	template: ReferralInput,
+	evacueeIds: string[],
+	options: {
+		intent: ReferralSubmitIntent;
+		ctx: AuthorContext;
+		repo?: ReferralRepository;
+	}
+): Promise<ReferralBatchResult> {
+	const repo = options.repo ?? referralRepository();
+	const created: Referral[] = [];
+	const failed: ReferralBatchResult['failed'] = [];
+
+	for (const evacuee_id of evacueeIds) {
+		try {
+			const input = { ...template, evacuee_id } as ReferralInput;
+			let doc = await repo.create(input, options.ctx);
+			if (options.intent === 'send') {
+				doc = await repo.transition(doc._id, 'sent', options.ctx.createdBy);
+			}
+			created.push(doc);
+		} catch (err) {
+			failed.push({
+				evacuee_id,
+				error: err instanceof Error ? err.message : 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ'
+			});
+		}
+	}
+
+	return { created, failed };
 }

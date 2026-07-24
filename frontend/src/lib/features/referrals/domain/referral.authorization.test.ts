@@ -55,4 +55,12 @@ describe('referral.authorization', () => {
 			ReferralAuthorizationError
 		);
 	});
+
+	it('allows only source to cancel capacity draft (draft → closed)', () => {
+		const draft = capacitySent({ status: 'draft', timeline: {} });
+		expect(() => assertActorMayTransition(draft, 'closed', 'SH001')).not.toThrow();
+		expect(() => assertActorMayTransition(draft, 'closed', 'SH002')).toThrow(
+			ReferralAuthorizationError
+		);
+	});
 });

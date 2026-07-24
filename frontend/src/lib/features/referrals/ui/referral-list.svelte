@@ -4,7 +4,9 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Search from '@lucide/svelte/icons/search';
+	import Users from '@lucide/svelte/icons/users';
 	import type { Referral, ReferralStatus } from '../domain/referral.schema';
+	import { groupReferralsForList, type ReferralListGroup } from '../domain/referral.batch-group';
 	import { useEvacuees, type Evacuee } from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
@@ -20,12 +22,12 @@
 	let {
 		referrals,
 		onSelect,
-		selectedId = null,
+		selectedKey = null,
 		evacuees = null
 	}: {
 		referrals: Referral[];
-		onSelect?: (id: string) => void;
-		selectedId?: string | null;
+		onSelect?: (group: ReferralListGroup) => void;
+		selectedKey?: string | null;
 		evacuees?: Evacuee[] | null;
 	} = $props();
 
@@ -57,8 +59,8 @@
 		currentPage = 1;
 	});
 
-	// Filter pipeline
-	const filteredReferrals = $derived.by(() => {
+	// Filter pipeline (per referral), then collapse batches into one row
+	const filteredGroups = $derived.by(() => {
 		let list = referrals;
 		if (activeTab !== 'all') {
 			list = list.filter((r) => r.status === activeTab);
@@ -74,12 +76,11 @@
 			});
 		}
 
-		return list;
+		return groupReferralsForList(list);
 	});
 
-	// Paginate pipeline
-	const paginatedReferrals = $derived(
-		filteredReferrals.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+	const paginatedGroups = $derived(
+		filteredGroups.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 	);
 
 	const tabs: { value: 'all' | ReferralStatus; label: string }[] = [
@@ -90,6 +91,17 @@
 		{ value: 'rejected', label: 'ปฏิเสธ (Rejected)' },
 		{ value: 'closed', label: 'ปิดรายการ (Closed)' }
 	];
+
+	function primaryLabel(group: ReferralListGroup): string {
+		if (group.count > 1) {
+			return `ชุดส่งต่อ ${group.count} คน`;
+		}
+		return getEvacueeName(group.sample.evacuee_id);
+	}
+
+	function destinationLabel(referral: Referral): string {
+		return referral.to_shelter_code || referral.to_org?.name || '-';
+	}
 </script>
 
 <div class="space-y-4">
@@ -125,7 +137,7 @@
 	</div>
 
 	<!-- List -->
-	{#if paginatedReferrals.length === 0}
+	{#if paginatedGroups.length === 0}
 		<div
 			class="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card p-12 text-center text-muted-foreground"
 		>
@@ -135,35 +147,45 @@
 		</div>
 	{:else}
 		<div class="space-y-2">
-			{#each paginatedReferrals as referral (referral._id)}
+			{#each paginatedGroups as group (group.key)}
 				<button
 					type="button"
-					onclick={() => onSelect?.(referral._id)}
+					onclick={() => onSelect?.(group)}
 					class="group relative flex w-full cursor-pointer flex-col justify-between gap-1.5 rounded-lg border border-border/80 bg-card p-3 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-accent/50
-					{selectedId === referral._id ? 'border-primary ring-2 ring-primary/10' : ''}"
+					{selectedKey === group.key ? 'border-primary ring-2 ring-primary/10' : ''}"
 				>
 					<!-- Line 1: Primary Info -->
 					<div class="flex flex-wrap items-center gap-2">
-						{#if isIncomingListItem(referral, actorShelter)}
+						{#if isIncomingListItem(group.sample, actorShelter)}
 							<Badge
 								class="h-5 bg-violet-100 px-1.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-950/40 dark:text-violet-300"
 							>
 								ขาเข้า
 							</Badge>
 						{/if}
-						<Badge class="{getUrgencyStyle(referral.urgency)} h-5 px-1.5 text-[10px] font-semibold">
-							{getUrgencyLabel(referral.urgency)}
+						{#if group.count > 1}
+							<Badge
+								class="h-5 gap-1 bg-sky-100 px-1.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
+							>
+								<Users class="h-3 w-3" />
+								{group.count} คน
+							</Badge>
+						{/if}
+						<Badge
+							class="{getUrgencyStyle(group.sample.urgency)} h-5 px-1.5 text-[10px] font-semibold"
+						>
+							{getUrgencyLabel(group.sample.urgency)}
 						</Badge>
 						<span class="truncate text-sm font-bold text-foreground">
-							{getEvacueeName(referral.evacuee_id)}
+							{primaryLabel(group)}
 						</span>
 						<span class="text-xs text-muted-foreground">→</span>
 						<span class="truncate text-xs font-medium text-muted-foreground">
-							{referral.to_shelter_code || referral.to_org?.name || '-'}
+							{destinationLabel(group.sample)}
 						</span>
-						{#if referral.reason}
+						{#if group.sample.reason}
 							<span class="hidden max-w-[200px] truncate text-xs text-muted-foreground sm:inline">
-								| {referral.reason}
+								| {group.sample.reason}
 							</span>
 						{/if}
 					</div>
@@ -171,13 +193,21 @@
 					<!-- Line 2: Meta Info + Action -->
 					<div class="flex w-full items-center justify-between gap-2">
 						<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-							<span>{formatReferralDate(referral.created_at)}</span>
-							<Badge class="{getStatusBadgeVariant(referral.status)} h-4 px-1 text-[10px]">
-								{getStatusLabel(referral.status)}
-							</Badge>
-							{#if referral.reason}
+							<span>{formatReferralDate(group.createdAt)}</span>
+							{#if group.sharedStatus}
+								<Badge class="{getStatusBadgeVariant(group.sharedStatus)} h-4 px-1 text-[10px]">
+									{getStatusLabel(group.sharedStatus)}
+								</Badge>
+							{:else}
+								<Badge
+									class="h-4 bg-amber-100 px-1 text-[10px] text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+								>
+									หลายสถานะ
+								</Badge>
+							{/if}
+							{#if group.sample.reason}
 								<span class="inline truncate text-xs text-muted-foreground sm:hidden">
-									| {referral.reason}
+									| {group.sample.reason}
 								</span>
 							{/if}
 						</div>
@@ -186,7 +216,7 @@
 							size="sm"
 							onclick={(e) => {
 								e.stopPropagation();
-								onSelect?.(referral._id);
+								onSelect?.(group);
 							}}
 							class="h-6 shrink-0 gap-1 px-2 text-xs text-muted-foreground group-hover:text-primary"
 						>
@@ -200,7 +230,7 @@
 	{/if}
 
 	<!-- Pagination Footer -->
-	{#if filteredReferrals.length > 0}
+	{#if filteredGroups.length > 0}
 		<div
 			class="mt-4 flex flex-col items-center justify-between gap-4 border-t border-border/60 pt-4 sm:flex-row"
 		>
@@ -208,12 +238,12 @@
 			<div class="font-sans text-xs text-muted-foreground">
 				แสดงรายการที่ {(currentPage - 1) * PAGE_SIZE + 1} - {Math.min(
 					currentPage * PAGE_SIZE,
-					filteredReferrals.length
-				)} จากทั้งหมด {filteredReferrals.length} รายการ
+					filteredGroups.length
+				)} จากทั้งหมด {filteredGroups.length} รายการ
 			</div>
 
 			<!-- Shadcn Pagination Root -->
-			<Pagination.Root bind:page={currentPage} count={filteredReferrals.length} perPage={PAGE_SIZE}>
+			<Pagination.Root bind:page={currentPage} count={filteredGroups.length} perPage={PAGE_SIZE}>
 				{#snippet children({ pages })}
 					<Pagination.Content>
 						<Pagination.Previous />

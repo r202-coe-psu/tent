@@ -4,7 +4,8 @@ import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
-import { referralRepository } from '../data/referral.remote';
+import { createReferralBatch, referralRepository } from '../data/referral.remote';
+import type { ReferralSubmitIntent } from '../data/referral.repository';
 import { authStore } from '$lib/stores/auth.svelte';
 import type {
 	Referral,
@@ -40,6 +41,29 @@ export const useCreateReferral = (queryClient: QueryClient) =>
 			referralRepository().create(input, {
 				shelterCode: getShelterCode(),
 				createdBy: authStore.user?.name ?? 'unknown'
+			}),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: referralKeys.all });
+		}
+	}));
+
+export const useCreateReferralBatch = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: ({
+			template,
+			evacueeIds,
+			intent
+		}: {
+			template: ReferralInput;
+			evacueeIds: string[];
+			intent: ReferralSubmitIntent;
+		}) =>
+			createReferralBatch(template, evacueeIds, {
+				intent,
+				ctx: {
+					shelterCode: getShelterCode(),
+					createdBy: authStore.user?.name ?? 'unknown'
+				}
 			}),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: referralKeys.all });

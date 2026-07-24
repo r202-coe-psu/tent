@@ -38,7 +38,7 @@ export function isIncomingCapacityReferral(referral: Referral, actorShelter: str
 
 /**
  * Whether the actor's shelter may perform `to` on this referral.
- * Capacity accept/reject → destination only (DoD). Capacity send/close → source.
+ * Capacity accept/reject → destination only (DoD). Capacity send/close (incl. cancel draft) → source.
  * Medical/resource respond → source (external org is out-of-band for R3).
  */
 export function assertActorMayTransition(

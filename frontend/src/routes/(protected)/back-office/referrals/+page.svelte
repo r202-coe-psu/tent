@@ -11,34 +11,83 @@
 		useReferral,
 		ReferralCreateForm,
 		ReferralList,
-		ReferralDetail
+		ReferralDetail,
+		ReferralBatchCards,
+		referralBatchKey,
+		type Referral,
+		type ReferralBatchFailure,
+		type ReferralListGroup
 	} from '$lib/features/referrals';
 
-	let viewMode = $state<'list' | 'create'>('list');
-	let selectedId = $state<string | null>(null);
+	let viewMode = $state<'list' | 'create' | 'batch'>('list');
+	let selectedGroupKey = $state<string | null>(null);
+	let selectedMemberId = $state<string | null>(null);
+	let selectedGroupReferrals = $state.raw<Referral[]>([]);
+	let batchReferrals = $state.raw<Referral[]>([]);
+	let batchFailed = $state.raw<ReferralBatchFailure[]>([]);
 
-	// Queries
 	const listQuery = useReferrals();
 	const referrals = $derived(listQuery.data ?? []);
 	const isLoadingList = $derived(listQuery.isLoading);
 
 	const detailQuery = useReferral(
-		() => selectedId ?? '',
-		() => !!selectedId
+		() => selectedMemberId ?? '',
+		() => !!selectedMemberId && viewMode === 'list'
 	);
 	const selectedReferral = $derived(detailQuery.data);
 	const isLoadingDetail = $derived(detailQuery.isFetching);
 
-	function handleCreated(newId: string) {
+	/** Keep right-panel batch in sync when list data refreshes. */
+	const liveGroupReferrals = $derived.by(() => {
+		if (!selectedGroupKey || selectedGroupReferrals.length === 0) return selectedGroupReferrals;
+		const fromList = referrals.filter((r) => referralBatchKey(r) === selectedGroupKey);
+		return fromList.length > 0 ? fromList : selectedGroupReferrals;
+	});
+
+	function handleBatchDone(result: { created: Referral[]; failed: ReferralBatchFailure[] }) {
+		batchReferrals = result.created;
+		batchFailed = result.failed;
+		viewMode = 'batch';
+		selectedGroupKey = null;
+		selectedMemberId = null;
+		selectedGroupReferrals = [];
+	}
+
+	function goToList() {
 		viewMode = 'list';
-		selectedId = newId;
+		batchReferrals = [];
+		batchFailed = [];
+		selectedGroupKey = null;
+		selectedMemberId = null;
+		selectedGroupReferrals = [];
+	}
+
+	function goToCreate() {
+		viewMode = 'create';
+		selectedGroupKey = null;
+		selectedMemberId = null;
+		selectedGroupReferrals = [];
+		batchReferrals = [];
+		batchFailed = [];
+	}
+
+	function handleSelectGroup(group: ReferralListGroup) {
+		selectedGroupKey = group.key;
+		selectedGroupReferrals = group.referrals;
+		// Single-person "batch" opens detail directly; multi opens batch panel
+		selectedMemberId = group.count === 1 ? group.sample._id : null;
+	}
+
+	function clearMemberSelection() {
+		selectedMemberId = null;
 	}
 </script>
 
-<div class="mx-auto flex h-full max-w-7xl flex-col space-y-6 p-1 md:p-6">
-	<!-- Page Header -->
+<div
+	class="mx-auto flex h-full min-h-0 max-w-7xl flex-col gap-6 overflow-y-auto p-1 md:p-6 lg:overflow-hidden"
+>
 	<div
-		class="flex flex-col justify-between gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center"
+		class="flex shrink-0 flex-col justify-between gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center"
 	>
 		<div class="space-y-1">
 			<h1
@@ -54,12 +103,12 @@
 
 		<div>
 			{#if viewMode === 'list'}
-				<Button onclick={() => (viewMode = 'create')} class="gap-2 font-semibold shadow-sm">
+				<Button onclick={goToCreate} class="gap-2 font-semibold shadow-sm">
 					<Plus class="h-4.5 w-4.5" />
 					สร้างรายการส่งต่อ
 				</Button>
-			{:else}
-				<Button variant="outline" onclick={() => (viewMode = 'list')} class="gap-2">
+			{:else if viewMode === 'create'}
+				<Button variant="outline" onclick={goToList} class="gap-2">
 					<ArrowLeft class="h-4.5 w-4.5" />
 					กลับไปหน้ารายการ
 				</Button>
@@ -67,15 +116,19 @@
 		</div>
 	</div>
 
-	<!-- Main Workspace Area -->
 	{#if viewMode === 'create'}
-		<div class="mx-auto w-full max-w-4xl">
-			<ReferralCreateForm onCreated={handleCreated} />
+		<div class="min-h-0 flex-1 overflow-y-auto">
+			<div class="mx-auto w-full max-w-4xl pb-6">
+				<ReferralCreateForm onBatchDone={handleBatchDone} />
+			</div>
+		</div>
+	{:else if viewMode === 'batch'}
+		<div class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-hidden">
+			<ReferralBatchCards referrals={batchReferrals} failed={batchFailed} onBack={goToList} />
 		</div>
 	{:else}
-		<div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-			<!-- Left List Column (col-span-5) -->
-			<div class="space-y-4 lg:col-span-5">
+		<div class="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-12 lg:overflow-hidden">
+			<div class="min-h-0 lg:col-span-5 lg:overflow-y-auto">
 				<Card.Root class="border border-border/80 shadow-sm">
 					<Card.Header class="bg-muted/20 pb-3">
 						<Card.Title class="text-lg font-bold">รายการส่งตัวทั้งหมด</Card.Title>
@@ -92,26 +145,53 @@
 								<span class="text-sm">กำลังโหลดข้อมูล...</span>
 							</div>
 						{:else}
-							<ReferralList {referrals} onSelect={(id) => (selectedId = id)} {selectedId} />
+							<ReferralList
+								{referrals}
+								onSelect={handleSelectGroup}
+								selectedKey={selectedGroupKey}
+							/>
 						{/if}
 					</Card.Content>
 				</Card.Root>
 			</div>
 
-			<!-- Right Detail Column (col-span-7) -->
-			<div class="space-y-4 lg:col-span-7">
-				{#if selectedId}
-					{#if isLoadingDetail && !selectedReferral}
-						<Card.Root class="border border-border/80 shadow-sm">
-							<Card.Content
-								class="flex flex-col items-center justify-center gap-2 py-24 text-muted-foreground"
-							>
-								<Loader2 class="h-8 w-8 animate-spin text-primary" />
-								<span class="text-sm font-medium">กำลังเปิดประวัติ...</span>
-							</Card.Content>
-						</Card.Root>
-					{:else if selectedReferral}
-						<ReferralDetail referral={selectedReferral} />
+			<div class="flex min-h-0 flex-col lg:col-span-7 lg:overflow-hidden">
+				{#if selectedGroupKey}
+					{#if selectedMemberId}
+						{#if isLoadingDetail && !selectedReferral}
+							<Card.Root class="border border-border/80 shadow-sm">
+								<Card.Content
+									class="flex flex-col items-center justify-center gap-2 py-24 text-muted-foreground"
+								>
+									<Loader2 class="h-8 w-8 animate-spin text-primary" />
+									<span class="text-sm font-medium">กำลังเปิดประวัติ...</span>
+								</Card.Content>
+							</Card.Root>
+						{:else if selectedReferral}
+							<div class="min-h-0 flex-1 space-y-4 overflow-y-auto pb-6">
+								{#if liveGroupReferrals.length > 1}
+									<div class="flex justify-start">
+										<Button
+											variant="outline"
+											size="sm"
+											onclick={clearMemberSelection}
+											class="gap-2"
+										>
+											<ArrowLeft class="h-4 w-4" />
+											กลับไปชุดส่งต่อ
+										</Button>
+									</div>
+								{/if}
+								<ReferralDetail referral={selectedReferral} />
+							</div>
+						{/if}
+					{:else}
+						<ReferralBatchCards
+							referrals={liveGroupReferrals}
+							mode="view"
+							selectedId={selectedMemberId}
+							onSelectReferral={(id) => (selectedMemberId = id)}
+						/>
 					{/if}
 				{:else}
 					<Card.Root

@@ -101,8 +101,8 @@
 <Toaster position="top-center" richColors />
 
 <QueryClientProvider client={data.queryClient}>
-	<TestingBanner />
 	<ConnectionBanner />
 	{@render children?.()}
+	<TestingBanner />
 	<SvelteQueryDevtools />
 </QueryClientProvider>

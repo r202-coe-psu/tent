@@ -207,8 +207,9 @@ export async function deployShelterViews(db: string): Promise<number> {
 /**
  * Idempotent re-PUT of `_design/access` (validate_doc_update) on an existing
  * shelter database. Use after whitelist changes (e.g. CR-034 `audit` type,
- * CR-045 `referral` type) when provisioning did not re-run. Callable from
- * `pnpm redeploy:referral-db` or admin endpoints.
+ * CR-045 `referral` type) when provisioning did not re-run. Used by admin
+ * endpoints; the CLI (`pnpm redeploy:referral-db`) mirrors this logic under
+ * plain `tsx` without importing this module (`$env` is SvelteKit-only).
  */
 export async function redeployShelterAccessDesign(
 	db: string,

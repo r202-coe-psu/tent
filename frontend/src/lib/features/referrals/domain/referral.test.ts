@@ -156,7 +156,7 @@ describe('Referral Domain', () => {
 
 		describe('canTransition combinations', () => {
 			const expectedTransitions: Record<ReferralStatus, ReferralStatus[]> = {
-				draft: ['sent'],
+				draft: ['sent', 'closed'],
 				sent: ['accepted', 'rejected'],
 				accepted: ['closed'],
 				rejected: ['closed'],
@@ -217,6 +217,16 @@ describe('Referral Domain', () => {
 				expect(updated.timeline.responded).toEqual({ at: nowIso, by: 'Hospital Staff B' });
 			});
 
+			it('should apply draft → closed (cancel draft — CR-046)', () => {
+				const doc = mockReferral({ status: 'draft' });
+				const nowIso = '2026-07-11T05:15:00.000Z';
+				const updated = applyTransition(doc, 'closed', 'Manager A', nowIso);
+
+				expect(updated.status).toBe('closed');
+				expect(updated.timeline.closed).toEqual({ at: nowIso, by: 'Manager A' });
+				expect(updated.timeline.sent).toBeUndefined();
+			});
+
 			it('should apply accepted → closed', () => {
 				const doc = mockReferral({
 					status: 'accepted',
@@ -242,7 +252,7 @@ describe('Referral Domain', () => {
 
 		describe('allowedTransitions list helper', () => {
 			it('should return correct options list', () => {
-				expect(allowedTransitions('draft')).toEqual(['sent']);
+				expect(allowedTransitions('draft')).toEqual(['sent', 'closed']);
 				expect(allowedTransitions('sent')).toEqual(['accepted', 'rejected']);
 				expect(allowedTransitions('closed')).toEqual([]);
 			});
