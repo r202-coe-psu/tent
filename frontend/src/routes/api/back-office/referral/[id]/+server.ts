@@ -1,9 +1,14 @@
+/* eslint-disable no-restricted-imports */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { authorizeReferral, resolveShelterCode, handleEndpointError } from '../_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
+import { redactForScope } from '$lib/features/referrals/domain/referral.redaction';
 
 export const prerender = false;
+
+/** See GET list handler — back-office is always internal scope. */
+const BACK_OFFICE_SCOPE = 'internal' as const;
 
 /**
  * GET /api/back-office/referral/[id]
@@ -26,7 +31,7 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 			return json({ error: `Referral not found: ${id}` }, { status: 404 });
 		}
 
-		return json(doc);
+		return json(redactForScope(doc, BACK_OFFICE_SCOPE));
 	} catch (e: unknown) {
 		return handleEndpointError(e, 'Referral API ID GET');
 	}

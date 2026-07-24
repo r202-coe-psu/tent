@@ -7,8 +7,18 @@ import {
 	referralInputSchema,
 	type ReferralStatus
 } from '$lib/features/referrals/domain/referral.schema';
+import { redactForScope } from '$lib/features/referrals/domain/referral.redaction';
+import { adminRaw } from '$lib/server/couch-admin';
+import { isEvacuee } from '$lib/features/people/domain/people';
 
 export const prerender = false;
+
+/**
+ * Back-office BFF is shelter_manager / SA only → always `internal` (no-op redaction).
+ * Public / FAM / EOC / Open API MUST call `redactForScope(doc, scope)` with a non-internal
+ * scope before returning referral payloads (FR-48 / NFR-5).
+ */
+const BACK_OFFICE_SCOPE = 'internal' as const;
 
 /**
  * GET /api/back-office/referral
@@ -26,7 +36,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
 		const list = await repo.list({ status, evacuee_id: evacueeId });
 
-		return json(list);
+		return json(list.map((doc) => redactForScope(doc, BACK_OFFICE_SCOPE)));
 	} catch (e: unknown) {
 		return handleEndpointError(e, 'Referral API GET');
 	}
@@ -35,6 +45,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
 /**
  * POST /api/back-office/referral
  * Create a new draft referral
+ *
+ * Admin/debug path — SPA create uses session remote (`referral.remote.ts`).
  */
 export const POST: RequestHandler = async ({ request, url }) => {
 	try {
@@ -68,21 +80,26 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			return json({ error: 'Validation failed', details: parsed.error.format() }, { status: 400 });
 		}
 
-		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const db = `shelter_${shelterCode.toLowerCase()}`;
+		const evacueeRes = await adminRaw(
+			`/${db}/${encodeURIComponent(parsed.data.evacuee_id)}`,
+			'GET'
+		);
+		if (evacueeRes.status === 404 || !isEvacuee(evacueeRes.data)) {
+			return json(
+				{ error: `Evacuee with ID ${parsed.data.evacuee_id} was not found in the active shelter.` },
+				{ status: 422 }
+			);
+		}
+
+		const repo = new CouchDbReferralServerRepository(db);
 		const ctx = {
 			shelterCode,
 			createdBy: caller.name
 		};
 
-		let created;
-		try {
-			created = await repo.create(parsed.data, ctx);
-		} catch (dbError: unknown) {
-			console.error('Failed to create referral in CouchDB:', dbError);
-			return json({ error: 'Failed to create referral' }, { status: 500 });
-		}
-
-		return json(created, { status: 201 });
+		const created = await repo.create(parsed.data, ctx);
+		return json(redactForScope(created, BACK_OFFICE_SCOPE), { status: 201 });
 	} catch (e: unknown) {
 		return handleEndpointError(e, 'Referral API POST');
 	}

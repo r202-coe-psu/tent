@@ -14,7 +14,13 @@
 
 	import type { Referral, ReferralStatus } from '../domain/referral.schema';
 	import { canTransition } from '../domain/referral.transitions';
+	import {
+		canActorRespond,
+		isIncomingCapacityReferral,
+		isOutgoingCapacityReferral
+	} from '../domain/referral.authorization';
 	import { useTransitionReferral } from '../application/queries';
+	import { getShelterCode } from '$lib/db/shelter';
 	import RedactionBanner from './redaction-banner.svelte';
 	import {
 		formatReferralDate as formatDate,
@@ -31,6 +37,23 @@
 
 	let responseReasonInput = $state('');
 	let showReasonPrompt = $state<'accepted' | 'rejected' | null>(null);
+
+	const actorShelter = $derived(getShelterCode());
+	const canRespond = $derived(canActorRespond(referral, actorShelter));
+	const awaitingDest = $derived(
+		isOutgoingCapacityReferral(referral, actorShelter) && referral.status === 'sent'
+	);
+	const isIncoming = $derived(isIncomingCapacityReferral(referral, actorShelter));
+	const canSend = $derived(
+		canTransition(referral.status, 'sent') &&
+			(!referral.referral_type ||
+				referral.referral_type !== 'capacity' ||
+				isOutgoingCapacityReferral(referral, actorShelter))
+	);
+	const canClose = $derived(
+		canTransition(referral.status, 'closed') &&
+			(referral.referral_type !== 'capacity' || isOutgoingCapacityReferral(referral, actorShelter))
+	);
 
 	async function handleTransition(to: ReferralStatus, label: string, reason?: string) {
 		await toast.promise(transitionMutation.mutateAsync({ id: referral._id, to, reason }), {
@@ -57,6 +80,27 @@
 	<!-- Redaction warning for hospitals -->
 	{#if referral.referral_type === 'medical-emergency' || referral.to_org?.kind === 'hospital'}
 		<RedactionBanner />
+	{/if}
+
+	{#if isIncoming && referral.status === 'sent'}
+		<div
+			class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
+			role="status"
+		>
+			คำขอย้ายเข้าจากศูนย์ <span class="font-mono font-semibold">{referral.shelter_code}</span> — ตอบรับแล้วระบบจะย้ายผู้ประสบภัยเข้าศูนย์นี้
+			(occupancy สองฝั่งจะอัปเดตหลังตอบรับเท่านั้น)
+		</div>
+	{/if}
+
+	{#if awaitingDest}
+		<div
+			class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+			role="status"
+		>
+			รอศูนย์ปลายทาง
+			<span class="font-mono font-semibold">{referral.to_shelter_code}</span>
+			ตอบรับหรือปฏิเสธ — การย้ายศูนย์จะเกิดขึ้นเมื่อปลายทางกดตอบรับเท่านั้น
+		</div>
 	{/if}
 
 	<Card.Root class="border border-border/80 shadow-md">
@@ -293,11 +337,11 @@
 			</div>
 		</Card.Content>
 
-		<!-- Actions Footer (Matrix Gate transitions) -->
+		<!-- Actions Footer (Matrix Gate transitions; capacity accept = destination only) -->
 		<Card.Footer
 			class="flex flex-wrap items-center justify-end gap-2.5 border-t border-border/60 bg-muted/20 py-4"
 		>
-			{#if canTransition(referral.status, 'sent')}
+			{#if canSend}
 				<Button
 					size="sm"
 					variant="default"
@@ -309,7 +353,7 @@
 				</Button>
 			{/if}
 
-			{#if canTransition(referral.status, 'accepted')}
+			{#if canRespond && canTransition(referral.status, 'accepted')}
 				<Button
 					size="sm"
 					class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
@@ -320,7 +364,7 @@
 				</Button>
 			{/if}
 
-			{#if canTransition(referral.status, 'rejected')}
+			{#if canRespond && canTransition(referral.status, 'rejected')}
 				<Button
 					size="sm"
 					variant="outline"
@@ -332,7 +376,7 @@
 				</Button>
 			{/if}
 
-			{#if canTransition(referral.status, 'closed')}
+			{#if canClose}
 				<Button
 					size="sm"
 					variant="outline"

@@ -28,7 +28,7 @@ export function getStatusBadgeVariant(status: ReferralStatus): string {
 
 export function getUrgencyStyle(urgency: ReferralUrgency | string): string {
 	if (urgency === 'urgent') {
-		return 'bg-red-500 hover:bg-red-600 text-white animate-pulse';
+		return 'bg-red-500 hover:bg-red-600 text-white motion-safe:animate-pulse';
 	}
 	return 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200';
 }
@@ -76,4 +76,17 @@ export function formatReferralDate(isoString?: string | null): string {
 	} catch {
 		return isoString;
 	}
+}
+
+/** List badge: incoming capacity mirror targeting this shelter. */
+export function isIncomingListItem(
+	referral: { referral_type?: string; shelter_code: string; to_shelter_code?: string },
+	actorShelter: string
+): boolean {
+	return (
+		referral.referral_type === 'capacity' &&
+		!!referral.to_shelter_code &&
+		referral.to_shelter_code.toUpperCase() === actorShelter.toUpperCase() &&
+		referral.shelter_code.toUpperCase() !== actorShelter.toUpperCase()
+	);
 }
