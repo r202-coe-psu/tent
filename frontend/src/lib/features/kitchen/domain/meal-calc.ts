@@ -11,8 +11,6 @@ import type {
 
 // Conventional recipe_id for rice — T-26 maps this to the stock item_id.
 export const RICE_RECIPE_ID = 'ingredient:rice';
-export const EGG_RECIPE_ID = 'ingredient:egg';
-export const VEGETABLE_RECIPE_ID = 'ingredient:vegetable';
 
 // Rice consumption per person per meal (grams). CR-021 removed rice from
 // sop_profile.ratios (SOP = shelter planning only) and moved food/ingredient
@@ -29,9 +27,7 @@ const GRAMS_PER_KG = 1000;
 // Display label/unit for a recipe row — covers every id calculateMealIngredients
 // can produce; a recipe_id missing here just falls back to showing its raw id.
 export const RECIPE_LABELS: Record<string, { label: string; unit: string }> = {
-	[RICE_RECIPE_ID]: { label: 'ข้าวสาร', unit: 'g' },
-	[EGG_RECIPE_ID]: { label: 'ไข่ไก่', unit: 'ฟอง' },
-	[VEGETABLE_RECIPE_ID]: { label: 'ผักรวม', unit: 'g' }
+	[RICE_RECIPE_ID]: { label: 'ข้าวสาร', unit: 'g' }
 };
 
 // Maps a calculated recipe_id to the stock item it draws down + its ledger unit
@@ -46,13 +42,7 @@ export const RECIPE_TO_STOCK_ITEM: Record<
 	string,
 	{ item_id: string; unit: string; recipe_per_stock_unit: number }
 > = {
-	[RICE_RECIPE_ID]: { item_id: 'item:rice', unit: 'kg', recipe_per_stock_unit: GRAMS_PER_KG },
-	[EGG_RECIPE_ID]: { item_id: 'item:egg', unit: 'piece', recipe_per_stock_unit: 1 },
-	[VEGETABLE_RECIPE_ID]: {
-		item_id: 'item:vegetable',
-		unit: 'kg',
-		recipe_per_stock_unit: GRAMS_PER_KG
-	}
+	[RICE_RECIPE_ID]: { item_id: 'item:rice', unit: 'kg', recipe_per_stock_unit: GRAMS_PER_KG }
 };
 
 export interface MealCalcSource {
@@ -118,9 +108,20 @@ export interface ResolvedItemMaster {
  * can be checked/withdrawn without a manual trip to `/back-office/catalog`
  * (catalog's item_master schema is out of kitchen's scope — no explicit-link
  * field there, so this only matches by name):
- *   1. same `name` (trimmed, case-insensitive) as a `supply_item` — automatic,
- *      no setup needed as long as the two catalogs happen to name it the same
+ *   1. same `name` (trimmed, case-insensitive) AND same base_unit as a
+ *      `supply_item` — automatic, no setup needed as long as the two catalogs
+ *      happen to name+measure it the same
  *   2. unresolved — recipe_id falls back to the item_master_id itself
+ *
+ * The unit guard is deliberate (CR-045): a name-only match whose units differ
+ * (recipe `kg` vs supply `g`) would draw the wrong amount down from the ledger,
+ * because this interim resolver does NO uom conversion — planned_qty stays
+ * recipe-scaled and only inherits the supply unit. Requiring the units to be
+ * equal keeps the drawdown honest; a mismatch stays blocked (unresolved) until
+ * the catalog is fixed, rather than silently under/over-issuing stock.
+ * Invariant: a resolved ingredient's recipe `uom` must equal its item_master
+ * `base_unit` (which now equals the supply unit) — enforced upstream by the
+ * catalog Recipe editor.
  *
  * Pure — no I/O; caller (application layer / UI) fetches both lists first.
  */
@@ -133,9 +134,10 @@ export function resolveItemMasterStock(
 	const info: Record<string, ResolvedItemMaster> = {};
 	for (const im of itemMasters) {
 		const matched = supplyByName.get(im.name.trim().toLowerCase());
-		info[im._id] = matched
-			? { stockItemId: matched._id, unit: matched.unit }
-			: { stockItemId: im._id, unit: im.base_unit };
+		info[im._id] =
+			matched && matched.unit === im.base_unit
+				? { stockItemId: matched._id, unit: matched.unit }
+				: { stockItemId: im._id, unit: im.base_unit };
 	}
 	return info;
 }

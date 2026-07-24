@@ -220,11 +220,21 @@ describe('resolveItemMasterStock — auto-match item_master ↔ supply_item', ()
 		...overrides
 	});
 
-	it('auto-matches by name (trimmed, case-insensitive)', () => {
-		const im = itemMaster({ name: ' ข้าวสาร ' });
-		const si = supplyItem({ name: 'ข้าวสาร' });
+	it('auto-matches by name (trimmed, case-insensitive) when units agree', () => {
+		const im = itemMaster({ name: ' ข้าวสาร ', base_unit: 'kg' });
+		const si = supplyItem({ name: 'ข้าวสาร', unit: 'kg' });
 		const info = resolveItemMasterStock([im], [si]);
 		expect(info[im._id]).toEqual({ stockItemId: si._id, unit: si.unit });
+	});
+
+	it('stays unresolved on a name match whose units differ (no silent bad drawdown)', () => {
+		// Same name, but recipe/master measures in g while stock tracks kg — a
+		// name-only match would deduct 1000× the intended amount. Guard leaves it
+		// unresolved (blocked) instead. CR-045.
+		const im = itemMaster({ name: 'ข้าวสาร', base_unit: 'g' });
+		const si = supplyItem({ name: 'ข้าวสาร', unit: 'kg' });
+		const info = resolveItemMasterStock([im], [si]);
+		expect(info[im._id]).toEqual({ stockItemId: im._id, unit: 'g' });
 	});
 
 	it('falls back to the item_master itself when nothing matches', () => {
