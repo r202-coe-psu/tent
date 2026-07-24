@@ -19,7 +19,6 @@ export type {
 	MovementDestination,
 	Gender,
 	Religion,
-	SpecialNeed,
 	StayStatus,
 	MovementAction,
 	CareTrack,
@@ -30,7 +29,6 @@ export type {
 export {
 	genderSchema,
 	religionSchema,
-	specialNeedSchema,
 	stayStatusSchema,
 	movementActionSchema,
 	careTrackSchema,
@@ -54,7 +52,6 @@ export {
 	maskNationalId,
 	matchesEvacueeSearch,
 	zoneLabel,
-	SPECIAL_NEED_CHIPS,
 	EWAR_SYMPTOM_GROUPS,
 	isEvacuee,
 	isMedical,

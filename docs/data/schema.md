@@ -41,7 +41,8 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
 > **schema_v 3** — `current_stay.status` เปลี่ยนจาก 4 ค่าเป็น 6 ค่า: `pre_registered`,`active`,
-> `temporary_leave`,`transferred`,`checked_out`,`deceased` (UI v5).
+> `temporary_leave`,`transferred`,`checked_out`,`deceased` (UI v5, CR-035).
+> `special_needs` เปลี่ยนจาก fixed enum เป็น free-form `[str]` (6).
 > schema_v 2 — เพิ่ม `country` (CR-007) และปรับปรุง `national_id` เป็น `person_id` (CR-028).
 
 | Field | ชนิด | req | หมายเหตุ |
@@ -55,7 +56,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `person_id` | {`cardType`:enum(`national_id`,`passport`,`pink_card`,`other`), `number`:str\|null} | opt | เอกสารแสดงตน — `cardType` default `"national_id"`; `number` คือเลขที่บัตร (opt); เก็บ plaintext ไม่ออก public tier ทุกกรณี |
 | `religion` | enum(`buddhist`,`muslim`,`christian`,`other`,`unknown`) | opt | ใช้วางแผนอาหาร halal |
 | `country` | str | req | ประเทศ | 
-| `special_needs` | [enum(`elderly`,`disabled`,`pregnant`,`infant`,`chronic_illness`,`bedridden`)] | opt | default `[]` |
+| `special_needs` | [str] | opt | free-form, nonempty หลัง trim; default `[]` (CR-046 — เดิม fixed enum; ไม่ผูก whitelist ในโค้ด, ไม่ใช่ master_data-wired — รอ CR แยกถ้าจะ wire ไป master_data) |
 | `emergency_contact` | {`name`:str, `phone`:str, `relation`:str} | opt | — |
 | `household_id` | str\|null | opt | → `household:{ulid}` |
 | `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`) เริ่ม `pre_registered` · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
@@ -68,7 +69,8 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 **Migration (schema_v 2 → 3):** rename บน read — `registered`→`pre_registered`, `checked_in`→`active`;
 `checked_out` เดิม (ออกทั่วไป) → `checked_out` ใหม่ (กลับภูมิลำเนา) ชั่วคราวจนกว่า manual review แยก
 เคสที่ควรเป็น `transferred`; ไม่มี legacy value map ไป `temporary_leave`/`deceased` (เกิดจาก movement
-action ใหม่เท่านั้น)
+action ใหม่เท่านั้น). `special_needs` (CR-046) ไม่ต้อง rename/transform — ค่า enum เดิม (เช่น
+`"elderly"`) เป็น subset ของ "any nonempty string" อ่านผ่านได้ตรง ๆ
 
 ### 1.2 `medical` — `medical:{ulid}` (1 doc ต่อ 1 evacuee)
 
