@@ -151,7 +151,7 @@
 						{#snippet children({ pages })}
 							<Pagination.Content>
 								<Pagination.Previous />
-								{#each pages as p, i (i)}
+								{#each pages as p, i (p.type === 'page' ? `page-${p.value}` : `ellipsis-${i}`)}
 									<Pagination.Item>
 										{#if p.type === 'page'}
 											<Pagination.Link page={p} isActive={p.value === currentPage} />
