@@ -2,7 +2,7 @@
 title: Release Roadmap (มิ.ย.–ก.ย. 2026 + maintenance)
 status: active
 created: 2026-06-03
-updated: 2026-07-07
+updated: 2026-07-23
 note: ปรับตาม schedule decision 2026-06-09 + decision sync 2026-06-15 (teams closed, RBAC approved, EOC MongoDB read-model) — canonical timeline อยู่ที่ task-breakdown/_timeline.md
 ---
 
@@ -15,7 +15,7 @@ note: ปรับตาม schedule decision 2026-06-09 + decision sync 2026-06
 Scope/FR/NFR รายละเอียดของแต่ละ phase อยู่ใน PRD ราย phase:
 
 - [Phase R2 — Foundation (Baseline, Household, Zoning, Inventory)](phase-r2-foundation.html)
-- [Phase R3 — Operations (Donation, Kitchen, Volunteer, SOP, Security)](phase-r3-operations.html)
+- [Phase R3 — Operations (Donation, Kitchen, Volunteer, SOP, Shelter Reports)](phase-r3-operations.html)
 - [Phase R4 — Integration (Family Search, Governance, Handover + deferred EOC/Open API)](phase-r4-integration-handover.html)
 
 Field contract อิง [Database Schema](../data/schema.md), [Data Model](../data/data-model.md), [API Contract](../data/api-contract.md); baseline FR-1..FR-20 spec อยู่ใน [`docs/features/`](../features/index.html)
@@ -35,7 +35,7 @@ Field contract อิง [Database Schema](../data/schema.md), [Data Model](../d
 | **10 มิ.ย.** | Kickoff Lead | walking skeleton เริ่มทันที (repo/CI, auth/RBAC skeleton, CouchDB schema + sync design, 1 vertical slice) | — |
 | **17 มิ.ย.** | Workshop — 4 ทีมเริ่มงาน | Baseline FR-1–20 (T-47..55) + R2 เริ่มขนาน | [R2](phase-r2-foundation.html) |
 | **มิ.ย.–ก.ค.** | **Foundation Gate 17 ก.ค.** | Baseline เต็ม + Household/Zoning + Inventory core (Module C) + Donation intake + RBAC | [R2](phase-r2-foundation.html) |
-| **ก.ค.–ส.ค.** | **Operations Gate 22 ส.ค.** | Donation full, Kitchen (D), Volunteer (A), SOP calculator (B), Security+Referral (E+F) | [R3](phase-r3-operations.html) |
+| **ก.ค.–ส.ค.** | **Operations Gate 22 ส.ค.** | Donation full, Kitchen (D), Volunteer (A), SOP calculator (B), Shelter Reports+Referral (E+F) | [R3](phase-r3-operations.html) |
 | **ส.ค.** (ขนาน) | — | Family Search (T-40/41) + RoPA minimal (T-43) + UAT/hardening (T-44) | [R4](phase-r4-integration-handover.html) |
 | **31 ส.ค.** | **In-scope ส่งมอบ** | Baseline + R2 + R3 + Family Search + governance ครบ | — |
 | **ก.ย. (สัปดาห์ 1)** | **Go-live full program** | ใช้งานจริง | — |
@@ -52,7 +52,7 @@ Gate semantics: ทุก gate ต้องผ่าน automated checks + stagi
 | --- | --- | --- | --- |
 | **Lead pair** Platform/Core | 2 | auth, RBAC, data model, shared API, remote-first CouchDB active-endpoint orchestration (Central-first + Edge fallback), DevOps, integration + floating reviewer | ตลอด |
 | **Team A** | 3 | Donation + Volunteer (ชิโน/นัท/กาน) | R2-R3 |
-| **Team B** | 3 | People/Household + Family Search + Security (พีค/โฮป/ปิ๊ก) | R2-R4 |
+| **Team B** | 3 | People/Household + Family Search + Shelter Reports (พีค/โฮป/ปิ๊ก) | R2-R4 |
 | **Team C** | 3 | Supply/Inventory + Kitchen/Food (ก้อง/มิว/พัฟ) | R2-R3 |
 | **Team D** | 3 | SOP/Resource Calc + Referral; support EOC after SOP/Referral stabilized (เน/ภูดิท/วิลเลียม) | R2-R4 |
 
@@ -69,7 +69,7 @@ Skeleton (T-01/02/03) ──> Baseline FR-1–20 (T-47..55) ─── occupancy/
         ├─> Inventory core ──┬─> Donation full (ต้องมี stock + reorder threshold)
         │                    ├─> Kitchen (ดึงวัตถุดิบจาก Inventory)
         │                    └─> SOP calc (occupancy + inventory + meal data)
-        └─> groundwork R3 ──> Volunteer, Security + Referral
+        └─> groundwork R3 ──> Volunteer, Shelter Reports + Referral
 
 all R3 producers ──> (deferred ≤14 ก.ย.) EOC aggregate API ──> Open API
 ```

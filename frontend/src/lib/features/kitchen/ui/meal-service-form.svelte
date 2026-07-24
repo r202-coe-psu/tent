@@ -25,6 +25,18 @@
 	const planned = $derived(plan?.headcount.total ?? 0);
 	const canSubmit = $derived(served >= 0 && waste >= 0 && volunteers >= 0 && outsideEvacuees >= 0);
 
+	// Soft warnings only — over-planned service is a real, expected scenario
+	// (computeMealVariance's `over` status covers it, e.g. the plan
+	// under-estimated demand), so these flag the numbers for a second look
+	// instead of blocking the record. Checked both per-field and combined,
+	// since a set of individually-fine numbers can still add up past plan.
+	const servedExceeds = $derived(planned > 0 && served > planned);
+	const wasteExceeds = $derived(planned > 0 && waste > planned);
+	const volunteersExceeds = $derived(planned > 0 && volunteers > planned);
+	const outsideExceeds = $derived(planned > 0 && outsideEvacuees > planned);
+	const total = $derived(served + waste + volunteers + outsideEvacuees);
+	const totalExceeds = $derived(planned > 0 && total > planned);
+
 	// Discard the actuals on close — no carryover between plans (mirrors
 	// requisition-dialog's close() pattern instead of resetting via $effect).
 	function resetActuals() {
@@ -51,10 +63,11 @@
 		if (!plan) return;
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
-			const svc = await record.mutateAsync({
+			await record.mutateAsync({
 				input: {
 					date: plan.date,
 					meal: plan.meal,
+					meal_plan_id: plan._id,
 					served,
 					waste,
 					external: { volunteers, outside_evacuees: outsideEvacuees },
@@ -62,24 +75,7 @@
 				},
 				ctx
 			});
-			// meal_service is append-only with a deterministic _id — the remote
-			// repository treats a re-record of the same date+meal as an idempotent
-			// create (resolves with the ORIGINAL doc, doesn't throw and doesn't
-			// overwrite). Detect that by comparing the resolved doc against what was
-			// just submitted, so a re-record surfaces "already recorded" instead of a
-			// misleading success toast.
-			const alreadyRecorded =
-				svc.served !== served ||
-				svc.waste !== waste ||
-				svc.external.volunteers !== volunteers ||
-				svc.external.outside_evacuees !== outsideEvacuees;
-			if (alreadyRecorded) {
-				toast.error(
-					`บันทึกบริการของ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} ไว้แล้ว (เสิร์ฟ ${svc.served.toLocaleString()})`
-				);
-			} else {
-				toast.success(`บันทึกบริการ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
-			}
+			toast.success(`บันทึกบริการ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
 			close();
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
@@ -88,7 +84,7 @@
 </script>
 
 <Dialog.Root {open} onOpenChange={handleOpenChange}>
-	<Dialog.Content class="max-w-lg">
+	<Dialog.Content class="sm:max-w-lg">
 		<Dialog.Header>
 			<Dialog.Title>บันทึกผลบริการอาหาร</Dialog.Title>
 			<Dialog.Description class="break-words">
@@ -106,10 +102,20 @@
 				<div class="space-y-1.5">
 					<Label for="ms-served">เสิร์ฟในศูนย์ (คน/กล่อง)</Label>
 					<Input id="ms-served" type="number" min="0" bind:value={served} required />
+					{#if servedExceeds}
+						<p class="text-xs text-amber-600">
+							⚠ เกินยอดที่วางแผนไว้ ({planned.toLocaleString()} คน) — ตรวจสอบยอดก่อนบันทึก
+						</p>
+					{/if}
 				</div>
 				<div class="space-y-1.5">
 					<Label for="ms-waste">เหลือทิ้ง (กล่อง)</Label>
 					<Input id="ms-waste" type="number" min="0" bind:value={waste} required />
+					{#if wasteExceeds}
+						<p class="text-xs text-amber-600">
+							⚠ เกินยอดที่วางแผนไว้ ({planned.toLocaleString()}) — ตรวจสอบยอดก่อนบันทึก
+						</p>
+					{/if}
 				</div>
 			</div>
 
@@ -119,13 +125,30 @@
 					<div class="space-y-1.5">
 						<Label for="ms-vol" class="text-xs">อาสาสมัคร</Label>
 						<Input id="ms-vol" type="number" min="0" bind:value={volunteers} />
+						{#if volunteersExceeds}
+							<p class="text-xs text-amber-600">
+								⚠ เกินยอดที่วางแผนไว้ ({planned.toLocaleString()})
+							</p>
+						{/if}
 					</div>
 					<div class="space-y-1.5">
 						<Label for="ms-outside" class="text-xs">ผู้อพยพนอกศูนย์</Label>
 						<Input id="ms-outside" type="number" min="0" bind:value={outsideEvacuees} />
+						{#if outsideExceeds}
+							<p class="text-xs text-amber-600">
+								⚠ เกินยอดที่วางแผนไว้ ({planned.toLocaleString()})
+							</p>
+						{/if}
 					</div>
 				</div>
 			</div>
+
+			{#if totalExceeds}
+				<p class="text-xs text-amber-600">
+					⚠ รวมทุกช่อง ({total.toLocaleString()}) เกินยอดที่วางแผนไว้ ({planned.toLocaleString()}
+					คน) — ตรวจสอบยอดก่อนบันทึก
+				</p>
+			{/if}
 
 			<div class="space-y-1.5">
 				<Label for="ms-notes" class="text-xs">หมายเหตุ (ไม่บังคับ)</Label>
