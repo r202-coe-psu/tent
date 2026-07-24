@@ -36,8 +36,8 @@ describe('SOP Ratio Domain', () => {
 			expect(profile.name).toBe('Sphere baseline');
 			expect(profile.version).toBe(1);
 			expect(profile.active).toBe(true);
-			expect(profile.ratios.water_l_per_person_day).toBe(15);
-			expect(profile.ratios.people_per_volunteer).toBe(50);
+			expect(profile.ratios.water_l_per_person_day).toBe('15');
+			expect(profile.ratios.people_per_volunteer).toBe('50');
 			expect(profile.type).toBe('sop_profile');
 			expect(profile.schema_v).toBe(SOP_MASTER_SCHEMA_VERSION);
 			expect((profile as Record<string, unknown>).shelter_code).toBeUndefined(); // Master has no shelter_code
@@ -57,7 +57,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ water_l_per_person_day: 15 } as unknown as Record<SopRatioKey, number>,
+					{ water_l_per_person_day: '15' } as unknown as Record<SopRatioKey, string>,
 					masterCtx
 				);
 			}).toThrow();
@@ -68,7 +68,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{} as Record<SopRatioKey, number>,
+					{} as Record<SopRatioKey, string>,
 					masterCtx
 				);
 			}).toThrow();
@@ -79,7 +79,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ ...validRatios, invalid_key: 10 } as unknown as Record<string, number>,
+					{ ...validRatios, invalid_key: '10' } as unknown as Record<string, string>,
 					masterCtx
 				);
 			}).toThrow();
@@ -88,7 +88,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ ...validRatios, caregiver_per_elderly: 2 } as unknown as Record<string, number>,
+					{ ...validRatios, caregiver_per_elderly: '2' } as unknown as Record<string, string>,
 					masterCtx
 				);
 			}).toThrow();
@@ -99,7 +99,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ ...validRatios, water_l_per_person_day: 0 },
+					{ ...validRatios, water_l_per_person_day: '0' },
 					masterCtx
 				);
 			}).toThrow();
@@ -108,7 +108,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_profile',
 					'Sphere baseline',
-					{ ...validRatios, water_l_per_person_day: -5 },
+					{ ...validRatios, water_l_per_person_day: '-5' },
 					masterCtx
 				);
 			}).toThrow();
@@ -120,14 +120,14 @@ describe('SOP Ratio Domain', () => {
 			const { profile, audit } = createInitialProfile(
 				'sop_override',
 				'Winter Override',
-				{ ...validRatios, water_l_per_person_day: 18 },
+				{ ...validRatios, water_l_per_person_day: '18' },
 				overrideCtx
 			);
 
 			expect(profile.name).toBe('Winter Override');
 			expect(profile.version).toBe(1);
 			expect(profile.active).toBe(true);
-			expect(profile.ratios.water_l_per_person_day).toBe(18);
+			expect(profile.ratios.water_l_per_person_day).toBe('18');
 			expect(profile.type).toBe('sop_override');
 			expect(profile.schema_v).toBe(SOP_OVERRIDE_SCHEMA_VERSION);
 			expect(profile.shelter_code).toBe('SH001');
@@ -144,7 +144,7 @@ describe('SOP Ratio Domain', () => {
 				createInitialProfile(
 					'sop_override',
 					'Winter Override',
-					{ water_l_per_person_day: 15 } as unknown as Record<SopRatioKey, number>,
+					{ water_l_per_person_day: '15' } as unknown as Record<SopRatioKey, string>,
 					overrideCtx
 				);
 			}).toThrow();
@@ -163,11 +163,16 @@ describe('SOP Ratio Domain', () => {
 				deactivatedPrev,
 				profile: next,
 				audit
-			} = createNewVersion(prev, { water_l_per_person_day: 20 }, 'Updated water ratio', masterCtx);
+			} = createNewVersion(
+				prev,
+				{ water_l_per_person_day: '20' },
+				'Updated water ratio',
+				masterCtx
+			);
 
 			expect(deactivatedPrev?.active).toBe(false);
 			expect(next.version).toBe(2);
-			expect(next.ratios.water_l_per_person_day).toBe(20);
+			expect(next.ratios.water_l_per_person_day).toBe('20');
 			expect(audit?.target_id).toBe(next._id);
 		});
 
@@ -182,7 +187,7 @@ describe('SOP Ratio Domain', () => {
 			expect(() => {
 				createNewVersion(
 					prev,
-					{ invalid_key: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
+					{ invalid_key: '200' } as unknown as Partial<Record<SopRatioKey, string>>,
 					'Update invalid ratio',
 					masterCtx
 				);
@@ -203,7 +208,7 @@ describe('SOP Ratio Domain', () => {
 				deactivatedPrev,
 				profile: next,
 				audit
-			} = createNewVersion(prev, { water_l_per_person_day: 15 }, 'No actual change', masterCtx);
+			} = createNewVersion(prev, { water_l_per_person_day: '15' }, 'No actual change', masterCtx);
 
 			expect(deactivatedPrev).toBeNull();
 			expect(audit).toBeNull();
@@ -220,15 +225,15 @@ describe('SOP Ratio Domain', () => {
 
 			const { profile: next } = createNewVersion(
 				prev,
-				{ water_l_per_person_day: 25 },
+				{ water_l_per_person_day: '25' },
 				'Update water only',
 				overrideCtx
 			);
 
 			// Untouched keys must survive the partial update
-			expect(next.ratios.people_per_volunteer).toBe(50);
+			expect(next.ratios.people_per_volunteer).toBe('50');
 			// Changed key must reflect new value
-			expect(next.ratios.water_l_per_person_day).toBe(25);
+			expect(next.ratios.water_l_per_person_day).toBe('25');
 			// A new doc must be created
 			expect(next._id).not.toBe(prev._id);
 			expect(next.version).toBe(2);
@@ -250,7 +255,7 @@ describe('SOP Ratio Domain', () => {
 				audit
 			} = createNewVersion(
 				prev,
-				{ water_l_per_person_day: 22 },
+				{ water_l_per_person_day: '22' },
 				'Updated local water ratio',
 				overrideCtx
 			);
@@ -259,7 +264,7 @@ describe('SOP Ratio Domain', () => {
 			expect(deactivatedPrev?._id).toBe(prev._id);
 			expect(next.name).toBe('Winter Override');
 			expect(next.version).toBe(2);
-			expect(next.ratios.water_l_per_person_day).toBe(22);
+			expect(next.ratios.water_l_per_person_day).toBe('22');
 			expect(next.active).toBe(true);
 			expect(audit?.action).toBe('manual_adjust');
 			expect(audit?.target_type).toBe('sop_override');
@@ -277,7 +282,7 @@ describe('SOP Ratio Domain', () => {
 			expect(() => {
 				createNewVersion(
 					prev,
-					{ invalid_key: 200 } as unknown as Partial<Record<SopRatioKey, number>>,
+					{ invalid_key: '200' } as unknown as Partial<Record<SopRatioKey, string>>,
 					'Update invalid ratio',
 					overrideCtx
 				);
@@ -297,20 +302,20 @@ describe('SOP Ratio Domain', () => {
 			const { profile: override } = createInitialProfile(
 				'sop_override',
 				'Local Override',
-				{ ...validRatios, water_l_per_person_day: 20 },
+				{ ...validRatios, water_l_per_person_day: '20' },
 				overrideCtx
 			);
 
 			// 1. Both active -> override wins
 			let resolved = resolveEffectiveProfile(override, master);
 			expect(resolved?.ratio_source).toBe('override');
-			expect(resolved?.ratios.water_l_per_person_day).toBe(20);
+			expect(resolved?.ratios.water_l_per_person_day).toBe('20');
 
 			// 2. Override inactive -> master wins
 			const inactiveOverride = { ...override, active: false };
 			resolved = resolveEffectiveProfile(inactiveOverride, master);
 			expect(resolved?.ratio_source).toBe('master');
-			expect(resolved?.ratios.water_l_per_person_day).toBe(15);
+			expect(resolved?.ratios.water_l_per_person_day).toBe('15');
 
 			// 3. Both inactive -> null
 			const inactiveMaster = { ...master, active: false };
@@ -320,7 +325,7 @@ describe('SOP Ratio Domain', () => {
 			// 4. Override absent -> master wins
 			resolved = resolveEffectiveProfile(null, master);
 			expect(resolved?.ratio_source).toBe('master');
-			expect(resolved?.ratios.water_l_per_person_day).toBe(15);
+			expect(resolved?.ratios.water_l_per_person_day).toBe('15');
 		});
 	});
 
@@ -374,7 +379,7 @@ describe('SOP Ratio Domain', () => {
 				isSopMaster({
 					...baseMasterMock,
 					schema_v: 3,
-					ratios: { ...validRatios, caregiver_per_elderly: 2 }
+					ratios: { ...validRatios, caregiver_per_elderly: '2' }
 				} as unknown)
 			).toBe(false);
 			const missingKeyRatios = { ...validRatios };
@@ -450,7 +455,7 @@ describe('SOP Ratio Domain', () => {
 				isSopOverride({
 					...baseOverrideMock,
 					schema_v: 2,
-					ratios: { ...validRatios, caregiver_per_elderly: 2 }
+					ratios: { ...validRatios, caregiver_per_elderly: '2' }
 				} as unknown)
 			).toBe(false);
 			const missingKeyRatios = { ...validRatios };
@@ -458,6 +463,55 @@ describe('SOP Ratio Domain', () => {
 			expect(
 				isSopOverride({ ...baseOverrideMock, schema_v: 2, ratios: missingKeyRatios } as unknown)
 			).toBe(false);
+		});
+	});
+
+	describe('Migration Integrity Verification (CR-038 Dry Run)', () => {
+		it('should ensure values are strictly stored as strings', () => {
+			const mockRatios = {
+				...validRatios,
+				water_l_per_person_day: '15.5',
+				m2_per_person_living: '0.001'
+			};
+			const { profile } = createInitialProfile(
+				'sop_profile',
+				'Test Baseline',
+				mockRatios,
+				masterCtx
+			);
+
+			expect(typeof profile.ratios.water_l_per_person_day).toBe('string');
+			expect(profile.ratios.water_l_per_person_day).toBe('15.5');
+			expect(typeof profile.ratios.m2_per_person_living).toBe('string');
+			expect(profile.ratios.m2_per_person_living).toBe('0.001');
+		});
+
+		it('should verify daily calc boundary logic preserves and calculates values as exact decimal strings', () => {
+			const mockRatios = {
+				...validRatios,
+				water_l_per_person_day: '15.5',
+				m2_per_person_living: '15.000'
+			};
+			const { profile } = createInitialProfile(
+				'sop_profile',
+				'Test Baseline',
+				mockRatios,
+				masterCtx
+			);
+
+			const occupancy = 500;
+
+			// Replicate buildResources boundary logic
+			const ratioStr1 = profile.ratios.water_l_per_person_day;
+			const ratio1 = Number(ratioStr1);
+			expect(typeof ratio1).toBe('number');
+			expect(ratio1 * occupancy).toBe(7750);
+
+			const ratioStr2 = profile.ratios.m2_per_person_living;
+			const ratio2 = Number(ratioStr2);
+			expect(typeof ratio2).toBe('number');
+			expect(ratio2).toBe(15);
+			expect(Number.isNaN(ratio2)).toBe(false);
 		});
 	});
 });

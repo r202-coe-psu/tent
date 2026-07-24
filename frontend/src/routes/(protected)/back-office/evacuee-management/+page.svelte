@@ -16,7 +16,7 @@
 	<title>จัดการผู้ประสบภัย · SmartShelter</title>
 </svelte:head>
 
-<div class="flex h-full flex-col">
+<div class="flex h-full min-h-0 flex-col overflow-hidden">
 	<!-- Tab nav -->
 	<div class="shrink-0 border-b border-border bg-background px-6 pt-4">
 		<nav class="flex gap-1">
@@ -57,7 +57,7 @@
 	</div>
 
 	<!-- Tab content -->
-	<div class="flex-1 overflow-auto">
+	<div class="min-h-0 flex-1 [scrollbar-gutter:stable] overflow-x-hidden overflow-y-scroll">
 		{#if activeTab === 'dashboard'}
 			{#if shelterStore.selectedShelterCode}
 				<DashboardTab shelterCode={shelterStore.selectedShelterCode} />

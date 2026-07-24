@@ -6,7 +6,7 @@ describe('buildValidateDocUpdate', () => {
 		const validateFn = buildValidateDocUpdate('SH001');
 		expect(validateFn).toContain("'audit'");
 		expect(validateFn).toMatch(
-			/var allowed = \['evacuee', 'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'audit'\]/
+			/var allowed = \['evacuee', 'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'audit', 'referral'\]/
 		);
 	});
 });

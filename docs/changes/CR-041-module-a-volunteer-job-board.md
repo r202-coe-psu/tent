@@ -1,163 +1,178 @@
 ---
 id: CR-041
 title: "Module A expand — Volunteer Job Board, configurable shifts, affiliation tracking (volunteer vs staff)"
-status: proposed
+status: approved
 date: 2026-07-15
+updated: 2026-07-22
+approved_on: 2026-07-22
 requested_by: project owner
 decided_by: project owner
 layer: volatile
 affects:
-  - docs/prd/phase-r3-operations.md FR-42 / FR-43 (+ JTBD volunteer)
-  - docs/prd/role-permission-matrix.md FR-42/43 rows + affiliate UI notes (D-DUTY-ACCESS ถ้าเลือกนอกทาง A/C)
-  - docs/task-breakdown/06-A-volunteer.md T-28 / T-29 (+ task ย่อยถ้าเคาะหลังประชุม)
-  - docs/sitemap.md — routes Job Board / volunteer schedule (หลังเคาะ path)
-  - docs/data/schema.md §2.8 volunteer · §2.9 shift_assignment (+ doc types job / job_application ใหม่)
+  - docs/prd/phase-r3-operations.md FR-42 / FR-43 (+ JTBD volunteer; FR-45→43 handoff เลื่อน — D-DEMAND=C)
+  - docs/prd/role-permission-matrix.md FR-42/43 rows + affiliate UI + time-bound duty access (D-DUTY-ACCESS=B)
+  - docs/task-breakdown/06-A-volunteer.md T-28 / T-29 (+ task ย่อย duty-access / job tier / public)
+  - docs/sitemap.md — routes Job Board / volunteer schedule / public `/volunteer*`
+  - docs/data/schema.md §2.8 volunteer (โปรไฟล์กลาง D-MULTI=A) · §2.9 shift_assignment · job / job_application
   - docs/data/data-model.md · schema-er-diagram.md
   - docs/features/volunteer-job-board-flow.md
   - docs/changes/CR-002 (reuse affiliation_tags — ไม่แก้สัญญา metadata-only)
-  - docs/changes/CR-005 (ถ้า D-PUBLIC เปิด `/volunteer*` — แยก sync / amend)
-  - schema_v: job 1 · job_application 1 · shift_assignment bump (เมื่อ D-SHIFT เคาะ)
-  - frontend → features/volunteers / job-board (หลัง approve + ปิด open decisions ที่บังคับ)
+  - docs/changes/CR-005 — **ต้อง amend** เปิด `/volunteer*` บน public (D-PUBLIC=A + D-REG=A)
+  - schema_v: job 1 · job_application 1 · shift_assignment bump · volunteer อาจ bump (โปรไฟล์กลาง)
+  - frontend → features/volunteers / job-board + public volunteer + guards time-bound
+  - note: D-DUTY-ACCESS=B ใกล้ stable core — แยก epic RBAC + review ก่อน apply
 ---
 
 # CR-041 — Module A: Volunteer Job Board + shifts + affiliation tracking
 
 ## สรุป (TL;DR)
 
-- **เปลี่ยนอะไร:** ขยาย Module A (FR-42/43, T-28/T-29) จาก “ลงทะเบียนอาสา + มอบหมายกะแบบเดิม” เป็น **Job Board ต่อศูนย์ + กะตั้งค่าได้ + ปรับ job ได้ตลอด + track อาสา vs staff ประจำ**
-- **เพื่อใคร/ทำไม:** SM จัดกำลังอาสาจริงในศูนย์; อาสาสมัคร/เห็นตาราง; แยกชัดว่าใครเป็นอาสาหรือ staff ประจำแม้ถือ RoleKey เดียวกัน
-- **dev ต้อง build อะไร (หลัง approve + ปิด open decisions):** feature Job Board · application · shift ที่ผูก job · UI affiliation · (opt) duty-access ตามมติ
-- **กระทบ schema/scope:** เพิ่ม `job` / `job_application`; ขยาย `shift_assignment`; ขยาย DoD T-28/T-29 · **ยังไม่ apply canonical docs จนกว่า CR `approved` และปิด decision ที่บังคับ schema**
+- **เปลี่ยนอะไร:** ขยาย Module A เป็น **Job Board ต่อศูนย์ + กะ template/override + application (± auto-accept) + โปรไฟล์อาสากลาง + public `/volunteer*` + แยก job tier + สิทธิ์เขียนตามกะ + ป้ายอาสา/staff**
+- **เพื่อใคร/ทำไม:** SM จัดกำลังอาสา; อาสาสมัครโปรไฟล์/งานจาก public; แยกอาสา vs staff ประจำ; staff-capable ใช้ flow หน้าที่ได้เฉพาะในกะ
+- **dev ต้อง build:** Job Board · application · shifts · affiliation UI · public volunteer · central volunteer profile · **time-bound duty access** (epic แยกแนะนำ)
+- **กระทบ schema/scope:** `job` / `job_application` ใหม่; bump `shift_assignment` + อาจ bump `volunteer` (D-MULTI=A); **ไม่ผูก SOP→Job ใน R3** (D-DEMAND=C) · มติ + follow-ups ปิดครบ · **`approved` 2026-07-22** — กำลังแตก epic/stories; apply canonical docs ตาม `affects`
 
 ## Why
 
-- Baseline Module A รองรับโปรไฟล์อาสา + `shift_assignment` (enum กะตายตัว + `station`) แต่ยังไม่มี **ประกาศงานให้สมัคร (Job Board)** และ application workflow
-- ความต้องการใช้งานจริง: กะตั้งค่าได้ต่อ job, ปรับประกาศได้ตลอดโดย SM, อาสาบางประเภทแทบไม่ใช้ระบบ (operational) ส่วนบางประเภทต้องใช้ flow เขียน (staff-capable)
-- คนที่ถือ RoleKey เดียวกันต้อง **track ได้** ว่าเป็นอาสาหรือ staff ประจำ — field `_users.affiliation_tags` มีจาก [CR-002](CR-002-registration-staff-affiliation-tags.md) แต่ยังไม่บังคับใช้ใน UI Module A
-- Flow/journey ร่างไว้แล้วใน [`docs/features/volunteer-job-board-flow.md`](../features/volunteer-job-board-flow.md) — CR นี้เป็นประตูเข้าสู่ canonical docs + task expand
+- Baseline มีโปรไฟล์อาสา + `shift_assignment` แต่ไม่มี Job Board / application / กะตั้งค่าได้ / public สมัคร / time-bound duty
+- Flow ร่างใน [`docs/features/volunteer-job-board-flow.md`](../features/volunteer-job-board-flow.md)
 
-## Decisions locked (2026-07-15)
+## Decisions locked
 
-| # | ID | คำตัดสิน |
-| --- | --- | --- |
-| 1 | **D-OWNER** | **SM** เป็นเจ้าของ Job Board / job ops ทั้งศูนย์ · **SA ไม่ทำ job ops** วันต่อวัน (เหลือ platform master: skill list / preset เท่านั้น) |
-| 2 | **D-AFFIL** | Track อาสา vs staff ประจำด้วย `_users.affiliation_tags` มี `"volunteer"` = อาสา; ไม่มี + มี RoleKey = staff ประจำ · แสดงป้าย/กรองใน UI · **ห้าม** RoleKey ชื่อ `volunteer` · tag **ไม่ให้สิทธิ์** (CR-002) |
-| 3 | RBAC vocabulary | คำว่า Volunteer ในโมดูล = domain/profile เท่านั้น — สอดคล้อง CR-002 / role-permission-matrix |
-
-## Open decisions (ต้องปิดก่อน apply schema เต็ม / แตก task ย่อยละเอียด)
-
-| ID | คำถาม | ทางเลือก | บล็อกอะไร |
+| # | ID | คำตัดสิน | วันที่ |
 | --- | --- | --- | --- |
-| **D-TIER** | แยก job operational vs staff-capable ในผลิตภัณฑ์? | A แยกชัด · B ไม่แยก · C R3 เฉพาะ operational | job.capability / UX |
-| **D-DUTY-ACCESS** | อาสาที่ใช้ระบบ (เช่น ทะเบียน) ได้สิทธิ์อย่างไร? | A RoleKey ถาวร · B ตามกะ/เวลา · C ไม่อาสาเขียน | **RBAC** (B ใกล้ stable core); UJ-V7 |
-| **D-LEAD** | มีหัวหน้างานไหม? | A ไม่มี · B job-scoped grant · C RoleKey ใหม่ | permission / UI |
-| **D-REG** | ช่องทางสมัครโปรไฟล์อาสา | A Public · B login จำกัด · C SM สร้างให้ | auth / CR-005 |
-| **D-SHIFT** | โมเดลกะ | A enum เดิม · B เวลาอิสระ · C template+override | **schema `shift_assignment` bump** |
-| **D-APP** | การเข้า job | A สมัครรออนุมัติ · B auto-accept · C SM assign อย่างเดียว | application flow |
-| **D-DEMAND** | SOP → Job | A auto draft · B SM กดสร้าง · C ไม่ผูก | T-31 handoff |
-| **D-MULTI** | อาสาหลายศูนย์ | A โปรไฟล์กลาง · B ต่อศูนย์ | data model |
-| **D-PUBLIC** | เปิด `/volunteer*` บน public | A พร้อม Module A · B หลัง gate · C deep link | CR-005 |
+| 1 | **D-OWNER** | **SM** เจ้าของ Job Board / job ops ทั้งศูนย์ · SA เหลือ platform master เท่านั้น | 2026-07-15 |
+| 2 | **D-AFFIL** | Track อาสา vs staff ด้วย `affiliation_tags` มี `"volunteer"` = อาสา · ห้าม RoleKey `volunteer` · tag ไม่ให้สิทธิ์ | 2026-07-15 |
+| 3 | RBAC vocabulary | Volunteer = domain/profile เท่านั้น | 2026-07-15 |
+| 4 | **D-TIER** | **A** — job มี `operational` \| `staff-capable` + required RoleKey เมื่อ staff-capable | 2026-07-22 |
+| 5 | **D-DUTY-ACCESS** | **B** — สิทธิ์เขียนตามกะ/เวลาของ assignment ที่ active · นอกกะ write ปฏิเสธ · ใกล้ stable core | 2026-07-22 |
+| 6 | **D-LEAD** | **A** — ไม่มีหัวหน้างานใน R3 | 2026-07-22 |
+| 7 | **D-REG** | **A** — สมัครโปรไฟล์ผ่าน public (ไม่บังคับ login ตอนสมัคร) | 2026-07-22 |
+| 8 | **D-SHIFT** | **C** — preset template + override ต่อ job · duty window = เวลาหลัง override | 2026-07-22 |
+| 9 | **D-APP** | **A + optional auto-accept** · default = รออนุมัติ · setting เปิดได้ · รายละเอียด = **F-AUTO** | 2026-07-22 |
+| 10 | **D-DEMAND** | **C — ไม่ผูก** SOP/T-31 → Job ใน R3 · คนละจอ; SM สร้าง job มือ · เลื่อน handoff FR-45→43 | 2026-07-22 |
+| 11 | **D-MULTI** | **A — โปรไฟล์กลาง** · อาสาหนึ่งโปรไฟล์สมัคร/ถูกมอบหมายหลายศูนย์ได้ · schema/placement ต้องออกแบบตอน apply (อาจ bump `volunteer`) | 2026-07-22 |
+| 12 | **D-PUBLIC** | **A — เปิด `/volunteer*` พร้อม Module A** · ต้อง amend CR-005 · มี nav/surface สมัคร (+ board ตาม sitemap) | 2026-07-22 |
+| 13 | **F-AUTO** | auto-accept **ต่อ job** · เมื่อเปิด: มีโควตาว่าง + (opt) skill match · **staff-capable: default ห้ามเปิด** (หรือ confirm สองชั้นถ้าบังคับเปิด) · ค่าเริ่มต้นทุก job = ปิด | 2026-07-22 |
+| 14 | **F-CLOCK** | เวลาอ้างอิง = **shelter local** · ยอมรับ clock skew **±5 นาที** รอบขอบกะ | 2026-07-22 |
+| 15 | **F-OFFLINE** | นอกเครือข่ายเมื่ออยู่นอกหน้าต่างกะ (หรือ grant หมดอายุ) → **deny write** · ไม่มี grace period | 2026-07-22 |
+| 16 | **F-OVERLAP** | หลาย assignment/job ได้ถ้า**ไม่ซ้อนเวลา** · กะข้ามเที่ยงคืน = หน้าต่างเวลาต่อเนื่องช่วงเดียว | 2026-07-22 |
+| 17 | **F-REVOKE** | เมื่อถอน assignment หรือเลื่อนเวลาแล้ว `now` ไม่อยู่ในหน้าต่างใหม่ → **ตัด grant ทันที** · ต้องแจ้งอาสา | 2026-07-22 |
+| 18 | **D-USER-PROVISION** | **สร้าง `_users`:** เฉพาะ **self-register** หรือ **SA สร้าง** — **SM สร้าง user ไม่ได้** · **แก้ RoleKey + ชนิดคน:** SM ทำได้ (รวมดึงอาสาเข้า RoleKey โดยไม่ต้องผ่าน Job Board) | 2026-07-22 |
 
-> **ข้อเสนอแนะ (ยังไม่มติ):** R3 เริ่ม **D-DUTY-ACCESS = A หรือ C** ก่อน — เลื่อน B (time-bound) ถ้ายังไม่พร้อมแตะ RBAC ลึก
+### Open decisions / follow-ups
+
+**ไม่มี** — มติผลิตภัณฑ์ + follow-ups duty-access ปิดครบแล้ว  
+ขั้นถัดไป: apply canonical docs + field table + epic/stories (handoff)
 
 ## Change
 
 ### A. FR-42 / FR-43 (before → after — หลัง approve)
 
-| | Before | After (ทิศทาง) |
+| | Before | After |
 | --- | --- | --- |
-| FR-42 | ลงทะเบียนอาสา + skills + availability | **คง** + ผูก Job Board entry (UJ-JOIN) + **บังคับ D-AFFIL** เมื่อมี login |
-| FR-43 | Skill match + มอบหมายกะ (`station` + enum กะ) | **ขยาย** เป็น Job posting + application + กะตาม **D-SHIFT** + adjust ได้ตลอดโดย SM |
-| Owner | SM (canonical) | **ยืนยัน D-OWNER** — ไม่มี SA เป็นคนดูแล board |
+| FR-42 | ลงทะเบียนอาสา + skills + availability | **คง** + public สมัคร + โปรไฟล์กลาง + Job Board entry + D-AFFIL เมื่อมี login |
+| FR-43 | Skill match + กะ enum | Job Board + application (± auto-accept) + template/override + tier + time-bound duty · **ไม่** auto จาก SOP ใน R3 |
+| Owner | SM | SM เท่านั้น (D-OWNER / D-LEAD=A) |
 
-**Consequences (testable) — ส่วนที่ล็อกแล้ว:**
+**Consequences (testable):**
 
-1. Job ops ของศูนย์ = SM (และ lead ถ้าเปิดภายหลังภายใต้ SM) — SA ไม่มี journey จัดการ job
-2. รายชื่อ user / สมาชิกกะแสดงป้าย **อาสา** vs **Staff ประจำ** จาก `affiliation_tags`
-3. สร้าง login ให้อาสาต้องตั้ง `affiliation_tags` มี `"volunteer"`; สร้าง staff ประจำห้ามใส่โดยปริยาย
+1. Job ops = SM เท่านั้นใน R3 — ไม่มี lead · SA ไม่มี journey job ops
+2. ป้ายอาสา / Staff ประจำจาก `affiliation_tags` + filter (R-AFFIL)
+3. **สร้าง `_users`:** self-register หรือ SA เท่านั้น — SM สร้างไม่ได้ · **แก้ RoleKey + ชนิดคน:** SM ทำได้ (รวมดึงอาสาเข้า RoleKey นอก Job Board)
+4. Job ต้องระบุ tier `operational` \| `staff-capable`; ถ้า staff-capable ต้องมี required RoleKey/capability
+5. อาสาที่ถือ assignment ของ job staff-capable ใช้ write path ตาม capability ได้ **เฉพาะช่วงกะ active**; นอกกะ write = ปฏิเสธ · ห้ามเช็ค permission จาก tag `volunteer`
+6. Public `/volunteer*` เปิดพร้อม Module A — สมัครโปรไฟล์ได้โดยไม่ login
+7. โปรไฟล์อาสา **กลาง** — สมัครงานหลายศูนย์จากโปรไฟล์เดียว
+8. กะ = template + override; duty window จากเวลาที่มีผล
+9. Application รออนุมัติเป็นค่าเริ่มต้น; auto-accept ต่อ job ตาม F-AUTO
+10. **ไม่มี** สร้าง/เติม job อัตโนมัติจาก SOP demand ใน R3 (D-DEMAND=C)
+11. Duty clock = shelter local ±5 นาที; offline นอกกะ = deny write; ทับเวลากะห้าม; ถอน/เลื่อนตัด grant ทันที + แจ้งอาสา
 
-**Consequences ที่รอ open decisions:** job entity ละเอียด, shift shape, self-apply, public สมัคร, duty-access
-
-### B. Doc types (ทิศทาง — รายละเอียด field ล็อกหลัง D-SHIFT / D-APP / D-TIER)
+### B. Doc types
 
 | Doc | สถานะ | หมายเหตุ |
 | --- | --- | --- |
-| `volunteer:{ulid}` | มีแล้ว (§2.8) | คง; ผูก `user_name` เมื่อมี login |
-| `shift_assignment:{ulid}` | มีแล้ว (§2.9) | **ขยาย/bump** เมื่อ D-SHIFT เคาะ (ลิงก์ `job_id`, เวลาอิสระ ฯลฯ) |
-| `job:{ulid}` | **ใหม่** (เสนอ) | ประกาศงานต่อศูนย์; status draft/open/paused/filled/closed; ปรับได้ตลอดโดย SM |
-| `job_application:{ulid}` | **ใหม่** (เสนอ ถ้า D-APP ≠ C) | สมัครเข้า job; status submitted → … |
+| `volunteer:{ulid}` | มีแล้ว — **อาจ bump** | โปรไฟล์กลาง (D-MULTI=A); สร้างจาก public; ผูก login เมื่อมี |
+| `shift_assignment:{ulid}` | bump | `job_id` + เวลาจาก template±override; ฐาน duty window; ผูก shelter ของ job |
+| `job:{ulid}` | ใหม่ v1 | ต่อศูนย์; tier; required roles; templates/overrides; `auto_accept` (default false; staff-capable จำกัดตาม F-AUTO) |
+| `job_application:{ulid}` | ใหม่ v1 | สมัครเข้า job; auto-accept ตาม setting |
 
-> Field table ละเอียด **ยังไม่ฝังใน CR นี้** — เขียนลง `schema.md` หลังปิด D-SHIFT + D-APP + D-TIER (กัน draft schema ชนมติห้องประชุม). โครง state / journey อ้าง feature flow §3–§5
+> Field table เขียนลง `schema.md` หลัง `approved`
 
-### C. Affiliation tracking (D-AFFIL — apply ได้หลัง approve โดยไม่ bump schema)
+### C. Affiliation (D-AFFIL)
 
-ใช้ field ที่มีอยู่:
+ไม่เปลี่ยนสัญญา CR-002 — บังคับ UI ตาม R-AFFIL-1..4 ใน feature flow
 
-| Field | พฤติกรรมที่บังคับในผลิตภัณฑ์ |
+### D. Task / planning (หลัง approve)
+
+| Task | ทิศทาง |
 | --- | --- |
-| `_users.affiliation_tags` | มี `"volunteer"` ↔ ป้ายอาสา; ไม่มี + มี RoleKey ↔ Staff ประจำ |
-| UI user admin | ฟอร์มสร้าง/แก้ **บังคับเลือกชนิดคน** (R-AFFIL-1..2 ใน feature flow) |
-| Filter | กรองรายชื่อเฉพาะอาสา / เฉพาะ staff ประจำ |
-
-ไม่แก้สัญญา CR-002 (metadata only)
-
-### D. Task / planning (`06-A-volunteer.md` — หลัง approve; รายละเอียด DoD ปรับตาม open decisions)
-
-| Task | ทิศทางหลัง approve |
-| --- | --- |
-| **T-28** | ขยาย DoD: UJ-JOIN + D-AFFIL เมื่อมี login · ช่องทางสมัครตาม D-REG |
-| **T-29** | ขยาย DoD: Job Board + กะตาม D-SHIFT + application ตาม D-APP + adjust job · skill match คง |
-| (opt) task ย่อย | แยก groundwork schema job/* ถ้าทีมต้องการ slice เล็กลง — ตั้ง ID หลังปิด open decisions |
-
-**ยังไม่แก้** `06-A-volunteer.md` จนกว่า `status: approved` (และอย่างน้อยปิด D-SHIFT / D-APP ที่กระทบ DoD)
+| **T-28** | public สมัคร + โปรไฟล์กลาง + skills/availability + D-AFFIL เมื่อ login |
+| **T-29** | Job Board + template/override + application ± auto-accept + skill match + assign · **ตัด** DoD “demand จาก T-31 สร้างงาน” ออกจาก R3 (เลื่อน) |
+| task ย่อยแนะนำ | (1) schema job/* + volunteer multi (2) public `/volunteer*` + CR-005 (3) **time-bound duty / guards** |
 
 ### E. Permissions
 
-| Action | หลัง approve (ขั้นต่ำตามที่ล็อก) |
+| Action | กติกา |
 | --- | --- |
-| Job Board mutate (สร้าง/แก้/ปิด/อนุมัติ/จัดกะ) | `shelter_manager` (+ SA platform override ตามแพทเทิร์น) — **ไม่ใช่** SA เป็นผู้ใช้หลัก |
-| Volunteer recruit (เดิม FR-42/43) | คง `VOLUNTEER_RECRUIT_ROLES` = {SA, SM} สำหรับ admin ข้ามศูนย์; **ops วันต่อวัน = SM** |
-| Write path ทะเบียน/ครัว ฯลฯ | ตาม RoleKey เดิม — **ไม่**จาก tag `volunteer`; รายละเอียดเพิ่มตาม D-DUTY-ACCESS |
+| Job Board mutate | `shelter_manager` (+ SA platform override ตามแพทเทิร์น) |
+| Public สมัครโปรไฟล์ | anonymous → สร้าง `volunteer` (ไม่ให้ RoleKey) |
+| สร้าง `_users` | **self-register** หรือ **SA** เท่านั้น — SM สร้างไม่ได้ (D-USER-PROVISION) |
+| แก้ RoleKey / ชนิดคน (`affiliation_tags`) | **SM ได้** (ในศูนย์ตน) และ SA · รวมการให้อาสาถือ RoleKey โดยไม่ผ่าน Job Board |
+| Write ทะเบียน/ครัว ฯลฯ ของอาสา | เฉพาะในกะ active ของ job staff-capable ที่ require capability นั้น |
 
-### F. Routes (ทิศทาง — path ล็อกหลัง approve)
+### F. Routes
 
 | พื้นที่ | หมายเหตุ |
 | --- | --- |
-| Back-office Job Board / กะ / รายชื่ออาสา | ภายใต้ shelter scope · SM |
-| ตารางอาสา (self) | ถ้ามี login ตาม D-REG |
-| Public `/volunteer*` | ผูก D-PUBLIC / CR-005 — ห้ามเปิดเงียบๆ |
+| Back-office Job Board / กะ | shelter scope · SM |
+| ตารางอาสา (self) | หลังมี login |
+| Public `/volunteer*` | สมัครโปรไฟล์ + เข้าถึง board ตาม sitemap — **amend CR-005** |
 
 ## Impact
 
 | Artifact | หลัง approve |
 | --- | --- |
-| `schema.md` §2.8–2.9 + § ใหม่ | `job` / `job_application`; ขยาย `shift_assignment` ตาม D-SHIFT |
-| data-model / ER | sync doc types |
-| PRD R3 FR-42/43 | consequences Job Board + D-AFFIL + owner SM |
-| role-permission-matrix | หมายเหตุ D-OWNER / D-AFFIL; แก้เพิ่มถ้า D-DUTY-ACCESS = B หรือ D-LEAD = C |
-| `06-A-volunteer.md` | ขยาย DoD T-28/T-29 |
-| `sitemap.md` | routes Module A |
-| feature flow | `draft for review` → `active` เมื่อ CR approved + open decisions ที่บังคับปิดครบ (หรือ mark deferred ใน CR) |
-| Code | `features/` สำหรับ volunteers / job-board |
-| CR-005 | amend เฉพาะถ้าเปิด public volunteer nav |
+| `schema.md` + data-model / ER | job, job_application, shift bump, volunteer multi-shelter |
+| PRD R3 FR-42/43 | ตาม consequences; หมายเหตุ FR-45→43 เลื่อน |
+| role-permission-matrix | D-OWNER / D-AFFIL / time-bound duty |
+| `06-A-volunteer.md` | ขยาย T-28/T-29; ตัด demand auto จาก DoD R3 |
+| `sitemap.md` | Module A + public volunteer |
+| feature flow | → `active` |
+| CR-005 | **amend บังคับ** (D-PUBLIC=A) |
+| Code | volunteers / job-board / public / duty guards |
 
 ## Migration
 
-- `volunteer` / `shift_assignment` อาจมี seed/dev data — migration ระบุเมื่อ bump `shift_assignment` (D-SHIFT)
-- `job` / `job_application` = schema_v 1 ตั้งต้นหลัง approve; pre-prod wipe/re-seed ได้ถ้านโยบายโปรเจกต์อนุญาต
-- D-AFFIL: **ไม่มี migrate อัตโนมัติ** จาก RoleKey → tag (ห้ามตาม CR-002); SM/SA ใส่ tag จากข้อมูลที่ยืนยันแล้ว
+- `job` / `job_application` = v1 หลัง approve; pre-prod re-seed ได้ตามนโยบาย
+- `shift_assignment` bump ตาม D-SHIFT=C
+- `volunteer` โปรไฟล์กลาง: migration/วางที่เก็บ (shared vs per-shelter) ระบุตอนเขียน schema — **ห้ามเดาในโค้ดก่อน spec**
+- D-AFFIL: ไม่ auto-tag จาก RoleKey
+- D-DUTY-ACCESS=B: ไม่ auto-แปลง RoleKey ถาวรเป็น grant ตามกะ
+- D-DEMAND=C: ไม่มี migrate จาก daily_calc → job
 
 ## Acceptance (เมื่อ CR ปิด done)
 
-- [ ] Decision locked + open decisions ที่บังคับ schema ถูกปิดหรือ mark deferred ชัดใน CR
-- [ ] Canonical docs อัปเดตครบตาม `affects`
-- [ ] T-28/T-29 DoD สะท้อน Job Board + D-AFFIL
-- [ ] ห้าม permission check จาก `affiliation_tags` / role ชื่อ `volunteer`
-- [ ] Feature flow `active` หรือ superseded ชี้สเปก implement
+- [x] Product decisions หลักล็อกครบ (รวม F-AUTO)
+- [x] F-CLOCK / F-OFFLINE / F-OVERLAP / F-REVOKE ล็อกแล้ว
+- [x] `status: approved` (2026-07-22)
+- [ ] Canonical docs + CR-005 amend ครบตาม `affects`
+- [ ] T-28/T-29 DoD สะท้อนมติ (รวมตัด SOP→Job ใน R3)
+- [ ] ห้าม permission จาก `affiliation_tags` / role ชื่อ `volunteer`
+- [ ] Feature flow `active`
+- [ ] Time-bound RBAC ผ่าน review ก่อน merge guard
 
 ## Decision log
 
-- 2026-07-15 — **proposed**. Track = ไฟล์ CR ใน `docs/changes/` (เจ้าของโครงการสั่งเพิ่ม CR)
-- 2026-07-15 — lock: D-OWNER (SM owns job ops; SA ไม่ดูแล board) · D-AFFIL (`affiliation_tags`) · ไม่มี RoleKey `volunteer`
-- 2026-07-15 — ร่าง flow/journeys ใน `docs/features/volunteer-job-board-flow.md` (ยัง `draft for review`)
-- 2026-07-15 — **ยังไม่ apply** schema.md / PRD / `06-A-volunteer.md` / sitemap / role-matrix จนกว่า `approved` + ปิด open decisions ที่บล็อก schema
+- 2026-07-15 — **proposed**. Track = ไฟล์ CR ใน `docs/changes/`
+- 2026-07-15 — lock: D-OWNER · D-AFFIL · ไม่มี RoleKey `volunteer`
+- 2026-07-15 — ร่าง `volunteer-job-board-flow.md` (`draft for review`)
+- 2026-07-15 — ยังไม่ apply canonical จนกว่า `approved`
+- 2026-07-22 — lock D-TIER=A · D-DUTY-ACCESS=B
+- 2026-07-22 — lock D-LEAD=A · D-REG=A · D-SHIFT=C · D-APP=A+opt auto-accept
+- 2026-07-22 — lock F-AUTO (ต่อ job; โควตา+(opt) skill match; staff-capable default ห้ามเปิด)
+- 2026-07-22 — lock D-DEMAND=C · D-MULTI=A · D-PUBLIC=A
+- 2026-07-22 — lock F-CLOCK / F-OFFLINE / F-OVERLAP / F-REVOKE ตามข้อเสนอ · **workshop ปิดครบ**
+- 2026-07-22 — **approved** โดย project owner · เริ่มแตก epic/stories สำหรับ handoff
+- 2026-07-22 — lock **D-USER-PROVISION**: สร้าง `_users` = self-register หรือ SA เท่านั้น; SM สร้างไม่ได้ แต่แก้ RoleKey + ชนิดคนได้ (รวมให้อาสาถือ RoleKey นอก Job Board)

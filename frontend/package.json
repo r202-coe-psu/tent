@@ -19,12 +19,14 @@
 		"openapi": "openapi-typescript",
 		"openapi:fetch": "mkdir -p src/lib/api-specs && curl -f http://localhost:9000/openapi.json -o src/lib/api-specs/fastapi.json",
 		"openapi:fastapi": "openapi-typescript src/lib/api-specs/fastapi.json -o src/lib/api/openapi.d.ts",
-		"openapi:update": "pnpm openapi:fetch && pnpm openapi:fastapi",
+		"openapi:format": "prettier --write src/lib/api-specs/fastapi.json src/lib/api/openapi.d.ts",
+		"openapi:update": "pnpm openapi:fetch && pnpm openapi:fastapi && pnpm openapi:format",
 		"seed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts",
 		"seed:thailand": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-thailand-location.ts",
 		"seed:delete-dashboard": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts --delete-dashboard",
 		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
-		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts"
+		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts",
+		"redeploy:referral-db": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/redeploy-referral-db.ts"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.1.0",

@@ -122,7 +122,7 @@
 	</div>
 
 	<div class="no-scrollbar flex-1 overflow-y-auto">
-		<div class="space-y-6 p-4 text-[13px] font-medium text-muted-foreground">
+		<div class="sticky top-0 z-10 bg-card p-4 pb-2">
 			<a
 				href={backofficeHomePath}
 				class="flex w-full items-center justify-center rounded-xl bg-muted py-2.5 text-sm font-normal text-foreground transition-colors hover:bg-muted/70 {collapsed
@@ -133,7 +133,9 @@
 				<House class="h-4 w-4 shrink-0 text-muted-foreground" />
 				{#if !collapsed}<span>กลับหน้าเลือกเมนูหลัก</span>{/if}
 			</a>
+		</div>
 
+		<div class="space-y-6 px-4 pt-2 pb-4 text-[13px] font-medium text-muted-foreground">
 			{#each backofficeNavbarGroups as group (group.title)}
 				{@const visibleItems = group.items.filter(canSee)}
 				{#if visibleItems.length > 0}
