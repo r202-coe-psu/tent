@@ -1,4 +1,9 @@
-import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
+import {
+	createMutation,
+	createQuery,
+	useQueryClient,
+	type QueryClient
+} from '@tanstack/svelte-query';
 import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
@@ -7,7 +12,7 @@ import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { peopleRepository } from '../data/people.remote';
-import type { HouseholdSearchLabels } from '../data/people.repository';
+import type { EvacueeFilters, HouseholdSearchLabels } from '../data/people.repository';
 import type {
 	Evacuee,
 	EvacueeInput,
@@ -23,8 +28,13 @@ export const peopleKeys = {
 	all: ['people'] as const,
 	evacuees: () => [...peopleKeys.all, 'evacuees', getShelterCode()] as const,
 	evacuee: (id: string) => [...peopleKeys.all, 'evacuee', getShelterCode(), id] as const,
-	evacueesPaginated: (page: number, pageSize: number, search = '') =>
-		[...peopleKeys.all, 'evacuees', getShelterCode(), { page, pageSize, search }] as const,
+	evacueesPaginated: (page: number, pageSize: number, search = '', filtersKey = '') =>
+		[
+			...peopleKeys.all,
+			'evacuees',
+			getShelterCode(),
+			{ page, pageSize, search, filtersKey }
+		] as const,
 	evacueesSearch: (query: string) =>
 		[...peopleKeys.all, 'evacuees', getShelterCode(), 'search', query] as const,
 	households: () => [...peopleKeys.all, 'households', getShelterCode()] as const,
@@ -49,14 +59,23 @@ export const useEvacuees = () =>
 export const useEvacueesPaginated = (
 	page: () => number,
 	pageSize: () => number,
-	search?: () => string
+	search?: () => string,
+	filters?: () => EvacueeFilters
 ) =>
 	createQuery(() => ({
-		queryKey: peopleKeys.evacueesPaginated(page(), pageSize(), search?.() ?? ''),
+		queryKey: peopleKeys.evacueesPaginated(
+			page(),
+			pageSize(),
+			search?.() ?? '',
+			filters ? JSON.stringify(filters()) : ''
+		),
 		queryFn: () =>
-			peopleRepository().listEvacueesPaginated(page(), pageSize(), search?.()) as Promise<
-				PaginatedResult<Evacuee>
-			>
+			peopleRepository().listEvacueesPaginated(
+				page(),
+				pageSize(),
+				search?.(),
+				filters?.()
+			) as Promise<PaginatedResult<Evacuee>>
 	}));
 
 export const useSearchEvacuees = (query: () => string, enabled: () => boolean) =>
@@ -84,8 +103,9 @@ export const useUpdateEvacuee = () =>
 		mutationFn: (evacuee: Evacuee) => peopleRepository().updateEvacuee(evacuee)
 	}));
 
-export const useCheckInEvacuee = () =>
-	createMutation(() => ({
+export const useCheckInEvacuee = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({
 			evacuee,
 			ctx,
@@ -94,14 +114,25 @@ export const useCheckInEvacuee = () =>
 			evacuee: Evacuee;
 			ctx: AuthorContext;
 			zone?: string | null;
-		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone)
+		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+		}
 	}));
+};
 
-export const useCheckOutEvacuee = () =>
-	createMutation(() => ({
+export const useCheckOutEvacuee = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
-			peopleRepository().checkOutEvacuee(evacuee, ctx)
+			peopleRepository().checkOutEvacuee(evacuee, ctx),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+		}
 	}));
+};
 
 /** One-shot lookup used by the scan flow — goes through TanStack Query keys. */
 export async function lookupEvacueeByScanCode(

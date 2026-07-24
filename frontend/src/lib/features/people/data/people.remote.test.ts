@@ -99,6 +99,35 @@ describe('PeopleRemoteRepository', () => {
 			const hits = await repo.searchEvacuees('SOMCHAI jaidee');
 			expect(hits).toHaveLength(1);
 		});
+
+		it('matches a phone number with or without formatting', async () => {
+			const hits = await repo.searchEvacuees('081-234-5678');
+			expect(hits).toHaveLength(1);
+			expect(hits[0].first_name).toBe('Somchai');
+		});
+	});
+
+	describe('listEvacueesPaginated filters', () => {
+		it('filters by supported vulnerable type and assigned zone before pagination', async () => {
+			const elderly = await repo.createEvacuee(
+				evInput({ first_name: 'Elder', special_needs: ['elderly'] }),
+				ctx
+			);
+			await repo.checkInEvacuee(elderly, ctx, 'Z1');
+			const pregnant = await repo.createEvacuee(
+				evInput({ first_name: 'Mother', special_needs: ['pregnant'] }),
+				ctx
+			);
+			await repo.checkInEvacuee(pregnant, ctx, 'Z2');
+
+			const result = await repo.listEvacueesPaginated(1, 10, '', {
+				specialNeed: 'elderly',
+				zone: 'Z1'
+			});
+
+			expect(result.total).toBe(1);
+			expect(result.items[0].first_name).toBe('Elder');
+		});
 	});
 });
 

@@ -7,15 +7,14 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { Combobox } from '$lib/components/ui/combobox/index.js';
+	import SearchSelect from '$lib/components/search-select.svelte';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import {
-		evacueeInputSchema,
-		specialNeedSchema,
-		SPECIAL_NEED_CHIPS,
-		type EvacueeInput
-	} from '../domain/people';
+	import { evacueeInputSchema, type EvacueeInput } from '../domain/people';
+	import { useMasterData } from '$lib/features/master-data';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 	import Camera from '@lucide/svelte/icons/camera';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { COUNTRIES } from '$lib/utils/country';
@@ -120,6 +119,20 @@
 	});
 
 	const { form: formData, errors, submitting } = form;
+
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+
+	// Vulnerable-group chips — restricted to this shelter's admission_policy.supported_vulnerable_groups
+	// (shelter config), label from master data.
+	const specialNeedChipOptions = $derived.by(() => {
+		const supported = shelterQuery.data?.admission_policy?.supported_vulnerable_groups ?? [];
+		const masterItems = vulnerableGroupQuery.data?.items ?? [];
+		return supported.map((code) => {
+			const masterItem = masterItems.find((item) => item.code === code);
+			return { code, label: masterItem?.label ?? code };
+		});
+	});
 
 	let age = $state('');
 
@@ -375,14 +388,15 @@
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>ประเทศ <span class="text-destructive">*</span></Form.Label>
-								<Combobox
-									items={COUNTRIES}
+								<SearchSelect
+									name="country"
+									options={COUNTRIES}
 									bind:value={$formData.country}
 									placeholder="เลือกประเทศ..."
 									searchPlaceholder="ค้นหาประเทศ..."
 									emptyText="ไม่พบประเทศ"
 									controlProps={props}
-									class="h-9"
+									class="h-9 rounded-md"
 								/>
 							{/snippet}
 						</Form.Control>
@@ -453,8 +467,8 @@
 		<div class="w-full space-y-2 border-t border-border pt-6">
 			<Label class="text-sm font-semibold">แท็กกลุ่มเปราะบางและความต้องการพิเศษ</Label>
 			<div class="flex flex-wrap gap-2 pt-1">
-				{#each specialNeedSchema.options as need (need)}
-					{@const chip = SPECIAL_NEED_CHIPS[need]}
+				{#each specialNeedChipOptions as chip (chip.code)}
+					{@const need = chip.code as NonNullable<EvacueeInput['special_needs']>[number]}
 					{@const checked = ($formData.special_needs ?? []).includes(need)}
 					<Button
 						type="button"
@@ -469,7 +483,6 @@
 							? 'border-primary bg-primary/10 font-medium text-primary hover:bg-primary/15'
 							: 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-primary/5'}"
 					>
-						<span>{chip.emoji}</span>
 						<span>{chip.label}</span>
 					</Button>
 				{/each}

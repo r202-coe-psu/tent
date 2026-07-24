@@ -1,8 +1,8 @@
 <script lang="ts">
 	import Stethoscope from '@lucide/svelte/icons/stethoscope';
 	import type { Evacuee, Medical, Screening } from '$lib/features/people';
-	import { SPECIAL_NEED_CHIPS, EWAR_SYMPTOM_GROUPS } from '$lib/features/people';
-	import type { SpecialNeed } from '$lib/features/people';
+	import { EWAR_SYMPTOM_GROUPS } from '$lib/features/people';
+	import { useMasterData } from '$lib/features/master-data';
 
 	let {
 		evacuee,
@@ -20,6 +20,11 @@
 			if (s) return s.label;
 		}
 		return id;
+	}
+
+	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	function specialNeedLabel(code: string): string {
+		return vulnerableGroupQuery.data?.items.find((i) => i.code === code)?.label ?? code;
 	}
 </script>
 
@@ -124,12 +129,10 @@
 				<div class="mt-2 flex flex-wrap gap-1.5">
 					{#if evacuee.special_needs && evacuee.special_needs.length > 0}
 						{#each evacuee.special_needs as need (need)}
-							{@const chip = SPECIAL_NEED_CHIPS[need as SpecialNeed]}
 							<span
 								class="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300"
 							>
-								<span>{chip.emoji}</span>
-								<span>{chip.label}</span>
+								<span>{specialNeedLabel(need)}</span>
 							</span>
 						{/each}
 					{:else}

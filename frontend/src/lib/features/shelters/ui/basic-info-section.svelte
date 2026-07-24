@@ -6,7 +6,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { Combobox } from '$lib/components/ui/combobox/index.js';
+	import SearchSelect from '$lib/components/search-select.svelte';
 	import { useMasterData } from '$lib/features/master-data';
 	import { useProvinces, useDistricts, useSubdistricts } from '../application/queries';
 	import LocationMapPicker from './location-map-picker.svelte';
@@ -79,8 +79,7 @@
 		() => $formData.district ?? null
 	);
 
-	// Combobox items — the raw lists are string[]/{ subdistrict, zipcode }[];
-	// Combobox wants { value, label }[].
+	// SearchSelect options — the raw lists are string[]/{ subdistrict, zipcode }[].
 	const provinceItems = $derived((provincesQuery.data ?? []).map((p) => ({ value: p, label: p })));
 	const districtItems = $derived((districtsQuery.data ?? []).map((d) => ({ value: d, label: d })));
 	const subdistrictItems = $derived(
@@ -331,14 +330,16 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>จังหวัด</Form.Label>
-					<Combobox
-						items={provinceItems}
+					<SearchSelect
+						name="province"
+						options={provinceItems}
 						bind:value={() => $formData.province ?? '', (v) => selectProvince(v || null)}
 						placeholder={provincesQuery.isLoading ? 'กำลังโหลด...' : 'เลือกจังหวัด...'}
 						searchPlaceholder="ค้นหาจังหวัด..."
 						emptyText="ไม่พบจังหวัด"
 						disabled={disabled || provincesQuery.isLoading}
 						controlProps={props}
+						class="h-9 rounded-md"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -349,8 +350,9 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>อำเภอ/เขต</Form.Label>
-					<Combobox
-						items={districtItems}
+					<SearchSelect
+						name="district"
+						options={districtItems}
 						bind:value={() => $formData.district ?? '', (v) => selectDistrict(v || null)}
 						placeholder={!$formData.province
 							? 'เลือกจังหวัดก่อน'
@@ -361,6 +363,7 @@
 						emptyText="ไม่พบอำเภอ"
 						disabled={disabled || !$formData.province || districtsQuery.isLoading}
 						controlProps={props}
+						class="h-9 rounded-md"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -371,8 +374,9 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>ตำบล/แขวง</Form.Label>
-					<Combobox
-						items={subdistrictItems}
+					<SearchSelect
+						name="subdistrict"
+						options={subdistrictItems}
 						bind:value={() => $formData.subdistrict ?? '', (v) => selectSubdistrict(v || null)}
 						placeholder={!$formData.district
 							? 'เลือกอำเภอก่อน'
@@ -383,6 +387,7 @@
 						emptyText="ไม่พบตำบล"
 						disabled={disabled || !$formData.district || subdistrictsQuery.isLoading}
 						controlProps={props}
+						class="h-9 rounded-md"
 					/>
 				{/snippet}
 			</Form.Control>

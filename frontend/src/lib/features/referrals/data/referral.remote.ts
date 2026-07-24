@@ -1,0 +1,184 @@
+import { createRemoteRepository, type Repository } from '$lib/db/repository';
+import { touch, makeDoc, type AuthorContext } from '$lib/db/model';
+import { getShelterCode, getShelterDb } from '$lib/db/shelter';
+import {
+	isReferral,
+	type Referral,
+	type ReferralFilter,
+	referralFilterSchema,
+	type ReferralInput,
+	type ReferralStatus,
+	buildReferralBody,
+	referralSchema
+} from '../domain/referral.schema';
+import { applyTransition } from '../domain/referral.transitions';
+import { peopleRepository } from '$lib/features/people';
+import type {
+	ReferralBatchResult,
+	ReferralRepository,
+	ReferralSubmitIntent
+} from './referral.repository';
+
+/**
+ * Capacity referrals need BFF/admin for:
+ * - `sent` → mirror into destination shelter DB (inbox)
+ * - `accepted`/`rejected` → destination-only; accept runs cross-DB transfer
+ * - `closed` → sync peer copy
+ */
+async function transitionCapacityViaBff(
+	id: string,
+	to: ReferralStatus,
+	reason: string | undefined,
+	shelterCode: string
+): Promise<Referral> {
+	const qs = new URLSearchParams({ shelter_code: shelterCode });
+	const res = await fetch(`/api/back-office/referral/${encodeURIComponent(id)}/transition?${qs}`, {
+		method: 'PATCH',
+		credentials: 'include',
+		headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+		body: JSON.stringify({ to, reason })
+	});
+
+	const payload = await res.json().catch(() => null);
+	if (!res.ok) {
+		const message =
+			payload && typeof payload === 'object' && 'error' in payload
+				? String((payload as { error: unknown }).error)
+				: `Capacity referral transition failed (${res.status})`;
+		throw new Error(message);
+	}
+
+	if (!isReferral(payload)) {
+		throw new Error('Capacity referral transition returned an invalid referral document');
+	}
+	return payload;
+}
+
+export class ReferralRemoteRepository implements ReferralRepository {
+	private readonly repo: Repository;
+
+	constructor(private readonly dbName: string) {
+		this.repo = createRemoteRepository(dbName);
+	}
+
+	async list(filter?: ReferralFilter): Promise<Referral[]> {
+		const parsed = referralFilterSchema.parse(filter ?? {});
+		const selector: Record<string, unknown> = {
+			type: 'referral'
+		};
+
+		if (parsed.status) {
+			selector.status = parsed.status;
+		}
+		if (parsed.evacuee_id) {
+			selector.evacuee_id = parsed.evacuee_id;
+		}
+
+		const sort =
+			parsed.sort === 'created_at_asc'
+				? [{ type: 'asc' }, { created_at: 'asc' }]
+				: [{ type: 'desc' }, { created_at: 'desc' }];
+
+		const docs = await this.repo.find<Referral>({
+			selector,
+			limit: parsed.limit,
+			skip: parsed.skip,
+			sort
+		});
+		return docs.filter(isReferral);
+	}
+
+	async get(id: string): Promise<Referral | null> {
+		const doc = await this.repo.get<Referral>(id);
+		return doc && isReferral(doc) ? doc : null;
+	}
+
+	async create(input: ReferralInput, ctx: AuthorContext): Promise<Referral> {
+		const evacuee = await peopleRepository().getEvacuee(input.evacuee_id);
+		if (!evacuee) {
+			throw new Error(`Evacuee with ID ${input.evacuee_id} was not found in the active shelter.`);
+		}
+
+		// FR-002: Duplicate active referral check
+		const existing = await this.list({ evacuee_id: input.evacuee_id });
+		const hasActive = existing.some((r) => r.status !== 'closed' && r.status !== 'rejected');
+		if (hasActive) {
+			throw new Error('ผู้ประสบภัยรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน');
+		}
+
+		const body = buildReferralBody(input);
+		const rawDoc = makeDoc('referral', 1, body, ctx);
+
+		const doc = referralSchema.parse(rawDoc);
+		return this.repo.put<Referral>(doc);
+	}
+
+	async transition(
+		id: string,
+		to: ReferralStatus,
+		actor: string,
+		reason?: string
+	): Promise<Referral> {
+		const latest = await this.repo.get<Referral>(id);
+		if (!latest || !isReferral(latest)) {
+			throw new Error(`Referral ${id} not found or invalid`);
+		}
+
+		// All capacity transitions go through BFF (mirror / dest-gated accept / peer sync).
+		if (latest.referral_type === 'capacity') {
+			return transitionCapacityViaBff(id, to, reason, getShelterCode());
+		}
+
+		const nowIso = new Date().toISOString();
+		const updated = applyTransition(latest, to, actor, nowIso, reason);
+		return this.repo.put<Referral>(touch(updated));
+	}
+}
+
+let singleton: ReferralRepository | null = null;
+let singletonDbName: string | null = null;
+
+export function referralRepository(): ReferralRepository {
+	const currentDb = getShelterDb();
+	if (!singleton || singletonDbName !== currentDb) {
+		singleton = new ReferralRemoteRepository(currentDb);
+		singletonDbName = currentDb;
+	}
+	return singleton;
+}
+
+/**
+ * Create one referral per evacuee (shared template fields), optionally transition each to `sent`.
+ * Continues on per-person failure so the UI can show partial success.
+ */
+export async function createReferralBatch(
+	template: ReferralInput,
+	evacueeIds: string[],
+	options: {
+		intent: ReferralSubmitIntent;
+		ctx: AuthorContext;
+		repo?: ReferralRepository;
+	}
+): Promise<ReferralBatchResult> {
+	const repo = options.repo ?? referralRepository();
+	const created: Referral[] = [];
+	const failed: ReferralBatchResult['failed'] = [];
+
+	for (const evacuee_id of evacueeIds) {
+		try {
+			const input = { ...template, evacuee_id } as ReferralInput;
+			let doc = await repo.create(input, options.ctx);
+			if (options.intent === 'send') {
+				doc = await repo.transition(doc._id, 'sent', options.ctx.createdBy);
+			}
+			created.push(doc);
+		} catch (err) {
+			failed.push({
+				evacuee_id,
+				error: err instanceof Error ? err.message : 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ'
+			});
+		}
+	}
+
+	return { created, failed };
+}

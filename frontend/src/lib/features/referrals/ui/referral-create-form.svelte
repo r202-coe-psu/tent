@@ -1,0 +1,184 @@
+<script lang="ts">
+	import * as Card from '$lib/components/ui/card/index.js';
+	import { useQueryClient } from '@tanstack/svelte-query';
+	import { toast } from 'svelte-sonner';
+
+	import { type Referral, type ReferralInput } from '../domain/referral.schema';
+	import type { ReferralBatchFailure, ReferralSubmitIntent } from '../data/referral.repository';
+	import { useCreateReferralBatch } from '../application/queries';
+	import RedactionBanner from './redaction-banner.svelte';
+	import EvacueePickerTable from './evacuee-picker-table.svelte';
+	import MedicalReferralForm from './medical-referral-form.svelte';
+	import CapacityReferralForm from './capacity-referral-form.svelte';
+	import ResourceReferralForm from './resource-referral-form.svelte';
+
+	let {
+		onBatchDone
+	}: {
+		onBatchDone?: (result: { created: Referral[]; failed: ReferralBatchFailure[] }) => void;
+	} = $props();
+
+	const queryClient = useQueryClient();
+	const batchMutation = useCreateReferralBatch(queryClient);
+
+	let selectedIds = $state<string[]>([]);
+	let selectedType = $state<'medical-emergency' | 'capacity' | 'resource'>('medical-emergency');
+	let selectionAttempted = $state(false);
+
+	const evacueeError = $derived(
+		selectionAttempted && selectedIds.length === 0
+			? 'กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน'
+			: undefined
+	);
+
+	const formEvacueeId = $derived(selectedIds[0] ?? '');
+
+	async function handleSubmit(formData: ReferralInput, intent: ReferralSubmitIntent) {
+		if (selectedIds.length === 0) {
+			selectionAttempted = true;
+			toast.error('กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน');
+			return;
+		}
+
+		selectionAttempted = false;
+		const actionLabel = intent === 'send' ? 'สร้างและส่ง' : 'บันทึกร่าง';
+		const mutation = batchMutation.mutateAsync({
+			template: formData,
+			evacueeIds: [...selectedIds],
+			intent
+		});
+
+		try {
+			void toast.promise(mutation, {
+				loading: `กำลัง${actionLabel} ${selectedIds.length} รายการ...`,
+				success: (res) => {
+					if (res.failed.length === 0) {
+						return intent === 'send'
+							? `ส่งข้อมูลสำเร็จ ${res.created.length} รายการ`
+							: `บันทึกร่างสำเร็จ ${res.created.length} รายการ`;
+					}
+					if (res.created.length === 0) {
+						return `สร้างไม่สำเร็จทั้ง ${res.failed.length} รายการ`;
+					}
+					return `สำเร็จบางส่วน: สร้างได้ ${res.created.length} / ล้มเหลว ${res.failed.length}`;
+				},
+				error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึก')
+			});
+
+			const result = await mutation;
+			onBatchDone?.(result);
+		} catch {
+			// toast.promise already surfaced the error
+		}
+	}
+</script>
+
+<div class="space-y-6">
+	{#if selectedType === 'medical-emergency'}
+		<RedactionBanner />
+	{/if}
+
+	<Card.Root class="overflow-hidden border border-border/80 shadow-md">
+		<Card.Header class="bg-muted/40 pb-4">
+			<Card.Title class="text-xl font-bold"
+				>สร้างรายการส่งต่อผู้ประสบภัย (New Referral Request)</Card.Title
+			>
+			<Card.Description
+				>เลือกผู้ประสบภัยได้หลายคน — ระบบจะสร้าง 1 ใบต่อคนด้วยข้อมูลปลายทางชุดเดียวกัน</Card.Description
+			>
+		</Card.Header>
+		<Card.Content class="space-y-6 p-6">
+			<div class="space-y-3">
+				<span class="text-sm font-semibold text-foreground"
+					>1. เลือกประเภทการส่งต่อ (Referral Type) *</span
+				>
+				<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+					<button
+						type="button"
+						onclick={() => (selectedType = 'medical-emergency')}
+						class="flex cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+						{selectedType === 'medical-emergency'
+							? 'border-red-500 bg-red-50/50 dark:bg-red-950/20'
+							: 'border-border/60 hover:border-border'}"
+					>
+						<div>
+							<div class="flex items-center justify-between">
+								<span class="font-bold text-red-600 dark:text-red-400">ส่งต่อทางการแพทย์</span>
+								<span class="text-xs font-semibold uppercase opacity-60">Medical</span>
+							</div>
+							<p class="mt-1 text-xs text-muted-foreground">
+								ส่งตัวผู้ป่วย/ผู้บาดเจ็บไปยังโรงพยาบาลหรือคลินิก (จำกัดสิทธิ์ข้อมูล FR-48)
+							</p>
+						</div>
+					</button>
+
+					<button
+						type="button"
+						onclick={() => (selectedType = 'capacity')}
+						class="flex cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+						{selectedType === 'capacity'
+							? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/20'
+							: 'border-border/60 hover:border-border'}"
+					>
+						<div>
+							<div class="flex items-center justify-between">
+								<span class="font-bold text-purple-600 dark:text-purple-400">ย้ายศูนย์พักพิง</span>
+								<span class="text-xs font-semibold uppercase opacity-60">Capacity</span>
+							</div>
+							<p class="mt-1 text-xs text-muted-foreground">
+								โอนย้ายผู้ประสบภัยไปยังศูนย์พักพิงอื่นเนื่องจากศูนย์เดิมเต็ม
+							</p>
+						</div>
+					</button>
+
+					<button
+						type="button"
+						onclick={() => (selectedType = 'resource')}
+						class="flex cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+						{selectedType === 'resource'
+							? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20'
+							: 'border-border/60 hover:border-border'}"
+					>
+						<div>
+							<div class="flex items-center justify-between">
+								<span class="font-bold text-blue-600 dark:text-blue-400">ขอสนับสนุนทรัพยากร</span>
+								<span class="text-xs font-semibold uppercase opacity-60">Resource</span>
+							</div>
+							<p class="mt-1 text-xs text-muted-foreground">
+								ขอสนับสนุนสิ่งของ ยา เครื่องอุปโภคบริโภค จากองค์กรภายนอก
+							</p>
+						</div>
+					</button>
+				</div>
+			</div>
+
+			<hr class="border-border/60" />
+
+			<EvacueePickerTable bind:selectedIds error={evacueeError} />
+
+			<hr class="border-border/60" />
+
+			{#key selectedType}
+				{#if selectedType === 'medical-emergency'}
+					<MedicalReferralForm
+						evacueeId={formEvacueeId}
+						onSubmit={handleSubmit}
+						submitting={batchMutation.isPending}
+					/>
+				{:else if selectedType === 'capacity'}
+					<CapacityReferralForm
+						evacueeId={formEvacueeId}
+						onSubmit={handleSubmit}
+						submitting={batchMutation.isPending}
+					/>
+				{:else if selectedType === 'resource'}
+					<ResourceReferralForm
+						evacueeId={formEvacueeId}
+						onSubmit={handleSubmit}
+						submitting={batchMutation.isPending}
+					/>
+				{/if}
+			{/key}
+		</Card.Content>
+	</Card.Root>
+</div>

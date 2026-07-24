@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-22 # CR-044 FastAPI public plane (PR #112)
+updated: 2026-07-24 # CR-046 referral draft cancel / CR-045 kitchen meal-plan workflow rework
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -63,3 +63,7 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-043](CR-043-notion-tasks-sync.md) | Notion Projects Tasks — July 16 sync checklist (T-48..T-52 status alignment, add T-61..T-65 config tasks) | done | stable | 2026-07-16 | docs/task-breakdown/ |
 | [CR-044](CR-044-fastapi-public-plane-pr112.md) | CR-017 amendment — FastAPI public plane in PR #112; `last_name_masked` in Mongo; worker loops 1–3 | approved | volatile | 2026-07-21 | CR-017, backend/, worker/, public-portal, couchdb-mongodb-sync.md |
 | [CR-045](CR-045-donation-quota-atomic-reservation.md) | Atomic quota reservation counter สำหรับ donation intake (T-21) — Mongo collection ใหม่ `donation_need_counter` (schema_v 1) + atomic `find_one_and_update` แทน read-then-write; compensate ตอน cancel/expire/partial-item-reject | approved | volatile | 2026-07-24 | docs/data/couchdb-mongodb-sync.md §4.1, backend/apiapp/modules/donations/{use_case.py,schemas.py,router.py}, worker/src/worker/retention/job.py |
+| [CR-045](CR-045-kitchen-meal-plan-workflow-rework.md) | Kitchen meal-plan rework — BOM/Custom recipe modes, linear เบิก/บันทึกบริการ workflow (no reissue), duplicate plans per date+meal (`meal_plan` _id → ulid), `meal_service` ↔ plan link (`meal_plan_id`, schema_v 1→2) | proposed (implementation complete — pending sign-off) | stable | 2026-07-22 | docs/data/schema.md §2.5 §2.7, schema_v meal_service 1→2, features/kitchen/{domain,data,application,ui} |
+| [CR-045](CR-045-referral-full-dod-alignment.md) | Referral Schema & Implementation Alignment — 3 referral kinds, destination-gated capacity accept (mirror inbox + cross-DB transfer), `response_reason` | approved | volatile | 2026-07-22 | docs/data/schema.md §2.11, docs/task-breakdown/09-F-referral.md, frontend/src/lib/features/referrals/ |
+| [CR-046](CR-046-referral-draft-cancel.md) | Referral — อนุญาต `draft → closed` (ยกเลิกร่างก่อนส่ง); capacity draft ห้าม sync peer ปลายทาง | done | volatile | 2026-07-24 | schema.md §2.11, 09-F-referral.md, features/referrals/{domain,ui,server} |
+| [CR-046](CR-046-referral-logic-hardening.md) | Referral Logic Hardening — 3 business rule fixes: self-referral prevention (422), duplicate active referral prevention (409), cross-shelter direction badges | proposed (implementation complete — pending owner sign-off) | volatile | 2026-07-24 | docs/data/schema.md §2.11, docs/task-breakdown/09-F-referral.md, frontend/src/lib/features/referrals/, frontend/src/routes/api/back-office/referral/+server.ts |

@@ -153,8 +153,12 @@
 			</div>
 		</header>
 
-		<!-- Content Area -->
-		<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+		<!-- Content Area: evacuee management owns scrolling inside its tab content. -->
+		<div
+			class="flex min-h-0 flex-1 flex-col {page.url.pathname === '/back-office/evacuee-management'
+				? 'overflow-hidden'
+				: 'overflow-y-auto'}"
+		>
 			{@render children()}
 		</div>
 	</div>

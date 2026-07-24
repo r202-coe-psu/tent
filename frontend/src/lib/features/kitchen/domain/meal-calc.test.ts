@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
 	calculateMealIngredients,
+	calculateMealIngredientsFromRecipe,
+	resolveItemMasterStock,
 	toRequisitionInput,
 	assessRequisition,
 	RICE_RECIPE_ID,
-	RECIPE_TO_STOCK_ITEM
+	RECIPE_TO_STOCK_ITEM,
+	type ResolvedItemMaster
 } from './meal-calc';
 import type { MealPlan, MealPlanHeadcount } from './kitchen';
+import type { Recipe, ItemMaster } from '$lib/features/catalog';
+import type { SupplyItem } from '$lib/features/supply';
 
 const SOP_ID = 'sop_profile:TEST001';
 const SOP_VERSION = 1;
@@ -83,6 +88,159 @@ describe('calculateMealIngredients', () => {
 		);
 		const plain = calculateMealIngredients(headcount(100), 150, SOP_ID, SOP_VERSION, AS_OF);
 		expect(mixed.recipes[0].planned_qty).toBe(plain.recipes[0].planned_qty);
+	});
+});
+
+describe('calculateMealIngredientsFromRecipe — catalog Recipe (BOM)', () => {
+	const recipe = (ingredients: Recipe['ingredients'], standardPortions = '100'): Recipe => ({
+		_id: 'recipe:test001',
+		type: 'recipe',
+		schema_v: 3,
+		created_at: AS_OF,
+		updated_at: AS_OF,
+		created_by: 'tester',
+		label: 'ทดสอบ',
+		ingredients,
+		standard_portions: standardPortions,
+		standard_duration_hours: '1',
+		is_default: false
+	});
+
+	it('scales each ingredient from standard_portions to actual headcount', () => {
+		const r = recipe([{ item_master_id: 'item_master:rice', quantity: '200', uom: 'g' }], '100');
+		const result = calculateMealIngredientsFromRecipe(
+			r,
+			headcount(70),
+			{},
+			SOP_ID,
+			SOP_VERSION,
+			AS_OF
+		);
+		// 200 g per 100 portions × 70 headcount = 140 g
+		expect(result.recipes[0].planned_qty).toBe(140);
+	});
+
+	it('resolves a linked ingredient to its real stock item_id + unit', () => {
+		const r = recipe([{ item_master_id: 'item_master:rice', quantity: '1', uom: 'ชิ้น' }]);
+		const itemInfo: Record<string, ResolvedItemMaster> = {
+			'item_master:rice': { stockItemId: 'item:rice', unit: 'kg' }
+		};
+		const result = calculateMealIngredientsFromRecipe(
+			r,
+			headcount(100),
+			itemInfo,
+			SOP_ID,
+			SOP_VERSION,
+			AS_OF
+		);
+		expect(result.recipes[0].recipe_id).toBe('item:rice');
+		expect(result.recipes[0].unit).toBe('kg');
+	});
+
+	it('falls back to the item_master_id + recipe uom when unresolved (no link yet)', () => {
+		const r = recipe([{ item_master_id: 'item_master:mystery', quantity: '1', uom: 'ชิ้น' }]);
+		const result = calculateMealIngredientsFromRecipe(
+			r,
+			headcount(100),
+			{},
+			SOP_ID,
+			SOP_VERSION,
+			AS_OF
+		);
+		expect(result.recipes[0].recipe_id).toBe('item_master:mystery');
+		expect(result.recipes[0].unit).toBe('ชิ้น');
+	});
+
+	it('resolves ingredients independently — partial linking leaves the rest unresolved', () => {
+		const r = recipe([
+			{ item_master_id: 'item_master:rice', quantity: '1', uom: 'ชิ้น' },
+			{ item_master_id: 'item_master:unlinked', quantity: '1', uom: 'ชิ้น' }
+		]);
+		const itemInfo: Record<string, ResolvedItemMaster> = {
+			'item_master:rice': { stockItemId: 'item:rice', unit: 'kg' }
+		};
+		const result = calculateMealIngredientsFromRecipe(
+			r,
+			headcount(100),
+			itemInfo,
+			SOP_ID,
+			SOP_VERSION,
+			AS_OF
+		);
+		expect(result.recipes[0].recipe_id).toBe('item:rice');
+		expect(result.recipes[1].recipe_id).toBe('item_master:unlinked');
+	});
+
+	it('throws when headcount.total is 0', () => {
+		const r = recipe([{ item_master_id: 'item_master:rice', quantity: '1', uom: 'g' }]);
+		expect(() =>
+			calculateMealIngredientsFromRecipe(r, headcount(0), {}, SOP_ID, SOP_VERSION, AS_OF)
+		).toThrow(/headcount.total must be > 0/);
+	});
+
+	it('throws when standard_portions is not positive', () => {
+		const r = recipe([{ item_master_id: 'item_master:rice', quantity: '1', uom: 'g' }], '0');
+		expect(() =>
+			calculateMealIngredientsFromRecipe(r, headcount(100), {}, SOP_ID, SOP_VERSION, AS_OF)
+		).toThrow(/standard_portions must be > 0/);
+	});
+});
+
+describe('resolveItemMasterStock — auto-match item_master ↔ supply_item', () => {
+	const itemMaster = (overrides: Partial<ItemMaster> = {}): ItemMaster => ({
+		_id: 'item_master:rice',
+		type: 'item_master',
+		schema_v: 3,
+		created_at: AS_OF,
+		updated_at: AS_OF,
+		created_by: 'tester',
+		name: 'ข้าวสาร',
+		base_unit: 'kg',
+		conversions: [],
+		distribution_type: 'consumable',
+		target_audience_type: 'all',
+		target_restrictions: {},
+		is_default: false,
+		...overrides
+	});
+
+	const supplyItem = (overrides: Partial<SupplyItem> = {}): SupplyItem => ({
+		_id: 'item:rice',
+		type: 'supply_item',
+		schema_v: 1,
+		shelter_code: 'SH001',
+		created_at: AS_OF,
+		updated_at: AS_OF,
+		created_by: 'seed',
+		name: 'ข้าวสาร',
+		category: 'food',
+		unit: 'kg',
+		reorder_level: null,
+		perishable: false,
+		...overrides
+	});
+
+	it('auto-matches by name (trimmed, case-insensitive) when units agree', () => {
+		const im = itemMaster({ name: ' ข้าวสาร ', base_unit: 'kg' });
+		const si = supplyItem({ name: 'ข้าวสาร', unit: 'kg' });
+		const info = resolveItemMasterStock([im], [si]);
+		expect(info[im._id]).toEqual({ stockItemId: si._id, unit: si.unit });
+	});
+
+	it('stays unresolved on a name match whose units differ (no silent bad drawdown)', () => {
+		// Same name, but recipe/master measures in g while stock tracks kg — a
+		// name-only match would deduct 1000× the intended amount. Guard leaves it
+		// unresolved (blocked) instead. CR-045.
+		const im = itemMaster({ name: 'ข้าวสาร', base_unit: 'g' });
+		const si = supplyItem({ name: 'ข้าวสาร', unit: 'kg' });
+		const info = resolveItemMasterStock([im], [si]);
+		expect(info[im._id]).toEqual({ stockItemId: im._id, unit: 'g' });
+	});
+
+	it('falls back to the item_master itself when nothing matches', () => {
+		const im = itemMaster({ name: 'ของลึกลับ' });
+		const info = resolveItemMasterStock([im], [supplyItem()]);
+		expect(info[im._id]).toEqual({ stockItemId: im._id, unit: im.base_unit });
 	});
 });
 

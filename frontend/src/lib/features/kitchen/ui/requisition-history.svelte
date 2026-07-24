@@ -1,26 +1,45 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
+	import * as Pagination from '$lib/components/ui/pagination';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
-	import { useRequisitions, type KitchenRequisition } from '$lib/features/kitchen';
+	import {
+		useRequisitions,
+		useMealPlans,
+		MEAL_PERIOD_LABELS,
+		type KitchenRequisition,
+		type MealPlan
+	} from '$lib/features/kitchen';
 	import { qtyGte } from '$lib/utils/qty';
 
 	const requisitions = useRequisitions();
+	const plans = useMealPlans();
+
+	// meal_plan_id is a ulid _id (not a deterministic date:meal string) — look
+	// the plan up directly by id instead of parsing it out of the id, same
+	// display convention as meal-service-summary's "แผนต้นทาง" column.
+	const planById = $derived.by(() => {
+		const m: Record<string, MealPlan> = {};
+		for (const p of plans.data ?? []) m[p._id] = p;
+		return m;
+	});
 
 	// Newest first — issued_at is the audit timestamp of the withdrawal.
 	const rows = $derived(
 		[...(requisitions.data ?? [])].sort((a, b) => b.issued_at.localeCompare(a.issued_at))
 	);
 
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+	const paginatedRows = $derived.by(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return rows.slice(start, start + PAGE_SIZE);
+	});
+
 	// A requisition is complete when every line issued the full requested qty;
 	// otherwise stock was short and it was a partial withdrawal (schema.md §2.6).
 	function isComplete(req: KitchenRequisition): boolean {
 		return req.items.every((i) => qtyGte(i.qty_issued, i.qty_requested));
-	}
-
-	function planLabel(id: string | null): string {
-		if (!id) return 'เบิกนอกแผน';
-		return id.split(':').slice(1).join(':') || id;
 	}
 
 	function formatTime(iso: string): string {
@@ -66,14 +85,28 @@
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
-						{#each rows as req (req._id)}
+						{#each paginatedRows as req (req._id)}
+							{@const plan = req.meal_plan_id ? (planById[req.meal_plan_id] ?? null) : null}
 							<Table.Row>
 								<Table.Cell class="px-6 text-xs text-muted-foreground">
 									{formatTime(req.issued_at)}
 								</Table.Cell>
 								<Table.Cell class="px-6 text-sm">{req.created_by}</Table.Cell>
-								<Table.Cell class="px-6 font-mono text-xs">{planLabel(req.meal_plan_id)}</Table.Cell
-								>
+								<Table.Cell class="px-6">
+									{#if !req.meal_plan_id}
+										<p class="text-sm text-muted-foreground">เบิกนอกแผน</p>
+									{:else if !plan}
+										<p class="text-sm text-muted-foreground">ไม่พบแผน</p>
+									{:else}
+										<p class="text-sm font-medium">
+											{plan.label ?? MEAL_PERIOD_LABELS[plan.meal]}
+										</p>
+										<p class="text-xs text-muted-foreground">
+											{#if plan.label}{MEAL_PERIOD_LABELS[plan.meal]} ·
+											{/if}<span class="font-mono">{plan.date}</span>
+										</p>
+									{/if}
+								</Table.Cell>
 								<Table.Cell class="px-6">
 									<ul class="space-y-0.5 text-xs">
 										{#each req.items as item (item.item_id)}
@@ -112,6 +145,27 @@
 					</Table.Body>
 				</Table.Root>
 			</div>
+			{#if rows.length > PAGE_SIZE}
+				<div class="flex justify-end p-4">
+					<Pagination.Root bind:page={currentPage} count={rows.length} perPage={PAGE_SIZE}>
+						{#snippet children({ pages })}
+							<Pagination.Content>
+								<Pagination.Previous />
+								{#each pages as p, i (p.type === 'page' ? `page-${p.value}` : `ellipsis-${i}`)}
+									<Pagination.Item>
+										{#if p.type === 'page'}
+											<Pagination.Link page={p} isActive={p.value === currentPage} />
+										{:else}
+											<Pagination.Ellipsis />
+										{/if}
+									</Pagination.Item>
+								{/each}
+								<Pagination.Next />
+							</Pagination.Content>
+						{/snippet}
+					</Pagination.Root>
+				</div>
+			{/if}
 		{/if}
 	</Card.Content>
 </Card.Root>
