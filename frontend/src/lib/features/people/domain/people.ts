@@ -318,7 +318,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		2,
+		3,
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
