@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module C — Supply & Inventory"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
+updated: 2026-07-25 # T-11 DoD sync กับ CR-032 Option A (purchase = flow แยก)
 module: C
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---
@@ -48,7 +48,8 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 **Description:** บันทึกการรับสิ่งของเข้าคลังศูนย์ (จากบริจาค/จัดซื้อ/โอนมา) โดยทุก movement เขียนเป็น **append-only ledger** — ยอดคงเหลือคำนวณจาก ledger ไม่แก้ตัวเลขตรงๆ task นี้เป็น hub ของ critical path (block T-12/13/14/15)
 
 **Definition of Done:**
-- รับเข้า: เลือก item + จำนวน + source marker (donation / transfer-in / manual) → ledger entry ถูกสร้าง + on-hand เพิ่มทันที พร้อม audit (ใคร/เมื่อไร) — `purchase` source **approved แล้ว (CR-032, @net-lynx sign-off 2026-07-24)** รอ implement
+- รับเข้า: เลือก item + จำนวน + source marker (donation / transfer-in / manual) → ledger entry ถูกสร้าง + on-hand เพิ่มทันที พร้อม audit (ใคร/เมื่อไร)
+- **จัดซื้อ (purchase) — flow แยก ไม่ใช่ source marker ในฟอร์มรับเข้า** [CR-032, approved 2026-07-24 (@net-lynx) · design Option A 2026-07-25]: (1) สร้างใบจัดซื้อ (`vendor` / `po_ref` / `items` เป็น planning) (2) ตอนของถึง key รับเข้า → ledger `reason:purchase` + `ref_id = purchase._id` (mirror donation) · ~~`purchase` source รอ implement~~ ⚠️ **แก้ 2026-07-25:** purchase ไม่เป็นค่าใน `receiveSourceSchema` · **สถานะ: slice 1/3 เสร็จ** (reason enum + `schema_v` 3) — เหลือ doc type schema.md §2.16, write path, UI surface (ที่วางยังไม่เคาะ ดู CR §Open items)
 - ปริมาณศูนย์หรือติดลบถูก validate ปฏิเสธ
 - Ledger แก้ไขย้อนหลังไม่ได้ — ผิดต้องทำรายการ adjust ใหม่ (correction entry)
 - ยอดคงเหลือต่อ item คำนวณจาก ledger ถูกต้อง (test ครอบ concurrent writes บน CouchDB)
