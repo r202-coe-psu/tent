@@ -152,28 +152,28 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		}
 
 		if (sourceAlreadyTransferred && !destActive) {
-			const docs = buildDestinationIntakeDocs({
-				evacuee: sourceEvacuee,
-				fromShelterCode: fromCode,
-				toShelterCode: toCode,
+			const docs = this.prepareDestinationIntakeDocs(
+				sourceEvacuee,
+				fromCode,
+				toCode,
 				actor,
 				nowIso,
-				referralId: referral._id,
+				referral._id,
 				reason
-			});
+			);
 			await this.writeDestTransfer(toDb, docs.destEvacuee, docs.destMovement, destRaw);
 			return;
 		}
 
-		const docs = buildCapacityTransferDocs({
-			evacuee: sourceEvacuee,
-			fromShelterCode: fromCode,
-			toShelterCode: toCode,
+		const docs = this.prepareFullCapacityTransferDocs(
+			sourceEvacuee,
+			fromCode,
+			toCode,
 			actor,
 			nowIso,
-			referralId: referral._id,
+			referral._id,
 			reason
-		});
+		);
 
 		// Dest already active but source not closed — finish source only (avoid duplicate transfer_in).
 		if (destActive) {
@@ -190,6 +190,48 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		await this.putDoc(fromDb, {
 			...docs.sourceEvacuee,
 			_rev: sourceEvacuee._rev
+		});
+	}
+
+	/** Helper: Constructs destination intake document payloads for idempotent retry */
+	private prepareDestinationIntakeDocs(
+		sourceEvacuee: Evacuee,
+		fromCode: string,
+		toCode: string,
+		actor: string,
+		nowIso: string,
+		referralId: string,
+		reason?: string
+	) {
+		return buildDestinationIntakeDocs({
+			evacuee: sourceEvacuee,
+			fromShelterCode: fromCode,
+			toShelterCode: toCode,
+			actor,
+			nowIso,
+			referralId,
+			reason
+		});
+	}
+
+	/** Helper: Constructs full capacity transfer document payloads (source + destination) */
+	private prepareFullCapacityTransferDocs(
+		sourceEvacuee: Evacuee,
+		fromCode: string,
+		toCode: string,
+		actor: string,
+		nowIso: string,
+		referralId: string,
+		reason?: string
+	) {
+		return buildCapacityTransferDocs({
+			evacuee: sourceEvacuee,
+			fromShelterCode: fromCode,
+			toShelterCode: toCode,
+			actor,
+			nowIso,
+			referralId,
+			reason
 		});
 	}
 

@@ -60,7 +60,7 @@
 						bind:value={$formData.to_shelter_code}
 						error={$errors.to_shelter_code}
 						validate={() => validate('to_shelter_code')}
-						excludeCode={getShelterCode()}
+						excludeCode={getShelterCode() ?? ''}
 						onSelect={(code) => {
 							$formData.to_shelter_code = code;
 						}}
