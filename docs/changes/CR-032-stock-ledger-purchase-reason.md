@@ -1,9 +1,9 @@
 ---
 id: CR-032
 title: "Add purchase doc type + purchase reason to stock_ledger"
-status: proposed
+status: approved
 date: 2026-07-05
-updated: 2026-07-15
+updated: 2026-07-25
 requested_by: development team C
 decided_by: project owner
 layer: volatile
@@ -12,13 +12,13 @@ affects:
   - schema_v purchase 1 (ใหม่) · stock_ledger 2 → 3
   - frontend/src/lib/features/operations/domain/operations.ts
   - frontend/src/lib/features/operations/data/operations.remote.ts
+  - frontend/src/lib/features/kitchen/data/kitchen.remote.ts (stock_ledger schema_v stamp — ripple ของ bump 2→3)
   - frontend/src/lib/features/operations/ui/ReceiveStockForm.svelte
 ---
-
 # CR-032 — Add purchase doc type + purchase reason to stock_ledger
 
 > [!NOTE]
-> **สรุป (TL;DR):** เพิ่ม doc type `purchase` (`purchase:{ulid}`) **และ** ค่า `purchase` ใน `stock_ledger.reason` enum เพื่อรองรับการรับสต็อกจากแหล่ง "จัดซื้อจัดจ้าง" แยกจากเงินบริจาค · ledger ของจัดซื้อเขียน `reason: 'purchase'` + `ref_id: 'purchase:{ulid}'` **ตาม pattern เดียวกับ donation** · schema_v stock_ledger 2→3, purchase 1 · **ยังไม่ merge เข้าโค้ด — รอ sign-off จริงจาก @net-lynx**
+> **สรุป (TL;DR):** เพิ่ม doc type `purchase` (`purchase:{ulid}`) **และ** ค่า `purchase` ใน `stock_ledger.reason` enum เพื่อรองรับการรับสต็อกจากแหล่ง "จัดซื้อจัดจ้าง" แยกจากเงินบริจาค · ledger ของจัดซื้อเขียน `reason: 'purchase'` + `ref_id: 'purchase:{ulid}'` **ตาม pattern เดียวกับ donation** · schema_v stock_ledger 2→3, purchase 1 · **อนุมัติแล้ว 2026-07-24 (@net-lynx sign-off ในแชท — แนว doc type + enum)** · role/permission = เหมือน FR-28 receive (`warehouse_staff` + SA; SM ไม่เขียน ledger ตรงตาม §3) · **ยังไม่ลงมือ implement (schema.md/code)**
 
 ## Why
 
@@ -39,13 +39,13 @@ Task T-11 (Stock receive + ledger write) ต้องรองรับการ
 
 1. เพิ่ม doc type `purchase` — `purchase:{ulid}` · `schema_v 1` · วางที่ `docs/data/schema.md` §2.16 (ต่อท้าย เลี่ยงการ renumber §2.x เดิม)
 
-| Field | ชนิด | req | หมายเหตุ |
-| --- | --- | --- | --- |
-| `vendor` | str | req | ชื่อผู้ขาย / หน่วยงานที่จัดหา |
-| `po_ref` | str | opt | เลขใบสั่งซื้อ / สัญญา (อ้างระบบภายนอก) |
-| `items` | [{`item_id`:str, `qty`:qty_str>0, `unit`:str}] | req | ≥1 รายการ — **planning signal เท่านั้น** ยอดจริงมาจาก `stock_ledger` (mirror `donation.items`, data-model.md §4) |
-| `occurred_at` | ts | req | วันที่รับของเข้าศูนย์ |
-| `note` | str | opt | — |
+| Field           | ชนิด                                             | req | หมายเหตุ                                                                                                                                       |
+| --------------- | ---------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `vendor`      | str                                                  | req | ชื่อผู้ขาย / หน่วยงานที่จัดหา                                                                                                |
+| `po_ref`      | str                                                  | opt | เลขใบสั่งซื้อ / สัญญา (อ้างระบบภายนอก)                                                                                 |
+| `items`       | [{`item_id`:str, `qty`:qty_str>0, `unit`:str}] | req | ≥1 รายการ —**planning signal เท่านั้น** ยอดจริงมาจาก `stock_ledger` (mirror `donation.items`, data-model.md §4) |
+| `occurred_at` | ts                                                   | req | วันที่รับของเข้าศูนย์                                                                                                             |
+| `note`        | str                                                  | opt | —                                                                                                                                                     |
 
 2. เพิ่ม `purchase` เข้าไปในค่า `reason` ที่อนุญาตของ `stock_ledger` (7 → 8 ค่า)
 3. Bump `schema_v` ของ `stock_ledger` จาก `2` เป็น `3`
@@ -54,13 +54,13 @@ Task T-11 (Stock receive + ledger write) ต้องรองรับการ
 
 แยกที่มาได้ครบทุกแหล่ง โดยทุกแหล่งใช้ pattern เดียวกัน:
 
-| แหล่ง | `reason` | `ref_id` |
-| --- | --- | --- |
-| บริจาค | `donation` | `donation:{ulid}` |
-| โอนระหว่างศูนย์ | `transfer_in` / `transfer_out` | `stock_transfer:{ulid}` |
-| เบิกครัว | `requisition` | `kitchen_requisition:{ulid}` |
-| **จัดซื้อ** | **`purchase`** | **`purchase:{ulid}`** |
-| ปรับสต็อกมือ | `adjust` | `null` |
+| แหล่ง                     | `reason`                         | `ref_id`                     |
+| ------------------------------ | ---------------------------------- | ------------------------------ |
+| บริจาค                   | `donation`                       | `donation:{ulid}`            |
+| โอนระหว่างศูนย์ | `transfer_in` / `transfer_out` | `stock_transfer:{ulid}`      |
+| เบิกครัว               | `requisition`                    | `kitchen_requisition:{ulid}` |
+| **จัดซื้อ**       | **`purchase`**             | **`purchase:{ulid}`**  |
+| ปรับสต็อกมือ       | `adjust`                         | `null`                       |
 
 ### Alternatives considered
 
@@ -77,7 +77,7 @@ Task T-11 (Stock receive + ledger write) ต้องรองรับการ
 - **Domain Layer:** เพิ่ม `purchaseSchema` / `createPurchase` / `isPurchase`; `ledgerReasonSchema` เพิ่ม `purchase`; `receiveSourceSchema` และ `createReceiveEntry` ต้องรองรับ `purchase`; `createStockLedger` ต้อง stamp `schema_v 3`
 - **Data Layer:** repo + remote ต้องสร้าง purchase doc แล้วผูก `ref_id` เข้ากับ ledger ในขั้นตอนเดียวกัน (mirror `keyDonationReceipt`)
 - **UI Layer:** ตัวเลือกใน `ReceiveStockForm` เพิ่ม "จัดซื้อ / หน่วยงานรัฐ" พร้อมช่อง `vendor` (req) และ `po_ref` (opt)
-- **Role/permission:** ยังไม่กำหนดว่าใครสร้าง `purchase` doc ได้ — ต้องระบุก่อน implement (change-management §2)
+- **Role/permission:** สร้าง `purchase` doc + เขียน ledger `reason:purchase` = **เหมือน FR-28 receive เป๊ะ** — `warehouse_staff` เป็นผู้เขียน (+ `system_admin` global); **SM ไม่เขียน ledger ตรง** ตาม operating note §3 (แม้ SM ⊇ WS) · shelter-scoped (ข้ามศูนย์ = NoPermission) · internal-only (ไม่มี public/donor tier) · gate ทั้ง purchase doc + ledger row แบบ atomic (mirror `keyDonationReceipt`) · ตัดสิน 2026-07-24 (ดู role-permission-matrix §3)
 - **T-13:** ไม่กระทบ — คนละ path (transfer items) ทำคู่ขนานได้
 - **นอกขอบเขต:** `reason: 'receive'` ยังเป็นค่ากำพร้า (ไม่มีโค้ด production สร้าง — `source: manual` map ไป `adjust`) CR นี้ไม่แตะ
 
@@ -98,3 +98,8 @@ Task T-11 (Stock receive + ledger write) ต้องรองรับการ
 - 2026-07-15 — แก้ `schema_v` จาก 1→2 เป็น 2→3: CR-038 (done, 2026-07-14) bump `stock_ledger` 1→2 ไปก่อนแล้ว (`qty` เป็น `qty_str`) เลข 1→2 เดิมจึงกลายเป็น no-op
 - 2026-07-15 — พิจารณาแนวทาง "doc type อย่างเดียว + `reason: 'receive'`" (ไม่ bump `schema_v`) แล้ว**ตกไป** เพราะ `ref_id` เป็น nullable ส่วน `reason` เป็น req และต้องเพิ่ม index `(ref_id)` ทั้งที่ `(reason)` มีอยู่แล้ว
 - 2026-07-15 — **ขยายขอบเขตเป็น doc type + enum value คู่กัน** ตาม pattern ของ `donation` (`reason` = ประเภท, `ref_id` = ใบไหน; ดู `operations.ts:467`) `schema_v` ของ `stock_ledger` จึงกลับมาเป็น 2→3 ตามข้อ 5 ข้างบน · ขอบเขตเดิม (แยกจัดซื้อออกจากบริจาคเพื่อ T-14) ไม่เปลี่ยน · ยัง `proposed` รอ sign-off จริงจาก @net-lynx
+- 2026-07-16 — PR #99 (docs-only) merged เข้า develop โดย @net-lynx — เป็นการ land ตัว **ข้อเสนอ** (ไฟล์ยังคง `status: proposed`) ไม่ใช่ sign-off ในตัว
+- 2026-07-24 — **approved**: @net-lynx sign-off ในแชท (2026-07-24) ยืนยันเอาแนว **doc type + enum** ตามข้อเสนอ → `status: proposed → approved` · **ยังไม่ implement**: `docs/data/schema.md` §2.16/§2.1 + code (`features/operations` domain/data/ui) ยังไม่แตะ · **open item ก่อน implement:** ยังไม่กำหนด role/permission ว่าใครสร้าง `purchase` doc ได้ (ดู Impact §role/permission · change-management §2)
+- 2026-07-24 — **role/permission decided** (ปิด open item ข้างบน): purchase = source ของ FR-28 receive → เขียน purchase doc + ledger `reason:purchase` **เหมือน FR-28/29/30 พี่น้องเป๊ะ** — `warehouse_staff` เขียน (+ `system_admin`); **SM ไม่เขียนตรง** ตาม operating note §3 · shelter-scoped, internal-only, gate 2 write แบบ atomic · sync `role-permission-matrix` §3 · (เคยพิจารณาให้ SM เขียนตรงตาม SM ⊇ WS แต่ **เลือก reconcile ให้ตรงพี่น้อง** เพื่อไม่แตะ RBAC core FR-28/29/30 นอก CR-032 — ไม่มี inconsistency ค้าง)
+- 2026-07-24 — clarification (per project owner): @net-lynx อนุมัติ CR-032 (doc type + enum) ในแชทแล้ว — เหตุที่ PR #99 (07-16) ยังคง `status: proposed` = ลืมแก้ status ตอน merge ไม่ใช่เพราะยังไม่อนุมัติ · role model final (WS-only เหมือนพี่น้อง) = project owner decision 2026-07-24 · role/permission **ไม่ใช่ open item ที่ค้างอีกต่อไป**
+- 2026-07-25 — **implement slice 1/3 (schema_v bump + reason enum)**: เพิ่ม `purchase` ใน `ledgerReasonSchema` + bump `stock_ledger` `schema_v` 2→3 ที่ **ผู้เขียน ledger ทั้งสองที่** — operations `createStockLedger` (`operations.ts`) และ kitchen `issueRequisition` (`kitchen.remote.ts`, **ripple ที่ CR เดิมไม่ได้ระบุ** — เพิ่มใน `affects` แล้ว) · schema.md §2.1 (enum + schema_v 3 + migration note) · test 2 จุด (operations.remote.test:149, kitchen.remote.test:57) — `meal_plan` schema_v คงเดิมที่ 2 (คนละ doc type) · **ยังไม่ทำ (slice 2–3)**: doc type `purchase` §2.16, write path (purchase doc + ledger, mirror kitchen `issueRequisition`/`bulkDocs`), UI vendor/po_ref · status ยัง `approved` (ยังไม่ `done`)

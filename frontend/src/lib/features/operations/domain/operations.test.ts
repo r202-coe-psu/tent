@@ -6,6 +6,7 @@ import {
 	canTransitionDonation,
 	keyDonationReceipt,
 	createStockLedger,
+	ledgerReasonSchema,
 	stockBalance,
 	createCampaign,
 	openNeeds,
@@ -104,6 +105,25 @@ describe('stockBalance', () => {
 		expect(() =>
 			createStockLedger({ item_id: 'item:rice', qty: 0, unit: 'kg', reason: 'adjust' }, ctx)
 		).toThrow();
+	});
+});
+
+describe('stock_ledger schema_v + reason enum (CR-032)', () => {
+	it('stamps schema_v 3 on every ledger entry', () => {
+		const entry = createStockLedger(
+			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'receive' },
+			ctx
+		);
+		expect(entry.schema_v).toBe(3);
+	});
+
+	it('accepts `purchase` as a valid reason (CR-032)', () => {
+		expect(ledgerReasonSchema.safeParse('purchase').success).toBe(true);
+		const entry = createStockLedger(
+			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'purchase' },
+			ctx
+		);
+		expect(entry.reason).toBe('purchase');
 	});
 });
 

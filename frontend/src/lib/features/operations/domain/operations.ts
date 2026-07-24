@@ -40,7 +40,8 @@ export const ledgerReasonSchema = z.enum([
 	'adjust',
 	'transfer_out',
 	'transfer_in',
-	'donation'
+	'donation',
+	'purchase'
 ]);
 export type LedgerReason = z.infer<typeof ledgerReasonSchema>;
 
@@ -166,7 +167,7 @@ export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): 
 	const d = stockLedgerInputSchema.parse(input);
 	return makeDoc(
 		'stock_ledger',
-		2,
+		3,
 		{
 			item_id: d.item_id,
 			qty: persistQty(d.qty),

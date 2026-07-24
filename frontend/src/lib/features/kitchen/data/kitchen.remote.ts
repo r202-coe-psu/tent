@@ -72,7 +72,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		const ledgerEntries = issuedItems.map((item, i) => ({
 			_id: ledgerIds[i],
 			type: 'stock_ledger' as const,
-			schema_v: 2,
+			schema_v: 3,
 			shelter_code: ctx.shelterCode,
 			created_at: ts,
 			updated_at: ts,

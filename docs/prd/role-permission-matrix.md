@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4)"
 status: approved
 created: 2026-06-04
-updated: 2026-07-23
+updated: 2026-07-24
 closes: K-12 (A1 RBAC phase-blocker)
 ---
 
@@ -93,6 +93,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 - catalog (FR-27) = master ข้ามศูนย์ → SA only
 - SM ดู stock dashboard ได้ (วางแผน) แต่ไม่ write ledger โดยตรง (เว้นแต่ KS tasks ใน §4)
 - DN pre-declaration: no-auth (FD-16), track ผ่าน `tracking_token` → `self` = match by token
+- **Purchase / จัดซื้อ [CR-032, 2026-07-24]:** source `purchase` ของ FR-28 receive — สร้าง `purchase` doc (`purchase:{ulid}`) + ledger `reason:purchase` เขียนโดย `warehouse_staff` (+ `system_admin` global); **SM ไม่เขียน ledger ตรง** ตาม operating note ข้างบน — เหมือน FR-28/29/30, shelter-scoped, internal-only; gate ทั้งสอง write แบบ atomic; ไม่มี public/donor tier
 
 ---
 
@@ -219,7 +220,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 **`backend/apiapp/modules/shelter/permissions.py`**
 - `EVACUEE_WRITE_ROLES` = {system_admin, shelter_manager, registration_staff}
 - `MOVEMENT_ROLES` = {system_admin, shelter_manager, registration_staff}
-- เพิ่ม `INVENTORY_WRITE_ROLES` = {system_admin, shelter_manager, warehouse_staff}
+- เพิ่ม `INVENTORY_WRITE_ROLES` = {system_admin, shelter_manager, warehouse_staff} — ครอบ receive/transfer/adjust/**purchase** (CR-032)
 - เพิ่ม `KITCHEN_ROLES` = {system_admin, shelter_manager, kitchen_staff}
 - เพิ่ม `SHELTER_REPORT_MUTATE_ROLES` = {shelter_manager} (+ system_admin platform override) — CR-040; แทน SECURITY_EVENT_ROLES
 - เพิ่ม `VOLUNTEER_RECRUIT_ROLES` = {system_admin, shelter_manager}
