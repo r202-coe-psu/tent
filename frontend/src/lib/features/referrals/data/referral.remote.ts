@@ -99,6 +99,13 @@ export class ReferralRemoteRepository implements ReferralRepository {
 			throw new Error(`Evacuee with ID ${input.evacuee_id} was not found in the active shelter.`);
 		}
 
+		// FR-002: Duplicate active referral check
+		const existing = await this.list({ evacuee_id: input.evacuee_id });
+		const hasActive = existing.some((r) => r.status !== 'closed' && r.status !== 'rejected');
+		if (hasActive) {
+			throw new Error('ผู้ประสบภัยรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน');
+		}
+
 		const body = buildReferralBody(input);
 		const rawDoc = makeDoc('referral', 1, body, ctx);
 
