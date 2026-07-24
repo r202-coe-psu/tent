@@ -3,6 +3,7 @@ id: CR-045
 title: Kitchen meal-plan rework — BOM/Custom modes, linear workflow, duplicate plans, meal_service↔plan link
 status: proposed (implementation complete on branch team-c-05-D — pending owner sign-off)
 date: 2026-07-22
+updated: 2026-07-24
 requested_by: kitchen module owner (decisions made across several working sessions on branch team-c-05-D)
 decided_by: project owner (session decisions, retroactively consolidated into this CR on 2026-07-22)
 layer: stable
@@ -13,6 +14,8 @@ affects:
   - frontend/src/lib/features/kitchen/domain/kitchen.ts
   - frontend/src/lib/features/kitchen/domain/meal-calc.ts
   - frontend/src/lib/features/kitchen/data/kitchen.remote.ts
+  - frontend/src/lib/features/kitchen/data/kitchen.repository.ts
+  - frontend/scripts/seed.ts (item_master + schema_v-3 recipe seed for BOM)
   - frontend/src/lib/features/kitchen/application/queries.ts
   - frontend/src/lib/features/kitchen/ui/meal-plan-form.svelte
   - frontend/src/lib/features/kitchen/ui/meal-plan-list.svelte
@@ -59,8 +62,17 @@ affects:
   ไม่มี field เชื่อมมือ (ทางเลือกที่เลือกแทนการเพิ่ม field เชื่อมโยงใน catalog เพราะ catalog อยู่นอก
   scope ของทีมนี้) — วัตถุดิบที่จับคู่ไม่ได้ยังคงใช้ `item_master_id` เป็น `recipe_id` (บล็อกการเบิก
   จนกว่าชื่อจะตรงกัน)
+  - **Invariant (unit guard, 2026-07-24)**: การจับคู่จะสำเร็จก็ต่อเมื่อ **ชื่อตรง และ
+    `item_master.base_unit === supply_item.unit`** เท่านั้น — resolver ตัวนี้ไม่มีการแปลงหน่วย
+    (uom conversion), `planned_qty` คงหน่วยตามสูตร แล้วรับหน่วยของ supply มาใช้ตรงๆ ถ้าชื่อตรงแต่หน่วย
+    ต่างกัน (เช่นสูตร `g` แต่คลัง `kg`) จะตัดสต็อกผิด 1000× จึงปล่อยให้ **unresolved (บล็อกเบิก)**
+    แทนที่จะจับคู่ผิด กติกาเสริม: หน่วย `uom` ของวัตถุดิบในสูตรต้องเท่ากับ `item_master.base_unit`
 - **New "Custom" plan mode**: เลือกวัตถุดิบเองจาก `supply_item` จริงโดยตรง (ไม่ผ่าน catalog Recipe
   เลย) — เบิกได้ทันทีเพราะอ้างอิงสต็อกจริงอยู่แล้ว
+- **Business rule — บันทึกบริการได้ครั้งเดียวต่อแผน (one-shot, 2026-07-24)**: `recordMealService`
+  ปฏิเสธการบันทึก `meal_service` ซ้ำสำหรับ `meal_plan_id` เดิม (guard ระดับ repo แทนที่จะพึ่ง
+  idempotence ของ deterministic `_id` เดิมที่หายไปตอนเปลี่ยนเป็น ulid) — บริการที่ไม่ผูกแผน
+  (`meal_plan_id` = `null`) ไม่ติดกติกานี้
 
 ## Impact
 
