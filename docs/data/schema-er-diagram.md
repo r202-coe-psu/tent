@@ -2,7 +2,7 @@
 title: Smart Shelter — Database ER Diagram v3
 status: draft for review
 created: 2026-06-17
-updated: 2026-07-14
+updated: 2026-07-23
 source: docs/data/schema.md
 ---
 
@@ -47,7 +47,9 @@ erDiagram
     EVACUEE ||--o{ MOVEMENT : "evacuee_id"
     EVACUEE ||--o{ SCREENING : "evacuee_id"
     EVACUEE ||--o{ REFERRAL : "evacuee_id"
-    EVACUEE }o--o{ SECURITY_EVENT : "evacuee_ids"
+    EVACUEE }o--o{ SHELTER_REPORT : "evacuee_ids"
+    HOUSEHOLD }o--o{ SHELTER_REPORT : "pet_refs"
+    SHELTER_REPORT ||--o| REFERRAL : "escalation"
 
     ITEM_MASTER ||--o{ STOCK_LEDGER : "item_id"
     ITEM_MASTER ||--o{ STOCK_TRANSFER_ITEM : "item_id"
@@ -337,7 +339,7 @@ erDiagram
     MEAL_PLAN ||--o| MEAL_SERVICE : "same date meal"
 ```
 
-## Volunteer, security, referral, audit — `shelter_{shelter_code}`
+## Volunteer, shelter report, referral, audit — `shelter_{shelter_code}`
 
 ```mermaid
 erDiagram
@@ -368,15 +370,23 @@ erDiagram
         enum status "assigned done no_show cancelled"
     }
 
-    SECURITY_EVENT {
-        string _id PK "security_event:ulid"
+    SHELTER_REPORT {
+        string _id PK "shelter_report:ulid"
+        enum kind "grievance incident"
+        enum category "theft violence fire intrusion lost_person pet_related facility food_service staff_conduct noise privacy other"
         enum severity "info warning critical"
-        enum category "theft violence fire intrusion lost_person other"
+        enum status "open in_progress resolved closed escalated"
+        string subject "req"
         string description "req"
         string zone "nullable"
+        json reporter "source evacuee_id display_name contact"
         json evacuee_ids "evacuee id array"
-        string actions_taken "opt"
+        json pet_refs "household_id pet_index"
+        string assignee_user_id FK "nullable _users name"
+        json actions "at by note array"
+        json escalation "referral_id reason nullable"
         datetime occurred_at "req"
+        datetime closed_at "nullable"
     }
 
     REFERRAL {
@@ -404,6 +414,10 @@ erDiagram
         string _id PK "evacuee:ulid"
     }
 
+    HOUSEHOLD {
+        string _id PK "household:ulid"
+    }
+
     DOC_TARGET {
         string target_type "any doc type"
         string target_id PK "doc id"
@@ -411,7 +425,9 @@ erDiagram
 
     COUCH_USER |o--o{ VOLUNTEER : "optional login"
     VOLUNTEER ||--o{ SHIFT_ASSIGNMENT : "assigned shifts"
-    EVACUEE }o--o{ SECURITY_EVENT : "evacuee_ids"
+    EVACUEE }o--o{ SHELTER_REPORT : "evacuee_ids"
+    HOUSEHOLD }o--o{ SHELTER_REPORT : "pet_refs"
+    SHELTER_REPORT ||--o| REFERRAL : "escalation"
     EVACUEE ||--o{ REFERRAL : "referrals"
     AUDIT }o--|| DOC_TARGET : "audits target"
 ```

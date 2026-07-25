@@ -2,9 +2,12 @@
 title: "Task Breakdown — Module B — SOP & Resource Calc"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
+updated: 2026-07-23
 module: B
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-006 (SOP master/override) applied 2026-06-22
+note: >
+  decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown;
+  CR-006 (SOP master/override) applied 2026-06-22;
+  CR-042 (OD-1=A, OD-2=B, OD-3=A, OD-4=C) applied 2026-07-23
 ---
 
 # Module B — SOP & Resource Calc
@@ -58,21 +61,25 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 **Description:** Engine คำนวณความต้องการทรัพยากรรายวันของศูนย์: occupancy จริง (T-06) × SOP ratio (T-30) เทียบ stock คงเหลือ (T-14) → ออกเป็น "ต้องการเท่าไร มีเท่าไร ขาดเท่าไร" ทั้งวัตถุดิบ ของใช้ และจำนวนอาสา — เป็น **hub ของ critical path** (block meal plan T-25, dashboard T-32, backbone T-35, simulation T-42)
 
 **Definition of Done:**
-- คำนวณ need/have/gap ต่อ item ต่อวันจากข้อมูลล่าสุดได้ทั้งแบบ on-demand และรอบอัตโนมัติรายวัน
+- คำนวณ need/have/gap ต่อ item ต่อวันจากข้อมูลล่าสุดแบบ **on-demand** (ปุ่มรันจาก UI) — **ไม่มี**รอบอัตโนมัติใน R3 ([CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) OD-3=A; scheduler = backlog)
 - **ใช้ effective ratio ตาม [CR-006](../changes/CR-006-sop-profile-master-override.md)**: resolve `override active ?? master` ก่อนคูณ occupancy (ไม่อ่าน master ตรงเมื่อศูนย์มี override active)
-- ผล expose เป็น API/read-model ตาม contract T-03 — feed เข้า Meal Plan (T-25/FR-39), Donation redirect (T-23/FR-37), Volunteer demand (T-29/FR-43), dashboard และ EOC MongoDB projection
-- สูตรมี unit test เทียบค่าคาดหวังจาก SOP จริงครบทุกประเภททรัพยากร (อาหาร/ของใช้/อาสา)
-- Edge cases ครอบ: occupancy = 0, ratio ขาด, **ศูนย์ไม่มี override → fall back master**, stock = 0 หรือข้อมูล stock ยังไม่ sync — ไม่ crash, แสดงสถานะข้อมูลไม่พอ
+- Persist `daily_calc:{date}` schema_v **2** พร้อม `ratio_source` + override id/version ([CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) OD-1=A)
+- `have` ตาม **hardcode map** ใน CR-042 OD-2=B (ไม่ lookup ด้วยชื่อ ratio key); key ที่ `have_source=none` → `have=null`
+- ผลให้ **dashboard T-32** อ่านจาก `daily_calc` — **ไม่บังคับ** feed Meal Plan (T-25) / Donation (T-23) / Volunteer demand (T-29) ใน R3 ([CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) OD-4=C)
+- สูตรมี unit test เทียบค่าคาดหวังจาก SOP จริงครบทุกประเภททรัพยากร (อาหาร/ของใช้/อาสา) ภายใต้ map ที่ล็อก
+- Edge cases ครอบ: occupancy = 0, ratio ขาด, **ศูนย์ไม่มี override → fall back master**, stock = 0 หรือข้อมูลยังไม่ sync — ไม่ crash, แสดงสถานะข้อมูลไม่พอ
 - Demo คำนวณศูนย์ตัวอย่าง 1 วันเต็มตรงกับคำนวณมือ
+- ถอด `rice_g_per_person_meal` จาก runtime `SOP_RATIO_KEYS` ให้ตรง [CR-021](../changes/CR-021-sop-ratio-scope-handbook-plus-volunteer.md)
 
 ### T-32 — Resource calculation dashboard (FR-46)
 
 **Description:** Dashboard แสดงผลการคำนวณของ T-31 สำหรับผู้บริหารศูนย์: ภาพรวม need/have/gap วันนี้ + แนวโน้ม เพื่อใช้ตัดสินใจขอของบริจาค/เกลี่ยทรัพยากร/เรียกอาสาเพิ่ม
 
 **Definition of Done:**
-- แสดง gap รายหมวด (อาหาร/ของใช้/อาสา) ชัดเจน รายการขาดเรียงตามความรุนแรง
-- Drill-down ดูที่มาตัวเลขได้ (occupancy, ratio, stock ที่ใช้คำนวณ + เวลา as-of) — ระบุด้วยว่า ratio มาจาก master หรือ override ของศูนย์ ([CR-006](../changes/CR-006-sop-profile-master-override.md))
-- จำกัดตาม shelter scope + role, โหลดตาม NFR (อิง read-model T-35) และ test + demo ผ่าน
+- แสดง gap รายหมวด (อาหาร/ของใช้/อาสา) ชัดเจน รายการขาดเรียงตามความรุนแรง — อ่านจาก `daily_calc` เป็น source หลัก
+- Drill-down ดูที่มาตัวเลขได้ (occupancy, ratio, have/stock, `as_of`) — ระบุว่า ratio มาจาก **master หรือ override** จาก field ใน snapshot (`ratio_source` + override id/version) ไม่ resolve สด ([CR-006](../changes/CR-006-sop-profile-master-override.md) / [CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) OD-1=A)
+- มีทางรันคำนวณ on-demand จากหน้า dashboard เมื่อยังไม่มี doc ของวันนั้น
+- จำกัดตาม shelter scope + role, โหลดตาม NFR และ test + demo ผ่าน
 
 ### T-42 — SOP what-if simulation (FR-54, deferred)
 

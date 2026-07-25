@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { Household, Evacuee, HouseholdInput } from '../domain/people';
+	import {
+		type LocationRow,
+		useProvinces,
+		useDistricts,
+		useSubdistricts
+	} from '$lib/features/locations';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -13,7 +19,7 @@
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import CheckSquare from '@lucide/svelte/icons/check-square';
 	import Check from '@lucide/svelte/icons/check';
-	import SearchSelect from '$lib/components/ui/search-select/search-select.svelte';
+	import SearchSelect from '$lib/components/search-select.svelte';
 	import { getAllLocations } from '$lib/features/shelters/data/thailand-location.api';
 
 	let {
@@ -37,12 +43,7 @@
 	let searchAddressNo = $state('');
 
 	let selectedLocationValue = $state('');
-	let selectedLocation = $state<{
-		province: string;
-		district: string;
-		subdistrict: string;
-		zipcode: number;
-	} | null>(null);
+	let selectedLocation = $state<LocationRow | null>(null);
 	let locationItems = $state.raw<{ value: string; label: string }[]>([]);
 	let locationsLoading = $state(true);
 
@@ -100,11 +101,44 @@
 		postal_code: ''
 	});
 
+	const provincesQuery = useProvinces();
+	const districtsQuery = useDistricts(() => formData.province || null);
+	const subdistrictsQuery = useSubdistricts(
+		() => formData.province || null,
+		() => formData.district || null
+	);
+
+	const provinceItems = $derived((provincesQuery.data ?? []).map((p) => ({ value: p, label: p })));
+	const districtItems = $derived((districtsQuery.data ?? []).map((d) => ({ value: d, label: d })));
+	const subdistrictItems = $derived(
+		(subdistrictsQuery.data ?? []).map((s) => ({ value: s.subdistrict, label: s.subdistrict }))
+	);
+
+	function selectProvince(value: string | null) {
+		formData.province = value ?? '';
+		// Downstream choices no longer apply to the new province.
+		formData.district = '';
+		formData.subdistrict = '';
+		formData.postal_code = '';
+	}
+
+	function selectDistrict(value: string | null) {
+		formData.district = value ?? '';
+		formData.subdistrict = '';
+		formData.postal_code = '';
+	}
+
+	function selectSubdistrict(value: string | null) {
+		formData.subdistrict = value ?? '';
+		const match = (subdistrictsQuery.data ?? []).find((s) => s.subdistrict === value);
+		formData.postal_code = match ? String(match.zipcode) : '';
+	}
+
 	$effect(() => {
 		if (showNewHouseholdForm && selectedLocation) {
-			formData.subdistrict = selectedLocation.subdistrict;
-			formData.district = selectedLocation.district;
 			formData.province = selectedLocation.province;
+			formData.district = selectedLocation.district;
+			formData.subdistrict = selectedLocation.subdistrict;
 			formData.postal_code = String(selectedLocation.zipcode);
 		}
 	});
@@ -309,11 +343,18 @@
 					<Button type="submit" class="h-11 bg-[#003B71] px-6 hover:bg-[#002a50]">
 						<Search class="mr-2 h-4 w-4" /> ค้นหาครอบครัว
 					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						class="h-11 border-[#003B71] text-[#003B71] hover:bg-blue-50"
+						onclick={() => {
+							showNewHouseholdForm = true;
+							selectedHouseholdId = null;
+						}}
+					>
+						<Plus class="mr-2 h-4 w-4" /> ลงทะเบียนเป็นครอบครัวใหม่
+					</Button>
 				</div>
-
-				<p class="mt-2 text-xs text-muted-foreground">
-					💡 ข้อดี: ค้นหาได้รวดเร็ว จับคู่ข้อมูลแบบ 1-to-1 แม่นยำ
-				</p>
 			</div>
 		{:else}
 			<div class="space-y-4">
@@ -330,12 +371,13 @@
 						<Label class="text-sm font-medium">ค้นหา ตำบล / อำเภอ / รหัสไปรษณีย์ ( dropdown )</Label
 						>
 						<SearchSelect
-							items={locationItems}
+							name="household_location"
+							options={locationItems}
 							bind:value={selectedLocationValue}
 							placeholder="พิมพ์เพื่อค้นหา เช่น บ้านพรุ หรือ 90250"
 							loading={locationsLoading}
 							loadingText="กำลังโหลดข้อมูลที่อยู่..."
-							class="h-11 border-border bg-muted/20"
+							class="h-11 rounded-md border-border bg-muted/20"
 						/>
 					</div>
 				</div>
@@ -346,10 +388,6 @@
 				>
 					<Search class="mr-2 h-4 w-4" /> ค้นหาครอบครัวจากที่อยู่ (Fuzzy Match)
 				</Button>
-
-				<p class="mt-2 text-xs text-muted-foreground">
-					💡 ข้อดี: ใช้เมื่อไม่ทราบข้อมูลส่วนบุคคลที่แน่ชัด
-				</p>
 			</div>
 		{/if}
 	</form>
@@ -533,7 +571,7 @@
 					<Input
 						bind:value={formData.address_no}
 						placeholder="เช่น 12/3"
-						class="h-11 bg-background"
+						class="h-9 bg-background"
 						required
 					/>
 				</div>
@@ -542,42 +580,63 @@
 					<Input
 						bind:value={formData.village_no}
 						placeholder="เช่น หมู่ 2"
-						class="h-11 bg-background"
-					/>
-				</div>
-				<div class="space-y-3">
-					<Label class="font-semibold">ตำบล / แขวง</Label>
-					<Input
-						bind:value={formData.subdistrict}
-						placeholder="เช่น บ้านพรุ"
-						class="h-11 bg-background"
-						required
-					/>
-				</div>
-				<div class="space-y-3">
-					<Label class="font-semibold">อำเภอ / เขต</Label>
-					<Input
-						bind:value={formData.district}
-						placeholder="เช่น หาดใหญ่"
-						class="h-11 bg-background"
-						required
+						class="h-9 bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
 					<Label class="font-semibold">จังหวัด</Label>
-					<Input
-						bind:value={formData.province}
-						placeholder="เช่น สงขลา"
-						class="h-11 bg-background"
-						required
+					<SearchSelect
+						name="province"
+						options={provinceItems}
+						bind:value={() => formData.province ?? '', (v) => selectProvince(v || null)}
+						placeholder={provincesQuery.isLoading ? 'กำลังโหลด...' : 'เลือกจังหวัด...'}
+						searchPlaceholder="ค้นหาจังหวัด..."
+						emptyText="ไม่พบจังหวัด"
+						disabled={pending || provincesQuery.isLoading}
+						class="h-9 rounded-md border-border bg-background"
+					/>
+				</div>
+				<div class="space-y-3">
+					<Label class="font-semibold">อำเภอ / เขต</Label>
+					<SearchSelect
+						name="district"
+						options={districtItems}
+						bind:value={() => formData.district ?? '', (v) => selectDistrict(v || null)}
+						placeholder={!formData.province
+							? 'เลือกจังหวัดก่อน'
+							: districtsQuery.isLoading
+								? 'กำลังโหลด...'
+								: 'เลือกอำเภอ...'}
+						searchPlaceholder="ค้นหาอำเภอ..."
+						emptyText="ไม่พบอำเภอ"
+						disabled={pending || !formData.province || districtsQuery.isLoading}
+						class="h-9 rounded-md border-border bg-background"
+					/>
+				</div>
+				<div class="space-y-3">
+					<Label class="font-semibold">ตำบล / แขวง</Label>
+					<SearchSelect
+						name="subdistrict"
+						options={subdistrictItems}
+						bind:value={() => formData.subdistrict ?? '', (v) => selectSubdistrict(v || null)}
+						placeholder={!formData.district
+							? 'เลือกอำเภอก่อน'
+							: subdistrictsQuery.isLoading
+								? 'กำลังโหลด...'
+								: 'เลือกตำบล...'}
+						searchPlaceholder="ค้นหาตำบล..."
+						emptyText="ไม่พบตำบล"
+						disabled={pending || !formData.district || subdistrictsQuery.isLoading}
+						class="h-9 rounded-md border-border bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
 					<Label class="font-semibold">รหัสไปรษณีย์</Label>
 					<Input
 						bind:value={formData.postal_code}
-						placeholder="เช่น 90250"
-						class="h-11 bg-background"
+						disabled={pending || !formData.subdistrict}
+						placeholder={!formData.subdistrict ? 'เลือกตำบลก่อน' : 'เช่น 90110'}
+						class="h-9 rounded-md border-border bg-background"
 						required
 					/>
 				</div>

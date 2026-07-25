@@ -28,7 +28,7 @@ R2 เติมสามอย่างที่ทำให้ศูนย์ "
 
 ### 2.1 Jobs To Be Done
 
-- **Registration Officer** ต้องลงทะเบียนทั้งครัวเรือนในครั้งเดียว ผูกสมาชิกเข้าด้วยกัน และออก Household Shelter ID/QR โดยไม่ช้ากว่าการลงราย Person
+- **Registration Officer** ต้องลงทะเบียนทั้งครัวเรือนในครั้งเดียว ผูกสมาชิกเข้าด้วยกัน โดยไม่ช้ากว่าการลงราย Person
 - **Shelter Manager** ต้องจัดสรรผู้พักพิงเข้าโซนตามประเภทและความจุของแต่ละโซน เห็นว่าโซนไหนเต็ม
 - **Warehouse / Supply Officer** *(role ใหม่)* ต้องรับสิ่งของเข้าคลัง บันทึกประเภท/จำนวน/หน่วย และแจกจ่าย/โอนระหว่างศูนย์ โดยมี stock ledger ที่ตรวจสอบย้อนหลังได้
 - **Donor** *(no-auth public surface — FD-16, ไม่ใช่ login role)* ต้องแจ้งของที่จะบริจาคล่วงหน้า **โดยไม่ต้อง login** ให้ระบบบันทึกเข้า pipeline ของคลัง แล้ว track เองผ่าน `tracking_token`
@@ -46,7 +46,7 @@ R2 เติมสามอย่างที่ทำให้ศูนย์ "
   - **Persona + context:** นัท เป็น Registration Officer วันเปิดศูนย์ คนต่อคิวมาเป็นครอบครัว
   - **Entry state:** login เลือก Shelter เริ่ม Household registration session
   - **Path:** สร้าง Household → เพิ่มสมาชิกเป็น Person ทีละคน (หัวหน้าครัวเรือน + อีก 4) → ระบุความสัมพันธ์ขั้นต่ำ → บันทึกสัตว์เลี้ยง/ทรัพย์สินที่นำมา → submit
-  - **Climax:** ระบบออก **Household Shelter ID/QR** หนึ่งใบ + Person ID รายคน และเสนอโซนที่เหมาะ (โซนครอบครัว)
+  - **Climax:** ระบบออก Person ID/QR รายคน (ใช้ QR ของหัวหน้าครัวเรือนแทนทั้งครัวเรือนได้) และเสนอโซนที่เหมาะ (โซนครอบครัว)
   - **Resolution:** ทั้งครัวเรือน check-in เข้าโซนได้ในสแกนเดียว; dashboard นับเป็น 5 คน 1 ครัวเรือน
   - **Edge case:** เน็ตหลุด → เข้า disconnected status-only (ไม่มี read-only local cache), automatic retry 3 attempts; เกินนั้นแสดง cannot-connect banner และให้ force retry เมื่อพร้อมกลับมา โดย ID mapping ไม่ซ้ำ
 
@@ -59,7 +59,7 @@ R2 เติมสามอย่างที่ทำให้ศูนย์ "
 
 ## 3. Glossary *(เพิ่มจาก baseline)*
 
-- **Household** — กลุ่มผู้พักพิงที่มาเป็นครัวเรือน/เดินทางร่วมกัน; ประกอบด้วย Person ตั้งแต่ 1 คนขึ้นไป มี Household Shelter ID/QR ของตนเอง 1 ต่อ 1 กับครัวเรือน
+- **Household** — กลุ่มผู้พักพิงที่มาเป็นครัวเรือน/เดินทางร่วมกัน; ประกอบด้วย Person ตั้งแต่ 1 คนขึ้นไป (ระบุตัวตนและค้นหาผ่าน Person ID/QR ของหัวหน้าครัวเรือน)
 - **Household Head** — Person ที่เป็นผู้แทนครัวเรือนสำหรับการติดต่อและ check-in รวม
 - **Zone** — พื้นที่ย่อยในศูนย์สำหรับจัดสรรผู้พักพิง (โซนครอบครัว / ชาย / หญิง / สัตว์เลี้ยง / เปราะบาง) มี capacity ของตนเอง
 - **Zone Allocation** — การกำหนดว่า Person/Household อยู่โซนใด ณ เวลาหนึ่ง
@@ -75,7 +75,7 @@ R2 เติมสามอย่างที่ทำให้ศูนย์ "
 
 ### 4.1 Household Registration & Grouping
 
-**Description:** ขยาย Person registration ของ baseline ให้ผูกหลาย Person เป็น Household และออก Household Shelter ID/QR เพิ่มจาก Person ID เดิม โดยไม่ทำลาย Person-only flow ที่ baseline ใช้อยู่ Realizes UJ-5
+**Description:** ขยาย Person registration ของ baseline ให้ผูกหลาย Person เป็น Household โดยไม่ทำลาย Person-only flow ที่ baseline ใช้อยู่ Realizes UJ-5
 
 #### FR-21: Create Household and Attach Members
 
@@ -86,18 +86,13 @@ Registration Officer สามารถสร้าง Household และผู
 - เพิ่ม/ลบสมาชิกจาก Household ได้ และ Person หนึ่งคนอยู่ได้เพียง 1 Household ณ เวลาหนึ่ง
 - Person-only registration เดิม (FR-4) ยังทำงานได้ — Household เป็น optional grouping ไม่ใช่ required step
 
-#### FR-22: Household Shelter ID/QR
+#### FR-22: Household Shelter ID/QR `[REMOVED — ดู CR-047]`
 
-ระบบสร้าง Household Shelter ID/QR ที่ไม่ซ้ำ ระดับครัวเรือน เพิ่มจาก Person ID/QR เดิม
-
-**Consequences (testable):**
-- Household ID unique ภายใน scope ที่กำหนด และแยก namespace จาก Person ID ชัดเจน
-- QR scan ของ Household เปิดผ่าน backend/permission check; payload ไม่บรรจุ sensitive data (ต่อ NFR-6)
-- ทั้ง Household ID และ Person ID ใช้ค้นหา/check-in ได้
+*(ยกเลิก — ไม่สร้าง Household Shelter ID/QR แยกเฉพาะระดับครัวเรือน โดยเปลี่ยนไปใช้ Person ID/QR ของหัวหน้าครัวเรือนแทนเพื่อความกระชับและลดความซ้ำซ้อน)*
 
 #### FR-23: Household Search & Check-in/out
 
-ผู้ใช้ค้นหา Household และทำ check-in/check-out ทั้งครัวเรือนในครั้งเดียว หรือรายบุคคลในครัวเรือนก็ได้ ตามสิทธิ์
+ผู้ใช้ค้นหา Household และทำ check-in/check-out ทั้งครัวเรือนในครั้งเดียว หรือรายบุคคลในครัวเรือนก็ได้ ตามสิทธิ์ ผ่าน Person ID/QR ของสมาชิกคนใดก็ได้ในครัวเรือน (ปกติคือ head)
 
 **Consequences (testable):**
 - Household check-in เพิ่ม occupancy เท่าจำนวนสมาชิกที่ check-in จริง ไม่นับสมาชิกที่ยัง absent
@@ -240,7 +235,7 @@ System Admin กำหนด role ใหม่ (`registration_staff`, `kitchen_s
 
 ### 6.1 In Scope (R2)
 
-- Household registration + Household Shelter ID/QR + household search + household check-in/out
+- Household registration + household search + household check-in/out (ใช้ Person ID/QR ของ head)
 - Pet/asset/vehicle records
 - Zone definition, capacity, allocation (warning-only)
 - Supply catalog, stock receive/distribute/transfer, stock dashboard, reorder threshold

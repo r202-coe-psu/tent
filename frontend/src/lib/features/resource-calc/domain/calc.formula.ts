@@ -9,20 +9,19 @@
  * quantity) and passes them in; the engine is domain-agnostic and reusable.
  */
 
-import { roundQtyNumber } from '$lib/utils/qty';
+import { persistQty } from '$lib/utils/qty';
+import Decimal from 'decimal.js';
 
 /**
  * ALGORITHM/formula version (semver) — NOT an API or schema version.
  * Semver governance (what counts as major/minor/patch) lives in the ADR, not here.
- * NOTE: changing quantity rounding ({@link roundQtyNumber}) alters observable `status`
+ * NOTE: changing quantity rounding ({@link persistQty}) alters observable `status`
  * classification and is therefore a FORMULA_V-governed formula change, not silent tuning.
  *
- * 1.2.0 — classify gap/surplus/ok via fixed-decimal rounding (`roundQtyNumber`) instead of
- *         `GAP_EPSILON`; `need`/`gap` are also rounded to the same scale.
- * 1.1.0 (T-31.3) — added the additive `data_status` field on `ResourceCalcResult`
- *                  (data-availability discriminator). No math/`status` change → Minor.
+ * 2.0.0 (CR-038) — migrate all ratio, have, need, and gap fields to decimal strings (string)
+ *                 and perform all resource-calc math using decimal.js.
  */
-export const FORMULA_V = '1.2.0';
+export const FORMULA_V = '2.0.0';
 
 /** Opaque resource id. Non-empty & unique are caller invariants (engine does not validate). */
 export type ResourceKey = string;
@@ -55,9 +54,9 @@ export interface ResourceInput {
 	readonly key: ResourceKey;
 	readonly kind: ResourceKind;
 	/** Effective ratio, already resolved upstream. */
-	readonly ratio: number | null;
+	readonly ratio: string | null;
 	/** Available quantity (`null` = unknown / not synced). */
-	readonly have: number | null;
+	readonly have: string | null;
 }
 
 export interface CalcInput {
@@ -75,13 +74,13 @@ export interface ResourceCalcResult {
 	/** `false` = a datum this row needs is structurally bad (occupancy<0, ratio≤0/NaN, have<0/NaN, overflow). */
 	readonly input_valid: boolean;
 	/** Echoed for ALL kinds incl. threshold. */
-	readonly ratio: number | null;
+	readonly ratio: string | null;
 	/** multiply: occupancy×ratio · divide: ceil(occupancy/ratio) · threshold/overflow/invalid: null. */
-	readonly need: number | null;
+	readonly need: string | null;
 	/** Echoed for ALL kinds; for threshold it is INFORMATIONAL only — never affects `status`. */
-	readonly have: number | null;
+	readonly have: string | null;
 	/** `need − have`, rounded to quantity decimals; null for threshold/overflow/no-verdict. */
-	readonly gap: number | null;
+	readonly gap: string | null;
 	readonly status: ResourceStatus;
 	/** Data-availability axis (orthogonal to `status`). Tells *why* a row is `insufficient_data`. */
 	readonly data_status: DataStatus;
@@ -120,8 +119,30 @@ function calcRow(
 	const base = { ordinal, key: r.key, kind: r.kind, ratio: r.ratio, have: r.have, as_of };
 
 	const occupancyValid = Number.isFinite(occupancy) && occupancy >= 0;
-	const ratioBad = r.ratio != null && (!Number.isFinite(r.ratio) || r.ratio <= 0);
-	const haveBad = r.have != null && (!Number.isFinite(r.have) || r.have < 0);
+
+	let ratioBad = false;
+	if (r.ratio != null) {
+		try {
+			const dec = new Decimal(r.ratio);
+			if (dec.isNaN() || !dec.isFinite() || dec.lte(0)) {
+				ratioBad = true;
+			}
+		} catch {
+			ratioBad = true;
+		}
+	}
+
+	let haveBad = false;
+	if (r.have != null) {
+		try {
+			const dec = new Decimal(r.have);
+			if (dec.isNaN() || !dec.isFinite() || dec.lt(0)) {
+				haveBad = true;
+			}
+		} catch {
+			haveBad = true;
+		}
+	}
 
 	// 1. Validity gate — structurally bad input (occupancy shared, so an invalid occupancy
 	//    invalidates every row). Runs BEFORE kind semantics: `ratio=-5` on a threshold is invalid.
@@ -142,7 +163,7 @@ function calcRow(
 	}
 
 	// 3. Kind semantics (ratio valid & present; occupancy valid).
-	let need: number;
+	let need: string;
 	switch (r.kind) {
 		case 'threshold':
 			// Quality ceiling, not a quantity. `have`/`ratio` echoed but never affect status.
@@ -154,18 +175,35 @@ function calcRow(
 				status: 'constraint',
 				data_status: 'complete'
 			};
-		case 'multiply':
-			need = roundQtyNumber(occupancy * r.ratio);
+		case 'multiply': {
+			try {
+				const dRatio = new Decimal(r.ratio);
+				need = persistQty(dRatio.mul(occupancy));
+			} catch {
+				return invalidResult(base);
+			}
 			break;
-		case 'divide':
-			need = Math.ceil(occupancy / r.ratio);
+		}
+		case 'divide': {
+			try {
+				const dRatio = new Decimal(r.ratio);
+				need = new Decimal(occupancy).div(dRatio).ceil().toString();
+			} catch {
+				return invalidResult(base);
+			}
 			break;
+		}
 		default:
 			return assertNever(r.kind);
 	}
 
 	// Overflow guard (multiply AND divide, e.g. ceil(1e308 / 1e-308)) — never leak Infinity.
-	if (!Number.isFinite(need)) {
+	try {
+		const dNeed = new Decimal(need);
+		if (!dNeed.isFinite() || dNeed.isNaN() || dNeed.abs().gt(Number.MAX_VALUE)) {
+			return invalidResult(base);
+		}
+	} catch {
 		return invalidResult(base);
 	}
 
@@ -180,11 +218,24 @@ function calcRow(
 		};
 	}
 
-	const gap = roundQtyNumber(need - r.have);
+	let gap: string;
 	let status: ResourceStatus;
-	if (gap > 0) status = 'gap';
-	else if (gap < 0) status = 'surplus';
-	else status = 'ok';
+	try {
+		const dNeed = new Decimal(need);
+		const dHave = new Decimal(r.have);
+		const dGap = dNeed.sub(dHave);
+		gap = persistQty(dGap);
+
+		if (dGap.gt(0)) {
+			status = 'gap';
+		} else if (dGap.lt(0)) {
+			status = 'surplus';
+		} else {
+			status = 'ok';
+		}
+	} catch {
+		return invalidResult(base);
+	}
 
 	// Gap computed successfully — incl. valid occupancy=0 (need 0) and stock=0 (have 0) rows.
 	return { ...base, input_valid: true, need, gap, status, data_status: 'complete' };
@@ -196,9 +247,8 @@ function calcRow(
  *
  * Duplicate `key`s are preserved 1:1 (dedup belongs to the adapter). Pair results back by `ordinal`.
  *
- * Floating point: `need`/`gap` for multiply rows are rounded via `roundQtyNumber` (fixed
- * decimal scale) so status classification can use ordinary `>`, `<`, `=== 0` without
- * an epsilon band. Divide rows stay integer (`Math.ceil`).
+ * Decimal String arithmetic: `need`/`gap` are computed using decimal.js and returned as
+ * decimal strings to avoid IEEE-754 precision issues.
  *
  * Never throws on data problems (reports via `input_valid` + `status`); throws only via `assertNever`.
  */

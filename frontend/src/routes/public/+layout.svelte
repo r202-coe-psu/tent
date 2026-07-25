@@ -5,7 +5,9 @@
 	let { children } = $props();
 </script>
 
-<div class="flex min-h-screen flex-col bg-muted/30 text-foreground antialiased">
+<div
+	class="flex min-h-svh flex-col bg-muted/30 pb-[var(--testing-banner-height)] text-foreground antialiased"
+>
 	<PublicNavbar />
 	<main class="flex-1">
 		{@render children?.()}

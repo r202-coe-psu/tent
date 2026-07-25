@@ -2,8 +2,8 @@
 title: Smart Shelter — Sitemap & Endpoint Map
 status: draft for review
 created: 2026-06-11
-updated: 2026-06-11
-note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public
+updated: 2026-07-23
+note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public; CR-040 route `/reports`
 ---
 
 # Smart Shelter — Sitemap & Endpoint Map
@@ -121,11 +121,11 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 | --- | --- | --- | --- |
 | `/resources` | daily resource calculation (น้ำ/อาหาร/ของใช้ ต่อ occupancy) + dashboard | FR-45..46 | views + `sop_profile` (catalog, read-only บน device) |
 
-### 2.8 Security & Referral — SM เท่านั้น
+### 2.8 Shelter Reports & Referral — SM เท่านั้น
 
 | Route | หน้าที่ | FR | Endpoint / Data action |
 | --- | --- | --- | --- |
-| `/security-events` | บันทึก/ติดตามเหตุการณ์ความปลอดภัย | FR-47 | `put security_event:{ulid}` (append-only) |
+| `/reports` | เปิด/ติดตามรายงานในศูนย์ (`shelter_report` · kind grievance\|incident) | FR-47 | `put`/`update shelter_report:{ulid}` (state machine, forward-only) |
 | `/referrals` | ส่งต่อหน่วยงานภายนอก — SM เห็น flag medical-emergency แต่ **medical detail = null** | FR-48 | `put referral` (state `draft→sent→accepted|rejected→closed`) |
 
 ### 2.9 Administration — SA เท่านั้น (global, ต้องมี WAN ถึง central)

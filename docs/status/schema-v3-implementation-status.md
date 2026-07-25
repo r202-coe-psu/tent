@@ -1,7 +1,7 @@
 ---
 title: Schema v3 — Implementation Status
 created: 2026-06-11
-updated: 2026-06-18
+updated: 2026-07-23
 ---
 
 # Schema v3 — Implementation Status
@@ -61,7 +61,7 @@ Extras: `applyMovementToStay()` + type guards ครบ
 | `meal_service` (append-only) | §2.7 | บันทึกแจกอาหารจริง |
 | `volunteer` | §2.8 | คนละ doc กับ `_users` |
 | `shift_assignment` | §2.9 | ตารางเวร |
-| `security_event` (append-only) | §2.10 | เหตุการณ์ความปลอดภัย |
+| `shelter_report` (state machine) | §2.10 | รายงาน grievance/incident — CR-040; ยังไม่ implement |
 | `referral` (state machine) | §2.11 | ส่งต่อหน่วยงานนอก |
 | `audit` (append-only) | §2.12 | การกระทำสำคัญ |
 

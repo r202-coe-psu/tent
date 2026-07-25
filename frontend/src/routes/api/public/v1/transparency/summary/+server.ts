@@ -80,6 +80,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 						}
 					}
 				} catch (e) {
+					// ignore fallback error
 					void e;
 				}
 				return { occ, vuln };
@@ -97,6 +98,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 			};
 			lastFetchTime = now;
 		} catch (e) {
+			// ignore fallback error
 			void e;
 		}
 	}

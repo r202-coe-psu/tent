@@ -16,6 +16,11 @@ export type HouseholdSearchLabels = {
 	community: Record<string, string>;
 };
 
+export type EvacueeFilters = {
+	specialNeed?: string;
+	zone?: string;
+};
+
 /**
  * Persistence contract for the `people` feature. The application layer depends
  * on this interface — never on CouchDB directly — so the store can be swapped
@@ -30,11 +35,14 @@ export interface PeopleRepository {
 	createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee>;
 	/** Every evacuee in this shelter database. */
 	listEvacuees(): Promise<Evacuee[]>;
+	/** Members linked to one household, resolved through the household_id Mango index. */
+	listHouseholdMembers(householdId: string): Promise<Evacuee[]>;
 	/** Paginated list of evacuees — optional `search` filters before paging. */
 	listEvacueesPaginated(
 		page: number,
 		pageSize: number,
-		search?: string
+		search?: string,
+		filters?: EvacueeFilters
 	): Promise<PaginatedResult<Evacuee>>;
 	/** One evacuee by `_id`, or `null` when absent. */
 	getEvacuee(id: string): Promise<Evacuee | null>;
@@ -80,4 +88,9 @@ export interface PeopleRepository {
 	 * this is the only path that flips occupancy to `checked_out` (T-06).
 	 */
 	checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
+	/**
+	 * Cancel a pre-registered household and persist an actor-attributed audit entry.
+	 * Person stay status is unchanged because `cancelled` belongs to HouseholdStatus only.
+	 */
+	cancelPreRegistration(householdId: string, ctx: AuthorContext): Promise<void>;
 }
