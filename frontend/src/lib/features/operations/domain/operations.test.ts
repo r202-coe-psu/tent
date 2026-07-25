@@ -15,6 +15,11 @@ import {
 	deriveNeedAvailability,
 	createReceiveEntry,
 	createDistributeEntry,
+	createPurchase,
+	keyPurchaseReceipt,
+	purchaseReceiptStatus,
+	canEditPurchase,
+	isPurchase,
 	mapNeedItemHeuristic,
 	type Donation,
 	type ReceiveSource
@@ -124,6 +129,155 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 			ctx
 		);
 		expect(entry.reason).toBe('purchase');
+	});
+});
+
+describe('purchase — createPurchase + keyPurchaseReceipt (CR-032)', () => {
+	it('creates a purchase doc (schema_v 1) carrying vendor and planning items', () => {
+		const purchase = createPurchase(
+			{
+				vendor: 'ACME',
+				po_ref: 'PO-1',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		expect(purchase.type).toBe('purchase');
+		expect(purchase.schema_v).toBe(1);
+		expect(purchase._id.startsWith('purchase:')).toBe(true);
+		expect(purchase.vendor).toBe('ACME');
+		expect(purchase.po_ref).toBe('PO-1');
+		expect(purchase.items[0].qty).toBe('100'); // persisted as qty_str
+		expect(isPurchase(purchase)).toBe(true);
+	});
+
+	it('omits po_ref and note when they are not supplied', () => {
+		const purchase = createPurchase(
+			{ vendor: 'ACME', items: [{ item_id: 'item:rice', qty: 1, unit: 'kg' }] },
+			ctx
+		);
+		expect(purchase.po_ref).toBeUndefined();
+		expect(purchase.note).toBeUndefined();
+	});
+
+	it('mints one purchase ledger entry per counted line, referencing the purchase', () => {
+		const purchase = createPurchase(
+			{ vendor: 'ACME', items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }] },
+			ctx
+		);
+		const ledger = keyPurchaseReceipt(
+			purchase,
+			[{ item_id: 'item:rice', qty: '90', unit: 'kg' }],
+			ctx
+		);
+		expect(ledger).toHaveLength(1);
+		expect(ledger[0].reason).toBe('purchase');
+		expect(ledger[0].ref_id).toBe(purchase._id);
+		expect(ledger[0].qty).toBe('90'); // counted, not the planned 100
+		expect(ledger[0].schema_v).toBe(3);
+	});
+
+	it('rejects a purchase without a vendor or without items', () => {
+		expect(() =>
+			createPurchase({ vendor: '', items: [{ item_id: 'item:rice', qty: 1, unit: 'kg' }] }, ctx)
+		).toThrow();
+		expect(() => createPurchase({ vendor: 'ACME', items: [] }, ctx)).toThrow();
+	});
+});
+
+// schema.md §2.16 — the receipt status is derived from the ledger, never stored,
+// so the badge can't drift from the balance shown beside it (T-14 DoD).
+describe('purchaseReceiptStatus + canEditPurchase (CR-032)', () => {
+	const twoLinePurchase = () =>
+		createPurchase(
+			{
+				vendor: 'ACME',
+				items: [
+					{ item_id: 'item:rice', qty: 100, unit: 'kg' },
+					{ item_id: 'item:sugar', qty: 20, unit: 'kg' }
+				]
+			},
+			ctx
+		);
+
+	it('reports not_received while no ledger row points at the purchase', () => {
+		const purchase = twoLinePurchase();
+		expect(purchaseReceiptStatus(purchase, [])).toBe('not_received');
+		expect(canEditPurchase(purchase, [])).toBe(true);
+	});
+
+	it('ignores ledger rows belonging to another purchase or another reason', () => {
+		const purchase = twoLinePurchase();
+		const other = keyPurchaseReceipt(
+			twoLinePurchase(),
+			[
+				{ item_id: 'item:rice', qty: '100', unit: 'kg' },
+				{ item_id: 'item:sugar', qty: '20', unit: 'kg' }
+			],
+			ctx
+		);
+		const donationRow = createStockLedger(
+			{ item_id: 'item:rice', qty: '100', unit: 'kg', reason: 'donation', ref_id: purchase._id },
+			ctx
+		);
+		expect(purchaseReceiptStatus(purchase, [...other, donationRow])).toBe('not_received');
+	});
+
+	it('reports partial while any ordered item is short, then received once all are met', () => {
+		const purchase = twoLinePurchase();
+		const firstRound = keyPurchaseReceipt(
+			purchase,
+			[{ item_id: 'item:rice', qty: '100', unit: 'kg' }],
+			ctx
+		);
+		expect(purchaseReceiptStatus(purchase, firstRound)).toBe('partial');
+		expect(canEditPurchase(purchase, firstRound)).toBe(false);
+
+		const secondRound = keyPurchaseReceipt(
+			purchase,
+			[{ item_id: 'item:sugar', qty: '20', unit: 'kg' }],
+			ctx
+		);
+		expect(purchaseReceiptStatus(purchase, [...firstRound, ...secondRound])).toBe('received');
+	});
+
+	it('sums multiple rounds for the same item before judging completeness', () => {
+		const purchase = createPurchase(
+			{ vendor: 'ACME', items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }] },
+			ctx
+		);
+		const rows = [
+			...keyPurchaseReceipt(purchase, [{ item_id: 'item:rice', qty: '40', unit: 'kg' }], ctx),
+			...keyPurchaseReceipt(purchase, [{ item_id: 'item:rice', qty: '60', unit: 'kg' }], ctx)
+		];
+		expect(purchaseReceiptStatus(purchase, rows.slice(0, 1))).toBe('partial');
+		expect(purchaseReceiptStatus(purchase, rows)).toBe('received');
+	});
+
+	it('counts receiving more than ordered as received, with no fourth state', () => {
+		const purchase = createPurchase(
+			{ vendor: 'ACME', items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }] },
+			ctx
+		);
+		const rows = keyPurchaseReceipt(
+			purchase,
+			[{ item_id: 'item:rice', qty: '120', unit: 'kg' }],
+			ctx
+		);
+		expect(purchaseReceiptStatus(purchase, rows)).toBe('received');
+	});
+
+	it('does not let an unordered item alone complete the purchase', () => {
+		const purchase = createPurchase(
+			{ vendor: 'ACME', items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }] },
+			ctx
+		);
+		const rows = keyPurchaseReceipt(
+			purchase,
+			[{ item_id: 'item:soap', qty: '5', unit: 'bar' }],
+			ctx
+		);
+		expect(purchaseReceiptStatus(purchase, rows)).toBe('partial');
 	});
 });
 
