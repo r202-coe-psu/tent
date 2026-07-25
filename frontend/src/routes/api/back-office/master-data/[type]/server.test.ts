@@ -114,6 +114,16 @@ describe('GET /api/back-office/master-data/[type]', () => {
 		expect((await res.json()).items).toEqual([]);
 	});
 
+	it('trims shelter_code query parameters before resolving scope', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callGET('pet_types', '?scope=shelter&shelter_code=%20SH001%20');
+
+		expect(res.status).toBe(200);
+		expect(authMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
+		expect(readMock).toHaveBeenCalledWith('pet_types', 'SH001');
+	});
+
 	it('resolves a shelter-local document before the global document', async () => {
 		readMock.mockImplementation(async (_type, shelterCode) =>
 			shelterCode === 'SH001'

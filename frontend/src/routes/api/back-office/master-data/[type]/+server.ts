@@ -194,7 +194,7 @@ type ParsedScope = { mode: 'global' | 'shelter' | 'effective'; shelterCode?: str
 function parseScope(request: Request, bodyShelterCode?: unknown): ParsedScope {
 	const url = new URL(request.url);
 	const requested = url.searchParams.get('scope');
-	const queryCode = url.searchParams.get('shelter_code') || undefined;
+	const queryCode = url.searchParams.get('shelter_code')?.trim() || undefined;
 	const bodyCode =
 		typeof bodyShelterCode === 'string' ? bodyShelterCode.trim() || undefined : undefined;
 	if (queryCode && bodyCode && queryCode !== bodyCode) {

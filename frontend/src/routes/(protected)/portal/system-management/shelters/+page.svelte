@@ -15,8 +15,9 @@
 	const shelters = $derived(sheltersQuery.data ?? []);
 	const total = $derived(shelters.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
+	const clampedPage = $derived(Math.min(currentPage, totalPages));
 	const pageShelters = $derived(
-		shelters.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+		shelters.slice((clampedPage - 1) * PAGE_SIZE, clampedPage * PAGE_SIZE)
 	);
 
 	$effect(() => {
@@ -72,14 +73,18 @@
 
 			{#if totalPages > 1}
 				<div class="mt-4 flex justify-center border-t border-shelter-border pt-4">
-					<Pagination.Root bind:page={currentPage} count={total} perPage={PAGE_SIZE}>
+					<Pagination.Root
+						bind:page={() => clampedPage, (p) => (currentPage = p)}
+						count={total}
+						perPage={PAGE_SIZE}
+					>
 						{#snippet children({ pages })}
 							<Pagination.Content>
 								<Pagination.Previous />
 								{#each pages as p (p.key)}
 									<Pagination.Item>
 										{#if p.type === 'page'}
-											<Pagination.Link page={p} isActive={p.value === currentPage} />
+											<Pagination.Link page={p} isActive={p.value === clampedPage} />
 										{:else}
 											<Pagination.Ellipsis />
 										{/if}
