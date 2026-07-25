@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
 import {
 	createEvacuee,
@@ -12,7 +13,15 @@ import {
 	isEvacuee,
 	createHousehold,
 	isHousehold,
-	migrateHouseholdV3ToV4
+	migrateHouseholdV3ToV4,
+	checkEvacueeHouseholdConflict,
+	assertEvacueeHouseholdAssignment,
+	assertHouseholdStatusTransition,
+	assertCheckoutDestination,
+	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
+	householdPreRegisterEvacueeSchema,
+	householdPreRegisterAddressFormSchema,
+	householdPostArrivalAddressFormSchema
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -48,6 +57,65 @@ describe('createEvacuee', () => {
 		expect(() =>
 			createEvacuee({ first_name: '  ', last_name: 'ข', gender: 'male', phone: null }, ctx)
 		).toThrow();
+	});
+});
+
+describe('household wizard schemas', () => {
+	it('requires identity and emergency contact for pre-registration with Thai errors', () => {
+		const result = householdPreRegisterEvacueeSchema.safeParse({
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			gender: 'male',
+			phone: '0812345678',
+			person_id: { cardType: 'national_id', number: '' },
+			emergency_contact: { name: '', phone: '', relation: 'contact' }
+		});
+
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues.map((issue) => issue.message)).toEqual(
+				expect.arrayContaining([
+					'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร',
+					'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน',
+					'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'
+				])
+			);
+		}
+	});
+
+	it('validates all required pre-registration address fields', () => {
+		const result = householdPreRegisterAddressFormSchema.safeParse({
+			addressNo: '',
+			villageNo: '',
+			subdistrict: '',
+			district: '',
+			province: '',
+			postalCode: '',
+			municipalityZone: '',
+			community: ''
+		});
+
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues).toHaveLength(8);
+			expect(result.error.issues.every((issue) => /[ก-๙]/.test(issue.message))).toBe(true);
+		}
+	});
+
+	it('keeps post-arrival notes optional while validating the base address', () => {
+		const result = householdPostArrivalAddressFormSchema.safeParse({
+			addressNo: '12/3',
+			villageNo: '',
+			subdistrict: 'หาดใหญ่',
+			district: 'หาดใหญ่',
+			province: 'สงขลา',
+			postalCode: '',
+			municipalityZone: '',
+			community: ''
+		});
+
+		expect(result.success).toBe(true);
+		if (result.success) expect(result.data.notes).toBe('');
 	});
 });
 
@@ -262,5 +330,101 @@ describe('createHousehold', () => {
 			expect(migrated.schema_v).toBe(4);
 			expect(migrated.status).toBe('pre_registered');
 		});
+	});
+});
+
+describe('household membership invariant', () => {
+	const makeEvacuee = (id: string, householdId: string | null) => ({
+		...createEvacuee({ first_name: id, last_name: 'ทดสอบ', gender: 'other', phone: null }, ctx),
+		_id: id,
+		household_id: householdId
+	});
+	const makeHousehold = (id: string, status: 'checked_in' | 'checked_out' = 'checked_in') => ({
+		...createHousehold({ label: id, head_evacuee_id: null, status }, ctx),
+		_id: id
+	});
+
+	it('blocks moving a member away from an active household that has other members', () => {
+		const household = makeHousehold('household:old');
+		const target = makeHousehold('household:new');
+		const member = makeEvacuee('evacuee:1', household._id);
+		const sibling = makeEvacuee('evacuee:2', household._id);
+
+		expect(
+			checkEvacueeHouseholdConflict(member, target._id, [household, target], [member, sibling])
+		).toMatchObject({ conflicted: true, householdId: household._id });
+		expect(() =>
+			assertEvacueeHouseholdAssignment(member, target._id, [household, target], [member, sibling])
+		).toThrow(/ยังมีสมาชิกอื่นอยู่/);
+	});
+
+	it('allows moving a solo member or a member from an inactive household', () => {
+		const active = makeHousehold('household:active');
+		const inactive = makeHousehold('household:inactive', 'checked_out');
+		const target = makeHousehold('household:target');
+		const solo = makeEvacuee('evacuee:solo', active._id);
+		const historical = makeEvacuee('evacuee:historical', inactive._id);
+
+		expect(checkEvacueeHouseholdConflict(solo, target._id, [active, target], [solo])).toEqual({
+			conflicted: false
+		});
+		expect(
+			checkEvacueeHouseholdConflict(historical, target._id, [inactive, target], [historical])
+		).toEqual({ conflicted: false });
+	});
+});
+
+describe('household status transitions', () => {
+	it('allows forward transitions and rejects reopening terminal statuses', () => {
+		expect(() => assertHouseholdStatusTransition('pre_registered', 'checked_in')).not.toThrow();
+		expect(() => assertHouseholdStatusTransition('checked_in', 'checked_out')).not.toThrow();
+		expect(() => assertHouseholdStatusTransition('checked_out', 'checked_in')).toThrow(
+			/ไม่สามารถเปลี่ยนสถานะ/
+		);
+		expect(() => assertHouseholdStatusTransition('cancelled', 'arriving')).toThrow(
+			/ไม่สามารถเปลี่ยนสถานะ/
+		);
+	});
+
+	it('allows cancelling a pre-registered household (CR-029)', () => {
+		expect(() => assertHouseholdStatusTransition('pre_registered', 'cancelled')).not.toThrow();
+	});
+
+	it('restricts the manual (free-form UI) transition table to non-side-effect-bound statuses', () => {
+		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.pre_registered).toEqual(['arriving']);
+		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.arriving).toEqual([]);
+		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.checked_in).toEqual([]);
+		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.checked_out).toEqual([]);
+		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.cancelled).toEqual([]);
+	});
+});
+
+describe('assertCheckoutDestination', () => {
+	it('rejects a missing destination', () => {
+		expect(() => assertCheckoutDestination(null)).toThrow(/ต้องระบุปลายทาง/);
+		expect(() => assertCheckoutDestination(undefined)).toThrow(/ต้องระบุปลายทาง/);
+	});
+
+	it('allows returned_home with no extra fields', () => {
+		expect(() => assertCheckoutDestination({ type: 'returned_home' })).not.toThrow();
+	});
+
+	it('requires destination_name for transferred_shelter / referred_facility', () => {
+		expect(() => assertCheckoutDestination({ type: 'transferred_shelter' })).toThrow(
+			/ชื่อ\/รหัสสถานที่ปลายทาง/
+		);
+		expect(() => assertCheckoutDestination({ type: 'referred_facility' })).toThrow(
+			/ชื่อ\/รหัสสถานที่ปลายทาง/
+		);
+		expect(() =>
+			assertCheckoutDestination({ type: 'transferred_shelter', destination_name: 'ศูนย์ B' })
+		).not.toThrow();
+	});
+
+	it('requires notes for "other"', () => {
+		expect(() => assertCheckoutDestination({ type: 'other' })).toThrow(/หมายเหตุ/);
+		expect(() =>
+			assertCheckoutDestination({ type: 'other', notes: 'ญาตินำกลับไปดูแลเอง' })
+		).not.toThrow();
 	});
 });

@@ -11,7 +11,12 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import UserX from '@lucide/svelte/icons/user-x';
-	import { useEvacueesPaginated, useCheckInEvacuee, zoneLabel } from '$lib/features/people';
+	import {
+		useEvacueesPaginated,
+		useCheckInEvacuee,
+		canCheckInEvacuee,
+		zoneLabel
+	} from '$lib/features/people';
 	import type { Evacuee } from '$lib/features/people';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -258,14 +263,16 @@
 									class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium
 										{e.current_stay.status === 'active'
 										? 'bg-green-100 text-green-800'
-										: 'bg-muted text-muted-foreground'}"
+										: e.current_stay.status === 'pre_registered'
+											? 'bg-blue-100 text-blue-800'
+											: 'bg-muted text-muted-foreground'}"
 								>
 									{STATUS_LABEL[e.current_stay.status] ?? e.current_stay.status}
 								</span>
 							</Table.Cell>
 							<Table.Cell class="text-center">
 								<div class="flex justify-center gap-1.5">
-									{#if e.current_stay.status !== 'active'}
+									{#if canCheckInEvacuee(e)}
 										<Button
 											variant="outline"
 											size="sm"
@@ -275,6 +282,7 @@
 											เช็คอิน
 										</Button>
 									{/if}
+
 									<Button
 										variant="outline"
 										size="sm"
