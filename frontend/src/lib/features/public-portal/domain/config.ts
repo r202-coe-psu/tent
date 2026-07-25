@@ -10,13 +10,7 @@ export const faqItemSchema = z.object({
 });
 
 export const publicConfigBodySchema = z.object({
-	faqs: z.preprocess((val) => {
-		if (Array.isArray(val)) {
-			// Migrate existing array data to 'public' category
-			return { public: val };
-		}
-		return val || { public: [] };
-	}, z.record(z.string(), z.array(faqItemSchema))).default({ public: [] }),
+	faqs: z.record(z.string(), z.array(faqItemSchema)).default({ public: [] }),
 	line_oa_url: z.string().url('URL ไม่ถูกต้อง').or(z.literal('')).optional(),
 	facebook_url: z.string().url('URL ไม่ถูกต้อง').or(z.literal('')).optional()
 });
