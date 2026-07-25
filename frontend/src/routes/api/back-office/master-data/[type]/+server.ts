@@ -76,6 +76,8 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		const body = (await request.json().catch(() => ({}))) as {
 			items?: unknown;
 			shelter_code?: unknown;
+			disabled_global_codes?: unknown;
+			default_global_code?: unknown;
 		};
 		const scope = parseScope(request, body.shelter_code);
 		if (scope.mode === 'effective') {
@@ -138,10 +140,35 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 						created_by: caller
 					};
 			delete doc.shelter_code;
+			// Global docs never carry a per-shelter disable list or default pointer.
+			delete doc.disabled_global_codes;
+			delete doc.default_global_code;
 		}
 		// Spreading `...existing` can carry a leftover `excluded_codes` from a v2
 		// doc — strip it so the persisted shape is clean schema_v 3 (CR-049).
 		delete (doc as MasterData & { excluded_codes?: string[] }).excluded_codes;
+
+		// Per-shelter disable list (CR-049 amendment): only when the client sends
+		// it (a global-item toggle). An items-only PUT (shelter-local edit) omits
+		// the key, so `...existing` preserves the current disable list.
+		if (scope.shelterCode && 'disabled_global_codes' in body) {
+			const codes = Array.isArray(body.disabled_global_codes)
+				? body.disabled_global_codes.filter((c): c is string => typeof c === 'string' && !!c.trim())
+				: [];
+			if (codes.length) doc.disabled_global_codes = codes;
+			else delete doc.disabled_global_codes;
+		}
+
+		// Shelter's chosen GLOBAL default (CR-049 amendment): only when the
+		// client sends the key. A non-empty string sets the pointer; an empty
+		// string/null clears it (revert to the global doc's own `is_default`).
+		// Never persisted on the global doc.
+		if (scope.shelterCode && 'default_global_code' in body) {
+			const code =
+				typeof body.default_global_code === 'string' ? body.default_global_code.trim() : '';
+			if (code) doc.default_global_code = code;
+			else delete doc.default_global_code;
+		}
 
 		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(id)}`, 'PUT', doc);
 		if (res.status === 409) {

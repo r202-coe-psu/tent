@@ -55,6 +55,26 @@
 			.map((i) => ({ value: i.code, label: i.label }))
 	);
 
+	// Seed configured defaults (master_data `is_default`) when a field is untouched.
+	// A new shelter starts empty → gets the default; an existing shelter already
+	// has values (superForm initialises synchronously) so the once/only-when-empty
+	// guard leaves them alone. (CR-049)
+	let defaultsSeeded = false;
+	$effect(() => {
+		const stItems = shelterTypeQuery.data?.items;
+		const mzItems = municipalityZoneQuery.data?.items;
+		if (!stItems || !mzItems || defaultsSeeded) return;
+		defaultsSeeded = true;
+		if (!$formData.shelter_type) {
+			const d = stItems.find((i) => i.is_default && i.status === 'active');
+			if (d) $formData.shelter_type = d.code;
+		}
+		if (!$formData.municipality_zone) {
+			const d = mzItems.find((i) => i.is_default && i.status === 'active');
+			if (d) $formData.municipality_zone = d.code;
+		}
+	});
+
 	const selectTriggerClass =
 		"flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
 

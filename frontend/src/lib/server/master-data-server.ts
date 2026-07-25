@@ -48,9 +48,13 @@ export async function readEffectiveMasterDoc(
  * Resolve the effective item list for a type/shelter as a simple concat:
  * global items first, then shelter-local items. Item codes are ULIDs
  * (domain-guaranteed disjoint between the global and shelter-local
- * documents), so no dedup / field comparison / excluded_codes bookkeeping is
- * needed. Items are returned as-is (active + inactive) — consumers filter by
- * status.
+ * documents), so no dedup / field comparison is needed.
+ *
+ * Per-shelter override (CR-049 amendment): a global item whose code is in the
+ * shelter-local `disabled_global_codes` is returned with `status: 'inactive'`
+ * for THIS shelter and tagged `shelter_disabled: true` in its source — the
+ * global doc is never mutated. Consumers filter by the resolved `status`, so
+ * no consumer change is needed.
  */
 export function mergeMasterDataItems(
 	globalDoc: MasterData | null,
@@ -60,14 +64,46 @@ export function mergeMasterDataItems(
 	const globalItems = globalDoc?.items ?? [];
 	const localItems = localDoc?.items ?? [];
 	const resolvedShelterCode = shelterCode ?? localDoc?.shelter_code ?? null;
+	const disabled = new Set(localDoc?.disabled_global_codes ?? []);
 
 	const itemSources: Record<string, MasterDataItemSource> = {};
-	for (const item of globalItems) {
-		itemSources[item.code] = { scope: 'global', shelter_code: null };
-	}
+	const globalResolved = globalItems.map((item) => {
+		const isDisabledHere = disabled.has(item.code);
+		itemSources[item.code] = {
+			scope: 'global',
+			shelter_code: null,
+			shelter_disabled: isDisabledHere
+		};
+		// One-directional: a shelter can only deactivate an active global item;
+		// a globally-inactive item stays inactive regardless.
+		return isDisabledHere && item.status === 'active'
+			? { ...item, status: 'inactive' as const }
+			: item;
+	});
 	for (const item of localItems) {
 		itemSources[item.code] = { scope: 'shelter', shelter_code: resolvedShelterCode };
 	}
 
-	return { items: [...globalItems, ...localItems], itemSources };
+	// Each tier runs enforceOneDefault independently, so the concat can carry two
+	// `is_default` items (one global, one shelter-local). Resolve to a single
+	// effective default: a shelter-local default supersedes the global one, and
+	// an inactive/per-shelter-disabled item can never be the default. Clear the
+	// flag on every other item so consumers never see two defaults. (CR-049)
+	//
+	// CR-049 amendment: a shelter may also point at a NON-default GLOBAL item as
+	// its default (`default_global_code`) without touching the global doc's own
+	// `is_default`/`label`. That pointer only wins when the target global item
+	// resolves active for this shelter; otherwise fall back to the global item
+	// flagged `is_default`.
+	const effectiveItems = [...globalResolved, ...localItems];
+	const localDefault = localItems.find((i) => i.is_default && i.status === 'active');
+	const pointedGlobal = localDoc?.default_global_code
+		? globalResolved.find((i) => i.code === localDoc.default_global_code && i.status === 'active')
+		: undefined;
+	const globalDefault = globalResolved.find((i) => i.is_default && i.status === 'active');
+	const globalDefaultForShelter = pointedGlobal ?? globalDefault;
+	const chosenCode = (localDefault ?? globalDefaultForShelter)?.code;
+	const items = effectiveItems.map((i) => ({ ...i, is_default: i.code === chosenCode }));
+
+	return { items, itemSources };
 }

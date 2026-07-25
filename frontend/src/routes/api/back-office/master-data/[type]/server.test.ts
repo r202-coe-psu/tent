@@ -131,15 +131,73 @@ describe('GET /api/back-office/master-data/[type]', () => {
 			items: unknown[];
 			item_sources: Record<string, { scope: string; shelter_code?: string | null }>;
 		};
+		// Two-tier default resolution: the shelter-local default ('cat') supersedes
+		// the global default ('dog'), so only one effective default remains.
 		expect(body.items).toEqual([
-			{ code: 'dog', label: 'Dog', is_default: true, status: 'active' },
+			{ code: 'dog', label: 'Dog', is_default: false, status: 'active' },
 			{ code: 'cat', label: 'Cat', is_default: true, status: 'active' }
 		]);
 		expect(body.item_sources).toEqual({
-			dog: { scope: 'global', shelter_code: null },
+			dog: { scope: 'global', shelter_code: null, shelter_disabled: false },
 			cat: { scope: 'shelter', shelter_code: 'SH001' }
 		});
 		expect(readMock).toHaveBeenCalledWith('pet_types', 'SH001');
+	});
+
+	it('disables a global item for the shelter via disabled_global_codes (global doc untouched)', async () => {
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode === 'SH001'
+				? {
+						...existingDoc([]),
+						_id: 'master_data:pet_types:SH001',
+						shelter_code: 'SH001',
+						disabled_global_codes: ['dog'],
+						schema_v: 3
+					}
+				: existingDoc([{ code: 'dog', label: 'Dog', is_default: true }])
+		);
+
+		const res = await callGET('pet_types', '?scope=effective&shelter_code=SH001');
+		const body = (await res.json()) as {
+			items: { code: string; status: string }[];
+			item_sources: Record<string, { scope: string; shelter_disabled?: boolean }>;
+		};
+		// Global 'dog' resolves inactive for THIS shelter; source flags it. A
+		// disabled item can't be the effective default, so is_default clears too.
+		expect(body.items).toEqual([
+			{ code: 'dog', label: 'Dog', is_default: false, status: 'inactive' }
+		]);
+		expect(body.item_sources.dog).toEqual({
+			scope: 'global',
+			shelter_code: null,
+			shelter_disabled: true
+		});
+	});
+
+	it('lets a shelter point at a non-default GLOBAL item via default_global_code', async () => {
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode === 'SH001'
+				? {
+						...existingDoc([]),
+						_id: 'master_data:pet_types:SH001',
+						shelter_code: 'SH001',
+						default_global_code: 'dog_b',
+						schema_v: 3
+					}
+				: existingDoc([
+						{ code: 'dog_a', label: 'Dog A', is_default: true },
+						{ code: 'dog_b', label: 'Dog B', is_default: false }
+					])
+		);
+
+		const res = await callGET('pet_types', '?scope=effective&shelter_code=SH001');
+		const body = (await res.json()) as {
+			items: { code: string; is_default: boolean }[];
+		};
+		expect(body.items).toEqual([
+			{ code: 'dog_a', label: 'Dog A', is_default: false, status: 'active' },
+			{ code: 'dog_b', label: 'Dog B', is_default: true, status: 'active' }
+		]);
 	});
 
 	it('rejects an unknown master type via the contract envelope', async () => {

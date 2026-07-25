@@ -107,7 +107,17 @@
 	}
 
 	function submitItems(nextItems: readonly MasterDataItem[]) {
-		putMutation.mutate({ type: activeType, items: localOnly(nextItems), context: writeContext });
+		const local = localOnly(nextItems);
+		// A shelter-local default is the most specific choice — when one is set,
+		// clear any global-default pointer so the two never compete (last choice
+		// wins). (CR-049 amendment)
+		const hasLocalDefault = local.some((i) => i.is_default);
+		putMutation.mutate({
+			type: activeType,
+			items: local,
+			context: writeContext,
+			...(hasLocalDefault ? { defaultGlobalCode: null } : {})
+		});
 	}
 
 	function handleSubmit(input: { code?: string; label: string; is_default: boolean }) {
@@ -122,7 +132,31 @@
 		submitItems(applyItemOp(items, op));
 	}
 
+	// Codes of global items this shelter has disabled (from the merged sources).
+	const disabledGlobalCodes = $derived(
+		Object.entries(detail.data?.item_sources ?? {})
+			.filter(([, s]) => s.shelter_disabled)
+			.map(([code]) => code)
+	);
+
 	function handleToggleStatus(item: MasterDataItem) {
+		const source = detail.data?.item_sources?.[item.code];
+		// Global item under a shelter → per-shelter enable/disable via
+		// `disabled_global_codes` (CR-049 amendment). Never mutates the global doc;
+		// shelter-local items are sent unchanged.
+		if (resolvedScope !== 'global' && source?.scope === 'global') {
+			const next = source.shelter_disabled
+				? disabledGlobalCodes.filter((c) => c !== item.code)
+				: [...disabledGlobalCodes, item.code];
+			putMutation.mutate({
+				type: activeType,
+				items: localOnly(items),
+				context: writeContext,
+				disabledGlobalCodes: next
+			});
+			return;
+		}
+		// Shelter-local item → flip its own status.
 		submitItems(
 			applyItemOp(items, {
 				kind: 'setStatus',
@@ -130,6 +164,24 @@
 				status: item.status === 'active' ? 'inactive' : 'active'
 			})
 		);
+	}
+
+	// Shelter picks a non-default GLOBAL item as its own default (CR-049
+	// amendment): stores `default_global_code` on the shelter-local doc only —
+	// the global item's label/is_default are never mutated. Shelter-local
+	// items are sent unchanged.
+	function handleSetGlobalDefault(item: MasterDataItem) {
+		// Choosing a global item as the default must win even when a shelter-local
+		// item is currently the default — clear the shelter-local `is_default`
+		// flags so the pointer isn't shadowed (merge: local default > pointed
+		// global). (CR-049 amendment)
+		const local = localOnly(items).map((i) => (i.is_default ? { ...i, is_default: false } : i));
+		putMutation.mutate({
+			type: activeType,
+			items: local,
+			context: writeContext,
+			defaultGlobalCode: item.code
+		});
 	}
 </script>
 
@@ -146,6 +198,7 @@
 			onAdd={openAdd}
 			onEdit={openEdit}
 			onToggleStatus={handleToggleStatus}
+			onSetGlobalDefault={handleSetGlobalDefault}
 		/>
 	</div>
 </div>

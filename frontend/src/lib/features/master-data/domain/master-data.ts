@@ -47,6 +47,9 @@ export type MasterDataRecordScope = 'global' | 'shelter';
 export interface MasterDataItemSource {
 	scope: MasterDataRecordScope;
 	shelter_code?: string | null;
+	/** For a global item under a shelter context: true when the current shelter
+	 *  has disabled it locally (`disabled_global_codes`) — global doc unchanged. */
+	shelter_disabled?: boolean;
 }
 
 /** Types shown on the Registration Config page (ตั้งค่าการลงทะเบียน). */
@@ -120,6 +123,14 @@ export interface MasterData {
 	master_type: MasterDataType;
 	shelter_code?: string;
 	items: MasterDataItem[];
+	/** Shelter-local only: ULID codes of GLOBAL items this shelter has disabled
+	 *  (per-shelter deactivate; global doc untouched). Absent = none. */
+	disabled_global_codes?: string[];
+	/** Shelter-local only: code of a GLOBAL item this shelter has chosen as its
+	 *  default (CR-049 amendment). The global item's `label`/`is_default` are
+	 *  never mutated — this is a per-shelter pointer only. Absent = fall back
+	 *  to the global item flagged `is_default`. */
+	default_global_code?: string;
 	created_at: string;
 	updated_at: string;
 	created_by: string;
@@ -133,6 +144,8 @@ export const masterDataSchema = z.object({
 	master_type: masterTypeSchema,
 	shelter_code: z.string().trim().min(1).optional(),
 	items: z.array(masterDataItemSchema).min(0),
+	disabled_global_codes: z.array(z.string().trim().min(1)).optional(),
+	default_global_code: z.string().trim().min(1).optional(),
 	created_at: z.string().datetime(),
 	updated_at: z.string().datetime(),
 	created_by: z.string().min(1)

@@ -6,11 +6,14 @@
 	import { ShelterList, useShelter, type ShelterSummary } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { isSystemAdmin } from '$lib/auth/roles';
 
 	// Back-office is a per-shelter workspace — show only the shelter the staff
 	// is currently scoped/selected to, not the full system-wide registry.
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelters = $derived(shelterQuery.data ? [shelterQuery.data] : []);
+	const isSA = $derived(isSystemAdmin(authStore.user?.roles ?? []));
 
 	function handleCreateNew() {
 		goto(resolve('/back-office/shelters/create'));
@@ -35,9 +38,11 @@
 			<p class="mt-1 text-sm text-muted-foreground">ข้อมูลศูนย์พักพิงปัจจุบันและสถานะความจุ</p>
 		</div>
 		<div class="flex flex-wrap gap-2">
-			<Button onclick={handleCreateNew}>
-				<Plus class="mr-2 h-4 w-4" /> เพิ่มศูนย์พักพิงใหม่
-			</Button>
+			{#if isSA}
+				<Button onclick={handleCreateNew}>
+					<Plus class="mr-2 h-4 w-4" /> เพิ่มศูนย์พักพิงใหม่
+				</Button>
+			{/if}
 		</div>
 	</div>
 

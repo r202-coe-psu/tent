@@ -65,12 +65,16 @@ export function usePutMaster() {
 		mutationFn: async ({
 			type,
 			items,
-			context
+			context,
+			disabledGlobalCodes,
+			defaultGlobalCode
 		}: {
 			type: MasterDataType;
 			items: readonly MasterDataItem[];
 			context?: MasterDataQueryContext;
-		}) => putMaster(type, items, context),
+			disabledGlobalCodes?: readonly string[];
+			defaultGlobalCode?: string | null;
+		}) => putMaster(type, items, context, disabledGlobalCodes, defaultGlobalCode),
 		onSuccess: (_data, { type, context }) => {
 			qc.invalidateQueries({ queryKey: masterDataKeys.detail(type, context) });
 			qc.invalidateQueries({ queryKey: masterDataKeys.list(context) });

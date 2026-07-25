@@ -16,7 +16,8 @@
 		itemSources,
 		onAdd,
 		onEdit,
-		onToggleStatus
+		onToggleStatus,
+		onSetGlobalDefault
 	}: {
 		type: MasterDataType;
 		items: readonly MasterDataItem[];
@@ -25,6 +26,7 @@
 		onAdd: () => void;
 		onEdit: (item: MasterDataItem) => void;
 		onToggleStatus: (item: MasterDataItem) => void;
+		onSetGlobalDefault: (item: MasterDataItem) => void;
 	} = $props();
 
 	let search = $state('');
@@ -35,10 +37,34 @@
 			: items
 	);
 
-	// At shelter scope, global-sourced items are read-only — no edit/toggle.
-	function isManageable(item: MasterDataItem): boolean {
-		if (context?.scope !== 'shelter') return true;
+	const isShelterScope = $derived(context?.scope === 'shelter');
+
+	// Owned = editable + toggleable as an item of THIS doc: shelter-local items
+	// (shelter scope), or every item (global scope, SA-managed).
+	function isOwned(item: MasterDataItem): boolean {
+		if (!isShelterScope) return true;
 		return itemSources?.[item.code]?.scope === 'shelter';
+	}
+
+	// A global item under a shelter can be enabled/disabled per-shelter (writes
+	// `disabled_global_codes`, not the global doc) — but only when it is active
+	// globally. A globally-inactive (deprecated) item stays read-only here.
+	// (CR-049 amendment)
+	function canPerShelterToggle(item: MasterDataItem): boolean {
+		if (!isShelterScope) return false;
+		const source = itemSources?.[item.code];
+		if (source?.scope !== 'global') return false;
+		return source.shelter_disabled === true || item.status === 'active';
+	}
+
+	// A global item, active for this shelter, not already the effective
+	// default → offer "ตั้งเป็นค่าเริ่มต้น" (stores `default_global_code` on the
+	// shelter-local doc only; the global item's label is never touched).
+	// (CR-049 amendment)
+	function canSetGlobalDefault(item: MasterDataItem): boolean {
+		if (!isShelterScope) return false;
+		if (item.status !== 'active' || item.is_default) return false;
+		return itemSources?.[item.code]?.scope === 'global';
 	}
 </script>
 
@@ -102,7 +128,9 @@
 			<tbody>
 				{#each filtered as item (item.code)}
 					{@const source = itemSources?.[item.code]}
-					{@const manageable = isManageable(item)}
+					{@const owned = isOwned(item)}
+					{@const perShelter = !owned && canPerShelterToggle(item)}
+					{@const canSetDefault = !owned && canSetGlobalDefault(item)}
 					<tr class="border-t hover:bg-muted/30" class:opacity-60={item.status === 'inactive'}>
 						<td class="px-4 py-3">
 							<div class="flex flex-wrap items-center gap-2">
@@ -126,12 +154,14 @@
 								<Badge class="border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
 									ใช้งาน
 								</Badge>
+							{:else if source?.shelter_disabled}
+								<Badge variant="outline" class="text-muted-foreground">ปิดใช้งาน (ศูนย์นี้)</Badge>
 							{:else}
 								<Badge variant="outline" class="text-muted-foreground">ปิดใช้งาน</Badge>
 							{/if}
 						</td>
 						<td class="px-4 py-3">
-							{#if manageable}
+							{#if owned}
 								<div class="flex items-center justify-end gap-2">
 									<Button
 										type="button"
@@ -168,6 +198,37 @@
 											: 'เปิดใช้งาน'} {item.label}"
 									>
 										{item.status === 'active' ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}
+									</Button>
+								</div>
+							{:else if perShelter}
+								<!-- Global item: enable/disable for THIS shelter only (does not
+								     touch the global doc); label editing stays central. -->
+								<div class="flex items-center justify-end gap-2">
+									{#if canSetDefault}
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											class="border-primary/20 text-primary hover:bg-primary/10"
+											onclick={() => onSetGlobalDefault(item)}
+											aria-label="ตั้งเป็นค่าเริ่มต้น {item.label}"
+										>
+											ตั้งเป็นค่าเริ่มต้น
+										</Button>
+									{/if}
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										class={source?.shelter_disabled
+											? 'border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10'
+											: 'border-destructive/20 text-destructive hover:bg-destructive/10'}
+										onclick={() => onToggleStatus(item)}
+										aria-label="{source?.shelter_disabled
+											? 'เปิดใช้งานสำหรับศูนย์นี้'
+											: 'ปิดใช้งานสำหรับศูนย์นี้'} {item.label}"
+									>
+										{source?.shelter_disabled ? 'เปิดใช้งาน (ศูนย์นี้)' : 'ปิดใช้งาน (ศูนย์นี้)'}
 									</Button>
 								</div>
 							{:else}

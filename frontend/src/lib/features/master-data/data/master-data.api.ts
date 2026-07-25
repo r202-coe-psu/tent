@@ -65,14 +65,23 @@ export function getMaster(
 export function putMaster(
 	type: MasterDataType,
 	items: readonly MasterDataItem[],
-	context: MasterDataQueryContext = { scope: 'global' }
+	context: MasterDataQueryContext = { scope: 'global' },
+	/** Per-shelter disable list for GLOBAL items (CR-049 amendment). Pass to
+	 *  update it (a global-item toggle); omit for a normal shelter-local edit. */
+	disabledGlobalCodes?: readonly string[],
+	/** Shelter's chosen GLOBAL default (CR-049 amendment). Pass the global
+	 *  item's code to set it, `null` to clear it (revert to the global doc's
+	 *  own `is_default`), or omit to leave the current pointer untouched. */
+	defaultGlobalCode?: string | null
 ): Promise<{ ok: true; rev: string }> {
 	const resolved = effectiveContext(context);
 	return serviceFetch(`${BASE}/${encodeURIComponent(type)}${queryString(context)}`, {
 		method: 'PUT',
 		body: JSON.stringify({
 			items,
-			...(resolved.shelterCode ? { shelter_code: resolved.shelterCode } : {})
+			...(resolved.shelterCode ? { shelter_code: resolved.shelterCode } : {}),
+			...(disabledGlobalCodes ? { disabled_global_codes: disabledGlobalCodes } : {}),
+			...(defaultGlobalCode !== undefined ? { default_global_code: defaultGlobalCode } : {})
 		}),
 		headers: { 'content-type': 'application/json' }
 	});
