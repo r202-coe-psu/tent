@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import Users from '@lucide/svelte/icons/users';
 	import Home from '@lucide/svelte/icons/home';
 	import BarChart2 from '@lucide/svelte/icons/bar-chart-2';
@@ -9,7 +11,19 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	type TabKey = 'dashboard' | 'evacuee' | 'household';
-	let activeTab = $state<TabKey>((page.url.searchParams.get('tab') as TabKey) || 'dashboard');
+	const tabKeys: readonly TabKey[] = ['dashboard', 'evacuee', 'household'];
+	const activeTab = $derived.by<TabKey>(() => {
+		const requestedTab = page.url.searchParams.get('tab') as TabKey | null;
+		return requestedTab && tabKeys.includes(requestedTab) ? requestedTab : 'dashboard';
+	});
+
+	function selectTab(tab: TabKey) {
+		void goto(`${resolve('/back-office/evacuee-management')}?tab=${tab}`, {
+			replaceState: true,
+			keepFocus: true,
+			noScroll: true
+		});
+	}
 </script>
 
 <svelte:head>
@@ -22,7 +36,7 @@
 		<nav class="flex gap-1">
 			<button
 				type="button"
-				onclick={() => (activeTab = 'dashboard')}
+				onclick={() => selectTab('dashboard')}
 				class="flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
 					{activeTab === 'dashboard'
 					? 'border-primary text-primary'
@@ -33,7 +47,7 @@
 			</button>
 			<button
 				type="button"
-				onclick={() => (activeTab = 'evacuee')}
+				onclick={() => selectTab('evacuee')}
 				class="flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
 					{activeTab === 'evacuee'
 					? 'border-primary text-primary'
@@ -44,7 +58,7 @@
 			</button>
 			<button
 				type="button"
-				onclick={() => (activeTab = 'household')}
+				onclick={() => selectTab('household')}
 				class="flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
 					{activeTab === 'household'
 					? 'border-primary text-primary'
