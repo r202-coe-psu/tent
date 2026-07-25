@@ -98,13 +98,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'ตั้งค่าโครงสร้างศูนย์',
 				href: null,
 				icon: Building,
-				requiresAdmin: true,
 				children: [
 					{
 						label: 'จัดการศูนย์พักพิง',
 						href: resolve('/back-office/shelters'),
-						icon: Building,
-						requiresAdmin: true
+						icon: Building
 					},
 					{ label: 'จัดการบ้านพี่เลี้ยง', href: null, icon: House }
 				]
