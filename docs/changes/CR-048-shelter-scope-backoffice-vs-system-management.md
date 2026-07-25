@@ -1,5 +1,5 @@
 ---
-id: CR-047
+id: CR-048
 title: Back-office shelter list scoped to own shelter · master data split global (system management) vs shelter-effective (back-office)
 status: proposed
 date: 2026-07-25
@@ -17,7 +17,7 @@ affects:
   - frontend/src/routes/(protected)/portal/system-management/{registration-config,shelter-config,household-master-data}/+page.svelte
 ---
 
-# CR-047 — Shelter list scope split (back-office vs system management) + master data global/effective split
+# CR-048 — Shelter list scope split (back-office vs system management) + master data global/effective split
 
 ## สรุป (TL;DR)
 
@@ -68,13 +68,13 @@ scope/permission โดยไม่มี CR ตาม")
 
 | ID | Requirement |
 | --- | --- |
-| FR-047-1 | `/back-office/shelters` ต้องแสดงเฉพาะ shelter ที่ user session ถือ `shelter_id`/`shelter_code` ตรงกันเท่านั้น — ไม่มี list ข้ามศูนย์ |
-| FR-047-2 | `/portal/system-management/shelters` ต้องแสดง shelter ทั้งหมดในระบบ, guard `requireAdmin` (SA only) |
-| FR-047-3 | Master data config page ฝั่ง back-office (`registration-config`, `shelter-config`, `household-master-data`) ต้อง query ด้วย `scope: "effective"` (merge global + shelter-local ของศูนย์ที่ session ถืออยู่, ลบ excluded codes) และเขียน (`writeContext`) ลง shelter-local doc เท่านั้น (`scope: "global"` สำหรับ write ก็เขียนเป็น shelter override เพราะ effective read คู่กับ global write ถูกแปลงเป็น shelter scope ใน `writeContext` ของ `master-data-config-page.svelte` — **ต้องยืนยันพฤติกรรมนี้กับโค้ดจริงก่อนปิด CR**, ดู Decision log) |
-| FR-047-4 | Master data config page ฝั่ง system-management ต้อง query/เขียนด้วย `scope: "global"` เท่านั้น — ไม่รับ/ไม่ query shelter-local doc |
-| FR-047-5 | staff ที่ไม่ใช่ SA (SM/REG/KS/WS) ต้อง**ไม่**เข้าถึง `/portal/system-management/*` ได้ (SA only ทั้ง area) — ต้องยืนยัน guard ที่ layout ระดับ `system-management/+layout.ts` (ปัจจุบันเป็น `requireAuth` เฉยๆ — **ช่องโหว่ที่ต้องปิด**, ดู Decision log) |
-| FR-047-6 | `docs/data/schema.md` §3.3 ต้องอัปเดตให้ตรงกับ shape จริง: `shelter_code?: string`, `excluded_codes?: string[]`, `schema_v: 1 \| 2`, พร้อมอธิบาย `_id` pattern ที่มี shelter variant และความหมายของ scope `global \| shelter \| effective` |
-| FR-047-7 | `docs/prd/role-permission-matrix.md` ต้องมีแถว/หมายเหตุใหม่สำหรับ master data scope: global master data = SA only (เดิมมีอยู่แล้ว, FR-27 pattern); shelter-local master data (effective view) = SA + SM (write scope ตน) |
+| FR-048-1 | `/back-office/shelters` ต้องแสดงเฉพาะ shelter ที่ user session ถือ `shelter_id`/`shelter_code` ตรงกันเท่านั้น — ไม่มี list ข้ามศูนย์ |
+| FR-048-2 | `/portal/system-management/shelters` ต้องแสดง shelter ทั้งหมดในระบบ, guard `requireAdmin` (SA only) |
+| FR-048-3 | Master data config page ฝั่ง back-office (`registration-config`, `shelter-config`, `household-master-data`) ต้อง query ด้วย `scope: "effective"` (merge global + shelter-local ของศูนย์ที่ session ถืออยู่, ลบ excluded codes) และเขียน (`writeContext`) ลง shelter-local doc เท่านั้น (`scope: "global"` สำหรับ write ก็เขียนเป็น shelter override เพราะ effective read คู่กับ global write ถูกแปลงเป็น shelter scope ใน `writeContext` ของ `master-data-config-page.svelte` — **ต้องยืนยันพฤติกรรมนี้กับโค้ดจริงก่อนปิด CR**, ดู Decision log) |
+| FR-048-4 | Master data config page ฝั่ง system-management ต้อง query/เขียนด้วย `scope: "global"` เท่านั้น — ไม่รับ/ไม่ query shelter-local doc |
+| FR-048-5 | staff ที่ไม่ใช่ SA (SM/REG/KS/WS) ต้อง**ไม่**เข้าถึง `/portal/system-management/*` ได้ (SA only ทั้ง area) — ต้องยืนยัน guard ที่ layout ระดับ `system-management/+layout.ts` (ปัจจุบันเป็น `requireAuth` เฉยๆ — **ช่องโหว่ที่ต้องปิด**, ดู Decision log) |
+| FR-048-6 | `docs/data/schema.md` §3.3 ต้องอัปเดตให้ตรงกับ shape จริง: `shelter_code?: string`, `excluded_codes?: string[]`, `schema_v: 1 \| 2`, พร้อมอธิบาย `_id` pattern ที่มี shelter variant และความหมายของ scope `global \| shelter \| effective` |
+| FR-048-7 | `docs/prd/role-permission-matrix.md` ต้องมีแถว/หมายเหตุใหม่สำหรับ master data scope: global master data = SA only (เดิมมีอยู่แล้ว, FR-27 pattern); shelter-local master data (effective view) = SA + SM (write scope ตน) |
 
 ---
 
@@ -82,12 +82,12 @@ scope/permission โดยไม่มี CR ตาม")
 
 | ไฟล์/เอกสาร | ผลกระทบ |
 | --- | --- |
-| `docs/prd/role-permission-matrix.md` | เพิ่มแถว/หมายเหตุ shelter-local master data scope (FR-047-7); ยืนยัน §7.1 ครอบ shelter list ด้วย |
+| `docs/prd/role-permission-matrix.md` | เพิ่มแถว/หมายเหตุ shelter-local master data scope (FR-048-7); ยืนยัน §7.1 ครอบ shelter list ด้วย |
 | `docs/data/schema.md §3.3` | เพิ่ม `shelter_code`, `excluded_codes`, `schema_v 2` shape ที่ขาดหายไป (ไม่ใช่ field ใหม่ — โค้ด implement แล้ว, เอกสารตามไม่ทัน) |
 | `frontend/src/routes/(protected)/back-office/shelters/+page.svelte` | มีอยู่แล้ว (own-shelter only) — ไม่ต้องแก้โค้ด เว้นแต่ verify เท่านั้น |
 | `frontend/src/routes/(protected)/portal/system-management/shelters/{+page.svelte,+page.ts}` | มีอยู่แล้ว (all shelters, requireAdmin) — ไม่ต้องแก้โค้ด เว้นแต่ verify เท่านั้น |
-| `frontend/src/lib/features/master-data/ui/master-data-config-page.svelte` | มีอยู่แล้ว (`scope` prop, effective merge) — verify write-context behavior ตาม FR-047-3 |
-| `frontend/src/routes/(protected)/portal/system-management/+layout.ts` | อาจต้องเปลี่ยนจาก `requireAuth` → `requireAdmin` ถ้ายืนยัน FR-047-5 ว่าเป็นช่องโหว่จริง |
+| `frontend/src/lib/features/master-data/ui/master-data-config-page.svelte` | มีอยู่แล้ว (`scope` prop, effective merge) — verify write-context behavior ตาม FR-048-3 |
+| `frontend/src/routes/(protected)/portal/system-management/+layout.ts` | อาจต้องเปลี่ยนจาก `requireAuth` → `requireAdmin` ถ้ายืนยัน FR-048-5 ว่าเป็นช่องโหว่จริง |
 
 ---
 
@@ -104,10 +104,10 @@ pattern CR-019/CR-031).
 - 2026-07-25 — proposed. เปิดเป็น CR ไฟล์เต็มตามที่เจ้าของโครงการเลือก (track ใน `docs/changes/`)
 - 2026-07-25 — พบว่า behavior หลักถูก implement ไปแล้วบน branch `feat-system-management` — CR นี้เป็น
   reconciliation (ratify code, sync spec) ไม่ใช่ new-build spec
-- **[NEEDS DECISION]** FR-047-3: ต้องยืนยันกับโค้ด `master-data-config-page.svelte` ว่า write context
+- **[NEEDS DECISION]** FR-048-3: ต้องยืนยันกับโค้ด `master-data-config-page.svelte` ว่า write context
   ของ back-office (`scope: "shelter"` prop) เขียนลง shelter-local doc เสมอจริงหรือไม่ (ไม่ใช่ทับ global)
   ก่อน mark `approved`
-- **[NEEDS DECISION]** FR-047-5: `system-management/+layout.ts` ปัจจุบันใช้ `requireAuth` (ไม่ใช่
+- **[NEEDS DECISION]** FR-048-5: `system-management/+layout.ts` ปัจจุบันใช้ `requireAuth` (ไม่ใช่
   `requireAdmin`) — ต้องเช็คว่าตั้งใจปล่อยให้ per-page guard ทำหน้าที่แทน (เหมือน pattern
   `back-office/+layout.ts` ตาม CR-024) หรือเป็นช่องโหว่ที่ SM/staff เข้าถึง system-management routes
   ที่ยังไม่มี guard เฉพาะหน้าได้

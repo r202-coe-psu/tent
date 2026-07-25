@@ -10,6 +10,7 @@
 	import { MASTER_DATA_TYPE_LABELS } from '$lib/features/master-data';
 	import { useDeleteMasterItem } from '$lib/features/master-data';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 
 	let {
 		type,
@@ -30,6 +31,8 @@
 	const deleteMutation = useDeleteMasterItem();
 
 	let search = $state('');
+	let deleteConfirmOpen = $state(false);
+	let pendingDeleteItem = $state<MasterDataItem | null>(null);
 
 	const filtered = $derived(
 		search.trim()
@@ -38,8 +41,14 @@
 	);
 
 	function handleDelete(item: MasterDataItem) {
-		if (!confirm(`ลบ "${item.label}" ออกจาก ${MASTER_DATA_TYPE_LABELS[type]}?`)) return;
-		deleteMutation.mutate({ type, code: item.code, context });
+		pendingDeleteItem = item;
+		deleteConfirmOpen = true;
+	}
+
+	function confirmDelete() {
+		if (!pendingDeleteItem) return;
+		deleteMutation.mutate({ type, code: pendingDeleteItem.code, context });
+		pendingDeleteItem = null;
 	}
 </script>
 
@@ -90,7 +99,7 @@
 		</div>
 	</header>
 
-	<div class="overflow-hidden rounded-lg border">
+	<div class="overflow-x-auto rounded-lg border">
 		<table class="w-full text-sm">
 			<thead class="bg-muted/50 text-muted-foreground">
 				<tr>
@@ -125,7 +134,7 @@
 									type="button"
 									variant="outline"
 									size="sm"
-									class="border-blue-200 text-blue-700 hover:bg-blue-50"
+									class="border-primary/20 text-primary hover:bg-primary/10"
 									onclick={() => onEdit(item)}
 									aria-label="จัดการ {item.label}"
 								>
@@ -147,7 +156,7 @@
 									type="button"
 									variant="outline"
 									size="sm"
-									class="border-red-200 text-red-700 hover:bg-red-50"
+									class="border-destructive/20 text-destructive hover:bg-destructive/10"
 									onclick={() => handleDelete(item)}
 									disabled={deleteMutation.isPending}
 									aria-label="ลบ {item.label}"
@@ -184,3 +193,25 @@
 		</table>
 	</div>
 </section>
+
+<AlertDialog.Root bind:open={deleteConfirmOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>ลบข้อมูลนี้?</AlertDialog.Title>
+			<AlertDialog.Description>
+				{#if pendingDeleteItem}
+					ลบ "{pendingDeleteItem.label}" ออกจาก {MASTER_DATA_TYPE_LABELS[type]}
+				{/if}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel onclick={() => (pendingDeleteItem = null)}>ยกเลิก</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="bg-destructive text-white hover:bg-destructive/90"
+				onclick={confirmDelete}
+			>
+				ลบ
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
