@@ -77,7 +77,7 @@ Feature "System Management" เป็น area ใหม่ (SA-only, ข้า�
 | --- | --- |
 | FR-049-1 | `/back-office/shelters` แสดงเฉพาะ shelter ที่ session ถือ `shelter_code` ตรงกัน — ไม่มี list ข้ามศูนย์ |
 | FR-049-2 | `/portal/system-management/shelters` แสดง shelter ทั้งหมด, guard `requireAdmin` (SA only) |
-| FR-049-3 | master data item `code` ที่สร้างใหม่ต้องเป็น ULID (`item_{ulid}`) เสมอ — ไม่ derive จาก label |
+| FR-049-3 | master data item `code` ต้องเป็น ULID (`item_{ulid}`) เสมอ ทั้ง UI-created และ seed — ไม่ derive จาก label, ไม่มี slug ที่ใดในระบบ |
 | FR-049-4 | global กับ shelter-local ห้ามใช้ code เดียวกัน (การันตีโดย ULID); consumption (`scope: effective`) คืน `global.items ++ shelterLocal.items` แบบ concat — ไม่ dedup, ไม่ override |
 | FR-049-5 | back-office config: global items = read-only (ไม่มีปุ่มแก้/toggle); shelter-local items = add/edit/toggle active ได้ (เขียนลง `master_data:{type}:{shelter_code}` เท่านั้น) |
 | FR-049-6 | system-management config: query/เขียน `scope: "global"` เท่านั้น — ไม่แตะ shelter-local; SA toggle active/inactive ของ global item ได้ |
@@ -117,7 +117,7 @@ Feature "System Management" เป็น area ใหม่ (SA-only, ข้า�
 | `.../master-data/ui/master-data-config-page.svelte` | `localOnly()` write-filter (shelter PUT ส่งเฉพาะ shelter-local); `handleToggleStatus` |
 | `.../features/{people,shelters,shelter-import}/**` (7 forms) | dropdown กรอง `status === 'active'` (display/label-resolve คงเดิม) |
 | `frontend/scripts/migrate-master-data.ts` + `package.json` | migration runner `pnpm migrate:master-data` (dry-run default, `--write --confirm`) |
-| `frontend/scripts/seed.ts` | `seedMasterData()` — global docs 6 types (vulnerable_group/health_condition/dietary_restrictions/pet_types/house_damage/shelter_type), status active, schema_v 3, idempotent |
+| `frontend/scripts/seed.ts` | `seedMasterData()` — global docs 6 types (vulnerable_group/health_condition/dietary_restrictions/pet_types/house_damage/shelter_type), **ULID codes (ไม่มี slug)**, status active, schema_v 3; evacuee `special_needs` thread ULID เดียวกันผ่าน `VG` lookup; ตัด `seedThailandLocation` ออกจาก flow (feature ปิด) |
 | `docs/data/schema.md §3.3` | two-tier, code=ULID, `status`, ลบ `excluded_codes`, schema_v 3 + migration note |
 | `docs/prd/role-permission-matrix.md` | master data scope rule (FR-049-10) |
 | tests | `master-data.test.ts` (ULID, status, setStatus, migration) 24 pass; `server.test.ts` × endpoints (concat, verbatim write, schema_v 3) |
@@ -135,8 +135,10 @@ admission-policy-section, basic-info-section, shelter-list, shelter-import — �
 - **`excluded_codes` removal** — doc เดิมที่มี `excluded_codes` จะถูก ignore; global item ที่เคยถูกซ่อน
   ในศูนย์นั้นจะ**กลับมาแสดง** (ตรงกับ intent ใหม่: global แสดงทุกศูนย์เสมอ). dev DB เท่านั้น ไม่มี prod
   data → reset ได้ (ตาม pattern CR-019/CR-031); ไม่ต้อง migration script
-- **`code` slug → ULID** — item เดิมที่มี slug code (`elderly`, หรือ seed `zone_1`/`z1_c16`) **คงอยู่ได้**
-  (ULID rule ใช้กับ item ที่สร้างใหม่); ไม่ rewrite code เดิม เพราะจะทำ record ที่อ้าง code นั้นพัง
+- **`code` = ULID ทุกที่ (UI + seed) — ไม่มี slug ที่ไหน** — `applyItemOp('add')` gen `item_{ulid}`;
+  `seedMasterData` ก็ gen `item_{ulid}` และ thread code เดียวกันเข้า evacuee `special_needs` ผ่าน `VG`
+  lookup ให้ resolve label ได้ (seed ตั้งใจรันบน DB ที่ reset — code regenerate ต่อรอบ). migration ไม่
+  rewrite code ที่ persist แล้ว (defensive กัน record อ้างพัง) แต่ระบบไม่ author slug ใหม่ที่ใดอีก
 - **`status` เพิ่มใหม่** — item เดิมที่ไม่มี `status` ให้ default เป็น `active` (ตอนอ่าน/parse); การ "ลบ"
   ต่อจากนี้เขียน `status: inactive` แทนการเอา item ออก. hard-delete เดิมไม่ใช้แล้ว
 - **schema_v 2 → 3** (เจ้าของเคาะ 2026-07-25) — เพิ่ม `status` + ลบ `excluded_codes`. doc เดิม (schema_v ≤2)
