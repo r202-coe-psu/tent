@@ -12,18 +12,21 @@
 
 	let { data, activeType = 'public' } = $props();
 
-	const form = superForm(untrack(() => data.form), {
-		validators: zod4(publicConfigBodySchema),
-		dataType: 'json',
-		onUpdated: async ({ form }) => {
-			if (form.valid) {
-				toast.success(form.message || 'บันทึกสำเร็จ');
-				await invalidateAll();
-			} else {
-				toast.error(form.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+	const form = superForm(
+		untrack(() => data.form),
+		{
+			validators: zod4(publicConfigBodySchema),
+			dataType: 'json',
+			onUpdated: async ({ form }) => {
+				if (form.valid) {
+					toast.success(form.message || 'บันทึกสำเร็จ');
+					await invalidateAll();
+				} else {
+					toast.error(form.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+				}
 			}
 		}
-	});
+	);
 
 	const { form: formData, enhance, submitting, submit } = form;
 </script>
