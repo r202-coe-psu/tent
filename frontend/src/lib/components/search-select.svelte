@@ -1,25 +1,50 @@
 <script lang="ts">
 	import * as Popover from '$lib/components/ui/popover';
 	import { Input } from '$lib/components/ui/input';
+	import { cn } from '$lib/utils/shadcn.js';
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronsUpDown from '@lucide/svelte/icons/chevrons-up-down';
+	import Loader from '@lucide/svelte/icons/loader';
 
 	interface Props {
 		name: string;
 		value?: string;
 		placeholder?: string;
+		searchPlaceholder?: string;
+		emptyText?: string;
+		loadingText?: string;
+		class?: string;
+		disabled?: boolean;
+		loading?: boolean;
+		maxResults?: number;
+		controlProps?: Record<string, unknown>;
 		options: { label: string; value: string }[];
 	}
 
-	let { name, value = $bindable(''), placeholder = 'เลือก...', options = [] }: Props = $props();
+	let {
+		name,
+		value = $bindable(''),
+		placeholder = 'เลือก...',
+		searchPlaceholder = 'ค้นหา...',
+		emptyText = 'ไม่พบข้อมูล',
+		loadingText = 'กำลังโหลด...',
+		class: className,
+		disabled = false,
+		loading = false,
+		maxResults = 100,
+		controlProps = {},
+		options = []
+	}: Props = $props();
 
 	let open = $state(false);
 	let searchValue = $state('');
 	let triggerWidth = $state(0);
 
-	let filteredOptions = $derived(
+	let matchedOptions = $derived(
 		options.filter((opt) => opt.label.toLowerCase().includes(searchValue.toLowerCase()))
 	);
+	let filteredOptions = $derived(matchedOptions.slice(0, maxResults));
+	let truncatedCount = $derived(matchedOptions.length - filteredOptions.length);
 
 	function handleSelect(optValue: string) {
 		value = optValue;
@@ -27,18 +52,29 @@
 		searchValue = '';
 	}
 
-	let selectedLabel = $derived(options.find((o) => o.value === value)?.label || placeholder);
+	let selectedLabel = $derived(
+		loading ? loadingText : options.find((o) => o.value === value)?.label || placeholder
+	);
 </script>
 
 <Popover.Root bind:open>
 	<div bind:clientWidth={triggerWidth} class="w-full">
 		<Popover.Trigger
-			class="flex h-10 w-full items-center justify-between rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 {value
-				? 'text-foreground'
-				: 'text-muted-foreground'}"
+			{...controlProps}
+			type="button"
+			disabled={disabled || loading}
+			class={cn(
+				'flex h-10 w-full items-center justify-between rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50',
+				value && !loading ? 'text-foreground' : 'text-muted-foreground',
+				className
+			)}
 		>
 			{selectedLabel}
-			<ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+			{#if loading}
+				<Loader class="ml-2 h-4 w-4 shrink-0 animate-spin opacity-50" />
+			{:else}
+				<ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+			{/if}
 		</Popover.Trigger>
 	</div>
 	<Popover.Content class="w-auto p-0" align="start">
@@ -46,14 +82,14 @@
 			<div class="border-b px-3">
 				<Input
 					type="text"
-					placeholder="ค้นหา..."
+					placeholder={searchPlaceholder}
 					bind:value={searchValue}
 					class="h-9 w-full border-0 px-0 focus-visible:ring-0 focus-visible:ring-offset-0"
 				/>
 			</div>
 			<div class="custom-scrollbar max-h-60 overflow-y-auto p-1">
 				{#if filteredOptions.length === 0}
-					<div class="py-6 text-center text-sm text-muted-foreground">ไม่พบข้อมูล</div>
+					<div class="py-6 text-center text-sm text-muted-foreground">{emptyText}</div>
 				{:else}
 					{#each filteredOptions as opt (opt.value)}
 						<button
@@ -69,6 +105,11 @@
 							{opt.label}
 						</button>
 					{/each}
+					{#if truncatedCount > 0}
+						<div class="px-3 py-2 text-center text-xs text-muted-foreground">
+							พิมพ์เพิ่มเพื่อค้นหาอีก {truncatedCount} รายการ
+						</div>
+					{/if}
 				{/if}
 			</div>
 		</div>

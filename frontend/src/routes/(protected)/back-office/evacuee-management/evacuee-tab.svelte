@@ -5,29 +5,47 @@
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { toast } from 'svelte-sonner';
 	import Users from '@lucide/svelte/icons/users';
 	import Search from '@lucide/svelte/icons/search';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import UserX from '@lucide/svelte/icons/user-x';
-	import {
-		useEvacueesPaginated,
-		useCheckInEvacuee,
-		zoneLabel,
-		SPECIAL_NEED_CHIPS
-	} from '$lib/features/people';
-	import type { Evacuee, SpecialNeed } from '$lib/features/people';
+	import { useEvacueesPaginated, useCheckInEvacuee, zoneLabel } from '$lib/features/people';
+	import type { Evacuee } from '$lib/features/people';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { useShelter } from '$lib/features/shelters';
+	import { useMasterData } from '$lib/features/master-data';
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
 	let search = $state('');
+	let selectedType = $state('');
+	let selectedZone = $state('');
+
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+
+	const vulnerableTypeOptions = $derived.by(() => {
+		const supported = shelterQuery.data?.admission_policy?.supported_vulnerable_groups ?? [];
+		const masterItems = vulnerableGroupQuery.data?.items ?? [];
+		return supported.map((code) => {
+			const masterItem = masterItems.find((item) => item.code === code);
+			return { value: code, label: masterItem?.label ?? code };
+		});
+	});
+
+	const zoneOptions = $derived(
+		(shelterQuery.data?.zones ?? []).map((zone) => ({ value: zone.code, label: zone.name }))
+	);
 
 	const query = useEvacueesPaginated(
 		() => currentPage,
 		() => PAGE_SIZE,
-		() => search
+		() => search,
+		() => ({ specialNeed: selectedType || undefined, zone: selectedZone || undefined })
 	);
 
 	const checkIn = useCheckInEvacuee();
@@ -56,12 +74,24 @@
 	const total = $derived(query.data?.total ?? 0);
 	const totalPages = $derived(query.data?.totalPages ?? 1);
 
-	function resetPageOnSearch() {
+	function resetPageOnFilter() {
 		currentPage = 1;
 	}
+
+	$effect(() => {
+		if (shelterQuery.isLoading || vulnerableGroupQuery.isLoading) return;
+		if (selectedType && !vulnerableTypeOptions.some((option) => option.value === selectedType)) {
+			selectedType = '';
+			resetPageOnFilter();
+		}
+		if (selectedZone && !zoneOptions.some((option) => option.value === selectedZone)) {
+			selectedZone = '';
+			resetPageOnFilter();
+		}
+	});
 </script>
 
-<div class="flex flex-col gap-6 p-6">
+<div class="flex max-h-screen flex-col gap-6 p-6">
 	<!-- Header -->
 	<div class="flex items-start justify-between gap-4">
 		<div class="space-y-1">
@@ -79,16 +109,83 @@
 		</Button>
 	</div>
 
-	<!-- Search -->
-	<div class="relative max-w-sm">
-		<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-		<Input
-			type="text"
-			placeholder="ค้นหาชื่อ หรือ รหัสประจำตัว..."
-			bind:value={search}
-			oninput={resetPageOnSearch}
-			class="rounded-full pl-9"
-		/>
+	<!-- Filters -->
+	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))]">
+		<div class="relative w-full min-w-0">
+			<label for="evacuee-search" class="sr-only">ค้นหาผู้ประสบภัย</label>
+			<Search
+				class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+			/>
+			<Input
+				id="evacuee-search"
+				type="search"
+				placeholder="ค้นหาชื่อ รหัสประจำตัว หรือเบอร์โทรศัพท์..."
+				bind:value={search}
+				oninput={resetPageOnFilter}
+				class="h-8 rounded-xl bg-background pl-9 shadow-xs"
+			/>
+		</div>
+
+		<div class="w-full min-w-0">
+			<Select.Root
+				type="single"
+				bind:value={selectedType}
+				onValueChange={resetPageOnFilter}
+				disabled={shelterQuery.isLoading || vulnerableGroupQuery.isLoading}
+			>
+				<Select.Trigger
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					aria-label="ประเภทผู้ประสบภัย"
+				>
+					<span class="truncate">
+						{vulnerableTypeOptions.find((option) => option.value === selectedType)?.label ??
+							'ทุกประเภท'}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="" label="ทุกประเภท" />
+					{#if vulnerableTypeOptions.length === 0}
+						<Select.Item
+							value="__no_supported_type"
+							label="ไม่มีกลุ่มเปราะบางที่เปิดใช้"
+							disabled
+						/>
+					{:else}
+						{#each vulnerableTypeOptions as option (option.value)}
+							<Select.Item value={option.value} label={option.label} />
+						{/each}
+					{/if}
+				</Select.Content>
+			</Select.Root>
+		</div>
+
+		<div class="w-full min-w-0">
+			<Select.Root
+				type="single"
+				bind:value={selectedZone}
+				onValueChange={resetPageOnFilter}
+				disabled={shelterQuery.isLoading}
+			>
+				<Select.Trigger
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					aria-label="โซนที่จัดสรร"
+				>
+					<span class="truncate">
+						{zoneOptions.find((option) => option.value === selectedZone)?.label ?? 'ทุกโซน'}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="" label="ทุกโซน" />
+					{#if zoneOptions.length === 0}
+						<Select.Item value="__no_zone" label="ศูนย์นี้ยังไม่มีโซน" disabled />
+					{:else}
+						{#each zoneOptions as option (option.value)}
+							<Select.Item value={option.value} label={option.label} />
+						{/each}
+					{/if}
+				</Select.Content>
+			</Select.Root>
+		</div>
 	</div>
 
 	<!-- Table -->
@@ -135,10 +232,12 @@
 								<div class="flex flex-wrap gap-1">
 									{#if e.special_needs && e.special_needs.length > 0}
 										{#each e.special_needs as need (need)}
-											{@const chip = SPECIAL_NEED_CHIPS[need as SpecialNeed]}
+											{@const label =
+												vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label ??
+												need}
 											<span
 												class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
-												>{chip.emoji} {chip.label}</span
+												>{label}</span
 											>
 										{/each}
 									{:else}

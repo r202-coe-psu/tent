@@ -8,6 +8,8 @@ import type { AuthorContext } from '$lib/db/model';
 import { kitchenRepository } from '../data/kitchen.remote';
 import { getActiveSopProfile } from '$lib/features/sop-ratios';
 import { peopleRepository } from '$lib/features/people';
+import { catalogRepository } from '$lib/features/catalog';
+import { supplyRepository } from '$lib/features/supply';
 import type {
 	MealPlan,
 	MealPlanInput,
@@ -16,7 +18,14 @@ import type {
 	GasCylinderType,
 	GasCylinderTypeInput
 } from '../domain/kitchen';
-import { calculateMealIngredients, DEFAULT_RICE_G_PER_PERSON_MEAL } from '../domain/meal-calc';
+import {
+	calculateMealIngredients,
+	calculateMealIngredientsFromRecipe,
+	calculateMealIngredientsFromCustom,
+	resolveItemMasterStock,
+	DEFAULT_RICE_G_PER_PERSON_MEAL,
+	type CustomIngredientInput
+} from '../domain/meal-calc';
 import { deriveHeadcountFromOccupancy } from '../domain/occupancy';
 import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
 
@@ -53,35 +62,94 @@ export const useCreateMealPlan = () =>
 			kitchenRepository().createMealPlan(input, ctx)
 	}));
 
+// Shared by create/update: recipeId (catalog BOM) sources ingredients from a
+// catalog Recipe, custom (ad-hoc supply_item list) from staff-typed rows;
+// otherwise falls back to the SOP-ratio rice calc. Rice ratio is a kitchen
+// coefficient, not a SOP ratio (CR-021) — the SOP profile is still read to
+// stamp calc_source provenance in all three cases.
+async function resolveMealPlanCalc(
+	headcount: MealPlanHeadcount,
+	recipeId: string | undefined,
+	custom: CustomIngredientInput[] | undefined,
+	headcountAsOf: string
+) {
+	const profile = await getActiveSopProfile();
+	if (!profile) throw new Error('No active SOP profile found — seed one first');
+	if (recipeId) {
+		const recipe = await catalogRepository().getRecipe(recipeId);
+		if (!recipe) throw new Error(`resolveMealPlanCalc: recipe "${recipeId}" not found`);
+		const [itemMasters, supplyItems] = await Promise.all([
+			catalogRepository().listItemMasters(),
+			supplyRepository().listItems()
+		]);
+		const itemInfo = resolveItemMasterStock(itemMasters, supplyItems);
+		return calculateMealIngredientsFromRecipe(
+			recipe,
+			headcount,
+			itemInfo,
+			profile._id,
+			profile.version,
+			headcountAsOf
+		);
+	}
+	if (custom) {
+		return calculateMealIngredientsFromCustom(
+			custom,
+			headcount,
+			profile._id,
+			profile.version,
+			headcountAsOf
+		);
+	}
+	return calculateMealIngredients(
+		headcount,
+		DEFAULT_RICE_G_PER_PERSON_MEAL,
+		profile._id,
+		profile.version,
+		headcountAsOf
+	);
+}
+
 export const useCreateMealPlanCalc = () =>
 	createMutation(() => ({
 		mutationFn: async ({
 			date,
 			meal,
+			label,
 			headcount,
 			override_reason,
+			recipeId,
+			custom,
 			ctx
 		}: {
 			date: string;
 			meal: MealPeriod;
+			label?: string;
 			headcount: MealPlanHeadcount;
 			override_reason?: string | null;
+			recipeId?: string;
+			custom?: CustomIngredientInput[];
 			ctx: AuthorContext;
 		}) => {
-			const profile = await getActiveSopProfile();
-			if (!profile) throw new Error('No active SOP profile found — seed one first');
-			// Rice ratio is a kitchen coefficient, not a SOP ratio (CR-021). The SOP
-			// profile is still read to stamp calc_source provenance (which planning
-			// profile was active), but the rice grams come from the kitchen constant.
-			const { recipes, calc_source } = calculateMealIngredients(
+			const headcountAsOf = new Date().toISOString();
+			const { recipes, calc_source } = await resolveMealPlanCalc(
 				headcount,
-				DEFAULT_RICE_G_PER_PERSON_MEAL,
-				profile._id,
-				profile.version,
-				new Date().toISOString()
+				recipeId,
+				custom,
+				headcountAsOf
 			);
+			// _id is a fresh ulid (kitchen.ts createMealPlan) — always a genuine new
+			// doc, multiple plans for the same date+meal are allowed by design.
 			return kitchenRepository().createMealPlan(
-				{ date, meal, headcount, recipes, calc_source, override_reason },
+				{
+					date,
+					meal,
+					headcount,
+					recipes,
+					calc_source,
+					override_reason,
+					...(label ? { label } : {})
+				},
 				ctx
 			);
 		}
@@ -90,6 +158,49 @@ export const useCreateMealPlanCalc = () =>
 export const useConfirmMealPlan = () =>
 	createMutation(() => ({
 		mutationFn: (plan: MealPlan) => kitchenRepository().confirmMealPlan(plan)
+	}));
+
+// Draft-only edit — recomputes recipes the same way useCreateMealPlanCalc does,
+// then patches the existing doc in place (date/meal/_id stay fixed).
+export const useUpdateMealPlanCalc = () =>
+	createMutation(() => ({
+		mutationFn: async ({
+			plan,
+			label,
+			headcount,
+			override_reason,
+			recipeId,
+			custom
+		}: {
+			plan: MealPlan;
+			label?: string;
+			headcount: MealPlanHeadcount;
+			override_reason?: string | null;
+			recipeId?: string;
+			custom?: CustomIngredientInput[];
+		}) => {
+			const { recipes, calc_source } = await resolveMealPlanCalc(
+				headcount,
+				recipeId,
+				custom,
+				new Date().toISOString()
+			);
+			// Pass `label` unconditionally (not a conditional spread): editing to an
+			// empty label must actually clear the old one. `undefined` is dropped on
+			// persist, so the stored doc loses `label` rather than keeping the stale value.
+			return kitchenRepository().updateMealPlanDraft(plan, {
+				headcount,
+				recipes,
+				calc_source,
+				override_reason,
+				label
+			});
+		}
+	}));
+
+export const useDeleteMealPlanDraft = () =>
+	createMutation(() => ({
+		mutationFn: (plan: MealPlan) => kitchenRepository().deleteMealPlanDraft(plan)
 	}));
 
 // --- KitchenRequisition ---

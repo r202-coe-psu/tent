@@ -23,6 +23,7 @@
  */
 
 import { z } from 'zod';
+import { qtyStrSchema, qtyStrPositiveSchema, qtyStrNonNegativeSchema } from '$lib/utils/qty';
 
 // --- Enums (mirror calc.formula.ts ResourceKind / ResourceStatus / DataStatus) ---
 export const resourceKindSchema = z.enum(['multiply', 'divide', 'threshold']);
@@ -56,8 +57,8 @@ export const dataStatusSchema = z.enum([
 export const resourceInputSchema = z.object({
 	key: z.string().min(1),
 	kind: resourceKindSchema,
-	ratio: z.number().finite().positive().nullable(),
-	have: z.number().finite().nonnegative().nullable()
+	ratio: qtyStrPositiveSchema.nullable(),
+	have: qtyStrNonNegativeSchema.nullable()
 });
 export type ResourceInputParsed = z.infer<typeof resourceInputSchema>;
 
@@ -91,10 +92,10 @@ export const resourceCalcResultSchema = z
 		key: z.string().min(1),
 		kind: resourceKindSchema,
 		input_valid: z.boolean(),
-		ratio: z.number().finite().nullable(),
-		need: z.number().finite().nullable(),
-		have: z.number().finite().nullable(),
-		gap: z.number().finite().nullable(),
+		ratio: qtyStrPositiveSchema.nullable(),
+		need: qtyStrNonNegativeSchema.nullable(),
+		have: qtyStrNonNegativeSchema.nullable(),
+		gap: qtyStrSchema.nullable(),
 		status: resourceStatusSchema,
 		data_status: dataStatusSchema,
 		as_of: z.string().datetime()
@@ -124,14 +125,14 @@ export type CalcOutput = z.infer<typeof calcOutputSchema>;
  *   (a snapshot never stores `±Infinity`); stock values may be `null` (unsynced).
  * - immutability (re-calc = new doc, never mutate) is a data-layer rule, not enforced here.
  */
-export const DAILY_CALC_SCHEMA_VERSION = 1;
+export const DAILY_CALC_SCHEMA_VERSION = 2;
 export const dailyCalcDocSchema = z.object({
 	formula_v: z.string().min(1),
 	sop_profile_version: z.number().int().positive(),
-	ratio_snapshot: z.record(z.string(), z.number().finite()),
+	ratio_snapshot: z.record(z.string(), qtyStrPositiveSchema),
 	occupancy_snapshot: z.number().finite().nonnegative(),
 	as_of: z.string().datetime(),
-	stock_snapshot: z.record(z.string(), z.number().finite().nullable()),
+	stock_snapshot: z.record(z.string(), qtyStrNonNegativeSchema.nullable()),
 	results: z.array(resourceCalcResultSchema)
 });
 export type DailyCalcDoc = z.infer<typeof dailyCalcDocSchema>;
