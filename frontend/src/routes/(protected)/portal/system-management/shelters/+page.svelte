@@ -15,13 +15,14 @@
 	const shelters = $derived(sheltersQuery.data ?? []);
 	const total = $derived(shelters.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
-	const clampedPage = $derived(Math.min(currentPage, totalPages));
+	const clampedPage = $derived(Math.max(1, Math.min(currentPage, totalPages)));
 	const pageShelters = $derived(
 		shelters.slice((clampedPage - 1) * PAGE_SIZE, clampedPage * PAGE_SIZE)
 	);
 
 	$effect(() => {
-		if (currentPage > totalPages) currentPage = totalPages;
+		const normalizedPage = Math.max(1, Math.min(currentPage, totalPages));
+		if (currentPage !== normalizedPage) currentPage = normalizedPage;
 	});
 
 	function handleCreateNew() {

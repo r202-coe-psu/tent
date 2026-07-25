@@ -2,7 +2,7 @@
 title: 'Harden shelter management review findings'
 type: 'bugfix'
 created: '2026-07-26'
-status: 'in-review'
+status: 'done'
 baseline_commit: '10425ddbafa222978163708b61492bb2b9eadfab'
 review_loop_iteration: 0
 context: []
@@ -61,3 +61,29 @@ context: []
 **Commands:**
 - `pnpm --dir frontend exec vitest run 'src/routes/api/back-office/master-data/[type]/server.test.ts'` -- expected: all endpoint tests pass.
 - `pnpm --dir frontend check` -- expected: Svelte and TypeScript checks pass.
+
+## Suggested Review Order
+
+**Pagination state normalization**
+
+- Lower- and upper-bound normalization keeps every derived slice index valid.
+  [`+page.svelte:18`](../../frontend/src/routes/(protected)/portal/system-management/shelters/+page.svelte#L18)
+
+- The effect persists the normalized page and prevents stale state restoration.
+  [`+page.svelte:23`](../../frontend/src/routes/(protected)/portal/system-management/shelters/+page.svelte#L23)
+
+- The pagination binding exposes the safe derived page while retaining user selection.
+  [`+page.svelte:77`](../../frontend/src/routes/(protected)/portal/system-management/shelters/+page.svelte#L77)
+
+**Shelter-code canonicalization**
+
+- Query and body scope values now compare using the same trimmed representation.
+  [`+server.ts:197`](../../frontend/src/routes/api/back-office/master-data/[type]/+server.ts#L197)
+
+**Regression coverage**
+
+- GET coverage verifies padded query scope is authorized and read canonically.
+  [`server.test.ts:117`](../../frontend/src/routes/api/back-office/master-data/[type]/server.test.ts#L117)
+
+- PUT coverage verifies padded query and trimmed body values do not conflict.
+  [`server.test.ts:270`](../../frontend/src/routes/api/back-office/master-data/[type]/server.test.ts#L270)

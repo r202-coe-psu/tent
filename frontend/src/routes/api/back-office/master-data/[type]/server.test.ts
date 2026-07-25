@@ -267,6 +267,20 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect(mgrMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
 	});
 
+	it('accepts padded shelter_code query with an equivalent trimmed body code', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT(
+			'pet_types',
+			{ shelter_code: 'SH001', items },
+			'?scope=shelter&shelter_code=%20SH001%20'
+		);
+
+		expect(res.status).toBe(200);
+		expect(mgrMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
+		expect(writtenDoc().shelter_code).toBe('SH001');
+	});
+
 	it('writes the submitted shelter-local items verbatim (no split against the global doc)', async () => {
 		// The global doc is never even read for a shelter-scoped PUT -- the UI
 		// sends only the shelter-local items (global is read-only client-side).
