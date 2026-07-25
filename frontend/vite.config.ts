@@ -73,6 +73,10 @@ export default defineConfig(({ mode }) => {
 						if (path === '/public/v1/shelters') return;
 						return false;
 					}
+				},
+				'/public/v1/config/faqs': {
+					target: fastapiTarget,
+					changeOrigin: true
 				}
 			}
 		},
