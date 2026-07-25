@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4)"
 status: approved
 created: 2026-06-04
-updated: 2026-07-25 # §3 Purchase note sync กับ CR-032 Option A (ถอนคำว่า atomic gate)
+updated: 2026-07-25 # §3 Purchase note sync กับ CR-032 Option A (ถอนคำว่า atomic gate) + แก้ข้อเท็จจริงเรื่อง validate_doc_update (CR-032 amend)
 closes: K-12 (A1 RBAC phase-blocker)
 ---
 
@@ -95,7 +95,8 @@ closes: K-12 (A1 RBAC phase-blocker)
 - DN pre-declaration: no-auth (FD-16), track ผ่าน `tracking_token` → `self` = match by token
 - **Purchase / จัดซื้อ [CR-032, 2026-07-24 · sync Option A 2026-07-25]:** สิทธิ์ **เท่ากับ FR-28 receive เป๊ะ** — สร้าง `purchase` doc (`purchase:{ulid}`) และเขียน ledger `reason:purchase` โดย `warehouse_staff` (+ `system_admin` global); **SM ไม่เขียน ledger ตรง** ตาม operating note ข้างบน — เหมือน FR-28/29/30, shelter-scoped, internal-only; ไม่มี public/donor tier
   - **flow เป็น 2 action แยกกัน** (CR-032 Option A): (1) สร้างใบจัดซื้อ (2) key รับเข้าคลัง → ledger. ~~source `purchase` ของ FR-28 receive~~ ⚠️ **แก้ 2026-07-25:** purchase **ไม่ใช่** ตัวเลือก source ในฟอร์ม FR-28 receive แต่เป็น flow ของตัวเอง — *สิทธิ์* เท่ากันแต่ *surface* คนละอัน · **role เดียวกันทั้งสองสเต็ป** จึงไม่มีช่องที่คนสร้างใบกับคนรับเข้ามีสิทธิ์ต่างกัน
-  - ~~gate ทั้งสอง write แบบ atomic~~ ⚠️ **แก้ถ้อยคำ 2026-07-25 (CR-032 Option A):** เป็นคนละ action **ไม่มี atomic gate** — enforce ที่ **route guard (`requireWarehouseAccess`) + Zod** เท่านั้น; โปรเจกต์ไม่มี `validate_doc_update` จึง **ไม่มี enforcement ระดับ CouchDB** — อย่าเคลมว่า gate ระดับ DB
+  - ~~gate ทั้งสอง write แบบ atomic~~ ⚠️ **แก้ถ้อยคำ 2026-07-25 (CR-032 Option A):** เป็นคนละ action **ไม่มี atomic gate** — enforce ที่ **route guard (`requireWarehouseAccess`) + Zod** เท่านั้น — อย่าเคลมว่า gate ระดับ DB
+    > ⚠️ **แก้ข้อเท็จจริง 2026-07-25 (CR-032 amend):** ถ้อยคำเดิม *"โปรเจกต์ไม่มี `validate_doc_update` จึงไม่มี enforcement ระดับ CouchDB"* **ไม่ตรงกับ code** — shelter db **มี** `_design/access` (`lib/server/shelter-access-design.ts`) ที่บังคับ **envelope §0 + `shelter_code` ต้องตรงกับ db + allowlist ของ `type`** · สิ่งที่ CouchDB **ไม่** บังคับคือ **role/RBAC** (แยกสิทธิ์ได้แค่ระดับ db ผ่าน `_security` roles) และ **field invariant** ⇒ ข้อสรุปของ §3 ยังถูก (role gating อยู่ที่ route guard + Zod) แต่ห้ามเขียนว่า "ไม่มี `validate_doc_update`" · ผลกระทบจริงของความเข้าใจผิดนี้: `purchase` ไม่ถูกใส่ใน allowlist จึงถูกปฏิเสธบน shelter db ที่ provision จริง (CR-032 §Change ข้อ 6)
 
 ---
 
