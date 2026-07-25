@@ -18,7 +18,9 @@
 	];
 
 	function navigateToType(type: string) {
-		goto(`${resolve('/back-office/public-portal-config')}?type=${encodeURIComponent(type)}`, { replaceState: true });
+		goto(`${resolve('/back-office/public-portal-config')}?type=${encodeURIComponent(type)}`, {
+			replaceState: true
+		});
 	}
 </script>
 
@@ -33,7 +35,7 @@
 	/>
 
 	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
-		<aside class="rounded-xl border bg-card p-4 text-card-foreground shadow-sm h-fit">
+		<aside class="h-fit rounded-xl border bg-card p-4 text-card-foreground shadow-sm">
 			<h2 class="mb-3 text-sm font-semibold text-muted-foreground">หมวดหมู่การตั้งค่า</h2>
 			<nav class="flex flex-col gap-2">
 				{#each categories as cat (cat.id)}
@@ -49,7 +51,11 @@
 					>
 						<div class="flex-1">
 							<div class="text-sm leading-tight font-semibold">{cat.label}</div>
-							<div class="mt-1 text-xs {isActive ? 'text-primary-foreground/80' : 'text-muted-foreground'}">
+							<div
+								class="mt-1 text-xs {isActive
+									? 'text-primary-foreground/80'
+									: 'text-muted-foreground'}"
+							>
 								{cat.desc}
 							</div>
 						</div>
@@ -58,6 +64,6 @@
 			</nav>
 		</aside>
 
-			<PublicPortalConfigForm {data} {activeType} />
+		<PublicPortalConfigForm {data} {activeType} />
 	</div>
 </div>

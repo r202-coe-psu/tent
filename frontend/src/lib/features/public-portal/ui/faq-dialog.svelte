@@ -2,7 +2,7 @@
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import type { z } from 'zod';
 	import type { publicConfigBodySchema, FaqItem } from '../domain/config';
-	
+
 	type ConfigBody = z.infer<typeof publicConfigBodySchema>;
 
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -45,27 +45,29 @@
 			$formData.faqs[activeType] = [...$formData.faqs[activeType], { ...editingItem }];
 		}
 		open = false;
-		
+
 		// Wait a tick for the store to update, then submit
 		setTimeout(() => submit?.(), 0);
 	}
 </script>
 
-<Dialog.Root bind:open={open}>
+<Dialog.Root bind:open>
 	<Dialog.Content class="sm:max-w-[500px]">
 		<Dialog.Header>
 			<Dialog.Title>{editingIndex !== null ? 'แก้ไขคำถาม' : 'เพิ่มคำถามใหม่'}</Dialog.Title>
-			<Dialog.Description>
-				ระบุคำถามและคำตอบที่ต้องการให้แสดงผล
-			</Dialog.Description>
+			<Dialog.Description>ระบุคำถามและคำตอบที่ต้องการให้แสดงผล</Dialog.Description>
 		</Dialog.Header>
 
 		<div class="space-y-4 py-4">
 			<div class="space-y-2">
 				<Label for="question">คำถาม</Label>
-				<Input id="question" bind:value={editingItem.question} placeholder="เช่น วิธีการลงทะเบียน?" />
+				<Input
+					id="question"
+					bind:value={editingItem.question}
+					placeholder="เช่น วิธีการลงทะเบียน?"
+				/>
 			</div>
-			
+
 			<div class="space-y-2">
 				<Label for="answer">คำตอบ</Label>
 				<Textarea id="answer" bind:value={editingItem.answer} placeholder="คำตอบ..." rows={4} />
@@ -81,7 +83,7 @@
 		</div>
 
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => open = false}>ยกเลิก</Button>
+			<Button variant="outline" onclick={() => (open = false)}>ยกเลิก</Button>
 			<Button onclick={saveModal}>ยืนยัน</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

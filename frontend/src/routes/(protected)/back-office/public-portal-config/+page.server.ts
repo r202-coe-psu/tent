@@ -1,6 +1,6 @@
 import { superValidate, message } from 'sveltekit-superforms';
 import { zod4 } from 'sveltekit-superforms/adapters';
-import { publicConfigBodySchema } from '$lib/features/public-portal';
+import { publicConfigBodySchema, type PublicConfigBody } from '$lib/features/public-portal';
 import type { PageServerLoad, Actions } from './$types';
 import { adminRaw, authorizeUserWrite, ServiceError } from '$lib/server/couch-admin';
 import { fail, error } from '@sveltejs/kit';
@@ -22,9 +22,7 @@ export const load: PageServerLoad = async ({ request }) => {
 	// Fetch existing config
 	const { status, data } = await adminRaw(CONFIG_DOC_PATH, 'GET');
 
-	let initialData = {
-		line_oa_url: '',
-		facebook_url: '',
+	let initialData: PublicConfigBody = {
 		faqs: {
 			public: [
 				{
@@ -35,13 +33,17 @@ export const load: PageServerLoad = async ({ request }) => {
 					order: 0
 				}
 			]
-		}
+		},
+		line_oa_url: '',
+		facebook_url: ''
 	};
 
 	if (status === 200 && data) {
 		initialData = data as typeof initialData;
 		if (Array.isArray(initialData.faqs)) {
-			initialData.faqs = { public: initialData.faqs as import('$lib/features/public-portal/domain/config').FaqItem[] };
+			initialData.faqs = {
+				public: initialData.faqs as import('$lib/features/public-portal/domain/config').FaqItem[]
+			};
 		} else if (!initialData.faqs) {
 			initialData.faqs = { public: [] };
 		}
@@ -78,10 +80,18 @@ export const actions: Actions = {
 
 		// Read existing to get _rev
 		const { status: getStatus, data: existingData } = await adminRaw(CONFIG_DOC_PATH, 'GET');
-		const existingDoc = getStatus === 200 ? (existingData as { _rev?: string; created_at?: string; created_by?: string; schema_v?: number }) : null;
+		const existingDoc =
+			getStatus === 200
+				? (existingData as {
+						_rev?: string;
+						created_at?: string;
+						created_by?: string;
+						schema_v?: number;
+					})
+				: null;
 		const ts = new Date().toISOString();
 		const existingBase = existingDoc;
-		
+
 		const docToSave = {
 			_id: 'config:public_portal',
 			type: 'config',

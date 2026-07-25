@@ -15,15 +15,17 @@ export const publicConfigBodySchema = z.object({
 	facebook_url: z.string().url('URL ไม่ถูกต้อง').or(z.literal('')).optional()
 });
 
-export const publicConfigSchema = z.object({
-	_id: z.literal('config:public_portal'),
-	_rev: z.string().optional(),
-	type: z.literal('config'),
-	schema_v: z.literal(1),
-	created_at: z.string().datetime(),
-	updated_at: z.string().datetime(),
-	created_by: z.string().min(1)
-}).merge(publicConfigBodySchema);
+export const publicConfigSchema = z
+	.object({
+		_id: z.literal('config:public_portal'),
+		_rev: z.string().optional(),
+		type: z.literal('config'),
+		schema_v: z.literal(1),
+		created_at: z.string().datetime(),
+		updated_at: z.string().datetime(),
+		created_by: z.string().min(1)
+	})
+	.merge(publicConfigBodySchema);
 
 export type FaqItem = z.infer<typeof faqItemSchema>;
 export type PublicConfigBody = z.infer<typeof publicConfigBodySchema>;

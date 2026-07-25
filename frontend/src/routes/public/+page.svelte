@@ -195,7 +195,9 @@
 									<span class="text-sm font-bold">{faq.question}</span>
 								</div>
 							</Accordion.Trigger>
-							<Accordion.Content class="pt-2 text-sm leading-relaxed text-muted-foreground whitespace-pre-line">
+							<Accordion.Content
+								class="pt-2 text-sm leading-relaxed whitespace-pre-line text-muted-foreground"
+							>
 								{faq.answer}
 							</Accordion.Content>
 						</Accordion.Item>
@@ -219,7 +221,7 @@
 
 		<!-- ติดต่อฉุกเฉินและด่วน -->
 		<div
-			class="flex flex-col h-fit justify-center rounded-2xl bg-[#1e293b] p-6 text-white shadow-lg lg:p-8"
+			class="flex h-fit flex-col justify-center rounded-2xl bg-[#1e293b] p-6 text-white shadow-lg lg:p-8"
 		>
 			<div
 				class="mb-4 inline-flex w-fit items-center rounded-full bg-white/10 px-3 py-1 text-xs font-bold tracking-wider text-white"

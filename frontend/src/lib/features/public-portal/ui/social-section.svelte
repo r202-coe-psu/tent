@@ -3,7 +3,7 @@
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import type { z } from 'zod';
 	import type { publicConfigBodySchema } from '../domain/config';
-	
+
 	type ConfigBody = z.infer<typeof publicConfigBodySchema>;
 
 	import * as Card from '$lib/components/ui/card';
