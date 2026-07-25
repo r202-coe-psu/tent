@@ -25,7 +25,7 @@ import {
 	type Medical,
 	type Movement
 } from '../domain/people';
-import type { HouseholdSearchLabels, PeopleRepository } from './people.repository';
+import type { EvacueeFilters, HouseholdSearchLabels, PeopleRepository } from './people.repository';
 
 function paginateSlice<T>(matched: T[], page: number, pageSize: number): PaginatedResult<T> {
 	const total = matched.length;
@@ -110,11 +110,18 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async listEvacueesPaginated(
 		page: number,
 		pageSize: number,
-		search?: string
+		search?: string,
+		filters?: EvacueeFilters
 	): Promise<PaginatedResult<Evacuee>> {
 		const all = await this.repo.allByType('evacuee', isEvacuee);
 		const q = search?.trim();
-		const matched = q ? all.filter((e) => matchesEvacueeSearch(e, q)) : all;
+		let matched = q ? all.filter((e) => matchesEvacueeSearch(e, q)) : all;
+		if (filters?.specialNeed) {
+			matched = matched.filter((e) => e.special_needs.some((need) => need === filters.specialNeed));
+		}
+		if (filters?.zone) {
+			matched = matched.filter((e) => e.current_stay.zone === filters.zone);
+		}
 		return paginateSlice(matched, page, pageSize);
 	}
 

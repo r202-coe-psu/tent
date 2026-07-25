@@ -15,22 +15,27 @@ const calc = (occupancy: number, resources: ResourceInput[], as_of: string = AS_
 const r = (
 	key: string,
 	kind: ResourceKind,
-	ratio: number | null,
-	have: number | null
-): ResourceInput => ({ key, kind, ratio, have });
+	ratio: string | number | null,
+	have: string | number | null
+): ResourceInput => ({
+	key,
+	kind,
+	ratio: ratio != null ? String(ratio) : null,
+	have: have != null ? String(have) : null
+});
 
 describe('calculateResources — happy path', () => {
 	it('multiply matches hand calc (occupancy × ratio) and gap = need − have', () => {
 		const [row] = calc(120, [r('water', 'multiply', 15, 1000)]);
-		expect(row.need).toBe(1800);
-		expect(row.gap).toBe(800);
+		expect(row.need).toBe('1800');
+		expect(row.gap).toBe('800');
 		expect(row.status).toBe('gap');
 		expect(row.input_valid).toBe(true);
 	});
 
 	it('divide uses ceil — acceptance: ratio 50, occupancy 120 → need 3', () => {
 		const [row] = calc(120, [r('volunteer', 'divide', 50, null)]);
-		expect(row.need).toBe(3);
+		expect(row.need).toBe('3');
 	});
 
 	it('threshold → constraint; need/gap null; have + ratio echoed', () => {
@@ -38,35 +43,35 @@ describe('calculateResources — happy path', () => {
 		expect(row.status).toBe('constraint');
 		expect(row.need).toBeNull();
 		expect(row.gap).toBeNull();
-		expect(row.ratio).toBe(30);
-		expect(row.have).toBe(25); // informational, echoed, does not affect status
+		expect(row.ratio).toBe('30');
+		expect(row.have).toBe('25'); // informational, echoed, does not affect status
 		expect(row.input_valid).toBe(true);
 	});
 
 	it('have = 0 → gap equals need, status gap', () => {
 		const [row] = calc(10, [r('water', 'multiply', 15, 0)]);
-		expect(row.need).toBe(150);
-		expect(row.gap).toBe(150);
+		expect(row.need).toBe('150');
+		expect(row.gap).toBe('150');
 		expect(row.status).toBe('gap');
 	});
 
 	it('have > need → surplus', () => {
 		const [row] = calc(10, [r('water', 'multiply', 15, 1000)]);
 		expect(row.status).toBe('surplus');
-		expect(row.gap).toBe(-850);
+		expect(row.gap).toBe('-850');
 	});
 
 	it('have null → insufficient_data (need still computed), input_valid true', () => {
 		const [row] = calc(10, [r('water', 'multiply', 15, null)]);
 		expect(row.status).toBe('insufficient_data');
-		expect(row.need).toBe(150);
+		expect(row.need).toBe('150');
 		expect(row.gap).toBeNull();
 		expect(row.input_valid).toBe(true);
 	});
 
 	it('occupancy = 0 → need 0 (no crash)', () => {
 		const [row] = calc(0, [r('water', 'multiply', 15, 0)]);
-		expect(row.need).toBe(0);
+		expect(row.need).toBe('0');
 		expect(row.status).toBe('ok');
 	});
 
@@ -82,10 +87,10 @@ describe('calculateResources — happy path', () => {
 			key: 'water',
 			kind: 'multiply',
 			input_valid: true,
-			ratio: 15,
-			need: 1800,
-			have: 1000,
-			gap: 800,
+			ratio: '15',
+			need: '1800',
+			have: '1000',
+			gap: '800',
 			status: 'gap',
 			data_status: 'complete',
 			as_of: AS_OF
@@ -95,10 +100,10 @@ describe('calculateResources — happy path', () => {
 			key: 'toilet_f',
 			kind: 'divide',
 			input_valid: true,
-			ratio: 20,
-			need: 6, // ceil(120 / 20)
-			have: 4,
-			gap: 2,
+			ratio: '20',
+			need: '6', // ceil(120 / 20)
+			have: '4',
+			gap: '2',
 			status: 'gap',
 			data_status: 'complete',
 			as_of: AS_OF
@@ -108,9 +113,9 @@ describe('calculateResources — happy path', () => {
 			key: 'max_queue',
 			kind: 'threshold',
 			input_valid: true,
-			ratio: 30,
+			ratio: '30',
 			need: null,
-			have: 25,
+			have: '25',
 			gap: null,
 			status: 'constraint',
 			data_status: 'complete',
@@ -166,11 +171,11 @@ describe('calculateResources — validity axis (input_valid=false, status=insuff
 	});
 
 	it('overflow (multiply and divide) → need null, input_valid false (no Infinity leak)', () => {
-		const [mul] = calc(1e308, [r('m', 'multiply', 1e308, null)]);
+		const [mul] = calc(1e308, [r('m', 'multiply', '1e308', null)]);
 		expect(mul.need).toBeNull();
 		expect(mul.input_valid).toBe(false);
 
-		const [div] = calc(1e308, [r('d', 'divide', 1e-308, null)]);
+		const [div] = calc(1e308, [r('d', 'divide', '1e-308', null)]);
 		expect(div.need).toBeNull();
 		expect(div.input_valid).toBe(false);
 	});
@@ -186,27 +191,24 @@ describe('calculateResources — absent vs invalid', () => {
 	});
 });
 
-describe('calculateResources — floating point vs status', () => {
-	it('float noise does not flip ok→gap; rounded need/gap wash residue', () => {
-		// 3 × 0.1 = 0.30000000000000004; rounded need 0.3 − have 0.3 → gap 0 → ok
-		const [row] = calc(3, [r('x', 'multiply', 0.1, 0.3)]);
+describe('calculateResources — decimal precision vs status', () => {
+	it('decimal math does not flip ok→gap; rounded need/gap wash residue', () => {
+		// 3 × 0.1 = 0.3; need '0.3' − have '0.3' → gap '0' → ok
+		const [row] = calc(3, [r('x', 'multiply', '0.1', '0.3')]);
 		expect(row.status).toBe('ok');
-		expect(row.need).toBe(0.3);
-		expect(row.gap).toBe(0);
+		expect(row.need).toBe('0.3');
+		expect(row.gap).toBe('0');
 	});
 
 	it('multiply result is rounded to quantity decimals', () => {
-		const [row] = calc(3, [r('x', 'multiply', 0.2, null)]);
-		expect(row.need).toBe(0.6);
+		const [row] = calc(3, [r('x', 'multiply', '0.2', null)]);
+		expect(row.need).toBe('0.6');
 	});
 
-	it('large-magnitude near-equal: representation noise only, status stays ok', () => {
-		// Derived (not a hand-written literal) so the noise is provably real, not coincidental:
-		// mathematically 1_000_000, but 0.1 + 0.2 - 0.3 !== 0 in binary floating point.
-		const noisyNeed = 1_000_000 + (0.1 + 0.2 - 0.3);
-		const [row] = calc(1, [r('x', 'multiply', noisyNeed, 1_000_000)]);
+	it('large-magnitude near-equal: decimal math handles it without noise, status stays ok', () => {
+		const [row] = calc(1, [r('x', 'multiply', '1000000', '1000000')]);
 		expect(row.status).toBe('ok');
-		expect(row.gap).toBe(0);
+		expect(row.gap).toBe('0');
 	});
 });
 
@@ -237,7 +239,7 @@ describe('calculateResources — structural', () => {
 		]);
 		expect(rows).toHaveLength(3);
 		expect(rows.map((x) => x.ordinal)).toEqual([0, 1, 2]);
-		expect(rows.map((x) => x.need)).toEqual([1000, 2000, 3000]);
+		expect(rows.map((x) => x.need)).toEqual(['1000', '2000', '3000']);
 	});
 
 	it('unknown kind (via cast) throws with the expected message', () => {
@@ -257,16 +259,15 @@ describe('calculateResources — structural', () => {
 		expect(input).toEqual(snapshot); // input unchanged
 	});
 
-	it('exports FORMULA_V = 1.2.0 and carries as_of through unchanged', () => {
-		expect(FORMULA_V).toBe('1.2.0'); // bumped for fixed-decimal gap classification
+	it('exports FORMULA_V = 2.0.0 and carries as_of through unchanged', () => {
+		expect(FORMULA_V).toBe('2.0.0');
 		const [row] = calc(10, [r('water', 'multiply', 15, null)], '2026-01-01T00:00:00.000Z');
 		expect(row.as_of).toBe('2026-01-01T00:00:00.000Z');
 	});
 
-	it('large divide result stays finite (not an overflow-boundary probe)', () => {
-		const [row] = calc(1, [r('vol', 'divide', 1e-12, null)]);
-		expect(row.need).toBe(1e12);
-		expect(Number.isFinite(row.need as number)).toBe(true);
+	it('large divide result stays finite', () => {
+		const [row] = calc(1, [r('vol', 'divide', '1e-12', null)]);
+		expect(row.need).toBe('1000000000000');
 		expect(row.input_valid).toBe(true);
 		expect(row.status).toBe('insufficient_data'); // have unresolved, not an overflow
 	});
@@ -277,7 +278,7 @@ describe('calculateResources — T-31.3 edge-case data_status (data-availability
 	it('occupancy = 0 → status ok, need 0, data_status complete (not an anomaly)', () => {
 		const [row] = calc(0, [r('water', 'multiply', 15, 0)]);
 		expect(row.status).toBe('ok');
-		expect(row.need).toBe(0);
+		expect(row.need).toBe('0');
 		expect(row.data_status).toBe('complete');
 		expect(row.input_valid).toBe(true);
 	});
@@ -302,7 +303,7 @@ describe('calculateResources — T-31.3 edge-case data_status (data-availability
 		const [row] = calc(120, [r('water', 'multiply', 15, null)]);
 		expect(row.status).toBe('insufficient_data');
 		expect(row.data_status).toBe('stock_unsynced');
-		expect(row.need).toBe(1800);
+		expect(row.need).toBe('1800');
 	});
 
 	it('distinguishability: ratio_missing vs stock_unsynced share status but differ in data_status', () => {

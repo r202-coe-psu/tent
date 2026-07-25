@@ -26,7 +26,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(2);
+		expect(e.schema_v).toBe(3);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);

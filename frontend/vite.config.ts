@@ -54,9 +54,10 @@ export default defineConfig(({ mode }) => {
 					changeOrigin: true,
 					rewrite: (path) => path.replace(/^\/couch/, '')
 				},
-				// Public plane endpoints moved to FastAPI — exact path only so
-				// /public SPA routes and /public/v1/shelters/{code}/risk BFF stay on SvelteKit.
-				'/public/v1/family-search': {
+				// Public plane → FastAPI (dev only; prod/staging use nginx /public-api/).
+				// Strip gateway prefix so FastAPI still sees /public/v1/*.
+				// SPA /public/* and BFF /api/* are unaffected.
+				'/public-api': {
 					target: fastapiTarget,
 					changeOrigin: true,
 					bypass(req) {

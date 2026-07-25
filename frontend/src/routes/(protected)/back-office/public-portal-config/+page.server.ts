@@ -40,6 +40,11 @@ export const load: PageServerLoad = async ({ request }) => {
 
 	if (status === 200 && data) {
 		initialData = data as typeof initialData;
+		if (Array.isArray(initialData.faqs)) {
+			initialData.faqs = { public: initialData.faqs as import('$lib/features/public-portal/domain/config').FaqItem[] };
+		} else if (!initialData.faqs) {
+			initialData.faqs = { public: [] };
+		}
 	}
 
 	const form = await superValidate(initialData, zod4(publicConfigBodySchema));
