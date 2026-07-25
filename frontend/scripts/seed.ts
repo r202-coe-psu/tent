@@ -401,7 +401,13 @@ async function seedRegistry(): Promise<void> {
  */
 const itemCode = () => `item_${ulid().toLowerCase()}`;
 
-type SeedItem = { code: string; label: string; is_default: boolean; status: 'active' };
+type SeedItem = {
+	code: string;
+	label: string;
+	is_default: boolean;
+	status: 'active';
+	parent_code?: string;
+};
 const toItem = (label: string, is_default = false): SeedItem => ({
 	code: itemCode(),
 	label,
@@ -421,6 +427,25 @@ const VG_DEFS = [
 ].map((d) => ({ ...d, code: itemCode() }));
 /** semantic key → generated ULID code, for evacuee special_needs cross-refs */
 const VG: Record<string, string> = Object.fromEntries(VG_DEFS.map((i) => [i.key, i.code]));
+
+// municipality_zone items keep a key → ULID lookup so seeded household docs
+// (`municipality_zone`) and community `parent_code` can reference them.
+const MZ_DEFS = [
+	{ key: 'zone_1', label: 'เขตเทศบาล 1', is_default: true },
+	{ key: 'zone_2', label: 'เขตเทศบาล 2' },
+	{ key: 'zone_3', label: 'เขตเทศบาล 3' },
+	{ key: 'zone_4', label: 'เขตเทศบาล 4' }
+].map((d) => ({ ...d, code: itemCode() }));
+/** zone key → generated ULID code, for household + community parent refs */
+const MZ: Record<string, string> = Object.fromEntries(MZ_DEFS.map((i) => [i.key, i.code]));
+
+// community items reference their parent zone via parent_code (CR-012 pattern).
+const COMMUNITY_DEFS: { label: string; parent: string; is_default?: boolean }[] = [
+	{ label: 'ชุมชนบ้านทุ่ง', parent: 'zone_1', is_default: true },
+	{ label: 'ชุมชนริมคลอง', parent: 'zone_1' },
+	{ label: 'ชุมชนหน้าเมือง', parent: 'zone_2' },
+	{ label: 'ชุมชนสวนหลวง', parent: 'zone_3' }
+];
 
 const MASTER_DATA_SEED: { type: string; items: SeedItem[] }[] = [
 	{
@@ -457,6 +482,25 @@ const MASTER_DATA_SEED: { type: string; items: SeedItem[] }[] = [
 	{
 		type: 'shelter_type',
 		items: [toItem('โรงเรียน', true), toItem('ศาลาประชาคม'), toItem('วัด'), toItem('อาคารราชการ')]
+	},
+	{
+		type: 'municipality_zone',
+		items: MZ_DEFS.map((d) => ({
+			code: d.code,
+			label: d.label,
+			is_default: d.is_default ?? false,
+			status: 'active'
+		}))
+	},
+	{
+		type: 'community',
+		items: COMMUNITY_DEFS.map((d) => ({
+			code: itemCode(),
+			label: d.label,
+			is_default: d.is_default ?? false,
+			status: 'active',
+			parent_code: MZ[d.parent]
+		}))
 	}
 ];
 
@@ -758,18 +802,18 @@ async function seedShelter(): Promise<void> {
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวใจดี',
-			municipality_zone: 'Z1',
+			municipality_zone: MZ.zone_1,
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ครอบครัวใหญ่ 4 คน'
 		},
 		{
 			label: 'ครอบครัวสุขสาย',
-			municipality_zone: 'Z1',
+			municipality_zone: MZ.zone_1,
 			head_evacuee_id: null,
 			pets: [{ species: 'dog', count: 1 }]
 		},
-		{ label: 'ครอบครัวรักสงบ', municipality_zone: 'Z2', head_evacuee_id: null, pets: [] }
+		{ label: 'ครอบครัวรักสงบ', municipality_zone: MZ.zone_2, head_evacuee_id: null, pets: [] }
 	];
 	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, ctx));
 
@@ -1093,7 +1137,7 @@ async function seedShelter2(): Promise<void> {
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวปัตตานี',
-			municipality_zone: 'Z1',
+			municipality_zone: MZ.zone_1,
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ตัวอย่าง SH002'
