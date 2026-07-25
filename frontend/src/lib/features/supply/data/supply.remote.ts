@@ -1,6 +1,10 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { isSupplyItem, type SupplyItem } from '../domain/supply';
 import type { SupplyRepository } from './supply.repository';
+import { getShelterDb } from '$lib/db/shelter';
+import { touch, type AuthorContext } from '$lib/db/model';
+import { isStockThresholdOverride, type StockThresholdOverride } from '../domain/threshold-override';
+
 
 /**
  * Remote CouchDB implementation of the supply catalog repository.
@@ -22,6 +26,18 @@ export class SupplyCatalogRemoteRepository implements SupplyRepository {
 
 	getItem(id: string): Promise<SupplyItem | null> {
 		return this.repo.get<SupplyItem>(id);
+	}
+
+	async listThresholdOverrides(): Promise<StockThresholdOverride[]> {
+		const shelterRepo = createRemoteRepository(getShelterDb());
+		return shelterRepo.allByType('stock_threshold_override', isStockThresholdOverride);
+	}
+
+	async saveThresholdOverride(override: Omit<StockThresholdOverride, 'type' | 'schema_v'>, ctx: AuthorContext): Promise<StockThresholdOverride> {
+		const shelterRepo = createRemoteRepository(getShelterDb());
+		const existing = await shelterRepo.get<StockThresholdOverride>(override._id).catch(() => null);
+		const updatedDoc = existing ? touch({ ...existing, ...override }, ctx) : touch({ ...override, type: 'stock_threshold_override' as const, schema_v: 1 as const }, ctx)
+		return shelterRepo.put(updatedDoc);
 	}
 }
 

@@ -36,6 +36,15 @@
 		return balanceQuery.data.get(selectedItem._id) ?? '0';
 	});
 
+	const isQtyOverStock = $derived.by(() => {
+		if (!$formData.qty) return false;
+		try {
+			return qtyGt($formData.qty, currentStock);
+		} catch {
+			return true;
+		}
+	});
+
 	const items = $derived.by(() => {
 		const supplyItems = itemsQuery.data ?? [];
 		const itemMasters = itemMastersQuery.data ?? [];
@@ -305,7 +314,7 @@
 		<!-- Submit Button -->
 		<div class="col-span-1 pt-3 sm:col-span-2">
 			<Form.Button
-				disabled={$submitting || !qtyGt(currentStock, 0) || qtyGt($formData.qty, currentStock)}
+				disabled={$submitting || !$formData.qty || !qtyGt(currentStock, 0) || isQtyOverStock}
 				class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary text-sm font-extrabold text-primary-foreground shadow-md transition-all duration-300 hover:scale-[1.02] hover:bg-primary/95 hover:shadow-lg active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
 			>
 				{$submitting ? 'กำลังบันทึกรายการ...' : 'บันทึกการแจกจ่ายพัสดุ'}

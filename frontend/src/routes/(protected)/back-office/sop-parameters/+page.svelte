@@ -10,7 +10,7 @@
 		SopTypeList,
 		SopRatioTab,
 		SopEditForm,
-		AlertThresholdStub,
+		AlertThresholdEditor,
 		VersionHistoryDrawer,
 		DeactivateConfirmDialog,
 		type SopTabType
@@ -144,7 +144,7 @@
 				/>
 			{/if}
 		{:else if activeTab === 'alert_threshold'}
-			<AlertThresholdStub />
+			<AlertThresholdEditor />
 		{/if}
 	</div>
 </div>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { SvelteSet } from 'svelte/reactivity';
 	import { useStockBalance, useLedger } from '../application/queries';
-	import { useSupplyItems } from '$lib/features/supply';
+	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
 	import { useItemMasters } from '$lib/features/catalog';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
@@ -39,6 +39,9 @@
 	const itemMastersQuery = useItemMasters();
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
+	const overridesQuery = useThresholdOverrides();
+
+	const overrides = $derived(overridesQuery.data ?? []);
 
 	// ─── Filter state ─────────────────────────────────────────────────────────
 	let searchQuery = $state('');
@@ -190,7 +193,8 @@
 		itemsQuery.isLoading ||
 			balanceQuery.isLoading ||
 			ledgerQuery.isLoading ||
-			itemMastersQuery.isLoading
+			itemMastersQuery.isLoading ||
+			overridesQuery.isLoading
 	);
 
 	// ─── Helpers ──────────────────────────────────────────────────────────────
@@ -255,9 +259,29 @@
 	const itemsWithCalculatedStatus = $derived(
 		items.map((item) => {
 			const qtyOnHand = balance.get(item._id) ?? '0';
-			let reorderThreshold = calculateReorderLevel(occupancy, item);
+			
+			// 1. Check if there is a local shelter-specific override for this item
+			const itemOverride = overrides.find((o) => o.item_id === item._id);
 
-			// Fallback to static reorder_level if dynamic calculation is not set
+			let reorderThreshold: string | null = null;
+
+			if (itemOverride) {
+				if (itemOverride.consumption_rate && itemOverride.target_reserve_days) {
+					reorderThreshold = calculateReorderLevel(occupancy, {
+						consumption_rate: itemOverride.consumption_rate,
+						target_reserve_days: itemOverride.target_reserve_days,
+						timeframe: (item as any).timeframe || 'daily'
+					});
+				} else if (itemOverride.reorder_level !== null) {
+					reorderThreshold = String(itemOverride.reorder_level);
+				}
+			}
+
+			// 2. Fallback to default catalog behavior if no override applies
+			if (reorderThreshold === null) {
+				reorderThreshold = calculateReorderLevel(occupancy, item);
+			}
+
 			if (reorderThreshold === null && item.reorder_level !== null) {
 				reorderThreshold = String(item.reorder_level);
 			}
