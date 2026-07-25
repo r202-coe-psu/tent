@@ -10,12 +10,26 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import {
-		householdPreRegisterEvacueeSchema,
-		specialNeedSchema,
-		SPECIAL_NEED_CHIPS,
-		type EvacueeInput
-	} from '../domain/people';
+	import { householdPreRegisterEvacueeSchema, type EvacueeInput } from '../domain/people';
+	import { z } from 'zod';
+
+	const specialNeedSchema = z.enum([
+		'elderly',
+		'disabled',
+		'pregnant',
+		'infant',
+		'chronic_illness',
+		'bedridden'
+	]);
+
+	const SPECIAL_NEED_CHIPS: Record<string, { emoji: string; label: string }> = {
+		elderly: { emoji: '👴', label: 'ผู้สูงอายุ' },
+		disabled: { emoji: '♿', label: 'พิการ' },
+		pregnant: { emoji: '🤰', label: 'ครรภ์' },
+		infant: { emoji: '👶', label: 'เด็กเล็ก' },
+		chronic_illness: { emoji: '🩺', label: 'โรคเรื้อรัง' },
+		bedridden: { emoji: '🛏️', label: 'ผู้ป่วยติดเตียง' }
+	};
 	import { COUNTRIES } from '$lib/utils/country';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Camera from '@lucide/svelte/icons/camera';

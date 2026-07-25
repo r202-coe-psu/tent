@@ -5,13 +5,30 @@
 	import { useCreateEvacuee, useEvacuees, useUpdateEvacuee } from '../application/queries';
 	import { getShelterCode } from '$lib/db/shelter';
 	import {
-		SPECIAL_NEED_CHIPS,
 		maskNationalId,
 		type Evacuee,
 		type Household,
-		evacueeInputSchema,
-		specialNeedSchema
+		evacueeInputSchema
 	} from '../domain/people';
+	import { z } from 'zod';
+
+	const specialNeedSchema = z.enum([
+		'elderly',
+		'disabled',
+		'pregnant',
+		'infant',
+		'chronic_illness',
+		'bedridden'
+	]);
+
+	const SPECIAL_NEED_CHIPS: Record<string, { emoji: string; label: string }> = {
+		elderly: { emoji: '👴', label: 'ผู้สูงอายุ' },
+		disabled: { emoji: '♿', label: 'พิการ' },
+		pregnant: { emoji: '🤰', label: 'ครรภ์' },
+		infant: { emoji: '👶', label: 'เด็กเล็ก' },
+		chronic_illness: { emoji: '🩺', label: 'โรคเรื้อรัง' },
+		bedridden: { emoji: '🛏️', label: 'ผู้ป่วยติดเตียง' }
+	};
 	import { toast } from 'svelte-sonner';
 	import Camera from '@lucide/svelte/icons/camera';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
