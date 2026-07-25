@@ -14,7 +14,7 @@ const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'kitchen_staff' };
 // ---- MealPlan ----
 
 describe('createMealPlan', () => {
-	it('generates deterministic _id from date + meal', () => {
+	it('generates a ulid-based _id (meal_plan:{ulid})', () => {
 		const plan = createMealPlan(
 			{
 				date: '2026-07-15',
@@ -24,13 +24,13 @@ describe('createMealPlan', () => {
 			},
 			ctx
 		);
-		expect(plan._id).toBe('meal_plan:2026-07-15:dinner');
+		expect(plan._id).toMatch(/^meal_plan:[0-9A-Z]{26}$/);
 		expect(plan.type).toBe('meal_plan');
 		expect(plan.status).toBe('draft');
 		expect(plan.shelter_code).toBe('SH001');
 	});
 
-	it('two plans with same date+meal have identical _id (deterministic collision)', () => {
+	it('two plans with the same date+meal get different _id (extra batches allowed)', () => {
 		const input = {
 			date: '2026-07-15',
 			meal: 'lunch' as const,
@@ -39,7 +39,9 @@ describe('createMealPlan', () => {
 		};
 		const a = createMealPlan(input, ctx);
 		const b = createMealPlan(input, ctx);
-		expect(a._id).toBe(b._id);
+		expect(a._id).not.toBe(b._id);
+		expect(a.date).toBe(b.date);
+		expect(a.meal).toBe(b.meal);
 	});
 
 	it('rejects invalid date format', () => {
@@ -174,22 +176,24 @@ describe('createKitchenRequisition', () => {
 // ---- MealService ----
 
 describe('createMealService', () => {
-	it('generates deterministic _id from date + meal', () => {
+	it('generates a ulid _id and carries meal_plan_id through', () => {
 		const svc = createMealService(
 			{
 				date: '2026-07-15',
 				meal: 'dinner',
+				meal_plan_id: 'meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 				served: 95,
 				waste: 3,
 				external: { volunteers: 5, outside_evacuees: 2 }
 			},
 			ctx
 		);
-		expect(svc._id).toBe('meal_service:2026-07-15:dinner');
+		expect(svc._id).toMatch(/^meal_service:[0-9A-Z]{26}$/);
 		expect(svc.type).toBe('meal_service');
+		expect(svc.meal_plan_id).toBe('meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV');
 	});
 
-	it('two records with same date+meal share the same _id', () => {
+	it('two records for the same date+meal (extra batches) get different _ids', () => {
 		const input = {
 			date: '2026-07-15',
 			meal: 'breakfast' as const,
@@ -197,7 +201,7 @@ describe('createMealService', () => {
 			waste: 5,
 			external: { volunteers: 3, outside_evacuees: 0 }
 		};
-		expect(createMealService(input, ctx)._id).toBe(createMealService(input, ctx)._id);
+		expect(createMealService(input, ctx)._id).not.toBe(createMealService(input, ctx)._id);
 	});
 });
 

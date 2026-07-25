@@ -50,6 +50,7 @@ export {
 	CHECK_OUT_ELIGIBLE_STATUSES,
 	applyMovementToStay,
 	maskNationalId,
+	matchesEvacueeSearch,
 	zoneLabel,
 	EWAR_SYMPTOM_GROUPS,
 	isEvacuee,

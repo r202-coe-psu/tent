@@ -216,15 +216,66 @@ describe('KitchenRemoteRepository.confirmMealPlan — state transition', () => {
 	});
 });
 
-// Append-only creates are idempotent under the remote-first repository, not
-// throw-on-conflict: `putDoc` (couch-db.ts) swallows a create-time 409 and
-// returns the already-stored doc (see couch-db.test.ts — "putDoc treats 409 on
-// create as idempotent success"). That primitive-level guarantee is what makes
-// meal_service append-only in practice (a second recordMealService call cannot
-// overwrite the first); it isn't re-tested here because the in-memory
-// Repository test double used in this file doesn't simulate CouchDB's 409
-// semantics (it always accepts a `put`), so re-asserting it against the double
-// would test the double, not the real behavior.
+describe('KitchenRemoteRepository.updateMealPlanDraft / deleteMealPlanDraft (draft-only)', () => {
+	let repo: KitchenRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new KitchenRemoteRepository('shelter_sh001');
+	});
+
+	const draftInput = {
+		date: '2026-07-15',
+		meal: 'lunch' as const,
+		headcount: { total: 50, halal: 0, soft_food: 0, infant: 0 },
+		recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 7500 }]
+	};
+
+	it('patches headcount/recipes in place, keeping the same _id', async () => {
+		const draft = await repo.createMealPlan(draftInput, ctx);
+		const patched = await repo.updateMealPlanDraft(draft, {
+			headcount: { total: 80, halal: 0, soft_food: 0, infant: 0 },
+			recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 12000 }],
+			calc_source: draft.calc_source,
+			override_reason: null
+		});
+
+		expect(patched._id).toBe(draft._id);
+		expect(patched.headcount.total).toBe(80);
+		expect(patched.recipes).toEqual([{ recipe_id: 'ingredient:rice', planned_qty: 12000 }]);
+	});
+
+	it('rejects editing a non-draft plan', async () => {
+		const draft = await repo.createMealPlan(draftInput, ctx);
+		const confirmed = await repo.confirmMealPlan(draft);
+		await expect(
+			repo.updateMealPlanDraft(confirmed, {
+				headcount: draft.headcount,
+				recipes: draft.recipes,
+				calc_source: draft.calc_source,
+				override_reason: null
+			})
+		).rejects.toThrow(/only draft/i);
+	});
+
+	it('deletes a draft plan', async () => {
+		const draft = await repo.createMealPlan(draftInput, ctx);
+		await repo.deleteMealPlanDraft(draft);
+		expect(await memoryRepo.get(draft._id)).toBeNull();
+	});
+
+	it('rejects deleting a non-draft plan', async () => {
+		const draft = await repo.createMealPlan(draftInput, ctx);
+		const confirmed = await repo.confirmMealPlan(draft);
+		await expect(repo.deleteMealPlanDraft(confirmed)).rejects.toThrow(/only draft/i);
+	});
+});
+
+// meal_service is a ulid-_id, append-only record (like kitchen_requisition) —
+// a second recordMealService call for the same plan creates a distinct doc
+// rather than colliding; the UI (not the doc id) is what stops a plan from
+// being serviced twice (meal-plan-list.svelte hides the button once
+// meal_plan_id shows up in a recorded service).
 describe('KitchenRemoteRepository.recordMealService — record + read back (T-27)', () => {
 	let repo: KitchenRemoteRepository;
 
@@ -236,6 +287,7 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 	const serviceInput = {
 		date: '2026-07-15',
 		meal: 'dinner' as const,
+		meal_plan_id: 'meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 		served: 95,
 		waste: 3,
 		external: { volunteers: 5, outside_evacuees: 2 },
@@ -245,9 +297,10 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 	it('persists served / waste / external + audit actor onto the stored doc', async () => {
 		const svc = await repo.recordMealService(serviceInput, ctx);
 
-		expect(svc._id).toBe('meal_service:2026-07-15:dinner');
+		expect(svc._id).toMatch(/^meal_service:[0-9A-Z]{26}$/);
 		const stored = (await memoryRepo.get(svc._id)) as Record<string, unknown>;
 		expect(stored.type).toBe('meal_service');
+		expect(stored.meal_plan_id).toBe('meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV');
 		expect(stored.served).toBe(95);
 		expect(stored.waste).toBe(3);
 		expect(stored.external).toEqual({ volunteers: 5, outside_evacuees: 2 });
@@ -265,7 +318,30 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 
 		const all = await repo.listMealServices();
 		expect(all).toHaveLength(1);
-		expect(all[0]._id).toBe('meal_service:2026-07-15:dinner');
+		expect(all[0]._id).toMatch(/^meal_service:[0-9A-Z]{26}$/);
+	});
+
+	it('getMealServiceByPlanId finds the record joined to a specific plan', async () => {
+		await repo.recordMealService(serviceInput, ctx);
+
+		const got = await repo.getMealServiceByPlanId('meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV');
+		expect(got?.served).toBe(95);
+		expect(await repo.getMealServiceByPlanId('meal_plan:does-not-exist')).toBeNull();
+	});
+
+	it('rejects a second service for a plan that already has one (one-shot)', async () => {
+		await repo.recordMealService(serviceInput, ctx);
+		await expect(repo.recordMealService(serviceInput, ctx)).rejects.toThrow(
+			/already recorded for this meal plan/
+		);
+		expect(await repo.listMealServices()).toHaveLength(1);
+	});
+
+	it('allows multiple planless services (no meal_plan_id to be unique against)', async () => {
+		const planless = { ...serviceInput, meal_plan_id: null };
+		await repo.recordMealService(planless, ctx);
+		await repo.recordMealService(planless, ctx);
+		expect(await repo.listMealServices()).toHaveLength(2);
 	});
 });
 
@@ -336,6 +412,7 @@ describe('T-27 demo chain — requisition → service record → variance', () =
 			{
 				date: '2026-07-20',
 				meal: 'dinner',
+				meal_plan_id: plan._id,
 				served: 85,
 				waste: 3,
 				external: { volunteers: 4, outside_evacuees: 3 }
@@ -343,8 +420,8 @@ describe('T-27 demo chain — requisition → service record → variance', () =
 			ctx
 		);
 
-		// 4. Variance summary joins service ↔ plan (same date:meal) and compares.
-		const storedPlan = await repo.getMealPlan('2026-07-20', 'dinner');
+		// 4. Variance summary joins service ↔ plan via meal_plan_id and compares.
+		const storedPlan = await repo.getMealPlanById(plan._id);
 		const v = computeMealVariance(svc, storedPlan);
 
 		expect(v.planned).toBe(100);

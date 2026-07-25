@@ -116,7 +116,12 @@ async function pollDb(
 			sinceByDb.set(dbName, data.last_seq);
 
 			for (const change of data.results) {
-				const docType = change.doc?.type;
+				// A deleted doc's tombstone carries only _id/_rev/_deleted — no `type`
+				// field survives — so a hard delete would otherwise never invalidate
+				// its query and the row would linger in the UI until a full reload.
+				// Every doc's _id follows the "{type}:{rest}" convention (the same one
+				// allDocsByType range-queries on), so fall back to that prefix.
+				const docType = change.doc?.type ?? change.id.split(':')[0];
 				if (!docType) continue;
 				const event: DataChangeEvent = { db: dbName, docType, docId: change.id };
 				eventChannel.emit(event);
