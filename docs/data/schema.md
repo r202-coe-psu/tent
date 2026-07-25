@@ -41,7 +41,8 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
 > **schema_v 3** — `current_stay.status` เปลี่ยนจาก 4 ค่าเป็น 6 ค่า: `pre_registered`,`active`,
-> `temporary_leave`,`transferred`,`checked_out`,`deceased` (UI v5).
+> `temporary_leave`,`transferred`,`checked_out`,`deceased` (UI v5, CR-035).
+> `special_needs` เปลี่ยนจาก fixed enum เป็น free-form `[str]` (6).
 > schema_v 2 — เพิ่ม `country` (CR-007) และปรับปรุง `national_id` เป็น `person_id` (CR-028).
 
 | Field | ชนิด | req | หมายเหตุ |
@@ -55,7 +56,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `person_id` | {`cardType`:enum(`national_id`,`passport`,`pink_card`,`other`), `number`:str\|null} | opt | เอกสารแสดงตน — `cardType` default `"national_id"`; `number` คือเลขที่บัตร (opt); เก็บ plaintext ไม่ออก public tier ทุกกรณี |
 | `religion` | enum(`buddhist`,`muslim`,`christian`,`other`,`unknown`) | opt | ใช้วางแผนอาหาร halal |
 | `country` | str | req | ประเทศ | 
-| `special_needs` | [enum(`elderly`,`disabled`,`pregnant`,`infant`,`chronic_illness`,`bedridden`)] | opt | default `[]` |
+| `special_needs` | [str] | opt | free-form, nonempty หลัง trim; default `[]` (CR-046 — เดิม fixed enum; ไม่ผูก whitelist ในโค้ด, ไม่ใช่ master_data-wired — รอ CR แยกถ้าจะ wire ไป master_data) |
 | `emergency_contact` | {`name`:str, `phone`:str, `relation`:str} | opt | — |
 | `household_id` | str\|null | opt | → `household:{ulid}` |
 | `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`) เริ่ม `pre_registered` · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
@@ -68,7 +69,8 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 **Migration (schema_v 2 → 3):** rename บน read — `registered`→`pre_registered`, `checked_in`→`active`;
 `checked_out` เดิม (ออกทั่วไป) → `checked_out` ใหม่ (กลับภูมิลำเนา) ชั่วคราวจนกว่า manual review แยก
 เคสที่ควรเป็น `transferred`; ไม่มี legacy value map ไป `temporary_leave`/`deceased` (เกิดจาก movement
-action ใหม่เท่านั้น)
+action ใหม่เท่านั้น). `special_needs` (CR-046) ไม่ต้อง rename/transform — ค่า enum เดิม (เช่น
+`"elderly"`) เป็น subset ของ "any nonempty string" อ่านผ่านได้ตรง ๆ
 
 ### 1.2 `medical` — `medical:{ulid}` (1 doc ต่อ 1 evacuee)
 
@@ -221,16 +223,19 @@ view `needs_open` = `needs` − donation(declared+received ของ campaign) �
 
 **Migration (schema_v 2 → 3):** pre-prod — wipe/re-seed; `qty_target` num → qty_str
 
-### 2.5 `meal_plan` — `meal_plan:{date}:{meal}` (deterministic — 1 doc/วัน/มื้อ)
+### 2.5 `meal_plan` — `meal_plan:{ulid}` (หลายแผนอาจใช้วัน+มื้อเดียวกันได้ — CR-045)
 
 > **schema_v 2** — เพิ่ม `calc_source` (audit trail ของการคำนวณ ingredient จาก SOP ratio). CR-025.
+> **CR-045** — `_id` เปลี่ยนจาก deterministic `meal_plan:{date}:{meal}` → ulid; เพิ่ม `label` และ
+> `recipes[].unit` (ทั้งคู่ optional — ไม่ bump schema_v)
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `date` | str | req | `YYYY-MM-DD` (เวลาท้องถิ่นศูนย์) |
 | `meal` | enum(`breakfast`,`lunch`,`dinner`,`snack`) | req | — |
+| `label` | str | opt | ชื่อเมนูที่ตั้งเอง (โหมด BOM/Custom) — ไม่มีค่า = ใช้ชื่อมื้อ SOP หรือชื่อสูตร BOM แทนตอนแสดงผล (CR-045) |
 | `headcount` | {`total`:int, `halal`:int, `soft_food`:int, `infant`:int} | req | มาจาก occupancy (T-06) — ดู mapping ด้านล่าง; แก้ manual ได้; แต่ละ sub-count ≤ total (มิติตั้งฉาก บวกกันไม่ได้) |
-| `recipes` | [{`recipe_id`:str, `planned_qty`:int>0}] | req | qty = ปริมาณวัตถุดิบต่อมื้อ (หน่วยตาม recipe_id เช่น `ingredient:rice` = กรัม); T-26 map เป็น item_id |
+| `recipes` | [{`recipe_id`:str, `planned_qty`:int>0, `unit`:str}] | req | qty = ปริมาณวัตถุดิบต่อมื้อ (หน่วยตาม recipe_id เช่น `ingredient:rice` = กรัม); T-26 map เป็น item_id; `unit` ต่อรายการ (opt) — ใส่เมื่อไม่ใช่ SOP มาตรฐาน (โหมด BOM/Custom อ้างอิง real `supply_item.unit`, CR-045) |
 | `status` | enum(`draft`,`confirmed`) | req | — |
 | `override_reason` | str\|null | opt | **บังคับ** เมื่อ headcount ต่างจาก occupancy snapshot ล่าสุด (CR-022) |
 | `calc_source` | {`sop_profile_id`:str, `sop_profile_version`:int>0, `headcount_as_of`:ts}\|null | opt | audit trail — SOP profile + version + snapshot เวลาอ่าน headcount ที่ใช้คำนวณ |
@@ -244,9 +249,16 @@ view `needs_open` = `needs` − donation(declared+received ของ campaign) �
 `kg` ก่อนส่งต่อ** — `kitchen_requisition.items[].unit` และ `stock_ledger.unit` ที่ตัดจริงต้องเป็น `kg`
 เสมอ ตามกฎ §2.1 (`unit` ต้องตรงกับ `item_master.base_unit`; `item:rice.base_unit = kg`) (CR-030)
 
-`_id` deterministic → กันสร้างแผนซ้ำมื้อเดียวกันสอง device (ชนเป็น conflict ให้ resolve ไม่ใช่ doc ซ้ำ)
+`_id` เป็น ulid (ไม่ deterministic อีกต่อไป, CR-045) — อนุญาตให้มีหลายแผนต่อวัน+มื้อเดียวกัน (เช่น
+สร้างแผนแยกก้อนสำหรับเสบียงเสริม) เพราะ workflow เบิก/บันทึกบริการเป็น one-shot ต่อแผน (เบิกซ้ำ/บันทึก
+ซ้ำไม่ได้ — ถ้าต้องเบิกเพิ่มต้องสร้างแผนใหม่แยกก้อนแทน). `getMealPlan(date, meal)` จึง scan +
+filter จาก `listMealPlans()` แทนการ `get` ตรงด้วย id — ambiguous ถ้ามีหลายแผนต่อมื้อ (คืนแค่ตัวแรกที่เจอ)
 
 **Migration (schema_v 1 → 2):** `calc_source` optional → doc เดิมไม่ต้อง backfill; reader ถือว่าไม่มี `calc_source` = แผนที่สร้างก่อนมี audit trail
+
+**Migration (_id pattern, CR-045):** แผนเก่าที่ยังมี `_id` แบบ deterministic (`meal_plan:{date}:{meal}`)
+ยังอ่าน/ใช้งานได้ปกติ ไม่ต้อง backfill — โค้ดอ้างอิงผ่าน field `date`/`meal`/`_id` ตรงๆ ไม่เคย parse
+รูปแบบ `_id` อยู่แล้ว
 
 ### 2.6 `kitchen_requisition` — `kitchen_requisition:{ulid}` · **append-only**
 
@@ -261,15 +273,31 @@ view `needs_open` = `needs` − donation(declared+received ของ campaign) �
 
 **Migration (schema_v 1 → 2):** pre-prod — wipe/re-seed
 
-### 2.7 `meal_service` — `meal_service:{date}:{meal}` (deterministic) · **append-only**
+### 2.7 `meal_service` — `meal_service:{ulid}` · **append-only** · **schema_v 2** (CR-045)
+
+> **CR-045** — `_id` เปลี่ยนจาก deterministic `meal_service:{date}:{meal}` → ulid; เพิ่ม
+> `meal_plan_id` (จำเป็นเพราะ §2.5 ตอนนี้อนุญาตหลายแผนต่อวัน+มื้อเดียวกัน — บันทึกบริการต้องผูกกับ
+> แผนที่เจาะจง ไม่ใช่แค่วัน+มื้อ)
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `date` / `meal` | str / enum | req | คู่กับ meal_plan |
+| `meal_plan_id` | str\|null | opt | แผนที่บันทึกนี้รายงานผล — UI เช็ค "บันทึกแล้วหรือยัง" ด้วย field นี้ (เทียบ `plan._id`) ไม่ใช่ date+meal (CR-045) |
 | `served` | int≥0 | req | เสิร์ฟในศูนย์ |
 | `waste` | int≥0 | req | เหลือทิ้ง |
 | `external` | {`volunteers`:int≥0, `outside_evacuees`:int≥0} | req | แจกนอกศูนย์ (ตาม source Module D) |
 | `notes` | str | opt | — |
+
+`_id` เป็น ulid (ไม่ deterministic อีกต่อไป, CR-045) — เหตุผลเดียวกับ `meal_plan` §2.5:
+หลายแผนอาจใช้วัน+มื้อเดียวกัน ดังนั้น "หนึ่งบันทึกต่อวัน+มื้อ" แบบเดิมใช้ไม่ได้แล้ว การซ้ำของบันทึก
+กันด้วย UI (ปุ่ม "บันทึกบริการ" หายไปหลังบันทึกแล้ว) ไม่ใช่ด้วย `_id` ชนกันเหมือนเดิม.
+`getMealService(date, meal)` scan + filter จาก `listMealServices()` เหมือน `getMealPlan` — ambiguous
+ถ้ามีหลายบันทึกต่อมื้อ
+
+**Migration (schema_v 1 → 2, CR-045):** `meal_plan_id` optional, default `null` — เอกสารเก่าที่สร้าง
+ก่อน CR-045 จะไม่มี field นี้ และจะไม่ถูกนับว่า "บันทึกแล้ว" สำหรับแผนใดอีกต่อไป (UI จับคู่ด้วย
+`meal_plan_id` ไม่ใช่ date+meal) — โปรเจกต์นี้อยู่ช่วง dev/test เท่านั้น (pre-prod) แนะนำ unseed/reseed
+ข้อมูลทดสอบแทนการ migrate เอกสารเก่าจริง
 
 view `meals_served` + เทียบ plan vs actual ต่อวัน
 

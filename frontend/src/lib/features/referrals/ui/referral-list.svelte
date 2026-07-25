@@ -16,7 +16,10 @@
 		getStatusLabel,
 		getUrgencyLabel,
 		getUrgencyStyle,
-		isIncomingListItem
+		isIncomingListItem,
+		getReferralDirection,
+		getDirectionLabel,
+		getDirectionBadgeVariant
 	} from './referral.ui-helpers';
 
 	let {
@@ -204,6 +207,19 @@
 								>
 									หลายสถานะ
 								</Badge>
+							{/if}
+							{#if group.sample.referral_type === 'capacity'}
+								{@const direction = getReferralDirection(group.sample)}
+								{#if direction !== 'internal'}
+									<Badge class="{getDirectionBadgeVariant(direction)} h-4 px-1 text-[10px]">
+										{getDirectionLabel(direction)}
+										{#if direction === 'outgoing'}
+											→ {group.sample.to_shelter_code}
+										{:else if direction === 'incoming'}
+											← {group.sample.shelter_code}
+										{/if}
+									</Badge>
+								{/if}
 							{/if}
 							{#if group.sample.reason}
 								<span class="inline truncate text-xs text-muted-foreground sm:hidden">

@@ -8,6 +8,7 @@
 	import { capacityInputSchema, type ReferralInput } from '../domain/referral.schema';
 	import type { ReferralSubmitIntent } from '../data/referral.repository';
 	import ShelterCombobox from './shelter-combobox.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	let {
 		evacueeId,
@@ -62,6 +63,7 @@
 						bind:value={$formData.to_shelter_code}
 						error={$errors.to_shelter_code}
 						validate={() => validate('to_shelter_code')}
+						excludeCode={getShelterCode() ?? ''}
 						onSelect={(code) => {
 							$formData.to_shelter_code = code;
 						}}

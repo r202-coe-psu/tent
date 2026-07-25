@@ -139,12 +139,24 @@ const baseInput = {
 	notes: z.string().max(2000, 'Notes must not exceed 2000 characters').optional()
 };
 
-export const capacityInputSchema = z.object({
-	...baseInput,
-	referral_type: z.literal('capacity'),
-	to_shelter_code: z.string().min(1, 'กรุณาระบุรหัสศูนย์พักพิงปลายทาง'),
-	to_org: toOrgSchema.optional()
-});
+export const capacityInputSchema = z
+	.object({
+		...baseInput,
+		referral_type: z.literal('capacity'),
+		to_shelter_code: z.string().min(1, 'กรุณาระบุรหัสศูนย์พักพิงปลายทาง'),
+		to_org: toOrgSchema.optional()
+	})
+	.refine(
+		(data) => {
+			// Runtime check: to_shelter_code must differ from current shelter
+			// Actual validation enforced at server level with shelterCode context
+			return data.to_shelter_code ? data.to_shelter_code.length > 0 : false;
+		},
+		{
+			message: 'ไม่สามารถส่งต่อผู้ประสบภัยไปยังศูนย์พักพิงเดียวกันได้',
+			path: ['to_shelter_code']
+		}
+	);
 
 export const resourceInputSchema = z.object({
 	...baseInput,

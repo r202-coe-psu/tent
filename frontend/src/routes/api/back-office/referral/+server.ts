@@ -80,6 +80,17 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			return json({ error: 'Validation failed', details: parsed.error.format() }, { status: 400 });
 		}
 
+		// FR-001: Self-referral guard
+		if (
+			parsed.data.referral_type === 'capacity' &&
+			parsed.data.to_shelter_code?.toUpperCase() === shelterCode.toUpperCase()
+		) {
+			return json(
+				{ error: 'ไม่สามารถส่งต่อผู้ประสบภัยไปยังศูนย์พักพิงเดียวกันได้' },
+				{ status: 422 }
+			);
+		}
+
 		const db = `shelter_${shelterCode.toLowerCase()}`;
 		const evacueeRes = await adminRaw(
 			`/${db}/${encodeURIComponent(parsed.data.evacuee_id)}`,
@@ -93,6 +104,16 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		}
 
 		const repo = new CouchDbReferralServerRepository(db);
+
+		// FR-002: Duplicate active referral check
+		const hasDuplicate = await repo.hasActiveReferral(parsed.data.evacuee_id);
+		if (hasDuplicate) {
+			return json(
+				{ error: 'ผู้ประสบภัยรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน' },
+				{ status: 409 }
+			);
+		}
+
 		const ctx = {
 			shelterCode,
 			createdBy: caller.name
