@@ -43,7 +43,10 @@
 	});
 	const writeContext = $derived<MasterDataQueryContext>({
 		scope: resolvedScope === 'effective' ? 'global' : resolvedScope,
-		...(resolvedShelterCode ? { shelterCode: resolvedShelterCode } : {})
+		// Never pair shelter_code with a global write — the server rejects it (422).
+		...(resolvedScope !== 'effective' && resolvedShelterCode
+			? { shelterCode: resolvedShelterCode }
+			: {})
 	});
 
 	// Active type lives in the URL (`?type=...`) — single source of truth so

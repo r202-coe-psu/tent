@@ -20,6 +20,12 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 			isSA: false,
 			shelterCode: 'SH001'
 		}),
+		requireShelterManagerOrSA: vi.fn().mockResolvedValue({
+			name: 'mgr',
+			roles: ['shelter:SH001', 'shelter_manager'],
+			isSA: false,
+			shelterCode: 'SH001'
+		}),
 		adminRaw: vi.fn()
 	};
 });
@@ -29,12 +35,18 @@ vi.mock('$lib/server/master-data-server', async (importOriginal) => ({
 }));
 
 import { GET, PUT } from './+server';
-import { requireAdmin, requireShelterScopeOrSA, adminRaw } from '$lib/server/couch-admin';
+import {
+	requireAdmin,
+	requireShelterManagerOrSA,
+	requireShelterScopeOrSA,
+	adminRaw
+} from '$lib/server/couch-admin';
 import { readMasterDoc } from '$lib/server/master-data-server';
 import type { MasterData } from '$lib/features/master-data/domain';
 
 const requireAdminMock = vi.mocked(requireAdmin);
 const authMock = vi.mocked(requireShelterScopeOrSA);
+const mgrMock = vi.mocked(requireShelterManagerOrSA);
 const adminRawMock = vi.mocked(adminRaw);
 const readMock = vi.mocked(readMasterDoc);
 
@@ -79,6 +91,7 @@ function writtenDoc(): MasterData {
 beforeEach(() => {
 	requireAdminMock.mockReset().mockResolvedValue('sa-user');
 	authMock.mockReset().mockResolvedValue(caller);
+	mgrMock.mockReset().mockResolvedValue(caller);
 	adminRawMock.mockReset().mockResolvedValue({ status: 201, data: { rev: '4-new' } });
 	readMock.mockReset();
 });
@@ -183,7 +196,7 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect(method).toBe('PUT');
 		expect((doc as MasterData).schema_v).toBe(3);
 		expect((doc as MasterData).shelter_code).toBe('SH001');
-		expect(authMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
+		expect(mgrMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
 	});
 
 	it('writes the submitted shelter-local items verbatim (no split against the global doc)', async () => {

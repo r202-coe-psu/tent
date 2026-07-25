@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import {
 	adminRaw,
 	requireAdmin,
+	requireShelterManagerOrSA,
 	requireShelterScopeOrSA,
 	serviceError,
 	ServiceError
@@ -80,9 +81,12 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		if (scope.mode === 'effective') {
 			throw new ServiceError('VALIDATION', 'PUT requires global or shelter scope');
 		}
+		// Writes are SM-or-SA (FR-049-10): shelter-local master data may only be
+		// mutated by the shelter's manager or a system admin — not general staff
+		// (requireShelterScopeOrSA is a read-only gate). Global writes stay SA-only.
 		const caller =
 			scope.mode === 'shelter'
-				? (await requireShelterScopeOrSA(request.headers.get('cookie'), scope.shelterCode!)).name
+				? (await requireShelterManagerOrSA(request.headers.get('cookie'), scope.shelterCode!)).name
 				: await requireAdmin(request.headers.get('cookie'));
 		if (!Array.isArray(body.items)) {
 			throw new ServiceError('VALIDATION', 'items[] is required');
@@ -135,6 +139,9 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 					};
 			delete doc.shelter_code;
 		}
+		// Spreading `...existing` can carry a leftover `excluded_codes` from a v2
+		// doc — strip it so the persisted shape is clean schema_v 3 (CR-049).
+		delete (doc as MasterData & { excluded_codes?: string[] }).excluded_codes;
 
 		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(id)}`, 'PUT', doc);
 		if (res.status === 409) {

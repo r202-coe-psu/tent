@@ -110,7 +110,10 @@ Feature "System Management" เป็น area ใหม่ (SA-only, ข้า�
 | `frontend/src/lib/features/master-data/domain/master-data.ts` | `applyItemOp('add')` → ULID เสมอ; op `delete`→`setStatus`; ลบ `slugifyLabel`/`slugifyAscii`/`uniqueCode`; เพิ่ม item `status`; ลบ `excluded_codes`; `schema_v 1\|2\|3`; เพิ่ม `needsMasterDataMigration`/`migrateMasterDataToV3` |
 | `.../master-data/{domain.ts,index.ts}` (barrels) | ลบ export slugify/uniqueCode/deleteItem/useDeleteMasterItem; เพิ่ม migration fns |
 | `frontend/src/lib/server/master-data-server.ts` | `mergeMasterDataItems` → concat + source tag (ไม่ override/ไม่ dedup); ลบ `splitMasterDataItems`/`sameMasterDataItem`/`excluded_codes` |
-| `.../api/back-office/master-data/[type]/+server.ts` | PUT เขียน items ตรง, stamp `schema_v: 3`; ลบ split/exclude |
+| `.../api/back-office/master-data/[type]/+server.ts` | PUT เขียน items ตรง, stamp `schema_v: 3`; ลบ split/exclude; **shelter write ใช้ `requireShelterManagerOrSA`** (ไม่ใช่ read-gate `requireShelterScopeOrSA` — staff ทั่วไปเขียนไม่ได้, FR-049-10); strip legacy `excluded_codes` ตอน update v2→v3 |
+| `.../back-office/{registration-config,shelter-config,household-master-data}/+page.ts` | guard `requireAdmin` → **`requireManager`** (SA + SM เข้าถึง back-office master data ได้) |
+| `.../components/backoffice-navbar/static.ts` | ถอด `requiresAdmin` จาก shelter-config + household items → SM เห็นเมนู master data ใน sidebar |
+| `.../master-data/ui/master-data-edit-modal.svelte` | เลิกใช้ `<label>` หุ้ม Checkbox (button ซ้อน = invalid HTML) → `<div>` + `aria-labelledby` |
 | `.../api/back-office/master-data/[type]/items/[code]/**` | **ลบทั้ง route** (hard-delete endpoint ไม่มีแล้ว — soft-delete ผ่าน PUT setStatus) |
 | `.../master-data/data/master-data.api.ts` + `application/queries.ts` | ลบ `deleteItem`/`useDeleteMasterItem` (เหลือ `usePutMaster`) |
 | `.../master-data/ui/master-data-item-list.svelte` | ปุ่ม toggle ปิด/เปิดใช้งาน; global read-only (`isManageable`); **column "สถานะปัจจุบัน"** ใหม่; inactive row จาง |
@@ -163,6 +166,11 @@ admission-policy-section, basic-info-section, shelter-list, shelter-import — �
 - 2026-07-25 — **เจ้าของเคาะ**: (1) schema_v 2→3 (เพิ่ม `status` + ลบ `excluded_codes`); (2)
   `system-management/+layout.ts` ใช้ `requireAdmin` guard ทั้ง area ที่ layout (ต่างจาก
   `back-office/+layout.ts` ที่เป็น per-page เพราะ back-office มีหลาย role) → เริ่ม implement
+- 2026-07-25 — **code review round 1 fixes**: (1) shelter PUT ใช้ `requireShelterManagerOrSA` แทน
+  read-gate `requireShelterScopeOrSA` (ปิดช่องให้ staff ทั่วไปเขียน master data — FR-049-10); (2) SM
+  เข้าถึง back-office master data ได้ — guard `requireManager` + ถอด `requiresAdmin` จาก navbar; (3)
+  strip legacy `excluded_codes` ตอน update; (4) edit-modal เลิก nest button ใน `<label>`; (5) writeContext
+  ไม่ส่ง `shelter_code` คู่ `scope=global`
 - **Replication note (edge)**: filtered replication ลง edge ต้อง include global doc (ไม่มี `shelter_code`)
   ด้วย มิฉะนั้นศูนย์ offline จะไม่เห็น global master data — เป็นเรื่อง replication filter config
   ไม่ใช่ data model แต่ต้องกำหนดตอน setup edge
