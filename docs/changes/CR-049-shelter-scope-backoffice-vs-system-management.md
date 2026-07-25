@@ -174,3 +174,49 @@ admission-policy-section, basic-info-section, shelter-list, shelter-import — �
 - **Replication note (edge)**: filtered replication ลง edge ต้อง include global doc (ไม่มี `shelter_code`)
   ด้วย มิฉะนั้นศูนย์ offline จะไม่เห็น global master data — เป็นเรื่อง replication filter config
   ไม่ใช่ data model แต่ต้องกำหนดตอน setup edge
+
+---
+
+## Amendment 2026-07-25 — per-shelter disable ของ global master data item
+
+**สรุป:** ศูนย์ปิด (deactivate) global master data item เฉพาะศูนย์ตัวเองได้ โดย**ไม่กระทบ global doc**
+(master หลัก) — เก็บใน shelter-local doc field ใหม่ `disabled_global_codes: string[]` (ULID ของ global item
+ที่ศูนย์ปิด). ต่างจาก `excluded_codes` เดิมที่ตัดทิ้ง: อันนี้เป็น **explicit toggle** (ไม่ใช่ auto array-diff),
+key เป็น **ULID** (ไม่ชน), และ **reversible**.
+
+### Requirements
+| ID | Requirement |
+| --- | --- |
+| FR-049-13 | shelter-local doc รับ field `disabled_global_codes?: string[]` (ULID ของ global item ที่ศูนย์ปิด) — เป็นส่วนของ schema_v 3 (field optional, doc ที่ไม่มี = ไม่ปิดอะไร; ไม่ bump เป็น 4 เพราะ v3 ยังไม่ปล่อย) |
+| FR-049-14 | back-office (shelter scope): global item ที่ global status = active → toggle ปิด/เปิด per-shelter ได้ (เขียน `disabled_global_codes`); **แก้ label ไม่ได้** (label เป็นของ global); global item ที่ global status = inactive → read-only (deprecated ทุกศูนย์, ปิด/เปิดต่อศูนย์ไม่ได้) |
+| FR-049-15 | consumption merge: global item effective status = `inactive` ถ้า code ∈ shelter's `disabled_global_codes` หรือ global status = inactive; ไม่งั้น active. consumer กรอง `status: active` เหมือนเดิม (ไม่ต้องแก้ 7 ฟอร์ม — effective status ถูก resolve ที่ merge แล้ว) |
+| FR-049-16 | ทิศทางเดียว: ศูนย์ปิด active-global item ได้ แต่**เปิด** global-inactive item ไม่ได้ (deprecated = deprecated ทุกที่) |
+| FR-049-17 | toggle per-shelter เขียนลง shelter-local doc เท่านั้น — global doc ไม่เปลี่ยน `_rev` |
+
+### Impact (amendment)
+- `master-data.ts` — `MasterData.disabled_global_codes?: string[]`; `MasterDataItemSource.shelter_disabled?: boolean`
+- `master-data-server.ts` — `mergeMasterDataItems` apply disabled set → override global item effective status + tag `shelter_disabled`
+- `[type]/+server.ts` — GET คืน `disabled_global_codes`; PUT รับ/persist `disabled_global_codes` (shelter scope)
+- `master-data.api.ts` + `queries.ts` — `putMaster` รับ `disabledGlobalCodes`
+- `master-data-config-page.svelte` + `master-data-item-list.svelte` — global item toggle → แก้ disabled set; แสดง toggle ตาม FR-049-14
+
+| FR-049-18 | **default resolution (two-tier)**: `mergeMasterDataItems` คืน effective default เดียว — shelter-local `is_default` (active) > global default (ดู FR-049-19) > ไม่มี; item ที่ inactive/disabled เป็น default ไม่ได้; consumer ไม่ต้องแก้ (7 ฟอร์มไม่อ่าน is_default อยู่แล้ว แต่ config UI แสดง badge เดียว) |
+| FR-049-19 | **set-as-default global per-shelter**: shelter-local doc รับ `default_global_code?: string` (ULID ของ global item ที่ศูนย์เลือกเป็น default). back-office (shelter scope): global item ที่ active + ยังไม่เป็น default → ปุ่ม "ตั้งเป็นค่าเริ่มต้น" (เขียน `default_global_code`); **แก้ label ไม่ได้**. merge: default_global_code ชนะ global `is_default` แต่แพ้ shelter-local `is_default`. global doc ไม่เปลี่ยน `_rev` |
+| FR-049-20 | **shelter management (back-office)**: shelter_manager เข้า `/back-office/shelters` (list ศูนย์ตน) + **edit** ศูนย์ตนได้ (guard `requireManager` client + `requireShelterManagerOrSA` server สำหรับ PATCH + zones close/reopen); **create** ศูนย์ใหม่ = SA only (ปุ่มซ่อนสำหรับ non-SA + `[mode]=create` guard `requireAdmin` + POST `requireAdmin`) |
+
+### Impact (amendment)
+- `master-data.ts` — `MasterData.disabled_global_codes?: string[]` + `default_global_code?: string`; `MasterDataItemSource.shelter_disabled?: boolean`
+- `master-data-server.ts` — `mergeMasterDataItems` apply disabled set + resolve default เดียว (local > pointed-global > global-default)
+- `[type]/+server.ts` — PUT รับ/persist `disabled_global_codes` + `default_global_code` (shelter scope; strip บน global)
+- `master-data.api.ts` + `queries.ts` — `putMaster`/`usePutMaster` รับ `disabledGlobalCodes` + `defaultGlobalCode`
+- `master-data-config-page.svelte` + `master-data-item-list.svelte` — global item: toggle enable/disable + ปุ่ม "ตั้งเป็นค่าเริ่มต้น"
+- **SM shelter mgmt**: `back-office/shelters/+page.{ts,svelte}`, `[mode]/[[id]]/+page.ts` (mode-aware guard), `backoffice-navbar/static.ts` (ถอด requiresAdmin), `api/back-office/shelter/[code]/+server.ts` PATCH + `zones/[zoneCode]/{,reopen}/+server.ts` → `requireShelterManagerOrSA`; POST create คง `requireAdmin`
+- **seed**: `seedMasterData` เพิ่ม `municipality_zone` + `community` (ULID + parent_code); ตัด `seedThailandLocation` ออกจาก flow; portal landing tile "ทะเบียนพื้นที่และศูนย์พักพิง" = SA only
+- **default auto-select**: household-form (municipality_zone) + shelter basic-info (shelter_type, municipality_zone) pre-select master `is_default` เมื่อฟอร์มใหม่
+
+### Decision log (amendment)
+- 2026-07-25 — เจ้าของเคาะ: ทำ per-shelter disable + track เป็น amendment ต่อท้าย CR-049. เหตุผลที่ทำได้สะอาด
+  (ต่างจาก excluded_codes เดิม): ULID ปิด ambiguity, explicit toggle, reversible, ทิศทางเดียว
+- 2026-07-26 — เจ้าของเคาะ: set-as-default global per-shelter (`default_global_code`, FR-049-19) + SM
+  shelter management (FR-049-20). Implement แบบ multi-agent (Sonnet labour + Opus review); regression test
+  ล็อก PATCH ใช้ `requireShelterManagerOrSA`
