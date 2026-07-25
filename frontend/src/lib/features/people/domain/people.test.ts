@@ -17,6 +17,8 @@ import {
 	checkEvacueeHouseholdConflict,
 	assertEvacueeHouseholdAssignment,
 	assertHouseholdStatusTransition,
+	assertCheckoutDestination,
+	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
 	householdPreRegisterEvacueeSchema,
 	householdPreRegisterAddressFormSchema,
 	householdPostArrivalAddressFormSchema
@@ -382,5 +384,47 @@ describe('household status transitions', () => {
 		expect(() => assertHouseholdStatusTransition('cancelled', 'arriving')).toThrow(
 			/ไม่สามารถเปลี่ยนสถานะ/
 		);
+	});
+
+	it('allows cancelling a pre-registered household (CR-029)', () => {
+		expect(() => assertHouseholdStatusTransition('pre_registered', 'cancelled')).not.toThrow();
+	});
+
+	it('restricts the manual (free-form UI) transition table to non-side-effect-bound statuses', () => {
+		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.pre_registered).toEqual(['arriving']);
+		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.arriving).toEqual([]);
+		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.checked_in).toEqual([]);
+		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.checked_out).toEqual([]);
+		expect(MANUAL_HOUSEHOLD_STATUS_TRANSITIONS.cancelled).toEqual([]);
+	});
+});
+
+describe('assertCheckoutDestination', () => {
+	it('rejects a missing destination', () => {
+		expect(() => assertCheckoutDestination(null)).toThrow(/ต้องระบุปลายทาง/);
+		expect(() => assertCheckoutDestination(undefined)).toThrow(/ต้องระบุปลายทาง/);
+	});
+
+	it('allows returned_home with no extra fields', () => {
+		expect(() => assertCheckoutDestination({ type: 'returned_home' })).not.toThrow();
+	});
+
+	it('requires destination_name for transferred_shelter / referred_facility', () => {
+		expect(() => assertCheckoutDestination({ type: 'transferred_shelter' })).toThrow(
+			/ชื่อ\/รหัสสถานที่ปลายทาง/
+		);
+		expect(() => assertCheckoutDestination({ type: 'referred_facility' })).toThrow(
+			/ชื่อ\/รหัสสถานที่ปลายทาง/
+		);
+		expect(() =>
+			assertCheckoutDestination({ type: 'transferred_shelter', destination_name: 'ศูนย์ B' })
+		).not.toThrow();
+	});
+
+	it('requires notes for "other"', () => {
+		expect(() => assertCheckoutDestination({ type: 'other' })).toThrow(/หมายเหตุ/);
+		expect(() =>
+			assertCheckoutDestination({ type: 'other', notes: 'ญาตินำกลับไปดูแลเอง' })
+		).not.toThrow();
 	});
 });

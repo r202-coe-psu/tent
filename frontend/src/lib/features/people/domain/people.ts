@@ -74,9 +74,28 @@ export const ACTIVE_HOUSEHOLD_STATUSES: readonly HouseholdStatus[] = [
 export const HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
 	Record<HouseholdStatus, readonly HouseholdStatus[]>
 > = {
-	pre_registered: ['arriving', 'checked_in'],
+	pre_registered: ['arriving', 'checked_in', 'cancelled'],
 	arriving: ['checked_in'],
 	checked_in: ['checked_out'],
+	checked_out: [],
+	cancelled: []
+};
+
+/**
+ * Transitions safe to offer as a free-standing status override (e.g. the
+ * household profile's "change status" modal). `checked_in` is driven by the
+ * scan/check-in flow (movement + occupancy, CR-029 §3) and `checked_out`
+ * requires a `checkout_destination` (R-29-8) that only the check-out flow
+ * collects; `cancelled` goes through `cancelPreRegistration` (audit-logged).
+ * None of those three belong behind a free-form status picker — this is the
+ * subset of {@link HOUSEHOLD_STATUS_TRANSITIONS} left over once they're excluded.
+ */
+export const MANUAL_HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
+	Record<HouseholdStatus, readonly HouseholdStatus[]>
+> = {
+	pre_registered: ['arriving'],
+	arriving: [],
+	checked_in: [],
 	checked_out: [],
 	cancelled: []
 };
@@ -271,6 +290,28 @@ export function assertHouseholdStatusTransition(
 	}
 }
 
+/**
+ * Enforce R-29-8: checking a household out always requires a destination,
+ * with additional required fields depending on `type` — `destination_name`
+ * for `transferred_shelter`/`referred_facility`, `notes` for `other`.
+ */
+export function assertCheckoutDestination(
+	destination: CheckoutDestination | null | undefined
+): void {
+	if (!destination) {
+		throw new Error('ต้องระบุปลายทางเมื่อเช็คเอาท์ครัวเรือน');
+	}
+	if (
+		(destination.type === 'transferred_shelter' || destination.type === 'referred_facility') &&
+		!destination.destination_name?.trim()
+	) {
+		throw new Error('กรุณาระบุชื่อ/รหัสสถานที่ปลายทาง');
+	}
+	if (destination.type === 'other' && !destination.notes?.trim()) {
+		throw new Error('กรุณาระบุหมายเหตุเมื่อเลือกปลายทางเป็นอื่นๆ');
+	}
+}
+
 export interface MovementDestination {
 	kind: 'home' | 'shelter' | 'hospital' | 'other';
 	shelter_code?: string;
@@ -329,7 +370,11 @@ export const evacueeInputSchema = z.object({
 				.string()
 				.trim()
 				.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
-			relation: z.string().trim().min(1, 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน')
+			relation: z
+				.string()
+				.trim()
+				.min(1, 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน')
+				.default('contact')
 		})
 		.optional(),
 	household_id: z.string().nullable().default(null),

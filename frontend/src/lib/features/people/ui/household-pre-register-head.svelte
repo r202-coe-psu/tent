@@ -7,7 +7,6 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import SearchSelect from '$lib/components/search-select.svelte';
-	import { SearchSelect as UiSearchSelect } from '$lib/components/ui/search-select/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
@@ -64,6 +63,19 @@
 		validators: zod4(householdPreRegisterEvacueeSchema),
 		resetForm: false,
 		onSubmit: ({ cancel }) => {
+			if (
+				$formData.person_id?.cardType === 'national_id' &&
+				($formData.person_id?.number ?? '').replace(/\D/g, '').length !== 13
+			) {
+				$errors.person_id = {
+					...$errors.person_id,
+					number: ['เลขประจำตัวประชาชนต้องมี 13 หลัก']
+				};
+				toast.error('เลขประจำตัวประชาชนต้องมี 13 หลัก');
+				cancel();
+				return;
+			}
+
 			if (noPhone) {
 				$formData.phone = null;
 			} else {
@@ -98,7 +110,14 @@
 			person_id: {
 				cardType: initialData.person_id?.cardType ?? 'national_id',
 				number: initialData.person_id?.number ?? ''
-			}
+			},
+			emergency_contact: initialData.emergency_contact
+				? {
+						name: initialData.emergency_contact.name,
+						phone: initialData.emergency_contact.phone,
+						relation: initialData.emergency_contact.relation ?? 'contact'
+					}
+				: $formData.emergency_contact
 		};
 		noPhone = !initialData.phone;
 		birthYearBE = String(initialData.birth_year ?? '');

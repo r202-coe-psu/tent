@@ -73,6 +73,34 @@ describe('PeopleRemoteRepository', () => {
 			await repo.createEvacuee(evInput(), ctx);
 			expect(await repo.listMedicals()).toHaveLength(0);
 		});
+
+		it('rejects assigning a new evacuee to a cancelled/checked-out household', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือนปิดแล้ว', head_evacuee_id: null, status: 'cancelled' },
+				ctx
+			);
+
+			await expect(
+				repo.createEvacuee(evInput({ household_id: household._id }), ctx)
+			).rejects.toThrow(/ยกเลิกหรือเช็คเอาท์แล้ว/);
+			expect(await repo.listEvacuees()).toHaveLength(0);
+		});
+
+		it('rejects assigning a new evacuee to a non-existent household', async () => {
+			await expect(
+				repo.createEvacuee(evInput({ household_id: 'household:missing' }), ctx)
+			).rejects.toThrow(/ไม่พบครัวเรือนปลายทาง/);
+		});
+
+		it('allows assigning a new evacuee to an active household', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือนเปิดอยู่', head_evacuee_id: null, status: 'checked_in' },
+				ctx
+			);
+
+			const saved = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
+			expect(saved.household_id).toBe(household._id);
+		});
 	});
 
 	describe('household membership invariant', () => {
@@ -137,6 +165,47 @@ describe('PeopleRemoteRepository', () => {
 			await expect(repo.updateHousehold({ ...household, status: 'checked_in' })).rejects.toThrow(
 				/ไม่สามารถเปลี่ยนสถานะ/
 			);
+		});
+
+		it('rejects checking a household out without a checkout_destination (R-29-8)', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: null, status: 'checked_in' },
+				ctx
+			);
+
+			await expect(
+				repo.updateHousehold({ ...household, status: 'checked_out', checkout_destination: null })
+			).rejects.toThrow(/ต้องระบุปลายทาง/);
+		});
+
+		it('rejects checking out with a destination type missing its required sub-field', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: null, status: 'checked_in' },
+				ctx
+			);
+
+			await expect(
+				repo.updateHousehold({
+					...household,
+					status: 'checked_out',
+					checkout_destination: { type: 'transferred_shelter' }
+				})
+			).rejects.toThrow(/ชื่อ\/รหัสสถานที่ปลายทาง/);
+		});
+
+		it('accepts checking out with a valid checkout_destination', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: null, status: 'checked_in' },
+				ctx
+			);
+
+			const updated = await repo.updateHousehold({
+				...household,
+				status: 'checked_out',
+				checkout_destination: { type: 'returned_home' }
+			});
+
+			expect(updated.status).toBe('checked_out');
 		});
 	});
 

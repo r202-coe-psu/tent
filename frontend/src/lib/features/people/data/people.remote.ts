@@ -25,6 +25,7 @@ import {
 	matchesEvacueeSearch,
 	assertEvacueeHouseholdAssignment,
 	assertHouseholdStatusTransition,
+	assertCheckoutDestination,
 	isActiveHouseholdStatus,
 	type Medical,
 	type Movement
@@ -83,6 +84,14 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	}
 
 	async createEvacuee(input: EvacueeInput, ctx: AuthorContext): Promise<Evacuee> {
+		if (input.household_id) {
+			const targetHousehold = await this.repo.get<Household>(input.household_id);
+			if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
+			if (!isActiveHouseholdStatus(migrateHouseholdV3ToV4(targetHousehold).status)) {
+				throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+			}
+		}
+
 		const evacuee = buildEvacuee(input, ctx);
 		const saved = await this.repo.put(evacuee);
 
@@ -206,9 +215,25 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (!latestDoc) throw new Error('ไม่พบข้อมูลครัวเรือน');
 		const latest = migrateHouseholdV3ToV4(latestDoc);
 		assertHouseholdStatusTransition(latest.status, household.status);
+		if (household.status === 'checked_out') {
+			assertCheckoutDestination(household.checkout_destination);
+		}
 		return this.repo.put(touch({ ...household, _rev: latest._rev }));
 	}
 
+	/**
+	 * When the last member is moved out of an active household (leaving it
+	 * empty), retire it as `cancelled` rather than:
+	 *  - hard-deleting the doc — history/audit trail for the reservation
+	 *    would be lost, and CouchDB tombstones complicate sync;
+	 *  - `checked_out` — that status asserts a real physical checkout with a
+	 *    `checkout_destination` (R-29-8), which never happened here; the
+	 *    household was simply emptied by a member reassignment.
+	 * `cancelled` is terminal (no transitions out, `isActiveHouseholdStatus`
+	 * excludes it) and mirrors the SM-initiated "cancel pre-registration"
+	 * path (`cancelPreRegistration`) that already uses the same status for
+	 * an abandoned reservation.
+	 */
 	private async cancelHouseholdIfEmpty(householdId: string): Promise<void> {
 		const [household, evacuees] = await Promise.all([
 			this.repo.get<Household>(householdId),
@@ -288,6 +313,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (household.status !== 'pre_registered') {
 			throw new Error('สามารถยกเลิกได้เฉพาะครัวเรือนที่อยู่ในสถานะลงทะเบียนล่วงหน้าเท่านั้น');
 		}
+		assertHouseholdStatusTransition(household.status, 'cancelled');
 
 		const members = await this.listHouseholdMembers(householdId);
 

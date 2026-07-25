@@ -10,7 +10,7 @@
 
 	// Queries & mutations
 	import {
-		HOUSEHOLD_STATUS_TRANSITIONS,
+		MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
 		useCancelPreRegistration,
 		useEvacuees,
 		useHousehold,
@@ -59,8 +59,11 @@
 	const isLoading = $derived(
 		evacueesQuery.isLoading || householdQuery.isLoading || householdsQuery.isLoading
 	);
+	// Only ops-override transitions belong here — check-in/out are driven by
+	// their own flows (scan/movement, checkout_destination) and cancellation
+	// goes through `cancelPreRegistration` (see MANUAL_HOUSEHOLD_STATUS_TRANSITIONS).
 	const allowedStatusTransitions = $derived(
-		household ? HOUSEHOLD_STATUS_TRANSITIONS[household.status] : []
+		household ? MANUAL_HOUSEHOLD_STATUS_TRANSITIONS[household.status] : []
 	);
 
 	// Modal controls
