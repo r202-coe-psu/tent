@@ -1,13 +1,7 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
 import { getShelterCode } from '$lib/db/shelter';
-import {
-	deleteItem,
-	getMaster,
-	listMasters,
-	putMaster,
-	type MasterDataSummary
-} from '../data/master-data.api';
+import { getMaster, listMasters, putMaster, type MasterDataSummary } from '../data/master-data.api';
 import type { MasterDataItem, MasterDataQueryContext, MasterDataType } from '../domain/master-data';
 
 type ContextGetter = () => MasterDataQueryContext | undefined;
@@ -86,30 +80,6 @@ export function usePutMaster() {
 		},
 		onError: (e: unknown) => {
 			toast.error(e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ');
-		}
-	}));
-}
-
-export function useDeleteMasterItem() {
-	const qc = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: async ({
-			type,
-			code,
-			context
-		}: {
-			type: MasterDataType;
-			code: string;
-			context?: MasterDataQueryContext;
-		}) => deleteItem(type, code, context),
-		onSuccess: (_data, { type, context }) => {
-			qc.invalidateQueries({ queryKey: masterDataKeys.detail(type, context) });
-			qc.invalidateQueries({ queryKey: masterDataKeys.list(context) });
-			qc.invalidateQueries({ queryKey: masterDataKeys.all });
-			toast.success('ลบสำเร็จ');
-		},
-		onError: (e: unknown) => {
-			toast.error(e instanceof Error ? e.message : 'ลบไม่สำเร็จ');
 		}
 	}));
 }

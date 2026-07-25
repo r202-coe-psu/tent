@@ -38,14 +38,17 @@ const authMock = vi.mocked(requireShelterScopeOrSA);
 const adminRawMock = vi.mocked(adminRaw);
 const readMock = vi.mocked(readMasterDoc);
 
-function existingDoc(items: MasterData['items']): MasterData {
+type ItemFixture = Omit<MasterData['items'][number], 'status'> &
+	Partial<Pick<MasterData['items'][number], 'status'>>;
+
+function existingDoc(items: ItemFixture[]): MasterData {
 	return {
 		_id: 'master_data:pet_types',
 		_rev: '3-old',
 		type: 'master_data',
 		schema_v: 1,
 		master_type: 'pet_types',
-		items,
+		items: items.map((i) => ({ ...i, status: i.status ?? 'active' })),
 		created_at: '2026-01-01T00:00:00.000Z',
 		updated_at: '2026-01-02T00:00:00.000Z',
 		created_by: 'origauthor'
@@ -116,8 +119,8 @@ describe('GET /api/back-office/master-data/[type]', () => {
 			item_sources: Record<string, { scope: string; shelter_code?: string | null }>;
 		};
 		expect(body.items).toEqual([
-			{ code: 'dog', label: 'Dog', is_default: true },
-			{ code: 'cat', label: 'Cat', is_default: true }
+			{ code: 'dog', label: 'Dog', is_default: true, status: 'active' },
+			{ code: 'cat', label: 'Cat', is_default: true, status: 'active' }
 		]);
 		expect(body.item_sources).toEqual({
 			dog: { scope: 'global', shelter_code: null },
@@ -178,37 +181,38 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		const [path, method, doc] = adminRawMock.mock.calls[0];
 		expect(path).toBe('/registry/master_data%3Apet_types%3ASH001');
 		expect(method).toBe('PUT');
-		expect((doc as MasterData).schema_v).toBe(2);
+		expect((doc as MasterData).schema_v).toBe(3);
 		expect((doc as MasterData).shelter_code).toBe('SH001');
 		expect(authMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
 	});
 
-	it('stores only shelter-specific items when effective values include global items', async () => {
-		readMock.mockImplementation(async (_type, shelterCode) =>
-			shelterCode
-				? null
-				: existingDoc([
-						{ code: 'dog', label: 'Dog', is_default: false },
-						{ code: 'cat', label: 'Cat', is_default: true }
-					])
-		);
+	it('writes the submitted shelter-local items verbatim (no split against the global doc)', async () => {
+		// The global doc is never even read for a shelter-scoped PUT -- the UI
+		// sends only the shelter-local items (global is read-only client-side).
+		readMock.mockResolvedValue(null);
 
 		await callPUT(
 			'pet_types',
 			{
 				shelter_code: 'SH001',
-				items: [
-					{ code: 'dog', label: 'Dog', is_default: false },
-					{ code: 'cat', label: 'Cat', is_default: true },
-					{ code: 'local_dog', label: 'Local dog', is_default: false }
-				]
+				items: [{ code: 'local_dog', label: 'Local dog', is_default: false }]
 			},
 			'?scope=shelter&shelter_code=SH001'
 		);
 
 		const doc = writtenDoc();
-		expect(doc.items).toEqual([{ code: 'local_dog', label: 'Local dog', is_default: false }]);
-		expect(doc.excluded_codes).toBeUndefined();
+		expect(doc.items).toEqual([
+			{ code: 'local_dog', label: 'Local dog', is_default: false, status: 'active' }
+		]);
+		expect(readMock).toHaveBeenCalledWith('pet_types', 'SH001');
+		expect(readMock).not.toHaveBeenCalledWith('pet_types');
+	});
+
+	it('defaults items without a status field to active', async () => {
+		readMock.mockResolvedValue(null);
+		await callPUT('pet_types', { items });
+		const doc = writtenDoc();
+		expect(doc.items).toEqual([{ code: 'dog', label: 'Dog', is_default: false, status: 'active' }]);
 	});
 
 	it('rejects shelter_code on a global write', async () => {
@@ -225,7 +229,7 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		const doc = writtenDoc();
 		expect(doc.created_by).toBe('origauthor');
 		expect(doc._rev).toBe('3-old');
-		expect(doc.items).toEqual(items);
+		expect(doc.items).toEqual([{ ...items[0], status: 'active' }]);
 	});
 
 	it('collapses multiple defaults down to exactly one (enforceOneDefault)', async () => {

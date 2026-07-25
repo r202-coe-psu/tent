@@ -16,8 +16,6 @@ export {
 	masterDataSchema,
 	masterDataItemSchema,
 	itemInputSchema,
-	slugifyLabel,
-	uniqueCode,
 	enforceOneDefault,
 	applyItemOp,
 	createMasterData,
@@ -25,6 +23,8 @@ export {
 	masterDocId,
 	makeRegistryDoc,
 	isMasterData,
+	needsMasterDataMigration,
+	migrateMasterDataToV3,
 	type MasterDataType,
 	type MasterDataScope,
 	type MasterDataRecordScope,
@@ -38,21 +38,14 @@ export {
 } from './domain/master-data';
 
 // Data — service plane client (CR-010)
-export {
-	listMasters,
-	getMaster,
-	putMaster,
-	deleteItem,
-	type MasterDataSummary
-} from './data/master-data.api';
+export { listMasters, getMaster, putMaster, type MasterDataSummary } from './data/master-data.api';
 
 // Application — TanStack Query hooks
 export {
 	masterDataKeys,
 	useMasterDataList,
 	useMasterData,
-	usePutMaster,
-	useDeleteMasterItem
+	usePutMaster
 } from './application/queries';
 
 // UI — feature components

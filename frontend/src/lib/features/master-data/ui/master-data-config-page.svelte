@@ -90,6 +90,23 @@
 		modalOpen = true;
 	}
 
+	// For shelter scope, the PUT body must contain ONLY shelter-local items —
+	// global items are read-only and live in their own doc, never copied into
+	// the shelter doc. Newly added items have no source entry yet, so they are
+	// treated as shelter-local. Global scope sends everything (all items are
+	// global there).
+	function localOnly(candidateItems: readonly MasterDataItem[]): MasterDataItem[] {
+		if (resolvedScope === 'global') return [...candidateItems];
+		return candidateItems.filter((item) => {
+			const source = detail.data?.item_sources?.[item.code];
+			return !source || source.scope === 'shelter';
+		});
+	}
+
+	function submitItems(nextItems: readonly MasterDataItem[]) {
+		putMutation.mutate({ type: activeType, items: localOnly(nextItems), context: writeContext });
+	}
+
 	function handleSubmit(input: { code?: string; label: string; is_default: boolean }) {
 		const op = input.code
 			? ({
@@ -99,7 +116,17 @@
 					is_default: input.is_default
 				} as const)
 			: ({ kind: 'add', label: input.label, is_default: input.is_default } as const);
-		putMutation.mutate({ type: activeType, items: applyItemOp(items, op), context: writeContext });
+		submitItems(applyItemOp(items, op));
+	}
+
+	function handleToggleStatus(item: MasterDataItem) {
+		submitItems(
+			applyItemOp(items, {
+				kind: 'setStatus',
+				code: item.code,
+				status: item.status === 'active' ? 'inactive' : 'active'
+			})
+		);
 	}
 </script>
 
@@ -115,6 +142,7 @@
 			itemSources={detail.data?.item_sources}
 			onAdd={openAdd}
 			onEdit={openEdit}
+			onToggleStatus={handleToggleStatus}
 		/>
 	</div>
 </div>

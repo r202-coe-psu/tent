@@ -27,8 +27,10 @@
 
 	const zoneQuery = useMasterData(() => 'municipality_zone');
 	const communityQuery = useMasterData(() => 'community');
-	const zoneItems = $derived(zoneQuery.data?.items ?? []);
-	const communityItems = $derived(communityQuery.data?.items ?? []);
+	const zoneItems = $derived((zoneQuery.data?.items ?? []).filter((i) => i.status === 'active'));
+	const communityItems = $derived(
+		(communityQuery.data?.items ?? []).filter((i) => i.status === 'active')
+	);
 	const masterDataLoading = $derived(zoneQuery.isLoading || communityQuery.isLoading);
 
 	const lookups = $derived<Lookups>({

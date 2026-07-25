@@ -14,11 +14,7 @@ import {
 	masterTypeSchema,
 	type MasterData
 } from '$lib/features/master-data/domain';
-import {
-	mergeMasterDataItems,
-	readMasterDoc,
-	splitMasterDataItems
-} from '$lib/server/master-data-server';
+import { mergeMasterDataItems, readMasterDoc } from '$lib/server/master-data-server';
 
 export const prerender = false;
 
@@ -68,9 +64,11 @@ export const GET: RequestHandler = async ({ params, request }) => {
 	}
 };
 
-/** PUT — replace the whole `items` array. Admin UI sends the canonical list
- *  (after add/edit/delete/setDefault ran client-side). Idempotent on first
- *  write (creates the doc with a fresh envelope). */
+/** PUT — replace the whole `items` array of the target doc (global or
+ *  shelter-local) verbatim. The UI sends only the items that belong to that
+ *  scope — for shelter scope that's the shelter-local items only, since the
+ *  global list is read-only client-side. No split, no overlay, no
+ *  excluded_codes bookkeeping: the submitted array becomes the doc's items. */
 export const PUT: RequestHandler = async ({ params, request }) => {
 	try {
 		const type = masterTypeSchema.parse(params.type);
@@ -94,46 +92,41 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		);
 
 		const id = masterDocId(type, scope.shelterCode);
-		const global = scope.shelterCode ? await readMasterDoc(type) : null;
 		const existing = await readMasterDoc(type, scope.shelterCode);
 		const now = new Date().toISOString();
 		let doc: MasterData;
 		if (scope.shelterCode) {
-			const overlay = splitMasterDataItems(cleaned, global);
 			doc = existing
 				? {
 						...existing,
-						schema_v: 2,
+						schema_v: 3,
 						shelter_code: scope.shelterCode,
-						items: overlay.items,
-						updated_at: now,
-						...(overlay.excludedCodes.length ? { excluded_codes: overlay.excludedCodes } : {})
-					}
-				: {
-						_id: id,
-						type: 'master_data',
-						schema_v: 2,
-						master_type: type,
-						shelter_code: scope.shelterCode,
-						items: overlay.items,
-						...(overlay.excludedCodes.length ? { excluded_codes: overlay.excludedCodes } : {}),
-						created_at: now,
-						updated_at: now,
-						created_by: caller
-					};
-			if (!overlay.excludedCodes.length) delete doc.excluded_codes;
-		} else {
-			doc = existing
-				? {
-						...existing,
-						schema_v: 2,
 						items: cleaned,
 						updated_at: now
 					}
 				: {
 						_id: id,
 						type: 'master_data',
-						schema_v: 2,
+						schema_v: 3,
+						master_type: type,
+						shelter_code: scope.shelterCode,
+						items: cleaned,
+						created_at: now,
+						updated_at: now,
+						created_by: caller
+					};
+		} else {
+			doc = existing
+				? {
+						...existing,
+						schema_v: 3,
+						items: cleaned,
+						updated_at: now
+					}
+				: {
+						_id: id,
+						type: 'master_data',
+						schema_v: 3,
 						master_type: type,
 						items: cleaned,
 						created_at: now,
@@ -141,7 +134,6 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 						created_by: caller
 					};
 			delete doc.shelter_code;
-			delete doc.excluded_codes;
 		}
 
 		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(id)}`, 'PUT', doc);

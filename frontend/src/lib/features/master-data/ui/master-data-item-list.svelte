@@ -7,10 +7,7 @@
 		MasterDataQueryContext,
 		MasterDataType
 	} from '$lib/features/master-data';
-	import { MASTER_DATA_TYPE_LABELS } from '$lib/features/master-data';
-	import { useDeleteMasterItem } from '$lib/features/master-data';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 
 	let {
 		type,
@@ -18,7 +15,8 @@
 		context,
 		itemSources,
 		onAdd,
-		onEdit
+		onEdit,
+		onToggleStatus
 	}: {
 		type: MasterDataType;
 		items: readonly MasterDataItem[];
@@ -26,13 +24,10 @@
 		itemSources?: Record<string, MasterDataItemSource>;
 		onAdd: () => void;
 		onEdit: (item: MasterDataItem) => void;
+		onToggleStatus: (item: MasterDataItem) => void;
 	} = $props();
 
-	const deleteMutation = useDeleteMasterItem();
-
 	let search = $state('');
-	let deleteConfirmOpen = $state(false);
-	let pendingDeleteItem = $state<MasterDataItem | null>(null);
 
 	const filtered = $derived(
 		search.trim()
@@ -40,21 +35,17 @@
 			: items
 	);
 
-	function handleDelete(item: MasterDataItem) {
-		pendingDeleteItem = item;
-		deleteConfirmOpen = true;
-	}
-
-	function confirmDelete() {
-		if (!pendingDeleteItem) return;
-		deleteMutation.mutate({ type, code: pendingDeleteItem.code, context });
-		pendingDeleteItem = null;
+	// At shelter scope, global-sourced items are read-only — no edit/toggle.
+	function isManageable(item: MasterDataItem): boolean {
+		if (context?.scope !== 'shelter') return true;
+		return itemSources?.[item.code]?.scope === 'shelter';
 	}
 </script>
 
 <section
 	class="rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6"
 	aria-label="รายการข้อมูล"
+	data-master-type={type}
 >
 	<header class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 		<h1 class="text-xl font-semibold">รายการข้อมูล ({items.length})</h1>
@@ -104,13 +95,15 @@
 			<thead class="bg-muted/50 text-muted-foreground">
 				<tr>
 					<th class="px-4 py-3 text-left font-semibold">ข้อมูลมาตรฐาน</th>
+					<th class="px-4 py-3 text-left font-semibold">สถานะปัจจุบัน</th>
 					<th class="px-4 py-3 text-right font-semibold">จัดการ</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each filtered as item (item.code)}
 					{@const source = itemSources?.[item.code]}
-					<tr class="border-t hover:bg-muted/30">
+					{@const manageable = isManageable(item)}
+					<tr class="border-t hover:bg-muted/30" class:opacity-60={item.status === 'inactive'}>
 						<td class="px-4 py-3">
 							<div class="flex flex-wrap items-center gap-2">
 								<div class="font-medium">{item.label}</div>
@@ -129,60 +122,62 @@
 							{/if}
 						</td>
 						<td class="px-4 py-3">
-							<div class="flex items-center justify-end gap-2">
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									class="border-primary/20 text-primary hover:bg-primary/10"
-									onclick={() => onEdit(item)}
-									aria-label="จัดการ {item.label}"
-								>
-									<svg
-										class="mr-1 h-3.5 w-3.5"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										aria-hidden="true"
+							{#if item.status === 'active'}
+								<Badge class="border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
+									ใช้งาน
+								</Badge>
+							{:else}
+								<Badge variant="outline" class="text-muted-foreground">ปิดใช้งาน</Badge>
+							{/if}
+						</td>
+						<td class="px-4 py-3">
+							{#if manageable}
+								<div class="flex items-center justify-end gap-2">
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										class="border-primary/20 text-primary hover:bg-primary/10"
+										onclick={() => onEdit(item)}
+										aria-label="จัดการ {item.label}"
 									>
-										<path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-									</svg>
-									จัดการ
-								</Button>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									class="border-destructive/20 text-destructive hover:bg-destructive/10"
-									onclick={() => handleDelete(item)}
-									disabled={deleteMutation.isPending}
-									aria-label="ลบ {item.label}"
-								>
-									<svg
-										class="mr-1 h-3.5 w-3.5"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										aria-hidden="true"
+										<svg
+											class="mr-1 h-3.5 w-3.5"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+										>
+											<path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+										</svg>
+										จัดการ
+									</Button>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										class={item.status === 'active'
+											? 'border-destructive/20 text-destructive hover:bg-destructive/10'
+											: 'border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10'}
+										onclick={() => onToggleStatus(item)}
+										aria-label="{item.status === 'active'
+											? 'ปิดใช้งาน'
+											: 'เปิดใช้งาน'} {item.label}"
 									>
-										<path
-											d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-										/>
-									</svg>
-									ลบ
-								</Button>
-							</div>
+										{item.status === 'active' ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}
+									</Button>
+								</div>
+							{:else}
+								<div class="text-right text-xs text-muted-foreground">จัดการที่ส่วนกลาง</div>
+							{/if}
 						</td>
 					</tr>
 				{:else}
 					<tr>
-						<td colspan="2" class="px-4 py-8 text-center text-muted-foreground">
+						<td colspan="3" class="px-4 py-8 text-center text-muted-foreground">
 							{search.trim()
 								? 'ไม่พบรายการที่ค้นหา'
 								: 'ยังไม่มีข้อมูล — กดปุ่ม "เพิ่มข้อมูล" เพื่อเริ่ม'}
@@ -193,25 +188,3 @@
 		</table>
 	</div>
 </section>
-
-<AlertDialog.Root bind:open={deleteConfirmOpen}>
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>ลบข้อมูลนี้?</AlertDialog.Title>
-			<AlertDialog.Description>
-				{#if pendingDeleteItem}
-					ลบ "{pendingDeleteItem.label}" ออกจาก {MASTER_DATA_TYPE_LABELS[type]}
-				{/if}
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel onclick={() => (pendingDeleteItem = null)}>ยกเลิก</AlertDialog.Cancel>
-			<AlertDialog.Action
-				class="bg-destructive text-white hover:bg-destructive/90"
-				onclick={confirmDelete}
-			>
-				ลบ
-			</AlertDialog.Action>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>

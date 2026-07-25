@@ -77,16 +77,3 @@ export function putMaster(
 		headers: { 'content-type': 'application/json' }
 	});
 }
-
-export function deleteItem(
-	type: MasterDataType,
-	code: string,
-	context?: MasterDataQueryContext
-): Promise<{ ok: true; rev: string }> {
-	return serviceFetch(
-		`${BASE}/${encodeURIComponent(type)}/items/${encodeURIComponent(code)}${queryString(context)}`,
-		{
-			method: 'DELETE'
-		}
-	);
-}

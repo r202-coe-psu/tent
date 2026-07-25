@@ -130,7 +130,11 @@
 	const specialNeedChipOptions = $derived.by(() => {
 		if (!vulnerableGroupQuery.isSuccess) return [];
 		const supported = shelterQuery.data?.admission_policy?.supported_vulnerable_groups ?? [];
-		const masterByCode = new Map(vulnerableGroupQuery.data.items.map((item) => [item.code, item]));
+		const masterByCode = new Map(
+			vulnerableGroupQuery.data.items
+				.filter((item) => item.status === 'active')
+				.map((item) => [item.code, item])
+		);
 		return supported
 			.filter((code) => masterByCode.has(code))
 			.map((code) => ({ code, label: masterByCode.get(code)!.label }));

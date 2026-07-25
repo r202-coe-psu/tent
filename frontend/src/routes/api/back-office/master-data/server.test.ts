@@ -50,14 +50,17 @@ function callEffective() {
 	return GET({ request, params: {} } as unknown as Parameters<typeof GET>[0]);
 }
 
-function fakeDoc(type: MasterData['master_type'], items: MasterData['items']): MasterData {
+type ItemFixture = Omit<MasterData['items'][number], 'status'> &
+	Partial<Pick<MasterData['items'][number], 'status'>>;
+
+function fakeDoc(type: MasterData['master_type'], items: ItemFixture[]): MasterData {
 	return {
 		_id: `master_data:${type}`,
 		_rev: '1-a',
 		type: 'master_data',
 		schema_v: 1,
 		master_type: type,
-		items,
+		items: items.map((i) => ({ ...i, status: i.status ?? 'active' })),
 		created_at: '2026-01-01T00:00:00.000Z',
 		updated_at: '2026-01-01T00:00:00.000Z',
 		created_by: 'sa-bootstrap'

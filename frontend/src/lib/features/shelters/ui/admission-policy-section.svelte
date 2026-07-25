@@ -22,7 +22,9 @@
 
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	const vulnerableGroups = $derived(
-		(vulnerableGroupQuery.data?.items ?? []).map((i) => ({ value: i.code, label: i.label }))
+		(vulnerableGroupQuery.data?.items ?? [])
+			.filter((i) => i.status === 'active')
+			.map((i) => ({ value: i.code, label: i.label }))
 	);
 
 	const selectedVulnerable = $derived(

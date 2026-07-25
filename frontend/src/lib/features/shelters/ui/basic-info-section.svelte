@@ -40,13 +40,19 @@
 	const communityQuery = useMasterData(() => 'community');
 
 	const shelterTypeItems = $derived(
-		(shelterTypeQuery.data?.items ?? []).map((i) => ({ value: i.code, label: i.label }))
+		(shelterTypeQuery.data?.items ?? [])
+			.filter((i) => i.status === 'active')
+			.map((i) => ({ value: i.code, label: i.label }))
 	);
 	const municipalityZoneItems = $derived(
-		(municipalityZoneQuery.data?.items ?? []).map((i) => ({ value: i.code, label: i.label }))
+		(municipalityZoneQuery.data?.items ?? [])
+			.filter((i) => i.status === 'active')
+			.map((i) => ({ value: i.code, label: i.label }))
 	);
 	const communityItems = $derived(
-		(communityQuery.data?.items ?? []).map((i) => ({ value: i.code, label: i.label }))
+		(communityQuery.data?.items ?? [])
+			.filter((i) => i.status === 'active')
+			.map((i) => ({ value: i.code, label: i.label }))
 	);
 
 	const selectTriggerClass =
