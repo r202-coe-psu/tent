@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-24
+updated: 2026-07-25
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -40,6 +40,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 4** — เพิ่ม `photo` (CR-049).
 > **schema_v 3** — `current_stay.status` เปลี่ยนจาก 4 ค่าเป็น 6 ค่า: `pre_registered`,`active`,
 > `temporary_leave`,`transferred`,`checked_out`,`deceased` (UI v5, CR-035).
 > `special_needs` เปลี่ยนจาก fixed enum เป็น free-form `[str]` (6).
@@ -59,6 +60,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `special_needs` | [str] | opt | free-form, nonempty หลัง trim; default `[]` (CR-046 — เดิม fixed enum; ไม่ผูก whitelist ในโค้ด, ไม่ใช่ master_data-wired — รอ CR แยกถ้าจะ wire ไป master_data) |
 | `emergency_contact` | {`name`:str, `phone`:str, `relation`:str} | opt | — |
 | `household_id` | str\|null | opt | → `household:{ulid}` |
+| `photo` | str\|null | opt | → image:{ulid} (§1.6) รูปถ่ายใบหน้าที่บันทึกตอนลงทะเบียน (CR-049); null/ไม่มี field = ไม่มีรูป |
 | `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`) เริ่ม `pre_registered` · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
 | `registered_via` | enum(`app`,`import`,`paper`) | req | — |
@@ -143,7 +145,21 @@ action ใหม่เท่านั้น). `special_needs` (CR-046) ไม่
 | `screened_at` | ts | req | — |
 
 **Index:** `(evacuee_id, screened_at)` · view `latest_screening`
+### 1.6 `image` — `image:{ulid}` · **schema_v 1** (CR-049)
 
+Doc type ทั่วไป (ไม่ผูกเฉพาะ evacuee) สำหรับเก็บรูปเป็น **CouchDB attachment** — ตัวเอกสารเก็บแค่
+เมตาดาต้า ตัวไบต์รูปจริงอยู่ใน `_attachments`
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `filename` | str | req | ชื่อไฟล์ต้นฉบับจาก client |
+| `content_type` | str | req | mime type หลัง compress (`image/jpeg`) |
+| `width` / `height` | int | req | ขนาดพิกเซลหลัง resize (ด้านยาวสุด ≤ 1024px) |
+| `original_size` / `compressed_size` / `thumbnail_size` | int | req | bytes — ก่อน compress / หลัง compress / thumbnail |
+| `caption` | str | opt | default `''` |
+
+**Attachments:** `full` (JPEG ≤1024px, quality 0.82), `thumb` (JPEG square-crop 200px) — เขียนผ่าน
+`PUT /{db}/{docid}/{attname}?rev=...` (HTTP ตรง ผ่าน `/couch` proxy คุกกี้ `_session` — ไม่ใช้ PouchDB)
 ---
 
 ## 2. DB `shelter_{shelter_code}` — Operations
