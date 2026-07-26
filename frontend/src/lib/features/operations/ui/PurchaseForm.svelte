@@ -60,8 +60,15 @@
 				}
 	);
 
+	// The create and edit dialogs mount at the same time — distinct ids keep
+	// superforms from feeding one form's data to the other.
+	const formId = untrack(() => (purchase ? `purchase-edit-${purchase._id}` : 'purchase-create'));
+
 	const form = superForm(defaults(initial, zod4(purchaseInputSchema)), {
 		SPA: true,
+		id: formId,
+		// `items` is a nested array of objects — superforms throws on init without this.
+		dataType: 'json',
 		validators: zod4(purchaseInputSchema),
 		resetForm: false,
 		onUpdate: async ({ form: validated }) => {

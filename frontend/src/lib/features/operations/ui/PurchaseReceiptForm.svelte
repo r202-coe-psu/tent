@@ -54,6 +54,8 @@
 		),
 		{
 			SPA: true,
+			// `counted` is a nested array of objects — superforms throws on init without this.
+			dataType: 'json',
 			validators: zod4(purchaseReceiptInputSchema),
 			resetForm: false,
 			onUpdate: async ({ form: validated }) => {
