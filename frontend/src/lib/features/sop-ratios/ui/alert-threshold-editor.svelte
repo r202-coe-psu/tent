@@ -85,7 +85,7 @@
 					consumption_rate: null
 				},
 				ctx: {
-					userId: authStore.user?.username ?? 'system',
+					userId: authStore.user?.name ?? 'system',
 					shelterCode
 				}
 			},
@@ -114,7 +114,7 @@
 					consumption_rate: null
 				},
 				ctx: {
-					userId: authStore.user?.username ?? 'system',
+					userId: authStore.user?.name ?? 'system',
 					shelterCode
 				}
 			},

@@ -59,9 +59,9 @@ export function startCatalogLiveQuery(queryClient: QueryClient): SubscribeDataCh
 	});
 
 	return {
-		unsubscribe: () => {
-			catalogHandle.unsubscribe();
-			shelterHandle.unsubscribe();
+		stop: () => {
+			catalogHandle.stop();
+			shelterHandle.stop();
 		}
 	};
 }

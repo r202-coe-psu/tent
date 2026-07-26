@@ -65,7 +65,7 @@
 	// ─── Modal state ──────────────────────────────────────────────────────────
 	let selectedItemId = $state<string | null>(null);
 	let isManageModalOpen = $state(false);
-	let activeModalTab = $state<'history' | 'checkin' | 'distribute' | 'adjust'>('history');
+	let activeModalTab = $state<'history' | 'checkin' | 'distribute' | 'adjust'>('checkin');
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
 	const items = $derived.by(() => {
@@ -603,7 +603,7 @@
 										<button
 											onclick={() => {
 												selectedItemId = item._id;
-												activeModalTab = 'history';
+												activeModalTab = 'checkin';
 												isManageModalOpen = true;
 											}}
 											class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background p-1.5 px-3 text-[12px] font-bold text-foreground shadow-sm transition-all duration-200 hover:scale-[1.05] hover:bg-muted active:scale-[0.95]"
@@ -680,7 +680,7 @@
 <!-- Manage / History Modal (Dialog) -->
 <Dialog.Root bind:open={isManageModalOpen}>
 	<Dialog.Content
-		class="max-h-[90vh] max-w-4xl overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl sm:max-w-4xl"
+		class="max-h-[92vh] sm:max-w-7xl w-full overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl"
 	>
 		<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
 			{#if selectedItemId}
@@ -695,73 +695,81 @@
 			{/if}
 		</Dialog.Header>
 
-		<!-- Tabs Inside Modal -->
-		<div class="mb-5 flex overflow-x-auto border-b border-border/60 whitespace-nowrap">
-			<button
-				onclick={() => (activeModalTab = 'history')}
-				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
-				'history'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
-				<Clock class="h-4 w-4" /> ประวัติความเคลื่อนไหว (Ledger)
-			</button>
-			<button
-				onclick={() => (activeModalTab = 'checkin')}
-				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
-				'checkin'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
-				<PlusCircle class="h-4 w-4" /> รับของเข้า (Check-in)
-			</button>
-			<button
-				onclick={() => (activeModalTab = 'distribute')}
-				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
-				'distribute'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
-				<MinusCircle class="h-4 w-4" /> แจกจ่ายออก (Distribute)
-			</button>
-			<button
-				onclick={() => (activeModalTab = 'adjust')}
-				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
-				'adjust'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
-				<Settings class="h-4 w-4" /> ปรับปรุงสต๊อก (Adjust)
-			</button>
-		</div>
+		<div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
+			<!-- Left Panel: Actions (6 cols) -->
+			<div class="lg:col-span-6 flex flex-col gap-6 lg:border-r lg:border-border/60 lg:pr-6">
+				<div class="flex items-center gap-2 border-b border-border/40 pb-3">
+					<span class="text-sm font-bold text-foreground">📊 จัดการด่วน (Quick Actions)</span>
+				</div>
 
-		<div class="mt-2">
-			{#if selectedItemId}
-				{#if activeModalTab === 'history'}
-					<LedgerTable filterItemId={selectedItemId} />
-				{:else if activeModalTab === 'checkin'}
-					<ReceiveStockForm
-						preselectedItemId={selectedItemId}
-						onsuccess={() => {
-							isManageModalOpen = false;
-						}}
-					/>
-				{:else if activeModalTab === 'distribute'}
-					<DistributeStockForm
-						preselectedItemId={selectedItemId}
-						onsuccess={() => {
-							isManageModalOpen = false;
-						}}
-					/>
-				{:else if activeModalTab === 'adjust'}
-					<AdjustStockForm
-						preselectedItemId={selectedItemId}
-						onsuccess={() => {
-							isManageModalOpen = false;
-						}}
-					/>
-				{/if}
-			{/if}
+				<!-- Action Card Tabs -->
+				<div class="grid grid-cols-3 gap-3">
+					<button
+						type="button"
+						onclick={() => (activeModalTab = 'distribute')}
+						class="flex flex-col items-center justify-center gap-2 py-4 px-3 rounded-xl border transition-all text-center {activeModalTab === 'distribute' ? 'bg-[#009262] text-white border-[#009262] shadow-md font-bold' : 'bg-muted/30 text-foreground border-border hover:bg-muted/70'}"
+					>
+						<MinusCircle class="h-5 w-5 text-orange-500 {activeModalTab === 'distribute' ? 'text-white' : ''}" />
+						<span class="text-xs font-bold whitespace-nowrap">เบิกจ่ายออก (Issue)</span>
+					</button>
+					<button
+						type="button"
+						onclick={() => (activeModalTab = 'checkin')}
+						class="flex flex-col items-center justify-center gap-2 py-4 px-3 rounded-xl border transition-all text-center {activeModalTab === 'checkin' ? 'bg-[#009262] text-white border-[#009262] shadow-md font-bold' : 'bg-muted/30 text-foreground border-border hover:bg-muted/70'}"
+					>
+						<PlusCircle class="h-5 w-5 text-emerald-500 {activeModalTab === 'checkin' ? 'text-white' : ''}" />
+						<span class="text-xs font-bold whitespace-nowrap">รับเข้า (Receive)</span>
+					</button>
+					<button
+						type="button"
+						onclick={() => (activeModalTab = 'adjust')}
+						class="flex flex-col items-center justify-center gap-2 py-4 px-3 rounded-xl border transition-all text-center {activeModalTab === 'adjust' ? 'bg-[#009262] text-white border-[#009262] shadow-md font-bold' : 'bg-muted/30 text-foreground border-border hover:bg-muted/70'}"
+					>
+						<Settings class="h-5 w-5 text-blue-500 {activeModalTab === 'adjust' ? 'text-white' : ''}" />
+						<span class="text-xs font-bold whitespace-nowrap">ปรับปรุงสต็อก (Adjust)</span>
+					</button>
+				</div>
+
+				<div class="mt-2 flex-1">
+					{#if selectedItemId}
+						{#if activeModalTab === 'checkin'}
+							<ReceiveStockForm
+								preselectedItemId={selectedItemId}
+								onsuccess={() => {
+									// Stay open so the user can see the ledger update on the right!
+								}}
+							/>
+						{:else if activeModalTab === 'distribute'}
+							<DistributeStockForm
+								preselectedItemId={selectedItemId}
+								onsuccess={() => {
+									// Stay open so the user can see the ledger update on the right!
+								}}
+							/>
+						{:else if activeModalTab === 'adjust'}
+							<AdjustStockForm
+								preselectedItemId={selectedItemId}
+								onsuccess={() => {
+									// Stay open so the user can see the ledger update on the right!
+								}}
+							/>
+						{/if}
+					{/if}
+				</div>
+			</div>
+
+			<!-- Right Panel: Ledger (6 cols) -->
+			<div class="lg:col-span-6 flex flex-col gap-4">
+				<div class="flex items-center gap-2 border-b border-border/40 pb-3">
+					<Clock class="h-4 w-4 text-muted-foreground" />
+					<span class="text-sm font-bold text-foreground">⏳ ประวัติการเคลื่อนไหว (Ledger)</span>
+				</div>
+				<div class="overflow-y-auto max-h-[60vh]">
+					{#if selectedItemId}
+						<LedgerTable filterItemId={selectedItemId} />
+					{/if}
+				</div>
+			</div>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
