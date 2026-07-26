@@ -472,6 +472,34 @@ export function createPurchase(input: PurchaseInput, ctx: AuthorContext): Purcha
 }
 
 /**
+ * Validator for the lines staff key against a purchase — the form-side mirror of
+ * the `CountedItem[]` that `keyPurchaseReceipt` consumes. At least one line is
+ * required, matching the repository's refusal to write an empty receipt.
+ *
+ * `lot.expiry` is deliberately optional here: whether an item is perishable
+ * lives in the supply catalog, which the domain layer cannot see, so that check
+ * stays with the caller (same split as `receiveInputSchema`).
+ */
+export const purchaseReceiptInputSchema = z.object({
+	counted: z
+		.array(
+			z.object({
+				item_id: z.string().min(1),
+				qty: qtyStrCoercePositiveSchema,
+				unit: z.string().trim().min(1),
+				lot: z
+					.object({
+						expiry: z.string().optional(),
+						note: z.string().trim().optional()
+					})
+					.optional()
+			})
+		)
+		.min(1, 'A receipt needs at least one counted line')
+});
+export type PurchaseReceiptInput = z.input<typeof purchaseReceiptInputSchema>;
+
+/**
  * Turn a hand counted purchase into stock. This is the ONLY path from a purchase
  * to `stock_ledger`, mirroring `keyDonationReceipt`. Each counted line becomes
  * one positive `purchase` ledger entry referencing the purchase doc — which was

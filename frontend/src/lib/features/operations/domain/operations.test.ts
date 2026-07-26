@@ -19,6 +19,7 @@ import {
 	keyPurchaseReceipt,
 	purchaseReceiptStatus,
 	canEditPurchase,
+	purchaseReceiptInputSchema,
 	isPurchase,
 	mapNeedItemHeuristic,
 	type Donation,
@@ -278,6 +279,41 @@ describe('purchaseReceiptStatus + canEditPurchase (CR-032)', () => {
 			ctx
 		);
 		expect(purchaseReceiptStatus(purchase, rows)).toBe('partial');
+	});
+});
+
+describe('purchaseReceiptInputSchema (CR-032)', () => {
+	it('rejects a receipt with no counted lines', () => {
+		expect(purchaseReceiptInputSchema.safeParse({ counted: [] }).success).toBe(false);
+	});
+
+	it('rejects a non-positive counted quantity', () => {
+		const parsed = purchaseReceiptInputSchema.safeParse({
+			counted: [{ item_id: 'item:rice', qty: 0, unit: 'kg' }]
+		});
+		expect(parsed.success).toBe(false);
+	});
+
+	it('coerces a numeric qty to qty_str and keeps the optional lot', () => {
+		const parsed = purchaseReceiptInputSchema.parse({
+			counted: [
+				{
+					item_id: 'item:rice',
+					qty: 12.5,
+					unit: 'kg',
+					lot: { expiry: '2026-08-01', note: 'Zone A' }
+				}
+			]
+		});
+		expect(parsed.counted[0].qty).toBe('12.5');
+		expect(parsed.counted[0].lot).toEqual({ expiry: '2026-08-01', note: 'Zone A' });
+	});
+
+	it('accepts a line without a lot — expiry is the caller’s check', () => {
+		const parsed = purchaseReceiptInputSchema.parse({
+			counted: [{ item_id: 'item:soap', qty: '5', unit: 'bar' }]
+		});
+		expect(parsed.counted[0].lot).toBeUndefined();
 	});
 });
 
