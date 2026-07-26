@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-24 # CR-046 referral draft cancel / CR-045 kitchen meal-plan workflow rework
+updated: 2026-07-26 # CR-050 stock_ledger reason ↔ ref_id invariant (proposed · renumber จาก CR-045)
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -67,3 +67,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-045](CR-045-referral-full-dod-alignment.md) | Referral Schema & Implementation Alignment — 3 referral kinds, destination-gated capacity accept (mirror inbox + cross-DB transfer), `response_reason` | approved | volatile | 2026-07-22 | docs/data/schema.md §2.11, docs/task-breakdown/09-F-referral.md, frontend/src/lib/features/referrals/ |
 | [CR-046](CR-046-referral-draft-cancel.md) | Referral — อนุญาต `draft → closed` (ยกเลิกร่างก่อนส่ง); capacity draft ห้าม sync peer ปลายทาง | done | volatile | 2026-07-24 | schema.md §2.11, 09-F-referral.md, features/referrals/{domain,ui,server} |
 | [CR-046](CR-046-referral-logic-hardening.md) | Referral Logic Hardening — 3 business rule fixes: self-referral prevention (422), duplicate active referral prevention (409), cross-shelter direction badges | proposed (implementation complete — pending owner sign-off) | volatile | 2026-07-24 | docs/data/schema.md §2.11, docs/task-breakdown/09-F-referral.md, frontend/src/lib/features/referrals/, frontend/src/routes/api/back-office/referral/+server.ts |
+| [CR-050](CR-050-stock-ledger-refid-invariant.md) | บังคับ invariant `stock_ledger.reason` ↔ prefix ของ `ref_id` ที่ชั้น domain (Zod superRefine + ตาราง R2) · `adjust` ต้อง `ref_id: null` · เลิก free text `ref_id` ในฟอร์มรับสต็อก → picker จาก doc จริง · เสนอ **ไม่ bump** `schema_v` (เดิมยกไว้เป็น CR-045 — renumber 2026-07-26) | proposed (รอเคาะ Q-1..Q-6) | volatile | 2026-07-25 (renumber 07-26) | docs/data/schema.md §2.1, features/operations/domain/operations.ts + operations.test.ts, ui/ReceiveStockForm.svelte, features/kitchen/data/kitchen.remote.ts, CR-032 |
