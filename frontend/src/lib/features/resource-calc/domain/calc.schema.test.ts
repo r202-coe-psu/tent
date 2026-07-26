@@ -27,10 +27,10 @@ const validResult = {
 	key: 'water_l_per_person_day',
 	kind: 'multiply' as const,
 	input_valid: true,
-	ratio: 15,
-	need: 1500,
-	have: 500,
-	gap: 1000,
+	ratio: '15',
+	need: '1500',
+	have: '500',
+	gap: '1000',
 	status: 'gap' as const,
 	data_status: 'complete' as const,
 	as_of: AS_OF
@@ -39,10 +39,10 @@ const validResult = {
 const validDoc = {
 	formula_v: FORMULA_V,
 	sop_profile_version: 1,
-	ratio_snapshot: { water_l_per_person_day: 15 },
+	ratio_snapshot: { water_l_per_person_day: '15' },
 	occupancy_snapshot: 100,
 	as_of: AS_OF,
-	stock_snapshot: { water_l_per_person_day: 500 },
+	stock_snapshot: { water_l_per_person_day: '500' },
 	results: [validResult]
 };
 
@@ -51,7 +51,7 @@ describe('calc.schema — valid parse', () => {
 		const input = {
 			occupancy: 120,
 			as_of: AS_OF,
-			resources: [{ key: 'water_l_per_person_day', kind: 'multiply', ratio: 15, have: 1000 }]
+			resources: [{ key: 'water_l_per_person_day', kind: 'multiply', ratio: '15', have: '1000' }]
 		};
 		expect(calcInputSchema.safeParse(input).success).toBe(true);
 	});
@@ -77,8 +77,8 @@ describe('calc.schema — valid parse', () => {
 		// 20 SOP keys (food ingredients, stock items, facilities). A non-SOP key must be accepted.
 		const doc = {
 			...validDoc,
-			ratio_snapshot: { some_stock_item_sku: 2.5, facility_showers: 50 },
-			stock_snapshot: { some_stock_item_sku: 10, facility_showers: null }
+			ratio_snapshot: { some_stock_item_sku: '2.5', facility_showers: '50' },
+			stock_snapshot: { some_stock_item_sku: '10', facility_showers: null }
 		};
 		expect(dailyCalcDocSchema.safeParse(doc).success).toBe(true);
 	});
@@ -107,21 +107,21 @@ describe('calc.schema — rejects invalid input (assert the offending field, not
 
 	it('ResourceInput.ratio = 0 → error on ratio (caller invariant ratio > 0 when present)', () => {
 		expectFieldError(
-			resourceInputSchema.safeParse({ key: 'x', kind: 'multiply', ratio: 0, have: null }),
+			resourceInputSchema.safeParse({ key: 'x', kind: 'multiply', ratio: '0', have: null }),
 			'ratio'
 		);
 	});
 
 	it('ResourceInput.have negative → error on have', () => {
 		expectFieldError(
-			resourceInputSchema.safeParse({ key: 'x', kind: 'multiply', ratio: 5, have: -3 }),
+			resourceInputSchema.safeParse({ key: 'x', kind: 'multiply', ratio: '5', have: '-3' }),
 			'have'
 		);
 	});
 
 	it('ResourceInput.kind out of enum → error on kind', () => {
 		expectFieldError(
-			resourceInputSchema.safeParse({ key: 'x', kind: 'bogus', ratio: 5, have: 1 }),
+			resourceInputSchema.safeParse({ key: 'x', kind: 'bogus', ratio: '5', have: '1' }),
 			'kind'
 		);
 	});
@@ -146,19 +146,16 @@ describe('calc.schema — rejects invalid input (assert the offending field, not
 		expectFieldError(dailyCalcDocSchema.safeParse(withoutRatio), 'ratio_snapshot');
 	});
 
-	// Finiteness contract: every numeric field rejects NaN and ±Infinity (Zod's z.number() does
-	// this by default; the schema also states `.finite()` explicitly). These tests lock the
-	// contract in so a future swap to a permissive number type is caught.
-	it('ResourceInput.ratio = Infinity → error on ratio (finiteness gate)', () => {
+	it('ResourceInput.ratio = Infinity → error on ratio (decimal string check)', () => {
 		expectFieldError(
-			resourceInputSchema.safeParse({ key: 'x', kind: 'multiply', ratio: Infinity, have: 1 }),
+			resourceInputSchema.safeParse({ key: 'x', kind: 'multiply', ratio: 'Infinity', have: '1' }),
 			'ratio'
 		);
 	});
 
 	it('ResourceInput.ratio = -Infinity → error on ratio', () => {
 		expectFieldError(
-			resourceInputSchema.safeParse({ key: 'x', kind: 'multiply', ratio: -Infinity, have: 1 }),
+			resourceInputSchema.safeParse({ key: 'x', kind: 'multiply', ratio: '-Infinity', have: '1' }),
 			'ratio'
 		);
 	});
@@ -172,13 +169,16 @@ describe('calc.schema — rejects invalid input (assert the offending field, not
 
 	it('ResourceCalcResult.need = Infinity → error on need (formula guarantees finite)', () => {
 		expectFieldError(
-			resourceCalcResultSchema.safeParse({ ...validResult, need: Infinity }),
+			resourceCalcResultSchema.safeParse({ ...validResult, need: 'Infinity' }),
 			'need'
 		);
 	});
 
 	it('ResourceCalcResult.gap = -Infinity → error on gap', () => {
-		expectFieldError(resourceCalcResultSchema.safeParse({ ...validResult, gap: -Infinity }), 'gap');
+		expectFieldError(
+			resourceCalcResultSchema.safeParse({ ...validResult, gap: '-Infinity' }),
+			'gap'
+		);
 	});
 
 	// .strict(): unknown/extra keys are rejected (this is what makes round-trip a drift detector).
@@ -193,9 +193,9 @@ describe('calc.schema — round-trip with the real formula (no drift)', () => {
 			occupancy: 120,
 			as_of: AS_OF,
 			resources: [
-				{ key: 'water_l_per_person_day', kind: 'multiply', ratio: 15, have: 1000 },
-				{ key: 'people_per_volunteer', kind: 'divide', ratio: 50, have: null },
-				{ key: 'max_queue_minutes', kind: 'threshold', ratio: 30, have: 25 }
+				{ key: 'water_l_per_person_day', kind: 'multiply', ratio: '15', have: '1000' },
+				{ key: 'people_per_volunteer', kind: 'divide', ratio: '50', have: null },
+				{ key: 'max_queue_minutes', kind: 'threshold', ratio: '30', have: '25' }
 			]
 		});
 		expect(calcOutputSchema.safeParse({ formula_v: FORMULA_V, results }).success).toBe(true);
@@ -211,23 +211,22 @@ describe('calc.schema — snapshot lock (frozen values survive a later ratio cha
 		const day1 = calculateResources({
 			occupancy: 100,
 			as_of: '2026-07-01T00:00:00.000Z',
-			resources: [{ key: 'water_l_per_person_day', kind: 'multiply', ratio: 15, have: 500 }]
+			resources: [{ key: 'water_l_per_person_day', kind: 'multiply', ratio: '15', have: '500' }]
 		});
 		const doc = dailyCalcDocSchema.parse({
 			formula_v: FORMULA_V,
 			sop_profile_version: 1,
-			ratio_snapshot: { water_l_per_person_day: 15 },
+			ratio_snapshot: { water_l_per_person_day: '15' },
 			occupancy_snapshot: 100,
 			as_of: '2026-07-01T00:00:00.000Z',
-			stock_snapshot: { water_l_per_person_day: 500 },
+			stock_snapshot: { water_l_per_person_day: '500' },
 			results: day1
 		});
 
 		// Day 15: the live master ratio is raised to 20 — but the frozen doc is unaffected.
-		// (Domain layer has no live profile; the point is the doc holds literal snapshot values.)
-		expect(doc.ratio_snapshot.water_l_per_person_day).toBe(15);
+		expect(doc.ratio_snapshot.water_l_per_person_day).toBe('15');
 		expect(doc.occupancy_snapshot).toBe(100);
-		expect(doc.results[0].need).toBe(1500); // 100 × 15, NOT 100 × 20
+		expect(doc.results[0].need).toBe('1500'); // 100 × 15, NOT 100 × 20
 		expect(doc.sop_profile_version).toBe(1);
 		expect(doc.formula_v).toBe(FORMULA_V); // pinned to whatever formula produced it
 	});
@@ -238,7 +237,7 @@ describe('calc.schema — barrel exports are consumable', () => {
 		expect(barrel.calcInputSchema).toBeDefined();
 		expect(barrel.calcOutputSchema).toBeDefined();
 		expect(barrel.dailyCalcDocSchema).toBeDefined();
-		expect(barrel.DAILY_CALC_SCHEMA_VERSION).toBe(1);
+		expect(barrel.DAILY_CALC_SCHEMA_VERSION).toBe(2);
 		// and the pre-existing T-31.1 exports remain (additive, non-breaking)
 		expect(barrel.calculateResources).toBeDefined();
 		expect(barrel.FORMULA_V).toBe(FORMULA_V);

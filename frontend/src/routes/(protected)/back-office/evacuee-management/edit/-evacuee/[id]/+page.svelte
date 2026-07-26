@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Plus from '@lucide/svelte/icons/plus';
 	import { EvacueeProfileView } from '$lib/features/people';
@@ -15,7 +16,14 @@
 <div class="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-6">
 	<div>
 		<button
-			onclick={() => goto(resolve('/back-office/evacuee-management'))}
+			onclick={() => {
+				const from = page.url.searchParams.get('from');
+				if (from) {
+					goto(from);
+				} else {
+					goto(resolve('/back-office/evacuee-management'));
+				}
+			}}
 			class="mb-4 inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
 		>
 			<ArrowLeft class="size-4" />

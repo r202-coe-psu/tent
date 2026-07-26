@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { makeDoc, catalogDoc, type AuthorContext, touch, shelterCodeSchema } from '$lib/db/model';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
+import { qtyStrPositiveSchema } from '$lib/utils/qty';
 
 export const SOP_RATIO_KEYS = [
 	'water_l_per_person_day',
@@ -53,8 +54,8 @@ export const SOP_RATIO_KIND: Record<SopRatioKey, 'multiply' | 'divide' | 'thresh
 };
 
 const ratioShape = SOP_RATIO_KEYS.reduce(
-	(acc, key) => ({ ...acc, [key]: z.number().positive() }),
-	{} as Record<SopRatioKey, z.ZodNumber>
+	(acc, key) => ({ ...acc, [key]: qtyStrPositiveSchema }),
+	{} as Record<SopRatioKey, typeof qtyStrPositiveSchema>
 );
 
 /**
@@ -143,7 +144,7 @@ export function resolveEffectiveProfile(
 	override?: SopOverride | null,
 	master?: SopMaster | null
 ): {
-	ratios: Record<SopRatioKey, number>;
+	ratios: Record<SopRatioKey, string>;
 	ratio_source: 'master' | 'override';
 } | null {
 	if (override && override.active) {
@@ -165,14 +166,14 @@ export function resolveEffectiveProfile(
 export function createInitialProfile(
 	targetType: 'sop_profile',
 	name: string,
-	ratios: Record<SopRatioKey, number>,
+	ratios: Record<SopRatioKey, string>,
 	ctx: { createdBy: string }
 ): { profile: SopMaster; audit: AuditEntry };
 
 export function createInitialProfile(
 	targetType: 'sop_override',
 	name: string,
-	ratios: Record<SopRatioKey, number>,
+	ratios: Record<SopRatioKey, string>,
 	ctx: AuthorContext & { base_profile_id: string }
 ): { profile: SopOverride; audit: AuditEntry };
 
@@ -182,11 +183,11 @@ export function createInitialProfile(
 export function createInitialProfile(
 	targetType: 'sop_profile' | 'sop_override',
 	name: string,
-	ratios: Record<SopRatioKey, number>,
+	ratios: Record<SopRatioKey, string>,
 	ctx: AnyProfileCtx
 ): { profile: SopMaster | SopOverride; audit: AuditEntry } {
 	// Both master and override require the full canonical set (Option 1).
-	const safeRatios = ratiosSchema.parse(ratios) as Record<SopRatioKey, number>;
+	const safeRatios = ratiosSchema.parse(ratios) as Record<SopRatioKey, string>;
 
 	if (targetType === 'sop_profile') {
 		const profile = catalogDoc(
@@ -260,14 +261,14 @@ export type CreateNewVersionResult<T extends SopMaster | SopOverride> =
 // Overload signatures for createNewVersion
 export function createNewVersion(
 	prev: SopMaster,
-	changes: Partial<Record<SopRatioKey, number>>,
+	changes: Partial<Record<SopRatioKey, string>>,
 	reason: string,
 	ctx: { createdBy: string }
 ): CreateNewVersionResult<SopMaster>;
 
 export function createNewVersion(
 	prev: SopOverride,
-	changes: Partial<Record<SopRatioKey, number>>,
+	changes: Partial<Record<SopRatioKey, string>>,
 	reason: string,
 	ctx: AuthorContext
 ): CreateNewVersionResult<SopOverride>;
@@ -279,14 +280,14 @@ export function createNewVersion(
  */
 export function createNewVersion<T extends SopMaster | SopOverride>(
 	prev: T,
-	changes: Partial<Record<SopRatioKey, number>>,
+	changes: Partial<Record<SopRatioKey, string>>,
 	reason: string,
 	ctx: MasterCtx | AuthorContext
 ): CreateNewVersionResult<T> {
 	// Validate partial changes strictly to reject non-whitelist or deprecated keys
 	const safeChanges = ratiosSchema.partial().strict().parse(changes);
 	let hasChanges = false;
-	const definedChanges: Partial<Record<SopRatioKey, number>> = {};
+	const definedChanges: Partial<Record<SopRatioKey, string>> = {};
 
 	for (const key of SOP_RATIO_KEYS) {
 		if (safeChanges[key] !== undefined) {
@@ -299,7 +300,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 		return { deactivatedPrev: null, profile: prev, audit: null } as CreateNewVersionResult<T>;
 	}
 
-	const newRatios = { ...prev.ratios, ...definedChanges } as Record<SopRatioKey, number>;
+	const newRatios = { ...prev.ratios, ...definedChanges } as Record<SopRatioKey, string>;
 	ratiosSchema.parse(newRatios);
 	if (prev.type === 'sop_profile') {
 		const createdBy = ctx.createdBy;

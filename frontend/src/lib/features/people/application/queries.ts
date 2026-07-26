@@ -1,4 +1,9 @@
-import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
+import {
+	createMutation,
+	createQuery,
+	useQueryClient,
+	type QueryClient
+} from '@tanstack/svelte-query';
 import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
@@ -7,7 +12,7 @@ import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { peopleRepository } from '../data/people.remote';
-import type { HouseholdSearchLabels } from '../data/people.repository';
+import type { EvacueeFilters, HouseholdSearchLabels } from '../data/people.repository';
 import type {
 	Evacuee,
 	EvacueeInput,
@@ -23,11 +28,17 @@ export const peopleKeys = {
 	all: ['people'] as const,
 	evacuees: () => [...peopleKeys.all, 'evacuees', getShelterCode()] as const,
 	evacuee: (id: string) => [...peopleKeys.all, 'evacuee', getShelterCode(), id] as const,
-	evacueesPaginated: (page: number, pageSize: number, search = '') =>
-		[...peopleKeys.all, 'evacuees', getShelterCode(), { page, pageSize, search }] as const,
+	evacueesPaginated: (page: number, pageSize: number, search = '', filtersKey = '') =>
+		[
+			...peopleKeys.all,
+			'evacuees',
+			getShelterCode(),
+			{ page, pageSize, search, filtersKey }
+		] as const,
 	evacueesSearch: (query: string) =>
 		[...peopleKeys.all, 'evacuees', getShelterCode(), 'search', query] as const,
 	households: () => [...peopleKeys.all, 'households', getShelterCode()] as const,
+	household: (id: string) => [...peopleKeys.all, 'household', getShelterCode(), id] as const,
 	householdsPaginated: (page: number, pageSize: number, search = '', labelsKey = '') =>
 		[
 			...peopleKeys.all,
@@ -49,14 +60,23 @@ export const useEvacuees = () =>
 export const useEvacueesPaginated = (
 	page: () => number,
 	pageSize: () => number,
-	search?: () => string
+	search?: () => string,
+	filters?: () => EvacueeFilters
 ) =>
 	createQuery(() => ({
-		queryKey: peopleKeys.evacueesPaginated(page(), pageSize(), search?.() ?? ''),
+		queryKey: peopleKeys.evacueesPaginated(
+			page(),
+			pageSize(),
+			search?.() ?? '',
+			filters ? JSON.stringify(filters()) : ''
+		),
 		queryFn: () =>
-			peopleRepository().listEvacueesPaginated(page(), pageSize(), search?.()) as Promise<
-				PaginatedResult<Evacuee>
-			>
+			peopleRepository().listEvacueesPaginated(
+				page(),
+				pageSize(),
+				search?.(),
+				filters?.()
+			) as Promise<PaginatedResult<Evacuee>>
 	}));
 
 export const useSearchEvacuees = (query: () => string, enabled: () => boolean) =>
@@ -73,19 +93,32 @@ export const useEvacuee = (id: () => string, enabled: () => boolean = () => true
 		enabled: enabled() && !!id()
 	}));
 
-export const useCreateEvacuee = () =>
-	createMutation(() => ({
+export const useCreateEvacuee = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: EvacueeInput; ctx: AuthorContext }) =>
-			peopleRepository().createEvacuee(input, ctx)
+			peopleRepository().createEvacuee(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+		}
 	}));
+};
 
-export const useUpdateEvacuee = () =>
-	createMutation(() => ({
-		mutationFn: (evacuee: Evacuee) => peopleRepository().updateEvacuee(evacuee)
+export const useUpdateEvacuee = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (evacuee: Evacuee) => peopleRepository().updateEvacuee(evacuee),
+		onSuccess: (evacuee) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+		}
 	}));
+};
 
-export const useCheckInEvacuee = () =>
-	createMutation(() => ({
+export const useCheckInEvacuee = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({
 			evacuee,
 			ctx,
@@ -94,14 +127,28 @@ export const useCheckInEvacuee = () =>
 			evacuee: Evacuee;
 			ctx: AuthorContext;
 			zone?: string | null;
-		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone)
+		}) => peopleRepository().checkInEvacuee(evacuee, ctx, zone ?? evacuee.current_stay.zone),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.households() });
+			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+		}
 	}));
+};
 
-export const useCheckOutEvacuee = () =>
-	createMutation(() => ({
+export const useCheckOutEvacuee = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
-			peopleRepository().checkOutEvacuee(evacuee, ctx)
+			peopleRepository().checkOutEvacuee(evacuee, ctx),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+		}
 	}));
+};
 
 /** One-shot lookup used by the scan flow — goes through TanStack Query keys. */
 export async function lookupEvacueeByScanCode(
@@ -139,6 +186,13 @@ export const useHouseholds = () =>
 		queryFn: () => peopleRepository().listHouseholds()
 	}));
 
+export const useHousehold = (id: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.household(id()),
+		queryFn: () => peopleRepository().getHousehold(id()),
+		enabled: enabled() && !!id()
+	}));
+
 export const useHouseholdsPaginated = (
 	page: () => number,
 	pageSize: () => number,
@@ -161,22 +215,51 @@ export const useHouseholdsPaginated = (
 			) as Promise<PaginatedResult<Household>>
 	}));
 
-export const useCreateHousehold = () =>
-	createMutation(() => ({
+export const useCreateHousehold = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: HouseholdInput; ctx: AuthorContext }) =>
-			peopleRepository().createHousehold(input, ctx)
+			peopleRepository().createHousehold(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+		}
 	}));
+};
 
-export const useUpdateHousehold = () =>
-	createMutation(() => ({
-		mutationFn: (household: Household) => peopleRepository().updateHousehold(household)
+export const useUpdateHousehold = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (household: Household) => peopleRepository().updateHousehold(household),
+		onSuccess: (household) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.household(household._id) });
+		}
 	}));
+};
 
-export const useCreateScreening = () =>
-	createMutation(() => ({
+export const useCancelPreRegistration = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ householdId, ctx }: { householdId: string; ctx: AuthorContext }) =>
+			peopleRepository().cancelPreRegistration(householdId, ctx),
+		onSuccess: (_data, variables) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.household(variables.householdId) });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+		}
+	}));
+};
+
+export const useCreateScreening = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ScreeningInput; ctx: AuthorContext }) =>
-			peopleRepository().createScreening(input, ctx)
+			peopleRepository().createScreening(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.screenings() });
+		}
 	}));
+};
 
 export const useMedicals = () =>
 	createQuery(() => ({

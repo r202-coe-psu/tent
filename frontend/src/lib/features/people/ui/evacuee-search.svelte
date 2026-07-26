@@ -8,9 +8,8 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { useSearchEvacuees } from '$lib/features/people';
-	import type { StayStatus } from '$lib/features/people';
 
-	const STATUS_LABELS: Record<StayStatus, string> = {
+	const STATUS_LABELS: Record<string, string> = {
 		pre_registered: 'ลงทะเบียนล่วงหน้า',
 		active: 'เข้าพักแล้ว',
 		temporary_leave: 'ออกชั่วคราว',

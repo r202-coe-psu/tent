@@ -94,9 +94,9 @@ const activeProfile = {
 	type: 'sop_profile',
 	version: 3,
 	ratios: {
-		water_l_per_person_day: 15,
-		people_per_toilet_female: 20,
-		max_queue_minutes: 30
+		water_l_per_person_day: '15',
+		people_per_toilet_female: '20',
+		max_queue_minutes: '30'
 	}
 };
 
@@ -135,10 +135,10 @@ describe('DailyCalcRemoteRepository.runOnDemand', () => {
 
 		const byKey = Object.fromEntries(rec.results.map((r) => [r.key, r]));
 		// multiply: need = 2 × 15 = 30, have 100 → surplus
-		expect(byKey.water_l_per_person_day.need).toBe(30);
+		expect(byKey.water_l_per_person_day.need).toBe('30');
 		expect(byKey.water_l_per_person_day.status).toBe('surplus');
 		// divide: need = ceil(2 / 20) = 1, no stock key → stock_unsynced
-		expect(byKey.people_per_toilet_female.need).toBe(1);
+		expect(byKey.people_per_toilet_female.need).toBe('1');
 		expect(byKey.people_per_toilet_female.data_status).toBe('stock_unsynced');
 		// threshold: quality ceiling → constraint, no have
 		expect(byKey.max_queue_minutes.status).toBe('constraint');
