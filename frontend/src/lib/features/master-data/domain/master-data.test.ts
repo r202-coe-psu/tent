@@ -6,16 +6,16 @@ import {
 	masterDataItemSchema,
 	masterDataSchema,
 	masterTypeSchema,
-	slugifyLabel,
-	touchMasterData,
-	uniqueCode
+	migrateMasterDataToV3,
+	needsMasterDataMigration,
+	touchMasterData
 } from './master-data';
 import type { MasterDataItem } from './master-data';
 
 const ctx = { createdBy: 'sa-user' };
 
 function makeItem(partial: Partial<MasterDataItem> = {}): MasterDataItem {
-	return { code: 'elderly', label: 'ผู้สูงอายุ', is_default: false, ...partial };
+	return { code: 'elderly', label: 'ผู้สูงอายุ', is_default: false, status: 'active', ...partial };
 }
 
 describe('masterTypeSchema', () => {
@@ -36,36 +36,6 @@ describe('masterTypeSchema', () => {
 
 	it('rejects unknown types', () => {
 		expect(() => masterTypeSchema.parse('religion')).toThrow();
-	});
-});
-
-describe('slugifyLabel', () => {
-	it('uses the dict for known Thai labels', () => {
-		expect(slugifyLabel('ผู้สูงอายุ')).toBe('elderly');
-		expect(slugifyLabel('อิสลาม (Halal)')).toBe('halal');
-		expect(slugifyLabel('สุนัข')).toBe('dog');
-		expect(slugifyLabel('เสียหายทั้งหมด')).toBe('total_loss');
-	});
-
-	it('slugifies ASCII input', () => {
-		expect(slugifyLabel('Chronic illness')).toBe('chronic_illness');
-		expect(slugifyLabel('  Hal al  ')).toBe('hal_al');
-	});
-
-	it('falls back to item_<ulid> for non-ascii Thai without dict entry', () => {
-		const code = slugifyLabel('สภาพอากาศหนาวมาก');
-		expect(code).toMatch(/^item_[0-9a-z]{26}$/);
-	});
-});
-
-describe('uniqueCode', () => {
-	it('returns base when no collision', () => {
-		expect(uniqueCode('ผู้สูงอายุ', [makeItem({ code: 'disabled' })])).toBe('elderly');
-	});
-
-	it('appends ULID on collision', () => {
-		const code = uniqueCode('ผู้สูงอายุ', [makeItem()]);
-		expect(code).toMatch(/^elderly_[0-9a-z]{26}$/);
 	});
 });
 
@@ -95,7 +65,7 @@ describe('createMasterData', () => {
 		const doc = createMasterData('vulnerable_group', [makeItem()], ctx);
 		expect(doc._id).toBe('master_data:vulnerable_group');
 		expect(doc.type).toBe('master_data');
-		expect(doc.schema_v).toBe(1);
+		expect(doc.schema_v).toBe(3);
 		expect(doc.master_type).toBe('vulnerable_group');
 		expect(doc.items).toHaveLength(1);
 		expect(doc.created_by).toBe('sa-user');
@@ -135,7 +105,8 @@ describe('applyItemOp', () => {
 		const items = [makeItem()];
 		const out = applyItemOp(items, { kind: 'add', label: 'ผู้พิการ' });
 		expect(out).toHaveLength(2);
-		expect(out[1].code).toBe('disabled');
+		expect(out[1].code).toMatch(/^item_[0-9a-z]{26}$/);
+		expect(out[1].status).toBe('active');
 	});
 
 	it('add with is_default unsets previous default', () => {
@@ -145,8 +116,8 @@ describe('applyItemOp', () => {
 			label: 'ผู้พิการ',
 			is_default: true
 		});
-		expect(out.find((i) => i.code === 'elderly')?.is_default).toBe(false);
-		expect(out.find((i) => i.code === 'disabled')?.is_default).toBe(true);
+		expect(out[0].is_default).toBe(false);
+		expect(out[1].is_default).toBe(true);
 	});
 
 	it('edit updates label only', () => {
@@ -156,18 +127,18 @@ describe('applyItemOp', () => {
 		expect(out[0].code).toBe('elderly');
 	});
 
-	it('delete removes by code', () => {
-		const items = [makeItem(), makeItem({ code: 'b' })];
-		const out = applyItemOp(items, { kind: 'delete', code: 'elderly' });
-		expect(out).toHaveLength(1);
-		expect(out[0].code).toBe('b');
-	});
-
 	it('setDefault flips exactly one item to default', () => {
 		const items = [makeItem({ is_default: true }), makeItem({ code: 'b' })];
 		const out = applyItemOp(items, { kind: 'setDefault', code: 'b' });
 		expect(out.find((i) => i.code === 'b')?.is_default).toBe(true);
 		expect(out.find((i) => i.code === 'elderly')?.is_default).toBe(false);
+	});
+
+	it('setStatus sets only the matching item to inactive', () => {
+		const items = [makeItem(), makeItem({ code: 'b' })];
+		const out = applyItemOp(items, { kind: 'setStatus', code: 'elderly', status: 'inactive' });
+		expect(out.find((i) => i.code === 'elderly')?.status).toBe('inactive');
+		expect(out.find((i) => i.code === 'b')?.status).toBe('active');
 	});
 });
 
@@ -195,5 +166,98 @@ describe('parent_code (community type)', () => {
 		);
 		expect(doc._id).toBe('master_data:shelter_type');
 		expect(doc.master_type).toBe('shelter_type');
+	});
+
+	it('creates a shelter-local document when a shelter code is supplied', () => {
+		const doc = createMasterData(
+			'shelter_type',
+			[makeItem({ code: 'school', label: 'โรงเรียน', is_default: true })],
+			ctx,
+			'SH001'
+		);
+		expect(doc._id).toBe('master_data:shelter_type:SH001');
+		expect(doc.schema_v).toBe(3);
+		expect(doc.shelter_code).toBe('SH001');
+	});
+});
+
+describe('masterDataItemSchema status default', () => {
+	it('defaults status to active when omitted', () => {
+		const item = masterDataItemSchema.parse({ code: 'z1', label: 'เขต 1', is_default: true });
+		expect(item.status).toBe('active');
+	});
+});
+
+describe('needsMasterDataMigration', () => {
+	const v3Doc = {
+		_id: 'master_data:pet_types',
+		type: 'master_data' as const,
+		schema_v: 3,
+		master_type: 'pet_types' as const,
+		items: [{ code: 'dog', label: 'Dog', is_default: true, status: 'active' as const }],
+		created_at: '2026-01-01T00:00:00.000Z',
+		updated_at: '2026-01-01T00:00:00.000Z',
+		created_by: 'seed'
+	};
+
+	it('is false for a clean v3 doc', () => {
+		expect(needsMasterDataMigration(v3Doc)).toBe(false);
+	});
+
+	it('is true when schema_v < 3', () => {
+		expect(needsMasterDataMigration({ ...v3Doc, schema_v: 2 })).toBe(true);
+	});
+
+	it('is true when excluded_codes is still present', () => {
+		expect(needsMasterDataMigration({ ...v3Doc, excluded_codes: ['dog'] })).toBe(true);
+	});
+
+	it('is true when any item is missing status', () => {
+		expect(
+			needsMasterDataMigration({
+				...v3Doc,
+				items: [{ code: 'dog', label: 'Dog', is_default: true }]
+			})
+		).toBe(true);
+	});
+});
+
+describe('migrateMasterDataToV3', () => {
+	it('backfills status, drops excluded_codes, and stamps schema_v 3', () => {
+		const legacy = {
+			_id: 'master_data:pet_types:SH001',
+			type: 'master_data' as const,
+			schema_v: 2,
+			master_type: 'pet_types' as const,
+			shelter_code: 'SH001',
+			items: [
+				{ code: 'dog', label: 'Dog', is_default: true },
+				{ code: 'cat', label: 'Cat', is_default: false, status: 'inactive' as const }
+			],
+			excluded_codes: ['bird'],
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			created_by: 'seed'
+		};
+		const v3 = migrateMasterDataToV3(legacy);
+		expect(v3.schema_v).toBe(3);
+		expect(v3.items[0].status).toBe('active'); // backfilled
+		expect(v3.items[1].status).toBe('inactive'); // preserved
+		expect((v3 as { excluded_codes?: string[] }).excluded_codes).toBeUndefined();
+		expect(v3.shelter_code).toBe('SH001'); // envelope preserved
+	});
+
+	it('is idempotent — a v3 doc round-trips unchanged (except identity)', () => {
+		const v3 = {
+			_id: 'master_data:pet_types',
+			type: 'master_data' as const,
+			schema_v: 3,
+			master_type: 'pet_types' as const,
+			items: [{ code: 'dog', label: 'Dog', is_default: true, status: 'active' as const }],
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			created_by: 'seed'
+		};
+		expect(migrateMasterDataToV3(v3)).toEqual(v3);
 	});
 });

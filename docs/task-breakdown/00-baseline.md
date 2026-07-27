@@ -28,7 +28,7 @@ note: decision-synced 2026-07-15 — T-54 realigned to CR-033 remote-first (deny
 
 | ID   | Status           | Feature / Task                                                                                                  | FR        | Stage | Scope    | Raw MD | AI×    | Adj MD | Depends   |
 | ---- | ---------------- | --------------------------------------------------------------------------------------------------------------- | --------- | ----- | -------- | ------ | ------ | ------ | --------- |
-| T-47 | 🔄 | Shelter master + config + seed data | FR-2..3 | prod | in-scope | 3 | ÷1.6 | 2 | T-02 |
+| T-47 | 🔄 | Shelter master + config (รวมสวิตช์ Toggle เปิด/ปิดรับบริจาคระดับศูนย์ CR-048 §1.11) + seed data | FR-2..3 | prod | in-scope | 3 | ÷1.6 | 2 | T-02 |
 | T-48 | 🔄 | Person registration (required `first_name`+`last_name`+`gender`+`phone`; phone เป็น `null` ได้เมื่อไม่มี) + แก้ไขข้อมูล | FR-4..5 | prod | in-scope | 6 | ÷1.6 | 4 | T-01,T-02 |
 | T-49 | 🔄 | Screening: vulnerability flags / medical notes / fast-track ตาม role | FR-6..8 | prod | in-scope | 6 | ÷1.6 | 4 | T-48 |
 | T-50 | 🔄 | Person Shelter ID/QR generation (payload ไม่มี PII/health) | FR-9 | prod | in-scope | 4 | ÷1.6 | 2.5 | T-48 |
