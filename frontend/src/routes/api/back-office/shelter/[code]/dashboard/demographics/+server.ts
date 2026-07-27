@@ -3,7 +3,7 @@
  *
  * Returns age-group and nationality breakdowns for currently checked-in evacuees
  * by querying the Dashboard-owned CouchDB Map/Reduce views in
- * `_design/dashboard`.
+ * `_design/app`.
  *
  * Security (security-rbac-bestpractices §2 & §3):
  *  - Caller must be authenticated and scoped to this shelter or be a SA.
@@ -22,7 +22,6 @@ import {
 	rowsToAgeGroups,
 	rowsToCountries
 } from '$lib/features/dashboard';
-import { SHELTER_DASHBOARD_DESIGN_NAME } from '$lib/features/shelters/server';
 
 export const prerender = false;
 
@@ -32,10 +31,7 @@ async function queryGroupedView(
 	db: string,
 	viewName: 'demographics_by_age' | 'demographics_by_country'
 ): Promise<GroupedDemographicRow[]> {
-	const res = await adminRaw(
-		`/${db}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/${viewName}?group=true`,
-		'GET'
-	);
+	const res = await adminRaw(`/${db}/_design/app/_view/${viewName}?group=true`, 'GET');
 
 	if (res.status === 404) {
 		throw new ServiceError('INTERNAL', `${viewName} view is not deployed for ${db}`);

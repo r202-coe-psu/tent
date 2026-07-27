@@ -114,11 +114,9 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 
 		const [agePath, ageMethod] = vi.mocked(adminRaw).mock.calls[0];
 		const [countryPath, countryMethod] = vi.mocked(adminRaw).mock.calls[1];
-		expect(agePath).toBe('/shelter_sh001/_design/dashboard/_view/demographics_by_age?group=true');
+		expect(agePath).toBe('/shelter_sh001/_design/app/_view/demographics_by_age?group=true');
 		expect(ageMethod).toBe('GET');
-		expect(countryPath).toBe(
-			'/shelter_sh001/_design/dashboard/_view/demographics_by_country?group=true'
-		);
+		expect(countryPath).toBe('/shelter_sh001/_design/app/_view/demographics_by_country?group=true');
 		expect(countryMethod).toBe('GET');
 	});
 });

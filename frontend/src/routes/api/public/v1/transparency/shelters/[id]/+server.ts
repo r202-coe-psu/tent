@@ -3,7 +3,6 @@ import type { RequestHandler } from './$types';
 import { adminRaw } from '$lib/server/couch-admin';
 import {
 	migrateShelterV2ToCurrent,
-	SHELTER_DASHBOARD_DESIGN_NAME,
 	type ShelterMaster,
 	type ShelterMasterV2
 } from '$lib/features/shelters/server';
@@ -30,7 +29,7 @@ export const GET: RequestHandler = async ({ params, setHeaders }) => {
 			if (mappedStatus === 'OPEN' || mappedStatus === 'FULL') {
 				try {
 					const occRes = await adminRaw(
-						`/shelter_${m.code.toLowerCase()}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/occupancy?group=true`,
+						`/shelter_${m.code.toLowerCase()}/_design/app/_view/occupancy?group=true`,
 						'GET'
 					);
 					if (occRes.status === 404) throw new Error('Dashboard design is not deployed');

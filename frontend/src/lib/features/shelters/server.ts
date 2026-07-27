@@ -38,9 +38,5 @@ export {
 } from './domain/schema';
 
 export { SHELTER_DASHBOARD_VIEWS } from './domain/views';
-export {
-	SHELTER_DASHBOARD_DESIGN_NAME,
-	SHELTER_VIEW_MODULES,
-	getShelterViewModule
-} from './domain/view-modules';
-export type { ShelterViewModule, CouchViewDefinition } from './domain/view-modules';
+export { SHELTER_VIEW_MANIFEST } from './domain/view-manifest';
+export type { ShelterViewManifest, CouchViewDefinition } from './domain/view-manifest';

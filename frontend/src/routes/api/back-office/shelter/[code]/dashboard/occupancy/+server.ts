@@ -22,7 +22,6 @@ import {
 } from '$lib/server/couch-admin';
 import { rowsToOccupancyPayload, OccupancyPayloadSchema } from '$lib/features/dashboard';
 import type { ViewResult } from '$lib/server/shelters.admin';
-import { SHELTER_DASHBOARD_DESIGN_NAME } from '$lib/features/shelters/server';
 
 export const prerender = false;
 
@@ -37,10 +36,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 
 		// Query the occupancy view with group=true to get per-status counts.
 		// All keys: 'pre_registered' | 'active' | 'temporary_leave' | 'transferred' | 'checked_out' | 'deceased'
-		const res = await adminRaw(
-			`/${db}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/occupancy?group=true`,
-			'GET'
-		);
+		const res = await adminRaw(`/${db}/_design/app/_view/occupancy?group=true`, 'GET');
 
 		if (res.status === 404) {
 			throw new ServiceError('INTERNAL', 'Dashboard occupancy view is not deployed');

@@ -4,7 +4,7 @@
  * Defines the canonical API response shape for the occupancy endpoint.
  * Source-of-truth for CouchDB view → API mapping (CR-020, T-52).
  *
- * CouchDB view: `_design/dashboard/_view/occupancy?group=true`
+ * CouchDB view: `_design/app/_view/occupancy?group=true`
  * Keys emitted: 'pre_registered' | 'active' | 'temporary_leave' | 'transferred' |
  *               'checked_out' | 'deceased' (schema.md schema_v 3 — the current
  *               6-value `StayStatus` enum, `current_stay.status` verbatim)

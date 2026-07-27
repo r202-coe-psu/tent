@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getShelterViewModule } from '../domain/view-modules';
+import { SHELTER_VIEW_MANIFEST } from '../domain/view-manifest';
 import { hashViews, runViewLifecycle, type ViewLifecycleClient } from './view-lifecycle';
 
 type StoredDesign = {
@@ -96,56 +96,47 @@ function fakeCouch(
 describe('shelter Map/Reduce lifecycle', () => {
 	it('dry-run never sends a PUT request', async () => {
 		const fake = fakeCouch();
-		const result = await runViewLifecycle(
-			'shelter_sh001',
-			getShelterViewModule('dashboard'),
-			fake.client,
-			{ mode: 'dry-run' }
-		);
+		const result = await runViewLifecycle('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client, {
+			mode: 'dry-run'
+		});
 
 		expect(result.status).toBe('dry-run');
-		expect(result.targetDesignName).toBe('dashboard');
+		expect(result.designName).toBe('app');
 		expect(fake.calls.some((call) => call.method === 'PUT')).toBe(false);
 	});
 
-	it('initial deployment writes stable dashboard directly without a candidate', async () => {
+	it('initial deployment writes stable directly without a candidate', async () => {
 		const fake = fakeCouch();
-		const result = await runViewLifecycle(
-			'shelter_sh001',
-			getShelterViewModule('dashboard'),
-			fake.client,
-			{ mode: 'write' }
-		);
+		const result = await runViewLifecycle('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client, {
+			mode: 'write'
+		});
 
 		expect(result.message).toBe('initial_deploy');
-		expect(fake.designs.has('shelter_sh001/_design/dashboard')).toBe(true);
+		expect(fake.designs.has('shelter_sh001/_design/app')).toBe(true);
 		expect([...fake.designs.keys()].some((key) => key.includes('__next_'))).toBe(false);
 	});
 
-	it('stable dashboard upgrade warms candidate, verifies signature, and cleans candidate', async () => {
+	it('stable upgrade warms candidate, verifies signature, and cleans candidate', async () => {
 		const fake = fakeCouch({
-			'shelter_sh001/_design/dashboard': {
-				_id: '_design/dashboard',
+			'shelter_sh001/_design/app': {
+				_id: '_design/app',
 				_rev: '1-old',
 				language: 'javascript',
 				views: { old_view: { map: 'function (doc) { emit(doc.type, 1); }' } }
 			}
 		});
 
-		const result = await runViewLifecycle(
-			'shelter_sh001',
-			getShelterViewModule('dashboard'),
-			fake.client,
-			{ mode: 'write' }
-		);
+		const result = await runViewLifecycle('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client, {
+			mode: 'write'
+		});
 
 		expect(result.status).toBe('deployed');
-		expect(fake.designs.get('shelter_sh001/_design/dashboard')?.views).toHaveProperty('occupancy');
+		expect(fake.designs.get('shelter_sh001/_design/app')?.views).toHaveProperty('occupancy');
 		expect([...fake.designs.keys()].some((key) => key.includes('__next_'))).toBe(false);
 		expect([...fake.designs.keys()].filter((key) => key.includes('__prev_')).length).toBe(1);
 	});
 
-	it('legacy app target preserves other module views and retries 409', async () => {
+	it('replaces views that are not in the manifest and retries 409', async () => {
 		const fake = fakeCouch(
 			{
 				'shelter_sh001/_design/app': {
@@ -153,7 +144,7 @@ describe('shelter Map/Reduce lifecycle', () => {
 					_rev: '1-old',
 					language: 'javascript',
 					views: {
-						other_module_view: {
+						retired_view: {
 							map: 'function (doc) { emit(doc.type, 1); }',
 							reduce: '_count'
 						}
@@ -163,17 +154,17 @@ describe('shelter Map/Reduce lifecycle', () => {
 			{ conflictOnce: true }
 		);
 
-		const result = await runViewLifecycle(
-			'shelter_sh001',
-			getShelterViewModule('dashboard'),
-			fake.client,
-			{ mode: 'write', targetDesignName: 'app' }
-		);
+		const result = await runViewLifecycle('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client, {
+			mode: 'write'
+		});
 
 		const app = fake.designs.get('shelter_sh001/_design/app');
 		expect(result.status).toBe('deployed');
-		expect(app?.views).toHaveProperty('other_module_view');
+		// The manifest is the whole view set: a view that is no longer in it must be
+		// gone, otherwise the deployed hash could never match the manifest hash.
+		expect(app?.views).not.toHaveProperty('retired_view');
 		expect(app?.views).toHaveProperty('occupancy');
+		// Non-view design fields still survive a deploy.
 		expect(app).toHaveProperty('language', 'javascript');
 		expect(fake.calls.filter((call) => call.method === 'PUT').length).toBeGreaterThan(3);
 	});
@@ -182,47 +173,47 @@ describe('shelter Map/Reduce lifecycle', () => {
 		const fake = fakeCouch({}, { conflictCount: 3 });
 
 		await expect(
-			runViewLifecycle('shelter_sh001', getShelterViewModule('dashboard'), fake.client, {
+			runViewLifecycle('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client, {
 				mode: 'write'
 			})
-		).rejects.toThrow('PUT dashboard failed');
+		).rejects.toThrow('PUT app failed');
 	});
 
 	it('rolls stable back with rollback metadata when promoted warm fails', async () => {
 		const oldViews = { old_view: { map: 'function (doc) { emit(doc.type, 1); }' } };
 		const fake = fakeCouch(
 			{
-				'shelter_sh001/_design/dashboard': {
-					_id: '_design/dashboard',
+				'shelter_sh001/_design/app': {
+					_id: '_design/app',
 					_rev: '1-old',
 					views: oldViews,
-					tent_view: { module: 'dashboard', version: 1, hash: hashViews(oldViews) }
+					tent_view: { version: 1, hash: hashViews(oldViews) }
 				}
 			},
-			{ warmFailureFor: 'dashboard' }
+			{ warmFailureFor: 'app' }
 		);
 
 		await expect(
-			runViewLifecycle('shelter_sh001', getShelterViewModule('dashboard'), fake.client, {
+			runViewLifecycle('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client, {
 				mode: 'write'
 			})
 		).rejects.toThrow('warm failed');
-		const restored = fake.designs.get('shelter_sh001/_design/dashboard');
+		const restored = fake.designs.get('shelter_sh001/_design/app');
 		expect(restored?.views).toEqual(oldViews);
 		expect(restored?.tent_view).toMatchObject({ hash: hashViews(oldViews), version: 1 });
 	});
 
 	it('verify rejects a stale stable hash', async () => {
 		const fake = fakeCouch({
-			'shelter_sh001/_design/dashboard': {
-				_id: '_design/dashboard',
+			'shelter_sh001/_design/app': {
+				_id: '_design/app',
 				_rev: '1-old',
 				views: { stale: { map: 'function () {}' } }
 			}
 		});
 
 		await expect(
-			runViewLifecycle('shelter_sh001', getShelterViewModule('dashboard'), fake.client, {
+			runViewLifecycle('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client, {
 				mode: 'verify'
 			})
 		).rejects.toThrow('Hash mismatch');
@@ -232,21 +223,21 @@ describe('shelter Map/Reduce lifecycle', () => {
 		const oldViews = { old_view: { map: 'function (doc) { emit(doc.type, 1); }' } };
 		const fake = fakeCouch(
 			{
-				'shelter_sh001/_design/dashboard': {
-					_id: '_design/dashboard',
+				'shelter_sh001/_design/app': {
+					_id: '_design/app',
 					_rev: '1-old',
 					views: oldViews
 				}
 			},
-			{ signatureByDesign: { dashboard: 'different-signature' } }
+			{ signatureByDesign: { app: 'different-signature' } }
 		);
 
 		await expect(
-			runViewLifecycle('shelter_sh001', getShelterViewModule('dashboard'), fake.client, {
+			runViewLifecycle('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client, {
 				mode: 'write'
 			})
 		).rejects.toThrow('View index signature mismatch');
-		expect(fake.designs.get('shelter_sh001/_design/dashboard')?.views).toEqual(oldViews);
+		expect(fake.designs.get('shelter_sh001/_design/app')?.views).toEqual(oldViews);
 	});
 
 	it('hash is deterministic for the same View definitions', () => {

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { CouchViewDefinition, ShelterViewModule } from '../domain/view-modules';
+import type { CouchViewDefinition, ShelterViewManifest } from '../domain/view-manifest';
 
 export type ViewLifecycleResponse = { status: number; data: unknown };
 export type ViewLifecycleClient = (
@@ -21,10 +21,9 @@ export type ViewLifecycleMode = 'dry-run' | 'write' | 'verify';
 
 export type ViewLifecycleResult = {
 	db: string;
-	module: string;
 	version: number;
 	mode: ViewLifecycleMode;
-	targetDesignName: string;
+	designName: string;
 	targetHash: string;
 	status: 'dry-run' | 'verified' | 'deployed' | 'failed';
 	message?: string;
@@ -207,66 +206,48 @@ function previousName(designName: string, previousHash: string): string {
 	return `${designName}__prev_${previousHash.slice(0, 12)}`;
 }
 
-function targetViews(
-	module: ShelterViewModule,
-	legacyDesign: DesignDocument | null,
-	targetDesignName: string
-): Record<string, CouchViewDefinition> {
-	if (targetDesignName !== module.legacyDesignName) return module.views;
-	return { ...(legacyDesign?.views ?? {}), ...module.views };
-}
-
-function moduleViewsMatch(
-	actual: Record<string, CouchViewDefinition> | undefined,
-	moduleViews: Record<string, CouchViewDefinition>
-): boolean {
-	return Object.entries(moduleViews).every(
-		([name, definition]) => stableJson(actual?.[name]) === stableJson(definition)
-	);
-}
-
 function lifecycleResult(
 	db: string,
-	module: ShelterViewModule,
+	manifest: ShelterViewManifest,
 	mode: ViewLifecycleMode,
-	targetDesignName: string,
 	targetHash: string,
 	status: ViewLifecycleResult['status'],
 	message?: string
 ): ViewLifecycleResult {
 	return {
 		db,
-		module: module.module,
-		version: module.version,
+		version: manifest.version,
 		mode,
-		targetDesignName,
+		designName: manifest.designName,
 		targetHash,
 		status,
 		...(message ? { message } : {})
 	};
 }
 
+/**
+ * Bring one shelter database's design document to the manifest.
+ *
+ * `views` is taken from the manifest verbatim — the deployed view set is
+ * REPLACED, never merged with what is already there (see `view-manifest.ts`).
+ * That is what lets `targetHash` be compared against the deployed hash at all.
+ */
 export async function runViewLifecycle(
 	db: string,
-	module: ShelterViewModule,
+	manifest: ShelterViewManifest,
 	request: ViewLifecycleClient,
-	options: { mode: ViewLifecycleMode; targetDesignName?: string }
+	options: { mode: ViewLifecycleMode }
 ): Promise<ViewLifecycleResult> {
-	const targetDesignName = options.targetDesignName ?? module.stableDesignName;
-	const legacy =
-		module.legacyDesignName && targetDesignName === module.legacyDesignName
-			? await getDesign(db, module.legacyDesignName, request)
-			: null;
-	const views = targetViews(module, legacy, targetDesignName);
+	const designName = manifest.designName;
+	const views = manifest.views;
 	const targetHash = hashViews(views);
 
 	if (options.mode === 'dry-run') {
-		const current = await getDesign(db, targetDesignName, request);
+		const current = await getDesign(db, designName, request);
 		return lifecycleResult(
 			db,
-			module,
+			manifest,
 			options.mode,
-			targetDesignName,
 			targetHash,
 			'dry-run',
 			current ? `current_hash=${hashViews(current.views ?? {})}` : 'design_missing'
@@ -274,86 +255,53 @@ export async function runViewLifecycle(
 	}
 
 	if (options.mode === 'verify') {
-		const stable = await getDesign(db, targetDesignName, request);
-		if (!stable) throw new Error(`Design ${targetDesignName} is missing for ${db}`);
+		const stable = await getDesign(db, designName, request);
+		if (!stable) throw new Error(`Design ${designName} is missing for ${db}`);
 		const currentHash = hashViews(stable.views ?? {});
 		if (currentHash !== targetHash) {
 			throw new Error(`Hash mismatch for ${db}: expected=${targetHash} actual=${currentHash}`);
 		}
-		await warmViews(db, targetDesignName, views, request);
-		return lifecycleResult(db, module, options.mode, targetDesignName, targetHash, 'verified');
+		await warmViews(db, designName, views, request);
+		return lifecycleResult(db, manifest, options.mode, targetHash, 'verified');
 	}
 
-	const stable = await getDesign(db, targetDesignName, request);
-	const alreadyCurrent =
-		stable &&
-		(targetDesignName === module.legacyDesignName
-			? moduleViewsMatch(stable.views, module.views)
-			: hashViews(stable.views ?? {}) === targetHash);
-	if (alreadyCurrent) {
-		await warmViews(
-			db,
-			targetDesignName,
-			targetDesignName === module.legacyDesignName ? module.views : views,
-			request
-		);
-		return lifecycleResult(
-			db,
-			module,
-			options.mode,
-			targetDesignName,
-			targetHash,
-			'deployed',
-			'already_current'
-		);
+	const stable = await getDesign(db, designName, request);
+
+	if (stable && hashViews(stable.views ?? {}) === targetHash) {
+		// Warm even when nothing changed: the document can be current while the
+		// index was never built (a fresh replica, or a database nobody queried yet).
+		await warmViews(db, designName, views, request);
+		return lifecycleResult(db, manifest, options.mode, targetHash, 'deployed', 'already_current');
 	}
 
 	if (!stable) {
 		await putDesign(
 			db,
-			targetDesignName,
+			designName,
 			{
 				views,
-				tent_view: {
-					module: module.module,
-					version: module.version,
-					hash: targetHash,
-					deployment: 'initial'
-				}
+				tent_view: { version: manifest.version, hash: targetHash, deployment: 'initial' }
 			},
 			request
 		);
-		await warmViews(db, targetDesignName, views, request);
-		return lifecycleResult(
-			db,
-			module,
-			options.mode,
-			targetDesignName,
-			targetHash,
-			'deployed',
-			'initial_deploy'
-		);
+		await warmViews(db, designName, views, request);
+		return lifecycleResult(db, manifest, options.mode, targetHash, 'deployed', 'initial_deploy');
 	}
 
 	let keepPrevious: string | undefined;
-	if (stable.views && hashViews(stable.views) !== targetHash) {
-		keepPrevious = previousName(targetDesignName, hashViews(stable.views));
-		await putDesign(db, keepPrevious, { ...stable, source_design: targetDesignName }, request);
+	if (stable.views) {
+		keepPrevious = previousName(designName, hashViews(stable.views));
+		await putDesign(db, keepPrevious, { ...stable, source_design: designName }, request);
 	}
 
-	const candidate = candidateName(targetDesignName, targetHash);
+	const candidate = candidateName(designName, targetHash);
 	await putDesign(
 		db,
 		candidate,
 		{
-			...(stable ?? {}),
+			...stable,
 			views,
-			tent_view: {
-				module: module.module,
-				version: module.version,
-				hash: targetHash,
-				source: targetDesignName
-			}
+			tent_view: { version: manifest.version, hash: targetHash, source: designName }
 		},
 		request
 	);
@@ -367,56 +315,47 @@ export async function runViewLifecycle(
 
 	await putDesign(
 		db,
-		targetDesignName,
+		designName,
 		(existing) => ({
 			...(existing ?? {}),
-			views: targetViews(module, existing, targetDesignName),
-			tent_view: {
-				module: module.module,
-				version: module.version,
-				hash: targetHash,
-				promoted_from: candidate
-			}
+			views,
+			tent_view: { version: manifest.version, hash: targetHash, promoted_from: candidate }
 		}),
 		request
 	);
-	const promoted = await getDesign(db, targetDesignName, request);
-	if (!promoted) throw new Error(`Promoted design ${targetDesignName} is missing for ${db}`);
+	const promoted = await getDesign(db, designName, request);
+	if (!promoted) throw new Error(`Promoted design ${designName} is missing for ${db}`);
 	try {
-		await warmViews(db, targetDesignName, promoted.views ?? {}, request);
-		const promotedSignature = await getViewSignature(db, targetDesignName, request);
+		await warmViews(db, designName, promoted.views ?? {}, request);
+		const promotedSignature = await getViewSignature(db, designName, request);
 		if (promotedSignature !== candidateSignature) {
 			throw new Error(
 				`View index signature mismatch for ${db}: candidate=${candidateSignature} promoted=${promotedSignature}`
 			);
 		}
 	} catch (error) {
-		if (stable) {
-			const restored = {
-				...stable,
-				tent_view: stable.tent_view ?? {
-					module: module.module,
-					version: module.version,
-					hash: hashViews(stable.views ?? {}),
-					deployment: 'rollback'
-				}
-			};
-			await putDesign(db, targetDesignName, restored, request);
-		}
+		const restored = {
+			...stable,
+			tent_view: stable.tent_view ?? {
+				version: manifest.version,
+				hash: hashViews(stable.views ?? {}),
+				deployment: 'rollback'
+			}
+		};
+		await putDesign(db, designName, restored, request);
 		throw error;
 	}
 
 	let message: string | undefined;
 	try {
-		await cleanupSnapshots(db, targetDesignName, keepPrevious, request);
+		await cleanupSnapshots(db, designName, keepPrevious, request);
 	} catch (error) {
 		message = `cleanup_pending: ${error instanceof Error ? error.message : String(error)}`;
 	}
 	return lifecycleResult(
 		db,
-		module,
+		manifest,
 		options.mode,
-		targetDesignName,
 		hashViews(promoted.views ?? {}),
 		'deployed',
 		message

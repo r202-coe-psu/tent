@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
-import { SHELTER_DASHBOARD_DESIGN_NAME, type ShelterMaster } from '$lib/features/shelters/server';
+import type { ShelterMaster } from '$lib/features/shelters/server';
 import { adminRaw } from '$lib/server/couch-admin';
 
 export const GET: RequestHandler = async ({ url, setHeaders }) => {
@@ -83,11 +83,11 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 				try {
 					const [occRes, ageRes] = await Promise.all([
 						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/occupancy?group=true`,
+							`/shelter_${m.code.toLowerCase()}/_design/app/_view/occupancy?group=true`,
 							'GET'
 						),
 						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/demographics_by_age?group=true`,
+							`/shelter_${m.code.toLowerCase()}/_design/app/_view/demographics_by_age?group=true`,
 							'GET'
 						)
 					]);

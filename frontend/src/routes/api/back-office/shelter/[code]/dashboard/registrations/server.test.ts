@@ -120,7 +120,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 
 		const [path, method] = vi.mocked(adminRaw).mock.calls[0];
 		expect(path).toContain(
-			`/shelter_sh001/_design/dashboard/_view/registrations_by_date_status?group=true`
+			`/shelter_sh001/_design/app/_view/registrations_by_date_status?group=true`
 		);
 		expect(method).toBe('GET');
 	});

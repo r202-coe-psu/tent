@@ -1,4 +1,4 @@
-import { getShelterViewModule } from '../domain/view-modules';
+import { SHELTER_VIEW_MANIFEST } from '../domain/view-manifest';
 import { runViewLifecycle } from './view-lifecycle';
 
 export type CouchClient = (
@@ -8,11 +8,12 @@ export type CouchClient = (
 ) => Promise<{ status: number; data: unknown }>;
 
 /**
- * Provision the Dashboard Design Document through the same lifecycle used by
- * the CI/CD runner. This keeps initial shelter creation and redeploys aligned
- * on retry, metadata, warm, and verification behavior.
+ * Provision `_design/app` through the same lifecycle the CI/CD runner uses.
+ * Sharing one code path keeps initial shelter creation and later redeploys
+ * aligned on retry, metadata, warm, and verification behaviour — a shelter
+ * created today must end up byte-identical to one the runner has migrated.
  */
 export async function deployShelterViewsFn(db: string, request: CouchClient): Promise<number> {
-	await runViewLifecycle(db, getShelterViewModule('dashboard'), request, { mode: 'write' });
+	await runViewLifecycle(db, SHELTER_VIEW_MANIFEST, request, { mode: 'write' });
 	return 200;
 }

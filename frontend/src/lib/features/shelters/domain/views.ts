@@ -1,5 +1,5 @@
 export const SHELTER_DASHBOARD_VIEWS = {
-	_id: '_design/dashboard',
+	_id: '_design/app',
 	views: {
 		occupancy: {
 			map: `function (doc) {

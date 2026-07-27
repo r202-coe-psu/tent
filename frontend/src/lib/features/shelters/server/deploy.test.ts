@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { deployShelterViewsFn } from './deploy';
 
 describe('deployShelterViewsFn', () => {
-	it('uses the shared lifecycle to initialize _design/dashboard', async () => {
+	it('uses the shared lifecycle to initialize _design/app', async () => {
 		let stored: Record<string, unknown> | null = null;
 		const request = vi.fn(async (path: string, method: string, body?: unknown) => {
 			if (method === 'GET' && path.includes('/_view/')) {
 				return { status: 200, data: { rows: [] } };
 			}
-			if (method === 'GET' && path.endsWith('/_design/dashboard')) {
+			if (method === 'GET' && path.endsWith('/_design/app')) {
 				return stored ? { status: 200, data: stored } : { status: 404, data: null };
 			}
 			if (method === 'PUT') {
@@ -20,13 +20,13 @@ describe('deployShelterViewsFn', () => {
 
 		await expect(deployShelterViewsFn('shelter_sh001', request)).resolves.toBe(200);
 
-		expect(request.mock.calls[0]).toEqual(['/shelter_sh001/_design/dashboard', 'GET']);
+		expect(request.mock.calls[0]).toEqual(['/shelter_sh001/_design/app', 'GET']);
 		const putCall = request.mock.calls.find((call) => call[1] === 'PUT');
-		expect(putCall?.[0]).toBe('/shelter_sh001/_design/dashboard');
+		expect(putCall?.[0]).toBe('/shelter_sh001/_design/app');
 		expect(putCall?.[2]).toMatchObject({
-			_id: '_design/dashboard',
+			_id: '_design/app',
 			views: expect.objectContaining({ occupancy: expect.any(Object) }),
-			tent_view: expect.objectContaining({ module: 'dashboard', deployment: 'initial' })
+			tent_view: expect.objectContaining({ version: expect.any(Number), deployment: 'initial' })
 		});
 	});
 });

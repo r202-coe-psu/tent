@@ -2,9 +2,9 @@
  * Redeploy Map/Reduce Views to shelter databases.
  *
  * Default is a read-only dry-run. Examples (from frontend/):
- *   pnpm deploy:shelter-views --module dashboard
- *   pnpm deploy:shelter-views --module dashboard --write --confirm
- *   pnpm deploy:shelter-views --module dashboard --verify
+ *   pnpm deploy:shelter-views
+ *   pnpm deploy:shelter-views --write --confirm
+ *   pnpm deploy:shelter-views --verify
  *
  * The target environment is whatever `COUCHDB_ADMIN_URL` points at — there is
  * deliberately no `--environment` flag. Separation between staging and
@@ -13,18 +13,16 @@
  * could not add to that. The run header logs the endpoint host so a CI log
  * always records which cluster was written.
  *
- * `--design app` is the current-system mode: it merges Dashboard Views into
- * the existing _design/app without dropping Views owned by other modules.
- * The default target is the module-owned _design/dashboard.
+ * There is one design document (`_design/app`) and one manifest, so there is no
+ * `--design` or `--module` flag to pick between them. The manifest is the whole
+ * view set: deploying REPLACES `views`, so a view dropped from the manifest is
+ * dropped from CouchDB too.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import {
-	getShelterViewModule,
-	SHELTER_VIEW_MODULES
-} from '$lib/features/shelters/domain/view-modules';
+import { SHELTER_VIEW_MANIFEST } from '$lib/features/shelters/domain/view-manifest';
 import {
 	runViewLifecycle,
 	type ViewLifecycleMode,
@@ -74,10 +72,6 @@ function parseCouchUrl(raw: string): { baseUrl: string; authHeader: string } {
 
 const { baseUrl, authHeader } = parseCouchUrl(rawCouchUrl);
 const args = new Set(process.argv.slice(2));
-const moduleArgIndex = process.argv.indexOf('--module');
-const requestedModule = moduleArgIndex >= 0 ? process.argv[moduleArgIndex + 1] : 'dashboard';
-const designArgIndex = process.argv.indexOf('--design');
-const targetDesignName = designArgIndex >= 0 ? process.argv[designArgIndex + 1] : undefined;
 const isWrite = args.has('--write');
 const isVerify = args.has('--verify');
 const isConfirmed = args.has('--confirm');
@@ -85,17 +79,12 @@ const outputJson = args.has('--json');
 
 if (isWrite && !isConfirmed) {
 	console.error('✗ --write requires --confirm');
-	console.error('  Example: pnpm deploy:shelter-views --module dashboard --write --confirm');
+	console.error('  Example: pnpm deploy:shelter-views --write --confirm');
 	process.exit(1);
 }
 
 if (isWrite && isVerify) {
 	console.error('✗ Choose either --write or --verify, not both');
-	process.exit(1);
-}
-
-if (designArgIndex >= 0 && !targetDesignName) {
-	console.error('✗ --design requires a design name, for example app or dashboard');
 	process.exit(1);
 }
 
@@ -177,21 +166,6 @@ function printResult(result: ViewLifecycleResult): void {
 }
 
 async function main() {
-	const moduleNames = args.has('--all') ? Object.keys(SHELTER_VIEW_MODULES) : [requestedModule];
-	if (requestedModule === 'all' && !args.has('--all')) {
-		throw new Error('Use --all instead of --module all');
-	}
-	const modules = moduleNames.map((name) => getShelterViewModule(name));
-	if (
-		targetDesignName &&
-		modules.some(
-			(manifest) =>
-				targetDesignName !== manifest.stableDesignName &&
-				targetDesignName !== manifest.legacyDesignName
-		)
-	) {
-		throw new Error(`Invalid --design "${targetDesignName}" for selected module`);
-	}
 	const shelters = await listShelters();
 	const runMode = mode();
 	const log = outputJson ? console.error : console.log;
@@ -199,9 +173,9 @@ async function main() {
 	// Host only — never the full baseUrl. `parseCouchUrl` strips credentials, but
 	// this line ends up in CI logs, so it must not depend on that staying true.
 	log(`   endpoint: ${new URL(baseUrl).host}`);
-	log(`   modules: ${moduleNames.join(', ')}`);
+	log(`   design: _design/${SHELTER_VIEW_MANIFEST.designName} (v${SHELTER_VIEW_MANIFEST.version})`);
+	log(`   views: ${Object.keys(SHELTER_VIEW_MANIFEST.views).join(', ')}`);
 	log(`   shelters: ${shelters.length}`);
-	log(`   target: ${targetDesignName ?? 'module stable design'}`);
 
 	if (shelters.length === 0) {
 		log('⚠️  No shelter masters in registry — nothing to process');
@@ -212,38 +186,28 @@ async function main() {
 	let failed = 0;
 	const results: ViewLifecycleResult[] = [];
 	for (const shelter of shelters) {
-		let preflightError: string | null = null;
 		try {
 			await ensureDatabase(shelter.db);
+			const result = await runViewLifecycle(shelter.db, SHELTER_VIEW_MANIFEST, couchReq, {
+				mode: runMode
+			});
+			results.push(result);
+			printResult(result);
+			ok++;
 		} catch (error) {
-			preflightError = error instanceof Error ? error.message : String(error);
-		}
-		for (const manifest of modules) {
-			try {
-				if (preflightError) throw new Error(preflightError);
-				const result = await runViewLifecycle(shelter.db, manifest, couchReq, {
-					mode: runMode,
-					targetDesignName
-				});
-				results.push(result);
-				printResult(result);
-				ok++;
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				const result: ViewLifecycleResult = {
-					db: shelter.db,
-					module: manifest.module,
-					version: manifest.version,
-					mode: runMode,
-					targetDesignName: targetDesignName ?? manifest.stableDesignName,
-					targetHash: 'unknown',
-					status: 'failed',
-					message
-				};
-				results.push(result);
-				printResult(result);
-				failed++;
-			}
+			const message = error instanceof Error ? error.message : String(error);
+			const result: ViewLifecycleResult = {
+				db: shelter.db,
+				version: SHELTER_VIEW_MANIFEST.version,
+				mode: runMode,
+				designName: SHELTER_VIEW_MANIFEST.designName,
+				targetHash: 'unknown',
+				status: 'failed',
+				message
+			};
+			results.push(result);
+			printResult(result);
+			failed++;
 		}
 	}
 

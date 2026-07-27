@@ -182,7 +182,8 @@ function uniq<T>(arr: T[]): T[] {
 /**
  * Deploy CouchDB Design Documents (Views) for a shelter database.
  *
- * CR-051: Adds Dashboard MapReduce views under `_design/dashboard`.
+ * CR-051: Deploys the shelter Map/Reduce views into `_design/app` through the
+ * shared lifecycle runner (candidate → warm → promote).
  *
  * Views deployed:
  *   - `occupancy`               — count by `current_stay.status` (total / active / temporary_leave / checked_out / transferred / deceased)

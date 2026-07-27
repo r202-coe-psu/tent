@@ -109,7 +109,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 		expect(data.total).toBe(15);
 
 		const [path, method] = vi.mocked(adminRaw).mock.calls[0];
-		expect(path).toBe('/shelter_sh001/_design/dashboard/_view/occupancy?group=true');
+		expect(path).toBe('/shelter_sh001/_design/app/_view/occupancy?group=true');
 		expect(method).toBe('GET');
 	});
 });
