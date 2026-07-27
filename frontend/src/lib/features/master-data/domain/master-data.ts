@@ -33,6 +33,25 @@ export type MasterDataType = (typeof MASTER_DATA_TYPES)[number];
 
 export const masterTypeSchema = z.enum(MASTER_DATA_TYPES);
 
+/** Where a master-data document is resolved from. */
+export const masterDataScopeSchema = z.enum(['global', 'shelter', 'effective']);
+export type MasterDataScope = z.infer<typeof masterDataScopeSchema>;
+
+export interface MasterDataQueryContext {
+	scope?: MasterDataScope;
+	shelterCode?: string | null;
+}
+
+export type MasterDataRecordScope = 'global' | 'shelter';
+
+export interface MasterDataItemSource {
+	scope: MasterDataRecordScope;
+	shelter_code?: string | null;
+	/** For a global item under a shelter context: true when the current shelter
+	 *  has disabled it locally (`disabled_global_codes`) — global doc unchanged. */
+	shelter_disabled?: boolean;
+}
+
 /** Types shown on the Registration Config page (ตั้งค่าการลงทะเบียน). */
 export const REGISTRATION_MASTER_TYPES = [
 	'vulnerable_group',
@@ -63,9 +82,9 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)'
 };
 
-/** Stable `code` used as the doc id — registry has no `shelter_code` (global). */
-export function masterDocId(type: MasterDataType): string {
-	return `master_data:${type}`;
+/** Stable id: global docs use `master_data:{type}`, local docs append the shelter code. */
+export function masterDocId(type: MasterDataType, shelterCode?: string | null): string {
+	return shelterCode ? `master_data:${type}:${shelterCode}` : `master_data:${type}`;
 }
 
 // ---------------------------------------------------------------- items
@@ -84,13 +103,14 @@ export const masterDataItemSchema = z.object({
 		.regex(/^[a-z0-9_]+$/, 'Code must be lower_snake'),
 	label: z.string().trim().min(1),
 	is_default: z.boolean(),
+	status: z.enum(['active', 'inactive']).default('active'),
 	parent_code: z.string().trim().min(1).optional()
 });
 export type MasterDataItem = z.infer<typeof masterDataItemSchema>;
 
 // ---------------------------------------------------------------- document
 
-/** Author context for a registry doc (no `shelter_code` — global). */
+/** Author context for a registry doc. Global docs omit `shelter_code`. */
 export interface RegistryAuthorContext {
 	createdBy: string;
 }
@@ -99,9 +119,18 @@ export interface MasterData {
 	_id: string;
 	_rev?: string;
 	type: 'master_data';
-	schema_v: 1;
+	schema_v: 1 | 2 | 3;
 	master_type: MasterDataType;
+	shelter_code?: string;
 	items: MasterDataItem[];
+	/** Shelter-local only: ULID codes of GLOBAL items this shelter has disabled
+	 *  (per-shelter deactivate; global doc untouched). Absent = none. */
+	disabled_global_codes?: string[];
+	/** Shelter-local only: code of a GLOBAL item this shelter has chosen as its
+	 *  default (CR-049 amendment). The global item's `label`/`is_default` are
+	 *  never mutated — this is a per-shelter pointer only. Absent = fall back
+	 *  to the global item flagged `is_default`. */
+	default_global_code?: string;
 	created_at: string;
 	updated_at: string;
 	created_by: string;
@@ -111,9 +140,12 @@ export const masterDataSchema = z.object({
 	_id: z.string().min(1),
 	_rev: z.string().optional(),
 	type: z.literal('master_data'),
-	schema_v: z.literal(1),
+	schema_v: z.union([z.literal(1), z.literal(2), z.literal(3)]),
 	master_type: masterTypeSchema,
+	shelter_code: z.string().trim().min(1).optional(),
 	items: z.array(masterDataItemSchema).min(0),
+	disabled_global_codes: z.array(z.string().trim().min(1)).optional(),
+	default_global_code: z.string().trim().min(1).optional(),
 	created_at: z.string().datetime(),
 	updated_at: z.string().datetime(),
 	created_by: z.string().min(1)
@@ -122,66 +154,44 @@ export const masterDataSchema = z.object({
 export const isMasterData = (d: unknown): d is MasterData =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'master_data';
 
-// ---------------------------------------------------------------- slugify
+// ---------------------------------------------------------------- migration v2 → v3
 
-/**
- * Hand-curated dictionary for labels that don't transliterate cleanly from Thai
- * to a readable lower_snake `code`. Keep this list short — only seeds that
- * field study has already committed to. Anything not in the dict falls through
- * to `slugifyAscii()` (transliterate) and a `_<ulid>` suffix on collision.
- */
-const SLUG_DICT: Record<string, string> = {
-	ผู้สูงอายุ: 'elderly',
-	ผู้พิการ: 'disabled',
-	หญิงตั้งครรภ์: 'pregnant',
-	เด็กเล็ก: 'infant',
-	โรคเรื้อรัง: 'chronic_illness',
-	แพ้อาหาร: 'allergy_food',
-	แพ้ยา: 'allergy_drug',
-	หอบหืด: 'asthma',
-	'อิสลาม (Halal)': 'halal',
-	มังสวิรัติ: 'vegetarian',
-	อาหารอ่อน: 'soft_food',
-	ไม่ทานหมู: 'no_pork',
-	เบาหวาน: 'diabetic',
-	สุนัข: 'dog',
-	แมว: 'cat',
-	นก: 'bird',
-	อื่นๆ: 'other',
-	เสียหายบางส่วน: 'partial',
-	เสียหายหนัก: 'severe',
-	เสียหายทั้งหมด: 'total_loss'
+/** A pre-v3 master_data doc: items may lack `status`, the doc may carry the
+ *  now-removed `excluded_codes`, and `schema_v` may be 1 or 2. */
+type LegacyMasterItem = Omit<MasterDataItem, 'status'> & { status?: MasterDataItem['status'] };
+type LegacyMasterData = Omit<MasterData, 'schema_v' | 'items'> & {
+	schema_v?: number;
+	items?: LegacyMasterItem[];
+	excluded_codes?: string[];
 };
 
-/** Lightweight transliteration — keeps ascii lower_snake; non-mappable → ''. */
-function slugifyAscii(label: string): string {
-	return label
-		.normalize('NFKD')
-		.replace(/[\u0300-\u036f]/g, '')
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, '_')
-		.replace(/^_+|_+$/g, '')
-		.replace(/_+/g, '_');
+/** True when a doc still needs the v3 shape: schema_v < 3, a leftover
+ *  `excluded_codes`, or any item missing `status`. Idempotent gate for the
+ *  migration runner (see scripts/migrate-master-data.ts). */
+export function needsMasterDataMigration(doc: LegacyMasterData): boolean {
+	if ((doc.schema_v ?? 0) < 3) return true;
+	if ('excluded_codes' in doc && doc.excluded_codes !== undefined) return true;
+	return (doc.items ?? []).some((i) => i.status === undefined);
 }
 
-/** Returns a `code` candidate for the given label — caller is responsible for
- *  uniqueness check (append ULID if collision). */
-export function slugifyLabel(label: string): string {
-	const trimmed = label.trim();
-	if (SLUG_DICT[trimmed]) return SLUG_DICT[trimmed];
-	const ascii = slugifyAscii(trimmed);
-	if (ascii) return ascii;
-	// All-non-ascii label with no dict entry → stable fallback via ULID.
-	return `item_${ulid().toLowerCase()}`;
-}
-
-/** Returns a unique `code` against the existing items list (appends ULID on
- *  collision). Pure — no I/O. */
-export function uniqueCode(label: string, existing: readonly MasterDataItem[]): string {
-	const base = slugifyLabel(label);
-	const taken = new Set(existing.map((i) => i.code));
-	if (!taken.has(base)) return base;
-	return `${base}_${ulid().toLowerCase()}`;
+/** Migrate a master_data doc to schema_v 3 (CR-049): backfill item `status`
+ *  (default `active`), drop `excluded_codes`, stamp `schema_v: 3`. Pure — no
+ *  I/O, no clock. The runner writes the result back and stamps `updated_at`. */
+export function migrateMasterDataToV3(doc: LegacyMasterData): MasterData {
+	const items: MasterDataItem[] = (doc.items ?? []).map((i) => ({
+		code: i.code,
+		label: i.label,
+		is_default: i.is_default,
+		status: i.status ?? 'active',
+		...(i.parent_code ? { parent_code: i.parent_code } : {})
+	}));
+	const next: MasterData & { excluded_codes?: string[] } = {
+		...doc,
+		schema_v: 3,
+		items
+	};
+	delete next.excluded_codes;
+	return next;
 }
 
 // ---------------------------------------------------------------- 1-default enforce
@@ -244,14 +254,19 @@ export function makeRegistryDoc<T extends string, B extends object>(
 export function createMasterData(
 	type: MasterDataType,
 	items: readonly MasterDataItem[],
-	ctx: RegistryAuthorContext
+	ctx: RegistryAuthorContext,
+	shelterCode?: string | null
 ): MasterData {
 	return makeRegistryDoc(
 		'master_data',
-		1,
-		{ master_type: type, items: enforceOneDefault(items) },
+		3,
+		{
+			master_type: type,
+			...(shelterCode ? { shelter_code: shelterCode } : {}),
+			items: enforceOneDefault(items)
+		},
 		ctx,
-		masterDocId(type)
+		masterDocId(type, shelterCode)
 	) as MasterData;
 }
 
@@ -273,16 +288,17 @@ export function touchMasterData(doc: MasterData): MasterData {
 export type ItemOp =
 	| { kind: 'add'; label: string; is_default?: boolean }
 	| { kind: 'edit'; code: string; label?: string; is_default?: boolean }
-	| { kind: 'delete'; code: string }
-	| { kind: 'setDefault'; code: string };
+	| { kind: 'setDefault'; code: string }
+	| { kind: 'setStatus'; code: string; status: 'active' | 'inactive' };
 
 export function applyItemOp(items: readonly MasterDataItem[], op: ItemOp): MasterDataItem[] {
 	switch (op.kind) {
 		case 'add': {
 			const newItem: MasterDataItem = {
-				code: uniqueCode(op.label, items),
+				code: `item_${ulid().toLowerCase()}`,
 				label: op.label.trim(),
-				is_default: op.is_default ?? false
+				is_default: op.is_default ?? false,
+				status: 'active'
 			};
 			return enforceOneDefault([...items, newItem], op.is_default ? newItem.code : undefined);
 		}
@@ -298,9 +314,9 @@ export function applyItemOp(items: readonly MasterDataItem[], op: ItemOp): Maste
 			);
 			return enforceOneDefault(updated, op.is_default === true ? op.code : undefined);
 		}
-		case 'delete':
-			return items.filter((i) => i.code !== op.code);
 		case 'setDefault':
 			return enforceOneDefault(items, op.code);
+		case 'setStatus':
+			return items.map((i) => (i.code === op.code ? { ...i, status: op.status } : i));
 	}
 }

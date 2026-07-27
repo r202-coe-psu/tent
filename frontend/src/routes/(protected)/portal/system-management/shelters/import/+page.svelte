@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { ShelterImportPage } from '$lib/features/shelter-import';
 </script>
 
@@ -6,4 +7,4 @@
 	<title>นำเข้าศูนย์พักพิงจาก Excel · SmartShelter</title>
 </svelte:head>
 
-<ShelterImportPage />
+<ShelterImportPage basePath={resolve('/portal/system-management/shelters')} />

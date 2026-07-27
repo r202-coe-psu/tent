@@ -1,22 +1,30 @@
+import { bulkDocs } from '$lib/db/couch-db';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterDb } from '$lib/db/shelter';
 import { touch, type AuthorContext } from '$lib/db/model';
 import {
 	createCampaign as buildCampaign,
+	createPurchase as buildPurchase,
 	isDonationCampaign,
 	isStockLedger,
 	isDonation,
 	isDonationSlot,
+	isPurchase,
+	canEditPurchase,
 	stockBalance,
 	createReceiveEntry,
 	createDistributeEntry,
+	keyPurchaseReceipt,
 	type DonationCampaign,
 	type CampaignInput,
 	type StockLedger,
 	type ReceiveInput,
 	type DistributeInput,
 	type Donation,
-	type DonationSlot
+	type DonationSlot,
+	type Purchase,
+	type PurchaseInput,
+	type CountedItem
 } from '../domain/operations';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
@@ -40,9 +48,11 @@ export function assertReceiveAgainstCatalog(entry: StockLedger, item: SupplyItem
 }
 
 export class OperationsRemoteRepository implements OperationsRepository {
+	private readonly dbName: string;
 	private readonly repo: Repository;
 
 	constructor(dbName: string = getShelterDb()) {
+		this.dbName = dbName;
 		this.repo = createRemoteRepository(dbName);
 	}
 
@@ -181,6 +191,76 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			_rev: existing?._rev ?? slot._rev
 		};
 		return this.repo.put(touch(merged));
+	}
+
+	// --- Purchase Methods (CR-032) ---
+
+	/** Persist a new procurement record. Stock only moves once staff key the receipt. */
+	async createPurchase(input: PurchaseInput, ctx: AuthorContext): Promise<Purchase> {
+		return this.repo.put(buildPurchase(input, ctx));
+	}
+
+	/** Fetch all procurement records in this shelter. */
+	async listPurchases(): Promise<Purchase[]> {
+		return this.repo.allByType('purchase', isPurchase);
+	}
+
+	/** Fetch a single procurement record by ID. */
+	async getPurchase(id: string): Promise<Purchase | null> {
+		return this.repo.get<Purchase>(id);
+	}
+
+	/**
+	 * Correct a purchase that nothing has been keyed against yet (CR-032).
+	 * Editing `items` after a receipt would move what the receipt status and the
+	 * ordered-vs-actual audit compare against, so it is refused instead.
+	 */
+	async updatePurchase(purchase: Purchase): Promise<Purchase> {
+		if (!canEditPurchase(purchase, await this.listLedger())) {
+			throw new Error(
+				`updatePurchase: ${purchase._id} has already been received — record a correction entry instead`
+			);
+		}
+
+		const existing = await this.repo.get<Purchase>(purchase._id);
+		const merged = {
+			...purchase,
+			_rev: existing?._rev ?? purchase._rev
+		};
+		return this.repo.put(touch(merged));
+	}
+
+	/**
+	 * Key a counted receipt against an already-committed purchase doc: one
+	 * positive `purchase` ledger entry per counted line, each pointing back at the
+	 * purchase. The purchase doc was written in an earlier step, so this is a
+	 * plain append — no cross-doc write to keep consistent (CR-032, Option A).
+	 *
+	 * Every line is validated against the item catalog before anything is written,
+	 * so a bad line rejects the whole receipt instead of half-writing it.
+	 */
+	async receivePurchase(
+		purchase: Purchase,
+		counted: CountedItem[],
+		ctx: AuthorContext
+	): Promise<StockLedger[]> {
+		const rows = keyPurchaseReceipt(purchase, counted, ctx);
+		if (rows.length === 0) {
+			throw new Error(`receivePurchase: ${purchase._id} needs at least one counted line`);
+		}
+
+		const catalog = new Map<string, SupplyItem | null>();
+		for (const row of rows) {
+			if (!catalog.has(row.item_id)) {
+				catalog.set(row.item_id, await supplyRepository().getItem(row.item_id));
+			}
+			assertReceiveAgainstCatalog(row, catalog.get(row.item_id) ?? null);
+		}
+
+		// One request for the whole receipt (mirrors kitchen `issueRequisition`).
+		// Append-only, so a partially applied receipt can simply be re-keyed for
+		// the missing lines — the purchase doc stays valid either way.
+		return bulkDocs(this.dbName, rows);
 	}
 }
 

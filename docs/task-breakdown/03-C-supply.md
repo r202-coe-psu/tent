@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module C — Supply & Inventory"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
+updated: 2026-07-25 # T-11 DoD sync กับ CR-032 Option A (purchase = flow แยก)
 module: C
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---
@@ -48,7 +48,11 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 **Description:** บันทึกการรับสิ่งของเข้าคลังศูนย์ (จากบริจาค/จัดซื้อ/โอนมา) โดยทุก movement เขียนเป็น **append-only ledger** — ยอดคงเหลือคำนวณจาก ledger ไม่แก้ตัวเลขตรงๆ task นี้เป็น hub ของ critical path (block T-12/13/14/15)
 
 **Definition of Done:**
-- รับเข้า: เลือก item + จำนวน + source marker (donation / transfer-in / manual) → ledger entry ถูกสร้าง + on-hand เพิ่มทันที พร้อม audit (ใคร/เมื่อไร) — `purchase` source ถอนกลับ pending CR-033 sign-off จาก net-lynx
+- รับเข้า: เลือก item + จำนวน + source marker (donation / transfer-in / manual) → ledger entry ถูกสร้าง + on-hand เพิ่มทันที พร้อม audit (ใคร/เมื่อไร)
+- **จัดซื้อ (purchase) — flow แยก ไม่ใช่ source marker ในฟอร์มรับเข้า** [CR-032, approved 2026-07-24 (@net-lynx) · design Option A 2026-07-25]: (1) สร้างใบจัดซื้อ (`vendor` / `po_ref` / `items` เป็น planning) (2) ตอนของถึง key รับเข้า → ledger `reason:purchase` + `ref_id = purchase._id` (mirror donation) · ~~`purchase` source รอ implement~~ ⚠️ **แก้ 2026-07-25:** purchase ไม่เป็นค่าใน `receiveSourceSchema`
+  - **กติกา UX เคาะครบ 2026-07-25** (ดู CR §UX decisions): surface = route `(protected)/back-office/purchases/` (guard `requireWarehouseAccess`) · key รับเข้าเป็น **counted ต่อ item แก้ qty ได้** (ตามบรรทัดฐาน T-26) · **รับหลายรอบได้** และ badge = **3 สถานะ derive จาก ledger เท่านั้น** (ยังไม่รับ / รับบางส่วน / รับครบ — รับเกินที่สั่ง = รับครบ ไม่ block ตอน key) · **แก้ใบได้เฉพาะสถานะ "ยังไม่รับ"** ไม่มียกเลิก/ลบใบ
+  - **สถานะ: slice 2/3 เสร็จ** — reason enum + `schema_v` 3 · doc type `schema.md` §2.16 · domain + data + application layer พร้อม test · **เหลือ:** UI surface + `seed.ts` demo (Standard DoD ต้องมี UI + demo จึงปิด T-11 ไม่ได้จนครบ)
+  - **ระวังตอนทำ T-24:** รายงานความโปร่งใส (public) นับ "รับเข้า" จาก ledger — ต้อง filter `reason` ไม่ให้ยอดจัดซื้อปนกับยอดบริจาค
 - ปริมาณศูนย์หรือติดลบถูก validate ปฏิเสธ
 - Ledger แก้ไขย้อนหลังไม่ได้ — ผิดต้องทำรายการ adjust ใหม่ (correction entry)
 - ยอดคงเหลือต่อ item คำนวณจาก ledger ถูกต้อง (test ครอบ concurrent writes บน CouchDB)

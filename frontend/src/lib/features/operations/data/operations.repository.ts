@@ -6,7 +6,10 @@ import type {
 	ReceiveInput,
 	DistributeInput,
 	Donation,
-	DonationSlot
+	DonationSlot,
+	Purchase,
+	PurchaseInput,
+	CountedItem
 } from '../domain/operations';
 import type { AuditAction } from '$lib/features/shared';
 
@@ -65,4 +68,31 @@ export interface OperationsRepository {
 	listDonationSlots(): Promise<DonationSlot[]>;
 	getDonationSlot(id: string): Promise<DonationSlot | null>;
 	updateDonationSlot(slot: DonationSlot): Promise<DonationSlot>;
+
+	// Purchase methods (CR-032) — procurement is a two-step flow, mirroring
+	// donation: the doc is declared first, the physical count is keyed later.
+
+	/** Persist a new procurement record. Creates no stock on its own. */
+	createPurchase(input: PurchaseInput, ctx: AuthorContext): Promise<Purchase>;
+
+	listPurchases(): Promise<Purchase[]>;
+	getPurchase(id: string): Promise<Purchase | null>;
+
+	/**
+	 * Correct a purchase that has not been keyed against yet. Rejects once any
+	 * ledger row references it — `items` is what the receipt status compares
+	 * against (schema.md §2.16). There is no cancel/delete.
+	 */
+	updatePurchase(purchase: Purchase): Promise<Purchase>;
+
+	/**
+	 * Key a physical count against an already-committed purchase: appends one
+	 * `purchase` ledger entry per counted line, each referencing the purchase doc.
+	 * Returns the entries written.
+	 */
+	receivePurchase(
+		purchase: Purchase,
+		counted: CountedItem[],
+		ctx: AuthorContext
+	): Promise<StockLedger[]>;
 }
