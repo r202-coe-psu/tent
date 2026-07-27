@@ -9,7 +9,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 # Household & Zoning
 
-> People & Search — household, member, shelter ID/QR, check-in/out, pet/asset, zone allocation
+> People & Search — household, member, check-in/out, pet/asset, zone allocation
 
 - **Team owner:** Team B — พีค, โฮป, ปิ๊ก (People/Household; ดู [Squad Roster](../prd/squad-roster.md))
 - **Phase:** R2
@@ -21,12 +21,11 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 | ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T-04 | 🔄 | Household create + attach members + head | FR-21 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-02 |
-| T-05 | ⬜ | Household Shelter ID/QR generation | FR-22 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-04 |
-| T-06 | 🔄 | Household search + household check-in/out | FR-23 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-05 |
+| T-06 | 🔄 | Household search + household check-in/out | FR-23 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-04 |
 | T-07 | 🔄 | Pet / asset / vehicle records | FR-24 | R2 | prod | ส.ค. | 3 | ÷1.6 | 2 | T-04 |
 | T-08 | 🔄 | Zone definition + capacity | FR-25 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-02 |
 | T-09 | 🔄 | Zone allocation + suggest (warning-only) | FR-26 | R2 | prod | ส.ค. | 5 | ÷1.4 | 3.5 | T-08 |
-|  |  | **รวมทั้งโมดูล** |  |  |  |  | **28** |  | **18.5** |  |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **24** |  | **16** |  |
 
 ## Task Details
 
@@ -52,12 +51,12 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 1. VOL ตรวจสอบและจัดการ household โดยแบ่งเป็น 2 ทางเลือก (2 Box):
    - **A.1 ค้นหาบ้านเดิม (Search Existing):** ค้นหาสถานที่/บ้านเลขที่จากระบบ (AutoComplete) หากพบ ให้เลือกเพื่อผูกบุคคลที่ลงทะเบียนนี้เป็น **"ลูกบ้าน" (Member)**
    - **A.2 สร้างบ้านใหม่ (Create New):** หากไม่พบ ให้กรอกฟอร์มที่อยู่ใหม่ และระบบจะผูกบุคคลนี้เป็น **"หัวหน้าบ้าน" (Head)** อัตโนมัติ (พร้อมกรอก emergency contact)
-2. ระบบ validate → ออก Shelter ID + QR (T-05) ทันที (เฉพาะกรณีสร้างบ้านใหม่)
+2. ระบบ validate (ใช้ Person ID/QR ของหัวหน้าครัวเรือน head ที่ออกไปแล้วตอนลงทะเบียน — ไม่ออก QR ระดับ household แยก)
 3. ดำเนินต่อที่ check-in (T-06)
 
 **Flow — Path B (Pre-registration):**
 1. SM/VOL สร้าง household สถานะ `pre-registered`
-2. QR ออกทันที → สามารถส่ง/พิมพ์ล่วงหน้าได้
+2. Person ID/QR ของ head พร้อมใช้งาน → สามารถส่ง/พิมพ์ล่วงหน้าได้
 3. SM assign zone ล่วงหน้าได้ (T-09) — zone จอง capacity แต่ **ยังไม่นับ occupancy**
 4. เมื่อ household มาถึง → VOL scan QR → check-in (T-06) → status เปลี่ยน `pre-registered → arriving → checked-in`
 5. ถ้า household ไม่มาถึง → SM mark `cancelled` ได้
@@ -66,7 +65,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 1. SM/VOL ค้นหา persons ที่ check-in แยกไปแล้ว
 2. สร้าง household ใหม่ → ตั้ง head → attach persons
 3. ระบบ validate แต่ละ person ว่าไม่มี active household อื่น
-4. ออก Shelter ID + QR ใหม่
+4. ใช้ Person ID/QR ของ head
 
 **Definition of Done:**
 - API + UI ของระบบลงทะเบียน (Stage 3) มีการแบ่งแยก flow ค้นหาที่อยู่เดิม (รับบทลูกบ้าน) และสร้างที่อยู่ใหม่ (รับบทหัวหน้าบ้าน) อย่างชัดเจน
@@ -84,18 +83,9 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ---
 
-### T-05 — Household Shelter ID/QR generation (FR-22)
+### T-05 — Household Shelter ID/QR generation (FR-22) `[REMOVED — ดู CR-047]`
 
-**Roles:** `SA ✓ · SM scope · VOL scope` — ดู [role-permission-matrix §3](../prd/role-permission-matrix.md#3-action-matrix--r2)
-
-**Description:** ออก Shelter ID + QR Code **ระดับครัวเรือน เพิ่มจาก Person ID/QR ระดับบุคคล** (PRD FR-22) ใช้ check-in/out ทั้งครัวเรือน, รับของแจก และค้นหา QR ออก**ทันทีที่สร้าง household** ไม่ว่าจะเป็น status `pre-registered` หรือ `arriving`
-
-**Definition of Done:**
-- รหัส unique ต่อ household, แยก namespace จาก Person ID ชัดเจน — ทั้งสอง ID ใช้ค้นหา/check-in ได้
-- QR ออกทันทีเมื่อ household ถูกสร้าง (รวมถึง `pre-registered` — ส่ง/พิมพ์ล่วงหน้าได้)
-- แสดง QR บนหน้าจอมือถือ + รองรับพิมพ์เป็นบัตร/สลิปได้
-- QR ไม่ฝัง PII/sensitive data (ใช้ opaque token/รหัสอ้างอิง — ต่อ NFR-6) และ scan เปิดผ่าน permission check
-- Test ครอบ collision, ออกซ้ำ (re-issue กรณีบัตรหาย) และ demo scan ด้วยกล้องจริง
+*(ตัดออกจาก Scope ตาม CR-047 — เปลี่ยนไปใช้ Person ID/QR ของหัวหน้าครัวเรือน head แทน)*
 
 ---
 
@@ -148,7 +138,7 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 > การออกจาก shelter **ทุกประเภท** ใช้ action checkout เดียวกัน — ความต่างอยู่ที่ `checkout_destination` ไม่ใช่ state แยก
 
 **Definition of Done:**
-- ค้นหาได้ทั้งจาก scan QR (T-05) และพิมพ์ค้น ผลลัพธ์จำกัดใน shelter scope ของผู้ใช้
+- ค้นหาได้ทั้งจาก scan Person QR ของสมาชิก (ปกติคือ head) และพิมพ์ค้น ผลลัพธ์จำกัดใน shelter scope ของผู้ใช้
 - Check-in flow รวม screening inline ในหน้าจอเดียว: vulnerability flags + special needs กรอกพร้อม check-in ทำครั้งเดียว
 - รองรับ check-in จาก status `pre-registered` (scan QR ที่ออกล่วงหน้า) และ `arriving` (สร้าง ณ จุดรับ)
 - Check-in/out ทั้งครัวเรือนหรือเลือกบางสมาชิกได้ สถานะ + timestamp บันทึกครบ
@@ -231,7 +221,7 @@ sequenceDiagram
 
 ---
 
-### Path A — สร้าง Household ณ จุดรับ แล้ว Check-in ทันที (T-04 → T-05 → T-06)
+### Path A — สร้าง Household ณ จุดรับ แล้ว Check-in ทันที (T-04 → T-06)
 
 ```mermaid
 sequenceDiagram
@@ -240,7 +230,7 @@ sequenceDiagram
 
     VOL->>SYS: สร้าง household (T-04)<br/>head + สมาชิก + emergency contact
     SYS->>SYS: validate: head มี required fields<br/>1 person = 1 active household
-    SYS->>SYS: auto-generate Shelter ID + QR (T-05)
+    SYS->>SYS: ใช้ Person ID/QR ของ head (จาก T-04)
     SYS-->>VOL: household created, status: arriving
 
     opt มีสัตว์/ทรัพย์สิน/ยานพาหนะ
@@ -257,7 +247,7 @@ sequenceDiagram
 
 ---
 
-### Path B — Pre-registration ล่วงหน้า แล้ว Check-in ตอนมาถึง (T-04 → T-05 → T-09 → T-06)
+### Path B — Pre-registration ล่วงหน้า แล้ว Check-in ตอนมาถึง (T-04 → T-09 → T-06)
 
 ```mermaid
 sequenceDiagram
@@ -267,7 +257,7 @@ sequenceDiagram
 
     note over SM,SYS: ── ก่อนมาถึง ──
     SM->>SYS: สร้าง household status: pre-registered (T-04)<br/>head + สมาชิก + emergency contact
-    SYS->>SYS: auto-generate Shelter ID + QR (T-05)
+    SYS->>SYS: ใช้ Person ID/QR ของ head (จาก T-04)
     SYS-->>SM: QR พร้อม ส่ง/พิมพ์ล่วงหน้าได้
 
     opt วางแผน zone ล่วงหน้า
@@ -307,7 +297,7 @@ sequenceDiagram
     SM->>SYS: ค้นหา person A, B, C (T-06 search)
     SM->>SYS: สร้าง household (T-04): head=A, สมาชิก B+C
     SYS->>SYS: validate: A, B, C ไม่มี active household อื่น
-    SYS->>SYS: auto-generate Shelter ID + QR (T-05)
+    SYS->>SYS: ใช้ Person ID/QR ของ head (จาก T-04)
     SYS-->>SM: household created + QR ออก
 
     opt assign zone
@@ -376,8 +366,8 @@ sequenceDiagram
 
 | Phase | Raw MD | Adj MD |
 | --- | --- | --- |
-| R2 | 28 | 18.5 |
-| **รวม** | **28** | **18.5** |
+| R2 | 24 | 16 |
+| **รวม** | **24** | **16** |
 
 ## Dependencies
 

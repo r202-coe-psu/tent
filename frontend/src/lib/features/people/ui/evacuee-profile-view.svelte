@@ -39,7 +39,9 @@
 
 	let { evacueeId, readonly = false }: { evacueeId: string; readonly?: boolean } = $props();
 
-	const statusConfig = {
+	const statusConfig: Partial<
+		Record<StayStatus, { label: string; colorClass: string; dotClass: string }>
+	> = {
 		active: {
 			label: 'พักพิงในศูนย์ (Active)',
 			colorClass:
@@ -76,7 +78,7 @@
 				'bg-slate-200 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700',
 			dotClass: 'bg-black'
 		}
-	} satisfies Record<StayStatus, { label: string; colorClass: string; dotClass: string }>;
+	};
 
 	const evacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
@@ -106,7 +108,14 @@
 	const shelterName = $derived(shelterQuery.data?.name ?? 'ศูนย์พักพิงชั่วคราว');
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const statusInfo = $derived(
-		evacuee ? (statusConfig[evacuee.current_stay.status] ?? statusConfig.pre_registered) : null
+		evacuee
+			? (statusConfig[evacuee.current_stay.status] ?? {
+					label: 'ลงทะเบียนล่วงหน้า (Pre-registered)',
+					colorClass:
+						'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+					dotClass: 'bg-blue-500'
+				})
+			: null
 	);
 	const familyMembers = $derived(
 		evacuee && evacuee.household_id && evacueesQuery.data

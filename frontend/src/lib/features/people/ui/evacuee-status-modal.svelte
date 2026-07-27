@@ -18,7 +18,7 @@
 	}: {
 		show: boolean;
 		evacuee: Evacuee;
-		statusConfig: Record<StayStatus, StatusConfig>;
+		statusConfig: Partial<Record<StayStatus, StatusConfig>>;
 		onClose: () => void;
 		onUpdateStatus: (status: StayStatus) => Promise<void>;
 	} = $props();
@@ -44,7 +44,7 @@
 			</div>
 
 			<div class="space-y-2">
-				{#each Object.entries(statusConfig) as [statusKey, cfg] (statusKey)}
+				{#each Object.entries(statusConfig).filter(([statusKey]) => statusKey !== 'cancelled') as [statusKey, cfg] (statusKey)}
 					<button
 						onclick={() => onUpdateStatus(statusKey as StayStatus)}
 						class="flex w-full cursor-pointer items-center justify-between rounded-xl border border-border p-3.5 font-semibold transition-all hover:border-primary hover:bg-slate-50 dark:hover:bg-slate-900 {evacuee
