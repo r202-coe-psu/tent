@@ -103,9 +103,9 @@
 		</div>
 
 		<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-			<!-- ระเบียบสิทธิ์ผู้ประสบภัย -->
+			<!-- ลงทะเบียนผู้ประสบภัย -->
 			<PublicQuickServiceCard
-				title="ระเบียบสิทธิ์ผู้ประสบภัย"
+				title="ลงทะเบียนผู้ประสบภัย"
 				badge="ด่วนที่สุด"
 				badgeClass="bg-danger-muted text-danger"
 				description="ท่านสามารถยื่นขอลงทะเบียนเข้าพัก สแกนเข้าออก หรือจองสิทธิ์ล่วงหน้าเพื่อจัดสรรเต็นท์ส่วนตัว ยา และเครื่องนุ่งห่ม"

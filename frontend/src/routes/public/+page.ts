@@ -4,7 +4,7 @@ import type { FaqItem } from '$lib/features/public-portal/domain/config';
 export const load: PageLoad = async ({ fetch }) => {
 	let faqs: FaqItem[] = [];
 	try {
-		const configRes = await fetch('/public/v1/config/faqs');
+		const configRes = await fetch('/api/public/v1/config/faqs');
 		if (configRes.ok) {
 			const configData = await configRes.json();
 			faqs = configData.faqs || [];

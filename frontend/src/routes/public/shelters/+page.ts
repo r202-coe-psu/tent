@@ -15,7 +15,7 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
 	return R * c;
 }
 
-export const load: PageLoad = async ({ url }) => {
+export const load: PageLoad = async ({ url, fetch }) => {
 	const search = url.searchParams.get('q') || '';
 	const province = url.searchParams.get('province') || '';
 	const district = url.searchParams.get('district') || '';
@@ -36,7 +36,8 @@ export const load: PageLoad = async ({ url }) => {
 		province: province || undefined,
 		district: district || undefined,
 		subdistrict: subdistrict || undefined,
-		status: status || undefined
+		status: status || undefined,
+		fetch
 	});
 
 	const userLatNum = user_lat ? parseFloat(user_lat) : NaN;
