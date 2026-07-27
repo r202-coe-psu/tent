@@ -4,14 +4,10 @@ import { error } from '@sveltejs/kit';
 
 export const load = (async ({ params }) => {
 	await requireEvacueeRegistration();
-	if (params.mode !== 'new' && params.mode !== 'edit') {
-		error(404, 'Page not found');
-	}
-	if (params.mode === 'edit' && !params.id) {
+	if (!params.id) {
 		error(400, 'Missing household ID for edit mode');
 	}
 	return {
-		mode: params.mode,
 		id: params.id
 	};
 }) satisfies PageLoad;
