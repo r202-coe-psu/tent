@@ -77,7 +77,7 @@ flowchart TD
 - **1.1 ระบบแสดงข้อความแจ้งเตือนเมื่ออนุมัติไม่สำเร็จ:** ระบบต้องแสดงข้อความแจ้งเตือน (Validation Alert) ระบุสาเหตุที่ชัดเจนเมื่อเจ้าหน้าที่กดปุ่มอนุมัติแล้วไม่ผ่านเงื่อนไข เช่น ข้อมูลสินค้ายังจับคู่ไม่ครบ หรือ ข้อมูลยังไม่ผ่านการประเมิน
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/stock-donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `PendingReviewDialog` (`frontend/src/lib/components/pending-review-dialog.svelte`)
-  > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/back-office/donations/approve`
+  > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/back-office/donations/approve` (โครงสร้าง Response กรณีไม่ผ่าน: `{ success: false, error_code: string, message: string }`)
 
 - **1.2 ระบบแยกหน้าจอตรวจสอบรายการบริจาคตามสถานะจริง:** 
   - ระบบต้องจัดสร้างหน้า "รอการประเมิน (Pending Review)" สำหรับการตัดสินใจอนุมัติ ปฏิเสธ หรือประสานงานส่งต่อ โดยระบบต้องไม่อนุญาตให้มีช่องกรอกจำนวนพัสดุรับจริงในหน้านี้
@@ -99,7 +99,7 @@ flowchart TD
 - **1.5 ระบบเพิ่มช่องทางค้นหารายการบริจาคทดแทนรหัสตอบรับ:** ระบบต้องเพิ่มช่องเลือกรายการ (Search-select Dropdown) ในหน้าสถานีสแกน (Scan Station) เพื่อรองรับกรณีรหัสตอบรับ (QR Code) ชำรุดหรือสูญหาย
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/stock-donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `ScanStation` (`frontend/src/routes/(protected)/back-office/stock-donations/components/scan-station.svelte`)
-  > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `GET /api/back-office/donations/search`
+  > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `GET /api/back-office/donations/search` (จำกัดผลลัพธ์สูงสุด limit=50 รายการ และรองรับการค้นหาแบบ partial match ด้วย Ref ID / ชื่อ / เบอร์โทรศัพท์)
 
 - **1.6 ระบบบังคับกรอกเหตุผลการปิดรับบริจาคด่วน (Force Cut-off):** ระบบต้องบังคับเจ้าหน้าที่กรอกเหตุผลเมื่อสั่งปิดรับบริจาคด่วน และระบบต้องยกเลิกเฉพาะคำขอที่อยู่ในสถานะ "รอการประเมิน" เท่านั้น โดยระบบต้องบันทึกเหตุผลลงในรายงานความโปร่งใส
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/stock-donations/+page.svelte`
@@ -124,7 +124,7 @@ flowchart TD
   > - **หน้าจอ (Page/Route):** `routes/public/donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `PublicDonorNeeds`
 
-- **1.11 ระบบเพิ่มตัวเลือกเปิดหรือปิดการรับบริจาคระดับศูนย์:** ระบบต้องจัดทำสวิตช์เปิดปิด (Toggle) เพื่อให้เจ้าหน้าที่ควบคุมการแสดงผลข้อมูลของศูนย์บนบอร์ดความต้องการสาธารณะ (Public Needs Board) โดยบันทึกฟิลด์ `public_donations_enabled: bool` (default `true`) หรือ `shelter.feature_flags.public_donations_enabled` ลงในเอกสาร `shelter` (`schema.md §3.1`)
+- **1.11 ระบบเพิ่มตัวเลือกเปิดหรือปิดการรับบริจาคระดับศูนย์:** ระบบต้องจัดทำสวิตช์เปิดปิด (Toggle) เพื่อให้เจ้าหน้าที่ควบคุมการแสดงผลข้อมูลของศูนย์บนบอร์ดความต้องการสาธารณะ (Public Needs Board) โดยบันทึกฟิลด์ `shelter.feature_flags.public_donations_enabled: bool` (default `true`) ลงในเอกสาร `shelter` (`schema.md §3.1`)
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/shelters/[code]/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `ShelterConfigForm`
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `PATCH /api/back-office/shelters/{code}`
@@ -177,7 +177,7 @@ flowchart TD
 - **ระบบหลังบ้าน (Back-office):** `frontend/src/routes/(protected)/back-office/stock-donations/`, `frontend/src/lib/features/donations/`
 - **ระบบเว็บสาธารณะ (Public Website):** `frontend/src/routes/public/donations/`
 - **สคีมาข้อมูล (Data Schema):**
-  - เพิ่มฟิลด์ `public_donations_enabled: bool` (default `true`) หรือ `feature_flags.public_donations_enabled` ในเอกสาร `shelter` (`schema.md §3.1`)
+  - เพิ่มฟิลด์ `feature_flags.public_donations_enabled: bool` (default `true`) ในเอกสาร `shelter` (`schema.md §3.1`)
   - เพิ่มฟิลด์ `pickup_address` ในโครงสร้าง `logistics` ของเอกสาร `donation` (`schema_v 2`)
   - เพิ่มฟิลด์ `needs[].status` ('open'|'closed') และ `visible_on_home` ใน `donation_campaign` (`schema_v 2`)
   - ปรับเปลี่ยนรูปแบบปริมาณสิ่งของเป็น string decimal (`qty_str`) ตาม CR-038 (`schema_v 3`)
