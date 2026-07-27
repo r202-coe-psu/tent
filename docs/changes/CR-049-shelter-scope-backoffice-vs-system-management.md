@@ -1,10 +1,10 @@
 ---
 id: CR-049
 title: Shelter list scope split (back-office vs system management) + master data ULID-code two-tier (global read-only + shelter-local) + status soft-delete
-status: proposed
+status: approved
 date: 2026-07-25
 requested_by: project owner (saktanuthpeak)
-decided_by: project owner
+decided_by: project owner (approved 2026-07-27)
 layer: volatile
 affects:
   - docs/prd/role-permission-matrix.md §3 (FR-27 pattern), §7.1 (scope rule)
@@ -120,7 +120,7 @@ Feature "System Management" เป็น area ใหม่ (SA-only, ข้า�
 | `.../master-data/ui/master-data-config-page.svelte` | `localOnly()` write-filter (shelter PUT ส่งเฉพาะ shelter-local); `handleToggleStatus` |
 | `.../features/{people,shelters,shelter-import}/**` (7 forms) | dropdown กรอง `status === 'active'` (display/label-resolve คงเดิม) |
 | `frontend/scripts/migrate-master-data.ts` + `package.json` | migration runner `pnpm migrate:master-data` (dry-run default, `--write --confirm`) |
-| `frontend/scripts/seed.ts` | `seedMasterData()` — global docs 6 types (vulnerable_group/health_condition/dietary_restrictions/pet_types/house_damage/shelter_type), **ULID codes (ไม่มี slug)**, status active, schema_v 3; evacuee `special_needs` thread ULID เดียวกันผ่าน `VG` lookup; ตัด `seedThailandLocation` ออกจาก flow (feature ปิด) |
+| `frontend/scripts/seed.ts` | `seedMasterData()` — global docs 6 types (vulnerable_group/health_condition/dietary_restrictions/pet_types/house_damage/shelter_type), **ULID codes (ไม่มี slug)**, status active, schema_v 3; evacuee `special_needs` thread ULID เดียวกันผ่าน `VG` lookup ให้ resolve label ได้; ตัด `seedThailandLocation` ออกจาก flow (feature ปิด) |
 | `docs/data/schema.md §3.3` | two-tier, code=ULID, `status`, ลบ `excluded_codes`, schema_v 3 + migration note |
 | `docs/prd/role-permission-matrix.md` | master data scope rule (FR-049-10) |
 | tests | `master-data.test.ts` (ULID, status, setStatus, migration) 24 pass; `server.test.ts` × endpoints (concat, verbatim write, schema_v 3) |
@@ -171,6 +171,7 @@ admission-policy-section, basic-info-section, shelter-list, shelter-import — �
   เข้าถึง back-office master data ได้ — guard `requireManager` + ถอด `requiresAdmin` จาก navbar; (3)
   strip legacy `excluded_codes` ตอน update; (4) edit-modal เลิก nest button ใน `<label>`; (5) writeContext
   ไม่ส่ง `shelter_code` คู่ `scope=global`
+- 2026-07-27 — **approved** by project owner in PR #124.
 - **Replication note (edge)**: filtered replication ลง edge ต้อง include global doc (ไม่มี `shelter_code`)
   ด้วย มิฉะนั้นศูนย์ offline จะไม่เห็น global master data — เป็นเรื่อง replication filter config
   ไม่ใช่ data model แต่ต้องกำหนดตอน setup edge
