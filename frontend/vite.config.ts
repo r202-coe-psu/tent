@@ -60,25 +60,7 @@ export default defineConfig(({ mode }) => {
 				'/public-api': {
 					target: fastapiTarget,
 					changeOrigin: true,
-					rewrite: (path) => path.replace(/^\/public-api/, ''),
-					bypass(req) {
-						const path = (req.url ?? '').split('?')[0].replace(/\/$/, '');
-						if (path === '/public/v1/family-search') return;
-						return false;
-					}
-				},
-				'/public/v1/shelters': {
-					target: fastapiTarget,
-					changeOrigin: true,
-					bypass(req) {
-						const path = (req.url ?? '').split('?')[0].replace(/\/$/, '');
-						if (path === '/public/v1/shelters') return;
-						return false;
-					}
-				},
-				'/public/v1/config/faqs': {
-					target: fastapiTarget,
-					changeOrigin: true
+					rewrite: (path) => path.replace(/^\/public-api/, '')
 				}
 			}
 		},
