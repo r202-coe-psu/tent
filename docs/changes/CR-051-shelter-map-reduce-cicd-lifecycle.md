@@ -1,7 +1,7 @@
 ---
 id: CR-051
 title: Shelter Map/Reduce lifecycle เชื่อมต่อ CI/CD
-status: proposed
+status: approved
 date: 2026-07-27
 updated: 2026-07-27
 requested_by: Team B (เสนอ PO)
