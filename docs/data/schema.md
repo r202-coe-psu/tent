@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-24
+updated: 2026-07-25
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -150,21 +150,23 @@ action ใหม่เท่านั้น). `special_needs` (CR-046) ไม่
 
 ### 2.1 `stock_ledger` — `stock_ledger:{ulid}` · **append-only**
 
-> **schema_v 2** — `qty` เป็น `qty_str` (ไม่ใช่ JSON number). CR-038.
+> **schema_v 3** — เพิ่ม `purchase` ใน reason enum (CR-032) — รองรับรับสต็อกจากแหล่ง "จัดซื้อจัดจ้าง" แยกจากบริจาค; ยอดจริงยังมาจาก ledger. doc type `purchase` (§2.16) + write path มาใน slice ถัดไปของ CR-032. ผู้เขียน ledger ทุกที่ stamp `schema_v 3` เท่ากัน (operations `createStockLedger`, kitchen `issueRequisition`).
+> schema_v 2 — `qty` เป็น `qty_str` (ไม่ใช่ JSON number). CR-038.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `item_id` | str | req | → `item_master:{sku\|ulid}` ใน catalog |
 | `qty` | qty_str | req | **signed**: + รับเข้า / − จ่ายออก; ≠ 0; ใน `base_unit` |
 | `unit` | str | req | ต้องตรงกับ `item_master.base_unit` |
-| `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`) | req | — |
-| `ref_id` | str\|null | opt | doc ต้นเหตุ (donation/transfer/requisition) |
+| `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`,`purchase`) | req | `purchase` = รับจากจัดซื้อ (CR-032) |
+| `ref_id` | str\|null | opt | doc ต้นเหตุ (donation/transfer/requisition/purchase) |
 | `lot` | {`expiry`:ts?, `note`:str?} | opt | ของหมดอายุได้ (อาหาร/ยา) |
 | `occurred_at` | ts | req | — |
 
 **Index:** `(item_id, occurred_at)` · `(reason)` · `stock_balance` = **client** Decimal sum ของ `qty` ต่อ item (อย่าพึ่ง CouchDB `_sum` ของ float/string)
 
 **Migration (schema_v 1 → 2):** pre-prod — wipe/re-seed; ไม่มี dual-read บังคับ
+**Migration (schema_v 2 → 3):** additive — เพิ่ม enum value อย่างเดียว ไม่เปลี่ยนโครงสร้าง field; doc `schema_v: 2` เดิมอ่าน/ใช้ได้ปกติ ไม่ต้อง backfill
 
 ### 2.2 `stock_transfer` — `stock_transfer:{ulid}` · state machine (forward-only)
 
@@ -474,6 +476,37 @@ closed   → (terminal)
 > ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`). append หรือ overwrite เท่านั้น — ไม่ mutate in place.
 > **Index:** `(_id)` (deterministic; `listRange` ใช้ bounded `startkey`/`endkey` = `daily_calc:{from}`..`daily_calc:{to}` ไม่สแกนทั้ง collection)
 
+### 2.16 `purchase` — `purchase:{ulid}` · **schema_v 1**
+
+> **schema_v 1** — doc type ใหม่ ([CR-032](../changes/CR-032-stock-ledger-purchase-reason.md)). บันทึกการจัดซื้อจัดจ้าง — แหล่งรับสต็อกที่แยกจากบริจาค เก็บผู้ขาย/เลขใบสั่งซื้อที่ `stock_ledger` (§2.1) ไม่มีที่เก็บให้
+> **ไม่มี `status`** — CR-032 ตัด state machine (`ordered`→`received`) ออกจาก scope. คำถาม "รับของแล้วหรือยัง" **อนุมานจาก ledger**: มีแถว `stock_ledger` ที่ `reason=purchase` และ `ref_id = purchase._id` หรือยัง (mirror `donation` → `keyedDonationIds`)
+> ของจริงเข้าคลังเมื่อ staff key รับเข้า → เขียน `stock_ledger` (`reason:purchase`, `ref_id=purchase._id`) ซึ่งเป็น **คนละ action กับตอนสร้างใบ** (CR-032 Option A — ไม่มี cross-doc atomic write). `items[]` = **planning signal เท่านั้น** ยอดจริงมาจาก ledger (data-model.md §4) เหมือน `donation.items`
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `vendor` | str | req | ชื่อผู้ขาย / หน่วยงานที่จัดหา |
+| `po_ref` | str | opt | เลขใบสั่งซื้อ / สัญญา (อ้างระบบภายนอก) |
+| `items` | [{`item_id`:str, `qty`:qty_str>0, `unit`:str}] | req | ≥1 รายการ — planning signal เท่านั้น |
+| `occurred_at` | ts | req | วันที่รับของเข้าศูนย์ / วันที่จัดซื้อ (ISO-8601 UTC) |
+| `note` | str | opt | — |
+
+> ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`). append หรือ overwrite (LWW ผ่าน `touch()`) — ไม่ mutate in place.
+> **Index:** `(occurred_at)` · การเช็คสถานะการรับใช้ index `(reason)` ของ `stock_ledger` แล้ว match `ref_id` — ไม่ต้องมี index บน `purchase`
+
+**สถานะการรับ (derived — ห้ามเก็บใน doc)** — คำนวณจากยอดรวมของแถว `stock_ledger` ที่ `reason='purchase'` และ `ref_id = purchase._id` เทียบกับ `items[]` (CR-032 เคาะ 2026-07-25 · T-14 DoD บังคับให้ reconcile กับ ledger ผลต่าง = 0):
+
+| สถานะ | เงื่อนไข |
+| --- | --- |
+| ยังไม่รับ | ไม่มีแถว ledger ที่ชี้มาที่ใบนี้ |
+| รับบางส่วน | มี ≥1 แถว แต่ยังมี item ใน `items[]` ที่ยอดรวม < `qty` ที่สั่ง |
+| รับครบ | ทุก item ใน `items[]` มียอดรวม **≥** `qty` ที่สั่ง |
+
+> **รับเกินที่สั่ง = "รับครบ"** ไม่มีสถานะที่สี่ และ **ไม่ block ตอน key** (ของหน้างานมาเกินได้) · item ที่ key เข้ามาโดยไม่อยู่ใน `items[]` ไม่เปลี่ยนสถานะ · key ได้หลายรอบต่อ 1 ใบ (partial receive) — key ผิดแก้ด้วย correction entry `reason:'adjust'` ตาม T-11 DoD ไม่ใช่แก้แถวเดิม
+
+**การแก้ไข** — แก้ `vendor` / `po_ref` / `items` / `occurred_at` / `note` ได้ **เฉพาะใบสถานะ "ยังไม่รับ"** (LWW `touch()`) · **ไม่มีการยกเลิก/ลบใบ** (ไม่มีฟิลด์สถานะยกเลิก) — ใบที่พิมพ์ผิดปล่อยค้างได้เพราะไม่กระทบยอดสต็อกซึ่งมาจาก ledger เท่านั้น · ห้ามแก้หลังเริ่มรับ เพราะ `items[]` เป็นตัวเทียบของสถานะข้างบน และเป็นฝั่ง "ที่สั่ง" ของ audit "จำนวนจริง vs ที่แจ้ง" (task-breakdown T-16)
+
+**Migration:** doc type ใหม่ ไม่มี doc เดิมให้ migrate
+
 ---
 
 ## 3. DB `registry` (central-managed → pull ลง device; edge fallback replica)
@@ -533,28 +566,61 @@ closed   → (terminal)
 
 ---
 
-### 3.3 `master_data` — `master_data:{master_type}` (deterministic 1 doc ต่อ type) · CR-012
+### 3.3 `master_data` — two-tier: `master_data:{master_type}` (global) / `master_data:{master_type}:{shelter_code}` (shelter-local) · **schema_v 3** (CR-012, CR-049)
 
-> central-managed, pull ลง device; edge fallback replica. **SA only** write. ทุก authenticated role อ่านได้.
+> **schema_v 3** — เพิ่ม item field `status`; ลบ `excluded_codes` (mechanism ทิ้งทั้งหมด); item `code`
+> ที่สร้างใหม่เป็น **ULID** (`item_{ulid}`) แทน slug. [CR-049](../changes/CR-049-shelter-scope-backoffice-vs-system-management.md).
+> schema_v 2 — baseline two-tier (`shelter_code?` + `excluded_codes?` override-merge) — **แนวทางนี้ถูกยกเลิกโดย CR-049**
+> (แทนด้วย concat, ดูด้านล่าง); schema_v 1 — global-only (CR-012).
+
+> **Two tiers, deterministic `_id`, ไม่มี ULID ที่ระดับ doc:**
+> - **Global** — `_id = "master_data:{master_type}"` (ไม่มี `shelter_code`) — central-managed, canonical
+>   ข้ามศูนย์, จัดการที่ **System Management** (SA only write; ทุก authenticated role อ่านได้)
+> - **Shelter-local** — `_id = "master_data:{master_type}:{shelter_code}"` (มี `shelter_code`) — จัดการที่
+>   back-office ของศูนย์นั้น (SA + `shelter_manager` ของศูนย์ตน write)
+>
+> `_id` ยังเป็น deterministic ทั้งคู่ (ไม่เปลี่ยนเป็น ULID) — กัน doc ซ้ำต่อ type/ศูนย์ และรักษา
+> idempotent re-seed. pull ลง device; edge fallback replica ต้อง include global doc ด้วย (ไม่มี `shelter_code`)
+> มิฉะนั้นศูนย์ offline จะไม่เห็น global master data.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `master_type` | enum(7 type) | req | `vulnerable_group` \| `health_condition` \| `dietary_restrictions` \| `pet_types` \| `house_damage` \| `municipality_zone` \| `community` |
-| `items` | [{`code`:str, `label`:str, `is_default`:bool, `parent_code`:str?}] | req | ≥1 item; `code` = lower_snake immutable; `parent_code` ใช้สำหรับ `community` → อ้างถึง `code` ของ `municipality_zone` item |
+| `shelter_code` | str? | opt | มีเฉพาะ doc tier shelter-local — ระบุศูนย์เจ้าของ; ไม่มี field นี้ = global doc |
+| `items` | [{`code`:str, `label`:str, `is_default`:bool, `status`:enum(`active`,`inactive`), `parent_code`:str?}] | req | ≥1 item; `code` = ULID (`item_{ulid}`) สำหรับ item ที่สร้างใหม่ — immutable; item เดิม (seed) ที่เป็น slug/semantic code (เช่น `municipality_zone` เดิม `zone_1`) ยังใช้ได้ต่อ ไม่ rewrite; `parent_code` ใช้สำหรับ `community` → อ้างถึง `code` ของ `municipality_zone` item |
 
 **Item shape:**
 ```ts
 interface MasterDataItem {
-  code: string;          // immutable slug, auto-generate จาก label (lower_snake / transliteration)
-  label: string;         // Thai display, editable
-  is_default: boolean;   // 1 item per type = true (enforce)
-  parent_code?: string;  // community เท่านั้น — ref code ของ municipality_zone
+  code: string;                    // ULID (`item_{ulid}`) สำหรับ item ใหม่ — immutable; item เดิม (seed) อาจยังเป็น slug/semantic code
+  label: string;                   // Thai display, editable
+  is_default: boolean;             // 1 item per type = true (enforce)
+  status: 'active' | 'inactive';   // default 'active'; soft-delete = set 'inactive' (ดูด้านล่าง)
+  parent_code?: string;            // community เท่านั้น — ref code ของ municipality_zone
 }
 ```
 
-**Seed data (Hat Yai):** ข้อมูล `municipality_zone` (4 เขต) และ `community` (102 ชุมชน) มาจาก [Wikipedia — เทศบาลนครหาดใหญ่](https://th.wikipedia.org/wiki/%E0%B9%80%E0%B8%97%E0%B8%A8%E0%B8%9A%E0%B8%B2%E0%B8%A5%E0%B8%99%E0%B8%84%E0%B8%A3%E0%B8%AB%E0%B8%B2%E0%B8%94%E0%B9%83%E0%B8%AB%E0%B8%8D%E0%B9%88); รายละเอียด seed ใน CR-012 Appendix A.
+**Resolution / consumption (`scope: "global" | "shelter" | "effective"`):**
+เนื่องจาก `code` เป็น ULID เสมอสำหรับ item ใหม่ global กับ shelter-local จึง **disjoint การันตี**
+(ชนกันไม่ได้) → `scope: "effective"` คืนค่าด้วย **concat ล้วนๆ**: `global.items ++ shelterLocal.items`
+— **ไม่มี dedup, ไม่มี override/merge ตาม code**. Global item เป็น **read-only** ที่ back-office (แก้/toggle
+ได้เฉพาะที่ System Management, SA only); shelter-local item แก้/toggle ได้ที่ back-office ของศูนย์ตนเอง.
+(แนวทางเดิม override-merge + `excluded_codes` ของ schema_v 2 **ถูกยกเลิก** — ดู CR-049 เหตุผล code collision)
 
-**Index:** `(master_type)` unique — 1 doc ต่อ type
+**Soft-delete (`status`):** การ "ลบ" item = set `status: 'inactive'` — item **ยังอยู่ใน array เดิม**
+(ไม่ hard-delete) เพื่อให้ record ที่อ้าง `code` นั้นอยู่แล้ว (เช่น `evacuee.special_needs`) resolve label
+ได้ตลอด. Consumer ที่สร้าง selection (dropdown ตอนเลือกค่าใหม่) กรองเฉพาะ `status === 'active'`; consumer
+ที่ทำ display/resolve label (แสดงค่าที่บันทึกไว้แล้ว) **ไม่กรอง** — ใช้ `find(code)?.label` ตรงๆ ไม่ว่า
+`status` จะเป็นอะไร. doc เดิม (schema_v ≤2) ที่ไม่มี `status` ต่อ item ให้ default เป็น `active` ตอนอ่าน.
+
+**Seed data (Hat Yai):** ข้อมูล `municipality_zone` (4 เขต) และ `community` (102 ชุมชน) มาจาก [Wikipedia — เทศบาลนครหาดใหญ่](https://th.wikipedia.org/wiki/%E0%B9%80%E0%B8%97%E0%B8%A8%E0%B8%9A%E0%B8%B2%E0%B8%A5%E0%B8%99%E0%B8%84%E0%B8%A3%E0%B8%AB%E0%B8%B2%E0%B8%94%E0%B9%83%E0%B8%AB%E0%B8%8D%E0%B9%88); รายละเอียด seed ใน CR-012 Appendix A. Seed code (`zone_1` เป็นต้น) เป็น slug/semantic ที่มีอยู่ก่อน CR-049 — คงไว้ ไม่ rewrite เป็น ULID.
+
+**Migration (schema_v 2 → 3, CR-049):** เพิ่ม `status` ต่อ item (doc เดิมไม่มี → default `active` ตอนอ่าน);
+ลบ `excluded_codes` ออกจาก schema (doc เดิมที่ยังมี field นี้ถูก ignore ตอนอ่าน — ไม่ error, ไม่ backfill
+ลบทิ้ง); write ใหม่ทั้งหมด stamp `schema_v: 3`. ไม่มี production data ณ วันที่ bump → dev/staging reset ได้
+ตาม pattern CR-019/CR-031 ไม่บังคับ migration script.
+
+**Index:** `(master_type)` — global unique 1 doc ต่อ type; `(master_type, shelter_code)` — shelter-local unique 1 doc ต่อ type ต่อศูนย์
 
 ---
 

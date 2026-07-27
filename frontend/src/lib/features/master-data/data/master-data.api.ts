@@ -1,5 +1,13 @@
 import { serviceFetch } from '$lib/api/service';
-import type { MasterData, MasterDataItem, MasterDataType } from '../domain/master-data';
+import { getShelterCode } from '$lib/db/shelter';
+import type {
+	MasterData,
+	MasterDataItem,
+	MasterDataItemSource,
+	MasterDataQueryContext,
+	MasterDataScope,
+	MasterDataType
+} from '../domain/master-data';
 
 /**
  * Master Data Engine — service plane client (CR-010).
@@ -14,28 +22,67 @@ import type { MasterData, MasterDataItem, MasterDataType } from '../domain/maste
 
 const BASE = '/api/back-office/master-data';
 
-export type MasterDataSummary = Pick<MasterData, '_id' | 'master_type' | 'items'>;
+export type MasterDataSummary = Pick<
+	MasterData,
+	'_id' | 'master_type' | 'items' | 'shelter_code'
+> & {
+	scope?: MasterDataScope;
+	source_shelter_code?: string | null;
+	item_sources?: Record<string, MasterDataItemSource>;
+};
 
-export function listMasters(): Promise<MasterDataSummary[]> {
-	return serviceFetch<MasterDataSummary[]>(BASE);
+function effectiveContext(context?: MasterDataQueryContext): Required<
+	Pick<MasterDataQueryContext, 'scope'>
+> & {
+	shelterCode?: string;
+} {
+	const scope = context?.scope ?? 'effective';
+	const shelterCode =
+		context?.shelterCode ?? (scope === 'effective' ? getShelterCode() : undefined);
+	return { scope, ...(shelterCode ? { shelterCode } : {}) };
 }
 
-export function getMaster(type: MasterDataType): Promise<MasterDataSummary> {
-	return serviceFetch<MasterDataSummary>(`${BASE}/${encodeURIComponent(type)}`);
+function queryString(context?: MasterDataQueryContext): string {
+	const resolved = effectiveContext(context);
+	const params = new URLSearchParams({ scope: resolved.scope });
+	if (resolved.shelterCode) params.set('shelter_code', resolved.shelterCode);
+	return `?${params.toString()}`;
+}
+
+export function listMasters(context?: MasterDataQueryContext): Promise<MasterDataSummary[]> {
+	return serviceFetch<MasterDataSummary[]>(`${BASE}${queryString(context)}`);
+}
+
+export function getMaster(
+	type: MasterDataType,
+	context?: MasterDataQueryContext
+): Promise<MasterDataSummary> {
+	return serviceFetch<MasterDataSummary>(
+		`${BASE}/${encodeURIComponent(type)}${queryString(context)}`
+	);
 }
 
 export function putMaster(
 	type: MasterDataType,
-	items: readonly MasterDataItem[]
+	items: readonly MasterDataItem[],
+	context: MasterDataQueryContext = { scope: 'global' },
+	/** Per-shelter disable list for GLOBAL items (CR-049 amendment). Pass to
+	 *  update it (a global-item toggle); omit for a normal shelter-local edit. */
+	disabledGlobalCodes?: readonly string[],
+	/** Shelter's chosen GLOBAL default (CR-049 amendment). Pass the global
+	 *  item's code to set it, `null` to clear it (revert to the global doc's
+	 *  own `is_default`), or omit to leave the current pointer untouched. */
+	defaultGlobalCode?: string | null
 ): Promise<{ ok: true; rev: string }> {
-	return serviceFetch(`${BASE}/${encodeURIComponent(type)}`, {
+	const resolved = effectiveContext(context);
+	return serviceFetch(`${BASE}/${encodeURIComponent(type)}${queryString(context)}`, {
 		method: 'PUT',
-		body: JSON.stringify({ items })
-	});
-}
-
-export function deleteItem(type: MasterDataType, code: string): Promise<{ ok: true; rev: string }> {
-	return serviceFetch(`${BASE}/${encodeURIComponent(type)}/items/${encodeURIComponent(code)}`, {
-		method: 'DELETE'
+		body: JSON.stringify({
+			items,
+			...(resolved.shelterCode ? { shelter_code: resolved.shelterCode } : {}),
+			...(disabledGlobalCodes ? { disabled_global_codes: disabledGlobalCodes } : {}),
+			...(defaultGlobalCode !== undefined ? { default_global_code: defaultGlobalCode } : {})
+		}),
+		headers: { 'content-type': 'application/json' }
 	});
 }
