@@ -15,6 +15,7 @@ import {
 	House,
 	Calculator,
 	HandHeart,
+	ShoppingCart,
 	MapPin,
 	UtensilsCrossed,
 	Tent,
@@ -74,6 +75,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'กระดานรับบริจาค',
 						href: resolve('/back-office/stock-donations'),
 						icon: HandHeart
+					},
+					{
+						label: 'ใบจัดซื้อ',
+						href: resolve('/back-office/purchases'),
+						icon: ShoppingCart
 					}
 				]
 			},
@@ -128,7 +134,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/household-master-data'),
 						icon: Home
 					},
-					{ label: '4. คลังสินค้า', href: null, icon: Warehouse },
+					{ label: '4. คลังสินค้า', href: resolve('/back-office/catalog'), icon: Warehouse },
 					{
 						label: '5. พารามิเตอร์',
 						href: resolve('/back-office/sop-parameters'),

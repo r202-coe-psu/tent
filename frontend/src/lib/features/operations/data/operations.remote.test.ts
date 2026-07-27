@@ -10,7 +10,7 @@ vi.mock('$lib/db/shelter', () => ({
 	getShelterDb: () => 'shelter_sh001'
 }));
 
-const mockGetItem = vi.fn<() => Promise<SupplyItem | null>>();
+const mockGetItem = vi.fn<(itemId: string) => Promise<SupplyItem | null>>();
 vi.mock('$lib/features/supply', () => ({
 	supplyRepository: () => ({ getItem: mockGetItem })
 }));
@@ -19,6 +19,21 @@ let memoryRepo = createInMemoryRepository();
 vi.mock('$lib/db/repository', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/db/repository')>();
 	return { ...actual, createRemoteRepository: () => memoryRepo };
+});
+
+// bulkDocs (used by receivePurchase to write a whole receipt in one request)
+// bypasses the Repository abstraction and hits couch-db.ts directly — route it
+// through the same in-memory store so the rows are readable via the repo.
+vi.mock('$lib/db/couch-db', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/db/couch-db')>();
+	return {
+		...actual,
+		bulkDocs: async (_dbName: string, docs: { _id: string }[]) => {
+			const saved = [];
+			for (const doc of docs) saved.push(await memoryRepo.put(doc));
+			return saved;
+		}
+	};
 });
 
 import { OperationsRemoteRepository, assertReceiveAgainstCatalog } from './operations.remote';
@@ -146,7 +161,7 @@ describe('OperationsRemoteRepository', () => {
 			),
 			{
 				_id: 'stock_ledger:01J20000000000000000000002',
-				schema_v: 2,
+				schema_v: 3,
 				shelter_code: 'SH001',
 				type: 'stock_ledger' as const,
 				item_id: 'item:rice',
@@ -275,6 +290,166 @@ describe('OperationsRemoteRepository', () => {
 			expect(result.item_id).toBe('item:rice');
 			const list = await repo.listLedger();
 			expect(list).toHaveLength(1);
+		});
+	});
+
+	// CR-032 — procurement is two separate steps: the purchase doc is declared
+	// first, the counted receipt is keyed later as plain ledger appends.
+	describe('purchase (CR-032)', () => {
+		beforeEach(() => {
+			mockGetItem.mockReset();
+		});
+
+		const input = {
+			vendor: 'ACME Trading',
+			po_ref: 'PO-1',
+			items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+		};
+
+		it('creates a purchase doc that moves no stock on its own', async () => {
+			const purchase = await repo.createPurchase(input, ctx);
+
+			expect(purchase.type).toBe('purchase');
+			expect(purchase.vendor).toBe('ACME Trading');
+			expect(purchase.po_ref).toBe('PO-1');
+			expect(await repo.listLedger()).toHaveLength(0);
+
+			const list = await repo.listPurchases();
+			expect(list).toHaveLength(1);
+			expect(list[0]._id).toBe(purchase._id);
+			expect((await repo.getPurchase(purchase._id))?.vendor).toBe('ACME Trading');
+		});
+
+		it('keys a counted receipt into ledger rows referencing the purchase', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+			const purchase = await repo.createPurchase(input, ctx);
+
+			// Counted short of the 100 kg declared — the ledger, not `items`, is the truth.
+			const rows = await repo.receivePurchase(
+				purchase,
+				[{ item_id: 'item:rice', qty: '90', unit: 'kg' }],
+				ctx
+			);
+
+			expect(rows).toHaveLength(1);
+			expect(rows[0].reason).toBe('purchase');
+			expect(rows[0].ref_id).toBe(purchase._id);
+
+			const stored = await repo.listLedger();
+			expect(stored).toHaveLength(1);
+			expect(stored[0].qty).toBe('90');
+			expect((await repo.getBalance()).get('item:rice')).toBe('90');
+		});
+
+		it('writes every counted line of a multi-item receipt', async () => {
+			mockGetItem.mockImplementation(async () => ({ unit: 'kg' }) as SupplyItem);
+			const purchase = await repo.createPurchase(
+				{
+					vendor: 'ACME Trading',
+					items: [
+						{ item_id: 'item:rice', qty: 100, unit: 'kg' },
+						{ item_id: 'item:sugar', qty: 20, unit: 'kg' }
+					]
+				},
+				ctx
+			);
+
+			await repo.receivePurchase(
+				purchase,
+				[
+					{ item_id: 'item:rice', qty: '100', unit: 'kg' },
+					{ item_id: 'item:sugar', qty: '20', unit: 'kg' }
+				],
+				ctx
+			);
+
+			const balance = await repo.getBalance();
+			expect(balance.get('item:rice')).toBe('100');
+			expect(balance.get('item:sugar')).toBe('20');
+		});
+
+		it('allows keying a second receipt against the same purchase (append-only)', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+			const purchase = await repo.createPurchase(input, ctx);
+
+			await repo.receivePurchase(purchase, [{ item_id: 'item:rice', qty: '60', unit: 'kg' }], ctx);
+			await repo.receivePurchase(purchase, [{ item_id: 'item:rice', qty: '40', unit: 'kg' }], ctx);
+
+			const stored = await repo.listLedger();
+			expect(stored).toHaveLength(2);
+			expect(stored.every((row) => row.ref_id === purchase._id)).toBe(true);
+			expect((await repo.getBalance()).get('item:rice')).toBe('100');
+		});
+
+		it('rejects a receipt with no counted lines', async () => {
+			const purchase = await repo.createPurchase(input, ctx);
+
+			await expect(repo.receivePurchase(purchase, [], ctx)).rejects.toThrow(
+				'needs at least one counted line'
+			);
+			expect(await repo.listLedger()).toHaveLength(0);
+		});
+
+		it('validates every line against the catalog before writing anything', async () => {
+			mockGetItem.mockImplementation(async (itemId: string) =>
+				itemId === 'item:rice' ? ({ unit: 'kg' } as SupplyItem) : null
+			);
+			const purchase = await repo.createPurchase(input, ctx);
+
+			await expect(
+				repo.receivePurchase(
+					purchase,
+					[
+						{ item_id: 'item:rice', qty: '100', unit: 'kg' },
+						{ item_id: 'item:ghost', qty: '5', unit: 'kg' }
+					],
+					ctx
+				)
+			).rejects.toThrow('Unknown item: item:ghost');
+
+			// The valid first line must not have landed either.
+			expect(await repo.listLedger()).toHaveLength(0);
+		});
+
+		it('corrects a purchase that has not been received yet', async () => {
+			const purchase = await repo.createPurchase(input, ctx);
+
+			const updated = await repo.updatePurchase({ ...purchase, vendor: 'ACME Trading (แก้ไข)' });
+
+			expect(updated.vendor).toBe('ACME Trading (แก้ไข)');
+			expect((await repo.getPurchase(purchase._id))?.vendor).toBe('ACME Trading (แก้ไข)');
+		});
+
+		it('refuses to correct a purchase once a receipt has been keyed', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+			const purchase = await repo.createPurchase(input, ctx);
+			// Partial receipt is enough — `items` is what the status compares against.
+			await repo.receivePurchase(purchase, [{ item_id: 'item:rice', qty: '10', unit: 'kg' }], ctx);
+
+			await expect(repo.updatePurchase({ ...purchase, vendor: 'Someone Else' })).rejects.toThrow(
+				'has already been received'
+			);
+
+			expect((await repo.getPurchase(purchase._id))?.vendor).toBe('ACME Trading');
+		});
+
+		it('rejects a perishable line without lot.expiry', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'l', perishable: true } as SupplyItem);
+			const purchase = await repo.createPurchase(
+				{ vendor: 'ACME Trading', items: [{ item_id: 'item:milk', qty: 5, unit: 'l' }] },
+				ctx
+			);
+
+			await expect(
+				repo.receivePurchase(purchase, [{ item_id: 'item:milk', qty: '5', unit: 'l' }], ctx)
+			).rejects.toThrow('Perishable item item:milk requires lot.expiry to be set');
+
+			const ok = await repo.receivePurchase(
+				purchase,
+				[{ item_id: 'item:milk', qty: '5', unit: 'l', lot: { expiry: '2026-12-31T00:00:00Z' } }],
+				ctx
+			);
+			expect(ok[0].lot?.expiry).toBe('2026-12-31T00:00:00Z');
 		});
 	});
 });

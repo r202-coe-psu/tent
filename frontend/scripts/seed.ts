@@ -50,9 +50,12 @@ import {
 } from '$lib/features/people/domain/people';
 import {
 	createCampaign,
+	createPurchase,
 	createStockLedger,
 	createWalkInDonation,
+	keyPurchaseReceipt,
 	type CampaignInput,
+	type PurchaseInput,
 	type StockLedgerInput,
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
@@ -1095,6 +1098,33 @@ async function seedShelter(): Promise<void> {
 	];
 	const donations = donationInputs.map((d) => createWalkInDonation(d, ctx));
 
+	// — purchases (CR-032) ————————————————————————————————————————————————————
+	// Two-step flow: the doc is declared first, the count is keyed separately. The
+	// second purchase is left unkeyed so both badge states show up in the UI.
+	const purchaseInputs: PurchaseInput[] = [
+		{
+			vendor: 'บริษัท สยามค้าส่ง จำกัด',
+			po_ref: 'PO-2569-0001',
+			items: [
+				{ item_id: ITEM.rice, qty: '100', unit: 'kg' },
+				{ item_id: ITEM.soap, qty: '60', unit: 'bar' }
+			],
+			note: 'จัดซื้อรอบเร่งด่วนสัปดาห์แรก'
+		},
+		{
+			vendor: 'ร้านค้าสหกรณ์ชุมชน',
+			items: [{ item_id: ITEM.blanket, qty: '40', unit: 'piece' }]
+		}
+	];
+	const purchases = purchaseInputs.map((p) => createPurchase(p, ctx));
+
+	// Partial receipt against the first purchase — rice arrived, soap has not.
+	const purchaseReceipts = keyPurchaseReceipt(
+		purchases[0],
+		[{ item_id: ITEM.rice, qty: '100', unit: 'kg' }],
+		ctx
+	);
+
 	// — bulk insert ——————————————————————————————————————————————————————————
 	const allDocs = [
 		...hhInputs.map((_, i) => [hh1, hh2, hh3][i]),
@@ -1104,7 +1134,9 @@ async function seedShelter(): Promise<void> {
 		...screenings,
 		...stockEntries,
 		...campaigns,
-		...donations
+		...donations,
+		...purchases,
+		...purchaseReceipts
 	];
 	await bulkDocs(dbName, allDocs);
 
@@ -1114,6 +1146,9 @@ async function seedShelter(): Promise<void> {
 	console.log(`  ✓ ${dbName}: ${medicals.length} medicals, ${screenings.length} screenings`);
 	console.log(
 		`  ✓ ${dbName}: ${stockEntries.length} stock entries, ${campaigns.length} campaigns, ${donations.length} donations`
+	);
+	console.log(
+		`  ✓ ${dbName}: ${purchases.length} purchases, ${purchaseReceipts.length} purchase receipt rows`
 	);
 }
 
