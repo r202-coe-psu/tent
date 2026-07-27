@@ -2,9 +2,9 @@
 title: "Task Breakdown — Donation"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
+updated: 2026-07-27
 module: donation
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (§F, 2026-06-22) เพิ่ม public `/donate` wizard (T-60) + donation schema_v 1→2 — ดู T-60
+note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (§F, 2026-06-22) เพิ่ม public `/donate` wizard (T-60); CR-045 (2026-07-24) atomic quota counter; CR-048 (2026-07-27) V8 realignment (UI split, Task #52 pending review, public tracking) — ดู T-15/T-16/T-22/T-60
 ---
 
 # Donation
@@ -21,12 +21,12 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 | ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T-15 | 🔄 | Donor pre-declaration (QR/form, no-auth: tracking_token + phone OTP + rate-limit/CAPTCHA) | FR-32 | R2 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-11 |
-| T-16 | 🔄 | Donation intake audit trail | FR-33 | R2 | prod | ส.ค. | 4 | ÷1.25 | 3 | T-15 |
+| T-16 | 🔄 | Donation intake audit trail & verification UI split | FR-33 | R2 | prod | ส.ค. | 4 | ÷1.25 | 3 | T-15 |
 | T-21 | 🔄 | Donation reservation (quota vs stock, no-auth via tracking_token + TTL) | FR-35 | R3 | prod | ส.ค. | 5 | ÷1.4 | 3.5 | T-14,T-16 |
-| T-22 | 🔄 | Donation cut-off (auto close at target) | FR-36 | R3 | prod | ส.ค. | 4 | ÷1.4 | 3 | T-21 |
+| T-22 | 🔄 | Donation cut-off & manual force cut-off | FR-36 | R3 | prod | ส.ค. | 4 | ÷1.4 | 3 | T-21 |
 | T-23 | ⬜ | Smart redirect to under-threshold shelters | FR-37 | R3 | prod | ส.ค. | 5 | ÷1.4 | 3.5 | T-22,T-14 |
 | T-24 | ⬜ | Donation transparency report (24h, public, QR) | FR-38 | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-16 |
-| T-60 | 🔄 | Public donation & queue booking (`/donate`) — needs board + logistics + slot booking + ticket (**CR-005 §F**) | FR-32,35,36 | R3 | prod | ส.ค. | 8 | ÷1.4 | 5.5 | T-15,T-21,T-22,T-02 |
+| T-60 | 🔄 | Public donation & queue booking (`/donate`) — needs board + logistics + slot booking + ticket (**CR-005 §F, CR-048**) | FR-32,35,36 | R3 | prod | ส.ค. | 8 | ÷1.4 | 5.5 | T-15,T-21,T-22,T-02 |
 |  |  | **รวมทั้งโมดูล** |  |  |  |  | **37** |  | **25.5** |  |
 
 ## Task Details
@@ -44,10 +44,13 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - รายการ pre-declare เป็น pending ไม่เข้า on-hand จนกว่ารับจริง (T-16/FR-28)
 - ผู้บริจาคเปิดสถานะรายการตัวเองด้วย tracking_token ได้ ไม่เห็นข้อมูลคนอื่น; เจ้าหน้าที่แจ้งแทนได้ (walk_in/phone)
 - เจ้าหน้าที่เห็นรายการ pre-declare ค้างรับในระบบ และ demo flow สแกน QR → แจ้ง → เห็นฝั่งเจ้าหน้าที่
+- **CR-048 (Task #52):** ทุกรายการ pre-declaration ต้องถูกปรับสถานะเริ่มต้นเป็น `pending_review` ในขั้นตอน "รอการประเมิน" เสมอ ยกเลิกกลไกการข้ามขั้นตอนไปออก QR Code อัตโนมัติทุกกรณี
+- **CR-048 Cold-chain:** เช็ค flag `is_cold_chain` จาก Item Master หากเป็นสินค้าต้องแช่เย็น บังคับส่งเข้า Pending Review เสมอ
+- **CR-048 Pickup Address:** รองรับการกรอก `pickup_address` ใน `logistics` เมื่อเลือกจัดส่งแบบให้รถศูนย์ไปรับ (`shelter_pickup`)
 
 > **CR-005 §F:** public donor wizard `/donate` เต็มรูป (donor PII เพิ่ม line_id/email, items.category/condition/note, logistics, slot, ticket QR+booking_ref, `PATCH` courier tracking) แยกไปทำใน **T-60**; T-15 คงเป็น pre-declaration core. donation doc ที่เขียนจาก `/donate` เป็น **schema_v 2** (ดู T-02 / `schema.md §2.3`).
 
-### T-16 — Donation intake audit trail (FR-33)
+### T-16 — Donation intake audit trail & verification UI split (FR-33)
 
 **Description:** บันทึกการรับบริจาคจริงที่หน้าศูนย์ ผูกกับ pre-declaration (ถ้ามี) และเขียนเข้า stock ledger (T-11) พร้อม audit trail ครบ — ใคร รับอะไร จากใคร เมื่อไร — เป็นฐานข้อมูลของ transparency report (T-24)
 
@@ -55,6 +58,12 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - รับของ walk-in (ไม่มี pre-declare) และรับตาม pre-declare ได้ทั้งสองทาง
 - รับแล้ว → ledger entry ใน T-11 + สถานะ pre-declaration อัปเดตเป็น received
 - Audit trail ทุกรายการ (ผู้รับ, ผู้บริจาค/token, เวลา, จำนวนจริง vs ที่แจ้ง) query ได้
+- **CR-048 UI Split:** แยกหน้าจอตรวจสอบรายการบริจาคหลังบ้านออกเป็น 2 แท็บตามสถานะจริง (`routes/(protected)/back-office/stock-donations/+page.svelte`):
+  - **แท็บ "รอการประเมิน (Pending Review)"** (`GET /api/back-office/donations/pending`) สำหรับกดอนุมัติ/ปฏิเสธ/ส่งต่อ โดยไม่อนุญาตให้มีช่องกรอกจำนวนพัสดุรับจริงในหน้านี้
+  - **แท็บ "กำลังตรวจรับ (Verifying Drop-off)"** (`GET /api/back-office/donations/verifying`) สำหรับกระทบยอดพัสดุจริง (กรอกจำนวนจริง, เลือกโซนจัดเก็บ, วันหมดอายุ, Gen เลขล็อต `L-YYMMDD-XXX` และบันทึก Stock Ledger)
+- **CR-048 Validation Alert:** แสดงข้อความแจ้งเตือนระบุสาเหตุชัดเจนเมื่ออนุมัติไม่ผ่านเงื่อนไขใน `PendingReviewDialog` (`POST /api/back-office/donations/approve`)
+- **CR-048 ScanStation Search-select:** เพิ่มช่องเลือกรายการบริจาคทดแทนการสแกน QR ใน `ScanStation` (`scan-station.svelte` / `GET /api/back-office/donations/search`)
+- **CR-048 Redirect Transfer Ticket:** เมื่อกดส่งต่อ ต้องไม่สร้าง Lot/Ledger ที่ศูนย์ปัจจุบัน แต่เปิด `RedirectModal` สร้าง Transfer Ticket (`POST /api/back-office/tickets`) พร้อมเปลี่ยนสถานะรายการเป็น `redirected`
 - Test + demo รับบริจาคครบทั้งสอง path
 
 ### T-21 — Donation reservation (FR-35)
@@ -64,6 +73,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 **Definition of Done:**
 - แสดงความต้องการคงค้าง (target − on-hand) ต่อ item ต่อศูนย์ก่อนยืนยันจอง
 - จองผ่าน `tracking_token` (no-auth) — จองที่ยืนยันแล้ว reserve โควตา กันบริจาคซ้อนเกินเป้าจากหลายคนพร้อมกัน
+- **CR-045 & CR-048 Atomic Quota Counter:** ใช้ Mongo Collection `donation_need_counter` และ atomic `find_one_and_update` ป้องกัน Race Condition และ overbooking
 - Donor แก้/ยกเลิกการจองของตนผ่าน token ได้โดยไม่ login (FR-35)
 - Item ที่ยอดครบแล้วจองไม่ได้ แสดงเหตุผล + ชี้ทางไป redirect (T-23)
 - TTL หมดอายุ → โควตาคืนอัตโนมัติ + rate-limit ต่อเบอร์/IP กัน abuse จองทิ้ง; OTP support อยู่หลัง `public_otp_required`, CAPTCHA เป็น production public gate (test การหมดอายุ + race ระหว่างจองพร้อมกัน)
@@ -77,6 +87,8 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - เมื่อ on-hand + reserved ≥ target → ปิดรับอัตโนมัติทั้งฝั่งจองและ pre-declare ไม่ต้องมีคนกด (FR-36)
 - Cut-off ทำงานต่อ item ต่อศูนย์ — ไม่กระทบ item อื่น
 - สถานะ "รับแล้ว/ปิดรับ" เห็นบน public view ทันที, เจ้าหน้าที่ override เปิด/ปิด manual ได้พร้อม audit
+- **CR-048 Manual Force Cut-off:** เจ้าหน้าที่สั่ง Force Cut-off รายไอเทมได้แม้ยอดยังไม่ครบเป้า โดยบังคับกรอกเหตุผล และมีผลเฉพาะรายการสถานะ "รอการประเมิน" เท่านั้น (`POST /api/back-office/campaigns/{id}/cut-off`)
+- **CR-048 Public Need Status Alignment:** แสดงสถานะเปิดรับบนหน้าเว็บประชาชนตามประกาศที่เปิดอยู่จริง ไม่ให้อ้างอิงจากสถานะสต็อกคลังโดยอัตโนมัติ
 - Stock ลด (แจกออก) จนต่ำกว่าเป้า → **เปิดรับใหม่อัตโนมัติ** (FR-36)
 - Test threshold crossing ทั้งสองทิศ + demo
 
@@ -103,18 +115,19 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - QR ชี้มายังรายงานของศูนย์นั้นๆ ถูกต้อง, mobile-first, โหลดเร็วตาม NFR
 - ตัวเลขตรงกับ ledger/audit trail (reconciliation test) + demo
 
-### T-60 — Public donation & queue booking (`/donate`) (CR-005 §F, FR-32/35/36)
+### T-60 — Public donation & queue booking (`/donate`) (CR-005 §F, CR-048)
 
 **Description:** หน้า public/no-login `/donate` ("บริจาคและจองคิว", DN tier) เป็น **stepper 4 ขั้น**: (1) กระดานความต้องการด่วน (`GET /public/v1/needs` aggregate), (2) ฟอร์มบริจาค pre-fill จากการ์ดที่เลือก, (3) เวลา/สถานที่ — วิธีส่ง/ยานพาหนะ/ศูนย์ปลายทาง (lock จากการ์ด)/slot/ETA, (4) ตั๋ว QR + booking ref (`DN-xxxxxx`) พิมพ์แปะลงของ. ขยาย DN surface เกินร่างเดิม — reflect ใน `public-tier-flow-spec §DN`; spec = `docs/features/public-tier-donation-spec.html`. ต่อยอด token-based flow ของ T-15/T-21 (no-auth, `tracking_token`)
 
 **Definition of Done:**
-- **ขั้น 1 needs board:** อ่าน aggregate ความต้องการทุกศูนย์จาก view `needs_open` (`schema.md §2.4`, cap = campaign `qty_target`; DN-4) — "ขาด N" = `max(0, needs_open)`, "งดรับ" = `needs_open ≤ 0`; ไม่มี PII
-- **ขั้น 2 form:** pre-fill หมวด/ประเภทจาก need card; เก็บ donor PII — ชื่อ+เบอร์ (เดิม) + **line_id/email optional** (DN-2); items มี `category`/`condition`/`note` (schema_v 2). **ไม่มี**ใบอนุโมทนา/ลดหย่อนภาษี (DN-3 ระบบไม่รองรับ — ไม่มี checkbox/field)
-- **ขั้น 3 logistics + slot:** วิธีส่ง/ยานพาหนะ/ปลายทาง lock จากการ์ด + ETA; จอง slot จาก `donation_slot` (`schema.md §2.13`, ศูนย์ตั้งค่าใน back-office — DN-5) อ่านความจุที่เหลือผ่าน view `slot_availability`; donor กรอกเลข courier tracking เองได้ (DN-6)
-- **ขั้น 4 ticket:** ออก `booking_ref` + QR, พิมพ์ label แปะของได้; donor เปิด/แก้ผ่าน `GET`/`PATCH /public/v1/donations/{token}` (auth = token) — แก้ courier tracking ภายหลังได้ (DN-6)
+- **ขั้น 1 needs board (CR-048):** อ่าน aggregate ความต้องการทุกศูนย์จาก view `needs_open` (`schema.md §2.4`, cap = campaign `qty_target`; DN-4) — "ขาด N" = `max(0, needs_open)`, "งดรับ" = `needs_open ≤ 0`; จัดเรียงความเร่งด่วน 4 ระดับ ("วิกฤต", "สำคัญ", "ปกติ", "ไม่มีความต้องการ"); ซ่อน Step Indicator ไว้แสดงตั้งแต่ Step 2 เป็นต้นไป; กรองสินค้าความต้องการแสดงไม่ซ้ำซ้อน; แสดงป้ายชื่อศูนย์ผู้สร้างประกาศจริง (ห้ามติดป้าย EOC ผิดพลาด); ไม่มี PII
+- **ขั้น 2 form (CR-048):** pre-fill หมวด/ประเภทจาก need card; เก็บ donor PII — ชื่อ+เบอร์ (เดิม) + **line_id/email optional** (DN-2); items มี `category`/`condition`/`note` (schema_v 2). **ตัดฟังก์ชันขอใบเสร็จลดหย่อนภาษี (E-Donation / DN-3)** ออกจากระบบบริจาคทั้งหมด (ไม่มี checkbox/field)
+- **ขั้น 3 logistics + slot (CR-048):** วิธีส่ง/ยานพาหนะ/ปลายทาง lock จากการ์ด + ETA; แสดงฟิลด์ข้อมูลตามวิธีส่งที่เลือก (ส่งเอง -> พาหนะ, พัสดุ -> tracking, ศูนย์ไปรับ -> `pickup_address`); จอง slot จาก `donation_slot` (`schema.md §2.13`, ศูนย์ตั้งค่าใน back-office — DN-5) อ่านความจุที่เหลือผ่าน view `slot_availability`; donor กรอกเลข courier tracking เองได้ (DN-6)
+- **ขั้น 4 ticket & public tracking (CR-048):** ออก `booking_ref` + QR, พิมพ์ label แปะของได้; donor เปิด/แก้ผ่าน `GET`/`PATCH /public/v1/donations/{token}` (auth = token) — แก้ courier tracking ภายหลังได้ (DN-6); **เพิ่มระบบติดตามสถานะบริจาคแบบไม่ต้องเข้าสู่ระบบ (`/public/donations/track` & `/public/donations/track/[token]`)** ค้นหาด้วย Ref ID + เบอร์โทรศัพท์ (Exact Match), ส่งค่า Ref ID และเบอร์โทรไปเติมในหน้าติดตามให้อัตโนมัติ, แสดง QR Code และปุ่มดาวน์โหลดเมื่อได้รับการอนุมัติ, และรวมเมนูหลัก "บริจาค" + "ตรวจสอบสถานะ" เป็นเมนูเดียวพร้อม Dropdown
 - **กัน race ตอน submit:** service re-check atomic — `needs_open ≤ 0` → `NEED_FULL`, slot เต็ม → `SLOT_FULL`
 - **DN-1 OTP = OFF (on hold):** develop แบบไม่มี OTP ไปก่อน (flag `public_otp_required=false` มีอยู่แล้ว — ไม่แตะ); rate-limit บังคับ, CAPTCHA เป็น production public gate
-- Public no-PII-leak test (board/ticket ไม่หลุด donor คนอื่น), reservation/cut-off สอดคล้อง T-21/T-22 + demo flow 4 ขั้นครบจน print ticket
+- Public no-PII-leak test (board/ticket ไม่หลุด donor คนอื่น), reservation/cut-off สอดคล้อง T-21/T-22 + demo flow 4 ขั้นครบจน print ticket และทดสอบ public tracking
+
 
 ## Effort by phase (Adj MD)
 
