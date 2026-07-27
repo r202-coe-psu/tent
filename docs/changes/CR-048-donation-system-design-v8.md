@@ -7,7 +7,7 @@ requested_by: เจ้าของโครงการ (Design V8)
 decided_by: เจ้าของโครงการ
 layer: volatile
 affects:
-  - docs/data/schema.md §2.3, §2.4, §2.13
+  - docs/data/schema.md §2.3, §2.4, §2.13, §3.1
   - docs/features/public-tier-donation-spec.html
   - frontend/src/lib/features/donations/
   - frontend/src/routes/public/donations/
@@ -84,7 +84,7 @@ affects:
   > - **หน้าจอ (Page/Route):** `routes/public/donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `PublicDonorNeeds`
 
-* **1.11 ระบบเพิ่มตัวเลือกเปิดหรือปิดการรับบริจาคระดับศูนย์:** ระบบต้องจัดทำสวิตช์เปิดปิด (Toggle) เพื่อให้เจ้าหน้าที่ควบคุมการแสดงผลข้อมูลของศูนย์บนบอร์ดความต้องการสาธารณะ (Public Needs Board)
+* **1.11 ระบบเพิ่มตัวเลือกเปิดหรือปิดการรับบริจาคระดับศูนย์:** ระบบต้องจัดทำสวิตช์เปิดปิด (Toggle) เพื่อให้เจ้าหน้าที่ควบคุมการแสดงผลข้อมูลของศูนย์บนบอร์ดความต้องการสาธารณะ (Public Needs Board) โดยบันทึกฟิลด์ `public_donations_enabled: bool` (default `true`) หรือ `shelter.feature_flags.public_donations_enabled` ลงในเอกสาร `shelter` (`schema.md §3.1`)
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/shelters/[code]/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `ShelterConfigForm`
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `PATCH /api/back-office/shelters/{code}`
@@ -133,10 +133,11 @@ affects:
 
 ## Impact
 
-* **เอกสาร:** `docs/data/schema.md` §2.3, §2.4, §2.13, `docs/features/public-tier-donation-spec.html`
+* **เอกสาร:** `docs/data/schema.md` §2.3, §2.4, §2.13, §3.1, `docs/features/public-tier-donation-spec.html`
 * **ระบบหลังบ้าน (Back-office):** `frontend/src/routes/(protected)/back-office/stock-donations/`, `frontend/src/lib/features/donations/`
 * **ระบบเว็บสาธารณะ (Public Website):** `frontend/src/routes/public/donations/`
 * **สคีมาข้อมูล (Data Schema):**
+  * เพิ่มฟิลด์ `public_donations_enabled: bool` (default `true`) หรือ `feature_flags.public_donations_enabled` ในเอกสาร `shelter` (`schema.md §3.1`)
   * เพิ่มฟิลด์ `pickup_address` ในโครงสร้าง `logistics` ของเอกสาร `donation` (`schema_v 2`)
   * เพิ่มฟิลด์ `needs[].status` ('open'|'closed') และ `visible_on_home` ใน `donation_campaign` (`schema_v 2`)
   * ปรับเปลี่ยนรูปแบบปริมาณสิ่งของเป็น string decimal (`qty_str`) ตาม CR-038 (`schema_v 3`)
@@ -145,7 +146,7 @@ affects:
 
 ## Migration
 
-1. **การเข้ากันได้แบบย้อนหลัง (Backward Compatibility):** ฟิลด์ข้อมูลใหม่ทั้งหมด (`pickup_address`, `needs[].status`, `visible_on_home`) เป็นฟิลด์ทางเลือก (Optional) หากเอกสารเดิมในระบบไม่มีฟิลด์ดังกล่าว ให้ระบบกำหนดค่าเริ่มต้นเป็น `'open'` และ `true` โดยไม่จำเป็นต้องทำสคริปต์แปลงข้อมูลย้อนหลัง
+1. **การเข้ากันได้แบบย้อนหลัง (Backward Compatibility):** ฟิลด์ข้อมูลใหม่ทั้งหมด (`public_donations_enabled`, `pickup_address`, `needs[].status`, `visible_on_home`) เป็นฟิลด์ทางเลือก (Optional) หากเอกสารเดิมในระบบไม่มีฟิลด์ดังกล่าว ให้ระบบกำหนดค่าเริ่มต้นเป็น `true` / `'open'` โดยไม่จำเป็นต้องทำสคริปต์แปลงข้อมูลย้อนหลัง
 2. **การปรับปรุงสิทธิ์ฐานข้อมูลศูนย์พักพิง:** ทีมพัฒนาต้องปรับปรุงเอกสารการเข้าถึง (`_design/access`) บนฐานข้อมูลศูนย์พักพิงเพื่อปลดล็อกสิทธิ์การอัปเดตฟิลด์สถานะใหม่
 
 ---
