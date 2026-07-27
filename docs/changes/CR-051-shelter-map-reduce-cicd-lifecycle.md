@@ -1,8 +1,9 @@
 ---
 id: CR-051
-title: Shelter Map/Reduce lifecycle ทุก module เชื่อมต่อ CI/CD
+title: Shelter Map/Reduce lifecycle เชื่อมต่อ CI/CD
 status: proposed
 date: 2026-07-27
+updated: 2026-07-27
 requested_by: Team B (เสนอ PO)
 decided_by: project owner
 layer: stable
@@ -12,54 +13,44 @@ affects:
   - frontend/package.json
   - frontend/src/lib/features/shelters/domain/views.ts
   - frontend/src/lib/features/shelters/server/deploy.ts
-  - frontend/src/lib/features/shelters/domain/view-modules.ts
   - frontend/src/lib/features/shelters/server/view-lifecycle.ts
   - frontend/scripts/deploy-shelter-views.ts
-  - Map/Reduce manifests ของทุก shelter module
   - frontend/src/routes/api/back-office/shelter/[code]/dashboard/*
   - frontend/src/routes/api/back-office/shelter/+server.ts
   - frontend/scripts/
-  - frontend/CONVENTIONS.md §5
   - docs/data/schema.md §7
   - docs/data/data-model.md §4
   - docker-compose.staging.no-nginx.yml
   - docker-compose.production.no-nginx.yml
 ---
 
-# CR-051 — Shelter Map/Reduce lifecycle ทุก module เชื่อมต่อ CI/CD
+# CR-051 — Shelter Map/Reduce lifecycle เชื่อมต่อ CI/CD
 
 ## TL;DR สำหรับ PO
 
-เสนอให้จัดการ CouchDB Map/Reduce View ของทุก module ใน shelter เป็น deployment artifact
-ที่มี version และ lifecycle ชัดเจน ไม่ผูกอยู่กับการสร้าง shelter หรือการ seed เท่านั้น
-Dashboard จะเป็น pilot แรก และใช้ stable Design Document ชื่อ `_design/dashboard`
+เสนอให้จัดการ CouchDB Map/Reduce View ของ shelter เป็น deployment artifact ที่มี version และ
+lifecycle ชัดเจน ไม่ผูกอยู่กับการสร้าง shelter หรือการ seed เท่านั้น
 
-เมื่อ source ของ module ใดเปลี่ยน CI/CD ต้อง deploy เฉพาะ Design Document ของ module นั้น
-ไปยัง shelter database ทุกแห่งบน CouchDB ส่วนกลาง ตรวจสอบว่า View พร้อมใช้งาน แล้วจึง
-deploy application โดยเก็บ previous stable definition ไว้หนึ่งรุ่นสำหรับ rollback และลบ candidate
-ที่ promote สำเร็จแล้วออกจาก CouchDB
+ปัญหาที่แก้: source code ถูก deploy แล้ว แต่ `_design/app` ใน shelter ที่มีอยู่ยังเป็น revision เก่า
+ทำให้แต่ละศูนย์อาจใช้ Map/Reduce business rule คนละรุ่นแม้รัน application release เดียวกัน
 
-แนวทางเป้าหมายคือ:
+เมื่อ Map/Reduce source เปลี่ยน CI/CD ต้อง deploy Design Document ไปยัง shelter database ทุกแห่ง
+บน CouchDB ส่วนกลาง ตรวจว่า View พร้อมใช้งานจริง แล้วจึง deploy application โดยเก็บ previous
+definition ไว้หนึ่งรุ่นสำหรับ rollback และลบ candidate ที่ promote สำเร็จแล้วออกจาก CouchDB
 
 ```text
-validate → deploy candidate ของ module ที่เปลี่ยน → warm/verify ทุก shelter database
-         → promote ไปยัง _design/{module}
+validate → deploy candidate → warm/verify ทุก shelter database
+         → promote ไปยัง _design/app
          → deploy application → smoke test → retain previous รุ่นเดียวไว้สำหรับ rollback
 ```
 
-การเปลี่ยนแปลงนี้แก้ปัญหาที่ source code ถูก deploy แล้ว แต่ `_design/app` ใน shelter เดิมยังเป็น
-revision เก่า ทำให้แต่ละศูนย์อาจใช้ Map/Reduce business rule คนละรุ่น โดย `_design/app` ถือเป็น
-legacy document หลังจาก Dashboard ย้าย consumer ไปอ่าน `_design/dashboard`
+**ขอบเขตที่ตกลงใน CR นี้:**
 
-ขอบเขตที่ตกลงใน CR นี้:
-
-- lifecycle engine รองรับทุก Map/Reduce module ที่อยู่ใน `shelter_*`
-- แต่ละ module มี Design Document และ ownership ของตนเอง เช่น `_design/dashboard`,
-  `_design/inventory`, `_design/kitchen` และ `_design/donations`
-- deploy เฉพาะ module ที่ manifest เปลี่ยน ไม่ rewrite ทุก Design Document ทุก release
-- Dashboard เป็น module แรกที่ย้ายจาก `_design/app` ไป `_design/dashboard`
-- View ที่ยังไม่มี implementation จริงจะเข้าระบบเมื่อ module นั้นมี manifest พร้อม ไม่สร้าง
-  View จากรายการในเอกสาร spec โดยอัตโนมัติ
+- คง Design Document เดียวต่อ database คือ **`_design/app`** ตาม convention เดิม ไม่แยกราย module
+  (เหตุผลและเงื่อนไขที่จะกลับมาพิจารณาอยู่ใน §3.0)
+- ชื่อ Design Document และ query path ของ consumer **ไม่เปลี่ยน** — CR นี้ไม่มี read-model migration
+- manifest ของ `_design/app` เป็น view set ทั้งก้อน และ CI/CD เป็นผู้เขียนคนเดียว
+- runner วนเฉพาะ `shelter_*` ที่อ่านได้จาก `registry` บน CouchDB ส่วนกลาง
 
 ## 1. ปัญหาปัจจุบัน
 
@@ -127,38 +118,27 @@ docker compose ... up -d --build --force-recreate
 เพื่อพิสูจน์ lifecycle ก่อนผูกเข้ากับ Jenkins จะเพิ่มคำสั่ง:
 
 ```text
-pnpm deploy:shelter-views --module dashboard
+pnpm deploy:shelter-views              # dry-run (ค่าเริ่มต้น)
+pnpm deploy:shelter-views --verify
+pnpm deploy:shelter-views --write --confirm
 ```
 
-ค่าเริ่มต้นเป็น dry-run และรองรับการ deploy Dashboard stable document ผ่าน:
+script ไม่มี flag เลือก Design Document และไม่มี flag เลือก environment โดยเจตนา:
 
-```text
-TENT_ENV=staging pnpm deploy:shelter-views --module dashboard --environment staging --write --confirm
-```
-
-โหมด `--design dashboard` จะ deploy Dashboard Views ไปยัง `_design/dashboard` ซึ่งเป็น target
-ที่ consumer ปัจจุบันใช้งานแล้ว ส่วน `--design app` เป็น compatibility mode สำหรับซ่อมหรือ
-rollback Design Document เดิมเท่านั้น และจะ merge View ของ module อื่นไว้เหมือนเดิม
-
-ความหมายของ target ที่ใช้กับ script มีดังนี้:
-
-| คำสั่ง                                 | Design Document ที่เขียน                                                   | ผลต่อ API ปัจจุบัน                                                 |
-| -------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `--design dashboard --write --confirm` | `_design/dashboard` ของ Dashboard                                          | ใช้กับ consumer ปัจจุบัน หลัง deploy สำเร็จและ verify แล้ว         |
-| `--design app --write --confirm`       | `_design/app` เดิม โดย merge Dashboard Views และรักษา View ของ module อื่น | ใช้เฉพาะ compatibility/rollback; consumer ใหม่ไม่อ่าน document นี้ |
-
-การรัน script ไม่ได้เปลี่ยน consumer code หรือสลับชื่อ Design Document เอง แต่ target ที่ระบุ
-ด้วย `--design` จะเป็นจุดที่ถูกเขียน สำหรับ shelter เดิมต้อง deploy และ verify `_design/dashboard`
-ให้ครบก่อนใช้งาน consumer ที่เปลี่ยนแล้ว
+- **ไม่มี `--design`** — มี Design Document เดียวคือ `_design/app` ไม่มีอะไรให้เลือก
+- **ไม่มี `--environment`** — ปลายทางคือสิ่งที่ `COUCHDB_ADMIN_URL` ชี้อยู่ การแยก staging กับ
+  production มาจากการที่ CI job แต่ละตัว bind credential ต่างกัน ซึ่งผู้สั่งงานแก้จาก command line
+  ไม่ได้ flag ที่ผู้สั่งงานพิมพ์เองไม่เพิ่มการป้องกันให้ แต่ต้อง log **host** ของ endpoint ที่เขียน
+  ทุกครั้งเพื่อให้ CI log บันทึกไว้ว่ารอบนั้นเขียน cluster ใด (ห้าม log URL ที่มี credential)
 
 PoC รอบนี้วนเฉพาะ shelter database ที่อ่านได้จาก `registry` บน CouchDB ส่วนกลาง ไม่แตะ
 replication topology และไม่ใช่ replica orchestrator (ดู §3.5 และ §9)
 
 ## 2. เป้าหมาย
 
-- shelter database ทุกแห่งใช้ View version ของแต่ละ module ที่ตรงกับ release
-- View deployment ทำซ้ำได้โดยไม่ทำให้ข้อมูลหรือ View ของ module อื่นสูญหาย
-- application ไม่ถูกสลับไปใช้ View ใหม่ก่อน View พร้อม
+- shelter database ทุกแห่งใช้ View version ที่ตรงกับ release
+- View deployment ทำซ้ำได้โดยไม่ทำให้ข้อมูลสูญหาย
+- application ไม่ถูกสลับไปใช้ View ใหม่ก่อน View พร้อมใช้จริง
 - pipeline ระบุ shelter ที่ deploy หรือ verify ล้มเหลวได้
 - rollback application แล้วสามารถกลับไปอ่าน View definition รุ่นก่อนหน้าได้
 - credential ของ CouchDB อยู่ใน CI/CD secret store และไม่ปรากฏใน source/log
@@ -166,70 +146,62 @@ replication topology และไม่ใช่ replica orchestrator (ดู §
 
 ## 3. ข้อเสนอเชิงสถาปัตยกรรม
 
-### 3.0 สองเรื่องที่ต้องไม่ปนกัน: การตั้งชื่อ/แยก Design Document กับ lifecycle runner
+### 3.0 ขอบเขตที่ตัดสินแล้ว: ทำ lifecycle runner คงไว้ Design Document เดียว
 
-CR นี้เสนอสองเรื่องที่แก้ปัญหาต่างกัน ตัดสินใจแยกกันได้ และมีเหตุผลของตัวเอง เอกสารส่วนที่เหลือ
-จะอ้างสองเรื่องนี้ตามชื่อด้านล่าง
+ตอนร่าง CR นี้มีสองเรื่องปนกันอยู่ ซึ่งแก้ปัญหาต่างกันและตัดสินใจแยกกันได้:
 
-| เรื่อง                                                                              | แก้ปัญหาอะไร                                                                                                  | ไม่ได้แก้อะไร                               | ขึ้นกับอีกเรื่องหรือไม่                 |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------------- |
-| **A. Design Document granularity** — แยก `_design/{module}` แทน `_design/app` เดียว | blast radius: การแก้ View ของ module หนึ่งไปทำให้ index ของ module อื่น rebuild และ deploy ชนกัน              | ไม่ได้ทำให้ shelter เดิมได้ definition ใหม่ | ไม่ — ทำได้โดยไม่มี runner (deploy มือ) |
-| **B. Lifecycle runner** — `deploy:shelter-views` + candidate/warm/promote/verify    | root cause ของ CR นี้: shelter เดิมค้าง Design Document revision เก่า เพราะ deploy application ไม่แตะ CouchDB | ไม่ได้ลด blast radius ถ้ายังอยู่ ddoc เดียว | ไม่ — ทำได้กับ `_design/app` เดียวก็ได้ |
+| เรื่อง                                                                              | แก้ปัญหาอะไร                                                                                                  | ไม่ได้แก้อะไร                               | สถานะ                    |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ------------------------ |
+| **A. Design Document granularity** — แยก `_design/{module}` แทน `_design/app` เดียว | blast radius: การแก้ View ของ module หนึ่งไปทำให้ index ของ module อื่น rebuild และ deploy ชนกัน              | ไม่ได้ทำให้ shelter เดิมได้ definition ใหม่ | **ไม่ทำใน CR นี้**       |
+| **B. Lifecycle runner** — `deploy:shelter-views` + candidate/warm/promote/verify    | root cause ของ CR นี้: shelter เดิมค้าง Design Document revision เก่า เพราะ deploy application ไม่แตะ CouchDB | ไม่ได้ลด blast radius                       | **ทำ — เนื้อหลักของ CR** |
 
-ประเด็นสำคัญสำหรับ PO: **A ไม่ใช่คำตอบของปัญหาใน §1.1 และ B ไม่ใช่คำตอบของ blast radius**
-ถ้าอนุมัติแค่ B ปัญหาปัจจุบันหายไปแต่การแก้ View ยัง rebuild ยกชุด; ถ้าอนุมัติแค่ A ทุก module แยกกัน
-สะอาดแต่ shelter เดิมยังค้างรุ่นเก่าเหมือนเดิม CR นี้เสนอทั้งสอง โดยให้ A เป็นเงื่อนไขของ
-acceptance gate ราย module และ B เป็นกลไกบังคับใช้
+**A ไม่ใช่คำตอบของปัญหาใน §1.1** การแยก Design Document ไม่ได้เขียน definition ใหม่ลง shelter ที่
+deploy ไปแล้วแม้แต่แห่งเดียว ปัญหาที่ร้องเรียนจะยังอยู่ครบ ตัวที่แก้ปัญหาคือ B เท่านั้น
 
-#### 3.0.1 เหตุผลของ A — ทำไมไม่ยัดทุก View ลง `_design/app` เดียว
+#### 3.0.1 เหตุผลที่ไม่ทำ A ในรอบนี้
 
-CouchDB คิด view-group signature จาก definition ของ **ทุก View ใน Design Document เดียวกัน** ผลคือ:
+1. **ประโยชน์ยังไม่เกิด** ประโยชน์ของการแยก ddoc (rebuild แยก, `_rev` แยก, rollback แยก) เกิดค่าเมื่อ
+   **มีหลายโมดูลที่มี View จริง** ตอนนี้มีชุดเดียว จำนวน index file, จำนวน view-server pass ต่อ
+   document, blast radius และ `_rev` contention เท่ากันทุกช่องระหว่าง `_design/app` กับ
+   `_design/{module}` — การแยกจึงไม่ซื้ออะไรเลยในวันนี้
+2. **ต้นทุนต้องจ่ายทันทีและเป็นต้นทุนด้าน correctness** การเปลี่ยนชื่อทำให้ query path ของ consumer
+   ทุกตัวเปลี่ยน ถ้า deploy ไม่ทันหรือพลาด shelter ใด consumer จะได้ `404` ซึ่งถ้าถูกแปลงเป็นเลข 0
+   จะกลายเป็น Dashboard และ public transparency API ที่รายงาน "ผู้อพยพ 0 คน" ขณะศูนย์เต็ม
+   ความเสี่ยงนี้ไม่มีเลยถ้าไม่เปลี่ยนชื่อ
+3. **แยกทีหลังได้ และไม่ถูกกว่าถ้าทำวันนี้แต่ก็ไม่แพงขึ้นแบบผูกมัด** — งานที่เพิ่มคือย้าย consumer path
+   ซึ่งเป็นงานเท่าเดิมไม่ว่าจะทำเมื่อไหร่ ต่างกันที่จำนวนข้อมูลตอน rebuild
 
-- แก้ View ของ module เดียว → signature ของทั้งกลุ่มเปลี่ยน → **index ของทุก View ใน ddoc นั้น
-  rebuild จากศูนย์** รวม View ของ module ที่ไม่ได้แตะ ระหว่าง rebuild consumer ต้องรอหรือยอมรับ
-  ข้อมูล stale — ในโครงการที่ spec ยังเปลี่ยนบ่อย หมายถึง Dashboard ดับเพราะทีมอื่นแก้ View ของตัวเอง
-- ddoc เดียวมีหลายเจ้าของ → ทุก module ต้อง read-modify-write document เดียวกัน เกิด `409` เวลา deploy
-  พร้อมกัน และต้องมี merge logic ถาวร
-- ddoc เดียวมี `_rev` เดียว → rollback ราย module ทำไม่ได้ rollback Dashboard = rollback View ของทุก module
+ต้นทุนของการอยู่ Design Document เดียวที่ยอมรับแล้ว — CouchDB คิด view-group signature จาก
+definition ของ **ทุก View ใน Design Document เดียวกัน** จึงเกิดผลตามนี้:
 
-ต้นทุนของการแยก (ยอมรับแล้ว): มี Design Document N ตัว = CouchDB ส่ง document ทุกใบเข้า view server
-N รอบตอน build index → CPU/IO และ disk เพิ่มเชิงเส้นตามจำนวน module ที่ N ประมาณ 4
-(dashboard/inventory/kitchen/donations) และ shelter database เป็นระดับต่อศูนย์ ต้นทุนนี้ต่ำกว่าความเสี่ยง
-ที่ Dashboard rebuild ทุกครั้งที่ module อื่นขยับ
+- แก้ View ตัวเดียว → signature ของทั้งกลุ่มเปลี่ยน → **index ของทุก View ใน `_design/app` rebuild
+  จากศูนย์** รวม View ที่ไม่ได้แตะ
+- ทุกคนที่ต้องเพิ่ม View ต้องแก้ document เดียวกัน จึงต้องมีผู้เขียนคนเดียว (§3.2)
+- `_rev` เดียว = rollback ได้ทั้งก้อนเท่านั้น
 
-#### 3.0.2 กติกา granularity — หยุดที่ 1 Design Document ต่อ module
+#### 3.0.2 เงื่อนไขที่จะกลับมาพิจารณา A
 
-- **ห้ามแยกละเอียดกว่า module** (เช่น ddoc ต่อ View) เพราะจ่ายต้นทุน N× โดยไม่ได้ประโยชน์เพิ่ม
-- View อยู่ Design Document เดียวกันได้เมื่อเข้าเกณฑ์ทั้งสองข้อ: (ก) อ่าน document type ชุดเดียวกัน
-  และ (ข) เปลี่ยนไปพร้อมกันตามรอบงานของ module เดียวกัน
-- View 4 ตัวของ Dashboard (`occupancy`, `demographics_by_age`, `demographics_by_country`,
-  `registrations_by_date_status`) เข้าเกณฑ์ทั้งสองข้อ จึงอยู่ `_design/dashboard` ก้อนเดียว
-- module ใหม่ที่ยังไม่มี View จริงไม่ต้องจอง Design Document ล่วงหน้า
+เสนอให้เปิด CR ใหม่เพื่อแยก Design Document เมื่อเข้า **ข้อใดข้อหนึ่ง**:
 
-#### 3.0.3 เหตุผลของ B — ทำไมต้องมี runner แม้จะแยก ddoc แล้ว
+- มีโมดูลที่สองที่ต้องการ View บน `shelter_*` จริง (ไม่ใช่แค่ในเอกสาร spec) และรอบการเปลี่ยนของมัน
+  ไม่ตรงกับรอบของ Dashboard
+- เวลา rebuild `_design/app` ทั้งกลุ่มยาวจนกระทบการใช้งาน (วัดจากเวลา warm ใน Stage D)
+- มีทีมที่ต้อง deploy View พร้อมกันจนเกิด `409` ซ้ำ ๆ เกินที่ bounded retry รับได้
 
-การแยก ddoc ไม่ได้เขียน Design Document ใหม่ลง shelter database ที่ deploy ไปแล้ว ต้องมีคำสั่งที่
-วน deploy + warm + verify ครบทุก shelter database และรายงานผลรายศูนย์ ตามที่กำหนดใน §3.3 และ §4
-โดย runner ต้องรับ manifest จาก A เป็น input (`--module`) จึง deploy เฉพาะ module ที่เปลี่ยนได้
+เมื่อถึงเวลานั้น กติกาที่เสนอไว้คือ **หยุด granularity ที่ 1 Design Document ต่อ module** ไม่แยก
+ละเอียดกว่านั้น (เช่น ddoc ต่อ View) เพราะจ่ายต้นทุน N× ของ view-server pass โดยไม่ได้ประโยชน์เพิ่ม
+และ View อยู่ Design Document เดียวกันได้เมื่อเข้าเกณฑ์ทั้งสองข้อ: (ก) อ่าน document type ชุดเดียวกัน
+และ (ข) เปลี่ยนไปพร้อมกันตามรอบงานเดียวกัน
 
-### 3.1 แยก ownership เป็น Design Document ราย module
+### 3.1 Design Document เดียวต่อ database
 
-ใช้ชื่อ stable Design Document รูปแบบ:
-
-```text
-_design/{module}
-```
-
-ตัวอย่าง:
+stable Design Document คือ:
 
 ```text
-_design/dashboard
-_design/inventory
-_design/kitchen
-_design/donations
+_design/app
 ```
 
-Dashboard ใช้ `_design/dashboard` และมี View เช่น:
+View ของ Dashboard ที่อยู่ใน document นี้:
 
 - `occupancy`
 - `demographics_by_age`
@@ -239,74 +211,74 @@ Dashboard ใช้ `_design/dashboard` และมี View เช่น:
 ระหว่าง rollout ใช้ Design Document ชั่วคราว:
 
 ```text
-_design/dashboard__next_<hash>
-_design/dashboard__prev_<version>
+_design/app__next_<hash>
+_design/app__prev_<version>
 ```
 
-เมื่อ candidate warm และ verify แล้ว จึง promote executable definition เดียวกันไปยัง
-`_design/dashboard` จากนั้นลบ candidate และเก็บ previous stable ไว้เพียงหนึ่งรุ่น
-เพื่อ rollback; หาก cleanup ล้มเหลวให้รายงาน `cleanup_pending` และทำ cleanup ซ้ำเป็นงานแยกได้
+เมื่อ candidate warm และ verify แล้ว จึง promote executable definition เดียวกันไปยัง `_design/app`
+จากนั้นลบ candidate และเก็บ previous stable ไว้เพียงหนึ่งรุ่นเพื่อ rollback; หาก cleanup ล้มเหลว
+ให้รายงาน `cleanup_pending` และทำ cleanup ซ้ำเป็นงานแยกได้
 
-เหตุผลที่แยก Design Document ราย module:
+เหตุที่ต้องมี candidate แยกแทนการ PUT ทับ `_design/app` ตรง ๆ: CouchDB build index ตอน query
+ครั้งแรกเท่านั้น และ reader คนแรกต้องรอจน build เสร็จ การ PUT ทับตรง ๆ จึงผลัก cost นั้นไปให้
+ผู้ใช้คนแรกที่เปิด Dashboard หลัง deploy candidate ให้ pipeline เป็นคนจ่าย cost นั้นแทน
 
-- module เปลี่ยนและ deploy แยกกันได้
-- warm และ verify index รุ่นใหม่ก่อนเปิดใช้
-- rollback ไปใช้ previous definition ได้
-- ลดการ rebuild View group ที่ไม่เกี่ยวข้อง เพราะ View ใน Design Document เดียวกันอยู่ใน
-  view group เดียวกัน
-- ownership ชัดเจนและไม่เขียนทับ View ของ module อื่น
+> ข้อสังเกตทางเทคนิคที่ต้อง verify ก่อนใช้จริง: CouchDB คิด view-group signature จาก
+> `{views, language, options, lib}` **ไม่รวมชื่อ Design Document** ถ้าจริง candidate กับ stable ที่มี
+> definition เหมือนกันจะใช้ index file เดียวกัน ทำให้ promote ไม่ต้อง rebuild ซ้ำ ต้องพิสูจน์บน
+> staging หนึ่งครั้งโดยเทียบ `view_index.signature` จาก `_design/app__next_<hash>/_info` กับ
+> `_design/app/_info` — **ถ้าไม่ตรง candidate ไม่ได้ประโยชน์อะไรและควรถอดออก**
 
-`_design/app` เดิมยังคงไว้ระหว่าง migration และจะไม่ถูกลบใน deployment รอบเดียวกัน
+### 3.2 View manifest — เป็น view set ทั้งก้อน และมีผู้เขียนคนเดียว
 
-### 3.2 เพิ่ม View manifest
-
-แต่ละ module ต้องมี manifest เป็น source of truth เช่น:
+manifest เป็น source of truth ของ **ทุก View ใน `_design/app`** ไม่ใช่ส่วนเพิ่มของโมดูลใดโมดูลหนึ่ง:
 
 ```ts
 {
-  module: "dashboard",
-  designName: "dashboard",
+  designName: 'app',
   version: 2,
-  hash: "<sha256-of-canonical-view-definition>",
-  views: { ... }
+  hash: '<sha256 ของ canonical definition ของ views ทั้งก้อน>',
+  views: { occupancy, demographics_by_age, demographics_by_country, registrations_by_date_status }
 }
 ```
 
 กติกา:
 
-- เปลี่ยน logic หรือ key contract ของ View ต้องเพิ่ม module version
+- **deploy คือ replace ไม่ใช่ merge** View ที่ไม่อยู่ใน manifest จะไม่อยู่ใน `_design/app` หลัง deploy
+  ข้อนี้บังคับ เพราะถ้า runner merge กับของเดิม hash ของผลลัพธ์จะไม่ตรง manifest ตลอดไป ทำให้
+  การ verify hash (§8) เป็นไปไม่ได้ และ View ที่เลิกใช้จะค้างอยู่ตลอดกาล
+- **CI/CD เป็นผู้เขียน `_design/app` คนเดียว** ห้าม PUT Design Document เองบน server ทีมที่ต้องการ
+  View ใหม่ต้องเพิ่มเข้า manifest กลางผ่าน PR
+- เปลี่ยน logic หรือ key contract ของ View ต้องเพิ่ม version
 - การแก้ที่ไม่เปลี่ยน output contract อาจคง version แต่ hash ต้องเปลี่ยน
-- pipeline ต้องตรวจว่า module manifest ใดเปลี่ยน และ deploy เฉพาะ module นั้น
-- pipeline ต้องบันทึก module, version, hash และ Git commit ที่ deploy
-- application query stable path `_design/{module}` และตรวจ compatibility จาก manifest
-- provisioning shelter ใหม่ต้องใช้ manifest เดียวกับ migration runner
+- pipeline ต้องบันทึก version, hash และ Git commit ที่ deploy
+- provisioning shelter ใหม่ต้องใช้ manifest เดียวกับ migration runner ไม่มี code path ที่ deploy
+  View คนละทางกับ runner
 
 ### 3.3 เพิ่ม migration runner แยกจาก frontend runtime
 
 PoC ใช้คำสั่งกลางนี้:
 
 ```text
-pnpm deploy:shelter-views --module dashboard --json
-TENT_ENV=staging pnpm deploy:shelter-views --module dashboard --environment staging --write --confirm
-pnpm deploy:shelter-views --module dashboard --verify --json
+pnpm deploy:shelter-views --json
+pnpm deploy:shelter-views --write --confirm
+pnpm deploy:shelter-views --verify --json
 ```
-
-การเลือก module จาก Git ด้วย `--changed-since` ยังไม่อยู่ใน PoC นี้ และต้องทำเป็นงานต่อยอดก่อน
-นำไปใช้เป็น CI/CD gate จริง ส่วน `--all` ใช้สำหรับรันทุก module ที่มี manifest; ไม่ใช้
-`--module all` ปะปนกัน
 
 runner ต้อง:
 
 1. อ่าน shelter master จาก `registry`
 2. สร้างชื่อ database ด้วย utility กลาง ไม่ประกอบชื่อแบบกระจัดกระจาย
 3. ตรวจว่า shelter database มีอยู่จริง
-4. deploy เฉพาะ Design Document จาก manifest ที่เลือก
+4. deploy Design Document จาก manifest แบบ replace
 5. ใช้ `_rev` สำหรับการ update Design Document version เดิม
 6. retry แบบ bounded เมื่อเกิด `409 Conflict` หรือ network error ชั่วคราว
-7. warm View โดย query ด้วย `limit=0` หรือ query ที่กำหนด
+7. warm View โดย query ด้วย `limit=0` หรือ query ที่กำหนด **โดยใช้ timeout ที่ยาวพอสำหรับ index
+   build** (การ warm ตั้งใจให้ block จน build เสร็จ จึงต้องไม่ใช้ timeout เดียวกับ request ปกติ)
 8. verify version/hash และ query contract
-9. สรุปผลราย shelter เป็น machine-readable report
-10. exit non-zero เมื่อมี failure
+9. สรุปผลราย shelter เป็น machine-readable report และแยก failure จาก lifecycle ออกจาก failure
+   จาก preflight (เช่น registry มี shelter แต่ database ไม่มี) เพราะสองอย่างนี้ต้องการคนแก้ต่างกลุ่ม
+10. exit non-zero เมื่อมี failure ของ lifecycle
 
 runner ควรถูก package เป็น one-shot migration image หรือ executable artifact แยกจาก
 frontend runtime เพื่อให้ CI/CD เรียกใช้ version เดียวกับ release ได้
@@ -319,8 +291,7 @@ frontend runtime เพื่อให้ CI/CD เรียกใช้ version
 {
   "shelter_code": "SH001",
   "database": "shelter_sh001",
-  "module": "dashboard",
-  "design_name": "dashboard",
+  "design_name": "app",
   "version": 2,
   "hash": "...",
   "git_commit": "...",
@@ -343,12 +314,21 @@ runner วนเฉพาะ `shelter_*` ที่อ่านได้จาก
 policy, สถานะ `pending` ของ edge ที่ offline หรือ reconciliation job ทั้งหมดนั้นจะแยกเป็น CR ใหม่
 เมื่อ topology ของศูนย์ชัดเจน (ดู §9)
 
-ข้อเท็จจริงของ CouchDB ที่ต้องจำไว้ตอนออกแบบ CR นั้นในอนาคต เพราะเป็นจุดที่คนพลาดบ่อย:
+### 3.6 View พร้อมใช้ ≠ Design Document ถูกเขียนแล้ว
 
-- **Design Document replicate ได้เหมือน document ปกติ แต่ view index ไม่ replicate** —
-  index เป็น local derived state ของแต่ละ node/shard และ CouchDB จะ build ตามการ query เท่านั้น
-- ดังนั้นการเห็น `_design/{module}` ปรากฏที่ปลายทางแล้ว **ไม่ได้แปลว่า View พร้อมใช้** ยังต้อง
-  warm ที่ CouchDB ตัวที่รับ request จริงอยู่ดี — เหตุผลเดียวกับที่ Stage D ต้อง warm ไม่ใช่แค่ verify hash
+สองข้อเท็จจริงของ CouchDB ที่กำหนดว่าทำไม Stage D ต้อง **warm** ไม่ใช่แค่ verify hash:
+
+1. **Design Document replicate ได้เหมือน document ปกติ แต่ view index ไม่ replicate** — index เป็น
+   local derived state ของแต่ละ node/shard และ CouchDB build ตามการ query เท่านั้น การเห็น
+   `_design/app` ปรากฏที่ปลายทางจึงไม่ได้แปลว่า View พร้อมใช้
+2. **index ที่ยังไม่ถูก build ไม่ได้คืนข้อมูลเก่า — มันคืนความว่าง** เมื่อ definition เปลี่ยน signature
+   จะเปลี่ยน CouchDB จะเริ่ม build index ใหม่ตั้งแต่ต้น query ปกติจะ block จน build เสร็จ แต่ query
+   ที่ใช้ `update=false`/`stale=ok` จะได้ `rows: []` ทันที
+
+ข้อ 2 สำคัญกับ CR นี้เป็นพิเศษ: **การคง `_design/app` ตัดความเสี่ยง `404` ออกไปได้ แต่ไม่ได้ตัด
+ความเสี่ยง "อ่านได้แต่ว่าง"** เพราะการแก้ definition ของ demographics ก็ทำให้ signature เปลี่ยนอยู่ดี
+consumer ที่แปลง empty result เป็นเลข 0 จะรายงานยอดเป็นศูนย์ระหว่างหน้าต่าง rebuild
+จึงยังต้องมี §7 ข้อ 1 และข้อกำหนดใน §11 ข้อ 6
 
 ## 4. CI/CD lifecycle ที่เสนอ
 
@@ -358,7 +338,7 @@ policy, สถานะ `pending` ของ edge ที่ offline หรือ 
 
 1. lint/type-check source
 2. unit test Map function, Reduce contract และ key shape
-3. ตรวจ module manifest version/hash และรายการ module ที่เปลี่ยน
+3. ตรวจ manifest version/hash ว่าเปลี่ยนหรือไม่
 4. ตรวจว่า application consumer รองรับ View version เป้าหมาย
 5. build application image และ migration image จาก Git commit เดียวกัน
 
@@ -370,14 +350,14 @@ runner อ่าน `registry` และสร้าง deployment plan:
 
 - จำนวน shelter ที่พบ
 - database ที่จะเขียน
-- current/target version และ hash แยกราย module
-- shelter ที่ขาด database หรืออ่านไม่ได้
+- current/target version และ hash
+- shelter ที่ขาด database หรืออ่านไม่ได้ (แยกออกจาก failure จริง)
 
 pipeline เก็บ plan เป็น artifact และหยุดก่อน write หากจำนวน shelter ไม่ตรงกับ policy
 
 ### Stage C — Deploy View
 
-deploy candidate Design Document ของ module ที่เปลี่ยนไปยัง shelter database ทุกแห่ง โดย:
+deploy candidate Design Document ไปยัง shelter database ทุกแห่ง โดย:
 
 - จำกัด concurrency เพื่อไม่ให้ CouchDB รับ load สูงพร้อมกัน
 - retry เฉพาะ transient failure
@@ -390,7 +370,7 @@ deploy candidate Design Document ของ module ที่เปลี่ยน
 
 หลัง deploy ให้ query candidate View ที่ CouchDB ซึ่งรับ request จริง เพื่อ:
 
-- trigger index build
+- trigger index build และ **รอจนเสร็จ** (ดู §3.6)
 - ตรวจว่า HTTP response สำเร็จ
 - ตรวจ key/value shape
 - ตรวจ business fixture หรือ invariant ที่สำคัญ
@@ -398,13 +378,9 @@ deploy candidate Design Document ของ module ที่เปลี่ยน
 
 application จะยังไม่ถูกสลับไปใช้รุ่นใหม่หาก shelter ใดไม่ผ่านเกณฑ์ที่ PO/ทีมกำหนด
 
-### Stage E — Deploy Application
+### Stage E — Promote และ Deploy Application
 
-เมื่อ candidate พร้อมแล้ว ให้ promote ไปยัง stable Design Document และ deploy application ที่ query:
-
-```text
-_design/dashboard
-```
+เมื่อ candidate พร้อมแล้ว ให้ promote definition เดียวกันไปยัง `_design/app` และ deploy application
 
 จากนั้นรัน smoke test Dashboard อย่างน้อย:
 
@@ -414,7 +390,7 @@ _design/dashboard
 - shelter ที่ไม่มีข้อมูล
 - shelter ที่มี `active`, `pre_registered` และ `checked_out`
 
-### Stage F — Observe และ Promote
+### Stage F — Observe
 
 - staging ต้องผ่าน smoke/QA ก่อน production
 - production เก็บ previous Design Document ไว้ตลอด rollback window
@@ -423,7 +399,7 @@ _design/dashboard
 
 ### Stage G — Retire รุ่นเก่า
 
-การลบ Design Document รุ่นเก่าเป็น maintenance job แยก ไม่ทำใน deployment เดียวกับการ promote
+การลบ `_design/app__prev_<version>` เป็น maintenance job แยก ไม่ทำใน deployment เดียวกับ promote
 
 ลบได้เมื่อ:
 
@@ -432,7 +408,8 @@ _design/dashboard
 - verify ทุก shelter ผ่าน
 - มี approval และ dry-run report
 
-เสนอให้เก็บอย่างน้อย current และ previous version (`N` และ `N-1`)
+เสนอให้เก็บอย่างน้อย current และ previous version (`N` และ `N-1`) และเรียก `_view_cleanup`
+ต่อ database หลังลบ เพื่อไม่ให้ index file ที่ไม่มีเจ้าของค้างบนดิสก์
 
 ## 5. ลำดับใน Jenkins ที่เสนอ
 
@@ -441,11 +418,11 @@ Checkout
   ↓
 Test + Build application/migration artifacts
   ↓
-Detect changed module manifests + dry-run
+Detect manifest change + dry-run
   ↓
-Deploy candidate + verify/warm ทุก shelter database
+Deploy candidate + warm/verify ทุก shelter database
   ↓
-Promote ไปยัง _design/{module}
+Promote ไปยัง _design/app
   ↓
 Deploy application containers
   ↓
@@ -459,29 +436,29 @@ Publish per-shelter deployment report
 - staging branch ใช้ staging CouchDB credential เท่านั้น
 - main branch ใช้ production credential พร้อม approval ตาม policy
 - credential เก็บใน Jenkins Credentials
-- ห้ามส่ง URL ที่มี username/password เข้า console log
+- ห้ามส่ง URL ที่มี username/password เข้า console log — แต่ **ต้อง log host ของ endpoint**
+  ที่ถูกเขียนทุกครั้ง
 - pipeline ต้องมี timeout และ bounded retry
-- production write ต้องไม่ใช้ flag ยืนยันแบบ hard-code ที่ผู้ใช้อาจเรียกผิด environment
-- module ที่ไม่มีการเปลี่ยน manifest ต้องไม่ถูก rewrite
+- manifest ที่ไม่เปลี่ยน ต้องไม่ทำให้ Design Document ถูก rewrite
 
 ## 6. Rollback
 
 ### กรณี View deploy ไม่ครบก่อน application deploy
 
 - หยุด pipeline
-- application รุ่นปัจจุบันยังอ่าน stable `_design/{module}`
+- application รุ่นปัจจุบันยังอ่าน `_design/app` รุ่นเดิมที่ยังไม่ถูก promote
 - แก้ shelter ที่ล้มเหลวแล้ว rerun runner ได้
 
 ### กรณี application ใหม่มีปัญหาหลัง promote
 
 - rollback application image/config ไป commit ก่อนหน้า
-- promote previous executable definition กลับมายัง stable `_design/{module}` แล้ว rollback application
-- target View ไม่จำเป็นต้องลบทันที
+- promote previous definition กลับมายัง `_design/app` แล้ว rollback application
+- candidate ไม่จำเป็นต้องลบทันที
 
 ### กรณีข้อมูล aggregate ของ View ใหม่ผิด
 
 - disable promotion หรือ rollback application
-- เก็บ target Design Document เพื่อ investigation
+- เก็บ Design Document ที่มีปัญหาไว้เพื่อ investigation
 - แก้ View ด้วย version ใหม่ ห้ามแก้ความหมายของ version ที่ถูก promote แล้วแบบเงียบ ๆ
 
 ## 7. ลำดับที่บังคับทางเทคนิค (ไม่ใช่แผนงาน)
@@ -492,45 +469,48 @@ CR นี้**ไม่กำหนดแผนดำเนินงาน phase
 สิ่งที่ CR นี้บังคับคือ **ข้อจำกัดลำดับที่ผิดแล้วข้อมูลเสียหรือ service ดับ** ซึ่งต้องถูกบังคับใน
 pipeline ตาม Stage A–G ใน §4 ไม่ใช่ด้วยวินัยของคน:
 
-1. **View ต้องพร้อมก่อน consumer** — deploy + warm + verify `_design/{module}` ครบทุก shelter
-   database ก่อน จึง deploy application ที่อ่าน stable path นั้น (Stage C→D→E)
-   ห้ามสลับ consumer ไป Design Document ที่ยังไม่ได้ deploy
-2. **ห้าม retire `_design/app`** ก่อน compatibility window และ production QA สิ้นสุด และก่อนยืนยันว่า
-   ไม่มี consumer เหลือ (Stage G) — เป็น job แยกจาก deployment ที่ promote
-3. **application กับ migration artifact ต้องมาจาก Git commit เดียวกัน** (Stage A)
-4. **staging ต้องผ่านก่อน production** และใช้ credential แยกกัน (§5)
-5. **module ที่ manifest ไม่เปลี่ยน ต้องไม่ถูก rewrite** (§5)
-
-สถานะ implementation ปัจจุบันติดตามที่ §8 Acceptance Criteria (`[x]` = ทำแล้ว) ไม่ต้องมีรายการ phase ซ้ำ
+1. **View ต้องพร้อมก่อน consumer** — deploy + warm + verify ครบทุก shelter database ก่อน จึง
+   deploy application ที่พึ่ง definition ใหม่ (Stage C→D→E) ข้อนี้ยังบังคับแม้ชื่อ Design Document
+   ไม่เปลี่ยน เพราะ index ที่ยังไม่ build คืนผลว่าง (§3.6)
+2. **application กับ migration artifact ต้องมาจาก Git commit เดียวกัน** (Stage A)
+3. **staging ต้องผ่านก่อน production** และใช้ credential แยกกัน (§5)
+4. **manifest ที่ไม่เปลี่ยน ต้องไม่ทำให้ Design Document ถูก rewrite** (§5)
+5. **การลบ previous definition เป็น job แยกจาก deployment ที่ promote** (Stage G)
 
 ## 8. Acceptance Criteria
 
-- [ ] มี module registry และ manifest contract ที่รองรับ Map/Reduce ทุก shelter module
-- [x] Dashboard ใช้ stable Design Document `_design/dashboard`
-- [x] อัปเดต convention จาก Design Document เดียว `_design/app` เป็น `_design/{module}`
-- [x] อัปเดต schema/data-model ให้ระบุ ownership และ lifecycle ราย module
+> implementation รอบแรกถูก revert เมื่อ 2026-07-27 เพื่อรอการตัดสินใจใน §3.0 ทุกข้อจึงยังเปิดอยู่
+
+- [ ] manifest ของ `_design/app` เป็น view set ทั้งก้อน และ deploy แบบ replace ไม่ merge
 - [ ] มี deterministic hash และ test ตรวจ View contract
-- [ ] มีคำสั่งเลือก `--module`, detect changed module, dry-run, write และ verify
+- [ ] Map function เป็น deterministic — ห้ามใช้เวลาปัจจุบันใน map (ค่าที่ emit ถูก persist ใน B-tree
+      ตอน index จึงค้างอยู่ที่เวลาที่ index ไม่ใช่เวลาที่ query) การจัด bucket ที่ขึ้นกับวันที่ต้องทำ
+      ตอน query
+- [ ] มีคำสั่ง dry-run, write และ verify โดย dry-run เป็นค่าเริ่มต้น
 - [ ] runner อ่าน shelter จาก `registry` และรายงานผลครบทุก shelter database
-- [ ] runner ทำซ้ำได้โดยไม่สร้างผลข้างเคียงหรือทำลาย View อื่น
+- [ ] runner แยก preflight failure (database ไม่มี) ออกจาก lifecycle failure ใน report และ exit code
+- [ ] runner ทำซ้ำได้โดยไม่สร้างผลข้างเคียง
 - [ ] รองรับ bounded retry สำหรับ `409` และ transient failure
-- [ ] candidate View ถูก warm และ verify ก่อน promote
+- [ ] candidate View ถูก warm ด้วย timeout ที่ยาวพอสำหรับ index build และ verify ก่อน promote
+- [ ] พิสูจน์บน staging แล้วว่า signature ของ candidate ตรงกับ stable (§3.1) หรือถอด candidate ออก
 - [ ] Design Document revision/hash ถูก verify หลัง deploy
-- [ ] Jenkins staging และ production ใช้ credential แยกกัน
+- [ ] CI/CD เป็นผู้เขียน `_design/app` คนเดียว และ verify hash จับ drift ได้
+- [ ] Jenkins staging และ production ใช้ credential แยกกัน และ log host ของ endpoint ที่เขียน
 - [ ] pipeline หยุดก่อน application deploy เมื่อ View deployment ไม่ผ่าน policy
 - [ ] application และ migration artifact มาจาก Git commit เดียวกัน
 - [ ] มี smoke test สำหรับ Dashboard endpoints หลัง deploy
-- [ ] rollback previous definition กลับมายัง stable `_design/{module}` ได้
-- [ ] shelter ใหม่ได้รับ active View version ระหว่าง provisioning
+- [ ] rollback previous definition กลับมายัง `_design/app` ได้
+- [ ] shelter ใหม่ได้รับ active View version ระหว่าง provisioning ผ่าน runner เดียวกัน
 - [ ] มี report ที่ระบุ version/hash/commit/status ราย shelter
-- [ ] การลบ View รุ่นเก่าเป็น job แยกพร้อม dry-run และ approval
+- [ ] การลบ definition รุ่นเก่าเป็น job แยกพร้อม dry-run, approval และ `_view_cleanup`
 
 ## 9. สิ่งที่ไม่อยู่ใน scope
 
+- **การแยก Design Document ราย module (`_design/{module}`)** — ตัดออกจาก CR นี้ตาม §3.0
+  จะแยกเป็น CR ใหม่เมื่อเข้าเงื่อนไขใน §3.0.2
+- การเปลี่ยนชื่อ Design Document หรือ query path ของ consumer
 - การเปลี่ยน schema ของ evacuee หรือ movement
 - การเปลี่ยน business rule ของ occupancy และ registrations
-- การลบ `_design/app` เดิมทันที
-- การลบ `_design/app` เดิมก่อน compatibility window และ production QA สิ้นสุด
 - การ redesign หน้า Dashboard
 - การสร้าง planned View ของ module ที่ยังไม่มี implementation จริง
 - **edge/replica ต่อศูนย์ทั้งหมด** — endpoint discovery, replication policy/filter สำหรับ `_design/*`,
@@ -542,32 +522,36 @@ pipeline ตาม Stage A–G ใน §4 ไม่ใช่ด้วยวิ�
 
 ## 10. ความเสี่ยงและมาตรการควบคุม
 
-| ความเสี่ยง                                      | มาตรการ                                                           |
-| ----------------------------------------------- | ----------------------------------------------------------------- |
-| CouchDB load สูงจากการ build index พร้อมกัน     | จำกัด concurrency, batch rollout และ warm ทีละกลุ่ม               |
-| shelter บางแห่ง deploy ไม่สำเร็จ                | per-shelter report, bounded retry และหยุดก่อน promote             |
-| Design Document มีอยู่แต่ index ยังไม่ถูก build | verify revision/hash **และ** warm ที่ CouchDB ที่รับ request จริง |
-| มีคนแก้ managed Design Document เองบน server    | CI/CD เป็น single writer; verify hash จับ drift ได้               |
-| app/View version ไม่ตรงกัน                      | build จาก commit เดียวกันและตรวจ manifest compatibility           |
-| rollback ไม่ได้เพราะ View เก่าถูกลบ             | เก็บ `N-1` และแยก cleanup ออกจาก deploy                           |
-| credential รั่วใน log                           | Jenkins Credentials และ sanitize URL/error output                 |
-| View contract เปลี่ยนโดยไม่เพิ่ม version        | CI test และ manifest version policy                               |
-| มี consumer เก่ายังใช้ `_design/app`            | inventory และ compatibility window ก่อน retire                    |
+| ความเสี่ยง                                         | มาตรการ                                                                    |
+| -------------------------------------------------- | -------------------------------------------------------------------------- |
+| CouchDB load สูงจากการ build index พร้อมกัน        | จำกัด concurrency, batch rollout และ warm ทีละกลุ่ม                        |
+| shelter บางแห่ง deploy ไม่สำเร็จ                   | per-shelter report, bounded retry และหยุดก่อน promote                      |
+| index ยังไม่ build → consumer อ่านได้แต่ได้ผลว่าง  | warm จนเสร็จใน Stage D ก่อน promote และห้ามแปลง empty เป็น 0 (§11 ข้อ 6)   |
+| แก้ View ตัวเดียวทำให้ทั้ง `_design/app` rebuild   | ยอมรับใน §3.0.1; วัดเวลา warm และเปิด CR แยก ddoc เมื่อเข้าเงื่อนไข §3.0.2 |
+| runner merge View แล้ว hash ไม่ตรง manifest ตลอดไป | deploy แบบ replace เท่านั้น (§3.2)                                         |
+| มีคนแก้ `_design/app` เองบน server                 | CI/CD เป็น single writer; verify hash จับ drift ได้                        |
+| app/View version ไม่ตรงกัน                         | build จาก commit เดียวกันและตรวจ manifest compatibility                    |
+| rollback ไม่ได้เพราะ definition เก่าถูกลบ          | เก็บ `N-1` และแยก cleanup ออกจาก deploy                                    |
+| index file ที่ไม่มีเจ้าของค้างบนดิสก์              | `_view_cleanup` ต่อ database หลังลบ definition เก่า (Stage G)              |
+| credential รั่วใน log                              | Jenkins Credentials, sanitize URL/error output, log เฉพาะ host             |
+| View contract เปลี่ยนโดยไม่เพิ่ม version           | CI test และ manifest version policy                                        |
 
 ## 11. ประเด็นที่ขอให้ PO ตัดสินใจ
 
-1. อนุมัติ **B (lifecycle runner)** — ให้ Map/Reduce ของทุก shelter module เป็น deployment artifact
-   ที่ต้องผ่าน CI/CD (ดู §3.0 สำหรับเหตุผลที่แยกจากข้อ 2)
-2. อนุมัติ **A (Design Document granularity)** — Design Document ราย module โดยเริ่ม Dashboard ที่
-   `_design/dashboard` และหยุด granularity ที่ 1 ddoc ต่อ module ตาม §3.0.2
-3. เลือก production rollout policy: all-at-once หรือ staged batch
-4. กำหนด rollback window สำหรับ candidate/previous Design Document
-5. กำหนดว่า deploy/verify ล้มเหลวที่ shelter หนึ่งแห่ง ต้อง block ทั้ง release หรือปล่อยผ่านได้
-6. อนุมัติให้ CI/CD เป็น single writer ของ managed `_design/{module}`
-7. ยืนยันว่า Dashboard/Public demographics ต้องนับเฉพาะ `active` — age view จะ emit `birth_year`
-   แบบ deterministic และ API จะจัด bucket ตามปีปัจจุบันตอน query; อนุมัติและ implement แล้วใน follow-up นี้
-8. ยืนยันว่าเมื่อ Dashboard Design Document หายหรือ query ไม่สำเร็จ Back-office ต้องแจ้ง error
-   ส่วน Public Transparency ต้องคืน metric เป็น `null`/สถานะ stale ไม่ตีความเป็นศูนย์
+1. อนุมัติ **B (lifecycle runner)** — ให้ Map/Reduce ของ shelter เป็น deployment artifact ที่ต้องผ่าน
+   CI/CD
+2. **ยืนยันการไม่ทำ A** — คง `_design/app` เดียวตาม convention เดิม และรับเงื่อนไขที่จะกลับมา
+   พิจารณาใน §3.0.2
+3. อนุมัติให้ **CI/CD เป็นผู้เขียน `_design/app` คนเดียว และ deploy แบบ replace** — ทีมที่ต้องการ
+   View ใหม่ต้องเพิ่มเข้า manifest กลางผ่าน PR ไม่ PUT เองบน server (§3.2)
+4. เลือก production rollout policy: all-at-once หรือ staged batch
+5. กำหนด rollback window สำหรับ candidate/previous Design Document
+6. ยืนยันว่าเมื่อ query View ไม่สำเร็จ **หรือ index ยังไม่ build (ได้ผลว่าง)** Back-office ต้องแจ้ง
+   error ส่วน Public Transparency ต้องคืน metric เป็น `null`/สถานะ stale — **ห้ามตีความเป็นศูนย์**
+7. กำหนดว่า deploy/verify ล้มเหลวที่ shelter หนึ่งแห่ง ต้อง block ทั้ง release หรือปล่อยผ่านได้
+   และ preflight failure (registry มี shelter แต่ database ไม่มี) ควร block หรือแค่รายงาน
+8. ยืนยันว่า Dashboard/Public demographics ต้องนับเฉพาะ `active` — age view จะ emit `birth_year`
+   แบบ deterministic และ API จะจัด bucket ตามปีปัจจุบันตอน query
 9. จัดลำดับงาน/phase และมอบหมาย owner (CR นี้ไม่เสนอแผน — ให้ PO จัดใน task-breakdown, ดู §7 และ §12)
 
 ## 12. Task breakdown และ owner
@@ -578,17 +562,17 @@ Acceptance Criteria (§8) และสิ่งที่อยู่นอก sc
 
 ## Migration
 
-ไม่ใช่ business-data migration แต่เป็น read-model migration:
+**ไม่มี read-model migration** — ชื่อ Design Document และ query path ของ consumer ไม่เปลี่ยน
+สิ่งที่เปลี่ยนคือ definition ภายใน `_design/app` และวิธี deploy:
 
 ```text
-_design/app
-    ↓ coexistence
-_design/dashboard__next_<hash>
+_design/app (definition รุ่นเก่า, revision กระจัดกระจายตาม shelter)
+    ↓ deploy candidate
+_design/app__next_<hash>
     ↓ warm/verify ทุก shelter database
-_design/dashboard
-    ↓ application promotion
-_design/app retained during compatibility window
-    ↓ retire after approval
+_design/app (promote definition ใหม่ ชื่อเดิม)
+    ↓ retain _design/app__prev_<version> หนึ่งรุ่น
+    ↓ retire + _view_cleanup after approval (Stage G)
 ```
 
 ## Decision log
@@ -596,18 +580,17 @@ _design/app retained during compatibility window
 - 2026-07-27 — proposed for PO review
 - 2026-07-27 — แนะนำ candidate/previous rotation + deploy-before-application เพื่อรองรับ safe rollout/rollback
 - 2026-07-27 — แนะนำ migration runner แยก เพราะ frontend production runtime ไม่มี toolchain สำหรับรัน TypeScript migration
-- 2026-07-27 — ขยาย lifecycle ให้รองรับทุก Map/Reduce module ใน shelter โดยแยก `_design/{module}`
-- 2026-07-27 — กำหนด Dashboard stable path เป็น `_design/dashboard`
-- 2026-07-27 — ผู้ใช้อนุมัติให้ Dashboard และ Public Transparency consumers อ่าน `_design/dashboard`; demographics ใช้ Map/Reduce ที่กรอง `active` และ `_design/app` คงไว้เป็น legacy
-- 2026-07-27 — แก้ตาม code review: age Map/Reduce emit `birth_year` แบบ deterministic (manifest version 2), API bucket ตามปีปัจจุบัน และ missing Dashboard ddoc ไม่ถูกแปลงเป็นศูนย์
-- 2026-07-27 — provisioning ใช้ lifecycle runner กลาง; write mode บังคับ `TENT_ENV` ตรงกับ `--environment`, เพิ่ม warm timeout และ cleanup candidate/previous rotation
-- 2026-07-27 — Design Document replicate ได้ตาม replication policy แต่ View index ต้อง warm/build ที่ replica เอง
-- 2026-07-27 — **ถอด replication/edge contract (§3.5 เดิม) ออกจาก scope** — CR นี้โฟกัสปัญหาเดียวคือ
-  shelter database บน CouchDB ส่วนกลางค้าง Design Document รุ่นเก่า (§1.1) เรื่อง endpoint discovery,
-  replication filter, edge pending/reconcile จะแยกเป็น CR ใหม่เมื่อ topology ของศูนย์ชัดเจน
-  โดยเก็บข้อเท็จจริงที่ต้องจำไว้ใน §3.5 (index ไม่ replicate — ต้อง warm ที่ node ที่รับ request)
-- 2026-07-27 — ถอดแผน phase (§7 เดิม) และ task breakdown/owner (§12 เดิม) ออกจาก CR — CR ให้เฉพาะ
-  contract ที่ pipeline ต้องบังคับ (Stage A–G + ลำดับบังคับ + AC) ส่วนการจัดลำดับงานและ owner เป็นของ PO
-- 2026-07-27 — เพิ่ม §3.0 แยกสองเรื่องออกจากกัน: A = Design Document granularity (`_design/{module}`)
-  แก้ blast radius, B = lifecycle runner แก้ root cause §1.1 — อนุมัติแยกกันได้ และยืนยันกติกา
-  granularity หยุดที่ 1 Design Document ต่อ module (§3.0.2)
+- 2026-07-27 — **ถอด replication/edge contract ออกจาก scope** — CR นี้โฟกัสปัญหาเดียวคือ shelter
+  database บน CouchDB ส่วนกลางค้าง Design Document รุ่นเก่า (§1.1) โดยเก็บข้อเท็จจริงที่ต้องจำไว้ใน §3.6
+- 2026-07-27 — ถอดแผน phase และ task breakdown/owner ออกจาก CR — CR ให้เฉพาะ contract ที่ pipeline
+  ต้องบังคับ (Stage A–G + ลำดับบังคับ + AC) ส่วนการจัดลำดับงานและ owner เป็นของ PO
+- 2026-07-27 — **ถอด A (Design Document granularity `_design/{module}`) ออกจาก scope — คง
+  `_design/app` เดียว** เหตุผล: มีชุด View เดียวจริง ประโยชน์ของการแยก (rebuild/`_rev`/rollback แยก)
+  ยังไม่เกิดค่า ขณะที่ต้นทุนคือการย้าย query path ของ consumer ทุกตัวซึ่งเปิดความเสี่ยง `404` →
+  ถูกตีความเป็นศูนย์ CR ยังเก็บเงื่อนไขที่จะกลับมาพิจารณาไว้ใน §3.0.2 พร้อมด้วยผลสืบเนื่องที่ตามมา:
+  manifest ต้องเป็น view set ทั้งก้อนและ CI เป็น single writer มิฉะนั้น verify hash เป็นไปไม่ได้ (§3.2)
+- 2026-07-27 — implementation รอบแรก (view-modules/view-lifecycle/runner + consumer ย้ายไป
+  `_design/dashboard`) ถูก revert เพื่อรอการตัดสินใจข้างต้น
+- 2026-07-27 — ถอด `--design` และ `--environment`/`TENT_ENV` ออกจาก runner: `--design` ไม่มี
+  ความหมายเมื่อมี Design Document เดียว และ `--environment` เทียบค่าที่ผู้สั่งงานพิมพ์เองสองค่า
+  จึงไม่เพิ่มการป้องกัน — การแยก environment มาจาก credential ต่อ CI job และให้ log host แทน (§1.5)
