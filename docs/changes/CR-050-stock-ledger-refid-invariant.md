@@ -1,7 +1,7 @@
 ---
 id: CR-050
 title: "Enforce reason ↔ ref_id invariant on stock_ledger"
-status: proposed
+status: approved
 date: 2026-07-25
 updated: 2026-07-26
 requested_by: project owner (design review ของ CR-032 Option A)
