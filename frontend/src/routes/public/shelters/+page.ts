@@ -49,7 +49,13 @@ export const load: PageLoad = async ({ url }) => {
 		if (hasUser && item.geo) {
 			dist = parseFloat(haversineKm(userLatNum, userLngNum, item.geo.lat, item.geo.lng).toFixed(1));
 		}
-		return toPublicShelterCard(item, dist);
+		return toPublicShelterCard(
+			{
+				...item,
+				vulnerable_groups: item.vulnerable_groups ?? undefined
+			},
+			dist
+		);
 	});
 
 	if (search.trim()) {

@@ -91,6 +91,7 @@ def project_shelter(doc: dict[str, Any]) -> tuple[ProjectionAction, dict[str, An
         "province": doc.get("province"),
         "district": doc.get("district"),
         "subdistrict": doc.get("subdistrict"),
+        "raw_data": doc,
         "updated_at": updated_at,
     }
     if geo:

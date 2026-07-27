@@ -25,6 +25,7 @@ class PublicShelter(Document):
 	province: str | None = None
 	district: str | None = None
 	subdistrict: str | None = None
+	raw_data: dict = Field(default_factory=dict)
 	updated_at: datetime
 
 	class Settings:
