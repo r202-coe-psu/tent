@@ -42,7 +42,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 		expect(data.error.code).toBe('FORBIDDEN');
 	});
 
-	it('returns graceful fallback on 404 (DB not found or view missing)', async () => {
+	it('returns 500 when the Dashboard demographic view is not deployed', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 			name: 'tester',
 			roles: [],
@@ -54,12 +54,10 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 		const event = createMockEvent('SH001');
 		const res = (await GET(event)) as Response;
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(500);
 		const data = await res.json();
-
-		expect(data.shelter_code).toBe('SH001');
-		expect(data.age_groups['0-4']).toBe(0);
-		expect(data.countries).toEqual({});
+		expect(data.error.code).toBe('INTERNAL');
+		expect(data.error.message).toContain('not deployed');
 	});
 
 	it('returns 500 on CouchDB view error (status >= 400)', async () => {
@@ -79,7 +77,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 		expect(data.error.code).toBe('INTERNAL');
 	});
 
-	it('returns successful data payload when views succeed', async () => {
+	it('returns active demographic data from the Dashboard views', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 			name: 'tester',
 			roles: [],
@@ -87,28 +85,20 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 			shelterCode: null
 		});
 
-		vi.mocked(adminRaw).mockResolvedValueOnce({
-			status: 200,
-			data: {
-				docs: [
-					{
-						current_stay: { status: 'active' },
-						birth_year: 2026 + 543 - 30,
-						country: 'THAILAND'
-					},
-					{
-						current_stay: { status: 'active' },
-						birth_year: 2026 + 543 - 2,
-						country: 'THAILAND'
-					},
-					{
-						current_stay: { status: 'pre_registered' },
-						birth_year: 2026 + 543 - 40,
-						country: 'LAOS'
-					}
-				]
-			}
-		});
+		vi.mocked(adminRaw)
+			.mockResolvedValueOnce({
+				status: 200,
+				data: {
+					rows: [
+						{ key: 2026 + 543 - 30, value: 1 },
+						{ key: 2026 + 543 - 2, value: 1 }
+					]
+				}
+			})
+			.mockResolvedValueOnce({
+				status: 200,
+				data: { rows: [{ key: 'THAILAND', value: 2 }] }
+			});
 
 		const event = createMockEvent('SH001');
 		const res = (await GET(event)) as Response;
@@ -122,12 +112,13 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 		expect(data.countries['THAILAND']).toBe(2);
 		expect(data.countries['LAOS']).toBeUndefined();
 
-		const [path, method, body] = vi.mocked(adminRaw).mock.calls[0];
-		expect(path).toBe('/shelter_sh001/_find');
-		expect(method).toBe('POST');
-		expect(body).toMatchObject({
-			selector: { type: 'evacuee', 'current_stay.status': 'active' },
-			fields: ['current_stay', 'birth_year', 'country']
-		});
+		const [agePath, ageMethod] = vi.mocked(adminRaw).mock.calls[0];
+		const [countryPath, countryMethod] = vi.mocked(adminRaw).mock.calls[1];
+		expect(agePath).toBe('/shelter_sh001/_design/dashboard/_view/demographics_by_age?group=true');
+		expect(ageMethod).toBe('GET');
+		expect(countryPath).toBe(
+			'/shelter_sh001/_design/dashboard/_view/demographics_by_country?group=true'
+		);
+		expect(countryMethod).toBe('GET');
 	});
 });

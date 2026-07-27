@@ -1,5 +1,5 @@
 export const SHELTER_DASHBOARD_VIEWS = {
-	_id: '_design/app',
+	_id: '_design/dashboard',
 	views: {
 		occupancy: {
 			map: `function (doc) {
@@ -10,37 +10,14 @@ export const SHELTER_DASHBOARD_VIEWS = {
 		},
 		demographics_by_age: {
 			map: `function (doc) {
-				if (doc.type !== 'evacuee') return;
-
-				if (!doc.birth_year) {
-					emit('unknown', 1);
-					return;
-				}
-
-				var ceYear = doc.birth_year - 543;
-				var currentYear = new Date().getFullYear();
-				var age = currentYear - ceYear;
-				var bucket;
-
-				if (age <= 4) {
-					bucket = '0-4';
-				} else if (age <= 11) {
-					bucket = '5-11';
-				} else if (age <= 17) {
-					bucket = '12-17';
-				} else if (age <= 59) {
-					bucket = '18-59';
-				} else {
-					bucket = '60+';
-				}
-
-				emit(bucket, 1);
+				if (doc.type !== 'evacuee' || !doc.current_stay || doc.current_stay.status !== 'active') return;
+				emit(doc.birth_year || null, 1);
 			}`,
 			reduce: '_count'
 		},
 		demographics_by_country: {
 			map: `function (doc) {
-				if (doc.type !== 'evacuee') return;
+				if (doc.type !== 'evacuee' || !doc.current_stay || doc.current_stay.status !== 'active') return;
 				var c = (doc.country || '').trim().toUpperCase() || 'UNKNOWN';
 				emit(c, 1);
 			}`,

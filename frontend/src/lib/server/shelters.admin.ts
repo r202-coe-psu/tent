@@ -16,9 +16,9 @@ import { buildValidateDocUpdate, REFERRAL_MANGO_INDEXES } from './shelter-access
 import {
 	migrateShelterV2ToCurrent,
 	type ShelterMaster,
-	type ShelterMasterV2,
-	deployShelterViewsFn
+	type ShelterMasterV2
 } from '$lib/features/shelters/server';
+import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 
 export { REFERRAL_MANGO_INDEXES } from './shelter-access-design';
 
@@ -182,18 +182,17 @@ function uniq<T>(arr: T[]): T[] {
 /**
  * Deploy CouchDB Design Documents (Views) for a shelter database.
  *
- * CR-020 (T-52): Adds 4 MapReduce views under the single `_design/app` design
- * document (couchdb-pouchdb-bestpractices §6 — one design doc per db).
+ * CR-051: Adds Dashboard MapReduce views under `_design/dashboard`.
  *
  * Views deployed:
  *   - `occupancy`               — count by `current_stay.status` (total / active / temporary_leave / checked_out / transferred / deceased)
- *   - `demographics_by_age`     — count by age-bucket string, derived from `birth_year` (พ.ศ.)
+ *   - `demographics_by_age`     — active evacuee count by `birth_year` (พ.ศ.); API buckets age at request time
  *   - `demographics_by_country`     — count by `country` field (req); falls back to 'unknown'
- *   - `registrations_by_date`   — count evacuee docs by `created_at` date (YYYY-MM-DD)
+ *   - `registrations_by_date_status` — count movement check-in/out by date and series
  *
  * All views use `?group=true` for per-key breakdown (see CONVENTIONS.md §5).
- * Views are idempotent: if `_design/app` already exists the current `_rev` is
- * fetched first and sent on the PUT (Read-Modify-Write; skill §3).
+ * Provisioning delegates to the shared candidate/warm/promote lifecycle so new shelters
+ * use the same manifest and metadata as CI/CD redeploys.
  */
 export async function deployShelterViews(db: string): Promise<number> {
 	try {

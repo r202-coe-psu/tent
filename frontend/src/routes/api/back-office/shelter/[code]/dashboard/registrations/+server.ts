@@ -29,6 +29,7 @@ import {
 	defaultDateRange
 } from '$lib/features/dashboard';
 import type { ViewResult } from '$lib/server/shelters.admin';
+import { SHELTER_DASHBOARD_DESIGN_NAME } from '$lib/features/shelters/server';
 
 export const prerender = false;
 
@@ -58,14 +59,14 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 		// CouchDB date-range query with the high-value sentinel on endkey
 		// so all documents on the `to` date are included. Array keys are used for [date, series].
 		const viewPath =
-			`/${db}/_design/app/_view/registrations_by_date_status?group=true` +
+			`/${db}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/registrations_by_date_status?group=true` +
 			`&startkey=${encodeURIComponent(JSON.stringify([from, '']))}` +
 			`&endkey=${encodeURIComponent(JSON.stringify([to + SENTINEL, SENTINEL]))}`;
 
 		const res = await adminRaw(viewPath, 'GET');
 
 		if (res.status === 404) {
-			return json(RegistrationsPayloadSchema.parse(rowsToRegistrationsPayload(code, [], from, to)));
+			throw new ServiceError('INTERNAL', 'Dashboard registrations view is not deployed');
 		}
 		if (res.status >= 400) {
 			throw new ServiceError('INTERNAL', `registrations_by_date_status view error (${res.status})`);

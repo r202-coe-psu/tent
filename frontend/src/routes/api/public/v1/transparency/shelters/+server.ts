@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
-import type { ShelterMaster } from '$lib/features/shelters/server';
+import { SHELTER_DASHBOARD_DESIGN_NAME, type ShelterMaster } from '$lib/features/shelters/server';
 import { adminRaw } from '$lib/server/couch-admin';
 
 export const GET: RequestHandler = async ({ url, setHeaders }) => {
@@ -75,20 +75,28 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 					? calcDistance(userLat, userLng, m.location.lat, m.location.lng)
 					: null;
 
-			let occupancy = 0;
-			let vulnerableCount = 0;
+			let occupancy: number | null = 0;
+			let vulnerableCount: number | null = 0;
 			if (mappedStatus === 'OPEN' || mappedStatus === 'FULL') {
+				occupancy = null;
+				vulnerableCount = null;
 				try {
 					const [occRes, ageRes] = await Promise.all([
 						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/app/_view/occupancy?group=true`,
+							`/shelter_${m.code.toLowerCase()}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/occupancy?group=true`,
 							'GET'
 						),
 						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/app/_view/demographics_by_age?group=true`,
+							`/shelter_${m.code.toLowerCase()}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/demographics_by_age?group=true`,
 							'GET'
 						)
 					]);
+					if (occRes.status === 404 || ageRes.status === 404) {
+						throw new Error('Dashboard design is not deployed');
+					}
+					if (occRes.status >= 400 || ageRes.status >= 400) {
+						throw new Error('Dashboard view query failed');
+					}
 
 					if (
 						occRes.status === 200 &&
@@ -111,11 +119,13 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 						(ageRes.data as Record<string, unknown>).rows
 					) {
 						const rows = (ageRes.data as Record<string, unknown>).rows as Array<{
-							key: string;
+							key: number | null;
 							value: unknown;
 						}>;
+						vulnerableCount = 0;
 						for (const r of rows) {
-							if (r.key === '0-4' || r.key === '60+') {
+							const age = r.key === null ? null : new Date().getFullYear() - (r.key - 543);
+							if (age !== null && (age <= 4 || age >= 60)) {
 								vulnerableCount += r.value as number;
 							}
 						}
@@ -126,7 +136,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			}
 
 			const capacity = m.capacity || 0;
-			const available = Math.max(0, capacity - occupancy);
+			const available = occupancy === null ? null : Math.max(0, capacity - occupancy);
 
 			return {
 				id: m._id,
@@ -206,8 +216,12 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 	const summaryData = {
 		shelters_total: shelters.length,
 		shelters_open: shelters.filter((s) => s.status === 'OPEN').length,
-		occupancy_total: shelters.reduce((acc, s) => acc + s.occupancy, 0),
-		vulnerable_count: shelters.reduce((acc, s) => acc + (s.vulnerableCount || 0), 0)
+		occupancy_total: shelters.every((s) => s.occupancy !== null)
+			? shelters.reduce((acc, s) => acc + (s.occupancy ?? 0), 0)
+			: null,
+		vulnerable_count: shelters.every((s) => s.vulnerableCount !== null)
+			? shelters.reduce((acc, s) => acc + (s.vulnerableCount ?? 0), 0)
+			: null
 	};
 
 	if (search) {
@@ -241,7 +255,9 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 		shelters = shelters.filter((s) => s.distance >= 0 && s.distance <= maxDistance);
 	}
 	if (hideFull) {
-		shelters = shelters.filter((s) => s.status !== 'FULL' && (s.capacity === 0 || s.available > 0));
+		shelters = shelters.filter(
+			(s) => s.status !== 'FULL' && (s.capacity === 0 || s.available === null || s.available > 0)
+		);
 	}
 
 	// Apply advanced filters

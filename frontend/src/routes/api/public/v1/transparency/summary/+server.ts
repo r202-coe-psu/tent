@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import { adminRaw } from '$lib/server/couch-admin';
+import { SHELTER_DASHBOARD_DESIGN_NAME } from '$lib/features/shelters/server';
 
 // In-memory read-model cache (T-35)
 let cachedSummary: Record<string, unknown> | null = null;
@@ -38,19 +39,26 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 
 			// Fetch real occupancy and demographics concurrently for all active shelters
 			const shelterPromises = activeShelters.map(async (m) => {
-				let occ = 0;
-				let vuln = 0;
+				let occ: number | null = null;
+				let vuln: number | null = null;
 				try {
 					const [occRes, ageRes] = await Promise.all([
 						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/app/_view/occupancy?group=true`,
+							`/shelter_${m.code.toLowerCase()}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/occupancy?group=true`,
 							'GET'
 						),
 						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/app/_view/demographics_by_age?group=true`,
+							`/shelter_${m.code.toLowerCase()}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/demographics_by_age?group=true`,
 							'GET'
 						)
 					]);
+					if (occRes.status === 404 || ageRes.status === 404) {
+						throw new Error('Dashboard design is not deployed');
+					}
+					if (occRes.status >= 400 || ageRes.status >= 400) {
+						throw new Error('Dashboard view query failed');
+					}
+					occ = 0;
 					if (
 						occRes.status === 200 &&
 						occRes.data &&
@@ -70,11 +78,13 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 						(ageRes.data as Record<string, unknown>).rows
 					) {
 						const rows = (ageRes.data as Record<string, unknown>).rows as Array<{
-							key: string;
+							key: number | null;
 							value: unknown;
 						}>;
+						vuln = 0;
 						for (const r of rows) {
-							if (r.key === '0-4' || r.key === '60+') {
+							const age = r.key === null ? null : new Date().getFullYear() - (r.key - 543);
+							if (age !== null && (age <= 4 || age >= 60)) {
 								vuln += r.value as number;
 							}
 						}
@@ -87,8 +97,12 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 			});
 
 			const results = await Promise.all(shelterPromises);
-			const totalOccupancy = results.reduce((sum, current) => sum + current.occ, 0);
-			const totalVulnerable = results.reduce((sum, current) => sum + current.vuln, 0);
+			const totalOccupancy = results.every((result) => result.occ !== null)
+				? results.reduce((sum, current) => sum + (current.occ ?? 0), 0)
+				: null;
+			const totalVulnerable = results.every((result) => result.vuln !== null)
+				? results.reduce((sum, current) => sum + (current.vuln ?? 0), 0)
+				: null;
 
 			cachedSummary = {
 				shelters_total: masters.length,
@@ -109,11 +123,11 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 		summary: cachedSummary || {
 			shelters_total: 0,
 			shelters_open: 0,
-			occupancy_total: 0,
-			vulnerable_count: 0
+			occupancy_total: null,
+			vulnerable_count: null
 		},
 		lastUpdated: lastFetchTime || now,
-		isStale,
+		isStale: isStale || cachedSummary === null,
 		flags: {
 			public_metrics_occupancy: true,
 			public_metrics_vulnerable: true,

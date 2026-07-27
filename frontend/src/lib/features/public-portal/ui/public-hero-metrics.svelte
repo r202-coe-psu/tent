@@ -29,8 +29,8 @@
 		summary?: {
 			shelters_open: number;
 			shelters_total: number;
-			occupancy_total: number;
-			vulnerable_count: number;
+			occupancy_total: number | null;
+			vulnerable_count: number | null;
 		};
 		flags?: { public_metrics_occupancy: boolean; public_metrics_vulnerable: boolean };
 		lastUpdated?: number;

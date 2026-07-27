@@ -1,5 +1,15 @@
 /**
- * Server-safe entry point for the shelters feature.
+ * Isomorphic (browser-safe) entry point for the shelters feature.
+ *
+ * NOTE ON THE NAME: this file is *not* protected by SvelteKit — only
+ * `$lib/server/**` is. Vite will happily bundle it into the browser, and
+ * `features/shelter-import/domain/import-row.ts` (reached from the root layout)
+ * does exactly that. So everything re-exported here MUST be isomorphic.
+ * Server-only runtime — anything touching `node:*`, admin credentials, or the
+ * filesystem — belongs in `./server/*` and must be imported from its deep path
+ * (e.g. `$lib/features/shelters/server/deploy`) by server modules only.
+ * Re-exporting `./server/deploy` here once dragged `node:crypto` into the
+ * client bundle via `view-lifecycle.ts`; don't put it back.
  *
  * The feature barrel (`$lib/features/shelters`) re-exports the application,
  * data, and UI layers — all of which are browser-only (remote CouchDB client, Svelte, TanStack
@@ -28,4 +38,9 @@ export {
 } from './domain/schema';
 
 export { SHELTER_DASHBOARD_VIEWS } from './domain/views';
-export { deployShelterViewsFn, type CouchClient } from './server/deploy';
+export {
+	SHELTER_DASHBOARD_DESIGN_NAME,
+	SHELTER_VIEW_MODULES,
+	getShelterViewModule
+} from './domain/view-modules';
+export type { ShelterViewModule, CouchViewDefinition } from './domain/view-modules';

@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { adminRaw } from '$lib/server/couch-admin';
 import {
 	migrateShelterV2ToCurrent,
+	SHELTER_DASHBOARD_DESIGN_NAME,
 	type ShelterMaster,
 	type ShelterMasterV2
 } from '$lib/features/shelters/server';
@@ -25,13 +26,15 @@ export const GET: RequestHandler = async ({ params, setHeaders }) => {
 			else if (m.operation_status === 'standby') mappedStatus = 'PREPARE';
 
 			// Real Occupancy
-			let occupancy = 0;
+			let occupancy: number | null = mappedStatus === 'OPEN' || mappedStatus === 'FULL' ? null : 0;
 			if (mappedStatus === 'OPEN' || mappedStatus === 'FULL') {
 				try {
 					const occRes = await adminRaw(
-						`/shelter_${m.code.toLowerCase()}/_design/app/_view/occupancy?group=true`,
+						`/shelter_${m.code.toLowerCase()}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/occupancy?group=true`,
 						'GET'
 					);
+					if (occRes.status === 404) throw new Error('Dashboard design is not deployed');
+					if (occRes.status >= 400) throw new Error('Dashboard occupancy query failed');
 					if (
 						occRes.status === 200 &&
 						occRes.data &&
@@ -59,10 +62,14 @@ export const GET: RequestHandler = async ({ params, setHeaders }) => {
 				address: m.location?.address || 'ไม่ระบุที่อยู่',
 				capacity: {
 					total: m.capacity || 0,
-					available: Math.max(0, (m.capacity || 0) - occupancy)
+					available: occupancy === null ? null : Math.max(0, (m.capacity || 0) - occupancy)
 				},
 				occupancy_rate:
-					(m.capacity || 0) > 0 ? Math.round((occupancy / (m.capacity || 1)) * 100) : 0,
+					occupancy === null
+						? null
+						: (m.capacity || 0) > 0
+							? Math.round((occupancy / (m.capacity || 1)) * 100)
+							: 0,
 				building_status:
 					m.area_type === 'indoor'
 						? 'อาคารปิด (ในร่ม)'

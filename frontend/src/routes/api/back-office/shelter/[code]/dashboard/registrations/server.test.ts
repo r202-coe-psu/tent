@@ -53,7 +53,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		expect(data.error.message).toBe('Access denied');
 	});
 
-	it('returns graceful fallback on 404 (DB not found or view missing)', async () => {
+	it('returns 500 when the Dashboard registrations view is not deployed', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 			name: 'tester',
 			roles: [],
@@ -65,14 +65,10 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		const event = createMockEvent('SH001');
 		const res = (await GET(event)) as Response;
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(500);
 		const data = await res.json();
-
-		// graceful fallback yields an empty object for checkin/checkout and 0 for total
-		expect(data.shelter_code).toBe('SH001');
-		expect(data.total).toBe(0);
-		expect(data.checkin).toEqual({});
-		expect(data.checkout).toEqual({});
+		expect(data.error.code).toBe('INTERNAL');
+		expect(data.error.message).toContain('not deployed');
 	});
 
 	it('returns 500 on CouchDB view error (status >= 400)', async () => {
@@ -121,5 +117,11 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		expect(data.checkin).toBeTypeOf('object');
 		expect(data.checkin[mockDate]).toBe(5);
 		expect(data.checkout).toBeTypeOf('object');
+
+		const [path, method] = vi.mocked(adminRaw).mock.calls[0];
+		expect(path).toContain(
+			`/shelter_sh001/_design/dashboard/_view/registrations_by_date_status?group=true`
+		);
+		expect(method).toBe('GET');
 	});
 });

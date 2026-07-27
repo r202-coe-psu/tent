@@ -2,7 +2,7 @@
  * domain/schema.ts — dashboard-registration
  *
  * Canonical response shape for the registrations endpoint.
- * CouchDB view: `_design/app/_view/registrations_by_date?group=true`
+ * CouchDB view: `_design/dashboard/_view/registrations_by_date_status?group=true`
  *
  * Supports optional date-range filtering via query params:
  *   ?from=YYYY-MM-DD&to=YYYY-MM-DD

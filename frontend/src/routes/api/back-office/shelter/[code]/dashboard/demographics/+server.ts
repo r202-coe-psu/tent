@@ -2,8 +2,8 @@
  * GET /api/back-office/shelter/[code]/dashboard/demographics
  *
  * Returns age-group and nationality breakdowns for currently checked-in evacuees
- * by querying the shelter database with a server-side Mango `_find` selector.
- * Only aggregate fields needed for the response are projected.
+ * by querying the Dashboard-owned CouchDB Map/Reduce views in
+ * `_design/dashboard`.
  *
  * Security (security-rbac-bestpractices §2 & §3):
  *  - Caller must be authenticated and scoped to this shelter or be a SA.
@@ -22,78 +22,47 @@ import {
 	rowsToAgeGroups,
 	rowsToCountries
 } from '$lib/features/dashboard';
+import { SHELTER_DASHBOARD_DESIGN_NAME } from '$lib/features/shelters/server';
 
 export const prerender = false;
 
-const FIND_PAGE_SIZE = 1000;
+type GroupedDemographicRow = { key: string | number | null; value: number };
 
-type DemographicDoc = {
-	current_stay?: { status?: string };
-	birth_year?: number | null;
-	country?: string | null;
-};
+async function queryGroupedView(
+	db: string,
+	viewName: 'demographics_by_age' | 'demographics_by_country'
+): Promise<GroupedDemographicRow[]> {
+	const res = await adminRaw(
+		`/${db}/_design/${SHELTER_DASHBOARD_DESIGN_NAME}/_view/${viewName}?group=true`,
+		'GET'
+	);
 
-/** Read only the fields needed for aggregate demographics, paged by bookmark. */
-async function findActiveEvacuees(db: string): Promise<DemographicDoc[] | null> {
-	const docs: DemographicDoc[] = [];
-	let bookmark: string | undefined;
-
-	for (;;) {
-		const res = await adminRaw(`/${db}/_find`, 'POST', {
-			selector: {
-				type: 'evacuee',
-				'current_stay.status': 'active'
-			},
-			fields: ['current_stay', 'birth_year', 'country'],
-			limit: FIND_PAGE_SIZE,
-			...(bookmark ? { bookmark } : {})
-		});
-
-		if (res.status === 404) return null;
-		if (res.status >= 400) {
-			throw new ServiceError('INTERNAL', `active evacuee query error (${res.status})`);
-		}
-
-		const data = (res.data as { docs?: DemographicDoc[]; bookmark?: string }) ?? {};
-		const page = data.docs ?? [];
-		docs.push(...page);
-
-		const nextBookmark = data.bookmark;
-		if (!nextBookmark || nextBookmark === bookmark || page.length < FIND_PAGE_SIZE) break;
-		bookmark = nextBookmark;
+	if (res.status === 404) {
+		throw new ServiceError('INTERNAL', `${viewName} view is not deployed for ${db}`);
+	}
+	if (res.status >= 400) {
+		throw new ServiceError('INTERNAL', `${viewName} view error (${res.status})`);
 	}
 
-	return docs;
+	return ((res.data as { rows?: GroupedDemographicRow[] }).rows ?? []) as GroupedDemographicRow[];
 }
 
-function docsToRows(docs: readonly DemographicDoc[]) {
-	const ageCounts: Record<string, number> = {};
-	const countryCounts: Record<string, number> = {};
+function ageBucketForBirthYear(birthYear: number | null, currentYear: number): string {
+	if (birthYear === null || !Number.isFinite(birthYear)) return 'unknown';
+	const age = currentYear - (birthYear - 543);
+	if (age <= 4) return '0-4';
+	if (age <= 11) return '5-11';
+	if (age <= 17) return '12-17';
+	if (age <= 59) return '18-59';
+	return '60+';
+}
+
+function ageRowsToBuckets(rows: GroupedDemographicRow[]) {
 	const currentYear = new Date().getFullYear();
-
-	for (const doc of docs) {
-		// Defensive filter: do not trust only the Mango selector.
-		if (doc.current_stay?.status !== 'active') continue;
-
-		let ageBucket = 'unknown';
-		if (doc.birth_year) {
-			const age = currentYear - (doc.birth_year - 543);
-			if (age <= 4) ageBucket = '0-4';
-			else if (age <= 11) ageBucket = '5-11';
-			else if (age <= 17) ageBucket = '12-17';
-			else if (age <= 59) ageBucket = '18-59';
-			else ageBucket = '60+';
-		}
-		ageCounts[ageBucket] = (ageCounts[ageBucket] ?? 0) + 1;
-
-		const country = (doc.country ?? '').trim().toUpperCase() || 'UNKNOWN';
-		countryCounts[country] = (countryCounts[country] ?? 0) + 1;
-	}
-
-	return {
-		ageRows: Object.entries(ageCounts).map(([key, value]) => ({ key, value })),
-		countryRows: Object.entries(countryCounts).map(([key, value]) => ({ key, value }))
-	};
+	return rows.map((row) => ({
+		key: ageBucketForBirthYear(typeof row.key === 'number' ? row.key : null, currentYear),
+		value: row.value
+	}));
 }
 
 export const GET: RequestHandler = async ({ params, request }) => {
@@ -102,27 +71,19 @@ export const GET: RequestHandler = async ({ params, request }) => {
 		await requireShelterScopeOrSA(request.headers.get('cookie'), code);
 
 		const db = `shelter_${code.toLowerCase()}`;
-
-		// Query current evacuee documents so this endpoint does not depend on
-		// a stale persisted _design/app demographics view.
-		const docs = await findActiveEvacuees(db);
-
-		// 404 means the shelter database is not available — return zeroes gracefully.
-		if (!docs) {
-			return json(
-				DemographicsPayloadSchema.parse({
-					shelter_code: code,
-					age_groups: { '0-4': 0, '5-11': 0, '12-17': 0, '18-59': 0, '60+': 0, unknown: 0 },
-					countries: {}
-				})
-			);
-		}
-		const { ageRows, countryRows } = docsToRows(docs);
+		const [ageRows, countryRows] = await Promise.all([
+			queryGroupedView(db, 'demographics_by_age'),
+			queryGroupedView(db, 'demographics_by_country')
+		]);
 
 		const payload = DemographicsPayloadSchema.parse({
 			shelter_code: code,
-			age_groups: rowsToAgeGroups(ageRows),
-			countries: rowsToCountries(countryRows)
+			age_groups: rowsToAgeGroups(ageRowsToBuckets(ageRows)),
+			countries: rowsToCountries(
+				countryRows.filter(
+					(row): row is { key: string; value: number } => typeof row.key === 'string'
+				)
+			)
 		});
 
 		return json(payload);
