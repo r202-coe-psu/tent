@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-27 # CR-048 Donation System Design V8 (PR #129) / CR-049 Shelter scope split (PR #124)
+updated: 2026-07-27 # CR-050 stock ledger refid invariant (PR #127)
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -70,4 +70,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-048](CR-048-donation-system-design-v8.md) | ปรับปรุงข้อกำหนดระบบรับบริจาค (Donation System) ตามบันทึกการแก้ไข Design V8 (Donation Back-office & Public Donor Website) | approved | volatile | 2026-07-27 | docs/data/schema.md §2.3/2.4/2.13, features/public-tier-donation-spec.html, routes/{public,back-office}/donations/ |
 | [CR-049](CR-049-shelter-scope-backoffice-vs-system-management.md) | Shelter list scope split (back-office vs system management) + master data ULID-code two-tier (global read-only + shelter-local) + status soft-delete | approved | volatile | 2026-07-25 (approved 07-27) | docs/prd/role-permission-matrix.md, docs/data/schema.md §3.3, routes/(protected)/portal/system-management/, features/master-data/ |
 | [CR-049](CR-049-image-people-register.md) | Evacuee photo — เพิ่ม photo ใน evacuee + doc type image (CouchDB attachment) สำหรับรูปถ่ายใบหน้า; schema_v evacuee 3→4, schema_v image 1 | approved | volatile | 2026-07-25 | docs/data/schema.md §1.1/§1.6, features/people/domain/people.ts, features/images/ |
-
+| [CR-050](CR-050-stock-ledger-refid-invariant.md) | บังคับ invariant `stock_ledger.reason` ↔ prefix ของ `ref_id` ที่ชั้น domain (Zod superRefine + ตาราง R2) · `adjust` ต้อง `ref_id: null` · เลิก free text `ref_id` ในฟอร์มรับสต็อก → picker จาก doc จริง · เสนอ **ไม่ bump** `schema_v` (เดิมยกไว้เป็น CR-045 — renumber 2026-07-26) | approved | volatile | 2026-07-25 (renumber 07-26) | docs/data/schema.md §2.1, features/operations/domain/operations.ts + operations.test.ts, ui/ReceiveStockForm.svelte, features/kitchen/data/kitchen.remote.ts, CR-032 |
