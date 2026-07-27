@@ -48,7 +48,7 @@
 	let categoryFilter = $state<string>('all');
 	let locationFilter = $state<string | 'all'>('all');
 	let statusFilter = $state<'all' | 'normal' | 'low' | 'empty' | 'expiring' | 'expired'>('all');
-	
+
 	// ─── Pagination state ─────────────────────────────────────────────────────
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
@@ -259,7 +259,7 @@
 	const itemsWithCalculatedStatus = $derived(
 		items.map((item) => {
 			const qtyOnHand = balance.get(item._id) ?? '0';
-			
+
 			// 1. Check if there is a local shelter-specific override for this item
 			const itemOverride = overrides.find((o) => o.item_id === item._id);
 
@@ -621,7 +621,11 @@
 			<!-- Pagination -->
 			{#if totalPages > 1}
 				<div class="mt-4 flex justify-end">
-					<Pagination.Root bind:page={currentPage} count={displayedItems.length} perPage={PAGE_SIZE}>
+					<Pagination.Root
+						bind:page={currentPage}
+						count={displayedItems.length}
+						perPage={PAGE_SIZE}
+					>
 						{#snippet children({ pages })}
 							<Pagination.Content>
 								<Pagination.Previous />
@@ -648,7 +652,10 @@
 				<div
 					class="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground shadow-sm"
 				>
-					<span>แสดง {paginatedItems.length} จากทั้งหมด {displayedItems.length} รายการที่ตรงเงื่อนไข (ในคลังมี {items.length} รายการ)</span>
+					<span
+						>แสดง {paginatedItems.length} จากทั้งหมด {displayedItems.length} รายการที่ตรงเงื่อนไข (ในคลังมี
+						{items.length} รายการ)</span
+					>
 					<div class="flex gap-3">
 						{#if emptyCount > 0}
 							<span class="font-bold text-rose-600">🔴 หมดแล้ว: {emptyCount} รายการ</span>
@@ -680,7 +687,7 @@
 <!-- Manage / History Modal (Dialog) -->
 <Dialog.Root bind:open={isManageModalOpen}>
 	<Dialog.Content
-		class="max-h-[92vh] sm:max-w-7xl w-full overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl"
+		class="max-h-[92vh] w-full overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl sm:max-w-7xl"
 	>
 		<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
 			{#if selectedItemId}
@@ -696,8 +703,8 @@
 		</Dialog.Header>
 
 		<div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
-			<!-- Left Panel: Actions (6 cols) -->
-			<div class="lg:col-span-6 flex flex-col gap-6 lg:border-r lg:border-border/60 lg:pr-6">
+			<!-- Left Panel: Actions (5 cols) -->
+			<div class="flex flex-col gap-6 lg:col-span-5 lg:border-r lg:border-border/60 lg:pr-6">
 				<div class="flex items-center gap-2 border-b border-border/40 pb-3">
 					<span class="text-sm font-bold text-foreground">📊 จัดการด่วน (Quick Actions)</span>
 				</div>
@@ -707,25 +714,40 @@
 					<button
 						type="button"
 						onclick={() => (activeModalTab = 'distribute')}
-						class="flex flex-col items-center justify-center gap-2 py-4 px-3 rounded-xl border transition-all text-center {activeModalTab === 'distribute' ? 'bg-[#009262] text-white border-[#009262] shadow-md font-bold' : 'bg-muted/30 text-foreground border-border hover:bg-muted/70'}"
+						class="flex flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
+						'distribute'
+							? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
+							: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
 					>
-						<MinusCircle class="h-5 w-5 text-orange-500 {activeModalTab === 'distribute' ? 'text-white' : ''}" />
+						<MinusCircle
+							class="h-5 w-5 text-orange-500 {activeModalTab === 'distribute' ? 'text-white' : ''}"
+						/>
 						<span class="text-xs font-bold whitespace-nowrap">เบิกจ่ายออก (Issue)</span>
 					</button>
 					<button
 						type="button"
 						onclick={() => (activeModalTab = 'checkin')}
-						class="flex flex-col items-center justify-center gap-2 py-4 px-3 rounded-xl border transition-all text-center {activeModalTab === 'checkin' ? 'bg-[#009262] text-white border-[#009262] shadow-md font-bold' : 'bg-muted/30 text-foreground border-border hover:bg-muted/70'}"
+						class="flex flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
+						'checkin'
+							? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
+							: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
 					>
-						<PlusCircle class="h-5 w-5 text-emerald-500 {activeModalTab === 'checkin' ? 'text-white' : ''}" />
+						<PlusCircle
+							class="h-5 w-5 text-emerald-500 {activeModalTab === 'checkin' ? 'text-white' : ''}"
+						/>
 						<span class="text-xs font-bold whitespace-nowrap">รับเข้า (Receive)</span>
 					</button>
 					<button
 						type="button"
 						onclick={() => (activeModalTab = 'adjust')}
-						class="flex flex-col items-center justify-center gap-2 py-4 px-3 rounded-xl border transition-all text-center {activeModalTab === 'adjust' ? 'bg-[#009262] text-white border-[#009262] shadow-md font-bold' : 'bg-muted/30 text-foreground border-border hover:bg-muted/70'}"
+						class="flex flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
+						'adjust'
+							? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
+							: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
 					>
-						<Settings class="h-5 w-5 text-blue-500 {activeModalTab === 'adjust' ? 'text-white' : ''}" />
+						<Settings
+							class="h-5 w-5 text-blue-500 {activeModalTab === 'adjust' ? 'text-white' : ''}"
+						/>
 						<span class="text-xs font-bold whitespace-nowrap">ปรับปรุงสต็อก (Adjust)</span>
 					</button>
 				</div>
@@ -758,13 +780,13 @@
 				</div>
 			</div>
 
-			<!-- Right Panel: Ledger (6 cols) -->
-			<div class="lg:col-span-6 flex flex-col gap-4">
+			<!-- Right Panel: Ledger (7 cols) -->
+			<div class="flex flex-col gap-4 lg:col-span-7">
 				<div class="flex items-center gap-2 border-b border-border/40 pb-3">
 					<Clock class="h-4 w-4 text-muted-foreground" />
 					<span class="text-sm font-bold text-foreground">⏳ ประวัติการเคลื่อนไหว (Ledger)</span>
 				</div>
-				<div class="overflow-y-auto max-h-[60vh]">
+				<div class="max-h-[60vh] overflow-y-auto">
 					{#if selectedItemId}
 						<LedgerTable filterItemId={selectedItemId} />
 					{/if}

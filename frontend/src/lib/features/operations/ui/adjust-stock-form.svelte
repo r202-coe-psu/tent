@@ -29,7 +29,12 @@
 	// Local State
 	let searchQuery = $state('');
 	let isDropdownOpen = $state(false);
-	let selectedItem = $state<{ _id: string; name: string; unit: string; perishable?: boolean } | null>(null);
+	let selectedItem = $state<{
+		_id: string;
+		name: string;
+		unit: string;
+		perishable?: boolean;
+	} | null>(null);
 	let container = $state<HTMLDivElement | null>(null);
 
 	let selectedLotKey = $state<string>('');
@@ -77,7 +82,7 @@
 			const note = entry.lot?.note?.trim() || 'คลังหลัก';
 			const expiry = entry.lot?.expiry || '';
 			const key = `${note}||${expiry}`;
-			
+
 			const current = lotsMap.get(key) || { note, expiry, qty: '0' };
 			lotsMap.set(key, {
 				note,
@@ -261,7 +266,7 @@
 	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-md"
 >
 	<div class="mb-2 flex items-center gap-2 border-b border-border/60 pb-3">
-		<Settings class="h-4.5 w-4.5 text-primary"/>
+		<Settings class="h-4.5 w-4.5 text-primary" />
 		<h3 class="text-sm font-bold text-foreground">ปรับปรุงยอดสต๊อก (Stock Adjustment)</h3>
 	</div>
 
@@ -279,9 +284,7 @@
 					disabled={!!preselectedItemId}
 					class={[
 						'h-10 w-full rounded-xl border border-border/80 bg-background px-3 shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20',
-						preselectedItemId
-							? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
-							: ''
+						preselectedItemId ? 'cursor-not-allowed bg-muted font-bold text-muted-foreground' : ''
 					]}
 				/>
 				{#if selectedItem && !preselectedItemId}
@@ -299,13 +302,9 @@
 						class="absolute left-0 z-20 mt-1 max-h-60 w-full animate-in overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl duration-150 fade-in slide-in-from-top-1"
 					>
 						{#if itemsQuery.isLoading || itemMastersQuery.isLoading}
-							<div class="p-3 text-xs font-medium text-muted-foreground">
-								กำลังโหลดข้อมูล...
-							</div>
+							<div class="p-3 text-xs font-medium text-muted-foreground">กำลังโหลดข้อมูล...</div>
 						{:else if filteredItems.length === 0}
-							<div class="p-3 text-xs font-medium text-muted-foreground">
-								ไม่พบรายการสิ่งของ
-							</div>
+							<div class="p-3 text-xs font-medium text-muted-foreground">ไม่พบรายการสิ่งของ</div>
 						{:else}
 							{#each filteredItems as item (item._id)}
 								<button
@@ -314,7 +313,9 @@
 									onclick={() => selectItem(item)}
 								>
 									<span class="font-semibold text-foreground">{item.name}</span>
-									<span class="rounded-md border border-border/60 bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+									<span
+										class="rounded-md border border-border/60 bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+									>
 										หน่วย: {item.unit}
 									</span>
 								</button>
@@ -359,7 +360,7 @@
 					<label class="text-xs font-bold text-foreground">
 						วันหมดอายุใหม่
 						{#if selectedItem.perishable}
-							<span class="text-rose-500 font-bold">* (ของเสียง่าย บังคับกรอก)</span>
+							<span class="font-bold text-rose-500">* (ของเสียง่าย บังคับกรอก)</span>
 						{/if}
 					</label>
 					<Input
@@ -377,13 +378,15 @@
 					<div class="relative mt-1">
 						<Input
 							type="number"
-							placeholder="ระบุจำนวนคงเหลือใหม่"
+							placeholder="ระบุจำนวนใหม่"
 							min="0"
 							step="any"
 							bind:value={newQtyInput}
-							class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 font-mono text-sm font-bold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+							class="h-10 w-full rounded-xl border border-border/80 bg-background pr-16 pl-3 font-mono text-sm font-bold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
 						/>
-						<span class="absolute top-1/2 right-3 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+						<span
+							class="absolute top-1/2 right-3 -translate-y-1/2 text-xs font-bold text-muted-foreground"
+						>
 							{selectedItem.unit}
 						</span>
 					</div>
@@ -400,25 +403,31 @@
 				</div>
 
 				<!-- Delta preview & Type display -->
-				<div class="col-span-1 sm:col-span-2 flex flex-wrap items-center justify-between rounded-xl border border-border/50 bg-muted/40 p-4 gap-4">
+				<div
+					class="col-span-1 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/50 bg-muted/40 p-4 sm:col-span-2"
+				>
 					<div class="flex flex-col gap-0.5">
 						<span class="text-xs font-medium text-muted-foreground">คำนวณการปรับยอด (Delta):</span>
 						{#if selectedLotKey !== 'new'}
 							<span class="text-[11px] text-muted-foreground/80">
-								(ยอดเดิมในคลัง: {currentLotQty} {selectedItem.unit})
+								(ยอดเดิมในคลัง: {currentLotQty}
+								{selectedItem.unit})
 							</span>
 						{/if}
 					</div>
 					<div class="flex items-center gap-3">
-						<span class={[
-							'text-lg font-black font-mono px-3 py-1 rounded-lg border',
-							Number(deltaQty) < 0
-								? 'bg-rose-500/10 border-rose-500/20 text-rose-600'
-								: Number(deltaQty) > 0
-									? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'
-									: 'bg-muted border-border text-muted-foreground'
-						]}>
-							{Number(deltaQty) > 0 ? '+' : ''}{deltaQty} {selectedItem.unit}
+						<span
+							class={[
+								'rounded-lg border px-3 py-1 font-mono text-lg font-black',
+								Number(deltaQty) < 0
+									? 'border-rose-500/20 bg-rose-500/10 text-rose-600'
+									: Number(deltaQty) > 0
+										? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600'
+										: 'border-border bg-muted text-muted-foreground'
+							]}
+						>
+							{Number(deltaQty) > 0 ? '+' : ''}{deltaQty}
+							{selectedItem.unit}
 						</span>
 					</div>
 				</div>
@@ -438,11 +447,11 @@
 							}}
 							disabled={Number(deltaQty) > 0}
 							class={[
-								'flex h-11 items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold transition-all cursor-pointer',
+								'flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold transition-all',
 								adjustmentType === 'write_off'
 									? 'border-rose-500 bg-rose-500/5 text-rose-600'
 									: 'border-border bg-card text-muted-foreground hover:bg-muted/50',
-								Number(deltaQty) > 0 ? 'opacity-40 cursor-not-allowed' : ''
+								Number(deltaQty) > 0 ? 'cursor-not-allowed opacity-40' : ''
 							]}
 						>
 							<MinusCircle class="h-4 w-4" />
@@ -459,11 +468,11 @@
 							}}
 							disabled={Number(deltaQty) < 0}
 							class={[
-								'flex h-11 items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold transition-all cursor-pointer',
+								'flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold transition-all',
 								adjustmentType === 'add'
 									? 'border-primary bg-primary/5 text-primary'
 									: 'border-border bg-card text-muted-foreground hover:bg-muted/50',
-								Number(deltaQty) < 0 ? 'opacity-40 cursor-not-allowed' : ''
+								Number(deltaQty) < 0 ? 'cursor-not-allowed opacity-40' : ''
 							]}
 						>
 							<PlusCircle class="h-4 w-4" />
@@ -474,13 +483,20 @@
 
 				<!-- Evidence Attachment -->
 				<div class="col-span-1 sm:col-span-2">
-					<label class="text-xs font-bold text-foreground mb-1 block">แนบหลักฐาน (Attachment)</label>
+					<label class="mb-1 block text-xs font-bold text-foreground">แนบหลักฐาน (Attachment)</label
+					>
 					{#if filePreview}
-						<div class="relative flex items-center gap-4 rounded-xl border border-border/80 bg-muted/30 p-3">
-							<img src={filePreview} alt="Evidence preview" class="h-16 w-16 rounded-lg object-cover border border-border" />
-							<div class="flex-1 min-w-0">
+						<div
+							class="relative flex items-center gap-4 rounded-xl border border-border/80 bg-muted/30 p-3"
+						>
+							<img
+								src={filePreview}
+								alt="Evidence preview"
+								class="h-16 w-16 rounded-lg border border-border object-cover"
+							/>
+							<div class="min-w-0 flex-1">
 								<p class="truncate text-xs font-bold text-foreground">{selectedFile?.name}</p>
-								<p class="text-[10px] text-muted-foreground mt-0.5">
+								<p class="mt-0.5 text-[10px] text-muted-foreground">
 									{(selectedFile?.size ?? 0) / 1024 > 1024
 										? `${((selectedFile?.size ?? 0) / 1024 / 1024).toFixed(2)} MB`
 										: `${((selectedFile?.size ?? 0) / 1024).toFixed(0)} KB`}
@@ -489,18 +505,20 @@
 							<button
 								type="button"
 								onclick={removeFile}
-								class="rounded-lg p-2 text-rose-500 hover:bg-rose-500/10 transition-colors"
+								class="rounded-lg p-2 text-rose-500 transition-colors hover:bg-rose-500/10"
 							>
 								<Trash class="h-4 w-4" />
 							</button>
 						</div>
 					{:else}
-						<div class="flex items-center justify-center w-full">
-							<label class="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-border/80 rounded-xl cursor-pointer bg-background hover:bg-muted/30 transition-all">
+						<div class="flex w-full items-center justify-center">
+							<label
+								class="flex h-28 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border/80 bg-background transition-all hover:bg-muted/30"
+							>
 								<div class="flex flex-col items-center justify-center pt-4 pb-4">
-									<Upload class="h-5 w-5 text-muted-foreground mb-1.5" />
+									<Upload class="mb-1.5 h-5 w-5 text-muted-foreground" />
 									<p class="text-xs font-semibold text-muted-foreground">อัปโหลดรูปภาพหลักฐาน</p>
-									<p class="text-[10px] text-muted-foreground/60 mt-0.5">PNG, JPG (สูงสุด 5MB)</p>
+									<p class="mt-0.5 text-[10px] text-muted-foreground/60">PNG, JPG (สูงสุด 5MB)</p>
 								</div>
 								<input type="file" accept="image/*" class="hidden" onchange={handleFileChange} />
 							</label>
