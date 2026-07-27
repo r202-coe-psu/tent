@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-27 # CR-049 Shelter scope split & two-tier master data (PR #124)
+updated: 2026-07-27 # CR-048 Donation System Design V8 (PR #129) / CR-049 Shelter scope split (PR #124)
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -67,4 +67,5 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-045](CR-045-referral-full-dod-alignment.md) | Referral Schema & Implementation Alignment — 3 referral kinds, destination-gated capacity accept (mirror inbox + cross-DB transfer), `response_reason` | approved | volatile | 2026-07-22 | docs/data/schema.md §2.11, docs/task-breakdown/09-F-referral.md, frontend/src/lib/features/referrals/ |
 | [CR-046](CR-046-referral-draft-cancel.md) | Referral — อนุญาต `draft → closed` (ยกเลิกร่างก่อนส่ง); capacity draft ห้าม sync peer ปลายทาง | done | volatile | 2026-07-24 | schema.md §2.11, 09-F-referral.md, features/referrals/{domain,ui,server} |
 | [CR-046](CR-046-referral-logic-hardening.md) | Referral Logic Hardening — 3 business rule fixes: self-referral prevention (422), duplicate active referral prevention (409), cross-shelter direction badges | proposed (implementation complete — pending owner sign-off) | volatile | 2026-07-24 | schema.md §2.11, docs/task-breakdown/09-F-referral.md, frontend/src/lib/features/referrals/, frontend/src/routes/api/back-office/referral/+server.ts |
+| [CR-048](CR-048-donation-system-design-v8.md) | ปรับปรุงข้อกำหนดระบบรับบริจาค (Donation System) ตามบันทึกการแก้ไข Design V8 (Donation Back-office & Public Donor Website) | approved | volatile | 2026-07-27 | docs/data/schema.md §2.3/2.4/2.13, features/public-tier-donation-spec.html, routes/{public,back-office}/donations/ |
 | [CR-049](CR-049-shelter-scope-backoffice-vs-system-management.md) | Shelter list scope split (back-office vs system management) + master data ULID-code two-tier (global read-only + shelter-local) + status soft-delete | approved | volatile | 2026-07-25 (approved 07-27) | docs/prd/role-permission-matrix.md, docs/data/schema.md §3.3, routes/(protected)/portal/system-management/, features/master-data/ |

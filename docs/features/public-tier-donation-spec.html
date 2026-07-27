@@ -185,8 +185,7 @@
         <div class="card-body prose max-w-none">
           <h2 class="card-title">Layout Overview — 4-Step Wizard</h2>
           <p>
-            หน้านี้เป็น stepper 4 ขั้น (tab bar ด้านบนแสดงสถานะแต่ละขั้น). ทิศทาง
-            ปกติเดินจากซ้ายไปขวา; กดย้อนขั้นที่ทำเสร็จแล้วได้.
+            หน้านี้เป็น stepper 4 ขั้น (หน้า Step 1 Urgent Needs Board ซ่อน Step Indicator ตัวระบุขั้นตอน; แถบ Step Indicator จะแสดงตั้งแต่ Step 2 ฟอร์มบริจาค เป็นต้นไป ตาม CR-048 §2.1). ทิศทางปกติเดินจากซ้ายไปขวา; กดย้อนขั้นที่ทำเสร็จแล้วได้.
           </p>
           <ol>
             <li>
@@ -370,6 +369,10 @@
               / รถเก๋ง-รถยนต์ / รถกระบะ / รถบรรทุก — แสดงเมื่อวิธีส่ง = ตนเอง/รถศูนย์
             </li>
             <li>
+              <strong>ที่อยู่และจุดนัดรับ (pickup_address) *</strong> — แสดงช่องกรอกที่อยู่และจุดนัดรับโดยละเอียด
+              เมื่อเลือกวิธีส่ง = <code>shelter_pickup</code> (ต้องการให้รถศูนย์ไปรับ) ตาม CR-048 §2.5
+            </li>
+            <li>
               <strong>เลือกศูนย์รับบริจาค *</strong> —
               <strong>lock จากการ์ดที่กดมาในขั้น 1</strong> (read-only) เช่น
               "ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2) (ของยังรับได้ 60%)".
@@ -471,6 +474,16 @@
               token ในตัว); แก้ได้เฉพาะ field ที่อนุญาต (เลข tracking / หมายเหตุ),
               <strong>ห้ามแก้</strong> ศูนย์ปลายทาง/slot/ตัว booking_ref
             </li>
+          </ul>
+          <h3>หน้าค้นหาติดตามสถานะแบบไม่ต้องเข้าสู่ระบบ — <code>/public/donations/track</code> (CR-048 §2.6)</h3>
+          <p>
+            นอกจาก <code>tracking_token</code> แล้ว ประชาชนสามารถค้นหาตั๋วบริจาคได้ทาง <code>/public/donations/track</code>
+            โดยใช้ <strong>หมายเลขอ้างอิง (Ref ID) คู่กับ หมายเลขโทรศัพท์ (Exact Match)</strong>:
+          </p>
+          <ul>
+            <li>แสดง Ref ID, หมายเลขโทรศัพท์, ปุ่มคัดลอก และปุ่มไปยังหน้าตั๋ว</li>
+            <li>เมื่อค้นพบ ระบบจะพาไปยังหน้า <code>/public/donations/track/{tracking_token}</code> อัตโนมัติ</li>
+            <li>แสดง QR Code พร้อมปุ่มดาวน์โหลดเมื่อรายการได้รับการอนุมัติแล้ว</li>
           </ul>
           <div class="alert alert-info">
             <span
