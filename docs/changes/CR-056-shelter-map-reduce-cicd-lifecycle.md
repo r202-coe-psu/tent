@@ -1,5 +1,5 @@
 ---
-id: CR-051
+id: CR-056
 title: Shelter Map/Reduce lifecycle เชื่อมต่อ CI/CD
 status: approved
 date: 2026-07-27
@@ -24,7 +24,7 @@ affects:
   - docker-compose.production.no-nginx.yml
 ---
 
-# CR-051 — Shelter Map/Reduce lifecycle เชื่อมต่อ CI/CD
+# CR-056 — Shelter Map/Reduce lifecycle เชื่อมต่อ CI/CD
 
 ## TL;DR สำหรับ PO
 

@@ -1,5 +1,5 @@
 ---
-id: CR-048
+id: CR-052
 title: ปรับปรุงข้อกำหนดระบบรับบริจาค (Donation System) ตามบันทึกการแก้ไข Design V8
 status: approved
 date: 2026-07-27
@@ -16,7 +16,7 @@ affects:
   - frontend/src/routes/api/back-office/donations/
 ---
 
-# CR-048 — ปรับปรุงข้อกำหนดระบบรับบริจาค (Donation System) ตามบันทึกการแก้ไข Design V8
+# CR-052 — ปรับปรุงข้อกำหนดระบบรับบริจาค (Donation System) ตามบันทึกการแก้ไข Design V8
 
 > สรุป (TL;DR); เอกสารนี้บันทึกข้อกำหนดการปรับปรุง **ระบบรับบริจาค (Donation System)** ทั้งฝั่งหลังบ้าน (Donation Board / Back-office) และฝั่งประชาชน (Public Donor Website) ตามผลการตรวจสอบการใช้งานจริงในบันทึกการแก้ไข Design V8 โดยระบุองค์ประกอบของระบบ ได้แก่ หน้าจอ (Page/Route), ส่วนประกอบ UI (Component), และจุดเชื่อมต่อข้อมูล (Endpoint/API เฉพาะข้อที่มีการสื่อสารกับเครื่องแม่ข่าย) ไว้อย่างชัดเจนในแต่ละข้อข้อกำหนด
 

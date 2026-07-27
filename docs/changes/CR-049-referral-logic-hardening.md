@@ -1,5 +1,5 @@
 ---
-id: CR-046
+id: CR-049
 title: Referral Logic Hardening — 3 Business Rule Fixes
 status: proposed (implementation complete — pending owner sign-off)
 date: 2026-07-24
@@ -13,7 +13,7 @@ affects:
   - frontend/src/routes/api/back-office/referral/+server.ts
 ---
 
-# CR-046 — Referral Logic Hardening (3 Business Rule Fixes)
+# CR-049 — Referral Logic Hardening (3 Business Rule Fixes)
 
 > **สรุป (TL;DR):** ปรับปรุงกฎธุรกิจโมดูล Referral (T-34) 3 จุดสำคัญ: (1) ป้องกันการส่งต่อศูนย์เดียวกัน (Self-Referral) ผ่าน UI Combobox filtering, Zod schema refinement และ Server 422 guard, (2) ป้องกันการสร้างคำร้องส่งต่อซ้ำซ้อนสำหรับผู้อพยพรายเดิมที่มีคำร้องเปิดอยู่ (`status` ไม่ใช่ `closed` หรือ `rejected`) ผ่าน Server 409 guard และ Remote repo check, (3) แสดงป้ายบอกทิศทางคำร้อง ("ขาออก" / "ขาเข้า" / "ภายใน") บน Referral Card ใน UI
 

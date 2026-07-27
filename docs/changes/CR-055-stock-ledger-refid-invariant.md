@@ -1,5 +1,5 @@
 ---
-id: CR-050
+id: CR-055
 title: "Enforce reason ↔ ref_id invariant on stock_ledger"
 status: approved
 date: 2026-07-25
@@ -17,7 +17,7 @@ affects:
   - script ตรวจข้อมูลเดิมก่อน enforce (ดู Migration)
 ---
 
-# CR-050 — Enforce reason ↔ ref_id invariant on stock_ledger
+# CR-055 — Enforce reason ↔ ref_id invariant on stock_ledger
 
 > [!NOTE]
 > **สรุป (TL;DR):** `stock_ledger.ref_id` ปัจจุบันรับสตริงอะไรก็ได้ ไม่มีอะไรผูกกับ `reason` — เขียน

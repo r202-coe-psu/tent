@@ -1,5 +1,5 @@
 ---
-id: CR-049
+id: CR-054
 title: Evacuee photo — เพิ่ม `photo` ใน evacuee + doc type `image` (CouchDB attachment) เพื่อบันทึกรูปถ่ายจริง; schema_v evacuee → 4, schema_v image 1 (ใหม่)
 status: approved
 date: 2026-07-25
@@ -17,7 +17,7 @@ affects:
   - frontend/src/lib/features/people/ui/evacuee-registration.svelte
 ---
 
-# CR-049 — Evacuee photo
+# CR-054 — Evacuee photo
 
 > **สรุป (TL;DR):** หน้าลงทะเบียน (Stage 3) มีช่องถ่ายภาพใบหน้าอยู่แล้วแต่ทำแค่ preview ชั่วคราว
 > ด้วย `URL.createObjectURL` — รูปไม่เคยถูกบันทึก และ `Evacuee` ไม่มี field อ้างอิงรูปเลย. CR นี้เพิ่ม

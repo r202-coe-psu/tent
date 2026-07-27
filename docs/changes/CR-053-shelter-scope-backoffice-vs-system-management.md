@@ -1,5 +1,5 @@
 ---
-id: CR-049
+id: CR-053
 title: Shelter list scope split (back-office vs system management) + master data ULID-code two-tier (global read-only + shelter-local) + status soft-delete
 status: approved
 date: 2026-07-25
@@ -18,7 +18,7 @@ affects:
   - frontend/src/lib/features/master-data/ui/master-data-config-page.svelte + master-data-item-list.svelte
 ---
 
-# CR-049 — Shelter list scope split + master data ULID two-tier (global read-only + shelter-local)
+# CR-053 — Shelter list scope split + master data ULID two-tier (global read-only + shelter-local)
 
 ## สรุป (TL;DR)
 
