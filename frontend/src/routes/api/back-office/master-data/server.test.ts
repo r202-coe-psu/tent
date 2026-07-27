@@ -14,7 +14,10 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/server/couch-admin')>();
 	return { ...actual, requireShelterScopeOrSA: vi.fn() };
 });
-vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: vi.fn() }));
+vi.mock('$lib/server/master-data-server', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/server/master-data-server')>()),
+	readMasterDoc: vi.fn()
+}));
 
 import { GET } from './+server';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
@@ -31,14 +34,33 @@ function call(cookie: string | null = 'AuthSession=abc') {
 	return GET({ request, params: {} } as unknown as Parameters<typeof GET>[0]);
 }
 
-function fakeDoc(type: MasterData['master_type'], items: MasterData['items']): MasterData {
+function callScoped() {
+	const request = new Request(
+		'http://localhost/api/back-office/master-data?scope=shelter&shelter_code=SH001',
+		{ headers: { cookie: 'AuthSession=abc' } }
+	);
+	return GET({ request, params: {} } as unknown as Parameters<typeof GET>[0]);
+}
+
+function callEffective() {
+	const request = new Request(
+		'http://localhost/api/back-office/master-data?scope=effective&shelter_code=SH001',
+		{ headers: { cookie: 'AuthSession=abc' } }
+	);
+	return GET({ request, params: {} } as unknown as Parameters<typeof GET>[0]);
+}
+
+type ItemFixture = Omit<MasterData['items'][number], 'status'> &
+	Partial<Pick<MasterData['items'][number], 'status'>>;
+
+function fakeDoc(type: MasterData['master_type'], items: ItemFixture[]): MasterData {
 	return {
 		_id: `master_data:${type}`,
 		_rev: '1-a',
 		type: 'master_data',
 		schema_v: 1,
 		master_type: type,
-		items,
+		items: items.map((i) => ({ ...i, status: i.status ?? 'active' })),
 		created_at: '2026-01-01T00:00:00.000Z',
 		updated_at: '2026-01-01T00:00:00.000Z',
 		created_by: 'sa-bootstrap'
@@ -100,5 +122,62 @@ describe('GET /api/back-office/master-data', () => {
 		});
 		const err = await Promise.resolve(call()).catch((e: unknown) => e);
 		expect((err as { status?: number }).status).toBe(403);
+	});
+
+	it('reads shelter-local docs without falling back to global docs', async () => {
+		readMock.mockImplementation(async (type, shelterCode) =>
+			type === 'pet_types' && shelterCode === 'SH001'
+				? {
+						...fakeDoc('pet_types', [{ code: 'cat', label: 'Cat', is_default: true }]),
+						_id: 'master_data:pet_types:SH001',
+						shelter_code: 'SH001',
+						schema_v: 2
+					}
+				: null
+		);
+
+		const res = await callScoped();
+		const body = (await res.json()) as Array<{
+			_id: string;
+			master_type: string;
+			items: unknown[];
+			scope: string;
+			shelter_code: string | null;
+		}>;
+
+		expect(authMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
+		expect(body.find((entry) => entry.master_type === 'pet_types')).toMatchObject({
+			_id: 'master_data:pet_types:SH001',
+			items: [{ code: 'cat', label: 'Cat', is_default: true }],
+			scope: 'shelter',
+			shelter_code: 'SH001'
+		});
+		expect(body.find((entry) => entry.master_type === 'vulnerable_group')?._id).toBe(
+			'master_data:vulnerable_group:SH001'
+		);
+	});
+
+	it('falls back to the global doc for an effective shelter read', async () => {
+		readMock.mockImplementation(async (type, shelterCode) =>
+			type === 'pet_types' && !shelterCode
+				? fakeDoc('pet_types', [{ code: 'dog', label: 'Dog', is_default: true }])
+				: null
+		);
+
+		const res = await callEffective();
+		const body = (await res.json()) as Array<{
+			master_type: string;
+			items: unknown[];
+			scope: string;
+			shelter_code: string | null;
+			item_sources: Record<string, { scope: string }>;
+		}>;
+
+		expect(body.find((entry) => entry.master_type === 'pet_types')).toMatchObject({
+			items: [{ code: 'dog', label: 'Dog', is_default: true }],
+			scope: 'effective',
+			shelter_code: 'SH001',
+			item_sources: { dog: { scope: 'global' } }
+		});
 	});
 });

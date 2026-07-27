@@ -104,13 +104,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'ตั้งค่าโครงสร้างศูนย์',
 				href: null,
 				icon: Building,
-				requiresAdmin: true,
 				children: [
 					{
 						label: 'จัดการศูนย์พักพิง',
 						href: resolve('/back-office/shelters'),
-						icon: Building,
-						requiresAdmin: true
+						icon: Building
 					},
 					{ label: 'จัดการบ้านพี่เลี้ยง', href: null, icon: House }
 				]
@@ -129,14 +127,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 					{
 						label: '2. ตั้งค่าศูนย์พักพิง',
 						href: resolve('/back-office/shelter-config'),
-						icon: Tent,
-						requiresAdmin: true
+						icon: Tent
 					},
 					{
 						label: '3. ตั้งค่าครัวเรือน',
 						href: resolve('/back-office/household-master-data'),
-						icon: Home,
-						requiresAdmin: true
+						icon: Home
 					},
 					{ label: '4. คลังสินค้า', href: resolve('/back-office/catalog'), icon: Warehouse },
 					{
