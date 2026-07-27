@@ -18,9 +18,49 @@ affects:
 
 # CR-048 — ปรับปรุงข้อกำหนดระบบรับบริจาค (Donation System) ตามบันทึกการแก้ไข Design V8
 
-## TL;DR
+> สรุป (TL;DR); เอกสารนี้บันทึกข้อกำหนดการปรับปรุง **ระบบรับบริจาค (Donation System)** ทั้งฝั่งหลังบ้าน (Donation Board / Back-office) และฝั่งประชาชน (Public Donor Website) ตามผลการตรวจสอบการใช้งานจริงในบันทึกการแก้ไข Design V8 โดยระบุองค์ประกอบของระบบ ได้แก่ หน้าจอ (Page/Route), ส่วนประกอบ UI (Component), และจุดเชื่อมต่อข้อมูล (Endpoint/API เฉพาะข้อที่มีการสื่อสารกับเครื่องแม่ข่าย) ไว้อย่างชัดเจนในแต่ละข้อข้อกำหนด
 
-เอกสารนี้บันทึกข้อกำหนดการปรับปรุง **ระบบรับบริจาค (Donation System)** ทั้งฝั่งหลังบ้าน (Donation Board / Back-office) และฝั่งประชาชน (Public Donor Website) ตามผลการตรวจสอบการใช้งานจริงในบันทึกการแก้ไข Design V8 โดยระบุองค์ประกอบของระบบ ได้แก่ หน้าจอ (Page/Route), ส่วนประกอบ UI (Component), และจุดเชื่อมต่อข้อมูล (Endpoint/API เฉพาะข้อที่มีการสื่อสารกับเครื่องแม่ข่าย) ไว้อย่างชัดเจนในแต่ละข้อข้อกำหนด
+---
+
+## Process Flowcharts
+
+### 1. กระบวนการบริจาคและติดตามสถานะฝั่งประชาชน (Public Donor Flow)
+
+```mermaid
+flowchart TD
+    P1["1.1 Public Needs Board (/donate)<br/>เรียงความเร่งด่วน 4 ระดับ + ซ่อน Step Indicator Step 1"] --> P2["1.2 Form บริจาค (Step 2)<br/>กรอก PII / ตัด E-Donation ออก (DN-3)"]
+    P2 --> P3["1.3 Logistics & Slot (Step 3)<br/>ส่งเอง (ยานพาหนะ) / พัสดุ (Tracking) / ศูนย์ไปรับ (pickup_address)"]
+    P3 --> P4["1.4 Ticket QR & Booking Ref (Step 4)<br/>แสดง Ref ID + Phone + QR Code"]
+    P4 --> P5["1.5 Track Page (/public/donations/track)<br/>ค้นหาด้วย Ref ID + Phone (Exact Match)"]
+```
+
+### 2. กระบวนการประเมินและตรวจรับพัสดุฝั่งหลังบ้าน (Back-office Verification Flow)
+
+```mermaid
+flowchart TD
+    A["รายการบริจาคถูกเสนอเข้ามา"] --> B1["บังคับเข้าสู่สถานะ pending_review<br/>(Task #52 / Cold-chain Check)"]
+    
+    B1 --> B2{"เจ้าหน้าที่ตัดสินใจประเมิน<br/>(หน้า 'รอการประเมิน' - Pending Review)"}
+    
+    B2 -->|กดอนุมัติ| B3["เปลี่ยนสถานะเป็น verifying<br/>(ย้ายไปหน้า 'กำลังตรวจรับ' - Verifying Drop-off)"]
+    B2 -->|กดส่งต่อ| B4["เปิด Redirect Modal ให้เลือกศูนย์ปลายทาง<br/>สร้าง Transfer Ticket ข้ามศูนย์"]
+    B2 -->|กดปฏิเสธ| B5["ปฏิเสธรายการบริจาค<br/>(Validation Alert หากข้อมูลไม่ผ่านเงื่อนไข)"]
+    
+    B3 --> B6["กระทบยอดพัสดุรับจริง ณ ศูนย์<br/>กรอกจำนวนจริง / โซนจัดเก็บ / Exp Date / Gen Lot L-YYMMDD-XXX"]
+    B6 --> B7[("บันทึก Stock Ledger<br/>& ปรับสถานะรายการเป็น received")]
+    
+    B4 --> B8[("สถานะเปลี่ยนเป็น redirected<br/>(ไม่สร้าง Lot/Ledger ที่ศูนย์ปัจจุบัน)")]
+    B5 --> B9[("สถานะเปลี่ยนเป็น rejected")]
+```
+
+### 3. กระบวนการปิดรับบริจาคด่วนโดยเจ้าหน้าที่ (Manual Force Cut-off Flow)
+
+```mermaid
+flowchart TD
+    C1["เจ้าหน้าที่สั่ง Force Cut-off รายไอเทม"] --> C2["ระบบบังคับกรอกเหตุผลการปิดรับบริจาค"]
+    C2 --> C3["ระบบยกเลิกเฉพาะรายการที่อยู่ในสถานะ pending_review"]
+    C3 --> C4[("บันทึกเหตุผลลงในรายงานความโปร่งใส (Transparency Report)")]
+```
 
 ---
 
@@ -34,57 +74,57 @@ affects:
 
 ### 1. ระบบรับบริจาคหลังบ้าน (Donation Board & Verification Back-office)
 
-* **1.1 ระบบแสดงข้อความแจ้งเตือนเมื่ออนุมัติไม่สำเร็จ:** ระบบต้องแสดงข้อความแจ้งเตือน (Validation Alert) ระบุสาเหตุที่ชัดเจนเมื่อเจ้าหน้าที่กดปุ่มอนุมัติแล้วไม่ผ่านเงื่อนไข เช่น ข้อมูลสินค้ายังจับคู่ไม่ครบ หรือ ข้อมูลยังไม่ผ่านการประเมิน
+- **1.1 ระบบแสดงข้อความแจ้งเตือนเมื่ออนุมัติไม่สำเร็จ:** ระบบต้องแสดงข้อความแจ้งเตือน (Validation Alert) ระบุสาเหตุที่ชัดเจนเมื่อเจ้าหน้าที่กดปุ่มอนุมัติแล้วไม่ผ่านเงื่อนไข เช่น ข้อมูลสินค้ายังจับคู่ไม่ครบ หรือ ข้อมูลยังไม่ผ่านการประเมิน
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/stock-donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `PendingReviewDialog` (`frontend/src/lib/components/pending-review-dialog.svelte`)
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/back-office/donations/approve`
 
-* **1.2 ระบบแยกหน้าจอตรวจสอบรายการบริจาคตามสถานะจริง:** 
-  * ระบบต้องจัดสร้างหน้า "รอการประเมิน (Pending Review)" สำหรับการตัดสินใจอนุมัติ ปฏิเสธ หรือประสานงานส่งต่อ โดยระบบต้องไม่อนุญาตให้มีช่องกรอกจำนวนพัสดุรับจริงในหน้านี้
-  * ระบบต้องจัดสร้างหน้า "กำลังตรวจรับ (Verifying Drop-off)" สำหรับการกระทบยอดพัสดุจริง ได้แก่ การกรอกจำนวนรับจริง การเลือกโซนจัดเก็บ การกรอกวันหมดอายุ และการสร้างเลขล็อต (Lot Number) พร้อมบันทึก บัญชีคลัง (Stock Ledger)
-  > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/stock-donations/+page.svelte` (แท็บ Pending Review และ แท็บ Verifying Drop-off)
-  > - **ส่วนประกอบ UI (Component):** `PendingReviewDialog`, `ReceiveStockForm` (`frontend/src/lib/features/operations/ui/ReceiveStockForm.svelte`)
-  > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `GET /api/back-office/donations/pending`, `GET /api/back-office/donations/verifying`
+- **1.2 ระบบแยกหน้าจอตรวจสอบรายการบริจาคตามสถานะจริง:** 
+  - ระบบต้องจัดสร้างหน้า "รอการประเมิน (Pending Review)" สำหรับการตัดสินใจอนุมัติ ปฏิเสธ หรือประสานงานส่งต่อ โดยระบบต้องไม่อนุญาตให้มีช่องกรอกจำนวนพัสดุรับจริงในหน้านี้
+  - ระบบต้องจัดสร้างหน้า "กำลังตรวจรับ (Verifying Drop-off)" สำหรับการกระทบยอดพัสดุจริง ได้แก่ การกรอกจำนวนรับจริง การเลือกโซนจัดเก็บ การกรอกวันหมดอายุ และการสร้างเลขล็อต (Lot Number) พร้อมบันทึก บัญชีคลัง (Stock Ledger)
+    > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/stock-donations/+page.svelte` (แท็บ Pending Review และ แท็บ Verifying Drop-off)
+    > - **ส่วนประกอบ UI (Component):** `PendingReviewDialog`, `ReceiveStockForm` (`frontend/src/lib/features/operations/ui/ReceiveStockForm.svelte`)
+    > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `GET /api/back-office/donations/pending`, `GET /api/back-office/donations/verifying`
 
-* **1.3 ระบบปรับปรุงพฤติกรรมการส่งต่อบริจาค (Redirect):** ระบบต้องไม่สร้างเลขล็อตหรือบัญชีคลังที่ศูนย์ปัจจุบันเมื่อกดส่งต่อ แต่ระบบต้องเปิดหน้าต่างย่อย (Modal) ให้เจ้าหน้าที่เลือกศูนย์ปลายทางและระบุหมายเหตุ เพื่อสร้างคำร้องโอนย้ายข้ามศูนย์ (Transfer Ticket) พร้อมเปลี่ยนสถานะรายการเป็น "ส่งต่อศูนย์อื่นแล้ว"
+- **1.3 ระบบปรับปรุงพฤติกรรมการส่งต่อบริจาค (Redirect):** ระบบต้องไม่สร้างเลขล็อตหรือบัญชีคลังที่ศูนย์ปัจจุบันเมื่อกดส่งต่อ แต่ระบบต้องเปิดหน้าต่างย่อย (Modal) ให้เจ้าหน้าที่เลือกศูนย์ปลายทางและระบุหมายเหตุ เพื่อสร้างคำร้องโอนย้ายข้ามศูนย์ (Transfer Ticket) พร้อมเปลี่ยนสถานะรายการเป็น "ส่งต่อศูนย์อื่นแล้ว"
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/stock-donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `PendingReviewDialog` (โหมด Redirect Modal)
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/back-office/tickets`, `PATCH /api/back-office/donations/{id}`
 
-* **1.4 ระบบบังคับประเมินรายการบริจาคทุกรายการ (Task #52):** ระบบต้องนำรายการบริจาคที่เสนอเข้ามาทั้งหมดเข้าสู่ขั้นตอน "รอการประเมิน (Pending Review)" เสมอ โดยระบบต้องยกเลิกกลไกการข้ามขั้นตอนไปออกรหัสตอบรับ (QR Code) อัตโนมัติทุกกรณี
+- **1.4 ระบบบังคับประเมินรายการบริจาคทุกรายการ (Task #52):** ระบบต้องนำรายการบริจาคที่เสนอเข้ามาทั้งหมดเข้าสู่ขั้นตอน "รอการประเมิน (Pending Review)" เสมอ โดยระบบต้องยกเลิกกลไกการข้ามขั้นตอนไปออกรหัสตอบรับ (QR Code) อัตโนมัติทุกกรณี
   > - **หน้าจอ (Page/Route):** `routes/public/donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `DonationStore` (`frontend/src/routes/public/donations/donation.svelte.ts`)
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/public/v1/donations`
 
-* **1.5 ระบบเพิ่มช่องทางค้นหารายการบริจาคทดแทนรหัสตอบรับ:** ระบบต้องเพิ่มช่องเลือกรายการ (Search-select Dropdown) ในหน้าสถานีสแกน (Scan Station) เพื่อรองรับกรณีรหัสตอบรับ (QR Code) ชำรุดหรือสูญหาย
+- **1.5 ระบบเพิ่มช่องทางค้นหารายการบริจาคทดแทนรหัสตอบรับ:** ระบบต้องเพิ่มช่องเลือกรายการ (Search-select Dropdown) ในหน้าสถานีสแกน (Scan Station) เพื่อรองรับกรณีรหัสตอบรับ (QR Code) ชำรุดหรือสูญหาย
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/stock-donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `ScanStation` (`frontend/src/routes/(protected)/back-office/stock-donations/components/scan-station.svelte`)
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `GET /api/back-office/donations/search`
 
-* **1.6 ระบบบังคับกรอกเหตุผลการปิดรับบริจาคด่วน (Force Cut-off):** ระบบต้องบังคับเจ้าหน้าที่กรอกเหตุผลเมื่อสั่งปิดรับบริจาคด่วน และระบบต้องยกเลิกเฉพาะคำขอที่อยู่ในสถานะ "รอการประเมิน" เท่านั้น โดยระบบต้องบันทึกเหตุผลลงในรายงานความโปร่งใส
+- **1.6 ระบบบังคับกรอกเหตุผลการปิดรับบริจาคด่วน (Force Cut-off):** ระบบต้องบังคับเจ้าหน้าที่กรอกเหตุผลเมื่อสั่งปิดรับบริจาคด่วน และระบบต้องยกเลิกเฉพาะคำขอที่อยู่ในสถานะ "รอการประเมิน" เท่านั้น โดยระบบต้องบันทึกเหตุผลลงในรายงานความโปร่งใส
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/stock-donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `ForceCutoffModal`
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/back-office/campaigns/{id}/cut-off`
 
-* **1.7 ระบบตรวจสอบเงื่อนไขสินค้าแช่เย็น (Cold-chain):** ระบบ Item Master ต้องจัดเก็บตัวบ่งชี้สินค้าแช่เย็น เพื่อให้ระบบบังคับรายการสินค้าแช่เย็นเข้าสู่ขั้นตอนรอการประเมินเสมอ
+- **1.7 ระบบตรวจสอบเงื่อนไขสินค้าแช่เย็น (Cold-chain):** ระบบ Item Master ต้องจัดเก็บตัวบ่งชี้สินค้าแช่เย็น เพื่อให้ระบบบังคับรายการสินค้าแช่เย็นเข้าสู่ขั้นตอนรอการประเมินเสมอ
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/master-data/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `ItemMasterForm` (`frontend/src/lib/features/catalog/domain/catalog.ts`)
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/public/v1/donations`, `GET /api/back-office/catalog/items`
 
-* **1.8 ระบบแสดงรายการสินค้าความต้องการแบบไม่ซ้ำซ้อน:** ระบบต้องกรองและแสดงรายการสินค้าความต้องการบริจาคในหน้ารายละเอียดศูนย์พักพิงโดยไม่มีรายการซ้ำ
+- **1.8 ระบบแสดงรายการสินค้าความต้องการแบบไม่ซ้ำซ้อน:** ระบบต้องกรองและแสดงรายการสินค้าความต้องการบริจาคในหน้ารายละเอียดศูนย์พักพิงโดยไม่มีรายการซ้ำ
   > - **หน้าจอ (Page/Route):** `routes/public/shelters/[code]/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `PublicDonorNeeds` (`frontend/src/lib/components/public-donor-needs.svelte`)
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `GET /api/public/v1/needs`
 
-* **1.9 ระบบกำหนดสถานะรับบริจาคจากประกาศที่เปิดอยู่:** ระบบต้องแสดงสถานะเปิดรับบริจาคบนหน้าเว็บประชาชนโดยอ้างอิงจากประกาศที่เปิดอยู่จริง ไม่ให้อ้างอิงจากสถานะสต็อกในคลังโดยอัตโนมัติ
+- **1.9 ระบบกำหนดสถานะรับบริจาคจากประกาศที่เปิดอยู่:** ระบบต้องแสดงสถานะเปิดรับบริจาคบนหน้าเว็บประชาชนโดยอ้างอิงจากประกาศที่เปิดอยู่จริง ไม่ให้อ้างอิงจากสถานะสต็อกในคลังโดยอัตโนมัติ
   > - **หน้าจอ (Page/Route):** `routes/public/donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `computeNeeds()` (`frontend/src/lib/features/donations/domain/compute-needs.ts`), `PublicDonorNeeds`
 
-* **1.10 ระบบแสดงป้ายศูนย์ผู้สร้างประกาศจริง:** ระบบต้องแสดงป้ายชื่อศูนย์อ้างอิงตามศูนย์ผู้สร้างประกาศจริง โดยระบบต้องไม่ติดป้าย EOC บนคำสั่งที่ไม่ใช่คำสั่งข้ามศูนย์จริง
+- **1.10 ระบบแสดงป้ายศูนย์ผู้สร้างประกาศจริง:** ระบบต้องแสดงป้ายชื่อศูนย์อ้างอิงตามศูนย์ผู้สร้างประกาศจริง โดยระบบต้องไม่ติดป้าย EOC บนคำสั่งที่ไม่ใช่คำสั่งข้ามศูนย์จริง
   > - **หน้าจอ (Page/Route):** `routes/public/donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `PublicDonorNeeds`
 
-* **1.11 ระบบเพิ่มตัวเลือกเปิดหรือปิดการรับบริจาคระดับศูนย์:** ระบบต้องจัดทำสวิตช์เปิดปิด (Toggle) เพื่อให้เจ้าหน้าที่ควบคุมการแสดงผลข้อมูลของศูนย์บนบอร์ดความต้องการสาธารณะ (Public Needs Board) โดยบันทึกฟิลด์ `public_donations_enabled: bool` (default `true`) หรือ `shelter.feature_flags.public_donations_enabled` ลงในเอกสาร `shelter` (`schema.md §3.1`)
+- **1.11 ระบบเพิ่มตัวเลือกเปิดหรือปิดการรับบริจาคระดับศูนย์:** ระบบต้องจัดทำสวิตช์เปิดปิด (Toggle) เพื่อให้เจ้าหน้าที่ควบคุมการแสดงผลข้อมูลของศูนย์บนบอร์ดความต้องการสาธารณะ (Public Needs Board) โดยบันทึกฟิลด์ `public_donations_enabled: bool` (default `true`) หรือ `shelter.feature_flags.public_donations_enabled` ลงในเอกสาร `shelter` (`schema.md §3.1`)
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/shelters/[code]/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `ShelterConfigForm`
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `PATCH /api/back-office/shelters/{code}`
@@ -93,54 +133,54 @@ affects:
 
 ### 2. ระบบเว็บสาธารณะสำหรับประชาชน (Public Donor Website)
 
-* **2.1 ระบบจัดเรียงบอร์ดความต้องการตามระดับความเร่งด่วน:** ระบบต้องจัดเรียงการ์ดความต้องการเรียงลำดับจาก วิกฤต -> สำคัญ -> ปกติ -> ไม่มีควาต้องการ และระบบต้องแสดงตัวระบุขั้นตอน (Step Indicator) ตั้งแต่ขั้นตอนที่ 2 (ฟอร์มบริจาค) เป็นต้นไป
+- **2.1 ระบบจัดเรียงบอร์ดความต้องการตามระดับความเร่งด่วน:** ระบบต้องจัดเรียงการ์ดความต้องการเรียงลำดับจาก วิกฤต -> สำคัญ -> ปกติ -> ไม่มีควาต้องการ และระบบต้องแสดงตัวระบุขั้นตอน (Step Indicator) ตั้งแต่ขั้นตอนที่ 2 (ฟอร์มบริจาค) เป็นต้นไป
   > - **หน้าจอ (Page/Route):** `routes/public/donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `PublicDonorNeeds`, `PublicStepper`
 
-* **2.2 ระบบจัดทำหน้ารายละเอียดความต้องการของศูนย์พักพิง:** ระบบต้องจัดสร้างหน้าจอใหม่เพื่อแสดงรายการความต้องการบริจาคทั้งหมดของศูนย์พักพิงที่ผู้ใช้เลือก
+- **2.2 ระบบจัดทำหน้ารายละเอียดความต้องการของศูนย์พักพิง:** ระบบต้องจัดสร้างหน้าจอใหม่เพื่อแสดงรายการความต้องการบริจาคทั้งหมดของศูนย์พักพิงที่ผู้ใช้เลือก
   > - **หน้าจอ (Page/Route):** `routes/public/shelters/[code]/needs/+page.svelte` (หรือ `/public/donations?shelter={code}`)
   > - **ส่วนประกอบ UI (Component):** `ShelterNeedsDetail`
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `GET /api/public/v1/needs?shelter={code}`
 
-* **2.3 ระบบกำหนดมาตรฐานระดับความเร่งด่วน:** ระบบต้องใช้คำระบุระดับความเร่งด่วนมาตรฐานเดียวกัน ได้แก่ "วิกฤต (Critical)", "สำคัญ (High)", และ "ปกติ (Normal)" ในทุกหน้าจอ ป้ายกำกับ (Badge) และตัวกรองข้อมูล (โดยขยายตัวกรองข้อมูลฝั่งประชาชนเป็น 4 ปุ่ม: ทั้งหมด / วิกฤต / สำคัญ / ปกติ)
+- **2.3 ระบบกำหนดมาตรฐานระดับความเร่งด่วน:** ระบบต้องใช้คำระบุระดับความเร่งด่วนมาตรฐานเดียวกัน ได้แก่ "วิกฤต (Critical)", "สำคัญ (High)", และ "ปกติ (Normal)" ในทุกหน้าจอ ป้ายกำกับ (Badge) และตัวกรองข้อมูล (โดยขยายตัวกรองข้อมูลฝั่งประชาชนเป็น 4 ปุ่ม: ทั้งหมด / วิกฤต / สำคัญ / ปกติ)
   > - **หน้าจอ (Page/Route):** `routes/public/donations/+page.svelte`, `routes/(protected)/back-office/stock-donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `UrgencyBadge` (`frontend/src/lib/components/public-donor-needs.svelte`)
 
-* **2.4 ระบบตัดฟังก์ชันขอใบเสร็จลดหย่อนภาษี:** ระบบต้องตัดฟังก์ชั่นการขอใบเสร็จหรือใบอนุโมทนาบัตรเพื่อลดหย่อนภาษี (E-Donation) ออกจากระบบบริจาคทั้งหมด
+- **2.4 ระบบตัดฟังก์ชันขอใบเสร็จลดหย่อนภาษี:** ระบบต้องตัดฟังก์ชั่นการขอใบเสร็จหรือใบอนุโมทนาบัตรเพื่อลดหย่อนภาษี (E-Donation) ออกจากระบบบริจาคทั้งหมด
   > - **หน้าจอ (Page/Route):** `routes/public/donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `FormDonor` (`frontend/src/lib/components/form/form-donor.svelte`)
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/public/v1/donations`
 
-* **2.5 ระบบปรับเปลี่ยนฟิลด์ข้อมูลตามเงื่อนไขการจัดส่ง (Step 3 Logistics):** 
-  * ระบบต้องแสดงช่องกรอกประเภทยานพาหนะ เมื่อผู้บริจาคเลือกวิธี "นำมาส่งเอง"
-  * ระบบต้องแสดงช่องกรอกหมายเลขติดตามพัสดุ (Tracking Number) เมื่อผู้บริจาคเลือกวิธี "ส่งพัสดุ"
-  * ระบบต้องแสดงช่องกรอกที่อยู่และจุดนัดรับ เมื่อผู้บริจาคเลือกวิธี "ให้รถศูนย์ไปรับ" (`pickup_address`)
-  * ระบบต้องล็อกช่องเลือกศูนย์รับบริจาคให้เป็นข้อมูลแบบอ่านได้อย่างเดียว (Read-only)
-  > - **หน้าจอ (Page/Route):** `routes/public/donations/+page.svelte`
-  > - **ส่วนประกอบ UI (Component):** `DonorTimeSelectionForm` (`frontend/src/lib/components/form/donor-time-selection-form.svelte`)
-  > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/public/v1/donations`
+- **2.5 ระบบปรับเปลี่ยนฟิลด์ข้อมูลตามเงื่อนไขการจัดส่ง (Step 3 Logistics):** 
+  - ระบบต้องแสดงช่องกรอกประเภทยานพาหนะ เมื่อผู้บริจาคเลือกวิธี "นำมาส่งเอง"
+  - ระบบต้องแสดงช่องกรอกหมายเลขติดตามพัสดุ (Tracking Number) เมื่อผู้บริจาคเลือกวิธี "ส่งพัสดุ"
+  - ระบบต้องแสดงช่องกรอกที่อยู่และจุดนัดรับ เมื่อผู้บริจาคเลือกวิธี "ให้รถศูนย์ไปรับ" (`pickup_address`)
+  - ระบบต้องล็อกช่องเลือกศูนย์รับบริจาคให้เป็นข้อมูลแบบอ่านได้อย่างเดียว (Read-only)
+    > - **หน้าจอ (Page/Route):** `routes/public/donations/+page.svelte`
+    > - **ส่วนประกอบ UI (Component):** `DonorTimeSelectionForm` (`frontend/src/lib/components/form/donor-time-selection-form.svelte`)
+    > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/public/v1/donations`
 
-* **2.6 ระบบติดตามสถานะการบริจาคโดยไม่ต้องเข้าสู่ระบบ:**
-  * ระบบต้องจัดสร้างหน้าตรวจสอบสถานะบริจาค โดยให้ค้นหาด้วยหมายเลขอ้างอิง (Ref ID) คู่กับ หมายเลขโทรศัพท์ (Exact Match)
-  * ระบบต้องรวมเมนู "บริจาค" และ "ตรวจสอบสถานะ" เป็นเมนูหลักเดียวพร้อมรายการย่อย (Dropdown)
-  * ระบบต้องแสดงหมายเลขอ้างอิง หมายเลขโทรศัพท์ ปุ่มคัดลอก และปุ่มลัดไปหน้าตรวจสอบสถานะในหน้ารายละเอียดตั๋วบริจาค (Step 4)
-  * ระบบต้องส่งค่าหมายเลขอ้างอิงและหมายเลขโทรศัพท์ไปเติมในหน้าตรวจสอบสถานะโดยอัตโนมัติ และระบบต้องแสดงรหัสตอบรับ (QR Code) พร้อมปุ่มดาวน์โหลดเมื่อรายการได้รับการอนุมัติ
-  > - **หน้าจอ (Page/Route):** `routes/public/donations/track/+page.svelte`, `routes/public/donations/track/[token]/+page.svelte`
-  > - **ส่วนประกอบ UI (Component):** `PublicNavbar` (`frontend/src/lib/components/public-navbar.svelte`), `PublicDonorSuccessTicket` (`frontend/src/lib/components/public-donor-success-ticket.svelte`), `TrackDonationForm`
-  > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/public/v1/donations/track-search`, `GET /api/public/v1/donations/{tracking_token}`, `PATCH /api/public/v1/donations/{tracking_token}`
+- **2.6 ระบบติดตามสถานะการบริจาคโดยไม่ต้องเข้าสู่ระบบ:**
+  - ระบบต้องจัดสร้างหน้าตรวจสอบสถานะบริจาค โดยให้ค้นหาด้วยหมายเลขอ้างอิง (Ref ID) คู่กับ หมายเลขโทรศัพท์ (Exact Match)
+  - ระบบต้องรวมเมนู "บริจาค" และ "ตรวจสอบสถานะ" เป็นเมนูหลักเดียวพร้อมรายการย่อย (Dropdown)
+  - ระบบต้องแสดงหมายเลขอ้างอิง หมายเลขโทรศัพท์ ปุ่มคัดลอก และปุ่มลัดไปหน้าตรวจสอบสถานะในหน้ารายละเอียดตั๋วบริจาค (Step 4)
+  - ระบบต้องส่งค่าหมายเลขอ้างอิงและหมายเลขโทรศัพท์ไปเติมในหน้าตรวจสอบสถานะโดยอัตโนมัติ และระบบต้องแสดงรหัสตอบรับ (QR Code) พร้อมปุ่มดาวน์โหลดเมื่อรายการได้รับการอนุมัติ
+    > - **หน้าจอ (Page/Route):** `routes/public/donations/track/+page.svelte`, `routes/public/donations/track/[token]/+page.svelte`
+    > - **ส่วนประกอบ UI (Component):** `PublicNavbar` (`frontend/src/lib/components/public-navbar.svelte`), `PublicDonorSuccessTicket` (`frontend/src/lib/components/public-donor-success-ticket.svelte`), `TrackDonationForm`
+    > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/public/v1/donations/track-search`, `GET /api/public/v1/donations/{tracking_token}`, `PATCH /api/public/v1/donations/{tracking_token}`
 
 ---
 
 ## Impact
 
-* **เอกสาร:** `docs/data/schema.md` §2.3, §2.4, §2.13, §3.1, `docs/features/public-tier-donation-spec.html`
-* **ระบบหลังบ้าน (Back-office):** `frontend/src/routes/(protected)/back-office/stock-donations/`, `frontend/src/lib/features/donations/`
-* **ระบบเว็บสาธารณะ (Public Website):** `frontend/src/routes/public/donations/`
-* **สคีมาข้อมูล (Data Schema):**
-  * เพิ่มฟิลด์ `public_donations_enabled: bool` (default `true`) หรือ `feature_flags.public_donations_enabled` ในเอกสาร `shelter` (`schema.md §3.1`)
-  * เพิ่มฟิลด์ `pickup_address` ในโครงสร้าง `logistics` ของเอกสาร `donation` (`schema_v 2`)
-  * เพิ่มฟิลด์ `needs[].status` ('open'|'closed') และ `visible_on_home` ใน `donation_campaign` (`schema_v 2`)
-  * ปรับเปลี่ยนรูปแบบปริมาณสิ่งของเป็น string decimal (`qty_str`) ตาม CR-038 (`schema_v 3`)
+- **เอกสาร:** `docs/data/schema.md` §2.3, §2.4, §2.13, §3.1, `docs/features/public-tier-donation-spec.html`
+- **ระบบหลังบ้าน (Back-office):** `frontend/src/routes/(protected)/back-office/stock-donations/`, `frontend/src/lib/features/donations/`
+- **ระบบเว็บสาธารณะ (Public Website):** `frontend/src/routes/public/donations/`
+- **สคีมาข้อมูล (Data Schema):**
+  - เพิ่มฟิลด์ `public_donations_enabled: bool` (default `true`) หรือ `feature_flags.public_donations_enabled` ในเอกสาร `shelter` (`schema.md §3.1`)
+  - เพิ่มฟิลด์ `pickup_address` ในโครงสร้าง `logistics` ของเอกสาร `donation` (`schema_v 2`)
+  - เพิ่มฟิลด์ `needs[].status` ('open'|'closed') และ `visible_on_home` ใน `donation_campaign` (`schema_v 2`)
+  - ปรับเปลี่ยนรูปแบบปริมาณสิ่งของเป็น string decimal (`qty_str`) ตาม CR-038 (`schema_v 3`)
 
 ---
 
