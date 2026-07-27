@@ -1,7 +1,7 @@
 ---
 id: CR-048
 title: ปรับปรุงข้อกำหนดระบบรับบริจาค (Donation System) ตามบันทึกการแก้ไข Design V8
-status: proposed
+status: approved
 date: 2026-07-27
 requested_by: เจ้าของโครงการ (Design V8)
 decided_by: เจ้าของโครงการ
