@@ -47,6 +47,9 @@ export class SupplyCatalogRemoteRepository implements SupplyRepository {
 				updated_at: now(),
 				created_by: ctx.createdBy
 			};
+		// Validate with Zod schema before put
+		stockThresholdOverrideSchema.parse(updatedDoc);
+
 		return shelterRepo.put(updatedDoc);
 	}
 }

@@ -31,8 +31,7 @@ describe('calculateReorderLevel', () => {
 	});
 
 	it('should calculate weekly reorder level correctly by dividing by 7', () => {
-		// 70 people * 7 kg/week * 3 days = 1470 kg/week * 3 days = 490 kg/day * 3 = 1470?
-		// Formula: (70 * 7 * 3) / 7 = 210
+		// Formula: (70 people * 7 unit/week * 3 days) / 7 days per week = 210 units
 		const result = calculateReorderLevel(70, {
 			consumption_rate: '7',
 			target_reserve_days: 3,

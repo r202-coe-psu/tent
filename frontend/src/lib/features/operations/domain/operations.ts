@@ -276,7 +276,7 @@ export const adjustInputSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoerceSignedNonZeroSchema,
 	unit: z.string().trim().min(1),
-	ref_id: z.string().nullable().default(null),
+	ref_id: z.string().nullable().default(null), // Always null for manual stock adjustments (no originating transfer/donation doc)
 	lot: z
 		.object({
 			expiry: z.string().optional(),
@@ -302,7 +302,6 @@ export function createAdjustEntry(input: AdjustInput, ctx: AuthorContext): Stock
 		ctx
 	);
 }
-
 
 /** Sum signed deltas per item — the `stock_balance` read model, computed client-side. */
 export function stockBalance(ledger: StockLedger[]): Map<string, string> {

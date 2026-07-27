@@ -85,7 +85,7 @@
 					consumption_rate: null
 				},
 				ctx: {
-					userId: authStore.user?.name ?? 'system',
+					createdBy: authStore.user?.name ?? 'system',
 					shelterCode
 				}
 			},
@@ -114,7 +114,7 @@
 					consumption_rate: null
 				},
 				ctx: {
-					userId: authStore.user?.name ?? 'system',
+					createdBy: authStore.user?.name ?? 'system',
 					shelterCode
 				}
 			},
@@ -136,7 +136,7 @@
 >
 	<header class="mb-6 flex flex-col gap-4 border-b border-border/60 pb-6 lg:flex-row lg:items-center lg:justify-between">
 		<div>
-			<h1 class="text-xl font-bold">กำหนดเกณฑ์เตือนภัยคลังสินค้าเฉพาะศูนย์ ({filteredItems.length})</h1>
+			<h2 class="text-xl font-bold">กำหนดเกณฑ์เตือนภัยคลังสินค้าเฉพาะศูนย์ ({filteredItems.length})</h2>
 			<p class="mt-1.5 text-xs text-muted-foreground">
 				ตั้งระดับจำนวนสินค้าคงเหลือขั้นต่ำเพื่อส่งสัญญาณเตือนภัยเมื่อของเหลือน้อย
 				(ค่าที่ตั้งในหน้านี้จะเขียนทับค่ากลางของระบบสำหรับศูนย์อพยพนี้)

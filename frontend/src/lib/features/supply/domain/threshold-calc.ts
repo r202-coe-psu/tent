@@ -24,7 +24,6 @@ export function calculateReorderLevel(
 
 		return persistQty(result);
 	} catch (error) {
-		console.error(`คำนวณเกณฑ์เตือนภัยสินค้าล้มเหลว:`, error);
 		return null;
 	}
 }

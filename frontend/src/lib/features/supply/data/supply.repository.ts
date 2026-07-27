@@ -18,9 +18,4 @@ export interface SupplyRepository {
 
 	listThresholdOverrides(): Promise<StockThresholdOverride[]>;
 	saveThresholdOverride(override: Omit<StockThresholdOverride, 'type' | 'schema_v'>, ctx: AuthorContext): Promise<StockThresholdOverride>;
-
-
-
-
 }
-

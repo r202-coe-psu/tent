@@ -36,7 +36,6 @@
 		perishable?: boolean;
 	} | null>(null);
 	let container = $state<HTMLDivElement | null>(null);
-
 	let selectedLotKey = $state<string>('');
 	let customLocation = $state<string>('');
 	let customExpiry = $state<string>('');
@@ -481,50 +480,7 @@
 					</div>
 				</div>
 
-				<!-- Evidence Attachment -->
-				<div class="col-span-1 sm:col-span-2">
-					<label class="mb-1 block text-xs font-bold text-foreground">แนบหลักฐาน (Attachment)</label
-					>
-					{#if filePreview}
-						<div
-							class="relative flex items-center gap-4 rounded-xl border border-border/80 bg-muted/30 p-3"
-						>
-							<img
-								src={filePreview}
-								alt="Evidence preview"
-								class="h-16 w-16 rounded-lg border border-border object-cover"
-							/>
-							<div class="min-w-0 flex-1">
-								<p class="truncate text-xs font-bold text-foreground">{selectedFile?.name}</p>
-								<p class="mt-0.5 text-[10px] text-muted-foreground">
-									{(selectedFile?.size ?? 0) / 1024 > 1024
-										? `${((selectedFile?.size ?? 0) / 1024 / 1024).toFixed(2)} MB`
-										: `${((selectedFile?.size ?? 0) / 1024).toFixed(0)} KB`}
-								</p>
-							</div>
-							<button
-								type="button"
-								onclick={removeFile}
-								class="rounded-lg p-2 text-rose-500 transition-colors hover:bg-rose-500/10"
-							>
-								<Trash class="h-4 w-4" />
-							</button>
-						</div>
-					{:else}
-						<div class="flex w-full items-center justify-center">
-							<label
-								class="flex h-28 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border/80 bg-background transition-all hover:bg-muted/30"
-							>
-								<div class="flex flex-col items-center justify-center pt-4 pb-4">
-									<Upload class="mb-1.5 h-5 w-5 text-muted-foreground" />
-									<p class="text-xs font-semibold text-muted-foreground">อัปโหลดรูปภาพหลักฐาน</p>
-									<p class="mt-0.5 text-[10px] text-muted-foreground/60">PNG, JPG (สูงสุด 5MB)</p>
-								</div>
-								<input type="file" accept="image/*" class="hidden" onchange={handleFileChange} />
-							</label>
-						</div>
-					{/if}
-				</div>
+
 
 				<!-- Reason / Note -->
 				<div class="col-span-1 sm:col-span-2">

@@ -111,7 +111,8 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
 		}
 
-		// If adjustment is negative (reduction), ensure we have enough stock overall
+		// NOTE: This balance check is aggregate (cross-lot total), not per-lot.
+		// Acceptable for single-user shelter; per-lot validation requires FIFO tracking.
 		if (qtyLte(entry.qty, 0)) {
 			const balances = await this.getBalance();
 			const currentQty = balances.get(entry.item_id) ?? '0';

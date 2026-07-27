@@ -55,10 +55,7 @@
 
 	$effect(() => {
 		// Reset to page 1 on filter/search change
-		searchQuery;
-		categoryFilter;
-		locationFilter;
-		statusFilter;
+		void [searchQuery, categoryFilter, locationFilter, statusFilter];
 		currentPage = 1;
 	});
 
@@ -71,9 +68,9 @@
 	const items = $derived.by(() => {
 		const supplyItems = (itemsQuery.data ?? []).map((si) => ({
 			...si,
-			target_reserve_days: (si as any).target_reserve_days,
-			consumption_rate: (si as any).consumption_rate,
-			timeframe: (si as any).timeframe
+			target_reserve_days: si.target_reserve_days,
+			consumption_rate: si.consumption_rate,
+			timeframe: si.timeframe
 		}));
 		const itemMasters = itemMastersQuery.data ?? [];
 
@@ -270,7 +267,7 @@
 					reorderThreshold = calculateReorderLevel(occupancy, {
 						consumption_rate: itemOverride.consumption_rate,
 						target_reserve_days: itemOverride.target_reserve_days,
-						timeframe: (item as any).timeframe || 'daily'
+						timeframe: item.timeframe || 'daily'
 					});
 				} else if (itemOverride.reorder_level !== null) {
 					reorderThreshold = String(itemOverride.reorder_level);

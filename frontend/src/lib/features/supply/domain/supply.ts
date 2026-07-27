@@ -55,6 +55,9 @@ export interface SupplyItem extends BaseDoc {
 	unit: string; // fixed unit per item — all ledger entries must use this
 	reorder_level: number | null;
 	perishable: boolean; // true → lot.expiry is mandatory on receive
+	target_reserve_days?: number;
+	consumption_rate?: string | null;
+	timeframe?: string | null;
 }
 
 // ---------------------------------------------------------------- schema

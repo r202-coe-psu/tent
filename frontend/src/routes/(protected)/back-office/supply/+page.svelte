@@ -35,7 +35,7 @@
 	const shelterCode = $derived(shelterCodeFromRoles(roles));
 
 	const occupancyQuery = useDashboardOccupancy(() => shelterCode ?? '');
-	const occupancy = $derived(occupancyQuery.data?.active ?? 120);
+	const occupancy = $derived(occupancyQuery.data?.active ?? 0);
 
 	// ─── Active Tab State ─────────────────────────────────────────────────────
 	let activeTab = $state<'inventory' | 'sphere'>('inventory');
