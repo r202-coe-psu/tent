@@ -3,6 +3,8 @@ import type { RequestHandler } from './$types';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import type { ShelterMaster } from '$lib/features/shelters/server';
 import { adminRaw } from '$lib/server/couch-admin';
+import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
+import { countVulnerableFromBirthYearRows } from '$lib/features/public-portal';
 
 export const GET: RequestHandler = async ({ url, setHeaders }) => {
 	// Cache the response for 60 seconds on the client and CDN to mitigate N+1 query load
@@ -80,16 +82,16 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			if (mappedStatus === 'OPEN' || mappedStatus === 'FULL') {
 				occupancy = null;
 				vulnerableCount = null;
+				const db = `shelter_${m.code.toLowerCase()}`;
 				try {
+					const deployment = await checkViewDeployment(db, adminRaw);
+					if (deployment.state !== 'current') {
+						throw new Error(`Dashboard design for ${db} is ${deployment.state}`);
+					}
+
 					const [occRes, ageRes] = await Promise.all([
-						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/app/_view/occupancy?group=true`,
-							'GET'
-						),
-						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/app/_view/demographics_by_age?group=true`,
-							'GET'
-						)
+						adminRaw(`/${db}/_design/app/_view/occupancy?group=true`, 'GET'),
+						adminRaw(`/${db}/_design/app/_view/demographics_by_age?group=true`, 'GET')
 					]);
 					if (occRes.status === 404 || ageRes.status === 404) {
 						throw new Error('Dashboard design is not deployed');
@@ -118,17 +120,9 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 						ageRes.data &&
 						(ageRes.data as Record<string, unknown>).rows
 					) {
-						const rows = (ageRes.data as Record<string, unknown>).rows as Array<{
-							key: number | null;
-							value: unknown;
-						}>;
-						vulnerableCount = 0;
-						for (const r of rows) {
-							const age = r.key === null ? null : new Date().getFullYear() - (r.key - 543);
-							if (age !== null && (age <= 4 || age >= 60)) {
-								vulnerableCount += r.value as number;
-							}
-						}
+						vulnerableCount = countVulnerableFromBirthYearRows(
+							(ageRes.data as Record<string, unknown>).rows
+						);
 					}
 				} catch (err) {
 					console.error(`Failed to fetch stats for shelter_${m.code}`, err);

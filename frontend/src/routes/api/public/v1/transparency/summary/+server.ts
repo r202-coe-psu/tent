@@ -2,6 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import { adminRaw } from '$lib/server/couch-admin';
+import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
+import { countVulnerableFromBirthYearRows } from '$lib/features/public-portal';
 
 // In-memory read-model cache (T-35)
 let cachedSummary: Record<string, unknown> | null = null;
@@ -40,16 +42,16 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 			const shelterPromises = activeShelters.map(async (m) => {
 				let occ: number | null = null;
 				let vuln: number | null = null;
+				const db = `shelter_${m.code.toLowerCase()}`;
 				try {
+					const deployment = await checkViewDeployment(db, adminRaw);
+					if (deployment.state !== 'current') {
+						throw new Error(`Dashboard design for ${db} is ${deployment.state}`);
+					}
+
 					const [occRes, ageRes] = await Promise.all([
-						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/app/_view/occupancy?group=true`,
-							'GET'
-						),
-						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/app/_view/demographics_by_age?group=true`,
-							'GET'
-						)
+						adminRaw(`/${db}/_design/app/_view/occupancy?group=true`, 'GET'),
+						adminRaw(`/${db}/_design/app/_view/demographics_by_age?group=true`, 'GET')
 					]);
 					if (occRes.status === 404 || ageRes.status === 404) {
 						throw new Error('Dashboard design is not deployed');
@@ -76,17 +78,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 						ageRes.data &&
 						(ageRes.data as Record<string, unknown>).rows
 					) {
-						const rows = (ageRes.data as Record<string, unknown>).rows as Array<{
-							key: number | null;
-							value: unknown;
-						}>;
-						vuln = 0;
-						for (const r of rows) {
-							const age = r.key === null ? null : new Date().getFullYear() - (r.key - 543);
-							if (age !== null && (age <= 4 || age >= 60)) {
-								vuln += r.value as number;
-							}
-						}
+						vuln = countVulnerableFromBirthYearRows((ageRes.data as Record<string, unknown>).rows);
 					}
 				} catch (e) {
 					// ignore fallback error

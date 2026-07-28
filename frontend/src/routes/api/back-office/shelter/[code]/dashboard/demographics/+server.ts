@@ -22,6 +22,7 @@ import {
 	rowsToAgeGroups,
 	rowsToCountries
 } from '$lib/features/dashboard';
+import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
 
 export const prerender = false;
 
@@ -67,6 +68,15 @@ export const GET: RequestHandler = async ({ params, request }) => {
 		await requireShelterScopeOrSA(request.headers.get('cookie'), code);
 
 		const db = `shelter_${code.toLowerCase()}`;
+
+		const deployment = await checkViewDeployment(db, adminRaw);
+		if (deployment.state === 'stale') {
+			throw new ServiceError(
+				'INTERNAL',
+				`Dashboard views for ${db} are on an older version (deployed=${deployment.deployedVersion}) than this app build expects — a redeploy of _design/app is pending`
+			);
+		}
+
 		const [ageRows, countryRows] = await Promise.all([
 			queryGroupedView(db, 'demographics_by_age'),
 			queryGroupedView(db, 'demographics_by_country')

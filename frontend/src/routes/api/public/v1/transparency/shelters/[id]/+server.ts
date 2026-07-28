@@ -6,6 +6,7 @@ import {
 	type ShelterMaster,
 	type ShelterMasterV2
 } from '$lib/features/shelters/server';
+import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
 
 export const GET: RequestHandler = async ({ params, setHeaders }) => {
 	// Cache the response for 60 seconds on the client and CDN to mitigate N+1 query load
@@ -27,11 +28,14 @@ export const GET: RequestHandler = async ({ params, setHeaders }) => {
 			// Real Occupancy
 			let occupancy: number | null = mappedStatus === 'OPEN' || mappedStatus === 'FULL' ? null : 0;
 			if (mappedStatus === 'OPEN' || mappedStatus === 'FULL') {
+				const db = `shelter_${m.code.toLowerCase()}`;
 				try {
-					const occRes = await adminRaw(
-						`/shelter_${m.code.toLowerCase()}/_design/app/_view/occupancy?group=true`,
-						'GET'
-					);
+					const deployment = await checkViewDeployment(db, adminRaw);
+					if (deployment.state !== 'current') {
+						throw new Error(`Dashboard design for ${db} is ${deployment.state}`);
+					}
+
+					const occRes = await adminRaw(`/${db}/_design/app/_view/occupancy?group=true`, 'GET');
 					if (occRes.status === 404) throw new Error('Dashboard design is not deployed');
 					if (occRes.status >= 400) throw new Error('Dashboard occupancy query failed');
 					if (
