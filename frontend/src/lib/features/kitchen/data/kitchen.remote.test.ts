@@ -54,7 +54,7 @@ async function seedStock(item_id: string, qty: string | number, unit = 'kg') {
 	await memoryRepo.put({
 		_id: `stock_ledger:seed-${item_id}-${Math.random().toString(36).slice(2)}`,
 		type: 'stock_ledger',
-		schema_v: 2,
+		schema_v: 3,
 		item_id,
 		qty: String(qty),
 		unit,

@@ -1,5 +1,5 @@
 ---
-id: CR-047
+id: CR-051
 title: ตัด Household Shelter ID/QR (FR-22 / T-05) — household check-in/out ใช้ Person ID/QR ของหัวหน้าครัวเรือนแทน
 status: proposed
 date: 2026-07-24
@@ -12,7 +12,7 @@ affects:
   - FR-23 (wording only — drops the Household ID bullet)
 ---
 
-# CR-047 — Remove Household Shelter ID/QR (FR-22 / T-05)
+# CR-051 — Remove Household Shelter ID/QR (FR-22 / T-05)
 
 ## TL;DR
 
