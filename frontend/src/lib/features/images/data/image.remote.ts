@@ -4,8 +4,8 @@
  * against the active shelter database.
  *
  * Each image doc has two attachments:
- *   - "full"  — compressed JPEG (max 1024px)
- *   - "thumb" — square-cropped JPEG thumbnail (200px)
+ *   - "full"  — compressed WebP (max 1024px)
+ *   - "thumb" — square-cropped WebP thumbnail (200px)
  */
 
 import {
@@ -54,7 +54,7 @@ export class ImageRemoteRepository implements ImageRepository {
 			1,
 			{
 				filename: file.name,
-				content_type: compressed.full.type || 'image/jpeg',
+				content_type: compressed.full.type || 'image/webp',
 				width: compressed.width,
 				height: compressed.height,
 				original_size: compressed.originalSize,
@@ -72,7 +72,7 @@ export class ImageRemoteRepository implements ImageRepository {
 			saved._rev!,
 			'full',
 			compressed.full,
-			compressed.full.type || 'image/jpeg'
+			compressed.full.type || 'image/webp'
 		);
 		await putAttachment(
 			this.dbName,
@@ -80,7 +80,7 @@ export class ImageRemoteRepository implements ImageRepository {
 			fullRes.rev,
 			'thumb',
 			compressed.thumbnail,
-			compressed.thumbnail.type || 'image/jpeg'
+			compressed.thumbnail.type || 'image/webp'
 		);
 
 		return toSummary({ ...saved, _rev: fullRes.rev });

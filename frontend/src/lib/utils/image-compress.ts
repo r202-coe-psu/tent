@@ -2,7 +2,7 @@
  * Client-side image compression using the Canvas API (no external deps).
  *
  * Resizes the image so neither dimension exceeds `maxPx` (default 1024),
- * then encodes to JPEG at the given quality (default 0.82).
+ * then encodes to WebP at the given quality (default 0.82).
  * Also produces a square-cropped thumbnail at `thumbPx` (default 200).
  */
 
@@ -11,10 +11,10 @@ export interface CompressOptions {
 	maxPx?: number;
 	/** Thumbnail size (square crop). Default: 200 */
 	thumbPx?: number;
-	/** JPEG quality 0-1. Default: 0.82 */
+	/** Encode quality 0-1. Default: 0.82 */
 	quality?: number;
-	/** Output mime type. Default: 'image/jpeg' */
-	mimeType?: 'image/jpeg' | 'image/webp';
+	/** Output mime type. Default: 'image/webp' */
+	mimeType?: 'image/webp';
 }
 
 export interface CompressResult {
@@ -69,7 +69,7 @@ export async function compressImage(
 	file: File,
 	opts: CompressOptions = {}
 ): Promise<CompressResult> {
-	const { maxPx = 1024, thumbPx = 200, quality = 0.82, mimeType = 'image/jpeg' } = opts;
+	const { maxPx = 1024, thumbPx = 200, quality = 0.82, mimeType = 'image/webp' } = opts;
 
 	const img = await loadImage(file);
 
