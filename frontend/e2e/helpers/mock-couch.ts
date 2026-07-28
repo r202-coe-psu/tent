@@ -121,8 +121,33 @@ export async function mockCouchRoutes(
 		const req = route.request();
 		const segments = new URL(req.url()).pathname.split('/').filter(Boolean);
 		const last = segments[segments.length - 1] ?? '';
+		if (last === '_all_docs') {
+			// allByType()/listHouseholds()/listEvacuees() prefix-scan this endpoint
+			// with startkey/endkey set to `{type}:` bounds — serve it from the
+			// in-memory store so docs created earlier in the same test are visible,
+			// instead of falling back to the generic (always-empty) mock.
+			const params = new URL(req.url()).searchParams;
+			const startkey = params.has('startkey')
+				? (JSON.parse(params.get('startkey')!) as string)
+				: undefined;
+			const endkey = params.has('endkey')
+				? (JSON.parse(params.get('endkey')!) as string)
+				: undefined;
+			const rows = [...docs.entries()]
+				.filter(
+					([id]) =>
+						(startkey === undefined || id >= startkey) && (endkey === undefined || id <= endkey)
+				)
+				.map(([id, doc]) => ({ id, key: id, value: { rev: doc._rev }, doc }));
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ rows, total_rows: rows.length, offset: 0 })
+			});
+			return;
+		}
 		if (last.startsWith('_')) {
-			// Not a single-doc path (_all_docs, _find, _changes, …) — defer to
+			// Not a single-doc path (_find, _changes, …) — defer to
 			// the generic mocks registered above.
 			await route.fallback();
 			return;
@@ -174,6 +199,30 @@ export async function mockCouchRoutes(
 				body: JSON.stringify([
 					{ province: 'สงขลา', district: 'หาดใหญ่', subdistrict: 'บ้านพรุ', zipcode: 90250 }
 				])
+			});
+			return;
+		}
+		if (url.includes('/api/v1/thailand-location/provinces')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(['สงขลา'])
+			});
+			return;
+		}
+		if (url.includes('/api/v1/thailand-location/districts')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(['หาดใหญ่'])
+			});
+			return;
+		}
+		if (url.includes('/api/v1/thailand-location/subdistricts')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([{ subdistrict: 'บ้านพรุ', zipcode: 90250 }])
 			});
 			return;
 		}
