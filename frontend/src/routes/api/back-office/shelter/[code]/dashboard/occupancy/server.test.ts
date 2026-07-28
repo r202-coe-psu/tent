@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET } from './+server';
 import { requireShelterScopeOrSA, adminRaw, ServiceError } from '$lib/server/couch-admin';
+import { SHELTER_VIEW_MANIFEST } from '$lib/features/shelters/server';
 import type { RequestEvent } from './$types';
 
 // Mock dependencies
@@ -86,15 +87,20 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 			isSA: true,
 			shelterCode: null
 		});
-		vi.mocked(adminRaw).mockResolvedValue({
-			status: 200,
-			data: {
-				rows: [
-					{ key: 'active', value: 10 },
-					{ key: 'pre_registered', value: 5 }
-				]
-			}
-		});
+		vi.mocked(adminRaw)
+			.mockResolvedValueOnce({
+				status: 200,
+				data: { tent_view: { version: SHELTER_VIEW_MANIFEST.version } }
+			})
+			.mockResolvedValueOnce({
+				status: 200,
+				data: {
+					rows: [
+						{ key: 'active', value: 10 },
+						{ key: 'pre_registered', value: 5 }
+					]
+				}
+			});
 
 		const event = createMockEvent('SH001');
 		const res = (await GET(event)) as Response;
@@ -108,8 +114,29 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 		expect(data.checked_out).toBe(0); // Defaulted to 0
 		expect(data.total).toBe(15);
 
-		const [path, method] = vi.mocked(adminRaw).mock.calls[0];
+		const [path, method] = vi.mocked(adminRaw).mock.calls[1];
 		expect(path).toBe('/shelter_sh001/_design/app/_view/occupancy?group=true');
 		expect(method).toBe('GET');
+	});
+
+	it('returns 500 when the deployed view version is older than this app build expects', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'tester',
+			roles: [],
+			isSA: true,
+			shelterCode: null
+		});
+		vi.mocked(adminRaw).mockResolvedValue({
+			status: 200,
+			data: { tent_view: { version: SHELTER_VIEW_MANIFEST.version - 1 } }
+		});
+
+		const event = createMockEvent('SH001');
+		const res = (await GET(event)) as Response;
+
+		expect(res.status).toBe(500);
+		const data = await res.json();
+		expect(data.error.code).toBe('INTERNAL');
+		expect(data.error.message).toContain('older version');
 	});
 });

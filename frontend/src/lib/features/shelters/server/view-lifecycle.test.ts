@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { SHELTER_VIEW_MANIFEST } from '../domain/view-manifest';
-import { hashViews, runViewLifecycle, type ViewLifecycleClient } from './view-lifecycle';
+import {
+	deployCandidate,
+	hashViews,
+	promoteCandidate,
+	retireSnapshots,
+	runViewLifecycle,
+	type ViewLifecycleClient
+} from './view-lifecycle';
 
 type StoredDesign = {
 	_id: string;
@@ -85,6 +92,9 @@ function fakeCouch(
 		const deleteMatch = path.match(/^\/?([^/]+)\/([^?]+)\?rev=/);
 		if (method === 'DELETE' && deleteMatch) {
 			designs.delete(`${db}/${decodeURIComponent(deleteMatch[2])}`);
+			return { status: 200, data: { ok: true } };
+		}
+		if (method === 'POST' && path.includes('/_view_cleanup')) {
 			return { status: 200, data: { ok: true } };
 		}
 		return { status: 405, data: null };
@@ -244,5 +254,137 @@ describe('shelter Map/Reduce lifecycle', () => {
 		const first = { b: { map: 'b' }, a: { map: 'a' } };
 		const second = { a: { map: 'a' }, b: { map: 'b' } };
 		expect(hashViews(first)).toBe(hashViews(second));
+	});
+});
+
+describe('deployCandidate / promoteCandidate barrier', () => {
+	it('deployCandidate never touches stable when a candidate is needed', async () => {
+		const oldViews = { old_view: { map: 'function (doc) { emit(doc.type, 1); }' } };
+		const fake = fakeCouch({
+			'shelter_sh001/_design/app': {
+				_id: '_design/app',
+				_rev: '1-old',
+				views: oldViews
+			}
+		});
+
+		const result = await deployCandidate('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client);
+
+		expect(result.status).toBe('candidate-ready');
+		expect(fake.designs.get('shelter_sh001/_design/app')?.views).toEqual(oldViews);
+		expect([...fake.designs.keys()].some((key) => key.includes('__next_'))).toBe(true);
+	});
+
+	it('promoteCandidate fails closed when no candidate was deployed first', async () => {
+		const oldViews = { old_view: { map: 'function (doc) { emit(doc.type, 1); }' } };
+		const fake = fakeCouch({
+			'shelter_sh001/_design/app': {
+				_id: '_design/app',
+				_rev: '1-old',
+				views: oldViews
+			}
+		});
+
+		await expect(
+			promoteCandidate('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client)
+		).rejects.toThrow('run deploy-candidate first');
+		expect(fake.designs.get('shelter_sh001/_design/app')?.views).toEqual(oldViews);
+	});
+
+	it('promoteCandidate promotes a previously deployed candidate and removes it, keeping one previous snapshot', async () => {
+		const oldViews = { old_view: { map: 'function (doc) { emit(doc.type, 1); }' } };
+		const fake = fakeCouch({
+			'shelter_sh001/_design/app': {
+				_id: '_design/app',
+				_rev: '1-old',
+				views: oldViews
+			}
+		});
+
+		await deployCandidate('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client);
+		const result = await promoteCandidate('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client);
+
+		expect(result.status).toBe('deployed');
+		expect(fake.designs.get('shelter_sh001/_design/app')?.views).toHaveProperty('occupancy');
+		expect([...fake.designs.keys()].some((key) => key.includes('__next_'))).toBe(false);
+		expect([...fake.designs.keys()].filter((key) => key.includes('__prev_')).length).toBe(1);
+	});
+
+	it('a failed promote on one shelter leaves another shelter that only deployed a candidate unpromoted', async () => {
+		const oldViews = { old_view: { map: 'function (doc) { emit(doc.type, 1); }' } };
+		const healthy = fakeCouch({
+			'shelter_sh001/_design/app': { _id: '_design/app', _rev: '1-old', views: oldViews }
+		});
+		const broken = fakeCouch(
+			{ 'shelter_sh002/_design/app': { _id: '_design/app', _rev: '1-old', views: oldViews } },
+			{ warmFailureFor: 'app__next_' + hashViews(SHELTER_VIEW_MANIFEST.views).slice(0, 12) }
+		);
+
+		// Stage C/D: both shelters deploy a candidate — this must succeed for
+		// shelter_sh001 regardless of what later happens to shelter_sh002.
+		await deployCandidate('shelter_sh001', SHELTER_VIEW_MANIFEST, healthy.client);
+		await expect(
+			deployCandidate('shelter_sh002', SHELTER_VIEW_MANIFEST, broken.client)
+		).rejects.toThrow();
+
+		// Stage E never runs for shelter_sh001 because the caller (the CI runner)
+		// must not promote anything once shelter_sh002's candidate failed.
+		expect(healthy.designs.get('shelter_sh001/_design/app')?.views).toEqual(oldViews);
+	});
+});
+
+describe('retireSnapshots', () => {
+	it('dry-run reports what would be removed without deleting anything', async () => {
+		const targetHash = hashViews(SHELTER_VIEW_MANIFEST.views);
+		const prevName = `app__prev_${targetHash.slice(0, 12)}`;
+		const fake = fakeCouch({
+			'shelter_sh001/_design/app': { _id: '_design/app', _rev: '1-cur', views: {} },
+			[`shelter_sh001/_design/${prevName}`]: {
+				_id: `_design/${prevName}`,
+				_rev: '1-prev',
+				views: {}
+			}
+		});
+
+		const { removed } = await retireSnapshots('shelter_sh001', SHELTER_VIEW_MANIFEST, fake.client, {
+			dryRun: true
+		});
+
+		expect(removed).toEqual([`_design/${prevName}`]);
+		expect(fake.designs.has(`shelter_sh001/_design/${prevName}`)).toBe(true);
+	});
+
+	it('write mode deletes non-kept snapshots and calls _view_cleanup', async () => {
+		const targetHash = hashViews(SHELTER_VIEW_MANIFEST.views);
+		const staleName = `app__prev_aaaaaaaaaaaa`;
+		const keepName = `app__prev_${targetHash.slice(0, 12)}`;
+		const fake = fakeCouch({
+			'shelter_sh001/_design/app': { _id: '_design/app', _rev: '1-cur', views: {} },
+			[`shelter_sh001/_design/${staleName}`]: {
+				_id: `_design/${staleName}`,
+				_rev: '1-stale',
+				views: {}
+			},
+			[`shelter_sh001/_design/${keepName}`]: {
+				_id: `_design/${keepName}`,
+				_rev: '1-keep',
+				views: {}
+			}
+		});
+
+		const { removed, keep } = await retireSnapshots(
+			'shelter_sh001',
+			SHELTER_VIEW_MANIFEST,
+			fake.client,
+			{ dryRun: false, keepPrevious: keepName }
+		);
+
+		expect(removed).toEqual([`_design/${staleName}`]);
+		expect(keep).toEqual([`_design/${keepName}`]);
+		expect(fake.designs.has(`shelter_sh001/_design/${staleName}`)).toBe(false);
+		expect(fake.designs.has(`shelter_sh001/_design/${keepName}`)).toBe(true);
+		expect(
+			fake.calls.some((call) => call.method === 'POST' && call.path.includes('_view_cleanup'))
+		).toBe(true);
 	});
 });

@@ -21,6 +21,10 @@ export {
 } from './domain/mappers';
 export { familySearch, listPublicShelters } from './data/public-api';
 export {
+	countVulnerableFromBirthYearRows,
+	isValidThaiBirthYear
+} from './domain/transparency-metrics';
+export {
 	publicPortalKeys,
 	useFamilySearchMutation,
 	usePublicShelters

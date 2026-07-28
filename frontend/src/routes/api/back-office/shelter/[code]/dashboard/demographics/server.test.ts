@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET } from './+server';
 import { requireShelterScopeOrSA, adminRaw, ServiceError } from '$lib/server/couch-admin';
+import { SHELTER_VIEW_MANIFEST } from '$lib/features/shelters/server';
 import type { RequestEvent } from './$types';
 
 // Mock dependencies
@@ -88,6 +89,10 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 		vi.mocked(adminRaw)
 			.mockResolvedValueOnce({
 				status: 200,
+				data: { tent_view: { version: SHELTER_VIEW_MANIFEST.version } }
+			})
+			.mockResolvedValueOnce({
+				status: 200,
 				data: {
 					rows: [
 						{ key: 2026 + 543 - 30, value: 1 },
@@ -112,11 +117,32 @@ describe('GET /api/back-office/shelter/[code]/dashboard/demographics', () => {
 		expect(data.countries['THAILAND']).toBe(2);
 		expect(data.countries['LAOS']).toBeUndefined();
 
-		const [agePath, ageMethod] = vi.mocked(adminRaw).mock.calls[0];
-		const [countryPath, countryMethod] = vi.mocked(adminRaw).mock.calls[1];
+		const [agePath, ageMethod] = vi.mocked(adminRaw).mock.calls[1];
+		const [countryPath, countryMethod] = vi.mocked(adminRaw).mock.calls[2];
 		expect(agePath).toBe('/shelter_sh001/_design/app/_view/demographics_by_age?group=true');
 		expect(ageMethod).toBe('GET');
 		expect(countryPath).toBe('/shelter_sh001/_design/app/_view/demographics_by_country?group=true');
 		expect(countryMethod).toBe('GET');
+	});
+
+	it('returns 500 when the deployed view version is older than this app build expects', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'tester',
+			roles: [],
+			isSA: true,
+			shelterCode: null
+		});
+		vi.mocked(adminRaw).mockResolvedValue({
+			status: 200,
+			data: { tent_view: { version: SHELTER_VIEW_MANIFEST.version - 1 } }
+		});
+
+		const event = createMockEvent('SH001');
+		const res = (await GET(event)) as Response;
+
+		expect(res.status).toBe(500);
+		const data = await res.json();
+		expect(data.error.code).toBe('INTERNAL');
+		expect(data.error.message).toContain('older version');
 	});
 });

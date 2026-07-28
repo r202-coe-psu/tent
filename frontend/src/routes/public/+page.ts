@@ -16,11 +16,11 @@ export const load: PageLoad = async ({ fetch }) => {
 		summary: {
 			shelters_open: 0,
 			shelters_total: 0,
-			occupancy_total: 0,
-			vulnerable_count: 0
+			occupancy_total: null,
+			vulnerable_count: null
 		},
 		lastUpdated: Date.now(),
-		isStale: false,
+		isStale: true,
 		flags: {
 			public_metrics_occupancy: true,
 			public_metrics_vulnerable: true,
