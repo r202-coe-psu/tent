@@ -279,7 +279,7 @@ async def test_evacuee_search_rate_limited(client: AsyncClient):
             headers=headers,
         )
         assert limited.status_code == 429
-        assert limited.json()["detail"]["error"]["code"] == "RATE_LIMITED"
+        assert limited.json()["errors"][0]["error"]["code"] == "RATE_LIMITED"
     finally:
         evacuee_router.RATE_LIMIT_MAX_REQUESTS = original_max
         evacuee_router._request_log.clear()

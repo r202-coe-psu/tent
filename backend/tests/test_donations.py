@@ -189,7 +189,7 @@ async def test_patch_courier_rejects_already_synced_buffer(
         json={"courier_tracking_no": "TH999"},
     )
     assert response.status_code == 409
-    assert response.json()["detail"]["error"] == "SYNCED_TO_COUCH"
+    assert response.json()["errors"][0]["error"] == "SYNCED_TO_COUCH"
 
 
 async def test_new_ulid_shape() -> None:

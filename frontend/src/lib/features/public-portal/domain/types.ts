@@ -2,7 +2,10 @@ import type { components } from '$lib/api/openapi';
 
 export type FamilySearchResult = components['schemas']['SearchResult'];
 export type FamilySearchResponse = components['schemas']['SearchResponse'];
-export type PublicShelterItem = components['schemas']['ShelterItem'];
+export type PublicShelterItem = components['schemas']['ShelterItem'] & {
+	vulnerable_groups?: string[];
+};
+export type PublicShelterDetail = components['schemas']['ShelterDetail'];
 export type PublicShelterListResponse = components['schemas']['ShelterListResponse'];
 export type PublicGeoPoint = components['schemas']['GeoPoint'];
 
@@ -18,6 +21,9 @@ export type PublicShelterCardModel = {
 	province: string;
 	district: string;
 	subdistrict: string;
+	pet_policy: string | null;
+	vulnerable_groups: string[] | null;
+	admin_type: string | null;
 	geo: PublicGeoPoint | null;
 };
 
@@ -26,4 +32,5 @@ export type ListPublicSheltersParams = {
 	district?: string;
 	subdistrict?: string;
 	status?: string;
+	fetch?: typeof globalThis.fetch;
 };

@@ -9,6 +9,7 @@
 
 <MasterDataConfigPage
 	allowedTypes={REGISTRATION_MASTER_TYPES}
+	scope="shelter"
 	title="1. ข้อมูลหลักบุคคล (Person Master Data)"
 	description="จัดการค่ามาตรฐานสำหรับฟอร์มลงทะเบียนบุคคล — เพิ่ม แก้ไข หรือลบตัวเลือกที่ใช้ในแต่ละหมวดหมู่"
 />

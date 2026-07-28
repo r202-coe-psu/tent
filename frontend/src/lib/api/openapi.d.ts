@@ -140,6 +140,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/shelters/{code}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Shelter
+		 * @description Get shelter detail from the MongoDB read model.
+		 */
+		get: operations['get_shelter'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -328,6 +348,92 @@ export interface components {
 			/** Family Members */
 			family_members?: components['schemas']['FamilyMember'][];
 		};
+		/** ShelterAdmissionPolicyDetail */
+		ShelterAdmissionPolicyDetail: {
+			/** Pets */
+			pets: string;
+			/** Vulnerable Groups */
+			vulnerable_groups: string[];
+		};
+		/** ShelterCapacityDetail */
+		ShelterCapacityDetail: {
+			/** Total */
+			total: number;
+			/** Available */
+			available: number;
+		};
+		/** ShelterContactDetail */
+		ShelterContactDetail: {
+			/** Manager */
+			manager: string;
+			/** Phone */
+			phone: string;
+		};
+		/** ShelterDetail */
+		ShelterDetail: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** Admin Type */
+			admin_type: string;
+			/** Address */
+			address: string;
+			capacity: components['schemas']['ShelterCapacityDetail'];
+			/** Occupancy Rate */
+			occupancy_rate: number;
+			/** Building Status */
+			building_status: string;
+			geo?: components['schemas']['GeoPoint'] | null;
+			admission_policy: components['schemas']['ShelterAdmissionPolicyDetail'];
+			travel: components['schemas']['ShelterTravelDetail'];
+			facilities: components['schemas']['ShelterFacilitiesDetail'];
+			/** Zones */
+			zones?: components['schemas']['ShelterZoneDetail'][] | null;
+			contact: components['schemas']['ShelterContactDetail'];
+			/** Faq */
+			faq: components['schemas']['ShelterFaqDetail'][];
+		};
+		/** ShelterDetailResponse */
+		ShelterDetailResponse: {
+			shelter: components['schemas']['ShelterDetail'];
+		};
+		/** ShelterFacilitiesDetail */
+		ShelterFacilitiesDetail: {
+			hygiene: components['schemas']['ShelterHygieneDetail'];
+			/** Power */
+			power: string;
+			/** Water */
+			water: string;
+			/** Comms */
+			comms: string[];
+			/** Kitchen */
+			kitchen: string;
+			/** Parking */
+			parking: string;
+		};
+		/** ShelterFaqDetail */
+		ShelterFaqDetail: {
+			/** Q */
+			q: string;
+			/** A */
+			a: string;
+		};
+		/** ShelterHygieneDetail */
+		ShelterHygieneDetail: {
+			/** Male */
+			male: number;
+			/** Female */
+			female: number;
+			/** Accessible */
+			accessible: number;
+			/** Shower */
+			shower: number;
+			/** Mobile Toilet */
+			mobile_toilet: number;
+		};
 		/** ShelterItem */
 		ShelterItem: {
 			/**
@@ -351,6 +457,12 @@ export interface components {
 			district?: string | null;
 			/** Subdistrict */
 			subdistrict?: string | null;
+			/** Pet Policy */
+			pet_policy?: string | null;
+			/** Vulnerable Groups */
+			vulnerable_groups?: string[] | null;
+			/** Admin Type */
+			admin_type?: string | null;
 			/**
 			 * Updated At
 			 * Format: date-time
@@ -377,6 +489,26 @@ export interface components {
 			name: string;
 			/** Needs */
 			needs: components['schemas']['NeedItemResponse'][];
+		};
+		/** ShelterTravelDetail */
+		ShelterTravelDetail: {
+			/** Route */
+			route: string;
+			/** Altitude */
+			altitude: string;
+			/** Flood Warning */
+			flood_warning?: string | null;
+		};
+		/** ShelterZoneDetail */
+		ShelterZoneDetail: {
+			/** Name */
+			name?: string | null;
+			/** Type */
+			type: string;
+			/** Capacity */
+			capacity?: number | null;
+			/** Area M2 */
+			area_m2?: number | null;
 		};
 		/** ValidationError */
 		ValidationError: {
@@ -630,6 +762,37 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['ShelterListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_shelter: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ShelterDetailResponse'];
 				};
 			};
 			/** @description Validation Error */
