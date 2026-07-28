@@ -1,7 +1,6 @@
 <script lang="ts">
 	import Scan from '@lucide/svelte/icons/scan';
 	import Camera from '@lucide/svelte/icons/camera';
-	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Check from '@lucide/svelte/icons/check';
 	import X from '@lucide/svelte/icons/x';
@@ -30,45 +29,6 @@
 	let scannedItems = $state<ScannedItem[]>([]);
 	let remarks = $state('');
 	let saving = $state(false);
-
-	/** Pre-declared donations this shelter is still waiting on (T-16-1.1). */
-	type PendingRow = {
-		booking_ref?: string;
-		donor_name: string;
-		item_count: number;
-		eta?: string;
-		slot?: { date: string; from: string; to: string };
-	};
-	let pendingQueue = $state<PendingRow[]>([]);
-	let queueLoading = $state(true);
-	let queueFilter = $state('');
-
-	const filteredQueue = $derived(
-		queueFilter.trim()
-			? pendingQueue.filter(
-					(row) =>
-						row.donor_name.toLowerCase().includes(queueFilter.trim().toLowerCase()) ||
-						(row.booking_ref ?? '').toLowerCase().includes(queueFilter.trim().toLowerCase())
-				)
-			: pendingQueue
-	);
-
-	async function loadQueue() {
-		queueLoading = true;
-		try {
-			const res = await fetch('/api/back-office/donations?status=declared');
-			const data = await res.json();
-			pendingQueue = data.success ? (data.donations as PendingRow[]) : [];
-		} catch {
-			pendingQueue = [];
-		} finally {
-			queueLoading = false;
-		}
-	}
-
-	$effect(() => {
-		loadQueue();
-	});
 
 	async function performLookup(query: string) {
 		if (!query.trim()) return;
@@ -139,7 +99,6 @@
 				searchQuery = '';
 				donationDoc = null;
 				remarks = '';
-				loadQueue();
 			} else {
 				toast.error(data.error || 'บันทึกไม่สำเร็จ');
 			}
@@ -201,60 +160,6 @@
 						ค้นหา
 					</Button>
 				</div>
-			</div>
-
-			<!-- Pending intake queue — pre-declared donations still waiting (T-16-1.1) -->
-			<div class="w-full max-w-2xl rounded-2xl border border-border/60 bg-card p-5 shadow-xs">
-				<div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-					<h3 class="flex items-center gap-2 text-xs font-bold text-foreground">
-						<ClipboardList class="h-4 w-4 text-primary" />
-						คิวใบจองที่รอรับของ
-						<span
-							class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground"
-						>
-							{pendingQueue.length}
-						</span>
-					</h3>
-					<Input
-						type="text"
-						placeholder="กรองด้วยชื่อผู้บริจาค หรือรหัสจอง"
-						bind:value={queueFilter}
-						class="h-8 rounded-xl text-[11px] sm:w-64"
-					/>
-				</div>
-
-				{#if queueLoading}
-					<p class="py-6 text-center text-[11px] text-muted-foreground">กำลังโหลดคิว…</p>
-				{:else if filteredQueue.length === 0}
-					<p class="py-6 text-center text-[11px] text-muted-foreground">
-						{pendingQueue.length === 0 ? 'ไม่มีใบจองค้างรับ' : 'ไม่พบใบจองที่ตรงกับคำค้น'}
-					</p>
-				{:else}
-					<div class="max-h-64 space-y-2 overflow-y-auto">
-						{#each filteredQueue as row (row.booking_ref)}
-							<button
-								type="button"
-								onclick={() => row.booking_ref && performLookup(row.booking_ref)}
-								class="flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border border-border/40 bg-muted/20 p-3 text-left transition-colors hover:bg-muted/50"
-							>
-								<div class="min-w-0">
-									<div class="flex items-center gap-2">
-										<span
-											class="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-extrabold text-black"
-											>{row.booking_ref ?? '—'}</span
-										>
-										<span class="truncate text-xs font-bold text-foreground">{row.donor_name}</span>
-									</div>
-									<p class="mt-0.5 text-[10px] text-muted-foreground">
-										{row.item_count} รายการ
-										{#if row.slot}· นัด {row.slot.date} {row.slot.from}–{row.slot.to}{/if}
-									</p>
-								</div>
-								<span class="shrink-0 text-[10px] font-bold text-primary">ตรวจรับ →</span>
-							</button>
-						{/each}
-					</div>
-				{/if}
 			</div>
 		{:else if scanState === 'scanning'}
 			<!-- Scanning State -->
