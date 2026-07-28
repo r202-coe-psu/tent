@@ -11,7 +11,12 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import UserX from '@lucide/svelte/icons/user-x';
-	import { useEvacueesPaginated, useCheckInEvacuee, zoneLabel } from '$lib/features/people';
+	import {
+		useEvacueesPaginated,
+		useCheckInEvacuee,
+		canCheckInEvacuee,
+		zoneLabel
+	} from '$lib/features/people';
 	import type { Evacuee } from '$lib/features/people';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -111,22 +116,27 @@
 
 	<!-- Filters -->
 	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))]">
-		<div class="relative w-full min-w-0">
-			<label for="evacuee-search" class="sr-only">ค้นหาผู้ประสบภัย</label>
-			<Search
-				class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-			/>
-			<Input
-				id="evacuee-search"
-				type="search"
-				placeholder="ค้นหาชื่อ รหัสประจำตัว หรือเบอร์โทรศัพท์..."
-				bind:value={search}
-				oninput={resetPageOnFilter}
-				class="h-8 rounded-xl bg-background pl-9 shadow-xs"
-			/>
+		<div class="w-full min-w-0 space-y-2">
+			<label for="evacuee-search" class="text-xs font-semibold text-foreground">ค้นหา</label>
+			<div class="relative">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+				/>
+				<Input
+					id="evacuee-search"
+					type="search"
+					placeholder="ค้นหาชื่อ รหัสประจำตัว หรือเบอร์โทรศัพท์..."
+					bind:value={search}
+					oninput={resetPageOnFilter}
+					class="h-8 rounded-xl bg-background pl-9 shadow-xs"
+				/>
+			</div>
 		</div>
 
-		<div class="w-full min-w-0">
+		<div class="w-full min-w-0 space-y-2">
+			<label for="evacuee-type-filter" class="text-xs font-semibold text-foreground"
+				>ประเภทผู้ประสบภัย</label
+			>
 			<Select.Root
 				type="single"
 				bind:value={selectedType}
@@ -134,6 +144,7 @@
 				disabled={shelterQuery.isLoading || vulnerableGroupQuery.isLoading}
 			>
 				<Select.Trigger
+					id="evacuee-type-filter"
 					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
 					aria-label="ประเภทผู้ประสบภัย"
 				>
@@ -159,7 +170,10 @@
 			</Select.Root>
 		</div>
 
-		<div class="w-full min-w-0">
+		<div class="w-full min-w-0 space-y-2">
+			<label for="evacuee-zone-filter" class="text-xs font-semibold text-foreground"
+				>โซนที่จัดสรร</label
+			>
 			<Select.Root
 				type="single"
 				bind:value={selectedZone}
@@ -167,6 +181,7 @@
 				disabled={shelterQuery.isLoading}
 			>
 				<Select.Trigger
+					id="evacuee-zone-filter"
 					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
 					aria-label="โซนที่จัดสรร"
 				>
@@ -258,14 +273,16 @@
 									class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium
 										{e.current_stay.status === 'active'
 										? 'bg-green-100 text-green-800'
-										: 'bg-muted text-muted-foreground'}"
+										: e.current_stay.status === 'pre_registered'
+											? 'bg-blue-100 text-blue-800'
+											: 'bg-muted text-muted-foreground'}"
 								>
 									{STATUS_LABEL[e.current_stay.status] ?? e.current_stay.status}
 								</span>
 							</Table.Cell>
 							<Table.Cell class="text-center">
 								<div class="flex justify-center gap-1.5">
-									{#if e.current_stay.status !== 'active'}
+									{#if canCheckInEvacuee(e)}
 										<Button
 											variant="outline"
 											size="sm"
@@ -275,6 +292,7 @@
 											เช็คอิน
 										</Button>
 									{/if}
+
 									<Button
 										variant="outline"
 										size="sm"

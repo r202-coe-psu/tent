@@ -1,11 +1,23 @@
 import type { PageLoad } from './$types';
+import type { FaqItem } from '$lib/features/public-portal/domain/config';
 
 export const load: PageLoad = async ({ fetch }) => {
+	let faqs: FaqItem[] = [];
+	try {
+		const configRes = await fetch('/api/public/v1/config/faqs');
+		if (configRes.ok) {
+			const configData = await configRes.json();
+			faqs = configData.faqs || [];
+		}
+	} catch (e) {
+		console.error('Failed to fetch config', e);
+	}
+
 	try {
 		const response = await fetch('/api/public/v1/transparency/summary');
 		if (response.ok) {
 			const data = await response.json();
-			return data;
+			return { ...data, faqs };
 		}
 	} catch (e) {
 		console.error('Failed to fetch summary metrics', e);
@@ -27,6 +39,7 @@ export const load: PageLoad = async ({ fetch }) => {
 			public_metrics_volunteers: false,
 			emergency_mode: false
 		},
-		isError: true
+		isError: true,
+		faqs
 	};
 };

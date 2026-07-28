@@ -50,9 +50,12 @@ import {
 } from '$lib/features/people/domain/people';
 import {
 	createCampaign,
+	createPurchase,
 	createStockLedger,
 	createWalkInDonation,
+	keyPurchaseReceipt,
 	type CampaignInput,
+	type PurchaseInput,
 	type StockLedgerInput,
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
@@ -78,7 +81,6 @@ import { ulid } from '$lib/db/ulid';
 
 import { deployShelterViewsFn } from '$lib/features/shelters/server';
 import { buildValidateDocUpdate, REFERRAL_MANGO_INDEXES } from '$lib/server/shelter-access-design';
-import { seedThailandLocation } from './seed-thailand-location';
 
 // ─── env ──────────────────────────────────────────────────────────────────────
 
@@ -247,6 +249,13 @@ const REGISTRY_SHELTERS = [
 			showers: 8,
 			water_points: 6,
 			handwashing_stations: 10
+		},
+		admission_policy: {
+			pet_policy: {
+				policy: 'conditional',
+				categories: [{ category: 'small_general' }, { category: 'livestock' }]
+			},
+			supported_vulnerable_groups: ['ผู้ป่วยติดเตียง', 'ผู้ใช้วีลแชร์', 'เด็กอ่อน']
 		}
 	},
 	{
@@ -263,6 +272,10 @@ const REGISTRY_SHELTERS = [
 			showers: 4,
 			water_points: 2,
 			handwashing_stations: 4
+		},
+		admission_policy: {
+			pet_policy: { policy: 'not_allowed' },
+			supported_vulnerable_groups: ['ผู้สูงอายุ', 'สตรีมีครรภ์', 'ผู้ป่วยแยกกักโรค']
 		}
 	},
 	{
@@ -270,12 +283,15 @@ const REGISTRY_SHELTERS = [
 		name: 'ศูนย์อพยพสำนักงานเทศบาลเมืองบ้านพรุ',
 		location: { lat: 6.948086391528152, lng: 100.47963181135452 },
 		capacity: 100,
-		zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 100 }],
+		zones: [
+			{ code: 'Z1', name: 'โซนรวม', capacity: 50 },
+			{ code: 'Z2', name: 'โซนสัตว์เลี้ยง', capacity: 50, type: 'pet' }
+		],
 		area_m2: 400,
 		facilities: {
 			toilets_female: 2,
 			toilets_male: 2,
-			toilets_accessible: 1,
+			toilets_accessible: 0,
 			showers: 4,
 			water_points: 2,
 			handwashing_stations: 4
@@ -359,14 +375,23 @@ async function seedRegistry(): Promise<void> {
 	const ts = now();
 	for (const shelter of REGISTRY_SHELTERS) {
 		const existing = existingByCode.get(shelter.code);
+
+		// Build payload extras (admission_policy)
+		const extras: Record<string, unknown> = {};
+		if ('admission_policy' in shelter) {
+			extras.admission_policy = shelter.admission_policy;
+		}
+
 		if (existing) {
 			await putDoc('registry', {
 				...existing,
 				name: shelter.name,
 				location: { ...shelter.location },
-				updated_at: ts
+				zones: shelter.zones.map((z) => ({ ...z })),
+				updated_at: ts,
+				...extras
 			});
-			console.log(`  ✓ registry: updated shelter ${shelter.code} (name + location)`);
+			console.log(`  ✓ registry: updated shelter ${shelter.code} (name + location + policies)`);
 		} else {
 			await putDoc('registry', {
 				_id: `shelter:${ulid()}`,
@@ -383,10 +408,153 @@ async function seedRegistry(): Promise<void> {
 				opened_at: ts,
 				created_at: ts,
 				updated_at: ts,
-				created_by: 'seed'
+				created_by: 'seed',
+				...extras
 			});
 			console.log(`  ✓ registry: 1 shelter master (${shelter.code})`);
 		}
+	}
+}
+
+// ─── seedMasterData ───────────────────────────────────────────────────────────
+
+/**
+ * Global master_data docs (CR-049) — one doc per type (`master_data:{type}`).
+ * Item `code` is always a ULID (`item_{ulid}`) — no slug anywhere — matching the
+ * UI-create rule. Codes referenced by other seed docs (evacuee `special_needs` →
+ * vulnerable_group) are generated once and threaded via the `VG` lookup so those
+ * references resolve to labels. Codes are regenerated per run, so seed is meant
+ * for a fresh/reset DB (see the reset flow in CLAUDE.md).
+ */
+const itemCode = () => `item_${ulid().toLowerCase()}`;
+
+type SeedItem = {
+	code: string;
+	label: string;
+	is_default: boolean;
+	status: 'active';
+	parent_code?: string;
+};
+const toItem = (label: string, is_default = false): SeedItem => ({
+	code: itemCode(),
+	label,
+	is_default,
+	status: 'active'
+});
+
+// vulnerable_group items keep a semantic key → generated ULID code lookup so
+// seeded evacuee.special_needs can reference the same codes.
+const VG_DEFS = [
+	{ key: 'elderly', label: 'ผู้สูงอายุ', is_default: true },
+	{ key: 'disabled', label: 'ผู้พิการ' },
+	{ key: 'pregnant', label: 'สตรีมีครรภ์' },
+	{ key: 'infant', label: 'ทารก' },
+	{ key: 'young_child', label: 'เด็กเล็ก' },
+	{ key: 'chronic_illness', label: 'ผู้ป่วยเรื้อรัง' }
+].map((d) => ({ ...d, code: itemCode() }));
+/** semantic key → generated ULID code, for evacuee special_needs cross-refs */
+const VG: Record<string, string> = Object.fromEntries(VG_DEFS.map((i) => [i.key, i.code]));
+
+// municipality_zone items keep a key → ULID lookup so seeded household docs
+// (`municipality_zone`) and community `parent_code` can reference them.
+const MZ_DEFS = [
+	{ key: 'zone_1', label: 'เขตเทศบาล 1', is_default: true },
+	{ key: 'zone_2', label: 'เขตเทศบาล 2' },
+	{ key: 'zone_3', label: 'เขตเทศบาล 3' },
+	{ key: 'zone_4', label: 'เขตเทศบาล 4' }
+].map((d) => ({ ...d, code: itemCode() }));
+/** zone key → generated ULID code, for household + community parent refs */
+const MZ: Record<string, string> = Object.fromEntries(MZ_DEFS.map((i) => [i.key, i.code]));
+
+// community items reference their parent zone via parent_code (CR-012 pattern).
+const COMMUNITY_DEFS: { label: string; parent: string; is_default?: boolean }[] = [
+	{ label: 'ชุมชนบ้านทุ่ง', parent: 'zone_1', is_default: true },
+	{ label: 'ชุมชนริมคลอง', parent: 'zone_1' },
+	{ label: 'ชุมชนหน้าเมือง', parent: 'zone_2' },
+	{ label: 'ชุมชนสวนหลวง', parent: 'zone_3' }
+];
+
+const MASTER_DATA_SEED: { type: string; items: SeedItem[] }[] = [
+	{
+		type: 'vulnerable_group',
+		items: VG_DEFS.map((d) => ({
+			code: d.code,
+			label: d.label,
+			is_default: d.is_default ?? false,
+			status: 'active'
+		}))
+	},
+	{
+		type: 'health_condition',
+		items: [
+			toItem('เบาหวาน', true),
+			toItem('ความดันโลหิตสูง'),
+			toItem('โรคหัวใจ'),
+			toItem('หอบหืด'),
+			toItem('แพ้อาหารทะเล')
+		]
+	},
+	{
+		type: 'dietary_restrictions',
+		items: [toItem('อิสลาม (ฮาลาล)', true), toItem('มังสวิรัติ'), toItem('อาหารอ่อน')]
+	},
+	{
+		type: 'pet_types',
+		items: [toItem('สุนัข', true), toItem('แมว'), toItem('นก')]
+	},
+	{
+		type: 'house_damage',
+		items: [toItem('เสียหายทั้งหลัง', true), toItem('เสียหายบางส่วน'), toItem('น้ำท่วมถึงชั้น 1')]
+	},
+	{
+		type: 'shelter_type',
+		items: [toItem('โรงเรียน', true), toItem('ศาลาประชาคม'), toItem('วัด'), toItem('อาคารราชการ')]
+	},
+	{
+		type: 'municipality_zone',
+		items: MZ_DEFS.map((d) => ({
+			code: d.code,
+			label: d.label,
+			is_default: d.is_default ?? false,
+			status: 'active'
+		}))
+	},
+	{
+		type: 'community',
+		items: COMMUNITY_DEFS.map((d) => ({
+			code: itemCode(),
+			label: d.label,
+			is_default: d.is_default ?? false,
+			status: 'active',
+			parent_code: MZ[d.parent]
+		}))
+	}
+];
+
+async function seedMasterData(): Promise<void> {
+	await ensureDb('registry');
+	const ts = now();
+
+	for (const { type, items } of MASTER_DATA_SEED) {
+		const id = `master_data:${type}`;
+		const { status: getStatus, data: existing } = await couchReq(
+			'GET',
+			`/registry/${encodeURIComponent(id)}`
+		);
+		const rev = getStatus === 200 ? (existing as { _rev: string })._rev : undefined;
+
+		await putDoc('registry', {
+			_id: id,
+			...(rev ? { _rev: rev } : {}),
+			type: 'master_data',
+			schema_v: 3,
+			master_type: type,
+			items,
+			created_at: ts,
+			updated_at: ts,
+			created_by: 'seed'
+		});
+		console.log(`  ✓ registry: master_data ${type} (${items.length} items)`);
 	}
 }
 
@@ -661,18 +829,18 @@ async function seedShelter(): Promise<void> {
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวใจดี',
-			municipality_zone: 'Z1',
+			municipality_zone: MZ.zone_1,
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ครอบครัวใหญ่ 4 คน'
 		},
 		{
 			label: 'ครอบครัวสุขสาย',
-			municipality_zone: 'Z1',
+			municipality_zone: MZ.zone_1,
 			head_evacuee_id: null,
 			pets: [{ species: 'dog', count: 1 }]
 		},
-		{ label: 'ครอบครัวรักสงบ', municipality_zone: 'Z2', head_evacuee_id: null, pets: [] }
+		{ label: 'ครอบครัวรักสงบ', municipality_zone: MZ.zone_2, head_evacuee_id: null, pets: [] }
 	];
 	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, ctx));
 
@@ -686,7 +854,7 @@ async function seedShelter(): Promise<void> {
 			phone: '0811111111',
 			birth_year: 1955,
 			religion: 'buddhist',
-			special_needs: ['elderly'],
+			special_needs: [VG.elderly],
 			household_id: hh1._id,
 			registered_via: 'import'
 		},
@@ -697,7 +865,7 @@ async function seedShelter(): Promise<void> {
 			phone: '0812222222',
 			birth_year: 1958,
 			religion: 'buddhist',
-			special_needs: ['elderly'],
+			special_needs: [VG.elderly],
 			household_id: hh1._id,
 			registered_via: 'import'
 		},
@@ -719,7 +887,7 @@ async function seedShelter(): Promise<void> {
 			phone: '0814444444',
 			birth_year: 1993,
 			religion: 'buddhist',
-			special_needs: ['pregnant'],
+			special_needs: [VG.pregnant],
 			household_id: hh1._id,
 			registered_via: 'import',
 			emergency_contact: { name: 'ประเสริฐ ใจดี', phone: '0813333333', relation: 'สามี' }
@@ -754,7 +922,7 @@ async function seedShelter(): Promise<void> {
 			phone: null,
 			birth_year: 2024,
 			religion: 'buddhist',
-			special_needs: ['infant'],
+			special_needs: [VG.infant],
 			household_id: hh2._id,
 			registered_via: 'import'
 		},
@@ -777,7 +945,7 @@ async function seedShelter(): Promise<void> {
 			phone: '0817777777',
 			birth_year: 1975,
 			religion: 'muslim',
-			special_needs: ['chronic_illness'],
+			special_needs: [VG.chronic_illness],
 			household_id: hh3._id,
 			registered_via: 'import',
 			emergency_contact: { name: 'วิชัย รักสงบ', phone: '0816666666', relation: 'สามี' }
@@ -954,6 +1122,33 @@ async function seedShelter(): Promise<void> {
 	];
 	const donations = donationInputs.map((d) => createWalkInDonation(d, ctx));
 
+	// — purchases (CR-032) ————————————————————————————————————————————————————
+	// Two-step flow: the doc is declared first, the count is keyed separately. The
+	// second purchase is left unkeyed so both badge states show up in the UI.
+	const purchaseInputs: PurchaseInput[] = [
+		{
+			vendor: 'บริษัท สยามค้าส่ง จำกัด',
+			po_ref: 'PO-2569-0001',
+			items: [
+				{ item_id: ITEM.rice, qty: '100', unit: 'kg' },
+				{ item_id: ITEM.soap, qty: '60', unit: 'bar' }
+			],
+			note: 'จัดซื้อรอบเร่งด่วนสัปดาห์แรก'
+		},
+		{
+			vendor: 'ร้านค้าสหกรณ์ชุมชน',
+			items: [{ item_id: ITEM.blanket, qty: '40', unit: 'piece' }]
+		}
+	];
+	const purchases = purchaseInputs.map((p) => createPurchase(p, ctx));
+
+	// Partial receipt against the first purchase — rice arrived, soap has not.
+	const purchaseReceipts = keyPurchaseReceipt(
+		purchases[0],
+		[{ item_id: ITEM.rice, qty: '100', unit: 'kg' }],
+		ctx
+	);
+
 	// — bulk insert ——————————————————————————————————————————————————————————
 	const allDocs = [
 		...hhInputs.map((_, i) => [hh1, hh2, hh3][i]),
@@ -963,7 +1158,9 @@ async function seedShelter(): Promise<void> {
 		...screenings,
 		...stockEntries,
 		...campaigns,
-		...donations
+		...donations,
+		...purchases,
+		...purchaseReceipts
 	];
 	await bulkDocs(dbName, allDocs);
 
@@ -973,6 +1170,9 @@ async function seedShelter(): Promise<void> {
 	console.log(`  ✓ ${dbName}: ${medicals.length} medicals, ${screenings.length} screenings`);
 	console.log(
 		`  ✓ ${dbName}: ${stockEntries.length} stock entries, ${campaigns.length} campaigns, ${donations.length} donations`
+	);
+	console.log(
+		`  ✓ ${dbName}: ${purchases.length} purchases, ${purchaseReceipts.length} purchase receipt rows`
 	);
 }
 
@@ -996,7 +1196,7 @@ async function seedShelter2(): Promise<void> {
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวปัตตานี',
-			municipality_zone: 'Z1',
+			municipality_zone: MZ.zone_1,
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ตัวอย่าง SH002'
@@ -1351,7 +1551,7 @@ async function main() {
 	try {
 		await seedUsers();
 		await seedRegistry();
-		await seedThailandLocation();
+		await seedMasterData();
 		await seedCatalog();
 		await seedCatalogSopRatios();
 		await seedShelter();
@@ -1359,8 +1559,8 @@ async function main() {
 		await seedDashboardData();
 		await seedDailyCalc();
 		console.log('\nDone.\n');
-	} catch (err) {
-		console.error('\nSeed failed:', err);
+	} catch (e: unknown) {
+		console.error('\nSeed failed:', e);
 		process.exit(1);
 	}
 }
