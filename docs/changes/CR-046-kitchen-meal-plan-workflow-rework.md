@@ -1,5 +1,5 @@
 ---
-id: CR-045
+id: CR-046
 title: Kitchen meal-plan rework — BOM/Custom modes, linear workflow, duplicate plans, meal_service↔plan link
 status: proposed (implementation complete on branch team-c-05-D — pending owner sign-off)
 date: 2026-07-22
@@ -24,7 +24,7 @@ affects:
   - frontend/src/lib/features/kitchen/ui/requisition-history.svelte
 ---
 
-# CR-045 — Kitchen meal-plan rework — BOM/Custom modes, linear workflow, duplicate plans, meal_service↔plan link
+# CR-046 — Kitchen meal-plan rework — BOM/Custom modes, linear workflow, duplicate plans, meal_service↔plan link
 
 ## Why
 
