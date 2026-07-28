@@ -1,9 +1,9 @@
 
 ---
-id: CR-048
-title: "CR-045 scope amendment — worker projector seeds donation_need_counter.qty_target"
+id: CR-059
+title: "CR-059 scope amendment — worker projector seeds donation_need_counter.qty_target"
 status: proposed
-date: 2026-07-27
+date: 2026-07-28
 requested_by: ทีมพัฒนา (Team A — ชิโน, นัท, กาน)
 decided_by: <เจ้าของโครงการ>
 layer: volatile
@@ -15,7 +15,7 @@ affects:
   - worker/tests/projectors/test_projectors.py
   - CR-045 Migration & Maintenance §One-time Backfill Script — ต้องรวม qty_target seed ด้วย
 ---
-# CR-048 — worker projector seeds `donation_need_counter.qty_target`
+# CR-059 — worker projector seeds `donation_need_counter.qty_target`
 
 ## สรุป (TL;DR)
 
@@ -98,9 +98,9 @@ CR-045-donation-quota-atomic-reservation กำหนด `DonationsUseCase.creat
   `worker/src/worker/projectors/donation_need_counter.py`), `worker/src/worker/couch/processor.py`
   (dispatch), `worker/tests/projectors/test_projectors.py`
 - **depends on:** `packages/tent-model/src/tent_model/donation_need_counter.py` ต้องมีอยู่ก่อน
-  (สร้างตาม CR-045 — คนละงาน implement แต่ต้อง merge ก่อน/พร้อมกัน)
+  (สร้างตาม CR-059 — คนละงาน implement แต่ต้อง merge ก่อน/พร้อมกัน)
 - **ไม่กระทบ:** schema_v ใดๆ, CouchDB `donation_campaign` doc shape, retention job (`purge_expired_buffers`)
-  ที่ CR-045 คุมอยู่แล้ว
+  ที่ CR-059 คุมอยู่แล้ว
 
 ## Migration
 
@@ -112,6 +112,6 @@ campaign เพื่อเติม `qty_target` ให้)
 
 ## Decision log
 
-- 2026-07-27 — proposed โดยทีมพัฒนา ระหว่าง implement CR-045 (T-21) — พบ gap สถาปัตยกรรมว่า FastAPI
+- 2026-07-28 — proposed โดยทีมพัฒนา ระหว่าง implement CR-045 (T-21) — พบ gap สถาปัตยกรรมว่า FastAPI
   ไม่มีทางอ่าน `qty_target` จาก CouchDB ได้เอง ต้องขยาย scope ของ CR-045 ให้ worker เป็นคน seed ค่านี้
   — รอเจ้าของโครงการเคาะ `approved` + ยืนยันวิธี track (เอกสารนี้ = ไฟล์ CR ตามที่ตกลง)
