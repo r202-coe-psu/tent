@@ -22,10 +22,14 @@
 		</div>
 		<div>
 			<div class="text-sm font-bold text-success-dark">
-				ผู้ดูแลศูนย์: {shelter.contact?.manager || '-'}
+				ผู้ดูแลศูนย์: {shelter.contact?.manager === 'unspecified'
+					? 'ไม่มีชื่อผู้ประสานงาน'
+					: shelter.contact?.manager || '-'}
 			</div>
 			<div class="text-xl font-bold text-success-dark">
-				{shelter.contact?.phone || '-'}
+				{shelter.contact?.phone === 'unspecified'
+					? 'ไม่มีข้อมูลติดต่อ'
+					: shelter.contact?.phone || '-'}
 			</div>
 		</div>
 	</div>

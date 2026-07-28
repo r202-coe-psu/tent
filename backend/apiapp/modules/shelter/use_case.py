@@ -49,32 +49,22 @@ class ShelterUseCase:
             vul_groups = list(admin_policy.get("supported_vulnerable_groups") or [])
             if not vul_groups:
                 if any(z.get("type") == "vulnerable" for z in zones):
-                    vul_groups.append("กลุ่มเปราะบางทั่วไป")
+                    vul_groups.append("general_vulnerable")
                 if any(z.get("type") == "quarantine" for z in zones):
-                    vul_groups.append("ผู้ป่วยแยกกักโรค")
+                    vul_groups.append("quarantine")
                 if (facilities.get("toilets_accessible") or 0) > 0:
-                    vul_groups.append("ผู้ใช้วีลแชร์")
+                    vul_groups.append("wheelchair")
 
             if not vul_groups:
-                vul_groups = ["ไม่มีโซนเฉพาะ"]
+                vul_groups = ["none"]
 
             if pet_policy.get("policy") == "conditional":
-                cats = []
-                for c in pet_policy.get("categories") or []:
-                    cat = c.get("category")
-                    if cat == "small_general":
-                        cats.append("สัตว์เล็กทั่วไป")
-                    elif cat == "large_dog":
-                        cats.append("สุนัขพันธุ์ใหญ่")
-                    elif cat == "livestock":
-                        cats.append("ปศุสัตว์")
-                    else:
-                        cats.append(str(cat))
-                pet_status = f"อนุญาตแบบมีเงื่อนไข ({', '.join(cats)})"
+                cats = [str(c.get("category")) for c in pet_policy.get("categories") or []]
+                pet_status = f"conditional:{','.join(cats)}"
             elif any(z.get("type") == "pet" for z in zones):
-                pet_status = "อนุญาต (มีโซนสัตว์เลี้ยง)"
+                pet_status = "allowed"
 
-            admin_type = m.get("shelter_type") or "ไม่ระบุประเภท"
+            admin_type = m.get("shelter_type") or "unspecified"
 
             shelters.append(
                 ShelterItem(
@@ -126,13 +116,9 @@ class ShelterUseCase:
         occupancy_rate = round((occupancy / capacity_total) * 100) if capacity_total > 0 else 0
 
         area_type = m.get("area_type")
-        building_status = "ไม่ระบุ"
-        if area_type == "indoor":
-            building_status = "อาคารปิด (ในร่ม)"
-        elif area_type == "outdoor":
-            building_status = "ลานเปิด (กลางแจ้ง)"
-        elif area_type == "hybrid":
-            building_status = "ผสมผสาน (มีทั้งในร่มและกลางแจ้ง)"
+        building_status = (
+            area_type if area_type in ("indoor", "outdoor", "hybrid") else "unspecified"
+        )
 
         admin_policy = m.get("admission_policy") or {}
         vul_groups = list(admin_policy.get("supported_vulnerable_groups") or [])
@@ -141,65 +127,38 @@ class ShelterUseCase:
 
         if not vul_groups:
             if any(z.get("type") == "vulnerable" for z in zones):
-                vul_groups.append("กลุ่มเปราะบางทั่วไป")
+                vul_groups.append("general_vulnerable")
             if any(z.get("type") == "quarantine" for z in zones):
-                vul_groups.append("ผู้ป่วยแยกกักโรค")
+                vul_groups.append("quarantine")
             if (facilities.get("toilets_accessible") or 0) > 0:
-                vul_groups.append("ผู้ใช้วีลแชร์")
+                vul_groups.append("wheelchair")
 
         if not vul_groups:
-            vul_groups = ["ไม่มีโซนเฉพาะ"]
+            vul_groups = ["none"]
 
         pet_policy = admin_policy.get("pet_policy") or {}
-        pet_status = "ไม่อนุญาต"
+        pet_status = "not_allowed"
         if pet_policy.get("policy") == "conditional":
-            cats = []
-            for c in pet_policy.get("categories") or []:
-                cat = c.get("category")
-                if cat == "small_general":
-                    cats.append("สัตว์เล็กทั่วไป")
-                elif cat == "large_dog":
-                    cats.append("สุนัขพันธุ์ใหญ่")
-                elif cat == "livestock":
-                    cats.append("ปศุสัตว์")
-                else:
-                    cats.append(str(cat))
-            pet_status = f"อนุญาตแบบมีเงื่อนไข ({', '.join(cats)})"
+            cats = [str(c.get("category")) for c in pet_policy.get("categories") or []]
+            pet_status = f"conditional:{','.join(cats)}"
         elif any(z.get("type") == "pet" for z in zones):
-            pet_status = "อนุญาต (มีโซนสัตว์เลี้ยง)"
+            pet_status = "allowed"
 
         utilities = m.get("utilities") or {}
-        power_source = utilities.get("power_source")
-        power = "ไม่มีข้อมูล"
-        if power_source == "generator":
-            power = "เครื่องปั่นไฟ"
-        elif power_source == "solar":
-            power = "โซลาร์เซลล์"
-        elif power_source == "city_grid":
-            power = "การไฟฟ้า"
-
-        water_source = utilities.get("water_source")
-        water = "ไม่มีข้อมูล"
-        if water_source == "groundwater":
-            water = "น้ำบาดาล"
-        elif water_source == "water_tank":
-            water = "รถบรรทุกน้ำ"
-        elif water_source == "city_water":
-            water = "การประปา"
-
-        comms_map = {"cellular": "สัญญาณมือถือ", "wifi": "Wi-Fi", "vhf_radio": "VHF"}
-        comms = [comms_map.get(c, c) for c in (utilities.get("communications") or [])]
+        power = utilities.get("power_source") or "none"
+        water = utilities.get("water_source") or "none"
+        comms = utilities.get("communications") or []
 
         common_areas = m.get("common_areas") or {}
-        kitchen = "โรงครัวกลาง" if common_areas.get("central_kitchen") else "ไม่มีโรงครัว"
-        parking = f"{common_areas.get('parking_capacity') or 0} คัน"
+        kitchen = "central_kitchen" if common_areas.get("central_kitchen") else "none"
+        parking = str(common_areas.get("parking_capacity") or 0)
 
         contact = m.get("contact") or {}
         key_personnel = m.get("key_personnel") or {}
         eoc_liaison = key_personnel.get("eoc_liaison") or {}
 
-        manager_name = contact.get("name") or eoc_liaison.get("name") or "เจ้าหน้าที่ประสานงาน"
-        manager_phone = contact.get("phone") or eoc_liaison.get("phone") or "ไม่มีข้อมูลติดต่อ"
+        manager_name = contact.get("name") or eoc_liaison.get("name") or "unspecified"
+        manager_phone = str(contact.get("phone") or eoc_liaison.get("phone") or "unspecified")
 
         risk = m.get("risk") or {}
 
@@ -220,19 +179,22 @@ class ShelterUseCase:
         return ShelterDetailResponse(
             shelter={
                 "id": code,
-                "name": m.get("name") or doc.name or "ไม่มีชื่อศูนย์พักพิง",
+                "name": m.get("name") or doc.name or code,
                 "status": mapped_status,
-                "admin_type": m.get("shelter_type") or "ไม่ระบุประเภท",
-                "address": location.get("address") or "ไม่ระบุที่อยู่",
+                "admin_type": m.get("shelter_type") or "unspecified",
+                "address": location.get("address") or "unspecified",
                 "capacity": {"total": capacity_total, "available": capacity_available},
                 "occupancy_rate": occupancy_rate,
                 "building_status": building_status,
                 "geo": doc.geo,
-                "admission_policy": {"pets": pet_status, "vulnerable_groups": vul_groups},
+                "admission_policy": {
+                    "pets": pet_status,
+                    "vulnerable_groups": vul_groups,
+                },
                 "travel": {
-                    "route": risk.get("entrance_description") or "ไม่มีข้อมูล",
+                    "route": risk.get("entrance_description") or "unspecified",
                     "altitude": (
-                        f"{risk.get('elevation_m')} เมตร" if risk.get("elevation_m") else "ไม่มีข้อมูล"
+                        str(risk.get("elevation_m")) if risk.get("elevation_m") else "unspecified"
                     ),
                     "flood_warning": risk.get("constraints"),
                 },

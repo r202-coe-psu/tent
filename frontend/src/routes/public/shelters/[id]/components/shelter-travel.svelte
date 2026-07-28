@@ -15,13 +15,17 @@
 		<div class="flex items-center justify-between border-b border-border/50 p-4">
 			<span class="text-sm font-semibold text-muted-foreground">เส้นทางเข้าศูนย์</span>
 			<span class="ml-4 text-right text-sm font-bold text-foreground"
-				>{shelter.travel?.route || '-'}</span
+				>{shelter.travel?.route === 'unspecified'
+					? 'ไม่มีข้อมูล'
+					: shelter.travel?.route || '-'}</span
 			>
 		</div>
 		<div class="flex items-center justify-between border-b border-border/50 p-4">
 			<span class="text-sm font-semibold text-muted-foreground">ระดับความสูงจากน้ำทะเล</span>
 			<span class="ml-4 text-right text-sm font-bold text-foreground"
-				>{shelter.travel?.altitude || '-'}</span
+				>{shelter.travel?.altitude === 'unspecified'
+					? 'ไม่มีข้อมูล'
+					: (shelter.travel?.altitude || '-') + ' เมตร'}</span
 			>
 		</div>
 		{#if shelter.travel?.flood_warning}

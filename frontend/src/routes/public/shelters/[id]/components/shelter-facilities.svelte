@@ -63,11 +63,31 @@
 				<div class="space-y-2 text-xs">
 					<div class="flex justify-between border-b border-border/50 pb-1">
 						<span class="text-muted-foreground">ไฟฟ้าหลัก:</span>
-						<span class="ml-2 text-right font-bold">{shelter.facilities?.power || '-'}</span>
+						<span class="ml-2 text-right font-bold">
+							{#if shelter.facilities?.power === 'generator'}
+								เครื่องปั่นไฟ
+							{:else if shelter.facilities?.power === 'solar'}
+								โซลาร์เซลล์
+							{:else if shelter.facilities?.power === 'city_grid'}
+								การไฟฟ้า
+							{:else}
+								ไม่มีข้อมูล
+							{/if}
+						</span>
 					</div>
 					<div class="flex justify-between">
 						<span class="text-muted-foreground">น้ำประปา:</span>
-						<span class="ml-2 text-right font-bold">{shelter.facilities?.water || '-'}</span>
+						<span class="ml-2 text-right font-bold">
+							{#if shelter.facilities?.water === 'groundwater'}
+								น้ำบาดาล
+							{:else if shelter.facilities?.water === 'water_tank'}
+								รถบรรทุกน้ำ
+							{:else if shelter.facilities?.water === 'city_water'}
+								การประปา
+							{:else}
+								ไม่มีข้อมูล
+							{/if}
+						</span>
 					</div>
 				</div>
 			</div>
@@ -81,13 +101,13 @@
 					<div class="flex justify-between border-b border-border/50 pb-1">
 						<span class="text-muted-foreground">สัญญาณมือถือ</span>
 						<span class="ml-2 text-right font-bold"
-							>{shelter.facilities?.comms?.includes('สัญญาณมือถือ') ? 'มี' : 'ไม่มี'}</span
+							>{shelter.facilities?.comms?.includes('cellular') ? 'มี' : 'ไม่มี'}</span
 						>
 					</div>
 					<div class="flex justify-between">
 						<span class="text-muted-foreground">VHF</span>
 						<span class="ml-2 text-right font-bold"
-							>{shelter.facilities?.comms?.includes('VHF') ? 'มี' : 'ไม่มี'}</span
+							>{shelter.facilities?.comms?.includes('vhf_radio') ? 'มี' : 'ไม่มี'}</span
 						>
 					</div>
 				</div>
@@ -101,7 +121,7 @@
 					class="flex items-center gap-1.5 rounded-xl bg-warning px-3 py-2 text-sm font-bold text-warning-foreground shadow-sm"
 				>
 					<ChefHat class="h-4 w-4 shrink-0" />
-					{shelter.facilities.kitchen}
+					{shelter.facilities.kitchen === 'central_kitchen' ? 'โรงครัวกลาง' : 'ไม่มีโรงครัว'}
 				</div>
 			{/if}
 			{#if shelter.facilities?.parking}
@@ -109,7 +129,7 @@
 					class="flex items-center gap-1.5 rounded-xl border border-border bg-muted px-3 py-2 text-sm font-bold text-foreground/90 shadow-sm"
 				>
 					<Car class="h-4 w-4 shrink-0" />
-					{shelter.facilities.parking}
+					{shelter.facilities.parking} คัน
 				</div>
 			{/if}
 		</div>

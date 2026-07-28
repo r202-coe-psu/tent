@@ -1,6 +1,6 @@
 {
 	"openapi": "3.1.0",
-	"info": { "title": "IMPs FastAPI", "version": "0.1.0" },
+	"info": { "title": "CouchDB Lab Public API", "version": "0.1.0" },
 	"paths": {
 		"/v1/auth/verify": {
 			"get": {

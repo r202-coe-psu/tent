@@ -37,7 +37,7 @@
 				<MapPin class="h-4 w-4 text-warning" />
 				{shelter.address || 'ไม่ระบุที่อยู่'}
 			</div>
-			{#if shelter.admin_type}
+			{#if shelter.admin_type && shelter.admin_type !== 'unspecified'}
 				<span
 					class="rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white/90"
 				>
@@ -72,7 +72,15 @@
 					<div class="text-xs font-semibold text-secondary/80">สถานะอาคาร</div>
 					<div class="flex items-end gap-2 self-end text-xl font-bold text-white">
 						<CheckCircle2 class="h-5 w-5 text-warning-subtle" />
-						{shelter.building_status || '-'}
+						{#if shelter.building_status === 'indoor'}
+							อาคารปิด (ในร่ม)
+						{:else if shelter.building_status === 'outdoor'}
+							ลานเปิด (กลางแจ้ง)
+						{:else if shelter.building_status === 'hybrid'}
+							ผสมผสาน (มีทั้งในร่มและกลางแจ้ง)
+						{:else}
+							ไม่ระบุ
+						{/if}
 					</div>
 				</div>
 			</div>

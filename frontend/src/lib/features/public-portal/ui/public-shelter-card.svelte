@@ -21,6 +21,36 @@
 		getStatusColor: (status: string) => string;
 		getStatusText: (status: string) => string;
 	} = $props();
+
+	function translateVulnerableGroup(group: string): string {
+		const map: Record<string, string> = {
+			general_vulnerable: 'กลุ่มเปราะบางทั่วไป',
+			quarantine: 'ผู้ป่วยแยกกักโรค',
+			wheelchair: 'ผู้ใช้วีลแชร์',
+			none: 'ไม่มีโซนเฉพาะ'
+		};
+		return map[group] || group;
+	}
+
+	function translatePetPolicy(policyStr: string | undefined): string {
+		if (!policyStr) return '-';
+		if (policyStr === 'not_allowed') return 'ไม่อนุญาต';
+		if (policyStr === 'allowed') return 'อนุญาต (มีโซนสัตว์เลี้ยง)';
+		if (policyStr.startsWith('conditional:')) {
+			const categories = policyStr.split(':')[1];
+			const map: Record<string, string> = {
+				small_general: 'สัตว์เล็กทั่วไป',
+				large_dog: 'สุนัขพันธุ์ใหญ่',
+				livestock: 'ปศุสัตว์'
+			};
+			const translated = categories
+				.split(',')
+				.map((c) => map[c] || c)
+				.join(', ');
+			return `อนุญาตแบบมีเงื่อนไข (${translated})`;
+		}
+		return policyStr;
+	}
 </script>
 
 <Card.Root
@@ -80,21 +110,21 @@
 				<span class="ml-0.5 text-[10px] font-bold text-muted-foreground">คน</span>
 			</div>
 		</div>
-		{#if shelter.pet_policy || (shelter.vulnerable_groups && shelter.vulnerable_groups.filter((g) => g !== 'ไม่มีโซนเฉพาะ').length > 0)}
+		{#if shelter.pet_policy || (shelter.vulnerable_groups && shelter.vulnerable_groups.filter((g) => g !== 'none' && g !== 'ไม่มีโซนเฉพาะ').length > 0)}
 			<div class="flex flex-col gap-2 border-t border-border/60 pt-2.5">
-				{#if shelter.vulnerable_groups && shelter.vulnerable_groups.filter((g) => g !== 'ไม่มีโซนเฉพาะ').length > 0}
+				{#if shelter.vulnerable_groups && shelter.vulnerable_groups.filter((g) => g !== 'none' && g !== 'ไม่มีโซนเฉพาะ').length > 0}
 					<div class="flex flex-col gap-1.5">
 						<div class="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
 							<HeartPulse class="h-3 w-3" />
 							กลุ่มเปราะบางที่รองรับ
 						</div>
 						<div class="flex flex-wrap gap-1">
-							{#each shelter.vulnerable_groups.filter((g) => g !== 'ไม่มีโซนเฉพาะ') as group, i (i)}
+							{#each shelter.vulnerable_groups.filter((g) => g !== 'none' && g !== 'ไม่มีโซนเฉพาะ') as group, i (i)}
 								<Badge
 									variant="secondary"
-									class="border-primary/10 bg-primary/5 text-[10px] text-foreground hover:bg-primary/10"
+									class="h-auto min-h-5 border-primary/10 bg-primary/5 py-1 text-left text-[10px] leading-tight whitespace-normal text-foreground hover:bg-primary/10"
 								>
-									{group}
+									{translateVulnerableGroup(group)}
 								</Badge>
 							{/each}
 						</div>
@@ -104,7 +134,8 @@
 				{#if shelter.pet_policy}
 					<div
 						class="flex flex-col gap-1.5 {shelter.vulnerable_groups &&
-						shelter.vulnerable_groups.filter((g) => g !== 'ไม่มีโซนเฉพาะ').length > 0
+						shelter.vulnerable_groups.filter((g) => g !== 'none' && g !== 'ไม่มีโซนเฉพาะ').length >
+							0
 							? 'mt-1'
 							: ''}"
 					>
@@ -115,11 +146,12 @@
 						<div class="flex flex-wrap">
 							<Badge
 								variant="outline"
-								class="text-[10px] {shelter.pet_policy.includes('ไม่')
+								class="h-auto min-h-5 py-1 text-left text-[10px] leading-tight whitespace-normal {shelter.pet_policy ===
+									'not_allowed' || shelter.pet_policy.includes('ไม่')
 									? 'border-danger/30 bg-danger/5 text-danger'
 									: 'border-success/30 bg-success/5 text-success-dark'}"
 							>
-								{shelter.pet_policy}
+								{translatePetPolicy(shelter.pet_policy)}
 							</Badge>
 						</div>
 					</div>

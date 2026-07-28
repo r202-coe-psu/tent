@@ -5,6 +5,19 @@
 	import type { PublicShelterDetail } from '$lib/features/public-portal';
 
 	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
+
+	function translatePetCategories(categoriesStr: string): string {
+		if (!categoriesStr) return '';
+		const map: Record<string, string> = {
+			small_general: 'สัตว์เล็กทั่วไป',
+			large_dog: 'สุนัขพันธุ์ใหญ่',
+			livestock: 'ปศุสัตว์'
+		};
+		return categoriesStr
+			.split(',')
+			.map((c) => map[c] || c)
+			.join(', ');
+	}
 </script>
 
 <section>
@@ -17,9 +30,8 @@
 		<!-- Pets -->
 		<div class="flex items-start gap-4 rounded-xl border border-border bg-white p-4 shadow-sm">
 			<div
-				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {(
-					shelter.admission_policy?.pets || ''
-				).includes('ไม่')
+				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {shelter
+					.admission_policy?.pets === 'not_allowed'
 					? 'bg-danger/10 text-danger'
 					: 'bg-warning/15 text-warning-dark'}"
 			>
@@ -27,18 +39,28 @@
 			</div>
 			<div>
 				<h3
-					class="mb-1 text-sm font-bold {(shelter.admission_policy?.pets || '').includes('ไม่')
+					class="mb-1 text-sm font-bold {shelter.admission_policy?.pets === 'not_allowed'
 						? 'text-danger'
 						: 'text-foreground'}"
 				>
 					นโยบายสัตว์เลี้ยง
 				</h3>
 				<p
-					class="text-sm {(shelter.admission_policy?.pets || '').includes('ไม่')
+					class="text-sm {shelter.admission_policy?.pets === 'not_allowed'
 						? 'text-danger/80'
 						: 'text-muted-foreground'}"
 				>
-					{shelter.admission_policy?.pets || '-'}
+					{#if shelter.admission_policy?.pets === 'not_allowed'}
+						ไม่อนุญาต
+					{:else if shelter.admission_policy?.pets === 'allowed'}
+						อนุญาต (มีโซนสัตว์เลี้ยง)
+					{:else if shelter.admission_policy?.pets?.startsWith('conditional')}
+						อนุญาตแบบมีเงื่อนไข ({translatePetCategories(
+							shelter.admission_policy.pets.split(':')[1]
+						)})
+					{:else}
+						-
+					{/if}
 				</p>
 			</div>
 		</div>
@@ -58,11 +80,21 @@
 							<span
 								class="inline-flex items-center rounded-full bg-accent-purple/10 px-2.5 py-0.5 text-xs font-semibold text-accent-purple"
 							>
-								{group}
+								{#if group === 'general_vulnerable'}
+									กลุ่มเปราะบางทั่วไป
+								{:else if group === 'quarantine'}
+									ผู้ป่วยแยกกักโรค
+								{:else if group === 'wheelchair'}
+									ผู้ใช้วีลแชร์
+								{:else if group === 'none'}
+									ไม่มีโซนเฉพาะ
+								{:else}
+									{group}
+								{/if}
 							</span>
 						{/each}
 					</div>
-					{#if !shelter.admission_policy.vulnerable_groups.includes('ผู้ป่วยติดเตียง')}
+					{#if !shelter.admission_policy.vulnerable_groups.includes('bedridden')}
 						<p class="mt-2 text-xs text-muted-foreground">
 							* ไม่ได้ระบุว่ารองรับผู้ป่วยติดเตียงเป็นพิเศษ
 						</p>
