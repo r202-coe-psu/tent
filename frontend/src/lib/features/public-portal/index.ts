@@ -25,3 +25,6 @@ export {
 	useFamilySearchMutation,
 	usePublicShelters
 } from './application/queries';
+
+export { publicConfigBodySchema, publicConfigSchema, type PublicConfigBody } from './domain/config';
+export { default as PublicPortalConfigForm } from './ui/public-portal-config-form.svelte';
