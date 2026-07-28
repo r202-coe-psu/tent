@@ -1,5 +1,5 @@
 ---
-id: CR-046
+id: CR-050
 title: "evacuee.special_needs enum → free-form string[]"
 status: proposed        # proposed | approved | done | rejected | superseded
 date: 2026-07-24
@@ -11,7 +11,7 @@ affects:
   - frontend/src/lib/features/people/domain/people.ts
 ---
 
-# CR-046 — evacuee.special_needs free-form
+# CR-050 — evacuee.special_needs free-form
 
 ## สรุป (TL;DR)
 

@@ -9,7 +9,14 @@
 	import HomePortalCard from '$lib/components/home-portal-card.svelte';
 
 	const roles = $derived(authStore.user?.roles ?? []);
-	const canSeeBackoffice = $derived(isSystemAdmin(roles) || isShelterManager(roles));
+	const isSA = $derived(isSystemAdmin(roles));
+	const canSeeBackoffice = $derived(isSA || isShelterManager(roles));
+	// onsite + public are always shown; system-management is SA-only; back-office
+	// is SA/SM — size the grid to the number of visible cards.
+	const visibleCards = $derived(2 + (isSA ? 1 : 0) + (canSeeBackoffice ? 1 : 0));
+	const lgCols = $derived(
+		visibleCards >= 4 ? 'lg:grid-cols-4' : visibleCards === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+	);
 </script>
 
 <svelte:head>
@@ -27,11 +34,7 @@
 			</p>
 		</header>
 
-		<main
-			class="grid grid-cols-1 gap-6 md:grid-cols-2 {canSeeBackoffice
-				? 'lg:grid-cols-4'
-				: 'lg:grid-cols-3'}"
-		>
+		<main class="grid grid-cols-1 gap-6 md:grid-cols-2 {lgCols}">
 			<HomePortalCard
 				icon={Users}
 				accent="brand"
@@ -49,13 +52,15 @@
 				href={resolve('/public')}
 			/>
 
-			<HomePortalCard
-				icon={Building2}
-				accent="accent-purple"
-				title="ศูนย์สั่งการ (EOC)"
-				description="ภาพรวมสถานการณ์, กระดานเช็คยอด Headcount, แผนที่กระจายทรัพยากร, และระดมอาสาสมัครส่วนกลาง"
-				disabled
-			/>
+			{#if isSA}
+				<HomePortalCard
+					icon={Building2}
+					accent="accent-purple"
+					title="ทะเบียนพื้นที่และศูนย์พักพิง"
+					description="จัดการข้อมูลศูนย์พักพิง, ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
+					href={resolve('/portal/system-management')}
+				/>
+			{/if}
 
 			{#if canSeeBackoffice}
 				<HomePortalCard

@@ -37,11 +37,15 @@
 
 	let {
 		id = '',
-		isEdit
+		isEdit,
+		basePath
 	}: {
 		id?: string;
 		isEdit: boolean;
+		basePath?: string;
 	} = $props();
+
+	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/shelters'));
 
 	const shelterQuery = useShelter(() => id);
 	const createMutation = useCreateShelter();
@@ -63,11 +67,11 @@
 			if (isEdit) {
 				updateMutation.mutate(
 					{ code: id, input: data },
-					{ onSuccess: () => goto(resolve('/back-office/shelters')) }
+					{ onSuccess: () => goto(resolvedBasePath) }
 				);
 			} else {
 				createMutation.mutate(data, {
-					onSuccess: () => goto(resolve('/back-office/shelters'))
+					onSuccess: () => goto(resolvedBasePath)
 				});
 			}
 		}
@@ -186,7 +190,7 @@
 	>
 		<div class="flex items-center space-x-2">
 			<a
-				href={resolve('/back-office/shelters')}
+				href={resolvedBasePath}
 				class="mr-1 rounded-lg p-2 transition hover:bg-muted/50"
 				title="ปิด"
 			>
@@ -198,7 +202,7 @@
 		</div>
 		<div class="flex items-center gap-2">
 			<a
-				href={resolve('/back-office/shelters')}
+				href={resolvedBasePath}
 				class="rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted/50"
 			>
 				ยกเลิก
@@ -218,9 +222,7 @@
 		<div class="flex flex-col items-center justify-center space-y-2 py-20 text-destructive">
 			<span>เกิดข้อผิดพลาดในการดึงข้อมูล</span>
 			<span class="text-xs text-muted-foreground">{errorMessage}</span>
-			<a href={resolve('/back-office/shelters')} class="text-muted-foreground underline"
-				>กลับหน้ารวม</a
-			>
+			<a href={resolvedBasePath} class="text-muted-foreground underline">กลับหน้ารวม</a>
 		</div>
 	{:else}
 		<div class="flex flex-col gap-6 p-6 md:flex-row">

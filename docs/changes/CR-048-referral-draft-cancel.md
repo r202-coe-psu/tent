@@ -1,5 +1,5 @@
 ---
-id: CR-046
+id: CR-048
 title: Referral — อนุญาต draft → closed (ยกเลิกร่างก่อนส่ง)
 status: done
 date: 2026-07-24
@@ -14,7 +14,7 @@ affects:
   - frontend/src/lib/features/referrals/server/referral.server-repository.ts
 ---
 
-# CR-046 — Referral draft cancel (`draft → closed`)
+# CR-048 — Referral draft cancel (`draft → closed`)
 
 ## สรุป (TL;DR)
 
