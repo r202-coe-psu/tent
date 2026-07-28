@@ -1,6 +1,6 @@
 {
 	"openapi": "3.1.0",
-	"info": { "title": "IMPs FastAPI", "version": "0.1.0" },
+	"info": { "title": "CouchDB Lab Public API", "version": "0.1.0" },
 	"paths": {
 		"/v1/auth/verify": {
 			"get": {
@@ -249,6 +249,40 @@
 					}
 				}
 			}
+		},
+		"/public/v1/shelters/{code}": {
+			"get": {
+				"tags": ["Shelters"],
+				"summary": "Get Shelter",
+				"description": "Get shelter detail from the MongoDB read model.",
+				"operationId": "get_shelter",
+				"parameters": [
+					{
+						"name": "code",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Code" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ShelterDetailResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
 		}
 	},
 	"components": {
@@ -482,6 +516,123 @@
 				"required": ["name", "status", "shelter_name"],
 				"title": "SearchResult"
 			},
+			"ShelterAdmissionPolicyDetail": {
+				"properties": {
+					"pets": { "type": "string", "title": "Pets" },
+					"vulnerable_groups": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Vulnerable Groups"
+					}
+				},
+				"type": "object",
+				"required": ["pets", "vulnerable_groups"],
+				"title": "ShelterAdmissionPolicyDetail"
+			},
+			"ShelterCapacityDetail": {
+				"properties": {
+					"total": { "type": "integer", "title": "Total" },
+					"available": { "type": "integer", "title": "Available" }
+				},
+				"type": "object",
+				"required": ["total", "available"],
+				"title": "ShelterCapacityDetail"
+			},
+			"ShelterContactDetail": {
+				"properties": {
+					"manager": { "type": "string", "title": "Manager" },
+					"phone": { "type": "string", "title": "Phone" }
+				},
+				"type": "object",
+				"required": ["manager", "phone"],
+				"title": "ShelterContactDetail"
+			},
+			"ShelterDetail": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"name": { "type": "string", "title": "Name" },
+					"status": { "type": "string", "title": "Status" },
+					"admin_type": { "type": "string", "title": "Admin Type" },
+					"address": { "type": "string", "title": "Address" },
+					"capacity": { "$ref": "#/components/schemas/ShelterCapacityDetail" },
+					"occupancy_rate": { "type": "integer", "title": "Occupancy Rate" },
+					"building_status": { "type": "string", "title": "Building Status" },
+					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
+					"admission_policy": { "$ref": "#/components/schemas/ShelterAdmissionPolicyDetail" },
+					"travel": { "$ref": "#/components/schemas/ShelterTravelDetail" },
+					"facilities": { "$ref": "#/components/schemas/ShelterFacilitiesDetail" },
+					"zones": {
+						"anyOf": [
+							{ "items": { "$ref": "#/components/schemas/ShelterZoneDetail" }, "type": "array" },
+							{ "type": "null" }
+						],
+						"title": "Zones"
+					},
+					"contact": { "$ref": "#/components/schemas/ShelterContactDetail" },
+					"faq": {
+						"items": { "$ref": "#/components/schemas/ShelterFaqDetail" },
+						"type": "array",
+						"title": "Faq"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"status",
+					"admin_type",
+					"address",
+					"capacity",
+					"occupancy_rate",
+					"building_status",
+					"admission_policy",
+					"travel",
+					"facilities",
+					"contact",
+					"faq"
+				],
+				"title": "ShelterDetail"
+			},
+			"ShelterDetailResponse": {
+				"properties": { "shelter": { "$ref": "#/components/schemas/ShelterDetail" } },
+				"type": "object",
+				"required": ["shelter"],
+				"title": "ShelterDetailResponse"
+			},
+			"ShelterFacilitiesDetail": {
+				"properties": {
+					"hygiene": { "$ref": "#/components/schemas/ShelterHygieneDetail" },
+					"power": { "type": "string", "title": "Power" },
+					"water": { "type": "string", "title": "Water" },
+					"comms": { "items": { "type": "string" }, "type": "array", "title": "Comms" },
+					"kitchen": { "type": "string", "title": "Kitchen" },
+					"parking": { "type": "string", "title": "Parking" }
+				},
+				"type": "object",
+				"required": ["hygiene", "power", "water", "comms", "kitchen", "parking"],
+				"title": "ShelterFacilitiesDetail"
+			},
+			"ShelterFaqDetail": {
+				"properties": {
+					"q": { "type": "string", "title": "Q" },
+					"a": { "type": "string", "title": "A" }
+				},
+				"type": "object",
+				"required": ["q", "a"],
+				"title": "ShelterFaqDetail"
+			},
+			"ShelterHygieneDetail": {
+				"properties": {
+					"male": { "type": "integer", "title": "Male" },
+					"female": { "type": "integer", "title": "Female" },
+					"accessible": { "type": "integer", "title": "Accessible" },
+					"shower": { "type": "integer", "title": "Shower" },
+					"mobile_toilet": { "type": "integer", "title": "Mobile Toilet" }
+				},
+				"type": "object",
+				"required": ["male", "female", "accessible", "shower", "mobile_toilet"],
+				"title": "ShelterHygieneDetail"
+			},
 			"ShelterItem": {
 				"properties": {
 					"code": { "type": "string", "title": "Code", "description": "Shelter code, e.g. SH001" },
@@ -494,6 +645,18 @@
 					"subdistrict": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Subdistrict"
+					},
+					"pet_policy": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Pet Policy"
+					},
+					"vulnerable_groups": {
+						"anyOf": [{ "items": { "type": "string" }, "type": "array" }, { "type": "null" }],
+						"title": "Vulnerable Groups"
+					},
+					"admin_type": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Admin Type"
 					},
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},
@@ -528,6 +691,30 @@
 				"type": "object",
 				"required": ["code", "name", "needs"],
 				"title": "ShelterNeedsResponse"
+			},
+			"ShelterTravelDetail": {
+				"properties": {
+					"route": { "type": "string", "title": "Route" },
+					"altitude": { "type": "string", "title": "Altitude" },
+					"flood_warning": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Flood Warning"
+					}
+				},
+				"type": "object",
+				"required": ["route", "altitude"],
+				"title": "ShelterTravelDetail"
+			},
+			"ShelterZoneDetail": {
+				"properties": {
+					"name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name" },
+					"type": { "type": "string", "title": "Type" },
+					"capacity": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Capacity" },
+					"area_m2": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Area M2" }
+				},
+				"type": "object",
+				"required": ["type"],
+				"title": "ShelterZoneDetail"
 			},
 			"ValidationError": {
 				"properties": {

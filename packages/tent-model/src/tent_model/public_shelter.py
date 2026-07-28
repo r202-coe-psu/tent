@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from beanie import Document
 from pydantic import BaseModel, ConfigDict, Field
@@ -25,6 +26,7 @@ class PublicShelter(Document):
 	province: str | None = None
 	district: str | None = None
 	subdistrict: str | None = None
+	raw_data: dict[str, Any] = Field(default_factory=dict)
 	updated_at: datetime
 
 	class Settings:

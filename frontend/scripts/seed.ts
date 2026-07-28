@@ -249,6 +249,13 @@ const REGISTRY_SHELTERS = [
 			showers: 8,
 			water_points: 6,
 			handwashing_stations: 10
+		},
+		admission_policy: {
+			pet_policy: {
+				policy: 'conditional',
+				categories: [{ category: 'small_general' }, { category: 'livestock' }]
+			},
+			supported_vulnerable_groups: ['ผู้ป่วยติดเตียง', 'ผู้ใช้วีลแชร์', 'เด็กอ่อน']
 		}
 	},
 	{
@@ -265,6 +272,10 @@ const REGISTRY_SHELTERS = [
 			showers: 4,
 			water_points: 2,
 			handwashing_stations: 4
+		},
+		admission_policy: {
+			pet_policy: { policy: 'not_allowed' },
+			supported_vulnerable_groups: ['ผู้สูงอายุ', 'สตรีมีครรภ์', 'ผู้ป่วยแยกกักโรค']
 		}
 	},
 	{
@@ -272,12 +283,15 @@ const REGISTRY_SHELTERS = [
 		name: 'ศูนย์อพยพสำนักงานเทศบาลเมืองบ้านพรุ',
 		location: { lat: 6.948086391528152, lng: 100.47963181135452 },
 		capacity: 100,
-		zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 100 }],
+		zones: [
+			{ code: 'Z1', name: 'โซนรวม', capacity: 50 },
+			{ code: 'Z2', name: 'โซนสัตว์เลี้ยง', capacity: 50, type: 'pet' }
+		],
 		area_m2: 400,
 		facilities: {
 			toilets_female: 2,
 			toilets_male: 2,
-			toilets_accessible: 1,
+			toilets_accessible: 0,
 			showers: 4,
 			water_points: 2,
 			handwashing_stations: 4
@@ -361,14 +375,23 @@ async function seedRegistry(): Promise<void> {
 	const ts = now();
 	for (const shelter of REGISTRY_SHELTERS) {
 		const existing = existingByCode.get(shelter.code);
+
+		// Build payload extras (admission_policy)
+		const extras: Record<string, unknown> = {};
+		if ('admission_policy' in shelter) {
+			extras.admission_policy = shelter.admission_policy;
+		}
+
 		if (existing) {
 			await putDoc('registry', {
 				...existing,
 				name: shelter.name,
 				location: { ...shelter.location },
-				updated_at: ts
+				zones: shelter.zones.map((z) => ({ ...z })),
+				updated_at: ts,
+				...extras
 			});
-			console.log(`  ✓ registry: updated shelter ${shelter.code} (name + location)`);
+			console.log(`  ✓ registry: updated shelter ${shelter.code} (name + location + policies)`);
 		} else {
 			await putDoc('registry', {
 				_id: `shelter:${ulid()}`,
@@ -385,7 +408,8 @@ async function seedRegistry(): Promise<void> {
 				opened_at: ts,
 				created_at: ts,
 				updated_at: ts,
-				created_by: 'seed'
+				created_by: 'seed',
+				...extras
 			});
 			console.log(`  ✓ registry: 1 shelter master (${shelter.code})`);
 		}
@@ -1535,8 +1559,8 @@ async function main() {
 		await seedDashboardData();
 		await seedDailyCalc();
 		console.log('\nDone.\n');
-	} catch (err) {
-		console.error('\nSeed failed:', err);
+	} catch (e: unknown) {
+		console.error('\nSeed failed:', e);
 		process.exit(1);
 	}
 }

@@ -69,7 +69,7 @@
 	<title>Smart Shelter — Public & RFL Portal</title>
 </svelte:head>
 
-<div class="mx-auto max-w-7xl px-4 py-8 md:px-6">
+<div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
 	<!-- 1. ประกาศด่วนระดับ 4 (อพยพทันที) -->
 	{#if showDemoEmergency}
 		<PublicEmergencyBanner {alerts} />
@@ -103,9 +103,9 @@
 		</div>
 
 		<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-			<!-- ระเบียบสิทธิ์ผู้ประสบภัย -->
+			<!-- ลงทะเบียนผู้ประสบภัย -->
 			<PublicQuickServiceCard
-				title="ระเบียบสิทธิ์ผู้ประสบภัย"
+				title="ลงทะเบียนผู้ประสบภัย"
 				badge="ด่วนที่สุด"
 				badgeClass="bg-danger-muted text-danger"
 				description="ท่านสามารถยื่นขอลงทะเบียนเข้าพัก สแกนเข้าออก หรือจองสิทธิ์ล่วงหน้าเพื่อจัดสรรเต็นท์ส่วนตัว ยา และเครื่องนุ่งห่ม"
@@ -179,100 +179,33 @@
 			</p>
 
 			<div class="flex flex-col gap-4">
-				<Accordion.Root type="single" value="item-1">
-					<Accordion.Item
-						value="item-1"
-						class="mb-3 rounded-xl border border-border px-4 py-2 shadow-sm"
-					>
-						<Accordion.Trigger class="text-left hover:no-underline">
-							<div class="flex items-center gap-3">
-								<div
-									class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-dark text-xs font-bold text-white"
-								>
-									1
+				<Accordion.Root type="single">
+					{#each data.faqs as faq, i (faq.id || i)}
+						<Accordion.Item
+							value="item-{i}"
+							class="mb-3 rounded-xl border border-border px-4 py-2 shadow-sm"
+						>
+							<Accordion.Trigger class="text-left hover:no-underline">
+								<div class="flex items-center gap-3">
+									<div
+										class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-dark text-xs font-bold text-white"
+									>
+										{i + 1}
+									</div>
+									<span class="text-sm font-bold">{faq.question}</span>
 								</div>
-								<span class="text-sm font-bold"
-									>การค้นหาญาติหรือครอบครัวที่สูญหายในระบบทำได้อย่างไร?</span
-								>
-							</div>
-						</Accordion.Trigger>
-						<Accordion.Content class="pt-2 text-sm leading-relaxed text-muted-foreground">
-							ท่านสามารถไปที่เมนู <strong>"สืบค้นผู้ประสบภัย"</strong> และใช้หมายเลขบัตรประชาชน 13 หลัก,
-							ชื่อ-นามสกุล หรือหมายเลขหนังสือเดินทางในการค้นหา ระบบจะแสดงสถานะความปลอดภัยและศูนย์พักพิงที่ญาติของท่านพักอาศัยอยู่ปัจจุบัน
-							โดยมีการปกปิดข้อมูลบางส่วนเพื่อความปลอดภัยตามหลัก PDPA
-						</Accordion.Content>
-					</Accordion.Item>
-
-					<Accordion.Item
-						value="item-2"
-						class="mb-3 rounded-xl border border-border px-4 py-2 shadow-sm"
-					>
-						<Accordion.Trigger class="text-left hover:no-underline">
-							<div class="flex items-center gap-3">
-								<div
-									class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20 text-xs font-bold text-muted-foreground"
-								>
-									2
-								</div>
-								<span class="text-sm font-bold">
-									หากต้องการนำสัตว์เลี้ยงหรือมีผู้ป่วยติดเตียง ต้องเลือกศูนย์พักพิงอย่างไร?
-								</span>
-							</div>
-						</Accordion.Trigger>
-						<Accordion.Content class="pt-2 text-sm leading-relaxed text-muted-foreground">
-							ท่านสามารถใช้ฟังก์ชัน <strong>"ตัวกรองขั้นสูง" (Advanced Filters)</strong> ในหน้าค้นหาศูนย์พักพิง
-							เพื่อกรองดูเฉพาะศูนย์ที่มีนโยบายอนุญาตสัตว์เลี้ยง หรือศูนย์ที่มีสิ่งอำนวยความสะดวกรองรับกลุ่มเปราะบาง
-							(เช่น เตียงผู้ป่วย, ทางลาดวีลแชร์, ศูนย์พยาบาล) ได้อย่างแม่นยำ
-						</Accordion.Content>
-					</Accordion.Item>
-
-					<Accordion.Item
-						value="item-3"
-						class="mb-3 rounded-xl border border-border px-4 py-2 shadow-sm"
-					>
-						<Accordion.Trigger class="text-left hover:no-underline">
-							<div class="flex items-center gap-3">
-								<div
-									class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20 text-xs font-bold text-muted-foreground"
-								>
-									3
-								</div>
-								<span class="text-sm font-bold"
-									>ความปลอดภัยของข้อมูลส่วนบุคคล (PDPA) ในระบบ Smart Shelter ได้มาตรฐานหรือไม่?</span
-								>
-							</div>
-						</Accordion.Trigger>
-						<Accordion.Content class="pt-2 text-sm leading-relaxed text-muted-foreground">
-							ระบบของเราปฏิบัติตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล (PDPA) อย่างเคร่งครัด
-							ข้อมูลผู้ประสบภัยที่แสดงในหน้าสาธารณะจะถูกเข้ารหัสและเซนเซอร์ (Masked)
-							เพื่อป้องกันมิจฉาชีพนำข้อมูลไปบิดเบือน มีเพียงเจ้าหน้าที่ EOC
-							ที่ได้รับสิทธิ์เท่านั้นจึงจะดูข้อมูลเชิงลึกได้
-						</Accordion.Content>
-					</Accordion.Item>
-
-					<Accordion.Item
-						value="item-4"
-						class="rounded-xl border border-border px-4 py-2 shadow-sm"
-					>
-						<Accordion.Trigger class="text-left hover:no-underline">
-							<div class="flex items-center gap-3">
-								<div
-									class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20 text-xs font-bold text-muted-foreground"
-								>
-									4
-								</div>
-								<span class="text-sm font-bold"
-									>ประชาชนทั่วไปสามารถมีส่วนร่วมหรือเป็นอาสาสมัครได้อย่างไร?</span
-								>
-							</div>
-						</Accordion.Trigger>
-						<Accordion.Content class="pt-2 text-sm leading-relaxed text-muted-foreground">
-							ท่านสามารถเลือกเมนู <strong>"สำหรับทีมอาสาสมัคร"</strong>
-							เพื่อดูความต้องการบุคลากรในแต่ละพื้นที่ และลงทะเบียนจองกะเวลาทำงานล่วงหน้า หรือเลือกเมนู
-							<strong>"สำหรับผู้ใจบุญ/บริจาค"</strong> เพื่อตรวจสอบรายการสิ่งของ (Wishlist) ที่ศูนย์ต่างๆ
-							กำลังขาดแคลนได้อย่างโปร่งใส
-						</Accordion.Content>
-					</Accordion.Item>
+							</Accordion.Trigger>
+							<Accordion.Content
+								class="pt-2 text-sm leading-relaxed whitespace-pre-line text-muted-foreground"
+							>
+								{faq.answer}
+							</Accordion.Content>
+						</Accordion.Item>
+					{:else}
+						<div class="text-center text-muted-foreground py-4 text-sm">
+							ยังไม่มีข้อมูลคำถามที่พบบ่อย
+						</div>
+					{/each}
 				</Accordion.Root>
 
 				<a
@@ -288,7 +221,7 @@
 
 		<!-- ติดต่อฉุกเฉินและด่วน -->
 		<div
-			class="flex flex-col justify-center rounded-2xl bg-[#1e293b] p-6 text-white shadow-lg lg:p-8"
+			class="flex h-fit flex-col justify-center rounded-2xl bg-[#1e293b] p-6 text-white shadow-lg lg:p-8"
 		>
 			<div
 				class="mb-4 inline-flex w-fit items-center rounded-full bg-white/10 px-3 py-1 text-xs font-bold tracking-wider text-white"

@@ -10,7 +10,6 @@
 	import { onMount } from 'svelte';
 	import {
 		familySearch,
-		isInShelterStatus,
 		searchResultKey,
 		type FamilySearchResult
 	} from '$lib/features/public-portal';
@@ -165,19 +164,26 @@
 									</div>
 								</div>
 
-								{#if isInShelterStatus(person.status)}
+								{#if person.status === 'in_shelter'}
 									<div
 										class="flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-bold text-green-700"
 									>
 										<div class="h-2 w-2 rounded-full bg-green-500"></div>
 										ปลอดภัย (อยู่ในศูนย์แล้ว)
 									</div>
+								{:else if person.status === 'moved'}
+									<div
+										class="flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-bold text-orange-700"
+									>
+										<div class="h-2 w-2 rounded-full bg-orange-500"></div>
+										ย้ายศูนย์พักพิงแล้ว
+									</div>
 								{:else}
 									<div
-										class="flex items-center gap-1.5 rounded-full border border-danger-border bg-danger-muted px-3 py-1.5 text-sm font-bold text-danger"
+										class="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-bold text-blue-700"
 									>
-										<div class="h-2 w-2 rounded-full bg-danger"></div>
-										ไม่อยู่ในศูนย์
+										<div class="h-2 w-2 rounded-full bg-blue-500"></div>
+										ออกจากศูนย์แล้ว (กลับบ้าน/ส่งต่อ)
 									</div>
 								{/if}
 							</div>
@@ -187,7 +193,7 @@
 								<div class="flex gap-3">
 									<MapPin class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
-										<div class="text-xs text-muted-foreground">พำนักอยู่ที่ศูนย์พักพิง</div>
+										<div class="text-xs text-muted-foreground">อาศัยอยู่ที่ศูนย์พักพิง</div>
 										<div class="font-medium text-foreground">{person.shelter_name || '-'}</div>
 									</div>
 								</div>
@@ -217,32 +223,44 @@
 							</div>
 
 							{#if person.family_members && person.family_members.length > 0}
-								<div class="border-t border-border/50 p-5">
-									<div class="mb-4 flex items-center gap-2 font-bold text-foreground/90">
+								<details class="group border-t border-border/50 p-5">
+									<summary
+										class="mb-4 flex cursor-pointer list-none items-center gap-2 font-bold text-foreground/90 transition-colors hover:text-primary"
+									>
 										<Users class="h-5 w-5" />
 										ข้อมูลสมาชิกในครอบครัว ({person.family_members.length} คน)
-									</div>
-									<div class="flex flex-col gap-3">
+										<span
+											class="ml-auto text-xs font-normal text-muted-foreground group-open:hidden"
+											>คลิกเพื่อดู</span
+										>
+										<span
+											class="ml-auto hidden text-xs font-normal text-muted-foreground group-open:inline"
+											>ซ่อน</span
+										>
+									</summary>
+									<div class="mt-4 flex flex-col gap-3">
 										{#each person.family_members as member, i (i)}
 											<div
-												class="flex items-center justify-between rounded-xl border border-border p-4"
+												class="flex items-center justify-between rounded-xl border border-border bg-white p-4"
 											>
 												<div>
 													<div class="font-bold text-foreground">
 														{member.name || '-'}
 													</div>
 												</div>
-												{#if isInShelterStatus(member.status)}
+												{#if member.status === 'in_shelter'}
 													<div class="text-sm font-bold text-green-600">
 														ปลอดภัยอยู่ในศูนย์ ({member.shelter_name || '-'})
 													</div>
+												{:else if member.status === 'moved'}
+													<div class="text-sm font-bold text-orange-600">ย้ายศูนย์พักพิงแล้ว</div>
 												{:else}
-													<div class="text-sm font-bold text-danger">พลัดหลง (ไม่อยู่ในศูนย์)</div>
+													<div class="text-sm font-bold text-blue-600">ออกจากศูนย์แล้ว</div>
 												{/if}
 											</div>
 										{/each}
 									</div>
-								</div>
+								</details>
 							{/if}
 						</div>
 					{/each}

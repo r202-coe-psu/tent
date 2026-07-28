@@ -86,7 +86,7 @@
 	<title>ตรวจสอบสถานะศูนย์พักพิง - Smart Shelter</title>
 </svelte:head>
 
-<div class="mx-auto max-w-[95rem] px-4 py-8 md:px-6">
+<div class="mx-auto max-w-380 px-4 py-8 md:px-6">
 	<!-- Header / Hero Section -->
 	<PublicHeroMetrics
 		title="ตรวจสอบสถานะศูนย์พักพิง"
