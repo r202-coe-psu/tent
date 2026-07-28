@@ -191,7 +191,7 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 				unit: 'kg',
 				reason: 'donation',
 				ref_id: 'donation:123',
-				schema_v: 2,
+				schema_v: 3, // stock_ledger bumped 2 → 3 when `purchase` joined the reason enum (CR-032)
 				shelter_code: 'SH001',
 				created_by: 'admin'
 			});
