@@ -4,6 +4,10 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button';
+	import { Card } from '$lib/components/ui/card';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Input } from '$lib/components/ui/input';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { LOGIN_ROUTE } from '$lib/guards/auth';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -29,6 +33,7 @@
 	let cameraInput = $state<HTMLInputElement>();
 
 	// Gallery / Lightbox
+	let lightboxOpen = $state(false);
 	let lightboxUrl = $state<string | null>(null);
 	let lightboxImage = $state<ImageSummary | null>(null);
 	let thumbnailUrls = $state<Record<string, string>>({});
@@ -53,7 +58,20 @@
 		return () => {
 			// Clean up thumbnail object URLs
 			Object.values(thumbnailUrls).forEach(URL.revokeObjectURL);
+			previewUrls.forEach(URL.revokeObjectURL);
+			if (lightboxUrl) URL.revokeObjectURL(lightboxUrl);
 		};
+	});
+
+	// The dialog's own overlay-click / Escape / close-button handling flips
+	// `lightboxOpen` to false without going through `closeLightbox` — release
+	// the object URL + selected image whenever that happens.
+	$effect(() => {
+		if (!lightboxOpen && lightboxUrl) {
+			URL.revokeObjectURL(lightboxUrl);
+			lightboxUrl = null;
+			lightboxImage = null;
+		}
 	});
 
 	// ---------------------------------------------------------------- helpers
@@ -116,14 +134,9 @@
 	async function openLightbox(img: ImageSummary) {
 		lightboxImage = img;
 		lightboxUrl = null;
+		lightboxOpen = true;
 		const url = await repo.getFullImageUrl(img._id);
 		lightboxUrl = url;
-	}
-
-	function closeLightbox() {
-		if (lightboxUrl) URL.revokeObjectURL(lightboxUrl);
-		lightboxUrl = null;
-		lightboxImage = null;
 	}
 
 	async function deleteImage(img: ImageSummary) {
@@ -137,7 +150,7 @@
 				delete next[img._id];
 				thumbnailUrls = next;
 			}
-			await repo.deleteImage(img._id);
+			await repo.deleteImage(img._id, img._rev);
 			await loadImages();
 		} catch (e) {
 			alert(`ลบไม่ได้: ${(e as Error).message}`);
@@ -169,17 +182,10 @@
 		if (input.files) addFiles(input.files);
 	}
 
-	// Keyboard: close lightbox on Escape
-	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape' && lightboxImage) closeLightbox();
-	}
-
 	const totalOriginal = $derived(images.reduce((s, i) => s + i.original_size, 0));
 	const totalCompressed = $derived(images.reduce((s, i) => s + i.compressed_size, 0));
 	const totalSaved = $derived(totalOriginal - totalCompressed);
 </script>
-
-<svelte:window onkeydown={onKeydown} />
 
 <svelte:head>
 	<title>POC: Image Upload — Smart Shelter</title>
@@ -189,8 +195,7 @@
 	/>
 </svelte:head>
 
-<!-- ============================================================ LAYOUT -->
-<div class="poc-root">
+<div class="min-h-screen bg-background text-foreground">
 	<!-- ROOT HEADER -->
 	<header class="flex items-center justify-end gap-4 border-b bg-background px-6 py-3">
 		<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
@@ -198,48 +203,56 @@
 	</header>
 
 	<!-- HEADER -->
-	<header class="poc-header">
-		<div class="header-inner">
-			<div class="header-left">
-				<span class="badge">POC</span>
+	<header class="border-b bg-gradient-to-br from-primary-muted to-muted px-6 py-6 md:px-8">
+		<div class="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-6">
+			<div class="flex items-center gap-4">
+				<Badge class="tracking-widest uppercase">POC</Badge>
 				<div>
-					<h1 class="title">Image Storage</h1>
-					<p class="subtitle">CouchDB Attachments — remote-first HTTP</p>
+					<h1 class="text-2xl font-extrabold text-foreground">Image Storage</h1>
+					<p class="mt-0.5 text-sm text-muted-foreground">
+						CouchDB Attachments — remote-first HTTP
+					</p>
 				</div>
 			</div>
-			<div class="stats-row">
-				<div class="stat">
-					<span class="stat-val">{images.length}</span>
-					<span class="stat-label">รูปทั้งหมด</span>
+			<div class="flex flex-wrap gap-4">
+				<div class="flex flex-col items-end rounded-lg border bg-card px-4 py-2.5 shadow-sm">
+					<span class="text-xl leading-none font-extrabold text-primary">{images.length}</span>
+					<span class="mt-0.5 text-[11px] text-muted-foreground">รูปทั้งหมด</span>
 				</div>
-				<div class="stat">
-					<span class="stat-val">{formatBytes(totalCompressed)}</span>
-					<span class="stat-label">ขนาดใน DB</span>
+				<div class="flex flex-col items-end rounded-lg border bg-card px-4 py-2.5 shadow-sm">
+					<span class="text-xl leading-none font-extrabold text-primary"
+						>{formatBytes(totalCompressed)}</span
+					>
+					<span class="mt-0.5 text-[11px] text-muted-foreground">ขนาดใน DB</span>
 				</div>
 				{#if totalSaved > 0}
-					<div class="stat stat-green">
-						<span class="stat-val">-{formatBytes(totalSaved)}</span>
-						<span class="stat-label"
-							>ประหยัด ({compressionRatio(totalOriginal, totalCompressed)})</span
+					<div class="flex flex-col items-end rounded-lg border bg-card px-4 py-2.5 shadow-sm">
+						<span class="text-xl leading-none font-extrabold text-success"
+							>-{formatBytes(totalSaved)}</span
 						>
+						<span class="mt-0.5 text-[11px] text-muted-foreground">
+							ประหยัด ({compressionRatio(totalOriginal, totalCompressed)})
+						</span>
 					</div>
 				{/if}
 			</div>
 		</div>
 	</header>
 
-	<div class="poc-body">
-		<!-- LEFT: Upload + Sync -->
-		<aside class="poc-sidebar">
-			<!-- UPLOAD ZONE -->
-			<section class="upload-section card">
-				<h2 class="section-title">📤 อัปโหลดรูป</h2>
+	<div
+		class="mx-auto grid max-w-[1400px] grid-cols-1 items-start gap-6 p-4 lg:grid-cols-[360px_1fr] lg:p-8"
+	>
+		<!-- LEFT: Upload -->
+		<aside>
+			<Card class="p-6">
+				<h2 class="text-base font-bold tracking-wide text-foreground">📤 อัปโหลดรูป</h2>
 
 				<!-- Drag & Drop -->
 				<div
 					id="drop-zone"
-					class="drop-zone"
-					class:drag-over={isDragOver}
+					class="cursor-pointer rounded-xl border-2 border-dashed bg-muted/40 p-8 text-center transition-all hover:border-primary hover:bg-primary-muted {isDragOver
+						? 'scale-[1.01] border-primary bg-primary-muted'
+						: 'border-border'}"
 					role="button"
 					tabindex="0"
 					ondragover={onDragOver}
@@ -248,10 +261,10 @@
 					onclick={() => fileInput?.click()}
 					onkeydown={(e) => e.key === 'Enter' && fileInput?.click()}
 				>
-					<div class="drop-icon">🖼️</div>
-					<p class="drop-text">วาง หรือ คลิกเพื่อเลือกรูป</p>
-					<p class="drop-hint">รองรับ JPG, PNG, WebP, HEIC</p>
-					<p class="drop-hint">Max 1024px • quality 80% • auto-resize</p>
+					<div class="text-4xl">🖼️</div>
+					<p class="mt-2 font-semibold text-foreground">วาง หรือ คลิกเพื่อเลือกรูป</p>
+					<p class="mt-1 text-xs text-muted-foreground">รองรับ JPG, PNG, WebP, HEIC</p>
+					<p class="text-xs text-muted-foreground">Max 1024px • quality 80% • auto-resize</p>
 				</div>
 
 				<!-- Hidden inputs -->
@@ -260,7 +273,7 @@
 					type="file"
 					accept="image/*"
 					multiple
-					style="display:none"
+					class="hidden"
 					onchange={onFileChange}
 				/>
 				<input
@@ -268,78 +281,93 @@
 					type="file"
 					accept="image/*"
 					capture="environment"
-					style="display:none"
+					class="hidden"
 					onchange={onFileChange}
 				/>
 
-				<button class="camera-btn" onclick={() => cameraInput?.click()}>
+				<Button variant="secondary" class="mt-3 w-full" onclick={() => cameraInput?.click()}>
 					📷 ถ่ายรูปจากกล้อง
-				</button>
+				</Button>
 
 				<!-- Preview -->
 				{#if previewFiles.length > 0}
-					<div class="preview-section">
-						<div class="preview-grid">
+					<div class="mt-4 space-y-3">
+						<div class="grid grid-cols-3 gap-2 sm:grid-cols-4">
 							{#each previewUrls as url, i (url)}
-								<div class="preview-item">
-									<img src={url} alt={previewFiles[i].name} class="preview-img" />
-									<span class="preview-name">{previewFiles[i].name}</span>
-									<span class="preview-size">{formatBytes(previewFiles[i].size)}</span>
+								<div class="flex flex-col items-center gap-1">
+									<img
+										src={url}
+										alt={previewFiles[i].name}
+										class="h-20 w-20 rounded-lg border object-cover"
+									/>
+									<span class="w-20 truncate text-center text-[10px] text-muted-foreground"
+										>{previewFiles[i].name}</span
+									>
+									<span class="text-[10px] text-muted-foreground"
+										>{formatBytes(previewFiles[i].size)}</span
+									>
 								</div>
 							{/each}
 						</div>
 
-						<div class="caption-row">
-							<input
-								id="caption-input"
-								type="text"
-								placeholder="คำอธิบายรูป (optional)"
-								bind:value={caption}
-								class="caption-input"
-							/>
-						</div>
+						<Input
+							id="caption-input"
+							type="text"
+							placeholder="คำอธิบายรูป (optional)"
+							bind:value={caption}
+						/>
 
 						{#if uploadError}
-							<p class="error-msg">❌ {uploadError}</p>
+							<p class="text-sm text-destructive">❌ {uploadError}</p>
 						{/if}
 
 						{#if uploading}
-							<div class="progress-bar">
-								<div class="progress-fill" style:width="{uploadProgress}%"></div>
+							<div class="h-1.5 overflow-hidden rounded-full bg-muted">
+								<div
+									class="h-full rounded-full bg-primary transition-all"
+									style:width="{uploadProgress}%"
+								></div>
 							</div>
-							<p class="progress-label">กำลังอัปโหลด {uploadProgress}%…</p>
+							<p class="text-center text-xs text-primary">กำลังอัปโหลด {uploadProgress}%…</p>
 						{:else}
-							<div class="preview-actions">
-								<button class="btn-upload" onclick={uploadFiles} disabled={uploading}>
+							<div class="flex gap-2">
+								<Button class="flex-1" onclick={uploadFiles} disabled={uploading}>
 									✅ บันทึก {previewFiles.length} รูป
-								</button>
-								<button class="btn-cancel" onclick={cancelPreview}>ยกเลิก</button>
+								</Button>
+								<Button variant="outline" onclick={cancelPreview}>ยกเลิก</Button>
 							</div>
 						{/if}
 					</div>
 				{/if}
-			</section>
+			</Card>
 		</aside>
 
 		<!-- RIGHT: Gallery -->
-		<main class="poc-main">
-			<div class="gallery-header">
-				<h2 class="section-title">🖼️ Gallery ({images.length} รูป)</h2>
+		<main class="min-h-[400px]">
+			<div class="mb-5 flex items-center justify-between">
+				<h2 class="text-base font-bold tracking-wide text-foreground">
+					🖼️ Gallery ({images.length} รูป)
+				</h2>
 			</div>
 
 			{#if images.length === 0}
-				<div class="empty-gallery">
-					<div class="empty-icon">📭</div>
-					<p>ยังไม่มีรูปภาพ</p>
-					<p class="empty-hint">อัปโหลดรูปทางซ้ายเพื่อเริ่มต้น</p>
+				<div class="flex h-[300px] flex-col items-center justify-center text-muted-foreground">
+					<div class="text-6xl">📭</div>
+					<p class="mt-3 text-base">ยังไม่มีรูปภาพ</p>
+					<p class="mt-1.5 text-sm text-muted-foreground">อัปโหลดรูปทางซ้ายเพื่อเริ่มต้น</p>
 				</div>
 			{:else}
-				<div class="gallery-grid">
+				<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
 					{#each images as img (img._id)}
-						<div class="gallery-card" class:deleting={deleting === img._id}>
+						<Card
+							class="group relative gap-0 overflow-hidden p-0 transition-all hover:-translate-y-0.5 hover:shadow-md {deleting ===
+							img._id
+								? 'pointer-events-none opacity-50'
+								: ''}"
+						>
 							<!-- Thumbnail -->
 							<button
-								class="thumb-btn"
+								class="block aspect-square w-full overflow-hidden bg-muted"
 								onclick={() => openLightbox(img)}
 								title="ดูรูปเต็ม"
 								aria-label="ดูรูป {img.filename}"
@@ -348,28 +376,30 @@
 									<img
 										src={thumbnailUrls[img._id]}
 										alt={img.filename}
-										class="thumb-img"
+										class="h-full w-full object-cover transition-transform group-hover:scale-105"
 										loading="lazy"
 									/>
 								{:else}
-									<div class="thumb-loading">⏳</div>
+									<div class="flex h-full w-full items-center justify-center text-2xl">⏳</div>
 								{/if}
 							</button>
 
 							<!-- Metadata -->
-							<div class="card-info">
-								<p class="card-filename" title={img.filename}>{img.filename}</p>
+							<div class="p-3">
+								<p class="truncate text-xs font-semibold text-foreground" title={img.filename}>
+									{img.filename}
+								</p>
 								{#if img.caption}
-									<p class="card-caption">{img.caption}</p>
+									<p class="truncate text-[11px] text-muted-foreground italic">{img.caption}</p>
 								{/if}
-								<div class="card-meta">
-									<span class="meta-dim">{img.width}×{img.height}</span>
-									<span class="meta-size">{formatBytes(img.compressed_size)}</span>
-									<span class="meta-saved"
+								<div class="mt-1 flex gap-1.5 text-[11px] text-muted-foreground">
+									<span>{img.width}×{img.height}</span>
+									<span>{formatBytes(img.compressed_size)}</span>
+									<span class="font-semibold text-success"
 										>-{compressionRatio(img.original_size, img.compressed_size)}</span
 									>
 								</div>
-								<p class="card-date">
+								<p class="mt-0.5 text-[10px] text-muted-foreground">
 									{new Date(img.created_at).toLocaleString('th-TH', {
 										dateStyle: 'medium',
 										timeStyle: 'short'
@@ -379,7 +409,7 @@
 
 							<!-- Delete -->
 							<button
-								class="delete-btn"
+								class="absolute top-2 right-2 rounded-md bg-background/90 px-2 py-1 text-sm opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
 								onclick={() => deleteImage(img)}
 								disabled={deleting === img._id}
 								title="ลบรูป"
@@ -387,7 +417,7 @@
 							>
 								{deleting === img._id ? '⏳' : '🗑️'}
 							</button>
-						</div>
+						</Card>
 					{/each}
 				</div>
 			{/if}
@@ -396,668 +426,47 @@
 </div>
 
 <!-- ============================================================ LIGHTBOX -->
-{#if lightboxImage}
-	<div
-		class="lightbox-overlay"
-		role="dialog"
-		aria-modal="true"
-		aria-label="รูปภาพ {lightboxImage.filename}"
-		onclick={closeLightbox}
+<Dialog.Root bind:open={lightboxOpen}>
+	<Dialog.Content
+		class="max-w-[min(90vw,1000px)] gap-0 overflow-hidden p-0 sm:max-w-[min(90vw,1000px)]"
 	>
-		<div class="lightbox-content" onclick={(e) => e.stopPropagation()}>
-			<button class="lightbox-close" onclick={closeLightbox} aria-label="ปิด">✕</button>
+		{#if lightboxImage}
+			<Dialog.Title class="sr-only">รูปภาพ {lightboxImage.filename}</Dialog.Title>
+			<Dialog.Description class="sr-only">{lightboxImage.caption}</Dialog.Description>
 
 			{#if lightboxUrl}
-				<img src={lightboxUrl} alt={lightboxImage.filename} class="lightbox-img" />
+				<img
+					src={lightboxUrl}
+					alt={lightboxImage.filename}
+					class="max-h-[70vh] w-full bg-muted object-contain"
+				/>
 			{:else}
-				<div class="lightbox-loading">
-					<div class="loading-spinner"></div>
+				<div
+					class="flex h-[300px] w-full flex-col items-center justify-center gap-4 text-muted-foreground"
+				>
+					<div
+						class="h-10 w-10 animate-spin rounded-full border-3 border-muted border-t-primary"
+					></div>
 					<p>กำลังโหลดรูปเต็ม…</p>
 				</div>
 			{/if}
 
-			<div class="lightbox-meta">
-				<p class="lb-filename">{lightboxImage.filename}</p>
+			<div class="border-t bg-muted/40 px-6 py-4">
+				<p class="font-bold text-foreground">{lightboxImage.filename}</p>
 				{#if lightboxImage.caption}
-					<p class="lb-caption">{lightboxImage.caption}</p>
+					<p class="mt-1 text-sm text-muted-foreground italic">{lightboxImage.caption}</p>
 				{/if}
-				<div class="lb-stats">
+				<div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
 					<span>{lightboxImage.width} × {lightboxImage.height} px</span>
 					<span>|</span>
 					<span>ต้นฉบับ: {formatBytes(lightboxImage.original_size)}</span>
 					<span>→</span>
 					<span>หลัง compress: {formatBytes(lightboxImage.compressed_size)}</span>
-					<span class="lb-saved"
-						>ประหยัด {compressionRatio(
-							lightboxImage.original_size,
-							lightboxImage.compressed_size
-						)}</span
-					>
+					<span class="font-semibold text-success">
+						ประหยัด {compressionRatio(lightboxImage.original_size, lightboxImage.compressed_size)}
+					</span>
 				</div>
 			</div>
-		</div>
-	</div>
-{/if}
-
-<style>
-	/* ===================== RESET / ROOT ===================== */
-	.poc-root {
-		min-height: auto;
-		background: transparent;
-		color: #0f172a;
-		font-family: 'Inter', system-ui, sans-serif;
-	}
-
-	/* ===================== HEADER ===================== */
-	.poc-header {
-		background: linear-gradient(135deg, #e0e7ff 0%, #f1f5f9 100%);
-		border-bottom: 1px solid #c7d2fe;
-		padding: 24px 32px;
-	}
-
-	.header-inner {
-		max-width: 1400px;
-		margin: 0 auto;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 24px;
-		flex-wrap: wrap;
-	}
-
-	.header-left {
-		display: flex;
-		align-items: center;
-		gap: 16px;
-	}
-
-	.badge {
-		background: linear-gradient(135deg, #6366f1, #4f46e5);
-		color: white;
-		font-size: 11px;
-		font-weight: 800;
-		letter-spacing: 0.15em;
-		padding: 4px 10px;
-		border-radius: 6px;
-	}
-
-	.title {
-		font-size: 28px;
-		font-weight: 800;
-		background: linear-gradient(135deg, #4f46e5, #4338ca, #312e81);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
-		margin: 0;
-	}
-
-	.subtitle {
-		color: #475569;
-		font-size: 13px;
-		margin: 2px 0 0;
-	}
-
-	.stats-row {
-		display: flex;
-		gap: 20px;
-		flex-wrap: wrap;
-	}
-
-	.stat {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		background: #ffffff;
-		border: 1px solid #e2e8f0;
-		border-radius: 10px;
-		padding: 10px 16px;
-		box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-	}
-
-	.stat-val {
-		font-size: 22px;
-		font-weight: 800;
-		color: #4f46e5;
-		line-height: 1;
-	}
-
-	.stat-label {
-		font-size: 11px;
-		color: #64748b;
-		margin-top: 2px;
-	}
-
-	.stat-green .stat-val {
-		color: #16a34a;
-	}
-
-	/* ===================== BODY ===================== */
-	.poc-body {
-		max-width: 1400px;
-		margin: 0 auto;
-		padding: 32px;
-		display: grid;
-		grid-template-columns: 360px 1fr;
-		gap: 24px;
-		align-items: start;
-	}
-
-	@media (max-width: 900px) {
-		.poc-body {
-			grid-template-columns: 1fr;
-			padding: 16px;
-		}
-	}
-
-	.card {
-		background: #ffffff;
-		border: 1px solid #e2e8f0;
-		border-radius: 16px;
-		padding: 24px;
-		margin-bottom: 20px;
-		box-shadow:
-			0 4px 6px -1px rgb(0 0 0 / 0.05),
-			0 2px 4px -2px rgb(0 0 0 / 0.05);
-	}
-
-	.section-title {
-		font-size: 16px;
-		font-weight: 700;
-		color: #1e1b4b;
-		margin: 0 0 16px;
-		letter-spacing: 0.02em;
-	}
-
-	/* ===================== UPLOAD ===================== */
-	.drop-zone {
-		border: 2px dashed #cbd5e1;
-		border-radius: 12px;
-		padding: 32px 24px;
-		text-align: center;
-		cursor: pointer;
-		transition: all 0.25s;
-		background: #f8fafc;
-	}
-
-	.drop-zone:hover,
-	.drop-zone.drag-over {
-		border-color: #4f46e5;
-		background: #eef2ff;
-		transform: scale(1.01);
-	}
-
-	.drop-icon {
-		font-size: 36px;
-		margin-bottom: 8px;
-	}
-	.drop-text {
-		color: #312e81;
-		font-weight: 600;
-		margin: 0 0 4px;
-	}
-	.drop-hint {
-		color: #64748b;
-		font-size: 12px;
-		margin: 2px 0 0;
-	}
-
-	.camera-btn {
-		width: 100%;
-		margin-top: 12px;
-		background: #f1f5f9;
-		border: 1px solid #cbd5e1;
-		color: #334155;
-		border-radius: 10px;
-		padding: 10px;
-		font-size: 14px;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.camera-btn:hover {
-		background: #e2e8f0;
-		color: #0f172a;
-	}
-
-	/* Preview */
-	.preview-section {
-		margin-top: 16px;
-	}
-
-	.preview-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-		gap: 8px;
-		margin-bottom: 12px;
-	}
-
-	.preview-item {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 3px;
-	}
-
-	.preview-img {
-		width: 80px;
-		height: 80px;
-		object-fit: cover;
-		border-radius: 8px;
-		border: 1px solid #e2e8f0;
-	}
-
-	.preview-name {
-		font-size: 10px;
-		color: #475569;
-		text-overflow: ellipsis;
-		overflow: hidden;
-		white-space: nowrap;
-		max-width: 80px;
-		text-align: center;
-	}
-
-	.preview-size {
-		font-size: 10px;
-		color: #64748b;
-	}
-
-	.caption-row {
-		margin-bottom: 12px;
-	}
-
-	.caption-input {
-		width: 100%;
-		background: #ffffff;
-		border: 1px solid #cbd5e1;
-		border-radius: 8px;
-		color: #0f172a;
-		padding: 8px 12px;
-		font-size: 13px;
-		box-sizing: border-box;
-		transition: border-color 0.2s;
-	}
-
-	.caption-input:focus {
-		outline: none;
-		border-color: #4f46e5;
-		box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
-	}
-
-	.caption-input::placeholder {
-		color: #94a3b8;
-	}
-
-	.preview-actions {
-		display: flex;
-		gap: 8px;
-	}
-
-	.btn-upload {
-		flex: 1;
-		background: linear-gradient(135deg, #4f46e5, #7c3aed);
-		color: white;
-		border: none;
-		border-radius: 10px;
-		padding: 10px;
-		font-weight: 700;
-		font-size: 13px;
-		cursor: pointer;
-		transition: opacity 0.2s;
-	}
-
-	.btn-upload:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-	.btn-upload:not(:disabled):hover {
-		opacity: 0.85;
-	}
-
-	.btn-cancel {
-		background: #ffffff;
-		color: #475569;
-		border: 1px solid #cbd5e1;
-		border-radius: 10px;
-		padding: 10px 16px;
-		font-size: 13px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.btn-cancel:hover {
-		background: #f1f5f9;
-		color: #0f172a;
-	}
-
-	.progress-bar {
-		height: 6px;
-		background: #f1f5f9;
-		border-radius: 3px;
-		overflow: hidden;
-		margin-bottom: 6px;
-	}
-
-	.progress-fill {
-		height: 100%;
-		background: linear-gradient(90deg, #4f46e5, #7c3aed);
-		border-radius: 3px;
-		transition: width 0.3s ease;
-	}
-
-	.progress-label {
-		font-size: 12px;
-		color: #4f46e5;
-		text-align: center;
-	}
-	.error-msg {
-		color: #dc2626;
-		font-size: 13px;
-		margin-bottom: 8px;
-	}
-
-	/* ===================== GALLERY ===================== */
-	.poc-main {
-		min-height: 400px;
-	}
-
-	.gallery-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: 20px;
-	}
-
-	.empty-gallery {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		height: 300px;
-		color: #94a3b8;
-	}
-
-	.empty-icon {
-		font-size: 64px;
-		margin-bottom: 12px;
-	}
-	.empty-gallery p {
-		font-size: 16px;
-		margin: 0;
-	}
-	.empty-hint {
-		font-size: 13px;
-		color: #64748b !important;
-		margin-top: 6px !important;
-	}
-
-	.gallery-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-		gap: 16px;
-	}
-
-	.gallery-card {
-		background: #ffffff;
-		border: 1px solid #e2e8f0;
-		border-radius: 14px;
-		overflow: hidden;
-		transition: all 0.25s;
-		position: relative;
-		box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-	}
-
-	.gallery-card:hover {
-		border-color: #cbd5e1;
-		box-shadow:
-			0 10px 15px -3px rgba(99, 102, 241, 0.1),
-			0 4px 6px -4px rgba(99, 102, 241, 0.1);
-		transform: translateY(-2px);
-	}
-
-	.gallery-card.deleting {
-		opacity: 0.5;
-		pointer-events: none;
-	}
-
-	.thumb-btn {
-		display: block;
-		width: 100%;
-		border: none;
-		background: #f1f5f9;
-		cursor: pointer;
-		padding: 0;
-		aspect-ratio: 1;
-		overflow: hidden;
-	}
-
-	.thumb-img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		transition: transform 0.3s;
-	}
-
-	.gallery-card:hover .thumb-img {
-		transform: scale(1.05);
-	}
-
-	.thumb-loading {
-		width: 100%;
-		height: 100%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 24px;
-		background: #f1f5f9;
-	}
-
-	.card-info {
-		padding: 12px;
-		background: #ffffff;
-	}
-
-	.card-filename {
-		font-size: 12px;
-		font-weight: 600;
-		color: #1e1b4b;
-		margin: 0 0 4px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.card-caption {
-		font-size: 11px;
-		color: #475569;
-		margin: 0 0 6px;
-		font-style: italic;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.card-meta {
-		display: flex;
-		gap: 6px;
-		font-size: 11px;
-		color: #94a3b8;
-		margin-bottom: 4px;
-	}
-
-	.meta-saved {
-		color: #16a34a;
-		font-weight: 600;
-	}
-	.card-date {
-		font-size: 10px;
-		color: #94a3b8;
-		margin: 0;
-	}
-
-	.delete-btn {
-		position: absolute;
-		top: 8px;
-		right: 8px;
-		background: rgba(255, 255, 255, 0.9);
-		border: none;
-		border-radius: 8px;
-		padding: 4px 8px;
-		cursor: pointer;
-		font-size: 14px;
-		color: #0f172a;
-		box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
-		opacity: 0;
-		transition: opacity 0.2s;
-	}
-
-	.gallery-card:hover .delete-btn {
-		opacity: 1;
-	}
-	.delete-btn:hover {
-		background: #fef2f2;
-		color: #dc2626;
-	}
-
-	/* ===================== LIGHTBOX ===================== */
-	.lightbox-overlay {
-		position: fixed;
-		inset: 0;
-		background: rgba(15, 23, 42, 0.8);
-		backdrop-filter: blur(8px);
-		z-index: 1000;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 32px;
-		animation: fadeIn 0.2s ease;
-	}
-
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-		}
-		to {
-			opacity: 1;
-		}
-	}
-
-	.lightbox-content {
-		position: relative;
-		max-width: min(90vw, 1000px);
-		max-height: 90vh;
-		background: #ffffff;
-		border: 1px solid #e2e8f0;
-		border-radius: 20px;
-		overflow: hidden;
-		display: flex;
-		flex-direction: column;
-		animation: scaleIn 0.2s ease;
-		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-	}
-
-	@keyframes scaleIn {
-		from {
-			transform: scale(0.95);
-			opacity: 0;
-		}
-		to {
-			transform: scale(1);
-			opacity: 1;
-		}
-	}
-
-	.lightbox-close {
-		position: absolute;
-		top: 12px;
-		right: 12px;
-		background: rgba(255, 255, 255, 0.9);
-		border: 1px solid rgba(0, 0, 0, 0.05);
-		color: #0f172a;
-		width: 36px;
-		height: 36px;
-		border-radius: 50%;
-		cursor: pointer;
-		font-size: 16px;
-		z-index: 10;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: all 0.2s;
-		box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
-	}
-
-	.lightbox-close:hover {
-		background: #fef2f2;
-		color: #dc2626;
-		border-color: #fee2e2;
-	}
-
-	.lightbox-img {
-		max-width: 100%;
-		max-height: 70vh;
-		object-fit: contain;
-		display: block;
-		background: #f1f5f9;
-	}
-
-	.lightbox-loading {
-		width: 400px;
-		height: 300px;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 16px;
-		color: #64748b;
-	}
-
-	.loading-spinner {
-		width: 40px;
-		height: 40px;
-		border: 3px solid #f1f5f9;
-		border-top-color: #4f46e5;
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
-	.lightbox-meta {
-		padding: 16px 24px;
-		border-top: 1px solid #e2e8f0;
-		background: #f8fafc;
-	}
-
-	.lb-filename {
-		font-weight: 700;
-		color: #0f172a;
-		margin: 0 0 4px;
-		font-size: 15px;
-	}
-
-	.lb-caption {
-		color: #475569;
-		font-style: italic;
-		margin: 0 0 8px;
-		font-size: 13px;
-	}
-
-	.lb-stats {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-size: 12px;
-		color: #64748b;
-		flex-wrap: wrap;
-	}
-
-	.lb-saved {
-		color: #16a34a;
-		font-weight: 600;
-	}
-</style>
+		{/if}
+	</Dialog.Content>
+</Dialog.Root>

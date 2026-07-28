@@ -22,6 +22,10 @@ export interface ImageRepository {
 	getFullImageUrl(id: string): Promise<string | null>;
 	/** Thumbnail attachment as an object URL. Caller must revoke it when done. */
 	getThumbnailUrl(id: string): Promise<string | null>;
-	/** Delete an image doc and its attachments. */
-	deleteImage(id: string): Promise<void>;
+	/**
+	 * Delete an image doc and its attachments. Pass `rev` (e.g. from an
+	 * already-loaded `ImageSummary._rev`) to skip the internal GET CouchDB
+	 * would otherwise need to resolve the current revision.
+	 */
+	deleteImage(id: string, rev?: string): Promise<void>;
 }

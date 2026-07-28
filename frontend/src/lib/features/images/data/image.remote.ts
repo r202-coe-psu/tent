@@ -74,7 +74,7 @@ export class ImageRemoteRepository implements ImageRepository {
 			compressed.full,
 			compressed.full.type || 'image/webp'
 		);
-		await putAttachment(
+		const thumbRes = await putAttachment(
 			this.dbName,
 			saved._id,
 			fullRes.rev,
@@ -83,7 +83,7 @@ export class ImageRemoteRepository implements ImageRepository {
 			compressed.thumbnail.type || 'image/webp'
 		);
 
-		return toSummary({ ...saved, _rev: fullRes.rev });
+		return toSummary({ ...saved, _rev: thumbRes.rev });
 	}
 
 	async listImages(): Promise<ImageSummary[]> {
@@ -106,8 +106,8 @@ export class ImageRemoteRepository implements ImageRepository {
 		return blob ? URL.createObjectURL(blob) : null;
 	}
 
-	async deleteImage(id: string): Promise<void> {
-		await deleteDoc(this.dbName, { _id: id });
+	async deleteImage(id: string, rev?: string): Promise<void> {
+		await deleteDoc(this.dbName, { _id: id, _rev: rev });
 	}
 }
 
