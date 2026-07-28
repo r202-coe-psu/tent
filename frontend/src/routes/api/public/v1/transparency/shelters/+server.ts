@@ -4,7 +4,7 @@ import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import type { ShelterMaster } from '$lib/features/shelters/server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
-import { countVulnerableFromBirthYearRows } from '$lib/features/public-portal';
+import { countVulnerableFromBirthYearRows } from '$lib/features/public-portal/server';
 
 export const GET: RequestHandler = async ({ url, setHeaders }) => {
 	// Cache the response for 60 seconds on the client and CDN to mitigate N+1 query load

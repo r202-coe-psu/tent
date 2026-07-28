@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import { adminRaw } from '$lib/server/couch-admin';
 import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
-import { countVulnerableFromBirthYearRows } from '$lib/features/public-portal';
+import { countVulnerableFromBirthYearRows } from '$lib/features/public-portal/server';
 
 // In-memory read-model cache (T-35)
 let cachedSummary: Record<string, unknown> | null = null;
