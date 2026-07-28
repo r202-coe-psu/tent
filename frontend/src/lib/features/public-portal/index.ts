@@ -10,6 +10,7 @@ export type {
 	ListPublicSheltersParams,
 	PublicGeoPoint,
 	PublicShelterCardModel,
+	PublicShelterDetail,
 	PublicShelterItem,
 	PublicShelterListResponse
 } from './domain/types';

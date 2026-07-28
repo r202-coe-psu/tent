@@ -27,6 +27,9 @@ export function toPublicShelterCard(item: PublicShelterItem, distance = 0): Publ
 		province: item.province ?? '',
 		district: item.district ?? '',
 		subdistrict: item.subdistrict ?? '',
+		pet_policy: item.pet_policy ?? null,
+		vulnerable_groups: item.vulnerable_groups ?? null,
+		admin_type: item.admin_type ?? null,
 		geo: item.geo ?? null
 	};
 }
