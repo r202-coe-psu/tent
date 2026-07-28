@@ -3,47 +3,93 @@ import type { RequestHandler } from './$types';
 import {
 	adminRaw,
 	requireAdmin,
+	requireShelterManagerOrSA,
 	requireShelterScopeOrSA,
 	serviceError,
 	ServiceError
 } from '$lib/server/couch-admin';
 import {
 	enforceOneDefault,
+	masterDocId,
 	masterDataSchema,
 	masterTypeSchema,
 	type MasterData
 } from '$lib/features/master-data/domain';
-import { readMasterDoc } from '$lib/server/master-data-server';
+import { mergeMasterDataItems, readMasterDoc } from '$lib/server/master-data-server';
 
 export const prerender = false;
 
 const REGISTRY_DB = 'registry';
 
-/** GET — read one master_data doc (404 → empty placeholder). Reads are open to
- *  any authenticated user (CR-012 §2); writes below stay SA-only. */
+/** GET — read one master_data doc (404 → empty placeholder). */
 export const GET: RequestHandler = async ({ params, request }) => {
-	await requireShelterScopeOrSA(request.headers.get('cookie'));
+	let type: ReturnType<typeof masterTypeSchema.parse>;
+	let scope: ParsedScope;
 	try {
-		const type = masterTypeSchema.parse(params.type);
-		const doc = await readMasterDoc(type);
+		type = masterTypeSchema.parse(params.type);
+		scope = parseScope(request);
+	} catch (e) {
+		return serviceError(e);
+	}
+	await requireShelterScopeOrSA(request.headers.get('cookie'), scope.shelterCode);
+	try {
+		const global = scope.mode === 'shelter' ? null : await readMasterDoc(type);
+		const local = scope.shelterCode ? await readMasterDoc(type, scope.shelterCode) : null;
+		const effective =
+			scope.mode === 'effective' ? mergeMasterDataItems(global, local, scope.shelterCode) : null;
+		const doc = local ?? global;
+		const items = effective?.items ?? doc?.items ?? [];
+		const itemSources =
+			effective?.itemSources ??
+			Object.fromEntries(
+				items.map((item) => [
+					item.code,
+					{
+						scope: scope.mode === 'shelter' ? 'shelter' : 'global',
+						shelter_code: scope.shelterCode ?? null
+					}
+				])
+			);
 		return json({
-			_id: `master_data:${type}`,
+			_id: doc?._id ?? masterDocId(type, scope.mode === 'shelter' ? scope.shelterCode : undefined),
 			master_type: type,
-			items: doc?.items ?? []
+			items,
+			scope: scope.mode,
+			shelter_code: scope.shelterCode ?? null,
+			source_shelter_code: local?.shelter_code ?? null,
+			item_sources: itemSources
 		});
 	} catch (e) {
+		if (e && typeof e === 'object' && 'status' in e) throw e;
 		return serviceError(e);
 	}
 };
 
-/** PUT — replace the whole `items` array. Admin UI sends the canonical list
- *  (after add/edit/delete/setDefault ran client-side). Idempotent on first
- *  write (creates the doc with a fresh envelope). */
+/** PUT — replace the whole `items` array of the target doc (global or
+ *  shelter-local) verbatim. The UI sends only the items that belong to that
+ *  scope — for shelter scope that's the shelter-local items only, since the
+ *  global list is read-only client-side. No split, no overlay, no
+ *  excluded_codes bookkeeping: the submitted array becomes the doc's items. */
 export const PUT: RequestHandler = async ({ params, request }) => {
-	const caller = await requireAdmin(request.headers.get('cookie'));
 	try {
 		const type = masterTypeSchema.parse(params.type);
-		const body = (await request.json().catch(() => ({}))) as { items?: unknown };
+		const body = (await request.json().catch(() => ({}))) as {
+			items?: unknown;
+			shelter_code?: unknown;
+			disabled_global_codes?: unknown;
+			default_global_code?: unknown;
+		};
+		const scope = parseScope(request, body.shelter_code);
+		if (scope.mode === 'effective') {
+			throw new ServiceError('VALIDATION', 'PUT requires global or shelter scope');
+		}
+		// Writes are SM-or-SA (FR-049-10): shelter-local master data may only be
+		// mutated by the shelter's manager or a system admin — not general staff
+		// (requireShelterScopeOrSA is a read-only gate). Global writes stay SA-only.
+		const caller =
+			scope.mode === 'shelter'
+				? (await requireShelterManagerOrSA(request.headers.get('cookie'), scope.shelterCode!)).name
+				: await requireAdmin(request.headers.get('cookie'));
 		if (!Array.isArray(body.items)) {
 			throw new ServiceError('VALIDATION', 'items[] is required');
 		}
@@ -51,21 +97,78 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 			masterDataSchema.shape.items.parse(body.items) as MasterData['items']
 		);
 
-		const id = `master_data:${type}`;
-		const existing = await readMasterDoc(type);
+		const id = masterDocId(type, scope.shelterCode);
+		const existing = await readMasterDoc(type, scope.shelterCode);
 		const now = new Date().toISOString();
-		const doc: MasterData = existing
-			? { ...existing, items: cleaned, updated_at: now }
-			: {
-					_id: id,
-					type: 'master_data',
-					schema_v: 1,
-					master_type: type,
-					items: cleaned,
-					created_at: now,
-					updated_at: now,
-					created_by: caller
-				};
+		let doc: MasterData;
+		if (scope.shelterCode) {
+			doc = existing
+				? {
+						...existing,
+						schema_v: 3,
+						shelter_code: scope.shelterCode,
+						items: cleaned,
+						updated_at: now
+					}
+				: {
+						_id: id,
+						type: 'master_data',
+						schema_v: 3,
+						master_type: type,
+						shelter_code: scope.shelterCode,
+						items: cleaned,
+						created_at: now,
+						updated_at: now,
+						created_by: caller
+					};
+		} else {
+			doc = existing
+				? {
+						...existing,
+						schema_v: 3,
+						items: cleaned,
+						updated_at: now
+					}
+				: {
+						_id: id,
+						type: 'master_data',
+						schema_v: 3,
+						master_type: type,
+						items: cleaned,
+						created_at: now,
+						updated_at: now,
+						created_by: caller
+					};
+			delete doc.shelter_code;
+			// Global docs never carry a per-shelter disable list or default pointer.
+			delete doc.disabled_global_codes;
+			delete doc.default_global_code;
+		}
+		// Spreading `...existing` can carry a leftover `excluded_codes` from a v2
+		// doc — strip it so the persisted shape is clean schema_v 3 (CR-049).
+		delete (doc as MasterData & { excluded_codes?: string[] }).excluded_codes;
+
+		// Per-shelter disable list (CR-049 amendment): only when the client sends
+		// it (a global-item toggle). An items-only PUT (shelter-local edit) omits
+		// the key, so `...existing` preserves the current disable list.
+		if (scope.shelterCode && 'disabled_global_codes' in body) {
+			const codes = Array.isArray(body.disabled_global_codes)
+				? body.disabled_global_codes.filter((c): c is string => typeof c === 'string' && !!c.trim())
+				: [];
+			if (codes.length) doc.disabled_global_codes = codes;
+			else delete doc.disabled_global_codes;
+		}
+
+		// Shelter's chosen GLOBAL default (CR-049 amendment): only when the
+		// client sends the key. A non-empty string sets the pointer; an empty
+		// string/null clears it (revert to the global doc's own `is_default`).
+		// Never persisted on the global doc.
+		if (scope.shelterCode && 'default_global_code' in body) {
+			const code =
+				typeof body.default_global_code === 'string' ? body.default_global_code.trim() : '';
+			if (code) doc.default_global_code = code;
+			else delete doc.default_global_code;
+		}
 
 		const res = await adminRaw(`/${REGISTRY_DB}/${encodeURIComponent(id)}`, 'PUT', doc);
 		if (res.status === 409) {
@@ -81,6 +184,36 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		if (!rev) throw new ServiceError('INTERNAL', 'CouchDB did not return a rev');
 		return json({ ok: true, rev });
 	} catch (e) {
+		if (e && typeof e === 'object' && 'status' in e) throw e;
 		return serviceError(e);
 	}
 };
+
+type ParsedScope = { mode: 'global' | 'shelter' | 'effective'; shelterCode?: string };
+
+function parseScope(request: Request, bodyShelterCode?: unknown): ParsedScope {
+	const url = new URL(request.url);
+	const requested = url.searchParams.get('scope');
+	// Canonicalize query scope to match the trimmed body shelter_code value.
+	const queryCode = url.searchParams.get('shelter_code')?.trim() || undefined;
+	const bodyCode =
+		typeof bodyShelterCode === 'string' ? bodyShelterCode.trim() || undefined : undefined;
+	if (queryCode && bodyCode && queryCode !== bodyCode) {
+		throw new ServiceError('VALIDATION', 'shelter_code does not match the query context');
+	}
+	const shelterCode = queryCode ?? bodyCode;
+	const mode = (requested ?? (shelterCode ? 'shelter' : 'global')) as ParsedScope['mode'];
+	if (!['global', 'shelter', 'effective'].includes(mode)) {
+		throw new ServiceError('VALIDATION', 'Invalid master-data scope');
+	}
+	if (mode === 'global' && shelterCode) {
+		throw new ServiceError('VALIDATION', 'Global master data cannot include shelter_code');
+	}
+	if ((mode === 'shelter' || mode === 'effective') && !shelterCode) {
+		throw new ServiceError('VALIDATION', 'shelter_code is required for this scope');
+	}
+	if (shelterCode && !/^[A-Za-z0-9_-]{1,20}$/.test(shelterCode)) {
+		throw new ServiceError('VALIDATION', 'Invalid shelter_code');
+	}
+	return { mode, ...(shelterCode ? { shelterCode } : {}) };
+}

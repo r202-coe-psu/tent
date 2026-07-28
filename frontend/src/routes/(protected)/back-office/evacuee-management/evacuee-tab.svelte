@@ -116,22 +116,27 @@
 
 	<!-- Filters -->
 	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))]">
-		<div class="relative w-full min-w-0">
-			<label for="evacuee-search" class="sr-only">ค้นหาผู้ประสบภัย</label>
-			<Search
-				class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-			/>
-			<Input
-				id="evacuee-search"
-				type="search"
-				placeholder="ค้นหาชื่อ รหัสประจำตัว หรือเบอร์โทรศัพท์..."
-				bind:value={search}
-				oninput={resetPageOnFilter}
-				class="h-8 rounded-xl bg-background pl-9 shadow-xs"
-			/>
+		<div class="w-full min-w-0 space-y-2">
+			<label for="evacuee-search" class="text-xs font-semibold text-foreground">ค้นหา</label>
+			<div class="relative">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+				/>
+				<Input
+					id="evacuee-search"
+					type="search"
+					placeholder="ค้นหาชื่อ รหัสประจำตัว หรือเบอร์โทรศัพท์..."
+					bind:value={search}
+					oninput={resetPageOnFilter}
+					class="h-8 rounded-xl bg-background pl-9 shadow-xs"
+				/>
+			</div>
 		</div>
 
-		<div class="w-full min-w-0">
+		<div class="w-full min-w-0 space-y-2">
+			<label for="evacuee-type-filter" class="text-xs font-semibold text-foreground"
+				>ประเภทผู้ประสบภัย</label
+			>
 			<Select.Root
 				type="single"
 				bind:value={selectedType}
@@ -139,6 +144,7 @@
 				disabled={shelterQuery.isLoading || vulnerableGroupQuery.isLoading}
 			>
 				<Select.Trigger
+					id="evacuee-type-filter"
 					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
 					aria-label="ประเภทผู้ประสบภัย"
 				>
@@ -164,7 +170,10 @@
 			</Select.Root>
 		</div>
 
-		<div class="w-full min-w-0">
+		<div class="w-full min-w-0 space-y-2">
+			<label for="evacuee-zone-filter" class="text-xs font-semibold text-foreground"
+				>โซนที่จัดสรร</label
+			>
 			<Select.Root
 				type="single"
 				bind:value={selectedZone}
@@ -172,6 +181,7 @@
 				disabled={shelterQuery.isLoading}
 			>
 				<Select.Trigger
+					id="evacuee-zone-filter"
 					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
 					aria-label="โซนที่จัดสรร"
 				>

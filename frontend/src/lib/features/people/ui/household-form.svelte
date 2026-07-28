@@ -57,10 +57,14 @@
 	const communityQuery = useMasterData(() => 'community');
 
 	const municipalityZoneItems = $derived(
-		(municipalityZoneQuery.data?.items ?? []).map((z) => ({ value: z.code, label: z.label }))
+		(municipalityZoneQuery.data?.items ?? [])
+			.filter((z) => z.status === 'active')
+			.map((z) => ({ value: z.code, label: z.label }))
 	);
 	const communityItems = $derived(
-		(communityQuery.data?.items ?? []).map((c) => ({ value: c.code, label: c.label }))
+		(communityQuery.data?.items ?? [])
+			.filter((c) => c.status === 'active')
+			.map((c) => ({ value: c.code, label: c.label }))
 	);
 
 	// --- Superform ---
