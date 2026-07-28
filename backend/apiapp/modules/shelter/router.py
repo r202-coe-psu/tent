@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from .schemas import ShelterDetailResponse, ShelterListResponse
 from .use_case import ShelterUseCase, get_shelter_use_case
@@ -41,8 +41,9 @@ async def get_shelter(
 
     result = await use_case.get_shelter(code=code)
     if not result:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=404, detail="Shelter not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "NOT_FOUND", "message": "Shelter not found"}},
+        )
 
     return result

@@ -856,3 +856,26 @@ write target ระหว่าง LAN fallback; schema/role enforcement ต้�
 6. required fields ครบ + enum ถูกต้อง (โครงสร้างลึกตรวจฝั่ง client/Zod — validate_doc_update ตรวจเท่าที่จำเป็นกัน doc พัง ไม่ duplicate ทุก rule)
 7. master `sop_profile` (catalog) เขียน/แก้ไขได้เฉพาะบทบาท `system_admin` เท่านั้น (replicate ลงเครื่องแบบ read-only)
 8. `sop_override` (shelter_*) ต้องเขียนโดยบทบาท `shelter_manager` ที่มี `shelter_code` ตรงกับ database และเซสชันการทำงาน
+
+---
+
+## 9. MongoDB Read Models
+
+### 9.1 `public_shelters` (MongoDB)
+
+Read model สำหรับฉายข้อมูลศูนย์พักพิงออกสู่ Public Portal (ค้นหาและดูรายละเอียดศูนย์พักพิง) โดย Backend จะเป็นผู้คัดลอกข้อมูลจาก CouchDB มาเขียนลงที่นี่
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `shelter_code` (เช่น `SH001`) |
+| `shelter_code` | str | req | รหัสศูนย์พักพิง |
+| `registry_id` | str\|null | opt | อ้างอิง ID จากฐานข้อมูลส่วนกลาง |
+| `name` | str | req | ชื่อศูนย์พักพิง |
+| `status` | enum(`open`,`closed`,`full`,`standby`) | req | สถานะของศูนย์พักพิง |
+| `geo` | {`lat`:num, `lng`:num}\|null | opt | พิกัด |
+| `capacity` | int | req | ความจุที่รองรับได้ทั้งหมด |
+| `province` | str\|null | opt | จังหวัด |
+| `district` | str\|null | opt | อำเภอ |
+| `subdistrict` | str\|null | opt | ตำบล |
+| `raw_data` | {str:Any} | req | โครงสร้าง JSON ต้นฉบับจากเอกสาร `shelter` ใน CouchDB `registry` เพื่อใช้สำหรับการฉายข้อมูลแบบละเอียด โดยไม่ต้องกำหนด Field ยิบย่อยใน Schema |
+| `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด |

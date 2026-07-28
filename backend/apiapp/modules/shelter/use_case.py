@@ -40,7 +40,7 @@ class ShelterUseCase:
             m = doc.raw_data or {}
 
             # extract pet_policy
-            petStatus = "ไม่อนุญาต"
+            pet_status = "ไม่อนุญาต"
             admin_policy = m.get("admission_policy") or {}
             pet_policy = admin_policy.get("pet_policy") or {}
             zones = m.get("zones") or []
@@ -70,9 +70,9 @@ class ShelterUseCase:
                         cats.append("ปศุสัตว์")
                     else:
                         cats.append(str(cat))
-                petStatus = f"อนุญาตแบบมีเงื่อนไข ({', '.join(cats)})"
+                pet_status = f"อนุญาตแบบมีเงื่อนไข ({', '.join(cats)})"
             elif any(z.get("type") == "pet" for z in zones):
-                petStatus = "อนุญาต (มีโซนสัตว์เลี้ยง)"
+                pet_status = "อนุญาต (มีโซนสัตว์เลี้ยง)"
 
             admin_type = m.get("shelter_type") or "ไม่ระบุประเภท"
 
@@ -86,7 +86,7 @@ class ShelterUseCase:
                     province=doc.province,
                     district=doc.district,
                     subdistrict=doc.subdistrict,
-                    pet_policy=petStatus,
+                    pet_policy=pet_status,
                     vulnerable_groups=vul_groups,
                     admin_type=admin_type,
                     updated_at=doc.updated_at,
@@ -108,17 +108,17 @@ class ShelterUseCase:
 
         m = doc.raw_data or {}
 
-        mappedStatus = "CLOSED"
+        mapped_status = "CLOSED"
         op_status = m.get("operation_status")
         if op_status == "active":
-            mappedStatus = "OPEN"
+            mapped_status = "OPEN"
         elif op_status == "full_capacity":
-            mappedStatus = "FULL"
+            mapped_status = "FULL"
         elif op_status == "standby":
-            mappedStatus = "PREPARE"
+            mapped_status = "PREPARE"
 
         occupancy = 0
-        if mappedStatus in ("OPEN", "FULL"):
+        if mapped_status in ("OPEN", "FULL"):
             occupancy = await PublicPerson.find({"shelter_code": code, "status": "active"}).count()
 
         capacity_total = m.get("capacity") or 0
@@ -151,7 +151,7 @@ class ShelterUseCase:
             vul_groups = ["ไม่มีโซนเฉพาะ"]
 
         pet_policy = admin_policy.get("pet_policy") or {}
-        petStatus = "ไม่อนุญาต"
+        pet_status = "ไม่อนุญาต"
         if pet_policy.get("policy") == "conditional":
             cats = []
             for c in pet_policy.get("categories") or []:
@@ -164,9 +164,9 @@ class ShelterUseCase:
                     cats.append("ปศุสัตว์")
                 else:
                     cats.append(str(cat))
-            petStatus = f"อนุญาตแบบมีเงื่อนไข ({', '.join(cats)})"
+            pet_status = f"อนุญาตแบบมีเงื่อนไข ({', '.join(cats)})"
         elif any(z.get("type") == "pet" for z in zones):
-            petStatus = "อนุญาต (มีโซนสัตว์เลี้ยง)"
+            pet_status = "อนุญาต (มีโซนสัตว์เลี้ยง)"
 
         utilities = m.get("utilities") or {}
         power_source = utilities.get("power_source")
@@ -221,14 +221,14 @@ class ShelterUseCase:
             shelter={
                 "id": code,
                 "name": m.get("name") or doc.name or "ไม่มีชื่อศูนย์พักพิง",
-                "status": mappedStatus,
+                "status": mapped_status,
                 "admin_type": m.get("shelter_type") or "ไม่ระบุประเภท",
                 "address": location.get("address") or "ไม่ระบุที่อยู่",
                 "capacity": {"total": capacity_total, "available": capacity_available},
                 "occupancy_rate": occupancy_rate,
                 "building_status": building_status,
                 "geo": doc.geo,
-                "admission_policy": {"pets": petStatus, "vulnerable_groups": vul_groups},
+                "admission_policy": {"pets": pet_status, "vulnerable_groups": vul_groups},
                 "travel": {
                     "route": risk.get("entrance_description") or "ไม่มีข้อมูล",
                     "altitude": (
