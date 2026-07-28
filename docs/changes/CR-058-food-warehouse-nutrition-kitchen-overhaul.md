@@ -1,5 +1,5 @@
 ---
-id: CR-047
+id: CR-058
 title: Food Warehouse, Nutrition Standards & Kitchen Operations Overhaul
 status: proposed
 date: 2026-07-25
@@ -14,7 +14,7 @@ affects:
   - frontend/src/lib/features/sop-ratios/
 ---
 
-# CR-047 — Food Warehouse, Nutrition Standards & Kitchen Operations Overhaul
+# CR-058 — Food Warehouse, Nutrition Standards & Kitchen Operations Overhaul
 
 > **สรุป (TL;DR):** ปรับปรุงระบบคลังเสบียง มาตรฐานโภชนาการ Sphere และกระบวนการวางแผนโรงครัวแบบ 3 ช่วงเวลา (A/B/C) · รวมศูนย์การนับประชากร Unified Headcount กรอง Active/In-shelter และล็อก Base Unit หลังบันทึกครั้งแรก · กระทบ `item_master`, `requirement_group`, `food_sphere_standard`, `meal_plan`, และ UI Kitchen Operations.
 

@@ -1,5 +1,5 @@
 ---
-id: CR-048
+id: CR-059
 title: Requisitions, Inter-Shelter Transfers & NFI Distribution Control
 status: proposed
 date: 2026-07-25
@@ -14,7 +14,7 @@ affects:
   - frontend/src/lib/features/distribution/
 ---
 
-# CR-048 — Requisitions, Inter-Shelter Transfers & NFI Distribution Control
+# CR-059 — Requisitions, Inter-Shelter Transfers & NFI Distribution Control
 
 > **สรุป (TL;DR):** ปรับปรุงระบบคำร้องเบิกจ่าย การโอนย้ายสินค้าข้ามศูนย์ โมเดลการแจกจ่ายสิ่งของ NFI แบบ 2 ขั้นตอน (Active Batch) และมาตรการความปลอดภัย UI · บังคับกรอกชื่อคนขับและทะเบียนรถก่อนอนุมัติส่งมอบ และบังคับสร้าง Destination Lot ID ใหม่ปลายทาง · กระทบ `stock_ledger`, `stock_transfer`, UI Ticket Flow และสิทธิ์การเข้าถึงข้อมูลข้ามศูนย์.
 
