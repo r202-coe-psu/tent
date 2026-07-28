@@ -82,12 +82,17 @@
 					{/if}
 				</div>
 
-				<label
-					class="flex cursor-pointer items-start gap-3 rounded-md border border-input bg-background p-3 transition hover:bg-accent"
-				>
-					<Checkbox bind:checked={isDefault} class="mt-0.5" />
+				<!-- Not a <label>: shadcn Checkbox renders a <button role="checkbox">,
+				     and nesting a button inside a <label> is invalid HTML. Associate
+				     the text via aria-labelledby instead. -->
+				<div class="flex items-start gap-3 rounded-md border border-input bg-background p-3">
+					<Checkbox
+						bind:checked={isDefault}
+						class="mt-0.5"
+						aria-labelledby="master-data-default-label"
+					/>
 					<div class="flex-1">
-						<div class="text-sm leading-none font-medium">
+						<div id="master-data-default-label" class="text-sm leading-none font-medium">
 							ตั้งค่าเป็นค่าเริ่มต้นสำหรับประเภทนี้ (Set as Default Option)
 						</div>
 						<p class="mt-1 text-xs text-muted-foreground">
@@ -95,7 +100,7 @@
 							ตัวเลือกนี้จะถูกตั้งเป็นตัวเลือกเริ่มต้นอัตโนมัติในการลงทะเบียนหรือเรียกใช้งานของหัววัยนี้
 						</p>
 					</div>
-				</label>
+				</div>
 
 				<footer class="mt-6 flex items-center justify-end gap-2">
 					<Button type="button" variant="outline" onclick={close}>ยกเลิกและย้อนกลับ</Button>

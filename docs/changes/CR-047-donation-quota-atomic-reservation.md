@@ -1,5 +1,5 @@
 ---
-id: CR-045
+id: CR-047
 title: Atomic quota reservation counter สำหรับ donation intake (กัน overbooking, T-21)
 status: approved
 date: 2026-07-24
@@ -12,7 +12,7 @@ affects:
   - backend/apiapp/modules/donations/{use_case.py,schemas.py,router.py}
   - worker/src/worker/retention/job.py
 ---
-# CR-045 — Atomic quota reservation counter สำหรับ donation intake
+# CR-047 — Atomic quota reservation counter สำหรับ donation intake
 
 ## Why
 

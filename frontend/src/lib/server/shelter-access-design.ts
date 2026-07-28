@@ -55,7 +55,7 @@ export function buildValidateDocUpdate(code: string): string {
   if (newDoc.shelter_code !== '${code}') {
     throw { forbidden: 'shelter_code must be ${code}' };
   }
-  var allowed = ['evacuee', 'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'audit', 'referral'];
+  var allowed = ['evacuee', 'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'audit', 'purchase', 'referral'];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
   }
