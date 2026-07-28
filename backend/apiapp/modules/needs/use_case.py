@@ -22,7 +22,8 @@ class NeedsUseCase:
                 continue
             grouped.setdefault(need.shelter_code, []).append(
                 NeedItemResponse(
-                    item_id=need.id.split(":item:", 1)[-1],
+                  
+                    item_id=need.id.split(":", 1)[-1],
                     name=need.item_name,
                     qty_needed=str(need.qty_needed),
                     unit=need.unit,
