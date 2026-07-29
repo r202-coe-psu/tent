@@ -58,6 +58,20 @@ describe('createEvacuee', () => {
 			createEvacuee({ first_name: '  ', last_name: 'ข', gender: 'male', phone: null }, ctx)
 		).toThrow();
 	});
+
+	it('defaults photo to absent, and carries it through when set (CR-054)', () => {
+		const withoutPhoto = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'other', phone: null },
+			ctx
+		);
+		expect(withoutPhoto.photo).toBeUndefined();
+
+		const withPhoto = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'other', phone: null, photo: 'image:01H...' },
+			ctx
+		);
+		expect(withPhoto.photo).toBe('image:01H...');
+	});
 });
 
 describe('household wizard schemas', () => {

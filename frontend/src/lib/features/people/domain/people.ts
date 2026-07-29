@@ -142,6 +142,7 @@ export interface Evacuee extends BaseDoc {
 	religion?: Religion;
 	special_needs: string[];
 	emergency_contact?: EmergencyContact;
+	photo?: string | null;
 	household_id: string | null;
 	current_stay: CurrentStay;
 	privacy: { search_excluded: boolean };
@@ -370,6 +371,7 @@ export const evacueeInputSchema = z.object({
 		})
 		.optional(),
 	household_id: z.string().nullable().default(null),
+	photo: z.string().nullable().optional().default(null),
 	registered_via: registeredViaSchema.default('app')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
@@ -565,6 +567,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			country: d.country,
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
+			...(d.photo ? { photo: d.photo } : {}),
 			household_id: d.household_id,
 			current_stay: { status: 'pre_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },

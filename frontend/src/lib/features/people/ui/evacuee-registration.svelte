@@ -15,7 +15,10 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { useSaveImage } from '$lib/features/images';
 	import Camera from '@lucide/svelte/icons/camera';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { COUNTRIES } from '$lib/utils/country';
 
@@ -54,6 +57,8 @@
 
 	let birthYearBE = $state('');
 	let facePhotoUrl = $state<string | null>(null);
+	let uploadingPhoto = $state(false);
+	const saveImage = useSaveImage();
 	// "ไม่มีเบอร์โทร" — เก็บ phone เป็น null ตาม spec (schema.md §evacuee: phone str|null, req)
 	let noPhone = $state(false);
 	let medicalConditionsStr = $state('');
@@ -193,10 +198,25 @@
 					accept="image/*"
 					class="hidden"
 					id="face-photo-input"
-					onchange={(e) => {
+					disabled={uploadingPhoto}
+					onchange={async (e) => {
 						const file = e.currentTarget.files?.[0];
-						if (file) {
-							facePhotoUrl = URL.createObjectURL(file);
+						if (!file) return;
+
+						facePhotoUrl = URL.createObjectURL(file);
+						uploadingPhoto = true;
+						try {
+							const ctx = {
+								shelterCode: shelterStore.selectedShelterCode ?? getShelterCode(),
+								createdBy: authStore.user?.name ?? 'unknown'
+							};
+							const image = await saveImage.mutateAsync({ file, ctx });
+							$formData.photo = image._id;
+						} catch {
+							$formData.photo = null;
+							toast.error('อัปโหลดรูปภาพล้มเหลว สามารถลงทะเบียนต่อได้โดยไม่มีรูป');
+						} finally {
+							uploadingPhoto = false;
 						}
 					}}
 				/>
@@ -205,11 +225,22 @@
 					class="block cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
 				>
 					{#if facePhotoUrl}
-						<img src={facePhotoUrl} alt="Face" class="h-40 w-full rounded-lg object-cover" />
+						<div class="relative h-40 w-full">
+							<img
+								src={facePhotoUrl}
+								alt="Face"
+								class="h-40 w-full rounded-lg object-cover {uploadingPhoto ? 'opacity-50' : ''}"
+							/>
+							{#if uploadingPhoto}
+								<div class="absolute inset-0 flex items-center justify-center">
+									<Loader2 class="h-8 w-8 animate-spin text-primary" />
+								</div>
+							{/if}
+						</div>
 					{:else}
 						<div class="flex h-40 flex-col items-center justify-center">
 							<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
-							<span class="text-xs text-muted-foreground">แตะเพื่อถ่ายภาพ</span>
+							<span class="text-xs text-muted-foreground">เพิ่มรูปภาพ</span>
 						</div>
 					{/if}
 				</label>
