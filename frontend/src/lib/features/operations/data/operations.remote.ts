@@ -14,6 +14,7 @@ import {
 	stockBalance,
 	createReceiveEntry,
 	createDistributeEntry,
+	createAdjustEntry,
 	keyPurchaseReceipt,
 	type DonationCampaign,
 	type CampaignInput,
