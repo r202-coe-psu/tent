@@ -3,7 +3,7 @@
  *
  * Canonical response shape for the demographics endpoint.
  * Two CouchDB views are queried in parallel (CR-020, T-52):
- *   1. `demographics_by_age?group=true`         — age-bucket counts
+ *   1. `demographics_by_age?group=true`         — active evacuee birth-year counts; API buckets by current year
  *   2. `demographics_by_country?group=true`  — country counts
  *
  * No PII: all data is aggregate-only (security-rbac-bestpractices §3).

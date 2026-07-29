@@ -49,20 +49,33 @@ export interface ScanDonationView {
 	logistics?: PublicDonationDoc['logistics'];
 }
 
-/** Back-office scan station — receive-donation mutation body (status locked to `received`). */
+/**
+ * Back-office scan station — receive-donation mutation body (status locked to `received`).
+ *
+ * `items` here are what staff physically COUNTED, which may differ from what the
+ * donor declared. Lines carrying an `item_id` mint a `stock_ledger` entry; free-text
+ * lines stay on the donation only (they are not in the catalog, so they cannot be
+ * counted as stock — schema.md §2.1 requires a real `item_id` + matching `unit`).
+ */
 export const receiveDonationInputSchema = z.object({
 	status: z.literal('received'),
+	/** Optional note from the receiving staff — lands on `received_summary.remarks`. */
+	remarks: z.string().trim().max(500).optional(),
 	items: z
 		.array(
 			z.object({
 				item_id: z.string().optional(),
 				free_text: z.string().optional(),
 				qty: qtyStrCoercePositiveSchema,
-				unit: z.string().min(1)
+				unit: z.string().min(1),
+				lot: z
+					.object({ expiry: z.string().optional(), note: z.string().trim().optional() })
+					.optional()
 			})
 		)
 		.optional()
 });
+export type ReceiveDonationInput = z.infer<typeof receiveDonationInputSchema>;
 
 const PUBLIC_DONATION_ERROR_MESSAGES: Record<string, string> = {
 	NEED_FULL: 'รายการนี้รับบริจาคครบแล้ว กรุณาเลือกรายการอื่น',

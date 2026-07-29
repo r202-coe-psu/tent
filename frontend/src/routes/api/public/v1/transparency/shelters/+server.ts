@@ -3,6 +3,8 @@ import type { RequestHandler } from './$types';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import type { ShelterMaster } from '$lib/features/shelters/server';
 import { adminRaw } from '$lib/server/couch-admin';
+import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
+import { countVulnerableFromBirthYearRows } from '$lib/features/public-portal/server';
 
 export const GET: RequestHandler = async ({ url, setHeaders }) => {
 	// Cache the response for 60 seconds on the client and CDN to mitigate N+1 query load
@@ -75,20 +77,28 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 					? calcDistance(userLat, userLng, m.location.lat, m.location.lng)
 					: null;
 
-			let occupancy = 0;
-			let vulnerableCount = 0;
+			let occupancy: number | null = 0;
+			let vulnerableCount: number | null = 0;
 			if (mappedStatus === 'OPEN' || mappedStatus === 'FULL') {
+				occupancy = null;
+				vulnerableCount = null;
+				const db = `shelter_${m.code.toLowerCase()}`;
 				try {
+					const deployment = await checkViewDeployment(db, adminRaw);
+					if (deployment.state !== 'current') {
+						throw new Error(`Dashboard design for ${db} is ${deployment.state}`);
+					}
+
 					const [occRes, ageRes] = await Promise.all([
-						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/app/_view/occupancy?group=true`,
-							'GET'
-						),
-						adminRaw(
-							`/shelter_${m.code.toLowerCase()}/_design/app/_view/demographics_by_age?group=true`,
-							'GET'
-						)
+						adminRaw(`/${db}/_design/app/_view/occupancy?group=true`, 'GET'),
+						adminRaw(`/${db}/_design/app/_view/demographics_by_age?group=true`, 'GET')
 					]);
+					if (occRes.status === 404 || ageRes.status === 404) {
+						throw new Error('Dashboard design is not deployed');
+					}
+					if (occRes.status >= 400 || ageRes.status >= 400) {
+						throw new Error('Dashboard view query failed');
+					}
 
 					if (
 						occRes.status === 200 &&
@@ -110,15 +120,9 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 						ageRes.data &&
 						(ageRes.data as Record<string, unknown>).rows
 					) {
-						const rows = (ageRes.data as Record<string, unknown>).rows as Array<{
-							key: string;
-							value: unknown;
-						}>;
-						for (const r of rows) {
-							if (r.key === '0-4' || r.key === '60+') {
-								vulnerableCount += r.value as number;
-							}
-						}
+						vulnerableCount = countVulnerableFromBirthYearRows(
+							(ageRes.data as Record<string, unknown>).rows
+						);
 					}
 				} catch (err) {
 					console.error(`Failed to fetch stats for shelter_${m.code}`, err);
@@ -126,7 +130,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			}
 
 			const capacity = m.capacity || 0;
-			const available = Math.max(0, capacity - occupancy);
+			const available = occupancy === null ? null : Math.max(0, capacity - occupancy);
 
 			return {
 				id: m._id,
@@ -206,8 +210,12 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 	const summaryData = {
 		shelters_total: shelters.length,
 		shelters_open: shelters.filter((s) => s.status === 'OPEN').length,
-		occupancy_total: shelters.reduce((acc, s) => acc + s.occupancy, 0),
-		vulnerable_count: shelters.reduce((acc, s) => acc + (s.vulnerableCount || 0), 0)
+		occupancy_total: shelters.every((s) => s.occupancy !== null)
+			? shelters.reduce((acc, s) => acc + (s.occupancy ?? 0), 0)
+			: null,
+		vulnerable_count: shelters.every((s) => s.vulnerableCount !== null)
+			? shelters.reduce((acc, s) => acc + (s.vulnerableCount ?? 0), 0)
+			: null
 	};
 
 	if (search) {
@@ -241,7 +249,9 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 		shelters = shelters.filter((s) => s.distance >= 0 && s.distance <= maxDistance);
 	}
 	if (hideFull) {
-		shelters = shelters.filter((s) => s.status !== 'FULL' && (s.capacity === 0 || s.available > 0));
+		shelters = shelters.filter(
+			(s) => s.status !== 'FULL' && (s.capacity === 0 || s.available === null || s.available > 0)
+		);
 	}
 
 	// Apply advanced filters
