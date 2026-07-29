@@ -136,6 +136,7 @@ export interface Evacuee extends BaseDoc {
 	phone: string | null;
 	nickname?: string;
 	birth_year?: number;
+	age?: number;
 	person_id?: PersonId;
 	country: string;
 	religion?: Religion;
@@ -340,6 +341,7 @@ export const evacueeInputSchema = z.object({
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
 	birth_year: z.coerce.number().int().optional(),
+	age: z.number().int().min(0).max(150).optional(),
 	person_id: personIdSchema.default({ cardType: 'national_id', number: '' }),
 	country: z
 		.string({ error: 'กรุณาเลือกประเทศ' })
@@ -549,7 +551,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		3,
+		5, // schema_v 5: adds age (CR-057) — skips 4, reserved for photo (CR-054, not yet implemented)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -557,6 +559,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			phone: d.phone,
 			...(d.nickname ? { nickname: d.nickname } : {}),
 			...(d.birth_year !== undefined ? { birth_year: d.birth_year } : {}),
+			...(d.age !== undefined ? { age: d.age } : {}),
 			...(d.person_id ? { person_id: d.person_id } : {}),
 			...(d.religion ? { religion: d.religion } : {}),
 			country: d.country,
@@ -799,6 +802,20 @@ export function matchesEvacueeSearch(evacuee: Evacuee, query: string): boolean {
 		if (evacuee.person_id?.number?.replace(/\D/g, '').includes(digitsOnly)) return true;
 	}
 	return false;
+}
+
+/**
+ * Age in years to display for an evacuee: prefers the stored `age` snapshot
+ * (CR-057), falling back to deriving from `birth_year` (พ.ศ., +543 offset)
+ * when `age` isn't set. Returns `null` when neither field is available.
+ */
+export function evacueeAgeYears(doc: {
+	age?: number | null;
+	birth_year?: number | null;
+}): number | null {
+	if (typeof doc.age === 'number') return doc.age;
+	if (typeof doc.birth_year === 'number') return new Date().getFullYear() + 543 - doc.birth_year;
+	return null;
 }
 
 export function zoneLabel(zone: string | null | undefined): string {
