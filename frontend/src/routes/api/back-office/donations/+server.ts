@@ -67,7 +67,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
 		// Soonest expected arrival first; undated bookings sink to the bottom.
 		rows.sort((a, b) =>
-			(a.eta ?? a.declared_at ?? '￿').localeCompare(b.eta ?? b.declared_at ?? '￿')
+			(a.eta ?? a.declared_at ?? '9999-99-99').localeCompare(b.eta ?? b.declared_at ?? '9999-99-99')
 		);
 
 		return json({ success: true, donations: rows });

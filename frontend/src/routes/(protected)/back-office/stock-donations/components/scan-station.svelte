@@ -69,6 +69,7 @@
 		scanState = 'idle';
 		searchQuery = '';
 		donationDoc = null;
+		scannedItems = [];
 		remarks = '';
 	}
 
