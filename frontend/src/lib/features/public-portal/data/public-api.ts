@@ -34,7 +34,8 @@ export async function listPublicShelters(
 				subdistrict: params.subdistrict || null,
 				status: params.status || null
 			}
-		}
+		},
+		fetch: params.fetch
 	});
 	if (error || !data) {
 		throw publicApiError(error, response.status, 'ไม่สามารถโหลดรายการศูนย์พักพิงได้');

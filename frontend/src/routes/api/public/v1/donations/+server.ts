@@ -15,7 +15,7 @@ import { qtyGt } from '$lib/utils/qty';
 const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
 
 /** Registry / public_shelters statuses that still accept public donations. */
-const DONATION_OPEN_STATUSES = new Set(['open', 'full']);
+const DONATION_OPEN_STATUSES = new Set(['open', 'full', 'active']);
 
 export const POST = async ({ request, getClientAddress }) => {
 	try {
