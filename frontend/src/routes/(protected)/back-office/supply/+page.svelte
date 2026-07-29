@@ -13,7 +13,13 @@
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import TrendingUp from '@lucide/svelte/icons/trending-up';
 	import XCircle from '@lucide/svelte/icons/x-circle';
+	import Scale from '@lucide/svelte/icons/scale';
 	import { qtyGt, qtyLte } from '$lib/utils/qty';
+	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
+
+	// ─── Tabs ─────────────────────────────────────────────────────────────────
+	type TabKey = 'stock' | 'needs';
+	let activeTab = $state<TabKey>('stock');
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const balanceQuery = useStockBalance();
@@ -54,147 +60,190 @@
 </svelte:head>
 
 <!-- Top bar header -->
-<header class="flex shrink-0 items-center gap-2 border-b border-sidebar-border bg-card px-4 py-2.5">
-	<Package class="h-4 w-4 text-primary" />
-	<h1 class="text-base font-bold text-foreground">คลังสินค้าและสิ่งของบรรเทาทุกข์</h1>
-</header>
+<div class="flex h-full flex-col">
+	<header
+		class="flex shrink-0 items-center gap-2 border-b border-sidebar-border bg-card px-4 py-2.5"
+	>
+		<Package class="h-4 w-4 text-primary" />
+		<h1 class="text-base font-bold text-foreground">คลังทรัพยากร (Stock &amp; Donations)</h1>
+	</header>
 
-<div class="flex w-full flex-1 flex-col gap-6 bg-background p-6">
-	<!-- Title & Inbound Trigger Button -->
-	<div class="flex w-full flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-		<div>
-			<h2 class="flex items-center gap-2 text-3xl font-extrabold tracking-tight text-foreground">
-				<Boxes class="h-8 w-8 text-primary" />
-				แผงควบคุมคลังและเสบียง
-			</h2>
-			<p class="mt-1.5 text-sm text-muted-foreground">
-				จัดการรับพัสดุเข้าคลัง ค้นหาสินค้า
-				และเรียกตรวจสอบบัญชีความเคลื่อนไหวสินค้าทั้งหมดในศูนย์พักพิง
-			</p>
-		</div>
+	<!-- Tab nav -->
+	<div class="shrink-0 border-b border-border bg-background px-6 pt-4">
+		<nav class="flex flex-wrap gap-1">
+			<button
+				type="button"
+				onclick={() => (activeTab = 'stock')}
+				class="flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
+					{activeTab === 'stock'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
+			>
+				<Package class="h-4 w-4" />
+				รายการพัสดุในคลัง (Stock Inventory)
+			</button>
+			<button
+				type="button"
+				onclick={() => (activeTab = 'needs')}
+				class="flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
+					{activeTab === 'needs'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
+			>
+				<Scale class="h-4 w-4" />
+				วิเคราะห์ความต้องการเสบียง (Sphere Standard)
+			</button>
+		</nav>
+	</div>
 
-		<!-- Dialog to Receive Stock -->
-		<Dialog.Root bind:open={isReceiveModalOpen}>
-			<Dialog.Trigger
-				class="inline-flex w-full shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-lg transition-all duration-300 hover:scale-[1.03] hover:bg-primary/95 hover:shadow-xl active:scale-[0.97] sm:w-auto"
-			>
-				<PackagePlus class="h-4.5 w-4.5" /> รับของเข้าคลัง
-			</Dialog.Trigger>
-			<Dialog.Content
-				class="max-h-[90vh] max-w-2xl overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl sm:max-w-2xl"
-			>
-				<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
-					<Dialog.Title class="flex items-center gap-2 text-xl font-bold text-foreground">
-						<PackagePlus class="h-5 w-5 text-primary" />
-						ลงทะเบียนรับของเข้าคลัง (Check-in)
-					</Dialog.Title>
-					<Dialog.Description class="mt-1 text-sm text-muted-foreground">
-						บันทึกการรับเข้าสิ่งของพัสดุจากผู้บริจาค การจัดซื้อ หรือการโอนย้าย โดยระบบจะบันทึกลงใน
-						Ledger โดยอัตโนมัติ
-					</Dialog.Description>
-				</Dialog.Header>
-				<div class="mt-2">
-					<ReceiveStockForm
-						onsuccess={() => {
-							isReceiveModalOpen = false;
-						}}
-					/>
+	<!-- Tab content -->
+	<div class="flex-1 overflow-auto">
+		{#if activeTab === 'stock'}
+			<div class="flex w-full flex-col gap-6 bg-background p-6">
+				<!-- Title & Inbound Trigger Button -->
+				<div
+					class="flex w-full flex-col items-start justify-between gap-4 sm:flex-row sm:items-center"
+				>
+					<div>
+						<h2
+							class="flex items-center gap-2 text-3xl font-extrabold tracking-tight text-foreground"
+						>
+							<Boxes class="h-8 w-8 text-primary" />
+							แผงควบคุมคลังและเสบียง
+						</h2>
+						<p class="mt-1.5 text-sm text-muted-foreground">
+							จัดการรับพัสดุเข้าคลัง ค้นหาสินค้า
+							และเรียกตรวจสอบบัญชีความเคลื่อนไหวสินค้าทั้งหมดในศูนย์พักพิง
+						</p>
+					</div>
+
+					<!-- Dialog to Receive Stock -->
+					<Dialog.Root bind:open={isReceiveModalOpen}>
+						<Dialog.Trigger
+							class="inline-flex w-full shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-lg transition-all duration-300 hover:scale-[1.03] hover:bg-primary/95 hover:shadow-xl active:scale-[0.97] sm:w-auto"
+						>
+							<PackagePlus class="h-4.5 w-4.5" /> รับของเข้าคลัง
+						</Dialog.Trigger>
+						<Dialog.Content
+							class="max-h-[90vh] max-w-2xl overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl sm:max-w-2xl"
+						>
+							<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
+								<Dialog.Title class="flex items-center gap-2 text-xl font-bold text-foreground">
+									<PackagePlus class="h-5 w-5 text-primary" />
+									ลงทะเบียนรับของเข้าคลัง (Check-in)
+								</Dialog.Title>
+								<Dialog.Description class="mt-1 text-sm text-muted-foreground">
+									บันทึกการรับเข้าสิ่งของพัสดุจากผู้บริจาค การจัดซื้อ หรือการโอนย้าย
+									โดยระบบจะบันทึกลงใน Ledger โดยอัตโนมัติ
+								</Dialog.Description>
+							</Dialog.Header>
+							<div class="mt-2">
+								<ReceiveStockForm
+									onsuccess={() => {
+										isReceiveModalOpen = false;
+									}}
+								/>
+							</div>
+						</Dialog.Content>
+					</Dialog.Root>
 				</div>
-			</Dialog.Content>
-		</Dialog.Root>
-	</div>
 
-	<!-- KPI Summary Widgets (Depth Design) -->
-	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-		<!-- Total items card -->
-		<div
-			class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-primary/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
-		>
-			<div>
-				<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
-					>รายการสิ่งของทั้งหมด</span
-				>
-				<strong class="mt-1.5 block font-mono text-3xl font-extrabold text-foreground">
-					{totalItems.toLocaleString()}
-				</strong>
-			</div>
-			<div class="rounded-xl border border-primary/20 bg-primary/10 p-3 text-primary">
-				<Boxes class="h-5 w-5" />
-			</div>
-		</div>
+				<!-- KPI Summary Widgets (Depth Design) -->
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+					<!-- Total items card -->
+					<div
+						class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-primary/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
+					>
+						<div>
+							<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
+								>รายการสิ่งของทั้งหมด</span
+							>
+							<strong class="mt-1.5 block font-mono text-3xl font-extrabold text-foreground">
+								{totalItems.toLocaleString()}
+							</strong>
+						</div>
+						<div class="rounded-xl border border-primary/20 bg-primary/10 p-3 text-primary">
+							<Boxes class="h-5 w-5" />
+						</div>
+					</div>
 
-		<!-- Out of stock card -->
-		<div
-			class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-rose-500/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
-		>
-			<div>
-				<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
-					>สินค้าหมดคลัง</span
-				>
-				<strong
-					class="mt-1.5 block font-mono text-3xl font-extrabold {emptyCount > 0
-						? 'text-rose-600'
-						: 'text-foreground'}"
-				>
-					{emptyCount.toLocaleString()}
-				</strong>
-			</div>
-			<div
-				class="flex items-center justify-center rounded-xl border p-3 {emptyCount > 0
-					? 'border-rose-500/20 bg-rose-500/10 text-rose-600'
-					: 'border-border bg-muted text-muted-foreground'}"
-			>
-				<XCircle class="h-5 w-5" />
-			</div>
-		</div>
+					<!-- Out of stock card -->
+					<div
+						class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-rose-500/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
+					>
+						<div>
+							<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
+								>สินค้าหมดคลัง</span
+							>
+							<strong
+								class="mt-1.5 block font-mono text-3xl font-extrabold {emptyCount > 0
+									? 'text-rose-600'
+									: 'text-foreground'}"
+							>
+								{emptyCount.toLocaleString()}
+							</strong>
+						</div>
+						<div
+							class="flex items-center justify-center rounded-xl border p-3 {emptyCount > 0
+								? 'border-rose-500/20 bg-rose-500/10 text-rose-600'
+								: 'border-border bg-muted text-muted-foreground'}"
+						>
+							<XCircle class="h-5 w-5" />
+						</div>
+					</div>
 
-		<!-- Low stock card -->
-		<div
-			class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-amber-500/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
-		>
-			<div>
-				<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
-					>สินค้าใกล้หมด (เฝ้าระวัง)</span
-				>
-				<strong
-					class="mt-1.5 block font-mono text-3xl font-extrabold {lowStockCount > 0
-						? 'text-amber-600'
-						: 'text-foreground'}"
-				>
-					{lowStockCount.toLocaleString()}
-				</strong>
-			</div>
-			<div
-				class="flex items-center justify-center rounded-xl border p-3 {lowStockCount > 0
-					? 'border-amber-500/20 bg-amber-500/10 text-amber-600'
-					: 'border-border bg-muted text-muted-foreground'}"
-			>
-				<AlertTriangle class="h-5 w-5" />
-			</div>
-		</div>
+					<!-- Low stock card -->
+					<div
+						class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-amber-500/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
+					>
+						<div>
+							<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
+								>สินค้าใกล้หมด (เฝ้าระวัง)</span
+							>
+							<strong
+								class="mt-1.5 block font-mono text-3xl font-extrabold {lowStockCount > 0
+									? 'text-amber-600'
+									: 'text-foreground'}"
+							>
+								{lowStockCount.toLocaleString()}
+							</strong>
+						</div>
+						<div
+							class="flex items-center justify-center rounded-xl border p-3 {lowStockCount > 0
+								? 'border-amber-500/20 bg-amber-500/10 text-amber-600'
+								: 'border-border bg-muted text-muted-foreground'}"
+						>
+							<AlertTriangle class="h-5 w-5" />
+						</div>
+					</div>
 
-		<!-- Transactions count card -->
-		<div
-			class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-purple-500/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
-		>
-			<div>
-				<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
-					>ความเคลื่อนไหวใน 24 ชม.</span
-				>
-				<strong class="mt-1.5 block font-mono text-3xl font-extrabold text-foreground">
-					{recentActivityCount.toLocaleString()}
-				</strong>
-			</div>
-			<div
-				class="rounded-xl border border-purple-500/20 bg-purple-500/10 p-3 text-purple-600 dark:text-purple-400"
-			>
-				<TrendingUp class="h-5 w-5" />
-			</div>
-		</div>
-	</div>
+					<!-- Transactions count card -->
+					<div
+						class="flex items-center justify-between rounded-2xl border border-border/80 bg-card/70 bg-gradient-to-br from-purple-500/5 via-background to-card p-5 shadow-sm transition-all duration-300 hover:shadow-md"
+					>
+						<div>
+							<span class="block text-xs font-bold tracking-wider text-muted-foreground uppercase"
+								>ความเคลื่อนไหวใน 24 ชม.</span
+							>
+							<strong class="mt-1.5 block font-mono text-3xl font-extrabold text-foreground">
+								{recentActivityCount.toLocaleString()}
+							</strong>
+						</div>
+						<div
+							class="rounded-xl border border-purple-500/20 bg-purple-500/10 p-3 text-purple-600 dark:text-purple-400"
+						>
+							<TrendingUp class="h-5 w-5" />
+						</div>
+					</div>
+				</div>
 
-	<!-- Main Inventory Table -->
-	<div class="animate-in duration-300 fade-in slide-in-from-bottom-3">
-		<StockTable />
+				<!-- Main Inventory Table -->
+				<div class="animate-in duration-300 fade-in slide-in-from-bottom-3">
+					<StockTable />
+				</div>
+			</div>
+		{:else}
+			<ResourceNeedsDashboard />
+		{/if}
 	</div>
 </div>
