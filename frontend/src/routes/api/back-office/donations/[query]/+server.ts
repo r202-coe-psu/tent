@@ -1,28 +1,31 @@
-import { json, error } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminRaw, requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
-import { hasStaffCapability, isShelterManager } from '$lib/auth/roles';
+import { adminRaw } from '$lib/server/couch-admin';
+import {
+	authorizeWarehouse,
+	findDonationByQuery,
+	isInCallerScope,
+	routeErrorResponse as toRouteError
+} from '$lib/server/donation-intake';
 import {
 	type PublicDonationDoc,
 	type ScanDonationView,
+	type ReceiveDonationInput,
 	receiveDonationInputSchema
 } from '$lib/features/donations';
+import {
+	keyDonationReceipt,
+	type CountedItem,
+	type Donation,
+	type StockLedger
+} from '$lib/features/operations/server';
+import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
+import { isSupplyItem, type SupplyItem, CATALOG_DB } from '$lib/features/supply/server';
 import { fetchDocs } from '$lib/server/donation-docs';
-import { sha256Hex } from '$lib/db/hash';
-
-type RegistryRow = { id: string; doc?: { code?: string } };
-type RegistryAllDocs = { rows?: RegistryRow[] };
 
 function routeErrorResponse(e: unknown) {
-	const message = e instanceof Error ? e.message : 'Internal Server Error';
-	const status =
-		typeof e === 'object' &&
-		e !== null &&
-		'status' in e &&
-		typeof (e as { status: unknown }).status === 'number'
-			? (e as { status: number }).status
-			: 500;
-	return json({ success: false, error: message || 'Internal Server Error' }, { status });
+	const { message, status } = toRouteError(e);
+	return json({ success: false, error: message }, { status });
 }
 
 // Project a raw donation doc to the redacted view the scan UI needs (no _rev,
@@ -43,44 +46,47 @@ function toScanView(d: PublicDonationDoc): ScanDonationView {
 	};
 }
 
-// Warehouse scan-station is for warehouse_staff (+ shelter_manager / SA), NOT CouchDB _admin.
-// Mirrors the CR-024 capability pattern (requireKitchen) — see $lib/guards/auth.ts.
-async function authorizeWarehouse(cookie: string | null): Promise<Caller> {
-	const caller = await requireShelterScopeOrSA(cookie); // authenticated; resolves roles/scope
-	const allowed =
-		caller.isSA ||
-		isShelterManager(caller.roles) ||
-		hasStaffCapability(caller.roles, 'warehouse_staff');
-	if (!allowed) throw error(403, 'Requires warehouse_staff, shelter_manager, or system_admin');
-	return caller;
+/**
+ * A counted line that becomes stock. Only lines carrying an `item_id` qualify:
+ * `stock_ledger.item_id` must point at a real catalog item and `unit` must equal
+ * that item's `base_unit` (schema.md §2.1), so free-text donations stay on the
+ * donation doc and never reach the ledger.
+ */
+function toCountedItems(lines: ReceiveDonationInput['items']): CountedItem[] {
+	return (lines ?? [])
+		.filter((it): it is typeof it & { item_id: string } => !!it.item_id)
+		.map((it) => ({
+			item_id: it.item_id,
+			qty: it.qty,
+			unit: it.unit,
+			...(it.lot ? { lot: it.lot } : {})
+		}));
 }
 
-// Find donation doc across all shelters by booking_ref or tracking_token_hash.
-// Uses _all_docs scan (no Mango index required — same pattern as public tracking lookup).
-async function findDonationByQuery(
-	query: string
-): Promise<{ donation: PublicDonationDoc; dbName: string } | null> {
-	const resRegistry = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');
-	if (resRegistry.status >= 400) {
-		throw new Error('Could not read registry');
-	}
-	const registryRows = (resRegistry.data as RegistryAllDocs)?.rows ?? [];
-	const shelterCodes = registryRows
-		.filter((r) => r.id.startsWith('shelter:') && r.doc?.code)
-		.map((r) => r.doc!.code as string);
+/**
+ * Enforce the catalog invariants the client-side receive path already enforces
+ * (`assertReceiveAgainstCatalog`) — this route writes with admin credentials, so
+ * `validate_doc_update` does not run for it and the checks must happen here.
+ */
+async function assertCountedAgainstCatalog(counted: CountedItem[]): Promise<void> {
+	if (counted.length === 0) return;
+	const items = (await fetchDocs<SupplyItem>(CATALOG_DB, 'item:')).filter(isSupplyItem);
+	const byId = new Map(items.map((i) => [i._id, i]));
 
-	const tokenHash = await sha256Hex(query);
-
-	for (const code of shelterCodes) {
-		const dbName = `shelter_${code.toLowerCase()}`;
-		const donations = await fetchDocs<PublicDonationDoc>(dbName, 'donation:');
-		const match = donations.find(
-			(d) =>
-				d?.type === 'donation' && (d.booking_ref === query || d.tracking_token_hash === tokenHash)
-		);
-		if (match) return { donation: match, dbName };
+	for (const line of counted) {
+		const item = byId.get(line.item_id);
+		if (!item) {
+			throw new Error(`Unknown item: ${line.item_id} — item must exist in the catalog`);
+		}
+		if (item.unit !== line.unit) {
+			throw new Error(
+				`Unit mismatch for item ${line.item_id}: expected ${item.unit}, got ${line.unit}`
+			);
+		}
+		if (item.perishable && !line.lot?.expiry) {
+			throw new Error(`Perishable item ${line.item_id} requires lot.expiry to be set`);
+		}
 	}
-	return null;
 }
 
 export const GET: RequestHandler = async ({ params, request }) => {
@@ -97,7 +103,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 		}
 
 		// Shelter-scope isolation: non-SA callers may only see donations of their own shelter.
-		if (!caller.isSA && caller.shelterCode !== found.donation.shelter_code) {
+		if (!isInCallerScope(caller, found.donation)) {
 			return json({ success: false, error: 'Forbidden' }, { status: 403 });
 		}
 
@@ -124,7 +130,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		// Shelter-scope isolation: non-SA callers may only receive donations of their own shelter.
-		if (!caller.isSA && caller.shelterCode !== found.donation.shelter_code) {
+		if (!isInCallerScope(caller, found.donation)) {
 			return json({ success: false, error: 'Forbidden' }, { status: 403 });
 		}
 
@@ -146,13 +152,89 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			);
 		}
 
+		// What staff actually counted; falls back to the declared lines when the
+		// UI sends none (walk-through with nothing changed).
+		const countedLines = parsed.data.items ?? donation.items;
+		const counted = toCountedItems(countedLines);
+
+		try {
+			await assertCountedAgainstCatalog(counted);
+		} catch (e) {
+			return json(
+				{ success: false, error: e instanceof Error ? e.message : 'Invalid counted items' },
+				{ status: 422 }
+			);
+		}
+
+		const ctx = { shelterCode: donation.shelter_code, createdBy: caller.name };
+
+		// 1) Ledger — the ONLY path from a donation into stock. Positive entries,
+		//    reason `donation`, ref_id back to the donation (couchdb-mongodb-sync.md §4.2).
+		const ledgers: StockLedger[] = keyDonationReceipt(
+			donation as unknown as Donation,
+			counted,
+			ctx
+		);
+
+		// 2) Audit — who received what, from which booking, declared vs actual.
+		//    No donor PII in `context`: the booking ref is the donor-facing handle.
+		const declaredSnapshot = (donation.items ?? []).map((it) => ({
+			item_id: it.item_id ?? null,
+			free_text: it.free_text ?? null,
+			qty: it.qty,
+			unit: it.unit
+		}));
+		const receivedSnapshot = (countedLines ?? []).map((it) => ({
+			item_id: it.item_id ?? null,
+			free_text: it.free_text ?? null,
+			qty: it.qty,
+			unit: it.unit
+		}));
+		const audit: AuditEntry = createAuditEntry(
+			{
+				action: 'manual_adjust',
+				target_type: 'donation',
+				target_id: donation._id,
+				reason: `ตรวจรับบริจาคที่ศูนย์ (${donation.booking_ref ?? donation._id})`,
+				context: {
+					booking_ref: donation.booking_ref ?? null,
+					received_by: caller.name,
+					declared_items: declaredSnapshot,
+					received_items: receivedSnapshot,
+					has_discrepancy: JSON.stringify(declaredSnapshot) !== JSON.stringify(receivedSnapshot),
+					ledger_ids: ledgers.map((l) => l._id),
+					free_text_lines_skipped: (countedLines ?? []).length - counted.length
+				}
+			},
+			ctx
+		);
+
+		// Ledger + audit go in FIRST. If this fails the donation stays `declared`
+		// and staff can key it again — safer than a received donation whose goods
+		// never reached the ledger.
+		const appendRes = await adminRaw(`/${dbName}/_bulk_docs`, 'POST', {
+			docs: [...ledgers, audit]
+		});
+		if (appendRes.status >= 400) {
+			throw new Error(
+				`Failed to write stock ledger / audit trail: ${JSON.stringify(appendRes.data)}`
+			);
+		}
+
 		const nowStr = new Date().toISOString();
+		// 3) Donation stays the record of what was DECLARED — `items` is never
+		//    overwritten (the projector mirrors it as `items_declared`). What was
+		//    actually received lands on `received_summary` (couchdb-mongodb-sync.md §3.2).
 		const updated: PublicDonationDoc = {
 			...donation,
 			status: 'received',
 			received_at: nowStr,
 			updated_at: nowStr,
-			items: parsed.data.items ?? donation.items
+			received_summary: {
+				total_items: (countedLines ?? []).length,
+				received_at: nowStr,
+				...(parsed.data.remarks ? { remarks: parsed.data.remarks } : {})
+			}
 		};
 
 		const saveRes = await adminRaw(`/${dbName}/${donation._id}`, 'PUT', updated);

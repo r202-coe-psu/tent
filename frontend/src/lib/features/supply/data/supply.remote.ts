@@ -1,5 +1,5 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
-import { isSupplyItem, type SupplyItem } from '../domain/supply';
+import { CATALOG_DB, isSupplyItem, type SupplyItem } from '../domain/supply';
 import type { SupplyRepository } from './supply.repository';
 
 /**
@@ -7,7 +7,7 @@ import type { SupplyRepository } from './supply.repository';
  *
  * Reads from the `catalog` database (schema.md §4) via the active central endpoint.
  */
-export const CATALOG_DB = 'catalog';
+export { CATALOG_DB };
 
 export class SupplyCatalogRemoteRepository implements SupplyRepository {
 	private readonly repo: Repository;
