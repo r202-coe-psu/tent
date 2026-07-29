@@ -5,7 +5,7 @@
 
 // Domain — document type
 export type { SupplyItem, SupplyCategory, SupplyItemInput } from './domain/supply';
-export type { StockThresholdOverride } from './domain/threshold-override';
+export type { StockThresholdOverride, SaveThresholdOverrideInput } from './domain/threshold-override';
 
 // Domain — schemas + enum labels + guard
 export {

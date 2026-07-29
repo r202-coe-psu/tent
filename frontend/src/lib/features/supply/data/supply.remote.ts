@@ -3,7 +3,7 @@ import { CATALOG_DB, isSupplyItem, type SupplyItem } from '../domain/supply';
 import type { SupplyRepository } from './supply.repository';
 import { getShelterDb } from '$lib/db/shelter';
 import { touch, type AuthorContext, now } from '$lib/db/model';
-import { isStockThresholdOverride, type StockThresholdOverride } from '../domain/threshold-override';
+import { isStockThresholdOverride, type StockThresholdOverride, stockThresholdOverrideSchema, type SaveThresholdOverrideInput } from '../domain/threshold-override';
 
 
 /**
@@ -33,7 +33,7 @@ export class SupplyCatalogRemoteRepository implements SupplyRepository {
 		return shelterRepo.allByType('stock_threshold_override', isStockThresholdOverride);
 	}
 
-	async saveThresholdOverride(override: Omit<StockThresholdOverride, 'type' | 'schema_v'>, ctx: AuthorContext): Promise<StockThresholdOverride> {
+	async saveThresholdOverride(override: SaveThresholdOverrideInput, ctx: AuthorContext): Promise<StockThresholdOverride> {
 		const shelterRepo = createRemoteRepository(getShelterDb());
 		const existing = await shelterRepo.get<StockThresholdOverride>(override._id).catch(() => null);
 		const updatedDoc = existing

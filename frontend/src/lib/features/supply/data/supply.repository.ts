@@ -1,6 +1,6 @@
 import type { SupplyItem } from '../domain/supply';
 import type { AuthorContext } from '$lib/db/model';
-import type { StockThresholdOverride } from '../domain/threshold-override';
+import type { StockThresholdOverride, SaveThresholdOverrideInput } from '../domain/threshold-override';
 
 
 /**
@@ -17,5 +17,5 @@ export interface SupplyRepository {
 	getItem(id: string): Promise<SupplyItem | null>;
 
 	listThresholdOverrides(): Promise<StockThresholdOverride[]>;
-	saveThresholdOverride(override: Omit<StockThresholdOverride, 'type' | 'schema_v'>, ctx: AuthorContext): Promise<StockThresholdOverride>;
+	saveThresholdOverride(override: SaveThresholdOverrideInput, ctx: AuthorContext): Promise<StockThresholdOverride>;
 }

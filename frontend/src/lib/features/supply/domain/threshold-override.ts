@@ -13,5 +13,10 @@ export const stockThresholdOverrideSchema = z.object({
 
 export type StockThresholdOverride = BaseDoc & z.infer<typeof stockThresholdOverrideSchema>;
 
+export type SaveThresholdOverrideInput = Omit<
+	StockThresholdOverride,
+	'type' | 'schema_v' | 'shelter_code' | 'created_at' | 'updated_at' | 'created_by'
+>;
+
 export const isStockThresholdOverride = (d: unknown): d is StockThresholdOverride =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_threshold_override';

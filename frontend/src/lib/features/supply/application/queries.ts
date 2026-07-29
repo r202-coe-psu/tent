@@ -5,7 +5,7 @@ import {
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
 import { getShelterDb } from '$lib/db/shelter';
-import type { StockThresholdOverride } from '../domain/threshold-override';
+import type { SaveThresholdOverrideInput } from '../domain/threshold-override';
 import type { AuthorContext } from '$lib/db/model';
 
 export const supplyKeys = {
@@ -37,7 +37,7 @@ export const useThresholdOverrides = () =>
 export const useSaveThresholdOverride = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: Omit<StockThresholdOverride, 'type' | 'schema_v'>; ctx: AuthorContext }) =>
+		mutationFn: ({ input, ctx }: { input: SaveThresholdOverrideInput; ctx: AuthorContext }) =>
 			supplyRepository().saveThresholdOverride(input, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: supplyKeys.overrides() });

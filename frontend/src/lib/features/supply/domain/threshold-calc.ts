@@ -4,7 +4,11 @@ import type { ItemMaster } from '$lib/features/catalog';
 
 export function calculateReorderLevel(
 	occupancy: number,
-	item: Pick<ItemMaster, 'consumption_rate' | 'target_reserve_days' | 'timeframe'>
+	item: {
+		consumption_rate?: string | null;
+		target_reserve_days?: number | null;
+		timeframe?: string | null;
+	}
 ): string | null {
 	if (
 		!item.consumption_rate ||
