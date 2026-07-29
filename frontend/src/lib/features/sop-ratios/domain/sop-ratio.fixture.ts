@@ -26,6 +26,5 @@ export const validRatios: Record<SopRatioKey, string> = {
 	m2_per_person_total: '45',
 	max_waterpoint_distance_m: '500',
 	max_queue_minutes: '30',
-	people_per_volunteer: '50',
-	rice_g_per_person_meal: '200'
+	people_per_volunteer: '50'
 };
