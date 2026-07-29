@@ -75,5 +75,8 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-056](CR-056-shelter-map-reduce-cicd-lifecycle.md) | Shelter Map/Reduce lifecycle เชื่อมต่อ CI/CD (renumbered from CR-051) | approved | stable | 2026-07-27 | Jenkinsfile, frontend/src/lib/features/shelters/domain/views.ts, frontend/scripts/deploy-shelter-views.ts |
 | [CR-057](CR-057-stock-threshold-override-schema.md) | Add stock_threshold_override document type and schema (T-14) | approved | volatile | 2026-07-28 | docs/data/schema.md §2.16 §7, schema_v stock_threshold_override 1, frontend/src/lib/features/supply/ |
 | [CR-057](CR-057-evacuee-schema-age.md) | Evacuee age — เพิ่ม field age ในชั้น domain (snapshot, อิสระจาก birth_year); schema_v evacuee → 5 | done | volatile | 2026-07-28 | docs/data/schema.md §1.1, schema_v evacuee 3→5, features/people/ |
+| [CR-058](CR-058-food-warehouse-nutrition-kitchen-overhaul.md) | CR-058 Food Warehouse, Nutrition Standards & Kitchen Operations Overhaul | proposed | volatile | 2026-07-28 | docs/data/schema.md, features/kitchen/ |
+| [CR-059](CR-059-inventory-requisition-inter-shelter-transfer.md) | CR-059 Requisitions, Inter-Shelter Transfers & NFI Distribution Control Form UIv8 | proposed | volatile | 2026-07-28 | docs/data/schema.md, features/supply/ |
+
 
 
