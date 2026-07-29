@@ -79,7 +79,7 @@ import {
 import { type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 
-import { deployShelterViewsFn } from '$lib/features/shelters/server';
+import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 import { buildValidateDocUpdate, REFERRAL_MANGO_INDEXES } from '$lib/server/shelter-access-design';
 
 // ─── env ──────────────────────────────────────────────────────────────────────
