@@ -1,5 +1,3 @@
-import { superValidate, message } from 'sveltekit-superforms';
-import { zod4 } from 'sveltekit-superforms/adapters';
 import { publicConfigBodySchema, type PublicConfigBody } from '$lib/features/public-portal';
 import type { PageServerLoad, Actions } from './$types';
 import { adminRaw, authorizeUserWrite, ServiceError } from '$lib/server/couch-admin';
@@ -9,7 +7,7 @@ import { fail, error } from '@sveltejs/kit';
 const CONFIG_DOC_PATH = '/registry/config:public_portal';
 
 export const load: PageServerLoad = async ({ request }) => {
-	// Require SA or Manager to view this page (or adapt based on your specific RBAC)
+	// Require SA or Manager to view this page
 	try {
 		await authorizeUserWrite(request.headers.get('cookie'));
 	} catch (e) {
@@ -49,13 +47,14 @@ export const load: PageServerLoad = async ({ request }) => {
 		}
 	}
 
-	const form = await superValidate(initialData, zod4(publicConfigBodySchema));
-
 	return {
-		form,
+		initialData,
 		title: 'การตั้งค่า Public Portal (FAQ)'
 	};
 };
+
+import { superValidate, message } from 'sveltekit-superforms/server';
+import { zod4 } from 'sveltekit-superforms/adapters';
 
 export const actions: Actions = {
 	default: async ({ request }) => {
@@ -73,7 +72,9 @@ export const actions: Actions = {
 			return fail(403, { error: 'Requires System Admin privileges to edit global configuration' });
 		}
 
-		const form = await superValidate(request, zod4(publicConfigBodySchema));
+		const form = await superValidate(request, zod4(publicConfigBodySchema), {
+			id: 'publicConfigForm'
+		});
 		if (!form.valid) {
 			return fail(400, { form });
 		}
