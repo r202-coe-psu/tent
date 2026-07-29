@@ -1,5 +1,5 @@
 import type { PageLoad } from './$types';
-import type { FaqItem } from '$lib/features/public-portal/domain/config';
+import type { FaqItem } from '$lib/features/public-portal';
 
 export const load: PageLoad = async ({ fetch }) => {
 	let faqs: FaqItem[] = [];

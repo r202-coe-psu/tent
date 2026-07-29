@@ -17,6 +17,7 @@ import type { Shelter } from '../domain/schema';
 export const sheltersKeys = {
 	all: ['shelters'] as const,
 	list: () => [...sheltersKeys.all, 'list'] as const,
+	search: () => [...sheltersKeys.all, 'search'] as const,
 	detail: (code: string) => [...sheltersKeys.all, 'detail', code] as const
 };
 
@@ -24,6 +25,12 @@ export const useShelters = () =>
 	createQuery(() => ({
 		queryKey: sheltersKeys.list(),
 		queryFn: () => sheltersRepository().listShelters()
+	}));
+
+export const useSearchShelters = () =>
+	createQuery(() => ({
+		queryKey: sheltersKeys.search(),
+		queryFn: () => sheltersRepository().searchShelters()
 	}));
 
 export const useShelter = (code: () => string) =>

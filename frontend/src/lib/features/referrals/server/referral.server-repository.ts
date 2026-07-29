@@ -52,7 +52,10 @@ interface PutResultResponse {
 }
 
 export class CouchDbReferralServerRepository implements ReferralRepository {
-	constructor(private readonly dbName: string) {}
+	constructor(
+		private readonly dbName: string,
+		private readonly contextShelterCode: string
+	) {}
 
 	private async couchGet<T>(dbName: string, path: string): Promise<{ status: number; data: T }> {
 		const res = await adminRaw(`/${dbName}${path}`, 'GET');
@@ -249,69 +252,11 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		await this.putDocIdempotent(toDb, destMovement);
 	}
 
-	/** Mirror referral into destination shelter DB (same _id; keeps source shelter_code). */
-	async mirrorCapacityReferralToDestination(referral: Referral): Promise<void> {
-		if (referral.referral_type !== 'capacity' || !referral.to_shelter_code) {
-			return;
-		}
-		const toDb = shelterDbName(referral.to_shelter_code);
-		const { status, data } = await this.couchGet<unknown>(
-			toDb,
-			`/${encodeURIComponent(referral._id)}`
-		);
-
-		const { _rev: _, ...withoutRev } = referral;
-		void _;
-		const mirror: Referral =
-			status === HTTP_OK && isReferral(data) && data._rev
-				? { ...withoutRev, _rev: data._rev }
-				: withoutRev;
-
-		await this.putDoc(toDb, mirror);
-	}
-
-	/** Keep the peer copy in sync after accept/reject/close (source ↔ destination). */
-	async syncCapacityReferralPeer(referral: Referral, actorShelter: string): Promise<void> {
-		if (referral.referral_type !== 'capacity' || !referral.to_shelter_code) {
-			return;
-		}
-
-		const sourceDb = shelterDbName(referral.shelter_code);
-		const destDb = shelterDbName(referral.to_shelter_code);
-		const peerDb =
-			shelterDbName(actorShelter) === sourceDb
-				? destDb
-				: shelterDbName(actorShelter) === destDb
-					? sourceDb
-					: null;
-
-		if (!peerDb) {
-			return;
-		}
-
-		const { status, data } = await this.couchGet<unknown>(
-			peerDb,
-			`/${encodeURIComponent(referral._id)}`
-		);
-
-		const { _rev: _, ...withoutRev } = referral;
-		void _;
-
-		if (status === HTTP_NOT_FOUND) {
-			// Peer missing (e.g. closed before mirror) — create from current state.
-			await this.putDoc(peerDb, withoutRev);
-			return;
-		}
-
-		if (status === HTTP_OK && isReferral(data) && data._rev) {
-			await this.putDoc(peerDb, { ...withoutRev, _rev: data._rev });
-		}
-	}
-
 	async list(filter?: ReferralFilter): Promise<Referral[]> {
 		const parsed = referralFilterSchema.parse(filter ?? {});
 		const selector: Record<string, unknown> = {
-			type: 'referral'
+			type: 'referral',
+			$or: [{ shelter_code: this.contextShelterCode }, { to_shelter_code: this.contextShelterCode }]
 		};
 
 		if (parsed.status) {
@@ -445,17 +390,6 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		}
 
 		const saved: Referral = { ...touched, _rev: data.rev };
-
-		if (saved.referral_type === 'capacity' && saved.to_shelter_code) {
-			if (to === 'sent') {
-				await this.mirrorCapacityReferralToDestination(saved);
-			} else if (to === 'accepted' || to === 'rejected') {
-				await this.syncCapacityReferralPeer(saved, scope);
-			} else if (to === 'closed' && latest.status !== 'draft') {
-				// CR-046: draft→closed never mirrored — do not create a peer on destination.
-				await this.syncCapacityReferralPeer(saved, scope);
-			}
-		}
 
 		return saved;
 	}

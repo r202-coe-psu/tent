@@ -33,7 +33,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		const status = (url.searchParams.get('status') as ReferralStatus) || undefined;
 		const evacueeId = url.searchParams.get('evacuee_id') || undefined;
 
-		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);
 		const list = await repo.list({ status, evacuee_id: evacueeId });
 
 		return json(list.map((doc) => redactForScope(doc, BACK_OFFICE_SCOPE)));
@@ -103,7 +103,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			);
 		}
 
-		const repo = new CouchDbReferralServerRepository(db);
+		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);
 
 		// FR-002: Duplicate active referral check
 		const hasDuplicate = await repo.hasActiveReferral(parsed.data.evacuee_id);

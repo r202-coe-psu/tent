@@ -24,7 +24,7 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 
 		const shelterCode = resolveShelterCode(caller, url.searchParams.get('shelter_code'));
 
-		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);
 		const doc = await repo.get(id);
 
 		if (!doc) {
