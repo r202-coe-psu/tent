@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -95,6 +96,10 @@
 	let uploadingMemberPhoto = $state(false);
 	const saveImage = useSaveImage();
 
+	onDestroy(() => {
+		if (memberFacePhotoUrl) URL.revokeObjectURL(memberFacePhotoUrl);
+	});
+
 	let memberBirthYearBE = $state('');
 	let memberAge = $state('');
 	let memberMedicalConditionsStr = $state('');
@@ -154,6 +159,7 @@
 
 				// Reset member form
 				memberForm.reset();
+				if (memberFacePhotoUrl) URL.revokeObjectURL(memberFacePhotoUrl);
 				memberFacePhotoUrl = null;
 				uploadingMemberPhoto = false;
 				memberBirthYearBE = '';
@@ -415,6 +421,7 @@
 							const file = e.currentTarget.files?.[0];
 							if (!file) return;
 
+							if (memberFacePhotoUrl) URL.revokeObjectURL(memberFacePhotoUrl);
 							memberFacePhotoUrl = URL.createObjectURL(file);
 							uploadingMemberPhoto = true;
 							try {

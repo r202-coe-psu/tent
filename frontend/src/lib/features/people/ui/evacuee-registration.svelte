@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -64,6 +65,10 @@
 	let medicalConditionsStr = $state('');
 	let medicalMedicationsStr = $state('');
 	let medicalAllergiesStr = $state('');
+
+	onDestroy(() => {
+		if (facePhotoUrl) URL.revokeObjectURL(facePhotoUrl);
+	});
 
 	const form = superForm(defaults(zod4(evacueeInputSchema)), {
 		SPA: true,
@@ -203,6 +208,7 @@
 						const file = e.currentTarget.files?.[0];
 						if (!file) return;
 
+						if (facePhotoUrl) URL.revokeObjectURL(facePhotoUrl);
 						facePhotoUrl = URL.createObjectURL(file);
 						uploadingPhoto = true;
 						try {

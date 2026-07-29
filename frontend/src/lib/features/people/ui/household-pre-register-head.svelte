@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -71,6 +72,10 @@
 	let uploadingPhoto = $state(false);
 	const saveImage = useSaveImage();
 	let noPhone = $state(false);
+
+	onDestroy(() => {
+		if (facePhotoUrl) URL.revokeObjectURL(facePhotoUrl);
+	});
 	let birthYearBE = $state('');
 	let age = $state('');
 	let medicalConditionsStr = $state('');
@@ -200,6 +205,7 @@
 							const file = e.currentTarget.files?.[0];
 							if (!file) return;
 
+							if (facePhotoUrl) URL.revokeObjectURL(facePhotoUrl);
 							facePhotoUrl = URL.createObjectURL(file);
 							uploadingPhoto = true;
 							try {

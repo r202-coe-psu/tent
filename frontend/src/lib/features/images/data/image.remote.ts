@@ -44,7 +44,7 @@ export class ImageRemoteRepository implements ImageRepository {
 	async saveImage(
 		file: File,
 		ctx: AuthorContext,
-		caption: string = '',
+		caption?: string,
 		opts: CompressOptions = {}
 	): Promise<ImageSummary> {
 		const compressed = await compressImage(file, opts);
@@ -60,30 +60,35 @@ export class ImageRemoteRepository implements ImageRepository {
 				original_size: compressed.originalSize,
 				compressed_size: compressed.compressedSize,
 				thumbnail_size: compressed.thumbnailSize,
-				caption
+				caption: caption ?? ''
 			},
 			ctx
 		);
 
 		const saved = await putDoc(this.dbName, doc);
-		const fullRes = await putAttachment(
-			this.dbName,
-			saved._id,
-			saved._rev!,
-			'full',
-			compressed.full,
-			compressed.full.type || 'image/webp'
-		);
-		const thumbRes = await putAttachment(
-			this.dbName,
-			saved._id,
-			fullRes.rev,
-			'thumb',
-			compressed.thumbnail,
-			compressed.thumbnail.type || 'image/webp'
-		);
+		try {
+			const fullRes = await putAttachment(
+				this.dbName,
+				saved._id,
+				saved._rev!,
+				'full',
+				compressed.full,
+				compressed.full.type || 'image/webp'
+			);
+			const thumbRes = await putAttachment(
+				this.dbName,
+				saved._id,
+				fullRes.rev,
+				'thumb',
+				compressed.thumbnail,
+				compressed.thumbnail.type || 'image/webp'
+			);
 
-		return toSummary({ ...saved, _rev: thumbRes.rev });
+			return toSummary({ ...saved, _rev: thumbRes.rev });
+		} catch (err) {
+			await deleteDoc(this.dbName, { _id: saved._id }).catch(() => {});
+			throw err;
+		}
 	}
 
 	async listImages(): Promise<ImageSummary[]> {

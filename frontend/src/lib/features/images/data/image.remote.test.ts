@@ -66,7 +66,7 @@ vi.mock('$lib/db/couch-db', () => ({
 	)
 }));
 
-import { deleteDoc } from '$lib/db/couch-db';
+import { deleteDoc, putAttachment } from '$lib/db/couch-db';
 import { ImageRemoteRepository, imageRepository } from './image.remote';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
@@ -117,6 +117,38 @@ describe('ImageRemoteRepository.saveImage', () => {
 		const file = fakeFile('photo.jpg', 100);
 		await repo.saveImage(file, ctx, '', { maxPx: 500, quality: 0.5 });
 		expect(compressImageMock).toHaveBeenCalledWith(file, { maxPx: 500, quality: 0.5 });
+	});
+});
+
+describe('ImageRemoteRepository.saveImage attachment failure cleanup', () => {
+	let repo: ImageRemoteRepository;
+
+	beforeEach(() => {
+		docs = new Map();
+		attachments = new Map();
+		vi.mocked(deleteDoc).mockClear();
+		repo = new ImageRemoteRepository('shelter_sh001');
+	});
+
+	it('deletes the orphaned metadata doc when the full attachment upload fails', async () => {
+		vi.mocked(putAttachment).mockRejectedValueOnce(new Error('network down'));
+
+		await expect(repo.saveImage(fakeFile('a.jpg', 10), ctx)).rejects.toThrow('network down');
+
+		expect(docs.size).toBe(0);
+		expect(deleteDoc).toHaveBeenCalledTimes(1);
+	});
+
+	it('deletes the orphaned metadata doc when the thumbnail attachment upload fails', async () => {
+		const defaultImpl = vi.mocked(putAttachment).getMockImplementation()!;
+		vi.mocked(putAttachment)
+			.mockImplementationOnce(defaultImpl) // "full" succeeds
+			.mockRejectedValueOnce(new Error('thumb upload failed')); // "thumb" fails
+
+		await expect(repo.saveImage(fakeFile('a.jpg', 10), ctx)).rejects.toThrow('thumb upload failed');
+
+		expect(docs.size).toBe(0);
+		expect(deleteDoc).toHaveBeenCalledTimes(1);
 	});
 });
 
