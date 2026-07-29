@@ -1,6 +1,6 @@
 import { adminRaw } from '$lib/server/couch-admin';
 import { makeDoc, touch, type AuthorContext } from '$lib/db/model';
-import { shelterDbName } from '$lib/server/shelter-access-design';
+import { shelterDbName, REFERRAL_MANGO_INDEXES } from '$lib/server/shelter-access-design';
 import { isEvacuee, type Evacuee, type Movement } from '$lib/features/people/domain/people';
 import {
 	isReferral,
@@ -51,6 +51,18 @@ interface PutResultResponse {
 	rev: string;
 }
 
+let centralOpsDbCreated = false;
+async function ensureCentralDb() {
+	if (centralOpsDbCreated) return;
+	const { status } = await adminRaw('/central_ops', 'PUT');
+	if (status === 201 || status === 412 || status === 200) {
+		centralOpsDbCreated = true;
+		for (const def of REFERRAL_MANGO_INDEXES) {
+			await adminRaw('/central_ops/_index', 'POST', def);
+		}
+	}
+}
+
 export class CouchDbReferralServerRepository implements ReferralRepository {
 	constructor(
 		private readonly dbName: string,
@@ -58,6 +70,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 	) {}
 
 	private async couchGet<T>(dbName: string, path: string): Promise<{ status: number; data: T }> {
+		if (dbName === 'central_ops') await ensureCentralDb();
 		const res = await adminRaw(`/${dbName}${path}`, 'GET');
 		return { status: res.status, data: res.data as T };
 	}
@@ -67,6 +80,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		path: string,
 		body: unknown
 	): Promise<{ status: number; data: T }> {
+		if (dbName === 'central_ops') await ensureCentralDb();
 		const res = await adminRaw(`/${dbName}${path}`, 'POST', body);
 		return { status: res.status, data: res.data as T };
 	}
@@ -76,6 +90,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		path: string,
 		body: unknown
 	): Promise<{ status: number; data: T }> {
+		if (dbName === 'central_ops') await ensureCentralDb();
 		const res = await adminRaw(`/${dbName}${path}`, 'PUT', body);
 		return { status: res.status, data: res.data as T };
 	}

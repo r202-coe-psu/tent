@@ -33,7 +33,7 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		repo = new ReferralRemoteRepository('shelter_sh001');
+		repo = new ReferralRemoteRepository();
 		vi.stubGlobal('fetch', fetchMock);
 	});
 
@@ -115,20 +115,24 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 		expect(mockRepoPut).not.toHaveBeenCalled();
 	});
 
-	it('keeps non-capacity transitions on the remote session path', async () => {
+	it('delegates all transitions (including non-capacity) to BFF', async () => {
 		const medicalSent: Referral = {
 			...capacitySent,
 			referral_type: 'medical-emergency',
 			to_shelter_code: undefined,
 			to_org: { name: 'Hospital A', kind: 'hospital' }
 		};
-		mockRepoGet.mockResolvedValue(medicalSent);
-		mockRepoPut.mockImplementation((doc) => Promise.resolve(doc));
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({ ...medicalSent, status: 'accepted' })
+		});
 
 		const result = await repo.transition(medicalSent._id, 'accepted', 'Staff B', 'Bed ready');
 
-		expect(fetchMock).not.toHaveBeenCalled();
-		expect(mockRepoPut).toHaveBeenCalled();
+		expect(fetchMock).toHaveBeenCalledWith(
+			expect.stringContaining('/api/back-office/referral/'),
+			expect.objectContaining({ method: 'PATCH', credentials: 'include' })
+		);
 		expect(result.status).toBe('accepted');
 	});
 });
