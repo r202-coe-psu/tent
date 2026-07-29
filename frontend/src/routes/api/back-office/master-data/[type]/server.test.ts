@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { error } from '@sveltejs/kit';
 
-// GET is open to any authenticated user (requireShelterScopeOrSA, CR-012 §2);
-// PUT stays SA-only (requireAdmin).
+// GET and shelter-scoped writes use requireShelterScopeOrSA; global writes stay
+// SA-only (requireAdmin).
 const caller = {
 	name: 'mgr',
 	roles: ['shelter:SH001', 'shelter_manager'],
@@ -14,45 +14,68 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 	return {
 		...actual,
 		requireAdmin: vi.fn().mockResolvedValue(undefined),
-		requireShelterScopeOrSA: vi.fn(),
+		requireShelterScopeOrSA: vi.fn().mockResolvedValue({
+			name: 'mgr',
+			roles: ['shelter:SH001', 'shelter_manager'],
+			isSA: false,
+			shelterCode: 'SH001'
+		}),
+		requireShelterManagerOrSA: vi.fn().mockResolvedValue({
+			name: 'mgr',
+			roles: ['shelter:SH001', 'shelter_manager'],
+			isSA: false,
+			shelterCode: 'SH001'
+		}),
 		adminRaw: vi.fn()
 	};
 });
-vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: vi.fn() }));
+vi.mock('$lib/server/master-data-server', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/server/master-data-server')>()),
+	readMasterDoc: vi.fn()
+}));
 
 import { GET, PUT } from './+server';
-import { requireAdmin, requireShelterScopeOrSA, adminRaw } from '$lib/server/couch-admin';
+import {
+	requireAdmin,
+	requireShelterManagerOrSA,
+	requireShelterScopeOrSA,
+	adminRaw
+} from '$lib/server/couch-admin';
 import { readMasterDoc } from '$lib/server/master-data-server';
 import type { MasterData } from '$lib/features/master-data/domain';
 
 const requireAdminMock = vi.mocked(requireAdmin);
 const authMock = vi.mocked(requireShelterScopeOrSA);
+const mgrMock = vi.mocked(requireShelterManagerOrSA);
 const adminRawMock = vi.mocked(adminRaw);
 const readMock = vi.mocked(readMasterDoc);
 
-function existingDoc(items: MasterData['items']): MasterData {
+type ItemFixture = Omit<MasterData['items'][number], 'status'> &
+	Partial<Pick<MasterData['items'][number], 'status'>>;
+
+function existingDoc(items: ItemFixture[]): MasterData {
 	return {
 		_id: 'master_data:pet_types',
 		_rev: '3-old',
 		type: 'master_data',
 		schema_v: 1,
 		master_type: 'pet_types',
-		items,
+		items: items.map((i) => ({ ...i, status: i.status ?? 'active' })),
 		created_at: '2026-01-01T00:00:00.000Z',
 		updated_at: '2026-01-02T00:00:00.000Z',
 		created_by: 'origauthor'
 	};
 }
 
-function callGET(type: string) {
-	const request = new Request(`http://localhost/api/back-office/master-data/${type}`, {
+function callGET(type: string, query = '') {
+	const request = new Request(`http://localhost/api/back-office/master-data/${type}${query}`, {
 		headers: { cookie: 'AuthSession=abc' }
 	});
 	return GET({ request, params: { type } } as unknown as Parameters<typeof GET>[0]);
 }
 
-function callPUT(type: string, body: unknown) {
-	const request = new Request(`http://localhost/api/back-office/master-data/${type}`, {
+function callPUT(type: string, body: unknown, query = '') {
+	const request = new Request(`http://localhost/api/back-office/master-data/${type}${query}`, {
 		method: 'PUT',
 		headers: { cookie: 'AuthSession=abc', 'content-type': 'application/json' },
 		body: JSON.stringify(body)
@@ -68,6 +91,7 @@ function writtenDoc(): MasterData {
 beforeEach(() => {
 	requireAdminMock.mockReset().mockResolvedValue('sa-user');
 	authMock.mockReset().mockResolvedValue(caller);
+	mgrMock.mockReset().mockResolvedValue(caller);
 	adminRawMock.mockReset().mockResolvedValue({ status: 201, data: { rev: '4-new' } });
 	readMock.mockReset();
 });
@@ -88,6 +112,102 @@ describe('GET /api/back-office/master-data/[type]', () => {
 		readMock.mockResolvedValue(null);
 		const res = await callGET('pet_types');
 		expect((await res.json()).items).toEqual([]);
+	});
+
+	it('trims shelter_code query parameters before resolving scope', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callGET('pet_types', '?scope=shelter&shelter_code=%20SH001%20');
+
+		expect(res.status).toBe(200);
+		expect(authMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
+		expect(readMock).toHaveBeenCalledWith('pet_types', 'SH001');
+	});
+
+	it('resolves a shelter-local document before the global document', async () => {
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode === 'SH001'
+				? {
+						...existingDoc([{ code: 'cat', label: 'Cat', is_default: true }]),
+						_id: 'master_data:pet_types:SH001',
+						shelter_code: 'SH001',
+						schema_v: 2
+					}
+				: { ...existingDoc([{ code: 'dog', label: 'Dog', is_default: true }]) }
+		);
+
+		const res = await callGET('pet_types', '?scope=effective&shelter_code=SH001');
+		const body = (await res.json()) as {
+			items: unknown[];
+			item_sources: Record<string, { scope: string; shelter_code?: string | null }>;
+		};
+		// Two-tier default resolution: the shelter-local default ('cat') supersedes
+		// the global default ('dog'), so only one effective default remains.
+		expect(body.items).toEqual([
+			{ code: 'dog', label: 'Dog', is_default: false, status: 'active' },
+			{ code: 'cat', label: 'Cat', is_default: true, status: 'active' }
+		]);
+		expect(body.item_sources).toEqual({
+			dog: { scope: 'global', shelter_code: null, shelter_disabled: false },
+			cat: { scope: 'shelter', shelter_code: 'SH001' }
+		});
+		expect(readMock).toHaveBeenCalledWith('pet_types', 'SH001');
+	});
+
+	it('disables a global item for the shelter via disabled_global_codes (global doc untouched)', async () => {
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode === 'SH001'
+				? {
+						...existingDoc([]),
+						_id: 'master_data:pet_types:SH001',
+						shelter_code: 'SH001',
+						disabled_global_codes: ['dog'],
+						schema_v: 3
+					}
+				: existingDoc([{ code: 'dog', label: 'Dog', is_default: true }])
+		);
+
+		const res = await callGET('pet_types', '?scope=effective&shelter_code=SH001');
+		const body = (await res.json()) as {
+			items: { code: string; status: string }[];
+			item_sources: Record<string, { scope: string; shelter_disabled?: boolean }>;
+		};
+		// Global 'dog' resolves inactive for THIS shelter; source flags it. A
+		// disabled item can't be the effective default, so is_default clears too.
+		expect(body.items).toEqual([
+			{ code: 'dog', label: 'Dog', is_default: false, status: 'inactive' }
+		]);
+		expect(body.item_sources.dog).toEqual({
+			scope: 'global',
+			shelter_code: null,
+			shelter_disabled: true
+		});
+	});
+
+	it('lets a shelter point at a non-default GLOBAL item via default_global_code', async () => {
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode === 'SH001'
+				? {
+						...existingDoc([]),
+						_id: 'master_data:pet_types:SH001',
+						shelter_code: 'SH001',
+						default_global_code: 'dog_b',
+						schema_v: 3
+					}
+				: existingDoc([
+						{ code: 'dog_a', label: 'Dog A', is_default: true },
+						{ code: 'dog_b', label: 'Dog B', is_default: false }
+					])
+		);
+
+		const res = await callGET('pet_types', '?scope=effective&shelter_code=SH001');
+		const body = (await res.json()) as {
+			items: { code: string; is_default: boolean }[];
+		};
+		expect(body.items).toEqual([
+			{ code: 'dog_a', label: 'Dog A', is_default: false, status: 'active' },
+			{ code: 'dog_b', label: 'Dog B', is_default: true, status: 'active' }
+		]);
 	});
 
 	it('rejects an unknown master type via the contract envelope', async () => {
@@ -130,6 +250,73 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect((doc as MasterData).master_type).toBe('pet_types');
 	});
 
+	it('writes a shelter-local document when shelter scope is supplied', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT(
+			'pet_types',
+			{ shelter_code: 'SH001', items },
+			'?scope=shelter&shelter_code=SH001'
+		);
+		expect(res.status).toBe(200);
+		const [path, method, doc] = adminRawMock.mock.calls[0];
+		expect(path).toBe('/registry/master_data%3Apet_types%3ASH001');
+		expect(method).toBe('PUT');
+		expect((doc as MasterData).schema_v).toBe(3);
+		expect((doc as MasterData).shelter_code).toBe('SH001');
+		expect(mgrMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
+	});
+
+	it('accepts padded shelter_code query with an equivalent trimmed body code', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT(
+			'pet_types',
+			{ shelter_code: 'SH001', items },
+			'?scope=shelter&shelter_code=%20SH001%20'
+		);
+
+		expect(res.status).toBe(200);
+		expect(mgrMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
+		expect(writtenDoc().shelter_code).toBe('SH001');
+	});
+
+	it('writes the submitted shelter-local items verbatim (no split against the global doc)', async () => {
+		// The global doc is never even read for a shelter-scoped PUT -- the UI
+		// sends only the shelter-local items (global is read-only client-side).
+		readMock.mockResolvedValue(null);
+
+		await callPUT(
+			'pet_types',
+			{
+				shelter_code: 'SH001',
+				items: [{ code: 'local_dog', label: 'Local dog', is_default: false }]
+			},
+			'?scope=shelter&shelter_code=SH001'
+		);
+
+		const doc = writtenDoc();
+		expect(doc.items).toEqual([
+			{ code: 'local_dog', label: 'Local dog', is_default: false, status: 'active' }
+		]);
+		expect(readMock).toHaveBeenCalledWith('pet_types', 'SH001');
+		expect(readMock).not.toHaveBeenCalledWith('pet_types');
+	});
+
+	it('defaults items without a status field to active', async () => {
+		readMock.mockResolvedValue(null);
+		await callPUT('pet_types', { items });
+		const doc = writtenDoc();
+		expect(doc.items).toEqual([{ code: 'dog', label: 'Dog', is_default: false, status: 'active' }]);
+	});
+
+	it('rejects shelter_code on a global write', async () => {
+		const res = await callPUT('pet_types', { shelter_code: 'SH001', items }, '?scope=global');
+		expect(res.status).toBe(422);
+		expect((await res.json()).error.code).toBe('VALIDATION');
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
 	it('preserves the existing envelope (created_by, _rev) on update', async () => {
 		readMock.mockResolvedValue(existingDoc([{ code: 'dog', label: 'Dog', is_default: true }]));
 
@@ -137,7 +324,7 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		const doc = writtenDoc();
 		expect(doc.created_by).toBe('origauthor');
 		expect(doc._rev).toBe('3-old');
-		expect(doc.items).toEqual(items);
+		expect(doc.items).toEqual([{ ...items[0], status: 'active' }]);
 	});
 
 	it('collapses multiple defaults down to exactly one (enforceOneDefault)', async () => {

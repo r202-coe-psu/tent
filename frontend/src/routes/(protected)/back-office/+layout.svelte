@@ -159,7 +159,11 @@
 				? 'overflow-hidden'
 				: 'overflow-y-auto'}"
 		>
-			{@render children()}
+			<!-- Reset scoped pages when the navbar changes shelter so every query/form
+			     is recreated with the newly selected shelter context. -->
+			{#key shelterStore.selectedShelterCode}
+				{@render children()}
+			{/key}
 		</div>
 	</div>
 </div>

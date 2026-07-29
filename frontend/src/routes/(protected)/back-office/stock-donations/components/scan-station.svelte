@@ -16,7 +16,19 @@
 	let donationDoc = $state<ScanDonationView | null>(null);
 	let bookingRef = $state('');
 	let donorName = $state('');
-	let scannedItems = $state<{ name: string; qty: string; unit: string; item_id?: string }[]>([]);
+	type ScannedItem = {
+		key: string;
+		name: string;
+		/** qty_str — kept as a string end to end (CR-038); never bound to a number input. */
+		qty: string;
+		unit: string;
+		item_id?: string;
+		/** Required by the API for perishable catalog items (schema.md §2.1). */
+		expiry: string;
+	};
+	let scannedItems = $state<ScannedItem[]>([]);
+	let remarks = $state('');
+	let saving = $state(false);
 
 	async function performLookup(query: string) {
 		if (!query.trim()) return;
@@ -34,11 +46,13 @@
 				donationDoc = data.donation as ScanDonationView;
 				bookingRef = donationDoc?.booking_ref || '';
 				donorName = donationDoc?.donor?.name || 'ไม่ระบุชื่อ';
-				scannedItems = (donationDoc?.items || []).map((it) => ({
+				scannedItems = (donationDoc?.items || []).map((it, i) => ({
+					key: `${it.item_id ?? it.free_text ?? 'line'}-${i}`,
 					name: it.free_text || it.item_id || 'ไม่ระบุชื่อสินค้า',
 					qty: it.qty != null && it.qty !== '' ? String(it.qty) : '0',
 					unit: it.unit || 'ชิ้น',
-					item_id: it.item_id
+					item_id: it.item_id,
+					expiry: ''
 				}));
 				scanState = 'result';
 			} else {
@@ -51,46 +65,48 @@
 		}
 	}
 
-	function startScan() {
-		performLookup('DN-582910');
-	}
-
 	function handleCancel() {
 		scanState = 'idle';
 		searchQuery = '';
 		donationDoc = null;
+		scannedItems = [];
+		remarks = '';
 	}
 
 	async function handleSave() {
-		if (!bookingRef) return;
+		if (!bookingRef || saving) return;
+		saving = true;
 		try {
 			const res = await fetch(`/api/back-office/donations/${encodeURIComponent(bookingRef)}`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					status: 'received',
+					...(remarks.trim() ? { remarks: remarks.trim() } : {}),
+					// A line is either a catalog item (item_id → stock ledger) or free text
+					// (stays on the donation) — never both.
 					items: scannedItems.map((it) => ({
-						item_id: it.item_id,
-						free_text: it.name,
+						...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
 						qty: it.qty,
-						unit: it.unit
+						unit: it.unit,
+						...(it.item_id && it.expiry ? { lot: { expiry: it.expiry } } : {})
 					}))
 				})
 			});
 			const data = await res.json();
 			if (data.success) {
 				toast.success(`บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef})`);
-				scannedItems.forEach((item) => {
-					toast.info(`รับเข้า: ${item.name} จำนวน ${item.qty} ${item.unit}`);
-				});
 				scanState = 'idle';
 				searchQuery = '';
 				donationDoc = null;
+				remarks = '';
 			} else {
 				toast.error(data.error || 'บันทึกไม่สำเร็จ');
 			}
 		} catch {
 			toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+		} finally {
+			saving = false;
 		}
 	}
 </script>
@@ -113,7 +129,7 @@
 	</div>
 
 	<!-- Scan Body -->
-	<div class="flex min-h-[420px] items-center justify-center bg-muted/5 p-6">
+	<div class="flex min-h-[420px] flex-col items-center justify-center gap-6 bg-muted/5 p-6">
 		{#if scanState === 'idle'}
 			<!-- Idle State -->
 			<div
@@ -145,23 +161,6 @@
 						ค้นหา
 					</Button>
 				</div>
-
-				<div class="relative my-2 flex w-full items-center justify-center">
-					<div class="absolute inset-x-0 h-px bg-border"></div>
-					<span
-						class="relative bg-card px-3 text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
-						>หรือ</span
-					>
-				</div>
-
-				<Button
-					onclick={startScan}
-					variant="outline"
-					class="mt-2 flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold"
-				>
-					<Scan class="h-4 w-4" />
-					จำลองสแกนใบจองตัวอย่าง (DN-582910)
-				</Button>
 			</div>
 		{:else if scanState === 'scanning'}
 			<!-- Scanning State -->
@@ -219,35 +218,64 @@
 					</h4>
 
 					<div class="space-y-2.5">
-						{#each scannedItems as item (item.name)}
-							<div
-								class="flex items-center justify-between rounded-xl border border-border/40 bg-muted/30 p-3"
-							>
-								<span class="text-xs font-bold text-foreground">{item.name}</span>
-								<div class="flex items-center gap-2">
-									<Input
-										type="number"
-										min="0"
-										bind:value={item.qty}
-										class="h-8 w-20 rounded-lg bg-card px-2 text-right text-xs font-semibold"
-									/>
-									<span class="w-12 text-[11px] font-semibold text-muted-foreground"
-										>{item.unit}</span
-									>
+						{#each scannedItems as item (item.key)}
+							<div class="rounded-xl border border-border/40 bg-muted/30 p-3">
+								<div class="flex items-center justify-between">
+									<span class="text-xs font-bold text-foreground">{item.name}</span>
+									<div class="flex items-center gap-2">
+										<Input
+											type="text"
+											inputmode="decimal"
+											bind:value={item.qty}
+											class="h-8 w-20 rounded-lg bg-card px-2 text-right text-xs font-semibold"
+										/>
+										<span class="w-12 text-[11px] font-semibold text-muted-foreground"
+											>{item.unit}</span
+										>
+									</div>
 								</div>
+								{#if item.item_id}
+									<label
+										class="mt-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-muted-foreground"
+									>
+										วันหมดอายุ (เฉพาะของที่มีวันหมดอายุ)
+										<Input
+											type="date"
+											bind:value={item.expiry}
+											class="h-7 w-36 rounded-lg bg-card px-2 text-[11px]"
+										/>
+									</label>
+								{:else}
+									<p class="mt-1.5 text-[10px] text-muted-foreground">
+										ไม่มีรหัสสินค้าในคลัง — บันทึกไว้ในใบบริจาค ไม่ตัดยอดเข้าคลัง
+									</p>
+								{/if}
 							</div>
 						{/each}
 					</div>
+
+					<label class="block">
+						<span class="text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase"
+							>หมายเหตุการตรวจรับ</span
+						>
+						<Input
+							type="text"
+							bind:value={remarks}
+							placeholder="เช่น ของมาไม่ครบตามที่แจ้ง"
+							class="mt-1.5 h-9 rounded-xl text-xs"
+						/>
+					</label>
 				</div>
 
 				<!-- Footer -->
 				<div class="border-t border-border/60 bg-muted/10 p-4">
 					<Button
 						onclick={handleSave}
+						disabled={saving}
 						class="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white transition-colors hover:bg-emerald-700"
 					>
 						<Check class="h-4 w-4" />
-						บันทึกของเข้าคลังเรียบร้อย
+						{saving ? 'กำลังบันทึก…' : 'บันทึกของเข้าคลังเรียบร้อย'}
 					</Button>
 				</div>
 			</div>
