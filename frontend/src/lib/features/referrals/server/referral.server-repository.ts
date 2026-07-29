@@ -84,6 +84,13 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			doc
 		);
 		if (status !== HTTP_CREATED && status !== HTTP_OK) {
+			if (status === HTTP_NOT_FOUND) {
+				throw new CouchDbReferralError(
+					`ไม่พบศูนย์พักพิงปลายทางหรือฐานข้อมูลไม่ถูกต้อง (${dbName})`,
+					status,
+					data
+				);
+			}
 			throw new CouchDbReferralError(`Failed to write ${doc._id} in ${dbName}`, status, data);
 		}
 		return data.rev;
@@ -434,6 +441,17 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		const updated = applyTransition(latest, to, actor, nowIso, reason);
 		const touched = touch(updated);
 
+		if (updated.referral_type === 'capacity' && updated.to_shelter_code) {
+			if (to === 'sent') {
+				await this.mirrorCapacityReferralToDestination(updated);
+			} else if (to === 'accepted' || to === 'rejected') {
+				await this.syncCapacityReferralPeer(updated, scope);
+			} else if (to === 'closed' && latest.status !== 'draft') {
+				// CR-046: draft→closed never mirrored — do not create a peer on destination.
+				await this.syncCapacityReferralPeer(updated, scope);
+			}
+		}
+
 		const { status, data } = await this.couchPut<PutResultResponse>(
 			this.dbName,
 			`/${encodeURIComponent(touched._id)}`,
@@ -445,18 +463,6 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		}
 
 		const saved: Referral = { ...touched, _rev: data.rev };
-
-		if (saved.referral_type === 'capacity' && saved.to_shelter_code) {
-			if (to === 'sent') {
-				await this.mirrorCapacityReferralToDestination(saved);
-			} else if (to === 'accepted' || to === 'rejected') {
-				await this.syncCapacityReferralPeer(saved, scope);
-			} else if (to === 'closed' && latest.status !== 'draft') {
-				// CR-046: draft→closed never mirrored — do not create a peer on destination.
-				await this.syncCapacityReferralPeer(saved, scope);
-			}
-		}
-
 		return saved;
 	}
 }

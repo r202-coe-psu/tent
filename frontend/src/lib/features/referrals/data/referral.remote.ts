@@ -180,5 +180,9 @@ export async function createReferralBatch(
 		}
 	}
 
+	if (created.length === 0 && failed.length > 0) {
+		throw new Error(failed[0]!.error);
+	}
+
 	return { created, failed };
 }
