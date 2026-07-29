@@ -330,8 +330,8 @@ describe('SOP Ratio Domain', () => {
 	});
 
 	describe('Calculation Kinds', () => {
-		it('should have all 21 whitelist keys mapped to their exact calculation kind', () => {
-			expect(SOP_RATIO_KEYS.length).toBe(21);
+		it('should have all 20 whitelist keys mapped to their exact calculation kind', () => {
+			expect(SOP_RATIO_KEYS.length).toBe(20);
 			for (const key of SOP_RATIO_KEYS) {
 				expect(SOP_RATIO_KIND[key]).toBeDefined();
 				expect(['multiply', 'divide', 'threshold'].includes(SOP_RATIO_KIND[key])).toBe(true);
