@@ -5,7 +5,7 @@
 	import type { Component } from 'svelte';
 
 	let {
-		title = 'ระบบข้อมูลผู้ประสบภัยและ<br/>สืบค้นสถานะเข้าพักฉุกเฉิน',
+		title = 'ระบบค้นหาผู้ประสบภัยในศูนย์อพยพ',
 		description = 'เชื่อมต่อ อำนวยความสะดวก และรายงานความช่วยเหลือสาธารณะเพื่อความโปร่งใสแบบตามเวลาจริง (Real-Time Transparency) สามารถสืบหาญาติ ติดตามผู้ประสบภัย หรือร่วมแจกจ่ายเสบียงผ่านเครือข่ายของเรา',
 		badgeText = 'LIVE DISASTER COORDINATION LINK',
 		badgeIcon: BadgeIcon = null,
@@ -125,7 +125,7 @@
 
 					<div class=" flex items-center justify-between border-b border-border/50 pb-4">
 						<h3 class="text-xs font-bold tracking-wider text-card-foreground uppercase">
-							สถานการณ์ปัจจุบัน ณ ขณะนี้ (Real-Time Metrics)
+							สถานการณ์ปัจจุบัน ณ ขณะนี้
 						</h3>
 						<span class="text-[10px] text-muted-foreground"
 							>อัปเดตล่าสุด: {new Date(lastUpdated).toLocaleTimeString('th-TH')}</span
@@ -167,30 +167,6 @@
 							</div>
 						{/if}
 					</div>
-
-					<!-- Metric 3 (Vulnerable) -->
-					{#if flags.public_metrics_vulnerable}
-						<div
-							class="mt-4 flex items-center justify-between rounded-xl border border-border/50 bg-muted/30 p-4"
-						>
-							<div>
-								<span class="mb-2 block text-xs font-semibold text-muted-foreground"
-									>กลุ่มเปราะบาง (เด็กและผู้สูงอายุ)</span
-								>
-								<div class="flex items-baseline gap-1">
-									<span class="text-3xl font-bold text-card-foreground"
-										>{summary?.vulnerable_count ?? '-'}</span
-									>
-									<span class="text-sm font-medium text-muted-foreground">คน</span>
-								</div>
-							</div>
-							<div
-								class="flex h-fit items-center rounded-lg bg-danger-muted/50 px-3 py-1.5 text-xs font-bold text-danger"
-							>
-								VULNERABLE
-							</div>
-						</div>
-					{/if}
 				</div>
 			</div>
 		{/if}

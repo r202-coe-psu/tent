@@ -1,7 +1,7 @@
 
 ---
-id: CR-059
-title: "CR-059 scope amendment — worker projector seeds donation_need_counter.qty_target"
+id: CR-060
+title: "CR-060 scope amendment — worker projector seeds donation_need_counter.qty_target"
 status: proposed
 date: 2026-07-28
 requested_by: ทีมพัฒนา (Team A — ชิโน, นัท, กาน)
@@ -15,7 +15,7 @@ affects:
   - worker/tests/projectors/test_projectors.py
   - CR-045 Migration & Maintenance §One-time Backfill Script — ต้องรวม qty_target seed ด้วย
 ---
-# CR-059 — worker projector seeds `donation_need_counter.qty_target`
+# CR-060 — worker projector seeds `donation_need_counter.qty_target`
 
 ## สรุป (TL;DR)
 
