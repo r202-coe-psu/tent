@@ -22,10 +22,19 @@ export async function checkViewDeployment(
 		`/${encodeURIComponent(db)}/_design/${SHELTER_VIEW_MANIFEST.designName}`,
 		'GET'
 	);
-	if (res.status === 404) return { state: 'missing' };
-	if (res.status >= 400) return { state: 'missing' };
+	if (res.status === 404 || res.status >= 400) {
+		console.warn(
+			`[view-guard] _design/${SHELTER_VIEW_MANIFEST.designName} is missing or inaccessible for ${db} (${res.status})`
+		);
+		return { state: 'missing' };
+	}
 	const deployedVersion =
 		(res.data as { tent_view?: { version?: number } } | null)?.tent_view?.version ?? null;
-	if (deployedVersion !== SHELTER_VIEW_MANIFEST.version) return { state: 'stale', deployedVersion };
+	if (deployedVersion !== SHELTER_VIEW_MANIFEST.version) {
+		console.warn(
+			`[view-guard] _design/${SHELTER_VIEW_MANIFEST.designName} for ${db} is stale (deployed=${deployedVersion}, expected=${SHELTER_VIEW_MANIFEST.version})`
+		);
+		return { state: 'stale', deployedVersion };
+	}
 	return { state: 'current' };
 }
