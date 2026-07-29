@@ -74,4 +74,6 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-055](CR-055-stock-ledger-refid-invariant.md) | บังคับ invariant `stock_ledger.reason` ↔ prefix ของ `ref_id` ที่ชั้น domain (Zod superRefine + ตาราง R2) · `adjust` ต้อง `ref_id: null` · เลิก free text `ref_id` ในฟอร์มรับสต็อก → picker จาก doc จริง · เสนอ **ไม่ bump** `schema_v` (renumbered from CR-050) | approved | volatile | 2026-07-25 (renumber 07-26) | docs/data/schema.md §2.1, features/operations/domain/operations.ts + operations.test.ts, ui/ReceiveStockForm.svelte, features/kitchen/data/kitchen.remote.ts, CR-032 |
 | [CR-056](CR-056-shelter-map-reduce-cicd-lifecycle.md) | Shelter Map/Reduce lifecycle เชื่อมต่อ CI/CD (renumbered from CR-051) | approved | stable | 2026-07-27 | Jenkinsfile, frontend/src/lib/features/shelters/domain/views.ts, frontend/scripts/deploy-shelter-views.ts |
 | [CR-057](CR-057-stock-threshold-override-schema.md) | Add stock_threshold_override document type and schema (T-14) | approved | volatile | 2026-07-28 | docs/data/schema.md §2.16 §7, schema_v stock_threshold_override 1, frontend/src/lib/features/supply/ |
+| [CR-057](CR-057-evacuee-schema-age.md) | Evacuee age — เพิ่ม field age ในชั้น domain (snapshot, อิสระจาก birth_year); schema_v evacuee → 5 | done | volatile | 2026-07-28 | docs/data/schema.md §1.1, schema_v evacuee 3→5, features/people/ |
+
 

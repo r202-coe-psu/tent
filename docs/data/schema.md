@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-25
+updated: 2026-07-28
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -40,6 +40,9 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 5** — เพิ่ม `age` (CR-057) — snapshot อายุตอนนี้ อิสระจาก `birth_year` (ไม่ derive
+> ไปมา). ข้าม `schema_v 4` ในโค้ด — จองไว้ให้ `photo` (CR-054, approved แต่ยังไม่ implement ใน
+> code ณ วันที่ CR-057 done); เมื่อ `photo` implement จริงจะต้อง reconcile เลข schema_v อีกครั้ง.
 > **schema_v 4** — เพิ่ม `photo` (CR-049).
 > **schema_v 3** — `current_stay.status` เปลี่ยนจาก 4 ค่าเป็น 6 ค่า: `pre_registered`,`active`,
 > `temporary_leave`,`transferred`,`checked_out`,`deceased` (UI v5, CR-035).
@@ -54,6 +57,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `phone` | str\|null | req | UI บังคับกรอก — กด/พิมพ์ "ไม่มี" → เก็บ `null`; เก็บ normalize แล้ว (ตัวเลขล้วน เช่น `"0812345678"`) |
 | `nickname` | str | opt | — |
 | `birth_year` | int | opt | พ.ศ. 4 หลัก |
+| `age` | int | opt | อายุ (ปี) ณ ตอนกรอกล่าสุด — snapshot ตรงๆ ไม่ derive จาก/ไปเป็น `birth_year` (CR-057) |
 | `person_id` | {`cardType`:enum(`national_id`,`passport`,`pink_card`,`other`), `number`:str\|null} | opt | เอกสารแสดงตน — `cardType` default `"national_id"`; `number` คือเลขที่บัตร (opt); เก็บ plaintext ไม่ออก public tier ทุกกรณี |
 | `religion` | enum(`buddhist`,`muslim`,`christian`,`other`,`unknown`) | opt | ใช้วางแผนอาหาร halal |
 | `country` | str | req | ประเทศ | 
@@ -73,6 +77,11 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 เคสที่ควรเป็น `transferred`; ไม่มี legacy value map ไป `temporary_leave`/`deceased` (เกิดจาก movement
 action ใหม่เท่านั้น). `special_needs` (CR-046) ไม่ต้อง rename/transform — ค่า enum เดิม (เช่น
 `"elderly"`) เป็น subset ของ "any nonempty string" อ่านผ่านได้ตรง ๆ
+
+**Migration (schema_v 3 → 5, CR-057):** purely additive — `age` เป็น field เสริมล้วนๆ, doc เดิม
+(schema_v ≤3) ไม่มี `age` ก็อ่านได้ปกติ ไม่ต้อง backfill; UI fallback ไปคำนวณอายุจาก `birth_year`
+เมื่อไม่มี `age` (`evacueeAgeYears()` helper). เลข `4` (`photo`, CR-054) ถูกข้ามในโค้ดเพราะยังไม่
+implement — ไม่กระทบ migration นี้
 
 ### 1.2 `medical` — `medical:{ulid}` (1 doc ต่อ 1 evacuee)
 

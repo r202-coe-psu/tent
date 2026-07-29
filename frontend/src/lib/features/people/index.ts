@@ -62,6 +62,7 @@ export {
 	maskNationalId,
 	matchesEvacueeSearch,
 	zoneLabel,
+	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,
 	isEvacuee,
 	isMedical,
