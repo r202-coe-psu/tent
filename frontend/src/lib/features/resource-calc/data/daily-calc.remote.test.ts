@@ -80,6 +80,11 @@ vi.mock('$lib/features/sop-ratios', () => ({
 	}
 }));
 
+const mockGetShelter = vi.fn();
+vi.mock('$lib/features/shelters', () => ({
+	sheltersRepository: () => ({ getShelter: mockGetShelter })
+}));
+
 import { DailyCalcRemoteRepository } from './daily-calc.remote';
 import { FORMULA_V } from '../domain/calc.formula';
 
@@ -110,6 +115,7 @@ beforeEach(() => {
 	mockListEvacuees.mockReset();
 	mockGetBalance.mockReset();
 	mockGetActive.mockReset();
+	mockGetShelter.mockReset();
 
 	mockListEvacuees.mockResolvedValue([
 		evacuee('active'),
@@ -117,12 +123,16 @@ beforeEach(() => {
 		evacuee('checked_out'),
 		evacuee('pre_registered')
 	]);
-	mockGetBalance.mockResolvedValue(new Map<string, string>([['water_l_per_person_day', '100']]));
+	mockGetBalance.mockResolvedValue(new Map<string, string>([['item:water', '100']]));
 	mockGetActive.mockResolvedValue(activeProfile);
+	mockGetShelter.mockResolvedValue({
+		area_m2: 500,
+		facilities: { water_points: 3, showers: 5, toilets_female: 10, toilets_male: 8 }
+	});
 });
 
 describe('DailyCalcRemoteRepository.runOnDemand', () => {
-	it('mints a deterministic, snapshot-locked daily_calc doc from the three barrel inputs', async () => {
+	it('mints a deterministic, snapshot-locked daily_calc doc from the four barrel inputs', async () => {
 		const rec = await repo().runOnDemand('2026-07-08', ctx);
 
 		expect(rec._id).toBe('daily_calc:2026-07-08');
@@ -130,6 +140,9 @@ describe('DailyCalcRemoteRepository.runOnDemand', () => {
 		expect(rec.shelter_code).toBe('SH001');
 		expect(rec.occupancy_snapshot).toBe(2); // only active (present) counts
 		expect(rec.sop_profile_version).toBe(3);
+		expect(rec.ratio_source).toBe('master');
+		expect(rec.sop_override_id).toBeNull();
+		expect(rec.sop_override_version).toBeNull();
 		expect(rec.formula_v).toBe(FORMULA_V);
 		expect(rec.results).toHaveLength(3);
 
@@ -137,12 +150,31 @@ describe('DailyCalcRemoteRepository.runOnDemand', () => {
 		// multiply: need = 2 × 15 = 30, have 100 → surplus
 		expect(byKey.water_l_per_person_day.need).toBe('30');
 		expect(byKey.water_l_per_person_day.status).toBe('surplus');
-		// divide: need = ceil(2 / 20) = 1, no stock key → stock_unsynced
+		// divide: need = ceil(2 / 20) = 1, mapped to shelter facilities
 		expect(byKey.people_per_toilet_female.need).toBe('1');
-		expect(byKey.people_per_toilet_female.data_status).toBe('stock_unsynced');
+		expect(byKey.people_per_toilet_female.have).toBe('10');
 		// threshold: quality ceiling → constraint, no have
 		expect(byKey.max_queue_minutes.status).toBe('constraint');
 		expect(byKey.max_queue_minutes.have).toBeNull();
+	});
+
+	it('freezes the active override identity and leaves absent mapped sources null', async () => {
+		mockGetActive.mockResolvedValue({
+			...activeProfile,
+			_id: 'sop_override:SH001:summer',
+			type: 'sop_override',
+			version: 4
+		});
+		mockGetShelter.mockResolvedValue({ area_m2: null, facilities: {} });
+
+		const rec = await repo().runOnDemand('2026-07-08', ctx);
+
+		expect(rec.ratio_source).toBe('override');
+		expect(rec.sop_override_id).toBe('sop_override:SH001:summer');
+		expect(rec.sop_override_version).toBe(4);
+		const byKey = Object.fromEntries(rec.results.map((r) => [r.key, r]));
+		expect(byKey.people_per_toilet_female.have).toBeNull();
+		expect(rec.stock_snapshot.people_per_toilet_female).toBeNull();
 	});
 
 	it('is idempotent — same date reuses daily_calc:{date}, never a second doc', async () => {
@@ -185,6 +217,15 @@ describe('DailyCalcRemoteRepository.runOnDemand', () => {
 		expect(overwritten.occupancy_snapshot).toBe(1);
 		expect(overwritten.created_at).toBe(first.created_at);
 		expect(overwritten._rev).not.toBe(first._rev);
+	});
+
+	it('upgrades a legacy record to schema_v 2 when recalculating it', async () => {
+		const first = await repo().runOnDemand('2026-07-08', ctx);
+		store.set(first._id, { ...first, schema_v: 1 });
+
+		const rec = await repo().runOnDemand('2026-07-08', ctx);
+
+		expect(rec.schema_v).toBe(2);
 	});
 
 	it('throws when there is no active SOP profile', async () => {

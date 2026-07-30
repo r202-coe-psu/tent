@@ -11,7 +11,13 @@
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { evacueeInputSchema, type EvacueeInput } from '../domain/people';
+	import {
+		evacueeInputSchema,
+		currentBEYear,
+		minBirthYearBE,
+		MAX_AGE_YEARS,
+		type EvacueeInput
+	} from '../domain/people';
 	import { useMasterData } from '$lib/features/master-data';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -76,6 +82,13 @@
 		validators: zod4(evacueeInputSchema),
 		resetForm: false,
 		onSubmit: ({ cancel }) => {
+			if (birthYearError || ageError) {
+				const message = birthYearError || ageError || '';
+				toast.error(message);
+				cancel();
+				return;
+			}
+
 			if ($formData.person_id.cardType === 'national_id' && $formData.person_id.number) {
 				const cleanId = $formData.person_id.number.replace(/\D/g, '');
 				if (cleanId.length !== 13) {
@@ -152,15 +165,36 @@
 
 	let age = $state('');
 
-	$effect(() => {
-		if (birthYearBE && !isNaN(Number(birthYearBE))) {
-			$formData.birth_year = Number(birthYearBE);
-		} else if (age && !isNaN(Number(age))) {
-			$formData.birth_year = new Date().getFullYear() + 543 - Number(age);
-		} else {
+	const birthYearError = $derived.by(() => {
+		if (!birthYearBE) return undefined;
+		const y = Number(birthYearBE);
+		if (isNaN(y)) return 'กรุณากรอกปีเกิดเป็นตัวเลข';
+		if (y > currentBEYear()) return 'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต';
+		if (y <= minBirthYearBE()) return `ปีเกิด (พ.ศ.) ต้องมากกว่า ${minBirthYearBE()}`;
+		return undefined;
+	});
+
+	const ageError = $derived.by(() => {
+		if (!age) return undefined;
+		const a = Number(age);
+		if (isNaN(a)) return 'กรุณากรอกอายุเป็นตัวเลข';
+		if (a > MAX_AGE_YEARS) return `อายุต้องไม่เกิน ${MAX_AGE_YEARS} ปี`;
+		return undefined;
+	});
+
+	function updateBirthYear(value: string) {
+		birthYearBE = value;
+		$formData.birth_year = value && !isNaN(Number(value)) ? Number(value) : undefined;
+	}
+
+	function updateAge(value: string) {
+		age = value;
+		if (value && !isNaN(Number(value))) {
+			$formData.birth_year = currentBEYear() - Number(value);
+		} else if (!birthYearBE) {
 			$formData.birth_year = undefined;
 		}
-	});
+	}
 
 	$effect(() => {
 		$formData.medical_conditions = medicalConditionsStr
@@ -346,7 +380,22 @@
 					<!-- ปีเกิด (พ.ศ.) -->
 					<div class="space-y-2">
 						<Label>ปีเกิด (พ.ศ.)</Label>
-						<Input type="text" placeholder="เช่น 2530" bind:value={birthYearBE} />
+						<Input
+							type="text"
+							inputmode="numeric"
+							maxlength={4}
+							placeholder="เช่น 2530"
+							value={birthYearBE}
+							aria-invalid={birthYearError ? 'true' : undefined}
+							oninput={(e) => {
+								const val = e.currentTarget.value.replace(/\D/g, '').slice(0, 4);
+								e.currentTarget.value = val;
+								updateBirthYear(val);
+							}}
+						/>
+						{#if birthYearError}
+							<p class="text-sm font-medium text-destructive">{birthYearError}</p>
+						{/if}
 					</div>
 
 					<!-- อายุ -->
@@ -357,12 +406,16 @@
 							inputmode="numeric"
 							maxlength={3}
 							value={age}
+							aria-invalid={ageError ? 'true' : undefined}
 							oninput={(e) => {
 								const val = e.currentTarget.value.replace(/\D/g, '');
 								e.currentTarget.value = val;
-								age = val;
+								updateAge(val);
 							}}
 						/>
+						{#if ageError}
+							<p class="text-sm font-medium text-destructive">{ageError}</p>
+						{/if}
 					</div>
 
 					<Form.Field {form} name="gender">
