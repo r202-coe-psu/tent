@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from tent_model.donation_buffer import DonationBuffer
+from tent_model.donation_need_counter import DonationNeedCounter
 from tent_model.public_donation import PublicDonation
 from tent_model.public_need import PublicNeed
 from tent_model.public_person import PublicPerson
@@ -22,6 +23,7 @@ ALL_DOCUMENTS = [
 	PublicDonation,
 	PublicNeed,
 	DonationBuffer,
+	DonationNeedCounter,
 	RetentionAudit,
 	SearchAudit,
 ]

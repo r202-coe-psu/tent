@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError
 from tent_model.donation_buffer import DonationBuffer, DonorBuffer
+from tent_model.donation_need_counter_ops import ReserveResult, release_quota, reserve_quota
 from tent_model.public_donation import DeclaredItem, PublicDonation
 from tent_model.public_shelter import PublicShelter
+
+logger = logging.getLogger(__name__)
 
 from ...utils.masking import sha256_hex
 from ...utils.ulid import new_ulid
@@ -89,41 +94,95 @@ class DonationsUseCase:
         items_declared = [item.model_dump(exclude_none=True) for item in payload.items]
         declared = _declared_items(items_declared)
 
-        buffer: DonationBuffer | None = None
-        booking_ref = ""
-        for attempt in range(_MAX_BOOKING_REF_ATTEMPTS):
-            booking_ref = _new_booking_ref()
-            candidate = DonationBuffer(
-                id=donation_id,
-                shelter_code=payload.shelter_code.upper(),
-                donor=DonorBuffer(**payload.donor.model_dump()),
-                items_declared=items_declared,
-                logistics=payload.logistics,
-                campaign_id=payload.campaign_id,
-                booking_ref=booking_ref,
-                tracking_token=tracking_token,
-                tracking_token_hash=token_hash,
-                status="declared",
-                synced_to_couch=False,
-                created_at=now,
-                expires_at=expires_at,
-            )
-            try:
-                await candidate.insert()
-                buffer = candidate
-                break
-            except DuplicateKeyError:
-                # Unique index on booking_ref (and tracking_token_hash). New token each
-                # call — practically only booking_ref collisions need a retry.
-                if attempt < _MAX_BOOKING_REF_ATTEMPTS - 1:
+        # Atomic quota reservation (CR-045/T-21) — only items with both campaign_id +
+        # item_id are quota-tracked; free-text/no-campaign items bypass unchanged.
+        # reserved[] accumulates successful increments so a later NEED_FULL (or a
+        # buffer-insert failure below) can compensate them — no multi-doc transaction
+        # available on single-node Mongo, so rollback is manual (CR-045 Compensation).
+        reserved: list[tuple[str, str, Decimal]] = []
+        try:
+            for idx, item in enumerate(payload.items):
+                if not payload.campaign_id or not item.item_id:
                     continue
-                raise
+                try:
+                    qty = Decimal(str(item.qty))
+                except InvalidOperation:
+                    continue
 
-        if buffer is None:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={"success": False, "error": "BOOKING_REF_EXHAUSTED"},
-            )
+                result = await reserve_quota(
+                    shelter_code=payload.shelter_code.upper(),
+                    campaign_id=payload.campaign_id,
+                    item_id=item.item_id,
+                    qty=qty,
+                    now=now,
+                )
+                if result is ReserveResult.NEED_FULL:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={
+                            "success": False,
+                            "error": "NEED_FULL",
+                            "item_id": item.item_id,
+                        },
+                    )
+                if result is ReserveResult.NOT_SEEDED:
+                    logger.warning(
+                        "donation_need_counter not seeded for %s/%s/%s — allowing "
+                        "unreserved (CR-048 worker projector not caught up yet)",
+                        payload.shelter_code.upper(),
+                        payload.campaign_id,
+                        item.item_id,
+                    )
+                    continue
+
+                reserved.append((payload.campaign_id, item.item_id, qty))
+                items_declared[idx]["reserved_qty"] = str(qty)
+
+            buffer: DonationBuffer | None = None
+            booking_ref = ""
+            for attempt in range(_MAX_BOOKING_REF_ATTEMPTS):
+                booking_ref = _new_booking_ref()
+                candidate = DonationBuffer(
+                    id=donation_id,
+                    shelter_code=payload.shelter_code.upper(),
+                    donor=DonorBuffer(**payload.donor.model_dump()),
+                    items_declared=items_declared,
+                    logistics=payload.logistics,
+                    campaign_id=payload.campaign_id,
+                    booking_ref=booking_ref,
+                    tracking_token=tracking_token,
+                    tracking_token_hash=token_hash,
+                    status="declared",
+                    synced_to_couch=False,
+                    created_at=now,
+                    expires_at=expires_at,
+                )
+                try:
+                    await candidate.insert()
+                    buffer = candidate
+                    break
+                except DuplicateKeyError:
+                    # Unique index on booking_ref (and tracking_token_hash). New token each
+                    # call — practically only booking_ref collisions need a retry.
+                    if attempt < _MAX_BOOKING_REF_ATTEMPTS - 1:
+                        continue
+                    raise
+
+            if buffer is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={"success": False, "error": "BOOKING_REF_EXHAUSTED"},
+                )
+        except Exception:
+            for campaign_id, item_id, qty in reserved:
+                await release_quota(
+                    shelter_code=payload.shelter_code.upper(),
+                    campaign_id=campaign_id,
+                    item_id=item_id,
+                    qty=qty,
+                    now=now,
+                )
+            raise
 
         # Stub public_donations so GET tracking works before outbound CDC catches up.
         stub = PublicDonation(
@@ -253,6 +312,23 @@ class DonationsUseCase:
 
         buffer.status = "cancelled"
         await buffer.save()
+
+        # Release quota for whatever was actually reserved per item (CR-045) — no-op
+        # (underflow-guarded) for items that bypassed the counter (no "reserved_qty").
+        if buffer.campaign_id:
+            release_now = datetime.now(UTC)
+            for item in buffer.items_declared:
+                reserved_qty = item.get("reserved_qty")
+                item_id = item.get("item_id")
+                if reserved_qty is None or not item_id:
+                    continue
+                await release_quota(
+                    shelter_code=buffer.shelter_code,
+                    campaign_id=buffer.campaign_id,
+                    item_id=item_id,
+                    qty=Decimal(reserved_qty),
+                    now=release_now,
+                )
 
         # Keep the tracking stub in step so GET reflects the cancellation immediately,
         # instead of waiting for outbound CDC sync to catch up.

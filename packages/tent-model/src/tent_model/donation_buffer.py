@@ -21,6 +21,10 @@ class DonationBuffer(Document):
 	id: str = Field(alias="_id")
 	shelter_code: str
 	donor: DonorBuffer
+	# each item may carry "reserved_qty" (qty_str) = amount actually locked into
+	# DonationNeedCounter.reserved_qty for that item (CR-045) — only present for
+	# items with both campaign_id + item_id; absent for free-text/no-campaign items,
+	# which bypass the counter entirely. cancel()/expire() release exactly this amount.
 	items_declared: list[dict[str, Any]] = Field(default_factory=list)
 	logistics: dict[str, Any] | None = None
 	campaign_id: str | None = None
