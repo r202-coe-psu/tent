@@ -22,6 +22,7 @@ import {
 } from '$lib/server/couch-admin';
 import { rowsToOccupancyPayload, OccupancyPayloadSchema } from '$lib/features/dashboard';
 import type { ViewResult } from '$lib/server/shelters.admin';
+import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
 
 export const prerender = false;
 
@@ -34,13 +35,20 @@ export const GET: RequestHandler = async ({ params, request }) => {
 
 		const db = `shelter_${code.toLowerCase()}`;
 
+		const deployment = await checkViewDeployment(db, adminRaw);
+		if (deployment.state === 'stale') {
+			throw new ServiceError(
+				'INTERNAL',
+				`Dashboard views for ${db} are on an older version (deployed=${deployment.deployedVersion}) than this app build expects — a redeploy of _design/app is pending`
+			);
+		}
+
 		// Query the occupancy view with group=true to get per-status counts.
 		// All keys: 'pre_registered' | 'active' | 'temporary_leave' | 'transferred' | 'checked_out' | 'deceased'
 		const res = await adminRaw(`/${db}/_design/app/_view/occupancy?group=true`, 'GET');
 
 		if (res.status === 404) {
-			// Design doc not yet deployed — return empty zeros rather than 500.
-			return json(rowsToOccupancyPayload(code, []));
+			throw new ServiceError('INTERNAL', 'Dashboard occupancy view is not deployed');
 		}
 		if (res.status >= 400) {
 			throw new ServiceError('INTERNAL', `CouchDB view error (${res.status})`);

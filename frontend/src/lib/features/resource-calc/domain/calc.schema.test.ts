@@ -38,6 +38,9 @@ const validResult = {
 const validDoc = {
 	formula_v: FORMULA_V,
 	sop_profile_version: 1,
+	ratio_source: 'master' as const,
+	sop_override_id: null,
+	sop_override_version: null,
 	ratio_snapshot: { water_l_per_person_day: '15' },
 	occupancy_snapshot: 100,
 	as_of: AS_OF,
@@ -67,8 +70,19 @@ describe('calc.schema — valid parse', () => {
 		).toBe(true);
 	});
 
-	it('accepts a valid DailyCalcDoc with all 6 snapshot fields', () => {
+	it('accepts a valid master DailyCalcDoc with all snapshot fields', () => {
 		expect(dailyCalcDocSchema.safeParse(validDoc).success).toBe(true);
+	});
+
+	it('accepts a valid override DailyCalcDoc with its source identity', () => {
+		expect(
+			dailyCalcDocSchema.safeParse({
+				...validDoc,
+				ratio_source: 'override',
+				sop_override_id: 'sop_override:SH001:summer',
+				sop_override_version: 4
+			}).success
+		).toBe(true);
 	});
 
 	it('ratio_snapshot / stock_snapshot keys are GENERIC (not constrained to SOP_RATIO_KEYS)', () => {
@@ -145,6 +159,38 @@ describe('calc.schema — rejects invalid input (assert the offending field, not
 		expectFieldError(dailyCalcDocSchema.safeParse(withoutRatio), 'ratio_snapshot');
 	});
 
+	it('DailyCalcDoc master provenance rejects an override id or version', () => {
+		expect(
+			dailyCalcDocSchema.safeParse({ ...validDoc, sop_override_id: 'sop_override:SH001:bad' })
+				.success
+		).toBe(false);
+		expect(dailyCalcDocSchema.safeParse({ ...validDoc, sop_override_version: 1 }).success).toBe(
+			false
+		);
+	});
+
+	it('DailyCalcDoc override provenance requires an override id', () => {
+		expect(
+			dailyCalcDocSchema.safeParse({
+				...validDoc,
+				ratio_source: 'override',
+				sop_override_id: null,
+				sop_override_version: 1
+			}).success
+		).toBe(false);
+	});
+
+	it('DailyCalcDoc override provenance requires an override version', () => {
+		expect(
+			dailyCalcDocSchema.safeParse({
+				...validDoc,
+				ratio_source: 'override',
+				sop_override_id: 'sop_override:SH001:bad',
+				sop_override_version: null
+			}).success
+		).toBe(false);
+	});
+
 	it('ResourceInput.ratio = Infinity → error on ratio (decimal string check)', () => {
 		expectFieldError(
 			resourceInputSchema.safeParse({ key: 'x', kind: 'multiply', ratio: 'Infinity', have: '1' }),
@@ -215,6 +261,9 @@ describe('calc.schema — snapshot lock (frozen values survive a later ratio cha
 		const doc = dailyCalcDocSchema.parse({
 			formula_v: FORMULA_V,
 			sop_profile_version: 1,
+			ratio_source: 'master',
+			sop_override_id: null,
+			sop_override_version: null,
 			ratio_snapshot: { water_l_per_person_day: '15' },
 			occupancy_snapshot: 100,
 			as_of: '2026-07-01T00:00:00.000Z',
@@ -236,6 +285,7 @@ describe('calc.schema — barrel exports are consumable', () => {
 		expect(barrel.calcInputSchema).toBeDefined();
 		expect(barrel.calcOutputSchema).toBeDefined();
 		expect(barrel.dailyCalcDocSchema).toBeDefined();
+		expect(barrel.ratioSourceSchema).toBeDefined();
 		expect(barrel.DAILY_CALC_SCHEMA_VERSION).toBe(2);
 		// and the pre-existing T-31.1 exports remain (additive, non-breaking)
 		expect(barrel.calculateResources).toBeDefined();

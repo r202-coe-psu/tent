@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET } from './+server';
 import { requireShelterScopeOrSA, adminRaw, ServiceError } from '$lib/server/couch-admin';
+import { SHELTER_VIEW_MANIFEST } from '$lib/features/shelters/server';
 import type { RequestEvent } from './$types';
 
 // Mock dependencies
@@ -43,7 +44,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 		expect(data.error.message).toBe('Access denied');
 	});
 
-	it('returns graceful fallback on 404 (DB not found or view missing)', async () => {
+	it('returns 500 when the Dashboard occupancy view is not deployed', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 			name: 'tester',
 			roles: [],
@@ -55,17 +56,10 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 		const event = createMockEvent('SH001');
 		const res = (await GET(event)) as Response;
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(500);
 		const data = await res.json();
-
-		expect(data.shelter_code).toBe('SH001');
-		expect(data.pre_registered).toBe(0);
-		expect(data.active).toBe(0);
-		expect(data.temporary_leave).toBe(0);
-		expect(data.transferred).toBe(0);
-		expect(data.checked_out).toBe(0);
-		expect(data.deceased).toBe(0);
-		expect(data.total).toBe(0);
+		expect(data.error.code).toBe('INTERNAL');
+		expect(data.error.message).toContain('not deployed');
 	});
 
 	it('returns 500 on CouchDB view error (status >= 400)', async () => {
@@ -93,15 +87,20 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 			isSA: true,
 			shelterCode: null
 		});
-		vi.mocked(adminRaw).mockResolvedValue({
-			status: 200,
-			data: {
-				rows: [
-					{ key: 'active', value: 10 },
-					{ key: 'pre_registered', value: 5 }
-				]
-			}
-		});
+		vi.mocked(adminRaw)
+			.mockResolvedValueOnce({
+				status: 200,
+				data: { tent_view: { version: SHELTER_VIEW_MANIFEST.version } }
+			})
+			.mockResolvedValueOnce({
+				status: 200,
+				data: {
+					rows: [
+						{ key: 'active', value: 10 },
+						{ key: 'pre_registered', value: 5 }
+					]
+				}
+			});
 
 		const event = createMockEvent('SH001');
 		const res = (await GET(event)) as Response;
@@ -114,5 +113,30 @@ describe('GET /api/back-office/shelter/[code]/dashboard/occupancy', () => {
 		expect(data.pre_registered).toBe(5);
 		expect(data.checked_out).toBe(0); // Defaulted to 0
 		expect(data.total).toBe(15);
+
+		const [path, method] = vi.mocked(adminRaw).mock.calls[1];
+		expect(path).toBe('/shelter_sh001/_design/app/_view/occupancy?group=true');
+		expect(method).toBe('GET');
+	});
+
+	it('returns 500 when the deployed view version is older than this app build expects', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'tester',
+			roles: [],
+			isSA: true,
+			shelterCode: null
+		});
+		vi.mocked(adminRaw).mockResolvedValue({
+			status: 200,
+			data: { tent_view: { version: SHELTER_VIEW_MANIFEST.version - 1 } }
+		});
+
+		const event = createMockEvent('SH001');
+		const res = (await GET(event)) as Response;
+
+		expect(res.status).toBe(500);
+		const data = await res.json();
+		expect(data.error.code).toBe('INTERNAL');
+		expect(data.error.message).toContain('older version');
 	});
 });

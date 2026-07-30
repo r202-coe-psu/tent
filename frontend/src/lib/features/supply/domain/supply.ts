@@ -14,6 +14,9 @@ import type { BaseDoc } from '$lib/db/model';
  * align with the full `item_master` spec documented in CR-013.
  */
 
+/** The central catalog database that holds the item master (schema.md §4). */
+export const CATALOG_DB = 'catalog';
+
 // ---------------------------------------------------------------- enums
 
 export const supplyCategorySchema = z.enum([
@@ -55,6 +58,9 @@ export interface SupplyItem extends BaseDoc {
 	unit: string; // fixed unit per item — all ledger entries must use this
 	reorder_level: number | null;
 	perishable: boolean; // true → lot.expiry is mandatory on receive
+	target_reserve_days?: number;
+	consumption_rate?: string | null;
+	timeframe?: string | null;
 }
 
 // ---------------------------------------------------------------- schema
