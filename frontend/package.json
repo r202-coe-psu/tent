@@ -24,6 +24,7 @@
 		"seed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts",
 		"seed:thailand": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-thailand-location.ts",
 		"seed:delete-dashboard": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts --delete-dashboard",
+		"cleanup:referral-hardening": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/cleanup-referral-hardening.ts",
 		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts",
 		"redeploy:referral-db": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/redeploy-referral-db.ts"

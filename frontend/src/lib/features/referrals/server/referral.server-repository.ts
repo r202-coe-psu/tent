@@ -1,5 +1,5 @@
 import { adminRaw } from '$lib/server/couch-admin';
-import { makeDoc, touch, type AuthorContext } from '$lib/db/model';
+import { makeDoc, shelterCodeSchema, touch, type AuthorContext } from '$lib/db/model';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { isEvacuee, type Evacuee, type Movement } from '$lib/features/people/domain/people';
 import {
@@ -111,6 +111,25 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			}
 		}
 		return this.putDoc(dbName, doc);
+	}
+
+	private async ensureDestinationDbExists(dbName: string): Promise<void> {
+		const { status, data } = await adminRaw(`/${dbName}`, 'HEAD');
+		if (status === HTTP_OK) {
+			return;
+		}
+		if (status === HTTP_NOT_FOUND) {
+			throw new CouchDbReferralError(
+				`ไม่พบศูนย์พักพิงปลายทางหรือฐานข้อมูลไม่ถูกต้อง (${dbName})`,
+				status,
+				data
+			);
+		}
+		throw new CouchDbReferralError(
+			`Failed to validate destination shelter database (${dbName})`,
+			status,
+			data
+		);
 	}
 
 	/**
@@ -261,7 +280,16 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		if (referral.referral_type !== 'capacity' || !referral.to_shelter_code) {
 			return;
 		}
-		const toDb = shelterDbName(referral.to_shelter_code);
+		const parsedToShelter = shelterCodeSchema.safeParse(referral.to_shelter_code);
+		if (!parsedToShelter.success) {
+			throw new CouchDbReferralError(
+				`ไม่พบศูนย์พักพิงปลายทางหรือฐานข้อมูลไม่ถูกต้อง (${shelterDbName(referral.to_shelter_code)})`,
+				422,
+				parsedToShelter.error.flatten()
+			);
+		}
+		const toDb = shelterDbName(parsedToShelter.data);
+		await this.ensureDestinationDbExists(toDb);
 		const { status, data } = await this.couchGet<unknown>(
 			toDb,
 			`/${encodeURIComponent(referral._id)}`
@@ -333,11 +361,21 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 				? [{ type: 'asc' }, { created_at: 'asc' }]
 				: [{ type: 'desc' }, { created_at: 'desc' }];
 
+		let useIndex: string;
+		if (parsed.status && parsed.sort === 'created_at_desc') {
+			useIndex = 'referral-list-status-created-desc-idx';
+		} else if (parsed.sort === 'created_at_desc') {
+			useIndex = 'referral-list-created-desc-idx';
+		} else {
+			useIndex = 'referral-list-created-asc-idx';
+		}
+
 		const body: Record<string, unknown> = {
 			selector,
 			limit: parsed.limit,
 			skip: parsed.skip,
-			sort
+			sort,
+			use_index: useIndex
 		};
 
 		const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', body);
