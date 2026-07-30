@@ -349,6 +349,7 @@ describe('POST /api/public/v1/donations', () => {
 	it('returns 409 NEED_FULL when the requested qty exceeds the remaining quota', async () => {
 		// target 50, already 48 declared → only 2 left, but payload asks for 5
 		vi.mocked(adminRaw).mockImplementation(needsMock(50, 48));
+		mockFastapiCreate();
 
 		const response = await POST({
 			request: { json: () => Promise.resolve(validPayload) },
@@ -359,12 +360,14 @@ describe('POST /api/public/v1/donations', () => {
 		expect(response.status).toBe(409);
 		expect(data.error).toBe('NEED_FULL');
 		expect(data.item_id).toBe('item:rice');
-		expect(putAsPublicWriter).not.toHaveBeenCalled();
+		// Rejected before the write path — nothing reaches the FastAPI intake buffer.
+		expect(fetch).not.toHaveBeenCalled();
 	});
 
 	it('accepts the booking when the requested qty exactly fits the remaining quota', async () => {
 		// target 50, already 45 declared → exactly 5 left, payload asks for 5
 		vi.mocked(adminRaw).mockImplementation(needsMock(50, 45));
+		mockFastapiCreate();
 
 		const response = await POST({
 			request: { json: () => Promise.resolve(validPayload) },
@@ -374,7 +377,10 @@ describe('POST /api/public/v1/donations', () => {
 		const data = await response.json();
 		expect(response.status).toBe(200);
 		expect(data.success).toBe(true);
-		expect(putAsPublicWriter).toHaveBeenCalled();
+		expect(fetch).toHaveBeenCalledWith(
+			'http://localhost:9000/public/v1/donations',
+			expect.objectContaining({ method: 'POST' })
+		);
 	});
 
 	it('returns 409 SLOT_FULL if the logistics slot is already fully booked', async () => {
