@@ -1,4 +1,9 @@
-import { createQuery, createMutation, useQueryClient, type QueryClient } from '@tanstack/svelte-query';
+import {
+	createQuery,
+	createMutation,
+	useQueryClient,
+	type QueryClient
+} from '@tanstack/svelte-query';
 import { supplyRepository, CATALOG_DB } from '../data/supply.remote';
 import {
 	subscribeDataChanges,

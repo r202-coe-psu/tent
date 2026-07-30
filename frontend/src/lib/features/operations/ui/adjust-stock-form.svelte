@@ -480,8 +480,6 @@
 					</div>
 				</div>
 
-
-
 				<!-- Reason / Note -->
 				<div class="col-span-1 sm:col-span-2">
 					<label class="text-xs font-bold text-foreground">เหตุผล / หมายเหตุ *</label>
