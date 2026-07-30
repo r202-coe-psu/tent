@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -97,3 +98,68 @@ async def test_process_campaign_change_still_reprojects_needs():
 
     project_needs.assert_awaited_once_with(couch, "SH001")
     apply_need.assert_awaited_once_with("upsert", need_payload)
+
+
+@pytest.mark.asyncio
+async def test_process_campaign_change_seeds_need_counters():
+    """CR-060 — a donation_campaign CDC event seeds the quota ceiling for each need."""
+    couch = AsyncMock()
+    change = {
+        "seq": 45,
+        "id": "donation_campaign:01",
+        "doc": {
+            "_id": "donation_campaign:01",
+            "type": "donation_campaign",
+            "status": "open",
+            "needs": [
+                {"item_id": "item:rice", "qty_target": "10"},
+                {"item_id": "item:water", "qty_target": "25"},
+            ],
+        },
+    }
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_need", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.project_needs_for_shelter",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "worker.couch.processor.apply_need_counters", new_callable=AsyncMock
+        ) as apply_counters,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    seeds = apply_counters.await_args.args[0]
+    assert [(s.shelter_code, s.item_id, s.qty_target) for s in seeds] == [
+        ("SH001", "item:rice", Decimal("10")),
+        ("SH001", "item:water", Decimal("25")),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_process_supply_item_change_does_not_seed_need_counters():
+    couch = AsyncMock()
+    change = {
+        "seq": 46,
+        "id": "item:rice",
+        "doc": {"_id": "item:rice", "type": "supply_item"},
+    }
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_need", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.project_needs_for_shelter",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "worker.couch.processor.apply_need_counters", new_callable=AsyncMock
+        ) as apply_counters,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    apply_counters.assert_not_awaited()

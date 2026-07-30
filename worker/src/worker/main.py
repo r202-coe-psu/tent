@@ -57,7 +57,9 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             run_search_audit_inbound_loop(couch, stop_event=stop),
             name="inbound-search-audit",
         )
-        retention_task = asyncio.create_task(run_retention_loop(stop_event=stop), name="retention")
+        retention_task = asyncio.create_task(
+            run_retention_loop(stop_event=stop, couch=couch), name="retention"
+        )
         await manager.start()
         logger.info("Sync worker running — Ctrl+C to stop")
         await stop.wait()

@@ -10,6 +10,7 @@ from worker.masking import shelter_code_from_db_name
 from worker.mongo import (
     apply_donation,
     apply_need,
+    apply_need_counters,
     apply_person,
     apply_shelter,
     delete_needs_for_shelter,
@@ -17,6 +18,7 @@ from worker.mongo import (
     resolve_shelter_code_for_registry_delete,
 )
 from worker.projectors.donation import project_donation
+from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import project_shelter
@@ -93,7 +95,13 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 await apply_donation(action, payload)
                 # New/updated declared items change remaining qty on the public board.
                 await _reproject_needs(couch, shelter_code)
-            elif doc_type in {"donation_campaign", "supply_item"}:
+            elif doc_type == "donation_campaign":
+                # CR-060: seed the atomic quota ceiling FastAPI reserves against. The
+                # campaign doc is already in hand from the change row — no re-fetch,
+                # unlike the full re-scan _reproject_needs does.
+                await apply_need_counters(plan_need_counters(doc, shelter_code=shelter_code))
+                await _reproject_needs(couch, shelter_code)
+            elif doc_type == "supply_item":
                 await _reproject_needs(couch, shelter_code)
 
     await save_checkpoint(database, seq)

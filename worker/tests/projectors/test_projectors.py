@@ -1,4 +1,5 @@
 import hashlib
+from decimal import Decimal
 
 from worker.masking import (
     mask_last_name,
@@ -11,6 +12,7 @@ from worker.masking import (
     shelter_code_from_db_name,
 )
 from worker.projectors.compute_needs import compute_needs
+from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
 from worker.projectors.shelter import is_shelter_open, map_public_shelter_status, project_shelter
 
@@ -211,3 +213,64 @@ def test_compute_needs_aggregates_campaign_minus_donations():
     remaining, item_campaign = compute_needs(campaigns, donations)
     assert remaining["item:rice"] == "7.0"
     assert item_campaign["item:rice"] == "donation_campaign:01"
+
+
+# --- CR-060: plan_need_counters (pure) ---
+
+
+def _campaign(**overrides):
+    doc = {
+        "_id": "donation_campaign:01",
+        "type": "donation_campaign",
+        "status": "open",
+        "needs": [
+            {"item_id": "item:rice", "qty_target": "10"},
+            {"item_id": "item:water", "qty_target": 25},
+        ],
+    }
+    doc.update(overrides)
+    return doc
+
+
+def test_plan_need_counters_one_seed_per_need():
+    seeds = plan_need_counters(_campaign(), shelter_code="SH001")
+    assert [(s.item_id, s.qty_target) for s in seeds] == [
+        ("item:rice", Decimal("10")),
+        ("item:water", Decimal("25")),
+    ]
+    assert {s.shelter_code for s in seeds} == {"SH001"}
+    assert {s.campaign_id for s in seeds} == {"donation_campaign:01"}
+
+
+def test_plan_need_counters_skips_closed_campaign():
+    # FR-4: closed campaign yields no plan, so existing counters are never touched.
+    assert plan_need_counters(_campaign(status="closed"), shelter_code="SH001") == []
+
+
+def test_plan_need_counters_ignores_other_doc_types():
+    assert plan_need_counters(_campaign(type="supply_item"), shelter_code="SH001") == []
+
+
+def test_plan_need_counters_skips_unusable_needs():
+    campaign = _campaign(
+        needs=[
+            {"qty_target": "5"},  # no item_id
+            {"item_id": "item:rice"},  # qty_target missing
+            {"item_id": "item:soap", "qty_target": "abc"},  # unparseable
+            {"item_id": "item:blanket", "qty_target": "-3"},  # bad data
+            {"item_id": "item:egg", "qty_target": "0"},  # kept: "งดรับ" must block
+        ]
+    )
+    seeds = plan_need_counters(campaign, shelter_code="SH001")
+    assert [(s.item_id, s.qty_target) for s in seeds] == [("item:egg", Decimal("0"))]
+
+
+def test_plan_need_counters_dedups_repeated_item():
+    campaign = _campaign(
+        needs=[
+            {"item_id": "item:rice", "qty_target": "10"},
+            {"item_id": "item:rice", "qty_target": "99"},
+        ]
+    )
+    seeds = plan_need_counters(campaign, shelter_code="SH001")
+    assert [(s.item_id, s.qty_target) for s in seeds] == [("item:rice", Decimal("10"))]

@@ -93,6 +93,24 @@ async def list_open_shelter_codes(couch: CouchClient) -> list[str]:
     return sorted(set(codes))
 
 
+async def list_all_shelter_codes(couch: CouchClient) -> list[str]:
+    """Every shelter in the registry, open or not.
+
+    Sweeps that must not skip closed shelters use this — a closed shelter can still
+    hold donations with a live reservation that needs expiring.
+    """
+    if not await couch.database_exists(REGISTRY_DB):
+        return []
+    codes: list[str] = []
+    async for doc in couch.iter_all_docs(REGISTRY_DB):
+        if doc.get("type") != "shelter":
+            continue
+        code = doc.get("code")
+        if code:
+            codes.append(str(code))
+    return sorted(set(codes))
+
+
 async def bootstrap_all(couch: CouchClient) -> None:
     logger.info("Starting bootstrap scan")
     await bootstrap_database(couch, REGISTRY_DB)

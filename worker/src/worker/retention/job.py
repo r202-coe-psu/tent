@@ -6,6 +6,7 @@ import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from tent_model import (
 	DonationBuffer,
@@ -14,7 +15,11 @@ from tent_model import (
 	PublicPerson,
 	PublicShelter,
 	RetentionAudit,
+	release_quota,
 )
+
+from worker.couch.client import CouchClient
+from worker.quota.expiry import expire_declared_donations
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +33,13 @@ def classify_expired_buffer(
 	now: datetime,
 ) -> str:
 	"""Return ``purge``, ``stuck``, or ``keep`` for an intake buffer row."""
-	if expires_at is None or expires_at >= now:
+	if expires_at is None:
+		return "keep"
+	# Motor/pymongo hands back BSON dates as timezone-naive (UTC) on read, while
+	# in-process datetimes here are timezone-aware — normalize before comparing.
+	if expires_at.tzinfo is None:
+		expires_at = expires_at.replace(tzinfo=UTC)
+	if expires_at >= now:
 		return "keep"
 	if synced_to_couch:
 		return "purge"
@@ -134,6 +145,25 @@ async def purge_expired_buffers(job_run_id: str) -> None:
 		if action != "purge":
 			continue
 
+		# Release reserved quota only for reservations that timed out without being
+		# received or explicitly cancelled (CR-045 "TTL หมดอายุ → โควตาคืนอัตโนมัติ").
+		# A "received" buffer keeps its quota consumed even after its Mongo staging
+		# row ages out; a "cancelled" buffer already released via cancel() — calling
+		# release_quota again here is a safe no-op (underflow guard).
+		if donation.status == "declared" and donation.campaign_id:
+			for item in donation.items_declared:
+				reserved_qty = item.get("reserved_qty")
+				item_id = item.get("item_id")
+				if reserved_qty is None or not item_id:
+					continue
+				await release_quota(
+					shelter_code=donation.shelter_code,
+					campaign_id=donation.campaign_id,
+					item_id=item_id,
+					qty=Decimal(reserved_qty),
+					now=now,
+				)
+
 		await _audit_and_delete(
 			job_run_id=job_run_id,
 			trigger="scheduled",
@@ -152,18 +182,26 @@ async def purge_expired_buffers(job_run_id: str) -> None:
 			)
 
 
-async def run_retention_once() -> None:
+async def run_retention_once(couch: CouchClient | None = None) -> None:
 	job_run_id = uuid.uuid4().hex
 	logger.info("Starting retention job %s", job_run_id)
 	await reconcile_closed_shelters(job_run_id)
 	await purge_expired_buffers(job_run_id)
+	if couch is not None:
+		# Same cycle as the quota release above so the counter and the CouchDB status
+		# move together (T-21 TTL). Runs after the purge: releasing first and flipping
+		# second means a crash in between leaves the doc "declared", and the next cycle
+		# retries the release harmlessly thanks to the underflow guard.
+		await expire_declared_donations(couch, now=datetime.now(UTC))
 	logger.info("Retention job %s complete", job_run_id)
 
 
-async def run_retention_loop(*, stop_event: asyncio.Event) -> None:
+async def run_retention_loop(
+	*, stop_event: asyncio.Event, couch: CouchClient | None = None
+) -> None:
 	while not stop_event.is_set():
 		try:
-			await run_retention_once()
+			await run_retention_once(couch)
 		except Exception:
 			logger.exception("Retention job failed")
 		await asyncio.sleep(RETENTION_INTERVAL_SECONDS)
