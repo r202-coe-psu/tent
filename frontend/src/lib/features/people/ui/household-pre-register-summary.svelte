@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { useCreateEvacuee, useEvacuees, useUpdateEvacuee } from '../application/queries';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { useSaveImage } from '$lib/features/images';
 	import {
 		maskNationalId,
 		type Evacuee,
@@ -34,6 +36,7 @@
 	};
 	import { toast } from 'svelte-sonner';
 	import Camera from '@lucide/svelte/icons/camera';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
@@ -93,6 +96,12 @@
 	let showAddMemberForm = $state(false);
 	let memberNoPhone = $state(false);
 	let memberFacePhotoUrl = $state<string | null>(null);
+	let uploadingMemberPhoto = $state(false);
+	const saveImage = useSaveImage();
+
+	onDestroy(() => {
+		if (memberFacePhotoUrl) URL.revokeObjectURL(memberFacePhotoUrl);
+	});
 
 	let memberBirthYearBE = $state('');
 	let memberAge = $state('');
@@ -176,7 +185,9 @@
 
 				// Reset member form
 				memberForm.reset();
+				if (memberFacePhotoUrl) URL.revokeObjectURL(memberFacePhotoUrl);
 				memberFacePhotoUrl = null;
+				uploadingMemberPhoto = false;
 				memberBirthYearBE = '';
 				memberAge = '';
 				memberMedicalConditionsStr = '';
@@ -448,10 +459,26 @@
 						accept="image/*"
 						class="hidden"
 						id="member-face-photo-input"
-						onchange={(e) => {
+						disabled={uploadingMemberPhoto}
+						onchange={async (e) => {
 							const file = e.currentTarget.files?.[0];
-							if (file) {
-								memberFacePhotoUrl = URL.createObjectURL(file);
+							if (!file) return;
+
+							if (memberFacePhotoUrl) URL.revokeObjectURL(memberFacePhotoUrl);
+							memberFacePhotoUrl = URL.createObjectURL(file);
+							uploadingMemberPhoto = true;
+							try {
+								const ctx = {
+									shelterCode: getShelterCode(),
+									createdBy: authStore.user?.name ?? 'unknown'
+								};
+								const image = await saveImage.mutateAsync({ file, ctx });
+								$memberFormData.photo = image._id;
+							} catch {
+								$memberFormData.photo = null;
+								toast.error('อัปโหลดรูปภาพล้มเหลว สามารถลงทะเบียนต่อได้โดยไม่มีรูป');
+							} finally {
+								uploadingMemberPhoto = false;
 							}
 						}}
 					/>
@@ -460,11 +487,20 @@
 						class="block cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
 					>
 						{#if memberFacePhotoUrl}
-							<img
-								src={memberFacePhotoUrl}
-								alt="Face"
-								class="h-40 w-full rounded-lg object-cover"
-							/>
+							<div class="relative h-40 w-full">
+								<img
+									src={memberFacePhotoUrl}
+									alt="Face"
+									class="h-40 w-full rounded-lg object-cover {uploadingMemberPhoto
+										? 'opacity-50'
+										: ''}"
+								/>
+								{#if uploadingMemberPhoto}
+									<div class="absolute inset-0 flex items-center justify-center">
+										<Loader2 class="h-8 w-8 animate-spin text-primary" />
+									</div>
+								{/if}
+							</div>
 						{:else}
 							<div class="flex h-40 flex-col items-center justify-center">
 								<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
