@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -14,6 +15,7 @@ from tent_model.public_donation import PublicDonation
 from tent_model.public_shelter import PublicShelter
 
 from apiapp.core.config import Settings
+from apiapp.modules.donations import router as donation_router
 from apiapp.utils.masking import sha256_hex
 from apiapp.utils.ulid import new_ulid
 
@@ -548,3 +550,63 @@ async def test_create_donation_allows_unseeded_quota_key(
     assert response.status_code == 201
     counter = await DonationNeedCounter.get("SH001:donation_campaign:unseeded:item:unknown")
     assert counter is None
+
+
+async def test_concurrent_bookings_never_exceed_the_target(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """T-21 DoD — race ระหว่างจองพร้อมกัน, end to end through the HTTP route.
+
+    Twelve donors submit at once for a target of 10 with 2 per booking: exactly five may
+    be created. Asserts the aggregate rather than which ones win, so the interleaving
+    can vary without making the test flaky. The pre-counter read-then-write path would
+    have accepted all twelve.
+    """
+    # The router's sliding window is module state shared across tests in this process,
+    # and twelve requests at once would otherwise be judged against whatever earlier
+    # tests already spent. Rate limiting has its own test; this one is about the quota.
+    donation_router._rate_buckets.clear()
+
+    now = datetime.now(UTC)
+    await DonationNeedCounter(
+        id="SH001:donation_campaign:race:item:rice",
+        shelter_code="SH001",
+        campaign_id="donation_campaign:race",
+        item_id="item:rice",
+        qty_target=Decimal("10"),
+        reserved_qty=Decimal("0"),
+        created_at=now,
+        updated_at=now,
+    ).insert()
+
+    def booking(index: int):
+        return client.post(
+            "/public/v1/donations",
+            headers=auth_headers,
+            json={
+                "shelter_code": "SH001",
+                "campaign_id": "donation_campaign:race",
+                "donor": {"name": f"Donor {index}", "phone": "0812345678"},
+                "items": [
+                    {"item_id": "item:rice", "free_text": "ข้าวสาร", "qty": 2, "unit": "kg"}
+                ],
+            },
+        )
+
+    responses = await asyncio.gather(*[booking(i) for i in range(12)])
+
+    created = [r for r in responses if r.status_code == 201]
+    rejected = [r for r in responses if r.status_code == 409]
+    assert len(created) == 5, [r.status_code for r in responses]
+    assert len(rejected) == 7
+    assert all(r.json()["errors"][0]["error"] == "NEED_FULL" for r in rejected)
+
+    counter = await DonationNeedCounter.get("SH001:donation_campaign:race:item:rice")
+    assert counter is not None
+    assert counter.reserved_qty == Decimal("10")
+
+    # A rejected booking must not leave a staging row behind holding no quota.
+    buffers = await DonationBuffer.find(
+        DonationBuffer.campaign_id == "donation_campaign:race"
+    ).to_list()
+    assert len(buffers) == 5

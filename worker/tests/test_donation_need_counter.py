@@ -1,10 +1,18 @@
 """Mongo-backed tests for the donation_need_counter seed path (CR-060 §Acceptance)."""
 
+import asyncio
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import bson
-from tent_model import DonationNeedCounter, counter_id, reserve_quota, seed_counter
+from tent_model import (
+    DonationNeedCounter,
+    ReserveResult,
+    counter_id,
+    release_quota,
+    reserve_quota,
+    seed_counter,
+)
 
 from worker.mongo import apply_need_counters
 from worker.projectors.donation_need_counter import plan_need_counters
@@ -125,8 +133,6 @@ async def test_seed_and_concurrent_inc_do_not_clobber_each_other(db: None) -> No
 
 async def test_reserve_quota_enforces_seeded_ceiling(db: None) -> None:
     """End-to-end: once seeded, FastAPI actually rejects at the campaign's target."""
-    from tent_model import ReserveResult
-
     await _seed(_campaign([{"item_id": "item:rice", "qty_target": "10"}]))
     now = datetime.now(UTC)
 
@@ -147,3 +153,87 @@ async def test_reserve_quota_enforces_seeded_ceiling(db: None) -> None:
 
     assert first is ReserveResult.RESERVED
     assert second is ReserveResult.NEED_FULL
+
+
+# --- concurrency (T-21 DoD — "race ระหว่างจองพร้อมกัน") ---
+
+
+async def _reserved() -> Decimal:
+    counter = await _get("item:rice")
+    assert counter is not None
+    return counter.reserved_qty
+
+
+async def _reserve(qty: str, now: datetime):
+    return await reserve_quota(
+        shelter_code=SHELTER,
+        campaign_id=CAMPAIGN,
+        item_id="item:rice",
+        qty=Decimal(qty),
+        now=now,
+    )
+
+
+async def _release(qty: str, now: datetime) -> None:
+    await release_quota(
+        shelter_code=SHELTER,
+        campaign_id=CAMPAIGN,
+        item_id="item:rice",
+        qty=Decimal(qty),
+        now=now,
+    )
+
+
+async def test_concurrent_reserves_never_exceed_the_ceiling(db: None) -> None:
+    """20 bookings race for a target of 10 — exactly 10 may win.
+
+    Asserts the aggregate, not who wins: the outcome is deterministic even though the
+    interleaving is not. This is the guarantee the whole counter exists for — the old
+    read-then-write path would have let all 20 through.
+    """
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "10"}]))
+    now = datetime.now(UTC)
+
+    results = await asyncio.gather(*[_reserve("1", now) for _ in range(20)])
+
+    assert sum(r is ReserveResult.RESERVED for r in results) == 10
+    assert sum(r is ReserveResult.NEED_FULL for r in results) == 10
+    assert await _reserved() == Decimal("10")
+
+
+async def test_concurrent_reserves_stop_at_the_last_whole_fit(db: None) -> None:
+    """Target 10 with 3 per booking: three fit, a fourth would overshoot to 12."""
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "10"}]))
+    now = datetime.now(UTC)
+
+    results = await asyncio.gather(*[_reserve("3", now) for _ in range(8)])
+
+    assert sum(r is ReserveResult.RESERVED for r in results) == 3
+    assert await _reserved() == Decimal("9")
+
+
+async def test_concurrent_releases_never_underflow(db: None) -> None:
+    """Duplicate cancels racing each other must floor at 0, never go negative."""
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "10"}]))
+    now = datetime.now(UTC)
+    await _reserve("5", now)
+
+    await asyncio.gather(*[_release("1", now) for _ in range(20)])
+
+    assert await _reserved() == Decimal("0")
+
+
+async def test_concurrent_reserve_and_release_settle_consistently(db: None) -> None:
+    """A cancel storm and a booking storm at once still net out exactly."""
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "100"}]))
+    now = datetime.now(UTC)
+    await _reserve("10", now)
+
+    await asyncio.gather(
+        *[_reserve("1", now) for _ in range(10)],
+        *[_release("1", now) for _ in range(10)],
+    )
+
+    # 10 held + 10 reserved - 10 released; every release has stock to take under any
+    # interleaving, so the total is fixed regardless of ordering.
+    assert await _reserved() == Decimal("10")
