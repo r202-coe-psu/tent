@@ -17,6 +17,7 @@
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import Scale from '@lucide/svelte/icons/scale';
 	import { ResourceDashboard } from '$lib/features/sop-ratios/components';
+	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
 	import { shelterCodeFromRoles } from '$lib/auth/roles';
 	import { useDashboardOccupancy } from '$lib/features/dashboard';
 
@@ -68,12 +69,6 @@
 	<title>คลังสินค้าและสิ่งของบรรเทาทุกข์ · SmartShelter</title>
 </svelte:head>
 
-<!-- Top bar header -->
-<header class="flex shrink-0 items-center gap-2 border-b border-sidebar-border bg-card px-4 py-2.5">
-	<Package class="h-4 w-4 text-primary" />
-	<h1 class="text-base font-bold text-foreground">คลังสินค้าและสิ่งของบรรเทาทุกข์</h1>
-</header>
-
 <div class="flex w-full flex-1 flex-col gap-6 bg-background p-6">
 	<!-- Offline banner -->
 	{#if isOffline}
@@ -90,7 +85,7 @@
 
 	<!-- Title with Accent Line -->
 	<div class="flex items-center gap-3 border-l-4 border-orange-500 pl-3">
-		<h2 class="text-xl font-bold text-foreground">คลังทรัพยากร (Stock & Donations)</h2>
+		<h2 class="text-xl font-bold text-foreground">คลังทรัพยากร (Stock &amp; Donations)</h2>
 	</div>
 
 	<!-- Segmented Tabs (Pills Control) -->
