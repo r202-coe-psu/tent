@@ -21,6 +21,7 @@ export {
 	resourceKindSchema,
 	resourceStatusSchema,
 	dataStatusSchema,
+	ratioSourceSchema,
 	resourceInputSchema,
 	calcInputSchema,
 	resourceCalcResultSchema,
