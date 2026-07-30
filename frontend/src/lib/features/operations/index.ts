@@ -71,7 +71,10 @@ export {
 	createReceiveEntry,
 	distributeInputSchema,
 	createDistributeEntry,
-	type DistributeInput
+	type DistributeInput,
+	adjustInputSchema,
+	createAdjustEntry,
+	type AdjustInput
 } from './domain/operations';
 
 // Data — repository contract + remote CouchDB binding
@@ -86,6 +89,7 @@ export {
 	useStockBalance,
 	useReceiveStock,
 	useDistributeStock,
+	useAdjustStock,
 	useCampaigns,
 	useStockLedgers,
 	useDonations,
@@ -101,10 +105,11 @@ export { useDonationNeedsBoard } from './application/use-donation-needs-board.sv
 export type { NeedItem } from './application/need-item.types';
 
 // UI components
-export { default as ReceiveStockForm } from './ui/ReceiveStockForm.svelte';
-export { default as DistributeStockForm } from './ui/DistributeStockForm.svelte';
-export { default as LedgerTable } from './ui/LedgerTable.svelte';
-export { default as StockTable } from './ui/StockTable.svelte';
+export { default as ReceiveStockForm } from './ui/receive-stock-form.svelte';
+export { default as DistributeStockForm } from './ui/distribute-stock-form.svelte';
+export { default as LedgerTable } from './ui/ledger-table.svelte';
+export { default as StockTable } from './ui/stock-table.svelte';
+export { default as AdjustStockForm } from './ui/adjust-stock-form.svelte';
 export { default as PurchaseForm } from './ui/PurchaseForm.svelte';
 export { default as PurchaseReceiptForm } from './ui/PurchaseReceiptForm.svelte';
 export { default as PurchaseTable } from './ui/PurchaseTable.svelte';

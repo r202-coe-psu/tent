@@ -5,7 +5,8 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { receiveInputSchema, type ReceiveInput } from '../domain/operations';
-	import { useSupplyItems, type SupplyItem } from '$lib/features/supply';
+	import { useSupplyItems } from '$lib/features/supply';
+	import { useItemMasters } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useReceiveStock } from '../application/queries';
@@ -19,17 +20,38 @@
 
 	// Fetch supply catalog items
 	const itemsQuery = useSupplyItems();
+	const itemMastersQuery = useItemMasters();
 	const receiveMutation = useReceiveStock();
 
 	// Local state for searchable items combobox
 	let searchQuery = $state('');
 	let isDropdownOpen = $state(false);
-	let selectedItem = $state<SupplyItem | null>(null);
+	let selectedItem = $state<{
+		_id: string;
+		name: string;
+		unit: string;
+		perishable?: boolean;
+	} | null>(null);
 	let container = $state<HTMLDivElement | null>(null);
+
+	const items = $derived.by(() => {
+		const supplyItems = itemsQuery.data ?? [];
+		const itemMasters = itemMastersQuery.data ?? [];
+
+		const mappedItemMasters = itemMasters.map((im) => ({
+			_id: im._id,
+			name: im.name,
+			category: im.category || 'other',
+			unit: im.base_unit || im.unit || 'ชิ้น',
+			reorder_level: null,
+			perishable: false
+		}));
+
+		return [...supplyItems, ...mappedItemMasters];
+	});
 
 	// Filter items based on search query
 	const filteredItems = $derived.by(() => {
-		const items = itemsQuery.data ?? [];
 		if (!searchQuery) return items;
 		const query = searchQuery.toLowerCase().trim();
 		return items.filter((i) => i.name.toLowerCase().includes(query));
@@ -58,7 +80,7 @@
 	const { form: formData, submitting, reset } = form;
 
 	// Update locked unit when item is selected
-	function selectItem(item: SupplyItem) {
+	function selectItem(item: { _id: string; name: string; unit: string; perishable?: boolean }) {
 		selectedItem = item;
 		$formData.item_id = item._id;
 		$formData.unit = item.unit;
@@ -106,8 +128,8 @@
 
 	// Automatically pre-fill the selected item when preselectedItemId changes
 	$effect(() => {
-		if (preselectedItemId && itemsQuery.data) {
-			const item = itemsQuery.data.find((i) => i._id === preselectedItemId);
+		if (preselectedItemId && (itemsQuery.data || itemMastersQuery.data)) {
+			const item = items.find((i) => i._id === preselectedItemId);
 			if (item) {
 				selectItem(item);
 			}
@@ -186,7 +208,7 @@
 								role="listbox"
 								class="absolute left-0 z-20 mt-1 max-h-60 w-full animate-in overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl duration-150 fade-in slide-in-from-top-1"
 							>
-								{#if itemsQuery.isLoading}
+								{#if itemsQuery.isLoading || itemMastersQuery.isLoading}
 									<div class="p-3 text-xs font-medium text-muted-foreground">
 										กำลังโหลดรายการสิ่งของ...
 									</div>
