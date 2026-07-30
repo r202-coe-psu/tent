@@ -15,7 +15,7 @@
 		form,
 		formData
 	}: {
-		form: SuperForm<ConfigBody, any>;
+		form: SuperForm<ConfigBody>;
 		formData: SuperFormData<ConfigBody>;
 	} = $props();
 </script>

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
 	resourceInputSchema,
 	calcInputSchema,
@@ -14,7 +14,6 @@ import { calculateResources, FORMULA_V } from './calc.formula';
 // typebox adapter crashes against the currently-installed typebox version (`Type.Base` is
 // undefined). None of that chain is exercised by this file's actual assertions, so the
 // transitive dependency is neutralized here rather than left to crash test collection.
-vi.mock('sveltekit-superforms/adapters', () => ({ zod4: vi.fn() }));
 
 // Barrel-consumable check (review suggestion): prove the new schemas are actually
 // re-exported through the public feature barrel, not just the deep domain path.
