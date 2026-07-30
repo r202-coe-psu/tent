@@ -100,9 +100,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 		steps.push({ step: 'design', status: design.status });
 
-		// 3.5. Deploy app views (CR-017)
-		const appStatus = await deployShelterViews(db);
-		steps.push({ step: 'design-app', status: appStatus });
+		// 3.5. Deploy Dashboard views (CR-051)
+		const dashboardStatus = await deployShelterViews(db);
+		steps.push({ step: 'design-dashboard', status: dashboardStatus });
 
 		// 3.6. Referral Mango indexes (CR-045 / T-34 list/find)
 		await deployReferralMangoIndexes(db);

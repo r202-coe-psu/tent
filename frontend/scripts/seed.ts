@@ -78,14 +78,12 @@ import {
 } from '$lib/features/resource-calc/domain/calc.schema';
 import { shelterCodeSchema, type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
-
-import { deployShelterViewsFn } from '$lib/features/shelters/server';
+import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
 	shelterDbName
 } from '$lib/server/shelter-access-design';
-
 // ─── env ──────────────────────────────────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -914,7 +912,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'ใจดี',
 			gender: 'male',
 			phone: '0811111111',
-			birth_year: 1955,
+			birth_year: 2498,
 			religion: 'buddhist',
 			special_needs: [VG.elderly],
 			household_id: hh1._id,
@@ -925,7 +923,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'ใจดี',
 			gender: 'female',
 			phone: '0812222222',
-			birth_year: 1958,
+			birth_year: 2501,
 			religion: 'buddhist',
 			special_needs: [VG.elderly],
 			household_id: hh1._id,
@@ -936,7 +934,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'ใจดี',
 			gender: 'male',
 			phone: '0813333333',
-			birth_year: 1990,
+			birth_year: 2533,
 			religion: 'buddhist',
 			special_needs: [],
 			household_id: hh1._id,
@@ -947,7 +945,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'ใจดี',
 			gender: 'female',
 			phone: '0814444444',
-			birth_year: 1993,
+			birth_year: 2536,
 			religion: 'buddhist',
 			special_needs: [VG.pregnant],
 			household_id: hh1._id,
@@ -960,7 +958,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'สุขสาย',
 			gender: 'female',
 			phone: null,
-			birth_year: 1988,
+			birth_year: 2531,
 			religion: 'buddhist',
 			special_needs: [],
 			household_id: hh2._id,
@@ -971,7 +969,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'สุขสาย',
 			gender: 'male',
 			phone: '0815555555',
-			birth_year: 1985,
+			birth_year: 2528,
 			religion: 'buddhist',
 			special_needs: [],
 			household_id: hh2._id,
@@ -982,7 +980,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'สุขสาย',
 			gender: 'female',
 			phone: null,
-			birth_year: 2024,
+			birth_year: 2567,
 			religion: 'buddhist',
 			special_needs: [VG.infant],
 			household_id: hh2._id,
@@ -994,7 +992,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'รักสงบ',
 			gender: 'male',
 			phone: '0816666666',
-			birth_year: 1972,
+			birth_year: 2515,
 			religion: 'muslim',
 			special_needs: [],
 			household_id: hh3._id,
@@ -1005,7 +1003,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'รักสงบ',
 			gender: 'female',
 			phone: '0817777777',
-			birth_year: 1975,
+			birth_year: 2518,
 			religion: 'muslim',
 			special_needs: [VG.chronic_illness],
 			household_id: hh3._id,
@@ -1017,7 +1015,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'รักสงบ',
 			gender: 'male',
 			phone: null,
-			birth_year: 2012,
+			birth_year: 2555,
 			religion: 'muslim',
 			special_needs: [],
 			household_id: hh3._id,
@@ -1264,7 +1262,7 @@ async function seedShelter2(): Promise<void> {
 			last_name: 'มานะ',
 			gender: 'female',
 			phone: '0899998888',
-			birth_year: 1995,
+			birth_year: 2538,
 			religion: 'muslim',
 			special_needs: [],
 			household_id: hh1._id,

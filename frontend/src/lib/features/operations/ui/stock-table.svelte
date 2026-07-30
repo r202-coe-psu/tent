@@ -1,9 +1,26 @@
 <script lang="ts">
 	import { SvelteSet } from 'svelte/reactivity';
 	import { useStockBalance, useLedger } from '../application/queries';
-	import { useSupplyItems } from '$lib/features/supply';
+	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
+	import { useItemMasters } from '$lib/features/catalog';
+	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import { cn } from '$lib/utils/shadcn.js';
+	import LedgerTable from './ledger-table.svelte';
+	import ReceiveStockForm from './receive-stock-form.svelte';
+	import DistributeStockForm from './distribute-stock-form.svelte';
+	import AdjustStockForm from './adjust-stock-form.svelte';
+	import * as Pagination from '$lib/components/ui/pagination/index.js';
+	import MinusCircle from '@lucide/svelte/icons/minus-circle';
+	import Settings from '@lucide/svelte/icons/settings';
+	import { qtyGt, qtyLte } from '$lib/utils/qty';
+	import { calculateReorderLevel } from '$lib/features/supply/domain/threshold-calc';
+	import type { ItemMaster } from '$lib/features/catalog/domain/catalog';
+
+	// Icon
+	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
 	import Filter from '@lucide/svelte/icons/filter';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
@@ -16,31 +33,61 @@
 	import History from '@lucide/svelte/icons/history';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import LedgerTable from './LedgerTable.svelte';
-	import { qtyGt, qtyLte } from '$lib/utils/qty';
-	import ReceiveStockForm from './ReceiveStockForm.svelte';
-	import DistributeStockForm from './DistributeStockForm.svelte';
-	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
+	const itemMastersQuery = useItemMasters();
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
+	const overridesQuery = useThresholdOverrides();
+
+	const overrides = $derived(overridesQuery.data ?? []);
 
 	// ─── Filter state ─────────────────────────────────────────────────────────
 	let searchQuery = $state('');
-	let categoryFilter = $state<SupplyCategory | 'all'>('all');
+	let categoryFilter = $state<string>('all');
 	let locationFilter = $state<string | 'all'>('all');
 	let statusFilter = $state<'all' | 'normal' | 'low' | 'empty' | 'expiring' | 'expired'>('all');
+
+	// ─── Pagination state ─────────────────────────────────────────────────────
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+
+	$effect(() => {
+		// Reset to page 1 on filter/search change
+		void [searchQuery, categoryFilter, locationFilter, statusFilter];
+		currentPage = 1;
+	});
 
 	// ─── Modal state ──────────────────────────────────────────────────────────
 	let selectedItemId = $state<string | null>(null);
 	let isManageModalOpen = $state(false);
-	let activeModalTab = $state<'history' | 'checkin' | 'distribute'>('history');
+	let activeModalTab = $state<'history' | 'checkin' | 'distribute' | 'adjust'>('checkin');
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
-	const items = $derived(itemsQuery.data ?? []);
+	const items = $derived.by(() => {
+		const supplyItems = (itemsQuery.data ?? []).map((si) => ({
+			...si,
+			target_reserve_days: si.target_reserve_days,
+			consumption_rate: si.consumption_rate,
+			timeframe: si.timeframe
+		}));
+		const itemMasters = itemMastersQuery.data ?? [];
+
+		const mappedItemMasters = itemMasters.map((im) => ({
+			_id: im._id,
+			name: im.name,
+			category: im.category || 'other',
+			unit: im.base_unit || im.unit || 'ชิ้น',
+			reorder_level: null,
+			perishable: false,
+			target_reserve_days: im.target_reserve_days,
+			consumption_rate: im.consumption_rate,
+			timeframe: im.timeframe
+		}));
+
+		return [...supplyItems, ...mappedItemMasters];
+	});
 	const balance = $derived(balanceQuery.data ?? new Map<string, string>());
 	const ledger = $derived(ledgerQuery.data ?? []);
 
@@ -104,15 +151,13 @@
 	/** Filtered and searched items list. */
 	const displayedItems = $derived.by(() => {
 		const q = searchQuery.toLowerCase().trim();
-		return items.filter((item) => {
+		return itemsWithCalculatedStatus.filter((item) => {
 			// Search
 			if (q && !item.name.toLowerCase().includes(q) && !item._id.toLowerCase().includes(q))
 				return false;
 			// Category
 			if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
 
-			const qty = balance.get(item._id) ?? '0';
-			const status = getStatus(qty, item.reorder_level);
 			const lot = latestLotByItem[item._id];
 			const expired = isExpired(lot?.expiry);
 			const expiring = isExpiringSoon(lot?.expiry);
@@ -124,9 +169,9 @@
 
 			// Status Filter
 			if (statusFilter !== 'all') {
-				if (statusFilter === 'normal' && status !== 'normal') return false;
-				if (statusFilter === 'low' && status !== 'low') return false;
-				if (statusFilter === 'empty' && status !== 'empty') return false;
+				if (statusFilter === 'normal' && item.status !== 'normal') return false;
+				if (statusFilter === 'low' && item.status !== 'low') return false;
+				if (statusFilter === 'empty' && item.status !== 'empty') return false;
 				if (statusFilter === 'expired' && !expired) return false;
 				if (statusFilter === 'expiring' && !expiring) return false;
 			}
@@ -134,12 +179,44 @@
 		});
 	});
 
+	const paginatedItems = $derived.by(() => {
+		const start = (currentPage - 1) * PAGE_SIZE;
+		return displayedItems.slice(start, start + PAGE_SIZE);
+	});
+
+	const totalPages = $derived(Math.max(1, Math.ceil(displayedItems.length / PAGE_SIZE)));
+
 	const isLoading = $derived(
-		itemsQuery.isLoading || balanceQuery.isLoading || ledgerQuery.isLoading
+		itemsQuery.isLoading ||
+			balanceQuery.isLoading ||
+			ledgerQuery.isLoading ||
+			itemMastersQuery.isLoading ||
+			overridesQuery.isLoading
 	);
 
 	// ─── Helpers ──────────────────────────────────────────────────────────────
-	const CATEGORY_OPTIONS = Object.entries(SUPPLY_CATEGORY_LABELS) as [SupplyCategory, string][];
+	function getCategoryStyle(category: string): string {
+		return CATEGORY_STYLES[category as SupplyCategory] || CATEGORY_STYLES.other;
+	}
+
+	function getCategoryLabel(category: string): string {
+		return SUPPLY_CATEGORY_LABELS[category as SupplyCategory] || category;
+	}
+
+	const uniqueCategories = $derived.by(() => {
+		const cats = new SvelteSet<string>();
+		for (const item of items) {
+			if (item.category) {
+				cats.add(item.category);
+			}
+		}
+		return Array.from(cats)
+			.map((cat) => ({
+				value: cat,
+				label: getCategoryLabel(cat)
+			}))
+			.sort((a, b) => a.label.localeCompare(b.label, 'th'));
+	});
 
 	function formatExpiry(expiryStr: string | undefined): string {
 		if (!expiryStr) return '-';
@@ -171,6 +248,57 @@
 		other:
 			'bg-[#f8f9fa] text-[#5f6368] border-[#dadce0] dark:bg-[#f8f9fa]/10 dark:text-[#9ca3af] dark:border-[#dadce0]/20'
 	};
+
+	// ─── Props ────────────────────────────────────────────────────────────────
+	let { occupancy = 120 } = $props();
+
+	// calculate reorder level and evaluate status
+	const itemsWithCalculatedStatus = $derived(
+		items.map((item) => {
+			const qtyOnHand = balance.get(item._id) ?? '0';
+
+			// 1. Check if there is a local shelter-specific override for this item
+			const itemOverride = overrides.find((o) => o.item_id === item._id);
+
+			let reorderThreshold: string | null = null;
+
+			if (itemOverride) {
+				if (itemOverride.consumption_rate && itemOverride.target_reserve_days) {
+					reorderThreshold = calculateReorderLevel(occupancy, {
+						consumption_rate: itemOverride.consumption_rate,
+						target_reserve_days: itemOverride.target_reserve_days,
+						timeframe: item.timeframe || 'daily'
+					});
+				} else if (itemOverride.reorder_level !== null) {
+					reorderThreshold = String(itemOverride.reorder_level);
+				}
+			}
+
+			// 2. Fallback to default catalog behavior if no override applies
+			if (reorderThreshold === null) {
+				reorderThreshold = calculateReorderLevel(occupancy, item);
+			}
+
+			if (reorderThreshold === null && item.reorder_level !== null) {
+				reorderThreshold = String(item.reorder_level);
+			}
+
+			let status: 'normal' | 'low' | 'empty' = 'normal';
+
+			if (qtyLte(qtyOnHand, 0)) {
+				status = 'empty';
+			} else if (reorderThreshold !== null && qtyLte(qtyOnHand, reorderThreshold)) {
+				status = 'low';
+			}
+
+			return {
+				...item,
+				qtyOnHand,
+				reorderThreshold,
+				status
+			};
+		})
+	);
 </script>
 
 <div class="space-y-6">
@@ -191,6 +319,15 @@
 					แสดงผลรายการสินค้าและยอดคงเหลือในคลัง
 					ประเมินความเพียงพอของสต๊อกอ้างอิงตามระดับเกณฑ์เตือนภัยเพื่อป้องกันของขาดแคลน
 				</p>
+			</div>
+			<div>
+				<a
+					href="/back-office/catalog?tab=item_master&action=create"
+					class={cn(buttonVariants({ size: 'lg' }), 'flex items-center gap-2')}
+				>
+					<Plus class="h-4 w-4" />
+					เพิ่มของใหม่
+				</a>
 			</div>
 		</div>
 
@@ -220,8 +357,8 @@
 						class="w-full cursor-pointer appearance-none truncate rounded-lg border border-border/80 bg-background py-2.5 pr-8 pl-9 text-sm font-semibold text-foreground shadow-sm transition-all outline-none focus:border-primary"
 					>
 						<option value="all">ทุกหมวดหมู่ (Category)</option>
-						{#each CATEGORY_OPTIONS as [val, label] (val)}
-							<option value={val}>{label}</option>
+						{#each uniqueCategories as cat (cat.value)}
+							<option value={cat.value}>{cat.label}</option>
 						{/each}
 					</select>
 					<div
@@ -321,9 +458,9 @@
 								</Table.Cell>
 							</Table.Row>
 						{:else}
-							{#each displayedItems as item (item._id)}
-								{@const qty = balance.get(item._id) ?? '0'}
-								{@const status = getStatus(qty, item.reorder_level)}
+							{#each paginatedItems as item (item._id)}
+								{@const qty = item.qtyOnHand}
+								{@const status = item.status}
 								{@const lot = latestLotByItem[item._id]}
 								{@const expired = isExpired(lot?.expiry)}
 								{@const expiring = isExpiringSoon(lot?.expiry)}
@@ -366,11 +503,11 @@
 									<!-- Category badge -->
 									<Table.Cell class="p-4">
 										<span
-											class="rounded-md border px-2.5 py-1 text-center text-[10px] font-bold whitespace-nowrap {CATEGORY_STYLES[
+											class="rounded-md border px-2.5 py-1 text-center text-[10px] font-bold whitespace-nowrap {getCategoryStyle(
 												item.category
-											]}"
+											)}"
 										>
-											{SUPPLY_CATEGORY_LABELS[item.category] || item.category}
+											{getCategoryLabel(item.category)}
 										</span>
 									</Table.Cell>
 
@@ -420,9 +557,9 @@
 													>{item.unit}</span
 												>
 											</span>
-											{#if item.reorder_level !== null}
+											{#if item.reorderThreshold !== null}
 												<span class="text-[10px] font-normal text-muted-foreground/60">
-													เกณฑ์: {item.reorder_level}
+													เกณฑ์: {item.reorderThreshold}
 													{item.unit}
 												</span>
 											{/if}
@@ -463,7 +600,7 @@
 										<button
 											onclick={() => {
 												selectedItemId = item._id;
-												activeModalTab = 'history';
+												activeModalTab = 'checkin';
 												isManageModalOpen = true;
 											}}
 											class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background p-1.5 px-3 text-[12px] font-bold text-foreground shadow-sm transition-all duration-200 hover:scale-[1.05] hover:bg-muted active:scale-[0.95]"
@@ -478,17 +615,44 @@
 				</Table.Root>
 			</div>
 
+			<!-- Pagination -->
+			{#if totalPages > 1}
+				<div class="mt-4 flex justify-end">
+					<Pagination.Root
+						bind:page={currentPage}
+						count={displayedItems.length}
+						perPage={PAGE_SIZE}
+					>
+						{#snippet children({ pages })}
+							<Pagination.Content>
+								<Pagination.Previous />
+								{#each pages as p, i (i)}
+									<Pagination.Item>
+										{#if p.type === 'page'}
+											<Pagination.Link page={p} isActive={p.value === currentPage} />
+										{:else}
+											<Pagination.Ellipsis />
+										{/if}
+									</Pagination.Item>
+								{/each}
+								<Pagination.Next />
+							</Pagination.Content>
+						{/snippet}
+					</Pagination.Root>
+				</div>
+			{/if}
+
 			<!-- Footer summary row -->
 			{#if !isLoading && items.length > 0}
-				{@const emptyCount = items.filter((i) => qtyLte(balance.get(i._id) ?? '0', 0)).length}
-				{@const lowCount = items.filter((i) => {
-					const qty = balance.get(i._id) ?? '0';
-					return qtyGt(qty, 0) && i.reorder_level !== null && qtyLte(qty, i.reorder_level);
-				}).length}
+				{@const emptyCount = itemsWithCalculatedStatus.filter((i) => i.status === 'empty').length}
+				{@const lowCount = itemsWithCalculatedStatus.filter((i) => i.status === 'low').length}
 				<div
 					class="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground shadow-sm"
 				>
-					<span>แสดง {displayedItems.length} จาก {items.length} รายการ</span>
+					<span
+						>แสดง {paginatedItems.length} จากทั้งหมด {displayedItems.length} รายการที่ตรงเงื่อนไข (ในคลังมี
+						{items.length} รายการ)</span
+					>
 					<div class="flex gap-3">
 						{#if emptyCount > 0}
 							<span class="font-bold text-rose-600">🔴 หมดแล้ว: {emptyCount} รายการ</span>
@@ -520,7 +684,7 @@
 <!-- Manage / History Modal (Dialog) -->
 <Dialog.Root bind:open={isManageModalOpen}>
 	<Dialog.Content
-		class="max-h-[90vh] max-w-4xl overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl sm:max-w-4xl"
+		class="max-h-[92vh] w-full overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl sm:max-w-7xl"
 	>
 		<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
 			{#if selectedItemId}
@@ -535,57 +699,96 @@
 			{/if}
 		</Dialog.Header>
 
-		<!-- Tabs Inside Modal -->
-		<div class="mb-5 flex overflow-x-auto border-b border-border/60 whitespace-nowrap">
-			<button
-				onclick={() => (activeModalTab = 'history')}
-				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
-				'history'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
-				<Clock class="h-4 w-4" /> ประวัติความเคลื่อนไหว (Ledger)
-			</button>
-			<button
-				onclick={() => (activeModalTab = 'checkin')}
-				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
-				'checkin'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
-				<PlusCircle class="h-4 w-4" /> รับของเข้า (Check-in)
-			</button>
-			<button
-				onclick={() => (activeModalTab = 'distribute')}
-				class="flex cursor-pointer items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-all {activeModalTab ===
-				'distribute'
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			>
-				<MinusCircle class="h-4 w-4" /> แจกจ่ายออก (Distribute)
-			</button>
-		</div>
+		<div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
+			<!-- Left Panel: Actions (5 cols) -->
+			<div class="flex flex-col gap-6 lg:col-span-5 lg:border-r lg:border-border/60 lg:pr-6">
+				<div class="flex items-center gap-2 border-b border-border/40 pb-3">
+					<span class="text-sm font-bold text-foreground">📊 จัดการด่วน (Quick Actions)</span>
+				</div>
 
-		<div class="mt-2">
-			{#if selectedItemId}
-				{#if activeModalTab === 'history'}
-					<LedgerTable filterItemId={selectedItemId} />
-				{:else if activeModalTab === 'checkin'}
-					<ReceiveStockForm
-						preselectedItemId={selectedItemId}
-						onsuccess={() => {
-							isManageModalOpen = false;
-						}}
-					/>
-				{:else if activeModalTab === 'distribute'}
-					<DistributeStockForm
-						preselectedItemId={selectedItemId}
-						onsuccess={() => {
-							isManageModalOpen = false;
-						}}
-					/>
-				{/if}
-			{/if}
+				<!-- Action Card Tabs -->
+				<div class="grid grid-cols-3 gap-3">
+					<button
+						type="button"
+						onclick={() => (activeModalTab = 'distribute')}
+						class="flex flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
+						'distribute'
+							? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
+							: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
+					>
+						<MinusCircle
+							class="h-5 w-5 text-orange-500 {activeModalTab === 'distribute' ? 'text-white' : ''}"
+						/>
+						<span class="text-xs font-bold whitespace-nowrap">เบิกจ่ายออก (Issue)</span>
+					</button>
+					<button
+						type="button"
+						onclick={() => (activeModalTab = 'checkin')}
+						class="flex flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
+						'checkin'
+							? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
+							: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
+					>
+						<PlusCircle
+							class="h-5 w-5 text-emerald-500 {activeModalTab === 'checkin' ? 'text-white' : ''}"
+						/>
+						<span class="text-xs font-bold whitespace-nowrap">รับเข้า (Receive)</span>
+					</button>
+					<button
+						type="button"
+						onclick={() => (activeModalTab = 'adjust')}
+						class="flex flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
+						'adjust'
+							? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
+							: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
+					>
+						<Settings
+							class="h-5 w-5 text-blue-500 {activeModalTab === 'adjust' ? 'text-white' : ''}"
+						/>
+						<span class="text-xs font-bold whitespace-nowrap">ปรับปรุงสต็อก (Adjust)</span>
+					</button>
+				</div>
+
+				<div class="mt-2 flex-1">
+					{#if selectedItemId}
+						{#if activeModalTab === 'checkin'}
+							<ReceiveStockForm
+								preselectedItemId={selectedItemId}
+								onsuccess={() => {
+									// Stay open so the user can see the ledger update on the right!
+								}}
+							/>
+						{:else if activeModalTab === 'distribute'}
+							<DistributeStockForm
+								preselectedItemId={selectedItemId}
+								onsuccess={() => {
+									// Stay open so the user can see the ledger update on the right!
+								}}
+							/>
+						{:else if activeModalTab === 'adjust'}
+							<AdjustStockForm
+								preselectedItemId={selectedItemId}
+								onsuccess={() => {
+									// Stay open so the user can see the ledger update on the right!
+								}}
+							/>
+						{/if}
+					{/if}
+				</div>
+			</div>
+
+			<!-- Right Panel: Ledger (7 cols) -->
+			<div class="flex flex-col gap-4 lg:col-span-7">
+				<div class="flex items-center gap-2 border-b border-border/40 pb-3">
+					<Clock class="h-4 w-4 text-muted-foreground" />
+					<span class="text-sm font-bold text-foreground">⏳ ประวัติการเคลื่อนไหว (Ledger)</span>
+				</div>
+				<div class="max-h-[60vh] overflow-y-auto">
+					{#if selectedItemId}
+						<LedgerTable filterItemId={selectedItemId} />
+					{/if}
+				</div>
+			</div>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>

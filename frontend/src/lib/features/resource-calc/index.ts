@@ -21,6 +21,7 @@ export {
 	resourceKindSchema,
 	resourceStatusSchema,
 	dataStatusSchema,
+	ratioSourceSchema,
 	resourceInputSchema,
 	calcInputSchema,
 	resourceCalcResultSchema,
@@ -53,3 +54,6 @@ export { startDailyCalcLiveQuery } from './application/calc-sync';
 
 // T-31.7 — ui layer: minimal status badge + on-demand trigger (NOT a dashboard — see T-32).
 export { default as CalcStatusBadge } from './ui/calc-status-badge.svelte';
+
+// T-32 — ui layer: the resource-needs dashboard (a tab in the Supply page). Additive.
+export { default as ResourceNeedsDashboard } from './ui/resource-needs-dashboard.svelte';
