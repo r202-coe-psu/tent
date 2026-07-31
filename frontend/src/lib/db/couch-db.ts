@@ -314,6 +314,73 @@ export async function saveBulkAtomic<T extends { _id: string; _rev?: string }>(
 	throw new Error(`Unexpected error in saveBulkAtomic for ${label}`);
 }
 
+interface AttachmentPutResult {
+	ok: boolean;
+	id: string;
+	rev: string;
+}
+
+/**
+ * PUT a binary attachment onto an existing doc revision. Bypasses
+ * `couchDbFetchRaw` because the request body is binary, not JSON.
+ */
+export async function putAttachment(
+	dbName: string,
+	docId: string,
+	rev: string,
+	attachmentName: string,
+	blob: Blob,
+	contentType: string,
+	init?: CouchFetchInit
+): Promise<AttachmentPutResult> {
+	return withRetry(async () => {
+		const { fetch: customFetch, ...rest } = init ?? {};
+		const fetchFn = customFetch ?? fetch;
+		const url = `${COUCH_URL}/${dbName}/${encodeURIComponent(docId)}/${encodeURIComponent(attachmentName)}?rev=${encodeURIComponent(rev)}`;
+		const res = await fetchFn(url, {
+			method: 'PUT',
+			credentials: 'include',
+			body: blob,
+			...rest,
+			headers: { 'Content-Type': contentType, ...rest.headers }
+		});
+		const data = (await res.json().catch(() => null)) as
+			(AttachmentPutResult & { error?: string; reason?: string }) | null;
+		if (!res.ok) {
+			throw toHttpError(res.status, data, `CouchDB attachment PUT failed (${res.status})`);
+		}
+		return data as AttachmentPutResult;
+	});
+}
+
+/** Fetch a binary attachment. Returns `null` when the doc/attachment is absent (404). */
+export async function getAttachment(
+	dbName: string,
+	docId: string,
+	attachmentName: string,
+	init?: CouchFetchInit
+): Promise<Blob | null> {
+	try {
+		return await withRetry(async () => {
+			const { fetch: customFetch, ...rest } = init ?? {};
+			const fetchFn = customFetch ?? fetch;
+			const url = `${COUCH_URL}/${dbName}/${encodeURIComponent(docId)}/${encodeURIComponent(attachmentName)}`;
+			const res = await fetchFn(url, { credentials: 'include', ...rest });
+			if (!res.ok) {
+				const data = (await res.json().catch(() => null)) as {
+					error?: string;
+					reason?: string;
+				} | null;
+				throw toHttpError(res.status, data, `CouchDB attachment GET failed (${res.status})`);
+			}
+			return res.blob();
+		});
+	} catch (err) {
+		if (err instanceof NotFoundError) return null;
+		throw err;
+	}
+}
+
 /** Probe central CouchDB reachability. */
 export async function probeCentral(init?: CouchFetchInit): Promise<boolean> {
 	try {

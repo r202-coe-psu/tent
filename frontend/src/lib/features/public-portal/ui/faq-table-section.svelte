@@ -41,27 +41,27 @@
 			question: '',
 			answer: '',
 			is_published: true,
-			order: $formData.faqs[activeType]?.length || 0
+			order: $formData.faqs?.[activeType]?.length || 0
 		};
 		modalOpen = true;
 	}
 
 	function openEdit(index: number) {
 		editingIndex = index;
-		editingItem = { ...$formData.faqs[activeType][index] };
+		editingItem = { ...($formData.faqs?.[activeType] || [])[index] };
 		modalOpen = true;
 	}
 
 	function handleDelete(index: number) {
 		if (!confirm('ยืนยันการลบคำถามนี้?')) return;
-		$formData.faqs[activeType] = $formData.faqs[activeType].filter(
+		$formData.faqs[activeType] = ($formData.faqs?.[activeType] || []).filter(
 			(_: FaqItem, i: number) => i !== index
 		);
 		setTimeout(() => submit?.(), 0);
 	}
 
 	const filteredFaqs = $derived(
-		($formData.faqs[activeType] || [])
+		($formData.faqs?.[activeType] || [])
 			.map((item: FaqItem, index: number) => ({ item, index }))
 			.filter((x: { item: FaqItem; index: number }) =>
 				search.trim() ? x.item.question.toLowerCase().includes(search.trim().toLowerCase()) : true
@@ -100,7 +100,7 @@
 			return;
 		}
 
-		const newArray = [...$formData.faqs[activeType]];
+		const newArray = [...($formData.faqs?.[activeType] || [])];
 		const itemToMove = newArray[draggedIndex];
 		newArray.splice(draggedIndex, 1);
 		newArray.splice(dropRealIndex, 0, itemToMove);
@@ -118,7 +118,9 @@
 
 <section class="rounded-xl p-4 text-card-foreground shadow-sm sm:p-6" aria-label="รายการข้อมูล FAQ">
 	<header class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-		<h1 class="text-xl font-semibold">รายการข้อมูล ({$formData.faqs[activeType]?.length || 0})</h1>
+		<h1 class="text-xl font-semibold">
+			รายการข้อมูล ({$formData.faqs?.[activeType]?.length || 0})
+		</h1>
 		<div class="flex items-center gap-2">
 			<div class="relative w-full sm:w-64">
 				<Input
