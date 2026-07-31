@@ -29,6 +29,13 @@ from .schemas import (
 
 _MAX_BOOKING_REF_ATTEMPTS = 8
 
+#: Statuses in which a donor may still change their own booking through the public token
+#: routes. Only a reservation awaiting drop-off qualifies: once goods arrive the count
+#: belongs to staff, and cancelled/expired have already released their quota. Mirrors
+#: ``isDonorEditable`` on the BFF — CR-052's pending_review/verifying belong here too
+#: once those statuses land.
+DONOR_EDITABLE_STATUSES = frozenset({"declared"})
+
 
 def _new_booking_ref() -> str:
     """Human-readable ``DN-######`` — uniqueness enforced by Mongo unique index."""
@@ -262,6 +269,15 @@ class DonationsUseCase:
                 },
             )
 
+        if buffer.status not in DONOR_EDITABLE_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "success": False,
+                    "error": f'Cannot update a donation in status "{buffer.status}"',
+                },
+            )
+
         logistics = dict(buffer.logistics or {})
         if logistics.get("delivery_method") != "parcel":
             raise HTTPException(
@@ -301,7 +317,7 @@ class DonationsUseCase:
                 },
             )
 
-        if buffer.status != "declared":
+        if buffer.status not in DONOR_EDITABLE_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={

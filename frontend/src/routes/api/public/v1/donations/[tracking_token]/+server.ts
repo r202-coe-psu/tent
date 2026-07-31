@@ -4,6 +4,7 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
+import { isDonorEditable } from '$lib/features/donations';
 import type { PublicDonationDoc } from '$lib/features/donations';
 
 function shelterDbFromToken(token: string): string | null {
@@ -141,6 +142,16 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 			return json({ success: true, message: 'Courier tracking number updated' });
 		}
 
+		if (!isDonorEditable(latestDoc.status)) {
+			return json(
+				{
+					success: false,
+					error: `Cannot update a donation in status "${latestDoc.status}"`
+				},
+				{ status: 400 }
+			);
+		}
+
 		if (!latestDoc.logistics || latestDoc.logistics.delivery_method !== 'parcel') {
 			return json(
 				{
@@ -222,7 +233,7 @@ export const DELETE = async ({ params, getClientAddress }) => {
 			return json({ success: true, message: 'Donation cancelled successfully' });
 		}
 
-		if (latestDoc.status !== 'declared') {
+		if (!isDonorEditable(latestDoc.status)) {
 			return json(
 				{
 					success: false,

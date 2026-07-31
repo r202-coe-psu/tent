@@ -610,3 +610,38 @@ async def test_concurrent_bookings_never_exceed_the_target(
         DonationBuffer.campaign_id == "donation_campaign:race"
     ).to_list()
     assert len(buffers) == 5
+
+
+async def test_patch_courier_rejects_cancelled_buffer(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """A donor must not keep editing a booking they already cancelled."""
+    token = "TX-SH001-CANCELLED"
+    now = datetime.now(UTC)
+    await DonationBuffer(
+        id="donation:cancelled-courier",
+        shelter_code="SH001",
+        donor=DonorBuffer(name="Donor", phone="0812345678"),
+        items_declared=[{"item_id": "item:rice", "qty": "1", "unit": "kg"}],
+        logistics={"delivery_method": "parcel"},
+        booking_ref="DN-900001",
+        tracking_token=token,
+        tracking_token_hash=sha256_hex(token),
+        status="cancelled",
+        synced_to_couch=False,
+        created_at=now,
+        expires_at=now + timedelta(hours=72),
+    ).insert()
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}",
+        headers=auth_headers,
+        json={"courier_tracking_no": "TH123456789"},
+    )
+
+    assert response.status_code == 400
+    assert "cancelled" in response.json()["errors"][0]["error"]
+
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    assert "courier_tracking_no" not in (buffer.logistics or {})

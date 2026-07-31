@@ -125,6 +125,32 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect((savedDoc as PublicDonationDoc).logistics?.courier_tracking_no).toBe('TH999888');
 	});
 
+	it.each(['received', 'cancelled', 'expired'] as const)(
+		'PATCH refuses to edit a donation already in status %s',
+		async (status) => {
+			// Goods already counted, or the quota already released — letting a donor keep
+			// editing here would desync the record from the ledger and the counter.
+			mockDonation.status = status;
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+					return Promise.resolve({ status: 200, data: { rows: [{ doc: mockDonation }] } });
+				}
+				return Promise.resolve({ status: 404, data: {} });
+			});
+
+			const response = await PATCH({
+				params: { tracking_token: TOKEN },
+				request: { json: () => Promise.resolve({ courier_tracking_no: 'TH999888' }) },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PatchEvent);
+
+			const data = await response.json();
+			expect(response.status).toBe(400);
+			expect(data.error).toContain(status);
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		}
+	);
+
 	it('PATCH falls back to FastAPI when donation is not yet in CouchDB', async () => {
 		vi.mocked(adminRaw).mockResolvedValue({
 			status: 200,

@@ -1,7 +1,11 @@
 // Domain — documents
 export type { DonationPreDeclaration } from './domain/donation';
 export type { PublicDonationDoc, PublicDonor, ScanDonationView } from './domain/public-donation';
-export { receiveDonationInputSchema, publicDonationErrorMessage } from './domain/public-donation';
+export {
+	receiveDonationInputSchema,
+	publicDonationErrorMessage,
+	isDonorEditable
+} from './domain/public-donation';
 export type { ReceiveDonationInput } from './domain/public-donation';
 
 // Domain — shared PURE computation (needs board + POST donations). Server-side
