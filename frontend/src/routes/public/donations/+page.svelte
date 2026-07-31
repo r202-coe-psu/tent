@@ -29,7 +29,8 @@
 	} as const;
 
 	const activeIndex = $derived(stepIndexMap[donationStore.activeTab] ?? 0);
-	const progressWidth = $derived(`${activeIndex * 33.33}%`);
+	
+	const progressWidth = $derived(`${(activeIndex / (steps.length - 1)) * 100}%`);
 </script>
 
 <svelte:head>
@@ -68,17 +69,23 @@
 	{/if}
 
 	<!-- Full-width Step Navigation / Flow Progress -->
-	<div class="w-full rounded-2xl border border-black/[0.04] bg-white p-4 shadow-sm sm:px-8">
+	<div
+		class="w-full overflow-hidden rounded-2xl border border-black/[0.04] bg-white p-4 shadow-sm sm:px-8"
+	>
 		<div class="relative mx-auto flex w-full items-center justify-between">
-			<!-- Progress Bar Background -->
+			<!-- Progress Bar Line Container — the track both bars are measured against, so
+			     the active bar can never run past the last step or out of the card. -->
 			<div
-				class="absolute top-5 right-[10%] left-[10%] h-1 rounded-full bg-slate-100 sm:top-1/2 sm:-translate-y-1/2"
-			></div>
-			<!-- Active Progress Bar -->
-			<div
-				class="absolute top-5 left-[10%] h-1 rounded-full bg-[#013365] transition-all duration-500 sm:top-1/2 sm:-translate-y-1/2"
-				style:width={progressWidth}
-			></div>
+				class="absolute top-5 right-6 left-6 h-1 -translate-y-1/2 sm:top-1/2 sm:right-10 sm:left-10"
+			>
+				<!-- Progress Bar Background -->
+				<div class="absolute inset-0 rounded-full bg-slate-100"></div>
+				<!-- Active Progress Bar -->
+				<div
+					class="absolute top-0 bottom-0 left-0 rounded-full bg-[#013365] transition-all duration-500"
+					style:width={progressWidth}
+				></div>
+			</div>
 
 			{#each steps as step, idx (step.id)}
 				{@const isActive = donationStore.activeTab === step.id}
