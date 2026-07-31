@@ -42,7 +42,7 @@
 <div class="flex items-center gap-2">
 	{#if record.data}
 		<Badge variant="secondary">
-			อัปเดตล่าสุด {updatedAtLabel} · โดย {record.data.created_by}
+			คำนวณล่าสุด {updatedAtLabel}
 		</Badge>
 	{:else}
 		<Badge variant="outline">ยังไม่เคยคำนวณ</Badge>

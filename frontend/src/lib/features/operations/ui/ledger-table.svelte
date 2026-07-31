@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { useLedger, useLedgerByItem } from '../application/queries';
 	import { useSupplyItems } from '$lib/features/supply';
+	import { useItemMasters } from '$lib/features/catalog';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import Clock from '@lucide/svelte/icons/clock';
 	import ArrowDownLeft from '@lucide/svelte/icons/arrow-down-left';
@@ -11,6 +12,7 @@
 
 	// Fetch stock movements ledger
 	const itemsQuery = useSupplyItems();
+	const itemMastersQuery = useItemMasters();
 	const allLedgerQuery = useLedger(() => !filterItemId);
 	const filteredLedgerQuery = useLedgerByItem(() => filterItemId);
 	const ledgerQuery = $derived(filterItemId ? filteredLedgerQuery : allLedgerQuery);
@@ -25,6 +27,9 @@
 	const itemMap = $derived.by(() => {
 		const map: Record<string, string> = {};
 		for (const item of itemsQuery.data ?? []) {
+			map[item._id] = item.name;
+		}
+		for (const item of itemMastersQuery.data ?? []) {
 			map[item._id] = item.name;
 		}
 		return map;
@@ -59,12 +64,7 @@
 </script>
 
 <div class="space-y-4">
-	<div class="flex items-center gap-2 border-b border-border/60 pb-3">
-		<Clock class="h-4.5 w-4.5 text-primary" />
-		<h3 class="text-sm font-bold text-foreground">ประวัติความเคลื่อนไหวคลังสินค้า</h3>
-	</div>
-
-	{#if ledgerQuery.isLoading || itemsQuery.isLoading}
+	{#if ledgerQuery.isLoading || itemsQuery.isLoading || itemMastersQuery.isLoading}
 		<div class="space-y-2">
 			{#each [0, 1, 2] as i (i)}
 				<div class="h-12 animate-pulse rounded-xl border border-border bg-muted/20"></div>
@@ -94,9 +94,11 @@
 								class="w-[120px] text-[11px] font-bold tracking-wider text-foreground uppercase"
 								>วัน-เวลา</Table.Head
 							>
-							<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase"
-								>รายการสิ่งของ</Table.Head
-							>
+							{#if !filterItemId}
+								<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase"
+									>รายการสิ่งของ</Table.Head
+								>
+							{/if}
 							<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase"
 								>จำนวน</Table.Head
 							>
@@ -121,10 +123,12 @@
 									{formatDateTime(entry.occurred_at)}
 								</Table.Cell>
 
-								<!-- Item Name -->
-								<Table.Cell class="text-[13px] font-semibold text-foreground">
-									{itemName}
-								</Table.Cell>
+								{#if !filterItemId}
+									<!-- Item Name -->
+									<Table.Cell class="text-[13px] font-semibold text-foreground">
+										{itemName}
+									</Table.Cell>
+								{/if}
 
 								<!-- Quantity & Signed Color -->
 								<Table.Cell class="whitespace-nowrap">

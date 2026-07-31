@@ -41,6 +41,7 @@ export const dataStatusSchema = z.enum([
 	'stock_unsynced',
 	'invalid_input'
 ]);
+export const ratioSourceSchema = z.enum(['master', 'override']);
 
 /**
  * Mirror of `ResourceInput` (calc.formula.ts). `.finite()` states the formula's
@@ -117,8 +118,9 @@ export type CalcOutput = z.infer<typeof calcOutputSchema>;
 
 /**
  * DailyCalcDoc — the snapshot-locked record. Every field freezes an input used at calc time so
- * the stored result is reproducible. All six snapshot fields are required.
- * - `formula_v` / `sop_profile_version` = the two version-lock axes (algorithm + ratio source).
+ * the stored result is reproducible. All snapshot and provenance fields are required.
+ * - `formula_v` / `sop_profile_version` = the two version-lock axes (algorithm + profile version).
+ * - `ratio_source` / `sop_override_*` = the resolved profile identity at calculation time.
  * - `ratio_snapshot` / `stock_snapshot` keyed by generic `string` (see the DECISION in the file
  *   header — deliberately NOT constrained to `SOP_RATIO_KEYS`). An EMPTY `{}` is intentionally
  *   accepted — a calc with no resources still records occupancy/version. Values are `.finite()`
@@ -126,13 +128,37 @@ export type CalcOutput = z.infer<typeof calcOutputSchema>;
  * - immutability (re-calc = new doc, never mutate) is a data-layer rule, not enforced here.
  */
 export const DAILY_CALC_SCHEMA_VERSION = 2;
-export const dailyCalcDocSchema = z.object({
-	formula_v: z.string().min(1),
-	sop_profile_version: z.number().int().positive(),
-	ratio_snapshot: z.record(z.string(), qtyStrPositiveSchema),
-	occupancy_snapshot: z.number().finite().nonnegative(),
-	as_of: z.string().datetime(),
-	stock_snapshot: z.record(z.string(), qtyStrNonNegativeSchema.nullable()),
-	results: z.array(resourceCalcResultSchema)
-});
+export const dailyCalcDocSchema = z
+	.object({
+		formula_v: z.string().min(1),
+		sop_profile_version: z.number().int().positive(),
+		ratio_source: ratioSourceSchema,
+		sop_override_id: z.string().min(1).nullable(),
+		sop_override_version: z.number().int().positive().nullable(),
+		ratio_snapshot: z.record(z.string(), qtyStrPositiveSchema),
+		occupancy_snapshot: z.number().finite().nonnegative(),
+		as_of: z.string().datetime(),
+		stock_snapshot: z.record(z.string(), qtyStrNonNegativeSchema.nullable()),
+		results: z.array(resourceCalcResultSchema)
+	})
+	.superRefine((doc, ctx) => {
+		const overrideFieldsPresent = doc.sop_override_id !== null || doc.sop_override_version !== null;
+		if (doc.ratio_source === 'master' && overrideFieldsPresent) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ['sop_override_id'],
+				message: 'Master ratio snapshots must not include override provenance'
+			});
+		}
+		if (
+			doc.ratio_source === 'override' &&
+			(doc.sop_override_id === null || doc.sop_override_version === null)
+		) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ['sop_override_id'],
+				message: 'Override ratio snapshots require override id and version'
+			});
+		}
+	});
 export type DailyCalcDoc = z.infer<typeof dailyCalcDocSchema>;

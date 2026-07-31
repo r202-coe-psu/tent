@@ -19,6 +19,7 @@ import {
 	assertHouseholdStatusTransition,
 	assertCheckoutDestination,
 	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
+	evacueeInputSchema,
 	householdPreRegisterEvacueeSchema,
 	householdPreRegisterAddressFormSchema,
 	householdPostArrivalAddressFormSchema
@@ -57,6 +58,20 @@ describe('createEvacuee', () => {
 		expect(() =>
 			createEvacuee({ first_name: '  ', last_name: 'ข', gender: 'male', phone: null }, ctx)
 		).toThrow();
+	});
+
+	it('defaults photo to absent, and carries it through when set (CR-054)', () => {
+		const withoutPhoto = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'other', phone: null },
+			ctx
+		);
+		expect(withoutPhoto.photo).toBeUndefined();
+
+		const withPhoto = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'other', phone: null, photo: 'image:01H...' },
+			ctx
+		);
+		expect(withPhoto.photo).toBe('image:01H...');
 	});
 });
 
@@ -116,6 +131,55 @@ describe('household wizard schemas', () => {
 
 		expect(result.success).toBe(true);
 		if (result.success) expect(result.data.notes).toBe('');
+	});
+});
+
+describe('evacueeInputSchema birth_year', () => {
+	const base = { first_name: 'ก', last_name: 'ข', gender: 'male' as const, phone: null };
+
+	it('accepts a plausible birth_year (พ.ศ.)', () => {
+		const result = evacueeInputSchema.safeParse({ ...base, birth_year: 2530 });
+		expect(result.success).toBe(true);
+	});
+
+	it('leaves birth_year optional', () => {
+		const result = evacueeInputSchema.safeParse(base);
+		expect(result.success).toBe(true);
+	});
+
+	it('rejects a birth_year implying an age over 150 years', () => {
+		const currentBEYear = new Date().getFullYear() + 543;
+		const minBirthYearBE = currentBEYear - 150;
+		const result = evacueeInputSchema.safeParse({ ...base, birth_year: minBirthYearBE });
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues.map((i) => i.message)).toContain(
+				`ปีเกิด (พ.ศ.) ต้องมากกว่า ${minBirthYearBE}`
+			);
+		}
+	});
+
+	it('accepts a birth_year implying an age of exactly 150 years', () => {
+		const currentBEYear = new Date().getFullYear() + 543;
+		const result = evacueeInputSchema.safeParse({ ...base, birth_year: currentBEYear - 150 + 1 });
+		expect(result.success).toBe(true);
+	});
+
+	it('accepts a newborn — birth_year equal to the current year (age 0)', () => {
+		const currentBEYear = new Date().getFullYear() + 543;
+		const result = evacueeInputSchema.safeParse({ ...base, birth_year: currentBEYear });
+		expect(result.success).toBe(true);
+	});
+
+	it('rejects a birth_year in the future', () => {
+		const currentBEYear = new Date().getFullYear() + 543;
+		const result = evacueeInputSchema.safeParse({ ...base, birth_year: currentBEYear + 1 });
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues.map((i) => i.message)).toContain(
+				'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต'
+			);
+		}
 	});
 });
 

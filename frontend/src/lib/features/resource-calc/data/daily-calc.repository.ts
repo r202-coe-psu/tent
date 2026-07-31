@@ -2,8 +2,9 @@
  * T-31.4 — persistence contract for the daily resource-calc engine.
  *
  * The application/UI layers depend on THIS interface, never on CouchDB or on the
- * peer feature internals. The concrete implementation reads all three calc inputs
- * (occupancy, effective SOP ratios, stock balance) through peer BARRELS only.
+ * peer feature internals. The concrete implementation reads all four calc inputs
+ * (occupancy, effective SOP ratios, stock balance, shelter facilities/area) through peer
+ * BARRELS only.
  */
 import type { AuthorContext, BaseDoc } from '$lib/db/model';
 import type { DailyCalcDoc } from '../domain/calc.schema';
@@ -49,7 +50,8 @@ export interface DailyCalcRepository {
 	 * Compute + persist the snapshot for `date`, idempotent on `daily_calc:{date}`.
 	 *
 	 * Inputs are read through peer barrels (occupancy via `people`, effective ratios
-	 * via `sop-ratios`, stock via `operations`) and fed to the pure engine. When a
+	 * via `sop-ratios`, stock via `operations`, facilities/area via `shelters`) and fed to the
+	 * pure engine. When a
 	 * snapshot already exists it is OVERWRITTEN, but the losing revision is first
 	 * preserved into an `audit:{action:retro_edit}` entry — persisted BEFORE the
 	 * overwrite lands, so a retroactive recalculation is never silently lossy.

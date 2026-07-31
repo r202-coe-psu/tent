@@ -6,6 +6,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { useItemCategories, useItemMasters, useRecipes } from '$lib/features/catalog';
+	import { page } from '$app/state';
 
 	const itemCategoriesQuery = useItemCategories();
 	const itemMastersQuery = useItemMasters();
@@ -16,6 +17,13 @@
 	const totalRecipes = $derived(recipesQuery.data?.length ?? 0);
 
 	let activeTab = $state<'item_category' | 'item_master' | 'recipe'>('item_category');
+
+	$effect(() => {
+		const tabParam = page.url.searchParams.get('tab');
+		if (tabParam === 'item_category' || tabParam === 'item_master' || tabParam === 'recipe') {
+			activeTab = tabParam;
+		}
+	});
 </script>
 
 <main class="container mx-auto px-4">

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -10,7 +11,16 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { householdPreRegisterEvacueeSchema, type EvacueeInput } from '../domain/people';
+	import {
+		householdPreRegisterEvacueeSchema,
+		currentBEYear,
+		minBirthYearBE,
+		MAX_AGE_YEARS,
+		type EvacueeInput
+	} from '../domain/people';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { useSaveImage } from '$lib/features/images';
 	import { z } from 'zod';
 
 	const specialNeedSchema = z.enum([
@@ -33,6 +43,7 @@
 	import { COUNTRIES } from '$lib/utils/country';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Camera from '@lucide/svelte/icons/camera';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 
 	const cardTypeOptions = [
 		{ value: 'national_id', label: 'เลขประจำตัวประชาชน (Thai National ID)' },
@@ -64,7 +75,13 @@
 	} = $props();
 
 	let facePhotoUrl = $state<string | null>(null);
+	let uploadingPhoto = $state(false);
+	const saveImage = useSaveImage();
 	let noPhone = $state(false);
+
+	onDestroy(() => {
+		if (facePhotoUrl) URL.revokeObjectURL(facePhotoUrl);
+	});
 	let birthYearBE = $state('');
 	let age = $state('');
 	let medicalConditionsStr = $state('');
@@ -77,6 +94,13 @@
 		validators: zod4(householdPreRegisterEvacueeSchema),
 		resetForm: false,
 		onSubmit: ({ cancel }) => {
+			if (birthYearError || ageError) {
+				const message = birthYearError || ageError || '';
+				toast.error(message);
+				cancel();
+				return;
+			}
+
 			if (
 				$formData.person_id?.cardType === 'national_id' &&
 				($formData.person_id?.number ?? '').replace(/\D/g, '').length !== 13
@@ -148,11 +172,28 @@
 	function updateAge(value: string) {
 		age = value;
 		if (value && !isNaN(Number(value))) {
-			$formData.birth_year = new Date().getFullYear() + 543 - Number(value);
+			$formData.birth_year = currentBEYear() - Number(value);
 		} else if (!birthYearBE) {
 			$formData.birth_year = undefined;
 		}
 	}
+
+	const birthYearError = $derived.by(() => {
+		if (!birthYearBE) return undefined;
+		const y = Number(birthYearBE);
+		if (isNaN(y)) return 'กรุณากรอกปีเกิดเป็นตัวเลข';
+		if (y > currentBEYear()) return 'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต';
+		if (y <= minBirthYearBE()) return `ปีเกิด (พ.ศ.) ต้องมากกว่า ${minBirthYearBE()}`;
+		return undefined;
+	});
+
+	const ageError = $derived.by(() => {
+		if (!age) return undefined;
+		const a = Number(age);
+		if (isNaN(a)) return 'กรุณากรอกอายุเป็นตัวเลข';
+		if (a > MAX_AGE_YEARS) return `อายุต้องไม่เกิน ${MAX_AGE_YEARS} ปี`;
+		return undefined;
+	});
 
 	function updateMedicalField(
 		field: 'medical_conditions' | 'medical_medications' | 'medical_allergies',
@@ -189,10 +230,26 @@
 						accept="image/*"
 						class="hidden"
 						id="face-photo-input"
-						onchange={(e) => {
+						disabled={uploadingPhoto}
+						onchange={async (e) => {
 							const file = e.currentTarget.files?.[0];
-							if (file) {
-								facePhotoUrl = URL.createObjectURL(file);
+							if (!file) return;
+
+							if (facePhotoUrl) URL.revokeObjectURL(facePhotoUrl);
+							facePhotoUrl = URL.createObjectURL(file);
+							uploadingPhoto = true;
+							try {
+								const ctx = {
+									shelterCode: getShelterCode(),
+									createdBy: authStore.user?.name ?? 'unknown'
+								};
+								const image = await saveImage.mutateAsync({ file, ctx });
+								$formData.photo = image._id;
+							} catch {
+								$formData.photo = null;
+								toast.error('อัปโหลดรูปภาพล้มเหลว สามารถลงทะเบียนต่อได้โดยไม่มีรูป');
+							} finally {
+								uploadingPhoto = false;
 							}
 						}}
 					/>
@@ -201,7 +258,18 @@
 						class="block cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
 					>
 						{#if facePhotoUrl}
-							<img src={facePhotoUrl} alt="Face" class="h-40 w-full rounded-lg object-cover" />
+							<div class="relative h-40 w-full">
+								<img
+									src={facePhotoUrl}
+									alt="Face"
+									class="h-40 w-full rounded-lg object-cover {uploadingPhoto ? 'opacity-50' : ''}"
+								/>
+								{#if uploadingPhoto}
+									<div class="absolute inset-0 flex items-center justify-center">
+										<Loader2 class="h-8 w-8 animate-spin text-primary" />
+									</div>
+								{/if}
+							</div>
 						{:else}
 							<div class="flex h-40 flex-col items-center justify-center">
 								<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
@@ -307,9 +375,19 @@
 							<Label>ปีเกิด (พ.ศ.)</Label>
 							<Input
 								placeholder="เช่น 2530"
+								inputmode="numeric"
+								maxlength={4}
 								value={birthYearBE}
-								oninput={(event) => updateBirthYear(event.currentTarget.value)}
+								aria-invalid={birthYearError ? 'true' : undefined}
+								oninput={(event) => {
+									const val = event.currentTarget.value.replace(/\D/g, '').slice(0, 4);
+									event.currentTarget.value = val;
+									updateBirthYear(val);
+								}}
 							/>
+							{#if birthYearError}
+								<p class="text-sm font-medium text-destructive">{birthYearError}</p>
+							{/if}
 						</div>
 						<div class="space-y-2">
 							<Label>อายุ (ปี)</Label>
@@ -318,12 +396,16 @@
 								value={age}
 								inputmode="numeric"
 								maxlength={3}
+								aria-invalid={ageError ? 'true' : undefined}
 								oninput={(e) => {
 									const val = e.currentTarget.value.replace(/\D/g, '');
 									e.currentTarget.value = val;
 									updateAge(val);
 								}}
 							/>
+							{#if ageError}
+								<p class="text-sm font-medium text-destructive">{ageError}</p>
+							{/if}
 						</div>
 						<Form.Field {form} name="gender">
 							<Form.Control>

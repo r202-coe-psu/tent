@@ -1,11 +1,11 @@
-
 ---
 id: CR-060
 title: "CR-060 scope amendment — worker projector seeds donation_need_counter.qty_target"
-status: proposed
+status: approved
 date: 2026-07-28
+updated: 2026-07-29
 requested_by: ทีมพัฒนา (Team A — ชิโน, นัท, กาน)
-decided_by: <เจ้าของโครงการ>
+decided_by: เจ้าของโครงการ (PR review #130, 2026-07-29)
 layer: volatile
 affects:
   - docs/changes/CR-045-donation-quota-atomic-reservation.md (affects list — เพิ่ม worker/src/worker/projectors/)
@@ -115,3 +115,11 @@ campaign เพื่อเติม `qty_target` ให้)
 - 2026-07-28 — proposed โดยทีมพัฒนา ระหว่าง implement CR-045 (T-21) — พบ gap สถาปัตยกรรมว่า FastAPI
   ไม่มีทางอ่าน `qty_target` จาก CouchDB ได้เอง ต้องขยาย scope ของ CR-045 ให้ worker เป็นคน seed ค่านี้
   — รอเจ้าของโครงการเคาะ `approved` + ยืนยันวิธี track (เอกสารนี้ = ไฟล์ CR ตามที่ตกลง)
+- 2026-07-29 — **approved** โดยเจ้าของโครงการ ผ่าน PR review #130 ("Verdict: Approve / Merge
+  readiness: ✅ พร้อม merge") — ยืนยันวิธี track = ไฟล์ CR นี้ + แถวใน `docs/changes/_index.md`
+  (แถว CR-060 หายไปตอน resolve conflict ของ #130 — เติมกลับแล้วใน CR-061)
+- **Known consequence ของ FR-2 (ยกมาให้เห็นชัด ไม่ใช่ข้อเปลี่ยนแปลง):** เพราะ `qty_target` เขียนด้วย
+  `$setOnInsert` เท่านั้น การที่เจ้าหน้าที่แก้ `qty_target` ของแคมเปญทีหลัง (เช่น 50 → 100) จะไม่มีผลกับ
+  counter — ขณะที่ `public_needs` recompute เต็มรอบทุกครั้งจึงขึ้นเป้าใหม่ ผลคือหน้ากระดานสาธารณะบอก
+  "ยังขาด" แต่ผู้บริจาคกดจองแล้วเด้ง `NEED_FULL` ที่เพดานเดิม จนกว่าจะรัน Recalculation CLI
+  (`donation-quota recalculate` ตาม CR-061) ปิด gap ให้
