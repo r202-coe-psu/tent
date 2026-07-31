@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-07-29 # Add CR-060, CR-061; restore the row PR #130 dropped
+updated: 2026-07-30 # CR-061 approved
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -78,4 +78,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-058](CR-058-food-warehouse-nutrition-kitchen-overhaul.md) | CR-058 Food Warehouse, Nutrition Standards & Kitchen Operations Overhaul | proposed | volatile | 2026-07-28 | docs/data/schema.md, features/kitchen/ |
 | [CR-059](CR-059-inventory-requisition-inter-shelter-transfer.md) | CR-059 Requisitions, Inter-Shelter Transfers & NFI Distribution Control Form UIv8 | proposed | volatile | 2026-07-28 | docs/data/schema.md, features/supply/ |
 | [CR-060](CR-060-donation-need-counter-worker-seed.md) | Scope amendment ของ CR-047 — worker projector seed `donation_need_counter.qty_target` ตอนรับ CDC event ของ `donation_campaign` (`$setOnInsert`, ห้ามแตะ `reserved_qty`) เพราะ FastAPI ไม่มี CouchDB client อ่าน `qty_target` เองไม่ได้ | approved | volatile | 2026-07-28 (approved 07-29) | worker/src/worker/projectors/donation_need_counter.py, worker/src/worker/couch/processor.py, packages/tent-model/src/tent_model/donation_need_counter_ops.py, CR-047 |
-| [CR-061](CR-061-donation-quota-reconcile-source-and-cli.md) | Scope correction ของ CR-047 §Migration — `reserved_qty` recalculation ต้องคิดจาก CouchDB `donation` docs + buffer ที่ยังไม่ sync (สูตรเดิม "จาก `DonationBuffer`" นับต่ำกว่าจริงเพราะ retention job ลบ row ที่ `received` ทิ้ง) + Backfill/Recalculation tool อยู่ที่ worker CLI `donation-quota` | proposed | volatile | 2026-07-29 | CR-047 §Migration & Maintenance, worker/src/worker/quota/, worker/src/worker/cli/, packages/tent-model/src/tent_model/donation_need_counter_ops.py |
+| [CR-061](CR-061-donation-quota-reconcile-source-and-cli.md) | Scope correction ของ CR-047 §Migration — `reserved_qty` recalculation ต้องคิดจาก CouchDB `donation` docs + buffer ที่ยังไม่ sync (สูตรเดิม "จาก `DonationBuffer`" นับต่ำกว่าจริงเพราะ retention job ลบ row ที่ `received` ทิ้ง) + Backfill/Recalculation tool อยู่ที่ worker CLI `donation-quota` | approved | volatile | 2026-07-29 (approved 07-30) | CR-047 §Migration & Maintenance, worker/src/worker/quota/, worker/src/worker/cli/, packages/tent-model/src/tent_model/donation_need_counter_ops.py |
