@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { useSupplyItems, useThresholdOverrides, useSaveThresholdOverride } from '$lib/features/supply';
+	import { SvelteSet } from 'svelte/reactivity';
+	import {
+		useSupplyItems,
+		useThresholdOverrides,
+		useSaveThresholdOverride
+	} from '$lib/features/supply';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -8,11 +13,9 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Filter from '@lucide/svelte/icons/filter';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Save from '@lucide/svelte/icons/save';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
-	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import { toast } from 'svelte-sonner';
 
 	// Queries
@@ -42,7 +45,7 @@
 	});
 
 	const uniqueCategories = $derived.by(() => {
-		const cats = new Set<string>();
+		const cats = new SvelteSet<string>();
 		for (const item of items) {
 			if (item.category) cats.add(item.category);
 		}
@@ -93,8 +96,9 @@
 				onSuccess: () => {
 					toast.success('บันทึกเกณฑ์เตือนภัยเฉพาะศูนย์เรียบร้อยแล้ว');
 				},
-				onError: (err: any) => {
-					toast.error(`บันทึกไม่สำเร็จ: ${err.message}`);
+				onError: (err: unknown) => {
+					const msg = err instanceof Error ? err.message : String(err);
+					toast.error(`บันทึกไม่สำเร็จ: ${msg}`);
 				}
 			}
 		);
@@ -122,8 +126,9 @@
 				onSuccess: () => {
 					toast.success('คืนค่าเกณฑ์เตือนภัยเป็นค่าเริ่มต้นของระบบแล้ว');
 				},
-				onError: (err: any) => {
-					toast.error(`คืนค่าไม่สำเร็จ: ${err.message}`);
+				onError: (err: unknown) => {
+					const msg = err instanceof Error ? err.message : String(err);
+					toast.error(`คืนค่าไม่สำเร็จ: ${msg}`);
 				}
 			}
 		);
@@ -134,9 +139,13 @@
 	class="rounded-[24px] border border-border bg-card p-6 text-card-foreground shadow-md"
 	aria-label="ตั้งค่าเกณฑ์เตือนภัยเฉพาะศูนย์"
 >
-	<header class="mb-6 flex flex-col gap-4 border-b border-border/60 pb-6 lg:flex-row lg:items-center lg:justify-between">
+	<header
+		class="mb-6 flex flex-col gap-4 border-b border-border/60 pb-6 lg:flex-row lg:items-center lg:justify-between"
+	>
 		<div>
-			<h2 class="text-xl font-bold">กำหนดเกณฑ์เตือนภัยคลังสินค้าเฉพาะศูนย์ ({filteredItems.length})</h2>
+			<h2 class="text-xl font-bold">
+				กำหนดเกณฑ์เตือนภัยคลังสินค้าเฉพาะศูนย์ ({filteredItems.length})
+			</h2>
 			<p class="mt-1.5 text-xs text-muted-foreground">
 				ตั้งระดับจำนวนสินค้าคงเหลือขั้นต่ำเพื่อส่งสัญญาณเตือนภัยเมื่อของเหลือน้อย
 				(ค่าที่ตั้งในหน้านี้จะเขียนทับค่ากลางของระบบสำหรับศูนย์อพยพนี้)
@@ -150,13 +159,15 @@
 					bind:value={search}
 					type="search"
 					placeholder="ค้นหาชื่อสินค้า..."
-					class="h-10 pl-9 rounded-xl border border-border"
+					class="h-10 rounded-xl border border-border pl-9"
 					aria-label="ค้นหาสินค้า"
 				/>
 			</div>
 			<!-- Category filter -->
 			<div class="relative w-full sm:w-48">
-				<Filter class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+				<Filter
+					class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+				/>
 				<select
 					bind:value={categoryFilter}
 					class="h-10 w-full cursor-pointer appearance-none truncate rounded-xl border border-border bg-background pr-8 pl-9 text-sm font-semibold outline-none focus:border-primary"
@@ -166,7 +177,9 @@
 						<option value={cat.value}>{cat.label}</option>
 					{/each}
 				</select>
-				<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground">
+				<div
+					class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground"
+				>
 					<ChevronDown class="h-4 w-4" />
 				</div>
 			</div>
@@ -175,16 +188,20 @@
 
 	{#if itemsQuery.isLoading || overridesQuery.isLoading}
 		<div class="flex h-64 items-center justify-center">
-			<div class="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary"></div>
+			<div
+				class="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary"
+			></div>
 		</div>
 	{:else if filteredItems.length === 0}
-		<div class="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-border p-12 text-center">
+		<div
+			class="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-border p-12 text-center"
+		>
 			<AlertTriangle class="mb-3 h-10 w-10 text-muted-foreground/50" />
 			<p class="text-sm text-muted-foreground">ไม่พบรายการพัสดุในระบบที่ตรงตามเงื่อนไข</p>
 		</div>
 	{:else}
 		<div class="overflow-x-auto rounded-2xl border border-border/80 bg-background shadow-sm">
-			<table class="w-full text-xs text-left whitespace-nowrap">
+			<table class="w-full text-left text-xs whitespace-nowrap">
 				<thead class="bg-muted/50 font-bold text-foreground">
 					<tr class="border-b">
 						<th class="p-4 pl-5">รายการสินค้า (SKU)</th>
@@ -198,8 +215,9 @@
 				<tbody class="divide-y divide-border/40">
 					{#each filteredItems as item (item._id)}
 						{@const override = overrides.find((o) => o.item_id === item._id)}
-						{@const isCustom = override?.reorder_level !== null && override?.reorder_level !== undefined}
-						<tr class="hover:bg-muted/30 transition-colors">
+						{@const isCustom =
+							override?.reorder_level !== null && override?.reorder_level !== undefined}
+						<tr class="transition-colors hover:bg-muted/30">
 							<td class="p-4 pl-5 font-semibold text-foreground">
 								<div class="flex flex-col gap-0.5">
 									<span class="text-sm">{item.name}</span>
@@ -207,7 +225,7 @@
 								</div>
 							</td>
 							<td class="p-4 text-center">
-								<span class="rounded bg-muted px-2 py-0.5 font-bold text-[10px]">
+								<span class="rounded bg-muted px-2 py-0.5 text-[10px] font-bold">
 									{SUPPLY_CATEGORY_LABELS[item.category as SupplyCategory] || item.category}
 								</span>
 							</td>
@@ -220,9 +238,11 @@
 									<Input
 										type="number"
 										min="0"
-										placeholder={item.reorder_level !== null ? String(item.reorder_level) : 'ยังไม่ตั้งเกณฑ์'}
+										placeholder={item.reorder_level !== null
+											? String(item.reorder_level)
+											: 'ยังไม่ตั้งเกณฑ์'}
 										bind:value={editedLevels[item._id]}
-										class="h-8 w-28 rounded-lg text-center font-mono text-xs border border-border"
+										class="h-8 w-28 rounded-lg border border-border text-center font-mono text-xs"
 									/>
 								</div>
 							</td>
@@ -234,7 +254,7 @@
 											variant="outline"
 											size="sm"
 											onclick={() => handleClear(item._id)}
-											class="h-8 border-destructive/20 hover:border-destructive/40 text-destructive bg-destructive/5 hover:bg-destructive/10 rounded-xl px-3"
+											class="h-8 rounded-xl border-destructive/20 bg-destructive/5 px-3 text-destructive hover:border-destructive/40 hover:bg-destructive/10"
 											title="ยกเลิกเกณฑ์เตือนภัยเฉพาะศูนย์และกลับไปใช้ค่าของระบบ"
 										>
 											<RotateCcw class="mr-1 h-3.5 w-3.5" />

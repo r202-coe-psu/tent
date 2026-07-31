@@ -6,8 +6,7 @@ export const stockThresholdOverrideSchema = z.object({
 	schema_v: z.literal(1),
 	item_id: z.string().min(1, 'ต้องระบุ SKU สินค้า'),
 	reorder_level: z.coerce.number().nonnegative().nullable().default(null),
-	target_reserve_days:
-		z.coerce.number().positive().nullable().default(null),
+	target_reserve_days: z.coerce.number().positive().nullable().default(null),
 	consumption_rate: z.string().trim().nullable().default(null)
 });
 
