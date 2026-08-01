@@ -37,6 +37,14 @@
 		onViewProfile: (id: string) => void;
 	} = $props();
 
+	// The head is always a household member — merge them in if the head-selection
+	// step didn't arrive via the QR-scan path (which adds it directly).
+	$effect(() => {
+		if (selectedHead && !selectedMembers.some((m) => m._id === selectedHead._id)) {
+			selectedMembers = [...selectedMembers, selectedHead];
+		}
+	});
+
 	// Search states
 	let memberQuery = $state('');
 	let debouncedMemberQuery = $state('');
