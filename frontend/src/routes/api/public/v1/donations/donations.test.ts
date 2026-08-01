@@ -81,6 +81,80 @@ describe('POST /api/public/v1/donations', () => {
 		captchaToken: 'dummy-token'
 	};
 
+	/** Registry + campaign + donations mocks, with `config:app` present or not. */
+	function mockCouchWithConfig(configDoc: Record<string, unknown> | null) {
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/registry')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								id: 'shelter:01ABCSHELTER',
+								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
+							},
+							...(configDoc ? [{ id: 'config:app', doc: configDoc }] : [])
+						]
+					}
+				});
+			}
+			if (method === 'GET' && path.includes('donation_campaign:')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									_id: 'donation_campaign:c1',
+									type: 'donation_campaign',
+									status: 'open',
+									needs: [{ item_id: 'item:rice', qty_target: 100, unit: 'kg' }]
+								}
+							}
+						]
+					}
+				});
+			}
+			if (method === 'GET' && path.includes('donation:')) {
+				return Promise.resolve({ status: 200, data: { rows: [] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+	}
+
+	function sentToFastapi(): Record<string, unknown> {
+		const call = vi
+			.mocked(fetch)
+			.mock.calls.find(([url]) => String(url).endsWith('/public/v1/donations'));
+		return JSON.parse(String((call?.[1] as { body?: unknown })?.body));
+	}
+
+	it('passes the configured reservation TTL through to FastAPI', async () => {
+		// FastAPI cannot read CouchDB, so config:app.donation_reservation_ttl_hours only
+		// reaches it if this route forwards it (schema.md §3.2).
+		mockCouchWithConfig({ _id: 'config:app', type: 'config', donation_reservation_ttl_hours: 24 });
+		mockFastapiCreate();
+
+		await POST({
+			request: { json: () => Promise.resolve(validPayload) },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		expect(sentToFastapi().reservation_ttl_hours).toBe(24);
+	});
+
+	it('falls back to 72 hours when no config document exists yet', async () => {
+		mockCouchWithConfig(null);
+		mockFastapiCreate();
+
+		await POST({
+			request: { json: () => Promise.resolve(validPayload) },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		expect(sentToFastapi().reservation_ttl_hours).toBe(72);
+	});
+
 	it('creates a donation via FastAPI buffer when input is valid', async () => {
 		// Mock needs recheck: remaining need is plenty (100 kg)
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {

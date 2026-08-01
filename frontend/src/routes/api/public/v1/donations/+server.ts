@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { dev } from '$app/environment';
 import { donationPreDeclarationInputSchema, computeNeeds } from '$lib/features/donations';
+import { APP_CONFIG_DOC_ID, readAppConfig } from '$lib/features/shared';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
@@ -65,11 +66,13 @@ export const POST = async ({ request, getClientAddress }) => {
 			return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 		}
 		const regRows =
-			(regRes.data as { rows?: { id: string; doc?: { code?: string; status?: string } }[] })
-				?.rows ?? [];
+			(regRes.data as { rows?: { id: string; doc?: Record<string, unknown> }[] })?.rows ?? [];
 		const shelterDoc = regRows.find(
 			(r) => r.id.startsWith('shelter:') && r.doc?.code === shelterCode
-		)?.doc;
+		)?.doc as { code?: string; status?: string } | undefined;
+		// config:app comes back in the registry scan above — FastAPI has no CouchDB client
+		// of its own, so the reservation TTL rides to it on the request (schema.md §3.2).
+		const appConfig = readAppConfig(regRows.find((r) => r.id === APP_CONFIG_DOC_ID)?.doc);
 		if (!shelterDoc) {
 			return json(
 				{ success: false, error: 'SHELTER_NOT_FOUND', shelter_code: shelterCode },
@@ -145,6 +148,7 @@ export const POST = async ({ request, getClientAddress }) => {
 			body: JSON.stringify({
 				shelter_code: parsed.data.shelter_code,
 				campaign_id: resolvedCampaignId,
+				reservation_ttl_hours: appConfig.donation_reservation_ttl_hours,
 				donor: parsed.data.donor,
 				items: parsed.data.items,
 				logistics: parsed.data.logistics

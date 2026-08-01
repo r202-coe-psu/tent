@@ -27,6 +27,10 @@ class DonationItemInput(BaseModel):
 class DonationCreateRequest(BaseModel):
     shelter_code: str
     campaign_id: str | None = None
+    #: ``config:app.donation_reservation_ttl_hours`` (schema.md §3.2), read from CouchDB
+    #: by the BFF and passed through — this service has no CouchDB client of its own.
+    #: Absent means "caller did not resolve it", which falls back to the spec default.
+    reservation_ttl_hours: int | None = Field(default=None, gt=0)
     donor: DonorInput
     items: list[DonationItemInput] = Field(default_factory=list)
     logistics: dict[str, Any] | None = None

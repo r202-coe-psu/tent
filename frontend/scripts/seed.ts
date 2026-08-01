@@ -33,6 +33,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID } from '$lib/features/shared';
 import {
 	applyMovementToStay,
 	createEvacuee,
@@ -556,6 +557,40 @@ async function seedMasterData(): Promise<void> {
 		});
 		console.log(`  ✓ registry: master_data ${type} (${items.length} items)`);
 	}
+}
+
+/**
+ * `config:app` — the app-wide singleton (schema.md §3.2).
+ *
+ * Seeded at the documented defaults so the document exists to be edited. Readers fall
+ * back to the same values when it is missing, so seeding changes no behaviour; it just
+ * means an operator has somewhere to change the donation TTL without creating a document
+ * by hand.
+ */
+async function seedAppConfig(): Promise<void> {
+	await ensureDb('registry');
+	const ts = now();
+	const id = APP_CONFIG_DOC_ID;
+	const { status: getStatus, data: existing } = await couchReq(
+		'GET',
+		`/registry/${encodeURIComponent(id)}`
+	);
+	if (getStatus === 200) {
+		// Never overwrite: this is operator-tuned configuration, not fixture data.
+		console.log(`  · registry: ${id} already present — left as is`);
+		return;
+	}
+
+	await putDoc('registry', {
+		_id: id,
+		type: 'config',
+		schema_v: 1,
+		...APP_CONFIG_DEFAULTS,
+		created_at: ts,
+		updated_at: ts,
+		created_by: 'seed'
+	});
+	console.log(`  ✓ registry: ${id} (defaults)`);
 }
 
 // ─── seedCatalog ──────────────────────────────────────────────────────────────
@@ -1552,6 +1587,7 @@ async function main() {
 		await seedUsers();
 		await seedRegistry();
 		await seedMasterData();
+		await seedAppConfig();
 		await seedCatalog();
 		await seedCatalogSopRatios();
 		await seedShelter();

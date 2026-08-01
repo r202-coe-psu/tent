@@ -29,12 +29,35 @@ from .schemas import (
 
 _MAX_BOOKING_REF_ATTEMPTS = 8
 
+#: Fallback for ``config:app.donation_reservation_ttl_hours`` (schema.md §3.2). The
+#: singleton lives in CouchDB, which this service cannot read, so the BFF resolves it and
+#: sends it on the request. This value applies only when it did not — an older BFF, or a
+#: registry with no config document yet — and matches the spec default so behaviour is
+#: unchanged for anyone who has not written one.
+DEFAULT_RESERVATION_TTL_HOURS = 72
+
 #: Statuses in which a donor may still change their own booking through the public token
 #: routes. Only a reservation awaiting drop-off qualifies: once goods arrive the count
 #: belongs to staff, and cancelled/expired have already released their quota. Mirrors
 #: ``isDonorEditable`` on the BFF — CR-052's pending_review/verifying belong here too
 #: once those statuses land.
 DONOR_EDITABLE_STATUSES = frozenset({"declared"})
+
+
+def reservation_expiry(now: datetime, ttl_hours: int | None) -> datetime:
+    """When this reservation's TTL runs out (T-21 DoD — "TTL หมดอายุ → โควตาคืนอัตโนมัติ")."""
+    hours = ttl_hours if ttl_hours else DEFAULT_RESERVATION_TTL_HOURS
+    try:
+        return now + timedelta(hours=hours)
+    except OverflowError:
+        # config:app is staff-authored and unbounded above; a fat-fingered value must not
+        # 500 the whole booking, so fall back rather than propagate.
+        logger.warning(
+            "reservation_ttl_hours=%s is out of range — falling back to %sh",
+            hours,
+            DEFAULT_RESERVATION_TTL_HOURS,
+        )
+        return now + timedelta(hours=DEFAULT_RESERVATION_TTL_HOURS)
 
 
 def _new_booking_ref() -> str:
@@ -95,7 +118,7 @@ class DonationsUseCase:
         donation_id = f"donation:{new_ulid()}"
         tracking_token = f"TX-{payload.shelter_code.upper()}-{secrets.token_hex(16).upper()}"
         now = datetime.now(UTC)
-        expires_at = now + timedelta(hours=72)
+        expires_at = reservation_expiry(now, payload.reservation_ttl_hours)
         token_hash = sha256_hex(tracking_token)
 
         items_declared = [item.model_dump(exclude_none=True) for item in payload.items]

@@ -16,6 +16,7 @@ from tent_model.public_shelter import PublicShelter
 
 from apiapp.core.config import Settings
 from apiapp.modules.donations import router as donation_router
+from apiapp.modules.donations import use_case as donation_use_case
 from apiapp.utils.masking import sha256_hex
 from apiapp.utils.ulid import new_ulid
 
@@ -645,3 +646,92 @@ async def test_patch_courier_rejects_cancelled_buffer(
     buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
     assert buffer is not None
     assert "courier_tracking_no" not in (buffer.logistics or {})
+
+
+# --- reservation TTL from config:app (schema.md §3.2, T-21 DoD) ---
+
+
+def test_reservation_expiry_uses_the_supplied_ttl() -> None:
+    now = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+    assert donation_use_case.reservation_expiry(now, 24) == now + timedelta(hours=24)
+
+
+@pytest.mark.parametrize("absent", [None, 0])
+def test_reservation_expiry_defaults_to_72_hours(absent: int | None) -> None:
+    """An older BFF, or a registry with no config document, must behave as before."""
+    now = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+    assert donation_use_case.reservation_expiry(now, absent) == now + timedelta(hours=72)
+
+
+def test_reservation_expiry_survives_an_out_of_range_ttl() -> None:
+    """config:app is staff-authored and unbounded — a fat-fingered value must not 500."""
+    now = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+    assert donation_use_case.reservation_expiry(now, 10**18) == now + timedelta(hours=72)
+
+
+async def test_create_donation_honours_the_configured_ttl(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    before = datetime.now(UTC)
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH001",
+            "reservation_ttl_hours": 6,
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"free_text": "ข้าวสาร", "qty": 5, "unit": "kg"}],
+        },
+    )
+    assert response.status_code == 201
+
+    token = response.json()["tracking_token"]
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    expires_at = buffer.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    # 6h out, not the 72h default. Windowed because "before" is stamped ahead of the
+    # request and Mongo truncates the stored value to milliseconds.
+    assert abs((expires_at - before) - timedelta(hours=6)) < timedelta(seconds=5)
+
+
+async def test_create_donation_defaults_the_ttl_when_not_supplied(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    before = datetime.now(UTC)
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH001",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"free_text": "ข้าวสาร", "qty": 5, "unit": "kg"}],
+        },
+    )
+    assert response.status_code == 201
+
+    token = response.json()["tracking_token"]
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    expires_at = buffer.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    assert abs((expires_at - before) - timedelta(hours=72)) < timedelta(seconds=5)
+
+
+@pytest.mark.parametrize("bad_ttl", [0, -1])
+async def test_create_donation_rejects_a_non_positive_ttl(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str], bad_ttl: int
+) -> None:
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH001",
+            "reservation_ttl_hours": bad_ttl,
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"free_text": "ข้าวสาร", "qty": 5, "unit": "kg"}],
+        },
+    )
+    assert response.status_code == 422
