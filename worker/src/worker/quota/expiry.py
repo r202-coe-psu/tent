@@ -5,12 +5,13 @@ unauthenticated-triggerable full scan of every shelter database, and the previou
 ``/api/v1/cron/expire-reservations`` route had no auth and nothing scheduling it, so the
 TTL half of T-21 never actually ran.
 
-Scope note — this flips the CouchDB donation doc only. Releasing the quota still happens
-in ``retention.job.purge_expired_buffers``, where CR-047 places it. Both trigger off the
-same ``expires_at`` and run in the same retention cycle, so they stay in step going
-forward, but the split is fragile: the buffer row is transient (purged once expired and
-synced) while the CouchDB doc is the system of record. Consolidating both into this
-module would need a scope amendment to CR-047 — see the follow-up note in T-21.
+Scope note — this flips the CouchDB donation doc only. Releasing the quota happens in
+``retention.job.purge_expired_buffers``, where CR-047 places it, and now also in
+``quota.settle`` as soon as the flip comes back round the change feed. Whichever lands
+first wins and the other is a no-op: ``settle`` compares the buffer's own status before
+releasing, and retention skips rows that are no longer ``declared``. Consolidating the
+TTL release into this module would still need a scope amendment to CR-047 — see the
+follow-up note in T-21.
 """
 
 from __future__ import annotations

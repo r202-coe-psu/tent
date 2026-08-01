@@ -46,6 +46,47 @@ async def test_process_donation_change_reprojects_needs():
 
 
 @pytest.mark.asyncio
+async def test_process_donation_change_settles_quota():
+    """A donation CDC event must settle the reservation, not just reproject the board.
+
+    The BFF cancels a synced donation by writing CouchDB directly, so the change feed is
+    the only place that sees it — nothing else would release the counter.
+    """
+    couch = AsyncMock()
+    donation_doc = {
+        "_id": "donation:01TEST",
+        "type": "donation",
+        "status": "cancelled",
+        "tracking_token_hash": "hash-1",
+        "campaign_id": "donation_campaign:01",
+        "items": [{"item_id": "item:rice", "qty": "2"}],
+    }
+    change = {"seq": 47, "id": "donation:01TEST", "doc": donation_doc}
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_donation", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_need", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.project_needs_for_shelter",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "worker.couch.processor.project_donation",
+            return_value=("upsert", {"_id": "donation:01TEST"}),
+        ),
+        patch(
+            "worker.couch.processor.settle_donation_quota", new_callable=AsyncMock
+        ) as settle,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    settle.assert_awaited_once()
+    assert settle.await_args.args[0] is donation_doc
+
+
+@pytest.mark.asyncio
 async def test_process_deleted_donation_reprojects_needs():
     couch = AsyncMock()
     need_payload = {"_id": "SH001:item:rice", "qty_needed": 5.0}

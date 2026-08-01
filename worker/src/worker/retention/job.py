@@ -148,8 +148,11 @@ async def purge_expired_buffers(job_run_id: str) -> None:
 		# Release reserved quota only for reservations that timed out without being
 		# received or explicitly cancelled (CR-045 "TTL หมดอายุ → โควตาคืนอัตโนมัติ").
 		# A "received" buffer keeps its quota consumed even after its Mongo staging
-		# row ages out; a "cancelled" buffer already released via cancel() — calling
-		# release_quota again here is a safe no-op (underflow guard).
+		# row ages out; a "cancelled" buffer already released via cancel() or
+		# quota.settle — calling release_quota again here is a safe no-op (underflow
+		# guard). This guard only works because settle keeps the status truthful:
+		# before it, every synced row read "declared" forever and this branch handed
+		# back quota for goods already in the shelter.
 		if donation.status == "declared" and donation.campaign_id:
 			for item in donation.items_declared:
 				reserved_qty = item.get("reserved_qty")
