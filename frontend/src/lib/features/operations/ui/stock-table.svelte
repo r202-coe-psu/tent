@@ -126,13 +126,6 @@
 		return result;
 	});
 
-	/** Determine stock status based on qty vs reorder_level. */
-	function getStatus(qty: string, reorderLevel: number | null): 'empty' | 'low' | 'normal' {
-		if (qtyLte(qty, 0)) return 'empty';
-		if (reorderLevel !== null && qtyLte(qty, reorderLevel)) return 'low';
-		return 'normal';
-	}
-
 	/** Check if an expiry date string is within the next `days` days. */
 	function isExpiringSoon(expiryStr: string | undefined, days = 7): boolean {
 		if (!expiryStr) return false;

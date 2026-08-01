@@ -26,7 +26,7 @@ export function calculateReorderLevel(
 		}
 
 		return persistQty(result);
-	} catch (error) {
+	} catch {
 		return null;
 	}
 }

@@ -5,6 +5,7 @@
 		useSaveThresholdOverride
 	} from '$lib/features/supply';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -44,7 +45,7 @@
 	});
 
 	const uniqueCategories = $derived.by(() => {
-		const cats = new Set<string>();
+		const cats = new SvelteSet<string>();
 		for (const item of items) {
 			if (item.category) cats.add(item.category);
 		}
@@ -95,7 +96,7 @@
 				onSuccess: () => {
 					toast.success('บันทึกเกณฑ์เตือนภัยเฉพาะศูนย์เรียบร้อยแล้ว');
 				},
-				onError: (err: any) => {
+				onError: (err: Error) => {
 					toast.error(`บันทึกไม่สำเร็จ: ${err.message}`);
 				}
 			}
@@ -124,7 +125,7 @@
 				onSuccess: () => {
 					toast.success('คืนค่าเกณฑ์เตือนภัยเป็นค่าเริ่มต้นของระบบแล้ว');
 				},
-				onError: (err: any) => {
+				onError: (err: Error) => {
 					toast.error(`คืนค่าไม่สำเร็จ: ${err.message}`);
 				}
 			}

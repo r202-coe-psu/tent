@@ -4,7 +4,8 @@
 	import { useItemMasters } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { useStockBalance, useLedger, useAdjustStock } from '../application/queries';
+	import { useLedger, useAdjustStock } from '../application/queries';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import Settings from '@lucide/svelte/icons/settings';
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
@@ -20,7 +21,6 @@
 	// Queries & Mutations
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters();
-	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const adjustMutation = useAdjustStock();
 
@@ -41,10 +41,6 @@
 	let newQtyInput = $state<string>('');
 	let adjustmentType = $state<'write_off' | 'add'>('write_off');
 	let reason = $state<string>('');
-
-	// Attachment Mockup
-	let selectedFile = $state<File | null>(null);
-	let filePreview = $state<string | null>(null);
 
 	const items = $derived.by(() => {
 		const supplyItems = itemsQuery.data ?? [];
@@ -73,7 +69,7 @@
 		const currentItem = selectedItem;
 		if (!currentItem || !ledgerQuery.data) return [];
 		const entries = ledgerQuery.data.filter((e) => e.item_id === currentItem._id);
-		const lotsMap = new Map<string, { note: string; expiry: string; qty: string }>();
+		const lotsMap = new SvelteMap<string, { note: string; expiry: string; qty: string }>();
 
 		for (const entry of entries) {
 			const note = entry.lot?.note?.trim() || 'คลังหลัก';
@@ -140,19 +136,6 @@
 		newQtyInput = '';
 		adjustmentType = 'write_off';
 		reason = '';
-	}
-
-	function handleFileChange(e: Event) {
-		const target = e.target as HTMLInputElement;
-		if (target.files && target.files[0]) {
-			selectedFile = target.files[0];
-			filePreview = URL.createObjectURL(selectedFile);
-		}
-	}
-
-	function removeFile() {
-		selectedFile = null;
-		filePreview = null;
 	}
 
 	// Watch newQtyInput to auto-set adjustmentType
@@ -230,7 +213,6 @@
 			loading: 'กำลังปรับปรุงสต๊อก...',
 			success: () => {
 				clearSelection();
-				removeFile();
 				if (onsuccess) onsuccess();
 				return 'ปรับปรุงยอดสต๊อกสำเร็จ!';
 			},
@@ -332,7 +314,7 @@
 					class="mt-1 h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
 				>
 					<option value="" disabled>-- เลือกสถานที่ / ล็อตที่พบเจอปัญหา --</option>
-					{#each itemLots as lot}
+					{#each itemLots as lot (lot.key)}
 						<option value={lot.key}>{lot.label}</option>
 					{/each}
 					<option value="new">➕ สร้าง/ปรับปรุงสถานที่อื่นนอกเหนือจากนี้...</option>
