@@ -17,7 +17,6 @@
 	import Settings from '@lucide/svelte/icons/settings';
 	import { qtyGt, qtyLte } from '$lib/utils/qty';
 	import { calculateReorderLevel } from '$lib/features/supply/domain/threshold-calc';
-	import type { ItemMaster } from '$lib/features/catalog/domain/catalog';
 
 	// Icon
 	import Plus from '@lucide/svelte/icons/plus';

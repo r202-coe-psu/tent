@@ -12,11 +12,9 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Filter from '@lucide/svelte/icons/filter';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Save from '@lucide/svelte/icons/save';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
-	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import { toast } from 'svelte-sonner';
 
 	// Queries

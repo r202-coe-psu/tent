@@ -7,11 +7,9 @@
 	import { useStockBalance, useLedger, useAdjustStock } from '../application/queries';
 	import { toast } from 'svelte-sonner';
 	import Settings from '@lucide/svelte/icons/settings';
-	import Upload from '@lucide/svelte/icons/upload';
-	import Trash from '@lucide/svelte/icons/trash-2';
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
-	import { qtyGt, qtyGte, qtyLte, qtyAbs, addQty, subQty } from '$lib/utils/qty';
+	import { addQty, subQty } from '$lib/utils/qty';
 	import type { StockLot } from '../domain/operations';
 
 	let {
