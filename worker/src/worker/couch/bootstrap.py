@@ -11,12 +11,14 @@ from worker.masking import shelter_code_from_db_name, shelter_db_name
 from worker.mongo import (
     apply_donation,
     apply_need,
+    apply_need_counters,
     apply_person,
     apply_shelter,
     delete_needs_for_shelter,
     delete_persons_for_shelter,
 )
 from worker.projectors.donation import project_donation
+from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import is_shelter_open, project_shelter
@@ -70,6 +72,14 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
         elif doc_type == "donation":
             action, payload = project_donation(doc, shelter_code=shelter_code)
             await apply_donation(action, payload)
+        elif doc_type == "donation_campaign":
+            # Bootstrap has to seed counters too, not just the CDC path (CR-060). A
+            # freshly provisioned environment — first deploy, or a DR restore — runs
+            # bootstrap and then tails _changes from the checkpoint it just saved, so
+            # campaigns that already existed never arrive as change events. Without
+            # this the counters stay empty and reserve_quota falls open: the system
+            # looks healthy while enforcing no ceiling at all.
+            await apply_need_counters(plan_need_counters(doc, shelter_code=shelter_code))
 
     need_actions = await project_needs_for_shelter(couch, shelter_code)
     for action, payload in need_actions:
