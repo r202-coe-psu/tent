@@ -142,6 +142,7 @@ export interface Evacuee extends BaseDoc {
 	religion?: Religion;
 	special_needs: string[];
 	emergency_contact?: EmergencyContact;
+	photo?: string | null;
 	household_id: string | null;
 	current_stay: CurrentStay;
 	privacy: { search_excluded: boolean };
@@ -334,13 +335,32 @@ export type PeopleDoc = Evacuee | Medical | Household | Movement | Screening;
 
 // ---------------------------------------------------------------- input schemas
 
+export const MAX_AGE_YEARS = 150;
+
+/** Current Buddhist Era year, computed at validation time (not schema-build time). */
+export function currentBEYear(): number {
+	return new Date().getFullYear() + 543;
+}
+
+/** Oldest acceptable birth year (พ.ศ.) — implies an age of {@link MAX_AGE_YEARS}. */
+export function minBirthYearBE(): number {
+	return currentBEYear() - MAX_AGE_YEARS;
+}
+
 export const evacueeInputSchema = z.object({
 	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
 	last_name: z.string({ error: 'กรุณากรอกนามสกุล' }).trim().min(1, 'กรุณากรอกนามสกุล'),
 	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }),
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
-	birth_year: z.coerce.number().int().optional(),
+	birth_year: z.coerce
+		.number()
+		.int()
+		.refine((y) => y > minBirthYearBE(), {
+			error: () => `ปีเกิด (พ.ศ.) ต้องมากกว่า ${minBirthYearBE()}`
+		})
+		.refine((y) => y <= currentBEYear(), 'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต')
+		.optional(),
 	age: z.number().int().min(0).max(150).optional(),
 	person_id: personIdSchema.default({ cardType: 'national_id', number: '' }),
 	country: z
@@ -370,6 +390,7 @@ export const evacueeInputSchema = z.object({
 		})
 		.optional(),
 	household_id: z.string().nullable().default(null),
+	photo: z.string().nullable().optional().default(null),
 	registered_via: registeredViaSchema.default('app')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
@@ -565,6 +586,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			country: d.country,
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
+			...(d.photo ? { photo: d.photo } : {}),
 			household_id: d.household_id,
 			current_stay: { status: 'pre_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },

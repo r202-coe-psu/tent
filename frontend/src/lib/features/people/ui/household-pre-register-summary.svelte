@@ -1,14 +1,19 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { useCreateEvacuee, useEvacuees, useUpdateEvacuee } from '../application/queries';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { useSaveImage } from '$lib/features/images';
 	import {
 		maskNationalId,
 		type Evacuee,
 		type Household,
-		evacueeInputSchema
+		evacueeInputSchema,
+		currentBEYear,
+		minBirthYearBE,
+		MAX_AGE_YEARS
 	} from '../domain/people';
 	import { z } from 'zod';
 
@@ -31,6 +36,7 @@
 	};
 	import { toast } from 'svelte-sonner';
 	import Camera from '@lucide/svelte/icons/camera';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
@@ -90,6 +96,12 @@
 	let showAddMemberForm = $state(false);
 	let memberNoPhone = $state(false);
 	let memberFacePhotoUrl = $state<string | null>(null);
+	let uploadingMemberPhoto = $state(false);
+	const saveImage = useSaveImage();
+
+	onDestroy(() => {
+		if (memberFacePhotoUrl) URL.revokeObjectURL(memberFacePhotoUrl);
+	});
 
 	let memberBirthYearBE = $state('');
 	let memberAge = $state('');
@@ -103,6 +115,29 @@
 		validators: zod4(evacueeInputSchema),
 		resetForm: false,
 		onSubmit: ({ cancel }) => {
+			if (memberBirthYearError || memberAgeError) {
+				const message = memberBirthYearError || memberAgeError || '';
+				toast.error(message);
+				cancel();
+				return;
+			}
+
+			if (
+				$memberFormData.person_id.cardType === 'national_id' &&
+				$memberFormData.person_id.number
+			) {
+				const cleanId = $memberFormData.person_id.number.replace(/\D/g, '');
+				if (cleanId.length !== 13) {
+					$memberErrors.person_id = {
+						...($memberErrors.person_id || {}),
+						number: ['เลขประจำตัวประชาชนต้องมี 13 หลัก']
+					};
+					toast.error('เลขประจำตัวประชาชนต้องมี 13 หลัก');
+					cancel();
+					return;
+				}
+			}
+
 			if (memberNoPhone) {
 				$memberFormData.phone = null;
 			} else {
@@ -150,7 +185,9 @@
 
 				// Reset member form
 				memberForm.reset();
+				if (memberFacePhotoUrl) URL.revokeObjectURL(memberFacePhotoUrl);
 				memberFacePhotoUrl = null;
+				uploadingMemberPhoto = false;
 				memberBirthYearBE = '';
 				memberAge = '';
 				memberMedicalConditionsStr = '';
@@ -183,11 +220,28 @@
 	function updateMemberAge(value: string) {
 		memberAge = value;
 		if (value && !isNaN(Number(value))) {
-			$memberFormData.birth_year = new Date().getFullYear() + 543 - Number(value);
+			$memberFormData.birth_year = currentBEYear() - Number(value);
 		} else if (!memberBirthYearBE) {
 			$memberFormData.birth_year = undefined;
 		}
 	}
+
+	const memberBirthYearError = $derived.by(() => {
+		if (!memberBirthYearBE) return undefined;
+		const y = Number(memberBirthYearBE);
+		if (isNaN(y)) return 'กรุณากรอกปีเกิดเป็นตัวเลข';
+		if (y > currentBEYear()) return 'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต';
+		if (y <= minBirthYearBE()) return `ปีเกิด (พ.ศ.) ต้องมากกว่า ${minBirthYearBE()}`;
+		return undefined;
+	});
+
+	const memberAgeError = $derived.by(() => {
+		if (!memberAge) return undefined;
+		const a = Number(memberAge);
+		if (isNaN(a)) return 'กรุณากรอกอายุเป็นตัวเลข';
+		if (a > MAX_AGE_YEARS) return `อายุต้องไม่เกิน ${MAX_AGE_YEARS} ปี`;
+		return undefined;
+	});
 
 	function updateMemberMedicalField(
 		field: 'medical_conditions' | 'medical_medications' | 'medical_allergies',
@@ -405,10 +459,26 @@
 						accept="image/*"
 						class="hidden"
 						id="member-face-photo-input"
-						onchange={(e) => {
+						disabled={uploadingMemberPhoto}
+						onchange={async (e) => {
 							const file = e.currentTarget.files?.[0];
-							if (file) {
-								memberFacePhotoUrl = URL.createObjectURL(file);
+							if (!file) return;
+
+							if (memberFacePhotoUrl) URL.revokeObjectURL(memberFacePhotoUrl);
+							memberFacePhotoUrl = URL.createObjectURL(file);
+							uploadingMemberPhoto = true;
+							try {
+								const ctx = {
+									shelterCode: getShelterCode(),
+									createdBy: authStore.user?.name ?? 'unknown'
+								};
+								const image = await saveImage.mutateAsync({ file, ctx });
+								$memberFormData.photo = image._id;
+							} catch {
+								$memberFormData.photo = null;
+								toast.error('อัปโหลดรูปภาพล้มเหลว สามารถลงทะเบียนต่อได้โดยไม่มีรูป');
+							} finally {
+								uploadingMemberPhoto = false;
 							}
 						}}
 					/>
@@ -417,11 +487,20 @@
 						class="block cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
 					>
 						{#if memberFacePhotoUrl}
-							<img
-								src={memberFacePhotoUrl}
-								alt="Face"
-								class="h-40 w-full rounded-lg object-cover"
-							/>
+							<div class="relative h-40 w-full">
+								<img
+									src={memberFacePhotoUrl}
+									alt="Face"
+									class="h-40 w-full rounded-lg object-cover {uploadingMemberPhoto
+										? 'opacity-50'
+										: ''}"
+								/>
+								{#if uploadingMemberPhoto}
+									<div class="absolute inset-0 flex items-center justify-center">
+										<Loader2 class="h-8 w-8 animate-spin text-primary" />
+									</div>
+								{/if}
+							</div>
 						{:else}
 							<div class="flex h-40 flex-col items-center justify-center">
 								<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
@@ -530,9 +609,19 @@
 							<Label>ปีเกิด (พ.ศ.)</Label>
 							<Input
 								placeholder="เช่น 2530"
+								inputmode="numeric"
+								maxlength={4}
 								value={memberBirthYearBE}
-								oninput={(event) => updateMemberBirthYear(event.currentTarget.value)}
+								aria-invalid={memberBirthYearError ? 'true' : undefined}
+								oninput={(event) => {
+									const val = event.currentTarget.value.replace(/\D/g, '').slice(0, 4);
+									event.currentTarget.value = val;
+									updateMemberBirthYear(val);
+								}}
 							/>
+							{#if memberBirthYearError}
+								<p class="text-sm font-medium text-destructive">{memberBirthYearError}</p>
+							{/if}
 						</div>
 						<div class="space-y-2">
 							<Label>อายุ (ปี)</Label>
@@ -541,12 +630,16 @@
 								value={memberAge}
 								inputmode="numeric"
 								maxlength={3}
+								aria-invalid={memberAgeError ? 'true' : undefined}
 								oninput={(e) => {
 									const val = e.currentTarget.value.replace(/\D/g, '');
 									e.currentTarget.value = val;
 									updateMemberAge(val);
 								}}
 							/>
+							{#if memberAgeError}
+								<p class="text-sm font-medium text-destructive">{memberAgeError}</p>
+							{/if}
 						</div>
 						<Form.Field form={memberForm} name="gender">
 							<Form.Control>

@@ -6,6 +6,7 @@
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import { maskNationalId } from '$lib/features/people';
 	import type { Evacuee, Medical, Screening } from '$lib/features/people';
+	import { imageRepository } from '$lib/features/images';
 
 	interface StatusInfo {
 		label: string;
@@ -32,17 +33,55 @@
 		onOpenStatusModal: () => void;
 		onOpenQrModal: () => void;
 	} = $props();
+
+	let photoUrl = $state<string | null>(null);
+
+	// Load the thumbnail as an object URL whenever the evacuee's photo ref changes;
+	// revoke it on change/unmount so blob URLs don't leak.
+	$effect(() => {
+		const photoId = evacuee.photo;
+		let cancelled = false;
+		let objectUrl: string | null = null;
+
+		if (photoId) {
+			imageRepository()
+				.getThumbnailUrl(photoId)
+				.then((url) => {
+					if (cancelled) {
+						if (url) URL.revokeObjectURL(url);
+						return;
+					}
+					objectUrl = url;
+					photoUrl = url;
+				});
+		} else {
+			photoUrl = null;
+		}
+
+		return () => {
+			cancelled = true;
+			if (objectUrl) URL.revokeObjectURL(objectUrl);
+		};
+	});
 </script>
 
 <div
 	class="flex flex-col items-start justify-between gap-6 rounded-3xl border border-border bg-card p-6 shadow-sm md:flex-row md:items-center"
 >
 	<div class="flex flex-wrap items-center gap-4">
-		<div
-			class="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-400 shadow-inner select-none dark:border-slate-700 dark:bg-slate-800"
-		>
-			<span>No Photo</span>
-		</div>
+		{#if photoUrl}
+			<img
+				src={photoUrl}
+				alt={`${evacuee.first_name} ${evacuee.last_name}`}
+				class="h-20 w-20 shrink-0 rounded-2xl border border-slate-200 object-cover shadow-inner dark:border-slate-700"
+			/>
+		{:else}
+			<div
+				class="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-400 shadow-inner select-none dark:border-slate-700 dark:bg-slate-800"
+			>
+				<span>No Photo</span>
+			</div>
+		{/if}
 
 		<div class="space-y-1">
 			<h2 class="text-2xl font-bold text-slate-900 dark:text-slate-50">
