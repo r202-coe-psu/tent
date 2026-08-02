@@ -4,7 +4,10 @@
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import type { Evacuee } from '$lib/features/people';
+	import * as Form from '$lib/components/ui/form/index.js';
+	import { evacueeEmergencyEditFormSchema, type Evacuee } from '$lib/features/people';
+	import { defaults, superForm } from 'sveltekit-superforms';
+	import { zod4 } from 'sveltekit-superforms/adapters';
 
 	export type EvacueeEmergencyEditData = {
 		emergencyContact:
@@ -38,14 +41,29 @@
 	let phone = $state(initial.phone);
 	let relation = $state(initial.relation);
 	let saving = $state(false);
+	const hasContact = $derived(Boolean(name.trim() || phone.trim() || relation.trim()));
+	const form = superForm(defaults(initial, zod4(evacueeEmergencyEditFormSchema)), {
+		SPA: true,
+		validators: zod4(evacueeEmergencyEditFormSchema),
+		resetForm: false
+	});
+	const { form: formData, validateForm } = form;
 
 	function digits(value: string): string {
 		return value.replace(/\D/g, '');
 	}
 
 	async function save() {
-		const hasContact = name.trim() || phone.trim() || relation.trim();
-		if (hasContact && (!name.trim() || digits(phone).length !== 10 || !relation.trim())) {
+		$formData = { name, phone, relation };
+		const validation = await validateForm({ update: true, focusOnError: true });
+		if (!validation.valid) {
+			toast.error('กรุณากรอกข้อมูลผู้ติดต่อให้ถูกต้องและครบถ้วน');
+			return;
+		}
+		const contactProvided = Boolean(
+			validation.data.name || validation.data.phone || validation.data.relation
+		);
+		if (contactProvided && (!name.trim() || digits(phone).length !== 10 || !relation.trim())) {
 			toast.error('กรุณากรอกชื่อ เบอร์โทร 10 หลัก และความสัมพันธ์ให้ครบ');
 			return;
 		}
@@ -53,8 +71,12 @@
 		saving = true;
 		try {
 			await onSave({
-				emergencyContact: hasContact
-					? { name: name.trim(), phone: digits(phone), relation: relation.trim() }
+				emergencyContact: contactProvided
+					? {
+							name: validation.data.name,
+							phone: digits(validation.data.phone),
+							relation: validation.data.relation
+						}
 					: undefined
 			});
 		} finally {
@@ -89,19 +111,49 @@
 			</header>
 
 			<div class="space-y-4 p-5">
-				<label class="block space-y-1.5 text-xs font-semibold text-foreground">
-					ชื่อผู้ติดต่อ
-					<Input bind:value={name} autocomplete="name" />
-				</label>
+				<Form.Field {form} name="name">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label
+								>ชื่อผู้ติดต่อ {#if hasContact}<span class="text-destructive">*</span
+									>{/if}</Form.Label
+							>
+							<Input {...props} bind:value={name} autocomplete="name" />
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
 				<div class="grid gap-3 sm:grid-cols-2">
-					<label class="space-y-1.5 text-xs font-semibold text-foreground">
-						เบอร์โทรศัพท์
-						<Input bind:value={phone} inputmode="numeric" maxlength={10} autocomplete="tel" />
-					</label>
-					<label class="space-y-1.5 text-xs font-semibold text-foreground">
-						ความสัมพันธ์
-						<Input bind:value={relation} placeholder="เช่น บิดา มารดา คู่สมรส" />
-					</label>
+					<Form.Field {form} name="phone">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label
+									>เบอร์โทรศัพท์ {#if hasContact}<span class="text-destructive">*</span
+										>{/if}</Form.Label
+								>
+								<Input
+									{...props}
+									bind:value={phone}
+									inputmode="numeric"
+									maxlength={10}
+									autocomplete="tel"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Form.Field {form} name="relation">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label
+									>ความสัมพันธ์ {#if hasContact}<span class="text-destructive">*</span
+										>{/if}</Form.Label
+								>
+								<Input {...props} bind:value={relation} placeholder="เช่น บิดา มารดา คู่สมรส" />
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 				</div>
 			</div>
 

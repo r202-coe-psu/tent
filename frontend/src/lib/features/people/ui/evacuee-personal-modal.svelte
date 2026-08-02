@@ -6,10 +6,21 @@
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import type { CardType, Evacuee, Gender, Religion } from '$lib/features/people';
+	import {
+		evacueePersonalEditFormSchema,
+		type CardType,
+		type Evacuee,
+		type Gender,
+		type Religion
+	} from '$lib/features/people';
+	import { defaults, superForm } from 'sveltekit-superforms';
+	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { imageRepository } from '$lib/features/images';
 	import { COUNTRIES } from '$lib/utils/country';
+	import SearchSelect from '$lib/components/search-select.svelte';
 
 	export type EvacueePersonalEditData = {
 		firstName: string;
@@ -95,6 +106,13 @@
 	let selectedPhotoUrl = $state<string | null>(null);
 	let saving = $state(false);
 
+	const form = superForm(defaults(initial, zod4(evacueePersonalEditFormSchema)), {
+		SPA: true,
+		validators: zod4(evacueePersonalEditFormSchema),
+		resetForm: false
+	});
+	const { form: formData, validateForm } = form;
+
 	$effect(() => {
 		const photoId = evacuee.photo;
 		let cancelled = false;
@@ -160,6 +178,26 @@
 	}
 
 	async function save() {
+		$formData = {
+			firstName,
+			lastName,
+			nickname,
+			birthYear,
+			age,
+			gender,
+			phone,
+			noPhone,
+			cardType,
+			cardNumber,
+			country,
+			religion
+		};
+		const validation = await validateForm({ update: true, focusOnError: true });
+		if (!validation.valid) {
+			toast.error('กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน');
+			return;
+		}
+
 		if (!firstName.trim() || !lastName.trim()) {
 			toast.error('กรุณากรอกชื่อและนามสกุล');
 			return;
@@ -203,17 +241,20 @@
 		saving = true;
 		try {
 			await onSave({
-				firstName: firstName.trim(),
-				lastName: lastName.trim(),
-				nickname: nickname.trim(),
+				firstName: validation.data.firstName,
+				lastName: validation.data.lastName,
+				nickname: validation.data.nickname,
 				birthYear: parsedBirthYear,
 				age: parsedAge,
-				gender,
-				phone: noPhone ? null : digits(phone),
-				cardType,
-				cardNumber: cardType === 'national_id' ? digits(cardNumber) : cardNumber.trim(),
-				country,
-				religion,
+				gender: validation.data.gender,
+				phone: validation.data.noPhone ? null : digits(validation.data.phone),
+				cardType: validation.data.cardType,
+				cardNumber:
+					validation.data.cardType === 'national_id'
+						? digits(validation.data.cardNumber)
+						: validation.data.cardNumber,
+				country: validation.data.country,
+				religion: validation.data.religion,
 				photoFile,
 				removePhoto
 			});
@@ -254,7 +295,7 @@
 			<div class="min-h-0 space-y-5 overflow-y-auto p-5">
 				<div class="grid gap-5 md:grid-cols-[132px_1fr]">
 					<div class="space-y-2">
-						<span class="text-xs font-semibold text-foreground">รูปถ่าย</span>
+						<span class="text-xs font-medium text-foreground">รูปถ่าย</span>
 						<input
 							id="evacuee-photo"
 							type="file"
@@ -292,118 +333,182 @@
 
 					<div class="space-y-4">
 						<div class="grid gap-3 sm:grid-cols-2">
-							<label class="space-y-1.5 text-xs font-semibold text-foreground">
-								ชื่อ
-								<Input bind:value={firstName} autocomplete="given-name" />
-							</label>
-							<label class="space-y-1.5 text-xs font-semibold text-foreground">
-								นามสกุล
-								<Input bind:value={lastName} autocomplete="family-name" />
-							</label>
+							<Form.Field {form} name="firstName">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>ชื่อ <span class="text-destructive">*</span></Form.Label>
+										<Input {...props} bind:value={firstName} autocomplete="given-name" />
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+							<Form.Field {form} name="lastName">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>นามสกุล <span class="text-destructive">*</span></Form.Label>
+										<Input {...props} bind:value={lastName} autocomplete="family-name" />
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
 						</div>
-						<label class="block space-y-1.5 text-xs font-semibold text-foreground">
-							ชื่อเล่น
-							<Input bind:value={nickname} />
-						</label>
+						<Form.Field {form} name="nickname">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>ชื่อเล่น</Form.Label>
+									<Input {...props} bind:value={nickname} />
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 					</div>
 				</div>
 
 				<div class="grid gap-3 sm:grid-cols-2">
-					<label class="space-y-1.5 text-xs font-semibold text-foreground">
-						ประเภทบัตรประจำตัว
-						<Select.Root type="single" bind:value={cardType}>
-							<Select.Trigger class="h-9 w-full">
-								{cardTypeOptions.find((option) => option.value === cardType)?.label}
-							</Select.Trigger>
-							<Select.Content>
-								{#each cardTypeOptions as option (option.value)}
-									<Select.Item value={option.value} label={option.label} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</label>
-					<label class="space-y-1.5 text-xs font-semibold text-foreground">
-						เลขที่บัตรประจำตัว
-						<Input bind:value={cardNumber} inputmode="numeric" />
-					</label>
+					<Form.Field {form} name="cardType">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>ประเภทบัตรประจำตัว</Form.Label>
+								<Select.Root type="single" bind:value={cardType}>
+									<Select.Trigger {...props} class="!h-9 w-full rounded-md">
+										{cardTypeOptions.find((option) => option.value === cardType)?.label}
+									</Select.Trigger>
+									<Select.Content>
+										{#each cardTypeOptions as option (option.value)}
+											<Select.Item value={option.value} label={option.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Form.Field {form} name="cardNumber">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>เลขที่บัตรประจำตัว</Form.Label>
+								<Input {...props} bind:value={cardNumber} inputmode="numeric" />
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 				</div>
 
 				<div class="grid gap-3 sm:grid-cols-3">
-					<label class="space-y-1.5 text-xs font-semibold text-foreground">
-						ปีเกิด (พ.ศ.)
-						<Input
-							value={birthYear}
-							inputmode="numeric"
-							oninput={(event) => updateBirthYear(event.currentTarget.value)}
-						/>
-					</label>
-					<label class="space-y-1.5 text-xs font-semibold text-foreground">
-						อายุ
-						<Input
-							value={age}
-							inputmode="numeric"
-							oninput={(event) => updateAge(event.currentTarget.value)}
-						/>
-					</label>
-					<label class="space-y-1.5 text-xs font-semibold text-foreground">
-						เพศ
-						<Select.Root type="single" bind:value={gender}>
-							<Select.Trigger class="h-9 w-full">
-								{genderOptions.find((option) => option.value === gender)?.label}
-							</Select.Trigger>
-							<Select.Content>
-								{#each genderOptions as option (option.value)}
-									<Select.Item value={option.value} label={option.label} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</label>
+					<Form.Field {form} name="birthYear">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>ปีเกิด (พ.ศ.)</Form.Label>
+								<Input
+									{...props}
+									value={birthYear}
+									inputmode="numeric"
+									oninput={(event) => updateBirthYear(event.currentTarget.value)}
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Form.Field {form} name="age">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>อายุ</Form.Label>
+								<Input
+									{...props}
+									value={age}
+									inputmode="numeric"
+									oninput={(event) => updateAge(event.currentTarget.value)}
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Form.Field {form} name="gender">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>เพศ <span class="text-destructive">*</span></Form.Label>
+								<Select.Root type="single" bind:value={gender}>
+									<Select.Trigger {...props} class="!h-9 w-full rounded-md">
+										{genderOptions.find((option) => option.value === gender)?.label}
+									</Select.Trigger>
+									<Select.Content>
+										{#each genderOptions as option (option.value)}
+											<Select.Item value={option.value} label={option.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 				</div>
 
 				<div class="grid gap-3 sm:grid-cols-2">
-					<label class="space-y-1.5 text-xs font-semibold text-foreground">
-						สัญชาติ
-						<Select.Root type="single" bind:value={country}>
-							<Select.Trigger class="h-9 w-full">
-								{COUNTRIES.find((option) => option.value === country)?.label ?? country}
-							</Select.Trigger>
-							<Select.Content class="max-h-72">
-								{#each COUNTRIES as option (option.value)}
-									<Select.Item value={option.value} label={option.label} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</label>
-					<label class="space-y-1.5 text-xs font-semibold text-foreground">
-						ศาสนา
-						<Select.Root type="single" bind:value={religion}>
-							<Select.Trigger class="h-9 w-full">
-								{religionOptions.find((option) => option.value === religion)?.label}
-							</Select.Trigger>
-							<Select.Content>
-								{#each religionOptions as option (option.value)}
-									<Select.Item value={option.value} label={option.label} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</label>
+					<Form.Field {form} name="country">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>สัญชาติ <span class="text-destructive">*</span></Form.Label>
+								<SearchSelect
+									name={props.name}
+									options={COUNTRIES}
+									bind:value={country}
+									placeholder="เลือกสัญชาติ"
+									searchPlaceholder="ค้นหาสัญชาติ..."
+									emptyText="ไม่พบสัญชาติ"
+									controlProps={{ ...props, id: 'country' }}
+									class="!h-9 rounded-md"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Form.Field {form} name="religion">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>ศาสนา</Form.Label>
+								<Select.Root type="single" bind:value={religion}>
+									<Select.Trigger {...props} class="!h-9 w-full rounded-md">
+										{religionOptions.find((option) => option.value === religion)?.label}
+									</Select.Trigger>
+									<Select.Content>
+										{#each religionOptions as option (option.value)}
+											<Select.Item value={option.value} label={option.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 				</div>
 
 				<div class="space-y-2">
-					<label class="block space-y-1.5 text-xs font-semibold text-foreground">
-						เบอร์โทรศัพท์
-						<Input
-							bind:value={phone}
-							inputmode="numeric"
-							maxlength={10}
-							disabled={noPhone}
-							autocomplete="tel"
-						/>
-					</label>
-					<label class="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-						<input type="checkbox" bind:checked={noPhone} class="size-4 rounded border-input" />
-						ไม่มีเบอร์โทรศัพท์
-					</label>
+					<Form.Field {form} name="phone">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>เบอร์โทรศัพท์ <span class="text-destructive">*</span></Form.Label>
+								<Input
+									{...props}
+									bind:value={phone}
+									inputmode="numeric"
+									maxlength={10}
+									disabled={noPhone}
+									autocomplete="tel"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Form.Field {form} name="noPhone">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label class="cursor-pointer text-xs text-muted-foreground">
+									<Checkbox {...props} id="no-phone" bind:checked={noPhone} />
+									ไม่มีเบอร์โทรศัพท์
+								</Form.Label>
+							{/snippet}
+						</Form.Control>
+					</Form.Field>
 				</div>
 			</div>
 

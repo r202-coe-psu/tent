@@ -6,9 +6,11 @@
 	import { useDistricts, useProvinces, useSubdistricts } from '$lib/features/shelters';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Label } from '$lib/components/ui/label/index.js';
-	import * as Select from '$lib/components/ui/select/index.js';
-	import type { Household } from '$lib/features/people';
+	import * as Form from '$lib/components/ui/form/index.js';
+	import SearchSelect from '$lib/components/search-select.svelte';
+	import { evacueeAddressEditFormSchema, type Household } from '$lib/features/people';
+	import { defaults, superForm } from 'sveltekit-superforms';
+	import { zod4 } from 'sveltekit-superforms/adapters';
 
 	let {
 		show,
@@ -29,19 +31,43 @@
 		}) => Promise<void>;
 	} = $props();
 
-	type FieldName =
-		'addressNo' | 'villageNo' | 'province' | 'district' | 'subdistrict' | 'postalCode';
-	type FieldErrors = Partial<Record<FieldName, string>>;
-
 	let addressNo = $state(untrack(() => household.address_no ?? ''));
 	let villageNo = $state(untrack(() => household.village_no ?? ''));
 	let subdistrict = $state(untrack(() => household.subdistrict ?? ''));
 	let district = $state(untrack(() => household.district ?? ''));
 	let province = $state(untrack(() => household.province ?? ''));
 	let postalCode = $state(untrack(() => household.postal_code ?? ''));
-	let errors = $state<FieldErrors>({});
 	let formError = $state('');
 	let saving = $state(false);
+	const hasLocation = $derived(Boolean(province || district || subdistrict || postalCode));
+
+	const form = superForm(
+		defaults(
+			untrack(() => ({ addressNo, villageNo, province, district, subdistrict, postalCode })),
+			zod4(evacueeAddressEditFormSchema)
+		),
+		{
+			SPA: true,
+			validators: zod4(evacueeAddressEditFormSchema),
+			resetForm: false,
+			onSubmit: () => {
+				$formData = { addressNo, villageNo, province, district, subdistrict, postalCode };
+			},
+			onUpdate: async ({ form: validated }) => {
+				if (!validated.valid || saving) return;
+				saving = true;
+				formError = '';
+				try {
+					await onSave({ ...validated.data });
+				} catch (error) {
+					formError = error instanceof Error ? error.message : 'บันทึกข้อมูลไม่สำเร็จ';
+				} finally {
+					saving = false;
+				}
+			}
+		}
+	);
+	const { form: formData, errors } = form;
 
 	const provincesQuery = useProvinces();
 	const districtsQuery = useDistricts(() => province || null);
@@ -72,7 +98,6 @@
 		district = household.district ?? '';
 		province = household.province ?? '';
 		postalCode = household.postal_code ?? '';
-		errors = {};
 		formError = '';
 	});
 
@@ -84,39 +109,23 @@
 		if (match) postalCode = String(match.zipcode);
 	});
 
-	function clearError(field: FieldName) {
-		if (!errors[field]) return;
-		const next = { ...errors };
-		delete next[field];
-		errors = next;
-	}
-
-	function selectProvince(value: string | undefined) {
-		province = value ?? '';
+	function selectProvince(value: string) {
+		province = value;
 		district = '';
 		subdistrict = '';
 		postalCode = '';
-		clearError('province');
-		clearError('district');
-		clearError('subdistrict');
-		clearError('postalCode');
 	}
 
-	function selectDistrict(value: string | undefined) {
-		district = value ?? '';
+	function selectDistrict(value: string) {
+		district = value;
 		subdistrict = '';
 		postalCode = '';
-		clearError('district');
-		clearError('subdistrict');
-		clearError('postalCode');
 	}
 
-	function selectSubdistrict(value: string | undefined) {
-		subdistrict = value ?? '';
+	function selectSubdistrict(value: string) {
+		subdistrict = value;
 		const match = (subdistrictsQuery.data ?? []).find((entry) => entry.subdistrict === subdistrict);
 		postalCode = match ? String(match.zipcode) : '';
-		clearError('subdistrict');
-		clearError('postalCode');
 	}
 
 	function clearLocation() {
@@ -124,42 +133,6 @@
 		district = '';
 		subdistrict = '';
 		postalCode = '';
-		errors = {};
-	}
-
-	function validate(): boolean {
-		const next: FieldErrors = {};
-		const hasLocation = Boolean(province || district || subdistrict || postalCode);
-		if (hasLocation && !province) next.province = 'กรุณาเลือกจังหวัด';
-		if (hasLocation && !district) next.district = 'กรุณาเลือกอำเภอ / เขต';
-		if (hasLocation && !subdistrict) next.subdistrict = 'กรุณาเลือกตำบล / แขวง';
-		if (hasLocation && !/^\d{5}$/.test(postalCode)) {
-			next.postalCode = 'ไม่พบรหัสไปรษณีย์ของตำบลที่เลือก';
-		}
-		errors = next;
-		return Object.keys(next).length === 0;
-	}
-
-	async function handleSubmit(event: SubmitEvent) {
-		event.preventDefault();
-		formError = '';
-		if (!validate() || saving) return;
-
-		saving = true;
-		try {
-			await onSave({
-				addressNo: addressNo.trim(),
-				villageNo: villageNo.trim(),
-				subdistrict,
-				district,
-				province,
-				postalCode
-			});
-		} catch (error) {
-			formError = error instanceof Error ? error.message : 'บันทึกข้อมูลไม่สำเร็จ';
-		} finally {
-			saving = false;
-		}
 	}
 </script>
 
@@ -173,7 +146,7 @@
 			aria-modal="true"
 			role="dialog"
 		>
-			<form onsubmit={handleSubmit}>
+			<form method="POST" use:form.enhance>
 				<header
 					class="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6"
 				>
@@ -200,23 +173,24 @@
 							<p class="mt-0.5 text-xs text-muted-foreground">ข้อมูลที่อยู่เพิ่มเติมของครอบครัว</p>
 						</div>
 						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-							<div class="space-y-1.5">
-								<Label for="address_no">บ้านเลขที่</Label>
-								<Input
-									id="address_no"
-									bind:value={addressNo}
-									oninput={() => clearError('addressNo')}
-									aria-invalid={errors.addressNo ? 'true' : undefined}
-									placeholder="เช่น 123/45"
-								/>
-								{#if errors.addressNo}<p class="text-xs text-destructive">
-										{errors.addressNo}
-									</p>{/if}
-							</div>
-							<div class="space-y-1.5">
-								<Label for="village_no">หมู่ที่ / ตรอก / ซอย / ถนน</Label>
-								<Input id="village_no" bind:value={villageNo} placeholder="เช่น หมู่ 2" />
-							</div>
+							<Form.Field {form} name="addressNo">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>บ้านเลขที่</Form.Label>
+										<Input {...props} bind:value={addressNo} placeholder="เช่น 123/45" />
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+							<Form.Field {form} name="villageNo">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>หมู่ที่ / ตรอก / ซอย / ถนน</Form.Label>
+										<Input {...props} bind:value={villageNo} placeholder="เช่น หมู่ 2" />
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
 						</div>
 					</section>
 
@@ -240,147 +214,118 @@
 						</div>
 
 						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-							<div class="space-y-1.5">
-								<Label for="province">จังหวัด</Label>
-								<Select.Root type="single" value={province} onValueChange={selectProvince}>
-									<Select.Trigger
-										id="province"
-										class="h-9 w-full bg-background"
-										aria-invalid={errors.province ? 'true' : undefined}
-									>
-										{province || 'เลือกจังหวัด'}
-									</Select.Trigger>
-									<Select.Content>
-										{#if provincesQuery.isLoading}
-											<Select.Item
-												value="__loading_provinces"
-												label="กำลังโหลดจังหวัด..."
-												disabled
-											/>
-										{:else if provincesQuery.isError}
-											<Select.Item
-												value="__error_provinces"
-												label="โหลดจังหวัดไม่สำเร็จ"
-												disabled
-											/>
-										{:else if provinceItems.length === 0}
-											<Select.Item value="__empty_provinces" label="ไม่พบข้อมูลจังหวัด" disabled />
-										{:else}
-											{#each provinceItems as item (item.value)}
-												<Select.Item value={item.value} label={item.label} />
-											{/each}
-										{/if}
-									</Select.Content>
-								</Select.Root>
+							<Form.Field {form} name="province">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label
+											>จังหวัด {#if hasLocation}<span class="text-destructive">*</span
+												>{/if}</Form.Label
+										>
+										<SearchSelect
+											name={props.name}
+											bind:value={() => province, selectProvince}
+											options={provinceItems}
+											placeholder="เลือกจังหวัด"
+											searchPlaceholder="ค้นหาจังหวัด..."
+											emptyText={provincesQuery.isError ? 'โหลดจังหวัดไม่สำเร็จ' : 'ไม่พบจังหวัด'}
+											loading={provincesQuery.isLoading}
+											class="!h-9 rounded-md"
+											controlProps={{ ...props, id: 'province' }}
+										/>
+									{/snippet}
+								</Form.Control>
 								{#if provincesQuery.isLoading}
 									<p class="text-xs text-muted-foreground">กำลังโหลดรายการจังหวัด...</p>
 								{:else if provincesQuery.isError}
 									<p class="text-xs text-destructive">
 										โหลดรายการจังหวัดไม่สำเร็จ ลองเปิดเมนูอีกครั้ง
 									</p>
-								{:else if errors.province}
-									<p class="text-xs text-destructive">{errors.province}</p>
+								{:else if $errors.province}
+									<Form.FieldErrors />
 								{/if}
-							</div>
+							</Form.Field>
 
-							<div class="space-y-1.5">
-								<Label for="district">อำเภอ / เขต</Label>
-								<Select.Root
-									type="single"
-									value={district}
-									onValueChange={selectDistrict}
-									disabled={!province}
-								>
-									<Select.Trigger
-										id="district"
-										class="h-9 w-full bg-background"
-										aria-invalid={errors.district ? 'true' : undefined}
-									>
-										{district || (!province ? 'เลือกจังหวัดก่อน' : 'เลือกอำเภอ / เขต')}
-									</Select.Trigger>
-									<Select.Content>
-										{#if districtsQuery.isLoading}
-											<Select.Item value="__loading_districts" label="กำลังโหลดอำเภอ..." disabled />
-										{:else if districtsQuery.isError}
-											<Select.Item value="__error_districts" label="โหลดอำเภอไม่สำเร็จ" disabled />
-										{:else if districtItems.length === 0}
-											<Select.Item value="__empty_districts" label="ไม่พบข้อมูลอำเภอ" disabled />
-										{:else}
-											{#each districtItems as item (item.value)}
-												<Select.Item value={item.value} label={item.label} />
-											{/each}
-										{/if}
-									</Select.Content>
-								</Select.Root>
+							<Form.Field {form} name="district">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label
+											>อำเภอ / เขต {#if hasLocation}<span class="text-destructive">*</span
+												>{/if}</Form.Label
+										>
+										<SearchSelect
+											name={props.name}
+											bind:value={() => district, selectDistrict}
+											options={districtItems}
+											placeholder={!province ? 'เลือกจังหวัดก่อน' : 'เลือกอำเภอ / เขต'}
+											searchPlaceholder="ค้นหาอำเภอ / เขต..."
+											emptyText={districtsQuery.isError ? 'โหลดอำเภอไม่สำเร็จ' : 'ไม่พบอำเภอ / เขต'}
+											loading={districtsQuery.isLoading}
+											disabled={!province}
+											class="!h-9 rounded-md"
+											controlProps={{ ...props, id: 'district' }}
+										/>
+									{/snippet}
+								</Form.Control>
 								{#if districtsQuery.isLoading && province}
 									<p class="text-xs text-muted-foreground">กำลังโหลดรายการอำเภอ...</p>
 								{:else if districtsQuery.isError && province}
 									<p class="text-xs text-destructive">โหลดรายการอำเภอไม่สำเร็จ</p>
-								{:else if errors.district}
-									<p class="text-xs text-destructive">{errors.district}</p>
+								{:else if $errors.district}
+									<Form.FieldErrors />
 								{/if}
-							</div>
+							</Form.Field>
 
-							<div class="space-y-1.5">
-								<Label for="subdistrict">ตำบล / แขวง</Label>
-								<Select.Root
-									type="single"
-									value={subdistrict}
-									onValueChange={selectSubdistrict}
-									disabled={!district}
-								>
-									<Select.Trigger
-										id="subdistrict"
-										class="h-9 w-full bg-background"
-										aria-invalid={errors.subdistrict ? 'true' : undefined}
-									>
-										{subdistrict || (!district ? 'เลือกอำเภอก่อน' : 'เลือกตำบล / แขวง')}
-									</Select.Trigger>
-									<Select.Content>
-										{#if subdistrictsQuery.isLoading}
-											<Select.Item
-												value="__loading_subdistricts"
-												label="กำลังโหลดตำบล..."
-												disabled
-											/>
-										{:else if subdistrictsQuery.isError}
-											<Select.Item
-												value="__error_subdistricts"
-												label="โหลดตำบลไม่สำเร็จ"
-												disabled
-											/>
-										{:else if subdistrictItems.length === 0}
-											<Select.Item value="__empty_subdistricts" label="ไม่พบข้อมูลตำบล" disabled />
-										{:else}
-											{#each subdistrictItems as item (item.value)}
-												<Select.Item value={item.value} label={item.label} />
-											{/each}
-										{/if}
-									</Select.Content>
-								</Select.Root>
+							<Form.Field {form} name="subdistrict">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label
+											>ตำบล / แขวง {#if hasLocation}<span class="text-destructive">*</span
+												>{/if}</Form.Label
+										>
+										<SearchSelect
+											name={props.name}
+											bind:value={() => subdistrict, selectSubdistrict}
+											options={subdistrictItems}
+											placeholder={!district ? 'เลือกอำเภอก่อน' : 'เลือกตำบล / แขวง'}
+											searchPlaceholder="ค้นหาตำบล / แขวง..."
+											emptyText={subdistrictsQuery.isError
+												? 'โหลดตำบลไม่สำเร็จ'
+												: 'ไม่พบตำบล / แขวง'}
+											loading={subdistrictsQuery.isLoading}
+											disabled={!district}
+											class="!h-9 rounded-md"
+											controlProps={{ ...props, id: 'subdistrict' }}
+										/>
+									{/snippet}
+								</Form.Control>
 								{#if subdistrictsQuery.isLoading && district}
 									<p class="text-xs text-muted-foreground">กำลังโหลดรายการตำบล...</p>
 								{:else if subdistrictsQuery.isError && district}
 									<p class="text-xs text-destructive">โหลดรายการตำบลไม่สำเร็จ</p>
-								{:else if errors.subdistrict}
-									<p class="text-xs text-destructive">{errors.subdistrict}</p>
+								{:else if $errors.subdistrict}
+									<Form.FieldErrors />
 								{/if}
-							</div>
+							</Form.Field>
 
-							<div class="space-y-1.5">
-								<Label for="postal_code">รหัสไปรษณีย์</Label>
-								<Input
-									id="postal_code"
-									value={postalCode}
-									disabled
-									aria-invalid={errors.postalCode ? 'true' : undefined}
-									placeholder={!subdistrict ? 'เลือกตำบลก่อน' : 'กำลังเติมรหัสไปรษณีย์...'}
-									class="bg-muted/50"
-								/>
-								{#if errors.postalCode}
-									<p class="text-xs text-destructive">{errors.postalCode}</p>
-								{/if}
-							</div>
+							<Form.Field {form} name="postalCode">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label
+											>รหัสไปรษณีย์ {#if hasLocation}<span class="text-destructive">*</span
+												>{/if}</Form.Label
+										>
+										<Input
+											{...props}
+											id="postal_code"
+											value={postalCode}
+											disabled
+											placeholder={!subdistrict ? 'เลือกตำบลก่อน' : 'กำลังเติมรหัสไปรษณีย์...'}
+											class="bg-muted/50"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
 						</div>
 					</section>
 

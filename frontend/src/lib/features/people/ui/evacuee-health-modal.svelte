@@ -7,10 +7,13 @@
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { useMasterData } from '$lib/features/master-data';
 	import {
 		EWAR_SYMPTOM_GROUPS,
+		evacueeHealthEditFormSchema,
 		type BloodGroup,
 		type CareTrack,
 		type Evacuee,
@@ -20,6 +23,8 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { defaults, superForm } from 'sveltekit-superforms';
+	import { zod4 } from 'sveltekit-superforms/adapters';
 
 	export type EvacueeHealthEditData = {
 		bloodGroup: BloodGroup;
@@ -171,6 +176,13 @@
 			: [...specialNeeds, code];
 	}
 
+	const form = superForm(defaults(snapshot(), zod4(evacueeHealthEditFormSchema)), {
+		SPA: true,
+		validators: zod4(evacueeHealthEditFormSchema),
+		resetForm: false
+	});
+	const { form: formData, validateForm } = form;
+
 	function validate(): boolean {
 		if (temperatureError) {
 			validationError = temperatureError;
@@ -181,22 +193,40 @@
 	}
 
 	async function save() {
-		if (saving || !validate()) return;
+		$formData = {
+			bloodGroup,
+			careTrack,
+			conditions,
+			medications,
+			allergies,
+			medicalNotes,
+			screeningNotes,
+			selectedSymptoms,
+			temperature,
+			referral,
+			specialNeeds
+		};
+		const validation = await validateForm({ update: true, focusOnError: true });
+		if (saving || !validation.valid) {
+			if (!validation.valid) validationError = 'กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน';
+			return;
+		}
+		if (!validate()) return;
 
 		saving = true;
 		try {
 			await onSave({
-				bloodGroup,
-				careTrack,
-				conditions: listFromText(conditions),
-				medications: listFromText(medications),
-				allergies: listFromText(allergies),
-				medicalNotes: medicalNotes.trim(),
-				screeningNotes: screeningNotes.trim(),
-				ewarSymptoms: [...selectedSymptoms],
-				temperatureC: temperature.trim() ? Number(temperature) : null,
-				referral,
-				specialNeeds: [...specialNeeds]
+				bloodGroup: validation.data.bloodGroup,
+				careTrack: validation.data.careTrack,
+				conditions: listFromText(validation.data.conditions),
+				medications: listFromText(validation.data.medications),
+				allergies: listFromText(validation.data.allergies),
+				medicalNotes: validation.data.medicalNotes,
+				screeningNotes: validation.data.screeningNotes,
+				ewarSymptoms: validation.data.selectedSymptoms,
+				temperatureC: validation.data.temperature ? Number(validation.data.temperature) : null,
+				referral: validation.data.referral,
+				specialNeeds: validation.data.specialNeeds
 			});
 		} finally {
 			saving = false;
@@ -272,59 +302,71 @@
 						</div>
 
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-							<div class="space-y-1.5">
-								<label for="health-blood-group" class="text-xs font-semibold text-foreground"
-									>หมู่เลือด</label
-								>
-								<Select.Root type="single" bind:value={bloodGroup}>
-									<Select.Trigger id="health-blood-group" class="h-9 w-full bg-background">
-										{bloodGroupOptions.find((option) => option.value === bloodGroup)?.label ??
-											'ไม่ระบุ'}
-									</Select.Trigger>
-									<Select.Content>
-										{#each bloodGroupOptions as option (option.value)}
-											<Select.Item value={option.value} label={option.label} />
-										{/each}
-									</Select.Content>
-								</Select.Root>
-							</div>
+							<Form.Field {form} name="bloodGroup">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>หมู่เลือด</Form.Label>
+										<Select.Root type="single" bind:value={bloodGroup}>
+											<Select.Trigger
+												{...props}
+												id="health-blood-group"
+												class="!h-9 w-full rounded-md bg-background"
+											>
+												{bloodGroupOptions.find((option) => option.value === bloodGroup)?.label ??
+													'ไม่ระบุ'}
+											</Select.Trigger>
+											<Select.Content>
+												{#each bloodGroupOptions as option (option.value)}
+													<Select.Item value={option.value} label={option.label} />
+												{/each}
+											</Select.Content>
+										</Select.Root>
+									{/snippet}
+								</Form.Control>
+							</Form.Field>
 
-							<div class="space-y-1.5">
-								<label for="health-care-track" class="text-xs font-semibold text-foreground"
-									>แนวทางดูแล</label
-								>
-								<Select.Root type="single" bind:value={careTrack}>
-									<Select.Trigger id="health-care-track" class="h-9 w-full bg-background">
-										{careTrackOptions.find((option) => option.value === careTrack)?.label ??
-											'ดูแลตามปกติ'}
-									</Select.Trigger>
-									<Select.Content>
-										{#each careTrackOptions as option (option.value)}
-											<Select.Item value={option.value} label={option.label} />
-										{/each}
-									</Select.Content>
-								</Select.Root>
-							</div>
+							<Form.Field {form} name="careTrack">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>แนวทางดูแล</Form.Label>
+										<Select.Root type="single" bind:value={careTrack}>
+											<Select.Trigger
+												{...props}
+												id="health-care-track"
+												class="!h-9 w-full rounded-md bg-background"
+											>
+												{careTrackOptions.find((option) => option.value === careTrack)?.label ??
+													'ดูแลตามปกติ'}
+											</Select.Trigger>
+											<Select.Content>
+												{#each careTrackOptions as option (option.value)}
+													<Select.Item value={option.value} label={option.label} />
+												{/each}
+											</Select.Content>
+										</Select.Root>
+									{/snippet}
+								</Form.Control>
+							</Form.Field>
 
-							<div class="space-y-1.5">
-								<label for="health-temperature" class="text-xs font-semibold text-foreground"
-									>อุณหภูมิ (°C)</label
-								>
-								<Input
-									id="health-temperature"
-									bind:value={temperature}
-									type="number"
-									inputmode="decimal"
-									step="0.1"
-									min="30"
-									max="45"
-									placeholder="เช่น 36.8"
-									aria-invalid={!!temperatureError}
-								/>
-								{#if temperatureError}
-									<p class="text-[11px] text-destructive" role="alert">{temperatureError}</p>
-								{/if}
-							</div>
+							<Form.Field {form} name="temperature">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>อุณหภูมิ (°C)</Form.Label>
+										<Input
+											{...props}
+											id="health-temperature"
+											bind:value={temperature}
+											type="number"
+											inputmode="decimal"
+											step="0.1"
+											min="30"
+											max="45"
+											placeholder="เช่น 36.8"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
 						</div>
 					</section>
 
@@ -336,45 +378,51 @@
 							ประวัติสุขภาพ
 						</h3>
 						<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-							<label
-								class="space-y-1.5 text-xs font-semibold text-foreground"
-								for="health-conditions"
-							>
-								โรคประจำตัว
-								<textarea
-									id="health-conditions"
-									bind:value={conditions}
-									rows="3"
-									placeholder="เช่น เบาหวาน, ความดัน"
-									class="flex min-h-20 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm font-normal transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-								></textarea>
-							</label>
-							<label
-								class="space-y-1.5 text-xs font-semibold text-foreground"
-								for="health-medications"
-							>
-								ยาที่ใช้ประจำ
-								<textarea
-									id="health-medications"
-									bind:value={medications}
-									rows="3"
-									placeholder="เช่น ยาลดความดัน"
-									class="flex min-h-20 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm font-normal transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-								></textarea>
-							</label>
-							<label
-								class="space-y-1.5 text-xs font-semibold text-foreground"
-								for="health-allergies"
-							>
-								ประวัติการแพ้
-								<textarea
-									id="health-allergies"
-									bind:value={allergies}
-									rows="3"
-									placeholder="เช่น เพนิซิลลิน, อาหารทะเล"
-									class="flex min-h-20 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm font-normal transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-								></textarea>
-							</label>
+							<Form.Field {form} name="conditions">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>โรคประจำตัว</Form.Label>
+										<Textarea
+											{...props}
+											id="health-conditions"
+											bind:value={conditions}
+											rows={3}
+											placeholder="เช่น เบาหวาน, ความดัน"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+							<Form.Field {form} name="medications">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>ยาที่ใช้ประจำ</Form.Label>
+										<Textarea
+											{...props}
+											id="health-medications"
+											bind:value={medications}
+											rows={3}
+											placeholder="เช่น ยาลดความดัน"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
+							<Form.Field {form} name="allergies">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>ประวัติการแพ้</Form.Label>
+										<Textarea
+											{...props}
+											id="health-allergies"
+											bind:value={allergies}
+											rows={3}
+											placeholder="เช่น เพนิซิลลิน, อาหารทะเล"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
 						</div>
 					</section>
 
@@ -390,45 +438,50 @@
 							{/if}
 						</div>
 
-						<div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-							{#each EWAR_SYMPTOM_GROUPS as group (group.title)}
-								<div class="overflow-hidden rounded-lg border border-border bg-background">
-									<div
-										class="flex items-center justify-between border-b border-border bg-muted/20 px-3 py-2"
-									>
-										<h4 class="text-xs font-semibold text-foreground">{group.title}</h4>
-										<span class="text-[10px] text-muted-foreground">
-											{group.symptoms.filter((symptom) => selectedSymptoms.includes(symptom.id))
-												.length}/{group.symptoms.length}
-										</span>
-									</div>
-									<div class="space-y-1 p-2">
-										{#each group.symptoms as symptom (symptom.id)}
-											{@const checked = selectedSymptoms.includes(symptom.id)}
-											<button
-												type="button"
-												role="checkbox"
-												aria-checked={checked}
-												aria-label={symptom.label}
-												onclick={() => toggleSymptom(symptom.id)}
-												class="flex w-full items-start gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none {checked
-													? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/35 dark:text-red-100'
-													: 'border-transparent text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground'}"
+						<Form.Field {form} name="selectedSymptoms">
+							<Form.Control>
+								<div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+									{#each EWAR_SYMPTOM_GROUPS as group (group.title)}
+										<div class="overflow-hidden rounded-lg border border-border bg-background">
+											<div
+												class="flex items-center justify-between border-b border-border bg-muted/20 px-3 py-2"
 											>
-												<span
-													class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border {checked
-														? 'border-red-600 bg-red-600 text-white'
-														: 'border-muted-foreground/50 bg-background'}"
-												>
-													{#if checked}<Check class="size-3" aria-hidden="true" />{/if}
+												<h4 class="text-xs font-semibold text-foreground">{group.title}</h4>
+												<span class="text-[10px] text-muted-foreground">
+													{group.symptoms.filter((symptom) => selectedSymptoms.includes(symptom.id))
+														.length}/{group.symptoms.length}
 												</span>
-												<span class="leading-snug">{symptom.label}</span>
-											</button>
-										{/each}
-									</div>
+											</div>
+											<div class="space-y-1 p-2">
+												{#each group.symptoms as symptom (symptom.id)}
+													{@const checked = selectedSymptoms.includes(symptom.id)}
+													<button
+														type="button"
+														role="checkbox"
+														aria-checked={checked}
+														aria-label={symptom.label}
+														onclick={() => toggleSymptom(symptom.id)}
+														class="flex w-full items-start gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none {checked
+															? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/35 dark:text-red-100'
+															: 'border-transparent text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground'}"
+													>
+														<span
+															class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border {checked
+																? 'border-red-600 bg-red-600 text-white'
+																: 'border-muted-foreground/50 bg-background'}"
+														>
+															{#if checked}<Check class="size-3" aria-hidden="true" />{/if}
+														</span>
+														<span class="leading-snug">{symptom.label}</span>
+													</button>
+												{/each}
+											</div>
+										</div>
+									{/each}
 								</div>
-							{/each}
-						</div>
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 					</section>
 
 					<section class="space-y-3" aria-labelledby="needs-heading">
@@ -439,96 +492,116 @@
 							<p class="text-[11px] text-muted-foreground">แสดงเฉพาะกลุ่มที่ศูนย์พักพิงรองรับ</p>
 						</div>
 
-						<div class="space-y-2">
-							<span class="text-xs font-semibold text-foreground">กลุ่มเปราะบาง</span>
-							{#if vulnerableGroupQuery.isLoading || shelterQuery.isLoading}
-								<p class="text-xs text-muted-foreground">กำลังโหลดรายการกลุ่มเปราะบาง...</p>
-							{:else if specialNeedOptions.length === 0}
-								<p
-									class="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
-								>
-									ศูนย์พักพิงยังไม่ได้กำหนดกลุ่มเปราะบางที่รองรับ
-								</p>
-							{:else}
-								<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-									{#each specialNeedOptions as option (option.code)}
-										{@const checked = specialNeeds.includes(option.code)}
-										<button
-											type="button"
-											role="checkbox"
-											aria-checked={checked}
-											onclick={() => toggleSpecialNeed(option.code)}
-											class="flex min-h-9 items-center gap-2 rounded-md border px-3 py-2 text-left text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none {checked
-												? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100'
-												: 'border-border bg-background text-muted-foreground hover:bg-muted/40 hover:text-foreground'}"
+						<Form.Field {form} name="specialNeeds">
+							<Form.Control>
+								<div class="space-y-2">
+									<Form.Label>กลุ่มเปราะบาง</Form.Label>
+									{#if vulnerableGroupQuery.isLoading || shelterQuery.isLoading}
+										<p class="text-xs text-muted-foreground">กำลังโหลดรายการกลุ่มเปราะบาง...</p>
+									{:else if specialNeedOptions.length === 0}
+										<p
+											class="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
 										>
-											<span
-												class="flex size-4 shrink-0 items-center justify-center rounded border {checked
-													? 'border-amber-600 bg-amber-600 text-white'
-													: 'border-muted-foreground/50'}"
-											>
-												{#if checked}<Check class="size-3" aria-hidden="true" />{/if}
-											</span>
-											<span>{option.label}</span>
-										</button>
-									{/each}
+											ศูนย์พักพิงยังไม่ได้กำหนดกลุ่มเปราะบางที่รองรับ
+										</p>
+									{:else}
+										<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+											{#each specialNeedOptions as option (option.code)}
+												{@const checked = specialNeeds.includes(option.code)}
+												<button
+													type="button"
+													role="checkbox"
+													aria-checked={checked}
+													onclick={() => toggleSpecialNeed(option.code)}
+													class="flex min-h-9 items-center gap-2 rounded-md border px-3 py-2 text-left text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none {checked
+														? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100'
+														: 'border-border bg-background text-muted-foreground hover:bg-muted/40 hover:text-foreground'}"
+												>
+													<span
+														class="flex size-4 shrink-0 items-center justify-center rounded border {checked
+															? 'border-amber-600 bg-amber-600 text-white'
+															: 'border-muted-foreground/50'}"
+													>
+														{#if checked}<Check class="size-3" aria-hidden="true" />{/if}
+													</span>
+													<span>{option.label}</span>
+												</button>
+											{/each}
+										</div>
+									{/if}
 								</div>
-							{/if}
-						</div>
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
 
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-							<div class="space-y-1.5">
-								<span class="text-xs font-semibold text-foreground">สถานะส่งต่อ</span>
-								<button
-									type="button"
-									role="switch"
-									aria-checked={referral}
-									onclick={() => (referral = !referral)}
-									class="flex min-h-9 w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none {referral
-										? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100'
-										: 'border-border bg-background text-muted-foreground hover:bg-muted/40'}"
-								>
-									<span>{referral ? 'ต้องส่งต่อเพื่อประเมินเพิ่มเติม' : 'ยังไม่ระบุการส่งต่อ'}</span
-									>
-									<span
-										class="relative h-5 w-9 rounded-full {referral
-											? 'bg-amber-600'
-											: 'bg-muted-foreground/30'}"
-									>
-										<span
-											class="absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform {referral
-												? 'translate-x-4'
-												: 'translate-x-0.5'}"
-										></span>
-									</span>
-								</button>
-							</div>
+							<Form.Field {form} name="referral">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>สถานะส่งต่อ</Form.Label>
+										<button
+											{...props}
+											type="button"
+											role="switch"
+											aria-checked={referral}
+											onclick={() => (referral = !referral)}
+											class="flex min-h-9 w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none {referral
+												? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100'
+												: 'border-border bg-background text-muted-foreground hover:bg-muted/40'}"
+										>
+											<span
+												>{referral
+													? 'ต้องส่งต่อเพื่อประเมินเพิ่มเติม'
+													: 'ยังไม่ระบุการส่งต่อ'}</span
+											>
+											<span
+												class="relative h-5 w-9 rounded-full {referral
+													? 'bg-amber-600'
+													: 'bg-muted-foreground/30'}"
+											>
+												<span
+													class="absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform {referral
+														? 'translate-x-4'
+														: 'translate-x-0.5'}"
+												></span>
+											</span>
+										</button>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
 
-							<div class="space-y-1.5">
-								<label for="health-screening-notes" class="text-xs font-semibold text-foreground"
-									>บันทึกการคัดกรองล่าสุด</label
-								>
-								<textarea
-									id="health-screening-notes"
-									bind:value={screeningNotes}
-									rows="3"
-									placeholder="เพิ่มข้อสังเกตหรือคำแนะนำสำหรับทีมดูแล"
-									class="flex min-h-20 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-								></textarea>
-							</div>
+							<Form.Field {form} name="screeningNotes">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>บันทึกการคัดกรองล่าสุด</Form.Label>
+										<Textarea
+											{...props}
+											id="health-screening-notes"
+											bind:value={screeningNotes}
+											rows={3}
+											placeholder="เพิ่มข้อสังเกตหรือคำแนะนำสำหรับทีมดูแล"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
 
-							<div class="space-y-1.5 sm:col-span-2">
-								<label for="health-medical-notes" class="text-xs font-semibold text-foreground"
-									>บันทึกการดูแลต่อเนื่อง</label
-								>
-								<textarea
-									id="health-medical-notes"
-									bind:value={medicalNotes}
-									rows="3"
-									placeholder="เพิ่มข้อมูลที่ต้องติดตามระหว่างพักพิง"
-									class="flex min-h-20 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-								></textarea>
-							</div>
+							<Form.Field {form} name="medicalNotes" class="sm:col-span-2">
+								<Form.Control>
+									{#snippet children({ props })}
+										<Form.Label>บันทึกการดูแลต่อเนื่อง</Form.Label>
+										<Textarea
+											{...props}
+											id="health-medical-notes"
+											bind:value={medicalNotes}
+											rows={3}
+											placeholder="เพิ่มข้อมูลที่ต้องติดตามระหว่างพักพิง"
+										/>
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors />
+							</Form.Field>
 						</div>
 					</section>
 
