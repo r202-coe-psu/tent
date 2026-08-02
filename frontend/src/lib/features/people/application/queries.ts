@@ -12,12 +12,20 @@ import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { peopleRepository } from '../data/people.remote';
-import type { EvacueeFilters, HouseholdSearchLabels } from '../data/people.repository';
+import type {
+	EvacueeFilters,
+	EvacueePatch,
+	HouseholdPatch,
+	HouseholdSearchLabels,
+	MedicalPatch
+} from '../data/people.repository';
 import type {
 	Evacuee,
 	EvacueeInput,
 	Household,
 	HouseholdInput,
+	Medical,
+	MedicalInput,
 	ScreeningInput
 } from '../domain/people';
 
@@ -108,6 +116,19 @@ export const useUpdateEvacuee = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: (evacuee: Evacuee) => peopleRepository().updateEvacuee(evacuee),
+		onSuccess: (evacuee) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+		}
+	}));
+};
+
+export const usePatchEvacuee = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ id, patch }: { id: string; patch: EvacueePatch }) =>
+			peopleRepository().patchEvacuee(id, patch),
 		onSuccess: (evacuee) => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
@@ -237,6 +258,18 @@ export const useUpdateHousehold = () => {
 	}));
 };
 
+export const usePatchHousehold = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ id, patch }: { id: string; patch: HouseholdPatch }) =>
+			peopleRepository().patchHousehold(id, patch),
+		onSuccess: (household) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.household(household._id) });
+		}
+	}));
+};
+
 export const useCancelPreRegistration = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
@@ -257,6 +290,48 @@ export const useCreateScreening = () => {
 			peopleRepository().createScreening(input, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.screenings() });
+		}
+	}));
+};
+
+export const useCreateMedical = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: MedicalInput; ctx: AuthorContext }) =>
+			peopleRepository().createMedical(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
+		}
+	}));
+};
+
+export const useUpdateMedical = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (medical: Medical) => peopleRepository().updateMedical(medical),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
+		}
+	}));
+};
+
+export const usePatchMedical = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ id, patch }: { id: string; patch: MedicalPatch }) =>
+			peopleRepository().patchMedical(id, patch),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
+		}
+	}));
+};
+
+export const useDeleteMedical = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (id: string) => peopleRepository().deleteMedical(id),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
 		}
 	}));
 };

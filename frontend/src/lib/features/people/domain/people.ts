@@ -229,7 +229,7 @@ export function checkEvacueeHouseholdConflict(
 	households: readonly Household[],
 	evacuees: readonly Evacuee[]
 ): EvacueeHouseholdConflict {
-	if (!targetHouseholdId || !evacuee.household_id || evacuee.household_id === targetHouseholdId) {
+	if (!evacuee.household_id || evacuee.household_id === targetHouseholdId) {
 		return { conflicted: false };
 	}
 
@@ -256,12 +256,14 @@ export function assertEvacueeHouseholdAssignment(
 	households: readonly Household[],
 	evacuees: readonly Evacuee[]
 ): void {
-	if (!targetHouseholdId || targetHouseholdId === evacuee.household_id) return;
+	if (targetHouseholdId === evacuee.household_id) return;
 
-	const targetHousehold = households.find((household) => household._id === targetHouseholdId);
-	if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
-	if (!isActiveHouseholdStatus(targetHousehold.status)) {
-		throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+	if (targetHouseholdId) {
+		const targetHousehold = households.find((household) => household._id === targetHouseholdId);
+		if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
+		if (!isActiveHouseholdStatus(targetHousehold.status)) {
+			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+		}
 	}
 
 	const conflict = checkEvacueeHouseholdConflict(evacuee, targetHouseholdId, households, evacuees);

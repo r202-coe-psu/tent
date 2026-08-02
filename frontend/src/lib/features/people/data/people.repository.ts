@@ -8,6 +8,7 @@ import type {
 	Screening,
 	ScreeningInput,
 	Medical,
+	MedicalInput,
 	Movement
 } from '../domain/people';
 
@@ -20,6 +21,47 @@ export type EvacueeFilters = {
 	specialNeed?: string;
 	zone?: string;
 };
+
+export type EvacueePatch = Partial<
+	Pick<
+		Evacuee,
+		| 'first_name'
+		| 'last_name'
+		| 'nickname'
+		| 'birth_year'
+		| 'age'
+		| 'gender'
+		| 'phone'
+		| 'person_id'
+		| 'country'
+		| 'religion'
+		| 'photo'
+		| 'special_needs'
+		| 'emergency_contact'
+		| 'household_id'
+		| 'current_stay'
+	>
+>;
+
+export type HouseholdPatch = Partial<
+	Pick<
+		Household,
+		| 'head_evacuee_id'
+		| 'address_no'
+		| 'village_no'
+		| 'subdistrict'
+		| 'district'
+		| 'province'
+		| 'postal_code'
+		| 'vehicles'
+		| 'assets'
+		| 'pets'
+	>
+>;
+
+export type MedicalPatch = Partial<
+	Pick<Medical, 'blood_group' | 'conditions' | 'medications' | 'allergies' | 'track' | 'notes'>
+>;
 
 /**
  * Persistence contract for the `people` feature. The application layer depends
@@ -48,6 +90,8 @@ export interface PeopleRepository {
 	getEvacuee(id: string): Promise<Evacuee | null>;
 	/** Persist an edited evacuee (LWW: bumps `updated_at`). */
 	updateEvacuee(evacuee: Evacuee): Promise<Evacuee>;
+	/** Merge section-owned evacuee fields into the latest persisted revision. */
+	patchEvacuee(id: string, patch: EvacueePatch): Promise<Evacuee>;
 	/** Mint a household from form input + author context and persist it. */
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household>;
 	/** Every household in this shelter database. */
@@ -63,14 +107,24 @@ export interface PeopleRepository {
 	getHousehold(id: string): Promise<Household | null>;
 	/** Persist an edited household (LWW: bumps `updated_at`). */
 	updateHousehold(household: Household): Promise<Household>;
+	/** Merge section-owned household fields into the latest persisted revision. */
+	patchHousehold(id: string, patch: HouseholdPatch): Promise<Household>;
 
 	/** Search evacuees by name, phone, or national ID. */
 	searchEvacuees(query: string): Promise<Evacuee[]>;
 
 	/** Mint a screening from input + author context and persist it. */
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening>;
+	/** Mint a medical record from input + author context and persist it. */
+	createMedical(input: MedicalInput, ctx: AuthorContext): Promise<Medical>;
 	/** Every medical record in this shelter database. */
 	listMedicals(): Promise<Medical[]>;
+	/** Persist an edited medical record (LWW: bumps `updated_at`). */
+	updateMedical(medical: Medical): Promise<Medical>;
+	/** Merge section-owned medical fields into the latest persisted revision. */
+	patchMedical(id: string, patch: MedicalPatch): Promise<Medical>;
+	/** Remove a medical record, used to compensate a failed multi-document health save. */
+	deleteMedical(id: string): Promise<void>;
 	/** Every movement record in this shelter database. */
 	listMovements(): Promise<Movement[]>;
 	/** Every screening record in this shelter database. */
