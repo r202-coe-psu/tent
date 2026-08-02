@@ -22,7 +22,8 @@ import {
 	evacueeInputSchema,
 	householdPreRegisterEvacueeSchema,
 	householdPreRegisterAddressFormSchema,
-	householdPostArrivalAddressFormSchema
+	householdPostArrivalAddressFormSchema,
+	evacueePersonalEditFormSchema
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -180,6 +181,28 @@ describe('evacueeInputSchema birth_year', () => {
 				'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต'
 			);
 		}
+	});
+});
+
+describe('evacueePersonalEditFormSchema age', () => {
+	it('accepts newborn age 0 without treating it as empty', () => {
+		const currentBEYear = new Date().getFullYear() + 543;
+		const result = evacueePersonalEditFormSchema.safeParse({
+			firstName: 'ทารก',
+			lastName: 'แรกเกิด',
+			nickname: '',
+			birthYear: String(currentBEYear),
+			age: '0',
+			gender: 'other',
+			phone: '',
+			noPhone: true,
+			cardType: 'national_id',
+			cardNumber: '',
+			country: 'THAILAND',
+			religion: 'unknown'
+		});
+
+		expect(result.success).toBe(true);
 	});
 });
 

@@ -580,7 +580,7 @@ export const evacueePersonalEditFormSchema = z
 			});
 		}
 
-		const parsedAge = data.age ? Number.parseInt(data.age, 10) : undefined;
+		const parsedAge = data.age.trim() !== '' ? Number.parseInt(data.age, 10) : undefined;
 		const parsedBirthYear = data.birthYear ? Number.parseInt(data.birthYear, 10) : undefined;
 		if (
 			data.age &&
@@ -816,29 +816,6 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 	);
 }
 
-/** Migrates a stored household doc up to schema_v 4 (adds status, checkout_destination; normalizes vehicle -> vehicles). */
-// export function migrateHouseholdV3ToV4(doc: any): Household {
-// 	if (doc && doc.type === 'household' && (!doc.schema_v || doc.schema_v < 4)) {
-// 		let vehicles = doc.vehicles;
-// 		if (!vehicles) {
-// 			if (doc.vehicle) {
-// 				vehicles = [doc.vehicle];
-// 			} else {
-// 				vehicles = [];
-// 			}
-// 		}
-// 		const migrated = {
-// 			...doc,
-// 			schema_v: 4,
-// 			status: doc.status || 'checked_in',
-// 			checkout_destination: doc.checkout_destination || null,
-// 			vehicles
-// 		};
-// 		delete migrated.vehicle;
-// 		return migrated;
-// 	}
-// 	return doc;
-// }
 export function migrateHouseholdV3ToV4(doc: unknown): Household {
 	const candidate = doc as Household | LegacyHouseholdDoc;
 	if (

@@ -105,6 +105,7 @@
 	let storedPhotoUrl = $state<string | null>(null);
 	let selectedPhotoUrl = $state<string | null>(null);
 	let saving = $state(false);
+	let lastOpenedEvacueeId = $state<string | null>(null);
 
 	const form = superForm(defaults(initial, zod4(evacueePersonalEditFormSchema)), {
 		SPA: true,
@@ -112,6 +113,50 @@
 		resetForm: false
 	});
 	const { form: formData, validateForm } = form;
+
+	// Rehydrate from the latest query result each time this modal opens. The
+	// component stays mounted between opens, so one-time initial state can be stale.
+	$effect(() => {
+		if (!show) {
+			lastOpenedEvacueeId = null;
+			return;
+		}
+		if (lastOpenedEvacueeId === evacuee._id) return;
+
+		const next = {
+			firstName: evacuee.first_name,
+			lastName: evacuee.last_name,
+			nickname: evacuee.nickname ?? '',
+			birthYear: evacuee.birth_year?.toString() ?? '',
+			age:
+				evacuee.age?.toString() ??
+				(evacuee.birth_year ? String(Math.max(0, currentYearBE - evacuee.birth_year)) : ''),
+			gender: evacuee.gender,
+			phone: evacuee.phone ?? '',
+			noPhone: !evacuee.phone,
+			cardType: evacuee.person_id?.cardType ?? 'national_id',
+			cardNumber: evacuee.person_id?.number ?? '',
+			country: evacuee.country || 'THAILAND',
+			religion: evacuee.religion ?? 'unknown'
+		};
+		firstName = next.firstName;
+		lastName = next.lastName;
+		nickname = next.nickname;
+		birthYear = next.birthYear;
+		age = next.age;
+		gender = next.gender;
+		phone = next.phone;
+		noPhone = next.noPhone;
+		cardType = next.cardType;
+		cardNumber = next.cardNumber;
+		country = next.country;
+		religion = next.religion;
+		$formData = next;
+		photoFile = null;
+		removePhoto = false;
+		storedPhotoUrl = null;
+		lastOpenedEvacueeId = evacuee._id;
+	});
 
 	$effect(() => {
 		const photoId = evacuee.photo;
@@ -211,7 +256,7 @@
 			return;
 		}
 
-		const parsedAge = age ? Number.parseInt(age, 10) : undefined;
+		const parsedAge = age.trim() !== '' ? Number.parseInt(age, 10) : undefined;
 		const parsedBirthYear = birthYear ? Number.parseInt(birthYear, 10) : undefined;
 		if (
 			parsedAge !== undefined &&

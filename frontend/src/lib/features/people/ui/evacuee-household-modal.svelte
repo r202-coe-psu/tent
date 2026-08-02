@@ -43,12 +43,30 @@
 	let householdId = $state(initial.householdId);
 	let setAsHead = $state(initial.setAsHead);
 	let saving = $state(false);
+	let lastOpenedEvacueeId = $state<string | null>(null);
 	const form = superForm(defaults(initial, zod4(evacueeHouseholdEditFormSchema)), {
 		SPA: true,
 		validators: zod4(evacueeHouseholdEditFormSchema),
 		resetForm: false
 	});
 	const { form: formData, validateForm } = form;
+
+	$effect(() => {
+		if (!show) {
+			lastOpenedEvacueeId = null;
+			return;
+		}
+		if (lastOpenedEvacueeId === evacuee._id) return;
+
+		const nextHouseholdId = evacuee.household_id ?? '';
+		householdId = nextHouseholdId;
+		setAsHead = nextHouseholdId
+			? households.find((household) => household._id === nextHouseholdId)?.head_evacuee_id ===
+				evacuee._id
+			: false;
+		$formData = { householdId, setAsHead };
+		lastOpenedEvacueeId = evacuee._id;
+	});
 
 	const householdOptions = $derived(
 		households.filter(

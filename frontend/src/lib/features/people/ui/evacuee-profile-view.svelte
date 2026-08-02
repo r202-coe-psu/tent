@@ -18,9 +18,14 @@
 		useDeleteMedical,
 		useCreateScreening,
 		usePatchEvacuee,
-		usePatchHousehold,
-		isActiveHouseholdStatus
+		usePatchHousehold
 	} from '$lib/features/people';
+	import {
+		hasStaffCapability,
+		isShelterManager,
+		isSystemAdmin,
+		shelterCodeFromRoles
+	} from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -58,6 +63,21 @@
 	} from './evacuee-household-modal.svelte';
 
 	let { evacueeId, readonly = false }: { evacueeId: string; readonly?: boolean } = $props();
+
+	const canEditProfile = $derived.by(() => {
+		if (readonly || !authStore.user) return false;
+		const roles = authStore.user.roles;
+		if (isSystemAdmin(roles)) return true;
+
+		const scopedShelter = shelterCodeFromRoles(roles);
+		const currentShelter = (shelterStore.selectedShelterCode ?? getShelterCode()).toUpperCase();
+		return (
+			!!scopedShelter &&
+			scopedShelter.toUpperCase() === currentShelter &&
+			(isShelterManager(roles) || hasStaffCapability(roles, 'registration_staff'))
+		);
+	});
+	const profileReadonly = $derived(readonly || !canEditProfile);
 
 	const statusConfig: Partial<
 		Record<StayStatus, { label: string; colorClass: string; dotClass: string }>
@@ -204,6 +224,14 @@
 	const visibleMovements = $derived(movements.slice(0, visibleMovementsCount));
 	const hasMoreMovements = $derived(movements.length > visibleMovementsCount);
 
+	function getAuthorContext() {
+		const createdBy = authStore.user?.name?.trim();
+		if (!createdBy) {
+			throw new Error('ไม่พบผู้ใช้งานปัจจุบัน กรุณารอการยืนยันตัวตนแล้วลองใหม่');
+		}
+		return { shelterCode: getShelterCode(), createdBy };
+	}
+
 	// Modal visibility state
 	let showZoneModal = $state(false);
 	let showStatusModal = $state(false);
@@ -302,14 +330,13 @@
 	async function savePersonal(data: EvacueePersonalEditData) {
 		if (!evacuee) return;
 		try {
+			await authStore.ensureInitialized();
 			let photo = data.removePhoto ? null : evacuee.photo;
 			if (data.photoFile) {
+				const actor = getAuthorContext();
 				const image = await saveImageMutation.mutateAsync({
 					file: data.photoFile,
-					ctx: {
-						shelterCode: getShelterCode(),
-						createdBy: authStore.user?.name ?? 'unknown'
-					},
+					ctx: actor,
 					caption: `${data.firstName} ${data.lastName}`
 				});
 				photo = image._id;
@@ -400,7 +427,10 @@
 		let patchedEvacuee = false;
 		let patchedMedical = false;
 		let createdMedicalId: string | null = null;
+		let actor: ReturnType<typeof getAuthorContext> | null = null;
+		const getActor = () => (actor ??= getAuthorContext());
 		try {
+			await authStore.ensureInitialized();
 			if ((medical || medicalHasValues) && medicalChanged) {
 				if (medical) {
 					await patchMedicalMutation.mutateAsync({
@@ -411,10 +441,7 @@
 				} else {
 					const created = await createMedicalMutation.mutateAsync({
 						input: { evacuee_id: evacuee._id, ...medicalPatch },
-						ctx: {
-							shelterCode: getShelterCode(),
-							createdBy: authStore.user?.name ?? 'unknown'
-						}
+						ctx: getActor()
 					});
 					createdMedicalId = created._id;
 				}
@@ -438,10 +465,7 @@
 						needs_referral: data.referral,
 						notes: data.screeningNotes || undefined
 					},
-					ctx: {
-						shelterCode: getShelterCode(),
-						createdBy: authStore.user?.name ?? 'unknown'
-					}
+					ctx: getActor()
 				});
 			}
 			toast.success('บันทึกข้อมูลสุขภาพเรียบร้อย');
@@ -485,23 +509,10 @@
 	async function saveHousehold(data: EvacueeHouseholdEditData) {
 		if (!evacuee) return;
 		try {
-			const previousHousehold = household;
 			await patchEvacueeMutation.mutateAsync({
 				id: evacuee._id,
 				patch: { household_id: data.householdId }
 			});
-			if (
-				previousHousehold &&
-				previousHousehold.head_evacuee_id === evacuee._id &&
-				(!data.setAsHead || data.householdId !== previousHousehold._id) &&
-				(data.householdId === previousHousehold._id ||
-					!isActiveHouseholdStatus(previousHousehold.status))
-			) {
-				await patchHouseholdMutation.mutateAsync({
-					id: previousHousehold._id,
-					patch: { head_evacuee_id: null }
-				});
-			}
 			const targetHousehold = data.householdId
 				? householdsQuery.data?.find((item) => item._id === data.householdId)
 				: null;
@@ -562,7 +573,7 @@
 			{medical}
 			{screening}
 			{statusInfo}
-			{readonly}
+			readonly={profileReadonly}
 			onOpenProfileEdit={() => (showPersonalModal = true)}
 			onOpenZoneModal={() => (showZoneModal = true)}
 			onOpenStatusModal={() => (showStatusModal = true)}
@@ -577,17 +588,17 @@
 				<EvacueeProfileZoneCard
 					{evacuee}
 					{shelterName}
-					{readonly}
+					readonly={profileReadonly}
 					onOpenEdit={() => (showZoneModal = true)}
 				/>
 				<EvacueeProfilePersonalCard
 					{evacuee}
-					{readonly}
+					readonly={profileReadonly}
 					onOpenEdit={() => (showPersonalModal = true)}
 				/>
 				<EvacueeProfileEmergencyCard
 					{evacuee}
-					{readonly}
+					readonly={profileReadonly}
 					onOpenEdit={() => (showEmergencyModal = true)}
 				/>
 			</div>
@@ -599,20 +610,20 @@
 					{evacuee}
 					{medical}
 					{screening}
-					{readonly}
+					readonly={profileReadonly}
 					onOpenEdit={() => (showHealthModal = true)}
 				/>
 				<EvacueeProfileHouseholdCard
 					{evacuee}
 					{household}
 					{familyMembers}
-					{readonly}
+					readonly={profileReadonly}
 					onOpenHouseholdModal={() => (showHouseholdModal = true)}
 					onOpenAddressModal={() => (showAddressModal = true)}
 				/>
 				<EvacueeProfileAssetsCard
 					{household}
-					{readonly}
+					readonly={profileReadonly}
 					onOpenAssetModal={() => (showAssetModal = true)}
 				/>
 			</div>
@@ -682,7 +693,7 @@
 	</div>
 
 	<!-- Modals (edit mode only) -->
-	{#if !readonly}
+	{#if !profileReadonly}
 		<EvacueeZoneModal
 			show={showZoneModal}
 			{evacuee}

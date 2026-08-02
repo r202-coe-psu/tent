@@ -41,6 +41,7 @@
 	let phone = $state(initial.phone);
 	let relation = $state(initial.relation);
 	let saving = $state(false);
+	let lastOpenedEvacueeId = $state<string | null>(null);
 	const hasContact = $derived(Boolean(name.trim() || phone.trim() || relation.trim()));
 	const form = superForm(defaults(initial, zod4(evacueeEmergencyEditFormSchema)), {
 		SPA: true,
@@ -48,6 +49,20 @@
 		resetForm: false
 	});
 	const { form: formData, validateForm } = form;
+
+	$effect(() => {
+		if (!show) {
+			lastOpenedEvacueeId = null;
+			return;
+		}
+		if (lastOpenedEvacueeId === evacuee._id) return;
+
+		name = evacuee.emergency_contact?.name ?? '';
+		phone = evacuee.emergency_contact?.phone ?? '';
+		relation = evacuee.emergency_contact?.relation ?? '';
+		$formData = { name, phone, relation };
+		lastOpenedEvacueeId = evacuee._id;
+	});
 
 	function digits(value: string): string {
 		return value.replace(/\D/g, '');
