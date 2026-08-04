@@ -100,7 +100,6 @@
 					const msg = err instanceof Error ? err.message : String(err);
 					toast.error(`บันทึกไม่สำเร็จ: ${msg}`);
 				}
-				}
 			}
 		);
 	}
@@ -130,7 +129,6 @@
 				onError: (err: unknown) => {
 					const msg = err instanceof Error ? err.message : String(err);
 					toast.error(`คืนค่าไม่สำเร็จ: ${msg}`);
-				}
 				}
 			}
 		);

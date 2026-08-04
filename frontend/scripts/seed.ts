@@ -1504,6 +1504,9 @@ async function seedDailyCalc(): Promise<void> {
 		const body = dailyCalcDocSchema.parse({
 			formula_v: FORMULA_V,
 			sop_profile_version: sopVersion,
+			ratio_source: 'master',
+			sop_override_id: null,
+			sop_override_version: null,
 			ratio_snapshot: ratioSnapshot,
 			occupancy_snapshot: occupancy,
 			as_of: asOf,
