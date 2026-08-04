@@ -18,11 +18,8 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// Demo data for shelters in emergency banner
-	const alerts = [
-		{ name: 'ศูนย์ค่ายทหาร (Primary)', capacity: 'เต็มความจุ (95%)', variant: 'danger' },
-		{ name: 'ศูนย์ ม.ราชภัฏ (Secondary)', capacity: 'ว่างรับได้ (40%)', variant: 'success' }
-	];
+	// Real alerts logic should be implemented later, removing demo data
+	const alerts: { name: string; capacity: string; variant: string }[] = [];
 
 	// OP-7: Polling state
 	let lastUpdated = $state(0);
@@ -70,9 +67,15 @@
 </svelte:head>
 
 <div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-	<!-- 1. ประกาศด่วนระดับ 4 (อพยพทันที) -->
-	{#if showDemoEmergency}
-		<PublicEmergencyBanner {alerts} />
+	<!-- 1. ประกาศด่วนและอื่นๆ -->
+	{#if data.announcements && data.announcements.length > 0}
+		{#each data.announcements as announcement (announcement._id || announcement.id)}
+			<!-- Show shelter alerts demo only in the first emergency announcement if emergency_mode is on -->
+			<PublicEmergencyBanner
+				{announcement}
+				alerts={announcement.severity === 'emergency' && showDemoEmergency ? alerts : []}
+			/>
+		{/each}
 	{/if}
 
 	<!-- 2. Hero & Real-Time Metrics (T-57) -->

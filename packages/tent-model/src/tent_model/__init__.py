@@ -1,5 +1,6 @@
 from tent_model.db import ALL_DOCUMENTS, close_db, init_db
 from tent_model.donation_buffer import DonationBuffer, DonorBuffer
+from tent_model.public_announcement import PublicAnnouncement
 from tent_model.public_donation import DeclaredItem, PublicDonation
 from tent_model.public_need import PublicNeed
 from tent_model.public_person import PublicPerson
@@ -14,6 +15,7 @@ __all__ = [
 	"DonationBuffer",
 	"DonorBuffer",
 	"GeoPoint",
+	"PublicAnnouncement",
 	"PublicDonation",
 	"PublicNeed",
 	"PublicPerson",
