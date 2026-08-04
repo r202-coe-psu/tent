@@ -1,6 +1,5 @@
 import Decimal from 'decimal.js';
 import { persistQty } from '$lib/utils/qty';
-import type { ItemMaster } from '$lib/features/catalog';
 
 export function calculateReorderLevel(
 	occupancy: number,
@@ -27,7 +26,7 @@ export function calculateReorderLevel(
 		}
 
 		return persistQty(result);
-	} catch (error) {
+	} catch {
 		return null;
 	}
 }

@@ -1,5 +1,5 @@
 import { adminRaw } from '$lib/server/couch-admin';
-import { makeDoc, touch, type AuthorContext } from '$lib/db/model';
+import { makeDoc, shelterCodeSchema, touch, type AuthorContext } from '$lib/db/model';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { isEvacuee, type Evacuee, type Movement } from '$lib/features/people/domain/people';
 import {
@@ -84,6 +84,13 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			doc
 		);
 		if (status !== HTTP_CREATED && status !== HTTP_OK) {
+			if (status === HTTP_NOT_FOUND) {
+				throw new CouchDbReferralError(
+					`ไม่พบศูนย์พักพิงปลายทางหรือฐานข้อมูลไม่ถูกต้อง (${dbName})`,
+					status,
+					data
+				);
+			}
 			throw new CouchDbReferralError(`Failed to write ${doc._id} in ${dbName}`, status, data);
 		}
 		return data.rev;
@@ -104,6 +111,25 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			}
 		}
 		return this.putDoc(dbName, doc);
+	}
+
+	private async ensureDestinationDbExists(dbName: string): Promise<void> {
+		const { status, data } = await adminRaw(`/${dbName}`, 'HEAD');
+		if (status === HTTP_OK) {
+			return;
+		}
+		if (status === HTTP_NOT_FOUND) {
+			throw new CouchDbReferralError(
+				`ไม่พบศูนย์พักพิงปลายทางหรือฐานข้อมูลไม่ถูกต้อง (${dbName})`,
+				status,
+				data
+			);
+		}
+		throw new CouchDbReferralError(
+			`Failed to validate destination shelter database (${dbName})`,
+			status,
+			data
+		);
 	}
 
 	/**
@@ -254,7 +280,16 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		if (referral.referral_type !== 'capacity' || !referral.to_shelter_code) {
 			return;
 		}
-		const toDb = shelterDbName(referral.to_shelter_code);
+		const parsedToShelter = shelterCodeSchema.safeParse(referral.to_shelter_code);
+		if (!parsedToShelter.success) {
+			throw new CouchDbReferralError(
+				`ไม่พบศูนย์พักพิงปลายทางหรือฐานข้อมูลไม่ถูกต้อง (${shelterDbName(referral.to_shelter_code)})`,
+				422,
+				parsedToShelter.error.flatten()
+			);
+		}
+		const toDb = shelterDbName(parsedToShelter.data);
+		await this.ensureDestinationDbExists(toDb);
 		const { status, data } = await this.couchGet<unknown>(
 			toDb,
 			`/${encodeURIComponent(referral._id)}`
@@ -326,11 +361,21 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 				? [{ type: 'asc' }, { created_at: 'asc' }]
 				: [{ type: 'desc' }, { created_at: 'desc' }];
 
+		let useIndex: string;
+		if (parsed.status && parsed.sort === 'created_at_desc') {
+			useIndex = 'referral-list-status-created-desc-idx';
+		} else if (parsed.sort === 'created_at_desc') {
+			useIndex = 'referral-list-created-desc-idx';
+		} else {
+			useIndex = 'referral-list-created-asc-idx';
+		}
+
 		const body: Record<string, unknown> = {
 			selector,
 			limit: parsed.limit,
 			skip: parsed.skip,
-			sort
+			sort,
+			use_index: useIndex
 		};
 
 		const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', body);
@@ -434,6 +479,17 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		const updated = applyTransition(latest, to, actor, nowIso, reason);
 		const touched = touch(updated);
 
+		if (updated.referral_type === 'capacity' && updated.to_shelter_code) {
+			if (to === 'sent') {
+				await this.mirrorCapacityReferralToDestination(updated);
+			} else if (to === 'accepted' || to === 'rejected') {
+				await this.syncCapacityReferralPeer(updated, scope);
+			} else if (to === 'closed' && latest.status !== 'draft') {
+				// CR-046: draft→closed never mirrored — do not create a peer on destination.
+				await this.syncCapacityReferralPeer(updated, scope);
+			}
+		}
+
 		const { status, data } = await this.couchPut<PutResultResponse>(
 			this.dbName,
 			`/${encodeURIComponent(touched._id)}`,
@@ -445,18 +501,6 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		}
 
 		const saved: Referral = { ...touched, _rev: data.rev };
-
-		if (saved.referral_type === 'capacity' && saved.to_shelter_code) {
-			if (to === 'sent') {
-				await this.mirrorCapacityReferralToDestination(saved);
-			} else if (to === 'accepted' || to === 'rejected') {
-				await this.syncCapacityReferralPeer(saved, scope);
-			} else if (to === 'closed' && latest.status !== 'draft') {
-				// CR-046: draft→closed never mirrored — do not create a peer on destination.
-				await this.syncCapacityReferralPeer(saved, scope);
-			}
-		}
-
 		return saved;
 	}
 }

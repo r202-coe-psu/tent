@@ -76,12 +76,14 @@ import {
 	dailyCalcDocSchema,
 	DAILY_CALC_SCHEMA_VERSION
 } from '$lib/features/resource-calc/domain/calc.schema';
-import { type AuthorContext, makeDoc, now } from '$lib/db/model';
+import { shelterCodeSchema, type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
-
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
-import { buildValidateDocUpdate, REFERRAL_MANGO_INDEXES } from '$lib/server/shelter-access-design';
-
+import {
+	buildValidateDocUpdate,
+	REFERRAL_MANGO_INDEXES,
+	shelterDbName
+} from '$lib/server/shelter-access-design';
 // ─── env ──────────────────────────────────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -784,19 +786,86 @@ async function deployShelterAccessDesign(db: string, shelterCode: string): Promi
 		`/${db}/${encodeURIComponent(ddocId)}`
 	);
 	const rev = getStatus === 200 ? (existingDdoc as { _rev: string })._rev : undefined;
-	await couchReq('PUT', `/${db}/${encodeURIComponent(ddocId)}`, {
+	const { status, data } = await couchReq('PUT', `/${db}/${encodeURIComponent(ddocId)}`, {
 		_id: ddocId,
 		...(rev ? { _rev: rev } : {}),
 		validate_doc_update: buildValidateDocUpdate(shelterCode)
 	});
+	if (status >= 400) {
+		const detail = (data as { reason?: string; error?: string } | null) ?? {};
+		throw new Error(
+			`Cannot deploy _design/access to "${db}" (HTTP ${status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
+	}
 	console.log(`  ✓ ${db}: _design/access deployed (referral whitelist)`);
 }
 
 async function deployMangoIndexes(db: string): Promise<void> {
 	for (const def of REFERRAL_MANGO_INDEXES) {
-		await couchReq('POST', `/${db}/_index`, def);
+		const { status, data } = await couchReq('POST', `/${db}/_index`, def);
+		if (status >= 400) {
+			const detail = (data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`Cannot deploy Mango index "${def.name}" to "${db}" (HTTP ${status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
 	}
 	console.log(`  ✓ ${db}: Mango indexes for referral deployed`);
+}
+
+async function listRegistryShelterCodes(): Promise<string[]> {
+	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
+	if (status === 404) {
+		throw new Error('Cannot provision shelter databases: registry DB does not exist');
+	}
+	if (status >= 400) {
+		const detail = (data as { reason?: string; error?: string } | null) ?? {};
+		throw new Error(
+			`Cannot read registry for shelter provisioning (HTTP ${status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
+	}
+
+	const rows =
+		(data as { rows?: { id?: string; doc?: { type?: string; code?: unknown } }[] })?.rows ?? [];
+	const codes = new Set<string>();
+
+	for (const row of rows) {
+		if (!row.id?.startsWith('shelter:') || row.doc?.type !== 'shelter') continue;
+		const parsed = shelterCodeSchema.safeParse(row.doc.code);
+		if (!parsed.success) {
+			console.warn(`  ⚠ registry: skipping invalid shelter code "${String(row.doc.code)}"`);
+			continue;
+		}
+		codes.add(parsed.data);
+	}
+
+	return [...codes].sort();
+}
+
+async function provisionShelterDb(shelterCode: string): Promise<void> {
+	const code = shelterCodeSchema.parse(shelterCode);
+	const db = shelterDbName(code);
+	await ensureDb(db);
+	await setSecurity(db, {
+		admins: { names: [], roles: ['system_admin'] },
+		members: { names: [], roles: [`shelter:${code}`] }
+	});
+	await deployShelterViewsFn(db, (path, method, body) => couchReq(method, path, body));
+	await deployShelterAccessDesign(db, code);
+	await deployMangoIndexes(db);
+}
+
+async function provisionRegistryShelterDbs(): Promise<void> {
+	const codes = await listRegistryShelterCodes();
+	if (codes.length === 0) {
+		console.log('  ⚠ registry: no shelter masters found to provision');
+		return;
+	}
+
+	for (const shelterCode of codes) {
+		console.log(`  → provisioning ${shelterCode} (${shelterDbName(shelterCode)})`);
+		await provisionShelterDb(shelterCode);
+	}
 }
 
 async function deployCatalogMangoIndexes(db: string): Promise<void> {
@@ -816,15 +885,6 @@ async function deployCatalogMangoIndexes(db: string): Promise<void> {
 // ─── seedShelter ──────────────────────────────────────────────────────────────
 
 async function seedShelter(): Promise<void> {
-	await ensureDb(SHELTER_DB);
-	await setSecurity(SHELTER_DB, {
-		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [`shelter:${SHELTER_CODE}`] }
-	});
-	await deployShelterViewsFn(SHELTER_DB, (path, method, body) => couchReq(method, path, body));
-	await deployShelterAccessDesign(SHELTER_DB, SHELTER_CODE);
-	await deployMangoIndexes(SHELTER_DB);
-
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
 		{
@@ -1177,15 +1237,6 @@ async function seedShelter(): Promise<void> {
 }
 
 async function seedShelter2(): Promise<void> {
-	await ensureDb(SHELTER_DB_2);
-	await setSecurity(SHELTER_DB_2, {
-		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [`shelter:${SHELTER_CODE_2}`] }
-	});
-	await deployShelterViewsFn(SHELTER_DB_2, (path, method, body) => couchReq(method, path, body));
-	await deployShelterAccessDesign(SHELTER_DB_2, SHELTER_CODE_2);
-	await deployMangoIndexes(SHELTER_DB_2);
-
 	const { status, data } = await couchReq('GET', `/${SHELTER_DB_2}/_all_docs?limit=1`);
 	if (status === 200 && (data as { rows?: unknown[] }).rows?.length) {
 		console.log(`  ✓ ${SHELTER_DB_2}: already seeded, skipping`);
@@ -1551,6 +1602,7 @@ async function main() {
 	try {
 		await seedUsers();
 		await seedRegistry();
+		await provisionRegistryShelterDbs();
 		await seedMasterData();
 		await seedCatalog();
 		await seedCatalogSopRatios();

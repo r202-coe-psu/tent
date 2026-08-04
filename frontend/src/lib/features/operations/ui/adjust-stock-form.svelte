@@ -4,14 +4,13 @@
 	import { useItemMasters } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { useStockBalance, useLedger, useAdjustStock } from '../application/queries';
+	import { useLedger, useAdjustStock } from '../application/queries';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import Settings from '@lucide/svelte/icons/settings';
-	import Upload from '@lucide/svelte/icons/upload';
-	import Trash from '@lucide/svelte/icons/trash-2';
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
-	import { qtyGt, qtyGte, qtyLte, qtyAbs, addQty, subQty } from '$lib/utils/qty';
+	import { addQty, subQty } from '$lib/utils/qty';
 	import type { StockLot } from '../domain/operations';
 
 	let {
@@ -22,7 +21,6 @@
 	// Queries & Mutations
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters();
-	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const adjustMutation = useAdjustStock();
 
@@ -43,10 +41,6 @@
 	let newQtyInput = $state<string>('');
 	let adjustmentType = $state<'write_off' | 'add'>('write_off');
 	let reason = $state<string>('');
-
-	// Attachment Mockup
-	let selectedFile = $state<File | null>(null);
-	let filePreview = $state<string | null>(null);
 
 	const items = $derived.by(() => {
 		const supplyItems = itemsQuery.data ?? [];
@@ -75,7 +69,7 @@
 		const currentItem = selectedItem;
 		if (!currentItem || !ledgerQuery.data) return [];
 		const entries = ledgerQuery.data.filter((e) => e.item_id === currentItem._id);
-		const lotsMap = new Map<string, { note: string; expiry: string; qty: string }>();
+		const lotsMap = new SvelteMap<string, { note: string; expiry: string; qty: string }>();
 
 		for (const entry of entries) {
 			const note = entry.lot?.note?.trim() || 'คลังหลัก';
@@ -142,19 +136,6 @@
 		newQtyInput = '';
 		adjustmentType = 'write_off';
 		reason = '';
-	}
-
-	function handleFileChange(e: Event) {
-		const target = e.target as HTMLInputElement;
-		if (target.files && target.files[0]) {
-			selectedFile = target.files[0];
-			filePreview = URL.createObjectURL(selectedFile);
-		}
-	}
-
-	function removeFile() {
-		selectedFile = null;
-		filePreview = null;
 	}
 
 	// Watch newQtyInput to auto-set adjustmentType
@@ -232,7 +213,6 @@
 			loading: 'กำลังปรับปรุงสต๊อก...',
 			success: () => {
 				clearSelection();
-				removeFile();
 				if (onsuccess) onsuccess();
 				return 'ปรับปรุงยอดสต๊อกสำเร็จ!';
 			},
@@ -272,9 +252,12 @@
 	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 		<!-- Searchable Item Selector -->
 		<div class="relative col-span-1 sm:col-span-2">
-			<label class="text-xs font-bold text-foreground">ค้นหาและเลือกรายการสิ่งของ</label>
+			<label for="item-search" class="text-xs font-bold text-foreground"
+				>ค้นหาและเลือกรายการสิ่งของ</label
+			>
 			<div bind:this={container} class="relative mt-1 w-full">
 				<Input
+					id="item-search"
 					placeholder="พิมพ์เพื่อค้นหา เช่น ข้าวสาร, น้ำดื่ม..."
 					bind:value={searchQuery}
 					onfocus={() => !preselectedItemId && (isDropdownOpen = true)}
@@ -328,13 +311,16 @@
 		{#if selectedItem}
 			<!-- Lot / Location selector -->
 			<div class="col-span-1 sm:col-span-2">
-				<label class="text-xs font-bold text-foreground">สถานที่และล็อตที่ต้องการปรับปรุง *</label>
+				<label for="lot-select" class="text-xs font-bold text-foreground"
+					>สถานที่และล็อตที่ต้องการปรับปรุง *</label
+				>
 				<select
+					id="lot-select"
 					bind:value={selectedLotKey}
 					class="mt-1 h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
 				>
 					<option value="" disabled>-- เลือกสถานที่ / ล็อตที่พบเจอปัญหา --</option>
-					{#each itemLots as lot}
+					{#each itemLots as lot (lot.key)}
 						<option value={lot.key}>{lot.label}</option>
 					{/each}
 					<option value="new">➕ สร้าง/ปรับปรุงสถานที่อื่นนอกเหนือจากนี้...</option>
@@ -344,8 +330,11 @@
 			<!-- Conditional Inputs for New Lot -->
 			{#if selectedLotKey === 'new'}
 				<div class="col-span-1">
-					<label class="text-xs font-bold text-foreground">สถานที่จัดเก็บใหม่ *</label>
+					<label for="custom-location" class="text-xs font-bold text-foreground"
+						>สถานที่จัดเก็บใหม่ *</label
+					>
 					<select
+						id="custom-location"
 						bind:value={customLocation}
 						class="mt-1 h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
 					>
@@ -356,13 +345,14 @@
 					</select>
 				</div>
 				<div class="col-span-1">
-					<label class="text-xs font-bold text-foreground">
+					<label for="custom-expiry" class="text-xs font-bold text-foreground">
 						วันหมดอายุใหม่
 						{#if selectedItem.perishable}
 							<span class="font-bold text-rose-500">* (ของเสียง่าย บังคับกรอก)</span>
 						{/if}
 					</label>
 					<Input
+						id="custom-expiry"
 						type="date"
 						bind:value={customExpiry}
 						class="mt-1 h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
@@ -373,9 +363,10 @@
 			{#if selectedLotKey}
 				<!-- Quantity Input -->
 				<div class="col-span-1">
-					<label class="text-xs font-bold text-foreground">จำนวนใหม่ *</label>
+					<label for="new-qty" class="text-xs font-bold text-foreground">จำนวนใหม่ *</label>
 					<div class="relative mt-1">
 						<Input
+							id="new-qty"
 							type="number"
 							placeholder="ระบุจำนวนใหม่"
 							min="0"
@@ -393,8 +384,10 @@
 
 				<!-- Issuer (Disabled) -->
 				<div class="col-span-1">
-					<label class="text-xs font-bold text-foreground">ผู้ดำเนินการ (Issuer)</label>
+					<label for="issuer" class="text-xs font-bold text-foreground">ผู้ดำเนินการ (Issuer)</label
+					>
 					<Input
+						id="issuer"
 						value={authStore.user?.name || 'เจ้าหน้าที่คลังสินค้า (Admin)'}
 						disabled
 						class="mt-1 h-10 w-full cursor-not-allowed rounded-xl border border-border/80 bg-muted px-3 font-semibold text-muted-foreground shadow-sm"
@@ -433,7 +426,7 @@
 
 				<!-- Adjustment Type (Toggle Group) -->
 				<div class="col-span-1 sm:col-span-2">
-					<label class="text-xs font-bold text-foreground">ประเภทการปรับปรุง</label>
+					<span class="block text-xs font-bold text-foreground">ประเภทการปรับปรุง</span>
 					<div class="mt-2 grid grid-cols-2 gap-3">
 						<button
 							type="button"
@@ -480,12 +473,11 @@
 					</div>
 				</div>
 
-
-
 				<!-- Reason / Note -->
 				<div class="col-span-1 sm:col-span-2">
-					<label class="text-xs font-bold text-foreground">เหตุผล / หมายเหตุ *</label>
+					<label for="reason" class="text-xs font-bold text-foreground">เหตุผล / หมายเหตุ *</label>
 					<textarea
+						id="reason"
 						placeholder="เช่น ถุงข้าวสารเปียกน้ำฝนสาด หรือ ค้นพบสินค้าตกหล่นระหว่างตรวจนับ"
 						bind:value={reason}
 						rows="3"

@@ -17,7 +17,6 @@
 	import Settings from '@lucide/svelte/icons/settings';
 	import { qtyGt, qtyLte } from '$lib/utils/qty';
 	import { calculateReorderLevel } from '$lib/features/supply/domain/threshold-calc';
-	import type { ItemMaster } from '$lib/features/catalog/domain/catalog';
 
 	// Icon
 	import Plus from '@lucide/svelte/icons/plus';
@@ -126,13 +125,6 @@
 		}
 		return result;
 	});
-
-	/** Determine stock status based on qty vs reorder_level. */
-	function getStatus(qty: string, reorderLevel: number | null): 'empty' | 'low' | 'normal' {
-		if (qtyLte(qty, 0)) return 'empty';
-		if (reorderLevel !== null && qtyLte(qty, reorderLevel)) return 'low';
-		return 'normal';
-	}
 
 	/** Check if an expiry date string is within the next `days` days. */
 	function isExpiringSoon(expiryStr: string | undefined, days = 7): boolean {

@@ -21,13 +21,18 @@ export const REFERRAL_MANGO_INDEXES = [
 		type: 'json' as const
 	},
 	{
-		index: { fields: ['type', 'created_at', 'status', 'evacuee_id'] },
-		name: 'referral-list-sort-idx',
+		index: { fields: [{ type: 'desc' }, { created_at: 'desc' }] },
+		name: 'referral-list-created-desc-idx',
 		type: 'json' as const
 	},
 	{
-		index: { fields: ['type', 'created_at'] },
-		name: 'referral-list-basic-idx',
+		index: { fields: [{ type: 'asc' }, { created_at: 'asc' }] },
+		name: 'referral-list-created-asc-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: [{ type: 'desc' }, { status: 'desc' }, { created_at: 'desc' }] },
+		name: 'referral-list-status-created-desc-idx',
 		type: 'json' as const
 	}
 ];

@@ -79,11 +79,21 @@ export class ReferralRemoteRepository implements ReferralRepository {
 				? [{ type: 'asc' }, { created_at: 'asc' }]
 				: [{ type: 'desc' }, { created_at: 'desc' }];
 
+		let useIndex: string;
+		if (parsed.status && parsed.sort === 'created_at_desc') {
+			useIndex = 'referral-list-status-created-desc-idx';
+		} else if (parsed.sort === 'created_at_desc') {
+			useIndex = 'referral-list-created-desc-idx';
+		} else {
+			useIndex = 'referral-list-created-asc-idx';
+		}
+
 		const docs = await this.repo.find<Referral>({
 			selector,
 			limit: parsed.limit,
 			skip: parsed.skip,
-			sort
+			sort,
+			use_index: useIndex
 		});
 		return docs.filter(isReferral);
 	}
@@ -178,6 +188,10 @@ export async function createReferralBatch(
 				error: err instanceof Error ? err.message : 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ'
 			});
 		}
+	}
+
+	if (created.length === 0 && failed.length > 0) {
+		throw new Error(failed[0]!.error);
 	}
 
 	return { created, failed };
