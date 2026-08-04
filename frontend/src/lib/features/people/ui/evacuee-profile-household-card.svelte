@@ -2,6 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Home from '@lucide/svelte/icons/home';
+	import Pencil from '@lucide/svelte/icons/pencil';
+	import UserRoundCheck from '@lucide/svelte/icons/user-round-check';
 	import type { Evacuee, Household } from '$lib/features/people';
 
 	let {
@@ -9,17 +11,19 @@
 		household,
 		familyMembers,
 		readonly,
-		onOpenAddressModal
+		onOpenAddressModal,
+		onOpenHouseholdModal
 	}: {
 		evacuee: Evacuee;
 		household: Household | null;
 		familyMembers: Evacuee[];
 		readonly: boolean;
 		onOpenAddressModal: () => void;
+		onOpenHouseholdModal: () => void;
 	} = $props();
 </script>
 
-<div class="space-y-4 rounded-3xl border border-border bg-card p-6 shadow-sm">
+<section class="space-y-4 rounded-lg border border-border bg-card p-5">
 	<div class="flex items-center justify-between border-b border-border pb-2">
 		<div class="flex items-center gap-2.5">
 			<Home class="size-4.5 text-primary" />
@@ -27,6 +31,17 @@
 				หัวหน้าครอบครัว (Head of Household)
 			</h3>
 		</div>
+		{#if !readonly}
+			<button
+				type="button"
+				aria-label="แก้ไขสังกัดครัวเรือน"
+				title="แก้ไขสังกัดครัวเรือน"
+				onclick={onOpenHouseholdModal}
+				class="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+			>
+				<Pencil class="size-4" />
+			</button>
+		{/if}
 	</div>
 
 	<div class="space-y-4">
@@ -36,7 +51,7 @@
 				<span
 					class="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300"
 				>
-					⭐ หัวหน้าครอบครัว
+					<UserRoundCheck class="mr-1 inline size-3.5" />หัวหน้าครอบครัว
 				</span>
 			{:else}
 				<span
@@ -50,7 +65,7 @@
 		<div>
 			<span class="block text-xs font-medium text-muted-foreground">รายชื่อสมาชิกร่วมทาง:</span>
 			<div
-				class="mt-1.5 rounded-2xl border border-dashed border-slate-200 p-3 text-center dark:border-slate-800"
+				class="mt-1.5 rounded-md border border-dashed border-slate-200 p-3 text-center dark:border-slate-800"
 			>
 				{#if familyMembers.length > 0}
 					<div class="flex flex-wrap justify-center gap-1.5">
@@ -79,14 +94,14 @@
 				{#if household && !readonly}
 					<button
 						onclick={onOpenAddressModal}
-						class="inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+						class="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-muted"
 					>
-						✏️ แก้ไขที่อยู่ครอบครัว
+						<Pencil class="size-3.5" /> แก้ไขที่อยู่
 					</button>
 				{/if}
 			</div>
 			<div
-				class="rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+				class="rounded-md border border-slate-100 bg-slate-50 p-3 text-xs font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
 			>
 				{#if household && (household.address_no || household.subdistrict || household.district || household.province)}
 					{household.address_no || ''}
@@ -101,4 +116,4 @@
 			</div>
 		</div>
 	</div>
-</div>
+</section>

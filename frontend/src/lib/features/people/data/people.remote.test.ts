@@ -103,6 +103,58 @@ describe('PeopleRemoteRepository', () => {
 		});
 	});
 
+	describe('updateMedical', () => {
+		it('updates an existing medical record with a fresh revision', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const medical = await repo.createMedical(
+				{
+					evacuee_id: evacuee._id,
+					conditions: ['asthma'],
+					medications: [],
+					allergies: [],
+					track: 'normal'
+				},
+				ctx
+			);
+
+			const updated = await repo.updateMedical({
+				...medical,
+				conditions: ['asthma', 'diabetes'],
+				blood_group: 'O'
+			});
+
+			expect(updated.conditions).toEqual(['asthma', 'diabetes']);
+			expect(updated.blood_group).toBe('O');
+			expect(updated._rev).not.toBe(medical._rev);
+		});
+	});
+
+	describe('section patches', () => {
+		it('merges evacuee section fields into the latest persisted revision', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+
+			await repo.patchEvacuee(evacuee._id, { first_name: 'ชื่อใหม่' });
+			await repo.patchEvacuee(evacuee._id, {
+				emergency_contact: { name: 'ญาติ', phone: '0812345678', relation: 'มารดา' }
+			});
+
+			const saved = await repo.getEvacuee(evacuee._id);
+			expect(saved?.first_name).toBe('ชื่อใหม่');
+			expect(saved?.emergency_contact?.name).toBe('ญาติ');
+		});
+
+		it('merges household section fields without replacing unrelated values', async () => {
+			const household = await repo.createHousehold({ label: 'ครัวเรือนหนึ่ง' }, ctx);
+
+			await repo.patchHousehold(household._id, { province: 'เชียงใหม่' });
+			await repo.patchHousehold(household._id, { head_evacuee_id: 'evacuee:test' });
+
+			const saved = await repo.getHousehold(household._id);
+			expect(saved?.province).toBe('เชียงใหม่');
+			expect(saved?.head_evacuee_id).toBe('evacuee:test');
+		});
+	});
+
 	describe('household membership invariant', () => {
 		it('rejects moving a member away from an active household with other members', async () => {
 			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
@@ -124,6 +176,22 @@ describe('PeopleRemoteRepository', () => {
 			expect((await repo.getEvacuee(first._id))?.household_id).toBe(oldHousehold._id);
 		});
 
+		it('rejects removing a member from an active household with other members', async () => {
+			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
+			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือนเดิม', head_evacuee_id: first._id, status: 'checked_in' },
+				ctx
+			);
+			await repo.patchEvacuee(first._id, { household_id: household._id });
+			await repo.patchEvacuee(second._id, { household_id: household._id });
+
+			await expect(repo.patchEvacuee(first._id, { household_id: null })).rejects.toThrow(
+				/ยังมีสมาชิกอื่นอยู่/
+			);
+			expect((await repo.getEvacuee(first._id))?.household_id).toBe(household._id);
+		});
+
 		it('moves a solo member and cancels the old household using fresh persisted data', async () => {
 			const member = await repo.createEvacuee(evInput(), ctx);
 			const oldHousehold = await repo.createHousehold(
@@ -139,7 +207,9 @@ describe('PeopleRemoteRepository', () => {
 			const moved = await repo.updateEvacuee({ ...linked, household_id: targetHousehold._id });
 
 			expect(moved.household_id).toBe(targetHousehold._id);
-			expect((await repo.getHousehold(oldHousehold._id))?.status).toBe('cancelled');
+			const cancelledHousehold = await repo.getHousehold(oldHousehold._id);
+			expect(cancelledHousehold?.status).toBe('cancelled');
+			expect(cancelledHousehold?.head_evacuee_id).toBeNull();
 		});
 	});
 

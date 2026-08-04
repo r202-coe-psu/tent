@@ -28,9 +28,17 @@ import {
 	assertCheckoutDestination,
 	isActiveHouseholdStatus,
 	type Medical,
+	type MedicalInput,
 	type Movement
 } from '../domain/people';
-import type { EvacueeFilters, HouseholdSearchLabels, PeopleRepository } from './people.repository';
+import type {
+	EvacueeFilters,
+	EvacueePatch,
+	HouseholdPatch,
+	HouseholdSearchLabels,
+	MedicalPatch,
+	PeopleRepository
+} from './people.repository';
 
 function paginateSlice<T>(matched: T[], page: number, pageSize: number): PaginatedResult<T> {
 	const total = matched.length;
@@ -175,6 +183,31 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return saved;
 	}
 
+	async patchEvacuee(id: string, patch: EvacueePatch): Promise<Evacuee> {
+		const latest = await this.repo.get<Evacuee>(id);
+		if (!latest) throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+		const next = { ...latest, ...patch };
+		const oldHouseholdId = latest.household_id;
+		if (oldHouseholdId !== next.household_id) {
+			const [households, evacuees] = await Promise.all([
+				this.repo.allByType('household', isHousehold),
+				this.repo.allByType('evacuee', isEvacuee)
+			]);
+			assertEvacueeHouseholdAssignment(
+				latest,
+				next.household_id,
+				households.map(migrateHouseholdV3ToV4),
+				evacuees
+			);
+		}
+
+		const saved = await this.repo.put(touch(next));
+		if (oldHouseholdId && oldHouseholdId !== saved.household_id) {
+			await this.cancelHouseholdIfEmpty(oldHouseholdId);
+		}
+		return saved;
+	}
+
 	async searchEvacuees(query: string): Promise<Evacuee[]> {
 		const q = query.trim();
 		if (!q) return [];
@@ -228,6 +261,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return this.repo.put(touch({ ...household, _rev: latest._rev }));
 	}
 
+	async patchHousehold(id: string, patch: HouseholdPatch): Promise<Household> {
+		const latestDoc = await this.repo.get<Household>(id);
+		if (!latestDoc) throw new Error('ไม่พบข้อมูลครัวเรือน');
+		const latest = migrateHouseholdV3ToV4(latestDoc);
+		const next = { ...latest, ...patch };
+		assertHouseholdStatusTransition(latest.status, next.status);
+		if (next.status === 'checked_out') assertCheckoutDestination(next.checkout_destination);
+		return this.repo.put(touch(next));
+	}
+
 	/**
 	 * When the last member is moved out of an active household (leaving it
 	 * empty), retire it as `cancelled` rather than:
@@ -251,15 +294,36 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 		const latest = await this.repo.get<Household>(householdId);
 		if (!latest || !isActiveHouseholdStatus(migrateHouseholdV3ToV4(latest).status)) return;
-		await this.repo.put(touch({ ...latest, status: 'cancelled' as const }));
+		await this.repo.put(touch({ ...latest, head_evacuee_id: null, status: 'cancelled' as const }));
 	}
 
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening> {
 		return this.repo.put(buildScreening(input, ctx));
 	}
 
+	createMedical(input: MedicalInput, ctx: AuthorContext): Promise<Medical> {
+		return this.repo.put(buildMedical(input, ctx));
+	}
+
 	listMedicals(): Promise<Medical[]> {
 		return this.repo.allByType('medical', isMedical);
+	}
+
+	async updateMedical(medical: Medical): Promise<Medical> {
+		const latest = await this.repo.get<Medical>(medical._id);
+		if (!latest) throw new Error('ไม่พบข้อมูลสุขภาพ');
+		return this.repo.put(touch({ ...medical, _rev: latest._rev }));
+	}
+
+	async patchMedical(id: string, patch: MedicalPatch): Promise<Medical> {
+		const latest = await this.repo.get<Medical>(id);
+		if (!latest) throw new Error('ไม่พบข้อมูลสุขภาพ');
+		return this.repo.put(touch({ ...latest, ...patch }));
+	}
+
+	async deleteMedical(id: string): Promise<void> {
+		const latest = await this.repo.get<Medical>(id);
+		if (latest) await this.repo.remove(latest);
 	}
 
 	listMovements(): Promise<Movement[]> {
