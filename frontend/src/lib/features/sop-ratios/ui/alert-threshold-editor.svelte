@@ -96,8 +96,10 @@
 				onSuccess: () => {
 					toast.success('บันทึกเกณฑ์เตือนภัยเฉพาะศูนย์เรียบร้อยแล้ว');
 				},
-				onError: (err: Error) => {
-					toast.error(`บันทึกไม่สำเร็จ: ${err.message}`);
+				onError: (err: unknown) => {
+					const msg = err instanceof Error ? err.message : String(err);
+					toast.error(`บันทึกไม่สำเร็จ: ${msg}`);
+				}
 				}
 			}
 		);
@@ -125,8 +127,10 @@
 				onSuccess: () => {
 					toast.success('คืนค่าเกณฑ์เตือนภัยเป็นค่าเริ่มต้นของระบบแล้ว');
 				},
-				onError: (err: Error) => {
-					toast.error(`คืนค่าไม่สำเร็จ: ${err.message}`);
+				onError: (err: unknown) => {
+					const msg = err instanceof Error ? err.message : String(err);
+					toast.error(`คืนค่าไม่สำเร็จ: ${msg}`);
+				}
 				}
 			}
 		);
