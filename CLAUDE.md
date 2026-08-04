@@ -125,32 +125,21 @@ fetching is client-side via **TanStack Query** (`@tanstack/svelte-query`), wired
 **Stack**: SvelteKit 2 + Svelte 5 (runes only) + Vite + TypeScript + Tailwind CSS v4 (no config
 file — `@tailwindcss/vite`). UI is shadcn-svelte over `bits-ui` primitives in
 `src/lib/components/ui/`. Forms use Superforms + Zod (`zod4Client` adapter). User feedback is
-**toast only** (`svelte-sonner`) — never `console.log` (the PouchDB sync `console.warn` paths are
-the deliberate exception).
+**toast only** (`svelte-sonner`) — never `console.log`.
 
-### Offline-first data, sync & auth — do not bypass (CONTRIBUTING.md §4)
+### Remote-first data & auth — do not bypass (CONTRIBUTING.md §4)
 
-- **All persistence goes through PouchDB** (`$lib/db/pouch.ts`), which **live-syncs** to CouchDB.
-  UI never talks to a remote DB directly — it reads/writes local PouchDB; sync propagates changes.
-- **Sync target follows a strict priority — one active remote at a time:**
+- **The app is remote-first**: the browser talks to CouchDB directly over HTTP (via the `/couch`
+  dev proxy), using the user's login cookie. There is **no PouchDB** and **no local database** on
+  the device.
+- **Writes go to the active endpoint directly** (no local write queue, no PouchDB). Priority:
   1. **Central CouchDB** (normal; WAN reachable; via `/couch` proxy)
   2. **Edge CouchDB on LAN** — fallback only when WAN/central is unreachable; edge is a
      LAN-continuity replica, NOT a normal client hub
-  3. **Local-only** — when neither central nor edge is reachable
-
-  Never run live replication to both central and edge simultaneously; stop the old sync before
-  starting the new one. When central returns, switch the active remote back to central.
-- **Login follows the same priority:** always attempt `POST /couch/_session` against central
-  first; edge fallback login is possible only because `_users` is filtered-replicated to the
-  edge server. Edge `AuthSession` cookies do NOT grant access to `/api/v1/*` service endpoints.
-- **Reactivity comes from the changes feed**, not manual refetching: the live-sync wiring
-  invalidates the relevant TanStack Query keys on PouchDB `change` events. Never poll / never use
-  `refetchInterval` for live data.
-- **Auth is the CouchDB `_session` cookie** (`$lib/db/couch.ts`). Identity is cached (localStorage /
-  `authStore` in `src/lib/stores/auth.svelte.ts`) so the app stays usable offline; only _sync_ needs
-  a live session. On a 401/403 the sync stops and the store flags **`needsReauth`** — the user is
-  **not** logged out of the local experience. Don't "fix" this by forcing a logout/redirect on sync
-  errors.
+- If the network is down, the app shows a disconnected banner — it does **not** fall back to
+  reading cached data offline.
+- **Auth is the CouchDB `_session` cookie** (`$lib/db/couch.ts`). Identity is stored in
+  `authStore` (`src/lib/stores/auth.svelte.ts`).
 - Use the guards in **`$lib/guards/auth.ts`** (`requireAuth`, `requireAdmin`, `redirectIfAuthenticated`)
   from route `+layout.ts`/`+page.ts` `load` functions. Don't roll your own redirect logic.
 - **Admin credentials (`COUCHDB_ADMIN_URL`) are server-only** — usable only in dev-server API routes
@@ -170,8 +159,8 @@ direction **`ui → application → data → domain`**:
 ```
 features/<name>/
   domain/       pure entities, Zod schemas, factories, invariants, type guards — no I/O, no Svelte, no PouchDB
-  data/         repository INTERFACE + concrete PouchDB impl + seed/admin helpers
-  application/  TanStack Query hooks (createQuery/createMutation) + live-sync wiring (depends on the repo interface)
+  data/         repository INTERFACE + concrete remote endpoint adapter (*.remote.ts) + seed/admin helpers
+  application/  TanStack Query hooks (createQuery/createMutation) (depends on the repo interface)
   ui/           feature-specific .svelte components
   index.ts      the public barrel — the ONLY entry point other code may import
 ```
