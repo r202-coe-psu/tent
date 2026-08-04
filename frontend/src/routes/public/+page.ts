@@ -1,8 +1,10 @@
 import type { PageLoad } from './$types';
 import type { FaqItem } from '$lib/features/public-portal';
+import type { Announcement } from '$lib/features/announcements';
 
 export const load: PageLoad = async ({ fetch }) => {
 	let faqs: FaqItem[] = [];
+	let announcements: Announcement[] = [];
 	try {
 		const configRes = await fetch('/api/public/v1/config/faqs');
 		if (configRes.ok) {
@@ -14,10 +16,20 @@ export const load: PageLoad = async ({ fetch }) => {
 	}
 
 	try {
+		const annRes = await fetch('/api/public/v1/announcements');
+		if (annRes.ok) {
+			const annData = await annRes.json();
+			announcements = annData.items || [];
+		}
+	} catch (e) {
+		console.error('Failed to fetch announcements', e);
+	}
+
+	try {
 		const response = await fetch('/api/public/v1/transparency/summary');
 		if (response.ok) {
 			const data = await response.json();
-			return { ...data, faqs };
+			return { ...data, faqs, announcements };
 		}
 	} catch (e) {
 		console.error('Failed to fetch summary metrics', e);
@@ -40,6 +52,7 @@ export const load: PageLoad = async ({ fetch }) => {
 			emergency_mode: false
 		},
 		isError: true,
-		faqs
+		faqs,
+		announcements
 	};
 };
