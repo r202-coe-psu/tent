@@ -23,6 +23,8 @@ from .schemas import (
 
 _MAX_BOOKING_REF_ATTEMPTS = 8
 
+_DONATION_OPEN_STATUSES = frozenset({"open", "full", "active"})
+
 
 def _new_booking_ref() -> str:
     """Human-readable ``DN-######`` — uniqueness enforced by Mongo unique index."""
@@ -63,11 +65,11 @@ def _tracking_payload(
 
 class DonationsUseCase:
     async def create(self, payload: DonationCreateRequest) -> DonationCreateResponse:
+        # Look the shelter up first, then judge its status: "no such shelter" (404) and
+        # "shelter stopped taking donations" (409) are different answers for the donor,
+        # and a single filtered query cannot tell them apart.
         shelter = await PublicShelter.find_one(
-            {
-                "shelter_code": payload.shelter_code.upper(),
-                "status": {"$in": ["open", "full"]},
-            }
+            PublicShelter.shelter_code == payload.shelter_code.upper()
         )
         if shelter is None:
             raise HTTPException(
@@ -75,6 +77,15 @@ class DonationsUseCase:
                 detail={
                     "success": False,
                     "error": "SHELTER_NOT_FOUND",
+                    "shelter_code": payload.shelter_code,
+                },
+            )
+        if shelter.status not in _DONATION_OPEN_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "success": False,
+                    "error": "SHELTER_CLOSED",
                     "shelter_code": payload.shelter_code,
                 },
             )

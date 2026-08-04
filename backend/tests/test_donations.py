@@ -97,6 +97,50 @@ async def test_create_donation_persists_campaign_id_and_tracking_stub(
     assert tracked["donation"]["items"][0]["item_name"] == "ข้าวสาร"
 
 
+async def test_create_donation_rejects_unknown_shelter(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """No such shelter in `public_shelters` → 404, distinct from a closed one."""
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH999",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"item_id": "item:rice", "qty": 1, "unit": "kg"}],
+        },
+    )
+    assert response.status_code == 404
+    assert response.json()["errors"][0]["error"] == "SHELTER_NOT_FOUND"
+
+
+async def test_create_donation_rejects_closed_shelter(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """A shelter that exists but stopped intake answers 409, not 404."""
+    shelter = PublicShelter(
+        id="SH002",
+        shelter_code="SH002",
+        name="Closed Shelter",
+        status="closed",
+        capacity=50,
+        updated_at=datetime.now(UTC),
+    )
+    await shelter.insert()
+
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH002",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"item_id": "item:rice", "qty": 1, "unit": "kg"}],
+        },
+    )
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["error"] == "SHELTER_CLOSED"
+
+
 async def test_get_tracking_falls_back_to_buffer(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:

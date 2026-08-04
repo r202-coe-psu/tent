@@ -399,4 +399,70 @@ describe('POST /api/public/v1/donations', () => {
 		expect(response.status).toBe(422);
 		expect(data.success).toBe(false);
 	});
+
+	describe('shelter validation now lives in FastAPI (CR-017 §Decision A)', () => {
+		function mockEmptyCouch() {
+			vi.mocked(adminRaw).mockResolvedValue({ status: 200, data: { rows: [] } });
+		}
+
+		function mockFastapiError(status: number, detail: Record<string, unknown>) {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: false,
+					status,
+					json: async () => ({ errors: [detail] })
+				})
+			);
+		}
+
+		it('surfaces SHELTER_NOT_FOUND from the FastAPI error envelope', async () => {
+			mockEmptyCouch();
+			mockFastapiError(404, {
+				success: false,
+				error: 'SHELTER_NOT_FOUND',
+				shelter_code: 'SH999'
+			});
+
+			const response = await POST({
+				request: { json: () => Promise.resolve({ ...validPayload, shelter_code: 'SH999' }) },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PostEvent);
+
+			const data = await response.json();
+			expect(response.status).toBe(404);
+			expect(data.success).toBe(false);
+			expect(data.error).toBe('SHELTER_NOT_FOUND');
+			expect(data.shelter_code).toBe('SH999');
+		});
+
+		it('surfaces SHELTER_CLOSED from the FastAPI error envelope', async () => {
+			mockEmptyCouch();
+			mockFastapiError(409, { success: false, error: 'SHELTER_CLOSED', shelter_code: 'SH001' });
+
+			const response = await POST({
+				request: { json: () => Promise.resolve(validPayload) },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PostEvent);
+
+			const data = await response.json();
+			expect(response.status).toBe(409);
+			expect(data.error).toBe('SHELTER_CLOSED');
+		});
+
+		it('never reads the shelter registry from CouchDB', async () => {
+			mockEmptyCouch();
+			mockFastapiCreate();
+
+			await POST({
+				request: { json: () => Promise.resolve(validPayload) },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PostEvent);
+
+			const registryReads = vi
+				.mocked(adminRaw)
+				.mock.calls.filter((c) => String(c[0]).includes('/registry'));
+			expect(registryReads).toHaveLength(0);
+		});
+	});
 });
