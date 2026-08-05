@@ -68,7 +68,8 @@
 		}
 
 		donationStore.isSubmitting = true;
-		let token = '';
+		// E2E may inject a token; otherwise require real reCAPTCHA (no silent skip in dev).
+		let token = window.__captchaToken || '';
 
 		if (siteKey && window.grecaptcha) {
 			try {
@@ -80,6 +81,12 @@
 				donationStore.isSubmitting = false;
 				return;
 			}
+		} else if (!token) {
+			donationStore.errorMessage =
+				'ยังไม่ได้ตั้งค่า reCAPTCHA (PUBLIC_RECAPTCHA_SITE_KEY) — ไม่สามารถส่งแบบฟอร์มได้';
+			toast.error(donationStore.errorMessage);
+			donationStore.isSubmitting = false;
+			return;
 		}
 
 		let slotDateStr = selectedDate
@@ -130,7 +137,7 @@
 								}))
 							: [{ free_text: 'ของบริจาคทั่วไป', qty: 1, unit: 'ชิ้น' }],
 					logistics: logistics,
-					captchaToken: token || 'dev-skip-token'
+					captchaToken: token
 				})
 			});
 			const data = await res.json();

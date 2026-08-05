@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { dev } from '$app/environment';
 import { donationPreDeclarationInputSchema, computeNeeds } from '$lib/features/donations';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
@@ -55,19 +54,17 @@ export const POST = async ({ request, getClientAddress }) => {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
-		// 3. CAPTCHA Check (Fail-closed in production)
-		if (!dev) {
-			if (!env.SECRET_RECAPTCHA_KEY || env.SECRET_RECAPTCHA_KEY === 'dummy-secret') {
-				console.error('SECRET_RECAPTCHA_KEY is missing or invalid in production!');
-				return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
-			}
-			if (!parsed.data.captchaToken) {
-				return json({ success: false, error: 'CAPTCHA token is required.' }, { status: 400 });
-			}
-			const isHuman = await captchaProvider.verifyToken(parsed.data.captchaToken, ip, 'donate');
-			if (!isHuman) {
-				return json({ success: false, error: 'CAPTCHA verification failed.' }, { status: 403 });
-			}
+		// 3. CAPTCHA Check (always — including dev — so local testing matches prod)
+		if (!env.SECRET_RECAPTCHA_KEY || env.SECRET_RECAPTCHA_KEY === 'dummy-secret') {
+			console.error('SECRET_RECAPTCHA_KEY is missing or invalid!');
+			return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
+		}
+		if (!parsed.data.captchaToken) {
+			return json({ success: false, error: 'CAPTCHA token is required.' }, { status: 400 });
+		}
+		const isHuman = await captchaProvider.verifyToken(parsed.data.captchaToken, ip, 'donate');
+		if (!isHuman) {
+			return json({ success: false, error: 'CAPTCHA verification failed.' }, { status: 403 });
 		}
 
 		// 3.1 shelter_code is validated by FastAPI against `public_shelters`

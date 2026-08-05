@@ -24,7 +24,7 @@ vi.mock('$lib/server/security/captcha', () => ({
 
 vi.mock('$env/dynamic/private', () => ({
 	env: {
-		SECRET_RECAPTCHA_KEY: 'dummy-secret',
+		SECRET_RECAPTCHA_KEY: 'test-recaptcha-secret',
 		FASTAPI_INTERNAL_URL: 'http://localhost:9000',
 		EXTERNAL_API_SECRET: 'test-external-secret'
 	}
