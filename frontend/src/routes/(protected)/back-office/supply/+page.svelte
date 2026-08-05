@@ -4,9 +4,11 @@
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import Scale from '@lucide/svelte/icons/scale';
-	import { ResourceDashboard } from '$lib/features/sop-ratios/components';
+	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
 	import { shelterCodeFromRoles } from '$lib/auth/roles';
 	import { useDashboardOccupancy } from '$lib/features/dashboard';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
 	const isOffline = $derived(authStore.needsReauth);
@@ -17,8 +19,16 @@
 	const occupancyQuery = useDashboardOccupancy(() => shelterCode ?? '');
 	const occupancy = $derived(occupancyQuery.data?.active ?? 0);
 
-	// ─── Active Tab State ─────────────────────────────────────────────────────
-	let activeTab = $state<'inventory' | 'sphere'>('inventory');
+	type TabKey = 'inventory' | 'sphere';
+	const activeTab = $derived<TabKey>(
+		page.url.searchParams.get('tab') === 'sphere' ? 'sphere' : 'inventory'
+	);
+
+	function setTab(tab: TabKey) {
+		const url = new URL(page.url);
+		url.searchParams.set('tab', tab);
+		goto(url, { replaceState: true, keepFocus: true, noScroll: true });
+	}
 </script>
 
 <svelte:head>
@@ -48,7 +58,7 @@
 	<div class="flex">
 		<div class="inline-flex rounded-xl border border-border/40 bg-muted/60 p-1 shadow-sm">
 			<button
-				onclick={() => (activeTab = 'inventory')}
+				onclick={() => setTab('inventory')}
 				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold tracking-wide transition-all duration-300 active:scale-[0.98] md:px-5 md:py-2.5 {activeTab ===
 				'inventory'
 					? 'border border-border/60 bg-background text-primary shadow-sm'
@@ -58,7 +68,7 @@
 				รายการพัสดุในคลัง (Stock Inventory)
 			</button>
 			<button
-				onclick={() => (activeTab = 'sphere')}
+				onclick={() => setTab('sphere')}
 				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold tracking-wide transition-all duration-300 active:scale-[0.98] md:px-5 md:py-2.5 {activeTab ===
 				'sphere'
 					? 'border border-border/60 bg-background text-primary shadow-sm'
@@ -77,7 +87,7 @@
 		</div>
 	{:else if activeTab === 'sphere'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
-			<ResourceDashboard {shelterCode} />
+			<ResourceNeedsDashboard />
 		</div>
 	{/if}
 </div>
