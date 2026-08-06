@@ -5,19 +5,30 @@
 	import Compass from '@lucide/svelte/icons/compass';
 	import Search from '@lucide/svelte/icons/search';
 	import Heart from '@lucide/svelte/icons/heart';
+	import PackageSearch from '@lucide/svelte/icons/package-search';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
-	// import FileText from '@lucide/svelte/icons/file-text';
-	// import UserPlus from '@lucide/svelte/icons/user-plus';
-	// import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 
-	// Function to check if route is active
 	function isActive(path: string) {
 		if (path === '/public') {
 			return page.url.pathname === '/public' || page.url.pathname === '/public/';
 		}
 		return page.url.pathname.startsWith(path);
+	}
+
+	function isDonatePage() {
+		const p = page.url.pathname;
+		return p === '/public/donations' || p === '/public/donations/';
+	}
+
+	function isTrackPage() {
+		return page.url.pathname.startsWith('/public/donations/track');
+	}
+
+	function isDonationsSection() {
+		return isDonatePage() || isTrackPage();
 	}
 
 	let mobileMenuOpen = $state(false);
@@ -76,7 +87,7 @@
 			</a>
 
 			<a
-				href="/public/shelters"
+				href={resolve('/public/shelters')}
 				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
 					'/public/shelters'
 				)
@@ -99,17 +110,44 @@
 				สืบค้นญาติ
 			</a>
 
-			<a
-				href={resolve('/public/donations')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-					'/public/donations'
-				)
-					? 'bg-primary-muted text-primary'
-					: 'text-muted-foreground'}"
-			>
-				<Heart class="h-4 w-4" />
-				บริจาคและจองคิว
-			</a>
+			<!-- Donations: donate + track (CR-052 §2.6) -->
+			<div class="group relative">
+				<a
+					href={resolve('/public/donations')}
+					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors group-hover:text-foreground hover:bg-muted/50 {isDonationsSection()
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+					aria-haspopup="true"
+				>
+					<Heart class="h-4 w-4" />
+					บริจาค
+					<ChevronDown
+						class="h-3.5 w-3.5 text-muted-foreground/75 transition-transform group-hover:rotate-180"
+					/>
+				</a>
+				<div
+					class="absolute right-0 mt-1 hidden w-52 rounded-xl border border-border bg-card p-1 shadow-lg group-hover:block group-focus-within:block"
+				>
+					<a
+						href={resolve('/public/donations')}
+						class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isDonatePage()
+							? 'bg-primary-muted text-primary'
+							: 'text-muted-foreground'}"
+					>
+						<Heart class="h-3.5 w-3.5" />
+						บริจาคและจองคิว
+					</a>
+					<a
+						href={resolve('/public/donations/track')}
+						class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isTrackPage()
+							? 'bg-primary-muted text-primary'
+							: 'text-muted-foreground'}"
+					>
+						<PackageSearch class="h-3.5 w-3.5" />
+						ตรวจสอบสถานะ
+					</a>
+				</div>
+			</div>
 
 			<a
 				href={resolve('/login')}
@@ -122,64 +160,6 @@
 				<Building2 class="h-4 w-4" />
 				ระบบหลังบ้าน
 			</a>
-
-			<!-- <a
-				href={resolve('/public/transparency' as any)}
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
-				title="เร็วๆ นี้"
-			>
-				<FileText class="h-4 w-4" />
-				รายงานความโปร่งใส
-				<span class="text-[9px] font-bold text-muted-foreground/60">(เร็วๆ นี้)</span>
-			</a> -->
-			<!-- <span
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
-				title="เร็วๆ นี้"
-			>
-				<FileText class="h-4 w-4" />
-				รายงานความโปร่งใส
-				<span class="text-[9px] font-bold text-muted-foreground/60">(เร็วๆ นี้)</span>
-			</span> -->
-
-			<!-- Dropdown for Volunteers -->
-			<!-- <div class="group relative">
-				<a
-					href={resolve('/public/volunteers')}
-					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground hover:bg-muted/50 {isActive(
-						'/public/volunteers'
-					)
-						? 'bg-primary-muted text-primary'
-						: ''}"
-				>
-					<UserPlus class="h-4 w-4" />
-					อาสาสมัคร / พี่เลี้ยง
-					<ChevronDown
-						class="h-3.5 w-3.5 text-muted-foreground/75 transition-transform group-hover:rotate-180"
-					/>
-				</a>
-				<div
-					class="absolute right-0 mt-1 hidden w-48 rounded-xl border border-border bg-card p-1 shadow-lg group-hover:block"
-				>
-					<a
-						href={resolve('/public/volunteers')}
-						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-					>
-						ลงทะเบียนอาสาสมัคร
-					</a>
-					<a
-						href={resolve('/public/volunteers/shifts' as any)}
-						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-					>
-						ตรวจสอบตารางกะงาน
-					</a>
-					<span
-						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground opacity-60"
-						title="เร็วๆ นี้"
-					>
-						ตรวจสอบตารางกะงาน
-					</span>
-				</div>
-			</div> -->
 		</nav>
 	</div>
 
@@ -201,11 +181,11 @@
 				</a>
 
 				<a
-					href="/public/shelters"
+					href={resolve('/public/shelters')}
 					onclick={() => (mobileMenuOpen = false)}
 					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-						'/shelters'
-					) && !isActive('/public/shelters')
+						'/public/shelters'
+					)
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
@@ -229,14 +209,23 @@
 				<a
 					href={resolve('/public/donations')}
 					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-						'/public/donations'
-					)
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isDonatePage()
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
 					<Heart class="h-5 w-5" />
 					บริจาคและจองคิว
+				</a>
+
+				<a
+					href={resolve('/public/donations/track')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isTrackPage()
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<PackageSearch class="h-5 w-5" />
+					ตรวจสอบสถานะบริจาค
 				</a>
 
 				<a

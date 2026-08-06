@@ -95,6 +95,9 @@ async def test_create_donation_persists_campaign_id_and_tracking_stub(
     assert tracked["donation"]["booking_ref"] == booking_ref
     assert tracked["donation"]["status"] == "declared"
     assert tracked["donation"]["items"][0]["item_name"] == "ข้าวสาร"
+    assert tracked["donation"]["donor"]["name"] == "Donor"
+    assert tracked["donation"]["donor"]["phone_masked"] == "***-***-5678"
+    assert tracked["donation"]["expires_at"] is not None
 
 
 async def test_create_donation_rejects_unknown_shelter(
@@ -167,6 +170,45 @@ async def test_get_tracking_falls_back_to_buffer(
     body = track.json()
     assert body["donation"]["booking_ref"] == "DN-999001"
     assert body["donation"]["items"][0]["item_name"] == "น้ำดื่ม"
+
+
+async def test_track_search_resolves_dn_plus_phone(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    token = "TX-SH001-SEARCH001"
+    token_hash = sha256_hex(token)
+    now = datetime.now(UTC)
+    await DonationBuffer(
+        id=f"donation:{new_ulid()}",
+        shelter_code="SH001",
+        donor=DonorBuffer(name="Search Donor", phone="081-234-5678"),
+        items_declared=[{"free_text": "ข้าวสาร", "qty": 1, "unit": "kg"}],
+        campaign_id=None,
+        booking_ref="DN-905176",
+        tracking_token=token,
+        tracking_token_hash=token_hash,
+        status="declared",
+        synced_to_couch=False,
+        created_at=now,
+        expires_at=now + timedelta(hours=72),
+    ).insert()
+
+    ok = await client.post(
+        "/public/v1/donations/track-search",
+        headers=auth_headers,
+        json={"booking_ref": "dn-905176", "phone": "0812345678"},
+    )
+    assert ok.status_code == 200
+    body = ok.json()
+    assert body["tracking_token"] == token
+    assert body["booking_ref"] == "DN-905176"
+
+    bad_phone = await client.post(
+        "/public/v1/donations/track-search",
+        headers=auth_headers,
+        json={"booking_ref": "DN-905176", "phone": "0899999999"},
+    )
+    assert bad_phone.status_code == 404
 
 
 async def test_patch_courier_updates_unsynced_buffer(
