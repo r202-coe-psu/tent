@@ -89,6 +89,14 @@ export {
 	petCategoryOrder
 } from './domain/policy-labels';
 
+export {
+	sumZoneCapacities,
+	capacityAlignment,
+	canSyncCapacityFromZones,
+	type ZoneCapacityLike,
+	type CapacityAlignment
+} from './domain/capacity-guide';
+
 // Data layer (public)
 export { createShelter, updateShelter, closeZone, reopenZone } from './data/shelters.api';
 export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.remote';
