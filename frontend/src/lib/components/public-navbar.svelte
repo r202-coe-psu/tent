@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Home from '@lucide/svelte/icons/home';
 	import Compass from '@lucide/svelte/icons/compass';
@@ -32,11 +33,39 @@
 	}
 
 	let mobileMenuOpen = $state(false);
+	let donationsMenuOpen = $state(false);
+	let donationsMenuEl: HTMLDivElement | undefined = $state();
 
 	function toggleMobileMenu() {
 		mobileMenuOpen = !mobileMenuOpen;
 	}
+
+	function toggleDonationsMenu() {
+		donationsMenuOpen = !donationsMenuOpen;
+	}
+
+	function closeDonationsMenu() {
+		donationsMenuOpen = false;
+	}
+
+	function handleWindowPointerDown(event: PointerEvent) {
+		if (!donationsMenuOpen || !donationsMenuEl) return;
+		if (!donationsMenuEl.contains(event.target as Node)) {
+			closeDonationsMenu();
+		}
+	}
+
+	function handleWindowKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape') closeDonationsMenu();
+	}
+
+	afterNavigate(() => {
+		donationsMenuOpen = false;
+		mobileMenuOpen = false;
+	});
 </script>
+
+<svelte:window onpointerdown={handleWindowPointerDown} onkeydown={handleWindowKeydown} />
 
 <header
 	class="sticky top-0 z-50 w-full border-b border-border bg-card/95 px-6 py-3 shadow-xs backdrop-blur-md"
@@ -110,43 +139,57 @@
 				สืบค้นญาติ
 			</a>
 
-			<!-- Donations: donate + track (CR-052 §2.6) -->
-			<div class="group relative">
-				<a
-					href={resolve('/public/donations')}
-					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors group-hover:text-foreground hover:bg-muted/50 {isDonationsSection()
+			<!-- Donations: donate + track (CR-052 §2.6) — click toggle (not hover) -->
+			<div class="relative" bind:this={donationsMenuEl}>
+				<button
+					type="button"
+					onclick={toggleDonationsMenu}
+					aria-haspopup="menu"
+					aria-expanded={donationsMenuOpen}
+					aria-controls={donationsMenuOpen ? 'donations-menu' : undefined}
+					class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isDonationsSection() ||
+					donationsMenuOpen
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
-					aria-haspopup="true"
 				>
 					<Heart class="h-4 w-4" />
 					บริจาค
 					<ChevronDown
-						class="h-3.5 w-3.5 text-muted-foreground/75 transition-transform group-hover:rotate-180"
+						class="h-3.5 w-3.5 text-muted-foreground/75 transition-transform {donationsMenuOpen
+							? 'rotate-180'
+							: ''}"
 					/>
-				</a>
-				<div
-					class="absolute right-0 mt-1 hidden w-52 rounded-xl border border-border bg-card p-1 shadow-lg group-hover:block group-focus-within:block"
-				>
-					<a
-						href={resolve('/public/donations')}
-						class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isDonatePage()
-							? 'bg-primary-muted text-primary'
-							: 'text-muted-foreground'}"
+				</button>
+				{#if donationsMenuOpen}
+					<div
+						id="donations-menu"
+						role="menu"
+						class="absolute right-0 mt-1 w-52 rounded-xl border border-border bg-card p-1 shadow-sm"
 					>
-						<Heart class="h-3.5 w-3.5" />
-						บริจาคและจองคิว
-					</a>
-					<a
-						href={resolve('/public/donations/track')}
-						class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isTrackPage()
-							? 'bg-primary-muted text-primary'
-							: 'text-muted-foreground'}"
-					>
-						<PackageSearch class="h-3.5 w-3.5" />
-						ตรวจสอบสถานะ
-					</a>
-				</div>
+						<a
+							role="menuitem"
+							href={resolve('/public/donations')}
+							onclick={closeDonationsMenu}
+							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isDonatePage()
+								? 'bg-primary-muted text-primary'
+								: 'text-muted-foreground'}"
+						>
+							<Heart class="h-3.5 w-3.5" />
+							บริจาคและจองคิว
+						</a>
+						<a
+							role="menuitem"
+							href={resolve('/public/donations/track')}
+							onclick={closeDonationsMenu}
+							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isTrackPage()
+								? 'bg-primary-muted text-primary'
+								: 'text-muted-foreground'}"
+						>
+							<PackageSearch class="h-3.5 w-3.5" />
+							ตรวจสอบสถานะ
+						</a>
+					</div>
+				{/if}
 			</div>
 
 			<a

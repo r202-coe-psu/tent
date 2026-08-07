@@ -9,7 +9,7 @@
 </script>
 
 <!-- Hero Card -->
-<div class="relative mb-8 overflow-hidden rounded-2xl bg-primary-dark text-white shadow-xl">
+<div class="relative mb-8 overflow-hidden rounded-2xl bg-primary-dark text-white shadow-sm">
 	<div
 		class="absolute inset-0 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:20px_20px] opacity-10"
 	></div>

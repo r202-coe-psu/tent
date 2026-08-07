@@ -9,6 +9,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
 	import { useDonationTrackSearch } from '$lib/features/donations';
+	import { PublicPageShell } from '$lib/features/public-portal';
 
 	let bookingRefInput = $state('');
 	let phoneInput = $state('');
@@ -38,17 +39,17 @@
 	<title>ติดตามสถานะของบริจาค — Smart Shelter</title>
 </svelte:head>
 
-<div class="mx-auto max-w-2xl px-4 py-8 md:py-16">
+<PublicPageShell>
 	<a
 		href={resolve('/public/donations')}
-		class="mb-6 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground md:mb-8"
+		class="mb-6 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
 	>
 		<ArrowLeft class="h-3.5 w-3.5" />
 		กลับหน้าจองคิวบริจาค
 	</a>
 
 	<div
-		class="overflow-hidden rounded-3xl border border-border bg-card p-6 text-foreground shadow-2xl md:p-10"
+		class="overflow-hidden rounded-3xl border border-border bg-card p-6 text-foreground shadow-sm md:p-10"
 	>
 		<div class="mb-6 flex items-center gap-3">
 			<div
@@ -129,4 +130,4 @@
 			</div>
 		</div>
 	</div>
-</div>
+</PublicPageShell>

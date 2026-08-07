@@ -6,13 +6,13 @@
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 
-	import Card from '$lib/components/ui/card/card.svelte';
 	import {
 		PublicShelterMetricCard,
 		PublicShelterCard,
 		ShelterFilterPanel,
 		ShelterMap,
 		PublicHeroMetrics,
+		PublicPageShell,
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
 
@@ -86,7 +86,7 @@
 	<title>ตรวจสอบสถานะศูนย์พักพิง - Smart Shelter</title>
 </svelte:head>
 
-<div class="mx-auto max-w-380 px-4 py-8 md:px-6">
+<PublicPageShell class="space-y-8">
 	<!-- Header / Hero Section -->
 	<PublicHeroMetrics
 		title="ตรวจสอบสถานะศูนย์พักพิง"
@@ -99,7 +99,7 @@
 	/>
 
 	<!-- Metric Cards (capacity directory — no occupancy aggregates per CR-017) -->
-	<div class="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-6">
+	<div class="grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-6">
 		<PublicShelterMetricCard
 			title="ศูนย์พักพิงทั้งหมด"
 			value={data?.summary?.shelters_total ?? '-'}
@@ -118,7 +118,7 @@
 	</div>
 
 	<!-- Main Content: Filters, Map, and List -->
-	<Card class="rounded-6xl! grid grid-cols-1 gap-6 p-6 lg:grid-cols-12">
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
 		<!-- Left: Filters (3 columns on desktop) -->
 		<div class="flex flex-col gap-5 lg:col-span-3">
 			<ShelterFilterPanel
@@ -169,8 +169,8 @@
 				{/each}
 			</div>
 		</div>
-	</Card>
-</div>
+	</div>
+</PublicPageShell>
 
 <style>
 	/* Custom scrollbar for the list */

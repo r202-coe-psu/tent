@@ -54,7 +54,7 @@
 </script>
 
 <Card.Root
-	class="flex flex-col gap-2! rounded-2xl border-border p-5 shadow-xs transition-colors hover:border-primary/40 hover:bg-muted/10 hover:shadow-md"
+	class="flex flex-col gap-2! rounded-2xl border-border p-5 shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/10 hover:shadow-md"
 >
 	<!-- Title and Status -->
 	<div class="flex items-start justify-between gap-2">

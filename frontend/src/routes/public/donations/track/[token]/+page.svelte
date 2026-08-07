@@ -22,6 +22,7 @@
 		formatTrackSchedule,
 		canEditCourierTracking
 	} from '$lib/features/donations';
+	import { PublicPageShell } from '$lib/features/public-portal';
 
 	let { data }: { data: { token: string } } = $props();
 	const token = $derived(data.token);
@@ -74,7 +75,7 @@
 	<title>รายละเอียดสถานะของบริจาค — Smart Shelter</title>
 </svelte:head>
 
-<div class="mx-auto max-w-3xl px-4 py-8 md:py-12">
+<PublicPageShell>
 	<a
 		href={resolve('/public/donations/track')}
 		class="mb-6 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
@@ -91,7 +92,7 @@
 			กำลังโหลดสถานะบริจาค…
 		</div>
 	{:else if isError}
-		<div class="rounded-3xl border border-danger-border bg-card p-8 text-center shadow-xl">
+		<div class="rounded-3xl border border-danger-border bg-card p-8 text-center shadow-sm">
 			<div
 				class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-danger-muted text-danger"
 			>
@@ -108,7 +109,7 @@
 			</a>
 		</div>
 	{:else if donation}
-		<div class="overflow-hidden rounded-3xl border border-border bg-card text-foreground shadow-xl">
+		<div class="overflow-hidden rounded-3xl border border-border bg-card text-foreground shadow-sm">
 			<div
 				class="flex flex-col gap-4 border-b border-border/20 bg-zinc-950 p-6 text-white sm:flex-row sm:items-center sm:justify-between"
 			>
@@ -326,4 +327,4 @@
 			</div>
 		</div>
 	{/if}
-</div>
+</PublicPageShell>

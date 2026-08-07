@@ -13,7 +13,7 @@
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import PublicQuickServiceCard from '$lib/components/public-quick-service-card.svelte';
 	import PublicEmergencyBanner from '$lib/components/public-emergency-banner.svelte';
-	import { PublicHeroMetrics } from '$lib/features/public-portal';
+	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';
 	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -66,7 +66,7 @@
 	<title>Smart Shelter — Public & RFL Portal</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
+<PublicPageShell class="space-y-8">
 	<!-- 1. ประกาศด่วนและอื่นๆ -->
 	{#if data.announcements && data.announcements.length > 0}
 		{#each data.announcements as announcement (announcement._id || announcement.id)}
@@ -81,7 +81,7 @@
 	<!-- 2. Hero & Real-Time Metrics (T-57) -->
 	{#if data.isError}
 		<div
-			class="mb-12 rounded-xl border border-destructive/20 bg-destructive/10 p-6 text-center text-destructive"
+			class="rounded-xl border border-destructive/20 bg-destructive/10 p-6 text-center text-destructive"
 		>
 			<ShieldAlert class="mx-auto mb-2 h-8 w-8" />
 			<h3 class="text-lg font-bold">ระบบขัดข้อง</h3>
@@ -92,7 +92,7 @@
 	{/if}
 
 	<!-- 3. เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์ -->
-	<section class="mb-12">
+	<section>
 		<div class="mb-8">
 			<div class="mb-2 flex items-center gap-2">
 				<Compass class="h-5 w-5 text-muted-foreground" />
@@ -162,9 +162,9 @@
 	</section>
 
 	<!-- 4. Help Center & Emergency Contacts -->
-	<div class="mb-12 grid grid-cols-1 gap-6 lg:grid-cols-2">
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<!-- ศูนย์รวมความช่วยเหลือ (Help Center) -->
-		<div class="rounded-2xl border border-border bg-card p-6 shadow-xs">
+		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
 			<div class="mb-2 flex items-center gap-2">
 				<div
 					class="flex h-7 w-7 items-center justify-center rounded-full bg-primary-muted text-primary"
@@ -205,7 +205,7 @@
 							</Accordion.Content>
 						</Accordion.Item>
 					{:else}
-						<div class="text-center text-muted-foreground py-4 text-sm">
+						<div class="py-4 text-center text-sm text-muted-foreground">
 							ยังไม่มีข้อมูลคำถามที่พบบ่อย
 						</div>
 					{/each}
@@ -224,7 +224,7 @@
 
 		<!-- ติดต่อฉุกเฉินและด่วน -->
 		<div
-			class="flex h-fit flex-col justify-center rounded-2xl bg-[#1e293b] p-6 text-white shadow-lg lg:p-8"
+			class="flex h-fit flex-col justify-center rounded-2xl bg-[#1e293b] p-6 text-white shadow-sm lg:p-8"
 		>
 			<div
 				class="mb-4 inline-flex w-fit items-center rounded-full bg-white/10 px-3 py-1 text-xs font-bold tracking-wider text-white"
@@ -278,4 +278,4 @@
 			</div>
 		</div>
 	</div>
-</div>
+</PublicPageShell>

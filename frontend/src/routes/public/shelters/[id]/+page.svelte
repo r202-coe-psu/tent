@@ -9,6 +9,7 @@
 	import ShelterZones from './components/shelter-zones.svelte';
 	import ShelterFacilities from './components/shelter-facilities.svelte';
 	import ShelterContact from './components/shelter-contact.svelte';
+	import { PublicPageShell } from '$lib/features/public-portal';
 
 	let { data }: { data: PageData } = $props();
 	let shelter = $derived(data.shelter);
@@ -18,10 +19,10 @@
 	<title>{shelter?.name || 'ข้อมูลศูนย์พักพิง'} - Smart Shelter</title>
 </svelte:head>
 
-<div class="min-h-screen pb-20">
+<div class="pb-20">
 	<!-- Top Navigation Bar -->
-	<div class="border-b border-border bg-white">
-		<div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6">
+	<div class="border-b border-border bg-card">
+		<div class="mx-auto flex max-w-380 items-center justify-between px-4 py-3 sm:px-6">
 			<a
 				href="/public/shelters"
 				class="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm font-bold text-foreground/90 transition-colors hover:text-primary"
@@ -38,7 +39,7 @@
 	</div>
 
 	{#if shelter}
-		<div class="mx-auto max-w-6xl px-4 py-8 md:px-6">
+		<PublicPageShell class="space-y-8">
 			<ShelterHero {shelter} />
 
 			<!-- Main Content Grid -->
@@ -56,7 +57,7 @@
 					<ShelterContact {shelter} />
 				</div>
 			</div>
-		</div>
+		</PublicPageShell>
 	{:else}
 		<div class="flex min-h-[50vh] flex-col items-center justify-center px-4 py-20 text-center">
 			<AlertTriangle class="mb-4 h-12 w-12 text-muted-foreground/60" />

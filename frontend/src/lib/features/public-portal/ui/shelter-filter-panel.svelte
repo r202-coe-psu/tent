@@ -147,7 +147,7 @@
 </script>
 
 <div
-	class="flex h-[85vh] max-h-200 flex-col rounded-2xl border border-border bg-card p-5 shadow-xs"
+	class="flex h-[85vh] max-h-200 flex-col rounded-2xl border border-border bg-card p-5 shadow-sm"
 >
 	<div class="mb-4 flex shrink-0 items-center gap-2">
 		<Filter class="h-4 w-4 text-primary" />

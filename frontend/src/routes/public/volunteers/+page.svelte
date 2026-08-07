@@ -10,6 +10,7 @@
 	import Ambulance from '@lucide/svelte/icons/ambulance';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Truck from '@lucide/svelte/icons/truck';
+	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';
 
 	let activeTab = $state('register'); // register | portal | needs
 </script>
@@ -18,49 +19,25 @@
 	<title>ระบบงานข้อมูลอาสาสมัคร — Smart Shelter</title>
 </svelte:head>
 
-<div class="mx-auto max-w-6xl px-4 py-8">
-	<!-- Top Banner -->
-	<div
-		class="relative mb-8 overflow-hidden rounded-3xl bg-primary-dark p-6 text-white shadow-lg md:p-10"
-	>
-		<div class="flex flex-col justify-between gap-6 md:flex-row md:items-center">
-			<div class="max-w-2xl">
-				<span
-					class="mb-3 inline-block rounded-md bg-white/10 px-2.5 py-1 text-[10px] font-black tracking-wider text-muted-foreground/60 uppercase"
-				>
-					# RESCUE VOLUNTEER PLATFORM
-				</span>
-				<h1 class="text-xl font-black tracking-tight text-white md:text-2xl">
-					ระบบงานข้อมูลอาสาสมัครร่วมบูรณาการภัยพิบัติ
-				</h1>
-				<p class="mt-2 text-xs leading-relaxed text-muted-foreground/60">
-					เชื่อมประสานความดี ขจัดปัญหาร่วมกระจุกตัว ด้วยการคัดกรองทักษะ (Skill Matching)
-					ออกรหัสลงทะเบียน (Role Card) ปฏิบัติอาสา และติดตามสวัสดิการตามมาตรฐาน Sphere
-				</p>
-			</div>
-
-			<!-- Stats -->
-			<div class="flex shrink-0 gap-4">
-				<div class="min-w-28 rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
-					<div class="text-[10px] font-bold text-muted-foreground/80">ลงทะเบียนแล้ว</div>
-					<div class="mt-1 text-xl font-black text-white">6 คน</div>
-				</div>
-				<div class="min-w-28 rounded-2xl border border-chart-2/30 bg-chart-2/15 p-4 text-center">
-					<div class="text-[10px] font-bold text-chart-2">เข้าพื้นที่ทำงาน</div>
-					<div class="mt-1 text-xl font-black text-chart-2">5 คน</div>
-				</div>
-			</div>
-		</div>
-	</div>
+<PublicPageShell class="space-y-8">
+	<PublicHeroMetrics
+		title="ระบบงานข้อมูลอาสาสมัครร่วมบูรณาการภัยพิบัติ"
+		description="เชื่อมประสานความดี ขจัดปัญหาร่วมกระจุกตัว ด้วยการคัดกรองทักษะ (Skill Matching) ออกรหัสลงทะเบียน (Role Card) ปฏิบัติอาสา และติดตามสวัสดิการตามมาตรฐาน Sphere"
+		badgeText="Rescue Volunteer Platform"
+		badgeIcon={UserPlus}
+		showLivePing={false}
+		bgClass="bg-primary-dark"
+		showSearch={false}
+	/>
 
 	<!-- Tab Bar Navigation -->
-	<div class="mb-8 flex justify-start border-b border-border">
+	<div class="flex justify-start border-b border-border">
 		<div class="inline-flex rounded-t-xl border-x border-t border-border/50 bg-muted/30 p-1">
 			<button
 				onclick={() => (activeTab = 'register')}
 				class="flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold transition-all {activeTab ===
 				'register'
-					? 'bg-card text-foreground shadow-xs'
+					? 'bg-card text-foreground shadow-sm'
 					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				<UserPlus class="h-3.5 w-3.5" />
@@ -70,7 +47,7 @@
 				onclick={() => (activeTab = 'portal')}
 				class="flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold transition-all {activeTab ===
 				'portal'
-					? 'bg-card text-foreground shadow-xs'
+					? 'bg-card text-foreground shadow-sm'
 					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				<QrCode class="h-3.5 w-3.5" />
@@ -80,7 +57,7 @@
 				onclick={() => (activeTab = 'needs')}
 				class="flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold transition-all {activeTab ===
 				'needs'
-					? 'bg-card text-foreground shadow-xs'
+					? 'bg-card text-foreground shadow-sm'
 					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				<ClipboardList class="h-3.5 w-3.5" />
@@ -94,7 +71,7 @@
 		<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
 			<!-- Form area -->
 			<div class="lg:col-span-2">
-				<div class="rounded-3xl border border-border bg-card p-6 shadow-2xs md:p-8">
+				<div class="rounded-3xl border border-border bg-card p-6 shadow-sm md:p-8">
 					<h2 class="text-base font-bold text-foreground">1. ลงทะเบียนร่วมเป็นกำลังอาสา</h2>
 					<p class="mt-1 text-xs text-muted-foreground">
 						เมื่อผ่านขบวนลงทะเบียน ระบบจะออกรหัสประจำตัวอาสาสำหรับใช้เช็คอิน และแจกจ่ายบัตรงาน Role
@@ -247,7 +224,7 @@
 			<!-- Sidebar -->
 			<div class="flex flex-col gap-5">
 				<!-- Welfare list -->
-				<div class="rounded-3xl border border-border bg-card p-5 shadow-2xs">
+				<div class="rounded-3xl border border-border bg-card p-5 shadow-sm">
 					<h3 class="flex items-center gap-1.5 text-sm font-bold text-foreground">
 						<Heart class="h-4.5 w-4.5 text-danger" />
 						คุณจะได้รับสวัสดิการอะไรบ้าง?
@@ -304,7 +281,7 @@
 
 	<!-- TAB 2: พอร์ทัล & บัตรงานอาสา -->
 	{#if activeTab === 'portal'}
-		<div class="mx-auto max-w-2xl rounded-3xl border border-border bg-card p-6 shadow-xs md:p-8">
+		<div class="mx-auto max-w-2xl rounded-3xl border border-border bg-card p-6 shadow-sm md:p-8">
 			<h2 class="flex items-center gap-2 text-base font-bold text-foreground">
 				<UserCheck class="h-5 w-5 text-primary" />
 				พอร์ทัลอาสาสมัคร (My Portal)
@@ -348,7 +325,7 @@
 
 	<!-- TAB 3: ประกาศความต้องการกำลังพล -->
 	{#if activeTab === 'needs'}
-		<div class="rounded-3xl border border-border bg-card p-6 shadow-xs md:p-8">
+		<div class="rounded-3xl border border-border bg-card p-6 shadow-sm md:p-8">
 			<div
 				class="mb-6 flex flex-col justify-between gap-4 border-b border-border/60 pb-6 md:flex-row md:items-center"
 			>
@@ -476,4 +453,4 @@
 			</div>
 		</div>
 	{/if}
-</div>
+</PublicPageShell>

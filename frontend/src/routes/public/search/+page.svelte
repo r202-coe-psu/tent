@@ -11,6 +11,8 @@
 	import {
 		familySearch,
 		searchResultKey,
+		PublicHeroMetrics,
+		PublicPageShell,
 		type FamilySearchResult
 	} from '$lib/features/public-portal';
 
@@ -71,23 +73,23 @@
 	}
 </script>
 
-<div class="mx-auto max-w-5xl px-4 py-8">
-	<!-- Hero Section -->
-	<div class="mb-8 overflow-hidden rounded-2xl bg-primary-dark p-8 text-white shadow-lg lg:p-12">
-		<div
-			class="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold tracking-wider text-white/90 uppercase"
-		>
-			<Search class="h-4 w-4" /> RESTORING FAMILY LINKS
-		</div>
-		<h1 class="mb-4 text-3xl font-bold md:text-4xl">ระบบสืบค้นญาติและครอบครัว</h1>
-		<p class="text-white/80">
-			สืบค้นและตรวจสอบสถานะความปลอดภัยของบุคคลในครอบครัว
-			เพื่อบรรเทาความเครียดโดยไม่ต้องออกเดินทางตามหา ด้วยระบบคุ้มครองข้อมูลส่วนบุคคล (PDPA)
-		</p>
-	</div>
+<svelte:head>
+	<title>ระบบสืบค้นญาติและครอบครัว - Smart Shelter</title>
+</svelte:head>
+
+<PublicPageShell class="space-y-8">
+	<PublicHeroMetrics
+		title="ระบบสืบค้นญาติและครอบครัว"
+		description="สืบค้นและตรวจสอบสถานะความปลอดภัยของบุคคลในครอบครัว เพื่อบรรเทาความเครียดโดยไม่ต้องออกเดินทางตามหา ด้วยระบบคุ้มครองข้อมูลส่วนบุคคล (PDPA)"
+		badgeText="Restoring Family Links"
+		badgeIcon={Search}
+		showLivePing={false}
+		bgClass="bg-primary-dark"
+		showSearch={false}
+	/>
 
 	<!-- Search Box -->
-	<div class="rounded-2xl border border-border bg-white p-6 shadow-sm">
+	<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
 		<h2 class="mb-2 text-center text-xl font-bold">กรอกข้อมูลเพื่อค้นหา</h2>
 		<p class="mb-6 text-center text-sm text-muted-foreground">
 			รองรับการค้นหาด้วย ชื่อ สกุล เบอร์โทรศัพท์ หรือ รหัสบัตรประชาชน
@@ -128,7 +130,7 @@
 	<!-- Results -->
 	{#if results !== null}
 		{#if results.length > 0}
-			<div class="mt-8">
+			<div>
 				<div
 					class="mb-4 flex items-center gap-2 rounded-lg bg-muted p-3 text-sm font-semibold text-foreground/90"
 				>
@@ -138,7 +140,7 @@
 
 				<div class="flex flex-col gap-6">
 					{#each paginatedResults ?? [] as person, i (searchResultKey(person, i))}
-						<div class="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+						<div class="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
 							<!-- Card Header -->
 							<div class="flex items-start justify-between border-b border-border/50 p-5">
 								<div>
@@ -241,7 +243,7 @@
 									<div class="mt-4 flex flex-col gap-3">
 										{#each person.family_members as member, i (i)}
 											<div
-												class="flex items-center justify-between rounded-xl border border-border bg-white p-4"
+												class="flex items-center justify-between rounded-xl border border-border bg-card p-4"
 											>
 												<div>
 													<div class="font-bold text-foreground">
@@ -293,10 +295,10 @@
 			</div>
 		{:else}
 			<div
-				class="mt-8 rounded-2xl border border-dashed border-border bg-muted/50 p-12 text-center text-muted-foreground"
+				class="rounded-2xl border border-dashed border-border bg-muted/50 p-12 text-center text-muted-foreground"
 			>
 				<div
-					class="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-white p-4 shadow-sm"
+					class="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-card p-4 shadow-sm"
 				>
 					<Search class="size-10 text-muted-foreground" />
 				</div>
@@ -306,12 +308,12 @@
 		{/if}
 	{:else}
 		<div
-			class="mt-8 rounded-2xl border border-dashed border-border bg-muted/50 p-12 text-center text-muted-foreground"
+			class="rounded-2xl border border-dashed border-border bg-muted/50 p-12 text-center text-muted-foreground"
 		>
 			<div
-				class="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-white p-4 shadow-sm"
+				class="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-card p-4 shadow-sm"
 			>
-				<Search class=" size-10 text-muted-foreground" />
+				<Search class="size-10 text-muted-foreground" />
 			</div>
 			<h3 class="mb-2 text-lg font-bold text-foreground/90">เริ่มการค้นหา</h3>
 			<p class="text-sm">
@@ -319,4 +321,4 @@
 			</p>
 		</div>
 	{/if}
-</div>
+</PublicPageShell>

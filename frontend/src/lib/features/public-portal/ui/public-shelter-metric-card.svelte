@@ -17,7 +17,7 @@
 	} = $props();
 </script>
 
-<Card class=" items-center rounded-2xl border-border p-5 shadow-xs transition-all hover:shadow-md">
+<Card class=" items-center rounded-2xl border-border p-5 shadow-sm transition-all hover:shadow-md">
 	<div class="flex w-full items-center gap-6">
 		<div
 			class="flex size-14 shrink-0 items-center justify-center rounded-xl border-2 shadow-lg {iconClass}"

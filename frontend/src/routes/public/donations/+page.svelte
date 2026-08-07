@@ -9,6 +9,7 @@
 	import DonorForm from '$lib/components/form/form-donor.svelte';
 	import TimeSelection from '$lib/components/form/donor-time-selection-form.svelte';
 	import SuccessTicket from '$lib/components/public-donor-success-ticket.svelte';
+	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';
 	import { env } from '$env/dynamic/public';
 
 	const donationStore = setDonationStore();
@@ -40,31 +41,19 @@
 	{/if}
 </svelte:head>
 
-<div class="mx-auto max-w-4xl space-y-6 px-4 py-8">
+<PublicPageShell class="space-y-6">
 	<!-- Hero Banner (Only when activeTab is 'needs') -->
 	{#if donationStore.activeTab === 'needs'}
-		<div class="w-full animate-in duration-300 fade-in">
-			<div
-				class="relative flex flex-col items-start justify-start gap-6 overflow-hidden rounded-3xl bg-[#013481] p-6 text-left text-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-10"
-			>
-				<div
-					class="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] bg-[size:4rem_4rem] opacity-10"
-				></div>
-
-				<div class="relative z-10 max-w-2xl space-y-3">
-					<div
-						class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold tracking-wider text-blue-100 uppercase"
-					>
-						<HeartHandshake class="h-3.5 w-3.5 text-blue-200" /> DONATION BOARD
-					</div>
-					<h1 class="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-						กระดาน<span class="text-blue-200">ความต้องการด่วน</span>
-					</h1>
-					<p class="text-sm leading-relaxed font-medium text-blue-100/80 sm:text-base">
-						อัปเดตข้อมูลแบบเรียลไทม์จากทุกศูนย์พักพิง คุณสามารถช่วยเติมเต็มในส่วนที่ขาดแคลนได้ทันที
-					</p>
-				</div>
-			</div>
+		<div class="animate-in duration-300 fade-in">
+			<PublicHeroMetrics
+				title="กระดานความต้องการด่วน"
+				description="อัปเดตข้อมูลแบบเรียลไทม์จากทุกศูนย์พักพิง คุณสามารถช่วยเติมเต็มในส่วนที่ขาดแคลนได้ทันที"
+				badgeText="Donation Board"
+				badgeIcon={HeartHandshake}
+				showLivePing={false}
+				bgClass="bg-primary-dark"
+				showSearch={false}
+			/>
 		</div>
 	{/if}
 
@@ -142,4 +131,4 @@
 			<SuccessTicket />
 		{/if}
 	</div>
-</div>
+</PublicPageShell>
