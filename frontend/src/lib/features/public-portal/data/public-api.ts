@@ -1,4 +1,8 @@
-import { publicClient } from '$lib/api/public-client';
+/**
+ * Public portal data access — browser calls same-origin BFF `/api/public/v1/*` only.
+ * FastAPI `/public/v1/*` requires EXTERNAL_API_SECRET (injected by BFF). Never use
+ * `/public-api` from the client (CR-063).
+ */
 import type {
 	FamilySearchResponse,
 	ListPublicSheltersParams,
@@ -14,31 +18,32 @@ function publicApiError(error: unknown, status: number, fallback: string): Error
 }
 
 export async function familySearch(query: string): Promise<FamilySearchResponse> {
-	const { data, error, response } = await publicClient.POST('/public/v1/family-search', {
-		body: { search: query }
+	const response = await fetch('/api/public/v1/family-search', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ search: query })
 	});
-	if (error || !data) {
-		throw publicApiError(error, response.status, 'เกิดข้อผิดพลาดในการค้นหา');
+	const data = await response.json().catch(() => null);
+	if (!response.ok || !data) {
+		throw publicApiError(data, response.status, 'เกิดข้อผิดพลาดในการค้นหา');
 	}
-	return data;
+	return data as FamilySearchResponse;
 }
 
 export async function listPublicShelters(
 	params: ListPublicSheltersParams = {}
 ): Promise<PublicShelterListResponse> {
-	const { data, error, response } = await publicClient.GET('/public/v1/shelters', {
-		params: {
-			query: {
-				province: params.province || null,
-				district: params.district || null,
-				subdistrict: params.subdistrict || null,
-				status: params.status || null
-			}
-		},
-		fetch: params.fetch
-	});
-	if (error || !data) {
-		throw publicApiError(error, response.status, 'ไม่สามารถโหลดรายการศูนย์พักพิงได้');
+	const url = new URL('/api/public/v1/shelters', 'http://local.invalid');
+	if (params.province) url.searchParams.set('province', params.province);
+	if (params.district) url.searchParams.set('district', params.district);
+	if (params.subdistrict) url.searchParams.set('subdistrict', params.subdistrict);
+	if (params.status) url.searchParams.set('status', params.status);
+
+	const fetchFn = params.fetch ?? fetch;
+	const response = await fetchFn(`${url.pathname}${url.search}`);
+	const data = await response.json().catch(() => null);
+	if (!response.ok || !data) {
+		throw publicApiError(data, response.status, 'ไม่สามารถโหลดรายการศูนย์พักพิงได้');
 	}
-	return data;
+	return data as PublicShelterListResponse;
 }

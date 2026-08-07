@@ -1,10 +1,16 @@
 import math
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from tent_model.public_announcement import PublicAnnouncement
 
-router = APIRouter(prefix="/public/v1/announcements", tags=["Announcements"])
+from ...core.security import verify_external_secret
+
+router = APIRouter(
+    prefix="/public/v1/announcements",
+    tags=["Announcements"],
+    dependencies=[Depends(verify_external_secret)],
+)
 
 
 class PaginatedAnnouncements(BaseModel):

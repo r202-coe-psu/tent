@@ -4,6 +4,7 @@ import type { Icon } from '@lucide/svelte';
 import {
 	House,
 	Home,
+	KeyRound,
 	MapPin,
 	Megaphone,
 	Settings,
@@ -49,7 +50,13 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 				icon: Building,
 				requiresAdmin: true
 			},
-			{ label: 'จัดการบ้านพี่เลี้ยง', href: resolve(`${base}/host-houses`), icon: House }
+			{ label: 'จัดการบ้านพี่เลี้ยง', href: resolve(`${base}/host-houses`), icon: House },
+			{
+				label: 'API Keys',
+				href: resolve(`${base}/api-keys`),
+				icon: KeyRound,
+				requiresAdmin: true
+			}
 		]
 	},
 	{

@@ -333,9 +333,10 @@ staff UI  →  CouchDB (SoR)
                 ↓ sync worker (CDC)
              MongoDB public_* collections
                 ↓
-             FastAPI :9000  (/public/v1/*)
+             FastAPI :9000  (/public/v1/* requires EXTERNAL_API_SECRET)
                 ↑
-public SPA  →  same-origin /public-api/*  (Vite proxy in dev; nginx in prod)
+public SPA  →  same-origin /api/public/v1/*  (SvelteKit BFF injects Bearer)
+external    →  /external/v1/* + X-API-Key (nginx or direct FastAPI)
 ```
 
 **Local stack (all three must run for public features that read Mongo):**
@@ -346,21 +347,18 @@ public SPA  →  same-origin /public-api/*  (Vite proxy in dev; nginx in prod)
 | 2. Seed / write staff data | `frontend/`                            | `pnpm seed` (or normal staff UI writes) so CouchDB has docs to project                |
 | 3. Sync                    | automatic via compose worker, or local | `uv run --project worker sync-worker` / `--bootstrap` for full re-sync                |
 | 4. Public API              | `backend/`                             | `./scripts/run-dev` → FastAPI on **:9000** (`APP_ENV=dev`)                            |
-| 5. SPA                     | `frontend/`                            | `pnpm dev` → :5173; proxies `/public-api` → FastAPI (strips prefix to `/public/v1/*`) |
+| 5. SPA                     | `frontend/`                            | `pnpm dev` → :5173; public reads via BFF `/api/public/v1/*` (CR-063)                  |
 
 Verify projections in Compass: `mongodb://localhost:27017/tentdb` (`public_persons`, `public_shelters`, …).
 
 **Frontend rules for this plane:**
 
-- Call FastAPI through **`$lib/api/public-client.ts`** (`openapi-fetch` + generated
-  `$lib/api/openapi.d.ts`, `baseUrl: '/public-api'`). Feature code lives in
-  `$lib/features/public-portal/` (layers + barrel).
+- Browser calls **only** same-origin BFF `/api/public/v1/*` (`src/routes/api/public/v1/**`).
+  Feature wrappers live in `$lib/features/public-portal/`. BFF injects
+  `EXTERNAL_API_SECRET` via `fastapiServiceHeaders()`.
+- Do **not** use a browser `/public-api` gateway to FastAPI (removed in CR-063).
 - Do **not** use `serviceFetch` / `$lib/api/service.ts` for public-plane routes (that helper is
   staff `/api/v1/*` + BFF).
-- Gateway is **`/public-api` only** — do **not** proxy `/public` (SPA) or `/api` (BFF). FastAPI
-  route paths remain `/public/v1/*` behind the gateway strip.
-- Needs / donations / transparency may still be SvelteKit BFF (`src/routes/api/public/v1/**`) until
-  migrated — do not invent a second untyped `fetch` path for endpoints already on FastAPI.
 - After changing FastAPI request/response schemas: start backend, then from `frontend/`:
 
   ```bash
@@ -384,10 +382,9 @@ Coding patterns (client wrappers, mappers, query keys): **`CONVENTIONS.md` §12*
   for when you actually need one.
 - Keep CouchDB same-origin in dev via the Vite `/couch` proxy (`PUBLIC_COUCH_PROXY`) so the session
   cookie is first-party — don't hardcode absolute CouchDB URLs in feature code.
-- Keep FastAPI public routes same-origin via `/public-api` (Vite proxy in dev via
-  `PUBLIC_FASTAPI_PROXY`; nginx in prod/staging). BFF server calls use `FASTAPI_INTERNAL_URL`
-  (+ `EXTERNAL_API_SECRET` for donations) — see §4.2. Don't hardcode `http://localhost:9000`
-  in feature code.
+- Public FastAPI is **BFF-only** (CR-063): browser → `/api/public/v1/*` → FastAPI with
+  `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET`. Don't hardcode `http://localhost:9000`
+  in feature code. External agencies use `/external/v1` + API key.
 
 ## 6. Testing
 

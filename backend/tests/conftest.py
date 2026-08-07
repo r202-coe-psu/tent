@@ -23,6 +23,12 @@ def settings() -> Settings:
 
 
 @pytest.fixture
+def auth_headers(settings: Settings) -> dict[str, str]:
+    """Bearer token for BFF → FastAPI `/public/v1/*` and admin routes."""
+    return {"Authorization": f"Bearer {settings.EXTERNAL_API_SECRET}"}
+
+
+@pytest.fixture
 async def db_client(settings: Settings) -> AsyncGenerator[AsyncIOMotorClient, None]:
     """Create a MongoDB client bound to the current test event loop."""
     client = AsyncIOMotorClient(

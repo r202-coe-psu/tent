@@ -18,8 +18,9 @@ repo-root `demo/` (see `demo/README.md`).
 | Public | anonymous SPA `/public/*` | `/public/v1/*` → FastAPI | MongoDB `public_*` (via sync worker) |
 
 Staff CouchDB is reached with cookie `_session` via same-origin proxy (`PUBLIC_COUCH_PROXY=/couch`).
-Public FastAPI is same-origin via **`/public-api`** (Vite proxy in dev via `PUBLIC_FASTAPI_PROXY`;
-nginx in prod/staging). FastAPI route paths remain `/public/v1/*` behind the gateway strip.
+Public FastAPI is reached from the SPA only via **SvelteKit BFF** `/api/public/v1/*`
+(Bearer `EXTERNAL_API_SECRET`; CR-063). External agencies use `/external/v1/*` + managed
+`X-API-Key`. FastAPI route paths remain `/public/v1/*` on the service itself.
 
 > **Stale docs — ignore where they disagree:** `frontend/agent-role.md` (and `AGENTS.md`) still
 > describe the original template (JWT + flat `api.ts`/`queries.ts`). The binding specs are
@@ -81,7 +82,7 @@ cd frontend && pnpm dev                             # Vite :5173 + proxies
 ```
 
 Env: repo-root `.env` from `.env.example`; `frontend/.env` from `frontend/.env.example`
-(needs `PUBLIC_FASTAPI_PROXY=http://localhost:9000`). Data persists under `deployment/`.
+(needs `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET`). Data persists under `deployment/`.
 
 To seed mock data:
 `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm seed`
@@ -101,15 +102,16 @@ Full workflow: **`frontend/CONTRIBUTING.md` §4.2** + coding patterns **`fronten
    (`/public/v1/family-search`, `/public/v1/shelters`, …); add tests under `backend/tests/`.
 3. **Regenerate types** from `frontend/`: `pnpm openapi:update` → commit `fastapi.json` +
    `openapi.d.ts`.
-4. **Wire UI** via `$lib/api/public-client.ts` and `$lib/features/public-portal/` barrel only —
-   never raw untyped `fetch` for routes already on FastAPI; never `serviceFetch` for public plane.
-5. **Gateway `/public-api`**: Vite (dev) and nginx (prod) strip the prefix and forward to FastAPI.
-   Do not proxy `/public` (SPA) or `/api` (BFF).
+4. **Wire UI** via BFF `/api/public/v1/*` and `$lib/features/public-portal/` barrel only —
+   never raw untyped `fetch` past the BFF for routes already on FastAPI; never `serviceFetch` for public plane.
+5. **No browser → FastAPI gateway**: do not proxy `/public-api` to FastAPI (CR-063). SPA `/public`
+   and staff `/api` stay on SvelteKit. External `/external/` may be proxied by nginx to FastAPI.
 
 ```
 staff → CouchDB → worker → MongoDB → FastAPI :9000
                                       ↑
-                         public SPA (/public-api/* via Vite or nginx)
+                    public SPA (/api/public/* BFF + Bearer)
+                    external (/external/v1/* + X-API-Key)
 ```
 
 ## Architecture
