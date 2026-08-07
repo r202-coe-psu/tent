@@ -1,0 +1,211 @@
+﻿Test_ID,Module,Sub_Module,Priority,Roles,Route_URL,Test_Case,Preconditions,Steps,Expected_Result,Status,Actual_Result,Bug_Link,Tester,Test_Date,Environment,Notes
+UAT-000,Setup,บัญชีทดสอบ,P0,"SA,SM,REG,KS,WS,PUB",-,เตรียมบัญชีทดสอบครบทุก role,มีสิทธิ์สร้าง user หรือมี seed data,"1) สร้าง/ยืนยันบัญชี SA, SM (ศูนย์ A), REG, KS, WS
+2) ยืนยัน SM อยู่ศูนย์เดียว
+3) เตรียมบัญชี anonymous (ไม่ login) สำหรับ public",มีบัญชีครบ 6 กลุ่ม พร้อมรหัสผ่าน และ shelter scope ถูกต้อง,Not Tested,,,,,Staging,ขั้นต่ำก่อนเริ่ม UAT
+UAT-001,Setup,Environment,P0,All,-,ยืนยัน environment พร้อมทดสอบ,"Stack ขึ้นครบ (CouchDB, Mongo, worker, FastAPI, frontend)","1) เปิด URL staging/local
+2) ตรวจ /public โหลดได้
+3) ตรวจ /login โหลดได้
+4) ตรวจ announcement/shelter public มีข้อมูลตัวอย่าง",หน้า public และ login ใช้งานได้ มีข้อมูล seed พอทดสอบ,Not Tested,,,,,Staging,
+UAT-010,Auth,Login,P0,All staff,/login,Login สำเร็จด้วย credentials ถูกต้อง,มีบัญชี staff ที่ active,"1) เปิด /login
+2) กรอก username/password ถูกต้อง
+3) Submit",เข้าสู่ระบบสำเร็จ และถูกพาไป /portal,Not Tested,,,,,Staging,
+UAT-011,Auth,Login,P0,All staff,/login,Login ล้มเหลวด้วย credentials ผิด,-,"1) กรอก username/password ผิด
+2) Submit",แสดง error toast และยังอยู่ที่ /login ไม่เข้า protected,Not Tested,,,,,Staging,
+UAT-012,Auth,Guard,P0,Anonymous,/back-office/evacuee-management,Unauthenticated เข้า protected route ถูก redirect,ยังไม่ login / ล้าง cookie,1) เปิด URL protected โดยตรง,Redirect ไป /login,Not Tested,,,,,Staging,
+UAT-013,Auth,Redirect,P1,SA,/login,ผู้ที่ login แล้วเข้า /login ถูกพาไป portal,Login อยู่แล้ว,1) เปิด /login,Redirect ไป /portal,Not Tested,,,,,Staging,
+UAT-014,Auth,Logout,P0,All staff,(protected),Logout สำเร็จ,Login อยู่,1) กด Logout จาก header,ออกจากระบบ พาไป /public และเข้า protected ไม่ได้อีก,Not Tested,,,,,Staging,
+UAT-015,Auth,Session expiry,P1,All staff,(protected),Session หมดอายุแสดงแถบเตือนและ reauth ได้,สามารถจำลอง session หมดอายุ (หรือรอหมดอายุ),"1) ทำให้ session หมดอายุ
+2) สังเกตแถบ Session หมดอายุ
+3) Login ใหม่ผ่าน dialog","แสดงแถบ ""Session หมดอายุ"" และ reauth แล้วใช้งานต่อได้",Not Tested,,,,,Staging,ข้อความไทย: Session หมดอายุ / กรุณาเข้าสู่ระบบอีกครั้ง
+UAT-016,Auth,Role redirect,P0,"REG,KS,WS",/portal/system-management,Role ที่ไม่มีสิทธิ์ถูกกันออกจาก System Management,Login เป็น REG หรือ KS หรือ WS,1) พยายามเปิด /portal/system-management,ถูก redirect ไป /portal (หรือถูกกันเข้า) ไม่เห็นข้อมูล SA,Not Tested,,,,,Staging,
+UAT-017,Auth,Connectivity,P1,All staff,(protected),เมื่อเชื่อมต่อ CouchDB ไม่ได้แสดง disconnected banner,สามารถตัด network/proxy ชั่วคราว,"1) ตัดการเชื่อมต่อ /couch
+2) พยายามโหลดข้อมูล",แสดง banner cannot connect / offline status — ไม่แสดงข้อมูล cache เก่าแบบ offline-first,Not Tested,,,,,Staging,Remote-first policy: status-only ไม่มี local DB
+UAT-020,Portal Hub,Card visibility,P0,SA,/portal,SA เห็นการ์ดครบทุกโมดูล,Login เป็น SA,"1) เปิด /portal
+2) ตรวจการ์ด: Onsite, Public, System Management, Back-Office",เห็น 4 การ์ด: ระบบส่วนหน้า / เว็บพอร์ทัลสาธารณะ / ทะเบียนพื้นที่และศูนย์พักพิง / ระบบส่วนหลัง,Not Tested,,,,,Staging,
+UAT-021,Portal Hub,Card visibility,P0,SM,/portal,SM เห็น Onsite + Public + Back-Office แต่ไม่เห็น System Management,Login เป็น SM,1) เปิด /portal,"เห็น Onsite, Public, Back-Office — ไม่เห็น System Management (SA only)",Not Tested,,,,,Staging,
+UAT-022,Portal Hub,Card visibility,P0,"REG,KS,WS",/portal,REG/KS/WS เห็นเฉพาะ Onsite + Public,Login เป็น REG หรือ KS หรือ WS,1) เปิด /portal,เห็นเฉพาะระบบส่วนหน้า และลิงก์ public — ไม่เห็น Back-Office / System Management,Not Tested,,,,,Staging,
+UAT-023,Portal Hub,Navigation,P1,SA,/portal,คลิกการ์ดพาไปถูกหน้า,Login SA,1) คลิกแต่ละการ์ด,"ไป /onsite, /public, /portal/system-management, back-office ตามลำดับ",Not Tested,,,,,Staging,
+UAT-030,Onsite,Hub,P0,"REG,SM,SA",/onsite,เปิดหน้า Onsite hub และเห็นเมนูหลัก,Login REG/SM/SA,1) เปิด /onsite,"เห็น ""ระบบส่วนหน้า ณ ศูนย์พักพิง"" และปุ่ม ลงทะเบียนใหม่ / สแกนเข้า-ออกศูนย์",Not Tested,,,,,Staging,ค้นหาและแก้ไขข้อมูลอาจ disabled — บันทึกเป็น Skip ถ้ายังไม่เปิด
+UAT-031,Onsite,Registration,P0,"REG,SM,SA",/onsite/people,ลงทะเบียนผู้ประสบภัยครบ flow (ปกติ),มีศูนย์ที่เปิดรับ + zone พร้อม,"1) เปิดลงทะเบียนใหม่
+2) ตรวจประวัติ (บัตร/เบอร์/ชื่อ)
+3) กรอก EWAR symptoms
+4) กรอกข้อมูลบุคคล
+5) ผูก/สร้างครัวเรือน
+6) บันทึก pet/asset/vehicle (ถ้ามี)
+7) เลือกโซน
+8) จบที่หน้า wristband/success",สร้าง person + household ได้สำเร็จ อยู่ในโซนที่เลือก occupancy อัปเดต,Not Tested,,,,,Staging,
+UAT-032,Onsite,Registration duplicate,P0,REG,/onsite/people,ตรวจประวัติเจอคนเดิมไม่สร้างซ้ำโดยไม่ตั้งใจ,มีผู้ประสบภัยที่ลงทะเบียนแล้ว,"1) ค้นด้วยเลขบัตรหรือเบอร์เดิม
+2) ดูผลลัพธ์",พบประวัติเดิม และมีทางเลือกใช้/แก้ไขแทนสร้างใหม่,Not Tested,,,,,Staging,
+UAT-033,Onsite,Fast Track,P0,"REG,SM",/onsite/people?mode=fast_track,Fast Track สำหรับกลุ่มเปราะบาง/medical,มีโซนเปราะบางหรือนโยบายรับ,"1) เปิดโหมด Fast Track
+2) กรอกข้อมูลขั้นต่ำที่จำเป็น
+3) บันทึก",แสดงแบนเนอร์ Fast Track และลงทะเบียนสำเร็จตามช่องทางพิเศษ,Not Tested,,,,,Staging,
+UAT-034,Onsite,Symptoms → Fast Track,P1,REG,/onsite/people,อาการเฝ้าระวังบังคับเข้า Fast Track,-,"1) ในขั้นตอน symptoms เลือกอาการที่ trigger
+2) ดู track ที่ระบบกำหนด",ระบบบังคับ/เปลี่ยนเป็น Fast Track,Not Tested,,,,,Staging,
+UAT-035,Onsite,Scan check-in,P0,"REG,SM,SA",/onsite/scan-check-in-out,Check-in ด้วย QR สำเร็จ,มี QR ของผู้ประสบภัย/ครัวเรือนที่ยังไม่ check-in,"1) เปิดหน้าสแกน
+2) สแกน QR หรือใส่รหัสมือ
+3) ยืนยัน check-in",สถานะเข้าศูนย์สำเร็จ occupancy เพิ่มตามกฎ,Not Tested,,,,,Staging,
+UAT-036,Onsite,Scan check-out,P0,"REG,SM,SA",/onsite/scan-check-in-out,Check-out ต้องระบุปลายทาง,มีคนที่อยู่ในศูนย์แล้ว,"1) สแกนคนที่อยู่
+2) เลือก check-out
+3) ไม่ใส่ destination แล้วลองบันทึก
+4) ใส่ destination แล้วบันทึก",ไม่มี destination = ไม่ผ่าน; มี destination = check-out สำเร็จ,Not Tested,,,,,Staging,Invariant R-29-8
+UAT-037,Onsite,Scan camera denied,P2,REG,/onsite/scan-check-in-out,ปฏิเสธสิทธิ์กล้องแล้วยังใช้ manual ได้,Browser ปฏิเสธ camera,"1) Deny camera
+2) ใช้กรอกรหัสมือ/ค้นหา",แสดงข้อความไม่เข้าถึงกล้องได้ แต่ manual/search ใช้ได้,Not Tested,,,,,Staging,
+UAT-038,Onsite,Scan terminal status,P1,REG,/onsite/scan-check-in-out,สถานะปลายทาง (เช่น deceased) ห้าม check-in,มี record สถานะ terminal (ถ้ามีใน seed),1) พยายาม check-in คนสถานะ terminal,ระบบปฏิเสธ check-in พร้อมข้อความชัดเจน,Not Tested,,,,,Staging,Skip ถ้าไม่มีข้อมูลทดสอบ
+UAT-039,Onsite,Profile view,P1,"REG,SM",/onsite/people/evacuee-profile-view/[id],ดูโปรไฟล์ผู้ประสบภัยจาก onsite,มี evacuee id,1) เปิดโปรไฟล์จากรายการ/ลิงก์,แสดงข้อมูลถูกต้องตามสิทธิ์ shelter scope,Not Tested,,,,,Staging,
+UAT-040,Back-Office,Evacuee dashboard,P0,"SA,SM,REG",/back-office/evacuee-management?tab=dashboard,แท็บภาพรวมแสดง occupancy/demographics ของศูนย์ที่เลือก,มีข้อมูลผู้พักพิงในศูนย์,"1) เปิดแท็บภาพรวม
+2) เลือกศูนย์ (ถ้าเป็น SA)
+3) ตรวจตัวเลข",ตัวเลขสอดคล้องกับจำนวนคนจริงในศูนย์,Not Tested,,,,,Staging,
+UAT-041,Back-Office,Evacuee list,P0,"SA,SM,REG",/back-office/evacuee-management?tab=evacuee,ค้นหาและเปิดแก้ไขผู้ประสบภัย,มีรายชื่อ,"1) ค้นชื่อ/บัตร
+2) เปิดแก้ไข
+3) แก้ฟิลด์ที่ไม่ critical แล้วบันทึก",ค้นเจอ แก้ไขบันทึกได้ และสะท้อนในรายการ,Not Tested,,,,,Staging,
+UAT-042,Back-Office,Household create,P0,"SA,SM,REG",/back-office/households/new,สร้างครัวเรือนใหม่,Login มีสิทธิ์ registration,"1) สร้างครัวเรือน
+2) เพิ่มสมาชิก
+3) บันทึก",ครัวเรือนถูกสร้างและปรากฏในแท็บครัวเรือน,Not Tested,,,,,Staging,
+UAT-043,Back-Office,Household pre-register,P1,"SA,SM,REG",/back-office/households/pre-register,ลงทะเบียนครัวเรือนล่วงหน้า,-,"1) กรอก pre-register
+2) บันทึก",สถานะ pre_registered และสามารถ convert/check-in ภายหลังได้,Not Tested,,,,,Staging,
+UAT-044,Back-Office,Household edit + QR,P1,"SA,SM,REG",/back-office/households/edit/[id],แก้ไขครัวเรือนและสแกนสมาชิกด้วย QR,มีครัวเรือน,"1) เปิดแก้ไข
+2) ใช้สแกน QR เพิ่ม/ยืนยันสมาชิก (ถ้ามี)",สมาชิกอัปเดตถูกต้อง,Not Tested,,,,,Staging,
+UAT-045,Back-Office,Shelter scope PII,P0,"SM,REG",/back-office/evacuee-management,Staff ศูนย์ A มองไม่เห็น PII ศูนย์ B,มีข้อมูล 2 ศูนย์; login SM/REG ศูนย์ A,"1) ดูรายชื่อผู้ประสบภัย
+2) พยายามเปิด id ของศูนย์อื่น (ถ้าทราบ)",เห็นเฉพาะศูนย์ตน; ข้ามศูนย์ถูกปฏิเสธ,Not Tested,,,,,Staging,Privacy critical
+UAT-046,Back-Office,KS/WS blocked from PII,P0,"KS,WS",/back-office/evacuee-management,KS/WS เข้าหน้าจัดการผู้ประสบภัยไม่ได้,Login KS หรือ WS,1) เปิด /back-office/evacuee-management,ถูกกัน/redirect — ไม่เห็น medical หรือ national ID,Not Tested,,,,,Staging,
+UAT-050,Back-Office,Referral create,P0,"SA,SM",/back-office/referrals,สร้าง referral และส่งต่อ,มีผู้ประสบภัย + ศูนย์ปลายทางมีที่ว่าง,"1) สร้าง referral
+2) เปลี่ยน draft → sent",สถานะเป็น sent และศูนย์ปลายทางเห็นรายการ,Not Tested,,,,,Staging,
+UAT-051,Back-Office,Referral accept,P0,"SA,SM",/back-office/referrals,ศูนย์ปลายทาง accept referral,มี referral สถานะ sent,"1) Login SM ศูนย์ปลายทาง (หรือ SA)
+2) Accept",สถานะ accepted; stay status ต้นทาง/ปลายทางอัปเดตตามกฎ (transferred → active/pre_registered),Not Tested,,,,,Staging,
+UAT-052,Back-Office,Referral reject/close,P1,"SA,SM",/back-office/referrals,Reject และ close ตาม transition matrix,มี referral sent/accepted,"1) Reject จาก sent
+2) Close จาก draft/accepted/rejected ตามที่อนุญาต
+3) ลอง transition ที่ไม่อนุญาต",transition ที่ถูกอนุญาตสำเร็จ; ที่ผิดถูกปฏิเสธ,Not Tested,,,,,Staging,
+UAT-053,Back-Office,Referral medical privacy,P0,"SA,SM,PUB",/back-office/referrals + /public,รายละเอียด medical ของ referral ไม่หลุดสู่ public,มี referral ที่มี medical note,"1) ตรวจใน staff UI เห็น medical
+2) ตรวจ public/API ว่าไม่มี medical",medical อยู่เฉพาะ internal shelter scope,Not Tested,,,,,Staging,
+UAT-060,System Management,Shelter list,P0,SA,/portal/system-management/shelters,SA ดูรายการศูนย์ทั้งหมด,Login SA,1) เปิดจัดการศูนย์พักพิง,เห็นรายการทุกศูนย์ สร้าง/แก้ไข/import ได้,Not Tested,,,,,Staging,
+UAT-061,System Management,Shelter create wizard,P0,SA,/portal/system-management/shelters/create,สร้างศูนย์ใหม่ครบ 8 ขั้นตอน,Login SA,"1) กรอก: พื้นฐาน → ความจุ → โซน → สาธารณูปโภค → ความเสี่ยง → นโยบายรับ → สัมภาระ → ยานพาหนะ
+2) บันทึก",ศูนย์ถูกสร้างและปรากฏในรายการ + sync ไป public ได้ภายในเวลาที่กำหนด,Not Tested,,,,,Staging,
+UAT-062,Back-Office,Shelter edit own,P0,SM,/back-office/shelters,SM แก้ไขศูนย์ตนได้,Login SM,"1) เปิดข้อมูลศูนย์ปัจจุบัน
+2) แก้ไขและบันทึก",บันทึกสำเร็จเฉพาะศูนย์ตน,Not Tested,,,,,Staging,
+UAT-063,Back-Office,Shelter create blocked for SM,P1,SM,/back-office/shelters,SM สร้างศูนย์ใหม่ไม่ได้ (SA only),Login SM,1) พยายามเข้า create mode,ถูกกัน — สร้างศูนย์ทำได้เฉพาะ SA ผ่าน system-management,Not Tested,,,,,Staging,
+UAT-064,Shelters,Capacity guide — no zones,P0,"SA,SM",shelter form step 2,แนวทางความจุเมื่อยังไม่มีโซน,เปิดฟอร์มแก้ไข/สร้างศูนย์,"1) ตั้ง Max Capacity = 100
+2) ไม่มีโซน",แสดงสถานะแนวทางว่ายังไม่มีโซน,Not Tested,,,,,Staging,Recent feature: capacity-guide
+UAT-065,Shelters,Capacity guide — zones under,P0,"SA,SM",shelter form step 2–3,ผลรวมโซนน้อยกว่าความจุศูนย์,Max Capacity = 100,"1) เพิ่มโซนรวม 80 คน
+2) ดู guideline",แจ้งว่าผลรวมโซนน้อยกว่าความจุศูนย์ และมีปุ่มปรับความจุศูนย์ให้เท่าผลรวมโซน,Not Tested,,,,,Staging,
+UAT-066,Shelters,Capacity guide — sync button,P0,"SA,SM",shelter form,กดปรับความจุศูนย์ให้เท่าผลรวมโซน,zones sum ≠ shelter max,"1) กดปุ่ม ""ปรับความจุศูนย์ให้เท่าผลรวมโซน (N คน)""",Max Capacity เปลี่ยนเป็น N และ toast ยืนยัน; guideline แสดงว่าตรงกัน,Not Tested,,,,,Staging,
+UAT-067,Shelters,Capacity guide — zones over,P0,"SA,SM",shelter form,ผลรวมโซนเกินความจุศูนย์,Max Capacity ต่ำกว่าผลรวมโซน,"1) ตั้งโซนรวมเกิน max
+2) ดู guideline (amber)",เตือนผลรวมโซนเกิน; sync แล้ว max ขึ้นตามผลรวมโซน,Not Tested,,,,,Staging,
+UAT-068,Shelters,Zone types,P1,"SA,SM",shelter form step 3,สร้าง/ปิด/เปิดโซนหลายประเภท,-,"1) สร้างโซน: ทั่วไป/ชายล้วน/หญิงล้วน/เปราะบาง/สัตว์เลี้ยง/กักโรค
+2) ปิดโซนแล้วเปิดใหม่",ประเภทถูกต้อง close/reopen ทำงาน,Not Tested,,,,,Staging,
+UAT-069,Shelters,Import,P1,SA,/portal/system-management/shelters/import,Import ศูนย์แบบ bulk,มีไฟล์ตัวอย่างที่ map คอลัมน์ได้,"1) อัปโหลด
+2) map columns
+3) confirm",ศูนย์ถูกสร้างตามไฟล์ โดยไม่พังข้อมูลเดิมโดยไม่ตั้งใจ,Not Tested,,,,,Staging,
+UAT-070,Shelters,Public capacity reflect,P1,"PUB,SA",/public/shelters,ความจุที่แก้ใน staff สะท้อนฝั่ง public,แก้ max capacity แล้วรอ sync worker,"1) แก้ capacity ใน staff
+2) รอ sync
+3) เปิด public shelters/detail",ตัวเลขความจุ/สถานะบน public อัปเดต,Not Tested,,,,,Staging,ขึ้นกับ worker sync latency
+UAT-080,Back-Office,Stock inventory,P0,"SA,WS",/back-office/supply,ดูสต็อกและรับเข้า (receive),มี catalog item,"1) แท็บรายการพัสดุ
+2) รับเข้า สินค้า qty/unit
+3) ตรวจ on-hand",ledger บันทึก on-hand เพิ่มถูกต้อง,Not Tested,,,,,Staging,
+UAT-081,Back-Office,Stock distribute,P0,"SA,WS",/back-office/supply,จ่ายออก (distribute) ลดสต็อก,มี on-hand พอ,"1) Distribute qty
+2) ตรวจ on-hand",on-hand ลดตามจำนวน; ประวัติมีรายการ,Not Tested,,,,,Staging,
+UAT-082,Back-Office,Stock adjust,P1,"SA,WS",/back-office/supply,Adjust สต็อกพร้อมเหตุผล,มี item,"1) Adjust +/- 
+2) ใส่เหตุผล",ยอดปรับถูกต้อง มีประวัติ,Not Tested,,,,,Staging,
+UAT-083,Back-Office,Reorder / Sphere,P1,"SA,SM,WS",/back-office/supply,แท็บวิเคราะห์ความต้องการเสบียง (Sphere),มี occupancy + threshold,"1) เปิดแท็บ Sphere
+2) ตรวจคำแนะนำเทียบ occupancy",แสดงการวิเคราะห์/reorder ที่สมเหตุสมผล,Not Tested,,,,,Staging,
+UAT-084,Back-Office,SM stock view only,P1,SM,/back-office/supply,SM ดู dashboard ได้ — ตรวจว่า write ledger ถูกจำกัดตามนโยบาย,Login SM (ไม่มี WS),"1) เปิด supply
+2) พยายาม receive/distribute",ดูได้; write ledger ถูกกันถ้าไม่ใช่ WS/SA (ตาม matrix FR-28/29),Not Tested,,,,,Staging,ถ้า UI อนุญาตแต่ backend ปฏิเสธ ให้บันทึก Fail/Note
+UAT-085,Back-Office,Purchase flow,P0,"SA,WS",/back-office/purchases,สร้างใบจัดซื้อแล้วรับเข้าคลังแยก 2 ขั้น,มี catalog,"1) สร้างใบจัดซื้อ
+2) ยังไม่รับของ → สถานะ not_received
+3) รับเข้าคลังบางส่วน/ครบ
+4) ตรวจสถานะ partial/received และ ledger reason:purchase",2 actions แยกกันสำเร็จ; สถานะสะท้อน ledger,Not Tested,,,,,Staging,CR-032 Option A
+UAT-086,Back-Office,Donation intake scan,P0,"SA,WS",/back-office/stock-donations,สแกนรับของบริจาคเข้าคลัง,มี donation declaration/QR จาก public,"1) แท็บสแกนรับของ
+2) สแกน/ยืนยันรับเข้า",รับเข้าสำเร็จ เชื่อมกับ tracking และสต็อกเพิ่ม,Not Tested,,,,,Staging,
+UAT-087,Back-Office,Donation needs board,P1,"SA,WS,SM",/back-office/stock-donations,"จัดการความต้องการบริจาค (cut-off, show-on-home, campaign)",-,"1) แท็บจัดการความต้องการ
+2) ตั้ง cut-off / แสดงบนหน้าแรก
+3) สร้าง campaign (ถ้ามี)",ตั้งค่าบันทึกและสะท้อนฝั่ง public needs,Not Tested,,,,,Staging,
+UAT-088,Back-Office,Donation pending review stub,P3,"SA,WS",/back-office/stock-donations,แท็บรายการรอตรวจสอบ (คาดว่ายัง mock),-,1) เปิดแท็บรอตรวจสอบ,ถ้าเป็น demo data ให้ข้าม (Skip) และระบุว่ายังไม่ production,Not Tested,,,,,Staging,Known stub — Skip expected
+UAT-089,Back-Office,Catalog CRUD,P0,SA,/back-office/catalog,SA จัดการหมวดหมู่/รายการสิ่งของ/สูตรอาหารมาตรฐาน,Login SA,"1) สร้างหมวด
+2) สร้างรายการ
+3) สร้าง/แก้สูตร
+4) แก้ไข/ปิดใช้งาน",CRUD สำเร็จ; item ใช้รับเข้าได้,Not Tested,,,,,Staging,Catalog master = SA only
+UAT-090,Back-Office,Catalog non-SA,P1,"SM,WS",/back-office/catalog,Non-SA ไม่สามารถ CRUD catalog master ได้,Login SM หรือ WS,1) พยายามสร้าง/แก้ catalog entity,ถูกกันตาม requireAdmin สำหรับ CRUD,Not Tested,,,,,Staging,
+UAT-100,Back-Office,Meal plan,P0,"SA,SM,KS",/back-office/kitchen,สร้าง/ยืนยันแผนอาหารจาก occupancy,มีผู้พักพิง + สูตร,"1) แท็บแผนอาหาร
+2) สร้างแผน
+3) Confirm",แผนถูกสร้างอิง occupancy,Not Tested,,,,,Staging,
+UAT-101,Back-Office,Kitchen requisition,P0,"SA,SM,KS",/back-office/kitchen,เบิกวัตถุดิบตัดสต็อก,มีสต็อกพอ,"1) แท็บประวัติเบิก
+2) เบิกวัตถุดิบ
+3) ตรวจ on-hand ที่ supply",สต็อกลดตาม requisition,Not Tested,,,,,Staging,
+UAT-102,Back-Office,Meal service,P1,"SA,KS",/back-office/kitchen,บันทึกสรุปบริการมื้ออาหาร,มี meal plan,"1) แท็บสรุปบริการ
+2) บันทึกจำนวนที่แจก",บันทึกสำเร็จและดูประวัติได้,Not Tested,,,,,Staging,
+UAT-103,Back-Office,Gas cylinders,P1,"SA,SM,KS",/back-office/kitchen/gas,จัดการถังแก๊ส,-,1) เพิ่ม/แก้ประเภทถังหรือทรัพยากรแก๊ส,บันทึกและแสดงสถานะถูกต้อง,Not Tested,,,,,Staging,
+UAT-104,Back-Office,Production board stub,P3,KS,/back-office/kitchen/production-board,กระดานการผลิต (เร็วๆ นี้),-,1) เปิดหน้า,แสดง coming soon — Skip เป็น expected,Not Tested,,,,,Staging,Known stub
+UAT-105,Back-Office,REG blocked kitchen,P1,REG,/back-office/kitchen,REG เข้า kitchen ไม่ได้,Login REG,1) เปิด /back-office/kitchen,ถูกกัน/redirect,Not Tested,,,,,Staging,
+UAT-110,Back-Office,Daily SOP dashboard,P0,"SA,SM",/back-office/resource-dashboard,รัน/ดูการประเมินประจำวัน (Daily SOP),มี occupancy + SOP params,"1) เปิด resource-dashboard
+2) รัน/รีเฟรชการคำนวณ
+3) ตรวจ alert",แสดงผลคำนวณทรัพยากรตามอัตราส่วน SOP,Not Tested,,,,,Staging,
+UAT-111,Back-Office,SOP parameters,P0,"SA,SM",/back-office/sop-parameters,ตั้งค่าพารามิเตอร์ / override ศูนย์,-,"1) ดู master ratios
+2) ตั้ง override ศูนย์ (ถ้าเป็น SM)
+3) ตรวจ version/history
+4) deactivate override",ค่าถูกบันทึกและสะท้อนบน dashboard; master ข้ามศูนย์ควรเป็น SA (ตรวจสิทธิ์เขียน),Not Tested,,,,,Staging,FR-44 master = SA — ตรวจว่า SM เขียน master ไม่ได้
+UAT-120,Back-Office,Create staff user (SM),P0,SM,/back-office/users,SM สร้าง staff ในศูนย์ตน,Login SM,"1) สร้าง user role REG หรือ KS หรือ WS
+2) Login ด้วยบัญชีใหม่",สร้างสำเร็จ และบัญชีใหม่ scope ศูนย์ตน,Not Tested,,,,,Staging,
+UAT-121,Back-Office,SM cannot create SA/SM,P0,SM,/back-office/users,SM สร้าง SA หรือ SM ไม่ได้,Login SM,1) พยายามสร้าง system_admin หรือ shelter_manager,ถูกปฏิเสธ,Not Tested,,,,,Staging,FR-34
+UAT-122,Back-Office,SA create any role,P0,SA,/back-office/users,SA สร้าง user ทุก role / ข้ามศูนย์ได้,Login SA,"1) สร้าง SM ศูนย์ B
+2) สร้าง SA อื่น (ถ้านโยบายอนุญาต)",สร้างสำเร็จตามที่อนุญาต,Not Tested,,,,,Staging,
+UAT-123,Back-Office,Edit/delete user,P1,"SA,SM",/back-office/users,แก้ไขและลบ user ตามสิทธิ์,มี user ทดสอบ,"1) แก้ display name/role
+2) ลบ user ทดสอบ",แก้/ลบสำเร็จ; SM ทำได้เฉพาะ staff ศูนย์ตน,Not Tested,,,,,Staging,
+UAT-124,Back-Office,Affiliation tags no permission,P2,SA,/back-office/users,affiliation_tags ไม่ให้สิทธิ์พิเศษ,-,"1) ใส่ tag volunteer ให้ user ที่ไม่มี role พิเศษ
+2) ตรวจว่าเข้าโมดูล admin ไม่ได้",tag เป็น metadata เท่านั้น ไม่ bypass RBAC,Not Tested,,,,,Staging,
+UAT-130,Back-Office,Registration config,P1,"SA,SM",/back-office/registration-config,ตั้งค่าข้อมูลหลักบุคคลมีผลต่อฟอร์มลงทะเบียน,-,"1) แก้ master data ที่เกี่ยวกับฟิลด์/ตัวเลือก
+2) เปิดฟอร์ม onsite ตรวจ",ตัวเลือกในฟอร์มสะท้อนค่าที่ตั้ง,Not Tested,,,,,Staging,
+UAT-131,Back-Office,Shelter config,P1,"SA,SM",/back-office/shelter-config,ตั้งค่าศูนย์พักพิง (master options),-,"1) แก้ค่า config
+2) ตรวจในฟอร์ม shelter",ค่าสะท้อนถูกต้อง,Not Tested,,,,,Staging,
+UAT-132,Back-Office,Household master data,P1,"SA,SM",/back-office/household-master-data,ตั้งค่าครัวเรือน,-,"1) แก้ค่า
+2) ตรวจฟอร์มครัวเรือน",ค่าสะท้อนถูกต้อง,Not Tested,,,,,Staging,
+UAT-133,Back-Office,Public portal FAQ config,P1,"SA,SM",/back-office/public-portal-config,ตั้งค่า FAQ/ช่องทางติดต่อบน public,-,"1) เพิ่ม/แก้ FAQ
+2) เปิด /public ตรวจ accordion",FAQ และลิงก์ติดต่ออัปเดตบนหน้าสาธารณะ,Not Tested,,,,,Staging,
+UAT-134,System Management,Global master data,P1,SA,/portal/system-management/registration-config,SA ตั้งค่า master ระดับระบบ,Login SA,1) แก้ registration/shelter/household config ฝั่ง system-management,บันทึกได้และมีผลทั่วระบบตาม design,Not Tested,,,,,Staging,
+UAT-140,System Management,Announcements CRUD,P0,SA,/portal/system-management/announcements,สร้าง/แก้/ลบประกาศด่วน,Login SA,"1) สร้างประกาศ severity info/warning/emergency
+2) ตั้ง is_active
+3) แก้/ลบ",CRUD สำเร็จ,Not Tested,,,,,Staging,
+UAT-141,Public,Announcements on home,P0,PUB,/public,ประกาศ active แสดงบนหน้า public,มีประกาศ active,"1) เปิด /public
+2) ตรวจแบนเนอร์ตาม severity",เห็นประกาศที่ active; inactive ไม่ขึ้น,Not Tested,,,,,Staging,
+UAT-150,Public,Landing,P0,PUB,/public,หน้าแรกสาธารณะโหลดครบองค์ประกอบหลัก,-,"1) เปิด /public
+2) ตรวจ metrics, quick services, FAQ, hotlines 1669/1784",หน้าโหลด; metrics แสดงหรือแจ้งระบบขัดข้องชัดเจนถ้า API fail,Not Tested,,,,,Staging,
+UAT-151,Public,Disabled CTAs,P2,PUB,/public,CTA ที่ยังไม่เปิดแสดงเร็วๆนี้/disabled,-,1) ตรวจปุ่มลงทะเบียนผู้ประสบภัย / อาสาสมัคร,ไม่พาไป flow ที่ยังไม่พร้อม (disabled หรือเร็วๆนี้),Not Tested,,,,,Staging,Expected Skip/Pass for disabled
+UAT-152,Public,Shelters list,P0,PUB,/public/shelters,รายการศูนย์ + filter + สถานะ,มีศูนย์ public,"1) เปิดตรวจสอบสถานะศูนย์พักพิง
+2) ใช้ filter จังหวัด/อำเภอ/สถานะ
+3) ดูการ์ดสถานะ เปิด/เต็ม/เตรียมพร้อม/ปิด",filter ทำงาน การ์ดแสดงสถานะถูกต้อง,Not Tested,,,,,Staging,
+UAT-153,Public,Shelter detail,P0,PUB,/public/shelters/[id],หน้ารายละเอียดศูนย์,มี shelter id สาธารณะ,"1) เปิดจากรายการ
+2) ตรวจโซน/สิ่งอำนวยความสะดวก/นโยบาย/ติดต่อ",ข้อมูลครบและไม่โชว์ PII ผู้ประสบภัย,Not Tested,,,,,Staging,
+UAT-154,Public,Shelter 404,P2,PUB,/public/shelters/invalid-id,ID ศูนย์ไม่พบ,-,1) เปิด id ปลอม,แสดงไม่พบข้อมูลศูนย์พักพิง,Not Tested,,,,,Staging,
+UAT-155,Public,Family search success,P0,FAM,/public/search,สืบค้นญาติด้วยคำค้น ≥ 3 ตัวอักษร,มีผู้ประสบภัยที่ไม่ได้ opt-out และยินยอมแสดง,"1) ค้นชื่อ/สกุล/เบอร์/บัตร ≥ 3 ตัว
+2) ดูผล",ได้ผลแบบ masked (ชื่อ/ชื่อเล่น/สถานะศูนย์) ไม่โชว์ medical/national ID เต็ม,Not Tested,,,,,Staging,FR-53 anti-enumeration
+UAT-156,Public,Family search short query,P0,FAM,/public/search,ค้นน้อยกว่า 3 ตัวอักษรถูกกัน,-,1) พิมพ์ 1–2 ตัวแล้วค้น,ไม่ค้นได้ / บังคับ ≥ 3 ตัว,Not Tested,,,,,Staging,
+UAT-157,Public,Family search opt-out,P0,"FAM,SM",/public/search,ผู้ที่ opt-out ไม่ขึ้นในผลค้นหา,ตั้ง opt-out ให้คนทดสอบจาก staff,"1) Opt-out จาก staff (FR-52)
+2) ค้นด้วยชื่อคนนั้นฝั่ง public",ไม่พบในผลลัพธ์สาธารณะ,Not Tested,,,,,Staging,
+UAT-158,Public,Family search rate limit,P1,FAM,/public/search,Rate limit เมื่อค้นถี่เกินไป,-,1) ส่งคำค้นซ้ำเร็วๆ จำนวนมาก,ได้ 429 หรือข้อความจำกัดการใช้งาน,Not Tested,,,,,Staging,NFR anti-enumeration
+UAT-159,Public,No PII leak,P0,"FAM,PUB",/public/search + /public/shelters,ตรวจว่า public ไม่รั่ว medical / บัตรประชาชน / ที่อยู่ละเอียดผู้ประสบภัย,-,1) ตรวจ response UI และ network (DevTools) ของ public endpoints,"ไม่มี medical, national ID เต็ม, หรือ PII ที่ห้ามตาม matrix §6",Not Tested,,,,,Staging,Security/Privacy critical
+UAT-170,Public,Donation full flow,P0,DN,/public/donations,บริจาคครบ 4 ขั้นจนได้ตั๋ว/QR,มี needs บนกระดาน; CAPTCHA ตาม env,"1) เลือกความต้องการ
+2) กรอกรายการบริจาค
+3) นัดหมาย
+4) ได้ตั๋ว + tracking token/QR",ได้ booking ref และสามารถ track ได้,Not Tested,,,,,Staging,
+UAT-171,Public,Donation track by ref,P0,DN,/public/donations/track,ติดตามสถานะด้วย booking ref + เบอร์,มี declaration จาก UAT-170,"1) กรอก DN-… + phone
+2) Submit",พาไป timeline สถานะของ token นั้น,Not Tested,,,,,Staging,
+UAT-172,Public,Donation track by token,P0,DN,/public/donations/track/[token],เปิดลิงก์ token ตรงๆ,มี token ถูกต้อง,1) เปิด URL token,แสดง timeline; token ผิด = ไม่พบ/error,Not Tested,,,,,Staging,
+UAT-173,Public,Donation cut-off,P1,"DN,WS",/public/donations,หลัง cut-off ไม่รับจองรายการนั้น,ตั้ง cut-off จาก staff needs board,"1) ตั้ง cut-off รายการ
+2) ลองจองฝั่ง public",ไม่ให้จองรายการที่ตัดรอบแล้ว (หรือ redirect ตาม FR-36/37),Not Tested,,,,,Staging,
+UAT-174,Public,Donation wrong phone on track,P1,DN,/public/donations/track,เบอร์ไม่ตรงกับ booking ต้องไม่เปิดสถานะ,มี booking,1) ใส่ ref ถูกแต่เบอร์ผิด,ไม่เปิดข้อมูล declaration ของคนอื่น,Not Tested,,,,,Staging,Privacy
+UAT-180,Public,Volunteers page,P3,PUB,/public/volunteers,หน้าอาสาสมัคร (ยังไม่ production-ready),-,1) เปิด /public/volunteers,บันทึกสถานะจริง (shell/demo) — Skip ถ้ายังไม่เปิดใช้งาน,Not Tested,,,,,Staging,Known stub; ไม่มีใน navbar
+UAT-181,System Management,Host houses stub,P3,SA,/portal/system-management/host-houses,บ้านพี่เลี้ยงยังเป็น stub,-,1) เปิดหน้า,Empty/stub — Skip expected,Not Tested,,,,,Staging,
+UAT-182,Nav,Placeholder menus,P3,"SA,SM",back-office nav,เมนูที่ยังไม่มีหน้า (href null) ไม่พัง,-,"1) ไล่เมนู: อาสาสมัคร, รายงานความโปร่งใส, รายงานหลังเหตุการณ์, GIS ฯลฯ",ไม่คลิกได้หรือแสดงเร็วๆนี้ — ไม่ error 500,Not Tested,,,,,Staging,
+UAT-190,Me,Profile,P2,All staff,/me,ดูโปรไฟล์ผู้ใช้ปัจจุบัน,Login,1) เปิด /me,แสดงข้อมูล user ปัจจุบันถูกต้อง,Not Tested,,,,,Staging,
+UAT-200,Cross-cutting,Shelter selector SA,P0,SA,navbar,SA สลับศูนย์แล้วข้อมูลตามศูนย์ที่เลือก,มี ≥2 ศูนย์,"1) เลือกศูนย์ A ตรวจรายการ
+2) สลับศูนย์ B",ข้อมูลเปลี่ยนตามศูนย์ที่เลือก,Not Tested,,,,,Staging,
+UAT-201,Cross-cutting,Concurrency 409,P1,"SA,SM",any edit form,แก้ไขเอกสารพร้อมกันสองแท็บจัดการ conflict,เปิดเอกสารเดียวกัน 2 แท็บ,"1) แท็บ A บันทึก
+2) แท็บ B บันทึกทับ",แท็บ B ได้ conflict/แจ้งให้รีโหลด ไม่เงียบทับข้อมูล,Not Tested,,,,,Staging,_rev RMW
+UAT-202,Cross-cutting,Root redirect,P2,PUB,/,Root / พาไป /public,-,1) เปิด /,Redirect ไป /public,Not Tested,,,,,Staging,
+UAT-203,Cross-cutting,Toast feedback,P2,All,หลายหน้า,สำเร็จ/ล้มเหลวใช้ toast ไม่พังเงียบ,-,1) ทำ create/update/delete สำเร็จและล้มเหลว,มี toast ชัดเจน; ไม่พึ่ง console.log เป็น feedback หลัก,Not Tested,,,,,Staging,
+UAT-204,Cross-cutting,Mobile responsive smoke,P1,"PUB,REG",/public + /onsite,Smoke บนมือถือ/ความกว้างแคบ,ใช้ device หรือ DevTools mobile,"1) เปิด public landing + shelters
+2) เปิด onsite registration ขั้นแรก",ใช้งานได้โดยไม่ตัดปุ่มสำคัญ/เลื่อนผิดแนวร้ายแรง,Not Tested,,,,,Staging,
+UAT-205,Cross-cutting,End-to-end happy path,P0,"SA,REG,WS,DN,PUB",หลายโมดูล,Happy path ครบวงจร: สร้างศูนย์ → ลงทะเบียนคน → check-in → บริจาค → รับเข้า → ครัวเบิก,บัญชีครบ role,"1) SA สร้าง/ตั้งศูนย์+โซน
+2) REG ลงทะเบียน+check-in
+3) DN บริจาคผ่าน public
+4) WS รับของเข้าคลัง
+5) KS สร้างแผน/เบิกวัตถุดิบ
+6) PUB เห็นศูนย์และค้นหาญาติ (masked)",ทุกขั้นสำเร็จ ข้อมูลเชื่อมกัน และ public ไม่รั่ว PII,Not Tested,,,,,Staging,Regression gate ก่อน go-live

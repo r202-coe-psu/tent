@@ -1,0 +1,31 @@
+Category,Value,Thai_Label,Description
+Priority,P0,วิกฤต,ต้องผ่านก่อน go-live / regression gate
+Priority,P1,สูง,ฟีเจอร์หลักที่ควรผ่านในรอบ UAT เต็ม
+Priority,P2,กลาง,คุณภาพ/UX/edge ที่ไม่บล็อกเปิดใช้ถ้ายังมี workaround
+Priority,P3,ต่ำ / stub,หน้ายังไม่พร้อม — คาดว่า Skip
+Status,Not Tested,ยังไม่ทดสอบ,ค่าเริ่มต้น
+Status,Pass,ผ่าน,ตรง Expected_Result
+Status,Fail,ไม่ผ่าน,บันทึก Actual_Result + Bug_Link
+Status,Blocked,ติดขัด,ทดสอบต่อไม่ได้ (env/ข้อมูล/dependency)
+Status,Skip,ข้าม,stub หรือนอกขอบเขตรอบนี้
+Status,N/A,ไม่เข้าเงื่อนไข,role/env ไม่เกี่ยวกับเคสนี้
+Role,SA,system_admin,สิทธิ์ทั้งระบบ — System Management + catalog master
+Role,SM,shelter_manager,บริหารศูนย์ตน ครอบ REG/KS/WS ในศูนย์
+Role,REG,registration_staff,ลงทะเบียน / check-in-out / ครัวเรือน
+Role,KS,kitchen_staff,แผนอาหาร / เบิกครัว / บันทึกมื้อ
+Role,WS,warehouse_staff,สต็อก / รับจ่าย / จัดซื้อ / รับบริจาค
+Role,PUB,Public anonymous,หน้าสาธารณะ ไม่ login
+Role,FAM,Family search,สืบค้นญาติแบบ masked
+Role,DN,Donor,บริจาค + track ด้วย token ไม่ login
+Module,Setup,เตรียมการ,บัญชีและ environment
+Module,Auth,เข้าสู่ระบบ,login / logout / session / guard
+Module,Portal Hub,พอร์ทัลพนักงาน,การ์ดนำทางตาม role
+Module,Onsite,ระบบส่วนหน้า,ลงทะเบียนและสแกน
+Module,Back-Office,ระบบส่วนหลัง,evacuee / supply / kitchen / config
+Module,Shelters,ศูนย์พักพิง + ความจุ,รวม capacity guide
+Module,System Management,ทะเบียนพื้นที่,SA only
+Module,Public,พอร์ทัลสาธารณะ,shelters / search / donations
+Module,Cross-cutting,ข้ามโมดูล,scope / privacy / concurrency / E2E
+Environment,Staging,Staging,แนะนำสำหรับ UAT ทีม
+Environment,Local,Local/dev,smoke ของ developer
+Environment,Prod-like,ใกล้ production,ก่อน go-live
