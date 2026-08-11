@@ -69,7 +69,7 @@
 
 - Onsite: ค้นหาและแก้ไขข้อมูล (disabled)  
 - Public: CTA ลงทะเบียนผู้ประสบภัย / อาสาสมัคร (เร็วๆนี้)  
-- `/public/volunteers`, host-houses, kitchen production-board  
+- `/volunteers`, host-houses, kitchen production-board  
 - แท็บ donation “รายการรอตรวจสอบ” (demo)  
 - เมนู back-office ที่ยังไม่มีหน้า (อาสาสมัคร, รายงานความโปร่งใส, GIS, …)
 

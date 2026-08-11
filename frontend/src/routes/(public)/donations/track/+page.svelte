@@ -28,7 +28,7 @@
 		}
 		try {
 			const result = await trackSearch.mutateAsync({ bookingRef, phone });
-			goto(resolve(`/public/donations/track/${encodeURIComponent(result.trackingToken)}`));
+			goto(resolve(`/donations/track/${encodeURIComponent(result.trackingToken)}`));
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'ค้นหาไม่สำเร็จ');
 		}
@@ -41,7 +41,7 @@
 
 <PublicPageShell>
 	<a
-		href={resolve('/public/donations')}
+		href={resolve('/donations')}
 		class="mb-6 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
 	>
 		<ArrowLeft class="h-3.5 w-3.5" />

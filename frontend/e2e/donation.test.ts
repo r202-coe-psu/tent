@@ -32,8 +32,8 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
 			});
 		});
 
-		// 2. Go to /public/donations
-		await page.goto('/public/donations');
+		// 2. Go to /donations
+		await page.goto('/donations');
 
 		// Step 1: Needs Board
 		await expect(page.locator('h2', { hasText: 'กระดานความต้องการด่วน' })).toBeVisible();

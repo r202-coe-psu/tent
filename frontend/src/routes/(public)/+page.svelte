@@ -127,7 +127,7 @@
 				icon={Package}
 				iconClass="bg-primary-muted/50 text-primary"
 			>
-				<PublicActionBtn href="/public/donations">แจ้งบริจาคสิ่งของล่วงหน้า</PublicActionBtn>
+				<PublicActionBtn href="/donations">แจ้งบริจาคสิ่งของล่วงหน้า</PublicActionBtn>
 				<PublicActionBtn variant="outline" disabled
 					>ดูบัญชีรับบริจาค / บอร์ดขอของ (เร็วๆนี้)</PublicActionBtn
 				>
@@ -156,7 +156,7 @@
 				icon={Search}
 				iconClass="bg-accent-purple-muted/50 text-accent-purple"
 			>
-				<PublicActionBtn href="/public/search">ค้นหารายบุคคลด่วนที่สุด</PublicActionBtn>
+				<PublicActionBtn href="/search">ค้นหารายบุคคลด่วนที่สุด</PublicActionBtn>
 			</PublicQuickServiceCard>
 		</div>
 	</section>
@@ -212,7 +212,7 @@
 				</Accordion.Root>
 
 				<a
-					href="/public/shelters"
+					href="/shelters"
 					class="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary-muted/30 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary-muted/50"
 				>
 					<MapPin class="h-4 w-4" />

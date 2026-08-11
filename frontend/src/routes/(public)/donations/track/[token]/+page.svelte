@@ -77,7 +77,7 @@
 
 <PublicPageShell>
 	<a
-		href={resolve('/public/donations/track')}
+		href={resolve('/donations/track')}
 		class="mb-6 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
 	>
 		<ArrowLeft class="h-3.5 w-3.5" />
@@ -102,7 +102,7 @@
 			<p class="mt-2 text-xs text-muted-foreground">{errorMessage}</p>
 			<p class="mt-1 font-mono text-[11px] break-all text-muted-foreground">{token}</p>
 			<a
-				href={resolve('/public/donations/track')}
+				href={resolve('/donations/track')}
 				class="mt-6 inline-flex rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground"
 			>
 				ค้นหาใหม่

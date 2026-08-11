@@ -95,7 +95,7 @@ UAT-068,Shelters,Zone types,P1,"SA,SM",shelter form step 3,สร้าง/ป�
 UAT-069,Shelters,Import,P1,SA,/portal/system-management/shelters/import,Import ศูนย์แบบ bulk,มีไฟล์ตัวอย่างที่ map คอลัมน์ได้,"1) อัปโหลด
 2) map columns
 3) confirm",ศูนย์ถูกสร้างตามไฟล์ โดยไม่พังข้อมูลเดิมโดยไม่ตั้งใจ,Not Tested,,,,,Staging,
-UAT-070,Shelters,Public capacity reflect,P1,"PUB,SA",/public/shelters,ความจุที่แก้ใน staff สะท้อนฝั่ง public,แก้ max capacity แล้วรอ sync worker,"1) แก้ capacity ใน staff
+UAT-070,Shelters,Public capacity reflect,P1,"PUB,SA",/shelters,ความจุที่แก้ใน staff สะท้อนฝั่ง public,แก้ max capacity แล้วรอ sync worker,"1) แก้ capacity ใน staff
 2) รอ sync
 3) เปิด public shelters/detail",ตัวเลขความจุ/สถานะบน public อัปเดต,Not Tested,,,,,Staging,ขึ้นกับ worker sync latency
 UAT-080,Back-Office,Stock inventory,P0,"SA,WS",/back-office/supply,ดูสต็อกและรับเข้า (receive),มี catalog item,"1) แท็บรายการพัสดุ
@@ -168,30 +168,30 @@ UAT-141,Public,Announcements on home,P0,PUB,/public,ประกาศ active �
 UAT-150,Public,Landing,P0,PUB,/public,หน้าแรกสาธารณะโหลดครบองค์ประกอบหลัก,-,"1) เปิด /public
 2) ตรวจ metrics, quick services, FAQ, hotlines 1669/1784",หน้าโหลด; metrics แสดงหรือแจ้งระบบขัดข้องชัดเจนถ้า API fail,Not Tested,,,,,Staging,
 UAT-151,Public,Disabled CTAs,P2,PUB,/public,CTA ที่ยังไม่เปิดแสดงเร็วๆนี้/disabled,-,1) ตรวจปุ่มลงทะเบียนผู้ประสบภัย / อาสาสมัคร,ไม่พาไป flow ที่ยังไม่พร้อม (disabled หรือเร็วๆนี้),Not Tested,,,,,Staging,Expected Skip/Pass for disabled
-UAT-152,Public,Shelters list,P0,PUB,/public/shelters,รายการศูนย์ + filter + สถานะ,มีศูนย์ public,"1) เปิดตรวจสอบสถานะศูนย์พักพิง
+UAT-152,Public,Shelters list,P0,PUB,/shelters,รายการศูนย์ + filter + สถานะ,มีศูนย์ public,"1) เปิดตรวจสอบสถานะศูนย์พักพิง
 2) ใช้ filter จังหวัด/อำเภอ/สถานะ
 3) ดูการ์ดสถานะ เปิด/เต็ม/เตรียมพร้อม/ปิด",filter ทำงาน การ์ดแสดงสถานะถูกต้อง,Not Tested,,,,,Staging,
-UAT-153,Public,Shelter detail,P0,PUB,/public/shelters/[id],หน้ารายละเอียดศูนย์,มี shelter id สาธารณะ,"1) เปิดจากรายการ
+UAT-153,Public,Shelter detail,P0,PUB,/shelters/[id],หน้ารายละเอียดศูนย์,มี shelter id สาธารณะ,"1) เปิดจากรายการ
 2) ตรวจโซน/สิ่งอำนวยความสะดวก/นโยบาย/ติดต่อ",ข้อมูลครบและไม่โชว์ PII ผู้ประสบภัย,Not Tested,,,,,Staging,
-UAT-154,Public,Shelter 404,P2,PUB,/public/shelters/invalid-id,ID ศูนย์ไม่พบ,-,1) เปิด id ปลอม,แสดงไม่พบข้อมูลศูนย์พักพิง,Not Tested,,,,,Staging,
-UAT-155,Public,Family search success,P0,FAM,/public/search,สืบค้นญาติด้วยคำค้น ≥ 3 ตัวอักษร,มีผู้ประสบภัยที่ไม่ได้ opt-out และยินยอมแสดง,"1) ค้นชื่อ/สกุล/เบอร์/บัตร ≥ 3 ตัว
+UAT-154,Public,Shelter 404,P2,PUB,/shelters/invalid-id,ID ศูนย์ไม่พบ,-,1) เปิด id ปลอม,แสดงไม่พบข้อมูลศูนย์พักพิง,Not Tested,,,,,Staging,
+UAT-155,Public,Family search success,P0,FAM,/search,สืบค้นญาติด้วยคำค้น ≥ 3 ตัวอักษร,มีผู้ประสบภัยที่ไม่ได้ opt-out และยินยอมแสดง,"1) ค้นชื่อ/สกุล/เบอร์/บัตร ≥ 3 ตัว
 2) ดูผล",ได้ผลแบบ masked (ชื่อ/ชื่อเล่น/สถานะศูนย์) ไม่โชว์ medical/national ID เต็ม,Not Tested,,,,,Staging,FR-53 anti-enumeration
-UAT-156,Public,Family search short query,P0,FAM,/public/search,ค้นน้อยกว่า 3 ตัวอักษรถูกกัน,-,1) พิมพ์ 1–2 ตัวแล้วค้น,ไม่ค้นได้ / บังคับ ≥ 3 ตัว,Not Tested,,,,,Staging,
-UAT-157,Public,Family search opt-out,P0,"FAM,SM",/public/search,ผู้ที่ opt-out ไม่ขึ้นในผลค้นหา,ตั้ง opt-out ให้คนทดสอบจาก staff,"1) Opt-out จาก staff (FR-52)
+UAT-156,Public,Family search short query,P0,FAM,/search,ค้นน้อยกว่า 3 ตัวอักษรถูกกัน,-,1) พิมพ์ 1–2 ตัวแล้วค้น,ไม่ค้นได้ / บังคับ ≥ 3 ตัว,Not Tested,,,,,Staging,
+UAT-157,Public,Family search opt-out,P0,"FAM,SM",/search,ผู้ที่ opt-out ไม่ขึ้นในผลค้นหา,ตั้ง opt-out ให้คนทดสอบจาก staff,"1) Opt-out จาก staff (FR-52)
 2) ค้นด้วยชื่อคนนั้นฝั่ง public",ไม่พบในผลลัพธ์สาธารณะ,Not Tested,,,,,Staging,
-UAT-158,Public,Family search rate limit,P1,FAM,/public/search,Rate limit เมื่อค้นถี่เกินไป,-,1) ส่งคำค้นซ้ำเร็วๆ จำนวนมาก,ได้ 429 หรือข้อความจำกัดการใช้งาน,Not Tested,,,,,Staging,NFR anti-enumeration
-UAT-159,Public,No PII leak,P0,"FAM,PUB",/public/search + /public/shelters,ตรวจว่า public ไม่รั่ว medical / บัตรประชาชน / ที่อยู่ละเอียดผู้ประสบภัย,-,1) ตรวจ response UI และ network (DevTools) ของ public endpoints,"ไม่มี medical, national ID เต็ม, หรือ PII ที่ห้ามตาม matrix §6",Not Tested,,,,,Staging,Security/Privacy critical
-UAT-170,Public,Donation full flow,P0,DN,/public/donations,บริจาคครบ 4 ขั้นจนได้ตั๋ว/QR,มี needs บนกระดาน; CAPTCHA ตาม env,"1) เลือกความต้องการ
+UAT-158,Public,Family search rate limit,P1,FAM,/search,Rate limit เมื่อค้นถี่เกินไป,-,1) ส่งคำค้นซ้ำเร็วๆ จำนวนมาก,ได้ 429 หรือข้อความจำกัดการใช้งาน,Not Tested,,,,,Staging,NFR anti-enumeration
+UAT-159,Public,No PII leak,P0,"FAM,PUB",/search + /shelters,ตรวจว่า public ไม่รั่ว medical / บัตรประชาชน / ที่อยู่ละเอียดผู้ประสบภัย,-,1) ตรวจ response UI และ network (DevTools) ของ public endpoints,"ไม่มี medical, national ID เต็ม, หรือ PII ที่ห้ามตาม matrix §6",Not Tested,,,,,Staging,Security/Privacy critical
+UAT-170,Public,Donation full flow,P0,DN,/donations,บริจาคครบ 4 ขั้นจนได้ตั๋ว/QR,มี needs บนกระดาน; CAPTCHA ตาม env,"1) เลือกความต้องการ
 2) กรอกรายการบริจาค
 3) นัดหมาย
 4) ได้ตั๋ว + tracking token/QR",ได้ booking ref และสามารถ track ได้,Not Tested,,,,,Staging,
-UAT-171,Public,Donation track by ref,P0,DN,/public/donations/track,ติดตามสถานะด้วย booking ref + เบอร์,มี declaration จาก UAT-170,"1) กรอก DN-… + phone
+UAT-171,Public,Donation track by ref,P0,DN,/donations/track,ติดตามสถานะด้วย booking ref + เบอร์,มี declaration จาก UAT-170,"1) กรอก DN-… + phone
 2) Submit",พาไป timeline สถานะของ token นั้น,Not Tested,,,,,Staging,
-UAT-172,Public,Donation track by token,P0,DN,/public/donations/track/[token],เปิดลิงก์ token ตรงๆ,มี token ถูกต้อง,1) เปิด URL token,แสดง timeline; token ผิด = ไม่พบ/error,Not Tested,,,,,Staging,
-UAT-173,Public,Donation cut-off,P1,"DN,WS",/public/donations,หลัง cut-off ไม่รับจองรายการนั้น,ตั้ง cut-off จาก staff needs board,"1) ตั้ง cut-off รายการ
+UAT-172,Public,Donation track by token,P0,DN,/donations/track/[token],เปิดลิงก์ token ตรงๆ,มี token ถูกต้อง,1) เปิด URL token,แสดง timeline; token ผิด = ไม่พบ/error,Not Tested,,,,,Staging,
+UAT-173,Public,Donation cut-off,P1,"DN,WS",/donations,หลัง cut-off ไม่รับจองรายการนั้น,ตั้ง cut-off จาก staff needs board,"1) ตั้ง cut-off รายการ
 2) ลองจองฝั่ง public",ไม่ให้จองรายการที่ตัดรอบแล้ว (หรือ redirect ตาม FR-36/37),Not Tested,,,,,Staging,
-UAT-174,Public,Donation wrong phone on track,P1,DN,/public/donations/track,เบอร์ไม่ตรงกับ booking ต้องไม่เปิดสถานะ,มี booking,1) ใส่ ref ถูกแต่เบอร์ผิด,ไม่เปิดข้อมูล declaration ของคนอื่น,Not Tested,,,,,Staging,Privacy
-UAT-180,Public,Volunteers page,P3,PUB,/public/volunteers,หน้าอาสาสมัคร (ยังไม่ production-ready),-,1) เปิด /public/volunteers,บันทึกสถานะจริง (shell/demo) — Skip ถ้ายังไม่เปิดใช้งาน,Not Tested,,,,,Staging,Known stub; ไม่มีใน navbar
+UAT-174,Public,Donation wrong phone on track,P1,DN,/donations/track,เบอร์ไม่ตรงกับ booking ต้องไม่เปิดสถานะ,มี booking,1) ใส่ ref ถูกแต่เบอร์ผิด,ไม่เปิดข้อมูล declaration ของคนอื่น,Not Tested,,,,,Staging,Privacy
+UAT-180,Public,Volunteers page,P3,PUB,/volunteers,หน้าอาสาสมัคร (ยังไม่ production-ready),-,1) เปิด /volunteers,บันทึกสถานะจริง (shell/demo) — Skip ถ้ายังไม่เปิดใช้งาน,Not Tested,,,,,Staging,Known stub; ไม่มีใน navbar
 UAT-181,System Management,Host houses stub,P3,SA,/portal/system-management/host-houses,บ้านพี่เลี้ยงยังเป็น stub,-,1) เปิดหน้า,Empty/stub — Skip expected,Not Tested,,,,,Staging,
 UAT-182,Nav,Placeholder menus,P3,"SA,SM",back-office nav,เมนูที่ยังไม่มีหน้า (href null) ไม่พัง,-,"1) ไล่เมนู: อาสาสมัคร, รายงานความโปร่งใส, รายงานหลังเหตุการณ์, GIS ฯลฯ",ไม่คลิกได้หรือแสดงเร็วๆนี้ — ไม่ error 500,Not Tested,,,,,Staging,
 UAT-190,Me,Profile,P2,All staff,/me,ดูโปรไฟล์ผู้ใช้ปัจจุบัน,Login,1) เปิด /me,แสดงข้อมูล user ปัจจุบันถูกต้อง,Not Tested,,,,,Staging,

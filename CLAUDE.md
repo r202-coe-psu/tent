@@ -15,7 +15,7 @@ repo-root `demo/` (see `demo/README.md`).
 | Plane | Who | Path | Store |
 | --- | --- | --- | --- |
 | Staff (sync) | logged-in UI | `/couch` → CouchDB | CouchDB SoR |
-| Public | anonymous SPA `/public/*` | `/public/v1/*` → FastAPI | MongoDB `public_*` (via sync worker) |
+| Public | anonymous SPA `/` (`/shelters`, …) | `/public/v1/*` → FastAPI | MongoDB `public_*` (via sync worker) |
 
 Staff CouchDB is reached with cookie `_session` via same-origin proxy (`PUBLIC_COUCH_PROXY=/couch`).
 Public FastAPI is reached from the SPA only via **SvelteKit BFF** `/api/public/v1/*`

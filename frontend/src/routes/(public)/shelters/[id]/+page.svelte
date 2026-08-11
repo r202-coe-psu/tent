@@ -24,7 +24,7 @@
 	<div class="border-b border-border bg-card">
 		<div class="mx-auto flex max-w-380 items-center justify-between px-4 py-3 sm:px-6">
 			<a
-				href="/public/shelters"
+				href="/shelters"
 				class="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm font-bold text-foreground/90 transition-colors hover:text-primary"
 			>
 				<ChevronLeft class="h-4 w-4" />
@@ -66,7 +66,7 @@
 				ขออภัย ข้อมูลที่คุณต้องการค้นหาอาจถูกลบหรือไม่มีอยู่ในระบบ
 			</p>
 			<a
-				href="/public/shelters"
+				href="/shelters"
 				class="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-primary px-6 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90"
 			>
 				กลับไปหน้าตรวจสอบสถานะ

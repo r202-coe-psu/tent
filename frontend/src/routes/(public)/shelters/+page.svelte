@@ -124,7 +124,7 @@
 			<ShelterFilterPanel
 				filters={data?.filters || {}}
 				availableTypes={data?.available_types || []}
-				action="/public/shelters"
+				action="/shelters"
 				bind:userLat={liveUserLat}
 				bind:userLng={liveUserLng}
 			/>

@@ -43,7 +43,7 @@
 
 	function handleSearch() {
 		if (searchQuery.trim()) {
-			goto(`/public/search?q=${encodeURIComponent(searchQuery.trim())}`);
+			goto(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
 		}
 	}
 

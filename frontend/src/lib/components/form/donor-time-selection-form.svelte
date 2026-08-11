@@ -16,7 +16,7 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import { publicDonationErrorMessage } from '$lib/features/donations';
-	import { getDonationStore } from '../../../routes/public/donations/donation.svelte';
+	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 
 	const donationStore = getDonationStore();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';

@@ -324,7 +324,7 @@ feature with live lists.
 
 ### 4.2 Public plane — worker, FastAPI, OpenAPI (do not bypass)
 
-Public routes under `/public/*` (family search, shelter directory, …) are **not** CouchDB session
+Public SPA routes at `/` (family search, shelter directory, …; legacy `/public/*` redirects) are **not** CouchDB session
 traffic. Contract: [`docs/data/api-contract.md`](../docs/data/api-contract.md) §5 +
 [`docs/data/couchdb-mongodb-sync.md`](../docs/data/couchdb-mongodb-sync.md).
 

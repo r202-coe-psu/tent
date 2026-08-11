@@ -13,19 +13,23 @@
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 
 	function isActive(path: string) {
-		if (path === '/public') {
-			return page.url.pathname === '/public' || page.url.pathname === '/public/';
+		if (path === '/') {
+			return page.url.pathname === '/';
 		}
 		return page.url.pathname.startsWith(path);
 	}
 
+	function isHomePage() {
+		return page.url.pathname === '/';
+	}
+
 	function isDonatePage() {
 		const p = page.url.pathname;
-		return p === '/public/donations' || p === '/public/donations/';
+		return p === '/donations' || p === '/donations/';
 	}
 
 	function isTrackPage() {
-		return page.url.pathname.startsWith('/public/donations/track');
+		return page.url.pathname.startsWith('/donations/track');
 	}
 
 	function isDonationsSection() {
@@ -73,7 +77,7 @@
 	<div class="mx-auto flex max-w-7xl items-center justify-between">
 		<!-- Logo and Title -->
 		<div class="flex items-center gap-3">
-			<a href={resolve('/public')} class="flex items-center gap-2">
+			<a href={resolve('/')} class="flex items-center gap-2">
 				<div
 					class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-muted text-primary"
 				>
@@ -104,10 +108,8 @@
 		<!-- Navbar Links -->
 		<nav class="hidden items-center gap-1 md:flex">
 			<a
-				href={resolve('/public')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-					'/public'
-				) && !isActive('/public/')
+				href={resolve('/')}
+				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isHomePage()
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
 			>
@@ -116,9 +118,9 @@
 			</a>
 
 			<a
-				href={resolve('/public/shelters')}
+				href={resolve('/shelters')}
 				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-					'/public/shelters'
+					'/shelters'
 				)
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
@@ -128,9 +130,9 @@
 			</a>
 
 			<a
-				href={resolve('/public/search')}
+				href={resolve('/search')}
 				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-					'/public/search'
+					'/search'
 				)
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
@@ -168,7 +170,7 @@
 					>
 						<a
 							role="menuitem"
-							href={resolve('/public/donations')}
+							href={resolve('/donations')}
 							onclick={closeDonationsMenu}
 							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isDonatePage()
 								? 'bg-primary-muted text-primary'
@@ -179,7 +181,7 @@
 						</a>
 						<a
 							role="menuitem"
-							href={resolve('/public/donations/track')}
+							href={resolve('/donations/track')}
 							onclick={closeDonationsMenu}
 							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isTrackPage()
 								? 'bg-primary-muted text-primary'
@@ -211,11 +213,9 @@
 		<div class="absolute top-full left-0 w-full border-b border-border bg-card shadow-lg md:hidden">
 			<nav class="flex flex-col gap-2 p-4">
 				<a
-					href={resolve('/public')}
+					href={resolve('/')}
 					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-						'/public'
-					) && !isActive('/public/')
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isHomePage()
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
@@ -224,10 +224,10 @@
 				</a>
 
 				<a
-					href={resolve('/public/shelters')}
+					href={resolve('/shelters')}
 					onclick={() => (mobileMenuOpen = false)}
 					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-						'/public/shelters'
+						'/shelters'
 					)
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
@@ -237,10 +237,10 @@
 				</a>
 
 				<a
-					href={resolve('/public/search')}
+					href={resolve('/search')}
 					onclick={() => (mobileMenuOpen = false)}
 					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-						'/public/search'
+						'/search'
 					)
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
@@ -250,7 +250,7 @@
 				</a>
 
 				<a
-					href={resolve('/public/donations')}
+					href={resolve('/donations')}
 					onclick={() => (mobileMenuOpen = false)}
 					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isDonatePage()
 						? 'bg-primary-muted text-primary'
@@ -261,7 +261,7 @@
 				</a>
 
 				<a
-					href={resolve('/public/donations/track')}
+					href={resolve('/donations/track')}
 					onclick={() => (mobileMenuOpen = false)}
 					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isTrackPage()
 						? 'bg-primary-muted text-primary'

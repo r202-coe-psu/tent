@@ -45,7 +45,7 @@
 	let {
 		filters = {},
 		availableTypes = [],
-		action = '/public/shelters',
+		action = '/shelters',
 		userLat = $bindable(''),
 		userLng = $bindable('')
 	}: {

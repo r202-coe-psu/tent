@@ -163,7 +163,7 @@
 	<!-- Actions -->
 	<div class="mt-auto flex gap-2 pt-2">
 		<Button
-			href={`/public/shelters/${shelter.id}`}
+			href={`/shelters/${shelter.id}`}
 			variant="outline"
 			size="sm"
 			class="h-9 flex-1 rounded-xl border-border text-xs font-bold text-foreground hover:bg-muted"
