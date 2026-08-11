@@ -49,7 +49,7 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - ./deployment/tent/mongodb/data:/data/db
+      - ../deployment/tent/mongodb/data:/data/db
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 5s
