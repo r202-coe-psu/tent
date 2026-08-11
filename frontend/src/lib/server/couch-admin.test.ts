@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { assertCanGrant, ServiceError, type Caller } from './couch-admin';
+import {
+	assertCanGrant,
+	ServiceError,
+	serviceError,
+	serviceErrorFromCouch,
+	type Caller
+} from './couch-admin';
 
 const sa: Caller = { name: 'sa', roles: ['system_admin'], isSA: true, shelterCode: null };
 const mgr: Caller = {
@@ -55,5 +61,49 @@ describe('assertCanGrant', () => {
 			shelterCode: null
 		};
 		expect(grantError(noScope, ['registration_staff'])?.code).toBe('FORBIDDEN');
+	});
+});
+
+describe('serviceErrorFromCouch', () => {
+	it('explains missing system database', () => {
+		const err = serviceErrorFromCouch('create user', 404, {
+			error: 'not_found',
+			reason: 'Database does not exist.'
+		});
+		expect(err.code).toBe('INTERNAL');
+		expect(err.message).toBe('Could not create user');
+		expect(err.description).toMatch(/couchdb-init|_cluster_setup|_users/i);
+	});
+
+	it('explains admin auth rejection', () => {
+		const err = serviceErrorFromCouch('list users', 401, {
+			error: 'unauthorized',
+			reason: 'Name or password is incorrect.'
+		});
+		expect(err.description).toMatch(/COUCHDB_ADMIN_URL/);
+	});
+
+	it('includes status and CouchDB detail for other failures', () => {
+		const err = serviceErrorFromCouch('create user', 400, {
+			error: 'bad_request',
+			reason: 'Invalid name'
+		});
+		expect(err.description).toBe('CouchDB responded 400: bad_request: Invalid name');
+	});
+});
+
+describe('serviceError envelope', () => {
+	it('includes optional description in the JSON body', async () => {
+		const res = serviceError(
+			new ServiceError('INTERNAL', 'Could not create user', 'CouchDB database missing')
+		);
+		expect(res.status).toBe(500);
+		await expect(res.json()).resolves.toEqual({
+			error: {
+				code: 'INTERNAL',
+				message: 'Could not create user',
+				description: 'CouchDB database missing'
+			}
+		});
 	});
 });

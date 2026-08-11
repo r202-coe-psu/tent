@@ -1,5 +1,5 @@
 import { adminRaw } from '$lib/server/couch-admin';
-import { ServiceError, type Caller } from '$lib/server/couch-admin';
+import { ServiceError, serviceErrorFromCouch, type Caller } from '$lib/server/couch-admin';
 import { isStaffOnly, shelterCodeFromRoles } from '$lib/auth/roles';
 import { validatePassword } from '$lib/server/password-policy';
 
@@ -10,8 +10,8 @@ import { validatePassword } from '$lib/server/password-policy';
  * future FastAPI route boundary. Authorization happens in the handlers
  * (couch-admin.authorizeUserWrite / assertCanGrant) BEFORE these run.
  *
- * Uses `adminRaw` (status, no throw) so CouchDB reasons never leak — failures
- * map to contract {@link ServiceError} codes.
+ * Uses `adminRaw` (status, no throw) so failures map to contract
+ * {@link ServiceError} codes with a safe `description` (no admin URL).
  */
 
 const USER_PREFIX = 'org.couchdb.user:';
@@ -59,13 +59,13 @@ export async function createUser(input: {
 		affiliation_tags: affiliation_tags ?? []
 	});
 	if (res.status === 409) throw new ServiceError('CONFLICT', `User "${name}" already exists`);
-	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not create user');
+	if (res.status >= 400) throw serviceErrorFromCouch('create user', res.status, res.data);
 }
 
 /** List users, scoped: SA sees all; a manager sees only their own shelter. */
 export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'GET');
-	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not list users');
+	if (res.status >= 400) throw serviceErrorFromCouch('list users', res.status, res.data);
 	const rows = (res.data as { rows?: { id: string; doc: CouchUserDoc }[] })?.rows ?? [];
 	const all = rows
 		.filter((r) => r.id.startsWith(USER_PREFIX) && r.doc)
@@ -84,8 +84,14 @@ export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 /** Delete a user. A manager may only delete users within their own shelter. */
 export async function deleteUser(name: string, caller: Caller): Promise<void> {
 	const got = await adminRaw(`/_users/${userDocId(name)}`, 'GET');
-	if (got.status === 404) throw new ServiceError('VALIDATION', `User "${name}" not found`);
-	if (got.status >= 400) throw new ServiceError('INTERNAL', 'Could not read user');
+	if (got.status === 404) {
+		const body = got.data as { reason?: string } | null;
+		if (body?.reason === 'Database does not exist.') {
+			throw serviceErrorFromCouch('read user', got.status, got.data);
+		}
+		throw new ServiceError('VALIDATION', `User "${name}" not found`);
+	}
+	if (got.status >= 400) throw serviceErrorFromCouch('read user', got.status, got.data);
 	const doc = got.data as CouchUserDoc;
 
 	if (!caller.isSA) {
@@ -99,7 +105,7 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 		}
 	}
 	const res = await adminRaw(`/_users/${userDocId(name)}?rev=${doc._rev}`, 'DELETE');
-	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not delete user');
+	if (res.status >= 400) throw serviceErrorFromCouch('delete user', res.status, res.data);
 }
 
 /** Update an existing user. A manager may only edit users in their own shelter and only staff. */
@@ -114,8 +120,14 @@ export async function updateUser(
 	caller: Caller
 ): Promise<void> {
 	const got = await adminRaw(`/_users/${userDocId(name)}`, 'GET');
-	if (got.status === 404) throw new ServiceError('VALIDATION', `User "${name}" not found`);
-	if (got.status >= 400) throw new ServiceError('INTERNAL', 'Could not read user');
+	if (got.status === 404) {
+		const body = got.data as { reason?: string } | null;
+		if (body?.reason === 'Database does not exist.') {
+			throw serviceErrorFromCouch('read user', got.status, got.data);
+		}
+		throw new ServiceError('VALIDATION', `User "${name}" not found`);
+	}
+	if (got.status >= 400) throw serviceErrorFromCouch('read user', got.status, got.data);
 	const doc = got.data as CouchUserDoc;
 
 	// Authorize changes
@@ -155,5 +167,5 @@ export async function updateUser(
 	}
 
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
-	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not update user');
+	if (res.status >= 400) throw serviceErrorFromCouch('update user', res.status, res.data);
 }

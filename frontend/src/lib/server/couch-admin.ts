@@ -134,7 +134,9 @@ const STATUS_BY_CODE: Record<ServiceErrorCode, number> = {
 export class ServiceError extends Error {
 	constructor(
 		readonly code: ServiceErrorCode,
-		message: string
+		message: string,
+		/** Optional operator-facing detail (CouchDB reason, remediation). Never put secrets here. */
+		readonly description?: string
 	) {
 		super(message);
 		this.name = 'ServiceError';
@@ -142,17 +144,61 @@ export class ServiceError extends Error {
 }
 
 /**
- * Render a caught error as the contract envelope `{ error: { code, message } }`.
- * Unknown errors collapse to a generic INTERNAL — never leak a raw CouchDB
- * reason or the admin URL to the client.
+ * Map a failed CouchDB admin response to {@link ServiceError} with a safe
+ * `description` (status + error/reason, no admin URL / credentials).
+ */
+export function serviceErrorFromCouch(
+	action: string,
+	status: number,
+	data: unknown
+): ServiceError {
+	const body = data as { error?: string; reason?: string } | null;
+	const couchError = typeof body?.error === 'string' ? body.error : undefined;
+	const couchReason = typeof body?.reason === 'string' ? body.reason : undefined;
+	const detail =
+		[couchError, couchReason].filter(Boolean).join(': ') || `HTTP ${status}`;
+
+	const missingDb =
+		status === 404 &&
+		(couchReason === 'Database does not exist.' ||
+			couchReason === 'missing' ||
+			couchError === 'not_found');
+
+	if (missingDb) {
+		return new ServiceError(
+			'INTERNAL',
+			`Could not ${action}`,
+			`CouchDB database missing (${detail}). Run couchdb-init / POST _cluster_setup on this environment (creates _users and other system DBs).`
+		);
+	}
+	if (status === 401 || status === 403) {
+		return new ServiceError(
+			'INTERNAL',
+			`Could not ${action}`,
+			`CouchDB rejected admin credentials (${detail}). Check COUCHDB_ADMIN_URL matches COUCHDB_USER/COUCHDB_PASSWORD.`
+		);
+	}
+	return new ServiceError(
+		'INTERNAL',
+		`Could not ${action}`,
+		`CouchDB responded ${status}: ${detail}`
+	);
+}
+
+/**
+ * Render a caught error as the contract envelope
+ * `{ error: { code, message, description? } }`.
+ * Unknown errors collapse to a generic INTERNAL — never leak the admin URL.
  */
 export function serviceError(e: unknown): Response {
 	const err =
 		e instanceof ServiceError ? e : new ServiceError('INTERNAL', 'Unexpected server error');
-	return json(
-		{ error: { code: err.code, message: err.message } },
-		{ status: STATUS_BY_CODE[err.code] }
-	);
+	const error: { code: ServiceErrorCode; message: string; description?: string } = {
+		code: err.code,
+		message: err.message
+	};
+	if (err.description) error.description = err.description;
+	return json({ error }, { status: STATUS_BY_CODE[err.code] });
 }
 
 /** Authenticated caller, resolved from the session cookie via central `_session`. */
