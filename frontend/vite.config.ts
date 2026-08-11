@@ -10,7 +10,7 @@ function couchInit(user: string, password: string, couchUrl: string) {
 		configureServer() {
 			const base = couchUrl;
 			const auth = 'Basic ' + Buffer.from(`${user}:${password}`).toString('base64');
-			const dbs = ['_users', '_replicator', '_global_changes', 'notes'];
+			const dbs = ['_users', '_replicator', '_global_changes'];
 			Promise.all(
 				dbs.map((db) =>
 					fetch(`${base}/${db}`, { method: 'PUT', headers: { Authorization: auth } })
