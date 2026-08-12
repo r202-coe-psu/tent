@@ -2,14 +2,16 @@
 title: "Task Breakdown — Baseline (FR-1–20)"
 status: active
 created: 2026-06-11
-updated: 2026-07-16
+updated: 2026-08-12
 module: baseline
-note: decision-synced 2026-07-15 — T-54 realigned to CR-033 remote-first (deny PouchDB / local-first / offline draft queue); planning source = Markdown
+note: >
+  decision-synced 2026-07-15 — T-54 realigned to CR-033 remote-first (deny PouchDB / local-first / offline draft queue);
+  2026-08-12 — T-54 Package B expanded for CR-064 (network-only edge continuity); planning source = Markdown
 ---
 
 # Baseline — Registration-first (FR-1–20)
 
-> **Greenfield:** ยังไม่มีระบบ MVP มาก่อน (มีเพียง CouchDB PoC) — baseline scope FR-1–20 (auth, person registration, screening, person QR/movement, dashboard, export, **remote-first continuity + Excel fallback**) ต้อง **build เป็นส่วนแรกของ foundation** ก่อน R2 จะต่อยอด. Spec รายละเอียดอยู่ใน `docs/features/` + [Database Schema](../data/schema.md) + [Data Model](../data/data-model.md). Topology อ้าง [CR-033](../changes/CR-033-remote-first-architecture-program-index.md).
+> **Greenfield:** ยังไม่มีระบบ MVP มาก่อน (มีเพียง CouchDB PoC) — baseline scope FR-1–20 (auth, person registration, screening, person QR/movement, dashboard, export, **remote-first continuity + Excel fallback**) ต้อง **build เป็นส่วนแรกของ foundation** ก่อน R2 จะต่อยอด. Spec รายละเอียดอยู่ใน `docs/features/` + [Database Schema](../data/schema.md) + [Data Model](../data/data-model.md). Topology อ้าง [CR-033](../changes/CR-033-remote-first-architecture-program-index.md); edge continuity อ้าง [CR-064](../changes/CR-064-edge-disaster-continuity.md).
 
 - **Team owner:** Team B (People) + Lead pair; ทีมอื่นช่วยตาม slice ที่ dependency แตะ (ดู [Squad Roster](../prd/squad-roster.md))
 - **Phase:** Foundation (มิ.ย.–ก.ค. ขนาน/ก่อน R2 features)
@@ -18,10 +20,10 @@ note: decision-synced 2026-07-15 — T-54 realigned to CR-033 remote-first (deny
 
 หมายเหตุ: walking skeleton ของ Lead (10–17 มิ.ย.) ครอบ repo/CI/CD, auth/RBAC skeleton (T-01), Central CouchDB base schema + Central-first active-endpoint design (T-02 ตั้งต้น; LAN Edge เป็น outage fallback เท่านั้น) และ 1 vertical slice — task ในตารางนี้คือการ build baseline **เต็ม** ต่อจาก skeleton
 
-> **สถานะ ณ 2026-07-15 (CR-033):** Legend — ✅ done · 🔄 in progress/partial · ⬜ not started
+> **สถานะ ณ 2026-08-12 (CR-033 + CR-064):** Legend — ✅ done · 🔄 in progress/partial · ⬜ not started
 >
 > - **T-47 🔄** — `features/shelters` (CRUD + admin UI + auto-assign code + seed shelter_sh001) done แล้ว; ยังต้องยืนยัน FR-2..3 ครบ DoD
-> - **T-54 🔄** — remote-first Central path + app-level event channel + ConnectionBanner/retry UX in place (`$lib/db/couch-db.ts`); **ยังขาด LAN Edge failover orchestration + failback/conflict tests** — **deny:** PouchDB, local-only write queue, offline draft queue ([CR-033](../changes/CR-033-remote-first-architecture-program-index.md))
+> - **T-54 🔄** — Package A (central remote path + event channel + ConnectionBanner) done; **Package B (CR-064)** = network-only edge continuity + ops UI + failback/conflict tests — **deny:** PouchDB, local-only write queue, offline draft queue, app `ActiveEndpoint` switch ([CR-033](../changes/CR-033-remote-first-architecture-program-index.md), [CR-064](../changes/CR-064-edge-disaster-continuity.md))
 > - **T-48..T-53, T-55** — ดูสถานะ implement จริงใน repo (people/dashboard มีแล้วบางส่วน); ตารางด้านล่างยังเป็น planning IDs
 
 ## Features / Tasks
@@ -35,7 +37,7 @@ note: decision-synced 2026-07-15 — T-54 realigned to CR-033 remote-first (deny
 | T-51 | 🔄 | Search + QR scan check-in/out + movement history + occupancy guardrail (warning-only) | FR-10..13 | prod | in-scope | 7 | ÷1.6 | 4.5 | T-50 |
 | T-52 | 🔄 | Dashboard v1 (occupancy, capacity, vulnerable/fast-track count, in/out today, last-updated) | FR-14 | prod | in-scope | 6 | ÷1.6 | 4 | T-51 |
 | T-53 | ⬜ | Export ตาม shelter/date/role + audit log + masking ตาม role | FR-15..16 | prod | in-scope | 5 | ÷1.25 | 4 | T-48 |
-| T-54 | 🔄 | Remote-first write path + Central-first + LAN Edge fallback/conflict (registration/screening) — **deny PouchDB / local-only / offline draft queue** | FR-17..18 | prod | in-scope | 10 | ÷1.25 | 8 | T-02,T-48 |
+| T-54 | 🔄 | Remote-first + network-only LAN Edge continuity (CR-064) + ops status UI — **deny PouchDB / local-only / offline draft / app ActiveEndpoint** | FR-17..18 | prod | in-scope | 10 | ÷1.25 | 8 | T-02,T-48 |
 | T-55 | ⬜ | Manual/Excel fallback + assisted import | FR-19..20 | prod | in-scope | 5 | ÷1.25 | 4 | T-48 |
 | T-61 | 🔄 | T-61 — Master config ข้อมูลบุคคลและการลงทะเบียน (Demographic & Registration) | - | prod | in-scope | - | - | - | - |
 | T-62 | 🔄 | T-62 — Back Office User Management | - | prod | in-scope | - | - | - | - |
@@ -44,30 +46,47 @@ note: decision-synced 2026-07-15 — T-54 realigned to CR-033 remote-first (deny
 | T-65 | 🔄 | T-65 — Thailand master data config data | - | prod | in-scope | - | - | - | - |
 |  | **รวมทั้งโมดูล** |  |  |  | **52** |  | **37** |  |
 
-> FR mapping accepted for planning จาก kickoff §2 / `docs/features/`; estimate ทั้งชุดใช้เป็น baseline planning แล้ว recalibrate หลัง sprint แรก (K-16). **T-54 scope เคาะใหม่ตาม [CR-033](../changes/CR-033-remote-first-architecture-program-index.md) (2026-07-07/15).**
+> FR mapping accepted for planning จาก kickoff §2 / `docs/features/`; estimate ทั้งชุดใช้เป็น baseline planning แล้ว recalibrate หลัง sprint แรก (K-16). **T-54:** [CR-033](../changes/CR-033-remote-first-architecture-program-index.md) Package A · [CR-064](../changes/CR-064-edge-disaster-continuity.md) Package B (2026-08-12, proposed).
 
 ## Task Details
 
 > DoD ทุก prod task ยึด [Standard DoD](_index.md#standard-dod): **UI + data/write path + validation + permission + test + demo ของ slice**
 
-### T-54 — Remote-first continuity + Edge failover (FR-17..18) — CR-033
+### T-54 — Remote-first continuity + network-only Edge (FR-17..18) — CR-033 + CR-064
 
-**Description:** ดูแล continuity ของ registration/screening ภายใต้ **remote-first**: write ไป active endpoint โดยตรง (Central ก่อนเสมอ, LAN Edge เฉพาะตอน Central/WAN ล่ม), active ได้ครั้งละหนึ่ง endpoint, failback กลับ Central โดยไม่สร้าง duplicate — **tech risk #1** ร่วมกับ T-02; Lead B เป็นเจ้าของร่วม
+**Description:** Continuity ของ registration/screening ภายใต้ **remote-first**: ปกติเขียน Central; ตอน WAN/central ล่มใช้ **LAN Edge** ผ่าน **network-only cutover** (DNS/router ชี้ domain เดิม — app ไม่สลับ `ActiveEndpoint`); staff **login ใหม่** บน edge / บน central หลัง cutback; มี **ops UI** ดูสถานะต่อ shelter + WAN ที่ศูนย์ — **tech risk #1** ร่วมกับ T-02; Lead B เจ้าของร่วม · รายละเอียดปฏิบัติการ:
+[`docs/features/edge-disaster-continuity-idea.md`](../features/edge-disaster-continuity-idea.md)
 
-**Out of scope (deny — CR-033):**
+**Packages:**
+
+| Pkg | Status | Scope |
+| --- | --- | --- |
+| **A** (CR-033) | ✅ | Central remote path, event channel, ConnectionBanner/retry 3×, disconnected status-only |
+| **B** (CR-064) | ⬜ proposed | Edge appliance (staff stack ยกเว้น FastAPI/Mongo), warm sync, network cutover, re-login, ops UI, failback backlog, chaos drill |
+
+**Out of scope (deny — CR-033 + CR-064):**
 
 - PouchDB / local client DB เป็น write path
 - local-first sync, local-only mode, offline draft/write queue
 - read-only local cache ตอน disconnected
+- App-driven `ActiveEndpoint` probe/switch (OD-2 = network-only)
+- FastAPI / Mongo / public plane บน edge; สร้าง/แก้ user บน edge
 
-**Definition of Done:**
+**Definition of Done — Package A (done):**
 
-- Write path เป็น remote-first ไป active endpoint เดียว (Central → Edge fallback) ตาม [data-model](../data/data-model.md) + [api-contract](../data/api-contract.md)
-- Disconnected = **status-only** (banner "cannot connect"); ไม่มี write/read จาก local DB
-- Retry UX กลางระบบ: auto 3 attempts แล้ว banner + force retry ได้
-- Live update ผ่าน **app-level event channel** (ไม่พึ่ง Pouch changes feed)
-- Test matrix: Central success, Edge fallback, disconnected status-only, failback ไม่ duplicate, conflict scenario
-- Package 8 (central-only remote path) ทำแล้ว; **follow-up ที่ยังค้าง = Edge failover orchestration**
+- Write path remote-first ไป Central ตาม data-model + api-contract (central-only runtime)
+- Disconnected = **status-only**; Retry UX: auto 3 attempts แล้ว banner + force retry
+- Live update ผ่าน **app-level event channel**
+
+**Definition of Done — Package B (CR-064):**
+
+- Edge image + warm central→edge sync (`shelter_*` + `registry` + `catalog` + filtered `_users`)
+- Network-only cutover: staff login ใหม่บน edge แล้ว R/W `shelter_*` ได้โดยไม่แตะ central
+- Failback: edge→central backlog ไม่ duplicate (ULID); staff login ใหม่บน central หลัง cutback
+- Ops UI (OD-4): central เห็นสถานะต่อ shelter; ที่ศูนย์เห็น WAN up/down
+- `/api/v1` + public plane = degraded/unavailable ชัดเจนตอน edge-only
+- Test matrix: Central success · network cutover + edge login/write · disconnected · failback no-duplicate · conflict · WAN indicator
+- Chaos drill + 5-phase runbook ผ่าน
 
 **Notes อื่นในโมดูล**
 

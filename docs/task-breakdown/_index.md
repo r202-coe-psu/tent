@@ -2,8 +2,10 @@
 title: "Task Breakdown by Module — Index"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
-note: decision-synced 2026-07-15 — CR-033 remote-first; Markdown task-breakdown = planning source; technical source = docs/data/schema.md + data-model.md + api-contract.md
+updated: 2026-08-12
+note: >
+  decision-synced 2026-07-15 — CR-033 remote-first; 2026-08-12 — CR-064 T-54 Package B (proposed);
+  Markdown task-breakdown = planning source; technical source = docs/data/schema.md + data-model.md + api-contract.md
 ---
 
 # Task Breakdown by Module
@@ -58,7 +60,7 @@ Planning source ปัจจุบัน = Markdown ใน `docs/task-breakdown/
 - ✅ **Shelters** CRUD + admin UI + auto-assign shelter_code + seed shelter_sh001 (`features/shelters`)
 - ✅ **Users** management BFF `/api/v1/users` + admin UI (`features/users`)
 
-**Baseline (module 0):** T-47 🔄 · T-54 🔄 (central remote path done; Edge failover follow-up) · T-48..55 ดู implement ใน repo  
+**Baseline (module 0):** T-47 🔄 · T-54 🔄 (Pkg A central done; Pkg B CR-064 network-only edge — proposed) · T-48..55 ดู implement ใน repo  
 **Platform/Core (module 1):** T-01 🔄 · T-02 🔄 · T-03 🔄 · gate/post ⬜  
 **Modules 2–12:** มีความคืบหน้าหลายโมดูลในโค้ด — tracking ละเอียดอยู่ใน Notion + โมดูลไฟล์
 
