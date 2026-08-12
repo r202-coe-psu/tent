@@ -83,19 +83,20 @@
 			style: {
 				version: 8,
 				sources: {
-					osm: {
+					// Carto Dark Matter — no API key; works on staging/prod (unlike Stadia domain auth).
+					basemap: {
 						type: 'raster',
-						tiles: ['https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png'],
+						tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],
 						tileSize: 256,
 						attribution:
-							'&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a>'
+							'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
 					}
 				},
 				layers: [
 					{
-						id: 'osm',
+						id: 'basemap',
 						type: 'raster',
-						source: 'osm',
+						source: 'basemap',
 						minzoom: 0,
 						maxzoom: 19
 					}
