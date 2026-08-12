@@ -2,6 +2,8 @@
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
+	import ConnectionBanner from '$lib/components/ConnectionBanner.svelte';
+	import { startStaffCouchSync } from '$lib/db/staff-couch-sync';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -10,7 +12,13 @@
 	import { SessionExpiredBar } from '$lib/features/login';
 	import type { LayoutProps } from './$types';
 
-	let { children }: LayoutProps = $props();
+	let { children, data }: LayoutProps = $props();
+
+	$effect(() => {
+		if (!authStore.isAuthenticated || authStore.needsReauth) return;
+		const sync = startStaffCouchSync(data.queryClient);
+		return () => sync.stop();
+	});
 
 	async function logout() {
 		await authStore.logout();
@@ -18,6 +26,8 @@
 		await goto(resolve(LOGOUT_ROUTE));
 	}
 </script>
+
+<ConnectionBanner />
 
 <div class="flex h-[var(--app-shell-height)] flex-col overflow-hidden">
 	{#if !page.url.pathname.startsWith('/back-office')}

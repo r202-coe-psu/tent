@@ -237,8 +237,9 @@ export function startPeopleLiveQuery(queryClient: QueryClient) {
 }
 ```
 
-Export it from `index.ts`, then register it in `src/routes/+layout.svelte` alongside the other
-`startXxxLiveQuery` calls. See §4.1 for how the plumbing works.
+Export it from `index.ts`, then append it to `STAFF_LIVE_QUERY_STARTERS` in
+`$lib/db/staff-couch-sync.ts`. The protected layout calls `startStaffCouchSync` —
+do not start CouchDB `_changes` or live-query subscribers from public routes.
 
 ### 3.2 Key files (bookmark these)
 
@@ -248,6 +249,7 @@ Export it from `index.ts`, then register it in `src/routes/+layout.svelte` along
 | `$lib/db/repository.ts`                   | `createRemoteRepository(dbName)` — use this in `*.remote.ts`   |
 | `$lib/db/event-channel.ts`                | App-wide pub/sub: "a document changed"                         |
 | `$lib/db/changes-subscriber.ts`           | Long-polls CouchDB `_changes` → emits to event channel         |
+| `$lib/db/staff-couch-sync.ts`             | Staff-only probe + `_changes` + live-query registry            |
 | `$lib/db/subscribe-data-changes.ts`       | Connects event channel → TanStack Query invalidation           |
 | `$lib/stores/endpoint.svelte.ts`          | Connection status: `connecting` / `connected` / `disconnected` |
 | `$lib/components/ConnectionBanner.svelte` | Red banner + "ลองเชื่อมต่ออีกครั้ง" when offline               |
@@ -313,9 +315,10 @@ another user) should see fresh data. The flow:
 CouchDB _changes (longpoll)  →  eventChannel.emit()  →  subscribeDataChanges()  →  queryClient.invalidateQueries()
 ```
 
-1. `+layout.svelte` starts `startChangesSubscriber([dbNames…])` — one long-poll per database.
+1. `(protected)/+layout.svelte` calls `startStaffCouchSync(queryClient)` — probe + one long-poll
+   per database + feature live queries. Public SPA routes never open `/couch`.
 2. Each feature exports `startXxxLiveQuery(queryClient)` that calls `subscribeDataChanges` and
-   maps `docType` → TanStack Query keys to invalidate.
+   maps `docType` → TanStack Query keys to invalidate. Register it on `STAFF_LIVE_QUERY_STARTERS`.
 3. After your own mutation succeeds, the invalidation from step 2 also covers your UI — you do
    **not** need manual `refetch()` in every mutation handler.
 
@@ -325,7 +328,9 @@ feature with live lists.
 ### 4.2 Public plane — worker, FastAPI, OpenAPI (do not bypass)
 
 Public SPA routes at `/` (family search, shelter directory, …; legacy `/public/*` redirects) are **not** CouchDB session
-traffic. Contract: [`docs/data/api-contract.md`](../docs/data/api-contract.md) §5 +
+traffic. Staff CouchDB `_changes` / live-query subscribers start only via `startStaffCouchSync`
+from `(protected)/+layout.svelte` so a leftover staff session never opens `/couch` on public pages.
+Contract: [`docs/data/api-contract.md`](../docs/data/api-contract.md) §5 +
 [`docs/data/couchdb-mongodb-sync.md`](../docs/data/couchdb-mongodb-sync.md).
 
 ```
