@@ -30,7 +30,7 @@
 	} as const;
 
 	const activeIndex = $derived(stepIndexMap[donationStore.activeTab] ?? 0);
-	
+
 	const progressWidth = $derived(`${(activeIndex / (steps.length - 1)) * 100}%`);
 </script>
 

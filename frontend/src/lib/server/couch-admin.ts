@@ -147,16 +147,11 @@ export class ServiceError extends Error {
  * Map a failed CouchDB admin response to {@link ServiceError} with a safe
  * `description` (status + error/reason, no admin URL / credentials).
  */
-export function serviceErrorFromCouch(
-	action: string,
-	status: number,
-	data: unknown
-): ServiceError {
+export function serviceErrorFromCouch(action: string, status: number, data: unknown): ServiceError {
 	const body = data as { error?: string; reason?: string } | null;
 	const couchError = typeof body?.error === 'string' ? body.error : undefined;
 	const couchReason = typeof body?.reason === 'string' ? body.reason : undefined;
-	const detail =
-		[couchError, couchReason].filter(Boolean).join(': ') || `HTTP ${status}`;
+	const detail = [couchError, couchReason].filter(Boolean).join(': ') || `HTTP ${status}`;
 
 	const missingDb =
 		status === 404 &&

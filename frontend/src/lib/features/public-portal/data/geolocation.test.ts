@@ -72,11 +72,7 @@ describe('requestUserPosition', () => {
 	it('resolves coordinates from getCurrentPosition', async () => {
 		vi.stubGlobal('navigator', {
 			geolocation: {
-				getCurrentPosition: (
-					success: PositionCallback,
-					_error?: PositionErrorCallback,
-					_options?: PositionOptions
-				) => {
+				getCurrentPosition: (success: PositionCallback) => {
 					success({
 						coords: { latitude: 7.88, longitude: 98.39 }
 					} as GeolocationPosition);

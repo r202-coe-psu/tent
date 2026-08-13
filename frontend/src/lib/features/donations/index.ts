@@ -36,7 +36,11 @@ export {
 } from './domain/donation';
 
 // Data + application — public tracking (BFF, not publicClient)
-export { fetchDonationTracking, searchDonationTracking, updateCourierTracking } from './data/public-tracking';
+export {
+	fetchDonationTracking,
+	searchDonationTracking,
+	updateCourierTracking
+} from './data/public-tracking';
 export {
 	donationTrackingKeys,
 	useDonationTracking,

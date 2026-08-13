@@ -19,15 +19,11 @@ function unwrapFastapiError(body: unknown): Record<string, unknown> {
 export const POST = async ({ request, getClientAddress }) => {
 	try {
 		const payload = await request.json();
-		const bookingRef =
-			typeof payload.booking_ref === 'string' ? payload.booking_ref.trim() : '';
+		const bookingRef = typeof payload.booking_ref === 'string' ? payload.booking_ref.trim() : '';
 		const phone = typeof payload.phone === 'string' ? payload.phone.trim() : '';
 
 		if (!bookingRef || !phone) {
-			return json(
-				{ success: false, error: 'booking_ref and phone are required' },
-				{ status: 400 }
-			);
+			return json({ success: false, error: 'booking_ref and phone are required' }, { status: 400 });
 		}
 
 		const ip = getClientAddress();

@@ -264,8 +264,7 @@
 											<div class="mt-1.5 flex flex-col gap-2 sm:flex-row">
 												<Input
 													bind:value={courierInput}
-													placeholder={donation.logistics?.courier_tracking_no ||
-														'กรอกเลขพัสดุ'}
+													placeholder={donation.logistics?.courier_tracking_no || 'กรอกเลขพัสดุ'}
 													class="h-9 rounded-xl text-xs"
 												/>
 												<Button

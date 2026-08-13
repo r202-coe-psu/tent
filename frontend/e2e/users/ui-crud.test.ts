@@ -102,6 +102,14 @@ test.afterEach(async ({ page }) => {
 const SA = ACCOUNTS[0];
 const SM1 = ACCOUNTS[1];
 
+const CAPABILITY_FIELD = 'บทบาท (Role)';
+const SHELTER_FIELD = 'Shelter ID (Code)';
+
+async function pickSelectOption(page: Page, fieldLabel: string, option: string | RegExp) {
+	await page.getByRole('combobox', { name: fieldLabel }).click();
+	await page.getByRole('option', { name: option }).click();
+}
+
 // ─── Fixture data for UI rendering ────────────────────────────────────────────
 
 const FIXTURE_USERS = [
@@ -387,9 +395,10 @@ test.describe('User Management UI — Create Flow (real BFF)', () => {
 		await page.locator('input[name="password"]').fill('TestPass1234!');
 		await page.locator('input[name="display_name"]').fill('New UI SM');
 
-		// SA can select capability and shelter
-		await page.locator('select[name="capability"]').selectOption('shelter_manager');
-		await page.locator('select[name="shelter_id"]').selectOption('SH001');
+		// Back-office users is locked to the header shelter — no picker, even for SA.
+		await expect(page.getByRole('combobox', { name: SHELTER_FIELD })).toHaveCount(0);
+		await expect(page.getByRole('dialog').getByText('SH001')).toBeVisible();
+		await pickSelectOption(page, CAPABILITY_FIELD, 'shelter_manager');
 
 		// Submit form
 		await page.getByRole('button', { name: /บันทึก/ }).click();
@@ -428,7 +437,7 @@ test.describe('User Management UI — Create Flow (real BFF)', () => {
 		await page.locator('input[name="display_name"]').fill('New UI Staff');
 
 		// SM can only create staff, shelter is fixed.
-		await page.locator('select[name="capability"]').selectOption('kitchen_staff');
+		await pickSelectOption(page, CAPABILITY_FIELD, 'kitchen_staff');
 
 		await page.getByRole('button', { name: /บันทึก/ }).click();
 
@@ -444,5 +453,88 @@ test.describe('User Management UI — Create Flow (real BFF)', () => {
 		expect(doc.roles).toContain('shelter:SH001'); // SM1's shelter
 		expect(doc.roles).toContain('kitchen_staff');
 		expect(doc.display_name).toBe('New UI Staff');
+	});
+});
+
+// ─── EOC global users (unlocked picker) + shelter-edit lock ───────────────────
+
+test.describe('User Management UI — EOC route', () => {
+	test('SA can open EOC users and still pick a shelter when creating', async ({ page }) => {
+		const newUsername = `ui_eoc_sm_${RUN_ID}`;
+		createdDuringTest.push(newUsername);
+
+		await injectSession(page, SA, sessions[SA.name]);
+		await mockUserList(page, []);
+		await mockShelters(page, [{ code: 'SH001', name: 'Test Shelter' }]);
+		await page.goto('http://localhost:4173/portal/system-management/users');
+
+		await page.getByRole('button', { name: /เพิ่มผู้ใช้/ }).click();
+		await expect(page.getByRole('dialog')).toBeVisible();
+		await expect(page.getByRole('combobox', { name: SHELTER_FIELD })).toBeVisible();
+
+		await page.locator('input[name="username"]').fill(newUsername);
+		await page.locator('input[name="password"]').fill('TestPass1234!');
+		await page.locator('input[name="display_name"]').fill('EOC UI SM');
+		await pickSelectOption(page, CAPABILITY_FIELD, 'shelter_manager');
+		await pickSelectOption(page, SHELTER_FIELD, /SH001/);
+		await page.getByRole('button', { name: /บันทึก/ }).click();
+		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
+
+		const auth = COUCH_AUTH;
+		const check = await fetch(
+			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(newUsername)}`,
+			{ headers: { Authorization: auth } }
+		);
+		expect(check.status).toBe(200);
+		const doc = await check.json();
+		expect(doc.roles).toContain('shelter:SH001');
+		expect(doc.roles).toContain('shelter_manager');
+	});
+
+	test('SM is redirected away from the EOC users URL', async ({ page }) => {
+		await injectSession(page, SM1, sessions[SM1.name]);
+		await page.goto('http://localhost:4173/portal/system-management/users');
+		await page.waitForURL((url) => !url.pathname.includes('/system-management/users'), {
+			timeout: 8000
+		});
+		await expect(page).toHaveURL('http://localhost:4173/portal');
+	});
+});
+
+test.describe('User Management UI — Shelter edit (locked)', () => {
+	test('SA creates a user from EOC shelter edit without a shelter picker', async ({ page }) => {
+		const CODE = 'SH001';
+		const newUsername = `ui_edit_lock_${RUN_ID}`;
+		createdDuringTest.push(newUsername);
+
+		await injectSession(page, SA, sessions[SA.name]);
+		await mockUserList(page, []);
+		await mockShelters(page, [{ code: CODE, name: 'Test Shelter' }]);
+		await page.goto(`http://localhost:4173/portal/system-management/shelters/edit/${CODE}`);
+
+		await page.getByRole('button', { name: 'ผู้ใช้งานและสิทธิ์' }).click();
+		await page.getByRole('button', { name: /เพิ่มผู้ใช้/ }).click();
+
+		await expect(page.getByRole('dialog')).toBeVisible();
+		await expect(page.getByRole('combobox', { name: SHELTER_FIELD })).toHaveCount(0);
+		await expect(page.getByRole('dialog').getByText(CODE)).toBeVisible();
+
+		await page.locator('input[name="username"]').fill(newUsername);
+		await page.locator('input[name="password"]').fill('TestPass1234!');
+		await page.locator('input[name="display_name"]').fill('Locked Shelter User');
+		await pickSelectOption(page, CAPABILITY_FIELD, 'shelter_manager');
+		await page.getByRole('button', { name: /บันทึก/ }).click();
+		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
+
+		const auth = COUCH_AUTH;
+		const check = await fetch(
+			`http://localhost:5984/_users/org.couchdb.user:${encodeURIComponent(newUsername)}`,
+			{ headers: { Authorization: auth } }
+		);
+		expect(check.status).toBe(200);
+		const doc = await check.json();
+		expect(doc.roles).toContain(`shelter:${CODE}`);
+		expect(doc.roles).toContain('shelter_manager');
+		expect(doc.display_name).toBe('Locked Shelter User');
 	});
 });

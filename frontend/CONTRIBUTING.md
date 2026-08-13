@@ -346,13 +346,13 @@ external    →  /external/v1/* + X-API-Key (nginx or direct FastAPI)
 
 **Local stack (all three must run for public features that read Mongo):**
 
-| Step                       | Where                                  | Command / note                                                                        |
-| -------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------- |
-| 1. Infra                   | repo root                              | `docker compose up -d` — CouchDB, MongoDB, sync worker                                |
-| 2. Seed / write staff data | `frontend/`                            | `pnpm seed` (or normal staff UI writes) so CouchDB has docs to project                |
-| 3. Sync                    | automatic via compose worker, or local | `uv run --project worker sync-worker` / `--bootstrap` for full re-sync                |
-| 4. Public API              | `backend/`                             | `./scripts/run-dev` → FastAPI on **:9000** (`APP_ENV=dev`)                            |
-| 5. SPA                     | `frontend/`                            | `pnpm dev` → :5173; public reads via BFF `/api/public/v1/*` (CR-063)                  |
+| Step                       | Where                                  | Command / note                                                         |
+| -------------------------- | -------------------------------------- | ---------------------------------------------------------------------- |
+| 1. Infra                   | repo root                              | `docker compose up -d` — CouchDB, MongoDB, sync worker                 |
+| 2. Seed / write staff data | `frontend/`                            | `pnpm seed` (or normal staff UI writes) so CouchDB has docs to project |
+| 3. Sync                    | automatic via compose worker, or local | `uv run --project worker sync-worker` / `--bootstrap` for full re-sync |
+| 4. Public API              | `backend/`                             | `./scripts/run-dev` → FastAPI on **:9000** (`APP_ENV=dev`)             |
+| 5. SPA                     | `frontend/`                            | `pnpm dev` → :5173; public reads via BFF `/api/public/v1/*` (CR-063)   |
 
 Verify projections in Compass: `mongodb://localhost:27017/tentdb` (`public_persons`, `public_shelters`, …).
 

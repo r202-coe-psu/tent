@@ -23,6 +23,7 @@
 		EMPTY_LUGGAGE_POLICY,
 		EMPTY_PARKING_POLICY
 	} from '$lib/features/shelters';
+	import { UserManagementPage } from '$lib/features/users';
 	import {
 		SHELTER_STEP_FIELDS,
 		collectErrorMessages,
@@ -43,6 +44,7 @@
 	import Briefcase from '@lucide/svelte/icons/briefcase';
 	import Car from '@lucide/svelte/icons/car';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import UserCog from '@lucide/svelte/icons/user-cog';
 
 	let {
 		id = '',
@@ -73,7 +75,14 @@
 	];
 	let step = $state(0);
 	let showValidationSummary = $state(false);
-	const isLastStep = $derived(step === steps.length - 1);
+	/** View switch (not a wizard step): users for this shelter. */
+	let usersViewActive = $state(false);
+	const isLastStep = $derived(!usersViewActive && step === steps.length - 1);
+
+	function selectStep(i: number) {
+		usersViewActive = false;
+		step = i;
+	}
 
 	const form = superForm(defaults(zod4(shelterSchema)), {
 		SPA: true,
@@ -263,10 +272,12 @@
 			>
 				ยกเลิก
 			</a>
-			<Button type="submit" form="shelter-form" disabled={$submitting || isPending}>
-				<Save class="h-4 w-4" />
-				<span>{isPending ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}</span>
-			</Button>
+			{#if !usersViewActive}
+				<Button type="submit" form="shelter-form" disabled={$submitting || isPending}>
+					<Save class="h-4 w-4" />
+					<span>{isPending ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}</span>
+				</Button>
+			{/if}
 		</div>
 	</div>
 
@@ -290,22 +301,25 @@
 					<p class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
 						หมวดหมู่ข้อมูล
 					</p>
-					<span class="text-[11px] font-semibold text-muted-foreground tabular-nums">
-						{step + 1} / {steps.length}
-					</span>
+					{#if !usersViewActive}
+						<span class="text-[11px] font-semibold text-muted-foreground tabular-nums">
+							{step + 1} / {steps.length}
+						</span>
+					{/if}
 				</div>
 				<ul class="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
 					{#each steps as s, i (s.label)}
 						{@const Icon = s.icon}
 						{@const hasError = stepsWithErrorsSet.has(i)}
+						{@const stepActive = !usersViewActive && step === i}
 						<li class="shrink-0">
 							<button
 								type="button"
-								onclick={() => (step = i)}
-								aria-current={step === i ? 'step' : undefined}
+								onclick={() => selectStep(i)}
+								aria-current={stepActive ? 'step' : undefined}
 								class={[
 									'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
-									step === i
+									stepActive
 										? hasError
 											? 'bg-destructive text-white shadow-sm'
 											: 'bg-primary text-white shadow-sm'
@@ -323,95 +337,134 @@
 							</button>
 						</li>
 					{/each}
+					<li class="shrink-0">
+						{#if isEdit}
+							<button
+								type="button"
+								onclick={() => (usersViewActive = true)}
+								aria-current={usersViewActive ? 'true' : undefined}
+								class={[
+									'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
+									usersViewActive
+										? 'bg-primary text-white shadow-sm'
+										: 'text-muted-foreground hover:-translate-y-px hover:bg-muted/50 hover:text-foreground'
+								]}
+							>
+								<UserCog class="h-4 w-4 shrink-0" />
+								<span class="min-w-0 flex-1 whitespace-nowrap md:whitespace-normal"
+									>ผู้ใช้งานและสิทธิ์</span
+								>
+							</button>
+						{:else}
+							<button
+								type="button"
+								disabled
+								title="บันทึกศูนย์ก่อนจึงเพิ่มผู้ใช้ได้"
+								class="flex w-full cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground/60"
+							>
+								<UserCog class="h-4 w-4 shrink-0" />
+								<span class="min-w-0 flex-1 whitespace-nowrap md:whitespace-normal"
+									>ผู้ใช้งานและสิทธิ์</span
+								>
+							</button>
+							<p class="mt-1 px-3 text-[11px] text-muted-foreground">
+								บันทึกศูนย์ก่อนจึงเพิ่มผู้ใช้ได้
+							</p>
+						{/if}
+					</li>
 				</ul>
 			</nav>
 
 			<!-- Step content -->
 			<div class="min-w-0 flex-1">
-				{#if showValidationSummary && (stepsWithErrors.length > 0 || validationMessages.length > 0)}
-					<div
-						class="mb-4 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
-						role="alert"
-					>
-						<div class="flex items-start gap-2">
-							<AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
-							<div class="min-w-0 flex-1 space-y-2">
-								<p class="font-semibold">ยังมีข้อมูลที่ต้องกรอกหรือแก้ไข</p>
-								{#if stepsWithErrors.length > 0}
-									<ul class="flex flex-wrap gap-2">
-										{#each stepsWithErrors as i (steps[i].label)}
-											<li>
-												<button
-													type="button"
-													onclick={() => (step = i)}
-													class={[
-														'rounded-md border px-2.5 py-1 text-xs font-medium transition',
-														step === i
-															? 'border-destructive bg-destructive text-white'
-															: 'border-destructive/30 bg-background text-destructive hover:bg-destructive/10'
-													]}
-												>
-													{steps[i].label}
-												</button>
-											</li>
-										{/each}
-									</ul>
-								{/if}
-								{#if validationMessages.length > 0}
-									<ul class="list-disc space-y-1 pl-5 text-destructive/90">
-										{#each validationMessages as msg (msg)}
-											<li>{msg}</li>
-										{/each}
-									</ul>
-								{/if}
+				{#if usersViewActive && isEdit}
+					<UserManagementPage lockedShelterCode={id} compact />
+				{:else}
+					{#if showValidationSummary && (stepsWithErrors.length > 0 || validationMessages.length > 0)}
+						<div
+							class="mb-4 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
+							role="alert"
+						>
+							<div class="flex items-start gap-2">
+								<AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
+								<div class="min-w-0 flex-1 space-y-2">
+									<p class="font-semibold">ยังมีข้อมูลที่ต้องกรอกหรือแก้ไข</p>
+									{#if stepsWithErrors.length > 0}
+										<ul class="flex flex-wrap gap-2">
+											{#each stepsWithErrors as i (steps[i].label)}
+												<li>
+													<button
+														type="button"
+														onclick={() => selectStep(i)}
+														class={[
+															'rounded-md border px-2.5 py-1 text-xs font-medium transition',
+															step === i
+																? 'border-destructive bg-destructive text-white'
+																: 'border-destructive/30 bg-background text-destructive hover:bg-destructive/10'
+														]}
+													>
+														{steps[i].label}
+													</button>
+												</li>
+											{/each}
+										</ul>
+									{/if}
+									{#if validationMessages.length > 0}
+										<ul class="list-disc space-y-1 pl-5 text-destructive/90">
+											{#each validationMessages as msg (msg)}
+												<li>{msg}</li>
+											{/each}
+										</ul>
+									{/if}
+								</div>
 							</div>
 						</div>
-					</div>
-				{/if}
+					{/if}
 
-				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-				<!-- keydown guards native implicit submit (Enter) to the last wizard step only -->
-				<form id="shelter-form" method="POST" use:enhance onkeydown={onFormKeydown}>
-					<div class={[step !== 0 && 'hidden']}>
-						<BasicInfoSection {form} {formData} />
-					</div>
-					<div class={[step !== 1 && 'hidden']}>
-						<CapacitySection {form} {formData} />
-					</div>
-					<div class={[step !== 2 && 'hidden']}>
-						<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
-					</div>
-					<div class={[step !== 3 && 'hidden']}>
-						<UtilitiesSection {form} {formData} />
-					</div>
-					<div class={[step !== 4 && 'hidden']}>
-						<RiskSection {form} {formData} />
-					</div>
-					<div class={[step !== 5 && 'hidden']}>
-						<AdmissionPolicySection {formData} />
-					</div>
-					<div class={[step !== 6 && 'hidden']}>
-						<LuggagePolicySection {formData} />
-					</div>
-					<div class={[step !== 7 && 'hidden']}>
-						<ParkingPolicySection {formData} />
-					</div>
+					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+					<!-- keydown guards native implicit submit (Enter) to the last wizard step only -->
+					<form id="shelter-form" method="POST" use:enhance onkeydown={onFormKeydown}>
+						<div class={[step !== 0 && 'hidden']}>
+							<BasicInfoSection {form} {formData} />
+						</div>
+						<div class={[step !== 1 && 'hidden']}>
+							<CapacitySection {form} {formData} />
+						</div>
+						<div class={[step !== 2 && 'hidden']}>
+							<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
+						</div>
+						<div class={[step !== 3 && 'hidden']}>
+							<UtilitiesSection {form} {formData} />
+						</div>
+						<div class={[step !== 4 && 'hidden']}>
+							<RiskSection {form} {formData} />
+						</div>
+						<div class={[step !== 5 && 'hidden']}>
+							<AdmissionPolicySection {formData} />
+						</div>
+						<div class={[step !== 6 && 'hidden']}>
+							<LuggagePolicySection {formData} />
+						</div>
+						<div class={[step !== 7 && 'hidden']}>
+							<ParkingPolicySection {formData} />
+						</div>
 
-					<!-- Bottom navigation -->
-					<div class="mt-6 flex items-center justify-between border-t border-shelter-border pt-6">
-						<Button type="button" variant="outline" onclick={goPrev} disabled={step === 0}>
-							<ArrowLeft class="h-4 w-4" />
-							<span>ก่อนหน้า</span>
-						</Button>
-
-						{#if !isLastStep}
-							<Button type="button" onclick={goNext}>
-								<span>ถัดไป</span>
-								<ArrowRight class="h-4 w-4" />
+						<!-- Bottom navigation -->
+						<div class="mt-6 flex items-center justify-between border-t border-shelter-border pt-6">
+							<Button type="button" variant="outline" onclick={goPrev} disabled={step === 0}>
+								<ArrowLeft class="h-4 w-4" />
+								<span>ก่อนหน้า</span>
 							</Button>
-						{/if}
-					</div>
-				</form>
+
+							{#if !isLastStep}
+								<Button type="button" onclick={goNext}>
+									<span>ถัดไป</span>
+									<ArrowRight class="h-4 w-4" />
+								</Button>
+							{/if}
+						</div>
+					</form>
+				{/if}
 			</div>
 		</div>
 	{/if}

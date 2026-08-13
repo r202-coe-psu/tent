@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-	sumZoneCapacities,
-	capacityAlignment,
-	canSyncCapacityFromZones
-} from './capacity-guide';
+import { sumZoneCapacities, capacityAlignment, canSyncCapacityFromZones } from './capacity-guide';
 
 describe('sumZoneCapacities', () => {
 	it('returns 0 for empty/null', () => {

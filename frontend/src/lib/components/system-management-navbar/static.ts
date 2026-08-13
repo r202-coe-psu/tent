@@ -10,7 +10,8 @@ import {
 	Settings,
 	Tent,
 	Users,
-	Building
+	Building,
+	UserCog
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -51,6 +52,12 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 				requiresAdmin: true
 			},
 			{ label: 'จัดการบ้านพี่เลี้ยง', href: resolve(`${base}/host-houses`), icon: House },
+			{
+				label: 'จัดการผู้ใช้งานและสิทธิ์',
+				href: resolve(`${base}/users`),
+				icon: UserCog,
+				requiresAdmin: true
+			},
 			{
 				label: 'API Keys',
 				href: resolve(`${base}/api-keys`),

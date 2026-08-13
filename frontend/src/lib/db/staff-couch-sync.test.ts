@@ -3,7 +3,10 @@ import type { QueryClient } from '@tanstack/svelte-query';
 import { CHANGES_FEED_START_DELAY_MS, startStaffCouchSync } from './staff-couch-sync';
 
 const probe = vi.fn();
-const startChangesSubscriberMock = vi.fn((_dbNames: string[]) => ({ stop: vi.fn() }));
+const startChangesSubscriberMock = vi.fn((dbNames: string[]) => {
+	void dbNames;
+	return { stop: vi.fn() };
+});
 const getShelterDbMock = vi.fn(() => 'shelter_sh001');
 
 vi.mock('$lib/stores/endpoint.svelte', () => ({

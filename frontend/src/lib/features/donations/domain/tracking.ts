@@ -114,7 +114,10 @@ export function canCancelDonation(status: string): boolean {
 	return status === 'declared' || status === 'pending_review';
 }
 
-export function canEditCourierTracking(status: string, logistics: DonationTrackLogistics | null): boolean {
+export function canEditCourierTracking(
+	status: string,
+	logistics: DonationTrackLogistics | null
+): boolean {
 	if (!logistics || logistics.delivery_method !== 'parcel') return false;
 	return status === 'declared' || status === 'pending_review' || status === 'verifying';
 }
