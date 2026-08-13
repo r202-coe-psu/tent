@@ -74,7 +74,7 @@ async def list_needs(
 
 
 @router.post(
-    "/family-search",
+    "/occupants",
     response_model=SearchResponse,
     responses={
         429: {"model": ApiErrorResponse},

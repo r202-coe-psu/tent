@@ -6,7 +6,7 @@ export const publicPortalKeys = {
 	all: ['public-portal'] as const,
 	shelters: (params: ListPublicSheltersParams) =>
 		[...publicPortalKeys.all, 'shelters', params] as const,
-	familySearch: (query: string) => [...publicPortalKeys.all, 'family-search', query] as const
+	familySearch: (query: string) => [...publicPortalKeys.all, 'occupants', query] as const
 };
 
 export function usePublicShelters(params: () => ListPublicSheltersParams) {

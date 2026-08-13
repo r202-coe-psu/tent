@@ -2,7 +2,7 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-22
+updated: 2026-08-13
 note: คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B)
 ---
 
@@ -17,7 +17,7 @@ api-contract v1 เดิมเขียนว่า public plane "อ่าน 
 | --- | --- |
 | **Privacy by construction** | เฉพาะ field ที่ public เห็นได้ ถูก project ลง Mongo (นามสกุล masked, ไม่มี medical, ไม่มีเบอร์ใน response) — ต่อให้ Mongo รั่ว ก็ไม่มี PII เต็ม |
 | **Blast radius** | public traffic / scraping / DDoS ชนแค่ Mongo replica — operational CouchDB (ที่ศูนย์พึ่งพา) ไม่กระทบ |
-| **Query shape** | family-search ต้องการ text index + phone exact + masking — ทำบน Mongo (aggregation/`$text`) ง่ายกว่า CouchDB view มาก |
+| **Query shape** | occupants search ต้องการ text index + phone exact + masking — ทำบน Mongo (aggregation/`$text`) ง่ายกว่า CouchDB view มาก |
 | **Scaling แยกโปรไฟล์** | public อ่านหนัก-เขียนเบา, operational เขียนหนัก — แยก store ปรับ scale อิสระ |
 
 **กติกาเจ้าของข้อมูล (สำคัญสุด):**
@@ -72,7 +72,7 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 ### 3.2 Mongo collections (ปลายทาง projection)
 
 ```js
-// public_persons — family-search index (1 doc / evacuee ที่ค้นเจอได้)
+// public_persons — occupants search index (1 doc / evacuee ที่ค้นเจอได้)
 { _id: "evacuee:01H...",            // = CouchDB _id (idempotency)
   shelter_code: "SH001",            // code ของ shelter
   first_name: "สมชาย",              // ชื่อจริงเต็ม
@@ -113,12 +113,12 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 ## 4. Inbound — MongoDB → CouchDB (donation intake + search_audit)
 
 public ประกาศบริจาคผ่าน `POST /public/v1/donations` → เขียน Mongo ก่อน → worker ค่อย persist เข้า CouchDB.
-family-search เขียน Mongo `search_audits` (hash เท่านั้น) → worker persist เข้า `central_ops`.
+occupants search เขียน Mongo `search_audits` (hash เท่านั้น) → worker persist เข้า `central_ops`.
 
 ### 4.0 search_audit inbound
 
 ```
-1. POST /public/v1/family-search
+1. POST /public/v1/occupants
    → FastAPI เขียน Mongo `search_audits`:
      { _id: search_audit:{ULID}, query_kind, query_hash, ip_hash,
        result_count, occurred_at, synced_to_couch: false }
@@ -202,7 +202,7 @@ donation doc ที่ลงไปเป็น state machine แบบ **forward
 
 | Endpoint | แตะ Mongo | หมายเหตุ |
 | --- | --- | --- |
-| `POST /public/v1/family-search` | read `public_persons` (`$text` ชื่อ หรือ `phone_hash`) | response: ชื่อจริง + นามสกุล masked + ศูนย์ + สถานะ; **ไม่มีเบอร์**; audit ลง Mongo → sync → `central_ops.search_audit` |
+| `POST /public/v1/occupants` | read `public_persons` (`$text` ชื่อ หรือ `phone_hash`) | response: ชื่อจริง + นามสกุล masked + ศูนย์ + สถานะ; **ไม่มีเบอร์**; audit ลง Mongo → sync → `central_ops.search_audit` |
 | `GET /public/v1/needs` | read `public_needs` | aggregate ข้ามศูนย์ |
 | `POST /public/v1/donations` | write `donations` (inbound §4) | ตอบ tracking_token ทันที |
 | `GET /public/v1/donations/{tracking_token}` | read `public_donations` | mirror สถานะจาก CouchDB |

@@ -68,7 +68,7 @@ async def test_evacuee_search_by_phone_returns_masked_result(
     )
 
     response = await client.post(
-        "/public/v1/family-search",
+        "/public/v1/occupants",
         json={"q": phone},
         headers=auth_headers,
     )
@@ -122,7 +122,7 @@ async def test_evacuee_search_by_national_id_exact_match(
     )
 
     response = await client.post(
-        "/public/v1/family-search",
+        "/public/v1/occupants",
         json={"q": "3900-1002-4419-2"},
         headers=auth_headers,
     )
@@ -173,7 +173,7 @@ async def test_evacuee_search_includes_family_members(
         )
 
     response = await client.post(
-        "/public/v1/family-search",
+        "/public/v1/occupants",
         json={"q": phone},
         headers=auth_headers,
     )
@@ -207,7 +207,7 @@ async def test_evacuee_search_hides_opted_out_records(
     )
 
     response = await client.post(
-        "/public/v1/family-search",
+        "/public/v1/occupants",
         json={"q": phone},
         headers=auth_headers,
     )
@@ -219,7 +219,7 @@ async def test_evacuee_search_rejects_invalid_query(
     client: AsyncClient, auth_headers: dict[str, str]
 ):
     response = await client.post(
-        "/public/v1/family-search",
+        "/public/v1/occupants",
         json={"q": "ab"},
         headers=auth_headers,
     )
@@ -266,7 +266,7 @@ async def test_evacuee_search_writes_search_audit(
     )
 
     response = await client.post(
-        "/public/v1/family-search",
+        "/public/v1/occupants",
         json={"q": phone},
         headers={**auth_headers, "X-Real-IP": "203.0.113.10"},
     )
@@ -282,9 +282,7 @@ async def test_evacuee_search_writes_search_audit(
     assert audit.synced_to_couch is False
 
 
-async def test_evacuee_search_rate_limited(
-    client: AsyncClient, auth_headers: dict[str, str]
-):
+async def test_evacuee_search_rate_limited(client: AsyncClient, auth_headers: dict[str, str]):
     from apiapp.modules.evacuee import router as evacuee_router
 
     evacuee_router._request_log.clear()
@@ -294,13 +292,13 @@ async def test_evacuee_search_rate_limited(
         headers = {**auth_headers, "X-Real-IP": "198.51.100.7"}
         for _ in range(3):
             ok = await client.post(
-                "/public/v1/family-search",
+                "/public/v1/occupants",
                 json={"q": "0811111111"},
                 headers=headers,
             )
             assert ok.status_code in (200, 422)
         limited = await client.post(
-            "/public/v1/family-search",
+            "/public/v1/occupants",
             json={"q": "0811111111"},
             headers=headers,
         )

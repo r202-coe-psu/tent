@@ -2,7 +2,7 @@
 title: "Task Breakdown — Family Search"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
+updated: 2026-08-13
 module: famsearch
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (§E, 2026-06-22) ขยาย exposure surface ของ /search — ดู T-41
 ---
@@ -49,7 +49,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - **กติกา mask ชื่อ (FS-3, CR-005):** ชื่อจริงเต็ม + นามสกุล mask (FAM grapheme rule เดิม) — ให้ญาติยืนยันตัวบุคคลได้
 - เฉพาะคนที่ consent (T-40) เท่านั้นที่ปรากฏ; opt-out `search_excluded` ซ่อนทั้ง record ครอบทุกช่องทางค้น (รวม identifier); ไม่พบ กับ ไม่ยินยอม ต้องแยกไม่ออกจากภายนอก
 - Anti-enumeration: rate-limit ต่อ IP/session, CAPTCHA/PoW ใน production public, identifier exact-only, ไม่มี endpoint ไล่ดึงรายชื่อ (test เชิง adversarial ครบ)
-- **ไม่มี demo/จำลอง (FS-4 REJECTED, CR-005):** ทุกการค้นยิง `POST /public/v1/family-search` จริง + เขียน audit ทุก query (ไม่เก็บ PII ผู้ค้น แต่ trace พอสำหรับ abuse detection — FR-53); mobile-first, ภาษาไทยเป็นหลัก
+- **ไม่มี demo/จำลอง (FS-4 REJECTED, CR-005):** ทุกการค้นยิง `POST /public/v1/occupants` จริง + เขียน audit ทุก query (ไม่เก็บ PII ผู้ค้น แต่ trace พอสำหรับ abuse detection — FR-53); mobile-first, ภาษาไทยเป็นหลัก
 - ผ่าน data-governance review + DPIA ก่อนเปิด public (feature-specific NFR ใน R4 PRD)
 - Demo ค้นเจอ (ทุกช่องทาง) ↔ opt-out แล้วค้นไม่เจอ end-to-end
 

@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-08-12 # Propose CR-064 edge disaster continuity (CR-033 follow-up)
+updated: 2026-08-13 # CR-065 occupants path rename
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -83,3 +83,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-063](CR-063-public-bff-only.md) | Lock all `/public/v1/*` to Bearer `EXTERNAL_API_SECRET` (BFF-only); remove browser `/public-api` gateway; `/external/v1` unchanged | approved | stable | 2026-08-07 | public routers auth, BFF family-search/shelters/needs, vite+nginx remove `/public-api`, CONTRIBUTING/CONVENTIONS §public plane |
 | [CR-064](CR-064-edge-disaster-continuity.md) | Edge disaster continuity — network-only LAN cutover + ops status UI; CR-033 follow-up; expand T-54 Package B; OD-1..OD-5 locked | proposed | stable | 2026-08-12 | edge-disaster-continuity-idea.md, T-54, api-contract/data-model (after approve), offline-fallback-flow-spec, Notion T-54 |
 | [CR-064 Notion checklist](CR-064-notion-sync-checklist.md) | Checklist sync T-54 บน Notion ตาม CR-064 — applied via Notion MCP 2026-08-12 | done | stable | 2026-08-12 | Notion Projects Tasks (T-54) |
+| [CR-065](CR-065-occupants-path-rename.md) | Rename public/external family-search path to occupants (`POST /public/v1/occupants`, `/external/v1/occupants`, BFF `/api/public/v1/occupants`); SPA `/search` unchanged | done | volatile | 2026-08-13 | api-contract §5, sitemap, public-tier-find/flow specs, 11-famsearch T-41, FastAPI evacuee+external routers, BFF occupants, public-api.ts, fastapi.json + openapi.d.ts |

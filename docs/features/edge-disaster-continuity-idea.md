@@ -2,7 +2,7 @@
 title: Edge disaster continuity — operational idea (parked)
 status: idea / elevated-via-CR-064
 created: 2026-08-12
-updated: 2026-08-12
+updated: 2026-08-13
 note: >
   แนวคิดปฏิบัติการ LAN edge — elevate ผ่าน CR-064 (proposed) + T-54 Package B.
   Topology binding ยังอยู่ที่ docs/data/* จนกว่า CR-064 จะ approved แล้ว reconcile.
@@ -94,7 +94,7 @@ related:
 - สร้าง / แก้ user / เปลี่ยนรหัสผ่านบน edge
 - Merge `_users` จากหลาย edge กลับ central
 - Offline local write queue หรือ PouchDB บน device
-- Public donation / family-search / EOC aggregate ผ่าน edge
+- Public donation / occupants search / EOC aggregate ผ่าน edge
 - Cross-shelter transfer / global dashboard ตอนเป็น edge islands
 - การเปิดศูนย์ใหม่ตอน WAN ล่ม (mint/provision = central-only)
 

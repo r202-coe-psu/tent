@@ -14,8 +14,8 @@ from .schemas import ApiErrorResponse, SearchRequest, SearchResponse
 from .use_case import EvacueeUseCase, get_evacuee_use_case
 
 router = APIRouter(
-    prefix="/public/v1/family-search",
-    tags=["Family Search"],
+    prefix="/public/v1/occupants",
+    tags=["Occupants"],
     dependencies=[Depends(verify_external_secret)],
 )
 

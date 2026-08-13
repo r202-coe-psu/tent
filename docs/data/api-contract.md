@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-07
+updated: 2026-08-13
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้
 ---
 
@@ -138,7 +138,7 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 
 | Endpoint | Auth |
 | --- | --- |
-| `POST /public/v1/family-search` | — (rate-limited + audit) |
+| `POST /public/v1/occupants` | — (rate-limited + audit) |
 | `GET /public/v1/needs` | — |
 | `POST /public/v1/donations` | เบอร์โทร (+OTP เมื่อ `public_otp_required` เปิด) |
 | `GET /public/v1/donations/{tracking_token}` | token |

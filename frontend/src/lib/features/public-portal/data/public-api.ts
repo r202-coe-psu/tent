@@ -18,7 +18,7 @@ function publicApiError(error: unknown, status: number, fallback: string): Error
 }
 
 export async function familySearch(query: string): Promise<FamilySearchResponse> {
-	const response = await fetch('/api/public/v1/family-search', {
+	const response = await fetch('/api/public/v1/occupants', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ search: query })

@@ -2,7 +2,7 @@
 title: Smart Shelter — Sitemap & Endpoint Map
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-23
+updated: 2026-08-13
 note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public; CR-040 route `/reports`
 ---
 
@@ -153,7 +153,7 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 
 | Endpoint | หน้าที่ | FR | Auth |
 | --- | --- | --- | --- |
-| `POST /public/v1/family-search` | ค้นญาติ — คืน masked directory (`first_name`, `last_name`, `nickname`, `shelter_status` เท่านั้น); เคารพ opt-out 100% | FR-53 | — (audit ทุกครั้ง) |
+| `POST /public/v1/occupants` | ค้นญาติ — คืน masked directory (`first_name`, `last_name`, `nickname`, `shelter_status` เท่านั้น); เคารพ opt-out 100% | FR-53 | — (audit ทุกครั้ง) |
 | `GET /public/v1/needs` | shortage รายศูนย์ (counts only, no-PII) เพื่อ direct การบริจาค | FR-32 | — |
 | `POST /public/v1/donations` | donor pre-declaration + reservation | FR-32, 35 | เบอร์โทร + OTP (เมื่อ `public_otp_required` เปิด) |
 | `GET /public/v1/donations/{tracking_token}` | ติดตามสถานะการบริจาคของตน | FR-35, 37 | `tracking_token` |

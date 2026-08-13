@@ -99,7 +99,7 @@ Full workflow: **`frontend/CONTRIBUTING.md` §4.2** + coding patterns **`fronten
 
 1. **Change CouchDB docs / projectors** (`worker/`) → projections land in Mongo `public_*`.
 2. **Change FastAPI** (`backend/apiapp/modules/…`) — keep paths on contract
-   (`/public/v1/family-search`, `/public/v1/shelters`, …); add tests under `backend/tests/`.
+   (`/public/v1/occupants`, `/public/v1/shelters`, …); add tests under `backend/tests/`.
 3. **Regenerate types** from `frontend/`: `pnpm openapi:update` → commit `fastapi.json` +
    `openapi.d.ts`.
 4. **Wire UI** via BFF `/api/public/v1/*` and `$lib/features/public-portal/` barrel only —

@@ -729,7 +729,7 @@ features/public-portal/
 ```ts
 // data/public-api.ts — browser → BFF only (CR-063)
 export async function familySearch(query: string) {
-	const response = await fetch('/api/public/v1/family-search', {
+	const response = await fetch('/api/public/v1/occupants', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ search: query })
@@ -754,4 +754,4 @@ export async function familySearch(query: string) {
 
 ---
 
-_Last updated: 2026-08-07_
+_Last updated: 2026-08-13_

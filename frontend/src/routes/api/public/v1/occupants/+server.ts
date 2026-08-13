@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
-/** POST /api/public/v1/family-search → FastAPI (Bearer EXTERNAL_API_SECRET). */
+/** POST /api/public/v1/occupants → FastAPI (Bearer EXTERNAL_API_SECRET). */
 export const POST: RequestHandler = async ({ request, fetch }) => {
 	let body: unknown;
 	try {
@@ -15,7 +15,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 	}
 
 	try {
-		const res = await fetch(`${fastapiBaseUrl()}/public/v1/family-search`, {
+		const res = await fetch(`${fastapiBaseUrl()}/public/v1/occupants`, {
 			method: 'POST',
 			headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
 			body: JSON.stringify(body)
@@ -24,7 +24,9 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 		return json(payload, { status: res.status, headers: { 'Cache-Control': 'no-store' } });
 	} catch {
 		return json(
-			{ error: { code: 'SEARCH_UNAVAILABLE', message: 'Family search temporarily unavailable' } },
+			{
+				error: { code: 'SEARCH_UNAVAILABLE', message: 'Occupants search temporarily unavailable' }
+			},
 			{ status: 503 }
 		);
 	}
