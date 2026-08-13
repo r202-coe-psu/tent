@@ -2,9 +2,9 @@
 title: "Task Breakdown — Household & Zoning"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
+updated: 2026-08-13
 module: people
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; updated 2026-06-18 per CR-001 (permission cross-ref, lifecycle, screening inline, pre-registration, bulk ops, UI split); updated 2026-06-24 per CR-009 (T-04 — Household management ย้ายไป Stage 3, 2-box search/create flow)
+note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; updated 2026-06-18 per CR-001 (permission cross-ref, lifecycle, screening inline, pre-registration, bulk ops, UI split); updated 2026-06-24 per CR-009 (T-04 — Household management ย้ายไป Stage 3, 2-box search/create flow); 2026-08-13 — CR-066 T-71..T-74; Wave 3 + T-72 **approved**; T-73/T-74 = Wave 4 รอบ CR ถัดไป
 ---
 
 # Household & Zoning
@@ -25,6 +25,10 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 | T-07 | 🔄 | Pet / asset / vehicle records | FR-24 | R2 | prod | ส.ค. | 3 | ÷1.6 | 2 | T-04 |
 | T-08 | 🔄 | Zone definition + capacity | FR-25 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-02 |
 | T-09 | 🔄 | Zone allocation + suggest (warning-only) | FR-26 | R2 | prod | ส.ค. | 5 | ÷1.4 | 3.5 | T-08 |
+| T-71 | ⬜ | Public booking + ยืนยันที่ประตู (reuse T-51 scan) — CR-070 P4 | FR-70..72, FR-77..79 | R3 | prod | in-scope | 8 | ÷1.4 | 5.5 | T-48,T-50,T-51 |
+| T-72 | ⬜ | People import xlsx/csv (ขยาย T-55) — CR-071 P5 | FR-73, FR-80, FR-81 | R3 | prod | in-scope | 6 | ÷1.25 | 5 | T-48 |
+| T-73 | ⬜ | Inbound POST คนจากหน่วยงาน — CR-071 P5 **blocked payload** | FR-74 | R3 | prod | blocked | 6 | ÷1.25 | 5 | T-71, partner spec |
+| T-74 | ⬜ | Triage เขียว/เหลือง/แดง — CR-072 P6 **blocked กฎ** | FR-75 | R3 | prod | blocked | 5 | ÷1.4 | 3.5 | T-49, D-TRIAGE-RULES |
 |  |  | **รวมทั้งโมดูล** |  |  |  |  | **24** |  | **16** |  |
 
 ## Task Details
@@ -81,6 +85,8 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - เขียนลง CouchDB ตาม schema T-02 พร้อม audit metadata (ใคร/เมื่อไร)
 - Unit + integration test ผ่าน, demo flow ลงทะเบียนครอบครัว 1 ครัวเรือนได้จริง (ครอบ path A + B)
 
+> **Program override (2026-08-13, D-BOOK-OCC=C):** สำหรับ occupancy coloring/counts ของโปรแกรม site-occupancy-booking ต่อไปนี้ `pre_registered` **นับ** occupancy (ศูนย์และบ้านพี่เลี้ยงกฎเดียวกัน). กติกา T-04/T-06 ด้านบน (`pre-registered` ไม่นับ) ยังเป็นประวัติ household reserved/zone — **ถูกทับ** สำหรับตัวเลข occupancy ที่ใช้สี health / public / การจอง. Kitchen/SOP คนอยู่จริง (CR-022 `active` only) ไม่ถูกแตะใน Wave 3. ดู [program spec §0](../features/site-occupancy-booking-program.md).
+
 ---
 
 ### T-05 — Household Shelter ID/QR generation (FR-22) `[REMOVED — ดู CR-047]`
@@ -126,6 +132,8 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 - `checked-out` → occupancy ลด; **ต้องระบุ `checkout_destination` เสมอ** (ดูด้านล่าง)
 - `cancelled` → `pre-registered` ที่ถูก SM ยกเลิก; ไม่นับ occupancy
 
+> **Program override (2026-08-13, D-BOOK-OCC=C / D-HOLD-CANCEL):** occupancy coloring/counts ของโปรแกรมนี้ นับ stay `active` + `pre_registered`. ปล่อยที่นั่งเมื่อ staff (SA/SM/RS) ยกเลิกชัดเจนเท่านั้น — ไม่มี TTL. กติกา T-06 ด้านบนยังเป็นประวัติ household; ดู [program spec §0](../features/site-occupancy-booking-program.md). ห้าม rewrite CR-029/CR-035 นอกจาก pointer.
+
 **`checkout_destination` (required ทุกครั้งที่ checkout):**
 
 | ตัวเลือก | Field ที่ต้องกรอกเพิ่ม |
@@ -144,7 +152,7 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 - Check-in/out ทั้งครัวเรือนหรือเลือกบางสมาชิกได้ สถานะ + timestamp บันทึกครบ
 - Lifecycle transitions ครบทุก path: `pre-registered → checked-in`, `checked-in → checked-out`, `pre-registered → cancelled`
 - Checkout ทุกประเภทใช้ action เดียวกัน — `checkout_destination` required เสมอ (4 ตัวเลือก: `returned_home`, `transferred_shelter` + ชื่อศูนย์, `referred_facility` + ชื่อสถานที่, `other` + หมายเหตุ)
-- ยอด occupancy ของศูนย์อัปเดตถูกต้องหลังทุก movement (`pre-registered` ไม่นับ, `checked-in` นับ)
+- ยอด occupancy ของศูนย์อัปเดตถูกต้องหลังทุก movement (`pre-registered` ไม่นับ, `checked-in` นับ — **ถูกทับโดย D-BOOK-OCC=C สำหรับสี health / public / การจอง**; ดู override ด้านบน)
 - Zone suggestion ทำงาน non-blocking — VOL confirm check-in ได้โดยไม่รอ zone
 - Test ครอบกรณี check-in ซ้ำ, check-out คนที่ไม่ได้อยู่, scan QR ของ `pre-registered` household, checkout ทุก destination type, และ demo flow เข้า-ออกครบวงจร
 
@@ -202,6 +210,89 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 - ยอด occupied ต่อโซนตรงกับความจริงเสมอหลังย้าย และเก็บ history การย้ายโซน
 - SM ดู override history + audit log ของโซนตนได้ (actor + timestamp + เหตุผล)
 - Test ครอบ suggest logic + override path + bulk path + pre-registration reservation, demo จัดสรรครัวเรือนเปราะบาง + มีสัตว์เลี้ยง
+
+---
+
+### T-71 — Public booking + ยืนยันที่ประตู (CR-070 P4)
+
+**Status:** ⬜ ready — CR-070 **approved** 2026-08-13 (Wave 3)
+**Owner:** Team B (พีค, โฮป, ปิ๊ก); Lead รีวิว public BFF
+**Depends:** T-48, T-50, T-51 (scan มีแล้ว); [CR-070](../changes/CR-070-public-booking-gate-confirm.md)
+**Program:** P4
+
+**Description:** เปิดช่องจองผ่านเว็บ — สร้าง `evacuee` (+ household) สถานะ `pre_registered`; occupancy **นับทันที** (D-BOOK-OCC=C); ออก QR ตาม T-50; ประชาชนตามสถานะด้วย QR หรือ `official_code` + เบอร์โทร (D-BOOK-TOKEN=A); ที่ประตู scan ตาม T-51 แล้ว check-in → `active` (ไม่ +1 occupancy ซ้ำ). ไม่มี TTL; ปล่อยที่นั่งเมื่อ SA/SM/RS ยกเลิกชัดเจน (D-HOLD-CANCEL). รายการ staff แสดงอายุการจองวัน/ชม./นาที ตอนโหลด/รีเฟรช (D-PRE-REG-AGE). **ไม่สร้าง doc type booking ใหม่.** ปุ่ม public «ลงทะเบียนผู้ประสบภัย» ที่ disabled อยู่เป็นจุดเข้า. `registered_via=web`.
+
+**Files likely touched:** public portal register/booking route; BFF สร้างคนแบบ no-session (pattern donation public + CR-063); `features/people`; check-in UI แสดงว่ามาจากการจอง; รายการ pre-reg + ยกเลิก; `registered_via` (proposed `web`)
+
+**Definition of Done:**
+- UI: ฟอร์มจอง public เลือกสถานที่ที่ยังเปิดรับ; ออก QR/รหัส; ตามสถานะด้วย QR หรือรหัส+เบอร์; หน้าประตู scan แล้ว check-in ได้โดยไม่ลงทะเบียนใหม่
+- UI staff: รายการ `pre_registered` แสดง elapsed วัน/ชม./นาที คำนวณตอนโหลด/รีเฟรช — ห้าม poll ห้ามนาฬิกาเดินสด
+- Write path: BFF เขียน CouchDB — ห้ามเบราว์เซอร์ถือ admin secret; คนได้ `pre_registered`; occupancy +1 ตอนจอง
+- ยกเลิก: SA/SM/RS เปลี่ยนสถานะ `cancelled` (ห้าม hard-delete); audit actor+timestamp; occupancy ลดตอนรีเฟรช; ไม่มี job auto-cancel
+- Validation: ขั้นต่ำ T-48; ศูนย์ `closed` จองไม่ได้; แดงเข้ม = warning ไม่ block (จนกว่า CR แยก)
+- Permission: public = CAPTCHA/rate-limit ตาม Public DoD; ประตู = role T-51; ยกเลิก hold = SA/SM/RS
+- Test: จอง→occupancy +1; scan ไม่ +1 ซ้ำ; ไม่มา+ยกเลิก occupancy ลด; RS ยกเลิกได้; role อื่นยกเลิกไม่ได้; scan ซ้ำ; no PII บน ticket สาธารณะ
+- Demo: จองเว็บ → พิมพ์ QR → staff scan check-in; ตามสถานะด้วยรหัส+เบอร์
+
+**Out of scope:** xlsx คน (T-72); inbound API (T-73); triage 3 สี (T-74); donation `/donate`; auto-expire
+
+---
+
+### T-72 — People import xlsx/csv (CR-071 P5)
+
+**Status:** ⬜ ready — CR-071 slice A **approved** 2026-08-13 (T-72 stay=A + permission RS+SA+SM); ยังรอ T-48
+**Owner:** Team B
+**Depends:** T-48; แนะนำหลัง T-71 เพื่อล็อกช่องทาง; [CR-071](../changes/CR-071-people-import-inbound.md)
+**Program:** P5 slice A
+
+**Description:** Staff อัปโหลด xlsx และ csv → preview รายแถว → commit สร้าง evacuee; `registered_via=import`. คอลัมน์ขั้นต่ำ = T-48 required + `shelter_code`. ห้ามเพิ่ม field schema ใหม่. ทุกแถวสำเร็จได้ `current_stay.status=pre_registered` เสมอ (T-72 initial stay=**A**) — นับ occupancy ตาม D-BOOK-OCC=C; เป็น `active` ผ่านประตู check-in หรือ staff เปลี่ยนสถานะเท่านั้น; **ห้าม** คอลัมน์เลือกสถานะต่อแถวในไฟล์.
+
+**Files likely touched:** `routes/(protected)/.../import` หรือขยาย sitemap `/import`; feature slice people-import (pattern CR-039); import log doc type (หลัง approve ถ้าไม่ reuse)
+
+**Definition of Done:**
+- UI: dropzone xlsx+csv, preview error รายช่อง, สรุปสำเร็จ/ล้มเหลว, ประวัติ log
+- Write path: sequential/batched put evacuee ในศูนย์ที่ระบุ; partial success ไม่ rollback; ทุกแถวสำเร็จเป็น `pre_registered`
+- Validation: Zod evacuee รายแถว; ไฟล์ว่าง/header ผิด = หยุดทั้งไฟล์พร้อมข้อความ; ห้ามคอลัมน์เลือก stay status ต่อแถว
+- Permission: **RS + SA + SM** (`registration_staff` + `system_admin` + `shelter_manager`) — เจ้าของขยายจาก proposed SM+SA; บทบาทอื่นห้าม
+- Test: csv+xlsx, แถวผสมถูก/ผิด, shelter_code ไม่มี, ทุกแถวสำเร็จเป็น `pre_registered`, RS/SA/SM ผ่าน / บทบาทอื่นถูกปฏิเสธ
+- Demo: ไฟล์ 10 แถว
+- **ขยาย/แทนที่** ช่องคนของ T-55 — ห้ามมีสอง importer คนละสูตร
+
+**Out of scope:** inbound POST (T-73); เดาคอลัมน์หน่วยงานภายนอก; SOP-lite fields; เลือก `active` ต่อแถวในไฟล์
+
+---
+
+### T-73 — Inbound POST คนจากหน่วยงาน (CR-071 P5) — BLOCKED
+
+**Status:** ⬜ blocked — D-INBOUND-PLANE + partner payload spec — **Wave 4 รอบ CR ถัดไป**
+**Owner:** Team B + Lead pair
+**Depends:** T-71 (ช่องทางคน); partner SPEC; [CR-071](../changes/CR-071-people-import-inbound.md) slice B
+**Program:** P5 slice B
+
+**Description:** รับรายชื่อจากหน่วยงานผ่าน API. **ห้ามเดา JSON.** เมื่อ SPEC เข้า: amend CR-071 แล้วค่อยออกแบบ path (external X-API-Key vs BFF SA).
+
+**Files likely touched (หลัง unblock):** FastAPI `/external/v1/...` หรือ BFF `/api/v1/people/inbound`; OpenAPI; tests auth
+
+**Definition of Done:** ยังไม่มีจนกว่า SPEC. หลังล็อก: OpenAPI ตรงสัญญา, 401/403, audit key, ไม่รับ field นอกสัญญา, demo หน่วยงาน 1 ราย
+
+**Out of scope:** สมมติ payload ONE PLATFORM (T-75 คนละสัญญา)
+
+---
+
+### T-74 — Triage เขียว / เหลือง / แดง (CR-072 P6) — BLOCKED
+
+**Status:** ⬜ blocked — D-TRIAGE-RULES + D-TRIAGE-FIELD — **Wave 4 รอบ CR ถัดไป**
+**Owner:** Team B
+**Depends:** T-49; [CR-072](../changes/CR-072-triage-green-yellow-red.md)
+**Program:** P6
+
+**Description:** คัดกรอง 3 สี. ปัจจุบัน `track` = `normal`|`fast_track`. **ห้าม map มั่ว** และห้ามเดากฎการแพทย์.
+
+**Files likely touched (หลัง unblock):** `features/people` screening UI + domain; schema screening/medical
+
+**Definition of Done:** ยังไม่มีจนกว่ากฎล็อก. หลังล็อก: UI บังคับเลือกสี, persist append-only, ไม่โชว์ medical บน public, test ทุกแยกกฎ, demo 3 เคส
+
+**Out of scope:** เขียน clinical protocol ใน task นี้
 
 ---
 

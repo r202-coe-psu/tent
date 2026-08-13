@@ -2,11 +2,12 @@
 title: "Task Breakdown — Baseline (FR-1–20)"
 status: active
 created: 2026-06-11
-updated: 2026-08-12
+updated: 2026-08-13
 module: baseline
 note: >
   decision-synced 2026-07-15 — T-54 realigned to CR-033 remote-first (deny PouchDB / local-first / offline draft queue);
-  2026-08-12 — T-54 Package B expanded for CR-064 (network-only edge continuity); planning source = Markdown
+  2026-08-12 — T-54 Package B expanded for CR-064 (network-only edge continuity); planning source = Markdown;
+  2026-08-13 — CR-066 program: T-66 site_kind + กรองหน้ารายการศูนย์ (D-HOST-NAV B′; CR-067 P1 **approved**); T-68 CR-068 **approved** (หลัง T-66)
 ---
 
 # Baseline — Registration-first (FR-1–20)
@@ -44,6 +45,8 @@ note: >
 | T-63 | 🔄 | T-63 — Master config Shelter  && Household field | - | prod | in-scope | - | - | - | - |
 | T-64 | 🔄 | T-64 — Export shelter data excel | - | prod | in-scope | - | - | - | - |
 | T-65 | 🔄 | T-65 — Thailand master data config data | - | prod | in-scope | - | - | - | - |
+| T-66 | ⬜ | `site_kind` บน shelter + ฟอร์ม + กรองบนหน้ารายการศูนย์ (ไม่มี `/host-houses`) — CR-067 P1 | FR-57..61 | prod | in-scope | 4 | ÷1.25 | 3 | T-47, CR-067 |
+| T-68 | ⬜ | Excel import ขยาย CR-039 คอลัมน์ `site_kind` — CR-068 P2 | FR-64..65 | prod | in-scope | 3 | ÷1.25 | 2.5 | T-66 |
 |  | **รวมทั้งโมดูล** |  |  |  | **52** |  | **37** |  |
 
 > FR mapping accepted for planning จาก kickoff §2 / `docs/features/`; estimate ทั้งชุดใช้เป็น baseline planning แล้ว recalibrate หลัง sprint แรก (K-16). **T-54:** [CR-033](../changes/CR-033-remote-first-architecture-program-index.md) Package A · [CR-064](../changes/CR-064-edge-disaster-continuity.md) Package B (2026-08-12, proposed).
@@ -123,11 +126,59 @@ note: >
 
 **Status:** Ready for Testing / QA Ready
 
+---
+
+### T-66 — `site_kind` schema + ฟอร์ม + กรองบนหน้ารายการศูนย์ (CR-067 P1)
+
+**Status:** ⬜ ready — CR-067 P1 **approved** 2026-08-13. D-SITE-MODEL=A และ D-HOST-NAV=B′ ล็อกแล้ว
+**Owner:** Lead pair (แจ็ก/เด่น)
+**Depends:** T-47; [CR-067](../changes/CR-067-shelter-site-kind.md)
+**Program:** [site-occupancy-booking-program.md](../features/site-occupancy-booking-program.md) P1
+
+**Description:** เพิ่ม `site_kind` enum(`evacuation_center`,`host_house`) บน doc `shelter` เดิม. ฟอร์มสร้าง/แก้เลือกชนิดได้. **ถอด** หน้า/nav `/portal/system-management/host-houses` (D-HOST-NAV **B′**). บ้านพี่เลี้ยงอยู่บนหน้ารายการศูนย์เดิม + กรอง `site_kind`. สร้างตาม filter: กรอง `host_house` → default `host_house`; กรอง `evacuation_center` → `evacuation_center`; แท็บ «ทั้งหมด» → ผู้ใช้ต้องเลือกชนิดก่อนบันทึก. **ห้าม** สร้าง doc type `host_house` แยก (CR-014 slice นั้น superseded โดย D-SITE-MODEL=A). **ห้าม** stub หน้า `/host-houses`.
+
+**Files likely touched:** `docs/data/schema.md` §3.1 (หลัง approve); `features/shelters/domain`; `ui/shelter-form-page.svelte`; หน้ารายการศูนย์ (filter + create default); ถอด `routes/(protected)/portal/system-management/host-houses/+page.svelte` และ nav ใน system-management navbar; `validate_doc_update` / Zod; worker public shelter projection ถ้าต้องส่ง `site_kind`
+
+**Definition of Done:**
+- UI: ฟอร์มมีตัวเลือกชนิดสถานที่; รายการศูนย์กรอง `site_kind` ได้; ไม่มี nav/route `/host-houses`; สร้างตาม filter (แท็บทั้งหมดต้องเลือกชนิดก่อน save)
+- Write path: persist `site_kind` ผ่าน create/edit shelter เดิม (BFF `/api/back-office/shelter`)
+- Validation: enum 2 ค่าเท่านั้น; doc เก่าไม่มี field อ่านเป็น `evacuation_center`
+- Permission: สร้าง/แก้ยัง SA ตาม path เดิม — ไม่เพิ่ม role ใน P1
+- Test: default migration อ่าน, reject ค่านอก enum, กรองรายการ, default ตาม filter
+- Demo: สร้างบ้านพี่เลี้ยง 1 หลัง เห็นในรายการกรอง แยกจากศูนย์
+- `shelter_type` / `project_level` ความหมายเดิม
+
+**Out of scope:** SOP-lite field list, Sphere auto-capacity, RBAC «ไม่มี user ประจำ» (T-76); ไอคอน public map (T-67); Excel คอลัมน์ใหม่ (T-68)
+
+---
+
+### T-68 — Excel import คอลัมน์ `site_kind` (CR-068 P2)
+
+**Status:** ⬜ ready หลัง T-66 — CR-068 **approved** 2026-08-13
+**Owner:** Lead pair (แจ็ก/เด่น)
+**Depends:** T-66; [CR-068](../changes/CR-068-shelter-import-site-kind.md) (ขยาย CR-039)
+**Program:** P2
+
+**Description:** เทมเพลต CR-039 เพิ่มคอลัมน์ «ชนิดสถานที่» map ไป `site_kind`. ว่าง = `evacuation_center`. Commit sequential เดิม.
+
+**Files likely touched:** `features/shelter-import/` (column map, template exceljs, validateRow, tests)
+
+**Definition of Done:**
+- UI: เทมเพลตมี dropdown ชนิดสถานที่; preview แสดงค่าที่ resolve แล้ว
+- Write path: แถวบ้าน/ศูนย์สร้างผ่าน `createShelter` เดิม
+- Validation: label ไทย → enum; ค่านอกชุด = error รายช่อง
+- Permission: `requireAdmin` ตาม CR-039
+- Test: default เมื่อว่าง, ไฟล์ผสม 2 ชนิด, partial success
+- Demo: import ไฟล์ ศูนย์ 1 + บ้าน 1
+
+**Out of scope:** ลดคอลัมน์บังคับสำหรับบ้าน (T-76); people import (T-72)
+
 ## Effort by phase (Adj MD)
 
 | Phase                   | Raw MD | Adj MD |
 | ----------------------- | ------ | ------ |
 | Foundation (มิ.ย.–ก.ค.) | 52     | 37     |
+| CR-066 T-66/T-68 (approved, ยังไม่รวมยอด 270) | 7 | 5.5 |
 | **รวม**                 | **52** | **37** |
 
 ## Dependencies

@@ -3,6 +3,7 @@ id: CR-014
 title: Design v5 Alignment (Missing Schema & Tasks)
 status: proposed
 date: 2026-06-26
+updated: 2026-08-13
 requested_by: development team B
 decided_by: project owner
 layer: volatile
@@ -61,3 +62,6 @@ affects:
 ## Decision log
 
 - 2026-06-26 — proposed
+- 2026-08-13 — [CR-067](CR-067-shelter-site-kind.md) แนะนำ **supersede เฉพาะ slice `host_house` doc type** (ยังไม่ implement) ด้วย `site_kind` บน `shelter`. สไลซ์อื่นของ CR-014 (GBV, thermal, house_damage, asset photos) **ไม่ถูกแตะ** — คง proposed อิสระ.
+- 2026-08-13 — **D-SITE-MODEL=A ล็อก.** Slice `host_house` doc type ของ CR นี้ **superseded สำหรับเรื่องนี้**. สไลซ์ GBV / thermal / house_damage **ไม่ถูกแตะ**. CR-014 ทั้งไฟล์ยัง `status: proposed`.
+- 2026-08-13 — รอบ approve Wave 1–3 + T-72 **ไม่ approve ทั้งไฟล์ CR-014**. Slice `host_house` doc type คง superseded โดย CR-067; สไลซ์อื่นยังเปิด — คง `proposed`.
