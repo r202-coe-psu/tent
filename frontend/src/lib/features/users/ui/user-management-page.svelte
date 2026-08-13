@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, shelterCodeFromRoles, shelterScopeRole } from '$lib/auth/roles';
+	import {
+		isSystemAdmin,
+		roleDisplayLabel,
+		shelterCodeFromRoles,
+		shelterScopeRole
+	} from '$lib/auth/roles';
 	import CreateUserForm from './create-user-form.svelte';
 	import EditUserForm from './edit-user-form.svelte';
 	import UserList from './user-list.svelte';
@@ -123,7 +128,11 @@
 			if (!searchQuery) return true;
 			const q = searchQuery.toLowerCase();
 			return (
-				u.name.toLowerCase().includes(q) || u.roles.some((r: string) => r.toLowerCase().includes(q))
+				u.name.toLowerCase().includes(q) ||
+				u.roles.some(
+					(r: string) =>
+						r.toLowerCase().includes(q) || roleDisplayLabel(r).toLowerCase().includes(q)
+				)
 			);
 		}) ?? []
 	);

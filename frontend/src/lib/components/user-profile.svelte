@@ -7,6 +7,7 @@
 		CardDescription
 	} from '$lib/components/ui/card';
 	import type { User } from '$lib/features/me';
+	import { formatRoleList } from '$lib/auth/roles';
 
 	interface Props {
 		user?: User | null;
@@ -28,7 +29,7 @@
 			</div>
 			<div>
 				<strong>Roles:</strong>
-				{user.roles.length ? user.roles.join(', ') : '—'}
+				{formatRoleList(user.roles)}
 			</div>
 		</CardContent>
 	</Card>

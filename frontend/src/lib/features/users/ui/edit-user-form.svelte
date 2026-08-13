@@ -6,11 +6,13 @@
 	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { STAFF_CAPABILITIES, SHELTER_CAPABILITIES } from '$lib/auth/roles';
+	import { STAFF_CAPABILITIES, SHELTER_CAPABILITIES, roleDisplayLabel } from '$lib/auth/roles';
 	import { editUserSchema, type EditUserInput } from '../domain/schema';
 	import { useShelters } from '$lib/features/shelters';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Save } from '@lucide/svelte';
+	import Eye from '@lucide/svelte/icons/eye';
+	import EyeOff from '@lucide/svelte/icons/eye-off';
 	import type { UserSummary } from '../data/users.api';
 	import { untrack } from 'svelte';
 
@@ -77,6 +79,8 @@
 	);
 
 	const fieldControlClass = 'h-11 w-full rounded-md border border-input bg-slate-50 px-3 text-sm';
+
+	let showPassword = $state(false);
 </script>
 
 <form method="POST" use:form.enhance>
@@ -115,13 +119,29 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label class="font-bold">รหัสผ่านใหม่ (หากต้องการเปลี่ยน)</Form.Label>
-					<Input
-						{...props}
-						type="password"
-						bind:value={$formData.password}
-						class="h-11 bg-slate-50"
-						placeholder="••••••"
-					/>
+					<div class="relative">
+						<Input
+							{...props}
+							type={showPassword ? 'text' : 'password'}
+							bind:value={$formData.password}
+							class="h-11 bg-slate-50 pr-10"
+							placeholder="••••••"
+						/>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
+							aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+							onclick={() => (showPassword = !showPassword)}
+						>
+							{#if showPassword}
+								<EyeOff class="size-4 text-muted-foreground" />
+							{:else}
+								<Eye class="size-4 text-muted-foreground" />
+							{/if}
+						</Button>
+					</div>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -133,11 +153,11 @@
 					<Form.Label class="font-bold">บทบาท (Role)</Form.Label>
 					<Select.Root type="single" bind:value={$formData.capability}>
 						<Select.Trigger {...props} class={fieldControlClass}>
-							{$formData.capability}
+							{$formData.capability ? roleDisplayLabel($formData.capability) : 'เลือกบทบาท'}
 						</Select.Trigger>
 						<Select.Content>
 							{#each capabilities as cap (cap)}
-								<Select.Item value={cap} label={cap} />
+								<Select.Item value={cap} label={roleDisplayLabel(cap)} />
 							{/each}
 						</Select.Content>
 					</Select.Root>

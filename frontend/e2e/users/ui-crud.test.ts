@@ -398,7 +398,7 @@ test.describe('User Management UI — Create Flow (real BFF)', () => {
 		// Back-office users is locked to the header shelter — no picker, even for SA.
 		await expect(page.getByRole('combobox', { name: SHELTER_FIELD })).toHaveCount(0);
 		await expect(page.getByRole('dialog').getByText('SH001')).toBeVisible();
-		await pickSelectOption(page, CAPABILITY_FIELD, 'shelter_manager');
+		await pickSelectOption(page, CAPABILITY_FIELD, 'ผู้จัดการศูนย์');
 
 		// Submit form
 		await page.getByRole('button', { name: /บันทึก/ }).click();
@@ -437,7 +437,7 @@ test.describe('User Management UI — Create Flow (real BFF)', () => {
 		await page.locator('input[name="display_name"]').fill('New UI Staff');
 
 		// SM can only create staff, shelter is fixed.
-		await pickSelectOption(page, CAPABILITY_FIELD, 'kitchen_staff');
+		await pickSelectOption(page, CAPABILITY_FIELD, 'เจ้าหน้าที่ครัว');
 
 		await page.getByRole('button', { name: /บันทึก/ }).click();
 
@@ -475,7 +475,7 @@ test.describe('User Management UI — EOC route', () => {
 		await page.locator('input[name="username"]').fill(newUsername);
 		await page.locator('input[name="password"]').fill('TestPass1234!');
 		await page.locator('input[name="display_name"]').fill('EOC UI SM');
-		await pickSelectOption(page, CAPABILITY_FIELD, 'shelter_manager');
+		await pickSelectOption(page, CAPABILITY_FIELD, 'ผู้จัดการศูนย์');
 		await pickSelectOption(page, SHELTER_FIELD, /SH001/);
 		await page.getByRole('button', { name: /บันทึก/ }).click();
 		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
@@ -522,7 +522,7 @@ test.describe('User Management UI — Shelter edit (locked)', () => {
 		await page.locator('input[name="username"]').fill(newUsername);
 		await page.locator('input[name="password"]').fill('TestPass1234!');
 		await page.locator('input[name="display_name"]').fill('Locked Shelter User');
-		await pickSelectOption(page, CAPABILITY_FIELD, 'shelter_manager');
+		await pickSelectOption(page, CAPABILITY_FIELD, 'ผู้จัดการศูนย์');
 		await page.getByRole('button', { name: /บันทึก/ }).click();
 		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
 

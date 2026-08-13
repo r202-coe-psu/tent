@@ -39,16 +39,16 @@ describe('roles kernel', () => {
 });
 
 describe('roleDisplayLabel', () => {
-	it('maps every internal RoleKey to an English label', () => {
-		expect(roleDisplayLabel('system_admin')).toBe('System Admin');
-		expect(roleDisplayLabel('shelter_manager')).toBe('Shelter Manager');
-		expect(roleDisplayLabel('registration_staff')).toBe('Registration Staff');
-		expect(roleDisplayLabel('kitchen_staff')).toBe('Kitchen Staff');
-		expect(roleDisplayLabel('warehouse_staff')).toBe('Warehouse Staff');
+	it('maps every internal RoleKey to a Thai label', () => {
+		expect(roleDisplayLabel('system_admin')).toBe('ผู้ดูแลระบบ');
+		expect(roleDisplayLabel('shelter_manager')).toBe('ผู้จัดการศูนย์');
+		expect(roleDisplayLabel('registration_staff')).toBe('เจ้าหน้าที่ลงทะเบียน');
+		expect(roleDisplayLabel('kitchen_staff')).toBe('เจ้าหน้าที่ครัว');
+		expect(roleDisplayLabel('warehouse_staff')).toBe('เจ้าหน้าที่คลัง');
 	});
 
 	it('renders a shelter-scope role with its code', () => {
-		expect(roleDisplayLabel('shelter:SH001')).toBe('Shelter Staff (SH001)');
+		expect(roleDisplayLabel('shelter:SH001')).toBe('ศูนย์ SH001');
 	});
 
 	it('falls back to the raw role string for unknown values', () => {
@@ -65,12 +65,12 @@ describe('roleDisplayLabel', () => {
 describe('formatRoleList', () => {
 	it('joins multiple roles with ", "', () => {
 		expect(formatRoleList(['shelter:SH001', 'registration_staff'])).toBe(
-			'Shelter Staff (SH001), Registration Staff'
+			'ศูนย์ SH001, เจ้าหน้าที่ลงทะเบียน'
 		);
 	});
 
 	it('returns the default label for an empty/missing list', () => {
-		expect(formatRoleList([])).toBe('General User');
-		expect(formatRoleList(undefined)).toBe('General User');
+		expect(formatRoleList([])).toBe('ผู้ใช้ทั่วไป');
+		expect(formatRoleList(undefined)).toBe('ผู้ใช้ทั่วไป');
 	});
 });

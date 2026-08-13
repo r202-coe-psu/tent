@@ -5,7 +5,7 @@
 	import { Settings2, Trash2 } from '@lucide/svelte';
 	import * as Table from '$lib/components/ui/table/index.js';
 
-	import { isStaffOnly } from '$lib/auth/roles';
+	import { formatRoleList, isStaffOnly } from '$lib/auth/roles';
 
 	let {
 		users,
@@ -46,7 +46,7 @@
 							variant="secondary"
 							class="rounded-md bg-slate-100 font-semibold text-slate-700 hover:bg-slate-100/80"
 						>
-							{user.roles.join(', ') || '—'}
+							{formatRoleList(user.roles)}
 						</Badge>
 					</Table.Cell>
 					<Table.Cell class="text-center">
