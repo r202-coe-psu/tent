@@ -182,7 +182,13 @@ test.describe('Shelter Form — Create', () => {
 
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
-		await page.waitForURL((url) => url.pathname === '/back-office/shelters', { timeout: 8000 });
+		// List route immediately redirects into edit for the scoped shelter.
+		await page.waitForURL(
+			(url) =>
+				url.pathname === '/back-office/shelters' ||
+				url.pathname.startsWith('/back-office/shelters/edit/'),
+			{ timeout: 8000 }
+		);
 
 		const body = getBody() as { name: string; capacity: number };
 		expect(body.name).toBe('ศูนย์พักพิงทดสอบ E2E');
@@ -220,7 +226,13 @@ test.describe('Shelter Form — Edit', () => {
 
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
-		await page.waitForURL((url) => url.pathname === '/back-office/shelters', { timeout: 8000 });
+		// List route immediately redirects into edit for the scoped shelter.
+		await page.waitForURL(
+			(url) =>
+				url.pathname === '/back-office/shelters' ||
+				url.pathname.startsWith('/back-office/shelters/edit/'),
+			{ timeout: 8000 }
+		);
 
 		const body = getPatchBody() as { name: string; capacity: number };
 		expect(body.name).toBe('ศูนย์พักพิงแก้ไขแล้ว');
