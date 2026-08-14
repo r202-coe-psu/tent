@@ -42,9 +42,13 @@ import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 
+// CR-055 R2: a 'donation' receipt must point at a real donation doc, so fixtures
+// that only need stock on hand still have to name one.
+const DONATION_REF = 'donation:01JFIXTUREDONATION';
+
 describe('assertReceiveAgainstCatalog', () => {
 	const entry = createReceiveEntry(
-		{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
+		{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: DONATION_REF },
 		ctx
 	);
 
@@ -75,7 +79,7 @@ describe('assertReceiveAgainstCatalog', () => {
 				qty: 5,
 				unit: 'l',
 				source: 'donation',
-				ref_id: null,
+				ref_id: DONATION_REF,
 				lot: { expiry: '2026-12-31T00:00:00Z' }
 			},
 			ctx
@@ -101,7 +105,7 @@ describe('OperationsRemoteRepository', () => {
 				qty: 100,
 				unit: 'kg',
 				source: 'donation',
-				ref_id: null
+				ref_id: DONATION_REF
 			},
 			ctx
 		);
@@ -122,7 +126,7 @@ describe('OperationsRemoteRepository', () => {
 				qty: 50,
 				unit: 'kg',
 				source: 'donation',
-				ref_id: null
+				ref_id: DONATION_REF
 			},
 			ctx
 		);
@@ -152,11 +156,17 @@ describe('OperationsRemoteRepository', () => {
 	it('calculates the stock balance accurately', async () => {
 		const entries = [
 			createReceiveEntry(
-				{ item_id: 'item:rice', qty: 100, unit: 'kg', source: 'donation', ref_id: null },
+				{ item_id: 'item:rice', qty: 100, unit: 'kg', source: 'donation', ref_id: DONATION_REF },
 				ctx
 			),
 			createReceiveEntry(
-				{ item_id: 'item:water', qty: 50, unit: 'bottle', source: 'donation', ref_id: null },
+				{
+					item_id: 'item:water',
+					qty: 50,
+					unit: 'bottle',
+					source: 'donation',
+					ref_id: DONATION_REF
+				},
 				ctx
 			),
 			{
@@ -189,7 +199,7 @@ describe('OperationsRemoteRepository', () => {
 		it('distributes stock and reduces balance when sufficient stock exists', async () => {
 			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
 			await repo.receiveStock(
-				{ item_id: 'item:soap', qty: 50, unit: 'bar', source: 'donation', ref_id: null },
+				{ item_id: 'item:soap', qty: 50, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
 				ctx
 			);
 
@@ -210,7 +220,7 @@ describe('OperationsRemoteRepository', () => {
 		it('throws an error if attempting to distribute more than available stock', async () => {
 			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
 			await repo.receiveStock(
-				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: null },
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
 				ctx
 			);
 
@@ -230,7 +240,13 @@ describe('OperationsRemoteRepository', () => {
 		const writes = Array.from({ length: 10 }).map(() =>
 			repo.addLedgerEntry(
 				createReceiveEntry(
-					{ item_id: 'item:concurrent', qty: 10, unit: 'box', source: 'donation' },
+					{
+						item_id: 'item:concurrent',
+						qty: 10,
+						unit: 'box',
+						source: 'donation',
+						ref_id: DONATION_REF
+					},
 					ctx
 				)
 			)
@@ -251,7 +267,13 @@ describe('OperationsRemoteRepository', () => {
 
 			await expect(
 				repo.receiveStock(
-					{ item_id: 'item:missing', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
+					{
+						item_id: 'item:missing',
+						qty: 10,
+						unit: 'kg',
+						source: 'donation',
+						ref_id: DONATION_REF
+					},
 					ctx
 				)
 			).rejects.toThrow('Unknown item: item:missing');
@@ -262,7 +284,7 @@ describe('OperationsRemoteRepository', () => {
 
 			await expect(
 				repo.receiveStock(
-					{ item_id: 'item:rice', qty: 10, unit: 'bag', source: 'donation', ref_id: null },
+					{ item_id: 'item:rice', qty: 10, unit: 'bag', source: 'donation', ref_id: DONATION_REF },
 					ctx
 				)
 			).rejects.toThrow('Unit mismatch for item item:rice: expected kg, got bag');
@@ -273,7 +295,7 @@ describe('OperationsRemoteRepository', () => {
 
 			await expect(
 				repo.receiveStock(
-					{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
+					{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: DONATION_REF },
 					ctx
 				)
 			).rejects.toThrow('Perishable item item:rice requires lot.expiry to be set');
@@ -283,7 +305,7 @@ describe('OperationsRemoteRepository', () => {
 			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
 
 			const result = await repo.receiveStock(
-				{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: null },
+				{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: DONATION_REF },
 				ctx
 			);
 
