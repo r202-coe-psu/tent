@@ -5,7 +5,7 @@ phase: R2
 month: มิ.ย.–ก.ค. 2026 (Foundation Gate 17 ก.ค.)
 gate: Backoffice Foundation Gate
 created: 2026-06-03
-updated: 2026-07-07
+updated: 2026-08-14
 ---
 
 # Phase R2 PRD: Foundation — Baseline, Household, Zoning & Inventory
@@ -30,8 +30,8 @@ R2 เติมสามอย่างที่ทำให้ศูนย์ "
 
 - **Registration Officer** ต้องลงทะเบียนทั้งครัวเรือนในครั้งเดียว ผูกสมาชิกเข้าด้วยกัน โดยไม่ช้ากว่าการลงราย Person
 - **Shelter Manager** ต้องจัดสรรผู้พักพิงเข้าโซนตามประเภทและความจุของแต่ละโซน เห็นว่าโซนไหนเต็ม
-- **Warehouse / Supply Officer** *(role ใหม่)* ต้องรับสิ่งของเข้าคลัง บันทึกประเภท/จำนวน/หน่วย และแจกจ่าย/โอนระหว่างศูนย์ โดยมี stock ledger ที่ตรวจสอบย้อนหลังได้
-- **Donor** *(no-auth public surface — FD-16, ไม่ใช่ login role)* ต้องแจ้งของที่จะบริจาคล่วงหน้า **โดยไม่ต้อง login** ให้ระบบบันทึกเข้า pipeline ของคลัง แล้ว track เองผ่าน `tracking_token`
+- **Warehouse / Supply Officer** _(role ใหม่)_ ต้องรับสิ่งของเข้าคลัง บันทึกประเภท/จำนวน/หน่วย และแจกจ่าย/โอนระหว่างศูนย์ โดยมี stock ledger ที่ตรวจสอบย้อนหลังได้
+- **Donor** _(no-auth public surface — FD-16, ไม่ใช่ login role)_ ต้องแจ้งของที่จะบริจาคล่วงหน้า **โดยไม่ต้อง login** ให้ระบบบันทึกเข้า pipeline ของคลัง แล้ว track เองผ่าน `tracking_token`
 - **System Admin** ต้องเพิ่ม role ใหม่และกำหนดสิทธิ์ระดับ field/action โดยไม่กระทบ permission เดิมของ baseline
 
 ### 2.2 Non-Users (R2)
@@ -57,13 +57,13 @@ R2 เติมสามอย่างที่ทำให้ศูนย์ "
   - **Climax:** Stock Dashboard ของน้ำดื่มเพิ่มเป็น real-time และเห็นยอดเทียบทุกศูนย์
   - **Resolution:** เมื่อศูนย์ข้างเคียงขาด บอลสร้างใบ "โอนออก" 100 แพ็ค ระบบลด stock ตนและเพิ่มปลายทางหลังยืนยันรับ
 
-## 3. Glossary *(เพิ่มจาก baseline)*
+## 3. Glossary _(เพิ่มจาก baseline)_
 
 - **Household** — กลุ่มผู้พักพิงที่มาเป็นครัวเรือน/เดินทางร่วมกัน; ประกอบด้วย Person ตั้งแต่ 1 คนขึ้นไป (ระบุตัวตนและค้นหาผ่าน Person ID/QR ของหัวหน้าครัวเรือน)
 - **Household Head** — Person ที่เป็นผู้แทนครัวเรือนสำหรับการติดต่อและ check-in รวม
 - **Zone** — พื้นที่ย่อยในศูนย์สำหรับจัดสรรผู้พักพิง (โซนครอบครัว / ชาย / หญิง / สัตว์เลี้ยง / เปราะบาง) มี capacity ของตนเอง
 - **Zone Allocation** — การกำหนดว่า Person/Household อยู่โซนใด ณ เวลาหนึ่ง
-- **Pet / Asset Record** — บันทึกสัตว์เลี้ยง ทรัพย์สิน หรือยานพาหนะที่ผู้พักพิงนำติดตัวมา ผูกกับ Person หรือ Household
+- **Pet / Asset Record** — บันทึกสัตว์เลี้ยง ทรัพย์สิน หรือยานพาหนะที่ผู้พักพิงนำติดตัวมา เก็บที่ Household
 - **Supply Item** — สิ่งของในคลัง จำแนกตามประเภท (อาหาร, น้ำดื่ม, ยา, ผ้าห่ม, อุปกรณ์อนามัย ฯลฯ) มีหน่วยนับมาตรฐาน
 - **Stock Ledger** — บันทึกการเคลื่อนไหวของ Supply Item ทุกรายการ (รับเข้า, แจกจ่าย, โอน, ปรับยอด) ที่คำนวณ on-hand ได้
 - **Stock Dashboard** — มุมมอง real-time ของปริมาณ Supply Item แยกประเภท ณ ทุกศูนย์
@@ -75,26 +75,29 @@ R2 เติมสามอย่างที่ทำให้ศูนย์ "
 
 ### 4.1 Household Registration & Grouping
 
-**Description:** ขยาย Person registration ของ baseline ให้ผูกหลาย Person เป็น Household โดยไม่ทำลาย Person-only flow ที่ baseline ใช้อยู่ Realizes UJ-5
+**Description:** ขยาย Person registration ของ baseline ให้ทุก Person ใน onsite flow อยู่ใน Household ตั้งแต่ 1 คนขึ้นไป โดยเลือก Household เดิมหรือสร้างใหม่ก่อนบันทึกสัตว์เลี้ยง/ทรัพย์สิน/ยานพาหนะและจัดโซน Realizes UJ-5
 
 #### FR-21: Create Household and Attach Members
 
 Registration Officer สามารถสร้าง Household และผูก Person ตั้งแต่ 1 คนขึ้นไปเข้าด้วยกัน พร้อมระบุ Household Head
 
 **Consequences (testable):**
+
 - สร้าง Household ได้จากข้อมูลขั้นต่ำ: ระบุ Household Head 1 คน (เป็น Person ที่มี required fields `first_name` + `last_name` + `gender` + `phone|null` ตาม FR-5)
 - เพิ่ม/ลบสมาชิกจาก Household ได้ และ Person หนึ่งคนอยู่ได้เพียง 1 Household ณ เวลาหนึ่ง
-- Person-only registration เดิม (FR-4) ยังทำงานได้ — Household เป็น optional grouping ไม่ใช่ required step
+- Onsite Person registration ต้องเลือก Household เดิมหรือสร้างใหม่ก่อนดำเนินการต่อ; ไม่มี path ที่บันทึก Person โดยไม่ผูก Household
+- ผู้ประสบภัยที่มาเพียงคนเดียวต้องสร้าง Household ขนาด 1 คนและเป็น Household Head
 
 #### FR-22: Household Shelter ID/QR `[REMOVED — ดู CR-047]`
 
-*(ยกเลิก — ไม่สร้าง Household Shelter ID/QR แยกเฉพาะระดับครัวเรือน โดยเปลี่ยนไปใช้ Person ID/QR ของหัวหน้าครัวเรือนแทนเพื่อความกระชับและลดความซ้ำซ้อน)*
+_(ยกเลิก — ไม่สร้าง Household Shelter ID/QR แยกเฉพาะระดับครัวเรือน โดยเปลี่ยนไปใช้ Person ID/QR ของหัวหน้าครัวเรือนแทนเพื่อความกระชับและลดความซ้ำซ้อน)_
 
 #### FR-23: Household Search & Check-in/out
 
 ผู้ใช้ค้นหา Household และทำ check-in/check-out ทั้งครัวเรือนในครั้งเดียว หรือรายบุคคลในครัวเรือนก็ได้ ตามสิทธิ์ ผ่าน Person ID/QR ของสมาชิกคนใดก็ได้ในครัวเรือน (ปกติคือ head)
 
 **Consequences (testable):**
+
 - Household check-in เพิ่ม occupancy เท่าจำนวนสมาชิกที่ check-in จริง ไม่นับสมาชิกที่ยัง absent
 - Check-in ระดับ Person ภายใน Household ยังทำได้ (สมาชิกบางคนมาทีหลัง)
 - กัน check-in ซ้ำทั้งระดับ Household และ Person (ต่อ NFR-7)
@@ -104,10 +107,11 @@ Registration Officer สามารถสร้าง Household และผู
 
 #### FR-24: Pet, Asset and Vehicle Records
 
-เจ้าหน้าที่บันทึกสัตว์เลี้ยง ทรัพย์สิน และยานพาหนะที่ผู้พักพิงนำมา ผูกกับ Person หรือ Household
+เจ้าหน้าที่บันทึกสัตว์เลี้ยง ทรัพย์สิน และยานพาหนะที่ผู้พักพิงนำมาไว้ที่ Household
 
 **Consequences (testable):**
-- บันทึก pet (ประเภท, จำนวน), asset, vehicle ได้โดยไม่ block registration
+
+- ขั้นบันทึก pet (ประเภท, จำนวน), asset, vehicle ต้องอยู่หลังการเลือก/สร้าง Household และก่อนจัดโซนเสมอ โดยส่งข้อมูลว่างได้เมื่อไม่มีรายการ
 - จำนวนสัตว์เลี้ยงใช้เป็น input ของ zone allocation (โซนสัตว์เลี้ยง) ใน FR-25
 
 ### 4.2 Zoning & Allocation
@@ -119,6 +123,7 @@ Registration Officer สามารถสร้าง Household และผู
 System Admin / Shelter Manager กำหนดโซนของศูนย์ พร้อมประเภทและ capacity ของแต่ละโซน
 
 **Consequences (testable):**
+
 - โซนรองรับประเภท: ครอบครัว, ชาย, หญิง, สัตว์เลี้ยง, กลุ่มเปราะบาง (ขยายได้)
 - ผลรวม zone capacity ไม่จำเป็นต้องเท่ากับ shelter capacity; ระบบเตือนเมื่อไม่สอดคล้อง
 - โซนที่ปิดไม่รับ allocation ใหม่
@@ -128,6 +133,7 @@ System Admin / Shelter Manager กำหนดโซนของศูนย์ 
 ระบบเสนอโซนที่เหมาะตอน registration/check-in และเจ้าหน้าที่ยืนยันหรือ override ได้
 
 **Consequences (testable):**
+
 - ระบบ suggest โซนจากประเภทผู้พักพิง (ครอบครัว → โซนครอบครัว, มี pet → พิจารณาโซนสัตว์เลี้ยง, vulnerable flag → โซนเปราะบาง)
 - Zone capacity เป็น **warning-only** ไม่ hard block (สอดคล้องหลัก capacity ของ baseline) override บันทึก actor
 - ย้ายโซนได้และเก็บ history การย้าย
@@ -141,6 +147,7 @@ System Admin / Shelter Manager กำหนดโซนของศูนย์ 
 System Admin กำหนด catalog ของ Supply Item พร้อมประเภทและหน่วยนับมาตรฐาน
 
 **Consequences (testable):**
+
 - Supply Item มีประเภท (อาหาร/น้ำดื่ม/ยา/ผ้าห่ม/อนามัย/อื่น ๆ) และหน่วยนับที่ fix ต่อ item
 - catalog เป็น master ใช้ร่วมทุกศูนย์ เพื่อให้ stock dashboard เทียบข้ามศูนย์ได้
 
@@ -149,6 +156,7 @@ System Admin กำหนด catalog ของ Supply Item พร้อมปร
 Warehouse Officer บันทึกการรับ Supply Item เข้าคลังของศูนย์
 
 **Consequences (testable):**
+
 - รับเข้าได้พร้อม source marker (donation / transfer-in / manual) เพื่อ audit
 - ทุกการรับเข้าเขียน Stock Ledger entry และเพิ่ม on-hand ทันที
 - ปริมาณติดลบหรือศูนย์ถูก validate
@@ -158,6 +166,7 @@ Warehouse Officer บันทึกการรับ Supply Item เข้า�
 Warehouse Officer บันทึกการแจกจ่าย Supply Item ให้ผู้พักพิง
 
 **Consequences (testable):**
+
 - แจกจ่ายลด on-hand ทันทีและเขียน Ledger entry พร้อม actor/timestamp
 - แจกจ่ายเกิน on-hand ถูกเตือน/ปฏิเสธ (ไม่ทำให้ stock ติดลบ — ต่อหลัก NFR-7)
 - [ASSUMPTION] R2 บันทึกการแจกจ่ายระดับรวม/ต่อโซน; การผูกแจกจ่ายกับ Person รายคนเป็น optional และอาจเลื่อนไป R3 ครัว
@@ -167,6 +176,7 @@ Warehouse Officer บันทึกการแจกจ่าย Supply Item �
 เจ้าหน้าที่สร้างใบโอน Supply Item ระหว่างศูนย์ พร้อมการยืนยันรับปลายทาง
 
 **Consequences (testable):**
+
 - โอนออกลด stock ต้นทางเป็นสถานะ in-transit; ปลายทางต้องยืนยันรับก่อนเพิ่ม on-hand
 - ของที่ยังไม่ยืนยันรับต้องไม่ถูกนับซ้ำทั้งสองศูนย์
 - Transfer ทุกใบ auditable
@@ -176,6 +186,7 @@ Warehouse Officer บันทึกการแจกจ่าย Supply Item �
 ระบบแสดง stock real-time แยกประเภทต่อศูนย์และข้ามศูนย์ พร้อม flag เมื่อต่ำกว่า reorder threshold
 
 **Consequences (testable):**
+
 - Stock Dashboard แสดง on-hand ต่อประเภทต่อศูนย์ และยอดรวมทุกศูนย์ พร้อม last-updated timestamp (ต่อหลัก dashboard baseline)
 - ตั้ง reorder threshold ต่อ item ต่อศูนย์ได้; ต่ำกว่าเกณฑ์ → flag "ขาดแคลน"
 - ตัวเลขต้อง reconcile กับ Stock Ledger ใน UAT (ต่อ SM แนวเดียวกับ dashboard baseline)
@@ -189,6 +200,7 @@ Warehouse Officer บันทึกการแจกจ่าย Supply Item �
 Donor แจ้งประเภท/ปริมาณของที่จะบริจาคล่วงหน้า ผ่าน QR/ฟอร์ม **โดยไม่ต้อง login/account** (FD-16) แล้วได้ `tracking_token` ไว้ติดตามสถานะเอง (เจ้าหน้าที่ยังแจ้งแทนได้ผ่าน walk_in/phone)
 
 **Consequences (testable):**
+
 - pre-declaration สร้างรายการ pending ที่ยังไม่เข้า on-hand จนกว่าจะรับจริง (FR-28)
 - ผูก pre-declaration กับการรับเข้าจริงได้ เพื่อ reconcile
 - **no-auth track (FD-16):** ระบบคืน `tracking_token` (random เดาไม่ได้); donor เปิด track ด้วย token ได้โดยไม่ login เห็นเฉพาะสถานะของตน — **ห้าม** lookup ด้วย `donation_code` ที่เป็น sequential (กัน enumeration/IDOR)
@@ -201,6 +213,7 @@ Donor แจ้งประเภท/ปริมาณของที่จะ�
 ทุก donation ที่เข้าคลังต้องตรวจสอบย้อนหลังได้ ระบุที่มาและผู้รับเข้า
 
 **Consequences (testable):**
+
 - เชื่อม donation intake → Stock Ledger โดยคง source = donation และ donor reference
 - เป็น data source ของ Donation Transparency Report ใน R3
 
@@ -215,6 +228,7 @@ System Admin กำหนด role ใหม่ (`registration_staff`, `kitchen_s
 > หมายเหตุ: **Donor ไม่ใช่ RBAC role** (FD-16 — no-auth public surface) และ **EOC ไม่ใช่ human role** (FD-14 — API-key principal) จึงไม่อยู่ใน role ใหม่ชุดนี้
 
 **Consequences (testable):**
+
 - role ใหม่ enforce ทั้ง UI, API และ export (ต่อ NFR-4, NFR-5)
 - permission เดิมของ baseline role ไม่เปลี่ยนพฤติกรรม (regression test ผ่าน)
 - ขยายต่อจาก [Role Permission Matrix full-system](role-permission-matrix.html) (lean 5 roles — K-12)
@@ -250,7 +264,7 @@ System Admin กำหนด role ใหม่ (`registration_staff`, `kitchen_s
 - EOC dashboard + Open API, family search → R4
 - Per-person supply consumption ledger → R3 (ครัว)
 
-## 7. Cross-Cutting NFRs *(เพิ่มจาก baseline NFR-1..NFR-11)*
+## 7. Cross-Cutting NFRs _(เพิ่มจาก baseline NFR-1..NFR-11)_
 
 - **NFR-12** (Performance): Household registration ของครัวเรือน ~5 คน ควรเสร็จในเวลาใกล้เคียง Person registration × จำนวนสมาชิก โดยไม่มี overhead จากการ grouping ที่ทำให้คิวช้า Validates FR-21, FR-23
 - **NFR-13** (Reliability): Stock Ledger ต้อง consistent — on-hand ที่คำนวณจาก ledger ต้องตรงกับ stock dashboard เสมอ และห้ามมี stock ติดลบ Validates FR-28, FR-29, FR-30, FR-31
@@ -258,17 +272,20 @@ System Admin กำหนด role ใหม่ (`registration_staff`, `kitchen_s
 - **NFR-15** (Security): role ใหม่ทั้งหมด enforce ที่ backend; **donor no-auth surface (FD-16)** ต้อง rate-limit + CAPTCHA + OTP บังคับเบอร์, track ด้วย `tracking_token` แบบ unguessable (ห้ามใช้ sequential `donation_code` เป็น public lookup → กัน IDOR/enumeration); ผ่าน governance review ก่อนเปิด public Validates FR-32, FR-34
 - **NFR-16** (Compatibility): การขยาย data model ต้อง additive — baseline collections (`evacuees`, `movement_events` ฯลฯ) และ API เดิมต้องทำงานได้โดยไม่ migration ที่ทำลายข้อมูล Validates FR-34
 
-## 8. Success Metrics *(ต่อจาก SM-6)*
+## 8. Success Metrics _(ต่อจาก SM-6)_
 
 **Primary**
+
 - **SM-7**: Household throughput — ลงทะเบียนครัวเรือน 5 คนแล้ว check-in ทั้งครัวเรือนใน UAT ได้ถูกต้อง occupancy +5 Validates FR-21, FR-23
 - **SM-8**: Stock correctness — on-hand บน Stock Dashboard ตรงกับ Stock Ledger หลัง receive/distribute/transfer ใน UAT (ผลต่าง = 0) Validates FR-28, FR-29, FR-30, FR-31
 
 **Secondary**
+
 - **SM-9**: Zone fit — ผู้พักพิงที่มี pet / vulnerable flag ถูก suggest โซนถูกประเภทใน UAT Validates FR-24, FR-26
 - **SM-10**: Transfer integrity — โอนระหว่างศูนย์แล้วยอดรวมสองศูนย์คงที่ก่อน/หลังโอน Validates FR-30
 
 **Counter-metrics (do not optimize)**
+
 - **SM-C4**: อย่าเร่ง household registration จนข้าม screening/vulnerable flag รายบุคคล (สมาชิกแต่ละคนยังต้องคัดกรองได้) Counterbalances SM-7
 - **SM-C5**: อย่าทำ stock dashboard ให้ดู real-time โดยข้าม ledger consistency (ตัวเลขสวยแต่ reconcile ไม่ได้) Counterbalances SM-8
 

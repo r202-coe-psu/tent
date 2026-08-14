@@ -606,7 +606,8 @@ test.describe('Evacuee Registration', () => {
 			await route.fallback();
 		});
 
-		// Navigate to step 4 (which triggers the actual evacuee PUT via onsubmit)
+		// Navigate to step 4. The actual evacuee PUT now occurs only after the
+		// required household choice and step 5 submission.
 		await page.goto('/onsite/people');
 		await expect(page.getByRole('heading', { name: 'ตรวจสอบประวัติการลงทะเบียน' })).toBeVisible({
 			timeout: 15_000
@@ -634,13 +635,24 @@ test.describe('Evacuee Registration', () => {
 		await page.getByRole('option', { name: /ชาย \(Male\)/ }).click();
 		await page.getByText('ไม่มีเบอร์โทร').click();
 
-		// Act — submit step 3 (triggers evacuee PUT on step 4 "ข้าม / ถัดไป")
+		// Act — submit step 3, then create the required one-person household draft.
 		await page.getByRole('button', { name: 'ถัดไป →' }).click();
 		await expect(page.getByText('ข้อมูลครัวเรือน')).toBeVisible({ timeout: 10_000 });
 
-		const skipBtn = page.getByRole('button', { name: 'ลงทะเบียนโดยไม่ผูกครัวเรือน' });
-		await expect(skipBtn).toBeVisible({ timeout: 5_000 });
-		await skipBtn.click();
+		await expect(page.getByRole('button', { name: 'ลงทะเบียนโดยไม่ผูกครัวเรือน' })).toHaveCount(0);
+		await page.getByRole('button', { name: 'ลงทะเบียนเป็นครอบครัวใหม่' }).click();
+		await page.getByPlaceholder('เช่น 12/3').fill('12/3');
+		await page.getByRole('button', { name: 'เลือกจังหวัด...' }).click();
+		await page.getByRole('button', { name: 'สงขลา', exact: true }).click();
+		await page.getByRole('button', { name: 'เลือกอำเภอ...' }).click();
+		await page.getByRole('button', { name: 'หาดใหญ่', exact: true }).click();
+		await page.getByRole('button', { name: 'เลือกตำบล...' }).click();
+		await page.getByRole('button', { name: 'บ้านพรุ', exact: true }).click();
+		await page.getByRole('button', { name: 'ถัดไป (ข้อมูลสัตว์เลี้ยง/ยานพาหนะ)' }).click();
+		await expect(
+			page.getByRole('heading', { name: 'ทรัพย์สินและสัตว์เลี้ยง (Assets & Pets)' })
+		).toBeVisible();
+		await page.getByRole('button', { name: 'ลงทะเบียนสำเร็จ' }).click();
 
 		await expect(
 			page.getByText('บันทึกไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน')

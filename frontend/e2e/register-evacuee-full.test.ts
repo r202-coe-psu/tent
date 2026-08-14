@@ -26,7 +26,7 @@
 import { test, expect } from '@playwright/test';
 import { createCouchUser, deleteCouchUser, couchLogin, STAFF_SH001_ROLES } from './helpers/couch';
 import { injectSession } from './helpers/login';
-import { mockCouchRoutes } from './helpers/mock-couch';
+import { mockCouchRoutes, SHELTER_DB } from './helpers/mock-couch';
 
 // ─── Shared fixtures ───────────────────────────────────────────────────────────
 
@@ -67,6 +67,14 @@ test.describe('Evacuee Registration', () => {
 	});
 
 	test('should complete evacuee registration end-to-end across all 6 steps', async ({ page }) => {
+		const writtenDocs: Record<string, unknown>[] = [];
+		page.on('request', (request) => {
+			if (request.method() === 'PUT' && request.url().includes(`/${SHELTER_DB}/`)) {
+				const body = request.postDataJSON();
+				if (body && typeof body === 'object') writtenDocs.push(body as Record<string, unknown>);
+			}
+		});
+
 		// Arrange — mount the shared mocks (helpers/mock-couch.ts) before navigation,
 		// then land on the wizard already authenticated (no login-form / logout
 		// roundtrip needed for this flow). The registry shelter fixture is needed
@@ -105,6 +113,11 @@ test.describe('Evacuee Registration', () => {
 		await expect(page.getByRole('button', { name: 'ค้นหาครอบครัว' })).toBeVisible({
 			timeout: 10_000
 		});
+		await expect(page.getByText('ผู้ประสบภัยทุกคนต้องมีครัวเรือน', { exact: true })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'ลงทะเบียนโดยไม่ผูกครัวเรือน' })).toHaveCount(0);
+		await expect(
+			page.getByRole('button', { name: 'ถัดไป (ข้อมูลสัตว์เลี้ยง/ยานพาหนะ)' })
+		).toBeDisabled();
 		await page.getByPlaceholder('089-999-9999').fill(`ไม่พบครอบครัว-${RUN_ID}`);
 		await page.getByRole('button', { name: 'ค้นหาครอบครัว' }).click();
 		await expect(page.getByText('ไม่พบครอบครัวลงทะเบียนด้วยข้อมูลนี้ในระบบ')).toBeVisible({
@@ -113,29 +126,41 @@ test.describe('Evacuee Registration', () => {
 		await page.getByRole('button', { name: 'ลงทะเบียนเป็นครอบครัวใหม่ที่อยู่นี้' }).click();
 		await page.getByPlaceholder('เช่น 12/3').fill(ADDRESS_NO);
 		await page.getByPlaceholder('เช่น หมู่ 2').fill(VILLAGE_NO);
-		await page.getByPlaceholder('เช่น บ้านพรุ').fill(SUBDISTRICT);
-		await page.getByPlaceholder('เช่น หาดใหญ่').fill(DISTRICT);
-		await page.getByPlaceholder('เช่น สงขลา').fill(PROVINCE);
-		await page.getByPlaceholder('เช่น 90250').fill(POSTAL_CODE);
+		await page.getByRole('button', { name: 'เลือกจังหวัด...' }).click();
+		await page.getByRole('button', { name: PROVINCE, exact: true }).click();
+		await page.getByRole('button', { name: 'เลือกอำเภอ...' }).click();
+		await page.getByRole('button', { name: DISTRICT, exact: true }).click();
+		await page.getByRole('button', { name: 'เลือกตำบล...' }).click();
+		await page.getByRole('button', { name: SUBDISTRICT, exact: true }).click();
+		await expect(page.locator('input[placeholder="เช่น 90110"]')).toHaveValue(POSTAL_CODE);
 		await page.getByRole('button', { name: 'ถัดไป (ข้อมูลสัตว์เลี้ยง/ยานพาหนะ)' }).click();
 
 		// ── Step 5: ทรัพย์สินและสัตว์เลี้ยง — nothing to declare, submit as-is ──
-		await expect(page.getByText('ทรัพย์สินและสัตว์เลี้ยง (Assets & Pets)')).toBeVisible({
-			timeout: 10_000
-		});
+		await expect(
+			page.getByRole('heading', { name: 'ทรัพย์สินและสัตว์เลี้ยง (Assets & Pets)' })
+		).toBeVisible({ timeout: 10_000 });
+		await page.getByRole('button', { name: 'เพิ่มสัตว์เลี้ยง' }).click();
+		await page.locator('input[type="number"]').first().fill('2');
+		await page.getByRole('checkbox', { name: /ข้าพเจ้าและครอบครัวรับทราบ/ }).click();
 		await page.getByRole('button', { name: 'ลงทะเบียนสำเร็จ' }).click();
 
-		// Assert — evacuee creation and household-link toasts both fire (this
-		// step registers the evacuee, then links it to the new household)
-		await expect(page.getByText(`Registered ${FIRST_NAME} ${LAST_NAME}`)).toBeVisible({
-			timeout: 8_000
-		});
+		// Assert — the combined registration/link operation succeeds.
 		await expect(page.getByText('ลงทะเบียนผู้ประสบภัยและครัวเรือนสำเร็จ')).toBeVisible({
 			timeout: 8_000
 		});
+		const householdWrite = writtenDocs.find((doc) => doc.type === 'household');
+		expect(householdWrite).toMatchObject({
+			pets: [{ species: 'dog', count: 2, has_cage: false }]
+		});
+		const linkedEvacueeWrite = writtenDocs.find(
+			(doc) => doc.type === 'evacuee' && typeof doc.household_id === 'string'
+		);
+		expect(linkedEvacueeWrite?.household_id).toBe(householdWrite?._id);
 
 		// ── Step 6: จัดสรรพื้นที่ — confirm the auto-recommended zone ─────────
-		await expect(page.getByText('จัดสรรพื้นที่ (Zoning)')).toBeVisible({ timeout: 10_000 });
+		await expect(page.getByRole('heading', { name: 'จัดสรรพื้นที่ (Zoning)' })).toBeVisible({
+			timeout: 10_000
+		});
 		const confirmZoneButton = page.getByRole('button', { name: /ยืนยันการเลือกโซน/ });
 		await expect(confirmZoneButton).toBeEnabled({ timeout: 5_000 });
 		await confirmZoneButton.click();
@@ -146,6 +171,5 @@ test.describe('Evacuee Registration', () => {
 		await expect(page.getByText('บันทึกข้อมูลและจัดสรรพื้นที่สำเร็จ')).toBeVisible({
 			timeout: 8_000
 		});
-		await expect(page.getByText('เลือกโซนพักพิงสำเร็จ')).toBeVisible({ timeout: 10_000 });
 	});
 });

@@ -39,7 +39,7 @@
 		showNewHouseholdForm?: boolean;
 	} = $props();
 
-	let searchMode: 'exact' | 'fuzzy' = $state('exact');
+	let searchMode: 'exact' | 'fuzzy' = $state('fuzzy');
 	let searchQuery = $state('');
 	let searchAddressNo = $state('');
 
