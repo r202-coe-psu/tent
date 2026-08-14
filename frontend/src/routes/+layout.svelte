@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import { asset } from '$app/paths';
 	import { QueryClientProvider } from '@tanstack/svelte-query';
 	import { Toaster } from '$lib/components/ui/sonner/index.js';
 	import { PUBLIC_APP_TITLE } from '$env/static/public';
@@ -17,7 +18,11 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" href={favicon} type="image/svg+xml" />
+	<link rel="icon" href={asset('/favicon.ico')} sizes="32x32" />
+	<link rel="apple-touch-icon" href={asset('/apple-touch-icon.png')} />
+	<link rel="manifest" href={asset('/site.webmanifest')} />
+	<meta name="theme-color" content="#0A2647" />
 	<title>
 		{PUBLIC_APP_TITLE}
 	</title>
