@@ -13,7 +13,7 @@
  * [RBAC-SA] SA may list all users (GET)
  * [RBAC-SA] SA may create user in any shelter with any capability (POST)
  * [RBAC-SA] SA may create another system_admin (POST, exclusive roles)
- * [RBAC-SA] Couch _admin may not grant system_admin via BFF
+ * [RBAC-SA] Couch _admin may grant system_admin via BFF (SA-equivalent)
  * [RBAC-SA] Bootstrap admin (COUCHDB_USER) cannot be listed/updated/deleted
  * [RBAC-SA] Last app SA cannot be deleted
  * [RBAC-SA] SA may not grant _admin role → 403
@@ -304,17 +304,18 @@ test.describe('User Management API — Access Control', () => {
 		expect((body as { error: { code: string } }).error.code).toBe('VALIDATION');
 	});
 
-	test('Couch _admin cannot grant system_admin via BFF → 403 FORBIDDEN', async () => {
+	test('Couch _admin may grant system_admin via BFF (SA-equivalent)', async () => {
 		const admin = couchBootstrapAdmin();
 		const session = await couchLogin(admin.name, admin.password);
-		const { status, body } = await apiPost(session, {
-			name: `e2e_from_admin_${RUN_ID}`,
+		const name = `e2e_from_admin_${RUN_ID}`;
+		createdDuringTest.push(name);
+		const { status } = await apiPost(session, {
+			name,
 			password: 'SecurePass1!',
 			display_name: 'From Admin',
 			roles: ['system_admin']
 		});
-		expect(status).toBe(403);
-		expect((body as { error: { code: string } }).error.code).toBe('FORBIDDEN');
+		expect(status).toBe(200);
 	});
 
 	test('SA cannot delete or update the bootstrap admin → 403 FORBIDDEN', async () => {

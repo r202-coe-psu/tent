@@ -36,8 +36,8 @@ describe('assertCanGrant', () => {
 		expect(grantError(sa, ['system_admin'])).toBeNull();
 	});
 
-	it('Couch _admin may not grant system_admin', () => {
-		expect(grantError(couchAdmin, ['system_admin'])?.code).toBe('FORBIDDEN');
+	it('Couch _admin may grant exactly system_admin (SA-equivalent)', () => {
+		expect(grantError(couchAdmin, ['system_admin'])).toBeNull();
 	});
 
 	it('rejects system_admin mixed with a shelter scope', () => {

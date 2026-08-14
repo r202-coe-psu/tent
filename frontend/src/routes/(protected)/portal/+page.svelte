@@ -56,7 +56,7 @@
 				<HomePortalCard
 					icon={Building2}
 					accent="accent-purple"
-					title="ทะเบียนพื้นที่และศูนย์พักพิง"
+					title="ระบบส่วนกลาง"
 					description="จัดการข้อมูลศูนย์พักพิง, ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
 					href={resolve('/portal/system-management')}
 				/>

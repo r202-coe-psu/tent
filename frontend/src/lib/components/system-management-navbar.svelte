@@ -89,7 +89,7 @@
 		<a
 			href={systemManagementHomePath}
 			class="flex items-center gap-3 {collapsed ? 'flex-none justify-center' : 'flex-1'}"
-			aria-label="กลับหน้าทะเบียนพื้นที่และศูนย์พักพิง"
+			aria-label="กลับหน้าระบบส่วนกลาง"
 		>
 			<div
 				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground"

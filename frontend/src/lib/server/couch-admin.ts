@@ -3,7 +3,6 @@ import { error, json } from '@sveltejs/kit';
 import {
 	COUCH_ADMIN,
 	SYSTEM_ADMIN,
-	isAppSystemAdmin,
 	isShelterManager,
 	isStaffOnly,
 	isSystemAdmin,
@@ -294,9 +293,9 @@ export async function requireShelterScopeOrSA(
 /**
  * Enforce what a caller may grant a new/edited user (least privilege). The
  * requested `roles[]` is validated against the caller — never trusted:
- *  - Minting `system_admin`: caller must hold the app RoleKey `system_admin`
- *    (Couch `_admin` alone is not enough). The granted list must be exactly
- *    `["system_admin"]` (no shelter scope / capability mix). CR-074.
+ *  - Minting `system_admin`: caller must be SA-equivalent (`system_admin` or
+ *    Couch `_admin` — CR-075). The granted list must be exactly
+ *    `["system_admin"]` (no shelter scope / capability mix). CR-074 exclusive.
  *  - Other grants: SA (or Couch `_admin`) may grant any roles except `_admin`;
  *    at most one shelter scope (1 user 1 shelter).
  *  - shelter_manager: shelter scope MUST equal the caller's own (no cross-shelter),
@@ -315,7 +314,7 @@ export function assertCanGrant(caller: Caller, requestedRoles: readonly string[]
 	}
 
 	if (requestedRoles.includes(SYSTEM_ADMIN)) {
-		if (!isAppSystemAdmin(caller.roles)) {
+		if (!caller.isSA) {
 			throw new ServiceError('FORBIDDEN', 'Only a system_admin may grant the system_admin role');
 		}
 		if (requestedRoles.length !== 1 || requestedRoles[0] !== SYSTEM_ADMIN) {

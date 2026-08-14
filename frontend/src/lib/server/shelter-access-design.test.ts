@@ -59,15 +59,56 @@ describe('buildValidateDocUpdate', () => {
 	it('includes audit in the allowed doc type whitelist', () => {
 		const validateFn = buildValidateDocUpdate('SH001');
 		expect(validateFn).toContain("'audit'");
-		expect(validateFn).toMatch(
-			/var allowed = \['evacuee', 'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'audit', 'purchase', 'referral'\]/
-		);
+		expect(validateFn).toContain("'purchase'");
+		expect(validateFn).toContain("'referral'");
 	});
 
 	// CR-032: purchase docs are written to shelter dbs, so the server-side
 	// whitelist must accept them or every write is rejected as forbidden.
 	it('includes purchase in the allowed doc type whitelist', () => {
 		expect(buildValidateDocUpdate('SH001')).toContain("'purchase'");
+	});
+
+	// People registration writes household/medical/screening/movement/image after
+	// createEvacuee — without these, session staff see a failed toast while an
+	// orphan pre_registered evacuee remains in the DB.
+	it('includes people-plane doc types in the allowed whitelist', () => {
+		const validateFn = buildValidateDocUpdate('SH001');
+		for (const type of ['household', 'medical', 'screening', 'movement', 'image'] as const) {
+			expect(validateFn).toContain(`'${type}'`);
+		}
+	});
+
+	it('accepts household create from registration staff', () => {
+		expect(() =>
+			compile()(
+				{
+					_id: 'household:01J',
+					type: 'household',
+					...envelope,
+					schema_v: 4,
+					label: 'ครอบครัวทดสอบ',
+					status: 'pre_registered'
+				},
+				null,
+				REGISTRATION
+			)
+		).not.toThrow();
+	});
+
+	it('rejects update of an existing movement (append-only)', () => {
+		const movement = {
+			...envelope,
+			schema_v: 1,
+			_id: 'movement:01J',
+			type: 'movement',
+			evacuee_id: 'evacuee:01J',
+			action: 'check_in'
+		};
+		expectForbidden(
+			() => compile()({ ...movement, zone: 'A' }, movement, REGISTRATION),
+			/Cannot update append-only movement/
+		);
 	});
 
 	it('accepts a new stock_ledger entry from warehouse staff', () => {

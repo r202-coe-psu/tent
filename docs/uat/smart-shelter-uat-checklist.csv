@@ -21,7 +21,7 @@ UAT-016,Auth,Role redirect,P0,"REG,KS,WS",/portal/system-management,Role ที�
 UAT-017,Auth,Connectivity,P1,All staff,(protected),เมื่อเชื่อมต่อ CouchDB ไม่ได้แสดง disconnected banner,สามารถตัด network/proxy ชั่วคราว,"1) ตัดการเชื่อมต่อ /couch
 2) พยายามโหลดข้อมูล",แสดง banner cannot connect / offline status — ไม่แสดงข้อมูล cache เก่าแบบ offline-first,Not Tested,,,,,Staging,Remote-first policy: status-only ไม่มี local DB
 UAT-020,Portal Hub,Card visibility,P0,SA,/portal,SA เห็นการ์ดครบทุกโมดูล,Login เป็น SA,"1) เปิด /portal
-2) ตรวจการ์ด: Onsite, Public, System Management, Back-Office",เห็น 4 การ์ด: ระบบส่วนหน้า / เว็บพอร์ทัลสาธารณะ / ทะเบียนพื้นที่และศูนย์พักพิง / ระบบส่วนหลัง,Not Tested,,,,,Staging,
+2) ตรวจการ์ด: Onsite, Public, System Management, Back-Office",เห็น 4 การ์ด: ระบบส่วนหน้า / เว็บพอร์ทัลสาธารณะ / ระบบส่วนกลาง / ระบบส่วนหลัง,Not Tested,,,,,Staging,
 UAT-021,Portal Hub,Card visibility,P0,SM,/portal,SM เห็น Onsite + Public + Back-Office แต่ไม่เห็น System Management,Login เป็น SM,1) เปิด /portal,"เห็น Onsite, Public, Back-Office — ไม่เห็น System Management (SA only)",Not Tested,,,,,Staging,
 UAT-022,Portal Hub,Card visibility,P0,"REG,KS,WS",/portal,REG/KS/WS เห็นเฉพาะ Onsite + Public,Login เป็น REG หรือ KS หรือ WS,1) เปิด /portal,เห็นเฉพาะระบบส่วนหน้า และลิงก์ public — ไม่เห็น Back-Office / System Management,Not Tested,,,,,Staging,
 UAT-023,Portal Hub,Navigation,P1,SA,/portal,คลิกการ์ดพาไปถูกหน้า,Login SA,1) คลิกแต่ละการ์ด,"ไป /onsite, /public, /portal/system-management, back-office ตามลำดับ",Not Tested,,,,,Staging,
@@ -147,7 +147,7 @@ UAT-120,Back-Office,Create staff user (SM),P0,SM,/back-office/users,SM สร้
 UAT-121,Back-Office,SM cannot create SA/SM,P0,SM,/back-office/users,SM สร้าง SA หรือ SM ไม่ได้,Login SM,1) พยายามสร้าง system_admin หรือ shelter_manager,ถูกปฏิเสธ,Not Tested,,,,,Staging,FR-34
 UAT-122,System Management,SA create any role,P0,SA,/portal/system-management/users,SA สร้าง user ทุก role รวม SA อื่น / ข้ามศูนย์ได้,Login SA,"1) สร้าง SM ศูนย์ B
 2) สร้าง SA อื่น (roles = system_admin เท่านั้น)
-3) ยืนยันลบ Couch admin (COUCHDB_USER) ไม่ได้",สร้างสำเร็จตามที่อนุญาต; bootstrap admin ล็อก,Not Tested,,,,,Staging,FR-34 CR-074
+3) ยืนยันลบ Couch admin (COUCHDB_USER) ไม่ได้",สร้างสำเร็จตามที่อนุญาต; bootstrap admin ล็อก,Not Tested,,,,,Staging,FR-34 CR-074/CR-075
 UAT-123,Back-Office,Edit/delete user,P1,"SA,SM",/back-office/users,แก้ไขและลบ user ตามสิทธิ์,มี user ทดสอบ,"1) แก้ display name/role
 2) ลบ user ทดสอบ",แก้/ลบสำเร็จ; SM ทำได้เฉพาะ staff ศูนย์ตน,Not Tested,,,,,Staging,
 UAT-124,Back-Office,Affiliation tags no permission,P2,SA,/back-office/users,affiliation_tags ไม่ให้สิทธิ์พิเศษ,-,"1) ใส่ tag volunteer ให้ user ที่ไม่มี role พิเศษ

@@ -69,3 +69,5 @@ N/A — ไม่ bump `schema_v`. `_users` ที่เป็น SA อยู�
 - 2026-08-14 — approved โดย project owner (สั่ง implement แผน); grant SA = app `system_admin`
   เท่านั้น; bootstrap admin = CouchDB `COUCHDB_USER` ห้ามลบ/แก้ผ่านแอปเด็ดขาด
 - 2026-08-14 — done: BFF + UI portal + seed sa01 + E2E + spec sync
+- 2026-08-14 — **partially superseded by CR-075**: grant SA gate เปิดให้ Couch `_admin` ด้วย;
+  exclusive roles / last-SA / bootstrap lock ของ CR-074 ยังใช้ต่อ
