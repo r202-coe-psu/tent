@@ -515,6 +515,66 @@ describe('check-in / check-out', () => {
 			await expect(repo.cancelPreRegistration(hh._id, ctx)).rejects.toThrow(/สามารถยกเลิกได้เฉพาะ/);
 		});
 	});
+
+	describe('createEvacueeWithScreening', () => {
+		it('persists both evacuee and screening', async () => {
+			const { evacuee, screening } = await repo.createEvacueeWithScreening(
+				evInput(),
+				{ symptoms: [], temperature_c: null, track: 'normal', needs_referral: false },
+				ctx
+			);
+			expect(evacuee._id).toMatch(/^evacuee:/);
+			expect(screening.evacuee_id).toBe(evacuee._id);
+			expect(await repo.getEvacuee(evacuee._id)).not.toBeNull();
+		});
+
+		it('rolls back the evacuee when screening write fails', async () => {
+			const originalPut = memoryRepo.put.bind(memoryRepo);
+			memoryRepo.put = async (doc) => {
+				if ((doc as { type?: string }).type === 'screening') {
+					throw new Error('doc type not allowed yet: screening');
+				}
+				return originalPut(doc);
+			};
+
+			await expect(
+				repo.createEvacueeWithScreening(
+					evInput({ first_name: 'Rollback' }),
+					{ symptoms: ['fever'], temperature_c: null, track: 'fast_track', needs_referral: false },
+					ctx
+				)
+			).rejects.toThrow(/doc type not allowed yet: screening/);
+
+			const leftover = (await repo.listEvacuees()).filter((e) => e.first_name === 'Rollback');
+			expect(leftover).toHaveLength(0);
+		});
+
+		it('rolls back medical when screening fails after medical was written', async () => {
+			const originalPut = memoryRepo.put.bind(memoryRepo);
+			memoryRepo.put = async (doc) => {
+				if ((doc as { type?: string }).type === 'screening') {
+					throw new Error('doc type not allowed yet: screening');
+				}
+				return originalPut(doc);
+			};
+
+			await expect(
+				repo.createEvacueeWithScreening(
+					evInput({
+						first_name: 'MedRollback',
+						medical_conditions: ['diabetes']
+					}),
+					{ symptoms: [], temperature_c: null, track: 'normal', needs_referral: false },
+					ctx
+				)
+			).rejects.toThrow(/doc type not allowed yet: screening/);
+
+			expect((await repo.listEvacuees()).filter((e) => e.first_name === 'MedRollback')).toHaveLength(
+				0
+			);
+			expect(await repo.listMedicals()).toHaveLength(0);
+		});
+	});
 });
 
 describe('peopleRepository singleton', () => {

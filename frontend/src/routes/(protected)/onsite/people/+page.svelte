@@ -5,10 +5,12 @@
 	import {
 		EvacueeForm,
 		EvacueeWristbandSuccess,
-		useCreateEvacuee,
-		useCreateScreening,
+		RegistrationSaveErrorAlert,
+		useCreateEvacueeWithScreening,
+		buildSaveFailureReport,
 		type EvacueeInput,
-		type Evacuee
+		type Evacuee,
+		type SaveFailureReport
 	} from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
 	import Zap from '@lucide/svelte/icons/zap';
@@ -17,31 +19,28 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 
-	const createMutation = useCreateEvacuee();
-	const createScreeningMutation = useCreateScreening();
+	const createMutation = useCreateEvacueeWithScreening();
 
 	let isFastTrack = $derived($page.url.searchParams.get('mode') === 'fast_track');
 
 	// Completed evacuee after zone selection — drives the success screen
 	let completedEvacuee = $state<Evacuee | null>(null);
+	let saveError = $state<SaveFailureReport | null>(null);
 
 	async function handleRegister(input: EvacueeInput, symptoms: string[]) {
+		const shelterCode = getShelterCode();
 		const ctx = {
-			shelterCode: getShelterCode(),
+			shelterCode,
 			createdBy: authStore.user?.name ?? 'unknown'
 		};
 		const track = isFastTrack ? 'fast_track' : symptoms.length > 0 ? 'fast_track' : 'normal';
 
-		try {
-			const evacuee = await createMutation.mutateAsync({
-				input: { ...input, track },
-				ctx
-			});
-			toast.success(`Registered ${evacuee.first_name} ${evacuee.last_name}`);
+		saveError = null;
 
-			await createScreeningMutation.mutateAsync({
-				input: {
-					evacuee_id: evacuee._id,
+		try {
+			const { evacuee } = await createMutation.mutateAsync({
+				input: { ...input, track },
+				screening: {
 					symptoms,
 					temperature_c: null,
 					track,
@@ -51,7 +50,13 @@
 			});
 			return evacuee;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : String(err));
+			saveError = buildSaveFailureReport(err, {
+				summaryTh: 'บันทึกไม่สำเร็จ — ระบบปฏิเสธเอกสาร',
+				shelterCode,
+				rollbackNote:
+					'compensated: deleted medical + evacuee created in this submit (screening is append-only and is not deleted if it was written)'
+			});
+			toast.error('บันทึกไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน');
 			throw err;
 		}
 	}
@@ -78,6 +83,10 @@
 		</button>
 
 		<h1 class="mb-6 text-3xl font-bold">ลงทะเบียนผู้ประสบภัย</h1>
+
+		{#if saveError}
+			<RegistrationSaveErrorAlert report={saveError} ondismiss={() => (saveError = null)} />
+		{/if}
 
 		{#if isFastTrack}
 			<div
@@ -177,7 +186,11 @@
 					onsubmit={handleRegister}
 					pending={createMutation.isPending}
 					bind:step
+					onsaveerror={(report) => {
+						saveError = report;
+					}}
 					onComplete={(ev) => {
+						saveError = null;
 						completedEvacuee = ev;
 					}}
 				/>

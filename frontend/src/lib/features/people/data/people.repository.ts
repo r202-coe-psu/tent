@@ -115,6 +115,26 @@ export interface PeopleRepository {
 
 	/** Mint a screening from input + author context and persist it. */
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening>;
+	/**
+	 * Create evacuee (+ optional medical) then screening as one save unit.
+	 * On screening failure, deletes medicals and the evacuee created in this call
+	 * so the wizard does not leave orphan `pre_registered` people.
+	 */
+	createEvacueeWithScreening(
+		input: EvacueeInput,
+		screening: Omit<ScreeningInput, 'evacuee_id'> & { evacuee_id?: string },
+		ctx: AuthorContext
+	): Promise<{ evacuee: Evacuee; screening: Screening }>;
+	/**
+	 * Compensate a failed registration unit: remove medicals for the evacuee,
+	 * then the evacuee. Screening/movement are append-only and are not deleted.
+	 */
+	compensateFailedEvacueeRegistration(evacueeId: string): Promise<void>;
+	/**
+	 * Remove a household created in a failed registration submit when it still
+	 * has no members (arriving / pre_registered only).
+	 */
+	compensateFailedHouseholdCreate(householdId: string): Promise<void>;
 	/** Mint a medical record from input + author context and persist it. */
 	createMedical(input: MedicalInput, ctx: AuthorContext): Promise<Medical>;
 	/** Every medical record in this shelter database. */

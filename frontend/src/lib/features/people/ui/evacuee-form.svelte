@@ -24,7 +24,9 @@
 		useUpdateHousehold,
 		useUpdateEvacuee,
 		useCheckInEvacuee,
-		peopleRepository
+		peopleRepository,
+		buildSaveFailureReport,
+		type SaveFailureReport
 	} from '../index';
 	import { getShelterCode } from '$lib/db/shelter';
 
@@ -32,13 +34,28 @@
 		onsubmit,
 		pending = false,
 		step = $bindable(1),
-		onComplete
+		onComplete,
+		onsaveerror
 	}: {
 		onsubmit: (input: EvacueeInput, symptoms: string[]) => Promise<Evacuee> | Evacuee;
 		pending?: boolean;
 		step?: 1 | 2 | 3 | 4 | 5 | 6;
 		onComplete?: (evacuee: Evacuee) => void;
+		onsaveerror?: (report: SaveFailureReport) => void;
 	} = $props();
+
+	function reportSaveFailure(
+		err: unknown,
+		opts: { rollbackNote?: string; docId?: string; docType?: string } = {}
+	) {
+		const report = buildSaveFailureReport(err, {
+			summaryTh: 'บันทึกไม่สำเร็จ — ระบบปฏิเสธเอกสาร',
+			shelterCode: getShelterCode(),
+			...opts
+		});
+		onsaveerror?.(report);
+		toast.error('บันทึกไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน');
+	}
 
 	const selectedSymptoms = new SvelteSet<string>();
 	let isHealthy = $state(false);
@@ -111,16 +128,22 @@
 		if (isSubmittingHousehold) return;
 		isSubmittingHousehold = true;
 
+		let registrationSucceeded = false;
+		let createdHouseholdId: string | null = null;
+		let registeredEvacuee: Evacuee | null = newlyRegisteredEvacuee;
+		const savedPendingInput = pendingEvacueeInput;
+		const savedPendingSymptoms = pendingSymptoms;
+
 		try {
 			const ctx = {
 				shelterCode: getShelterCode(),
 				createdBy: authStore.user?.name ?? 'unknown'
 			};
 
-			// 1. Register evacuee
-			let registeredEvacuee = newlyRegisteredEvacuee;
+			// 1. Register evacuee (+ screening via parent onsubmit unit)
 			if (pendingEvacueeInput) {
 				registeredEvacuee = await onsubmit(pendingEvacueeInput, pendingSymptoms);
+				registrationSucceeded = true;
 				newlyRegisteredEvacuee = registeredEvacuee;
 				pendingEvacueeInput = null;
 				pendingSymptoms = [];
@@ -194,6 +217,7 @@
 				};
 
 				const res = await createHouseholdMutation.mutateAsync({ input: householdInput, ctx });
+				createdHouseholdId = res._id;
 				householdId = res._id;
 			}
 
@@ -212,8 +236,31 @@
 			// Go to step 6 (Zoning)
 			step = 6;
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			toast.error(`เกิดข้อผิดพลาดในการบันทึก: ${message}`);
+			const repo = peopleRepository();
+			if (createdHouseholdId) {
+				await repo.compensateFailedHouseholdCreate(createdHouseholdId);
+			}
+
+			if (registrationSucceeded && registeredEvacuee) {
+				// Household/link failed after a successful registration unit — roll that unit back.
+				await repo.compensateFailedEvacueeRegistration(registeredEvacuee._id);
+				newlyRegisteredEvacuee = null;
+				pendingEvacueeInput = savedPendingInput;
+				pendingSymptoms = savedPendingSymptoms;
+				reportSaveFailure(err, {
+					docId: registeredEvacuee._id,
+					docType: 'evacuee',
+					rollbackNote:
+						'compensated: removed household (if created) + medical/evacuee from this submit when possible'
+				});
+			} else if (savedPendingInput) {
+				// Parent onsubmit already compensated + reported; restore draft for retry.
+				newlyRegisteredEvacuee = null;
+				pendingEvacueeInput = savedPendingInput;
+				pendingSymptoms = savedPendingSymptoms;
+			} else {
+				reportSaveFailure(err);
+			}
 		} finally {
 			isSubmittingHousehold = false;
 		}
@@ -372,6 +419,8 @@
 						} else {
 							if (isSubmittingHousehold) return;
 							isSubmittingHousehold = true;
+							const savedPendingInput = pendingEvacueeInput;
+							const savedPendingSymptoms = pendingSymptoms;
 							try {
 								if (pendingEvacueeInput) {
 									newlyRegisteredEvacuee = await onsubmit(pendingEvacueeInput, pendingSymptoms);
@@ -379,9 +428,11 @@
 									pendingSymptoms = [];
 								}
 								step = 6;
-							} catch (err) {
-								const message = err instanceof Error ? err.message : String(err);
-								toast.error(`เกิดข้อผิดพลาดในการบันทึก: ${message}`);
+							} catch {
+								// Parent onsubmit compensates + reports; restore draft for retry.
+								newlyRegisteredEvacuee = null;
+								pendingEvacueeInput = savedPendingInput;
+								pendingSymptoms = savedPendingSymptoms;
 							} finally {
 								isSubmittingHousehold = false;
 							}

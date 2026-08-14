@@ -107,6 +107,7 @@ export {
 	useCancelPreRegistration,
 	useCreateMedical,
 	useCreateScreening,
+	useCreateEvacueeWithScreening,
 	useUpdateMedical,
 	usePatchMedical,
 	useDeleteMedical,
@@ -130,3 +131,9 @@ export { default as EvacueePetAssetVehicle } from './ui/evacuee-pet-asset-vehicl
 export { default as HouseholdPreRegister } from './ui/household-pre-register.svelte';
 export { default as HouseholdPreRegisterSummary } from './ui/household-pre-register-summary.svelte';
 export { default as HouseholdProfileView } from './ui/household-profile-view.svelte';
+export { default as RegistrationSaveErrorAlert } from './ui/registration-save-error-alert.svelte';
+export {
+	buildSaveFailureReport,
+	formatSaveFailureReport,
+	type SaveFailureReport
+} from '$lib/utils/errors';

@@ -103,12 +103,13 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const evacuee = buildEvacuee(input, ctx);
 		const saved = await this.repo.put(evacuee);
 
-		if (
+		const needsMedical =
 			(input.medical_conditions && input.medical_conditions.length > 0) ||
 			(input.medical_allergies && input.medical_allergies.length > 0) ||
 			(input.medical_medications && input.medical_medications.length > 0) ||
-			(input.medical_note && input.medical_note.length > 0)
-		) {
+			(input.medical_note && input.medical_note.length > 0);
+
+		if (needsMedical) {
 			const medicalInput = {
 				evacuee_id: evacuee._id,
 				conditions: input.medical_conditions || [],
@@ -118,7 +119,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				track: input.track || ('normal' as const)
 			};
 			const medicalDoc = buildMedical(medicalInput, ctx);
-			await this.repo.put(medicalDoc);
+			try {
+				await this.repo.put(medicalDoc);
+			} catch (err) {
+				await this.compensateFailedEvacueeRegistration(saved._id);
+				throw err;
+			}
 		}
 
 		return saved;
@@ -299,6 +305,61 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening> {
 		return this.repo.put(buildScreening(input, ctx));
+	}
+
+	async createEvacueeWithScreening(
+		input: EvacueeInput,
+		screening: Omit<ScreeningInput, 'evacuee_id'> & { evacuee_id?: string },
+		ctx: AuthorContext
+	): Promise<{ evacuee: Evacuee; screening: Screening }> {
+		const evacuee = await this.createEvacuee(input, ctx);
+		try {
+			const screeningDoc = await this.createScreening(
+				{ ...screening, evacuee_id: evacuee._id },
+				ctx
+			);
+			return { evacuee, screening: screeningDoc };
+		} catch (err) {
+			await this.compensateFailedEvacueeRegistration(evacuee._id);
+			throw err;
+		}
+	}
+
+	async compensateFailedEvacueeRegistration(evacueeId: string): Promise<void> {
+		const medicals = await this.repo.find<Medical>({
+			selector: { type: 'medical', evacuee_id: evacueeId },
+			limit: 100
+		});
+		for (const medical of medicals.filter(isMedical)) {
+			try {
+				await this.repo.remove(medical);
+			} catch {
+				// Best-effort compensation; surface the original save error to the UI.
+			}
+		}
+
+		const latest = await this.repo.get<Evacuee>(evacueeId);
+		if (latest) {
+			try {
+				await this.repo.remove(latest);
+			} catch {
+				// Best-effort compensation.
+			}
+		}
+	}
+
+	async compensateFailedHouseholdCreate(householdId: string): Promise<void> {
+		const latestDoc = await this.repo.get<Household>(householdId);
+		if (!latestDoc) return;
+		const latest = migrateHouseholdV3ToV4(latestDoc);
+		if (latest.status !== 'arriving' && latest.status !== 'pre_registered') return;
+		const members = await this.listHouseholdMembers(householdId);
+		if (members.length > 0) return;
+		try {
+			await this.repo.remove(latest);
+		} catch {
+			// Best-effort compensation.
+		}
 	}
 
 	createMedical(input: MedicalInput, ctx: AuthorContext): Promise<Medical> {

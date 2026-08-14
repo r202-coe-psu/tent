@@ -112,6 +112,26 @@ export const useCreateEvacuee = () => {
 	}));
 };
 
+export const useCreateEvacueeWithScreening = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			input,
+			screening,
+			ctx
+		}: {
+			input: EvacueeInput;
+			screening: Omit<ScreeningInput, 'evacuee_id'> & { evacuee_id?: string };
+			ctx: AuthorContext;
+		}) => peopleRepository().createEvacueeWithScreening(input, screening, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.screenings() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.medicals() });
+		}
+	}));
+};
+
 export const useUpdateEvacuee = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
