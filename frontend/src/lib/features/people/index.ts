@@ -32,6 +32,7 @@ export {
 	genderSchema,
 	religionSchema,
 	stayStatusSchema,
+	householdStatusSchema,
 	movementActionSchema,
 	careTrackSchema,
 	bloodGroupSchema,
@@ -54,6 +55,8 @@ export {
 	assertMovementAllowed,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
+	canCancelEvacueePreRegistration,
+	canCancelHouseholdPreRegistration,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
 	ACTIVE_HOUSEHOLD_STATUSES,
@@ -82,7 +85,7 @@ export {
 	type ScreeningInput
 } from './domain/people';
 
-export type { PeopleRepository } from './data/people.repository';
+export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
 export { peopleRepository } from './data/people.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
@@ -101,10 +104,13 @@ export {
 	useHouseholds,
 	useHousehold,
 	useHouseholdsPaginated,
+	listMatchingEvacueeIds,
+	listMatchingHouseholdIds,
 	useCreateHousehold,
 	useUpdateHousehold,
 	usePatchHousehold,
 	useCancelPreRegistration,
+	useCancelEvacueePreRegistration,
 	useCreateMedical,
 	useCreateScreening,
 	useCreateEvacueeWithScreening,

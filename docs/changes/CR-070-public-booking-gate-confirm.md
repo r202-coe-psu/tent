@@ -96,9 +96,28 @@ Public write ต้องผ่าน BFF (CR-063) — ห้ามให้เ�
 - Auto-expire / job ตัดจอง (D-HOLD-TTL=none)
 - Kitchen/SOP occupancy คนอยู่จริง (ยัง `active` only — CR-022)
 
+## Implementation notes (2026-08-14)
+
+Slice: **bulk cancel + status filters** on `/back-office/evacuee-management` (evacuee + household
+tabs). Public booking / `registered_via=web` / D-PRE-REG-AGE remain out of this slice.
+
+- **schema.md §1.1:** bump evacuee `schema_v` 5 → 6; add stay status `cancelled` (7-value enum).
+- **Domain/data:** `cancelPreRegistration(householdId)` sets household → `cancelled` **and**
+  cascades member stays with `pre_registered` → `cancelled` (+ `since`); audit context includes
+  cancelled-member count. New `cancelEvacueePreRegistration(evacueeId)` for person-level cancel;
+  if linked household is still `pre_registered` and no members remain `pre_registered`, cancel
+  the household too.
+- **RBAC (D-HOLD-CANCEL):** UI + mutation gate = SA / SM / RS only.
+- **Lists:** status filters on both tabs; multi-select across pagination; select-all matching
+  filters; sticky bulk «ยกเลิกการลงทะเบียนล่วงหน้า».
+- Occupancy: `cancelled` is not counted in dashboard `pre_registered` / `total` (unknown keys
+  discarded by `rowsToOccupancyPayload`).
+
 ## Decision log
 
 - 2026-08-13 — proposed. Reuse `pre_registered` + T-51. ไม่สร้าง booking doc.
 - 2026-08-13 — Wave 1 ล็อกใน CR-066 (D-TRACK-METHOD=CR+Notion). CR นี้ยัง `proposed`.
 - 2026-08-13 — **Wave 3 ล็อก** (decision ≠ approve CR): D-BOOK-OCC=**C** (เจ้าของทับคำแนะนำ A — จองนับ occupancy ทั้งศูนย์และบ้าน) · D-HOLD-TTL=**none** · D-PRE-REG-AGE · D-HOLD-CANCEL (เจ้าของเริ่ม SA/SM แล้วเพิ่ม RS) · D-REG-VIA เพิ่ม `web`+`api` · D-BOOK-TOKEN=**A**. **ไม่ bump schema.md.**
 - 2026-08-13 — **approved** โดยเจ้าของโครงการ (IMPS): Wave 3 ทั้งก้อน (D-BOOK-OCC=C, D-HOLD-TTL=none, D-PRE-REG-AGE, D-HOLD-CANCEL, D-REG-VIA `web`, D-BOOK-TOKEN=A). **ไม่ bump schema.md ในรอบนี้** (evacuee `registered_via` + stay `cancelled` ตอน implement ตาม Migration).
+- 2026-08-14 — **implement (partial):** stay `cancelled` + schema_v 6 + cancel cascade + list
+  status filters + bulk cancel (SA/SM/RS). Public booking / `web` / D-PRE-REG-AGE ยังไม่ทำในรอบนี้.

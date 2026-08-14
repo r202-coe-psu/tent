@@ -15,6 +15,7 @@ import { peopleRepository } from '../data/people.remote';
 import type {
 	EvacueeFilters,
 	EvacueePatch,
+	HouseholdFilters,
 	HouseholdPatch,
 	HouseholdSearchLabels,
 	MedicalPatch
@@ -28,6 +29,8 @@ import type {
 	MedicalInput,
 	ScreeningInput
 } from '../domain/people';
+import { canCancelHold } from '$lib/auth/roles';
+import { authStore } from '$lib/stores/auth.svelte';
 
 // Every key includes the active shelter code so switching the back-office
 // shelter selector (shelterStore.selectedShelterCode) invalidates and
@@ -47,12 +50,18 @@ export const peopleKeys = {
 		[...peopleKeys.all, 'evacuees', getShelterCode(), 'search', query] as const,
 	households: () => [...peopleKeys.all, 'households', getShelterCode()] as const,
 	household: (id: string) => [...peopleKeys.all, 'household', getShelterCode(), id] as const,
-	householdsPaginated: (page: number, pageSize: number, search = '', labelsKey = '') =>
+	householdsPaginated: (
+		page: number,
+		pageSize: number,
+		search = '',
+		labelsKey = '',
+		filtersKey = ''
+	) =>
 		[
 			...peopleKeys.all,
 			'households',
 			getShelterCode(),
-			{ page, pageSize, search, labelsKey }
+			{ page, pageSize, search, labelsKey, filtersKey }
 		] as const,
 	medicals: () => [...peopleKeys.all, 'medicals', getShelterCode()] as const,
 	movements: () => [...peopleKeys.all, 'movements', getShelterCode()] as const,
@@ -238,23 +247,35 @@ export const useHouseholdsPaginated = (
 	page: () => number,
 	pageSize: () => number,
 	search?: () => string,
-	labels?: () => HouseholdSearchLabels
+	labels?: () => HouseholdSearchLabels,
+	filters?: () => HouseholdFilters
 ) =>
 	createQuery(() => ({
 		queryKey: peopleKeys.householdsPaginated(
 			page(),
 			pageSize(),
 			search?.() ?? '',
-			labels ? JSON.stringify(labels()) : ''
+			labels ? JSON.stringify(labels()) : '',
+			filters ? JSON.stringify(filters()) : ''
 		),
 		queryFn: () =>
 			peopleRepository().listHouseholdsPaginated(
 				page(),
 				pageSize(),
 				search?.(),
-				labels?.()
+				labels?.(),
+				filters?.()
 			) as Promise<PaginatedResult<Household>>
 	}));
+
+export const listMatchingEvacueeIds = (search?: string, filters?: EvacueeFilters) =>
+	peopleRepository().listMatchingEvacueeIds(search, filters);
+
+export const listMatchingHouseholdIds = (
+	search?: string,
+	labels?: HouseholdSearchLabels,
+	filters?: HouseholdFilters
+) => peopleRepository().listMatchingHouseholdIds(search, labels, filters);
 
 export const useCreateHousehold = () => {
 	const queryClient = useQueryClient();
@@ -293,12 +314,33 @@ export const usePatchHousehold = () => {
 export const useCancelPreRegistration = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ householdId, ctx }: { householdId: string; ctx: AuthorContext }) =>
-			peopleRepository().cancelPreRegistration(householdId, ctx),
+		mutationFn: ({ householdId, ctx }: { householdId: string; ctx: AuthorContext }) => {
+			if (!canCancelHold(authStore.user?.roles ?? [])) {
+				throw new Error('ไม่มีสิทธิ์ยกเลิกการลงทะเบียนล่วงหน้า');
+			}
+			return peopleRepository().cancelPreRegistration(householdId, ctx);
+		},
 		onSuccess: (_data, variables) => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.household(variables.householdId) });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+		}
+	}));
+};
+
+export const useCancelEvacueePreRegistration = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ evacueeId, ctx }: { evacueeId: string; ctx: AuthorContext }) => {
+			if (!canCancelHold(authStore.user?.roles ?? [])) {
+				throw new Error('ไม่มีสิทธิ์ยกเลิกการลงทะเบียนล่วงหน้า');
+			}
+			return peopleRepository().cancelEvacueePreRegistration(evacueeId, ctx);
+		},
+		onSuccess: (_data, variables) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(variables.evacueeId) });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
 		}
 	}));
 };

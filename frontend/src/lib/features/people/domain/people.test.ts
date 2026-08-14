@@ -8,6 +8,8 @@ import {
 	assertMovementAllowed,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
+	canCancelEvacueePreRegistration,
+	canCancelHouseholdPreRegistration,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
 	isEvacuee,
@@ -37,7 +39,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(5);
+		expect(e.schema_v).toBe(6);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -236,6 +238,36 @@ describe('movement → current_stay', () => {
 
 		const m = createMovement({ evacuee_id: e._id, action: 'check_in', zone: null }, ctx);
 		expect(() => applyMovementToStay(deceased, m)).toThrow(/เสียชีวิต/);
+	});
+
+	it('rejects movement from cancelled stay (terminal status)', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const cancelled = {
+			...e,
+			current_stay: { status: 'cancelled' as const, zone: null, since: e.current_stay.since }
+		};
+		expect(canCheckInEvacuee(cancelled)).toBe(false);
+		expect(canCancelEvacueePreRegistration(cancelled)).toBe(false);
+		expect(() => assertMovementAllowed(cancelled, 'check_in')).toThrow(/ยกเลิก/);
+	});
+
+	it('canCancel* helpers only allow pre_registered', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		expect(canCancelEvacueePreRegistration(e)).toBe(true);
+		const hh = createHousehold(
+			{
+				label: 'บ้านทดสอบ',
+				head_evacuee_id: e._id,
+				status: 'pre_registered',
+				municipality_zone: null,
+				community: null,
+				pets: [],
+				vehicles: []
+			},
+			ctx
+		);
+		expect(canCancelHouseholdPreRegistration(hh)).toBe(true);
+		expect(canCancelHouseholdPreRegistration({ ...hh, status: 'checked_in' })).toBe(false);
 	});
 
 	it('rejects check_out unless status is active', () => {

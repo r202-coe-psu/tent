@@ -24,6 +24,7 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { now } from '$lib/db/model';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { canCancelHold } from '$lib/auth/roles';
 
 	// Sub-components
 	import HouseholdProfileHeaderCard from './household-profile-header-card.svelte';
@@ -77,6 +78,7 @@
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const headOrFirstMember = $derived(head ?? members[0] ?? null);
+	const canCancel = $derived(canCancelHold(authStore.user?.roles ?? []));
 
 	const statusConfig = {
 		checked_in: {
@@ -312,6 +314,7 @@
 			onOpenZoneModal={() => (showZoneModal = true)}
 			onCancelPreRegistration={cancelPreRegistration}
 			isCancelling={cancelPreRegistrationMutation.isPending}
+			{canCancel}
 		/>
 
 		<!-- Grid Layout -->

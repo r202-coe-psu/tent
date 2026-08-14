@@ -117,6 +117,12 @@
 			colorClass:
 				'bg-slate-200 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700',
 			dotClass: 'bg-black'
+		},
+		cancelled: {
+			label: 'ยกเลิกการลงทะเบียนล่วงหน้า',
+			colorClass:
+				'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800',
+			dotClass: 'bg-slate-400'
 		}
 	};
 

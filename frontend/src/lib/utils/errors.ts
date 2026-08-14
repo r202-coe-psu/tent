@@ -94,10 +94,12 @@ const AUTH_FORBIDDEN_REASON =
  * True when a CouchDB 403 body looks like `validate_doc_update` rejection
  * (e.g. `doc type not allowed yet: screening`) rather than missing DB access.
  */
-export function isCouchDocumentPolicyForbidden(data: {
-	error?: string;
-	reason?: string;
-} | null): boolean {
+export function isCouchDocumentPolicyForbidden(
+	data: {
+		error?: string;
+		reason?: string;
+	} | null
+): boolean {
 	if (!data) return false;
 	const reason = (data.reason ?? '').trim();
 	if (!reason) return false;

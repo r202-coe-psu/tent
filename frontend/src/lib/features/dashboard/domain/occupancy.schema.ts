@@ -6,8 +6,9 @@
  *
  * CouchDB view: `_design/app/_view/occupancy?group=true`
  * Keys emitted: 'pre_registered' | 'active' | 'temporary_leave' | 'transferred' |
- *               'checked_out' | 'deceased' (schema.md schema_v 3 — the current
- *               6-value `StayStatus` enum, `current_stay.status` verbatim)
+ *               'checked_out' | 'deceased' | 'cancelled' (schema.md schema_v 6 —
+ *               `StayStatus` verbatim). `cancelled` is ignored by the payload
+ *               mapper (unknown/extra keys discarded) so it does not inflate total.
  *
  * No PII: only aggregate counts leave the server (security-rbac-bestpractices §3).
  */

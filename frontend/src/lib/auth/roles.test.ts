@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	formatRoleList,
+	canCancelHold,
 	isAppSystemAdmin,
 	isLastAppSystemAdmin,
 	isShelterManager,
@@ -43,6 +44,16 @@ describe('roles kernel', () => {
 	it('recognises shelter managers', () => {
 		expect(isShelterManager(['shelter:SH001', 'shelter_manager'])).toBe(true);
 		expect(isShelterManager(['shelter:SH001', 'registration_staff'])).toBe(false);
+	});
+
+	it('canCancelHold allows SA, SM, and registration_staff only', () => {
+		expect(canCancelHold(['system_admin'])).toBe(true);
+		expect(canCancelHold(['_admin'])).toBe(true);
+		expect(canCancelHold(['shelter:SH001', 'shelter_manager'])).toBe(true);
+		expect(canCancelHold(['shelter:SH001', 'registration_staff'])).toBe(true);
+		expect(canCancelHold(['shelter:SH001', 'kitchen_staff'])).toBe(false);
+		expect(canCancelHold(['shelter:SH001', 'warehouse_staff'])).toBe(false);
+		expect(canCancelHold([])).toBe(false);
 	});
 
 	it('isStaffOnly accepts staff capabilities but rejects manager/system_admin', () => {

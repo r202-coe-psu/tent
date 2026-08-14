@@ -67,6 +67,18 @@ export function isShelterManager(roles: readonly string[]): boolean {
 	return roles.includes(SHELTER_MANAGER);
 }
 
+/**
+ * True when the actor may cancel a pre-registration hold (D-HOLD-CANCEL / CR-070):
+ * system_admin, shelter_manager, or registration_staff.
+ */
+export function canCancelHold(roles: readonly string[]): boolean {
+	return (
+		isSystemAdmin(roles) ||
+		isShelterManager(roles) ||
+		hasStaffCapability(roles, 'registration_staff')
+	);
+}
+
 /** True when the role list includes `warehouse_staff`. */
 export function isWarehouseStaff(roles: readonly string[]): boolean {
 	return roles.includes(WAREHOUSE_STAFF);

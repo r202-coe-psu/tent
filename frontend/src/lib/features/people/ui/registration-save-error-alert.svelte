@@ -50,8 +50,7 @@
 			กรุณาคัดลอกรายละเอียดด้านล่างส่งให้นักพัฒนา
 		</p>
 		<pre
-			class="max-h-48 overflow-auto rounded-md border border-destructive/20 bg-background/80 p-3 font-mono text-xs break-all whitespace-pre-wrap text-foreground"
-		>{detailText}</pre>
+			class="max-h-48 overflow-auto rounded-md border border-destructive/20 bg-background/80 p-3 font-mono text-xs break-all whitespace-pre-wrap text-foreground">{detailText}</pre>
 		<Button type="button" variant="outline" size="sm" class="gap-1.5" onclick={copyReport}>
 			<Copy class="size-3.5" />
 			คัดลอก

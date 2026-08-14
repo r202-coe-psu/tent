@@ -5,11 +5,13 @@ import type {
 	EvacueeInput,
 	Household,
 	HouseholdInput,
+	HouseholdStatus,
 	Screening,
 	ScreeningInput,
 	Medical,
 	MedicalInput,
-	Movement
+	Movement,
+	StayStatus
 } from '../domain/people';
 
 export type HouseholdSearchLabels = {
@@ -20,6 +22,11 @@ export type HouseholdSearchLabels = {
 export type EvacueeFilters = {
 	specialNeed?: string;
 	zone?: string;
+	status?: StayStatus;
+};
+
+export type HouseholdFilters = {
+	status?: HouseholdStatus;
 };
 
 export type EvacueePatch = Partial<
@@ -96,13 +103,28 @@ export interface PeopleRepository {
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household>;
 	/** Every household in this shelter database. */
 	listHouseholds(): Promise<Household[]>;
-	/** Paginated list of households — optional `search` filters before paging. */
+	/** Paginated list of households — optional `search` / `filters` before paging. */
 	listHouseholdsPaginated(
 		page: number,
 		pageSize: number,
 		search?: string,
-		labels?: HouseholdSearchLabels
+		labels?: HouseholdSearchLabels,
+		filters?: HouseholdFilters
 	): Promise<PaginatedResult<Household>>;
+	/**
+	 * All household `_id`s matching the same search/filter criteria as
+	 * {@link listHouseholdsPaginated} (no paging) — used for select-all-matching.
+	 */
+	listMatchingHouseholdIds(
+		search?: string,
+		labels?: HouseholdSearchLabels,
+		filters?: HouseholdFilters
+	): Promise<string[]>;
+	/**
+	 * All evacuee `_id`s matching the same search/filter criteria as
+	 * {@link listEvacueesPaginated} (no paging) — used for select-all-matching.
+	 */
+	listMatchingEvacueeIds(search?: string, filters?: EvacueeFilters): Promise<string[]>;
 	/** One household by `_id`, or `null` when absent. */
 	getHousehold(id: string): Promise<Household | null>;
 	/** Persist an edited household (LWW: bumps `updated_at`). */
@@ -163,8 +185,15 @@ export interface PeopleRepository {
 	 */
 	checkOutEvacuee(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee>;
 	/**
-	 * Cancel a pre-registered household and persist an actor-attributed audit entry.
-	 * Person stay status is unchanged because `cancelled` belongs to HouseholdStatus only.
+	 * Cancel a pre-registered household: set household → `cancelled` and cascade
+	 * member stays that are still `pre_registered` → `cancelled` (CR-070).
+	 * Persists an actor-attributed audit entry.
 	 */
 	cancelPreRegistration(householdId: string, ctx: AuthorContext): Promise<void>;
+	/**
+	 * Cancel a single evacuee's pre-registration stay → `cancelled`.
+	 * If the linked household is still `pre_registered` and no members remain
+	 * with stay `pre_registered`, cancel the household too.
+	 */
+	cancelEvacueePreRegistration(evacueeId: string, ctx: AuthorContext): Promise<void>;
 }

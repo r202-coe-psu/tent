@@ -1,5 +1,5 @@
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
-import { touch, type AuthorContext } from '$lib/db/model';
+import { now, touch, type AuthorContext } from '$lib/db/model';
 import { getShelterDb } from '$lib/db/shelter';
 import { createAuditEntry } from '$lib/features/shared';
 import {
@@ -27,6 +27,7 @@ import {
 	assertHouseholdStatusTransition,
 	assertCheckoutDestination,
 	isActiveHouseholdStatus,
+	canCancelEvacueePreRegistration,
 	type Medical,
 	type MedicalInput,
 	type Movement
@@ -34,6 +35,7 @@ import {
 import type {
 	EvacueeFilters,
 	EvacueePatch,
+	HouseholdFilters,
 	HouseholdPatch,
 	HouseholdSearchLabels,
 	MedicalPatch,
@@ -148,6 +150,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		search?: string,
 		filters?: EvacueeFilters
 	): Promise<PaginatedResult<Evacuee>> {
+		const matched = await this.filterEvacuees(search, filters);
+		return paginateSlice(matched, page, pageSize);
+	}
+
+	async listMatchingEvacueeIds(search?: string, filters?: EvacueeFilters): Promise<string[]> {
+		const matched = await this.filterEvacuees(search, filters);
+		return matched.map((e) => e._id);
+	}
+
+	private async filterEvacuees(search?: string, filters?: EvacueeFilters): Promise<Evacuee[]> {
 		const all = await this.repo.allByType('evacuee', isEvacuee);
 		const q = search?.trim();
 		let matched = q ? all.filter((e) => matchesEvacueeSearch(e, q)) : all;
@@ -157,7 +169,10 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (filters?.zone) {
 			matched = matched.filter((e) => e.current_stay.zone === filters.zone);
 		}
-		return paginateSlice(matched, page, pageSize);
+		if (filters?.status) {
+			matched = matched.filter((e) => e.current_stay.status === filters.status);
+		}
+		return matched;
 	}
 
 	getEvacuee(id: string): Promise<Evacuee | null> {
@@ -234,8 +249,27 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		page: number,
 		pageSize: number,
 		search?: string,
-		labels?: HouseholdSearchLabels
+		labels?: HouseholdSearchLabels,
+		filters?: HouseholdFilters
 	): Promise<PaginatedResult<Household>> {
+		const matched = await this.filterHouseholds(search, labels, filters);
+		return paginateSlice(matched, page, pageSize);
+	}
+
+	async listMatchingHouseholdIds(
+		search?: string,
+		labels?: HouseholdSearchLabels,
+		filters?: HouseholdFilters
+	): Promise<string[]> {
+		const matched = await this.filterHouseholds(search, labels, filters);
+		return matched.map((h) => h._id);
+	}
+
+	private async filterHouseholds(
+		search?: string,
+		labels?: HouseholdSearchLabels,
+		filters?: HouseholdFilters
+	): Promise<Household[]> {
 		let all = await this.repo.allByType('household', isHousehold);
 		all = all.map(migrateHouseholdV3ToV4);
 		const q = search?.trim();
@@ -248,7 +282,10 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				matchesHouseholdSearch(h, q, headNames.get(h.head_evacuee_id ?? '') ?? '', labels)
 			);
 		}
-		return paginateSlice(all, page, pageSize);
+		if (filters?.status) {
+			all = all.filter((h) => h.status === filters.status);
+		}
+		return all;
 	}
 
 	async getHousehold(id: string): Promise<Household | null> {
@@ -448,6 +485,23 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		assertHouseholdStatusTransition(household.status, 'cancelled');
 
 		const members = await this.listHouseholdMembers(householdId);
+		const since = now();
+		let cancelledMembers = 0;
+
+		for (const member of members) {
+			if (member.current_stay.status !== 'pre_registered') continue;
+			await this.repo.put(
+				touch({
+					...member,
+					current_stay: {
+						...member.current_stay,
+						status: 'cancelled' as const,
+						since
+					}
+				})
+			);
+			cancelledMembers += 1;
+		}
 
 		const updatedHousehold = touch({
 			...household,
@@ -464,12 +518,86 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				context: {
 					previous_status: household.status,
 					next_status: 'cancelled',
-					member_count: members.length
+					member_count: members.length,
+					cancelled_member_count: cancelledMembers
 				}
 			},
 			ctx
 		);
 		await this.repo.put(audit);
+	}
+
+	async cancelEvacueePreRegistration(evacueeId: string, ctx: AuthorContext): Promise<void> {
+		const evacuee = await this.getEvacuee(evacueeId);
+		if (!evacuee) {
+			throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+		}
+		if (!canCancelEvacueePreRegistration(evacuee)) {
+			throw new Error('สามารถยกเลิกได้เฉพาะผู้ที่อยู่ในสถานะลงทะเบียนล่วงหน้าเท่านั้น');
+		}
+
+		const since = now();
+		await this.repo.put(
+			touch({
+				...evacuee,
+				current_stay: {
+					...evacuee.current_stay,
+					status: 'cancelled' as const,
+					since
+				}
+			})
+		);
+
+		const audit = createAuditEntry(
+			{
+				action: 'other',
+				target_type: 'evacuee',
+				target_id: evacueeId,
+				reason: 'ยกเลิกการลงทะเบียนล่วงหน้า',
+				context: {
+					previous_status: 'pre_registered',
+					next_status: 'cancelled',
+					household_id: evacuee.household_id
+				}
+			},
+			ctx
+		);
+		await this.repo.put(audit);
+
+		if (!evacuee.household_id) return;
+
+		const household = await this.getHousehold(evacuee.household_id);
+		if (!household || household.status !== 'pre_registered') return;
+
+		const members = await this.listHouseholdMembers(household._id);
+		const stillPreRegistered = members.some(
+			(m) => m._id !== evacueeId && m.current_stay.status === 'pre_registered'
+		);
+		if (stillPreRegistered) return;
+
+		assertHouseholdStatusTransition(household.status, 'cancelled');
+		await this.repo.put(
+			touch({
+				...household,
+				status: 'cancelled' as const
+			})
+		);
+
+		const householdAudit = createAuditEntry(
+			{
+				action: 'other',
+				target_type: 'household',
+				target_id: household._id,
+				reason: 'ยกเลิกการลงทะเบียนครัวเรือนล่วงหน้า — ไม่มีสมาชิกค้าง pre_registered',
+				context: {
+					previous_status: 'pre_registered',
+					next_status: 'cancelled',
+					triggered_by_evacuee_id: evacueeId
+				}
+			},
+			ctx
+		);
+		await this.repo.put(householdAudit);
 	}
 }
 

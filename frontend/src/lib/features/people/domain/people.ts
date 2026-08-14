@@ -42,7 +42,8 @@ export const stayStatusSchema = z.enum([
 	'temporary_leave',
 	'transferred',
 	'checked_out',
-	'deceased'
+	'deceased',
+	'cancelled'
 ]);
 export type StayStatus = z.infer<typeof stayStatusSchema>;
 
@@ -747,7 +748,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		5, // schema_v 5: adds age (CR-057) — skips 4, reserved for photo (CR-054, not yet implemented)
+		6, // schema_v 6: stay cancelled (CR-070); 5 = age (CR-057); 4 reserved for photo (CR-054)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -906,12 +907,17 @@ export function canCheckOutEvacuee(evacuee: Evacuee): boolean {
 
 /**
  * Guard movement transitions against impossible / terminal stay states.
- * `deceased` is terminal (schema.md §1.4) — no reverse action except staying deceased.
+ * `deceased` and `cancelled` are terminal — no reverse action except staying put.
  */
 export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction): void {
 	const status = evacuee.current_stay.status;
 	if (status === 'deceased' && action !== 'mark_deceased') {
 		throw new Error('สถานะเสียชีวิตเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก');
+	}
+	if (status === 'cancelled') {
+		throw new Error(
+			'สถานะยกเลิกการลงทะเบียนล่วงหน้าเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก'
+		);
 	}
 	if (action === 'check_in' && !canCheckInEvacuee(evacuee)) {
 		throw new Error(`ไม่สามารถเช็คอินจากสถานะ ${status} ได้`);
@@ -919,6 +925,16 @@ export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction):
 	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
 		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
 	}
+}
+
+/** True when an evacuee stay may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */
+export function canCancelEvacueePreRegistration(evacuee: Evacuee): boolean {
+	return evacuee.current_stay.status === 'pre_registered';
+}
+
+/** True when a household may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */
+export function canCancelHouseholdPreRegistration(household: Household): boolean {
+	return household.status === 'pre_registered';
 }
 
 /**
