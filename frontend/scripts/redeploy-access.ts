@@ -1,14 +1,15 @@
 /**
- * Redeploy `_design/access` (referral whitelist) + referral Mango indexes
- * on every shelter DB listed in the registry.
+ * Redeploy `_design/access` (validate_doc_update allowlist) + referral Mango
+ * indexes on every shelter DB listed in the registry.
  *
- * Required after merging T-34 / CR-045 onto existing staging/prod DBs —
- * new shelters provisioned via POST /api/back-office/shelter get both
- * automatically; seed also deploys them for local SH001/SH002.
+ * Run after allowlist changes (e.g. new doc types in shelter-access-design)
+ * on existing staging/prod DBs — new shelters provisioned via
+ * POST /api/back-office/shelter get both automatically; seed also deploys
+ * them for local SH001/SH002.
  *
  * Usage (from frontend/):
- *   pnpm redeploy:referral-db                 # dry-run
- *   pnpm redeploy:referral-db --write --confirm
+ *   pnpm redeploy:access                 # dry-run
+ *   pnpm redeploy:access --write --confirm
  *
  * Needs: COUCHDB_ADMIN_URL in frontend/.env
  *   Format: http://admin:<password>@<host>:<port>
@@ -78,7 +79,7 @@ const CONFIRMED = process.argv.includes('--confirm');
 
 if (!DRY_RUN && !CONFIRMED) {
 	console.error('✗ --write requires --confirm (a typo could write to production)');
-	console.error('  Re-run with: pnpm redeploy:referral-db --write --confirm');
+	console.error('  Re-run with: pnpm redeploy:access --write --confirm');
 	process.exit(1);
 }
 

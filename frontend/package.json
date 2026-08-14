@@ -27,7 +27,7 @@
 		"cleanup:referral-hardening": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/cleanup-referral-hardening.ts",
 		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts",
-		"redeploy:referral-db": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/redeploy-referral-db.ts",
+		"redeploy:access": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/redeploy-access.ts",
 		"deploy:shelter-views": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/deploy-shelter-views.ts"
 	},
 	"devDependencies": {
