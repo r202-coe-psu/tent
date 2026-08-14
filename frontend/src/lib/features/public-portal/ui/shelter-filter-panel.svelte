@@ -139,14 +139,42 @@
 		}
 	});
 
-	onMount(async () => {
-		if (!hasPosition) geoReason = geolocationBlockReason();
+	async function ensureUserPosition(): Promise<boolean> {
+		if (hasPosition) return true;
 
-		try {
-			locationData = await getAllLocations();
-		} catch {
-			/* province/district selects stay empty */
+		const blocked = geolocationBlockReason();
+		if (blocked) {
+			geoReason = blocked;
+			return false;
 		}
+
+		locating = true;
+		try {
+			const pos = await requestUserPosition();
+			userLat = pos.lat;
+			userLng = pos.lng;
+			geoReason = null;
+			return true;
+		} catch (err) {
+			geoReason = err instanceof GeolocationUnavailableError ? err.reason : 'unavailable';
+			return false;
+		} finally {
+			locating = false;
+		}
+	}
+
+	onMount(async () => {
+		const locationsPromise = getAllLocations()
+			.then((data) => {
+				locationData = data;
+			})
+			.catch(() => {
+				/* province/district selects stay empty */
+			});
+
+		// First visit: request GPS so the map can show the user marker without a distance click.
+		await ensureUserPosition();
+		await locationsPromise;
 	});
 
 	async function selectDistance(km: string) {
@@ -154,20 +182,7 @@
 			distanceValue = '';
 			return;
 		}
-		if (!hasPosition) {
-			locating = true;
-			try {
-				const pos = await requestUserPosition();
-				userLat = pos.lat;
-				userLng = pos.lng;
-				geoReason = null;
-			} catch (err) {
-				geoReason = err instanceof GeolocationUnavailableError ? err.reason : 'unavailable';
-				locating = false;
-				return;
-			}
-			locating = false;
-		}
+		if (!(await ensureUserPosition())) return;
 		distanceValue = km;
 	}
 

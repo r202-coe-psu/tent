@@ -137,7 +137,9 @@
 			>
 				<ShelterMap
 					shelters={displayShelters}
-					userLocation={{ lat: parseFloat(liveUserLat), lng: parseFloat(liveUserLng) }}
+					userLocation={liveUserLat && liveUserLng
+						? { lat: liveUserLat, lng: liveUserLng }
+						: undefined}
 				/>
 			</div>
 		</div>
