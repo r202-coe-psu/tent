@@ -717,6 +717,57 @@ test.describe('Evacuee Registration', () => {
 		await expect(phoneInput).toBeEnabled();
 	});
 
+	test('should preserve the registration draft when navigating away and back', async ({ page }) => {
+		await goToStep3(page);
+		await page.route(`**/${SHELTER_DB}/**`, async (route) => {
+			const request = route.request();
+			const attachmentName = new URL(request.url()).pathname.split('/').filter(Boolean).at(-1);
+			if (request.method() === 'PUT' && (attachmentName === 'full' || attachmentName === 'thumb')) {
+				await route.fulfill({
+					status: 201,
+					contentType: 'application/json',
+					body: JSON.stringify({ ok: true, id: 'image:draft-test', rev: '2-attachment-mock' })
+				});
+				return;
+			}
+			await route.fallback();
+		});
+
+		await page.getByPlaceholder('ชื่อจริง').fill('สมหญิง');
+		await page.getByPlaceholder('นามสกุล', { exact: true }).fill('ใจมั่น');
+		await page
+			.locator('[data-slot="form-item"]')
+			.filter({ has: page.locator('label', { hasText: 'เพศ' }) })
+			.locator('[data-slot="select-trigger"]')
+			.click();
+		await page.getByRole('option', { name: /หญิง \(Female\)/ }).click();
+
+		const noPhoneCheckbox = page
+			.locator('label')
+			.filter({ hasText: 'ไม่มีเบอร์โทร' })
+			.locator('[data-slot="checkbox"]');
+		await noPhoneCheckbox.click();
+		await expect(noPhoneCheckbox).toBeChecked();
+
+		await page.locator('#face-photo-input').setInputFiles('static/icon-192.png');
+		const preview = page.getByRole('img', { name: 'Face' });
+		await expect(preview).toBeVisible();
+		await expect(noPhoneCheckbox).toBeChecked();
+		const previewUrl = await preview.getAttribute('src');
+		expect(previewUrl).toMatch(/^blob:/);
+
+		// Step 3 submit → Step 4 → Step 3 preserves the validated EvacueeInput draft.
+		await page.getByRole('button', { name: 'ถัดไป →' }).click();
+		await expect(page.getByText('ผู้ประสบภัยทุกคนต้องมีครัวเรือน', { exact: true })).toBeVisible();
+		await page.getByRole('button', { name: 'ย้อนกลับ' }).click();
+
+		await expect(page.getByPlaceholder('ชื่อจริง')).toHaveValue('สมหญิง');
+		await expect(page.getByPlaceholder('นามสกุล', { exact: true })).toHaveValue('ใจมั่น');
+		await expect(noPhoneCheckbox).toBeChecked();
+		await expect(page.locator('input[name="phone"]')).toBeDisabled();
+		await expect(preview).toHaveAttribute('src', previewUrl!);
+	});
+
 	test('should show SOS ESCALATE banner on step 3 when symptoms were selected in step 2', async ({
 		page
 	}) => {

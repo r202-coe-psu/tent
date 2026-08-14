@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type {
 		EvacueeInput,
@@ -105,6 +106,9 @@
 
 	let pendingEvacueeInput = $state<EvacueeInput | null>(null);
 	let pendingSymptoms = $state<string[]>([]);
+	let registrationDraft = $state.raw<Partial<EvacueeInput> | null>(null);
+	let registrationFacePhotoUrl = $state<string | null>(null);
+	let registrationDraftActive = $state(step === 3);
 
 	let selectedHousehold = $state<Household | null>(null);
 	let isCreatingNewHousehold = $state(false);
@@ -143,8 +147,19 @@
 
 	function goToStep(next: 1 | 2 | 3 | 4 | 5 | 6) {
 		zoneError = null;
+		if (next === 3) registrationDraftActive = true;
 		step = next;
 	}
+
+	function clearRegistrationDraft() {
+		if (registrationFacePhotoUrl) URL.revokeObjectURL(registrationFacePhotoUrl);
+		registrationDraft = null;
+		registrationFacePhotoUrl = null;
+	}
+
+	onDestroy(() => {
+		if (registrationFacePhotoUrl) URL.revokeObjectURL(registrationFacePhotoUrl);
+	});
 
 	function retryHouseholdData() {
 		evacueesQuery.refetch();
@@ -152,6 +167,7 @@
 	}
 
 	function handleRegistrationSubmit(input: EvacueeInput) {
+		registrationDraft = structuredClone(input);
 		pendingEvacueeInput = input;
 		pendingSymptoms = Array.from(selectedSymptoms);
 		selectedSymptoms.clear();
@@ -351,6 +367,8 @@
 
 			// Reset internal state
 			goToStep(1);
+			clearRegistrationDraft();
+			registrationDraftActive = false;
 			newlyRegisteredEvacuee = null;
 			selectedHousehold = null;
 			isCreatingNewHousehold = false;
@@ -449,6 +467,20 @@
 	</Alert.Root>
 {/if}
 
+{#if registrationDraftActive}
+	<div class:hidden={step !== 3}>
+		<RegistrationSection
+			onsubmit={handleRegistrationSubmit}
+			pending={isSubmittingEvacuee || pending}
+			onBack={() => goToStep(2)}
+			hasSymptomsSelected={selectedSymptoms.size > 0}
+			initialInput={registrationDraft}
+			ondraftchange={(input) => (registrationDraft = structuredClone(input))}
+			bind:facePhotoUrl={registrationFacePhotoUrl}
+		/>
+	</div>
+{/if}
+
 {#if step === 1}
 	<SearchSection onNext={() => goToStep(2)} />
 {:else if step === 2}
@@ -457,13 +489,6 @@
 		{selectedSymptoms}
 		onBack={() => goToStep(1)}
 		onNext={() => goToStep(3)}
-	/>
-{:else if step === 3}
-	<RegistrationSection
-		onsubmit={handleRegistrationSubmit}
-		pending={isSubmittingEvacuee || pending}
-		onBack={() => goToStep(2)}
-		hasSymptomsSelected={selectedSymptoms.size > 0}
 	/>
 {:else if step === 4}
 	<div class="space-y-6">
