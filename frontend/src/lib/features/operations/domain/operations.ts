@@ -163,7 +163,21 @@ export const stockLedgerInputSchema = z.object({
 });
 export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
 
-export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): StockLedger {
+/**
+ * The single factory every `stock_ledger` writer must go through (CR-055 R7) —
+ * it is where the `reason` ↔ `ref_id` invariant is enforced, so a writer that
+ * assembles the doc by hand silently escapes it.
+ *
+ * `id` exists for callers that need the `_id` BEFORE the write, so they can
+ * store it on another doc in the same `bulkDocs` batch — kitchen
+ * `issueRequisition` puts them on `kitchen_requisition.ledger_ids`. Omit it and
+ * `makeDoc` mints a ULID as usual.
+ */
+export function createStockLedger(
+	input: StockLedgerInput,
+	ctx: AuthorContext,
+	id?: string
+): StockLedger {
 	const d = stockLedgerInputSchema.parse(input);
 	return makeDoc(
 		'stock_ledger',
@@ -177,7 +191,8 @@ export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): 
 			...(d.lot ? { lot: d.lot } : {}),
 			occurred_at: d.occurred_at ?? now()
 		},
-		ctx
+		ctx,
+		id
 	);
 }
 
