@@ -23,6 +23,10 @@ export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 export const SHELTER_CAPABILITIES = [...STAFF_CAPABILITIES, SHELTER_MANAGER] as const;
 export type ShelterCapability = (typeof SHELTER_CAPABILITIES)[number];
 
+/** Roles an SA may pick in the portal user form (shelter capabilities + system_admin). */
+export const SA_GRANTABLE_CAPABILITIES = [...SHELTER_CAPABILITIES, SYSTEM_ADMIN] as const;
+export type SaGrantableCapability = (typeof SA_GRANTABLE_CAPABILITIES)[number];
+
 /** The CouchDB server-admin role — never mintable through the app. */
 export const COUCH_ADMIN = '_admin';
 
@@ -40,6 +44,22 @@ export function shelterCodeFromRoles(roles: readonly string[]): string | null {
 /** True when the role list denotes an SA or the CouchDB server admin (SA-equivalent). */
 export function isSystemAdmin(roles: readonly string[]): boolean {
 	return roles.includes(SYSTEM_ADMIN) || roles.includes(COUCH_ADMIN);
+}
+
+/** True when the role list holds the app `system_admin` RoleKey (not Couch `_admin`). */
+export function isAppSystemAdmin(roles: readonly string[]): boolean {
+	return roles.includes(SYSTEM_ADMIN);
+}
+
+/**
+ * True when removing/demoting this target would leave zero app SAs.
+ * `appSaCountIncludingTarget` is the current count of `_users` with `system_admin`.
+ */
+export function isLastAppSystemAdmin(
+	targetRoles: readonly string[],
+	appSaCountIncludingTarget: number
+): boolean {
+	return isAppSystemAdmin(targetRoles) && appSaCountIncludingTarget <= 1;
 }
 
 /** True when the role list denotes a shelter_manager. */

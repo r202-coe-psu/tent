@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
 	formatRoleList,
+	isAppSystemAdmin,
+	isLastAppSystemAdmin,
 	isShelterManager,
 	isStaffOnly,
 	isSystemAdmin,
@@ -23,6 +25,19 @@ describe('roles kernel', () => {
 		expect(isSystemAdmin(['system_admin'])).toBe(true);
 		expect(isSystemAdmin(['_admin'])).toBe(true);
 		expect(isSystemAdmin(['shelter:SH001', 'shelter_manager'])).toBe(false);
+	});
+
+	it('isAppSystemAdmin is only the app RoleKey, not Couch _admin', () => {
+		expect(isAppSystemAdmin(['system_admin'])).toBe(true);
+		expect(isAppSystemAdmin(['_admin'])).toBe(false);
+		expect(isAppSystemAdmin(['shelter:SH001', 'shelter_manager'])).toBe(false);
+	});
+
+	it('isLastAppSystemAdmin when the target is the only app SA', () => {
+		expect(isLastAppSystemAdmin(['system_admin'], 1)).toBe(true);
+		expect(isLastAppSystemAdmin(['system_admin'], 2)).toBe(false);
+		expect(isLastAppSystemAdmin(['shelter:SH001', 'registration_staff'], 1)).toBe(false);
+		expect(isLastAppSystemAdmin(['_admin'], 0)).toBe(false);
 	});
 
 	it('recognises shelter managers', () => {

@@ -2,10 +2,12 @@
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
+		isAppSystemAdmin,
 		isSystemAdmin,
 		roleDisplayLabel,
 		shelterCodeFromRoles,
-		shelterScopeRole
+		shelterScopeRole,
+		SYSTEM_ADMIN
 	} from '$lib/auth/roles';
 	import CreateUserForm from './create-user-form.svelte';
 	import EditUserForm from './edit-user-form.svelte';
@@ -20,12 +22,15 @@
 
 	let {
 		lockedShelterCode,
-		compact = false
+		compact = false,
+		allowSystemAdminRole = false
 	}: {
 		/** When set, list and forms are scoped to this shelter — no picker. */
 		lockedShelterCode?: string;
 		/** Embedded in shelter settings: smaller heading so it doesn't clash. */
 		compact?: boolean;
+		/** Portal-only: SA may create/edit `system_admin` users. */
+		allowSystemAdminRole?: boolean;
 	} = $props();
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -43,18 +48,25 @@
 	let dialogOpen = $state(false);
 	let editDialogOpen = $state(false);
 	let deleteDialogOpen = $state(false);
+	let demoteDialogOpen = $state(false);
 	let searchQuery = $state('');
 	let selectedUser = $state<UserSummary | null>(null);
 	let userToDelete = $state<string | null>(null);
+	let pendingDemote = $state<EditUserInput | null>(null);
+
+	function rolesFromInput(input: { capability: string; shelter_id?: string }): string[] | null {
+		if (input.capability === SYSTEM_ADMIN) return [SYSTEM_ADMIN];
+		const code = effectiveLock ?? input.shelter_id;
+		if (!code) return null;
+		return [shelterScopeRole(code), input.capability];
+	}
 
 	function handleCreate(input: CreateUserInput) {
-		const code = effectiveLock ?? input.shelter_id;
-		if (!code) {
+		const userRoles = rolesFromInput(input);
+		if (!userRoles) {
 			toast.error('A shelter code is required');
 			return;
 		}
-		// Build the canonical roles[]: shelter scope + capability (server re-validates).
-		const userRoles = [shelterScopeRole(code), input.capability];
 		createMutation.mutate(
 			{
 				name: input.username,
@@ -78,14 +90,13 @@
 		editDialogOpen = true;
 	}
 
-	function handleUpdate(input: EditUserInput) {
+	function applyUpdate(input: EditUserInput) {
 		if (!selectedUser) return;
-		const code = effectiveLock ?? input.shelter_id;
-		if (!code) {
+		const userRoles = rolesFromInput(input);
+		if (!userRoles) {
 			toast.error('A shelter code is required');
 			return;
 		}
-		const userRoles = [shelterScopeRole(code), input.capability];
 		updateMutation.mutate(
 			{
 				name: selectedUser.name,
@@ -98,11 +109,25 @@
 				onSuccess: () => {
 					toast.success(`User "${selectedUser?.name}" updated`);
 					editDialogOpen = false;
+					demoteDialogOpen = false;
 					selectedUser = null;
+					pendingDemote = null;
 				},
 				onError: (err: Error) => toast.error(err.message)
 			}
 		);
+	}
+
+	function handleUpdate(input: EditUserInput) {
+		if (!selectedUser) return;
+		const wasSa = isAppSystemAdmin(selectedUser.roles);
+		const willBeSa = input.capability === SYSTEM_ADMIN;
+		if (wasSa && !willBeSa) {
+			pendingDemote = input;
+			demoteDialogOpen = true;
+			return;
+		}
+		applyUpdate(input);
 	}
 
 	function confirmDelete(name: string) {
@@ -121,6 +146,13 @@
 			onError: (err: Error) => toast.error(err.message)
 		});
 	}
+
+	const deletingIsSa = $derived(
+		Boolean(
+			userToDelete &&
+			usersQuery.data?.some((u) => u.name === userToDelete && isAppSystemAdmin(u.roles))
+		)
+	);
 
 	const filteredUsers = $derived(
 		usersQuery.data?.filter((u: UserSummary) => {
@@ -179,6 +211,7 @@
 						onsubmit={handleCreate}
 						oncancel={() => (dialogOpen = false)}
 						{isSA}
+						{allowSystemAdminRole}
 						lockedShelterCode={effectiveLock ?? null}
 						pending={createMutation.isPending}
 					/>
@@ -231,6 +264,7 @@
 						selectedUser = null;
 					}}
 					{isSA}
+					{allowSystemAdminRole}
 					lockedShelterCode={effectiveLock ?? null}
 					pending={updateMutation.isPending}
 				/>
@@ -246,6 +280,11 @@
 			<Dialog.Description class="pt-2 text-sm text-slate-500">
 				คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้งาน <strong class="text-slate-900">{userToDelete}</strong>?
 				การดำเนินการนี้ไม่สามารถย้อนกลับได้
+				{#if deletingIsSa}
+					<span class="mt-2 block"
+						>บัญชีนี้เป็นผู้ดูแลระบบ — ลบได้เฉพาะเมื่อยังมี SA คนอื่นในระบบ</span
+					>
+				{/if}
 			</Dialog.Description>
 		</Dialog.Header>
 		<div class="mt-2 flex justify-end gap-4 pt-4">
@@ -267,6 +306,40 @@
 				class="rounded-lg bg-red-600 text-white hover:bg-red-700"
 			>
 				{#if deleteMutation.isPending}กำลังลบ...{:else}ยืนยันการลบ{/if}
+			</Button>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={demoteDialogOpen}>
+	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[400px]">
+		<Dialog.Header>
+			<Dialog.Title class="text-lg font-bold">ยืนยันการลดสิทธิ์ผู้ดูแลระบบ</Dialog.Title>
+			<Dialog.Description class="pt-2 text-sm text-slate-500">
+				จะลดสิทธิ์ <strong class="text-slate-900">{selectedUser?.name}</strong>
+				จากผู้ดูแลระบบเป็นบทบาทของศูนย์ ทำได้เฉพาะเมื่อยังมี SA คนอื่นในระบบ
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="mt-2 flex justify-end gap-4 pt-4">
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => {
+					demoteDialogOpen = false;
+					pendingDemote = null;
+				}}
+				class="rounded-lg"
+			>
+				ยกเลิก
+			</Button>
+			<Button
+				disabled={updateMutation.isPending || !pendingDemote}
+				onclick={() => {
+					if (pendingDemote) applyUpdate(pendingDemote);
+				}}
+				class="rounded-lg bg-[#0f2d5c] text-white hover:bg-[#0a1e3f]"
+			>
+				{#if updateMutation.isPending}กำลังบันทึก...{:else}ยืนยัน{/if}
 			</Button>
 		</div>
 	</Dialog.Content>

@@ -6,7 +6,13 @@
 	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { STAFF_CAPABILITIES, SHELTER_CAPABILITIES, roleDisplayLabel } from '$lib/auth/roles';
+	import {
+		STAFF_CAPABILITIES,
+		SHELTER_CAPABILITIES,
+		SA_GRANTABLE_CAPABILITIES,
+		roleDisplayLabel,
+		SYSTEM_ADMIN
+	} from '$lib/auth/roles';
 	import { createUserSchema, type CreateUserInput } from '../domain/schema';
 	import { useShelters } from '$lib/features/shelters';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -20,6 +26,7 @@
 		onsubmit,
 		oncancel,
 		isSA = false,
+		allowSystemAdminRole = false,
 		lockedShelterCode = null,
 		pending = false
 	}: {
@@ -27,14 +34,21 @@
 		oncancel?: () => void;
 		/** System admin: may grant shelter_manager as well as staff capabilities. */
 		isSA?: boolean;
+		/** Portal-only: include `system_admin` in the role picker. */
+		allowSystemAdminRole?: boolean;
 		/** When set, this code is always shelter_id — hide the picker even for SA. */
 		lockedShelterCode?: string | null;
 		pending?: boolean;
 	} = $props();
 
 	const shelterLocked = $derived(Boolean(lockedShelterCode));
-	// SA may grant shelter_manager too; a manager only staff capabilities.
-	const capabilities = $derived(isSA ? SHELTER_CAPABILITIES : STAFF_CAPABILITIES);
+	const capabilities = $derived(
+		isSA && allowSystemAdminRole
+			? SA_GRANTABLE_CAPABILITIES
+			: isSA
+				? SHELTER_CAPABILITIES
+				: STAFF_CAPABILITIES
+	);
 
 	const form = superForm(defaults(zod4(createUserSchema)), {
 		SPA: true,
@@ -49,6 +63,8 @@
 	});
 
 	const { form: formData, submitting, reset } = form;
+
+	const isSaCapability = $derived($formData.capability === SYSTEM_ADMIN);
 
 	const shelterItems = $derived(
 		(sheltersQuery.data ?? []).map((s) => ({
@@ -145,7 +161,12 @@
 			<Form.FieldErrors />
 		</Form.Field>
 
-		{#if isSA && !shelterLocked}
+		{#if isSaCapability}
+			<Field.Field>
+				<Field.Label class="font-bold">Shelter</Field.Label>
+				<p class="text-sm text-muted-foreground">สิทธิ์ทั้งระบบ — ไม่ผูกกับศูนย์พักพิง</p>
+			</Field.Field>
+		{:else if isSA && !shelterLocked}
 			<Form.Field {form} name="shelter_id">
 				<Form.Control>
 					{#snippet children({ props })}

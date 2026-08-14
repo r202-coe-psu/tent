@@ -2,6 +2,8 @@ import { env } from '$env/dynamic/private';
 import { error, json } from '@sveltejs/kit';
 import {
 	COUCH_ADMIN,
+	SYSTEM_ADMIN,
+	isAppSystemAdmin,
 	isShelterManager,
 	isStaffOnly,
 	isSystemAdmin,
@@ -17,7 +19,7 @@ import {
  * here so the admin password stays on the server.
  */
 
-function adminConfig(): { base: string; authHeader: string } {
+function adminConfig(): { base: string; authHeader: string; user: string } {
 	const url = env.COUCHDB_ADMIN_URL ?? '';
 	const match = url.match(/^(https?:\/\/)([^:]+):([^@]+)@(.+)$/);
 	if (!match) {
@@ -26,8 +28,25 @@ function adminConfig(): { base: string; authHeader: string } {
 	const [, scheme, user, pass, host] = match;
 	return {
 		base: `${scheme}${host}`.replace(/\/$/, ''),
-		authHeader: 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64')
+		authHeader: 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64'),
+		user: decodeURIComponent(user)
 	};
+}
+
+/** Username of the CouchDB server admin from `COUCHDB_ADMIN_URL` (typically `admin`). */
+export function bootstrapAdminName(): string {
+	return adminConfig().user;
+}
+
+/**
+ * True when the `_users` doc is the immutable CouchDB bootstrap admin:
+ * username matches {@link bootstrapAdminName} or the doc holds `_admin`.
+ */
+export function isProtectedBootstrapAdmin(
+	doc: { name: string; roles?: readonly string[] },
+	bootstrapName: string = bootstrapAdminName()
+): boolean {
+	return doc.name === bootstrapName || (doc.roles ?? []).includes(COUCH_ADMIN);
 }
 
 /** Raw admin request — returns status + parsed body, never throws on HTTP error. */
@@ -275,8 +294,11 @@ export async function requireShelterScopeOrSA(
 /**
  * Enforce what a caller may grant a new/edited user (least privilege). The
  * requested `roles[]` is validated against the caller — never trusted:
- *  - SA: any roles except the CouchDB server admin (`_admin`); at most one
- *    shelter scope (1 user 1 shelter).
+ *  - Minting `system_admin`: caller must hold the app RoleKey `system_admin`
+ *    (Couch `_admin` alone is not enough). The granted list must be exactly
+ *    `["system_admin"]` (no shelter scope / capability mix). CR-074.
+ *  - Other grants: SA (or Couch `_admin`) may grant any roles except `_admin`;
+ *    at most one shelter scope (1 user 1 shelter).
  *  - shelter_manager: shelter scope MUST equal the caller's own (no cross-shelter),
  *    capabilities ⊆ {registration_staff, kitchen_staff, warehouse_staff}
  *    (no manager/SA). Per CR-002 / spec §1.1, `volunteer` is no longer a RoleKey.
@@ -292,7 +314,17 @@ export function assertCanGrant(caller: Caller, requestedRoles: readonly string[]
 		throw new ServiceError('VALIDATION', 'A user belongs to at most one shelter');
 	}
 
-	if (caller.isSA) return; // SA may grant any non-_admin role.
+	if (requestedRoles.includes(SYSTEM_ADMIN)) {
+		if (!isAppSystemAdmin(caller.roles)) {
+			throw new ServiceError('FORBIDDEN', 'Only a system_admin may grant the system_admin role');
+		}
+		if (requestedRoles.length !== 1 || requestedRoles[0] !== SYSTEM_ADMIN) {
+			throw new ServiceError('VALIDATION', 'system_admin cannot be combined with other roles');
+		}
+		return;
+	}
+
+	if (caller.isSA) return; // SA / Couch _admin may grant non-_admin shelter roles.
 
 	// shelter_manager: own shelter only, staff capabilities only.
 	if (!caller.shelterCode) {

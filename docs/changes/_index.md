@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-08-13 # CR-066..CR-071 approved (Wave 1–3 + T-72; CR-067 P1 only; CR-071 slice A only); CR-072/CR-073 proposed — Wave 4 next CR round
+updated: 2026-08-14 # CR-074 approved (SA user management); CR-066..CR-071 approved (Wave 1–3 + T-72); CR-072/CR-073 proposed — Wave 4 next CR round
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -92,3 +92,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-071](CR-071-people-import-inbound.md) | People import xlsx/csv + inbound API (inbound payload blocked รอ spec); D-REG-VIA ล็อก `web`+`api`; T-72 initial stay=A + import permission=RS+SA+SM — **approved slice A**; T-73 = รอบ CR ถัดไป | approved | volatile | 2026-08-13 (approved 2026-08-13) | T-55 overlap, T-72/T-73, `registered_via` import/api |
 | [CR-072](CR-072-triage-green-yellow-red.md) | คัดกรอง เขียว/เหลือง/แดง — กฎการแพทย์ยังไม่เคาะ (blocked); Wave 4 รอบ CR ถัดไป | proposed | volatile | 2026-08-13 | screening/medical.track, T-49 overlap, T-74 |
 | [CR-073](CR-073-one-platform-external-get-blocked.md) | ONE PLATFORM + external GET payload — blocked รอ SPEC หน่วยงาน (K-14); Wave 4 รอบ CR ถัดไป | proposed | volatile | 2026-08-13 | api-contract (หลัง SPEC), T-75, CR-062 `/external/v1` คงเดิม |
+| [CR-074](CR-074-sa-user-management.md) | จัดการ user SA — grant `system_admin` ได้เฉพาะ app SA; exclusive roles; last-SA; ล็อก Couch bootstrap admin ไม่ให้ลบ/แก้ผ่านแอป; UI เฉพาะ portal | done | volatile | 2026-08-14 | role-permission-matrix FR-34, api-contract §3, schema.md §6, users feature, couch-admin/user-service, seed sa01, UAT-122 |

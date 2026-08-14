@@ -21,12 +21,12 @@
  * | seedRegistry — shelter master| plain object          | no factory (server-side only) |
  * | seedCatalog — supply items   | plain object          | no factory (no catalog feature) |
  * | seedCatalog — recipes        | plain object          | no factory (no catalog feature) |
- * | seedUsers — _users staff     | plain CouchDB user    | staff01–staff03 test logins     |
+ * | seedUsers — _users staff     | plain CouchDB user    | sa01 + staff01–staff03 test logins |
  *
  * Safe to re-run: catalog and registry docs use deterministic IDs
  * (PUT → 409 = already exists → skip). Shelter docs use ULIDs so
  * re-running adds another batch — useful for volume testing.
- * Test users (staff01–03) are also idempotent (409 → skip).
+ * Test users (sa01, staff01–03) are also idempotent (409 → skip).
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -318,13 +318,34 @@ const USER_PREFIX = 'org.couchdb.user:';
 const SEED_STAFF_PASSWORD = '!Q2w3e4r5t';
 const SEED_STAFF_ROLES = ['shelter:SH001', 'registration_staff'] as const;
 
-/** Create staff01–staff03 test logins in CouchDB `_users` (idempotent). */
+/** Create sa01 + staff01–staff03 test logins in CouchDB `_users` (idempotent). */
 async function seedUsers(): Promise<void> {
-	const names = ['staff01', 'staff02', 'staff03'] as const;
+	const staffNames = ['staff01', 'staff02', 'staff03'] as const;
 	let created = 0;
 	let skipped = 0;
 
-	for (const name of names) {
+	const { status: saStatus } = await couchReq(
+		'PUT',
+		`/_users/${USER_PREFIX}${encodeURIComponent('sa01')}`,
+		{
+			name: 'sa01',
+			password: SEED_STAFF_PASSWORD,
+			display_name: 'System Admin',
+			roles: ['system_admin'],
+			type: 'user',
+			shelter_id: null,
+			affiliation_tags: []
+		}
+	);
+	if (saStatus === 201) {
+		created += 1;
+	} else if (saStatus === 409) {
+		skipped += 1;
+	} else {
+		throw new Error(`PUT _users/sa01 failed (HTTP ${saStatus})`);
+	}
+
+	for (const name of staffNames) {
 		const { status } = await couchReq('PUT', `/_users/${USER_PREFIX}${encodeURIComponent(name)}`, {
 			name,
 			password: SEED_STAFF_PASSWORD,
@@ -344,7 +365,7 @@ async function seedUsers(): Promise<void> {
 	}
 
 	console.log(
-		`  ✓ _users: staff01–staff03 (password shared; ${created} created, ${skipped} already exist)`
+		`  ✓ _users: sa01 + staff01–staff03 (password shared; ${created} created, ${skipped} already exist)`
 	);
 }
 

@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-13
+updated: 2026-08-14
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้
 ---
 
@@ -110,8 +110,13 @@ DELETE /api/v1/users?name=       → ลบ user (SM ลบได้เฉพา
 ```
 
 > **shelter provisioning** (`/api/v1/shelters*`) = `system_admin` เท่านั้น. **user management**
-> (`/api/v1/users`) authorization ละเอียดกว่า (FR-34, แก้ 2026-06-14):
+> (`/api/v1/users`) authorization ละเอียดกว่า (FR-34, แก้ 2026-06-14, CR-074 2026-08-14):
 > - **`system_admin`** — สร้าง/ลบ user ได้ทุก role (ยกเว้น CouchDB `_admin`), ทุกศูนย์; เลือก `shelter:{code}` จาก payload.
+>   Grant `system_admin` ได้เฉพาะ caller ที่ `_users.roles` มี `system_admin` (ไม่ใช่แค่ Couch `_admin`).
+>   รูป `roles` ของ SA ต้องเป็น `["system_admin"]` เท่านั้น (`shelter_id = null`) — ผสม shelter/capability → `VALIDATION`.
+>   ห้ามลบหรือลดสิทธิ์ app SA คนสุดท้าย → `FORBIDDEN`.
+>   CouchDB server admin (username จาก `COUCHDB_ADMIN_URL` / `COUCHDB_USER` หรือ `roles` มี `_admin`) ห้าม
+>   create ทับชื่อ / update / delete ผ่านแอป → `FORBIDDEN`; ไม่ปรากฏใน `GET /api/v1/users`.
 > - **`shelter_manager`** — เฉพาะ **staff** (`registration_staff`/`kitchen_staff`/`warehouse_staff`) ใน **ศูนย์ตนเท่านั้น**;
 >   `shelter:{code}` derive จาก session ผู้เรียก (ไม่เชื่อ client). ห้าม grant `shelter_manager`/`system_admin`/`_admin` หรือข้ามศูนย์ → `FORBIDDEN`.
 > - server validate `roles[]` เสมอ (ไม่ไว้ใจ payload). contract นี้คือสิ่งที่ service จริง (FastAPI) ต้องบังคับเหมือนกัน — dev BFF เป็น implementation ชั่วคราว.

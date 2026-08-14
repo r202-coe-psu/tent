@@ -145,8 +145,9 @@ UAT-111,Back-Office,SOP parameters,P0,"SA,SM",/back-office/sop-parameters,ตั
 UAT-120,Back-Office,Create staff user (SM),P0,SM,/back-office/users,SM สร้าง staff ในศูนย์ตน,Login SM,"1) สร้าง user role REG หรือ KS หรือ WS
 2) Login ด้วยบัญชีใหม่",สร้างสำเร็จ และบัญชีใหม่ scope ศูนย์ตน,Not Tested,,,,,Staging,
 UAT-121,Back-Office,SM cannot create SA/SM,P0,SM,/back-office/users,SM สร้าง SA หรือ SM ไม่ได้,Login SM,1) พยายามสร้าง system_admin หรือ shelter_manager,ถูกปฏิเสธ,Not Tested,,,,,Staging,FR-34
-UAT-122,Back-Office,SA create any role,P0,SA,/back-office/users,SA สร้าง user ทุก role / ข้ามศูนย์ได้,Login SA,"1) สร้าง SM ศูนย์ B
-2) สร้าง SA อื่น (ถ้านโยบายอนุญาต)",สร้างสำเร็จตามที่อนุญาต,Not Tested,,,,,Staging,
+UAT-122,System Management,SA create any role,P0,SA,/portal/system-management/users,SA สร้าง user ทุก role รวม SA อื่น / ข้ามศูนย์ได้,Login SA,"1) สร้าง SM ศูนย์ B
+2) สร้าง SA อื่น (roles = system_admin เท่านั้น)
+3) ยืนยันลบ Couch admin (COUCHDB_USER) ไม่ได้",สร้างสำเร็จตามที่อนุญาต; bootstrap admin ล็อก,Not Tested,,,,,Staging,FR-34 CR-074
 UAT-123,Back-Office,Edit/delete user,P1,"SA,SM",/back-office/users,แก้ไขและลบ user ตามสิทธิ์,มี user ทดสอบ,"1) แก้ display name/role
 2) ลบ user ทดสอบ",แก้/ลบสำเร็จ; SM ทำได้เฉพาะ staff ศูนย์ตน,Not Tested,,,,,Staging,
 UAT-124,Back-Office,Affiliation tags no permission,P2,SA,/back-office/users,affiliation_tags ไม่ให้สิทธิ์พิเศษ,-,"1) ใส่ tag volunteer ให้ user ที่ไม่มี role พิเศษ
