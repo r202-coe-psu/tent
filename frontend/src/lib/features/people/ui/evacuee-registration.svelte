@@ -682,18 +682,23 @@
 		</div>
 
 		<!-- Back + Submit row -->
-		<div class="flex w-full items-center justify-between border-t border-border pt-6">
+		<div
+			class="flex w-full flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
+		>
+			<Form.Button
+				disabled={$submitting || pending}
+				class="h-12 w-full px-6 text-sm font-semibold sm:h-10 sm:w-auto"
+			>
+				ถัดไป →
+			</Form.Button>
 			<Button
 				type="button"
 				variant="outline"
 				onclick={onBack}
-				class="h-10 px-6 text-sm font-medium"
+				class="h-12 w-full px-6 text-sm font-medium sm:h-10 sm:w-auto"
 			>
 				ย้อนกลับ
 			</Button>
-			<Form.Button disabled={$submitting || pending} class="h-10 px-6 text-sm font-semibold">
-				ถัดไป →
-			</Form.Button>
 		</div>
 	</Field.FieldGroup>
 </form>

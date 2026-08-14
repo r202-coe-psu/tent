@@ -153,15 +153,46 @@ test.describe('Evacuee Registration', () => {
 
 		// Assert — step label spans rendered (sm+ viewport)
 		// After heading is visible the labels should already be in DOM
-		await expect(page.getByText('ตรวจสอบประวัติ').first()).toBeVisible({ timeout: 5_000 });
-		await expect(page.getByText('ประเมินอาการ').first()).toBeVisible({ timeout: 5_000 });
-		await expect(page.getByText('ข้อมูลผู้ประสบภัย').first()).toBeVisible({ timeout: 5_000 });
-		await expect(page.getByText('ข้อมูลครัวเรือน').first()).toBeVisible({ timeout: 5_000 });
-		await expect(page.getByText('ทรัพย์สินและสัตว์เลี้ยง').first()).toBeVisible({ timeout: 5_000 });
-		await expect(page.getByText('จัดสรรพื้นที่').first()).toBeVisible({ timeout: 5_000 });
+		// Assert — desktop short labels (exact) so the compact mobile h2
+		// "ตรวจสอบประวัติการลงทะเบียน" is not matched as a hidden first hit
+		await expect(page.getByText('ตรวจสอบประวัติ', { exact: true })).toBeVisible({ timeout: 5_000 });
+		await expect(page.getByText('ประเมินอาการ', { exact: true })).toBeVisible({ timeout: 5_000 });
+		await expect(page.getByText('ข้อมูลผู้ประสบภัย', { exact: true })).toBeVisible({
+			timeout: 5_000
+		});
+		await expect(page.getByText('ข้อมูลครัวเรือน', { exact: true })).toBeVisible({
+			timeout: 5_000
+		});
+		await expect(page.getByText('ทรัพย์สินและสัตว์เลี้ยง', { exact: true })).toBeVisible({
+			timeout: 5_000
+		});
+		await expect(page.getByText('จัดสรรพื้นที่', { exact: true })).toBeVisible({ timeout: 5_000 });
 	});
 
-	test('should highlight step 1 circle with ring class when registration starts', async ({
+	test('should show compact step progress and stacked actions on a mobile viewport', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await setupPage(page);
+		await page.goto('/onsite/people');
+
+		await expect(page.getByText('ขั้น 1 จาก 6')).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByRole('heading', { name: 'ตรวจสอบประวัติการลงทะเบียน' })).toBeVisible();
+		await expect(page.getByRole('progressbar', { name: 'ความคืบหน้าการลงทะเบียน' })).toBeVisible();
+
+		await page.getByRole('button', { name: 'ลงทะเบียนใหม่' }).first().click();
+		await expect(page.getByText('ขั้น 2 จาก 6')).toBeVisible({ timeout: 5_000 });
+
+		const nextBtn = page.getByRole('button', { name: 'ถัดไป →' });
+		const backBtn = page.getByRole('button', { name: 'ย้อนกลับ' });
+		await expect(nextBtn).toBeVisible();
+		await expect(backBtn).toBeVisible();
+		const nextBox = await nextBtn.boundingBox();
+		const backBox = await backBtn.boundingBox();
+		expect(nextBox?.y).toBeLessThan(backBox?.y ?? Number.POSITIVE_INFINITY);
+	});
+
+	test('should highlight step 1 in the progress indicator when registration starts', async ({
 		page
 	}) => {
 		// Arrange
@@ -171,16 +202,13 @@ test.describe('Evacuee Registration', () => {
 			timeout: 15_000
 		});
 
-		// Act — already at step 1
-
-		// Assert — active step gets bg-primary (ring-* classes are JIT-purged in preview build)
+		// Assert — desktop stepper marks step 1 as current
 		const step1Circle = page.locator('div.rounded-full').filter({ hasText: '1' }).first();
 		await expect(step1Circle).toHaveClass(/bg-primary/);
+		await expect(step1Circle).toHaveAttribute('aria-current', 'step');
 	});
 
-	test('should advance the ring highlight to step 2 after clicking ลงทะเบียนใหม่', async ({
-		page
-	}) => {
+	test('should highlight step 2 after clicking ลงทะเบียนใหม่', async ({ page }) => {
 		// Arrange
 		await setupPage(page);
 		await page.goto('/onsite/people');
@@ -194,9 +222,13 @@ test.describe('Evacuee Registration', () => {
 			timeout: 5_000
 		});
 
-		// Assert — step 2 circle should now be the active (bg-primary) one
+		// Assert
+		await expect(
+			page.getByRole('heading', { name: /ส่วนประเมินอาการเจ็บป่วยและกลุ่มอาการเฝ้าระวัง/ })
+		).toBeVisible({ timeout: 5_000 });
 		const step2Circle = page.locator('div.rounded-full').filter({ hasText: '2' }).first();
 		await expect(step2Circle).toHaveClass(/bg-primary/);
+		await expect(step2Circle).toHaveAttribute('aria-current', 'step');
 	});
 
 	test('should display all mandatory fields and sections on step 3', async ({ page }) => {
@@ -338,6 +370,28 @@ test.describe('Evacuee Registration', () => {
 		await expect(
 			page.getByText('ไม่พบข้อมูลในระบบ').or(page.getByText('เกิดข้อผิดพลาดในการค้นหา'))
 		).toBeVisible({ timeout: 15_000 });
+	});
+
+	test('should show a retryable error when history search fails', async ({ page }) => {
+		await setupPage(page);
+		await page.goto('/onsite/people');
+		await expect(page.getByRole('heading', { name: 'ตรวจสอบประวัติการลงทะเบียน' })).toBeVisible({
+			timeout: 15_000
+		});
+
+		await page.route('**/_all_docs**', async (route) => {
+			await route.fulfill({
+				status: 500,
+				contentType: 'application/json',
+				body: JSON.stringify({ error: 'internal_server_error' })
+			});
+		});
+
+		await page.getByPlaceholder('เลขบัตรประชาชน / เบอร์โทร / ชื่อ-นามสกุล').fill('สมชาย');
+		await expect(page.getByText('เกิดข้อผิดพลาดในการค้นหา')).toBeVisible({
+			timeout: 15_000
+		});
+		await expect(page.getByRole('button', { name: 'ลองใหม่' })).toBeVisible();
 	});
 
 	// ══════════════════════════════════════════════════════════════════════════
@@ -584,17 +638,18 @@ test.describe('Evacuee Registration', () => {
 		await page.getByRole('button', { name: 'ถัดไป →' }).click();
 		await expect(page.getByText('ข้อมูลครัวเรือน')).toBeVisible({ timeout: 10_000 });
 
-		const skipBtn = page.getByRole('button', { name: 'ข้าม / ถัดไป' });
+		const skipBtn = page.getByRole('button', { name: 'ลงทะเบียนโดยไม่ผูกครัวเรือน' });
 		await expect(skipBtn).toBeVisible({ timeout: 5_000 });
 		await skipBtn.click();
 
-		// Assert — 409 must NOT be swallowed silently; the specific ConflictError
-		// toast must appear ("เกิดข้อผิดพลาดในการบันทึก: Document conflict" from
-		// evacuee-form's catch + ConflictError.message). A broad /เกิดข้อผิดพลาด/
-		// match would also pass on unrelated save failures.
-		await expect(page.getByText(/เกิดข้อผิดพลาดในการบันทึก:.*Document conflict/i)).toBeVisible({
+		await expect(
+			page.getByText('บันทึกไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน')
+		).toBeVisible({
 			timeout: 8_000
 		});
+		await expect(
+			page.getByRole('alert').getByText('บันทึกไม่สำเร็จ — ระบบปฏิเสธเอกสาร', { exact: true })
+		).toBeVisible({ timeout: 5_000 });
 	});
 
 	// ══════════════════════════════════════════════════════════════════════════
@@ -752,24 +807,25 @@ test.describe('Evacuee Registration', () => {
 		// Toggle to "Fuzzy Match" search
 		await page.getByRole('button', { name: /ค้นหาด้วยที่อยู่/ }).click();
 
-		// Check search address input and location input are visible
 		const addressInput = page.getByPlaceholder('พิมพ์ตัวเลขนำหน้า เช่น 12/3 หรือ 45');
-		const locationInput = page.getByPlaceholder('พิมพ์เพื่อค้นหา เช่น บ้านพรุ หรือ 90250');
+		const locationTrigger = page.getByRole('button', {
+			name: /พิมพ์เพื่อค้นหา เช่น บ้านพรุ หรือ 90250|กำลังโหลดข้อมูลที่อยู่/
+		});
 		await expect(addressInput).toBeVisible();
-		await expect(locationInput).toBeVisible();
+		await expect(locationTrigger).toBeVisible();
+		await expect(locationTrigger).toHaveText(/พิมพ์เพื่อค้นหา เช่น บ้านพรุ หรือ 90250/, {
+			timeout: 10_000
+		});
 
-		// Type in locationInput to trigger dropdown
-		await locationInput.fill('บ้านพรุ');
+		await locationTrigger.click();
+		await page.getByPlaceholder('ค้นหา...').fill('บ้านพรุ');
 
-		// Check dropdown list option is visible
 		const option = page.getByRole('button', { name: /ต.บ้านพรุ อ.หาดใหญ่/ });
 		await expect(option).toBeVisible({ timeout: 5_000 });
-
-		// Click the dropdown option to select
 		await option.click();
-
-		// Check locationInput contains the formatted selection
-		await expect(locationInput).toHaveValue(/ต.บ้านพรุ อ.หาดใหญ่/);
+		await expect(
+			page.getByRole('button', { name: 'ต.บ้านพรุ อ.หาดใหญ่ จ.สงขลา 90250' })
+		).toBeVisible();
 
 		// Fill address input
 		await addressInput.fill('12/3');

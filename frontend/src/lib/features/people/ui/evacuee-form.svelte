@@ -17,6 +17,9 @@
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Alert from '$lib/components/ui/alert/index.js';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import {
 		useEvacuees,
 		useHouseholds,
@@ -29,6 +32,39 @@
 		type SaveFailureReport
 	} from '../index';
 	import { getShelterCode } from '$lib/db/shelter';
+
+	const STEPS = [
+		{
+			title: 'ตรวจสอบประวัติการลงทะเบียน',
+			short: 'ตรวจสอบประวัติ',
+			description: 'ค้นหาด้วยเลขบัตรประชาชน, เบอร์โทรศัพท์ หรือชื่อ-นามสกุล ก่อนลงทะเบียนใหม่'
+		},
+		{
+			title: 'ส่วนประเมินอาการเจ็บป่วยและกลุ่มอาการเฝ้าระวัง (EWAR Symptoms)',
+			short: 'ประเมินอาการ',
+			description: 'โปรดสังเกตอาการหรือสอบถามผู้ประสบภัยก่อนเริ่มลงทะเบียน หากพบอาการให้แจ้งเตือน'
+		},
+		{
+			title: 'ข้อมูลผู้ประสบภัย (Registration)',
+			short: 'ข้อมูลผู้ประสบภัย',
+			description: 'กรอกข้อมูลพื้นฐานและประเมินสถานะ'
+		},
+		{
+			title: 'หน้าค้นหาครัวเรือน (Head of Household)',
+			short: 'ข้อมูลครัวเรือน',
+			description: 'สืบค้นและตรวจสอบกลุ่มครอบครัว หรือลงทะเบียนเป็นครอบครัวใหม่'
+		},
+		{
+			title: 'ทรัพย์สินและสัตว์เลี้ยง (Assets & Pets)',
+			short: 'ทรัพย์สินและสัตว์เลี้ยง',
+			description: 'บันทึกข้อมูลสัมภาระ ยานพาหนะ สัตว์เลี้ยง และสถานะบ้าน'
+		},
+		{
+			title: 'จัดสรรพื้นที่ (Zoning)',
+			short: 'จัดสรรพื้นที่',
+			description: 'เลือกโซนพักพิงและพิมพ์สลิปข้อปฏิบัติ'
+		}
+	] as const;
 
 	let {
 		onsubmit,
@@ -62,6 +98,9 @@
 	let newlyRegisteredEvacuee = $state<Evacuee | null>(null);
 	let isSubmittingEvacuee = $state(false);
 	let isSubmittingHousehold = $state(false);
+	let zoneError = $state<string | null>(null);
+
+	const currentStep = $derived(STEPS[step - 1]);
 
 	let pendingEvacueeInput = $state<EvacueeInput | null>(null);
 	let pendingSymptoms = $state<string[]>([]);
@@ -93,18 +132,30 @@
 	// Fetch data for HouseholdRegisterForm
 	const evacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
+	const householdDataLoading = $derived(evacueesQuery.isLoading || householdsQuery.isLoading);
+	const householdDataError = $derived(evacueesQuery.isError || householdsQuery.isError);
 
 	const createHouseholdMutation = useCreateHousehold();
 	const updateHouseholdMutation = useUpdateHousehold();
 	const updateEvacueeMutation = useUpdateEvacuee();
 	const checkInMutation = useCheckInEvacuee();
 
+	function goToStep(next: 1 | 2 | 3 | 4 | 5 | 6) {
+		zoneError = null;
+		step = next;
+	}
+
+	function retryHouseholdData() {
+		evacueesQuery.refetch();
+		householdsQuery.refetch();
+	}
+
 	function handleRegistrationSubmit(input: EvacueeInput) {
 		pendingEvacueeInput = input;
 		pendingSymptoms = Array.from(selectedSymptoms);
 		selectedSymptoms.clear();
 		isHealthy = false;
-		step = 4;
+		goToStep(4);
 	}
 
 	function handleHouseholdSelect(household: Household) {
@@ -117,7 +168,7 @@
 		newHouseholdAddress = addressInput;
 		isCreatingNewHousehold = true;
 		selectedHousehold = null;
-		step = 5;
+		goToStep(5);
 	}
 
 	async function handleFinalSubmit(petAssetVehicleData: {
@@ -234,7 +285,7 @@
 			}
 
 			// Go to step 6 (Zoning)
-			step = 6;
+			goToStep(6);
 		} catch (err) {
 			const repo = peopleRepository();
 			if (createdHouseholdId) {
@@ -267,8 +318,11 @@
 	}
 
 	async function handleZoneSubmit(zone: string) {
+		zoneError = null;
+
 		if (!newlyRegisteredEvacuee) {
-			toast.error('ไม่พบข้อมูลผู้ประสบภัยที่กำลังคัดแยก');
+			zoneError = 'ไม่พบข้อมูลผู้ประสบภัยที่กำลังคัดแยก กรุณาย้อนกลับไปตรวจสอบขั้นตอนก่อนหน้า';
+			toast.error('จัดสรรพื้นที่ไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน');
 			return;
 		}
 
@@ -276,7 +330,9 @@
 			// Fetch the latest evacuee document to avoid CouchDB MVCC revision conflicts
 			const latestEvacuee = await peopleRepository().getEvacuee(newlyRegisteredEvacuee._id);
 			if (!latestEvacuee) {
-				toast.error('ไม่พบข้อมูลผู้ประสบภัยในระบบ');
+				zoneError =
+					'ไม่พบข้อมูลผู้ประสบภัยในระบบ — ข้อมูลอาจยังไม่ถูกบันทึกครบ กรุณาย้อนกลับหรือลองใหม่อีกครั้ง';
+				toast.error('จัดสรรพื้นที่ไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน');
 				return;
 			}
 
@@ -295,7 +351,7 @@
 			toast.success('บันทึกข้อมูลและจัดสรรพื้นที่สำเร็จ');
 
 			// Reset internal state
-			step = 1;
+			goToStep(1);
 			newlyRegisteredEvacuee = null;
 			selectedHousehold = null;
 			isCreatingNewHousehold = false;
@@ -303,119 +359,156 @@
 
 			// Notify parent to show the success/wristband screen
 			onComplete?.(finishedEvacuee);
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			toast.error(`เกิดข้อผิดพลาดในการจัดสรรพื้นที่: ${message}`);
+		} catch {
+			zoneError =
+				'จัดสรรพื้นที่ไม่สำเร็จ — ข้อมูลผู้ประสบภัยถูกบันทึกแล้ว กรุณาลองเลือกโซนอีกครั้ง ไม่ต้องลงทะเบียนใหม่';
+			toast.error('จัดสรรพื้นที่ไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน');
 		}
 	}
 </script>
 
-<!-- ── Step wizard indicator ───────────────────────────────────────────────────── -->
-{#snippet stepLabel(s: number)}
-	{s === 1
-		? 'ตรวจสอบประวัติ'
-		: s === 2
-			? 'ประเมินอาการ'
-			: s === 3
-				? 'ข้อมูลผู้ประสบภัย'
-				: s === 4
-					? 'ข้อมูลครัวเรือน'
-					: s === 5
-						? 'ทรัพย์สินและสัตว์เลี้ยง'
-						: 'จัดสรรพื้นที่'}
-{/snippet}
-
-<div class="mb-8 flex items-start">
-	{#each [1, 2, 3, 4, 5, 6] as s (s)}
-		<div class="flex flex-1 flex-col items-center gap-2">
-			<div class="flex w-full items-center">
-				<!-- left connector -->
-				<div
-					class="h-0.5 flex-1 transition-colors {s === 1
-						? 'invisible'
-						: step >= s
-							? 'bg-green-500'
-							: 'bg-border'}"
-				></div>
-				<!-- circle -->
-				<div
-					class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors {step ===
-					s
-						? 'bg-primary text-primary-foreground ring-4 ring-primary/20'
-						: step > s
-							? 'bg-green-600 text-white'
-							: 'bg-muted text-muted-foreground'}"
-				>
-					{step > s ? '✓' : s}
-				</div>
-				<!-- right connector -->
-				<div
-					class="h-0.5 flex-1 transition-colors {s === 6
-						? 'invisible'
-						: step > s
-							? 'bg-green-500'
-							: 'bg-border'}"
-				></div>
-			</div>
-			<!-- label below -->
-			<span
-				class="hidden text-center text-xs leading-tight font-medium sm:block {step === s
-					? 'text-foreground'
-					: step > s
-						? 'text-green-700'
-						: 'text-muted-foreground'}"
-			>
-				{@render stepLabel(s)}
-			</span>
+<!-- ── Step progress ──────────────────────────────────────────────────────────── -->
+<div class="mb-6 space-y-3">
+	<div class="sm:hidden">
+		<p class="text-xs font-medium text-muted-foreground">ขั้น {step} จาก 6</p>
+		<h2 class="text-lg font-semibold">{currentStep.title}</h2>
+		<p class="text-sm text-muted-foreground">{currentStep.description}</p>
+		<div
+			class="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
+			role="progressbar"
+			aria-valuenow={step}
+			aria-valuemin={1}
+			aria-valuemax={6}
+			aria-label="ความคืบหน้าการลงทะเบียน"
+		>
+			<div
+				class="h-full rounded-full bg-primary transition-all"
+				style:width={`${(step / 6) * 100}%`}
+			></div>
 		</div>
-	{/each}
+	</div>
+
+	<div class="hidden sm:block">
+		<div class="mb-4 flex items-start">
+			{#each STEPS as meta, i (meta.short)}
+				{@const s = i + 1}
+				<div class="flex flex-1 flex-col items-center gap-2">
+					<div class="flex w-full items-center">
+						<div
+							class="h-0.5 flex-1 transition-colors {s === 1
+								? 'invisible'
+								: step >= s
+									? 'bg-green-500'
+									: 'bg-border'}"
+						></div>
+						<div
+							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors {step ===
+							s
+								? 'bg-primary text-primary-foreground ring-4 ring-primary/20'
+								: step > s
+									? 'bg-green-600 text-white'
+									: 'bg-muted text-muted-foreground'}"
+							aria-current={step === s ? 'step' : undefined}
+						>
+							{step > s ? '✓' : s}
+						</div>
+						<div
+							class="h-0.5 flex-1 transition-colors {s === 6
+								? 'invisible'
+								: step > s
+									? 'bg-green-500'
+									: 'bg-border'}"
+						></div>
+					</div>
+					<span
+						class="text-center text-xs leading-tight font-medium {step === s
+							? 'text-foreground'
+							: step > s
+								? 'text-green-700'
+								: 'text-muted-foreground'}"
+					>
+						{meta.short}
+					</span>
+				</div>
+			{/each}
+		</div>
+		<h2 class="text-xl font-semibold">{currentStep.title}</h2>
+		<p class="text-sm text-muted-foreground">{currentStep.description}</p>
+	</div>
 </div>
 
+{#if zoneError}
+	<Alert.Root variant="destructive" class="mb-4 border-destructive/40 bg-destructive/5">
+		<CircleAlert class="size-4" />
+		<Alert.Title class="font-semibold">จัดสรรพื้นที่ไม่สำเร็จ</Alert.Title>
+		<Alert.Description class="space-y-3">
+			<p>{zoneError}</p>
+			<Button type="button" variant="outline" size="sm" onclick={() => (zoneError = null)}>
+				ปิดการแจ้งเตือน
+			</Button>
+		</Alert.Description>
+	</Alert.Root>
+{/if}
+
 {#if step === 1}
-	<SearchSection onNext={() => (step = 2)} />
+	<SearchSection onNext={() => goToStep(2)} />
 {:else if step === 2}
 	<EwarSymptomSection
 		bind:isHealthy
 		{selectedSymptoms}
-		onBack={() => (step = 1)}
-		onNext={() => (step = 3)}
+		onBack={() => goToStep(1)}
+		onNext={() => goToStep(3)}
 	/>
 {:else if step === 3}
 	<RegistrationSection
 		onsubmit={handleRegistrationSubmit}
 		pending={isSubmittingEvacuee || pending}
-		onBack={() => (step = 2)}
+		onBack={() => goToStep(2)}
 		hasSymptomsSelected={selectedSymptoms.size > 0}
 	/>
 {:else if step === 4}
 	<div class="space-y-6">
-		<HouseholdRegisterForm
-			allEvacuees={combinedEvacuees}
-			households={householdsQuery.data ?? []}
-			onsubmit={handleHouseholdRegisterSubmit}
-			onselect={handleHouseholdSelect}
-			pending={isSubmittingHousehold}
-			bind:showNewHouseholdForm={isCreatingNewHousehold}
-		/>
-		<div class="flex items-center justify-between border-t border-border pt-6">
-			<Button
-				type="button"
-				variant="outline"
-				onclick={() => {
-					step = 3;
-				}}
-				class="h-10 gap-1 px-6 py-2 text-sm font-medium"
-			>
-				ย้อนกลับ
-			</Button>
+		{#if householdDataLoading}
+			<div class="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+				<Loader2 class="size-4 animate-spin" />
+				กำลังโหลดข้อมูลครัวเรือน...
+			</div>
+		{:else}
+			{#if householdDataError}
+				<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5">
+					<CircleAlert class="size-4" />
+					<Alert.Title class="font-semibold">โหลดข้อมูลครัวเรือนไม่สำเร็จ</Alert.Title>
+					<Alert.Description class="space-y-3">
+						<p>
+							ยังค้นหาครัวเรือนที่มีอยู่ไม่ได้ แต่สามารถลงทะเบียนครอบครัวใหม่ หรือข้ามขั้นนี้ได้
+						</p>
+						<Button type="button" variant="outline" size="sm" onclick={retryHouseholdData}>
+							ลองใหม่
+						</Button>
+					</Alert.Description>
+				</Alert.Root>
+			{/if}
+
+			<HouseholdRegisterForm
+				allEvacuees={combinedEvacuees}
+				households={householdsQuery.data ?? []}
+				onsubmit={handleHouseholdRegisterSubmit}
+				onselect={handleHouseholdSelect}
+				pending={isSubmittingHousehold}
+				bind:showNewHouseholdForm={isCreatingNewHousehold}
+			/>
+		{/if}
+		<div
+			class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
+		>
 			{#if !isCreatingNewHousehold}
 				<Button
 					type="button"
-					class="h-10 bg-[#003B71] px-6 text-sm font-medium hover:bg-[#002a50]"
+					class="h-12 w-full bg-[#003B71] text-sm font-medium hover:bg-[#002a50] sm:h-10 sm:w-auto sm:px-6"
 					disabled={isSubmittingHousehold}
 					onclick={async () => {
 						if (selectedHousehold) {
-							step = 5;
+							goToStep(5);
 						} else {
 							if (isSubmittingHousehold) return;
 							isSubmittingHousehold = true;
@@ -427,7 +520,7 @@
 									pendingEvacueeInput = null;
 									pendingSymptoms = [];
 								}
-								step = 6;
+								goToStep(6);
 							} catch {
 								// Parent onsubmit compensates + reports; restore draft for retry.
 								newlyRegisteredEvacuee = null;
@@ -439,25 +532,35 @@
 						}
 					}}
 				>
-					{selectedHousehold ? 'ถัดไป ⏩' : 'ข้าม / ถัดไป'}
+					{selectedHousehold ? 'ถัดไป →' : 'ลงทะเบียนโดยไม่ผูกครัวเรือน'}
 				</Button>
 			{/if}
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => goToStep(3)}
+				class="h-12 w-full text-sm font-medium sm:h-10 sm:w-auto sm:px-6"
+			>
+				ย้อนกลับ
+			</Button>
 		</div>
 	</div>
 {:else if step === 5}
 	<EvacueePetAssetVehicle
 		household={selectedHousehold}
-		onBack={() => (step = 4)}
+		pending={isSubmittingHousehold}
+		onBack={() => goToStep(4)}
 		onNext={handleFinalSubmit}
 	/>
 {:else if step === 6}
 	<EvacueeSelectZone
 		evacuee={newlyRegisteredEvacuee}
+		pending={checkInMutation.isPending}
 		onBack={() => {
 			if (selectedHousehold || isCreatingNewHousehold) {
-				step = 5;
+				goToStep(5);
 			} else {
-				step = 4;
+				goToStep(4);
 			}
 		}}
 		onSubmit={handleZoneSubmit}

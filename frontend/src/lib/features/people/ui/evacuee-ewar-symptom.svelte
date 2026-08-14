@@ -77,13 +77,6 @@
 	>
 		{isHealthy ? '✅' : '🟩'} ไม่มีอาการป่วย (Healthy / No Symptoms)
 	</Button>
-	{#if isHealthy}
-		<div class="flex items-center justify-end pt-6">
-			<Button type="button" onclick={handleNext} class="h-10 px-6 text-sm font-semibold">
-				ถัดไป →
-			</Button>
-		</div>
-	{/if}
 
 	<!-- Symptom groups -->
 	{#each EWAR_SYMPTOM_GROUPS as group (group.title)}
@@ -113,12 +106,23 @@
 	{/each}
 
 	<!-- Back + Next row -->
-	<div class="flex items-center justify-between border-t border-border pt-6">
-		<Button type="button" variant="outline" onclick={onBack} class="h-10 px-6 text-sm font-medium">
-			ย้อนกลับ
-		</Button>
-		<Button type="button" onclick={handleNext} class="h-10 px-6 text-sm font-semibold">
+	<div
+		class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
+	>
+		<Button
+			type="button"
+			onclick={handleNext}
+			class="h-12 w-full px-6 text-sm font-semibold sm:h-10 sm:w-auto"
+		>
 			ถัดไป →
+		</Button>
+		<Button
+			type="button"
+			variant="outline"
+			onclick={onBack}
+			class="h-12 w-full px-6 text-sm font-medium sm:h-10 sm:w-auto"
+		>
+			ย้อนกลับ
 		</Button>
 	</div>
 </div>
