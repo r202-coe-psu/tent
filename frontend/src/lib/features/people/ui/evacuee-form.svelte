@@ -504,7 +504,8 @@
 			{#if !isCreatingNewHousehold}
 				<Button
 					type="button"
-					class="h-12 w-full bg-[#003B71] text-sm font-medium hover:bg-[#002a50] sm:h-10 sm:w-auto sm:px-6"
+					variant={selectedHousehold ? 'default' : 'outline'}
+					class="h-12 w-full text-sm font-medium sm:h-10 sm:w-auto sm:px-6"
 					disabled={isSubmittingHousehold}
 					onclick={async () => {
 						if (selectedHousehold) {
@@ -537,7 +538,7 @@
 			{/if}
 			<Button
 				type="button"
-				variant="outline"
+				variant="ghost"
 				onclick={() => goToStep(3)}
 				class="h-12 w-full text-sm font-medium sm:h-10 sm:w-auto sm:px-6"
 			>

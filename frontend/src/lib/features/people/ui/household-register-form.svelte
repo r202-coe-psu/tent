@@ -365,13 +365,13 @@
 							class="h-12 bg-muted/20 pl-9 sm:h-11"
 						/>
 					</div>
-					<Button type="submit" class="h-12 bg-[#003B71] px-6 hover:bg-[#002a50] sm:h-11">
+					<Button type="submit" variant="default" class="h-12 px-6 sm:h-11">
 						<Search class="mr-2 h-4 w-4" /> ค้นหาครอบครัว
 					</Button>
 					<Button
 						type="button"
-						variant="outline"
-						class="h-12 border-[#003B71] text-[#003B71] hover:bg-blue-50 sm:h-11"
+						variant="secondary"
+						class="h-12 sm:h-11"
 						onclick={() => {
 							showNewHouseholdForm = true;
 							selectedHouseholdId = null;
@@ -420,7 +420,8 @@
 
 				<Button
 					type="submit"
-					class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#003B71] font-bold text-white hover:bg-[#002a50]"
+					variant="default"
+					class="flex h-12 w-full items-center justify-center gap-2 rounded-xl font-bold"
 				>
 					<Search class="mr-2 h-4 w-4" /> ค้นหาครอบครัวจากที่อยู่ (Fuzzy Match)
 				</Button>
@@ -578,7 +579,8 @@
 			</div>
 			<Button
 				type="button"
-				class="h-12 w-full rounded-xl bg-[#003B71] px-6 hover:bg-[#002a50] sm:h-10 sm:w-auto"
+				variant="default"
+				class="h-12 w-full rounded-xl px-6 sm:h-10 sm:w-auto"
 				onclick={() => (showNewHouseholdForm = true)}
 			>
 				<Plus class="mr-2 h-4 w-4" /> ลงทะเบียนเป็นครอบครัวใหม่ที่อยู่นี้
@@ -687,8 +689,9 @@
 			<div class="mt-8 flex flex-col gap-3 border-t pt-6 sm:flex-row-reverse sm:justify-start">
 				<Button
 					type="submit"
+					variant="default"
 					disabled={pending}
-					class="h-12 w-full bg-[#003B71] px-6 hover:bg-[#002a50] sm:h-11 sm:w-auto"
+					class="h-12 w-full px-6 sm:h-11 sm:w-auto"
 				>
 					ถัดไป (ข้อมูลสัตว์เลี้ยง/ยานพาหนะ)
 				</Button>
