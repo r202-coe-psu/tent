@@ -109,8 +109,6 @@ test.afterEach(async ({ page }) => {
 test.describe('Referrals Flow — E2E UI Tests', () => {
 	test('Full Flow: Create from Source -> Verify -> Accept from Destination', async ({ page }) => {
 		test.setTimeout(90000);
-		page.on('console', (msg) => console.log('BROWSER CONSOLE:', msg.type(), msg.text()));
-
 		// ==========================================
 		// STEP 1: Source Shelter creates a referral
 		// ==========================================
