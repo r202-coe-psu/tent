@@ -112,7 +112,7 @@ test.describe('Referrals Flow — E2E UI Tests', () => {
 		// STEP 1: Source Shelter creates a referral
 		// ==========================================
 		await injectSession(page, SM1, sessions[SM1.name]);
-		await page.goto('http://localhost:4173/back-office/referrals');
+		await page.goto('/back-office/referrals');
 
 		// Click create new referral button
 		await page.getByRole('button', { name: /สร้างรายการส่งต่อ/ }).click();
@@ -155,7 +155,7 @@ test.describe('Referrals Flow — E2E UI Tests', () => {
 		// Clear session and login as destination shelter manager
 		await clearSession(page);
 		await injectSession(page, SM2, sessions[SM2.name]);
-		await page.goto('http://localhost:4173/back-office/referrals');
+		await page.goto('/back-office/referrals');
 
 		// The list should show the incoming referral, click it.
 		// Note: Destination shelter cannot see evacuee name until accepted, so we search by reason.
