@@ -74,15 +74,40 @@ export const shelterImportLogBodySchema = z.object({
 });
 export type ShelterImportLogBody = z.infer<typeof shelterImportLogBodySchema>;
 
+/**
+ * Caps on what one log doc carries. The counters above stay exact; only the
+ * per-row detail is bounded, so a 200-row file full of errors cannot grow the
+ * doc without limit, and a long error message (they can quote a cell's text)
+ * cannot drag a whole cell of user-entered data into a permanent audit doc.
+ */
+export const MAX_LOGGED_RESULTS = 200;
+export const MAX_LOGGED_MESSAGE = 200;
+
+function trimResult(r: ImportRowResult): ImportRowResult {
+	if (!r.errors?.length) return r;
+	return {
+		...r,
+		errors: r.errors.map((e) =>
+			e.message.length <= MAX_LOGGED_MESSAGE
+				? e
+				: { ...e, message: `${e.message.slice(0, MAX_LOGGED_MESSAGE)}…` }
+		)
+	};
+}
+
 /** Mint a fresh log doc (registry envelope, ULID id). */
 export function createShelterImportLog(
 	body: ShelterImportLogBody,
 	createdBy: string
 ): ShelterImportLog {
+	const bounded: ShelterImportLogBody = {
+		...body,
+		results: body.results.slice(0, MAX_LOGGED_RESULTS).map(trimResult)
+	};
 	return catalogDoc(
 		SHELTER_IMPORT_LOG_TYPE,
 		SHELTER_IMPORT_LOG_SCHEMA_V,
-		body,
+		bounded,
 		createdBy
 	) as ShelterImportLog;
 }

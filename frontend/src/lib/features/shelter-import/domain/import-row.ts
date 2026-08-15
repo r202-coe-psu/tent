@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createShelterSchema } from '$lib/features/shelters/server';
-import { zoneSchema } from '$lib/features/shelters';
+import { petPolicySchema, zoneSchema } from '$lib/features/shelters';
 import {
 	FIELD_SEPARATOR,
 	H,
@@ -25,6 +25,7 @@ import {
 	ZONE_TYPE_CHOICES
 } from './columns';
 import type { EnumChoice, MasterColumn } from './columns';
+import type { PetCategory, SubStorageType, VehicleType } from '$lib/features/shelters';
 import { findInFileDuplicates } from './duplicates';
 
 /**
@@ -87,6 +88,38 @@ export interface RowValidation {
 	errors: RowFieldError[];
 }
 
+/** The stored shelter, as far as {@link buildUpdatePayload} needs to read it. */
+export interface ExistingShelterPolicy {
+	admission_policy?: { supported_vulnerable_groups?: string[] } | null;
+}
+
+/**
+ * PATCH body for a row that updates an existing shelter.
+ *
+ * The workbook has no columns for `municipality_zone`, `community` or
+ * `admission_policy.supported_vulnerable_groups` (`APP_ONLY_FIELDS`) —
+ * {@link validateRow} only fills them with null/`[]` to satisfy the create
+ * schema. The endpoint shallow-merges, so sending them would erase what an
+ * admin configured in the app: the two top-level keys are dropped from the
+ * body, and `admission_policy` (replaced wholesale, not merged) carries the
+ * stored groups back so only its pet-policy half comes from the file.
+ */
+export function buildUpdatePayload(
+	shelter: ShelterInput,
+	existing: ExistingShelterPolicy | null
+): Omit<ShelterInput, 'municipality_zone' | 'community'> {
+	const rest: Partial<ShelterInput> = { ...shelter };
+	delete rest.municipality_zone;
+	delete rest.community;
+	return {
+		...(rest as Omit<ShelterInput, 'municipality_zone' | 'community'>),
+		admission_policy: {
+			...shelter.admission_policy,
+			supported_vulnerable_groups: existing?.admission_policy?.supported_vulnerable_groups ?? []
+		}
+	};
+}
+
 /** label → code map + the set of valid codes, for one master_data list. */
 export interface MasterLookup {
 	byLabel: Map<string, string>;
@@ -145,7 +178,10 @@ function labelBase(label: string): string {
 	return (i === -1 ? label : label.slice(0, i)).trim();
 }
 
-function matchChoice(value: string, choices: readonly EnumChoice[]): EnumChoice | undefined {
+function matchChoice<T extends string>(
+	value: string,
+	choices: readonly EnumChoice<T>[]
+): EnumChoice<T> | undefined {
 	return choices.find(
 		(c) => c.value === value || c.label === value || labelBase(c.label) === value
 	);
@@ -185,12 +221,12 @@ function createSink(): ErrorSink {
 
 // ===== resolvers =====
 
-function resolveEnum(
+function resolveEnum<T extends string>(
 	raw: RawRow,
 	header: string,
-	choices: readonly EnumChoice[],
+	choices: readonly EnumChoice<T>[],
 	sink: ErrorSink
-): string | undefined {
+): T | undefined {
 	const value = cell(raw, header);
 	if (value === '') return undefined;
 	const match = matchChoice(value, choices);
@@ -199,13 +235,13 @@ function resolveEnum(
 	return undefined;
 }
 
-function resolveMultiEnum(
+function resolveMultiEnum<T extends string>(
 	raw: RawRow,
 	header: string,
-	choices: readonly EnumChoice[],
+	choices: readonly EnumChoice<T>[],
 	sink: ErrorSink
-): string[] {
-	const out: string[] = [];
+): T[] {
+	const out: T[] = [];
 	for (const part of splitMulti(cell(raw, header))) {
 		const match = matchChoice(part, choices);
 		if (!match) {
@@ -259,7 +295,7 @@ function resolveInt(raw: RawRow, header: string, sink: ErrorSink): number | null
 
 /** `ชื่อ:ประเภท:ตร.ม.` items separated by `|` → sub_storage entries. */
 function resolveSubStorage(raw: RawRow, sink: ErrorSink) {
-	const out: { name: string; type: string; area_m2: number | null }[] = [];
+	const out: { name: string; type: SubStorageType; area_m2: number | null }[] = [];
 	for (const item of splitMulti(cell(raw, H.sub_storage))) {
 		const [rawName = '', rawType = '', rawArea = ''] = item
 			.split(FIELD_SEPARATOR)
@@ -335,13 +371,13 @@ function buildZones(zoneRows: readonly RawSheetRow[], sink: ErrorSink): ParsedZo
 }
 
 /** {@link resolveEnum} but tagging the error with a zone-sheet row number. */
-function resolveEnumOnSheet(
+function resolveEnumOnSheet<T extends string>(
 	raw: RawRow,
 	header: string,
-	choices: readonly EnumChoice[],
+	choices: readonly EnumChoice<T>[],
 	sink: ErrorSink,
 	line: number
-): string | undefined {
+): T | undefined {
 	const value = cell(raw, header);
 	if (value === '') return undefined;
 	const match = matchChoice(value, choices);
@@ -352,14 +388,42 @@ function resolveEnumOnSheet(
 
 // ===== pet policy (flattened across fixed columns) =====
 
-function buildPetCategories(raw: RawRow, sink: ErrorSink) {
-	const categories: Record<string, unknown>[] = [];
+/**
+ * One `admission_policy.pet_policy.categories[]` entry, before Zod validates it —
+ * taken from the shared schema so the shapes cannot drift.
+ */
+type PetCategoryInput = NonNullable<z.input<typeof petPolicySchema>['categories']>[number];
 
-	// One ใช่/ไม่ใช่ column per condition, reassembled per category.
-	const conditionsOf = (category: string) =>
+/** Fallback column for a Zod issue on `categories[i]` — one per category. */
+const PET_CATEGORY_HEADER: Record<PetCategory, string> = {
+	small_general: H.pet_small_other,
+	large_dog: H.pet_large_other,
+	livestock: H.pet_livestock_capacity
+};
+
+/** Vehicle-count columns, in the order `supported_vehicles[]` is assembled. */
+const PARKING_VEHICLE_COLUMNS: readonly (readonly [string, VehicleType])[] = [
+	[H.park_motorcycle, 'motorcycle'],
+	[H.park_car, 'car'],
+	[H.park_truck, 'truck'],
+	[H.park_boat, 'boat']
+];
+
+function buildPetCategories(raw: RawRow, sink: ErrorSink): PetCategoryInput[] {
+	const categories: PetCategoryInput[] = [];
+
+	/**
+	 * One ใช่/ไม่ใช่ column per condition, reassembled per category.
+	 *
+	 * The schema types `conditions` per category (discriminated union), while
+	 * `PET_CONDITION_COLUMNS` carries the flat `PetCondition` union. The filter
+	 * on `c.category` is exactly the pairing `petCategoryConditions` defines, so
+	 * the narrowing is cast here rather than re-encoded.
+	 */
+	const conditionsOf = <C extends PetCategory>(category: C) =>
 		PET_CONDITION_COLUMNS.filter(
 			(c) => c.category === category && resolveBoolean(raw, c.header, sink) === true
-		).map((c) => c.value);
+		).map((c) => c.value) as NonNullable<Extract<PetCategoryInput, { category: C }>['conditions']>;
 
 	const small = conditionsOf('small_general');
 	const smallOther = strOrNull(cell(raw, H.pet_small_other));
@@ -385,6 +449,23 @@ function buildPetCategories(raw: RawRow, sink: ErrorSink) {
 		});
 
 	return categories;
+}
+
+/**
+ * Column for a Zod issue inside an array this validator assembled — matched by
+ * the longest registered prefix, so `…supported_vehicles.1.max_capacity` lands
+ * on the column that supplied entry 1.
+ */
+function assembledHeader(path: string, assembled: ReadonlyMap<string, string>): string | undefined {
+	let best: string | undefined;
+	let bestLength = -1;
+	for (const [prefix, header] of assembled) {
+		if ((path === prefix || path.startsWith(`${prefix}.`)) && prefix.length > bestLength) {
+			best = header;
+			bestLength = prefix.length;
+		}
+	}
+	return best;
 }
 
 // ===== main entry point =====
@@ -441,19 +522,18 @@ export function validateRow(
 
 	// Gated fields — mirror what the form clears, so an import can't persist a
 	// combination the UI would never produce (FR-23-6/26/30, D-A5).
-	const supportedVehicles =
+	const parkingEntries =
 		parkingAvailability === 'available'
-			? (
-					[
-						[H.park_motorcycle, 'motorcycle'],
-						[H.park_car, 'car'],
-						[H.park_truck, 'truck'],
-						[H.park_boat, 'boat']
-					] as const
-				)
-					.map(([header, type]) => ({ type, max_capacity: numOrUndef(cell(raw, header)) }))
-					.filter((v) => v.max_capacity !== undefined)
+			? PARKING_VEHICLE_COLUMNS.map(([header, type]) => ({
+					header,
+					type,
+					max_capacity: numOrUndef(cell(raw, header))
+				})).filter((v) => v.max_capacity !== undefined)
 			: [];
+	const supportedVehicles = parkingEntries.map(({ type, max_capacity }) => ({
+		type,
+		max_capacity
+	}));
 
 	const petCategories = petPolicy === 'conditional' ? buildPetCategories(raw, sink) : [];
 
@@ -551,7 +631,20 @@ export function validateRow(
 			rules: parkingRules,
 			rules_other: strOrNull(cell(raw, H.parking_rules_other))
 		}
-	};
+		// Typo-guard: the schema's own input type, so a misspelled field name is a
+		// compile error instead of a silently ignored cell.
+	} satisfies z.input<typeof createShelterSchema>;
+
+	// Arrays this validator assembles by hand have no `ColumnDef.path`, so their
+	// Zod issues would map to nothing. Point each assembled index back at the
+	// column that fed it — see {@link assembledHeader}.
+	const assembled = new Map<string, string>([['common_areas.sub_storage', H.sub_storage]]);
+	parkingEntries.forEach(({ header }, i) =>
+		assembled.set(`parking_policy.supported_vehicles.${i}`, header)
+	);
+	petCategories.forEach((c, i) =>
+		assembled.set(`admission_policy.pet_policy.categories.${i}`, PET_CATEGORY_HEADER[c.category])
+	);
 
 	const parsed = createShelterSchema.safeParse(input);
 	if (!parsed.success) {
@@ -559,8 +652,13 @@ export function validateRow(
 			const path = issue.path.join('.');
 			// Zone issues are already reported per zone-sheet row above.
 			if (path.startsWith('zones')) continue;
-			const header = PATH_TO_HEADER[path];
-			if (!header) continue;
+			// Never drop an issue: a row that fails with an empty error list shows up
+			// in the preview as "ผิดพลาด" with no reason, and the user cannot fix it.
+			const header = PATH_TO_HEADER[path] ?? assembledHeader(path, assembled);
+			if (!header) {
+				sink.push(path, issue.message);
+				continue;
+			}
 			// Give the required-capacity case a Thai message (schema can't, the value is undefined).
 			const message =
 				header === H.capacity && capacityCell === '' ? 'ต้องระบุความจุสูงสุด (คน)' : issue.message;

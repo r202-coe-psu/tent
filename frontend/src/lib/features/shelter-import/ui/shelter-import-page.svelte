@@ -193,17 +193,19 @@
 			<p class="py-10 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูลตั้งต้น...</p>
 		{:else}
 			<label
-				class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border px-6 py-10 text-center transition-colors hover:bg-muted/40"
+				class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border px-6 py-10 text-center transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:bg-muted/40"
 			>
 				<Upload class="h-8 w-8 text-muted-foreground" />
 				<span class="text-sm font-medium">{parsing ? 'กำลังอ่านไฟล์...' : 'เลือกไฟล์ .xlsx'}</span>
 				<span class="text-xs text-muted-foreground">
 					กรอกข้อมูลตาม template — คอลัมน์ที่ไฮไลต์คือช่องที่จำเป็น
 				</span>
+				<!-- sr-only, not `hidden`: display:none drops the input out of the tab
+				     order, leaving keyboard users no way to open the file picker. -->
 				<input
 					type="file"
 					accept=".xlsx"
-					class="hidden"
+					class="sr-only"
 					disabled={parsing}
 					onchange={onFileChange}
 				/>

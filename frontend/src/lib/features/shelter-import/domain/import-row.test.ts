@@ -3,6 +3,7 @@ import { luggageRuleLabels } from '$lib/features/shelters';
 import { H, isTextColumn, PET_CONDITION_COLUMNS, SHEETS } from './columns';
 import {
 	buildMasterLookup,
+	buildUpdatePayload,
 	emptyLookups,
 	orphanZoneRows,
 	validateRow,
@@ -519,5 +520,79 @@ describe('validateRow — pet conditions as boolean columns', () => {
 				'boolean'
 			);
 		}
+	});
+});
+
+describe('validateRow — every failure carries a column (no silent errors)', () => {
+	it('reports a bad parking count on its own column', () => {
+		const r = validateRow(
+			baseRow({
+				[H.parking_availability]: 'มีพื้นที่จอดรถ',
+				[H.park_car]: '-5'
+			}),
+			1,
+			emptyLookups()
+		);
+		expect(r.ok).toBe(false);
+		expect(r.errors.length).toBeGreaterThan(0);
+		expect(r.errors.map((e) => e.column)).toContain(H.park_car);
+	});
+
+	it('never returns a failed row with an empty error list', () => {
+		const rows: RawRow[] = [
+			baseRow({ [H.parking_availability]: 'มีพื้นที่จอดรถ', [H.park_boat]: 'abc' }),
+			baseRow({ [H.sub_storage]: `คลังหน้าอาคาร:อาหารแห้ง:${'9'.repeat(400)}` }),
+			baseRow({ [H.capacity]: '0' })
+		];
+		for (const raw of rows) {
+			const r = validateRow(raw, 1, emptyLookups());
+			if (!r.ok) expect(r.errors.length, JSON.stringify(raw)).toBeGreaterThan(0);
+		}
+	});
+});
+
+describe('column contract — headers are unique across sheets', () => {
+	it('has no header text used by two different sheets', () => {
+		const seen = new Map<string, string>();
+		for (const sheet of SHEETS) {
+			for (const col of sheet.columns) {
+				// The join key is deliberately repeated on the 1:1 sheets.
+				if (col.isRef) continue;
+				const other = seen.get(col.header);
+				expect(other, `"${col.header}" ใช้ซ้ำในชีต ${other} และ ${sheet.name}`).toBeUndefined();
+				seen.set(col.header, sheet.name);
+			}
+		}
+	});
+});
+
+describe('buildUpdatePayload — fields the workbook cannot express', () => {
+	const rowPayload = () => {
+		const r = validateRow(baseRow(), 1, emptyLookups());
+		if (!r.shelter) throw new Error('fixture row should validate');
+		return r.shelter;
+	};
+
+	it('drops municipality_zone / community so PATCH keeps the stored values', () => {
+		const payload = buildUpdatePayload(rowPayload(), null);
+		expect('municipality_zone' in payload).toBe(false);
+		expect('community' in payload).toBe(false);
+	});
+
+	it('carries the stored supported_vulnerable_groups back into admission_policy', () => {
+		const payload = buildUpdatePayload(rowPayload(), {
+			admission_policy: { supported_vulnerable_groups: ['elderly', 'pregnant'] }
+		});
+		expect(payload.admission_policy.supported_vulnerable_groups).toEqual(['elderly', 'pregnant']);
+		// the pet half still comes from the file
+		expect(payload.admission_policy.pet_policy).toEqual({ policy: null, categories: [] });
+	});
+
+	it('keeps every other field from the file', () => {
+		const shelter = rowPayload();
+		const payload = buildUpdatePayload(shelter, null);
+		expect(payload.name).toBe(shelter.name);
+		expect(payload.capacity).toBe(shelter.capacity);
+		expect(payload.admission_policy.supported_vulnerable_groups).toEqual([]);
 	});
 });

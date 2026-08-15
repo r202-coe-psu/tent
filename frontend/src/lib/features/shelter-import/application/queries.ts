@@ -9,10 +9,10 @@ import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
-import { createShelter, updateShelter, sheltersKeys } from '$lib/features/shelters';
+import { createShelter, getShelter, updateShelter, sheltersKeys } from '$lib/features/shelters';
 import { SHELTER_IMPORT_LOG_TYPE } from '../domain/import-log';
 import { createShelterImportLog, type ImportRowResult } from '../domain/import-log';
-import type { RowValidation } from '../domain/import-row';
+import { buildUpdatePayload, type RowValidation } from '../domain/import-row';
 import type { DuplicateMatch } from '../domain/duplicates';
 import { IMPORT_LOG_REGISTRY_DB, listImportLogs, writeImportLog } from '../data/import-log.remote';
 
@@ -79,7 +79,10 @@ export function useImportShelters() {
 						continue;
 					}
 					if (duplicate && duplicateAction === 'update') {
-						await updateShelter(duplicate.existingCode, r.shelter);
+						// Re-read the stored doc so the fields the workbook cannot express
+						// survive the PATCH (see `buildUpdatePayload`).
+						const existing = await getShelter(duplicate.existingCode);
+						await updateShelter(duplicate.existingCode, buildUpdatePayload(r.shelter, existing));
 						results.push({
 							row: r.row,
 							name: r.name,

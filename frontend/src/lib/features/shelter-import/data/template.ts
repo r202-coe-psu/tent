@@ -10,6 +10,7 @@ import {
 	type MasterColumn
 } from '../domain/columns';
 import { buildSampleWorkbook, type SampleWorkbook } from './sample-row';
+import type { CellValue } from 'exceljs';
 
 /**
  * Generate the shelter-import `.xlsx` template (CR-039).
@@ -92,7 +93,7 @@ function headerFillFor(col: ColumnDef): string {
  * a separate column — and older workbooks whose asterisk sat in its own column
  * still import (that cell normalizes to '' and is ignored).
  */
-function headerValue(col: ColumnDef): import('exceljs').CellValue {
+function headerValue(col: ColumnDef): CellValue {
 	if (!col.required) return col.header;
 	return {
 		richText: [

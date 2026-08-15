@@ -334,7 +334,7 @@ export function isTextColumn(kind: ColumnKind): boolean {
  * normalize that cell to '' and it is ignored like any unknown column.
  */
 export function normalizeHeader(text: string): string {
-	return text.replace(/[\s*]*\*[\s*]*$/, '').trim();
+	return text.replace(/\s*\*+\s*$/, '').trim();
 }
 
 /**
