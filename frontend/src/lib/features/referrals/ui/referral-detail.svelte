@@ -53,7 +53,10 @@
 	);
 	const canClose = $derived(
 		canTransition(referral.status, 'closed') &&
-			(referral.referral_type !== 'capacity' || isOutgoingCapacityReferral(referral, actorShelter))
+			(referral.referral_type !== 'capacity' ||
+				isOutgoingCapacityReferral(referral, actorShelter) ||
+				((referral.status === 'accepted' || referral.status === 'rejected') &&
+					isIncomingCapacityReferral(referral, actorShelter)))
 	);
 
 	async function handleTransition(to: ReferralStatus, label: string, reason?: string) {

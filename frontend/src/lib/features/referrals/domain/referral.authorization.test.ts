@@ -63,4 +63,13 @@ describe('referral.authorization', () => {
 			ReferralAuthorizationError
 		);
 	});
+
+	it('allows both source and destination to close accepted capacity referral (accepted → closed)', () => {
+		const accepted = capacitySent({ status: 'accepted', timeline: {} });
+		expect(() => assertActorMayTransition(accepted, 'closed', 'SH001')).not.toThrow();
+		expect(() => assertActorMayTransition(accepted, 'closed', 'SH002')).not.toThrow();
+		expect(() => assertActorMayTransition(accepted, 'closed', 'SH003')).toThrow(
+			ReferralAuthorizationError
+		);
+	});
 });
