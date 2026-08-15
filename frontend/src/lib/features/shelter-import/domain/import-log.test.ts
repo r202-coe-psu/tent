@@ -12,6 +12,8 @@ const body: ShelterImportLogBody = {
 	imported_by: 'admin',
 	total_rows: 2,
 	success_count: 1,
+	updated_count: 0,
+	skipped_count: 0,
 	error_count: 1,
 	results: [
 		{ row: 1, name: 'ศูนย์ A', status: 'created', code: 'SH001' },
@@ -34,7 +36,7 @@ describe('shelter_import_log', () => {
 	it('stamps the registry envelope with a type-prefixed id', () => {
 		const doc = createShelterImportLog(body, 'admin');
 		expect(doc.type).toBe('shelter_import_log');
-		expect(doc.schema_v).toBe(1);
+		expect(doc.schema_v).toBe(2);
 		expect(doc._id.startsWith('shelter_import_log:')).toBe(true);
 		expect(doc.created_by).toBe('admin');
 		expect(doc.created_at).toBe(doc.updated_at);

@@ -8,59 +8,86 @@
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { useMasterData } from '$lib/features/master-data';
+	import { useShelters } from '$lib/features/shelters';
 	import {
 		buildMasterLookup,
-		validateRows,
+		orphanZoneRows,
+		validateWorkbook,
 		type Lookups,
-		type RawRow,
+		type ParsedWorkbook,
 		type RowValidation
 	} from '../domain/import-row';
-	import type { EnumChoice } from '../domain/columns';
+	import {
+		APP_ONLY_FIELDS,
+		MASTER_COLUMNS,
+		type EnumChoice,
+		type MasterColumn
+	} from '../domain/columns';
+	import { findExistingDuplicates, type DuplicateMatch } from '../domain/duplicates';
 	import { buildShelterTemplateBlob, type TemplateMasters } from '../data/template';
 	import { parseShelterWorkbook } from '../data/parse';
-	import { useImportShelters } from '../application/queries';
+	import { useImportShelters, type DuplicateAction } from '../application/queries';
 	import ImportPreviewTable from './import-preview-table.svelte';
 	import ImportLogHistory from './import-log-history.svelte';
 
 	let { basePath }: { basePath?: string } = $props();
 	const resolvedBasePath = $derived(basePath ?? resolve('/portal/system-management/shelters'));
 
-	const zoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
-	const zoneItems = $derived((zoneQuery.data?.items ?? []).filter((i) => i.status === 'active'));
-	const communityItems = $derived(
-		(communityQuery.data?.items ?? []).filter((i) => i.status === 'active')
-	);
-	const masterDataLoading = $derived(zoneQuery.isLoading || communityQuery.isLoading);
+	const shelterTypeQuery = useMasterData(() => 'shelter_type');
 
-	const lookups = $derived<Lookups>({
-		municipality_zone: buildMasterLookup(zoneItems),
-		community: buildMasterLookup(communityItems)
+	const activeItems = $derived<Record<MasterColumn, { code: string; label: string }[]>>({
+		shelter_type: (shelterTypeQuery.data?.items ?? []).filter((i) => i.status === 'active')
 	});
 
-	let rawRows = $state<RawRow[]>([]);
+	const masterDataLoading = $derived(shelterTypeQuery.isLoading);
+
+	const lookups = $derived(
+		Object.fromEntries(MASTER_COLUMNS.map((t) => [t, buildMasterLookup(activeItems[t])])) as Lookups
+	);
+
+	let workbook = $state<ParsedWorkbook>({ shelters: [], zones: [] });
 	let filename = $state('');
 	let parsing = $state(false);
 
 	const validations = $derived<RowValidation[]>(
-		rawRows.length ? validateRows(rawRows, lookups) : []
+		workbook.shelters.length ? validateWorkbook(workbook, lookups) : []
 	);
 	const validCount = $derived(validations.filter((v) => v.ok).length);
 	const errorCount = $derived(validations.length - validCount);
+	const orphanZones = $derived(workbook.shelters.length ? orphanZoneRows(workbook) : []);
+	const zoneCount = $derived(workbook.zones.length);
+
+	const sheltersQuery = useShelters();
+	const existingShelters = $derived(
+		(sheltersQuery.data ?? []).map((s) => ({ code: s.code, name: s.name }))
+	);
+	const duplicates = $derived(
+		workbook.shelters.length
+			? findExistingDuplicates(validations, existingShelters)
+			: new Map<number, DuplicateMatch>()
+	);
+	const dupCount = $derived(validations.filter((v) => v.ok && duplicates.has(v.row)).length);
+	const newCount = $derived(validCount - dupCount);
+
+	let duplicateAction = $state<DuplicateAction>('skip');
 
 	const importMutation = useImportShelters();
 
-	async function downloadTemplate() {
+	async function downloadTemplate(withSample: boolean) {
 		try {
-			const masters: TemplateMasters = {
-				municipality_zone: zoneItems.map((i): EnumChoice => ({ value: i.code, label: i.label })),
-				community: communityItems.map((i): EnumChoice => ({ value: i.code, label: i.label }))
-			};
-			const blob = await buildShelterTemplateBlob(masters);
+			const masters = Object.fromEntries(
+				MASTER_COLUMNS.map((t) => [
+					t,
+					activeItems[t].map((i): EnumChoice => ({ value: i.code, label: i.label }))
+				])
+			) as TemplateMasters;
+			const blob = await buildShelterTemplateBlob(masters, { withSample });
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a');
 			a.href = url;
-			a.download = 'shelter-import-template.xlsx';
+			a.download = withSample
+				? 'shelter-import-template-sample.xlsx'
+				: 'shelter-import-template.xlsx';
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch {
@@ -74,12 +101,12 @@
 		if (!file) return;
 		parsing = true;
 		try {
-			rawRows = await parseShelterWorkbook(file);
+			workbook = await parseShelterWorkbook(file);
 			filename = file.name;
-			if (rawRows.length === 0) toast.warning('ไม่พบข้อมูลในไฟล์');
+			if (workbook.shelters.length === 0) toast.warning('ไม่พบข้อมูลในไฟล์');
 		} catch {
 			toast.error('อ่านไฟล์ไม่สำเร็จ — ตรวจสอบว่าเป็นไฟล์ .xlsx ที่ถูกต้อง');
-			rawRows = [];
+			workbook = { shelters: [], zones: [] };
 			filename = '';
 		} finally {
 			parsing = false;
@@ -88,14 +115,32 @@
 	}
 
 	function clearFile() {
-		rawRows = [];
+		workbook = { shelters: [], zones: [] };
 		filename = '';
 	}
 
+	const importDisabled = $derived(
+		newCount === 0 && !(duplicateAction === 'update' && dupCount > 0)
+	);
+
+	const importLabel = $derived(
+		dupCount === 0
+			? `นำเข้า ${validCount} ศูนย์`
+			: duplicateAction === 'update'
+				? `นำเข้า ${newCount} ศูนย์ (อัปเดต ${dupCount})`
+				: `นำเข้า ${newCount} ศูนย์ (ข้าม ${dupCount})`
+	);
+
 	function runImport() {
-		if (validCount === 0) return;
+		if (importDisabled) return;
 		importMutation.mutate(
-			{ filename, importedBy: authStore.user?.name ?? 'unknown', rows: validations },
+			{
+				filename,
+				importedBy: authStore.user?.name ?? 'unknown',
+				rows: validations,
+				duplicates,
+				duplicateAction
+			},
 			{ onSuccess: () => clearFile() }
 		);
 	}
@@ -108,10 +153,22 @@
 			<p class="mt-1 text-sm text-muted-foreground">
 				ดาวน์โหลด template กรอกข้อมูล แล้วอัปโหลดเพื่อสร้างศูนย์พักพิงหลายแห่งพร้อมกัน
 			</p>
+			<p class="mt-1 text-xs text-muted-foreground">
+				{APP_ONLY_FIELDS.join(' · ')} ไม่มีในไฟล์ — ตั้งค่าในหน้าแก้ไขศูนย์พักพิงหลังนำเข้าเสร็จ
+			</p>
 		</div>
-		<Button variant="outline" onclick={downloadTemplate} disabled={masterDataLoading}>
-			<Download class="mr-2 h-4 w-4" /> ดาวน์โหลด Template
-		</Button>
+		<div class="flex flex-wrap gap-2">
+			<Button
+				variant="outline"
+				onclick={() => downloadTemplate(false)}
+				disabled={masterDataLoading}
+			>
+				<Download class="mr-2 h-4 w-4" /> ดาวน์โหลด Template
+			</Button>
+			<Button variant="outline" onclick={() => downloadTemplate(true)} disabled={masterDataLoading}>
+				<Download class="mr-2 h-4 w-4" /> Template + ตัวอย่างข้อมูล
+			</Button>
+		</div>
 	</div>
 
 	<!-- Upload -->
@@ -122,7 +179,10 @@
 					<FileSpreadsheet class="h-5 w-5 text-muted-foreground" />
 					<span class="font-medium">{filename}</span>
 					<span class="text-muted-foreground">
-						· {validations.length} แถว · พร้อมนำเข้า {validCount} · ผิดพลาด {errorCount}
+						· {validations.length} ศูนย์ · {zoneCount} โซน · พร้อมนำเข้า {validCount} · ผิดพลาด {errorCount}{dupCount >
+						0
+							? ` · ชื่อซ้ำ ${dupCount}`
+							: ''}
 					</span>
 				</div>
 				<Button variant="ghost" size="sm" onclick={clearFile}>
@@ -130,9 +190,7 @@
 				</Button>
 			</div>
 		{:else if masterDataLoading}
-			<p class="py-10 text-center text-sm text-muted-foreground">
-				กำลังโหลดข้อมูลโซนเทศบาล/ชุมชน...
-			</p>
+			<p class="py-10 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูลตั้งต้น...</p>
 		{:else}
 			<label
 				class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border px-6 py-10 text-center transition-colors hover:bg-muted/40"
@@ -158,9 +216,9 @@
 		<div class="rounded-2xl border border-shelter-border bg-card p-4 shadow-sm md:p-6">
 			<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
 				<h3 class="text-lg font-semibold text-foreground">ตรวจสอบข้อมูลก่อนนำเข้า</h3>
-				<Button onclick={runImport} disabled={validCount === 0 || importMutation.isPending}>
+				<Button onclick={runImport} disabled={importDisabled || importMutation.isPending}>
 					<Upload class="mr-2 h-4 w-4" />
-					{importMutation.isPending ? 'กำลังนำเข้า...' : `นำเข้า ${validCount} ศูนย์`}
+					{importMutation.isPending ? 'กำลังนำเข้า...' : importLabel}
 				</Button>
 			</div>
 			{#if errorCount > 0}
@@ -168,7 +226,54 @@
 					มี {errorCount} แถวที่มีข้อผิดพลาด — ระบบจะข้ามแถวเหล่านี้และนำเข้าเฉพาะแถวที่พร้อม
 				</p>
 			{/if}
-			<ImportPreviewTable {validations} />
+			{#if orphanZones.length > 0}
+				<p class="mb-3 text-sm text-amber-600">
+					ชีต "โซน" มี {orphanZones.length} แถวที่ "รหัสศูนย์พักพิง" ไม่ตรงกับศูนย์ใดเลย (แถวที่
+					{orphanZones.map((z) => z.line).join(', ')}) — แถวเหล่านี้จะไม่ถูกนำเข้า
+				</p>
+			{/if}
+			{#if duplicates.size > 0}
+				<div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+					<p class="text-sm text-amber-600">
+						พบ {duplicates.size} ศูนย์ที่ชื่อซ้ำกับในระบบ
+					</p>
+					<ul class="mt-2 space-y-1 text-sm text-amber-700">
+						{#each [...duplicates.values()] as dup (dup.existingCode + dup.row)}
+							<li>{dup.name} → {dup.existingCode}</li>
+						{/each}
+					</ul>
+					<div class="mt-3 space-y-2">
+						<label class="flex items-center space-x-3 text-sm">
+							<input
+								type="radio"
+								name="duplicate-action"
+								value="skip"
+								checked={duplicateAction === 'skip'}
+								onchange={() => (duplicateAction = 'skip')}
+								class="h-4 w-4 accent-shelter-blue-text"
+							/>
+							<span>ข้ามศูนย์ที่ซ้ำ (ไม่แก้ไขข้อมูลเดิม)</span>
+						</label>
+						<label class="flex items-center space-x-3 text-sm">
+							<input
+								type="radio"
+								name="duplicate-action"
+								value="update"
+								checked={duplicateAction === 'update'}
+								onchange={() => (duplicateAction = 'update')}
+								class="h-4 w-4 accent-shelter-blue-text"
+							/>
+							<span>อัปเดตข้อมูลเดิมทับด้วยค่าจากไฟล์</span>
+						</label>
+					</div>
+					{#if duplicateAction === 'update'}
+						<p class="mt-2 text-sm text-amber-700">
+							คำเตือน: ข้อมูลศูนย์ที่มีอยู่เดิมจะถูกเขียนทับด้วยค่าจากไฟล์นี้ทั้งหมด
+						</p>
+					{/if}
+				</div>
+			{/if}
+			<ImportPreviewTable {validations} {duplicates} {duplicateAction} />
 		</div>
 	{/if}
 
