@@ -60,10 +60,14 @@
 	);
 
 	async function handleTransition(to: ReferralStatus, label: string, reason?: string) {
+		console.log('>>> handleTransition called with:', to, label, reason);
 		await toast.promise(transitionMutation.mutateAsync({ id: referral._id, to, reason }), {
 			loading: `กำลังเปลี่ยนสถานะเป็น "${label}"...`,
 			success: `เปลี่ยนสถานะเป็น "${label}" สำเร็จ`,
-			error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
+			error: (err) => {
+				console.error('>>> Transition error:', err);
+				return err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ';
+			}
 		});
 		showReasonPrompt = null;
 		responseReasonInput = '';
@@ -396,7 +400,11 @@
 						size="sm"
 						variant="outline"
 						class="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
-						onclick={() => handleTransition('closed', 'ปิดรายการ')}
+						data-testid="btn-close-referral"
+						onclick={() => {
+							console.log('>>> CLOSE BUTTON CLICKED!');
+							handleTransition('closed', 'ปิดรายการ');
+						}}
 					>
 						<Archive class="h-4 w-4" />
 						ปิดรายการ (Close)
