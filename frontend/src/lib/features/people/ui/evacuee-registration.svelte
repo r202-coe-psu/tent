@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -10,12 +11,21 @@
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { evacueeInputSchema, type EvacueeInput } from '../domain/people';
+	import {
+		evacueeInputSchema,
+		currentBEYear,
+		minBirthYearBE,
+		MAX_AGE_YEARS,
+		type EvacueeInput
+	} from '../domain/people';
 	import { useMasterData } from '$lib/features/master-data';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { useSaveImage } from '$lib/features/images';
 	import Camera from '@lucide/svelte/icons/camera';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { COUNTRIES } from '$lib/utils/country';
 
@@ -44,28 +54,47 @@
 		onsubmit,
 		pending = false,
 		onBack,
-		hasSymptomsSelected = false
+		hasSymptomsSelected = false,
+		initialInput = null,
+		ondraftchange,
+		facePhotoUrl = $bindable(null)
 	}: {
 		onsubmit: (input: EvacueeInput) => void;
 		pending?: boolean;
 		onBack: () => void;
 		hasSymptomsSelected?: boolean;
+		initialInput?: Partial<EvacueeInput> | null;
+		ondraftchange?: (input: Partial<EvacueeInput>) => void;
+		facePhotoUrl?: string | null;
 	} = $props();
 
-	let birthYearBE = $state('');
-	let facePhotoUrl = $state<string | null>(null);
+	const initial = untrack(() => initialInput);
+	let birthYearBE = $state(initial?.birth_year?.toString() ?? '');
+	let uploadingPhoto = $state(false);
+	const saveImage = useSaveImage();
 	// "ไม่มีเบอร์โทร" — เก็บ phone เป็น null ตาม spec (schema.md §evacuee: phone str|null, req)
 	let noPhone = $state(false);
-	let medicalConditionsStr = $state('');
-	let medicalMedicationsStr = $state('');
-	let medicalAllergiesStr = $state('');
+	let medicalConditionsStr = $state(initial?.medical_conditions?.join(', ') ?? '');
+	let medicalMedicationsStr = $state(initial?.medical_medications?.join(', ') ?? '');
+	let medicalAllergiesStr = $state(initial?.medical_allergies?.join(', ') ?? '');
 
-	const form = superForm(defaults(zod4(evacueeInputSchema)), {
+	const initialFormData = {
+		...initial,
+		person_id: initial?.person_id ?? { cardType: 'national_id' as const, number: '' }
+	};
+	const form = superForm(defaults(initialFormData, zod4(evacueeInputSchema)), {
 		SPA: true,
 		dataType: 'json',
 		validators: zod4(evacueeInputSchema),
 		resetForm: false,
 		onSubmit: ({ cancel }) => {
+			if (birthYearError || ageError) {
+				const message = birthYearError || ageError || '';
+				toast.error(message);
+				cancel();
+				return;
+			}
+
 			if ($formData.person_id.cardType === 'national_id' && $formData.person_id.number) {
 				const cleanId = $formData.person_id.number.replace(/\D/g, '');
 				if (cleanId.length !== 13) {
@@ -114,7 +143,7 @@
 				toast.error('กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน');
 				return;
 			}
-			onsubmit(form.data);
+			onsubmit(form.data as EvacueeInput);
 		}
 	});
 
@@ -142,50 +171,60 @@
 
 	let age = $state('');
 
-	$effect(() => {
-		if (birthYearBE && !isNaN(Number(birthYearBE))) {
-			$formData.birth_year = Number(birthYearBE);
-		} else if (age && !isNaN(Number(age))) {
-			$formData.birth_year = new Date().getFullYear() + 543 - Number(age);
-		} else {
+	const birthYearError = $derived.by(() => {
+		if (!birthYearBE) return undefined;
+		const y = Number(birthYearBE);
+		if (isNaN(y)) return 'กรุณากรอกปีเกิดเป็นตัวเลข';
+		if (y > currentBEYear()) return 'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต';
+		if (y <= minBirthYearBE()) return `ปีเกิด (พ.ศ.) ต้องมากกว่า ${minBirthYearBE()}`;
+		return undefined;
+	});
+
+	const ageError = $derived.by(() => {
+		if (!age) return undefined;
+		const a = Number(age);
+		if (isNaN(a)) return 'กรุณากรอกอายุเป็นตัวเลข';
+		if (a > MAX_AGE_YEARS) return `อายุต้องไม่เกิน ${MAX_AGE_YEARS} ปี`;
+		return undefined;
+	});
+
+	function updateBirthYear(value: string) {
+		birthYearBE = value;
+		$formData.birth_year = value && !isNaN(Number(value)) ? Number(value) : undefined;
+	}
+
+	function updateAge(value: string) {
+		age = value;
+		if (value && !isNaN(Number(value))) {
+			$formData.birth_year = currentBEYear() - Number(value);
+		} else if (!birthYearBE) {
 			$formData.birth_year = undefined;
 		}
-	});
+	}
 
-	$effect(() => {
-		$formData.medical_conditions = medicalConditionsStr
-			? medicalConditionsStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
+	function parseMedicalList(value: string) {
+		return value
+			.split(',')
+			.map((item) => item.trim())
+			.filter(Boolean);
+	}
 
-	$effect(() => {
-		$formData.medical_medications = medicalMedicationsStr
-			? medicalMedicationsStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
-
-	$effect(() => {
-		$formData.medical_allergies = medicalAllergiesStr
-			? medicalAllergiesStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
+	function handleBack() {
+		ondraftchange?.($formData);
+		onBack();
+	}
 </script>
 
-<form method="POST" use:form.enhance class="space-y-6">
+<form
+	method="POST"
+	use:form.enhance
+	class="space-y-8 sm:space-y-6 [&_[data-slot=form-label]]:text-base sm:[&_[data-slot=form-label]]:text-sm [&_[data-slot=input]]:h-12 [&_[data-slot=input]]:text-base sm:[&_[data-slot=input]]:h-10 sm:[&_[data-slot=input]]:text-sm"
+>
 	<Field.FieldGroup>
-		<div class="grid grid-cols-1 items-start gap-6 md:grid-cols-[200px_1fr]">
+		<div class="grid grid-cols-1 items-start gap-8 lg:grid-cols-[200px_1fr] lg:gap-6">
 			<!-- Column 1: Face Photo mockup -->
-			<div class="space-y-2">
-				<p class="text-sm leading-none font-medium text-foreground">
+			<div class="space-y-3 sm:max-w-xs lg:max-w-none">
+				<p class="text-base leading-snug font-medium text-foreground sm:text-sm">
 					ภาพถ่ายใบหน้า (Face Recognition)
 				</p>
 				<input
@@ -193,36 +232,63 @@
 					accept="image/*"
 					class="hidden"
 					id="face-photo-input"
-					onchange={(e) => {
+					disabled={uploadingPhoto}
+					onchange={async (e) => {
 						const file = e.currentTarget.files?.[0];
-						if (file) {
-							facePhotoUrl = URL.createObjectURL(file);
+						if (!file) return;
+
+						if (facePhotoUrl) URL.revokeObjectURL(facePhotoUrl);
+						facePhotoUrl = URL.createObjectURL(file);
+						uploadingPhoto = true;
+						try {
+							const ctx = {
+								shelterCode: shelterStore.selectedShelterCode ?? getShelterCode(),
+								createdBy: authStore.user?.name ?? 'unknown'
+							};
+							const image = await saveImage.mutateAsync({ file, ctx });
+							$formData.photo = image._id;
+						} catch {
+							$formData.photo = null;
+							toast.error('อัปโหลดรูปภาพล้มเหลว สามารถลงทะเบียนต่อได้โดยไม่มีรูป');
+						} finally {
+							uploadingPhoto = false;
 						}
 					}}
 				/>
 				<label
 					for="face-photo-input"
-					class="block cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
+					class="block min-h-44 cursor-pointer rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-4 text-center transition-all hover:border-primary/50 hover:bg-muted/30"
 				>
 					{#if facePhotoUrl}
-						<img src={facePhotoUrl} alt="Face" class="h-40 w-full rounded-lg object-cover" />
+						<div class="relative h-40 w-full">
+							<img
+								src={facePhotoUrl}
+								alt="Face"
+								class="h-40 w-full rounded-lg object-cover {uploadingPhoto ? 'opacity-50' : ''}"
+							/>
+							{#if uploadingPhoto}
+								<div class="absolute inset-0 flex items-center justify-center">
+									<Loader2 class="h-8 w-8 animate-spin text-primary" />
+								</div>
+							{/if}
+						</div>
 					{:else}
 						<div class="flex h-40 flex-col items-center justify-center">
 							<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
-							<span class="text-xs text-muted-foreground">แตะเพื่อถ่ายภาพ</span>
+							<span class="text-sm text-muted-foreground">เพิ่มรูปภาพ</span>
 						</div>
 					{/if}
 				</label>
 			</div>
 
 			<!-- Column 2: Fields grid -->
-			<div class="space-y-4">
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+			<div class="space-y-5 sm:space-y-4">
+				<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4">
 					<div class="space-y-2">
-						<Label>ประเภทบัตร</Label>
+						<Label class="text-base sm:text-sm">ประเภทบัตร</Label>
 						<Select.Root type="single" bind:value={$formData.person_id.cardType}>
 							<Select.Trigger
-								class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+								class="flex !h-12 w-full items-center rounded-md border border-input bg-background px-3 text-base font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground sm:!h-10 sm:text-sm [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
 							>
 								{cardTypeOptions.find((o) => o.value === $formData.person_id.cardType)?.label ??
 									'— เลือก —'}
@@ -270,7 +336,7 @@
 					</Form.Field>
 				</div>
 
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+				<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4">
 					<!-- ชื่อ -->
 					<Form.Field {form} name="first_name">
 						<Form.Control>
@@ -305,27 +371,46 @@
 					</Form.Field>
 				</div>
 
-				<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+				<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
 					<!-- ปีเกิด (พ.ศ.) -->
 					<div class="space-y-2">
-						<Label>ปีเกิด (พ.ศ.)</Label>
-						<Input type="text" placeholder="เช่น 2530" bind:value={birthYearBE} />
+						<Label class="text-base sm:text-sm">ปีเกิด (พ.ศ.)</Label>
+						<Input
+							type="text"
+							inputmode="numeric"
+							maxlength={4}
+							placeholder="เช่น 2530"
+							value={birthYearBE}
+							aria-invalid={birthYearError ? 'true' : undefined}
+							oninput={(e) => {
+								const val = e.currentTarget.value.replace(/\D/g, '').slice(0, 4);
+								e.currentTarget.value = val;
+								updateBirthYear(val);
+							}}
+						/>
+						{#if birthYearError}
+							<p class="text-sm font-medium text-destructive">{birthYearError}</p>
+						{/if}
 					</div>
 
 					<!-- อายุ -->
 					<div class="space-y-2">
-						<Label>อายุ (ปี)</Label>
+						<Label class="text-base sm:text-sm">อายุ (ปี)</Label>
 						<Input
 							type="text"
 							inputmode="numeric"
 							maxlength={3}
 							value={age}
+							aria-invalid={ageError ? 'true' : undefined}
 							oninput={(e) => {
 								const val = e.currentTarget.value.replace(/\D/g, '');
 								e.currentTarget.value = val;
-								age = val;
+								updateAge(val);
 							}}
 						/>
+						{#if ageError}
+							<p class="text-sm font-medium text-destructive">{ageError}</p>
+						{/if}
 					</div>
 
 					<Form.Field {form} name="gender">
@@ -335,7 +420,7 @@
 								<Select.Root type="single" bind:value={$formData.gender}>
 									<Select.Trigger
 										{...props}
-										class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+										class="flex !h-12 w-full items-center rounded-md border border-input bg-background px-3 text-base font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground sm:!h-10 sm:text-sm [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
 									>
 										{genderOptions.find((o) => o.value === $formData.gender)?.label ?? '— เลือก —'}
 									</Select.Trigger>
@@ -370,11 +455,12 @@
 										$formData.phone = val === '' ? null : val;
 									}}
 								/>
-								<label class="mt-1.5 flex cursor-pointer items-center gap-2 text-xs">
+								<label class="mt-2 flex min-h-11 cursor-pointer items-center gap-3 text-sm">
 									<Checkbox
+										class="size-5"
 										checked={noPhone}
-										onCheckedChange={(v) => {
-											noPhone = !!v;
+										onCheckedChange={(value) => {
+											noPhone = !!value;
 											if (noPhone) {
 												$formData.phone = null;
 												$errors.phone = undefined;
@@ -389,7 +475,7 @@
 					</Form.Field>
 				</div>
 
-				<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+				<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
 					<Form.Field {form} name="country">
 						<Form.Control>
 							{#snippet children({ props })}
@@ -402,7 +488,7 @@
 									searchPlaceholder="ค้นหาประเทศ..."
 									emptyText="ไม่พบประเทศ"
 									controlProps={props}
-									class="h-9 rounded-md"
+									class="h-12 rounded-md text-base sm:h-10 sm:text-sm"
 								/>
 							{/snippet}
 						</Form.Control>
@@ -416,7 +502,7 @@
 								<Select.Root type="single" bind:value={$formData.religion}>
 									<Select.Trigger
 										{...props}
-										class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+										class="flex !h-12 w-full items-center rounded-md border border-input bg-background px-3 text-base font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground sm:!h-10 sm:text-sm [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
 									>
 										{religionOptions.find((o) => o.value === $formData.religion)?.label ??
 											'— เลือก —'}
@@ -436,43 +522,55 @@
 		</div>
 
 		<!-- Medical fields section (โรคประจำตัว) -->
-		<div class="w-full space-y-4 border-t border-border pt-6">
-			<h3 class="flex items-center gap-2 text-sm font-semibold text-foreground">
+		<div class="w-full space-y-5 border-t border-border pt-8 sm:space-y-4 sm:pt-6">
+			<h3 class="flex items-center gap-2 text-base font-semibold text-foreground">
 				<span>🏥</span> โรคประจำตัว & ข้อมูลสุขภาพ
 			</h3>
-			<div class="grid grid-cols-1 gap-4">
+			<div class="grid grid-cols-1 gap-5 sm:gap-4">
 				<div class="space-y-2">
-					<Label>โรคประจำตัว</Label>
+					<Label class="text-base sm:text-sm">โรคประจำตัว</Label>
 					<Input
 						placeholder="เช่น เบาหวาน, ความดัน (ถ้าไม่มีให้เว้นว่าง)"
-						bind:value={medicalConditionsStr}
+						value={medicalConditionsStr}
+						oninput={(event) => {
+							medicalConditionsStr = event.currentTarget.value;
+							$formData.medical_conditions = parseMedicalList(medicalConditionsStr);
+						}}
 					/>
 				</div>
 			</div>
 
-			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+			<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4">
 				<div class="space-y-2">
-					<Label>ยาที่ใช้ประจำ</Label>
+					<Label class="text-base sm:text-sm">ยาที่ใช้ประจำ</Label>
 					<Input
 						placeholder="เช่น ยาลดความดัน, ยาเบาหวาน (ถ้าไม่มีให้เว้นว่าง)"
-						bind:value={medicalMedicationsStr}
+						value={medicalMedicationsStr}
+						oninput={(event) => {
+							medicalMedicationsStr = event.currentTarget.value;
+							$formData.medical_medications = parseMedicalList(medicalMedicationsStr);
+						}}
 					/>
 				</div>
 
 				<div class="space-y-2">
-					<Label>ประวัติการแพ้ (ยา/อาหาร)</Label>
+					<Label class="text-base sm:text-sm">ประวัติการแพ้ (ยา/อาหาร)</Label>
 					<Input
 						placeholder="เช่น แพ้เพนิซิลลิน, อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
-						bind:value={medicalAllergiesStr}
+						value={medicalAllergiesStr}
+						oninput={(event) => {
+							medicalAllergiesStr = event.currentTarget.value;
+							$formData.medical_allergies = parseMedicalList(medicalAllergiesStr);
+						}}
 					/>
 				</div>
 			</div>
 		</div>
 
 		<!-- Special Needs section -->
-		<div class="w-full space-y-2 border-t border-border pt-6">
-			<Label class="text-sm font-semibold">แท็กกลุ่มเปราะบางและความต้องการพิเศษ</Label>
-			<div class="flex flex-wrap gap-2 pt-1">
+		<div class="w-full space-y-3 border-t border-border pt-8 sm:space-y-2 sm:pt-6">
+			<Label class="text-base font-semibold sm:text-sm">แท็กกลุ่มเปราะบางและความต้องการพิเศษ</Label>
+			<div class="flex flex-wrap gap-2.5 pt-1 sm:gap-2">
 				{#each specialNeedChipOptions as chip (chip.code)}
 					{@const need = chip.code as NonNullable<EvacueeInput['special_needs']>[number]}
 					{@const checked = ($formData.special_needs ?? []).includes(need)}
@@ -485,7 +583,7 @@
 								? current.filter((n) => n !== need)
 								: [...current, need];
 						}}
-						class="inline-flex h-auto items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-normal transition-colors {checked
+						class="inline-flex min-h-11 items-center gap-1.5 rounded-full border px-4 py-2 text-base font-normal transition-colors sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-sm {checked
 							? 'border-primary bg-primary/10 font-medium text-primary hover:bg-primary/15'
 							: 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:bg-primary/5'}"
 					>
@@ -496,12 +594,12 @@
 			<Form.Field {form} name="special_needs"><Form.FieldErrors /></Form.Field>
 
 			<div class="mt-8 mb-4 overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]">
-				<div class="border-b border-[#E2E8F0] px-4 py-3 sm:px-6">
+				<div class="border-b border-[#E2E8F0] px-4 py-4 sm:px-6 sm:py-3">
 					<h3 class="flex items-center gap-2 text-base font-bold text-foreground">
 						<span>🚨</span> ข้อมูลติดต่อฉุกเฉิน (Emergency Contact)
 					</h3>
 				</div>
-				<div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:p-6">
+				<div class="grid grid-cols-1 gap-5 p-4 sm:grid-cols-2 sm:gap-4 sm:p-6">
 					<Form.Field {form} name="emergency_contact.name">
 						<Form.Control>
 							{#snippet children({ props })}
@@ -520,7 +618,7 @@
 										}
 										$formData.emergency_contact.name = e.currentTarget.value;
 									}}
-									class="bg-white"
+									class="bg-white text-base sm:text-sm"
 								/>
 							{/snippet}
 						</Form.Control>
@@ -537,7 +635,7 @@
 									maxlength={10}
 									placeholder="08X-XXX-XXXX"
 									value={$formData.emergency_contact?.phone ?? ''}
-									class="bg-white"
+									class="bg-white text-base sm:text-sm"
 									oninput={(e) => {
 										const val = e.currentTarget.value.replace(/\D/g, '');
 										e.currentTarget.value = val;
@@ -567,7 +665,7 @@
 								{...props}
 								bind:value={$formData.medical_note}
 								placeholder="เช่น ผู้ป่วยที่ต้องรับยาเฉพาะทาง หรือต้องการการดูแลพิเศษ"
-								class="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+								class="flex min-h-28 w-full rounded-md border border-input bg-background px-3 py-3 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-24 sm:py-2 sm:text-sm"
 							></textarea>
 						{/snippet}
 					</Form.Control>
@@ -581,29 +679,34 @@
 					role="alert"
 				>
 					<TriangleAlert class="size-5 shrink-0" aria-hidden="true" />
-					<p class="text-sm font-bold">
+					<p class="text-base font-bold sm:text-sm">
 						ส่งต่อผู้ป่วยฉุกเฉิน <span class="font-extrabold">(SOS ESCALATE)</span>
 					</p>
 				</div>
-				<p class="text-center text-xs text-muted-foreground">
+				<p class="text-center text-sm text-muted-foreground">
 					ระบบจะแจ้งเตือนไปยังแผนงควบคุมของผู้ว่าฯ และ รพ. สนามทันที
 				</p>
 			{/if}
 		</div>
 
 		<!-- Back + Submit row -->
-		<div class="flex w-full items-center justify-between border-t border-border pt-6">
+		<div
+			class="flex w-full flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
+		>
+			<Form.Button
+				disabled={$submitting || pending}
+				class="h-12 w-full px-6 text-base font-semibold sm:h-10 sm:w-auto sm:text-sm"
+			>
+				ถัดไป →
+			</Form.Button>
 			<Button
 				type="button"
 				variant="outline"
-				onclick={onBack}
-				class="h-10 px-6 text-sm font-medium"
+				onclick={handleBack}
+				class="h-12 w-full px-6 text-base font-medium sm:h-10 sm:w-auto sm:text-sm"
 			>
 				ย้อนกลับ
 			</Button>
-			<Form.Button disabled={$submitting || pending} class="h-10 px-6 text-sm font-semibold">
-				ถัดไป →
-			</Form.Button>
 		</div>
 	</Field.FieldGroup>
 </form>

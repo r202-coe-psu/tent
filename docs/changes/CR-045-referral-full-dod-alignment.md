@@ -58,8 +58,8 @@ affects:
   - `skip`: รองรับจำนวนรายการที่ต้องการข้ามสำหรับ Pagination
   - `sort`: รองรับการเรียงลำดับรายการ (`created_at_desc` เป็น default หรือ `created_at_asc`)
   - `referralFilterSchema`: Zod schema สำหรับทำ Type Validation ความถูกต้องของพารามิเตอร์การค้นหา
-- **Mango Index Deployment:** เพิ่มและลงทะเบียน CouchDB Mango Index `referral-list-sort-idx` (`['type', 'created_at', 'status', 'evacuee_id']`) และ `referral-list-basic-idx` (`['type', 'created_at']`) ใน `scripts/seed.ts` / shelter provision / `pnpm redeploy:referral-db` เพื่อรองรับการค้นหา เรียงลำดับ และป้องกันข้อผิดพลาด 400 Bad Request
-- **Ops (existing DBs):** หลัง merge ต้องรัน `pnpm redeploy:referral-db --write --confirm` บน staging/prod (ชี้ `COUCHDB_ADMIN_URL`) เพื่อ re-PUT `_design/access` (whitelist `referral`) + mango indexes — มิฉะนั้น session create จะโดน `doc type not allowed` / list อาจ 400
+- **Mango Index Deployment:** เพิ่มและลงทะเบียน CouchDB Mango Index `referral-list-sort-idx` (`['type', 'created_at', 'status', 'evacuee_id']`) และ `referral-list-basic-idx` (`['type', 'created_at']`) ใน `scripts/seed.ts` / shelter provision / `pnpm redeploy:access` เพื่อรองรับการค้นหา เรียงลำดับ และป้องกันข้อผิดพลาด 400 Bad Request
+- **Ops (existing DBs):** หลัง merge ต้องรัน `pnpm redeploy:access --write --confirm` บน staging/prod (ชี้ `COUCHDB_ADMIN_URL`) เพื่อ re-PUT `_design/access` (whitelist `referral`) + mango indexes — มิฉะนั้น session create จะโดน `doc type not allowed` / list อาจ 400
 
 ---
 

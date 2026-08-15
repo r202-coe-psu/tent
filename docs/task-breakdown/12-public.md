@@ -2,9 +2,9 @@
 title: "Task Breakdown — Public Portal (PUB tier)"
 status: active
 created: 2026-06-22
-updated: 2026-07-16
+updated: 2026-08-13
 module: public
-note: เพิ่มตาม CR-005 (2026-06-22) — public/no-login portal surface (landing + /shelters + FAQ) ที่ task-breakdown เดิมยังไม่มี module รองรับ
+note: เพิ่มตาม CR-005 (2026-06-22) — public/no-login portal surface (landing + /shelters + FAQ) ที่ task-breakdown เดิมยังไม่มี module รองรับ; 2026-08-13 — CR-066 T-67 map icons ตาม site_kind (CR-067 P1 **approved**); D-HEALTH-SURFACE=A สีหมุด 5 สีอยู่ T-69
 ---
 
 # Public Portal (PUB tier)
@@ -27,6 +27,7 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 | T-57 | 🔄 | Public Portal landing + real-time metrics panel | CR-005 §A/B/C | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-52,T-35,T-01 |
 | T-58 | 🔄 | Public Shelter Dashboard (`/shelters`) — cards + map + filter | CR-005 §D | R3 | prod | ส.ค. | 7 | ÷1.4 | 5 | T-57,T-47 |
 | T-59 | 🔄 | Public FAQ (dynamic) + EOC FAQ setup screen | CR-005 OP-1 | R3 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-03 |
+| T-67 | ⬜ | Public map ไอคอนแยก `evacuation_center` vs `host_house` — CR-067 P1 | FR-62 | R3 | prod | in-scope | 3 | ÷1.4 | 2 | T-58,T-66 |
 |  |  | **รวมทั้งโมดูล** |  |  |  |  | **17** |  | **11.5** |  |
 
 ## Task Details
@@ -63,6 +64,29 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 - Back-office FAQ setup: CRUD รายการ FAQ (จำกัดสิทธิ์ตาม role-permission matrix), เผยแพร่/ซ่อนได้, มีผลกับ public ทันที (ไม่ cache ค้างเกินกำหนด)
 - LINE OA / FB Page URL config (OP-2) เก็บใน setup เดียวกัน (ยังซ่อนปุ่มฝั่ง public ตอนนี้) + demo เพิ่ม/แก้ FAQ แล้วเห็นบน public
 
+---
+
+### T-67 — Public map ไอคอนตาม `site_kind` (CR-067 P1)
+
+**Status:** ⬜ ready หลัง T-66 — CR-067 P1 **approved** 2026-08-13
+**Owner:** Lead pair (public surface)
+**Depends:** T-58, T-66; [CR-067](../changes/CR-067-shelter-site-kind.md)
+**Program:** P1 map slice
+
+**Description:** หมุด public map ใช้ไอคอนคนละชุดสำหรับศูนย์อพยพ vs บ้านพี่เลี้ยง. **ไม่ใช้** emoji จากสตริง `shelter_type` เป็นตัวแยกชนิด. สีหมุดตาม occupancy health อยู่ T-69 (D-HEALTH-SURFACE=A ล็อกแล้ว — public map/card แสดง 5 สีตอนนี้; สูตรคนละเรื่องจากไอคอน).
+
+**Files likely touched:** `features/public-portal` map; FastAPI/BFF shelter DTO ส่ง `site_kind`; filter ชนิดบน `/shelters`
+
+**Definition of Done:**
+- UI: แผนที่และรายการแยกไอคอน 2 ชนิด; กรองชนิดได้
+- Write path: ไม่มี — อ่าน projection
+- Validation: ค่า `site_kind` นอกชุดไม่ทำให้แผนที่พัง (fallback ไอคอนศูนย์)
+- Permission: public no-login; no PII บนหมุด
+- Test: สองชนิดบนแผนที่เดียวกัน; filter
+- Demo: ศูนย์ + บ้านคนละไอคอน
+
+**Out of scope:** สี 5 แถบ (T-69); SOP-lite; เปิดปุ่มจอง (T-71)
+
 ## Effort by phase (Adj MD)
 
 | Phase | Raw MD | Adj MD |
@@ -81,5 +105,6 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 - `T-01` (RBAC + public-tier redaction whitelist) — module **Platform/Core**
 - `T-47` (Shelter master + geo/config) — module **Baseline** (หมุด map + per-shelter capacity)
 - `T-03` (Shared API convention — public endpoint) — module **Platform/Core**
+- `T-66` (site_kind) — หมุดแยกไอคอน T-67
 
 **Related public-tier surface (คนละ module):** `/search` → [T-41](11-famsearch.md) (FAM) · `/donate` → [T-60](04-donation.md) (DN)

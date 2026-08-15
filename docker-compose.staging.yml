@@ -15,6 +15,33 @@ services:
       retries: 10
       start_period: 10s
 
+  # Creates system DBs (_users, _replicator, _global_changes). Idempotent.
+  couchdb-init:
+    container_name: tent-couchdb-init-staging
+    image: curlimages/curl:latest
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        CODE=$$(curl -s -o /tmp/couch-init.out -w '%{http_code}' -X POST \
+          "http://$${COUCHDB_USER}:$${COUCHDB_PASSWORD}@couchdb:5984/_cluster_setup" \
+          -H "Content-Type: application/json" \
+          -d "{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"$${COUCHDB_USER}\",\"password\":\"$${COUCHDB_PASSWORD}\",\"port\":5984}")
+        cat /tmp/couch-init.out || true
+        case "$$CODE" in
+          200|201) echo "CouchDB single-node setup OK" ;;
+          400|409) echo "CouchDB already set up (HTTP $$CODE) — skipping" ;;
+          *) echo "CouchDB cluster setup failed (HTTP $$CODE)"; exit 1 ;;
+        esac
+
   mongodb:
     container_name: tent-mongodb-staging
     image: mongo:7
@@ -71,6 +98,7 @@ services:
         PUBLIC_APP_TITLE: ${PUBLIC_APP_TITLE:-Tent}
         PUBLIC_COUCHDB_URL: ${PUBLIC_ORIGIN:-http://localhost}
         PUBLIC_COUCH_PROXY: /couch
+        PUBLIC_RECAPTCHA_SITE_KEY: ${PUBLIC_RECAPTCHA_SITE_KEY}
     environment:
       # adapter-node requires ORIGIN in production
       ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
@@ -79,10 +107,14 @@ services:
       # BFF donations/needs → FastAPI on the compose network (not localhost)
       FASTAPI_INTERNAL_URL: http://fastapi:9000
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
+      # Site key also at runtime for $env/dynamic/public; secret is verify-only
+      PUBLIC_RECAPTCHA_SITE_KEY: ${PUBLIC_RECAPTCHA_SITE_KEY}
       SECRET_RECAPTCHA_KEY: ${SECRET_RECAPTCHA_KEY}
     depends_on:
       couchdb:
         condition: service_healthy
+      couchdb-init:
+        condition: service_completed_successfully
       fastapi:
         condition: service_started
     restart: unless-stopped

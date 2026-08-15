@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-28
+updated: 2026-08-14
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -40,6 +40,8 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 6** — เพิ่ม `cancelled` ใน `current_stay.status` (CR-070 D-HOLD-CANCEL) — ยกเลิก
+> hold/pre-registration; ไม่นับ occupancy; ไม่เช็คอินจากสถานะนี้.
 > **schema_v 5** — เพิ่ม `age` (CR-057) — snapshot อายุตอนนี้ อิสระจาก `birth_year` (ไม่ derive
 > ไปมา). ข้าม `schema_v 4` ในโค้ด — จองไว้ให้ `photo` (CR-054, approved แต่ยังไม่ implement ใน
 > code ณ วันที่ CR-057 done); เมื่อ `photo` implement จริงจะต้อง reconcile เลข schema_v อีกครั้ง.
@@ -65,7 +67,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `emergency_contact` | {`name`:str, `phone`:str, `relation`:str} | opt | — |
 | `household_id` | str\|null | opt | → `household:{ulid}` |
 | `photo` | str\|null | opt | → image:{ulid} (§1.6) (CR-049) null/ไม่มี field = ไม่มีรูป |
-| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`) เริ่ม `pre_registered` · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
+| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) เริ่ม `pre_registered` · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement (ยกเว้น `cancelled` จาก cancel-hold path, ไม่ผ่าน movement) |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
 | `registered_via` | enum(`app`,`import`,`paper`) | req | — |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
@@ -82,6 +84,11 @@ action ใหม่เท่านั้น). `special_needs` (CR-046) ไม่
 (schema_v ≤3) ไม่มี `age` ก็อ่านได้ปกติ ไม่ต้อง backfill; UI fallback ไปคำนวณอายุจาก `birth_year`
 เมื่อไม่มี `age` (`evacueeAgeYears()` helper). เลข `4` (`photo`, CR-054) ถูกข้ามในโค้ดเพราะยังไม่
 implement — ไม่กระทบ migration นี้
+
+**Migration (schema_v 5 → 6, CR-070):** purely additive enum — `cancelled` เป็นค่าใหม่ของ
+`current_stay.status`; doc เดิมไม่ต้อง backfill. ตั้งผ่าน `cancelPreRegistration` /
+`cancelEvacueePreRegistration` (ไม่ผ่าน movement). Occupancy view ยัง emit ตาม status key;
+`cancelled` ไม่รวมใน total/pre_registered buckets ของ dashboard payload
 
 ### 1.2 `medical` — `medical:{ulid}` (1 doc ต่อ 1 evacuee)
 
@@ -790,7 +797,7 @@ code?: str (เมื่อ created), errors?: [{ column: str, message: str }] }
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `query_kind` | enum(`name`,`phone`,`national_id`,`passport`) | req | ชนิด query ที่ parse ได้จาก public family-search (CR-044) |
+| `query_kind` | enum(`name`,`phone`,`national_id`,`passport`) | req | ชนิด query ที่ parse ได้จาก public occupants search (CR-044, path CR-065) |
 | `query_hash` | str | req | SHA-256 ของ query (normalize แล้ว) — ไม่เก็บ query ตรง |
 | `ip_hash` | str | req | — |
 | `result_count` | int≥0 | req | — |
@@ -832,7 +839,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | `name` | str | req | CouchDB username (login id) |
 | `password` | str | req | CouchDB hash จัดการโดย CouchDB เอง |
 | `display_name` | str\|null | opt | ชื่อแสดงผล (UI บังคับกรอกตอนสร้าง) |
-| `roles` | [str] | req | CouchDB role list: `["shelter:{id}"]` + RoleKey ต่อ function เช่น `"registration_staff"`, `"kitchen_staff"`, `"warehouse_staff"`, `"shelter_manager"`, `"system_admin"` — 1 user 1 shelter; SA มี `shelter_id = null` (ไม่มี `shelter:{id}` prefix) |
+| `roles` | [str] | req | CouchDB role list: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` เท่านั้น (SA, `shelter_id = null`, ห้ามผสม `shelter:{id}` หรือ capability — CR-074) หรือ (b) `["shelter:{id}"]` + RoleKey ต่อ function เช่น `"registration_staff"`, `"kitchen_staff"`, `"warehouse_staff"`, `"shelter_manager"` — 1 user 1 shelter. CouchDB `_admin` ไม่ mint ผ่านแอป |
 | `affiliation_tags` | [str] | opt | **metadata เท่านั้น** — lower_snake string เช่น `"volunteer"`, `"governance"` · default `[]` · **ห้ามใช้แทน permission**: ไม่ให้สิทธิ์, ไม่เปลี่ยน shelter scope, ไม่ bypass role check ใด ๆ ทั้งสิ้น |
 | `shelter_id` | str\|null | opt | shelter `_id` ที่ user นี้สังกัด (เดียวกับ `shelter:{id}` ใน roles); `null` = global (SA); server derive จาก session ไม่เชื่อ client |
 

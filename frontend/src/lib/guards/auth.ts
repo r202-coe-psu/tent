@@ -16,7 +16,7 @@ export const LANDING_ROUTE = '/portal';
 export const LOGIN_ROUTE = '/login';
 
 /** Where users land after logout. */
-export const LOGOUT_ROUTE = '/public';
+export const LOGOUT_ROUTE = '/';
 
 /**
  * Auth guard for protected routes. Resolves the CouchDB `_session` cookie and

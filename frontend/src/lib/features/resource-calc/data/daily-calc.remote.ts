@@ -1,11 +1,12 @@
 /**
  * T-31.4 — remote (CouchDB) implementation of the daily resource-calc repository.
  *
- * Reads the three calc inputs through peer BARRELS only (never raw peer docs, never
+ * Reads the four calc inputs through peer BARRELS only (never raw peer docs, never
  * a whole-collection `_all_docs` scan of another feature):
  *   - occupancy       → `people`      (active/present headcount)
  *   - effective ratio → `sop-ratios`  (`getActiveSopProfile`: override ?? master)
  *   - stock balance   → `operations`  (`getBalance`)
+ *   - facilities/area → `shelters`    (`getShelter`)
  * feeds them to the pure engine (`resource-calc/domain`), then persists a
  * snapshot-locked, deterministically-keyed `daily_calc:{date}` doc.
  */
@@ -14,7 +15,14 @@ import { getShelterDb } from '$lib/db/shelter';
 import { makeDoc, now, type AuthorContext } from '$lib/db/model';
 import { peopleRepository, type Evacuee } from '$lib/features/people';
 import { operationsRepository } from '$lib/features/operations';
-import { getActiveSopProfile, SOP_RATIO_KIND, type SopRatioKey } from '$lib/features/sop-ratios';
+import { sheltersRepository } from '$lib/features/shelters';
+import {
+	getActiveSopProfile,
+	SOP_RATIO_KIND,
+	type SopMaster,
+	type SopOverride,
+	type SopRatioKey
+} from '$lib/features/sop-ratios';
 import { createAuditEntry } from '$lib/features/shared';
 import { calculateResources, FORMULA_V, type ResourceInput } from '../domain/calc.formula';
 import {
@@ -28,6 +36,7 @@ import {
 	type DailyCalcRecord,
 	type DailyCalcRepository
 } from './daily-calc.repository';
+import { resolveHave, type ShelterHaveSource } from './have-map';
 
 /** Minimal shape of a bounded `_all_docs?include_docs=true` response. */
 interface AllDocsResponse {
@@ -39,29 +48,10 @@ export function countActive(evacuees: Evacuee[]): number {
 	return evacuees.filter((e) => e.current_stay?.status === 'active').length;
 }
 
-/**
- * Turn the effective SOP ratios + stock balance into the engine's per-resource inputs,
- * and capture the ratio/stock snapshots frozen at calc time.
- *
- * SEAM — the SOP-ratio-key → stock-item / facility-count mapping is not yet specified
- * (docs/data TBD). Until it lands, `have` is a best-effort direct lookup by ratio key;
- * unmapped resources resolve to `null` and the engine reports `data_status:'stock_unsynced'`
- * rather than a false zero. `threshold` ratios are quality ceilings, not quantities, so they
- * carry no `have`. Replace `resolveHave` once the mapping is defined.
- */
-function resolveHave(
-	key: SopRatioKey,
-	kind: (typeof SOP_RATIO_KIND)[SopRatioKey],
-	stock: Map<string, string>
-): string | null {
-	if (kind === 'threshold') return null;
-	const raw = stock.get(key);
-	return raw ?? null;
-}
-
 function buildResources(
 	ratios: Record<SopRatioKey, string>,
-	stock: Map<string, string>
+	stock: Map<string, string>,
+	shelter: ShelterHaveSource
 ): {
 	resources: ResourceInput[];
 	ratioSnapshot: Record<string, string>;
@@ -74,13 +64,28 @@ function buildResources(
 	for (const key of Object.keys(ratios) as SopRatioKey[]) {
 		const ratio = ratios[key];
 		const kind = SOP_RATIO_KIND[key];
-		const have = resolveHave(key, kind, stock);
+		const have = resolveHave(key, { stock, shelter });
 		resources.push({ key, kind, ratio, have });
 		ratioSnapshot[key] = ratio;
 		stockSnapshot[key] = have;
 	}
 
 	return { resources, ratioSnapshot, stockSnapshot };
+}
+
+function provenanceFrom(active: SopMaster | SopOverride) {
+	if (active.type === 'sop_override') {
+		return {
+			ratio_source: 'override' as const,
+			sop_override_id: active._id,
+			sop_override_version: active.version
+		};
+	}
+	return {
+		ratio_source: 'master' as const,
+		sop_override_id: null,
+		sop_override_version: null
+	};
 }
 
 export class DailyCalcRemoteRepository implements DailyCalcRepository {
@@ -93,11 +98,12 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 	async runOnDemand(date: string, ctx: AuthorContext): Promise<DailyCalcRecord> {
 		const asOf = now();
 
-		// 1. Read all three inputs through peer barrels (parallel).
-		const [evacuees, active, stock] = await Promise.all([
+		// 1. Read all inputs through peer barrels (parallel).
+		const [evacuees, active, stock, shelter] = await Promise.all([
 			peopleRepository().listEvacuees(),
-			getActiveSopProfile(),
-			operationsRepository().getBalance()
+			getActiveSopProfile(ctx.shelterCode),
+			operationsRepository().getBalance(),
+			sheltersRepository().getShelter(ctx.shelterCode)
 		]);
 
 		if (!active) {
@@ -107,7 +113,12 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 		}
 
 		const occupancy = countActive(evacuees);
-		const { resources, ratioSnapshot, stockSnapshot } = buildResources(active.ratios, stock);
+		const { resources, ratioSnapshot, stockSnapshot } = buildResources(
+			active.ratios,
+			stock,
+			shelter
+		);
+		const provenance = provenanceFrom(active);
 
 		// 2. Pure engine.
 		const results = calculateResources({ occupancy, as_of: asOf, resources });
@@ -116,6 +127,7 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 		const body: DailyCalcDoc = dailyCalcDocSchema.parse({
 			formula_v: FORMULA_V,
 			sop_profile_version: active.version,
+			...provenance,
 			ratio_snapshot: ratioSnapshot,
 			occupancy_snapshot: occupancy,
 			as_of: asOf,
@@ -140,6 +152,9 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 						previous: {
 							formula_v: existing.formula_v,
 							sop_profile_version: existing.sop_profile_version,
+							ratio_source: existing.ratio_source,
+							sop_override_id: existing.sop_override_id,
+							sop_override_version: existing.sop_override_version,
 							occupancy_snapshot: existing.occupancy_snapshot,
 							as_of: existing.as_of,
 							results: existing.results
@@ -153,7 +168,7 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 
 		// 4b. Mint (create) or overwrite (carry _rev + created_at, bump updated_at) the record.
 		const record: DailyCalcRecord = existing
-			? { ...existing, ...body, updated_at: now() }
+			? { ...existing, ...body, schema_v: DAILY_CALC_SCHEMA_VERSION, updated_at: now() }
 			: makeDoc('daily_calc', DAILY_CALC_SCHEMA_VERSION, body, ctx, date);
 
 		return putDoc(this.dbName, record);

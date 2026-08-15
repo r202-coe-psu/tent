@@ -3,3 +3,8 @@ packages:
 allowBuilds:
   core-js: true
   esbuild: true
+overrides:
+  'brace-expansion@1': 1.1.18
+  'brace-expansion@2': 2.1.4
+  'exceljs>uuid': 11.1.1
+  dompurify: 3.4.12

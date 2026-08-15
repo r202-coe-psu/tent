@@ -11,10 +11,12 @@ COPY . .
 ARG PUBLIC_APP_TITLE=Tent
 ARG PUBLIC_COUCHDB_URL=http://localhost
 ARG PUBLIC_COUCH_PROXY=/couch
+ARG PUBLIC_RECAPTCHA_SITE_KEY=
 
 RUN PUBLIC_APP_TITLE=$PUBLIC_APP_TITLE \
     PUBLIC_COUCHDB_URL=$PUBLIC_COUCHDB_URL \
     PUBLIC_COUCH_PROXY=$PUBLIC_COUCH_PROXY \
+    PUBLIC_RECAPTCHA_SITE_KEY=$PUBLIC_RECAPTCHA_SITE_KEY \
     pnpm build
 
 # ---
@@ -22,10 +24,24 @@ RUN PUBLIC_APP_TITLE=$PUBLIC_APP_TITLE \
 FROM node:24-slim AS runner
 WORKDIR /app
 
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/build ./build
-COPY --from=builder /app/package.json ./
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/.svelte-kit ./.svelte-kit
+COPY --from=builder /app/package.json /app/tsconfig.json /app/svelte.config.js ./
+
+RUN chown -R node:node /app
 
 ENV NODE_ENV=production
 
 EXPOSE 3000
+
+USER node
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+	CMD node -e "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
 CMD ["node", "build"]

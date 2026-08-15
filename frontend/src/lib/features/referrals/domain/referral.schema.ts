@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod';
+import { shelterCodeSchema } from '$lib/db/model';
 
 // ---------------------------------------------------------------------------
 // Sub-schemas
@@ -81,7 +82,7 @@ const referralBaseSchema = z.object({
 /** Capacity referral: requires to_shelter_code */
 export const capacityReferralSchema = referralBaseSchema.extend({
 	referral_type: z.literal('capacity'),
-	to_shelter_code: z.string().min(1, 'Target shelter code is required'),
+	to_shelter_code: shelterCodeSchema,
 	to_org: toOrgSchema.optional()
 });
 
@@ -143,7 +144,7 @@ export const capacityInputSchema = z
 	.object({
 		...baseInput,
 		referral_type: z.literal('capacity'),
-		to_shelter_code: z.string().min(1, 'กรุณาระบุรหัสศูนย์พักพิงปลายทาง'),
+		to_shelter_code: shelterCodeSchema,
 		to_org: toOrgSchema.optional()
 	})
 	.refine(

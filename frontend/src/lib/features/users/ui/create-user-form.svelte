@@ -2,13 +2,23 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { STAFF_CAPABILITIES, SHELTER_CAPABILITIES } from '$lib/auth/roles';
+	import {
+		STAFF_CAPABILITIES,
+		SHELTER_CAPABILITIES,
+		SA_GRANTABLE_CAPABILITIES,
+		roleDisplayLabel,
+		SYSTEM_ADMIN
+	} from '$lib/auth/roles';
 	import { createUserSchema, type CreateUserInput } from '../domain/schema';
 	import { useShelters } from '$lib/features/shelters';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Save } from '@lucide/svelte';
+	import Eye from '@lucide/svelte/icons/eye';
+	import EyeOff from '@lucide/svelte/icons/eye-off';
 
 	const sheltersQuery = useShelters();
 
@@ -16,20 +26,29 @@
 		onsubmit,
 		oncancel,
 		isSA = false,
-		shelterCode = null,
+		allowSystemAdminRole = false,
+		lockedShelterCode = null,
 		pending = false
 	}: {
 		onsubmit: (input: CreateUserInput) => void;
 		oncancel?: () => void;
-		/** System admin: may grant any capability + choose the shelter. */
+		/** System admin: may grant shelter_manager as well as staff capabilities. */
 		isSA?: boolean;
-		/** A manager's own shelter (locked); SA leaves this null and types one. */
-		shelterCode?: string | null;
+		/** Portal-only: include `system_admin` in the role picker. */
+		allowSystemAdminRole?: boolean;
+		/** When set, this code is always shelter_id — hide the picker even for SA. */
+		lockedShelterCode?: string | null;
 		pending?: boolean;
 	} = $props();
 
-	// SA may grant shelter_manager too; a manager only staff capabilities.
-	const capabilities = $derived(isSA ? SHELTER_CAPABILITIES : STAFF_CAPABILITIES);
+	const shelterLocked = $derived(Boolean(lockedShelterCode));
+	const capabilities = $derived(
+		isSA && allowSystemAdminRole
+			? SA_GRANTABLE_CAPABILITIES
+			: isSA
+				? SHELTER_CAPABILITIES
+				: STAFF_CAPABILITIES
+	);
 
 	const form = superForm(defaults(zod4(createUserSchema)), {
 		SPA: true,
@@ -37,14 +56,26 @@
 		resetForm: false,
 		onUpdate: async ({ form }) => {
 			if (!form.valid) return;
-			// A manager's shelter is implicit; an SA types it in the field.
-			const shelter_id = isSA ? form.data.shelter_id : (shelterCode ?? undefined);
+			const shelter_id = lockedShelterCode ?? (isSA ? form.data.shelter_id : undefined);
 			onsubmit({ ...form.data, shelter_id });
 			reset();
 		}
 	});
 
 	const { form: formData, submitting, reset } = form;
+
+	const isSaCapability = $derived($formData.capability === SYSTEM_ADMIN);
+
+	const shelterItems = $derived(
+		(sheltersQuery.data ?? []).map((s) => ({
+			value: s.code,
+			label: `${s.name} (${s.code})`
+		}))
+	);
+
+	const fieldControlClass = 'h-11 w-full rounded-md border border-input bg-slate-50 px-3 text-sm';
+
+	let showPassword = $state(false);
 </script>
 
 <form method="POST" use:form.enhance>
@@ -56,7 +87,7 @@
 					<Input
 						{...props}
 						bind:value={$formData.username}
-						class="h-11 border-0 bg-slate-50 shadow-none"
+						class="h-11 bg-slate-50"
 						placeholder="user123"
 					/>
 				{/snippet}
@@ -71,7 +102,7 @@
 					<Input
 						{...props}
 						bind:value={$formData.display_name}
-						class="h-11 border-0 bg-slate-50 shadow-none"
+						class="h-11 bg-slate-50"
 						placeholder="นาย สมชาย"
 					/>
 				{/snippet}
@@ -83,13 +114,29 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label class="font-bold">รหัสผ่าน (Password)</Form.Label>
-					<Input
-						{...props}
-						type="password"
-						bind:value={$formData.password}
-						class="h-11 border-0 bg-slate-50 shadow-none"
-						placeholder="••••••"
-					/>
+					<div class="relative">
+						<Input
+							{...props}
+							type={showPassword ? 'text' : 'password'}
+							bind:value={$formData.password}
+							class="h-11 bg-slate-50 pr-10"
+							placeholder="••••••"
+						/>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
+							aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+							onclick={() => (showPassword = !showPassword)}
+						>
+							{#if showPassword}
+								<EyeOff class="size-4 text-muted-foreground" />
+							{:else}
+								<Eye class="size-4 text-muted-foreground" />
+							{/if}
+						</Button>
+					</div>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -99,37 +146,43 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label class="font-bold">บทบาท (Role)</Form.Label>
-					<select
-						{...props}
-						bind:value={$formData.capability}
-						class="h-11 w-full rounded-md border-0 bg-slate-50 px-3 text-sm shadow-none"
-					>
-						{#each capabilities as cap (cap)}
-							<option value={cap}>{cap}</option>
-						{/each}
-					</select>
+					<Select.Root type="single" bind:value={$formData.capability}>
+						<Select.Trigger {...props} class={fieldControlClass}>
+							{$formData.capability ? roleDisplayLabel($formData.capability) : 'เลือกบทบาท'}
+						</Select.Trigger>
+						<Select.Content>
+							{#each capabilities as cap (cap)}
+								<Select.Item value={cap} label={roleDisplayLabel(cap)} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
 
-		{#if isSA}
+		{#if isSaCapability}
+			<Field.Field>
+				<Field.Label class="font-bold">Shelter</Field.Label>
+				<p class="text-sm text-muted-foreground">สิทธิ์ทั้งระบบ — ไม่ผูกกับศูนย์พักพิง</p>
+			</Field.Field>
+		{:else if isSA && !shelterLocked}
 			<Form.Field {form} name="shelter_id">
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label class="font-bold">Shelter ID (Code)</Form.Label>
-						<select
-							{...props}
-							bind:value={$formData.shelter_id}
-							class="h-11 w-full rounded-md border-0 bg-slate-50 px-3 text-sm shadow-none"
-						>
-							<option value="">-- Select Shelter --</option>
-							{#if sheltersQuery.data}
-								{#each sheltersQuery.data as shelter (shelter.code)}
-									<option value={shelter.code}>{shelter.name} ({shelter.code})</option>
-								{/each}
-							{/if}
-						</select>
+						<Combobox
+							items={shelterItems}
+							bind:value={
+								() => $formData.shelter_id ?? '', (v) => ($formData.shelter_id = v || undefined)
+							}
+							placeholder={sheltersQuery.isLoading ? 'กำลังโหลด...' : '-- Select Shelter --'}
+							searchPlaceholder="ค้นหาศูนย์พักพิง..."
+							emptyText="ไม่พบศูนย์พักพิง"
+							disabled={sheltersQuery.isLoading}
+							controlProps={props}
+							class={fieldControlClass}
+						/>
 					{/snippet}
 				</Form.Control>
 				<Form.FieldErrors />
@@ -137,7 +190,7 @@
 		{:else}
 			<Field.Field>
 				<Field.Label class="font-bold">Shelter</Field.Label>
-				<p class="text-sm text-muted-foreground">{shelterCode ?? '—'} (your shelter)</p>
+				<p class="text-sm text-muted-foreground">{lockedShelterCode ?? '—'}</p>
 			</Field.Field>
 		{/if}
 

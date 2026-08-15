@@ -1,7 +1,22 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDoc, putDoc, bulkDocs } from './couch-db';
-import { CouchAuthError } from '$lib/utils/errors';
+import { CouchAuthError, CouchDocumentPolicyError } from '$lib/utils/errors';
+
+const markNeedsReauth = vi.fn();
+
+vi.mock('$lib/stores/auth.svelte', () => ({
+	authStore: {
+		markNeedsReauth: (...args: unknown[]) => markNeedsReauth(...args)
+	}
+}));
+
+vi.mock('$lib/stores/endpoint.svelte', () => ({
+	endpointStore: {
+		markConnected: vi.fn(),
+		markDisconnected: vi.fn()
+	}
+}));
 
 const store = new Map<string, unknown>();
 
@@ -49,6 +64,7 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
 
 beforeEach(() => {
 	store.clear();
+	markNeedsReauth.mockReset();
 	vi.stubGlobal('fetch', mockFetch);
 });
 
@@ -78,10 +94,47 @@ describe('couch-db', () => {
 		expect((results[0] as { _rev?: string })._rev).toBe('1-bulk');
 	});
 
-	it('maps 401 to CouchAuthError', async () => {
+	it('maps 401 to CouchAuthError and marks needs reauth', async () => {
 		vi.stubGlobal('fetch', () =>
 			Promise.resolve(new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 }))
 		);
 		await expect(putDoc('testdb', { _id: 'x:1' })).rejects.toBeInstanceOf(CouchAuthError);
+		expect(markNeedsReauth).toHaveBeenCalledTimes(1);
+	});
+
+	it('maps validate_doc_update 403 to CouchDocumentPolicyError without reauth', async () => {
+		vi.stubGlobal('fetch', () =>
+			Promise.resolve(
+				new Response(
+					JSON.stringify({
+						error: 'forbidden',
+						reason: 'doc type not allowed yet: screening'
+					}),
+					{ status: 403 }
+				)
+			)
+		);
+		const err = await putDoc('testdb', { _id: 'screening:1', type: 'screening' }).catch((e) => e);
+		expect(err).toBeInstanceOf(CouchDocumentPolicyError);
+		expect((err as CouchDocumentPolicyError).reason).toBe('doc type not allowed yet: screening');
+		expect((err as CouchDocumentPolicyError).docId).toBe('screening:1');
+		expect((err as CouchDocumentPolicyError).docType).toBe('screening');
+		expect(markNeedsReauth).not.toHaveBeenCalled();
+	});
+
+	it('maps membership 403 to CouchAuthError and marks needs reauth', async () => {
+		vi.stubGlobal('fetch', () =>
+			Promise.resolve(
+				new Response(
+					JSON.stringify({
+						error: 'forbidden',
+						reason: 'You are not allowed to access this db.'
+					}),
+					{ status: 403 }
+				)
+			)
+		);
+		await expect(putDoc('testdb', { _id: 'x:1' })).rejects.toBeInstanceOf(CouchAuthError);
+		expect(markNeedsReauth).toHaveBeenCalledTimes(1);
 	});
 });

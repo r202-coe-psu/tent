@@ -8,11 +8,16 @@ from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
+from ...core.security import verify_external_secret
 from ...utils.request_meta import client_ip
 from .schemas import ApiErrorResponse, SearchRequest, SearchResponse
 from .use_case import EvacueeUseCase, get_evacuee_use_case
 
-router = APIRouter(prefix="/public/v1/family-search", tags=["Family Search"])
+router = APIRouter(
+    prefix="/public/v1/occupants",
+    tags=["Occupants"],
+    dependencies=[Depends(verify_external_secret)],
+)
 
 RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX_REQUESTS = 30

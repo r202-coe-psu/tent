@@ -1,4 +1,4 @@
-"""Inbound loop — persist family-search audit buffer into CouchDB ``central_ops``."""
+"""Inbound loop — persist occupants-search audit buffer into CouchDB ``central_ops``."""
 
 from __future__ import annotations
 

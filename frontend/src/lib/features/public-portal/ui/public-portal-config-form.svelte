@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { superForm } from 'sveltekit-superforms';
+	import { superForm, defaults } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { publicConfigBodySchema } from '../domain/config';
 	import { Button } from '$lib/components/ui/button';
@@ -13,16 +13,26 @@
 	let { data, activeType = 'public' } = $props();
 
 	const form = superForm(
-		untrack(() => data.form),
+		defaults(
+			untrack(() => data.initialData),
+			zod4(publicConfigBodySchema)
+		),
 		{
+			id: 'publicConfigForm',
 			validators: zod4(publicConfigBodySchema),
 			dataType: 'json',
+			resetForm: false,
+			warnings: {
+				duplicateId: false
+			},
 			onUpdated: async ({ form }) => {
 				if (form.valid) {
 					toast.success(form.message || 'บันทึกสำเร็จ');
 					await invalidateAll();
 				} else {
-					toast.error(form.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+					toast.error(
+						form.errors?._errors?.[0] || form.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล'
+					);
 				}
 			}
 		}

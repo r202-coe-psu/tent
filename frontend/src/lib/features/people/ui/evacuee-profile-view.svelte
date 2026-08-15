@@ -3,6 +3,9 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Clock from '@lucide/svelte/icons/clock';
+	import Circle from '@lucide/svelte/icons/circle';
+	import FilePenLine from '@lucide/svelte/icons/file-pen-line';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
 
 	import {
 		useEvacuees,
@@ -10,10 +13,21 @@
 		useMedicals,
 		useScreenings,
 		useMovements,
-		useUpdateEvacuee,
-		useUpdateHousehold
+		useCreateMedical,
+		usePatchMedical,
+		useDeleteMedical,
+		useCreateScreening,
+		usePatchEvacuee,
+		usePatchHousehold
 	} from '$lib/features/people';
+	import {
+		hasStaffCapability,
+		isShelterManager,
+		isSystemAdmin,
+		shelterCodeFromRoles
+	} from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import type {
 		StayStatus,
@@ -22,6 +36,7 @@
 		MovementAction
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
+	import { useSaveImage } from '$lib/features/images';
 	import { now } from '$lib/db/model';
 
 	import EvacueeProfileHeaderCard from './evacuee-profile-header-card.svelte';
@@ -36,8 +51,33 @@
 	import EvacueeQrModal from './evacuee-qr-modal.svelte';
 	import EvacueeAddressModal from './evacuee-address-modal.svelte';
 	import EvacueeAssetsModal from './evacuee-assets-modal.svelte';
+	import EvacueePersonalModal, {
+		type EvacueePersonalEditData
+	} from './evacuee-personal-modal.svelte';
+	import EvacueeEmergencyModal, {
+		type EvacueeEmergencyEditData
+	} from './evacuee-emergency-modal.svelte';
+	import EvacueeHealthModal, { type EvacueeHealthEditData } from './evacuee-health-modal.svelte';
+	import EvacueeHouseholdModal, {
+		type EvacueeHouseholdEditData
+	} from './evacuee-household-modal.svelte';
 
 	let { evacueeId, readonly = false }: { evacueeId: string; readonly?: boolean } = $props();
+
+	const canEditProfile = $derived.by(() => {
+		if (readonly || !authStore.user) return false;
+		const roles = authStore.user.roles;
+		if (isSystemAdmin(roles)) return true;
+
+		const scopedShelter = shelterCodeFromRoles(roles);
+		const currentShelter = (shelterStore.selectedShelterCode ?? getShelterCode()).toUpperCase();
+		return (
+			!!scopedShelter &&
+			scopedShelter.toUpperCase() === currentShelter &&
+			(isShelterManager(roles) || hasStaffCapability(roles, 'registration_staff'))
+		);
+	});
+	const profileReadonly = $derived(readonly || !canEditProfile);
 
 	const statusConfig: Partial<
 		Record<StayStatus, { label: string; colorClass: string; dotClass: string }>
@@ -77,6 +117,12 @@
 			colorClass:
 				'bg-slate-200 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700',
 			dotClass: 'bg-black'
+		},
+		cancelled: {
+			label: 'ยกเลิกการลงทะเบียนล่วงหน้า',
+			colorClass:
+				'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800',
+			dotClass: 'bg-slate-400'
 		}
 	};
 
@@ -86,8 +132,13 @@
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const movementsQuery = useMovements();
-	const updateEvacueeMutation = useUpdateEvacuee();
-	const updateHouseholdMutation = useUpdateHousehold();
+	const patchEvacueeMutation = usePatchEvacuee();
+	const patchHouseholdMutation = usePatchHousehold();
+	const createMedicalMutation = useCreateMedical();
+	const patchMedicalMutation = usePatchMedical();
+	const deleteMedicalMutation = useDeleteMedical();
+	const createScreeningMutation = useCreateScreening();
+	const saveImageMutation = useSaveImage();
 
 	const evacuee = $derived(evacueesQuery.data?.find((e) => e._id === evacueeId) ?? null);
 	const household = $derived(
@@ -102,7 +153,11 @@
 	);
 	const screening = $derived(
 		evacuee && screeningsQuery.data
-			? (screeningsQuery.data.find((s) => s.evacuee_id === evacuee._id) ?? null)
+			? (screeningsQuery.data
+					.filter((s) => s.evacuee_id === evacuee._id)
+					.sort((a, b) =>
+						(b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at)
+					)[0] ?? null)
 			: null
 	);
 	const shelterName = $derived(shelterQuery.data?.name ?? 'ศูนย์พักพิงชั่วคราว');
@@ -134,14 +189,26 @@
 			: []
 	);
 
-	const movementLabels: Record<MovementAction, { emoji: string; label: string }> = {
-		check_in: { emoji: '🟢', label: 'เช็คอิน (Check-in)' },
-		check_out: { emoji: '⚪', label: 'ย้ายออก/กลับภูมิลำเนา (Checked-out)' },
-		transfer_in: { emoji: '🔵', label: 'ย้ายเข้า (Transfer in)' },
-		transfer_out: { emoji: '🟣', label: 'ย้ายออก (Transfer out)' },
-		leave_temporary: { emoji: '🟠', label: 'ออกชั่วคราว (Temporary leave)' },
-		return_from_leave: { emoji: '🟢', label: 'กลับจากออกชั่วคราว (Return from leave)' },
-		mark_deceased: { emoji: '⚫', label: 'เสียชีวิต (Deceased)' }
+	const movementLabels: Record<MovementAction, { dotClass: string; label: string }> = {
+		check_in: { dotClass: 'fill-emerald-500 text-emerald-500', label: 'เช็คอิน (Check-in)' },
+		check_out: {
+			dotClass: 'fill-slate-400 text-slate-400',
+			label: 'ย้ายออก/กลับภูมิลำเนา (Checked-out)'
+		},
+		transfer_in: { dotClass: 'fill-blue-500 text-blue-500', label: 'ย้ายเข้า (Transfer in)' },
+		transfer_out: { dotClass: 'fill-violet-500 text-violet-500', label: 'ย้ายออก (Transfer out)' },
+		leave_temporary: {
+			dotClass: 'fill-amber-500 text-amber-500',
+			label: 'ออกชั่วคราว (Temporary leave)'
+		},
+		return_from_leave: {
+			dotClass: 'fill-emerald-500 text-emerald-500',
+			label: 'กลับจากออกชั่วคราว (Return from leave)'
+		},
+		mark_deceased: {
+			dotClass: 'fill-slate-950 text-slate-950 dark:fill-slate-100 dark:text-slate-100',
+			label: 'เสียชีวิต (Deceased)'
+		}
 	};
 
 	const isLoading = $derived(
@@ -163,19 +230,31 @@
 	const visibleMovements = $derived(movements.slice(0, visibleMovementsCount));
 	const hasMoreMovements = $derived(movements.length > visibleMovementsCount);
 
+	function getAuthorContext() {
+		const createdBy = authStore.user?.name?.trim();
+		if (!createdBy) {
+			throw new Error('ไม่พบผู้ใช้งานปัจจุบัน กรุณารอการยืนยันตัวตนแล้วลองใหม่');
+		}
+		return { shelterCode: getShelterCode(), createdBy };
+	}
+
 	// Modal visibility state
 	let showZoneModal = $state(false);
 	let showStatusModal = $state(false);
 	let showQrModal = $state(false);
 	let showAddressModal = $state(false);
 	let showAssetModal = $state(false);
+	let showPersonalModal = $state(false);
+	let showEmergencyModal = $state(false);
+	let showHealthModal = $state(false);
+	let showHouseholdModal = $state(false);
 
 	async function updateZone(zoneCode: string) {
 		if (!evacuee) return;
 		try {
-			await updateEvacueeMutation.mutateAsync({
-				...evacuee,
-				current_stay: { ...evacuee.current_stay, zone: zoneCode, since: now() }
+			await patchEvacueeMutation.mutateAsync({
+				id: evacuee._id,
+				patch: { current_stay: { ...evacuee.current_stay, zone: zoneCode, since: now() } }
 			});
 			toast.success(`ย้ายโซนเป็น ${zoneCode.toUpperCase()} เรียบร้อย`);
 			showZoneModal = false;
@@ -187,9 +266,9 @@
 	async function updateStatus(status: StayStatus) {
 		if (!evacuee) return;
 		try {
-			await updateEvacueeMutation.mutateAsync({
-				...evacuee,
-				current_stay: { ...evacuee.current_stay, status, since: now() }
+			await patchEvacueeMutation.mutateAsync({
+				id: evacuee._id,
+				patch: { current_stay: { ...evacuee.current_stay, status, since: now() } }
 			});
 			toast.success('อัปเดตสถานะการพักพิงเรียบร้อย');
 			showStatusModal = false;
@@ -211,14 +290,16 @@
 			return;
 		}
 		try {
-			await updateHouseholdMutation.mutateAsync({
-				...household,
-				address_no: data.addressNo || null,
-				village_no: data.villageNo || null,
-				subdistrict: data.subdistrict || null,
-				district: data.district || null,
-				province: data.province || null,
-				postal_code: data.postalCode || null
+			await patchHouseholdMutation.mutateAsync({
+				id: household._id,
+				patch: {
+					address_no: data.addressNo || null,
+					village_no: data.villageNo || null,
+					subdistrict: data.subdistrict || null,
+					district: data.district || null,
+					province: data.province || null,
+					postal_code: data.postalCode || null
+				}
 			});
 			toast.success('แก้ไขที่อยู่ครัวเรือนสำเร็จ');
 			showAddressModal = false;
@@ -237,16 +318,223 @@
 			return;
 		}
 		try {
-			await updateHouseholdMutation.mutateAsync({
-				...household,
-				vehicles: data.vehicles,
-				assets: data.valuables ? { description: data.valuables, image_url: null } : null,
-				pets: data.pets.filter((p) => p.count > 0)
+			await patchHouseholdMutation.mutateAsync({
+				id: household._id,
+				patch: {
+					vehicles: data.vehicles,
+					assets: data.valuables ? { description: data.valuables, image_url: null } : null,
+					pets: data.pets.filter((p) => p.count > 0)
+				}
 			});
 			toast.success('แก้ไขข้อมูลทรัพย์สินและสัตว์เลี้ยงสำเร็จ');
 			showAssetModal = false;
 		} catch (err: unknown) {
 			toast.error(`ไม่สามารถบันทึกข้อมูลได้: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	}
+
+	async function savePersonal(data: EvacueePersonalEditData) {
+		if (!evacuee) return;
+		try {
+			await authStore.ensureInitialized();
+			let photo = data.removePhoto ? null : evacuee.photo;
+			if (data.photoFile) {
+				const actor = getAuthorContext();
+				const image = await saveImageMutation.mutateAsync({
+					file: data.photoFile,
+					ctx: actor,
+					caption: `${data.firstName} ${data.lastName}`
+				});
+				photo = image._id;
+			}
+
+			await patchEvacueeMutation.mutateAsync({
+				id: evacuee._id,
+				patch: {
+					first_name: data.firstName,
+					last_name: data.lastName,
+					nickname: data.nickname || undefined,
+					birth_year: data.birthYear,
+					age: data.age,
+					gender: data.gender,
+					phone: data.phone,
+					person_id: { cardType: data.cardType, number: data.cardNumber || undefined },
+					country: data.country,
+					religion: data.religion,
+					photo
+				}
+			});
+			toast.success('บันทึกข้อมูลส่วนบุคคลเรียบร้อย');
+			showPersonalModal = false;
+		} catch (err: unknown) {
+			toast.error(
+				`ไม่สามารถบันทึกข้อมูลส่วนบุคคลได้: ${err instanceof Error ? err.message : String(err)}`
+			);
+		}
+	}
+
+	async function saveEmergency(data: EvacueeEmergencyEditData) {
+		if (!evacuee) return;
+		try {
+			await patchEvacueeMutation.mutateAsync({
+				id: evacuee._id,
+				patch: { emergency_contact: data.emergencyContact }
+			});
+			toast.success('บันทึกข้อมูลติดต่อฉุกเฉินเรียบร้อย');
+			showEmergencyModal = false;
+		} catch (err: unknown) {
+			toast.error(
+				`ไม่สามารถบันทึกข้อมูลติดต่อฉุกเฉินได้: ${err instanceof Error ? err.message : String(err)}`
+			);
+		}
+	}
+
+	async function saveHealth(data: EvacueeHealthEditData) {
+		if (!evacuee) return;
+		const medicalPatch = {
+			blood_group: data.bloodGroup,
+			conditions: data.conditions,
+			medications: data.medications,
+			allergies: data.allergies,
+			track: data.careTrack,
+			notes: data.medicalNotes || undefined
+		};
+		const medicalHasValues =
+			data.conditions.length > 0 ||
+			data.medications.length > 0 ||
+			data.allergies.length > 0 ||
+			data.medicalNotes.length > 0 ||
+			data.bloodGroup !== 'unknown' ||
+			data.careTrack === 'fast_track';
+		const medicalChanged =
+			!medical ||
+			medical.blood_group !== data.bloodGroup ||
+			JSON.stringify(medical.conditions) !== JSON.stringify(data.conditions) ||
+			JSON.stringify(medical.medications) !== JSON.stringify(data.medications) ||
+			JSON.stringify(medical.allergies) !== JSON.stringify(data.allergies) ||
+			medical.track !== data.careTrack ||
+			(medical.notes ?? '') !== data.medicalNotes;
+		const specialNeedsChanged =
+			JSON.stringify(evacuee.special_needs) !== JSON.stringify(data.specialNeeds);
+		const nextSymptoms = data.ewarSymptoms;
+		const screeningChanged =
+			!screening ||
+			JSON.stringify(screening.symptoms) !== JSON.stringify(nextSymptoms) ||
+			screening.temperature_c !== data.temperatureC ||
+			screening.needs_referral !== data.referral ||
+			screening.track !== data.careTrack ||
+			(screening.notes ?? '') !== data.screeningNotes;
+		const screeningHasValues =
+			nextSymptoms.length > 0 ||
+			data.temperatureC !== null ||
+			data.referral ||
+			data.screeningNotes.length > 0;
+
+		let patchedEvacuee = false;
+		let patchedMedical = false;
+		let createdMedicalId: string | null = null;
+		let actor: ReturnType<typeof getAuthorContext> | null = null;
+		const getActor = () => (actor ??= getAuthorContext());
+		try {
+			await authStore.ensureInitialized();
+			if ((medical || medicalHasValues) && medicalChanged) {
+				if (medical) {
+					await patchMedicalMutation.mutateAsync({
+						id: medical._id,
+						patch: medicalPatch
+					});
+					patchedMedical = true;
+				} else {
+					const created = await createMedicalMutation.mutateAsync({
+						input: { evacuee_id: evacuee._id, ...medicalPatch },
+						ctx: getActor()
+					});
+					createdMedicalId = created._id;
+				}
+			}
+
+			if (specialNeedsChanged) {
+				await patchEvacueeMutation.mutateAsync({
+					id: evacuee._id,
+					patch: { special_needs: data.specialNeeds }
+				});
+				patchedEvacuee = true;
+			}
+
+			if (screeningChanged && (screening || screeningHasValues)) {
+				await createScreeningMutation.mutateAsync({
+					input: {
+						evacuee_id: evacuee._id,
+						symptoms: nextSymptoms,
+						temperature_c: data.temperatureC,
+						track: data.careTrack,
+						needs_referral: data.referral,
+						notes: data.screeningNotes || undefined
+					},
+					ctx: getActor()
+				});
+			}
+			toast.success('บันทึกข้อมูลสุขภาพเรียบร้อย');
+			showHealthModal = false;
+		} catch (err: unknown) {
+			const rollbacks: Promise<unknown>[] = [];
+			if (patchedEvacuee) {
+				rollbacks.push(
+					patchEvacueeMutation.mutateAsync({
+						id: evacuee._id,
+						patch: { special_needs: evacuee.special_needs }
+					})
+				);
+			}
+			if (patchedMedical && medical) {
+				rollbacks.push(
+					patchMedicalMutation.mutateAsync({
+						id: medical._id,
+						patch: {
+							blood_group: medical.blood_group,
+							conditions: medical.conditions,
+							medications: medical.medications,
+							allergies: medical.allergies,
+							track: medical.track,
+							notes: medical.notes
+						}
+					})
+				);
+			}
+			if (createdMedicalId) rollbacks.push(deleteMedicalMutation.mutateAsync(createdMedicalId));
+			const rollbackResults = await Promise.allSettled(rollbacks);
+			const rollbackFailed = rollbackResults.some((result) => result.status === 'rejected');
+			toast.error(
+				rollbackFailed
+					? `บันทึกข้อมูลสุขภาพได้บางส่วน กรุณารีเฟรชและตรวจสอบอีกครั้ง: ${err instanceof Error ? err.message : String(err)}`
+					: `ไม่สามารถบันทึกข้อมูลสุขภาพได้ ระบบคืนค่าการเปลี่ยนแปลงแล้ว: ${err instanceof Error ? err.message : String(err)}`
+			);
+		}
+	}
+
+	async function saveHousehold(data: EvacueeHouseholdEditData) {
+		if (!evacuee) return;
+		try {
+			await patchEvacueeMutation.mutateAsync({
+				id: evacuee._id,
+				patch: { household_id: data.householdId }
+			});
+			const targetHousehold = data.householdId
+				? householdsQuery.data?.find((item) => item._id === data.householdId)
+				: null;
+			if (targetHousehold && data.setAsHead && targetHousehold.head_evacuee_id !== evacuee._id) {
+				await patchHouseholdMutation.mutateAsync({
+					id: targetHousehold._id,
+					patch: { head_evacuee_id: evacuee._id }
+				});
+			}
+
+			toast.success('บันทึกสังกัดครัวเรือนเรียบร้อย');
+			showHouseholdModal = false;
+		} catch (err: unknown) {
+			toast.error(
+				`ไม่สามารถบันทึกสังกัดครัวเรือนได้: ${err instanceof Error ? err.message : String(err)}`
+			);
 		}
 	}
 
@@ -266,7 +554,7 @@
 
 {#if isLoading}
 	<div
-		class="flex flex-col items-center justify-center gap-3 rounded-3xl border border-border bg-card py-20 shadow-sm"
+		class="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card py-20"
 	>
 		<div
 			class="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent"
@@ -274,58 +562,81 @@
 		<p class="text-sm font-medium text-muted-foreground">กำลังโหลดข้อมูลผู้พักพิง...</p>
 	</div>
 {:else if !evacuee}
-	<div class="space-y-4 rounded-3xl border border-border bg-card py-16 text-center shadow-sm">
+	<div class="space-y-4 rounded-lg border border-border bg-card py-16 text-center">
 		<p class="text-base font-semibold text-destructive">ไม่พบข้อมูลผู้พักพิงในระบบ</p>
 		<button
-			class="inline-flex cursor-pointer items-center justify-center rounded-xl border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors hover:bg-muted"
+			class="inline-flex cursor-pointer items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors hover:bg-muted"
 			onclick={() => goto(resolve('/back-office/evacuee-management'))}
 		>
 			กลับหน้าหลัก
 		</button>
 	</div>
 {:else}
-	<div class="space-y-6">
+	<div class="space-y-5">
 		<!-- Header -->
 		<EvacueeProfileHeaderCard
 			{evacuee}
 			{medical}
 			{screening}
 			{statusInfo}
-			{readonly}
+			readonly={profileReadonly}
+			onOpenProfileEdit={() => (showPersonalModal = true)}
 			onOpenZoneModal={() => (showZoneModal = true)}
 			onOpenStatusModal={() => (showStatusModal = true)}
 			onOpenQrModal={() => (showQrModal = true)}
 		/>
 
 		<!-- Two-column body -->
-		<div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+		<div class="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
 			<!-- Left column -->
-			<div class="space-y-6 lg:col-span-5">
-				<EvacueeProfileZoneCard {evacuee} {shelterName} />
-				<EvacueeProfilePersonalCard {evacuee} />
-				<EvacueeProfileEmergencyCard {evacuee} />
+			<div class="space-y-4 lg:col-span-5">
+				<h2 class="px-1 text-sm font-bold text-foreground">ข้อมูลบุคคลและตำแหน่งพักพิง</h2>
+				<EvacueeProfileZoneCard
+					{evacuee}
+					{shelterName}
+					readonly={profileReadonly}
+					onOpenEdit={() => (showZoneModal = true)}
+				/>
+				<EvacueeProfilePersonalCard
+					{evacuee}
+					readonly={profileReadonly}
+					onOpenEdit={() => (showPersonalModal = true)}
+				/>
+				<EvacueeProfileEmergencyCard
+					{evacuee}
+					readonly={profileReadonly}
+					onOpenEdit={() => (showEmergencyModal = true)}
+				/>
 			</div>
 
 			<!-- Right column -->
-			<div class="space-y-6 lg:col-span-7">
-				<EvacueeProfileHealthCard {evacuee} {medical} {screening} />
+			<div class="space-y-4 lg:col-span-7">
+				<h2 class="px-1 text-sm font-bold text-foreground">สุขภาพ ครัวเรือน และทรัพย์สิน</h2>
+				<EvacueeProfileHealthCard
+					{evacuee}
+					{medical}
+					{screening}
+					readonly={profileReadonly}
+					onOpenEdit={() => (showHealthModal = true)}
+				/>
 				<EvacueeProfileHouseholdCard
 					{evacuee}
 					{household}
 					{familyMembers}
-					{readonly}
+					readonly={profileReadonly}
+					onOpenHouseholdModal={() => (showHouseholdModal = true)}
 					onOpenAddressModal={() => (showAddressModal = true)}
 				/>
 				<EvacueeProfileAssetsCard
 					{household}
-					{readonly}
+					readonly={profileReadonly}
 					onOpenAssetModal={() => (showAssetModal = true)}
 				/>
 			</div>
 		</div>
 
 		<!-- Audit log — record metadata + movement events combined -->
-		<div class="space-y-3 rounded-3xl border border-border bg-card p-6 shadow-sm">
+		<section class="space-y-3 rounded-lg border border-border bg-card p-5">
 			<div class="flex items-center gap-2.5 border-b border-border pb-2">
 				<Clock class="size-4.5 text-primary" />
 				<h3 class="text-sm font-bold text-slate-900 dark:text-slate-50">
@@ -335,7 +646,7 @@
 			<ol class="space-y-2.5">
 				{#if evacuee.updated_at && evacuee.updated_at !== evacuee.created_at}
 					<li class="flex items-start gap-3 text-xs">
-						<span class="mt-0.5 text-sm">✏️</span>
+						<FilePenLine class="mt-0.5 size-4 text-blue-600" />
 						<div class="flex-1 space-y-0.5">
 							<div class="font-semibold text-foreground">แก้ไขข้อมูลล่าสุด (Updated)</div>
 							<div class="text-muted-foreground">{formatDateTime(evacuee.updated_at)}</div>
@@ -344,7 +655,7 @@
 				{/if}
 				{#each visibleMovements as m (m._id)}
 					<li class="flex items-start gap-3 text-xs">
-						<span class="mt-0.5 text-sm">{movementLabels[m.action].emoji}</span>
+						<Circle class="mt-1 size-3 {movementLabels[m.action].dotClass}" />
 						<div class="flex-1 space-y-0.5">
 							<div class="font-semibold text-foreground">
 								{movementLabels[m.action].label}
@@ -375,7 +686,7 @@
 					</li>
 				{/if}
 				<li class="flex items-start gap-3 text-xs">
-					<span class="mt-0.5 text-sm">📝</span>
+					<UserPlus class="mt-0.5 size-4 text-emerald-600" />
 					<div class="flex-1 space-y-0.5">
 						<div class="font-semibold text-foreground">ลงทะเบียนข้อมูล (Registered)</div>
 						<div class="text-muted-foreground">
@@ -384,11 +695,11 @@
 					</div>
 				</li>
 			</ol>
-		</div>
+		</section>
 	</div>
 
 	<!-- Modals (edit mode only) -->
-	{#if !readonly}
+	{#if !profileReadonly}
 		<EvacueeZoneModal
 			show={showZoneModal}
 			{evacuee}
@@ -422,6 +733,45 @@
 				{household}
 				onClose={() => (showAssetModal = false)}
 				onSave={saveAssets}
+			/>
+		{/if}
+
+		{#if showPersonalModal}
+			<EvacueePersonalModal
+				show={showPersonalModal}
+				{evacuee}
+				onClose={() => (showPersonalModal = false)}
+				onSave={savePersonal}
+			/>
+		{/if}
+
+		{#if showEmergencyModal}
+			<EvacueeEmergencyModal
+				show={showEmergencyModal}
+				{evacuee}
+				onClose={() => (showEmergencyModal = false)}
+				onSave={saveEmergency}
+			/>
+		{/if}
+
+		{#if showHealthModal}
+			<EvacueeHealthModal
+				show={showHealthModal}
+				{evacuee}
+				{medical}
+				{screening}
+				onClose={() => (showHealthModal = false)}
+				onSave={saveHealth}
+			/>
+		{/if}
+
+		{#if showHouseholdModal}
+			<EvacueeHouseholdModal
+				show={showHouseholdModal}
+				{evacuee}
+				households={householdsQuery.data ?? []}
+				onClose={() => (showHouseholdModal = false)}
+				onSave={saveHousehold}
 			/>
 		{/if}
 	{/if}

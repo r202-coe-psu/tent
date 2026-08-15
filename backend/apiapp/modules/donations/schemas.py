@@ -51,3 +51,16 @@ class DonationCourierPatchRequest(BaseModel):
 class DonationCourierPatchResponse(BaseModel):
     success: bool = True
     message: str = "Courier tracking number updated"
+
+
+class DonationTrackSearchRequest(BaseModel):
+    """CR-052 §2.6 — human booking_ref + phone exact match (not token alone)."""
+
+    booking_ref: str
+    phone: str
+
+
+class DonationTrackSearchResponse(BaseModel):
+    success: bool = True
+    tracking_token: str
+    booking_ref: str

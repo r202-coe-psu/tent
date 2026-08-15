@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-07
+updated: 2026-08-14
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้
 ---
 
@@ -110,8 +110,14 @@ DELETE /api/v1/users?name=       → ลบ user (SM ลบได้เฉพา
 ```
 
 > **shelter provisioning** (`/api/v1/shelters*`) = `system_admin` เท่านั้น. **user management**
-> (`/api/v1/users`) authorization ละเอียดกว่า (FR-34, แก้ 2026-06-14):
-> - **`system_admin`** — สร้าง/ลบ user ได้ทุก role (ยกเว้น CouchDB `_admin`), ทุกศูนย์; เลือก `shelter:{code}` จาก payload.
+> (`/api/v1/users`) authorization ละเอียดกว่า (FR-34, แก้ 2026-06-14, CR-074 / CR-075 2026-08-14):
+> - **`system_admin`** (และ Couch `_admin` ที่ login ผ่านแอป — SA-equivalent) — สร้าง/ลบ user ได้ทุก role
+>   (ยกเว้น CouchDB `_admin`), ทุกศูนย์; เลือก `shelter:{code}` จาก payload.
+>   Grant `system_admin` ได้เมื่อ caller เป็น SA-equivalent (`system_admin` หรือ `_admin` — CR-075).
+>   รูป `roles` ของ SA ต้องเป็น `["system_admin"]` เท่านั้น (`shelter_id = null`) — ผสม shelter/capability → `VALIDATION`.
+>   ห้ามลบหรือลดสิทธิ์ app SA คนสุดท้าย → `FORBIDDEN`.
+>   CouchDB server admin (username จาก `COUCHDB_ADMIN_URL` / `COUCHDB_USER` หรือ `roles` มี `_admin`) ห้าม
+>   create ทับชื่อ / update / delete ผ่านแอป → `FORBIDDEN`; ไม่ปรากฏใน `GET /api/v1/users`.
 > - **`shelter_manager`** — เฉพาะ **staff** (`registration_staff`/`kitchen_staff`/`warehouse_staff`) ใน **ศูนย์ตนเท่านั้น**;
 >   `shelter:{code}` derive จาก session ผู้เรียก (ไม่เชื่อ client). ห้าม grant `shelter_manager`/`system_admin`/`_admin` หรือข้ามศูนย์ → `FORBIDDEN`.
 > - server validate `roles[]` เสมอ (ไม่ไว้ใจ payload). contract นี้คือสิ่งที่ service จริง (FastAPI) ต้องบังคับเหมือนกัน — dev BFF เป็น implementation ชั่วคราว.
@@ -138,7 +144,7 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 
 | Endpoint | Auth |
 | --- | --- |
-| `POST /public/v1/family-search` | — (rate-limited + audit) |
+| `POST /public/v1/occupants` | — (rate-limited + audit) |
 | `GET /public/v1/needs` | — |
 | `POST /public/v1/donations` | เบอร์โทร (+OTP เมื่อ `public_otp_required` เปิด) |
 | `GET /public/v1/donations/{tracking_token}` | token |

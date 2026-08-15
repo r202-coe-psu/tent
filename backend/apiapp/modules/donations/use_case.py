@@ -12,16 +12,19 @@ from tent_model.donation_buffer import DonationBuffer, DonorBuffer
 from tent_model.public_donation import DeclaredItem, PublicDonation
 from tent_model.public_shelter import PublicShelter
 
-from ...utils.masking import sha256_hex
+from ...utils.masking import normalize_phone, sha256_hex
 from ...utils.ulid import new_ulid
 from .schemas import (
     DonationCourierPatchResponse,
     DonationCreateRequest,
     DonationCreateResponse,
     DonationTrackingResponse,
+    DonationTrackSearchResponse,
 )
 
 _MAX_BOOKING_REF_ATTEMPTS = 8
+
+_DONATION_OPEN_STATUSES = frozenset({"open", "full", "active"})
 
 
 def _new_booking_ref() -> str:
@@ -41,6 +44,23 @@ def _declared_items(raw_items: list[dict[str, Any]]) -> list[DeclaredItem]:
     ]
 
 
+def _mask_phone(phone: str) -> str:
+    digits = "".join(c for c in phone if c.isdigit())
+    if len(digits) < 4:
+        return "***"
+    return f"***-***-{digits[-4:]}"
+
+
+def _donor_from_buffer(buffer: DonationBuffer) -> dict[str, Any]:
+    """Capability-URL auth: show donor name + masked phone on the ticket only."""
+    return {
+        "name": buffer.donor.name,
+        "phone_masked": _mask_phone(buffer.donor.phone),
+        "line_id": buffer.donor.line_id,
+        "email": buffer.donor.email,
+    }
+
+
 def _tracking_payload(
     *,
     status_value: str,
@@ -49,25 +69,31 @@ def _tracking_payload(
     items: list[DeclaredItem],
     received_summary: dict[str, Any] | None,
     updated_at: datetime,
+    donor: dict[str, Any] | None = None,
+    logistics: dict[str, Any] | None = None,
+    expires_at: datetime | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "status": status_value,
         "booking_ref": booking_ref,
         "shelter_code": shelter_code,
-        "donor": {},
+        "donor": donor or {},
         "items": [item.model_dump() for item in items],
+        "logistics": logistics,
         "received_summary": received_summary,
         "updated_at": updated_at.isoformat(),
+        "expires_at": expires_at.isoformat() if expires_at else None,
     }
+    return payload
 
 
 class DonationsUseCase:
     async def create(self, payload: DonationCreateRequest) -> DonationCreateResponse:
+        # Look the shelter up first, then judge its status: "no such shelter" (404) and
+        # "shelter stopped taking donations" (409) are different answers for the donor,
+        # and a single filtered query cannot tell them apart.
         shelter = await PublicShelter.find_one(
-            {
-                "shelter_code": payload.shelter_code.upper(),
-                "status": {"$in": ["open", "full"]},
-            }
+            PublicShelter.shelter_code == payload.shelter_code.upper()
         )
         if shelter is None:
             raise HTTPException(
@@ -75,6 +101,15 @@ class DonationsUseCase:
                 detail={
                     "success": False,
                     "error": "SHELTER_NOT_FOUND",
+                    "shelter_code": payload.shelter_code,
+                },
+            )
+        if shelter.status not in _DONATION_OPEN_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "success": False,
+                    "error": "SHELTER_CLOSED",
                     "shelter_code": payload.shelter_code,
                 },
             )
@@ -144,7 +179,11 @@ class DonationsUseCase:
 
     async def get_by_tracking_token(self, tracking_token: str) -> DonationTrackingResponse:
         token_hash = sha256_hex(tracking_token)
+        # Buffer may still hold logistics + donor after the public stub exists;
+        # enrich the ticket when available (retention may drop the buffer later).
+        buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
         donation = await PublicDonation.find_one(PublicDonation.tracking_token_hash == token_hash)
+
         if donation is not None:
             return DonationTrackingResponse(
                 donation=_tracking_payload(
@@ -154,11 +193,12 @@ class DonationsUseCase:
                     items=list(donation.items_declared),
                     received_summary=donation.received_summary,
                     updated_at=donation.updated_at,
+                    donor=_donor_from_buffer(buffer) if buffer else {},
+                    logistics=dict(buffer.logistics) if buffer and buffer.logistics else None,
+                    expires_at=buffer.expires_at if buffer else None,
                 )
             )
 
-        # Fallback: buffer row before / if stub missing (create race or legacy rows).
-        buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
         if buffer is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -173,7 +213,44 @@ class DonationsUseCase:
                 items=_declared_items(buffer.items_declared),
                 received_summary=None,
                 updated_at=buffer.created_at,
+                donor=_donor_from_buffer(buffer),
+                logistics=dict(buffer.logistics) if buffer.logistics else None,
+                expires_at=buffer.expires_at,
             )
+        )
+
+    async def track_search(self, booking_ref: str, phone: str) -> DonationTrackSearchResponse:
+        """Resolve ``DN-######`` + phone → tracking_token (CR-052 §2.6).
+
+        Always 404 on miss / phone mismatch so booking refs are not enumerable.
+        """
+        ref = booking_ref.strip().upper()
+        if not ref.startswith("DN-"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"success": False, "error": "Donation record not found"},
+            )
+
+        buffer = await DonationBuffer.find_one(DonationBuffer.booking_ref == ref)
+        if buffer is None:
+            buffer = await DonationBuffer.find_one(
+                DonationBuffer.booking_ref == booking_ref.strip()
+            )
+        if buffer is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"success": False, "error": "Donation record not found"},
+            )
+
+        if normalize_phone(buffer.donor.phone) != normalize_phone(phone):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"success": False, "error": "Donation record not found"},
+            )
+
+        return DonationTrackSearchResponse(
+            tracking_token=buffer.tracking_token,
+            booking_ref=buffer.booking_ref,
         )
 
     async def update_courier_tracking(

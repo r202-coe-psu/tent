@@ -349,13 +349,13 @@ test.describe('Household Post-arrival Grouping', () => {
 			timeout: 15_000
 		});
 
-		await expect(page.getByRole('heading', { name: 'ครอบครัวนที รักษาดี' })).toBeVisible({
+		await expect(page.getByText('ครอบครัวนที รักษาดี', { exact: true })).toBeVisible({
 			timeout: 5_000
 		});
-		await expect(page.getByText('จำนวนสมาชิก: 2 คน')).toBeVisible({ timeout: 5_000 });
+		await expect(page.getByText('รายชื่อสมาชิกในบ้าน (2 คน)')).toBeVisible({ timeout: 5_000 });
 
 		// Click finish
-		await page.getByRole('button', { name: 'เสร็จสิ้น กลับหน้าหลัก' }).click();
+		await page.getByRole('button', { name: 'เสร็จสิ้นการจัดกลุ่มครอบครัว ✔' }).click();
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 	});
 

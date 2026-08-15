@@ -143,7 +143,7 @@ test.describe('Shelter Form — Access Guard', () => {
 });
 
 test.describe('Shelter Form — Create', () => {
-	test('blocks submit and shows an error toast when required fields are empty', async ({
+	test('blocks submit and shows which fields/steps need fixing when required fields are empty', async ({
 		page
 	}) => {
 		const { wasCalled } = await mockCreate(page, { ok: true, code: 'SH900' });
@@ -155,6 +155,12 @@ test.describe('Shelter Form — Create', () => {
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
 		await expect(page.getByText('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง')).toBeVisible();
+		await expect(page.getByRole('alert')).toContainText('ยังมีข้อมูลที่ต้องกรอกหรือแก้ไข');
+		await expect(page.getByRole('alert')).toContainText('ชื่อศูนย์พักพิงต้องไม่ว่าง');
+		await expect(page.getByRole('alert')).toContainText(/ความจุ|กรุณาระบุความจุ/);
+		// Jumps to the first invalid step and surfaces the field error inline.
+		await expect(page.getByRole('heading', { name: new RegExp(BASIC_INFO_HEADING) })).toBeVisible();
+		await expect(page.getByText('ชื่อศูนย์พักพิงต้องไม่ว่าง')).toBeVisible();
 		expect(wasCalled()).toBe(false);
 		await expect(page).toHaveURL(/\/back-office\/shelters\/create/);
 	});
@@ -176,7 +182,13 @@ test.describe('Shelter Form — Create', () => {
 
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
-		await page.waitForURL((url) => url.pathname === '/back-office/shelters', { timeout: 8000 });
+		// List route immediately redirects into edit for the scoped shelter.
+		await page.waitForURL(
+			(url) =>
+				url.pathname === '/back-office/shelters' ||
+				url.pathname.startsWith('/back-office/shelters/edit/'),
+			{ timeout: 8000 }
+		);
 
 		const body = getBody() as { name: string; capacity: number };
 		expect(body.name).toBe('ศูนย์พักพิงทดสอบ E2E');
@@ -214,7 +226,13 @@ test.describe('Shelter Form — Edit', () => {
 
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
-		await page.waitForURL((url) => url.pathname === '/back-office/shelters', { timeout: 8000 });
+		// List route immediately redirects into edit for the scoped shelter.
+		await page.waitForURL(
+			(url) =>
+				url.pathname === '/back-office/shelters' ||
+				url.pathname.startsWith('/back-office/shelters/edit/'),
+			{ timeout: 8000 }
+		);
 
 		const body = getPatchBody() as { name: string; capacity: number };
 		expect(body.name).toBe('ศูนย์พักพิงแก้ไขแล้ว');

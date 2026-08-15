@@ -17,10 +17,16 @@ async def _insert_shelter_doc(
     await db_client[db_name]["public_shelters"].insert_one(doc)
 
 
+async def test_list_shelters_requires_bearer(client: AsyncClient):
+    response = await client.get("/public/v1/shelters")
+    assert response.status_code == 401
+
+
 async def test_list_shelters_returns_open_shelters(
     client: AsyncClient,
     db_client: AsyncIOMotorClient,
     settings: Settings,
+    auth_headers: dict[str, str],
 ):
     now = datetime.now(UTC)
     await _insert_shelter_doc(
@@ -55,7 +61,7 @@ async def test_list_shelters_returns_open_shelters(
         },
     )
 
-    response = await client.get("/public/v1/shelters")
+    response = await client.get("/public/v1/shelters", headers=auth_headers)
     assert response.status_code == 200
     assert response.headers["cache-control"] == "public, max-age=600"
 
@@ -70,6 +76,7 @@ async def test_list_shelters_filters_by_province(
     client: AsyncClient,
     db_client: AsyncIOMotorClient,
     settings: Settings,
+    auth_headers: dict[str, str],
 ):
     now = datetime.now(UTC)
     await _insert_shelter_doc(
@@ -99,7 +106,11 @@ async def test_list_shelters_filters_by_province(
         },
     )
 
-    response = await client.get("/public/v1/shelters", params={"province": "สงขลา"})
+    response = await client.get(
+        "/public/v1/shelters",
+        params={"province": "สงขลา"},
+        headers=auth_headers,
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["count"] == 1

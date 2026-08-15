@@ -2,9 +2,9 @@
 title: "Task Breakdown — EOC + Open API (Part 3)"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
+updated: 2026-08-13
 module: eoc
-note: decision-synced 2026-07-15 — CR-033 remote-first wording; MongoDB read-model selected for K-17
+note: decision-synced 2026-07-15 — CR-033 remote-first wording; MongoDB read-model selected for K-17; 2026-08-13 — CR-066 T-70 occupancy_health field (CR-069 **approved**; EOC = API ทีหลัง T-37); T-75 ONE PLATFORM = Wave 4 รอบ CR ถัดไป
 ---
 
 # EOC + Open API (Part 3)
@@ -25,6 +25,8 @@ note: decision-synced 2026-07-15 — CR-033 remote-first wording; MongoDB read-m
 | T-37 | ⬜ | EOC cross-shelter aggregate data API (read-only; aggregate + selected fields, no person drill) — FD-14 | FR-49 | R4 | prod | deferred | 8 | ÷1.6 | 5 | all R3 |
 | T-38 | ⬜ | EOC API scope rules + API-key principal (issue/rotate/revoke, per-key rate-limit + audit) — FD-14, replaces eoc_viewer role | FR-50 | R4 | prod | deferred | 4 | ÷1.25 | 3 | T-37 |
 | T-39 | ⬜ | Open API: aggregate, auth, rate-limit, versioned (separate tier from EOC API per FD-14) | FR-51 | R4 | prod | deferred | 7 | ÷1.25 | 5.5 | T-37,P-03 |
+| T-70 | ⬜ | EOC aggregate field `occupancy_health` — CR-069 **blocked T-37** | FR-69 | R4 | prod | blocked | 3 | ÷1.25 | 2.5 | T-37,T-69 |
+| T-75 | ⬜ | ONE PLATFORM / external GET ตาม SPEC หน่วยงาน — CR-073 **blocked K-14** | FR-76 | R4 | prod | blocked | — | — | — | partner SPEC |
 |  |  | **รวมทั้งโมดูล** |  |  |  |  | **19** |  | **13.5** |  |
 
 > **Deferred** (ส่งมอบหลัง go-live, ภายในสัปดาห์ที่ 2 กันยายน 2026): T-37, T-38, T-39
@@ -64,6 +66,38 @@ note: decision-synced 2026-07-15 — CR-033 remote-first wording; MongoDB read-m
 - Auth + rate-limit แยกจาก EOC tier, ข้อมูลเป็น aggregate ที่ผ่านเกณฑ์เปิดเผยสาธารณะเท่านั้น (ไม่มี PII/medical/national ID — test ยืนยัน)
 - OpenAPI spec + คู่มือ integrate สำหรับหน่วยงานภายนอกเผยแพร่ได้
 - Demo ดึงข้อมูลจาก client ภายนอกจริง 1 ราย — ส่งมอบภายใน 14/09/2026
+
+---
+
+### T-70 — EOC aggregate field `occupancy_health` (CR-069) — BLOCKED
+
+**Status:** ⬜ blocked — T-37 + T-69. D-HEALTH-SURFACE=**A** ล็อกแล้ว (EOC = ฟิลด์ API ทีหลัง; ห้าม dashboard ในแอป)
+**Owner:** Lead pair (แจ็ก/เด่น); Team D สูตรเดียวกันกับ T-69
+**Depends:** T-37, T-69; [CR-069](../changes/CR-069-occupancy-health-colors.md)
+**Program:** P3 (EOC slice)
+
+**Description:** เพิ่ม derived `occupancy_health` (+ occupancy, capacity, as_of) บน EOC cross-shelter aggregate API. **FD-14 คง** — ไม่มีหน้า EOC dashboard ใน SPA (D-HEALTH-SURFACE=A ตัดตัวเลือก C). สูตรต้องชุดเดียวกับ T-69 (รวม D-STANDBY=A, D-HEALTH-VS-STATUS=B, ตัวเศษ occupancy ตาม D-BOOK-OCC=C = `active` + `pre_registered`).
+
+**Files likely touched (หลัง unblock):** FastAPI EOC module; worker projection; OpenAPI; tests no-PII
+
+**Definition of Done:** field ตรงสูตร T-69; ไม่มี person drill-down; OpenAPI; demo ดึงข้าม ≥2 ศูนย์
+
+**Out of scope:** human dashboard; เปลี่ยน `operation_status` จาก API
+
+---
+
+### T-75 — ONE PLATFORM / external GET ตาม SPEC หน่วยงาน (CR-073) — BLOCKED
+
+**Status:** ⬜ blocked — D-ONE-PLATFORM / K-14 เซ็นสัญญา — **Wave 4 รอบ CR ถัดไป**
+**Owner:** Lead pair
+**Depends:** partner SPEC; [CR-073](../changes/CR-073-one-platform-external-get-blocked.md)
+**Program:** P7
+
+**Description:** ขยาย `/external/v1` GET ตาม SPEC ที่หน่วยงานส่ง. **ห้ามเดา payload.** ของ CR-062 (GET mirror + API keys) คงเดิม ห้าม breaking change เพื่อเดาสัญญา. ไม่แทนที่ T-39 จนกว่าเทียบสัญญาแล้ว.
+
+**Definition of Done:** ยังไม่มีจนกว่า SPEC. หลังล็อก: OpenAPI ตรงสัญญา, auth ตามที่เขาขอหรือ X-API-Key เดิม, demo client หน่วยงาน 1 ราย
+
+**Out of scope:** สมมติ resource/field; inbound POST คน (T-73)
 
 ## Effort by phase (Adj MD)
 

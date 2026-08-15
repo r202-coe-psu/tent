@@ -23,6 +23,10 @@ export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 export const SHELTER_CAPABILITIES = [...STAFF_CAPABILITIES, SHELTER_MANAGER] as const;
 export type ShelterCapability = (typeof SHELTER_CAPABILITIES)[number];
 
+/** Roles an SA may pick in the portal user form (shelter capabilities + system_admin). */
+export const SA_GRANTABLE_CAPABILITIES = [...SHELTER_CAPABILITIES, SYSTEM_ADMIN] as const;
+export type SaGrantableCapability = (typeof SA_GRANTABLE_CAPABILITIES)[number];
+
 /** The CouchDB server-admin role — never mintable through the app. */
 export const COUCH_ADMIN = '_admin';
 
@@ -42,9 +46,37 @@ export function isSystemAdmin(roles: readonly string[]): boolean {
 	return roles.includes(SYSTEM_ADMIN) || roles.includes(COUCH_ADMIN);
 }
 
+/** True when the role list holds the app `system_admin` RoleKey (not Couch `_admin`). */
+export function isAppSystemAdmin(roles: readonly string[]): boolean {
+	return roles.includes(SYSTEM_ADMIN);
+}
+
+/**
+ * True when removing/demoting this target would leave zero app SAs.
+ * `appSaCountIncludingTarget` is the current count of `_users` with `system_admin`.
+ */
+export function isLastAppSystemAdmin(
+	targetRoles: readonly string[],
+	appSaCountIncludingTarget: number
+): boolean {
+	return isAppSystemAdmin(targetRoles) && appSaCountIncludingTarget <= 1;
+}
+
 /** True when the role list denotes a shelter_manager. */
 export function isShelterManager(roles: readonly string[]): boolean {
 	return roles.includes(SHELTER_MANAGER);
+}
+
+/**
+ * True when the actor may cancel a pre-registration hold (D-HOLD-CANCEL / CR-070):
+ * system_admin, shelter_manager, or registration_staff.
+ */
+export function canCancelHold(roles: readonly string[]): boolean {
+	return (
+		isSystemAdmin(roles) ||
+		isShelterManager(roles) ||
+		hasStaffCapability(roles, 'registration_staff')
+	);
 }
 
 /** True when the role list includes `warehouse_staff`. */
@@ -68,28 +100,28 @@ export function isStaffOnly(roles: readonly string[]): boolean {
 }
 
 /**
- * Per-role English display labels for the staff capability set. Kept in one
+ * Per-role Thai display labels for the staff capability set. Kept in one
  * place so adding a new capability in `STAFF_CAPABILITIES` surfaces here at
- * the type level (TypeScript will flag a missing entry below). Labels mirror
- * the canonical role names in `role-permission-matrix.md` §1.1.
+ * the type level (TypeScript will flag a missing entry below). Stored RoleKey
+ * values stay English; only UI copy is Thai.
  */
 const STAFF_CAPABILITY_LABELS: Record<StaffCapability, string> = {
-	registration_staff: 'Registration Staff',
-	kitchen_staff: 'Kitchen Staff',
-	warehouse_staff: 'Warehouse Staff'
+	registration_staff: 'เจ้าหน้าที่ลงทะเบียน',
+	kitchen_staff: 'เจ้าหน้าที่ครัว',
+	warehouse_staff: 'เจ้าหน้าที่คลัง'
 };
 
 /**
- * Human-readable English label for a single CouchDB role string. Shelter-scope
- * roles render as `Shelter Staff (SH001)`. Unknown values fall back to the
- * raw role string so the UI never goes blank.
+ * Human-readable Thai label for a single CouchDB role string. Shelter-scope
+ * roles render as `ศูนย์ SH001`. Unknown values fall back to the raw role
+ * string so the UI never goes blank.
  */
 export function roleDisplayLabel(role: string): string {
-	if (role === SYSTEM_ADMIN) return 'System Admin';
-	if (role === SHELTER_MANAGER) return 'Shelter Manager';
-	if (role === COUCH_ADMIN) return 'Couch Admin';
+	if (role === SYSTEM_ADMIN) return 'ผู้ดูแลระบบ';
+	if (role === SHELTER_MANAGER) return 'ผู้จัดการศูนย์';
+	if (role === COUCH_ADMIN) return 'ผู้ดูแล CouchDB';
 	if (role.startsWith('shelter:')) {
-		return `Shelter Staff (${role.slice('shelter:'.length)})`;
+		return `ศูนย์ ${role.slice('shelter:'.length)}`;
 	}
 	if ((STAFF_CAPABILITIES as readonly string[]).includes(role)) {
 		return STAFF_CAPABILITY_LABELS[role as StaffCapability];
@@ -98,11 +130,11 @@ export function roleDisplayLabel(role: string): string {
 }
 
 /**
- * Join a role list into a single human-readable string. Returns `'General User'`
+ * Join a role list into a single human-readable string. Returns `'ผู้ใช้ทั่วไป'`
  * for an empty list — used as the avatar tooltip in the back-office navbar
  * when the user has no assigned roles.
  */
 export function formatRoleList(roles: readonly string[] | undefined): string {
-	if (!roles || roles.length === 0) return 'General User';
+	if (!roles || roles.length === 0) return 'ผู้ใช้ทั่วไป';
 	return roles.map(roleDisplayLabel).join(', ');
 }

@@ -99,7 +99,7 @@
           <h2>ภาพรวม</h2>
           <p>
             ระบบนี้ใช้ Central CouchDB เป็น source of truth ทั้งเรื่อง authentication และ authorization
-            โดย frontend (SvelteKit + PouchDB) ทำหน้าที่ <em>อ่าน</em> สิทธิ์มาแสดงผลและ gate route เท่านั้น
+            โดย frontend (SvelteKit) เป็น Remote-first ทำหน้าที่ยิงตรงหา CouchDB Server ผ่าน HTTP Proxy (<code>/couch</code>) โดยใช้ <code>_session</code> cookie
             ความปลอดภัยจริงบังคับใช้ที่ชั้น Central CouchDB; Edge fallback ใช้ <code>_session</code> แยกและไม่ให้สิทธิ์แทน Central API
           </p>
           <figure class="diagram">
@@ -472,8 +472,8 @@ flowchart TB
           <h2>สรุปคำแนะนำ</h2>
           <ul>
             <li>ใช้ <strong>Pattern 1</strong> (DB-per-subscope + roles) เป็นฐาน</li>
-            <li>Topology: <strong>Central-first + LAN Edge fallback</strong> (ไม่ใช่ Edge เป็น normal hub)</li>
-            <li>Device เขียน local PouchDB ก่อน แล้ว sync ไป active remote เพียงหนึ่งตัว: Central, Edge fallback, หรือ local-only</li>
+            <li>Topology: <strong>Central-first + LAN Edge fallback</strong> (Remote-first ยิงตรงผ่าน HTTP)</li>
+            <li>Browser ยิงตรงหา active remote เพียงหนึ่งตัว: Central เมื่อ reachable, หรือ LAN Edge เฉพาะช่วง WAN/Central ล่ม</li>
             <li>Edge เก็บ fallback replica และ sync backlog ขึ้น Central เมื่อ WAN กลับมา</li>
             <li>Shelter ไม่มี edge → Central เมื่อ online, local-only ตอน outage; soft-edge ใช้ได้เฉพาะ fallback ที่กำหนดชัด</li>
             <li>ระบบนับจำนวน → <strong>event-sourcing/ledger</strong> กัน conflict</li>

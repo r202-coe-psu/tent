@@ -1,0 +1,7 @@
+# Ignore known false positives / accepted test fixtures.
+# Requires extension setting: "trivy.useIgnoreFile": true
+secrets:
+  - id: jwt-token
+    paths:
+      - frontend/e2e/mock-api.js
+    statement: E2E mock JWTs only — not real credentials

@@ -15,11 +15,12 @@ repo-root `demo/` (see `demo/README.md`).
 | Plane | Who | Path | Store |
 | --- | --- | --- | --- |
 | Staff (sync) | logged-in UI | `/couch` → CouchDB | CouchDB SoR |
-| Public | anonymous SPA `/public/*` | `/public/v1/*` → FastAPI | MongoDB `public_*` (via sync worker) |
+| Public | anonymous SPA `/` (`/shelters`, …) | `/public/v1/*` → FastAPI | MongoDB `public_*` (via sync worker) |
 
 Staff CouchDB is reached with cookie `_session` via same-origin proxy (`PUBLIC_COUCH_PROXY=/couch`).
-Public FastAPI is same-origin via **`/public-api`** (Vite proxy in dev via `PUBLIC_FASTAPI_PROXY`;
-nginx in prod/staging). FastAPI route paths remain `/public/v1/*` behind the gateway strip.
+Public FastAPI is reached from the SPA only via **SvelteKit BFF** `/api/public/v1/*`
+(Bearer `EXTERNAL_API_SECRET`; CR-063). External agencies use `/external/v1/*` + managed
+`X-API-Key`. FastAPI route paths remain `/public/v1/*` on the service itself.
 
 > **Stale docs — ignore where they disagree:** `frontend/agent-role.md` (and `AGENTS.md`) still
 > describe the original template (JWT + flat `api.ts`/`queries.ts`). The binding specs are
@@ -81,7 +82,7 @@ cd frontend && pnpm dev                             # Vite :5173 + proxies
 ```
 
 Env: repo-root `.env` from `.env.example`; `frontend/.env` from `frontend/.env.example`
-(needs `PUBLIC_FASTAPI_PROXY=http://localhost:9000`). Data persists under `deployment/`.
+(needs `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET`). Data persists under `deployment/`.
 
 To seed mock data:
 `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm seed`
@@ -98,18 +99,19 @@ Full workflow: **`frontend/CONTRIBUTING.md` §4.2** + coding patterns **`fronten
 
 1. **Change CouchDB docs / projectors** (`worker/`) → projections land in Mongo `public_*`.
 2. **Change FastAPI** (`backend/apiapp/modules/…`) — keep paths on contract
-   (`/public/v1/family-search`, `/public/v1/shelters`, …); add tests under `backend/tests/`.
+   (`/public/v1/occupants`, `/public/v1/shelters`, …); add tests under `backend/tests/`.
 3. **Regenerate types** from `frontend/`: `pnpm openapi:update` → commit `fastapi.json` +
    `openapi.d.ts`.
-4. **Wire UI** via `$lib/api/public-client.ts` and `$lib/features/public-portal/` barrel only —
-   never raw untyped `fetch` for routes already on FastAPI; never `serviceFetch` for public plane.
-5. **Gateway `/public-api`**: Vite (dev) and nginx (prod) strip the prefix and forward to FastAPI.
-   Do not proxy `/public` (SPA) or `/api` (BFF).
+4. **Wire UI** via BFF `/api/public/v1/*` and `$lib/features/public-portal/` barrel only —
+   never raw untyped `fetch` past the BFF for routes already on FastAPI; never `serviceFetch` for public plane.
+5. **No browser → FastAPI gateway**: do not proxy `/public-api` to FastAPI (CR-063). SPA `/public`
+   and staff `/api` stay on SvelteKit. External `/external/` may be proxied by nginx to FastAPI.
 
 ```
 staff → CouchDB → worker → MongoDB → FastAPI :9000
                                       ↑
-                         public SPA (/public-api/* via Vite or nginx)
+                    public SPA (/api/public/* BFF + Bearer)
+                    external (/external/v1/* + X-API-Key)
 ```
 
 ## Architecture
@@ -125,32 +127,21 @@ fetching is client-side via **TanStack Query** (`@tanstack/svelte-query`), wired
 **Stack**: SvelteKit 2 + Svelte 5 (runes only) + Vite + TypeScript + Tailwind CSS v4 (no config
 file — `@tailwindcss/vite`). UI is shadcn-svelte over `bits-ui` primitives in
 `src/lib/components/ui/`. Forms use Superforms + Zod (`zod4Client` adapter). User feedback is
-**toast only** (`svelte-sonner`) — never `console.log` (the PouchDB sync `console.warn` paths are
-the deliberate exception).
+**toast only** (`svelte-sonner`) — never `console.log`.
 
-### Offline-first data, sync & auth — do not bypass (CONTRIBUTING.md §4)
+### Remote-first data & auth — do not bypass (CONTRIBUTING.md §4)
 
-- **All persistence goes through PouchDB** (`$lib/db/pouch.ts`), which **live-syncs** to CouchDB.
-  UI never talks to a remote DB directly — it reads/writes local PouchDB; sync propagates changes.
-- **Sync target follows a strict priority — one active remote at a time:**
+- **The app is remote-first**: the browser talks to CouchDB directly over HTTP (via the `/couch`
+  dev proxy), using the user's login cookie. There is **no PouchDB** and **no local database** on
+  the device.
+- **Writes go to the active endpoint directly** (no local write queue, no PouchDB). Priority:
   1. **Central CouchDB** (normal; WAN reachable; via `/couch` proxy)
   2. **Edge CouchDB on LAN** — fallback only when WAN/central is unreachable; edge is a
      LAN-continuity replica, NOT a normal client hub
-  3. **Local-only** — when neither central nor edge is reachable
-
-  Never run live replication to both central and edge simultaneously; stop the old sync before
-  starting the new one. When central returns, switch the active remote back to central.
-- **Login follows the same priority:** always attempt `POST /couch/_session` against central
-  first; edge fallback login is possible only because `_users` is filtered-replicated to the
-  edge server. Edge `AuthSession` cookies do NOT grant access to `/api/v1/*` service endpoints.
-- **Reactivity comes from the changes feed**, not manual refetching: the live-sync wiring
-  invalidates the relevant TanStack Query keys on PouchDB `change` events. Never poll / never use
-  `refetchInterval` for live data.
-- **Auth is the CouchDB `_session` cookie** (`$lib/db/couch.ts`). Identity is cached (localStorage /
-  `authStore` in `src/lib/stores/auth.svelte.ts`) so the app stays usable offline; only _sync_ needs
-  a live session. On a 401/403 the sync stops and the store flags **`needsReauth`** — the user is
-  **not** logged out of the local experience. Don't "fix" this by forcing a logout/redirect on sync
-  errors.
+- If the network is down, the app shows a disconnected banner — it does **not** fall back to
+  reading cached data offline.
+- **Auth is the CouchDB `_session` cookie** (`$lib/db/couch.ts`). Identity is stored in
+  `authStore` (`src/lib/stores/auth.svelte.ts`).
 - Use the guards in **`$lib/guards/auth.ts`** (`requireAuth`, `requireAdmin`, `redirectIfAuthenticated`)
   from route `+layout.ts`/`+page.ts` `load` functions. Don't roll your own redirect logic.
 - **Admin credentials (`COUCHDB_ADMIN_URL`) are server-only** — usable only in dev-server API routes
@@ -170,8 +161,8 @@ direction **`ui → application → data → domain`**:
 ```
 features/<name>/
   domain/       pure entities, Zod schemas, factories, invariants, type guards — no I/O, no Svelte, no PouchDB
-  data/         repository INTERFACE + concrete PouchDB impl + seed/admin helpers
-  application/  TanStack Query hooks (createQuery/createMutation) + live-sync wiring (depends on the repo interface)
+  data/         repository INTERFACE + concrete remote endpoint adapter (*.remote.ts) + seed/admin helpers
+  application/  TanStack Query hooks (createQuery/createMutation) (depends on the repo interface)
   ui/           feature-specific .svelte components
   index.ts      the public barrel — the ONLY entry point other code may import
 ```

@@ -2,12 +2,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response
 
+from ...core.security import verify_external_secret
 from .schemas import ConfigResponse
 from .use_case import ConfigUseCase, get_config_use_case
 
-router = APIRouter(prefix="/public/v1/config", tags=["Config"])
+router = APIRouter(
+    prefix="/public/v1/config",
+    tags=["Config"],
+    dependencies=[Depends(verify_external_secret)],
+)
 
 CACHE_CONTROL = "public, max-age=60"
+
 
 @router.get("/faqs", response_model=ConfigResponse)
 async def get_faqs(

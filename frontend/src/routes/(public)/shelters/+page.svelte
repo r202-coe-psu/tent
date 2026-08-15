@@ -1,0 +1,192 @@
+<script lang="ts">
+	import type { PageData } from './$types';
+
+	// Icons
+	import Building2 from '@lucide/svelte/icons/building-2';
+	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
+	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+
+	import {
+		PublicShelterMetricCard,
+		PublicShelterCard,
+		ShelterFilterPanel,
+		ShelterMap,
+		PublicHeroMetrics,
+		PublicPageShell,
+		type PublicShelterCardModel
+	} from '$lib/features/public-portal';
+
+	let { data }: { data: PageData } = $props();
+
+	let liveUserLat = $state('');
+	let liveUserLng = $state('');
+
+	function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+		const R = 6371; // km
+		const dLat = ((lat2 - lat1) * Math.PI) / 180;
+		const dLon = ((lon2 - lon1) * Math.PI) / 180;
+		const a =
+			Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+			Math.cos((lat1 * Math.PI) / 180) *
+				Math.cos((lat2 * Math.PI) / 180) *
+				Math.sin(dLon / 2) *
+				Math.sin(dLon / 2);
+		const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+		return R * c;
+	}
+
+	let displayShelters = $derived(
+		((data?.shelters ?? []) as PublicShelterCardModel[]).map((s) => {
+			if (liveUserLat && liveUserLng && s.geo?.lat && s.geo?.lng) {
+				const dist = calcDistance(
+					parseFloat(liveUserLat),
+					parseFloat(liveUserLng),
+					s.geo.lat,
+					s.geo.lng
+				);
+				return { ...s, distance: parseFloat(dist.toFixed(1)) };
+			}
+			return s;
+		})
+	);
+
+	$effect(() => {
+		if (data?.filters?.user_lat) liveUserLat = data.filters.user_lat.toString();
+		if (data?.filters?.user_lng) liveUserLng = data.filters.user_lng.toString();
+	});
+
+	function getStatusColor(status: string) {
+		switch (status) {
+			case 'OPEN':
+				return 'bg-transparent text-success border-border/80';
+			case 'FULL':
+				return 'bg-transparent text-danger border-border/80';
+			case 'PREPARE':
+				return 'bg-transparent text-warning border-border/80';
+			default:
+				return 'bg-transparent text-muted-foreground border-border/80';
+		}
+	}
+
+	function getStatusText(status: string) {
+		switch (status) {
+			case 'OPEN':
+				return 'เปิดใช้งาน';
+			case 'FULL':
+				return 'เต็มความจุ';
+			case 'PREPARE':
+				return 'เตรียมพร้อม';
+			default:
+				return 'ปิดทำการ';
+		}
+	}
+</script>
+
+<svelte:head>
+	<title>ตรวจสอบสถานะศูนย์พักพิง - Smart Shelter</title>
+</svelte:head>
+
+<PublicPageShell class="space-y-8">
+	<!-- Header / Hero Section -->
+	<PublicHeroMetrics
+		title="ตรวจสอบสถานะศูนย์พักพิง"
+		description="ข้อมูลศูนย์พักพิงจากระบบสาธารณะ — ชื่อ พิกัด สถานะ และความจุ เพื่อประกอบการตัดสินใจเคลื่อนย้ายและขอรับความช่วยเหลือ"
+		badgeText="Public Shelter Dashboard"
+		badgeIcon={Building2}
+		showLivePing={false}
+		bgClass="bg-primary-dark"
+		showSearch={false}
+	/>
+
+	<!-- Metric Cards (capacity directory — no occupancy aggregates per CR-017) -->
+	<div class="grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-6">
+		<PublicShelterMetricCard
+			title="ศูนย์พักพิงทั้งหมด"
+			value={data?.summary?.shelters_total ?? '-'}
+			unit="แห่ง"
+			icon={ClipboardList}
+			iconClass="border-accent-purple shadow-accent-purple/15 text-accent-purple"
+		/>
+
+		<PublicShelterMetricCard
+			title="ศูนย์พักพิงที่เปิดใช้งาน"
+			value={data?.summary?.shelters_open ?? '-'}
+			unit="แห่ง"
+			icon={Building2}
+			iconClass="border-success shadow-success/15 text-success"
+		/>
+	</div>
+
+	<!-- Main Content: Filters, Map, and List -->
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+		<!-- Left: Filters (3 columns on desktop) -->
+		<div class="flex flex-col gap-5 lg:col-span-3">
+			<ShelterFilterPanel
+				filters={data?.filters || {}}
+				availableTypes={data?.available_types || []}
+				action="/shelters"
+				bind:userLat={liveUserLat}
+				bind:userLng={liveUserLng}
+			/>
+		</div>
+
+		<!-- Middle: Map (5 columns on desktop) -->
+		<div class="h-100 min-h-125 lg:col-span-5 lg:h-auto">
+			<div
+				class="relative z-0 h-full w-full overflow-hidden rounded-2xl border border-border bg-muted shadow-inner"
+			>
+				<ShelterMap
+					shelters={displayShelters}
+					userLocation={liveUserLat && liveUserLng
+						? { lat: liveUserLat, lng: liveUserLng }
+						: undefined}
+				/>
+			</div>
+		</div>
+
+		<!-- Right: Shelter List (4 columns on desktop) -->
+		<div class="flex h-100 min-h-125 flex-col gap-4 lg:col-span-4 lg:h-auto">
+			<div class="flex items-center justify-between rounded-t-2xl bg-card px-1 py-1">
+				<h3 class="font-bold text-foreground">
+					รายชื่อศูนย์พักพิง <span class="ml-1 text-sm font-medium text-muted-foreground"
+						>{displayShelters.length} แห่ง</span
+					>
+				</h3>
+			</div>
+
+			<div
+				class="custom-scrollbar flex flex-col gap-4 overflow-y-auto pr-2"
+				style="max-height: 700px;"
+			>
+				{#each displayShelters as shelter (shelter.id)}
+					<PublicShelterCard {shelter} {getStatusColor} {getStatusText} />
+				{:else}
+					<div
+						class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border p-8 text-center text-muted-foreground"
+					>
+						<AlertTriangle class="mb-2 h-8 w-8 text-muted-foreground/50" />
+						<p class="font-medium">ไม่พบข้อมูลศูนย์พักพิง</p>
+						<p class="text-sm">ลองเปลี่ยนเงื่อนไขการค้นหาอีกครั้ง</p>
+					</div>
+				{/each}
+			</div>
+		</div>
+	</div>
+</PublicPageShell>
+
+<style>
+	/* Custom scrollbar for the list */
+	.custom-scrollbar::-webkit-scrollbar {
+		width: 4px;
+	}
+	.custom-scrollbar::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.custom-scrollbar::-webkit-scrollbar-thumb {
+		background-color: #cbd5e1;
+		border-radius: 10px;
+	}
+	.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+		background-color: #94a3b8;
+	}
+</style>

@@ -280,7 +280,9 @@ export function useDonationNeedsBoard(options?: {
 	}
 
 	return {
-		derivedItems,
+		get derivedItems() {
+			return derivedItems;
+		},
 		toggleShowOnHome,
 		toggleCutOff,
 		handleAddRequest,

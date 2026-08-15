@@ -43,7 +43,7 @@
 
 	function handleSearch() {
 		if (searchQuery.trim()) {
-			goto(`/public/search?q=${encodeURIComponent(searchQuery.trim())}`);
+			goto(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
 		}
 	}
 
@@ -52,16 +52,16 @@
 	}
 </script>
 
-<div class="mb-8 overflow-hidden rounded-2xl {bgClass} relative p-8 text-white shadow-lg lg:p-12">
+<div class="relative overflow-hidden rounded-2xl {bgClass} p-8 text-white shadow-sm lg:p-12">
 	<div
 		class="absolute inset-0 opacity-10"
 		style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 24px 24px;"
 	></div>
-	<div class="relative flex flex-col gap-10 md:flex-row">
+	<div class="relative flex flex-col gap-10 md:flex-row md:items-center md:justify-between">
 		<!-- Text Content -->
-		<div class="flex flex-col justify-center">
+		<div class="flex min-w-0 flex-1 flex-col justify-center">
 			<div
-				class="mb-4 inline-flex w-fit items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold tracking-wider text-white/90 uppercase backdrop-blur-sm"
+				class="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold tracking-wider text-white/90 uppercase backdrop-blur-sm"
 			>
 				{#if showLivePing}
 					<span class="relative flex h-2 w-2">
@@ -112,8 +112,8 @@
 
 		<!-- Metrics Panel -->
 		{#if summary && flags && lastUpdated !== undefined && isStale !== undefined}
-			<div class="flex flex-col justify-center">
-				<div class="relative rounded-2xl border border-border bg-card p-6 shadow-xl">
+			<div class="flex w-full shrink-0 flex-col justify-center md:w-auto md:max-w-sm">
+				<div class="relative rounded-2xl border border-border bg-card p-6 shadow-sm">
 					<!-- Stale Warning -->
 					{#if isStale}
 						<div

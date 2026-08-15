@@ -12,7 +12,6 @@ import {
 	UserCog,
 	Database,
 	Warehouse,
-	House,
 	Calculator,
 	HandHeart,
 	ShoppingCart,
@@ -101,17 +100,9 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '4. ตั้งค่าระบบ',
 		items: [
 			{
-				label: 'ตั้งค่าโครงสร้างศูนย์',
-				href: null,
-				icon: Building,
-				children: [
-					{
-						label: 'จัดการศูนย์พักพิง',
-						href: resolve('/back-office/shelters'),
-						icon: Building
-					},
-					{ label: 'จัดการบ้านพี่เลี้ยง', href: null, icon: House }
-				]
+				label: 'จัดการศูนย์พักพิง',
+				href: resolve('/back-office/shelters'),
+				icon: Building
 			},
 			{ label: 'จัดการผู้ใช้งานและสิทธิ์', href: resolve('/back-office/users'), icon: UserCog },
 			{
@@ -134,7 +125,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/household-master-data'),
 						icon: Home
 					},
-					{ label: '4. คลังสินค้า', href: resolve('/back-office/catalog'), icon: Warehouse },
+					{
+						label: '4. คลังสินค้า',
+						href: resolve('/back-office/catalog'),
+						icon: Warehouse
+					},
 					{
 						label: '5. พารามิเตอร์',
 						href: resolve('/back-office/sop-parameters'),

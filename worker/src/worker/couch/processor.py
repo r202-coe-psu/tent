@@ -16,6 +16,8 @@ from worker.mongo import (
     delete_persons_for_shelter,
     resolve_shelter_code_for_registry_delete,
 )
+from worker.mongo.announcement import apply_announcement
+from worker.projectors.announcement import project_announcement
 from worker.projectors.donation import project_donation
 from worker.projectors.evacuee import project_evacuee
 from worker.projectors.needs import project_needs_for_shelter
@@ -44,14 +46,17 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
             await save_checkpoint(database, seq)
             return
         if database == REGISTRY_DB:
-            deleted_doc = change.get("doc")
-            shelter_code = await resolve_shelter_code_for_registry_delete(
-                doc_id, deleted_doc=deleted_doc
-            )
-            if shelter_code:
-                await apply_shelter("delete", {"_id": shelter_code})
-                await delete_persons_for_shelter(shelter_code)
-                await delete_needs_for_shelter(shelter_code)
+            if doc_id.startswith("announcement:"):
+                await apply_announcement("delete", {"_id": doc_id})
+            else:
+                deleted_doc = change.get("doc")
+                shelter_code = await resolve_shelter_code_for_registry_delete(
+                    doc_id, deleted_doc=deleted_doc
+                )
+                if shelter_code:
+                    await apply_shelter("delete", {"_id": shelter_code})
+                    await delete_persons_for_shelter(shelter_code)
+                    await delete_needs_for_shelter(shelter_code)
         else:
             shelter_code = shelter_code_from_db_name(database)
             if shelter_code:
@@ -69,12 +74,23 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
         return
 
     if database == REGISTRY_DB:
-        action, payload = project_shelter(doc)
-        await apply_shelter(action, payload)
-        if action == "delete" and payload and payload.get("_id"):
-            code = str(payload["_id"])
-            await delete_persons_for_shelter(code)
-            await delete_needs_for_shelter(code)
+        doc_type = doc.get("type")
+        if doc_type == "shelter":
+            action, payload = project_shelter(doc)
+            await apply_shelter(action, payload)
+            if action == "delete" and payload and payload.get("_id"):
+                code = str(payload["_id"])
+                await delete_persons_for_shelter(code)
+                await delete_needs_for_shelter(code)
+        elif doc_type == "announcement":
+            action, payload = project_announcement(doc)
+            await apply_announcement(action, payload)
+        elif doc_type == "config":
+            from worker.mongo.config import apply_config
+            from worker.projectors.config import project_config
+
+            action, payload = project_config(doc)
+            await apply_config(action, payload)
     else:
         shelter_code = shelter_code_from_db_name(database)
         if shelter_code:

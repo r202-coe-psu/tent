@@ -1,12 +1,18 @@
 import secrets
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, HTTPException, Security, status
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
+from tent_model.api_key import ApiKey
 
+from ..utils.masking import sha256_hex
 from .config import settings
 
 _bearer = HTTPBearer(auto_error=False)
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+KEY_PREFIX_LEN = 8
 
 
 async def verify_external_secret(
@@ -32,3 +38,42 @@ async def verify_external_secret(
             detail="Invalid API secret",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def _unauthorized(detail: str = "Invalid or missing API key") -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "ApiKey"},
+    )
+
+
+async def verify_api_key(
+    api_key: Annotated[str | None, Security(_api_key_header)],
+) -> ApiKey:
+    """Validate managed consumer key from ``X-API-Key`` (CR-062)."""
+    if not api_key or not api_key.startswith("tsk_") or len(api_key) < KEY_PREFIX_LEN:
+        raise _unauthorized()
+
+    prefix = api_key[:KEY_PREFIX_LEN]
+    doc = await ApiKey.find_one(ApiKey.key_prefix == prefix)
+    if doc is None:
+        raise _unauthorized()
+
+    expected = sha256_hex(api_key)
+    if not secrets.compare_digest(doc.key_hash, expected):
+        raise _unauthorized()
+
+    if doc.revoked_at is not None:
+        raise _unauthorized("API key has been revoked")
+
+    now = datetime.now(UTC)
+    expires = doc.expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=UTC)
+    if now >= expires:
+        raise _unauthorized("API key has expired")
+
+    doc.last_used_at = now
+    await doc.save()
+    return doc

@@ -2,12 +2,13 @@
 title: "Task Breakdown — Module B — SOP & Resource Calc"
 status: active
 created: 2026-06-05
-updated: 2026-07-23
+updated: 2026-08-13
 module: B
 note: >
   decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown;
   CR-006 (SOP master/override) applied 2026-06-22;
-  CR-042 (OD-1=A, OD-2=B, OD-3=A, OD-4=C) applied 2026-07-23
+  CR-042 (OD-1=A, OD-2=B, OD-3=A, OD-4=C) applied 2026-07-23;
+  2026-08-13 — CR-066 T-69 occupancy health **approved** (Wave 1–3); T-76 SOP-lite/Sphere = Wave 4 รอบ CR ถัดไป
 ---
 
 # Module B — SOP & Resource Calc
@@ -28,6 +29,8 @@ note: >
 | T-31 | 🔄 | Daily resource calculation engine | FR-45 | R3 | prod | ส.ค. | 7 | ÷1.4 | 5 | T-30,T-14 |
 | T-32 | 🔄 | Resource calculation dashboard | FR-46 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-31 |
 | T-42 | ⬜ | SOP what-if simulation | FR-54 | R4 | prod | deferred | 6 | ÷1.4 | 4.5 | T-31 |
+| T-69 | ⬜ | Occupancy health 5 สี (derived) staff + public — CR-069 P3 | FR-66..68 | R3 | prod | in-scope | 5 | ÷1.4 | 3.5 | T-52 |
+| T-76 | ⬜ | SOP-lite บ้านพี่เลี้ยง + Sphere auto-capacity + ไม่บังคับ staff — **blocked workshop** | FR-63 phase2 | R4 | prod | blocked | 6 | ÷1.25 | 5 | T-66, SOP workshop |
 |  |  | **รวมทั้งโมดูล** |  |  |  |  | **30** |  | **21.5** |  |
 
 > **Deferred** (ส่งมอบหลัง go-live, ภายในสัปดาห์ที่ 2 กันยายน 2026): T-42
@@ -89,6 +92,44 @@ note: >
 - ตั้ง scenario (occupancy สมมุติ, จำนวนวัน, ratio override) แล้วรันผลผ่าน engine เดียวกับ T-31 (ไม่ fork สูตร)
 - ผล simulation แยกขาดจากข้อมูลจริง (ไม่เขียนทับ calc รายวัน) + เทียบ scenario กับปัจจุบันได้
 - บันทึก/เปิด scenario ซ้ำได้ และ test + demo จำลองเหตุการณ์น้ำท่วมตัวอย่าง — ส่งมอบภายใน 14/09/2026
+
+---
+
+### T-69 — Occupancy health 5 สี (CR-069 P3)
+
+**Status:** ⬜ ready — CR-069 **approved** 2026-08-13. Wave 1–2 ล็อกแล้ว; ตัวเศษ occupancy ตาม Wave 3 D-BOOK-OCC=C
+**Owner:** Team D (เน, ภูดิท, วิลเลียม) เจ้าของสูตร; Lead รีวิว public plane
+**Depends:** T-52; [CR-069](../changes/CR-069-occupancy-health-colors.md) — occupancy health นับ stay `active` + `pre_registered` (D-BOOK-OCC=C)
+**Program:** P3
+
+**Description:** ฟังก์ชัน domain บริสุทธิ์ derive `occupancy_health` จาก occupancy÷capacity + override จาก `operation_status`. **ไม่ persist.** Occupancy = count stay `active` **และ** `pre_registered` (D-BOOK-OCC=C — ทับ T-04/T-06 และตัวเศษ Wave 1 ที่นับแค่ `active`). แทนแถบ staff 3 สีด้วย 5 สีบน staff list/dashboard **และ** public map/card (D-HEALTH-SURFACE=A). **ไม่สร้างหน้า EOC ในแอป (FD-14)** — EOC = ฟิลด์ API ทีหลัง (T-70). กติการวม: `standby`/`closed` → เทา (ไม่เข้า %); `full_capacity` → แดงแม้ occupancy &lt;100%; นอกนั้นตาม % (เทาปิด · ฟ้า &lt;60 · เหลือง 60–89 · แดง 90–100 · แดงเข้ม &gt;100). `capacity=0` + สถานะเปิด → ไม่มีข้อมูลความจุ ห้ามหารศูนย์. เปิดอยู่ = `{active, full_capacity}`. Kitchen/SOP คนอยู่จริง (T-31) ยังนับ `active` อย่างเดียว.
+
+**Files likely touched:** `features/shelters` หรือ `features/dashboard` domain health; staff list occupancy bar; public-portal map/card color; ห้าม hardcode % กระจาย — ค่าคงที่ที่เดียว
+
+**Definition of Done:**
+- UI: staff list/dashboard **และ** public map/card แสดง 5 สีตามสูตรที่ล็อก
+- Write path: **ไม่มี** — derived ตอนอ่าน
+- Validation: `capacity<=0` + สถานะเปิด ไม่หารศูนย์; occupancy=0 + `active` = ฟ้า; `standby` = เทาแม้ occupancy สูง; `pre_registered` นับเข้า occupancy
+- Permission: อ่านตาม shelter scope เดิม
+- Test: ทุกแถบสี + `closed`/`standby` ทั้งที่ยังมีคน + `full_capacity` + occupancy 50/100 = แดง + ขอบ 89/90 และ 100/101 + hold `pre_registered` ทำให้สีขยับ
+- Demo: 5 ศูนย์ครบ 5 สี
+
+**Out of scope:** T-70 EOC API field; auto-เขียน `operation_status`; block check-in เมื่อเกินจุ; SOP-lite (T-76); kitchen headcount (CR-022)
+
+---
+
+### T-76 — SOP-lite + Sphere auto-capacity + ไม่บังคับ staff ประจำบ้าน — BLOCKED
+
+**Status:** ⬜ blocked — SOP workshop ยังไม่เกิด — **Wave 4 รอบ CR ถัดไป**
+**Owner:** Team D
+**Depends:** T-66; D-SOP-LITE, D-HOST-STAFF, D-SPHERE-CAP
+**Program:** P1b
+
+**Description:** หลัง workshop — ฟิลด์บังคับบ้านพี่เลี้ยงเบากว่าศูนย์; capacity จาก `floor(area_m2 / 3.5)` ถ้าล็อกสูตร; บ้านไม่บังคับ user ประจำ. **ห้ามเดารายการฟิลด์ SOP ในรอบนี้.**
+
+**Definition of Done:** ยังไม่มีจนกว่า workshop + decision. หลังล็อก: schema/form ตามรายการที่เซ็น, test Sphere rounding, demo บ้านไม่มี SM ประจำตาม D-HOST-STAFF
+
+**Out of scope:** สมมติ checklist พื้นที่ปลอดภัยจาก CR-014 โดยไม่มี workshop
 
 ## Effort by phase (Adj MD)
 

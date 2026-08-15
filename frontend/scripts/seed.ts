@@ -21,12 +21,12 @@
  * | seedRegistry — shelter master| plain object          | no factory (server-side only) |
  * | seedCatalog — supply items   | plain object          | no factory (no catalog feature) |
  * | seedCatalog — recipes        | plain object          | no factory (no catalog feature) |
- * | seedUsers — _users staff     | plain CouchDB user    | staff01–staff03 test logins     |
+ * | seedUsers — _users staff     | plain CouchDB user    | sa01 + staff01–staff03 test logins |
  *
  * Safe to re-run: catalog and registry docs use deterministic IDs
  * (PUT → 409 = already exists → skip). Shelter docs use ULIDs so
  * re-running adds another batch — useful for volume testing.
- * Test users (staff01–03) are also idempotent (409 → skip).
+ * Test users (sa01, staff01–03) are also idempotent (409 → skip).
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -76,12 +76,14 @@ import {
 	dailyCalcDocSchema,
 	DAILY_CALC_SCHEMA_VERSION
 } from '$lib/features/resource-calc/domain/calc.schema';
-import { type AuthorContext, makeDoc, now } from '$lib/db/model';
+import { shelterCodeSchema, type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
-
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
-import { buildValidateDocUpdate, REFERRAL_MANGO_INDEXES } from '$lib/server/shelter-access-design';
-
+import {
+	buildValidateDocUpdate,
+	REFERRAL_MANGO_INDEXES,
+	shelterDbName
+} from '$lib/server/shelter-access-design';
 // ─── env ──────────────────────────────────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -316,13 +318,34 @@ const USER_PREFIX = 'org.couchdb.user:';
 const SEED_STAFF_PASSWORD = '!Q2w3e4r5t';
 const SEED_STAFF_ROLES = ['shelter:SH001', 'registration_staff'] as const;
 
-/** Create staff01–staff03 test logins in CouchDB `_users` (idempotent). */
+/** Create sa01 + staff01–staff03 test logins in CouchDB `_users` (idempotent). */
 async function seedUsers(): Promise<void> {
-	const names = ['staff01', 'staff02', 'staff03'] as const;
+	const staffNames = ['staff01', 'staff02', 'staff03'] as const;
 	let created = 0;
 	let skipped = 0;
 
-	for (const name of names) {
+	const { status: saStatus } = await couchReq(
+		'PUT',
+		`/_users/${USER_PREFIX}${encodeURIComponent('sa01')}`,
+		{
+			name: 'sa01',
+			password: SEED_STAFF_PASSWORD,
+			display_name: 'System Admin',
+			roles: ['system_admin'],
+			type: 'user',
+			shelter_id: null,
+			affiliation_tags: []
+		}
+	);
+	if (saStatus === 201) {
+		created += 1;
+	} else if (saStatus === 409) {
+		skipped += 1;
+	} else {
+		throw new Error(`PUT _users/sa01 failed (HTTP ${saStatus})`);
+	}
+
+	for (const name of staffNames) {
 		const { status } = await couchReq('PUT', `/_users/${USER_PREFIX}${encodeURIComponent(name)}`, {
 			name,
 			password: SEED_STAFF_PASSWORD,
@@ -342,7 +365,7 @@ async function seedUsers(): Promise<void> {
 	}
 
 	console.log(
-		`  ✓ _users: staff01–staff03 (password shared; ${created} created, ${skipped} already exist)`
+		`  ✓ _users: sa01 + staff01–staff03 (password shared; ${created} created, ${skipped} already exist)`
 	);
 }
 
@@ -784,19 +807,86 @@ async function deployShelterAccessDesign(db: string, shelterCode: string): Promi
 		`/${db}/${encodeURIComponent(ddocId)}`
 	);
 	const rev = getStatus === 200 ? (existingDdoc as { _rev: string })._rev : undefined;
-	await couchReq('PUT', `/${db}/${encodeURIComponent(ddocId)}`, {
+	const { status, data } = await couchReq('PUT', `/${db}/${encodeURIComponent(ddocId)}`, {
 		_id: ddocId,
 		...(rev ? { _rev: rev } : {}),
 		validate_doc_update: buildValidateDocUpdate(shelterCode)
 	});
+	if (status >= 400) {
+		const detail = (data as { reason?: string; error?: string } | null) ?? {};
+		throw new Error(
+			`Cannot deploy _design/access to "${db}" (HTTP ${status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
+	}
 	console.log(`  ✓ ${db}: _design/access deployed (referral whitelist)`);
 }
 
 async function deployMangoIndexes(db: string): Promise<void> {
 	for (const def of REFERRAL_MANGO_INDEXES) {
-		await couchReq('POST', `/${db}/_index`, def);
+		const { status, data } = await couchReq('POST', `/${db}/_index`, def);
+		if (status >= 400) {
+			const detail = (data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`Cannot deploy Mango index "${def.name}" to "${db}" (HTTP ${status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
 	}
 	console.log(`  ✓ ${db}: Mango indexes for referral deployed`);
+}
+
+async function listRegistryShelterCodes(): Promise<string[]> {
+	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
+	if (status === 404) {
+		throw new Error('Cannot provision shelter databases: registry DB does not exist');
+	}
+	if (status >= 400) {
+		const detail = (data as { reason?: string; error?: string } | null) ?? {};
+		throw new Error(
+			`Cannot read registry for shelter provisioning (HTTP ${status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
+	}
+
+	const rows =
+		(data as { rows?: { id?: string; doc?: { type?: string; code?: unknown } }[] })?.rows ?? [];
+	const codes = new Set<string>();
+
+	for (const row of rows) {
+		if (!row.id?.startsWith('shelter:') || row.doc?.type !== 'shelter') continue;
+		const parsed = shelterCodeSchema.safeParse(row.doc.code);
+		if (!parsed.success) {
+			console.warn(`  ⚠ registry: skipping invalid shelter code "${String(row.doc.code)}"`);
+			continue;
+		}
+		codes.add(parsed.data);
+	}
+
+	return [...codes].sort();
+}
+
+async function provisionShelterDb(shelterCode: string): Promise<void> {
+	const code = shelterCodeSchema.parse(shelterCode);
+	const db = shelterDbName(code);
+	await ensureDb(db);
+	await setSecurity(db, {
+		admins: { names: [], roles: ['system_admin'] },
+		members: { names: [], roles: [`shelter:${code}`] }
+	});
+	await deployShelterViewsFn(db, (path, method, body) => couchReq(method, path, body));
+	await deployShelterAccessDesign(db, code);
+	await deployMangoIndexes(db);
+}
+
+async function provisionRegistryShelterDbs(): Promise<void> {
+	const codes = await listRegistryShelterCodes();
+	if (codes.length === 0) {
+		console.log('  ⚠ registry: no shelter masters found to provision');
+		return;
+	}
+
+	for (const shelterCode of codes) {
+		console.log(`  → provisioning ${shelterCode} (${shelterDbName(shelterCode)})`);
+		await provisionShelterDb(shelterCode);
+	}
 }
 
 async function deployCatalogMangoIndexes(db: string): Promise<void> {
@@ -816,15 +906,6 @@ async function deployCatalogMangoIndexes(db: string): Promise<void> {
 // ─── seedShelter ──────────────────────────────────────────────────────────────
 
 async function seedShelter(): Promise<void> {
-	await ensureDb(SHELTER_DB);
-	await setSecurity(SHELTER_DB, {
-		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [`shelter:${SHELTER_CODE}`] }
-	});
-	await deployShelterViewsFn(SHELTER_DB, (path, method, body) => couchReq(method, path, body));
-	await deployShelterAccessDesign(SHELTER_DB, SHELTER_CODE);
-	await deployMangoIndexes(SHELTER_DB);
-
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
 		{
@@ -852,7 +933,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'ใจดี',
 			gender: 'male',
 			phone: '0811111111',
-			birth_year: 1955,
+			birth_year: 2498,
 			religion: 'buddhist',
 			special_needs: [VG.elderly],
 			household_id: hh1._id,
@@ -863,7 +944,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'ใจดี',
 			gender: 'female',
 			phone: '0812222222',
-			birth_year: 1958,
+			birth_year: 2501,
 			religion: 'buddhist',
 			special_needs: [VG.elderly],
 			household_id: hh1._id,
@@ -874,7 +955,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'ใจดี',
 			gender: 'male',
 			phone: '0813333333',
-			birth_year: 1990,
+			birth_year: 2533,
 			religion: 'buddhist',
 			special_needs: [],
 			household_id: hh1._id,
@@ -885,7 +966,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'ใจดี',
 			gender: 'female',
 			phone: '0814444444',
-			birth_year: 1993,
+			birth_year: 2536,
 			religion: 'buddhist',
 			special_needs: [VG.pregnant],
 			household_id: hh1._id,
@@ -898,7 +979,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'สุขสาย',
 			gender: 'female',
 			phone: null,
-			birth_year: 1988,
+			birth_year: 2531,
 			religion: 'buddhist',
 			special_needs: [],
 			household_id: hh2._id,
@@ -909,7 +990,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'สุขสาย',
 			gender: 'male',
 			phone: '0815555555',
-			birth_year: 1985,
+			birth_year: 2528,
 			religion: 'buddhist',
 			special_needs: [],
 			household_id: hh2._id,
@@ -920,7 +1001,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'สุขสาย',
 			gender: 'female',
 			phone: null,
-			birth_year: 2024,
+			birth_year: 2567,
 			religion: 'buddhist',
 			special_needs: [VG.infant],
 			household_id: hh2._id,
@@ -932,7 +1013,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'รักสงบ',
 			gender: 'male',
 			phone: '0816666666',
-			birth_year: 1972,
+			birth_year: 2515,
 			religion: 'muslim',
 			special_needs: [],
 			household_id: hh3._id,
@@ -943,7 +1024,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'รักสงบ',
 			gender: 'female',
 			phone: '0817777777',
-			birth_year: 1975,
+			birth_year: 2518,
 			religion: 'muslim',
 			special_needs: [VG.chronic_illness],
 			household_id: hh3._id,
@@ -955,7 +1036,7 @@ async function seedShelter(): Promise<void> {
 			last_name: 'รักสงบ',
 			gender: 'male',
 			phone: null,
-			birth_year: 2012,
+			birth_year: 2555,
 			religion: 'muslim',
 			special_needs: [],
 			household_id: hh3._id,
@@ -1177,15 +1258,6 @@ async function seedShelter(): Promise<void> {
 }
 
 async function seedShelter2(): Promise<void> {
-	await ensureDb(SHELTER_DB_2);
-	await setSecurity(SHELTER_DB_2, {
-		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [`shelter:${SHELTER_CODE_2}`] }
-	});
-	await deployShelterViewsFn(SHELTER_DB_2, (path, method, body) => couchReq(method, path, body));
-	await deployShelterAccessDesign(SHELTER_DB_2, SHELTER_CODE_2);
-	await deployMangoIndexes(SHELTER_DB_2);
-
 	const { status, data } = await couchReq('GET', `/${SHELTER_DB_2}/_all_docs?limit=1`);
 	if (status === 200 && (data as { rows?: unknown[] }).rows?.length) {
 		console.log(`  ✓ ${SHELTER_DB_2}: already seeded, skipping`);
@@ -1211,7 +1283,7 @@ async function seedShelter2(): Promise<void> {
 			last_name: 'มานะ',
 			gender: 'female',
 			phone: '0899998888',
-			birth_year: 1995,
+			birth_year: 2538,
 			religion: 'muslim',
 			special_needs: [],
 			household_id: hh1._id,
@@ -1453,6 +1525,9 @@ async function seedDailyCalc(): Promise<void> {
 		const body = dailyCalcDocSchema.parse({
 			formula_v: FORMULA_V,
 			sop_profile_version: sopVersion,
+			ratio_source: 'master',
+			sop_override_id: null,
+			sop_override_version: null,
 			ratio_snapshot: ratioSnapshot,
 			occupancy_snapshot: occupancy,
 			as_of: asOf,
@@ -1551,6 +1626,7 @@ async function main() {
 	try {
 		await seedUsers();
 		await seedRegistry();
+		await provisionRegistryShelterDbs();
 		await seedMasterData();
 		await seedCatalog();
 		await seedCatalogSopRatios();

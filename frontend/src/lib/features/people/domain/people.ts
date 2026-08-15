@@ -42,7 +42,8 @@ export const stayStatusSchema = z.enum([
 	'temporary_leave',
 	'transferred',
 	'checked_out',
-	'deceased'
+	'deceased',
+	'cancelled'
 ]);
 export type StayStatus = z.infer<typeof stayStatusSchema>;
 
@@ -142,6 +143,7 @@ export interface Evacuee extends BaseDoc {
 	religion?: Religion;
 	special_needs: string[];
 	emergency_contact?: EmergencyContact;
+	photo?: string | null;
 	household_id: string | null;
 	current_stay: CurrentStay;
 	privacy: { search_excluded: boolean };
@@ -228,7 +230,7 @@ export function checkEvacueeHouseholdConflict(
 	households: readonly Household[],
 	evacuees: readonly Evacuee[]
 ): EvacueeHouseholdConflict {
-	if (!targetHouseholdId || !evacuee.household_id || evacuee.household_id === targetHouseholdId) {
+	if (!evacuee.household_id || evacuee.household_id === targetHouseholdId) {
 		return { conflicted: false };
 	}
 
@@ -255,12 +257,14 @@ export function assertEvacueeHouseholdAssignment(
 	households: readonly Household[],
 	evacuees: readonly Evacuee[]
 ): void {
-	if (!targetHouseholdId || targetHouseholdId === evacuee.household_id) return;
+	if (targetHouseholdId === evacuee.household_id) return;
 
-	const targetHousehold = households.find((household) => household._id === targetHouseholdId);
-	if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
-	if (!isActiveHouseholdStatus(targetHousehold.status)) {
-		throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+	if (targetHouseholdId) {
+		const targetHousehold = households.find((household) => household._id === targetHouseholdId);
+		if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
+		if (!isActiveHouseholdStatus(targetHousehold.status)) {
+			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+		}
 	}
 
 	const conflict = checkEvacueeHouseholdConflict(evacuee, targetHouseholdId, households, evacuees);
@@ -334,13 +338,32 @@ export type PeopleDoc = Evacuee | Medical | Household | Movement | Screening;
 
 // ---------------------------------------------------------------- input schemas
 
+export const MAX_AGE_YEARS = 150;
+
+/** Current Buddhist Era year, computed at validation time (not schema-build time). */
+export function currentBEYear(): number {
+	return new Date().getFullYear() + 543;
+}
+
+/** Oldest acceptable birth year (พ.ศ.) — implies an age of {@link MAX_AGE_YEARS}. */
+export function minBirthYearBE(): number {
+	return currentBEYear() - MAX_AGE_YEARS;
+}
+
 export const evacueeInputSchema = z.object({
 	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
 	last_name: z.string({ error: 'กรุณากรอกนามสกุล' }).trim().min(1, 'กรุณากรอกนามสกุล'),
 	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }),
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
-	birth_year: z.coerce.number().int().optional(),
+	birth_year: z.coerce
+		.number()
+		.int()
+		.refine((y) => y > minBirthYearBE(), {
+			error: () => `ปีเกิด (พ.ศ.) ต้องมากกว่า ${minBirthYearBE()}`
+		})
+		.refine((y) => y <= currentBEYear(), 'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต')
+		.optional(),
 	age: z.number().int().min(0).max(150).optional(),
 	person_id: personIdSchema.default({ cardType: 'national_id', number: '' }),
 	country: z
@@ -370,6 +393,7 @@ export const evacueeInputSchema = z.object({
 		})
 		.optional(),
 	household_id: z.string().nullable().default(null),
+	photo: z.string().nullable().optional().default(null),
 	registered_via: registeredViaSchema.default('app')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
@@ -518,6 +542,179 @@ export const householdBasicInfoFormSchema = householdInputSchema.pick({
 });
 export type HouseholdBasicInfoForm = z.infer<typeof householdBasicInfoFormSchema>;
 
+const digitsOnly = (value: string) => value.replace(/\D/g, '');
+
+/** Field-level schema used by the evacuee profile's personal edit modal. */
+export const evacueePersonalEditFormSchema = z
+	.object({
+		firstName: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
+		lastName: z.string({ error: 'กรุณากรอกนามสกุล' }).trim().min(1, 'กรุณากรอกนามสกุล'),
+		nickname: z.string().trim(),
+		birthYear: z.string().trim(),
+		age: z.string().trim(),
+		gender: genderSchema,
+		phone: z.string().trim(),
+		noPhone: z.boolean().default(false),
+		cardType: cardTypeSchema,
+		cardNumber: z.string().trim(),
+		country: z.string({ error: 'กรุณาเลือกสัญชาติ' }).trim().min(1, 'กรุณาเลือกสัญชาติ'),
+		religion: religionSchema
+	})
+	.superRefine((data, ctx) => {
+		if (!data.noPhone && digitsOnly(data.phone).length !== 10) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['phone'],
+				message: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือกไม่มีเบอร์โทร'
+			});
+		}
+
+		if (
+			data.cardType === 'national_id' &&
+			data.cardNumber &&
+			digitsOnly(data.cardNumber).length !== 13
+		) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['cardNumber'],
+				message: 'เลขประจำตัวประชาชนต้องมี 13 หลัก'
+			});
+		}
+
+		const parsedAge = data.age.trim() !== '' ? Number.parseInt(data.age, 10) : undefined;
+		const parsedBirthYear = data.birthYear ? Number.parseInt(data.birthYear, 10) : undefined;
+		if (
+			data.age &&
+			(!Number.isInteger(parsedAge) ||
+				(parsedAge ?? -1) < 0 ||
+				(parsedAge ?? MAX_AGE_YEARS + 1) > MAX_AGE_YEARS)
+		) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['age'],
+				message: `อายุต้องอยู่ระหว่าง 0 ถึง ${MAX_AGE_YEARS} ปี`
+			});
+		}
+		if (
+			data.birthYear &&
+			(!Number.isInteger(parsedBirthYear) ||
+				(parsedBirthYear ?? 0) <= minBirthYearBE() ||
+				(parsedBirthYear ?? 0) > currentBEYear())
+		) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['birthYear'],
+				message: `ปีเกิดต้องมากกว่า พ.ศ. ${minBirthYearBE()} และไม่เกินปีปัจจุบัน`
+			});
+		}
+		if (
+			parsedBirthYear !== undefined &&
+			parsedAge !== undefined &&
+			Number.isInteger(parsedBirthYear) &&
+			Number.isInteger(parsedAge) &&
+			currentBEYear() - parsedBirthYear !== parsedAge
+		) {
+			ctx.addIssue({ code: 'custom', path: ['age'], message: 'ปีเกิดและอายุไม่สัมพันธ์กัน' });
+		}
+	});
+
+export const evacueeEmergencyEditFormSchema = z
+	.object({
+		name: z.string().trim(),
+		phone: z.string().trim(),
+		relation: z.string().trim()
+	})
+	.superRefine((data, ctx) => {
+		const hasContact = Boolean(data.name || data.phone || data.relation);
+		if (!hasContact) return;
+		if (!data.name)
+			ctx.addIssue({ code: 'custom', path: ['name'], message: 'กรุณากรอกชื่อผู้ติดต่อ' });
+		if (digitsOnly(data.phone).length !== 10) {
+			ctx.addIssue({ code: 'custom', path: ['phone'], message: 'กรุณากรอกเบอร์โทร 10 หลัก' });
+		}
+		if (!data.relation)
+			ctx.addIssue({ code: 'custom', path: ['relation'], message: 'กรุณาระบุความสัมพันธ์' });
+	});
+
+export const evacueeAddressEditFormSchema = z
+	.object({
+		addressNo: z.string().trim(),
+		villageNo: z.string().trim(),
+		province: z.string().trim(),
+		district: z.string().trim(),
+		subdistrict: z.string().trim(),
+		postalCode: z.string().trim()
+	})
+	.superRefine((data, ctx) => {
+		const hasLocation = Boolean(
+			data.province || data.district || data.subdistrict || data.postalCode
+		);
+		if (!hasLocation) return;
+		if (!data.province)
+			ctx.addIssue({ code: 'custom', path: ['province'], message: 'กรุณาเลือกจังหวัด' });
+		if (!data.district)
+			ctx.addIssue({ code: 'custom', path: ['district'], message: 'กรุณาเลือกอำเภอ / เขต' });
+		if (!data.subdistrict)
+			ctx.addIssue({ code: 'custom', path: ['subdistrict'], message: 'กรุณาเลือกตำบล / แขวง' });
+		if (!/^\d{5}$/.test(data.postalCode)) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['postalCode'],
+				message: 'ไม่พบรหัสไปรษณีย์ของตำบลที่เลือก'
+			});
+		}
+	});
+
+export const evacueeHealthEditFormSchema = z
+	.object({
+		bloodGroup: bloodGroupSchema,
+		careTrack: careTrackSchema,
+		conditions: z.string().trim(),
+		medications: z.string().trim(),
+		allergies: z.string().trim(),
+		medicalNotes: z.string().trim(),
+		screeningNotes: z.string().trim(),
+		selectedSymptoms: z.array(z.string().trim().min(1)),
+		temperature: z.string().trim(),
+		referral: z.boolean(),
+		specialNeeds: z.array(z.string().trim().min(1))
+	})
+	.superRefine((data, ctx) => {
+		if (!data.temperature) return;
+		const value = Number(data.temperature);
+		if (!Number.isFinite(value) || value < 30 || value > 45) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['temperature'],
+				message: 'อุณหภูมิต้องอยู่ระหว่าง 30 ถึง 45 °C'
+			});
+		}
+	});
+
+export const evacueeHouseholdEditFormSchema = z.object({
+	householdId: z.string(),
+	setAsHead: z.boolean()
+});
+
+export const evacueeAssetsEditFormSchema = z.object({
+	vehicles: z.array(
+		z.object({
+			type: z.enum(['car', 'motorcycle', 'other']),
+			license_plate: z.string().trim().nullable()
+		})
+	),
+	valuables: z.string().trim(),
+	pets: z.array(
+		z.object({
+			species: z.enum(['dog', 'cat', 'bird', 'other']),
+			count: z.coerce.number().int().positive('จำนวนต้องมากกว่า 0'),
+			notes: z.string().trim().optional(),
+			has_cage: z.boolean().optional(),
+			image_url: z.string().trim().nullable().optional()
+		})
+	)
+});
+
 export const movementInputSchema = z.object({
 	evacuee_id: z.string().min(1),
 	action: movementActionSchema,
@@ -551,7 +748,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		5, // schema_v 5: adds age (CR-057) — skips 4, reserved for photo (CR-054, not yet implemented)
+		6, // schema_v 6: stay cancelled (CR-070); 5 = age (CR-057); 4 reserved for photo (CR-054)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -565,6 +762,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			country: d.country,
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
+			...(d.photo ? { photo: d.photo } : {}),
 			household_id: d.household_id,
 			current_stay: { status: 'pre_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },
@@ -619,29 +817,6 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext): Hous
 	);
 }
 
-/** Migrates a stored household doc up to schema_v 4 (adds status, checkout_destination; normalizes vehicle -> vehicles). */
-// export function migrateHouseholdV3ToV4(doc: any): Household {
-// 	if (doc && doc.type === 'household' && (!doc.schema_v || doc.schema_v < 4)) {
-// 		let vehicles = doc.vehicles;
-// 		if (!vehicles) {
-// 			if (doc.vehicle) {
-// 				vehicles = [doc.vehicle];
-// 			} else {
-// 				vehicles = [];
-// 			}
-// 		}
-// 		const migrated = {
-// 			...doc,
-// 			schema_v: 4,
-// 			status: doc.status || 'checked_in',
-// 			checkout_destination: doc.checkout_destination || null,
-// 			vehicles
-// 		};
-// 		delete migrated.vehicle;
-// 		return migrated;
-// 	}
-// 	return doc;
-// }
 export function migrateHouseholdV3ToV4(doc: unknown): Household {
 	const candidate = doc as Household | LegacyHouseholdDoc;
 	if (
@@ -732,12 +907,17 @@ export function canCheckOutEvacuee(evacuee: Evacuee): boolean {
 
 /**
  * Guard movement transitions against impossible / terminal stay states.
- * `deceased` is terminal (schema.md §1.4) — no reverse action except staying deceased.
+ * `deceased` and `cancelled` are terminal — no reverse action except staying put.
  */
 export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction): void {
 	const status = evacuee.current_stay.status;
 	if (status === 'deceased' && action !== 'mark_deceased') {
 		throw new Error('สถานะเสียชีวิตเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก');
+	}
+	if (status === 'cancelled') {
+		throw new Error(
+			'สถานะยกเลิกการลงทะเบียนล่วงหน้าเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก'
+		);
 	}
 	if (action === 'check_in' && !canCheckInEvacuee(evacuee)) {
 		throw new Error(`ไม่สามารถเช็คอินจากสถานะ ${status} ได้`);
@@ -745,6 +925,16 @@ export function assertMovementAllowed(evacuee: Evacuee, action: MovementAction):
 	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
 		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
 	}
+}
+
+/** True when an evacuee stay may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */
+export function canCancelEvacueePreRegistration(evacuee: Evacuee): boolean {
+	return evacuee.current_stay.status === 'pre_registered';
+}
+
+/** True when a household may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */
+export function canCancelHouseholdPreRegistration(household: Household): boolean {
+	return household.status === 'pre_registered';
 }
 
 /**
