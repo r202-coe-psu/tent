@@ -31,7 +31,8 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 });
 vi.mock('$lib/server/master-data-server', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/server/master-data-server')>()),
-	readMasterDoc: vi.fn()
+	readMasterDoc: vi.fn(),
+	readShelterMasterDocs: vi.fn()
 }));
 
 import { GET, PUT } from './+server';
@@ -41,7 +42,7 @@ import {
 	requireShelterScopeOrSA,
 	adminRaw
 } from '$lib/server/couch-admin';
-import { readMasterDoc } from '$lib/server/master-data-server';
+import { readMasterDoc, readShelterMasterDocs } from '$lib/server/master-data-server';
 import type { MasterData } from '$lib/features/master-data/domain';
 
 const requireAdminMock = vi.mocked(requireAdmin);
@@ -49,6 +50,7 @@ const authMock = vi.mocked(requireShelterScopeOrSA);
 const mgrMock = vi.mocked(requireShelterManagerOrSA);
 const adminRawMock = vi.mocked(adminRaw);
 const readMock = vi.mocked(readMasterDoc);
+const readShelterDocsMock = vi.mocked(readShelterMasterDocs);
 
 type ItemFixture = Omit<MasterData['items'][number], 'status'> &
 	Partial<Pick<MasterData['items'][number], 'status'>>;
@@ -94,6 +96,7 @@ beforeEach(() => {
 	mgrMock.mockReset().mockResolvedValue(caller);
 	adminRawMock.mockReset().mockResolvedValue({ status: 201, data: { rev: '4-new' } });
 	readMock.mockReset();
+	readShelterDocsMock.mockReset().mockResolvedValue([]);
 });
 
 describe('GET /api/back-office/master-data/[type]', () => {
@@ -294,6 +297,83 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 
 		expect(res.status).toBe(200);
 		expect(adminRawMock).toHaveBeenCalled();
+	});
+
+	it('rejects a GLOBAL label that collides with an existing shelter-local item (CR-078)', async () => {
+		readMock.mockResolvedValue(null);
+		readShelterDocsMock.mockResolvedValue([
+			{
+				...existingDoc([{ code: 'local1', label: 'สุนัข', is_default: false }]),
+				_id: 'master_data:pet_types:SH001',
+				shelter_code: 'SH001'
+			}
+		]);
+
+		const res = await callPUT('pet_types', {
+			items: [{ code: 'g1', label: 'สุนัข', is_default: false }]
+		});
+
+		expect(res.status).toBe(422);
+		expect((await res.json()).error.code).toBe('VALIDATION');
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
+	it('allows a GLOBAL label no shelter uses (CR-078)', async () => {
+		readMock.mockResolvedValue(null);
+		readShelterDocsMock.mockResolvedValue([
+			{
+				...existingDoc([{ code: 'local1', label: 'สุนัข', is_default: false }]),
+				_id: 'master_data:pet_types:SH001',
+				shelter_code: 'SH001'
+			}
+		]);
+
+		const res = await callPUT('pet_types', {
+			items: [{ code: 'g1', label: 'กระต่าย', is_default: false }]
+		});
+
+		expect(res.status).toBe(200);
+	});
+
+	it('lets an unrelated edit through when the doc already held duplicates (CR-078)', async () => {
+		// Data written before the rule existed: two items share a label. Toggling
+		// one item's status must not be rejected, or the doc becomes unfixable.
+		const legacy = [
+			{ code: 'dog', label: 'สุนัข', is_default: true },
+			{ code: 'dog2', label: 'สุนัข', is_default: false }
+		];
+		readMock.mockResolvedValue(existingDoc(legacy));
+
+		const res = await callPUT('pet_types', {
+			items: [
+				{ code: 'dog', label: 'สุนัข', is_default: true, status: 'inactive' },
+				{ code: 'dog2', label: 'สุนัข', is_default: false }
+			]
+		});
+
+		expect(res.status).toBe(200);
+		expect(writtenDoc().items[0].status).toBe('inactive');
+	});
+
+	it('still rejects a NEW duplicate on a doc that already held a legacy one (CR-078)', async () => {
+		readMock.mockResolvedValue(
+			existingDoc([
+				{ code: 'dog', label: 'สุนัข', is_default: true },
+				{ code: 'dog2', label: 'สุนัข', is_default: false }
+			])
+		);
+
+		const res = await callPUT('pet_types', {
+			items: [
+				{ code: 'dog', label: 'สุนัข', is_default: true },
+				{ code: 'dog2', label: 'สุนัข', is_default: false },
+				{ code: 'cat', label: 'แมว', is_default: false },
+				{ code: 'cat2', label: 'แมว', is_default: false }
+			]
+		});
+
+		expect(res.status).toBe(422);
+		expect(adminRawMock).not.toHaveBeenCalled();
 	});
 
 	it('creates a fresh envelope stamped with the authenticated SA name when absent', async () => {

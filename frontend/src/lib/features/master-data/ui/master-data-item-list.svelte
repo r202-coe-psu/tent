@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import type {
-		MasterDataItem,
-		MasterDataItemSource,
-		MasterDataQueryContext,
-		MasterDataType
+	import {
+		duplicateLabelKeys,
+		normalizeLabel,
+		type MasterDataItem,
+		type MasterDataItemSource,
+		type MasterDataQueryContext,
+		type MasterDataType
 	} from '$lib/features/master-data';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 
@@ -38,6 +40,23 @@
 	);
 
 	const isShelterScope = $derived(context?.scope === 'shelter');
+
+	// Duplicate labels can still reach this list through paths that never touch
+	// the PUT gate — replication backlog from an edge, a direct script write, an
+	// import. The rule cannot be pushed down to CouchDB either: validate_doc_update
+	// only ever sees one document, so a global ↔ shelter-local collision is
+	// invisible there. So detect and surface it, and let an operator resolve it by
+	// renaming or deactivating one side. (CR-078)
+	//
+	// Counted over every item, not `filtered` — a search must not hide the warning.
+	const duplicateKeys = $derived(duplicateLabelKeys(items));
+	const duplicateCount = $derived(
+		items.filter((i) => duplicateKeys.has(normalizeLabel(i.label))).length
+	);
+
+	function isDuplicate(item: MasterDataItem): boolean {
+		return duplicateKeys.has(normalizeLabel(item.label));
+	}
 
 	// Owned = editable + toggleable as an item of THIS doc: shelter-local items
 	// (shelter scope), or every item (global scope, SA-managed).
@@ -116,6 +135,21 @@
 		</div>
 	</header>
 
+	{#if duplicateCount > 0}
+		<div
+			role="alert"
+			class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+		>
+			<p class="font-medium text-amber-700 dark:text-amber-400">
+				พบชื่อซ้ำ {duplicateCount} รายการในประเภทนี้
+			</p>
+			<p class="mt-1 text-muted-foreground">
+				กรุณาแก้ไขชื่อหรือปิดใช้งานให้เหลือรายการเดียวต่อหนึ่งชื่อ — รายการที่ซ้ำถูกทำเครื่องหมาย
+				"ชื่อซ้ำ" ไว้ในตารางด้านล่าง{isShelterScope ? ' (รายการ GLOBAL ต้องแก้ที่ส่วนกลาง)' : ''}
+			</p>
+		</div>
+	{/if}
+
 	<div class="overflow-x-auto rounded-lg border">
 		<table class="w-full text-sm">
 			<thead class="bg-muted/50 text-muted-foreground">
@@ -140,6 +174,9 @@
 										? `SHELTER · ${source.shelter_code ?? 'ไม่ระบุศูนย์'}`
 										: 'GLOBAL · ทุกศูนย์'}
 								</Badge>
+								{#if isDuplicate(item)}
+									<Badge variant="destructive">ชื่อซ้ำ</Badge>
+								{/if}
 							</div>
 							{#if item.is_default}
 								<span

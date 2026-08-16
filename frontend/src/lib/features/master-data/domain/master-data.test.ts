@@ -3,6 +3,7 @@ import {
 	applyItemOp,
 	createMasterData,
 	enforceOneDefault,
+	duplicateLabelKeys,
 	findDuplicateLabel,
 	findLabelCollision,
 	normalizeLabel,
@@ -72,6 +73,12 @@ describe('unique label (CR-078)', () => {
 		it('treats a non-breaking space like a normal space', () => {
 			expect(normalizeLabel('ผู้\u00A0พิการ')).toBe(normalizeLabel('ผู้ พิการ'));
 		});
+
+		it('ignores zero-width characters that JS \\s does not match', () => {
+			// U+200B is used as a word separator in Thai text pasted from Word/LINE.
+			expect(normalizeLabel('สุ\u200Bนัข')).toBe(normalizeLabel('สุนัข'));
+			expect(normalizeLabel('สุ\uFEFFนัข')).toBe(normalizeLabel('สุนัข'));
+		});
 	});
 
 	describe('findDuplicateLabel', () => {
@@ -128,6 +135,51 @@ describe('unique label (CR-078)', () => {
 
 		it('returns undefined for an empty list', () => {
 			expect(findLabelCollision([])).toBeUndefined();
+		});
+
+		it('skips a collision whose label was already duplicated before the write', () => {
+			const legacy = [
+				makeItem({ code: 'a', label: 'สุนัข' }),
+				makeItem({ code: 'b', label: 'สุนัข' })
+			];
+			const grandfathered = duplicateLabelKeys(legacy);
+			expect(findLabelCollision(legacy, [], grandfathered)).toBeUndefined();
+		});
+
+		it('still rejects a NEW duplicate on a doc that already had a legacy one', () => {
+			const legacy = [
+				makeItem({ code: 'a', label: 'สุนัข' }),
+				makeItem({ code: 'b', label: 'สุนัข' })
+			];
+			const next = [
+				...legacy,
+				makeItem({ code: 'c', label: 'แมว' }),
+				makeItem({ code: 'd', label: 'แมว' })
+			];
+			expect(findLabelCollision(next, [], duplicateLabelKeys(legacy))).toBe('แมว');
+		});
+	});
+
+	describe('duplicateLabelKeys', () => {
+		it('reports only labels that appear more than once', () => {
+			const keys = duplicateLabelKeys([
+				makeItem({ code: 'a', label: 'สุนัข' }),
+				makeItem({ code: 'b', label: ' สุนัข ' }),
+				makeItem({ code: 'c', label: 'แมว' })
+			]);
+			expect([...keys]).toEqual(['สุนัข']);
+		});
+
+		it('detects a duplicate spanning two groups (global vs shelter-local)', () => {
+			const keys = duplicateLabelKeys(
+				[makeItem({ code: 'g', label: 'แมว' })],
+				[makeItem({ code: 'l', label: 'แมว' })]
+			);
+			expect(keys.has('แมว')).toBe(true);
+		});
+
+		it('is empty for a clean list', () => {
+			expect(duplicateLabelKeys([makeItem({ code: 'a', label: 'สุนัข' })]).size).toBe(0);
 		});
 	});
 });

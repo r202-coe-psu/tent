@@ -62,12 +62,21 @@
 	// Seed the configured defaults once master data arrives — only while the
 	// field is still empty, so stepping back into this form (initialData restores
 	// the operator's own choice) never overwrites it. (CR-049)
-	let defaultsSeeded = false;
+	//
+	// One flag per field: the two master queries resolve independently, and a
+	// single shared flag would burn out on whichever arrives first and drop the
+	// other default for good.
+	let mzSeeded = false;
+	let commSeeded = false;
 	$effect(() => {
-		if (defaultsSeeded || (!defaultMunicipalityZone && !defaultCommunity)) return;
-		defaultsSeeded = true;
-		if (!$formData.municipalityZone) $formData.municipalityZone = defaultMunicipalityZone;
-		if (!$formData.community) $formData.community = defaultCommunity;
+		if (!mzSeeded && defaultMunicipalityZone) {
+			mzSeeded = true;
+			if (!$formData.municipalityZone) $formData.municipalityZone = defaultMunicipalityZone;
+		}
+		if (!commSeeded && defaultCommunity) {
+			commSeeded = true;
+			if (!$formData.community) $formData.community = defaultCommunity;
+		}
 	});
 
 	const provincesQuery = useProvinces();

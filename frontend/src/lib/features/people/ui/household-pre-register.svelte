@@ -53,10 +53,16 @@
 		(municipalityZoneQuery.data?.items ?? []).find((z) => z.is_default && z.status === 'active')
 			?.code ?? ''
 	);
-	const defaultCommunity = $derived(
-		(communityQuery.data?.items ?? []).find((c) => c.is_default && c.status === 'active')?.code ??
-			''
-	);
+	// Keep the pair coherent: a default ชุมชน whose `parent_code` points at another
+	// เขต would pre-fill an address that contradicts itself, so fall back to none.
+	const defaultCommunity = $derived.by(() => {
+		const c = (communityQuery.data?.items ?? []).find((i) => i.is_default && i.status === 'active');
+		if (!c) return '';
+		if (c.parent_code && defaultMunicipalityZone && c.parent_code !== defaultMunicipalityZone) {
+			return '';
+		}
+		return c.code;
+	});
 
 	// --- Created State ---
 	let createdHousehold = $state<Household | null>(null);

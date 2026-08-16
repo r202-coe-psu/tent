@@ -36,15 +36,19 @@ modal ตรวจแค่ "ห้ามว่าง", `applyItemOp` ต่อ 
 
 1. **ขอบเขต:** `label` ต้อง unique **ภายใน `master_type` เดียวกัน** เท่านั้น — ชื่อเดียวกันยังใช้ข้าม
    type ได้ (เช่น "อื่นๆ" มีได้ทั้งใน `vulnerable_group` และ `pet_types`)
-2. **การเทียบ:** normalize ก่อนเทียบ — NFC, ยุบช่องว่างทุกชนิด (รวม NBSP) เหลือช่องว่างเดียว, trim,
-   lowercase (ไทยไม่มี case — มีผลเฉพาะส่วนละตินของ label). ค่าที่**บันทึกจริงยังเป็นข้อความตามที่
-   เจ้าหน้าที่พิมพ์** — normalize ใช้เพื่อเปรียบเทียบเท่านั้น
+2. **การเทียบ:** normalize ก่อนเทียบ — NFC, **ตัดอักขระ zero-width ทิ้ง** (U+200B–U+200D, U+2060,
+   U+FEFF — JS `\s` ไม่จับ U+200B ซึ่งพบบ่อยในข้อความไทยที่ copy มาจาก Word/Excel/LINE),
+   ยุบช่องว่างทุกชนิด (รวม NBSP) เหลือช่องว่างเดียว, trim, lowercase (ไทยไม่มี case — มีผลเฉพาะ
+   ส่วนละตินของ label). ค่าที่**บันทึกจริงยังเป็นข้อความตามที่เจ้าหน้าที่พิมพ์** — normalize
+   ใช้เพื่อเปรียบเทียบเท่านั้น
 3. **item ที่ปิดใช้งานนับด้วย:** `status: 'inactive'` ยังถือว่าจองชื่อนั้นไว้ เพราะ `code` เดิมยังถูก
    record ที่บันทึกไปแล้วอ้างอยู่ (soft-delete, schema.md §3.3) — ถ้าอยากใช้ชื่อเดิมอีกให้เปิดใช้งาน
    item เดิมกลับมา ไม่ใช่สร้างใหม่
-4. **ข้ามสอง tier:** การเขียน shelter-local ต้องไม่ชนกับ `label` ของ global tier ด้วย เพราะหน้า
-   back-office แสดงรายการ merge (global + shelter-local) รวมกัน — สองชื่อเดียวกันในตารางนั้นแยกไม่ออก
-   (การเขียน global ตรวจเฉพาะภายในรายการ global)
+4. **ข้ามสอง tier — ตรวจสองทาง:** หน้า back-office แสดงรายการ merge (global + shelter-local)
+   รวมกัน ชื่อที่ชนกันจากทิศไหนก็อ่านเหมือนกันทั้งคู่ จึงตรวจทั้งสองทาง — การเขียน shelter-local
+   ตรวจกับ items ของ global tier, และ**การเขียน global ตรวจกับ items ของทุกศูนย์**
+   (`readShelterMasterDocs` — prefix scan `master_data:{type}:` บน `_all_docs`). ถ้าตรวจทางเดียว
+   SA จะสร้าง global item ที่ชนกับของศูนย์ใดศูนย์หนึ่งได้ แล้วศูนย์นั้นจะบันทึก type นั้นไม่ได้อีกเลย
 5. **จุดบังคับ 2 ชั้น:**
    - **Modal** — ตรวจสดขณะพิมพ์ ขึ้นข้อความ "มีรายการชื่อนี้อยู่แล้วในประเภทนี้" (ต่อท้าย
      "(ปิดใช้งานอยู่)" เมื่อชนกับ item ที่ปิดใช้งาน) และ **disable ปุ่มบันทึก**
@@ -52,6 +56,14 @@ modal ตรวจแค่ "ห้ามว่าง", `applyItemOp` ต่อ 
      กัน กัน request ที่ยิงตรงข้าม UI
 6. **ตอนแก้ไข** ยกเว้น item ตัวเอง — บันทึกซ้ำโดยไม่เปลี่ยนชื่อยังทำได้ แต่เปลี่ยนชื่อไปชนกับ item
    อื่นถูกปฏิเสธ
+7. **Detect-then-resolve สำหรับชื่อซ้ำที่เล็ดลอดเข้ามา:** กฎนี้บังคับได้เฉพาะที่ application layer
+   — ทางเข้าอื่นที่ไม่ผ่าน BFF (replication backlog จาก edge, script/seed ที่เขียน CouchDB ตรง,
+   import) จึงยังทำให้เกิดชื่อซ้ำได้ และ **กดกฎลงไปที่ CouchDB ไม่ได้**: `validate_doc_update`
+   เห็นแค่ `(newDoc, oldDoc)` ของ doc ตัวเอง อ่าน doc อื่นไม่ได้ → ตรวจ uniqueness ข้าม
+   global ↔ shelter-local ไม่ได้เลย. ดังนั้นหน้า master data จึง **ตรวจจับและแจ้ง** แทนการกัน:
+   ขึ้น banner บอกจำนวนรายการที่ซ้ำ (นับจาก items ทั้งหมด ไม่ขึ้นกับช่องค้นหา) และติด badge
+   "ชื่อซ้ำ" ที่แถวที่ชนกัน ให้เจ้าหน้าที่ไปแก้ชื่อหรือปิดใช้งานให้เหลืออันเดียว. ภายใต้ศูนย์ รายการ
+   GLOBAL ที่ชนจะถูกมาร์กด้วย แต่ต้องแก้ที่ส่วนกลาง (copy ใน banner บอกไว้)
 
 ## Acceptance
 
@@ -62,6 +74,12 @@ modal ตรวจแค่ "ห้ามว่าง", `applyItemOp` ต่อ 
 - [x] ชื่อเดียวกันข้าม `master_type` → ผ่าน
 - [x] PUT ที่ยิงตรงพร้อม items ที่มี label ซ้ำ → `422` และไม่มีการเขียนลง CouchDB
 - [x] PUT scope shelter ที่ label ชนกับ item ของ global → `422`
+- [x] PUT scope global ที่ label ชนกับ item ของศูนย์ใดศูนย์หนึ่ง → `422`
+- [x] ชื่อที่ต่างกันแค่อักขระ zero-width (U+200B / U+FEFF) → ถือว่าซ้ำ
+- [x] doc ที่มีชื่อซ้ำค้างอยู่ก่อนกฎนี้ → toggle สถานะ / แก้ item อื่นยังผ่าน แต่เพิ่มคู่ซ้ำใหม่ยังถูกปฏิเสธ
+- [x] modal ที่ยังโหลดรายการเดิมไม่สำเร็จ → ปุ่มบันทึก disabled พร้อมข้อความบอกเหตุผล
+- [x] doc ที่มีชื่อซ้ำอยู่ → หน้า master data ขึ้น banner + badge "ชื่อซ้ำ" ที่แถวที่ชนกัน
+- [x] banner ยังแสดงแม้กำลังพิมพ์ค้นหาอยู่ (นับจาก items ทั้งหมด ไม่ใช่ผลค้นหา)
 - [x] ครอบทั้ง 3 หน้า (registration-config / household-master-data / shelter-config) ทั้งฝั่ง
       `back-office` และ `portal/system-management` — ใช้ `MasterDataConfigPage` ร่วมกัน
 
@@ -79,13 +97,23 @@ modal ตรวจแค่ "ห้ามว่าง", `applyItemOp` ต่อ 
 
 N/A — ไม่เปลี่ยน persisted document shape และ **ไม่ bump `schema_v`** (คงที่ 3)
 
-**ข้อมูลเดิมที่ซ้ำอยู่ก่อนแล้ว:** กฎนี้ตรวจที่ payload ของ PUT ไม่ใช่ตอนอ่าน — doc ที่มี label ซ้ำ
-ค้างอยู่ยังอ่านและแสดงผลได้ปกติ แต่การแก้ไขครั้งถัดไปของ type นั้นจะถูกปฏิเสธจนกว่าจะเปลี่ยนชื่อให้
-ไม่ซ้ำ (แก้ได้จาก modal ตามปกติ — การเปลี่ยนเป็นชื่อที่ไม่ซ้ำไม่ถูกบล็อก). seed ปัจจุบัน
-(`frontend/scripts/seed.ts`) ไม่มี label ซ้ำในทุก type จึงไม่ต้อง backfill
+**ข้อมูลเดิมที่ซ้ำอยู่ก่อนแล้ว — grandfather:** ก่อนตรวจ ระบบอ่าน state ที่ persist อยู่แล้วมาทำ
+ชุด "label ที่ซ้ำอยู่ก่อนหน้านี้" (`duplicateLabelKeys`) แล้ว**ข้ามการตรวจเฉพาะ label เหล่านั้น** —
+doc ที่มีชื่อซ้ำค้างมาก่อนกฎนี้จึงยัง toggle สถานะ / แก้ item อื่นได้ตามปกติ ไม่ถูกล็อกจนกว่าจะ
+เปลี่ยนชื่อ (ถ้าไม่ทำแบบนี้ การกด "ปิดใช้งาน" ก็จะถูกปฏิเสธ ทำให้แก้อะไรไม่ได้เลย). แต่การ**เพิ่มคู่ซ้ำ
+ใหม่ยังถูกปฏิเสธเสมอ** แม้ doc นั้นจะมีคู่ซ้ำเดิมอยู่. seed ปัจจุบัน (`frontend/scripts/seed.ts`)
+ไม่มี label ซ้ำในทุก type จึงไม่ต้อง backfill
 
 ## Decision log
 
 - 2026-08-16 — project owner เลือก: ขอบเขต = ภายใน `master_type` เดียวกัน, inactive นับเป็นซ้ำ,
   ห้าม shelter-local ชนกับ global, และ tracking = CR ไฟล์ใหม่
 - 2026-08-16 — proposed: domain helper + modal guard + PUT gate + unit/server tests
+- 2026-08-16 — edge-case pass (bmad-review-edge-case-hunter) แก้เพิ่ม 3 จุดในกฎนี้: ตัดอักขระ
+  zero-width ตอน normalize, ตรวจข้าม tier สองทาง (global ↔ shelter), และ grandfather ชื่อซ้ำเดิม
+  ไม่ให้ล็อกการแก้ไขอื่น. modal ที่โหลดรายการเดิมไม่สำเร็จจะ disable ปุ่มบันทึกแทนการปล่อยผ่าน
+- 2026-08-16 — project owner ถามถึงเคส offline/edge เขียนแล้ว sync กลับมาชนกัน. สรุป: ปัจจุบัน
+  เกิดไม่ได้ เพราะ `registry` replicate ทางเดียว `central → edge` (data-model.md §1 ตาราง) ศูนย์
+  อ่าน master data จาก edge ได้แต่เขียนไม่ได้ — ต่างจาก `shelter_{code}` ที่มี edge ⇄ central
+  backlog. เลือกทาง **detect-then-resolve** (banner + badge) แทนการพยายามกันตอน replicate ซึ่ง
+  ทำไม่ได้จริง — ดู Change ข้อ 7

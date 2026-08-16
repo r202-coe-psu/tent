@@ -15,6 +15,7 @@
 		masterType,
 		editing,
 		existingItems = [],
+		existingItemsReady = true,
 		onSubmit
 	}: {
 		open: boolean;
@@ -23,6 +24,10 @@
 		/** Every item already shown for this type — under a shelter that is the
 		 *  merged global + shelter-local list, so the check covers both (CR-078). */
 		existingItems?: readonly MasterDataItem[];
+		/** False while the list query is pending or errored. `existingItems` is
+		 *  `[]` then, which would make the duplicate check silently pass anything —
+		 *  so block the save instead of shipping an unchecked label (CR-078). */
+		existingItemsReady?: boolean;
 		onSubmit: (input: { code?: string; label: string; is_default: boolean }) => void;
 	} = $props();
 
@@ -39,8 +44,11 @@
 			? 'กรุณากรอกชื่อแสดงผลภาษาไทย'
 			: duplicate
 				? `มีรายการชื่อนี้อยู่แล้วในประเภทนี้${duplicate.status === 'inactive' ? ' (ปิดใช้งานอยู่)' : ''}`
-				: null
+				: !existingItemsReady
+					? 'ยังโหลดรายการเดิมไม่สำเร็จ — ตรวจสอบชื่อซ้ำไม่ได้ กรุณาลองใหม่'
+					: null
 	);
+	const canSubmit = $derived(!!labelTrimmed && !duplicate && existingItemsReady);
 
 	$effect(() => {
 		if (open) {
@@ -57,7 +65,7 @@
 	function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		touched = true;
-		if (!labelTrimmed || duplicate) return;
+		if (!canSubmit) return;
 		onSubmit({ code: editing?.code, label: labelTrimmed, is_default: isDefault });
 		close();
 	}
@@ -118,7 +126,7 @@
 
 				<footer class="mt-6 flex items-center justify-end gap-2">
 					<Button type="button" variant="outline" onclick={close}>ยกเลิกและย้อนกลับ</Button>
-					<Button type="submit" disabled={!labelTrimmed || !!duplicate}>
+					<Button type="submit" disabled={!canSubmit}>
 						<svg
 							class="mr-1.5 h-4 w-4"
 							viewBox="0 0 24 24"

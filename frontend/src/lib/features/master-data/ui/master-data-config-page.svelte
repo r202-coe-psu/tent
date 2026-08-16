@@ -208,5 +208,6 @@
 	masterType={activeType}
 	editing={editingItem}
 	existingItems={items}
+	existingItemsReady={detail.isSuccess}
 	onSubmit={handleSubmit}
 />

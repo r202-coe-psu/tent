@@ -26,6 +26,7 @@ export {
 	normalizeLabel,
 	findDuplicateLabel,
 	findLabelCollision,
+	duplicateLabelKeys,
 	needsMasterDataMigration,
 	migrateMasterDataToV3,
 	type MasterDataType,
