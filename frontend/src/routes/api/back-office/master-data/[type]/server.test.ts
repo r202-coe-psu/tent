@@ -235,6 +235,67 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect(adminRawMock).not.toHaveBeenCalled();
 	});
 
+	it('rejects two items sharing a label within the same type (422 VALIDATION, CR-078)', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT('pet_types', {
+			items: [
+				{ code: 'dog', label: 'สุนัข', is_default: false },
+				{ code: 'dog2', label: ' สุนัข ', is_default: false }
+			]
+		});
+
+		expect(res.status).toBe(422);
+		expect((await res.json()).error.code).toBe('VALIDATION');
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
+	it('counts an inactive item as taking its label (CR-078)', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT('pet_types', {
+			items: [
+				{ code: 'dog', label: 'สุนัข', is_default: false, status: 'inactive' },
+				{ code: 'dog2', label: 'สุนัข', is_default: false }
+			]
+		});
+
+		expect(res.status).toBe(422);
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
+	it('rejects a shelter-local label that collides with a GLOBAL item (CR-078)', async () => {
+		// readMasterDoc(type) with no shelter code → the global tier.
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode ? null : existingDoc([{ code: 'dog', label: 'สุนัข', is_default: true }])
+		);
+
+		const res = await callPUT(
+			'pet_types',
+			{ shelter_code: 'SH001', items: [{ code: 'local1', label: 'สุนัข', is_default: false }] },
+			'?scope=shelter&shelter_code=SH001'
+		);
+
+		expect(res.status).toBe(422);
+		expect((await res.json()).error.code).toBe('VALIDATION');
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
+	it('allows a shelter-local label that no global item uses (CR-078)', async () => {
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode ? null : existingDoc([{ code: 'dog', label: 'สุนัข', is_default: true }])
+		);
+
+		const res = await callPUT(
+			'pet_types',
+			{ shelter_code: 'SH001', items: [{ code: 'local1', label: 'กระต่าย', is_default: false }] },
+			'?scope=shelter&shelter_code=SH001'
+		);
+
+		expect(res.status).toBe(200);
+		expect(adminRawMock).toHaveBeenCalled();
+	});
+
 	it('creates a fresh envelope stamped with the authenticated SA name when absent', async () => {
 		readMock.mockResolvedValue(null);
 
@@ -282,8 +343,9 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 	});
 
 	it('writes the submitted shelter-local items verbatim (no split against the global doc)', async () => {
-		// The global doc is never even read for a shelter-scoped PUT -- the UI
-		// sends only the shelter-local items (global is read-only client-side).
+		// The global doc is read only to check label uniqueness across tiers
+		// (CR-078); it is never merged into the written doc -- the UI sends only
+		// the shelter-local items (global is read-only client-side).
 		readMock.mockResolvedValue(null);
 
 		await callPUT(
@@ -300,7 +362,6 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 			{ code: 'local_dog', label: 'Local dog', is_default: false, status: 'active' }
 		]);
 		expect(readMock).toHaveBeenCalledWith('pet_types', 'SH001');
-		expect(readMock).not.toHaveBeenCalledWith('pet_types');
 	});
 
 	it('defaults items without a status field to active', async () => {

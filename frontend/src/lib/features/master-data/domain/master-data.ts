@@ -108,6 +108,61 @@ export const masterDataItemSchema = z.object({
 });
 export type MasterDataItem = z.infer<typeof masterDataItemSchema>;
 
+// ---------------------------------------------------------------- unique label
+
+/**
+ * Normalize a label for duplicate detection (CR-078): NFC-normalize (Thai
+ * combining marks), trim, collapse every run of whitespace (incl. NBSP) to a
+ * single space, and lowercase. Thai is caseless — lowercasing only affects the
+ * Latin part of a label such as `"ผู้สูงอายุ (Elderly)"`.
+ *
+ * Comparison-only: the stored `label` keeps the operator's exact spelling.
+ */
+export function normalizeLabel(label: string): string {
+	return label.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/**
+ * First item in `items` whose label collides with `label`, or `undefined`
+ * (CR-078). `excludeCode` skips the item being edited so re-saving an item
+ * without renaming it is allowed.
+ *
+ * **Inactive items count.** A deprecated label stays resolvable for records
+ * that already reference its `code` (soft-delete, schema.md §3.3), so reusing
+ * the same text on a new item would make those two indistinguishable in the UI.
+ */
+export function findDuplicateLabel(
+	items: readonly MasterDataItem[],
+	label: string,
+	excludeCode?: string
+): MasterDataItem | undefined {
+	const target = normalizeLabel(label);
+	if (!target) return undefined;
+	return items.find((i) => i.code !== excludeCode && normalizeLabel(i.label) === target);
+}
+
+/**
+ * Whole-list guard for the write path (CR-078): the first label that collides
+ * either inside `items` itself or with `against`, or `undefined` when clean.
+ *
+ * `against` carries the GLOBAL items when validating a shelter-local write —
+ * the shelter UI renders the merged global + local list, so a shelter item may
+ * not reuse a global label either. Returns the label as stored (not normalized)
+ * so the message can quote what the operator sees.
+ */
+export function findLabelCollision(
+	items: readonly MasterDataItem[],
+	against: readonly MasterDataItem[] = []
+): string | undefined {
+	const seen = new Set(against.map((i) => normalizeLabel(i.label)));
+	for (const item of items) {
+		const key = normalizeLabel(item.label);
+		if (seen.has(key)) return item.label;
+		seen.add(key);
+	}
+	return undefined;
+}
+
 // ---------------------------------------------------------------- document
 
 /** Author context for a registry doc. Global docs omit `shelter_code`. */

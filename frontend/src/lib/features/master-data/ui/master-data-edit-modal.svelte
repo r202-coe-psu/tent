@@ -5,6 +5,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import {
 		MASTER_DATA_TYPE_LABELS,
+		findDuplicateLabel,
 		type MasterDataItem,
 		type MasterDataType
 	} from '$lib/features/master-data';
@@ -13,11 +14,15 @@
 		open = $bindable(false),
 		masterType,
 		editing,
+		existingItems = [],
 		onSubmit
 	}: {
 		open: boolean;
 		masterType: MasterDataType;
 		editing: MasterDataItem | null;
+		/** Every item already shown for this type — under a shelter that is the
+		 *  merged global + shelter-local list, so the check covers both (CR-078). */
+		existingItems?: readonly MasterDataItem[];
 		onSubmit: (input: { code?: string; label: string; is_default: boolean }) => void;
 	} = $props();
 
@@ -26,7 +31,16 @@
 	let touched = $state(false);
 
 	const labelTrimmed = $derived(label.trim());
-	const labelError = $derived(touched && !labelTrimmed ? 'กรุณากรอกชื่อแสดงผลภาษาไทย' : null);
+	// Labels are unique per master type (CR-078). Excluding the item being edited
+	// keeps a re-save without a rename legal. The server re-checks on PUT.
+	const duplicate = $derived(findDuplicateLabel(existingItems, labelTrimmed, editing?.code));
+	const labelError = $derived(
+		touched && !labelTrimmed
+			? 'กรุณากรอกชื่อแสดงผลภาษาไทย'
+			: duplicate
+				? `มีรายการชื่อนี้อยู่แล้วในประเภทนี้${duplicate.status === 'inactive' ? ' (ปิดใช้งานอยู่)' : ''}`
+				: null
+	);
 
 	$effect(() => {
 		if (open) {
@@ -43,7 +57,7 @@
 	function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		touched = true;
-		if (!labelTrimmed) return;
+		if (!labelTrimmed || duplicate) return;
 		onSubmit({ code: editing?.code, label: labelTrimmed, is_default: isDefault });
 		close();
 	}
@@ -104,7 +118,7 @@
 
 				<footer class="mt-6 flex items-center justify-end gap-2">
 					<Button type="button" variant="outline" onclick={close}>ยกเลิกและย้อนกลับ</Button>
-					<Button type="submit">
+					<Button type="submit" disabled={!labelTrimmed || !!duplicate}>
 						<svg
 							class="mr-1.5 h-4 w-4"
 							viewBox="0 0 24 24"

@@ -10,6 +10,7 @@ import {
 } from '$lib/server/couch-admin';
 import {
 	enforceOneDefault,
+	findLabelCollision,
 	masterDocId,
 	masterDataSchema,
 	masterTypeSchema,
@@ -96,6 +97,18 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		const cleaned = enforceOneDefault(
 			masterDataSchema.shape.items.parse(body.items) as MasterData['items']
 		);
+
+		// Unique label per master type (CR-078). This is the enforcing gate — the
+		// modal blocks the same collision client-side, but a direct PUT must not
+		// slip past it. A shelter-local write is also checked against the GLOBAL
+		// items, because the shelter UI renders the merged list and two identical
+		// labels there would be indistinguishable. Inactive items count: their
+		// `code` stays referenced by existing records (soft-delete, schema.md §3.3).
+		const globalItems = scope.shelterCode ? ((await readMasterDoc(type))?.items ?? []) : [];
+		const collision = findLabelCollision(cleaned, globalItems);
+		if (collision) {
+			throw new ServiceError('VALIDATION', `มีรายการชื่อ "${collision}" อยู่แล้วในประเภทนี้`);
+		}
 
 		const id = masterDocId(type, scope.shelterCode);
 		const existing = await readMasterDoc(type, scope.shelterCode);

@@ -3,6 +3,9 @@ import {
 	applyItemOp,
 	createMasterData,
 	enforceOneDefault,
+	findDuplicateLabel,
+	findLabelCollision,
+	normalizeLabel,
 	masterDataItemSchema,
 	masterDataSchema,
 	masterTypeSchema,
@@ -57,6 +60,75 @@ describe('enforceOneDefault', () => {
 		const out = enforceOneDefault(items, 'b');
 		expect(out.find((i) => i.code === 'b')?.is_default).toBe(true);
 		expect(out.find((i) => i.code === 'elderly')?.is_default).toBe(false);
+	});
+});
+
+describe('unique label (CR-078)', () => {
+	describe('normalizeLabel', () => {
+		it('trims, collapses inner whitespace, and lowercases the Latin part', () => {
+			expect(normalizeLabel('  ผู้สูงอายุ   (Elderly)  ')).toBe('ผู้สูงอายุ (elderly)');
+		});
+
+		it('treats a non-breaking space like a normal space', () => {
+			expect(normalizeLabel('ผู้\u00A0พิการ')).toBe(normalizeLabel('ผู้ พิการ'));
+		});
+	});
+
+	describe('findDuplicateLabel', () => {
+		const items = [
+			makeItem({ code: 'a', label: 'ผู้สูงอายุ' }),
+			makeItem({ code: 'b', label: 'ผู้พิการ', status: 'inactive' })
+		];
+
+		it('finds a collision that differs only by surrounding whitespace', () => {
+			expect(findDuplicateLabel(items, '  ผู้สูงอายุ ')?.code).toBe('a');
+		});
+
+		it('counts an inactive item as taken', () => {
+			expect(findDuplicateLabel(items, 'ผู้พิการ')?.code).toBe('b');
+		});
+
+		it('returns undefined for a genuinely new label', () => {
+			expect(findDuplicateLabel(items, 'สตรีมีครรภ์')).toBeUndefined();
+		});
+
+		it('excludes the item being edited so a re-save without rename passes', () => {
+			expect(findDuplicateLabel(items, 'ผู้สูงอายุ', 'a')).toBeUndefined();
+		});
+
+		it('still blocks renaming one item onto another item label', () => {
+			expect(findDuplicateLabel(items, 'ผู้พิการ', 'a')?.code).toBe('b');
+		});
+
+		it('returns undefined for a blank label (the required-field rule owns that)', () => {
+			expect(findDuplicateLabel(items, '   ')).toBeUndefined();
+		});
+	});
+
+	describe('findLabelCollision', () => {
+		it('detects a duplicate inside the submitted list', () => {
+			const dup = findLabelCollision([
+				makeItem({ code: 'a', label: 'สุนัข' }),
+				makeItem({ code: 'b', label: ' สุนัข ' })
+			]);
+			expect(dup).toBe(' สุนัข ');
+		});
+
+		it('detects a shelter-local item colliding with a global one', () => {
+			const local = [makeItem({ code: 'local', label: 'แมว' })];
+			const global = [makeItem({ code: 'global', label: 'แมว' })];
+			expect(findLabelCollision(local, global)).toBe('แมว');
+		});
+
+		it('returns undefined when the list and the global tier are both clean', () => {
+			const local = [makeItem({ code: 'local', label: 'กระต่าย' })];
+			const global = [makeItem({ code: 'global', label: 'แมว' })];
+			expect(findLabelCollision(local, global)).toBeUndefined();
+		});
+
+		it('returns undefined for an empty list', () => {
+			expect(findLabelCollision([])).toBeUndefined();
+		});
 	});
 });
 

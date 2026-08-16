@@ -207,5 +207,6 @@
 	bind:open={modalOpen}
 	masterType={activeType}
 	editing={editingItem}
+	existingItems={items}
 	onSubmit={handleSubmit}
 />
