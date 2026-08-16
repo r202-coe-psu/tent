@@ -177,6 +177,25 @@
 		}
 	});
 
+	// Seed the configured defaults (master_data `is_default`) for เขต / ชุมชน.
+	// Declared AFTER the prefill effect on purpose: on a cache hit the master
+	// queries already hold data on the first flush, and the prefill effect resets
+	// both combobox values — seeding earlier would be wiped straight away.
+	// `initialized` means prefill has run, so an empty value here really is
+	// "operator has not chosen"; on edit `initialData` already filled them and the
+	// only-when-empty guard leaves those alone. (CR-049)
+	let defaultsSeeded = false;
+	$effect(() => {
+		const mzItems = municipalityZoneQuery.data?.items;
+		const commItems = communityQuery.data?.items;
+		if (!initialized || defaultsSeeded || !mzItems || !commItems) return;
+		defaultsSeeded = true;
+		if (!mzVal) mzVal = mzItems.find((i) => i.is_default && i.status === 'active')?.code ?? '';
+		if (!commVal) {
+			commVal = commItems.find((i) => i.is_default && i.status === 'active')?.code ?? '';
+		}
+	});
+
 	// Initialize selectedMemberIds once after allEvacuees loads
 	$effect(() => {
 		if (membersInitialized || !initialData) return;

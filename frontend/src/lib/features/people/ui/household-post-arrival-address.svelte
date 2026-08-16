@@ -24,6 +24,8 @@
 		householdLabel = '',
 		municipalityZoneItems = [],
 		communityItems = [],
+		defaultMunicipalityZone = '',
+		defaultCommunity = '',
 		onBack,
 		onNext
 	}: {
@@ -31,6 +33,9 @@
 		householdLabel?: string;
 		municipalityZoneItems?: { value: string; label: string }[];
 		communityItems?: { value: string; label: string }[];
+		/** master_data `is_default` code — pre-selects the field on a fresh form. */
+		defaultMunicipalityZone?: string;
+		defaultCommunity?: string;
 		onBack: () => void;
 		onNext: (data: HouseholdPostArrivalAddressForm) => void;
 	} = $props();
@@ -52,6 +57,17 @@
 		if (initialized || !initialData) return;
 		initialized = true;
 		$formData = { ...$formData, ...initialData };
+	});
+
+	// Seed the configured defaults once master data arrives — only while the
+	// field is still empty, so stepping back into this form (initialData restores
+	// the operator's own choice) never overwrites it. (CR-049)
+	let defaultsSeeded = false;
+	$effect(() => {
+		if (defaultsSeeded || (!defaultMunicipalityZone && !defaultCommunity)) return;
+		defaultsSeeded = true;
+		if (!$formData.municipalityZone) $formData.municipalityZone = defaultMunicipalityZone;
+		if (!$formData.community) $formData.community = defaultCommunity;
 	});
 
 	const provincesQuery = useProvinces();
