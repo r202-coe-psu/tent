@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-14
+updated: 2026-08-17
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -411,38 +411,11 @@ open → escalated
 
 **Migration:** ไม่มี `security_event` จาก production → ไม่ backfill; ห้ามสร้าง `security_event` ใหม่
 
-### 2.11 `referral` — `referral:{ulid}` · state machine (CR-045, CR-046)
+### 2.11 `referral` — [MIGRATED TO central_ops]
 
-| Field | ชนิด | req | หมายเหตุ |
-| --- | --- | --- | --- |
-| `evacuee_id` | str | req | — |
-| `referral_type` | enum(`capacity`,`resource`,`medical-emergency`) | req | default `medical-emergency` (CR-045) |
-| `to_shelter_code` | str | opt | รหัสศูนย์พักพิงปลายทาง (ระบุเมื่อ `referral_type` = `capacity`) |
-| `to_org` | {`name`:str?, `kind`:enum(`hospital`,`social_services`,`other`)?, `contact`:str?} | opt | หน่วยงานปลายทาง (ระบุเมื่อ `referral_type` ≠ `capacity`) |
-| `reason` | str | req | — |
-| `response_reason` | str | opt | เหตุผลประกอบการตอบรับ (`accepted`) หรือปฏิเสธ (`rejected`) (CR-045) |
-| `urgency` | enum(`normal`,`urgent`) | req | — |
-| `status` | enum(`draft`,`sent`,`accepted`,`rejected`,`closed`) | req | forward-only — ดู transitions ด้านล่าง |
-| `timeline` | {`sent`:{at,by}?, `responded`:{at,by}?, `closed`:{at,by}?} | sys | — |
-| `notes` | str | opt | — |
-
-**Status transitions (forward-only):**
-
-```
-draft    → sent | closed     (closed = ยกเลิกร่างก่อนส่ง — CR-046)
-sent     → accepted | rejected
-accepted → closed
-rejected → closed
-closed   → (terminal)
-```
-
-> **Capacity hand-off (CR-045, destination-gated):**
-> 1. ต้นทาง `draft → sent` ผ่าน BFF → **mirror** referral (same `_id`, คง `shelter_code` ต้นทาง) เข้า `shelter_{to}` เป็น inbox ปลายทาง
-> 2. **เฉพาะศูนย์ปลายทาง** (`caller.shelter === to_shelter_code`) กด `accepted` / `rejected`
-> 3. ตอน `accepted` เท่านั้น: cross-DB transfer — dest `transfer_in` แล้ว source `transfer_out` (**ห้าม** rewrite `shelter_code` ใน DB ต้นทาง) จากนั้น sync สถานะกลับต้นทาง
-> 4. ต้นทาง `draft → closed` (CR-046): ปิดที่ source เท่านั้น — **ห้าม** สร้าง/sync peer ที่ปลายทาง (ยังไม่เคย mirror)
-> Write path = BFF `/api/back-office/referral/[id]/transition` ผ่าน `adminRaw` (capacity ทุก transition รวม cancel draft)
-> **Index:** Mango indexes deployed: `referral-type-status-idx` (`['type', 'status']`), `referral-type-evacuee-idx` (`['type', 'evacuee_id']`), `referral-list-sort-idx` (`['type', 'created_at', 'status', 'evacuee_id']`), `referral-list-basic-idx` (`['type', 'created_at']`).
+> ⚠️ **ย้ายการจัดเก็บไปที่ DB `central_ops` (§5.4):**
+> ตั้งแต่สถาปัตยกรรม Cross-Tenant Referral แบบรวมศูนย์ (Centralized Architecture) เอกสารประเภท `referral` ทั้งหมดจะถูกเก็บไว้ที่ฐานข้อมูลกลาง `central_ops` โดยตรง ไม่เก็บใน `shelter_{shelter_code}` และไม่ใช้การ Mirror Doc ระหว่าง DB อีกต่อไป
+> ดูรายละเอียด Schema, Indexes และ Access Control ของ `referral` ได้ที่ **[§5.4 referral — central_ops](#54-referral--referralulid--state-machine-cr-045-cr-046-centralized-architecture)**
 
 ### 2.12 `audit` — `audit:{ulid}` · **append-only**
 
@@ -826,6 +799,49 @@ edge/device ไม่เคย mint code). central เป็น single writer �
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `value` | int≥0 | sys | เลขที่ allocate ล่าสุด (เริ่ม `0`) — provision ศูนย์ใหม่ = read-modify-write `value+1` แล้ว mint `code = "SH" + pad3(value)`; ชน `_rev` (409) → retry |
+
+### 5.4 `referral` — `referral:{ulid}` · state machine (CR-045, CR-046, Centralized Architecture)
+
+> **การจัดเก็บข้อมูลแบบรวมศูนย์ (Centralized Cross-Tenant Database):**
+> เอกสารส่งต่อทุกประเภท (`capacity`, `resource`, `medical-emergency`) จัดเก็บรวมกันในฐานข้อมูลกลาง `central_ops` โดยตรง (ไม่ใช่ `shelter_{shelter_code}`) เพื่อรองรับการทำงานข้ามศูนย์แบบไร้รอยต่อโดยไม่ต้อง Mirror เอกสารระหว่างฐานข้อมูล
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `evacuee_id` | str | req | — |
+| `referral_type` | enum(`capacity`,`resource`,`medical-emergency`) | req | default `medical-emergency` (CR-045) |
+| `shelter_code` | str | req | รหัสศูนย์พักพิงต้นทางผู้สร้างคำร้อง |
+| `to_shelter_code` | str | opt | รหัสศูนย์พักพิงปลายทาง (ระบุเมื่อ `referral_type` = `capacity`) |
+| `to_org` | {`name`:str?, `kind`:enum(`hospital`,`social_services`,`other`)?, `contact`:str?} | opt | หน่วยงานปลายทาง (ระบุเมื่อ `referral_type` ≠ `capacity`) |
+| `reason` | str | req | — |
+| `response_reason` | str | opt | เหตุผลประกอบการตอบรับ (`accepted`) หรือปฏิเสธ (`rejected`) (CR-045) |
+| `urgency` | enum(`normal`,`urgent`) | req | — |
+| `status` | enum(`draft`,`sent`,`accepted`,`rejected`,`closed`) | req | forward-only — ดู transitions ด้านล่าง |
+| `timeline` | {`sent`:{at,by}?, `responded`:{at,by}?, `closed`:{at,by}?} | sys | — |
+| `notes` | str | opt | — |
+
+**Status transitions (forward-only):**
+
+```
+draft    → sent | closed     (closed = ยกเลิกร่างก่อนส่ง — CR-046)
+sent     → accepted | rejected
+accepted → closed
+rejected → closed
+closed   → (terminal)
+```
+
+> **Cross-Tenant Flow & Scope Isolation (Centralized Architecture):**
+> 1. **Central Database Storage:** คำร้องถูกสร้างและอัปเดตสถานะใน DB `central_ops` โดยตรง ผ่าน BFF Endpoints (`/api/back-office/referral` และ `/api/back-office/referral/[id]/transition`)
+> 2. **Multi-Tenant Scope Isolation:** การเข้าถึงข้อมูลถูกควบคุมในระดับ BFF Server (`+server.ts`):
+>    - `GET /api/back-office/referral` (list): กรองเฉพาะรายการที่ `shelter_code === shelterCode` (ต้นทาง) หรือ `to_shelter_code === shelterCode` (ปลายทาง) ด้วย Mango query `$or`
+>    - `GET /api/back-office/referral/[id]` (single): ตรวจสอบสิทธิ์ `caller.isSA || doc.shelter_code === shelterCode || doc.to_shelter_code === shelterCode` หากไม่ใช่จะส่งคืน `403 Forbidden`
+> 3. **Destination-gated Accept/Reject:** เฉพาะศูนย์ปลายทาง (`to_shelter_code`) เท่านั้นที่มีสิทธิ์กด `accepted` / `rejected` สำหรับ `capacity` referral (ตรวจสอบด้วย `assertActorMayTransition`)
+> 4. **Cross-DB Transfer on Accept:** เมื่อมีการ `accepted` คำร้องประเภท `capacity` ระบบ BFF จะทำ cross-DB transfer อัตโนมัติ (เขียน `transfer_in` ที่ศูนย์ปลายทาง และ `transfer_out` ที่ศูนย์ต้นทาง) ก่อนอัปเดตสถานะใน `central_ops`
+>
+> **Indexes (Mango indexes deployed in `central_ops`):**
+> - `referral-type-status-idx`: `['type', 'status']`
+> - `referral-type-evacuee-idx`: `['type', 'evacuee_id']`
+> - `referral-list-sort-idx`: `['type', 'created_at', 'status', 'evacuee_id']`
+> - `referral-list-basic-idx`: `['type', 'created_at']`
 
 ---
 
