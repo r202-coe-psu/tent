@@ -121,10 +121,11 @@ function calcRow(
 	const occupancyValid = Number.isFinite(occupancy) && occupancy >= 0;
 
 	let ratioBad = false;
+	let dRatio: Decimal | null = null;
 	if (r.ratio != null) {
 		try {
-			const dec = new Decimal(r.ratio);
-			if (dec.isNaN() || !dec.isFinite() || dec.lte(0)) {
+			dRatio = new Decimal(r.ratio);
+			if (dRatio.isNaN() || !dRatio.isFinite() || dRatio.lte(0)) {
 				ratioBad = true;
 			}
 		} catch {
@@ -133,10 +134,11 @@ function calcRow(
 	}
 
 	let haveBad = false;
+	let dHave: Decimal | null = null;
 	if (r.have != null) {
 		try {
-			const dec = new Decimal(r.have);
-			if (dec.isNaN() || !dec.isFinite() || dec.lt(0)) {
+			dHave = new Decimal(r.have);
+			if (dHave.isNaN() || !dHave.isFinite() || dHave.lt(0)) {
 				haveBad = true;
 			}
 		} catch {
@@ -163,7 +165,8 @@ function calcRow(
 	}
 
 	// 3. Kind semantics (ratio valid & present; occupancy valid).
-	let need: string;
+	let dNeed: Decimal;
+	let roundNeed: boolean;
 	switch (r.kind) {
 		case 'threshold':
 			// Quality ceiling, not a quantity. `have`/`ratio` echoed but never affect status.
@@ -175,37 +178,23 @@ function calcRow(
 				status: 'constraint',
 				data_status: 'complete'
 			};
-		case 'multiply': {
-			try {
-				const dRatio = new Decimal(r.ratio);
-				need = persistQty(dRatio.mul(occupancy));
-			} catch {
-				return invalidResult(base);
-			}
+		case 'multiply':
+			dNeed = dRatio!.mul(occupancy);
+			roundNeed = true;
 			break;
-		}
-		case 'divide': {
-			try {
-				const dRatio = new Decimal(r.ratio);
-				need = new Decimal(occupancy).div(dRatio).ceil().toString();
-			} catch {
-				return invalidResult(base);
-			}
+		case 'divide':
+			dNeed = new Decimal(occupancy).div(dRatio!).ceil();
+			roundNeed = false;
 			break;
-		}
 		default:
 			return assertNever(r.kind);
 	}
 
 	// Overflow guard (multiply AND divide, e.g. ceil(1e308 / 1e-308)) — never leak Infinity.
-	try {
-		const dNeed = new Decimal(need);
-		if (!dNeed.isFinite() || dNeed.isNaN() || dNeed.abs().gt(Number.MAX_VALUE)) {
-			return invalidResult(base);
-		}
-	} catch {
+	if (!dNeed.isFinite() || dNeed.isNaN() || dNeed.abs().gt(Number.MAX_VALUE)) {
 		return invalidResult(base);
 	}
+	const need = roundNeed ? persistQty(dNeed) : dNeed.toString();
 
 	if (r.have == null) {
 		return {
@@ -218,23 +207,15 @@ function calcRow(
 		};
 	}
 
-	let gap: string;
+	const dGap = new Decimal(need).sub(dHave!);
+	const gap = persistQty(dGap);
 	let status: ResourceStatus;
-	try {
-		const dNeed = new Decimal(need);
-		const dHave = new Decimal(r.have);
-		const dGap = dNeed.sub(dHave);
-		gap = persistQty(dGap);
-
-		if (dGap.gt(0)) {
-			status = 'gap';
-		} else if (dGap.lt(0)) {
-			status = 'surplus';
-		} else {
-			status = 'ok';
-		}
-	} catch {
-		return invalidResult(base);
+	if (dGap.gt(0)) {
+		status = 'gap';
+	} else if (dGap.lt(0)) {
+		status = 'surplus';
+	} else {
+		status = 'ok';
 	}
 
 	// Gap computed successfully — incl. valid occupancy=0 (need 0) and stock=0 (have 0) rows.
