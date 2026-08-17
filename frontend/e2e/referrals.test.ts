@@ -54,13 +54,13 @@ test.beforeAll(async () => {
 	await couchReq('PUT', '/central_ops');
 	await couchReq('PUT', '/shelter_sh001');
 	await couchReq('PUT', '/shelter_sh002');
-	await couchReq('PUT', '/_master_shelters');
+	await couchReq('PUT', '/registry');
 
 	// 2. Insert mock evacuee to source shelter
 	await couchReq('PUT', `/shelter_sh001/${encodeURIComponent(MOCK_EVACUEE_ID)}`, MOCK_EVACUEE);
 
 	// 3. Insert mock shelter to master list for combobox
-	await couchReq('PUT', `/_master_shelters/shelter:SH002`, SH002);
+	await couchReq('PUT', `/registry/shelter:SH002`, SH002);
 
 	// 4. Create users
 	await createCouchUser(SM1);
@@ -82,11 +82,11 @@ test.afterAll(async () => {
 		);
 	}
 
-	const shDoc = await couchReq('GET', `/_master_shelters/shelter:SH002`);
+	const shDoc = await couchReq('GET', `/registry/shelter:SH002`);
 	if (shDoc.status === 200 && shDoc.data) {
 		await couchReq(
 			'DELETE',
-			`/_master_shelters/shelter:SH002?rev=${(shDoc.data as { _rev: string })._rev}`
+			`/registry/shelter:SH002?rev=${(shDoc.data as { _rev: string })._rev}`
 		);
 	}
 
