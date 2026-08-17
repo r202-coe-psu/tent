@@ -808,6 +808,7 @@ edge/device ไม่เคย mint code). central เป็น single writer �
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `evacuee_id` | str | req | — |
+| `evacuee_summary` | {`first_name`:str, `last_name`:str, `gender`:str?} | opt | สแนปชอตชื่อ-นามสกุล และเพศของผู้ประสบภัยสำหรับให้ศูนย์ปลายทางแสดงผลได้ทันทีก่อนตอบรับ |
 | `referral_type` | enum(`capacity`,`resource`,`medical-emergency`) | req | default `medical-emergency` (CR-045) |
 | `shelter_code` | str | req | รหัสศูนย์พักพิงต้นทางผู้สร้างคำร้อง |
 | `to_shelter_code` | str | opt | รหัสศูนย์พักพิงปลายทาง (ระบุเมื่อ `referral_type` = `capacity`) |
