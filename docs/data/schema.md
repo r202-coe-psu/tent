@@ -666,7 +666,7 @@ insert. Idempotent: `_id` เป็น deterministic → re-seed ไม่เก
 
 ---
 
-### 3.7 `shelter_import_log` — `shelter_import_log:{ulid}` · **schema_v 1** · **append-only** (CR-039)
+### 3.7 `shelter_import_log` — `shelter_import_log:{ulid}` · **schema_v 2** · **append-only** (CR-039, CR-077)
 
 Log 1 doc ต่อ 1 batch ของการ import ศูนย์พักพิงจาก Excel. envelope กลาง (ไม่มี `shelter_code` —
 เป็น registry doc). เขียนหลัง commit เสร็จ; ไม่แก้ย้อนหลัง.
@@ -677,14 +677,24 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `filename` | str | req | ชื่อไฟล์ที่อัปโหลด |
 | `imported_by` | str | req | `name` ของผู้ import (จาก session) |
 | `total_rows` | int | req | จำนวนแถวข้อมูล (ไม่รวม header) |
-| `success_count` | int | req | จำนวนศูนย์ที่สร้างสำเร็จ |
+| `success_count` | int | req | สร้าง + อัปเดตสำเร็จ (`created_count + updated_count`) |
+| `updated_count` | int | req (default 0) | จำนวนศูนย์ที่ถูกอัปเดตเพราะชื่อซ้ำ — **v2** |
+| `skipped_count` | int | req (default 0) | จำนวนแถวที่ข้ามเพราะชื่อซ้ำ — **v2** |
 | `error_count` | int | req | จำนวนแถวที่ล้มเหลว (validation + server) |
 | `results` | array | req | ผลราย row — ดูรูปด้านล่าง |
 | `started_at` | str (ISO) | req | เวลาเริ่ม commit |
 | `finished_at` | str (ISO) | req | เวลาเสร็จ |
 
-`results[]`: `{ row: int, name: str|null, status: 'created'|'validation_error'|'server_error',
-code?: str (เมื่อ created), errors?: [{ column: str, message: str }] }`
+`results[]`: `{ row: int, name: str|null, status: 'created'|'updated'|'skipped_duplicate'|
+'validation_error'|'server_error', code?: str (เมื่อ created/updated/skipped), existing_code?: str
+(ศูนย์เดิมที่ถูกอัปเดตหรือถูกข้าม), errors?: [{ column: str, message: str, sheet?: str, line?: int }] }`
+
+**ขอบเขตของ `results[]` (CR-077):** เก็บไม่เกิน **200 แถวแรก** และ `message` ยาวไม่เกิน **200 ตัวอักษร**
+(เกินแล้วตัดท้ายด้วย `…`) — กันไม่ให้ doc บวมและกันไม่ให้ข้อความที่ยกค่าจากเซลล์ติดลงไปทั้งก้อน.
+`total_rows` / counters ยังนับครบทุกแถวเสมอ.
+
+**v1 → v2 (CR-077, additive):** doc รุ่น v1 ไม่มี `updated_count` / `skipped_count` — อ่านกลับได้ตามปกติ
+(Zod ใส่ค่า default 0) **ไม่มี migration script**.
 
 **เขียน/อ่าน:** system_admin เท่านั้น (เป็น member ของ registry). อ่านตรงจาก browser ผ่าน
 `createRemoteRepository('registry')`; live-sync ผ่าน changes feed ของ registry (เหมือน `shelter`).

@@ -98,7 +98,13 @@ export {
 } from './domain/capacity-guide';
 
 // Data layer (public)
-export { createShelter, updateShelter, closeZone, reopenZone } from './data/shelters.api';
+export {
+	createShelter,
+	getShelter,
+	updateShelter,
+	closeZone,
+	reopenZone
+} from './data/shelters.api';
 export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.remote';
 export type { ShelterSummary, ShelterBasic } from './data/shelters.repository';
 export { getAllLocations } from './data/thailand-location.api';
