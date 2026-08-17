@@ -841,6 +841,8 @@ closed   → (terminal)
 > **Indexes (Mango indexes deployed in `central_ops`):**
 > - `referral-type-status-idx`: `['type', 'status']`
 > - `referral-type-evacuee-idx`: `['type', 'evacuee_id']`
+> - `referral-type-shelter-created-idx`: `['type', 'shelter_code', 'created_at']`
+> - `referral-type-toshelter-created-idx`: `['type', 'to_shelter_code', 'created_at']`
 > - `referral-list-sort-idx`: `['type', 'created_at', 'status', 'evacuee_id']`
 > - `referral-list-basic-idx`: `['type', 'created_at']`
 
