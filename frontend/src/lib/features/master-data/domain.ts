@@ -24,6 +24,8 @@ export {
 	findDuplicateLabel,
 	findLabelCollision,
 	duplicateLabelKeys,
+	dedupeItemsByCode,
+	duplicateItemCodes,
 	needsMasterDataMigration,
 	migrateMasterDataToV3,
 	type MasterDataType,

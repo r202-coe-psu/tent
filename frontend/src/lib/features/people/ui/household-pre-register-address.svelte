@@ -64,15 +64,15 @@
 	// One flag per field: the two master queries resolve independently, and a
 	// single shared flag would burn out on whichever arrives first and drop the
 	// other default for good.
-	let mzSeeded = false;
-	let commSeeded = false;
+	let municipalityZoneSeeded = false;
+	let communitySeeded = false;
 	$effect(() => {
-		if (!mzSeeded && defaultMunicipalityZone) {
-			mzSeeded = true;
+		if (!municipalityZoneSeeded && defaultMunicipalityZone) {
+			municipalityZoneSeeded = true;
 			if (!$formData.municipalityZone) $formData.municipalityZone = defaultMunicipalityZone;
 		}
-		if (!commSeeded && defaultCommunity) {
-			commSeeded = true;
+		if (!communitySeeded && defaultCommunity) {
+			communitySeeded = true;
 			if (!$formData.community) $formData.community = defaultCommunity;
 		}
 	});

@@ -154,6 +154,45 @@ export function findDuplicateLabel(
 }
 
 /**
+ * Drop items whose `code` repeats, keeping the first occurrence (CR-078).
+ *
+ * `code` is the identity of an item everywhere in this feature: `applyItemOp`
+ * matches on it, `mergeMasterDataItems` builds `item_sources` keyed by it, and
+ * consumers resolve a saved value with `find(code)`. A repeated code therefore
+ * is not "two items" — it is one item recorded twice, and it makes the list
+ * unfixable from the UI (editing or toggling either row hits both).
+ *
+ * Defensive repair on the write path, same spirit as {@link enforceOneDefault}:
+ * the next save of that type collapses the copies. Keeping the FIRST occurrence
+ * is the only safe choice — it is the one already referenced by existing records.
+ */
+export function dedupeItemsByCode(items: readonly MasterDataItem[]): MasterDataItem[] {
+	const seen = new Set<string>();
+	const out: MasterDataItem[] = [];
+	for (const item of items) {
+		if (seen.has(item.code)) continue;
+		seen.add(item.code);
+		out.push(item);
+	}
+	return out;
+}
+
+/**
+ * Codes that appear more than once in `items` (CR-078) — the read-side
+ * counterpart of {@link dedupeItemsByCode}, used to flag the affected rows and
+ * to keep a keyed `{#each}` from throwing on the duplicate key.
+ */
+export function duplicateItemCodes(items: readonly MasterDataItem[]): Set<string> {
+	const seen = new Set<string>();
+	const repeated = new Set<string>();
+	for (const item of items) {
+		if (seen.has(item.code)) repeated.add(item.code);
+		seen.add(item.code);
+	}
+	return repeated;
+}
+
+/**
  * Normalized labels that ALREADY appear more than once across `itemGroups`
  * (CR-078). The write path passes the currently persisted state so those labels
  * are grandfathered: data that predates this rule must not brick every later

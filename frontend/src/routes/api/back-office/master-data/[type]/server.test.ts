@@ -376,6 +376,22 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect(adminRawMock).not.toHaveBeenCalled();
 	});
 
+	it('collapses items that repeat one code, keeping the first (CR-078)', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT('pet_types', {
+			items: [
+				{ code: 'dog', label: 'สุนัข', is_default: true },
+				{ code: 'dog', label: 'สุนัข', is_default: false }
+			]
+		});
+
+		expect(res.status).toBe(200);
+		const items = writtenDoc().items;
+		expect(items).toHaveLength(1);
+		expect(items[0]).toMatchObject({ code: 'dog', is_default: true });
+	});
+
 	it('creates a fresh envelope stamped with the authenticated SA name when absent', async () => {
 		readMock.mockResolvedValue(null);
 

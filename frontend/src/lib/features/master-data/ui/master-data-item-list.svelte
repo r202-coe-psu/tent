@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import {
+		duplicateItemCodes,
 		duplicateLabelKeys,
 		normalizeLabel,
 		type MasterDataItem,
@@ -53,6 +54,12 @@
 	const duplicateCount = $derived(
 		items.filter((i) => duplicateKeys.has(normalizeLabel(i.label))).length
 	);
+
+	// A repeated `code` is a different, worse problem than a repeated label: every
+	// operation here matches on `code`, so editing or toggling one row would hit
+	// both copies. The operator cannot fix that from this screen — the write path
+	// collapses the copies on the next save instead (`dedupeItemsByCode`).
+	const duplicateCodes = $derived(duplicateItemCodes(items));
 
 	function isDuplicate(item: MasterDataItem): boolean {
 		return duplicateKeys.has(normalizeLabel(item.label));
@@ -150,6 +157,21 @@
 		</div>
 	{/if}
 
+	{#if duplicateCodes.size > 0}
+		<div
+			role="alert"
+			class="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm"
+		>
+			<p class="font-medium text-destructive">
+				พบรายการที่มีรหัสซ้ำกัน {duplicateCodes.size} รหัส
+			</p>
+			<p class="mt-1 text-muted-foreground">
+				รายการเหล่านี้เป็นสำเนาของกันและกัน (มาร์กว่า "รหัสซ้ำ" ด้านล่าง) การแก้ไขหรือปิดใช้งาน
+				จะมีผลกับทุกสำเนาพร้อมกัน — ระบบจะยุบให้เหลือรายการเดียวอัตโนมัติเมื่อบันทึกครั้งถัดไป
+			</p>
+		</div>
+	{/if}
+
 	<div class="overflow-x-auto rounded-lg border">
 		<table class="w-full text-sm">
 			<thead class="bg-muted/50 text-muted-foreground">
@@ -160,7 +182,12 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each filtered as item (item.code)}
+				<!-- Keyed by code AND position: `code` alone is the natural key, but a
+				     corrupted doc can repeat one, and Svelte throws each_key_duplicate
+				     on that — blanking the whole table exactly when the operator needs
+				     to see it to fix it. The suffix only ever differs for the broken
+				     rows. (CR-078) -->
+				{#each filtered as item, i (duplicateCodes.has(item.code) ? `${item.code}#${i}` : item.code)}
 					{@const source = itemSources?.[item.code]}
 					{@const owned = isOwned(item)}
 					{@const perShelter = !owned && canPerShelterToggle(item)}
@@ -176,6 +203,9 @@
 								</Badge>
 								{#if isDuplicate(item)}
 									<Badge variant="destructive">ชื่อซ้ำ</Badge>
+								{/if}
+								{#if duplicateCodes.has(item.code)}
+									<Badge variant="destructive">รหัสซ้ำ</Badge>
 								{/if}
 							</div>
 							{#if item.is_default}

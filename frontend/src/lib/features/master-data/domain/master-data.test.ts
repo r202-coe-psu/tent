@@ -3,6 +3,8 @@ import {
 	applyItemOp,
 	createMasterData,
 	enforceOneDefault,
+	dedupeItemsByCode,
+	duplicateItemCodes,
 	duplicateLabelKeys,
 	findDuplicateLabel,
 	findLabelCollision,
@@ -157,6 +159,42 @@ describe('unique label (CR-078)', () => {
 				makeItem({ code: 'd', label: 'แมว' })
 			];
 			expect(findLabelCollision(next, [], duplicateLabelKeys(legacy))).toBe('แมว');
+		});
+	});
+
+	describe('dedupeItemsByCode', () => {
+		it('keeps the first occurrence of a repeated code', () => {
+			const out = dedupeItemsByCode([
+				makeItem({ code: 'dup', label: 'ตัวแรก' }),
+				makeItem({ code: 'other', label: 'อื่น' }),
+				makeItem({ code: 'dup', label: 'สำเนา' })
+			]);
+			expect(out.map((i) => i.code)).toEqual(['dup', 'other']);
+			expect(out[0].label).toBe('ตัวแรก');
+		});
+
+		it('leaves a clean list untouched', () => {
+			const items = [makeItem({ code: 'a' }), makeItem({ code: 'b' })];
+			expect(dedupeItemsByCode(items)).toEqual(items);
+		});
+
+		it('handles an empty list', () => {
+			expect(dedupeItemsByCode([])).toEqual([]);
+		});
+	});
+
+	describe('duplicateItemCodes', () => {
+		it('reports a code recorded twice', () => {
+			const codes = duplicateItemCodes([
+				makeItem({ code: 'dup' }),
+				makeItem({ code: 'ok' }),
+				makeItem({ code: 'dup' })
+			]);
+			expect([...codes]).toEqual(['dup']);
+		});
+
+		it('is empty when every code is distinct', () => {
+			expect(duplicateItemCodes([makeItem({ code: 'a' }), makeItem({ code: 'b' })]).size).toBe(0);
 		});
 	});
 

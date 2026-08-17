@@ -9,6 +9,7 @@ import {
 	ServiceError
 } from '$lib/server/couch-admin';
 import {
+	dedupeItemsByCode,
 	duplicateLabelKeys,
 	enforceOneDefault,
 	findLabelCollision,
@@ -99,8 +100,11 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		if (!Array.isArray(body.items)) {
 			throw new ServiceError('VALIDATION', 'items[] is required');
 		}
+		// dedupeItemsByCode repairs a doc that recorded one item twice (CR-078) —
+		// while it stands, every UI action matches both copies, so the operator
+		// cannot fix it from the screen. Collapse it here on the next save.
 		const cleaned = enforceOneDefault(
-			masterDataSchema.shape.items.parse(body.items) as MasterData['items']
+			dedupeItemsByCode(masterDataSchema.shape.items.parse(body.items) as MasterData['items'])
 		);
 
 		const id = masterDocId(type, scope.shelterCode);
