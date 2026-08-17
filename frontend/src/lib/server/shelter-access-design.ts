@@ -96,7 +96,7 @@ export function buildValidateDocUpdate(code: string): string {
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot',
-    'audit', 'purchase', 'referral'
+    'audit', 'daily_calc', 'purchase', 'referral'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
