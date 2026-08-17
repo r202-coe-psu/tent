@@ -71,14 +71,6 @@ export function assertActorMayTransition(
 	}
 
 	if (to === 'sent' || to === 'closed') {
-		if (
-			to === 'closed' &&
-			(referral.status === 'accepted' || referral.status === 'rejected') &&
-			isDest
-		) {
-			return;
-		}
-
 		if (!isSource) {
 			throw new ReferralAuthorizationError(
 				'Only the originating shelter can send or close a capacity referral'

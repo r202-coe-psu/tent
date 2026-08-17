@@ -9,6 +9,7 @@ import {
 	referralFilterSchema,
 	type ReferralInput,
 	type ReferralStatus,
+	type EvacueeSummary,
 	buildReferralBody,
 	referralSchema
 } from '../domain/referral.schema';
@@ -332,8 +333,12 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		return isReferral(data) ? data : null;
 	}
 
-	async create(input: ReferralInput, ctx: AuthorContext): Promise<Referral> {
-		const body = buildReferralBody(input);
+	async create(
+		input: ReferralInput,
+		ctx: AuthorContext,
+		evacueeSummary?: EvacueeSummary
+	): Promise<Referral> {
+		const body = buildReferralBody(input, evacueeSummary);
 		const rawDoc = makeDoc('referral', 1, body, ctx);
 
 		const doc = referralSchema.parse(rawDoc);

@@ -172,11 +172,15 @@ test.describe('Referrals Flow — E2E UI Tests', () => {
 		await expect(page.getByText('เปลี่ยนสถานะเป็น "ตอบรับ" สำเร็จ')).toBeVisible();
 
 		// ==========================================
-		// STEP 3: Destination Shelter closes the referral
+		// STEP 3: Source Shelter closes the referral
 		// ==========================================
+		await clearSession(page);
+		await injectSession(page, SM1, sessions[SM1.name]);
+		await page.goto('/back-office/referrals');
 
-		// Wait for the previous toast to disappear to prevent click interception
-		await expect(page.getByText('เปลี่ยนสถานะเป็น "ตอบรับ" สำเร็จ')).toBeHidden({ timeout: 10000 });
+		const acceptedItem = page.locator('button').filter({ hasText: 'ศูนย์เต็ม' }).first();
+		await expect(acceptedItem).toBeVisible();
+		await acceptedItem.click();
 
 		// Wait for the UI to update and show the close button
 		const closeButton = page.getByTestId('btn-close-referral');

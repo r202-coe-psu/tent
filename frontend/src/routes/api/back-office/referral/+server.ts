@@ -103,6 +103,13 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			);
 		}
 
+		const evacueeDoc = evacueeRes.data;
+		const evacueeSummary = {
+			first_name: evacueeDoc.first_name,
+			last_name: evacueeDoc.last_name,
+			gender: evacueeDoc.gender
+		};
+
 		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);
 
 		// FR-002: Duplicate active referral check
@@ -119,7 +126,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			createdBy: caller.name
 		};
 
-		const created = await repo.create(parsed.data, ctx);
+		const created = await repo.create(parsed.data, ctx, evacueeSummary);
 		return json(redactForScope(created, BACK_OFFICE_SCOPE), { status: 201 });
 	} catch (e: unknown) {
 		return handleEndpointError(e, 'Referral API POST');

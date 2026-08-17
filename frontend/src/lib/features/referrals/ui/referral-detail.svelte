@@ -53,10 +53,7 @@
 	);
 	const canClose = $derived(
 		canTransition(referral.status, 'closed') &&
-			(referral.referral_type !== 'capacity' ||
-				isOutgoingCapacityReferral(referral, actorShelter) ||
-				((referral.status === 'accepted' || referral.status === 'rejected') &&
-					isIncomingCapacityReferral(referral, actorShelter)))
+			(referral.referral_type !== 'capacity' || isOutgoingCapacityReferral(referral, actorShelter))
 	);
 
 	async function handleTransition(to: ReferralStatus, label: string, reason?: string) {
@@ -141,6 +138,15 @@
 				</h3>
 				<div class="rounded-lg border border-border/60 bg-muted/40 p-4">
 					<div class="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
+						{#if referral.evacuee_summary}
+							<div>
+								<p class="text-xs text-muted-foreground">ชื่อ-นามสกุล ผู้ประสบภัย</p>
+								<p class="mt-0.5 text-base font-semibold text-foreground">
+									{referral.evacuee_summary.first_name}
+									{referral.evacuee_summary.last_name}
+								</p>
+							</div>
+						{/if}
 						<div>
 							<p class="text-xs text-muted-foreground">รหัสผู้ประสบภัย (Evacuee ID)</p>
 							<p class="mt-0.5 font-mono font-medium">{referral.evacuee_id}</p>

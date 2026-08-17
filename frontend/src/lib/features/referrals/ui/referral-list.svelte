@@ -44,9 +44,13 @@
 		evacuees !== null ? evacuees : (evacueesQuery.data ?? [])
 	) as Evacuee[];
 
-	function getEvacueeName(evacueeId: string): string {
+	function getEvacueeName(evacueeId: string, referral?: Referral): string {
 		const evac = resolvedEvacuees.find((e) => e._id === evacueeId);
-		return evac ? `${evac.first_name} ${evac.last_name}` : 'ไม่พบชื่อผู้ประสบภัย';
+		if (evac) return `${evac.first_name} ${evac.last_name}`;
+		if (referral?.evacuee_summary) {
+			return `${referral.evacuee_summary.first_name} ${referral.evacuee_summary.last_name}`;
+		}
+		return 'ไม่พบชื่อผู้ประสบภัย';
 	}
 
 	// Local state for filtering and pagination
@@ -72,7 +76,7 @@
 		if (searchQuery.trim()) {
 			const query = searchQuery.toLowerCase().trim();
 			list = list.filter((r) => {
-				const evacName = getEvacueeName(r.evacuee_id).toLowerCase();
+				const evacName = getEvacueeName(r.evacuee_id, r).toLowerCase();
 				const orgName = r.to_org?.name?.toLowerCase() ?? r.to_shelter_code?.toLowerCase() ?? '';
 				const evacId = r.evacuee_id.toLowerCase();
 				return evacName.includes(query) || orgName.includes(query) || evacId.includes(query);
@@ -99,7 +103,7 @@
 		if (group.count > 1) {
 			return `ชุดส่งต่อ ${group.count} คน`;
 		}
-		return getEvacueeName(group.sample.evacuee_id);
+		return getEvacueeName(group.sample.evacuee_id, group.sample);
 	}
 
 	function destinationLabel(referral: Referral): string {
