@@ -68,6 +68,7 @@ import {
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
 import {
+	enforceOneDefault,
 	masterDocId,
 	type MasterData,
 	type MasterDataItem,
@@ -644,7 +645,7 @@ async function seedMasterData(): Promise<MasterLookup> {
 		const persistedByLabel = new Map((existing?.items ?? []).map((i) => [i.label, i]));
 
 		const resolved: Record<string, MasterDataItem> = {};
-		const items: MasterDataItem[] = def.items.map((d) => {
+		const seeded: MasterDataItem[] = def.items.map((d) => {
 			const item: MasterDataItem = {
 				code: persistedByLabel.get(d.label)?.code ?? itemCode(),
 				label: d.label,
@@ -657,6 +658,13 @@ async function seedMasterData(): Promise<MasterLookup> {
 		});
 		master[def.type] = resolved;
 
+		// Keep items an operator added through the config UI — the seed owns its own
+		// labels, not the whole list. Seeded items come first so `enforceOneDefault`
+		// resolves the default in the seed's favour.
+		const seededLabels = new Set(def.items.map((d) => d.label));
+		const extras = (existing?.items ?? []).filter((i) => !seededLabels.has(i.label));
+		const items = enforceOneDefault([...seeded, ...extras]);
+
 		await putDoc('registry', {
 			_id: id,
 			...(existing?._rev ? { _rev: existing._rev } : {}),
@@ -668,9 +676,10 @@ async function seedMasterData(): Promise<MasterLookup> {
 			updated_at: ts,
 			created_by: 'seed'
 		});
-		const reused = items.filter((i) => persistedByLabel.has(i.label)).length;
+		const reused = seeded.filter((i) => persistedByLabel.has(i.label)).length;
 		console.log(
-			`  ✓ registry: master_data ${def.type} (${items.length} items, ${reused} codes reused)`
+			`  ✓ registry: master_data ${def.type} (${seeded.length} seeded, ${reused} codes reused` +
+				`${extras.length ? `, ${extras.length} existing kept` : ''})`
 		);
 	}
 
