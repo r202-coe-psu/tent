@@ -60,10 +60,7 @@
 		await toast.promise(transitionMutation.mutateAsync({ id: referral._id, to, reason }), {
 			loading: `กำลังเปลี่ยนสถานะเป็น "${label}"...`,
 			success: `เปลี่ยนสถานะเป็น "${label}" สำเร็จ`,
-			error: (err) => {
-				console.error('>>> Transition error:', err);
-				return err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ';
-			}
+			error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
 		});
 		showReasonPrompt = null;
 		responseReasonInput = '';
