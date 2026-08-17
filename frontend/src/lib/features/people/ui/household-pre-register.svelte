@@ -34,12 +34,35 @@
 	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
 	const communityQuery = useMasterData(() => 'community');
 
+	// Selection lists show active items only (schema.md §3.3 soft-delete rule).
 	const municipalityZoneItems = $derived(
-		(municipalityZoneQuery.data?.items ?? []).map((z) => ({ value: z.code, label: z.label }))
+		(municipalityZoneQuery.data?.items ?? [])
+			.filter((z) => z.status === 'active')
+			.map((z) => ({ value: z.code, label: z.label }))
 	);
 	const communityItems = $derived(
-		(communityQuery.data?.items ?? []).map((c) => ({ value: c.code, label: c.label }))
+		(communityQuery.data?.items ?? [])
+			.filter((c) => c.status === 'active')
+			.map((c) => ({ value: c.code, label: c.label }))
 	);
+
+	// The configured default (master_data `is_default`) pre-selects the address
+	// step on a fresh registration — the address form applies it only while the
+	// operator has not chosen anything. (CR-049)
+	const defaultMunicipalityZone = $derived(
+		(municipalityZoneQuery.data?.items ?? []).find((z) => z.is_default && z.status === 'active')
+			?.code ?? ''
+	);
+	// Keep the pair coherent: a default ชุมชน whose `parent_code` points at another
+	// เขต would pre-fill an address that contradicts itself, so fall back to none.
+	const defaultCommunity = $derived.by(() => {
+		const c = (communityQuery.data?.items ?? []).find((i) => i.is_default && i.status === 'active');
+		if (!c) return '';
+		if (c.parent_code && defaultMunicipalityZone && c.parent_code !== defaultMunicipalityZone) {
+			return '';
+		}
+		return c.code;
+	});
 
 	// --- Created State ---
 	let createdHousehold = $state<Household | null>(null);
@@ -224,6 +247,8 @@
 			{householdLabel}
 			{municipalityZoneItems}
 			{communityItems}
+			{defaultMunicipalityZone}
+			{defaultCommunity}
 			onBack={() => (step = 1)}
 			onNext={(data) => {
 				addressData = data;

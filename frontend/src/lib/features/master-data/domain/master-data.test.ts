@@ -3,6 +3,12 @@ import {
 	applyItemOp,
 	createMasterData,
 	enforceOneDefault,
+	dedupeItemsByCode,
+	duplicateItemCodes,
+	duplicateLabelKeys,
+	findDuplicateLabel,
+	findLabelCollision,
+	normalizeLabel,
 	masterDataItemSchema,
 	masterDataSchema,
 	masterTypeSchema,
@@ -57,6 +63,162 @@ describe('enforceOneDefault', () => {
 		const out = enforceOneDefault(items, 'b');
 		expect(out.find((i) => i.code === 'b')?.is_default).toBe(true);
 		expect(out.find((i) => i.code === 'elderly')?.is_default).toBe(false);
+	});
+});
+
+describe('unique label (CR-078)', () => {
+	describe('normalizeLabel', () => {
+		it('trims, collapses inner whitespace, and lowercases the Latin part', () => {
+			expect(normalizeLabel('  ผู้สูงอายุ   (Elderly)  ')).toBe('ผู้สูงอายุ (elderly)');
+		});
+
+		it('treats a non-breaking space like a normal space', () => {
+			expect(normalizeLabel('ผู้\u00A0พิการ')).toBe(normalizeLabel('ผู้ พิการ'));
+		});
+
+		it('ignores zero-width characters that JS \\s does not match', () => {
+			// U+200B is used as a word separator in Thai text pasted from Word/LINE.
+			expect(normalizeLabel('สุ\u200Bนัข')).toBe(normalizeLabel('สุนัข'));
+			expect(normalizeLabel('สุ\uFEFFนัข')).toBe(normalizeLabel('สุนัข'));
+		});
+	});
+
+	describe('findDuplicateLabel', () => {
+		const items = [
+			makeItem({ code: 'a', label: 'ผู้สูงอายุ' }),
+			makeItem({ code: 'b', label: 'ผู้พิการ', status: 'inactive' })
+		];
+
+		it('finds a collision that differs only by surrounding whitespace', () => {
+			expect(findDuplicateLabel(items, '  ผู้สูงอายุ ')?.code).toBe('a');
+		});
+
+		it('counts an inactive item as taken', () => {
+			expect(findDuplicateLabel(items, 'ผู้พิการ')?.code).toBe('b');
+		});
+
+		it('returns undefined for a genuinely new label', () => {
+			expect(findDuplicateLabel(items, 'สตรีมีครรภ์')).toBeUndefined();
+		});
+
+		it('excludes the item being edited so a re-save without rename passes', () => {
+			expect(findDuplicateLabel(items, 'ผู้สูงอายุ', 'a')).toBeUndefined();
+		});
+
+		it('still blocks renaming one item onto another item label', () => {
+			expect(findDuplicateLabel(items, 'ผู้พิการ', 'a')?.code).toBe('b');
+		});
+
+		it('returns undefined for a blank label (the required-field rule owns that)', () => {
+			expect(findDuplicateLabel(items, '   ')).toBeUndefined();
+		});
+	});
+
+	describe('findLabelCollision', () => {
+		it('detects a duplicate inside the submitted list', () => {
+			const dup = findLabelCollision([
+				makeItem({ code: 'a', label: 'สุนัข' }),
+				makeItem({ code: 'b', label: ' สุนัข ' })
+			]);
+			expect(dup).toBe(' สุนัข ');
+		});
+
+		it('detects a shelter-local item colliding with a global one', () => {
+			const local = [makeItem({ code: 'local', label: 'แมว' })];
+			const global = [makeItem({ code: 'global', label: 'แมว' })];
+			expect(findLabelCollision(local, global)).toBe('แมว');
+		});
+
+		it('returns undefined when the list and the global tier are both clean', () => {
+			const local = [makeItem({ code: 'local', label: 'กระต่าย' })];
+			const global = [makeItem({ code: 'global', label: 'แมว' })];
+			expect(findLabelCollision(local, global)).toBeUndefined();
+		});
+
+		it('returns undefined for an empty list', () => {
+			expect(findLabelCollision([])).toBeUndefined();
+		});
+
+		it('skips a collision whose label was already duplicated before the write', () => {
+			const legacy = [
+				makeItem({ code: 'a', label: 'สุนัข' }),
+				makeItem({ code: 'b', label: 'สุนัข' })
+			];
+			const grandfathered = duplicateLabelKeys(legacy);
+			expect(findLabelCollision(legacy, [], grandfathered)).toBeUndefined();
+		});
+
+		it('still rejects a NEW duplicate on a doc that already had a legacy one', () => {
+			const legacy = [
+				makeItem({ code: 'a', label: 'สุนัข' }),
+				makeItem({ code: 'b', label: 'สุนัข' })
+			];
+			const next = [
+				...legacy,
+				makeItem({ code: 'c', label: 'แมว' }),
+				makeItem({ code: 'd', label: 'แมว' })
+			];
+			expect(findLabelCollision(next, [], duplicateLabelKeys(legacy))).toBe('แมว');
+		});
+	});
+
+	describe('dedupeItemsByCode', () => {
+		it('keeps the first occurrence of a repeated code', () => {
+			const out = dedupeItemsByCode([
+				makeItem({ code: 'dup', label: 'ตัวแรก' }),
+				makeItem({ code: 'other', label: 'อื่น' }),
+				makeItem({ code: 'dup', label: 'สำเนา' })
+			]);
+			expect(out.map((i) => i.code)).toEqual(['dup', 'other']);
+			expect(out[0].label).toBe('ตัวแรก');
+		});
+
+		it('leaves a clean list untouched', () => {
+			const items = [makeItem({ code: 'a' }), makeItem({ code: 'b' })];
+			expect(dedupeItemsByCode(items)).toEqual(items);
+		});
+
+		it('handles an empty list', () => {
+			expect(dedupeItemsByCode([])).toEqual([]);
+		});
+	});
+
+	describe('duplicateItemCodes', () => {
+		it('reports a code recorded twice', () => {
+			const codes = duplicateItemCodes([
+				makeItem({ code: 'dup' }),
+				makeItem({ code: 'ok' }),
+				makeItem({ code: 'dup' })
+			]);
+			expect([...codes]).toEqual(['dup']);
+		});
+
+		it('is empty when every code is distinct', () => {
+			expect(duplicateItemCodes([makeItem({ code: 'a' }), makeItem({ code: 'b' })]).size).toBe(0);
+		});
+	});
+
+	describe('duplicateLabelKeys', () => {
+		it('reports only labels that appear more than once', () => {
+			const keys = duplicateLabelKeys([
+				makeItem({ code: 'a', label: 'สุนัข' }),
+				makeItem({ code: 'b', label: ' สุนัข ' }),
+				makeItem({ code: 'c', label: 'แมว' })
+			]);
+			expect([...keys]).toEqual(['สุนัข']);
+		});
+
+		it('detects a duplicate spanning two groups (global vs shelter-local)', () => {
+			const keys = duplicateLabelKeys(
+				[makeItem({ code: 'g', label: 'แมว' })],
+				[makeItem({ code: 'l', label: 'แมว' })]
+			);
+			expect(keys.has('แมว')).toBe(true);
+		});
+
+		it('is empty for a clean list', () => {
+			expect(duplicateLabelKeys([makeItem({ code: 'a', label: 'สุนัข' })]).size).toBe(0);
+		});
 	});
 });
 
