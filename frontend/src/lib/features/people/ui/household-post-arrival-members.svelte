@@ -198,6 +198,16 @@
 											<ShieldAlert class="size-3" />
 											สังกัด: {conflict.label}
 										</Badge>
+									{:else if evacuee.current_stay.status !== 'active'}
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											disabled
+											class="bg-slate-100 text-slate-400"
+										>
+											{STATUS_LABELS[evacuee.current_stay.status] ?? 'ยังไม่เช็คอิน'}
+										</Button>
 									{:else}
 										<Button
 											type="button"

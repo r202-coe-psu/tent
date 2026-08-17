@@ -24,6 +24,7 @@
 		lookupEvacueeByScanCode,
 		useCheckInEvacuee,
 		useCheckOutEvacuee,
+		useEvacuees,
 		type Evacuee,
 		type StayStatus
 	} from '$lib/features/people';
@@ -50,6 +51,39 @@
 	const queryClient = useQueryClient();
 	const checkIn = useCheckInEvacuee();
 	const checkOut = useCheckOutEvacuee();
+	const evacueesQuery = useEvacuees();
+
+	let selectedMemberIds = $state<string[]>([]);
+
+	const foundEvacuee = $derived(scanResult?.success ? scanResult.evacuee : null);
+	const allEvacuees = $derived(evacueesQuery.data ?? []);
+	const familyMembers = $derived(
+		foundEvacuee?.household_id
+			? allEvacuees.filter((e) => e.household_id === foundEvacuee.household_id)
+			: []
+	);
+
+	const isActionCheckOut = $derived(foundEvacuee ? canCheckOutEvacuee(foundEvacuee) : false);
+	const isActionCheckIn = $derived(foundEvacuee ? canCheckInEvacuee(foundEvacuee) : false);
+
+	const eligibleFamilyMembers = $derived.by(() => {
+		if (!foundEvacuee) return [];
+		if (isActionCheckOut) {
+			return familyMembers.filter((e) => canCheckOutEvacuee(e));
+		}
+		if (isActionCheckIn) {
+			return familyMembers.filter((e) => canCheckInEvacuee(e));
+		}
+		return [];
+	});
+
+	$effect(() => {
+		if (foundEvacuee) {
+			selectedMemberIds = eligibleFamilyMembers.map((e) => e._id);
+		} else {
+			selectedMemberIds = [];
+		}
+	});
 
 	function cameraAttachment(node: HTMLDivElement) {
 		const html5QrCode = new Html5Qrcode(node.id);
@@ -142,27 +176,41 @@
 		}
 	}
 
-	async function handleCheckIn(evacuee: Evacuee) {
+	async function handleBulkCheckIn() {
+		if (selectedMemberIds.length === 0) return;
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		const targets = eligibleFamilyMembers.filter((e) => selectedMemberIds.includes(e._id));
 		try {
-			const updated = await checkIn.mutateAsync({ evacuee, ctx });
-			if (scanResult?.evacuee?._id === evacuee._id) {
-				scanResult = { ...scanResult, evacuee: updated };
+			const promises = targets.map((evacuee) => checkIn.mutateAsync({ evacuee, ctx }));
+			const results = await Promise.all(promises);
+
+			if (foundEvacuee) {
+				const updatedFound = results.find((r) => r._id === foundEvacuee._id);
+				if (updatedFound && scanResult) {
+					scanResult = { ...scanResult, evacuee: updatedFound };
+				}
 			}
-			toast.success(`เช็คอิน ${evacuee.first_name} ${evacuee.last_name} แล้ว`);
+			toast.success(`เช็คอินสำเร็จ ${targets.length} คน`);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
 		}
 	}
 
-	async function handleCheckOut(evacuee: Evacuee) {
+	async function handleBulkCheckOut() {
+		if (selectedMemberIds.length === 0) return;
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		const targets = eligibleFamilyMembers.filter((e) => selectedMemberIds.includes(e._id));
 		try {
-			const updated = await checkOut.mutateAsync({ evacuee, ctx });
-			if (scanResult?.evacuee?._id === evacuee._id) {
-				scanResult = { ...scanResult, evacuee: updated };
+			const promises = targets.map((evacuee) => checkOut.mutateAsync({ evacuee, ctx }));
+			const results = await Promise.all(promises);
+
+			if (foundEvacuee) {
+				const updatedFound = results.find((r) => r._id === foundEvacuee._id);
+				if (updatedFound && scanResult) {
+					scanResult = { ...scanResult, evacuee: updatedFound };
+				}
 			}
-			toast.success(`เช็คเอาท์ ${evacuee.first_name} ${evacuee.last_name} แล้ว`);
+			toast.success(`เช็คเอาท์สำเร็จ ${targets.length} คน`);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เช็คเอาท์ไม่สำเร็จ');
 		}
@@ -375,6 +423,90 @@
 								</div>
 							</div>
 
+							{#if found.household_id && familyMembers.length > 1}
+								<div
+									class="border-t border-slate-100 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50"
+								>
+									<div class="mb-3 flex items-center justify-between">
+										<h5 class="text-xs font-bold text-slate-800 dark:text-slate-200">
+											จัดการเช็คอิน/เช็คเอาท์พร้อมกับครอบครัว
+										</h5>
+										<label
+											class="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-[#003B71] select-none dark:text-blue-400"
+										>
+											<input
+												type="checkbox"
+												checked={selectedMemberIds.length === eligibleFamilyMembers.length &&
+													eligibleFamilyMembers.length > 0}
+												indeterminate={selectedMemberIds.length > 0 &&
+													selectedMemberIds.length < eligibleFamilyMembers.length}
+												disabled={eligibleFamilyMembers.length === 0}
+												onchange={(e) => {
+													if (e.currentTarget.checked) {
+														selectedMemberIds = eligibleFamilyMembers.map((m) => m._id);
+													} else {
+														selectedMemberIds = [];
+													}
+												}}
+												class="rounded-sm border-slate-300 dark:border-slate-700"
+											/>
+											เลือกทั้งหมด
+										</label>
+									</div>
+									<div class="max-h-48 space-y-2 overflow-y-auto pr-1">
+										{#each familyMembers as member (member._id)}
+											{@const isEligible = isActionCheckOut
+												? canCheckOutEvacuee(member)
+												: isActionCheckIn
+													? canCheckInEvacuee(member)
+													: false}
+											{@const isScanned = member._id === found._id}
+											<label
+												class="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 transition-all select-none hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/50"
+											>
+												<div class="flex min-w-0 items-center gap-2.5">
+													<input
+														type="checkbox"
+														value={member._id}
+														checked={selectedMemberIds.includes(member._id)}
+														disabled={!isEligible}
+														onchange={(e) => {
+															if (e.currentTarget.checked) {
+																selectedMemberIds = [...selectedMemberIds, member._id];
+															} else {
+																selectedMemberIds = selectedMemberIds.filter(
+																	(id) => id !== member._id
+																);
+															}
+														}}
+														class="rounded-sm border-slate-300 disabled:opacity-50 dark:border-slate-700"
+													/>
+													<span
+														class="truncate text-xs font-semibold text-slate-800 dark:text-slate-200"
+													>
+														{member.first_name}
+														{member.last_name}
+														{#if isScanned}
+															<span
+																class="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary"
+																>คนที่สแกน</span
+															>
+														{/if}
+													</span>
+												</div>
+												<span
+													class="rounded-full px-2 py-0.5 text-[10px] font-semibold {isEligible
+														? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+														: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}"
+												>
+													{getStatusLabel(member.current_stay.status)}
+												</span>
+											</label>
+										{/each}
+									</div>
+								</div>
+							{/if}
+
 							<!-- Action row: primary tap target sits on the right, within thumb reach -->
 							<div
 								class="flex items-center gap-2 border-t border-slate-100 p-3 dark:border-slate-800"
@@ -391,8 +523,8 @@
 								{#if canCheckOut}
 									<Button
 										class="h-11 flex-1 gap-1.5 rounded-xl bg-red-600 text-sm font-bold text-white shadow-sm transition-all hover:bg-red-700 active:scale-[0.98]"
-										onclick={() => handleCheckOut(found)}
-										disabled={checkOut.isPending}
+										onclick={handleBulkCheckOut}
+										disabled={checkOut.isPending || selectedMemberIds.length === 0}
 									>
 										{#if checkOut.isPending}
 											<Loader class="size-4 animate-spin" />
@@ -404,8 +536,8 @@
 								{:else if canCheckIn}
 									<Button
 										class="h-11 flex-1 gap-1.5 rounded-xl bg-[#22C55E] text-sm font-bold text-white shadow-sm transition-all hover:bg-[#16A34A] active:scale-[0.98]"
-										onclick={() => handleCheckIn(found)}
-										disabled={checkIn.isPending}
+										onclick={handleBulkCheckIn}
+										disabled={checkIn.isPending || selectedMemberIds.length === 0}
 									>
 										{#if checkIn.isPending}
 											<Loader class="size-4 animate-spin" />

@@ -206,6 +206,10 @@
 											สังกัด: {conflict.label}
 										</Badge>
 									</div>
+								{:else if evacuee.current_stay.status !== 'active'}
+									<Button type="button" size="sm" disabled class="bg-slate-200 text-slate-500">
+										{STATUS_LABELS[evacuee.current_stay.status] ?? 'ยังไม่เช็คอิน'}
+									</Button>
 								{:else}
 									<Button type="button" size="sm" onclick={() => selectHead(evacuee)}>
 										เลือกเป็นหัวหน้า

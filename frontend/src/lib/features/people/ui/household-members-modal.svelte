@@ -47,6 +47,14 @@
 			);
 		});
 	});
+	const STATUS_LABELS: Record<string, string> = {
+		pre_registered: 'ลงทะเบียนล่วงหน้า',
+		active: 'อยู่ในศูนย์',
+		temporary_leave: 'ออกชั่วคราว',
+		transferred: 'ย้ายศูนย์',
+		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
+		deceased: 'เสียชีวิต'
+	};
 </script>
 
 {#if show}
@@ -141,9 +149,19 @@
 										{/if}
 									</div>
 
-									<Button size="sm" class="h-7 px-2.5 text-[11px]" onclick={() => onAddMember(c)}>
-										เพิ่มเข้ากลุ่ม
-									</Button>
+									{#if household.status === 'checked_in' && c.current_stay.status !== 'active'}
+										<Button
+											size="sm"
+											disabled
+											class="h-7 bg-slate-100 px-2.5 text-[11px] text-slate-400"
+										>
+											{STATUS_LABELS[c.current_stay.status] ?? 'ยังไม่เช็คอิน'}
+										</Button>
+									{:else}
+										<Button size="sm" class="h-7 px-2.5 text-[11px]" onclick={() => onAddMember(c)}>
+											เพิ่มเข้ากลุ่ม
+										</Button>
+									{/if}
 								</div>
 							{/each}
 						{/if}
