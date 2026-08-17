@@ -675,14 +675,14 @@ export const evacueeHealthEditFormSchema = z
 		medicalNotes: z.string().trim(),
 		screeningNotes: z.string().trim(),
 		selectedSymptoms: z.array(z.string().trim().min(1)),
-		temperature: z.string().trim(),
+		// `<input type="number">` bindings yield a number (or null when cleared), never a string.
+		temperature: z.number().nullable(),
 		referral: z.boolean(),
 		specialNeeds: z.array(z.string().trim().min(1))
 	})
 	.superRefine((data, ctx) => {
-		if (!data.temperature) return;
-		const value = Number(data.temperature);
-		if (!Number.isFinite(value) || value < 30 || value > 45) {
+		if (data.temperature === null) return;
+		if (!Number.isFinite(data.temperature) || data.temperature < 30 || data.temperature > 45) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['temperature'],

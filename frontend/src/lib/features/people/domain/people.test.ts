@@ -25,7 +25,8 @@ import {
 	householdPreRegisterEvacueeSchema,
 	householdPreRegisterAddressFormSchema,
 	householdPostArrivalAddressFormSchema,
-	evacueePersonalEditFormSchema
+	evacueePersonalEditFormSchema,
+	evacueeHealthEditFormSchema
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -205,6 +206,51 @@ describe('evacueePersonalEditFormSchema age', () => {
 		});
 
 		expect(result.success).toBe(true);
+	});
+});
+
+describe('evacueeHealthEditFormSchema temperature', () => {
+	const base = {
+		bloodGroup: 'unknown' as const,
+		careTrack: 'normal' as const,
+		conditions: '',
+		medications: '',
+		allergies: '',
+		medicalNotes: '',
+		screeningNotes: '',
+		selectedSymptoms: [],
+		referral: false,
+		specialNeeds: []
+	};
+
+	// `<input type="number">` bindings hand us a number, so the schema must take one as-is.
+	it('accepts the number a number input binds', () => {
+		const result = evacueeHealthEditFormSchema.safeParse({ ...base, temperature: 37.5 });
+
+		expect(result.success).toBe(true);
+		expect(result.data?.temperature).toBe(37.5);
+	});
+
+	it('accepts null for a cleared field', () => {
+		const result = evacueeHealthEditFormSchema.safeParse({ ...base, temperature: null });
+
+		expect(result.success).toBe(true);
+		expect(result.data?.temperature).toBeNull();
+	});
+
+	it('rejects a temperature outside 30–45 °C', () => {
+		for (const temperature of [29.9, 45.1]) {
+			const result = evacueeHealthEditFormSchema.safeParse({ ...base, temperature });
+
+			expect(result.success).toBe(false);
+			expect(result.error?.issues[0].message).toBe('อุณหภูมิต้องอยู่ระหว่าง 30 ถึง 45 °C');
+		}
+	});
+
+	it('accepts the 30 and 45 °C bounds', () => {
+		for (const temperature of [30, 45]) {
+			expect(evacueeHealthEditFormSchema.safeParse({ ...base, temperature }).success).toBe(true);
+		}
 	});
 });
 
