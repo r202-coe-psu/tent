@@ -39,7 +39,7 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 			return json({ error: 'Reason exceeds maximum length of 2000 characters' }, { status: 422 });
 		}
 
-		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);
 
 		const MAX_RETRIES = 3;
 		let lastError: { message?: string } | null = null;

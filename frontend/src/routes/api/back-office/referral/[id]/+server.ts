@@ -24,11 +24,15 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 
 		const shelterCode = resolveShelterCode(caller, url.searchParams.get('shelter_code'));
 
-		const repo = new CouchDbReferralServerRepository(`shelter_${shelterCode.toLowerCase()}`);
+		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);
 		const doc = await repo.get(id);
 
 		if (!doc) {
 			return json({ error: `Referral not found: ${id}` }, { status: 404 });
+		}
+
+		if (!caller.isSA && doc.shelter_code !== shelterCode && doc.to_shelter_code !== shelterCode) {
+			return json({ error: 'Forbidden: You do not have access to this referral' }, { status: 403 });
 		}
 
 		return json(redactForScope(doc, BACK_OFFICE_SCOPE));

@@ -21,6 +21,16 @@ export const REFERRAL_MANGO_INDEXES = [
 		type: 'json' as const
 	},
 	{
+		index: { fields: ['type', 'shelter_code', 'created_at'] },
+		name: 'referral-type-shelter-created-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'to_shelter_code', 'created_at'] },
+		name: 'referral-type-toshelter-created-idx',
+		type: 'json' as const
+	},
+	{
 		index: { fields: [{ type: 'desc' }, { created_at: 'desc' }] },
 		name: 'referral-list-created-desc-idx',
 		type: 'json' as const

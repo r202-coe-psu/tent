@@ -106,7 +106,7 @@ export {
 	reopenZone
 } from './data/shelters.api';
 export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.remote';
-export type { ShelterSummary } from './data/shelters.repository';
+export type { ShelterSummary, ShelterBasic } from './data/shelters.repository';
 export { getAllLocations } from './data/thailand-location.api';
 
 // Application (public)
@@ -114,6 +114,7 @@ export {
 	sheltersKeys,
 	startSheltersLiveQuery,
 	useShelters,
+	useSearchShelters,
 	useShelter,
 	useProvinces,
 	useDistricts,
