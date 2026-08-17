@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import {
+		dedupeItemsByCode,
 		duplicateItemCodes,
 		duplicateLabelKeys,
 		normalizeLabel,
@@ -50,9 +51,15 @@
 	// renaming or deactivating one side. (CR-078)
 	//
 	// Counted over every item, not `filtered` — a search must not hide the warning.
-	const duplicateKeys = $derived(duplicateLabelKeys(items));
+	//
+	// Deduped by code first, so the two warnings never describe the same defect:
+	// one item recorded twice trivially shares its own label, and telling the
+	// operator to "rename one of them" would be advice that cannot work. What is
+	// left here is a real collision between two DIFFERENT items.
+	const distinctItems = $derived(dedupeItemsByCode(items));
+	const duplicateKeys = $derived(duplicateLabelKeys(distinctItems));
 	const duplicateCount = $derived(
-		items.filter((i) => duplicateKeys.has(normalizeLabel(i.label))).length
+		distinctItems.filter((i) => duplicateKeys.has(normalizeLabel(i.label))).length
 	);
 
 	// A repeated `code` is a different, worse problem than a repeated label: every
