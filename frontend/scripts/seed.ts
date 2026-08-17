@@ -23,6 +23,14 @@
  * | seedCatalog — recipes        | plain object          | no factory (no catalog feature) |
  * | seedUsers — _users staff     | plain CouchDB user    | sa01 + staff01–staff03 test logins |
  *
+ * ## Ordering
+ *
+ * `seedMasterData` runs FIRST and returns a {@link MasterLookup}; the shelter
+ * masters and every household/evacuee below reference the item codes it wrote
+ * (`shelter_type`, `admission_policy.supported_vulnerable_groups`,
+ * `special_needs`, `municipality_zone`, `community`). Nothing hardcodes a master
+ * code — see the seedMasterData docblock.
+ *
  * Safe to re-run: catalog and registry docs use deterministic IDs
  * (PUT → 409 = already exists → skip). Shelter docs use ULIDs so
  * re-running adds another batch — useful for volume testing.
@@ -59,6 +67,13 @@ import {
 	type StockLedgerInput,
 	type WalkInDonationInput
 } from '$lib/features/operations/domain/operations';
+import {
+	enforceOneDefault,
+	masterDocId,
+	type MasterData,
+	type MasterDataItem,
+	type MasterDataType
+} from '$lib/features/master-data/domain';
 import {
 	createInitialProfile,
 	SOP_MASTER_SCHEMA_VERSION,
@@ -232,12 +247,21 @@ const CTX_2: AuthorContext = { shelterCode: SHELTER_CODE_2, createdBy: 'seed' };
 
 const SHELTER_CODE_3 = 'SH003';
 
-/** Registry master records — upserted on every seed run (name + location always applied). */
+/**
+ * Registry master records — upserted on every seed run (name + location always applied).
+ *
+ * `shelter_type_key` and `admission_policy.supported_vulnerable_group_keys` are
+ * seed-only handles into {@link MASTER_DATA_DEFS}; {@link seedRegistry} swaps them
+ * for the persisted master_data item codes, which is what those two fields store.
+ * A shelter must list every vulnerable-group code its evacuees use — the
+ * registration/health forms only offer chips whose code is in this list.
+ */
 const REGISTRY_SHELTERS = [
 	{
 		code: SHELTER_CODE,
 		name: 'ศูนย์อพยพศูนย์กีฬามหาวิทยาลัยสงขลานครินทร์',
 		location: { lat: 7.010027132382802, lng: 100.50024358303605 },
+		shelter_type_key: 'sports_centre',
 		capacity: 200,
 		zones: [
 			{ code: 'Z1', name: 'โซน A', capacity: 100 },
@@ -257,13 +281,23 @@ const REGISTRY_SHELTERS = [
 				policy: 'conditional',
 				categories: [{ category: 'small_general' }, { category: 'livestock' }]
 			},
-			supported_vulnerable_groups: ['ผู้ป่วยติดเตียง', 'ผู้ใช้วีลแชร์', 'เด็กอ่อน']
+			supported_vulnerable_group_keys: [
+				'elderly',
+				'disabled',
+				'wheelchair',
+				'bedridden',
+				'pregnant',
+				'infant',
+				'young_child',
+				'chronic_illness'
+			]
 		}
 	},
 	{
 		code: SHELTER_CODE_2,
 		name: 'ศูนย์อพยพสำนักงานเทศบาลนครหาดใหญ่',
 		location: { lat: 7.015427802879699, lng: 100.47291623646029 },
+		shelter_type_key: 'government_building',
 		capacity: 100,
 		zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 100 }],
 		area_m2: 400,
@@ -277,13 +311,16 @@ const REGISTRY_SHELTERS = [
 		},
 		admission_policy: {
 			pet_policy: { policy: 'not_allowed' },
-			supported_vulnerable_groups: ['ผู้สูงอายุ', 'สตรีมีครรภ์', 'ผู้ป่วยแยกกักโรค']
+			supported_vulnerable_group_keys: ['elderly', 'pregnant', 'chronic_illness']
 		}
 	},
 	{
+		// No admission_policy — keeps the "shelter has not configured a policy yet"
+		// path covered (registration offers no vulnerable-group chips there).
 		code: SHELTER_CODE_3,
 		name: 'ศูนย์อพยพสำนักงานเทศบาลเมืองบ้านพรุ',
 		location: { lat: 6.948086391528152, lng: 100.47963181135452 },
+		shelter_type_key: 'community_hall',
 		capacity: 100,
 		zones: [
 			{ code: 'Z1', name: 'โซนรวม', capacity: 50 },
@@ -371,7 +408,7 @@ async function seedUsers(): Promise<void> {
 
 // ─── seedRegistry ─────────────────────────────────────────────────────────────
 
-async function seedRegistry(): Promise<void> {
+async function seedRegistry(master: MasterLookup): Promise<void> {
 	await ensureDb('registry');
 	await setSecurity('registry', {
 		admins: { names: [], roles: ['system_admin'] },
@@ -399,10 +436,21 @@ async function seedRegistry(): Promise<void> {
 	for (const shelter of REGISTRY_SHELTERS) {
 		const existing = existingByCode.get(shelter.code);
 
-		// Build payload extras (admission_policy)
-		const extras: Record<string, unknown> = {};
+		// Build payload extras — both carry master_data item codes, resolved from
+		// the keys declared on REGISTRY_SHELTERS (see seedMasterData).
+		const extras: Record<string, unknown> = {
+			shelter_type: masterCode(master, 'shelter_type', shelter.shelter_type_key)
+		};
 		if ('admission_policy' in shelter) {
-			extras.admission_policy = shelter.admission_policy;
+			const { supported_vulnerable_group_keys, ...policy } = shelter.admission_policy;
+			extras.admission_policy = {
+				...policy,
+				supported_vulnerable_groups: masterCodes(
+					master,
+					'vulnerable_group',
+					...supported_vulnerable_group_keys
+				)
+			};
 		}
 
 		if (existing) {
@@ -443,142 +491,199 @@ async function seedRegistry(): Promise<void> {
 
 /**
  * Global master_data docs (CR-049) — one doc per type (`master_data:{type}`).
- * Item `code` is always a ULID (`item_{ulid}`) — no slug anywhere — matching the
- * UI-create rule. Codes referenced by other seed docs (evacuee `special_needs` →
- * vulnerable_group) are generated once and threaded via the `VG` lookup so those
- * references resolve to labels. Codes are regenerated per run, so seed is meant
- * for a fresh/reset DB (see the reset flow in CLAUDE.md).
+ *
+ * Master data is seeded FIRST, and every downstream section references what it
+ * actually wrote: shelter `admission_policy.supported_vulnerable_groups` +
+ * `shelter_type`, evacuee `special_needs`, household `municipality_zone` +
+ * `community`. Those fields persist the item **`code`**, and codes are ULIDs
+ * (`item_{ulid}`) — never slugs, matching the UI-create rule — so they cannot be
+ * written by hand. Instead every item carries a `key` (seed-script only, never
+ * persisted); {@link seedMasterData} resolves `key` → persisted item and returns
+ * a {@link MasterLookup} that later sections read through {@link masterCode} /
+ * {@link masterLabel}. An unknown key throws rather than writing a dangling ref.
+ *
+ * Re-running against a populated registry reuses the codes already stored (items
+ * are matched back by `label`), so evacuee/household docs written by an earlier
+ * run keep resolving instead of pointing at regenerated ULIDs.
+ *
+ * Types with no doc field to link to yet (`dietary_restrictions`, `house_damage`,
+ * `pet_types` — `PetGroup.species` is a fixed domain enum, not a master code) are
+ * seeded for the config screens only.
  */
 const itemCode = () => `item_${ulid().toLowerCase()}`;
 
-type SeedItem = {
-	code: string;
+/** One item to seed. `key` is a seed-only handle; `code` is generated/reused. */
+type SeedItemDef = {
+	key: string;
 	label: string;
-	is_default: boolean;
-	status: 'active';
-	parent_code?: string;
+	is_default?: boolean;
+	/** `key` of the owning item in `parent_type` (community → municipality zone). */
+	parent_key?: string;
 };
-const toItem = (label: string, is_default = false): SeedItem => ({
-	code: itemCode(),
-	label,
-	is_default,
-	status: 'active'
-});
 
-// vulnerable_group items keep a semantic key → generated ULID code lookup so
-// seeded evacuee.special_needs can reference the same codes.
-const VG_DEFS = [
-	{ key: 'elderly', label: 'ผู้สูงอายุ', is_default: true },
-	{ key: 'disabled', label: 'ผู้พิการ' },
-	{ key: 'pregnant', label: 'สตรีมีครรภ์' },
-	{ key: 'infant', label: 'ทารก' },
-	{ key: 'young_child', label: 'เด็กเล็ก' },
-	{ key: 'chronic_illness', label: 'ผู้ป่วยเรื้อรัง' }
-].map((d) => ({ ...d, code: itemCode() }));
-/** semantic key → generated ULID code, for evacuee special_needs cross-refs */
-const VG: Record<string, string> = Object.fromEntries(VG_DEFS.map((i) => [i.key, i.code]));
+type MasterTypeDef = {
+	type: MasterDataType;
+	/** Type `parent_key` resolves against — must appear earlier in the list. */
+	parent_type?: MasterDataType;
+	items: SeedItemDef[];
+};
 
-// municipality_zone items keep a key → ULID lookup so seeded household docs
-// (`municipality_zone`) and community `parent_code` can reference them.
-const MZ_DEFS = [
-	{ key: 'zone_1', label: 'เขตเทศบาล 1', is_default: true },
-	{ key: 'zone_2', label: 'เขตเทศบาล 2' },
-	{ key: 'zone_3', label: 'เขตเทศบาล 3' },
-	{ key: 'zone_4', label: 'เขตเทศบาล 4' }
-].map((d) => ({ ...d, code: itemCode() }));
-/** zone key → generated ULID code, for household + community parent refs */
-const MZ: Record<string, string> = Object.fromEntries(MZ_DEFS.map((i) => [i.key, i.code]));
+/** Resolved `master_type` → seed `key` → the item as persisted. */
+type MasterLookup = Record<MasterDataType, Record<string, MasterDataItem>>;
 
-// community items reference their parent zone via parent_code (CR-012 pattern).
-const COMMUNITY_DEFS: { label: string; parent: string; is_default?: boolean }[] = [
-	{ label: 'ชุมชนบ้านทุ่ง', parent: 'zone_1', is_default: true },
-	{ label: 'ชุมชนริมคลอง', parent: 'zone_1' },
-	{ label: 'ชุมชนหน้าเมือง', parent: 'zone_2' },
-	{ label: 'ชุมชนสวนหลวง', parent: 'zone_3' }
-];
+function masterItem(master: MasterLookup, type: MasterDataType, key: string): MasterDataItem {
+	const item = master[type]?.[key];
+	if (!item) throw new Error(`seed: no master_data item "${key}" seeded for type "${type}"`);
+	return item;
+}
 
-const MASTER_DATA_SEED: { type: string; items: SeedItem[] }[] = [
+const masterCode = (m: MasterLookup, type: MasterDataType, key: string) =>
+	masterItem(m, type, key).code;
+const masterCodes = (m: MasterLookup, type: MasterDataType, ...keys: string[]) =>
+	keys.map((key) => masterCode(m, type, key));
+const masterLabel = (m: MasterLookup, type: MasterDataType, key: string) =>
+	masterItem(m, type, key).label;
+const masterLabels = (m: MasterLookup, type: MasterDataType, ...keys: string[]) =>
+	keys.map((key) => masterLabel(m, type, key));
+
+const MASTER_DATA_DEFS: MasterTypeDef[] = [
 	{
 		type: 'vulnerable_group',
-		items: VG_DEFS.map((d) => ({
-			code: d.code,
-			label: d.label,
-			is_default: d.is_default ?? false,
-			status: 'active'
-		}))
+		items: [
+			{ key: 'elderly', label: 'ผู้สูงอายุ', is_default: true },
+			{ key: 'disabled', label: 'ผู้พิการ' },
+			{ key: 'wheelchair', label: 'ผู้ใช้วีลแชร์' },
+			{ key: 'bedridden', label: 'ผู้ป่วยติดเตียง' },
+			{ key: 'pregnant', label: 'สตรีมีครรภ์' },
+			{ key: 'infant', label: 'ทารก' },
+			{ key: 'young_child', label: 'เด็กเล็ก' },
+			{ key: 'chronic_illness', label: 'ผู้ป่วยเรื้อรัง' }
+		]
 	},
 	{
 		type: 'health_condition',
 		items: [
-			toItem('เบาหวาน', true),
-			toItem('ความดันโลหิตสูง'),
-			toItem('โรคหัวใจ'),
-			toItem('หอบหืด'),
-			toItem('แพ้อาหารทะเล')
+			{ key: 'diabetes', label: 'เบาหวาน', is_default: true },
+			{ key: 'hypertension', label: 'ความดันโลหิตสูง' },
+			{ key: 'heart_disease', label: 'โรคหัวใจ' },
+			{ key: 'asthma', label: 'หอบหืด' },
+			{ key: 'seafood_allergy', label: 'แพ้อาหารทะเล' },
+			{ key: 'sulfa_allergy', label: 'แพ้ยาซัลฟา' }
 		]
 	},
 	{
 		type: 'dietary_restrictions',
-		items: [toItem('อิสลาม (ฮาลาล)', true), toItem('มังสวิรัติ'), toItem('อาหารอ่อน')]
+		items: [
+			{ key: 'halal', label: 'อิสลาม (ฮาลาล)', is_default: true },
+			{ key: 'vegetarian', label: 'มังสวิรัติ' },
+			{ key: 'soft_diet', label: 'อาหารอ่อน' }
+		]
 	},
 	{
 		type: 'pet_types',
-		items: [toItem('สุนัข', true), toItem('แมว'), toItem('นก')]
+		items: [
+			{ key: 'dog', label: 'สุนัข', is_default: true },
+			{ key: 'cat', label: 'แมว' },
+			{ key: 'bird', label: 'นก' }
+		]
 	},
 	{
 		type: 'house_damage',
-		items: [toItem('เสียหายทั้งหลัง', true), toItem('เสียหายบางส่วน'), toItem('น้ำท่วมถึงชั้น 1')]
+		items: [
+			{ key: 'total_loss', label: 'เสียหายทั้งหลัง', is_default: true },
+			{ key: 'partial', label: 'เสียหายบางส่วน' },
+			{ key: 'flooded_first_floor', label: 'น้ำท่วมถึงชั้น 1' }
+		]
 	},
 	{
 		type: 'shelter_type',
-		items: [toItem('โรงเรียน', true), toItem('ศาลาประชาคม'), toItem('วัด'), toItem('อาคารราชการ')]
+		items: [
+			{ key: 'school', label: 'โรงเรียน', is_default: true },
+			{ key: 'community_hall', label: 'ศาลาประชาคม' },
+			{ key: 'temple', label: 'วัด' },
+			{ key: 'government_building', label: 'อาคารราชการ' },
+			{ key: 'sports_centre', label: 'ศูนย์กีฬา' }
+		]
 	},
 	{
 		type: 'municipality_zone',
-		items: MZ_DEFS.map((d) => ({
-			code: d.code,
-			label: d.label,
-			is_default: d.is_default ?? false,
-			status: 'active'
-		}))
+		items: [
+			{ key: 'zone_1', label: 'เขตเทศบาล 1', is_default: true },
+			{ key: 'zone_2', label: 'เขตเทศบาล 2' },
+			{ key: 'zone_3', label: 'เขตเทศบาล 3' },
+			{ key: 'zone_4', label: 'เขตเทศบาล 4' }
+		]
 	},
 	{
+		// community items point at their zone via `parent_code` (CR-012 pattern),
+		// so municipality_zone must already be resolved when this one is built.
 		type: 'community',
-		items: COMMUNITY_DEFS.map((d) => ({
-			code: itemCode(),
-			label: d.label,
-			is_default: d.is_default ?? false,
-			status: 'active',
-			parent_code: MZ[d.parent]
-		}))
+		parent_type: 'municipality_zone',
+		items: [
+			{ key: 'ban_thung', label: 'ชุมชนบ้านทุ่ง', is_default: true, parent_key: 'zone_1' },
+			{ key: 'rim_klong', label: 'ชุมชนริมคลอง', parent_key: 'zone_1' },
+			{ key: 'na_mueang', label: 'ชุมชนหน้าเมือง', parent_key: 'zone_2' },
+			{ key: 'suan_luang', label: 'ชุมชนสวนหลวง', parent_key: 'zone_3' }
+		]
 	}
 ];
 
-async function seedMasterData(): Promise<void> {
+async function seedMasterData(): Promise<MasterLookup> {
 	await ensureDb('registry');
 	const ts = now();
+	const master = {} as MasterLookup;
 
-	for (const { type, items } of MASTER_DATA_SEED) {
-		const id = `master_data:${type}`;
-		const { status: getStatus, data: existing } = await couchReq(
+	for (const def of MASTER_DATA_DEFS) {
+		const id = masterDocId(def.type);
+		const { status: getStatus, data } = await couchReq(
 			'GET',
 			`/registry/${encodeURIComponent(id)}`
 		);
-		const rev = getStatus === 200 ? (existing as { _rev: string })._rev : undefined;
+		const existing = getStatus === 200 ? (data as MasterData) : null;
+		// Reuse the persisted code for a label we already seeded — a re-run must
+		// not orphan `special_needs` / `community` refs on existing people docs.
+		const persistedByLabel = new Map((existing?.items ?? []).map((i) => [i.label, i]));
+
+		const resolved: Record<string, MasterDataItem> = {};
+		const seeded: MasterDataItem[] = def.items.map((d) => {
+			const item: MasterDataItem = {
+				code: persistedByLabel.get(d.label)?.code ?? itemCode(),
+				label: d.label,
+				is_default: d.is_default ?? false,
+				status: 'active',
+				...(d.parent_key ? { parent_code: masterCode(master, def.parent_type!, d.parent_key) } : {})
+			};
+			resolved[d.key] = item;
+			return item;
+		});
+		master[def.type] = resolved;
+
+		// Keep items an operator added through the config UI — the seed owns its own
+		// labels, not the whole list. Seeded items come first so `enforceOneDefault`
+		// resolves the default in the seed's favour.
+		const seededLabels = new Set(def.items.map((d) => d.label));
+		const extras = (existing?.items ?? []).filter((i) => !seededLabels.has(i.label));
+		const items = enforceOneDefault([...seeded, ...extras]);
 
 		await putDoc('registry', {
 			_id: id,
-			...(rev ? { _rev: rev } : {}),
+			...(existing?._rev ? { _rev: existing._rev } : {}),
 			type: 'master_data',
 			schema_v: 3,
-			master_type: type,
+			master_type: def.type,
 			items,
-			created_at: ts,
+			created_at: existing?.created_at ?? ts,
 			updated_at: ts,
 			created_by: 'seed'
 		});
-		console.log(`  ✓ registry: master_data ${type} (${items.length} items)`);
+		const reused = seeded.filter((i) => persistedByLabel.has(i.label)).length;
+		console.log(
+			`  ✓ registry: master_data ${def.type} (${seeded.length} seeded, ${reused} codes reused` +
+				`${extras.length ? `, ${extras.length} existing kept` : ''})`
+		);
 	}
+
+	return master;
 }
 
 // ─── seedCatalog ──────────────────────────────────────────────────────────────
@@ -905,23 +1010,41 @@ async function deployCatalogMangoIndexes(db: string): Promise<void> {
 
 // ─── seedShelter ──────────────────────────────────────────────────────────────
 
-async function seedShelter(): Promise<void> {
+async function seedShelter(master: MasterLookup): Promise<void> {
+	// Master-data codes this shelter's people docs reference. `community` must sit
+	// under the household's `municipality_zone` — the master items are linked by
+	// `parent_code`, so a mismatched pair would render as an orphan in the form.
+	const zone = (key: string) => masterCode(master, 'municipality_zone', key);
+	const community = (key: string) => masterCode(master, 'community', key);
+	const vg = (...keys: string[]) => masterCodes(master, 'vulnerable_group', ...keys);
+	const health = (...keys: string[]) => masterLabels(master, 'health_condition', ...keys);
+
 	// — households ——————————————————————————————————————————————————————————————
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวใจดี',
-			municipality_zone: MZ.zone_1,
+			municipality_zone: zone('zone_1'),
+			community: community('ban_thung'),
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ครอบครัวใหญ่ 4 คน'
 		},
 		{
 			label: 'ครอบครัวสุขสาย',
-			municipality_zone: MZ.zone_1,
+			municipality_zone: zone('zone_1'),
+			community: community('rim_klong'),
 			head_evacuee_id: null,
+			// PetGroup.species is a fixed domain enum, not a master_data code — the
+			// pet_types master feeds the config screens only.
 			pets: [{ species: 'dog', count: 1 }]
 		},
-		{ label: 'ครอบครัวรักสงบ', municipality_zone: MZ.zone_2, head_evacuee_id: null, pets: [] }
+		{
+			label: 'ครอบครัวรักสงบ',
+			municipality_zone: zone('zone_2'),
+			community: community('na_mueang'),
+			head_evacuee_id: null,
+			pets: []
+		}
 	];
 	const [hh1, hh2, hh3] = hhInputs.map((h) => createHousehold(h, ctx));
 
@@ -935,7 +1058,7 @@ async function seedShelter(): Promise<void> {
 			phone: '0811111111',
 			birth_year: 2498,
 			religion: 'buddhist',
-			special_needs: [VG.elderly],
+			special_needs: vg('elderly'),
 			household_id: hh1._id,
 			registered_via: 'import'
 		},
@@ -946,7 +1069,7 @@ async function seedShelter(): Promise<void> {
 			phone: '0812222222',
 			birth_year: 2501,
 			religion: 'buddhist',
-			special_needs: [VG.elderly],
+			special_needs: vg('elderly'),
 			household_id: hh1._id,
 			registered_via: 'import'
 		},
@@ -968,7 +1091,7 @@ async function seedShelter(): Promise<void> {
 			phone: '0814444444',
 			birth_year: 2536,
 			religion: 'buddhist',
-			special_needs: [VG.pregnant],
+			special_needs: vg('pregnant'),
 			household_id: hh1._id,
 			registered_via: 'import',
 			emergency_contact: { name: 'ประเสริฐ ใจดี', phone: '0813333333', relation: 'สามี' }
@@ -1003,7 +1126,7 @@ async function seedShelter(): Promise<void> {
 			phone: null,
 			birth_year: 2567,
 			religion: 'buddhist',
-			special_needs: [VG.infant],
+			special_needs: vg('infant'),
 			household_id: hh2._id,
 			registered_via: 'import'
 		},
@@ -1026,7 +1149,7 @@ async function seedShelter(): Promise<void> {
 			phone: '0817777777',
 			birth_year: 2518,
 			religion: 'muslim',
-			special_needs: [VG.chronic_illness],
+			special_needs: vg('chronic_illness'),
 			household_id: hh3._id,
 			registered_via: 'import',
 			emergency_contact: { name: 'วิชัย รักสงบ', phone: '0816666666', relation: 'สามี' }
@@ -1057,11 +1180,14 @@ async function seedShelter(): Promise<void> {
 	const checkedInEvacuees = evacuees.map((e, i) => applyMovementToStay(e, movements[i]));
 
 	// — medical records ————————————————————————————————————————————————————————
+	// `conditions` / `allergies` are free text on the doc (no code field), so these
+	// carry the health_condition master LABELS — the values a staff member would
+	// get by picking from the configured list rather than inventing wording.
 	const medicalInputs: MedicalInput[] = [
 		{
 			evacuee_id: evacuees[0]._id,
 			blood_group: 'O',
-			conditions: ['ความดันโลหิตสูง'],
+			conditions: health('hypertension'),
 			medications: ['แอมโลดิปีน 5mg'],
 			allergies: [],
 			track: 'fast_track'
@@ -1069,7 +1195,7 @@ async function seedShelter(): Promise<void> {
 		{
 			evacuee_id: evacuees[1]._id,
 			blood_group: 'A',
-			conditions: ['เบาหวานชนิดที่ 2'],
+			conditions: health('diabetes'),
 			medications: ['เมตฟอร์มิน 500mg'],
 			allergies: [],
 			track: 'fast_track'
@@ -1086,9 +1212,9 @@ async function seedShelter(): Promise<void> {
 		{
 			evacuee_id: evacuees[8]._id,
 			blood_group: 'B',
-			conditions: ['โรคหอบหืด'],
+			conditions: health('asthma'),
 			medications: ['ซัลบูทามอล'],
-			allergies: ['ซัลฟา'],
+			allergies: health('sulfa_allergy'),
 			track: 'fast_track'
 		}
 	];
@@ -1257,7 +1383,7 @@ async function seedShelter(): Promise<void> {
 	);
 }
 
-async function seedShelter2(): Promise<void> {
+async function seedShelter2(master: MasterLookup): Promise<void> {
 	const { status, data } = await couchReq('GET', `/${SHELTER_DB_2}/_all_docs?limit=1`);
 	if (status === 200 && (data as { rows?: unknown[] }).rows?.length) {
 		console.log(`  ✓ ${SHELTER_DB_2}: already seeded, skipping`);
@@ -1268,7 +1394,8 @@ async function seedShelter2(): Promise<void> {
 	const hhInputs: HouseholdInput[] = [
 		{
 			label: 'ครอบครัวปัตตานี',
-			municipality_zone: MZ.zone_1,
+			municipality_zone: masterCode(master, 'municipality_zone', 'zone_1'),
+			community: masterCode(master, 'community', 'ban_thung'),
 			head_evacuee_id: null,
 			pets: [],
 			notes: 'ตัวอย่าง SH002'
@@ -1277,6 +1404,8 @@ async function seedShelter2(): Promise<void> {
 	const [hh1] = hhInputs.map((h) => createHousehold(h, CTX_2));
 
 	// — evacuees ————————————————————————————————————————————————————————————————
+	// `pregnant` is on SH002's supported_vulnerable_groups, so the chip resolves
+	// in registration for this shelter too.
 	const evacueeInputs: EvacueeInput[] = [
 		{
 			first_name: 'ดานียา',
@@ -1285,7 +1414,7 @@ async function seedShelter2(): Promise<void> {
 			phone: '0899998888',
 			birth_year: 2538,
 			religion: 'muslim',
-			special_needs: [],
+			special_needs: masterCodes(master, 'vulnerable_group', 'pregnant'),
 			household_id: hh1._id,
 			registered_via: 'import'
 		}
@@ -1312,7 +1441,7 @@ async function seedShelter2(): Promise<void> {
 }
 
 // ─── seedDashboardData ────────────────────────────────────────────────────────
-async function seedDashboardData(): Promise<void> {
+async function seedDashboardData(master: MasterLookup): Promise<void> {
 	await ensureDb(SHELTER_DB);
 
 	// Check if already seeded by looking specifically for our generated mock docs
@@ -1355,6 +1484,17 @@ async function seedDashboardData(): Promise<void> {
 	] as const;
 	const CURRENT_YEAR = new Date().getFullYear();
 
+	// Age bucket → vulnerable_group master code, so the dashboard's vulnerable
+	// counts and the profile chips resolve against the seeded master list. Every
+	// code used here is on SH001's supported_vulnerable_groups (see REGISTRY_SHELTERS).
+	const SPECIAL_NEEDS_BY_AGE_BUCKET: Record<string, string[]> = {
+		'0-4': masterCodes(master, 'vulnerable_group', 'infant'),
+		'5-11': masterCodes(master, 'vulnerable_group', 'young_child'),
+		'12-17': [],
+		'18-59': [],
+		'60+': masterCodes(master, 'vulnerable_group', 'elderly')
+	};
+
 	function rnd(min: number, max: number) {
 		return Math.floor(Math.random() * (max - min + 1)) + min;
 	}
@@ -1394,6 +1534,7 @@ async function seedDashboardData(): Promise<void> {
 			gender: i % 2 === 0 ? 'male' : 'female',
 			phone: null,
 			birth_year,
+			special_needs: SPECIAL_NEEDS_BY_AGE_BUCKET[ageBucket],
 			registered_via: 'import'
 		};
 
@@ -1625,14 +1766,16 @@ async function main() {
 	console.log(`\nSeeding mock data → ${displayUrl}\n`);
 	try {
 		await seedUsers();
-		await seedRegistry();
+		// Master data first: the shelter masters and every people doc below persist
+		// its item codes, and seedMasterData is what resolves key → code.
+		const master = await seedMasterData();
+		await seedRegistry(master);
 		await provisionRegistryShelterDbs();
-		await seedMasterData();
 		await seedCatalog();
 		await seedCatalogSopRatios();
-		await seedShelter();
-		await seedShelter2();
-		await seedDashboardData();
+		await seedShelter(master);
+		await seedShelter2(master);
+		await seedDashboardData(master);
 		await seedDailyCalc();
 		console.log('\nDone.\n');
 	} catch (e: unknown) {
