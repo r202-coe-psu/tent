@@ -25,14 +25,11 @@ import {
 } from '$lib/features/sop-ratios';
 import { createAuditEntry } from '$lib/features/shared';
 import { calculateResources, FORMULA_V, type ResourceInput } from '../domain/calc.formula';
-import {
-	dailyCalcDocSchema,
-	DAILY_CALC_SCHEMA_VERSION,
-	type DailyCalcDoc
-} from '../domain/calc.schema';
+import { DAILY_CALC_SCHEMA_VERSION, type DailyCalcDoc } from '../domain/calc.schema';
+import { DailyCalcReadError, canonicalDailyCalcDocSchema } from './daily-calc.validation';
 import {
 	dailyCalcDocId,
-	isDailyCalcRecord,
+	parseDailyCalc,
 	type DailyCalcRecord,
 	type DailyCalcRepository
 } from './daily-calc.repository';
@@ -92,7 +89,14 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 	constructor(private readonly dbName: string = getShelterDb()) {}
 
 	async get(date: string): Promise<DailyCalcRecord | null> {
-		return getDoc<DailyCalcRecord>(this.dbName, dailyCalcDocId(date));
+		const id = dailyCalcDocId(date);
+		const raw = await getDoc<{ _id: string }>(this.dbName, id);
+		if (raw === null) return null;
+		const record = parseDailyCalc(raw);
+		if (record._id !== id) {
+			throw new DailyCalcReadError('invalid_invariant', record._id, `expected document id ${id}`);
+		}
+		return record;
 	}
 
 	async runOnDemand(date: string, ctx: AuthorContext): Promise<DailyCalcRecord> {
@@ -124,7 +128,7 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 		const results = calculateResources({ occupancy, as_of: asOf, resources });
 
 		// 3. Snapshot-locked body — validated against the domain schema before persisting.
-		const body: DailyCalcDoc = dailyCalcDocSchema.parse({
+		const body: DailyCalcDoc = canonicalDailyCalcDocSchema.parse({
 			formula_v: FORMULA_V,
 			sop_profile_version: active.version,
 			...provenance,
@@ -171,7 +175,7 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 			? { ...existing, ...body, schema_v: DAILY_CALC_SCHEMA_VERSION, updated_at: now() }
 			: makeDoc('daily_calc', DAILY_CALC_SCHEMA_VERSION, body, ctx, date);
 
-		return putDoc(this.dbName, record);
+		return parseDailyCalc(await putDoc(this.dbName, record));
 	}
 
 	async listRange(from: string, to: string): Promise<DailyCalcRecord[]> {
@@ -183,8 +187,16 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 			`/_all_docs?include_docs=true&startkey=${encodeURIComponent(startkey)}&endkey=${encodeURIComponent(endkey)}`
 		);
 		return res.rows
-			.map((r) => r.doc)
-			.filter(isDailyCalcRecord)
+			.map((r) => {
+				if (!r.doc) {
+					throw new Error(`CouchDB returned an empty document for ${r.id}`);
+				}
+				const record = parseDailyCalc(r.doc);
+				if (record._id !== r.id) {
+					throw new Error(`CouchDB row/document id mismatch for ${r.id}`);
+				}
+				return record;
+			})
 			.sort((a, b) => a._id.localeCompare(b._id));
 	}
 }

@@ -17,7 +17,7 @@
  * | seedShelter — stock ledger   | createStockLedger     | operations domain   |
  * | seedShelter — donations      | createWalkInDonation  | operations domain   |
  * | seedShelter — campaigns      | createCampaign        | operations domain   |
- * | seedDailyCalc — daily_calc   | calculateResources    | resource-calc domain (real engine; mock T-31.6 worker output) |
+ * | seedDailyCalc — daily_calc   | calculateResources    | resource-calc domain (real engine; CR-042 have map) |
  * | seedRegistry — shelter master| plain object          | no factory (server-side only) |
  * | seedCatalog — supply items   | plain object          | no factory (no catalog feature) |
  * | seedCatalog — recipes        | plain object          | no factory (no catalog feature) |
@@ -31,10 +31,12 @@
  * `special_needs`, `municipality_zone`, `community`). Nothing hardcodes a master
  * code — see the seedMasterData docblock.
  *
- * Safe to re-run: catalog and registry docs use deterministic IDs
+ * Safe to re-run for catalog and registry docs, which use deterministic IDs
  * (PUT → 409 = already exists → skip). Shelter docs use ULIDs so
  * re-running adds another batch — useful for volume testing.
- * Test users (sa01, staff01–03) are also idempotent (409 → skip).
+ * Test users (sa01 + staff01–03) are also idempotent (409 → skip).
+ * daily_calc is the exception: deterministic snapshots fail on conflict so stale evidence is
+ * never reported as freshly seeded; wipe the local seed data before regenerating that window.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -62,6 +64,8 @@ import {
 	createStockLedger,
 	createWalkInDonation,
 	keyPurchaseReceipt,
+	parseStockLedger,
+	stockBalance,
 	type CampaignInput,
 	type PurchaseInput,
 	type StockLedgerInput,
@@ -88,6 +92,11 @@ import {
 	type ResourceInput
 } from '$lib/features/resource-calc/domain/calc.formula';
 import {
+	parseDailyCalcRecord,
+	resolveHave,
+	type ShelterHaveSource
+} from '$lib/features/resource-calc/core';
+import {
 	dailyCalcDocSchema,
 	DAILY_CALC_SCHEMA_VERSION
 } from '$lib/features/resource-calc/domain/calc.schema';
@@ -99,6 +108,7 @@ import {
 	REFERRAL_MANGO_INDEXES,
 	shelterDbName
 } from '$lib/server/shelter-access-design';
+import { assertBulkWriteResults, prefixRangeEnd, type BulkWriteResult } from './t31-seed-support';
 // ─── env ──────────────────────────────────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -204,12 +214,14 @@ async function putDoc(db: string, doc: Record<string, unknown>): Promise<void> {
 		throw new Error(`PUT ${doc._id} → ${db} failed (HTTP ${status})`);
 }
 
-async function bulkDocs(db: string, docs: unknown[]): Promise<void> {
+async function bulkDocs(
+	db: string,
+	docs: unknown[],
+	options: { allowConflicts?: boolean } = { allowConflicts: true }
+): Promise<void> {
 	const { status, data } = await couchReq('POST', `/${db}/_bulk_docs`, { docs });
 	if (status !== 201) throw new Error(`_bulk_docs to "${db}" failed (HTTP ${status})`);
-	const results = data as { id: string; ok?: boolean; error?: string; reason?: string }[];
-	const errs = results.filter((r) => r.error && r.error !== 'conflict');
-	if (errs.length) console.warn(`  ⚠ non-conflict errors in ${db}:`, errs.slice(0, 5));
+	assertBulkWriteResults(db, data as BulkWriteResult[], options);
 }
 
 // ─── catalog helpers ──────────────────────────────────────────────────────────
@@ -1596,16 +1608,15 @@ async function seedDashboardData(master: MasterLookup): Promise<void> {
 
 // ─── seedDailyCalc ──────────────────────────────────────────────────────────────
 //
-// Stand-in for the Central auto-daily-run worker (T-31.6 — PM decided "Central"), which
-// lives in a separate service, NOT this repo. It writes a trend of `daily_calc:{date}`
-// snapshots so the T-32 resource dashboard has real data to render before that worker exists.
+// Seed-only fixture for the T-32 resource dashboard. Production R3 calculation is on-demand
+// through DailyCalcRemoteRepository; this script does not implement or stand in for a scheduler.
 //
-// vithi A — the need/have/gap/status numbers come from the REAL engine (`calculateResources`,
+// The need/have/gap/status numbers come from the REAL engine (`calculateResources`,
 // FORMULA_V) fed the active master SOP ratios, so the persisted shape matches production exactly.
-// Only the two inputs the past cannot give us are mocked: historical occupancy (headcount per day)
-// and stock `have` (the ratio-key → stock mapping is a documented SEAM — CR-036 Open decision #2).
-// `threshold` ratios carry no `have`, mirroring the impl's `resolveHave`. This does NOT replace the
-// real worker; when it lands, output shape is already identical.
+// Historical occupancy remains a deterministic mock because this seed does not have historical
+// occupancy input. Stock and shelter `have` values are read from persisted sources through the
+// CR-042 ratio-to-source map. This does NOT replace the real worker; when it lands, output shape
+// is already identical.
 
 const DAILY_CALC_DAYS = 14;
 
@@ -1613,18 +1624,95 @@ function isoDay(d: Date): string {
 	return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+interface CouchDocRow {
+	doc?: unknown;
+}
+
+interface CouchDocsResponse {
+	rows?: CouchDocRow[];
+}
+
+function finiteNumber(value: unknown): number | null {
+	return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+async function readSeedStockBalance(): Promise<Map<string, string>> {
+	const startkey = encodeURIComponent(JSON.stringify('stock_ledger:'));
+	const endkey = encodeURIComponent(JSON.stringify(prefixRangeEnd('stock_ledger:')));
+	const { status, data } = await couchReq(
+		'GET',
+		`/${SHELTER_DB}/_all_docs?include_docs=true&startkey=${startkey}&endkey=${endkey}`
+	);
+	if (status !== 200) {
+		throw new Error(`Cannot read stock ledger from "${SHELTER_DB}" (HTTP ${status})`);
+	}
+
+	const rows = (data as CouchDocsResponse).rows ?? [];
+	const ledger = rows.map((row, index) => {
+		if (row.doc === undefined) throw new Error(`Missing stock_ledger document at row ${index}`);
+		try {
+			return parseStockLedger(row.doc);
+		} catch (error) {
+			throw new Error(`Invalid persisted stock_ledger at row ${index}: ${String(error)}`, {
+				cause: error
+			});
+		}
+	});
+	return stockBalance(ledger);
+}
+
+async function readSeedShelterSource(): Promise<ShelterHaveSource> {
+	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
+	if (status !== 200) {
+		throw new Error(`Cannot read shelter registry (HTTP ${status})`);
+	}
+
+	const rows = (data as CouchDocsResponse).rows ?? [];
+	const shelter = rows
+		.map((row) => row.doc)
+		.find((doc): doc is Record<string, unknown> => {
+			if (!doc || typeof doc !== 'object') return false;
+			const candidate = doc as Record<string, unknown>;
+			return candidate.type === 'shelter' && candidate.code === SHELTER_CODE;
+		});
+	if (!shelter) {
+		throw new Error(`Cannot find shelter ${SHELTER_CODE} in registry`);
+	}
+
+	const facilities =
+		shelter.facilities && typeof shelter.facilities === 'object'
+			? (shelter.facilities as Record<string, unknown>)
+			: {};
+
+	return {
+		area_m2: finiteNumber(shelter.area_m2),
+		facilities: {
+			water_points: finiteNumber(facilities.water_points),
+			showers: finiteNumber(facilities.showers),
+			toilets_female: finiteNumber(facilities.toilets_female),
+			toilets_male: finiteNumber(facilities.toilets_male)
+		}
+	};
+}
+
 async function seedDailyCalc(): Promise<void> {
 	await ensureDb(SHELTER_DB);
 
-	// Effective ratios = active master profile (SH001 has no override) — the real resolution.
+	// The persisted master profile is the only source of truth for seeded daily_calc snapshots.
 	const { status, data } = await couchReq(
 		'GET',
 		`/catalog/${encodeURIComponent('sop_profile:master_sphere_baseline')}`
 	);
-	const master =
-		status === 200 ? (data as { ratios?: Record<SopRatioKey, string>; version?: number }) : null;
-	const ratios: Record<SopRatioKey, string> = master?.ratios ?? validRatios;
-	const sopVersion = master?.version ?? 1;
+	if (status !== 200) {
+		throw new Error(`Cannot read persisted master SOP profile (HTTP ${status})`);
+	}
+	const master = sopMasterSchema.parse(data);
+	if (!master.active) {
+		throw new Error('Persisted master SOP profile is not active');
+	}
+	const ratios: Record<SopRatioKey, string> = master.ratios;
+	const sopVersion = master.version;
+	const [stock, shelter] = await Promise.all([readSeedStockBalance(), readSeedShelterSource()]);
 
 	const today = new Date();
 	const records: unknown[] = [];
@@ -1646,15 +1734,8 @@ async function seedDailyCalc(): Promise<void> {
 
 		for (const key of Object.keys(ratios) as SopRatioKey[]) {
 			const ratioStr = ratios[key];
-			const ratioNum = Number(ratioStr);
 			const kind = SOP_RATIO_KIND[key];
-			const roughNeed =
-				kind === 'multiply' ? occupancy * ratioNum : Math.ceil(occupancy / ratioNum);
-			// have oscillates across a deficit/surplus band so the dashboard shows real gaps;
-			// threshold ratios are quality ceilings → no stock (null), same as `resolveHave`.
-			const factor = 0.7 + 0.6 * (0.5 + 0.5 * Math.sin(phase + key.length));
-			const have =
-				kind === 'threshold' ? null : String(Math.max(0, Math.round(roughNeed * factor)));
+			const have = resolveHave(key, { stock, shelter });
 			resources.push({ key, kind, ratio: ratioStr, have });
 			ratioSnapshot[key] = ratioStr;
 			stockSnapshot[key] = have;
@@ -1676,12 +1757,23 @@ async function seedDailyCalc(): Promise<void> {
 			results
 		});
 
-		records.push(makeDoc('daily_calc', DAILY_CALC_SCHEMA_VERSION, body, CTX, date));
+		const record = makeDoc('daily_calc', DAILY_CALC_SCHEMA_VERSION, body, CTX, date);
+		// Validate the complete persisted shape before bulk write: domain body, envelope, canonical
+		// key set, provenance, and semantic row invariants must all pass for every snapshot.
+		parseDailyCalcRecord(record);
+		records.push(record);
 	}
 
-	await bulkDocs(SHELTER_DB, records);
+	try {
+		await bulkDocs(SHELTER_DB, records, { allowConflicts: false });
+	} catch (error) {
+		throw new Error(
+			`daily_calc seed write failed. Existing deterministic snapshots must be wiped before reseeding: ${String(error)}`,
+			{ cause: error }
+		);
+	}
 	console.log(
-		`  ✓ ${SHELTER_DB}: ${records.length} daily_calc snapshots seeded (mock T-31.6 output, real engine ${FORMULA_V})`
+		`  ✓ ${SHELTER_DB}: ${records.length} daily_calc snapshots seeded (CR-042 have map, mock historical occupancy, real engine ${FORMULA_V})`
 	);
 }
 
@@ -1728,7 +1820,7 @@ async function deleteDashboardData(): Promise<void> {
 		toDelete.push(...movesToDelete);
 	}
 
-	// Also find and delete daily_calc snapshots (mock T-31.6 worker output) — bounded range scan.
+	// Also find and delete daily_calc snapshots produced by this seed script — bounded range scan.
 	// Upper bound ';' (0x3B) sorts just after ':' (0x3A), covering every `daily_calc:*` id (ASCII-only).
 	const dcStart = encodeURIComponent(JSON.stringify('daily_calc:'));
 	const dcEnd = encodeURIComponent(JSON.stringify('daily_calc;'));
