@@ -1,5 +1,5 @@
 ---
-id: CR-078
+id: CR-079
 title: เพิ่ม SOP what-if simulation แบบไม่เขียนทับ Daily Calc
 status: proposed
 date: 2026-08-19
@@ -19,7 +19,7 @@ why: ให้ผู้บริหารจำลอง occupancy, จำนว
 migration: ไม่มี migration ของเอกสารเดิม; เป็น document type ใหม่ แต่ฐานข้อมูลเดิมต้องได้รับ validator ที่รองรับ `simulation` ก่อนเปิดใช้งาน
 ---
 
-# CR-078 — เพิ่ม SOP what-if simulation แบบไม่เขียนทับ Daily Calc
+# CR-079 — เพิ่ม SOP what-if simulation แบบไม่เขียนทับ Daily Calc
 
 ## Why
 
