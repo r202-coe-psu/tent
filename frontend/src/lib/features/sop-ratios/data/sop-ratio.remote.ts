@@ -3,6 +3,9 @@ import { saveBulkAtomic } from '$lib/db/couch-db';
 import { touch, type AuthorContext } from '$lib/db/model';
 import { createAuditEntry, type AuditEntry, isAuditEntry } from '$lib/features/shared';
 import {
+	createInitialProfile,
+	createNewVersion,
+	createProfileSlug,
 	isSopMaster,
 	isSopOverride,
 	resolveEffectiveProfile as resolveDomain,
@@ -36,17 +39,39 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 		this.repo = createRemoteRepository(dbName);
 	}
 
+	async listAll(): Promise<SopMaster[]> {
+		const all = await this.repo.allByType('sop_profile', isSopMaster);
+		const latestBySlug = new Map<string, SopMaster>();
+		for (const profile of all) {
+			const slug = profile.slug ?? createProfileSlug(profile.name);
+			const current = latestBySlug.get(slug);
+			// An activated historic version must remain visible/selectable rather than
+			// being hidden by a newer inactive revision of the same profile.
+			if (
+				!current ||
+				(profile.active && !current.active) ||
+				(profile.active === current.active && profile.version > current.version)
+			) {
+				latestBySlug.set(slug, profile);
+			}
+		}
+		return [...latestBySlug.values()].sort((a, b) => a.name.localeCompare(b.name));
+	}
+
 	async listActive(): Promise<SopMaster[]> {
 		const all = await this.repo.allByType('sop_profile', isSopMaster);
 		return all.filter((p) => p.active);
 	}
 
-	async listVersions(name: string): Promise<SopMaster[]> {
-		const results = await this.repo.find<SopMaster>({
-			selector: { type: 'sop_profile', name: name },
-			limit: 1000
-		});
-		return results.filter(isSopMaster);
+	async listVersions(slug: string): Promise<SopMaster[]> {
+		const all = await this.repo.allByType('sop_profile', isSopMaster);
+		return all
+			.filter((profile) => (profile.slug ?? createProfileSlug(profile.name)) === slug)
+			.sort((a, b) => b.version - a.version);
+	}
+
+	async getBySlug(slug: string): Promise<SopMaster | null> {
+		return (await this.listVersions(slug))[0] ?? null;
 	}
 
 	async getById(id: string): Promise<SopMaster | null> {
@@ -62,11 +87,23 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 		profile: SopMaster,
 		audit: AuditEntry | null
 	): Promise<{ profile: SopMaster; deactivatedPrev: SopMaster | null; audit: AuditEntry | null }> {
-		const docs: Array<SopMaster | AuditEntry> = [profile];
-		if (deactivatedPrev) docs.push(deactivatedPrev);
+		// Master profiles have a single global activation slot.  This also covers
+		// editing a historical/inactive profile: saving its next version promotes
+		// that new version and atomically deactivates the previously active one.
+		const activeProfiles = profile.active ? await this.listActive() : [];
+		const profilesToSave = new Map<string, SopMaster>();
+		for (const active of activeProfiles) {
+			if (active._id !== profile._id)
+				profilesToSave.set(active._id, { ...touch(active), active: false });
+		}
+		if (deactivatedPrev) profilesToSave.set(deactivatedPrev._id, deactivatedPrev);
+		profilesToSave.set(profile._id, profile);
+		const docs: Array<SopMaster | AuditEntry> = [...profilesToSave.values()];
 		if (audit) docs.push(audit);
 
-		const saved = await saveBulkAtomic(this.dbName, docs, 'master versions');
+		const saved = await saveBulkAtomic(this.dbName, docs, 'master versions', undefined, {
+			onConflict: 'throw'
+		});
 
 		return {
 			profile: saved.find((d) => d._id === profile._id) as SopMaster,
@@ -77,6 +114,63 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 		};
 	}
 
+	async createNextVersion(
+		prev: SopMaster,
+		changes: Partial<Record<SopRatioKey, string>>,
+		reason: string,
+		ctx: { createdBy: string }
+	): Promise<{ profile: SopMaster; deactivatedPrev: SopMaster | null; audit: AuditEntry | null }> {
+		const slug = prev.slug ?? createProfileSlug(prev.name);
+		let lastConflict: unknown;
+
+		for (let attempt = 0; attempt < 3; attempt++) {
+			const versions = await this.listVersions(slug);
+			const currentPrev = versions.find((version) => version._id === prev._id) ?? prev;
+			const maxVersion = Math.max(
+				currentPrev.version,
+				...versions.map((version) => version.version)
+			);
+			const next = createNewVersion(currentPrev, changes, reason, ctx, maxVersion);
+
+			try {
+				return await this.createVersion(next.deactivatedPrev, next.profile, next.audit);
+			} catch (error) {
+				if (!(error instanceof Error) || error.message !== '409_CONFLICT') throw error;
+				lastConflict = error;
+			}
+		}
+
+		throw new Error('ไม่สามารถสร้างเวอร์ชันใหม่ได้ เนื่องจากมีการแก้ไขพร้อมกัน', {
+			cause: lastConflict
+		});
+	}
+
+	async createInitial(
+		name: string,
+		ratios: SopMaster['ratios'],
+		createdBy: string
+	): Promise<{ profile: SopMaster; audit: AuditEntry }> {
+		const slug = createProfileSlug(name);
+		if (!slug) throw new Error('Profile name must contain at least one Latin letter or number');
+		if (await this.getBySlug(slug)) throw new Error('Profile name already exists');
+
+		const { profile, audit } = createInitialProfile('sop_profile', name, ratios, { createdBy });
+		const activeProfiles = await this.listActive();
+		// The first master establishes the baseline.  Later profiles are drafts
+		// until an administrator explicitly promotes one, so creating a profile
+		// never silently switches every shelter to a new standard.
+		const initialProfile: SopMaster = {
+			...profile,
+			active: activeProfiles.length === 0
+		};
+		const docs: Array<SopMaster | AuditEntry> = [initialProfile, audit];
+		const saved = await saveBulkAtomic(this.dbName, docs, 'create master profile');
+		return {
+			profile: saved.find((doc) => doc._id === initialProfile._id) as SopMaster,
+			audit: saved.find((doc) => doc._id === audit._id) as AuditEntry
+		};
+	}
+
 	async setActive(id: string, ctx?: { createdBy: string }): Promise<void> {
 		const target = await this.getById(id);
 		if (!target) {
@@ -84,13 +178,11 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 		}
 
 		const activeProfiles = await this.listActive();
-		const sameNameActive = activeProfiles.filter(
-			(p) => p.name === target.name && p._id !== target._id
-		);
+		const otherActive = activeProfiles.filter((p) => p._id !== target._id);
 
 		const docsToSave: Array<SopMaster | AuditEntry> = [];
 
-		for (const p of sameNameActive) {
+		for (const p of otherActive) {
 			docsToSave.push({ ...touch(p), active: false });
 		}
 
@@ -105,7 +197,7 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 					target_type: 'sop_profile',
 					target_id: target._id,
 					reason: `Set version ${target.version} of profile "${target.name}" as active`,
-					context: { deactivated_ids: sameNameActive.map((p) => p._id) }
+					context: { deactivated_ids: otherActive.map((p) => p._id) }
 				},
 				{ shelterCode: 'catalog', createdBy: ctx.createdBy }
 			);
@@ -115,6 +207,34 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 		if (docsToSave.length > 0) {
 			await saveBulkAtomic(this.dbName, docsToSave, 'active master');
 		}
+	}
+
+	async setInactive(id: string, ctx?: { createdBy: string }): Promise<void> {
+		const target = await this.getById(id);
+		if (!target) throw new Error(`SOP master profile with ID ${id} not found`);
+		if (!target.active) return;
+
+		const activeProfiles = await this.listActive();
+		if (activeProfiles.length <= 1) {
+			throw new Error('Cannot deactivate the only active profile. Activate another profile first.');
+		}
+
+		const docs: Array<SopMaster | AuditEntry> = [{ ...touch(target), active: false }];
+		if (ctx) {
+			docs.push(
+				createAuditEntry(
+					{
+						action: 'manual_adjust',
+						target_type: 'sop_profile',
+						target_id: target._id,
+						reason: `Deactivate master profile "${target.name}"`,
+						context: { version: target.version }
+					},
+					{ shelterCode: 'catalog', createdBy: ctx.createdBy }
+				)
+			);
+		}
+		await saveBulkAtomic(this.dbName, docs, 'deactivate master');
 	}
 }
 
@@ -164,7 +284,9 @@ export class SopOverrideRemoteRepository implements SopOverrideRepository {
 		if (deactivatedPrev) docs.push(deactivatedPrev);
 		if (audit) docs.push(audit);
 
-		const saved = await saveBulkAtomic(this.dbName, docs, 'override versions');
+		const saved = await saveBulkAtomic(this.dbName, docs, 'override versions', undefined, {
+			onConflict: 'throw'
+		});
 
 		return {
 			profile: saved.find((d) => d._id === profile._id) as SopOverride,
@@ -173,6 +295,39 @@ export class SopOverrideRemoteRepository implements SopOverrideRepository {
 				: null,
 			audit: audit ? (saved.find((d) => d._id === audit._id) as AuditEntry) : null
 		};
+	}
+
+	async createNextVersion(
+		prev: SopOverride,
+		changes: Partial<Record<SopRatioKey, string>>,
+		reason: string,
+		ctx: AuthorContext
+	): Promise<{
+		profile: SopOverride;
+		deactivatedPrev: SopOverride | null;
+		audit: AuditEntry | null;
+	}> {
+		let lastConflict: unknown;
+		for (let attempt = 0; attempt < 3; attempt++) {
+			const versions = await this.listVersions(prev.name);
+			const currentPrev = versions.find((version) => version._id === prev._id) ?? prev;
+			const maxVersion = Math.max(
+				currentPrev.version,
+				...versions.map((version) => version.version)
+			);
+			const next = createNewVersion(currentPrev, changes, reason, ctx, maxVersion);
+
+			try {
+				return await this.createVersion(next.deactivatedPrev, next.profile, next.audit);
+			} catch (error) {
+				if (!(error instanceof Error) || error.message !== '409_CONFLICT') throw error;
+				lastConflict = error;
+			}
+		}
+
+		throw new Error('ไม่สามารถสร้างเวอร์ชันใหม่ได้ เนื่องจากมีการแก้ไขพร้อมกัน', {
+			cause: lastConflict
+		});
 	}
 
 	async setActive(id: string, ctx?: AuthorContext): Promise<void> {

@@ -6,7 +6,9 @@ import type { SopMaster, SopOverride } from '../domain/sop-ratio';
 export const sopRatioKeys = {
 	all: ['sop_ratios'] as const,
 	active: () => [...sopRatioKeys.all, 'active'] as const,
-	list: () => [...sopRatioKeys.all, 'list'] as const
+	list: () => [...sopRatioKeys.all, 'list'] as const,
+	masterProfiles: () => [...sopRatioKeys.all, 'master-profiles'] as const,
+	masterProfile: (slug: string) => [...sopRatioKeys.all, 'master-profile', slug] as const
 };
 
 export const sopVersionKeys = {
@@ -60,6 +62,26 @@ export const useSopProfiles = () =>
 		queryKey: sopRatioKeys.list(),
 		queryFn: () => sopMasterRepository().listActive()
 	}));
+
+/** Latest version of every master, including inactive profiles, for SA management. */
+export const useAllMasterProfiles = () =>
+	createQuery(() => ({
+		queryKey: sopRatioKeys.masterProfiles(),
+		queryFn: () => sopMasterRepository().listAll()
+	}));
+
+/** Latest version of a master profile selected by its stable slug. */
+export const useMasterProfile = (slug: string | (() => string)) => {
+	const getSlug = typeof slug === 'function' ? slug : () => slug;
+	return createQuery(() => {
+		const resolvedSlug = getSlug();
+		return {
+			queryKey: sopRatioKeys.masterProfile(resolvedSlug),
+			queryFn: () => sopMasterRepository().getBySlug(resolvedSlug),
+			enabled: resolvedSlug.trim().length > 0
+		};
+	});
+};
 
 export const useActiveSopOverride = (shelterCode: string | (() => string)) => {
 	const getCode = typeof shelterCode === 'function' ? shelterCode : () => shelterCode;

@@ -1,19 +1,33 @@
 // Public barrel for the sop-ratios feature. Domain-only (types, repository contracts, and TanStack query hooks).
-export type { SopMaster, SopOverride } from './domain/sop-ratio';
+export type {
+	SopMaster,
+	SopOverride,
+	SopProfile,
+	SopProfileDoc,
+	SopProfileInput,
+	SopProfileVersion,
+	SopProfileVersionDoc
+} from './domain/sop-ratio';
 
 export {
 	createInitialProfile,
 	createNewVersion,
+	createProfileSlug,
+	incrementVersion,
 	isSopMaster,
 	isSopOverride,
 	resolveEffectiveProfile,
 	SOP_RATIO_KEYS,
 	SOP_RATIO_KIND,
 	sopMasterSchema,
+	sopProfileFormSchema,
+	sopProfileInputSchema,
+	sopProfileSlugSchema,
 	sopOverrideSchema,
 	SOP_MASTER_SCHEMA_VERSION,
 	type CreateNewVersionResult,
-	type SopRatioKey
+	type SopRatioKey,
+	validateRatios
 } from './domain/sop-ratio';
 export { RATIO_LABELS } from './domain/sop-ratio.labels';
 
@@ -47,6 +61,7 @@ export {
 // Data — repositories + resolver
 export type { SopMasterRepository, SopOverrideRepository } from './data/sop-ratio.repository';
 export {
+	SopMasterRemoteRepository,
 	sopMasterRepository,
 	sopOverrideRepository,
 	resolveEffectiveRatios
@@ -58,6 +73,8 @@ export {
 	useActiveSopProfile,
 	useActiveSopRatio,
 	useSopProfiles,
+	useAllMasterProfiles,
+	useMasterProfile,
 	useActiveSopOverride,
 	getActiveSopProfile,
 	sopVersionKeys
@@ -76,12 +93,15 @@ export {
 	useCreateMasterVersion,
 	useCreateOverrideVersion,
 	useCreateInitialOverride,
+	useCreateInitialMaster,
 	useSetMasterActive,
+	useDeactivateMaster,
 	useSetOverrideActive,
 	useSetOverrideInactive,
 	type CreateMasterVersionInput,
 	type CreateOverrideVersionInput,
-	type CreateInitialOverrideInput
+	type CreateInitialOverrideInput,
+	type CreateInitialMasterInput
 } from './application/use-create-version';
 
 // Live-sync wiring (call once per layout, pass QueryClient)
