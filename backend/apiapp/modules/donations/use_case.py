@@ -18,8 +18,8 @@ from .schemas import (
     DonationCourierPatchResponse,
     DonationCreateRequest,
     DonationCreateResponse,
-    DonationTrackSearchResponse,
     DonationTrackingResponse,
+    DonationTrackSearchResponse,
 )
 
 _MAX_BOOKING_REF_ATTEMPTS = 8
@@ -233,7 +233,9 @@ class DonationsUseCase:
 
         buffer = await DonationBuffer.find_one(DonationBuffer.booking_ref == ref)
         if buffer is None:
-            buffer = await DonationBuffer.find_one(DonationBuffer.booking_ref == booking_ref.strip())
+            buffer = await DonationBuffer.find_one(
+                DonationBuffer.booking_ref == booking_ref.strip()
+            )
         if buffer is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -29,6 +29,36 @@ export async function readMasterDoc(
 	return res.data as MasterData;
 }
 
+/**
+ * Every shelter-local doc of one type (`master_data:{type}:{shelter_code}`),
+ * via an `_all_docs` prefix scan — no Mango index required, same pattern as the
+ * donation/public readers. The trailing `\uFFF0` is CouchDB's high sentinel, so
+ * the range covers exactly the ids that carry a shelter suffix and never the
+ * global `master_data:{type}` doc itself.
+ *
+ * `startkey`/`endkey` are JSON values per the CouchDB API, and they are
+ * percent-encoded here rather than interpolated raw: the quotes and the
+ * non-ASCII sentinel would otherwise travel unescaped through whatever proxy
+ * sits in front of CouchDB.
+ *
+ * Used by the label-uniqueness gate (CR-078) to check a GLOBAL write against
+ * every shelter's list. Do NOT import into client bundles.
+ */
+export async function readShelterMasterDocs(type: MasterDataType): Promise<MasterData[]> {
+	const prefix = `${masterDocId(type)}:`;
+	const startkey = encodeURIComponent(JSON.stringify(prefix));
+	const endkey = encodeURIComponent(JSON.stringify(`${prefix}\uFFF0`));
+	const res = await adminRaw(
+		`/${REGISTRY_DB}/_all_docs?include_docs=true&startkey=${startkey}&endkey=${endkey}`,
+		'GET'
+	);
+	if (res.status >= 400) {
+		throw new ServiceError('INTERNAL', `Could not list shelter master data for ${type}`);
+	}
+	const rows = (res.data as { rows?: { doc?: MasterData | null }[] })?.rows ?? [];
+	return rows.map((r) => r.doc).filter((d): d is MasterData => !!d && Array.isArray(d.items));
+}
+
 /** Read the global master doc plus the shelter-local doc and concat their items. */
 export async function readEffectiveMasterDoc(
 	type: MasterDataType,

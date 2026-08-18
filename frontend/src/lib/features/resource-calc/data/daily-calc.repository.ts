@@ -7,6 +7,7 @@
  * BARRELS only.
  */
 import type { AuthorContext, BaseDoc } from '$lib/db/model';
+import { DailyCalcReadError, parseDailyCalcRecord } from './daily-calc.validation';
 import type { DailyCalcDoc } from '../domain/calc.schema';
 
 /**
@@ -38,9 +39,21 @@ export function dailyCalcDocId(date: string): string {
 	return `${DAILY_CALC_ID_PREFIX}:${date}`;
 }
 
-/** Structural guard for a persisted daily-calc record. */
-export const isDailyCalcRecord = (d: unknown): d is DailyCalcRecord =>
-	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'daily_calc';
+/** Fail-closed guard for a persisted daily-calc record. */
+export const isDailyCalcRecord = (d: unknown): d is DailyCalcRecord => {
+	try {
+		parseDailyCalcRecord(d);
+		return true;
+	} catch (error) {
+		if (error instanceof DailyCalcReadError) return false;
+		throw error;
+	}
+};
+
+/** Parse and validate the public persisted read model. */
+export function parseDailyCalc(d: unknown): DailyCalcRecord {
+	return parseDailyCalcRecord(d) as DailyCalcRecord;
+}
 
 export interface DailyCalcRepository {
 	/** One day's persisted snapshot by date (`YYYY-MM-DD`), or `null` if not yet calculated. */

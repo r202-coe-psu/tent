@@ -1,5 +1,5 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
-import { isSystemAdmin, shelterCodeFromRoles } from '$lib/auth/roles';
+import { isSystemAdmin, isShelterManager, shelterCodeFromRoles } from '$lib/auth/roles';
 import { authStore } from '$lib/stores/auth.svelte';
 import {
 	EMPTY_ADMISSION_POLICY,
@@ -9,12 +9,22 @@ import {
 	migrateShelterV2ToCurrent,
 	type ShelterMaster
 } from '../domain/schema';
-import type { SheltersRepository, ShelterSummary } from './shelters.repository';
+import type { SheltersRepository, ShelterSummary, ShelterBasic } from './shelters.repository';
 
 export const SHELTER_REGISTRY_DB = 'registry';
 
 function shelterDbName(code: string): string {
 	return `shelter_${code.toLowerCase()}`;
+}
+
+function masterToBasic(master: ShelterMaster): ShelterBasic {
+	return {
+		code: master.code,
+		name: master.name,
+		operation_status: master.operation_status ?? 'standby',
+		capacity: master.capacity ?? 0,
+		province: master.province ?? null
+	};
 }
 
 function masterToSummary(master: ShelterMaster): ShelterSummary {
@@ -55,9 +65,17 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 	};
 }
 
-function visibleShelters(all: ShelterSummary[]): ShelterSummary[] {
+function visibleSheltersSummary(all: ShelterSummary[]): ShelterSummary[] {
 	const roles = authStore.user?.roles ?? [];
 	if (isSystemAdmin(roles)) return all;
+	const scope = shelterCodeFromRoles(roles);
+	if (scope) return all.filter((s) => s.code === scope);
+	return [];
+}
+
+function visibleSheltersBasic(all: ShelterBasic[]): ShelterBasic[] {
+	const roles = authStore.user?.roles ?? [];
+	if (isSystemAdmin(roles) || isShelterManager(roles)) return all;
 	const scope = shelterCodeFromRoles(roles);
 	if (scope) return all.filter((s) => s.code === scope);
 	return [];
@@ -73,7 +91,13 @@ export class SheltersRemoteRepository implements SheltersRepository {
 	async listShelters(): Promise<ShelterSummary[]> {
 		const masters = await this.repo.allByType('shelter', isShelterMasterDoc);
 		const summaries = masters.map((m) => masterToSummary(migrateShelterV2ToCurrent(m)));
-		return visibleShelters(summaries);
+		return visibleSheltersSummary(summaries);
+	}
+
+	async searchShelters(): Promise<ShelterBasic[]> {
+		const masters = await this.repo.allByType('shelter', isShelterMasterDoc);
+		const basics = masters.map((m) => masterToBasic(migrateShelterV2ToCurrent(m)));
+		return visibleSheltersBasic(basics);
 	}
 
 	async getShelter(code: string): Promise<ShelterSummary> {

@@ -56,7 +56,7 @@ describe('CouchDbReferralServerRepository capacity destination-gated accept', ()
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		repo = new CouchDbReferralServerRepository('shelter_sh002');
+		repo = new CouchDbReferralServerRepository('central_ops', 'SH002');
 	});
 
 	it('writes dest intake then source transfer_out without rewriting source shelter_code', async () => {
@@ -199,7 +199,7 @@ describe('CouchDbReferralServerRepository capacity destination-gated accept', ()
 	});
 
 	it('rejects capacity accept when actor is source shelter (403)', async () => {
-		const sourceRepo = new CouchDbReferralServerRepository('shelter_sh001');
+		const sourceRepo = new CouchDbReferralServerRepository('central_ops', 'SH001');
 		adminRaw.mockImplementation(async (path: string, method: string) => {
 			const decoded = decodeURIComponent(path);
 			if (method === 'GET' && decoded.includes('referral:01CAPACITY')) {
@@ -214,160 +214,6 @@ describe('CouchDbReferralServerRepository capacity destination-gated accept', ()
 			status: 403,
 			message: expect.stringMatching(/destination shelter/i)
 		});
-	});
-
-	it('mirrors referral into destination DB on sent', async () => {
-		const sourceRepo = new CouchDbReferralServerRepository('shelter_sh001');
-		const draft: Referral = {
-			...capacitySent,
-			status: 'draft',
-			timeline: {},
-			_rev: '1-draft'
-		};
-
-		adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
-			const decoded = decodeURIComponent(path);
-			if (method === 'GET' && decoded.includes('/shelter_sh001/referral:')) {
-				return { status: 200, data: draft };
-			}
-			if (method === 'HEAD' && decoded === '/shelter_sh002') {
-				return { status: 200, data: null };
-			}
-			if (method === 'GET' && decoded.includes('/shelter_sh002/referral:')) {
-				return { status: 404, data: { error: 'not_found' } };
-			}
-			if (method === 'PUT') {
-				return { status: 201, data: { ok: true, id: 'referral:01CAPACITY', rev: '2-x' } };
-			}
-			return { status: 500, data: { path, method, body } };
-		});
-
-		const saved = await sourceRepo.transition(
-			'referral:01CAPACITY',
-			'sent',
-			'Staff A',
-			undefined,
-			'SH001'
-		);
-		expect(saved.status).toBe('sent');
-
-		const destMirrorPut = adminRaw.mock.calls.find(
-			(c) =>
-				c[1] === 'PUT' && decodeURIComponent(String(c[0])).startsWith('/shelter_sh002/referral:')
-		);
-		expect(destMirrorPut?.[2]).toEqual(
-			expect.objectContaining({
-				_id: 'referral:01CAPACITY',
-				status: 'sent',
-				shelter_code: 'SH001',
-				to_shelter_code: 'SH002'
-			})
-		);
-	});
-
-	it('does not update source when destination DB is missing on sent mirror', async () => {
-		const sourceRepo = new CouchDbReferralServerRepository('shelter_sh001');
-		const draft: Referral = {
-			...capacitySent,
-			status: 'draft',
-			timeline: {},
-			_rev: '1-draft',
-			to_shelter_code: 'SH003'
-		};
-
-		adminRaw.mockImplementation(async (path: string, method: string) => {
-			const decoded = decodeURIComponent(path);
-			if (method === 'GET' && decoded.includes('/shelter_sh001/referral:')) {
-				return { status: 200, data: draft };
-			}
-			if (method === 'HEAD' && decoded === '/shelter_sh003') {
-				return { status: 404, data: null };
-			}
-			return { status: 500, data: { path, method } };
-		});
-
-		await expect(
-			sourceRepo.transition('referral:01CAPACITY', 'sent', 'Staff A', undefined, 'SH001')
-		).rejects.toMatchObject({
-			status: 404,
-			message: 'ไม่พบศูนย์พักพิงปลายทางหรือฐานข้อมูลไม่ถูกต้อง (shelter_sh003)'
-		});
-
-		expect(adminRaw.mock.calls.every((c) => c[1] !== 'PUT')).toBe(true);
-	});
-
-	it('rejects invalid destination shelter code before mirror write', async () => {
-		const sourceRepo = new CouchDbReferralServerRepository('shelter_sh001');
-		const draft = {
-			...capacitySent,
-			status: 'draft',
-			timeline: {},
-			_rev: '1-draft',
-			to_shelter_code: 'ศูนย์พักพิงปัตตานี'
-		} as Referral;
-
-		adminRaw.mockImplementation(async (path: string, method: string) => {
-			const decoded = decodeURIComponent(path);
-			if (method === 'GET' && decoded.includes('/shelter_sh001/referral:')) {
-				return { status: 200, data: draft };
-			}
-			return { status: 500, data: { path, method } };
-		});
-
-		await expect(
-			sourceRepo.transition('referral:01CAPACITY', 'sent', 'Staff A', undefined, 'SH001')
-		).rejects.toMatchObject({
-			status: 422,
-			message: 'ไม่พบศูนย์พักพิงปลายทางหรือฐานข้อมูลไม่ถูกต้อง (shelter_ศูนย์พักพิงปัตตานี)'
-		});
-
-		expect(adminRaw.mock.calls.every((c) => c[1] !== 'PUT')).toBe(true);
-		expect(adminRaw.mock.calls.every((c) => c[1] !== 'HEAD')).toBe(true);
-	});
-
-	it('updates existing destination mirror idempotently on sent', async () => {
-		const sourceRepo = new CouchDbReferralServerRepository('shelter_sh001');
-		const draft: Referral = {
-			...capacitySent,
-			status: 'draft',
-			timeline: {},
-			_rev: '1-draft'
-		};
-		const existingMirror: Referral = {
-			...draft,
-			_rev: '2-dest-old'
-		};
-
-		adminRaw.mockImplementation(async (path: string, method: string) => {
-			const decoded = decodeURIComponent(path);
-			if (method === 'GET' && decoded.includes('/shelter_sh001/referral:')) {
-				return { status: 200, data: draft };
-			}
-			if (method === 'HEAD' && decoded === '/shelter_sh002') {
-				return { status: 200, data: null };
-			}
-			if (method === 'GET' && decoded.includes('/shelter_sh002/referral:')) {
-				return { status: 200, data: existingMirror };
-			}
-			if (method === 'PUT') {
-				return { status: 201, data: { ok: true, id: 'referral:01CAPACITY', rev: '3-new' } };
-			}
-			return { status: 500, data: { path, method } };
-		});
-
-		await sourceRepo.transition('referral:01CAPACITY', 'sent', 'Staff A', undefined, 'SH001');
-
-		const destMirrorPut = adminRaw.mock.calls.find(
-			(c) =>
-				c[1] === 'PUT' && decodeURIComponent(String(c[0])).startsWith('/shelter_sh002/referral:')
-		);
-		expect(destMirrorPut?.[2]).toEqual(
-			expect.objectContaining({
-				_id: 'referral:01CAPACITY',
-				_rev: '2-dest-old',
-				status: 'sent'
-			})
-		);
 	});
 
 	it('fail-fast when source evacuee missing', async () => {

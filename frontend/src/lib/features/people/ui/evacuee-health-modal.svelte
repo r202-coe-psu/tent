@@ -79,7 +79,7 @@
 	let medicalNotes = $state('');
 	let screeningNotes = $state('');
 	let selectedSymptoms = $state<string[]>([]);
-	let temperature = $state('');
+	let temperature = $state<number | null>(null);
 	let referral = $state(false);
 	let specialNeeds = $state<string[]>([]);
 	let saving = $state(false);
@@ -102,10 +102,9 @@
 	});
 
 	const temperatureError = $derived.by(() => {
-		if (!temperature.trim()) return '';
-		const value = Number(temperature);
-		if (!Number.isFinite(value)) return 'กรุณากรอกอุณหภูมิเป็นตัวเลข';
-		if (value < 30 || value > 45) return 'อุณหภูมิต้องอยู่ระหว่าง 30 ถึง 45 °C';
+		if (temperature === null) return '';
+		if (!Number.isFinite(temperature)) return 'กรุณากรอกอุณหภูมิเป็นตัวเลข';
+		if (temperature < 30 || temperature > 45) return 'อุณหภูมิต้องอยู่ระหว่าง 30 ถึง 45 °C';
 		return '';
 	});
 
@@ -119,7 +118,7 @@
 			medicalNotes: medical?.notes ?? '',
 			screeningNotes: screening?.notes ?? '',
 			selectedSymptoms: [...(screening?.symptoms ?? [])],
-			temperature: screening?.temperature_c?.toString() ?? '',
+			temperature: screening?.temperature_c ?? null,
 			referral: screening?.needs_referral ?? false,
 			specialNeeds: [...(evacuee.special_needs ?? [])]
 		};
@@ -224,7 +223,7 @@
 				medicalNotes: validation.data.medicalNotes,
 				screeningNotes: validation.data.screeningNotes,
 				ewarSymptoms: validation.data.selectedSymptoms,
-				temperatureC: validation.data.temperature ? Number(validation.data.temperature) : null,
+				temperatureC: validation.data.temperature,
 				referral: validation.data.referral,
 				specialNeeds: validation.data.specialNeeds
 			});

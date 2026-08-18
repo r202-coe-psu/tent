@@ -9,13 +9,20 @@ import {
 	ServiceError
 } from '$lib/server/couch-admin';
 import {
+	dedupeItemsByCode,
+	duplicateLabelKeys,
 	enforceOneDefault,
+	findLabelCollision,
 	masterDocId,
 	masterDataSchema,
 	masterTypeSchema,
 	type MasterData
 } from '$lib/features/master-data/domain';
-import { mergeMasterDataItems, readMasterDoc } from '$lib/server/master-data-server';
+import {
+	mergeMasterDataItems,
+	readMasterDoc,
+	readShelterMasterDocs
+} from '$lib/server/master-data-server';
 
 export const prerender = false;
 
@@ -93,12 +100,36 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		if (!Array.isArray(body.items)) {
 			throw new ServiceError('VALIDATION', 'items[] is required');
 		}
+		// dedupeItemsByCode repairs a doc that recorded one item twice (CR-078) —
+		// while it stands, every UI action matches both copies, so the operator
+		// cannot fix it from the screen. Collapse it here on the next save.
 		const cleaned = enforceOneDefault(
-			masterDataSchema.shape.items.parse(body.items) as MasterData['items']
+			dedupeItemsByCode(masterDataSchema.shape.items.parse(body.items) as MasterData['items'])
 		);
 
 		const id = masterDocId(type, scope.shelterCode);
 		const existing = await readMasterDoc(type, scope.shelterCode);
+
+		// Unique label per master type (CR-078). This is the enforcing gate — the
+		// modal blocks the same collision client-side, but a direct PUT must not
+		// slip past it. Inactive items count: their `code` stays referenced by
+		// existing records (soft-delete, schema.md §3.3).
+		//
+		// The cross-tier check runs BOTH ways, because the shelter UI renders the
+		// merged global + local list and a collision from either direction shows
+		// two rows that read identically: a shelter write is checked against the
+		// global items, and a global write against every shelter's items.
+		const otherTier = scope.shelterCode
+			? ((await readMasterDoc(type))?.items ?? [])
+			: (await readShelterMasterDocs(type)).flatMap((d) => d.items);
+		// Labels that already collided before this write are skipped — data that
+		// predates the rule must not brick every later edit of the type (a status
+		// toggle would otherwise be rejected with no way to reach the bad item).
+		const grandfathered = duplicateLabelKeys(existing?.items ?? [], otherTier);
+		const collision = findLabelCollision(cleaned, otherTier, grandfathered);
+		if (collision) {
+			throw new ServiceError('VALIDATION', `มีรายการชื่อ "${collision}" อยู่แล้วในประเภทนี้`);
+		}
 		const now = new Date().toISOString();
 		let doc: MasterData;
 		if (scope.shelterCode) {

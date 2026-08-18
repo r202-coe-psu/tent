@@ -63,6 +63,10 @@ describe('buildValidateDocUpdate', () => {
 		expect(validateFn).toContain("'referral'");
 	});
 
+	it('includes daily_calc in the allowed doc type whitelist for on-demand writes', () => {
+		expect(buildValidateDocUpdate('SH001')).toContain("'daily_calc'");
+	});
+
 	// CR-032: purchase docs are written to shelter dbs, so the server-side
 	// whitelist must accept them or every write is rejected as forbidden.
 	it('includes purchase in the allowed doc type whitelist', () => {

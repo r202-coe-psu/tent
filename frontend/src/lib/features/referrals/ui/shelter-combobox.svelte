@@ -4,7 +4,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
-	import { useShelters, type ShelterSummary } from '$lib/features/shelters';
+	import { useSearchShelters, type ShelterBasic } from '$lib/features/shelters';
 
 	let {
 		value = $bindable(''),
@@ -24,7 +24,7 @@
 
 	const errorMessage = $derived(Array.isArray(error) ? error[0] : error);
 
-	const sheltersQuery = useShelters();
+	const sheltersQuery = useSearchShelters();
 	const allShelters = $derived(sheltersQuery.data ?? []);
 
 	const availableShelters = $derived(
@@ -57,7 +57,7 @@
 		return found ? `${found.name} (${found.code})` : value;
 	});
 
-	function selectShelter(shelter: ShelterSummary) {
+	function selectShelter(shelter: ShelterBasic) {
 		value = shelter.code;
 		onSelect?.(shelter.code);
 		validate?.();
