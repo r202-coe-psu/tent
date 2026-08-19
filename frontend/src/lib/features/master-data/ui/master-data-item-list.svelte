@@ -1,11 +1,15 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import type {
-		MasterDataItem,
-		MasterDataItemSource,
-		MasterDataQueryContext,
-		MasterDataType
+	import {
+		dedupeItemsByCode,
+		duplicateItemCodes,
+		duplicateLabelKeys,
+		normalizeLabel,
+		type MasterDataItem,
+		type MasterDataItemSource,
+		type MasterDataQueryContext,
+		type MasterDataType
 	} from '$lib/features/master-data';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 
@@ -38,6 +42,35 @@
 	);
 
 	const isShelterScope = $derived(context?.scope === 'shelter');
+
+	// Duplicate labels can still reach this list through paths that never touch
+	// the PUT gate — replication backlog from an edge, a direct script write, an
+	// import. The rule cannot be pushed down to CouchDB either: validate_doc_update
+	// only ever sees one document, so a global ↔ shelter-local collision is
+	// invisible there. So detect and surface it, and let an operator resolve it by
+	// renaming or deactivating one side. (CR-078)
+	//
+	// Counted over every item, not `filtered` — a search must not hide the warning.
+	//
+	// Deduped by code first, so the two warnings never describe the same defect:
+	// one item recorded twice trivially shares its own label, and telling the
+	// operator to "rename one of them" would be advice that cannot work. What is
+	// left here is a real collision between two DIFFERENT items.
+	const distinctItems = $derived(dedupeItemsByCode(items));
+	const duplicateKeys = $derived(duplicateLabelKeys(distinctItems));
+	const duplicateCount = $derived(
+		distinctItems.filter((i) => duplicateKeys.has(normalizeLabel(i.label))).length
+	);
+
+	// A repeated `code` is a different, worse problem than a repeated label: every
+	// operation here matches on `code`, so editing or toggling one row would hit
+	// both copies. The operator cannot fix that from this screen — the write path
+	// collapses the copies on the next save instead (`dedupeItemsByCode`).
+	const duplicateCodes = $derived(duplicateItemCodes(items));
+
+	function isDuplicate(item: MasterDataItem): boolean {
+		return duplicateKeys.has(normalizeLabel(item.label));
+	}
 
 	// Owned = editable + toggleable as an item of THIS doc: shelter-local items
 	// (shelter scope), or every item (global scope, SA-managed).
@@ -116,6 +149,36 @@
 		</div>
 	</header>
 
+	{#if duplicateCount > 0}
+		<div
+			role="alert"
+			class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+		>
+			<p class="font-medium text-amber-700 dark:text-amber-400">
+				พบชื่อซ้ำ {duplicateCount} รายการในประเภทนี้
+			</p>
+			<p class="mt-1 text-muted-foreground">
+				กรุณาแก้ไขชื่อหรือปิดใช้งานให้เหลือรายการเดียวต่อหนึ่งชื่อ — รายการที่ซ้ำถูกทำเครื่องหมาย
+				"ชื่อซ้ำ" ไว้ในตารางด้านล่าง{isShelterScope ? ' (รายการ GLOBAL ต้องแก้ที่ส่วนกลาง)' : ''}
+			</p>
+		</div>
+	{/if}
+
+	{#if duplicateCodes.size > 0}
+		<div
+			role="alert"
+			class="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm"
+		>
+			<p class="font-medium text-destructive">
+				พบรายการที่มีรหัสซ้ำกัน {duplicateCodes.size} รหัส
+			</p>
+			<p class="mt-1 text-muted-foreground">
+				รายการเหล่านี้เป็นสำเนาของกันและกัน (มาร์กว่า "รหัสซ้ำ" ด้านล่าง) การแก้ไขหรือปิดใช้งาน
+				จะมีผลกับทุกสำเนาพร้อมกัน — ระบบจะยุบให้เหลือรายการเดียวอัตโนมัติเมื่อบันทึกครั้งถัดไป
+			</p>
+		</div>
+	{/if}
+
 	<div class="overflow-x-auto rounded-lg border">
 		<table class="w-full text-sm">
 			<thead class="bg-muted/50 text-muted-foreground">
@@ -126,7 +189,12 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each filtered as item (item.code)}
+				<!-- Keyed by code AND position: `code` alone is the natural key, but a
+				     corrupted doc can repeat one, and Svelte throws each_key_duplicate
+				     on that — blanking the whole table exactly when the operator needs
+				     to see it to fix it. The suffix only ever differs for the broken
+				     rows. (CR-078) -->
+				{#each filtered as item, i (duplicateCodes.has(item.code) ? `${item.code}#${i}` : item.code)}
 					{@const source = itemSources?.[item.code]}
 					{@const owned = isOwned(item)}
 					{@const perShelter = !owned && canPerShelterToggle(item)}
@@ -140,6 +208,12 @@
 										? `SHELTER · ${source.shelter_code ?? 'ไม่ระบุศูนย์'}`
 										: 'GLOBAL · ทุกศูนย์'}
 								</Badge>
+								{#if isDuplicate(item)}
+									<Badge variant="destructive">ชื่อซ้ำ</Badge>
+								{/if}
+								{#if duplicateCodes.has(item.code)}
+									<Badge variant="destructive">รหัสซ้ำ</Badge>
+								{/if}
 							</div>
 							{#if item.is_default}
 								<span

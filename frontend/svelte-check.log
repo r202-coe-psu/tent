@@ -1,0 +1,202 @@
+Loading svelte-check in workspace: /home/chinochi866/import_star/tent/frontend
+Getting Svelte diagnostics...
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/+page.ts:13:4
+Error: Type '{}' is missing the following properties from type '{ question: string; answer: string; is_published: boolean; order: number; id?: string | undefined; }[]': length, pop, push, concat, and 35 more. 
+			configData = await configRes.json();
+			faqs = configData.faqs || [];
+		}
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/+page.ts:58:40
+Error: Property 'lat' does not exist on type '{}'. 
+		let dist = 0;
+		if (hasUser && item?.geo && item.geo.lat != null && item.geo.lng != null) {
+			dist = parseFloat(haversineKm(userLatNum, userLngNum, item.geo.lat, item.geo.lng).toFixed(1));
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/+page.ts:58:64
+Error: Property 'lng' does not exist on type '{}'. 
+		let dist = 0;
+		if (hasUser && item?.geo && item.geo.lat != null && item.geo.lng != null) {
+			dist = parseFloat(haversineKm(userLatNum, userLngNum, item.geo.lat, item.geo.lng).toFixed(1));
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/+page.ts:59:67
+Error: Property 'lat' does not exist on type '{}'. 
+		if (hasUser && item?.geo && item.geo.lat != null && item.geo.lng != null) {
+			dist = parseFloat(haversineKm(userLatNum, userLngNum, item.geo.lat, item.geo.lng).toFixed(1));
+		}
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/+page.ts:59:81
+Error: Property 'lng' does not exist on type '{}'. 
+		if (hasUser && item?.geo && item.geo.lat != null && item.geo.lng != null) {
+			dist = parseFloat(haversineKm(userLatNum, userLngNum, item.geo.lat, item.geo.lng).toFixed(1));
+		}
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/+page.ts:64:5
+Error: Type '{} | undefined' is not assignable to type 'string[] | undefined'.
+  Type '{}' is missing the following properties from type 'string[]': length, pop, push, concat, and 35 more. 
+				...item,
+				vulnerable_groups: item?.vulnerable_groups ?? undefined
+			},
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:31:17
+Error: Property 'shelters' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'shelters' does not exist on type 'void'. 
+		expect(result).toBeDefined();
+		expect(result.shelters).toEqual([]);
+		expect(result.count).toBe(0);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:32:17
+Error: Property 'count' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'count' does not exist on type 'void'. 
+		expect(result.shelters).toEqual([]);
+		expect(result.count).toBe(0);
+		expect(result.summary.shelters_total).toBe(0);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:33:17
+Error: Property 'summary' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'summary' does not exist on type 'void'. 
+		expect(result.count).toBe(0);
+		expect(result.summary.shelters_total).toBe(0);
+		expect(result.summary.shelters_open).toBe(0);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:34:17
+Error: Property 'summary' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'summary' does not exist on type 'void'. 
+		expect(result.summary.shelters_total).toBe(0);
+		expect(result.summary.shelters_open).toBe(0);
+	});
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:50:17
+Error: Property 'shelters' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'shelters' does not exist on type 'void'. 
+
+		expect(result.shelters).toEqual([]);
+		expect(result.count).toBe(0);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:51:17
+Error: Property 'count' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'count' does not exist on type 'void'. 
+		expect(result.shelters).toEqual([]);
+		expect(result.count).toBe(0);
+		expect(result.summary.shelters_total).toBe(0);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:52:17
+Error: Property 'summary' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'summary' does not exist on type 'void'. 
+		expect(result.count).toBe(0);
+		expect(result.summary.shelters_total).toBe(0);
+		expect(result.summary.shelters_open).toBe(0);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:53:17
+Error: Property 'summary' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'summary' does not exist on type 'void'. 
+		expect(result.summary.shelters_total).toBe(0);
+		expect(result.summary.shelters_open).toBe(0);
+		expect(result.as_of).toBe('2026-08-19T10:00:00Z');
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:54:17
+Error: Property 'as_of' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'as_of' does not exist on type 'void'. 
+		expect(result.summary.shelters_open).toBe(0);
+		expect(result.as_of).toBe('2026-08-19T10:00:00Z');
+	});
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:59:4
+Error: Type 'undefined' is not assignable to type '{ code: string; name: string; status: string; capacity: number; geo?: { lat: number; lng: number; } | null | undefined; province?: string | null | undefined; district?: string | null | undefined; ... 4 more ...; updated_at: string; }[]'. 
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: undefined,
+			count: 0,
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:70:17
+Error: Property 'shelters' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'shelters' does not exist on type 'void'. 
+
+		expect(result.shelters).toEqual([]);
+		expect(result.count).toBe(0);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:71:17
+Error: Property 'count' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'count' does not exist on type 'void'. 
+		expect(result.shelters).toEqual([]);
+		expect(result.count).toBe(0);
+		expect(result.summary.shelters_total).toBe(0);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:72:17
+Error: Property 'summary' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'summary' does not exist on type 'void'. 
+		expect(result.count).toBe(0);
+		expect(result.summary.shelters_total).toBe(0);
+		expect(result.summary.shelters_open).toBe(0);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:73:17
+Error: Property 'summary' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'summary' does not exist on type 'void'. 
+		expect(result.summary.shelters_total).toBe(0);
+		expect(result.summary.shelters_open).toBe(0);
+	});
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:112:17
+Error: Property 'shelters' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'shelters' does not exist on type 'void'. 
+
+		expect(result.shelters).toHaveLength(2);
+		expect(result.count).toBe(2);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:113:17
+Error: Property 'count' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'count' does not exist on type 'void'. 
+		expect(result.shelters).toHaveLength(2);
+		expect(result.count).toBe(2);
+		expect(result.summary.shelters_total).toBe(2);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:114:17
+Error: Property 'summary' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'summary' does not exist on type 'void'. 
+		expect(result.count).toBe(2);
+		expect(result.summary.shelters_total).toBe(2);
+		expect(result.summary.shelters_open).toBe(1);
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:115:17
+Error: Property 'summary' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'summary' does not exist on type 'void'. 
+		expect(result.summary.shelters_total).toBe(2);
+		expect(result.summary.shelters_open).toBe(1);
+		expect(result.shelters[0].name).toBe('ศูนย์ช่วยเหลือเทศบาล');
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:116:17
+Error: Property 'shelters' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'shelters' does not exist on type 'void'. 
+		expect(result.summary.shelters_open).toBe(1);
+		expect(result.shelters[0].name).toBe('ศูนย์ช่วยเหลือเทศบาล');
+		expect(result.shelters[0].status).toBe('OPEN');
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:117:17
+Error: Property 'shelters' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'shelters' does not exist on type 'void'. 
+		expect(result.shelters[0].name).toBe('ศูนย์ช่วยเหลือเทศบาล');
+		expect(result.shelters[0].status).toBe('OPEN');
+		expect(result.shelters[1].status).toBe('CLOSED');
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:118:17
+Error: Property 'shelters' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'shelters' does not exist on type 'void'. 
+		expect(result.shelters[0].status).toBe('OPEN');
+		expect(result.shelters[1].status).toBe('CLOSED');
+	});
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:153:17
+Error: Property 'shelters' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'shelters' does not exist on type 'void'. 
+
+		expect(result.shelters).toHaveLength(1);
+		expect(result.shelters[0].code).toBe('SH001');
+
+/home/chinochi866/import_star/tent/frontend/src/routes/(public)/shelters/page.test.ts:154:17
+Error: Property 'shelters' does not exist on type 'void | (Omit<PageData, RequiredKeys<T>> & Partial<Pick<PageData, never>> & Record<string, any>)'.
+  Property 'shelters' does not exist on type 'void'. 
+		expect(result.shelters).toHaveLength(1);
+		expect(result.shelters[0].code).toBe('SH001');
+	});
+
+====================================
+svelte-check found 29 errors and 0 warnings in 3 files

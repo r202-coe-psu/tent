@@ -18,8 +18,10 @@
  * facilities, volunteers). Keys align with SOP ratio names when ratios come from T-30, but the
  * schema does not require it.
  *
- * This file is domain-only: it does NOT persist, touch schema.md, or define a CouchDB doc type
- * (persisting `DailyCalcDoc` needs a CR — change-management §2).
+ * This file is domain-only: it does NOT persist, touch schema.md, or define the persisted
+ * envelope. The CR-042 canonical persisted read boundary is layered in
+ * `data/daily-calc.validation.ts`; keeping that boundary separate lets the pure formula schema
+ * remain reusable without importing storage concerns into the domain.
  */
 
 import { z } from 'zod';

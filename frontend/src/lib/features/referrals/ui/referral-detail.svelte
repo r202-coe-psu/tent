@@ -135,6 +135,15 @@
 				</h3>
 				<div class="rounded-lg border border-border/60 bg-muted/40 p-4">
 					<div class="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
+						{#if referral.evacuee_summary}
+							<div>
+								<p class="text-xs text-muted-foreground">ชื่อ-นามสกุล ผู้ประสบภัย</p>
+								<p class="mt-0.5 text-base font-semibold text-foreground">
+									{referral.evacuee_summary.first_name}
+									{referral.evacuee_summary.last_name}
+								</p>
+							</div>
+						{/if}
 						<div>
 							<p class="text-xs text-muted-foreground">รหัสผู้ประสบภัย (Evacuee ID)</p>
 							<p class="mt-0.5 font-mono font-medium">{referral.evacuee_id}</p>
@@ -393,7 +402,10 @@
 						size="sm"
 						variant="outline"
 						class="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
-						onclick={() => handleTransition('closed', 'ปิดรายการ')}
+						data-testid="btn-close-referral"
+						onclick={() => {
+							handleTransition('closed', 'ปิดรายการ');
+						}}
 					>
 						<Archive class="h-4 w-4" />
 						ปิดรายการ (Close)

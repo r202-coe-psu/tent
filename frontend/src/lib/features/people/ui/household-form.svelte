@@ -67,6 +67,11 @@
 			.map((c) => ({ value: c.code, label: c.label }))
 	);
 
+	/** Code of the single active `is_default` item, or '' when none is configured. */
+	function defaultCodeOf(items: readonly { code: string; is_default: boolean; status: string }[]) {
+		return items.find((i) => i.is_default && i.status === 'active')?.code ?? '';
+	}
+
 	// --- Superform ---
 	const form = superForm(defaults(zod4(householdInputSchema)), {
 		SPA: true,
@@ -174,6 +179,41 @@
 				membersInitialized = true;
 				initialized = true;
 			}
+		}
+	});
+
+	// Seed the configured defaults (master_data `is_default`) for เขต / ชุมชน —
+	// CREATE ONLY. Editing an existing household must never gain a zone it did
+	// not have: there, an empty value is a deliberate blank, not "unset yet", and
+	// seeding it would silently persist on the next save.
+	//
+	// Declared AFTER the prefill effect on purpose: on a cache hit the master
+	// queries already hold data on the first flush, and the prefill effect resets
+	// both combobox values — seeding earlier would be wiped straight away.
+	// `initialized` means prefill has run, so an empty value here really is
+	// "operator has not chosen". (CR-049)
+	//
+	// Each field is seeded independently: one query failing (or being disabled
+	// because no shelter is selected) must not suppress the other's default.
+	let mzSeeded = false;
+	let commSeeded = false;
+	$effect(() => {
+		if (!initialized || initialData) return;
+		const mzItems = municipalityZoneQuery.data?.items;
+		const commItems = communityQuery.data?.items;
+		if (mzItems && !mzSeeded) {
+			mzSeeded = true;
+			if (!mzVal) mzVal = defaultCodeOf(mzItems);
+		}
+		if (commItems && !commSeeded) {
+			commSeeded = true;
+			// Keep the pair coherent: a default ชุมชน that belongs to a different
+			// เขต would pre-fill an address that contradicts itself, so fall back to
+			// no community rather than a mismatched one.
+			const zone = mzVal;
+			const candidate = commItems.find((i) => i.is_default && i.status === 'active');
+			const coherent = !candidate?.parent_code || !zone || candidate.parent_code === zone;
+			if (!commVal && candidate && coherent) commVal = candidate.code;
 		}
 	});
 

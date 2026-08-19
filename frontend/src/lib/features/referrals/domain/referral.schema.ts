@@ -51,6 +51,13 @@ export const referralTimelineSchema = z.object({
 });
 export type ReferralTimeline = z.infer<typeof referralTimelineSchema>;
 
+export const evacueeSummarySchema = z.object({
+	first_name: z.string().min(1),
+	last_name: z.string().min(1),
+	gender: z.string().optional()
+});
+export type EvacueeSummary = z.infer<typeof evacueeSummarySchema>;
+
 // ---------------------------------------------------------------------------
 // Discriminated union schemas for Referral Documents
 // ---------------------------------------------------------------------------
@@ -65,6 +72,7 @@ const referralBaseSchema = z.object({
 	updated_at: z.string().datetime(),
 	created_by: z.string().min(1),
 	evacuee_id: z.string().startsWith('evacuee:'),
+	evacuee_summary: evacueeSummarySchema.optional(),
 	reason: z
 		.string()
 		.min(1, 'Reason is required')
@@ -224,9 +232,10 @@ export function isMedicalReferral(r: Referral): r is MedicalReferral {
 /**
  * Shared factory function to construct a new draft referral body.
  */
-export function buildReferralBody(input: ReferralInput) {
+export function buildReferralBody(input: ReferralInput, evacueeSummary?: EvacueeSummary) {
 	const base = {
 		evacuee_id: input.evacuee_id,
+		evacuee_summary: evacueeSummary,
 		reason: input.reason,
 		urgency: input.urgency,
 		status: 'draft' as const,

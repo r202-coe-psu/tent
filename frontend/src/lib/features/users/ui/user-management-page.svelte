@@ -9,8 +9,7 @@
 		shelterScopeRole,
 		SYSTEM_ADMIN
 	} from '$lib/auth/roles';
-	import CreateUserForm from './create-user-form.svelte';
-	import EditUserForm from './edit-user-form.svelte';
+	import UserForm from './user-form.svelte';
 	import UserList from './user-list.svelte';
 	import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../application/queries';
 	import type { CreateUserInput, EditUserInput } from '../domain/schema';
@@ -61,28 +60,19 @@
 		return [shelterScopeRole(code), input.capability];
 	}
 
-	function handleCreate(input: CreateUserInput) {
+	/** Rejects on failure — UserForm turns the reason into a Superforms error. */
+	async function handleCreate(input: CreateUserInput) {
 		const userRoles = rolesFromInput(input);
-		if (!userRoles) {
-			toast.error('A shelter code is required');
-			return;
-		}
-		createMutation.mutate(
-			{
-				name: input.username,
-				password: input.password,
-				display_name: input.display_name,
-				roles: userRoles,
-				affiliation_tags: input.affiliation_tags
-			},
-			{
-				onSuccess: () => {
-					toast.success(`User "${input.username}" created`);
-					dialogOpen = false;
-				},
-				onError: (err: Error) => toast.error(err.message)
-			}
-		);
+		if (!userRoles) throw new Error('A shelter code is required');
+		await createMutation.mutateAsync({
+			name: input.username,
+			password: input.password,
+			display_name: input.display_name,
+			roles: userRoles,
+			affiliation_tags: input.affiliation_tags
+		});
+		toast.success(`User "${input.username}" created`);
+		dialogOpen = false;
 	}
 
 	function handleEdit(user: UserSummary) {
@@ -90,35 +80,27 @@
 		editDialogOpen = true;
 	}
 
-	function applyUpdate(input: EditUserInput) {
-		if (!selectedUser) return;
+	/** Rejects on failure — the caller decides whether that becomes a form error or a toast. */
+	async function applyUpdate(input: EditUserInput) {
+		const target = selectedUser;
+		if (!target) return;
 		const userRoles = rolesFromInput(input);
-		if (!userRoles) {
-			toast.error('A shelter code is required');
-			return;
-		}
-		updateMutation.mutate(
-			{
-				name: selectedUser.name,
-				password: input.password || undefined,
-				display_name: input.display_name,
-				roles: userRoles,
-				affiliation_tags: input.affiliation_tags
-			},
-			{
-				onSuccess: () => {
-					toast.success(`User "${selectedUser?.name}" updated`);
-					editDialogOpen = false;
-					demoteDialogOpen = false;
-					selectedUser = null;
-					pendingDemote = null;
-				},
-				onError: (err: Error) => toast.error(err.message)
-			}
-		);
+		if (!userRoles) throw new Error('A shelter code is required');
+		await updateMutation.mutateAsync({
+			name: target.name,
+			password: input.password || undefined,
+			display_name: input.display_name,
+			roles: userRoles,
+			affiliation_tags: input.affiliation_tags
+		});
+		toast.success(`User "${target.name}" updated`);
+		editDialogOpen = false;
+		demoteDialogOpen = false;
+		selectedUser = null;
+		pendingDemote = null;
 	}
 
-	function handleUpdate(input: EditUserInput) {
+	async function handleUpdate(input: EditUserInput) {
 		if (!selectedUser) return;
 		const wasSa = isAppSystemAdmin(selectedUser.roles);
 		const willBeSa = input.capability === SYSTEM_ADMIN;
@@ -127,7 +109,15 @@
 			demoteDialogOpen = true;
 			return;
 		}
-		applyUpdate(input);
+		await applyUpdate(input);
+	}
+
+	/** The demote path runs from its own dialog, with no form listening — so it toasts. */
+	function confirmDemote() {
+		if (!pendingDemote) return;
+		applyUpdate(pendingDemote).catch((err: unknown) =>
+			toast.error(err instanceof Error ? err.message : 'ไม่สามารถลดสิทธิ์ผู้ดูแลระบบได้')
+		);
 	}
 
 	function confirmDelete(name: string) {
@@ -207,7 +197,7 @@
 					>
 				</Dialog.Header>
 				<div class="px-6 pb-6">
-					<CreateUserForm
+					<UserForm
 						onsubmit={handleCreate}
 						oncancel={() => (dialogOpen = false)}
 						{isSA}
@@ -256,7 +246,7 @@
 		</Dialog.Header>
 		<div class="px-6 pb-6">
 			{#if selectedUser}
-				<EditUserForm
+				<UserForm
 					user={selectedUser}
 					onsubmit={handleUpdate}
 					oncancel={() => {
@@ -334,9 +324,7 @@
 			</Button>
 			<Button
 				disabled={updateMutation.isPending || !pendingDemote}
-				onclick={() => {
-					if (pendingDemote) applyUpdate(pendingDemote);
-				}}
+				onclick={confirmDemote}
 				class="rounded-lg bg-[#0f2d5c] text-white hover:bg-[#0a1e3f]"
 			>
 				{#if updateMutation.isPending}กำลังบันทึก...{:else}ยืนยัน{/if}

@@ -39,11 +39,14 @@ export {
 export {
 	dailyCalcDocId,
 	isDailyCalcRecord,
+	parseDailyCalc,
 	DAILY_CALC_ID_PREFIX,
 	type DailyCalcRepository,
 	type DailyCalcRecord
 } from './data/daily-calc.repository';
 export { dailyCalcRepository, DailyCalcRemoteRepository } from './data/daily-calc.remote';
+// CR-042 — approved have-source map used by the calculation adapter and seed.
+export { resolveHave, type HaveMapSources, type ShelterHaveSource } from './core';
 
 // T-31.5 — application layer: TanStack Query hooks + live-sync wiring.
 export { calcKeys } from './application/queries';

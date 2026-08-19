@@ -33,7 +33,7 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		repo = new ReferralRemoteRepository('shelter_sh001');
+		repo = new ReferralRemoteRepository();
 		vi.stubGlobal('fetch', fetchMock);
 	});
 
@@ -115,20 +115,24 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 		expect(mockRepoPut).not.toHaveBeenCalled();
 	});
 
-	it('keeps non-capacity transitions on the remote session path', async () => {
+	it('delegates all transitions (including non-capacity) to BFF', async () => {
 		const medicalSent: Referral = {
 			...capacitySent,
 			referral_type: 'medical-emergency',
 			to_shelter_code: undefined,
 			to_org: { name: 'Hospital A', kind: 'hospital' }
 		};
-		mockRepoGet.mockResolvedValue(medicalSent);
-		mockRepoPut.mockImplementation((doc) => Promise.resolve(doc));
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({ ...medicalSent, status: 'accepted' })
+		});
 
 		const result = await repo.transition(medicalSent._id, 'accepted', 'Staff B', 'Bed ready');
 
-		expect(fetchMock).not.toHaveBeenCalled();
-		expect(mockRepoPut).toHaveBeenCalled();
+		expect(fetchMock).toHaveBeenCalledWith(
+			expect.stringContaining('/api/back-office/referral/'),
+			expect.objectContaining({ method: 'PATCH', credentials: 'include' })
+		);
 		expect(result.status).toBe('accepted');
 	});
 });
@@ -244,7 +248,7 @@ describe('createReferralBatch', () => {
 		expect(result.failed).toEqual([{ evacuee_id: ids[1], error: 'BFF mirror failed' }]);
 	});
 
-	it('throws the first failure message when the whole batch fails', async () => {
+	it('returns the failure message when the batch fails', async () => {
 		const ids = ['evacuee:01EEE000000000000000001'];
 		const create = vi
 			.fn()
@@ -254,11 +258,16 @@ describe('createReferralBatch', () => {
 		const transition = vi.fn();
 		const repo = { create, transition } as unknown as ReferralRepository;
 
-		await expect(
-			createReferralBatch(template, ids, { intent: 'draft', ctx, repo })
-		).rejects.toThrow('ผู้ประสบภัยรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน');
+		const result = await createReferralBatch(template, ids, { intent: 'draft', ctx, repo });
 
 		expect(create).toHaveBeenCalledTimes(1);
 		expect(transition).not.toHaveBeenCalled();
+		expect(result.created).toHaveLength(0);
+		expect(result.failed).toEqual([
+			{
+				evacuee_id: ids[0],
+				error: 'ผู้ประสบภัยรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน'
+			}
+		]);
 	});
 });

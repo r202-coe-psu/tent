@@ -108,6 +108,141 @@ export const masterDataItemSchema = z.object({
 });
 export type MasterDataItem = z.infer<typeof masterDataItemSchema>;
 
+// ---------------------------------------------------------------- unique label
+
+/** Invisible characters that carry no meaning in a label but break a naive
+ *  comparison. JS `\s` covers NBSP and U+FEFF but NOT the zero-width family
+ *  (U+200B–U+200D, category Cf) — and U+200B is common in Thai text pasted out
+ *  of Word/Excel/LINE, where it is used as a word separator. */
+const INVISIBLE_CHARS = /[\u200B-\u200D\u2060\uFEFF]/g;
+
+/**
+ * Normalize a label for duplicate detection (CR-078): NFC-normalize (Thai
+ * combining marks), drop zero-width characters, trim, collapse every run of
+ * whitespace (incl. NBSP) to a single space, and lowercase. Thai is caseless —
+ * lowercasing only affects the Latin part of a label such as
+ * `"ผู้สูงอายุ (Elderly)"`.
+ *
+ * Comparison-only: the stored `label` keeps the operator's exact spelling.
+ */
+export function normalizeLabel(label: string): string {
+	return label
+		.normalize('NFC')
+		.replace(INVISIBLE_CHARS, '')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.toLowerCase();
+}
+
+/**
+ * First item in `items` whose label collides with `label`, or `undefined`
+ * (CR-078). `excludeCode` skips the item being edited so re-saving an item
+ * without renaming it is allowed.
+ *
+ * **Inactive items count.** A deprecated label stays resolvable for records
+ * that already reference its `code` (soft-delete, schema.md §3.3), so reusing
+ * the same text on a new item would make those two indistinguishable in the UI.
+ */
+export function findDuplicateLabel(
+	items: readonly MasterDataItem[],
+	label: string,
+	excludeCode?: string
+): MasterDataItem | undefined {
+	const target = normalizeLabel(label);
+	if (!target) return undefined;
+	return items.find((i) => i.code !== excludeCode && normalizeLabel(i.label) === target);
+}
+
+/**
+ * Drop items whose `code` repeats, keeping the first occurrence (CR-078).
+ *
+ * `code` is the identity of an item everywhere in this feature: `applyItemOp`
+ * matches on it, `mergeMasterDataItems` builds `item_sources` keyed by it, and
+ * consumers resolve a saved value with `find(code)`. A repeated code therefore
+ * is not "two items" — it is one item recorded twice, and it makes the list
+ * unfixable from the UI (editing or toggling either row hits both).
+ *
+ * Defensive repair on the write path, same spirit as {@link enforceOneDefault}:
+ * the next save of that type collapses the copies. Keeping the FIRST occurrence
+ * is the only safe choice — it is the one already referenced by existing records.
+ */
+export function dedupeItemsByCode(items: readonly MasterDataItem[]): MasterDataItem[] {
+	const seen = new Set<string>();
+	const out: MasterDataItem[] = [];
+	for (const item of items) {
+		if (seen.has(item.code)) continue;
+		seen.add(item.code);
+		out.push(item);
+	}
+	return out;
+}
+
+/**
+ * Codes that appear more than once in `items` (CR-078) — the read-side
+ * counterpart of {@link dedupeItemsByCode}, used to flag the affected rows and
+ * to keep a keyed `{#each}` from throwing on the duplicate key.
+ */
+export function duplicateItemCodes(items: readonly MasterDataItem[]): Set<string> {
+	const seen = new Set<string>();
+	const repeated = new Set<string>();
+	for (const item of items) {
+		if (seen.has(item.code)) repeated.add(item.code);
+		seen.add(item.code);
+	}
+	return repeated;
+}
+
+/**
+ * Normalized labels that ALREADY appear more than once across `itemGroups`
+ * (CR-078). The write path passes the currently persisted state so those labels
+ * are grandfathered: data that predates this rule must not brick every later
+ * edit of that type — a status toggle or an unrelated rename would otherwise be
+ * rejected forever with no way to reach the offending item.
+ */
+export function duplicateLabelKeys(
+	...itemGroups: readonly (readonly MasterDataItem[])[]
+): Set<string> {
+	const seen = new Set<string>();
+	const duplicated = new Set<string>();
+	for (const group of itemGroups) {
+		for (const item of group) {
+			const key = normalizeLabel(item.label);
+			if (seen.has(key)) duplicated.add(key);
+			seen.add(key);
+		}
+	}
+	return duplicated;
+}
+
+/**
+ * Whole-list guard for the write path (CR-078): the first label that collides
+ * either inside `items` itself or with `against`, or `undefined` when clean.
+ *
+ * `against` carries the items of the OTHER tier — global items when validating
+ * a shelter-local write, and every shelter-local item when validating a global
+ * write. The check is symmetric because the shelter UI renders the merged
+ * global + local list, so a collision from either direction produces two rows
+ * that read identically.
+ *
+ * `grandfathered` (see {@link duplicateLabelKeys}) holds normalized labels that
+ * already collided before this write; those are skipped so pre-existing data
+ * never blocks an unrelated edit. Returns the label as stored (not normalized)
+ * so the message can quote what the operator sees.
+ */
+export function findLabelCollision(
+	items: readonly MasterDataItem[],
+	against: readonly MasterDataItem[] = [],
+	grandfathered: ReadonlySet<string> = new Set()
+): string | undefined {
+	const seen = new Set(against.map((i) => normalizeLabel(i.label)));
+	for (const item of items) {
+		const key = normalizeLabel(item.label);
+		if (seen.has(key) && !grandfathered.has(key)) return item.label;
+		seen.add(key);
+	}
+	return undefined;
+}
+
 // ---------------------------------------------------------------- document
 
 /** Author context for a registry doc. Global docs omit `shelter_code`. */
