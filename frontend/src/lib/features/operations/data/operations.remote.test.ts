@@ -380,6 +380,20 @@ describe('OperationsRemoteRepository', () => {
 			expect(await repo.listLedger()).toHaveLength(0);
 		});
 
+		it('receipts as a donation even if the caller names another source', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			// a walk-in IS a donation; a caller passing 'manual' would otherwise map
+			// to reason 'adjust' and be rejected by R2 for carrying a ref_id
+			const { entry } = await repo.receiveWalkInDonation(
+				walkIn,
+				{ ...receive, source: 'manual' as const },
+				ctx
+			);
+
+			expect(entry.reason).toBe('donation');
+		});
+
 		it('writes NOTHING when the unit disagrees with the catalog', async () => {
 			mockGetItem.mockResolvedValue({ unit: 'bag' } as SupplyItem);
 

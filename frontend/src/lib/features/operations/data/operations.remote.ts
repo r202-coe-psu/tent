@@ -93,7 +93,12 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		ctx: AuthorContext
 	): Promise<{ donation: Donation; entry: StockLedger }> {
 		const donation = createWalkInDonation(donationInput, ctx);
-		const entry = createReceiveEntry({ ...receiveInput, ref_id: donation._id }, ctx);
+		// a walk-in is a donation by definition — do not let a caller say otherwise
+		// and end up rejected by the R2 guard for a reason it cannot explain
+		const entry = createReceiveEntry(
+			{ ...receiveInput, source: 'donation', ref_id: donation._id },
+			ctx
+		);
 
 		const item = await supplyRepository().getItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
@@ -220,11 +225,11 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	}
 
 	/** Create and persist a new donation. */
+	/** Update an existing donation (bumps updated_at and handles CouchDB MVCC). */
 	async createDonation(donation: Donation): Promise<Donation> {
 		return this.repo.put(donation);
 	}
 
-	/** Update an existing donation (bumps updated_at and handles CouchDB MVCC). */
 	async updateDonation(donation: Donation): Promise<Donation> {
 		const existing = await this.repo.get<Donation>(donation._id);
 		const merged = {

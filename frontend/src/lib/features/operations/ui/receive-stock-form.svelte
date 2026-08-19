@@ -124,12 +124,12 @@
 		resetForm: true,
 		onUpdate: async ({ form: validated }) => {
 			// In walk-in mode `ref_id` is legitimately empty: the donation does not
-			// exist yet and is minted with the ledger row at submit. Every other
-			// field error still blocks.
-			const blocking = Object.keys(validated.errors).filter(
-				(field) => !(isWalkInOpen && field === 'ref_id')
-			);
-			if (blocking.length > 0) {
+			// exist yet and is minted with the ledger row at submit. That is the one
+			// error worth ignoring — `validated.valid` stays the authority for
+			// everything else.
+			const fields = Object.keys(validated.errors);
+			const onlyWalkInRefId = isWalkIn && fields.length === 1 && fields[0] === 'ref_id';
+			if (!validated.valid && !onlyWalkInRefId) {
 				toast.error('กรุณาตรวจสอบข้อมูลในฟอร์ม');
 				return;
 			}
@@ -140,7 +140,7 @@
 				return;
 			}
 
-			if (isWalkInOpen) {
+			if (isWalkIn) {
 				const problem = walkInError();
 				if (problem) {
 					toast.error(problem);
@@ -155,6 +155,17 @@
 	});
 
 	const { form: formData, submitting, reset } = form;
+
+	/**
+	 * Whether this submit is a walk-in.
+	 *
+	 * Derived rather than read straight off `isWalkInOpen` so the mode cannot
+	 * outlive the source that owns it: the panel is only rendered for `donation`,
+	 * and a stale flag would otherwise send a Manual/Adjust receipt down the
+	 * walk-in branch and fail it against the R2 guard with an error about a field
+	 * that is not on screen.
+	 */
+	const isWalkIn = $derived($formData.source === 'donation' && isWalkInOpen);
 
 	// Update locked unit when item is selected
 	function selectItem(item: { _id: string; name: string; unit: string; perishable?: boolean }) {
@@ -197,7 +208,10 @@
 	 * The schema rejects the stale value — it cannot clear it, so the form must.
 	 */
 	function handleSourceChange(e: Event & { currentTarget: HTMLSelectElement }) {
-		if (e.currentTarget.value !== 'donation') clearDonation();
+		if (e.currentTarget.value !== 'donation') {
+			clearDonation();
+			resetWalkIn();
+		}
 	}
 
 	// Quick expiry date buttons (+3d / +7d)
@@ -469,7 +483,7 @@
 		</Form.Field>
 
 		<!-- Donation picker (CR-055 R4) — only `donation` carries a ref_id here -->
-		{#if $formData.source === 'donation' && !isWalkInOpen}
+		{#if $formData.source === 'donation' && !isWalkIn}
 			<Form.Field {form} name="ref_id" class="relative col-span-1 sm:col-span-2">
 				<Form.Control>
 					{#snippet children({ props })}
