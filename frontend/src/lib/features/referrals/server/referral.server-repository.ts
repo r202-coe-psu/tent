@@ -1,6 +1,6 @@
 import { adminRaw } from '$lib/server/couch-admin';
-import { makeDoc, shelterCodeSchema, touch, type AuthorContext } from '$lib/db/model';
-import { shelterDbName } from '$lib/server/shelter-access-design';
+import { makeDoc, touch, type AuthorContext } from '$lib/db/model';
+import { shelterDbName, REFERRAL_MANGO_INDEXES } from '$lib/server/shelter-access-design';
 import { isEvacuee, type Evacuee, type Movement } from '$lib/features/people/domain/people';
 import {
 	isReferral,
@@ -9,6 +9,7 @@ import {
 	referralFilterSchema,
 	type ReferralInput,
 	type ReferralStatus,
+	type EvacueeSummary,
 	buildReferralBody,
 	referralSchema
 } from '../domain/referral.schema';
@@ -51,10 +52,26 @@ interface PutResultResponse {
 	rev: string;
 }
 
+let centralOpsDbCreated = false;
+async function ensureCentralDb() {
+	if (centralOpsDbCreated) return;
+	const { status } = await adminRaw('/central_ops', 'PUT');
+	if (status === 201 || status === 412 || status === 200) {
+		centralOpsDbCreated = true;
+		for (const def of REFERRAL_MANGO_INDEXES) {
+			await adminRaw('/central_ops/_index', 'POST', def);
+		}
+	}
+}
+
 export class CouchDbReferralServerRepository implements ReferralRepository {
-	constructor(private readonly dbName: string) {}
+	constructor(
+		private readonly dbName: string,
+		private readonly contextShelterCode: string
+	) {}
 
 	private async couchGet<T>(dbName: string, path: string): Promise<{ status: number; data: T }> {
+		if (dbName === 'central_ops') await ensureCentralDb();
 		const res = await adminRaw(`/${dbName}${path}`, 'GET');
 		return { status: res.status, data: res.data as T };
 	}
@@ -64,6 +81,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		path: string,
 		body: unknown
 	): Promise<{ status: number; data: T }> {
+		if (dbName === 'central_ops') await ensureCentralDb();
 		const res = await adminRaw(`/${dbName}${path}`, 'POST', body);
 		return { status: res.status, data: res.data as T };
 	}
@@ -73,6 +91,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		path: string,
 		body: unknown
 	): Promise<{ status: number; data: T }> {
+		if (dbName === 'central_ops') await ensureCentralDb();
 		const res = await adminRaw(`/${dbName}${path}`, 'PUT', body);
 		return { status: res.status, data: res.data as T };
 	}
@@ -84,13 +103,6 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			doc
 		);
 		if (status !== HTTP_CREATED && status !== HTTP_OK) {
-			if (status === HTTP_NOT_FOUND) {
-				throw new CouchDbReferralError(
-					`ไม่พบศูนย์พักพิงปลายทางหรือฐานข้อมูลไม่ถูกต้อง (${dbName})`,
-					status,
-					data
-				);
-			}
 			throw new CouchDbReferralError(`Failed to write ${doc._id} in ${dbName}`, status, data);
 		}
 		return data.rev;
@@ -111,25 +123,6 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			}
 		}
 		return this.putDoc(dbName, doc);
-	}
-
-	private async ensureDestinationDbExists(dbName: string): Promise<void> {
-		const { status, data } = await adminRaw(`/${dbName}`, 'HEAD');
-		if (status === HTTP_OK) {
-			return;
-		}
-		if (status === HTTP_NOT_FOUND) {
-			throw new CouchDbReferralError(
-				`ไม่พบศูนย์พักพิงปลายทางหรือฐานข้อมูลไม่ถูกต้อง (${dbName})`,
-				status,
-				data
-			);
-		}
-		throw new CouchDbReferralError(
-			`Failed to validate destination shelter database (${dbName})`,
-			status,
-			data
-		);
 	}
 
 	/**
@@ -275,78 +268,11 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		await this.putDocIdempotent(toDb, destMovement);
 	}
 
-	/** Mirror referral into destination shelter DB (same _id; keeps source shelter_code). */
-	async mirrorCapacityReferralToDestination(referral: Referral): Promise<void> {
-		if (referral.referral_type !== 'capacity' || !referral.to_shelter_code) {
-			return;
-		}
-		const parsedToShelter = shelterCodeSchema.safeParse(referral.to_shelter_code);
-		if (!parsedToShelter.success) {
-			throw new CouchDbReferralError(
-				`ไม่พบศูนย์พักพิงปลายทางหรือฐานข้อมูลไม่ถูกต้อง (${shelterDbName(referral.to_shelter_code)})`,
-				422,
-				parsedToShelter.error.flatten()
-			);
-		}
-		const toDb = shelterDbName(parsedToShelter.data);
-		await this.ensureDestinationDbExists(toDb);
-		const { status, data } = await this.couchGet<unknown>(
-			toDb,
-			`/${encodeURIComponent(referral._id)}`
-		);
-
-		const { _rev: _, ...withoutRev } = referral;
-		void _;
-		const mirror: Referral =
-			status === HTTP_OK && isReferral(data) && data._rev
-				? { ...withoutRev, _rev: data._rev }
-				: withoutRev;
-
-		await this.putDoc(toDb, mirror);
-	}
-
-	/** Keep the peer copy in sync after accept/reject/close (source ↔ destination). */
-	async syncCapacityReferralPeer(referral: Referral, actorShelter: string): Promise<void> {
-		if (referral.referral_type !== 'capacity' || !referral.to_shelter_code) {
-			return;
-		}
-
-		const sourceDb = shelterDbName(referral.shelter_code);
-		const destDb = shelterDbName(referral.to_shelter_code);
-		const peerDb =
-			shelterDbName(actorShelter) === sourceDb
-				? destDb
-				: shelterDbName(actorShelter) === destDb
-					? sourceDb
-					: null;
-
-		if (!peerDb) {
-			return;
-		}
-
-		const { status, data } = await this.couchGet<unknown>(
-			peerDb,
-			`/${encodeURIComponent(referral._id)}`
-		);
-
-		const { _rev: _, ...withoutRev } = referral;
-		void _;
-
-		if (status === HTTP_NOT_FOUND) {
-			// Peer missing (e.g. closed before mirror) — create from current state.
-			await this.putDoc(peerDb, withoutRev);
-			return;
-		}
-
-		if (status === HTTP_OK && isReferral(data) && data._rev) {
-			await this.putDoc(peerDb, { ...withoutRev, _rev: data._rev });
-		}
-	}
-
 	async list(filter?: ReferralFilter): Promise<Referral[]> {
 		const parsed = referralFilterSchema.parse(filter ?? {});
 		const selector: Record<string, unknown> = {
-			type: 'referral'
+			type: 'referral',
+			$or: [{ shelter_code: this.contextShelterCode }, { to_shelter_code: this.contextShelterCode }]
 		};
 
 		if (parsed.status) {
@@ -361,21 +287,11 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 				? [{ type: 'asc' }, { created_at: 'asc' }]
 				: [{ type: 'desc' }, { created_at: 'desc' }];
 
-		let useIndex: string;
-		if (parsed.status && parsed.sort === 'created_at_desc') {
-			useIndex = 'referral-list-status-created-desc-idx';
-		} else if (parsed.sort === 'created_at_desc') {
-			useIndex = 'referral-list-created-desc-idx';
-		} else {
-			useIndex = 'referral-list-created-asc-idx';
-		}
-
 		const body: Record<string, unknown> = {
 			selector,
 			limit: parsed.limit,
 			skip: parsed.skip,
-			sort,
-			use_index: useIndex
+			sort
 		};
 
 		const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', body);
@@ -417,8 +333,12 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		return isReferral(data) ? data : null;
 	}
 
-	async create(input: ReferralInput, ctx: AuthorContext): Promise<Referral> {
-		const body = buildReferralBody(input);
+	async create(
+		input: ReferralInput,
+		ctx: AuthorContext,
+		evacueeSummary?: EvacueeSummary
+	): Promise<Referral> {
+		const body = buildReferralBody(input, evacueeSummary);
 		const rawDoc = makeDoc('referral', 1, body, ctx);
 
 		const doc = referralSchema.parse(rawDoc);
@@ -479,17 +399,6 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		const updated = applyTransition(latest, to, actor, nowIso, reason);
 		const touched = touch(updated);
 
-		if (updated.referral_type === 'capacity' && updated.to_shelter_code) {
-			if (to === 'sent') {
-				await this.mirrorCapacityReferralToDestination(updated);
-			} else if (to === 'accepted' || to === 'rejected') {
-				await this.syncCapacityReferralPeer(updated, scope);
-			} else if (to === 'closed' && latest.status !== 'draft') {
-				// CR-046: draft→closed never mirrored — do not create a peer on destination.
-				await this.syncCapacityReferralPeer(updated, scope);
-			}
-		}
-
 		const { status, data } = await this.couchPut<PutResultResponse>(
 			this.dbName,
 			`/${encodeURIComponent(touched._id)}`,
@@ -501,6 +410,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		}
 
 		const saved: Referral = { ...touched, _rev: data.rev };
+
 		return saved;
 	}
 }

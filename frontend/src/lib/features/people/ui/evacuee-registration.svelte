@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -54,29 +54,35 @@
 		onsubmit,
 		pending = false,
 		onBack,
-		hasSymptomsSelected = false
+		hasSymptomsSelected = false,
+		initialInput = null,
+		ondraftchange,
+		facePhotoUrl = $bindable(null)
 	}: {
 		onsubmit: (input: EvacueeInput) => void;
 		pending?: boolean;
 		onBack: () => void;
 		hasSymptomsSelected?: boolean;
+		initialInput?: Partial<EvacueeInput> | null;
+		ondraftchange?: (input: Partial<EvacueeInput>) => void;
+		facePhotoUrl?: string | null;
 	} = $props();
 
-	let birthYearBE = $state('');
-	let facePhotoUrl = $state<string | null>(null);
+	const initial = untrack(() => initialInput);
+	let birthYearBE = $state(initial?.birth_year?.toString() ?? '');
 	let uploadingPhoto = $state(false);
 	const saveImage = useSaveImage();
 	// "ไม่มีเบอร์โทร" — เก็บ phone เป็น null ตาม spec (schema.md §evacuee: phone str|null, req)
 	let noPhone = $state(false);
-	let medicalConditionsStr = $state('');
-	let medicalMedicationsStr = $state('');
-	let medicalAllergiesStr = $state('');
+	let medicalConditionsStr = $state(initial?.medical_conditions?.join(', ') ?? '');
+	let medicalMedicationsStr = $state(initial?.medical_medications?.join(', ') ?? '');
+	let medicalAllergiesStr = $state(initial?.medical_allergies?.join(', ') ?? '');
 
-	onDestroy(() => {
-		if (facePhotoUrl) URL.revokeObjectURL(facePhotoUrl);
-	});
-
-	const form = superForm(defaults(zod4(evacueeInputSchema)), {
+	const initialFormData = {
+		...initial,
+		person_id: initial?.person_id ?? { cardType: 'national_id' as const, number: '' }
+	};
+	const form = superForm(defaults(initialFormData, zod4(evacueeInputSchema)), {
 		SPA: true,
 		dataType: 'json',
 		validators: zod4(evacueeInputSchema),
@@ -137,7 +143,7 @@
 				toast.error('กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน');
 				return;
 			}
-			onsubmit(form.data);
+			onsubmit(form.data as EvacueeInput);
 		}
 	});
 
@@ -196,32 +202,17 @@
 		}
 	}
 
-	$effect(() => {
-		$formData.medical_conditions = medicalConditionsStr
-			? medicalConditionsStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
+	function parseMedicalList(value: string) {
+		return value
+			.split(',')
+			.map((item) => item.trim())
+			.filter(Boolean);
+	}
 
-	$effect(() => {
-		$formData.medical_medications = medicalMedicationsStr
-			? medicalMedicationsStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
-
-	$effect(() => {
-		$formData.medical_allergies = medicalAllergiesStr
-			? medicalAllergiesStr
-					.split(',')
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-	});
+	function handleBack() {
+		ondraftchange?.($formData);
+		onBack();
+	}
 </script>
 
 <form
@@ -468,8 +459,8 @@
 									<Checkbox
 										class="size-5"
 										checked={noPhone}
-										onCheckedChange={(v) => {
-											noPhone = !!v;
+										onCheckedChange={(value) => {
+											noPhone = !!value;
 											if (noPhone) {
 												$formData.phone = null;
 												$errors.phone = undefined;
@@ -540,7 +531,11 @@
 					<Label class="text-base sm:text-sm">โรคประจำตัว</Label>
 					<Input
 						placeholder="เช่น เบาหวาน, ความดัน (ถ้าไม่มีให้เว้นว่าง)"
-						bind:value={medicalConditionsStr}
+						value={medicalConditionsStr}
+						oninput={(event) => {
+							medicalConditionsStr = event.currentTarget.value;
+							$formData.medical_conditions = parseMedicalList(medicalConditionsStr);
+						}}
 					/>
 				</div>
 			</div>
@@ -550,7 +545,11 @@
 					<Label class="text-base sm:text-sm">ยาที่ใช้ประจำ</Label>
 					<Input
 						placeholder="เช่น ยาลดความดัน, ยาเบาหวาน (ถ้าไม่มีให้เว้นว่าง)"
-						bind:value={medicalMedicationsStr}
+						value={medicalMedicationsStr}
+						oninput={(event) => {
+							medicalMedicationsStr = event.currentTarget.value;
+							$formData.medical_medications = parseMedicalList(medicalMedicationsStr);
+						}}
 					/>
 				</div>
 
@@ -558,7 +557,11 @@
 					<Label class="text-base sm:text-sm">ประวัติการแพ้ (ยา/อาหาร)</Label>
 					<Input
 						placeholder="เช่น แพ้เพนิซิลลิน, อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
-						bind:value={medicalAllergiesStr}
+						value={medicalAllergiesStr}
+						oninput={(event) => {
+							medicalAllergiesStr = event.currentTarget.value;
+							$formData.medical_allergies = parseMedicalList(medicalAllergiesStr);
+						}}
 					/>
 				</div>
 			</div>
@@ -699,7 +702,7 @@
 			<Button
 				type="button"
 				variant="outline"
-				onclick={onBack}
+				onclick={handleBack}
 				class="h-12 w-full px-6 text-base font-medium sm:h-10 sm:w-auto sm:text-sm"
 			>
 				ย้อนกลับ

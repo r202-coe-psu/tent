@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type {
 		EvacueeInput,
@@ -52,7 +53,8 @@
 		{
 			title: 'หน้าค้นหาครัวเรือน (Head of Household)',
 			short: 'ข้อมูลครัวเรือน',
-			description: 'สืบค้นและตรวจสอบกลุ่มครอบครัว หรือลงทะเบียนเป็นครอบครัวใหม่'
+			description:
+				'เลือกครัวเรือนเดิม หรือสร้างครัวเรือนใหม่ (ผู้ที่มาเพียงคนเดียวให้สร้างครัวเรือน 1 คน)'
 		},
 		{
 			title: 'ทรัพย์สินและสัตว์เลี้ยง (Assets & Pets)',
@@ -104,6 +106,9 @@
 
 	let pendingEvacueeInput = $state<EvacueeInput | null>(null);
 	let pendingSymptoms = $state<string[]>([]);
+	let registrationDraft = $state.raw<Partial<EvacueeInput> | null>(null);
+	let registrationFacePhotoUrl = $state<string | null>(null);
+	let registrationDraftActive = $state(step === 3);
 
 	let selectedHousehold = $state<Household | null>(null);
 	let isCreatingNewHousehold = $state(false);
@@ -142,8 +147,19 @@
 
 	function goToStep(next: 1 | 2 | 3 | 4 | 5 | 6) {
 		zoneError = null;
+		if (next === 3) registrationDraftActive = true;
 		step = next;
 	}
+
+	function clearRegistrationDraft() {
+		if (registrationFacePhotoUrl) URL.revokeObjectURL(registrationFacePhotoUrl);
+		registrationDraft = null;
+		registrationFacePhotoUrl = null;
+	}
+
+	onDestroy(() => {
+		if (registrationFacePhotoUrl) URL.revokeObjectURL(registrationFacePhotoUrl);
+	});
 
 	function retryHouseholdData() {
 		evacueesQuery.refetch();
@@ -151,6 +167,7 @@
 	}
 
 	function handleRegistrationSubmit(input: EvacueeInput) {
+		registrationDraft = structuredClone(input);
 		pendingEvacueeInput = input;
 		pendingSymptoms = Array.from(selectedSymptoms);
 		selectedSymptoms.clear();
@@ -177,6 +194,11 @@
 		vehicles: { type: 'car' | 'motorcycle' | 'other'; license_plate: string | null }[];
 	}) {
 		if (isSubmittingHousehold) return;
+		if (!selectedHousehold && (!isCreatingNewHousehold || !newHouseholdAddress)) {
+			toast.error('กรุณาเลือกครัวเรือนเดิม หรือสร้างครัวเรือนใหม่ก่อนดำเนินการต่อ');
+			goToStep(4);
+			return;
+		}
 		isSubmittingHousehold = true;
 
 		let registrationSucceeded = false;
@@ -231,20 +253,13 @@
 				const latestHousehold = await peopleRepository().getHousehold(selectedHousehold._id);
 				if (!latestHousehold) throw new Error('ไม่พบครัวเรือนในระบบ');
 
-				// Append new pets if any
-				let updatedPets = [...(latestHousehold.pets || [])];
-				if (pets.length > 0) {
-					updatedPets.push(...pets);
-				}
-
 				await updateHouseholdMutation.mutateAsync({
 					...latestHousehold,
 					label: latestHousehold.label || `ครอบครัวผู้ประสบภัย ${latestHousehold._id}`,
-					pets: updatedPets,
+					// Step 5 edits the household-level collections in place.
+					pets,
 					assets: assets || latestHousehold.assets || null,
-					// Append the registrant's vehicles to the household's existing list (like pets),
-					// rather than replacing them.
-					vehicles: [...(latestHousehold.vehicles || []), ...vehicles]
+					vehicles
 				});
 			} else if (isCreatingNewHousehold) {
 				const addr = newHouseholdAddress || {};
@@ -273,16 +288,16 @@
 			}
 
 			// 6. Link evacuee to household
-			if (householdId) {
-				const updated = await updateEvacueeMutation.mutateAsync({
-					...registeredEvacuee,
-					household_id: householdId
-				});
-				newlyRegisteredEvacuee = updated;
-				toast.success('ลงทะเบียนผู้ประสบภัยและครัวเรือนสำเร็จ');
-			} else {
-				toast.success('ลงทะเบียนผู้ประสบภัยสำเร็จ');
+			if (!householdId) {
+				throw new Error('ต้องเลือกหรือสร้างครัวเรือนก่อนลงทะเบียนผู้ประสบภัย');
 			}
+
+			const updated = await updateEvacueeMutation.mutateAsync({
+				...registeredEvacuee,
+				household_id: householdId
+			});
+			newlyRegisteredEvacuee = updated;
+			toast.success('ลงทะเบียนผู้ประสบภัยและครัวเรือนสำเร็จ');
 
 			// Go to step 6 (Zoning)
 			goToStep(6);
@@ -352,6 +367,8 @@
 
 			// Reset internal state
 			goToStep(1);
+			clearRegistrationDraft();
+			registrationDraftActive = false;
 			newlyRegisteredEvacuee = null;
 			selectedHousehold = null;
 			isCreatingNewHousehold = false;
@@ -450,6 +467,20 @@
 	</Alert.Root>
 {/if}
 
+{#if registrationDraftActive}
+	<div class:hidden={step !== 3}>
+		<RegistrationSection
+			onsubmit={handleRegistrationSubmit}
+			pending={isSubmittingEvacuee || pending}
+			onBack={() => goToStep(2)}
+			hasSymptomsSelected={selectedSymptoms.size > 0}
+			initialInput={registrationDraft}
+			ondraftchange={(input) => (registrationDraft = structuredClone(input))}
+			bind:facePhotoUrl={registrationFacePhotoUrl}
+		/>
+	</div>
+{/if}
+
 {#if step === 1}
 	<SearchSection onNext={() => goToStep(2)} />
 {:else if step === 2}
@@ -459,15 +490,17 @@
 		onBack={() => goToStep(1)}
 		onNext={() => goToStep(3)}
 	/>
-{:else if step === 3}
-	<RegistrationSection
-		onsubmit={handleRegistrationSubmit}
-		pending={isSubmittingEvacuee || pending}
-		onBack={() => goToStep(2)}
-		hasSymptomsSelected={selectedSymptoms.size > 0}
-	/>
 {:else if step === 4}
 	<div class="space-y-6">
+		<Alert.Root class="border-primary/30 bg-primary/5">
+			<CircleAlert class="size-4" />
+			<Alert.Title class="font-semibold">ผู้ประสบภัยทุกคนต้องมีครัวเรือน</Alert.Title>
+			<Alert.Description>
+				เลือกครัวเรือนเดิม หรือสร้างครัวเรือนใหม่ หากมาเพียงคนเดียวให้สร้างครัวเรือน 1 คน
+				โดยผู้ลงทะเบียนจะเป็นหัวหน้าครัวเรือน
+			</Alert.Description>
+		</Alert.Root>
+
 		{#if householdDataLoading}
 			<div class="flex items-center gap-2 py-8 text-sm text-muted-foreground">
 				<Loader2 class="size-4 animate-spin" />
@@ -479,9 +512,7 @@
 					<CircleAlert class="size-4" />
 					<Alert.Title class="font-semibold">โหลดข้อมูลครัวเรือนไม่สำเร็จ</Alert.Title>
 					<Alert.Description class="space-y-3">
-						<p>
-							ยังค้นหาครัวเรือนที่มีอยู่ไม่ได้ แต่สามารถลงทะเบียนครอบครัวใหม่ หรือข้ามขั้นนี้ได้
-						</p>
+						<p>ยังค้นหาครัวเรือนที่มีอยู่ไม่ได้ แต่ยังสามารถสร้างครัวเรือนใหม่ได้</p>
 						<Button type="button" variant="outline" size="sm" onclick={retryHouseholdData}>
 							ลองใหม่
 						</Button>
@@ -504,36 +535,12 @@
 			{#if !isCreatingNewHousehold}
 				<Button
 					type="button"
-					variant={selectedHousehold ? 'default' : 'outline'}
+					variant="default"
 					class="h-12 w-full text-sm font-medium sm:h-10 sm:w-auto sm:px-6"
-					disabled={isSubmittingHousehold}
-					onclick={async () => {
-						if (selectedHousehold) {
-							goToStep(5);
-						} else {
-							if (isSubmittingHousehold) return;
-							isSubmittingHousehold = true;
-							const savedPendingInput = pendingEvacueeInput;
-							const savedPendingSymptoms = pendingSymptoms;
-							try {
-								if (pendingEvacueeInput) {
-									newlyRegisteredEvacuee = await onsubmit(pendingEvacueeInput, pendingSymptoms);
-									pendingEvacueeInput = null;
-									pendingSymptoms = [];
-								}
-								goToStep(6);
-							} catch {
-								// Parent onsubmit compensates + reports; restore draft for retry.
-								newlyRegisteredEvacuee = null;
-								pendingEvacueeInput = savedPendingInput;
-								pendingSymptoms = savedPendingSymptoms;
-							} finally {
-								isSubmittingHousehold = false;
-							}
-						}
-					}}
+					disabled={isSubmittingHousehold || !selectedHousehold}
+					onclick={() => goToStep(5)}
 				>
-					{selectedHousehold ? 'ถัดไป →' : 'ลงทะเบียนโดยไม่ผูกครัวเรือน'}
+					ถัดไป (ข้อมูลสัตว์เลี้ยง/ยานพาหนะ)
 				</Button>
 			{/if}
 			<Button
@@ -558,11 +565,7 @@
 		evacuee={newlyRegisteredEvacuee}
 		pending={checkInMutation.isPending}
 		onBack={() => {
-			if (selectedHousehold || isCreatingNewHousehold) {
-				goToStep(5);
-			} else {
-				goToStep(4);
-			}
+			goToStep(5);
 		}}
 		onSubmit={handleZoneSubmit}
 	/>

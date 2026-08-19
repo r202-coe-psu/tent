@@ -606,7 +606,8 @@ test.describe('Evacuee Registration', () => {
 			await route.fallback();
 		});
 
-		// Navigate to step 4 (which triggers the actual evacuee PUT via onsubmit)
+		// Navigate to step 4. The actual evacuee PUT now occurs only after the
+		// required household choice and step 5 submission.
 		await page.goto('/onsite/people');
 		await expect(page.getByRole('heading', { name: 'ตรวจสอบประวัติการลงทะเบียน' })).toBeVisible({
 			timeout: 15_000
@@ -634,13 +635,24 @@ test.describe('Evacuee Registration', () => {
 		await page.getByRole('option', { name: /ชาย \(Male\)/ }).click();
 		await page.getByText('ไม่มีเบอร์โทร').click();
 
-		// Act — submit step 3 (triggers evacuee PUT on step 4 "ข้าม / ถัดไป")
+		// Act — submit step 3, then create the required one-person household draft.
 		await page.getByRole('button', { name: 'ถัดไป →' }).click();
 		await expect(page.getByText('ข้อมูลครัวเรือน')).toBeVisible({ timeout: 10_000 });
 
-		const skipBtn = page.getByRole('button', { name: 'ลงทะเบียนโดยไม่ผูกครัวเรือน' });
-		await expect(skipBtn).toBeVisible({ timeout: 5_000 });
-		await skipBtn.click();
+		await expect(page.getByRole('button', { name: 'ลงทะเบียนโดยไม่ผูกครัวเรือน' })).toHaveCount(0);
+		await page.getByRole('button', { name: 'ลงทะเบียนเป็นครอบครัวใหม่' }).click();
+		await page.getByPlaceholder('เช่น 12/3').fill('12/3');
+		await page.getByRole('button', { name: 'เลือกจังหวัด...' }).click();
+		await page.getByRole('button', { name: 'สงขลา', exact: true }).click();
+		await page.getByRole('button', { name: 'เลือกอำเภอ...' }).click();
+		await page.getByRole('button', { name: 'หาดใหญ่', exact: true }).click();
+		await page.getByRole('button', { name: 'เลือกตำบล...' }).click();
+		await page.getByRole('button', { name: 'บ้านพรุ', exact: true }).click();
+		await page.getByRole('button', { name: 'ถัดไป (ข้อมูลสัตว์เลี้ยง/ยานพาหนะ)' }).click();
+		await expect(
+			page.getByRole('heading', { name: 'ทรัพย์สินและสัตว์เลี้ยง (Assets & Pets)' })
+		).toBeVisible();
+		await page.getByRole('button', { name: 'ลงทะเบียนสำเร็จ' }).click();
 
 		await expect(
 			page.getByText('บันทึกไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน')
@@ -703,6 +715,57 @@ test.describe('Evacuee Registration', () => {
 
 		// Assert — phone input is enabled again
 		await expect(phoneInput).toBeEnabled();
+	});
+
+	test('should preserve the registration draft when navigating away and back', async ({ page }) => {
+		await goToStep3(page);
+		await page.route(`**/${SHELTER_DB}/**`, async (route) => {
+			const request = route.request();
+			const attachmentName = new URL(request.url()).pathname.split('/').filter(Boolean).at(-1);
+			if (request.method() === 'PUT' && (attachmentName === 'full' || attachmentName === 'thumb')) {
+				await route.fulfill({
+					status: 201,
+					contentType: 'application/json',
+					body: JSON.stringify({ ok: true, id: 'image:draft-test', rev: '2-attachment-mock' })
+				});
+				return;
+			}
+			await route.fallback();
+		});
+
+		await page.getByPlaceholder('ชื่อจริง').fill('สมหญิง');
+		await page.getByPlaceholder('นามสกุล', { exact: true }).fill('ใจมั่น');
+		await page
+			.locator('[data-slot="form-item"]')
+			.filter({ has: page.locator('label', { hasText: 'เพศ' }) })
+			.locator('[data-slot="select-trigger"]')
+			.click();
+		await page.getByRole('option', { name: /หญิง \(Female\)/ }).click();
+
+		const noPhoneCheckbox = page
+			.locator('label')
+			.filter({ hasText: 'ไม่มีเบอร์โทร' })
+			.locator('[data-slot="checkbox"]');
+		await noPhoneCheckbox.click();
+		await expect(noPhoneCheckbox).toBeChecked();
+
+		await page.locator('#face-photo-input').setInputFiles('static/icon-192.png');
+		const preview = page.getByRole('img', { name: 'Face' });
+		await expect(preview).toBeVisible();
+		await expect(noPhoneCheckbox).toBeChecked();
+		const previewUrl = await preview.getAttribute('src');
+		expect(previewUrl).toMatch(/^blob:/);
+
+		// Step 3 submit → Step 4 → Step 3 preserves the validated EvacueeInput draft.
+		await page.getByRole('button', { name: 'ถัดไป →' }).click();
+		await expect(page.getByText('ผู้ประสบภัยทุกคนต้องมีครัวเรือน', { exact: true })).toBeVisible();
+		await page.getByRole('button', { name: 'ย้อนกลับ' }).click();
+
+		await expect(page.getByPlaceholder('ชื่อจริง')).toHaveValue('สมหญิง');
+		await expect(page.getByPlaceholder('นามสกุล', { exact: true })).toHaveValue('ใจมั่น');
+		await expect(noPhoneCheckbox).toBeChecked();
+		await expect(page.locator('input[name="phone"]')).toBeDisabled();
+		await expect(preview).toHaveAttribute('src', previewUrl!);
 	});
 
 	test('should show SOS ESCALATE banner on step 3 when symptoms were selected in step 2', async ({

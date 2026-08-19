@@ -31,6 +31,8 @@ export {
 	transferStatusSchema,
 	donationChannelSchema,
 	stockLedgerInputSchema,
+	stockLedgerDocSchema,
+	parseStockLedger,
 	receiveInputSchema,
 	walkInDonationInputSchema,
 	campaignInputSchema,

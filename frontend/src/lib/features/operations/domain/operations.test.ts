@@ -7,6 +7,7 @@ import {
 	keyDonationReceipt,
 	createStockLedger,
 	stockLedgerInputSchema,
+	parseStockLedger,
 	ledgerReasonSchema,
 	stockBalance,
 	createCampaign,
@@ -144,6 +145,30 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 			ctx
 		);
 		expect(entry.reason).toBe('purchase');
+	});
+
+	it('rejects malformed persisted ledger documents at a signed-sum boundary', () => {
+		const entry = createStockLedger(
+			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'receive' },
+			ctx
+		);
+
+		expect(parseStockLedger(entry)).toEqual(entry);
+		expect(() => parseStockLedger({ ...entry, qty: 'not-a-quantity' })).toThrow();
+		expect(() => parseStockLedger({ ...entry, qty: 5 })).toThrow();
+		expect(() => parseStockLedger({ ...entry, type: 'donation' })).toThrow();
+	});
+
+	it('reads compatible schema_v 2 ledgers but reserves purchase for schema_v 3', () => {
+		const entry = createStockLedger(
+			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'receive' },
+			ctx
+		);
+
+		expect(parseStockLedger({ ...entry, schema_v: 2 }).schema_v).toBe(2);
+		expect(() => parseStockLedger({ ...entry, schema_v: 2, reason: 'purchase' })).toThrow(
+			/purchase requires stock_ledger schema_v 3/
+		);
 	});
 });
 

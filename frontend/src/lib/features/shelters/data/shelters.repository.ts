@@ -20,6 +20,14 @@ import type {
  * Canonical definition; `shelters.api.ts` re-exports this type rather than
  * duplicating it, so a schema bump only needs to update this file + `masterToSummary()`.
  */
+export interface ShelterBasic {
+	code: string;
+	name: string;
+	operation_status: OperationStatus;
+	province: string | null;
+	capacity: number;
+}
+
 export interface ShelterSummary {
 	code: string;
 	name: string;
@@ -53,5 +61,6 @@ export interface ShelterSummary {
 
 export interface SheltersRepository {
 	listShelters(): Promise<ShelterSummary[]>;
+	searchShelters(): Promise<ShelterBasic[]>;
 	getShelter(code: string): Promise<ShelterSummary>;
 }

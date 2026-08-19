@@ -2,9 +2,9 @@
 title: "Task Breakdown — Household & Zoning"
 status: active
 created: 2026-06-05
-updated: 2026-08-13
+updated: 2026-08-14
 module: people
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; updated 2026-06-18 per CR-001 (permission cross-ref, lifecycle, screening inline, pre-registration, bulk ops, UI split); updated 2026-06-24 per CR-009 (T-04 — Household management ย้ายไป Stage 3, 2-box search/create flow); 2026-08-13 — CR-066 T-71..T-74; Wave 3 + T-72 **approved**; T-73/T-74 = Wave 4 รอบ CR ถัดไป
+note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; updated 2026-06-18 per CR-001 (permission cross-ref, lifecycle, screening inline, pre-registration, bulk ops, UI split); updated 2026-06-24 per CR-009 (T-04 — Household management ย้ายไป Stage 3, 2-box search/create flow); 2026-08-13 — CR-066 T-71..T-74; Wave 3 + T-72 **approved**; T-73/T-74 = Wave 4 รอบ CR ถัดไป; 2026-08-14 — CR-076 บังคับ household ใน onsite registration และเก็บ pet/asset/vehicle ที่ household
 ---
 
 # Household & Zoning
@@ -18,18 +18,18 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ## Features / Tasks
 
-| ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-04 | 🔄 | Household create + attach members + head | FR-21 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-02 |
-| T-06 | 🔄 | Household search + household check-in/out | FR-23 | R2 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-04 |
-| T-07 | 🔄 | Pet / asset / vehicle records | FR-24 | R2 | prod | ส.ค. | 3 | ÷1.6 | 2 | T-04 |
-| T-08 | 🔄 | Zone definition + capacity | FR-25 | R2 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-02 |
-| T-09 | 🔄 | Zone allocation + suggest (warning-only) | FR-26 | R2 | prod | ส.ค. | 5 | ÷1.4 | 3.5 | T-08 |
-| T-71 | ⬜ | Public booking + ยืนยันที่ประตู (reuse T-51 scan) — CR-070 P4 | FR-70..72, FR-77..79 | R3 | prod | in-scope | 8 | ÷1.4 | 5.5 | T-48,T-50,T-51 |
-| T-72 | ⬜ | People import xlsx/csv (ขยาย T-55) — CR-071 P5 | FR-73, FR-80, FR-81 | R3 | prod | in-scope | 6 | ÷1.25 | 5 | T-48 |
-| T-73 | ⬜ | Inbound POST คนจากหน่วยงาน — CR-071 P5 **blocked payload** | FR-74 | R3 | prod | blocked | 6 | ÷1.25 | 5 | T-71, partner spec |
-| T-74 | ⬜ | Triage เขียว/เหลือง/แดง — CR-072 P6 **blocked กฎ** | FR-75 | R3 | prod | blocked | 5 | ÷1.4 | 3.5 | T-49, D-TRIAGE-RULES |
-|  |  | **รวมทั้งโมดูล** |  |  |  |  | **24** |  | **16** |  |
+| ID   | Status | Feature / Task                                                | FR                   | Phase | Stage | Scope    | Raw MD | AI×   | Adj MD | Depends              |
+| ---- | ------ | ------------------------------------------------------------- | -------------------- | ----- | ----- | -------- | ------ | ----- | ------ | -------------------- |
+| T-04 | 🔄     | Household create + attach members + head                      | FR-21                | R2    | prod  | ส.ค.     | 6      | ÷1.6  | 4      | T-02                 |
+| T-06 | 🔄     | Household search + household check-in/out                     | FR-23                | R2    | prod  | ส.ค.     | 6      | ÷1.6  | 4      | T-04                 |
+| T-07 | 🔄     | Pet / asset / vehicle records                                 | FR-24                | R2    | prod  | ส.ค.     | 3      | ÷1.6  | 2      | T-04                 |
+| T-08 | 🔄     | Zone definition + capacity                                    | FR-25                | R2    | prod  | ส.ค.     | 4      | ÷1.6  | 2.5    | T-02                 |
+| T-09 | 🔄     | Zone allocation + suggest (warning-only)                      | FR-26                | R2    | prod  | ส.ค.     | 5      | ÷1.4  | 3.5    | T-08                 |
+| T-71 | ⬜     | Public booking + ยืนยันที่ประตู (reuse T-51 scan) — CR-070 P4 | FR-70..72, FR-77..79 | R3    | prod  | in-scope | 8      | ÷1.4  | 5.5    | T-48,T-50,T-51       |
+| T-72 | ⬜     | People import xlsx/csv (ขยาย T-55) — CR-071 P5                | FR-73, FR-80, FR-81  | R3    | prod  | in-scope | 6      | ÷1.25 | 5      | T-48                 |
+| T-73 | ⬜     | Inbound POST คนจากหน่วยงาน — CR-071 P5 **blocked payload**    | FR-74                | R3    | prod  | blocked  | 6      | ÷1.25 | 5      | T-71, partner spec   |
+| T-74 | ⬜     | Triage เขียว/เหลือง/แดง — CR-072 P6 **blocked กฎ**            | FR-75                | R3    | prod  | blocked  | 5      | ÷1.4  | 3.5    | T-49, D-TRIAGE-RULES |
+|      |        | **รวมทั้งโมดูล**                                              |                      |       |       |          | **24** |       | **16** |                      |
 
 ## Task Details
 
@@ -41,24 +41,26 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 **Roles:** `SA ✓ · SM scope · VOL scope` — ดู [role-permission-matrix §3](../prd/role-permission-matrix.md#3-action-matrix--r2)
 
-**Description:** สร้าง "ครัวเรือน" เป็น **optional grouping** เหนือ person record ของ baseline registration (FR-4..6) — ผูก person ตั้งแต่ 1 คนขึ้นไปเข้าครัวเรือน กำหนด/เปลี่ยนหัวหน้าครัวเรือน (head) ได้ โดย person-only flow ต้องทำงานได้โดยไม่บังคับสร้างครัวเรือน (PRD FR-21) — การจัดการและตั้งค่า Household จะแยกมาอยู่ใน **Stage 3 (จัดการตั้งค่าหัวหน้าครอบครัว)** อย่างชัดเจน เพื่อลดความสับสนกับฟอร์มข้อมูลบุคคลใน Stage 2 (ดู [CR-009](../changes/CR-009-register-household-flow.md))
+**Description:** สร้าง "ครัวเรือน" เป็น **required grouping** เหนือ person record ของ onsite registration (FR-4..6) — ทุก person ต้องเลือกครัวเรือนเดิมหรือสร้างครัวเรือนใหม่ตั้งแต่ 1 คนขึ้นไป และกำหนด/เปลี่ยนหัวหน้าครัวเรือน (head) ได้ ผู้ที่มาเพียงคนเดียวต้องสร้างครัวเรือน 1 คนโดยมีตนเองเป็น head การจัดการ Household อยู่ใน **Stage 3 (จัดการตั้งค่าหัวหน้าครอบครัว)** แยกจากฟอร์มข้อมูลบุคคลใน Stage 2 (ดู [CR-009](../changes/CR-009-register-household-flow.md), [CR-076](../changes/CR-076-onsite-registration-household-required.md))
 
 รองรับ **3 creation path**:
 
-| Path | ใคร | เมื่อไร | Status เริ่มต้น |
-| --- | --- | --- | --- |
-| **A — สร้าง ณ จุดรับ** | VOL | household มาถึงพร้อมกัน | `arriving` |
-| **B — Pre-registration ล่วงหน้า** | SM หรือ VOL (backoffice) | รับแจ้งล่วงหน้าว่าจะมา | `pre-registered` |
-| **C — Post-arrival grouping** | SM หรือ VOL | persons check-in แยกกันไปแล้ว | สร้าง household แล้ว attach persons ที่มี status `checked-in` อยู่แล้ว |
+| Path                              | ใคร                      | เมื่อไร                       | Status เริ่มต้น                                                        |
+| --------------------------------- | ------------------------ | ----------------------------- | ---------------------------------------------------------------------- |
+| **A — สร้าง ณ จุดรับ**            | VOL                      | household มาถึงพร้อมกัน       | `arriving`                                                             |
+| **B — Pre-registration ล่วงหน้า** | SM หรือ VOL (backoffice) | รับแจ้งล่วงหน้าว่าจะมา        | `pre-registered`                                                       |
+| **C — Post-arrival grouping**     | SM หรือ VOL              | persons check-in แยกกันไปแล้ว | สร้าง household แล้ว attach persons ที่มี status `checked-in` อยู่แล้ว |
 
 **Flow — Path A (สร้าง ณ จุดรับ) — ทำในขั้นตอน Stage 3:**
+
 1. VOL ตรวจสอบและจัดการ household โดยแบ่งเป็น 2 ทางเลือก (2 Box):
    - **A.1 ค้นหาบ้านเดิม (Search Existing):** ค้นหาสถานที่/บ้านเลขที่จากระบบ (AutoComplete) หากพบ ให้เลือกเพื่อผูกบุคคลที่ลงทะเบียนนี้เป็น **"ลูกบ้าน" (Member)**
    - **A.2 สร้างบ้านใหม่ (Create New):** หากไม่พบ ให้กรอกฟอร์มที่อยู่ใหม่ และระบบจะผูกบุคคลนี้เป็น **"หัวหน้าบ้าน" (Head)** อัตโนมัติ (พร้อมกรอก emergency contact)
 2. ระบบ validate (ใช้ Person ID/QR ของหัวหน้าครัวเรือน head ที่ออกไปแล้วตอนลงทะเบียน — ไม่ออก QR ระดับ household แยก)
-3. ดำเนินต่อที่ check-in (T-06)
+3. บันทึกสัตว์เลี้ยง/ทรัพย์สิน/ยานพาหนะที่ระดับ household (T-07) ก่อนดำเนินต่อที่ check-in (T-06)
 
 **Flow — Path B (Pre-registration):**
+
 1. SM/VOL สร้าง household สถานะ `pre-registered`
 2. Person ID/QR ของ head พร้อมใช้งาน → สามารถส่ง/พิมพ์ล่วงหน้าได้
 3. SM assign zone ล่วงหน้าได้ (T-09) — zone จอง capacity แต่ **ยังไม่นับ occupancy**
@@ -66,12 +68,14 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 5. ถ้า household ไม่มาถึง → SM mark `cancelled` ได้
 
 **Flow — Path C (Post-arrival grouping):**
+
 1. SM/VOL ค้นหา persons ที่ check-in แยกไปแล้ว
 2. สร้าง household ใหม่ → ตั้ง head → attach persons
 3. ระบบ validate แต่ละ person ว่าไม่มี active household อื่น
 4. ใช้ Person ID/QR ของ head
 
 **Definition of Done:**
+
 - API + UI ของระบบลงทะเบียน (Stage 3) มีการแบ่งแยก flow ค้นหาที่อยู่เดิม (รับบทลูกบ้าน) และสร้างที่อยู่ใหม่ (รับบทหัวหน้าบ้าน) อย่างชัดเจน
 - ระบบสามารถ assign role สมาชิก (ลูกบ้าน/หัวหน้าบ้าน) ให้ตรงตามเงื่อนไขทางเลือกโดยอัตโนมัติ
 - API + UI สร้าง/แก้ไข household, เพิ่ม-ถอดสมาชิก, ตั้งและเปลี่ยน head ได้ (head ต้องเป็น person ที่มี required fields ตาม FR-5)
@@ -81,6 +85,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - `pre-registered` household ไม่นับ occupancy จนกว่าจะ check-in จริง (T-06)
 - SM mark `cancelled` สำหรับ `pre-registered` household ที่ไม่มาถึงได้
 - ทุก person ต้องมี household เสมอ — Stage 3 บังคับ join หรือ create (CR-009 amend); solo evacuee = household ขนาด 1 คน (head_evacuee_id = ตัวเอง)
+- Onsite registration ต้องผ่าน Stage 3 → T-07 → จัดโซนตามลำดับเสมอ; ไม่มี action ข้าม household หรือข้าม T-07
 - ลบ/ย้ายสมาชิกแล้วข้อมูล person record ไม่เสียหาย (additive ต่อ base schema T-02)
 - เขียนลง CouchDB ตาม schema T-02 พร้อม audit metadata (ใคร/เมื่อไร)
 - Unit + integration test ผ่าน, demo flow ลงทะเบียนครอบครัว 1 ครัวเรือนได้จริง (ครอบ path A + B)
@@ -91,7 +96,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ### T-05 — Household Shelter ID/QR generation (FR-22) `[REMOVED — ดู CR-047]`
 
-*(ตัดออกจาก Scope ตาม CR-047 — เปลี่ยนไปใช้ Person ID/QR ของหัวหน้าครัวเรือน head แทน)*
+_(ตัดออกจาก Scope ตาม CR-047 — เปลี่ยนไปใช้ Person ID/QR ของหัวหน้าครัวเรือน head แทน)_
 
 ---
 
@@ -104,6 +109,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 **Description:** ค้นหาครัวเรือน (ชื่อสมาชิก, Shelter ID, เบอร์โทร) และทำ check-in/check-out ระดับครัวเรือนทั้งชุดหรือรายสมาชิก รวม **arrival screening inline** ที่ทำพร้อมกับ check-in ครั้งเดียว ยอด occupancy ที่ได้เป็น input ของ zone (T-09), resource calc (T-31) และ dashboard
 
 **Check-in flow (ทุก path):**
+
 1. VOL scan QR หรือพิมพ์ค้น → ระบบแสดง household profile
 2. VOL กรอก **screening form inline** (ทำพร้อมกัน ครั้งเดียว):
    - Vulnerability flags: ผู้สูงอายุ, ท้อง, ผู้พิการ, เด็กเล็ก
@@ -126,6 +132,7 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 ```
 
 **กฎ status transitions:**
+
 - `pre-registered` → ไม่นับ occupancy; QR ใช้งานได้; zone จองล่วงหน้าได้
 - `arriving` → ระหว่าง screening/check-in กำลังดำเนินการ
 - `checked-in` → นับ occupancy; เริ่มนับตั้งแต่ timestamp check-in
@@ -136,16 +143,17 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 
 **`checkout_destination` (required ทุกครั้งที่ checkout):**
 
-| ตัวเลือก | Field ที่ต้องกรอกเพิ่ม |
-| --- | --- |
-| `returned_home` — กลับบ้าน | — |
-| `transferred_shelter` — ย้ายไปศูนย์อพยพอื่น | ชื่อ/รหัสศูนย์ปลายทาง |
-| `referred_facility` — ไปสถานที่ช่วยเหลืออื่น (โรงพยาบาล, วัด, ญาติ ฯลฯ) | ชื่อสถานที่ |
-| `other` — อื่นๆ | หมายเหตุ (required) |
+| ตัวเลือก                                                                | Field ที่ต้องกรอกเพิ่ม |
+| ----------------------------------------------------------------------- | ---------------------- |
+| `returned_home` — กลับบ้าน                                              | —                      |
+| `transferred_shelter` — ย้ายไปศูนย์อพยพอื่น                             | ชื่อ/รหัสศูนย์ปลายทาง  |
+| `referred_facility` — ไปสถานที่ช่วยเหลืออื่น (โรงพยาบาล, วัด, ญาติ ฯลฯ) | ชื่อสถานที่            |
+| `other` — อื่นๆ                                                         | หมายเหตุ (required)    |
 
 > การออกจาก shelter **ทุกประเภท** ใช้ action checkout เดียวกัน — ความต่างอยู่ที่ `checkout_destination` ไม่ใช่ state แยก
 
 **Definition of Done:**
+
 - ค้นหาได้ทั้งจาก scan Person QR ของสมาชิก (ปกติคือ head) และพิมพ์ค้น ผลลัพธ์จำกัดใน shelter scope ของผู้ใช้
 - Check-in flow รวม screening inline ในหน้าจอเดียว: vulnerability flags + special needs กรอกพร้อม check-in ทำครั้งเดียว
 - รองรับ check-in จาก status `pre-registered` (scan QR ที่ออกล่วงหน้า) และ `arriving` (สร้าง ณ จุดรับ)
@@ -162,10 +170,12 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 
 **Roles:** `SA ✓ · SM scope · VOL scope` — ดู [role-permission-matrix §3](../prd/role-permission-matrix.md#3-action-matrix--r2)
 
-**Description:** บันทึกสัตว์เลี้ยง (ประเภท, จำนวน, กรง), ทรัพย์สิน และยานพาหนะที่นำติดตัวมา ผูกกับ **person หรือ household** (source ส่วนที่ 1 ข้อ 3 — Assets & Pets) ข้อมูลสัตว์เลี้ยงเป็น input การจัดโซนสัตว์เลี้ยง (T-09) และ related `pet_refs` ของ shelter report (T-33 / CR-040)
+**Description:** บันทึกสัตว์เลี้ยง (ประเภท, จำนวน, กรง), ทรัพย์สิน และยานพาหนะที่นำติดตัวมาไว้ที่ **household** (source ส่วนที่ 1 ข้อ 3 — Assets & Pets) ข้อมูลสัตว์เลี้ยงเป็น input การจัดโซนสัตว์เลี้ยง (T-09) และ related `pet_refs` ของ shelter report (T-33 / CR-040)
 
 **Definition of Done:**
-- CRUD pet/asset/vehicle ผูก person หรือ household พร้อมประเภทตามรายการที่ design (P-01) กำหนด — บันทึกได้โดยไม่ block registration flow
+
+- CRUD pet/asset/vehicle ผูก household พร้อมประเภทตามรายการที่ design (P-01) กำหนด
+- Onsite registration ต้องแสดงขั้นตอนนี้หลังเลือก/สร้าง household และก่อนจัดโซนเสมอ; ผู้ใช้ส่งข้อมูลว่างได้เมื่อไม่มีรายการ
 - จำนวนสัตว์เลี้ยงต่อโซน query ได้ (รองรับ zone allocation)
 - แสดงในหน้า household profile และ test + demo ผ่าน
 
@@ -178,6 +188,7 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 **Description:** ผู้ดูแลศูนย์นิยามโซนที่พักของศูนย์ (โซนครอบครัว, ชาย/หญิง, กลุ่มเปราะบาง, สัตว์เลี้ยง) พร้อม capacity ต่อโซน เป็นโครงให้ T-09 จัดสรร **VOL ไม่มีสิทธิ์ create/edit zone** — เฉพาะ SM และ SA เท่านั้น
 
 **Definition of Done:**
+
 - CRUD โซน + ประเภทโซน + capacity ต่อโซน ภายใน shelter scope (ประเภทขยายเพิ่มได้)
 - แก้ capacity แล้วยอดคงเหลือ (capacity − occupied) คำนวณใหม่ถูกต้อง
 - `pre-registered` household ที่ assign zone ไว้ล่วงหน้านับเป็น "reserved" แยกจาก "occupied" จนกว่าจะ check-in จริง
@@ -203,6 +214,7 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 - **Pre-registration zone reservation:** `pre-registered` household assign zone ได้ล่วงหน้า — นับเป็น "reserved" ไม่ใช่ "occupied" จนกว่าจะ check-in จริง
 
 **Definition of Done:**
+
 - Assign/ย้าย household เข้าโซนได้ (single และ bulk) ระบบ suggest โซนที่เหมาะสมพร้อมเหตุผลสั้นๆ (อิง vulnerability flags + screening data + จำนวนสัตว์เลี้ยง)
 - Bulk assign: SM เลือกหลาย household พร้อมกันได้ warning แสดงรายครัวเรือน บันทึก override actor รายรายการ
 - เกิน capacity / ผิดประเภทโซน → แสดง warning ชัดเจนแต่ user ยืนยันทำต่อได้ (override บันทึก actor)
@@ -225,6 +237,7 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 **Files likely touched:** public portal register/booking route; BFF สร้างคนแบบ no-session (pattern donation public + CR-063); `features/people`; check-in UI แสดงว่ามาจากการจอง; รายการ pre-reg + ยกเลิก; `registered_via` (proposed `web`)
 
 **Definition of Done:**
+
 - UI: ฟอร์มจอง public เลือกสถานที่ที่ยังเปิดรับ; ออก QR/รหัส; ตามสถานะด้วย QR หรือรหัส+เบอร์; หน้าประตู scan แล้ว check-in ได้โดยไม่ลงทะเบียนใหม่
 - UI staff: รายการ `pre_registered` แสดง elapsed วัน/ชม./นาที คำนวณตอนโหลด/รีเฟรช — ห้าม poll ห้ามนาฬิกาเดินสด
 - Write path: BFF เขียน CouchDB — ห้ามเบราว์เซอร์ถือ admin secret; คนได้ `pre_registered`; occupancy +1 ตอนจอง
@@ -250,6 +263,7 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 **Files likely touched:** `routes/(protected)/.../import` หรือขยาย sitemap `/import`; feature slice people-import (pattern CR-039); import log doc type (หลัง approve ถ้าไม่ reuse)
 
 **Definition of Done:**
+
 - UI: dropzone xlsx+csv, preview error รายช่อง, สรุปสำเร็จ/ล้มเหลว, ประวัติ log
 - Write path: sequential/batched put evacuee ในศูนย์ที่ระบุ; partial success ไม่ rollback; ทุกแถวสำเร็จเป็น `pre_registered`
 - Validation: Zod evacuee รายแถว; ไฟล์ว่าง/header ผิด = หยุดทั้งไฟล์พร้อมข้อความ; ห้ามคอลัมน์เลือก stay status ต่อแถว
@@ -455,9 +469,9 @@ sequenceDiagram
 
 ## Effort by phase (Adj MD)
 
-| Phase | Raw MD | Adj MD |
-| --- | --- | --- |
-| R2 | 24 | 16 |
+| Phase   | Raw MD | Adj MD |
+| ------- | ------ | ------ |
+| R2      | 24     | 16     |
 | **รวม** | **24** | **16** |
 
 ## Dependencies

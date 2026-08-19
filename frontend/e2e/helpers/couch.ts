@@ -35,7 +35,7 @@ export function couchBootstrapAdmin(): { name: string; password: string } {
 	return { name: decodeURIComponent(m[2]), password: decodeURIComponent(m[3]) };
 }
 
-async function couchReq(
+export async function couchReq(
 	method: string,
 	path: string,
 	body?: unknown

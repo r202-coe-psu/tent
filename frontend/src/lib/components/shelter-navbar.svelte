@@ -3,19 +3,25 @@
 	import { useShelters } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { shelterCodeFromRoles } from '$lib/auth/roles';
+	import { shelterCodeFromRoles, isSystemAdmin } from '$lib/auth/roles';
 
 	const sheltersQuery = useShelters();
 
 	const selectedCode = $derived(shelterStore.selectedShelterCode);
 
 	const userShelterCode = $derived(shelterCodeFromRoles(authStore.user?.roles ?? []));
+	const isAdmin = $derived(isSystemAdmin(authStore.user?.roles ?? []));
+
+	const allowedShelters = $derived(
+		sheltersQuery.data?.filter((s) => isAdmin || s.code === userShelterCode) ?? []
+	);
 
 	$effect(() => {
-		const shelters = sheltersQuery.data;
-		if (!shelters?.length || shelterStore.selectedShelterCode) return;
-		const own = userShelterCode ? shelters.find((s) => s.code === userShelterCode) : undefined;
-		shelterStore.selectedShelterCode = (own ?? shelters[0]).code;
+		if (!allowedShelters.length || shelterStore.selectedShelterCode) return;
+		const own = userShelterCode
+			? allowedShelters.find((s) => s.code === userShelterCode)
+			: undefined;
+		shelterStore.selectedShelterCode = (own ?? allowedShelters[0]).code;
 	});
 
 	function onShelterChange(code: string | undefined) {
@@ -40,7 +46,7 @@
 				</Select.Trigger>
 				<Select.Content align="end" class="w-[350px]">
 					<Select.Group>
-						{#each sheltersQuery.data as shelter (shelter.code)}
+						{#each allowedShelters as shelter (shelter.code)}
 							<Select.Item value={shelter.code} label={shelter.name}>
 								{shelter.name}
 							</Select.Item>

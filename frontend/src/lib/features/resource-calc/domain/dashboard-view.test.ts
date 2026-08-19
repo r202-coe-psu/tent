@@ -51,6 +51,9 @@ describe('rowSeverity — consumables (multiply, days-of-supply lens)', () => {
 	it('ok when ≥ 7 days', () => {
 		expect(rowSeverity(row('multiply', 1, 1000))).toBe('ok'); // 10 days
 	});
+	it('nodata when a valid multiply row has zero need', () => {
+		expect(rowSeverity(row('multiply', 1, 0, 0))).toBe('nodata');
+	});
 });
 
 describe('rowSeverity — facilities (divide, shortfall lens)', () => {
@@ -65,6 +68,25 @@ describe('rowSeverity — facilities (divide, shortfall lens)', () => {
 	it('ok on surplus', () => {
 		// need 10, have 20 → surplus
 		expect(rowSeverity(row('divide', 10, 20))).toBe('ok');
+	});
+	it('treats a persisted gap row with zero shortfall as inconsistent data', () => {
+		const computed = row('divide', 10, 10);
+		const syntheticGap = {
+			...computed,
+			status: 'gap' as const,
+			gap: '0'
+		};
+		expect(rowSeverity(syntheticGap)).toBe('nodata');
+	});
+	it('never presents a persisted gap row with missing need/gap as green', () => {
+		const computed = row('divide', 10, 10);
+		const syntheticMissing = {
+			...computed,
+			status: 'gap' as const,
+			need: null,
+			gap: null
+		};
+		expect(rowSeverity(syntheticMissing)).toBe('nodata');
 	});
 });
 
@@ -108,5 +130,13 @@ describe('sortBySeverity', () => {
 		const sorted = sortBySeverity([ok, crit, watch]);
 		expect(sorted.map((r) => rowSeverity(r))).toEqual(['crit', 'watch', 'ok']);
 		expect(SEVERITY_RANK.crit).toBeLessThan(SEVERITY_RANK.ok);
+	});
+	it('keeps ordinal order when severity ties', () => {
+		const first = row('multiply', 1, 200);
+		const second = { ...first, ordinal: first.ordinal + 1 };
+		expect(sortBySeverity([second, first]).map((r) => r.ordinal)).toEqual([
+			first.ordinal,
+			second.ordinal
+		]);
 	});
 });

@@ -140,10 +140,13 @@
 			closeable.length > 0
 	);
 
-	function evacueeName(evacueeId: string): string {
+	function evacueeName(evacueeId: string, referral?: Referral): string {
 		const found = evacueesQuery.data?.find((e) => e._id === evacueeId);
-		if (!found) return evacueeId;
-		return `${found.first_name} ${found.last_name}`;
+		if (found) return `${found.first_name} ${found.last_name}`;
+		if (referral?.evacuee_summary) {
+			return `${referral.evacuee_summary.first_name} ${referral.evacuee_summary.last_name}`;
+		}
+		return evacueeId;
 	}
 
 	function evacueeZone(evacueeId: string): string {
@@ -464,7 +467,7 @@
 								onclick={() => onSelectReferral?.(referral._id)}
 							>
 								<Table.Cell class="font-semibold text-foreground">
-									{evacueeName(referral.evacuee_id)}
+									{evacueeName(referral.evacuee_id, referral)}
 								</Table.Cell>
 								<Table.Cell class="text-muted-foreground">
 									{evacueeZone(referral.evacuee_id)}
