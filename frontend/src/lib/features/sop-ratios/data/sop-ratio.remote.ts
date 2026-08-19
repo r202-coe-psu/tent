@@ -1,5 +1,5 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
-import { saveBulkAtomic } from '$lib/db/couch-db';
+import { putDoc, saveBulkAtomic } from '$lib/db/couch-db';
 import { touch, type AuthorContext } from '$lib/db/model';
 import { createAuditEntry, type AuditEntry, isAuditEntry } from '$lib/features/shared';
 import {
@@ -9,7 +9,10 @@ import {
 	isSopMaster,
 	isSopOverride,
 	resolveEffectiveProfile as resolveDomain,
+	SOP_MASTER_ACTIVE_POINTER_ID,
+	sopMasterActivePointerSchema,
 	type SopMaster,
+	type SopMasterActivePointer,
 	type SopOverride,
 	type SopRatioKey
 } from '../domain/sop-ratio';
@@ -39,14 +42,26 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 		this.repo = createRemoteRepository(dbName);
 	}
 
+	async getActivePointer(): Promise<SopMasterActivePointer | null> {
+		const doc = await this.repo.get<SopMasterActivePointer>(SOP_MASTER_ACTIVE_POINTER_ID);
+		if (!doc) return null;
+		const parse = sopMasterActivePointerSchema.safeParse(doc);
+		return parse.success ? parse.data : null;
+	}
+
 	async listAll(): Promise<SopMaster[]> {
 		const all = await this.repo.allByType('sop_profile', isSopMaster);
+		const pointer = await this.getActivePointer();
+		const activeId = pointer?.active_profile_id;
+
 		const latestBySlug = new Map<string, SopMaster>();
-		for (const profile of all) {
+		for (const rawProfile of all) {
+			const profile: SopMaster = {
+				...rawProfile,
+				active: activeId ? rawProfile._id === activeId : rawProfile.active
+			};
 			const slug = profile.slug ?? createProfileSlug(profile.name);
 			const current = latestBySlug.get(slug);
-			// An activated historic version must remain visible/selectable rather than
-			// being hidden by a newer inactive revision of the same profile.
 			if (
 				!current ||
 				(profile.active && !current.active) ||
@@ -59,14 +74,56 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 	}
 
 	async listActive(): Promise<SopMaster[]> {
+		const pointer = await this.getActivePointer();
+		if (pointer) {
+			const profile = await this.getById(pointer.active_profile_id);
+			if (profile) return [{ ...profile, active: true }];
+			const bySlug = await this.getBySlug(pointer.active_slug);
+			if (bySlug) return [{ ...bySlug, active: true }];
+			return [];
+		}
+
+		// Legacy migration / bootstrap path:
 		const all = await this.repo.allByType('sop_profile', isSopMaster);
-		return all.filter((p) => p.active);
+		const legacyActive = all.filter((p) => p.active);
+		if (legacyActive.length === 1) {
+			const target = legacyActive[0];
+			const pointerDoc: SopMasterActivePointer = {
+				_id: SOP_MASTER_ACTIVE_POINTER_ID,
+				type: 'sop_profile_active',
+				schema_v: 1,
+				active_profile_id: target._id,
+				active_slug: target.slug ?? createProfileSlug(target.name),
+				active_version: target.version,
+				updated_at: new Date().toISOString(),
+				updated_by: 'system_migration'
+			};
+			try {
+				await putDoc(this.dbName, pointerDoc);
+			} catch {
+				// Ignore CAS race on bootstrap
+			}
+			return [{ ...target, active: true }];
+		}
+		if (legacyActive.length > 1) {
+			throw new Error(
+				'Multiple active master profiles found without active pointer; manual repair required'
+			);
+		}
+		return [];
 	}
 
 	async listVersions(slug: string): Promise<SopMaster[]> {
 		const all = await this.repo.allByType('sop_profile', isSopMaster);
+		const pointer = await this.getActivePointer();
+		const activeId = pointer?.active_profile_id;
+
 		return all
 			.filter((profile) => (profile.slug ?? createProfileSlug(profile.name)) === slug)
+			.map((profile) => ({
+				...profile,
+				active: activeId ? profile._id === activeId : profile.active
+			}))
 			.sort((a, b) => b.version - a.version);
 	}
 
@@ -75,7 +132,13 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 	}
 
 	async getById(id: string): Promise<SopMaster | null> {
-		return this.repo.get<SopMaster>(id);
+		const doc = await this.repo.get<SopMaster>(id);
+		if (!doc || !isSopMaster(doc)) return null;
+		const pointer = await this.getActivePointer();
+		return {
+			...doc,
+			active: pointer ? pointer.active_profile_id === doc._id : doc.active
+		};
 	}
 
 	async listAuditsByTargetIds(ids: string[]): Promise<AuditEntry[]> {
@@ -87,29 +150,34 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 		profile: SopMaster,
 		audit: AuditEntry | null
 	): Promise<{ profile: SopMaster; deactivatedPrev: SopMaster | null; audit: AuditEntry | null }> {
-		// Master profiles have a single global activation slot.  This also covers
-		// editing a historical/inactive profile: saving its next version promotes
-		// that new version and atomically deactivates the previously active one.
-		const activeProfiles = profile.active ? await this.listActive() : [];
-		const profilesToSave = new Map<string, SopMaster>();
-		for (const active of activeProfiles) {
-			if (active._id !== profile._id)
-				profilesToSave.set(active._id, { ...touch(active), active: false });
-		}
-		if (deactivatedPrev) profilesToSave.set(deactivatedPrev._id, deactivatedPrev);
-		profilesToSave.set(profile._id, profile);
-		const docs: Array<SopMaster | AuditEntry> = [...profilesToSave.values()];
-		if (audit) docs.push(audit);
+		const draftProfile: SopMaster = { ...profile, active: false };
+		const docsToSave: Array<SopMaster | AuditEntry> = [draftProfile];
+		if (audit) docsToSave.push(audit);
 
-		const saved = await saveBulkAtomic(this.dbName, docs, 'master versions', undefined, {
+		const saved = await saveBulkAtomic(this.dbName, docsToSave, 'master versions', undefined, {
 			onConflict: 'throw'
 		});
+		const savedProfile = saved.find((d) => d._id === profile._id) as SopMaster;
+
+		// Single-doc CAS on pointer to promote the new version as active master
+		const pointer = await this.getActivePointer();
+		const nextPointer: SopMasterActivePointer = {
+			_id: SOP_MASTER_ACTIVE_POINTER_ID,
+			...(pointer?._rev ? { _rev: pointer._rev } : {}),
+			type: 'sop_profile_active',
+			schema_v: 1,
+			active_profile_id: savedProfile._id,
+			active_slug: savedProfile.slug ?? createProfileSlug(savedProfile.name),
+			active_version: savedProfile.version,
+			updated_at: new Date().toISOString(),
+			updated_by: profile.created_by
+		};
+
+		await putDoc(this.dbName, nextPointer);
 
 		return {
-			profile: saved.find((d) => d._id === profile._id) as SopMaster,
-			deactivatedPrev: deactivatedPrev
-				? (saved.find((d) => d._id === deactivatedPrev._id) as SopMaster)
-				: null,
+			profile: { ...savedProfile, active: true },
+			deactivatedPrev: null,
 			audit: audit ? (saved.find((d) => d._id === audit._id) as AuditEntry) : null
 		};
 	}
@@ -155,19 +223,34 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 		if (await this.getBySlug(slug)) throw new Error('Profile name already exists');
 
 		const { profile, audit } = createInitialProfile('sop_profile', name, ratios, { createdBy });
-		const activeProfiles = await this.listActive();
-		// The first master establishes the baseline.  Later profiles are drafts
-		// until an administrator explicitly promotes one, so creating a profile
-		// never silently switches every shelter to a new standard.
-		const initialProfile: SopMaster = {
-			...profile,
-			active: activeProfiles.length === 0
-		};
-		const docs: Array<SopMaster | AuditEntry> = [initialProfile, audit];
-		const saved = await saveBulkAtomic(this.dbName, docs, 'create master profile');
+		const draftProfile: SopMaster = { ...profile, active: false };
+		await putDoc(this.dbName, draftProfile);
+		await putDoc(this.dbName, audit);
+
+		const pointer = await this.getActivePointer();
+		let isFirstActive = false;
+		if (!pointer) {
+			const nextPointer: SopMasterActivePointer = {
+				_id: SOP_MASTER_ACTIVE_POINTER_ID,
+				type: 'sop_profile_active',
+				schema_v: 1,
+				active_profile_id: draftProfile._id,
+				active_slug: slug,
+				active_version: draftProfile.version,
+				updated_at: new Date().toISOString(),
+				updated_by: createdBy
+			};
+			try {
+				await putDoc(this.dbName, nextPointer);
+				isFirstActive = true;
+			} catch {
+				// CAS conflict lost to concurrent creator
+			}
+		}
+
 		return {
-			profile: saved.find((doc) => doc._id === initialProfile._id) as SopMaster,
-			audit: saved.find((doc) => doc._id === audit._id) as AuditEntry
+			profile: { ...draftProfile, active: isFirstActive },
+			audit
 		};
 	}
 
@@ -177,64 +260,50 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 			throw new Error(`SOP master profile with ID ${id} not found`);
 		}
 
-		const activeProfiles = await this.listActive();
-		const otherActive = activeProfiles.filter((p) => p._id !== target._id);
+		const pointer = await this.getActivePointer();
+		const nextPointer: SopMasterActivePointer = {
+			_id: SOP_MASTER_ACTIVE_POINTER_ID,
+			...(pointer?._rev ? { _rev: pointer._rev } : {}),
+			type: 'sop_profile_active',
+			schema_v: 1,
+			active_profile_id: target._id,
+			active_slug: target.slug ?? createProfileSlug(target.name),
+			active_version: target.version,
+			updated_at: new Date().toISOString(),
+			updated_by: ctx?.createdBy ?? 'system'
+		};
 
-		const docsToSave: Array<SopMaster | AuditEntry> = [];
-
-		for (const p of otherActive) {
-			docsToSave.push({ ...touch(p), active: false });
+		try {
+			await putDoc(this.dbName, nextPointer);
+		} catch (error) {
+			throw new Error(
+				'ไม่สามารถเปลี่ยน Active Profile ได้ เนื่องจากมีการปรับเปลี่ยนโดยผู้ใช้อื่นในระหว่างนี้ (409 Conflict)',
+				{
+					cause: error
+				}
+			);
 		}
 
-		if (!target.active) {
-			docsToSave.push({ ...touch(target), active: true });
-		}
-
-		if (docsToSave.length > 0 && ctx) {
+		if (ctx) {
 			const audit = createAuditEntry(
 				{
 					action: 'manual_adjust',
 					target_type: 'sop_profile',
 					target_id: target._id,
 					reason: `Set version ${target.version} of profile "${target.name}" as active`,
-					context: { deactivated_ids: otherActive.map((p) => p._id) }
+					context: { previous_pointer: pointer?.active_profile_id ?? null }
 				},
 				{ shelterCode: 'catalog', createdBy: ctx.createdBy }
 			);
-			docsToSave.push(audit);
-		}
-
-		if (docsToSave.length > 0) {
-			await saveBulkAtomic(this.dbName, docsToSave, 'active master');
+			await putDoc(this.dbName, audit);
 		}
 	}
 
-	async setInactive(id: string, ctx?: { createdBy: string }): Promise<void> {
-		const target = await this.getById(id);
-		if (!target) throw new Error(`SOP master profile with ID ${id} not found`);
-		if (!target.active) return;
-
-		const activeProfiles = await this.listActive();
-		if (activeProfiles.length <= 1) {
-			throw new Error('Cannot deactivate the only active profile. Activate another profile first.');
-		}
-
-		const docs: Array<SopMaster | AuditEntry> = [{ ...touch(target), active: false }];
-		if (ctx) {
-			docs.push(
-				createAuditEntry(
-					{
-						action: 'manual_adjust',
-						target_type: 'sop_profile',
-						target_id: target._id,
-						reason: `Deactivate master profile "${target.name}"`,
-						context: { version: target.version }
-					},
-					{ shelterCode: 'catalog', createdBy: ctx.createdBy }
-				)
-			);
-		}
-		await saveBulkAtomic(this.dbName, docs, 'deactivate master');
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	async setInactive(_id: string, _ctx?: { createdBy: string }): Promise<void> {
+		throw new Error(
+			'Cannot deactivate the active master profile directly. Activate another master profile instead.'
+		);
 	}
 }
 

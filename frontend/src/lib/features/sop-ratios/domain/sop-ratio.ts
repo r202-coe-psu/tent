@@ -130,6 +130,26 @@ export const sopMasterSchema = z.object({
 
 export type SopMaster = z.infer<typeof sopMasterSchema>;
 
+export const SOP_MASTER_ACTIVE_POINTER_ID = 'sop_profile_active:global' as const;
+
+export const sopMasterActivePointerSchema = z.object({
+	_id: z.literal(SOP_MASTER_ACTIVE_POINTER_ID),
+	_rev: z.string().optional(),
+	type: z.literal('sop_profile_active'),
+	schema_v: z.literal(1),
+	active_profile_id: z.string().min(1),
+	active_slug: z.string().min(1),
+	active_version: z.number().int().positive(),
+	updated_at: z.string().datetime(),
+	updated_by: z.string().min(1)
+});
+
+export type SopMasterActivePointer = z.infer<typeof sopMasterActivePointerSchema>;
+
+export function isSopMasterActivePointer(doc: unknown): doc is SopMasterActivePointer {
+	return sopMasterActivePointerSchema.safeParse(doc).success;
+}
+
 // T-30 terminology.  These aliases retain the existing SOP master envelope
 // (`active`, `created_at`, string quantity values) used by catalog documents.
 export type SopProfile = SopMaster;

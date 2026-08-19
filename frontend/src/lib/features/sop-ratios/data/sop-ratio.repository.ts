@@ -1,4 +1,9 @@
-import type { SopMaster, SopOverride, SopRatioKey } from '../domain/sop-ratio';
+import type {
+	SopMaster,
+	SopMasterActivePointer,
+	SopOverride,
+	SopRatioKey
+} from '../domain/sop-ratio';
 import type { AuditEntry } from '$lib/features/shared';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -6,6 +11,7 @@ export interface SopMasterRepository {
 	/** Latest version of every master profile, ordered by display name. */
 	listAll(): Promise<SopMaster[]>;
 	listActive(): Promise<SopMaster[]>;
+	getActivePointer(): Promise<SopMasterActivePointer | null>;
 
 	/** Immutable version history for one stable profile slug, newest first. */
 	listVersions(slug: string): Promise<SopMaster[]>;

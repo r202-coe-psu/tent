@@ -770,7 +770,20 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `name` | str | req | เช่น "Sphere baseline", "ปภ. มาตรฐาน" |
 | `ratios` | {`water_l_per_person_day`:qty_str, `drinking_water_l_per_person_day`:qty_str, `cooking_water_l_per_person_day`:qty_str, `hygiene_water_l_per_person_day`:qty_str, `kcal_per_adult_day`:qty_str, `people_per_tap`:qty_str, `people_per_handpump`:qty_str, `people_per_open_well`:qty_str, `people_per_laundry`:qty_str, `people_per_bathing`:qty_str, `people_per_toilet_female`:qty_str, `people_per_toilet_male`:qty_str, `people_per_dining_point_adult`:qty_str, `people_per_dining_point_child`:qty_str, `m2_per_person_living`:qty_str, `m2_per_person_living_cold`:qty_str, `m2_per_person_total`:qty_str, `max_waterpoint_distance_m`:qty_str, `max_queue_minutes`:qty_str, `people_per_volunteer`:qty_str} | req | ratios ต้องระบุคีย์ครบถ้วน (Full Ratios Requirement) ใช้ 20-key strict schema ทั้ง Master และ Override |
 | `version` | int | req | — |
-| `active` | bool | req | ศูนย์เลือกใช้ profile ที่ active |
+| `active` | bool | req | (Backward-compatible projection only) การตัดสิน active master ใช้ `sop_profile_active:global` pointer เป็น authoritative |
+
+### 4.5 `sop_profile_active` — `sop_profile_active:global` (Singleton Pointer)
+
+> **schema_v 1** — Singleton coordination document สำหรับตัดสิน Active Master SOP Profile เพียงหนึ่งเดียวทั่วทั้งระบบผ่าน Optimistic Concurrency Control (CAS) ด้วย `_rev`
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | บังคับเป็น `"sop_profile_active:global"` |
+| `active_profile_id` | str | req | ID เอกสาร `sop_profile` ที่เป็น Master Active หลัก |
+| `active_slug` | str | req | Slug ของ Master Active หลัก |
+| `active_version` | int | req | เลขเวอร์ชันที่กำลังใช้งานอยู่ |
+| `updated_at` | str | req | เวลา ISO-8601 UTC |
+| `updated_by` | str | req | ผู้ดำเนินการอัปเดต |
 
 ---
 

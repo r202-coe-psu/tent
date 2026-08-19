@@ -930,7 +930,18 @@ async function seedCatalogSopRatios(): Promise<void> {
 	audit.target_id = fullDocId;
 	audit._id = `audit:seed_sphere_baseline`;
 
-	await bulkDocs('catalog', [profile, audit]);
+	const pointerDoc = {
+		_id: 'sop_profile_active:global',
+		type: 'sop_profile_active',
+		schema_v: 1,
+		active_profile_id: fullDocId,
+		active_slug: profile.slug,
+		active_version: profile.version,
+		updated_at: new Date().toISOString(),
+		updated_by: 'seed'
+	};
+
+	await bulkDocs('catalog', [profile, audit, pointerDoc]);
 	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
 }
 
