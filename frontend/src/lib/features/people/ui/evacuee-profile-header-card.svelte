@@ -22,7 +22,8 @@
 		readonly,
 		onOpenZoneModal,
 		onOpenStatusModal,
-		onOpenQrModal
+		onOpenQrModal,
+		onOpenProfileEdit
 	}: {
 		evacuee: Evacuee;
 		medical: Medical | null;
@@ -32,6 +33,7 @@
 		onOpenZoneModal: () => void;
 		onOpenStatusModal: () => void;
 		onOpenQrModal: () => void;
+		onOpenProfileEdit: () => void;
 	} = $props();
 
 	let photoUrl = $state<string | null>(null);
@@ -65,19 +67,19 @@
 	});
 </script>
 
-<div
-	class="flex flex-col items-start justify-between gap-6 rounded-3xl border border-border bg-card p-6 shadow-sm md:flex-row md:items-center"
+<header
+	class="flex flex-col items-start justify-between gap-5 rounded-lg border border-border bg-card p-5 md:flex-row md:items-center"
 >
 	<div class="flex flex-wrap items-center gap-4">
 		{#if photoUrl}
 			<img
 				src={photoUrl}
 				alt={`${evacuee.first_name} ${evacuee.last_name}`}
-				class="h-20 w-20 shrink-0 rounded-2xl border border-slate-200 object-cover shadow-inner dark:border-slate-700"
+				class="h-20 w-20 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-700"
 			/>
 		{:else}
 			<div
-				class="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-400 shadow-inner select-none dark:border-slate-700 dark:bg-slate-800"
+				class="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-400 select-none dark:border-slate-700 dark:bg-slate-800"
 			>
 				<span>No Photo</span>
 			</div>
@@ -87,6 +89,9 @@
 			<h2 class="text-2xl font-bold text-slate-900 dark:text-slate-50">
 				{evacuee.first_name}
 				{evacuee.last_name}
+				{#if evacuee.nickname}
+					<span class="text-base font-semibold text-muted-foreground">({evacuee.nickname})</span>
+				{/if}
 			</h2>
 			<p
 				class="inline-block rounded-md bg-muted px-2 py-0.5 font-mono text-xs tracking-wider text-muted-foreground"
@@ -129,14 +134,21 @@
 	>
 		{#if !readonly}
 			<button
-				class="inline-flex cursor-pointer items-center justify-center rounded-xl border border-amber-400 bg-transparent px-4 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+				class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+				onclick={onOpenProfileEdit}
+			>
+				<Pencil class="size-4" />
+				<span>ข้อมูลส่วนบุคคล</span>
+			</button>
+			<button
+				class="inline-flex cursor-pointer items-center justify-center rounded-md border border-amber-400 bg-transparent px-4 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
 				onclick={onOpenZoneModal}
 			>
 				ย้ายโซน (Change Zone)
 			</button>
 
 			<button
-				class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold shadow-sm transition-all hover:brightness-95 {statusInfo?.colorClass}"
+				class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold transition-colors hover:brightness-95 {statusInfo?.colorClass}"
 				onclick={onOpenStatusModal}
 			>
 				<span class="size-1.5 rounded-full {statusInfo?.dotClass}"></span>
@@ -145,7 +157,7 @@
 			</button>
 
 			<button
-				class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:bg-muted dark:text-slate-200"
+				class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-muted dark:text-slate-200"
 				onclick={onOpenQrModal}
 			>
 				<Printer class="size-4 opacity-75" />
@@ -153,14 +165,14 @@
 			</button>
 		{:else}
 			<span
-				class="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold {statusInfo?.colorClass}"
+				class="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold {statusInfo?.colorClass}"
 			>
 				<span class="size-1.5 rounded-full {statusInfo?.dotClass}"></span>
 				<span>{statusInfo?.label}</span>
 			</span>
 
 			<button
-				class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:bg-muted dark:text-slate-200"
+				class="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-muted dark:text-slate-200"
 				onclick={() =>
 					goto(resolve(`/back-office/evacuee-management/edit/-evacuee/${evacuee._id}`))}
 			>
@@ -169,4 +181,4 @@
 			</button>
 		{/if}
 	</div>
-</div>
+</header>

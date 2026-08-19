@@ -16,12 +16,14 @@
 
 	let {
 		household = null,
+		pending = false,
 		onBack,
 		onNext
 	}: {
 		// When an existing household is selected in step 4, its pets/assets/vehicles
 		// are fetched in so the user edits them in place instead of creating over.
 		household?: Household | null;
+		pending?: boolean;
 		onBack: () => void;
 		onNext: (data: {
 			pets: PetGroup[];
@@ -125,79 +127,65 @@
 	const disclaimerRequired = $derived(disclaimerGroups.length > 0);
 </script>
 
-<div class="space-y-4">
-	<!-- Header Card -->
-	<div class="flex items-center gap-4 rounded-xl border border-border bg-card p-6 shadow-sm">
-		<div
-			class="flex h-10 w-10 items-center justify-center rounded-full bg-[#e2e8f0] text-lg font-bold text-slate-700"
-		>
-			4
+<div class="space-y-6">
+	<!-- Pets Section — a household may bring several -->
+	<section class="space-y-3">
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+			<h3 class="text-sm font-semibold">🐶 สัตว์เลี้ยงที่นำมาด้วย</h3>
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				class="h-10 w-full shrink-0 bg-background sm:h-8 sm:w-auto"
+				onclick={addPet}
+			>
+				<Plus class="mr-1 h-3.5 w-3.5" /> เพิ่มสัตว์เลี้ยง
+			</Button>
 		</div>
-		<div>
-			<h2 class="text-lg font-bold">ทรัพย์สินและสัตว์เลี้ยง (Assets & Pets)</h2>
-			<p class="text-sm text-muted-foreground">
-				บันทึกข้อมูลสัมภาระ ยานพาหนะ สัตว์เลี้ยง และสถานะบ้าน
+
+		{#if petRows.length === 0}
+			<p class="text-xs text-muted-foreground">
+				ยังไม่มีสัตว์เลี้ยง — กด "เพิ่มสัตว์เลี้ยง" เพื่อเพิ่มรายการ
 			</p>
-		</div>
-	</div>
-
-	<!-- Form Content -->
-	<div class="space-y-6 rounded-xl border border-border bg-card p-6 shadow-sm">
-		<!-- Pets Section — a household may bring several -->
-		<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-			<div class="flex items-center justify-between gap-2">
-				<div class="flex items-center gap-1 text-sm font-semibold">🐶 สัตว์เลี้ยงที่นำมาด้วย</div>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					class="h-8 shrink-0 bg-background"
-					onclick={addPet}
-				>
-					<Plus class="mr-1 h-3.5 w-3.5" /> เพิ่มสัตว์เลี้ยง
-				</Button>
-			</div>
-
-			{#if petRows.length === 0}
-				<p class="text-xs text-muted-foreground">
-					ยังไม่มีสัตว์เลี้ยง — กด "เพิ่มสัตว์เลี้ยง" เพื่อเพิ่มรายการ
-				</p>
-			{:else}
-				<div class="space-y-2">
-					{#each petRows as pet (pet.id)}
-						<div class="flex items-end gap-2 rounded-lg border bg-muted/20 p-3">
-							<div class="w-[110px] shrink-0 space-y-1">
-								<Label class="text-[10px] text-muted-foreground">ชนิดสัตว์</Label>
-								<Select.Root type="single" bind:value={pet.species}>
-									<Select.Trigger class="h-9 w-full bg-background text-sm">
-										{petSpeciesOptions.find((o) => o.value === pet.species)?.label ?? 'ชนิด'}
-									</Select.Trigger>
-									<Select.Content>
-										{#each petSpeciesOptions as opt (opt.value)}
-											<Select.Item value={opt.value} label={opt.label} />
-										{/each}
-									</Select.Content>
-								</Select.Root>
-							</div>
-							<div class="w-[72px] shrink-0 space-y-1">
-								<Label class="text-[10px] text-muted-foreground">จำนวน</Label>
-								<Input
-									type="number"
-									min={1}
-									class="h-9 bg-background text-sm"
-									bind:value={pet.count}
-								/>
-							</div>
-							<div class="flex-1 space-y-1">
-								<Label class="text-[10px] text-muted-foreground">หมายเหตุ</Label>
-								<Input
-									class="h-9 bg-background text-sm"
-									bind:value={pet.notes}
-									placeholder="เช่น พันธุ์ / สี"
-								/>
-							</div>
+		{:else}
+			<div class="space-y-2">
+				{#each petRows as pet (pet.id)}
+					<div
+						class="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-end"
+					>
+						<div class="w-full space-y-1 sm:w-[110px] sm:shrink-0">
+							<Label class="text-[10px] text-muted-foreground">ชนิดสัตว์</Label>
+							<Select.Root type="single" bind:value={pet.species}>
+								<Select.Trigger class="h-11 w-full bg-background text-sm sm:h-9">
+									{petSpeciesOptions.find((o) => o.value === pet.species)?.label ?? 'ชนิด'}
+								</Select.Trigger>
+								<Select.Content>
+									{#each petSpeciesOptions as opt (opt.value)}
+										<Select.Item value={opt.value} label={opt.label} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						</div>
+						<div class="w-full space-y-1 sm:w-[72px] sm:shrink-0">
+							<Label class="text-[10px] text-muted-foreground">จำนวน</Label>
+							<Input
+								type="number"
+								min={1}
+								class="h-11 bg-background text-sm sm:h-9"
+								bind:value={pet.count}
+							/>
+						</div>
+						<div class="flex-1 space-y-1">
+							<Label class="text-[10px] text-muted-foreground">หมายเหตุ</Label>
+							<Input
+								class="h-11 bg-background text-sm sm:h-9"
+								bind:value={pet.notes}
+								placeholder="เช่น พันธุ์ / สี"
+							/>
+						</div>
+						<div class="flex items-center justify-between gap-2">
 							<div
-								class="flex h-9 shrink-0 items-center gap-1.5 rounded-md border bg-background px-3"
+								class="flex h-11 flex-1 items-center gap-1.5 rounded-md border bg-background px-3 sm:h-9 sm:flex-none"
 							>
 								<Checkbox
 									id="pet_cage_{pet.id}"
@@ -212,86 +200,83 @@
 								type="button"
 								variant="outline"
 								size="icon"
-								class="h-9 w-9 shrink-0 bg-background"
+								class="h-11 w-11 shrink-0 bg-background sm:h-9 sm:w-9"
 								onclick={() => removePet(pet.id)}
 							>
 								<X class="h-4 w-4 text-muted-foreground" />
 							</Button>
 						</div>
-					{/each}
-				</div>
-			{/if}
+					</div>
+				{/each}
+			</div>
+		{/if}
+	</section>
+
+	<!-- Assets Section -->
+	<section class="space-y-3">
+		<h3 class="text-sm font-semibold">🎒 ทรัพย์สินมีค่า / สัมภาระ</h3>
+		<Input
+			bind:value={assetDescription}
+			placeholder="รายละเอียดทรัพย์สิน/สัมภาระ"
+			class="h-12 bg-background sm:h-10"
+		/>
+	</section>
+
+	<!-- Vehicles Section -->
+	<section class="space-y-3">
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+			<h3 class="text-sm font-semibold">🚗 ยานพาหนะ</h3>
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				class="h-10 w-full shrink-0 bg-background sm:h-8 sm:w-auto"
+				onclick={addVehicle}
+			>
+				<Plus class="mr-1 h-3.5 w-3.5" /> เพิ่มคัน
+			</Button>
 		</div>
 
-		<!-- Assets Section -->
-		<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-			<div class="flex items-center gap-1 text-sm font-semibold">🎒 ทรัพย์สินมีค่า / สัมภาระ</div>
-			<div class="flex items-center gap-2">
-				<Input
-					bind:value={assetDescription}
-					placeholder="รายละเอียดทรัพย์สิน/สัมภาระ"
-					class="flex-1 bg-background"
-				/>
-			</div>
-		</div>
-
-		<!-- Vehicles Section -->
-		<div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-			<div class="flex items-center justify-between gap-2">
-				<div class="flex items-center gap-1 text-sm font-semibold">🚗 ยานพาหนะ</div>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					class="h-8 shrink-0 bg-background"
-					onclick={addVehicle}
-				>
-					<Plus class="mr-1 h-3.5 w-3.5" /> เพิ่มคัน
-				</Button>
-			</div>
-
-			{#if vehicleRows.length === 0}
-				<p class="text-xs text-muted-foreground">
-					ยังไม่มียานพาหนะ — กด "เพิ่มคัน" เพื่อเพิ่มรายการ
-				</p>
-			{:else}
-				<div class="space-y-2">
-					{#each vehicleRows as vehicle (vehicle.id)}
+		{#if vehicleRows.length === 0}
+			<p class="text-xs text-muted-foreground">ยังไม่มียานพาหนะ — กด "เพิ่มคัน" เพื่อเพิ่มรายการ</p>
+		{:else}
+			<div class="space-y-2">
+				{#each vehicleRows as vehicle (vehicle.id)}
+					<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+						<Select.Root type="single" bind:value={vehicle.type}>
+							<Select.Trigger class="h-12 w-full bg-background sm:h-10 sm:w-[120px] sm:shrink-0">
+								{vehicleTypeOptions.find((o) => o.value === vehicle.type)?.label ?? 'ประเภท'}
+							</Select.Trigger>
+							<Select.Content>
+								{#each vehicleTypeOptions as opt (opt.value)}
+									<Select.Item value={opt.value} label={opt.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
 						<div class="flex items-center gap-2">
-							<Select.Root type="single" bind:value={vehicle.type}>
-								<Select.Trigger class="w-[120px] shrink-0 bg-background">
-									{vehicleTypeOptions.find((o) => o.value === vehicle.type)?.label ?? 'ประเภท'}
-								</Select.Trigger>
-								<Select.Content>
-									{#each vehicleTypeOptions as opt (opt.value)}
-										<Select.Item value={opt.value} label={opt.label} />
-									{/each}
-								</Select.Content>
-							</Select.Root>
 							<Input
 								bind:value={vehicle.license_plate}
 								placeholder="ทะเบียนรถ"
-								class="flex-1 bg-background"
+								class="h-12 flex-1 bg-background sm:h-10"
 							/>
 							<Button
 								type="button"
 								variant="outline"
 								size="icon"
-								class="h-10 w-10 shrink-0 bg-background"
+								class="h-12 w-12 shrink-0 bg-background sm:h-10 sm:w-10"
 								onclick={() => removeVehicle(vehicle.id)}
 							>
 								<X class="h-4 w-4 text-muted-foreground" />
 							</Button>
 						</div>
-					{/each}
-				</div>
-			{/if}
-		</div>
-	</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
+	</section>
 
 	{#if disclaimerRequired}
-		<!-- Shelter Disclaimer — sourced from this shelter's configured policies -->
-		<div class="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+		<section class="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
 			<div class="flex items-center gap-2">
 				<ShieldAlert class="h-5 w-5 text-amber-600" />
 				<h3 class="text-sm font-bold text-amber-800">
@@ -320,23 +305,16 @@
 					รวมถึงรับผิดชอบต่อทรัพย์สินมีค่าของตนเองหากเกิดการสูญหาย
 				</span>
 			</label>
-		</div>
+		</section>
 	{/if}
 
-	<!-- Bottom Actions -->
-	<div class="flex items-center justify-between rounded-xl border bg-card p-6 shadow-sm">
+	<div
+		class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
+	>
 		<Button
 			type="button"
-			variant="outline"
-			class="h-12 w-[48%] text-base font-medium"
-			onclick={onBack}
-		>
-			ย้อนกลับ
-		</Button>
-		<Button
-			type="button"
-			disabled={disclaimerRequired && !disclaimerAcknowledged}
-			class="h-12 w-[48%] bg-[#003B71] text-base font-medium hover:bg-[#002a50]"
+			disabled={pending || (disclaimerRequired && !disclaimerAcknowledged)}
+			class="h-12 w-full bg-[#003B71] text-base font-medium hover:bg-[#002a50] sm:w-auto sm:px-8"
 			onclick={() =>
 				onNext({
 					pets: petRows.map((p) => ({
@@ -353,6 +331,14 @@
 				})}
 		>
 			ลงทะเบียนสำเร็จ
+		</Button>
+		<Button
+			type="button"
+			variant="outline"
+			class="h-12 w-full text-base font-medium sm:w-auto sm:px-8"
+			onclick={onBack}
+		>
+			ย้อนกลับ
 		</Button>
 	</div>
 </div>

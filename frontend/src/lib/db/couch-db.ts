@@ -4,6 +4,8 @@ import {
 	CannotConnectError,
 	ConflictError,
 	CouchAuthError,
+	CouchDocumentPolicyError,
+	isCouchDocumentPolicyForbidden,
 	NetworkError,
 	NotFoundError,
 	type AppError
@@ -73,12 +75,25 @@ async function couchDbFetchRaw<T>(
 function toHttpError(
 	status: number,
 	data: { error?: string; reason?: string } | null,
-	fallback: string
+	fallback: string,
+	docContext?: { docId?: string; docType?: string }
 ): AppError {
 	if (status === 404) return new NotFoundError();
 	if (status === 409) return new ConflictError();
 	if (status === 401) return new CouchAuthError(401);
-	if (status === 403) return new CouchAuthError(403);
+	if (status === 403) {
+		if (isCouchDocumentPolicyForbidden(data)) {
+			return new CouchDocumentPolicyError(
+				data?.reason || fallback,
+				403,
+				data?.error,
+				data?.reason,
+				docContext?.docId,
+				docContext?.docType
+			);
+		}
+		return new CouchAuthError(403);
+	}
 	if (status >= 500 || status === 0) return new NetworkError();
 	const message = data?.reason || data?.error || fallback;
 	return new ConflictError(message);
@@ -150,17 +165,32 @@ export async function getDoc<T extends { _id: string }>(
 	}
 }
 
-export async function putDoc<T extends { _id: string; _rev?: string }>(
+export async function putDoc<T extends { _id: string; _rev?: string; type?: string }>(
 	dbName: string,
 	doc: T,
 	init?: CouchFetchInit
 ): Promise<T> {
 	const isCreate = !doc._rev;
 	try {
-		const res = await couchDbFetch<PutResult>(dbName, `/${encodeURIComponent(doc._id)}`, {
-			method: 'PUT',
-			body: JSON.stringify(doc),
-			...init
+		const res = await withRetry(async () => {
+			const { data, status, ok } = await couchDbFetchRaw<PutResult>(
+				dbName,
+				`/${encodeURIComponent(doc._id)}`,
+				{
+					method: 'PUT',
+					body: JSON.stringify(doc),
+					...init
+				}
+			);
+			if (!ok) {
+				throw toHttpError(
+					status,
+					data as { error?: string; reason?: string } | null,
+					`CouchDB request failed (${status})`,
+					{ docId: doc._id, docType: doc.type }
+				);
+			}
+			return data as PutResult;
 		});
 		return { ...doc, _rev: res.rev };
 	} catch (err) {

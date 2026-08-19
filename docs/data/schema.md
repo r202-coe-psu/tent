@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-28
+updated: 2026-08-17
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -40,6 +40,8 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 6** — เพิ่ม `cancelled` ใน `current_stay.status` (CR-070 D-HOLD-CANCEL) — ยกเลิก
+> hold/pre-registration; ไม่นับ occupancy; ไม่เช็คอินจากสถานะนี้.
 > **schema_v 5** — เพิ่ม `age` (CR-057) — snapshot อายุตอนนี้ อิสระจาก `birth_year` (ไม่ derive
 > ไปมา). ข้าม `schema_v 4` ในโค้ด — จองไว้ให้ `photo` (CR-054, approved แต่ยังไม่ implement ใน
 > code ณ วันที่ CR-057 done); เมื่อ `photo` implement จริงจะต้อง reconcile เลข schema_v อีกครั้ง.
@@ -65,7 +67,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `emergency_contact` | {`name`:str, `phone`:str, `relation`:str} | opt | — |
 | `household_id` | str\|null | opt | → `household:{ulid}` |
 | `photo` | str\|null | opt | → image:{ulid} (§1.6) (CR-049) null/ไม่มี field = ไม่มีรูป |
-| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`) เริ่ม `pre_registered` · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
+| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) เริ่ม `pre_registered` · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement (ยกเว้น `cancelled` จาก cancel-hold path, ไม่ผ่าน movement) |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
 | `registered_via` | enum(`app`,`import`,`paper`) | req | — |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
@@ -82,6 +84,11 @@ action ใหม่เท่านั้น). `special_needs` (CR-046) ไม่
 (schema_v ≤3) ไม่มี `age` ก็อ่านได้ปกติ ไม่ต้อง backfill; UI fallback ไปคำนวณอายุจาก `birth_year`
 เมื่อไม่มี `age` (`evacueeAgeYears()` helper). เลข `4` (`photo`, CR-054) ถูกข้ามในโค้ดเพราะยังไม่
 implement — ไม่กระทบ migration นี้
+
+**Migration (schema_v 5 → 6, CR-070):** purely additive enum — `cancelled` เป็นค่าใหม่ของ
+`current_stay.status`; doc เดิมไม่ต้อง backfill. ตั้งผ่าน `cancelPreRegistration` /
+`cancelEvacueePreRegistration` (ไม่ผ่าน movement). Occupancy view ยัง emit ตาม status key;
+`cancelled` ไม่รวมใน total/pre_registered buckets ของ dashboard payload
 
 ### 1.2 `medical` — `medical:{ulid}` (1 doc ต่อ 1 evacuee)
 
@@ -404,38 +411,11 @@ open → escalated
 
 **Migration:** ไม่มี `security_event` จาก production → ไม่ backfill; ห้ามสร้าง `security_event` ใหม่
 
-### 2.11 `referral` — `referral:{ulid}` · state machine (CR-045, CR-046)
+### 2.11 `referral` — [MIGRATED TO central_ops]
 
-| Field | ชนิด | req | หมายเหตุ |
-| --- | --- | --- | --- |
-| `evacuee_id` | str | req | — |
-| `referral_type` | enum(`capacity`,`resource`,`medical-emergency`) | req | default `medical-emergency` (CR-045) |
-| `to_shelter_code` | str | opt | รหัสศูนย์พักพิงปลายทาง (ระบุเมื่อ `referral_type` = `capacity`) |
-| `to_org` | {`name`:str?, `kind`:enum(`hospital`,`social_services`,`other`)?, `contact`:str?} | opt | หน่วยงานปลายทาง (ระบุเมื่อ `referral_type` ≠ `capacity`) |
-| `reason` | str | req | — |
-| `response_reason` | str | opt | เหตุผลประกอบการตอบรับ (`accepted`) หรือปฏิเสธ (`rejected`) (CR-045) |
-| `urgency` | enum(`normal`,`urgent`) | req | — |
-| `status` | enum(`draft`,`sent`,`accepted`,`rejected`,`closed`) | req | forward-only — ดู transitions ด้านล่าง |
-| `timeline` | {`sent`:{at,by}?, `responded`:{at,by}?, `closed`:{at,by}?} | sys | — |
-| `notes` | str | opt | — |
-
-**Status transitions (forward-only):**
-
-```
-draft    → sent | closed     (closed = ยกเลิกร่างก่อนส่ง — CR-046)
-sent     → accepted | rejected
-accepted → closed
-rejected → closed
-closed   → (terminal)
-```
-
-> **Capacity hand-off (CR-045, destination-gated):**
-> 1. ต้นทาง `draft → sent` ผ่าน BFF → **mirror** referral (same `_id`, คง `shelter_code` ต้นทาง) เข้า `shelter_{to}` เป็น inbox ปลายทาง
-> 2. **เฉพาะศูนย์ปลายทาง** (`caller.shelter === to_shelter_code`) กด `accepted` / `rejected`
-> 3. ตอน `accepted` เท่านั้น: cross-DB transfer — dest `transfer_in` แล้ว source `transfer_out` (**ห้าม** rewrite `shelter_code` ใน DB ต้นทาง) จากนั้น sync สถานะกลับต้นทาง
-> 4. ต้นทาง `draft → closed` (CR-046): ปิดที่ source เท่านั้น — **ห้าม** สร้าง/sync peer ที่ปลายทาง (ยังไม่เคย mirror)
-> Write path = BFF `/api/back-office/referral/[id]/transition` ผ่าน `adminRaw` (capacity ทุก transition รวม cancel draft)
-> **Index:** Mango indexes deployed: `referral-type-status-idx` (`['type', 'status']`), `referral-type-evacuee-idx` (`['type', 'evacuee_id']`), `referral-list-sort-idx` (`['type', 'created_at', 'status', 'evacuee_id']`), `referral-list-basic-idx` (`['type', 'created_at']`).
+> ⚠️ **ย้ายการจัดเก็บไปที่ DB `central_ops` (§5.4):**
+> ตั้งแต่สถาปัตยกรรม Cross-Tenant Referral แบบรวมศูนย์ (Centralized Architecture) เอกสารประเภท `referral` ทั้งหมดจะถูกเก็บไว้ที่ฐานข้อมูลกลาง `central_ops` โดยตรง ไม่เก็บใน `shelter_{shelter_code}` และไม่ใช้การ Mirror Doc ระหว่าง DB อีกต่อไป
+> ดูรายละเอียด Schema, Indexes และ Access Control ของ `referral` ได้ที่ **[§5.4 referral — central_ops](#54-referral--referralulid--state-machine-cr-045-cr-046-centralized-architecture)**
 
 ### 2.12 `audit` — `audit:{ulid}` · **append-only**
 
@@ -686,7 +666,7 @@ insert. Idempotent: `_id` เป็น deterministic → re-seed ไม่เก
 
 ---
 
-### 3.7 `shelter_import_log` — `shelter_import_log:{ulid}` · **schema_v 1** · **append-only** (CR-039)
+### 3.7 `shelter_import_log` — `shelter_import_log:{ulid}` · **schema_v 2** · **append-only** (CR-039, CR-077)
 
 Log 1 doc ต่อ 1 batch ของการ import ศูนย์พักพิงจาก Excel. envelope กลาง (ไม่มี `shelter_code` —
 เป็น registry doc). เขียนหลัง commit เสร็จ; ไม่แก้ย้อนหลัง.
@@ -697,14 +677,24 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `filename` | str | req | ชื่อไฟล์ที่อัปโหลด |
 | `imported_by` | str | req | `name` ของผู้ import (จาก session) |
 | `total_rows` | int | req | จำนวนแถวข้อมูล (ไม่รวม header) |
-| `success_count` | int | req | จำนวนศูนย์ที่สร้างสำเร็จ |
+| `success_count` | int | req | สร้าง + อัปเดตสำเร็จ (`created_count + updated_count`) |
+| `updated_count` | int | req (default 0) | จำนวนศูนย์ที่ถูกอัปเดตเพราะชื่อซ้ำ — **v2** |
+| `skipped_count` | int | req (default 0) | จำนวนแถวที่ข้ามเพราะชื่อซ้ำ — **v2** |
 | `error_count` | int | req | จำนวนแถวที่ล้มเหลว (validation + server) |
 | `results` | array | req | ผลราย row — ดูรูปด้านล่าง |
 | `started_at` | str (ISO) | req | เวลาเริ่ม commit |
 | `finished_at` | str (ISO) | req | เวลาเสร็จ |
 
-`results[]`: `{ row: int, name: str|null, status: 'created'|'validation_error'|'server_error',
-code?: str (เมื่อ created), errors?: [{ column: str, message: str }] }`
+`results[]`: `{ row: int, name: str|null, status: 'created'|'updated'|'skipped_duplicate'|
+'validation_error'|'server_error', code?: str (เมื่อ created/updated/skipped), existing_code?: str
+(ศูนย์เดิมที่ถูกอัปเดตหรือถูกข้าม), errors?: [{ column: str, message: str, sheet?: str, line?: int }] }`
+
+**ขอบเขตของ `results[]` (CR-077):** เก็บไม่เกิน **200 แถวแรก** และ `message` ยาวไม่เกิน **200 ตัวอักษร**
+(เกินแล้วตัดท้ายด้วย `…`) — กันไม่ให้ doc บวมและกันไม่ให้ข้อความที่ยกค่าจากเซลล์ติดลงไปทั้งก้อน.
+`total_rows` / counters ยังนับครบทุกแถวเสมอ.
+
+**v1 → v2 (CR-077, additive):** doc รุ่น v1 ไม่มี `updated_count` / `skipped_count` — อ่านกลับได้ตามปกติ
+(Zod ใส่ค่า default 0) **ไม่มี migration script**.
 
 **เขียน/อ่าน:** system_admin เท่านั้น (เป็น member ของ registry). อ่านตรงจาก browser ผ่าน
 `createRemoteRepository('registry')`; live-sync ผ่าน changes feed ของ registry (เหมือน `shelter`).
@@ -790,7 +780,7 @@ code?: str (เมื่อ created), errors?: [{ column: str, message: str }] }
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `query_kind` | enum(`name`,`phone`,`national_id`,`passport`) | req | ชนิด query ที่ parse ได้จาก public family-search (CR-044) |
+| `query_kind` | enum(`name`,`phone`,`national_id`,`passport`) | req | ชนิด query ที่ parse ได้จาก public occupants search (CR-044, path CR-065) |
 | `query_hash` | str | req | SHA-256 ของ query (normalize แล้ว) — ไม่เก็บ query ตรง |
 | `ip_hash` | str | req | — |
 | `result_count` | int≥0 | req | — |
@@ -820,6 +810,52 @@ edge/device ไม่เคย mint code). central เป็น single writer �
 | --- | --- | --- | --- |
 | `value` | int≥0 | sys | เลขที่ allocate ล่าสุด (เริ่ม `0`) — provision ศูนย์ใหม่ = read-modify-write `value+1` แล้ว mint `code = "SH" + pad3(value)`; ชน `_rev` (409) → retry |
 
+### 5.4 `referral` — `referral:{ulid}` · state machine (CR-045, CR-046, Centralized Architecture)
+
+> **การจัดเก็บข้อมูลแบบรวมศูนย์ (Centralized Cross-Tenant Database):**
+> เอกสารส่งต่อทุกประเภท (`capacity`, `resource`, `medical-emergency`) จัดเก็บรวมกันในฐานข้อมูลกลาง `central_ops` โดยตรง (ไม่ใช่ `shelter_{shelter_code}`) เพื่อรองรับการทำงานข้ามศูนย์แบบไร้รอยต่อโดยไม่ต้อง Mirror เอกสารระหว่างฐานข้อมูล
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `evacuee_id` | str | req | — |
+| `evacuee_summary` | {`first_name`:str, `last_name`:str, `gender`:str?} | opt | สแนปชอตชื่อ-นามสกุล และเพศของผู้ประสบภัยสำหรับให้ศูนย์ปลายทางแสดงผลได้ทันทีก่อนตอบรับ |
+| `referral_type` | enum(`capacity`,`resource`,`medical-emergency`) | req | default `medical-emergency` (CR-045) |
+| `shelter_code` | str | req | รหัสศูนย์พักพิงต้นทางผู้สร้างคำร้อง |
+| `to_shelter_code` | str | opt | รหัสศูนย์พักพิงปลายทาง (ระบุเมื่อ `referral_type` = `capacity`) |
+| `to_org` | {`name`:str?, `kind`:enum(`hospital`,`social_services`,`other`)?, `contact`:str?} | opt | หน่วยงานปลายทาง (ระบุเมื่อ `referral_type` ≠ `capacity`) |
+| `reason` | str | req | — |
+| `response_reason` | str | opt | เหตุผลประกอบการตอบรับ (`accepted`) หรือปฏิเสธ (`rejected`) (CR-045) |
+| `urgency` | enum(`normal`,`urgent`) | req | — |
+| `status` | enum(`draft`,`sent`,`accepted`,`rejected`,`closed`) | req | forward-only — ดู transitions ด้านล่าง |
+| `timeline` | {`sent`:{at,by}?, `responded`:{at,by}?, `closed`:{at,by}?} | sys | — |
+| `notes` | str | opt | — |
+
+**Status transitions (forward-only):**
+
+```
+draft    → sent | closed     (closed = ยกเลิกร่างก่อนส่ง — CR-046)
+sent     → accepted | rejected
+accepted → closed
+rejected → closed
+closed   → (terminal)
+```
+
+> **Cross-Tenant Flow & Scope Isolation (Centralized Architecture):**
+> 1. **Central Database Storage:** คำร้องถูกสร้างและอัปเดตสถานะใน DB `central_ops` โดยตรง ผ่าน BFF Endpoints (`/api/back-office/referral` และ `/api/back-office/referral/[id]/transition`)
+> 2. **Multi-Tenant Scope Isolation:** การเข้าถึงข้อมูลถูกควบคุมในระดับ BFF Server (`+server.ts`):
+>    - `GET /api/back-office/referral` (list): กรองเฉพาะรายการที่ `shelter_code === shelterCode` (ต้นทาง) หรือ `to_shelter_code === shelterCode` (ปลายทาง) ด้วย Mango query `$or`
+>    - `GET /api/back-office/referral/[id]` (single): ตรวจสอบสิทธิ์ `caller.isSA || doc.shelter_code === shelterCode || doc.to_shelter_code === shelterCode` หากไม่ใช่จะส่งคืน `403 Forbidden`
+> 3. **Destination-gated Accept/Reject:** เฉพาะศูนย์ปลายทาง (`to_shelter_code`) เท่านั้นที่มีสิทธิ์กด `accepted` / `rejected` สำหรับ `capacity` referral (ตรวจสอบด้วย `assertActorMayTransition`)
+> 4. **Cross-DB Transfer on Accept:** เมื่อมีการ `accepted` คำร้องประเภท `capacity` ระบบ BFF จะทำ cross-DB transfer อัตโนมัติ (เขียน `transfer_in` ที่ศูนย์ปลายทาง และ `transfer_out` ที่ศูนย์ต้นทาง) ก่อนอัปเดตสถานะใน `central_ops`
+>
+> **Indexes (Mango indexes deployed in `central_ops`):**
+> - `referral-type-status-idx`: `['type', 'status']`
+> - `referral-type-evacuee-idx`: `['type', 'evacuee_id']`
+> - `referral-type-shelter-created-idx`: `['type', 'shelter_code', 'created_at']`
+> - `referral-type-toshelter-created-idx`: `['type', 'to_shelter_code', 'created_at']`
+> - `referral-list-sort-idx`: `['type', 'created_at', 'status', 'evacuee_id']`
+> - `referral-list-basic-idx`: `['type', 'created_at']`
+
 ---
 
 ## 6. DB `_users` (CouchDB system DB — central-managed)
@@ -832,7 +868,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | `name` | str | req | CouchDB username (login id) |
 | `password` | str | req | CouchDB hash จัดการโดย CouchDB เอง |
 | `display_name` | str\|null | opt | ชื่อแสดงผล (UI บังคับกรอกตอนสร้าง) |
-| `roles` | [str] | req | CouchDB role list: `["shelter:{id}"]` + RoleKey ต่อ function เช่น `"registration_staff"`, `"kitchen_staff"`, `"warehouse_staff"`, `"shelter_manager"`, `"system_admin"` — 1 user 1 shelter; SA มี `shelter_id = null` (ไม่มี `shelter:{id}` prefix) |
+| `roles` | [str] | req | CouchDB role list: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` เท่านั้น (SA, `shelter_id = null`, ห้ามผสม `shelter:{id}` หรือ capability — CR-074) หรือ (b) `["shelter:{id}"]` + RoleKey ต่อ function เช่น `"registration_staff"`, `"kitchen_staff"`, `"warehouse_staff"`, `"shelter_manager"` — 1 user 1 shelter. CouchDB `_admin` ไม่ mint ผ่านแอป |
 | `affiliation_tags` | [str] | opt | **metadata เท่านั้น** — lower_snake string เช่น `"volunteer"`, `"governance"` · default `[]` · **ห้ามใช้แทน permission**: ไม่ให้สิทธิ์, ไม่เปลี่ยน shelter scope, ไม่ bypass role check ใด ๆ ทั้งสิ้น |
 | `shelter_id` | str\|null | opt | shelter `_id` ที่ user นี้สังกัด (เดียวกับ `shelter:{id}` ใน roles); `null` = global (SA); server derive จาก session ไม่เชื่อ client |
 

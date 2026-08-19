@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
 	formatRoleList,
+	canCancelHold,
+	isAppSystemAdmin,
+	isLastAppSystemAdmin,
 	isShelterManager,
 	isStaffOnly,
 	isSystemAdmin,
@@ -25,9 +28,32 @@ describe('roles kernel', () => {
 		expect(isSystemAdmin(['shelter:SH001', 'shelter_manager'])).toBe(false);
 	});
 
+	it('isAppSystemAdmin is only the app RoleKey, not Couch _admin', () => {
+		expect(isAppSystemAdmin(['system_admin'])).toBe(true);
+		expect(isAppSystemAdmin(['_admin'])).toBe(false);
+		expect(isAppSystemAdmin(['shelter:SH001', 'shelter_manager'])).toBe(false);
+	});
+
+	it('isLastAppSystemAdmin when the target is the only app SA', () => {
+		expect(isLastAppSystemAdmin(['system_admin'], 1)).toBe(true);
+		expect(isLastAppSystemAdmin(['system_admin'], 2)).toBe(false);
+		expect(isLastAppSystemAdmin(['shelter:SH001', 'registration_staff'], 1)).toBe(false);
+		expect(isLastAppSystemAdmin(['_admin'], 0)).toBe(false);
+	});
+
 	it('recognises shelter managers', () => {
 		expect(isShelterManager(['shelter:SH001', 'shelter_manager'])).toBe(true);
 		expect(isShelterManager(['shelter:SH001', 'registration_staff'])).toBe(false);
+	});
+
+	it('canCancelHold allows SA, SM, and registration_staff only', () => {
+		expect(canCancelHold(['system_admin'])).toBe(true);
+		expect(canCancelHold(['_admin'])).toBe(true);
+		expect(canCancelHold(['shelter:SH001', 'shelter_manager'])).toBe(true);
+		expect(canCancelHold(['shelter:SH001', 'registration_staff'])).toBe(true);
+		expect(canCancelHold(['shelter:SH001', 'kitchen_staff'])).toBe(false);
+		expect(canCancelHold(['shelter:SH001', 'warehouse_staff'])).toBe(false);
+		expect(canCancelHold([])).toBe(false);
 	});
 
 	it('isStaffOnly accepts staff capabilities but rejects manager/system_admin', () => {
@@ -39,16 +65,16 @@ describe('roles kernel', () => {
 });
 
 describe('roleDisplayLabel', () => {
-	it('maps every internal RoleKey to an English label', () => {
-		expect(roleDisplayLabel('system_admin')).toBe('System Admin');
-		expect(roleDisplayLabel('shelter_manager')).toBe('Shelter Manager');
-		expect(roleDisplayLabel('registration_staff')).toBe('Registration Staff');
-		expect(roleDisplayLabel('kitchen_staff')).toBe('Kitchen Staff');
-		expect(roleDisplayLabel('warehouse_staff')).toBe('Warehouse Staff');
+	it('maps every internal RoleKey to a Thai label', () => {
+		expect(roleDisplayLabel('system_admin')).toBe('ผู้ดูแลระบบ');
+		expect(roleDisplayLabel('shelter_manager')).toBe('ผู้จัดการศูนย์');
+		expect(roleDisplayLabel('registration_staff')).toBe('เจ้าหน้าที่ลงทะเบียน');
+		expect(roleDisplayLabel('kitchen_staff')).toBe('เจ้าหน้าที่ครัว');
+		expect(roleDisplayLabel('warehouse_staff')).toBe('เจ้าหน้าที่คลัง');
 	});
 
 	it('renders a shelter-scope role with its code', () => {
-		expect(roleDisplayLabel('shelter:SH001')).toBe('Shelter Staff (SH001)');
+		expect(roleDisplayLabel('shelter:SH001')).toBe('ศูนย์ SH001');
 	});
 
 	it('falls back to the raw role string for unknown values', () => {
@@ -65,12 +91,12 @@ describe('roleDisplayLabel', () => {
 describe('formatRoleList', () => {
 	it('joins multiple roles with ", "', () => {
 		expect(formatRoleList(['shelter:SH001', 'registration_staff'])).toBe(
-			'Shelter Staff (SH001), Registration Staff'
+			'ศูนย์ SH001, เจ้าหน้าที่ลงทะเบียน'
 		);
 	});
 
 	it('returns the default label for an empty/missing list', () => {
-		expect(formatRoleList([])).toBe('General User');
-		expect(formatRoleList(undefined)).toBe('General User');
+		expect(formatRoleList([])).toBe('ผู้ใช้ทั่วไป');
+		expect(formatRoleList(undefined)).toBe('ผู้ใช้ทั่วไป');
 	});
 });

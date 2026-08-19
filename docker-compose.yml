@@ -8,7 +8,7 @@ services:
     ports:
       - "5984:5984"
     volumes:
-      - ../deployment/couchdb/data:/opt/couchdb/data
+      - ../deployment/tent/couchdb/data:/opt/couchdb/data
       - ./couchdb-session.ini:/opt/couchdb/etc/local.d/session.ini
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
@@ -49,7 +49,7 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - ./deployment/mongodb/data:/data/db
+      - ../deployment/tent/mongodb/data:/data/db
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 5s

@@ -310,7 +310,10 @@ export const shelterSchema = z.object({
 	province: z.string().trim().nullish(),
 	postal_code: z.string().trim().nullish(),
 	key_personnel: keyPersonnelSchema.nullish(),
-	capacity: z.coerce.number().int().positive('ความจุสูงสุดต้องมากกว่า 0'),
+	capacity: z.coerce
+		.number({ error: 'กรุณาระบุความจุสูงสุด' })
+		.int('ความจุสูงสุดต้องเป็นจำนวนเต็ม')
+		.positive('ความจุสูงสุดต้องมากกว่า 0'),
 	area_m2: z.coerce.number().min(0).nullish(),
 	area_type: areaTypeSchema.nullish(),
 	facilities: facilitiesSchema,

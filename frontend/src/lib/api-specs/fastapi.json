@@ -128,9 +128,9 @@
 				}
 			}
 		},
-		"/public/v1/family-search": {
+		"/public/v1/occupants": {
 			"post": {
-				"tags": ["Family Search"],
+				"tags": ["Occupants"],
 				"summary": "Search Evacuees",
 				"description": "Search evacuees in the public read model (masked, no PII leakage).",
 				"operationId": "search_evacuees",

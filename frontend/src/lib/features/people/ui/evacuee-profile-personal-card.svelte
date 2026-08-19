@@ -1,20 +1,75 @@
 <script lang="ts">
 	import User from '@lucide/svelte/icons/user';
-	import type { Evacuee } from '$lib/features/people';
+	import Pencil from '@lucide/svelte/icons/pencil';
+	import { maskNationalId, type Evacuee } from '$lib/features/people';
+	import { COUNTRIES } from '$lib/utils/country';
 
-	let { evacuee }: { evacuee: Evacuee } = $props();
+	let {
+		evacuee,
+		readonly,
+		onOpenEdit
+	}: { evacuee: Evacuee; readonly: boolean; onOpenEdit: () => void } = $props();
+
+	const documentLabels: Record<string, string> = {
+		national_id: 'บัตรประชาชน',
+		passport: 'หนังสือเดินทาง',
+		pink_card: 'บัตรชมพู',
+		other: 'เอกสารอื่นๆ'
+	};
+
+	function countryLabel(value: string): string {
+		return COUNTRIES.find((country) => country.value === value)?.label ?? value;
+	}
 </script>
 
-<div class="space-y-4 rounded-3xl border border-border bg-card p-6 shadow-sm">
-	<div class="flex items-center gap-2.5 border-b border-border pb-2">
-		<User class="size-4.5 text-primary" />
-		<h3 class="text-sm font-bold text-slate-900 dark:text-slate-50">ข้อมูลส่วนบุคคล</h3>
+<section class="space-y-4 rounded-lg border border-border bg-card p-5">
+	<div class="flex items-center justify-between border-b border-border pb-2">
+		<div class="flex items-center gap-2.5">
+			<User class="size-4.5 text-primary" />
+			<h3 class="text-sm font-bold text-slate-900 dark:text-slate-50">ข้อมูลส่วนบุคคล</h3>
+		</div>
+		{#if !readonly}
+			<button
+				type="button"
+				aria-label="แก้ไขข้อมูลส่วนบุคคล"
+				title="แก้ไขข้อมูลส่วนบุคคล"
+				onclick={onOpenEdit}
+				class="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+			>
+				<Pencil class="size-4" />
+			</button>
+		{/if}
 	</div>
-	<div class="grid grid-cols-2 gap-x-2 gap-y-4">
+	<div class="grid grid-cols-2 gap-x-4 gap-y-4">
+		<div class="col-span-2 border-b border-border/50 pb-3">
+			<span class="block text-xs font-medium text-muted-foreground">ชื่อ - นามสกุล</span>
+			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+				{evacuee.first_name}
+				{evacuee.last_name}
+			</span>
+		</div>
+		<div>
+			<span class="block text-xs font-medium text-muted-foreground">ชื่อเล่น</span>
+			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+				{evacuee.nickname || 'ไม่ระบุ'}
+			</span>
+		</div>
+		<div>
+			<span class="block text-xs font-medium text-muted-foreground">เอกสารยืนยันตัวตน</span>
+			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+				{documentLabels[evacuee.person_id?.cardType ?? 'national_id'] ?? 'เอกสารอื่นๆ'}
+			</span>
+		</div>
+		<div class="col-span-2">
+			<span class="block text-xs font-medium text-muted-foreground">เลขที่เอกสาร</span>
+			<span class="mt-0.5 block font-mono text-sm font-semibold text-slate-800 dark:text-slate-200">
+				{maskNationalId(evacuee.person_id?.number)}
+			</span>
+		</div>
 		<div>
 			<span class="block text-xs font-medium text-muted-foreground">เพศ</span>
 			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
-				{evacuee.gender === 'male' ? 'Male' : evacuee.gender === 'female' ? 'Female' : 'Other'}
+				{evacuee.gender === 'male' ? 'ชาย' : evacuee.gender === 'female' ? 'หญิง' : 'อื่นๆ'}
 			</span>
 		</div>
 		<div>
@@ -22,13 +77,21 @@
 			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
 				{evacuee.birth_year
 					? `${new Date().getFullYear() + 543 - evacuee.birth_year} ปี`
-					: 'ไม่ระบุ'}
+					: evacuee.age !== undefined
+						? `${evacuee.age} ปี`
+						: 'ไม่ระบุ'}
+			</span>
+		</div>
+		<div>
+			<span class="block text-xs font-medium text-muted-foreground">ปีเกิด</span>
+			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+				{evacuee.birth_year ? `พ.ศ. ${evacuee.birth_year}` : 'ไม่ระบุ'}
 			</span>
 		</div>
 		<div>
 			<span class="block text-xs font-medium text-muted-foreground">สัญชาติ</span>
 			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
-				{evacuee.country === 'THAILAND' ? 'ไทย' : evacuee.country}
+				{countryLabel(evacuee.country)}
 			</span>
 		</div>
 		<div>
@@ -40,7 +103,9 @@
 						? 'อิสลาม'
 						: evacuee.religion === 'christian'
 							? 'คริสต์'
-							: 'ไม่ระบุ'}
+							: evacuee.religion === 'other'
+								? 'อื่นๆ'
+								: 'ไม่ระบุ'}
 			</span>
 		</div>
 		<div class="col-span-2 border-t border-border/50 pt-3">
@@ -50,4 +115,4 @@
 			</span>
 		</div>
 	</div>
-</div>
+</section>

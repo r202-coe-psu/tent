@@ -1,21 +1,39 @@
 <script lang="ts">
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import Pencil from '@lucide/svelte/icons/pencil';
 	import type { Evacuee } from '$lib/features/people';
 	import { zoneLabel } from '$lib/features/people';
 
 	let {
 		evacuee,
-		shelterName
+		shelterName,
+		readonly,
+		onOpenEdit
 	}: {
 		evacuee: Evacuee;
 		shelterName: string;
+		readonly: boolean;
+		onOpenEdit: () => void;
 	} = $props();
 </script>
 
-<div class="space-y-4 rounded-3xl border border-border bg-card p-6 shadow-sm">
-	<div class="flex items-center gap-2.5 border-b border-border pb-2">
-		<MapPin class="size-4.5 text-primary" />
-		<h3 class="text-sm font-bold text-slate-900 dark:text-slate-50">พิกัดโซนและศูนย์พักพิง</h3>
+<section class="space-y-4 rounded-lg border border-border bg-card p-5">
+	<div class="flex items-center justify-between border-b border-border pb-2">
+		<div class="flex items-center gap-2.5">
+			<MapPin class="size-4.5 text-primary" />
+			<h3 class="text-sm font-bold text-slate-900 dark:text-slate-50">พิกัดโซนและศูนย์พักพิง</h3>
+		</div>
+		{#if !readonly}
+			<button
+				type="button"
+				aria-label="แก้ไขโซนพักอาศัย"
+				title="แก้ไขโซนพักอาศัย"
+				onclick={onOpenEdit}
+				class="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+			>
+				<Pencil class="size-4" />
+			</button>
+		{/if}
 	</div>
 	<div class="space-y-3.5">
 		<div>
@@ -39,4 +57,4 @@
 			</div>
 		</div>
 	</div>
-</div>
+</section>

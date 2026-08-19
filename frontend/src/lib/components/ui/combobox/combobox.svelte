@@ -62,7 +62,10 @@
 			</Button>
 		{/snippet}
 	</Popover.Trigger>
-	<Popover.Content class="w-[--bits-popover-anchor-width] p-0">
+	<Popover.Content
+		align="start"
+		class="w-(--bits-floating-anchor-width) min-w-(--bits-floating-anchor-width) p-0"
+	>
 		<Command.Root>
 			<Command.Input placeholder={searchPlaceholder} />
 			<Command.List>

@@ -1,17 +1,22 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as Alert from '$lib/components/ui/alert/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useShelter, type Zone } from '$lib/features/shelters/index.js';
 	import type { Evacuee } from '../domain/people';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 
 	let {
 		evacuee,
+		pending = false,
 		onBack,
 		onSubmit
 	}: {
 		evacuee?: Evacuee | null;
+		pending?: boolean;
 		onBack: () => void;
 		onSubmit: (zone: string) => void;
 	} = $props();
@@ -47,53 +52,47 @@
 	});
 </script>
 
-<div class="space-y-4">
-	<!-- Header Card -->
-	<div class="flex items-center gap-4 rounded-xl border border-border bg-card p-6 shadow-sm">
-		<div
-			class="flex h-10 w-10 items-center justify-center rounded-full bg-[#e2e8f0] text-lg font-bold text-slate-700"
-		>
-			6
-		</div>
-		<div>
-			<h2 class="text-lg font-bold">จัดสรรพื้นที่ (Zoning)</h2>
-			<p class="text-sm text-muted-foreground">พิมพ์สลิปและข้อปฏิบัติ</p>
-		</div>
-	</div>
-
-	<!-- Form Content -->
-	<div
-		class="flex flex-col items-center justify-center space-y-4 rounded-xl border border-blue-200 bg-[#f0f9ff] p-8 text-center shadow-sm"
-	>
-		<div class="space-y-1">
-			<p class="text-lg font-medium text-foreground">โซนแนะนำ:</p>
+<div class="space-y-6">
+	{#if shelterQuery.isError}
+		<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5">
+			<CircleAlert class="size-4" />
+			<Alert.Title class="font-semibold">โหลดข้อมูลโซนไม่สำเร็จ</Alert.Title>
+			<Alert.Description class="space-y-3">
+				<p>ยังเลือกพื้นที่พักพิงไม่ได้ กรุณาลองโหลดรายการโซนอีกครั้ง</p>
+				<Button type="button" variant="outline" size="sm" onclick={() => shelterQuery.refetch()}>
+					ลองใหม่
+				</Button>
+			</Alert.Description>
+		</Alert.Root>
+	{:else}
+		<div class="space-y-3 text-center">
+			<p class="text-base font-medium text-foreground">โซนแนะนำ</p>
 			{#if shelterQuery.isLoading}
-				<p class="animate-pulse text-sm text-muted-foreground">กำลังโหลดข้อมูลโซน...</p>
+				<p class="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+					<Loader2 class="size-4 animate-spin" />
+					กำลังโหลดข้อมูลโซน...
+				</p>
 			{:else if recommendedZone}
-				<h3 class="mt-2 flex items-center justify-center gap-2 text-2xl font-bold">
-					<span class="text-3xl">
-						{recommendedZone.type === 'vulnerable' ? '🟣' : '🟢'}
-					</span>
+				<p class="text-2xl font-bold">
+					<span class="mr-1">{recommendedZone.type === 'vulnerable' ? '🟣' : '🟢'}</span>
 					{recommendedZone.name}
-				</h3>
-				<p class="mt-1 text-xs text-muted-foreground">
+				</p>
+				<p class="text-xs text-muted-foreground">
 					แนะนำตามสถานะของผู้อพยพ ({recommendedZone.type === 'vulnerable'
 						? 'กลุ่มเปราะบาง'
 						: 'บุคคลทั่วไป'})
 				</p>
 			{:else}
-				<h3
-					class="mt-2 flex items-center justify-center gap-2 text-lg font-bold text-muted-foreground"
-				>
+				<p class="text-base font-semibold text-muted-foreground" role="status">
 					ไม่มีโซนที่เปิดให้บริการในศูนย์นี้
-				</h3>
+				</p>
 			{/if}
 		</div>
 
 		{#if activeZones.length > 0}
-			<div class="mt-4 w-full max-w-sm">
+			<div class="mx-auto w-full max-w-sm">
 				<Select.Root type="single" bind:value={selectedZone}>
-					<Select.Trigger class="h-12 w-full rounded-xl border-border bg-white shadow-sm">
+					<Select.Trigger class="h-12 w-full rounded-xl border-border bg-background">
 						{@const currentZone = activeZones.find((z: Zone) => z.code === selectedZone)}
 						<span class="flex items-center gap-2 text-base font-medium">
 							{currentZone ? `📍 ${currentZone.name}` : 'เลือกโซน...'}
@@ -109,23 +108,23 @@
 				</Select.Root>
 			</div>
 		{/if}
-	</div>
+	{/if}
 
-	<!-- Bottom Actions -->
-	<div class="flex flex-col gap-3 rounded-xl border bg-card p-6 shadow-sm">
+	<div class="flex flex-col gap-3 border-t border-border pt-6">
 		<Button
 			type="button"
-			disabled={!selectedZone || shelterQuery.isLoading}
+			disabled={!selectedZone || shelterQuery.isLoading || shelterQuery.isError || pending}
 			class="h-12 w-full rounded-xl bg-[#003B71] text-sm font-medium hover:bg-[#002a50] md:text-base"
 			onclick={() => onSubmit(selectedZone)}
 		>
-			ยืนยันการเลือกโซน และไปขั้นตอนถัดไป &gt;
+			{pending ? 'กำลังบันทึกโซน...' : 'ยืนยันการเลือกโซน และไปขั้นตอนถัดไป >'}
 		</Button>
 		<Button
 			type="button"
 			variant="outline"
 			class="h-12 w-full rounded-xl text-sm font-medium md:text-base"
 			onclick={onBack}
+			disabled={pending}
 		>
 			ย้อนกลับ
 		</Button>

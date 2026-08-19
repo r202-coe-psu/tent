@@ -9,10 +9,11 @@ import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
-import { createShelter, sheltersKeys } from '$lib/features/shelters';
+import { createShelter, getShelter, updateShelter, sheltersKeys } from '$lib/features/shelters';
 import { SHELTER_IMPORT_LOG_TYPE } from '../domain/import-log';
 import { createShelterImportLog, type ImportRowResult } from '../domain/import-log';
-import type { RowValidation } from '../domain/import-row';
+import { buildUpdatePayload, type RowValidation } from '../domain/import-row';
+import type { DuplicateMatch } from '../domain/duplicates';
 import { IMPORT_LOG_REGISTRY_DB, listImportLogs, writeImportLog } from '../data/import-log.remote';
 
 /**
@@ -36,16 +37,28 @@ export function useImportLogs() {
 	}));
 }
 
+export type DuplicateAction = 'skip' | 'update';
+
 export interface ImportSheltersInput {
 	filename: string;
 	importedBy: string;
 	rows: RowValidation[];
+	/** row number -> the existing shelter it duplicates */
+	duplicates: Map<number, DuplicateMatch>;
+	/** what to do with those rows */
+	duplicateAction: DuplicateAction;
 }
 
 export function useImportShelters() {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: async ({ filename, importedBy, rows }: ImportSheltersInput) => {
+		mutationFn: async ({
+			filename,
+			importedBy,
+			rows,
+			duplicates,
+			duplicateAction
+		}: ImportSheltersInput) => {
 			const started_at = new Date().toISOString();
 			const results: ImportRowResult[] = [];
 			for (const r of rows) {
@@ -53,7 +66,32 @@ export function useImportShelters() {
 					results.push({ row: r.row, name: r.name, status: 'validation_error', errors: r.errors });
 					continue;
 				}
+				const duplicate = duplicates.get(r.row);
 				try {
+					if (duplicate && duplicateAction === 'skip') {
+						results.push({
+							row: r.row,
+							name: r.name,
+							status: 'skipped_duplicate',
+							code: duplicate.existingCode,
+							existing_code: duplicate.existingCode
+						});
+						continue;
+					}
+					if (duplicate && duplicateAction === 'update') {
+						// Re-read the stored doc so the fields the workbook cannot express
+						// survive the PATCH (see `buildUpdatePayload`).
+						const existing = await getShelter(duplicate.existingCode);
+						await updateShelter(duplicate.existingCode, buildUpdatePayload(r.shelter, existing));
+						results.push({
+							row: r.row,
+							name: r.name,
+							status: 'updated',
+							code: duplicate.existingCode,
+							existing_code: duplicate.existingCode
+						});
+						continue;
+					}
 					const res = await createShelter(r.shelter);
 					results.push({ row: r.row, name: r.name, status: 'created', code: res.code });
 				} catch (e) {
@@ -66,7 +104,13 @@ export function useImportShelters() {
 				}
 			}
 			const finished_at = new Date().toISOString();
-			const success_count = results.filter((x) => x.status === 'created').length;
+			const created_count = results.filter((x) => x.status === 'created').length;
+			const updated_count = results.filter((x) => x.status === 'updated').length;
+			const skipped_count = results.filter((x) => x.status === 'skipped_duplicate').length;
+			const success_count = created_count + updated_count;
+			const error_count = results.filter(
+				(x) => x.status === 'validation_error' || x.status === 'server_error'
+			).length;
 			const log = createShelterImportLog(
 				{
 					source: 'shelter',
@@ -74,7 +118,9 @@ export function useImportShelters() {
 					imported_by: importedBy,
 					total_rows: rows.length,
 					success_count,
-					error_count: rows.length - success_count,
+					updated_count,
+					skipped_count,
+					error_count,
 					results,
 					started_at,
 					finished_at
@@ -87,12 +133,19 @@ export function useImportShelters() {
 		onSuccess: (log) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
 			queryClient.invalidateQueries({ queryKey: shelterImportKeys.logs() });
-			if (log.error_count === 0) {
-				toast.success(`นำเข้าศูนย์พักพิงสำเร็จ ${log.success_count} แห่ง`);
+			// Build the summary from whichever outcomes actually occurred, so a
+			// run that only skipped duplicates never reads "อัปเดต 0 แห่ง".
+			const created = log.success_count - log.updated_count;
+			const parts: string[] = [];
+			if (created > 0 || log.success_count === 0) parts.push(`นำเข้า ${created} แห่ง`);
+			if (log.updated_count > 0) parts.push(`อัปเดต ${log.updated_count} แห่ง`);
+			if (log.skipped_count > 0) parts.push(`ข้าม ${log.skipped_count} แห่ง (ชื่อซ้ำ)`);
+			if (log.error_count > 0) parts.push(`ล้มเหลว ${log.error_count} แถว`);
+
+			if (log.error_count > 0) {
+				toast.warning(`${parts.join(', ')} — ดูรายละเอียดในประวัติการนำเข้า`);
 			} else {
-				toast.warning(
-					`นำเข้าสำเร็จ ${log.success_count} แห่ง, ล้มเหลว ${log.error_count} แถว — ดูรายละเอียดในประวัติการนำเข้า`
-				);
+				toast.success(parts.join(', '));
 			}
 		},
 		onError: (e: unknown) => {

@@ -17,6 +17,8 @@ from .schemas import (
     DonationCreateRequest,
     DonationCreateResponse,
     DonationTrackingResponse,
+    DonationTrackSearchRequest,
+    DonationTrackSearchResponse,
 )
 from .use_case import DonationsUseCase, get_donations_use_case
 
@@ -64,6 +66,23 @@ async def create_donation(
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.create(payload)
+
+
+@router.post(
+    "/track-search",
+    response_model=DonationTrackSearchResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def track_search_donation(
+    request: Request,
+    response: Response,
+    payload: DonationTrackSearchRequest,
+    use_case: DonationsUseCase = Depends(get_donations_use_case),  # noqa: B008
+) -> DonationTrackSearchResponse:
+    """Resolve booking_ref (DN-…) + phone → tracking_token (CR-052 §2.6)."""
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.track_search(payload.booking_ref, payload.phone)
 
 
 @router.get(

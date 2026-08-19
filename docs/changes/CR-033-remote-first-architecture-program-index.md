@@ -66,7 +66,7 @@ data model, API contract, planning, feature flow, conventions และ governan
 - ✅ Done — Package 7 (propagation status): locked decisions propagated across data/api/task/flow/PRD/frontend docs and skills listed in `affects`
 - ✅ Done — Package 8: frontend implementation — central-only remote path (`couch-db.ts`, `*.remote.ts`, event channel, ConnectionBanner)
 - ✅ Done — Package 9 (2026-07-15): task-breakdown baseline/index/glossary/timeline/T-54 realign (deny PouchDB); Notion T-54/T-02 synced via `ntn` (`docs/changes/CR-033-notion-sync-checklist.md`)
-- ⬜ Follow-up — edge failover orchestration (deferred from Package 8)
+- ⬜ Follow-up — edge failover orchestration → **[CR-064](CR-064-edge-disaster-continuity.md)** (proposed 2026-08-12; T-54 Package B; idea: [`edge-disaster-continuity-idea.md`](../features/edge-disaster-continuity-idea.md))
 
 ## Owner decisions (locked)
 - ✅ `disconnected` policy: เลือก **A** = status-only (ไม่อนุญาต read-only local cache)
@@ -108,4 +108,4 @@ data model, API contract, planning, feature flow, conventions และ governan
 - ✅ Done — Package 8: frontend implementation — central-only remote path (`couch-db.ts`, `*.remote.ts`, event channel, ConnectionBanner)
 - 2026-07-15 — owner directed Package 9: finish task-breakdown + Notion track for T-54/T-02 under CR-033
 - ✅ Done — Package 9: task-breakdown docs + Notion T-54/T-02 + board comment synced (`ntn` CLI)
-- ⬜ Follow-up — edge failover orchestration (deferred from Package 8)
+- ⬜ Follow-up — edge failover orchestration → **[CR-064](CR-064-edge-disaster-continuity.md)** (proposed 2026-08-12; T-54 Package B; idea: [`edge-disaster-continuity-idea.md`](../features/edge-disaster-continuity-idea.md))

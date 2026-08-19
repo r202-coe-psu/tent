@@ -8,6 +8,8 @@ import {
 	assertMovementAllowed,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
+	canCancelEvacueePreRegistration,
+	canCancelHouseholdPreRegistration,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
 	isEvacuee,
@@ -22,7 +24,9 @@ import {
 	evacueeInputSchema,
 	householdPreRegisterEvacueeSchema,
 	householdPreRegisterAddressFormSchema,
-	householdPostArrivalAddressFormSchema
+	householdPostArrivalAddressFormSchema,
+	evacueePersonalEditFormSchema,
+	evacueeHealthEditFormSchema
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -36,7 +40,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(5);
+		expect(e.schema_v).toBe(6);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -183,6 +187,73 @@ describe('evacueeInputSchema birth_year', () => {
 	});
 });
 
+describe('evacueePersonalEditFormSchema age', () => {
+	it('accepts newborn age 0 without treating it as empty', () => {
+		const currentBEYear = new Date().getFullYear() + 543;
+		const result = evacueePersonalEditFormSchema.safeParse({
+			firstName: 'ทารก',
+			lastName: 'แรกเกิด',
+			nickname: '',
+			birthYear: String(currentBEYear),
+			age: '0',
+			gender: 'other',
+			phone: '',
+			noPhone: true,
+			cardType: 'national_id',
+			cardNumber: '',
+			country: 'THAILAND',
+			religion: 'unknown'
+		});
+
+		expect(result.success).toBe(true);
+	});
+});
+
+describe('evacueeHealthEditFormSchema temperature', () => {
+	const base = {
+		bloodGroup: 'unknown' as const,
+		careTrack: 'normal' as const,
+		conditions: '',
+		medications: '',
+		allergies: '',
+		medicalNotes: '',
+		screeningNotes: '',
+		selectedSymptoms: [],
+		referral: false,
+		specialNeeds: []
+	};
+
+	// `<input type="number">` bindings hand us a number, so the schema must take one as-is.
+	it('accepts the number a number input binds', () => {
+		const result = evacueeHealthEditFormSchema.safeParse({ ...base, temperature: 37.5 });
+
+		expect(result.success).toBe(true);
+		expect(result.data?.temperature).toBe(37.5);
+	});
+
+	it('accepts null for a cleared field', () => {
+		const result = evacueeHealthEditFormSchema.safeParse({ ...base, temperature: null });
+
+		expect(result.success).toBe(true);
+		expect(result.data?.temperature).toBeNull();
+	});
+
+	it('rejects a temperature outside 30–45 °C', () => {
+		for (const temperature of [29.9, 45.1]) {
+			const result = evacueeHealthEditFormSchema.safeParse({ ...base, temperature });
+
+			expect(result.success).toBe(false);
+			expect(result.error?.issues[0].message).toBe('อุณหภูมิต้องอยู่ระหว่าง 30 ถึง 45 °C');
+		}
+	});
+
+	it('accepts the 30 and 45 °C bounds', () => {
+		for (const temperature of [30, 45]) {
+			expect(evacueeHealthEditFormSchema.safeParse({ ...base, temperature }).success).toBe(true);
+		}
+	});
+});
+
 describe('movement → current_stay', () => {
 	it('check_in moves the snapshot to active at the event time', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
@@ -213,6 +284,36 @@ describe('movement → current_stay', () => {
 
 		const m = createMovement({ evacuee_id: e._id, action: 'check_in', zone: null }, ctx);
 		expect(() => applyMovementToStay(deceased, m)).toThrow(/เสียชีวิต/);
+	});
+
+	it('rejects movement from cancelled stay (terminal status)', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const cancelled = {
+			...e,
+			current_stay: { status: 'cancelled' as const, zone: null, since: e.current_stay.since }
+		};
+		expect(canCheckInEvacuee(cancelled)).toBe(false);
+		expect(canCancelEvacueePreRegistration(cancelled)).toBe(false);
+		expect(() => assertMovementAllowed(cancelled, 'check_in')).toThrow(/ยกเลิก/);
+	});
+
+	it('canCancel* helpers only allow pre_registered', () => {
+		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		expect(canCancelEvacueePreRegistration(e)).toBe(true);
+		const hh = createHousehold(
+			{
+				label: 'บ้านทดสอบ',
+				head_evacuee_id: e._id,
+				status: 'pre_registered',
+				municipality_zone: null,
+				community: null,
+				pets: [],
+				vehicles: []
+			},
+			ctx
+		);
+		expect(canCancelHouseholdPreRegistration(hh)).toBe(true);
+		expect(canCancelHouseholdPreRegistration({ ...hh, status: 'checked_in' })).toBe(false);
 	});
 
 	it('rejects check_out unless status is active', () => {

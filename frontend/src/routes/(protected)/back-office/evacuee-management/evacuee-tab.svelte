@@ -5,6 +5,7 @@
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { toast } from 'svelte-sonner';
 	import Users from '@lucide/svelte/icons/users';
@@ -14,11 +15,17 @@
 	import {
 		useEvacueesPaginated,
 		useCheckInEvacuee,
+		useCancelEvacueePreRegistration,
+		listMatchingEvacueeIds,
 		canCheckInEvacuee,
-		zoneLabel
+		canCancelEvacueePreRegistration,
+		stayStatusSchema,
+		zoneLabel,
+		type Evacuee,
+		type StayStatus
 	} from '$lib/features/people';
-	import type { Evacuee } from '$lib/features/people';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { canCancelHold } from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
@@ -29,9 +36,57 @@
 	let search = $state('');
 	let selectedType = $state('');
 	let selectedZone = $state('');
+	let selectedStatus = $state('');
+	let selectedIds = $state<string[]>([]);
+	let isSelectingAllMatching = $state(false);
+	let isBulkCancelling = $state(false);
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	const canCancel = $derived(canCancelHold(authStore.user?.roles ?? []));
+
+	const statusConfig = {
+		pre_registered: {
+			label: 'ลงทะเบียนล่วงหน้า',
+			colorClass:
+				'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+		},
+		active: {
+			label: 'อยู่ในศูนย์',
+			colorClass:
+				'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800'
+		},
+		temporary_leave: {
+			label: 'ออกชั่วคราว',
+			colorClass:
+				'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+		},
+		transferred: {
+			label: 'ย้ายศูนย์',
+			colorClass:
+				'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+		},
+		checked_out: {
+			label: 'ย้ายออก/กลับภูมิลำเนา',
+			colorClass:
+				'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+		},
+		deceased: {
+			label: 'เสียชีวิต',
+			colorClass:
+				'bg-slate-200 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700'
+		},
+		cancelled: {
+			label: 'ยกเลิกการลงทะเบียนล่วงหน้า',
+			colorClass:
+				'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800'
+		}
+	} satisfies Record<StayStatus, { label: string; colorClass: string }>;
+
+	const statusOptions = stayStatusSchema.options.map((value) => ({
+		value,
+		label: statusConfig[value].label
+	}));
 
 	const vulnerableTypeOptions = $derived.by(() => {
 		const supported = shelterQuery.data?.admission_policy?.supported_vulnerable_groups ?? [];
@@ -46,16 +101,78 @@
 		(shelterQuery.data?.zones ?? []).map((zone) => ({ value: zone.code, label: zone.name }))
 	);
 
+	const filters = $derived({
+		specialNeed: selectedType || undefined,
+		zone: selectedZone || undefined,
+		status: (selectedStatus || undefined) as StayStatus | undefined
+	});
+
 	const query = useEvacueesPaginated(
 		() => currentPage,
 		() => PAGE_SIZE,
 		() => search,
-		() => ({ specialNeed: selectedType || undefined, zone: selectedZone || undefined })
+		() => filters
 	);
 
 	const checkIn = useCheckInEvacuee();
+	const cancelEvacuee = useCancelEvacueePreRegistration();
 
-	// Inline check-in until T-06 dedicated flow ships — flips current_stay to active.
+	const items = $derived(query.data?.items ?? []);
+	const total = $derived(query.data?.total ?? 0);
+	const totalPages = $derived(query.data?.totalPages ?? 1);
+
+	const pageIds = $derived(items.map((e) => e._id));
+	const allPageSelected = $derived(
+		pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id))
+	);
+	const somePageSelected = $derived(
+		pageIds.some((id) => selectedIds.includes(id)) && !allPageSelected
+	);
+	const selectedEligibleCount = $derived(
+		items.filter((e) => selectedIds.includes(e._id) && canCancelEvacueePreRegistration(e)).length
+	);
+
+	function clearSelection() {
+		selectedIds = [];
+	}
+
+	function resetPageOnFilter() {
+		currentPage = 1;
+		clearSelection();
+	}
+
+	function toggleId(id: string, checked: boolean | 'indeterminate') {
+		if (checked === true) {
+			if (!selectedIds.includes(id)) selectedIds = [...selectedIds, id];
+			return;
+		}
+		selectedIds = selectedIds.filter((x) => x !== id);
+	}
+
+	function toggleSelectPage(checked: boolean | 'indeterminate') {
+		if (checked === true) {
+			const next = [...selectedIds];
+			for (const id of pageIds) {
+				if (!next.includes(id)) next.push(id);
+			}
+			selectedIds = next;
+			return;
+		}
+		selectedIds = selectedIds.filter((id) => !pageIds.includes(id));
+	}
+
+	async function selectAllMatching() {
+		isSelectingAllMatching = true;
+		try {
+			selectedIds = await listMatchingEvacueeIds(search, filters);
+			toast.success(`เลือกแล้ว ${selectedIds.length} รายการตามตัวกรอง`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เลือกทั้งหมดไม่สำเร็จ');
+		} finally {
+			isSelectingAllMatching = false;
+		}
+	}
+
 	async function handleCheckIn(evacuee: Evacuee) {
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		try {
@@ -66,21 +183,33 @@
 		}
 	}
 
-	const STATUS_LABEL: Record<string, string> = {
-		pre_registered: 'ลงทะเบียนล่วงหน้า',
-		active: 'อยู่ในศูนย์',
-		temporary_leave: 'ออกชั่วคราว',
-		transferred: 'ย้ายศูนย์',
-		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
-		deceased: 'เสียชีวิต'
-	};
+	async function handleBulkCancel() {
+		if (!canCancel || selectedIds.length === 0) return;
+		if (
+			!window.confirm(
+				`ยืนยันยกเลิกการลงทะเบียนล่วงหน้าของ ${selectedIds.length} รายการที่เลือกหรือไม่?\n(เฉพาะสถานะลงทะเบียนล่วงหน้าจะถูกยกเลิก)`
+			)
+		) {
+			return;
+		}
 
-	const items = $derived(query.data?.items ?? []);
-	const total = $derived(query.data?.total ?? 0);
-	const totalPages = $derived(query.data?.totalPages ?? 1);
-
-	function resetPageOnFilter() {
-		currentPage = 1;
+		isBulkCancelling = true;
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		let ok = 0;
+		let failed = 0;
+		for (const id of selectedIds) {
+			try {
+				await cancelEvacuee.mutateAsync({ evacueeId: id, ctx });
+				ok += 1;
+			} catch {
+				failed += 1;
+			}
+		}
+		isBulkCancelling = false;
+		clearSelection();
+		if (ok > 0) toast.success(`ยกเลิกการลงทะเบียนล่วงหน้าสำเร็จ ${ok} รายการ`);
+		if (failed > 0)
+			toast.error(`ยกเลิกไม่สำเร็จ ${failed} รายการ (อาจไม่ใช่สถานะลงทะเบียนล่วงหน้า)`);
 	}
 
 	$effect(() => {
@@ -115,7 +244,7 @@
 	</div>
 
 	<!-- Filters -->
-	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))]">
+	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
 		<div class="w-full min-w-0 space-y-2">
 			<label for="evacuee-search" class="text-xs font-semibold text-foreground">ค้นหา</label>
 			<div class="relative">
@@ -201,7 +330,64 @@
 				</Select.Content>
 			</Select.Root>
 		</div>
+
+		<div class="w-full min-w-0 space-y-2">
+			<label for="evacuee-status-filter" class="text-xs font-semibold text-foreground">สถานะ</label>
+			<Select.Root type="single" bind:value={selectedStatus} onValueChange={resetPageOnFilter}>
+				<Select.Trigger
+					id="evacuee-status-filter"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					aria-label="สถานะการพักพิง"
+				>
+					<span class="truncate">
+						{statusOptions.find((option) => option.value === selectedStatus)?.label ?? 'ทุกสถานะ'}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="" label="ทุกสถานะ" />
+					{#each statusOptions as option (option.value)}
+						<Select.Item value={option.value} label={option.label} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
 	</div>
+
+	{#if selectedIds.length > 0}
+		<div
+			class="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur"
+		>
+			<p class="text-sm font-medium text-foreground">
+				เลือกแล้ว <span class="text-primary tabular-nums">{selectedIds.length}</span> คน
+				{#if canCancel && selectedEligibleCount > 0}
+					<span class="text-muted-foreground">
+						· ยกเลิกได้บนหน้านี้ {selectedEligibleCount} คน</span
+					>
+				{/if}
+			</p>
+			<div class="flex flex-wrap gap-2">
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={selectAllMatching}
+					disabled={isSelectingAllMatching || total === 0}
+				>
+					{isSelectingAllMatching ? 'กำลังเลือก...' : 'เลือกทั้งหมดตามตัวกรอง'}
+				</Button>
+				<Button variant="ghost" size="sm" onclick={clearSelection}>ล้างการเลือก</Button>
+				{#if canCancel}
+					<Button
+						variant="destructive"
+						size="sm"
+						onclick={handleBulkCancel}
+						disabled={isBulkCancelling || selectedIds.length === 0}
+					>
+						{isBulkCancelling ? 'กำลังยกเลิก...' : 'ยกเลิกการลงทะเบียนล่วงหน้า'}
+					</Button>
+				{/if}
+			</div>
+		</div>
+	{/if}
 
 	<!-- Table -->
 	{#if query.isLoading}
@@ -226,6 +412,14 @@
 			<Table.Root>
 				<Table.Header>
 					<Table.Row class="bg-muted/40 hover:bg-muted/40">
+						<Table.Head class="w-12">
+							<Checkbox
+								checked={allPageSelected}
+								indeterminate={somePageSelected}
+								onCheckedChange={toggleSelectPage}
+								aria-label="เลือกทั้งหน้า"
+							/>
+						</Table.Head>
 						<Table.Head class="font-semibold text-foreground">ชื่อ-นามสกุล</Table.Head>
 						<Table.Head class="font-semibold text-foreground">ประเภทผู้ประสบภัย</Table.Head>
 						<Table.Head class="font-semibold text-foreground">ZONE จัดสรร</Table.Head>
@@ -236,6 +430,13 @@
 				<Table.Body>
 					{#each items as e (e._id)}
 						<Table.Row class="transition-colors hover:bg-muted/20">
+							<Table.Cell>
+								<Checkbox
+									checked={selectedIds.includes(e._id)}
+									onCheckedChange={(checked) => toggleId(e._id, checked)}
+									aria-label={`เลือก ${e.first_name} ${e.last_name}`}
+								/>
+							</Table.Cell>
 							<Table.Cell class="font-semibold text-foreground">
 								{e.first_name}
 								{e.last_name}
@@ -269,15 +470,12 @@
 								</span>
 							</Table.Cell>
 							<Table.Cell class="text-center">
+								{@const config = statusConfig[e.current_stay.status]}
 								<span
-									class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium
-										{e.current_stay.status === 'active'
-										? 'bg-green-100 text-green-800'
-										: e.current_stay.status === 'pre_registered'
-											? 'bg-blue-100 text-blue-800'
-											: 'bg-muted text-muted-foreground'}"
+									class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {config?.colorClass ??
+										'border-border bg-muted text-muted-foreground'}"
 								>
-									{STATUS_LABEL[e.current_stay.status] ?? e.current_stay.status}
+									{config?.label ?? e.current_stay.status}
 								</span>
 							</Table.Cell>
 							<Table.Cell class="text-center">

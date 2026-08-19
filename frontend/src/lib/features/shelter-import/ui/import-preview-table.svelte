@@ -2,8 +2,18 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import type { RowValidation } from '../domain/import-row';
+	import type { DuplicateMatch } from '../domain/duplicates';
+	import type { DuplicateAction } from '../application/queries';
 
-	let { validations }: { validations: RowValidation[] } = $props();
+	let {
+		validations,
+		duplicates = new Map<number, DuplicateMatch>(),
+		duplicateAction = 'skip'
+	}: {
+		validations: RowValidation[];
+		duplicates?: Map<number, DuplicateMatch>;
+		duplicateAction?: DuplicateAction;
+	} = $props();
 </script>
 
 <div class="overflow-x-auto rounded-xl border border-border">
@@ -22,7 +32,13 @@
 					<Table.Cell class="text-center text-muted-foreground">{v.row}</Table.Cell>
 					<Table.Cell class="font-medium">{v.name ?? '—'}</Table.Cell>
 					<Table.Cell class="text-center">
-						{#if v.ok}
+						{#if v.ok && duplicates.has(v.row)}
+							<Badge variant="outline" class="border-amber-300 text-amber-700">
+								{duplicateAction === 'update'
+									? `ซ้ำ — อัปเดต ${duplicates.get(v.row)?.existingCode}`
+									: 'ซ้ำ — จะข้าม'}
+							</Badge>
+						{:else if v.ok}
 							<Badge variant="secondary">พร้อมนำเข้า</Badge>
 						{:else}
 							<Badge variant="destructive">ผิดพลาด</Badge>
@@ -31,8 +47,16 @@
 					<Table.Cell>
 						{#if v.errors.length > 0}
 							<ul class="space-y-1 text-sm text-destructive">
-								{#each v.errors as err (err.column + err.message)}
-									<li><span class="font-medium">{err.column}:</span> {err.message}</li>
+								{#each v.errors as err (err.column + err.message + (err.line ?? ''))}
+									<li>
+										{#if err.sheet}
+											<span class="text-muted-foreground">
+												[{err.sheet}{err.line === undefined ? '' : ` แถว ${err.line}`}]
+											</span>
+										{/if}
+										<span class="font-medium">{err.column}:</span>
+										{err.message}
+									</li>
 								{/each}
 							</ul>
 						{:else}

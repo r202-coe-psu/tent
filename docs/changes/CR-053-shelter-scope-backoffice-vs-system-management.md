@@ -212,7 +212,7 @@ key เป็น **ULID** (ไม่ชน), และ **reversible**.
 - `master-data.api.ts` + `queries.ts` — `putMaster`/`usePutMaster` รับ `disabledGlobalCodes` + `defaultGlobalCode`
 - `master-data-config-page.svelte` + `master-data-item-list.svelte` — global item: toggle enable/disable + ปุ่ม "ตั้งเป็นค่าเริ่มต้น"
 - **SM shelter mgmt**: `back-office/shelters/+page.{ts,svelte}`, `[mode]/[[id]]/+page.ts` (mode-aware guard), `backoffice-navbar/static.ts` (ถอด requiresAdmin), `api/back-office/shelter/[code]/+server.ts` PATCH + `zones/[zoneCode]/{,reopen}/+server.ts` → `requireShelterManagerOrSA`; POST create คง `requireAdmin`
-- **seed**: `seedMasterData` เพิ่ม `municipality_zone` + `community` (ULID + parent_code); ตัด `seedThailandLocation` ออกจาก flow; portal landing tile "ทะเบียนพื้นที่และศูนย์พักพิง" = SA only
+- **seed**: `seedMasterData` เพิ่ม `municipality_zone` + `community` (ULID + parent_code); ตัด `seedThailandLocation` ออกจาก flow; portal landing tile "ระบบส่วนกลาง" = SA only
 - **default auto-select**: household-form (municipality_zone) + shelter basic-info (shelter_type, municipality_zone) pre-select master `is_default` เมื่อฟอร์มใหม่
 
 ### Decision log (amendment)

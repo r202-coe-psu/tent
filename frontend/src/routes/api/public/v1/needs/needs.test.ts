@@ -34,7 +34,7 @@ describe('GET /api/public/v1/needs', () => {
 			})
 		);
 
-		const response = await GET({} as unknown as GetEvent);
+		const response = await GET({ fetch: globalThis.fetch } as unknown as GetEvent);
 		const data = await response.json();
 
 		expect(data).toHaveLength(1);
@@ -53,7 +53,7 @@ describe('GET /api/public/v1/needs', () => {
 			})
 		);
 
-		const response = await GET({} as unknown as GetEvent);
+		const response = await GET({ fetch: globalThis.fetch } as unknown as GetEvent);
 		const data = await response.json();
 		expect(data).toEqual({ success: false, error: 'NEEDS_UNAVAILABLE' });
 		expect(response.status).toBe(503);
@@ -62,7 +62,7 @@ describe('GET /api/public/v1/needs', () => {
 	it('returns 503 when FastAPI fetch throws', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connection refused')));
 
-		const response = await GET({} as unknown as GetEvent);
+		const response = await GET({ fetch: globalThis.fetch } as unknown as GetEvent);
 		const data = await response.json();
 		expect(data).toEqual({ success: false, error: 'NEEDS_UNAVAILABLE' });
 		expect(response.status).toBe(503);

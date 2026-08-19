@@ -83,7 +83,7 @@ export const GET = async ({ params, getClientAddress }) => {
 				items: donation.items ?? [],
 				logistics: donation.logistics ?? null,
 				received_summary: donation.received_summary ?? null,
-				created_at: donation.updated_at,
+				updated_at: donation.updated_at ?? null,
 				expires_at: donation.expires_at ?? null
 			}
 		});

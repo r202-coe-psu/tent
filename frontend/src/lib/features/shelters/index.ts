@@ -89,10 +89,24 @@ export {
 	petCategoryOrder
 } from './domain/policy-labels';
 
+export {
+	sumZoneCapacities,
+	capacityAlignment,
+	canSyncCapacityFromZones,
+	type ZoneCapacityLike,
+	type CapacityAlignment
+} from './domain/capacity-guide';
+
 // Data layer (public)
-export { createShelter, updateShelter, closeZone, reopenZone } from './data/shelters.api';
+export {
+	createShelter,
+	getShelter,
+	updateShelter,
+	closeZone,
+	reopenZone
+} from './data/shelters.api';
 export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.remote';
-export type { ShelterSummary } from './data/shelters.repository';
+export type { ShelterSummary, ShelterBasic } from './data/shelters.repository';
 export { getAllLocations } from './data/thailand-location.api';
 
 // Application (public)
@@ -100,7 +114,11 @@ export {
 	sheltersKeys,
 	startSheltersLiveQuery,
 	useShelters,
+	useSearchShelters,
 	useShelter,
+	useProvinces,
+	useDistricts,
+	useSubdistricts,
 	useCreateShelter,
 	useUpdateShelter,
 	useCloseZone,

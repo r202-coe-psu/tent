@@ -32,12 +32,19 @@ export {
 	genderSchema,
 	religionSchema,
 	stayStatusSchema,
+	householdStatusSchema,
 	movementActionSchema,
 	careTrackSchema,
 	bloodGroupSchema,
 	evacueeInputSchema,
 	medicalInputSchema,
 	householdInputSchema,
+	evacueePersonalEditFormSchema,
+	evacueeEmergencyEditFormSchema,
+	evacueeAddressEditFormSchema,
+	evacueeHealthEditFormSchema,
+	evacueeHouseholdEditFormSchema,
+	evacueeAssetsEditFormSchema,
 	movementInputSchema,
 	screeningInputSchema,
 	createEvacuee,
@@ -48,6 +55,8 @@ export {
 	assertMovementAllowed,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
+	canCancelEvacueePreRegistration,
+	canCancelHouseholdPreRegistration,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
 	ACTIVE_HOUSEHOLD_STATUSES,
@@ -76,7 +85,7 @@ export {
 	type ScreeningInput
 } from './domain/people';
 
-export type { PeopleRepository } from './data/people.repository';
+export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
 export { peopleRepository } from './data/people.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
@@ -95,10 +104,20 @@ export {
 	useHouseholds,
 	useHousehold,
 	useHouseholdsPaginated,
+	listMatchingEvacueeIds,
+	listMatchingHouseholdIds,
 	useCreateHousehold,
 	useUpdateHousehold,
+	usePatchHousehold,
 	useCancelPreRegistration,
+	useCancelEvacueePreRegistration,
+	useCreateMedical,
 	useCreateScreening,
+	useCreateEvacueeWithScreening,
+	useUpdateMedical,
+	usePatchMedical,
+	useDeleteMedical,
+	usePatchEvacuee,
 	useMedicals,
 	useMovements,
 	useScreenings,
@@ -118,3 +137,9 @@ export { default as EvacueePetAssetVehicle } from './ui/evacuee-pet-asset-vehicl
 export { default as HouseholdPreRegister } from './ui/household-pre-register.svelte';
 export { default as HouseholdPreRegisterSummary } from './ui/household-pre-register-summary.svelte';
 export { default as HouseholdProfileView } from './ui/household-profile-view.svelte';
+export { default as RegistrationSaveErrorAlert } from './ui/registration-save-error-alert.svelte';
+export {
+	buildSaveFailureReport,
+	formatSaveFailureReport,
+	type SaveFailureReport
+} from '$lib/utils/errors';

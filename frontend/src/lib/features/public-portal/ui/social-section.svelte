@@ -15,7 +15,7 @@
 		form,
 		formData
 	}: {
-		form: SuperForm<ConfigBody>;
+		form: SuperForm<ConfigBody, Record<string, unknown>>;
 		formData: SuperFormData<ConfigBody>;
 	} = $props();
 </script>
@@ -38,7 +38,7 @@
 	</Form.Field>
 {/snippet}
 
-<Card.Root class="overflow-hidden border-none py-0 shadow-md transition-shadow hover:shadow-lg">
+<Card.Root class="overflow-hidden border-none py-0 shadow-sm transition-shadow hover:shadow-md">
 	<div class="border-b border-border/50 bg-primary/5 px-6 py-4">
 		<div class="flex items-center gap-3">
 			<div class="rounded-lg bg-primary/10 p-2 text-primary">

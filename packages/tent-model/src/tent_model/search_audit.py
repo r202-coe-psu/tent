@@ -8,7 +8,7 @@ from pymongo import IndexModel
 
 
 class SearchAudit(Document):
-	"""Public family-search audit buffer → inbound sync to ``central_ops``.
+	"""Public occupants-search audit buffer → inbound sync to ``central_ops``.
 
 	Stores hashes only (never raw query / IP). ``synced_to_couch`` gates inbound.
 	"""

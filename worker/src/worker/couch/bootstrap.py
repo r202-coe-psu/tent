@@ -28,7 +28,9 @@ logger = logging.getLogger(__name__)
 REGISTRY_DB = "registry"
 
 
-async def _load_households(couch: CouchClient, database: str) -> dict[str, dict[str, Any]]:
+async def _load_households(
+    couch: CouchClient, database: str
+) -> dict[str, dict[str, Any]]:
     households: dict[str, dict[str, Any]] = {}
     async for doc in couch.iter_all_docs(database):
         if doc.get("type") == "household" and doc.get("_id"):
@@ -44,12 +46,26 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
     shelter_code = shelter_code_from_db_name(database)
     if database == REGISTRY_DB:
         async for doc in couch.iter_all_docs(REGISTRY_DB):
-            action, payload = project_shelter(doc)
-            await apply_shelter(action, payload)
-            if action == "delete" and payload and payload.get("_id"):
-                code = str(payload["_id"])
-                await delete_persons_for_shelter(code)
-                await delete_needs_for_shelter(code)
+            doc_type = doc.get("type")
+            if doc_type == "shelter":
+                action, payload = project_shelter(doc)
+                await apply_shelter(action, payload)
+                if action == "delete" and payload and payload.get("_id"):
+                    code = str(payload["_id"])
+                    await delete_persons_for_shelter(code)
+                    await delete_needs_for_shelter(code)
+            elif doc_type == "announcement":
+                from worker.mongo.announcement import apply_announcement
+                from worker.projectors.announcement import project_announcement
+
+                action, payload = project_announcement(doc)
+                await apply_announcement(action, payload)
+            elif doc_type == "config":
+                from worker.mongo.config import apply_config
+                from worker.projectors.config import project_config
+
+                action, payload = project_config(doc)
+                await apply_config(action, payload)
         seq = await couch.db_update_seq(REGISTRY_DB)
         await save_checkpoint(REGISTRY_DB, seq)
         logger.info("Bootstrap complete for %s (seq=%s)", REGISTRY_DB, seq)

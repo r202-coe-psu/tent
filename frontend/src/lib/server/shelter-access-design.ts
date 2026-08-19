@@ -21,13 +21,28 @@ export const REFERRAL_MANGO_INDEXES = [
 		type: 'json' as const
 	},
 	{
-		index: { fields: ['type', 'created_at', 'status', 'evacuee_id'] },
-		name: 'referral-list-sort-idx',
+		index: { fields: ['type', 'shelter_code', 'created_at'] },
+		name: 'referral-type-shelter-created-idx',
 		type: 'json' as const
 	},
 	{
-		index: { fields: ['type', 'created_at'] },
-		name: 'referral-list-basic-idx',
+		index: { fields: ['type', 'to_shelter_code', 'created_at'] },
+		name: 'referral-type-toshelter-created-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: [{ type: 'desc' }, { created_at: 'desc' }] },
+		name: 'referral-list-created-desc-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: [{ type: 'asc' }, { created_at: 'asc' }] },
+		name: 'referral-list-created-asc-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: [{ type: 'desc' }, { status: 'desc' }, { created_at: 'desc' }] },
+		name: 'referral-list-status-created-desc-idx',
 		type: 'json' as const
 	}
 ];
@@ -37,9 +52,9 @@ export const REFERRAL_MANGO_INDEXES = [
  * envelope (schema.md §0) + shelter_code match + allowed doc types, then the
  * integrity rules of T-16:
  *
- *  - **append-only** `stock_ledger` / `audit` — reject any update or delete of an
- *    existing doc (schema.md §6.2). A wrong ledger entry is corrected by writing a
- *    new offsetting entry, never by editing history.
+ *  - **append-only** `stock_ledger` / `audit` / `movement` / `screening` — reject any
+ *    update or delete of an existing doc (schema.md §1.4–1.5, §6.2). A wrong ledger
+ *    entry is corrected by writing a new offsetting entry, never by editing history.
  *  - **forward-only** `donation.status` — `received` may not fall back to `declared`
  *    (schema.md §2.3 state machine).
  *  - **role gate** on `stock_ledger` — only warehouse staff / managers may move stock.
@@ -52,7 +67,8 @@ export const REFERRAL_MANGO_INDEXES = [
 export function buildValidateDocUpdate(code: string): string {
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
-  var appendOnly = ['stock_ledger', 'audit'];
+  // schema.md §1.4 movement, §1.5 screening, §6.2 stock_ledger / audit
+  var appendOnly = ['stock_ledger', 'audit', 'movement', 'screening'];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
     if (wasAppendOnly) {
@@ -74,11 +90,18 @@ export function buildValidateDocUpdate(code: string): string {
   if (newDoc.shelter_code !== '${code}') {
     throw { forbidden: 'shelter_code must be ${code}' };
   }
-  var allowed = ['evacuee', 'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'audit', 'purchase', 'referral'];
+  // People plane (schema.md §1) must be writable by session staff — missing
+  // household/medical/screening/movement/image causes partial registration:
+  // createEvacuee succeeds, then household/screening PUT is forbidden.
+  var allowed = [
+    'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
+    'donation', 'donation_campaign', 'stock_ledger', 'donation_slot',
+    'audit', 'daily_calc', 'purchase', 'referral'
+  ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
   }
-  // 1. append-only: stock_ledger / audit are never rewritten
+  // 1. append-only: stock_ledger / audit / movement / screening are never rewritten
   if (appendOnly.indexOf(newDoc.type) !== -1 && oldDoc) {
     throw { forbidden: 'Cannot update append-only ' + newDoc.type + ' documents' };
   }

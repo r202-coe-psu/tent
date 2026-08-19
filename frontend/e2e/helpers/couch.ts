@@ -28,7 +28,14 @@ function parseCouchUrl(raw: string): { base: string; auth: string } {
 
 export const { base: COUCH_BASE, auth: COUCH_AUTH } = parseCouchUrl(COUCH_URL);
 
-async function couchReq(
+/** CouchDB server-admin credentials from `COUCHDB_ADMIN_URL` (never mintable via the app). */
+export function couchBootstrapAdmin(): { name: string; password: string } {
+	const m = COUCH_URL.match(/^(https?:\/\/)([^:]+):([^@]+)@(.+)$/);
+	if (!m) throw new Error(`Invalid COUCHDB_ADMIN_URL: ${COUCH_URL}`);
+	return { name: decodeURIComponent(m[2]), password: decodeURIComponent(m[3]) };
+}
+
+export async function couchReq(
 	method: string,
 	path: string,
 	body?: unknown

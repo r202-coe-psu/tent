@@ -52,3 +52,4 @@ affects:
 ## Decision log
 - 2026-07-08 — proposed
 - 2026-07-08 — done
+- 2026-08-13 — **pointer เท่านั้น (ไม่แก้กติกาใน CR นี้):** โปรแกรม site-occupancy-booking ทับ occupancy coloring/counts ด้วย D-BOOK-OCC=C — นับ stay `active` + `pre_registered`. ดู [program spec §0](../features/site-occupancy-booking-program.md) และ CR-069/CR-070. Kitchen/SOP คนอยู่จริงยังตาม occupancy mapping `active` ใน CR นี้.

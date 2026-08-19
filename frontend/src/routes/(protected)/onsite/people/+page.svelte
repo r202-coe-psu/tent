@@ -1,47 +1,45 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import * as Card from '$lib/components/ui/card/index.js';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		EvacueeForm,
 		EvacueeWristbandSuccess,
-		useCreateEvacuee,
-		useCreateScreening,
+		RegistrationSaveErrorAlert,
+		useCreateEvacueeWithScreening,
+		buildSaveFailureReport,
 		type EvacueeInput,
-		type Evacuee
+		type Evacuee,
+		type SaveFailureReport
 	} from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
 	import Zap from '@lucide/svelte/icons/zap';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 
-	const createMutation = useCreateEvacuee();
-	const createScreeningMutation = useCreateScreening();
+	const createMutation = useCreateEvacueeWithScreening();
 
-	let isFastTrack = $derived($page.url.searchParams.get('mode') === 'fast_track');
+	let isFastTrack = $derived(page.url.searchParams.get('mode') === 'fast_track');
 
 	// Completed evacuee after zone selection — drives the success screen
 	let completedEvacuee = $state<Evacuee | null>(null);
+	let saveError = $state<SaveFailureReport | null>(null);
 
 	async function handleRegister(input: EvacueeInput, symptoms: string[]) {
+		const shelterCode = getShelterCode();
 		const ctx = {
-			shelterCode: getShelterCode(),
+			shelterCode,
 			createdBy: authStore.user?.name ?? 'unknown'
 		};
 		const track = isFastTrack ? 'fast_track' : symptoms.length > 0 ? 'fast_track' : 'normal';
 
-		try {
-			const evacuee = await createMutation.mutateAsync({
-				input: { ...input, track },
-				ctx
-			});
-			toast.success(`Registered ${evacuee.first_name} ${evacuee.last_name}`);
+		saveError = null;
 
-			await createScreeningMutation.mutateAsync({
-				input: {
-					evacuee_id: evacuee._id,
+		try {
+			const { evacuee } = await createMutation.mutateAsync({
+				input: { ...input, track },
+				screening: {
 					symptoms,
 					temperature_c: null,
 					track,
@@ -51,7 +49,13 @@
 			});
 			return evacuee;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : String(err));
+			saveError = buildSaveFailureReport(err, {
+				summaryTh: 'บันทึกไม่สำเร็จ — ระบบปฏิเสธเอกสาร',
+				shelterCode,
+				rollbackNote:
+					'compensated: deleted medical + evacuee created in this submit (screening is append-only and is not deleted if it was written)'
+			});
+			toast.error('บันทึกไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน');
 			throw err;
 		}
 	}
@@ -59,7 +63,11 @@
 	let step = $state<1 | 2 | 3 | 4 | 5 | 6>(1);
 </script>
 
-<div class="container mx-auto max-w-5xl p-6">
+<svelte:head>
+	<title>ลงทะเบียนผู้ประสบภัย | SmartShelter Thailand</title>
+</svelte:head>
+
+<div class="mx-auto w-full max-w-5xl px-4 py-4 md:px-6 md:py-6">
 	{#if completedEvacuee}
 		<EvacueeWristbandSuccess
 			evacuee={completedEvacuee}
@@ -68,28 +76,31 @@
 			}}
 		/>
 	{:else}
-		<!-- ── Registration Flow ─────────────────────────────────────────────── -->
 		<button
 			onclick={() => goto(resolve('/onsite'))}
-			class="mb-4 inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+			class="mb-3 inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
 		>
 			<ArrowLeft class="size-4" />
 			<span>กลับ</span>
 		</button>
 
-		<h1 class="mb-6 text-3xl font-bold">ลงทะเบียนผู้ประสบภัย</h1>
+		<h1 class="mb-4 text-2xl font-bold md:mb-6 md:text-3xl">ลงทะเบียนผู้ประสบภัย</h1>
+
+		{#if saveError}
+			<RegistrationSaveErrorAlert report={saveError} ondismiss={() => (saveError = null)} />
+		{/if}
 
 		{#if isFastTrack}
 			<div
-				class="mb-6 flex items-center gap-4 rounded-2xl border border-purple-200 bg-purple-50/50 p-4"
+				class="mb-4 flex items-start gap-3 rounded-xl border border-purple-200 bg-purple-50/50 p-3 md:mb-6 md:items-center md:gap-4 md:p-4"
 			>
 				<div
-					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-100 text-yellow-500"
+					class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-100 text-yellow-500 md:h-10 md:w-10"
 				>
 					<Zap class="size-5 fill-yellow-500" />
 				</div>
 				<div>
-					<h3 class="text-sm font-bold text-purple-900">การลงทะเบียนช่องทางพิเศษ (Fast Track)</h3>
+					<h2 class="text-sm font-bold text-purple-900">การลงทะเบียนช่องทางพิเศษ (Fast Track)</h2>
 					<p class="text-xs font-semibold text-purple-700">
 						สำหรับกลุ่มเปราะบาง มีความต้องการพิเศษ หรือกรณีฉุกเฉินทางการแพทย์
 					</p>
@@ -97,91 +108,17 @@
 			</div>
 		{/if}
 
-		{#if step === 1}
-			<Card.Root class="mb-4">
-				<Card.Header class="flex flex-row items-start gap-3 space-y-0 p-4">
-					<div
-						class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
-					>
-						1
-					</div>
-					<div class="space-y-1">
-						<Card.Title class="text-base leading-none font-semibold">
-							ตรวจสอบประวัติการลงทะเบียน
-						</Card.Title>
-						<Card.Description class="text-sm">
-							ค้นหาด้วยเลขบัตรประชาชน, เบอร์โทรศัพท์ หรือชื่อ-นามสกุล ก่อนลงทะเบียนใหม่
-						</Card.Description>
-					</div>
-				</Card.Header>
-			</Card.Root>
-		{:else if step === 2}
-			<Card.Root class="mb-4">
-				<Card.Header class="flex flex-row items-start gap-3 space-y-0 p-4">
-					<div
-						class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
-					>
-						2
-					</div>
-					<div class="space-y-1">
-						<Card.Title class="text-base leading-none font-semibold">
-							ส่วนประเมินอาการเจ็บป่วยและกลุ่มอาการเฝ้าระวัง (EWAR Symptoms)
-						</Card.Title>
-						<Card.Description class="text-sm">
-							โปรดสังเกตอาการหรือสอบถามผู้ประสบภัยก่อนเริ่มลงทะเบียน หากพบอาการให้แจ้งเตือน
-						</Card.Description>
-					</div>
-				</Card.Header>
-			</Card.Root>
-		{:else if step === 3}
-			<Card.Root class="mb-4">
-				<Card.Header class="flex flex-row items-center justify-between gap-3 space-y-0 p-4">
-					<div class="flex items-center gap-3">
-						<div
-							class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
-						>
-							3
-						</div>
-						<div class="space-y-1">
-							<Card.Title class="text-base leading-none font-semibold"
-								>ข้อมูลผู้ประสบภัย (Registration)</Card.Title
-							>
-							<Card.Description class="text-sm">กรอกข้อมูลพื้นฐานและประเมินสถานะ</Card.Description>
-						</div>
-					</div>
-				</Card.Header>
-			</Card.Root>
-		{:else if step === 4}
-			<Card.Root class="mb-4">
-				<Card.Header class="flex flex-row items-center gap-3 space-y-0 p-4">
-					<div
-						class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
-					>
-						4
-					</div>
-					<div class="space-y-1">
-						<Card.Title class="text-base leading-none font-semibold"
-							>หน้าค้นหาครัวเรือน (Head of Household)</Card.Title
-						>
-						<Card.Description class="text-sm">
-							สืบค้นและตรวจสอบกลุ่มครอบครัว หรือลงทะเบียนเป็นครอบครัวใหม่
-						</Card.Description>
-					</div>
-				</Card.Header>
-			</Card.Root>
-		{/if}
-
-		<Card.Root class="mb-8">
-			<Card.Content>
-				<EvacueeForm
-					onsubmit={handleRegister}
-					pending={createMutation.isPending}
-					bind:step
-					onComplete={(ev) => {
-						completedEvacuee = ev;
-					}}
-				/>
-			</Card.Content>
-		</Card.Root>
+		<EvacueeForm
+			onsubmit={handleRegister}
+			pending={createMutation.isPending}
+			bind:step
+			onsaveerror={(report) => {
+				saveError = report;
+			}}
+			onComplete={(ev) => {
+				saveError = null;
+				completedEvacuee = ev;
+			}}
+		/>
 	{/if}
 </div>

@@ -103,6 +103,58 @@ describe('PeopleRemoteRepository', () => {
 		});
 	});
 
+	describe('updateMedical', () => {
+		it('updates an existing medical record with a fresh revision', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const medical = await repo.createMedical(
+				{
+					evacuee_id: evacuee._id,
+					conditions: ['asthma'],
+					medications: [],
+					allergies: [],
+					track: 'normal'
+				},
+				ctx
+			);
+
+			const updated = await repo.updateMedical({
+				...medical,
+				conditions: ['asthma', 'diabetes'],
+				blood_group: 'O'
+			});
+
+			expect(updated.conditions).toEqual(['asthma', 'diabetes']);
+			expect(updated.blood_group).toBe('O');
+			expect(updated._rev).not.toBe(medical._rev);
+		});
+	});
+
+	describe('section patches', () => {
+		it('merges evacuee section fields into the latest persisted revision', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+
+			await repo.patchEvacuee(evacuee._id, { first_name: 'ชื่อใหม่' });
+			await repo.patchEvacuee(evacuee._id, {
+				emergency_contact: { name: 'ญาติ', phone: '0812345678', relation: 'มารดา' }
+			});
+
+			const saved = await repo.getEvacuee(evacuee._id);
+			expect(saved?.first_name).toBe('ชื่อใหม่');
+			expect(saved?.emergency_contact?.name).toBe('ญาติ');
+		});
+
+		it('merges household section fields without replacing unrelated values', async () => {
+			const household = await repo.createHousehold({ label: 'ครัวเรือนหนึ่ง' }, ctx);
+
+			await repo.patchHousehold(household._id, { province: 'เชียงใหม่' });
+			await repo.patchHousehold(household._id, { head_evacuee_id: 'evacuee:test' });
+
+			const saved = await repo.getHousehold(household._id);
+			expect(saved?.province).toBe('เชียงใหม่');
+			expect(saved?.head_evacuee_id).toBe('evacuee:test');
+		});
+	});
+
 	describe('household membership invariant', () => {
 		it('rejects moving a member away from an active household with other members', async () => {
 			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
@@ -124,6 +176,22 @@ describe('PeopleRemoteRepository', () => {
 			expect((await repo.getEvacuee(first._id))?.household_id).toBe(oldHousehold._id);
 		});
 
+		it('rejects removing a member from an active household with other members', async () => {
+			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
+			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือนเดิม', head_evacuee_id: first._id, status: 'checked_in' },
+				ctx
+			);
+			await repo.patchEvacuee(first._id, { household_id: household._id });
+			await repo.patchEvacuee(second._id, { household_id: household._id });
+
+			await expect(repo.patchEvacuee(first._id, { household_id: null })).rejects.toThrow(
+				/ยังมีสมาชิกอื่นอยู่/
+			);
+			expect((await repo.getEvacuee(first._id))?.household_id).toBe(household._id);
+		});
+
 		it('moves a solo member and cancels the old household using fresh persisted data', async () => {
 			const member = await repo.createEvacuee(evInput(), ctx);
 			const oldHousehold = await repo.createHousehold(
@@ -139,7 +207,9 @@ describe('PeopleRemoteRepository', () => {
 			const moved = await repo.updateEvacuee({ ...linked, household_id: targetHousehold._id });
 
 			expect(moved.household_id).toBe(targetHousehold._id);
-			expect((await repo.getHousehold(oldHousehold._id))?.status).toBe('cancelled');
+			const cancelledHousehold = await repo.getHousehold(oldHousehold._id);
+			expect(cancelledHousehold?.status).toBe('cancelled');
+			expect(cancelledHousehold?.head_evacuee_id).toBeNull();
 		});
 	});
 
@@ -263,6 +333,57 @@ describe('PeopleRemoteRepository', () => {
 			expect(result.total).toBe(1);
 			expect(result.items[0].first_name).toBe('Elder');
 		});
+
+		it('filters by stay status and returns matching ids', async () => {
+			const waiting = await repo.createEvacuee(evInput({ first_name: 'Waiting' }), ctx);
+			const active = await repo.createEvacuee(evInput({ first_name: 'Active' }), ctx);
+			await repo.checkInEvacuee(active, ctx);
+
+			const result = await repo.listEvacueesPaginated(1, 10, '', { status: 'pre_registered' });
+			expect(result.items.map((e) => e._id)).toEqual([waiting._id]);
+
+			const ids = await repo.listMatchingEvacueeIds('', { status: 'active' });
+			expect(ids).toEqual([active._id]);
+		});
+	});
+
+	describe('listHouseholdsPaginated status filter', () => {
+		it('filters households by status and returns matching ids', async () => {
+			const a = await repo.createEvacuee(evInput({ first_name: 'A' }), ctx);
+			const b = await repo.createEvacuee(evInput({ first_name: 'B' }), ctx);
+			const pre = await repo.createHousehold(
+				{
+					label: 'Pre',
+					head_evacuee_id: a._id,
+					status: 'pre_registered',
+					municipality_zone: null,
+					community: null,
+					pets: [],
+					vehicles: []
+				},
+				ctx
+			);
+			const arriving = await repo.createHousehold(
+				{
+					label: 'Arriving',
+					head_evacuee_id: b._id,
+					status: 'arriving',
+					municipality_zone: null,
+					community: null,
+					pets: [],
+					vehicles: []
+				},
+				ctx
+			);
+
+			const result = await repo.listHouseholdsPaginated(1, 10, '', undefined, {
+				status: 'pre_registered'
+			});
+			expect(result.items.map((h) => h._id)).toEqual([pre._id]);
+
+			const ids = await repo.listMatchingHouseholdIds('', undefined, { status: 'arriving' });
+			expect(ids).toEqual([arriving._id]);
+		});
 	});
 });
 
@@ -375,7 +496,7 @@ describe('check-in / check-out', () => {
 	});
 
 	describe('cancelPreRegistration', () => {
-		it('cancels the household, preserves valid person stay status, and records the actor', async () => {
+		it('cancels the household, cascades member stays to cancelled, and records the actor', async () => {
 			const member = await repo.createEvacuee(evInput(), ctx);
 			await repo.createEvacuee(evInput({ first_name: 'บุคคลนอกครัวเรือน' }), ctx);
 			const hh = await repo.createHousehold(
@@ -404,7 +525,7 @@ describe('check-in / check-out', () => {
 			expect(fetchedHh?.status).toBe('cancelled');
 
 			const fetchedMember = await repo.getEvacuee(member._id);
-			expect(fetchedMember?.current_stay.status).toBe('pre_registered');
+			expect(fetchedMember?.current_stay.status).toBe('cancelled');
 			expect((await repo.listEvacuees()).map((evacuee) => evacuee._id)).toContain(member._id);
 			expect(findSpy).toHaveBeenCalledWith({
 				selector: { type: 'evacuee', household_id: hh._id },
@@ -422,7 +543,8 @@ describe('check-in / check-out', () => {
 				context: {
 					previous_status: 'pre_registered',
 					next_status: 'cancelled',
-					member_count: 1
+					member_count: 1,
+					cancelled_member_count: 1
 				}
 			});
 		});
@@ -443,6 +565,123 @@ describe('check-in / check-out', () => {
 			);
 
 			await expect(repo.cancelPreRegistration(hh._id, ctx)).rejects.toThrow(/สามารถยกเลิกได้เฉพาะ/);
+		});
+	});
+
+	describe('cancelEvacueePreRegistration', () => {
+		it('cancels a pre_registered stay and cancels the household when no members remain', async () => {
+			const member = await repo.createEvacuee(evInput(), ctx);
+			const hh = await repo.createHousehold(
+				{
+					label: 'บ้านทดสอบ',
+					head_evacuee_id: member._id,
+					status: 'pre_registered',
+					municipality_zone: null,
+					community: null,
+					pets: [],
+					vehicles: []
+				},
+				ctx
+			);
+			await repo.updateEvacuee({ ...member, household_id: hh._id });
+
+			await repo.cancelEvacueePreRegistration(member._id, ctx);
+
+			expect((await repo.getEvacuee(member._id))?.current_stay.status).toBe('cancelled');
+			expect((await repo.getHousehold(hh._id))?.status).toBe('cancelled');
+		});
+
+		it('keeps household pre_registered when another member is still pre_registered', async () => {
+			const a = await repo.createEvacuee(evInput({ first_name: 'A' }), ctx);
+			const b = await repo.createEvacuee(evInput({ first_name: 'B' }), ctx);
+			const hh = await repo.createHousehold(
+				{
+					label: 'บ้านทดสอบ',
+					head_evacuee_id: a._id,
+					status: 'pre_registered',
+					municipality_zone: null,
+					community: null,
+					pets: [],
+					vehicles: []
+				},
+				ctx
+			);
+			await repo.updateEvacuee({ ...a, household_id: hh._id });
+			await repo.updateEvacuee({ ...b, household_id: hh._id });
+
+			await repo.cancelEvacueePreRegistration(a._id, ctx);
+
+			expect((await repo.getEvacuee(a._id))?.current_stay.status).toBe('cancelled');
+			expect((await repo.getEvacuee(b._id))?.current_stay.status).toBe('pre_registered');
+			expect((await repo.getHousehold(hh._id))?.status).toBe('pre_registered');
+		});
+
+		it('throws when stay is not pre_registered', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			await repo.checkInEvacuee(evacuee, ctx);
+			await expect(repo.cancelEvacueePreRegistration(evacuee._id, ctx)).rejects.toThrow(
+				/สามารถยกเลิกได้เฉพาะ/
+			);
+		});
+	});
+
+	describe('createEvacueeWithScreening', () => {
+		it('persists both evacuee and screening', async () => {
+			const { evacuee, screening } = await repo.createEvacueeWithScreening(
+				evInput(),
+				{ symptoms: [], temperature_c: null, track: 'normal', needs_referral: false },
+				ctx
+			);
+			expect(evacuee._id).toMatch(/^evacuee:/);
+			expect(screening.evacuee_id).toBe(evacuee._id);
+			expect(await repo.getEvacuee(evacuee._id)).not.toBeNull();
+		});
+
+		it('rolls back the evacuee when screening write fails', async () => {
+			const originalPut = memoryRepo.put.bind(memoryRepo);
+			memoryRepo.put = async (doc) => {
+				if ((doc as { type?: string }).type === 'screening') {
+					throw new Error('doc type not allowed yet: screening');
+				}
+				return originalPut(doc);
+			};
+
+			await expect(
+				repo.createEvacueeWithScreening(
+					evInput({ first_name: 'Rollback' }),
+					{ symptoms: ['fever'], temperature_c: null, track: 'fast_track', needs_referral: false },
+					ctx
+				)
+			).rejects.toThrow(/doc type not allowed yet: screening/);
+
+			const leftover = (await repo.listEvacuees()).filter((e) => e.first_name === 'Rollback');
+			expect(leftover).toHaveLength(0);
+		});
+
+		it('rolls back medical when screening fails after medical was written', async () => {
+			const originalPut = memoryRepo.put.bind(memoryRepo);
+			memoryRepo.put = async (doc) => {
+				if ((doc as { type?: string }).type === 'screening') {
+					throw new Error('doc type not allowed yet: screening');
+				}
+				return originalPut(doc);
+			};
+
+			await expect(
+				repo.createEvacueeWithScreening(
+					evInput({
+						first_name: 'MedRollback',
+						medical_conditions: ['diabetes']
+					}),
+					{ symptoms: [], temperature_c: null, track: 'normal', needs_referral: false },
+					ctx
+				)
+			).rejects.toThrow(/doc type not allowed yet: screening/);
+
+			expect(
+				(await repo.listEvacuees()).filter((e) => e.first_name === 'MedRollback')
+			).toHaveLength(0);
+			expect(await repo.listMedicals()).toHaveLength(0);
 		});
 	});
 });

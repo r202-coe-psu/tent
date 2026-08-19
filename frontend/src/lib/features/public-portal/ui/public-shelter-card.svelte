@@ -54,7 +54,7 @@
 </script>
 
 <Card.Root
-	class="flex flex-col gap-2! rounded-2xl border-border p-5 shadow-xs transition-colors hover:border-primary/40 hover:bg-muted/10 hover:shadow-md"
+	class="flex flex-col gap-2! rounded-2xl border-border p-5 shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/10 hover:shadow-md"
 >
 	<!-- Title and Status -->
 	<div class="flex items-start justify-between gap-2">
@@ -163,7 +163,7 @@
 	<!-- Actions -->
 	<div class="mt-auto flex gap-2 pt-2">
 		<Button
-			href={`/public/shelters/${shelter.id}`}
+			href={`/shelters/${shelter.id}`}
 			variant="outline"
 			size="sm"
 			class="h-9 flex-1 rounded-xl border-border text-xs font-bold text-foreground hover:bg-muted"

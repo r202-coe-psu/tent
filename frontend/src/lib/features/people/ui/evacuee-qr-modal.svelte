@@ -32,7 +32,8 @@
 		temporary_leave: '#f59e0b',
 		transferred: '#a855f7',
 		checked_out: '#ef4444',
-		deceased: '#020617'
+		deceased: '#020617',
+		cancelled: '#94a3b8'
 	};
 
 	async function handlePrintPreview() {

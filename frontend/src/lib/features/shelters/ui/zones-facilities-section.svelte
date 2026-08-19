@@ -18,6 +18,7 @@
 	import Power from '@lucide/svelte/icons/power';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Users from '@lucide/svelte/icons/users';
+	import CapacityZoneGuideline from './capacity-zone-guideline.svelte';
 
 	let {
 		form,
@@ -30,6 +31,11 @@
 		shelterCode?: string;
 		disabled?: boolean;
 	} = $props();
+
+	function syncCapacityFromZones(zoneSum: number) {
+		$formData.capacity = zoneSum;
+		toast.success(`ปรับความจุศูนย์เป็น ${zoneSum} คน ตามผลรวมโซนแล้ว`);
+	}
 
 	const closeZoneMutation = useCloseZone();
 	const reopenZoneMutation = useReopenZone();
@@ -187,6 +193,14 @@
 		<span class="text-sm font-bold text-black">3.</span>
 		<h2 class="text-base font-bold text-black">การจัดการโซนและสิ่งอำนวยความสะดวก</h2>
 	</div>
+
+	<CapacityZoneGuideline
+		shelterCapacity={$formData.capacity}
+		zones={$formData.zones}
+		{disabled}
+		onSyncFromZones={syncCapacityFromZones}
+	/>
+
 	<!-- 3a. Living Zones -->
 
 	<div class="space-y-4 rounded-xl border border-shelter-border bg-background p-5">

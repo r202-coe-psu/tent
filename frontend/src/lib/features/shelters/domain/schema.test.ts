@@ -44,6 +44,17 @@ describe('shelterSchema', () => {
 		expect(() => shelterSchema.parse({ ...validShelterInput, name: '  ' })).toThrow();
 	});
 
+	it('rejects missing capacity with a Thai message', () => {
+		const result = shelterSchema.safeParse({ ...validShelterInput, capacity: undefined });
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues.some((i) => i.path.includes('capacity'))).toBe(true);
+			expect(result.error.issues.find((i) => i.path.includes('capacity'))?.message).toMatch(
+				/ความจุ|กรุณาระบุ/
+			);
+		}
+	});
+
 	it('rejects capacity of 0', () => {
 		expect(() => shelterSchema.parse({ ...validShelterInput, capacity: 0 })).toThrow();
 	});

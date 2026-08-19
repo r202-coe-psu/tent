@@ -2,8 +2,11 @@
 title: "Task Breakdown by Module — Index"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
-note: decision-synced 2026-07-15 — CR-033 remote-first; Markdown task-breakdown = planning source; technical source = docs/data/schema.md + data-model.md + api-contract.md
+updated: 2026-08-13
+note: >
+  decision-synced 2026-07-15 — CR-033 remote-first; 2026-08-12 — CR-064 T-54 Package B (proposed);
+  2026-08-13 — CR-066 program T-66..T-76: Wave 1–3 + T-72 **approved** (IMPS); Wave 4 = รอบ CR ถัดไป (ยังไม่รวม Adj MD เข้า 270);
+  Markdown task-breakdown = planning source; technical source = docs/data/schema.md + data-model.md + api-contract.md
 ---
 
 # Task Breakdown by Module
@@ -58,7 +61,7 @@ Planning source ปัจจุบัน = Markdown ใน `docs/task-breakdown/
 - ✅ **Shelters** CRUD + admin UI + auto-assign shelter_code + seed shelter_sh001 (`features/shelters`)
 - ✅ **Users** management BFF `/api/v1/users` + admin UI (`features/users`)
 
-**Baseline (module 0):** T-47 🔄 · T-54 🔄 (central remote path done; Edge failover follow-up) · T-48..55 ดู implement ใน repo  
+**Baseline (module 0):** T-47 🔄 · T-54 🔄 (Pkg A central done; Pkg B CR-064 network-only edge — proposed) · T-48..55 ดู implement ใน repo  
 **Platform/Core (module 1):** T-01 🔄 · T-02 🔄 · T-03 🔄 · gate/post ⬜  
 **Modules 2–12:** มีความคืบหน้าหลายโมดูลในโค้ด — tracking ละเอียดอยู่ใน Notion + โมดูลไฟล์
 
@@ -83,6 +86,25 @@ Planning source ปัจจุบัน = Markdown ใน `docs/task-breakdown/
 
 > **CR-005 (2026-06-22) — public-tier scope:** +Module 12 Public Portal (T-57/58/59, +11.5) · Donation +T-60 `/donate` wizard (+5.5) · Family Search T-41 `/search` bump (+1.5) → ยอดรวม 250 → **268.5 Adj MD** (provisional, recalibrate K-16). `/search` (FAM) ขยาย exposure surface, `/donate` (DN) ต้องการ donation schema_v 1→2 + `donation_slot` §2.13. ดูรายละเอียด [CR-005](../changes/CR-005-public-portal-landing-public-metrics.md).
 > **CR-006 (2026-06-22) — SOP master/override:** Module B T-30 +1.5 Adj MD (master+override surface) → 268.5 → **270 Adj MD**.
+> **CR-066 (2026-08-13, approved Wave 1–3 + T-72; Wave 4 = รอบ CR ถัดไป) — site / occupancy / booking / triage:** T-66..T-72 พร้อมตาม dependency (T-70 ยัง blocked T-37). T-73..T-76 ยัง **ไม่รวม** เข้า 270 Adj MD. Spec = [`docs/features/site-occupancy-booking-program.md`](../features/site-occupancy-booking-program.md). ห้าม reuse T-61/T-62.
+
+## CR-066 assignment snapshot (Wave 1–3 + T-72 **approved**; Wave 4 = รอบ CR ถัดไป)
+
+| T-id | Module | ทีม | สถานะ |
+| --- | --- | --- | --- |
+| T-66 | [00-baseline](00-baseline.md) | Lead | **ready** (CR-067 P1 approved; ไม่มี stub `/host-houses`) |
+| T-67 | [12-public](12-public.md) | Lead | blocked T-66 |
+| T-68 | [00-baseline](00-baseline.md) | Lead | blocked T-66 |
+| T-69 | [07-B-sop](07-B-sop.md) | Team D + Lead | **ready** (CR-069 approved) |
+| T-70 | [10-eoc](10-eoc.md) | Lead | blocked T-37 (D-HEALTH-SURFACE=A — EOC = API ไม่ใช่ dashboard) |
+| T-71 | [02-people](02-people.md) | Team B | **ready** (CR-070 approved) |
+| T-72 | [02-people](02-people.md) | Team B | **ready** (CR-071 slice A approved; ยังรอ T-48) |
+| T-73 | [02-people](02-people.md) | Team B + Lead | blocked partner spec — **รอบ CR ถัดไป** |
+| T-74 | [02-people](02-people.md) | Team B | blocked กฎ triage — **รอบ CR ถัดไป** |
+| T-75 | [10-eoc](10-eoc.md) | Lead | blocked K-14 / SPEC — **รอบ CR ถัดไป** |
+| T-76 | [07-B-sop](07-B-sop.md) | Team D | blocked SOP workshop — **รอบ CR ถัดไป** |
+
+Team A และ Team C **ไม่ใช่เจ้าของหลัก**.
 
 ## Pre-production design (บริษัท — แยก capacity)
 

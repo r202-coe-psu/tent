@@ -5,16 +5,36 @@
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { toast } from 'svelte-sonner';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
 	import Pencil from '@lucide/svelte/icons/pencil';
-	import { useHouseholdsPaginated, useEvacuees, type HouseholdStatus } from '$lib/features/people';
+	import {
+		useHouseholdsPaginated,
+		useEvacuees,
+		useCancelPreRegistration,
+		listMatchingHouseholdIds,
+		canCancelHouseholdPreRegistration,
+		householdStatusSchema,
+		type HouseholdStatus
+	} from '$lib/features/people';
 	import { useMasterData } from '$lib/features/master-data';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { canCancelHold } from '$lib/auth/roles';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
 	let search = $state('');
+	let selectedStatus = $state('');
+	let selectedIds = $state<string[]>([]);
+	let isSelectingAllMatching = $state(false);
+	let isBulkCancelling = $state(false);
+
+	const canCancel = $derived(canCancelHold(authStore.user?.roles ?? []));
 
 	const statusConfig = {
 		pre_registered: {
@@ -44,9 +64,15 @@
 		}
 	} satisfies Record<HouseholdStatus, { label: string; colorClass: string }>;
 
+	const statusOptions = householdStatusSchema.options.map((value) => ({
+		value,
+		label: statusConfig[value].label
+	}));
+
 	const allEvacueesQuery = useEvacuees();
 	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
 	const communityQuery = useMasterData(() => 'community');
+	const cancelHousehold = useCancelPreRegistration();
 
 	const municipalityZoneLabels = $derived(
 		Object.fromEntries(
@@ -57,22 +83,106 @@
 		Object.fromEntries((communityQuery.data?.items ?? []).map((item) => [item.code, item.label]))
 	);
 
+	const searchLabels = $derived({
+		municipalityZone: municipalityZoneLabels,
+		community: communityLabels
+	});
+
+	const filters = $derived({
+		status: (selectedStatus || undefined) as HouseholdStatus | undefined
+	});
+
 	const householdsQuery = useHouseholdsPaginated(
 		() => currentPage,
 		() => PAGE_SIZE,
 		() => search,
-		() => ({
-			municipalityZone: municipalityZoneLabels,
-			community: communityLabels
-		})
+		() => searchLabels,
+		() => filters
 	);
 
 	const items = $derived(householdsQuery.data?.items ?? []);
 	const total = $derived(householdsQuery.data?.total ?? 0);
 	const totalPages = $derived(householdsQuery.data?.totalPages ?? 1);
 
-	function resetPageOnSearch() {
+	const pageIds = $derived(items.map((h) => h._id));
+	const allPageSelected = $derived(
+		pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id))
+	);
+	const somePageSelected = $derived(
+		pageIds.some((id) => selectedIds.includes(id)) && !allPageSelected
+	);
+	const selectedEligibleCount = $derived(
+		items.filter((h) => selectedIds.includes(h._id) && canCancelHouseholdPreRegistration(h)).length
+	);
+
+	function clearSelection() {
+		selectedIds = [];
+	}
+
+	function resetPageOnFilter() {
 		currentPage = 1;
+		clearSelection();
+	}
+
+	function toggleId(id: string, checked: boolean | 'indeterminate') {
+		if (checked === true) {
+			if (!selectedIds.includes(id)) selectedIds = [...selectedIds, id];
+			return;
+		}
+		selectedIds = selectedIds.filter((x) => x !== id);
+	}
+
+	function toggleSelectPage(checked: boolean | 'indeterminate') {
+		if (checked === true) {
+			const next = [...selectedIds];
+			for (const id of pageIds) {
+				if (!next.includes(id)) next.push(id);
+			}
+			selectedIds = next;
+			return;
+		}
+		selectedIds = selectedIds.filter((id) => !pageIds.includes(id));
+	}
+
+	async function selectAllMatching() {
+		isSelectingAllMatching = true;
+		try {
+			selectedIds = await listMatchingHouseholdIds(search, searchLabels, filters);
+			toast.success(`เลือกแล้ว ${selectedIds.length} ครัวเรือนตามตัวกรอง`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เลือกทั้งหมดไม่สำเร็จ');
+		} finally {
+			isSelectingAllMatching = false;
+		}
+	}
+
+	async function handleBulkCancel() {
+		if (!canCancel || selectedIds.length === 0) return;
+		if (
+			!window.confirm(
+				`ยืนยันยกเลิกการลงทะเบียนล่วงหน้าของ ${selectedIds.length} ครัวเรือนที่เลือกหรือไม่?\n(เฉพาะสถานะลงทะเบียนล่วงหน้าจะถูกยกเลิก)`
+			)
+		) {
+			return;
+		}
+
+		isBulkCancelling = true;
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		let ok = 0;
+		let failed = 0;
+		for (const id of selectedIds) {
+			try {
+				await cancelHousehold.mutateAsync({ householdId: id, ctx });
+				ok += 1;
+			} catch {
+				failed += 1;
+			}
+		}
+		isBulkCancelling = false;
+		clearSelection();
+		if (ok > 0) toast.success(`ยกเลิกการลงทะเบียนล่วงหน้าสำเร็จ ${ok} ครัวเรือน`);
+		if (failed > 0)
+			toast.error(`ยกเลิกไม่สำเร็จ ${failed} ครัวเรือน (อาจไม่ใช่สถานะลงทะเบียนล่วงหน้า)`);
 	}
 </script>
 
@@ -104,17 +214,81 @@
 		</div>
 	</div>
 
-	<!-- Search -->
-	<div class="relative max-w-sm">
-		<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-		<Input
-			type="text"
-			placeholder="ค้นหาชื่อครัวเรือน, เขต หรือ หัวหน้า..."
-			bind:value={search}
-			oninput={resetPageOnSearch}
-			class="rounded-full pl-9"
-		/>
+	<!-- Filters -->
+	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-2">
+		<div class="relative max-w-full space-y-2">
+			<label for="household-search" class="text-xs font-semibold text-foreground">ค้นหา</label>
+			<div class="relative">
+				<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+				<Input
+					id="household-search"
+					type="text"
+					placeholder="ค้นหาชื่อครัวเรือน, เขต หรือ หัวหน้า..."
+					bind:value={search}
+					oninput={resetPageOnFilter}
+					class="rounded-full pl-9"
+				/>
+			</div>
+		</div>
+		<div class="w-full min-w-0 space-y-2">
+			<label for="household-status-filter" class="text-xs font-semibold text-foreground"
+				>สถานะ</label
+			>
+			<Select.Root type="single" bind:value={selectedStatus} onValueChange={resetPageOnFilter}>
+				<Select.Trigger
+					id="household-status-filter"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					aria-label="สถานะครัวเรือน"
+				>
+					<span class="truncate">
+						{statusOptions.find((option) => option.value === selectedStatus)?.label ?? 'ทุกสถานะ'}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="" label="ทุกสถานะ" />
+					{#each statusOptions as option (option.value)}
+						<Select.Item value={option.value} label={option.label} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
 	</div>
+
+	{#if selectedIds.length > 0}
+		<div
+			class="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur"
+		>
+			<p class="text-sm font-medium text-foreground">
+				เลือกแล้ว <span class="text-primary tabular-nums">{selectedIds.length}</span> ครัวเรือน
+				{#if canCancel && selectedEligibleCount > 0}
+					<span class="text-muted-foreground">
+						· ยกเลิกได้บนหน้านี้ {selectedEligibleCount} ครัวเรือน</span
+					>
+				{/if}
+			</p>
+			<div class="flex flex-wrap gap-2">
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={selectAllMatching}
+					disabled={isSelectingAllMatching || total === 0}
+				>
+					{isSelectingAllMatching ? 'กำลังเลือก...' : 'เลือกทั้งหมดตามตัวกรอง'}
+				</Button>
+				<Button variant="ghost" size="sm" onclick={clearSelection}>ล้างการเลือก</Button>
+				{#if canCancel}
+					<Button
+						variant="destructive"
+						size="sm"
+						onclick={handleBulkCancel}
+						disabled={isBulkCancelling || selectedIds.length === 0}
+					>
+						{isBulkCancelling ? 'กำลังยกเลิก...' : 'ยกเลิกการลงทะเบียนล่วงหน้า'}
+					</Button>
+				{/if}
+			</div>
+		</div>
+	{/if}
 
 	<!-- Table -->
 	{#if householdsQuery.isLoading}
@@ -139,6 +313,14 @@
 			<Table.Root>
 				<Table.Header>
 					<Table.Row class="bg-muted/40 hover:bg-muted/40">
+						<Table.Head class="w-12">
+							<Checkbox
+								checked={allPageSelected}
+								indeterminate={somePageSelected}
+								onCheckedChange={toggleSelectPage}
+								aria-label="เลือกทั้งหน้า"
+							/>
+						</Table.Head>
 						<Table.Head class="font-semibold text-foreground">ชื่อครัวเรือน</Table.Head>
 						<Table.Head class="font-semibold text-foreground">หัวหน้าครัวเรือน</Table.Head>
 						<Table.Head class="font-semibold text-foreground">สมาชิก</Table.Head>
@@ -154,6 +336,13 @@
 						{@const headName = head ? `${head.first_name} ${head.last_name}` : '—'}
 						{@const members = allEvacueesQuery.data?.filter((e) => e.household_id === h._id) ?? []}
 						<Table.Row class="transition-colors hover:bg-muted/20">
+							<Table.Cell>
+								<Checkbox
+									checked={selectedIds.includes(h._id)}
+									onCheckedChange={(checked) => toggleId(h._id, checked)}
+									aria-label={`เลือก ${h.label}`}
+								/>
+							</Table.Cell>
 							<Table.Cell class="font-semibold text-foreground">{h.label}</Table.Cell>
 							<Table.Cell class="font-medium text-foreground">{headName}</Table.Cell>
 							<Table.Cell>

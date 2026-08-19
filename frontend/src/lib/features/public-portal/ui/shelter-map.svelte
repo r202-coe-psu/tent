@@ -83,19 +83,25 @@
 			style: {
 				version: 8,
 				sources: {
-					osm: {
+					// Carto Voyager — light, labeled streets; no API key (unlike Stadia domain auth).
+					basemap: {
 						type: 'raster',
-						tiles: ['https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png'],
+						tiles: [
+							'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+							'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+							'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+							'https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'
+						],
 						tileSize: 256,
 						attribution:
-							'&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a>'
+							'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
 					}
 				},
 				layers: [
 					{
-						id: 'osm',
+						id: 'basemap',
 						type: 'raster',
-						source: 'osm',
+						source: 'basemap',
 						minzoom: 0,
 						maxzoom: 19
 					}
@@ -252,25 +258,25 @@
 
 <!-- Legend overlay -->
 <div
-	class="absolute bottom-8 left-2 z-10 rounded-xl border border-border/50 bg-black/70 px-3 py-2.5 text-xs shadow-lg backdrop-blur-md"
+	class="absolute bottom-8 left-2 z-10 rounded-xl border border-border bg-card/95 px-3 py-2.5 text-xs shadow-lg backdrop-blur-md"
 >
-	<div class="mb-2 font-bold text-white">สถานะศูนย์พักพิง</div>
+	<div class="mb-2 font-bold text-foreground">สถานะศูนย์พักพิง</div>
 	<div class="flex flex-col gap-1.5">
 		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#22c55e] shadow-sm"></div>
-			<span class="font-medium text-slate-200">เปิดใช้งาน</span>
+			<div class="h-3 w-3 rounded-full border border-white bg-[#22c55e] shadow-sm"></div>
+			<span class="font-medium text-muted-foreground">เปิดใช้งาน</span>
 		</div>
 		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#f59e0b] shadow-sm"></div>
-			<span class="font-medium text-slate-200">เตรียมพร้อม</span>
+			<div class="h-3 w-3 rounded-full border border-white bg-[#f59e0b] shadow-sm"></div>
+			<span class="font-medium text-muted-foreground">เตรียมพร้อม</span>
 		</div>
 		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#ef4444] shadow-sm"></div>
-			<span class="font-medium text-slate-200">เต็มความจุ</span>
+			<div class="h-3 w-3 rounded-full border border-white bg-[#ef4444] shadow-sm"></div>
+			<span class="font-medium text-muted-foreground">เต็มความจุ</span>
 		</div>
 		<div class="flex items-center gap-2">
-			<div class="h-3 w-3 rounded-full border border-white/80 bg-[#94a3b8] shadow-sm"></div>
-			<span class="font-medium text-slate-200">ปิดทำการ</span>
+			<div class="h-3 w-3 rounded-full border border-white bg-[#94a3b8] shadow-sm"></div>
+			<span class="font-medium text-muted-foreground">ปิดทำการ</span>
 		</div>
 	</div>
 </div>

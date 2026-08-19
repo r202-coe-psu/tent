@@ -6,6 +6,8 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { toast } from 'svelte-sonner';
+	import CapacityZoneGuideline from './capacity-zone-guideline.svelte';
 
 	let {
 		form,
@@ -22,6 +24,11 @@
 		{ value: 'outdoor', label: 'ลานเปิด (Outdoor)' },
 		{ value: 'hybrid', label: 'แบบผสม (Hybrid)' }
 	];
+
+	function syncCapacityFromZones(zoneSum: number) {
+		$formData.capacity = zoneSum;
+		toast.success(`ปรับความจุศูนย์เป็น ${zoneSum} คน ตามผลรวมโซนแล้ว`);
+	}
 </script>
 
 <section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
@@ -30,6 +37,13 @@
 		<span class="text-sm font-bold text-black">2.</span>
 		<h2 class="text-base font-bold text-black">ข้อมูลความจุเชิงพื้นที่</h2>
 	</div>
+
+	<CapacityZoneGuideline
+		shelterCapacity={$formData.capacity}
+		zones={$formData.zones}
+		{disabled}
+		onSyncFromZones={syncCapacityFromZones}
+	/>
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 		<Form.Field {form} name="capacity">

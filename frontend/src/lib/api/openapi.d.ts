@@ -62,7 +62,7 @@ export interface paths {
 		patch: operations['patch_donation_courier'];
 		trace?: never;
 	};
-	'/public/v1/family-search': {
+	'/public/v1/occupants': {
 		parameters: {
 			query?: never;
 			header?: never;

@@ -1,5 +1,5 @@
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
-import { touch, type AuthorContext } from '$lib/db/model';
+import { now, touch, type AuthorContext } from '$lib/db/model';
 import { getShelterDb } from '$lib/db/shelter';
 import { createAuditEntry } from '$lib/features/shared';
 import {
@@ -27,10 +27,20 @@ import {
 	assertHouseholdStatusTransition,
 	assertCheckoutDestination,
 	isActiveHouseholdStatus,
+	canCancelEvacueePreRegistration,
 	type Medical,
+	type MedicalInput,
 	type Movement
 } from '../domain/people';
-import type { EvacueeFilters, HouseholdSearchLabels, PeopleRepository } from './people.repository';
+import type {
+	EvacueeFilters,
+	EvacueePatch,
+	HouseholdFilters,
+	HouseholdPatch,
+	HouseholdSearchLabels,
+	MedicalPatch,
+	PeopleRepository
+} from './people.repository';
 
 function paginateSlice<T>(matched: T[], page: number, pageSize: number): PaginatedResult<T> {
 	const total = matched.length;
@@ -95,12 +105,13 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const evacuee = buildEvacuee(input, ctx);
 		const saved = await this.repo.put(evacuee);
 
-		if (
+		const needsMedical =
 			(input.medical_conditions && input.medical_conditions.length > 0) ||
 			(input.medical_allergies && input.medical_allergies.length > 0) ||
 			(input.medical_medications && input.medical_medications.length > 0) ||
-			(input.medical_note && input.medical_note.length > 0)
-		) {
+			(input.medical_note && input.medical_note.length > 0);
+
+		if (needsMedical) {
 			const medicalInput = {
 				evacuee_id: evacuee._id,
 				conditions: input.medical_conditions || [],
@@ -110,7 +121,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				track: input.track || ('normal' as const)
 			};
 			const medicalDoc = buildMedical(medicalInput, ctx);
-			await this.repo.put(medicalDoc);
+			try {
+				await this.repo.put(medicalDoc);
+			} catch (err) {
+				await this.compensateFailedEvacueeRegistration(saved._id);
+				throw err;
+			}
 		}
 
 		return saved;
@@ -134,6 +150,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		search?: string,
 		filters?: EvacueeFilters
 	): Promise<PaginatedResult<Evacuee>> {
+		const matched = await this.filterEvacuees(search, filters);
+		return paginateSlice(matched, page, pageSize);
+	}
+
+	async listMatchingEvacueeIds(search?: string, filters?: EvacueeFilters): Promise<string[]> {
+		const matched = await this.filterEvacuees(search, filters);
+		return matched.map((e) => e._id);
+	}
+
+	private async filterEvacuees(search?: string, filters?: EvacueeFilters): Promise<Evacuee[]> {
 		const all = await this.repo.allByType('evacuee', isEvacuee);
 		const q = search?.trim();
 		let matched = q ? all.filter((e) => matchesEvacueeSearch(e, q)) : all;
@@ -143,7 +169,10 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (filters?.zone) {
 			matched = matched.filter((e) => e.current_stay.zone === filters.zone);
 		}
-		return paginateSlice(matched, page, pageSize);
+		if (filters?.status) {
+			matched = matched.filter((e) => e.current_stay.status === filters.status);
+		}
+		return matched;
 	}
 
 	getEvacuee(id: string): Promise<Evacuee | null> {
@@ -175,6 +204,31 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return saved;
 	}
 
+	async patchEvacuee(id: string, patch: EvacueePatch): Promise<Evacuee> {
+		const latest = await this.repo.get<Evacuee>(id);
+		if (!latest) throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+		const next = { ...latest, ...patch };
+		const oldHouseholdId = latest.household_id;
+		if (oldHouseholdId !== next.household_id) {
+			const [households, evacuees] = await Promise.all([
+				this.repo.allByType('household', isHousehold),
+				this.repo.allByType('evacuee', isEvacuee)
+			]);
+			assertEvacueeHouseholdAssignment(
+				latest,
+				next.household_id,
+				households.map(migrateHouseholdV3ToV4),
+				evacuees
+			);
+		}
+
+		const saved = await this.repo.put(touch(next));
+		if (oldHouseholdId && oldHouseholdId !== saved.household_id) {
+			await this.cancelHouseholdIfEmpty(oldHouseholdId);
+		}
+		return saved;
+	}
+
 	async searchEvacuees(query: string): Promise<Evacuee[]> {
 		const q = query.trim();
 		if (!q) return [];
@@ -195,8 +249,27 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		page: number,
 		pageSize: number,
 		search?: string,
-		labels?: HouseholdSearchLabels
+		labels?: HouseholdSearchLabels,
+		filters?: HouseholdFilters
 	): Promise<PaginatedResult<Household>> {
+		const matched = await this.filterHouseholds(search, labels, filters);
+		return paginateSlice(matched, page, pageSize);
+	}
+
+	async listMatchingHouseholdIds(
+		search?: string,
+		labels?: HouseholdSearchLabels,
+		filters?: HouseholdFilters
+	): Promise<string[]> {
+		const matched = await this.filterHouseholds(search, labels, filters);
+		return matched.map((h) => h._id);
+	}
+
+	private async filterHouseholds(
+		search?: string,
+		labels?: HouseholdSearchLabels,
+		filters?: HouseholdFilters
+	): Promise<Household[]> {
 		let all = await this.repo.allByType('household', isHousehold);
 		all = all.map(migrateHouseholdV3ToV4);
 		const q = search?.trim();
@@ -209,7 +282,10 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				matchesHouseholdSearch(h, q, headNames.get(h.head_evacuee_id ?? '') ?? '', labels)
 			);
 		}
-		return paginateSlice(all, page, pageSize);
+		if (filters?.status) {
+			all = all.filter((h) => h.status === filters.status);
+		}
+		return all;
 	}
 
 	async getHousehold(id: string): Promise<Household | null> {
@@ -226,6 +302,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			assertCheckoutDestination(household.checkout_destination);
 		}
 		return this.repo.put(touch({ ...household, _rev: latest._rev }));
+	}
+
+	async patchHousehold(id: string, patch: HouseholdPatch): Promise<Household> {
+		const latestDoc = await this.repo.get<Household>(id);
+		if (!latestDoc) throw new Error('ไม่พบข้อมูลครัวเรือน');
+		const latest = migrateHouseholdV3ToV4(latestDoc);
+		const next = { ...latest, ...patch };
+		assertHouseholdStatusTransition(latest.status, next.status);
+		if (next.status === 'checked_out') assertCheckoutDestination(next.checkout_destination);
+		return this.repo.put(touch(next));
 	}
 
 	/**
@@ -251,15 +337,91 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 		const latest = await this.repo.get<Household>(householdId);
 		if (!latest || !isActiveHouseholdStatus(migrateHouseholdV3ToV4(latest).status)) return;
-		await this.repo.put(touch({ ...latest, status: 'cancelled' as const }));
+		await this.repo.put(touch({ ...latest, head_evacuee_id: null, status: 'cancelled' as const }));
 	}
 
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening> {
 		return this.repo.put(buildScreening(input, ctx));
 	}
 
+	async createEvacueeWithScreening(
+		input: EvacueeInput,
+		screening: Omit<ScreeningInput, 'evacuee_id'> & { evacuee_id?: string },
+		ctx: AuthorContext
+	): Promise<{ evacuee: Evacuee; screening: Screening }> {
+		const evacuee = await this.createEvacuee(input, ctx);
+		try {
+			const screeningDoc = await this.createScreening(
+				{ ...screening, evacuee_id: evacuee._id },
+				ctx
+			);
+			return { evacuee, screening: screeningDoc };
+		} catch (err) {
+			await this.compensateFailedEvacueeRegistration(evacuee._id);
+			throw err;
+		}
+	}
+
+	async compensateFailedEvacueeRegistration(evacueeId: string): Promise<void> {
+		const medicals = await this.repo.find<Medical>({
+			selector: { type: 'medical', evacuee_id: evacueeId },
+			limit: 100
+		});
+		for (const medical of medicals.filter(isMedical)) {
+			try {
+				await this.repo.remove(medical);
+			} catch {
+				// Best-effort compensation; surface the original save error to the UI.
+			}
+		}
+
+		const latest = await this.repo.get<Evacuee>(evacueeId);
+		if (latest) {
+			try {
+				await this.repo.remove(latest);
+			} catch {
+				// Best-effort compensation.
+			}
+		}
+	}
+
+	async compensateFailedHouseholdCreate(householdId: string): Promise<void> {
+		const latestDoc = await this.repo.get<Household>(householdId);
+		if (!latestDoc) return;
+		const latest = migrateHouseholdV3ToV4(latestDoc);
+		if (latest.status !== 'arriving' && latest.status !== 'pre_registered') return;
+		const members = await this.listHouseholdMembers(householdId);
+		if (members.length > 0) return;
+		try {
+			await this.repo.remove(latest);
+		} catch {
+			// Best-effort compensation.
+		}
+	}
+
+	createMedical(input: MedicalInput, ctx: AuthorContext): Promise<Medical> {
+		return this.repo.put(buildMedical(input, ctx));
+	}
+
 	listMedicals(): Promise<Medical[]> {
 		return this.repo.allByType('medical', isMedical);
+	}
+
+	async updateMedical(medical: Medical): Promise<Medical> {
+		const latest = await this.repo.get<Medical>(medical._id);
+		if (!latest) throw new Error('ไม่พบข้อมูลสุขภาพ');
+		return this.repo.put(touch({ ...medical, _rev: latest._rev }));
+	}
+
+	async patchMedical(id: string, patch: MedicalPatch): Promise<Medical> {
+		const latest = await this.repo.get<Medical>(id);
+		if (!latest) throw new Error('ไม่พบข้อมูลสุขภาพ');
+		return this.repo.put(touch({ ...latest, ...patch }));
+	}
+
+	async deleteMedical(id: string): Promise<void> {
+		const latest = await this.repo.get<Medical>(id);
+		if (latest) await this.repo.remove(latest);
 	}
 
 	listMovements(): Promise<Movement[]> {
@@ -323,6 +485,23 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		assertHouseholdStatusTransition(household.status, 'cancelled');
 
 		const members = await this.listHouseholdMembers(householdId);
+		const since = now();
+		let cancelledMembers = 0;
+
+		for (const member of members) {
+			if (member.current_stay.status !== 'pre_registered') continue;
+			await this.repo.put(
+				touch({
+					...member,
+					current_stay: {
+						...member.current_stay,
+						status: 'cancelled' as const,
+						since
+					}
+				})
+			);
+			cancelledMembers += 1;
+		}
 
 		const updatedHousehold = touch({
 			...household,
@@ -339,12 +518,86 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				context: {
 					previous_status: household.status,
 					next_status: 'cancelled',
-					member_count: members.length
+					member_count: members.length,
+					cancelled_member_count: cancelledMembers
 				}
 			},
 			ctx
 		);
 		await this.repo.put(audit);
+	}
+
+	async cancelEvacueePreRegistration(evacueeId: string, ctx: AuthorContext): Promise<void> {
+		const evacuee = await this.getEvacuee(evacueeId);
+		if (!evacuee) {
+			throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+		}
+		if (!canCancelEvacueePreRegistration(evacuee)) {
+			throw new Error('สามารถยกเลิกได้เฉพาะผู้ที่อยู่ในสถานะลงทะเบียนล่วงหน้าเท่านั้น');
+		}
+
+		const since = now();
+		await this.repo.put(
+			touch({
+				...evacuee,
+				current_stay: {
+					...evacuee.current_stay,
+					status: 'cancelled' as const,
+					since
+				}
+			})
+		);
+
+		const audit = createAuditEntry(
+			{
+				action: 'other',
+				target_type: 'evacuee',
+				target_id: evacueeId,
+				reason: 'ยกเลิกการลงทะเบียนล่วงหน้า',
+				context: {
+					previous_status: 'pre_registered',
+					next_status: 'cancelled',
+					household_id: evacuee.household_id
+				}
+			},
+			ctx
+		);
+		await this.repo.put(audit);
+
+		if (!evacuee.household_id) return;
+
+		const household = await this.getHousehold(evacuee.household_id);
+		if (!household || household.status !== 'pre_registered') return;
+
+		const members = await this.listHouseholdMembers(household._id);
+		const stillPreRegistered = members.some(
+			(m) => m._id !== evacueeId && m.current_stay.status === 'pre_registered'
+		);
+		if (stillPreRegistered) return;
+
+		assertHouseholdStatusTransition(household.status, 'cancelled');
+		await this.repo.put(
+			touch({
+				...household,
+				status: 'cancelled' as const
+			})
+		);
+
+		const householdAudit = createAuditEntry(
+			{
+				action: 'other',
+				target_type: 'household',
+				target_id: household._id,
+				reason: 'ยกเลิกการลงทะเบียนครัวเรือนล่วงหน้า — ไม่มีสมาชิกค้าง pre_registered',
+				context: {
+					previous_status: 'pre_registered',
+					next_status: 'cancelled',
+					triggered_by_evacuee_id: evacueeId
+				}
+			},
+			ctx
+		);
+		await this.repo.put(householdAudit);
 	}
 }
 

@@ -8,7 +8,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
-	import { getDonationStore } from '../../routes/public/donations/donation.svelte';
+	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import QRCode from 'qrcode';
 	import { toast } from 'svelte-sonner';
 

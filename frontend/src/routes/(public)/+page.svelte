@@ -1,0 +1,281 @@
+<script lang="ts">
+	import type { PageData } from './$types';
+	import { onMount } from 'svelte';
+	import MapPin from '@lucide/svelte/icons/map-pin';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
+	import Search from '@lucide/svelte/icons/search';
+	import HelpCircle from '@lucide/svelte/icons/help-circle';
+	import ExternalLink from '@lucide/svelte/icons/external-link';
+	import PhoneCall from '@lucide/svelte/icons/phone-call';
+	import Package from '@lucide/svelte/icons/package';
+	import Compass from '@lucide/svelte/icons/compass';
+	import * as Accordion from '$lib/components/ui/accordion/index.js';
+	import PublicQuickServiceCard from '$lib/components/public-quick-service-card.svelte';
+	import PublicEmergencyBanner from '$lib/components/public-emergency-banner.svelte';
+	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';
+	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
+
+	let { data }: { data: PageData } = $props();
+
+	// Real alerts logic should be implemented later, removing demo data
+	const alerts: { name: string; capacity: string; variant: string }[] = [];
+
+	// OP-7: Polling state
+	let lastUpdated = $state(0);
+	$effect(() => {
+		if (!lastUpdated) lastUpdated = data.lastUpdated;
+	});
+	let isStale = $state(false);
+
+	onMount(() => {
+		const pollInterval = setInterval(async () => {
+			try {
+				const response = await fetch('/api/public/v1/transparency/summary');
+				if (response.ok) {
+					const newData = await response.json();
+					data.summary = newData.summary;
+					lastUpdated = newData.lastUpdated;
+					isStale = newData.isStale;
+					data.flags = newData.flags;
+				}
+			} catch (e) {
+				console.error('Polling failed', e);
+			}
+		}, 600000); // 10 mins
+
+		// Stale threshold 30 minutes check
+		const staleCheck = setInterval(() => {
+			if (Date.now() - lastUpdated > 1800000) {
+				// 30 mins
+				isStale = true;
+			}
+		}, 60000); // Check every minute
+
+		return () => {
+			clearInterval(pollInterval);
+			clearInterval(staleCheck);
+		};
+	});
+
+	// Read emergency banner switch from API flags
+	let showDemoEmergency = $derived(data.flags?.emergency_mode ?? false);
+</script>
+
+<svelte:head>
+	<title>Smart Shelter — Public & RFL Portal</title>
+</svelte:head>
+
+<PublicPageShell class="space-y-8">
+	<!-- 1. ประกาศด่วนและอื่นๆ -->
+	{#if data.announcements && data.announcements.length > 0}
+		{#each data.announcements as announcement (announcement._id || announcement.id)}
+			<!-- Show shelter alerts demo only in the first emergency announcement if emergency_mode is on -->
+			<PublicEmergencyBanner
+				{announcement}
+				alerts={announcement.severity === 'emergency' && showDemoEmergency ? alerts : []}
+			/>
+		{/each}
+	{/if}
+
+	<!-- 2. Hero & Real-Time Metrics (T-57) -->
+	{#if data.isError}
+		<div
+			class="rounded-xl border border-destructive/20 bg-destructive/10 p-6 text-center text-destructive"
+		>
+			<ShieldAlert class="mx-auto mb-2 h-8 w-8" />
+			<h3 class="text-lg font-bold">ระบบขัดข้อง</h3>
+			<p class="text-sm">ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาลองใหม่ภายหลัง</p>
+		</div>
+	{:else}
+		<PublicHeroMetrics summary={data.summary} flags={data.flags} {lastUpdated} {isStale} />
+	{/if}
+
+	<!-- 3. เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์ -->
+	<section>
+		<div class="mb-8">
+			<div class="mb-2 flex items-center gap-2">
+				<Compass class="h-5 w-5 text-muted-foreground" />
+				<h2 class="text-xl font-bold text-foreground">
+					เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์
+				</h2>
+			</div>
+			<p class="text-xs text-muted-foreground">
+				ดำเนินการติดต่อ ลงทะเบียน หรือประสานขอโอนย้ายเพื่อรับรองความช่วยเหลือที่รวดเร็ว
+			</p>
+		</div>
+
+		<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+			<!-- ลงทะเบียนผู้ประสบภัย -->
+			<PublicQuickServiceCard
+				title="ลงทะเบียนผู้ประสบภัย"
+				badge="ด่วนที่สุด"
+				badgeClass="bg-danger-muted text-danger"
+				description="ท่านสามารถยื่นขอลงทะเบียนเข้าพัก สแกนเข้าออก หรือจองสิทธิ์ล่วงหน้าเพื่อจัดสรรเต็นท์ส่วนตัว ยา และเครื่องนุ่งห่ม"
+				icon={ShieldAlert}
+				iconClass="bg-danger-muted/30 text-danger"
+			>
+				<PublicActionBtn disabled>ลงทะเบียน (เร็วๆนี้)</PublicActionBtn>
+			</PublicQuickServiceCard>
+
+			<!-- สำหรับผู้ใจบุญ / บริจาค -->
+			<PublicQuickServiceCard
+				title="สำหรับผู้ใจบุญ/บริจาค"
+				badge="Wishlist"
+				badgeClass="bg-primary-muted text-primary"
+				description="ร่วมประสานงานมอบอาหารปรุงสุก วัตถุดิบ น้ำดื่ม หรือสมทบกองทุน EOC ข้อมูลจัดซื้อโปร่งใส ตรวจสอบได้ทันที"
+				icon={Package}
+				iconClass="bg-primary-muted/50 text-primary"
+			>
+				<PublicActionBtn href="/donations">แจ้งบริจาคสิ่งของล่วงหน้า</PublicActionBtn>
+				<PublicActionBtn variant="outline" disabled
+					>ดูบัญชีรับบริจาค / บอร์ดขอของ (เร็วๆนี้)</PublicActionBtn
+				>
+			</PublicQuickServiceCard>
+
+			<!-- สำหรับทีมอาสาสมัคร -->
+			<div>
+				<PublicQuickServiceCard
+					title="สำหรับทีมอาสาสมัคร"
+					badge="ร่วมแรงกาย"
+					badgeClass="bg-chart-2/15 text-chart-2"
+					description="ร่วมลงทะเบียนจองกะงานฝ่ายสวัสดิการ แจกจ่าย ขนย้าย แพทย์สนาม หรือสนับสนุนเจ้าหน้าที่ ณ พื้นที่อุทกภัยชายแดนใต้"
+					icon={UserPlus}
+					iconClass="bg-chart-2/15 text-chart-2"
+				>
+					<PublicActionBtn disabled>สมัคร / จองกะช่วยเหลือ (เร็วๆนี้)</PublicActionBtn>
+				</PublicQuickServiceCard>
+			</div>
+
+			<!-- สืบค้นผู้ประสบภัย -->
+			<PublicQuickServiceCard
+				title="สืบค้นผู้ประสบภัย"
+				badge="PDPA Shield"
+				badgeClass="bg-accent-purple-muted text-accent-purple"
+				description="เช็ครายชื่อผู้ประสบภัย ปลอดภัยในพิกัดศูนย์ควบคุม ตรึงระบบเก็บรวบรวมหลักฐานและส่งต่ออย่างเป็นความลับขั้นสูงสุด"
+				icon={Search}
+				iconClass="bg-accent-purple-muted/50 text-accent-purple"
+			>
+				<PublicActionBtn href="/search">ค้นหารายบุคคลด่วนที่สุด</PublicActionBtn>
+			</PublicQuickServiceCard>
+		</div>
+	</section>
+
+	<!-- 4. Help Center & Emergency Contacts -->
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+		<!-- ศูนย์รวมความช่วยเหลือ (Help Center) -->
+		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
+			<div class="mb-2 flex items-center gap-2">
+				<div
+					class="flex h-7 w-7 items-center justify-center rounded-full bg-primary-muted text-primary"
+				>
+					<HelpCircle class="h-4 w-4" />
+				</div>
+				<h2 class="text-lg font-bold text-foreground">
+					ศูนย์รวมความช่วยเหลือ (EOC Help Center & FAQ)
+				</h2>
+			</div>
+
+			<p class="mb-5 text-sm text-muted-foreground">
+				คำถามที่พบบ่อยระดับศูนย์รวมคำชักซ้อมจากประชาชน ดึงพิกัดข้อมูลจัดตั้งเรียลไทม์จากระบบตั้งค่า
+				FAQ ของฝ่ายบริหารศูนย์ (EOC Dashboard Setup)
+			</p>
+
+			<div class="flex flex-col gap-4">
+				<Accordion.Root type="single">
+					{#each data.faqs as faq, i (faq.id || i)}
+						<Accordion.Item
+							value="item-{i}"
+							class="mb-3 rounded-xl border border-border px-4 py-2 shadow-sm"
+						>
+							<Accordion.Trigger class="text-left hover:no-underline">
+								<div class="flex items-center gap-3">
+									<div
+										class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-dark text-xs font-bold text-white"
+									>
+										{i + 1}
+									</div>
+									<span class="text-sm font-bold">{faq.question}</span>
+								</div>
+							</Accordion.Trigger>
+							<Accordion.Content
+								class="pt-2 text-sm leading-relaxed whitespace-pre-line text-muted-foreground"
+							>
+								{faq.answer}
+							</Accordion.Content>
+						</Accordion.Item>
+					{:else}
+						<div class="py-4 text-center text-sm text-muted-foreground">
+							ยังไม่มีข้อมูลคำถามที่พบบ่อย
+						</div>
+					{/each}
+				</Accordion.Root>
+
+				<a
+					href="/shelters"
+					class="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary-muted/30 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary-muted/50"
+				>
+					<MapPin class="h-4 w-4" />
+					ตรวจสอบพิกัดแผนที่แต่ละศูนย์และบ้านพี่เลี้ยง
+					<ExternalLink class="h-3 w-3" />
+				</a>
+			</div>
+		</div>
+
+		<!-- ติดต่อฉุกเฉินและด่วน -->
+		<div
+			class="flex h-fit flex-col justify-center rounded-2xl bg-[#1e293b] p-6 text-white shadow-sm lg:p-8"
+		>
+			<div
+				class="mb-4 inline-flex w-fit items-center rounded-full bg-white/10 px-3 py-1 text-xs font-bold tracking-wider text-white"
+			>
+				OPERATIONS ON STANDBY 24/7
+			</div>
+
+			<div class="mb-3 flex items-start gap-3">
+				<PhoneCall class="mt-1 h-6 w-6 shrink-0 text-chart-2" />
+				<h2 class="text-xl leading-tight font-bold">
+					ประสานการกู้ชีพฉุกเฉินและหน่วยเคลื่อนที่เร็ว
+				</h2>
+			</div>
+			<p class="mb-6 text-sm leading-relaxed text-white/70">
+				หากติดค้างอยู่ในตึกจมน้ำ เจ็บครรภ์คลอด สัตว์มีพิษกัด หรือต้องการรถย้ายระดับสูงพิกัดตำบล
+				ประสานงานโดยอัตโนมัติ
+			</p>
+
+			<div class="flex flex-col gap-3">
+				<!-- โทร 1669 -->
+				<a
+					href="tel:1669"
+					class="flex items-center justify-between rounded-xl bg-danger px-5 py-4 font-bold transition-colors hover:bg-danger/90"
+				>
+					<div class="flex items-center gap-3">
+						<div
+							class="flex h-5 w-5 items-center justify-center rounded-full border border-white text-xs"
+						>
+							i
+						</div>
+						<span class="text-base text-white">โทร 1669</span>
+					</div>
+					<span class="rounded-lg bg-black/20 px-3 py-1.5 text-[11px] text-white"
+						>สายด่วนกู้ชีพแพทย์ฉุกเฉิน</span
+					>
+				</a>
+
+				<!-- โทร 1784 -->
+				<a
+					href="tel:1784"
+					class="flex items-center justify-between rounded-xl bg-warning px-5 py-4 font-bold transition-colors hover:bg-[#b45309]"
+				>
+					<div class="flex items-center gap-3">
+						<PhoneCall class="h-4 w-4 text-white" />
+						<span class="text-base text-white">โทร 1784</span>
+					</div>
+					<span class="rounded-lg bg-black/20 px-3 py-1.5 text-[11px] text-white"
+						>ศูนย์เตือนภัย ปภ. พายุคุกคาม</span
+					>
+				</a>
+			</div>
+		</div>
+	</div>
+</PublicPageShell>

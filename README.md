@@ -46,20 +46,19 @@ GIS, Model 3 ระดับ, SOP, ข้อเสนอเชิงนโยบ
 **Topology (central-first + LAN fallback):**
 
 ```
-device (PouchDB) ⇄ WAN ⇄ central (CouchDB 3.5)
-      │                        │ edge fallback replica
-      └──── LAN (fallback) ⇄ edge (CouchDB @ศูนย์)
+Browser  ──HTTP (/couch)──>  central (CouchDB 3.5)
+   │                           │ (LAN failover)
+   └─────HTTP (LAN)────────>  edge (CouchDB @ศูนย์)
 ```
 
-App เขียน local PouchDB ก่อนเสมอ; sync กับ active remote เดียว (central ปกติ,
-edge เฉพาะ WAN outage, local-only ถ้าไม่เห็นทั้งคู่)
+App เป็น Remote-first ยิงตรงหา CouchDB Server ผ่าน HTTP โดยใช้ Session Cookie (ไร้ PouchDB / Local DB บนอุปกรณ์)
 
 สิ่งที่มีในโค้ดตอนนี้:
 
 - **Domain model** — evacuee, household, medical, movement, stock, donation, donation campaign
   (`features/people`, `features/operations`)
 - **Role-based access** — CouchDB `_session`; roles: `system_admin` | `shelter:{code}` + function roles
-- **Offline-first** — PouchDB sync ผ่าน `/couch` proxy (same-origin, first-party cookie)
+- **Remote-first** — ยิงตรงหา CouchDB ผ่าน `/couch` proxy (same-origin, first-party cookie)
 - **Admin ops** — dev-server API routes (`/api/register`, `/api/admin/users`) ถือ admin credentials ฝั่ง server
 
 > demo เก่า (shelter A/B/C) ถูกย้ายไป `demo/` แล้ว — ไม่ได้ build ใน production
@@ -67,7 +66,7 @@ edge เฉพาะ WAN outage, local-only ถ้าไม่เห็นทั
 ## Tech stack (ย่อ)
 
 - **Frontend**: SvelteKit 2 + Svelte 5 (runes) + TypeScript, Tailwind CSS v4, shadcn-svelte
-- **Data**: client-side ล้วน — TanStack Query, PouchDB (offline) sync กับ CouchDB 3.5
+- **Data**: client-side ล้วน — TanStack Query + Remote CouchDB client ยิงตรงหา CouchDB 3.5
 - **Backend**: CouchDB 3.5 ตรงจาก browser (cookie session auth ผ่าน dev proxy `/couch`)
 - **Deploy**: SPA/PWA เสิร์ฟด้วย Node server (`adapter-node`, `ssr = false`) — Node รัน `/api/*` server endpoints ด้วย
 

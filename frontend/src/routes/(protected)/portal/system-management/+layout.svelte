@@ -26,7 +26,7 @@
 		return null;
 	});
 
-	const pageTitle = $derived(currentPageNode?.label ?? 'ทะเบียนพื้นที่และศูนย์พักพิง');
+	const pageTitle = $derived(currentPageNode?.label ?? 'ระบบส่วนกลาง');
 	const PageIcon = $derived(currentPageNode?.icon ?? Building);
 </script>
 

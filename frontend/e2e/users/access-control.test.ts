@@ -12,6 +12,10 @@
  * [Auth]    registration_staff (non-manager) → 403 FORBIDDEN
  * [RBAC-SA] SA may list all users (GET)
  * [RBAC-SA] SA may create user in any shelter with any capability (POST)
+ * [RBAC-SA] SA may create another system_admin (POST, exclusive roles)
+ * [RBAC-SA] Couch _admin may grant system_admin via BFF (SA-equivalent)
+ * [RBAC-SA] Bootstrap admin (COUCHDB_USER) cannot be listed/updated/deleted
+ * [RBAC-SA] Last app SA cannot be deleted
  * [RBAC-SA] SA may not grant _admin role → 403
  * [RBAC-SM] SM lists only own-shelter users (GET scoped)
  * [RBAC-SM] SM may create staff user in own shelter (POST)
@@ -33,6 +37,7 @@ import {
 	createCouchUser,
 	deleteCouchUser,
 	couchLogin,
+	couchBootstrapAdmin,
 	SA_ROLES,
 	SM_SH001_ROLES,
 	SM_SH002_ROLES,
@@ -233,6 +238,7 @@ test.describe('User Management API — Access Control', () => {
 		expect(names).toContain(sm1Name());
 		expect(names).toContain(sm2Name());
 		expect(names).toContain(staffName());
+		expect(names).not.toContain(couchBootstrapAdmin().name);
 	});
 
 	// ── System Admin (SA) — POST ───────────────────────────────────────────────
@@ -272,6 +278,93 @@ test.describe('User Management API — Access Control', () => {
 		});
 		expect(status).toBe(403);
 		expect((body as { error: { code: string } }).error.code).toBe('FORBIDDEN');
+	});
+
+	test('SA can create another system_admin (UAT-122)', async () => {
+		const newUser = `e2e_new_sa_${RUN_ID}`;
+		createdDuringTest.push(newUser);
+		const { status, body } = await apiPost(saSession(), {
+			name: newUser,
+			password: 'SecurePass1!',
+			display_name: 'New SA',
+			roles: ['system_admin']
+		});
+		expect(status).toBe(200);
+		expect((body as { ok: boolean }).ok).toBe(true);
+	});
+
+	test('SA cannot mix system_admin with a shelter scope → 422 VALIDATION', async () => {
+		const { status, body } = await apiPost(saSession(), {
+			name: `e2e_mixed_sa_${RUN_ID}`,
+			password: 'SecurePass1!',
+			display_name: 'Mixed',
+			roles: ['system_admin', 'shelter:SH001']
+		});
+		expect(status).toBe(422);
+		expect((body as { error: { code: string } }).error.code).toBe('VALIDATION');
+	});
+
+	test('Couch _admin may grant system_admin via BFF (SA-equivalent)', async () => {
+		const admin = couchBootstrapAdmin();
+		const session = await couchLogin(admin.name, admin.password);
+		const name = `e2e_from_admin_${RUN_ID}`;
+		createdDuringTest.push(name);
+		const { status } = await apiPost(session, {
+			name,
+			password: 'SecurePass1!',
+			display_name: 'From Admin',
+			roles: ['system_admin']
+		});
+		expect(status).toBe(200);
+	});
+
+	test('SA cannot delete or update the bootstrap admin → 403 FORBIDDEN', async () => {
+		const admin = couchBootstrapAdmin();
+		const del = await apiDelete(saSession(), admin.name);
+		expect(del.status).toBe(403);
+		expect((del.body as { error: { code: string } }).error.code).toBe('FORBIDDEN');
+		const put = await apiPut(saSession(), { name: admin.name, display_name: 'Hacked' });
+		expect(put.status).toBe(403);
+		expect((put.body as { error: { code: string } }).error.code).toBe('FORBIDDEN');
+	});
+
+	test('SA can promote staff to system_admin and demote back', async () => {
+		const target = `e2e_promote_${RUN_ID}`;
+		createdDuringTest.push(target);
+		await createCouchUser({
+			name: target,
+			password: 'SecurePass1!',
+			roles: STAFF_SH001_ROLES,
+			display_name: 'Promote Target'
+		});
+		const promo = await apiPut(saSession(), { name: target, roles: ['system_admin'] });
+		expect(promo.status).toBe(200);
+		const demo = await apiPut(saSession(), { name: target, roles: [...STAFF_SH001_ROLES] });
+		expect(demo.status).toBe(200);
+	});
+
+	test('SA can delete another SA when at least one remains', async () => {
+		const extra = `e2e_extra_sa_${RUN_ID}`;
+		const created = await apiPost(saSession(), {
+			name: extra,
+			password: 'SecurePass1!',
+			display_name: 'Extra SA',
+			roles: ['system_admin']
+		});
+		expect(created.status).toBe(200);
+		const del = await apiDelete(saSession(), extra);
+		expect(del.status).toBe(200);
+	});
+
+	test('SA cannot delete the last remaining app system_admin → 403', async () => {
+		const { body } = await apiGet(saSession());
+		const sas = (body as Array<{ name: string; roles: string[] }>).filter((u) =>
+			u.roles.includes('system_admin')
+		);
+		test.skip(sas.length !== 1, 'environment has additional app SAs');
+		const { status, body: delBody } = await apiDelete(saSession(), saName());
+		expect(status).toBe(403);
+		expect((delBody as { error: { code: string } }).error.code).toBe('FORBIDDEN');
 	});
 
 	test('SA cannot assign user to multiple shelters → 422 VALIDATION', async () => {

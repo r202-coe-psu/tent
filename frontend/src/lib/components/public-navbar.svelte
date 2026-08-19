@@ -1,31 +1,75 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Home from '@lucide/svelte/icons/home';
 	import Compass from '@lucide/svelte/icons/compass';
 	import Search from '@lucide/svelte/icons/search';
 	import Heart from '@lucide/svelte/icons/heart';
+	import PackageSearch from '@lucide/svelte/icons/package-search';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
-	// import FileText from '@lucide/svelte/icons/file-text';
-	// import UserPlus from '@lucide/svelte/icons/user-plus';
-	// import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 
-	// Function to check if route is active
 	function isActive(path: string) {
-		if (path === '/public') {
-			return page.url.pathname === '/public' || page.url.pathname === '/public/';
+		if (path === '/') {
+			return page.url.pathname === '/';
 		}
 		return page.url.pathname.startsWith(path);
 	}
 
+	function isHomePage() {
+		return page.url.pathname === '/';
+	}
+
+	function isDonatePage() {
+		const p = page.url.pathname;
+		return p === '/donations' || p === '/donations/';
+	}
+
+	function isTrackPage() {
+		return page.url.pathname.startsWith('/donations/track');
+	}
+
+	function isDonationsSection() {
+		return isDonatePage() || isTrackPage();
+	}
+
 	let mobileMenuOpen = $state(false);
+	let donationsMenuOpen = $state(false);
+	let donationsMenuEl: HTMLDivElement | undefined = $state();
 
 	function toggleMobileMenu() {
 		mobileMenuOpen = !mobileMenuOpen;
 	}
+
+	function toggleDonationsMenu() {
+		donationsMenuOpen = !donationsMenuOpen;
+	}
+
+	function closeDonationsMenu() {
+		donationsMenuOpen = false;
+	}
+
+	function handleWindowPointerDown(event: PointerEvent) {
+		if (!donationsMenuOpen || !donationsMenuEl) return;
+		if (!donationsMenuEl.contains(event.target as Node)) {
+			closeDonationsMenu();
+		}
+	}
+
+	function handleWindowKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape') closeDonationsMenu();
+	}
+
+	afterNavigate(() => {
+		donationsMenuOpen = false;
+		mobileMenuOpen = false;
+	});
 </script>
+
+<svelte:window onpointerdown={handleWindowPointerDown} onkeydown={handleWindowKeydown} />
 
 <header
 	class="sticky top-0 z-50 w-full border-b border-border bg-card/95 px-6 py-3 shadow-xs backdrop-blur-md"
@@ -33,7 +77,7 @@
 	<div class="mx-auto flex max-w-7xl items-center justify-between">
 		<!-- Logo and Title -->
 		<div class="flex items-center gap-3">
-			<a href={resolve('/public')} class="flex items-center gap-2">
+			<a href={resolve('/')} class="flex items-center gap-2">
 				<div
 					class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-muted text-primary"
 				>
@@ -64,10 +108,8 @@
 		<!-- Navbar Links -->
 		<nav class="hidden items-center gap-1 md:flex">
 			<a
-				href={resolve('/public')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-					'/public'
-				) && !isActive('/public/')
+				href={resolve('/')}
+				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isHomePage()
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
 			>
@@ -76,9 +118,9 @@
 			</a>
 
 			<a
-				href="/public/shelters"
+				href={resolve('/shelters')}
 				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-					'/public/shelters'
+					'/shelters'
 				)
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
@@ -88,9 +130,9 @@
 			</a>
 
 			<a
-				href={resolve('/public/search')}
+				href={resolve('/search')}
 				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-					'/public/search'
+					'/search'
 				)
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
@@ -99,17 +141,58 @@
 				สืบค้นญาติ
 			</a>
 
-			<a
-				href={resolve('/public/donations')}
-				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-					'/public/donations'
-				)
-					? 'bg-primary-muted text-primary'
-					: 'text-muted-foreground'}"
-			>
-				<Heart class="h-4 w-4" />
-				บริจาคและจองคิว
-			</a>
+			<!-- Donations: donate + track (CR-052 §2.6) — click toggle (not hover) -->
+			<div class="relative" bind:this={donationsMenuEl}>
+				<button
+					type="button"
+					onclick={toggleDonationsMenu}
+					aria-haspopup="menu"
+					aria-expanded={donationsMenuOpen}
+					aria-controls={donationsMenuOpen ? 'donations-menu' : undefined}
+					class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isDonationsSection() ||
+					donationsMenuOpen
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<Heart class="h-4 w-4" />
+					บริจาค
+					<ChevronDown
+						class="h-3.5 w-3.5 text-muted-foreground/75 transition-transform {donationsMenuOpen
+							? 'rotate-180'
+							: ''}"
+					/>
+				</button>
+				{#if donationsMenuOpen}
+					<div
+						id="donations-menu"
+						role="menu"
+						class="absolute right-0 mt-1 w-52 rounded-xl border border-border bg-card p-1 shadow-sm"
+					>
+						<a
+							role="menuitem"
+							href={resolve('/donations')}
+							onclick={closeDonationsMenu}
+							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isDonatePage()
+								? 'bg-primary-muted text-primary'
+								: 'text-muted-foreground'}"
+						>
+							<Heart class="h-3.5 w-3.5" />
+							บริจาคและจองคิว
+						</a>
+						<a
+							role="menuitem"
+							href={resolve('/donations/track')}
+							onclick={closeDonationsMenu}
+							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isTrackPage()
+								? 'bg-primary-muted text-primary'
+								: 'text-muted-foreground'}"
+						>
+							<PackageSearch class="h-3.5 w-3.5" />
+							ตรวจสอบสถานะ
+						</a>
+					</div>
+				{/if}
+			</div>
 
 			<a
 				href={resolve('/login')}
@@ -122,64 +205,6 @@
 				<Building2 class="h-4 w-4" />
 				ระบบหลังบ้าน
 			</a>
-
-			<!-- <a
-				href={resolve('/public/transparency' as any)}
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
-				title="เร็วๆ นี้"
-			>
-				<FileText class="h-4 w-4" />
-				รายงานความโปร่งใส
-				<span class="text-[9px] font-bold text-muted-foreground/60">(เร็วๆ นี้)</span>
-			</a> -->
-			<!-- <span
-				class="pointer-events-none flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground opacity-45 transition-colors select-none hover:bg-muted/50"
-				title="เร็วๆ นี้"
-			>
-				<FileText class="h-4 w-4" />
-				รายงานความโปร่งใส
-				<span class="text-[9px] font-bold text-muted-foreground/60">(เร็วๆ นี้)</span>
-			</span> -->
-
-			<!-- Dropdown for Volunteers -->
-			<!-- <div class="group relative">
-				<a
-					href={resolve('/public/volunteers')}
-					class="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground hover:bg-muted/50 {isActive(
-						'/public/volunteers'
-					)
-						? 'bg-primary-muted text-primary'
-						: ''}"
-				>
-					<UserPlus class="h-4 w-4" />
-					อาสาสมัคร / พี่เลี้ยง
-					<ChevronDown
-						class="h-3.5 w-3.5 text-muted-foreground/75 transition-transform group-hover:rotate-180"
-					/>
-				</a>
-				<div
-					class="absolute right-0 mt-1 hidden w-48 rounded-xl border border-border bg-card p-1 shadow-lg group-hover:block"
-				>
-					<a
-						href={resolve('/public/volunteers')}
-						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-					>
-						ลงทะเบียนอาสาสมัคร
-					</a>
-					<a
-						href={resolve('/public/volunteers/shifts' as any)}
-						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-					>
-						ตรวจสอบตารางกะงาน
-					</a>
-					<span
-						class="block rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground opacity-60"
-						title="เร็วๆ นี้"
-					>
-						ตรวจสอบตารางกะงาน
-					</span>
-				</div>
-			</div> -->
 		</nav>
 	</div>
 
@@ -188,11 +213,9 @@
 		<div class="absolute top-full left-0 w-full border-b border-border bg-card shadow-lg md:hidden">
 			<nav class="flex flex-col gap-2 p-4">
 				<a
-					href={resolve('/public')}
+					href={resolve('/')}
 					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-						'/public'
-					) && !isActive('/public/')
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isHomePage()
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
@@ -201,11 +224,11 @@
 				</a>
 
 				<a
-					href="/public/shelters"
+					href={resolve('/shelters')}
 					onclick={() => (mobileMenuOpen = false)}
 					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
 						'/shelters'
-					) && !isActive('/public/shelters')
+					)
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
@@ -214,10 +237,10 @@
 				</a>
 
 				<a
-					href={resolve('/public/search')}
+					href={resolve('/search')}
 					onclick={() => (mobileMenuOpen = false)}
 					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-						'/public/search'
+						'/search'
 					)
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
@@ -227,16 +250,25 @@
 				</a>
 
 				<a
-					href={resolve('/public/donations')}
+					href={resolve('/donations')}
 					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-						'/public/donations'
-					)
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isDonatePage()
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
 					<Heart class="h-5 w-5" />
 					บริจาคและจองคิว
+				</a>
+
+				<a
+					href={resolve('/donations/track')}
+					onclick={() => (mobileMenuOpen = false)}
+					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isTrackPage()
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<PackageSearch class="h-5 w-5" />
+					ตรวจสอบสถานะบริจาค
 				</a>
 
 				<a

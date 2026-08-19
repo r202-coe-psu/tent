@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod';
+import { shelterCodeSchema } from '$lib/db/model';
 
 // ---------------------------------------------------------------------------
 // Sub-schemas
@@ -50,6 +51,13 @@ export const referralTimelineSchema = z.object({
 });
 export type ReferralTimeline = z.infer<typeof referralTimelineSchema>;
 
+export const evacueeSummarySchema = z.object({
+	first_name: z.string().min(1),
+	last_name: z.string().min(1),
+	gender: z.string().optional()
+});
+export type EvacueeSummary = z.infer<typeof evacueeSummarySchema>;
+
 // ---------------------------------------------------------------------------
 // Discriminated union schemas for Referral Documents
 // ---------------------------------------------------------------------------
@@ -64,6 +72,7 @@ const referralBaseSchema = z.object({
 	updated_at: z.string().datetime(),
 	created_by: z.string().min(1),
 	evacuee_id: z.string().startsWith('evacuee:'),
+	evacuee_summary: evacueeSummarySchema.optional(),
 	reason: z
 		.string()
 		.min(1, 'Reason is required')
@@ -81,7 +90,7 @@ const referralBaseSchema = z.object({
 /** Capacity referral: requires to_shelter_code */
 export const capacityReferralSchema = referralBaseSchema.extend({
 	referral_type: z.literal('capacity'),
-	to_shelter_code: z.string().min(1, 'Target shelter code is required'),
+	to_shelter_code: shelterCodeSchema,
 	to_org: toOrgSchema.optional()
 });
 
@@ -143,7 +152,7 @@ export const capacityInputSchema = z
 	.object({
 		...baseInput,
 		referral_type: z.literal('capacity'),
-		to_shelter_code: z.string().min(1, 'กรุณาระบุรหัสศูนย์พักพิงปลายทาง'),
+		to_shelter_code: shelterCodeSchema,
 		to_org: toOrgSchema.optional()
 	})
 	.refine(
@@ -223,9 +232,10 @@ export function isMedicalReferral(r: Referral): r is MedicalReferral {
 /**
  * Shared factory function to construct a new draft referral body.
  */
-export function buildReferralBody(input: ReferralInput) {
+export function buildReferralBody(input: ReferralInput, evacueeSummary?: EvacueeSummary) {
 	const base = {
 		evacuee_id: input.evacuee_id,
+		evacuee_summary: evacueeSummary,
 		reason: input.reason,
 		urgency: input.urgency,
 		status: 'draft' as const,

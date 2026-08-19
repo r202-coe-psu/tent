@@ -10,7 +10,7 @@ function couchInit(user: string, password: string, couchUrl: string) {
 		configureServer() {
 			const base = couchUrl;
 			const auth = 'Basic ' + Buffer.from(`${user}:${password}`).toString('base64');
-			const dbs = ['_users', '_replicator', '_global_changes', 'notes'];
+			const dbs = ['_users', '_replicator', '_global_changes'];
 			Promise.all(
 				dbs.map((db) =>
 					fetch(`${base}/${db}`, { method: 'PUT', headers: { Authorization: auth } })
@@ -35,7 +35,6 @@ export default defineConfig(({ mode }) => {
 		/^(https?:\/\/)[^@/]+@/,
 		'$1'
 	);
-	const fastapiTarget = env.PUBLIC_FASTAPI_PROXY || 'http://localhost:9000';
 
 	return {
 		plugins: [
@@ -53,15 +52,9 @@ export default defineConfig(({ mode }) => {
 					target: couchTarget,
 					changeOrigin: true,
 					rewrite: (path) => path.replace(/^\/couch/, '')
-				},
-				// Public plane → FastAPI (dev only; prod/staging use nginx /public-api/).
-				// Strip gateway prefix so FastAPI still sees /public/v1/*.
-				// SPA /public/* and BFF /api/* are unaffected.
-				'/public-api': {
-					target: fastapiTarget,
-					changeOrigin: true,
-					rewrite: (path) => path.replace(/^\/public-api/, '')
 				}
+				// Public plane: browser → SvelteKit BFF `/api/public/v1/*` → FastAPI
+				// with EXTERNAL_API_SECRET (CR-063). No browser `/public-api` gateway.
 			}
 		},
 		test: {

@@ -5,7 +5,7 @@
 	import { Settings2, Trash2 } from '@lucide/svelte';
 	import * as Table from '$lib/components/ui/table/index.js';
 
-	import { isStaffOnly } from '$lib/auth/roles';
+	import { formatRoleList, isStaffOnly, COUCH_ADMIN } from '$lib/auth/roles';
 
 	let {
 		users,
@@ -36,6 +36,7 @@
 		</Table.Header>
 		<Table.Body>
 			{#each users as user (user.name)}
+				{@const immutable = user.roles.includes(COUCH_ADMIN)}
 				<Table.Row class="hover:bg-slate-50/50">
 					<Table.Cell class="pl-10 font-medium">{user.name}</Table.Cell>
 					<Table.Cell class="font-bold">
@@ -46,7 +47,7 @@
 							variant="secondary"
 							class="rounded-md bg-slate-100 font-semibold text-slate-700 hover:bg-slate-100/80"
 						>
-							{user.roles.join(', ') || '—'}
+							{formatRoleList(user.roles)}
 						</Badge>
 					</Table.Cell>
 					<Table.Cell class="text-center">
@@ -55,7 +56,7 @@
 								variant="secondary"
 								size="sm"
 								class="h-8 bg-blue-50 px-3 text-xs text-blue-800 hover:bg-blue-100"
-								disabled={!isSA && !isStaffOnly(user.roles)}
+								disabled={immutable || (!isSA && !isStaffOnly(user.roles))}
 								onclick={() => onedit(user)}
 							>
 								<Settings2 class="mr-1 h-3 w-3" /> จัดการ
@@ -64,7 +65,7 @@
 								variant="outline"
 								size="icon"
 								class="h-8 w-8 border-red-100 text-red-500 hover:bg-red-50 hover:text-red-600"
-								disabled={pending || (!isSA && !isStaffOnly(user.roles))}
+								disabled={pending || immutable || (!isSA && !isStaffOnly(user.roles))}
 								onclick={() => ondelete(user.name)}
 							>
 								<Trash2 class="h-4 w-4" />

@@ -1,3 +1,4 @@
+from tent_model.api_key import ApiKey
 from tent_model.db import ALL_DOCUMENTS, close_db, init_db
 from tent_model.donation_buffer import DonationBuffer, DonorBuffer
 from tent_model.donation_need_counter import DonationNeedCounter
@@ -19,11 +20,13 @@ from tent_model.sync_checkpoint import SyncCheckpoint
 
 __all__ = [
 	"ALL_DOCUMENTS",
+	"ApiKey",
 	"DeclaredItem",
 	"DonationBuffer",
 	"DonationNeedCounter",
 	"DonorBuffer",
 	"GeoPoint",
+	"PublicAnnouncement",
 	"PublicDonation",
 	"PublicNeed",
 	"PublicPerson",

@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { dev } from '$app/environment';
 import { donationPreDeclarationInputSchema, computeNeeds } from '$lib/features/donations';
 import { APP_CONFIG_DOC_ID, readAppConfig } from '$lib/features/shared';
 import type { PublicDonationDoc } from '$lib/features/donations';
@@ -15,8 +14,22 @@ import { qtyGt } from '$lib/utils/qty';
 
 const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
 
-/** Registry / public_shelters statuses that still accept public donations. */
-const DONATION_OPEN_STATUSES = new Set(['open', 'full', 'active']);
+/**
+ * Flatten FastAPI's error envelope into the shape the donor UI reads.
+ *
+ * `apiapp/core/http_error.py` wraps every `HTTPException` as `{ errors: [detail] }`,
+ * but the wizard reads `data.error` and maps the code to Thai copy via
+ * `publicDonationErrorMessage()`. Spreading the raw envelope would bury the code one
+ * level down and silently downgrade every message to the generic fallback.
+ */
+function unwrapFastapiError(body: unknown): Record<string, unknown> {
+	if (typeof body !== 'object' || body === null) return { error: 'Database save failed' };
+	const envelope = body as { errors?: unknown[] };
+	const detail = Array.isArray(envelope.errors) ? envelope.errors[0] : undefined;
+	if (typeof detail === 'object' && detail !== null) return detail as Record<string, unknown>;
+	if (typeof detail === 'string') return { error: detail };
+	return body as Record<string, unknown>;
+}
 
 export const POST = async ({ request, getClientAddress }) => {
 	try {
@@ -42,23 +55,24 @@ export const POST = async ({ request, getClientAddress }) => {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
-		// 3. CAPTCHA Check (Fail-closed in production)
-		if (!dev) {
-			if (!env.SECRET_RECAPTCHA_KEY || env.SECRET_RECAPTCHA_KEY === 'dummy-secret') {
-				console.error('SECRET_RECAPTCHA_KEY is missing or invalid in production!');
-				return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
-			}
-			if (!parsed.data.captchaToken) {
-				return json({ success: false, error: 'CAPTCHA token is required.' }, { status: 400 });
-			}
-			const isHuman = await captchaProvider.verifyToken(parsed.data.captchaToken, ip, 'donate');
-			if (!isHuman) {
-				return json({ success: false, error: 'CAPTCHA verification failed.' }, { status: 403 });
-			}
+		// 3. CAPTCHA Check (always — including dev — so local testing matches prod)
+		if (!env.SECRET_RECAPTCHA_KEY || env.SECRET_RECAPTCHA_KEY === 'dummy-secret') {
+			console.error('SECRET_RECAPTCHA_KEY is missing or invalid!');
+			return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
+		}
+		if (!parsed.data.captchaToken) {
+			return json({ success: false, error: 'CAPTCHA token is required.' }, { status: 400 });
+		}
+		const isHuman = await captchaProvider.verifyToken(parsed.data.captchaToken, ip, 'donate');
+		if (!isHuman) {
+			return json({ success: false, error: 'CAPTCHA verification failed.' }, { status: 403 });
 		}
 
-		// 3.1 Validate shelter_code — ต้องมีศูนย์นี้ใน registry และ status เป็น open|full
-		// (สอดคล้อง FastAPI PublicShelter ที่รับ open|full; registry scan by `code`)
+		// 3.1 shelter_code is validated by FastAPI against `public_shelters`
+		// (SHELTER_NOT_FOUND 404 / SHELTER_CLOSED 409) — CR-017 §Decision A puts the
+		// public plane on Mongo, so this route must not read the registry itself. The
+		// scan that used to live here pulled all 8,444 registry docs (~6.3 MB) on every
+		// donation just to read one shelter's status.
 		const shelterCode = parsed.data.shelter_code;
 		const regRes = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');
 		if (regRes.status >= 400) {
@@ -157,13 +171,7 @@ export const POST = async ({ request, getClientAddress }) => {
 
 		if (!apiRes.ok) {
 			const errBody = await apiRes.json().catch(() => ({}));
-			return json(
-				{
-					success: false,
-					...(typeof errBody === 'object' ? errBody : { error: 'Database save failed' })
-				},
-				{ status: apiRes.status }
-			);
+			return json({ success: false, ...unwrapFastapiError(errBody) }, { status: apiRes.status });
 		}
 
 		const created = (await apiRes.json()) as {

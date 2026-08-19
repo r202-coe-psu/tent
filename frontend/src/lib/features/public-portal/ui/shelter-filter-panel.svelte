@@ -12,6 +12,12 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Filter from '@lucide/svelte/icons/filter';
 	import { getAllLocations } from '$lib/features/shelters';
+	import {
+		geolocationBlockReason,
+		GeolocationUnavailableError,
+		requestUserPosition,
+		type GeoUnavailableReason
+	} from '../data/geolocation';
 
 	interface Filters {
 		search?: string;
@@ -45,7 +51,7 @@
 	let {
 		filters = {},
 		availableTypes = [],
-		action = '/public/shelters',
+		action = '/shelters',
 		userLat = $bindable(''),
 		userLng = $bindable('')
 	}: {
@@ -112,33 +118,73 @@
 			.map((d) => ({ label: d, value: d }))
 	]);
 
-	onMount(async () => {
-		if (navigator.geolocation) {
-			navigator.geolocation.getCurrentPosition(
-				(position) => {
-					userLat = position.coords.latitude.toString();
-					userLng = position.coords.longitude.toString();
-				},
-				(err) => {
-					console.warn('High accuracy failed, falling back:', err);
-					navigator.geolocation.getCurrentPosition(
-						(pos) => {
-							userLat = pos.coords.latitude.toString();
-							userLng = pos.coords.longitude.toString();
-						},
-						(err2) => console.warn('Fallback geolocation error:', err2)
-					);
-				},
-				{ enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-			);
-		}
+	let locating = $state(false);
+	let geoReason = $state<GeoUnavailableReason | null>(null);
+	let hasPosition = $derived(Boolean(userLat && userLng));
+	let distanceLocked = $derived(!hasPosition && (locating || geoReason !== null));
 
-		try {
-			locationData = await getAllLocations();
-		} catch (err) {
-			console.error('Failed to load location data', err);
+	let geoHint = $derived.by(() => {
+		switch (geoReason) {
+			case 'insecure':
+				return 'ต้องเปิดผ่าน HTTPS หรือ localhost จึงใช้รัศมีจากตำแหน่งได้';
+			case 'policy':
+				return 'เบราว์เซอร์บล็อกการเข้าถึงตำแหน่งในหน้านี้';
+			case 'denied':
+				return 'ไม่ได้รับอนุญาตให้ใช้ตำแหน่ง — แสดงศูนย์ทั้งหมด';
+			case 'unsupported':
+			case 'unavailable':
+				return 'ใช้ตำแหน่งไม่ได้ — แสดงศูนย์ทั้งหมด';
+			default:
+				return locating ? 'กำลังขอตำแหน่ง...' : '';
 		}
 	});
+
+	async function ensureUserPosition(): Promise<boolean> {
+		if (hasPosition) return true;
+
+		const blocked = geolocationBlockReason();
+		if (blocked) {
+			geoReason = blocked;
+			return false;
+		}
+
+		locating = true;
+		try {
+			const pos = await requestUserPosition();
+			userLat = pos.lat;
+			userLng = pos.lng;
+			geoReason = null;
+			return true;
+		} catch (err) {
+			geoReason = err instanceof GeolocationUnavailableError ? err.reason : 'unavailable';
+			return false;
+		} finally {
+			locating = false;
+		}
+	}
+
+	onMount(async () => {
+		const locationsPromise = getAllLocations()
+			.then((data) => {
+				locationData = data;
+			})
+			.catch(() => {
+				/* province/district selects stay empty */
+			});
+
+		// First visit: request GPS so the map can show the user marker without a distance click.
+		await ensureUserPosition();
+		await locationsPromise;
+	});
+
+	async function selectDistance(km: string) {
+		if (distanceValue === km) {
+			distanceValue = '';
+			return;
+		}
+		if (!(await ensureUserPosition())) return;
+		distanceValue = km;
+	}
 
 	let hideFullToggle = $state<boolean>(false);
 	$effect(() => {
@@ -147,7 +193,7 @@
 </script>
 
 <div
-	class="flex h-[85vh] max-h-200 flex-col rounded-2xl border border-border bg-card p-5 shadow-xs"
+	class="flex h-[85vh] max-h-200 flex-col rounded-2xl border border-border bg-card p-5 shadow-sm"
 >
 	<div class="mb-4 flex shrink-0 items-center gap-2">
 		<Filter class="h-4 w-4 text-primary" />
@@ -229,24 +275,28 @@
 				<!-- Distance radio pills -->
 				<div class="space-y-3">
 					<div class="text-xs font-bold text-foreground">รัศมีจากตำแหน่งของคุณ (GPS)</div>
-					<div class="flex gap-2 rounded-lg border border-border bg-muted/20 p-1">
-						<input type="hidden" name="distance" value={distanceValue} />
+					<div
+						class="flex gap-2 rounded-lg border border-border bg-muted/20 p-1"
+						title={geoHint || undefined}
+					>
+						<input type="hidden" name="distance" value={hasPosition ? distanceValue : ''} />
 						{#each ['5', '10', '20'] as km (km)}
 							<button
 								type="button"
-								class="flex-1 rounded-md py-1.5 text-center text-[13px] font-medium transition-all {distanceValue ===
+								disabled={distanceLocked}
+								class="flex-1 rounded-md py-1.5 text-center text-[13px] font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 {distanceValue ===
 								km
 									? 'bg-primary-dark font-bold text-white'
 									: 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
-								onclick={() => {
-									if (distanceValue === km) distanceValue = '';
-									else distanceValue = km;
-								}}
+								onclick={() => selectDistance(km)}
 							>
 								{km} กม.
 							</button>
 						{/each}
 					</div>
+					{#if geoHint}
+						<p class="text-[11px] text-muted-foreground">{geoHint}</p>
+					{/if}
 				</div>
 
 				<!-- Hidden geolocation inputs -->

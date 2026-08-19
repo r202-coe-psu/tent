@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response
 
+from ...core.security import verify_external_secret
 from .schemas import NeedsListResponse
 from .use_case import NeedsUseCase, get_needs_use_case
 
-router = APIRouter(prefix="/public/v1/needs", tags=["Needs"])
+router = APIRouter(
+    prefix="/public/v1/needs",
+    tags=["Needs"],
+    dependencies=[Depends(verify_external_secret)],
+)
 
 CACHE_CONTROL = "public, max-age=600"
 

@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4)"
 status: approved
 created: 2026-06-04
-updated: 2026-07-25 # §3 Purchase note sync กับ CR-032 Option A (ถอนคำว่า atomic gate) + แก้ข้อเท็จจริงเรื่อง validate_doc_update (CR-032 amend)
+updated: 2026-08-14 # §3 FR-34 CR-075 — Couch _admin may grant system_admin (SA-equivalent); CR-074 exclusive/last-SA/bootstrap lock
 closes: K-12 (A1 RBAC phase-blocker)
 ---
 
@@ -86,9 +86,12 @@ closes: K-12 (A1 RBAC phase-blocker)
 | สร้าง/ลบ user (login) + assign role | FR-34 | ✓ | scope (staff) | — | — | — |
 
 **หมายเหตุ:**
-- **FR-34 user creation (แก้ 2026-06-18):** SM สร้าง/ลบได้เฉพาะ **staff** (`registration_staff`/`kitchen_staff`/`warehouse_staff`)
+- **FR-34 user creation (แก้ 2026-06-18, CR-074 / CR-075 2026-08-14):** SM สร้าง/ลบได้เฉพาะ **staff** (`registration_staff`/`kitchen_staff`/`warehouse_staff`)
   ใน **ศูนย์ตน** (shelter derive จาก session) — สร้าง `shelter_manager`/`system_admin` หรือข้ามศูนย์ = SA เท่านั้น.
-  การกำหนด role/scope permission ยังคง SA only. ผ่าน `POST /api/v1/users` (api-contract.md §3).
+  Grant `system_admin` ได้เมื่อ caller เป็น SA-equivalent (`system_admin` หรือ Couch `_admin` — CR-075).
+  `roles` ของ SA ต้องเป็น `["system_admin"]` เท่านั้น (`shelter_id = null`). ห้ามลบ/ลดสิทธิ์ app SA คนสุดท้าย.
+  CouchDB server admin (`COUCHDB_USER` / `_admin`) ห้ามลบ/แก้/สร้างทับชื่อผ่านแอป. UI สร้าง SA อยู่ที่
+  `/portal/system-management/users` เท่านั้น. การกำหนด role/scope permission ยังคง SA only. ผ่าน `POST /api/v1/users` (api-contract.md §3).
 - WS เห็นเฉพาะ inventory/donation ของศูนย์ตน — **ไม่เห็น** Person/medical (ดู §6)
 - catalog (FR-27) = master ข้ามศูนย์ → SA only
 - SM ดู stock dashboard ได้ (วางแผน) แต่ไม่ write ledger โดยตรง (เว้นแต่ KS tasks ใน §4)

@@ -47,7 +47,7 @@
 	}
 </script>
 
-<div class="space-y-4">
+<div class="space-y-5 sm:space-y-4">
 	<!-- Isolation Needed alert card -->
 	{#if needsIsolation}
 		<div
@@ -70,33 +70,28 @@
 	<Button
 		type="button"
 		variant="outline"
+		aria-pressed={isHealthy}
 		onclick={toggleHealthy}
-		class="h-auto w-full rounded-xl border-2 p-4 text-center font-semibold transition-colors {isHealthy
+		class="h-auto min-h-14 w-full touch-manipulation rounded-xl border-2 p-4 text-center font-semibold transition-colors sm:min-h-12 sm:p-3 {isHealthy
 			? 'border-green-500 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-950/50'
 			: 'border-border bg-muted/30 text-muted-foreground hover:border-green-400 hover:bg-green-50/50'}"
 	>
 		{isHealthy ? '✅' : '🟩'} ไม่มีอาการป่วย (Healthy / No Symptoms)
 	</Button>
-	{#if isHealthy}
-		<div class="flex items-center justify-end pt-6">
-			<Button type="button" onclick={handleNext} class="h-10 px-6 text-sm font-semibold">
-				ถัดไป →
-			</Button>
-		</div>
-	{/if}
 
 	<!-- Symptom groups -->
 	{#each EWAR_SYMPTOM_GROUPS as group (group.title)}
-		<div class="space-y-2">
+		<div class="space-y-2.5 sm:space-y-2">
 			<p class="text-sm font-semibold text-foreground">{group.title}</p>
-			<div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-2 lg:grid-cols-3">
 				{#each group.symptoms as symptom (symptom.id)}
 					<Button
 						type="button"
 						variant="outline"
 						disabled={isHealthy}
+						aria-pressed={selectedSymptoms.has(symptom.id)}
 						onclick={() => toggleSymptom(symptom.id)}
-						class="flex h-auto items-start gap-2 rounded-lg border p-3 text-left text-sm font-normal transition-colors disabled:pointer-events-none disabled:opacity-40 {selectedSymptoms.has(
+						class="flex h-auto min-h-14 w-full touch-manipulation items-center gap-3 rounded-lg border p-4 text-left text-sm font-normal transition-colors disabled:pointer-events-none disabled:opacity-40 sm:min-h-11 sm:gap-2 sm:p-3 {selectedSymptoms.has(
 							symptom.id
 						)
 							? 'border-primary bg-primary/10 text-foreground hover:bg-primary/15'
@@ -113,12 +108,23 @@
 	{/each}
 
 	<!-- Back + Next row -->
-	<div class="flex items-center justify-between border-t border-border pt-6">
-		<Button type="button" variant="outline" onclick={onBack} class="h-10 px-6 text-sm font-medium">
-			ย้อนกลับ
-		</Button>
-		<Button type="button" onclick={handleNext} class="h-10 px-6 text-sm font-semibold">
+	<div
+		class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
+	>
+		<Button
+			type="button"
+			onclick={handleNext}
+			class="h-12 w-full px-6 text-sm font-semibold sm:h-10 sm:w-auto"
+		>
 			ถัดไป →
+		</Button>
+		<Button
+			type="button"
+			variant="outline"
+			onclick={onBack}
+			class="h-12 w-full px-6 text-sm font-medium sm:h-10 sm:w-auto"
+		>
+			ย้อนกลับ
 		</Button>
 	</div>
 </div>

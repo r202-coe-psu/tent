@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
+from ...core.security import verify_external_secret
 from .schemas import ShelterDetailResponse, ShelterListResponse
 from .use_case import ShelterUseCase, get_shelter_use_case
 
-router = APIRouter(prefix="/public/v1/shelters", tags=["Shelters"])
+router = APIRouter(
+    prefix="/public/v1/shelters",
+    tags=["Shelters"],
+    dependencies=[Depends(verify_external_secret)],
+)
 CACHE_CONTROL = "public, max-age=600"
 
 

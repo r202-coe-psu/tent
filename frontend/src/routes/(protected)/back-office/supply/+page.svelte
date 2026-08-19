@@ -1,35 +1,16 @@
 <script lang="ts">
-	import {
-		ReceiveStockForm,
-		StockTable,
-		useStockBalance,
-		useLedger
-	} from '$lib/features/operations';
-	import { useSupplyItems } from '$lib/features/supply';
-	import * as Dialog from '$lib/components/ui/dialog';
+	import { StockTable } from '$lib/features/operations';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { qtyGt, qtyLte } from '$lib/utils/qty';
-	import Package from '@lucide/svelte/icons/package';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Boxes from '@lucide/svelte/icons/boxes';
-	import PackagePlus from '@lucide/svelte/icons/package-plus';
-	import TrendingUp from '@lucide/svelte/icons/trending-up';
-	import XCircle from '@lucide/svelte/icons/x-circle';
 	import Scale from '@lucide/svelte/icons/scale';
-	import { ResourceDashboard } from '$lib/features/sop-ratios/components';
 	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
 	import { shelterCodeFromRoles } from '$lib/auth/roles';
 	import { useDashboardOccupancy } from '$lib/features/dashboard';
-
-	// ─── Queries ──────────────────────────────────────────────────────────────
-	const balanceQuery = useStockBalance();
-	const itemsQuery = useSupplyItems();
-	const ledgerQuery = useLedger();
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
-	const balance = $derived(balanceQuery.data ?? new Map<string, string>());
-	const items = $derived(itemsQuery.data ?? []);
-	const ledger = $derived(ledgerQuery.data ?? []);
 	const isOffline = $derived(authStore.needsReauth);
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -38,31 +19,16 @@
 	const occupancyQuery = useDashboardOccupancy(() => shelterCode ?? '');
 	const occupancy = $derived(occupancyQuery.data?.active ?? 0);
 
-	// ─── Active Tab State ─────────────────────────────────────────────────────
-	let activeTab = $state<'inventory' | 'sphere'>('inventory');
+	type TabKey = 'inventory' | 'sphere';
+	const activeTab = $derived<TabKey>(
+		page.url.searchParams.get('tab') === 'sphere' ? 'sphere' : 'inventory'
+	);
 
-	// ─── Modal state ──────────────────────────────────────────────────────────
-	let isReceiveModalOpen = $state(false);
-
-	// ─── KPI Calculations ─────────────────────────────────────────────────────
-	const totalItems = $derived(items.length);
-
-	const emptyCount = $derived.by(() => {
-		return items.filter((i) => qtyLte(balance.get(i._id) ?? '0', 0)).length;
-	});
-
-	const lowStockCount = $derived.by(() => {
-		return items.filter((i) => {
-			const qty = balance.get(i._id) ?? '0';
-			return qtyGt(qty, 0) && i.reorder_level !== null && qtyLte(qty, i.reorder_level);
-		}).length;
-	});
-
-	const recentActivityCount = $derived.by(() => {
-		// Filter movements recorded today (last 24 hours)
-		const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-		return ledger.filter((entry) => Date.parse(entry.occurred_at) > oneDayAgo).length;
-	});
+	function setTab(tab: TabKey) {
+		const url = new URL(page.url);
+		url.searchParams.set('tab', tab);
+		goto(url, { replaceState: true, keepFocus: true, noScroll: true });
+	}
 </script>
 
 <svelte:head>
@@ -92,7 +58,7 @@
 	<div class="flex">
 		<div class="inline-flex rounded-xl border border-border/40 bg-muted/60 p-1 shadow-sm">
 			<button
-				onclick={() => (activeTab = 'inventory')}
+				onclick={() => setTab('inventory')}
 				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold tracking-wide transition-all duration-300 active:scale-[0.98] md:px-5 md:py-2.5 {activeTab ===
 				'inventory'
 					? 'border border-border/60 bg-background text-primary shadow-sm'
@@ -102,7 +68,7 @@
 				รายการพัสดุในคลัง (Stock Inventory)
 			</button>
 			<button
-				onclick={() => (activeTab = 'sphere')}
+				onclick={() => setTab('sphere')}
 				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold tracking-wide transition-all duration-300 active:scale-[0.98] md:px-5 md:py-2.5 {activeTab ===
 				'sphere'
 					? 'border border-border/60 bg-background text-primary shadow-sm'
@@ -121,7 +87,7 @@
 		</div>
 	{:else if activeTab === 'sphere'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
-			<ResourceDashboard {shelterCode} />
+			<ResourceNeedsDashboard />
 		</div>
 	{/if}
 </div>

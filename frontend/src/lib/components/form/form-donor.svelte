@@ -6,7 +6,7 @@
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { toast } from 'svelte-sonner';
-	import { getDonationStore } from '../../../routes/public/donations/donation.svelte';
+	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { PUBLIC_DONATION_CATEGORIES } from '$lib/features/donations';
 
 	const donationStore = getDonationStore();

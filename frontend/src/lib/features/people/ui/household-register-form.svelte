@@ -19,6 +19,7 @@
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import CheckSquare from '@lucide/svelte/icons/check-square';
 	import Check from '@lucide/svelte/icons/check';
+	import { toast } from 'svelte-sonner';
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { getAllLocations } from '$lib/features/shelters/data/thailand-location.api';
 
@@ -38,7 +39,7 @@
 		showNewHouseholdForm?: boolean;
 	} = $props();
 
-	let searchMode: 'exact' | 'fuzzy' = $state('exact');
+	let searchMode: 'exact' | 'fuzzy' = $state('fuzzy');
 	let searchQuery = $state('');
 	let searchAddressNo = $state('');
 
@@ -46,6 +47,7 @@
 	let selectedLocation = $state<LocationRow | null>(null);
 	let locationItems = $state.raw<{ value: string; label: string }[]>([]);
 	let locationsLoading = $state(true);
+	let locationsError = $state<string | null>(null);
 
 	onMount(async () => {
 		try {
@@ -57,19 +59,42 @@
 					label
 				};
 			});
-		} catch (err) {
-			console.error('Failed to load locations', err);
+			locationsError = null;
+		} catch {
+			locationsError =
+				'โหลดรายการที่อยู่ไม่สำเร็จ กรุณาลองใหม่ หรือกรอกที่อยู่เองตอนสร้างครอบครัวใหม่';
+			toast.error('โหลดรายการที่อยู่ไม่สำเร็จ — ค้นหาด้วยที่อยู่ยังใช้ไม่ได้ชั่วคราว');
 		} finally {
 			locationsLoading = false;
 		}
 	});
 
+	async function retryLocations() {
+		locationsLoading = true;
+		locationsError = null;
+		try {
+			const data = await getAllLocations();
+			locationItems = data.map((item) => {
+				const label = `ต.${item.subdistrict} อ.${item.district} จ.${item.province} ${item.zipcode}`;
+				return {
+					value: JSON.stringify(item),
+					label
+				};
+			});
+		} catch {
+			locationsError =
+				'โหลดรายการที่อยู่ไม่สำเร็จ กรุณาลองใหม่ หรือกรอกที่อยู่เองตอนสร้างครอบครัวใหม่';
+			toast.error('โหลดรายการที่อยู่ไม่สำเร็จ — ค้นหาด้วยที่อยู่ยังใช้ไม่ได้ชั่วคราว');
+		} finally {
+			locationsLoading = false;
+		}
+	}
+
 	$effect(() => {
 		if (selectedLocationValue) {
 			try {
 				selectedLocation = JSON.parse(selectedLocationValue);
-			} catch (err) {
-				console.error(err);
+			} catch {
 				selectedLocation = null;
 			}
 		} else {
@@ -276,14 +301,14 @@
 <div class="space-y-6">
 	<!-- Search Section -->
 	<form
-		class="rounded-2xl border border-border bg-card p-6 shadow-sm"
+		class="space-y-4"
 		onsubmit={(e) => {
 			e.preventDefault();
 			doSearch();
 		}}
 	>
 		<!-- Search Mode Toggle -->
-		<div class="mb-6 flex overflow-hidden rounded-xl bg-muted/50 p-1">
+		<div class="flex flex-col overflow-hidden rounded-xl bg-muted/50 p-1 sm:flex-row">
 			<button
 				type="button"
 				class="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors {searchMode ===
@@ -302,7 +327,7 @@
 			>
 				<span class="mr-2 {searchMode === 'exact' ? 'text-primary' : 'text-muted-foreground'}"
 					>◉</span
-				> ค้นหาด้วยบุคคล (Exact Match)
+				> ค้นหาด้วยบุคคล
 			</button>
 			<button
 				type="button"
@@ -322,14 +347,14 @@
 			>
 				<span class="mr-2 {searchMode === 'fuzzy' ? 'text-primary' : 'text-muted-foreground'}"
 					>◎</span
-				> ค้นหาด้วยที่อยู่ (Fuzzy Match)
+				> ค้นหาด้วยที่อยู่
 			</button>
 		</div>
 
 		{#if searchMode === 'exact'}
 			<div class="space-y-3">
 				<Label class="text-sm font-medium">เบอร์โทรศัพท์ หรือ เลขบัตรประจำตัวประชาชน</Label>
-				<div class="flex gap-3">
+				<div class="flex flex-col gap-3 sm:flex-row">
 					<div class="relative flex-1">
 						<Search
 							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -337,16 +362,16 @@
 						<Input
 							bind:value={searchQuery}
 							placeholder="089-999-9999"
-							class="h-11 bg-muted/20 pl-9"
+							class="h-12 bg-muted/20 pl-9 sm:h-11"
 						/>
 					</div>
-					<Button type="submit" class="h-11 bg-[#003B71] px-6 hover:bg-[#002a50]">
+					<Button type="submit" variant="default" class="h-12 px-6 sm:h-11">
 						<Search class="mr-2 h-4 w-4" /> ค้นหาครอบครัว
 					</Button>
 					<Button
 						type="button"
-						variant="outline"
-						class="h-11 border-[#003B71] text-[#003B71] hover:bg-blue-50"
+						variant="secondary"
+						class="h-12 sm:h-11"
 						onclick={() => {
 							showNewHouseholdForm = true;
 							selectedHouseholdId = null;
@@ -358,18 +383,28 @@
 			</div>
 		{:else}
 			<div class="space-y-4">
+				{#if locationsError}
+					<div
+						class="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+						role="alert"
+					>
+						<p>{locationsError}</p>
+						<Button type="button" variant="outline" size="sm" onclick={retryLocations}>
+							ลองใหม่
+						</Button>
+					</div>
+				{/if}
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div class="space-y-2">
 						<Label class="text-sm font-medium">บ้านเลขที่ / ซอย / ถนน</Label>
 						<Input
 							bind:value={searchAddressNo}
 							placeholder="พิมพ์ตัวเลขนำหน้า เช่น 12/3 หรือ 45"
-							class="h-11 bg-muted/20"
+							class="h-12 bg-muted/20 sm:h-11"
 						/>
 					</div>
 					<div class="relative space-y-2">
-						<Label class="text-sm font-medium">ค้นหา ตำบล / อำเภอ / รหัสไปรษณีย์ ( dropdown )</Label
-						>
+						<Label class="text-sm font-medium">ค้นหา ตำบล / อำเภอ / รหัสไปรษณีย์</Label>
 						<SearchSelect
 							name="household_location"
 							options={locationItems}
@@ -377,14 +412,16 @@
 							placeholder="พิมพ์เพื่อค้นหา เช่น บ้านพรุ หรือ 90250"
 							loading={locationsLoading}
 							loadingText="กำลังโหลดข้อมูลที่อยู่..."
-							class="h-11 rounded-md border-border bg-muted/20"
+							disabled={!!locationsError}
+							class="h-12 rounded-md border-border bg-muted/20 sm:h-11"
 						/>
 					</div>
 				</div>
 
 				<Button
 					type="submit"
-					class="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#003B71] font-bold text-white hover:bg-[#002a50]"
+					variant="default"
+					class="flex h-12 w-full items-center justify-center gap-2 rounded-xl font-bold"
 				>
 					<Search class="mr-2 h-4 w-4" /> ค้นหาครอบครัวจากที่อยู่ (Fuzzy Match)
 				</Button>
@@ -509,9 +546,7 @@
 
 		<!-- Selected Alert -->
 		{#if selectedResult}
-			<div
-				class="mt-8 rounded-2xl border border-green-200 bg-[#ecfdf5] p-5 shadow-sm transition-all duration-300 md:p-6"
-			>
+			<div class="mt-6 rounded-xl border border-green-200 bg-[#ecfdf5] p-4 md:p-5">
 				<div class="flex items-start gap-3">
 					<CheckSquare class="mt-0.5 h-6 w-6 shrink-0 text-[#00a86b]" />
 					<div class="space-y-1.5 text-green-900">
@@ -536,14 +571,16 @@
 	<!-- Not Found Alert -->
 	{#if searchState === 'not_found' && !showNewHouseholdForm}
 		<div
-			class="flex flex-col items-center justify-center gap-5 rounded-3xl border border-amber-200 bg-[#fffdf5] px-6 py-10 text-center shadow-sm"
+			class="flex flex-col items-center justify-center gap-4 px-2 py-6 text-center"
+			role="status"
 		>
-			<div class="flex items-center gap-2 text-lg font-bold text-red-600">
+			<div class="flex items-center gap-2 text-base font-bold text-red-600">
 				<X class="h-6 w-6 stroke-[3]" /> ไม่พบครอบครัวลงทะเบียนด้วยข้อมูลนี้ในระบบ
 			</div>
 			<Button
 				type="button"
-				class="h-10 rounded-xl bg-[#003B71] px-6 hover:bg-[#002a50]"
+				variant="default"
+				class="h-12 w-full rounded-xl px-6 sm:h-10 sm:w-auto"
 				onclick={() => (showNewHouseholdForm = true)}
 			>
 				<Plus class="mr-2 h-4 w-4" /> ลงทะเบียนเป็นครอบครัวใหม่ที่อยู่นี้
@@ -553,11 +590,8 @@
 
 	<!-- New Household Form -->
 	{#if showNewHouseholdForm}
-		<form
-			class="rounded-3xl border border-border bg-card p-6 shadow-sm md:p-8"
-			onsubmit={handleNewHouseholdSubmit}
-		>
-			<div class="mb-6">
+		<form class="space-y-6 border-t border-border pt-6" onsubmit={handleNewHouseholdSubmit}>
+			<div>
 				<h3 class="flex items-center gap-2 text-lg font-bold">
 					🏡 กรอกข้อมูลที่อยู่ (สร้างครอบครัวใหม่)
 				</h3>
@@ -652,17 +686,22 @@
 				</p>
 			</div>
 
-			<div class="mt-8 flex justify-end gap-3 border-t pt-6">
+			<div class="mt-8 flex flex-col gap-3 border-t pt-6 sm:flex-row-reverse sm:justify-start">
+				<Button
+					type="submit"
+					variant="default"
+					disabled={pending}
+					class="h-12 w-full px-6 sm:h-11 sm:w-auto"
+				>
+					ถัดไป (ข้อมูลสัตว์เลี้ยง/ยานพาหนะ)
+				</Button>
 				<Button
 					type="button"
 					variant="outline"
-					class="h-11 px-6"
+					class="h-12 w-full px-6 sm:h-11 sm:w-auto"
 					onclick={() => (showNewHouseholdForm = false)}
 				>
 					ยกเลิก
-				</Button>
-				<Button type="submit" disabled={pending} class="h-11 bg-[#003B71] px-6 hover:bg-[#002a50]">
-					ถัดไป (ข้อมูลสัตว์เลี้ยง/ยานพาหนะ)
 				</Button>
 			</div>
 		</form>

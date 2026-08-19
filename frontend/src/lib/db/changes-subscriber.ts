@@ -51,7 +51,8 @@ export function classifyChangesPollStatus(
  * mechanism (CR-033 decision B).
  *
  * On 401/403 the entire subscriber hard-stops (abort all pollers) and sets
- * `needsReauth`. The root layout restarts the feed only after a successful login.
+ * `needsReauth`. `startStaffCouchSync` in the protected layout restarts the
+ * feed only after a successful login.
  */
 export function startChangesSubscriber(dbNames: string[]): ChangesSubscriberHandle {
 	if (!browser) return { stop: () => {} };

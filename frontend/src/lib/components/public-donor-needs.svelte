@@ -6,7 +6,7 @@
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import X from '@lucide/svelte/icons/x';
-	import { getDonationStore } from '../../routes/public/donations/donation.svelte';
+	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import { PUBLIC_DONATION_CATEGORIES } from '$lib/features/donations';
 
 	const donationStore = getDonationStore();
