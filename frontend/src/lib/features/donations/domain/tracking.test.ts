@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	canCancelDonation,
 	canEditCourierTracking,
 	donationStatusLabel,
 	formatTrackSchedule,
@@ -40,5 +41,27 @@ describe('toDonationTrackView', () => {
 			})
 		).toBe(true);
 		expect(canEditCourierTracking('received', { delivery_method: 'parcel' })).toBe(false);
+	});
+});
+
+describe('canCancelDonation', () => {
+	it('allows cancel only while the reservation still awaits drop-off', () => {
+		expect(canCancelDonation('declared')).toBe(true);
+	});
+
+	it('refuses once staff took over or the booking already closed', () => {
+		// Same DONOR_EDITABLE_STATUSES set both write paths gate on — the button must not
+		// offer an action that DELETE would answer with 400.
+		for (const status of [
+			'pending_review',
+			'verifying',
+			'received',
+			'redirected',
+			'rejected',
+			'expired',
+			'cancelled'
+		]) {
+			expect(canCancelDonation(status)).toBe(false);
+		}
 	});
 });
