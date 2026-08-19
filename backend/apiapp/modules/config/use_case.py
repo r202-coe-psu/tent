@@ -18,10 +18,15 @@ class ConfigUseCase:
             logger.info("No config:public_portal found in database or missing faqs.public")
             return ConfigResponse(faqs=[])
         
-        items = doc["faqs"]["public"]
+        items = doc.get("faqs", {}).get("public", [])
         faqs = [FaqItem(**item) for item in items if item.get("is_published", False)]
         faqs.sort(key=lambda x: x.order)
-        return ConfigResponse(faqs=faqs)
+        return ConfigResponse(
+            faqs=faqs,
+            line_oa_url=doc.get("line_oa_url"),
+            facebook_url=doc.get("facebook_url"),
+            phone_number=doc.get("phone_number"),
+        )
 
 def get_config_use_case(db: AsyncIOMotorDatabase = Depends(get_database)) -> ConfigUseCase:
     return ConfigUseCase(db)

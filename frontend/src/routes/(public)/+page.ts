@@ -5,10 +5,11 @@ import type { Announcement } from '$lib/features/announcements';
 export const load: PageLoad = async ({ fetch }) => {
 	let faqs: FaqItem[] = [];
 	let announcements: Announcement[] = [];
+	let configData: any = {};
 	try {
 		const configRes = await fetch('/api/public/v1/config/faqs');
 		if (configRes.ok) {
-			const configData = await configRes.json();
+			configData = await configRes.json();
 			faqs = configData.faqs || [];
 		}
 	} catch (e) {
@@ -29,7 +30,7 @@ export const load: PageLoad = async ({ fetch }) => {
 		const response = await fetch('/api/public/v1/transparency/summary');
 		if (response.ok) {
 			const data = await response.json();
-			return { ...data, faqs, announcements };
+			return { ...data, configData, announcements, faqs };
 		}
 	} catch (e) {
 		console.error('Failed to fetch summary metrics', e);

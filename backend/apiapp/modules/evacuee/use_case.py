@@ -94,29 +94,41 @@ class EvacueeUseCase:
 
     async def _find_persons(self, parsed: ParsedSearchQuery) -> list[PublicPerson]:
         if parsed.kind == SearchQueryKind.NATIONAL_ID:
-            person = await PublicPerson.find_one(
+            return await PublicPerson.find(
                 PublicPerson.national_id_hash == national_id_hash(parsed.normalized),
                 {"search_excluded": {"$ne": True}},
-            )
-            return [person] if person else []
+            ).limit(NAME_RESULT_LIMIT).to_list()
 
         if parsed.kind == SearchQueryKind.PASSPORT:
-            person = await PublicPerson.find_one(
+            return await PublicPerson.find(
                 PublicPerson.passport_hash == passport_hash(parsed.normalized),
                 {"search_excluded": {"$ne": True}},
-            )
-            return [person] if person else []
+            ).limit(NAME_RESULT_LIMIT).to_list()
 
         if parsed.kind == SearchQueryKind.PHONE:
-            person = await PublicPerson.find_one(
+            return await PublicPerson.find(
                 PublicPerson.phone_hash == phone_hash(parsed.normalized),
                 {"search_excluded": {"$ne": True}},
-            )
-            return [person] if person else []
+            ).limit(NAME_RESULT_LIMIT).to_list()
+
+        import re
+        terms = [re.escape(t) for t in parsed.normalized.strip().split() if t]
+        
+        if not terms:
+            return []
+
+        and_clauses = []
+        for term in terms:
+            and_clauses.append({
+                "$or": [
+                    {"first_name": {"$regex": term, "$options": "i"}},
+                    {"last_name_masked": {"$regex": term, "$options": "i"}}
+                ]
+            })
 
         return (
             await PublicPerson.find(
-                {"$text": {"$search": parsed.normalized}},
+                {"$and": and_clauses},
                 {"search_excluded": {"$ne": True}},
             )
             .limit(NAME_RESULT_LIMIT)

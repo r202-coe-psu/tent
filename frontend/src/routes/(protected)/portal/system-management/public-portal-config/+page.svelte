@@ -18,9 +18,19 @@
 	];
 
 	function navigateToType(type: string) {
-		goto(`${resolve('/back-office/public-portal-config')}?type=${encodeURIComponent(type)}`, {
-			replaceState: true
-		});
+		goto(
+			`${resolve('/portal/system-management/public-portal-config')}?type=${encodeURIComponent(type)}`,
+			{
+				replaceState: true
+			}
+		);
+	}
+
+	function getPreviewUrl(type: string) {
+		if (type === 'public' || type === 'social') return '/';
+		if (type === 'registration') return '/register';
+		if (type === 'volunteer') return '/volunteers';
+		return '/';
 	}
 </script>
 
@@ -49,17 +59,41 @@
 							? 'border-transparent bg-primary text-primary-foreground shadow'
 							: 'border-input bg-background hover:bg-accent'}"
 					>
-						<div class="flex-1">
+						<div class="flex-1 text-left">
 							<div class="text-sm leading-tight font-semibold">{cat.label}</div>
 							<div
-								class="mt-1 text-xs {isActive
+								class="mt-1 flex items-center justify-between text-xs {isActive
 									? 'text-primary-foreground/80'
 									: 'text-muted-foreground'}"
 							>
-								{cat.desc}
+								<span>{cat.desc}</span>
 							</div>
 						</div>
 					</button>
+					{#if isActive}
+						<a
+							href={getPreviewUrl(cat.id)}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="12"
+								height="12"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline
+									points="15 3 21 3 21 9"
+								></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg
+							>
+							ดูการแสดงผลหน้าบ้าน
+						</a>
+					{/if}
 				{/each}
 			</nav>
 		</aside>
