@@ -1,9 +1,9 @@
 ---
 id: CR-055
 title: "Enforce reason ↔ ref_id invariant on stock_ledger"
-status: approved
+status: done
 date: 2026-07-25
-updated: 2026-08-14
+updated: 2026-08-15
 requested_by: project owner (design review ของ CR-032 Option A)
 decided_by: project owner
 layer: volatile
@@ -228,24 +228,24 @@ ref_id: z.string().nullable().default(null)
 
 ## Acceptance / DoD
 
-- [ ] ทุกแถวในตาราง R2 มี test ทั้งกรณี accept และ reject
-- [ ] แถวเก่าที่ละเมิด invariant ยังอ่านผ่าน `stockBalance` / `LedgerTable` / `calculateReserved` ได้ (R5)
-- [ ] audit script รันแล้วรายงานผล 0 แถวละเมิด หรือรายการที่เจ้าของรับทราบแล้ว (Q-4)
-- [ ] `docs/data/schema.md` §2.1 มีตาราง R2 + อัป `updated:`
-- [ ] **ไม่มีการประกอบ doc `stock_ledger` ด้วยมือหลงเหลือ** — `grep -rn "type: 'stock_ledger'" frontend/src/lib`
+- [x] ทุกแถวในตาราง R2 มี test ทั้งกรณี accept และ reject
+- [x] แถวเก่าที่ละเมิด invariant ยังอ่านผ่าน `stockBalance` / `LedgerTable` / `calculateReserved` ได้ (R5)
+- [x] audit script รันแล้วรายงานผล 0 แถวละเมิด หรือรายการที่เจ้าของรับทราบแล้ว (Q-4)
+- [x] `docs/data/schema.md` §2.1 มีตาราง R2 + อัป `updated:`
+- [x] **ไม่มีการประกอบ doc `stock_ledger` ด้วยมือหลงเหลือ** — `grep -rn "type: 'stock_ledger'" frontend/src/lib`
       เจอเฉพาะ `operations.ts` (นิยาม interface) · kitchen `issueRequisition` เขียนผ่าน `createStockLedger` (R7)
-- [ ] `kitchen.remote.test.ts` เดิมยังเขียว (`ref_id === requisition._id`) + มี case ใหม่ที่ `issueRequisition`
+- [x] `kitchen.remote.test.ts` เดิมยังเขียว (`ref_id === requisition._id`) + มี case ใหม่ที่ `issueRequisition`
       **โยน** เมื่อ `ref_id` ไม่ขึ้นต้นด้วย `kitchen_requisition:` (R7 × แถว `requisition` ของ R2)
-- [ ] `adjustInputSchema.ref_id` **และ** `distributeInputSchema.ref_id` เป็น `z.null()` — ส่ง string เข้าไป
+- [x] `adjustInputSchema.ref_id` **และ** `distributeInputSchema.ref_id` เป็น `z.null()` — ส่ง string เข้าไป
       แล้ว **ไม่ compile** (type-level) และ `parse` ไม่ผ่าน (runtime) · ฟอร์มปรับสต็อก/จ่ายออกยังทำงาน
       เหมือนเดิม (R8)
-- [ ] กรอก `ref_id` ผิดในฟอร์มรับสต็อกแล้วขึ้นเป็น **ข้อความใต้ช่อง `ref_id`** ไม่ใช่ error toast —
+- [x] กรอก `ref_id` ผิดในฟอร์มรับสต็อกแล้วขึ้นเป็น **ข้อความใต้ช่อง `ref_id`** ไม่ใช่ error toast —
       มี test ของ `receiveInputSchema` ที่ยืนยัน issue ออกที่ path `['ref_id']` (R9)
-- [ ] ฟอร์มรับสต็อก: source `donation` มี picker + ปุ่มบริจาคหน้างานที่มินต์ donation doc จริง (D-1 ค) ·
+- [x] ฟอร์มรับสต็อก: source `donation` มี picker + ปุ่มบริจาคหน้างานที่มินต์ donation doc จริง (D-1 ค) ·
       source `transfer_in` **ไม่ปรากฏเป็นตัวเลือก** แต่ `transfer_in`/`transfer_out` ยังอยู่ใน
       `ledgerReasonSchema` (D-3 ก) — R4
-- [ ] `pnpm check` 0 error · `pnpm test` ผ่าน · `pnpm lint` ผ่าน
-- [ ] ถ้าทำ R4 → `.svelte` ที่แตะผ่าน `svelte-autofixer` จน clean
+- [x] `pnpm check` 0 error · `pnpm test` ผ่าน · `pnpm lint` ผ่าน
+- [x] ถ้าทำ R4 → `.svelte` ที่แตะผ่าน `svelte-autofixer` จน clean
 
 ## Decision log
 
@@ -317,6 +317,27 @@ ref_id: z.string().nullable().default(null)
     error toast ตอน mutation แทนข้อความใต้ช่อง · **ผลพลอยได้:** ความเสี่ยง "superRefine ทำ superforms
     adapter สะดุด" ที่เคยประเมินไว้สูงสุด **ตกไป** เพราะ R1 ไม่ได้แตะ schema ที่ฟอร์มใช้
   - **§Impact แก้ข้อเท็จจริง** เรื่อง `validate_doc_update` (ดูหัวข้อนั้น) — คำเคาะ Q-6 (ก) คงเดิม
+- 2026-08-15 — **ปิดงาน · `status: done`** · ลงครบทั้ง R1–R9 ใน 5 commit บน branch `CR-055`
+  (`0e68bd17` docs · `e1e97545` R7 ครัวผ่าน factory · `bcf017d4` R1–R3 + R8 + R9 + fixture ·
+  `1f442868` schema.md ตาราง R2 · `b28c50e2` audit script · + commit ของ R4) · DoD ครบ 11 ข้อ
+  - **audit (Q-4):** `pnpm audit:ledger-refid` บนฐาน dev ที่ seed ใหม่ → **0 แถวละเมิด** จาก 10 แถวใน
+    3 shelter DB (`receive` 7 · `distribute` 2 · `purchase` 1) · แถว `purchase` มี `ref_id` เป็น
+    `purchase:{ulid}` จริง ⇒ ผลรันนี้ครอบทั้งสาขา "ต้องมี prefix" และสาขา "ต้องเป็น `null`"
+  - **สคริปต์ import `REF_PREFIX_BY_REASON` จาก domain โดยตรง ไม่ผ่าน barrel** — barrel re-export
+    `.svelte` + TanStack Query ซึ่งพังใต้ `tsx` (ข้อควรระวังเดียวกับที่ `redeploy-access.ts` บันทึกไว้) ·
+    `eslint.config.js` ยกเว้น `scripts/**` จากกฎ barrel ไว้สำหรับกรณีนี้อยู่แล้ว ⇒ **ไม่ต้องขยาย barrel**
+    ตามที่ implement plan เสนอ แต่ยังได้เจตนาเดิมคือ audit อ่านตารางเดียวกับที่ guard บังคับ
+  - **แก้ implement plan ข้อ 5 ที่ผิด:** plan สั่งลบ `handleSourceChange` โดยอ้างว่า "logic ล้างค่าย้ายไป
+    อยู่ที่ schema แล้ว" — **schema ปฏิเสธค่าได้ แต่ล้างค่าให้ไม่ได้** · ถ้าลบจริง ผู้ใช้ที่เลือกใบบริจาคแล้ว
+    สลับ source เป็น `manual` จะเหลือ `ref_id` ค้าง → R9 map เป็น `adjust` ที่บังคับ `null` → submit ไม่ผ่าน
+    โดย error ชี้ไปยังช่องที่ถูกซ่อนไปแล้ว ⇒ **คง handler ไว้** (เหลือเงื่อนไขเดียวเพราะ `transfer_in`
+    ถูกถอดออกจากฟอร์มตาม D-3)
+  - **`phone_hash` ของบริจาคหน้างานเมื่อผู้บริจาคไม่ให้เบอร์:** schema บังคับ `phone_hash` (min 1) แต่
+    `phone` เป็น nullable ⇒ ใช้ nonce ต่อใบ (`sha256Hex(crypto.randomUUID())`) เพราะ `phone_hash` มีไว้
+    เชื่อมโยงผู้บริจาคข้ามใบหลัง retention ลบเบอร์ทิ้ง — ไม่มีเบอร์ก็ไม่มีอะไรให้เชื่อม · **ถ้าเจ้าของ
+    ต้องการ semantics อื่น (เช่นบังคับกรอกเบอร์สำหรับ walk-in) ต้องตั้ง CR แก้ `walkInDonationInputSchema`**
+  - **ripple ที่ยังเปิดอยู่:** CR-059 (Active Batch) — วันที่ `distribute` มี doc ต้นเหตุ ต้องกลับมาแก้แถว
+    `distribute` ในตาราง R2 จาก `null` เป็น prefix ของ doc นั้น (บันทึกไว้สองทางแล้วใน CR-059)
 - 2026-08-14 — **เก็บ trace การ renumber ให้ครบ: `CR-045 → CR-050 → CR-055`** · entry 2026-07-26 เล่าถึงแค่
   รอบแรก (045 → 050) · รอบสอง (050 → 055) เกิดที่ commit `34960e75` เพราะ **CR-050 ถูกใช้ซ้ำ** โดย
   `CR-050-evacuee-special-needs-freeform-reconcile.md` ซึ่งเป็นคนละเรื่องสนิท · ripple ที่ตามมาแก้ในรอบนี้:
