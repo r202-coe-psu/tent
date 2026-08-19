@@ -201,6 +201,27 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 		};
 		expect(stockBalance([legal, illegal]).get('item:rice')).toBe('10');
 	});
+
+	it('still reserves against a legacy donation row whose ref_id is malformed', () => {
+		// pre-invariant rows used a truncated prefix; `calculateReserved` must keep
+		// reading them rather than throwing or silently dropping the donation
+		const donation: Donation = {
+			...declaredItemsDonation(),
+			_id: 'donation:legacy-A',
+			status: 'received',
+			items: [{ item_id: 'item:water', qty: '20', unit: 'ขวด' }]
+		};
+		const malformed = {
+			...write('receive', null),
+			reason: 'donation' as const,
+			ref_id: 'don:legacy-A'
+		};
+
+		// the malformed pointer does not match the donation, so it stays unkeyed
+		expect(calculateReserved([donation], [malformed]).get('item:water')).toBe('20');
+		// and the read path did not throw on the way through
+		expect(keyedDonationIds([malformed]).has('don:legacy-A')).toBe(true);
+	});
 });
 
 describe('purchase — createPurchase + keyPurchaseReceipt (CR-032)', () => {

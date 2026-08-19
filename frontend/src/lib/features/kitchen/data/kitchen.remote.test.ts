@@ -134,6 +134,39 @@ describe('KitchenRemoteRepository.issueRequisition — ledger deduction pattern'
 		expect(rows[0].occurred_at).toBe(rows[1].occurred_at);
 	});
 
+	// CR-055 R7 × the `requisition` row of R2 — the point of routing kitchen
+	// through `createStockLedger` is that a bad `ref_id` cannot reach the
+	// database. Forcing the requisition to mint a wrong-prefixed `_id` is the
+	// only way to reach that branch, since `issueRequisition` otherwise derives
+	// `ref_id` from a `kitchen_requisition:` id it built itself.
+	it('rejects when the ref_id would not be a kitchen_requisition id', async () => {
+		const kitchenDomain = await import('../domain/kitchen');
+		const spy = vi
+			.spyOn(kitchenDomain, 'createKitchenRequisition')
+			.mockImplementation((input, ledgerIds, authorCtx) => ({
+				...kitchenDomain.createKitchenRequisition(input, ledgerIds, authorCtx),
+				_id: 'not_a_requisition:01JBOGUS'
+			}));
+
+		try {
+			await expect(
+				repo.issueRequisition(
+					{
+						meal_plan_id: null,
+						items: [{ item_id: 'item:rice', qty_requested: 1, qty_issued: 1, unit: 'kg' }]
+					},
+					ctx
+				)
+			).rejects.toThrow();
+		} finally {
+			spy.mockRestore();
+		}
+
+		// nothing partial was written — the guard fires before bulkDocs
+		const rows = await memoryRepo.allByType('stock_ledger', isStockLedger);
+		expect(rows.some((r) => r.reason === 'requisition')).toBe(false);
+	});
+
 	it('ledger_ids in requisition match actual written doc _ids', async () => {
 		const result = await repo.issueRequisition(
 			{
