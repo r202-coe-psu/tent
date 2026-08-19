@@ -12,7 +12,6 @@ import { getShelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { AuditAction } from '$lib/features/shared';
 import { operationsRepository } from '../data/operations.remote';
-import { createWalkInDonation } from '../domain/operations';
 import type {
 	DonationCampaign,
 	CampaignInput,
@@ -123,18 +122,24 @@ export const useReceiveStock = () => {
 };
 
 /**
- * Mutation hook that mints a walk-in donation document (CR-055 R4 / D-1).
+ * Mutation hook for goods that arrive without a booking (CR-055 R4 / D-1).
  *
- * Goods that arrive without a booking have no donation doc to point at, so the
- * receive form's picker would be empty and the stock could not be keyed at all.
- * This creates the missing source document first; the caller then uses the
- * returned `_id` as the ledger's `ref_id`.
+ * Mints the missing donation document AND the ledger row that references it in
+ * one request, so an abandoned form cannot leave a `declared` donation behind
+ * inflating reserved stock forever.
  */
-export const useCreateWalkInDonation = () => {
+export const useReceiveWalkInDonation = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: WalkInDonationInput; ctx: AuthorContext }) =>
-			operationsRepository().createDonation(createWalkInDonation(input, ctx)),
+		mutationFn: ({
+			donation,
+			receive,
+			ctx
+		}: {
+			donation: WalkInDonationInput;
+			receive: ReceiveInput;
+			ctx: AuthorContext;
+		}) => operationsRepository().receiveWalkInDonation(donation, receive, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}

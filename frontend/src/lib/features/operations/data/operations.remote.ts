@@ -13,6 +13,7 @@ import {
 	canEditPurchase,
 	stockBalance,
 	createReceiveEntry,
+	createWalkInDonation,
 	createDistributeEntry,
 	createAdjustEntry,
 	keyPurchaseReceipt,
@@ -23,6 +24,7 @@ import {
 	type DistributeInput,
 	type AdjustInput,
 	type Donation,
+	type WalkInDonationInput,
 	type DonationSlot,
 	type Purchase,
 	type PurchaseInput,
@@ -83,6 +85,30 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		const item = await supplyRepository().getItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
 		return this.addLedgerEntry(entry);
+	}
+
+	async receiveWalkInDonation(
+		donationInput: WalkInDonationInput,
+		receiveInput: ReceiveInput,
+		ctx: AuthorContext
+	): Promise<{ donation: Donation; entry: StockLedger }> {
+		const donation = createWalkInDonation(donationInput, ctx);
+		const entry = createReceiveEntry({ ...receiveInput, ref_id: donation._id }, ctx);
+
+		const item = await supplyRepository().getItem(entry.item_id);
+		assertReceiveAgainstCatalog(entry, item);
+
+		// One request for both docs (mirrors kitchen `issueRequisition` and
+		// `receivePurchase`). Writing the donation on its own — as a separate
+		// button press — would leave a `declared` donation behind whenever the
+		// receipt never followed, and `calculateReserved` counts those forever
+		// (nothing calls `expireDonation`). Minting both here means an abandoned
+		// form leaves nothing at all.
+		const [savedDonation, savedEntry] = await bulkDocs<Donation | StockLedger>(this.dbName, [
+			donation,
+			entry
+		]);
+		return { donation: savedDonation as Donation, entry: savedEntry as StockLedger };
 	}
 
 	async distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger> {

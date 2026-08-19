@@ -98,7 +98,7 @@ export {
 	useStockLedgers,
 	useDonations,
 	useCreateCampaign,
-	useCreateWalkInDonation,
+	useReceiveWalkInDonation,
 	useUpdateCampaign,
 	usePurchases,
 	useCreatePurchase,

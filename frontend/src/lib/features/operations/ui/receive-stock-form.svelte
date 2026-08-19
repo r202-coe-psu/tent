@@ -8,7 +8,8 @@
 		keyableDonations,
 		receiveInputSchema,
 		type Donation,
-		type ReceiveInput
+		type ReceiveInput,
+		type WalkInDonationInput
 	} from '../domain/operations';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useItemMasters } from '$lib/features/catalog';
@@ -16,9 +17,9 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { sha256Hex } from '$lib/db/hash';
 	import {
-		useCreateWalkInDonation,
 		useDonations,
 		useReceiveStock,
+		useReceiveWalkInDonation,
 		useStockLedgers
 	} from '../application/queries';
 	import { toast } from 'svelte-sonner';
@@ -35,7 +36,7 @@
 	const receiveMutation = useReceiveStock();
 	const donationsQuery = useDonations();
 	const ledgersQuery = useStockLedgers();
-	const walkInMutation = useCreateWalkInDonation();
+	const walkInMutation = useReceiveWalkInDonation();
 
 	// Local state for searchable items combobox
 	let searchQuery = $state('');
@@ -55,7 +56,9 @@
 	let selectedDonation = $state<Donation | null>(null);
 	let donationContainer = $state<HTMLDivElement | null>(null);
 
-	// Walk-in capture (D-1) — collapsed until the donor has no booking.
+	// Walk-in capture (D-1). This only collects donor details — the donation doc
+	// is minted at submit, alongside the ledger row, never before (see
+	// `receiveWalkInDonation`).
 	let isWalkInOpen = $state(false);
 	let walkInDonorName = $state('');
 	let walkInDonorPhone = $state('');
@@ -120,7 +123,13 @@
 		validators: zod4(receiveInputSchema),
 		resetForm: true,
 		onUpdate: async ({ form: validated }) => {
-			if (!validated.valid) {
+			// In walk-in mode `ref_id` is legitimately empty: the donation does not
+			// exist yet and is minted with the ledger row at submit. Every other
+			// field error still blocks.
+			const blocking = Object.keys(validated.errors).filter(
+				(field) => !(isWalkInOpen && field === 'ref_id')
+			);
+			if (blocking.length > 0) {
 				toast.error('กรุณาตรวจสอบข้อมูลในฟอร์ม');
 				return;
 			}
@@ -128,6 +137,16 @@
 			// Validate perishable item expiry date requirement
 			if (selectedItem?.perishable && !validated.data.lot?.expiry) {
 				toast.error(`สินค้า "${selectedItem.name}" เป็นของเสียได้ จำเป็นต้องระบุวันหมดอายุ`);
+				return;
+			}
+
+			if (isWalkInOpen) {
+				const problem = walkInError();
+				if (problem) {
+					toast.error(problem);
+					return;
+				}
+				await handleWalkInCommit(validated.data);
 				return;
 			}
 
@@ -211,6 +230,28 @@
 		});
 	}
 
+	/** Walk-in receipt: donation doc + ledger row in one request. */
+	async function handleWalkInCommit(data: ReceiveInput) {
+		const ctx = {
+			shelterCode: getShelterCode(),
+			createdBy: authStore.user?.name ?? 'unknown'
+		};
+		const donation = await buildWalkInInput(data);
+
+		toast.promise(walkInMutation.mutateAsync({ donation, receive: data, ctx }), {
+			loading: 'กำลังบันทึกข้อมูล...',
+			success: () => {
+				clearSelection();
+				resetWalkIn();
+				reset();
+				if (onsuccess) onsuccess();
+				return `บันทึกของบริจาคหน้างานของ "${donation.donor.name}" สำเร็จ!`;
+			},
+			error: (err: unknown) =>
+				err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล'
+		});
+	}
+
 	// Automatically pre-fill the selected item when preselectedItemId changes
 	$effect(() => {
 		if (preselectedItemId && (itemsQuery.data || itemMastersQuery.data)) {
@@ -233,61 +274,45 @@
 	}
 
 	/**
-	 * Mint the donation document that walk-in goods lack (CR-055 D-1).
+	 * Validate the walk-in donor fields without writing anything.
 	 *
-	 * Donation docs otherwise only arrive from the public portal, so goods handed
-	 * over at the gate have nothing for `ref_id` to point at — the picker would be
-	 * empty and the stock could not be received at all. The donation records the
-	 * line currently in the form, then becomes this receipt's `ref_id`.
+	 * The donation document is minted at submit, in the same request as the
+	 * ledger row (`receiveWalkInDonation`). Writing it here on a button press
+	 * would leave a `declared` donation behind whenever the receipt never
+	 * followed, and `calculateReserved` counts those as reserved stock forever —
+	 * nothing calls `expireDonation`.
 	 */
-	async function commitWalkInDonation() {
-		if (!$formData.item_id || !$formData.qty || !$formData.unit) {
-			toast.error('เลือกรายการสิ่งของและระบุจำนวนก่อนสร้างใบบริจาคหน้างาน');
-			return;
-		}
-		const name = walkInDonorName.trim();
-		if (!name) {
-			toast.error('ระบุชื่อผู้บริจาค');
-			return;
-		}
-		const phone = walkInDonorPhone.trim() || null;
-		if (phone && !/^[0-9]+$/.test(phone)) {
-			toast.error('เบอร์โทรต้องเป็นตัวเลขเท่านั้น');
-			return;
-		}
+	function walkInError(): string | null {
+		if (!walkInDonorName.trim()) return 'ระบุชื่อผู้บริจาค';
+		const phone = walkInDonorPhone.trim();
+		if (phone && !/^[0-9]+$/.test(phone)) return 'เบอร์โทรต้องเป็นตัวเลขเท่านั้น';
+		return null;
+	}
 
-		// `phone_hash` is what links a donor's donations together once retention
-		// drops the raw phone. With no phone there is nothing to link, so a
-		// per-donation nonce fills the required field without inventing a linkage.
+	/**
+	 * `phone_hash` is what links a donor's donations together once retention
+	 * drops the raw phone. With no phone there is nothing to link, so a
+	 * per-donation nonce fills the required field without inventing a linkage.
+	 */
+	async function buildWalkInInput(data: ReceiveInput): Promise<WalkInDonationInput> {
+		const phone = walkInDonorPhone.trim() || null;
 		const [phoneHash, trackingTokenHash] = await Promise.all([
 			sha256Hex(phone ?? crypto.randomUUID()),
 			sha256Hex(crypto.randomUUID())
 		]);
-
-		const ctx = {
-			shelterCode: getShelterCode(),
-			createdBy: authStore.user?.name ?? 'unknown'
+		return {
+			donor: { name: walkInDonorName.trim(), phone, phone_hash: phoneHash },
+			kind: 'items',
+			items: [{ item_id: data.item_id, qty: data.qty, unit: data.unit }],
+			campaign_id: null,
+			tracking_token_hash: trackingTokenHash
 		};
+	}
 
-		try {
-			const donation = await walkInMutation.mutateAsync({
-				input: {
-					donor: { name, phone, phone_hash: phoneHash },
-					kind: 'items',
-					items: [{ item_id: $formData.item_id, qty: $formData.qty, unit: $formData.unit }],
-					campaign_id: null,
-					tracking_token_hash: trackingTokenHash
-				},
-				ctx
-			});
-			selectDonation(donation);
-			isWalkInOpen = false;
-			walkInDonorName = '';
-			walkInDonorPhone = '';
-			toast.success(`สร้างใบบริจาคหน้างานของ "${name}" แล้ว`);
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'สร้างใบบริจาคหน้างานไม่สำเร็จ');
-		}
+	function resetWalkIn() {
+		isWalkInOpen = false;
+		walkInDonorName = '';
+		walkInDonorPhone = '';
 	}
 </script>
 
@@ -444,7 +469,7 @@
 		</Form.Field>
 
 		<!-- Donation picker (CR-055 R4) — only `donation` carries a ref_id here -->
-		{#if $formData.source === 'donation'}
+		{#if $formData.source === 'donation' && !isWalkInOpen}
 			<Form.Field {form} name="ref_id" class="relative col-span-1 sm:col-span-2">
 				<Form.Control>
 					{#snippet children({ props })}
@@ -523,25 +548,29 @@
 				</Form.Control>
 				<Form.FieldErrors />
 			</Form.Field>
+		{/if}
 
-			<!-- Walk-in donation (CR-055 D-1) — goods that arrive without a booking -->
+		<!-- Walk-in donation (CR-055 D-1) — goods that arrive without a booking.
+			 Only captures the donor here; the donation doc is minted with the
+			 ledger row on submit, so an abandoned form writes nothing. -->
+		{#if $formData.source === 'donation'}
 			<div class="col-span-1 sm:col-span-2">
 				{#if isWalkInOpen}
 					<div
 						class="flex flex-col gap-3 rounded-xl border border-dashed border-border bg-muted/40 p-4"
 					>
 						<div class="flex items-center justify-between">
-							<span class="text-xs font-bold text-foreground">บันทึกบริจาคหน้างาน (Walk-in)</span>
+							<span class="text-xs font-bold text-foreground">บริจาคหน้างาน (Walk-in)</span>
 							<button
 								type="button"
 								class="text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
-								onclick={() => (isWalkInOpen = false)}
+								onclick={resetWalkIn}
 							>
-								ยกเลิก
+								เลือกจากใบบริจาคแทน
 							</button>
 						</div>
 						<p class="text-xs text-muted-foreground">
-							สร้างใบบริจาคจากรายการและจำนวนที่กรอกไว้ด้านบน แล้วผูกใบนั้นเป็นที่มาของของที่รับเข้า
+							ระบบจะสร้างใบบริจาคจากรายการด้านบนพร้อมกับบันทึกของเข้าคลังในขั้นตอนเดียว
 						</p>
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 							<Input
@@ -556,20 +585,15 @@
 								class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm shadow-sm"
 							/>
 						</div>
-						<button
-							type="button"
-							disabled={walkInMutation.isPending}
-							class="h-10 cursor-pointer rounded-xl bg-secondary px-4 text-xs font-extrabold text-secondary-foreground shadow-sm transition hover:bg-secondary/90 disabled:cursor-not-allowed disabled:opacity-60"
-							onclick={commitWalkInDonation}
-						>
-							{walkInMutation.isPending ? 'กำลังสร้างใบบริจาค...' : 'สร้างใบบริจาคหน้างาน'}
-						</button>
 					</div>
 				{:else}
 					<button
 						type="button"
 						class="cursor-pointer text-xs font-bold text-primary underline-offset-2 transition hover:underline"
-						onclick={() => (isWalkInOpen = true)}
+						onclick={() => {
+							clearDonation();
+							isWalkInOpen = true;
+						}}
 					>
 						ไม่มีใบจอง? บันทึกบริจาคหน้างาน
 					</button>

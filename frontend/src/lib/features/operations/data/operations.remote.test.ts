@@ -315,6 +315,79 @@ describe('OperationsRemoteRepository', () => {
 		});
 	});
 
+	// CR-055 R4 / D-1 — walk-in goods have no donation doc to point at, so one is
+	// minted WITH the ledger row. The pairing is the point: a donation written on
+	// its own would sit at `declared` forever if the receipt never followed, and
+	// `calculateReserved` counts those as reserved stock with nothing to sweep them.
+	describe('receiveWalkInDonation (CR-055 D-1)', () => {
+		const walkIn = {
+			donor: { name: 'ผู้ใจบุญ', phone: '0800000000', phone_hash: 'hash' },
+			kind: 'items' as const,
+			items: [{ item_id: 'item:rice', qty: 10, unit: 'kg' }],
+			campaign_id: null,
+			tracking_token_hash: 'tok'
+		};
+		const receive = {
+			item_id: 'item:rice',
+			qty: 10,
+			unit: 'kg',
+			source: 'donation' as const,
+			ref_id: null
+		};
+
+		beforeEach(() => {
+			mockGetItem.mockReset();
+		});
+
+		it('writes the donation and the ledger row that references it', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			const { donation, entry } = await repo.receiveWalkInDonation(walkIn, receive, ctx);
+
+			expect(donation._id).toMatch(/^donation:/);
+			expect(donation.channel).toBe('walk_in');
+			// the ledger points at the donation minted in the same call — this is
+			// what makes the pair satisfy the R2 table
+			expect(entry.reason).toBe('donation');
+			expect(entry.ref_id).toBe(donation._id);
+
+			expect(await repo.listDonations()).toHaveLength(1);
+			expect(await repo.listLedger()).toHaveLength(1);
+		});
+
+		it('ignores any ref_id the caller passes — the fresh donation always wins', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			const { donation, entry } = await repo.receiveWalkInDonation(
+				walkIn,
+				{ ...receive, ref_id: 'donation:01JSOMEONEELSE' },
+				ctx
+			);
+
+			expect(entry.ref_id).toBe(donation._id);
+			expect(entry.ref_id).not.toBe('donation:01JSOMEONEELSE');
+		});
+
+		it('writes NOTHING when the catalog rejects the item', async () => {
+			mockGetItem.mockResolvedValue(null);
+
+			await expect(repo.receiveWalkInDonation(walkIn, receive, ctx)).rejects.toThrow(
+				'Unknown item: item:rice'
+			);
+
+			// the guard runs before the write, so no orphan donation is left behind
+			expect(await repo.listDonations()).toHaveLength(0);
+			expect(await repo.listLedger()).toHaveLength(0);
+		});
+
+		it('writes NOTHING when the unit disagrees with the catalog', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bag' } as SupplyItem);
+
+			await expect(repo.receiveWalkInDonation(walkIn, receive, ctx)).rejects.toThrow();
+			expect(await repo.listDonations()).toHaveLength(0);
+		});
+	});
+
 	// CR-032 — procurement is two separate steps: the purchase doc is declared
 	// first, the counted receipt is keyed later as plain ledger appends.
 	describe('purchase (CR-032)', () => {
