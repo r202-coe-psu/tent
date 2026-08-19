@@ -81,22 +81,14 @@ describe('POST /api/public/v1/donations', () => {
 		captchaToken: 'dummy-token'
 	};
 
-	/** Registry + campaign + donations mocks, with `config:app` present or not. */
+	/** `config:app` + campaign + donations mocks, with the config doc present or not. */
 	function mockCouchWithConfig(configDoc: Record<string, unknown> | null) {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
-			if (method === 'GET' && path.includes('/registry')) {
-				return Promise.resolve({
-					status: 200,
-					data: {
-						rows: [
-							{
-								id: 'shelter:01ABCSHELTER',
-								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
-							},
-							...(configDoc ? [{ id: 'config:app', doc: configDoc }] : [])
-						]
-					}
-				});
+			// Single-doc read by id — CouchDB answers 404 when the config is not seeded.
+			if (method === 'GET' && path === '/registry/config:app') {
+				return configDoc
+					? Promise.resolve({ status: 200, data: configDoc })
+					: Promise.resolve({ status: 404, data: { error: 'not_found' } });
 			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
@@ -159,19 +151,6 @@ describe('POST /api/public/v1/donations', () => {
 		// Mock needs recheck: remaining need is plenty (100 kg)
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 			// Shelter validation: registry lookup
-			if (method === 'GET' && path.includes('/registry')) {
-				return Promise.resolve({
-					status: 200,
-					data: {
-						rows: [
-							{
-								id: 'shelter:01ABCSHELTER',
-								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
-							}
-						]
-					}
-				});
-			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
@@ -229,19 +208,6 @@ describe('POST /api/public/v1/donations', () => {
 
 	it('forwards shelter_pickup logistics to FastAPI', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
-			if (method === 'GET' && path.includes('/registry')) {
-				return Promise.resolve({
-					status: 200,
-					data: {
-						rows: [
-							{
-								id: 'shelter:01ABCSHELTER',
-								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
-							}
-						]
-					}
-				});
-			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
@@ -296,19 +262,6 @@ describe('POST /api/public/v1/donations', () => {
 	it('returns 409 NEED_FULL if the item need target is already fully met', async () => {
 		// Mock needs recheck: target is 50, but we already have 50 or more donated
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
-			if (method === 'GET' && path.includes('/registry')) {
-				return Promise.resolve({
-					status: 200,
-					data: {
-						rows: [
-							{
-								id: 'shelter:01ABCSHELTER',
-								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
-							}
-						]
-					}
-				});
-			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
@@ -368,19 +321,6 @@ describe('POST /api/public/v1/donations', () => {
 	// exceeds what remains — not only when the need is fully closed.
 	function needsMock(qtyTarget: number, existingDeclaredQty: number) {
 		return (path: string, method: string) => {
-			if (method === 'GET' && path.includes('/registry')) {
-				return Promise.resolve({
-					status: 200,
-					data: {
-						rows: [
-							{
-								id: 'shelter:01ABCSHELTER',
-								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
-							}
-						]
-					}
-				});
-			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
@@ -459,19 +399,6 @@ describe('POST /api/public/v1/donations', () => {
 
 	it('returns 409 SLOT_FULL if the logistics slot is already fully booked', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
-			if (method === 'GET' && path.includes('/registry')) {
-				return Promise.resolve({
-					status: 200,
-					data: {
-						rows: [
-							{
-								id: 'shelter:01ABCSHELTER',
-								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
-							}
-						]
-					}
-				});
-			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
@@ -618,7 +545,9 @@ describe('POST /api/public/v1/donations', () => {
 			expect(data.error).toBe('SHELTER_CLOSED');
 		});
 
-		it('never reads the shelter registry from CouchDB', async () => {
+		it('never scans the registry to validate the shelter', async () => {
+			// The shelter check belongs to FastAPI (`public_shelters`). Only `config:app` may
+			// be read here, by id — the `_all_docs` scan cost 8,444 docs (~6.3 MB) per donation.
 			mockEmptyCouch();
 			mockFastapiCreate();
 
@@ -629,8 +558,9 @@ describe('POST /api/public/v1/donations', () => {
 
 			const registryReads = vi
 				.mocked(adminRaw)
-				.mock.calls.filter((c) => String(c[0]).includes('/registry'));
-			expect(registryReads).toHaveLength(0);
+				.mock.calls.map((c) => String(c[0]))
+				.filter((path) => path.includes('/registry'));
+			expect(registryReads).toEqual(['/registry/config:app']);
 		});
 	});
 });

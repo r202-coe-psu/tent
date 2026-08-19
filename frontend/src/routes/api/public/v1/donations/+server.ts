@@ -68,37 +68,23 @@ export const POST = async ({ request, getClientAddress }) => {
 			return json({ success: false, error: 'CAPTCHA verification failed.' }, { status: 403 });
 		}
 
-		// 3.1 shelter_code is validated by FastAPI against `public_shelters`
-		// (SHELTER_NOT_FOUND 404 / SHELTER_CLOSED 409) — CR-017 §Decision A puts the
-		// public plane on Mongo, so this route must not read the registry itself. The
-		// scan that used to live here pulled all 8,444 registry docs (~6.3 MB) on every
-		// donation just to read one shelter's status.
+		// 3.1 shelter_code (existence + open/closed) is validated by FastAPI against
+		// `public_shelters` — SHELTER_NOT_FOUND 404 / SHELTER_CLOSED 409 come back from
+		// there. CR-017 §Decision A puts the public plane on Mongo, so this route does not
+		// re-check the shelter against the registry.
 		const shelterCode = parsed.data.shelter_code;
-		const regRes = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');
-		if (regRes.status >= 400) {
-			console.error('Registry lookup failed', regRes.data);
+
+		// FastAPI has no CouchDB client of its own, so the reservation TTL rides to it on
+		// the request (schema.md §3.2). Read the single `config:app` doc by id — the
+		// `_all_docs` scan that used to live here pulled all 8,444 registry docs (~6.3 MB)
+		// on every donation.
+		const cfgRes = await adminRaw(`/registry/${APP_CONFIG_DOC_ID}`, 'GET');
+		if (cfgRes.status >= 500) {
+			console.error('config:app lookup failed', cfgRes.data);
 			return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 		}
-		const regRows =
-			(regRes.data as { rows?: { id: string; doc?: Record<string, unknown> }[] })?.rows ?? [];
-		const shelterDoc = regRows.find(
-			(r) => r.id.startsWith('shelter:') && r.doc?.code === shelterCode
-		)?.doc as { code?: string; status?: string } | undefined;
-		// config:app comes back in the registry scan above — FastAPI has no CouchDB client
-		// of its own, so the reservation TTL rides to it on the request (schema.md §3.2).
-		const appConfig = readAppConfig(regRows.find((r) => r.id === APP_CONFIG_DOC_ID)?.doc);
-		if (!shelterDoc) {
-			return json(
-				{ success: false, error: 'SHELTER_NOT_FOUND', shelter_code: shelterCode },
-				{ status: 404 }
-			);
-		}
-		if (!shelterDoc.status || !DONATION_OPEN_STATUSES.has(shelterDoc.status)) {
-			return json(
-				{ success: false, error: 'SHELTER_CLOSED', shelter_code: shelterCode },
-				{ status: 409 }
-			);
-		}
+		// 404 = config doc not seeded yet → schema defaults (TTL 72h).
+		const appConfig = readAppConfig(cfgRes.status === 200 ? cfgRes.data : null);
 
 		const dbName = `shelter_${shelterCode.toLowerCase()}`;
 
