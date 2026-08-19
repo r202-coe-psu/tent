@@ -1,10 +1,10 @@
 /**
  * T-31.10 demo — Scenario 2 (illustrative, formula-direct).
  *
- * Scenario 1 (real seeded data) never exercises the ok/gap/surplus branches because `have` is
- * always null with today's real data (the resolveHave stock-mapping seam — see the demo doc's
- * Known Limitation). This script calls the REAL `calculateResources()` with hand-picked `have`
- * values to prove those branches work. Not wired to any DB — pure domain call, no I/O.
+ * The CR-042 seed/manual path exercises `surplus` for mapped stock, facility, and area sources,
+ * while unsupported sources intentionally remain null. This script calls the REAL
+ * `calculateResources()` with hand-picked `have` values to prove the `ok`, `gap`, and `surplus`
+ * branches independently. It is not wired to any DB — pure domain call, no I/O.
  *
  * Usage: pnpm tsx --tsconfig .svelte-kit/tsconfig.json scripts/demo/t31-scenario-2-illustrative.ts
  */

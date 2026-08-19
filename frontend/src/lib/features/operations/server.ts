@@ -24,6 +24,8 @@ export {
 	isStockLedger,
 	isDonation,
 	stockLedgerInputSchema,
+	stockLedgerDocSchema,
+	parseStockLedger,
 	donationStatusSchema,
 	ledgerReasonSchema
 } from './domain/operations';

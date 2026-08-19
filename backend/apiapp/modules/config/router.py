@@ -14,6 +14,7 @@ router = APIRouter(
 
 CACHE_CONTROL = "public, max-age=60"
 
+
 @router.get("/faqs", response_model=ConfigResponse)
 async def get_faqs(
     response: Response,

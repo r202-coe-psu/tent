@@ -178,7 +178,8 @@ describe('BFF Referral List and Create Endpoints', () => {
 			expect(data).toEqual(mockCreatedReferral);
 			expect(mockCreate).toHaveBeenCalledWith(
 				expect.objectContaining({ evacuee_id: 'evacuee:1' }),
-				{ shelterCode: 'SH001', createdBy: 'sm_user' }
+				{ shelterCode: 'SH001', createdBy: 'sm_user' },
+				{ first_name: 'A', last_name: 'B', gender: 'male' }
 			);
 		});
 

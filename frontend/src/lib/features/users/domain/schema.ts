@@ -13,9 +13,9 @@ export type Capability = z.infer<typeof capabilitySchema>;
  * `system_admin` does not take a shelter (`shelter_id` omitted).
  */
 export const createUserSchema = z.object({
-	username: z.string().min(3, 'Username must be at least 3 characters'),
+	username: z.string().min(3, 'Username ต้องมีอย่างน้อย 3 ตัวอักษร'),
 	password: passwordSchema,
-	display_name: z.string().min(1, 'Display name is required'),
+	display_name: z.string().min(1, 'ชื่อที่แสดงต้องไม่ว่าง'),
 	capability: capabilitySchema,
 	shelter_id: shelterCodeSchema.optional(),
 	affiliation_tags: z.array(z.string()).optional()
@@ -33,3 +33,9 @@ export const editUserSchema = z.object({
 });
 
 export type EditUserInput = z.infer<typeof editUserSchema>;
+
+/**
+ * What the shared user form emits. Create and edit produce the same shape — the schemas differ
+ * only in strictness (edit accepts an empty password, meaning "keep the current one").
+ */
+export type UserFormInput = CreateUserInput & EditUserInput;

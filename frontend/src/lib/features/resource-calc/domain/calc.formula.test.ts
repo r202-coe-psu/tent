@@ -170,6 +170,24 @@ describe('calculateResources — validity axis (input_valid=false, status=insuff
 		}
 	});
 
+	it('reports thrown decimal inputs as invalid instead of leaking the exception', () => {
+		const thrownRatio = Symbol('ratio') as unknown as string;
+		const thrownHave = Symbol('have') as unknown as string;
+		const rows = calculateResources({
+			occupancy: 1,
+			as_of: AS_OF,
+			resources: [
+				{ key: 'ratio', kind: 'multiply', ratio: thrownRatio, have: null },
+				{ key: 'have', kind: 'multiply', ratio: '1', have: thrownHave }
+			]
+		});
+
+		for (const row of rows) {
+			expect(row.input_valid).toBe(false);
+			expect(row.data_status).toBe('invalid_input');
+		}
+	});
+
 	it('overflow (multiply and divide) → need null, input_valid false (no Infinity leak)', () => {
 		const [mul] = calc(1e308, [r('m', 'multiply', '1e308', null)]);
 		expect(mul.need).toBeNull();

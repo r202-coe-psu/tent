@@ -6,6 +6,7 @@ import {
 	qtyAbs,
 	qtyGte,
 	qtyNeg,
+	qtyStrSignedNonZeroSchema,
 	qtyStrCoercePositiveSchema,
 	qtyStrCoerceSignedNonZeroSchema,
 	subQty
@@ -162,6 +163,41 @@ export const stockLedgerInputSchema = z.object({
 	occurred_at: z.string().optional()
 });
 export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
+
+/** Full persisted stock_ledger contract used before signed-sum calculations. */
+export const stockLedgerDocSchema = z
+	.object({
+		_id: z.string().regex(/^stock_ledger:/),
+		_rev: z.string().optional(),
+		type: z.literal('stock_ledger'),
+		schema_v: z.union([z.literal(2), z.literal(3)]),
+		shelter_code: z.string().min(1),
+		created_at: z.string().datetime(),
+		updated_at: z.string().datetime(),
+		created_by: z.string().min(1),
+		item_id: z.string().min(1),
+		qty: qtyStrSignedNonZeroSchema,
+		unit: z.string().trim().min(1),
+		reason: ledgerReasonSchema,
+		ref_id: z.string().nullable(),
+		lot: z.object({ expiry: z.string().optional(), note: z.string().trim().optional() }).optional(),
+		occurred_at: z.string().datetime()
+	})
+	.passthrough()
+	.superRefine((doc, ctx) => {
+		if (doc.schema_v === 2 && doc.reason === 'purchase') {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ['reason'],
+				message: 'purchase requires stock_ledger schema_v 3'
+			});
+		}
+	});
+
+/** Parse one persisted ledger entry and fail closed before it contributes to a balance. */
+export function parseStockLedger(input: unknown): StockLedger {
+	return stockLedgerDocSchema.parse(input) as StockLedger;
+}
 
 export function createStockLedger(input: StockLedgerInput, ctx: AuthorContext): StockLedger {
 	const d = stockLedgerInputSchema.parse(input);

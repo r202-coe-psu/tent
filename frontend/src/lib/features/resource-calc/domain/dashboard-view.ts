@@ -66,11 +66,12 @@ export function rowSeverity(r: ResourceCalcResult): Severity {
 
 	// divide (facilities): severity from the shortfall ratio (gap / need).
 	if (r.status === 'surplus' || r.status === 'ok') return 'ok';
-	if (r.need == null || r.gap == null || !qtyGt(r.need, 0)) return 'ok';
+	// A complete `gap` row must have a positive need and gap. Anything else is an inconsistent
+	// persisted/legacy row and must never be presented as green.
+	if (r.need == null || r.gap == null || !qtyGt(r.need, 0) || !qtyGt(r.gap, 0)) return 'nodata';
 	const shortfall = parseQty(r.gap).dividedBy(parseQty(r.need)).toNumber();
 	if (shortfall >= FACILITY_CRIT_SHORTFALL) return 'crit';
-	if (shortfall > 0) return 'watch';
-	return 'ok';
+	return 'watch';
 }
 
 /** Count of rows per severity (for the KPI tiles). Includes a `total`. */

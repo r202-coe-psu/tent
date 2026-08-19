@@ -75,8 +75,25 @@ vi.mock('$lib/features/sop-ratios', () => ({
 	getActiveSopProfile: () => mockGetActive(),
 	SOP_RATIO_KIND: {
 		water_l_per_person_day: 'multiply',
+		drinking_water_l_per_person_day: 'multiply',
+		cooking_water_l_per_person_day: 'multiply',
+		hygiene_water_l_per_person_day: 'multiply',
+		kcal_per_adult_day: 'multiply',
+		people_per_tap: 'divide',
+		people_per_handpump: 'divide',
+		people_per_open_well: 'divide',
+		people_per_laundry: 'divide',
+		people_per_bathing: 'divide',
 		people_per_toilet_female: 'divide',
-		max_queue_minutes: 'threshold'
+		people_per_toilet_male: 'divide',
+		people_per_dining_point_adult: 'divide',
+		people_per_dining_point_child: 'divide',
+		m2_per_person_living: 'multiply',
+		m2_per_person_living_cold: 'multiply',
+		m2_per_person_total: 'multiply',
+		max_waterpoint_distance_m: 'threshold',
+		max_queue_minutes: 'threshold',
+		people_per_volunteer: 'divide'
 	}
 }));
 
@@ -100,8 +117,25 @@ const activeProfile = {
 	version: 3,
 	ratios: {
 		water_l_per_person_day: '15',
+		drinking_water_l_per_person_day: '3',
+		cooking_water_l_per_person_day: '6',
+		hygiene_water_l_per_person_day: '6',
+		kcal_per_adult_day: '2000',
+		people_per_tap: '80',
+		people_per_handpump: '500',
+		people_per_open_well: '400',
+		people_per_laundry: '100',
+		people_per_bathing: '50',
 		people_per_toilet_female: '20',
-		max_queue_minutes: '30'
+		people_per_toilet_male: '35',
+		people_per_dining_point_adult: '20',
+		people_per_dining_point_child: '10',
+		m2_per_person_living: '3.5',
+		m2_per_person_living_cold: '4.5',
+		m2_per_person_total: '45',
+		max_waterpoint_distance_m: '500',
+		max_queue_minutes: '30',
+		people_per_volunteer: '50'
 	}
 };
 
@@ -144,7 +178,7 @@ describe('DailyCalcRemoteRepository.runOnDemand', () => {
 		expect(rec.sop_override_id).toBeNull();
 		expect(rec.sop_override_version).toBeNull();
 		expect(rec.formula_v).toBe(FORMULA_V);
-		expect(rec.results).toHaveLength(3);
+		expect(rec.results).toHaveLength(20);
 
 		const byKey = Object.fromEntries(rec.results.map((r) => [r.key, r]));
 		// multiply: need = 2 × 15 = 30, have 100 → surplus
@@ -219,13 +253,18 @@ describe('DailyCalcRemoteRepository.runOnDemand', () => {
 		expect(overwritten._rev).not.toBe(first._rev);
 	});
 
-	it('upgrades a legacy record to schema_v 2 when recalculating it', async () => {
+	it('rejects a legacy record instead of silently migrating it during recalculation', async () => {
 		const first = await repo().runOnDemand('2026-07-08', ctx);
 		store.set(first._id, { ...first, schema_v: 1 });
 
-		const rec = await repo().runOnDemand('2026-07-08', ctx);
-
-		expect(rec.schema_v).toBe(2);
+		await expect(repo().runOnDemand('2026-07-08', ctx)).rejects.toMatchObject({
+			kind: 'unsupported_schema',
+			documentId: first._id
+		});
+		expect(putDoc).not.toHaveBeenCalledWith(
+			'shelter_sh001',
+			expect.objectContaining({ type: 'audit' })
+		);
 	});
 
 	it('throws when there is no active SOP profile', async () => {
@@ -245,6 +284,16 @@ describe('DailyCalcRemoteRepository.get / listRange', () => {
 		expect(got?._id).toBe('daily_calc:2026-07-08');
 	});
 
+	it('get fails closed when the persisted snapshot uses an unsupported schema', async () => {
+		const created = await repo().runOnDemand('2026-07-08', ctx);
+		store.set(created._id, { ...created, schema_v: 1 });
+
+		await expect(repo().get('2026-07-08')).rejects.toMatchObject({
+			kind: 'unsupported_schema',
+			documentId: created._id
+		});
+	});
+
 	it('listRange returns only in-range snapshots, ascending by date', async () => {
 		await repo().runOnDemand('2026-07-06', ctx);
 		await repo().runOnDemand('2026-07-08', ctx);
@@ -259,5 +308,15 @@ describe('DailyCalcRemoteRepository.get / listRange', () => {
 			'daily_calc:2026-07-08',
 			'daily_calc:2026-07-10'
 		]);
+	});
+
+	it('listRange fails closed instead of silently dropping one malformed snapshot', async () => {
+		const created = await repo().runOnDemand('2026-07-08', ctx);
+		store.set(created._id, { ...created, schema_v: 1 });
+
+		await expect(repo().listRange('2026-07-08', '2026-07-08')).rejects.toMatchObject({
+			kind: 'unsupported_schema',
+			documentId: created._id
+		});
 	});
 });

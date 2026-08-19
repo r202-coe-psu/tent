@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-07-23
+updated: 2026-08-17
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -49,7 +49,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `registry` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
 | `catalog` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
 | `_users` | ✓ master | ✓ **filtered replica** (เฉพาะ user ของศูนย์ตน) | — | central `_session` | central → edge (selector by role `shelter:{id}`) เพื่อ fallback login |
-| `central_ops` | ✓ เท่านั้น | — | — | central-only service/read model | — (search_audit, export_job, `counter:shelter`) |
+| `central_ops` | ✓ เท่านั้น | — | — | central-only service/read model & cross-tenant store | — (search_audit, export_job, `counter:shelter`, `referral`) |
 
 - 1 ศูนย์ = 1 db → ปิดศูนย์ = หยุด replication + purge ทั้ง db ที่ central, ล้าง edge server ทั้งเครื่อง
 - ศูนย์ 20,000 คน: traffic ปกติวิ่งกับ **central**; ถ้า WAN/central ล่มระหว่าง onboarding จึง failover ไป
@@ -129,7 +129,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `volunteer` | mutable (LWW) | อาสาสมัคร (คนละ doc กับ `_users` — อาสาไม่มี login ก็ได้) |
 | `shift_assignment` | mutable (LWW) | ตารางเวร |
 | `shelter_report` | state machine | รายงานในศูนย์ (`kind`: grievance \| incident) — [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md) |
-| `referral` | state machine | ส่งต่อหน่วยงานนอก: `draft→sent→accepted|rejected→closed` |
+| `referral` | state machine | ส่งต่อหน่วยงานนอก/ข้ามศูนย์: `draft→sent→accepted|rejected→closed` (จัดเก็บที่ `central_ops` — ดู schema.md §5.4) |
 | `audit` | **append-only** | การกระทำสำคัญ (override duplicate-hint, แก้ retroactive, export, ลบ) |
 
 State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc พร้อม `status` ใหม่ (LWW) — ตัว transition ที่ขัดกัน

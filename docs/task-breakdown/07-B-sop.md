@@ -73,6 +73,7 @@ note: >
 - Edge cases ครอบ: occupancy = 0, ratio ขาด, **ศูนย์ไม่มี override → fall back master**, stock = 0 หรือข้อมูลยังไม่ sync — ไม่ crash, แสดงสถานะข้อมูลไม่พอ
 - Demo คำนวณศูนย์ตัวอย่าง 1 วันเต็มตรงกับคำนวณมือ
 - ถอด `rice_g_per_person_meal` จาก runtime `SOP_RATIO_KEYS` ให้ตรง [CR-021](../changes/CR-021-sop-ratio-scope-handbook-plus-volunteer.md)
+- หลักฐานการปิดงานและ verification gates: [T-31 Exit Criteria](../status/T-31-exit-criteria.md)
 
 ### T-32 — Resource calculation dashboard (FR-46)
 
