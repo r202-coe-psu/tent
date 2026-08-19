@@ -12,6 +12,8 @@ import {
 	createCampaign,
 	openNeeds,
 	calculateReserved,
+	keyedDonationIds,
+	keyableDonations,
 	isNeedCutOff,
 	deriveNeedAvailability,
 	createReceiveEntry,
@@ -475,6 +477,69 @@ describe('openNeeds', () => {
 		};
 		const remainingClosed = openNeeds(closedCampaign, [], []);
 		expect(remainingClosed).toHaveLength(0);
+	});
+});
+
+// CR-055 R4 — what the receive form's picker is allowed to offer. The picker is
+// the reason `ref_id` can no longer be mistyped, so the filter deciding what
+// goes in it carries the same weight as the write guard itself.
+describe('keyableDonations + keyedDonationIds (CR-055 R4)', () => {
+	const donation = (over: Partial<Donation>): Donation => ({
+		...declaredItemsDonation(),
+		...over
+	});
+
+	const keyedRow = (refId: string | null, reason: LedgerReason = 'donation') => ({
+		...createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: '10',
+				unit: 'kg',
+				reason: 'receive' as LedgerReason,
+				ref_id: null
+			},
+			ctx
+		),
+		reason,
+		ref_id: refId
+	});
+
+	it('collects the donation ids that already have a donation ledger row', () => {
+		const keyed = keyedDonationIds([
+			keyedRow('donation:A'),
+			keyedRow('purchase:P', 'purchase'),
+			keyedRow(null, 'adjust')
+		]);
+		expect([...keyed]).toEqual(['donation:A']);
+	});
+
+	it('offers declared and unkeyed received donations', () => {
+		const declared = donation({ _id: 'donation:A', status: 'declared' });
+		const received = donation({ _id: 'donation:B', status: 'received' });
+		const offered = keyableDonations([declared, received], []);
+		expect(offered.map((d) => d._id)).toEqual(['donation:A', 'donation:B']);
+	});
+
+	it('drops a donation once a ledger row keys it', () => {
+		const declared = donation({ _id: 'donation:A', status: 'declared' });
+		const keyed = donation({ _id: 'donation:B', status: 'received' });
+		const offered = keyableDonations([declared, keyed], [keyedRow('donation:B')]);
+		expect(offered.map((d) => d._id)).toEqual(['donation:A']);
+	});
+
+	it('drops terminal donations and money donations', () => {
+		const expired = donation({ _id: 'donation:A', status: 'expired' });
+		const cancelled = donation({ _id: 'donation:B', status: 'cancelled' });
+		const money = donation({ _id: 'donation:C', kind: 'money', items: undefined });
+		expect(keyableDonations([expired, cancelled, money], [])).toEqual([]);
+	});
+
+	it('is not fooled by a ledger row pointing at another doc type', () => {
+		// a `purchase` row carrying a purchase id must not un-offer a donation
+		// that happens to share the suffix
+		const declared = donation({ _id: 'donation:A', status: 'declared' });
+		const offered = keyableDonations([declared], [keyedRow('purchase:A', 'purchase')]);
+		expect(offered.map((d) => d._id)).toEqual(['donation:A']);
 	});
 });
 

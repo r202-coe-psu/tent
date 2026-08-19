@@ -12,6 +12,7 @@ import { getShelterDb } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { AuditAction } from '$lib/features/shared';
 import { operationsRepository } from '../data/operations.remote';
+import { createWalkInDonation } from '../domain/operations';
 import type {
 	DonationCampaign,
 	CampaignInput,
@@ -20,7 +21,8 @@ import type {
 	AdjustInput,
 	Purchase,
 	PurchaseInput,
-	CountedItem
+	CountedItem,
+	WalkInDonationInput
 } from '../domain/operations';
 
 export const operationsKeys = {
@@ -114,6 +116,25 @@ export const useReceiveStock = () => {
 	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) =>
 			operationsRepository().receiveStock(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/**
+ * Mutation hook that mints a walk-in donation document (CR-055 R4 / D-1).
+ *
+ * Goods that arrive without a booking have no donation doc to point at, so the
+ * receive form's picker would be empty and the stock could not be keyed at all.
+ * This creates the missing source document first; the caller then uses the
+ * returned `_id` as the ledger's `ref_id`.
+ */
+export const useCreateWalkInDonation = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: WalkInDonationInput; ctx: AuthorContext }) =>
+			operationsRepository().createDonation(createWalkInDonation(input, ctx)),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}

@@ -724,23 +724,55 @@ export function createCampaign(input: CampaignInput, ctx: AuthorContext): Donati
  * - Donation documents with a 'declared' status.
  * - Donation documents with a 'received' status that have not yet been added to the inventory stock (no referenced ledger entry).
  */
+/**
+ * `_id`s of the donations that have already been keyed into stock.
+ *
+ * "Keyed" means a `donation` ledger row points at it, which after CR-055 R2 is
+ * a reliable signal: `reason: 'donation'` can only carry a `donation:` id, so a
+ * typo can no longer make a keyed donation look unkeyed (or unreserve someone
+ * else's). Shared by `calculateReserved` and `keyableDonations` so the receive
+ * form and the campaign board agree on what is still outstanding.
+ */
+export function keyedDonationIds(stockLedgers: StockLedger[]): Set<string> {
+	const keyed = new Set<string>();
+	for (const ledger of stockLedgers) {
+		if (ledger.reason === 'donation' && ledger.ref_id) {
+			keyed.add(ledger.ref_id);
+		}
+	}
+	return keyed;
+}
+
+/**
+ * Donations the receive form may still key stock against (CR-055 R4).
+ *
+ * Goods-in-kind only — a `money` donation never produces a ledger row. A
+ * `declared` donation is one whose goods are arriving now; a `received` one was
+ * marked as arrived but never keyed. Both still owe stock. `expired` and
+ * `cancelled` are terminal, and anything already keyed would double-count.
+ */
+export function keyableDonations(donations: Donation[], stockLedgers: StockLedger[]): Donation[] {
+	const keyed = keyedDonationIds(stockLedgers);
+	return donations.filter(
+		(d) =>
+			d.kind === 'items' &&
+			(d.status === 'declared' || d.status === 'received') &&
+			!keyed.has(d._id)
+	);
+}
+
 export function calculateReserved(
 	donations: Donation[],
 	stockLedgers: StockLedger[],
 	campaignId?: string
 ): Map<string, string> {
-	const keyedDonationIds = new Set<string>();
-	for (const ledger of stockLedgers) {
-		if (ledger.reason === 'donation' && ledger.ref_id) {
-			keyedDonationIds.add(ledger.ref_id);
-		}
-	}
+	const keyed = keyedDonationIds(stockLedgers);
 
 	const reserved = new Map<string, string>();
 	for (const don of donations) {
 		if (campaignId && don.campaign_id !== campaignId) continue;
 		if (don.status === 'expired' || don.status === 'cancelled') continue;
-		const isUnkeyedReceived = don.status === 'received' && !keyedDonationIds.has(don._id);
+		const isUnkeyedReceived = don.status === 'received' && !keyed.has(don._id);
 		if (don.status !== 'declared' && !isUnkeyedReceived) continue;
 		for (const item of don.items ?? []) {
 			if (!item.item_id) continue;
