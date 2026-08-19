@@ -29,7 +29,9 @@
 		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts",
 		"redeploy:access": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/redeploy-access.ts",
-		"deploy:shelter-views": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/deploy-shelter-views.ts"
+		"deploy:shelter-views": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/deploy-shelter-views.ts",
+		"sync:central": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/sync-central-db.ts",
+		"db:sync": "pnpm sync:central --write --confirm && pnpm redeploy:access --write --confirm && pnpm deploy:shelter-views --deploy-candidate --write --confirm && pnpm deploy:shelter-views --promote --write --confirm"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.1.0",
