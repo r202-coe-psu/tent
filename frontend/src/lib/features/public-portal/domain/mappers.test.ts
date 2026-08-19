@@ -8,12 +8,20 @@ describe('toUiShelterStatus', () => {
 		expect(toUiShelterStatus('full')).toBe('FULL');
 		expect(toUiShelterStatus('closed')).toBe('CLOSED');
 	});
+
+	it('handles empty or invalid status safely', () => {
+		expect(toUiShelterStatus('')).toBe('CLOSED');
+		expect(toUiShelterStatus(null)).toBe('CLOSED');
+		expect(toUiShelterStatus(undefined)).toBe('CLOSED');
+	});
 });
 
 describe('isInShelterStatus', () => {
 	it('recognizes FastAPI public status', () => {
 		expect(isInShelterStatus('in_shelter')).toBe(true);
 		expect(isInShelterStatus('moved')).toBe(false);
+		expect(isInShelterStatus(null)).toBe(false);
+		expect(isInShelterStatus(undefined)).toBe(false);
 	});
 });
 
@@ -36,5 +44,23 @@ describe('toPublicShelterCard', () => {
 		expect(card.capacity).toBe(100);
 		expect(card.distance).toBe(3.2);
 		expect(card.geo).toEqual({ lat: 7, lng: 100 });
+	});
+
+	it('handles null, undefined, or empty shelter item gracefully without throwing', () => {
+		const emptyCard = toPublicShelterCard(null);
+		expect(emptyCard.id).toBe('ศูนย์พักพิง');
+		expect(emptyCard.status).toBe('CLOSED');
+		expect(emptyCard.capacity).toBe(0);
+		expect(emptyCard.distance).toBe(0);
+		expect(emptyCard.geo).toBeNull();
+		expect(emptyCard.vulnerable_groups).toBeNull();
+
+		const undefinedCard = toPublicShelterCard(undefined);
+		expect(undefinedCard.id).toBe('ศูนย์พักพิง');
+		expect(undefinedCard.status).toBe('CLOSED');
+
+		const partialCard = toPublicShelterCard({});
+		expect(partialCard.status).toBe('CLOSED');
+		expect(partialCard.name).toBe('ศูนย์พักพิง');
 	});
 });
