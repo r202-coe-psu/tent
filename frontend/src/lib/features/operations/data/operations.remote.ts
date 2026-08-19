@@ -109,6 +109,21 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// receipt never followed, and `calculateReserved` counts those forever
 		// (nothing calls `expireDonation`). Minting both here means an abandoned
 		// form leaves nothing at all.
+		//
+		// NOT atomic, and the gap is asymmetric. `_bulk_docs` runs
+		// `validate_doc_update` per document, and the two docs answer to different
+		// rules: `donation` has no role gate, while `stock_ledger` requires
+		// warehouse_staff / shelter_manager / system_admin
+		// (`server/shelter-access-design.ts`). A writer who has lost the warehouse
+		// role therefore gets the donation accepted and the ledger row rejected —
+		// this call throws, but the donation is already persisted and starts
+		// inflating reserved stock. The only realistic trigger is a role revoked
+		// while the form sits open: the route guard (`requireWarehouseAccess`) and
+		// the design doc read the same roles, so there is no systematic mismatch,
+		// and every other rule in the design doc applies equally to both docs or
+		// only fires on update. Closing it for real means either gating `donation`
+		// the same way (a provisioning change — redeploy `_design/access` on every
+		// shelter DB) or sweeping stale `declared` donations; both are their own CR.
 		const [savedDonation, savedEntry] = await bulkDocs<Donation | StockLedger>(this.dbName, [
 			donation,
 			entry
