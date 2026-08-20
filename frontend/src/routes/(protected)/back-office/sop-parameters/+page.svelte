@@ -168,14 +168,16 @@
 
 		{#if activeTab === 'sphere_standard'}
 			{#if masterQuery.isLoading || (shelterCode && overrideQuery.isLoading)}
-				<div class="flex h-64 items-center justify-center rounded-xl border bg-card p-6 shadow-sm">
+				<div
+					class="flex min-h-[600px] items-center justify-center rounded-xl border bg-card p-6 shadow-sm"
+				>
 					<div
 						class="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary"
 					></div>
 				</div>
 			{:else}
 				<!-- Keep the master toolbar and ratios panel in the same grid column. -->
-				<div class="min-w-0 space-y-3">
+				<div class="flex min-w-0 flex-col gap-3">
 					{#if isSA}
 						<div class="flex flex-wrap items-center gap-2">
 							<label for="master-profile" class="text-sm font-semibold">Master Profile</label>
