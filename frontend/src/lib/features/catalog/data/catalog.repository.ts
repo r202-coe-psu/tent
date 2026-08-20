@@ -45,4 +45,10 @@ export interface CatalogRepository {
 	getRecipe(id: string): Promise<Recipe | null>;
 
 	updateRecipe(recipe: Recipe): Promise<Recipe>;
+
+	deleteItemMaster(id: string): Promise<boolean>;
+
+	deleteItemCategory(id: string): Promise<boolean>;
+
+	deleteRecipe(id: string): Promise<boolean>;
 }

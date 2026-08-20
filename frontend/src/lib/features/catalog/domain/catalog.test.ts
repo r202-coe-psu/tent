@@ -178,4 +178,58 @@ describe('catalog domain', () => {
 			})
 		).toThrow();
 	});
+
+	it('should support deactivated field defaulting to false and accepting true', () => {
+		const baseInput = {
+			name: 'น้ำดื่ม',
+			base_unit: 'bottle',
+			conversions: [],
+			distribution_type: 'consumable' as const,
+			target_audience_type: 'all' as const,
+			target_restrictions: { genders: [], vulnerable_groups: [], diet_religions: [] },
+			is_default: false
+		};
+
+		const defaultParsed = itemMasterInputSchema.parse(baseInput);
+		expect(defaultParsed.deactivated).toBeUndefined();
+
+		const docWithDefault = createItemMaster(baseInput, ctx);
+		expect(docWithDefault.deactivated).toBe(false);
+
+		const deactivatedInput = {
+			...baseInput,
+			deactivated: true
+		};
+		const deactivatedParsed = itemMasterInputSchema.parse(deactivatedInput);
+		expect(deactivatedParsed.deactivated).toBe(true);
+
+		const docWithDeactivated = createItemMaster(deactivatedInput, ctx);
+		expect(docWithDeactivated.deactivated).toBe(true);
+	});
+
+	it('should support deactivated field for Recipe defaulting to false and accepting true', () => {
+		const baseInput = {
+			label: 'น้ำพริก',
+			ingredients: [{ item_master_id: 'item_1', quantity: '0.5', uom: 'kg' }],
+			standard_portions: '10',
+			standard_duration_hours: '0.5',
+			is_default: false
+		};
+
+		const defaultParsed = recipeInputSchema.parse(baseInput);
+		expect(defaultParsed.deactivated).toBeUndefined();
+
+		const docWithDefault = createRecipe(baseInput, ctx);
+		expect(docWithDefault.deactivated).toBe(false);
+
+		const deactivatedInput = {
+			...baseInput,
+			deactivated: true
+		};
+		const deactivatedParsed = recipeInputSchema.parse(deactivatedInput);
+		expect(deactivatedParsed.deactivated).toBe(true);
+
+		const docWithDeactivated = createRecipe(deactivatedInput, ctx);
+		expect(docWithDeactivated.deactivated).toBe(true);
+	});
 });

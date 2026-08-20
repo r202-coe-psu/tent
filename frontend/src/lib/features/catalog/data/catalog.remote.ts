@@ -1,5 +1,6 @@
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { touch, type AuthorContext } from '$lib/db/model';
+import { getShelterDb } from '$lib/db/shelter';
 import {
 	createItemCategory,
 	isItemCategory,
@@ -90,6 +91,69 @@ export class CatalogRemoteRepository implements CatalogRepository {
 
 	updateRecipe(recipe: Recipe): Promise<Recipe> {
 		return this.repo.put(touch(recipe));
+	}
+
+	async deleteItemMaster(id: string): Promise<boolean> {
+		const item = await this.getItemMaster(id);
+		if (!item) return false;
+
+		const shelterRepo = createRemoteRepository(getShelterDb());
+		const ledgerEntries = await shelterRepo.allByType(
+			'stock_ledger',
+			(d): d is { _id: string; type: string; item_id: string } => {
+				return !!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_ledger';
+			}
+		);
+		const isUsed = ledgerEntries.some((entry) => entry.item_id === id);
+
+		if (isUsed) {
+			item.deactivated = true;
+			await this.updateItemMaster(item);
+			return false;
+		} else {
+			await this.repo.remove(item);
+			return true;
+		}
+	}
+
+	async deleteItemCategory(id: string): Promise<boolean> {
+		const category = await this.getItemCategory(id);
+		if (!category) return false;
+
+		const itemMasters = await this.listItemMasters();
+		const isUsed = itemMasters.some((item) => item.category === category.name);
+
+		if (isUsed) {
+			throw new Error(
+				`Cannot delete category "${category.name}" because it is currently used by one or more items.`
+			);
+		}
+
+		await this.repo.remove(category);
+		return true;
+	}
+
+	async deleteRecipe(id: string): Promise<boolean> {
+		const recipe = await this.getRecipe(id);
+		if (!recipe) return false;
+
+		const shelterRepo = createRemoteRepository(getShelterDb());
+		const mealPlans = await shelterRepo.allByType(
+			'meal_plan',
+			(d): d is { _id: string; type: string; recipes: { recipe_id: string }[] } => {
+				return !!d && typeof d === 'object' && (d as { type?: unknown }).type === 'meal_plan';
+			}
+		);
+		const isUsed = mealPlans.some((plan) => plan.recipes?.some((r) => r.recipe_id === id));
+
+		if (isUsed) {
+			recipe.deactivated = true;
+			await this.updateRecipe(recipe);
+			return false;
+		} else {
+			await this.repo.remove(recipe);
+			return true;
+		}
 	}
 }
 

@@ -9,23 +9,72 @@
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { toast } from 'svelte-sonner';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	// Icon
 	import Search from '@lucide/svelte/icons/search';
 	import Plus from '@lucide/svelte/icons/plus';
 	import X from '@lucide/svelte/icons/x';
-	import { Settings2 } from '@lucide/svelte';
-	import { Trash2 } from '@lucide/svelte';
+	import { Settings2, Trash2, RotateCcw } from '@lucide/svelte';
 	// Navigation / Routing
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	// Feature
-	import { useItemMasters, ItemMasterForm } from '$lib/features/catalog';
+	import {
+		useItemMasters,
+		ItemMasterForm,
+		useDeleteItemMaster,
+		useUpdateItemMaster,
+		type ItemMaster
+	} from '$lib/features/catalog';
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 
 	const query = useItemMasters();
+	const deleteMutation = useDeleteItemMaster();
+	const updateItemMutation = useUpdateItemMaster();
+
+	let deleteConfirmOpen = $state(false);
+	let pendingDeleteItem = $state<{ id: string; name: string } | null>(null);
+
+	function activateItem(item: ItemMaster) {
+		const updated = { ...item, deactivated: false };
+		updateItemMutation.mutate(updated, {
+			onSuccess: () => {
+				toast.success(`นำรายการ "${item.name}" กลับมาใช้งานสำเร็จ`);
+			},
+			onError: (err: Error) => {
+				toast.error(err.message || 'เกิดข้อผิดพลาดในการทำรายการ');
+			}
+		});
+	}
+
+	function showDeleteConfirm(id: string, name: string) {
+		pendingDeleteItem = { id, name };
+		deleteConfirmOpen = true;
+	}
+
+	function confirmDelete() {
+		if (!pendingDeleteItem) return;
+		const { id, name } = pendingDeleteItem;
+		deleteMutation.mutate(id, {
+			onSuccess: (wasDeleted) => {
+				if (wasDeleted) {
+					toast.success(`ลบรายการ "${name}" สำเร็จ`);
+				} else {
+					toast.success(
+						`เปลี่ยนสถานะรายการ "${name}" เป็นปิดใช้งาน (Deactivated) เนื่องจากรายการนี้มีการบันทึกธุรกรรมในคลังแล้ว`
+					);
+				}
+				deleteConfirmOpen = false;
+				pendingDeleteItem = null;
+			},
+			onError: (err: Error) => {
+				toast.error(err.message || 'เกิดข้อผิดพลาดในการทำรายการ');
+			}
+		});
+	}
 
 	// Pagination
 	const PAGE_SIZE = 10;
@@ -122,22 +171,47 @@
 					{:else}
 						{#each paginatedItems as e (e._id)}
 							<Table.Row>
-								<Table.Cell class="font-bold text-foreground">{e.name}</Table.Cell>
+								<Table.Cell class="font-bold text-foreground">
+									{e.name}
+									{#if e.deactivated}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-600/10 ring-inset"
+										>
+											ปิดใช้งาน (Deactivated)
+										</span>
+									{/if}
+								</Table.Cell>
 								<Table.Cell class="text-center">
 									{#if isSA}
-										<Button variant="outline" size="sm" onclick={() => showEditForm(e._id)}>
-											<Settings2 class="h-4 w-4" />
-											จัดการ
-										</Button>
+										<div class="inline-flex gap-2">
+											<Button variant="outline" size="sm" onclick={() => showEditForm(e._id)}>
+												<Settings2 class="h-4 w-4" />
+												จัดการ
+											</Button>
+											{#if e.deactivated}
+												<Button
+													variant="outline"
+													size="sm"
+													onclick={() => activateItem(e)}
+													disabled={updateItemMutation.isPending}
+													class="text-green-600 hover:text-green-700 dark:text-green-400"
+												>
+													<RotateCcw class="h-4 w-4" />
+													นำกลับมาใช้
+												</Button>
+											{:else}
+												<Button
+													variant="outline"
+													size="sm"
+													onclick={() => showDeleteConfirm(e._id, e.name)}
+													disabled={deleteMutation.isPending}
+												>
+													<Trash2 class="h-4 w-4" />
+													ลบ
+												</Button>
+											{/if}
+										</div>
 									{/if}
-									<Button
-										variant="outline"
-										size="sm"
-										onclick={() => toast.warning('ฟังก์ชันนี้จะมาในระบบถัดไป')}
-									>
-										<Trash2 class="h-4 w-4" />
-										ลบ
-									</Button>
 								</Table.Cell>
 							</Table.Row>
 						{/each}
@@ -201,3 +275,43 @@
 		{/if}
 	</div>
 {/if}
+
+<Dialog.Root bind:open={deleteConfirmOpen}>
+	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[420px]">
+		<Dialog.Header>
+			<Dialog.Title class="text-lg font-bold text-red-600">ยืนยันการลบรายการสิ่งของ</Dialog.Title>
+			<Dialog.Description class="pt-2 text-sm text-slate-500">
+				{#if pendingDeleteItem}
+					คุณแน่ใจหรือไม่ว่าต้องการลบรายการ <strong class="text-slate-900"
+						>{pendingDeleteItem.name}</strong
+					>?
+					<span class="mt-3 block text-xs leading-relaxed text-muted-foreground">
+						* หากรายการนี้มีประวัติการบันทึกคลังสินค้า (Stock Ledger) อยู่ในระบบแล้ว
+						รายการจะถูกเปลี่ยนสถานะเป็นปิดใช้งาน (Deactivated) แทนการลบถาวร
+					</span>
+				{/if}
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="mt-2 flex justify-end gap-4 pt-4">
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => {
+					deleteConfirmOpen = false;
+					pendingDeleteItem = null;
+				}}
+				class="rounded-lg"
+			>
+				ยกเลิก
+			</Button>
+			<Button
+				variant="destructive"
+				disabled={deleteMutation.isPending}
+				onclick={confirmDelete}
+				class="rounded-lg bg-red-600 text-white hover:bg-red-700"
+			>
+				{#if deleteMutation.isPending}กำลังลบ...{:else}ยืนยันการลบ{/if}
+			</Button>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>

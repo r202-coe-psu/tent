@@ -8,6 +8,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 
 	// Icon
 	import Search from '@lucide/svelte/icons/search';
@@ -16,13 +17,40 @@
 	import { Settings2 } from '@lucide/svelte';
 	import { Trash2 } from '@lucide/svelte';
 	// Feature
-	import { useItemCategories } from '$lib/features/catalog';
-	import { ItemCategoryForm } from '$lib/features/catalog';
+	import {
+		useItemCategories,
+		ItemCategoryForm,
+		useDeleteItemCategory
+	} from '$lib/features/catalog';
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 
 	const query = useItemCategories();
+	const deleteMutation = useDeleteItemCategory();
+
+	let deleteConfirmOpen = $state(false);
+	let pendingDeleteCategory = $state<{ id: string; name: string } | null>(null);
+
+	function showDeleteConfirm(id: string, name: string) {
+		pendingDeleteCategory = { id, name };
+		deleteConfirmOpen = true;
+	}
+
+	function confirmDelete() {
+		if (!pendingDeleteCategory) return;
+		const { id, name } = pendingDeleteCategory;
+		deleteMutation.mutate(id, {
+			onSuccess: () => {
+				toast.success(`ลบหมวดหมู่ "${name}" สำเร็จ`);
+				deleteConfirmOpen = false;
+				pendingDeleteCategory = null;
+			},
+			onError: (err) => {
+				toast.error(err.message || 'เกิดข้อผิดพลาดในการลบหมวดหมู่');
+			}
+		});
+	}
 
 	// Pagination
 	const PAGE_SIZE = 10;
@@ -135,19 +163,22 @@
 								</Table.Cell>
 								<Table.Cell class="text-center">
 									{#if isSA}
-										<Button variant="outline" size="sm" onclick={() => showEditForm(e._id)}>
-											<Settings2 class="h-4 w-4" />
-											จัดการ
-										</Button>
+										<div class="inline-flex gap-2">
+											<Button variant="outline" size="sm" onclick={() => showEditForm(e._id)}>
+												<Settings2 class="h-4 w-4" />
+												จัดการ
+											</Button>
+											<Button
+												variant="outline"
+												size="sm"
+												onclick={() => showDeleteConfirm(e._id, e.name)}
+												disabled={deleteMutation.isPending}
+											>
+												<Trash2 class="h-4 w-4" />
+												ลบ
+											</Button>
+										</div>
 									{/if}
-									<Button
-										variant="outline"
-										size="sm"
-										onclick={() => toast.warning('ฟังก์ชันนี้จะมาในระบบถัดไป')}
-									>
-										<Trash2 class="h-4 w-4" />
-										ลบ
-									</Button>
 								</Table.Cell>
 							</Table.Row>
 						{/each}
@@ -211,3 +242,42 @@
 		{/if}
 	</div>
 {/if}
+
+<Dialog.Root bind:open={deleteConfirmOpen}>
+	<Dialog.Content class="rounded-2xl p-6 sm:max-w-[400px]">
+		<Dialog.Header>
+			<Dialog.Title class="text-lg font-bold text-red-600">ยืนยันการลบหมวดหมู่</Dialog.Title>
+			<Dialog.Description class="pt-2 text-sm text-slate-500">
+				{#if pendingDeleteCategory}
+					คุณแน่ใจหรือไม่ว่าต้องการลบหมวดหมู่ <strong class="text-slate-900"
+						>{pendingDeleteCategory.name}</strong
+					>?
+					<span class="mt-3 block text-xs leading-relaxed text-muted-foreground">
+						* ไม่สามารถลบหมวดหมู่ที่มีรายการสินค้าอ้างอิงอยู่ได้
+					</span>
+				{/if}
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="mt-2 flex justify-end gap-4 pt-4">
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => {
+					deleteConfirmOpen = false;
+					pendingDeleteCategory = null;
+				}}
+				class="rounded-lg"
+			>
+				ยกเลิก
+			</Button>
+			<Button
+				variant="destructive"
+				disabled={deleteMutation.isPending}
+				onclick={confirmDelete}
+				class="rounded-lg bg-red-600 text-white hover:bg-red-700"
+			>
+				{#if deleteMutation.isPending}กำลังลบ...{:else}ยืนยันการลบ{/if}
+			</Button>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>

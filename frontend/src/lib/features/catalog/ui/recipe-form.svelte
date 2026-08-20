@@ -43,7 +43,8 @@
 				ingredients: [{ item_master_id: '', quantity: '1', uom: '' }],
 				standard_portions: '100',
 				standard_duration_hours: '1',
-				is_default: false
+				is_default: false,
+				deactivated: false
 			}
 		}),
 		{
@@ -103,6 +104,7 @@
 			$formData.standard_portions = item.standard_portions;
 			$formData.standard_duration_hours = item.standard_duration_hours;
 			$formData.is_default = item.is_default || false;
+			$formData.deactivated = item.deactivated ?? false;
 		}
 	});
 
@@ -189,7 +191,9 @@
 								<ItemSelector
 									bind:value={conv.item_master_id}
 									bind:uom={conv.uom}
-									items={itemMastersQuery.data ?? []}
+									items={(itemMastersQuery.data ?? []).filter(
+										(im) => !im.deactivated || im._id === conv.item_master_id
+									)}
 								/>
 							</div>
 

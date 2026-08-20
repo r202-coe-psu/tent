@@ -83,7 +83,9 @@
 	// ที่)" and throw on select. Filter them out of the dropdown so BOM never lists
 	// a broken option; if that leaves nothing, the empty-state CTA shows instead.
 	const validRecipes = $derived(
-		(recipes.data ?? []).filter((r) => r.label && Number(r.standard_portions) > 0)
+		(recipes.data ?? []).filter(
+			(r) => r.label && Number(r.standard_portions) > 0 && (!r.deactivated || r._id === recipeId)
+		)
 	);
 
 	// Same resolveItemMasterStock() as application/queries.ts's resolveMealPlanCalc,

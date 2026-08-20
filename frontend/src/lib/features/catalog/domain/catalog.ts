@@ -67,6 +67,7 @@ export interface ItemMaster extends CatalogDoc {
 	target_audience_type: TargetAudienceType;
 	target_restrictions: TargetRestrictions;
 	is_default: boolean;
+	deactivated?: boolean;
 }
 
 export interface Recipe extends CatalogDoc {
@@ -76,6 +77,7 @@ export interface Recipe extends CatalogDoc {
 	standard_portions: string; // qty_str
 	standard_duration_hours: string; // qty_str
 	is_default: boolean;
+	deactivated?: boolean;
 }
 
 // ---------------------------------------------------------------- input schemas
@@ -117,7 +119,8 @@ export const itemMasterInputSchema = z.object({
 		vulnerable_groups: z.array(vulnerableGroups).optional(),
 		diet_religions: z.array(dietReligions).optional()
 	}),
-	is_default: z.boolean().default(false)
+	is_default: z.boolean().default(false),
+	deactivated: z.boolean().optional()
 });
 export type ItemMasterInput = z.infer<typeof itemMasterInputSchema>;
 
@@ -134,7 +137,8 @@ export const recipeInputSchema = z.object({
 		.default([]),
 	standard_portions: qtyStrCoercePositiveSchema,
 	standard_duration_hours: qtyStrCoercePositiveSchema,
-	is_default: z.boolean()
+	is_default: z.boolean(),
+	deactivated: z.boolean().optional()
 });
 
 export type RecipeInput = z.infer<typeof recipeInputSchema>;
@@ -182,7 +186,8 @@ export function createItemMaster(input: ItemMasterInput, ctx: AuthorContext): It
 			overstock_alert_days: d.overstock_alert_days,
 			target_audience_type: d.target_audience_type,
 			target_restrictions: d.target_restrictions,
-			is_default: d.is_default
+			is_default: d.is_default,
+			deactivated: d.deactivated ?? false
 		},
 		ctx.createdBy
 	);
@@ -202,7 +207,8 @@ export function createRecipe(input: RecipeInput, ctx: AuthorContext): Recipe {
 			})),
 			standard_portions: persistQty(d.standard_portions),
 			standard_duration_hours: persistQty(d.standard_duration_hours),
-			is_default: d.is_default
+			is_default: d.is_default,
+			deactivated: d.deactivated ?? false
 		},
 		ctx.createdBy
 	);

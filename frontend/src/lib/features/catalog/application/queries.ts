@@ -188,6 +188,45 @@ export const useUpdateRecipe = () => {
 	}));
 };
 
+export const useDeleteItemMaster = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (id: string) => {
+			enforceSA();
+			return catalogRepository().deleteItemMaster(id);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
+		}
+	}));
+};
+
+export const useDeleteItemCategory = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (id: string) => {
+			enforceSA();
+			return catalogRepository().deleteItemCategory(id);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
+		}
+	}));
+};
+
+export const useDeleteRecipe = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (id: string) => {
+			enforceSA();
+			return catalogRepository().deleteRecipe(id);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
+		}
+	}));
+};
+
 export function startCatalogMasterLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
 	return subscribeDataChanges(queryClient, CATALOG_DB, (type) => {
 		const allowed = ['item_category', 'item_master', 'recipe', 'sop_profile'];
