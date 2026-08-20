@@ -5,7 +5,7 @@ from tent_model.public_announcement import PublicAnnouncement
 from tent_model.public_donation import DeclaredItem, PublicDonation
 from tent_model.public_need import PublicNeed
 from tent_model.public_person import PublicPerson
-from tent_model.public_shelter import GeoPoint, PublicShelter
+from tent_model.public_shelter import GeoJsonPoint, GeoPoint, PublicShelter
 from tent_model.retention_audit import RetentionAudit
 from tent_model.search_audit import SearchAudit
 from tent_model.sync_checkpoint import SyncCheckpoint
@@ -16,6 +16,7 @@ __all__ = [
 	"DeclaredItem",
 	"DonationBuffer",
 	"DonorBuffer",
+	"GeoJsonPoint",
 	"GeoPoint",
 	"PublicAnnouncement",
 	"PublicDonation",
