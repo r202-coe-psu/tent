@@ -1,12 +1,12 @@
 ---
 id: CR-079
 title: เพิ่ม SOP what-if simulation แบบไม่เขียนทับ Daily Calc
-status: proposed
+status: approved
 date: 2026-08-19
 created: 2026-08-19
-updated: 2026-08-19
+updated: 2026-08-21
 requested_by: T-42 / project owner
-decided_by: pending project owner approval
+decided_by: project owner (2026-08-21)
 depends:
   - T-31 — daily resource calculation engine
 layer: volatile
@@ -96,3 +96,4 @@ CR นี้ขออนุมัติเฉพาะ contract, scope, persiste
 ## Decision log
 
 - 2026-08-19 — proposed; รอ project owner review/approval ก่อนเริ่ม PR.
+- 2026-08-21 — approved (project owner อนุมัติสเปก CR-079)

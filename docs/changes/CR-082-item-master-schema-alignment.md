@@ -1,10 +1,10 @@
 ---
 id: CR-082
 title: Item Master — Schema Alignment, Base Unit Locking, & Storage Properties (T-10) Team C
-status: proposed
+status: approved
 date: 2026-08-20
 requested_by: project owner
-decided_by: project owner
+decided_by: project owner (2026-08-21)
 layer: volatile
 affects:
   - docs/data/schema.md §4.2
@@ -82,3 +82,4 @@ affects:
 ## Decision log
 
 * 2026-08-20 — proposed (ร่างเอกสาร Change Request สำหรับ Schema Alignment ของ Item Master ในระบบคลังสินค้า; renumbered เป็น CR-082 หลบ CR-081)
+* 2026-08-21 — approved (project owner อนุมัติสเปก CR-082)
