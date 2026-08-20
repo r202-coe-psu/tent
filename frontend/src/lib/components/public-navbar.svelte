@@ -13,6 +13,7 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import { BookingModal } from '$lib/features/public-register';
 
 	function isActive(path: string) {
 		if (path === '/') {
@@ -38,17 +39,12 @@
 		return isDonatePage() || isTrackPage();
 	}
 
-	function isRegisterPage() {
-		const p = page.url.pathname;
-		return p === '/register' || p === '/register/';
-	}
-
 	function isRegisterTrackPage() {
 		return page.url.pathname.startsWith('/register/track');
 	}
 
 	function isRegisterSection() {
-		return isRegisterPage() || isRegisterTrackPage();
+		return isRegisterTrackPage() || registerMenuOpen;
 	}
 
 	let mobileMenuOpen = $state(false);
@@ -56,6 +52,8 @@
 	let donationsMenuEl: HTMLDivElement | undefined = $state();
 	let registerMenuOpen = $state(false);
 	let registerMenuEl: HTMLDivElement | undefined = $state();
+	// Booking has no route of its own — the navbar opens the dialog in place.
+	let bookingOpen = $state(false);
 
 	function toggleMobileMenu() {
 		mobileMenuOpen = !mobileMenuOpen;
@@ -189,17 +187,18 @@
 						role="menu"
 						class="absolute right-0 mt-1 w-56 rounded-xl border border-border bg-card p-1 shadow-sm"
 					>
-						<a
+						<button
+							type="button"
 							role="menuitem"
-							href={resolve('/register')}
-							onclick={closeRegisterMenu}
-							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isRegisterPage()
-								? 'bg-primary-muted text-primary'
-								: 'text-muted-foreground'}"
+							onclick={() => {
+								closeRegisterMenu();
+								bookingOpen = true;
+							}}
+							class="flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 						>
 							<ClipboardCheck class="h-3.5 w-3.5" />
 							จองเข้าศูนย์ล่วงหน้า
-						</a>
+						</button>
 						<a
 							role="menuitem"
 							href={resolve('/register/track')}
@@ -335,16 +334,17 @@
 					สืบค้นญาติ
 				</a>
 
-				<a
-					href={resolve('/register')}
-					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isRegisterPage()
-						? 'bg-primary-muted text-primary'
-						: 'text-muted-foreground'}"
+				<button
+					type="button"
+					onclick={() => {
+						mobileMenuOpen = false;
+						bookingOpen = true;
+					}}
+					class="flex w-full cursor-pointer items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
 				>
 					<ClipboardCheck class="h-5 w-5" />
 					จองเข้าศูนย์ล่วงหน้า
-				</a>
+				</button>
 
 				<a
 					href={resolve('/register/track')}
@@ -395,3 +395,5 @@
 		</div>
 	{/if}
 </header>
+
+<BookingModal bind:open={bookingOpen} />

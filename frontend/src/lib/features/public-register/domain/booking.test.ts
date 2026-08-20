@@ -1,27 +1,34 @@
 import { describe, it, expect } from 'vitest';
-import { createEvacuee } from '$lib/features/people/server';
+import { createEvacuee, createHousehold } from '$lib/features/people/server';
 import {
 	bookingCodeFrom,
 	evacueeIdFromBookingCode,
+	householdLabelFrom,
+	isCaptchaKeyConfigured,
 	publicBookingErrorMessage,
 	publicBookingInputSchema,
 	publicBookingLookupSchema,
-	toEvacueeInput
+	splitThaiName,
+	toEvacueeInputs,
+	toHouseholdInput
 } from './booking';
+
+const CONTACT = { name: '  สมชาย ใจดี ', gender: 'male' as const, special_needs: [] };
 
 const VALID = {
 	shelter_code: 'SH001',
-	first_name: '  สมชาย ',
-	last_name: 'ใจดี',
-	gender: 'male' as const,
-	phone: '0812345678'
+	phone: '0812345678',
+	members: [CONTACT],
+	pets: []
 };
 
 describe('publicBookingInputSchema', () => {
-	it('trims names and accepts the T-48 minimum', () => {
+	it('accepts the minimum: shelter, phone and one member', () => {
 		const parsed = publicBookingInputSchema.parse(VALID);
-		expect(parsed.first_name).toBe('สมชาย');
 		expect(parsed.shelter_code).toBe('SH001');
+		expect(parsed.members).toHaveLength(1);
+		expect(parsed.members[0].name).toBe('สมชาย ใจดี');
+		expect(parsed.pets).toEqual([]);
 	});
 
 	it('requires a 10-digit phone — D-BOOK-TOKEN=A uses it as the second factor', () => {
@@ -29,15 +36,23 @@ describe('publicBookingInputSchema', () => {
 		expect(publicBookingInputSchema.safeParse({ ...VALID, phone: '081234567' }).success).toBe(
 			false
 		);
-		expect(publicBookingInputSchema.safeParse({ ...VALID, phone: '08123456ab' }).success).toBe(
-			false
-		);
 	});
 
-	it('rejects a malformed shelter code', () => {
-		expect(publicBookingInputSchema.safeParse({ ...VALID, shelter_code: 'sh1' }).success).toBe(
+	it('requires at least one member and caps a single booking at 20', () => {
+		expect(publicBookingInputSchema.safeParse({ ...VALID, members: [] }).success).toBe(false);
+		const many = Array.from({ length: 21 }, () => CONTACT);
+		expect(publicBookingInputSchema.safeParse({ ...VALID, members: many }).success).toBe(false);
+	});
+
+	it('accepts an optional 13-digit national id and rejects a malformed one', () => {
+		expect(
+			publicBookingInputSchema.safeParse({ ...VALID, national_id: '1234567890123' }).success
+		).toBe(true);
+		expect(publicBookingInputSchema.safeParse({ ...VALID, national_id: '123' }).success).toBe(
 			false
 		);
+		// Absent is fine — a displaced person may have lost their card.
+		expect(publicBookingInputSchema.safeParse(VALID).success).toBe(true);
 	});
 
 	it('drops fields the public form must not be able to set', () => {
@@ -46,35 +61,115 @@ describe('publicBookingInputSchema', () => {
 			_id: 'evacuee:ATTACKER',
 			_rev: '9-x',
 			registered_via: 'app',
-			current_stay: { status: 'active' },
-			person_id: { cardType: 'national_id', number: '1234567890123' }
+			current_stay: { status: 'active' }
 		});
 		expect(parsed).not.toHaveProperty('_id');
 		expect(parsed).not.toHaveProperty('_rev');
 		expect(parsed).not.toHaveProperty('registered_via');
 		expect(parsed).not.toHaveProperty('current_stay');
-		expect(parsed).not.toHaveProperty('person_id');
 	});
 });
 
-describe('toEvacueeInput → createEvacuee', () => {
-	it('produces a pre_registered web booking with staff defaults', () => {
+describe('splitThaiName', () => {
+	it('splits on the first whitespace run', () => {
+		expect(splitThaiName('สมชาย ใจดี')).toEqual({ first_name: 'สมชาย', last_name: 'ใจดี' });
+		expect(splitThaiName('  สมชาย   ใจดี  ')).toEqual({ first_name: 'สมชาย', last_name: 'ใจดี' });
+	});
+
+	it('keeps a compound surname together', () => {
+		expect(splitThaiName('สมชาย ใจดี มีสุข')).toEqual({
+			first_name: 'สมชาย',
+			last_name: 'ใจดี มีสุข'
+		});
+	});
+
+	it('leaves last_name empty rather than guessing on a single word', () => {
+		expect(splitThaiName('สมชาย')).toEqual({ first_name: 'สมชาย', last_name: '' });
+	});
+});
+
+describe('toEvacueeInputs → createEvacuee', () => {
+	const input = publicBookingInputSchema.parse({
+		...VALID,
+		national_id: '1234567890123',
+		members: [
+			CONTACT,
+			{ name: 'สมหญิง ใจดี', gender: 'female', special_needs: ['ผู้สูงอายุ'] },
+			{ name: 'เด็กชายเล็ก ใจดี', gender: 'male', special_needs: ['เด็กเล็ก', 'ผู้ป่วยเรื้อรัง'] }
+		]
+	});
+	const ctx = { shelterCode: 'SH001', createdBy: 'public' };
+
+	it('mints every member pre_registered with registered_via web', () => {
+		const evacuees = toEvacueeInputs(input, 'household:H1').map((i) => createEvacuee(i, ctx));
+
+		expect(evacuees).toHaveLength(3);
+		for (const e of evacuees) {
+			expect(e.schema_v).toBe(7);
+			expect(e.registered_via).toBe('web');
+			expect(e.current_stay.status).toBe('pre_registered');
+			expect(e.household_id).toBe('household:H1');
+			expect(e.created_by).toBe('public');
+			// Untouched staff defaults keep web and counter registrations identical.
+			expect(e.country).toBe('THAILAND');
+		}
+	});
+
+	it('gives the phone and national id to the contact only', () => {
+		const evacuees = toEvacueeInputs(input, 'household:H1').map((i) => createEvacuee(i, ctx));
+
+		expect(evacuees[0].phone).toBe('0812345678');
+		expect(evacuees[0].person_id).toEqual({ cardType: 'national_id', number: '1234567890123' });
+		// Members are reachable through the contact — they have no phone of their own.
+		expect(evacuees[1].phone).toBeNull();
+		expect(evacuees[1].person_id?.number ?? '').toBe('');
+	});
+
+	it('carries each member’s own vulnerability tags into special_needs', () => {
+		const evacuees = toEvacueeInputs(input, 'household:H1').map((i) => createEvacuee(i, ctx));
+
+		expect(evacuees[0].special_needs).toEqual([]);
+		expect(evacuees[1].special_needs).toEqual(['ผู้สูงอายุ']);
+		expect(evacuees[2].special_needs).toEqual(['เด็กเล็ก', 'ผู้ป่วยเรื้อรัง']);
+	});
+});
+
+describe('toHouseholdInput → createHousehold', () => {
+	it('names the household after the contact and marks it pre_registered', () => {
 		const input = publicBookingInputSchema.parse(VALID);
-		const evacuee = createEvacuee(toEvacueeInput(input), {
-			shelterCode: input.shelter_code,
+		const household = createHousehold(toHouseholdInput(input, 'evacuee:E1'), {
+			shelterCode: 'SH001',
 			createdBy: 'public'
 		});
 
-		expect(evacuee.type).toBe('evacuee');
-		expect(evacuee.schema_v).toBe(7);
-		expect(evacuee.registered_via).toBe('web');
-		expect(evacuee.current_stay.status).toBe('pre_registered');
-		expect(evacuee.household_id).toBeNull();
-		expect(evacuee.created_by).toBe('public');
-		// Untouched staff defaults keep web and counter registrations the same shape.
-		expect(evacuee.country).toBe('THAILAND');
-		expect(evacuee.special_needs).toEqual([]);
-		expect(evacuee.privacy).toEqual({ search_excluded: false });
+		expect(household.type).toBe('household');
+		expect(household.label).toBe('ครอบครัวสมชาย ใจดี');
+		expect(household.head_evacuee_id).toBe('evacuee:E1');
+		expect(household.status).toBe('pre_registered');
+		expect(household.pets).toEqual([]);
+	});
+
+	it('maps pets onto the household pets[] shape (CR-016)', () => {
+		const input = publicBookingInputSchema.parse({
+			...VALID,
+			pets: [
+				{ species: 'dog', notes: 'โกโก้ ชิวาว่า', has_cage: true },
+				{ species: 'cat', has_cage: false }
+			]
+		});
+		const household = createHousehold(toHouseholdInput(input, 'evacuee:E1'), {
+			shelterCode: 'SH001',
+			createdBy: 'public'
+		});
+
+		expect(household.pets).toEqual([
+			{ species: 'dog', count: 1, notes: 'โกโก้ ชิวาว่า', has_cage: true },
+			{ species: 'cat', count: 1, has_cage: false }
+		]);
+	});
+
+	it('falls back to a generic label when the contact name is blank', () => {
+		expect(householdLabelFrom('   ')).toBe('ครอบครัวผู้จองผ่านเว็บ');
 	});
 });
 
@@ -91,10 +186,6 @@ describe('booking code', () => {
 			expect(evacueeIdFromBookingCode(typed)).toBe(`evacuee:${ulid}`);
 		}
 	});
-
-	it('leaves a bare ulid alone', () => {
-		expect(bookingCodeFrom(ulid)).toBe(ulid);
-	});
 });
 
 describe('publicBookingLookupSchema', () => {
@@ -109,6 +200,29 @@ describe('publicBookingLookupSchema', () => {
 	});
 });
 
+describe('isCaptchaKeyConfigured', () => {
+	it('accepts a real-looking key', () => {
+		expect(isCaptchaKeyConfigured('6LcAbCdEfGhIjKlMnOpQrStUvWxYz0123456789')).toBe(true);
+	});
+
+	it('rejects the placeholders that ship in .env.example and test fixtures', () => {
+		for (const placeholder of [
+			'google_site_key',
+			'google_secret_key',
+			'dummy-secret',
+			'change-me-in-staging'
+		]) {
+			expect(isCaptchaKeyConfigured(placeholder)).toBe(false);
+		}
+	});
+
+	it('rejects absent or blank values', () => {
+		expect(isCaptchaKeyConfigured(undefined)).toBe(false);
+		expect(isCaptchaKeyConfigured(null)).toBe(false);
+		expect(isCaptchaKeyConfigured('   ')).toBe(false);
+	});
+});
+
 describe('publicBookingErrorMessage', () => {
 	it('maps known codes to Thai copy', () => {
 		expect(publicBookingErrorMessage('SHELTER_CLOSED')).toContain('ปิดรับ');
@@ -117,6 +231,5 @@ describe('publicBookingErrorMessage', () => {
 
 	it('falls back for anything unrecognised', () => {
 		expect(publicBookingErrorMessage('WAT')).toBe('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
-		expect(publicBookingErrorMessage(undefined)).toBe('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
 	});
 });

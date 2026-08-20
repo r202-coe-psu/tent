@@ -7,9 +7,8 @@
  */
 
 // ui
-export { default as BookingStepper } from './ui/booking-stepper.svelte';
-export { default as BookingShelterStep } from './ui/booking-shelter-step.svelte';
-export { default as BookingPersonStep } from './ui/booking-person-step.svelte';
+export { default as BookingForm } from './ui/booking-form.svelte';
+export { default as BookingModal } from './ui/booking-modal.svelte';
 export { default as BookingTicket } from './ui/booking-ticket.svelte';
 
 // application
@@ -32,15 +31,25 @@ export {
 // domain
 export {
 	bookingCodeFrom,
+	bookingGenderSchema,
+	bookingNationalIdSchema,
 	bookingPhoneSchema,
 	evacueeIdFromBookingCode,
+	householdLabelFrom,
+	isCaptchaKeyConfigured,
 	publicBookingErrorMessage,
 	publicBookingInputSchema,
 	publicBookingLookupSchema,
-	toEvacueeInput
+	publicBookingMemberSchema,
+	publicBookingPetSchema,
+	splitThaiName,
+	toEvacueeInputs,
+	toHouseholdInput
 } from './domain/booking';
+
 export type {
 	PublicBookingErrorCode,
 	PublicBookingInput,
-	PublicBookingLookupInput
+	PublicBookingLookupInput,
+	PublicBookingMember
 } from './domain/booking';

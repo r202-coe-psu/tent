@@ -13,10 +13,20 @@
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import PublicQuickServiceCard from '$lib/components/public-quick-service-card.svelte';
 	import PublicEmergencyBanner from '$lib/components/public-emergency-banner.svelte';
-	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';
+	import {
+		FamilySearchModal,
+		PublicHeroMetrics,
+		PublicPageShell
+	} from '$lib/features/public-portal';
+	import { BookingModal } from '$lib/features/public-register';
 	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
 
 	let { data }: { data: PageData } = $props();
+
+	// Booking and family search open in place (CR-070 / T-71) — a citizen looking
+	// for shelter should not lose the landing page they just found.
+	let bookingOpen = $state(false);
+	let searchOpen = $state(false);
 
 	// Real alerts logic should be implemented later, removing demo data
 	const alerts: { name: string; capacity: string; variant: string }[] = [];
@@ -115,7 +125,7 @@
 				icon={ShieldAlert}
 				iconClass="bg-danger-muted/30 text-danger"
 			>
-				<PublicActionBtn href="/register">จองเข้าศูนย์ล่วงหน้า</PublicActionBtn>
+				<PublicActionBtn onclick={() => (bookingOpen = true)}>จองเข้าศูนย์ล่วงหน้า</PublicActionBtn>
 				<PublicActionBtn variant="outline" href="/register/track"
 					>ตรวจสอบสถานะการจอง</PublicActionBtn
 				>
@@ -159,7 +169,9 @@
 				icon={Search}
 				iconClass="bg-accent-purple-muted/50 text-accent-purple"
 			>
-				<PublicActionBtn href="/search">ค้นหารายบุคคลด่วนที่สุด</PublicActionBtn>
+				<PublicActionBtn onclick={() => (searchOpen = true)}
+					>ค้นหารายบุคคลด่วนที่สุด</PublicActionBtn
+				>
 			</PublicQuickServiceCard>
 		</div>
 	</section>
@@ -282,3 +294,6 @@
 		</div>
 	</div>
 </PublicPageShell>
+
+<BookingModal bind:open={bookingOpen} />
+<FamilySearchModal bind:open={searchOpen} />

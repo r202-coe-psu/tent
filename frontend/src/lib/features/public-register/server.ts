@@ -8,16 +8,25 @@
  */
 export {
 	bookingCodeFrom,
+	bookingGenderSchema,
+	bookingNationalIdSchema,
 	bookingPhoneSchema,
 	evacueeIdFromBookingCode,
+	householdLabelFrom,
+	isCaptchaKeyConfigured,
 	publicBookingErrorMessage,
 	publicBookingInputSchema,
 	publicBookingLookupSchema,
-	toEvacueeInput
+	publicBookingMemberSchema,
+	publicBookingPetSchema,
+	splitThaiName,
+	toEvacueeInputs,
+	toHouseholdInput
 } from './domain/booking';
 
 export type {
 	PublicBookingErrorCode,
 	PublicBookingInput,
-	PublicBookingLookupInput
+	PublicBookingLookupInput,
+	PublicBookingMember
 } from './domain/booking';
