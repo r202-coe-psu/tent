@@ -19,6 +19,9 @@ class ShelterUseCase:
         district: str | None = None,
         subdistrict: str | None = None,
         status: str | None = None,
+        lat: float | None = None,
+        lng: float | None = None,
+        radius_km: float | None = None,
     ) -> ShelterListResponse:
         filters: dict[str, object] = {}
         if province:
@@ -30,7 +33,22 @@ class ShelterUseCase:
         if status:
             filters["status"] = status
 
-        if filters:
+        has_near = False
+        if lat is not None and lng is not None:
+            near_query: dict[str, object] = {
+                "$geometry": {
+                    "type": "Point",
+                    "coordinates": [lng, lat],
+                }
+            }
+            if radius_km is not None and radius_km > 0:
+                near_query["$maxDistance"] = radius_km * 1000.0  # meters
+            filters["location"] = {"$nearSphere": near_query}
+            has_near = True
+
+        if has_near:
+            docs = await PublicShelter.find(filters).to_list()
+        elif filters:
             docs = await PublicShelter.find(filters).sort("+name").to_list()
         else:
             docs = await PublicShelter.find_all().sort("+name").to_list()
@@ -73,6 +91,7 @@ class ShelterUseCase:
                     status=doc.status,
                     capacity=doc.capacity,
                     geo=doc.geo,
+                    location=doc.location,
                     province=doc.province,
                     district=doc.district,
                     subdistrict=doc.subdistrict,
@@ -187,6 +206,7 @@ class ShelterUseCase:
                 "occupancy_rate": occupancy_rate,
                 "building_status": building_status,
                 "geo": doc.geo,
+                "location": doc.location,
                 "admission_policy": {
                     "pets": pet_status,
                     "vulnerable_groups": vul_groups,
