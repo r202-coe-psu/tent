@@ -174,50 +174,53 @@
 					></div>
 				</div>
 			{:else}
-				{#if isSA}
-					<div class="mb-3 flex flex-wrap items-center gap-2">
-						<label for="master-profile" class="text-sm font-semibold">Master Profile</label>
-						<select
-							id="master-profile"
-							value={effectiveSelectedMasterSlug}
-							onchange={selectMaster}
-							class="rounded-md border bg-background px-3 py-2 text-sm"
-						>
-							{#each masterQuery.data ?? [] as profile (profile._id)}
-								<option value={profile.slug ?? createProfileSlug(profile.name)}
-									>{profile.active ? '[ใช้งาน] ' : ''}{profile.name} (v{profile.version})</option
-								>
-							{/each}
-						</select>
-						<button
-							class="rounded-md border px-3 py-2 text-sm font-semibold"
-							onclick={() => (createMasterOpen = true)}>สร้าง Master Profile</button
-						>
-						{#if selectedMaster}
-							<button
-								type="button"
-								class="rounded-md border px-3 py-2 text-sm font-semibold disabled:opacity-50"
-								disabled={disabled || selectedMaster.active}
-								onclick={setMasterActive}
+				<!-- Keep the master toolbar and ratios panel in the same grid column. -->
+				<div class="min-w-0 space-y-3">
+					{#if isSA}
+						<div class="flex flex-wrap items-center gap-2">
+							<label for="master-profile" class="text-sm font-semibold">Master Profile</label>
+							<select
+								id="master-profile"
+								value={effectiveSelectedMasterSlug}
+								onchange={selectMaster}
+								class="rounded-md border bg-background px-3 py-2 text-sm"
 							>
-								{selectedMaster.active ? 'กำลังใช้งาน' : 'ตั้งเป็น Master หลัก'}
-							</button>
-						{/if}
-					</div>
-				{/if}
-				<SopRatioTab
-					profile={activeProfile}
-					bind:activeContext
-					hasOverride={!!activeOverride}
-					{isSA}
-					{canEditOverride}
-					{shelterCode}
-					{disabled}
-					onEditAll={handleEditAll}
-					onCreateOverride={createInitialOverride}
-					onDeactivateOverride={deactivateOverride}
-					onViewHistory={handleViewHistory}
-				/>
+								{#each masterQuery.data ?? [] as profile (profile._id)}
+									<option value={profile.slug ?? createProfileSlug(profile.name)}
+										>{profile.active ? '[ใช้งาน] ' : ''}{profile.name} (v{profile.version})</option
+									>
+								{/each}
+							</select>
+							<button
+								class="rounded-md border px-3 py-2 text-sm font-semibold"
+								onclick={() => (createMasterOpen = true)}>สร้าง Master Profile</button
+							>
+							{#if selectedMaster}
+								<button
+									type="button"
+									class="rounded-md border px-3 py-2 text-sm font-semibold disabled:opacity-50"
+									disabled={disabled || selectedMaster.active}
+									onclick={setMasterActive}
+								>
+									{selectedMaster.active ? 'กำลังใช้งาน' : 'ตั้งเป็น Master หลัก'}
+								</button>
+							{/if}
+						</div>
+					{/if}
+					<SopRatioTab
+						profile={activeProfile}
+						bind:activeContext
+						hasOverride={!!activeOverride}
+						{isSA}
+						{canEditOverride}
+						{shelterCode}
+						{disabled}
+						onEditAll={handleEditAll}
+						onCreateOverride={createInitialOverride}
+						onDeactivateOverride={deactivateOverride}
+						onViewHistory={handleViewHistory}
+					/>
+				</div>
 			{/if}
 		{:else if activeTab === 'alert_threshold'}
 			<AlertThresholdEditor />

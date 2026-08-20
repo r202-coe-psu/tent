@@ -439,7 +439,8 @@ describe('getVerifiedActiveMaster and getVerifiedActiveSopProfile (CR-081)', () 
 			version: 1,
 			active: false
 		};
-		const { ratios: _ratios, ...malformedProfile } = validProfile;
+		const malformedProfile: Partial<typeof validProfile> = { ...validProfile };
+		delete malformedProfile.ratios;
 
 		vi.spyOn(couchDb, 'getDocWithConflicts').mockImplementation(async (_db, id) => {
 			if (id === SOP_MASTER_ACTIVE_POINTER_ID)
