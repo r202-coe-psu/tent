@@ -150,6 +150,42 @@ export function isSopMasterActivePointer(doc: unknown): doc is SopMasterActivePo
 	return sopMasterActivePointerSchema.safeParse(doc).success;
 }
 
+/**
+ * Pure domain helper for verifying alignment between an active pointer and target master profile.
+ * Verifies ID, slug, and version triple without any database, browser, or server imports.
+ */
+export function verifyMasterPointerMatch(
+	pointer: SopMasterActivePointer,
+	profile: SopMaster
+): { ok: true } | { ok: false; issue: 'pointer_target_mismatch'; message: string } {
+	if (pointer.active_profile_id !== profile._id) {
+		return {
+			ok: false,
+			issue: 'pointer_target_mismatch',
+			message: `Active pointer ID (${pointer.active_profile_id}) does not match target profile ID (${profile._id})`
+		};
+	}
+
+	const expectedSlug = profile.slug ?? createProfileSlug(profile.name);
+	if (pointer.active_slug !== expectedSlug) {
+		return {
+			ok: false,
+			issue: 'pointer_target_mismatch',
+			message: `Active pointer slug (${pointer.active_slug}) does not match target profile slug (${expectedSlug})`
+		};
+	}
+
+	if (pointer.active_version !== profile.version) {
+		return {
+			ok: false,
+			issue: 'pointer_target_mismatch',
+			message: `Active pointer version (${pointer.active_version}) does not match target profile version (${profile.version})`
+		};
+	}
+
+	return { ok: true };
+}
+
 // T-30 terminology.  These aliases retain the existing SOP master envelope
 // (`active`, `created_at`, string quantity values) used by catalog documents.
 export type SopProfile = SopMaster;

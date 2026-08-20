@@ -17,6 +17,7 @@ export {
 	isSopMaster,
 	isSopOverride,
 	resolveEffectiveProfile,
+	verifyMasterPointerMatch,
 	SOP_RATIO_KEYS,
 	SOP_RATIO_KIND,
 	sopMasterSchema,
@@ -30,6 +31,7 @@ export {
 	validateRatios
 } from './domain/sop-ratio';
 export { RATIO_LABELS } from './domain/sop-ratio.labels';
+export { SopMasterIntegrityError, type SopMasterIntegrityIssue } from '$lib/utils/errors';
 
 // Trend series shapes (shared by chart + resource-calc snapshot)
 export type { TrendPoint, TrendSeries } from './domain/trend';
@@ -61,6 +63,7 @@ export {
 // Data — repositories + resolver
 export type { SopMasterRepository, SopOverrideRepository } from './data/sop-ratio.repository';
 export {
+	getVerifiedActiveMaster,
 	SopMasterRemoteRepository,
 	sopMasterRepository,
 	sopOverrideRepository,
@@ -77,6 +80,7 @@ export {
 	useMasterProfile,
 	useActiveSopOverride,
 	getActiveSopProfile,
+	getVerifiedActiveSopProfile,
 	sopVersionKeys
 } from './application/queries';
 

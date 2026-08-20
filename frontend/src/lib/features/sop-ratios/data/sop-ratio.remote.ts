@@ -1,5 +1,6 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
-import { putDoc, saveBulkAtomic } from '$lib/db/couch-db';
+import { getDoc, getDocWithConflicts, putDoc, saveBulkAtomic } from '$lib/db/couch-db';
+import { AppError, ConflictError, SopMasterIntegrityError } from '$lib/utils/errors';
 import { touch, type AuthorContext } from '$lib/db/model';
 import { createAuditEntry, type AuditEntry, isAuditEntry } from '$lib/features/shared';
 import {
@@ -11,6 +12,8 @@ import {
 	resolveEffectiveProfile as resolveDomain,
 	SOP_MASTER_ACTIVE_POINTER_ID,
 	sopMasterActivePointerSchema,
+	sopMasterSchema,
+	verifyMasterPointerMatch,
 	type SopMaster,
 	type SopMasterActivePointer,
 	type SopOverride,
@@ -173,7 +176,25 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 			updated_by: profile.created_by
 		};
 
-		await putDoc(this.dbName, nextPointer);
+		try {
+			await putDoc(this.dbName, nextPointer, undefined, { onConflict: 'throw' });
+		} catch (error) {
+			await this.getActivePointer();
+			if (error instanceof ConflictError) {
+				throw new ConflictError(
+					`SOP master version ${savedProfile.version} was saved as draft, but could not be promoted to active master due to concurrent pointer update.`
+				);
+			}
+			if (error instanceof AppError) throw error;
+			throw new ConflictError(
+				`SOP master version ${savedProfile.version} was saved as draft, but active pointer CAS failed.`
+			);
+		}
+
+		await this.verifyActiveMasterPromotion(
+			savedProfile._id,
+			`SOP master version ${savedProfile.version}`
+		);
 
 		return {
 			profile: { ...savedProfile, active: true },
@@ -189,28 +210,12 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 		ctx: { createdBy: string }
 	): Promise<{ profile: SopMaster; deactivatedPrev: SopMaster | null; audit: AuditEntry | null }> {
 		const slug = prev.slug ?? createProfileSlug(prev.name);
-		let lastConflict: unknown;
+		const versions = await this.listVersions(slug);
+		const currentPrev = versions.find((version) => version._id === prev._id) ?? prev;
+		const maxVersion = Math.max(currentPrev.version, ...versions.map((version) => version.version));
+		const next = createNewVersion(currentPrev, changes, reason, ctx, maxVersion);
 
-		for (let attempt = 0; attempt < 3; attempt++) {
-			const versions = await this.listVersions(slug);
-			const currentPrev = versions.find((version) => version._id === prev._id) ?? prev;
-			const maxVersion = Math.max(
-				currentPrev.version,
-				...versions.map((version) => version.version)
-			);
-			const next = createNewVersion(currentPrev, changes, reason, ctx, maxVersion);
-
-			try {
-				return await this.createVersion(next.deactivatedPrev, next.profile, next.audit);
-			} catch (error) {
-				if (!(error instanceof Error) || error.message !== '409_CONFLICT') throw error;
-				lastConflict = error;
-			}
-		}
-
-		throw new Error('ไม่สามารถสร้างเวอร์ชันใหม่ได้ เนื่องจากมีการแก้ไขพร้อมกัน', {
-			cause: lastConflict
-		});
+		return await this.createVersion(next.deactivatedPrev, next.profile, next.audit);
 	}
 
 	async createInitial(
@@ -241,17 +246,42 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 				updated_by: createdBy
 			};
 			try {
-				await putDoc(this.dbName, nextPointer);
-				isFirstActive = true;
-			} catch {
-				// CAS conflict lost to concurrent creator
+				await putDoc(this.dbName, nextPointer, undefined, {
+					onConflict: 'throw'
+				});
+			} catch (error) {
+				await this.getActivePointer();
+				if (error instanceof AppError) throw error;
+				throw new ConflictError(
+					error instanceof Error ? error.message : 'Active pointer creation conflict'
+				);
 			}
+
+			await this.verifyActiveMasterPromotion(
+				draftProfile._id,
+				`Initial SOP master profile "${draftProfile.name}"`
+			);
+
+			isFirstActive = true;
 		}
 
 		return {
 			profile: { ...draftProfile, active: isFirstActive },
 			audit
 		};
+	}
+
+	private async verifyActiveMasterPromotion(
+		expectedProfileId: string,
+		operationContext: string
+	): Promise<void> {
+		const verifiedMaster = await getVerifiedActiveMaster(this.dbName);
+
+		if (verifiedMaster._id !== expectedProfileId) {
+			throw new ConflictError(
+				`${operationContext} was saved as a draft, but post-write verification found active pointer targets another profile.`
+			);
+		}
 	}
 
 	async setActive(id: string, ctx?: { createdBy: string }): Promise<void> {
@@ -274,15 +304,19 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 		};
 
 		try {
-			await putDoc(this.dbName, nextPointer);
+			await putDoc(this.dbName, nextPointer, undefined, { onConflict: 'throw' });
 		} catch (error) {
-			throw new Error(
-				'ไม่สามารถเปลี่ยน Active Profile ได้ เนื่องจากมีการปรับเปลี่ยนโดยผู้ใช้อื่นในระหว่างนี้ (409 Conflict)',
-				{
-					cause: error
-				}
+			if (error instanceof AppError) throw error;
+			throw new ConflictError(
+				'ไม่สามารถเปลี่ยน Active Profile ได้ เนื่องจากมีการปรับเปลี่ยนโดยผู้ใช้อื่นในระหว่างนี้ (409 Conflict)'
 			);
 		}
+
+		// Post-write verification: confirm that active pointer targets the intended profile before audit write / success
+		await this.verifyActiveMasterPromotion(
+			target._id,
+			`Active pointer update for SOP master profile ${target._id}`
+		);
 
 		if (ctx) {
 			const audit = createAuditEntry(
@@ -305,6 +339,79 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 			'Cannot deactivate the active master profile directly. Activate another master profile instead.'
 		);
 	}
+}
+
+/**
+ * Reads the singleton active pointer (`sop_profile_active:global`), fetches its target profile,
+ * and strictly verifies their alignment (id, slug, version, Zod schemas).
+ * Throws `SopMasterIntegrityError` if any check fails.
+ */
+export async function getVerifiedActiveMaster(
+	catalogDbName: string = 'catalog'
+): Promise<SopMaster> {
+	// 1. Fetch raw pointer document with conflict metadata
+	const rawPointer = await getDocWithConflicts<{ _id: string }>(
+		catalogDbName,
+		SOP_MASTER_ACTIVE_POINTER_ID
+	);
+	if (!rawPointer) {
+		throw new SopMasterIntegrityError(
+			'pointer_missing',
+			'Active master pointer document is missing (sop_profile_active:global)'
+		);
+	}
+
+	// Detect unresolved CouchDB conflicts
+	if (
+		typeof rawPointer === 'object' &&
+		rawPointer !== null &&
+		Array.isArray((rawPointer as { _conflicts?: unknown[] })._conflicts) &&
+		(rawPointer as { _conflicts?: unknown[] })._conflicts!.length > 0
+	) {
+		throw new SopMasterIntegrityError(
+			'pointer_conflicted',
+			'Active master pointer document (sop_profile_active:global) has unresolved CouchDB conflicts'
+		);
+	}
+
+	// 2. Validate pointer shape
+	const pointerParse = sopMasterActivePointerSchema.safeParse(rawPointer);
+	if (!pointerParse.success) {
+		throw new SopMasterIntegrityError(
+			'pointer_malformed',
+			'Active master pointer document (sop_profile_active:global) is malformed',
+			pointerParse.error
+		);
+	}
+	const pointer = pointerParse.data;
+
+	// 3. Fetch target profile document
+	const rawProfile = await getDoc<{ _id: string }>(catalogDbName, pointer.active_profile_id);
+	if (!rawProfile) {
+		throw new SopMasterIntegrityError(
+			'profile_missing',
+			`Target active SOP master profile (${pointer.active_profile_id}) is missing`
+		);
+	}
+
+	// 4. Validate profile shape
+	const profileParse = sopMasterSchema.safeParse(rawProfile);
+	if (!profileParse.success) {
+		throw new SopMasterIntegrityError(
+			'profile_malformed',
+			`Target active SOP master profile (${pointer.active_profile_id}) is malformed`,
+			profileParse.error
+		);
+	}
+	const profile = profileParse.data;
+
+	// 5. Verify triple identity alignment: id, slug, version
+	const match = verifyMasterPointerMatch(pointer, profile);
+	if (!match.ok) {
+		throw new SopMasterIntegrityError('pointer_target_mismatch', match.message);
+	}
+
+	return { ...profile, active: true };
 }
 
 export class SopOverrideRemoteRepository implements SopOverrideRepository {
@@ -353,9 +460,7 @@ export class SopOverrideRemoteRepository implements SopOverrideRepository {
 		if (deactivatedPrev) docs.push(deactivatedPrev);
 		if (audit) docs.push(audit);
 
-		const saved = await saveBulkAtomic(this.dbName, docs, 'override versions', undefined, {
-			onConflict: 'throw'
-		});
+		const saved = await saveBulkAtomic(this.dbName, docs, 'override versions');
 
 		return {
 			profile: saved.find((d) => d._id === profile._id) as SopOverride,
@@ -376,27 +481,8 @@ export class SopOverrideRemoteRepository implements SopOverrideRepository {
 		deactivatedPrev: SopOverride | null;
 		audit: AuditEntry | null;
 	}> {
-		let lastConflict: unknown;
-		for (let attempt = 0; attempt < 3; attempt++) {
-			const versions = await this.listVersions(prev.name);
-			const currentPrev = versions.find((version) => version._id === prev._id) ?? prev;
-			const maxVersion = Math.max(
-				currentPrev.version,
-				...versions.map((version) => version.version)
-			);
-			const next = createNewVersion(currentPrev, changes, reason, ctx, maxVersion);
-
-			try {
-				return await this.createVersion(next.deactivatedPrev, next.profile, next.audit);
-			} catch (error) {
-				if (!(error instanceof Error) || error.message !== '409_CONFLICT') throw error;
-				lastConflict = error;
-			}
-		}
-
-		throw new Error('ไม่สามารถสร้างเวอร์ชันใหม่ได้ เนื่องจากมีการแก้ไขพร้อมกัน', {
-			cause: lastConflict
-		});
+		const next = createNewVersion(prev, changes, reason, ctx);
+		return await this.createVersion(next.deactivatedPrev, next.profile, next.audit);
 	}
 
 	async setActive(id: string, ctx?: AuthorContext): Promise<void> {

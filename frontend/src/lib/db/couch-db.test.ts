@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDoc, putDoc, bulkDocs } from './couch-db';
-import { CouchAuthError, CouchDocumentPolicyError } from '$lib/utils/errors';
+import { getDoc, getDocWithConflicts, putDoc, putDocStrict, bulkDocs } from './couch-db';
+import { CouchAuthError, CouchDocumentPolicyError, ConflictError } from '$lib/utils/errors';
 
 const markNeedsReauth = vi.fn();
 
@@ -21,9 +21,10 @@ vi.mock('$lib/stores/endpoint.svelte', () => ({
 const store = new Map<string, unknown>();
 
 function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-	const url = typeof input === 'string' ? input : input.toString();
+	const urlStr = typeof input === 'string' ? input : input.toString();
+	const url = new URL(urlStr);
 	const method = init?.method ?? 'GET';
-	const idMatch = url.match(/\/testdb\/([^/?]+)/);
+	const idMatch = url.pathname.match(/\/testdb\/([^/?]+)/);
 	const id = idMatch ? decodeURIComponent(idMatch[1]) : '';
 
 	if (method === 'PUT' && id) {
@@ -45,10 +46,14 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
 		if (!doc) {
 			return Promise.resolve(new Response(JSON.stringify({ error: 'not_found' }), { status: 404 }));
 		}
-		return Promise.resolve(new Response(JSON.stringify(doc), { status: 200 }));
+		const resData = { ...(doc as object) };
+		if (url.searchParams.get('conflicts') !== 'true') {
+			delete (resData as { _conflicts?: unknown })._conflicts;
+		}
+		return Promise.resolve(new Response(JSON.stringify(resData), { status: 200 }));
 	}
 
-	if (url.includes('/_bulk_docs')) {
+	if (urlStr.includes('/_bulk_docs')) {
 		const body = JSON.parse(init?.body as string) as {
 			docs: Array<{ _id: string; _rev?: string }>;
 		};
@@ -82,10 +87,17 @@ describe('couch-db', () => {
 		expect(await getDoc('testdb', 'note:missing')).toBeNull();
 	});
 
-	it('putDoc treats 409 on create as idempotent success', async () => {
+	it('putDoc treats 409 on create as idempotent success by default', async () => {
 		await putDoc('testdb', { _id: 'note:dup', body: 'first' });
 		const again = await putDoc('testdb', { _id: 'note:dup', body: 'retry' });
 		expect((again as { _rev?: string })._rev).toBe('1-abc');
+	});
+
+	it('putDoc with onConflict: throw (putDocStrict) throws ConflictError on create 409', async () => {
+		await putDoc('testdb', { _id: 'note:strict', body: 'first' });
+		await expect(
+			putDocStrict('testdb', { _id: 'note:strict', body: 'second' })
+		).rejects.toBeInstanceOf(ConflictError);
 	});
 
 	it('bulkDocs writes multiple documents', async () => {
@@ -136,5 +148,60 @@ describe('couch-db', () => {
 		);
 		await expect(putDoc('testdb', { _id: 'x:1' })).rejects.toBeInstanceOf(CouchAuthError);
 		expect(markNeedsReauth).toHaveBeenCalledTimes(1);
+	});
+
+	it('getDocWithConflicts includes ?conflicts=true in URL and correctly encodes colons', async () => {
+		const fetchSpy = vi.fn(mockFetch);
+		vi.stubGlobal('fetch', fetchSpy);
+
+		store.set('sop_profile_active:global', {
+			_id: 'sop_profile_active:global',
+			type: 'sop_profile_active',
+			_conflicts: ['2-conflicting-leaf-revision']
+		});
+
+		const res = await getDocWithConflicts<{ _id: string }>('testdb', 'sop_profile_active:global');
+		expect(res).not.toBeNull();
+
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		const calledUrlStr = String(fetchSpy.mock.calls[0][0]);
+		const calledUrl = new URL(calledUrlStr);
+		expect(calledUrl.searchParams.get('conflicts')).toBe('true');
+		expect(calledUrl.pathname).toContain('sop_profile_active%3Aglobal');
+	});
+
+	it('getDocWithConflicts preserves _conflicts in returned data', async () => {
+		store.set('sop_profile_active:global', {
+			_id: 'sop_profile_active:global',
+			type: 'sop_profile_active',
+			_conflicts: ['2-conflicting-leaf-revision']
+		});
+
+		const res = await getDocWithConflicts<{ _id: string }>('testdb', 'sop_profile_active:global');
+		expect(res?._conflicts).toEqual(['2-conflicting-leaf-revision']);
+	});
+
+	it('getDocWithConflicts returns null on 404', async () => {
+		const res = await getDocWithConflicts<{ _id: string }>('testdb', 'sop_profile_active:missing');
+		expect(res).toBeNull();
+	});
+
+	it('getDoc does not request ?conflicts=true and strips _conflicts from returned document', async () => {
+		const fetchSpy = vi.fn(mockFetch);
+		vi.stubGlobal('fetch', fetchSpy);
+
+		store.set('sop_profile_active:global', {
+			_id: 'sop_profile_active:global',
+			type: 'sop_profile_active',
+			_conflicts: ['2-conflicting-leaf-revision']
+		});
+
+		const res = await getDoc<{ _id: string }>('testdb', 'sop_profile_active:global');
+		expect(res).not.toBeNull();
+
+		const calledUrlStr = String(fetchSpy.mock.calls[0][0]);
+		const calledUrl = new URL(calledUrlStr);
+		expect(calledUrl.searchParams.has('conflicts')).toBe(false);
+		expect((res as { _conflicts?: unknown })._conflicts).toBeUndefined();
 	});
 });

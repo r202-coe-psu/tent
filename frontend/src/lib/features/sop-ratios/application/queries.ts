@@ -1,7 +1,11 @@
 import { createQuery } from '@tanstack/svelte-query';
 import { getShelterCode } from '$lib/db/shelter';
-import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.remote';
-import type { SopMaster, SopOverride } from '../domain/sop-ratio';
+import {
+	getVerifiedActiveMaster,
+	sopMasterRepository,
+	sopOverrideRepository
+} from '../data/sop-ratio.remote';
+import { validateRatios, type SopMaster, type SopOverride } from '../domain/sop-ratio';
 
 export const sopRatioKeys = {
 	all: ['sop_ratios'] as const,
@@ -38,6 +42,25 @@ export async function getActiveSopProfile(
 	const activeOverride = getLatestVersion(overrides);
 	const activeMaster = getLatestVersion(masters);
 	return activeOverride ?? activeMaster ?? null;
+}
+
+/**
+ * Strict active SOP source for a shelter (CR-079).
+ * If a valid active override exists, it wins per CR-006 precedence.
+ * Otherwise, falls back to the verified active master (which throws `SopMasterIntegrityError` if pointer integrity fails).
+ */
+export async function getVerifiedActiveSopProfile(
+	shelterCode?: string
+): Promise<SopMaster | SopOverride> {
+	const code = shelterCode ?? getShelterCode();
+	const activeOverrides = await sopOverrideRepository(code).listActive();
+	const activeOverride = activeOverrides.sort((a, b) => b.version - a.version)[0];
+
+	if (activeOverride && validateRatios(activeOverride.ratios)) {
+		return activeOverride;
+	}
+
+	return await getVerifiedActiveMaster();
 }
 
 export const useActiveSopRatio = (shelterCode?: string | (() => string)) => {
