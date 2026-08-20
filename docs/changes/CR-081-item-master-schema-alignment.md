@@ -12,7 +12,7 @@ affects:
   - frontend/src/lib/features/catalog/domain/catalog.ts
   - frontend/src/lib/features/catalog/ui/item-master-form.svelte
 ---
-# CR-079 — Item Master: Schema Alignment, Base Unit Locking, & Storage Properties
+# CR-081 — Item Master: Schema Alignment, Base Unit Locking, & Storage Properties
 
 > **สรุป (TL;DR):** ปรับปรุงโครงสร้างข้อมูล `item_master` เพื่อสอดรับกับสเปกโรงครัวคลังสินค้า (CR-058) · เพิ่มฟิลด์ใหม่ `item_class` ในรูปแบบ `enum` ประกอบด้วย `CONSUMABLE`, `DURABLE`, `EQUIPMENT` โดยคงฟิลด์ `category` เพื่ออ้างอิงหมวดหมู่ตามเดิม · เพิ่มฟิลด์โภชนาการ/การจัดเก็บ `shelf_life_days`, `storage_type`, `allergens` · ล็อกการแก้ไข `base_unit` หลังบันทึกครั้งแรก · นำฟิลด์ `default_purchasing_uom` และ `distribution_mode` ออก · ปรับรุ่นโครงสร้างข้อมูล `schema_v` ของ `item_master` จาก `3` เป็น `4`
 
