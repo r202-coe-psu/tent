@@ -1,5 +1,5 @@
 ---
-id: CR-081
+id: CR-082
 title: Item Master — Schema Alignment, Base Unit Locking, & Storage Properties (T-10) Team C
 status: proposed
 date: 2026-08-20
@@ -12,7 +12,7 @@ affects:
   - frontend/src/lib/features/catalog/domain/catalog.ts
   - frontend/src/lib/features/catalog/ui/item-master-form.svelte
 ---
-# CR-081 — Item Master: Schema Alignment, Base Unit Locking, & Storage Properties
+# CR-082 — Item Master: Schema Alignment, Base Unit Locking, & Storage Properties
 
 > **สรุป (TL;DR):** ปรับปรุงโครงสร้างข้อมูล `item_master` เพื่อสอดรับกับสเปกโรงครัวคลังสินค้า (CR-058) · เพิ่มฟิลด์ใหม่ `item_class` ในรูปแบบ `enum` ประกอบด้วย `CONSUMABLE`, `DURABLE`, `EQUIPMENT` โดยคงฟิลด์ `category` เพื่ออ้างอิงหมวดหมู่ตามเดิม · เพิ่มฟิลด์โภชนาการ/การจัดเก็บ `shelf_life_days`, `storage_type`, `allergens` · ล็อกการแก้ไข `base_unit` หลังบันทึกครั้งแรก · นำฟิลด์ `default_purchasing_uom` และ `distribution_mode` ออก · ปรับรุ่นโครงสร้างข้อมูล `schema_v` ของ `item_master` จาก `3` เป็น `4`
 
@@ -20,7 +20,7 @@ affects:
 
 ## Why
 
-1. **ปัญหาหน่วยจัดซื้อที่ตกค้าง:** โครงสร้างข้อมูลเดิมใน [schema.md](file:///home/suthinxn/suthinxn/work/tent/docs/data/schema.md#L730) ยังมีฟิลด์ `default_purchasing_uom` ซึ่งไม่จำเป็นและขัดแย้งกับหลักการ **A6 — ไม่มีระบบจัดซื้อ (Purchase Order) ในระบบ** ของศูนย์พักพิง
+1. **ปัญหาหน่วยจัดซื้อที่ตกค้าง:** โครงสร้างข้อมูลเดิมใน [schema.md](../data/schema.md#L730) ยังมีฟิลด์ `default_purchasing_uom` ซึ่งไม่จำเป็นและขัดแย้งกับหลักการ **A6 — ไม่มีระบบจัดซื้อ (Purchase Order) ในระบบ** ของศูนย์พักพิง
 2. **การป้องกันสต็อกย้อนหลังพัง:** การแก้ไขหน่วยนับพื้นฐาน (`base_unit`) ของสินค้าที่มีความเคลื่อนไหวในบัญชีสต็อกแล้ว ส่งผลให้การคำนวณยอดสต็อกย้อนหลังเสียหาย จำเป็นต้องป้องกันการแก้ไขฟิลด์นี้หลังสร้างรายการสินค้า
 3. **การทำงานร่วมกับระบบความมั่นคงทางอาหารโรงครัว (CR-058):** ระบบครัวและการจำแนกวัตถุดิบต้องการข้อมูลที่ละเอียดขึ้น เช่น ประเภทการจัดเก็บ (Storage Type), อายุการจัดเก็บ (Shelf Life) และกลุ่มสารก่อภูมิแพ้ (Allergens) รวมถึงขยายมิติของการตรวจสิทธิ์ผู้รับแจกจ่าย (Eligibility Tags) ให้รองรับ 3 มิติ เพื่อคัดกรองความปลอดภัยของอาหารอย่างเหมาะสม
 
@@ -60,11 +60,11 @@ affects:
 ## Impact
 
 * **Docs:**
-  * [schema.md](file:///home/suthinxn/suthinxn/work/tent/docs/data/schema.md) §4.2: แก้ไขโครงสร้างตารางข้อมูลและคำอธิบายฟิลด์ของ `item_master` (เพิ่ม `item_class` และลบ UOM ล้าสมัย)
-  * [_index.md](file:///home/suthinxn/suthinxn/work/tent/docs/changes/_index.md): ลงทะเบียนเอกสาร CR-079
+  * [schema.md](../data/schema.md) §4.2: แก้ไขโครงสร้างตารางข้อมูลและคำอธิบายฟิลด์ของ `item_master` (เพิ่ม `item_class` และลบ UOM ล้าสมัย)
+  * [_index.md](_index.md): ลงทะเบียนเอกสาร CR-082
 * **Code:**
-  * [catalog.ts](file:///home/suthinxn/suthinxn/work/tent/frontend/src/lib/features/catalog/domain/catalog.ts): ปรับปรุง `itemMasterInputSchema` และอินเตอร์เฟส `ItemMaster`
-  * [item-master-form.svelte](file:///home/suthinxn/suthinxn/work/tent/frontend/src/lib/features/catalog/ui/item-master-form.svelte): ลบฟิลด์ที่ไม่ได้ใช้, เพิ่ม input fields ใหม่, และปิดปุ่มแก้ไข `base_unit` เมื่อเป็น edit mode
+  * [catalog.ts](../../frontend/src/lib/features/catalog/domain/catalog.ts): ปรับปรุง `itemMasterInputSchema` และอินเตอร์เฟส `ItemMaster`
+  * [item-master-form.svelte](../../frontend/src/lib/features/catalog/ui/item-master-form.svelte): ลบฟิลด์ที่ไม่ได้ใช้, เพิ่ม input fields ใหม่, และปิดปุ่มแก้ไข `base_unit` เมื่อเป็น edit mode
 * **Tests:**
   * แก้ไข mock seed และ unit tests ใน `frontend/src/lib/features/catalog/` ที่มี dependencies ต่อฟิลด์ที่เปลี่ยนไป
 
@@ -81,4 +81,4 @@ affects:
 
 ## Decision log
 
-* 2026-08-20 — proposed (ร่างเอกสาร Change Request สำหรับ Schema Alignment ของ Item Master ในระบบคลังสินค้า)
+* 2026-08-20 — proposed (ร่างเอกสาร Change Request สำหรับ Schema Alignment ของ Item Master ในระบบคลังสินค้า; renumbered เป็น CR-082 หลบ CR-081)
