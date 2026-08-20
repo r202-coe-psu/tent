@@ -12,5 +12,7 @@
  */
 export {
 	countVulnerableFromBirthYearRows,
-	isValidThaiBirthYear
+	isValidThaiBirthYear,
+	OCCUPANCY_STATUSES,
+	sumOccupancyFromStatusRows
 } from './domain/transparency-metrics';

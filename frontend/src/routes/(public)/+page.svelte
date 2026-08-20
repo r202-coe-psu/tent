@@ -115,7 +115,10 @@
 				icon={ShieldAlert}
 				iconClass="bg-danger-muted/30 text-danger"
 			>
-				<PublicActionBtn disabled>ลงทะเบียน (เร็วๆนี้)</PublicActionBtn>
+				<PublicActionBtn href="/register">จองเข้าศูนย์ล่วงหน้า</PublicActionBtn>
+				<PublicActionBtn variant="outline" href="/register/track"
+					>ตรวจสอบสถานะการจอง</PublicActionBtn
+				>
 			</PublicQuickServiceCard>
 
 			<!-- สำหรับผู้ใจบุญ / บริจาค -->
