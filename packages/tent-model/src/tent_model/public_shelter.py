@@ -13,6 +13,11 @@ class GeoPoint(BaseModel):
 	lng: float
 
 
+class GeoJsonPoint(BaseModel):
+	type: str = "Point"
+	coordinates: list[float]  # [longitude, latitude]
+
+
 class PublicShelter(Document):
 	model_config = ConfigDict(populate_by_name=True)
 
@@ -21,6 +26,7 @@ class PublicShelter(Document):
 	registry_id: str | None = None
 	name: str
 	status: str = "open"
+	location: GeoJsonPoint | None = None
 	geo: GeoPoint | None = None
 	capacity: int = 0
 	province: str | None = None
@@ -32,8 +38,10 @@ class PublicShelter(Document):
 	class Settings:
 		name = "public_shelters"
 		indexes = [
+			IndexModel([("location", "2dsphere")]),
 			IndexModel([("shelter_code", 1)]),
 			IndexModel([("registry_id", 1)]),
 			IndexModel([("province", 1), ("district", 1), ("subdistrict", 1)]),
 			IndexModel([("status", 1)]),
 		]
+
