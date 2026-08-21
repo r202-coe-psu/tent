@@ -1,10 +1,10 @@
 ---
 id: CR-077
 title: Excel import ศูนย์พักพิง — ครอบคลุมทุก field ของ shelterSchema, workbook 5 ชีต, จัดการชื่อซ้ำ, shelter_import_log schema_v 1→2
-status: proposed
+status: approved
 date: 2026-08-15
 requested_by: ทีมพัฒนา (branch `refactor-import-shelter-excel`)
-decided_by: <รอเจ้าของโครงการ>
+decided_by: project owner (2026-08-21)
 layer: volatile
 extends: CR-039
 affects:
@@ -161,4 +161,5 @@ ID ระดับ CR (`FR-77-x`) — ใช้ตรวจรับงานข
 
 ## Decision log
 
-- 2026-08-15 — proposed (ร่างจาก branch `refactor-import-shelter-excel`; ยังไม่ approve, ยังมี 5 ข้อรอเคาะ)
+- 2026-08-15 — proposed (ร่างจาก branch `refactor-import-shelter-excel`; ยังมี 5 ข้อรอเคาะ)
+- 2026-08-21 — approved (project owner อนุมัติสเปก CR-077)
