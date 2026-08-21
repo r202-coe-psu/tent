@@ -2,7 +2,12 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { checkEvacueeHouseholdConflict, useSearchEvacuees, zoneLabel } from '../index';
+	import {
+		checkEvacueeHouseholdConflict,
+		useSearchEvacuees,
+		zoneLabel,
+		STATUS_LABELS
+	} from '../index';
 	import type { Evacuee, Household } from '../domain/people';
 	import { toast } from 'svelte-sonner';
 
@@ -73,15 +78,6 @@
 		}
 		selectedHead = evacuee;
 	}
-
-	const STATUS_LABELS: Record<string, string> = {
-		pre_registered: 'ลงทะเบียนล่วงหน้า',
-		active: 'อยู่ในศูนย์',
-		temporary_leave: 'ออกชั่วคราว',
-		transferred: 'ย้ายศูนย์',
-		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
-		deceased: 'เสียชีวิต'
-	};
 </script>
 
 <div class="mx-auto w-full max-w-3xl space-y-6">

@@ -25,6 +25,7 @@
 		useCheckInEvacuee,
 		useCheckOutEvacuee,
 		useEvacuees,
+		STATUS_LABELS,
 		type Evacuee,
 		type StayStatus
 	} from '$lib/features/people';
@@ -182,15 +183,32 @@
 		const targets = eligibleFamilyMembers.filter((e) => selectedMemberIds.includes(e._id));
 		try {
 			const promises = targets.map((evacuee) => checkIn.mutateAsync({ evacuee, ctx }));
-			const results = await Promise.all(promises);
+			const results = await Promise.allSettled(promises);
+
+			const fulfilledResults = results
+				.filter((r): r is PromiseFulfilledResult<Evacuee> => r.status === 'fulfilled')
+				.map((r) => r.value);
+			const rejectedResults = results
+				.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+				.map((r) => r.reason);
 
 			if (foundEvacuee) {
-				const updatedFound = results.find((r) => r._id === foundEvacuee._id);
+				const updatedFound = fulfilledResults.find((r) => r._id === foundEvacuee._id);
 				if (updatedFound && scanResult) {
 					scanResult = { ...scanResult, evacuee: updatedFound };
 				}
 			}
-			toast.success(`เช็คอินสำเร็จ ${targets.length} คน`);
+
+			if (rejectedResults.length === 0) {
+				toast.success(`เช็คอินสำเร็จ ${targets.length} คน`);
+			} else if (fulfilledResults.length > 0) {
+				toast.warning(
+					`เช็คอินสำเร็จ ${fulfilledResults.length} คน, ล้มเหลว ${rejectedResults.length} คน`
+				);
+			} else {
+				const firstError = rejectedResults[0];
+				toast.error(firstError instanceof Error ? firstError.message : 'เช็คอินไม่สำเร็จ');
+			}
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
 		}
@@ -202,15 +220,32 @@
 		const targets = eligibleFamilyMembers.filter((e) => selectedMemberIds.includes(e._id));
 		try {
 			const promises = targets.map((evacuee) => checkOut.mutateAsync({ evacuee, ctx }));
-			const results = await Promise.all(promises);
+			const results = await Promise.allSettled(promises);
+
+			const fulfilledResults = results
+				.filter((r): r is PromiseFulfilledResult<Evacuee> => r.status === 'fulfilled')
+				.map((r) => r.value);
+			const rejectedResults = results
+				.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+				.map((r) => r.reason);
 
 			if (foundEvacuee) {
-				const updatedFound = results.find((r) => r._id === foundEvacuee._id);
+				const updatedFound = fulfilledResults.find((r) => r._id === foundEvacuee._id);
 				if (updatedFound && scanResult) {
 					scanResult = { ...scanResult, evacuee: updatedFound };
 				}
 			}
-			toast.success(`เช็คเอาท์สำเร็จ ${targets.length} คน`);
+
+			if (rejectedResults.length === 0) {
+				toast.success(`เช็คเอาท์สำเร็จ ${targets.length} คน`);
+			} else if (fulfilledResults.length > 0) {
+				toast.warning(
+					`เช็คเอาท์สำเร็จ ${fulfilledResults.length} คน, ล้มเหลว ${rejectedResults.length} คน`
+				);
+			} else {
+				const firstError = rejectedResults[0];
+				toast.error(firstError instanceof Error ? firstError.message : 'เช็คเอาท์ไม่สำเร็จ');
+			}
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เช็คเอาท์ไม่สำเร็จ');
 		}
@@ -218,16 +253,7 @@
 
 	// Helper for status label translation
 	function getStatusLabel(status: StayStatus) {
-		const statusLabels: Record<string, string> = {
-			pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
-			active: 'เช็คอินเข้าพักแล้ว',
-			temporary_leave: 'ออกชั่วคราว',
-			transferred: 'ย้ายศูนย์พักพิงแล้ว',
-			checked_out: 'ย้ายออก/กลับภูมิลำเนาแล้ว',
-			deceased: 'เสียชีวิต',
-			cancelled: 'ยกเลิกการลงทะเบียนล่วงหน้า'
-		};
-		return statusLabels[status];
+		return STATUS_LABELS[status] ?? status;
 	}
 </script>
 
