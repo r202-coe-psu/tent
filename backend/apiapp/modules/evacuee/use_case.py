@@ -97,7 +97,7 @@ class EvacueeUseCase:
             return (
                 await PublicPerson.find(
                     PublicPerson.national_id_hash == national_id_hash(parsed.normalized),
-                    {"search_excluded": {"$ne": True}},
+                    PublicPerson.search_excluded != True,  # noqa: E712
                 )
                 .limit(NAME_RESULT_LIMIT)
                 .to_list()
@@ -107,7 +107,7 @@ class EvacueeUseCase:
             return (
                 await PublicPerson.find(
                     PublicPerson.passport_hash == passport_hash(parsed.normalized),
-                    {"search_excluded": {"$ne": True}},
+                    PublicPerson.search_excluded != True,  # noqa: E712
                 )
                 .limit(NAME_RESULT_LIMIT)
                 .to_list()
@@ -117,7 +117,7 @@ class EvacueeUseCase:
             return (
                 await PublicPerson.find(
                     PublicPerson.phone_hash == phone_hash(parsed.normalized),
-                    {"search_excluded": {"$ne": True}},
+                    PublicPerson.search_excluded != True,  # noqa: E712
                 )
                 .limit(NAME_RESULT_LIMIT)
                 .to_list()
@@ -130,7 +130,7 @@ class EvacueeUseCase:
         if not terms:
             return []
 
-        and_clauses = []
+        and_clauses = [{"search_excluded": {"$ne": True}}]
         for term in terms:
             and_clauses.append(
                 {
@@ -141,14 +141,7 @@ class EvacueeUseCase:
                 }
             )
 
-        return (
-            await PublicPerson.find(
-                {"$and": and_clauses},
-                {"search_excluded": {"$ne": True}},
-            )
-            .limit(NAME_RESULT_LIMIT)
-            .to_list()
-        )
+        return await PublicPerson.find({"$and": and_clauses}).limit(NAME_RESULT_LIMIT).to_list()
 
     async def _load_shelter_names(self, codes: set[str]) -> dict[str, str]:
         if not codes:
@@ -166,7 +159,7 @@ class EvacueeUseCase:
         members = await PublicPerson.find(
             PublicPerson.household_id == person.household_id,
             PublicPerson.shelter_code == person.shelter_code,
-            {"search_excluded": {"$ne": True}},
+            PublicPerson.search_excluded != True,  # noqa: E712
         ).to_list()
 
         return [
