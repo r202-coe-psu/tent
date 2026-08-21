@@ -329,3 +329,71 @@ def test_compute_needs_still_offers_an_item_another_campaign_has_open():
     # Binding to the closed campaign would hand the donation to a counter with room
     # while the campaign that can actually take it goes unused.
     assert item_campaign["item:rice"] == "c2"
+
+
+# --- on-hand stock (T-22 cut-off) — ต้องตรงกับ TS compute-needs.test.ts เคสต่อเคส ---
+
+
+def _ledger(item_id: str, qty: str, reason: str = "donation", ref_id=None) -> dict:
+    return {"type": "stock_ledger", "item_id": item_id, "qty": qty, "reason": reason,
+            "ref_id": ref_id}
+
+
+def _don(did: str, campaign_id, status: str, item_id: str, qty: str) -> dict:
+    return {"_id": did, "type": "donation", "campaign_id": campaign_id, "status": status,
+            "items": [{"item_id": item_id, "qty": qty}]}
+
+
+def test_compute_needs_counts_what_the_warehouse_holds():
+    """540 kg on the shelf against a 500 kg target is not "ด่วน! ขาด 450"."""
+    remaining, _ = compute_needs(
+        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "500"}])],
+        [],
+        [_ledger("item:rice", "540")],
+    )
+    assert remaining["item:rice"] == "-40.0"
+
+
+def test_compute_needs_adds_on_hand_and_reserved():
+    remaining, _ = compute_needs(
+        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "500"}])],
+        [_don("donation:1", "c1", "declared", "item:rice", "50")],
+        [_ledger("item:rice", "300")],
+    )
+    assert remaining["item:rice"] == "150.0"
+
+
+def test_compute_needs_does_not_double_count_a_ledgered_receipt():
+    remaining, _ = compute_needs(
+        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "500"}])],
+        [_don("donation:1", "c1", "received", "item:rice", "100")],
+        [_ledger("item:rice", "100", ref_id="donation:1")],
+    )
+    assert remaining["item:rice"] == "400.0"
+
+
+def test_compute_needs_still_owes_a_receipt_not_in_the_ledger():
+    remaining, _ = compute_needs(
+        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "500"}])],
+        [_don("donation:1", "c1", "received", "item:rice", "100")],
+        [],
+    )
+    assert remaining["item:rice"] == "400.0"
+
+
+def test_compute_needs_reopens_when_stock_is_issued_out():
+    """T-22 "เปิดรับใหม่อัตโนมัติ" — distributing out is a negative ledger row."""
+    remaining, _ = compute_needs(
+        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "500"}])],
+        [],
+        [_ledger("item:rice", "500"), _ledger("item:rice", "-120", reason="distribute")],
+    )
+    assert remaining["item:rice"] == "120.0"
+
+
+def test_compute_needs_without_ledgers_behaves_as_before():
+    remaining, _ = compute_needs(
+        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "500"}])],
+        [_don("donation:1", "c1", "declared", "item:rice", "50")],
+    )
+    assert remaining["item:rice"] == "450.0"

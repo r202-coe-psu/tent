@@ -294,6 +294,86 @@ describe('POST /api/public/v1/donations', () => {
 		};
 	}
 
+	/**
+	 * Two open campaigns want rice: c1 has 90 left, c2 has 500. The board sums them into
+	 * 590, but a donation carries one campaign_id, so binding to whichever came first
+	 * refused a 200 kg gift while c2 sat on quota nobody could reach.
+	 */
+	function twoRiceCampaignsMock(firstTarget: number, secondTarget: number) {
+		return (path: string, method: string) => {
+			if (method === 'GET' && path.includes('donation_campaign:')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									_id: 'donation_campaign:c1',
+									type: 'donation_campaign',
+									status: 'open',
+									needs: [{ item_id: 'item:rice', qty_target: firstTarget, unit: 'kg' }]
+								}
+							},
+							{
+								doc: {
+									_id: 'donation_campaign:c2',
+									type: 'donation_campaign',
+									status: 'open',
+									needs: [{ item_id: 'item:rice', qty_target: secondTarget, unit: 'kg' }]
+								}
+							}
+						]
+					}
+				});
+			}
+			if (method === 'GET' && path.includes('donation:')) {
+				return Promise.resolve({ status: 200, data: { rows: [] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		};
+	}
+
+	it('routes a donation to a campaign that can take it, not merely the first', async () => {
+		vi.mocked(adminRaw).mockImplementation(twoRiceCampaignsMock(90, 500));
+		mockFastapiCreate();
+
+		const response = await POST({
+			request: {
+				json: () =>
+					Promise.resolve({
+						...validPayload,
+						items: [{ item_id: 'item:rice', free_text: 'ข้าวสาร', qty: '200', unit: 'kg' }]
+					})
+			},
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		expect(response.status).toBe(200);
+		const [, init] = vi.mocked(fetch).mock.calls[0]!;
+		const body = JSON.parse(String((init as RequestInit).body));
+		expect(body.campaign_id).toBe('donation_campaign:c2');
+	});
+
+	it('refuses a qty only reachable by splitting across campaigns', async () => {
+		// 90 + 500 shows as 590 on the board; no single booking can draw on both.
+		vi.mocked(adminRaw).mockImplementation(twoRiceCampaignsMock(90, 500));
+		mockFastapiCreate();
+
+		const response = await POST({
+			request: {
+				json: () =>
+					Promise.resolve({
+						...validPayload,
+						items: [{ item_id: 'item:rice', free_text: 'ข้าวสาร', qty: '550', unit: 'kg' }]
+					})
+			},
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toBe('NEED_FULL');
+	});
+
 	it('returns 409 NEED_FULL when the requested qty exceeds the remaining quota', async () => {
 		// target 50, already 48 declared → only 2 left, but payload asks for 5
 		vi.mocked(adminRaw).mockImplementation(needsMock(50, 48));

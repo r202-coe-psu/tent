@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { computeNeeds } from './compute-needs';
+import { computeNeeds, pickCampaignForItems } from './compute-needs';
 import type {
+	StockLedger,
 	CampaignNeed,
 	Donation,
 	DonationCampaign,
@@ -248,5 +249,179 @@ describe('computeNeeds', () => {
 		);
 		expect(remaining.size).toBe(0);
 		expect(itemCampaign.size).toBe(0);
+	});
+});
+
+describe('pickCampaignForItems', () => {
+	/**
+	 * The bug this exists for: two open campaigns both want rice, the board sums them
+	 * into one headline figure, but a donation carries a single campaign_id. Binding to
+	 * whichever campaign came first meant a donor was shown 590 kg of headroom, asked
+	 * for 200, and was refused — while the other campaign sat on 500 nobody could reach.
+	 */
+	function pick(campaigns: DonationCampaign[], items: { item_id?: string; qty: string }[]) {
+		const { campaignRemaining } = computeNeeds(campaigns, []);
+		return pickCampaignForItems(campaignRemaining, items);
+	}
+
+	it('skips a campaign that cannot take the amount and uses one that can', () => {
+		const result = pick(
+			[campaign('c1', [need('item:rice', '90')]), campaign('c2', [need('item:rice', '500')])],
+			[{ item_id: 'item:rice', qty: '200' }]
+		);
+		expect(result).toEqual({ ok: true, campaignId: 'c2' });
+	});
+
+	it('still prefers the earlier campaign when it can take the amount', () => {
+		// Older campaigns fill first; the fallback must not reorder normal bookings.
+		const result = pick(
+			[campaign('c1', [need('item:rice', '300')]), campaign('c2', [need('item:rice', '500')])],
+			[{ item_id: 'item:rice', qty: '200' }]
+		);
+		expect(result).toEqual({ ok: true, campaignId: 'c1' });
+	});
+
+	it('accepts a request that exactly fills a campaign', () => {
+		const result = pick(
+			[campaign('c1', [need('item:rice', '90')])],
+			[{ item_id: 'item:rice', qty: '90' }]
+		);
+		expect(result).toEqual({ ok: true, campaignId: 'c1' });
+	});
+
+	it('refuses when the total is only reachable by splitting across campaigns', () => {
+		// 90 + 500 = 590 on the board, but no single booking can draw on both.
+		const result = pick(
+			[campaign('c1', [need('item:rice', '90')]), campaign('c2', [need('item:rice', '500')])],
+			[{ item_id: 'item:rice', qty: '550' }]
+		);
+		expect(result).toEqual({ ok: false, itemId: 'item:rice' });
+	});
+
+	it('needs one campaign to cover every item in the request', () => {
+		// c1 has the rice but no water; c2 has both, so c2 wins.
+		const result = pick(
+			[
+				campaign('c1', [need('item:rice', '500')]),
+				campaign('c2', [need('item:rice', '500'), need('item:water', '100')])
+			],
+			[
+				{ item_id: 'item:rice', qty: '10' },
+				{ item_id: 'item:water', qty: '10' }
+			]
+		);
+		expect(result).toEqual({ ok: true, campaignId: 'c2' });
+	});
+
+	it('refuses when no campaign carries the whole basket', () => {
+		const result = pick(
+			[campaign('c1', [need('item:rice', '500')]), campaign('c2', [need('item:water', '100')])],
+			[
+				{ item_id: 'item:rice', qty: '10' },
+				{ item_id: 'item:water', qty: '10' }
+			]
+		);
+		expect(result.ok).toBe(false);
+	});
+
+	it('leaves free-text donations unbound, as before', () => {
+		const result = pick([campaign('c1', [need('item:rice', '500')])], [{ qty: '5' }]);
+		expect(result).toEqual({ ok: true, campaignId: null });
+	});
+
+	it('leaves an item no open campaign asks for unbound', () => {
+		const result = pick(
+			[campaign('c1', [need('item:rice', '500')])],
+			[{ item_id: 'item:blanket', qty: '5' }]
+		);
+		expect(result).toEqual({ ok: true, campaignId: null });
+	});
+
+	it('will not route a donation into a need staff closed', () => {
+		const result = pick(
+			[
+				campaign('c1', [need('item:rice', '500', 'closed')]),
+				campaign('c2', [need('item:rice', '500')])
+			],
+			[{ item_id: 'item:rice', qty: '10' }]
+		);
+		expect(result).toEqual({ ok: true, campaignId: 'c2' });
+	});
+});
+
+describe('on-hand stock (T-22 cut-off)', () => {
+	function ledger(item_id: string, qty: string, extra: Partial<StockLedger> = {}): StockLedger {
+		return {
+			...BASE,
+			_id: `stock_ledger:${item_id}:${qty}`,
+			type: 'stock_ledger',
+			item_id,
+			qty,
+			reason: 'donation',
+			ref_id: null,
+			...extra
+		} as StockLedger;
+	}
+
+	it('counts what the warehouse already holds against the target', () => {
+		// The bug this closes: a shelter sitting on 540 kg against a 500 kg target still
+		// shouted "ด่วน! ขาด 450 กก." on the public board while its own staff screen
+		// showed FULL, because only this side ignored the ledger.
+		const { remaining } = computeNeeds(
+			[campaign('c1', [need('item:rice', '500')])],
+			[],
+			[ledger('item:rice', '540')]
+		);
+		expect(remaining.get('item:rice')).toBe('-40');
+	});
+
+	it('adds on-hand and reserved the way the back-office board does', () => {
+		const { remaining } = computeNeeds(
+			[campaign('c1', [need('item:rice', '500')])],
+			[donation('donation:1', 'c1', 'declared', [{ item_id: 'item:rice', qty: '50' }])],
+			[ledger('item:rice', '300')]
+		);
+		expect(remaining.get('item:rice')).toBe('150');
+	});
+
+	it('does not count a received donation twice once the ledger carries it', () => {
+		// 100 kg arrived and was booked in. It is on the shelf, not still owed.
+		const { remaining } = computeNeeds(
+			[campaign('c1', [need('item:rice', '500')])],
+			[donation('donation:1', 'c1', 'received', [{ item_id: 'item:rice', qty: '100' }])],
+			[ledger('item:rice', '100', { ref_id: 'donation:1' })]
+		);
+		expect(remaining.get('item:rice')).toBe('400');
+	});
+
+	it('still owes a received donation the ledger has not recorded yet', () => {
+		const { remaining } = computeNeeds(
+			[campaign('c1', [need('item:rice', '500')])],
+			[donation('donation:1', 'c1', 'received', [{ item_id: 'item:rice', qty: '100' }])],
+			[]
+		);
+		expect(remaining.get('item:rice')).toBe('400');
+	});
+
+	it('lets issues out of the warehouse reopen a need', () => {
+		// Distributing stock out is a negative ledger row (T-22 "เปิดรับใหม่อัตโนมัติ").
+		const { remaining } = computeNeeds(
+			[campaign('c1', [need('item:rice', '500')])],
+			[],
+			[ledger('item:rice', '500'), ledger('item:rice', '-120', { reason: 'distribute' })]
+		);
+		expect(remaining.get('item:rice')).toBe('120');
+	});
+
+	it('keeps a booking out when the warehouse already covers the target', () => {
+		const { campaignRemaining } = computeNeeds(
+			[campaign('c1', [need('item:rice', '500')])],
+			[],
+			[ledger('item:rice', '540')]
+		);
+		expect(pickCampaignForItems(campaignRemaining, [{ item_id: 'item:rice', qty: '10' }])).toEqual({
+			ok: false,
+			itemId: 'item:rice'
+		});
 	});
 });

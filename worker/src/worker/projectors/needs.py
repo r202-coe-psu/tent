@@ -54,9 +54,16 @@ async def project_needs_for_shelter(
         for doc in await _fetch_docs_by_prefix(couch, database, "donation:")
         if doc.get("type") == "donation"
     ]
+    # T-22 closes a need on on-hand + reserved, so the warehouse has to be in hand
+    # here too — the back-office board has counted it since CR-034.
+    stock_ledgers = [
+        doc
+        for doc in await _fetch_docs_by_prefix(couch, database, "stock_ledger:")
+        if doc.get("type") == "stock_ledger"
+    ]
     catalog = await _load_catalog_map(couch)
 
-    remaining, _ = compute_needs(campaigns, donations)
+    remaining, _ = compute_needs(campaigns, donations, stock_ledgers)
     now = datetime.now(UTC)
     actions: list[tuple[ProjectionAction, dict[str, Any] | None]] = []
 

@@ -30,7 +30,12 @@ export {
 
 // Domain — shared PURE computation (needs board + POST donations). Server-side
 // doc fetching lives in $lib/server/donation-docs (kept out of the client barrel).
-export { computeNeeds } from './domain/compute-needs';
+export {
+	computeNeeds,
+	pickCampaignForItems,
+	type CampaignPick,
+	type RequestedItem
+} from './domain/compute-needs';
 
 // Domain — input schemas + factories + transitions + guards
 export {
