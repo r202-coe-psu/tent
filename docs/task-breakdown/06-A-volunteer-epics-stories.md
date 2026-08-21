@@ -458,6 +458,20 @@ So that I can help where needed without creating duplicate profiles.
 **And** กติกาไม่ซ้อนเวลายังใช้ข้ามศูนย์ (F-OVERLAP)  
 **And** PII ยัง mask ตาม NFR-20; ไม่ขยายสิทธิ์ข้ามศูนย์จากแค่สมัคร (MA-08, MA-13, MA-16)
 
+### Story 3.11: สแกน QR Ticket รายงานตัวหน้างานและบันทึกเวลาเข้า-ออก
+
+As a shelter reception or registration staff,  
+I want to scan an incoming volunteer's QR Ticket on arrival,  
+So that the system logs their check-in/out timestamps and updates active volunteer metrics in real-time.
+
+**Acceptance Criteria:**
+
+**Given** อาสาสมัครเดินทางมาถึงศูนย์พร้อม Digital Ticket / QR Code  
+**When** เจ้าหน้าที่เปิดหน้า `/volunteers/checkin` และสแกน QR Ticket (หรือค้นหาด้วยชื่อ/เบอร์โทร)  
+**Then** ระบบบันทึกเวลา `check_in_at` ลงใน `shift_assignment` และปรับสถานะเป็น `checked_in`  
+**And** ตัวเลข `volunteers_active` ของศูนย์อัปเดตแบบ real-time  
+**And** เมื่อหมดกะ สามารถสแกนซ้ำเพื่อบันทึก `check_out_at` (MA-10b, D-CHECKIN)
+
 ---
 
 ## Epic 4: สิทธิ์ตามกะสำหรับอาสา staff-capable
