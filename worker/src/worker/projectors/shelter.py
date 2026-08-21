@@ -67,12 +67,16 @@ def project_shelter(doc: dict[str, Any]) -> tuple[ProjectionAction, dict[str, An
             payload["registry_id"] = registry_id
         return ("delete", payload)
 
-    location = doc.get("location") or {}
-    lat = location.get("lat")
-    lng = location.get("lng")
+    location_doc = doc.get("location") or {}
+    lat = location_doc.get("lat")
+    lng = location_doc.get("lng")
     geo = None
+    location_geojson = None
     if lat is not None and lng is not None:
-        geo = {"lat": float(lat), "lng": float(lng)}
+        lat_f = float(lat)
+        lng_f = float(lng)
+        geo = {"lat": lat_f, "lng": lng_f}
+        location_geojson = {"type": "Point", "coordinates": [lng_f, lat_f]}
 
     updated_raw = doc.get("updated_at") or doc.get("created_at")
     updated_at = (
@@ -96,4 +100,6 @@ def project_shelter(doc: dict[str, Any]) -> tuple[ProjectionAction, dict[str, An
     }
     if geo:
         payload["geo"] = geo
+    if location_geojson:
+        payload["location"] = location_geojson
     return ("upsert", payload)

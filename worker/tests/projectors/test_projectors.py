@@ -52,6 +52,7 @@ def test_project_shelter_v1_open():
         "name": "ศูนย์ทดสอบ",
         "operation_status": "active",
         "capacity": 200,
+        "location": {"lat": 7.0, "lng": 100.5},
         "updated_at": "2026-01-01T00:00:00.000Z",
     }
     action, payload = project_shelter(doc)
@@ -61,6 +62,8 @@ def test_project_shelter_v1_open():
     assert payload["status"] == "open"
     assert payload["registry_id"] == "shelter:01TEST"
     assert payload["capacity"] == 200
+    assert payload["geo"] == {"lat": 7.0, "lng": 100.5}
+    assert payload["location"] == {"type": "Point", "coordinates": [100.5, 7.0]}
     assert "national_id" not in payload
 
 

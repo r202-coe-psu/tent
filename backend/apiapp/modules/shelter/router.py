@@ -23,6 +23,9 @@ async def list_shelters(
     district: str | None = Query(default=None),
     subdistrict: str | None = Query(default=None),
     status: str | None = Query(default=None),
+    lat: float | None = Query(default=None, ge=-90.0, le=90.0, description="User latitude"),
+    lng: float | None = Query(default=None, ge=-180.0, le=180.0, description="User longitude"),
+    radius_km: float | None = Query(default=None, gt=0, description="Search radius in kilometers"),
     use_case: ShelterUseCase = Depends(get_shelter_use_case),  # noqa: B008
 ) -> ShelterListResponse:
     """List shelters from the MongoDB read model."""
@@ -32,6 +35,9 @@ async def list_shelters(
         district=district,
         subdistrict=subdistrict,
         status=status,
+        lat=lat,
+        lng=lng,
+        radius_km=radius_km,
     )
 
 

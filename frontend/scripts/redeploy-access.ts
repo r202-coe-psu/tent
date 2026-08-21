@@ -53,10 +53,11 @@ function loadEnv(): Record<string, string> {
 }
 
 const env = loadEnv();
-const rawCouchUrl = env.COUCHDB_ADMIN_URL;
+const rawCouchUrl = process.env.COUCHDB_ADMIN_URL ?? env.COUCHDB_ADMIN_URL;
 
 if (!rawCouchUrl) {
-	console.error('✗ COUCHDB_ADMIN_URL is not set in frontend/.env');
+	console.error('✗ COUCHDB_ADMIN_URL is not set');
+	console.error('  Set it in the environment or frontend/.env');
 	console.error('  Format: http://admin:<password>@<host>:<port>');
 	process.exit(1);
 }
@@ -123,13 +124,41 @@ async function listShelterMasters(): Promise<ShelterMasterRow[]> {
 		.map((r) => ({ code: r.doc!.code! }));
 }
 
-async function redeployShelterAccessDesign(db: string, shelterCode: string): Promise<number> {
+interface AccessRedeployOutcome {
+	status: number;
+	updated: boolean;
+	reason: 'already_current' | 'created' | 'updated' | 'diff_will_update' | 'missing_will_create';
+}
+
+async function redeployShelterAccessDesign(
+	db: string,
+	shelterCode: string,
+	dryRun: boolean
+): Promise<AccessRedeployOutcome> {
 	const existing = await couchReq('GET', `/${db}/_design/access`);
-	const rev = existing.status === 200 ? (existing.data as { _rev: string })._rev : undefined;
+	const existingData =
+		existing.status === 200
+			? (existing.data as { _rev?: string; validate_doc_update?: string } | null)
+			: null;
+	const expectedValidate = buildValidateDocUpdate(shelterCode);
+
+	if (existingData && existingData.validate_doc_update === expectedValidate) {
+		return { status: 304, updated: false, reason: 'already_current' };
+	}
+
+	if (dryRun) {
+		return {
+			status: 200,
+			updated: true,
+			reason: existing.status === 404 ? 'missing_will_create' : 'diff_will_update'
+		};
+	}
+
+	const rev = existingData?._rev;
 	const res = await couchReq('PUT', `/${db}/_design/access`, {
 		_id: '_design/access',
 		...(rev ? { _rev: rev } : {}),
-		validate_doc_update: buildValidateDocUpdate(shelterCode)
+		validate_doc_update: expectedValidate
 	});
 	if (res.status >= 400) {
 		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
@@ -137,11 +166,20 @@ async function redeployShelterAccessDesign(db: string, shelterCode: string): Pro
 			`validate_doc_update redeploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
 		);
 	}
-	return res.status;
+	return { status: res.status, updated: true, reason: rev ? 'updated' : 'created' };
 }
 
-async function deployReferralMangoIndexes(db: string): Promise<void> {
+async function deployReferralMangoIndexes(
+	db: string,
+	dryRun: boolean
+): Promise<{ created: number; existing: number }> {
+	let created = 0;
+	let existing = 0;
 	for (const def of REFERRAL_MANGO_INDEXES) {
+		if (dryRun) {
+			created++;
+			continue;
+		}
 		const res = await couchReq('POST', `/${db}/_index`, def);
 		if (res.status >= 400) {
 			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
@@ -149,7 +187,14 @@ async function deployReferralMangoIndexes(db: string): Promise<void> {
 				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
 			);
 		}
+		const result = (res.data as { result?: string } | null)?.result;
+		if (result === 'exists') {
+			existing++;
+		} else {
+			created++;
+		}
 	}
+	return { created, existing };
 }
 
 // ─── main ───────────────────────────────────────────────────────────────────
@@ -176,19 +221,30 @@ async function main() {
 		const db = shelterDbName(code);
 		console.log(`  → ${code} (${db})`);
 
-		if (DRY_RUN) {
-			console.log(
-				`    would redeploy _design/access + ${REFERRAL_MANGO_INDEXES.length} mango indexes`
-			);
-			ok++;
-			continue;
-		}
-
 		try {
-			const status = await redeployShelterAccessDesign(db, code);
-			console.log(`    ✓ _design/access (${status})`);
-			await deployReferralMangoIndexes(db);
-			console.log(`    ✓ referral mango indexes`);
+			const accessResult = await redeployShelterAccessDesign(db, code, DRY_RUN);
+			if (DRY_RUN) {
+				if (accessResult.updated) {
+					console.log(
+						`    would redeploy _design/access (${accessResult.reason}) + ${REFERRAL_MANGO_INDEXES.length} mango indexes`
+					);
+				} else {
+					console.log(`    _design/access already current (skip PUT)`);
+				}
+				ok++;
+				continue;
+			}
+
+			if (accessResult.updated) {
+				console.log(`    ✓ _design/access (${accessResult.reason}, HTTP ${accessResult.status})`);
+			} else {
+				console.log(`    ✓ _design/access (already current, skipped PUT)`);
+			}
+
+			const indexResult = await deployReferralMangoIndexes(db, false);
+			console.log(
+				`    ✓ referral mango indexes (${indexResult.created} created, ${indexResult.existing} existing)`
+			);
 			ok++;
 		} catch (e: unknown) {
 			const msg = e instanceof Error ? e.message : String(e);
@@ -210,3 +266,4 @@ main().catch((e) => {
 	console.error('Fatal:', e);
 	process.exit(1);
 });
+

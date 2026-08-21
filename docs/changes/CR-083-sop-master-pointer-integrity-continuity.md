@@ -1,5 +1,5 @@
 ---
-id: CR-081
+id: CR-083
 title: SOP master active pointer — verified resolution and fail-closed calculation
 status: approved
 date: 2026-08-19
@@ -13,7 +13,7 @@ affects:
   - relevant unit & integration tests
 ---
 
-# CR-081 — SOP master active pointer: verified resolution and fail-closed calculation
+# CR-083 — SOP master active pointer: verified resolution and fail-closed calculation
 
 > **สรุป (TL;DR):** `sop_profile_active:global` ต้องชี้ได้เฉพาะ immutable `sop_profile` ที่มีอยู่จริงและ validate ผ่านสเปก · T-31 Resource Calculation ต้อง fail-closed เมื่อ master active pointer ผิดปกติ (pointer missing/malformed, target missing/malformed, slug/version mismatch หรือ unresolved CAS conflict) · Legacy Kitchen API คงเดิมไม่เปลี่ยน behavior · Active override ยังคงชนะตามลำดับความสำคัญของ CR-006 · Existing `daily_calc` snapshots ไม่ถูกลบหรือ rewrite · ไม่เพิ่ม persisted field และไม่ bump `schema_v`
 

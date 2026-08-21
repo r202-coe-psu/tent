@@ -2,7 +2,7 @@
 title: Smart Shelter — Sitemap & Endpoint Map
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-13
+updated: 2026-08-21
 note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public; CR-040 route `/reports`
 ---
 
@@ -110,10 +110,12 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 
 ### 2.6 Volunteer — SM
 
-| Route                | หน้าที่                                               | FR    | Endpoint / Data action        |
-| -------------------- | ----------------------------------------------------- | ----- | ----------------------------- |
-| `/volunteers`        | ทะเบียนอาสาสมัคร + skills (อาสาไม่จำเป็นต้องมี login) | FR-42 | `put volunteer:{ulid}`        |
-| `/volunteers/shifts` | skill match + จัดเวร/มอบหมายงาน                       | FR-43 | `put shift_assignment:{ulid}` |
+| Route                 | หน้าที่                                                                                   | FR    | Endpoint / Data action                                            |
+| --------------------- | ----------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------- |
+| `/volunteers`         | ทะเบียนอาสาสมัคร + skills + ค้นหา/กรอง (อาสา operational ไม่จำเป็นต้องมี login)           | FR-42 | `put volunteer:{ulid}`                                            |
+| `/volunteers/jobs`    | Job Board ประจำศูนย์: สร้าง/แก้ประกาศงาน, ตั้งกะ, ดูผู้สมัคร, toggle auto-accept (CR-041) | FR-43 | `put job:{ulid}` · Mango `job_application`                       |
+| `/volunteers/shifts`  | skill match + จัดเวร/มอบหมายงาน + ตรวจสอบเวลาทับซ้อน                                      | FR-43 | `put shift_assignment:{ulid}`                                     |
+| `/volunteers/checkin` | จุดสแกน QR Ticket รายงานตัวหน้างาน บันทึกเวลาเข้า-ออก และอัปเดต `volunteers_active`       | FR-42 | `put shift_assignment` (check_in_at) · `put volunteer` (checkin) |
 
 ### 2.7 SOP & Resource Calculation — SM ดู / SA config
 
@@ -151,13 +153,26 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 ทุก endpoint rate-limited + anti-enumeration (NFR-24) — contract เต็มดู
 [public-tier-flow-spec](features/public-tier-flow-spec.html)
 
-| Endpoint                                    | หน้าที่                                                                                                               | FR        | Auth                                              |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------- |
-| `POST /public/v1/occupants`                 | ค้นญาติ — คืน masked directory (`first_name`, `last_name`, `nickname`, `shelter_status` เท่านั้น); เคารพ opt-out 100% | FR-53     | — (audit ทุกครั้ง)                                |
-| `GET /public/v1/needs`                      | shortage รายศูนย์ (counts only, no-PII) เพื่อ direct การบริจาค                                                        | FR-32     | —                                                 |
-| `POST /public/v1/donations`                 | donor pre-declaration + reservation                                                                                   | FR-32, 35 | เบอร์โทร + OTP (เมื่อ `public_otp_required` เปิด) |
-| `GET /public/v1/donations/{tracking_token}` | ติดตามสถานะการบริจาคของตน                                                                                             | FR-35, 37 | `tracking_token`                                  |
-| `GET /public/v1/transparency/*`             | รายงานความโปร่งใส (aggregate) 🔒                                                                                      | FR-38     | —                                                 |
+**Public Routes (SPA):**
+- `/` — Public Landing (Hero metrics, Quick-service cards)
+- `/shelters` — Public Shelter Dashboard
+- `/search` — Family Search
+- `/donate` — Donation & Queue Booking
+- `/volunteer` — Volunteer Portal Landing (CR-041 D-PUBLIC=A)
+- `/volunteer/jobs` — Public Job Board & Application
+- `/volunteer/ticket/[token]` — Digital Volunteer Ticket & Status Check
+
+| Endpoint                                         | หน้าที่                                                                                                               | FR        | Auth                                              |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------- |
+| `POST /public/v1/occupants`                      | ค้นญาติ — คืน masked directory (`first_name`, `last_name`, `nickname`, `shelter_status` เท่านั้น); เคารพ opt-out 100% | FR-53     | — (audit ทุกครั้ง)                                |
+| `GET /public/v1/needs`                           | shortage รายศูนย์ (counts only, no-PII) เพื่อ direct การบริจาค                                                        | FR-32     | —                                                 |
+| `POST /public/v1/donations`                      | donor pre-declaration + reservation                                                                                   | FR-32, 35 | reCAPTCHA v3 + Rate Limit                         |
+| `GET /public/v1/donations/{tracking_token}`      | ติดตามสถานะการบริจาคของตน                                                                                             | FR-35, 37 | `tracking_token`                                  |
+| `GET /public/v1/transparency/*`                  | รายงานความโปร่งใส (aggregate) 🔒                                                                                      | FR-38     | —                                                 |
+| `GET /public/v1/jobs`                            | รายการ Job Board เปิดรับสมัครของศูนย์ต่าง ๆ พร้อมยอดโควตา                                                             | FR-43     | —                                                 |
+| `POST /public/v1/jobs/{id}/apply`                | ยื่นใบสมัครงานอาสาสมัคร (No-Auth) → ออก `tracking_token` + Digital Ticket                                             | FR-42     | reCAPTCHA v3 + Rate Limit                         |
+| `GET /public/v1/volunteer/ticket/{token}`        | ตรวจสอบสถานะการสมัคร / วันเวลานัดหมาย / QR Code ประจำตัว                                                              | FR-42     | `tracking_token`                                  |
+| `POST /public/v1/volunteer/ticket/{token}/cancel`| กดยกเลิกการสมัครล่วงหน้า                                                                                              | FR-42     | `tracking_token`                                  |
 
 **EOC / Open API (R4 deferred — service แยก):** `GET` aggregate API + API key per consumer
 (FR-49, 51) — ไม่มี endpoint รายบุคคล, no-PII, audited; spec จะนิยามใน P-03

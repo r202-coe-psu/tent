@@ -233,7 +233,7 @@ describe('SopMasterRemoteRepository Active Pointer & Migration Invariants', () =
 	});
 });
 
-describe('getVerifiedActiveMaster and getVerifiedActiveSopProfile (CR-081)', () => {
+describe('getVerifiedActiveMaster and getVerifiedActiveSopProfile (CR-083)', () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
 	});
@@ -498,7 +498,7 @@ describe('getVerifiedActiveMaster and getVerifiedActiveSopProfile (CR-081)', () 
 	});
 });
 
-describe('Shared Post-Write Verification (Blocker 2 of CR-081)', () => {
+describe('Shared Post-Write Verification (Blocker 2 of CR-083)', () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
 	});
