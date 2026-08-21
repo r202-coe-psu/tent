@@ -16,12 +16,17 @@ export type {
 	PublicShelterItem,
 	PublicShelterListResponse
 } from './domain/types';
+export { searchResultKey, toPublicShelterCard, toUiShelterStatus } from './domain/mappers';
 export {
 	isInShelterStatus,
-	searchResultKey,
-	toPublicShelterCard,
-	toUiShelterStatus
-} from './domain/mappers';
+	publicStayStatusLabel,
+	publicStayStatusTone,
+	PUBLIC_STAY_STATUS_LABELS,
+	PUBLIC_STAY_STATUSES,
+	type PublicStayStatus,
+	type StayStatusTone
+} from './domain/stay-status';
+export { default as StayStatusChip } from './ui/stay-status-chip.svelte';
 export { familySearch, listPublicShelters } from './data/public-api';
 export {
 	publicPortalKeys,

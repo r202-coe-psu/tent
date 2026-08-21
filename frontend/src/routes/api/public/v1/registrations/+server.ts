@@ -12,7 +12,7 @@ import {
 } from '$lib/features/public-register/server';
 import { createEvacuee, createHousehold } from '$lib/features/people/server';
 import { isShelterBookable } from '$lib/features/shelters/server';
-import { bulkAsPublicWriter } from '$lib/server/couch-public-writer';
+import { bulkAsPublicWriter, rollbackAsPublicWriter } from '$lib/server/couch-public-writer';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { shelterDbName } from '$lib/server/shelter-access-design';
@@ -105,15 +105,28 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	);
 	household.head_evacuee_id = evacuees[0]._id;
 
-	const { status, failed } = await bulkAsPublicWriter(shelterDbName(input.shelter_code), [
-		household,
-		...evacuees
-	]);
+	const dbName = shelterDbName(input.shelter_code);
+	const { status, failed, written } = await bulkAsPublicWriter(dbName, [household, ...evacuees]);
 	if (failed.length > 0) {
 		console.error(
 			`public booking write failed (${status}): ` +
 				failed.map((f) => `${f.id}=${f.reason}`).join(', ')
 		);
+
+		// `_bulk_docs` is per-row, not a transaction: the rows that were accepted
+		// are already durable. Left alone they become an orphan household — or an
+		// evacuee holding a `pre_registered` place (and therefore occupancy, per
+		// D-BOOK-OCC=C) for a booking the citizen was just told had failed.
+		const { rolledBack, orphaned } = await rollbackAsPublicWriter(dbName, written);
+		if (rolledBack.length > 0) {
+			console.warn(`public booking rolled back partial write: ${rolledBack.join(', ')}`);
+		}
+		if (orphaned.length > 0) {
+			console.error(
+				`public booking LEFT ORPHAN DOCS in ${dbName} — needs manual cleanup: ${orphaned.join(', ')}`
+			);
+		}
+
 		return json({ success: false, error: 'WRITE_FAILED' }, { status: 502, headers: noStore });
 	}
 

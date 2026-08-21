@@ -79,7 +79,8 @@ async def test_evacuee_search_by_phone_returns_masked_result(
     assert body["count"] == 1
     result = body["results"][0]
     assert result["name"] == f"สมชาย {mask_last_name('ใจดี')}"
-    assert result["status"] == "in_shelter"
+    # CR-080: the real stay status, not the old collapsed `in_shelter` bucket.
+    assert result["status"] == "active"
     assert result["shelter_name"] == "ศูนย์ทดสอบ"
     assert result["national_id"] == "390-XXXX-XX-192"
     assert "phone" not in result
@@ -129,7 +130,7 @@ async def test_evacuee_search_by_national_id_exact_match(
     assert response.status_code == 200
     body = response.json()
     assert body["count"] == 1
-    assert body["results"][0]["status"] == "moved"
+    assert body["results"][0]["status"] == "transferred"
 
 
 async def test_evacuee_search_includes_family_members(
@@ -181,6 +182,151 @@ async def test_evacuee_search_includes_family_members(
     members = response.json()["results"][0]["family_members"]
     assert len(members) == 1
     assert members[0]["name"] == f"ลูก {mask_last_name('ใจดี')}"
+    assert members[0]["status"] == "active"
+
+
+async def test_evacuee_search_reports_pre_registered_as_itself(
+    client: AsyncClient,
+    db_client: AsyncIOMotorClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """CR-080 — the case the old three-bucket mapping got wrong.
+
+    Someone who booked online (CR-070) and has not arrived is `pre_registered`.
+    The public search used to fold that into `in_shelter`, telling a relative the
+    person was safely at the shelter when nobody had seen them.
+    """
+    phone = "0822222222"
+    now = datetime.now(UTC)
+    await _insert_shelter(
+        db_client,
+        settings,
+        {
+            "_id": "SH001",
+            "shelter_code": "SH001",
+            "name": "ศูนย์ทดสอบ",
+            "status": "open",
+            "capacity": 100,
+            "updated_at": now,
+        },
+    )
+    await _insert_person(
+        db_client,
+        settings,
+        {
+            "_id": "evacuee:booked",
+            "shelter_code": "SH001",
+            "first_name": "สมปอง",
+            "last_name_masked": mask_last_name("ยังไม่มา"),
+            "phone_hash": phone_hash(phone),
+            "search_excluded": False,
+            "status": "pre_registered",
+            "updated_at": now,
+        },
+    )
+
+    response = await client.post(
+        "/public/v1/occupants",
+        json={"q": phone},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["results"][0]["status"] == "pre_registered"
+
+
+async def test_evacuee_search_reports_unmapped_status_as_unknown(
+    client: AsyncClient,
+    db_client: AsyncIOMotorClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """A projection emitting a status the API has not been taught must not be
+    guessed at — `unknown` says so plainly instead of picking an outcome."""
+    phone = "0833333333"
+    now = datetime.now(UTC)
+    await _insert_person(
+        db_client,
+        settings,
+        {
+            "_id": "evacuee:weird",
+            "shelter_code": "SH001",
+            "first_name": "สมศรี",
+            "last_name_masked": mask_last_name("แปลก"),
+            "phone_hash": phone_hash(phone),
+            "search_excluded": False,
+            "status": "teleported",
+            "updated_at": now,
+        },
+    )
+
+    response = await client.post(
+        "/public/v1/occupants",
+        json={"q": phone},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["results"][0]["status"] == "unknown"
+
+
+async def test_evacuee_search_matches_a_thai_name_prefix(
+    client: AsyncClient,
+    db_client: AsyncIOMotorClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """Thai is one token to MongoDB's text index, so partial names need the
+    prefix fallback — "สัก" found nothing before it existed (CR-080)."""
+    now = datetime.now(UTC)
+    await _insert_shelter(
+        db_client,
+        settings,
+        {
+            "_id": "SH001",
+            "shelter_code": "SH001",
+            "name": "ศูนย์ทดสอบ",
+            "status": "open",
+            "capacity": 100,
+            "updated_at": now,
+        },
+    )
+    await _insert_person(
+        db_client,
+        settings,
+        {
+            "_id": "evacuee:thai",
+            "shelter_code": "SH001",
+            "first_name": "สักก์ธนัชญ์",
+            "last_name_masked": mask_last_name("พีระพันธ์"),
+            "search_excluded": False,
+            "status": "active",
+            "updated_at": now,
+        },
+    )
+
+    partial = await client.post(
+        "/public/v1/occupants",
+        json={"q": "สักก์"},
+        headers=auth_headers,
+    )
+    assert partial.status_code == 200
+    assert partial.json()["count"] == 1
+
+    # Still exact-matchable, and still not a browse-everyone oracle: the regex is
+    # anchored, so a fragment from the middle of the name matches nothing.
+    exact = await client.post(
+        "/public/v1/occupants",
+        json={"q": "สักก์ธนัชญ์"},
+        headers=auth_headers,
+    )
+    assert exact.json()["count"] == 1
+
+    middle = await client.post(
+        "/public/v1/occupants",
+        json={"q": "ธนัชญ์"},
+        headers=auth_headers,
+    )
+    assert middle.json()["count"] == 0
 
 
 async def test_evacuee_search_hides_opted_out_records(

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import Clock from '@lucide/svelte/icons/clock';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Search from '@lucide/svelte/icons/search';
@@ -9,6 +8,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { familySearch } from '../data/public-api';
 	import { searchResultKey } from '../domain/mappers';
+	import StayStatusChip from './stay-status-chip.svelte';
 	import type { FamilySearchResult } from '../domain/types';
 
 	interface Props {
@@ -119,9 +119,8 @@
 								{formatDateTime(result.checked_in_at)}
 							</p>
 							{#if result.status}
-								<p class="mt-2 flex items-center gap-1.5 text-xs font-semibold text-success">
-									<CheckCircle class="h-3.5 w-3.5" />
-									{result.status}
+								<p class="mt-2">
+									<StayStatusChip status={result.status} size="sm" />
 								</p>
 							{/if}
 						</li>

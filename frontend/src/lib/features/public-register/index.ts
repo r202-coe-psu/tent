@@ -41,6 +41,7 @@ export {
 	bookingGenderSchema,
 	bookingNationalIdSchema,
 	bookingPhoneSchema,
+	bookingShelterCodeSchema,
 	evacueeIdFromBookingCode,
 	householdLabelFrom,
 	isCaptchaKeyConfigured,
@@ -50,6 +51,8 @@ export {
 	publicBookingMemberSchema,
 	publicBookingPetSchema,
 	publicBookingPetSpeciesSchema,
+	publicBookingVehicleSchema,
+	publicBookingVehicleTypeSchema,
 	toEvacueeInputs,
 	toHouseholdInput
 } from './domain/booking';

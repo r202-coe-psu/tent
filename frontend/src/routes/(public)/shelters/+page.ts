@@ -1,5 +1,9 @@
 import type { PageLoad } from './$types';
-import { listPublicShelters, toPublicShelterCard } from '$lib/features/public-portal';
+import {
+	listPublicShelters,
+	toPublicShelterCard,
+	type PublicShelterListResponse
+} from '$lib/features/public-portal';
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
 	const R = 6371;
@@ -37,7 +41,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const hasUser = !Number.isNaN(userLatNum) && !Number.isNaN(userLngNum);
 	const maxDistance = distance ? parseFloat(distance) : NaN;
 
-	let data: { shelters?: any[]; count?: number; as_of?: string } | null = null;
+	let data: PublicShelterListResponse;
 	try {
 		data = await listPublicShelters({
 			province: province || undefined,
@@ -54,7 +58,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		data = { shelters: [], count: 0, as_of: new Date().toISOString() };
 	}
 
-	const rawShelters = Array.isArray(data?.shelters) ? data.shelters : [];
+	const rawShelters = Array.isArray(data.shelters) ? data.shelters : [];
 
 	let shelters = rawShelters.map((item) => {
 		let dist = 0;

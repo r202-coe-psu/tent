@@ -64,12 +64,19 @@ export async function putAsPublicWriter(
  * single round trip. CouchDB `_bulk_docs` is not a transaction — it reports
  * per-row success — so the caller must check `failed` and compensate.
  *
- * Returns the rows CouchDB rejected; empty means every document was written.
+ * `written` carries the `_rev` of every row that DID land, which is what makes
+ * that compensation possible: a booking rejected halfway would otherwise leave a
+ * household with no members (or members with no household) behind while the API
+ * told the citizen the booking failed. Feed it to {@link rollbackAsPublicWriter}.
  */
 export async function bulkAsPublicWriter(
 	dbName: string,
 	docs: { _id: string }[]
-): Promise<{ status: number; failed: { id: string; reason: string }[] }> {
+): Promise<{
+	status: number;
+	failed: { id: string; reason: string }[];
+	written: { id: string; rev: string }[];
+}> {
 	const body = { docs, new_edits: true };
 	const path = `/${dbName}/_bulk_docs`;
 
@@ -104,13 +111,62 @@ export async function bulkAsPublicWriter(
 	}
 
 	if (status >= 400) {
-		return { status, failed: docs.map((d) => ({ id: d._id, reason: `HTTP ${status}` })) };
+		// The request itself was refused, so nothing landed — nothing to roll back.
+		return {
+			status,
+			failed: docs.map((d) => ({ id: d._id, reason: `HTTP ${status}` })),
+			written: []
+		};
 	}
 
-	const rows = Array.isArray(data) ? (data as { id?: string; ok?: boolean; error?: string }[]) : [];
+	const rows = Array.isArray(data)
+		? (data as { id?: string; ok?: boolean; error?: string; rev?: string }[])
+		: [];
 	const failed = rows
 		.filter((r) => !r.ok)
 		.map((r) => ({ id: r.id ?? '(unknown)', reason: r.error ?? 'unknown' }));
+	const written = rows
+		.filter((r) => r.ok && r.id && r.rev)
+		.map((r) => ({ id: r.id as string, rev: r.rev as string }));
 
-	return { status, failed };
+	return { status, failed, written };
+}
+
+/**
+ * Best-effort compensation for a partially applied {@link bulkAsPublicWriter}.
+ *
+ * `_bulk_docs` is per-row, not atomic: when one document in a booking is
+ * rejected the others are already durable. Deleting them keeps a booking that
+ * reported failure from leaving an orphan household — or worse, an evacuee
+ * counted against occupancy for a booking the citizen was told did not go
+ * through.
+ *
+ * Deletion passes `validate_doc_update`: the design doc only blocks deletes of
+ * the append-only types (`stock_ledger` / `audit` / `movement` / `screening`),
+ * and a booking writes neither.
+ *
+ * Best-effort by design — it never throws. If the rollback itself fails there is
+ * nothing useful left to do inside the request, and the caller is already
+ * returning an error; what matters is that the leftovers are named in the log so
+ * they can be cleaned up.
+ */
+export async function rollbackAsPublicWriter(
+	dbName: string,
+	written: { id: string; rev: string }[]
+): Promise<{ rolledBack: string[]; orphaned: string[] }> {
+	if (written.length === 0) return { rolledBack: [], orphaned: [] };
+
+	try {
+		const { failed } = await bulkAsPublicWriter(
+			dbName,
+			written.map(({ id, rev }) => ({ _id: id, _rev: rev, _deleted: true }))
+		);
+		const stuck = new Set(failed.map((f) => f.id));
+		return {
+			rolledBack: written.map((w) => w.id).filter((id) => !stuck.has(id)),
+			orphaned: written.map((w) => w.id).filter((id) => stuck.has(id))
+		};
+	} catch {
+		return { rolledBack: [], orphaned: written.map((w) => w.id) };
+	}
 }

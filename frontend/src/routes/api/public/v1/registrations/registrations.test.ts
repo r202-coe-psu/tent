@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
-import { bulkAsPublicWriter } from '$lib/server/couch-public-writer';
+import { bulkAsPublicWriter, rollbackAsPublicWriter } from '$lib/server/couch-public-writer';
 import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 
 type PostEvent = Parameters<typeof POST>[0];
@@ -21,7 +21,10 @@ vi.mock('$app/environment', () => ({
 }));
 
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
-vi.mock('$lib/server/couch-public-writer', () => ({ bulkAsPublicWriter: vi.fn() }));
+vi.mock('$lib/server/couch-public-writer', () => ({
+	bulkAsPublicWriter: vi.fn(),
+	rollbackAsPublicWriter: vi.fn()
+}));
 vi.mock('$lib/server/security/rate-limiter', () => ({
 	registerIpLimiter: { check: vi.fn(() => true) },
 	registerPhoneLimiter: { check: vi.fn(() => true) }
@@ -74,7 +77,9 @@ describe('POST /api/public/v1/registrations', () => {
 	beforeEach(() => {
 		vi.mocked(findMasterByCode).mockReset();
 		vi.mocked(bulkAsPublicWriter).mockReset();
-		vi.mocked(bulkAsPublicWriter).mockResolvedValue({ status: 201, failed: [] });
+		vi.mocked(bulkAsPublicWriter).mockResolvedValue({ status: 201, failed: [], written: [] });
+		vi.mocked(rollbackAsPublicWriter).mockReset();
+		vi.mocked(rollbackAsPublicWriter).mockResolvedValue({ rolledBack: [], orphaned: [] });
 		vi.mocked(registerIpLimiter.check).mockReturnValue(true);
 		vi.mocked(registerPhoneLimiter.check).mockReturnValue(true);
 		verifyToken.mockReset();
@@ -313,11 +318,49 @@ describe('POST /api/public/v1/registrations', () => {
 		vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
 		vi.mocked(bulkAsPublicWriter).mockResolvedValue({
 			status: 201,
-			failed: [{ id: 'evacuee:X', reason: 'forbidden' }]
+			failed: [{ id: 'evacuee:X', reason: 'forbidden' }],
+			written: []
 		});
 		const res = await POST(event(VALID_BODY));
 		expect(res.status).toBe(502);
 		expect((await res.json()).error).toBe('WRITE_FAILED');
+	});
+
+	// `_bulk_docs` is per-row, not atomic. Without this, a rejected member leaves
+	// the household (and any accepted member) durable — an orphan household, and
+	// an evacuee holding occupancy for a booking reported as failed.
+	it('rolls back the rows that did land when part of the bulk write is rejected', async () => {
+		vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+		vi.mocked(bulkAsPublicWriter).mockResolvedValue({
+			status: 201,
+			failed: [{ id: 'evacuee:X', reason: 'forbidden' }],
+			written: [
+				{ id: 'household:H1', rev: '1-a' },
+				{ id: 'evacuee:E1', rev: '1-b' }
+			]
+		});
+
+		const res = await POST(event(VALID_BODY));
+
+		expect(res.status).toBe(502);
+		expect(rollbackAsPublicWriter).toHaveBeenCalledWith('shelter_sh001', [
+			{ id: 'household:H1', rev: '1-a' },
+			{ id: 'evacuee:E1', rev: '1-b' }
+		]);
+	});
+
+	it('does not attempt a rollback when nothing landed', async () => {
+		vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+		vi.mocked(bulkAsPublicWriter).mockResolvedValue({
+			status: 503,
+			failed: [{ id: 'household:H1', reason: 'HTTP 503' }],
+			written: []
+		});
+
+		const res = await POST(event(VALID_BODY));
+
+		expect(res.status).toBe(502);
+		expect(rollbackAsPublicWriter).toHaveBeenCalledWith('shelter_sh001', []);
 	});
 
 	// CR-070 requires CAPTCHA on the public plane. A developer without Google keys

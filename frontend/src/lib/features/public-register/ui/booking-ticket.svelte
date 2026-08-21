@@ -57,8 +57,14 @@
 		downloading = true;
 		try {
 			await downloadElementAsPdf(ticketEl, `preregister-${ticket.code}`);
-		} catch {
-			toast.error('ดาวน์โหลดใบจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+		} catch (err) {
+			// Surface the real reason when there is one — a render that timed out
+			// says so, which tells the citizen retrying is worth it.
+			toast.error(
+				err instanceof Error && err.message
+					? err.message
+					: 'ดาวน์โหลดใบจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
+			);
 		} finally {
 			downloading = false;
 		}
