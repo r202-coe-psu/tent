@@ -150,6 +150,15 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `GET /public/v1/donations/{tracking_token}` | token |
 | `GET /public/v1/transparency/*` | — |
 
+### 5.1 External plane `/external/v1` (CR-062, CR-079 M2 Integration)
+
+สำหรับหน่วยงานและระบบภายนอก (เช่น ระบบ M2) เรียกใช้งาน:
+
+| Endpoint | Method | Auth | Response |
+| --- | --- | --- | --- |
+| `/external/v1/shelters` | GET | `Authorization: Bearer <token>` หรือ `X-API-Key` | รายการศูนย์พักพิง (`shelter_id`, `shelter_name`, `lat`, `long`) กรองตาม `status` |
+| `/external/v1/persons/shelter-residency` | GET | `Authorization: Bearer <token>` หรือ `X-API-Key` | สถานะการเข้าพัก (`shelter_id`, `shelter_name`, `checkin_datetime`, `status: CHECKED_IN\|CHECKED_OUT`) ค้นหาจาก `?cid=...` |
+
 ## 6. สิ่งที่ตั้งใจ "ไม่มี"
 
 - ไม่มี REST CRUD สำหรับ doc ปฏิบัติการ (evacuee/movement/stock/...) — ใช้ sync plane เท่านั้น

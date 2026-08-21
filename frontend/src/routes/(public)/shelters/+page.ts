@@ -32,6 +32,11 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			.map((s) => s.trim().toLowerCase())
 			.find((s) => s === 'open' || s === 'closed' || s === 'full' || s === 'prepare') || '';
 
+	const userLatNum = user_lat ? parseFloat(user_lat) : NaN;
+	const userLngNum = user_lng ? parseFloat(user_lng) : NaN;
+	const hasUser = !Number.isNaN(userLatNum) && !Number.isNaN(userLngNum);
+	const maxDistance = distance ? parseFloat(distance) : NaN;
+
 	let data: { shelters?: any[]; count?: number; as_of?: string } | null = null;
 	try {
 		data = await listPublicShelters({
@@ -39,17 +44,15 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			district: district || undefined,
 			subdistrict: subdistrict || undefined,
 			status: status || undefined,
+			lat: hasUser ? userLatNum : undefined,
+			lng: hasUser ? userLngNum : undefined,
+			radius_km: hasUser && !Number.isNaN(maxDistance) && maxDistance > 0 ? maxDistance : undefined,
 			fetch
 		});
 	} catch (e) {
 		console.warn('Failed to load public shelters:', e);
 		data = { shelters: [], count: 0, as_of: new Date().toISOString() };
 	}
-
-	const userLatNum = user_lat ? parseFloat(user_lat) : NaN;
-	const userLngNum = user_lng ? parseFloat(user_lng) : NaN;
-	const hasUser = !Number.isNaN(userLatNum) && !Number.isNaN(userLngNum);
-	const maxDistance = distance ? parseFloat(distance) : NaN;
 
 	const rawShelters = Array.isArray(data?.shelters) ? data.shelters : [];
 

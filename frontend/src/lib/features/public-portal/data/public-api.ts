@@ -38,6 +38,11 @@ export async function listPublicShelters(
 	if (params.district) url.searchParams.set('district', params.district);
 	if (params.subdistrict) url.searchParams.set('subdistrict', params.subdistrict);
 	if (params.status) url.searchParams.set('status', params.status);
+	if (params.lat !== undefined && !Number.isNaN(params.lat)) url.searchParams.set('lat', params.lat.toString());
+	if (params.lng !== undefined && !Number.isNaN(params.lng)) url.searchParams.set('lng', params.lng.toString());
+	if (params.radius_km !== undefined && !Number.isNaN(params.radius_km) && params.radius_km > 0) {
+		url.searchParams.set('radius_km', params.radius_km.toString());
+	}
 
 	const fetchFn = params.fetch ?? fetch;
 	const response = await fetchFn(`${url.pathname}${url.search}`);

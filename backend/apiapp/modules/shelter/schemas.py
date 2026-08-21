@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel, Field
-from tent_model.public_shelter import GeoPoint
+from tent_model.public_shelter import GeoJsonPoint, GeoPoint
 
 
 class ShelterListCapacityDetail(BaseModel):
@@ -19,6 +19,7 @@ class ShelterItem(BaseModel):
     status: str
     capacity: int = 0
     geo: GeoPoint | None = None
+    location: GeoJsonPoint | None = None
     province: str | None = None
     district: str | None = None
     subdistrict: str | None = None
@@ -94,6 +95,7 @@ class ShelterDetail(BaseModel):
     occupancy_rate: int
     building_status: str
     geo: GeoPoint | None = None
+    location: GeoJsonPoint | None = None
     admission_policy: ShelterAdmissionPolicyDetail
     travel: ShelterTravelDetail
     facilities: ShelterFacilitiesDetail
