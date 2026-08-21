@@ -36,6 +36,7 @@ async def test_process_donation_change_reprojects_needs():
             "worker.couch.processor.project_donation",
             return_value=("upsert", {"_id": "donation:01TEST"}),
         ),
+        patch("worker.couch.processor.reserve_walk_in_quota", new_callable=AsyncMock),
     ):
         await process_change(couch, "shelter_sh001", change)
 
@@ -84,6 +85,48 @@ async def test_process_donation_change_settles_quota():
 
     settle.assert_awaited_once()
     assert settle.await_args.args[0] is donation_doc
+
+
+@pytest.mark.asyncio
+async def test_process_donation_change_counts_a_walk_in():
+    """A donation staff keyed in never reserved — the counter has to pick it up.
+
+    Only FastAPI's public path calls reserve_quota. Without this the counter reported
+    less than the shelter actually owed and handed the difference back out to donors.
+    """
+    couch = AsyncMock()
+    walk_in = {
+        "_id": "donation:01WALKIN",
+        "type": "donation",
+        "status": "declared",
+        "campaign_id": "donation_campaign:01",
+        "items": [{"item_id": "item:rice", "qty": "40"}],
+    }
+    change = {"seq": 48, "id": "donation:01WALKIN", "doc": walk_in}
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_donation", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_need", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.project_needs_for_shelter",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "worker.couch.processor.project_donation",
+            return_value=("upsert", {"_id": "donation:01WALKIN"}),
+        ),
+        patch("worker.couch.processor.settle_donation_quota", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.reserve_walk_in_quota", new_callable=AsyncMock
+        ) as walk_in_quota,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    walk_in_quota.assert_awaited_once()
+    assert walk_in_quota.await_args.args[1] is walk_in
+    assert walk_in_quota.await_args.kwargs["shelter_code"] == "SH001"
 
 
 @pytest.mark.asyncio

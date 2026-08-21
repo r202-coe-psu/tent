@@ -223,3 +223,81 @@ async def test_missing_status_leaves_the_buffer_alone(db: None) -> None:
     assert await settle_donation_quota(malformed, now=datetime.now(UTC)) == Decimal("0")
     # Never write a null status onto the buffer — the guards downstream read it.
     assert await _current_status() == "declared"
+
+
+# --- walk-in donations must hold quota too ---
+
+
+def _walk_in(**overrides) -> dict:
+    doc = {
+        "_id": "donation:walkin",
+        "type": "donation",
+        "status": "declared",
+        "channel": "walk_in",
+        "tracking_token_hash": "hash-walkin",
+        "campaign_id": CAMPAIGN,
+        "items": [{"item_id": "item:rice", "qty": "40"}],
+    }
+    doc.update(overrides)
+    return doc
+
+
+async def _reconcile_calls(doc: dict) -> list:
+    """Run reserve_walk_in_quota with reconcile stubbed; return the calls it made."""
+    from unittest.mock import AsyncMock, patch
+
+    from worker.quota.reconcile import ShelterReconcileReport
+    from worker.quota.settle import reserve_walk_in_quota
+
+    with patch(
+        "worker.quota.settle.reconcile_shelter",
+        new_callable=AsyncMock,
+        return_value=ShelterReconcileReport(shelter_code=SHELTER),
+    ) as reconcile:
+        ran = await reserve_walk_in_quota(
+            AsyncMock(), doc, shelter_code=SHELTER, now=datetime.now(UTC)
+        )
+    return [ran, reconcile.await_count]
+
+
+async def test_walk_in_donation_is_counted(db: None) -> None:
+    ran, calls = await _reconcile_calls(_walk_in())
+    assert ran is True
+    assert calls == 1
+
+
+async def test_a_public_booking_is_left_alone(db: None) -> None:
+    """FastAPI already incremented on the way in — counting it here doubles it.
+
+    Note it is `channel`, not the token hash, that tells them apart: staff walk-ins
+    carry a tracking token too, so donors get a ticket either way.
+    """
+    ran, calls = await _reconcile_calls(_walk_in(channel="public"))
+    assert ran is False
+    assert calls == 0
+
+
+async def test_a_walk_in_outside_any_campaign_holds_nothing(db: None) -> None:
+    ran, calls = await _reconcile_calls(_walk_in(campaign_id=None))
+    assert ran is False
+    assert calls == 0
+
+
+async def test_free_text_only_walk_in_holds_nothing(db: None) -> None:
+    """No item_id means no counter to attribute it to."""
+    ran, calls = await _reconcile_calls(_walk_in(items=[{"free_text": "ข้าวสาร", "qty": "5"}]))
+    assert ran is False
+    assert calls == 0
+
+
+async def test_a_settled_walk_in_is_not_counted(db: None) -> None:
+    for status in ("cancelled", "expired", "rejected", "redirected"):
+        ran, calls = await _reconcile_calls(_walk_in(status=status))
+        assert ran is False, status
+        assert calls == 0, status
+
+
+async def test_a_received_walk_in_still_counts(db: None) -> None:
+    """Goods in hand consume the target just as a pledge does (CR-061)."""
+    ran, _ = await _reconcile_calls(_walk_in(status="received"))
+    assert ran is True

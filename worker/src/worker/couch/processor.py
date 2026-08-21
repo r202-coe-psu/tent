@@ -25,7 +25,7 @@ from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import project_shelter
-from worker.quota.settle import settle_donation_quota
+from worker.quota.settle import reserve_walk_in_quota, settle_donation_quota
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,12 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 # A donation that left declared/received stops holding its reservation.
                 # Driven off the CouchDB doc — the system of record — because the BFF
                 # cancels there directly and never touches the Mongo buffer.
-                await settle_donation_quota(doc, now=datetime.now(UTC))
+                now = datetime.now(UTC)
+                await settle_donation_quota(doc, now=now)
+                # …and one that arrived without ever reserving — a walk-in staff keyed
+                # in — has to start holding it, or the counter hands the same goods out
+                # to a public donor as well.
+                await reserve_walk_in_quota(couch, doc, shelter_code=shelter_code, now=now)
                 # New/updated declared items change remaining qty on the public board.
                 await _reproject_needs(couch, shelter_code)
             elif doc_type == "donation_campaign":

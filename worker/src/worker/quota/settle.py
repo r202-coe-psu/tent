@@ -34,7 +34,7 @@ from typing import Any
 
 from tent_model import DonationBuffer, release_quota
 
-from worker.quota.reconcile import QUOTA_HOLDING_STATUSES
+from worker.quota.reconcile import QUOTA_HOLDING_STATUSES, reconcile_shelter
 
 logger = logging.getLogger(__name__)
 
@@ -114,3 +114,67 @@ async def settle_donation_quota(doc: dict[str, Any], *, now: datetime) -> Decima
     buffer.status = new_status
     await buffer.save()
     return released
+
+
+async def reserve_walk_in_quota(
+    couch: Any,
+    doc: dict[str, Any],
+    *,
+    shelter_code: str,
+    now: datetime,
+) -> bool:
+    """Count a donation that reached CouchDB without ever reserving quota.
+
+    Only public bookings go through ``reserve_quota``: they are created by FastAPI,
+    which increments the counter as it accepts them. A donation staff key in at the
+    shelter is written straight to CouchDB, so the counter never hears about it — it
+    reported 360 while the shelter had 410 owed against a 500 target, and handed the
+    difference back out to donors.
+
+    CR-061 already settled that these count: ``sum_reserved_by_key`` treats every
+    CouchDB donation in a quota-holding status as reserved, walk-ins included, so
+    ``donation-quota recalculate`` would correct the counter to exactly this figure.
+    The live path simply disagreed with the tool meant to repair it.
+
+    Rather than add a second way to move ``reserved_qty``, this reuses that same
+    reconciliation, which makes it idempotent for free: it *sets* the counter to the
+    recomputed truth instead of incrementing, so replaying a change row cannot
+    double-count, and a booking landing mid-run is reported as a conflict and left
+    alone (CR-047 Cutover Lock) rather than stomped.
+
+    Returns whether a reconciliation ran.
+    """
+    # `channel` is the only honest signal here. Every donation carries a
+    # `tracking_token_hash` — staff walk-ins included, so donors can be given a ticket —
+    # and schema.md §2.3 defines `channel: public` as "came from /public/v1", which is
+    # exactly the path that already called reserve_quota. Re-counting one of those would
+    # be the double-count this function exists to avoid.
+    if doc.get("channel") == "public":
+        return False
+    # No campaign means no counter to hold — free-text and out-of-campaign walk-ins
+    # bypass the quota mechanism entirely, as they always have.
+    if not doc.get("campaign_id"):
+        return False
+    if doc.get("status") not in QUOTA_HOLDING_STATUSES:
+        return False
+    if not any(item.get("item_id") for item in doc.get("items") or []):
+        return False
+
+    report = await reconcile_shelter(couch, shelter_code, now=now, apply=True)
+    if report.counters_changed:
+        logger.info(
+            "Walk-in donation %s brought %d counter(s) in line for %s",
+            doc.get("_id"),
+            report.counters_changed,
+            shelter_code,
+        )
+    if report.counters_conflicted:
+        # A booking landed mid-run. The counter keeps the live value; the next donation
+        # change, or the scheduled recalculation, settles it.
+        logger.warning(
+            "Reconcile for %s hit %d conflict(s) after walk-in %s",
+            shelter_code,
+            report.counters_conflicted,
+            doc.get("_id"),
+        )
+    return True
