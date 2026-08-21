@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-14
+updated: 2026-08-20
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้
 ---
 
@@ -149,6 +149,15 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `POST /public/v1/donations` | เบอร์โทร (+OTP เมื่อ `public_otp_required` เปิด) |
 | `GET /public/v1/donations/{tracking_token}` | token |
 | `GET /public/v1/transparency/*` | — |
+| `POST /api/public/v1/registrations` | CAPTCHA + rate-limit (BFF-only, ไม่มีบน FastAPI) |
+| `POST /api/public/v1/registrations/lookup` | รหัสการจอง + เบอร์โทร (BFF-only) |
+
+> **หมายเหตุ (CR-070/T-71):** สอง endpoint ล่างเป็น **BFF-only** — อยู่บน SvelteKit เท่านั้น
+> (`frontend/src/routes/api/public/v1/registrations/**`) และเขียน CouchDB ตรงผ่าน
+> `putAsPublicWriter` (CouchDB user `public_writer` ไม่มี role → ผ่าน `validate_doc_update`).
+> **ไม่มี path คู่กันบน FastAPI** เพราะ booking ต้องกันที่ทันทีตาม D-BOOK-OCC=C ซึ่งรอ
+> projection Mongo ไม่ได้ และ QR ต้องสแกนที่ประตูได้ทันที. Auth ของทุก `/public/v1/*` บน
+> FastAPI ยังเป็น Bearer `EXTERNAL_API_SECRET` ตาม CR-063.
 
 ### 5.1 External plane `/external/v1` (CR-062, CR-079 M2 Integration)
 
@@ -162,6 +171,12 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 ## 6. สิ่งที่ตั้งใจ "ไม่มี"
 
 - ไม่มี REST CRUD สำหรับ doc ปฏิบัติการ (evacuee/movement/stock/...) — ใช้ sync plane เท่านั้น
+  **ข้อยกเว้นเดียว (CR-070):** public booking สร้าง `evacuee` หนึ่ง doc ผ่าน BFF
+  (`POST /api/public/v1/registrations`) เพราะผู้จองไม่มี session จึงเข้า sync plane ไม่ได้
+  — เป็น intake action ที่ปิดตาย ไม่ใช่ CRUD surface: ไม่มี GET/PUT/PATCH/DELETE รายตัว,
+  สร้างได้อย่างเดียว, สถานะบังคับเป็น `pre_registered`, และอ่านกลับได้เฉพาะผ่าน
+  `/lookup` ด้วยรหัส+เบอร์ที่ตรงกัน. แก้ไข/ยกเลิกหลังจากนั้นเป็นงาน staff บน sync plane
+  (เทียบเคียง `PATCH /public/v1/donations/{token}` ของ CR-052 ที่เขียน `donation` doc)
 - ไม่มี JWT/refresh-token layer — template เดิม (`auth-interceptor`, `mock-api.js`) ไม่ใช้
 - ไม่มี EOC / Open API ในรุ่นนี้ (deferred — จะเป็น service แยกอ่าน central)
 - ไม่มี endpoint อ่านข้อมูลรายบุคคลใน public plane
