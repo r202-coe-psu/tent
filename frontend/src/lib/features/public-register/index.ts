@@ -19,13 +19,20 @@ export {
 	type BookingStore,
 	type BookingTicket as BookingTicketModel
 } from './application/booking-store.svelte';
-export { publicRegisterKeys, useBookingLookup, useCreateBooking } from './application/queries';
+export {
+	publicRegisterKeys,
+	useBookingLookup,
+	useCreateBooking,
+	usePetTypes
+} from './application/queries';
 
 // data
 export {
 	createBooking,
+	fetchPetTypes,
 	lookupBooking,
-	type BookingTicketResponse
+	type BookingTicketResponse,
+	type PetTypeOption
 } from './data/public-register.api';
 
 // domain
@@ -42,6 +49,7 @@ export {
 	publicBookingLookupSchema,
 	publicBookingMemberSchema,
 	publicBookingPetSchema,
+	publicBookingPetSpeciesSchema,
 	toEvacueeInputs,
 	toHouseholdInput
 } from './domain/booking';

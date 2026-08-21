@@ -15,7 +15,7 @@
 
 	let { open = $bindable(false), shelterCode = '' }: Props = $props();
 
-	let shelters = $state<PublicShelterCardModel[]>([]);
+	let shelters = $state<(PublicShelterCardModel & { available: number | null })[]>([]);
 	let vulnerableGroups = $state<{ code: string; label: string }[]>([]);
 	let loadError = $state('');
 	let loaded = $state(false);
@@ -37,8 +37,33 @@
 						r.ok ? r.json() : { groups: [] }
 					)
 				]);
-				shelters = (shelterRes?.shelters ?? []).map((s) => toPublicShelterCard(s as never));
+				const cards = (shelterRes?.shelters ?? []).map((s) => toPublicShelterCard(s as never));
 				vulnerableGroups = groupRes?.groups ?? [];
+
+				// Vacancy isn't in the shelter list projection yet — queried the same way
+				// as the back-office occupancy dashboard (aggregate CouchDB view, no PII),
+				// just unauthenticated and batched across every non-closed shelter.
+				const codes = cards.filter((c) => c.status !== 'CLOSED').map((c) => c.code);
+				let occupancy: Record<string, number | null> = {};
+				if (codes.length > 0) {
+					try {
+						const occRes = await fetch(
+							`/api/public/v1/shelters/occupancy?codes=${codes.join(',')}`
+						).then((r) => (r.ok ? r.json() : { occupancy: {} }));
+						occupancy = occRes?.occupancy ?? {};
+					} catch {
+						// Vacancy is a nice-to-have on top of the shelter list — a failed
+						// occupancy fetch must not block booking, so every shelter just
+						// falls back to `available: null` (rendered as capacity only).
+					}
+				}
+				shelters = cards.map((c) => ({
+					...c,
+					available:
+						typeof occupancy[c.code] === 'number'
+							? Math.max(0, c.capacity - occupancy[c.code]!)
+							: null
+				}));
 			} catch {
 				loadError = 'โหลดรายชื่อศูนย์พักพิงไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
 				loaded = false;

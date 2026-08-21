@@ -17,7 +17,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import type { PublicShelterCardModel } from '$lib/features/public-portal';
-	import { useCreateBooking } from '../application/queries';
+	import { useCreateBooking, usePetTypes } from '../application/queries';
 	import { isCaptchaKeyConfigured, publicBookingInputSchema } from '../domain/booking';
 	import type { BookingTicket } from '../application/booking-store.svelte';
 
@@ -27,7 +27,7 @@
 	}
 
 	interface Props {
-		shelters: PublicShelterCardModel[];
+		shelters: (PublicShelterCardModel & { available: number | null })[];
 		vulnerableGroups: VulnerableGroup[];
 		/** Preselect and lock the shelter (opened from a shelter detail page). */
 		lockedShelterCode?: string;
@@ -44,13 +44,6 @@
 		{ value: 'male', label: 'ชาย' },
 		{ value: 'female', label: 'หญิง' },
 		{ value: 'other', label: 'อื่น ๆ' }
-	] as const;
-
-	const PET_SPECIES = [
-		{ value: 'dog', label: '🐶 สุนัข' },
-		{ value: 'cat', label: '🐱 แมว' },
-		{ value: 'bird', label: '🐦 นก' },
-		{ value: 'other', label: '🐾 อื่น ๆ' }
 	] as const;
 
 	function blankMember() {
@@ -111,6 +104,32 @@
 	});
 
 	const petsAllowed = $derived((selected?.pet_policy ?? null) !== 'no_pets');
+
+	/**
+	 * Pet species this shelter accepts, from `master_data:pet_types` (global +
+	 * shelter-local merge, CR-049) rather than a fixed list — same reasoning as
+	 * `availableTags` above, but the query itself has to be reactive: unlike the
+	 * vulnerable groups (loaded once by the modal before this form even mounts),
+	 * which shelter to ask for pet types is a choice the citizen makes *inside*
+	 * this form. `usePetTypes` keys its cache by shelter code, so switching back
+	 * to a shelter already queried this session is served from cache, not refetched.
+	 */
+	const petTypesQuery = usePetTypes(() => selected?.code ?? '');
+	const petTypes = $derived(petTypesQuery.data ?? []);
+
+	/** The shelter's configured default species (CR-049 `is_default`), falling
+	 *  back to the first offered choice — a citizen adding a pet should not have
+	 *  to make a choice the shelter already told us is the common case. */
+	const defaultPetSpecies = $derived(
+		petTypes.find((p) => p.is_default)?.code ?? petTypes[0]?.code ?? ''
+	);
+
+	/** "ว่าง/ทั้งหมด" when vacancy is known, else just the total capacity. */
+	function capacityLabel(shelter: { capacity: number; available: number | null }): string {
+		return shelter.available === null
+			? `${shelter.capacity} ที่`
+			: `${shelter.available}/${shelter.capacity} ที่`;
+	}
 
 	function setMemberCount(next: number) {
 		const target = Math.max(1, Math.min(20, next));
@@ -197,7 +216,7 @@
 							<span
 								class="rounded-full border border-success/30 bg-success-muted/40 px-2 py-0.5 text-[11px] font-bold text-success"
 							>
-								ความจุ {selected.capacity} ที่
+								{capacityLabel(selected)}
 							</span>
 						{/if}
 					</div>
@@ -215,7 +234,20 @@
 								<Select.Item
 									value={shelter.code}
 									label="{shelter.name}{shelter.status === 'FULL' ? ' (เต็ม)' : ''}"
-								/>
+								>
+									<span class="flex w-full items-center justify-between gap-2">
+										<span class="truncate">
+											{shelter.name}{shelter.status === 'FULL' ? ' (เต็ม)' : ''}
+										</span>
+										{#if shelter.capacity > 0}
+											<span
+												class="shrink-0 rounded-full bg-success-muted px-2 py-0.5 text-[11px] font-bold text-success"
+											>
+												{capacityLabel(shelter)}
+											</span>
+										{/if}
+									</span>
+								</Select.Item>
 							{/each}
 						</Select.Content>
 					</Select.Root>
@@ -442,7 +474,7 @@
 					onCheckedChange={(v) => {
 						bringsPets = v === true;
 						if (bringsPets && $formData.pets.length === 0) {
-							$formData.pets = [{ species: 'dog', notes: '', has_cage: false }];
+							$formData.pets = [{ species: defaultPetSpecies, notes: '', has_cage: false }];
 						}
 					}}
 				/>
@@ -452,7 +484,7 @@
 
 			{#if bringsPets}
 				{#each $formData.pets as pet, idx (idx)}
-					<div class="space-y-3 rounded-xl border border-warning/40 bg-warning-muted/20 p-4">
+					<div class="space-y-3 rounded-xl border border-warning/40 bg-warning/10 p-4">
 						<div class="flex items-center justify-between">
 							<p class="text-sm font-bold text-foreground">สัตว์เลี้ยงตัวที่ {idx + 1}</p>
 							<Button
@@ -474,18 +506,25 @@
 										<Select.Root
 											type="single"
 											value={pet.species}
-											onValueChange={(v) => ($formData.pets[idx].species = v as typeof pet.species)}
+											onValueChange={(v) => ($formData.pets[idx].species = v)}
 										>
 											<Select.Trigger
 												{...props}
-												class="!h-11 w-full"
+												class="!h-11 w-full bg-background"
 												aria-label="ชนิดสัตว์เลี้ยงตัวที่ {idx + 1}"
 											>
-												{PET_SPECIES.find((s) => s.value === pet.species)?.label ?? '— เลือก —'}
+												{petTypesQuery.isPending
+													? 'กำลังโหลดชนิดสัตว์เลี้ยง…'
+													: (petTypes.find((s) => s.code === pet.species)?.label ?? '— เลือก —')}
 											</Select.Trigger>
 											<Select.Content>
-												{#each PET_SPECIES as option (option.value)}
-													<Select.Item value={option.value} label={option.label} />
+												{#each petTypes as option (option.code)}
+													<Select.Item
+														value={option.code}
+														label={option.is_default
+															? `${option.label} (ค่าเริ่มต้น)`
+															: option.label}
+													/>
 												{/each}
 											</Select.Content>
 										</Select.Root>
@@ -530,7 +569,10 @@
 					class="w-full"
 					disabled={$formData.pets.length >= 20}
 					onclick={() =>
-						($formData.pets = [...$formData.pets, { species: 'dog', notes: '', has_cage: false }])}
+						($formData.pets = [
+							...$formData.pets,
+							{ species: defaultPetSpecies, notes: '', has_cage: false }
+						])}
 				>
 					<Plus class="h-4 w-4" />
 					เพิ่มสัตว์เลี้ยงตัวถัดไป

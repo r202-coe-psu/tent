@@ -34,6 +34,16 @@ const GROUPS = {
 	]
 };
 
+// pet_types master data for the selected shelter — `dog` is the shelter's
+// configured default, so a newly added pet row preselects it without the
+// citizen having to choose (same code the pet-recording test submits).
+const PET_TYPES = {
+	petTypes: [
+		{ code: 'dog', label: 'สุนัข', is_default: true },
+		{ code: 'cat', label: 'แมว', is_default: false }
+	]
+};
+
 /**
  * Pick a value from a shadcn Select. `Form.Control` spreads the superforms field
  * name onto `Select.Trigger`, so the trigger is `button[name="<field>"]` — there
@@ -68,6 +78,9 @@ async function mockReferenceData(page: Page) {
 	);
 	await page.route('**/api/public/v1/config/vulnerable-groups', (route) =>
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPS) })
+	);
+	await page.route('**/api/public/v1/config/pet-types**', (route) =>
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PET_TYPES) })
 	);
 }
 
@@ -184,6 +197,9 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		await dialog.locator('input[name="phone"]').fill('0812345678');
 
 		await dialog.getByLabel('นำสัตว์เลี้ยงมาด้วย').check();
+		// The species choices — and the preselected default — come from the
+		// shelter's configured `pet_types` master data, not a hardcoded list.
+		await expect(dialog.locator('button[name="pets[0].species"]')).toContainText('สุนัข');
 		await dialog.locator('input[name="pets[0].notes"]').fill('โกโก้ ชิวาว่า');
 		await dialog.getByLabel('นำกรง/สายจูง/ตะกร้าติดตัวมาด้วย').check();
 

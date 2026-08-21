@@ -53,9 +53,24 @@ export const publicBookingMemberSchema = z.object({
 
 export type PublicBookingMember = z.infer<typeof publicBookingMemberSchema>;
 
+/**
+ * A pet's species, as a `master_data:pet_types` item `code` (CR-010 phase 2)
+ * rather than a fixed enum — shelters configure their own accepted species via
+ * master data (global list plus per-shelter overrides), so the wire format is
+ * "whatever code `/api/public/v1/config/pet-types` offered" and not a closed
+ * set of literals known at compile time. Still bounded and non-empty so a
+ * malformed or oversized value cannot slip through — just not tied to the
+ * master-data `code` regex, which is an implementation detail of that feature.
+ */
+export const publicBookingPetSpeciesSchema = z
+	.string({ error: 'กรุณาเลือกชนิดสัตว์เลี้ยง' })
+	.trim()
+	.min(1, 'กรุณาเลือกชนิดสัตว์เลี้ยง')
+	.max(40, 'รหัสชนิดสัตว์เลี้ยงยาวเกินไป');
+
 /** A pet travelling with the household — mirrors `household.pets[]` (CR-016). */
 export const publicBookingPetSchema = z.object({
-	species: z.enum(['dog', 'cat', 'bird', 'other']),
+	species: publicBookingPetSpeciesSchema,
 	notes: z.string().trim().max(200).optional(),
 	has_cage: z.boolean().default(false)
 });
@@ -111,18 +126,43 @@ export function toEvacueeInputs(input: PublicBookingInput, householdId: string) 
 	});
 }
 
-/** Map a booking onto the staff `HouseholdInput` shape (CR-076: everyone gets one). */
+/**
+ * The staff `household.pets[].species` enum (`docs/data/schema.md` §1.3, CR-016) —
+ * still the pre-master-data fixed set. Wiring configured `pet_types` codes all
+ * the way into that schema is CR-010 phase 2 and has not happened yet, so it is
+ * a documented spec value this feature must not widen unilaterally.
+ */
+const LEGACY_HOUSEHOLD_PET_SPECIES = new Set(['dog', 'cat', 'bird', 'other']);
+
+/**
+ * Map a booking onto the staff `HouseholdInput` shape (CR-076: everyone gets one).
+ *
+ * `pet.species` is now a shelter-configured `pet_types` code (see
+ * {@link publicBookingPetSpeciesSchema}), which can be anything the shelter's
+ * master data offers — not necessarily one of the 4 literals the household
+ * schema still accepts (CR-016, pre-dates the master-data engine). A code
+ * outside that fixed set folds into `other` rather than failing `createHousehold`'s
+ * validation outright; the actual configured code is preserved in `notes` so
+ * staff are not left guessing what the citizen actually selected.
+ */
 export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: string) {
 	return {
 		label: householdLabelFrom(input.members[0] ?? { first_name: '', last_name: '' }),
 		head_evacuee_id: headEvacueeId,
 		status: 'pre_registered' as const,
-		pets: input.pets.map((pet) => ({
-			species: pet.species,
-			count: 1,
-			...(pet.notes ? { notes: pet.notes } : {}),
-			has_cage: pet.has_cage
-		}))
+		pets: input.pets.map((pet) => {
+			const isKnownSpecies = LEGACY_HOUSEHOLD_PET_SPECIES.has(pet.species);
+			const species = (isKnownSpecies ? pet.species : 'other') as 'dog' | 'cat' | 'bird' | 'other';
+			const notes = isKnownSpecies
+				? pet.notes
+				: [pet.notes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ');
+			return {
+				species,
+				count: 1,
+				...(notes ? { notes } : {}),
+				has_cage: pet.has_cage
+			};
+		})
 	};
 }
 

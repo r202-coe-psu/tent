@@ -69,7 +69,18 @@
 			<p class="text-xs opacity-80">รหัสศูนย์ {ticket.shelter_code}</p>
 		</div>
 
-		<div class="flex flex-col items-center gap-3 px-6 py-6">
+		<!--
+			Printable target: only this block should end up on paper (QR + booking code
+			+ shelter name — no wristband chrome, no accent bars, no ID-card panels).
+			The `booking-ticket-print` id is picked up by the @media print isolation
+			below (same visibility-hidden-then-override idiom as evacuee-qr-modal.svelte),
+			so it stays visible while the rest of the page (header banner, dl, page
+			chrome outside this component) is hidden for print.
+		-->
+		<div id="booking-ticket-print" class="flex flex-col items-center gap-3 px-6 py-6">
+			<p class="hidden text-center text-sm font-bold text-foreground print:block">
+				{ticket.shelter_name}
+			</p>
 			{#await qrPromise}
 				<div class="h-44 w-44 animate-pulse rounded-lg bg-muted"></div>
 			{:then qrUrl}
@@ -125,3 +136,36 @@
 		</Button>
 	</div>
 </div>
+
+<style>
+	/*
+		Print QR-only: deliberately thinner than the onsite wristband/ID-card print
+		in evacuee-qr-modal.svelte. That flow isolates a full card panel (accent bar,
+		name, zone, national ID); a booking ticket only needs the gate scanner to read
+		the QR plus the booking code as a human-readable fallback, so the isolated
+		target here is just the QR block — no header banner, no dl summary.
+	*/
+	@media print {
+		:global(body *) {
+			visibility: hidden;
+		}
+		#booking-ticket-print,
+		#booking-ticket-print * {
+			visibility: visible;
+		}
+		#booking-ticket-print {
+			position: absolute;
+			left: 50%;
+			top: 50%;
+			transform: translate(-50%, -50%);
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 12px;
+		}
+		#booking-ticket-print img {
+			height: 240px !important;
+			width: 240px !important;
+		}
+	}
+</style>

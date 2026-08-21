@@ -8,6 +8,7 @@ import {
 	publicBookingErrorMessage,
 	publicBookingInputSchema,
 	publicBookingLookupSchema,
+	publicBookingPetSpeciesSchema,
 	toEvacueeInputs,
 	toHouseholdInput
 } from './booking';
@@ -94,6 +95,36 @@ describe('publicBookingInputSchema', () => {
 	});
 });
 
+// The shelter's `pet_types` master data (global + per-shelter merge, CR-049)
+// decides which species codes are on offer — the schema itself must accept
+// whatever a shelter configures, not just the legacy `dog|cat|bird|other` set
+// the field used to be limited to before `/api/public/v1/config/pet-types`
+// existed.
+describe('publicBookingPetSpeciesSchema (configured pet_types codes)', () => {
+	it('accepts any non-empty, bounded master-data code — not just the old fixed set', () => {
+		for (const code of ['dog', 'rabbit', 'item_01jabcdefghjkmnpqrstvwxyz']) {
+			expect(publicBookingPetSpeciesSchema.safeParse(code).success).toBe(true);
+		}
+	});
+
+	it('rejects an empty or whitespace-only species', () => {
+		expect(publicBookingPetSpeciesSchema.safeParse('').success).toBe(false);
+		expect(publicBookingPetSpeciesSchema.safeParse('   ').success).toBe(false);
+	});
+
+	it('rejects an unreasonably long species value', () => {
+		expect(publicBookingPetSpeciesSchema.safeParse('x'.repeat(41)).success).toBe(false);
+	});
+
+	it('a booking carries the configured code straight through', () => {
+		const parsed = publicBookingInputSchema.parse({
+			...VALID,
+			pets: [{ species: 'rabbit', has_cage: false }]
+		});
+		expect(parsed.pets[0].species).toBe('rabbit');
+	});
+});
+
 describe('toEvacueeInputs → createEvacuee', () => {
 	const input = publicBookingInputSchema.parse({
 		...VALID,
@@ -176,6 +207,31 @@ describe('toHouseholdInput → createHousehold', () => {
 		expect(household.pets).toEqual([
 			{ species: 'dog', count: 1, notes: 'โกโก้ ชิวาว่า', has_cage: true },
 			{ species: 'cat', count: 1, has_cage: false }
+		]);
+	});
+
+	// The household schema's `species` enum (docs/data/schema.md §1.3, CR-016) still
+	// only knows dog/cat/bird/other — wiring `pet_types` master data all the way into
+	// it is a separate CR-010 phase 2 that has not happened. A shelter-configured code
+	// outside that set must not blow up `createHousehold`'s own validation, so it folds
+	// into `other` with the real code preserved in `notes` rather than being lost.
+	it('folds a species code outside the legacy household enum into "other", keeping it in notes', () => {
+		const input = publicBookingInputSchema.parse({
+			...VALID,
+			pets: [{ species: 'rabbit', notes: 'กระต่ายพันธุ์ฮอลแลนด์ลอป', has_cage: true }]
+		});
+		const household = createHousehold(toHouseholdInput(input, 'evacuee:E1'), {
+			shelterCode: 'SH001',
+			createdBy: 'public'
+		});
+
+		expect(household.pets).toEqual([
+			{
+				species: 'other',
+				count: 1,
+				notes: 'กระต่ายพันธุ์ฮอลแลนด์ลอป — ชนิด: rabbit',
+				has_cage: true
+			}
 		]);
 	});
 

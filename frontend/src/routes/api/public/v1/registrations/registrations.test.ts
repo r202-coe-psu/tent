@@ -284,6 +284,29 @@ describe('POST /api/public/v1/registrations', () => {
 				{ species: 'dog', count: 1, notes: 'โกโก้', has_cage: true }
 			]);
 		});
+
+		// `species` is a shelter-configured `pet_types` code (master data), not a
+		// fixed enum — a shelter can offer species beyond the legacy dog/cat/bird/
+		// other set. The request must still validate (422 would silently break
+		// booking for that shelter's citizens), even though the value has no
+		// special meaning to the household schema.
+		it('accepts a pet species outside the legacy dog/cat/bird/other set', async () => {
+			const res = await POST(
+				event({ ...FAMILY, pets: [{ species: 'rabbit', notes: 'กระต่าย', has_cage: false }] })
+			);
+			expect(res.status).toBe(201);
+
+			const { household } = writtenDocs();
+			expect(household.pets).toEqual([
+				{ species: 'other', count: 1, notes: 'กระต่าย — ชนิด: rabbit', has_cage: false }
+			]);
+		});
+
+		it('422 when a pet has no species selected', async () => {
+			const res = await POST(event({ ...FAMILY, pets: [{ species: '', has_cage: false }] }));
+			expect(res.status).toBe(422);
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+		});
 	});
 
 	it('502 when CouchDB rejects any row of the bulk write', async () => {
