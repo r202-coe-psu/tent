@@ -3,7 +3,7 @@ id: CR-041
 title: "Module A expand — Volunteer Job Board, configurable shifts, affiliation tracking (volunteer vs staff)"
 status: approved
 date: 2026-07-15
-updated: 2026-07-22
+updated: 2026-08-21
 approved_on: 2026-07-22
 requested_by: project owner
 decided_by: project owner
@@ -12,13 +12,14 @@ affects:
   - docs/prd/phase-r3-operations.md FR-42 / FR-43 (+ JTBD volunteer; FR-45→43 handoff เลื่อน — D-DEMAND=C)
   - docs/prd/role-permission-matrix.md FR-42/43 rows + affiliate UI + time-bound duty access (D-DUTY-ACCESS=B)
   - docs/task-breakdown/06-A-volunteer.md T-28 / T-29 (+ task ย่อย duty-access / job tier / public)
-  - docs/sitemap.md — routes Job Board / volunteer schedule / public `/volunteer*`
-  - docs/data/schema.md §2.8 volunteer (โปรไฟล์กลาง D-MULTI=A) · §2.9 shift_assignment · job / job_application
+  - docs/task-breakdown/06-A-volunteer-epics-stories.md
+  - docs/sitemap.md — routes Job Board / volunteer schedule / public `/volunteer*` / QR check-in
+  - docs/data/schema.md §2.8 volunteer · §2.9 shift_assignment bump · §2.17 job · §2.18 job_application
   - docs/data/data-model.md · schema-er-diagram.md
   - docs/features/volunteer-job-board-flow.md
   - docs/changes/CR-002 (reuse affiliation_tags — ไม่แก้สัญญา metadata-only)
-  - docs/changes/CR-005 — **ต้อง amend** เปิด `/volunteer*` บน public (D-PUBLIC=A + D-REG=A)
-  - schema_v: job 1 · job_application 1 · shift_assignment bump · volunteer อาจ bump (โปรไฟล์กลาง)
+  - docs/changes/CR-005 — **amended 2026-08-21** เปิด `/volunteer*` บน public (D-PUBLIC=A + D-REG=A)
+  - schema_v: job 1 · job_application 1 · shift_assignment 2 · volunteer 1
   - frontend → features/volunteers / job-board + public volunteer + guards time-bound
   - note: D-DUTY-ACCESS=B ใกล้ stable core — แยก epic RBAC + review ก่อน apply
 ---
@@ -27,10 +28,10 @@ affects:
 
 ## สรุป (TL;DR)
 
-- **เปลี่ยนอะไร:** ขยาย Module A เป็น **Job Board ต่อศูนย์ + กะ template/override + application (± auto-accept) + โปรไฟล์อาสากลาง + public `/volunteer*` + แยก job tier + สิทธิ์เขียนตามกะ + ป้ายอาสา/staff**
+- **เปลี่ยนอะไร:** ขยาย Module A เป็น **Job Board ต่อศูนย์ + กะ template/override + application (± auto-accept) + Digital Ticket/QR (No SMS OTP) + reCAPTCHA v3 anti-spam + On-site QR Check-in + โปรไฟล์อาสากลาง + public `/volunteer*` + แยก job tier + สิทธิ์เขียนตามกะ + ป้ายอาสา/staff**
 - **เพื่อใคร/ทำไม:** SM จัดกำลังอาสา; อาสาสมัครโปรไฟล์/งานจาก public; แยกอาสา vs staff ประจำ; staff-capable ใช้ flow หน้าที่ได้เฉพาะในกะ
-- **dev ต้อง build:** Job Board · application · shifts · affiliation UI · public volunteer · central volunteer profile · **time-bound duty access** (epic แยกแนะนำ)
-- **กระทบ schema/scope:** `job` / `job_application` ใหม่; bump `shift_assignment` + อาจ bump `volunteer` (D-MULTI=A); **ไม่ผูก SOP→Job ใน R3** (D-DEMAND=C) · มติ + follow-ups ปิดครบ · **`approved` 2026-07-22** — กำลังแตก epic/stories; apply canonical docs ตาม `affects`
+- **dev ต้อง build:** Job Board · application · shifts · affiliation UI · public volunteer · digital ticket & QR checkin · **time-bound duty access**
+- **กระทบ schema/scope:** `job` / `job_application` ใหม่; bump `shift_assignment` (v2); `volunteer` เพิ่ม tracking_token; **ไม่ผูก SOP→Job ใน R3** (D-DEMAND=C) · **`approved` 2026-07-22** (ปิดดีเทล 2026-08-21)
 
 ## Why
 
@@ -51,14 +52,17 @@ affects:
 | 8 | **D-SHIFT** | **C** — preset template + override ต่อ job · duty window = เวลาหลัง override | 2026-07-22 |
 | 9 | **D-APP** | **A + optional auto-accept** · default = รออนุมัติ · setting เปิดได้ · รายละเอียด = **F-AUTO** | 2026-07-22 |
 | 10 | **D-DEMAND** | **C — ไม่ผูก** SOP/T-31 → Job ใน R3 · คนละจอ; SM สร้าง job มือ · เลื่อน handoff FR-45→43 | 2026-07-22 |
-| 11 | **D-MULTI** | **A — โปรไฟล์กลาง** · อาสาหนึ่งโปรไฟล์สมัคร/ถูกมอบหมายหลายศูนย์ได้ · schema/placement ต้องออกแบบตอน apply (อาจ bump `volunteer`) | 2026-07-22 |
+| 11 | **D-MULTI** | **A — โปรไฟล์กลาง** · อาสาหนึ่งโปรไฟล์สมัคร/ถูกมอบหมายหลายศูนย์ได้ | 2026-07-22 |
 | 12 | **D-PUBLIC** | **A — เปิด `/volunteer*` พร้อม Module A** · ต้อง amend CR-005 · มี nav/surface สมัคร (+ board ตาม sitemap) | 2026-07-22 |
-| 13 | **F-AUTO** | auto-accept **ต่อ job** · เมื่อเปิด: มีโควตาว่าง + (opt) skill match · **staff-capable: default ห้ามเปิด** (หรือ confirm สองชั้นถ้าบังคับเปิด) · ค่าเริ่มต้นทุก job = ปิด | 2026-07-22 |
+| 13 | **F-AUTO** | auto-accept **ต่อ job** · เมื่อเปิด: มีโควตาว่าง + (opt) skill match · **staff-capable: default ห้ามเปิด** · ค่าเริ่มต้นทุก job = ปิด | 2026-07-22 |
 | 14 | **F-CLOCK** | เวลาอ้างอิง = **shelter local** · ยอมรับ clock skew **±5 นาที** รอบขอบกะ | 2026-07-22 |
 | 15 | **F-OFFLINE** | นอกเครือข่ายเมื่ออยู่นอกหน้าต่างกะ (หรือ grant หมดอายุ) → **deny write** · ไม่มี grace period | 2026-07-22 |
 | 16 | **F-OVERLAP** | หลาย assignment/job ได้ถ้า**ไม่ซ้อนเวลา** · กะข้ามเที่ยงคืน = หน้าต่างเวลาต่อเนื่องช่วงเดียว | 2026-07-22 |
 | 17 | **F-REVOKE** | เมื่อถอน assignment หรือเลื่อนเวลาแล้ว `now` ไม่อยู่ในหน้าต่างใหม่ → **ตัด grant ทันที** · ต้องแจ้งอาสา | 2026-07-22 |
 | 18 | **D-USER-PROVISION** | **สร้าง `_users`:** เฉพาะ **self-register** หรือ **SA สร้าง** — **SM สร้าง user ไม่ได้** · **แก้ RoleKey + ชนิดคน:** SM ทำได้ (รวมดึงอาสาเข้า RoleKey โดยไม่ต้องผ่าน Job Board) | 2026-07-22 |
+| 19 | **D-TICKET** | **Digital Ticket via URL/QR**: เมื่อสมัครสำเร็จรับลิงก์ Ticket + QR Code ทันที ไม่ใช้ SMS OTP (ลดงบประมาณ) | 2026-08-21 |
+| 20 | **D-CHECKIN** | **On-site QR Check-in**: โต๊ะลงทะเบียนสแกน QR Ticket ของอาสาเพื่อบันทึก check-in/out และ feed `volunteers_active` | 2026-08-21 |
+| 21 | **D-ANTISPAM** | **Zero-Cost Anti-Spam**: ใช้ reCAPTCHA v3 (เบื้องหลัง) + Rate Limiting + Phone Deduplication แทน SMS | 2026-08-21 |
 
 ### Open decisions / follow-ups
 
@@ -176,3 +180,4 @@ affects:
 - 2026-07-22 — lock F-CLOCK / F-OFFLINE / F-OVERLAP / F-REVOKE ตามข้อเสนอ · **workshop ปิดครบ**
 - 2026-07-22 — **approved** โดย project owner · เริ่มแตก epic/stories สำหรับ handoff
 - 2026-07-22 — lock **D-USER-PROVISION**: สร้าง `_users` = self-register หรือ SA เท่านั้น; SM สร้างไม่ได้ แต่แก้ RoleKey + ชนิดคนได้ (รวมให้อาสาถือ RoleKey นอก Job Board)
+- 2026-08-21 — lock **D-TICKET / D-CHECKIN / D-ANTISPAM**: สรุป Digital Ticket URL/QR, On-site QR check-in, และ reCAPTCHA v3 + zero SMS cost model

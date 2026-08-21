@@ -13,6 +13,7 @@ import {
 	canEditPurchase,
 	stockBalance,
 	createReceiveEntry,
+	createWalkInDonation,
 	createDistributeEntry,
 	createAdjustEntry,
 	keyPurchaseReceipt,
@@ -23,6 +24,7 @@ import {
 	type DistributeInput,
 	type AdjustInput,
 	type Donation,
+	type WalkInDonationInput,
 	type DonationSlot,
 	type Purchase,
 	type PurchaseInput,
@@ -83,6 +85,50 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		const item = await supplyRepository().getItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
 		return this.addLedgerEntry(entry);
+	}
+
+	async receiveWalkInDonation(
+		donationInput: WalkInDonationInput,
+		receiveInput: ReceiveInput,
+		ctx: AuthorContext
+	): Promise<{ donation: Donation; entry: StockLedger }> {
+		const donation = createWalkInDonation(donationInput, ctx);
+		// a walk-in is a donation by definition — do not let a caller say otherwise
+		// and end up rejected by the R2 guard for a reason it cannot explain
+		const entry = createReceiveEntry(
+			{ ...receiveInput, source: 'donation', ref_id: donation._id },
+			ctx
+		);
+
+		const item = await supplyRepository().getItem(entry.item_id);
+		assertReceiveAgainstCatalog(entry, item);
+
+		// One request for both docs (mirrors kitchen `issueRequisition` and
+		// `receivePurchase`). Writing the donation on its own — as a separate
+		// button press — would leave a `declared` donation behind whenever the
+		// receipt never followed, and `calculateReserved` counts those forever
+		// (nothing calls `expireDonation`). Minting both here means an abandoned
+		// form leaves nothing at all.
+		//
+		// NOT atomic, and the gap is asymmetric. `_bulk_docs` runs
+		// `validate_doc_update` per document, and the two docs answer to different
+		// rules: `donation` has no role gate, while `stock_ledger` requires
+		// warehouse_staff / shelter_manager / system_admin
+		// (`server/shelter-access-design.ts`). A writer who has lost the warehouse
+		// role therefore gets the donation accepted and the ledger row rejected —
+		// this call throws, but the donation is already persisted and starts
+		// inflating reserved stock. The only realistic trigger is a role revoked
+		// while the form sits open: the route guard (`requireWarehouseAccess`) and
+		// the design doc read the same roles, so there is no systematic mismatch,
+		// and every other rule in the design doc applies equally to both docs or
+		// only fires on update. Closing it for real means either gating `donation`
+		// the same way (a provisioning change — redeploy `_design/access` on every
+		// shelter DB) or sweeping stale `declared` donations; both are their own CR.
+		const [savedDonation, savedEntry] = await bulkDocs<Donation | StockLedger>(this.dbName, [
+			donation,
+			entry
+		]);
+		return { donation: savedDonation as Donation, entry: savedEntry as StockLedger };
 	}
 
 	async distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger> {
@@ -194,11 +240,11 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	}
 
 	/** Create and persist a new donation. */
+	/** Update an existing donation (bumps updated_at and handles CouchDB MVCC). */
 	async createDonation(donation: Donation): Promise<Donation> {
 		return this.repo.put(donation);
 	}
 
-	/** Update an existing donation (bumps updated_at and handles CouchDB MVCC). */
 	async updateDonation(donation: Donation): Promise<Donation> {
 		const existing = await this.repo.get<Donation>(donation._id);
 		const merged = {

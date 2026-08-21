@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4)"
 status: approved
 created: 2026-06-04
-updated: 2026-08-14 # §3 FR-34 CR-075 — Couch _admin may grant system_admin (SA-equivalent); CR-074 exclusive/last-SA/bootstrap lock
+updated: 2026-08-21 # §4 FR-42/43 CR-041 Module A Volunteer Job Board, Digital Ticket & Time-bound shift access
 closes: K-12 (A1 RBAC phase-blocker)
 ---
 
@@ -114,8 +114,8 @@ closes: K-12 (A1 RBAC phase-blocker)
 | Meal plan (สร้างจาก occupancy) | FR-39 | ✓ | scope | — | scope | — | — | — |
 | Kitchen requisition (ตัด stock) | FR-40 | ✓ | scope | scope | scope | — | — | — |
 | Meal service record | FR-41 | ✓ | scope (ดู) | — | scope | — | — | — |
-| Volunteer registration + skills | FR-42 | ✓ | scope | — | — | — | — | — |
-| Skill match + task/shift assign | FR-43 | ✓ | scope | — | — | — | — | — |
+| Volunteer registration + public apply | FR-42 | ✓ | scope | — | — | — | self (public) | — |
+| Job Board + task/shift assign | FR-43 | ✓ | scope | — | — | — | — | — |
 | SOP ratio configuration | FR-44 | ✓ | — | — | — | — | — | — |
 | Daily resource calculation (run/ดู) | FR-45 | ✓ | scope | scope (ดู) | scope (ดู) | scope (ดู) | — | — |
 | Resource calc dashboard | FR-46 | ✓ | scope | — | — | — | — | — |
@@ -124,7 +124,11 @@ closes: K-12 (A1 RBAC phase-blocker)
 
 **หมายเหตุ:**
 - **Kitchen requisition (FR-40)** ✅ **CONFIRMED option A (2026-06-05)**: KS เขียน requisition ตัด on-hand ตรง ผ่าน Stock Ledger เดียวกับ WS (FR-29 pattern). KS เขียนได้เฉพาะ requisition-type entry; WS own receive/transfer/adjust. SM สามารถเขียน KS entries ได้ (SM ⊇ KS)
-- Volunteer/VC responsibilities (FR-42/43) ย้ายมาที่ SM — **ไม่มี volunteer_coordinator role แยก**; คำว่า Volunteer ใน FR-42/43 คือ domain/profile ไม่ใช่ RoleKey
+- **Volunteer Management & Job Board (FR-42/43 · CR-041):**
+  - SM เป็นเจ้าของ Job Board / job ops ประจำศูนย์ — **ไม่มี volunteer_coordinator role แยก**; คำว่า Volunteer คือ domain/profile ไม่ใช่ RoleKey
+  - ประชาชนสมัครผ่าน Public No-Auth (`self`) รับ Digital Ticket URL / QR Code (ไม่มีค่าใช้จ่าย SMS OTP, ป้องกันสแปมด้วย reCAPTCHA v3 + Rate Limiting)
+  - **Time-bound Shift Access:** อาสาประเภท `staff-capable` ที่ถือ RoleKey (เช่น `registration_staff`) จะได้รับสิทธิ์เขียนระบบ **เฉพาะช่วงเวลาของกะงานที่ active เท่านั้น** (นอกเวลากะ write request จะถูกปฏิเสธ)
+  - ป้ายระบุตัวตนอาสาใช้ `_users.affiliation_tags: ["volunteer"]` (CR-002) เป็น metadata เท่านั้น — ห้ามใช้เป็น RoleKey
 - Shelter reports (FR-47) = SM เท่านั้น (allow-list `SHELTER_REPORT_MUTATE_ROLES`; SA = platform override) — **ไม่มี security_officer role แยก** · [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md)
 - **Referral & hand-off (FR-48)** ✅ **CONFIRMED (FD-13):** `shelter_manager` เป็นเจ้าของ referral; medical detail อยู่ใน internal shelter scope เท่านั้น และไม่ออก public/API/EOC (§6)
 - SOP ratio config (FR-44) = master ข้ามศูนย์ → SA only
