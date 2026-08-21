@@ -10,6 +10,7 @@
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Ban from '@lucide/svelte/icons/ban';
+	import Pencil from '@lucide/svelte/icons/pencil';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
@@ -23,7 +24,8 @@
 		formatTrackSchedule,
 		canEditCourierTracking,
 		canCancelDonation,
-		CancelDonationDialog
+		CancelDonationDialog,
+		EditDonationItemsDialog
 	} from '$lib/features/donations';
 	import { PublicPageShell } from '$lib/features/public-portal';
 
@@ -35,6 +37,7 @@
 
 	let courierInput = $state('');
 	let cancelOpen = $state(false);
+	let editOpen = $state(false);
 
 	const donation = $derived(trackingQuery.data);
 	const isLoading = $derived(trackingQuery.isPending);
@@ -50,6 +53,9 @@
 		donation ? canEditCourierTracking(donation.status, donation.logistics) : false
 	);
 	const showCancel = $derived(donation ? canCancelDonation(donation.status) : false);
+	// Same gate as cancelling: while it is only a reservation the donor still owns it
+	// (CR-080 — the owner settled on `declared` only).
+	const showEdit = $derived(showCancel);
 
 	async function saveCourier() {
 		const value = courierInput.trim();
@@ -328,6 +334,25 @@
 						</div>
 					</div>
 
+					{#if showEdit}
+						<div class="flex flex-col gap-2 border-t border-border pt-5">
+							<Button
+								variant="outline"
+								onclick={() => (editOpen = true)}
+								class="h-10 rounded-xl text-xs font-bold"
+							>
+								<Pencil class="h-4 w-4" />
+								แก้ไขรายการที่จะบริจาค
+							</Button>
+							<p class="text-[11px] leading-relaxed text-muted-foreground">
+								ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าเจ้าหน้าที่จะเริ่มตรวจรับ
+								{#if donation.revisions.length}
+									· แก้ไขแล้ว {donation.revisions.length} ครั้ง
+								{/if}
+							</p>
+						</div>
+					{/if}
+
 					{#if showCancel}
 						<div class="flex flex-col gap-2 border-t border-border pt-5">
 							<Button
@@ -346,6 +371,17 @@
 				</div>
 			</div>
 		</div>
+
+		<!-- Mounted only while open so the edit draft is seeded fresh from the booking
+		     each time, rather than an effect syncing props into state behind the user. -->
+		{#if editOpen}
+			<EditDonationItemsDialog
+				bind:open={editOpen}
+				{token}
+				items={donation.items}
+				onSaved={() => trackingQuery.refetch()}
+			/>
+		{/if}
 
 		<CancelDonationDialog
 			bind:open={cancelOpen}

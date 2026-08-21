@@ -477,7 +477,9 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	).toISOString();
 	return makeDoc(
 		'donation',
-		3,
+		// 4 since CR-080 added revisions[] — a walk-in has none yet, but the version has
+		// to say which shape a reader should expect.
+		4,
 		{
 			channel: 'walk_in' as const,
 			donor: d.donor,

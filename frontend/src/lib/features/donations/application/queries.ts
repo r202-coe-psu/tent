@@ -3,7 +3,9 @@ import {
 	cancelDonation,
 	fetchDonationTracking,
 	searchDonationTracking,
-	updateCourierTracking
+	updateCourierTracking,
+	updateDonationItems,
+	type DonationItemEdit
 } from '../data/public-tracking';
 
 export const donationTrackingKeys = {
@@ -37,6 +39,19 @@ export function useCancelDonation() {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: (input: { token: string }) => cancelDonation(input.token),
+		onSuccess: (_data, input) =>
+			queryClient.invalidateQueries({ queryKey: donationTrackingKeys.detail(input.token) })
+	}));
+}
+
+export function useUpdateDonationItems() {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (input: { token: string; items: DonationItemEdit[] }) =>
+			updateDonationItems(input.token, input.items),
+		// Refetch rather than patch the cache: the service decides the stored shape
+		// (reserved_qty per item, the revision entry), and guessing it here is how the
+		// two drift apart.
 		onSuccess: (_data, input) =>
 			queryClient.invalidateQueries({ queryKey: donationTrackingKeys.detail(input.token) })
 	}));

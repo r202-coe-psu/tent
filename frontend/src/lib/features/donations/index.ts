@@ -1,6 +1,11 @@
 // Domain — documents
 export type { DonationPreDeclaration } from './domain/donation';
-export type { PublicDonationDoc, PublicDonor, ScanDonationView } from './domain/public-donation';
+export type {
+	DonationRevision,
+	PublicDonationDoc,
+	PublicDonor,
+	ScanDonationView
+} from './domain/public-donation';
 export {
 	receiveDonationInputSchema,
 	publicDonationErrorMessage,
@@ -36,6 +41,7 @@ export {
 	type CampaignPick,
 	type RequestedItem
 } from './domain/compute-needs';
+export { carryItemIds, type BareItem } from './domain/carry-item-ids';
 
 // Domain — input schemas + factories + transitions + guards
 export {
@@ -49,15 +55,19 @@ export {
 	cancelDonation,
 	fetchDonationTracking,
 	searchDonationTracking,
-	updateCourierTracking
+	updateCourierTracking,
+	updateDonationItems,
+	type DonationItemEdit
 } from './data/public-tracking';
 export {
 	donationTrackingKeys,
 	useCancelDonation,
 	useDonationTracking,
 	useDonationTrackSearch,
-	useUpdateCourierTracking
+	useUpdateCourierTracking,
+	useUpdateDonationItems
 } from './application/queries';
 
 // UI
 export { default as CancelDonationDialog } from './ui/cancel-donation-dialog.svelte';
+export { default as EditDonationItemsDialog } from './ui/edit-donation-items-dialog.svelte';

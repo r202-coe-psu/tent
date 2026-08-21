@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { donationIpLimiter } from '$lib/server/security/rate-limiter';
+import { donationEditLimiter, donationReadLimiter } from '$lib/server/security/rate-limiter';
 import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
@@ -59,7 +59,7 @@ export const GET = async ({ params, getClientAddress }) => {
 		}
 
 		const ip = getClientAddress();
-		if (!donationIpLimiter.check(ip)) {
+		if (!donationReadLimiter.check(ip)) {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
@@ -84,7 +84,8 @@ export const GET = async ({ params, getClientAddress }) => {
 				logistics: donation.logistics ?? null,
 				received_summary: donation.received_summary ?? null,
 				updated_at: donation.updated_at ?? null,
-				expires_at: donation.expires_at ?? null
+				expires_at: donation.expires_at ?? null,
+				revisions: donation.revisions ?? []
 			}
 		});
 	} catch {
@@ -105,7 +106,7 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		}
 
 		const ip = getClientAddress();
-		if (!donationIpLimiter.check(ip)) {
+		if (!donationEditLimiter.check(ip)) {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
@@ -199,7 +200,7 @@ export const DELETE = async ({ params, getClientAddress }) => {
 		}
 
 		const ip = getClientAddress();
-		if (!donationIpLimiter.check(ip)) {
+		if (!donationEditLimiter.check(ip)) {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 

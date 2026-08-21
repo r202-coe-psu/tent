@@ -32,6 +32,19 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 		condition?: string;
 		note?: string;
 	}>;
+	/**
+	 * Append-only log of donor edits to `items` (schema.md §2.3, CR-080). Snapshots of
+	 * the whole basket before and after, not diffs — staff reading the booking before
+	 * accepting goods need to see what it used to be without reassembling it.
+	 */
+	revisions?: DonationRevision[];
+}
+
+export interface DonationRevision {
+	at: string;
+	by: 'donor' | 'staff';
+	items_before: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
+	items_after: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
 }
 
 /**

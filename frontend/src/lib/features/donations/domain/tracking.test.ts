@@ -64,3 +64,28 @@ describe('canCancelDonation', () => {
 		expect(canCancelDonation('something_new')).toBe(false);
 	});
 });
+
+describe('item_id survives the round trip', () => {
+	/**
+	 * The edit dialog sends the whole basket back. It can only send an item_id it was
+	 * given, so if the view drops one the edit silently untracks that item: the counter
+	 * releases what it held and never retakes it, and the needs board stops deducting it.
+	 * That happened — a soap donation lost item:soap on its first edit and the public
+	 * board went on advertising 50 while the back office showed 20.
+	 */
+	it('carries item_id from the payload', () => {
+		const view = toDonationTrackView({
+			status: 'declared',
+			items: [{ item_id: 'item:soap', free_text: 'สบู่ก้อน', qty: '10', unit: 'bar' }]
+		});
+		expect(view.items[0]?.item_id).toBe('item:soap');
+	});
+
+	it('reports null rather than undefined for a free-text item', () => {
+		const view = toDonationTrackView({
+			status: 'declared',
+			items: [{ free_text: 'ของใช้เบ็ดเตล็ด', qty: '2', unit: 'ชิ้น' }]
+		});
+		expect(view.items[0]?.item_id).toBeNull();
+	});
+});
