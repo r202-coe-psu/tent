@@ -31,9 +31,18 @@ export function computeNeeds(
 			}
 		}
 		for (const need of campaign.needs) {
-			const rem = subQty(need.qty_target, covered.get(need.item_id) ?? '0');
+			// A need staff closed by hand takes no more (T-22 manual force cut-off,
+			// CR-052). It still contributes a zero rather than being skipped: callers
+			// treat a missing key as "not tracked" and let the booking through, so
+			// dropping it here would reopen exactly what the close was meant to stop.
+			const rem =
+				need.status === 'closed' ? '0' : subQty(need.qty_target, covered.get(need.item_id) ?? '0');
 			remaining.set(need.item_id, addQty(remaining.get(need.item_id) ?? '0', rem));
-			if (!itemCampaign.has(need.item_id)) itemCampaign.set(need.item_id, campaign._id);
+			// Bind the item to a campaign still accepting it, so a closed need in one
+			// campaign cannot capture a donation another campaign can actually take.
+			if (need.status !== 'closed' && !itemCampaign.has(need.item_id)) {
+				itemCampaign.set(need.item_id, campaign._id);
+			}
 		}
 	}
 	return { remaining, itemCampaign };

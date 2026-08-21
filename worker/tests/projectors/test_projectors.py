@@ -277,3 +277,55 @@ def test_plan_need_counters_dedups_repeated_item():
     )
     seeds = plan_need_counters(campaign, shelter_code="SH001")
     assert [(s.item_id, s.qty_target) for s in seeds] == [("item:rice", Decimal("10"))]
+
+
+# --- needs[].status closed — must mirror the TS computeNeeds (T-22 §1.6, CR-052) ---
+
+
+def _open_campaign(campaign_id: str, needs: list[dict]) -> dict:
+    return {"_id": campaign_id, "type": "donation_campaign", "status": "open", "needs": needs}
+
+
+def test_compute_needs_reports_a_closed_need_as_taking_nothing():
+    remaining, _ = compute_needs(
+        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}])],
+        [],
+    )
+    assert remaining["item:rice"] == "0.0"
+
+
+def test_compute_needs_keeps_a_closed_need_in_the_map():
+    """A missing key reads as "not tracked" downstream and lets the booking through."""
+    remaining, _ = compute_needs(
+        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}])],
+        [],
+    )
+    assert "item:rice" in remaining
+
+
+def test_compute_needs_ignores_donations_against_a_closed_need():
+    remaining, _ = compute_needs(
+        [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}])],
+        [
+            {
+                "campaign_id": "c1",
+                "status": "declared",
+                "items": [{"item_id": "item:rice", "qty": "30"}],
+            }
+        ],
+    )
+    assert remaining["item:rice"] == "0.0"
+
+
+def test_compute_needs_still_offers_an_item_another_campaign_has_open():
+    remaining, item_campaign = compute_needs(
+        [
+            _open_campaign("c1", [{"item_id": "item:rice", "qty_target": "100", "status": "closed"}]),
+            _open_campaign("c2", [{"item_id": "item:rice", "qty_target": "40"}]),
+        ],
+        [],
+    )
+    assert remaining["item:rice"] == "40.0"
+    # Binding to the closed campaign would hand the donation to a counter with room
+    # while the campaign that can actually take it goes unused.
+    assert item_campaign["item:rice"] == "c2"

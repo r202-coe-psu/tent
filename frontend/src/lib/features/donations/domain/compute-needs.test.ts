@@ -170,13 +170,38 @@ describe('computeNeeds', () => {
 		expect(remaining.get('item:rice')).toBe('100');
 	});
 
-	it('does not yet honour a per-item needs[].status of closed', () => {
-		// KNOWN GAP, not desired behaviour. CR-052 adds needs[].status so staff can force
-		// cut-off a single item (T-22 §1.6), but this function walks every need regardless,
-		// so a closed item still reports as open and stays bookable. Change this test
-		// together with the fix.
+	it('reports a manually closed need as taking nothing more', () => {
+		// Staff force cut-off of a single item (T-22 §1.6, CR-052 needs[].status).
 		const { remaining } = computeNeeds([campaign('c1', [need('item:rice', '100', 'closed')])], []);
-		expect(remaining.get('item:rice')).toBe('100');
+		expect(remaining.get('item:rice')).toBe('0');
+	});
+
+	it('keeps a closed need in the map instead of dropping it', () => {
+		// Callers read a missing key as "not tracked" and let the booking through, so
+		// omitting a closed item would reopen exactly what the close was meant to stop.
+		const { remaining } = computeNeeds([campaign('c1', [need('item:rice', '100', 'closed')])], []);
+		expect(remaining.has('item:rice')).toBe(true);
+	});
+
+	it('ignores donations already counted against a closed need', () => {
+		// The target is off the table entirely — not "target minus what arrived".
+		const { remaining } = computeNeeds(
+			[campaign('c1', [need('item:rice', '100', 'closed')])],
+			[donation('donation:1', 'c1', 'declared', [{ item_id: 'item:rice', qty: '30' }])]
+		);
+		expect(remaining.get('item:rice')).toBe('0');
+	});
+
+	it('still offers an item another campaign has open', () => {
+		// Closing rice in one campaign must not close it network-wide.
+		const { remaining } = computeNeeds(
+			[
+				campaign('c1', [need('item:rice', '100', 'closed')]),
+				campaign('c2', [need('item:rice', '40')])
+			],
+			[]
+		);
+		expect(remaining.get('item:rice')).toBe('40');
 	});
 
 	describe('itemCampaign', () => {
@@ -190,6 +215,19 @@ describe('computeNeeds', () => {
 			);
 			expect(itemCampaign.get('item:rice')).toBe('c1');
 			expect(itemCampaign.get('item:water')).toBe('c2');
+		});
+
+		it('skips a campaign whose need for the item is closed', () => {
+			// Binding to the closed campaign would hand the donation to a counter that
+			// still has room, while the campaign that can actually take it goes unused.
+			const { itemCampaign } = computeNeeds(
+				[
+					campaign('c1', [need('item:rice', '100', 'closed')]),
+					campaign('c2', [need('item:rice', '40')])
+				],
+				[]
+			);
+			expect(itemCampaign.get('item:rice')).toBe('c2');
 		});
 
 		it('still binds an item whose need is already fully met', () => {

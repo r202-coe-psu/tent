@@ -37,10 +37,15 @@ def compute_needs(
             item_id = need.get("item_id")
             if not item_id:
                 continue
+            # A need staff closed by hand takes no more (T-22 manual force cut-off,
+            # CR-052). Contributes a zero rather than being skipped: a missing key reads
+            # as "not tracked" downstream and lets the booking through.
+            is_closed = need.get("status") == "closed"
             target = _to_float(need.get("qty_target"))
-            rem = target - covered.get(item_id, 0.0)
+            rem = 0.0 if is_closed else target - covered.get(item_id, 0.0)
             remaining[item_id] = remaining.get(item_id, 0.0) + rem
-            if item_id not in item_campaign:
+            # Bind the item to a campaign still accepting it.
+            if not is_closed and item_id not in item_campaign:
                 item_campaign[item_id] = campaign_id
 
     return (
