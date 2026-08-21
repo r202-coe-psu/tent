@@ -295,12 +295,18 @@
 					</div>
 				{/each}
 			</div>
-			<label class="flex items-start gap-2 pt-1 text-sm">
+			<label
+				class="flex cursor-pointer items-start gap-3 rounded-lg border-2 border-amber-300/90 bg-white/90 p-3.5 shadow-xs transition-all hover:border-amber-400 hover:bg-white dark:border-amber-700/60 dark:bg-amber-950/40 dark:hover:bg-amber-950/60"
+			>
 				<Checkbox
+					id="disclaimer-ack"
 					checked={disclaimerAcknowledged}
 					onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
+					class="mt-0.5 size-5 shrink-0 rounded-md border-2 border-slate-400 bg-white shadow-xs data-[state=checked]:border-slate-600 data-[state=checked]:bg-slate-600 data-[state=checked]:text-white dark:border-slate-500 dark:bg-slate-900 dark:data-[state=checked]:border-slate-400 dark:data-[state=checked]:bg-slate-500"
 				/>
-				<span class="font-bold text-amber-900">
+				<span
+					class="text-sm leading-relaxed font-semibold text-amber-950 select-none dark:text-amber-100"
+				>
 					ข้าพเจ้าและครอบครัวรับทราบและยินยอมปฏิบัติตามกฎระเบียบของศูนย์พักพิง
 					รวมถึงรับผิดชอบต่อทรัพย์สินมีค่าของตนเองหากเกิดการสูญหาย
 				</span>

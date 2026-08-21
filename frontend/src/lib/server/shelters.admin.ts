@@ -216,11 +216,21 @@ export async function redeployShelterAccessDesign(
 	shelterCode: string
 ): Promise<number> {
 	const existing = await adminRaw(`/${db}/_design/access`, 'GET');
-	const rev = existing.status === 200 ? (existing.data as { _rev: string })._rev : undefined;
+	const existingDoc =
+		existing.status === 200
+			? (existing.data as { _rev?: string; validate_doc_update?: string } | null)
+			: null;
+	const expected = buildValidateDocUpdate(shelterCode);
+
+	if (existingDoc && existingDoc.validate_doc_update === expected) {
+		return 304;
+	}
+
+	const rev = existingDoc?._rev;
 	const res = await adminRaw(`/${db}/_design/access`, 'PUT', {
 		_id: '_design/access',
 		...(rev ? { _rev: rev } : {}),
-		validate_doc_update: buildValidateDocUpdate(shelterCode)
+		validate_doc_update: expected
 	});
 	if (res.status >= 400) {
 		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};

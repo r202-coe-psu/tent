@@ -37,14 +37,13 @@
 
 	let displayShelters = $derived(
 		((data?.shelters ?? []) as PublicShelterCardModel[]).map((s) => {
-			if (liveUserLat && liveUserLng && s.geo?.lat && s.geo?.lng) {
-				const dist = calcDistance(
-					parseFloat(liveUserLat),
-					parseFloat(liveUserLng),
-					s.geo.lat,
-					s.geo.lng
-				);
-				return { ...s, distance: parseFloat(dist.toFixed(1)) };
+			if (liveUserLat && liveUserLng && s?.geo?.lat != null && s?.geo?.lng != null) {
+				const uLat = parseFloat(liveUserLat);
+				const uLng = parseFloat(liveUserLng);
+				if (!isNaN(uLat) && !isNaN(uLng)) {
+					const dist = calcDistance(uLat, uLng, s.geo.lat, s.geo.lng);
+					return { ...s, distance: parseFloat(dist.toFixed(1)) };
+				}
 			}
 			return s;
 		})
@@ -102,7 +101,7 @@
 	<div class="grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-6">
 		<PublicShelterMetricCard
 			title="ศูนย์พักพิงทั้งหมด"
-			value={data?.summary?.shelters_total ?? '-'}
+			value={data?.summary?.shelters_total ?? 0}
 			unit="แห่ง"
 			icon={ClipboardList}
 			iconClass="border-accent-purple shadow-accent-purple/15 text-accent-purple"
@@ -110,7 +109,7 @@
 
 		<PublicShelterMetricCard
 			title="ศูนย์พักพิงที่เปิดใช้งาน"
-			value={data?.summary?.shelters_open ?? '-'}
+			value={data?.summary?.shelters_open ?? 0}
 			unit="แห่ง"
 			icon={Building2}
 			iconClass="border-success shadow-success/15 text-success"
@@ -158,7 +157,7 @@
 				class="custom-scrollbar flex flex-col gap-4 overflow-y-auto pr-2"
 				style="max-height: 700px;"
 			>
-				{#each displayShelters as shelter (shelter.id)}
+				{#each displayShelters as shelter, i (shelter.id || shelter.code || i)}
 					<PublicShelterCard {shelter} {getStatusColor} {getStatusText} />
 				{:else}
 					<div
