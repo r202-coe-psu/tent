@@ -755,40 +755,19 @@ def test_reservation_expiry_survives_an_out_of_range_ttl() -> None:
     assert donation_use_case.reservation_expiry(now, 10**18) == now + timedelta(hours=72)
 
 
-async def test_create_donation_honours_the_configured_ttl(
-    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
-) -> None:
-    before = datetime.now(UTC)
-    response = await client.post(
-        "/public/v1/donations",
-        headers=auth_headers,
-        json={
-            "shelter_code": "SH001",
-            "reservation_ttl_hours": 6,
-            "donor": {"name": "Donor", "phone": "0812345678"},
-            "items": [{"free_text": "ข้าวสาร", "qty": 5, "unit": "kg"}],
-        },
+async def _seed_app_config(**fields: object) -> None:
+    """Stand in for the worker projecting registry `config:app` into `public_config`."""
+    collection = DonationBuffer.get_motor_collection().database["public_config"]
+    await collection.replace_one(
+        {"_id": "config:app"}, {"_id": "config:app", **fields}, upsert=True
     )
-    assert response.status_code == 201
-
-    token = response.json()["tracking_token"]
-    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
-    assert buffer is not None
-    expires_at = buffer.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=UTC)
-    # 6h out, not the 72h default. Windowed because "before" is stamped ahead of the
-    # request and Mongo truncates the stored value to milliseconds.
-    assert abs((expires_at - before) - timedelta(hours=6)) < timedelta(seconds=5)
 
 
-async def test_create_donation_defaults_the_ttl_when_not_supplied(
-    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
-) -> None:
+async def _booked_ttl(client: AsyncClient, headers: dict[str, str]) -> timedelta:
     before = datetime.now(UTC)
     response = await client.post(
         "/public/v1/donations",
-        headers=auth_headers,
+        headers=headers,
         json={
             "shelter_code": "SH001",
             "donor": {"name": "Donor", "phone": "0812345678"},
@@ -796,28 +775,36 @@ async def test_create_donation_defaults_the_ttl_when_not_supplied(
         },
     )
     assert response.status_code == 201
-
     token = response.json()["tracking_token"]
     buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
     assert buffer is not None
     expires_at = buffer.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=UTC)
-    assert abs((expires_at - before) - timedelta(hours=72)) < timedelta(seconds=5)
+    return expires_at - before
 
 
-@pytest.mark.parametrize("bad_ttl", [0, -1])
-async def test_create_donation_rejects_a_non_positive_ttl(
-    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str], bad_ttl: int
+async def test_create_donation_honours_the_projected_ttl(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    response = await client.post(
-        "/public/v1/donations",
-        headers=auth_headers,
-        json={
-            "shelter_code": "SH001",
-            "reservation_ttl_hours": bad_ttl,
-            "donor": {"name": "Donor", "phone": "0812345678"},
-            "items": [{"free_text": "ข้าวสาร", "qty": 5, "unit": "kg"}],
-        },
-    )
-    assert response.status_code == 422
+    await _seed_app_config(donation_reservation_ttl_hours=6)
+
+    # Windowed: "before" is stamped ahead of the request and Mongo truncates to millis.
+    assert abs(await _booked_ttl(client, auth_headers) - timedelta(hours=6)) < timedelta(seconds=5)
+
+
+async def test_create_donation_defaults_when_the_config_has_not_projected_yet(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """A fresh environment has no config document — bookings must still work."""
+    assert abs(await _booked_ttl(client, auth_headers) - timedelta(hours=72)) < timedelta(seconds=5)
+
+
+@pytest.mark.parametrize("bad", [0, -1, "6", 1.5, True, None])
+async def test_unusable_configured_ttl_falls_back_to_the_default(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str], bad: object
+) -> None:
+    """`True` is in here on purpose: bool subclasses int, and would mean "1 hour"."""
+    await _seed_app_config(donation_reservation_ttl_hours=bad)
+
+    assert abs(await _booked_ttl(client, auth_headers) - timedelta(hours=72)) < timedelta(seconds=5)

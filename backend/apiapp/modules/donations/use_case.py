@@ -63,6 +63,38 @@ def reservation_expiry(now: datetime, ttl_hours: int | None) -> datetime:
         return now + timedelta(hours=DEFAULT_RESERVATION_TTL_HOURS)
 
 
+#: Where the worker lands the projected ``config:app`` (schema.md §3.2).
+_PUBLIC_CONFIG_COLLECTION = "public_config"
+_APP_CONFIG_ID = "config:app"
+
+
+async def configured_ttl_hours() -> int | None:
+    """Read ``donation_reservation_ttl_hours`` from the projected app config.
+
+    The document lives in CouchDB, which this service cannot read, so the worker
+    projects it into ``public_config`` — the same bridge CR-060 built for the quota
+    ceiling. Returns ``None`` whenever the value is missing or unusable so the caller
+    falls back to the spec default: a booking must never fail because config sync is
+    behind, and a shelter with no config document is the normal starting state.
+    """
+    try:
+        collection = DonationBuffer.get_motor_collection().database[_PUBLIC_CONFIG_COLLECTION]
+        doc = await collection.find_one({"_id": _APP_CONFIG_ID})
+    except Exception:
+        logger.warning("Could not read %s — using the default TTL", _APP_CONFIG_ID, exc_info=True)
+        return None
+    if not doc:
+        return None
+
+    value = doc.get("donation_reservation_ttl_hours")
+    # bool is an int subclass, and a stray `true` here would silently mean "1 hour".
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        if value is not None:
+            logger.warning("Ignoring unusable donation_reservation_ttl_hours %r", value)
+        return None
+    return value
+
+
 def _new_booking_ref() -> str:
     """Human-readable ``DN-######`` — uniqueness enforced by Mongo unique index."""
     return f"DN-{secrets.randbelow(900000) + 100000}"
@@ -153,7 +185,7 @@ class DonationsUseCase:
         donation_id = f"donation:{new_ulid()}"
         tracking_token = f"TX-{payload.shelter_code.upper()}-{secrets.token_hex(16).upper()}"
         now = datetime.now(UTC)
-        expires_at = reservation_expiry(now, payload.reservation_ttl_hours)
+        expires_at = reservation_expiry(now, await configured_ttl_hours())
         token_hash = sha256_hex(tracking_token)
 
         items_declared = [item.model_dump(exclude_none=True) for item in payload.items]
