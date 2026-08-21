@@ -13,7 +13,17 @@ from worker.masking import sha256_hex, shelter_db_name
 
 logger = logging.getLogger(__name__)
 
-POLL_INTERVAL_SECONDS = 15
+#: How long a public booking can sit in Mongo before CouchDB — and therefore the needs
+#: board and the booking pre-check, which both read CouchDB — knows about it.
+#:
+#: That lag is the window two donors can book the same last units in: each reads a state
+#: where the other's booking has not landed. The atomic counter is the backstop, but it
+#: only enforces ``reserved_qty ≤ qty_target`` and knows nothing about warehouse stock,
+#: so a shelter already holding goods can still be over-collected inside the window.
+#: Closing that properly means giving the counter a stock-aware ceiling; until then a
+#: shorter poll is what keeps the exposure small. Three seconds costs one extra indexed
+#: Mongo query per second across all shelters.
+POLL_INTERVAL_SECONDS = 3
 
 
 async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> bool:
