@@ -33,6 +33,11 @@ export const bookingNationalIdSchema = z
 /**
  * One person on the booking. `member[0]` is the household contact.
  *
+ * `first_name`/`last_name` are separate fields — same split staff intake uses
+ * (`evacueeInputSchema`, `evacuee-registration.svelte`) — rather than one free-text
+ * "ชื่อ-นามสกุล" box, since `createEvacuee` requires both non-empty and a single-word
+ * entry has no whitespace to split on.
+ *
  * `special_needs` holds the labels the citizen ticked, drawn from the selected
  * shelter's `admission_policy.supported_vulnerable_groups` — the shelter decides
  * which groups it can take, so the choices are per-shelter rather than a fixed
@@ -40,11 +45,8 @@ export const bookingNationalIdSchema = z
  * free-form `[str]` since CR-046.
  */
 export const publicBookingMemberSchema = z.object({
-	name: z
-		.string({ error: 'กรุณากรอกชื่อ-นามสกุล' })
-		.trim()
-		.min(1, 'กรุณากรอกชื่อ-นามสกุล')
-		.max(200),
+	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ').max(100),
+	last_name: z.string({ error: 'กรุณากรอกนามสกุล' }).trim().min(1, 'กรุณากรอกนามสกุล').max(100),
 	gender: bookingGenderSchema,
 	special_needs: z.array(z.string().trim().min(1)).max(20).default([])
 });
@@ -74,25 +76,12 @@ export const publicBookingInputSchema = z.object({
 
 export type PublicBookingInput = z.infer<typeof publicBookingInputSchema>;
 
-/**
- * Split a Thai full name into the `first_name` / `last_name` the schema stores.
- *
- * The form asks for one "ชื่อ-นามสกุล" box because that is how people write their
- * own name; the first whitespace run separates them. A single-word entry keeps
- * `last_name` empty rather than guessing.
- */
-export function splitThaiName(full: string): { first_name: string; last_name: string } {
-	const parts = full.trim().split(/\s+/);
-	return {
-		first_name: parts[0] ?? '',
-		last_name: parts.slice(1).join(' ')
-	};
-}
-
 /** Household label, matching the staff pre-register convention (`ครอบครัว{ชื่อ}`). */
-export function householdLabelFrom(contactName: string): string {
-	const { first_name, last_name } = splitThaiName(contactName);
-	const joined = [first_name, last_name].filter(Boolean).join(' ');
+export function householdLabelFrom(contact: { first_name: string; last_name: string }): string {
+	const joined = [contact.first_name, contact.last_name]
+		.map((s) => s.trim())
+		.filter(Boolean)
+		.join(' ');
 	return joined ? `ครอบครัว${joined}` : 'ครอบครัวผู้จองผ่านเว็บ';
 }
 
@@ -108,7 +97,8 @@ export function toEvacueeInputs(input: PublicBookingInput, householdId: string) 
 	return input.members.map((member, index) => {
 		const isContact = index === 0;
 		return {
-			...splitThaiName(member.name),
+			first_name: member.first_name,
+			last_name: member.last_name,
 			gender: member.gender,
 			phone: isContact ? input.phone : null,
 			...(isContact && input.national_id
@@ -124,7 +114,7 @@ export function toEvacueeInputs(input: PublicBookingInput, householdId: string) 
 /** Map a booking onto the staff `HouseholdInput` shape (CR-076: everyone gets one). */
 export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: string) {
 	return {
-		label: householdLabelFrom(input.members[0]?.name ?? ''),
+		label: householdLabelFrom(input.members[0] ?? { first_name: '', last_name: '' }),
 		head_evacuee_id: headEvacueeId,
 		status: 'pre_registered' as const,
 		pets: input.pets.map((pet) => ({

@@ -107,7 +107,8 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		await expect(page.getByRole('option')).toHaveCount(1);
 		await page.getByRole('option', { name: /เทศบาลนครหาดใหญ่/ }).click();
 
-		await dialog.locator('input[name="members[0].name"]').fill('สมชาย ใจดี');
+		await dialog.locator('input[name="members[0].first_name"]').fill('สมชาย');
+		await dialog.locator('input[name="members[0].last_name"]').fill('ใจดี');
 		await dialog.locator('input[name="phone"]').fill('0812345678');
 
 		await dialog.getByRole('button', { name: 'ยืนยันการจองเข้าศูนย์' }).click();
@@ -118,7 +119,7 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		expect(submitted).toMatchObject({
 			shelter_code: 'SH001',
 			phone: '0812345678',
-			members: [{ name: 'สมชาย ใจดี', gender: 'male', special_needs: [] }],
+			members: [{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', special_needs: [] }],
 			pets: []
 		});
 	});
@@ -138,7 +139,8 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 
 		const dialog = await openBooking(page);
 		await selectOption(dialog, 'shelter_code', /เทศบาลนครหาดใหญ่/);
-		await dialog.locator('input[name="members[0].name"]').fill('สมชาย ใจดี');
+		await dialog.locator('input[name="members[0].first_name"]').fill('สมชาย');
+		await dialog.locator('input[name="members[0].last_name"]').fill('ใจดี');
 		await dialog.locator('input[name="phone"]').fill('0812345678');
 
 		// The tag choices come from the selected shelter, not a hardcoded list.
@@ -146,7 +148,8 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		await expect(dialog.getByText('ผู้ป่วยติดเตียง').first()).toBeVisible();
 
 		await dialog.getByRole('button', { name: 'เพิ่มจำนวนผู้พักพิง' }).click();
-		await dialog.locator('input[name="members[1].name"]').fill('สมหญิง ใจดี');
+		await dialog.locator('input[name="members[1].first_name"]').fill('สมหญิง');
+		await dialog.locator('input[name="members[1].last_name"]').fill('ใจดี');
 		// Second member is elderly.
 		await dialog.getByLabel('ผู้สูงอายุ — สมาชิกคนที่ 2').check();
 
@@ -155,8 +158,8 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 
 		expect(submitted).toMatchObject({
 			members: [
-				{ name: 'สมชาย ใจดี', special_needs: [] },
-				{ name: 'สมหญิง ใจดี', special_needs: ['ผู้สูงอายุ'] }
+				{ first_name: 'สมชาย', last_name: 'ใจดี', special_needs: [] },
+				{ first_name: 'สมหญิง', last_name: 'ใจดี', special_needs: ['ผู้สูงอายุ'] }
 			]
 		});
 	});
@@ -176,7 +179,8 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 
 		const dialog = await openBooking(page);
 		await selectOption(dialog, 'shelter_code', /เทศบาลนครหาดใหญ่/);
-		await dialog.locator('input[name="members[0].name"]').fill('สมชาย ใจดี');
+		await dialog.locator('input[name="members[0].first_name"]').fill('สมชาย');
+		await dialog.locator('input[name="members[0].last_name"]').fill('ใจดี');
 		await dialog.locator('input[name="phone"]').fill('0812345678');
 
 		await dialog.getByLabel('นำสัตว์เลี้ยงมาด้วย').check();
@@ -203,7 +207,8 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 
 		const dialog = await openBooking(page);
 		await selectOption(dialog, 'shelter_code', /เทศบาลนครหาดใหญ่/);
-		await dialog.locator('input[name="members[0].name"]').fill('สมชาย ใจดี');
+		await dialog.locator('input[name="members[0].first_name"]').fill('สมชาย');
+		await dialog.locator('input[name="members[0].last_name"]').fill('ใจดี');
 		await dialog.locator('input[name="phone"]').fill('0812345678');
 		await dialog.getByRole('button', { name: 'ยืนยันการจองเข้าศูนย์' }).click();
 
@@ -248,35 +253,5 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		await dialog.getByLabel('คำค้นหา').fill('สมชาย');
 		await dialog.getByRole('button', { name: 'ค้นหา' }).click();
 		await expect(dialog.getByText('ไม่พบผู้ที่ตรงกับคำค้นหา')).toBeVisible();
-	});
-
-	test('track page needs both the code and the phone', async ({ page }) => {
-		await page.route('**/api/public/v1/registrations/lookup', async (route) => {
-			const body = route.request().postDataJSON();
-			if (body.phone !== '0812345678') {
-				await route.fulfill({
-					status: 404,
-					contentType: 'application/json',
-					body: JSON.stringify({ success: false, error: 'BOOKING_NOT_FOUND' })
-				});
-				return;
-			}
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify(TICKET)
-			});
-		});
-
-		await page.goto('/register/track');
-
-		await page.getByLabel('รหัสการจอง').fill(BOOKING_CODE);
-		await page.getByLabel('เบอร์โทรศัพท์').fill('0899999999');
-		await page.getByRole('button', { name: 'ตรวจสอบสถานะ' }).click();
-		await expect(page.getByRole('alert')).toContainText('ไม่พบการจอง');
-
-		await page.getByLabel('เบอร์โทรศัพท์').fill('0812345678');
-		await page.getByRole('button', { name: 'ตรวจสอบสถานะ' }).click();
-		await expect(page.getByText(BOOKING_CODE)).toBeVisible();
 	});
 });

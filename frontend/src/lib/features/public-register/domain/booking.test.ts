@@ -8,12 +8,16 @@ import {
 	publicBookingErrorMessage,
 	publicBookingInputSchema,
 	publicBookingLookupSchema,
-	splitThaiName,
 	toEvacueeInputs,
 	toHouseholdInput
 } from './booking';
 
-const CONTACT = { name: '  สมชาย ใจดี ', gender: 'male' as const, special_needs: [] };
+const CONTACT = {
+	first_name: '  สมชาย ',
+	last_name: ' ใจดี ',
+	gender: 'male' as const,
+	special_needs: []
+};
 
 const VALID = {
 	shelter_code: 'SH001',
@@ -27,7 +31,8 @@ describe('publicBookingInputSchema', () => {
 		const parsed = publicBookingInputSchema.parse(VALID);
 		expect(parsed.shelter_code).toBe('SH001');
 		expect(parsed.members).toHaveLength(1);
-		expect(parsed.members[0].name).toBe('สมชาย ใจดี');
+		expect(parsed.members[0].first_name).toBe('สมชาย');
+		expect(parsed.members[0].last_name).toBe('ใจดี');
 		expect(parsed.pets).toEqual([]);
 	});
 
@@ -68,23 +73,24 @@ describe('publicBookingInputSchema', () => {
 		expect(parsed).not.toHaveProperty('registered_via');
 		expect(parsed).not.toHaveProperty('current_stay');
 	});
-});
 
-describe('splitThaiName', () => {
-	it('splits on the first whitespace run', () => {
-		expect(splitThaiName('สมชาย ใจดี')).toEqual({ first_name: 'สมชาย', last_name: 'ใจดี' });
-		expect(splitThaiName('  สมชาย   ใจดี  ')).toEqual({ first_name: 'สมชาย', last_name: 'ใจดี' });
-	});
-
-	it('keeps a compound surname together', () => {
-		expect(splitThaiName('สมชาย ใจดี มีสุข')).toEqual({
-			first_name: 'สมชาย',
-			last_name: 'ใจดี มีสุข'
-		});
-	});
-
-	it('leaves last_name empty rather than guessing on a single word', () => {
-		expect(splitThaiName('สมชาย')).toEqual({ first_name: 'สมชาย', last_name: '' });
+	// A single "ชื่อ-นามสกุล" box used to be split on whitespace, which left
+	// `last_name` empty for a one-word entry and crashed `createEvacuee` downstream
+	// (it requires both non-empty) — first_name/last_name are now separate,
+	// required fields so the schema itself rejects a missing surname up front.
+	it('requires both first_name and last_name on every member', () => {
+		expect(
+			publicBookingInputSchema.safeParse({
+				...VALID,
+				members: [{ ...CONTACT, last_name: '' }]
+			}).success
+		).toBe(false);
+		expect(
+			publicBookingInputSchema.safeParse({
+				...VALID,
+				members: [{ ...CONTACT, first_name: '' }]
+			}).success
+		).toBe(false);
 	});
 });
 
@@ -94,8 +100,13 @@ describe('toEvacueeInputs → createEvacuee', () => {
 		national_id: '1234567890123',
 		members: [
 			CONTACT,
-			{ name: 'สมหญิง ใจดี', gender: 'female', special_needs: ['ผู้สูงอายุ'] },
-			{ name: 'เด็กชายเล็ก ใจดี', gender: 'male', special_needs: ['เด็กเล็ก', 'ผู้ป่วยเรื้อรัง'] }
+			{ first_name: 'สมหญิง', last_name: 'ใจดี', gender: 'female', special_needs: ['ผู้สูงอายุ'] },
+			{
+				first_name: 'เด็กชายเล็ก',
+				last_name: 'ใจดี',
+				gender: 'male',
+				special_needs: ['เด็กเล็ก', 'ผู้ป่วยเรื้อรัง']
+			}
 		]
 	});
 	const ctx = { shelterCode: 'SH001', createdBy: 'public' };
@@ -169,7 +180,9 @@ describe('toHouseholdInput → createHousehold', () => {
 	});
 
 	it('falls back to a generic label when the contact name is blank', () => {
-		expect(householdLabelFrom('   ')).toBe('ครอบครัวผู้จองผ่านเว็บ');
+		expect(householdLabelFrom({ first_name: '  ', last_name: '  ' })).toBe(
+			'ครอบครัวผู้จองผ่านเว็บ'
+		);
 	});
 });
 

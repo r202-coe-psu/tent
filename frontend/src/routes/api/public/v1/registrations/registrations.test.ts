@@ -38,7 +38,7 @@ vi.mock('$lib/server/security/captcha', () => ({
 
 const OPEN_SHELTER = { code: 'SH001', name: 'ศูนย์ทดสอบ', operation_status: 'active' };
 
-const CONTACT = { name: 'สมชาย ใจดี', gender: 'male', special_needs: [] };
+const CONTACT = { first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', special_needs: [] };
 
 const VALID_BODY = {
 	shelter_code: 'SH001',
@@ -83,8 +83,8 @@ describe('POST /api/public/v1/registrations', () => {
 		mockAppEnv.dev = false;
 	});
 
-	it('422 when the contact name is blank', async () => {
-		const res = await POST(event({ ...VALID_BODY, members: [{ ...CONTACT, name: '  ' }] }));
+	it('422 when the contact last name is blank', async () => {
+		const res = await POST(event({ ...VALID_BODY, members: [{ ...CONTACT, last_name: '  ' }] }));
 		expect(res.status).toBe(422);
 		expect((await res.json()).error).toBe('INVALID_INPUT');
 		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
@@ -227,8 +227,13 @@ describe('POST /api/public/v1/registrations', () => {
 			national_id: '1234567890123',
 			members: [
 				CONTACT,
-				{ name: 'สมหญิง ใจดี', gender: 'female', special_needs: ['ผู้สูงอายุ'] },
-				{ name: 'เล็ก ใจดี', gender: 'male', special_needs: ['เด็กเล็ก'] }
+				{
+					first_name: 'สมหญิง',
+					last_name: 'ใจดี',
+					gender: 'female',
+					special_needs: ['ผู้สูงอายุ']
+				},
+				{ first_name: 'เล็ก', last_name: 'ใจดี', gender: 'male', special_needs: ['เด็กเล็ก'] }
 			],
 			pets: [{ species: 'dog', notes: 'โกโก้', has_cage: true }]
 		};

@@ -126,9 +126,6 @@
 				iconClass="bg-danger-muted/30 text-danger"
 			>
 				<PublicActionBtn onclick={() => (bookingOpen = true)}>จองเข้าศูนย์ล่วงหน้า</PublicActionBtn>
-				<PublicActionBtn variant="outline" href="/register/track"
-					>ตรวจสอบสถานะการจอง</PublicActionBtn
-				>
 			</PublicQuickServiceCard>
 
 			<!-- สำหรับผู้ใจบุญ / บริจาค -->

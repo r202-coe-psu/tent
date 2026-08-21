@@ -42,7 +42,6 @@ export {
 	publicBookingLookupSchema,
 	publicBookingMemberSchema,
 	publicBookingPetSchema,
-	splitThaiName,
 	toEvacueeInputs,
 	toHouseholdInput
 } from './domain/booking';

@@ -54,7 +54,12 @@
 	] as const;
 
 	function blankMember() {
-		return { name: '', gender: 'male' as const, special_needs: [] as string[] };
+		return {
+			first_name: '',
+			last_name: '',
+			gender: 'male' as const,
+			special_needs: [] as string[]
+		};
 	}
 
 	// `dataType: 'json'` is required for the nested `members[]` / `pets[]` arrays —
@@ -93,10 +98,14 @@
 	 * it can support (`admission_policy.supported_vulnerable_groups`), so the
 	 * choices follow the selection above rather than being a fixed list — there is
 	 * no point offering "ผู้ป่วยติดเตียง" at a centre that cannot take one.
+	 *
+	 * FastAPI sends the literal sentinel `"none"` when a shelter has no groups to
+	 * offer (see `public-shelter-card.svelte`, which filters the same sentinel) —
+	 * without dropping it here it would render as a tag literally labeled "none".
 	 */
 	const availableTags = $derived.by(() => {
-		const codes = selected?.vulnerable_groups ?? null;
-		if (!codes || codes.length === 0) return [];
+		const codes = (selected?.vulnerable_groups ?? []).filter((code) => code && code !== 'none');
+		if (codes.length === 0) return [];
 		const byCode = new Map(vulnerableGroups.map((g) => [g.code, g.label]));
 		return codes.map((code) => byCode.get(code) ?? code).filter(Boolean);
 	});
@@ -198,7 +207,7 @@
 						onValueChange={(v) => ($formData.shelter_code = v)}
 						disabled={Boolean(lockedShelterCode)}
 					>
-						<Select.Trigger {...props} class="h-11 w-full font-semibold">
+						<Select.Trigger {...props} class="!h-11 w-full font-semibold">
 							{selected?.name ?? '— เลือกศูนย์พักพิง —'}
 						</Select.Trigger>
 						<Select.Content>
@@ -237,6 +246,7 @@
 					<Input
 						{...props}
 						bind:value={$formData.phone}
+						class="!h-11"
 						inputmode="numeric"
 						maxlength={10}
 						placeholder="08X-XXX-XXXX"
@@ -255,6 +265,7 @@
 					<Input
 						{...props}
 						bind:value={$formData.national_id}
+						class="!h-11"
 						inputmode="numeric"
 						maxlength={13}
 						placeholder="X-XXXX-XXXXX-XX-X"
@@ -324,15 +335,32 @@
 					{who}
 				</p>
 
-				<div class="grid gap-3 sm:grid-cols-[2fr_1fr]">
-					<Form.Field {form} name={`members[${idx}].name`} class="space-y-1.5">
+				<div class="grid gap-3 sm:grid-cols-3">
+					<Form.Field {form} name={`members[${idx}].first_name`} class="space-y-1.5">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ชื่อ-นามสกุล</Form.Label>
+								<Form.Label>ชื่อ</Form.Label>
 								<Input
 									{...props}
-									bind:value={member.name}
-									placeholder="เช่น สมศักดิ์ มีสุข"
+									bind:value={member.first_name}
+									class="!h-11"
+									placeholder="เช่น สมศักดิ์"
+									autocomplete="off"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+
+					<Form.Field {form} name={`members[${idx}].last_name`} class="space-y-1.5">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>นามสกุล</Form.Label>
+								<Input
+									{...props}
+									bind:value={member.last_name}
+									class="!h-11"
+									placeholder="เช่น มีสุข"
 									autocomplete="off"
 								/>
 							{/snippet}
@@ -349,7 +377,7 @@
 									value={member.gender}
 									onValueChange={(v) => ($formData.members[idx].gender = v as typeof member.gender)}
 								>
-									<Select.Trigger {...props} class="h-9 w-full" aria-label="เพศ — {who}">
+									<Select.Trigger {...props} class="!h-11 w-full" aria-label="เพศ — {who}">
 										{GENDERS.find((g) => g.value === member.gender)?.label ?? '— เลือกเพศ —'}
 									</Select.Trigger>
 									<Select.Content>
@@ -450,7 +478,7 @@
 										>
 											<Select.Trigger
 												{...props}
-												class="h-9 w-full"
+												class="!h-11 w-full"
 												aria-label="ชนิดสัตว์เลี้ยงตัวที่ {idx + 1}"
 											>
 												{PET_SPECIES.find((s) => s.value === pet.species)?.label ?? '— เลือก —'}
@@ -473,6 +501,7 @@
 										<Input
 											{...props}
 											bind:value={pet.notes}
+											class="!h-11"
 											placeholder="เช่น โกโก้ / ชิวาว่า 1 ตัว"
 										/>
 									{/snippet}

@@ -8,7 +8,6 @@
 	import Heart from '@lucide/svelte/icons/heart';
 	import PackageSearch from '@lucide/svelte/icons/package-search';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
-	import Ticket from '@lucide/svelte/icons/ticket';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
@@ -39,19 +38,9 @@
 		return isDonatePage() || isTrackPage();
 	}
 
-	function isRegisterTrackPage() {
-		return page.url.pathname.startsWith('/register/track');
-	}
-
-	function isRegisterSection() {
-		return isRegisterTrackPage() || registerMenuOpen;
-	}
-
 	let mobileMenuOpen = $state(false);
 	let donationsMenuOpen = $state(false);
 	let donationsMenuEl: HTMLDivElement | undefined = $state();
-	let registerMenuOpen = $state(false);
-	let registerMenuEl: HTMLDivElement | undefined = $state();
 	// Booking has no route of its own — the navbar opens the dialog in place.
 	let bookingOpen = $state(false);
 
@@ -61,20 +50,10 @@
 
 	function toggleDonationsMenu() {
 		donationsMenuOpen = !donationsMenuOpen;
-		if (donationsMenuOpen) registerMenuOpen = false;
 	}
 
 	function closeDonationsMenu() {
 		donationsMenuOpen = false;
-	}
-
-	function toggleRegisterMenu() {
-		registerMenuOpen = !registerMenuOpen;
-		if (registerMenuOpen) donationsMenuOpen = false;
-	}
-
-	function closeRegisterMenu() {
-		registerMenuOpen = false;
 	}
 
 	function handleWindowPointerDown(event: PointerEvent) {
@@ -82,20 +61,15 @@
 		if (donationsMenuOpen && donationsMenuEl && !donationsMenuEl.contains(target)) {
 			closeDonationsMenu();
 		}
-		if (registerMenuOpen && registerMenuEl && !registerMenuEl.contains(target)) {
-			closeRegisterMenu();
-		}
 	}
 
 	function handleWindowKeydown(event: KeyboardEvent) {
 		if (event.key !== 'Escape') return;
 		closeDonationsMenu();
-		closeRegisterMenu();
 	}
 
 	afterNavigate(() => {
 		donationsMenuOpen = false;
-		registerMenuOpen = false;
 		mobileMenuOpen = false;
 	});
 </script>
@@ -160,59 +134,15 @@
 				ตรวจสอบศูนย์พักพิง
 			</a>
 
-			<!-- Booking: จอง + ตรวจสอบสถานะ (CR-070 / T-71) — click toggle, mirrors บริจาค -->
-			<div class="relative" bind:this={registerMenuEl}>
-				<button
-					type="button"
-					onclick={toggleRegisterMenu}
-					aria-haspopup="menu"
-					aria-expanded={registerMenuOpen}
-					aria-controls={registerMenuOpen ? 'register-menu' : undefined}
-					class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isRegisterSection() ||
-					registerMenuOpen
-						? 'bg-primary-muted text-primary'
-						: 'text-muted-foreground'}"
-				>
-					<ClipboardCheck class="h-4 w-4" />
-					จองเข้าศูนย์
-					<ChevronDown
-						class="h-3.5 w-3.5 text-muted-foreground/75 transition-transform {registerMenuOpen
-							? 'rotate-180'
-							: ''}"
-					/>
-				</button>
-				{#if registerMenuOpen}
-					<div
-						id="register-menu"
-						role="menu"
-						class="absolute right-0 mt-1 w-56 rounded-xl border border-border bg-card p-1 shadow-sm"
-					>
-						<button
-							type="button"
-							role="menuitem"
-							onclick={() => {
-								closeRegisterMenu();
-								bookingOpen = true;
-							}}
-							class="flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-						>
-							<ClipboardCheck class="h-3.5 w-3.5" />
-							จองเข้าศูนย์ล่วงหน้า
-						</button>
-						<a
-							role="menuitem"
-							href={resolve('/register/track')}
-							onclick={closeRegisterMenu}
-							class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground {isRegisterTrackPage()
-								? 'bg-primary-muted text-primary'
-								: 'text-muted-foreground'}"
-						>
-							<Ticket class="h-3.5 w-3.5" />
-							ตรวจสอบสถานะการจอง
-						</a>
-					</div>
-				{/if}
-			</div>
+			<!-- Booking (CR-070 / T-71) — no route of its own, opens the dialog in place. -->
+			<button
+				type="button"
+				onclick={() => (bookingOpen = true)}
+				class="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
+			>
+				<ClipboardCheck class="h-4 w-4" />
+				จองเข้าศูนย์
+			</button>
 
 			<a
 				href={resolve('/search')}
@@ -345,17 +275,6 @@
 					<ClipboardCheck class="h-5 w-5" />
 					จองเข้าศูนย์ล่วงหน้า
 				</button>
-
-				<a
-					href={resolve('/register/track')}
-					onclick={() => (mobileMenuOpen = false)}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isRegisterTrackPage()
-						? 'bg-primary-muted text-primary'
-						: 'text-muted-foreground'}"
-				>
-					<Ticket class="h-5 w-5" />
-					ตรวจสอบสถานะการจอง
-				</a>
 
 				<a
 					href={resolve('/donations')}
