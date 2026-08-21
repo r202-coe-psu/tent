@@ -211,7 +211,9 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<div class="flex items-center justify-between gap-2">
-						<Form.Label>ศูนย์พักพิงที่ต้องการเข้าพัก</Form.Label>
+						<Form.Label
+							>ศูนย์พักพิงที่ต้องการเข้าพัก <span class="text-destructive">*</span></Form.Label
+						>
 						{#if selected && selected.capacity > 0}
 							<span
 								class="rounded-full border border-success/30 bg-success-muted/40 px-2 py-0.5 text-[11px] font-bold text-success"
@@ -274,7 +276,7 @@
 		<Form.Field {form} name="phone">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>เบอร์โทรศัพท์มือถือ</Form.Label>
+					<Form.Label>เบอร์โทรศัพท์มือถือ <span class="text-destructive">*</span></Form.Label>
 					<Input
 						{...props}
 						bind:value={$formData.phone}
@@ -371,7 +373,7 @@
 					<Form.Field {form} name={`members[${idx}].first_name`} class="space-y-1.5">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ชื่อ</Form.Label>
+								<Form.Label>ชื่อ <span class="text-destructive">*</span></Form.Label>
 								<Input
 									{...props}
 									bind:value={member.first_name}
@@ -387,7 +389,7 @@
 					<Form.Field {form} name={`members[${idx}].last_name`} class="space-y-1.5">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>นามสกุล</Form.Label>
+								<Form.Label>นามสกุล <span class="text-destructive">*</span></Form.Label>
 								<Input
 									{...props}
 									bind:value={member.last_name}
@@ -403,7 +405,7 @@
 					<Form.Field {form} name={`members[${idx}].gender`} class="space-y-1.5">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เพศ</Form.Label>
+								<Form.Label>เพศ <span class="text-destructive">*</span></Form.Label>
 								<Select.Root
 									type="single"
 									value={member.gender}
@@ -502,7 +504,7 @@
 							<Form.Field {form} name={`pets[${idx}].species`} class="space-y-1.5">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label>ชนิดสัตว์เลี้ยง</Form.Label>
+										<Form.Label>ชนิดสัตว์เลี้ยง <span class="text-destructive">*</span></Form.Label>
 										<Select.Root
 											type="single"
 											value={pet.species}

@@ -34,9 +34,30 @@
 			: d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
 	});
 
+	/**
+	 * Print with a meaningful "Save as PDF" filename (`preregister-<code>`, mirroring
+	 * the `evacuee-id-<id>` convention of the onsite QR card).
+	 *
+	 * The browser derives that filename from `document.title`, which is the only
+	 * hook native printing gives us — so swap the title for the duration of the
+	 * print and put it back after. Restored on `afterprint`, not on the line after
+	 * `window.print()`: the call is not reliably synchronous across browsers, and
+	 * restoring too early hands the dialog back the old title before it reads one.
+	 */
+	function printTicket() {
+		const previousTitle = document.title;
+		const restore = () => {
+			document.title = previousTitle;
+			window.removeEventListener('afterprint', restore);
+		};
+		window.addEventListener('afterprint', restore);
+		document.title = `preregister-${ticket.code}`;
+		window.print();
+	}
+
 	const statusLabel = $derived(
 		ticket.status === 'pre_registered'
-			? 'จองแล้ว รอยืนยันตัวตนที่ประตู'
+			? 'Pre-registered'
 			: ticket.status === 'active'
 				? 'เช็คอินเข้าศูนย์แล้ว'
 				: ticket.status === 'cancelled'
@@ -130,7 +151,7 @@
 	</p>
 
 	<div class="flex justify-center print:hidden">
-		<Button type="button" variant="outline" onclick={() => window.print()}>
+		<Button type="button" variant="outline" onclick={printTicket}>
 			<Printer class="h-4 w-4" />
 			พิมพ์ใบจอง
 		</Button>
@@ -144,14 +165,45 @@
 		name, zone, national ID); a booking ticket only needs the gate scanner to read
 		the QR plus the booking code as a human-readable fallback, so the isolated
 		target here is just the QR block — no header banner, no dl summary.
+
+		The ticket renders inside a bits-ui Dialog (booking-modal.svelte), portalled
+		to <body>, sitting on top of the public landing page's own CTA buttons.
+
+		`transition: none` is load-bearing, not hygiene. `visibility` is a discrete
+		*transitionable* property, and the landing page's PublicActionBtn CTAs plus
+		the dialog overlay/content all carry `transition-all` at 150ms — so their
+		visible → hidden flip is deferred (a discrete property switches at 50% of the
+		duration) past the moment the print snapshot is taken. Measured under
+		print-media emulation: 8 foreign elements were still `visible` immediately
+		after print styles applied, every one of them with `transition: all 0.15s`,
+		and 0 remained once the transitions were allowed to settle. Killing
+		transitions here makes the flip instant, which is what actually closes the
+		isolation gap; the `!important` below is only belt-and-braces.
 	*/
 	@media print {
+		:global(*),
+		:global(*::before),
+		:global(*::after) {
+			transition: none !important;
+			animation: none !important;
+		}
 		:global(body *) {
-			visibility: hidden;
+			visibility: hidden !important;
 		}
 		#booking-ticket-print,
 		#booking-ticket-print * {
-			visibility: visible;
+			visibility: visible !important;
+		}
+		/*
+			`visibility: hidden` stops the painting but KEEPS the layout box, so the
+			(invisible) landing page underneath still contributed its full height and
+			printed as trailing blank pages — a 2-3 page PDF for one QR. Collapsing
+			every body-level subtree that does not contain the ticket removes that
+			height entirely; the dialog's own chrome is `position: fixed`, so what is
+			left contributes nothing to the flow and the QR fits one page.
+		*/
+		:global(body > *:not(:has(#booking-ticket-print))) {
+			display: none !important;
 		}
 		#booking-ticket-print {
 			position: absolute;
