@@ -53,6 +53,7 @@ async def seed_counter(
 				"item_id": item_id,
 				"qty_target": bson.Decimal128(str(qty_target)),
 				"reserved_qty": bson.Decimal128("0"),
+				"on_hand_qty": bson.Decimal128("0"),
 				"created_at": now,
 			},
 			"$set": {"updated_at": now},
@@ -73,7 +74,18 @@ class ReserveResult(str, Enum):
 async def reserve_quota(
 	*, shelter_code: str, campaign_id: str, item_id: str, qty: Decimal, now: datetime
 ) -> ReserveResult:
-	"""Atomically increment ``reserved_qty`` iff ``reserved_qty + qty <= qty_target``."""
+	"""Atomically increment ``reserved_qty`` iff it stays within the ceiling.
+
+	The ceiling is ``qty_target − on_hand_qty``, not ``qty_target``. A need is met once
+	the warehouse plus the outstanding bookings reach the target — the same rule the
+	needs board, the back-office board and the worker projector apply. This was the one
+	place still measuring against the bare target, so two donors could book 180 kg each
+	against a 500 kg target the shelter already held 270 kg of, and neither the atomic
+	guard nor a retry would notice.
+
+	``$ifNull`` because counters seeded before ``on_hand_qty`` existed have no such
+	field; they read as 0, which is the old behaviour.
+	"""
 	cid = counter_id(shelter_code, campaign_id, item_id)
 	existing = await DonationNeedCounter.get(cid)
 	if existing is None:
@@ -85,7 +97,12 @@ async def reserve_quota(
 			"$expr": {
 				"$lte": [
 					{"$add": ["$reserved_qty", bson.Decimal128(str(qty))]},
-					"$qty_target",
+					{
+						"$subtract": [
+							"$qty_target",
+							{"$ifNull": ["$on_hand_qty", bson.Decimal128("0")]},
+						]
+					},
 				]
 			},
 		},
@@ -143,3 +160,24 @@ async def release_quota(
 		{"_id": cid, "reserved_qty": {"$gte": bson.Decimal128(str(qty))}},
 		{"$inc": {"reserved_qty": bson.Decimal128(str(-qty))}, "$set": {"updated_at": now}},
 	)
+
+
+async def set_on_hand_qty(
+	*, shelter_code: str, item_id: str, qty: Decimal, now: datetime
+) -> int:
+	"""Record what the warehouse holds of ``item_id``, across every campaign wanting it.
+
+	Written by the worker off the stock ledger, alongside ``qty_target`` (CR-060 FR-3);
+	``reserved_qty`` stays FastAPI's and is untouched here. The reservation ceiling in
+	``reserve_quota`` is ``qty_target − on_hand_qty``, so this is the field that keeps
+	the counter agreeing with what the boards show donors.
+
+	No ``campaign_id``: a stock ledger records the shelter's shelf, which no campaign
+	owns a share of. Every campaign asking for the item sees the whole balance, exactly
+	as ``compute_needs`` does. Returns how many counters were changed.
+	"""
+	result = await DonationNeedCounter.get_motor_collection().update_many(
+		{"shelter_code": shelter_code, "item_id": item_id},
+		{"$set": {"on_hand_qty": bson.Decimal128(str(qty)), "updated_at": now}},
+	)
+	return int(result.modified_count)

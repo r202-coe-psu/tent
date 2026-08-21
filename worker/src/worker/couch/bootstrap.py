@@ -20,6 +20,7 @@ from worker.mongo import (
 from worker.projectors.donation import project_donation
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
+from worker.mongo.on_hand import refresh_on_hand
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import is_shelter_open, project_shelter
 
@@ -96,6 +97,11 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
             # this the counters stay empty and reserve_quota falls open: the system
             # looks healthy while enforcing no ceiling at all.
             await apply_need_counters(plan_need_counters(doc, shelter_code=shelter_code))
+
+    # Same reason the counters are seeded above: the ledger entries already on disk
+    # never arrive as change events, and a counter left at on_hand_qty 0 enforces the
+    # bare target instead of what is genuinely still needed.
+    await refresh_on_hand(couch, shelter_code)
 
     need_actions = await project_needs_for_shelter(couch, shelter_code)
     for action, payload in need_actions:

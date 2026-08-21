@@ -32,7 +32,7 @@ from tent_model import DonationNeedCounter, close_db, init_db
 from worker.config import load_settings
 from worker.couch.client import CouchClient
 from worker.masking import shelter_db_name
-from worker.mongo import apply_need_counters
+from worker.mongo import apply_need_counters, refresh_on_hand
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.quota import ShelterReconcileReport, reconcile_shelter
 
@@ -111,10 +111,16 @@ async def _run(args: argparse.Namespace) -> int:
         print(f"donation-quota {args.command} — {mode} — {len(codes)} shelter(s)\n")
 
         seeded_total = 0
+        on_hand_total = 0
         reports: list[ShelterReconcileReport] = []
         for code in codes:
             if args.command == "backfill":
                 seeded_total += await _seed_open_campaigns(couch, code, apply=apply)
+                # The reservation ceiling is qty_target − on_hand_qty, so a counter
+                # written before that field existed enforces the bare target. Nothing
+                # else backfills it: the change feed only reacts to new ledger entries.
+                if apply:
+                    on_hand_total += await refresh_on_hand(couch, code)
             report = await reconcile_shelter(couch, code, now=now, apply=apply)
             reports.append(report)
             _print_report(report, apply=apply)
@@ -126,6 +132,7 @@ async def _run(args: argparse.Namespace) -> int:
         print("\nSummary")
         if args.command == "backfill":
             print(f"  qty_target seeds planned: {seeded_total}")
+            print(f"  on_hand_qty refreshed: {on_hand_total}")
         print(f"  reserved_qty {'changed' if apply else 'to change'}: {changed}")
         print(f"  conflicts: {conflicts}")
         print(f"  unattributed items (need manual review): {unattributed}")

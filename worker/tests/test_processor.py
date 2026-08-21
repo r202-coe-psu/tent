@@ -73,6 +73,7 @@ async def test_process_donation_change_settles_quota():
             new_callable=AsyncMock,
             return_value=[],
         ),
+        patch("worker.couch.processor.refresh_on_hand", new_callable=AsyncMock),
         patch(
             "worker.couch.processor.project_donation",
             return_value=("upsert", {"_id": "donation:01TEST"}),
@@ -113,6 +114,7 @@ async def test_process_donation_change_counts_a_walk_in():
             new_callable=AsyncMock,
             return_value=[],
         ),
+        patch("worker.couch.processor.refresh_on_hand", new_callable=AsyncMock),
         patch(
             "worker.couch.processor.project_donation",
             return_value=("upsert", {"_id": "donation:01WALKIN"}),
@@ -177,6 +179,7 @@ async def test_process_campaign_change_still_reprojects_needs():
             new_callable=AsyncMock,
             return_value=[("upsert", need_payload)],
         ) as project_needs,
+        patch("worker.couch.processor.refresh_on_hand", new_callable=AsyncMock),
     ):
         await process_change(couch, "shelter_sh001", change)
 
@@ -210,6 +213,7 @@ async def test_process_campaign_change_seeds_need_counters():
             new_callable=AsyncMock,
             return_value=[],
         ),
+        patch("worker.couch.processor.refresh_on_hand", new_callable=AsyncMock),
         patch(
             "worker.couch.processor.apply_need_counters", new_callable=AsyncMock
         ) as apply_counters,
@@ -240,6 +244,7 @@ async def test_process_supply_item_change_does_not_seed_need_counters():
             new_callable=AsyncMock,
             return_value=[],
         ),
+        patch("worker.couch.processor.refresh_on_hand", new_callable=AsyncMock),
         patch(
             "worker.couch.processor.apply_need_counters", new_callable=AsyncMock
         ) as apply_counters,
@@ -247,3 +252,64 @@ async def test_process_supply_item_change_does_not_seed_need_counters():
         await process_change(couch, "shelter_sh001", change)
 
     apply_counters.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_process_stock_ledger_change_refreshes_the_ceiling():
+    """Goods on the shelf lower what still has to be donated — and the booking ceiling.
+
+    Nothing reacted to a ledger entry before this: the board kept advertising the old
+    shortfall and the counter kept accepting bookings against the bare qty_target.
+    """
+    couch = AsyncMock()
+    change = {
+        "seq": 60,
+        "id": "stock_ledger:01",
+        "doc": {
+            "_id": "stock_ledger:01",
+            "type": "stock_ledger",
+            "item_id": "item:rice",
+            "qty": "270",
+        },
+    }
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_need", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.project_needs_for_shelter",
+            new_callable=AsyncMock,
+            return_value=[],
+        ) as project_needs,
+        patch(
+            "worker.couch.processor.refresh_on_hand", new_callable=AsyncMock
+        ) as refresh,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    refresh.assert_awaited_once_with(couch, "SH001")
+    project_needs.assert_awaited_once_with(couch, "SH001")
+
+
+@pytest.mark.asyncio
+async def test_process_deleted_stock_ledger_raises_the_ceiling_back():
+    """A delete row carries no doc, so the branch keys off the id prefix instead."""
+    couch = AsyncMock()
+    change = {"seq": 61, "id": "stock_ledger:01", "deleted": True}
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_person", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_need", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.project_needs_for_shelter",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "worker.couch.processor.refresh_on_hand", new_callable=AsyncMock
+        ) as refresh,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    refresh.assert_awaited_once_with(couch, "SH001")

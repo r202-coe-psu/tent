@@ -8,6 +8,7 @@ from tent_model.donation_need_counter_ops import (
 	release_quota,
 	reserve_quota,
 	seed_counter,
+	set_on_hand_qty,
 	set_reserved_qty,
 )
 from tent_model.public_announcement import PublicAnnouncement
@@ -43,5 +44,6 @@ __all__ = [
 	"release_quota",
 	"reserve_quota",
 	"seed_counter",
+	"set_on_hand_qty",
 	"set_reserved_qty",
 ]

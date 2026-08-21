@@ -23,6 +23,7 @@ from worker.projectors.announcement import project_announcement
 from worker.projectors.donation import project_donation
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
+from worker.mongo.on_hand import refresh_on_hand
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import project_shelter
 from worker.quota.settle import reserve_walk_in_quota, settle_donation_quota
@@ -68,6 +69,12 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 if doc_id.startswith("donation:"):
                     await apply_donation("delete", {"_id": doc_id})
                     # Declared qty left the board — recompute remaining needs.
+                    await _reproject_needs(couch, shelter_code)
+                elif doc_id.startswith("stock_ledger:"):
+                    # A deleted entry raises the shortfall again, so the ceiling has to
+                    # go back up with it — a delete row carries no doc to read a type
+                    # from, hence the id prefix.
+                    await refresh_on_hand(couch, shelter_code)
                     await _reproject_needs(couch, shelter_code)
         await save_checkpoint(database, seq)
         return
@@ -127,6 +134,17 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 # campaign doc is already in hand from the change row — no re-fetch,
                 # unlike the full re-scan _reproject_needs does.
                 await apply_need_counters(plan_need_counters(doc, shelter_code=shelter_code))
+                # A counter seeded now starts at on_hand_qty 0 even when the shelf is
+                # already full, so give it the current balance before it takes bookings.
+                await refresh_on_hand(couch, shelter_code)
+                await _reproject_needs(couch, shelter_code)
+            elif doc_type == "stock_ledger":
+                # Goods on the shelf lower what a need still has to be donated, so they
+                # lower the reservation ceiling too — the counter caps at
+                # ``qty_target − on_hand_qty``. Nothing used to react to a ledger entry
+                # at all: the board kept advertising the old shortfall and the counter
+                # kept accepting bookings against the bare target.
+                await refresh_on_hand(couch, shelter_code)
                 await _reproject_needs(couch, shelter_code)
             elif doc_type == "supply_item":
                 await _reproject_needs(couch, shelter_code)
