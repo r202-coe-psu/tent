@@ -20,6 +20,14 @@ pipeline {
                             echo '==> Deploying Tent to Staging...'
                             cd /home/projects/tent
                             git -C /home/projects/tent pull
+                            
+                            echo '==> Building frontend image...'
+                            docker compose -f docker-compose.staging.no-nginx.yml build frontend
+                            
+                            echo '==> Syncing CouchDB Design Docs & Schema...'
+                            docker compose -f docker-compose.staging.no-nginx.yml run --rm frontend pnpm db:sync
+                            
+                            echo '==> Starting services...'
                             docker compose -f docker-compose.staging.no-nginx.yml up -d --build --force-recreate
                         "
                         echo "Deployment process finished successfully!"
@@ -42,9 +50,17 @@ pipeline {
                         echo "Starting deployment to Production server..."
                         
                         ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
-                            echo '==> Deploying Tent...'
+                            echo '==> Deploying Tent to Production...'
                             cd /home/projects/tent
                             git -C /home/projects/tent pull
+                            
+                            echo '==> Building frontend image...'
+                            docker compose -f docker-compose.production.no-nginx.yml build frontend
+                            
+                            echo '==> Syncing CouchDB Design Docs & Schema...'
+                            docker compose -f docker-compose.production.no-nginx.yml run --rm frontend pnpm db:sync
+                            
+                            echo '==> Starting services...'
                             docker compose -f docker-compose.production.no-nginx.yml up -d --build --force-recreate
                         "
                         echo "Deployment process finished successfully!"

@@ -9,7 +9,6 @@
 	import Truck from '@lucide/svelte/icons/truck';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
-	import Ban from '@lucide/svelte/icons/ban';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
@@ -21,9 +20,7 @@
 		vehicleLabel,
 		formatTrackTimestamp,
 		formatTrackSchedule,
-		canEditCourierTracking,
-		canCancelDonation,
-		CancelDonationDialog
+		canEditCourierTracking
 	} from '$lib/features/donations';
 	import { PublicPageShell } from '$lib/features/public-portal';
 
@@ -34,7 +31,6 @@
 	const courierMutation = useUpdateCourierTracking();
 
 	let courierInput = $state('');
-	let cancelDialogOpen = $state(false);
 
 	const donation = $derived(trackingQuery.data);
 	const isLoading = $derived(trackingQuery.isPending);
@@ -49,7 +45,6 @@
 	const showCourierEdit = $derived(
 		donation ? canEditCourierTracking(donation.status, donation.logistics) : false
 	);
-	const showCancel = $derived(donation ? canCancelDonation(donation.status) : false);
 
 	async function saveCourier() {
 		const value = courierInput.trim();
@@ -328,37 +323,7 @@
 						</div>
 					</div>
 				</div>
-
-				{#if showCancel}
-					<div
-						class="flex flex-col gap-3 rounded-2xl border border-danger-border bg-danger-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between"
-					>
-						<div class="text-xs">
-							<p class="font-bold text-foreground">ไม่สะดวกมาส่งของแล้ว?</p>
-							<p class="mt-0.5 text-[11px] text-muted-foreground">
-								ยกเลิกการจองเพื่อคืนสิทธิ์ให้ผู้บริจาคท่านอื่น —
-								ยกเลิกได้ก่อนเจ้าหน้าที่เริ่มตรวจรับ
-							</p>
-						</div>
-						<Button
-							variant="destructive"
-							onclick={() => (cancelDialogOpen = true)}
-							class="h-9 shrink-0 gap-1.5 rounded-xl px-3 text-xs font-bold"
-						>
-							<Ban class="h-3.5 w-3.5" />
-							ยกเลิกการจอง
-						</Button>
-					</div>
-				{/if}
 			</div>
 		</div>
-
-		{#if showCancel}
-			<CancelDonationDialog
-				bind:open={cancelDialogOpen}
-				{token}
-				bookingRef={donation.booking_ref}
-			/>
-		{/if}
 	{/if}
 </PublicPageShell>

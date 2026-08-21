@@ -68,24 +68,12 @@ export const POST = async ({ request, getClientAddress }) => {
 			return json({ success: false, error: 'CAPTCHA verification failed.' }, { status: 403 });
 		}
 
-		// 3.1 shelter_code (existence + open/closed) is validated by FastAPI against
-		// `public_shelters` — SHELTER_NOT_FOUND 404 / SHELTER_CLOSED 409 come back from
-		// there. CR-017 §Decision A puts the public plane on Mongo, so this route does not
-		// re-check the shelter against the registry.
+		// 3.1 shelter_code is validated by FastAPI against `public_shelters`
+		// (SHELTER_NOT_FOUND 404 / SHELTER_CLOSED 409) — CR-017 §Decision A puts the
+		// public plane on Mongo, so this route must not read the registry itself. The
+		// scan that used to live here pulled all 8,444 registry docs (~6.3 MB) on every
+		// donation just to read one shelter's status.
 		const shelterCode = parsed.data.shelter_code;
-
-		// FastAPI has no CouchDB client of its own, so the reservation TTL rides to it on
-		// the request (schema.md §3.2). Read the single `config:app` doc by id — the
-		// `_all_docs` scan that used to live here pulled all 8,444 registry docs (~6.3 MB)
-		// on every donation.
-		const cfgRes = await adminRaw(`/registry/${APP_CONFIG_DOC_ID}`, 'GET');
-		if (cfgRes.status >= 500) {
-			console.error('config:app lookup failed', cfgRes.data);
-			return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
-		}
-		// 404 = config doc not seeded yet → schema defaults (TTL 72h).
-		const appConfig = readAppConfig(cfgRes.status === 200 ? cfgRes.data : null);
-
 		const dbName = `shelter_${shelterCode.toLowerCase()}`;
 
 		// โหลด campaigns + donations ครั้งเดียวแล้วใช้ซ้ำทุกการตรวจ (needs / booking_ref / slot)

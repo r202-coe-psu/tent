@@ -20,7 +20,8 @@ import type {
 	AdjustInput,
 	Purchase,
 	PurchaseInput,
-	CountedItem
+	CountedItem,
+	WalkInDonationInput
 } from '../domain/operations';
 
 export const operationsKeys = {
@@ -114,6 +115,31 @@ export const useReceiveStock = () => {
 	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) =>
 			operationsRepository().receiveStock(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/**
+ * Mutation hook for goods that arrive without a booking (CR-055 R4 / D-1).
+ *
+ * Mints the missing donation document AND the ledger row that references it in
+ * one request, so an abandoned form cannot leave a `declared` donation behind
+ * inflating reserved stock forever.
+ */
+export const useReceiveWalkInDonation = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			donation,
+			receive,
+			ctx
+		}: {
+			donation: WalkInDonationInput;
+			receive: ReceiveInput;
+			ctx: AuthorContext;
+		}) => operationsRepository().receiveWalkInDonation(donation, receive, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}

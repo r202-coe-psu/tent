@@ -85,7 +85,8 @@
 		<div class="flex items-start gap-1.5">
 			<MapPin class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/70" />
 			<span class="leading-relaxed"
-				>{shelter.address} อ.{shelter.district}, จ.{shelter.province}
+				>{shelter.address || '-'}{#if shelter.district}
+					อ.{shelter.district}{/if}{#if shelter.province}, จ.{shelter.province}{/if}
 			</span>
 		</div>
 		<div class="ml-5 flex items-center gap-1.5">
@@ -106,20 +107,20 @@
 				รองรับได้สูงสุด
 			</div>
 			<div class="font-bold text-foreground">
-				<span class="text-sm">{shelter.capacity}</span>
+				<span class="text-sm">{shelter.capacity ?? 0}</span>
 				<span class="ml-0.5 text-[10px] font-bold text-muted-foreground">คน</span>
 			</div>
 		</div>
-		{#if shelter.pet_policy || (shelter.vulnerable_groups && shelter.vulnerable_groups.filter((g) => g !== 'none' && g !== 'ไม่มีโซนเฉพาะ').length > 0)}
+		{#if shelter.pet_policy || (Array.isArray(shelter.vulnerable_groups) && shelter.vulnerable_groups.filter((g) => g && g !== 'none' && g !== 'ไม่มีโซนเฉพาะ').length > 0)}
 			<div class="flex flex-col gap-2 border-t border-border/60 pt-2.5">
-				{#if shelter.vulnerable_groups && shelter.vulnerable_groups.filter((g) => g !== 'none' && g !== 'ไม่มีโซนเฉพาะ').length > 0}
+				{#if Array.isArray(shelter.vulnerable_groups) && shelter.vulnerable_groups.filter((g) => g && g !== 'none' && g !== 'ไม่มีโซนเฉพาะ').length > 0}
 					<div class="flex flex-col gap-1.5">
 						<div class="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
 							<HeartPulse class="h-3 w-3" />
 							กลุ่มเปราะบางที่รองรับ
 						</div>
 						<div class="flex flex-wrap gap-1">
-							{#each shelter.vulnerable_groups.filter((g) => g !== 'none' && g !== 'ไม่มีโซนเฉพาะ') as group, i (i)}
+							{#each shelter.vulnerable_groups.filter((g) => g && g !== 'none' && g !== 'ไม่มีโซนเฉพาะ') as group, i (i)}
 								<Badge
 									variant="secondary"
 									class="h-auto min-h-5 border-primary/10 bg-primary/5 py-1 text-left text-[10px] leading-tight whitespace-normal text-foreground hover:bg-primary/10"
@@ -133,9 +134,9 @@
 
 				{#if shelter.pet_policy}
 					<div
-						class="flex flex-col gap-1.5 {shelter.vulnerable_groups &&
-						shelter.vulnerable_groups.filter((g) => g !== 'none' && g !== 'ไม่มีโซนเฉพาะ').length >
-							0
+						class="flex flex-col gap-1.5 {Array.isArray(shelter.vulnerable_groups) &&
+						shelter.vulnerable_groups.filter((g) => g && g !== 'none' && g !== 'ไม่มีโซนเฉพาะ')
+							.length > 0
 							? 'mt-1'
 							: ''}"
 					>

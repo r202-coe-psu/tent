@@ -32,5 +32,8 @@ export type ListPublicSheltersParams = {
 	district?: string;
 	subdistrict?: string;
 	status?: string;
+	lat?: number;
+	lng?: number;
+	radius_km?: number;
 	fetch?: typeof globalThis.fetch;
 };

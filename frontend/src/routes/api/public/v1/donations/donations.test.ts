@@ -545,9 +545,7 @@ describe('POST /api/public/v1/donations', () => {
 			expect(data.error).toBe('SHELTER_CLOSED');
 		});
 
-		it('never scans the registry to validate the shelter', async () => {
-			// The shelter check belongs to FastAPI (`public_shelters`). Only `config:app` may
-			// be read here, by id — the `_all_docs` scan cost 8,444 docs (~6.3 MB) per donation.
+		it('never reads the shelter registry from CouchDB', async () => {
 			mockEmptyCouch();
 			mockFastapiCreate();
 
@@ -558,9 +556,8 @@ describe('POST /api/public/v1/donations', () => {
 
 			const registryReads = vi
 				.mocked(adminRaw)
-				.mock.calls.map((c) => String(c[0]))
-				.filter((path) => path.includes('/registry'));
-			expect(registryReads).toEqual(['/registry/config:app']);
+				.mock.calls.filter((c) => String(c[0]).includes('/registry'));
+			expect(registryReads).toHaveLength(0);
 		});
 	});
 });

@@ -1,6 +1,4 @@
 /** Public donation ticket view — capability-URL lookup via tracking token (DN-6). */
-import type { DonationStatus } from '$lib/features/operations';
-import { isDonorEditable } from './public-donation';
 
 export type DonationTrackStatus =
 	| 'declared'
@@ -112,14 +110,8 @@ export function formatTrackSchedule(logistics: DonationTrackLogistics | null): s
 	return '-';
 }
 
-/**
- * Donor-side cancel guard — mirrors the write paths' authority so the button never
- * offers an action the server refuses: both `DELETE /api/public/v1/donations/{token}`
- * (Couch) and FastAPI's buffer `cancel()` gate on `DONOR_EDITABLE_STATUSES`. Widening
- * that set (CR-052 `pending_review`/`verifying`) lights this up automatically.
- */
 export function canCancelDonation(status: string): boolean {
-	return isDonorEditable(status as DonationStatus);
+	return status === 'declared' || status === 'pending_review';
 }
 
 export function canEditCourierTracking(
