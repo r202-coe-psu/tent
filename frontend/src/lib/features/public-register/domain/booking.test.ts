@@ -50,6 +50,45 @@ describe('publicBookingInputSchema', () => {
 		expect(publicBookingInputSchema.safeParse({ ...VALID, members: many }).success).toBe(false);
 	});
 
+	// The shared `shelterCodeSchema` reports "Shelter code must look like SH001" —
+	// a developer-facing English assertion. On the public form the only way to fail
+	// it is to submit without choosing, so the citizen must get Thai instead.
+	it('reports a missing or malformed shelter in Thai', () => {
+		const blank = publicBookingInputSchema.safeParse({ ...VALID, shelter_code: '' });
+		expect(blank.success).toBe(false);
+		expect(blank.error?.issues[0].message).toBe('กรุณาเลือกศูนย์พักพิง');
+
+		const malformed = publicBookingInputSchema.safeParse({ ...VALID, shelter_code: 'nope' });
+		expect(malformed.success).toBe(false);
+		expect(malformed.error?.issues[0].message).toBe('กรุณาเลือกศูนย์พักพิงจากรายการ');
+	});
+
+	it('defaults vehicles to an empty list when the citizen brings no car', () => {
+		expect(publicBookingInputSchema.parse(VALID).vehicles).toEqual([]);
+	});
+
+	it('accepts vehicles with an optional plate, and rejects an unknown vehicle type', () => {
+		const parsed = publicBookingInputSchema.parse({
+			...VALID,
+			vehicles: [{ type: 'car', license_plate: ' กข 1234 สงขลา ' }, { type: 'motorcycle' }]
+		});
+		expect(parsed.vehicles).toEqual([
+			{ type: 'car', license_plate: 'กข 1234 สงขลา' },
+			{ type: 'motorcycle' }
+		]);
+
+		// `household.vehicles[].type` is still the closed car/motorcycle/other enum —
+		// this form must not widen it (unlike pet species, which is master-data driven).
+		expect(
+			publicBookingInputSchema.safeParse({ ...VALID, vehicles: [{ type: 'boat' }] }).success
+		).toBe(false);
+	});
+
+	it('caps a single booking at 10 vehicles', () => {
+		const many = Array.from({ length: 11 }, () => ({ type: 'car' as const }));
+		expect(publicBookingInputSchema.safeParse({ ...VALID, vehicles: many }).success).toBe(false);
+	});
+
 	it('accepts an optional 13-digit national id and rejects a malformed one', () => {
 		expect(
 			publicBookingInputSchema.safeParse({ ...VALID, national_id: '1234567890123' }).success
@@ -189,6 +228,7 @@ describe('toHouseholdInput → createHousehold', () => {
 		expect(household.head_evacuee_id).toBe('evacuee:E1');
 		expect(household.status).toBe('pre_registered');
 		expect(household.pets).toEqual([]);
+		expect(household.vehicles).toEqual([]);
 	});
 
 	it('maps pets onto the household pets[] shape (CR-016)', () => {
@@ -232,6 +272,24 @@ describe('toHouseholdInput → createHousehold', () => {
 				notes: 'กระต่ายพันธุ์ฮอลแลนด์ลอป — ชนิด: rabbit',
 				has_cage: true
 			}
+		]);
+	});
+
+	it('maps vehicles onto the household vehicles[] shape, blanking an unfilled plate', () => {
+		const input = publicBookingInputSchema.parse({
+			...VALID,
+			vehicles: [{ type: 'car', license_plate: 'กข 1234' }, { type: 'motorcycle' }]
+		});
+		const household = createHousehold(toHouseholdInput(input, 'evacuee:E1'), {
+			shelterCode: 'SH001',
+			createdBy: 'public'
+		});
+
+		// `license_plate` is nullable in the household schema, so "no plate given"
+		// has to arrive as `null` — not the empty string the form's input produces.
+		expect(household.vehicles).toEqual([
+			{ type: 'car', license_plate: 'กข 1234' },
+			{ type: 'motorcycle', license_plate: null }
 		]);
 	});
 

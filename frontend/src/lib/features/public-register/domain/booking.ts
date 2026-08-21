@@ -14,6 +14,22 @@
 import { z } from 'zod';
 import { shelterCodeSchema } from '$lib/db/model';
 
+/**
+ * The shelter the citizen picked, validated against the shared
+ * {@link shelterCodeSchema} but reported in Thai.
+ *
+ * The shared schema's message ("Shelter code must look like SH001") is a
+ * developer-facing assertion about a code the *staff* UI never types by hand —
+ * on a public form the only way to fail it is to submit without choosing a
+ * shelter, and an English format error is the wrong thing to show for that.
+ * Wrapped rather than edited: the same schema guards every staff-plane doc id.
+ */
+export const bookingShelterCodeSchema = z
+	.string({ error: 'กรุณาเลือกศูนย์พักพิง' })
+	.trim()
+	.min(1, 'กรุณาเลือกศูนย์พักพิง')
+	.refine((code) => shelterCodeSchema.safeParse(code).success, 'กรุณาเลือกศูนย์พักพิงจากรายการ');
+
 /** Thai mobile number, digits only. Unlike staff intake, "ไม่มี" is not an option. */
 export const bookingPhoneSchema = z
 	.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
@@ -45,10 +61,18 @@ export const bookingNationalIdSchema = z
  * free-form `[str]` since CR-046.
  */
 export const publicBookingMemberSchema = z.object({
-	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ').max(100),
-	last_name: z.string({ error: 'กรุณากรอกนามสกุล' }).trim().min(1, 'กรุณากรอกนามสกุล').max(100),
+	first_name: z
+		.string({ error: 'กรุณากรอกชื่อ' })
+		.trim()
+		.min(1, 'กรุณากรอกชื่อ')
+		.max(100, 'ชื่อยาวเกินไป'),
+	last_name: z
+		.string({ error: 'กรุณากรอกนามสกุล' })
+		.trim()
+		.min(1, 'กรุณากรอกนามสกุล')
+		.max(100, 'นามสกุลยาวเกินไป'),
 	gender: bookingGenderSchema,
-	special_needs: z.array(z.string().trim().min(1)).max(20).default([])
+	special_needs: z.array(z.string().trim().min(1)).max(20, 'เลือกได้สูงสุด 20 รายการ').default([])
 });
 
 export type PublicBookingMember = z.infer<typeof publicBookingMemberSchema>;
@@ -71,12 +95,32 @@ export const publicBookingPetSpeciesSchema = z
 /** A pet travelling with the household — mirrors `household.pets[]` (CR-016). */
 export const publicBookingPetSchema = z.object({
 	species: publicBookingPetSpeciesSchema,
-	notes: z.string().trim().max(200).optional(),
+	notes: z.string().trim().max(200, 'รายละเอียดยาวเกินไป').optional(),
 	has_cage: z.boolean().default(false)
 });
 
+/**
+ * A vehicle the household drives to the shelter — mirrors `household.vehicles[]`
+ * (people domain, schema_v 4), so the citizen-entered value lands in the field
+ * staff already read on the household profile. Kept to the same closed enum:
+ * unlike pet species (master-data driven, CR-049), vehicle type is still a fixed
+ * set in the household schema and this form must not widen it unilaterally.
+ *
+ * `license_plate` is optional — the plate is what lets staff manage parking, but
+ * a citizen fleeing at night may not have it to hand, and the household schema
+ * already stores it nullable.
+ */
+export const publicBookingVehicleTypeSchema = z.enum(['car', 'motorcycle', 'other'], {
+	error: 'กรุณาเลือกประเภทยานพาหนะ'
+});
+
+export const publicBookingVehicleSchema = z.object({
+	type: publicBookingVehicleTypeSchema,
+	license_plate: z.string().trim().max(20, 'ทะเบียนรถยาวเกินไป').optional()
+});
+
 export const publicBookingInputSchema = z.object({
-	shelter_code: shelterCodeSchema,
+	shelter_code: bookingShelterCodeSchema,
 	phone: bookingPhoneSchema,
 	national_id: bookingNationalIdSchema.optional(),
 	members: z
@@ -85,7 +129,8 @@ export const publicBookingInputSchema = z.object({
 		// A single booking is a household, not a mass import — cap it so one request
 		// cannot reserve an entire shelter.
 		.max(20, 'จองได้สูงสุด 20 คนต่อครั้ง กรุณาติดต่อเจ้าหน้าที่หากมีมากกว่านี้'),
-	pets: z.array(publicBookingPetSchema).max(20).default([]),
+	pets: z.array(publicBookingPetSchema).max(20, 'ระบุสัตว์เลี้ยงได้สูงสุด 20 ตัว').default([]),
+	vehicles: z.array(publicBookingVehicleSchema).max(10, 'ระบุยานพาหนะได้สูงสุด 10 คัน').default([]),
 	captchaToken: z.string().trim().optional()
 });
 
@@ -144,6 +189,9 @@ const LEGACY_HOUSEHOLD_PET_SPECIES = new Set(['dog', 'cat', 'bird', 'other']);
  * outside that fixed set folds into `other` rather than failing `createHousehold`'s
  * validation outright; the actual configured code is preserved in `notes` so
  * staff are not left guessing what the citizen actually selected.
+ *
+ * `vehicles` needs no such folding — the public form offers exactly the closed
+ * `car | motorcycle | other` set the household schema accepts.
  */
 export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: string) {
 	return {
@@ -162,7 +210,13 @@ export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: strin
 				...(notes ? { notes } : {}),
 				has_cage: pet.has_cage
 			};
-		})
+		}),
+		// `license_plate` is nullable in the household schema, and an empty string is
+		// not "no plate" — normalize the blank the form produces back to `null`.
+		vehicles: input.vehicles.map((vehicle) => ({
+			type: vehicle.type,
+			license_plate: vehicle.license_plate?.trim() || null
+		}))
 	};
 }
 

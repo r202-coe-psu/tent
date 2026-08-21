@@ -134,16 +134,6 @@
 				ตรวจสอบศูนย์พักพิง
 			</a>
 
-			<!-- Booking (CR-070 / T-71) — no route of its own, opens the dialog in place. -->
-			<button
-				type="button"
-				onclick={() => (bookingOpen = true)}
-				class="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
-			>
-				<ClipboardCheck class="h-4 w-4" />
-				จองเข้าศูนย์
-			</button>
-
 			<a
 				href={resolve('/search')}
 				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(

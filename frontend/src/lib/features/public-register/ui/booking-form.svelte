@@ -1,5 +1,7 @@
 <script lang="ts">
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
+	import Car from '@lucide/svelte/icons/car';
+	import Info from '@lucide/svelte/icons/info';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Minus from '@lucide/svelte/icons/minus';
 	import PawPrint from '@lucide/svelte/icons/paw-print';
@@ -46,6 +48,22 @@
 		{ value: 'other', label: 'อื่น ๆ' }
 	] as const;
 
+	/**
+	 * Vehicle is a single three-way choice rather than the staff form's repeatable
+	 * `vehicles[]` rows: a household evacuating arrives in one thing or nothing,
+	 * and "no vehicle" is by far the common answer, so it is the default and the
+	 * first option. `type` still uses the closed `household.vehicles[].type` set,
+	 * with the staff Thai labels — `other` is simply not offered here, since a
+	 * citizen picking "อื่น ๆ" on a phone tells the parking marshal nothing.
+	 */
+	const VEHICLE_CHOICES = [
+		{ value: 'none', label: 'ไม่มีพาหนะ' },
+		{ value: 'car', label: 'รถยนต์' },
+		{ value: 'motorcycle', label: 'มอเตอร์ไซค์' }
+	] as const;
+
+	type VehicleChoice = (typeof VEHICLE_CHOICES)[number]['value'];
+
 	function blankMember() {
 		return {
 			first_name: '',
@@ -77,9 +95,28 @@
 	$formData.shelter_code = untrack(() => lockedShelterCode);
 	$formData.members = [blankMember()];
 	$formData.pets = [];
+	$formData.vehicles = [];
 
 	let bringsPets = $state(false);
+	let vehicleChoice = $state<VehicleChoice>('none');
 	let submitError = $state('');
+
+	/**
+	 * Keep `vehicles[]` — the wire shape, mirroring `household.vehicles[]` — in
+	 * step with the single choice above. The plate survives a switch between car
+	 * and motorcycle (mistapping the type should not wipe what was typed) and is
+	 * dropped entirely on "ไม่มีพาหนะ".
+	 */
+	function setVehicleChoice(choice: VehicleChoice) {
+		vehicleChoice = choice;
+		if (choice === 'none') {
+			$formData.vehicles = [];
+			return;
+		}
+		$formData.vehicles = [
+			{ type: choice, license_plate: $formData.vehicles[0]?.license_plate ?? '' }
+		];
+	}
 
 	// `CLOSED` is the only hard block (FR-72) — a full shelter stays bookable and
 	// warns instead, matching the warning-only occupancy guardrail of T-51.
@@ -103,7 +140,17 @@
 		return codes.map((code) => byCode.get(code) ?? code).filter(Boolean);
 	});
 
-	const petsAllowed = $derived((selected?.pet_policy ?? null) !== 'no_pets');
+	/**
+	 * Everything in sections 2 and 3 that is *offered by the shelter* — the
+	 * vulnerable-group tags and the pet species — is unanswerable until one is
+	 * picked. Rather than rendering empty pickers (which read as "this shelter
+	 * supports nothing"), those blocks are replaced by a prompt to choose a
+	 * shelter first. Fields the citizen owns — names, gender, vehicle — stay open.
+	 */
+	const hasShelter = $derived(selected !== null);
+	const petsAllowed = $derived(hasShelter && (selected?.pet_policy ?? null) !== 'no_pets');
+	/** Section 3 covers pets too — either the shelter takes them, or we do not know yet. */
+	const sectionCoversPets = $derived(petsAllowed || !hasShelter);
 
 	/**
 	 * Pet species this shelter accepts, from `master_data:pet_types` (global +
@@ -179,10 +226,13 @@
 			const ticket = await createBooking.mutateAsync({
 				...data,
 				pets: bringsPets ? data.pets : [],
+				vehicles: vehicleChoice === 'none' ? [] : data.vehicles,
 				...(token ? { captchaToken: token } : {})
 			});
 			toast.success('จองเข้าศูนย์สำเร็จ');
-			onbooked(ticket);
+			// The surname is not in the response by design (see `BookingTicket`) —
+			// carry over the one the contact just typed so the ticket can show a full name.
+			onbooked({ ...ticket, last_name: data.members[0].last_name });
 		} catch (err) {
 			submitError = err instanceof Error ? err.message : 'จองไม่สำเร็จ กรุณาลองใหม่';
 			toast.error(submitError);
@@ -195,6 +245,20 @@
 		<script src="https://www.google.com/recaptcha/api.js?render={siteKey}" async defer></script>
 	{/if}
 </svelte:head>
+
+<!--
+	Shown wherever a block's choices are defined by the shelter (vulnerable-group
+	tags, pet species) and no shelter has been picked yet — an empty picker there
+	would read as "this shelter offers nothing" rather than "answer step 1 first".
+-->
+{#snippet chooseShelterFirst(what: string)}
+	<p
+		class="flex items-start gap-2 rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground"
+	>
+		<Info class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+		<span>กรุณาเลือกศูนย์พักพิงในขั้นตอนที่ 1 ก่อน — {what}</span>
+	</p>
+{/snippet}
 
 <form method="POST" use:enhance class="space-y-5">
 	<!-- ── 1. ศูนย์พักพิงและผู้ติดต่อหลัก ───────────────────────────────── -->
@@ -358,6 +422,10 @@
 			</div>
 		</div>
 
+		{#if !hasShelter}
+			{@render chooseShelterFirst('รายการความต้องการพิเศษจะแสดงตามที่ศูนย์นั้นรองรับ')}
+		{/if}
+
 		{#each $formData.members as member, idx (idx)}
 			{@const who = idx === 0 ? 'ผู้ติดต่อหลัก (ท่านเอง)' : `สมาชิกคนที่ ${idx + 1}`}
 			<div class="space-y-3 rounded-xl border border-border p-4">
@@ -455,17 +523,22 @@
 		{/each}
 	</section>
 
-	<!-- ── 3. สัตว์เลี้ยง ──────────────────────────────────────────────── -->
-	{#if petsAllowed}
-		<section class="space-y-4 rounded-2xl border border-border bg-card p-5">
-			<h3 class="flex items-center gap-2 text-base font-bold text-foreground">
-				<span
-					class="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
-					>3</span
-				>
-				สัตว์เลี้ยงที่นำมาด้วย
-			</h3>
+	<!-- ── 3. สัตว์เลี้ยงและยานพาหนะ ─────────────────────────────────── -->
+	<!--
+		One section, two optional add-ons the household brings with it. Vehicles sit
+		here rather than behind `petsAllowed`: a shelter that refuses pets still has a
+		car park, and the plate is what lets staff manage it.
+	-->
+	<section class="space-y-4 rounded-2xl border border-border bg-card p-5">
+		<h3 class="flex items-center gap-2 text-base font-bold text-foreground">
+			<span
+				class="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
+				>3</span
+			>
+			{sectionCoversPets ? 'สัตว์เลี้ยงและยานพาหนะที่นำมาด้วย' : 'ยานพาหนะที่นำมาด้วย'}
+		</h3>
 
+		{#if petsAllowed}
 			<label
 				for="brings-pets"
 				class="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground"
@@ -580,8 +653,70 @@
 					เพิ่มสัตว์เลี้ยงตัวถัดไป
 				</Button>
 			{/if}
-		</section>
-	{/if}
+
+			<hr class="border-border" />
+		{:else if !hasShelter}
+			{@render chooseShelterFirst('ตัวเลือกสัตว์เลี้ยงจะแสดงตามนโยบายของศูนย์ที่เลือก')}
+
+			<hr class="border-border" />
+		{/if}
+
+		<fieldset class="space-y-2" aria-label="ยานพาหนะที่นำมาด้วย">
+			{#if sectionCoversPets}
+				<p class="flex items-center gap-2 text-sm font-medium text-foreground">
+					<Car class="h-4 w-4 text-muted-foreground" />
+					ยานพาหนะที่นำมาด้วย
+				</p>
+			{/if}
+			<!--
+				Three short options that all fit on one row are faster to tap than a
+				dropdown, and the default answer ("ไม่มีพาหนะ") stays visible without
+				opening anything. Built on real `<input type="radio">` behind a styled
+				label rather than ARIA-tagged buttons, so arrow-key navigation, the
+				single tab stop and the exclusivity all come from the browser.
+			-->
+			<div class="grid grid-cols-3 gap-2">
+				{#each VEHICLE_CHOICES as choice (choice.value)}
+					{@const active = vehicleChoice === choice.value}
+					<label
+						class="flex h-11 cursor-pointer items-center justify-center rounded-lg border px-2 text-center text-[13px] font-semibold transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 sm:text-sm {active
+							? 'border-primary bg-primary text-primary-foreground'
+							: 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50'}"
+					>
+						<input
+							type="radio"
+							name="vehicle-choice"
+							value={choice.value}
+							checked={active}
+							onchange={() => setVehicleChoice(choice.value)}
+							class="sr-only"
+						/>
+						{choice.label}
+					</label>
+				{/each}
+			</div>
+		</fieldset>
+
+		{#if vehicleChoice !== 'none'}
+			<Form.Field {form} name="vehicles[0].license_plate">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>ทะเบียนรถ</Form.Label>
+						<Input
+							{...props}
+							bind:value={$formData.vehicles[0].license_plate}
+							class="!h-11"
+							maxlength={20}
+							placeholder="เช่น กข 1234 สงขลา"
+							autocomplete="off"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.Description>ทางเลือก — ช่วยเจ้าหน้าที่จัดที่จอดรถให้</Form.Description>
+				<Form.FieldErrors />
+			</Form.Field>
+		{/if}
+	</section>
 
 	{#if submitError}
 		<p

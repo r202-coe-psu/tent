@@ -8,6 +8,7 @@ export interface BookingTicket {
 	shelter_code: string;
 	shelter_name: string;
 	first_name: string;
+	last_name: string;
 	status: string;
 	booked_at: string;
 }

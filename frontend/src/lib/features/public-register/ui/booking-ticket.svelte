@@ -1,9 +1,10 @@
 <script lang="ts">
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
-	import Info from '@lucide/svelte/icons/info';
-	import Printer from '@lucide/svelte/icons/printer';
+	import Download from '@lucide/svelte/icons/download';
 	import QRCode from 'qrcode';
+	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button';
+	import { downloadElementAsPdf } from '$lib/utils/pdf';
 	import type { BookingTicket } from '../application/booking-store.svelte';
 
 	interface Props {
@@ -13,6 +14,13 @@
 	}
 
 	const { ticket, showSuccessHeader = true }: Props = $props();
+
+	/** Falls back to whichever half exists, so a blank never renders as a stray space. */
+	const fullName = $derived([ticket.first_name, ticket.last_name].filter(Boolean).join(' '));
+
+	/** The QR block — the only part that goes on paper (see the @media print rules). */
+	let ticketEl = $state<HTMLElement | null>(null);
+	let downloading = $state(false);
 
 	// The QR carries only the booking code — no name, no phone, no health data
 	// (CR-070: ไม่ expose medical/national ID บน public ticket). It is the same
@@ -35,24 +43,25 @@
 	});
 
 	/**
-	 * Print with a meaningful "Save as PDF" filename (`preregister-<code>`, mirroring
-	 * the `evacuee-id-<id>` convention of the onsite QR card).
+	 * Save the ticket straight to the device as `preregister-<code>.pdf` (mirroring
+	 * the `evacuee-id-<id>` filename convention of the onsite QR card).
 	 *
-	 * The browser derives that filename from `document.title`, which is the only
-	 * hook native printing gives us — so swap the title for the duration of the
-	 * print and put it back after. Restored on `afterprint`, not on the line after
-	 * `window.print()`: the call is not reliably synchronous across browsers, and
-	 * restoring too early hands the dialog back the old title before it reads one.
+	 * Deliberately a download, not `window.print()` and not the preview tab the
+	 * staff QR card opens: a citizen on a phone at a shelter gate wants the file in
+	 * their downloads, not a print dialog to dismiss or a popup their browser may
+	 * block. Only the QR block is rasterized, matching what the print stylesheet
+	 * below isolates — the QR plus the booking code as a human-readable fallback.
 	 */
-	function printTicket() {
-		const previousTitle = document.title;
-		const restore = () => {
-			document.title = previousTitle;
-			window.removeEventListener('afterprint', restore);
-		};
-		window.addEventListener('afterprint', restore);
-		document.title = `preregister-${ticket.code}`;
-		window.print();
+	async function downloadTicket() {
+		if (!ticketEl || downloading) return;
+		downloading = true;
+		try {
+			await downloadElementAsPdf(ticketEl, `preregister-${ticket.code}`);
+		} catch {
+			toast.error('ดาวน์โหลดใบจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+		} finally {
+			downloading = false;
+		}
 	}
 
 	const statusLabel = $derived(
@@ -85,20 +94,26 @@
 		class="mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-black/[0.04] bg-card shadow-sm print:border-0 print:shadow-none"
 	>
 		<div class="bg-primary-dark px-6 py-4 text-center text-white">
-			<p class="text-[11px] font-bold tracking-widest uppercase opacity-80">Shelter Booking</p>
 			<p class="mt-1 text-base font-bold">{ticket.shelter_name}</p>
 			<p class="text-xs opacity-80">รหัสศูนย์ {ticket.shelter_code}</p>
 		</div>
 
 		<!--
-			Printable target: only this block should end up on paper (QR + booking code
-			+ shelter name — no wristband chrome, no accent bars, no ID-card panels).
+			Printable target: only this block should end up on paper (QR + the holder's
+			name + shelter name — no wristband chrome, no accent bars, no ID-card panels).
+			The booking code is deliberately not shown: it is the evacuee ULID the QR
+			already carries — unreadable to a human, and meaningless to the marshal at
+			the gate, who matches the person in front of them against the name.
 			The `booking-ticket-print` id is picked up by the @media print isolation
 			below (same visibility-hidden-then-override idiom as evacuee-qr-modal.svelte),
 			so it stays visible while the rest of the page (header banner, dl, page
 			chrome outside this component) is hidden for print.
 		-->
-		<div id="booking-ticket-print" class="flex flex-col items-center gap-3 px-6 py-6">
+		<div
+			bind:this={ticketEl}
+			id="booking-ticket-print"
+			class="flex flex-col items-center gap-3 bg-card px-6 py-6"
+		>
 			<p class="hidden text-center text-sm font-bold text-foreground print:block">
 				{ticket.shelter_name}
 			</p>
@@ -110,23 +125,20 @@
 				<p
 					class="flex h-44 w-44 items-center justify-center rounded-lg bg-muted p-4 text-center text-xs text-muted-foreground"
 				>
-					สร้าง QR ไม่สำเร็จ กรุณาใช้รหัสการจองด้านล่างแทน
+					สร้าง QR ไม่สำเร็จ กรุณาแจ้งชื่อ-นามสกุลกับเจ้าหน้าที่ที่ประตูศูนย์
 				</p>
 			{/await}
 
 			<div class="text-center">
 				<p class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-					รหัสการจอง
+					ชื่อผู้จอง
 				</p>
-				<p class="font-mono text-sm font-bold break-all text-foreground">{ticket.code}</p>
+				<p class="text-base font-bold text-foreground">{fullName}</p>
 			</div>
 		</div>
 
+		<!-- The name lives in the QR block above (it prints); no need to repeat it here. -->
 		<dl class="space-y-2 border-t border-border px-6 py-4 text-sm">
-			<div class="flex justify-between gap-4">
-				<dt class="text-muted-foreground">ชื่อผู้จอง</dt>
-				<dd class="font-semibold text-foreground">{ticket.first_name}</dd>
-			</div>
 			<div class="flex justify-between gap-4">
 				<dt class="text-muted-foreground">สถานะ</dt>
 				<dd class="text-right font-semibold text-foreground">{statusLabel}</dd>
@@ -140,20 +152,10 @@
 		</dl>
 	</div>
 
-	<p
-		class="mx-auto flex max-w-md items-start gap-2 rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground print:hidden"
-	>
-		<Info class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-		<span>
-			กรุณาเก็บรหัสการจองนี้ไว้เป็นหลักฐาน หากไม่สามารถมาได้
-			กรุณาแจ้งเจ้าหน้าที่เพื่อยกเลิกและคืนที่ให้ผู้อื่น
-		</span>
-	</p>
-
 	<div class="flex justify-center print:hidden">
-		<Button type="button" variant="outline" onclick={printTicket}>
-			<Printer class="h-4 w-4" />
-			พิมพ์ใบจอง
+		<Button type="button" variant="outline" disabled={downloading} onclick={downloadTicket}>
+			<Download class="h-4 w-4" />
+			{downloading ? 'กำลังสร้างไฟล์…' : 'ดาวน์โหลดใบจอง (PDF)'}
 		</Button>
 	</div>
 </div>
@@ -163,8 +165,12 @@
 		Print QR-only: deliberately thinner than the onsite wristband/ID-card print
 		in evacuee-qr-modal.svelte. That flow isolates a full card panel (accent bar,
 		name, zone, national ID); a booking ticket only needs the gate scanner to read
-		the QR plus the booking code as a human-readable fallback, so the isolated
+		the QR plus the holder's name as a human-readable fallback, so the isolated
 		target here is just the QR block — no header banner, no dl summary.
+
+		The download button no longer calls `window.print()`, but these rules still
+		earn their place: a user who hits Ctrl+P (or "Print" from the browser menu)
+		on an open ticket gets the same one-page QR instead of the whole landing page.
 
 		The ticket renders inside a bits-ui Dialog (booking-modal.svelte), portalled
 		to <body>, sitting on top of the public landing page's own CTA buttons.
