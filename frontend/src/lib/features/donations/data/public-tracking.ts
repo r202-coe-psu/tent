@@ -67,3 +67,21 @@ export async function updateCourierTracking(
 		throw new Error(unwrapError(body, 'บันทึกเลขพัสดุไม่สำเร็จ'));
 	}
 }
+
+export async function cancelDonation(trackingToken: string): Promise<void> {
+	const res = await fetch(`/api/public/v1/donations/${encodeURIComponent(trackingToken)}`, {
+		method: 'DELETE'
+	});
+	const body = await res.json().catch(() => ({}));
+	if (!res.ok) {
+		if (res.status === 429) throw new Error('คุณส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่');
+		if (res.status === 409) {
+			throw new Error('รายการนี้กำลังบันทึกเข้าระบบ กรุณารีเฟรชแล้วลองใหม่อีกครั้ง');
+		}
+		if (res.status === 400) {
+			throw new Error('รายการนี้ยกเลิกไม่ได้แล้ว — เจ้าหน้าที่เริ่มดำเนินการหรือปิดรายการไปแล้ว');
+		}
+		if (res.status === 404) throw new Error('ไม่พบรายการบริจาคสำหรับรหัสนี้');
+		throw new Error(unwrapError(body, 'ยกเลิกการจองไม่สำเร็จ'));
+	}
+}

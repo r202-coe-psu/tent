@@ -1,7 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { donationPreDeclarationInputSchema, computeNeeds } from '$lib/features/donations';
-import { APP_CONFIG_DOC_ID, readAppConfig } from '$lib/features/shared';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
@@ -136,7 +135,6 @@ export const POST = async ({ request, getClientAddress }) => {
 			body: JSON.stringify({
 				shelter_code: parsed.data.shelter_code,
 				campaign_id: resolvedCampaignId,
-				reservation_ttl_hours: appConfig.donation_reservation_ttl_hours,
 				donor: parsed.data.donor,
 				items: parsed.data.items,
 				logistics: parsed.data.logistics

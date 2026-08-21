@@ -68,3 +68,8 @@ class DonationTrackSearchResponse(BaseModel):
     success: bool = True
     tracking_token: str
     booking_ref: str
+
+
+class DonationCancelResponse(BaseModel):
+    success: bool = True
+    message: str = "Donation cancelled successfully"

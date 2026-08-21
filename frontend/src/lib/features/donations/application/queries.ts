@@ -1,5 +1,6 @@
-import { createMutation, createQuery } from '@tanstack/svelte-query';
+import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import {
+	cancelDonation,
 	fetchDonationTracking,
 	searchDonationTracking,
 	updateCourierTracking
@@ -29,5 +30,14 @@ export function useUpdateCourierTracking() {
 	return createMutation(() => ({
 		mutationFn: (input: { token: string; courierTrackingNo: string }) =>
 			updateCourierTracking(input.token, input.courierTrackingNo)
+	}));
+}
+
+export function useCancelDonation() {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (input: { token: string }) => cancelDonation(input.token),
+		onSuccess: (_data, input) =>
+			queryClient.invalidateQueries({ queryKey: donationTrackingKeys.detail(input.token) })
 	}));
 }

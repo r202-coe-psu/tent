@@ -692,11 +692,42 @@ async function seedMasterData(): Promise<MasterLookup> {
 		const reused = seeded.filter((i) => persistedByLabel.has(i.label)).length;
 		console.log(
 			`  ✓ registry: master_data ${def.type} (${seeded.length} seeded, ${reused} codes reused` +
-			`${extras.length ? `, ${extras.length} existing kept` : ''})`
+				`${extras.length ? `, ${extras.length} existing kept` : ''})`
 		);
 	}
 
 	return master;
+}
+
+/**
+ * `config:app` — the app-wide singleton (schema.md §3.2).
+ *
+ * Seeded at the documented defaults so the document exists to be edited. Readers fall
+ * back to the same values when it is missing, so seeding changes no behaviour; it just
+ * means an operator has somewhere to change the donation TTL without creating a document
+ * by hand.
+ */
+async function seedAppConfig(): Promise<void> {
+	await ensureDb('registry');
+	const ts = now();
+	const id = APP_CONFIG_DOC_ID;
+	const { status: getStatus } = await couchReq('GET', `/registry/${encodeURIComponent(id)}`);
+	if (getStatus === 200) {
+		// Never overwrite: this is operator-tuned configuration, not fixture data.
+		console.log(`  · registry: ${id} already present — left as is`);
+		return;
+	}
+
+	await putDoc('registry', {
+		_id: id,
+		type: 'config',
+		schema_v: 1,
+		...APP_CONFIG_DEFAULTS,
+		created_at: ts,
+		updated_at: ts,
+		created_by: 'seed'
+	});
+	console.log(`  ✓ registry: ${id} (defaults)`);
 }
 
 // ─── seedCatalog ──────────────────────────────────────────────────────────────
@@ -1862,6 +1893,7 @@ async function main() {
 		// Master data first: the shelter masters and every people doc below persist
 		// its item codes, and seedMasterData is what resolves key → code.
 		const master = await seedMasterData();
+		await seedAppConfig();
 		await seedRegistry(master);
 		await provisionRegistryShelterDbs();
 		await seedCatalog();
