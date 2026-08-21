@@ -16,6 +16,8 @@ from .schemas import (
     DonationCourierPatchResponse,
     DonationCreateRequest,
     DonationCreateResponse,
+    DonationItemsPatchRequest,
+    DonationItemsPatchResponse,
     DonationTrackingResponse,
     DonationTrackSearchRequest,
     DonationTrackSearchResponse,
@@ -117,6 +119,29 @@ async def patch_donation_courier(
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.update_courier_tracking(tracking_token, payload.courier_tracking_no)
+
+
+@router.patch(
+    "/{tracking_token}/items",
+    response_model=DonationItemsPatchResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def patch_donation_items(
+    request: Request,
+    response: Response,
+    tracking_token: str,
+    payload: DonationItemsPatchRequest,
+    use_case: DonationsUseCase = Depends(get_donations_use_case),  # noqa: B008
+) -> DonationItemsPatchResponse:
+    """Donor edits their own declared items, moving the quota by the difference (CR-080).
+
+    A separate path from the courier PATCH above: that one touches only the intake
+    buffer and can never be refused, while this one moves the atomic counter and answers
+    409 when the target is full.
+    """
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.update_items(tracking_token, payload.items)
 
 
 @router.delete(

@@ -10,7 +10,7 @@ import pytest
 from httpx import AsyncClient
 from tent_model.donation_buffer import DonationBuffer, DonorBuffer
 from tent_model.donation_need_counter import DonationNeedCounter
-from tent_model.donation_need_counter_ops import release_quota
+from tent_model.donation_need_counter_ops import release_quota, reserve_quota
 from tent_model.public_donation import PublicDonation
 from tent_model.public_shelter import PublicShelter
 
@@ -808,3 +808,391 @@ async def test_unusable_configured_ttl_falls_back_to_the_default(
     await _seed_app_config(donation_reservation_ttl_hours=bad)
 
     assert abs(await _booked_ttl(client, auth_headers) - timedelta(hours=72)) < timedelta(seconds=5)
+
+
+# --- donor edits their own items (CR-080) ---
+
+
+async def _seed_counter(target: str, item_id: str = "item:rice") -> None:
+    from tent_model.donation_need_counter_ops import seed_counter
+
+    await seed_counter(
+        shelter_code="SH001",
+        campaign_id="donation_campaign:c1",
+        item_id=item_id,
+        qty_target=Decimal(target),
+        now=datetime.now(UTC),
+    )
+
+
+async def _book(client: AsyncClient, headers: dict[str, str], items: list[dict]) -> str:
+    # The router's sliding window is module state shared across every test in this
+    # process. These cases each make several calls; without clearing, the later ones are
+    # judged against what the earlier ones spent and start returning 429. Rate limiting
+    # has its own test — these are about editing.
+    donation_router._rate_buckets.clear()
+    response = await client.post(
+        "/public/v1/donations",
+        headers=headers,
+        json={
+            "shelter_code": "SH001",
+            "campaign_id": "donation_campaign:c1",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": items,
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["tracking_token"]
+
+
+async def _reserved(item_id: str = "item:rice") -> Decimal:
+    counter = await DonationNeedCounter.find_one(
+        DonationNeedCounter.shelter_code == "SH001",
+        DonationNeedCounter.item_id == item_id,
+    )
+    assert counter is not None
+    return counter.reserved_qty
+
+
+async def _edit(client: AsyncClient, headers: dict[str, str], token: str, items: list[dict]):
+    donation_router._rate_buckets.clear()
+    return await client.patch(
+        f"/public/v1/donations/{token}/items", headers=headers, json={"items": items}
+    )
+
+
+async def test_raising_a_quantity_reserves_only_the_difference(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "5", "unit": "kg"}])
+    assert await _reserved() == Decimal("5")
+
+    assert (
+        await _edit(
+            client, auth_headers, token, [{"item_id": "item:rice", "qty": "8", "unit": "kg"}]
+        )
+    ).status_code == 200
+    # 8, not 13 — the edit moves the booking, it does not add a second one.
+    assert await _reserved() == Decimal("8")
+
+
+async def test_lowering_a_quantity_gives_the_difference_back(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "40", "unit": "kg"}])
+
+    await _edit(client, auth_headers, token, [{"item_id": "item:rice", "qty": "10", "unit": "kg"}])
+    assert await _reserved() == Decimal("10")
+
+
+async def test_dropping_an_item_releases_all_of_it(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    await _seed_counter("100", "item:water")
+    token = await _book(
+        client,
+        auth_headers,
+        [
+            {"item_id": "item:rice", "qty": "10", "unit": "kg"},
+            {"item_id": "item:water", "qty": "20", "unit": "bottle"},
+        ],
+    )
+
+    await _edit(client, auth_headers, token, [{"item_id": "item:rice", "qty": "10", "unit": "kg"}])
+    assert await _reserved("item:rice") == Decimal("10")
+    assert await _reserved("item:water") == Decimal("0")
+
+
+async def test_moving_quantity_between_items_is_not_blocked_by_itself(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Releases run before reserves, so the booking does not collide with its own hold."""
+    await _seed_counter("50")
+    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "50", "unit": "kg"}])
+    assert await _reserved() == Decimal("50")
+
+    # The target is exactly full. Swapping 50 for 30 only works if the 50 goes back first.
+    assert (
+        await _edit(
+            client, auth_headers, token, [{"item_id": "item:rice", "qty": "30", "unit": "kg"}]
+        )
+    ).status_code == 200
+    assert await _reserved() == Decimal("30")
+
+
+async def test_a_full_target_refuses_the_whole_edit(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-080 Q2 — reject the request, leave the booking exactly as it was."""
+    await _seed_counter("100")
+    await _seed_counter("100", "item:water")
+    token = await _book(
+        client,
+        auth_headers,
+        [
+            {"item_id": "item:rice", "qty": "10", "unit": "kg"},
+            {"item_id": "item:water", "qty": "10", "unit": "bottle"},
+        ],
+    )
+    # Someone else takes the rest of the rice.
+    await reserve_quota(
+        shelter_code="SH001",
+        campaign_id="donation_campaign:c1",
+        item_id="item:rice",
+        qty=Decimal("90"),
+        now=datetime.now(UTC),
+    )
+
+    response = await _edit(
+        client,
+        auth_headers,
+        token,
+        [
+            {"item_id": "item:rice", "qty": "60", "unit": "kg"},
+            {"item_id": "item:water", "qty": "5", "unit": "bottle"},
+        ],
+    )
+
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["error"] == "NEED_FULL"
+    # The water release that ran first must have been put back: nothing changed.
+    assert await _reserved("item:rice") == Decimal("100")
+    assert await _reserved("item:water") == Decimal("10")
+
+
+async def test_a_refused_edit_leaves_the_items_alone(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("20")
+    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "20", "unit": "kg"}])
+
+    await _edit(client, auth_headers, token, [{"item_id": "item:rice", "qty": "999", "unit": "kg"}])
+
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    assert buffer.items_declared[0]["qty"] == "20"
+    assert buffer.revisions == []
+
+
+async def test_an_edit_is_logged_as_a_snapshot_pair(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-080 Q4 — the whole basket before and after, not a diff."""
+    await _seed_counter("100")
+    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "5", "unit": "kg"}])
+
+    await _edit(client, auth_headers, token, [{"item_id": "item:rice", "qty": "8", "unit": "kg"}])
+
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    assert len(buffer.revisions) == 1
+    entry = buffer.revisions[0]
+    assert entry["by"] == "donor"
+    assert entry["items_before"] == [{"item_id": "item:rice", "qty": "5", "unit": "kg"}]
+    assert entry["items_after"] == [{"item_id": "item:rice", "qty": "8", "unit": "kg"}]
+
+
+async def test_editing_repeatedly_appends_and_is_never_capped(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-080 Q5 — no per-booking limit; the IP rate limit is the only brake."""
+    await _seed_counter("100")
+    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "1", "unit": "kg"}])
+
+    for qty in ("2", "3", "4"):
+        assert (
+            await _edit(
+                client, auth_headers, token, [{"item_id": "item:rice", "qty": qty, "unit": "kg"}]
+            )
+        ).status_code == 200
+
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    assert len(buffer.revisions) == 3
+    assert await _reserved() == Decimal("4")
+
+
+async def test_editing_does_not_extend_the_ttl(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-080 Q3 — else a donor holds a reservation open forever by editing it."""
+    await _seed_counter("100")
+    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "5", "unit": "kg"}])
+    token_hash = sha256_hex(token)
+    booked = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
+    assert booked is not None
+    before = booked.expires_at
+
+    await _edit(client, auth_headers, token, [{"item_id": "item:rice", "qty": "6", "unit": "kg"}])
+
+    edited = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
+    assert edited is not None
+    after = edited.expires_at
+    assert after == before
+
+
+@pytest.mark.parametrize("status_value", ["pending_review", "verifying", "received", "cancelled"])
+async def test_only_a_declared_booking_may_be_edited(
+    client: AsyncClient,
+    open_shelter: PublicShelter,
+    auth_headers: dict[str, str],
+    status_value: str,
+) -> None:
+    """CR-080 Q1 — once staff start assessing, the count is theirs."""
+    await _seed_counter("100")
+    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "5", "unit": "kg"}])
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    buffer.status = status_value
+    await buffer.save()
+
+    response = await _edit(
+        client, auth_headers, token, [{"item_id": "item:rice", "qty": "9", "unit": "kg"}]
+    )
+
+    assert response.status_code == 400
+    assert await _reserved() == Decimal("5")
+
+
+async def test_an_empty_basket_is_refused(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Cancelling is DELETE. An edit down to nothing would leave a donation of nothing."""
+    await _seed_counter("100")
+    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "5", "unit": "kg"}])
+
+    assert (await _edit(client, auth_headers, token, [])).status_code == 400
+    assert await _reserved() == Decimal("5")
+
+
+async def test_editing_an_unknown_token_is_not_found(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    response = await _edit(
+        client, auth_headers, "TX-SH001-NOPE", [{"item_id": "item:rice", "qty": "1", "unit": "kg"}]
+    )
+    assert response.status_code == 404
+
+
+async def test_tracking_reports_item_id_so_an_edit_can_send_it_back(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The edit form returns the whole basket; it can only return an item_id it was given.
+
+    Dropping it silently untracks the item — the counter releases what it held and never
+    retakes it, and the needs board stops deducting it. That happened to a soap donation:
+    the first edit lost item:soap, and the public board went on advertising 50 units while
+    the back office showed 20.
+    """
+    await _seed_counter("100", "item:soap")
+    token = await _book(
+        client, auth_headers, [{"item_id": "item:soap", "qty": "10", "unit": "bar"}]
+    )
+
+    tracked = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
+
+    assert tracked.status_code == 200
+    assert tracked.json()["donation"]["items"][0]["item_id"] == "item:soap"
+
+
+async def test_an_edit_keeps_the_item_quota_tracked(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100", "item:soap")
+    token = await _book(
+        client, auth_headers, [{"item_id": "item:soap", "qty": "10", "unit": "bar"}]
+    )
+
+    await _edit(
+        client,
+        auth_headers,
+        token,
+        [{"item_id": "item:soap", "free_text": "สบู่ก้อน", "qty": "30", "unit": "bar"}],
+    )
+
+    assert await _reserved("item:soap") == Decimal("30")
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    assert buffer.items_declared[0]["item_id"] == "item:soap"
+    assert buffer.items_declared[0]["reserved_qty"] == "30"
+
+
+async def test_an_edit_that_loses_item_id_does_not_untrack_the_item(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The damage this guards against happened twice to a live soap booking.
+
+    A tracking stub written before DeclaredItem carried item_id handed the edit form a
+    bare item; the form sent it back bare; the item stopped being quota-tracked, the
+    counter released its 10 and never retook them, and the public board went on
+    advertising units the shelter had already been promised.
+    """
+    await _seed_counter("100", "item:soap")
+    # As the donate wizard writes it — item_id plus the name the donor saw.
+    token = await _book(
+        client,
+        auth_headers,
+        [{"item_id": "item:soap", "free_text": "สบู่ก้อน", "qty": "10", "unit": "bar"}],
+    )
+
+    # Exactly what a stale client sends: the right line, no item_id.
+    response = await _edit(
+        client, auth_headers, token, [{"free_text": "สบู่ก้อน", "qty": "30", "unit": "bar"}]
+    )
+
+    assert response.status_code == 200
+    assert await _reserved("item:soap") == Decimal("30")
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    assert buffer.items_declared[0]["item_id"] == "item:soap"
+
+
+async def test_a_genuinely_new_free_text_line_stays_untracked(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Only lines this booking already holds get an id back — nothing is inferred."""
+    await _seed_counter("100", "item:soap")
+    token = await _book(
+        client, auth_headers, [{"item_id": "item:soap", "qty": "10", "unit": "bar"}]
+    )
+
+    await _edit(
+        client,
+        auth_headers,
+        token,
+        [
+            {"item_id": "item:soap", "free_text": "สบู่ก้อน", "qty": "10", "unit": "bar"},
+            {"free_text": "ผ้าอ้อมผู้ใหญ่", "qty": "5", "unit": "แพ็ค"},
+        ],
+    )
+
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    assert buffer.items_declared[1].get("item_id") is None
+    assert "reserved_qty" not in buffer.items_declared[1]
+
+
+async def test_dropping_a_line_still_releases_it(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Carrying ids forward must not resurrect a line the donor actually removed."""
+    await _seed_counter("100", "item:soap")
+    await _seed_counter("100", "item:blanket")
+    token = await _book(
+        client,
+        auth_headers,
+        [
+            {"item_id": "item:soap", "free_text": "สบู่ก้อน", "qty": "10", "unit": "bar"},
+            {"item_id": "item:blanket", "free_text": "ผ้าห่ม", "qty": "4", "unit": "piece"},
+        ],
+    )
+
+    await _edit(
+        client, auth_headers, token, [{"free_text": "สบู่ก้อน", "qty": "10", "unit": "bar"}]
+    )
+
+    assert await _reserved("item:soap") == Decimal("10")
+    assert await _reserved("item:blanket") == Decimal("0")
