@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	canCancelDonation,
 	canEditCourierTracking,
 	donationStatusLabel,
 	formatTrackSchedule,
@@ -40,5 +41,26 @@ describe('toDonationTrackView', () => {
 			})
 		).toBe(true);
 		expect(canEditCourierTracking('received', { delivery_method: 'parcel' })).toBe(false);
+	});
+});
+
+describe('canCancelDonation', () => {
+	// Gates the cancel button on the donor's track page. A booking that is still only
+	// a reservation may be handed back; once it is out of the donor's hands the count
+	// belongs to staff.
+	it.each(['declared', 'pending_review'])('lets the donor cancel a %s booking', (status) => {
+		expect(canCancelDonation(status)).toBe(true);
+	});
+
+	it.each(['received', 'verifying', 'cancelled', 'expired', 'rejected', 'redirected'])(
+		'hides cancel once the booking is %s',
+		(status) => {
+			expect(canCancelDonation(status)).toBe(false);
+		}
+	);
+
+	it('hides cancel for an unknown status rather than guessing', () => {
+		expect(canCancelDonation('')).toBe(false);
+		expect(canCancelDonation('something_new')).toBe(false);
 	});
 });

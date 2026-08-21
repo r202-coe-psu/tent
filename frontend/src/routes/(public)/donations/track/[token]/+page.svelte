@@ -9,6 +9,7 @@
 	import Truck from '@lucide/svelte/icons/truck';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import Ban from '@lucide/svelte/icons/ban';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
@@ -20,7 +21,9 @@
 		vehicleLabel,
 		formatTrackTimestamp,
 		formatTrackSchedule,
-		canEditCourierTracking
+		canEditCourierTracking,
+		canCancelDonation,
+		CancelDonationDialog
 	} from '$lib/features/donations';
 	import { PublicPageShell } from '$lib/features/public-portal';
 
@@ -31,6 +34,7 @@
 	const courierMutation = useUpdateCourierTracking();
 
 	let courierInput = $state('');
+	let cancelOpen = $state(false);
 
 	const donation = $derived(trackingQuery.data);
 	const isLoading = $derived(trackingQuery.isPending);
@@ -45,6 +49,7 @@
 	const showCourierEdit = $derived(
 		donation ? canEditCourierTracking(donation.status, donation.logistics) : false
 	);
+	const showCancel = $derived(donation ? canCancelDonation(donation.status) : false);
 
 	async function saveCourier() {
 		const value = courierInput.trim();
@@ -322,8 +327,31 @@
 							{/if}
 						</div>
 					</div>
+
+					{#if showCancel}
+						<div class="flex flex-col gap-2 border-t border-border pt-5">
+							<Button
+								variant="outline"
+								onclick={() => (cancelOpen = true)}
+								class="h-10 rounded-xl border-destructive/40 text-xs font-bold text-destructive hover:bg-destructive/10 hover:text-destructive"
+							>
+								<Ban class="h-4 w-4" />
+								ยกเลิกการจองนี้
+							</Button>
+							<p class="text-[11px] leading-relaxed text-muted-foreground">
+								ยกเลิกแล้วจำนวนที่จองไว้จะถูกคืนให้ผู้บริจาคท่านอื่นทันที และย้อนกลับไม่ได้
+							</p>
+						</div>
+					{/if}
 				</div>
 			</div>
 		</div>
+
+		<CancelDonationDialog
+			bind:open={cancelOpen}
+			{token}
+			bookingRef={donation.booking_ref}
+			onCancelled={() => trackingQuery.refetch()}
+		/>
 	{/if}
 </PublicPageShell>

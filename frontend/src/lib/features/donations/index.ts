@@ -41,13 +41,18 @@ export {
 
 // Data + application — public tracking (BFF, not publicClient)
 export {
+	cancelDonation,
 	fetchDonationTracking,
 	searchDonationTracking,
 	updateCourierTracking
 } from './data/public-tracking';
 export {
 	donationTrackingKeys,
+	useCancelDonation,
 	useDonationTracking,
 	useDonationTrackSearch,
 	useUpdateCourierTracking
 } from './application/queries';
+
+// UI
+export { default as CancelDonationDialog } from './ui/cancel-donation-dialog.svelte';
