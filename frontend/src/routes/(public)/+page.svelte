@@ -78,7 +78,7 @@
 </svelte:head>
 
 <PublicPageShell class="space-y-8">
-	<!-- 1. ประกาศด่วนและอื่นๆ -->
+	<!-- 1. Urgent Announcements and Others -->
 	{#if data.announcements && data.announcements.length > 0}
 		{#each data.announcements as announcement (announcement._id || announcement.id)}
 			<!-- Show shelter alerts demo only in the first emergency announcement if emergency_mode is on -->
@@ -102,7 +102,7 @@
 		<PublicHeroMetrics summary={data.summary} flags={data.flags} {lastUpdated} {isStale} />
 	{/if}
 
-	<!-- 3. เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์ -->
+	<!-- 3. Service Menu and Eligibility Checking -->
 	<section>
 		<div class="mb-8">
 			<div class="mb-2 flex items-center gap-2">
@@ -117,7 +117,7 @@
 		</div>
 
 		<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-			<!-- ลงทะเบียนผู้ประสบภัย -->
+			<!-- Victim Registration -->
 			<PublicQuickServiceCard
 				title={t.regTitle}
 				badge={t.regBadge}
@@ -129,7 +129,7 @@
 				<PublicActionBtn onclick={() => (bookingOpen = true)}>{t.regBtn}</PublicActionBtn>
 			</PublicQuickServiceCard>
 
-			<!-- สำหรับผู้ใจบุญ / บริจาค -->
+			<!-- For Donors / Donations -->
 			<PublicQuickServiceCard
 				title={t.donateTitle}
 				badge={t.donateBadge}
@@ -142,7 +142,7 @@
 				<PublicActionBtn variant="outline" disabled>{t.donateBtn2}</PublicActionBtn>
 			</PublicQuickServiceCard>
 
-			<!-- สำหรับทีมอาสาสมัคร -->
+			<!-- For Volunteers -->
 			<div>
 				<PublicQuickServiceCard
 					title={t.volTitle}
@@ -156,7 +156,7 @@
 				</PublicQuickServiceCard>
 			</div>
 
-			<!-- สืบค้นผู้ประสบภัย -->
+			<!-- Urgent Person Search -->
 			<PublicQuickServiceCard
 				title={t.searchTitle}
 				badge={t.searchBadge}
@@ -172,7 +172,7 @@
 
 	<!-- 4. Help Center & Emergency Contacts -->
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<!-- ศูนย์รวมความช่วยเหลือ (Help Center) -->
+		<!-- Help Center (EOC Help Center & FAQ) -->
 		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
 			<div class="mb-2 flex items-center gap-2">
 				<div
@@ -232,7 +232,7 @@
 			</div>
 		</div>
 
-		<!-- ติดต่อฉุกเฉินและด่วน -->
+		<!-- Emergency and Urgent Contacts -->
 		<div
 			class="flex h-fit flex-col justify-center rounded-2xl bg-[#1e293b] p-6 text-white shadow-sm lg:p-8"
 		>
@@ -253,7 +253,7 @@
 			</p>
 
 			<div class="flex flex-col gap-3">
-				<!-- โทร 1669 -->
+				<!-- Call 1669 -->
 				<a
 					href="tel:1669"
 					class="flex items-center justify-between rounded-xl bg-danger px-5 py-4 font-bold transition-colors hover:bg-danger/90"
@@ -271,7 +271,7 @@
 					>
 				</a>
 
-				<!-- โทร 1784 -->
+				<!-- Call 1784 -->
 				<a
 					href="tel:1784"
 					class="flex items-center justify-between rounded-xl bg-warning px-5 py-4 font-bold transition-colors hover:bg-[#b45309]"
@@ -287,7 +287,7 @@
 
 				{#if data.configData?.phone_number || data.configData?.line_oa_url || data.configData?.facebook_url}
 					<div class="mt-4 border-t border-white/10 pt-4">
-						<h3 class="mb-3 text-sm font-bold text-white/90">สอบถามข้อมูลเพิ่มเติม</h3>
+						<h3 class="mb-3 text-sm font-bold text-white/90">{t.moreInfo}</h3>
 						<div class="flex flex-col gap-2">
 							{#if data.configData?.phone_number}
 								<a
@@ -296,10 +296,10 @@
 								>
 									<div class="flex items-center gap-3">
 										<PhoneCall class="h-4 w-4 text-white" />
-										<span class="text-sm text-white">โทร {data.configData.phone_number}</span>
+										<span class="text-sm text-white">{t.call} {data.configData.phone_number}</span>
 									</div>
 									<span class="rounded-lg bg-black/20 px-3 py-1 text-[11px] text-white"
-										>สายตรงศูนย์ฯ</span
+										>{t.directLine}</span
 									>
 								</a>
 							{/if}

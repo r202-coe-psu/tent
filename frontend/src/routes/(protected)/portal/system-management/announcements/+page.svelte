@@ -22,6 +22,11 @@
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import AlertOctagon from '@lucide/svelte/icons/alert-octagon';
 	import { toast } from 'svelte-sonner';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { ADMIN_ANNOUNCEMENTS_I18N } from '$lib/constants/i18n';
+
+	const t = $derived(getTranslation(ADMIN_ANNOUNCEMENTS_I18N, langState.current));
 
 	const announcementsQuery = useAnnouncements();
 	const createAnnouncementMutation = useCreateAnnouncement();
@@ -142,13 +147,13 @@
 </script>
 
 <svelte:head>
-	<title>จัดการประกาศด่วน — SmartShelter</title>
+	<title>{t.pageTitle} — SmartShelter</title>
 </svelte:head>
 
 <div class="mx-6 flex flex-1 flex-col gap-8 p-6 md:p-8">
 	<div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
 		<div>
-			<h2 class="text-3xl font-bold tracking-tight text-foreground">จัดการประกาศด่วน</h2>
+			<h2 class="text-3xl font-bold tracking-tight text-foreground">{t.pageTitle}</h2>
 			<p class="mt-2 text-muted-foreground">
 				จัดการข้อความประกาศแจ้งเตือนที่จะเผยแพร่บนระบบสาธารณะ
 				เพื่อให้ประชาชนได้รับทราบข้อมูลที่สำคัญ
@@ -168,17 +173,17 @@
 			<Table.Header class="bg-muted/50">
 				<Table.Row class="hover:bg-transparent">
 					<Table.Head class="w-[55%] font-semibold text-foreground md:w-[60%] lg:w-[60%]"
-						>หัวข้อและรายละเอียด</Table.Head
+						>{t.tableHeaderTitle}</Table.Head
 					>
 					<Table.Head class="w-[15%] font-semibold text-foreground md:w-[15%] lg:w-[15%]"
-						>ระดับความสำคัญ</Table.Head
+						>{t.tableHeaderSeverity}</Table.Head
 					>
 					<Table.Head
 						class="w-[15%] text-center font-semibold text-foreground md:w-[15%] lg:w-[15%]"
-						>สถานะ</Table.Head
+						>{t.tableHeaderStatus}</Table.Head
 					>
 					<Table.Head class="w-[15%] text-right font-semibold text-foreground md:w-[10%] lg:w-[10%]"
-						>จัดการ</Table.Head
+						>{t.tableHeaderActions}</Table.Head
 					>
 				</Table.Row>
 			</Table.Header>
@@ -190,7 +195,7 @@
 								<div
 									class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"
 								></div>
-								<p>กำลังโหลดข้อมูล...</p>
+								<p>{t.loading}</p>
 							</div>
 						</Table.Cell>
 					</Table.Row>
@@ -202,11 +207,12 @@
 									<Info class="h-8 w-8" />
 								</div>
 								<div>
-									<h3 class="text-lg font-semibold text-foreground">ยังไม่มีประกาศด่วน</h3>
-									<p class="mt-1 text-sm">คลิกปุ่มสร้างประกาศใหม่เพื่อเริ่มต้นเพิ่มข้อมูล</p>
+									<h3 class="text-lg font-semibold text-foreground">{t.emptyTitle}</h3>
+									<p class="mt-1 text-sm">{t.emptyDesc}</p>
 								</div>
 								<Button variant="outline" class="mt-2" onclick={openCreateDialog}>
-									<Plus class="mr-2 h-4 w-4" /> เริ่มต้นสร้างประกาศ
+									<Plus class="mr-2 h-4 w-4" />
+									{t.createNewBtn}
 								</Button>
 							</div>
 						</Table.Cell>
@@ -260,7 +266,7 @@
 											? 'text-primary'
 											: 'text-muted-foreground'}"
 									>
-										{item.is_active ? 'แสดงผล' : 'ซ่อน'}
+										{item.is_active ? t.statusActive : t.statusHidden}
 									</span>
 								</div>
 							</Table.Cell>
@@ -323,37 +329,39 @@
 <Dialog.Root bind:open={isDialogOpen}>
 	<Dialog.Content class="overflow-hidden p-0 sm:max-w-[500px]">
 		<div class="border-b border-border bg-muted/30 p-6 pb-4">
-			<Dialog.Title class="text-xl">{editingId ? 'แก้ไขประกาศ' : 'สร้างประกาศใหม่'}</Dialog.Title>
+			<Dialog.Title class="text-xl"
+				>{editingId ? t.dialogEditTitle : t.dialogCreateTitle}</Dialog.Title
+			>
 			<Dialog.Description class="mt-1.5">
-				ระบุรายละเอียดของประกาศเพื่อแสดงในหน้าสาธารณะ (Public Portal)
+				{t.dialogDesc}
 			</Dialog.Description>
 		</div>
 		<div class="grid gap-5 p-6">
 			<div class="grid gap-2">
 				<Label for="title" class="text-sm font-semibold"
-					>หัวข้อประกาศ (ไทย) <span class="text-destructive">*</span></Label
+					>{t.formTitleTh} <span class="text-destructive">*</span></Label
 				>
 				<Input
 					id="title"
 					bind:value={form.title}
-					placeholder="เช่น แจ้งเตือนพายุเข้าบริเวณศูนย์พักพิง"
+					placeholder={t.formTitleThPlaceholder}
 					class="focus-visible:ring-primary"
 				/>
 			</div>
 			<div class="grid gap-2">
 				<Label for="description" class="text-sm font-semibold"
-					>รายละเอียด (ไทย) <span class="text-destructive">*</span></Label
+					>{t.formDescTh} <span class="text-destructive">*</span></Label
 				>
 				<Textarea
 					id="description"
 					bind:value={form.description}
-					placeholder="อธิบายรายละเอียดของประกาศ..."
+					placeholder={t.formDescThPlaceholder}
 					rows={4}
 					class="resize-none focus-visible:ring-primary"
 				/>
 			</div>
 			<div class="grid gap-2">
-				<Label for="title_en" class="text-sm font-semibold">หัวข้อประกาศ (English)</Label>
+				<Label for="title_en" class="text-sm font-semibold">{t.formTitleEn}</Label>
 				<Input
 					id="title_en"
 					bind:value={form.title_en}
@@ -362,7 +370,7 @@
 				/>
 			</div>
 			<div class="grid gap-2">
-				<Label for="description_en" class="text-sm font-semibold">รายละเอียด (English)</Label>
+				<Label for="description_en" class="text-sm font-semibold">{t.formDescEn}</Label>
 				<Textarea
 					id="description_en"
 					bind:value={form.description_en}
@@ -373,7 +381,7 @@
 			</div>
 			<div class="grid grid-cols-2 gap-4">
 				<div class="grid gap-2">
-					<Label for="severity" class="text-sm font-semibold">ระดับความสำคัญ</Label>
+					<Label for="severity" class="text-sm font-semibold">{t.formSeverity}</Label>
 					<Select.Root
 						type="single"
 						value={form.severity}
@@ -396,18 +404,18 @@
 					</Select.Root>
 				</div>
 				<div class="grid gap-2">
-					<Label for="is-active" class="text-sm font-semibold">สถานะเริ่มต้น</Label>
+					<Label for="is-active" class="text-sm font-semibold">{t.formStatus}</Label>
 					<div
 						class="flex h-10 items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 shadow-sm"
 					>
-						<span class="text-sm">{form.is_active ? 'เปิดแสดงผล' : 'เป็นแบบร่าง'}</span>
+						<span class="text-sm">{form.is_active ? t.formStatusActive : t.formStatusDraft}</span>
 						<Switch id="is-active" bind:checked={form.is_active} />
 					</div>
 				</div>
 			</div>
 		</div>
 		<div class="flex items-center justify-end gap-2 border-t border-border bg-muted/30 p-4">
-			<Button variant="ghost" onclick={() => (isDialogOpen = false)}>ยกเลิก</Button>
+			<Button variant="ghost" onclick={() => (isDialogOpen = false)}>{t.btnCancel}</Button>
 			<Button onclick={handleSave} disabled={isSaving} class="min-w-[100px]">
 				{#if isSaving}
 					<div
