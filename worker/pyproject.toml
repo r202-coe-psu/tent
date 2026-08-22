@@ -14,6 +14,7 @@ tent-model = { workspace = true }
 
 [project.scripts]
 sync-worker = "worker.main:main"
+donation-quota = "worker.cli.donation_quota:main"
 
 [build-system]
 requires = ["hatchling"]

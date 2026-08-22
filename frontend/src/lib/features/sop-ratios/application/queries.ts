@@ -1,12 +1,18 @@
 import { createQuery } from '@tanstack/svelte-query';
 import { getShelterCode } from '$lib/db/shelter';
-import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.remote';
-import type { SopMaster, SopOverride } from '../domain/sop-ratio';
+import {
+	getVerifiedActiveMaster,
+	sopMasterRepository,
+	sopOverrideRepository
+} from '../data/sop-ratio.remote';
+import { validateRatios, type SopMaster, type SopOverride } from '../domain/sop-ratio';
 
 export const sopRatioKeys = {
 	all: ['sop_ratios'] as const,
 	active: () => [...sopRatioKeys.all, 'active'] as const,
-	list: () => [...sopRatioKeys.all, 'list'] as const
+	list: () => [...sopRatioKeys.all, 'list'] as const,
+	masterProfiles: () => [...sopRatioKeys.all, 'master-profiles'] as const,
+	masterProfile: (slug: string) => [...sopRatioKeys.all, 'master-profile', slug] as const
 };
 
 export const sopVersionKeys = {
@@ -38,6 +44,25 @@ export async function getActiveSopProfile(
 	return activeOverride ?? activeMaster ?? null;
 }
 
+/**
+ * Strict active SOP source for a shelter (CR-079).
+ * If a valid active override exists, it wins per CR-006 precedence.
+ * Otherwise, falls back to the verified active master (which throws `SopMasterIntegrityError` if pointer integrity fails).
+ */
+export async function getVerifiedActiveSopProfile(
+	shelterCode?: string
+): Promise<SopMaster | SopOverride> {
+	const code = shelterCode ?? getShelterCode();
+	const activeOverrides = await sopOverrideRepository(code).listActive();
+	const activeOverride = activeOverrides.sort((a, b) => b.version - a.version)[0];
+
+	if (activeOverride && validateRatios(activeOverride.ratios)) {
+		return activeOverride;
+	}
+
+	return await getVerifiedActiveMaster();
+}
+
 export const useActiveSopRatio = (shelterCode?: string | (() => string)) => {
 	const getCode = typeof shelterCode === 'function' ? shelterCode : () => shelterCode;
 	return createQuery(() => {
@@ -60,6 +85,26 @@ export const useSopProfiles = () =>
 		queryKey: sopRatioKeys.list(),
 		queryFn: () => sopMasterRepository().listActive()
 	}));
+
+/** Latest version of every master, including inactive profiles, for SA management. */
+export const useAllMasterProfiles = () =>
+	createQuery(() => ({
+		queryKey: sopRatioKeys.masterProfiles(),
+		queryFn: () => sopMasterRepository().listAll()
+	}));
+
+/** Latest version of a master profile selected by its stable slug. */
+export const useMasterProfile = (slug: string | (() => string)) => {
+	const getSlug = typeof slug === 'function' ? slug : () => slug;
+	return createQuery(() => {
+		const resolvedSlug = getSlug();
+		return {
+			queryKey: sopRatioKeys.masterProfile(resolvedSlug),
+			queryFn: () => sopMasterRepository().getBySlug(resolvedSlug),
+			enabled: resolvedSlug.trim().length > 0
+		};
+	});
+};
 
 export const useActiveSopOverride = (shelterCode: string | (() => string)) => {
 	const getCode = typeof shelterCode === 'function' ? shelterCode : () => shelterCode;

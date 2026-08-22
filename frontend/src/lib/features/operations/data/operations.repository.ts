@@ -7,6 +7,7 @@ import type {
 	DistributeInput,
 	AdjustInput,
 	Donation,
+	WalkInDonationInput,
 	DonationSlot,
 	Purchase,
 	PurchaseInput,
@@ -48,6 +49,21 @@ export interface OperationsRepository {
 	 * Process and persist an inbound stock receive entry.
 	 */
 	receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger>;
+
+	/**
+	 * Receive goods that arrived without a booking (CR-055 R4 / D-1).
+	 *
+	 * Mints the walk-in donation document and the ledger row that points at it in
+	 * a SINGLE request. They must not be split into two user actions: a donation
+	 * written on its own stays `status: 'declared'` if the receipt never follows,
+	 * and `calculateReserved` counts every declared donation as reserved stock
+	 * with nothing to sweep it (`expireDonation` has no caller).
+	 */
+	receiveWalkInDonation(
+		donationInput: WalkInDonationInput,
+		receiveInput: ReceiveInput,
+		ctx: AuthorContext
+	): Promise<{ donation: Donation; entry: StockLedger }>;
 
 	/**
 	 * Process and persist an outbound stock distribute entry.

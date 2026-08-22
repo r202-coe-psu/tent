@@ -47,6 +47,16 @@ export const stayStatusSchema = z.enum([
 ]);
 export type StayStatus = z.infer<typeof stayStatusSchema>;
 
+export const STATUS_LABELS: Record<StayStatus, string> = {
+	pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
+	active: 'เช็คอินเข้าพักแล้ว',
+	temporary_leave: 'ออกชั่วคราว',
+	transferred: 'ย้ายศูนย์พักพิงแล้ว',
+	checked_out: 'ย้ายออก/กลับภูมิลำเนาแล้ว',
+	deceased: 'เสียชีวิต',
+	cancelled: 'ยกเลิกการลงทะเบียนล่วงหน้า'
+};
+
 export const householdStatusSchema = z.enum([
 	'pre_registered',
 	'arriving',
@@ -748,7 +758,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		6, // schema_v 6: stay cancelled (CR-070); 5 = age (CR-057); 4 reserved for photo (CR-054)
+		7, // schema_v 7: registered_via `web` (CR-070 D-REG-VIA); 6 = stay cancelled (CR-070); 5 = age (CR-057); 4 reserved for photo (CR-054)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,

@@ -1,7 +1,7 @@
 ---
 id: CR-078
 title: Master data — label ห้ามซ้ำภายใน master_type เดียวกัน (เช็คก่อนสร้าง/แก้ไข ทั้ง UI และ server)
-status: proposed
+status: approved
 date: 2026-08-16
 requested_by: project owner
 decided_by: project owner (ยืนยัน 2026-08-16)
@@ -137,3 +137,4 @@ doc ที่มีชื่อซ้ำค้างมาก่อนกฎน�
   อ่าน master data จาก edge ได้แต่เขียนไม่ได้ — ต่างจาก `shelter_{code}` ที่มี edge ⇄ central
   backlog. เลือกทาง **detect-then-resolve** (banner + badge) แทนการพยายามกันตอน replicate ซึ่ง
   ทำไม่ได้จริง — ดู Change ข้อ 7
+- 2026-08-21 — approved (project owner อนุมัติสเปก CR-078)

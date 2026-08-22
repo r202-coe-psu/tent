@@ -5,6 +5,36 @@ import { z } from 'zod';
 export const operationStatusSchema = z.enum(['standby', 'active', 'full_capacity', 'closed']);
 export type OperationStatus = z.infer<typeof operationStatusSchema>;
 
+/**
+ * Read a shelter master's operating status, tolerating the pre-CR-008 shape.
+ *
+ * schema_v 1/2 masters carry a legacy `status` (`open` | `closed`) instead of
+ * `operation_status`. Mirrors `resolve_operation_status()` in
+ * `worker/src/worker/projectors/shelter.py` so the CouchDB write path and the
+ * Mongo projection agree on what a shelter's status is.
+ */
+export function resolveOperationStatus(doc: unknown): string | null {
+	if (!doc || typeof doc !== 'object') return null;
+	const d = doc as { operation_status?: unknown; status?: unknown };
+	if (typeof d.operation_status === 'string' && d.operation_status) return d.operation_status;
+	if (typeof d.status === 'string' && d.status) return d.status;
+	return null;
+}
+
+/**
+ * Can the public book a place here? (CR-070 FR-72 / T-71 validation.)
+ *
+ * `closed` is the only hard block. `full_capacity` and a dark-red occupancy
+ * health stay bookable and surface a warning instead — matching the
+ * warning-only occupancy guardrail of T-51. A master with no status at all is
+ * treated as not bookable (fail closed).
+ */
+export function isShelterBookable(doc: unknown): boolean {
+	const status = resolveOperationStatus(doc);
+	if (status === null) return false;
+	return status !== 'closed';
+}
+
 export const zoneTypeSchema = z.enum([
 	'general',
 	'male',

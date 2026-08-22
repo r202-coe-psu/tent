@@ -113,11 +113,53 @@ tabs). Public booking / `registered_via=web` / D-PRE-REG-AGE remain out of this 
 - Occupancy: `cancelled` is not counted in dashboard `pre_registered` / `total` (unknown keys
   discarded by `rowsToOccupancyPayload`).
 
+## Implementation notes (2026-08-20)
+
+Slice: **public booking + self-lookup** (`/register`, `/register/track`) — ปิดงานหลักของ T-71
+ยกเว้น multi-member household และ D-PRE-REG-AGE ที่ยกไปรอบถัดไป.
+
+- **schema.md §1.1:** bump evacuee `schema_v` 6 → 7; `registered_via` += `web` (D-REG-VIA,
+  additive ไม่ต้อง backfill; ไม่มีโค้ดไหน branch บนค่านี้). อัปเดต `data-model.md` +
+  `schema-er-diagram.md` ให้ตรงด้วย.
+- **Write path (Lead review ตาม CR นี้):** เลือก **BFF → CouchDB ตรง** ผ่าน
+  `putAsPublicWriter` (user `public_writer` ไม่มี role → write ยังผ่าน `validate_doc_update`)
+  — **ไม่ผ่าน FastAPI**. เหตุผล: reuse `createEvacuee` ตัวเดียวกับ staff (ไม่มี doc shape ซ้ำใน
+  Python), occupancy ขยับใน request เดียวตาม D-BOOK-OCC=C, และ QR สแกนได้ทันทีที่ประตู.
+  Endpoint: `POST /api/public/v1/registrations` + `POST /api/public/v1/registrations/lookup`.
+- **Shelter validation:** `registry/_design/app/_view/by_code` (ใหม่) — `findMasterByCode` เลิก
+  scan ทั้ง registry (ลบ TODO เดิม). ศูนย์ `closed` → 409 `SHELTER_CLOSED`; `full_capacity`
+  จองได้แต่ขึ้น warning (FR-72 warning-only).
+- **Booking code = evacuee ULID.** D-BOOK-TOKEN=A ระบุ "QR **หรือ** `official_code`" — สาย QR ใช้
+  ได้เลยเพราะ QR ของ staff ฝัง `evacuee._id` อยู่แล้วและ `CHECK_IN_ELIGIBLE_STATUSES` มี
+  `pre_registered` แล้ว → **FR-71 ไม่ต้องเขียนโค้ดใหม่**. เมื่อ `official_code` (T-50) เสร็จ ให้
+  lookup รับทั้งสองแบบ และ **ต้องรับ ULID ต่อไปตลอด** เพราะใบจองที่พิมพ์ไปแล้วออกใหม่ไม่ได้.
+- **D-BOOK-OCC=C ฝั่ง public:** รอบ 2026-08-14 แก้แค่ dashboard ของ staff — รอบนี้แก้เพิ่ม 3 จุดที่
+  ยังนับแค่ `active`: `backend/apiapp/modules/shelter/use_case.py`,
+  `api/public/v1/transparency/{shelters,summary}`. ถ้าไม่แก้ ประชาชนจองแล้วเลขบนหน้าเว็บไม่ขยับ.
+- **Anti-abuse:** rate limiter แยก bucket จาก donation (`registerIpLimiter` /
+  `registerPhoneLimiter` / `registerLookupIpLimiter`) + reCAPTCHA v3 action `register`
+  (parity กับ `/donations`; ข้อเสนอ PoW ใน `public-tier-flow-spec.html` ยังเป็น "Open point").
+- **Infra:** `COUCHDB_PUBLIC_WRITER_URL` ไม่เคยถูกตั้งไว้ที่ไหนเลย (prod `putAsPublicWriter`
+  throw → courier PATCH ของ CR-052 น่าจะพังบน staging/prod อยู่ก่อนแล้ว). รอบนี้เพิ่มใน
+  `.env.example` ×2 + compose ×5, seed สร้าง user, และ `redeploy:access` grant
+  `_security.members` ให้ทุกศูนย์ (อยู่ใน `db:sync` อยู่แล้ว).
+- **ปุ่มเข้า flow (เจ้าของเคาะ):** เปิดปุ่มการ์ดหน้าแรกที่ disabled อยู่ + dropdown «จองเข้าศูนย์»
+  ใน navbar (desktop + mobile) + ปุ่ม «จองที่ศูนย์นี้» บนหน้า `/shelters/[id]`
+  (deep link `?shelter=CODE` ล็อก step 1). UAT-151 แคบเหลือเฉพาะปุ่มอาสาสมัคร +
+  เพิ่ม UAT-160..164.
+- **ยังไม่ทำในรอบนี้:** household/multi-member ตาม CR-076 (จองเดี่ยว `household_id=null`),
+  D-PRE-REG-AGE (FR-77), `official_code` จริง (T-50).
+
 ## Decision log
 
 - 2026-08-13 — proposed. Reuse `pre_registered` + T-51. ไม่สร้าง booking doc.
 - 2026-08-13 — Wave 1 ล็อกใน CR-066 (D-TRACK-METHOD=CR+Notion). CR นี้ยัง `proposed`.
 - 2026-08-13 — **Wave 3 ล็อก** (decision ≠ approve CR): D-BOOK-OCC=**C** (เจ้าของทับคำแนะนำ A — จองนับ occupancy ทั้งศูนย์และบ้าน) · D-HOLD-TTL=**none** · D-PRE-REG-AGE · D-HOLD-CANCEL (เจ้าของเริ่ม SA/SM แล้วเพิ่ม RS) · D-REG-VIA เพิ่ม `web`+`api` · D-BOOK-TOKEN=**A**. **ไม่ bump schema.md.**
 - 2026-08-13 — **approved** โดยเจ้าของโครงการ (IMPS): Wave 3 ทั้งก้อน (D-BOOK-OCC=C, D-HOLD-TTL=none, D-PRE-REG-AGE, D-HOLD-CANCEL, D-REG-VIA `web`, D-BOOK-TOKEN=A). **ไม่ bump schema.md ในรอบนี้** (evacuee `registered_via` + stay `cancelled` ตอน implement ตาม Migration).
+- 2026-08-20 — **implement (public booking):** `/register` + `/register/track`; BFF เขียน
+  CouchDB ตรงผ่าน `putAsPublicWriter` (ไม่ผ่าน FastAPI); `registry` `_view/by_code`;
+  `registered_via=web` + evacuee schema_v 7; public occupancy นับ `pre_registered`;
+  booking code = evacuee ULID จนกว่า T-50 จะส่ง `official_code`. เหลือ multi-member
+  household + D-PRE-REG-AGE.
 - 2026-08-14 — **implement (partial):** stay `cancelled` + schema_v 6 + cancel cascade + list
   status filters + bulk cancel (SA/SM/RS). Public booking / `web` / D-PRE-REG-AGE ยังไม่ทำในรอบนี้.

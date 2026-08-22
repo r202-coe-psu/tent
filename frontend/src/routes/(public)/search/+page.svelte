@@ -13,6 +13,7 @@
 		searchResultKey,
 		PublicHeroMetrics,
 		PublicPageShell,
+		StayStatusChip,
 		type FamilySearchResult
 	} from '$lib/features/public-portal';
 
@@ -139,12 +140,14 @@
 				</div>
 
 				<div class="flex flex-col gap-6">
-					{#each paginatedResults ?? [] as person, i (searchResultKey(person, i))}
+					{#each paginatedResults ?? [] as person, i (searchResultKey(person, (currentPage - 1) * itemsPerPage + i))}
 						<div class="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
 							<!-- Card Header -->
-							<div class="flex items-start justify-between border-b border-border/50 p-5">
+							<div
+								class="items-start justify-between space-y-1 border-b border-border/50 p-5 md:flex"
+							>
 								<div>
-									<div class="flex items-center gap-3">
+									<div class="items-center gap-3 space-y-1 md:flex">
 										<h3 class="text-xl font-bold text-foreground">
 											{person.name || 'ไม่ระบุชื่อ'}
 										</h3>
@@ -160,34 +163,14 @@
 											>
 										{/if}
 									</div>
-									<div class="mt-2 flex gap-4 text-sm text-muted-foreground">
-										<span>ID: <span class="font-mono">{person.national_id || '-'}</span></span>
-										<span>เพศ: {genderLabel(person.gender)}</span>
+									<div class="mt-2 gap-4 text-sm text-muted-foreground md:flex">
+										<p>ID: <span class="font-mono">{person.national_id || '-'}</span></p>
+										<p>เพศ: {genderLabel(person.gender)}</p>
 									</div>
 								</div>
 
-								{#if person.status === 'in_shelter'}
-									<div
-										class="flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-bold text-green-700"
-									>
-										<div class="h-2 w-2 rounded-full bg-green-500"></div>
-										ปลอดภัย (อยู่ในศูนย์แล้ว)
-									</div>
-								{:else if person.status === 'moved'}
-									<div
-										class="flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-bold text-orange-700"
-									>
-										<div class="h-2 w-2 rounded-full bg-orange-500"></div>
-										ย้ายศูนย์พักพิงแล้ว
-									</div>
-								{:else}
-									<div
-										class="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-bold text-blue-700"
-									>
-										<div class="h-2 w-2 rounded-full bg-blue-500"></div>
-										ออกจากศูนย์แล้ว (กลับบ้าน/ส่งต่อ)
-									</div>
-								{/if}
+								<!-- Real stay status, labelled exactly as the backoffice labels it (CR-080). -->
+								<StayStatusChip status={person.status} />
 							</div>
 
 							<!-- Card Body -->
@@ -225,7 +208,12 @@
 							</div>
 
 							{#if person.family_members && person.family_members.length > 0}
-								<details class="group border-t border-border/50 p-5">
+								<!--
+									Open by default: someone searching for a relative wants the rest of
+									the household on screen without a second click — that is usually the
+									answer they came for ("did the whole family make it?").
+								-->
+								<details open class="group border-t border-border/50 p-5">
 									<summary
 										class="mb-4 flex cursor-pointer list-none items-center gap-2 font-bold text-foreground/90 transition-colors hover:text-primary"
 									>
@@ -243,22 +231,18 @@
 									<div class="mt-4 flex flex-col gap-3">
 										{#each person.family_members as member, i (i)}
 											<div
-												class="flex items-center justify-between rounded-xl border border-border bg-card p-4"
+												class="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center"
 											>
 												<div>
 													<div class="font-bold text-foreground">
 														{member.name || '-'}
 													</div>
 												</div>
-												{#if member.status === 'in_shelter'}
-													<div class="text-sm font-bold text-green-600">
-														ปลอดภัยอยู่ในศูนย์ ({member.shelter_name || '-'})
-													</div>
-												{:else if member.status === 'moved'}
-													<div class="text-sm font-bold text-orange-600">ย้ายศูนย์พักพิงแล้ว</div>
-												{:else}
-													<div class="text-sm font-bold text-blue-600">ออกจากศูนย์แล้ว</div>
-												{/if}
+												<StayStatusChip
+													status={member.status}
+													detail={member.shelter_name || null}
+													size="sm"
+												/>
 											</div>
 										{/each}
 									</div>

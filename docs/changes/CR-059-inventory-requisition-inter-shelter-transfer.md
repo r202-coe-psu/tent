@@ -13,6 +13,7 @@ affects:
   - frontend/src/lib/features/transfers/
   - frontend/src/lib/features/inventory/
   - frontend/src/lib/features/distribution/
+  - docs/changes/CR-055-stock-ledger-refid-invariant.md (แถว `distribute` ของตาราง R2 — ต้องแก้เมื่อ CR นี้ลง)
 ---
 
 # CR-059 — Requisitions, Inter-Shelter Transfers & NFI Distribution Control
@@ -188,6 +189,15 @@ split allocation, driver/plate บังคับ, destination lot ID, สถา
   `frontend/src/lib/features/distribution/` — ไม่ตรงกับโครงสร้าง repo จริง งานตัดสต็อก/ledger/transfer
   ทั้งหมดอยู่ที่ **`frontend/src/lib/features/operations/`** (domain/data/application/ui) เพิ่ม
   server route ใหม่ที่ `frontend/src/routes/api/back-office/transfer/**`
+- **[CR-055](CR-055-stock-ledger-refid-invariant.md) — ripple บังคับ (ห้ามลืม):** CR-055 เคาะ Q-1 (ก) ว่า
+  `stock_ledger.reason = 'distribute'` ต้องมี `ref_id = null` **เสมอ** โดยให้เหตุผลชัดว่า "จนกว่าจะมี doc
+  การแจกจ่ายจริง" · CR นี้คือ CR ที่สร้าง doc นั้น ⇒ **วันที่ CR-059 ลง ต้องกลับไปแก้แถว `distribute` ใน
+  ตาราง R2** ทั้งสามที่ให้ตรงกัน:
+  1. `REF_PREFIX_BY_REASON` (`features/operations/domain/operations.ts`) — เปลี่ยน `distribute: null`
+     เป็น prefix ของ doc ต้นเหตุ
+  2. `distributeInputSchema.ref_id` — ปัจจุบันเป็น `z.null()` ตาม R8 ต้องคลายเป็น `z.string()`
+  3. `docs/data/schema.md` §2.1 ตาราง `reason` → `ref_id` + บรรทัด Migration
+  ถ้าไม่แก้ การเขียน ledger ของ flow แจกจ่ายจะถูก guard ของ CR-055 ปฏิเสธทั้งหมด
 
 ---
 
@@ -198,6 +208,10 @@ split allocation, driver/plate บังคับ, destination lot ID, สถา
 
 ## Decision Log
 - 2026-07-25 — proposed (กำหนดสเปกปรับปรุงระบบคำร้องเบิกจ่าย โอนย้ายข้ามศูนย์ NFI 2 ขั้นตอน และ UI Safety)
+- 2026-08-15 — **บันทึก ripple สองทางกับ CR-055** (ปิดงาน CR-055) · CR-055 บังคับ invariant
+  `reason` ↔ prefix ของ `ref_id` ที่ชั้น domain แล้ว และเคาะให้ `distribute` เป็น `null` เสมอ **เพราะยังไม่มี
+  doc ต้นเหตุ** · CR นี้เป็นตัวสร้าง doc นั้น ⇒ เพิ่มรายการแก้ 3 จุดไว้ใน §Impact เพื่อไม่ให้หลุด ·
+  ฝั่ง CR-055 มีบรรทัดชี้กลับมาที่นี่ใน Decision log ของวันเดียวกัน
 - 2026-08-22 — **approved (บางส่วน)** by project owner — เฉพาะแนวทาง cross-DB write pattern ของ
   Flow 1 (T-13): ย้าย `stock_transfer` ไป `central_ops` + เขียนผ่าน server route (`adminRaw`) แบบ
   `referral` ประเภท `capacity` (CR-045/CR-046) พร้อม mirror-write สองทาง (dispatch→dest,

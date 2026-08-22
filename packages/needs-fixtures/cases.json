@@ -1,0 +1,200 @@
+{
+	"$comment": "T-22 remaining-need parity cases. See README.md. remaining = target − (on_hand + reserved).",
+	"cases": [
+		{
+			"name": "plain target, nothing received yet",
+			"why": "Baseline. If this drifts, something very basic broke.",
+			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }],
+			"donations": [],
+			"stock_ledgers": [],
+			"expected_remaining": { "item:rice": 500 },
+			"expected_per_campaign": { "c1": { "item:rice": 500 } }
+		},
+		{
+			"name": "a declared donation is owed to the shelter",
+			"why": "Reserved counts against the target before the goods arrive.",
+			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }],
+			"donations": [
+				{
+					"_id": "donation:1",
+					"campaign_id": "c1",
+					"status": "declared",
+					"items": [{ "item_id": "item:rice", "qty": "50" }]
+				}
+			],
+			"stock_ledgers": [],
+			"expected_remaining": { "item:rice": 450 },
+			"expected_per_campaign": { "c1": { "item:rice": 450 } }
+		},
+		{
+			"name": "warehouse stock counts against the target",
+			"why": "The bug this file exists for: the public board ignored the ledger and advertised goods the shelter had already closed intake on.",
+			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }],
+			"donations": [],
+			"stock_ledgers": [
+				{ "item_id": "item:rice", "qty": "540", "reason": "donation", "ref_id": null }
+			],
+			"expected_remaining": { "item:rice": -40 },
+			"expected_per_campaign": { "c1": { "item:rice": -40 } }
+		},
+		{
+			"name": "on-hand and reserved add up",
+			"why": "T-22 closes on on-hand + reserved, not either alone.",
+			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }],
+			"donations": [
+				{
+					"_id": "donation:1",
+					"campaign_id": "c1",
+					"status": "declared",
+					"items": [{ "item_id": "item:rice", "qty": "50" }]
+				}
+			],
+			"stock_ledgers": [
+				{ "item_id": "item:rice", "qty": "300", "reason": "donation", "ref_id": null }
+			],
+			"expected_remaining": { "item:rice": 150 },
+			"expected_per_campaign": { "c1": { "item:rice": 150 } }
+		},
+		{
+			"name": "a received donation already in the ledger is not counted twice",
+			"why": "Its goods are on the shelf. Counting them as owed as well would close the need at half the quantity.",
+			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }],
+			"donations": [
+				{
+					"_id": "donation:1",
+					"campaign_id": "c1",
+					"status": "received",
+					"items": [{ "item_id": "item:rice", "qty": "100" }]
+				}
+			],
+			"stock_ledgers": [
+				{ "item_id": "item:rice", "qty": "100", "reason": "donation", "ref_id": "donation:1" }
+			],
+			"expected_remaining": { "item:rice": 400 },
+			"expected_per_campaign": { "c1": { "item:rice": 400 } }
+		},
+		{
+			"name": "a received donation the ledger has not recorded is still owed",
+			"why": "Staff marked it received but have not booked it in; the shelter is still expecting it.",
+			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }],
+			"donations": [
+				{
+					"_id": "donation:1",
+					"campaign_id": "c1",
+					"status": "received",
+					"items": [{ "item_id": "item:rice", "qty": "100" }]
+				}
+			],
+			"stock_ledgers": [],
+			"expected_remaining": { "item:rice": 400 },
+			"expected_per_campaign": { "c1": { "item:rice": 400 } }
+		},
+		{
+			"name": "distributing stock back out reopens the need",
+			"why": "T-22 'เปิดรับใหม่อัตโนมัติ' — an issue is a negative ledger row.",
+			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }],
+			"donations": [],
+			"stock_ledgers": [
+				{ "item_id": "item:rice", "qty": "500", "reason": "donation", "ref_id": null },
+				{ "item_id": "item:rice", "qty": "-120", "reason": "distribute", "ref_id": null }
+			],
+			"expected_remaining": { "item:rice": 120 },
+			"expected_per_campaign": { "c1": { "item:rice": 120 } }
+		},
+		{
+			"name": "cancelled and expired donations owe nothing",
+			"why": "Their quota went back to other donors; they must not hold the need down.",
+			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }],
+			"donations": [
+				{
+					"_id": "donation:1",
+					"campaign_id": "c1",
+					"status": "cancelled",
+					"items": [{ "item_id": "item:rice", "qty": "100" }]
+				},
+				{
+					"_id": "donation:2",
+					"campaign_id": "c1",
+					"status": "expired",
+					"items": [{ "item_id": "item:rice", "qty": "100" }]
+				}
+			],
+			"stock_ledgers": [],
+			"expected_remaining": { "item:rice": 500 },
+			"expected_per_campaign": { "c1": { "item:rice": 500 } }
+		},
+		{
+			"name": "a need staff closed by hand takes nothing more",
+			"why": "T-22 §1.6 manual force cut-off (CR-052). Contributes zero rather than dropping out, because a missing key reads as 'not tracked' downstream.",
+			"campaigns": [
+				{
+					"_id": "c1",
+					"needs": [{ "item_id": "item:rice", "qty_target": "500", "status": "closed" }]
+				}
+			],
+			"donations": [],
+			"stock_ledgers": [],
+			"expected_remaining": { "item:rice": 0 },
+			"expected_per_campaign": { "c1": { "item:rice": 0 } }
+		},
+		{
+			"name": "two campaigns want the same item",
+			"why": "The board sums them. A donation carries one campaign_id, so the sum is not bookable in one go — see the bookability invariant.",
+			"campaigns": [
+				{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] },
+				{ "_id": "c2", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }
+			],
+			"donations": [
+				{
+					"_id": "donation:1",
+					"campaign_id": "c1",
+					"status": "declared",
+					"items": [{ "item_id": "item:rice", "qty": "460" }]
+				}
+			],
+			"stock_ledgers": [],
+			"expected_remaining": { "item:rice": 540 },
+			"expected_per_campaign": { "c1": { "item:rice": 40 }, "c2": { "item:rice": 500 } }
+		},
+		{
+			"name": "stock is shelter-wide, reserved is per campaign",
+			"why": "The warehouse does not belong to a campaign, so on-hand counts against every campaign asking for the item.",
+			"campaigns": [
+				{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] },
+				{ "_id": "c2", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }
+			],
+			"donations": [
+				{
+					"_id": "donation:1",
+					"campaign_id": "c1",
+					"status": "declared",
+					"items": [{ "item_id": "item:rice", "qty": "100" }]
+				}
+			],
+			"stock_ledgers": [
+				{ "item_id": "item:rice", "qty": "200", "reason": "donation", "ref_id": null }
+			],
+			"expected_remaining": { "item:rice": 500 },
+			"expected_per_campaign": { "c1": { "item:rice": 200 }, "c2": { "item:rice": 300 } }
+		},
+		{
+			"name": "several items in one campaign stay independent",
+			"why": "Filling rice must not close water.",
+			"campaigns": [
+				{
+					"_id": "c1",
+					"needs": [
+						{ "item_id": "item:rice", "qty_target": "500" },
+						{ "item_id": "item:water", "qty_target": "1000" }
+					]
+				}
+			],
+			"donations": [],
+			"stock_ledgers": [
+				{ "item_id": "item:rice", "qty": "500", "reason": "donation", "ref_id": null }
+			],
+			"expected_remaining": { "item:rice": 0, "item:water": 1000 },
+			"expected_per_campaign": { "c1": { "item:rice": 0, "item:water": 1000 } }
+		}
+	]
+}

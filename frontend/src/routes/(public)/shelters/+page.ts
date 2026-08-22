@@ -1,5 +1,10 @@
 import type { PageLoad } from './$types';
-import { listPublicShelters, toPublicShelterCard } from '$lib/features/public-portal';
+import {
+	listPublicShelters,
+	toPublicShelterCard,
+	type PublicShelterListResponse,
+	type PublicShelterItem
+} from '$lib/features/public-portal';
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
 	const R = 6371;
@@ -37,7 +42,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const hasUser = !Number.isNaN(userLatNum) && !Number.isNaN(userLngNum);
 	const maxDistance = distance ? parseFloat(distance) : NaN;
 
-	let data: { shelters?: any[]; count?: number; as_of?: string } | null = null;
+	let data: PublicShelterListResponse | null;
 	try {
 		data = await listPublicShelters({
 			province: province || undefined,
@@ -49,12 +54,11 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			radius_km: hasUser && !Number.isNaN(maxDistance) && maxDistance > 0 ? maxDistance : undefined,
 			fetch
 		});
-	} catch (e) {
-		console.warn('Failed to load public shelters:', e);
+	} catch {
 		data = { shelters: [], count: 0, as_of: new Date().toISOString() };
 	}
 
-	const rawShelters = Array.isArray(data?.shelters) ? data.shelters : [];
+	const rawShelters = (Array.isArray(data?.shelters) ? data.shelters : []) as PublicShelterItem[];
 
 	let shelters = rawShelters.map((item) => {
 		let dist = 0;
@@ -90,7 +94,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	return {
 		shelters,
 		count: shelters.length,
-		as_of: data?.as_of ?? new Date().toISOString(),
+		as_of: data.as_of ?? new Date().toISOString(),
 		summary: {
 			shelters_total: shelters.length,
 			shelters_open: openCount

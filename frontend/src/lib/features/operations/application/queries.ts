@@ -8,7 +8,7 @@ import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
-import { getShelterDb } from '$lib/db/shelter';
+import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { AuditAction } from '$lib/features/shared';
 import { operationsRepository } from '../data/operations.remote';
@@ -22,7 +22,8 @@ import type {
 	PurchaseInput,
 	CountedItem,
 	TransferInput,
-	TransferFilter
+	TransferFilter,
+	WalkInDonationInput
 } from '../domain/operations';
 
 export const operationsKeys = {
@@ -33,7 +34,7 @@ export const operationsKeys = {
 	purchases: () => [...operationsKeys.all, 'purchases'] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
-	balance: () => [...operationsKeys.all, 'balance'] as const,
+	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
 	transfer: (id: string) => [...operationsKeys.transfers(), id] as const
 };
@@ -118,6 +119,31 @@ export const useReceiveStock = () => {
 	return createMutation(() => ({
 		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) =>
 			operationsRepository().receiveStock(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/**
+ * Mutation hook for goods that arrive without a booking (CR-055 R4 / D-1).
+ *
+ * Mints the missing donation document AND the ledger row that references it in
+ * one request, so an abandoned form cannot leave a `declared` donation behind
+ * inflating reserved stock forever.
+ */
+export const useReceiveWalkInDonation = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			donation,
+			receive,
+			ctx
+		}: {
+			donation: WalkInDonationInput;
+			receive: ReceiveInput;
+			ctx: AuthorContext;
+		}) => operationsRepository().receiveWalkInDonation(donation, receive, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}

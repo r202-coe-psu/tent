@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isInShelterStatus, toPublicShelterCard, toUiShelterStatus } from './mappers';
-import type { PublicShelterItem } from './types';
+import { searchResultKey, toPublicShelterCard, toUiShelterStatus } from './mappers';
+import type { FamilySearchResult, PublicShelterItem } from './types';
 
 describe('toUiShelterStatus', () => {
 	it('maps open/full/closed', () => {
@@ -13,15 +13,6 @@ describe('toUiShelterStatus', () => {
 		expect(toUiShelterStatus('')).toBe('CLOSED');
 		expect(toUiShelterStatus(null)).toBe('CLOSED');
 		expect(toUiShelterStatus(undefined)).toBe('CLOSED');
-	});
-});
-
-describe('isInShelterStatus', () => {
-	it('recognizes FastAPI public status', () => {
-		expect(isInShelterStatus('in_shelter')).toBe(true);
-		expect(isInShelterStatus('moved')).toBe(false);
-		expect(isInShelterStatus(null)).toBe(false);
-		expect(isInShelterStatus(undefined)).toBe(false);
 	});
 });
 
@@ -62,5 +53,31 @@ describe('toPublicShelterCard', () => {
 		const partialCard = toPublicShelterCard({});
 		expect(partialCard.status).toBe('CLOSED');
 		expect(partialCard.name).toBe('ศูนย์พักพิง');
+	});
+});
+
+describe('searchResultKey', () => {
+	// Observed on /search: one person who booked twice at the same shelter comes
+	// back as two rows agreeing on every field the public API exposes (the surname
+	// and the national ID are both masked), which crashed the list with
+	// `each_key_duplicate`. Nothing in the payload can tell them apart, so the key
+	// has to carry position too.
+	it('stays unique when two results are identical on every visible field', () => {
+		const row = {
+			shelter_name: 'ศูนย์อพยพ ม.อ.',
+			name: 'สักก์ธนัชญ์ พี****',
+			national_id: '111-XXXX-XX-111'
+		} as FamilySearchResult;
+
+		expect(searchResultKey(row, 0)).not.toBe(searchResultKey(row, 1));
+	});
+
+	it('keeps the identity in the key, so it is not a bare index', () => {
+		const row = { shelter_name: 'ศูนย์ A', name: 'สมชาย ใ***' } as FamilySearchResult;
+		expect(searchResultKey(row, 2)).toBe('ศูนย์ A:สมชาย ใ***:no-id:2');
+	});
+
+	it('survives a null result', () => {
+		expect(searchResultKey(null as unknown as FamilySearchResult, 4)).toBe('result-4');
 	});
 });

@@ -17,17 +17,21 @@
 	} = $props();
 </script>
 
-<Card class=" items-center rounded-2xl border-border p-5 shadow-sm transition-all hover:shadow-md">
-	<div class="flex w-full items-center gap-6">
+<Card
+	class="items-center rounded-2xl border-border p-4 shadow-sm transition-all hover:shadow-md sm:p-5"
+>
+	<div
+		class="flex w-full flex-col items-center gap-3 text-center sm:flex-row sm:gap-6 sm:text-left"
+	>
 		<div
-			class="flex size-14 shrink-0 items-center justify-center rounded-xl border-2 shadow-lg {iconClass}"
+			class="flex size-12 shrink-0 items-center justify-center rounded-xl border-2 shadow-lg sm:size-14 {iconClass}"
 		>
-			<IconComponent class="size-6" />
+			<IconComponent class="size-5 sm:size-6" />
 		</div>
-		<div class="flex flex-col">
-			<p class="text-sm font-medium text-muted-foreground">{title}</p>
-			<p class="mt-1 text-2xl font-bold text-foreground">
-				{value} <span class="text-sm font-normal text-muted-foreground">{unit}</span>
+		<div class="flex flex-col items-center sm:items-start">
+			<p class="text-xs font-medium text-muted-foreground sm:text-sm">{title}</p>
+			<p class="mt-0.5 text-xl font-bold text-foreground sm:mt-1 sm:text-2xl">
+				{value} <span class="text-xs font-normal text-muted-foreground sm:text-sm">{unit}</span>
 			</p>
 		</div>
 	</div>
