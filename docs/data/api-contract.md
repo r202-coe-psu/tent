@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-14
+updated: 2026-08-21
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้
 ---
 
@@ -148,7 +148,29 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `GET /public/v1/needs` | — |
 | `POST /public/v1/donations` | เบอร์โทร (+OTP เมื่อ `public_otp_required` เปิด) |
 | `GET /public/v1/donations/{tracking_token}` | token |
+| `PATCH /public/v1/donations/{tracking_token}` | token |
+| `DELETE /public/v1/donations/{tracking_token}` | token |
 | `GET /public/v1/transparency/*` | — |
+
+**`PATCH /public/v1/donations/{tracking_token}`** — donor แก้การจองของตัวเอง (CR-080).
+Body รับได้ทั้ง `courier_tracking_no` (DN-6) และ `items` อย่างใดอย่างหนึ่งหรือทั้งคู่:
+
+```jsonc
+{ "items": [{ "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg" }] }
+```
+
+`items` เป็น **ชุดเต็มที่ต้องการให้เป็น** ไม่ใช่ delta — ลบรายการ = ไม่ส่งมันมา. ระบบคิด
+ส่วนต่างกับที่จองไว้เดิมเอง แล้ว release ก่อน reserve เสมอ เพื่อให้การย้ายจำนวนระหว่าง item
+ไม่ชนเพดานของตัวเอง.
+
+| สถานะ | ความหมาย |
+| --- | --- |
+| `200` | แก้สำเร็จ — บันทึก `revisions[]` เพิ่ม 1 รายการ |
+| `400` | สถานะไม่ใช่ `declared` แล้ว (เจ้าหน้าที่เริ่มประเมิน) |
+| `409 NEED_FULL` | โควตาไม่พอ — **ของเดิมไม่เปลี่ยนเลย** ทุกการจองที่ทำไปในคำขอนี้ถูกคืนกลับ |
+| `429` | rate-limit ต่อ IP (ไม่มีเพดานจำนวนครั้งต่อใบจอง) |
+
+TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก `declared_at` เดิม
 
 ### 5.1 External plane `/external/v1` (CR-062, CR-079 M2 Integration)
 

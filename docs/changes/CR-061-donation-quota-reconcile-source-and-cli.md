@@ -1,10 +1,11 @@
 ---
 id: CR-061
 title: "CR-061 scope correction — แหล่งข้อมูลของ reserved_qty recalculation + worker CLI `donation-quota`"
-status: proposed
+status: approved
 date: 2026-07-29
+updated: 2026-07-30
 requested_by: ทีมพัฒนา (Team A — ชิโน, นัท, กาน)
-decided_by: <เจ้าของโครงการ>
+decided_by: เจ้าของโครงการ (PR review #144, 2026-07-30)
 layer: volatile
 affects:
   - docs/changes/CR-047-donation-quota-atomic-reservation.md §Migration & Maintenance (แก้แหล่งข้อมูล) + affects list (เพิ่ม worker CLI)
@@ -136,3 +137,8 @@ N/A ต่อ `schema_v`. ลำดับการ rollout:
   คำนวณที่ CR-047 ระบุไว้ทำให้ `reserved_qty` ต่ำกว่าความจริงและย้อนกลับไปเปิดโควตาที่ถูกใช้แล้ว
   จึงต้องแก้แหล่งข้อมูล + ระบุที่อยู่ของ tool. เจ้าของโครงการเลือกวิธี track = ไฟล์ CR ใหม่
   (ยืนยัน 2026-07-29) — รอเคาะ `approved`
+- 2026-07-30 — **approved** โดยเจ้าของโครงการ ผ่าน PR review #144 ("Verdict: Approve / Merge
+  readiness: ✅ พร้อม merge / Blockers: None") — รับรองว่าแหล่งข้อมูลที่แก้ตรงตามสถาปัตยกรรม
+  Remote-First (CouchDB = SoR) และกัน overbooking ได้ถูกต้อง
+- **Follow-up ที่ reviewer ระบุ (ยังไม่ทำ):** `docs/data/couchdb-mongodb-sync.md §4.1` ค้างไม่อัปเดต
+  ตั้งแต่ CR-047 — แยกเป็น PR เอกสารต่างหากได้ ไม่บล็อกการ merge โค้ดของ CR นี้

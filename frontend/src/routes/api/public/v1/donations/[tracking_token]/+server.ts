@@ -1,9 +1,10 @@
 import { json } from '@sveltejs/kit';
-import { donationIpLimiter } from '$lib/server/security/rate-limiter';
+import { donationEditLimiter, donationReadLimiter } from '$lib/server/security/rate-limiter';
 import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
+import { isDonorEditable } from '$lib/features/donations';
 import type { PublicDonationDoc } from '$lib/features/donations';
 
 function shelterDbFromToken(token: string): string | null {
@@ -40,6 +41,16 @@ async function patchCourierViaFastApi(trackingToken: string, courierTrackingNo: 
 	return { status: res.status, body };
 }
 
+/** Pre-inbound: cancel on the Mongo intake buffer via FastAPI. */
+async function cancelViaFastApi(trackingToken: string) {
+	const res = await fetch(
+		`${fastapiBaseUrl()}/public/v1/donations/${encodeURIComponent(trackingToken)}`,
+		{ method: 'DELETE', headers: fastapiServiceHeaders() }
+	);
+	const body = await res.json().catch(() => ({}));
+	return { status: res.status, body };
+}
+
 export const GET = async ({ params, getClientAddress }) => {
 	try {
 		const { tracking_token } = params;
@@ -48,7 +59,7 @@ export const GET = async ({ params, getClientAddress }) => {
 		}
 
 		const ip = getClientAddress();
-		if (!donationIpLimiter.check(ip)) {
+		if (!donationReadLimiter.check(ip)) {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
@@ -73,7 +84,8 @@ export const GET = async ({ params, getClientAddress }) => {
 				logistics: donation.logistics ?? null,
 				received_summary: donation.received_summary ?? null,
 				updated_at: donation.updated_at ?? null,
-				expires_at: donation.expires_at ?? null
+				expires_at: donation.expires_at ?? null,
+				revisions: donation.revisions ?? []
 			}
 		});
 	} catch {
@@ -94,7 +106,7 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		}
 
 		const ip = getClientAddress();
-		if (!donationIpLimiter.check(ip)) {
+		if (!donationEditLimiter.check(ip)) {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
@@ -131,6 +143,16 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 			return json({ success: true, message: 'Courier tracking number updated' });
 		}
 
+		if (!isDonorEditable(latestDoc.status)) {
+			return json(
+				{
+					success: false,
+					error: `Cannot update a donation in status "${latestDoc.status}"`
+				},
+				{ status: 400 }
+			);
+		}
+
 		if (!latestDoc.logistics || latestDoc.logistics.delivery_method !== 'parcel') {
 			return json(
 				{
@@ -165,6 +187,87 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		}
 
 		return json({ success: true, message: 'Courier tracking number updated' });
+	} catch {
+		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+	}
+};
+
+export const DELETE = async ({ params, getClientAddress }) => {
+	try {
+		const { tracking_token } = params;
+		if (!tracking_token) {
+			return json({ success: false, error: 'Tracking token is required' }, { status: 400 });
+		}
+
+		const ip = getClientAddress();
+		if (!donationEditLimiter.check(ip)) {
+			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
+		}
+
+		const shelterDb = shelterDbFromToken(tracking_token);
+		if (!shelterDb) {
+			return json({ success: false, error: 'Invalid tracking token format' }, { status: 400 });
+		}
+		const trackingTokenHash = await sha256Hex(tracking_token);
+
+		const latestDoc = await findByTokenHash(shelterDb, trackingTokenHash);
+		if (!latestDoc) {
+			// Not in Couch yet (inbound poll lag) — cancel the Mongo buffer directly.
+			const { status, body } = await cancelViaFastApi(tracking_token);
+			if (status === 409) {
+				return json(
+					{
+						success: false,
+						error: 'Donation is syncing. Please refresh and try again in a moment.'
+					},
+					{ status: 409 }
+				);
+			}
+			if (!status || status >= 400) {
+				return json(
+					typeof body === 'object' && body !== null
+						? body
+						: { success: false, error: 'Donation record not found' },
+					{ status: status || 404 }
+				);
+			}
+			return json({ success: true, message: 'Donation cancelled successfully' });
+		}
+
+		if (!isDonorEditable(latestDoc.status)) {
+			return json(
+				{
+					success: false,
+					error: `Cannot cancel donation in status "${latestDoc.status}"`
+				},
+				{ status: 400 }
+			);
+		}
+
+		latestDoc.status = 'cancelled';
+		latestDoc.updated_at = new Date().toISOString();
+
+		let writeRes: { status: number; data: unknown };
+		try {
+			writeRes = await putAsPublicWriter(shelterDb, latestDoc._id, latestDoc);
+		} catch {
+			return json({ success: false, error: 'Server configuration error.' }, { status: 500 });
+		}
+
+		if (writeRes.status === 409) {
+			return json(
+				{
+					success: false,
+					error: 'Donation was updated elsewhere. Please refresh and try again.'
+				},
+				{ status: 409 }
+			);
+		}
+		if (writeRes.status !== 201 && writeRes.status !== 200) {
+			return json({ success: false, error: 'Database update failed' }, { status: 500 });
+		}
+
+		return json({ success: true, message: 'Donation cancelled successfully' });
 	} catch {
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}
