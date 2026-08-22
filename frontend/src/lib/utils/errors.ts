@@ -60,6 +60,26 @@ export class CannotConnectError extends AppError {
 	}
 }
 
+export type SopMasterIntegrityIssue =
+	| 'pointer_missing'
+	| 'pointer_malformed'
+	| 'profile_missing'
+	| 'profile_malformed'
+	| 'pointer_target_mismatch'
+	| 'pointer_conflicted';
+
+/** Thrown when active SOP master singleton pointer or target profile integrity check fails (CR-079). */
+export class SopMasterIntegrityError extends AppError {
+	constructor(
+		readonly issue: SopMasterIntegrityIssue,
+		message: string,
+		readonly details?: unknown
+	) {
+		super(message, 'SOP_MASTER_INTEGRITY');
+		this.name = 'SopMasterIntegrityError';
+	}
+}
+
 /** Alias for auth failures from the active CouchDB endpoint. */
 export class CouchAuthError extends AuthError {
 	constructor(status: 401 | 403 = 401) {

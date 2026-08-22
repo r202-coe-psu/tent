@@ -81,11 +81,11 @@
 	</div>
 {:else}
 	<div class="overflow-hidden rounded-lg border">
-		<table class="w-full text-sm">
+		<table class="w-full table-fixed text-sm">
 			<thead class="bg-muted/50 text-muted-foreground">
 				<tr>
-					<th class="px-4 py-3 text-left font-semibold">รายการ (Item)</th>
-					<th class="px-4 py-3 text-center font-semibold">ค่ากำหนด (Value)</th>
+					<th class="w-[70%] px-4 py-3 text-left font-semibold">รายการ (Item)</th>
+					<th class="w-[30%] px-4 py-3 text-center font-semibold">ค่ากำหนด (Value)</th>
 				</tr>
 			</thead>
 			<tbody>

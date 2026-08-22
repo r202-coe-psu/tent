@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { load } from './+page';
+import type { PublicShelterCardModel } from '$lib/features/public-portal';
 
 vi.mock('$lib/features/public-portal', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/features/public-portal')>();
@@ -10,6 +11,19 @@ vi.mock('$lib/features/public-portal', async (importOriginal) => {
 });
 
 import { listPublicShelters } from '$lib/features/public-portal';
+
+type LoadEventInput = Parameters<typeof load>[0];
+type LoadResult = {
+	shelters: PublicShelterCardModel[];
+	count: number;
+	as_of: string;
+	summary: {
+		shelters_total: number;
+		shelters_open: number;
+	};
+	filters: Record<string, string>;
+	available_types: string[];
+};
 
 describe('public/shelters load function', () => {
 	beforeEach(() => {
@@ -22,10 +36,8 @@ describe('public/shelters load function', () => {
 		);
 
 		const url = new URL('http://localhost/shelters');
-		const result = (await load({
-			url,
-			fetch: vi.fn()
-		} as any)) as any;
+		const event = { url, fetch: vi.fn() as typeof fetch } as unknown as LoadEventInput;
+		const result = (await load(event)) as unknown as LoadResult;
 
 		expect(result).toBeDefined();
 		expect(result.shelters).toEqual([]);
@@ -42,10 +54,8 @@ describe('public/shelters load function', () => {
 		});
 
 		const url = new URL('http://localhost/shelters');
-		const result = (await load({
-			url,
-			fetch: vi.fn()
-		} as any)) as any;
+		const event = { url, fetch: vi.fn() as typeof fetch } as unknown as LoadEventInput;
+		const result = (await load(event)) as unknown as LoadResult;
 
 		expect(result.shelters).toEqual([]);
 		expect(result.count).toBe(0);
@@ -56,16 +66,14 @@ describe('public/shelters load function', () => {
 
 	it('handles null or undefined shelters property safely', async () => {
 		vi.mocked(listPublicShelters).mockResolvedValue({
-			shelters: undefined as any,
+			shelters: undefined as unknown as [],
 			count: 0,
 			as_of: '2026-08-19T10:00:00Z'
 		});
 
 		const url = new URL('http://localhost/shelters');
-		const result = (await load({
-			url,
-			fetch: vi.fn()
-		} as any)) as any;
+		const event = { url, fetch: vi.fn() as typeof fetch } as unknown as LoadEventInput;
+		const result = (await load(event)) as unknown as LoadResult;
 
 		expect(result.shelters).toEqual([]);
 		expect(result.count).toBe(0);
@@ -104,10 +112,8 @@ describe('public/shelters load function', () => {
 		});
 
 		const url = new URL('http://localhost/shelters');
-		const result = (await load({
-			url,
-			fetch: vi.fn()
-		} as any)) as any;
+		const event = { url, fetch: vi.fn() as typeof fetch } as unknown as LoadEventInput;
+		const result = (await load(event)) as unknown as LoadResult;
 
 		expect(result.shelters).toHaveLength(2);
 		expect(result.count).toBe(2);
@@ -145,10 +151,8 @@ describe('public/shelters load function', () => {
 		});
 
 		const url = new URL('http://localhost/shelters?q=หาดใหญ่');
-		const result = (await load({
-			url,
-			fetch: vi.fn()
-		} as any)) as any;
+		const event = { url, fetch: vi.fn() as typeof fetch } as unknown as LoadEventInput;
+		const result = (await load(event)) as unknown as LoadResult;
 
 		expect(result.shelters).toHaveLength(1);
 		expect(result.shelters[0].code).toBe('SH001');
