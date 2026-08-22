@@ -245,3 +245,36 @@ split allocation, driver/plate บังคับ, destination lot ID, สถา
     4. Authorization guard ใหม่ (`transfer.authorization.ts`) + ลำดับ write 6 ขั้นต่อ transition
        (GET → guard → domain fn → ledger → central status → mirror best-effort) พร้อม self-healing mirror
        ตอน `GET`
+- 2026-08-22 — **decided** (สืบเนื่องจาก entry ก่อนหน้า "T-13 write-path implementation detail") — ยกเลิก
+  2 ข้อของดีไซน์ที่เคยขึ้นเป็น "⚠️ proposed" ด้านบน แทนที่ด้วยแนวทางใหม่ที่ตรวจสอบโค้ดจริงเพิ่มเติมแล้วพบว่า
+  ปลอดภัยกว่าและไม่ต้องรอ PM sign-off (เพราะไม่แตะ stable core / ไม่ขยาย scope เกินสถาปัตยกรรม `central_ops`
+  ที่ approve ไปแล้ว) — **ทั้งสองข้อนี้ไม่ต้องเปิดรอบ approve แยกอีก** ต่างจาก field ละเอียด (driver/plate ฯลฯ)
+  ที่ยังคงต้องรอ schema_v รอบใหม่ตามเดิม:
+  1. **ยกเลิก mirror-write สองทางทั้งหมด** (เดิมข้อ 3 ของ entry ก่อนหน้า) — ตรวจโค้ด `referral` จริง
+     (`referral.remote.ts`, `referral.server-repository.ts`, `[id]/transition/+server.ts`) แล้วพบว่า
+     **`referral` ไม่ได้ mirror-write เอกสารเข้า `shelter_{code}` เลยสักครั้ง** ทั้งที่มี comment ในโค้ด
+     เขียนว่า "mirror into destination shelter DB" — comment นั้นเป็นภาษาที่ค้างมาจากก่อน migrate ไป
+     `central_ops` (ดู git log `9515342a`, `e6dfe27c`) ปัจจุบัน `referral` มองเห็นข้ามศูนย์ผ่าน Mango
+     `$or` query บน `central_ops` โดยตรงเท่านั้น ไม่มี doc มิเรอร์จริงที่ไหนเลย และ `startReferralsLiveQuery`
+     ที่ subscribe `getShelterDb()` สำหรับ `type === 'referral'` จึงไม่เคยถูกทริกเกอร์จริงในทางปฏิบัติ
+     (referral ไม่เคยเขียน type นี้ลง shelter DB) — เป็นโค้ดที่ค้างมาเฉยๆ ไม่ error แต่ก็ไม่ทำงาน
+     เพิ่มเติม: เช็ค `central_ops` `_security` ตรงแล้วพบ `members`/`admins` ล็อกเฉพาะ role `_admin` เท่านั้น
+     — session ปกติของศูนย์ **อ่าน `central_ops` ตรงไม่ได้เลยแม้แต่ read-only** ทำให้ทางเลือก "อ่าน
+     `central_ops` changes feed ตรง" เป็นไปไม่ได้ด้วยสถาปัตยกรรมปัจจุบัน
+     **สรุป: `stock_transfer` จะไม่มี mirror-write ในรอบนี้** — sync สถานะข้ามศูนย์ (CR-059 ข้อ 4.4 "ส่งมอบ
+     สำเร็จ อัตโนมัติ") ใช้ refetch-on-interaction แทน (`invalidateQueries` หลัง mutation ของฝั่งตัวเอง,
+     ผู้ใช้อีกฝั่งเห็นค่าล่าสุดเมื่อเปิดหน้า/refetch เอง) — เป็น gap เดียวกับที่ `referral` มีอยู่แล้วจริงในปัจจุบัน
+     ไม่ใช่ regression ใหม่ที่ `stock_transfer` สร้างขึ้นเอง — ผลคือ **ไม่ต้องเพิ่ม `stock_transfer` เข้า
+     type-map ของ `startOperationsLiveQuery`** ในรอบนี้ (ไม่มีอะไรให้ watch ใน shelter `_changes` feed)
+  2. **เปลี่ยนกลไก retry-safety ของ ledger จาก deterministic `_id` มาเป็น state-check idempotency**
+     (เดิมข้อ 1 ของ entry ก่อนหน้า) — deterministic id (`stock_ledger:{transfer_id}:{reason}:{item_id}`)
+     เปลี่ยน `_id` pattern ของ `stock_ledger` ซึ่งเป็น stable core (`CLAUDE.md` "Remote-first data & auth —
+     do not bypass" + common envelope §0 ของ `schema.md`) ต้อง review ก่อนแตะ — **แทนที่ด้วย**: ก่อนเขียน
+     ledger entry ในแต่ละ transition ให้ query Mango `_find` หา `{type: 'stock_ledger', ref_id:
+     transfer._id, reason}` ใน shelter DB ปลายทางก่อน ถ้ามีอยู่แล้วข้ามการเขียน (ถือว่าทำสำเร็จแล้วจากรอบ
+     retry ก่อนหน้า) — เป็นกลไกเดียวกับที่ `referral` ใช้จริงอยู่แล้วสำหรับความปลอดภัยตอน retry ของตัวเอง
+     (`completeCapacityTransfer`'s `sourceAlreadyTransferred && destActive → no-op` check) เพียงแต่ใช้ตรวจ
+     สถานะข้อมูลแทนการเปลี่ยนวิธีตั้ง id — **ไม่ต้องแก้ `schema.md` เพิ่มจาก entry ก่อนหน้า** เพราะ `_id`
+     pattern ของ `stock_ledger` (`stock_ledger:{ulid}`) ไม่เปลี่ยนเลย
+  - รายละเอียดเต็มของเหตุผลและ implementation อยู่ใน `~/Reports/CR-059-T12-T13-implementation-plan.md`
+    และ `~/Reports/CR-059-Flow1-T13-implementation-plan.md` (อัปเดตพร้อมกันกับ entry นี้)

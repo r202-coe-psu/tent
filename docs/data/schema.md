@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-17
+updated: 2026-08-22
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -200,19 +200,15 @@ Doc type ทั่วไป (ไม่ผูกเฉพาะ evacuee) สำ�
 **Migration (schema_v 1 → 2):** pre-prod — wipe/re-seed; ไม่มี dual-read บังคับ
 **Migration (schema_v 2 → 3):** additive — เพิ่ม enum value อย่างเดียว ไม่เปลี่ยนโครงสร้าง field; doc `schema_v: 2` เดิมอ่าน/ใช้ได้ปกติ ไม่ต้อง backfill
 
-### 2.2 `stock_transfer` — `stock_transfer:{ulid}` · state machine (forward-only)
+### 2.2 `stock_transfer` — [MIGRATED TO central_ops]
 
-> **schema_v 2** — `items[].qty` เป็น `qty_str`. CR-038.
-
-| Field | ชนิด | req | หมายเหตุ |
-| --- | --- | --- | --- |
-| `from_shelter` / `to_shelter` | str | req | shelter_code (เช่น `SH001`) — doc เกิดฝั่งต้นทาง replicate ผ่าน central |
-| `items` | [{`item_id`:str, `qty`:qty_str>0, `unit`:str}] | req | ≥1 รายการ |
-| `status` | enum(`requested`,`shipped`,`received`,`cancelled`) | req | forward-only: received > shipped > requested; cancelled ได้ก่อน shipped เท่านั้น |
-| `timeline` | {`requested`:{at,by}, `shipped`:{at,by}?, `received`:{at,by}?} | req/sys | เติมตาม transition |
-| `notes` | str | opt | — |
-
-แต่ละ transition เขียน `stock_ledger` คู่: shipped → `transfer_out` (−) ฝั่งต้นทาง; received → `transfer_in` (+) ฝั่งปลายทาง
+> ⚠️ **ย้ายการจัดเก็บไปที่ DB `central_ops` (§5.5):**
+> ตามการตัดสินใจสถาปัตยกรรม cross-DB write pattern ของ CR-059 (Flow 1 / T-13, approved 2026-08-22)
+> เอกสารประเภท `stock_transfer` ทั้งหมดจะถูกเก็บไว้ที่ฐานข้อมูลกลาง `central_ops` โดยตรง ไม่เก็บใน
+> `shelter_{shelter_code}` อีกต่อไป — เหตุผล: session ของศูนย์หนึ่งเขียนข้าม DB ของอีกศูนย์ไม่ได้
+> (`_security.roles`) จึงต้องมีที่เก็บกลางเพื่อให้สถานะฝั่งต้นทางเปลี่ยนเป็น "ส่งมอบสำเร็จ" อัตโนมัติ
+> หลังปลายทางยืนยันรับเข้าได้ (CR-059 ข้อ 4.4)
+> ดูรายละเอียด Schema ของ `stock_transfer` ได้ที่ **[§5.5 stock_transfer — central_ops](#55-stock_transfer--stock_transferulid--state-machine-forward-only-cr-059-centralized-architecture)**
 
 ### 2.3 `donation` — `donation:{ulid}` · state machine
 
@@ -855,6 +851,45 @@ closed   → (terminal)
 > - `referral-type-toshelter-created-idx`: `['type', 'to_shelter_code', 'created_at']`
 > - `referral-list-sort-idx`: `['type', 'created_at', 'status', 'evacuee_id']`
 > - `referral-list-basic-idx`: `['type', 'created_at']`
+
+### 5.5 `stock_transfer` — `stock_transfer:{ulid}` · state machine (forward-only, CR-059, Centralized Architecture)
+
+> **ย้ายมาจาก `shelter_{shelter_code}` (§2.2 เดิม, superseded) — CR-059, approved 2026-08-22:**
+> เอกสารประเภท `stock_transfer` จัดเก็บรวมกันในฐานข้อมูลกลาง `central_ops` โดยตรง (ไม่ใช่
+> `shelter_{shelter_code}`) แบบเดียวกับ `referral` (§5.4) เพื่อรองรับ real-time sync สถานะข้ามศูนย์โดยไม่
+> ต้องพึ่ง session เขียนข้าม DB — ดูเหตุผลและรายละเอียดสถาปัตยกรรมเต็มที่
+> `docs/changes/CR-059-inventory-requisition-inter-shelter-transfer.md` หัวข้อ "🏗️ การตัดสินใจทาง
+> สถาปัตยกรรม"
+>
+> **`schema_v` ไม่ bump** (คงที่ 2 เดิม) — ย้าย location เท่านั้น ไม่ได้เปลี่ยนรูปร่าง doc (นิยามตาม
+> `docs/change-management.md` §4) พร้อม precedent จาก `referral` ที่ย้าย DB แบบเดียวกันแล้วไม่ bump
+> เช่นกัน (§2.11/§5.4) — ดูรายละเอียดเต็มใน CR-059 Decision Log entry 2026-08-22 ("T-13 write-path
+> implementation detail")
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `from_shelter` / `to_shelter` | str | req | shelter_code (เช่น `SH001`) — canonical doc เดียวใน `central_ops`, ไม่ replicate ผ่าน central แบบเดิมอีกต่อไป |
+| `items` | [{`item_id`:str, `qty`:qty_str>0, `unit`:str}] | req | ≥1 รายการ |
+| `status` | enum(`requested`,`shipped`,`received`,`cancelled`) | req | forward-only: received > shipped > requested; cancelled ได้ก่อน shipped เท่านั้น |
+| `timeline` | {`requested`:{at,by}, `shipped`:{at,by}?, `received`:{at,by}?} | req/sys | เติมตาม transition |
+| `notes` | str | opt | — |
+
+แต่ละ transition เขียน `stock_ledger` คู่ที่ `shelter_{shelter_code}` ของแต่ละฝั่งตามปกติ (เฉพาะ doc
+`stock_transfer` เองเท่านั้นที่ย้ายมา `central_ops` — `stock_ledger` ไม่ย้าย): shipped → `transfer_out`
+(−) ฝั่งต้นทาง; received → `transfer_in` (+) ฝั่งปลายทาง
+
+> **Write path (CR-059, approved architecture):** เขียนผ่าน BFF Endpoints ที่
+> `frontend/src/routes/api/back-office/transfer/**` ด้วย `adminRaw` (`$lib/server/couch-admin.ts`) แบบ
+> เดียวกับ `referral` (§5.4) — client เลิกเขียน `stock_transfer` ตรงผ่าน `/couch` proxy · Mirror-write
+> สองทาง: `shipped` → mirror เข้า `shelter_{to_shelter}` (แบบ referral `sent`), `received` → mirror
+> ย้อนกลับเข้า `shelter_{from_shelter}` (ของใหม่ ไม่มีใน referral) เพื่อให้แต่ละศูนย์เห็นสำเนาผ่าน
+> `_changes` feed ที่ subscribe อยู่แล้ว — รายละเอียด implementation ระดับ write-order/authorization guard
+> (deterministic ledger id, critical/best-effort write tier) ยังเป็น proposed (ยังไม่ confirm กับ project
+> owner อย่างเป็นทางการ) ดู CR-059 Decision Log entry 2026-08-22 ("T-13 write-path implementation detail")
+>
+> **ยังไม่ approve ในรอบนี้ (CR-059):** field ละเอียดเพิ่มเติม — บังคับกรอกผู้ขับขี่/ทะเบียนรถก่อนอนุมัติ
+> ส่งมอบ, การจัดสรรเบิกข้ามล็อต ("+ แบ่งจากอีกล็อต/โซน"), Destination Lot ID ใหม่ปลายทาง, สิทธิ์
+> คัดค้าน/ระงับคำสั่ง — รอ approve schema_v รอบใหม่แยกต่างหากก่อนเพิ่มเข้า field table นี้
 
 ---
 
