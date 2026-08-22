@@ -32,6 +32,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			{
 				title: body.title,
 				description: body.description,
+				title_en: body.title_en,
+				description_en: body.description_en,
 				severity: body.severity,
 				is_active: body.is_active
 			},

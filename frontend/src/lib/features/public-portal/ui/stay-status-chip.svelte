@@ -4,6 +4,7 @@
 		publicStayStatusTone,
 		type StayStatusTone
 	} from '../domain/stay-status';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	interface Props {
 		status: string | null | undefined;
@@ -34,7 +35,7 @@
 	};
 
 	const tone = $derived(publicStayStatusTone(status));
-	const label = $derived(publicStayStatusLabel(status));
+	const label = $derived(publicStayStatusLabel(status, langState.current as 'th' | 'en'));
 </script>
 
 <span

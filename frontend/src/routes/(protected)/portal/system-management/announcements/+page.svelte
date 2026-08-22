@@ -36,6 +36,8 @@
 	const defaultForm = () => ({
 		title: '',
 		description: '',
+		title_en: '',
+		description_en: '',
 		severity: 'info' as 'info' | 'warning' | 'emergency',
 		is_active: true
 	});
@@ -69,6 +71,8 @@
 		form = {
 			title: item.title,
 			description: item.description,
+			title_en: item.title_en || '',
+			description_en: item.description_en || '',
 			severity: item.severity,
 			is_active: item.is_active
 		};
@@ -327,7 +331,7 @@
 		<div class="grid gap-5 p-6">
 			<div class="grid gap-2">
 				<Label for="title" class="text-sm font-semibold"
-					>หัวข้อประกาศ <span class="text-destructive">*</span></Label
+					>หัวข้อประกาศ (ไทย) <span class="text-destructive">*</span></Label
 				>
 				<Input
 					id="title"
@@ -338,13 +342,32 @@
 			</div>
 			<div class="grid gap-2">
 				<Label for="description" class="text-sm font-semibold"
-					>รายละเอียด <span class="text-destructive">*</span></Label
+					>รายละเอียด (ไทย) <span class="text-destructive">*</span></Label
 				>
 				<Textarea
 					id="description"
 					bind:value={form.description}
 					placeholder="อธิบายรายละเอียดของประกาศ..."
-					rows={5}
+					rows={4}
+					class="resize-none focus-visible:ring-primary"
+				/>
+			</div>
+			<div class="grid gap-2">
+				<Label for="title_en" class="text-sm font-semibold">หัวข้อประกาศ (English)</Label>
+				<Input
+					id="title_en"
+					bind:value={form.title_en}
+					placeholder="e.g. Storm warning at shelter area"
+					class="focus-visible:ring-primary"
+				/>
+			</div>
+			<div class="grid gap-2">
+				<Label for="description_en" class="text-sm font-semibold">รายละเอียด (English)</Label>
+				<Textarea
+					id="description_en"
+					bind:value={form.description_en}
+					placeholder="Announcement description in English..."
+					rows={4}
 					class="resize-none focus-visible:ring-primary"
 				/>
 			</div>
