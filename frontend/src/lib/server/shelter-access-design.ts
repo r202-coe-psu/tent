@@ -67,8 +67,12 @@ export const REFERRAL_MANGO_INDEXES = [
 export function buildValidateDocUpdate(code: string): string {
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
-  // schema.md §1.4 movement, §1.5 screening, §6.2 stock_ledger / audit
-  var appendOnly = ['stock_ledger', 'audit', 'movement', 'screening'];
+  // schema.md §1.4 movement, §1.5 screening, §2.6 kitchen_requisition,
+  // §2.7 meal_service, §2.7.2 gas_ledger (CR-080), §6.2 stock_ledger / audit
+  var appendOnly = [
+    'stock_ledger', 'audit', 'movement', 'screening',
+    'kitchen_requisition', 'meal_service', 'gas_ledger'
+  ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
     if (wasAppendOnly) {
@@ -93,10 +97,15 @@ export function buildValidateDocUpdate(code: string): string {
   // People plane (schema.md §1) must be writable by session staff — missing
   // household/medical/screening/movement/image causes partial registration:
   // createEvacuee succeeds, then household/screening PUT is forbidden.
+  // Kitchen (Module D, schema.md §2.5-§2.7.2) was missing here entirely —
+  // kitchen_staff could never actually write a meal plan, requisition, service
+  // record, or gas cylinder/ledger without an _admin session (bug found + fixed
+  // alongside CR-080).
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot',
-    'audit', 'daily_calc', 'purchase', 'referral'
+    'audit', 'daily_calc', 'purchase', 'referral',
+    'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
