@@ -32,6 +32,7 @@ export const load: PageServerLoad = async ({ request }) => {
 				}
 			]
 		},
+		phone_number: '',
 		line_oa_url: '',
 		facebook_url: ''
 	};

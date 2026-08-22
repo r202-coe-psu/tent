@@ -8,6 +8,11 @@ from tent_model.public_shelter import PublicShelter
 
 from .schemas import ShelterDetailResponse, ShelterItem, ShelterListResponse
 
+# Stay statuses that hold a place at a shelter (CR-070 D-BOOK-OCC=C, FR-66):
+# a web booking reserves the seat the moment it is made, so `pre_registered`
+# counts alongside `active`. Kitchen/SOP head-counts stay `active`-only (CR-022).
+OCCUPANCY_STATUSES = ("active", "pre_registered")
+
 
 class ShelterUseCase:
     """Read-only queries against the public_shelters projection."""
@@ -19,6 +24,9 @@ class ShelterUseCase:
         district: str | None = None,
         subdistrict: str | None = None,
         status: str | None = None,
+        lat: float | None = None,
+        lng: float | None = None,
+        radius_km: float | None = None,
     ) -> ShelterListResponse:
         filters: dict[str, object] = {}
         if province:
@@ -30,7 +38,22 @@ class ShelterUseCase:
         if status:
             filters["status"] = status
 
-        if filters:
+        has_near = False
+        if lat is not None and lng is not None:
+            near_query: dict[str, object] = {
+                "$geometry": {
+                    "type": "Point",
+                    "coordinates": [lng, lat],
+                }
+            }
+            if radius_km is not None and radius_km > 0:
+                near_query["$maxDistance"] = radius_km * 1000.0  # meters
+            filters["location"] = {"$nearSphere": near_query}
+            has_near = True
+
+        if has_near:
+            docs = await PublicShelter.find(filters).to_list()
+        elif filters:
             docs = await PublicShelter.find(filters).sort("+name").to_list()
         else:
             docs = await PublicShelter.find_all().sort("+name").to_list()
@@ -73,6 +96,7 @@ class ShelterUseCase:
                     status=doc.status,
                     capacity=doc.capacity,
                     geo=doc.geo,
+                    location=doc.location,
                     province=doc.province,
                     district=doc.district,
                     subdistrict=doc.subdistrict,
@@ -109,7 +133,9 @@ class ShelterUseCase:
 
         occupancy = 0
         if mapped_status in ("OPEN", "FULL"):
-            occupancy = await PublicPerson.find({"shelter_code": code, "status": "active"}).count()
+            occupancy = await PublicPerson.find(
+                {"shelter_code": code, "status": {"$in": list(OCCUPANCY_STATUSES)}}
+            ).count()
 
         capacity_total = m.get("capacity") or 0
         capacity_available = max(0, capacity_total - occupancy)
@@ -187,6 +213,7 @@ class ShelterUseCase:
                 "occupancy_rate": occupancy_rate,
                 "building_status": building_status,
                 "geo": doc.geo,
+                "location": doc.location,
                 "admission_policy": {
                     "pets": pet_status,
                     "vulnerable_groups": vul_groups,

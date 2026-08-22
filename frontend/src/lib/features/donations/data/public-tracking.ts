@@ -67,3 +67,55 @@ export async function updateCourierTracking(
 		throw new Error(unwrapError(body, 'บันทึกเลขพัสดุไม่สำเร็จ'));
 	}
 }
+
+export async function cancelDonation(trackingToken: string): Promise<void> {
+	const res = await fetch(`/api/public/v1/donations/${encodeURIComponent(trackingToken)}`, {
+		method: 'DELETE'
+	});
+	const body = await res.json().catch(() => ({}));
+	if (!res.ok) {
+		if (res.status === 429) throw new Error('คุณส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่');
+		if (res.status === 409) {
+			throw new Error('รายการนี้กำลังบันทึกเข้าระบบ กรุณารีเฟรชแล้วลองใหม่อีกครั้ง');
+		}
+		if (res.status === 400) {
+			throw new Error('รายการนี้ยกเลิกไม่ได้แล้ว — เจ้าหน้าที่เริ่มดำเนินการหรือปิดรายการไปแล้ว');
+		}
+		if (res.status === 404) throw new Error('ไม่พบรายการบริจาคสำหรับรหัสนี้');
+		throw new Error(unwrapError(body, 'ยกเลิกการจองไม่สำเร็จ'));
+	}
+}
+
+/** What the donor wants the booking to contain — the whole basket, not a delta. */
+export type DonationItemEdit = {
+	item_id?: string;
+	free_text?: string;
+	qty: string;
+	unit: string;
+};
+
+export async function updateDonationItems(
+	trackingToken: string,
+	items: DonationItemEdit[]
+): Promise<{ revisions: number }> {
+	const res = await fetch(`/api/public/v1/donations/${encodeURIComponent(trackingToken)}/items`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ items })
+	});
+	const body = await res.json().catch(() => ({}));
+	if (!res.ok) {
+		if (res.status === 429) throw new Error('คุณส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่');
+		if ((body as { error?: string }).error === 'NEED_FULL') {
+			throw new Error(
+				'มีผู้บริจาคท่านอื่นจองตัดหน้าพอดี — จำนวนที่ขอเกินยอดที่เหลืออยู่ กรุณาลดจำนวนแล้วลองใหม่'
+			);
+		}
+		if (res.status === 400) {
+			throw new Error('รายการนี้แก้ไม่ได้แล้ว — เจ้าหน้าที่เริ่มตรวจรับหรือปิดรายการไปแล้ว');
+		}
+		if (res.status === 404) throw new Error('ไม่พบรายการบริจาคสำหรับรหัสนี้');
+		throw new Error(unwrapError(body, 'แก้ไขรายการไม่สำเร็จ'));
+	}
+	return { revisions: (body as { revisions?: number }).revisions ?? 0 };
+}

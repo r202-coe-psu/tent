@@ -32,6 +32,7 @@ export {
 	genderSchema,
 	religionSchema,
 	stayStatusSchema,
+	STATUS_LABELS,
 	householdStatusSchema,
 	movementActionSchema,
 	careTrackSchema,

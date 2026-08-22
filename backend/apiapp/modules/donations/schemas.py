@@ -48,6 +48,25 @@ class DonationCourierPatchRequest(BaseModel):
     courier_tracking_no: str
 
 
+class DonationItemsPatchRequest(BaseModel):
+    #: The whole basket the donor wants, not a delta — dropping a line means leaving it
+    #: out. The service works out the difference against what is already reserved.
+    items: list[DonationItemInput]
+
+
+class DonationItemsPatchResponse(BaseModel):
+    success: bool = True
+    message: str = "Donation items updated"
+    #: How many entries the revision log now holds, so a caller can show "แก้ไข N ครั้ง".
+    revisions: int = 0
+    #: The stored items after the edit, carrying the per-item ``reserved_qty`` the
+    #: counter now holds. The BFF writes these straight onto the CouchDB document once
+    #: the donation has synced, so the two never have to recompute the same split.
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    #: The entry just appended, for the BFF to add to the CouchDB document's log.
+    revision: dict[str, Any] = Field(default_factory=dict)
+
+
 class DonationCourierPatchResponse(BaseModel):
     success: bool = True
     message: str = "Courier tracking number updated"
@@ -64,3 +83,8 @@ class DonationTrackSearchResponse(BaseModel):
     success: bool = True
     tracking_token: str
     booking_ref: str
+
+
+class DonationCancelResponse(BaseModel):
+    success: bool = True
+    message: str = "Donation cancelled successfully"

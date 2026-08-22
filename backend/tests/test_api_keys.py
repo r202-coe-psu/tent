@@ -131,8 +131,8 @@ async def test_external_shelters_with_valid_key(
         headers={"X-API-Key": api_key},
     )
     assert response.status_code == 200
-    assert response.json()["count"] == 1
-    assert response.json()["shelters"][0]["code"] == "SH001"
+    assert len(response.json()) == 1
+    assert response.json()[0]["shelter_id"] == "SH001"
 
     stored = await ApiKey.get(create.json()["id"])
     assert stored is not None

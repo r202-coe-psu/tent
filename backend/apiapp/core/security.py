@@ -43,15 +43,22 @@ async def verify_external_secret(
 def _unauthorized(detail: str = "Invalid or missing API key") -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=detail,
-        headers={"WWW-Authenticate": "ApiKey"},
+        detail={"error": {"code": "unauthorized", "message": detail}},
+        headers={"WWW-Authenticate": "Bearer"},
     )
 
 
 async def verify_api_key(
-    api_key: Annotated[str | None, Security(_api_key_header)],
+    bearer_creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
+    api_key_header: Annotated[str | None, Security(_api_key_header)] = None,
 ) -> ApiKey:
-    """Validate managed consumer key from ``X-API-Key`` (CR-062)."""
+    """Validate managed consumer key from ``Authorization: Bearer`` or ``X-API-Key`` (CR-062)."""
+    api_key: str | None = None
+    if bearer_creds and bearer_creds.credentials:
+        api_key = bearer_creds.credentials
+    elif api_key_header:
+        api_key = api_key_header
+
     if not api_key or not api_key.startswith("tsk_") or len(api_key) < KEY_PREFIX_LEN:
         raise _unauthorized()
 

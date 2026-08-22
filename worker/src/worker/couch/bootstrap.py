@@ -11,13 +11,16 @@ from worker.masking import shelter_code_from_db_name, shelter_db_name
 from worker.mongo import (
     apply_donation,
     apply_need,
+    apply_need_counters,
     apply_person,
     apply_shelter,
     delete_needs_for_shelter,
     delete_persons_for_shelter,
 )
 from worker.projectors.donation import project_donation
+from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
+from worker.mongo.on_hand import refresh_on_hand
 from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import is_shelter_open, project_shelter
 
@@ -86,6 +89,19 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
         elif doc_type == "donation":
             action, payload = project_donation(doc, shelter_code=shelter_code)
             await apply_donation(action, payload)
+        elif doc_type == "donation_campaign":
+            # Bootstrap has to seed counters too, not just the CDC path (CR-060). A
+            # freshly provisioned environment — first deploy, or a DR restore — runs
+            # bootstrap and then tails _changes from the checkpoint it just saved, so
+            # campaigns that already existed never arrive as change events. Without
+            # this the counters stay empty and reserve_quota falls open: the system
+            # looks healthy while enforcing no ceiling at all.
+            await apply_need_counters(plan_need_counters(doc, shelter_code=shelter_code))
+
+    # Same reason the counters are seeded above: the ledger entries already on disk
+    # never arrive as change events, and a counter left at on_hand_qty 0 enforces the
+    # bare target instead of what is genuinely still needed.
+    await refresh_on_hand(couch, shelter_code)
 
     need_actions = await project_needs_for_shelter(couch, shelter_code)
     for action, payload in need_actions:
@@ -105,6 +121,24 @@ async def list_open_shelter_codes(couch: CouchClient) -> list[str]:
             continue
         code = doc.get("code")
         if code and is_shelter_open(doc):
+            codes.append(str(code))
+    return sorted(set(codes))
+
+
+async def list_all_shelter_codes(couch: CouchClient) -> list[str]:
+    """Every shelter in the registry, open or not.
+
+    Sweeps that must not skip closed shelters use this — a closed shelter can still
+    hold donations with a live reservation that needs expiring.
+    """
+    if not await couch.database_exists(REGISTRY_DB):
+        return []
+    codes: list[str] = []
+    async for doc in couch.iter_all_docs(REGISTRY_DB):
+        if doc.get("type") != "shelter":
+            continue
+        code = doc.get("code")
+        if code:
             codes.append(str(code))
     return sorted(set(codes))
 

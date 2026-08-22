@@ -7,16 +7,27 @@
 	import Search from '@lucide/svelte/icons/search';
 	import HelpCircle from '@lucide/svelte/icons/help-circle';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
+	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import PhoneCall from '@lucide/svelte/icons/phone-call';
 	import Package from '@lucide/svelte/icons/package';
 	import Compass from '@lucide/svelte/icons/compass';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import PublicQuickServiceCard from '$lib/components/public-quick-service-card.svelte';
 	import PublicEmergencyBanner from '$lib/components/public-emergency-banner.svelte';
-	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';
+	import {
+		FamilySearchModal,
+		PublicHeroMetrics,
+		PublicPageShell
+	} from '$lib/features/public-portal';
+	import { BookingModal } from '$lib/features/public-register';
 	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
 
 	let { data }: { data: PageData } = $props();
+
+	// Booking and family search open in place (CR-070 / T-71) — a citizen looking
+	// for shelter should not lose the landing page they just found.
+	let bookingOpen = $state(false);
+	let searchOpen = $state(false);
 
 	// Real alerts logic should be implemented later, removing demo data
 	const alerts: { name: string; capacity: string; variant: string }[] = [];
@@ -115,7 +126,7 @@
 				icon={ShieldAlert}
 				iconClass="bg-danger-muted/30 text-danger"
 			>
-				<PublicActionBtn disabled>ลงทะเบียน (เร็วๆนี้)</PublicActionBtn>
+				<PublicActionBtn onclick={() => (bookingOpen = true)}>จองเข้าศูนย์ล่วงหน้า</PublicActionBtn>
 			</PublicQuickServiceCard>
 
 			<!-- สำหรับผู้ใจบุญ / บริจาค -->
@@ -156,7 +167,9 @@
 				icon={Search}
 				iconClass="bg-accent-purple-muted/50 text-accent-purple"
 			>
-				<PublicActionBtn href="/search">ค้นหารายบุคคลด่วนที่สุด</PublicActionBtn>
+				<PublicActionBtn onclick={() => (searchOpen = true)}
+					>ค้นหารายบุคคลด่วนที่สุด</PublicActionBtn
+				>
 			</PublicQuickServiceCard>
 		</div>
 	</section>
@@ -275,7 +288,58 @@
 						>ศูนย์เตือนภัย ปภ. พายุคุกคาม</span
 					>
 				</a>
+
+				{#if data.configData?.phone_number || data.configData?.line_oa_url || data.configData?.facebook_url}
+					<div class="mt-4 border-t border-white/10 pt-4">
+						<h3 class="mb-3 text-sm font-bold text-white/90">สอบถามข้อมูลเพิ่มเติม</h3>
+						<div class="flex flex-col gap-2">
+							{#if data.configData?.phone_number}
+								<a
+									href="tel:{data.configData.phone_number}"
+									class="flex items-center justify-between rounded-xl bg-white/10 px-5 py-3 font-bold transition-colors hover:bg-white/20"
+								>
+									<div class="flex items-center gap-3">
+										<PhoneCall class="h-4 w-4 text-white" />
+										<span class="text-sm text-white">โทร {data.configData.phone_number}</span>
+									</div>
+									<span class="rounded-lg bg-black/20 px-3 py-1 text-[11px] text-white"
+										>สายตรงศูนย์ฯ</span
+									>
+								</a>
+							{/if}
+							{#if data.configData?.line_oa_url}
+								<a
+									href={data.configData.line_oa_url}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="flex items-center justify-between rounded-xl bg-[#00B900] px-5 py-3 font-bold transition-colors hover:bg-[#009900]"
+								>
+									<div class="flex items-center gap-3">
+										<MessageCircle class="h-4 w-4 text-white" />
+										<span class="text-sm text-white">LINE Official</span>
+									</div>
+								</a>
+							{/if}
+							{#if data.configData?.facebook_url}
+								<a
+									href={data.configData.facebook_url}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="flex items-center justify-between rounded-xl bg-[#1877F2] px-5 py-3 font-bold transition-colors hover:bg-[#166FE5]"
+								>
+									<div class="flex items-center gap-3">
+										<ExternalLink class="h-4 w-4 text-white" />
+										<span class="text-sm text-white">Facebook Page</span>
+									</div>
+								</a>
+							{/if}
+						</div>
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>
 </PublicPageShell>
+
+<BookingModal bind:open={bookingOpen} />
+<FamilySearchModal bind:open={searchOpen} />

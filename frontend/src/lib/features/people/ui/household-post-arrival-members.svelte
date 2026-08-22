@@ -3,7 +3,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { checkEvacueeHouseholdConflict, useSearchEvacuees } from '../index';
+	import { checkEvacueeHouseholdConflict, useSearchEvacuees, STATUS_LABELS } from '../index';
 	import type { Evacuee, Household } from '../domain/people';
 	import { toast } from 'svelte-sonner';
 
@@ -100,15 +100,6 @@
 		}
 		selectedMembers = selectedMembers.filter((m) => m._id !== id);
 	}
-
-	const STATUS_LABELS: Record<string, string> = {
-		pre_registered: 'ลงทะเบียนล่วงหน้า',
-		active: 'อยู่ในศูนย์',
-		temporary_leave: 'ออกชั่วคราว',
-		transferred: 'ย้ายศูนย์',
-		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
-		deceased: 'เสียชีวิต'
-	};
 </script>
 
 <div class="mx-auto w-full max-w-4xl space-y-6">
@@ -198,6 +189,16 @@
 											<ShieldAlert class="size-3" />
 											สังกัด: {conflict.label}
 										</Badge>
+									{:else if evacuee.current_stay.status !== 'active'}
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											disabled
+											class="bg-slate-100 text-slate-400"
+										>
+											{STATUS_LABELS[evacuee.current_stay.status] ?? 'ยังไม่เช็คอิน'}
+										</Button>
 									{:else}
 										<Button
 											type="button"

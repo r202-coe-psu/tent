@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-14
+updated: 2026-08-21
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้
 ---
 
@@ -148,11 +148,57 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `GET /public/v1/needs` | — |
 | `POST /public/v1/donations` | เบอร์โทร (+OTP เมื่อ `public_otp_required` เปิด) |
 | `GET /public/v1/donations/{tracking_token}` | token |
+| `PATCH /public/v1/donations/{tracking_token}` | token |
+| `DELETE /public/v1/donations/{tracking_token}` | token |
 | `GET /public/v1/transparency/*` | — |
+| `POST /api/public/v1/registrations` | CAPTCHA + rate-limit (BFF-only, ไม่มีบน FastAPI) |
+| `POST /api/public/v1/registrations/lookup` | รหัสการจอง + เบอร์โทร (BFF-only) |
+
+> **หมายเหตุ (CR-070/T-71):** สอง endpoint ล่างเป็น **BFF-only** — อยู่บน SvelteKit เท่านั้น
+> (`frontend/src/routes/api/public/v1/registrations/**`) และเขียน CouchDB ตรงผ่าน
+> `putAsPublicWriter` (CouchDB user `public_writer` ไม่มี role → ผ่าน `validate_doc_update`).
+> **ไม่มี path คู่กันบน FastAPI** เพราะ booking ต้องกันที่ทันทีตาม D-BOOK-OCC=C ซึ่งรอ
+> projection Mongo ไม่ได้ และ QR ต้องสแกนที่ประตูได้ทันที. Auth ของทุก `/public/v1/*` บน
+> FastAPI ยังเป็น Bearer `EXTERNAL_API_SECRET` ตาม CR-063.
+
+**`PATCH /public/v1/donations/{tracking_token}`** — donor แก้การจองของตัวเอง (CR-080).
+Body รับได้ทั้ง `courier_tracking_no` (DN-6) และ `items` อย่างใดอย่างหนึ่งหรือทั้งคู่:
+
+```jsonc
+{ "items": [{ "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg" }] }
+```
+
+`items` เป็น **ชุดเต็มที่ต้องการให้เป็น** ไม่ใช่ delta — ลบรายการ = ไม่ส่งมันมา. ระบบคิด
+ส่วนต่างกับที่จองไว้เดิมเอง แล้ว release ก่อน reserve เสมอ เพื่อให้การย้ายจำนวนระหว่าง item
+ไม่ชนเพดานของตัวเอง.
+
+| สถานะ | ความหมาย |
+| --- | --- |
+| `200` | แก้สำเร็จ — บันทึก `revisions[]` เพิ่ม 1 รายการ |
+| `400` | สถานะไม่ใช่ `declared` แล้ว (เจ้าหน้าที่เริ่มประเมิน) |
+| `409 NEED_FULL` | โควตาไม่พอ — **ของเดิมไม่เปลี่ยนเลย** ทุกการจองที่ทำไปในคำขอนี้ถูกคืนกลับ |
+| `429` | rate-limit ต่อ IP (ไม่มีเพดานจำนวนครั้งต่อใบจอง) |
+
+TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก `declared_at` เดิม
+
+### 5.1 External plane `/external/v1` (CR-062, CR-079 M2 Integration)
+
+สำหรับหน่วยงานและระบบภายนอก (เช่น ระบบ M2) เรียกใช้งาน:
+
+| Endpoint | Method | Auth | Response |
+| --- | --- | --- | --- |
+| `/external/v1/shelters` | GET | `Authorization: Bearer <token>` หรือ `X-API-Key` | รายการศูนย์พักพิง (`shelter_id`, `shelter_name`, `lat`, `long`) กรองตาม `status` |
+| `/external/v1/persons/shelter-residency` | GET | `Authorization: Bearer <token>` หรือ `X-API-Key` | สถานะการเข้าพัก (`shelter_id`, `shelter_name`, `checkin_datetime`, `status: CHECKED_IN\|CHECKED_OUT`) ค้นหาจาก `?cid=...` |
 
 ## 6. สิ่งที่ตั้งใจ "ไม่มี"
 
 - ไม่มี REST CRUD สำหรับ doc ปฏิบัติการ (evacuee/movement/stock/...) — ใช้ sync plane เท่านั้น
+  **ข้อยกเว้นเดียว (CR-070):** public booking สร้าง `evacuee` หนึ่ง doc ผ่าน BFF
+  (`POST /api/public/v1/registrations`) เพราะผู้จองไม่มี session จึงเข้า sync plane ไม่ได้
+  — เป็น intake action ที่ปิดตาย ไม่ใช่ CRUD surface: ไม่มี GET/PUT/PATCH/DELETE รายตัว,
+  สร้างได้อย่างเดียว, สถานะบังคับเป็น `pre_registered`, และอ่านกลับได้เฉพาะผ่าน
+  `/lookup` ด้วยรหัส+เบอร์ที่ตรงกัน. แก้ไข/ยกเลิกหลังจากนั้นเป็นงาน staff บน sync plane
+  (เทียบเคียง `PATCH /public/v1/donations/{token}` ของ CR-052 ที่เขียน `donation` doc)
 - ไม่มี JWT/refresh-token layer — template เดิม (`auth-interceptor`, `mock-api.js`) ไม่ใช้
 - ไม่มี EOC / Open API ในรุ่นนี้ (deferred — จะเป็น service แยกอ่าน central)
 - ไม่มี endpoint อ่านข้อมูลรายบุคคลใน public plane

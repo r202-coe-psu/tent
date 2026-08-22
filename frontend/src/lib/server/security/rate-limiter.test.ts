@@ -49,3 +49,43 @@ describe('RateLimiter', () => {
 		expect(limiter.check('ip5')).toBe(true); // ip5 allowed
 	});
 });
+
+describe('donation limiter budgets', () => {
+	/**
+	 * These were one shared 3-per-minute limiter, which made a single edit cost three
+	 * requests — open the ticket, save, refetch — so a donor could edit once a minute
+	 * at best. CR-080 says they may edit as often as they like, bounded only by the IP
+	 * limit, so the budgets are split by what each surface actually exposes.
+	 */
+	it('keeps creating a booking tight, since that is the abuse vector', async () => {
+		const { donationIpLimiter, donationPhoneLimiter } = await import('./rate-limiter');
+		for (const limiter of [donationIpLimiter, donationPhoneLimiter]) {
+			const key = `create-${Math.random()}`;
+			expect([1, 2, 3].map(() => limiter.check(key))).toEqual([true, true, true]);
+			expect(limiter.check(key)).toBe(false);
+		}
+	});
+
+	it('leaves room to edit a booking more than once a minute', async () => {
+		const { donationEditLimiter } = await import('./rate-limiter');
+		const key = `edit-${Math.random()}`;
+		// One edit costs a save plus the refetch that follows it.
+		expect(Array.from({ length: 10 }, () => donationEditLimiter.check(key))).not.toContain(false);
+		expect(donationEditLimiter.check(key)).toBe(false);
+	});
+
+	it('does not let reading your own ticket eat the write budget', async () => {
+		const { donationEditLimiter, donationReadLimiter } = await import('./rate-limiter');
+		const key = `read-${Math.random()}`;
+		for (let i = 0; i < 20; i++) donationReadLimiter.check(key);
+		// Reads are idempotent and token-gated; they must not spend what edits need.
+		expect(donationEditLimiter.check(key)).toBe(true);
+	});
+
+	it('still caps reads, since each one reaches FastAPI and Mongo', async () => {
+		const { donationReadLimiter } = await import('./rate-limiter');
+		const key = `read-cap-${Math.random()}`;
+		for (let i = 0; i < 30; i++) donationReadLimiter.check(key);
+		expect(donationReadLimiter.check(key)).toBe(false);
+	});
+});
