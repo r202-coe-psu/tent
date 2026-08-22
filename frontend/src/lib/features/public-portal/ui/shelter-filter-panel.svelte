@@ -19,6 +19,10 @@
 		type GeoUnavailableReason
 	} from '../data/geolocation';
 
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_FILTER_PANEL_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+
 	interface Filters {
 		search?: string;
 		province?: string;
@@ -68,6 +72,8 @@
 	let selectedSubdistrict = $state<string>('');
 	let distanceValue = $state<string>('5');
 
+	const t = $derived(getTranslation(PUBLIC_FILTER_PANEL_I18N, langState.current));
+
 	$effect(() => {
 		searchQuery = filters.search ?? '';
 		selectedProvince = filters.province ?? '';
@@ -82,14 +88,14 @@
 	let locationData = $state<{ province: string; district: string; subdistrict: string }[]>([]);
 
 	let provincesList = $derived([
-		{ label: 'จังหวัด (ทั้งหมด)', value: '' },
+		{ label: t.provincePlaceholder, value: '' },
 		...[...new Set((locationData || []).map((d) => d.province))]
 			.sort()
 			.map((p) => ({ label: p, value: p }))
 	]);
 
 	let districtsList = $derived([
-		{ label: 'อำเภอ (ทั้งหมด)', value: '' },
+		{ label: t.districtPlaceholder, value: '' },
 		...[
 			...new Set(
 				(locationData || [])
@@ -102,7 +108,7 @@
 	]);
 
 	let subdistrictsList = $derived([
-		{ label: 'ตำบล (ทั้งหมด)', value: '' },
+		{ label: t.subdistrictPlaceholder, value: '' },
 		...[
 			...new Set(
 				(locationData || [])
@@ -126,16 +132,16 @@
 	let geoHint = $derived.by(() => {
 		switch (geoReason) {
 			case 'insecure':
-				return 'ต้องเปิดผ่าน HTTPS หรือ localhost จึงใช้รัศมีจากตำแหน่งได้';
+				return t.geoInsecure;
 			case 'policy':
-				return 'เบราว์เซอร์บล็อกการเข้าถึงตำแหน่งในหน้านี้';
+				return t.geoPolicy;
 			case 'denied':
-				return 'ไม่ได้รับอนุญาตให้ใช้ตำแหน่ง — แสดงศูนย์ทั้งหมด';
+				return t.geoDenied;
 			case 'unsupported':
 			case 'unavailable':
-				return 'ใช้ตำแหน่งไม่ได้ — แสดงศูนย์ทั้งหมด';
+				return t.geoUnsupported;
 			default:
-				return locating ? 'กำลังขอตำแหน่ง...' : '';
+				return locating ? t.geoLocating : '';
 		}
 	});
 
@@ -197,7 +203,7 @@
 >
 	<div class="mb-4 flex shrink-0 items-center gap-2">
 		<Filter class="h-4 w-4 text-primary" />
-		<h3 class="font-bold text-foreground">ค้นหาและตัวกรอง</h3>
+		<h3 class="font-bold text-foreground">{t.title}</h3>
 	</div>
 
 	<form method="GET" {action} class="flex min-h-0 flex-1 flex-col">
@@ -205,14 +211,16 @@
 			<div class="space-y-4">
 				<!-- Search -->
 				<div class="space-y-1.5">
-					<Label for="search" class="text-xs font-semibold text-muted-foreground">ค้นหา</Label>
+					<Label for="search" class="text-xs font-semibold text-muted-foreground"
+						>{t.searchLabel}</Label
+					>
 					<div class="relative">
 						<Input
 							id="search"
 							name="q"
 							type="text"
 							bind:value={searchQuery}
-							placeholder="ชื่อศูนย์..."
+							placeholder={t.searchPlaceholder}
 							class="w-full rounded-xl pl-9"
 						/>
 						<Search class="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
@@ -220,10 +228,12 @@
 				</div>
 				<!-- Province -->
 				<div class="w-full space-y-1.5">
-					<Label for="province" class="text-xs font-semibold text-muted-foreground">จังหวัด</Label>
+					<Label for="province" class="text-xs font-semibold text-muted-foreground"
+						>{t.provinceLabel}</Label
+					>
 					<SearchSelect
 						name="province"
-						placeholder="จังหวัด (ทั้งหมด)"
+						placeholder={t.provincePlaceholder}
 						bind:value={selectedProvince}
 						options={provincesList}
 					/>
@@ -231,11 +241,12 @@
 
 				<!-- District -->
 				<div class="w-full space-y-1.5">
-					<Label for="district" class="text-xs font-semibold text-muted-foreground">อำเภอ/เขต</Label
+					<Label for="district" class="text-xs font-semibold text-muted-foreground"
+						>{t.districtLabel}</Label
 					>
 					<SearchSelect
 						name="district"
-						placeholder="อำเภอ (ทั้งหมด)"
+						placeholder={t.districtPlaceholder}
 						bind:value={selectedDistrict}
 						options={districtsList}
 					/>
@@ -244,11 +255,11 @@
 				<!-- Sub-district -->
 				<div class="w-full space-y-1.5">
 					<Label for="subdistrict" class="text-xs font-semibold text-muted-foreground"
-						>ตำบล/แขวง</Label
+						>{t.subdistrictLabel}</Label
 					>
 					<SearchSelect
 						name="subdistrict"
-						placeholder="ตำบล (ทั้งหมด)"
+						placeholder={t.subdistrictPlaceholder}
 						bind:value={selectedSubdistrict}
 						options={subdistrictsList}
 					/>
@@ -256,17 +267,16 @@
 
 				<!-- Type -->
 				<div class="space-y-1.5">
-					<Label for="type" class="text-xs font-semibold text-muted-foreground"
-						>ประเภทศูนย์พักพิง</Label
+					<Label for="type" class="text-xs font-semibold text-muted-foreground">{t.typeLabel}</Label
 					>
 					<Select.Root type="single" name="type" value={filters.type ?? ''}>
 						<Select.Trigger class="w-full rounded-xl">
-							<Select.Value placeholder="ประเภท (ทั้งหมด)" />
+							<Select.Value placeholder={t.typePlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
-							<Select.Item value="">ประเภท (ทั้งหมด)</Select.Item>
-							{#each availableTypes as t (t)}
-								<Select.Item value={t}>{t}</Select.Item>
+							<Select.Item value="">{t.typePlaceholder}</Select.Item>
+							{#each availableTypes as tp (tp)}
+								<Select.Item value={tp}>{tp}</Select.Item>
 							{/each}
 						</Select.Content>
 					</Select.Root>
@@ -274,7 +284,7 @@
 
 				<!-- Distance radio pills -->
 				<div class="space-y-3">
-					<div class="text-xs font-bold text-foreground">รัศมีจากตำแหน่งของคุณ (GPS)</div>
+					<div class="text-xs font-bold text-foreground">{t.radiusLabel}</div>
 					<div
 						class="flex gap-2 rounded-lg border border-border bg-muted/20 p-1"
 						title={geoHint || undefined}
@@ -290,7 +300,8 @@
 									: 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
 								onclick={() => selectDistance(km)}
 							>
-								{km} กม.
+								{km}
+								{t.km}
 							</button>
 						{/each}
 					</div>
@@ -317,9 +328,9 @@
 						<Label
 							for="hide_full_ui"
 							class="cursor-pointer text-sm leading-tight font-bold text-foreground"
-							>แสดงเฉพาะศูนย์ที่ยังไม่เต็ม</Label
+							>{t.hideFullTitle}</Label
 						>
-						<span class="text-[11px] text-muted-foreground">ซ่อนศูนย์พักพิงที่ความจุเต็มแล้ว</span>
+						<span class="text-[11px] text-muted-foreground">{t.hideFullDesc}</span>
 					</div>
 				</div>
 
@@ -330,15 +341,13 @@
 							<Accordion.Trigger
 								class="px-4 py-3 transition-colors hover:bg-muted/50 hover:no-underline"
 							>
-								<span class="text-sm font-bold text-primary-dark"
-									>ตัวกรองขั้นสูง (Advanced Filters)</span
-								>
+								<span class="text-sm font-bold text-primary-dark">{t.advancedFilters}</span>
 							</Accordion.Trigger>
 							<Accordion.Content class="pb-2">
 								<div class="space-y-6 px-2 pt-2 pb-2">
 									<!-- Category 1 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
-										<div class="text-[13px] font-bold text-foreground">1. การดูแลกลุ่มเปราะบาง</div>
+										<div class="text-[13px] font-bold text-foreground">{t.cat1}</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
@@ -348,7 +357,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>มีเตียงสำหรับผู้ป่วยติดเตียง</span
+													>{t.vulBed}</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -359,7 +368,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>รองรับผู้พิการ / วีลแชร์เข้าถึงได้</span
+													>{t.vulWheelchair}</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -370,7 +379,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>มีพื้นที่สำหรับเด็กอ่อน / หญิงตั้งครรภ์</span
+													>{t.vulInfant}</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -381,7 +390,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>รองรับผู้สูงอายุ</span
+													>{t.vulElderly}</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -392,14 +401,14 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>มีห้องแยกกักโรค (Isolation Zone)</span
+													>{t.vulIsolation}</span
 												>
 											</label>
 										</div>
 									</div>
 									<!-- Category 2 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
-										<div class="text-[13px] font-bold text-foreground">2. นโยบายสัตว์เลี้ยง</div>
+										<div class="text-[13px] font-bold text-foreground">{t.cat2}</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
@@ -409,7 +418,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>🐶 อนุญาตสัตว์เลี้ยงทั่วไป (สุนัขเล็ก, แมว)</span
+													>{t.petGen}</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -420,7 +429,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>🦮 อนุญาตสุนัขขนาดใหญ่</span
+													>{t.petLarge}</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -431,14 +440,14 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>🐄 มีพื้นที่รองรับปศุสัตว์ (วัว, ควาย, แพะ)</span
+													>{t.petLive}</span
 												>
 											</label>
 										</div>
 									</div>
 									<!-- Category 3 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
-										<div class="text-[13px] font-bold text-foreground">3. พื้นที่จอดยานพาหนะ</div>
+										<div class="text-[13px] font-bold text-foreground">{t.cat3}</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
@@ -448,7 +457,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>🚗 มีที่จอดรถยนต์ / กระบะ (และยังไม่เต็ม)</span
+													>{t.parkCar}</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -459,7 +468,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>🏍️ มีที่จอดรถจักรยานยนต์</span
+													>{t.parkMotor}</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -470,7 +479,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>🛥️ มีจุดจอดเรือ / เรืออพยพ</span
+													>{t.parkBoat}</span
 												>
 											</label>
 										</div>
@@ -478,7 +487,7 @@
 									<!-- Category 4 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
 										<div class="text-[13px] font-bold text-foreground">
-											4. สาธารณูปโภคและความปลอดภัย
+											{t.cat4}
 										</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -489,7 +498,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>📶 มีสัญญาณ Wi-Fi ของศูนย์ให้บริการ</span
+													>{t.utilWifi}</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -500,7 +509,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>🍲 มีโรงครัวกลาง (อาหาร)</span
+													>{t.facKitchen}</span
 												>
 											</label>
 											<label class="group flex cursor-pointer items-start gap-3">
@@ -511,7 +520,7 @@
 												/>
 												<span
 													class="text-xs leading-tight font-medium text-muted-foreground transition-colors group-hover:text-foreground"
-													>🛡️ มีพื้นที่ปลอดภัยสำหรับเด็กและสตรี</span
+													>{t.facWomen}</span
 												>
 											</label>
 										</div>
@@ -532,10 +541,10 @@
 				size="lg"
 				class="w-1/3 rounded-xl font-bold text-muted-foreground shadow-sm hover:bg-muted"
 			>
-				ล้างค่า
+				{t.clearBtn}
 			</Button>
 			<Button type="submit" size="lg" class="w-2/3 rounded-xl font-bold shadow-sm">
-				ค้นหาและกรองข้อมูล
+				{t.submitBtn}
 			</Button>
 		</div>
 	</form>

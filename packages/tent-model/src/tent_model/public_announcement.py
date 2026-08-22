@@ -16,6 +16,8 @@ class PublicAnnouncement(Document):
     id: str = Field(alias="_id", description="The CouchDB announcement document ID")
     title: str
     description: str
+    title_en: str | None = None
+    description_en: str | None = None
     severity: Literal["info", "warning", "emergency"]
     is_active: bool
     updated_at: datetime
