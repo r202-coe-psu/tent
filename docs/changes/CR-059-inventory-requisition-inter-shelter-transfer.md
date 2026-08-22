@@ -74,6 +74,47 @@ flowchart TD
 
 ---
 
+### 🏗️ การตัดสินใจทางสถาปัตยกรรม — Cross-DB Write Pattern สำหรับ Flow 1 (T-13)
+
+> **Approved by project owner — 2026-08-22.** ยืนยันแนวทาง: ให้ `stock_transfer` ใช้ pattern เดียวกับ
+> `referral` ประเภท `capacity` (การส่งต่อ/ย้ายผู้ประสบภัยข้ามศูนย์ — CR-045, CR-046) ซึ่งเป็นโค้ดที่ merge
+> เข้า `develop` แล้วและผ่าน review รอบหนึ่ง
+
+**สาเหตุ:** สถาปัตยกรรมปัจจุบันคือ **1 ศูนย์ = 1 CouchDB database** (`shelter_{shelter_code}`)
+session ของเจ้าหน้าที่ศูนย์หนึ่งเขียนข้าม DB ของอีกศูนย์ไม่ได้ (`_security.roles` จำกัดสิทธิ์) ขณะที่
+`stock_transfer` เดิม (`schema.md` §2.2) ถูกออกแบบให้อยู่ใน `shelter_{shelter_code}` — ทำให้ requirement
+ข้อ "Real-time Sync: หลังปลายทางยืนยันรับเข้าคลังสำเร็จ สถานะฝั่งต้นทางเปลี่ยนเป็น 'ส่งมอบสำเร็จ'
+อัตโนมัติ" (ข้อ 4.4 ด้านบน) ทำไม่ได้จริงด้วย session ปกติ — เป็นสาเหตุที่ branch เดิม (`team-C-T-13`,
+ดู DoD ใน Notion) ค้างสถานะ "Pause" อยู่ที่ 3/6 ข้อ (ไม่ผ่าน: กันของหาย/double-count, audit trail
+ครบสองฝั่ง)
+
+**แนวทางที่อนุมัติ — ย้าย `stock_transfer` ไปอยู่ `central_ops`:**
+1. **ย้าย doc type** `stock_transfer` ออกจาก `schema.md` §2.2 (`shelter_{shelter_code}`) ไปเป็นหัวข้อ
+   ใหม่ใน `schema.md` §5 (`central_ops`) — mark §2.2 เดิมเป็น superseded ชี้มาที่หัวข้อใหม่ (ตาม
+   `docs/change-management.md` §4 "อย่าลบ mark superseded")
+2. **Write path ผ่าน server route เท่านั้น** (`src/routes/api/back-office/transfer/**`) ใช้ `adminRaw`
+   (`$lib/server/couch-admin.ts`) เหมือน `referral.server-repository.ts` — client (`operations.remote.ts`)
+   เลิกเขียน `stock_transfer` ตรงผ่าน `/couch` proxy แบบที่ branch เดิมทำ เปลี่ยนเป็น `fetch()` เข้า route
+   ใหม่แทน (`stock_ledger`/`stock_transfer`'s own ledger entries ยังคงเขียนที่ `shelter_{code}` ของแต่ละ
+   ฝั่งตามปกติ — ย้ายเฉพาะตัว `stock_transfer` doc)
+3. **Mirror-write เพื่อ live-query** — คัดลอก pattern จาก `referral.remote.ts` (`sent` → mirror เข้า
+   `shelter_{to}`) มาใช้กับ `dispatched` → mirror เข้า `shelter_{to_shelter}`
+   - **ส่วนต่อขยายเกินจาก referral เดิม:** referral mirror ทางเดียว (ต้นทาง→ปลายทาง ตอน `sent` เท่านั้น
+     ฝั่งต้นทางไม่ได้รับ push กลับตอนปลายทาง accept/reject — อาศัย refetch/invalidate เอา) แต่ CR-059
+     ข้อ 4.4 ต้องการ sync **ย้อนกลับ** ไปต้นทางตอนปลายทางยืนยันรับด้วย จึงต้องเพิ่ม mirror-write อีกทาง
+     ตอน `received` → เขียนกลับเข้า `shelter_{from_shelter}` ด้วย (ของใหม่ ไม่ใช่ copy ตรงจาก referral)
+   - เพิ่ม `stock_transfer` เข้า type-map ของ `startOperationsLiveQuery` (`application/queries.ts`)
+     เพื่อให้ `_changes` feed ของแต่ละศูนย์ที่ subscribe อยู่แล้วรับสำเนานี้ต่อ
+4. **หมายเหตุความคลาดเคลื่อนของเอกสารเดิม:** `schema.md` §5.4 เขียนไว้ว่า referral "ไม่ต้อง Mirror
+   เอกสารระหว่างฐานข้อมูล" แต่โค้ดจริง (`referral.remote.ts`, CR-045 §2) mirror จริงตอน `sent` — ไม่ได้
+   แก้ไขจุดนี้ตอนนี้ (นอก scope ของ CR-059) แต่บันทึกไว้เผื่อสับสนตอนอ้างอิง §5.4 เป็นแบบอย่าง
+
+**ยังไม่ตัดสินใจ (แยกจาก decision นี้):** รูปแบบฟิลด์เต็มของ `stock_transfer` หลัง CR-059 (lot-based
+split allocation, driver/plate บังคับ, destination lot ID, สถานะคัดค้าน/ระงับ) — decision นี้ครอบคลุม
+แค่ที่เก็บข้อมูล + cross-DB write path เท่านั้น ฟิลด์เพิ่มเติมต้องตกลง schema_v ใหม่แยกอีกรอบ
+
+---
+
 ### 2. Flow ที่ 2: การเบิกแจกจ่ายสิ่งของทั่วไป 2 ขั้นตอน (2-Step Item Distribution Flow)
 *เปรียบเทียบสเปกใหม่ใน SmartShelter_สเปคระบบคลังสินค้า.md (หัวข้อ 5) เทียบกับสเปคเดิมใน docs/*
 
@@ -138,8 +179,14 @@ flowchart TD
 ---
 
 ## Impact (ผลกระทบต่อระบบ)
-- **Docs:** `docs/data/schema.md` (§4.1, §4.2, §4.3, §4.4, §4.5, §5.1-5.4)
-- **Code:** `frontend/src/lib/features/transfers/`, `frontend/src/lib/features/inventory/`, `frontend/src/lib/features/distribution/`
+- **Docs:** `docs/data/schema.md` (§4.1, §4.2, §4.3, §4.4, §4.5, §5.1-5.4) — ตัวเลขหัวข้ออ้างอิงจาก
+  spec ต้นทาง (SmartShelter_สเปคระบบคลังสินค้า.md) ไม่ตรงกับเลขหัวข้อจริงใน `schema.md` ของ repo นี้
+  (`stock_transfer`/`stock_ledger` จริงคือ §2.2/§2.1); **เพิ่มเติมจาก decision 2026-08-22:**
+  `docs/data/schema.md` §2.2 (mark superseded) → หัวข้อใหม่ใน §5 (`central_ops`)
+- **Code:** `frontend/src/lib/features/transfers/`, `frontend/src/lib/features/inventory/`,
+  `frontend/src/lib/features/distribution/` — ไม่ตรงกับโครงสร้าง repo จริง งานตัดสต็อก/ledger/transfer
+  ทั้งหมดอยู่ที่ **`frontend/src/lib/features/operations/`** (domain/data/application/ui) เพิ่ม
+  server route ใหม่ที่ `frontend/src/routes/api/back-office/transfer/**`
 
 ---
 
@@ -150,3 +197,9 @@ flowchart TD
 
 ## Decision Log
 - 2026-07-25 — proposed (กำหนดสเปกปรับปรุงระบบคำร้องเบิกจ่าย โอนย้ายข้ามศูนย์ NFI 2 ขั้นตอน และ UI Safety)
+- 2026-08-22 — **approved (บางส่วน)** by project owner — เฉพาะแนวทาง cross-DB write pattern ของ
+  Flow 1 (T-13): ย้าย `stock_transfer` ไป `central_ops` + เขียนผ่าน server route (`adminRaw`) แบบ
+  `referral` ประเภท `capacity` (CR-045/CR-046) พร้อม mirror-write สองทาง (dispatch→dest,
+  receive→source ย้อนกลับ — ส่วนหลังเป็นของใหม่เกินจาก referral เดิม) รายละเอียดเต็มอยู่ในหัวข้อ
+  "🏗️ การตัดสินใจทางสถาปัตยกรรม" ด้านบน — **field ละเอียดของ `stock_transfer` (lot split, driver/plate,
+  dispute state) ยังไม่ approve ในรอบนี้** ต้องคุยแยกอีกรอบก่อน bump `schema_v`
