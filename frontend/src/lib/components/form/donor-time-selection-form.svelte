@@ -27,23 +27,32 @@
 
 	onMount(async () => {
 		try {
-			const res = await fetch('/api/v1/shelters');
-			const data = await res.json();
-			if (Array.isArray(data)) shelters = data;
+			const res = await fetch('/api/public/v1/needs');
+			if (res.ok) {
+				const data = await res.json();
+				if (Array.isArray(data)) {
+					shelters = data.map((s: { code: string; name: string }) => ({
+						code: s.code,
+						name: s.name
+					}));
+				}
+			}
 		} catch {
 			toast.error('ไม่สามารถโหลดรายชื่อศูนย์พักพิงได้ กรุณาลองใหม่อีกครั้ง');
 		}
 	});
 
-	async function submitDonation() {
+	function handleConfirmBookingRequest() {
 		donationStore.errorMessage = '';
 
 		if (!donationStore.deliveryMethod) {
 			donationStore.errorMessage = 'กรุณาเลือกวิธีการจัดส่ง';
+			toast.error(donationStore.errorMessage);
 			return;
 		}
 		if (donationStore.deliveryMethod === 'self_dropoff' && !donationStore.vehicleType) {
 			donationStore.errorMessage = 'กรุณาเลือกประเภทยานพาหนะ';
+			toast.error(donationStore.errorMessage);
 			return;
 		}
 		if (
@@ -52,21 +61,35 @@
 			(!selectedDate || !donationStore.slotTime)
 		) {
 			donationStore.errorMessage = 'กรุณาเลือกวันที่และช่วงเวลา';
+			toast.error(donationStore.errorMessage);
 			return;
 		}
 		if (donationStore.deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress) {
 			donationStore.errorMessage = 'กรุณาระบุที่อยู่สำหรับไปรับของ';
+			toast.error(donationStore.errorMessage);
 			return;
 		}
 		if (!donationStore.donorName.trim()) {
-			donationStore.errorMessage = 'กรุณากรอกชื่อผู้บริจาค';
+			donationStore.errorMessage = 'กรุณากรอกชื่อผู้บริจาคใน Step 2';
+			toast.error(donationStore.errorMessage);
 			return;
 		}
 		if (!donationStore.donorPhone.trim()) {
-			donationStore.errorMessage = 'กรุณากรอกเบอร์โทรศัพท์';
+			donationStore.errorMessage = 'กรุณากรอกเบอร์โทรศัพท์ใน Step 2';
+			toast.error(donationStore.errorMessage);
+			return;
+		}
+		if (!donationStore.shelterCode) {
+			donationStore.errorMessage = 'กรุณาเลือกศูนย์พักพิงปลายทาง';
+			toast.error(donationStore.errorMessage);
 			return;
 		}
 
+		submitDonation();
+	}
+
+	async function submitDonation() {
+		donationStore.errorMessage = '';
 		donationStore.isSubmitting = true;
 		// E2E may inject a token; otherwise require real reCAPTCHA (no silent skip in dev).
 		let token = window.__captchaToken || '';
@@ -180,14 +203,14 @@
 	}
 </script>
 
-<div class="rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm">
+<div class="rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-xs md:p-8">
 	<div class="mb-6 flex items-center gap-3 border-b border-slate-100 pb-4">
-		<div class="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-600">
-			<Navigation class="h-5 w-5" />
+		<div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#fff3e0]">
+			<Navigation class="h-5 w-5 text-[#ff9f0a]" />
 		</div>
 		<div>
 			<h3 class="text-xl font-bold text-slate-800">ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์</h3>
-			<p class="text-xs font-medium text-slate-400">ระบุวิธีการจัดส่งและเวลาที่จะมาถึง</p>
+			<p class="mt-1 text-xs font-medium text-slate-500">ระบุวิธีการจัดส่งและเวลาที่จะมาถึง</p>
 		</div>
 	</div>
 
@@ -201,7 +224,7 @@
 				<button
 					type="button"
 					onclick={() => (isItemsModalOpen = true)}
-					class="flex cursor-pointer items-center gap-0.5 text-xs font-black text-primary hover:underline"
+					class="flex cursor-pointer items-center gap-0.5 text-xs font-black text-[#013481] hover:underline"
 				>
 					ดูทั้งหมด
 				</button>
@@ -222,7 +245,7 @@
 					</span>
 				{/each}
 				{#if donationStore.items.length > 5}
-					<span class="block pl-4 text-left text-[11px] font-black text-primary hover:underline">
+					<span class="block pl-4 text-left text-[11px] font-black text-[#013481] hover:underline">
 						+ ดูทั้งหมดอีก {donationStore.items.length - 5} รายการ (กดเพื่อดูทั้งหมด)
 					</span>
 				{/if}
@@ -232,7 +255,7 @@
 		<!-- 1. วิธีการจัดส่ง -->
 		<div>
 			<span class="mb-3 block text-sm font-bold text-slate-800">
-				วิธีการจัดส่ง <span class="text-danger">*</span>
+				วิธีการจัดส่ง <span class="text-red-500">*</span>
 			</span>
 			<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
 				<button
@@ -271,7 +294,7 @@
 		<!-- กรณีส่งไปรษณีย์ -->
 		{#if donationStore.deliveryMethod === 'parcel'}
 			<div class="animate-in space-y-4 duration-200 fade-in">
-				<h2 class="block text-sm font-bold text-slate-800">ข้อมูลขนส่งพัสดุ</h2>
+				<h4 class="block text-sm font-bold text-slate-800">ข้อมูลขนส่งพัสดุ</h4>
 				<div class="grid gap-4 md:grid-cols-2">
 					<div>
 						<Label class="mb-1.5 block text-xs font-bold text-slate-600">คาดว่าจะถึง (ETA)</Label>
@@ -299,7 +322,7 @@
 		{#if donationStore.deliveryMethod === 'self_dropoff'}
 			<div class="animate-in space-y-3 duration-200 fade-in">
 				<span class="block text-sm font-bold text-slate-800">
-					ประเภทยานพาหนะที่จะนำมาส่ง <span class="text-danger">*</span>
+					ประเภทยานพาหนะที่จะนำมาส่ง <span class="text-red-500">*</span>
 				</span>
 				<p class="text-xs leading-relaxed text-slate-500">
 					ข้อมูลนี้สำคัญมาก เพื่อให้จุดรับของกะพื้นที่จอดและเตรียมคนยกของ
@@ -334,7 +357,7 @@
 		{#if donationStore.deliveryMethod === 'shelter_pickup'}
 			<div class="animate-in space-y-2 duration-200 fade-in">
 				<label class="block text-sm font-bold text-slate-800" for="pickup-address">
-					ที่อยู่ / จุดนัดรับของ <span class="text-danger">*</span>
+					ที่อยู่ / จุดนัดรับของ <span class="text-red-500">*</span>
 				</label>
 				<textarea
 					id="pickup-address"
@@ -352,8 +375,8 @@
 					class="mb-3 block flex items-center gap-2 text-sm font-bold text-slate-800"
 					for="shelter-select"
 				>
-					<MapPin class="h-4.5 w-4.5 text-slate-500" /> เลือกศูนย์รับบริจาค
-					<span class="text-danger">*</span>
+					<MapPin class="h-4 w-4 text-slate-500" /> เลือกศูนย์รับบริจาค
+					<span class="text-red-500">*</span>
 					{#if donationStore.shelterLocked}
 						<span
 							class="ml-2 inline-flex items-center gap-1 rounded-md bg-slate-200/60 px-2 py-0.5 text-xs font-semibold text-slate-600"
@@ -381,10 +404,10 @@
 			{#if donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup'}
 				<div class="animate-in space-y-4 duration-200 fade-in">
 					<span class="block flex items-center gap-2 text-sm font-bold text-slate-800">
-						<CalendarIcon class="h-4.5 w-4.5 text-slate-500" /> เลือกวันที่และช่วงเวลา {donationStore.deliveryMethod ===
+						<CalendarIcon class="h-4 w-4 text-slate-500" /> เลือกวันที่และช่วงเวลา {donationStore.deliveryMethod ===
 						'shelter_pickup'
 							? 'ที่ต้องการให้ไปรับ'
-							: 'ที่จะนำของมาส่ง'} <span class="text-danger">*</span>
+							: 'ที่จะนำของมาส่ง'} <span class="text-red-500">*</span>
 					</span>
 
 					<div class="w-full">
@@ -463,7 +486,7 @@
 					donationStore.deliveryMethod === 'shelter_pickup') &&
 					!donationStore.slotTime) ||
 				(donationStore.deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress.trim())}
-			onclick={submitDonation}
+			onclick={handleConfirmBookingRequest}
 			class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013481] py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-[#002244] active:scale-95 disabled:opacity-50"
 		>
 			{#if donationStore.isSubmitting}
@@ -475,6 +498,7 @@
 	</div>
 </div>
 
+<!-- OTP Verification Modal Dialog (v8.5 Feature) -->
 <!-- Items Modal Dialog -->
 {#if isItemsModalOpen}
 	<div
@@ -492,7 +516,8 @@
 				<button
 					type="button"
 					onclick={() => (isItemsModalOpen = false)}
-					class="rounded-lg p-1 text-white/80 transition hover:bg-white/10 hover:text-white"
+					class="cursor-pointer rounded-lg p-1 text-white/80 transition hover:bg-white/10 hover:text-white"
+					aria-label="ปิด"
 				>
 					<X class="h-6 w-6" />
 				</button>
@@ -505,7 +530,7 @@
 				>
 					รายการที่คุณเลือก ({donationStore.items.length} รายการ)
 				</div>
-				<div class="divide-y divide-slate-100 font-['Prompt']">
+				<div class="divide-y divide-slate-100">
 					{#each donationStore.items as item, index (item.id)}
 						{@const dotClass = getDotColor(index)}
 						<div class="flex items-start gap-3 py-3 text-left first:pt-0 last:pb-0">

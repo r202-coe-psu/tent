@@ -22,7 +22,12 @@ import {
 	type GasCylinderType,
 	type GasCylinderTypeInput
 } from '../domain/kitchen';
-import { stockBalance, isStockLedger, type StockLedger } from '$lib/features/operations';
+import {
+	createStockLedger,
+	stockBalance,
+	isStockLedger,
+	type StockLedger
+} from '$lib/features/operations';
 import { qtyGt, qtyNeg } from '$lib/utils/qty';
 import type { KitchenRepository } from './kitchen.repository';
 
@@ -74,24 +79,29 @@ export class KitchenRemoteRepository implements KitchenRepository {
 			}
 		}
 
-		const ledgerIds = issuedItems.map(() => makeDocId('stock_ledger', ulid()));
+		// The requisition stores its ledger `_id`s, so they must exist before either
+		// doc is built — mint the ULIDs first, then hand each one to
+		// `createStockLedger` (CR-055 R7: no writer assembles a ledger doc by hand,
+		// or it escapes the reason ↔ ref_id invariant). `occurred_at` is passed
+		// explicitly so every row of one requisition shares a timestamp.
+		const ledgerUlids = issuedItems.map(() => ulid());
+		const ledgerIds = ledgerUlids.map((id) => makeDocId('stock_ledger', id));
 		const requisition = createKitchenRequisition(input, ledgerIds, ctx);
 		const ts = now();
-		const ledgerEntries = issuedItems.map((item, i) => ({
-			_id: ledgerIds[i],
-			type: 'stock_ledger' as const,
-			schema_v: 3,
-			shelter_code: ctx.shelterCode,
-			created_at: ts,
-			updated_at: ts,
-			created_by: ctx.createdBy,
-			item_id: item.item_id,
-			qty: qtyNeg(item.qty_issued),
-			unit: item.unit,
-			reason: 'requisition' as const,
-			ref_id: requisition._id,
-			occurred_at: ts
-		}));
+		const ledgerEntries = issuedItems.map((item, i) =>
+			createStockLedger(
+				{
+					item_id: item.item_id,
+					qty: qtyNeg(item.qty_issued),
+					unit: item.unit,
+					reason: 'requisition',
+					ref_id: requisition._id,
+					occurred_at: ts
+				},
+				ctx,
+				ledgerUlids[i]
+			)
+		);
 
 		await bulkDocs(this.dbName, [requisition, ...ledgerEntries]);
 		return requisition;

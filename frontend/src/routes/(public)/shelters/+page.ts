@@ -54,8 +54,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			radius_km: hasUser && !Number.isNaN(maxDistance) && maxDistance > 0 ? maxDistance : undefined,
 			fetch
 		});
-	} catch (e) {
-		console.warn('Failed to load public shelters:', e);
+	} catch {
 		data = { shelters: [], count: 0, as_of: new Date().toISOString() };
 	}
 
@@ -95,7 +94,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	return {
 		shelters,
 		count: shelters.length,
-		as_of: data?.as_of ?? new Date().toISOString(),
+		as_of: data.as_of ?? new Date().toISOString(),
 		summary: {
 			shelters_total: shelters.length,
 			shelters_open: openCount

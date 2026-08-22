@@ -54,6 +54,38 @@ export class RateLimiter {
 	}
 }
 
-// Singleton instances for specific limits
+// Singleton instances, one per surface rather than one shared budget.
+//
+// They were a single 3-per-minute limiter for every donation route, which meant one
+// edit cost three: loading the ticket, saving, and the refetch after saving. CR-080
+// settled that a donor may edit as often as they like, held only by the IP limit — so
+// the limit has to leave room for editing at all.
+//
+// The numbers follow what each surface exposes:
+
+/** Creating a booking. The abuse vector CR-005 set this at — deliberately tight. */
 export const donationIpLimiter = new RateLimiter(60000, 3);
+/** Same, per phone number, so one abuser cannot spread across IPs. */
 export const donationPhoneLimiter = new RateLimiter(60000, 3);
+/**
+ * Changing a booking that already exists: edit, courier number, cancel.
+ *
+ * Reaching one requires the tracking token, which is 128 bits of unguessable, and the
+ * blast radius is a single record the caller already owns. Ten a minute is generous for
+ * a person and still caps a script.
+ */
+export const donationEditLimiter = new RateLimiter(60000, 10);
+/**
+ * Reading one's own ticket. Idempotent, token-gated, and the page refetches after every
+ * change — counting it against the write budget is what made editing twice impossible.
+ * Still limited, because each read reaches FastAPI and Mongo.
+ */
+export const donationReadLimiter = new RateLimiter(60000, 30);
+
+// Public booking (CR-070 / T-71). Separate buckets from donations so a busy
+// donation drive cannot lock a family out of booking a place to sleep.
+// One household books once; 3/min per IP still allows correcting a typo.
+export const registerIpLimiter = new RateLimiter(60000, 3);
+export const registerPhoneLimiter = new RateLimiter(60000, 3);
+// Lookup is a read but also an enumeration surface — hold it tighter.
+export const registerLookupIpLimiter = new RateLimiter(60000, 10);

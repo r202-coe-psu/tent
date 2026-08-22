@@ -13,7 +13,17 @@ from worker.masking import sha256_hex, shelter_db_name
 
 logger = logging.getLogger(__name__)
 
-POLL_INTERVAL_SECONDS = 15
+#: How long a public booking can sit in Mongo before CouchDB — and therefore the needs
+#: board and the booking pre-check, which both read CouchDB — knows about it.
+#:
+#: That lag is the window two donors can book the same last units in: each reads a state
+#: where the other's booking has not landed. The atomic counter is the backstop, but it
+#: only enforces ``reserved_qty ≤ qty_target`` and knows nothing about warehouse stock,
+#: so a shelter already holding goods can still be over-collected inside the window.
+#: Closing that properly means giving the counter a stock-aware ceiling; until then a
+#: shorter poll is what keeps the exposure small. Three seconds costs one extra indexed
+#: Mongo query per second across all shelters.
+POLL_INTERVAL_SECONDS = 3
 
 
 async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> bool:
@@ -26,7 +36,11 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
     couch_doc = {
         "_id": donation.id if donation.id.startswith("donation:") else f"donation:{donation.id}",
         "type": "donation",
-        "schema_v": 2,
+        # 4 for revisions[] (CR-080). This line read 2 until now, two versions behind:
+        # CR-038 moved items[].qty to qty_str and took schema.md §2.3 to 3, but only the
+        # walk-in writer followed, so every public donation was stamped a version it had
+        # already outgrown.
+        "schema_v": 4,
         "channel": "public",
         "shelter_code": donation.shelter_code,
         "campaign_id": donation.campaign_id,
@@ -50,6 +64,9 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
         "items": donation.items_declared,
         "logistics": donation.logistics,
         "status": donation.status,
+        # Donor edits made before this reached CouchDB (CR-080) — carry the log across
+        # so the shelter sees the full history, not just the final shape.
+        "revisions": donation.revisions,
         "source": "public",
     }
 

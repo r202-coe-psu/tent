@@ -8,6 +8,11 @@ from tent_model.public_shelter import PublicShelter
 
 from .schemas import ShelterDetailResponse, ShelterItem, ShelterListResponse
 
+# Stay statuses that hold a place at a shelter (CR-070 D-BOOK-OCC=C, FR-66):
+# a web booking reserves the seat the moment it is made, so `pre_registered`
+# counts alongside `active`. Kitchen/SOP head-counts stay `active`-only (CR-022).
+OCCUPANCY_STATUSES = ("active", "pre_registered")
+
 
 class ShelterUseCase:
     """Read-only queries against the public_shelters projection."""
@@ -128,7 +133,9 @@ class ShelterUseCase:
 
         occupancy = 0
         if mapped_status in ("OPEN", "FULL"):
-            occupancy = await PublicPerson.find({"shelter_code": code, "status": "active"}).count()
+            occupancy = await PublicPerson.find(
+                {"shelter_code": code, "status": {"$in": list(OCCUPANCY_STATUSES)}}
+            ).count()
 
         capacity_total = m.get("capacity") or 0
         capacity_available = max(0, capacity_total - occupancy)

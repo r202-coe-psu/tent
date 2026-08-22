@@ -7,10 +7,12 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Heart from '@lucide/svelte/icons/heart';
 	import PackageSearch from '@lucide/svelte/icons/package-search';
+	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import { BookingModal } from '$lib/features/public-register';
 
 	function isActive(path: string) {
 		if (path === '/') {
@@ -39,6 +41,8 @@
 	let mobileMenuOpen = $state(false);
 	let donationsMenuOpen = $state(false);
 	let donationsMenuEl: HTMLDivElement | undefined = $state();
+	// Booking has no route of its own — the navbar opens the dialog in place.
+	let bookingOpen = $state(false);
 
 	function toggleMobileMenu() {
 		mobileMenuOpen = !mobileMenuOpen;
@@ -53,14 +57,15 @@
 	}
 
 	function handleWindowPointerDown(event: PointerEvent) {
-		if (!donationsMenuOpen || !donationsMenuEl) return;
-		if (!donationsMenuEl.contains(event.target as Node)) {
+		const target = event.target as Node;
+		if (donationsMenuOpen && donationsMenuEl && !donationsMenuEl.contains(target)) {
 			closeDonationsMenu();
 		}
 	}
 
 	function handleWindowKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape') closeDonationsMenu();
+		if (event.key !== 'Escape') return;
+		closeDonationsMenu();
 	}
 
 	afterNavigate(() => {
@@ -249,6 +254,18 @@
 					สืบค้นญาติ
 				</a>
 
+				<button
+					type="button"
+					onclick={() => {
+						mobileMenuOpen = false;
+						bookingOpen = true;
+					}}
+					class="flex w-full cursor-pointer items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
+				>
+					<ClipboardCheck class="h-5 w-5" />
+					จองเข้าศูนย์ล่วงหน้า
+				</button>
+
 				<a
 					href={resolve('/donations')}
 					onclick={() => (mobileMenuOpen = false)}
@@ -287,3 +304,5 @@
 		</div>
 	{/if}
 </header>
+
+<BookingModal bind:open={bookingOpen} />

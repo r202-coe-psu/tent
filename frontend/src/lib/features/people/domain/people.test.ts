@@ -40,7 +40,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(6);
+		expect(e.schema_v).toBe(7);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -56,6 +56,39 @@ describe('createEvacuee', () => {
 	it('accepts "no phone" as null', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'other', phone: null }, ctx);
 		expect(e.phone).toBeNull();
+	});
+
+	// CR-070 D-REG-VIA — public booking writes `web`; the enum stays additive so
+	// existing `app` / `import` / `paper` docs need no backfill.
+	it('carries registered_via "web" for public bookings', () => {
+		const e = createEvacuee(
+			{
+				first_name: 'ก',
+				last_name: 'ข',
+				gender: 'female',
+				phone: '0812345678',
+				registered_via: 'web'
+			},
+			ctx
+		);
+		expect(e.registered_via).toBe('web');
+		expect(e.current_stay.status).toBe('pre_registered');
+	});
+
+	it('rejects an unknown registration channel', () => {
+		expect(() =>
+			createEvacuee(
+				{
+					first_name: 'ก',
+					last_name: 'ข',
+					gender: 'male',
+					phone: '0812345678',
+					// `api` is reserved for CR-071 and must not be accepted yet.
+					registered_via: 'api' as never
+				},
+				ctx
+			)
+		).toThrow();
 	});
 
 	it('rejects an empty first name', () => {

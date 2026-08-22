@@ -21,6 +21,10 @@ class DonationBuffer(Document):
 	id: str = Field(alias="_id")
 	shelter_code: str
 	donor: DonorBuffer
+	# each item may carry "reserved_qty" (qty_str) = amount actually locked into
+	# DonationNeedCounter.reserved_qty for that item (CR-045) — only present for
+	# items with both campaign_id + item_id; absent for free-text/no-campaign items,
+	# which bypass the counter entirely. cancel()/expire() release exactly this amount.
 	items_declared: list[dict[str, Any]] = Field(default_factory=list)
 	logistics: dict[str, Any] | None = None
 	campaign_id: str | None = None
@@ -28,6 +32,10 @@ class DonationBuffer(Document):
 	tracking_token: str
 	tracking_token_hash: str
 	status: str = "declared"
+	# Donor edits to items_declared, snapshot before/after (CR-080). Kept here as well as
+	# on the CouchDB doc because a donation can be edited before inbound has persisted it
+	# — inbound copies these across so the log survives the hand-off. Append-only.
+	revisions: list[dict[str, Any]] = Field(default_factory=list)
 	synced_to_couch: bool = False
 	created_at: datetime
 	expires_at: datetime | None = None

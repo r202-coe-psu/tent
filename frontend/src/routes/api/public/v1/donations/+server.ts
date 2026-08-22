@@ -1,6 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { donationPreDeclarationInputSchema, computeNeeds } from '$lib/features/donations';
+import {
+	donationPreDeclarationInputSchema,
+	computeNeeds,
+	pickCampaignForItems
+} from '$lib/features/donations';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
@@ -8,8 +12,7 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { fetchDocs } from '$lib/server/donation-docs';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
-import type { DonationCampaign } from '$lib/features/operations';
-import { qtyGt } from '$lib/utils/qty';
+import type { DonationCampaign, StockLedger } from '$lib/features/operations';
 
 const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
 
@@ -75,35 +78,33 @@ export const POST = async ({ request, getClientAddress }) => {
 		const shelterCode = parsed.data.shelter_code;
 		const dbName = `shelter_${shelterCode.toLowerCase()}`;
 
-		// โหลด campaigns + donations ครั้งเดียวแล้วใช้ซ้ำทุกการตรวจ (needs / booking_ref / slot)
-		const [campaigns, donations] = await Promise.all([
+		// โหลด campaigns + donations + stock ครั้งเดียวแล้วใช้ซ้ำทุกการตรวจ
+		const [campaigns, donations, stockLedgers] = await Promise.all([
 			fetchDocs<DonationCampaign>(dbName, 'donation_campaign:').then((docs) =>
 				docs.filter((c) => c && c.type === 'donation_campaign' && c.status === 'open')
 			),
 			fetchDocs<PublicDonationDoc>(dbName, 'donation:').then((docs) =>
 				docs.filter((d) => d && d.type === 'donation')
+			),
+			// T-22 ปิดรับเมื่อ on-hand + reserved ≥ target — ถ้าไม่นับคลัง หน้าเว็บจะรับ
+			// ของที่ศูนย์ปิดรับไปแล้ว (ตรงกับสูตรของ deriveNeedAvailability ฝั่งหลังบ้าน)
+			fetchDocs<StockLedger>(dbName, 'stock_ledger:').then((docs) =>
+				docs.filter((l) => l && l.type === 'stock_ledger')
 			)
 		]);
 
-		const { remaining, itemCampaign } = computeNeeds(campaigns, donations);
+		const { campaignRemaining } = computeNeeds(campaigns, donations, stockLedgers);
 
 		// 3.5 Best-effort re-check needs_open vs ยอดที่ขอ → NEED_FULL (CR-005 DN-4)
 		// หมายเหตุ: read→decide→write ยังไม่ atomic จริง (ไม่มี validate_doc_update/optimistic lock)
-		// — atomicity เต็มรูปเป็นงาน T-02. ปฏิเสธเมื่อของเหลือน้อยกว่าที่ผู้บริจาคขอ (ไม่ใช่แค่ ≤ 0)
-		// ผูก campaign เฉพาะ item_id ที่ส่งมาจากการ์ด needs เท่านั้น — ไม่เดา item_id จาก free_text
-		// (เลิก substring heuristic ที่อาจ bind campaign ผิด); free-text ล้วน → ไม่นับต่อ campaign
-		let resolvedCampaignId: string | null = null;
-		for (const it of parsed.data.items) {
-			const itemId = it.item_id;
-			if (!itemId) continue;
-			if (remaining.has(itemId) && qtyGt(it.qty, remaining.get(itemId) ?? '0')) {
-				return json({ success: false, error: 'NEED_FULL', item_id: itemId }, { status: 409 });
-			}
-			// ผูก donation เข้ากับ campaign ที่ต้องการ item นี้ เพื่อให้ needs_open ลดลงตามจริง
-			if (!resolvedCampaignId && itemCampaign.has(itemId)) {
-				resolvedCampaignId = itemCampaign.get(itemId) ?? null;
-			}
+		// — atomicity เต็มรูปเป็นงาน T-02; ชั้นที่กันจริงคือ donation_need_counter (CR-047)
+		// เลือก campaign ที่รับไหวจริง ไม่ใช่ตัวแรกที่บังเอิญขอ item นี้ — ยอดรวมข้ามแคมเปญ
+		// จองในใบเดียวไม่ได้ เพราะ donation หนึ่งใบผูก campaign_id ได้ตัวเดียว
+		const pick = pickCampaignForItems(campaignRemaining, parsed.data.items);
+		if (!pick.ok) {
+			return json({ success: false, error: 'NEED_FULL', item_id: pick.itemId }, { status: 409 });
 		}
+		const resolvedCampaignId = pick.campaignId;
 
 		// 3.6 Atomic re-check slot เต็ม/closed → SLOT_FULL
 		if (parsed.data.logistics?.slot) {

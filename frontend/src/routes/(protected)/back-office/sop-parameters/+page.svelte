@@ -1,10 +1,12 @@
 <script lang="ts">
 	import type { SopMaster, SopOverride } from '$lib/features/sop-ratios';
 	import {
-		useSopProfiles,
+		useAllMasterProfiles,
 		useActiveSopOverride,
 		useSetOverrideInactive,
-		useCreateInitialOverride
+		useCreateInitialOverride,
+		useSetMasterActive,
+		createProfileSlug
 	} from '$lib/features/sop-ratios';
 	import {
 		SopTypeList,
@@ -28,40 +30,58 @@
 
 	// Modal / Drawer state
 	let bulkEditOpen = $state(false);
+	let createMasterOpen = $state(false);
 	let deactivateConfirmOpen = $state(false);
 	let historyProfile = $state<SopMaster | SopOverride | null>(null);
+	let selectedMasterSlug = $state('');
+	let viewedMasterVersion = $state<SopMaster | null>(null);
 
 	// Queries
-	const masterQuery = useSopProfiles();
-	const activeMaster = $derived(
-		masterQuery.data != null && masterQuery.data.length > 0
-			? [...masterQuery.data].sort((a, b) => b.version - a.version)[0]
-			: null
+	const masterQuery = useAllMasterProfiles();
+	const activeMaster = $derived(masterQuery.data?.find((profile) => profile.active) ?? null);
+	const activeMasterSlug = $derived(
+		activeMaster ? (activeMaster.slug ?? createProfileSlug(activeMaster.name)) : ''
+	);
+	const effectiveSelectedMasterSlug = $derived(selectedMasterSlug || activeMasterSlug);
+	const selectedMaster = $derived(
+		masterQuery.data?.find(
+			(profile) => (profile.slug ?? createProfileSlug(profile.name)) === effectiveSelectedMasterSlug
+		) ??
+			activeMaster ??
+			null
 	);
 
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? '');
 	const overrideQuery = useActiveSopOverride(() => shelterCode);
 	const activeOverride = $derived(overrideQuery.data ?? null);
 
-	const activeProfile = $derived(activeContext === 'master' ? activeMaster : activeOverride);
+	const effectiveActiveContext = $derived(shelterCode ? activeContext : 'master');
+	const viewedProfile = $derived(
+		viewedMasterVersion &&
+			(viewedMasterVersion.slug ?? createProfileSlug(viewedMasterVersion.name)) ===
+				effectiveSelectedMasterSlug
+			? viewedMasterVersion
+			: null
+	);
+	const activeProfile = $derived(
+		effectiveActiveContext === 'master' ? (viewedProfile ?? selectedMaster) : activeOverride
+	);
 	// Mutations
 	const setInactiveMutation = useSetOverrideInactive(() => shelterCode);
 	const initialOverrideMutation = useCreateInitialOverride(() => shelterCode);
+	const setMasterActiveMutation = useSetMasterActive();
 
-	const disabled = $derived(setInactiveMutation.isPending || initialOverrideMutation.isPending);
+	const disabled = $derived(
+		setInactiveMutation.isPending ||
+			initialOverrideMutation.isPending ||
+			setMasterActiveMutation.isPending
+	);
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 	const canEditOverride = $derived(
 		isSA || (isShelterManager(roles) && shelterCodeFromRoles(roles) === shelterCode)
 	);
-
-	// Revert to Master context automatically if no shelter is selected
-	$effect(() => {
-		if (!shelterCode && activeContext === 'override') {
-			activeContext = 'master';
-		}
-	});
 
 	async function createInitialOverride() {
 		if (!activeMaster || !shelterCode) {
@@ -105,6 +125,21 @@
 	function handleViewHistory() {
 		historyProfile = activeProfile;
 	}
+
+	async function setMasterActive() {
+		if (!selectedMaster) {
+			toast.error('ไม่พบ Master Profile ที่เลือก');
+			return;
+		}
+		if (selectedMaster.active) return;
+		const createdBy = authStore.user?.name ?? 'unknown';
+		await setMasterActiveMutation.mutateAsync({ id: selectedMaster._id, createdBy });
+	}
+
+	function selectMaster(event: Event) {
+		selectedMasterSlug = (event.currentTarget as HTMLSelectElement).value;
+		viewedMasterVersion = null;
+	}
 </script>
 
 <svelte:head>
@@ -118,30 +153,76 @@
 		description="กำหนดพารามิเตอร์ SOP มาตรฐาน (Sphere Standard) สำหรับการคำนวณทรัพยากร และค่าปรับแต่งเฉพาะศูนย์พักพิง"
 	/>
 
+	{#if isSA && !masterQuery.isLoading && (masterQuery.data ?? []).length === 0}
+		<div class="rounded-xl border border-dashed p-6 text-center">
+			<p class="font-semibold">ยังไม่มี Master SOP Profile</p>
+			<button
+				class="mt-3 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white"
+				onclick={() => (createMasterOpen = true)}>สร้าง Master Profile แรก</button
+			>
+		</div>
+	{/if}
+
 	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
 		<SopTypeList bind:activeTab />
 
 		{#if activeTab === 'sphere_standard'}
 			{#if masterQuery.isLoading || (shelterCode && overrideQuery.isLoading)}
-				<div class="flex h-64 items-center justify-center rounded-xl border bg-card p-6 shadow-sm">
+				<div
+					class="flex min-h-[600px] items-center justify-center rounded-xl border bg-card p-6 shadow-sm"
+				>
 					<div
 						class="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary"
 					></div>
 				</div>
 			{:else}
-				<SopRatioTab
-					profile={activeProfile}
-					bind:activeContext
-					hasOverride={!!activeOverride}
-					{isSA}
-					{canEditOverride}
-					{shelterCode}
-					{disabled}
-					onEditAll={handleEditAll}
-					onCreateOverride={createInitialOverride}
-					onDeactivateOverride={deactivateOverride}
-					onViewHistory={handleViewHistory}
-				/>
+				<!-- Keep the master toolbar and ratios panel in the same grid column. -->
+				<div class="flex min-w-0 flex-col gap-3">
+					{#if isSA}
+						<div class="flex flex-wrap items-center gap-2">
+							<label for="master-profile" class="text-sm font-semibold">Master Profile</label>
+							<select
+								id="master-profile"
+								value={effectiveSelectedMasterSlug}
+								onchange={selectMaster}
+								class="rounded-md border bg-background px-3 py-2 text-sm"
+							>
+								{#each masterQuery.data ?? [] as profile (profile._id)}
+									<option value={profile.slug ?? createProfileSlug(profile.name)}
+										>{profile.active ? '[ใช้งาน] ' : ''}{profile.name} (v{profile.version})</option
+									>
+								{/each}
+							</select>
+							<button
+								class="rounded-md border px-3 py-2 text-sm font-semibold"
+								onclick={() => (createMasterOpen = true)}>สร้าง Master Profile</button
+							>
+							{#if selectedMaster}
+								<button
+									type="button"
+									class="rounded-md border px-3 py-2 text-sm font-semibold disabled:opacity-50"
+									disabled={disabled || selectedMaster.active}
+									onclick={setMasterActive}
+								>
+									{selectedMaster.active ? 'กำลังใช้งาน' : 'ตั้งเป็น Master หลัก'}
+								</button>
+							{/if}
+						</div>
+					{/if}
+					<SopRatioTab
+						profile={activeProfile}
+						bind:activeContext
+						hasOverride={!!activeOverride}
+						{isSA}
+						{canEditOverride}
+						{shelterCode}
+						{disabled}
+						onEditAll={handleEditAll}
+						onCreateOverride={createInitialOverride}
+						onDeactivateOverride={deactivateOverride}
+						onViewHistory={handleViewHistory}
+					/>
+				</div>
 			{/if}
 		{:else if activeTab === 'alert_threshold'}
 			<AlertThresholdEditor />
@@ -153,10 +234,21 @@
 	<SopEditForm profile={activeProfile} onClose={() => (bulkEditOpen = false)} />
 {/if}
 
+{#if createMasterOpen}
+	<SopEditForm mode="create" onClose={() => (createMasterOpen = false)} />
+{/if}
+
 {#if historyProfile}
 	<VersionHistoryDrawer
 		profile={historyProfile}
 		{activeMaster}
+		{isSA}
+		onViewVersion={(profile) => {
+			if (profile.type === 'sop_profile') {
+				viewedMasterVersion = profile;
+				activeContext = 'master';
+			}
+		}}
 		onClose={() => {
 			historyProfile = null;
 		}}

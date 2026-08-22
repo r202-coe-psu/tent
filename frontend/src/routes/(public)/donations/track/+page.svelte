@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import { onMount } from 'svelte';
 	import Search from '@lucide/svelte/icons/search';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
@@ -11,9 +13,14 @@
 	import { useDonationTrackSearch } from '$lib/features/donations';
 	import { PublicPageShell } from '$lib/features/public-portal';
 
-	let bookingRefInput = $state('');
-	let phoneInput = $state('');
+	// CR-052 §2.6: the donation ticket links here with ref + phone already filled in.
+	let bookingRefInput = $state(page.url.searchParams.get('ref') ?? '');
+	let phoneInput = $state(page.url.searchParams.get('phone') ?? '');
 	const trackSearch = useDonationTrackSearch();
+
+	onMount(() => {
+		if (bookingRefInput.trim() && phoneInput.trim()) handleSearch();
+	});
 
 	async function handleSearch() {
 		const bookingRef = bookingRefInput.trim().toUpperCase();
@@ -39,7 +46,7 @@
 	<title>ติดตามสถานะของบริจาค — Smart Shelter</title>
 </svelte:head>
 
-<PublicPageShell>
+<PublicPageShell maxWidth="max-w-5xl">
 	<a
 		href={resolve('/donations')}
 		class="mb-6 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"

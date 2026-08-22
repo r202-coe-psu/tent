@@ -73,6 +73,7 @@ vi.mock('$lib/features/operations', () => ({
 const mockGetActive = vi.fn();
 vi.mock('$lib/features/sop-ratios', () => ({
 	getActiveSopProfile: () => mockGetActive(),
+	getVerifiedActiveSopProfile: () => mockGetActive(),
 	SOP_RATIO_KIND: {
 		water_l_per_person_day: 'multiply',
 		drinking_water_l_per_person_day: 'multiply',
@@ -318,5 +319,21 @@ describe('DailyCalcRemoteRepository.get / listRange', () => {
 			kind: 'unsupported_schema',
 			documentId: created._id
 		});
+	});
+
+	it('T-31 fails closed and does not write or overwrite daily_calc when master pointer integrity fails', async () => {
+		const { SopMasterIntegrityError } = await import('$lib/utils/errors');
+		mockGetActive.mockRejectedValueOnce(
+			new SopMasterIntegrityError('pointer_missing', 'Active master pointer missing')
+		);
+
+		putDoc.mockClear();
+		await expect(repo().runOnDemand('2026-08-19', ctx)).rejects.toBeInstanceOf(
+			SopMasterIntegrityError
+		);
+
+		// Verified that putDoc was never called to create or overwrite daily_calc snapshot
+		expect(putDoc).not.toHaveBeenCalled();
+		expect(store.has('daily_calc:2026-08-19')).toBe(false);
 	});
 });
