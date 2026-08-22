@@ -7,13 +7,16 @@ export interface DonationItem {
 	unit: string;
 	condition?: string;
 	remark?: string;
+	image?: string;
 }
 
-export type TabStep = 'needs' | 'form' | 'time' | 'ticket';
+export type TabStep = 'needs' | 'shelter-details' | 'form' | 'time' | 'ticket';
 
 class DonationStore {
 	activeTab = $state<TabStep>('needs');
 	reachedStep = $state(1); // 1: needs, 2: form, 3: time, 4: ticket
+	flowMode = $state<'solicited' | 'unsolicited'>('solicited');
+	selectedShelterForNeeds = $state<string | null>(null);
 
 	donorName = $state('');
 	donorPhone = $state('');
@@ -36,12 +39,13 @@ class DonationStore {
 			name: '',
 			amount: 1,
 			unit: 'ชิ้น',
-			condition: '',
-			remark: ''
+			condition: 'new',
+			remark: '',
+			image: ''
 		}
 	]);
 
-	// ขั้น 3 — จุดส่งมอบ + วันเวลา (เก็บไว้โช๋วบนตั๋ว)
+	// ขั้น 3 — จุดส่งมอบ + วันเวลา (เก็บไว้โชว์บนตั๋ว)
 	selectedShelter = $state('');
 	selectedShelterName = $state('');
 	shelterLocked = $state(false); // true = มาจากการ์ด needs board → ล็อกศูนย์ปลายทาง (DN)
@@ -60,8 +64,9 @@ class DonationStore {
 			name: '',
 			amount: 1,
 			unit: 'ชิ้น',
-			condition: '',
-			remark: ''
+			condition: 'new',
+			remark: '',
+			image: ''
 		});
 	}
 
@@ -72,6 +77,8 @@ class DonationStore {
 	reset() {
 		this.activeTab = 'needs';
 		this.reachedStep = 1;
+		this.flowMode = 'solicited';
+		this.selectedShelterForNeeds = null;
 		this.donorName = '';
 		this.donorPhone = '';
 		this.donorLine = '';
@@ -95,8 +102,9 @@ class DonationStore {
 				name: '',
 				amount: 1,
 				unit: 'ชิ้น',
-				condition: '',
-				remark: ''
+				condition: 'new',
+				remark: '',
+				image: ''
 			}
 		];
 		this.captchaToken = '';

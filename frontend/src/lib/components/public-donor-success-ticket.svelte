@@ -5,9 +5,12 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Package from '@lucide/svelte/icons/package';
 	import Navigation from '@lucide/svelte/icons/navigation';
+	import Copy from '@lucide/svelte/icons/copy';
+	import Search from '@lucide/svelte/icons/search';
 	import X from '@lucide/svelte/icons/x';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
+	import { resolve } from '$app/paths';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import QRCode from 'qrcode';
 	import { toast } from 'svelte-sonner';
@@ -20,15 +23,27 @@
 	let courierError = $state('');
 	let qrCodeUrl = $state('');
 	let isItemsModalOpen = $state(false);
+	let isCopied = $state(false);
+
+	// CR-052 §2.6: hand the ref + phone to the track page so it can search on arrival.
+	const trackHref = $derived.by(() => {
+		const base = resolve('/donations/track');
+		const parts: string[] = [];
+		if (donationStore.bookingRef) parts.push(`ref=${encodeURIComponent(donationStore.bookingRef)}`);
+		if (donationStore.donorPhone)
+			parts.push(`phone=${encodeURIComponent(donationStore.donorPhone)}`);
+		return parts.length ? `${base}?${parts.join('&')}` : base;
+	});
 
 	const isPendingReview = $derived(
 		donationStore.deliveryMethod === 'shelter_pickup' ||
 			donationStore.items.reduce((acc, curr) => acc + curr.amount, 0) > 500 ||
+			donationStore.flowMode === 'unsolicited' ||
 			donationStore.items.some((item) => !item.item_id)
 	);
 
 	$effect(() => {
-		const token = donationStore.trackingToken;
+		const token = donationStore.trackingToken || donationStore.bookingRef;
 		if (!token) return;
 		QRCode.toDataURL(token, { margin: 1, width: 256 })
 			.then((url) => (qrCodeUrl = url))
@@ -49,6 +64,7 @@
 			const data = await res.json();
 			if (data.success) {
 				courierSaved = true;
+				toast.success('บันทึกเลขพัสดุเรียบร้อยแล้ว');
 			} else {
 				courierError = data.error || 'บันทึกเลขพัสดุไม่สำเร็จ';
 			}
@@ -56,6 +72,16 @@
 			courierError = 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์';
 		} finally {
 			savingCourier = false;
+		}
+	}
+
+	function handleCopyRef() {
+		const code = donationStore.bookingRef || donationStore.trackingToken;
+		if (code) {
+			navigator.clipboard.writeText(code);
+			isCopied = true;
+			toast.success('คัดลอกรหัสอ้างอิงแล้ว!');
+			setTimeout(() => (isCopied = false), 2000);
 		}
 	}
 
@@ -71,7 +97,7 @@
 	}
 </script>
 
-<div class="mx-auto w-full max-w-md animate-in font-['Prompt'] duration-300 fade-in">
+<div class="mx-auto w-full max-w-sm animate-in duration-300 fade-in">
 	<!-- Ticket Top Part (Voucher Header) -->
 	<div
 		class="{isPendingReview
@@ -92,7 +118,7 @@
 		</h3>
 		<p class="relative z-10 text-xs leading-relaxed font-medium text-white/80">
 			{isPendingReview
-				? 'เนื่องจากเป็นการเสนอสิ่งของทั่วไป หรือมีปริมาณที่มากเป็นพิเศษ ระบบได้ส่งรายการนี้ให้แอดมินประเมินความสามารถในการจัดเก็บของคลังแล้ว แอดมินจะติดต่อกลับให้เร็วที่สุดครับ'
+				? 'ระบบได้รับข้อมูลการบริจาคของคุณแล้ว และได้ส่งรายการนี้ให้แอดมินประเมินความสามารถในการจัดเก็บของคลัง แอดมินจะติดต่อกลับให้เร็วที่สุดครับ'
 				: 'แสดง QR Code นี้ให้ รปภ. หรือเจ้าหน้าที่ศูนย์'}
 		</p>
 
@@ -105,7 +131,7 @@
 		></div>
 	</div>
 
-	<!-- Ticket Bottom Part (Voucher Details) -->
+	<!-- Ticket Bottom Part (Voucher Details with Cutouts) -->
 	<div
 		class="relative rounded-b-3xl border-x border-b border-slate-200 bg-white p-6 text-center shadow-xl"
 	>
@@ -140,7 +166,7 @@
 				{donationStore.bookingRef || 'DN-XXXXXX'}
 			</div>
 			<div class="mt-2 text-[10px] font-semibold text-slate-400">TRACKING TOKEN</div>
-			<div class="font-mono text-xs font-bold text-primary select-all">
+			<div class="font-mono text-xs font-bold text-[#013365] select-all">
 				{donationStore.trackingToken || '-'}
 			</div>
 		</div>
@@ -217,11 +243,69 @@
 			</div>
 		</div>
 
+		<!-- วิธีติดตามสถานะการบริจาค (v8.5 Tracking Guide Card) -->
+		<div class="mt-8 rounded-2xl border border-slate-200/80 bg-slate-50 p-5 text-left">
+			<div class="mb-3 flex items-center gap-1.5 text-sm font-extrabold text-slate-800">
+				<ShieldCheck class="h-4 w-4 text-[#013365]" />
+				<span>วิธีติดตามสถานะการบริจาค</span>
+			</div>
+			<p class="mb-4 text-xs leading-relaxed font-bold text-slate-500">
+				บันทึกข้อมูลเหล่านี้ไว้เพื่อใช้ตรวจสอบสถานะการรับของภายหลัง
+			</p>
+
+			<div class="mb-4 grid grid-cols-2 gap-3">
+				<div
+					class="flex min-h-[72px] flex-col justify-between rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs"
+				>
+					<div>
+						<span class="mb-0.5 block text-[10px] font-bold tracking-wider text-slate-400 uppercase"
+							>รหัสอ้างอิง (Ref ID)</span
+						>
+						<span class="block truncate font-mono text-sm font-black text-slate-800 select-all">
+							{donationStore.bookingRef || 'DN-XXXXXX'}
+						</span>
+					</div>
+					<div class="mt-2 flex items-center justify-between">
+						<button
+							type="button"
+							onclick={handleCopyRef}
+							class="flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-bold transition-all duration-200 {isCopied
+								? 'border-emerald-200 bg-emerald-50 text-emerald-600'
+								: 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-[#013365]'}"
+						>
+							<Copy class="h-3 w-3" />
+							{isCopied ? 'คัดลอกแล้ว!' : 'คัดลอกรหัส'}
+						</button>
+					</div>
+				</div>
+
+				<div
+					class="flex min-h-[72px] flex-col justify-between rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs"
+				>
+					<div>
+						<span class="mb-0.5 block text-[10px] font-bold tracking-wider text-slate-400 uppercase"
+							>เบอร์โทรศัพท์</span
+						>
+						<span class="block truncate text-sm font-black text-slate-800 select-all">
+							{donationStore.donorPhone || 'ไม่ระบุ'}
+						</span>
+					</div>
+					<span class="mt-2 block text-[10px] font-medium text-slate-400">ใช้ตรวจสอบสถานะ</span>
+				</div>
+			</div>
+
+			<a
+				href={trackHref}
+				class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#013365] py-3 text-xs font-bold text-white shadow-xs transition-all duration-200 hover:bg-[#013365]/90"
+			>
+				<Search class="h-3.5 w-3.5" />
+				ตรวจสอบสถานะการบริจาคของฉัน
+			</a>
+		</div>
+
 		<!-- DN-6: courier tracking update for parcel method -->
 		{#if donationStore.deliveryMethod === 'parcel'}
-			<div
-				class="mt-6 mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left font-['Prompt']"
-			>
+			<div class="mt-6 mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left">
 				<div class="mb-2 flex items-center gap-2 text-xs font-bold text-slate-700">
 					<Truck class="h-4 w-4 text-slate-500" />
 					ส่งทางขนส่งพัสดุ? เพิ่ม/แก้ไขเลขติดตาม (Tracking No.)
@@ -253,7 +337,7 @@
 		<button
 			type="button"
 			onclick={() => toast.success('กำลังเปิดแผนที่เพื่อนำทางไปยังศูนย์พักพิง')}
-			class="mt-8 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 py-4 text-[15px] font-bold text-white shadow-md transition-colors hover:bg-slate-800"
+			class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 py-4 text-[15px] font-bold text-white shadow-md transition-colors hover:bg-slate-800"
 		>
 			<Navigation class="h-4.5 w-4.5" /> นำทางด้วย Google Maps
 		</button>
@@ -280,9 +364,7 @@
 			<div class="flex shrink-0 items-center justify-between bg-slate-900 p-5 text-white">
 				<div class="flex items-center gap-2">
 					<Package class="h-5 w-5 text-white" />
-					<h4 class="font-['Prompt'] text-lg font-black tracking-tight">
-						รายการสิ่งของบริจาคทั้งหมด
-					</h4>
+					<h4 class="text-lg font-black tracking-tight">รายการสิ่งของบริจาคทั้งหมด</h4>
 				</div>
 				<button
 					type="button"
@@ -300,7 +382,7 @@
 				>
 					รายการที่คุณเลือก ({donationStore.items.length} รายการ)
 				</div>
-				<div class="divide-y divide-slate-100 font-['Prompt']">
+				<div class="divide-y divide-slate-100">
 					{#each donationStore.items as item, index (item.id)}
 						{@const dotClass = getDotColor(index)}
 						<div class="flex items-start gap-3 py-3 text-left first:pt-0 last:pb-0">
