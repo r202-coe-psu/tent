@@ -6,6 +6,7 @@
 export const PUBLIC_STAY_STATUSES = [
 	'pre_registered',
 	'active',
+	'in_shelter',
 	'temporary_leave',
 	'transferred',
 	'checked_out',
@@ -20,6 +21,7 @@ export const PUBLIC_STAY_STATUS_LABELS: Record<'th' | 'en', Record<PublicStaySta
 	th: {
 		pre_registered: 'ลงทะเบียนล่วงหน้า',
 		active: 'เข้าพักแล้ว',
+		in_shelter: 'พักพิงอยู่ในศูนย์',
 		temporary_leave: 'ออกชั่วคราว',
 		transferred: 'ย้ายไปแล้ว',
 		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
@@ -29,6 +31,7 @@ export const PUBLIC_STAY_STATUS_LABELS: Record<'th' | 'en', Record<PublicStaySta
 	en: {
 		pre_registered: 'Pre-registered',
 		active: 'Checked-in',
+		in_shelter: 'In Shelter',
 		temporary_leave: 'Temporary Leave',
 		transferred: 'Transferred',
 		checked_out: 'Checked-out/Returned',
@@ -39,6 +42,7 @@ export const PUBLIC_STAY_STATUS_LABELS: Record<'th' | 'en', Record<PublicStaySta
 
 const TONES: Record<PublicStayStatus, StayStatusTone> = {
 	active: 'safe',
+	in_shelter: 'safe',
 	pre_registered: 'pending',
 	temporary_leave: 'pending',
 	transferred: 'moved',
@@ -53,7 +57,10 @@ function asKnown(status: string | null | undefined): PublicStayStatus | null {
 		: null;
 }
 
-export function publicStayStatusLabel(status: string | null | undefined, lang: 'th' | 'en' = 'th'): string {
+export function publicStayStatusLabel(
+	status: string | null | undefined,
+	lang: 'th' | 'en' = 'th'
+): string {
 	const known = asKnown(status);
 	if (known) return PUBLIC_STAY_STATUS_LABELS[lang][known];
 	return status?.trim() || (lang === 'th' ? 'ไม่ทราบสถานะ' : 'Unknown status');
@@ -65,5 +72,5 @@ export function publicStayStatusTone(status: string | null | undefined): StaySta
 }
 
 export function isInShelterStatus(status: string | null | undefined): boolean {
-	return status === 'active';
+	return status === 'active' || status === 'in_shelter';
 }
