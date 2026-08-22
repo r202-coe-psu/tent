@@ -106,25 +106,34 @@ class EvacueeUseCase:
 
     async def _find_persons(self, parsed: ParsedSearchQuery) -> list[PublicPerson]:
         if parsed.kind == SearchQueryKind.NATIONAL_ID:
-            person = await PublicPerson.find_one(
-                PublicPerson.national_id_hash == national_id_hash(parsed.normalized),
-                {"search_excluded": {"$ne": True}},
+            return (
+                await PublicPerson.find(
+                    PublicPerson.national_id_hash == national_id_hash(parsed.normalized),
+                    PublicPerson.search_excluded != True,  # noqa: E712
+                )
+                .limit(NAME_RESULT_LIMIT)
+                .to_list()
             )
-            return [person] if person else []
 
         if parsed.kind == SearchQueryKind.PASSPORT:
-            person = await PublicPerson.find_one(
-                PublicPerson.passport_hash == passport_hash(parsed.normalized),
-                {"search_excluded": {"$ne": True}},
+            return (
+                await PublicPerson.find(
+                    PublicPerson.passport_hash == passport_hash(parsed.normalized),
+                    PublicPerson.search_excluded != True,  # noqa: E712
+                )
+                .limit(NAME_RESULT_LIMIT)
+                .to_list()
             )
-            return [person] if person else []
 
         if parsed.kind == SearchQueryKind.PHONE:
-            person = await PublicPerson.find_one(
-                PublicPerson.phone_hash == phone_hash(parsed.normalized),
-                {"search_excluded": {"$ne": True}},
+            return (
+                await PublicPerson.find(
+                    PublicPerson.phone_hash == phone_hash(parsed.normalized),
+                    PublicPerson.search_excluded != True,  # noqa: E712
+                )
+                .limit(NAME_RESULT_LIMIT)
+                .to_list()
             )
-            return [person] if person else []
 
         return await self._find_by_name(parsed.normalized)
 
@@ -189,7 +198,7 @@ class EvacueeUseCase:
         members = await PublicPerson.find(
             PublicPerson.household_id == person.household_id,
             PublicPerson.shelter_code == person.shelter_code,
-            {"search_excluded": {"$ne": True}},
+            PublicPerson.search_excluded != True,  # noqa: E712
         ).to_list()
 
         return [

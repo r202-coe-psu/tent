@@ -2,7 +2,8 @@ import type { PageLoad } from './$types';
 import {
 	listPublicShelters,
 	toPublicShelterCard,
-	type PublicShelterListResponse
+	type PublicShelterListResponse,
+	type PublicShelterItem
 } from '$lib/features/public-portal';
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -41,7 +42,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const hasUser = !Number.isNaN(userLatNum) && !Number.isNaN(userLngNum);
 	const maxDistance = distance ? parseFloat(distance) : NaN;
 
-	let data: PublicShelterListResponse;
+	let data: PublicShelterListResponse | null;
 	try {
 		data = await listPublicShelters({
 			province: province || undefined,
@@ -57,7 +58,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		data = { shelters: [], count: 0, as_of: new Date().toISOString() };
 	}
 
-	const rawShelters = Array.isArray(data.shelters) ? data.shelters : [];
+	const rawShelters = (Array.isArray(data?.shelters) ? data.shelters : []) as PublicShelterItem[];
 
 	let shelters = rawShelters.map((item) => {
 		let dist = 0;

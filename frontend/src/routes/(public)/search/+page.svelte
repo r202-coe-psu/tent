@@ -143,9 +143,11 @@
 					{#each paginatedResults ?? [] as person, i (searchResultKey(person, (currentPage - 1) * itemsPerPage + i))}
 						<div class="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
 							<!-- Card Header -->
-							<div class="flex items-start justify-between border-b border-border/50 p-5">
+							<div
+								class="items-start justify-between space-y-1 border-b border-border/50 p-5 md:flex"
+							>
 								<div>
-									<div class="flex items-center gap-3">
+									<div class="items-center gap-3 space-y-1 md:flex">
 										<h3 class="text-xl font-bold text-foreground">
 											{person.name || 'ไม่ระบุชื่อ'}
 										</h3>
@@ -161,9 +163,9 @@
 											>
 										{/if}
 									</div>
-									<div class="mt-2 flex gap-4 text-sm text-muted-foreground">
-										<span>ID: <span class="font-mono">{person.national_id || '-'}</span></span>
-										<span>เพศ: {genderLabel(person.gender)}</span>
+									<div class="mt-2 gap-4 text-sm text-muted-foreground md:flex">
+										<p>ID: <span class="font-mono">{person.national_id || '-'}</span></p>
+										<p>เพศ: {genderLabel(person.gender)}</p>
 									</div>
 								</div>
 
@@ -229,7 +231,7 @@
 									<div class="mt-4 flex flex-col gap-3">
 										{#each person.family_members as member, i (i)}
 											<div
-												class="flex items-center justify-between rounded-xl border border-border bg-card p-4"
+												class="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center"
 											>
 												<div>
 													<div class="font-bold text-foreground">
