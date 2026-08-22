@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module D — Kitchen & Food"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
+updated: 2026-08-22
 module: D
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---
@@ -47,6 +47,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - สร้างแผนต่อมื้อ/วันอัตโนมัติจาก occupancy ล่าสุด + ratio — occupancy เปลี่ยนแล้ว re-calc ได้
 - ปรับแผน manual ได้ (override พร้อมบันทึกเหตุผล)
 - แผนแสดงรายการวัตถุดิบ + จำนวนที่ต้องเบิก ส่งต่อเป็น input ให้ T-26 ได้ทันที
+- เลือกถังแก๊สจริงต่อแผนได้ (หลายถัง) เตือนถ้ายอดที่คำนวณเกินยอดคงเหลือของถังนั้น (CR-080)
 - Test สูตรคำนวณเทียบค่าคาดหวังจาก SOP จริง + demo วางแผน 1 วันเต็ม
 
 ### T-26 — Kitchen requisition (deduct stock) (FR-40)
@@ -56,6 +57,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 **Definition of Done:**
 - สร้างใบเบิกจากแผนได้ในคลิกเดียว + แก้รายการ/จำนวนก่อนยืนยันได้
 - ยืนยันเบิก → stock ตัดผ่าน ledger (audit ครบ), ของไม่พอ → warning + เบิกบางส่วนได้
+- ถ้าแผนมีถังแก๊ส (T-25) ตัด `gas_ledger` พร้อมกันแบบ atomic — ถังไม่พอ **บล็อกทั้งใบ** (CR-080)
 - ประวัติใบเบิกต่อวัน/ต่อมื้อ query ได้ และ test + demo เบิกตามแผนจริง
 
 ### T-27 — Meal service record (served / waste / external) (FR-41)
@@ -66,6 +68,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - บันทึก served/waste/external ต่อมื้อได้จาก UI หน้างาน (เร็ว ใช้บน mobile ได้)
 - เทียบแผน vs จริง (plan vs served) ดูได้ต่อวัน เพื่อปรับ ratio/แผนวันถัดไป
 - ยอดแจกนอกศูนย์แยกประเภทตามที่ source กำหนด (อาสา/ผู้ประสบภัยในที่ตั้ง)
+- บันทึก actual_yield (ผลผลิตที่ทำได้จริง, optional) ต่อมื้อ และสรุปเทียบ yield vs แผนได้ในหน้าสรุปบริการ (CR-079)
 - Test + demo บันทึกครบ 3 ประเภทใน 1 มื้อ
 
 ## Effort by phase (Adj MD)
