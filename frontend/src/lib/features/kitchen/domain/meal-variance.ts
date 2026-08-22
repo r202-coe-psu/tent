@@ -14,15 +14,29 @@ export interface MealVariance {
 	served: number;
 	waste: number;
 	external: number; // volunteers + outside_evacuees
-	produced: number; // served + waste — best estimate of what the kitchen cooked in-center
+	// served + waste — best estimate of what the kitchen cooked in-center when no
+	// actual_yield was recorded. `actual_yield` (below), when present, is the
+	// measured figure; `produced` keeps this same estimate either way (CR-079
+	// deliberately does not redefine it).
+	produced: number;
 	variance: number; // served - planned (0 when no plan)
 	variance_pct: number | null; // variance / planned * 100; null when planned is 0/absent
 	status: MealVarianceStatus;
+	actual_yield: number | null; // service.actual_yield ?? null — null = not recorded (CR-079)
+	yield_variance: number | null; // actual_yield - planned; null when either is absent (CR-079)
 }
 
 // Default ± band (percent of planned) inside which a service counts as on-target.
 // A pure default so callers can tune it without the domain guessing operational policy.
 export const VARIANCE_TOLERANCE_PCT = 5;
+
+/** Thai display label for each {@link MealVarianceStatus} (review-screen badge). */
+export const MEAL_VARIANCE_STATUS_LABELS: Record<MealVarianceStatus, string> = {
+	on_target: 'ตรงแผน',
+	over: 'เกินแผน',
+	under: 'ต่ำกว่าแผน',
+	no_plan: 'ไม่มีแผนอ้างอิง'
+};
 
 /**
  * Compares one meal_service record against the meal_plan for the same date+meal,
@@ -32,6 +46,11 @@ export const VARIANCE_TOLERANCE_PCT = 5;
  * `variance` is served − planned so a positive number reads as "served more than
  * planned". `external` (volunteers + outside_evacuees) and `waste` are surfaced as
  * separate review signals, not folded into the served-vs-plan number.
+ *
+ * `actual_yield`/`yield_variance` (CR-079) are read-only additions that report
+ * what the kitchen recorded as produced, compared to plan. They never influence
+ * `variance`, `variance_pct`, `status`, or `produced` — those remain served-vs-planned
+ * exactly as before CR-079.
  */
 export function computeMealVariance(
 	service: MealService,
@@ -42,6 +61,7 @@ export function computeMealVariance(
 	const waste = service.waste;
 	const external = service.external.volunteers + service.external.outside_evacuees;
 	const produced = served + waste;
+	const actualYield = service.actual_yield ?? null;
 
 	const planned = plan ? plan.headcount.total : null;
 
@@ -56,7 +76,9 @@ export function computeMealVariance(
 			produced,
 			variance: 0,
 			variance_pct: null,
-			status: 'no_plan'
+			status: 'no_plan',
+			actual_yield: actualYield,
+			yield_variance: null
 		};
 	}
 
@@ -72,6 +94,8 @@ export function computeMealVariance(
 		status = 'under';
 	}
 
+	const yieldVariance = actualYield !== null ? actualYield - planned : null;
+
 	return {
 		planned,
 		served,
@@ -80,6 +104,8 @@ export function computeMealVariance(
 		produced,
 		variance,
 		variance_pct: variancePct,
-		status
+		status,
+		actual_yield: actualYield,
+		yield_variance: yieldVariance
 	};
 }
