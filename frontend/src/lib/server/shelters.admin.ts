@@ -13,6 +13,7 @@
 
 import { adminRaw, ServiceError } from './couch-admin';
 import { buildValidateDocUpdate, REFERRAL_MANGO_INDEXES } from './shelter-access-design';
+import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID, registryByCodePath } from './registry-design';
 import {
 	migrateShelterV2ToCurrent,
 	type ShelterMaster,
@@ -47,12 +48,30 @@ export async function listShelterMasters(): Promise<ShelterMaster[]> {
 }
 
 /**
- * Find a shelter master by its `code` field (e.g. SH001). Scans the full
- * registry — the `_id` uses a ULID (`shelter:{ulid()}`), not the code, so
- * direct lookup is not possible without a `_view/by_code`.
- * TODO: switch to `shelter:{code}` as the canonical `_id` and drop this scan.
+ * Find a shelter master by its `code` field (e.g. SH001).
+ *
+ * The `_id` is `shelter:{ulid}`, not the code, so this goes through
+ * `_design/app/_view/by_code` (see `registry-design.ts`). Falls back to a full
+ * scan only when the design doc is missing — a registry provisioned before the
+ * view existed and not yet run through `pnpm redeploy:access`.
  */
 export async function findMasterByCode(code: string): Promise<ShelterMaster | null> {
+	const res = await adminRaw(registryByCodePath(code), 'GET');
+	if (res.status === 200) {
+		const rows = (res.data as { rows?: { doc?: unknown }[] })?.rows ?? [];
+		return (rows[0]?.doc as ShelterMaster) ?? null;
+	}
+	if (res.status === 404) {
+		// Missing database vs missing design doc — only the latter is recoverable.
+		const reason = (res.data as { reason?: string } | null)?.reason ?? '';
+		if (reason === 'Database does not exist.') return null;
+		return findMasterByCodeScan(code);
+	}
+	throw new ServiceError('INTERNAL', 'Could not read registry');
+}
+
+/** Pre-view fallback for {@link findMasterByCode}; O(registry) — avoid on hot paths. */
+async function findMasterByCodeScan(code: string): Promise<ShelterMaster | null> {
 	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
 	if (res.status === 404) return null;
 	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not read registry');
@@ -61,6 +80,36 @@ export async function findMasterByCode(code: string): Promise<ShelterMaster | nu
 		(r) => r.id.startsWith('shelter:') && r.doc && (r.doc as { code?: string }).code === code
 	);
 	return (match?.doc as ShelterMaster) ?? null;
+}
+
+/**
+ * Idempotent PUT of the registry `_design/app` (the `by_code` view). Safe to
+ * re-run: skips the write when the deployed doc already matches.
+ */
+export async function deployRegistryDesign(): Promise<{ status: number; updated: boolean }> {
+	const desired = buildRegistryDesignDoc();
+	const existing = await adminRaw(`/${SHELTER_REGISTRY_DB}/${REGISTRY_DESIGN_ID}`, 'GET');
+	const current =
+		existing.status === 200
+			? (existing.data as { _rev?: string; views?: Record<string, { map: string }> })
+			: null;
+
+	if (current && current.views?.by_code?.map === desired.views.by_code.map) {
+		return { status: 304, updated: false };
+	}
+
+	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/${REGISTRY_DESIGN_ID}`, 'PUT', {
+		...desired,
+		...(current?._rev ? { _rev: current._rev } : {})
+	});
+	if (res.status >= 400) {
+		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+		throw new ServiceError(
+			'INTERNAL',
+			`registry _design/app write failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
+	}
+	return { status: res.status, updated: true };
 }
 
 /** Idempotent v2 → v3 migration wrapper. */

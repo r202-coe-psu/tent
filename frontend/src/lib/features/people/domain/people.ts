@@ -758,7 +758,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		6, // schema_v 6: stay cancelled (CR-070); 5 = age (CR-057); 4 reserved for photo (CR-054)
+		7, // schema_v 7: registered_via `web` (CR-070 D-REG-VIA); 6 = stay cancelled (CR-070); 5 = age (CR-057); 4 reserved for photo (CR-054)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,

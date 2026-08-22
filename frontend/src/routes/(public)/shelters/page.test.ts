@@ -10,7 +10,21 @@ vi.mock('$lib/features/public-portal', async (importOriginal) => {
 	};
 });
 
-import { listPublicShelters } from '$lib/features/public-portal';
+import { listPublicShelters, type PublicShelterListResponse } from '$lib/features/public-portal';
+
+/**
+ * `load` is typed against SvelteKit's full `LoadEvent`, but this page reads only
+ * `url` and `fetch`. Building the rest of the event would test SvelteKit, not the
+ * page — so the narrowing lives here once, described, rather than as a pair of
+ * bare `as any` at each of the five call sites.
+ */
+async function runLoad(url: URL) {
+	const result = await load({ url, fetch: vi.fn() } as unknown as Parameters<typeof load>[0]);
+	// `PageLoad` is allowed to return nothing; this one always returns data, and
+	// narrowing here is what lets each assertion below read a real property.
+	if (!result) throw new Error('load() returned no data');
+	return result;
+}
 
 type LoadEventInput = Parameters<typeof load>[0];
 type LoadResult = {
@@ -36,8 +50,7 @@ describe('public/shelters load function', () => {
 		);
 
 		const url = new URL('http://localhost/shelters');
-		const event = { url, fetch: vi.fn() as typeof fetch } as unknown as LoadEventInput;
-		const result = (await load(event)) as unknown as LoadResult;
+		const result = await runLoad(url);
 
 		expect(result).toBeDefined();
 		expect(result.shelters).toEqual([]);
@@ -54,8 +67,7 @@ describe('public/shelters load function', () => {
 		});
 
 		const url = new URL('http://localhost/shelters');
-		const event = { url, fetch: vi.fn() as typeof fetch } as unknown as LoadEventInput;
-		const result = (await load(event)) as unknown as LoadResult;
+		const result = await runLoad(url);
 
 		expect(result.shelters).toEqual([]);
 		expect(result.count).toBe(0);
@@ -65,15 +77,16 @@ describe('public/shelters load function', () => {
 	});
 
 	it('handles null or undefined shelters property safely', async () => {
+		// Deliberately malformed: the point of the test is that a payload missing
+		// `shelters` does not blow up the load, so it cannot satisfy the response type.
 		vi.mocked(listPublicShelters).mockResolvedValue({
-			shelters: undefined as unknown as [],
+			shelters: undefined,
 			count: 0,
 			as_of: '2026-08-19T10:00:00Z'
-		});
+		} as unknown as PublicShelterListResponse);
 
 		const url = new URL('http://localhost/shelters');
-		const event = { url, fetch: vi.fn() as typeof fetch } as unknown as LoadEventInput;
-		const result = (await load(event)) as unknown as LoadResult;
+		const result = await runLoad(url);
 
 		expect(result.shelters).toEqual([]);
 		expect(result.count).toBe(0);
@@ -112,8 +125,7 @@ describe('public/shelters load function', () => {
 		});
 
 		const url = new URL('http://localhost/shelters');
-		const event = { url, fetch: vi.fn() as typeof fetch } as unknown as LoadEventInput;
-		const result = (await load(event)) as unknown as LoadResult;
+		const result = await runLoad(url);
 
 		expect(result.shelters).toHaveLength(2);
 		expect(result.count).toBe(2);
@@ -151,8 +163,7 @@ describe('public/shelters load function', () => {
 		});
 
 		const url = new URL('http://localhost/shelters?q=หาดใหญ่');
-		const event = { url, fetch: vi.fn() as typeof fetch } as unknown as LoadEventInput;
-		const result = (await load(event)) as unknown as LoadResult;
+		const result = await runLoad(url);
 
 		expect(result.shelters).toHaveLength(1);
 		expect(result.shelters[0].code).toBe('SH001');

@@ -81,3 +81,11 @@ export const donationEditLimiter = new RateLimiter(60000, 10);
  * Still limited, because each read reaches FastAPI and Mongo.
  */
 export const donationReadLimiter = new RateLimiter(60000, 30);
+
+// Public booking (CR-070 / T-71). Separate buckets from donations so a busy
+// donation drive cannot lock a family out of booking a place to sleep.
+// One household books once; 3/min per IP still allows correcting a typo.
+export const registerIpLimiter = new RateLimiter(60000, 3);
+export const registerPhoneLimiter = new RateLimiter(60000, 3);
+// Lookup is a read but also an enumeration surface — hold it tighter.
+export const registerLookupIpLimiter = new RateLimiter(60000, 10);

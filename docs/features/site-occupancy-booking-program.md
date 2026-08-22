@@ -2,7 +2,7 @@
 title: "Program — Site kind, occupancy health, booking channels, triage"
 status: active
 created: 2026-08-13
-updated: 2026-08-13
+updated: 2026-08-20
 owner: PM (John) / เจ้าของโครงการ
 audience: developer + team lead assignment
 note: >
@@ -127,7 +127,7 @@ flowchart TD
 | **P1b** | SOP-lite, ไม่บังคับ user ประจำ, Sphere auto-capacity | (จอดใน CR-067 §Phase 2) | T-76 | Team D | **รอบ CR ถัดไป** — SOP workshop + D-SOP-LITE / D-HOST-STAFF / D-SPHERE-CAP |
 | **P2** | Excel import ขยาย CR-039 | [CR-068](../changes/CR-068-shelter-import-site-kind.md) | T-68 | Lead | **approved** — หลัง T-66 |
 | **P3** | Occupancy health 5 สี | [CR-069](../changes/CR-069-occupancy-health-colors.md) | T-69, T-70 | Team D + Lead (EOC) | **approved** — T-69 พร้อม; T-70 รอ T-37 |
-| **P4** | จองผ่านเว็บ + ยืนยันที่ประตู | [CR-070](../changes/CR-070-public-booking-gate-confirm.md) | T-71 | Team B | **approved** — พร้อม (scan มีแล้ว T-51) |
+| **P4** | จองผ่านเว็บ + ยืนยันที่ประตู | [CR-070](../changes/CR-070-public-booking-gate-confirm.md) | T-71 | Team B | **in progress** — booking + self-lookup ship 2026-08-20; เหลือ multi-member household + D-PRE-REG-AGE |
 | **P5** | People import xlsx/csv + inbound API | [CR-071](../changes/CR-071-people-import-inbound.md) | T-72, T-73 | Team B + Lead | T-72 **approved** (ยังรอ T-48); T-73 **รอบ CR ถัดไป** (blocked payload) |
 | **P6** | Triage เขียว/เหลือง/แดง | [CR-072](../changes/CR-072-triage-green-yellow-red.md) | T-74 | Team B | **รอบ CR ถัดไป** — blocked D-TRIAGE-RULES |
 | **P7** | External GET / ONE PLATFORM | [CR-073](../changes/CR-073-one-platform-external-get-blocked.md) | T-75 | Lead | **รอบ CR ถัดไป** — blocked SPEC ภายนอก (K-14) |
@@ -248,7 +248,7 @@ Health **ไม่ persist**. ประเมินตามลำดับ (sta
 | **T-68** | Excel import คอลัมน์ `site_kind` (ขยาย CR-039) | Lead | blocked | T-66 | CR-068 |
 | **T-69** | Domain `occupancy_health` + แสดง 5 สี staff และ public | Team D + Lead (public plane) | **ready** | CR-069 approved | CR-069 |
 | **T-70** | ฟิลด์ `occupancy_health` บน EOC aggregate API | Lead | blocked | T-37, T-69 (D-HEALTH-SURFACE=A — EOC = API ทีหลัง ไม่ใช่ dashboard) | CR-069 |
-| **T-71** | Public booking + ยืนยันที่ประตู (reuse T-51 scan) | Team B พีค/โฮป/ปิ๊ก | **ready** | CR-070 approved | CR-070 |
+| **T-71** | Public booking + ยืนยันที่ประตู (reuse T-51 scan) | Team B พีค/โฮป/ปิ๊ก | **in progress** | CR-070 approved; booking + lookup ship 2026-08-20 | CR-070 |
 | **T-72** | People import xlsx/csv (ขยาย T-55) | Team B | **ready** (รอ T-48) | CR-071 slice A approved | CR-071 |
 | **T-73** | Inbound POST คนจากหน่วยงาน | Team B + Lead | blocked | D-INBOUND-PLANE + partner payload spec — **รอบ CR ถัดไป** | CR-071 |
 | **T-74** | Triage เขียว/เหลือง/แดง | Team B | blocked | D-TRIAGE-RULES, D-TRIAGE-FIELD — **รอบ CR ถัดไป** | CR-072 |

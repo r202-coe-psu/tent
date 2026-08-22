@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -19,19 +20,30 @@ logger = logging.getLogger(__name__)
 
 NAME_RESULT_LIMIT = 10
 
-IN_SHELTER_STATUSES = frozenset({"pre_registered", "active", "temporary_leave"})
-MOVED_STATUSES = frozenset({"transferred"})
-CHECKED_OUT_STATUSES = frozenset({"checked_out", "deceased"})
+#: The seven `current_stay.status` values of the staff data model, reported to
+#: the public search verbatim since CR-080. Before that they were collapsed into
+#: `in_shelter` / `moved` / `checked_out` (FS-2, CR-005), which answered the one
+#: question this endpoint exists for incorrectly: a person who reserved a place
+#: through the public booking flow (CR-070) but never arrived is
+#: `pre_registered`, and the old mapping displayed them as safely in the shelter.
+#: Anything outside this set is reported as `unknown` rather than guessed at, so
+#: a projection emitting a status the API has not been taught about cannot be
+#: silently rendered as some other outcome.
+PUBLIC_STAY_STATUSES = frozenset(
+    {
+        "pre_registered",
+        "active",
+        "temporary_leave",
+        "transferred",
+        "checked_out",
+        "deceased",
+        "cancelled",
+    }
+)
 
 
 def map_public_status(stay_status: str) -> str:
-    if stay_status in IN_SHELTER_STATUSES:
-        return "in_shelter"
-    if stay_status in MOVED_STATUSES:
-        return "moved"
-    if stay_status in CHECKED_OUT_STATUSES:
-        return "checked_out"
-    return "checked_out"
+    return stay_status if stay_status in PUBLIC_STAY_STATUSES else "unknown"
 
 
 class EvacueeUseCase:
@@ -114,9 +126,47 @@ class EvacueeUseCase:
             )
             return [person] if person else []
 
+        return await self._find_by_name(parsed.normalized)
+
+    async def _find_by_name(self, name: str) -> list[PublicPerson]:
+        """Name search: whole-word text index first, then an anchored prefix match.
+
+        The text index alone cannot answer a partial Thai name. MongoDB tokenizes
+        `$text` on whitespace and punctuation and matches whole terms, and Thai is
+        not one of its supported text-search languages — Thai script also has no
+        spaces between words, so a name like "สักก์ธนัชญ์" is one indivisible
+        token. Searching "สัก" scored zero hits against three matching records
+        until this fallback existed; a relative had to type the name exactly.
+
+        The fallback is deliberately anchored (`^`): "the name starts like this"
+        is what someone half-remembering a relative's name needs, whereas an
+        unanchored substring would turn the endpoint into a browse-everyone
+        oracle. `parse_search_query` already rejects queries under 3 characters,
+        the per-IP limiter throttles repeats, and the result cap still applies.
+
+        Runs only when the text search comes back empty, so an exact-name query
+        still costs a single round trip.
+        """
+        exact = (
+            await PublicPerson.find(
+                {"$text": {"$search": name}},
+                {"search_excluded": {"$ne": True}},
+            )
+            .limit(NAME_RESULT_LIMIT)
+            .to_list()
+        )
+        if exact:
+            return exact
+
+        prefix = f"^{re.escape(name)}"
         return (
             await PublicPerson.find(
-                {"$text": {"$search": parsed.normalized}},
+                {
+                    "$or": [
+                        {"first_name": {"$regex": prefix}},
+                        {"last_name_masked": {"$regex": prefix}},
+                    ]
+                },
                 {"search_excluded": {"$ne": True}},
             )
             .limit(NAME_RESULT_LIMIT)

@@ -3,7 +3,10 @@ import type { RequestHandler } from './$types';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import { adminRaw } from '$lib/server/couch-admin';
 import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
-import { countVulnerableFromBirthYearRows } from '$lib/features/public-portal/server';
+import {
+	countVulnerableFromBirthYearRows,
+	sumOccupancyFromStatusRows
+} from '$lib/features/public-portal/server';
 
 // In-memory read-model cache (T-35)
 let cachedSummary: Record<string, unknown> | null = null;
@@ -65,12 +68,9 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 						occRes.data &&
 						(occRes.data as Record<string, unknown>).rows
 					) {
-						const rows = (occRes.data as Record<string, unknown>).rows as Array<{
-							key: string;
-							value: unknown;
-						}>;
-						const activeRow = rows.find((r) => r.key === 'active');
-						occ = activeRow ? (activeRow.value as number) : 0;
+						// active + pre_registered (CR-070 D-BOOK-OCC=C) — a web booking
+						// holds the seat immediately, so the public number must move too.
+						occ = sumOccupancyFromStatusRows((occRes.data as Record<string, unknown>).rows);
 					}
 
 					if (

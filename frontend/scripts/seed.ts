@@ -104,11 +104,13 @@ import {
 import { shelterCodeSchema, type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
+import { parseCouchCredentialUrl } from '$lib/server/couch-credentials';
 import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
 	shelterDbName
 } from '$lib/server/shelter-access-design';
+import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
 import { assertBulkWriteResults, prefixRangeEnd, type BulkWriteResult } from './t31-seed-support';
 // ─── env ──────────────────────────────────────────────────────────────────────
 
@@ -136,6 +138,18 @@ function loadEnv(): Record<string, string> {
 const env = loadEnv();
 const rawCouchUrl =
 	process.env.COUCHDB_ADMIN_URL ?? env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984';
+
+/**
+ * Username of the limited-permission public writer (`putAsPublicWriter`), added
+ * to each shelter's `_security.members.names`. Empty when unset — dev then falls
+ * back to admin credentials inside `putAsPublicWriter`.
+ */
+const PUBLIC_WRITER_NAMES: string[] = (() => {
+	const creds = parseCouchCredentialUrl(
+		process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL
+	);
+	return creds ? [creds.user] : [];
+})();
 
 // Node's native fetch rejects URLs with embedded credentials — split them out.
 function parseCouchUrl(raw: string): { baseUrl: string; authHeader: string } {
@@ -417,9 +431,79 @@ async function seedUsers(): Promise<void> {
 	console.log(
 		`  ✓ _users: sa01 + staff01–staff03 (password shared; ${created} created, ${skipped} already exist)`
 	);
+
+	await seedPublicWriter();
+}
+
+/**
+ * Create the limited-permission public writer used by `putAsPublicWriter`
+ * (public booking POST — CR-070/T-71 — and the donation courier PATCH).
+ *
+ * Roleless on purpose: it is granted per-shelter access as a plain
+ * `_security.members.names` entry, so every write still passes through
+ * `_design/access` validate_doc_update. Only seeded when
+ * `COUCHDB_PUBLIC_WRITER_URL` is configured; local dev without it falls back to
+ * admin credentials inside `putAsPublicWriter`.
+ */
+async function seedPublicWriter(): Promise<void> {
+	const creds = parseCouchCredentialUrl(
+		process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL
+	);
+	if (!creds) {
+		console.log('  – _users: COUCHDB_PUBLIC_WRITER_URL unset — public writer not seeded');
+		return;
+	}
+
+	const { status } = await couchReq(
+		'PUT',
+		`/_users/${USER_PREFIX}${encodeURIComponent(creds.user)}`,
+		{
+			name: creds.user,
+			password: creds.password,
+			display_name: 'Public Writer (BFF)',
+			roles: [],
+			type: 'user',
+			shelter_id: null,
+			affiliation_tags: []
+		}
+	);
+	if (status !== 201 && status !== 409) {
+		throw new Error(`PUT _users/${creds.user} failed (HTTP ${status})`);
+	}
+	console.log(
+		`  ✓ _users: public writer "${creds.user}" (${status === 201 ? 'created' : 'already exists'})`
+	);
 }
 
 // ─── seedRegistry ─────────────────────────────────────────────────────────────
+
+/**
+ * Idempotent PUT of the registry `_design/app` (`by_code` view) so
+ * `findMasterByCode` and the public booking BFF can look a shelter up by code
+ * instead of scanning the whole registry.
+ */
+async function deployRegistryDesign(): Promise<void> {
+	const desired = buildRegistryDesignDoc();
+	const existing = await couchReq('GET', `/registry/${REGISTRY_DESIGN_ID}`);
+	const current =
+		existing.status === 200
+			? (existing.data as { _rev?: string; views?: Record<string, { map: string }> })
+			: null;
+
+	if (current && current.views?.by_code?.map === desired.views.by_code.map) {
+		console.log('  ✓ registry: _design/app already current');
+		return;
+	}
+
+	const { status } = await couchReq('PUT', `/registry/${REGISTRY_DESIGN_ID}`, {
+		...desired,
+		...(current?._rev ? { _rev: current._rev } : {})
+	});
+	if (status !== 201 && status !== 202) {
+		throw new Error(`Cannot deploy registry _design/app (HTTP ${status})`);
+	}
+	console.log('  ✓ registry: _design/app (by_code view) deployed');
+}
 
 async function seedRegistry(master: MasterLookup): Promise<void> {
 	await ensureDb('registry');
@@ -430,6 +514,7 @@ async function seedRegistry(master: MasterLookup): Promise<void> {
 			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
 		}
 	});
+	await deployRegistryDesign();
 
 	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
 	const existingByCode = new Map<string, Record<string, unknown>>();
@@ -1046,7 +1131,9 @@ async function provisionShelterDb(shelterCode: string): Promise<void> {
 	await ensureDb(db);
 	await setSecurity(db, {
 		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [`shelter:${code}`] }
+		// Public writer joins by name (roleless) so its writes still go through
+		// `_design/access` validate_doc_update — see seedPublicWriter().
+		members: { names: [...PUBLIC_WRITER_NAMES], roles: [`shelter:${code}`] }
 	});
 	await deployShelterViewsFn(db, (path, method, body) => couchReq(method, path, body));
 	await deployShelterAccessDesign(db, code);
