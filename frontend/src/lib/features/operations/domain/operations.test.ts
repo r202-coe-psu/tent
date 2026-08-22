@@ -26,6 +26,7 @@ import {
 	createTransfer,
 	dispatchTransfer,
 	receiveTransfer,
+	cancelTransfer,
 	type Donation,
 	type ReceiveSource
 } from './operations';
@@ -922,6 +923,54 @@ describe('Inter-shelter Transfers', () => {
 
 		// The float trap CR-038 exists to close: 0.1 + 0.2 must not drift to 0.30000000000000004
 		expect(stockBalance([out[0], incoming[0]])).toEqual(new Map([['item:rice', '0.1']]));
+	});
+
+	it('records a discrepancy reason via notes on partial receipt', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		const { transfer: received } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: 85 }],
+			ctx,
+			'15kg damaged in transit'
+		);
+
+		expect(received.notes).toBe('15kg damaged in transit');
+	});
+
+	it('cancels a requested transfer with no ledger impact', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+
+		const { transfer: cancelled } = cancelTransfer(t);
+		expect(cancelled.status).toBe('cancelled');
+	});
+
+	it('rejects cancelling a transfer that has already shipped', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+		expect(() => cancelTransfer(shipped)).toThrow();
 	});
 });
 

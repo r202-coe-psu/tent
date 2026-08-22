@@ -21,7 +21,11 @@ export type {
 	TransferStatus,
 	DonationChannel,
 	DonationSlot,
-	NeedAvailability
+	NeedAvailability,
+	StockTransfer,
+	StockTransferItem,
+	TransferInput,
+	TransferFilter
 } from './domain/operations';
 
 // Domain — schemas + factories + transitions + read models + guards
@@ -76,7 +80,16 @@ export {
 	type DistributeInput,
 	adjustInputSchema,
 	createAdjustEntry,
-	type AdjustInput
+	type AdjustInput,
+	createTransfer,
+	dispatchTransfer,
+	receiveTransfer,
+	cancelTransfer,
+	isStockTransfer,
+	transferInputSchema,
+	transferFilterSchema,
+	receivedItemSchema,
+	type ReceivedItemInput
 } from './domain/operations';
 
 // Data — repository contract + remote CouchDB binding
@@ -101,6 +114,12 @@ export {
 	useCreatePurchase,
 	useUpdatePurchase,
 	useReceivePurchase,
+	useTransfers,
+	useTransfer,
+	useCreateTransfer,
+	useDispatchTransfer,
+	useReceiveTransfer,
+	useCancelTransfer,
 	startOperationsLiveQuery
 } from './application/queries';
 export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';
@@ -115,3 +134,5 @@ export { default as AdjustStockForm } from './ui/adjust-stock-form.svelte';
 export { default as PurchaseForm } from './ui/PurchaseForm.svelte';
 export { default as PurchaseReceiptForm } from './ui/PurchaseReceiptForm.svelte';
 export { default as PurchaseTable } from './ui/PurchaseTable.svelte';
+export { default as TransferForm } from './ui/transfer-form.svelte';
+export { default as TransferList } from './ui/transfer-list.svelte';

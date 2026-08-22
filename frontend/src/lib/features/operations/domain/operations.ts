@@ -10,6 +10,7 @@ import {
 	qtyStrSignedNonZeroSchema,
 	qtyStrCoercePositiveSchema,
 	qtyStrCoerceSignedNonZeroSchema,
+	qtyStrCoerceNonNegativeSchema,
 	subQty
 } from '$lib/utils/qty';
 
@@ -677,6 +678,20 @@ export const transferInputSchema = z.object({
 });
 export type TransferInput = z.input<typeof transferInputSchema>;
 
+export const receivedItemSchema = z.object({
+	item_id: z.string().min(1),
+	qty: qtyStrCoerceNonNegativeSchema
+});
+export type ReceivedItemInput = z.input<typeof receivedItemSchema>;
+
+export const transferFilterSchema = z.object({
+	status: transferStatusSchema.optional(),
+	limit: z.number().int().positive().max(1000).default(50),
+	skip: z.number().int().nonnegative().default(0),
+	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc')
+});
+export type TransferFilter = z.input<typeof transferFilterSchema>;
+
 export function createTransfer(input: TransferInput, ctx: AuthorContext): StockTransfer {
 	const d = transferInputSchema.parse(input);
 	return makeDoc(
@@ -742,7 +757,8 @@ export function dispatchTransfer(
 export function receiveTransfer(
 	transfer: StockTransfer,
 	receivedItems: { item_id: string; qty: string | number }[],
-	ctx: AuthorContext
+	ctx: AuthorContext,
+	notes?: string
 ): { transfer: StockTransfer; ledgers: StockLedger[] } {
 	if (transfer.status !== 'shipped') {
 		throw new Error(`Cannot receive transfer in status "${transfer.status}"`);
@@ -763,7 +779,8 @@ export function receiveTransfer(
 			...transfer.timeline,
 			received: { at: now(), by: ctx.createdBy }
 		},
-		updated_at: now()
+		updated_at: now(),
+		...(notes ? { notes } : {})
 	};
 
 	const ledgers = updatedItems
@@ -783,6 +800,27 @@ export function receiveTransfer(
 		);
 
 	return { transfer: updatedTransfer, ledgers };
+}
+
+/**
+ * Cancels a transfer before it has shipped. No ledger entries — nothing was
+ * ever deducted from source stock, so there is nothing to return. Does not add
+ * a `timeline` key (schema.md's `timeline` shape has no `cancelled` slot —
+ * adding one is a persisted-doc shape change that needs its own CR); `status`
+ * + `updated_at` (common envelope) already record the transition.
+ */
+export function cancelTransfer(transfer: StockTransfer): { transfer: StockTransfer } {
+	if (transfer.status !== 'requested') {
+		throw new Error(`Cannot cancel transfer in status "${transfer.status}"`);
+	}
+
+	const updatedTransfer: StockTransfer = {
+		...transfer,
+		status: 'cancelled',
+		updated_at: now()
+	};
+
+	return { transfer: updatedTransfer };
 }
 
 // ---------------------------------------------------------------- campaign

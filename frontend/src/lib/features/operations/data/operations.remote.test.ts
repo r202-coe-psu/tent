@@ -7,7 +7,8 @@ import { isAuditEntry } from '$lib/features/shared';
 vi.mock('$lib/db/shelter', () => ({
 	SHELTER_CODE: 'SH001',
 	SHELTER_DB: 'shelter_sh001',
-	getShelterDb: () => 'shelter_sh001'
+	getShelterDb: () => 'shelter_sh001',
+	getShelterCode: () => 'SH001'
 }));
 
 const mockGetItem = vi.fn<(itemId: string) => Promise<SupplyItem | null>>();
@@ -497,5 +498,137 @@ describe('OperationsRemoteRepository.updateCampaign', () => {
 			reason: 'อัปเดตชื่อแคมเปญเพื่อความชัดเจน',
 			created_by: 'tester'
 		});
+	});
+});
+
+describe('OperationsRemoteRepository — transfer via BFF (CR-059 Flow 1 / T-13)', () => {
+	let repo: OperationsRemoteRepository;
+	const fetchMock = vi.fn();
+
+	const requestedTransfer = {
+		_id: 'stock_transfer:01TRANSFER0000000000000000',
+		type: 'stock_transfer',
+		schema_v: 2,
+		shelter_code: 'SH001',
+		created_at: '2026-08-22T05:00:00.000Z',
+		updated_at: '2026-08-22T05:00:00.000Z',
+		created_by: 'Staff A',
+		from_shelter: 'SH001',
+		to_shelter: 'SH002',
+		items: [{ item_id: 'item:rice', qty: '100', unit: 'kg' }],
+		status: 'requested',
+		timeline: { requested: { at: '2026-08-22T05:00:00.000Z', by: 'Staff A' } }
+	};
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		repo = new OperationsRemoteRepository();
+		vi.stubGlobal('fetch', fetchMock);
+	});
+
+	it('creates a transfer via POST, not the shelter session repo', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 201,
+			json: async () => requestedTransfer
+		});
+
+		const doc = await repo.createTransfer({
+			from_shelter: 'SH001',
+			to_shelter: 'SH002',
+			items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+		});
+
+		expect(doc.status).toBe('requested');
+		expect(fetchMock).toHaveBeenCalledWith(
+			expect.stringContaining('/api/back-office/transfer?'),
+			expect.objectContaining({ method: 'POST', credentials: 'include' })
+		);
+	});
+
+	it('lists transfers scoped to the caller shelter', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => [requestedTransfer]
+		});
+
+		const list = await repo.listTransfers();
+		expect(list).toHaveLength(1);
+		expect(fetchMock).toHaveBeenCalledWith(
+			expect.stringContaining('shelter_code=SH001'),
+			expect.objectContaining({ credentials: 'include' })
+		);
+	});
+
+	it('returns null for a 404 getTransfer', async () => {
+		fetchMock.mockResolvedValue({ ok: false, status: 404, json: async () => null });
+		expect(await repo.getTransfer('stock_transfer:missing')).toBeNull();
+	});
+
+	it('dispatches via PATCH to the transition endpoint with status shipped', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => ({ ...requestedTransfer, status: 'shipped' })
+		});
+
+		const doc = await repo.dispatchTransfer(requestedTransfer._id);
+		expect(doc.status).toBe('shipped');
+
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toContain(
+			`/api/back-office/transfer/${encodeURIComponent(requestedTransfer._id)}/transition?`
+		);
+		expect(init).toMatchObject({ method: 'PATCH', credentials: 'include' });
+		expect(JSON.parse(init.body)).toMatchObject({ to: 'shipped' });
+	});
+
+	it('receives with receivedItems and notes forwarded in the request body', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => ({ ...requestedTransfer, status: 'received' })
+		});
+
+		await repo.receiveTransfer(
+			requestedTransfer._id,
+			[{ item_id: 'item:rice', qty: 85 }],
+			'15kg damaged in transit'
+		);
+
+		const [, init] = fetchMock.mock.calls[0];
+		expect(JSON.parse(init.body)).toEqual({
+			to: 'received',
+			receivedItems: [{ item_id: 'item:rice', qty: 85 }],
+			notes: '15kg damaged in transit'
+		});
+	});
+
+	it('cancels via PATCH to the transition endpoint with status cancelled', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => ({ ...requestedTransfer, status: 'cancelled' })
+		});
+
+		const doc = await repo.cancelTransfer(requestedTransfer._id);
+		expect(doc.status).toBe('cancelled');
+	});
+
+	it('throws with the server error message on a failed create', async () => {
+		fetchMock.mockResolvedValue({
+			ok: false,
+			status: 422,
+			json: async () => ({ error: 'Cannot transfer to the same shelter' })
+		});
+
+		await expect(
+			repo.createTransfer({
+				from_shelter: 'SH001',
+				to_shelter: 'SH001',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			})
+		).rejects.toThrow('Cannot transfer to the same shelter');
 	});
 });

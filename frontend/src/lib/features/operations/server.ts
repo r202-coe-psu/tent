@@ -27,7 +27,16 @@ export {
 	stockLedgerDocSchema,
 	parseStockLedger,
 	donationStatusSchema,
-	ledgerReasonSchema
+	ledgerReasonSchema,
+	createTransfer,
+	dispatchTransfer,
+	receiveTransfer,
+	cancelTransfer,
+	isStockTransfer,
+	transferInputSchema,
+	transferStatusSchema,
+	transferFilterSchema,
+	receivedItemSchema
 } from './domain/operations';
 
 export type {
@@ -37,5 +46,16 @@ export type {
 	DonationStatus,
 	LedgerReason,
 	StockLedger,
-	StockLot
+	StockLot,
+	StockTransfer,
+	StockTransferItem,
+	TransferInput,
+	TransferStatus,
+	TransferFilter,
+	ReceivedItemInput
 } from './domain/operations';
+
+export {
+	assertActorMayTransition as assertActorMayTransitionTransfer,
+	TransferAuthorizationError
+} from './domain/transfer.authorization';

@@ -47,6 +47,40 @@ export const REFERRAL_MANGO_INDEXES = [
 	}
 ];
 
+/** Mango index definitions required by stock_transfer list/find (CR-059). */
+export const TRANSFER_MANGO_INDEXES = [
+	{
+		index: { fields: ['type', 'status'] },
+		name: 'transfer-type-status-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'from_shelter', 'created_at'] },
+		name: 'transfer-type-fromshelter-created-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'to_shelter', 'created_at'] },
+		name: 'transfer-type-toshelter-created-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: [{ type: 'desc' }, { created_at: 'desc' }] },
+		name: 'transfer-list-created-desc-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: [{ type: 'asc' }, { created_at: 'asc' }] },
+		name: 'transfer-list-created-asc-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: [{ type: 'desc' }, { status: 'desc' }, { created_at: 'desc' }] },
+		name: 'transfer-list-status-created-desc-idx',
+		type: 'json' as const
+	}
+];
+
 /**
  * Server-side `validate_doc_update` for a shelter db. Enforces the common
  * envelope (schema.md §0) + shelter_code match + allowed doc types, then the

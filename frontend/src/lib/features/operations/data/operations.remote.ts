@@ -1,6 +1,6 @@
 import { bulkDocs } from '$lib/db/couch-db';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
-import { getShelterDb } from '$lib/db/shelter';
+import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import { touch, type AuthorContext } from '$lib/db/model';
 import {
 	createCampaign as buildCampaign,
@@ -10,6 +10,7 @@ import {
 	isDonation,
 	isDonationSlot,
 	isPurchase,
+	isStockTransfer,
 	canEditPurchase,
 	stockBalance,
 	createReceiveEntry,
@@ -26,7 +27,11 @@ import {
 	type DonationSlot,
 	type Purchase,
 	type PurchaseInput,
-	type CountedItem
+	type CountedItem,
+	type StockTransfer,
+	type TransferInput,
+	type TransferFilter,
+	type TransferStatus
 } from '../domain/operations';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
@@ -296,6 +301,105 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// Append-only, so a partially applied receipt can simply be re-keyed for
 		// the missing lines — the purchase doc stays valid either way.
 		return bulkDocs(this.dbName, rows);
+	}
+
+	// --- Transfer methods (CR-059 Flow 1 / T-13) ---
+	// `stock_transfer` lives in `central_ops`, not this shelter's DB, so these go through the
+	// admin BFF (`fetch`), not `this.repo` — mirrors `referral.remote.ts`'s BFF calls.
+
+	async listTransfers(filter?: TransferFilter): Promise<StockTransfer[]> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		if (filter?.status) qs.append('status', filter.status);
+		const res = await fetch(`/api/back-office/transfer?${qs}`, {
+			credentials: 'include',
+			headers: { Accept: 'application/json' }
+		});
+		if (!res.ok) {
+			throw new Error(`Failed to list transfers: ${res.statusText}`);
+		}
+		const list = await res.json();
+		return Array.isArray(list) ? list.filter(isStockTransfer) : [];
+	}
+
+	async getTransfer(id: string): Promise<StockTransfer | null> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		const res = await fetch(`/api/back-office/transfer/${encodeURIComponent(id)}?${qs}`, {
+			credentials: 'include',
+			headers: { Accept: 'application/json' }
+		});
+		if (res.status === 404) return null;
+		if (!res.ok) {
+			throw new Error(`Failed to get transfer: ${res.statusText}`);
+		}
+		const doc = await res.json();
+		return isStockTransfer(doc) ? doc : null;
+	}
+
+	async createTransfer(input: TransferInput): Promise<StockTransfer> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		const res = await fetch(`/api/back-office/transfer?${qs}`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+			body: JSON.stringify(input)
+		});
+		const payload = await res.json().catch(() => null);
+		if (!res.ok) {
+			const message =
+				payload && typeof payload === 'object' && 'error' in payload
+					? String((payload as { error: unknown }).error)
+					: `Failed to create transfer (${res.status})`;
+			throw new Error(message);
+		}
+		if (!isStockTransfer(payload)) {
+			throw new Error('Create transfer returned an invalid transfer document');
+		}
+		return payload;
+	}
+
+	private async transitionTransfer(
+		id: string,
+		to: TransferStatus,
+		opts?: { receivedItems?: { item_id: string; qty: string | number }[]; notes?: string }
+	): Promise<StockTransfer> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		const res = await fetch(
+			`/api/back-office/transfer/${encodeURIComponent(id)}/transition?${qs}`,
+			{
+				method: 'PATCH',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+				body: JSON.stringify({ to, ...opts })
+			}
+		);
+		const payload = await res.json().catch(() => null);
+		if (!res.ok) {
+			const message =
+				payload && typeof payload === 'object' && 'error' in payload
+					? String((payload as { error: unknown }).error)
+					: `Transfer transition failed (${res.status})`;
+			throw new Error(message);
+		}
+		if (!isStockTransfer(payload)) {
+			throw new Error('Transfer transition returned an invalid transfer document');
+		}
+		return payload;
+	}
+
+	async dispatchTransfer(id: string): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'shipped');
+	}
+
+	async receiveTransfer(
+		id: string,
+		receivedItems: { item_id: string; qty: string | number }[],
+		notes?: string
+	): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'received', { receivedItems, notes });
+	}
+
+	async cancelTransfer(id: string): Promise<StockTransfer> {
+		return this.transitionTransfer(id, 'cancelled');
 	}
 }
 
