@@ -205,7 +205,7 @@ split allocation, driver/plate บังคับ, destination lot ID, สถา
   "🏗️ การตัดสินใจทางสถาปัตยกรรม" ด้านบน — **field ละเอียดของ `stock_transfer` (lot split, driver/plate,
   dispute state) ยังไม่ approve ในรอบนี้** ต้องคุยแยกอีกรอบก่อน bump `schema_v`
 - 2026-08-22 — **status → `approved`** by project owner (Chatchanok Nikrothanont) — ยืนยันว่า
-  **Kontuch Suksawat (`Fishcanwalk`) เป็น PM ของโปรเจกต์นี้** เนื้อหาส่วนที่ Kontuch เป็นผู้เริ่มเขียนไว้ตั้งแต่
+  **PM  (`Fishcanwalk`) เป็น PM ของโปรเจกต์นี้** เนื้อหาส่วนที่ PM เป็นผู้เริ่มเขียนไว้ตั้งแต่
   commit ต้นฉบับ (`466d9a63`, 2026-07-29) — Why, Ticket System Overview, **Flow 1** (ข้อ 4, เนื้อหา
   ก่อนหัวข้อสถาปัตยกรรม cross-DB), **Flow 2** (2-Step Item Distribution / Active Batch, ข้อ 5),
   **Flow 3** (Kitchen Requisition, ข้อ 5.5), UI Safety Standards, Master Formulas Table, และ Task
@@ -219,3 +219,29 @@ split allocation, driver/plate บังคับ, destination lot ID, สถา
     decision แยกต่างหาก (แบบเดียวกับที่ทำให้ T-13 ข้างต้น) ก่อนเริ่ม implement Flow 2
   - ขอบเขตของกฎ "ผู้เขียนเดิม = PM = approved" นี้ใช้กับ **CR-059 ฉบับนี้เท่านั้น** ยังไม่ใช่นโยบายทั่วไป
     สำหรับ CR อื่น — ต้องตกลงแยกถ้าจะขยายผล
+- 2026-08-22 — T-13 write-path implementation detail (ต่อยอดจาก entry cross-DB write pattern ด้านบน)
+  — แยกเป็น 2 ส่วนตามสถานะจริง:
+  - **✅ decided** by project owner (Chatchanok Nikrothanont) — **`schema_v` ของ `stock_transfer` ไม่
+    bump** ตอนย้าย `shelter_{shelter_code}` (§2.2) → `central_ops` (§5) เพราะเป็นการย้าย location ไม่ใช่
+    เปลี่ยน field shape (`docs/change-management.md` §4 ผูก bump กับ "เปลี่ยนรูปร่างdoc" เท่านั้น) —
+    ยืนยันด้วย precedent จริง: `referral` เจอเคสเดียวกัน (`shelter_{code}` → `central_ops`) แล้วไม่ bump
+    schema_v เช่นกัน — §2.11 (เดิม) และ §5.4 (ปัจจุบัน) ของ `referral` ไม่มีคำว่า `schema_v` ปรากฏเลย
+    ต่างจาก `stock_ledger`/`stock_transfer` เดิมที่มี annotation "schema_v N" ทุกจุดที่ field เปลี่ยนจริง
+    (เปิด CR-045/CR-046 ที่ schema.md อ้างเป็นที่มาแล้วพบว่าทั้งคู่ไม่มีข้อความเรื่อง `central_ops`
+    migration เลย — การย้าย DB ของ referral ไม่เคยถูกเขียนเป็น CR แยก แค่สะท้อนตรงเป็น pointer note ใน
+    schema.md) — action ก่อนแก้ `schema.md` จริง: เช็ค CouchDB ว่าไม่มี `stock_transfer` doc ค้างใน
+    `shelter_{code}` ใดๆ ก่อน (คาดว่าไม่มี เพราะ `team-C-T-13` ค้าง Pause ไม่เคย merge)
+  - **⚠️ proposed — ยังไม่ approve, ต้องคุยกับ PM (PM) ก่อนเขียนโค้ดจริง** — ดีไซน์ write-path
+    ระดับ implementation ของ T-13 (รายละเอียดเต็มอยู่ใน `~/Reports/CR-059-T12-T13-implementation-plan.md`
+    §1.3):
+    1. Ledger doc ใช้ **deterministic id** (`stock_ledger:{transfer_id}:{reason}:{item_id}`) แทน random
+       ulid — แก้ root cause ของปัญหา double-count ที่ทำให้ `team-C-T-13` เดิมค้าง Pause
+    2. Mirror-write ทิศทาง `received → shelter_from` (ของใหม่ ไม่มีใน `referral`) เป็น read-only
+       snapshot ใช้ deterministic id + `putDocIdempotent`
+    3. **เปลี่ยนกรอบคิด ordering จาก referral** (`dest-first vs source-first` สำหรับ evacuee) **เป็น
+       critical/best-effort tier** (ledger + central status = critical อยู่ใน retry loop; mirror-write =
+       best-effort ไม่ block request) — เป็นการตีความ trade-off ใหม่ที่ referral ไม่เคยใช้ ต้องให้ PM
+       เห็นก่อนเพราะกระทบ data consistency ของสต็อกจริง
+    4. Authorization guard ใหม่ (`transfer.authorization.ts`) + ลำดับ write 6 ขั้นต่อ transition
+       (GET → guard → domain fn → ledger → central status → mirror best-effort) พร้อม self-healing mirror
+       ตอน `GET`
