@@ -21,9 +21,22 @@
 	let volunteers = $state(0);
 	let outsideEvacuees = $state(0);
 	let notes = $state('');
+	// Actual Yield (CR-079) — tri-state: null = not recorded, 0 = recorded zero.
+	// An emptied <input type="number"> binds to null in Svelte, so this stays
+	// null until the kitchen actually types a value.
+	let actualYield = $state<number | null>(null);
 
 	const planned = $derived(plan?.headcount.total ?? 0);
-	const canSubmit = $derived(served >= 0 && waste >= 0 && volunteers >= 0 && outsideEvacuees >= 0);
+	const canSubmit = $derived(
+		served >= 0 &&
+			waste >= 0 &&
+			volunteers >= 0 &&
+			outsideEvacuees >= 0 &&
+			(actualYield === null || actualYield >= 0)
+	);
+	// actual_yield is the ceiling on distribution (ผลผลิต), served is what went out —
+	// exceeding it is a real, expected scenario worth a second look, not a block.
+	const servedExceedsYield = $derived(actualYield != null && served > actualYield);
 
 	// Soft warnings only — over-planned service is a real, expected scenario
 	// (computeMealVariance's `over` status covers it, e.g. the plan
@@ -45,6 +58,7 @@
 		volunteers = 0;
 		outsideEvacuees = 0;
 		notes = '';
+		actualYield = null;
 	}
 
 	function close() {
@@ -68,6 +82,7 @@
 					date: plan.date,
 					meal: plan.meal,
 					meal_plan_id: plan._id,
+					actual_yield: actualYield ?? undefined,
 					served,
 					waste,
 					external: { volunteers, outside_evacuees: outsideEvacuees },
@@ -98,6 +113,19 @@
 		</Dialog.Header>
 
 		<form onsubmit={handleSubmit} class="space-y-4">
+			<div class="space-y-1.5">
+				<Label for="ms-yield">ผลผลิตที่ทำได้จริง (Actual Yield) — เพดานการแจก (ไม่บังคับ)</Label>
+				<Input id="ms-yield" type="number" min="0" bind:value={actualYield} />
+				<p class="text-xs text-muted-foreground">
+					จำนวนที่ปรุงเสร็จจริง — ปล่อยว่างได้ถ้ายังไม่ทราบ
+				</p>
+				{#if servedExceedsYield}
+					<p class="text-xs text-amber-600">
+						⚠ เสิร์ฟมากกว่าผลผลิตที่ทำได้จริง — ตรวจสอบยอดก่อนบันทึก
+					</p>
+				{/if}
+			</div>
+
 			<div class="grid grid-cols-2 gap-4">
 				<div class="space-y-1.5">
 					<Label for="ms-served">เสิร์ฟในศูนย์ (คน/กล่อง)</Label>
@@ -166,9 +194,13 @@
 				<div class="flex items-center gap-2 rounded-md border bg-muted/40 p-3 text-xs">
 					<ClipboardCheck class="h-4 w-4 shrink-0 text-muted-foreground" />
 					<span>
-						วางแผน {planned.toLocaleString()} · เสิร์ฟ {served.toLocaleString()} ·
+						วางแผน {planned.toLocaleString()} · เสิร์ฟ {served.toLocaleString()}
+						{#if actualYield !== null}
+							· ทำได้จริง {actualYield.toLocaleString()}
+						{/if}
+						·
 						<span
-							class="font-semibold {served - planned < 0 ? 'text-amber-700' : 'text-emerald-700'}"
+							class="font-semibold {served - planned === 0 ? 'text-emerald-700' : 'text-amber-700'}"
 						>
 							ผลต่าง {served - planned >= 0 ? '+' : ''}{(served - planned).toLocaleString()}
 						</span>
