@@ -54,15 +54,15 @@
 	function getStatusText(status: string): string {
 		switch (status) {
 			case 'OPEN':
-				return 'เปิดใช้งาน';
+				return t.statusOpen;
 			case 'FULL':
-				return 'เต็มความจุ';
+				return t.statusFull;
 			case 'PREPARE':
-				return 'เตรียมพร้อม';
+				return t.statusStandby;
 			case 'CLOSED':
-				return 'ปิดทำการ';
+				return t.statusClosed;
 			default:
-				return 'ปิดทำการ';
+				return t.statusClosed;
 		}
 	}
 
@@ -72,6 +72,23 @@
 
 	function getSiteKindText(siteKind: PublicSiteKind | undefined): string {
 		return siteKind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์อพยพ';
+	}
+
+	function translateAdminType(type: string): string {
+		if (langState.current !== 'en') return type;
+		const map: Record<string, string> = {
+			วัด: 'Temple',
+			โรงเรียน: 'School',
+			หน่วยงานราชการ: 'Government Agency',
+			ศูนย์อพยพ: 'Evacuation Center',
+			มหาวิทยาลัย: 'University',
+			มัสยิด: 'Mosque',
+			โบสถ์: 'Church',
+			พื้นที่เอกชน: 'Private Area',
+			อื่นๆ: 'Other',
+			unspecified: 'Unspecified'
+		};
+		return map[type] || type;
 	}
 
 	onMount(async () => {
@@ -248,6 +265,11 @@
 			}
 		}
 	});
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_MAP_I18N } from '$lib/constants/i18n';
+
+	let t = $derived(getTranslation(PUBLIC_SHELTER_MAP_I18N, langState.current));
 </script>
 
 <svelte:head>
@@ -260,23 +282,23 @@
 <div
 	class="absolute bottom-8 left-2 z-10 rounded-xl border border-border bg-card/95 px-3 py-2.5 text-xs shadow-lg backdrop-blur-md"
 >
-	<div class="mb-2 font-bold text-foreground">สถานะศูนย์พักพิง</div>
+	<div class="mb-2 font-bold text-foreground">{t.shelterStatus}</div>
 	<div class="flex flex-col gap-1.5">
 		<div class="flex items-center gap-2">
 			<div class="h-3 w-3 rounded-full border border-white bg-[#22c55e] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">เปิดใช้งาน</span>
+			<span class="font-medium text-muted-foreground">{t.statusOpen}</span>
 		</div>
 		<div class="flex items-center gap-2">
 			<div class="h-3 w-3 rounded-full border border-white bg-[#f59e0b] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">เตรียมพร้อม</span>
+			<span class="font-medium text-muted-foreground">{t.statusStandby}</span>
 		</div>
 		<div class="flex items-center gap-2">
 			<div class="h-3 w-3 rounded-full border border-white bg-[#ef4444] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">เต็มความจุ</span>
+			<span class="font-medium text-muted-foreground">{t.statusFull}</span>
 		</div>
 		<div class="flex items-center gap-2">
 			<div class="h-3 w-3 rounded-full border border-white bg-[#94a3b8] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">ปิดทำการ</span>
+			<span class="font-medium text-muted-foreground">{t.statusClosed}</span>
 		</div>
 	</div>
 </div>

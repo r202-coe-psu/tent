@@ -28,6 +28,23 @@
 
 	let t = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
 
+	function translateAdminType(type: string): string {
+		if (langState.current !== 'en') return type;
+		const map: Record<string, string> = {
+			วัด: 'Temple',
+			โรงเรียน: 'School',
+			หน่วยงานราชการ: 'Government Agency',
+			ศูนย์อพยพ: 'Evacuation Center',
+			มหาวิทยาลัย: 'University',
+			มัสยิด: 'Mosque',
+			โบสถ์: 'Church',
+			พื้นที่เอกชน: 'Private Area',
+			อื่นๆ: 'Other',
+			unspecified: 'Unspecified'
+		};
+		return map[type] || type;
+	}
+
 	function translateVulnerableGroup(group: string): string {
 		const map: Record<string, string> = {
 			general_vulnerable: t.generalVulnerable,
@@ -35,13 +52,25 @@
 			wheelchair: t.wheelchair,
 			none: t.noSpecificZone
 		};
+		if (langState.current === 'en') {
+			Object.assign(map, {
+				ผู้ป่วยติดเตียง: 'Bedridden Patient',
+				ผู้ใช้วีลแชร์: 'Wheelchair User',
+				เด็กอ่อน: 'Infant/Baby',
+				ผู้สูงอายุ: 'Elderly',
+				สตรีมีครรภ์: 'Pregnant Women',
+				ผู้พิการ: 'Disabled Person',
+				ผู้ป่วยจิตเวช: 'Psychiatric Patient',
+				ผู้ป่วยแยกกักโรค: 'Quarantine Patient'
+			});
+		}
 		return map[group] || group;
 	}
 
 	function translatePetPolicy(policyStr: string | undefined): string {
 		if (!policyStr) return '-';
-		if (policyStr === 'not_allowed') return t.notAllowed;
-		if (policyStr === 'allowed') return t.allowed;
+		if (policyStr === 'not_allowed' || policyStr === 'ไม่อนุญาต') return t.notAllowed;
+		if (policyStr === 'allowed' || policyStr === 'อนุญาต') return t.allowed;
 		if (policyStr.startsWith('conditional:')) {
 			const categories = policyStr.split(':')[1];
 			const map: Record<string, string> = {
@@ -71,7 +100,7 @@
 			{#if shelter.admin_type}
 				<div class="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
 					<span class="h-1.5 w-1.5 rounded-full bg-primary/40"></span>
-					{shelter.admin_type}
+					{translateAdminType(shelter.admin_type)}
 				</div>
 			{/if}
 			<div class="mt-1 text-[11px] font-semibold text-primary">

@@ -6,6 +6,28 @@
 	import type { PublicShelterDetail } from '$lib/features/public-portal';
 
 	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
+
+	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
+
+	function translateAdminType(type: string): string {
+		if (langState.current !== 'en') return type;
+		const map: Record<string, string> = {
+			วัด: 'Temple',
+			โรงเรียน: 'School',
+			หน่วยงานราชการ: 'Government Agency',
+			ศูนย์อพยพ: 'Evacuation Center',
+			มหาวิทยาลัย: 'University',
+			มัสยิด: 'Mosque',
+			โบสถ์: 'Church',
+			พื้นที่เอกชน: 'Private Area',
+			อื่นๆ: 'Other',
+			unspecified: 'Unspecified'
+		};
+		return map[type] || type;
+	}
 </script>
 
 <!-- Hero Card -->
@@ -25,23 +47,23 @@
 				></span>
 				<span class="relative inline-flex h-2 w-2 rounded-full bg-success"></span>
 			</span>
-			{shelter.status === 'OPEN' ? 'เปิดรับผู้อพยพ' : shelter.status || '-'}
+			{shelter.status === 'OPEN' ? t.openAdmission : shelter.status || '-'}
 		</div>
 
 		<!-- Title & Subtitle -->
 		<h1 class="mb-3 text-3xl font-bold tracking-tight md:text-4xl">
-			{shelter.name || 'ไม่มีชื่อศูนย์'}
+			{shelter.name || t.unnamedShelter}
 		</h1>
 		<div class="mb-10 flex flex-wrap items-center gap-3 text-sm text-muted-foreground/60">
 			<div class="flex items-center gap-1.5 text-accent">
 				<MapPin class="h-4 w-4 text-warning" />
-				{shelter.address || 'ไม่ระบุที่อยู่'}
+				{shelter.address || t.addressNotSpecified}
 			</div>
 			{#if shelter.admin_type && shelter.admin_type !== 'unspecified'}
 				<span
 					class="rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white/90"
 				>
-					{shelter.admin_type}
+					{translateAdminType(shelter.admin_type)}
 				</span>
 			{/if}
 		</div>
@@ -52,34 +74,34 @@
 		>
 			<div class="grid grid-cols-2 gap-8 md:flex">
 				<div>
-					<div class="mb-1 text-xs font-semibold text-secondary/80">ความจุ (ว่าง / ทั้งหมด)</div>
+					<div class="mb-1 text-xs font-semibold text-secondary/80">{t.capacityLabel}</div>
 					<div class="flex items-baseline gap-1.5">
 						<span class="text-3xl font-bold text-success-subtle"
 							>{shelter.capacity?.available ?? '-'}</span
 						>
 						<span class="text-xl font-medium text-secondary">/</span>
 						<span class="text-xl font-bold text-white">{shelter.capacity?.total ?? '-'}</span>
-						<span class="text-sm font-medium text-secondary/80">คน</span>
+						<span class="text-sm font-medium text-secondary/80">{t.people}</span>
 					</div>
 				</div>
 
 				<div>
-					<div class="mb-1 text-xs font-semibold text-secondary/80">อัตราครองเตียง</div>
+					<div class="mb-1 text-xs font-semibold text-secondary/80">{t.occupancyRate}</div>
 					<div class="text-3xl font-bold text-white">{shelter.occupancy_rate ?? '-'}%</div>
 				</div>
 
 				<div class="col-span-2 items-center justify-around md:col-span-1 md:space-y-2">
-					<div class="text-xs font-semibold text-secondary/80">สถานะอาคาร</div>
+					<div class="text-xs font-semibold text-secondary/80">{t.buildingStatus}</div>
 					<div class="flex items-end gap-2 self-end text-xl font-bold text-white">
 						<CheckCircle2 class="h-5 w-5 text-warning-subtle" />
 						{#if shelter.building_status === 'indoor'}
-							อาคารปิด (ในร่ม)
+							{t.indoor}
 						{:else if shelter.building_status === 'outdoor'}
-							ลานเปิด (กลางแจ้ง)
+							{t.outdoor}
 						{:else if shelter.building_status === 'hybrid'}
-							ผสมผสาน (มีทั้งในร่มและกลางแจ้ง)
+							{t.hybrid}
 						{:else}
-							ไม่ระบุ
+							{t.unspecified}
 						{/if}
 					</div>
 				</div>
@@ -96,7 +118,7 @@
 					class="flex w-fit items-center gap-2 rounded-xl bg-warning px-6 py-3.5 text-sm font-bold text-warning-foreground shadow-lg transition-colors hover:bg-warning-subtle"
 				>
 					<Navigation class="h-4.5 w-4.5" />
-					นำทางด้วย Google Maps
+					{t.navigateMaps}
 				</Button>
 			{/if}
 		</div>
