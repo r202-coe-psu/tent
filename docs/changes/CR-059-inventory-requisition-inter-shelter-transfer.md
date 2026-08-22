@@ -1,8 +1,9 @@
 ---
 id: CR-059
 title: Requisitions, Inter-Shelter Transfers & NFI Distribution Control
-status: proposed
+status: approved
 date: 2026-07-25
+updated: 2026-08-22
 requested_by: Logistics & Field Requisition Management
 decided_by: Project Owner
 layer: volatile
@@ -203,3 +204,18 @@ split allocation, driver/plate บังคับ, destination lot ID, สถา
   receive→source ย้อนกลับ — ส่วนหลังเป็นของใหม่เกินจาก referral เดิม) รายละเอียดเต็มอยู่ในหัวข้อ
   "🏗️ การตัดสินใจทางสถาปัตยกรรม" ด้านบน — **field ละเอียดของ `stock_transfer` (lot split, driver/plate,
   dispute state) ยังไม่ approve ในรอบนี้** ต้องคุยแยกอีกรอบก่อน bump `schema_v`
+- 2026-08-22 — **status → `approved`** by project owner (Chatchanok Nikrothanont) — ยืนยันว่า
+  **Kontuch Suksawat (`Fishcanwalk`) เป็น PM ของโปรเจกต์นี้** เนื้อหาส่วนที่ Kontuch เป็นผู้เริ่มเขียนไว้ตั้งแต่
+  commit ต้นฉบับ (`466d9a63`, 2026-07-29) — Why, Ticket System Overview, **Flow 1** (ข้อ 4, เนื้อหา
+  ก่อนหัวข้อสถาปัตยกรรม cross-DB), **Flow 2** (2-Step Item Distribution / Active Batch, ข้อ 5),
+  **Flow 3** (Kitchen Requisition, ข้อ 5.5), UI Safety Standards, Master Formulas Table, และ Task
+  Summary Table — **ให้ถือเป็น approved ทั้งหมด** ในระดับ requirement/business spec โดยไม่ต้องผ่าน
+  sign-off รอบเพิ่มเติมอีก
+  - **ข้อยกเว้นที่ยังไม่ผ่านการอนุมัตินี้:** field ละเอียดของ `stock_transfer` (lot split, driver/plate,
+    dispute state) ตามที่บันทึกไว้ใน entry ด้านบน — ยังต้องคุยแยก schema_v ต่างหาก
+  - **ไม่ครอบคลุมการตัดสินใจสถาปัตยกรรมระดับ implementation:** การ approve requirement ของ Flow 2
+    (offline on-site distribution) **ไม่ได้แปลว่าวิธีทำ offline ได้รับการตัดสินใจแล้ว** — ขัดกับหลัก
+    remote-first/no-PouchDB ใน `CLAUDE.md` (§"Remote-first data & auth") ต้องมี architecture
+    decision แยกต่างหาก (แบบเดียวกับที่ทำให้ T-13 ข้างต้น) ก่อนเริ่ม implement Flow 2
+  - ขอบเขตของกฎ "ผู้เขียนเดิม = PM = approved" นี้ใช้กับ **CR-059 ฉบับนี้เท่านั้น** ยังไม่ใช่นโยบายทั่วไป
+    สำหรับ CR อื่น — ต้องตกลงแยกถ้าจะขยายผล
