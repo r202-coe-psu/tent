@@ -4,44 +4,49 @@
 	import Users from '@lucide/svelte/icons/users';
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import type { PublicShelterDetail } from '$lib/features/public-portal';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
 
 	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
 
 	function getZoneName(type: string | undefined): string {
 		switch (type) {
 			case 'general':
-				return 'โซนพักพิงทั่วไป';
+				return t.generalZone;
 			case 'male':
-				return 'โซนพักพิง (ชาย)';
+				return t.maleZone;
 			case 'female':
-				return 'โซนพักพิง (หญิง)';
+				return t.femaleZone;
 			case 'family':
-				return 'โซนพักพิง (ครอบครัว)';
+				return t.familyZone;
 			case 'pet':
-				return 'โซนสัตว์เลี้ยง';
+				return t.petZone;
 			case 'vulnerable':
-				return 'โซนกลุ่มเปราะบาง';
+				return t.vulnerableZone;
 			case 'quarantine':
-				return 'โซนแยกกักโรค';
+				return t.quarantineZone;
 			case 'kitchen':
-				return 'โซนโรงครัว';
+				return t.kitchenZone;
 			case 'storage':
-				return 'โซนเก็บของ';
+				return t.storageZone;
 			case 'admin':
-				return 'โซนเจ้าหน้าที่';
+				return t.adminZone;
 			case 'medical':
-				return 'โซนปฐมพยาบาล';
+				return t.medicalZone;
 			default:
-				return `โซน ${type || 'ไม่ระบุ'}`;
+				return `${t.zonePrefix} ${type || t.unspecified}`;
 		}
 	}
+
+	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
 </script>
 
 {#if shelter.zones && shelter.zones.length > 0}
 	<section>
 		<div class="mb-4 flex items-center gap-2">
 			<Layers class="text-accent-blue h-5 w-5" />
-			<h2 class="text-lg font-bold text-foreground">โซนพื้นที่ภายในศูนย์</h2>
+			<h2 class="text-lg font-bold text-foreground">{t.internalShelterZones}</h2>
 		</div>
 
 		<div class="grid grid-cols-1 gap-3">
@@ -73,14 +78,14 @@
 								{/if}
 							</h3>
 							<p class="text-xs text-muted-foreground">
-								{#if zone.area_m2}พื้นที่ {zone.area_m2} ตร.ม.{/if}
+								{#if zone.area_m2}{t.area} {zone.area_m2} {t.sqm}{/if}
 							</p>
 						</div>
 					</div>
 					<div class="text-right">
 						{#if zone.capacity}
 							<div class="text-sm font-bold text-foreground">{zone.capacity}</div>
-							<div class="text-xs text-muted-foreground">คน</div>
+							<div class="text-xs text-muted-foreground">{t.people}</div>
 						{:else}
 							<div class="text-sm text-muted-foreground">-</div>
 						{/if}
