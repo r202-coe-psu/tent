@@ -23,6 +23,9 @@ import {
 	purchaseReceiptInputSchema,
 	isPurchase,
 	mapNeedItemHeuristic,
+	createTransfer,
+	dispatchTransfer,
+	receiveTransfer,
 	type Donation,
 	type ReceiveSource
 } from './operations';
@@ -776,6 +779,149 @@ describe('createDistributeEntry', () => {
 				ctx
 			)
 		).toThrow();
+	});
+});
+
+describe('Inter-shelter Transfers', () => {
+	it('creates and dispatches a transfer', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		expect(t.status).toBe('requested');
+
+		const { transfer: shipped, ledgers } = dispatchTransfer(t, ctx);
+		expect(shipped.status).toBe('shipped');
+		expect(shipped.timeline.shipped).toBeDefined();
+		expect(ledgers).toHaveLength(1);
+		expect(ledgers[0].qty).toBe('-100'); // outbound
+		expect(ledgers[0].reason).toBe('transfer_out');
+	});
+
+	it('receives a transfer completely', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		const { transfer: received, ledgers } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: 100 }],
+			ctx
+		);
+
+		expect(received.status).toBe('received');
+		expect(received.items[0].received_qty).toBe('100');
+		expect(ledgers).toHaveLength(1);
+		expect(ledgers[0].qty).toBe('100');
+		expect(ledgers[0].reason).toBe('transfer_in');
+	});
+
+	it('handles partial receipt (loss in transit)', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		// Receiver only gets 85
+		const { transfer: received, ledgers } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: 85 }],
+			ctx
+		);
+
+		expect(received.status).toBe('received');
+		expect(received.items[0].received_qty).toBe('85');
+		expect(ledgers).toHaveLength(1);
+		expect(ledgers[0].qty).toBe('85'); // Only 85 added to inventory
+		expect(ledgers[0].reason).toBe('transfer_in');
+	});
+
+	it('handles zero receipt (complete loss)', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		// Receiver gets 0
+		const { transfer: received, ledgers } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: 0 }],
+			ctx
+		);
+
+		expect(received.status).toBe('received');
+		expect(received.items[0].received_qty).toBe('0');
+		expect(ledgers).toHaveLength(0); // No ledger entry since nothing was added
+	});
+
+	it('rejects dispatching a transfer that is not requested', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+		expect(() => dispatchTransfer(shipped, ctx)).toThrow();
+	});
+
+	it('rejects receiving a transfer that has not shipped', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		expect(() => receiveTransfer(t, [{ item_id: 'item:rice', qty: 100 }], ctx)).toThrow();
+	});
+
+	it('keeps decimal qty exact through dispatch and receive (CR-038)', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: '0.1', unit: 'kg' }]
+			},
+			ctx
+		);
+		expect(t.items[0].qty).toBe('0.1');
+
+		const { transfer: shipped, ledgers: out } = dispatchTransfer(t, ctx);
+		expect(out[0].qty).toBe('-0.1');
+
+		const { ledgers: incoming } = receiveTransfer(
+			shipped,
+			[{ item_id: 'item:rice', qty: '0.2' }],
+			ctx
+		);
+		expect(incoming[0].qty).toBe('0.2');
+
+		// The float trap CR-038 exists to close: 0.1 + 0.2 must not drift to 0.30000000000000004
+		expect(stockBalance([out[0], incoming[0]])).toEqual(new Map([['item:rice', '0.1']]));
 	});
 });
 
