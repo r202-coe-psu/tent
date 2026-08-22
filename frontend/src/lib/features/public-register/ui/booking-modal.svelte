@@ -65,7 +65,7 @@
 							: null
 				}));
 			} catch {
-				loadError = 'โหลดรายชื่อศูนย์พักพิงไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
+				loadError = t.loadError;
 				loaded = false;
 			}
 		})();
@@ -74,6 +74,10 @@
 	function reset() {
 		ticket = null;
 	}
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_BOOKING_I18N } from '$lib/constants/i18n';
+	let t = $derived(getTranslation(PUBLIC_BOOKING_I18N, langState.current));
 </script>
 
 <Dialog.Root
@@ -86,12 +90,10 @@
 		<Dialog.Header class="pb-4">
 			<Dialog.Title class="flex items-center gap-2 text-lg">
 				<ClipboardCheck class="h-5 w-5 text-primary" />
-				{ticket ? 'ใบจองเข้าศูนย์พักพิง' : 'จองเข้าศูนย์พักพิงล่วงหน้า'}
+				{ticket ? t.modalTitleTicket : t.modalTitleBook}
 			</Dialog.Title>
 			<Dialog.Description>
-				{ticket
-					? 'กรุณาบันทึกหรือพิมพ์ใบจองนี้ไว้แสดงที่ประตูศูนย์'
-					: 'กันที่ไว้ก่อนเดินทาง ลดเวลารอที่หน้าประตู และช่วยให้ศูนย์เตรียมอาหารและเครื่องนอนได้ตรงจำนวน'}
+				{ticket ? t.modalDescTicket : t.modalDescBook}
 			</Dialog.Description>
 		</Dialog.Header>
 
