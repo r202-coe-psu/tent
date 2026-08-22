@@ -13,6 +13,7 @@ import { supplyRepository } from '$lib/features/supply';
 import type {
 	MealPlan,
 	MealPlanInput,
+	MealPlanGasUsage,
 	KitchenRequisitionInput,
 	MealServiceInput,
 	GasCylinderType,
@@ -35,6 +36,7 @@ export const kitchenKeys = {
 	requisitions: () => [...kitchenKeys.all, 'requisitions'] as const,
 	mealServices: () => [...kitchenKeys.all, 'meal_services'] as const,
 	gasCylinderTypes: () => [...kitchenKeys.all, 'gas_cylinder_types'] as const,
+	gasLedger: () => [...kitchenKeys.all, 'gas_ledger'] as const,
 	occupancy: () => [...kitchenKeys.all, 'occupancy'] as const
 };
 
@@ -120,6 +122,7 @@ export const useCreateMealPlanCalc = () =>
 			override_reason,
 			recipeId,
 			custom,
+			gasUsage,
 			ctx
 		}: {
 			date: string;
@@ -129,6 +132,7 @@ export const useCreateMealPlanCalc = () =>
 			override_reason?: string | null;
 			recipeId?: string;
 			custom?: CustomIngredientInput[];
+			gasUsage?: MealPlanGasUsage[];
 			ctx: AuthorContext;
 		}) => {
 			const headcountAsOf = new Date().toISOString();
@@ -148,7 +152,8 @@ export const useCreateMealPlanCalc = () =>
 					recipes,
 					calc_source,
 					override_reason,
-					...(label ? { label } : {})
+					...(label ? { label } : {}),
+					...(gasUsage && gasUsage.length > 0 ? { gas_usage: gasUsage } : {})
 				},
 				ctx
 			);
@@ -170,7 +175,8 @@ export const useUpdateMealPlanCalc = () =>
 			headcount,
 			override_reason,
 			recipeId,
-			custom
+			custom,
+			gasUsage
 		}: {
 			plan: MealPlan;
 			label?: string;
@@ -178,6 +184,7 @@ export const useUpdateMealPlanCalc = () =>
 			override_reason?: string | null;
 			recipeId?: string;
 			custom?: CustomIngredientInput[];
+			gasUsage?: MealPlanGasUsage[];
 		}) => {
 			const { recipes, calc_source } = await resolveMealPlanCalc(
 				headcount,
@@ -185,15 +192,17 @@ export const useUpdateMealPlanCalc = () =>
 				custom,
 				new Date().toISOString()
 			);
-			// Pass `label` unconditionally (not a conditional spread): editing to an
-			// empty label must actually clear the old one. `undefined` is dropped on
-			// persist, so the stored doc loses `label` rather than keeping the stale value.
+			// Pass `label`/`gas_usage` unconditionally (not a conditional spread):
+			// editing to empty must actually clear the old value. `undefined` is
+			// dropped on persist (kitchen.remote.ts), so the stored doc loses the
+			// key rather than keeping a stale value.
 			return kitchenRepository().updateMealPlanDraft(plan, {
 				headcount,
 				recipes,
 				calc_source,
 				override_reason,
-				label
+				label,
+				gas_usage: gasUsage && gasUsage.length > 0 ? gasUsage : undefined
 			});
 		}
 	}));
@@ -256,6 +265,33 @@ export const useDeleteGasCylinderType = () =>
 		mutationFn: (doc: GasCylinderType) => kitchenRepository().deleteGasCylinderType(doc)
 	}));
 
+// --- GasLedger (CR-080) — real per-cylinder stock ---
+
+export const useGasLedger = () =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.gasLedger(),
+		queryFn: () => kitchenRepository().listGasLedger()
+	}));
+
+export const useRefillGasCylinder = () =>
+	createMutation(() => ({
+		mutationFn: ({
+			cylinderId,
+			qtyKg,
+			ctx
+		}: {
+			cylinderId: string;
+			qtyKg: string;
+			ctx: AuthorContext;
+		}) => kitchenRepository().refillGasCylinder(cylinderId, qtyKg, ctx)
+	}));
+
+export const useWriteOffGasCylinder = () =>
+	createMutation(() => ({
+		mutationFn: ({ cylinderId, ctx }: { cylinderId: string; ctx: AuthorContext }) =>
+			kitchenRepository().writeOffGasCylinder(cylinderId, ctx)
+	}));
+
 // --- Live sync ---
 
 export function startKitchenLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
@@ -269,6 +305,8 @@ export function startKitchenLiveQuery(queryClient: QueryClient): SubscribeDataCh
 				return [kitchenKeys.mealServices()];
 			case 'gas_cylinder_type':
 				return [kitchenKeys.gasCylinderTypes()];
+			case 'gas_ledger':
+				return [kitchenKeys.gasLedger()];
 			case 'evacuee':
 			case 'movement':
 				return [kitchenKeys.occupancy()];

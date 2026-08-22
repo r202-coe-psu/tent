@@ -30,8 +30,36 @@ export type {
 } from './domain/meal-calc';
 
 // Domain — plan vs actual variance (T-27)
-export { computeMealVariance, VARIANCE_TOLERANCE_PCT } from './domain/meal-variance';
+export {
+	computeMealVariance,
+	VARIANCE_TOLERANCE_PCT,
+	MEAL_VARIANCE_STATUS_LABELS
+} from './domain/meal-variance';
 export type { MealVariance, MealVarianceStatus } from './domain/meal-variance';
+
+// Domain — LPG gas consumption (CR-058 §2.2, T-25 ช่วง A)
+export {
+	calculateGasConsumptionKg,
+	cylindersNeeded,
+	cookingHoursFromConsumptionKg
+} from './domain/gas-calc';
+export type { GasBurnCoefficients } from './domain/gas-calc';
+
+// Domain — gas cylinder stock ledger (CR-080)
+export {
+	gasLedgerReasonSchema,
+	createGasLedgerEntry,
+	isGasLedgerEntry,
+	gasCylinderBalance,
+	gasCylinderStatus,
+	maxRefillKg
+} from './domain/gas-ledger';
+export type {
+	GasLedgerEntry,
+	GasLedgerInput,
+	GasLedgerReason,
+	GasCylinderStatus
+} from './domain/gas-ledger';
 
 // Domain — occupancy → headcount (T-06 source)
 export { deriveHeadcountFromOccupancy, SOFT_FOOD_NEEDS } from './domain/occupancy';
@@ -42,6 +70,7 @@ export type {
 	MealPlan,
 	MealPlanHeadcount,
 	MealPlanRecipe,
+	MealPlanGasUsage,
 	KitchenRequisition,
 	KitchenRequisitionItem,
 	MealService,
@@ -94,5 +123,8 @@ export {
 	useCreateGasCylinderType,
 	useUpdateGasCylinderType,
 	useDeleteGasCylinderType,
+	useGasLedger,
+	useRefillGasCylinder,
+	useWriteOffGasCylinder,
 	startKitchenLiveQuery
 } from './application/queries';
