@@ -5,39 +5,46 @@
 		useOverrideVersionHistory,
 		type SopMaster,
 		type SopOverride,
-		type SopRatioKey
+		type SopRatioKey,
+		RATIO_LABELS,
+		createProfileSlug,
+		useSetMasterActive
 	} from '$lib/features/sop-ratios';
 	import X from '@lucide/svelte/icons/x';
 	import Clock from '@lucide/svelte/icons/clock';
 	import User from '@lucide/svelte/icons/user';
 	import { fade, fly } from 'svelte/transition';
-	import { RATIO_LABELS } from '../domain/sop-ratio.labels';
+
+	import { formatThaiDateTime } from '$lib/utils/date';
+	import { authStore } from '$lib/stores/auth.svelte';
 
 	interface Props {
 		profile: SopMaster | SopOverride;
 		onClose: () => void;
 		activeMaster?: SopMaster | null;
+		isSA?: boolean;
+		onViewVersion?: (profile: SopMaster | SopOverride) => void;
 	}
 
-	const { profile, onClose, activeMaster }: Props = $props();
+	const { profile, onClose, activeMaster, isSA = false, onViewVersion }: Props = $props();
 
 	const isMaster = $derived(isSopMaster(profile));
 
-	const masterQuery = useMasterVersionHistory(() => (isMaster ? profile.name : ''));
+	const masterQuery = useMasterVersionHistory(() =>
+		isMaster ? ((profile as SopMaster).slug ?? createProfileSlug(profile.name)) : ''
+	);
 	const overrideQuery = useOverrideVersionHistory(
 		() => (!isMaster ? profile.name : ''),
 		() => (!isMaster ? (profile as SopOverride).shelter_code : '')
 	);
 
 	const historyQuery = $derived(isMaster ? masterQuery : overrideQuery);
+	const activateMasterMutation = useSetMasterActive();
 
-	function formatDate(iso: string) {
-		return new Date(iso).toLocaleString('th-TH', {
-			day: '2-digit',
-			month: 'short',
-			year: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
+	async function activate(version: SopMaster) {
+		await activateMasterMutation.mutateAsync({
+			id: version._id,
+			createdBy: authStore.user?.name ?? 'unknown'
 		});
 	}
 </script>
@@ -174,9 +181,30 @@
 									<User size={12} />
 									{version.created_by}
 								</p>
+								{#if isMaster}
+									<div class="mt-3 flex justify-end gap-2">
+										<button
+											type="button"
+											class="rounded-lg border px-2.5 py-1 text-xs font-semibold"
+											onclick={() => onViewVersion?.(version)}
+										>
+											ดูเวอร์ชันนี้
+										</button>
+										{#if isSA && !version.active}
+											<button
+												type="button"
+												class="rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+												disabled={activateMasterMutation.isPending}
+												onclick={() => activate(version as SopMaster)}
+											>
+												เปิดใช้งาน
+											</button>
+										{/if}
+									</div>
+								{/if}
 								<p class="flex items-center gap-1.5 text-[12px] text-slate-500">
 									<Clock size={12} />
-									{formatDate(version.updated_at)}
+									{formatThaiDateTime(version.updated_at)}
 								</p>
 							</div>
 						</div>
