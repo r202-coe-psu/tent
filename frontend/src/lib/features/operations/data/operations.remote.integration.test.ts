@@ -26,6 +26,10 @@ async function probe(): Promise<boolean> {
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 
+// CR-055 R2: a 'donation' receipt must point at a real donation doc, so fixtures
+// that only need stock on hand still have to name one.
+const DONATION_REF = 'donation:01JFIXTUREDONATION';
+
 describe('OperationsRemoteRepository — CouchDB integration (T-11 DoD #4)', () => {
 	let dbName: string;
 
@@ -52,7 +56,13 @@ describe('OperationsRemoteRepository — CouchDB integration (T-11 DoD #4)', () 
 			const N = 100;
 			const entries = Array.from({ length: N }, () =>
 				createReceiveEntry(
-					{ item_id: 'item:concurrent', qty: 5, unit: 'kg', source: 'donation' },
+					{
+						item_id: 'item:concurrent',
+						qty: 5,
+						unit: 'kg',
+						source: 'donation',
+						ref_id: DONATION_REF
+					},
 					ctx
 				)
 			);
@@ -79,7 +89,7 @@ describe('OperationsRemoteRepository — CouchDB integration (T-11 DoD #4)', () 
 
 		const repo = new OperationsRemoteRepository(dbName);
 		const entry = createReceiveEntry(
-			{ item_id: 'item:rice', qty: 42, unit: 'kg', source: 'donation' },
+			{ item_id: 'item:rice', qty: 42, unit: 'kg', source: 'donation', ref_id: DONATION_REF },
 			ctx
 		);
 		await repo.addLedgerEntry(entry);

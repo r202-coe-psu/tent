@@ -12,6 +12,7 @@ affects:
   - frontend/src/lib/features/transfers/
   - frontend/src/lib/features/inventory/
   - frontend/src/lib/features/distribution/
+  - docs/changes/CR-055-stock-ledger-refid-invariant.md (แถว `distribute` ของตาราง R2 — ต้องแก้เมื่อ CR นี้ลง)
 ---
 
 # CR-059 — Requisitions, Inter-Shelter Transfers & NFI Distribution Control
@@ -140,6 +141,15 @@ flowchart TD
 ## Impact (ผลกระทบต่อระบบ)
 - **Docs:** `docs/data/schema.md` (§4.1, §4.2, §4.3, §4.4, §4.5, §5.1-5.4)
 - **Code:** `frontend/src/lib/features/transfers/`, `frontend/src/lib/features/inventory/`, `frontend/src/lib/features/distribution/`
+- **[CR-055](CR-055-stock-ledger-refid-invariant.md) — ripple บังคับ (ห้ามลืม):** CR-055 เคาะ Q-1 (ก) ว่า
+  `stock_ledger.reason = 'distribute'` ต้องมี `ref_id = null` **เสมอ** โดยให้เหตุผลชัดว่า "จนกว่าจะมี doc
+  การแจกจ่ายจริง" · CR นี้คือ CR ที่สร้าง doc นั้น ⇒ **วันที่ CR-059 ลง ต้องกลับไปแก้แถว `distribute` ใน
+  ตาราง R2** ทั้งสามที่ให้ตรงกัน:
+  1. `REF_PREFIX_BY_REASON` (`features/operations/domain/operations.ts`) — เปลี่ยน `distribute: null`
+     เป็น prefix ของ doc ต้นเหตุ
+  2. `distributeInputSchema.ref_id` — ปัจจุบันเป็น `z.null()` ตาม R8 ต้องคลายเป็น `z.string()`
+  3. `docs/data/schema.md` §2.1 ตาราง `reason` → `ref_id` + บรรทัด Migration
+  ถ้าไม่แก้ การเขียน ledger ของ flow แจกจ่ายจะถูก guard ของ CR-055 ปฏิเสธทั้งหมด
 
 ---
 
@@ -150,3 +160,7 @@ flowchart TD
 
 ## Decision Log
 - 2026-07-25 — proposed (กำหนดสเปกปรับปรุงระบบคำร้องเบิกจ่าย โอนย้ายข้ามศูนย์ NFI 2 ขั้นตอน และ UI Safety)
+- 2026-08-15 — **บันทึก ripple สองทางกับ CR-055** (ปิดงาน CR-055) · CR-055 บังคับ invariant
+  `reason` ↔ prefix ของ `ref_id` ที่ชั้น domain แล้ว และเคาะให้ `distribute` เป็น `null` เสมอ **เพราะยังไม่มี
+  doc ต้นเหตุ** · CR นี้เป็นตัวสร้าง doc นั้น ⇒ เพิ่มรายการแก้ 3 จุดไว้ใน §Impact เพื่อไม่ให้หลุด ·
+  ฝั่ง CR-055 มีบรรทัดชี้กลับมาที่นี่ใน Decision log ของวันเดียวกัน

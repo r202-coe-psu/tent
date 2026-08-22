@@ -9,6 +9,10 @@ vi.mock('$lib/db/shelter', () => ({
 	getShelterCode: vi.fn(() => 'SH001')
 }));
 
+vi.mock('$lib/stores/auth.svelte', () => ({
+	authStore: { user: { roles: ['system_admin'] } }
+}));
+
 const TEST_SHELTER_CODE = 'SH001';
 import {
 	SOP_MASTER_SCHEMA_VERSION,
@@ -27,13 +31,13 @@ vi.mock('svelte-sonner', () => ({
 }));
 
 // Mock repositories from data layer
-const mockCreateVersion = vi.fn().mockResolvedValue({ ok: true });
+const mockCreateNextVersion = vi.fn().mockResolvedValue({ ok: true });
 vi.mock('../data/sop-ratio.remote', () => ({
 	sopMasterRepository: () => ({
-		createVersion: mockCreateVersion
+		createNextVersion: mockCreateNextVersion
 	}),
 	sopOverrideRepository: () => ({
-		createVersion: mockCreateVersion
+		createNextVersion: mockCreateNextVersion
 	})
 }));
 
@@ -108,7 +112,7 @@ describe('SOP Ratios Application Hooks', () => {
 			await mutation.mutate(validOverrideInput);
 
 			// Verify data layer was called
-			expect(mockCreateVersion).toHaveBeenCalled();
+			expect(mockCreateNextVersion).toHaveBeenCalled();
 
 			// Verify query cache was invalidated
 			expect(mockInvalidateQueries).toHaveBeenCalledWith({
@@ -134,7 +138,7 @@ describe('SOP Ratios Application Hooks', () => {
 			);
 
 			// Verify data layer was NOT called due to the guard block
-			expect(mockCreateVersion).not.toHaveBeenCalled();
+			expect(mockCreateNextVersion).not.toHaveBeenCalled();
 
 			// Verify toast notification failed or was called with error (via onError)
 			expect(toast.error).toHaveBeenCalledWith(
@@ -153,7 +157,7 @@ describe('SOP Ratios Application Hooks', () => {
 
 			const result = await mutation.mutate(noOpInput);
 
-			expect(mockCreateVersion).not.toHaveBeenCalled();
+			expect(mockCreateNextVersion).not.toHaveBeenCalled();
 			expect(result).toEqual({
 				profile: validOverrideInput.prev,
 				deactivatedPrev: null,
@@ -170,7 +174,7 @@ describe('SOP Ratios Application Hooks', () => {
 
 			const result = await mutation.mutate(emptyInput);
 
-			expect(mockCreateVersion).not.toHaveBeenCalled();
+			expect(mockCreateNextVersion).not.toHaveBeenCalled();
 			expect(result).toEqual({
 				profile: validOverrideInput.prev,
 				deactivatedPrev: null,
@@ -208,7 +212,7 @@ describe('SOP Ratios Application Hooks', () => {
 			const mutation = useCreateMasterVersion();
 			await mutation.mutate(validMasterInput);
 
-			expect(mockCreateVersion).toHaveBeenCalled();
+			expect(mockCreateNextVersion).toHaveBeenCalled();
 			expect(mockInvalidateQueries).toHaveBeenCalledWith({
 				queryKey: sopRatioKeys.all
 			});
@@ -226,7 +230,7 @@ describe('SOP Ratios Application Hooks', () => {
 
 			const result = await mutation.mutate(noOpInput);
 
-			expect(mockCreateVersion).not.toHaveBeenCalled();
+			expect(mockCreateNextVersion).not.toHaveBeenCalled();
 			expect(result).toEqual({
 				profile: validMasterInput.prev,
 				deactivatedPrev: null,

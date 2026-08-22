@@ -29,8 +29,11 @@ export function toPublicShelterCard(
 	const parts = [subdistrict, district, province].filter(Boolean);
 	const address = parts.length > 0 ? parts.join(' ') : code || name;
 
+	const rawId = (item as Record<string, unknown> | null | undefined)?.id;
+	const itemId = typeof rawId === 'string' ? rawId : '';
+
 	return {
-		id: code || name,
+		id: code || itemId || name,
 		code,
 		name,
 		status: toUiShelterStatus(item?.status),

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { load } from './+page';
+import type { PublicShelterCardModel } from '$lib/features/public-portal';
 
 vi.mock('$lib/features/public-portal', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/features/public-portal')>();
@@ -24,6 +25,19 @@ async function runLoad(url: URL) {
 	if (!result) throw new Error('load() returned no data');
 	return result;
 }
+
+type LoadEventInput = Parameters<typeof load>[0];
+type LoadResult = {
+	shelters: PublicShelterCardModel[];
+	count: number;
+	as_of: string;
+	summary: {
+		shelters_total: number;
+		shelters_open: number;
+	};
+	filters: Record<string, string>;
+	available_types: string[];
+};
 
 describe('public/shelters load function', () => {
 	beforeEach(() => {

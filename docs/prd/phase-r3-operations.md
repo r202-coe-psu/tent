@@ -5,7 +5,7 @@ phase: R3
 month: ก.ค.–ส.ค. 2026 (Operations Gate 22 ส.ค.)
 gate: Operations Gate
 created: 2026-06-03
-updated: 2026-07-23
+updated: 2026-08-21
 ---
 
 # Phase R3 PRD: Operations — Donation, Kitchen, Volunteer, SOP & Shelter Reports
@@ -148,26 +148,31 @@ Kitchen Lead บันทึกการแจกจ่ายอาหารแ�
 - แยกประเภท: ผู้พักพิงในศูนย์ / อาสา / แจกจ่ายนอกศูนย์ (ผู้ประสบภัยที่ยังอยู่ในที่ตั้ง)
 - [ASSUMPTION] การผูก meal กับ Person รายคน (ใครรับมื้อไหน) เป็น optional; R3 เน้นยอดรวม/ประเภท
 
-### 4.3 Volunteer Management & Skill Matching (Module A)
+### 4.3 Volunteer Management & Job Board (Module A)
 
-**Description:** Volunteer Coordinator รับสมัครอาสา จับคู่ทักษะกับงาน และจัดกะ Realizes ความต้องการอาสาจาก Resource Calculation (FR-45)
+**Description:** Shelter Manager จัดการ Job Board ของศูนย์ รับสมัครอาสาผ่านหน้า Public (No-Auth) ออก Digital Ticket / QR Code จัดกะงาน และควบคุมสิทธิ์อาสาแบบ Time-Bound Shift Access (CR-041)
 
-#### FR-42: Volunteer Registration & Skills
+#### FR-42: Volunteer Registration & Public Application
 
-Volunteer ลงทะเบียนพร้อม skill tags และความพร้อม (availability)
+ประชาชนสามารถสมัครเป็นอาสาสมัครผ่านฟอร์มสาธารณะ (No-Auth) พร้อมรับ Digital Ticket / QR Code สำหรับตรวจสอบสถานะและรายงานตัว
 
 **Consequences (testable):**
-- volunteer profile เก็บ skill tags (เช่น แพทย์, ครัว, ขนของ, ดูแลเด็ก), availability และศูนย์ที่สังกัด
+- ฟอร์มรับสมัครสาธารณะเก็บข้อมูลติดต่อ, skill tags, ความพร้อม (availability) และออก `tracking_token` + Digital Ticket ทันที
+- ป้องกันสแปมด้วย reCAPTCHA v3 + Rate Limiting (ไม่มีค่าใช้จ่าย SMS OTP)
+- อาสาสมัครสามารถบันทึก/เปิดลิงก์ Digital Ticket หรือ QR Code เพื่อตรวจสอบสถานะการอนุมัติ วันเวลานัดหมาย หรือกดยกเลิก
+- โต๊ะลงทะเบียน/ต้อนรับของศูนย์สามารถสแกน QR Ticket เพื่อบันทึกการเช็คอิน (Check-in/Check-out Timestamp) เพื่ออัปเดตยอด `volunteers_active`
 - ข้อมูลส่วนตัวอาสา mask ตาม role เช่นเดียวกับผู้พักพิง (ต่อ NFR-5)
 
-#### FR-43: Skill Match & Task Assignment
+#### FR-43: Volunteer Job Board, Configurable Shifts & Time-Bound Access
 
-ระบบจับคู่ Volunteer กับงานที่ต้องการทักษะตรงกัน และ Coordinator มอบหมาย/จัดกะได้
+Shelter Manager จัดการประกาศรับสมัครงาน (Job Board) ประจำศูนย์ ตั้งค่ากะงาน และควบคุมสิทธิ์การเข้าถึงระบบ
 
 **Consequences (testable):**
-- ระบบ suggest อาสาที่ skill ตรงและ available สำหรับงานที่เปิด
-- มอบหมายงาน/กะแล้วเก็บ assignment history; กันมอบหมายชนเวลา
-- งานที่มาจาก Resource Calculation (ต้องการอาสาครัว N คน) สร้างเป็น demand ให้จับคู่ได้
+- Job Board แสดงจำนวนโควตาที่ต้องการ, จำนวนที่ยืนยันแล้ว, และจำนวนที่รอคัดเลือก พร้อมสถานะเปิดรับ
+- กำหนด tier ของงาน: `operational` (งานทั่วไป ไม่ต้องมี login) vs `staff-capable` (งานที่ต้องใช้สิทธิ์ระบบ)
+- นโยบาย Auto-Accept: งาน `operational` สามารถเปิดตอบรับอัตโนมัติเมื่อโควตาว่าง; งาน `staff-capable` บังคับ Shelter Manager อนุมัติรายคน
+- **Time-bound Shift Access**: อาสาสมัครกลุ่ม staff-capable ที่ได้รับ Account `_users` + RoleKey จะมีสิทธิ์เขียน/แก้ไขข้อมูลได้เฉพาะช่วงเวลากะงานที่ active เท่านั้น (นอกเวลากะ ระบบปฏิเสธ write เพื่อความปลอดภัยของข้อมูล PII/Medical)
+- มอบหมาย/จัดกะงาน (Shift Assignment) ป้องกันการมอบหมายเวลาทับซ้อน (Overlap Prevention)
 
 ### 4.4 SOP Resource Calculator (Module B)
 

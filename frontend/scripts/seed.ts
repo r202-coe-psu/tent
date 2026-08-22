@@ -43,6 +43,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID } from '$lib/features/shared';
 import {
 	applyMovementToStay,
 	createEvacuee,
@@ -783,6 +784,37 @@ async function seedMasterData(): Promise<MasterLookup> {
 	return master;
 }
 
+/**
+ * `config:app` — the app-wide singleton (schema.md §3.2).
+ *
+ * Seeded at the documented defaults so the document exists to be edited. Readers fall
+ * back to the same values when it is missing, so seeding changes no behaviour; it just
+ * means an operator has somewhere to change the donation TTL without creating a document
+ * by hand.
+ */
+async function seedAppConfig(): Promise<void> {
+	await ensureDb('registry');
+	const ts = now();
+	const id = APP_CONFIG_DOC_ID;
+	const { status: getStatus } = await couchReq('GET', `/registry/${encodeURIComponent(id)}`);
+	if (getStatus === 200) {
+		// Never overwrite: this is operator-tuned configuration, not fixture data.
+		console.log(`  · registry: ${id} already present — left as is`);
+		return;
+	}
+
+	await putDoc('registry', {
+		_id: id,
+		type: 'config',
+		schema_v: 1,
+		...APP_CONFIG_DEFAULTS,
+		created_at: ts,
+		updated_at: ts,
+		created_by: 'seed'
+	});
+	console.log(`  ✓ registry: ${id} (defaults)`);
+}
+
 // ─── seedCatalog ──────────────────────────────────────────────────────────────
 
 async function seedCatalog(): Promise<void> {
@@ -962,7 +994,24 @@ async function seedCatalog(): Promise<void> {
 async function seedCatalogSopRatios(): Promise<void> {
 	await ensureDb('catalog');
 
-	// Idempotent check: check if the Sphere Baseline master profile already exists in catalog DB
+	// Never overwrite manually managed master profiles. The seed only supplies a
+	// local-development baseline when the catalog has no master at all.
+	const { status: findStatus, data: findData } = await couchReq('POST', '/catalog/_find', {
+		selector: { type: 'sop_profile' },
+		limit: 1
+	});
+	if (findStatus !== 200) {
+		throw new Error(
+			`seedCatalogSopRatios: unable to inspect existing profiles (HTTP ${findStatus})`
+		);
+	}
+	const existingProfiles = (findData as { docs?: unknown[] }).docs ?? [];
+	if (existingProfiles.length > 0) {
+		console.log('  ✓ catalog: SOP Profiles already exist, skipping seed');
+		return;
+	}
+
+	// Idempotent fallback for older development catalog snapshots.
 	// We use the deterministic ID 'master_sphere_baseline' to do an O(1) direct document lookup
 	// NOTE: If the name "Sphere Baseline" is changed in the future, remember to update this deterministicId
 	// to prevent the script from accidentally creating a duplicate master profile.
@@ -998,7 +1047,18 @@ async function seedCatalogSopRatios(): Promise<void> {
 	audit.target_id = fullDocId;
 	audit._id = `audit:seed_sphere_baseline`;
 
-	await bulkDocs('catalog', [profile, audit]);
+	const pointerDoc = {
+		_id: 'sop_profile_active:global',
+		type: 'sop_profile_active',
+		schema_v: 1,
+		active_profile_id: fullDocId,
+		active_slug: profile.slug,
+		active_version: profile.version,
+		updated_at: new Date().toISOString(),
+		updated_by: 'seed'
+	};
+
+	await bulkDocs('catalog', [profile, audit, pointerDoc]);
 	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
 }
 
@@ -1948,6 +2008,7 @@ async function main() {
 		// Master data first: the shelter masters and every people doc below persist
 		// its item codes, and seedMasterData is what resolves key → code.
 		const master = await seedMasterData();
+		await seedAppConfig();
 		await seedRegistry(master);
 		await provisionRegistryShelterDbs();
 		await seedCatalog();

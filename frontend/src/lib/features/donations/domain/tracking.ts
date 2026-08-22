@@ -12,6 +12,11 @@ export type DonationTrackStatus =
 	| string;
 
 export type DonationTrackItem = {
+	/**
+	 * Kept even though nothing renders it. The edit form sends the basket back whole,
+	 * and a line that returns without its item_id stops being quota-tracked.
+	 */
+	item_id: string | null;
 	item_name: string;
 	qty: string | number | null;
 	unit: string | null;
@@ -48,6 +53,8 @@ export type DonationTrackView = {
 	} | null;
 	updated_at: string | null;
 	expires_at: string | null;
+	/** Donor edits so far (CR-080) — the page shows the count, not the entries. */
+	revisions: Array<Record<string, unknown>>;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -152,6 +159,11 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 		items: itemsRaw.map((item) => {
 			const row = item as Record<string, unknown>;
 			return {
+				// Carried even though nothing on the page displays it. The edit dialog sends
+				// the basket back whole, and an item that returns without its item_id stops
+				// being quota-tracked: no counter, no deduction from the needs board, and
+				// whatever it held is released and never retaken.
+				item_id: row.item_id != null ? String(row.item_id) : null,
 				item_name: String(row.item_name ?? row.free_text ?? 'ของบริจาค'),
 				qty: (row.qty as string | number | null) ?? null,
 				unit: row.unit != null ? String(row.unit) : null,
@@ -167,6 +179,7 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 				? (receivedRaw as DonationTrackView['received_summary'])
 				: null,
 		updated_at: raw.updated_at != null ? String(raw.updated_at) : null,
-		expires_at: raw.expires_at != null ? String(raw.expires_at) : null
+		expires_at: raw.expires_at != null ? String(raw.expires_at) : null,
+		revisions: Array.isArray(raw.revisions) ? (raw.revisions as Array<Record<string, unknown>>) : []
 	};
 }

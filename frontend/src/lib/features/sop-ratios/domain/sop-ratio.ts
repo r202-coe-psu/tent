@@ -28,6 +28,32 @@ export const SOP_RATIO_KEYS = [
 
 export type SopRatioKey = (typeof SOP_RATIO_KEYS)[number];
 
+/** A stable, URL-safe identity for a master profile. */
+export const sopProfileSlugSchema = z.string().regex(/^[a-z0-9-]+$/, 'Invalid profile slug');
+
+/**
+ * Deterministically derives the profile identity from its display name.  The
+ * repository is responsible for checking uniqueness before a document is
+ * created; keeping this pure makes it safe to use in forms and migrations.
+ */
+export function createProfileSlug(name: string): string {
+	const latinSlug = name
+		.normalize('NFKD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.replace(/-{2,}/g, '-');
+	if (latinSlug) return latinSlug;
+
+	// Keep non-Latin display names usable without lossy transliteration.  Each
+	// Unicode code point is encoded in base-36, yielding a URL-safe and
+	// injective fallback (unlike a short hash, distinct Thai names cannot collide).
+	const codePoints = [...name.trim()].map((character) => character.codePointAt(0)?.toString(36));
+	return `profile-${codePoints.join('-')}`;
+}
+
 export const SOP_RATIO_KIND: Record<SopRatioKey, 'multiply' | 'divide' | 'threshold'> = {
 	water_l_per_person_day: 'multiply',
 	drinking_water_l_per_person_day: 'multiply',
@@ -67,6 +93,13 @@ const ratioShape = SOP_RATIO_KEYS.reduce(
  */
 export const ratiosSchema = z.object(ratioShape).strict();
 
+/** True only for a complete canonical ratio snapshot with positive quantities. */
+export function validateRatios(
+	ratios: Record<string, string>
+): ratios is Record<SopRatioKey, string> {
+	return ratiosSchema.safeParse(ratios).success;
+}
+
 /**
  * @deprecated Use `ratiosSchema` directly. Both Master and Override now strictly require the full 20-key schema per CR-026 Option 1.
  */
@@ -84,7 +117,11 @@ export const sopMasterSchema = z.object({
 	created_at: z.string().datetime(),
 	updated_at: z.string().datetime(),
 	created_by: z.string().min(1),
-	name: z.string().min(1),
+	name: z.string().trim().min(1).max(100),
+	// Legacy catalog documents predate multi-profile support.  They are still
+	// readable (their slug is derived from name in the repository), while every
+	// newly written master document always includes a stable slug.
+	slug: sopProfileSlugSchema.optional(),
 	// Master ratios use the unified 20-key strict schema (Option 1).
 	ratios: ratiosSchema,
 	version: z.number().int().positive(),
@@ -92,6 +129,82 @@ export const sopMasterSchema = z.object({
 });
 
 export type SopMaster = z.infer<typeof sopMasterSchema>;
+
+export const SOP_MASTER_ACTIVE_POINTER_ID = 'sop_profile_active:global' as const;
+
+export const sopMasterActivePointerSchema = z.object({
+	_id: z.literal(SOP_MASTER_ACTIVE_POINTER_ID),
+	_rev: z.string().optional(),
+	type: z.literal('sop_profile_active'),
+	schema_v: z.literal(1),
+	active_profile_id: z.string().min(1),
+	active_slug: z.string().min(1),
+	active_version: z.number().int().positive(),
+	updated_at: z.string().datetime(),
+	updated_by: z.string().min(1)
+});
+
+export type SopMasterActivePointer = z.infer<typeof sopMasterActivePointerSchema>;
+
+export function isSopMasterActivePointer(doc: unknown): doc is SopMasterActivePointer {
+	return sopMasterActivePointerSchema.safeParse(doc).success;
+}
+
+/**
+ * Pure domain helper for verifying alignment between an active pointer and target master profile.
+ * Verifies ID, slug, and version triple without any database, browser, or server imports.
+ */
+export function verifyMasterPointerMatch(
+	pointer: SopMasterActivePointer,
+	profile: SopMaster
+): { ok: true } | { ok: false; issue: 'pointer_target_mismatch'; message: string } {
+	if (pointer.active_profile_id !== profile._id) {
+		return {
+			ok: false,
+			issue: 'pointer_target_mismatch',
+			message: `Active pointer ID (${pointer.active_profile_id}) does not match target profile ID (${profile._id})`
+		};
+	}
+
+	const expectedSlug = profile.slug ?? createProfileSlug(profile.name);
+	if (pointer.active_slug !== expectedSlug) {
+		return {
+			ok: false,
+			issue: 'pointer_target_mismatch',
+			message: `Active pointer slug (${pointer.active_slug}) does not match target profile slug (${expectedSlug})`
+		};
+	}
+
+	if (pointer.active_version !== profile.version) {
+		return {
+			ok: false,
+			issue: 'pointer_target_mismatch',
+			message: `Active pointer version (${pointer.active_version}) does not match target profile version (${profile.version})`
+		};
+	}
+
+	return { ok: true };
+}
+
+// T-30 terminology.  These aliases retain the existing SOP master envelope
+// (`active`, `created_at`, string quantity values) used by catalog documents.
+export type SopProfile = SopMaster;
+export type SopProfileDoc = SopMaster;
+export type SopProfileVersion = SopMaster;
+export type SopProfileVersionDoc = SopMaster;
+
+/** Form/API input for creating a new master profile (legacy quantity strings). */
+export const sopProfileInputSchema = z.object({
+	name: z.string().trim().min(1).max(100),
+	ratios: ratiosSchema
+});
+
+/** Shared Superforms payload for creating a master or saving a new version. */
+export const sopProfileFormSchema = sopProfileInputSchema.extend({
+	reason: z.string().trim().max(500).optional()
+});
+
+export type SopProfileInput = z.infer<typeof sopProfileInputSchema>;
 
 export const isSopMaster = (d: unknown): d is SopMaster => sopMasterSchema.safeParse(d).success;
 
@@ -128,6 +241,26 @@ export const isSopOverride = (d: unknown): d is SopOverride =>
 type MasterCtx = { createdBy: string };
 type OverrideCtx = AuthorContext & { base_profile_id: string };
 type AnyProfileCtx = MasterCtx | OverrideCtx;
+
+/**
+ * Returns an immutable next master version.  It deliberately does not perform
+ * I/O or activation changes; the repository applies the global-active
+ * transaction when saving it.
+ */
+export function incrementVersion(current: SopMaster): SopMaster {
+	const slug = current.slug ?? createProfileSlug(current.name);
+	if (!slug) throw new Error('Profile name cannot produce an empty slug');
+	return {
+		...current,
+		_id: `sop_profile:${slug}:${current.version + 1}`,
+		_rev: undefined,
+		slug,
+		version: current.version + 1,
+		active: true,
+		created_at: new Date().toISOString(),
+		updated_at: new Date().toISOString()
+	};
+}
 
 /**
  * Resolves the effective SOP profile ratios for a shelter:
@@ -188,16 +321,20 @@ export function createInitialProfile(
 	const safeRatios = ratiosSchema.parse(ratios) as Record<SopRatioKey, string>;
 
 	if (targetType === 'sop_profile') {
+		const slug = createProfileSlug(name);
+		if (!slug) throw new Error('Profile name must contain at least one Latin letter or number');
 		const profile = catalogDoc(
 			'sop_profile',
 			SOP_MASTER_SCHEMA_VERSION,
 			{
 				name,
+				slug,
 				ratios: safeRatios,
 				version: 1,
 				active: true
 			},
-			ctx.createdBy
+			ctx.createdBy,
+			`${slug}:1`
 		) as SopMaster;
 
 		sopMasterSchema.parse(profile);
@@ -261,14 +398,16 @@ export function createNewVersion(
 	prev: SopMaster,
 	changes: Partial<Record<SopRatioKey, string>>,
 	reason: string,
-	ctx: { createdBy: string }
+	ctx: { createdBy: string },
+	maxVersion?: number
 ): CreateNewVersionResult<SopMaster>;
 
 export function createNewVersion(
 	prev: SopOverride,
 	changes: Partial<Record<SopRatioKey, string>>,
 	reason: string,
-	ctx: AuthorContext
+	ctx: AuthorContext,
+	maxVersion?: number
 ): CreateNewVersionResult<SopOverride>;
 
 /**
@@ -280,7 +419,8 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 	prev: T,
 	changes: Partial<Record<SopRatioKey, string>>,
 	reason: string,
-	ctx: MasterCtx | AuthorContext
+	ctx: MasterCtx | AuthorContext,
+	maxVersion?: number
 ): CreateNewVersionResult<T> {
 	// Validate partial changes strictly to reject non-whitelist or deprecated keys
 	const safeChanges = ratiosSchema.partial().strict().parse(changes);
@@ -300,19 +440,25 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 
 	const newRatios = { ...prev.ratios, ...definedChanges } as Record<SopRatioKey, string>;
 	ratiosSchema.parse(newRatios);
+	const targetVersion = Math.max(maxVersion ?? prev.version, prev.version) + 1;
+
 	if (prev.type === 'sop_profile') {
 		const createdBy = ctx.createdBy;
+		const slug = prev.slug ?? createProfileSlug(prev.name);
+		if (!slug) throw new Error('Profile name must contain at least one Latin letter or number');
 
 		const profile = catalogDoc(
 			'sop_profile',
 			SOP_MASTER_SCHEMA_VERSION,
 			{
 				name: prev.name,
+				slug,
 				ratios: newRatios,
-				version: prev.version + 1,
+				version: targetVersion,
 				active: true
 			},
-			createdBy
+			createdBy,
+			`${slug}:${targetVersion}`
 		) as SopMaster;
 
 		sopMasterSchema.parse(profile);
@@ -346,7 +492,7 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 				base_profile_id: overridePrev.base_profile_id,
 				name: overridePrev.name,
 				ratios: newRatios,
-				version: overridePrev.version + 1,
+				version: targetVersion,
 				active: true
 			},
 			overrideCtx
