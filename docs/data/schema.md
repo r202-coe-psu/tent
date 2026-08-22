@@ -841,7 +841,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 
 > **Migration note:** `supply_item` docs (schema_v 1) ยังคงอยู่ใน DB จนกว่าจะ migrate; client ต้อง handle ทั้ง `item:` prefix (เดิม) และ `item_master:` prefix (ใหม่) ในช่วง transition
 
-### 4.4 `sop_profile` — `sop_profile:{ulid}`
+### 4.4 `sop_profile` — `sop_profile:{slug}:{version}`
 
 > **schema_v 3** — อัปเดต ratios whitelist 3 → 20 canonical keys (CR-006 amendment 2026-06-25 + CR-021). เพิ่ม `SOP_RATIO_KIND` (multiply/divide/threshold) สำหรับ calc engine (T-31).
 > **Migration Note:** `schema_v` bumped due to CR-006 / CR-021. No production backfill needed. Devs must re-run the seed script (which now auto-overwrites) or delete stale catalog docs. **Breaking Change:** Legacy 3-key ratios (rice_g_per_person_meal, toilet_per_person) removed. All 20 canonical keys required; no auto-mapping from legacy keys. Devs must re-run seed or delete stale docs.
@@ -849,10 +849,27 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
+| `_id` | str | req | `sop_profile:{slug}:{version}` — แต่ละ immutable version ถูกบันทึกเป็น ID ในรูปแบบ `{slug}:{version}` (เช่น `sop_profile:sphere-baseline:2`) |
 | `name` | str | req | เช่น "Sphere baseline", "ปภ. มาตรฐาน" |
+| `slug` | str | req | Stable canonical slug used to group immutable version history; e.g. `"sphere-baseline"`. `slug` จะคงที่ข้ามเวอร์ชันของ profile เดียวกัน ในขณะที่ `version` เพิ่มขึ้นตามลำดับ |
 | `ratios` | {`water_l_per_person_day`:qty_str, `drinking_water_l_per_person_day`:qty_str, `cooking_water_l_per_person_day`:qty_str, `hygiene_water_l_per_person_day`:qty_str, `kcal_per_adult_day`:qty_str, `people_per_tap`:qty_str, `people_per_handpump`:qty_str, `people_per_open_well`:qty_str, `people_per_laundry`:qty_str, `people_per_bathing`:qty_str, `people_per_toilet_female`:qty_str, `people_per_toilet_male`:qty_str, `people_per_dining_point_adult`:qty_str, `people_per_dining_point_child`:qty_str, `m2_per_person_living`:qty_str, `m2_per_person_living_cold`:qty_str, `m2_per_person_total`:qty_str, `max_waterpoint_distance_m`:qty_str, `max_queue_minutes`:qty_str, `people_per_volunteer`:qty_str} | req | ratios ต้องระบุคีย์ครบถ้วน (Full Ratios Requirement) ใช้ 20-key strict schema ทั้ง Master และ Override |
-| `version` | int | req | — |
-| `active` | bool | req | ศูนย์เลือกใช้ profile ที่ active |
+| `version` | int | req | เลขเวอร์ชันของ profile ภายใต้ `slug` นั้น (เริ่มจาก 1) |
+| `active` | bool | req | (Backward-compatible projection only) `sop_profile_active:global` pointer เป็น **Authoritative Active State** เพียงหนึ่งเดียวในการตัดสิน active master (`active_profile_id`, `active_slug`, `active_version`). ค่า `sop_profile.active` บนเอกสาร profile รายตัวเป็นเพียง read-model / projection ห้ามนำมาตัดสิน active master |
+
+> **Legacy Compatibility Note:** เอกสาร catalog ในอดีตก่อนการเปลี่ยนสเปก T-30 อาจมีรูปแบบ ID เดิม (เช่น `sop_profile:{ulid}` หรือ `sop_profile:{name}`) และอาจไม่มี field `slug` (ซึ่ง repository จะคำนวณ `slug` จาก `name` เมื่ออ่านเอกสารเก่า). เอกสาร Master SOP ใหม่ทั้งหมดที่เขียนด้วย T-30 จะใช้ ID รูปแบบ `sop_profile:{slug}:{version}` และต้องมี field `slug` เสมอ. ไม่มีสัญญาในการทำ automatic batch migration, backfill หรือ cross-document referential integrity validation.
+
+### 4.5 `sop_profile_active` — `sop_profile_active:global` (Singleton Pointer)
+
+> **schema_v 1** — Singleton coordination document สำหรับตัดสิน Active Master SOP Profile เพียงหนึ่งเดียวทั่วทั้งระบบผ่าน Optimistic Concurrency Control (CAS) ด้วย `_rev` (ผ่าน `putDoc` ด้วย `{ onConflict: 'throw' }`). **ข้อจำกัดการตรวจสอบของ CouchDB:** ฟังก์ชัน `validate_doc_update` ของ CouchDB ทำงานตรวจสอบความถูกต้องของเอกสารแต่ละฉบับแยกจากกันแบบเดี่ยว (Single-document isolation) จึงตรวจสอบได้เฉพาะโครงสร้าง field, schema_v และ immutable fields ของ pointer เอง แต่ไม่สามารถทำ cross-document validation เพื่อรับรองว่า `active_profile_id` อ้างอิงไปยังเอกสาร `sop_profile` ที่มีอยู่จริงใน database ได้
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | บังคับเป็น `"sop_profile_active:global"` |
+| `active_profile_id` | str | req | ID เอกสาร `sop_profile` ที่เป็น Master Active หลัก |
+| `active_slug` | str | req | Slug ของ Master Active หลัก |
+| `active_version` | int | req | เลขเวอร์ชันที่กำลังใช้งานอยู่ |
+| `updated_at` | str | req | เวลา ISO-8601 UTC |
+| `updated_by` | str | req | ผู้ดำเนินการอัปเดต |
 
 ---
 

@@ -909,7 +909,24 @@ async function seedCatalog(): Promise<void> {
 async function seedCatalogSopRatios(): Promise<void> {
 	await ensureDb('catalog');
 
-	// Idempotent check: check if the Sphere Baseline master profile already exists in catalog DB
+	// Never overwrite manually managed master profiles. The seed only supplies a
+	// local-development baseline when the catalog has no master at all.
+	const { status: findStatus, data: findData } = await couchReq('POST', '/catalog/_find', {
+		selector: { type: 'sop_profile' },
+		limit: 1
+	});
+	if (findStatus !== 200) {
+		throw new Error(
+			`seedCatalogSopRatios: unable to inspect existing profiles (HTTP ${findStatus})`
+		);
+	}
+	const existingProfiles = (findData as { docs?: unknown[] }).docs ?? [];
+	if (existingProfiles.length > 0) {
+		console.log('  ✓ catalog: SOP Profiles already exist, skipping seed');
+		return;
+	}
+
+	// Idempotent fallback for older development catalog snapshots.
 	// We use the deterministic ID 'master_sphere_baseline' to do an O(1) direct document lookup
 	// NOTE: If the name "Sphere Baseline" is changed in the future, remember to update this deterministicId
 	// to prevent the script from accidentally creating a duplicate master profile.
@@ -945,7 +962,18 @@ async function seedCatalogSopRatios(): Promise<void> {
 	audit.target_id = fullDocId;
 	audit._id = `audit:seed_sphere_baseline`;
 
-	await bulkDocs('catalog', [profile, audit]);
+	const pointerDoc = {
+		_id: 'sop_profile_active:global',
+		type: 'sop_profile_active',
+		schema_v: 1,
+		active_profile_id: fullDocId,
+		active_slug: profile.slug,
+		active_version: profile.version,
+		updated_at: new Date().toISOString(),
+		updated_by: 'seed'
+	};
+
+	await bulkDocs('catalog', [profile, audit, pointerDoc]);
 	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
 }
 

@@ -31,9 +31,9 @@ export type SopOverrideWithReason = SopOverride & { audit_reason: string | null 
 // Fetch functions (thin — business logic stays in repository)
 // ---------------------------------------------------------------------------
 
-async function fetchMasterVersions(name: string): Promise<SopMasterWithReason[]> {
+async function fetchMasterVersions(slug: string): Promise<SopMasterWithReason[]> {
 	const repo = sopMasterRepository();
-	const all = await repo.listVersions(name);
+	const all = await repo.listVersions(slug);
 	const sorted = [...all].sort((a, b) => b.version - a.version);
 	if (sorted.length === 0) return [];
 
@@ -103,14 +103,14 @@ async function fetchOverrideVersions(
  * {/each}
  * ```
  */
-export const useMasterVersionHistory = (name: string | (() => string)) => {
-	const getName = typeof name === 'function' ? name : () => name;
+export const useMasterVersionHistory = (slug: string | (() => string)) => {
+	const getSlug = typeof slug === 'function' ? slug : () => slug;
 	return createQuery(() => {
-		const resolvedName = getName();
+		const resolvedSlug = getSlug();
 		return {
-			queryKey: [...sopVersionKeys.master(), resolvedName] as const,
-			queryFn: () => fetchMasterVersions(resolvedName),
-			enabled: resolvedName.trim().length > 0
+			queryKey: [...sopVersionKeys.master(), resolvedSlug] as const,
+			queryFn: () => fetchMasterVersions(resolvedSlug),
+			enabled: resolvedSlug.trim().length > 0
 		};
 	});
 };

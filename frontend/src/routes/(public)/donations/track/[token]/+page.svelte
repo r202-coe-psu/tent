@@ -13,6 +13,8 @@
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import Download from '@lucide/svelte/icons/download';
+	import QRCode from 'qrcode';
 	import { toast } from 'svelte-sonner';
 	import {
 		useDonationTracking,
@@ -49,6 +51,37 @@
 	);
 
 	const status = $derived(donation?.status ?? '');
+
+	// CR-052 §2.6: once the donation is approved the donor needs a scannable QR at drop-off.
+	const showQr = $derived(status === 'verifying' || status === 'received');
+	let qrCodeUrl = $state('');
+
+	$effect(() => {
+		if (!showQr) {
+			qrCodeUrl = '';
+			return;
+		}
+		let cancelled = false;
+		QRCode.toDataURL(token, { margin: 1, width: 256 })
+			.then((url) => {
+				if (!cancelled) qrCodeUrl = url;
+			})
+			.catch(() => {
+				if (!cancelled) qrCodeUrl = '';
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	function downloadQr() {
+		if (!qrCodeUrl) return;
+		const link = document.createElement('a');
+		link.href = qrCodeUrl;
+		link.download = `QR-${donation?.booking_ref ?? token}.png`;
+		link.click();
+		toast.success('บันทึกรูป QR แล้ว');
+	}
 	const showCourierEdit = $derived(
 		donation ? canEditCourierTracking(donation.status, donation.logistics) : false
 	);
@@ -86,7 +119,7 @@
 	<title>รายละเอียดสถานะของบริจาค — Smart Shelter</title>
 </svelte:head>
 
-<PublicPageShell>
+<PublicPageShell maxWidth="max-w-5xl">
 	<a
 		href={resolve('/donations/track')}
 		class="mb-6 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
@@ -145,6 +178,28 @@
 			</div>
 
 			<div class="space-y-8 p-6 md:p-8">
+				{#if showQr && qrCodeUrl}
+					<div
+						class="flex flex-col items-center gap-3 rounded-2xl border border-border bg-muted/30 p-6 text-center"
+					>
+						<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
+							รหัสตอบรับ (QR Code)
+						</h4>
+						<img
+							src={qrCodeUrl}
+							alt="QR Code สำหรับรายการบริจาค {donation.booking_ref ?? token}"
+							class="h-44 w-44 rounded-xl bg-white p-2 shadow-sm"
+						/>
+						<Button type="button" variant="outline" size="sm" onclick={downloadQr}>
+							<Download class="h-3.5 w-3.5" />
+							บันทึกรูป QR
+						</Button>
+						<p class="max-w-xs text-[11px] text-muted-foreground">
+							แสดง QR Code นี้แก่เจ้าหน้าที่เมื่อนำของมาส่ง เพื่อความรวดเร็วในการตรวจรับ
+						</p>
+					</div>
+				{/if}
+
 				<div class="space-y-4">
 					<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
 						ไทม์ไลน์สถานะ

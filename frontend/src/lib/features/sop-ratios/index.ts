@@ -1,21 +1,37 @@
 // Public barrel for the sop-ratios feature. Domain-only (types, repository contracts, and TanStack query hooks).
-export type { SopMaster, SopOverride } from './domain/sop-ratio';
+export type {
+	SopMaster,
+	SopOverride,
+	SopProfile,
+	SopProfileDoc,
+	SopProfileInput,
+	SopProfileVersion,
+	SopProfileVersionDoc
+} from './domain/sop-ratio';
 
 export {
 	createInitialProfile,
 	createNewVersion,
+	createProfileSlug,
+	incrementVersion,
 	isSopMaster,
 	isSopOverride,
 	resolveEffectiveProfile,
+	verifyMasterPointerMatch,
 	SOP_RATIO_KEYS,
 	SOP_RATIO_KIND,
 	sopMasterSchema,
+	sopProfileFormSchema,
+	sopProfileInputSchema,
+	sopProfileSlugSchema,
 	sopOverrideSchema,
 	SOP_MASTER_SCHEMA_VERSION,
 	type CreateNewVersionResult,
-	type SopRatioKey
+	type SopRatioKey,
+	validateRatios
 } from './domain/sop-ratio';
 export { RATIO_LABELS } from './domain/sop-ratio.labels';
+export { SopMasterIntegrityError, type SopMasterIntegrityIssue } from '$lib/utils/errors';
 
 // Trend series shapes (shared by chart + resource-calc snapshot)
 export type { TrendPoint, TrendSeries } from './domain/trend';
@@ -47,6 +63,8 @@ export {
 // Data — repositories + resolver
 export type { SopMasterRepository, SopOverrideRepository } from './data/sop-ratio.repository';
 export {
+	getVerifiedActiveMaster,
+	SopMasterRemoteRepository,
 	sopMasterRepository,
 	sopOverrideRepository,
 	resolveEffectiveRatios
@@ -58,8 +76,11 @@ export {
 	useActiveSopProfile,
 	useActiveSopRatio,
 	useSopProfiles,
+	useAllMasterProfiles,
+	useMasterProfile,
 	useActiveSopOverride,
 	getActiveSopProfile,
+	getVerifiedActiveSopProfile,
 	sopVersionKeys
 } from './application/queries';
 
@@ -76,12 +97,15 @@ export {
 	useCreateMasterVersion,
 	useCreateOverrideVersion,
 	useCreateInitialOverride,
+	useCreateInitialMaster,
 	useSetMasterActive,
+	useDeactivateMaster,
 	useSetOverrideActive,
 	useSetOverrideInactive,
 	type CreateMasterVersionInput,
 	type CreateOverrideVersionInput,
-	type CreateInitialOverrideInput
+	type CreateInitialOverrideInput,
+	type CreateInitialMasterInput
 } from './application/use-create-version';
 
 // Live-sync wiring (call once per layout, pass QueryClient)

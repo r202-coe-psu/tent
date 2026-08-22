@@ -26,8 +26,10 @@
 import { createMutation, useQueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
 import { getShelterCode } from '$lib/db/shelter';
+import { authStore } from '$lib/stores/auth.svelte';
+import { isSystemAdmin } from '$lib/auth/roles';
 import type { AuthorContext } from '$lib/db/model';
-import { createNewVersion, createInitialProfile } from '../domain/sop-ratio';
+import { createInitialProfile } from '../domain/sop-ratio';
 import type { SopMaster, SopOverride, SopRatioKey } from '../domain/sop-ratio';
 import { sopMasterRepository, sopOverrideRepository } from '../data/sop-ratio.remote';
 import { sopRatioKeys } from './queries';
@@ -47,6 +49,18 @@ export interface CreateMasterVersionInput {
 	createdBy: string;
 }
 
+export interface CreateInitialMasterInput {
+	name: string;
+	ratios: Record<SopRatioKey, string>;
+	createdBy: string;
+}
+
+function requireSystemAdmin(): void {
+	if (!isSystemAdmin(authStore.user?.roles ?? [])) {
+		throw new Error('เฉพาะผู้ดูแลระบบเท่านั้นที่จัดการ Master SOP Profile ได้');
+	}
+}
+
 export interface CreateOverrideVersionInput {
 	/** The current active override to create a new version from. */
 	prev: SopOverride;
@@ -60,6 +74,24 @@ export interface CreateOverrideVersionInput {
 // ---------------------------------------------------------------------------
 // Hooks
 // ---------------------------------------------------------------------------
+
+/** Creates a named v1 master. It becomes active only when no other master is active. */
+export function useCreateInitialMaster() {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ name, ratios, createdBy }: CreateInitialMasterInput) => {
+			requireSystemAdmin();
+			return sopMasterRepository().createInitial(name, ratios, createdBy);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
+			toast.success('สร้าง Master SOP Profile สำเร็จ');
+		},
+		onError: (error: unknown) => {
+			toast.error(error instanceof Error ? error.message : 'ไม่สามารถสร้าง Master SOP Profile ได้');
+		}
+	}));
+}
 
 /**
  * Mutation hook for creating a new version of the **master** SOP profile.
@@ -88,6 +120,7 @@ export function useCreateMasterVersion() {
 
 	return createMutation(() => ({
 		mutationFn: async ({ prev, changes, reason, createdBy }: CreateMasterVersionInput) => {
+			requireSystemAdmin();
 			// If changes is empty {}, Object.keys yields [] and hasChanges is false.
 			// This safely treats an empty payload as an implicit no-op branch.
 			const hasChanges = Object.keys(changes).some((key) => {
@@ -98,16 +131,8 @@ export function useCreateMasterVersion() {
 				return { profile: prev, deactivatedPrev: null, audit: null };
 			}
 
-			// Step 1: Domain — pure function, no I/O.
-			const result = createNewVersion(prev, changes, reason, { createdBy });
-
-			// Step 2: Persist — atomic bulkDocs write via remote repository.
-			// saveBulkAtomic inside createVersion handles MVCC 409 retry.
-			return sopMasterRepository().createVersion(
-				result.deactivatedPrev,
-				result.profile,
-				result.audit
-			);
+			const repo = sopMasterRepository();
+			return repo.createNextVersion(prev, changes, reason, { createdBy });
 		},
 
 		onSuccess: () => {
@@ -172,13 +197,7 @@ export function useCreateOverrideVersion(shelterCode?: string | (() => string)) 
 					return { profile: prev, deactivatedPrev: null, audit: null };
 				}
 
-				const result = createNewVersion(prev, changes, reason, ctx);
-
-				return sopOverrideRepository(code).createVersion(
-					result.deactivatedPrev,
-					result.profile,
-					result.audit
-				);
+				return sopOverrideRepository(code).createNextVersion(prev, changes, reason, ctx);
 			},
 
 			onSuccess: () => {
@@ -229,6 +248,7 @@ export function useSetMasterActive() {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: async ({ id, createdBy }: { id: string; createdBy: string }) => {
+			requireSystemAdmin();
 			return sopMasterRepository().setActive(id, { createdBy });
 		},
 		onSuccess: () => {
@@ -237,6 +257,24 @@ export function useSetMasterActive() {
 		},
 		onError: () => {
 			toast.error('ไม่สามารถเปิดใช้งาน Master SOP ได้');
+		}
+	}));
+}
+
+/** Deactivation is guarded in the repository so the final active master remains available. */
+export function useDeactivateMaster() {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({ id, createdBy }: { id: string; createdBy: string }) => {
+			requireSystemAdmin();
+			return sopMasterRepository().setInactive(id, { createdBy });
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
+			toast.success('ปิดใช้งาน Master SOP สำเร็จ');
+		},
+		onError: (error: unknown) => {
+			toast.error(error instanceof Error ? error.message : 'ไม่สามารถปิดใช้งาน Master SOP ได้');
 		}
 	}));
 }
