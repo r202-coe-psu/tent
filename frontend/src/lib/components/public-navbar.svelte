@@ -121,7 +121,7 @@
 					{langState.current.toUpperCase()}
 				</Select.Trigger>
 				<Select.Content>
-					{#each SUPPORTED_LANGUAGES as lang}
+					{#each SUPPORTED_LANGUAGES as lang (lang.code)}
 						<Select.Item value={lang.code} label={lang.name}>
 							<div class="flex items-center gap-2">
 								<span class="text-sm">{lang.name}</span>
@@ -261,7 +261,7 @@
 							langState.current.toUpperCase()}
 					</Select.Trigger>
 					<Select.Content>
-						{#each SUPPORTED_LANGUAGES as lang}
+						{#each SUPPORTED_LANGUAGES as lang (lang.code)}
 							<Select.Item value={lang.code} label={lang.name}>
 								<div class="flex items-center gap-2">
 									<span class="text-sm">{lang.name}</span>

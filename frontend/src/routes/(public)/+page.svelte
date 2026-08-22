@@ -165,9 +165,7 @@
 				icon={Search}
 				iconClass="bg-accent-purple-muted/50 text-accent-purple"
 			>
-				<PublicActionBtn onclick={() => (searchOpen = true)}
-					>{t.searchBtn}</PublicActionBtn
-				>
+				<PublicActionBtn onclick={() => (searchOpen = true)}>{t.searchBtn}</PublicActionBtn>
 			</PublicQuickServiceCard>
 		</div>
 	</section>
