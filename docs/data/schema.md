@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v4
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-17
+updated: 2026-08-22
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -176,6 +176,46 @@ Doc type ทั่วไป (ไม่ผูกเฉพาะ evacuee) สำ�
 
 **Attachments:** `full` (WEBP ≤1024px, quality 0.82), `thumb` (WEBP square-crop 200px) — เขียนผ่าน
 `PUT /{db}/{docid}/{attname}?rev=...` (HTTP ตรง ผ่าน `/couch` proxy คุกกี้ `_session`)
+### 1.7 `people_import_log` — `people_import_log:{ulid}` · **schema_v 1** · **append-only** (CR-071)
+
+Log 1 doc ต่อ 1 batch ของการ import ครัวเรือน+สมาชิกจาก Excel/CSV (T-72). envelope กลาง **มี
+`shelter_code`** — ต่างจาก `shelter_import_log` (§3.7) ที่อยู่ใน `registry` เพราะ `results[]` ของ log นี้
+มีชื่อผู้ประสบภัย จึงต้องอยู่ใน db ของศูนย์เดียวกับข้อมูลคนที่มันอ้างถึง (shelter-scope isolation).
+เขียนหลัง commit เสร็จ; ไม่แก้ย้อนหลัง
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `source` | enum(`people`) | req | ชนิดข้อมูลที่ import (ตอนนี้มีแค่ people) |
+| `filename` | str | req | ชื่อไฟล์ที่อัปโหลด (.xlsx หรือ .csv) |
+| `imported_by` | str | req | `name` ของผู้ import (จาก session) |
+| `total_rows` | int | req | จำนวน**ครัวเรือน**ที่อ่านได้จากไฟล์ (ไม่ใช่จำนวนคน) |
+| `success_count` | int | req | ครัวเรือนที่สร้างสำเร็จ |
+| `skipped_count` | int | req | ครัวเรือนที่ข้ามเพราะหัวหน้าครัวเรือนซ้ำกับคนในศูนย์นี้แล้ว |
+| `error_count` | int | req | ครัวเรือนที่ล้มเหลว (validation + server) |
+| `created_people` | int | req | จำนวนคนที่เขียนจริงรวมทุกครัวเรือน (หัวหน้า + สมาชิก) |
+| `skipped_people` | int | req | จำนวนคนที่ข้ามเพราะซ้ำกับคนที่มีอยู่แล้วในศูนย์นี้ |
+| `results` | array | req | ผลรายครัวเรือน — ดูรูปด้านล่าง |
+| `started_at` | str (ISO) | req | เวลาเริ่ม commit |
+| `finished_at` | str (ISO) | req | เวลาเสร็จ |
+
+`results[]`: `{ row: int (แถวข้อมูลที่ 1-based ของชีตครัวเรือน), label: str|null, status:
+'created'|'skipped_duplicate'|'validation_error'|'server_error', household_id?: str (เมื่อ created),
+created_members?: int (สมาชิกที่เขียน ไม่รวมหัวหน้า), skipped_members?: int,
+existing_evacuee_id?: str (คนเดิมที่ทำให้ครัวเรือนนี้ถูกข้าม), errors?: [{ column: str, message: str,
+sheet?: str, line?: int }] }`
+
+**ขอบเขตของ `results[]`:** เก็บไม่เกิน **200 ครัวเรือนแรก** และ `message` ยาวไม่เกิน **200 ตัวอักษร**
+(เกินแล้วตัดท้ายด้วย `…`) — เหตุผลเดียวกับ §3.7. counters ด้านบนยังนับครบทุกแถวเสมอ
+
+**เขียน/อ่าน:** บทบาทที่ import ได้ (`registration_staff`, `shelter_admin`, `shelter_manager` — CR-071)
+เขียนผ่านเซสชัน staff ตรงจาก browser; `_design/access` ของ `shelter_*` ต้องมี `people_import_log`
+ทั้งใน whitelist และ append-only list (ดู §8 ข้อ 2) มิฉะนั้น import สำเร็จแต่ประวัติเขียนไม่ลง
+
+**Index:** ไม่ต้องมี secondary index — prefix scan `people_import_log:` ผ่าน `_all_docs` เพียงพอ
+
+**หมายเหตุ sync:** worker ไม่รู้จัก doc type นี้ จึงถูกข้ามในการ project ลง MongoDB (ไม่มี public
+projection — เป็นข้อมูลหลังบ้านล้วน)
+
 ---
 
 ## 2. DB `shelter_{shelter_code}` — Operations
@@ -894,7 +934,7 @@ Design docs / `validate_doc_update` ต้อง deploy ทั้ง central แ
 write target ระหว่าง LAN fallback; schema/role enforcement ต้องเหมือนกันทุก remote.
 
 1. `type` อยู่ใน whitelist ของ db นั้น; `_id` ขึ้นต้นด้วย `{type}:`
-2. append-only types (`movement`, `screening`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `audit`, `search_audit`) — ปฏิเสธ update/delete ทุกกรณี
+2. append-only types (`movement`, `screening`, `people_import_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `audit`, `search_audit`) — ปฏิเสธ update/delete ทุกกรณี
 3. state machine types (`stock_transfer`, `donation`, `referral`, `shelter_report`, …) — ปฏิเสธ transition ถอยหลัง (ตามลำดับ enum / กราฟของ type นั้น)
 4. role→type เขียนได้ตาม role-permission-matrix (ตรวจ `userCtx.roles`)
 5. `shelter_code` ใน doc ต้องตรงกับ db

@@ -52,9 +52,10 @@ export const REFERRAL_MANGO_INDEXES = [
  * envelope (schema.md §0) + shelter_code match + allowed doc types, then the
  * integrity rules of T-16:
  *
- *  - **append-only** `stock_ledger` / `audit` / `movement` / `screening` — reject any
- *    update or delete of an existing doc (schema.md §1.4–1.5, §6.2). A wrong ledger
- *    entry is corrected by writing a new offsetting entry, never by editing history.
+ *  - **append-only** `stock_ledger` / `audit` / `movement` / `screening` /
+ *    `people_import_log` — reject any update or delete of an existing doc
+ *    (schema.md §1.4–1.5, §1.7, §6.2). A wrong ledger entry is corrected by writing
+ *    a new offsetting entry, never by editing history.
  *  - **forward-only** `donation.status` — `received` may not fall back to `declared`
  *    (schema.md §2.3 state machine).
  *  - **role gate** on `stock_ledger` — only warehouse staff / managers may move stock.
@@ -67,8 +68,8 @@ export const REFERRAL_MANGO_INDEXES = [
 export function buildValidateDocUpdate(code: string): string {
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
-  // schema.md §1.4 movement, §1.5 screening, §6.2 stock_ledger / audit
-  var appendOnly = ['stock_ledger', 'audit', 'movement', 'screening'];
+  // schema.md §1.4 movement, §1.5 screening, §1.7 people_import_log, §6.2 stock_ledger / audit
+  var appendOnly = ['stock_ledger', 'audit', 'movement', 'screening', 'people_import_log'];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
     if (wasAppendOnly) {
@@ -95,6 +96,7 @@ export function buildValidateDocUpdate(code: string): string {
   // createEvacuee succeeds, then household/screening PUT is forbidden.
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
+    'people_import_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot',
     'audit', 'daily_calc', 'purchase', 'referral'
   ];
