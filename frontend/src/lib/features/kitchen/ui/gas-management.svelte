@@ -2,12 +2,16 @@
 	import Flame from '@lucide/svelte/icons/flame';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Pencil from '@lucide/svelte/icons/pencil';
-	import Check from '@lucide/svelte/icons/check';
-	import X from '@lucide/svelte/icons/x';
 	import Plus from '@lucide/svelte/icons/plus';
+	import Fuel from '@lucide/svelte/icons/fuel';
+	import Eraser from '@lucide/svelte/icons/eraser';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { Badge } from '$lib/components/ui/badge';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import * as Table from '$lib/components/ui/table';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -16,16 +20,102 @@
 		useCreateGasCylinderType,
 		useUpdateGasCylinderType,
 		useDeleteGasCylinderType,
+		useGasLedger,
+		useRefillGasCylinder,
+		useWriteOffGasCylinder,
+		gasCylinderBalance,
+		gasCylinderStatus,
+		maxRefillKg,
 		kitchenKeys,
-		type GasCylinderType
+		type GasCylinderType,
+		type GasCylinderStatus
 	} from '$lib/features/kitchen';
 	import { useQueryClient } from '@tanstack/svelte-query';
+	import { addQty, qtyNeg } from '$lib/utils/qty';
 
 	const gasTypes = useGasCylinderTypes();
+	const gasLedger = useGasLedger();
 	const createType = useCreateGasCylinderType();
 	const updateType = useUpdateGasCylinderType();
 	const deleteType = useDeleteGasCylinderType();
+	const refillType = useRefillGasCylinder();
+	const writeOffType = useWriteOffGasCylinder();
 	const queryClient = useQueryClient();
+
+	const GAS_STATUS_LABELS: Record<GasCylinderStatus, string> = {
+		unused: 'ยังไม่ใช้',
+		in_use: 'กำลังใช้',
+		empty: 'หมดแล้ว'
+	};
+	const GAS_STATUS_CLASS: Record<GasCylinderStatus, string> = {
+		unused: 'border-border bg-muted text-muted-foreground',
+		in_use: 'border-blue-200 bg-blue-50 text-blue-700',
+		empty: 'border-red-200 bg-red-50 text-red-700'
+	};
+
+	// Remaining kg for one cylinder — computed from its ledger, never stored (CR-080).
+	function remainingOf(g: GasCylinderType): string {
+		return gasCylinderBalance(gasLedger.data ?? [], g._id, g.capacity_kg);
+	}
+
+	// Refill dialog state
+	let refillOpen = $state(false);
+	let refillDoc = $state<GasCylinderType | null>(null);
+	let refillQty = $state('');
+	const refillRoom = $derived(
+		refillDoc ? maxRefillKg(remainingOf(refillDoc), refillDoc.capacity_kg) : '0'
+	);
+
+	function startRefill(g: GasCylinderType) {
+		refillDoc = g;
+		refillQty = '';
+		refillOpen = true;
+	}
+
+	function closeRefill() {
+		refillOpen = false;
+		refillDoc = null;
+		refillQty = '';
+	}
+
+	async function handleRefill() {
+		if (!refillDoc) return;
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		try {
+			await refillType.mutateAsync({ cylinderId: refillDoc._id, qtyKg: refillQty, ctx });
+			await queryClient.invalidateQueries({ queryKey: kitchenKeys.gasLedger() });
+			toast.success(`เติมแก๊ส "${refillDoc.name}" ${refillQty} kg แล้ว`);
+			closeRefill();
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
+		}
+	}
+
+	// Write-off (CR-080 addendum) — a dust-sized remainder can never reach 0
+	// through consumption (gas draws are a hard all-or-nothing block, unlike
+	// stock_ledger's partial issue), so it needs a manual way to zero out.
+	let writeOffOpen = $state(false);
+	let writeOffDoc = $state<GasCylinderType | null>(null);
+
+	function startWriteOff(g: GasCylinderType) {
+		writeOffDoc = g;
+		writeOffOpen = true;
+	}
+
+	async function handleWriteOff() {
+		if (!writeOffDoc) return;
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		try {
+			await writeOffType.mutateAsync({ cylinderId: writeOffDoc._id, ctx });
+			await queryClient.invalidateQueries({ queryKey: kitchenKeys.gasLedger() });
+			toast.success(`ตัดเศษเหลือของ "${writeOffDoc.name}" เป็น 0 แล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
+		} finally {
+			writeOffOpen = false;
+			writeOffDoc = null;
+		}
+	}
 
 	// Add form state
 	let name = $state('');
@@ -33,29 +123,33 @@
 	let burnRateKgPerHour = $state('0.5');
 	let timeMultiplier = $state('1');
 
-	// Inline edit state — keyed by doc _id
-	let editingId = $state<string | null>(null);
+	// Edit dialog state — the row being edited, or null when the dialog is closed.
+	let editOpen = $state(false);
+	let editingDoc = $state<GasCylinderType | null>(null);
 	let editName = $state('');
 	let editCapacity = $state('0');
 	let editBurnRate = $state('0');
 	let editMultiplier = $state('0');
 
 	function startEdit(g: GasCylinderType) {
-		editingId = g._id;
+		editingDoc = g;
 		editName = g.name;
 		editCapacity = g.capacity_kg;
 		editBurnRate = g.burn_rate_kg_per_hour;
 		editMultiplier = g.time_multiplier;
+		editOpen = true;
 	}
 
-	function cancelEdit() {
-		editingId = null;
+	function closeEdit() {
+		editOpen = false;
+		editingDoc = null;
 	}
 
-	async function handleSaveEdit(doc: GasCylinderType) {
+	async function handleSaveEdit() {
+		if (!editingDoc) return;
 		try {
 			await updateType.mutateAsync({
-				doc,
+				doc: editingDoc,
 				input: {
 					name: editName,
 					capacity_kg: editCapacity,
@@ -65,7 +159,7 @@
 			});
 			await queryClient.invalidateQueries({ queryKey: kitchenKeys.gasCylinderTypes() });
 			toast.success(`อัปเดต "${editName}" แล้ว`);
-			editingId = null;
+			closeEdit();
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
 		}
@@ -108,140 +202,6 @@
 
 <div class="min-h-full p-6">
 	<div class="mx-auto max-w-3xl space-y-5">
-		<!-- Existing types card -->
-		<div class="rounded-2xl bg-white p-6 shadow-sm">
-			<p class="font-semibold text-gray-900">
-				ฐานข้อมูลถังแก๊ส/เตาแก๊สปัจจุบัน ({gasTypes.data?.length ?? 0} ชนิด)
-			</p>
-			<p class="mt-0.5 text-xs text-gray-500">ค่าตั้งต้นสำหรับคำนวณเวลาและปริมาณการใช้แก๊ส</p>
-
-			{#if gasTypes.isPending}
-				<p class="mt-4 text-sm text-gray-400">กำลังโหลด...</p>
-			{:else if !gasTypes.data?.length}
-				<p class="mt-4 text-sm text-gray-400">ยังไม่มีข้อมูล — เพิ่มด้านล่างได้เลย</p>
-			{:else}
-				<div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-					{#each gasTypes.data as g (g._id)}
-						<div class="relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-							{#if editingId === g._id}
-								<!-- Edit mode -->
-								<div class="space-y-3">
-									<input
-										class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-purple-400 focus:outline-none"
-										bind:value={editName}
-										placeholder="ชื่อประเภทเตา/แก๊ส"
-									/>
-									<div class="grid grid-cols-3 gap-2">
-										<div class="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2">
-											<p class="text-[10px] text-gray-400">ความจุ (kg)</p>
-											<input
-												type="text"
-												inputmode="decimal"
-												min="0.1"
-												step="0.1"
-												class="mt-1 w-full bg-transparent text-sm font-bold text-gray-900 focus:outline-none"
-												bind:value={editCapacity}
-											/>
-										</div>
-										<div class="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2">
-											<p class="text-[10px] text-gray-400">Burn Rate (kg/ชม.)</p>
-											<input
-												type="text"
-												inputmode="decimal"
-												min="0.01"
-												step="0.01"
-												class="mt-1 w-full bg-transparent text-sm font-semibold text-blue-600 focus:outline-none"
-												bind:value={editBurnRate}
-											/>
-										</div>
-										<div class="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2">
-											<p class="text-[10px] text-gray-400">Multiplier</p>
-											<input
-												type="text"
-												inputmode="decimal"
-												min="0.1"
-												step="0.1"
-												class="mt-1 w-full bg-transparent text-sm font-bold text-purple-600 focus:outline-none"
-												bind:value={editMultiplier}
-											/>
-										</div>
-									</div>
-									<div class="flex justify-end gap-2">
-										<button
-											type="button"
-											class="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50"
-											onclick={cancelEdit}
-										>
-											<X class="h-3 w-3" /> ยกเลิก
-										</button>
-										<button
-											type="button"
-											class="flex items-center gap-1 rounded-lg bg-purple-600 px-3 py-1.5 text-xs text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
-											onclick={() => handleSaveEdit(g)}
-											disabled={updateType.isPending || !editName}
-										>
-											<Check class="h-3 w-3" /> บันทึก
-										</button>
-									</div>
-								</div>
-							{:else}
-								<!-- View mode -->
-								<div class="absolute top-3 right-3 flex gap-1.5">
-									<button
-										type="button"
-										class="text-gray-300 transition-colors hover:text-blue-400"
-										onclick={() => startEdit(g)}
-										aria-label="แก้ไข"
-									>
-										<Pencil class="h-3.5 w-3.5" />
-									</button>
-									<button
-										type="button"
-										class="text-gray-300 transition-colors hover:text-red-400"
-										onclick={() => handleDelete(g)}
-										disabled={deleteType.isPending}
-										aria-label="ลบ"
-									>
-										<Trash2 class="h-3.5 w-3.5" />
-									</button>
-								</div>
-
-								<div class="flex items-center gap-2 pr-12">
-									<Flame class="h-4 w-4 shrink-0 text-orange-500" />
-									<p class="text-sm font-semibold text-gray-900">{g.name}</p>
-								</div>
-
-								<div class="mt-3 grid grid-cols-3 gap-2">
-									<div class="rounded-xl border border-gray-100 bg-white px-3 py-2.5 shadow-sm">
-										<p class="text-[10px] leading-tight text-gray-400">
-											ความจุต่อถัง<br />(น้ำหนักสุทธิ)
-										</p>
-										<p class="mt-1.5 text-sm font-bold text-gray-900">
-											{g.capacity_kg} <span class="text-xs font-normal text-gray-500">kg</span>
-										</p>
-									</div>
-									<div class="rounded-xl border border-gray-100 bg-white px-3 py-2.5 shadow-sm">
-										<p class="text-[10px] leading-tight text-gray-400">
-											อัตราสิ้นเปลือง<br />(Burn Rate)
-										</p>
-										<p class="mt-1.5 text-sm font-semibold text-blue-600">
-											{g.burn_rate_kg_per_hour}<span class="text-xs font-normal"> kg / ชม.</span>
-										</p>
-									</div>
-									<div class="rounded-xl border border-gray-100 bg-white px-3 py-2.5 shadow-sm">
-										<p class="text-[10px] leading-tight text-gray-400">
-											ตัวคูณเวลา<br />(Time Multiplier)
-										</p>
-										<p class="mt-1.5 text-sm font-bold text-purple-600">x{g.time_multiplier}</p>
-									</div>
-								</div>
-							{/if}
-						</div>
-					{/each}
-				</div>
-			{/if}
-		</div>
-
 		<!-- Add form card -->
 		<div class="rounded-2xl bg-white p-6 shadow-sm">
 			<p class="flex items-center gap-1.5 font-semibold text-gray-900">
@@ -316,5 +276,196 @@
 				</div>
 			</form>
 		</div>
+
+		<!-- Existing types card -->
+		<div class="rounded-2xl bg-white p-6 shadow-sm">
+			<p class="font-semibold text-gray-900">
+				ฐานข้อมูลถังแก๊ส/เตาแก๊สปัจจุบัน ({gasTypes.data?.length ?? 0} ชนิด)
+			</p>
+			<p class="mt-0.5 text-xs text-gray-500">ค่าตั้งต้นสำหรับคำนวณเวลาและปริมาณการใช้แก๊ส</p>
+
+			{#if gasTypes.isPending}
+				<p class="mt-4 text-sm text-gray-400">กำลังโหลด...</p>
+			{:else if !gasTypes.data?.length}
+				<p class="mt-4 text-sm text-gray-400">ยังไม่มีข้อมูล — เพิ่มด้านล่างได้เลย</p>
+			{:else}
+				<div class="mt-4 overflow-x-auto">
+					<Table.Root>
+						<Table.Header>
+							<Table.Row>
+								<Table.Head>ชื่อประเภทเตา/แก๊ส</Table.Head>
+								<Table.Head class="text-right">ความจุต่อถัง (kg)</Table.Head>
+								<Table.Head class="text-right">Burn Rate (kg/ชม.)</Table.Head>
+								<Table.Head class="text-right">ตัวคูณเวลา</Table.Head>
+								<Table.Head>สถานะ</Table.Head>
+								<Table.Head class="text-right">ใช้ไปแล้ว</Table.Head>
+								<Table.Head class="text-right">เหลือ</Table.Head>
+								<Table.Head class="text-right">จัดการ</Table.Head>
+							</Table.Row>
+						</Table.Header>
+						<Table.Body>
+							{#each gasTypes.data as g (g._id)}
+								{@const remaining = remainingOf(g)}
+								{@const status = gasCylinderStatus(remaining, g.capacity_kg)}
+								{@const used = addQty(g.capacity_kg, qtyNeg(remaining))}
+								<Table.Row>
+									<Table.Cell>
+										<div class="flex items-center gap-2">
+											<Flame class="h-4 w-4 shrink-0 text-orange-500" />
+											<span class="font-medium text-gray-900">{g.name}</span>
+										</div>
+									</Table.Cell>
+									<Table.Cell class="text-right">{g.capacity_kg} kg</Table.Cell>
+									<Table.Cell class="text-right text-blue-600"
+										>{g.burn_rate_kg_per_hour} kg/ชม.</Table.Cell
+									>
+									<Table.Cell class="text-right text-purple-600">x{g.time_multiplier}</Table.Cell>
+									<Table.Cell>
+										<Badge variant="outline" class={GAS_STATUS_CLASS[status]}
+											>{GAS_STATUS_LABELS[status]}</Badge
+										>
+									</Table.Cell>
+									<Table.Cell class="text-right">{used} kg</Table.Cell>
+									<Table.Cell class="text-right font-medium">{remaining} kg</Table.Cell>
+									<Table.Cell class="text-right">
+										<div class="flex justify-end gap-1.5">
+											<button
+												type="button"
+												class="text-gray-400 transition-colors hover:text-emerald-500"
+												onclick={() => startRefill(g)}
+												disabled={status === 'unused'}
+												aria-label="เติมแก๊ส"
+											>
+												<Fuel class="h-4 w-4" />
+											</button>
+											<button
+												type="button"
+												class="text-gray-400 transition-colors hover:text-amber-500"
+												onclick={() => startWriteOff(g)}
+												disabled={status !== 'in_use'}
+												title="ตัดเศษเหลือทิ้ง — ใช้เมื่อถังเหลือน้อยเกินจะเบิกอีก"
+												aria-label="ตัดเศษเหลือทิ้ง"
+											>
+												<Eraser class="h-4 w-4" />
+											</button>
+											<button
+												type="button"
+												class="text-gray-400 transition-colors hover:text-blue-500"
+												onclick={() => startEdit(g)}
+												aria-label="แก้ไข"
+											>
+												<Pencil class="h-4 w-4" />
+											</button>
+											<button
+												type="button"
+												class="text-gray-400 transition-colors hover:text-red-500"
+												onclick={() => handleDelete(g)}
+												disabled={deleteType.isPending}
+												aria-label="ลบ"
+											>
+												<Trash2 class="h-4 w-4" />
+											</button>
+										</div>
+									</Table.Cell>
+								</Table.Row>
+							{/each}
+						</Table.Body>
+					</Table.Root>
+				</div>
+			{/if}
+		</div>
+
+		<Dialog.Root open={editOpen} onOpenChange={(v) => (v ? null : closeEdit())}>
+			<Dialog.Content class="sm:max-w-md">
+				<Dialog.Header>
+					<Dialog.Title>แก้ไขถังแก๊ส/เตาแก๊ส</Dialog.Title>
+				</Dialog.Header>
+				<div class="space-y-4">
+					<div class="space-y-1.5">
+						<Label for="gas-edit-name">ชื่อประเภทเตา/แก๊ส</Label>
+						<Input id="gas-edit-name" bind:value={editName} />
+					</div>
+					<div class="grid grid-cols-3 gap-3">
+						<div class="space-y-1.5">
+							<Label for="gas-edit-capacity" class="text-xs">ความจุ (kg)</Label>
+							<Input
+								id="gas-edit-capacity"
+								type="text"
+								inputmode="decimal"
+								bind:value={editCapacity}
+							/>
+						</div>
+						<div class="space-y-1.5">
+							<Label for="gas-edit-burn" class="text-xs">Burn Rate (kg/ชม.)</Label>
+							<Input id="gas-edit-burn" type="text" inputmode="decimal" bind:value={editBurnRate} />
+						</div>
+						<div class="space-y-1.5">
+							<Label for="gas-edit-mult" class="text-xs">ตัวคูณเวลา</Label>
+							<Input
+								id="gas-edit-mult"
+								type="text"
+								inputmode="decimal"
+								bind:value={editMultiplier}
+							/>
+						</div>
+					</div>
+				</div>
+				<Dialog.Footer>
+					<Button type="button" variant="outline" onclick={closeEdit}>ยกเลิก</Button>
+					<Button onclick={handleSaveEdit} disabled={updateType.isPending || !editName}>
+						{updateType.isPending ? 'กำลังบันทึก...' : 'บันทึก'}
+					</Button>
+				</Dialog.Footer>
+			</Dialog.Content>
+		</Dialog.Root>
+
+		<Dialog.Root open={refillOpen} onOpenChange={(v) => (v ? null : closeRefill())}>
+			<Dialog.Content class="sm:max-w-sm">
+				<Dialog.Header>
+					<Dialog.Title>เติมแก๊ส{refillDoc ? ` — ${refillDoc.name}` : ''}</Dialog.Title>
+					{#if refillDoc}
+						<Dialog.Description>
+							เหลือ {remainingOf(refillDoc)} kg จาก {refillDoc.capacity_kg} kg — เติมได้อีกไม่เกิน
+							{refillRoom} kg
+						</Dialog.Description>
+					{/if}
+				</Dialog.Header>
+				<div class="space-y-1.5">
+					<Label for="gas-refill-qty">ปริมาณที่เติม (kg)</Label>
+					<Input id="gas-refill-qty" type="text" inputmode="decimal" bind:value={refillQty} />
+				</div>
+				<Dialog.Footer>
+					<Button type="button" variant="outline" onclick={closeRefill}>ยกเลิก</Button>
+					<Button onclick={handleRefill} disabled={refillType.isPending || !refillQty}>
+						{refillType.isPending ? 'กำลังบันทึก...' : 'เติมแก๊ส'}
+					</Button>
+				</Dialog.Footer>
+			</Dialog.Content>
+		</Dialog.Root>
+
+		<AlertDialog.Root bind:open={writeOffOpen}>
+			<AlertDialog.Content>
+				<AlertDialog.Header>
+					<AlertDialog.Title>ตัดเศษเหลือทิ้ง?</AlertDialog.Title>
+					<AlertDialog.Description>
+						{#if writeOffDoc}
+							ถัง "{writeOffDoc.name}" เหลือ {remainingOf(writeOffDoc)} kg — เศษจำนวนนี้เบิกต่อไม่ได้
+							(เบิกแก๊สบางส่วนไม่ได้) การตัดเศษจะปรับยอดเหลือเป็น 0 กก. ทันที (บันทึกเป็นรายการ ปรับยอดใน
+							ledger, กู้คืนไม่ได้ — เติมแก๊สใหม่ได้ตามปกติ)
+						{/if}
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel onclick={() => (writeOffDoc = null)}>ยกเลิก</AlertDialog.Cancel>
+					<AlertDialog.Action
+						class="bg-amber-600 text-white hover:bg-amber-700"
+						disabled={writeOffType.isPending}
+						onclick={handleWriteOff}
+					>
+						ตัดเศษเหลือทิ้ง
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog.Root>
 	</div>
 </div>
