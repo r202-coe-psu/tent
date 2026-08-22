@@ -10,3 +10,4 @@ export type { Language } from './i18n/common';
 export { PUBLIC_BOOKING_I18N } from './i18n/public-booking';
 export { PUBLIC_BOOKING_FORM_I18N } from './i18n/public-booking-form';
 export { PUBLIC_BOOKING_TICKET_I18N } from './i18n/public-booking-ticket';
+export * from './i18n/admin-announcements';

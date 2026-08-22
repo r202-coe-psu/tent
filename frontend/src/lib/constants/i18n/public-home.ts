@@ -38,7 +38,9 @@ export const PUBLIC_HOME_I18N = {
 			'หากติดค้างอยู่ในตึกจมน้ำ เจ็บครรภ์คลอด สัตว์มีพิษกัด หรือต้องการรถย้ายระดับสูงพิกัดตำบล ประสานงานโดยอัตโนมัติ',
 		contact1669Label: 'สายด่วนกู้ชีพแพทย์ฉุกเฉิน',
 		contact1784Label: 'ศูนย์เตือนภัย ปภ. พายุคุกคาม',
-		call: 'โทร'
+		call: 'โทร',
+		moreInfo: 'สอบถามข้อมูลเพิ่มเติม',
+		directLine: 'สายตรงศูนย์ฯ'
 	},
 	en: {
 		pageTitle: 'Smart Shelter — Public & RFL Portal',
@@ -77,7 +79,9 @@ export const PUBLIC_HOME_I18N = {
 			'If trapped in a flooded building, in labor, bitten by venomous animals, or needing a high-clearance vehicle, auto-coordinate here.',
 		contact1669Label: 'Emergency Medical Hotline',
 		contact1784Label: 'DDPM Storm Warning Center',
-		call: 'Call'
+		call: 'Call',
+		moreInfo: 'More Information',
+		directLine: 'Direct Line'
 	}
 } as const;
 

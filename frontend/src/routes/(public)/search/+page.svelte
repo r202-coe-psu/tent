@@ -176,7 +176,7 @@
 									</div>
 									<div class="mt-2 gap-4 text-sm text-muted-foreground md:flex">
 										<p>ID: <span class="font-mono">{person.national_id || '-'}</span></p>
-										<p>เพศ: {genderLabel(person.gender)}</p>
+										<p>{t.genderPrefix} {genderLabel(person.gender)}</p>
 									</div>
 								</div>
 
