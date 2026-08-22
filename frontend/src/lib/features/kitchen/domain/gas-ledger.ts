@@ -16,7 +16,7 @@ import {
 // operations' `stock_ledger` (signed delta, never a stored running total)
 // but kept as its own doc type since gas is not an `item_master`/`supply_item`.
 
-// 'adjust' (CR-080 addendum) — manual write-off for a dust-sized remainder that
+// 'adjust' (CR-085 addendum) — manual write-off for a dust-sized remainder that
 // can never legitimately reach 0 through consumption: a gas draw is a hard
 // all-or-nothing block (unlike stock_ledger's partial-issue), so a cylinder
 // left with e.g. 0.001 kg stays stuck at status 'in_use' forever unless some

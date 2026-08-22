@@ -228,7 +228,7 @@
 				fillFromOccupancy(plan.headcount);
 				overrideReason = plan.override_reason ?? '';
 				// Cooking hours aren't stored separately from the resulting
-				// consumption_kg (CR-080) — reconstruct them from the cylinder's own
+				// consumption_kg (CR-085) — reconstruct them from the cylinder's own
 				// coefficients (inverse of calculateGasConsumptionKg) so the field
 				// shows the hours instead of coming back blank. Falls back to blank
 				// only if the cylinder type itself can no longer be found (deleted).
@@ -345,7 +345,7 @@
 		return { totalKg, totalCylinders };
 	});
 
-	// Real remaining stock for one cylinder (CR-080) — computed from its ledger,
+	// Real remaining stock for one cylinder (CR-085) — computed from its ledger,
 	// never stored. Used only to warn if this plan's draw would come up short;
 	// the hard block is at issueRequisition time, since the real balance can
 	// shift between drafting a plan and actually requisitioning it.
@@ -355,7 +355,7 @@
 		return gasCylinderBalance(gasLedger.data ?? [], cylinderId, cyl.capacity_kg);
 	}
 
-	// What actually gets persisted onto the plan (CR-080) — only rows with a
+	// What actually gets persisted onto the plan (CR-085) — only rows with a
 	// picked cylinder AND a resolvable consumption figure; a half-filled row is
 	// silently dropped rather than blocking the whole plan submission.
 	const validGasUsage = $derived.by((): MealPlanGasUsage[] =>

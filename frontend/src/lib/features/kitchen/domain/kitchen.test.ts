@@ -204,7 +204,7 @@ describe('createMealService', () => {
 		expect(createMealService(input, ctx)._id).not.toBe(createMealService(input, ctx)._id);
 	});
 
-	it('carries actual_yield through when provided (CR-079)', () => {
+	it('carries actual_yield through when provided (CR-084)', () => {
 		const svc = createMealService(
 			{
 				date: '2026-07-15',
@@ -280,7 +280,7 @@ describe('createMealService', () => {
 		).toThrow();
 	});
 
-	it('keeps schema_v 2 — optional field, no bump (CR-079)', () => {
+	it('keeps schema_v 2 — optional field, no bump (CR-084)', () => {
 		const svc = createMealService(
 			{
 				date: '2026-07-15',

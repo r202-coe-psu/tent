@@ -9,6 +9,10 @@ from pymongo import IndexModel
 
 
 class DeclaredItem(BaseModel):
+	# Carried through even though no public surface renders it: the donor's edit form
+	# sends the basket back whole, and an item returning without its item_id silently
+	# stops being quota-tracked (CR-080).
+	item_id: str | None = None
 	item_name: str = ""
 	qty: Any = None
 	unit: str | None = None

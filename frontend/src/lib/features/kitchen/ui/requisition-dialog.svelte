@@ -31,7 +31,7 @@
 	const gasTypes = useGasCylinderTypes();
 	const gasLedger = useGasLedger();
 
-	// Pre-check the plan's gas draw (CR-080) the same way food is pre-checked
+	// Pre-check the plan's gas draw (CR-085) the same way food is pre-checked
 	// below — so a shortfall is visible and blocks the submit button here,
 	// instead of surfacing only as a raw throw from issueRequisition at the
 	// moment of submit. issueRequisition still re-checks server-side (the real

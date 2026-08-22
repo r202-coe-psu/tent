@@ -1,5 +1,10 @@
 import type { PageLoad } from './$types';
-import { listPublicShelters, toPublicShelterCard } from '$lib/features/public-portal';
+import {
+	listPublicShelters,
+	toPublicShelterCard,
+	type PublicShelterListResponse,
+	type PublicShelterItem
+} from '$lib/features/public-portal';
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
 	const R = 6371;
@@ -32,28 +37,38 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			.map((s) => s.trim().toLowerCase())
 			.find((s) => s === 'open' || s === 'closed' || s === 'full' || s === 'prepare') || '';
 
-	const data = await listPublicShelters({
-		province: province || undefined,
-		district: district || undefined,
-		subdistrict: subdistrict || undefined,
-		status: status || undefined,
-		fetch
-	});
-
 	const userLatNum = user_lat ? parseFloat(user_lat) : NaN;
 	const userLngNum = user_lng ? parseFloat(user_lng) : NaN;
 	const hasUser = !Number.isNaN(userLatNum) && !Number.isNaN(userLngNum);
 	const maxDistance = distance ? parseFloat(distance) : NaN;
 
-	let shelters = data.shelters.map((item) => {
+	let data: PublicShelterListResponse | null;
+	try {
+		data = await listPublicShelters({
+			province: province || undefined,
+			district: district || undefined,
+			subdistrict: subdistrict || undefined,
+			status: status || undefined,
+			lat: hasUser ? userLatNum : undefined,
+			lng: hasUser ? userLngNum : undefined,
+			radius_km: hasUser && !Number.isNaN(maxDistance) && maxDistance > 0 ? maxDistance : undefined,
+			fetch
+		});
+	} catch {
+		data = { shelters: [], count: 0, as_of: new Date().toISOString() };
+	}
+
+	const rawShelters = (Array.isArray(data?.shelters) ? data.shelters : []) as PublicShelterItem[];
+
+	let shelters = rawShelters.map((item) => {
 		let dist = 0;
-		if (hasUser && item.geo) {
+		if (hasUser && item?.geo && item.geo.lat != null && item.geo.lng != null) {
 			dist = parseFloat(haversineKm(userLatNum, userLngNum, item.geo.lat, item.geo.lng).toFixed(1));
 		}
 		return toPublicShelterCard(
 			{
 				...item,
-				vulnerable_groups: item.vulnerable_groups ?? undefined
+				vulnerable_groups: item?.vulnerable_groups ?? undefined
 			},
 			dist
 		);
@@ -63,10 +78,10 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		const q = search.trim().toLowerCase();
 		shelters = shelters.filter(
 			(s) =>
-				s.name.toLowerCase().includes(q) ||
-				s.code.toLowerCase().includes(q) ||
-				s.province.toLowerCase().includes(q) ||
-				s.district.toLowerCase().includes(q)
+				(s.name && s.name.toLowerCase().includes(q)) ||
+				(s.code && s.code.toLowerCase().includes(q)) ||
+				(s.province && s.province.toLowerCase().includes(q)) ||
+				(s.district && s.district.toLowerCase().includes(q))
 		);
 	}
 
@@ -79,7 +94,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	return {
 		shelters,
 		count: shelters.length,
-		as_of: data.as_of,
+		as_of: data.as_of ?? new Date().toISOString(),
 		summary: {
 			shelters_total: shelters.length,
 			shelters_open: openCount

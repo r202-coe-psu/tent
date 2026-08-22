@@ -53,7 +53,7 @@
 		empty: 'border-red-200 bg-red-50 text-red-700'
 	};
 
-	// Remaining kg for one cylinder — computed from its ledger, never stored (CR-080).
+	// Remaining kg for one cylinder — computed from its ledger, never stored (CR-085).
 	function remainingOf(g: GasCylinderType): string {
 		return gasCylinderBalance(gasLedger.data ?? [], g._id, g.capacity_kg);
 	}
@@ -91,7 +91,7 @@
 		}
 	}
 
-	// Write-off (CR-080 addendum) — a dust-sized remainder can never reach 0
+	// Write-off (CR-085 addendum) — a dust-sized remainder can never reach 0
 	// through consumption (gas draws are a hard all-or-nothing block, unlike
 	// stock_ledger's partial issue), so it needs a manual way to zero out.
 	let writeOffOpen = $state(false);

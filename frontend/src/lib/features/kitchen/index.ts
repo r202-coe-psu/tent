@@ -45,7 +45,7 @@ export {
 } from './domain/gas-calc';
 export type { GasBurnCoefficients } from './domain/gas-calc';
 
-// Domain — gas cylinder stock ledger (CR-080)
+// Domain — gas cylinder stock ledger (CR-085)
 export {
 	gasLedgerReasonSchema,
 	createGasLedgerEntry,

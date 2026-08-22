@@ -50,7 +50,7 @@ export interface MealPlanRecipe {
 }
 
 // One gas cylinder (kitchen.ts GasCylinderType) this plan draws from, and how
-// much it's expected to draw — CR-080. `issueRequisition` reads this array to
+// much it's expected to draw — CR-085. `issueRequisition` reads this array to
 // write the matching `gas_ledger` consumption entries; absence means the plan
 // doesn't use gas (not an empty draw of 0).
 export interface MealPlanGasUsage {
@@ -238,9 +238,9 @@ export interface MealService extends BaseDoc {
 	date: string;
 	meal: MealPeriod;
 	meal_plan_id: string | null;
-	// Portions the kitchen actually produced (ช่วง C, CR-079). Distinct from
+	// Portions the kitchen actually produced (ช่วง C, CR-084). Distinct from
 	// `served` (how many were handed out) — yield is the ceiling on distribution.
-	// Absent on docs written before CR-079 and whenever the kitchen skips it —
+	// Absent on docs written before CR-084 and whenever the kitchen skips it —
 	// absence means "not recorded", not zero.
 	actual_yield?: number;
 	served: number;

@@ -3,7 +3,7 @@ import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
-import { getShelterDb } from '$lib/db/shelter';
+import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { kitchenRepository } from '../data/kitchen.remote';
 import { getActiveSopProfile } from '$lib/features/sop-ratios';
@@ -32,12 +32,12 @@ import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
 
 export const kitchenKeys = {
 	all: ['kitchen'] as const,
-	mealPlans: () => [...kitchenKeys.all, 'meal_plans'] as const,
-	requisitions: () => [...kitchenKeys.all, 'requisitions'] as const,
-	mealServices: () => [...kitchenKeys.all, 'meal_services'] as const,
-	gasCylinderTypes: () => [...kitchenKeys.all, 'gas_cylinder_types'] as const,
-	gasLedger: () => [...kitchenKeys.all, 'gas_ledger'] as const,
-	occupancy: () => [...kitchenKeys.all, 'occupancy'] as const
+	mealPlans: () => [...kitchenKeys.all, 'meal_plans', getShelterCode()] as const,
+	requisitions: () => [...kitchenKeys.all, 'requisitions', getShelterCode()] as const,
+	mealServices: () => [...kitchenKeys.all, 'meal_services', getShelterCode()] as const,
+	gasCylinderTypes: () => [...kitchenKeys.all, 'gas_cylinder_types', getShelterCode()] as const,
+	gasLedger: () => [...kitchenKeys.all, 'gas_ledger', getShelterCode()] as const,
+	occupancy: () => [...kitchenKeys.all, 'occupancy', getShelterCode()] as const
 };
 
 // --- Occupancy (T-06 handoff) ---
@@ -265,7 +265,7 @@ export const useDeleteGasCylinderType = () =>
 		mutationFn: (doc: GasCylinderType) => kitchenRepository().deleteGasCylinderType(doc)
 	}));
 
-// --- GasLedger (CR-080) — real per-cylinder stock ---
+// --- GasLedger (CR-085) — real per-cylinder stock ---
 
 export const useGasLedger = () =>
 	createQuery(() => ({

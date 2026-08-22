@@ -11,10 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from ...core.security import verify_external_secret
 from ...utils.request_meta import client_ip
 from .schemas import (
+    DonationCancelResponse,
     DonationCourierPatchRequest,
     DonationCourierPatchResponse,
     DonationCreateRequest,
     DonationCreateResponse,
+    DonationItemsPatchRequest,
+    DonationItemsPatchResponse,
     DonationTrackingResponse,
     DonationTrackSearchRequest,
     DonationTrackSearchResponse,
@@ -116,3 +119,43 @@ async def patch_donation_courier(
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.update_courier_tracking(tracking_token, payload.courier_tracking_no)
+
+
+@router.patch(
+    "/{tracking_token}/items",
+    response_model=DonationItemsPatchResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def patch_donation_items(
+    request: Request,
+    response: Response,
+    tracking_token: str,
+    payload: DonationItemsPatchRequest,
+    use_case: DonationsUseCase = Depends(get_donations_use_case),  # noqa: B008
+) -> DonationItemsPatchResponse:
+    """Donor edits their own declared items, moving the quota by the difference (CR-080).
+
+    A separate path from the courier PATCH above: that one touches only the intake
+    buffer and can never be refused, while this one moves the atomic counter and answers
+    409 when the target is full.
+    """
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.update_items(tracking_token, payload.items)
+
+
+@router.delete(
+    "/{tracking_token}",
+    response_model=DonationCancelResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def cancel_donation(
+    request: Request,
+    response: Response,
+    tracking_token: str,
+    use_case: DonationsUseCase = Depends(get_donations_use_case),  # noqa: B008
+) -> DonationCancelResponse:
+    """Cancel on the Mongo intake buffer (pre-inbound only)."""
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.cancel(tracking_token)

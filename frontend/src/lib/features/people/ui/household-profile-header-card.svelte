@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import type { Household, HouseholdStatus } from '../domain/people';
+	import { MANUAL_HOUSEHOLD_STATUS_TRANSITIONS } from '../domain/people';
 
 	let {
 		household,
@@ -19,6 +20,11 @@
 		isCancelling?: boolean;
 		canCancel?: boolean;
 	} = $props();
+
+	const allowedTransitions = $derived(
+		household ? MANUAL_HOUSEHOLD_STATUS_TRANSITIONS[household.status] : []
+	);
+	const isStatusEditable = $derived(allowedTransitions.length > 0);
 </script>
 
 <div
@@ -59,14 +65,23 @@
 
 		{#if statusConfig[household.status]}
 			{@const config = statusConfig[household.status]}
-			<button
-				class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold shadow-sm transition-all hover:brightness-95 {config.colorClass}"
-				onclick={onOpenStatusModal}
-			>
-				<span class="size-1.5 rounded-full {config.dotClass}"></span>
-				<span>{config.label}</span>
-				<Pencil class="ml-0.5 size-3.5 opacity-60" />
-			</button>
+			{#if isStatusEditable}
+				<button
+					class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold shadow-sm transition-all hover:brightness-95 {config.colorClass}"
+					onclick={onOpenStatusModal}
+				>
+					<span class="size-1.5 rounded-full {config.dotClass}"></span>
+					<span>{config.label}</span>
+					<Pencil class="ml-0.5 size-3.5 opacity-60" />
+				</button>
+			{:else}
+				<div
+					class="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold {config.colorClass}"
+				>
+					<span class="size-1.5 rounded-full {config.dotClass}"></span>
+					<span>{config.label}</span>
+				</div>
+			{/if}
 		{/if}
 	</div>
 </div>

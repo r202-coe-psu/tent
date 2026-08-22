@@ -12,7 +12,7 @@ export type GasBurnCoefficients = Pick<
  * All three factors are qty_str; multiplied as Decimal and rounded ONCE at the end
  * (`persistQty`) so a 4dp × 4dp × 4dp product never carries IEEE noise.
  *
- * Persisted on `meal_plan.gas_usage[].consumption_kg` (CR-080) and drawn down via
+ * Persisted on `meal_plan.gas_usage[].consumption_kg` (CR-085) and drawn down via
  * `gas_ledger` at requisition time.
  */
 export function calculateGasConsumptionKg(
@@ -47,7 +47,7 @@ export function cylindersNeeded(consumptionKg: QtyValue, capacityKg: QtyValue): 
 /**
  * Inverse of {@link calculateGasConsumptionKg} — recovers the cooking-hours input
  * from a persisted `consumption_kg` + the cylinder's own coefficients. Only
- * `consumption_kg` is stored on `meal_plan.gas_usage` (CR-080 didn't add a
+ * `consumption_kg` is stored on `meal_plan.gas_usage` (CR-085 didn't add a
  * separate hours field), so re-opening a plan for edit needs this to show the
  * hours field pre-filled instead of blank — the result reproduces the exact same
  * `consumption_kg` if fed back into calculateGasConsumptionKg, even if it isn't

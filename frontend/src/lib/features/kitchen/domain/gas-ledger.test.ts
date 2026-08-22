@@ -65,7 +65,7 @@ describe('createGasLedgerEntry', () => {
 		).toThrow();
 	});
 
-	// CR-080 addendum — manual write-off for a dust remainder a hard-block
+	// CR-085 addendum — manual write-off for a dust remainder a hard-block
 	// consumption flow could never legitimately zero out.
 	it('accepts reason "adjust" (write-off addendum)', () => {
 		const e = createGasLedgerEntry(

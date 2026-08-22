@@ -21,7 +21,7 @@
 	let volunteers = $state(0);
 	let outsideEvacuees = $state(0);
 	let notes = $state('');
-	// Actual Yield (CR-079) — tri-state: null = not recorded, 0 = recorded zero.
+	// Actual Yield (CR-084) — tri-state: null = not recorded, 0 = recorded zero.
 	// An emptied <input type="number"> binds to null in Svelte, so this stays
 	// null until the kitchen actually types a value.
 	let actualYield = $state<number | null>(null);

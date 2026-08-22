@@ -16,14 +16,14 @@ export interface MealVariance {
 	external: number; // volunteers + outside_evacuees
 	// served + waste — best estimate of what the kitchen cooked in-center when no
 	// actual_yield was recorded. `actual_yield` (below), when present, is the
-	// measured figure; `produced` keeps this same estimate either way (CR-079
+	// measured figure; `produced` keeps this same estimate either way (CR-084
 	// deliberately does not redefine it).
 	produced: number;
 	variance: number; // served - planned (0 when no plan)
 	variance_pct: number | null; // variance / planned * 100; null when planned is 0/absent
 	status: MealVarianceStatus;
-	actual_yield: number | null; // service.actual_yield ?? null — null = not recorded (CR-079)
-	yield_variance: number | null; // actual_yield - planned; null when either is absent (CR-079)
+	actual_yield: number | null; // service.actual_yield ?? null — null = not recorded (CR-084)
+	yield_variance: number | null; // actual_yield - planned; null when either is absent (CR-084)
 }
 
 // Default ± band (percent of planned) inside which a service counts as on-target.
@@ -47,10 +47,10 @@ export const MEAL_VARIANCE_STATUS_LABELS: Record<MealVarianceStatus, string> = {
  * planned". `external` (volunteers + outside_evacuees) and `waste` are surfaced as
  * separate review signals, not folded into the served-vs-plan number.
  *
- * `actual_yield`/`yield_variance` (CR-079) are read-only additions that report
+ * `actual_yield`/`yield_variance` (CR-084) are read-only additions that report
  * what the kitchen recorded as produced, compared to plan. They never influence
  * `variance`, `variance_pct`, `status`, or `produced` — those remain served-vs-planned
- * exactly as before CR-079.
+ * exactly as before CR-084.
  */
 export function computeMealVariance(
 	service: MealService,

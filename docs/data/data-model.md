@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-17
+updated: 2026-08-21
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -126,8 +126,10 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `meal_plan` | mutable (LWW) | แผนมื้ออาหารรายวัน — อ้าง `recipe` + ปริมาณ (กล่อง/หม้อ) ต่อมื้อ |
 | `kitchen_requisition` | **append-only** | เบิกวัตถุดิบ — สร้าง `stock_ledger` คู่กัน (qty ติดลบ) |
 | `meal_service` | **append-only** | บันทึกแจกอาหารจริงต่อมื้อ |
-| `volunteer` | mutable (LWW) | อาสาสมัคร (คนละ doc กับ `_users` — อาสาไม่มี login ก็ได้) |
-| `shift_assignment` | mutable (LWW) | ตารางเวร |
+| `volunteer` | mutable (LWW) | อาสาสมัคร (คนละ doc กับ `_users` — อาสาไม่มี login ก็ได้; มี tracking_token ออก Digital Ticket) |
+| `job` | state machine | งานประกาศรับสมัครอาสาประจำศูนย์ (`operational` \| `staff-capable`, โควตา, template กะ) — CR-041 |
+| `job_application` | state machine | ใบสมัครงานอาสา (`pending→accepted|rejected|cancelled`, tracking_token) — CR-041 |
+| `shift_assignment` | mutable (LWW) | ตารางเวร + duty_window + เช็คอินหน้างาน (v2) |
 | `shelter_report` | state machine | รายงานในศูนย์ (`kind`: grievance \| incident) — [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md) |
 | `referral` | state machine | ส่งต่อหน่วยงานนอก/ข้ามศูนย์: `draft→sent→accepted|rejected→closed` (จัดเก็บที่ `central_ops` — ดู schema.md §5.4) |
 | `audit` | **append-only** | การกระทำสำคัญ (override duplicate-hint, แก้ retroactive, export, ลบ) |

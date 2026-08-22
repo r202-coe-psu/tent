@@ -24,7 +24,7 @@ status: stories-draft-complete
 module: A
 source_cr: CR-041
 created: 2026-07-22
-updated: 2026-07-22
+updated: 2026-08-21
 ---
 
 # Module A (CR-041) — Epic Breakdown
@@ -57,7 +57,9 @@ Epic/story breakdown สำหรับ **Module A — Volunteer** ตาม [CR
 - MA-07: เปิด public surface `/volunteer*` พร้อม Module A (nav + สมัคร; board ตาม sitemap) — ต้อง amend CR-005
 - MA-08: โปรไฟล์อาสาเป็นโปรไฟล์กลาง — สมัคร/ถูกมอบหมายหลายศูนย์จากโปรไฟล์เดียวได้
 - MA-09: โปรไฟล์เก็บ skills, availability, ติดต่อ; แก้ไขภายหลังได้; SM ค้น/กรองตามทักษะและช่วงเวลาได้
+- MA-09b: **Digital Ticket & QR Code**: ผู้สมัครรับ URL Ticket + QR Code สำหรับตรวจสอบสถานะและรายงานตัวหน้างาน — ป้องกันสแปมด้วย reCAPTCHA v3 + Rate Limiting (ไม่มีค่าใช้จ่าย SMS OTP)
 - MA-10: มี doc type `job` ต่อศูนย์ — status draft/open/paused/filled/closed; SM สร้าง/แก้/พัก/ปิดได้ตลอด
+- MA-10b: **On-Site QR Check-In**: โต๊ะลงทะเบียนของศูนย์สแกน QR Ticket เพื่อบันทึกเวลา Check-in/Check-out และ feed `volunteers_active`
 - MA-11: Job ระบุ capability tier `operational` | `staff-capable`; staff-capable ต้องประกาศ required RoleKey/capability
 - MA-12: กะใช้ preset template (platform/SA) + override ต่อ job (เวลา/ความจุ/ทักษะ)
 - MA-13: มี `job_application` — สมัครแล้วรออนุมัติเป็นค่าเริ่มต้น; SM อนุมัติ/ปฏิเสธ/มอบหมายได้; รองรับ SM assign ตรง
@@ -291,6 +293,21 @@ So that matching and scheduling stay accurate.
 **Then** การเปลี่ยนแปลงถูกบันทึกและใช้ในการ match/จัดกะได้  
 **And** เมื่อชนิดคนเป็นอาสา ต้องมี `affiliation_tags` รวม `"volunteer"` (MA-09, MA-03, D-USER-PROVISION)
 
+### Story 2.5: ออก Digital Ticket พร้อม QR Code และติดตามสถานะแบบ No-Auth
+
+As a public volunteer applicant,  
+I want to receive a Digital Ticket with a unique tracking URL and QR code,  
+So that I can check my application status and present my QR code on-site without needing SMS OTP.
+
+**Acceptance Criteria:**
+
+**Given** ผู้สมัครส่งฟอร์มสมัครผ่านหน้า public สำเร็จ  
+**When** ระบบประมวลผลคำขอ (พร้อมผ่าน reCAPTCHA v3)  
+**Then** สร้าง `tracking_token` เฉพาะบุคคล และนำทางผู้สมัครไปยังหน้า `/volunteer/ticket/[token]`  
+**And** หน้า Digital Ticket แสดง QR Code ประจำตัว, สถานะการสมัคร (`pending`/`accepted`), วันเวลาและจุดงานที่เลือก  
+**And** มีปุ่ม "บันทึกรูป QR Code" และ "กดยกเลิกการสมัครล่วงหน้า"  
+**And** ไม่พึ่งพา SMS Gateway ใด ๆ (MA-09b, D-TICKET, D-ANTISPAM)
+
 ---
 
 ## Epic 3: Job Board — ประกาศงาน สมัคร จับคู่ และจัดกะ
@@ -440,6 +457,20 @@ So that I can help where needed without creating duplicate profiles.
 **Then** แต่ละศูนย์มี application/assignment ของตนเองโดยไม่ต้องสร้างโปรไฟล์ซ้ำ  
 **And** กติกาไม่ซ้อนเวลายังใช้ข้ามศูนย์ (F-OVERLAP)  
 **And** PII ยัง mask ตาม NFR-20; ไม่ขยายสิทธิ์ข้ามศูนย์จากแค่สมัคร (MA-08, MA-13, MA-16)
+
+### Story 3.11: สแกน QR Ticket รายงานตัวหน้างานและบันทึกเวลาเข้า-ออก
+
+As a shelter reception or registration staff,  
+I want to scan an incoming volunteer's QR Ticket on arrival,  
+So that the system logs their check-in/out timestamps and updates active volunteer metrics in real-time.
+
+**Acceptance Criteria:**
+
+**Given** อาสาสมัครเดินทางมาถึงศูนย์พร้อม Digital Ticket / QR Code  
+**When** เจ้าหน้าที่เปิดหน้า `/volunteers/checkin` และสแกน QR Ticket (หรือค้นหาด้วยชื่อ/เบอร์โทร)  
+**Then** ระบบบันทึกเวลา `check_in_at` ลงใน `shift_assignment` และปรับสถานะเป็น `checked_in`  
+**And** ตัวเลข `volunteers_active` ของศูนย์อัปเดตแบบ real-time  
+**And** เมื่อหมดกะ สามารถสแกนซ้ำเพื่อบันทึก `check_out_at` (MA-10b, D-CHECKIN)
 
 ---
 

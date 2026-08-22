@@ -1,5 +1,5 @@
 ---
-id: CR-079
+id: CR-084
 title: meal_service — เพิ่ม actual_yield (จำนวนเสิร์ฟที่ทำได้จริง, optional) เป็นเพดานการแจกอาหาร
 status: proposed
 date: 2026-08-22
@@ -15,7 +15,7 @@ affects:
   - frontend/src/lib/features/kitchen/ui/meal-service-summary.svelte
 ---
 
-# CR-079 — meal_service: เพิ่ม `actual_yield`
+# CR-084 — meal_service: เพิ่ม `actual_yield`
 
 > **สรุป (TL;DR):** field ใหม่ `actual_yield` (int≥0, optional) บน `meal_service` · คนละความหมายกับ
 > `served` · `schema_v` คงที่ **2** · เพดานยังไม่บังคับตอนเขียน (soft warning เท่านั้น) ·
@@ -49,7 +49,7 @@ CR** เพราะ:
 1. **Field ใหม่:** `meal_service.actual_yield?: number` — `int().min(0)`, optional
 2. **ความหมายต่างจาก `served`:** `actual_yield` = จำนวนที่ครัว**ปรุงได้จริง** (ผลผลิต), `served` =
    จำนวนที่**แจกออกไปจริง** สองค่านี้ต่างกันได้ตามสภาพจริงหน้างาน
-3. **ไม่มีค่า ≠ 0:** doc ที่ไม่มี field นี้ (รวมทุก doc ที่เขียนก่อน CR-079) หมายถึง "ยังไม่บันทึก
+3. **ไม่มีค่า ≠ 0:** doc ที่ไม่มี field นี้ (รวมทุก doc ที่เขียนก่อน CR-084) หมายถึง "ยังไม่บันทึก
    ผลผลิต" ไม่ใช่ "ผลผลิตเป็นศูนย์" — ต้องแยกกันตอน render (`—` vs `0`)
 4. **`schema_v` คงที่ 2 ไม่ bump เป็น 3** — field เป็น optional additive ไม่ทำให้ doc เดิมผิดรูป
    อ้าง precedent ในไฟล์เดียวกัน 2 จุด: `docs/data/schema.md` §2.5 (CR-045 เพิ่ม `label` +
@@ -95,3 +95,6 @@ field นี้ยังอ่าน/ใช้งานได้ปกติ อ
 
 - 2026-08-22 — proposed (project owner อนุมัติให้เปิด CR สำหรับ field ใหม่นี้ พร้อมยืนยันการไม่
   bump schema_v และใช้ soft-warning ไม่ใช่ hard refine)
+- 2026-08-22 — renumbered จาก CR-079 → CR-084 ตอน merge `develop`: เลข CR-079 ถูก branch อื่นใช้ไป
+  แล้วสำหรับคนละเรื่อง (SOP what-if simulation) ก่อนที่ branch นี้จะ merge เข้า — ไม่มีการเปลี่ยน
+  เนื้อหา แค่เลขไฟล์/รหัส CR

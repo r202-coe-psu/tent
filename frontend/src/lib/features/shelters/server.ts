@@ -27,6 +27,8 @@
 
 export {
 	migrateShelterV2ToCurrent,
+	isShelterBookable,
+	resolveOperationStatus,
 	createShelterSchema,
 	updateShelterSchema,
 	EMPTY_ADMISSION_POLICY,

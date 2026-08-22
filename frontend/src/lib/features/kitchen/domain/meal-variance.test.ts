@@ -93,12 +93,12 @@ describe('computeMealVariance', () => {
 		expect(VARIANCE_TOLERANCE_PCT).toBe(5);
 	});
 
-	it('passes actual_yield through when recorded (CR-079)', () => {
+	it('passes actual_yield through when recorded (CR-084)', () => {
 		const v = computeMealVariance(service({ served: 85, actual_yield: 90 }), plan(100));
 		expect(v.actual_yield).toBe(90);
 	});
 
-	it('actual_yield is null on a service with no yield recorded (pre-CR-079 doc)', () => {
+	it('actual_yield is null on a service with no yield recorded (pre-CR-084 doc)', () => {
 		const v = computeMealVariance(service({ served: 85 }), plan(100));
 		expect(v.actual_yield).toBeNull();
 	});

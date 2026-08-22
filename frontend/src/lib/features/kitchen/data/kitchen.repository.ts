@@ -32,7 +32,7 @@ export interface KitchenRepository {
 
 	// KitchenRequisition — append-only; writes stock_ledger entries atomically,
 	// plus gas_ledger consumption entries when the plan carries gas_usage
-	// (CR-080) — throws (writes nothing) if any cylinder's remaining kg is short.
+	// (CR-085) — throws (writes nothing) if any cylinder's remaining kg is short.
 	issueRequisition(input: KitchenRequisitionInput, ctx: AuthorContext): Promise<KitchenRequisition>;
 	listRequisitions(): Promise<KitchenRequisition[]>;
 
@@ -44,7 +44,7 @@ export interface KitchenRepository {
 	getMealService(date: string, meal: string): Promise<MealService | null>;
 	listMealServices(): Promise<MealService[]>;
 
-	// GasCylinderType — reference data (one doc = one real physical tank, CR-080)
+	// GasCylinderType — reference data (one doc = one real physical tank, CR-085)
 	createGasCylinderType(input: GasCylinderTypeInput, ctx: AuthorContext): Promise<GasCylinderType>;
 	listGasCylinderTypes(): Promise<GasCylinderType[]>;
 	updateGasCylinderType(
@@ -53,11 +53,11 @@ export interface KitchenRepository {
 	): Promise<GasCylinderType>;
 	deleteGasCylinderType(doc: GasCylinderType): Promise<void>;
 
-	// GasLedger — append-only real stock per cylinder (CR-080). Consumption
+	// GasLedger — append-only real stock per cylinder (CR-085). Consumption
 	// entries are written by issueRequisition; refill is its own action here.
 	listGasLedger(): Promise<GasLedgerEntry[]>;
 	refillGasCylinder(cylinderId: string, qtyKg: string, ctx: AuthorContext): Promise<GasLedgerEntry>;
-	// Manual "write off the remainder" (CR-080 addendum, reason='adjust') — zeroes
+	// Manual "write off the remainder" (CR-085 addendum, reason='adjust') — zeroes
 	// out a dust-sized balance that a hard-block consumption flow could never
 	// legitimately reach. No-op guard: throws if the cylinder is already empty.
 	writeOffGasCylinder(cylinderId: string, ctx: AuthorContext): Promise<GasLedgerEntry>;

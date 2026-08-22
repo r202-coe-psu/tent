@@ -36,6 +36,7 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 vi.mock('$lib/features/operations', async () => {
 	const domain = await import('../../operations/domain/operations');
 	return {
+		createStockLedger: domain.createStockLedger,
 		stockBalance: domain.stockBalance,
 		isStockLedger: domain.isStockLedger
 	};
@@ -99,6 +100,71 @@ describe('KitchenRemoteRepository.issueRequisition — ledger deduction pattern'
 		const l1 = (await memoryRepo.get(result.ledger_ids[1])) as Record<string, unknown>;
 		expect(l1.qty).toBe('-180');
 		expect(l1.item_id).toBe('item:egg');
+	});
+
+	// CR-055 R7 — these rows must come out of `createStockLedger`, not be
+	// assembled here, so the reason ↔ ref_id invariant reaches them too. Asserted
+	// through the envelope the factory stamps: every row carries schema_v 3, the
+	// shelter code and author from ctx, and one shared occurred_at per issue.
+	it('mints requisition ledger rows through the shared factory', async () => {
+		const result = await repo.issueRequisition(
+			{
+				meal_plan_id: null,
+				items: [
+					{ item_id: 'item:rice', qty_requested: 10, qty_issued: 10, unit: 'kg' },
+					{ item_id: 'item:water', qty_requested: 5, qty_issued: 5, unit: 'ขวด' }
+				]
+			},
+			ctx
+		);
+
+		const rows = (await Promise.all(result.ledger_ids.map((id) => memoryRepo.get(id)))) as Record<
+			string,
+			unknown
+		>[];
+
+		for (const row of rows) {
+			expect(row.schema_v).toBe(3);
+			expect(row.shelter_code).toBe(ctx.shelterCode);
+			expect(row.created_by).toBe(ctx.createdBy);
+			expect(row.ref_id).toBe(result._id);
+			expect(String(row.ref_id)).toMatch(/^kitchen_requisition:/);
+		}
+		// one shared timestamp, not one `now()` per row
+		expect(rows[0].occurred_at).toBe(rows[1].occurred_at);
+	});
+
+	// CR-055 R7 × the `requisition` row of R2 — the point of routing kitchen
+	// through `createStockLedger` is that a bad `ref_id` cannot reach the
+	// database. Forcing the requisition to mint a wrong-prefixed `_id` is the
+	// only way to reach that branch, since `issueRequisition` otherwise derives
+	// `ref_id` from a `kitchen_requisition:` id it built itself.
+	it('rejects when the ref_id would not be a kitchen_requisition id', async () => {
+		const kitchenDomain = await import('../domain/kitchen');
+		const spy = vi
+			.spyOn(kitchenDomain, 'createKitchenRequisition')
+			.mockImplementation((input, ledgerIds, authorCtx) => ({
+				...kitchenDomain.createKitchenRequisition(input, ledgerIds, authorCtx),
+				_id: 'not_a_requisition:01JBOGUS'
+			}));
+
+		try {
+			await expect(
+				repo.issueRequisition(
+					{
+						meal_plan_id: null,
+						items: [{ item_id: 'item:rice', qty_requested: 1, qty_issued: 1, unit: 'kg' }]
+					},
+					ctx
+				)
+			).rejects.toThrow();
+		} finally {
+			spy.mockRestore();
+		}
+
+		// nothing partial was written — the guard fires before bulkDocs
+		const rows = await memoryRepo.allByType('stock_ledger', isStockLedger);
+		expect(rows.some((r) => r.reason === 'requisition')).toBe(false);
 	});
 
 	it('ledger_ids in requisition match actual written doc _ids', async () => {
@@ -344,7 +410,7 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 		expect(await repo.listMealServices()).toHaveLength(2);
 	});
 
-	it('persists actual_yield onto the stored doc (CR-079)', async () => {
+	it('persists actual_yield onto the stored doc (CR-084)', async () => {
 		const svc = await repo.recordMealService({ ...serviceInput, actual_yield: 90 }, ctx);
 		const stored = (await memoryRepo.get(svc._id)) as Record<string, unknown>;
 		expect(stored.actual_yield).toBe(90);
@@ -457,7 +523,7 @@ describe('T-27 demo chain — requisition → service record → variance', () =
 		expect(riceOnHand).toBeCloseTo(85, 6);
 	});
 
-	it('records yield 90 / served 85 → variance under-plan and yield_variance −10 (CR-079)', async () => {
+	it('records yield 90 / served 85 → variance under-plan and yield_variance −10 (CR-084)', async () => {
 		const plan = await repo.createMealPlan(
 			{
 				date: '2026-07-21',
@@ -496,7 +562,7 @@ describe('T-27 demo chain — requisition → service record → variance', () =
 	});
 });
 
-describe('KitchenRemoteRepository — gas cylinder ledger (CR-080)', () => {
+describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	let repo: KitchenRemoteRepository;
 
 	beforeEach(async () => {
@@ -623,7 +689,7 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-080)', () => {
 		);
 	});
 
-	// CR-080 addendum — a dust remainder can never be drawn to 0 through
+	// CR-085 addendum — a dust remainder can never be drawn to 0 through
 	// consumption (all-or-nothing), so writeOffGasCylinder is the only path.
 	it('writeOffGasCylinder zeroes out a dust remainder', async () => {
 		const cyl = await repo.createGasCylinderType(

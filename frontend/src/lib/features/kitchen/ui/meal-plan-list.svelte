@@ -179,7 +179,7 @@
 			);
 			return;
 		}
-		// Same fail-fast for gas (CR-080) — a plan whose planned draw already
+		// Same fail-fast for gas (CR-085) — a plan whose planned draw already
 		// exceeds a cylinder's remaining balance can never actually be
 		// withdrawn (requisition-dialog hard-blocks it), so don't let it move
 		// past draft looking "ready".
@@ -233,7 +233,7 @@
 		return Math.max(0, recipe.planned_qty - onHandDisplayUnit);
 	}
 
-	// Gas cylinders (CR-080) this plan would draw short of — same "flag it in
+	// Gas cylinders (CR-085) this plan would draw short of — same "flag it in
 	// the table" treatment as stockShortfall above, so a gas shortfall is
 	// visible before staff even open the requisition dialog where it's a hard
 	// block.

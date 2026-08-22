@@ -1,5 +1,5 @@
 ---
-id: CR-080
+id: CR-085
 title: gas_ledger — ติดตามสต็อกแก๊สจริงต่อถัง (ใช้ไปแล้ว/เหลือ/สถานะ) + เติมแก๊ส + เช็คพอก่อนเบิก
 status: proposed
 date: 2026-08-22
@@ -18,7 +18,7 @@ affects:
   - frontend/src/lib/features/kitchen/ui/gas-management.svelte
 ---
 
-# CR-080 — ติดตามสต็อกแก๊สจริงต่อถัง
+# CR-085 — ติดตามสต็อกแก๊สจริงต่อถัง
 
 > **สรุป (TL;DR):** `gas_cylinder_type` แต่ละ doc แทน **ถังจริง 1 ใบ** (ไม่ใช่ "รุ่น" ที่ใช้ร่วมกันหลาย
 > ถัง) เพิ่ม doc ใหม่ append-only `gas_ledger` (เหมือน `stock_ledger` แต่แยกก้อน ไม่ผูกกับ
@@ -56,7 +56,7 @@ CR-058/059 ให้ครัวคำนวณแก๊สที่ต้อง
    - `in_use` (กำลังใช้) — `0 < remaining_kg < capacity_kg`
    - `empty` (หมดแล้ว) — `remaining_kg <= 0`
 5. **`meal_plan` เพิ่ม `gas_usage?: {cylinder_id, consumption_kg}[]`** (optional, ไม่ bump schema_v —
-   precedent เดียวกับ CR-045/CR-031/CR-079) เก็บว่าแผนนี้เลือกถังไหน ใช้กี่ kg (คำนวณจากแผงแก๊สตอน
+   precedent เดียวกับ CR-045/CR-031/CR-084) เก็บว่าแผนนี้เลือกถังไหน ใช้กี่ kg (คำนวณจากแผงแก๊สตอน
    สร้าง/แก้แผน)
 6. **`issueRequisition` เขียน `gas_ledger` (reason=`consumption`) พร้อมกับ `stock_ledger` เดิม** ใน
    `bulkDocs` เดียว (atomic เหมือนอาหาร) — อ่าน `plan.gas_usage` ตอนเบิก, เช็คยอดเหลือของแต่ละถังก่อน
@@ -111,3 +111,6 @@ local dev DB ต้องรัน `pnpm redeploy:access` เพิ่ม `gas_l
 - 2026-08-22 — project owner สังเกตเอง (ผ่านการทดสอบจริง) ว่าเศษเหลือเล็กน้อยไม่มีทางถึงสถานะ "หมด"
   ผ่าน flow ปกติ เพราะเบิกแก๊สเป็น all-or-nothing — เลือกทางแก้แบบ "ปุ่มตัดเศษเหลือทิ้งเดียว" (ไม่ใช่
   ช่องปรับยอดทั่วไป +/-) → เพิ่ม `reason='adjust'` ตามข้อ 9
+- 2026-08-22 — renumbered จาก CR-080 → CR-085 ตอน merge `develop`: เลข CR-080 ถูก branch อื่นใช้ไป
+  แล้วสำหรับคนละเรื่อง (donor edit reservation via token) ก่อนที่ branch นี้จะ merge เข้า — ไม่มีการ
+  เปลี่ยนเนื้อหา แค่เลขไฟล์/รหัส CR
