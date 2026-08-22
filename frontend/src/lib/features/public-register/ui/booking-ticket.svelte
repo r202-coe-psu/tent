@@ -79,6 +79,10 @@
 					? 'การจองถูกยกเลิก'
 					: ticket.status
 	);
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_BOOKING_TICKET_I18N } from '$lib/constants/i18n';
+	let t = $derived(getTranslation(PUBLIC_BOOKING_TICKET_I18N, langState.current));
 </script>
 
 <div class="space-y-4">
@@ -90,7 +94,7 @@
 			<div>
 				<p class="text-sm font-bold text-foreground">จองเข้าศูนย์สำเร็จ</p>
 				<p class="mt-0.5 text-xs text-muted-foreground">
-					ระบบกันที่ให้ท่านแล้ว กรุณาบันทึกหรือพิมพ์ใบจองนี้ไว้แสดงที่ประตูศูนย์
+					ระบบกันที่ให้ท่านแล้ว กรุณาบันทึกหรือ{t.printBtn}นี้ไว้แสดงที่ประตูศูนย์
 				</p>
 			</div>
 		</div>
