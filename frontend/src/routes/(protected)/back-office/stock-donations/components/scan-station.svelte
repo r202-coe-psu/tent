@@ -9,8 +9,17 @@
 	import { toast } from 'svelte-sonner';
 	import type { ScanDonationView } from '$lib/features/donations';
 
+	/**
+	 * `initialQuery` — set when opened from the "กำลังตรวจรับ (Verifying)" tab
+	 * (R-16.5): the row is already known, so the lookup runs immediately instead
+	 * of waiting on a manual search. `onSaved` lets that tab refresh its list.
+	 */
+	let { initialQuery = '', onSaved }: { initialQuery?: string; onSaved?: () => void } = $props();
+
 	let scanState = $state<'idle' | 'scanning' | 'result'>('idle');
-	let searchQuery = $state('');
+	// Seeded once from the prop at mount; the verifying tab remounts this component
+	// per booking ref, so it never needs to react to a later change of `initialQuery`.
+	let searchQuery = $state(initialQuery);
 
 	// Redacted scanned booking data (ScanDonationView from the back-office API)
 	let donationDoc = $state<ScanDonationView | null>(null);
@@ -100,6 +109,7 @@
 				searchQuery = '';
 				donationDoc = null;
 				remarks = '';
+				onSaved?.();
 			} else {
 				toast.error(data.error || 'บันทึกไม่สำเร็จ');
 			}
@@ -108,6 +118,11 @@
 		} finally {
 			saving = false;
 		}
+	}
+
+	// One-shot lookup at mount, not a reactive binding.
+	if (initialQuery) {
+		performLookup(initialQuery);
 	}
 </script>
 

@@ -46,7 +46,20 @@ export const ledgerReasonSchema = z.enum([
 ]);
 export type LedgerReason = z.infer<typeof ledgerReasonSchema>;
 
-export const donationStatusSchema = z.enum(['declared', 'received', 'expired', 'cancelled']);
+/**
+ * `pending_review` / `verifying` / `rejected` land here per the CR-052-approved
+ * enum (schema.md §2.3, `donation.status`) — the code was behind the doc, not the
+ * other way around (T-16).
+ */
+export const donationStatusSchema = z.enum([
+	'declared',
+	'pending_review',
+	'verifying',
+	'received',
+	'rejected',
+	'expired',
+	'cancelled'
+]);
 export type DonationStatus = z.infer<typeof donationStatusSchema>;
 
 export const transferStatusSchema = z.enum(['requested', 'shipped', 'received', 'cancelled']);
@@ -499,8 +512,11 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 
 /** Forward-only transitions for a donation (schema.md §2.3). */
 const DONATION_TRANSITIONS: Record<DonationStatus, DonationStatus[]> = {
-	declared: ['received', 'expired', 'cancelled'],
+	declared: ['pending_review', 'received', 'expired', 'cancelled'],
+	pending_review: ['verifying', 'rejected', 'expired', 'cancelled'],
+	verifying: ['received', 'cancelled'],
 	received: [],
+	rejected: [],
 	expired: [],
 	cancelled: []
 };

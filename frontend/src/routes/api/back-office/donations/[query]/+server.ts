@@ -173,7 +173,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			await assertCountedAgainstCatalog(counted);
 		} catch (e) {
 			return json(
-				{ success: false, error: e instanceof Error ? e.message : 'Invalid counted items' },
+				{
+					success: false,
+					error_code: 'CATALOG_MISMATCH',
+					error: e instanceof Error ? e.message : 'Invalid counted items'
+				},
 				{ status: 422 }
 			);
 		}

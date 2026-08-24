@@ -12,6 +12,7 @@ export {
 	isDonorEditable
 } from './domain/public-donation';
 export type { ReceiveDonationInput } from './domain/public-donation';
+export type { PendingDonationRow } from './domain/back-office';
 
 // Domain — public tracking ticket (DN-6)
 export type {
