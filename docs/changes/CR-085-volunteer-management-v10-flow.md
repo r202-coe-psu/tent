@@ -125,6 +125,100 @@ affects:
 
 ---
 
+### 1.1 รายละเอียดการปรับแก้ Schema & Database Fields (Data Field Modifications)
+
+เปรียบเทียบโครงสร้างฐานข้อมูลระหว่าง **โครงสร้างเดิม (Legacy Schema)** กับ **สิ่งที่ปรับปรุงเพิ่มใน CR-085 (New & Modified Fields)** แยกตาม Document Type:
+
+#### 1. `volunteer` — `volunteer:{ulid}` (Schema v1)
+
+- **โครงสร้างเดิม (Legacy Schema):**
+  ```ts
+  interface VolunteerDocLegacy {
+    first_name: string;
+    last_name: string;
+    phone: string | null;
+    phone_hash?: string | null;
+    skills?: string[];
+    tracking_token?: string | null;
+    status: 'active' | 'inactive';
+    user_name?: string | null;
+  }
+  ```
+- **สิ่งที่ปรับเปลี่ยนใน CR-085:**
+  - ✨ **[เพิ่มฟิลด์ใหม่] `national_id: string | null` (optional):** เลขประจำตัวประชาชน 13 หลัก เพื่อผูกตัวตน Single Source of Truth (Unified Multi-Role Person Identity)
+  - ✨ **[เพิ่มฟิลด์ใหม่] `checked_in: boolean` (system, default: `false`):** ติดตามสถานะเช็คอินปฏิบัติหน้าที่สดหน้างาน
+  - ✨ **[เพิ่มฟิลด์ใหม่] `current_shelter_code: string | null` (optional):** รหัสศูนย์พักพิงที่อาสากำลังปฏิบัติงานอยู่ในกะปัจจุบัน
+
+---
+
+#### 2. `shift_assignment` — `shift_assignment:{ulid}` (Schema v1 $\rightarrow$ v2)
+
+- **โครงสร้างเดิม (Legacy Schema v1):**
+  ```ts
+  interface ShiftAssignmentDocV1 {
+    job_id: string;
+    volunteer_id: string;
+    date: string;
+    shift: 'morning' | 'afternoon' | 'night' | 'custom';
+    station: string;
+    status: 'assigned' | 'no_show' | 'cancelled';
+  }
+  ```
+- **สิ่งที่ปรับเปลี่ยนใน CR-085 (Schema v2):**
+  - ✨ **[เพิ่มฟิลด์ใหม่] `duty_window: { start_ts: string, end_ts: string }` (required):** หน้าต่างเวลากะงานจริง สำหรับระบบบังคับ Time-Bound Shift Access Control ($\pm 5$ นาที)
+  - ✨ **[เพิ่มฟิลด์ใหม่] `check_in_at: string | null` (optional):** Timestamp สแกน QR Ticket รายงานตัวเข้างานที่จุด Tablet เช็คอิน
+  - ✨ **[เพิ่มฟิลด์ใหม่] `check_out_at: string | null` (optional):** Timestamp เช็คเอาท์ออกงาน
+  - ✨ **[เพิ่มฟิลด์ใหม่] `check_in_by: string | null` (optional):** Username/Staff ID ของเจ้าหน้าที่ผู้กดรับรายงานตัว
+  - ✨ **[เพิ่มฟิลด์ใหม่] `dispatch_status: 'dispatched' | 'accepted' | 'declined' | null` (optional):** สถานะเมื่อได้รับการเสนอจ่ายงานจาก SM ผ่าน Direct Dispatch
+  - 🔄 **[ปรับปรุง Enum] `status`:** เพิ่มค่าสถานะ `standby`, `checked_in`, `completed` เพื่อรองรับ Real-time Shift Lifecycle (กลายเป็น `enum('assigned', 'standby', 'checked_in', 'completed', 'no_show', 'cancelled')`)
+
+---
+
+#### 3. `job` — `job:{ulid}` (Schema v1)
+
+- **โครงสร้างเดิม (Legacy Schema):**
+  ```ts
+  interface JobDocLegacy {
+    title: string;
+    tier: 'operational' | 'staff-capable';
+    quota: number;
+    slots_confirmed: number;
+    slots_pending: number; // 🔴 ฟิลด์เดิม (นับเฉพาะใบสมัครรออนุมัติ)
+    status: 'open' | 'almost_full' | 'full' | 'closed' | 'cancelled';
+  }
+  ```
+- **สิ่งที่ปรับเปลี่ยนใน CR-085:**
+  - ✨ **[เพิ่มฟิลด์ใหม่] `slots_dispatched: number` (required, default: `0`):** ยอดอาสาสมัครที่อยู่ระหว่างเสนอจ่ายงานรอตอบรับ (🟡 Dispatched Quota)
+  - 🔄 **[เปลี่ยนชื่อฟิลด์ & ปรับวิธีคำนวณ] `slots_pending` $\rightarrow$ `slots_remaining`:** เปลี่ยนมาเก็บยอดกำลังพลที่ยังขาดอยู่สด (⚪ Remaining Quota = `quota` - `slots_confirmed` - `slots_dispatched`)
+
+---
+
+#### 4. `job_application` — `job_application:{ulid}` (Schema v1)
+
+- **โครงสร้างเดิม (Legacy Schema):**
+  ```ts
+  interface JobApplicationDocLegacy {
+    job_id: string;
+    volunteer_id: string | null;
+    applicant: { first_name: string; last_name: string; phone: string; email: string | null; skills: string[] };
+    tracking_token: string;
+    status: 'pending' | 'accepted' | 'rejected' | 'cancelled'; // 🔴 Enum เดิม
+  }
+  ```
+- **สิ่งที่ปรับเปลี่ยนใน CR-085:**
+  - ✨ **[เพิ่มฟิลด์ใหม่] `applicant.national_id: string | null` (optional):** เลขบัตรประชาชน 13 หลักตอนกรอกฟอร์มสมัครด่วน No-SMS OTP
+  - 🔄 **[ปรับปรุง Enum] `status`:** เปลี่ยนค่าสถานะจาก `pending/accepted/rejected` เป็น `confirmed` (อนุมัติทันที/auto-accept), `pending_review` (รอตรวจวิชาชีพควบคุม), `cancelled` (ยกเลิกตั๋ว) เพื่อให้สอดคล้องกับตั๋วดิจิทัล
+
+---
+
+#### 5. `_users` (System User Account — Multi-Role Identity)
+
+- **โครงสร้างเดิม (Legacy Schema):** บัญชีผู้ใช้งานระบบหลังบ้านทั่วไป
+- **สิ่งที่ปรับเปลี่ยนใน CR-085:**
+  - ✨ **[เพิ่มฟิลด์ใหม่] `linked_person_id: string | null` (optional):** Foreign Key เชื่อมโยงบัญชีผู้ใช้หลังบ้านกับ `volunteer_id` / `national_id` เพื่อตรวจสอบสิทธิ์ Time-Bound Access Control
+
+---
+
 ## 2. แผนภาพสถาปัตยกรรมและลำดับการทำงาน (System Workflows & Sequence Diagrams)
 
 ### 2.1 แผนภาพกลุ่มผู้ใช้งานและระดับสิทธิ์ (User Personas & System Roles)
