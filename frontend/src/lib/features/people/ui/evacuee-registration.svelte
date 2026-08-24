@@ -28,27 +28,9 @@
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { COUNTRIES } from '$lib/utils/country';
-
-	const cardTypeOptions = [
-		{ value: 'national_id', label: 'เลขประจำตัวประชาชน (Thai National ID)' },
-		{ value: 'passport', label: 'หนังสือเดินทาง (Passport)' },
-		{ value: 'pink_card', label: 'บัตรประจำตัวคนซึ่งไม่มีสัญชาติไทย (Pink Card)' },
-		{ value: 'other', label: 'อื่นๆ (Other)' }
-	];
-
-	const genderOptions = [
-		{ value: 'male', label: 'ชาย (Male)' },
-		{ value: 'female', label: 'หญิง (Female)' },
-		{ value: 'other', label: 'อื่นๆ (Other)' }
-	];
-
-	const religionOptions = [
-		{ value: 'buddhist', label: 'พุทธ (Buddhism)' },
-		{ value: 'muslim', label: 'อิสลาม (Islam)' },
-		{ value: 'christian', label: 'คริสต์ (Christianity)' },
-		{ value: 'other', label: 'อื่นๆ (Other)' },
-		{ value: 'unknown', label: 'ไม่ระบุ (Unknown)' }
-	];
+	import { getTranslation } from '$lib/utils/i18n';
+	import { languageStore, type LanguageCode } from '$lib/stores/language.svelte';
+	import { EVACUEE_REGISTRATION_I18N } from './_constants/evacuee-registration.i18n';
 
 	let {
 		onsubmit,
@@ -57,7 +39,8 @@
 		hasSymptomsSelected = false,
 		initialInput = null,
 		ondraftchange,
-		facePhotoUrl = $bindable(null)
+		facePhotoUrl = $bindable(null),
+		lang
 	}: {
 		onsubmit: (input: EvacueeInput) => void;
 		pending?: boolean;
@@ -66,7 +49,32 @@
 		initialInput?: Partial<EvacueeInput> | null;
 		ondraftchange?: (input: Partial<EvacueeInput>) => void;
 		facePhotoUrl?: string | null;
+		lang?: LanguageCode;
 	} = $props();
+
+	const activeLang = $derived(lang ?? languageStore.current);
+	const t = $derived(getTranslation(EVACUEE_REGISTRATION_I18N, activeLang));
+
+	const cardTypeOptions = $derived([
+		{ value: 'national_id', label: t.cardType.options.national_id },
+		{ value: 'passport', label: t.cardType.options.passport },
+		{ value: 'pink_card', label: t.cardType.options.pink_card },
+		{ value: 'other', label: t.cardType.options.other }
+	]);
+
+	const genderOptions = $derived([
+		{ value: 'male', label: t.personal.gender.options.male },
+		{ value: 'female', label: t.personal.gender.options.female },
+		{ value: 'other', label: t.personal.gender.options.other }
+	]);
+
+	const religionOptions = $derived([
+		{ value: 'buddhist', label: t.personal.religion.options.buddhist },
+		{ value: 'muslim', label: t.personal.religion.options.muslim },
+		{ value: 'christian', label: t.personal.religion.options.christian },
+		{ value: 'other', label: t.personal.religion.options.other },
+		{ value: 'unknown', label: t.personal.religion.options.unknown }
+	]);
 
 	const initial = untrack(() => initialInput);
 	let birthYearBE = $state(initial?.birth_year?.toString() ?? '');
@@ -100,9 +108,9 @@
 				if (cleanId.length !== 13) {
 					$errors.person_id = {
 						...($errors.person_id || {}),
-						number: ['เลขประจำตัวประชาชนต้องมี 13 หลัก']
+						number: [t.validation.nationalIdLength]
 					};
-					toast.error('เลขประจำตัวประชาชนต้องมี 13 หลัก');
+					toast.error(t.validation.nationalIdLength);
 					cancel();
 					return;
 				}
@@ -113,8 +121,8 @@
 			} else {
 				const cleanPhone = ($formData.phone ?? '').replace(/\D/g, '');
 				if (cleanPhone.length !== 10) {
-					$errors.phone = ['กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"'];
-					toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"');
+					$errors.phone = [t.validation.phoneRequired];
+					toast.error(t.validation.phoneRequired);
 					cancel();
 					return;
 				}
@@ -129,9 +137,9 @@
 					if (cleanPhone.length !== 10) {
 						$errors.emergency_contact = {
 							...($errors.emergency_contact || {}),
-							phone: ['เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก']
+							phone: [t.validation.emergencyPhoneLength]
 						};
-						toast.error('เบอร์ติดต่อฉุกเฉินต้องมี 10 หลัก');
+						toast.error(t.validation.emergencyPhoneLength);
 						cancel();
 						return;
 					}
@@ -140,7 +148,7 @@
 		},
 		onUpdate: async ({ form }) => {
 			if (!form.valid) {
-				toast.error('กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน');
+				toast.error(t.validation.formIncomplete);
 				return;
 			}
 			onsubmit(form.data as EvacueeInput);
@@ -174,17 +182,17 @@
 	const birthYearError = $derived.by(() => {
 		if (!birthYearBE) return undefined;
 		const y = Number(birthYearBE);
-		if (isNaN(y)) return 'กรุณากรอกปีเกิดเป็นตัวเลข';
-		if (y > currentBEYear()) return 'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต';
-		if (y <= minBirthYearBE()) return `ปีเกิด (พ.ศ.) ต้องมากกว่า ${minBirthYearBE()}`;
+		if (isNaN(y)) return t.validation.birthYearNumeric;
+		if (y > currentBEYear()) return t.validation.birthYearFuture;
+		if (y <= minBirthYearBE()) return t.validation.birthYearMin(minBirthYearBE());
 		return undefined;
 	});
 
 	const ageError = $derived.by(() => {
 		if (!age) return undefined;
 		const a = Number(age);
-		if (isNaN(a)) return 'กรุณากรอกอายุเป็นตัวเลข';
-		if (a > MAX_AGE_YEARS) return `อายุต้องไม่เกิน ${MAX_AGE_YEARS} ปี`;
+		if (isNaN(a)) return t.validation.ageNumeric;
+		if (a > MAX_AGE_YEARS) return t.validation.ageMax(MAX_AGE_YEARS);
 		return undefined;
 	});
 
@@ -225,7 +233,7 @@
 			<!-- Column 1: Face Photo mockup -->
 			<div class="space-y-3 sm:max-w-xs lg:max-w-none">
 				<p class="text-base leading-snug font-medium text-foreground sm:text-sm">
-					ภาพถ่ายใบหน้า (Face Recognition)
+					{t.photo.label}
 				</p>
 				<input
 					type="file"
@@ -249,7 +257,7 @@
 							$formData.photo = image._id;
 						} catch {
 							$formData.photo = null;
-							toast.error('อัปโหลดรูปภาพล้มเหลว สามารถลงทะเบียนต่อได้โดยไม่มีรูป');
+							toast.error(t.photo.uploadFailed);
 						} finally {
 							uploadingPhoto = false;
 						}
@@ -275,7 +283,7 @@
 					{:else}
 						<div class="flex h-40 flex-col items-center justify-center">
 							<Camera class="mb-2 h-10 w-10 text-muted-foreground" />
-							<span class="text-sm text-muted-foreground">เพิ่มรูปภาพ</span>
+							<span class="text-sm text-muted-foreground">{t.photo.add}</span>
 						</div>
 					{/if}
 				</label>
@@ -285,13 +293,13 @@
 			<div class="space-y-5 sm:space-y-4">
 				<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4">
 					<div class="space-y-2">
-						<Label class="text-base sm:text-sm">ประเภทบัตร</Label>
+						<Label class="text-base sm:text-sm">{t.cardType.label}</Label>
 						<Select.Root type="single" bind:value={$formData.person_id.cardType}>
 							<Select.Trigger
 								class="flex !h-12 w-full items-center rounded-md border border-input bg-background px-3 text-base font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground sm:!h-10 sm:text-sm [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
 							>
 								{cardTypeOptions.find((o) => o.value === $formData.person_id.cardType)?.label ??
-									'— เลือก —'}
+									t.cardType.selectPlaceholder}
 							</Select.Trigger>
 							<Select.Content>
 								{#each cardTypeOptions as opt (opt.value)}
@@ -307,13 +315,13 @@
 							{#snippet children({ props })}
 								<Form.Label>
 									{#if $formData.person_id.cardType === 'national_id'}
-										เลขประจำตัวประชาชน
+										{t.idNumber.labels.national_id}
 									{:else if $formData.person_id.cardType === 'passport'}
-										เลขที่พาสปอร์ต
+										{t.idNumber.labels.passport}
 									{:else if $formData.person_id.cardType === 'pink_card'}
-										เลขประจำตัวคนซึ่งไม่มีสัญชาติไทย
+										{t.idNumber.labels.pink_card}
 									{:else}
-										เลขหมายบัตร
+										{t.idNumber.labels.other}
 									{/if}
 								</Form.Label>
 								<Input
@@ -324,10 +332,10 @@
 											? 9
 											: undefined}
 									placeholder={$formData.person_id.cardType === 'national_id'
-										? 'X-XXXX-XXXXX-XX-X'
+										? t.idNumber.placeholders.national_id
 										: $formData.person_id.cardType === 'passport'
-											? 'Passport Number'
-											: 'หมายเลขบัตร'}
+											? t.idNumber.placeholders.passport
+											: t.idNumber.placeholders.other}
 									bind:value={$formData.person_id.number}
 								/>
 							{/snippet}
@@ -341,8 +349,14 @@
 					<Form.Field {form} name="first_name">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ชื่อ (First Name) <span class="text-destructive">*</span></Form.Label>
-								<Input {...props} placeholder="ชื่อจริง" bind:value={$formData.first_name} />
+								<Form.Label
+									>{t.personal.firstName.label} <span class="text-destructive">*</span></Form.Label
+								>
+								<Input
+									{...props}
+									placeholder={t.personal.firstName.placeholder}
+									bind:value={$formData.first_name}
+								/>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
@@ -352,8 +366,14 @@
 					<Form.Field {form} name="last_name">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>นามสกุล (Last Name) <span class="text-destructive">*</span></Form.Label>
-								<Input {...props} placeholder="นามสกุล" bind:value={$formData.last_name} />
+								<Form.Label
+									>{t.personal.lastName.label} <span class="text-destructive">*</span></Form.Label
+								>
+								<Input
+									{...props}
+									placeholder={t.personal.lastName.placeholder}
+									bind:value={$formData.last_name}
+								/>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
@@ -363,8 +383,12 @@
 					<Form.Field {form} name="nickname">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ชื่อเล่น</Form.Label>
-								<Input {...props} placeholder="ชื่อเล่น (ถ้ามี)" bind:value={$formData.nickname} />
+								<Form.Label>{t.personal.nickname.label}</Form.Label>
+								<Input
+									{...props}
+									placeholder={t.personal.nickname.placeholder}
+									bind:value={$formData.nickname}
+								/>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
@@ -374,12 +398,12 @@
 				<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
 					<!-- ปีเกิด (พ.ศ.) -->
 					<div class="space-y-2">
-						<Label class="text-base sm:text-sm">ปีเกิด (พ.ศ.)</Label>
+						<Label class="text-base sm:text-sm">{t.personal.birthYear.label}</Label>
 						<Input
 							type="text"
 							inputmode="numeric"
 							maxlength={4}
-							placeholder="เช่น 2530"
+							placeholder={t.personal.birthYear.placeholder}
 							value={birthYearBE}
 							aria-invalid={birthYearError ? 'true' : undefined}
 							oninput={(e) => {
@@ -395,7 +419,7 @@
 
 					<!-- อายุ -->
 					<div class="space-y-2">
-						<Label class="text-base sm:text-sm">อายุ (ปี)</Label>
+						<Label class="text-base sm:text-sm">{t.personal.age.label}</Label>
 						<Input
 							type="text"
 							inputmode="numeric"
@@ -416,13 +440,16 @@
 					<Form.Field {form} name="gender">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เพศ <span class="text-destructive">*</span></Form.Label>
+								<Form.Label
+									>{t.personal.gender.label} <span class="text-destructive">*</span></Form.Label
+								>
 								<Select.Root type="single" bind:value={$formData.gender}>
 									<Select.Trigger
 										{...props}
 										class="flex !h-12 w-full items-center rounded-md border border-input bg-background px-3 text-base font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground sm:!h-10 sm:text-sm [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
 									>
-										{genderOptions.find((o) => o.value === $formData.gender)?.label ?? '— เลือก —'}
+										{genderOptions.find((o) => o.value === $formData.gender)?.label ??
+											t.personal.gender.selectPlaceholder}
 									</Select.Trigger>
 									<Select.Content>
 										{#each genderOptions as opt (opt.value)}
@@ -440,13 +467,13 @@
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label
-									>เบอร์โทรศัพท์ยืนยันตัวตน <span class="text-destructive">*</span></Form.Label
+									>{t.personal.phone.label} <span class="text-destructive">*</span></Form.Label
 								>
 								<Input
 									{...props}
 									inputmode="numeric"
 									maxlength={10}
-									placeholder="08X-XXX-XXXX"
+									placeholder={t.personal.phone.placeholder}
 									disabled={noPhone}
 									value={noPhone ? '' : ($formData.phone ?? '')}
 									oninput={(e) => {
@@ -467,7 +494,7 @@
 											}
 										}}
 									/>
-									<span class="text-muted-foreground">ไม่มีเบอร์โทร</span>
+									<span class="text-muted-foreground">{t.personal.phone.noPhone}</span>
 								</label>
 							{/snippet}
 						</Form.Control>
@@ -479,14 +506,16 @@
 					<Form.Field {form} name="country">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ประเทศ <span class="text-destructive">*</span></Form.Label>
+								<Form.Label
+									>{t.personal.country.label} <span class="text-destructive">*</span></Form.Label
+								>
 								<SearchSelect
 									name="country"
 									options={COUNTRIES}
 									bind:value={$formData.country}
-									placeholder="เลือกประเทศ..."
-									searchPlaceholder="ค้นหาประเทศ..."
-									emptyText="ไม่พบประเทศ"
+									placeholder={t.personal.country.placeholder}
+									searchPlaceholder={t.personal.country.searchPlaceholder}
+									emptyText={t.personal.country.emptyText}
 									controlProps={props}
 									class="h-12 rounded-md text-base sm:h-10 sm:text-sm"
 								/>
@@ -498,14 +527,14 @@
 					<Form.Field {form} name="religion">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ศาสนา</Form.Label>
+								<Form.Label>{t.personal.religion.label}</Form.Label>
 								<Select.Root type="single" bind:value={$formData.religion}>
 									<Select.Trigger
 										{...props}
 										class="flex !h-12 w-full items-center rounded-md border border-input bg-background px-3 text-base font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground sm:!h-10 sm:text-sm [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
 									>
 										{religionOptions.find((o) => o.value === $formData.religion)?.label ??
-											'— เลือก —'}
+											t.personal.religion.selectPlaceholder}
 									</Select.Trigger>
 									<Select.Content>
 										{#each religionOptions as opt (opt.value)}
@@ -524,13 +553,14 @@
 		<!-- Medical fields section (โรคประจำตัว) -->
 		<div class="w-full space-y-5 border-t border-border pt-8 sm:space-y-4 sm:pt-6">
 			<h3 class="flex items-center gap-2 text-base font-semibold text-foreground">
-				<span>🏥</span> โรคประจำตัว & ข้อมูลสุขภาพ
+				<span>🏥</span>
+				{t.medical.header}
 			</h3>
 			<div class="grid grid-cols-1 gap-5 sm:gap-4">
 				<div class="space-y-2">
-					<Label class="text-base sm:text-sm">โรคประจำตัว</Label>
+					<Label class="text-base sm:text-sm">{t.medical.conditions.label}</Label>
 					<Input
-						placeholder="เช่น เบาหวาน, ความดัน (ถ้าไม่มีให้เว้นว่าง)"
+						placeholder={t.medical.conditions.placeholder}
 						value={medicalConditionsStr}
 						oninput={(event) => {
 							medicalConditionsStr = event.currentTarget.value;
@@ -542,9 +572,9 @@
 
 			<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4">
 				<div class="space-y-2">
-					<Label class="text-base sm:text-sm">ยาที่ใช้ประจำ</Label>
+					<Label class="text-base sm:text-sm">{t.medical.medications.label}</Label>
 					<Input
-						placeholder="เช่น ยาลดความดัน, ยาเบาหวาน (ถ้าไม่มีให้เว้นว่าง)"
+						placeholder={t.medical.medications.placeholder}
 						value={medicalMedicationsStr}
 						oninput={(event) => {
 							medicalMedicationsStr = event.currentTarget.value;
@@ -554,9 +584,9 @@
 				</div>
 
 				<div class="space-y-2">
-					<Label class="text-base sm:text-sm">ประวัติการแพ้ (ยา/อาหาร)</Label>
+					<Label class="text-base sm:text-sm">{t.medical.allergies.label}</Label>
 					<Input
-						placeholder="เช่น แพ้เพนิซิลลิน, อาหารทะเล, ถั่ว (ถ้าไม่มีให้เว้นว่าง)"
+						placeholder={t.medical.allergies.placeholder}
 						value={medicalAllergiesStr}
 						oninput={(event) => {
 							medicalAllergiesStr = event.currentTarget.value;
@@ -569,7 +599,7 @@
 
 		<!-- Special Needs section -->
 		<div class="w-full space-y-3 border-t border-border pt-8 sm:space-y-2 sm:pt-6">
-			<Label class="text-base font-semibold sm:text-sm">แท็กกลุ่มเปราะบางและความต้องการพิเศษ</Label>
+			<Label class="text-base font-semibold sm:text-sm">{t.specialNeeds.label}</Label>
 			<div class="flex flex-wrap gap-2.5 pt-1 sm:gap-2">
 				{#each specialNeedChipOptions as chip (chip.code)}
 					{@const need = chip.code as NonNullable<EvacueeInput['special_needs']>[number]}
@@ -596,24 +626,25 @@
 			<div class="mt-8 mb-4 overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]">
 				<div class="border-b border-[#E2E8F0] px-4 py-4 sm:px-6 sm:py-3">
 					<h3 class="flex items-center gap-2 text-base font-bold text-foreground">
-						<span>🚨</span> ข้อมูลติดต่อฉุกเฉิน (Emergency Contact)
+						<span>🚨</span>
+						{t.emergencyContact.header}
 					</h3>
 				</div>
 				<div class="grid grid-cols-1 gap-5 p-4 sm:grid-cols-2 sm:gap-4 sm:p-6">
 					<Form.Field {form} name="emergency_contact.name">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ชื่อ-นามสกุล บุคคลติดต่อฉุกเฉิน</Form.Label>
+								<Form.Label>{t.emergencyContact.name.label}</Form.Label>
 								<Input
 									{...props}
-									placeholder="ชื่อนามสกุล ญาติ/ผู้ใกล้ชิด"
+									placeholder={t.emergencyContact.name.placeholder}
 									value={$formData.emergency_contact?.name ?? ''}
 									oninput={(e) => {
 										if (!$formData.emergency_contact) {
 											$formData.emergency_contact = {
 												name: '',
 												phone: '',
-												relation: 'ญาติ/ผู้ใกล้ชิด'
+												relation: t.emergencyContact.defaultRelation
 											};
 										}
 										$formData.emergency_contact.name = e.currentTarget.value;
@@ -628,12 +659,12 @@
 					<Form.Field {form} name="emergency_contact.phone">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เบอร์ติดต่อฉุกเฉิน</Form.Label>
+								<Form.Label>{t.emergencyContact.phone.label}</Form.Label>
 								<Input
 									{...props}
 									inputmode="numeric"
 									maxlength={10}
-									placeholder="08X-XXX-XXXX"
+									placeholder={t.emergencyContact.phone.placeholder}
 									value={$formData.emergency_contact?.phone ?? ''}
 									class="bg-white text-base sm:text-sm"
 									oninput={(e) => {
@@ -643,7 +674,7 @@
 											$formData.emergency_contact = {
 												name: '',
 												phone: '',
-												relation: 'ญาติ/ผู้ใกล้ชิด'
+												relation: t.emergencyContact.defaultRelation
 											};
 										}
 										$formData.emergency_contact.phone = val;
@@ -660,11 +691,11 @@
 				<Form.Field {form} name="medical_note">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label>ความต้องการพิเศษ (ถ้ามี)</Form.Label>
+							<Form.Label>{t.specialNeeds.note.label}</Form.Label>
 							<textarea
 								{...props}
 								bind:value={$formData.medical_note}
-								placeholder="เช่น ผู้ป่วยที่ต้องรับยาเฉพาะทาง หรือต้องการการดูแลพิเศษ"
+								placeholder={t.specialNeeds.note.placeholder}
 								class="flex min-h-28 w-full rounded-md border border-input bg-background px-3 py-3 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-24 sm:py-2 sm:text-sm"
 							></textarea>
 						{/snippet}
@@ -680,11 +711,11 @@
 				>
 					<TriangleAlert class="size-5 shrink-0" aria-hidden="true" />
 					<p class="text-base font-bold sm:text-sm">
-						ส่งต่อผู้ป่วยฉุกเฉิน <span class="font-extrabold">(SOS ESCALATE)</span>
+						{t.sos.title} <span class="font-extrabold">{t.sos.badge}</span>
 					</p>
 				</div>
 				<p class="text-center text-sm text-muted-foreground">
-					ระบบจะแจ้งเตือนไปยังแผนงควบคุมของผู้ว่าฯ และ รพ. สนามทันที
+					{t.sos.description}
 				</p>
 			{/if}
 		</div>
@@ -697,7 +728,7 @@
 				disabled={$submitting || pending}
 				class="h-12 w-full px-6 text-base font-semibold sm:h-10 sm:w-auto sm:text-sm"
 			>
-				ถัดไป →
+				{t.actions.next}
 			</Form.Button>
 			<Button
 				type="button"
@@ -705,7 +736,7 @@
 				onclick={handleBack}
 				class="h-12 w-full px-6 text-base font-medium sm:h-10 sm:w-auto sm:text-sm"
 			>
-				ย้อนกลับ
+				{t.actions.back}
 			</Button>
 		</div>
 	</Field.FieldGroup>
