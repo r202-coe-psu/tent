@@ -83,6 +83,68 @@ describe('buildValidateDocUpdate', () => {
 		}
 	});
 
+	// CR-071 / T-72: the people importer writes its batch log to the shelter db
+	// (its results[] carry evacuee names). Without the whitelist entry the whole
+	// import succeeds but the history write 403s.
+	it('accepts a people_import_log write from registration staff', () => {
+		expect(() =>
+			compile()(
+				{
+					_id: 'people_import_log:01J',
+					type: 'people_import_log',
+					...envelope,
+					schema_v: 1,
+					source: 'people',
+					filename: 'households.xlsx',
+					imported_by: 'reg',
+					total_rows: 3,
+					success_count: 3,
+					skipped_count: 0,
+					error_count: 0,
+					created_people: 7,
+					skipped_people: 0,
+					results: [],
+					started_at: '2026-08-22T00:00:00.000Z',
+					finished_at: '2026-08-22T00:00:01.000Z'
+				},
+				null,
+				REGISTRATION
+			)
+		).not.toThrow();
+	});
+
+	it('rejects update of an existing people_import_log (append-only)', () => {
+		const log = {
+			...envelope,
+			schema_v: 1,
+			_id: 'people_import_log:01J',
+			type: 'people_import_log',
+			source: 'people',
+			filename: 'households.xlsx',
+			imported_by: 'reg'
+		};
+		expectForbidden(
+			() => compile()({ ...log, success_count: 9 }, log, REGISTRATION),
+			/Cannot update append-only people_import_log/
+		);
+	});
+
+	it('rejects delete of an existing people_import_log (append-only)', () => {
+		const log = {
+			...envelope,
+			schema_v: 1,
+			_id: 'people_import_log:01J',
+			type: 'people_import_log',
+			source: 'people',
+			filename: 'households.xlsx',
+			imported_by: 'reg'
+		};
+		expectForbidden(
+			() => compile()({ _id: log._id, _rev: '1-a', _deleted: true }, log, REGISTRATION),
+			/Cannot delete append-only people_import_log/
+		);
+	});
+
 	it('accepts household create from registration staff', () => {
 		expect(() =>
 			compile()(

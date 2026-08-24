@@ -11,6 +11,7 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
+	import Upload from '@lucide/svelte/icons/upload';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import {
 		useHouseholdsPaginated,
@@ -199,6 +200,14 @@
 			</p>
 		</div>
 		<div class="flex gap-2">
+			<Button
+				variant="outline"
+				size="sm"
+				onclick={() => goto(resolve('/back-office/households/import'))}
+			>
+				<Upload class="h-3.5 w-3.5" />
+				นำเข้าจาก Excel
+			</Button>
 			<Button
 				variant="outline"
 				size="sm"
