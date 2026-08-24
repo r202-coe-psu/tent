@@ -292,22 +292,28 @@
 			<!-- Column 2: Fields grid -->
 			<div class="space-y-5 sm:space-y-4">
 				<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4">
-					<div class="space-y-2">
-						<Label class="text-base sm:text-sm">{t.cardType.label}</Label>
-						<Select.Root type="single" bind:value={$formData.person_id.cardType}>
-							<Select.Trigger
-								class="flex !h-12 w-full items-center rounded-md border border-input bg-background px-3 text-base font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground sm:!h-10 sm:text-sm [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
-							>
-								{cardTypeOptions.find((o) => o.value === $formData.person_id.cardType)?.label ??
-									t.cardType.selectPlaceholder}
-							</Select.Trigger>
-							<Select.Content>
-								{#each cardTypeOptions as opt (opt.value)}
-									<Select.Item value={opt.value} label={opt.label} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</div>
+					<Form.Field {form} name="person_id.cardType">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>{t.cardType.label}</Form.Label>
+								<Select.Root type="single" bind:value={$formData.person_id.cardType}>
+									<Select.Trigger
+										{...props}
+										class="!h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+									>
+										{cardTypeOptions.find((o) => o.value === $formData.person_id.cardType)?.label ??
+											t.cardType.selectPlaceholder}
+									</Select.Trigger>
+									<Select.Content>
+										{#each cardTypeOptions as opt (opt.value)}
+											<Select.Item value={opt.value} label={opt.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 
 					<!-- เลขประจำตัวประชาชน / พาสปอร์ต / อื่นๆ -->
 					<Form.Field {form} name="person_id.number">
