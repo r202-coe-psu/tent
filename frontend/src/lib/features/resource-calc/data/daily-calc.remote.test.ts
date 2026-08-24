@@ -74,28 +74,6 @@ const mockGetActive = vi.fn();
 vi.mock('$lib/features/sop-ratios', () => ({
 	getActiveSopProfile: () => mockGetActive(),
 	getVerifiedActiveSopProfile: () => mockGetActive(),
-	SOP_RATIO_KEYS: [
-		'water_l_per_person_day',
-		'drinking_water_l_per_person_day',
-		'cooking_water_l_per_person_day',
-		'hygiene_water_l_per_person_day',
-		'kcal_per_adult_day',
-		'people_per_tap',
-		'people_per_handpump',
-		'people_per_open_well',
-		'people_per_laundry',
-		'people_per_bathing',
-		'people_per_toilet_female',
-		'people_per_toilet_male',
-		'people_per_dining_point_adult',
-		'people_per_dining_point_child',
-		'm2_per_person_living',
-		'm2_per_person_living_cold',
-		'm2_per_person_total',
-		'max_waterpoint_distance_m',
-		'max_queue_minutes',
-		'people_per_volunteer'
-	],
 	SOP_RATIO_KIND: {
 		water_l_per_person_day: 'multiply',
 		drinking_water_l_per_person_day: 'multiply',

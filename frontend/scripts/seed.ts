@@ -1,8 +1,7 @@
 /**
  * Mock data seed script for the Smart Shelter dev environment.
  *
- * Usage:  pnpm seed  (from frontend/ or repo root)
- *         pnpm seed:reset  (local test DB only; replace daily_calc snapshots)
+ * Usage:  pnpm seed  (from frontend/)
  *         pnpm unseed [--confirm]  — remove seed docs (see scripts/unseed.ts)
  * Needs:  CouchDB running + COUCHDB_ADMIN_URL in frontend/.env
  *
@@ -37,8 +36,7 @@
  * re-running adds another batch — useful for volume testing.
  * Test users (sa01 + staff01–03) are also idempotent (409 → skip).
  * daily_calc is the exception: deterministic snapshots fail on conflict so stale evidence is
- * never reported as freshly seeded. Use the explicit seed:reset command to replace only the
- * local daily_calc snapshot window when the persisted source map or formula has changed.
+ * never reported as freshly seeded; wipe the local seed data before regenerating that window.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -1951,39 +1949,13 @@ async function seedDailyCalc(): Promise<void> {
 		await bulkDocs(SHELTER_DB, records, { allowConflicts: false });
 	} catch (error) {
 		throw new Error(
-			`daily_calc seed write failed. Existing deterministic snapshots are protected. Run "pnpm seed:reset" from the repo root (local test DB only) before reseeding: ${String(error)}`,
+			`daily_calc seed write failed. Existing deterministic snapshots must be wiped before reseeding: ${String(error)}`,
 			{ cause: error }
 		);
 	}
 	console.log(
 		`  ✓ ${SHELTER_DB}: ${records.length} daily_calc snapshots seeded (CR-042 have map, mock historical occupancy, real engine ${FORMULA_V})`
 	);
-}
-
-/**
- * Delete only the deterministic daily_calc snapshot window owned by this seed.
- * This is intentionally opt-in: normal `pnpm seed` must never erase persisted data.
- */
-async function deleteDailyCalcSnapshots(): Promise<number> {
-	await ensureDb(SHELTER_DB);
-
-	// Upper bound ';' (0x3B) sorts just after ':' (0x3A), covering every daily_calc:* id.
-	const dcStart = encodeURIComponent(JSON.stringify('daily_calc:'));
-	const dcEnd = encodeURIComponent(JSON.stringify('daily_calc;'));
-	const { status, data } = await couchReq(
-		'GET',
-		`/${SHELTER_DB}/_all_docs?include_docs=true&startkey=${dcStart}&endkey=${dcEnd}`
-	);
-	if (status !== 200) throw new Error(`Cannot list daily_calc snapshots (HTTP ${status})`);
-
-	const rows = (data as { rows?: { doc?: Record<string, unknown> }[] }).rows ?? [];
-	const toDelete = rows
-		.filter((row) => row.doc?._id)
-		.map((row) => ({ ...row.doc, _deleted: true }));
-
-	if (toDelete.length === 0) return 0;
-	await bulkDocs(SHELTER_DB, toDelete);
-	return toDelete.length;
 }
 
 // ─── deleteDashboardData ──────────────────────────────────────────────────────
@@ -2029,17 +2001,30 @@ async function deleteDashboardData(): Promise<void> {
 		toDelete.push(...movesToDelete);
 	}
 
-	if (toDelete.length === 0) {
-		console.log(`  ✓ No dashboard test data found to delete.`);
-	} else {
-		await bulkDocs(SHELTER_DB, toDelete);
-		console.log(`  ✓ Deleted ${toDelete.length} dashboard test documents.`);
+	// Also find and delete daily_calc snapshots produced by this seed script — bounded range scan.
+	// Upper bound ';' (0x3B) sorts just after ':' (0x3A), covering every `daily_calc:*` id (ASCII-only).
+	const dcStart = encodeURIComponent(JSON.stringify('daily_calc:'));
+	const dcEnd = encodeURIComponent(JSON.stringify('daily_calc;'));
+	const { status: dcStatus, data: dcData } = await couchReq(
+		'GET',
+		`/${SHELTER_DB}/_all_docs?include_docs=true&startkey=${dcStart}&endkey=${dcEnd}`
+	);
+	if (dcStatus === 200) {
+		const dcRows = (dcData as { rows: { doc: { type?: string } & Record<string, unknown> }[] })
+			.rows;
+		const dcToDelete = dcRows
+			.filter((r) => r.doc && r.doc._id)
+			.map((r) => ({ ...r.doc, _deleted: true }));
+		toDelete.push(...dcToDelete);
 	}
 
-	const deletedDailyCalc = await deleteDailyCalcSnapshots();
-	if (deletedDailyCalc > 0) {
-		console.log(`  ✓ Deleted ${deletedDailyCalc} daily_calc snapshots.`);
+	if (toDelete.length === 0) {
+		console.log(`  ✓ No dashboard test data found to delete.`);
+		return;
 	}
+
+	await bulkDocs(SHELTER_DB, toDelete);
+	console.log(`  ✓ Deleted ${toDelete.length} dashboard test documents.`);
 }
 
 // ─── main ─────────────────────────────────────────────────────────────────────
@@ -2065,10 +2050,6 @@ async function main() {
 		await seedShelter(master);
 		await seedShelter2(master);
 		await seedDashboardData(master);
-		if (process.argv.includes('--reset-daily-calc')) {
-			const deleted = await deleteDailyCalcSnapshots();
-			console.log(`  ✓ Reset ${deleted} existing daily_calc snapshots before reseeding.`);
-		}
 		await seedDailyCalc();
 		console.log('\nDone.\n');
 	} catch (e: unknown) {

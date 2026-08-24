@@ -45,12 +45,6 @@ export {
 	type DailyCalcRecord
 } from './data/daily-calc.repository';
 export { dailyCalcRepository, DailyCalcRemoteRepository } from './data/daily-calc.remote';
-export {
-	loadCalculationSnapshot,
-	buildCalculationResources,
-	type CalculationSnapshot,
-	type CalculationProfileSnapshot
-} from './data/calculation-snapshot';
 // CR-042 — approved have-source map used by the calculation adapter and seed.
 export { resolveHave, type HaveMapSources, type ShelterHaveSource } from './core';
 

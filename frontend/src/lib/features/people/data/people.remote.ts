@@ -604,8 +604,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 let singleton: PeopleRepository | null = null;
 let singletonDbName: string | null = null;
 
-export function peopleRepository(shelterCode?: string): PeopleRepository {
-	const currentDb = getShelterDb(shelterCode);
+export function peopleRepository(): PeopleRepository {
+	const currentDb = getShelterDb();
 	if (!singleton || singletonDbName !== currentDb) {
 		singleton = new PeopleRemoteRepository(currentDb);
 		singletonDbName = currentDb;

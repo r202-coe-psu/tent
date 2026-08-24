@@ -348,8 +348,8 @@ export class OperationsRemoteRepository implements OperationsRepository {
 let singleton: OperationsRepository | null = null;
 let singletonDbName: string | null = null;
 
-export function operationsRepository(shelterCode?: string): OperationsRepository {
-	const currentDb = getShelterDb(shelterCode);
+export function operationsRepository(): OperationsRepository {
+	const currentDb = getShelterDb();
 	if (!singleton || singletonDbName !== currentDb) {
 		singleton = new OperationsRemoteRepository(currentDb);
 		singletonDbName = currentDb;

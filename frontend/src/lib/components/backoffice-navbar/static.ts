@@ -18,8 +18,7 @@ import {
 	MapPin,
 	UtensilsCrossed,
 	Tent,
-	Home,
-	FlaskConical
+	Home
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -27,7 +26,6 @@ type Leaf = {
 	href: ResolvedPathname | null;
 	icon: typeof Icon;
 	requiresAdmin?: boolean;
-	requiresManager?: boolean;
 };
 
 type Group = Leaf & {
@@ -65,12 +63,6 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'การประเมินประจำวัน (Daily SOP)',
 				href: resolve('/back-office/resource-dashboard'),
 				icon: ClipboardList
-			},
-			{
-				label: 'จำลองสถานการณ์ SOP',
-				href: resolve('/back-office/sop-simulation'),
-				icon: FlaskConical,
-				requiresManager: true
 			},
 			{
 				label: 'คลังสิ่งของและบริจาค',

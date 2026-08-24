@@ -133,13 +133,8 @@ LEFTHOOK=0 git commit -m "..."
 - `pnpm check` — type-check (รันก่อนปิดงานทุกครั้ง)
 - `pnpm test` — unit tests (Vitest)
 - `pnpm test:e2e` — Playwright e2e
-- `pnpm seed` — Create mock data; refuses to overwrite existing `daily_calc:*` snapshots
-- `pnpm seed:reset` — Explicitly delete only local `daily_calc:*` snapshots, then reseed them
+- `pnpm seed` — Create mock data (purge old data first)
 - `pnpm unseed --confirm` — Wipe all CouchDB databases except `_users`
-
-`pnpm seed:reset` is for a local test database only. It is intentionally separate from the normal
-seed command so stale `daily_calc` evidence cannot be erased accidentally. The same commands remain
-available from `frontend/`.
 
 การจัดการข้อมูลตัวอย่างด้วย Docker Compose (รันที่ repo root; ต้องมี `couchdb` / `mongodb` จาก base compose):
 

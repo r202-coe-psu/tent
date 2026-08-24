@@ -13,8 +13,18 @@
 import { couchDbFetch, getDoc, putDoc } from '$lib/db/couch-db';
 import { getShelterDb } from '$lib/db/shelter';
 import { makeDoc, now, type AuthorContext } from '$lib/db/model';
+import { peopleRepository, type Evacuee } from '$lib/features/people';
+import { operationsRepository } from '$lib/features/operations';
+import { sheltersRepository } from '$lib/features/shelters';
+import {
+	getActiveSopProfile,
+	SOP_RATIO_KIND,
+	type SopMaster,
+	type SopOverride,
+	type SopRatioKey
+} from '$lib/features/sop-ratios';
 import { createAuditEntry } from '$lib/features/shared';
-import { calculateResources } from '../domain/calc.formula';
+import { calculateResources, FORMULA_V, type ResourceInput } from '../domain/calc.formula';
 import { DAILY_CALC_SCHEMA_VERSION, type DailyCalcDoc } from '../domain/calc.schema';
 import { DailyCalcReadError, canonicalDailyCalcDocSchema } from './daily-calc.validation';
 import {
@@ -23,14 +33,57 @@ import {
 	type DailyCalcRecord,
 	type DailyCalcRepository
 } from './daily-calc.repository';
-import { countActive, loadCalculationSnapshot } from './calculation-snapshot';
+import { resolveHave, type ShelterHaveSource } from './have-map';
 
 /** Minimal shape of a bounded `_all_docs?include_docs=true` response. */
 interface AllDocsResponse {
 	rows: Array<{ id: string; doc?: unknown }>;
 }
 
-export { countActive };
+/** Count of evacuees physically present (`active`) — the occupancy input (T-06 denormalized stay). */
+export function countActive(evacuees: Evacuee[]): number {
+	return evacuees.filter((e) => e.current_stay?.status === 'active').length;
+}
+
+function buildResources(
+	ratios: Record<SopRatioKey, string>,
+	stock: Map<string, string>,
+	shelter: ShelterHaveSource
+): {
+	resources: ResourceInput[];
+	ratioSnapshot: Record<string, string>;
+	stockSnapshot: Record<string, string | null>;
+} {
+	const resources: ResourceInput[] = [];
+	const ratioSnapshot: Record<string, string> = {};
+	const stockSnapshot: Record<string, string | null> = {};
+
+	for (const key of Object.keys(ratios) as SopRatioKey[]) {
+		const ratio = ratios[key];
+		const kind = SOP_RATIO_KIND[key];
+		const have = resolveHave(key, { stock, shelter });
+		resources.push({ key, kind, ratio, have });
+		ratioSnapshot[key] = ratio;
+		stockSnapshot[key] = have;
+	}
+
+	return { resources, ratioSnapshot, stockSnapshot };
+}
+
+function provenanceFrom(active: SopMaster | SopOverride) {
+	if (active.type === 'sop_override') {
+		return {
+			ratio_source: 'override' as const,
+			sop_override_id: active._id,
+			sop_override_version: active.version
+		};
+	}
+	return {
+		ratio_source: 'master' as const,
+		sop_override_id: null,
+		sop_override_version: null
+	};
+}
 
 export class DailyCalcRemoteRepository implements DailyCalcRepository {
 	constructor(private readonly dbName: string = getShelterDb()) {}
@@ -47,26 +100,42 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 	}
 
 	async runOnDemand(date: string, ctx: AuthorContext): Promise<DailyCalcRecord> {
-		const snapshot = await loadCalculationSnapshot(ctx.shelterCode);
+		const asOf = now();
+
+		// 1. Read all inputs through peer barrels (parallel).
+		const [evacuees, active, stock, shelter] = await Promise.all([
+			peopleRepository().listEvacuees(),
+			getActiveSopProfile(ctx.shelterCode),
+			operationsRepository().getBalance(),
+			sheltersRepository().getShelter(ctx.shelterCode)
+		]);
+
+		if (!active) {
+			throw new Error(
+				'No active SOP profile (master/override) for this shelter — cannot compute daily resource calc'
+			);
+		}
+
+		const occupancy = countActive(evacuees);
+		const { resources, ratioSnapshot, stockSnapshot } = buildResources(
+			active.ratios,
+			stock,
+			shelter
+		);
+		const provenance = provenanceFrom(active);
 
 		// 2. Pure engine.
-		const results = calculateResources({
-			occupancy: snapshot.current_occupancy,
-			as_of: snapshot.as_of,
-			resources: snapshot.resource_inputs
-		});
+		const results = calculateResources({ occupancy, as_of: asOf, resources });
 
 		// 3. Snapshot-locked body — validated against the domain schema before persisting.
 		const body: DailyCalcDoc = canonicalDailyCalcDocSchema.parse({
-			formula_v: snapshot.formula_v,
-			sop_profile_version: snapshot.profile.effective_version,
-			ratio_source: snapshot.profile.ratio_source,
-			sop_override_id: snapshot.profile.override_id,
-			sop_override_version: snapshot.profile.override_version,
-			ratio_snapshot: snapshot.current_ratios,
-			occupancy_snapshot: snapshot.current_occupancy,
-			as_of: snapshot.as_of,
-			stock_snapshot: snapshot.stock_snapshot,
+			formula_v: FORMULA_V,
+			sop_profile_version: active.version,
+			...provenance,
+			ratio_snapshot: ratioSnapshot,
+			occupancy_snapshot: occupancy,
+			as_of: asOf,
+			stock_snapshot: stockSnapshot,
 			results
 		});
 

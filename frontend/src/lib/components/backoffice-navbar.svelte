@@ -12,7 +12,7 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { LOGOUT_ROUTE } from '$lib/guards/auth';
-	import { isSystemAdmin, isShelterManager, formatRoleList } from '$lib/auth/roles';
+	import { isSystemAdmin, formatRoleList } from '$lib/auth/roles';
 	import {
 		backofficeNavbarGroups,
 		backofficeHomePath,
@@ -25,7 +25,6 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const isManager = $derived(isSA || isShelterManager(roles));
 
 	async function logout() {
 		mobileMenuOpen = false;
@@ -80,7 +79,6 @@
 	// Reactive through closure on `isSA` ($derived) — only called from template blocks
 	function canSee(node: BackofficeNavbarNode): boolean {
 		if ('requiresAdmin' in node && node.requiresAdmin) return isSA;
-		if ('requiresManager' in node && node.requiresManager) return isManager;
 		return true;
 	}
 </script>

@@ -22,7 +22,6 @@
 		"openapi:format": "prettier --write src/lib/api-specs/fastapi.json src/lib/api/openapi.d.ts",
 		"openapi:update": "pnpm openapi:fetch && pnpm openapi:fastapi && pnpm openapi:format",
 		"seed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts",
-		"seed:reset": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts --reset-daily-calc",
 		"verify:resource-calc-seed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/verify-t31-seed.ts",
 		"seed:thailand": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-thailand-location.ts",
 		"seed:delete-dashboard": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed.ts --delete-dashboard",
