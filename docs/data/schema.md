@@ -330,6 +330,9 @@ view `needs_open` = `needs` − donation(declared+received ของ campaign) �
 
 ### 2.5 `meal_plan` — `meal_plan:{ulid}` (หลายแผนอาจใช้วัน+มื้อเดียวกันได้ — CR-045)
 
+> **CR-085** — เพิ่ม `gas_usage[]` (ถังแก๊ส + ปริมาณที่แผนนี้จะใช้) — optional, **ไม่ bump schema_v**
+> (คงที่ 2; precedent CR-045/CR-031/CR-084)
+>
 > **schema_v 2** — เพิ่ม `calc_source` (audit trail ของการคำนวณ ingredient จาก SOP ratio). CR-025.
 > **CR-045** — `_id` เปลี่ยนจาก deterministic `meal_plan:{date}:{meal}` → ulid; เพิ่ม `label` และ
 > `recipes[].unit` (ทั้งคู่ optional — ไม่ bump schema_v)
@@ -344,6 +347,7 @@ view `needs_open` = `needs` − donation(declared+received ของ campaign) �
 | `status` | enum(`draft`,`confirmed`) | req | — |
 | `override_reason` | str\|null | opt | **บังคับ** เมื่อ headcount ต่างจาก occupancy snapshot ล่าสุด (CR-022) |
 | `calc_source` | {`sop_profile_id`:str, `sop_profile_version`:int>0, `headcount_as_of`:ts}\|null | opt | audit trail — SOP profile + version + snapshot เวลาอ่าน headcount ที่ใช้คำนวณ |
+| `gas_usage` | [{`cylinder_id`:str, `consumption_kg`:qty_str>0}] | opt | ถังแก๊ส (อ้าง `gas_cylinder_type`) + ปริมาณที่แผนนี้คำนวณว่าต้องใช้ (CR-085); ไม่มีค่า = แผนนี้ไม่ใช้แก๊ส (ยังไม่บันทึก ไม่ใช่ 0); `issueRequisition` อ่านค่านี้ไปตัด `gas_ledger` |
 
 **Headcount source — occupancy mapping (CR-022):** derive จาก evacuee ที่ `current_stay.status = 'active'` —
 `total` = จำนวนทั้งหมด, `halal` = `religion = 'muslim'`, `infant` = `special_needs` มี `'infant'`,
@@ -380,6 +384,9 @@ filter จาก `listMealPlans()` แทนการ `get` ตรงด้ว�
 
 ### 2.7 `meal_service` — `meal_service:{ulid}` · **append-only** · **schema_v 2** (CR-045)
 
+> **CR-084** — เพิ่ม `actual_yield` (จำนวนเสิร์ฟที่ทำได้จริง) — optional, **ไม่ bump schema_v**
+> (คงที่ 2; precedent §2.5 CR-045, §4.2 CR-031)
+>
 > **CR-045** — `_id` เปลี่ยนจาก deterministic `meal_service:{date}:{meal}` → ulid; เพิ่ม
 > `meal_plan_id` (จำเป็นเพราะ §2.5 ตอนนี้อนุญาตหลายแผนต่อวัน+มื้อเดียวกัน — บันทึกบริการต้องผูกกับ
 > แผนที่เจาะจง ไม่ใช่แค่วัน+มื้อ)
@@ -388,7 +395,8 @@ filter จาก `listMealPlans()` แทนการ `get` ตรงด้ว�
 | --- | --- | --- | --- |
 | `date` / `meal` | str / enum | req | คู่กับ meal_plan |
 | `meal_plan_id` | str\|null | opt | แผนที่บันทึกนี้รายงานผล — UI เช็ค "บันทึกแล้วหรือยัง" ด้วย field นี้ (เทียบ `plan._id`) ไม่ใช่ date+meal (CR-045) |
-| `served` | int≥0 | req | เสิร์ฟในศูนย์ |
+| `actual_yield` | int≥0 | opt | จำนวนที่ครัวปรุงได้จริง (ผลผลิต) — ใช้เป็นเพดานการแจก (CR-084); ไม่มีค่า = ยังไม่บันทึกผลผลิต (ไม่ใช่ 0) |
+| `served` | int≥0 | req | เสิร์ฟในศูนย์ — จำนวนที่แจกออกไปจริง (คนละความหมายกับ `actual_yield`) |
 | `waste` | int≥0 | req | เหลือทิ้ง |
 | `external` | {`volunteers`:int≥0, `outside_evacuees`:int≥0} | req | แจกนอกศูนย์ (ตาม source Module D) |
 | `notes` | str | opt | — |
@@ -399,15 +407,27 @@ filter จาก `listMealPlans()` แทนการ `get` ตรงด้ว�
 `getMealService(date, meal)` scan + filter จาก `listMealServices()` เหมือน `getMealPlan` — ambiguous
 ถ้ามีหลายบันทึกต่อมื้อ
 
+**`actual_yield` vs `served` (CR-084):** `actual_yield` คือจำนวนที่ครัว**ปรุงได้จริง** (ผลผลิต),
+`served` คือจำนวนที่**แจกออกไปจริง** — สองค่านี้ต่างกันได้ (ปรุงได้ 90 แต่แจกได้ 85) เพดาน
+`served ≤ actual_yield` **ยังไม่บังคับตอนเขียนรอบนี้** (แค่ soft warning ฝั่ง UI) — การบังคับเพดานจริง
+เป็นงานของ flow แจกจ่าย/สแกนหน้างานที่ยังไม่มีในระบบ. `MealVariance.variance`/`variance_pct`/`status`
+ยังคงหมายถึง served-vs-planned เหมือนเดิม ไม่เปลี่ยนความหมายเพราะ `actual_yield`
+
 **Migration (schema_v 1 → 2, CR-045):** `meal_plan_id` optional, default `null` — เอกสารเก่าที่สร้าง
 ก่อน CR-045 จะไม่มี field นี้ และจะไม่ถูกนับว่า "บันทึกแล้ว" สำหรับแผนใดอีกต่อไป (UI จับคู่ด้วย
 `meal_plan_id` ไม่ใช่ date+meal) — โปรเจกต์นี้อยู่ช่วง dev/test เท่านั้น (pre-prod) แนะนำ unseed/reseed
 ข้อมูลทดสอบแทนการ migrate เอกสารเก่าจริง
 
+**Migration (CR-084):** `actual_yield` optional — ไม่ bump `schema_v` (คงที่ 2); doc เดิมไม่มี field
+นี้ → อ่านเป็น "ยังไม่บันทึกผลผลิต" ไม่ต้อง backfill
+
 view `meals_served` + เทียบ plan vs actual ต่อวัน
 
 ### 2.7.1 `gas_cylinder_type` — `gas_cylinder_type:{ulid}` · **schema_v 2**
 
+> **CR-085** — แต่ละ doc แทน**ถังแก๊สจริง 1 ใบ** (ไม่ใช่ "รุ่น" ที่ใช้ร่วมกันหลายถัง) — สต็อกจริงของ
+> ถังนี้ track ผ่าน `gas_ledger` §2.7.2 แยกเอกสาร ไม่เพิ่ม field ที่นี่
+>
 > **schema_v 2** — `capacity_kg` / `burn_rate_kg_per_hour` / `time_multiplier` เป็น `qty_str`. CR-038.
 > schema_v 1 — reference data สำหรับคำนวณเวลา/ปริมาณการใช้แก๊สหุงต้ม (LPG) ในครัว. CR-025 (ต่อยอด CR-003 T-56). mutable — LWW ผ่าน `touch()`.
 
@@ -419,6 +439,39 @@ view `meals_served` + เทียบ plan vs actual ต่อวัน
 | `time_multiplier` | qty_str>0 | req | ตัวคูณเวลา; default `"1"` |
 
 **Migration (schema_v 1 → 2):** pre-prod — wipe/re-seed
+
+### 2.7.2 `gas_ledger` — `gas_ledger:{ulid}` · **append-only** · **schema_v 1** (CR-085)
+
+> สต็อกแก๊สจริงต่อถัง (`gas_cylinder_type` §2.7.1) — เหมือน `stock_ledger` §2.1 แต่แยกเอกสาร ไม่ผูก
+> กับ `item_master`/`supply_item` เพราะแก๊สไม่ใช่ supply item ปกติ
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `cylinder_id` | str | req | อ้าง `gas_cylinder_type._id` |
+| `qty_kg` | qty_str (signed, non-zero) | req | ลบ = ใช้ไป (`consumption`)/ตัดเศษ (`adjust`), บวก = เติมกลับ (`refill`) |
+| `reason` | enum(`consumption`,`refill`,`adjust`) | req | `adjust` = ตัดเศษเหลือทิ้งด้วยมือ (CR-085 addendum) |
+| `ref_id` | str\|null | opt | `meal_plan_id` เมื่อ `reason = consumption`; `null` เมื่อ `refill`/`adjust` |
+| `occurred_at` | ts | req | — |
+
+**ยอดเหลือ (compute เสมอ ไม่เก็บ running total):**
+$$\text{remaining\_kg} = \text{capacity\_kg} + \sum \text{qty\_kg (entries ของถังนี้)}$$
+
+**สถานะ (derive จากยอดเหลือ ไม่เก็บ field แยก):**
+- `unused` (ยังไม่ใช้) — `remaining_kg == capacity_kg`
+- `in_use` (กำลังใช้) — `0 < remaining_kg < capacity_kg`
+- `empty` (หมดแล้ว) — `remaining_kg <= 0`
+
+**เขียนเมื่อไหร่:** `issueRequisition` (T-26) เขียน entry `reason=consumption` พร้อม `stock_ledger`
+ของอาหารใน `bulkDocs` เดียวกัน (atomic) — อ่านจาก `meal_plan.gas_usage` §2.5 เช็คยอดเหลือก่อนเขียน
+**throw บล็อกทั้งหมดถ้ายอดเหลือไม่พอ** (ไม่ partial-issue เหมือนอาหาร) ปุ่ม "เติมแก๊ส" หน้า UI เขียน
+entry `reason=refill` แยก (validate ไม่ให้ยอดเหลือเกิน `capacity_kg`)
+
+เพราะ `consumption` เป็น all-or-nothing เศษเหลือขนาดเล็ก (เช่น 0.001 kg) จะไม่มีทางถูกเบิกจนหมดผ่าน
+flow ปกติเลย ค้างเป็น `in_use` ตลอดไป — ปุ่ม "ตัดเศษเหลือทิ้ง" หน้า UI เขียน entry เดียว
+`reason=adjust`, `qty_kg = -remaining_kg` ให้ยอดเหลือเป็น 0 พอดี (`ref_id: null`) ปฏิเสธ (throw) ถ้าถัง
+ว่างอยู่แล้ว
+
+**Migration:** N/A — doc type ใหม่ ไม่มีของเดิมต้อง migrate
 
 ### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 1**
 

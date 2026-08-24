@@ -26,6 +26,7 @@ function expectForbidden(run: () => void, match: RegExp): void {
 
 const WAREHOUSE: UserCtx = { name: 'ws', roles: ['shelter:SH001', 'warehouse_staff'] };
 const REGISTRATION: UserCtx = { name: 'reg', roles: ['shelter:SH001', 'registration_staff'] };
+const KITCHEN: UserCtx = { name: 'kt', roles: ['shelter:SH001', 'kitchen_staff'] };
 
 const envelope = {
 	schema_v: 2,
@@ -225,6 +226,119 @@ describe('buildValidateDocUpdate', () => {
 					compile()(donation({ status: 'declared' }), donation({ status: 'received' }), WAREHOUSE),
 				/Cannot revert donation status back to declared/
 			);
+		});
+	});
+
+	// Module D (kitchen) was missing from the whitelist entirely — kitchen_staff
+	// could never actually write any of these without an _admin session, even
+	// though requireKitchen() lets them into the UI (bug found + fixed alongside
+	// CR-080's gas_ledger addition).
+	describe('kitchen doc types (schema.md §2.5-§2.7.2)', () => {
+		it('includes every kitchen doc type in the allowed whitelist', () => {
+			const validateFn = buildValidateDocUpdate('SH001');
+			for (const type of [
+				'meal_plan',
+				'kitchen_requisition',
+				'meal_service',
+				'gas_cylinder_type',
+				'gas_ledger'
+			] as const) {
+				expect(validateFn).toContain(`'${type}'`);
+			}
+		});
+
+		it('accepts a new meal_plan from kitchen_staff', () => {
+			expect(() =>
+				compile()(
+					{
+						_id: 'meal_plan:01J',
+						type: 'meal_plan',
+						...envelope,
+						date: '2026-08-22',
+						meal: 'lunch',
+						headcount: { total: 10, halal: 0, soft_food: 0, infant: 0 },
+						recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 1000 }],
+						status: 'draft'
+					},
+					null,
+					KITCHEN
+				)
+			).not.toThrow();
+		});
+
+		it('accepts a new gas_cylinder_type from kitchen_staff', () => {
+			expect(() =>
+				compile()(
+					{
+						_id: 'gas_cylinder_type:01J',
+						type: 'gas_cylinder_type',
+						...envelope,
+						schema_v: 2,
+						name: 'ถังทดสอบ',
+						capacity_kg: '15',
+						burn_rate_kg_per_hour: '0.5',
+						time_multiplier: '1'
+					},
+					null,
+					KITCHEN
+				)
+			).not.toThrow();
+		});
+
+		it('accepts a new gas_ledger entry from kitchen_staff', () => {
+			expect(() =>
+				compile()(
+					{
+						_id: 'gas_ledger:01J',
+						type: 'gas_ledger',
+						...envelope,
+						schema_v: 1,
+						cylinder_id: 'gas_cylinder_type:01J',
+						qty_kg: '-2',
+						reason: 'consumption',
+						ref_id: null,
+						occurred_at: envelope.created_at
+					},
+					null,
+					KITCHEN
+				)
+			).not.toThrow();
+		});
+
+		it.each(['kitchen_requisition', 'meal_service', 'gas_ledger'])(
+			'rejects updating an existing %s (append-only)',
+			(type) => {
+				const doc = { ...envelope, schema_v: 1, _id: `${type}:01J`, type };
+				expectForbidden(
+					() => compile()({ ...doc, touched: true }, doc, KITCHEN),
+					new RegExp(`Cannot update append-only ${type}`)
+				);
+			}
+		);
+
+		it.each(['kitchen_requisition', 'meal_service', 'gas_ledger'])(
+			'rejects deleting an existing %s (append-only)',
+			(type) => {
+				const doc = { ...envelope, schema_v: 1, _id: `${type}:01J`, type };
+				expectForbidden(
+					() => compile()({ _id: `${type}:01J`, _deleted: true }, doc, KITCHEN),
+					new RegExp(`Cannot delete append-only ${type}`)
+				);
+			}
+		);
+
+		it('allows updating an existing gas_cylinder_type (mutable, LWW)', () => {
+			const doc = {
+				...envelope,
+				schema_v: 2,
+				_id: 'gas_cylinder_type:01J',
+				type: 'gas_cylinder_type',
+				name: 'ถังทดสอบ',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			};
+			expect(() => compile()({ ...doc, capacity_kg: '20' }, doc, KITCHEN)).not.toThrow();
 		});
 	});
 

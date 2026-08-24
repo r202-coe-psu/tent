@@ -2,14 +2,24 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import * as Pagination from '$lib/components/ui/pagination';
+	import { Badge } from '$lib/components/ui/badge';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import {
 		useMealServices,
 		useMealPlans,
 		computeMealVariance,
 		MEAL_PERIOD_LABELS,
-		type MealPlan
+		MEAL_VARIANCE_STATUS_LABELS,
+		type MealPlan,
+		type MealVarianceStatus
 	} from '$lib/features/kitchen';
+
+	const STATUS_CLASS: Record<MealVarianceStatus, string> = {
+		on_target: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+		over: 'border-orange-200 bg-orange-50 text-orange-700',
+		under: 'border-amber-200 bg-amber-50 text-amber-700',
+		no_plan: 'border-border bg-muted text-muted-foreground'
+	};
 
 	const services = useMealServices();
 	const plans = useMealPlans();
@@ -78,9 +88,11 @@
 						<Table.Row class="text-xs">
 							<Table.Head class="min-w-[160px] px-6">แผนต้นทาง</Table.Head>
 							<Table.Head class="min-w-[80px] px-6 text-right">วางแผน</Table.Head>
+							<Table.Head class="min-w-[90px] px-6 text-right">ทำได้จริง</Table.Head>
 							<Table.Head class="min-w-[100px] px-6 text-right">เสิร์ฟในศูนย์</Table.Head>
 							<Table.Head class="min-w-[100px] px-6 text-right">เสิร์ฟนอกศูนย์</Table.Head>
 							<Table.Head class="min-w-[80px] px-6 text-right">เหลือทิ้ง</Table.Head>
+							<Table.Head class="min-w-[110px] px-6">สถานะ</Table.Head>
 							<Table.Head class="min-w-[130px] px-6">ผู้บันทึก / เวลา</Table.Head>
 						</Table.Row>
 					</Table.Header>
@@ -102,6 +114,14 @@
 								<Table.Cell class="px-6 text-right text-sm">
 									{v.planned === null ? '—' : v.planned.toLocaleString()}
 								</Table.Cell>
+								<Table.Cell class="px-6 text-right text-sm">
+									{v.actual_yield === null ? '—' : v.actual_yield.toLocaleString()}
+									{#if v.yield_variance !== null}
+										<p class="text-xs text-muted-foreground">
+											{v.yield_variance >= 0 ? '+' : ''}{v.yield_variance.toLocaleString()} เทียบแผน
+										</p>
+									{/if}
+								</Table.Cell>
 								<Table.Cell class="px-6 text-right text-sm font-semibold">
 									{v.served.toLocaleString()}
 								</Table.Cell>
@@ -110,6 +130,16 @@
 								</Table.Cell>
 								<Table.Cell class="px-6 text-right text-sm {v.waste > 0 ? 'text-amber-700' : ''}">
 									{v.waste.toLocaleString()}
+								</Table.Cell>
+								<Table.Cell class="px-6">
+									<Badge variant="outline" class={STATUS_CLASS[v.status]}
+										>{MEAL_VARIANCE_STATUS_LABELS[v.status]}</Badge
+									>
+									<p class="mt-0.5 text-xs text-muted-foreground">
+										{v.variance_pct === null
+											? '—'
+											: `${v.variance_pct >= 0 ? '+' : ''}${v.variance_pct.toFixed(1)}%`}
+									</p>
 								</Table.Cell>
 								<Table.Cell class="px-6">
 									<p class="text-sm">{svc.created_by}</p>
