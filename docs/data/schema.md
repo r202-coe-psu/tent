@@ -732,6 +732,38 @@ open → escalated
 
 ---
 
+### 2.20 `simulation` — `simulation:{ulid}` · **immutable snapshot · schema_v 1** (CR-079 / T-42)
+
+> ผลการจำลอง SOP แบบ what-if สำหรับการวางแผนล่วงหน้า ใช้ input snapshot เดียวกับ T-31 และ
+> ใช้ engine เดียวกัน แต่ **ไม่เขียนทับ `daily_calc`** และไม่แก้ occupancy, active SOP,
+> stock หรือ facilities จริง. `Run` ไม่ persist; `Save` สร้างเอกสารใหม่เท่านั้น และเอกสารที่บันทึกแล้ว
+> ห้าม update หรือ delete. การเปิดผลเดิมอ่าน `result` ที่ freeze ไว้โดยไม่ rerun engine.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `shelter_code` | str | req | ศูนย์เจ้าของ snapshot; ต้องตรงกับฐานข้อมูลและ `result.snapshot.shelter_code` |
+| `created_at` / `updated_at` | ts / ts | req | immutable; ต้องมีค่าเท่ากัน |
+| `created_by` | str | req | ผู้บันทึก; ต้องตรงกับ authenticated user |
+| `result.input` | object | req | `{name:str, occupancy:int≥0, days:int 1..365, ratio_overrides:Partial<SOP_RATIO_KEYS>}` |
+| `result.snapshot` | object | req | `shelter_code`, `as_of`, `formula_v`, effective SOP provenance, `current_occupancy`, `current_ratios`, `resource_inputs[]`, `stock_snapshot` |
+| `result.current` | object | req | baseline occupancy/ratios, T-31 `daily_results[]` และ `horizon_results[]` |
+| `result.scenario` | object | req | scenario occupancy/effective ratios, T-31 `daily_results[]` และ `horizon_results[]` |
+| `result.comparison` | object[] | req | ต่อ resource: current/scenario ratio, daily need, horizon need, stock, gap, delta และ data status |
+
+`resource_inputs[]`, `daily_results[]`, `horizon_results[]` และ `comparison[]` ต้องครอบคลุม
+canonical SOP ratio keys ทั้ง 20 รายการและเรียงลำดับเดียวกัน. `ratio_overrides` ใช้ได้เฉพาะ
+canonical keys และเก็บค่าเป็น `qty_str` ที่มากกว่า 0.
+
+`horizon_results` ใช้ semantics จาก T-31: resource kind `multiply` คูณด้วย `days`,
+`divide` ใช้ความต้องการพร้อมกันโดยไม่สะสมตามวัน และ `threshold` ไม่สะสมและไม่ใช้ Stock gap.
+Stock snapshot ชุดเดียวกันถูกใช้ทั้ง Current และ Scenario; `null` แปลว่ายังไม่มีข้อมูล Stock.
+
+> **Index:** `_id` (ULID). สิทธิ์บันทึกจำกัด `shelter_manager` ในศูนย์ตนเองและ `system_admin`
+> ตามศูนย์ที่เลือก. Public HTTP API, forecast ที่ occupancy เปลี่ยนรายวัน, chart, export,
+> sharing และ edit history ไม่อยู่ใน schema/Scope ของ CR-079.
+
+---
+
 ## 3. DB `registry` (central-managed → pull ลง device; edge fallback replica)
 
 ### 3.1 `shelter` — `shelter:{ulid}`
