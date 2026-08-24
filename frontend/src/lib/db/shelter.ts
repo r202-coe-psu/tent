@@ -19,6 +19,6 @@ export function getShelterCode(): string {
 }
 
 /** The CouchDB database name for the current user's shelter. */
-export function getShelterDb(): string {
-	return `shelter_${getShelterCode().toLowerCase()}`;
+export function getShelterDb(shelterCode: string = getShelterCode()): string {
+	return `shelter_${shelterCode.toLowerCase()}`;
 }

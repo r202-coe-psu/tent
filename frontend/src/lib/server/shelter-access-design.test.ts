@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { SOP_RATIO_KEYS } from '$lib/features/sop-ratios';
 import { buildValidateDocUpdate } from './shelter-access-design';
 
 type UserCtx = { name: string; roles: string[] };
@@ -56,6 +57,26 @@ const donation = (over: Doc = {}): Doc => ({
 	...over
 });
 
+const ratios = Object.fromEntries(SOP_RATIO_KEYS.map((key) => [key, '1']));
+const resultRows = SOP_RATIO_KEYS.map((key, ordinal) => ({ key, ordinal }));
+const simulationResult = (shelterCode = 'SH001') => ({
+	input: {
+		name: 'Flood 14 days',
+		occupancy: 2000,
+		days: 14,
+		ratio_overrides: {}
+	},
+	snapshot: {
+		shelter_code: shelterCode,
+		current_occupancy: 500,
+		current_ratios: ratios,
+		resource_inputs: resultRows
+	},
+	current: { occupancy: 500, ratios, daily_results: resultRows, horizon_results: resultRows },
+	scenario: { occupancy: 2000, ratios, daily_results: resultRows, horizon_results: resultRows },
+	comparison: resultRows.map((row) => ({ ...row, current_ratio: '1', scenario_ratio: '1' }))
+});
+
 describe('buildValidateDocUpdate', () => {
 	it('includes audit in the allowed doc type whitelist', () => {
 		const validateFn = buildValidateDocUpdate('SH001');
@@ -66,6 +87,77 @@ describe('buildValidateDocUpdate', () => {
 
 	it('includes daily_calc in the allowed doc type whitelist for on-demand writes', () => {
 		expect(buildValidateDocUpdate('SH001')).toContain("'daily_calc'");
+	});
+
+	it('allows managers to create immutable simulations and rejects staff or updates', () => {
+		const simulation = {
+			...envelope,
+			schema_v: 1,
+			_id: 'simulation:01K1ABCDEFGHJKMNPQRSTVWXYZ',
+			type: 'simulation',
+			created_by: 'sm',
+			result: simulationResult()
+		};
+		expect(() =>
+			compile()(simulation, null, {
+				name: 'sm',
+				roles: ['shelter:SH001', 'shelter_manager']
+			})
+		).not.toThrow();
+		expectForbidden(
+			() => compile()(simulation, null, REGISTRATION),
+			/Only shelter managers or system admins/
+		);
+		expectForbidden(
+			() =>
+				compile()(simulation, simulation, {
+					name: 'sm',
+					roles: ['shelter:SH001', 'shelter_manager']
+				}),
+			/Saved simulations are immutable/
+		);
+		expectForbidden(
+			() =>
+				compile()({ ...simulation, _deleted: true }, simulation, {
+					name: 'sm',
+					roles: ['shelter:SH001', 'shelter_manager']
+				}),
+			/cannot be deleted/
+		);
+	});
+
+	it('rejects forged, malformed, or cross-shelter simulation evidence', () => {
+		const valid = {
+			...envelope,
+			_id: 'simulation:01K1ABCDEFGHJKMNPQRSTVWXYZ',
+			type: 'simulation',
+			schema_v: 1,
+			created_by: 'sm',
+			result: simulationResult()
+		};
+		const ctx = { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] };
+		expectForbidden(
+			() => compile()({ ...valid, created_by: 'forged' }, null, ctx),
+			/authenticated user/
+		);
+		expectForbidden(() => compile()({ ...valid, result: {} }, null, ctx), /shape is incomplete/);
+		expectForbidden(
+			() => compile()({ ...valid, result: simulationResult('SH002') }, null, ctx),
+			/snapshot shelter/
+		);
+		expectForbidden(
+			() => compile()({ ...valid, _id: 'simulation:not-a-ulid' }, null, ctx),
+			/simulation id/
+		);
+		const badOrder = structuredClone(simulationResult());
+		badOrder.comparison[0].key = SOP_RATIO_KEYS[1];
+		expectForbidden(() => compile()({ ...valid, result: badOrder }, null, ctx), /resource order/);
+		const badOccupancy = structuredClone(simulationResult());
+		badOccupancy.scenario.occupancy = 1999;
+		expectForbidden(
+			() => compile()({ ...valid, result: badOccupancy }, null, ctx),
+			/occupancy evidence/
+		);
 	});
 
 	// CR-032: purchase docs are written to shelter dbs, so the server-side

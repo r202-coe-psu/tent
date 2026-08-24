@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4)"
 status: approved
 created: 2026-06-04
-updated: 2026-08-21 # §4 FR-42/43 CR-041 Module A Volunteer Job Board, Digital Ticket & Time-bound shift access
+updated: 2026-08-25 # §4 FR-42/43 CR-041 Module A Volunteer Job Board, Digital Ticket & Time-bound shift access; CR-079 FR-54 — shelter_manager ในศูนย์ตนเองและ system_admin ตามศูนย์ที่เลือก
 closes: K-12 (A1 RBAC phase-blocker)
 ---
 
@@ -144,7 +144,7 @@ closes: K-12 (A1 RBAC phase-blocker)
 | Open API — aggregate data pull | FR-51 | ✓ 🔒 | — | agg 🔒 | — |
 | Search consent / opt-out (ตั้งค่า) | FR-52 | ✓ | scope | — | — |
 | Public family search (query) | FR-53 | — | — | — | FAM·masked dir 🔒 |
-| What-if SOP simulation | FR-54 | ✓ | — | — | — |
+| What-if SOP simulation | FR-54 | ✓ | scope | — | — |
 | RoPA / consent / retention finalize | FR-55 | ✓ | — | — | — |
 | Cross-module UAT + handover package | FR-56 | ✓ | — | — | — |
 

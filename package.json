@@ -2,7 +2,10 @@
 	"name": "tent",
 	"private": true,
 	"scripts": {
-		"prepare": "lefthook install"
+		"prepare": "lefthook install",
+		"seed": "pnpm --dir frontend seed",
+		"seed:reset": "pnpm --dir frontend seed:reset",
+		"verify:resource-calc-seed": "pnpm --dir frontend verify:resource-calc-seed"
 	},
 	"devDependencies": {
 		"lefthook": "^1.13.6"
