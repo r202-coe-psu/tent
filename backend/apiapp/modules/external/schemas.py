@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 class M2ShelterItem(BaseModel):
     shelter_id: str = Field(description="รหัสศูนย์พักพิง เช่น SH001")
     shelter_name: str = Field(description="ชื่อศูนย์พักพิง")
+    site_kind: Literal["evacuation_center", "host_house"] = Field(
+        default="evacuation_center", description="ชนิดสถานที่"
+    )
     lat: float | None = Field(default=None, description="พิกัดละติจูด (WGS 84)")
     long: float | None = Field(default=None, description="พิกัดลองจิจูด (WGS 84)")
 

@@ -40,7 +40,8 @@ async function seed() {
 		const shelter: ShelterMaster = {
 			_id: `shelter:${crypto.randomUUID()}`,
 			type: 'shelter',
-			schema_v: 4,
+			schema_v: 5,
+			site_kind: 'evacuation_center',
 			code: `MOCK${i.toString().padStart(3, '0')}`,
 			name: `Mock Shelter ${i} - ${prov}`,
 			operation_status: i % 5 === 0 ? 'full_capacity' : 'active',

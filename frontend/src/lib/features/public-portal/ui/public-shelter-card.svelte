@@ -68,6 +68,9 @@
 					{shelter.admin_type}
 				</div>
 			{/if}
+			<div class="mt-1 text-[11px] font-semibold text-primary">
+				{shelter.site_kind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์อพยพ'}
+			</div>
 		</div>
 		<span
 			class="shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold {getStatusColor(

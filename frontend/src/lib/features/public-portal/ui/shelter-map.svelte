@@ -1,6 +1,7 @@
 <script lang="ts">
 	/* eslint-disable @typescript-eslint/no-explicit-any */
 	import { onMount, onDestroy } from 'svelte';
+	import type { PublicSiteKind } from '../domain/types';
 
 	interface ShelterGeo {
 		lat: number;
@@ -13,7 +14,7 @@
 		status: string;
 		capacity: number;
 		distance: number;
-		type?: string;
+		site_kind?: PublicSiteKind;
 		geo?: ShelterGeo | null;
 	}
 
@@ -65,13 +66,12 @@
 		}
 	}
 
-	function getTypeIcon(type: string | undefined): string {
-		if (!type) return '🏠';
-		if (type.includes('อพยพ')) return '⛺';
-		if (type.includes('แพทย์') || type.includes('พยาบาล')) return '🏥';
-		if (type.includes('วัด')) return '🛕';
-		if (type.includes('โรงเรียน')) return '🏫';
-		return '🏠';
+	function getTypeIcon(siteKind: PublicSiteKind | undefined): string {
+		return siteKind === 'host_house' ? '🏠' : '⛺';
+	}
+
+	function getSiteKindText(siteKind: PublicSiteKind | undefined): string {
+		return siteKind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์อพยพ';
 	}
 
 	onMount(async () => {
@@ -193,7 +193,7 @@
 				bounds.extend(lngLat);
 
 				const color = getStatusColorCode(shelter.status);
-				const icon = getTypeIcon(shelter.type);
+				const icon = getTypeIcon(shelter.site_kind);
 
 				const el = document.createElement('div');
 				// Do not apply position: relative to the root element,
@@ -222,7 +222,7 @@
 				const popup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
 					<div style="font-size:12px;font-family:sans-serif;color:#1e293b;min-width:160px;">
 						<strong style="font-size:14px;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
-						<div style="margin-bottom:2px;font-size:11px;color:#64748b;">${shelter.type || 'ศูนย์พักพิง'}</div>
+						<div style="margin-bottom:2px;font-size:11px;color:#64748b;">${getSiteKindText(shelter.site_kind)}</div>
 						สถานะ: <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
 						ความจุ: <strong>${shelter.capacity}</strong> คน<br/>
 						${shelter.distance > 0 ? `ระยะทาง: <strong>${shelter.distance}</strong> กม.` : ''}

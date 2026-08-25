@@ -119,6 +119,51 @@ async def test_list_shelters_filters_by_province(
     assert body["shelters"][0]["code"] == "SH001"
 
 
+async def test_list_shelters_filters_by_site_kind(
+    client: AsyncClient,
+    db_client: AsyncIOMotorClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    now = datetime.now(UTC)
+    await _insert_shelter_doc(
+        db_client,
+        settings,
+        {
+            "_id": "SH001",
+            "shelter_code": "SH001",
+            "name": "ศูนย์ทดสอบ",
+            "site_kind": "evacuation_center",
+            "status": "open",
+            "capacity": 100,
+            "updated_at": now,
+        },
+    )
+    await _insert_shelter_doc(
+        db_client,
+        settings,
+        {
+            "_id": "SH002",
+            "shelter_code": "SH002",
+            "name": "บ้านทดสอบ",
+            "site_kind": "host_house",
+            "status": "open",
+            "capacity": 10,
+            "updated_at": now,
+        },
+    )
+
+    response = await client.get(
+        "/public/v1/shelters",
+        params={"site_kind": "host_house"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["shelters"][0]["site_kind"] == "host_house"
+
+
 async def test_list_shelters_filters_by_radius(
     client: AsyncClient,
     db_client: AsyncIOMotorClient,

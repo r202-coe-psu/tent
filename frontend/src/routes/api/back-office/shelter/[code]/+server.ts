@@ -29,6 +29,7 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		return json({
 			code: migrated.code,
 			name: migrated.name,
+			site_kind: migrated.site_kind ?? 'evacuation_center',
 			db: `shelter_${migrated.code.toLowerCase()}`,
 			operation_status: migrated.operation_status ?? 'standby',
 			capacity: migrated.capacity ?? 0,

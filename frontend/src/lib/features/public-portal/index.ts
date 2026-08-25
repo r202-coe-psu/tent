@@ -14,7 +14,8 @@ export type {
 	PublicShelterCardModel,
 	PublicShelterDetail,
 	PublicShelterItem,
-	PublicShelterListResponse
+	PublicShelterListResponse,
+	PublicSiteKind
 } from './domain/types';
 export { searchResultKey, toPublicShelterCard, toUiShelterStatus } from './domain/mappers';
 export {
