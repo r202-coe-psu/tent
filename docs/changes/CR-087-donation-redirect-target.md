@@ -1,10 +1,10 @@
 ---
 id: CR-087
 title: donation — เพิ่ม field ปลายทางที่ส่งต่อ (redirect_to_shelter_code) + ticket ฝั่งศูนย์ปลายทาง สำหรับสถานะ redirected (T-16 R-16.4)
-status: proposed
+status: approved
 date: 2026-08-25
 requested_by: Team A (T-16 intake review implementation) / Kunanon Nusaeng
-decided_by: <รอเจ้าของโครงการ>
+decided_by: project owner (อนุมัติ 2026-08-25)
 layer: volatile
 affects:
   - docs/data/schema.md §2.3 donation
@@ -105,3 +105,4 @@ CR นี้เป็นตัวปลดล็อกให้ต่อปุ�
 ## Decision log
 
 - 2026-08-25 — proposed
+- 2026-08-25 — approved by project owner
