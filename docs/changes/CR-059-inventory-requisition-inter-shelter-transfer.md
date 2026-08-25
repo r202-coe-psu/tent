@@ -3,7 +3,7 @@ id: CR-059
 title: Requisitions, Inter-Shelter Transfers & NFI Distribution Control
 status: approved
 date: 2026-07-25
-updated: 2026-08-22
+updated: 2026-08-25
 requested_by: Logistics & Field Requisition Management
 decided_by: Project Owner
 layer: volatile
@@ -292,3 +292,12 @@ split allocation, driver/plate บังคับ, destination lot ID, สถา
      pattern ของ `stock_ledger` (`stock_ledger:{ulid}`) ไม่เปลี่ยนเลย
   - รายละเอียดเต็มของเหตุผลและ implementation อยู่ใน `~/Reports/CR-059-T12-T13-implementation-plan.md`
     และ `~/Reports/CR-059-Flow1-T13-implementation-plan.md` (อัปเดตพร้อมกันกับ entry นี้)
+- 2026-08-25 — เทียบโค้ดจริงใน `71fd0b35` กับ Flow 1 (§4) พบว่า field ละเอียด 5 กลุ่ม (lot metadata,
+  driver/plate, dispute/suspend, delete+undo ของตาราง list, หน้ารายละเอียด Ticket) ยังไม่ implement ตรง
+  กับที่บันทึกไว้ในรายการ "ยังไม่ approve ในรอบนี้" ของ entry ด้านบนและ `schema.md` §5.5 — เปิด CR ใหม่
+  แยกต่างหากเพื่อขอ approve field เหล่านี้ ไม่ปนกับ decision ของ CR-059 ที่ปิดไปแล้ว: แยกเป็น 3 ไฟล์ตาม
+  schema impact (กันปัญหา schema_v ชนกันถ้า approve ไม่พร้อมกัน) —
+  **[CR-084](CR-084-t13-transfer-lot-driver-dispute.md)** (lot/driver-plate/dispute, เปลี่ยน doc shape
+  จริง, `stock_transfer` schema_v 2 → 3), **[CR-085](CR-085-t13-transfer-delete-undo.md)** (ลบคำร้อง +
+  Undo, ไม่แตะ schema_v), **[CR-086](CR-086-t13-transfer-detail-page.md)** (หน้ารายละเอียด Ticket, ไม่แตะ
+  schema_v) — ทั้งสามยังเป็น status: `proposed`
