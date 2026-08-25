@@ -43,5 +43,6 @@ class PublicShelter(Document):
 			IndexModel([("shelter_code", 1)]),
 			IndexModel([("registry_id", 1)]),
 			IndexModel([("province", 1), ("district", 1), ("subdistrict", 1)]),
+			IndexModel([("site_kind", 1)]),
 			IndexModel([("status", 1)]),
 		]
