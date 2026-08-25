@@ -18,6 +18,7 @@ import {
 
 const validShelterInput = {
 	name: 'โรงเรียนบ้านค่าย',
+	site_kind: 'evacuation_center' as const,
 	operation_status: 'standby' as const,
 	capacity: 150,
 	facilities: {},
@@ -31,6 +32,7 @@ describe('shelterSchema', () => {
 	it('accepts minimal valid shelter', () => {
 		const s = shelterSchema.parse(validShelterInput);
 		expect(s.name).toBe('โรงเรียนบ้านค่าย');
+		expect(s.site_kind).toBe('evacuation_center');
 		expect(s.operation_status).toBe('standby');
 		expect(s.capacity).toBe(150);
 		expect(s.facilities).toEqual({});
@@ -38,6 +40,18 @@ describe('shelterSchema', () => {
 		expect(s.utilities).toEqual({ communications: [], vhf_channel: null });
 		expect(s.risk).toEqual({});
 		expect(s.zones).toEqual([]);
+	});
+
+	it('requires site_kind for new shelter input', () => {
+		const result = shelterSchema.safeParse({ ...validShelterInput, site_kind: undefined });
+		expect(result.success).toBe(false);
+	});
+
+	it('accepts host_house and rejects unknown site kinds', () => {
+		expect(shelterSchema.parse({ ...validShelterInput, site_kind: 'host_house' }).site_kind).toBe(
+			'host_house'
+		);
+		expect(() => shelterSchema.parse({ ...validShelterInput, site_kind: 'host' })).toThrow();
 	});
 
 	it('rejects empty name', () => {
@@ -284,7 +298,8 @@ describe('migrateShelterV2ToCurrent', () => {
 	it('migrates status open → operation_status active', () => {
 		const migrated = migrateShelterV2ToCurrent(v2Master);
 		expect(migrated.operation_status).toBe('active');
-		expect(migrated.schema_v).toBe(4);
+		expect(migrated.schema_v).toBe(5);
+		expect(migrated.site_kind).toBe('evacuation_center');
 	});
 
 	it('migrates status closed → operation_status closed', () => {
@@ -363,11 +378,11 @@ describe('migrateShelterV2ToCurrent', () => {
 	it('is idempotent — calling twice on v2 produces same result', () => {
 		const first = migrateShelterV2ToCurrent(v2Master);
 		const second = migrateShelterV2ToCurrent(first);
-		expect(second.schema_v).toBe(4);
+		expect(second.schema_v).toBe(5);
 		expect(second.operation_status).toBe(first.operation_status);
 	});
 
-	it('is idempotent — calling on current (v4) returns as-is', () => {
+	it('is idempotent — calling on current (v5) returns as-is', () => {
 		const current = migrateShelterV2ToCurrent(v2Master);
 		const again = migrateShelterV2ToCurrent(current);
 		expect(again).toBe(current);
@@ -650,7 +665,7 @@ describe('CR-023 — migrate v3 → v4 default-fill', () => {
 			updated_at: '2024-01-01T00:00:00Z'
 		} as unknown as ShelterMasterV2;
 		const m = migrateShelterV2ToCurrent(v3doc);
-		expect(m.schema_v).toBe(4);
+		expect(m.schema_v).toBe(5);
 		expect(m.project_level).toBeNull();
 		expect(m.municipality_zone).toBeNull();
 		expect(m.admission_policy).toEqual({

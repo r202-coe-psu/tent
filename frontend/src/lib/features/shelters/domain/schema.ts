@@ -5,6 +5,14 @@ import { z } from 'zod';
 export const operationStatusSchema = z.enum(['standby', 'active', 'full_capacity', 'closed']);
 export type OperationStatus = z.infer<typeof operationStatusSchema>;
 
+// CR-067: one registry document represents either an evacuation center or a host house.
+export const siteKindSchema = z.enum(['evacuation_center', 'host_house']);
+export type SiteKind = z.infer<typeof siteKindSchema>;
+export const SITE_KIND_LABELS: Record<SiteKind, string> = {
+	evacuation_center: 'ศูนย์อพยพ (Evacuation Center)',
+	host_house: 'บ้านพี่เลี้ยง (Host House)'
+};
+
 /**
  * Read a shelter master's operating status, tolerating the pre-CR-008 shape.
  *
@@ -324,6 +332,7 @@ export type ParkingPolicy = z.infer<typeof parkingPolicySchema>;
 
 export const shelterSchema = z.object({
 	name: z.string().trim().min(1, 'ชื่อศูนย์พักพิงต้องไม่ว่าง'),
+	site_kind: siteKindSchema,
 	operation_status: operationStatusSchema.default('standby'),
 	// code จาก master_data:shelter_type (CR-023 FR-23-0a) — persist string code
 	shelter_type: z.string().trim().nullish(),
@@ -421,9 +430,10 @@ export interface ShelterMaster {
 	_id: string;
 	_rev?: string;
 	type: 'shelter';
-	schema_v: 4;
+	schema_v: number;
 	code: string;
 	name: string;
+	site_kind: SiteKind;
 	operation_status?: OperationStatus;
 	shelter_type?: string | null;
 	project_level?: ProjectLevel | null;
@@ -540,10 +550,24 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
 	};
 }
 
+/** v4 → v5 default-fill (CR-067). Old registry docs are evacuation centers. */
+function migrateV4ToV5(v4: ShelterMaster): ShelterMaster {
+	return {
+		...v4,
+		schema_v: 5,
+		site_kind: v4.site_kind ?? 'evacuation_center'
+	};
+}
+
 /** Idempotent v2 → current migration. Safe to call multiple times. */
 export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaster): ShelterMaster {
-	if (master.schema_v >= 4) return master as ShelterMaster;
-	if (master.schema_v === 3) return migrateV3ToV4(master as ShelterMaster);
+	if (master.schema_v >= 5) {
+		if ('site_kind' in master && master.site_kind) return master as ShelterMaster;
+		return migrateV4ToV5(master as ShelterMaster);
+	}
+	if (master.schema_v === 4) return migrateV4ToV5(master as unknown as ShelterMaster);
+	if (master.schema_v === 3)
+		return migrateV4ToV5(migrateV3ToV4(master as unknown as ShelterMaster));
 	const v2 = master as ShelterMasterV2;
 	// Backfill shelter capacity: v2 stored capacity at the top level but v3 zones
 	// are the source of truth, so sum zone capacity (>= 0) and fall back to 100
@@ -605,5 +629,5 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	delete (v3 as Record<string, unknown>).rules;
 	delete (v3 as Record<string, unknown>).sops;
 	// Chain v2→v3→v4 so a v2 doc lands on the current shape in one call.
-	return migrateV3ToV4(v3 as unknown as ShelterMaster);
+	return migrateV4ToV5(migrateV3ToV4(v3 as unknown as ShelterMaster));
 }

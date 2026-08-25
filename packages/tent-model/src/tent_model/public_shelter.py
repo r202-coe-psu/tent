@@ -25,6 +25,7 @@ class PublicShelter(Document):
 	shelter_code: str
 	registry_id: str | None = None
 	name: str
+	site_kind: str = "evacuation_center"
 	status: str = "open"
 	location: GeoJsonPoint | None = None
 	geo: GeoPoint | None = None
@@ -44,4 +45,3 @@ class PublicShelter(Document):
 			IndexModel([("province", 1), ("district", 1), ("subdistrict", 1)]),
 			IndexModel([("status", 1)]),
 		]
-

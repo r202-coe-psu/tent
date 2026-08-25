@@ -11,6 +11,7 @@ import type {
 	ParkingPolicy,
 	ProjectLevel,
 	Risk,
+	SiteKind,
 	Utilities,
 	Zone
 } from '../domain/schema';
@@ -23,6 +24,7 @@ import type {
 export interface ShelterBasic {
 	code: string;
 	name: string;
+	site_kind: SiteKind;
 	operation_status: OperationStatus;
 	province: string | null;
 	capacity: number;
@@ -31,6 +33,7 @@ export interface ShelterBasic {
 export interface ShelterSummary {
 	code: string;
 	name: string;
+	site_kind: SiteKind;
 	db: string;
 	operation_status: OperationStatus;
 	capacity: number;
