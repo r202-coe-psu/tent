@@ -25,7 +25,7 @@ affects:
 - **เปลี่ยนอะไร:** แปลงข้อกำหนด `volunteer_flow.md` (V10) เป็น CR-092 ครอบคลุมสถาปัตยกรรมจิตอาสาแบบครบวงจร:
   - **Unified Person Identity:** ผูกตัวตน 3 สถานะ (ผู้ประสบภัย/อาสา/เจ้าหน้าที่) ด้วย `national_id` / `phone_number` เป็น Single Source of Truth
   - **Zero-Friction No-SMS OTP:** สมัครงานได้ใน 30 วินาที รับ QR Code ตั๋วดิจิทัลทันที ป้องกัน Abuse ด้วย reCAPTCHA v3 (Invisible) + Rate Limiting
-  - **Time-Bound Write Access:** ปลดล็อกสิทธิ์บันทึกข้อมูลเฉพาะช่วงเวลากะงาน $\pm 5$ นาที และต้องเช็คอินเข้างานแล้ว (`checked_in = true`)
+  - **Time-Bound Write Access:** ปลดล็อกสิทธิ์บันทึกข้อมูลเฉพาะช่วงเวลากะงาน $\pm 5$ นาที และต้องเช็คอินเข้างานแล้ว (`checked_in = true`) โดยบังคับใช้ที่ระดับ **Server BFF Middleware / Endpoints (`+server.ts`)**
   - **3-Color Quota Management:** บริหารยอดกำลังพลสด 3 สถานะสด (🟢 Confirmed / 🟡 Dispatched / ⚪ Remaining)
   - **6 หน้าจอหลัก:** Public Board, Digital Pass, Tablet Check-in Station, Roster, Dispatch Workspace, Volunteer Portal
 - **เพื่อใคร/ทำไม:**
@@ -35,9 +35,9 @@ affects:
 - **Dev ต้อง build:**
   - **Public App:** Public 2-Tab Job Board (`/volunteers/jobs`), Single Pass View (`/volunteer/ticket/:token`), Volunteer Portal Dashboard (`/volunteer/portal`)
   - **On-Site & Admin:** จุดสแกนเช็คอินผ่าน Tablet (`/volunteers/checkin`), Unified Roster (`/admin/volunteers/roster`), Dispatch Workspace (`/admin/volunteers/dispatch`)
-  - **Security & Infrastructure:** Time-Bound Access Guard (Middleware/Hooks), reCAPTCHA v3 Backend Verification, Rate Limiters (3 requests / 10 mins)
+  - **Security & Infrastructure:** Time-Bound Access Guard ที่ระดับ **Server BFF (`+server.ts` endpoints / hooks)**, ระบบบังคับรีเซ็ตรหัสผ่านครั้งแรก (Mandatory Password Reset on First Login) ตาม [Password Policy](../data/password-policy.md), reCAPTCHA v3 Backend Verification, Rate Limiters (3 requests / 10 mins)
 - **กระทบ schema/scope:**
-  - **Data Schemas:** `volunteer`, `job`, `job_application`, `shift_assignment`, `_users` (Link Multi-Role Account)
+  - **Data Schemas:** `volunteer` (schema v1 — เพิ่ม `national_id`, `checked_in`, `current_shelter_code`, ผูก `user_name`), `job` (schema v1), `job_application` (schema v1), `shift_assignment` (schema v2). **หมายเหตุความปลอดภัย:** ไม่แก้ไข schema หรือเพิ่มฟิลด์ใน CouchDB `_users` Authentication Database โดยตรง แต่ใช้โมเดล Mapping ผ่าน Application Database (`volunteer.user_name`) และควบคุมการเข้าถึงผ่าน Server BFF (`+server.ts`)
   - **Document Specs:** `role-permission-matrix.md` (Time-Bound RBAC) และ `06-A-volunteer.md` (T-28 / T-29)
 
 ---
@@ -70,7 +70,7 @@ affects:
    - ผู้อพยพ (Evacuee)
    - จิตอาสา (Volunteer)
    - เจ้าหน้าที่ (Staff)
-2. เมื่อผู้จัดการศูนย์ออกสิทธิ์ใช้งานระบบหลังบ้าน หาก `phone_number` หรือ `national_id` มีอยู่ในระบบ `_users` หรือโปรไฟล์เดิม ระบบต้องเชื่อมโยง (Link) บัญชีเดิมทันที ห้ามสร้าง User ซ้ำซ้อน
+2. เมื่อผู้จัดการศูนย์ออกสิทธิ์ใช้งานระบบหลังบ้าน หาก `phone_number` หรือ `national_id` มีอยู่ในระบบหรือโปรไฟล์เดิม ระบบ Server BFF ต้องเชื่อมโยง (Link) โดยอัปเดตฟิลด์ `volunteer.user_name` ให้ชี้ไปยังบัญชี `_users` เดิม โดยไม่สร้าง User ใน `_users` ซ้ำซ้อน
 3. ระบบต้อง บันทึกพิกัดศูนย์ที่บุคคลกำลัง On-Site ปฏิบัติงานหรือพักพิงอยู่จริงผ่าน Event การสแกน QR เช็คอินเข้ากะ หรือการลงทะเบียนหน้าด่านศูนย์พักพิง
 
 ### FR-VOL-02: การสมัครงานภาคประชาชนแบบ No-SMS OTP & Anti-Spam
@@ -100,11 +100,14 @@ affects:
    - **ฝั่งขวา (60% - Instant Verification Card & Live Feed):** แสดงการ์ดข้อมูลอาสาขนาดใหญ่เมื่อสแกนเจอ พร้อมปุ่ม 1-Click `[ 🟢 เช็คอินเข้างาน (Check-In) ]` และ `[ 🚪 เช็คเอาต์ออกงาน (Check-Out) ]` และแสดงรายการประวัติการเช็คอินล่าสุด (Live Attendance Feed) อัปเดตสด Real-time
 3. เมื่อกดปุ่มเช็คอินสำเร็จ ระบบต้อง บันทึก Timestamp เข้างาน และเพิ่มยอด `volunteers_active` สดประจำศูนย์ทันที
 
-### FR-VOL-05: ระบบจำกัดสิทธิ์ตามเวลากะงาน (Time-Bound Shift Access Control)
+### FR-VOL-05: ระบบจำกัดสิทธิ์ตามเวลากะงานที่ระดับ Server BFF (Server BFF Time-Bound Shift Access Control)
 
-1. สำหรับอาสาช่วยงานระบบ (Staff-Capable Volunteer) ที่ได้รับสิทธิ์บันทึกข้อมูลหลังบ้าน (Write Access) สิทธิ์การบันทึกข้อมูลต้องเปิดใช้งานได้เฉพาะเมื่อเข้าเงื่อนไข:
-   $$\text{Write Access Status} = \begin{cases} \text{ENABLED}, & (\text{now} \ge \text{shift\_start} - 5\text{m}) \land (\text{now} \le \text{shift\_end} + 5\text{m}) \land (\text{checked\_in} = \text{true}) \\ \text{READ-ONLY}, & \text{กรณีอื่นๆ ทั้งหมด} \end{cases}$$
-2. หากอยู่นอกช่วงเวลากะงาน หรือยังไม่ได้สแกนเช็คอินเข้างาน ระบบต้อง บล็อกคำขอแก้ไขข้อมูล (Deny Write Access) และคืนค่า HTTP status `403 Forbidden` พร้อมข้อความแจ้งเตือนทันที
+1. **ระดับการบังคับใช้สิทธิ์ (Enforcement Layer):**
+   - สิทธิ์การบันทึกข้อมูล (Write Access: POST, PUT, PATCH, DELETE) ของอาสาช่วยงานระบบ (Staff-Capable Volunteer) **ต้องถูกบังคับใช้ที่ระดับ Server BFF Middleware / Endpoints (`+server.ts`) เสมอ**
+   - **เหตุผลทางสถาปัตยกรรม:** Client-Side PouchDB หรือ CouchDB Direct Access ไม่สามารถตรวจสอบ Context ของเวลาปัจจุบันกับสถานะการเข้ากะได้อย่างปลอดภัยและเชื่อถือได้ การส่งคำขอแก้ไขข้อมูลทั้งหมดจึงต้องกระทำผ่าน Server BFF ที่มี Time-Bound Guard เท่านั้น
+2. **เงื่อนไขการเปิดสิทธิ์บันทึกข้อมูล (Write Authorization Rule):**
+   $$\text{Write Access Status} = \begin{cases} \text{ENABLED (200/204)}, & (\text{now} \ge \text{shift\_start} - 5\text{m}) \land (\text{now} \le \text{shift\_end} + 5\text{m}) \land (\text{checked\_in} = \text{true}) \\ \text{READ-ONLY / 403 Forbidden}, & \text{กรณีอื่นๆ ทั้งหมด} \end{cases}$$
+3. หากอยู่นอกช่วงเวลากะงาน หรือยังไม่ได้สแกนเช็คอินเข้างาน Server BFF ต้อง บล็อกคำขอแก้ไขข้อมูล (Deny Write Access) และคืนค่า HTTP status `403 Forbidden` พร้อมระบุ Error Code `ERR_OUTSIDE_SHIFT_WINDOW` และข้อความแจ้งเตือนทันที
 
 ### FR-VOL-06: ศูนย์จ่ายงานและบริหารโควตากำลังพล 3 สี (Direct Dispatch & Quota State Calculations)
 
@@ -116,12 +119,15 @@ affects:
    - อาสาสมัครกดปฏิเสธภารกิจ (Decline) $\rightarrow$ `Dispatched - 1`, `Remaining + 1` (สถานะคำขอ = `declined`)
 3. ตัวกรองค้นหากำลังพลต้อง รองรับการกรองทักษะตรงสาย (Skill Match) และ การป้องกันเวลาชนกะ (Time Collision Prevention) พร้อมปุ่มเลือกแบบกลุ่ม (Bulk Dispatch)
 
-### FR-VOL-07: การออกสิทธิ์ระบบหลังบ้านและส่งมอบรหัสผ่าน (Back-Office Access Provisioning)
+### FR-VOL-07: การออกสิทธิ์ระบบหลังบ้านและการบังคับเปลี่ยนรหัสผ่าน (Back-Office Access Provisioning & Password Security)
 
 1. ในหน้าทำเนียบอาสา (`/admin/volunteers/roster`) เมื่อคลิกปุ่ม `[ 🔑 ออกสิทธิ์ใช้งานระบบหลังบ้าน ]` ระบบต้อง เปิด Modal พร้อม Auto-fill ข้อมูลชื่อ, เบอร์โทรศัพท์, และศูนย์พักพิงสังกัด
 2. หากโปรไฟล์ยังไม่มีอีเมล ต้อง บังคับกรอก Email เพื่อใช้เป็น Username สำหรับล็อกอินหลังบ้าน
-3. รหัสผ่านเริ่มต้น (Default Password) ต้อง กำหนดให้อัตโนมัติเป็น **เบอร์โทรศัพท์ของอาสาสมัคร**
-4. เมื่อบันทึกสำเร็จ ระบบต้อง แสดงการ์ดส่งมอบสิทธิ์ (Credential Handoff Card) สรุป Username/Password สำหรับผู้จัดการศูนย์ส่งมอบให้อาสาใช้งาน
+3. **การจัดการรหัสผ่านเริ่มต้นและความปลอดภัย (Initial Credential & Mandatory Password Reset):**
+   - ระบบ Server BFF จะสร้าง Temporary Password ที่มีความปลอดภัยตามมาตรฐาน [Password Policy](../data/password-policy.md)
+   - บัญชีที่สร้างใหม่จะถูกตั้งค่า `must_change_password: true` เพื่อ **บังคับเปลี่ยนรหัสผ่านทันทีในการเข้าสู่ระบบครั้งแรก (Mandatory First-Time Password Reset)** ก่อนได้รับสิทธิ์เข้าถึงฟังก์ชันใดๆ ของระบบ เพื่อป้องกันปัญหา Predictable Credentials
+   - รหัสผ่านใหม่ที่ผู้ใช้ตั้งจะต้องผ่านเกณฑ์ความปลอดภัยครบถ้วนตาม [Password Policy](../data/password-policy.md) (ความยาว $\ge 10$ ตัวอักษร, ตัวพิมพ์ใหญ่, ตัวพิมพ์เล็ก, ตัวเลข และอักขระพิเศษ)
+4. เมื่อบันทึกสำเร็จ ระบบต้อง แสดงการ์ดส่งมอบสิทธิ์ (Credential Handoff Card) สรุป Username (Email) และ Temporary Setup Credential สำหรับผู้จัดการศูนย์ส่งมอบให้อาสาใช้งาน
 
 ---
 
@@ -148,6 +154,7 @@ affects:
   - ✨ **[เพิ่มฟิลด์ใหม่] `national_id: string | null` (optional):** เลขประจำตัวประชาชน 13 หลัก เพื่อผูกตัวตน Single Source of Truth (Unified Multi-Role Person Identity)
   - ✨ **[เพิ่มฟิลด์ใหม่] `checked_in: boolean` (system, default: `false`):** ติดตามสถานะเช็คอินปฏิบัติหน้าที่สดหน้างาน
   - ✨ **[เพิ่มฟิลด์ใหม่] `current_shelter_code: string | null` (optional):** รหัสศูนย์พักพิงที่อาสากำลังปฏิบัติงานอยู่ในกะปัจจุบัน
+  - 🔗 **[คงเดิมและใช้งาน] `user_name: string | null` (optional):** Foreign Key อ้างอิงไปยัง Username ในระบบ `_users` เมื่อได้รับสิทธิ์เป็น Staff-Capable Volunteer (Application Database Mapping)
 
 ---
 
@@ -165,7 +172,7 @@ affects:
   }
   ```
 - **สิ่งที่ปรับเปลี่ยนใน CR-092 (Schema v2):**
-  - ✨ **[เพิ่มฟิลด์ใหม่] `duty_window: { start_ts: string, end_ts: string }` (required):** หน้าต่างเวลากะงานจริง สำหรับระบบบังคับ Time-Bound Shift Access Control ($\pm 5$ นาที)
+  - ✨ **[เพิ่มฟิลด์ใหม่] `duty_window: { start_ts: string, end_ts: string }` (required):** หน้าต่างเวลากะงานจริง สำหรับระบบบังคับ Server BFF Time-Bound Shift Access Control ($\pm 5$ นาที)
   - ✨ **[เพิ่มฟิลด์ใหม่] `check_in_at: string | null` (optional):** Timestamp สแกน QR Ticket รายงานตัวเข้างานที่จุด Tablet เช็คอิน
   - ✨ **[เพิ่มฟิลด์ใหม่] `check_out_at: string | null` (optional):** Timestamp เช็คเอาท์ออกงาน
   - ✨ **[เพิ่มฟิลด์ใหม่] `check_in_by: string | null` (optional):** Username/Staff ID ของเจ้าหน้าที่ผู้กดรับรายงานตัว
@@ -211,11 +218,13 @@ affects:
 
 ---
 
-#### 5. `_users` (System User Account — Multi-Role Identity)
+#### 5. สถาปัตยกรรมบัญชีผู้ใช้งาน (User Account Mapping — No `_users` DB Mutation)
 
-- **โครงสร้างเดิม (Legacy Schema):** บัญชีผู้ใช้งานระบบหลังบ้านทั่วไป
-- **สิ่งที่ปรับเปลี่ยนใน CR-092:**
-  - ✨ **[เพิ่มฟิลด์ใหม่] `linked_person_id: string | null` (optional):** Foreign Key เชื่อมโยงบัญชีผู้ใช้หลังบ้านกับ `volunteer_id` / `national_id` เพื่อตรวจสอบสิทธิ์ Time-Bound Access Control
+- **นโยบายการจัดการ CouchDB `_users` Database:**
+  - ฐานข้อมูล `_users` ของ CouchDB เป็น Authentication Database ภายในระบบ ห้ามแก้ไข schema หรือเพิ่ม application metadata/foreign key (`linked_person_id`) ลงใน `_users` โดยตรง เพื่อป้องกันผลกระทบต่อ Auth provider, replication และ security rules
+- **โมเดลการเชื่อมโยงข้อมูล (Application Database Mapping Model):**
+  - จัดเก็บความสัมพันธ์ที่ฝั่ง Application Database ผ่านฟิลด์ `volunteer.user_name` (§2.8) ซึ่งชี้ไปยัง username ใน `_users`
+  - ฝั่ง Server BFF (`+server.ts`) จะทำการ resolve ตัวตนจาก Session User $\rightarrow$ ค้นหา `volunteer` doc และ `shift_assignment` doc ใน Application Database เพื่อตรวจสอบสิทธิ์ Time-Bound RBAC และ Shelter Scope โดยโครงสร้าง `_users` ยังคงเป็นมาตรฐานตามเดิม
 
 ---
 
@@ -229,19 +238,19 @@ graph TD
 
     Tablet -->|เช็คอินสำเร็จ| OpVol["💪 3. อาสาระดับปฏิบัติการ (Operational)<br/>• งานครัว, งานยกของ, แจกของ, ทำความสะอาด<br/>• ไม่ต้องใช้คอมพิวเตอร์หลังบ้าน"]
 
-    SM["👔 5. ผู้จัดการศูนย์ (Shelter Manager)<br/>• สร้างกะงาน, ควบคุม Job Board<br/>• ค้นหากำลังพล & Direct Dispatch<br/>• ตรวจ Audit Checklist ทักษะควบคุม"] -.->|ออกสิทธิ์ระบบผ่าน User Management| StaffVol["🛡️ 4. อาสาช่วยงานระบบ (Staff-Capable)<br/>• ช่วยคัดกรอง, ลงทะเบียน, แจกจ่าย POS<br/>• Time-Bound Write Access เฉพาะเวลากะ"]
+    SM["👔 5. ผู้จัดการศูนย์ (Shelter Manager)<br/>• สร้างกะงาน, ควบคุม Job Board<br/>• ค้นหากำลังพล & Direct Dispatch<br/>• ตรวจ Audit Checklist ทักษะควบคุม"] -.->|ออกสิทธิ์ระบบผ่าน User Management| StaffVol["🛡️ 4. อาสาช่วยงานระบบ (Staff-Capable)<br/>• ช่วยคัดกรอง, ลงทะเบียน, แจกจ่าย POS<br/>• Server BFF Time-Bound Write Access เฉพาะเวลากะ"]
 
     SM -.->|มอบหมายงาน| OpVol
 ```
 
 ### 2.1.1 ตาราง Role × Auth Method × System Permissions
 
-| ระดับผู้ใช้งาน                                   | การพิสูจน์ตัวตน (Auth Method)                               | สิทธิ์ในระบบ (System Permissions)                                                | ขอบเขตงานตัวอย่าง                                    |
-| ------------------------------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| **1. ประชาชนผู้สมัคร (Public Citizen)**          | **No-Auth (ไม่ต้องล็อกอิน)** ป้องกัน Bot ด้วย reCAPTCHA v3  | ดูตลาดงาน (Job Board) และส่งใบสมัครรับตั๋ว QR                                    | สมัครกะงานล่วงหน้าผ่านมือถือ                         |
-| **2. อาสาสมัครทั่วไป (Operational Volunteer)**   | **Digital Ticket QR Code** หรือเข้าพอร์ทัลด้วยเบอร์โทรศัพท์ | ดูตารางงานตนเอง, เช็คอิน/เช็คเอาต์, รับสวัสดิการอาหาร                            | ครัวกลาง, ยกของ, แจกถุงยังชีพ, สันทนาการ             |
-| **3. อาสาช่วยงานระบบ (Staff-Capable Volunteer)** | **Email Username + Phone Password** (ผูกกับ RBAC)           | **Time-Bound Write Access:** ปลดล็อกสิทธิ์บันทึกข้อมูลเฉพาะช่วงเวลากะงาน ±5 นาที | ลงทะเบียนผู้ประสบภัย, คัดกรองอาการ, บันทึกแจกของ POS |
-| **4. ผู้จัดการศูนย์ (Shelter Manager)**          | **Staff Account (RBAC)** + บันทึก Audit Trail ทุก Action    | สิทธิ์เต็มในการสร้างกะงาน, มอบหมายงาน (Dispatch), รับรองทักษะวิชาชีพ             | ควบคุมภาพรวมกำลังพล, อนุมัติสิทธิ์ระบบหลังบ้าน       |
+| ระดับผู้ใช้งาน                                   | การพิสูจน์ตัวตน (Auth Method)                                                                                                                 | สิทธิ์ในระบบ (System Permissions)                                                              | ขอบเขตงานตัวอย่าง                                    |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| **1. ประชาชนผู้สมัคร (Public Citizen)**          | **No-Auth (ไม่ต้องล็อกอิน)** ป้องกัน Bot ด้วย reCAPTCHA v3                                                                                    | ดูตลาดงาน (Job Board) และส่งใบสมัครรับตั๋ว QR                                                  | สมัครกะงานล่วงหน้าผ่านมือถือ                         |
+| **2. อาสาสมัครทั่วไป (Operational Volunteer)**   | **Digital Ticket QR Code** หรือเข้าพอร์ทัลด้วยเบอร์โทรศัพท์                                                                                   | ดูตารางงานตนเอง, เช็คอิน/เช็คเอาต์, รับสวัสดิการอาหาร                                          | ครัวกลาง, ยกของ, แจกถุงยังชีพ, สันทนาการ             |
+| **3. อาสาช่วยงานระบบ (Staff-Capable Volunteer)** | **Email Username + Temporary Password** (พร้อมบังคับ Mandatory Password Reset ในการเข้าสู่ระบบครั้งแรกตาม [Password Policy](../data/password-policy.md)) | **Server BFF Time-Bound Write Access:** ปลดล็อกสิทธิ์บันทึกข้อมูลเฉพาะช่วงเวลากะงาน ±5 นาที และ `checked_in = true` | ลงทะเบียนผู้ประสบภัย, คัดกรองอาการ, บันทึกแจกของ POS |
+| **4. ผู้จัดการศูนย์ (Shelter Manager)**          | **Staff Account (RBAC)** + บันทึก Audit Trail ทุก Action                                                                                      | สิทธิ์เต็มในการสร้างกะงาน, มอบหมายงาน (Dispatch), รับรองทักษะวิชาชีพ                           | ควบคุมภาพรวมกำลังพล, อนุมัติสิทธิ์ระบบหลังบ้าน       |
 
 ---
 
@@ -299,7 +308,7 @@ sequenceDiagram
     Server-->>Server: 5. บันทึก Timestamp เข้างาน และเพิ่มยอด volunteers_active สดทันที
 
     opt อาสามีบัญชีช่วยงานระบบ (Staff-Capable)
-        Server-->>Server: 6. ปลดล็อกสิทธิ์ Write ในระบบให้เข้าถึงหน้าจอที่ได้รับมอบหมาย
+        Server-->>Server: 6. ปลดล็อกสิทธิ์ Write ใน Server BFF ให้เข้าถึงหน้าจอที่ได้รับมอบหมาย
     end
 
     Tablet-->>Gate: 7. เสียง Beep ยืนยันสำเร็จ และขึ้นรายการใน Live Attendance Feed ด้านขวา
@@ -358,16 +367,16 @@ sequenceDiagram
         SM->>Modal: 3. กรอก Email ของอาสา (Required สำหรับใช้เป็น Username)
     end
 
-    Modal-->>SM: 4. แสดงรหัสผ่านเริ่มต้นเป็น [ เบอร์โทรศัพท์ของอาสา ]
+    Modal-->>SM: 4. สร้าง Temporary Password / Setup Token ตามมาตรฐาน Password Policy
     SM->>Modal: 5. เลือกบทบาทสิทธิ์ (Role Assignment เช่น Food Staff, Reg Staff)
     SM->>Modal: 6. คลิก [ 💾 บันทึกและออกสิทธิ์ใช้งาน ]
 
-    Server-->>Server: 7. ตรวจสอบเบอร์โทรซ้ำ (ถ้ามีผูกบัญชีเดิม / ถ้าไม่มีสร้างบัญชีใหม่)
+    Server-->>Server: 7. ตรวจสอบเบอร์โทร/อีเมลซ้ำ (ถ้ามีผูก volunteer.user_name เดิม / ถ้าไม่มีสร้างบัญชีใน _users พร้อม must_change_password=true)
     Server-->>Modal: 8. แสดงการ์ดส่งมอบสิทธิ์ (Credential Handoff Card)
+    SM->>Vol: 9. ส่งมอบ Username (Email) และ Temporary Password ให้อาสา
 
-    SM->>Vol: 9. ส่งมอบ Username (Email), Password (เบอร์โทร) หรือให้สแกน QR ตั๋วเข้าสู่ระบบ
-
-    Note over Vol,Server: สิทธิ์ Write จะเปิดใช้งานได้เฉพาะช่วงเวลากะงาน ±5 นาทีเท่านั้น (Time-Bound)
+    Vol->>Server: 10. ล็อกอินครั้งแรก -> บังคับเปลี่ยนรหัสผ่าน (Mandatory Password Reset) -> เข้าสู่ระบบสำเร็จ
+    Note over Vol,Server: สิทธิ์ Write ที่ Server BFF (+server.ts) จะเปิดใช้งานได้เฉพาะช่วงเวลากะงาน ±5 นาทีเท่านั้น (Time-Bound)
 ```
 
 ---
@@ -508,13 +517,13 @@ sequenceDiagram
 
 ## 5. เงื่อนไขการส่งมอบและการทดสอบ (Acceptance Criteria & DoD)
 
-- [ ] **AC-VOL-01 (Unified Identity):** เมื่อออกสิทธิ์หลังบ้านให้อาสาที่มีเบอร์โทรตรงกับบุคคลเดิมในระบบ ระบบต้องผูกบัญชีเดิมโดยไม่สร้าง doc ใน `_users` ซ้ำ
+- [ ] **AC-VOL-01 (Unified Identity & App Mapping):** เมื่อออกสิทธิ์หลังบ้านให้อาสาที่มีเบอร์โทรตรงกับบุคคลเดิมในระบบ ระบบ Server BFF ต้องผูกความสัมพันธ์ผ่าน `volunteer.user_name` โดยไม่สร้าง User ซ้ำใน `_users` และไม่เพิ่มฟิลด์แปลกปลอมในฐานข้อมูล `_users`
 - [ ] **AC-VOL-02 (No-SMS OTP):** ประชาชนสามารถส่งฟอร์มสมัครงานผ่าน `/volunteers/jobs` ได้สำเร็จโดยไม่ต้องรับรหัส SMS OTP และได้รับตั๋วดิจิทัล QR Code ทันทีภายใน 30 วินาที
 - [ ] **AC-VOL-03 (Digital Pass View):** หน้า `/volunteer/ticket/:token` แสดง QR Code JWT แบบ Clean Single Ticket View และสามารถกดบันทึกรูป QR Code หรือคัดลอกลิงก์ได้
 - [ ] **AC-VOL-04 (POS Check-in):** หน้า `/volunteers/checkin` รองรับทั้งการยิงสแกน QR และการพิมพ์ค้นหาเบอร์โทร 4 ตัวท้าย กดเช็คอินแล้วเพิ่มยอด `volunteers_active` สดทันที
-- [ ] **AC-VOL-05 (Time-Bound Write Access):** บัญชีอาสาสมัคร Staff-Capable จะได้รับสิทธิ์ Write Access เฉพาะช่วงกะงาน $\pm 5$ นาทีและ checked-in เท่านั้น หากอยู่นอกกะคำขอ Write ต้องถูกปฏิเสธ (403 Forbidden)
+- [ ] **AC-VOL-05 (Server BFF Time-Bound Write Guard):** ระบบ Server BFF (`+server.ts`) บังคับใช้ Time-Bound Guard โดยอนุญาตให้บัญชีอาสาสมัคร Staff-Capable ส่งคำขอ Write ได้เฉพาะช่วงกะงาน $\pm 5$ นาที และ `checked_in = true` เท่านั้น หากอยู่นอกกะหรือยังไม่เช็คอิน คำขอ Write ต้องถูก Server ปฏิเสธด้วย HTTP 403 Forbidden ทันที
 - [ ] **AC-VOL-06 (3-Color Quota):** แถบโควตาแสดงยอด `Accepted`, `Dispatched`, และ `Remaining` ตรงตามสถานะ เมื่อ SM กด Dispatch ยอด Dispatched เพิ่ม +1 และเมื่ออาสากด Decline ยอด คืนกลับไปที่ Remaining +1
-- [ ] **AC-VOL-07 (Credential Handoff):** การกดออกสิทธิ์หลังบ้านสร้าง Username เป็น Email และ Password ตั้งต้นเป็นเบอร์โทรศัพท์ พร้อมแสดงการ์ดสรุป Credential Handoff
+- [ ] **AC-VOL-07 (Credential Provisioning & Mandatory Password Reset):** การออกสิทธิ์หลังบ้านสร้าง Username เป็น Email และ Temporary Password ที่ปลอดภัย พร้อมบังคับเปลี่ยนรหัสผ่านใหม่ในการล็อกอินครั้งแรก (Mandatory Password Reset ตาม [Password Policy](../data/password-policy.md) $\ge 10$ ตัวอักษร, ตัวพิมพ์ใหญ่, ตัวพิมพ์เล็ก, ตัวเลข, สัญลักษณ์พิเศษ) ก่อนเข้าใช้งานระบบ
 - [ ] **AC-VOL-08 (Public 2-Tab Layout):** หน้า `/volunteers/jobs` ยุบเหลือ 2 แท็บระดับเดียว (`ตลาดงานอาสา` และ `ค้นหาตั๋วของฉัน`) ตามมติ `D-VOL-PUBLIC-2TABS`
 
 ---
@@ -522,6 +531,10 @@ sequenceDiagram
 ## 6. ประวัติการตัดสินใจ (Decision Log)
 
 - **2026-08-24 — Proposed:** ถอดบทเรียนจาก UIv10 และแปลงเป็น CR-092 (renumbered จาก CR-089 เพื่อหลบ CR ID collision) สำหรับเตรียมพร้อมจัดทำ Task implementation และ Handover สู่ทีมพัฒนา
+- **2026-08-25 — Revised:** ปรับปรุงตามข้อเสนอแนะด้านความปลอดภัยและสถาปัตยกรรม:
+  1. ยกเลิกการแก้ไข schema `_users` โดยเปลี่ยนมาใช้ Application Database Mapping Model ผ่าน `volunteer.user_name` และ Server BFF
+  2. ปรับปรุงกลไก Password Provisioning ให้มี Mandatory First-Time Password Reset ตาม [Password Policy](../data/password-policy.md) แทนการใช้เบอร์โทรศัพท์เป็น default password
+  3. ระบุ Enforcement Layer สำหรับ Time-Bound Shift Access Control ให้ชัดเจนว่าบังคับใช้ที่ระดับ Server BFF Middleware / Endpoints (`+server.ts`)
 
 ---
 
