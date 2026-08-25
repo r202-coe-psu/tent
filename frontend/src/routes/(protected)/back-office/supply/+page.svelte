@@ -5,18 +5,15 @@
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import Scale from '@lucide/svelte/icons/scale';
 	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
-	import { shelterCodeFromRoles } from '$lib/auth/roles';
 	import { useDashboardOccupancy } from '$lib/features/dashboard';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	// ─── Derived data ─────────────────────────────────────────────────────────
 	const isOffline = $derived(authStore.needsReauth);
 
-	const roles = $derived(authStore.user?.roles ?? []);
-	const shelterCode = $derived(shelterCodeFromRoles(roles));
-
-	const occupancyQuery = useDashboardOccupancy(() => shelterCode ?? '');
+	const occupancyQuery = useDashboardOccupancy(() => getShelterCode());
 	const occupancy = $derived(occupancyQuery.data?.active ?? 0);
 
 	type TabKey = 'inventory' | 'sphere';

@@ -1,6 +1,11 @@
 <script lang="ts">
-	import { SvelteSet } from 'svelte/reactivity';
-	import { useStockBalance, useLedger } from '../application/queries';
+	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
+	import {
+		useStockBalance,
+		useLedger,
+		useCrossShelterStockBalances,
+		useCrossShelterLedger
+	} from '../application/queries';
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
 	import { useItemMasters } from '$lib/features/catalog';
@@ -15,8 +20,11 @@
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 	import Settings from '@lucide/svelte/icons/settings';
-	import { qtyGt, qtyLte } from '$lib/utils/qty';
+	import { qtyGt, qtyLte, addQty } from '$lib/utils/qty';
 	import { calculateReorderLevel } from '$lib/features/supply/domain/threshold-calc';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { isSystemAdmin } from '$lib/auth/roles';
+	import { useShelters } from '$lib/features/shelters';
 
 	// Icon
 	import Plus from '@lucide/svelte/icons/plus';
@@ -42,6 +50,23 @@
 
 	const overrides = $derived(overridesQuery.data ?? []);
 
+	// ─── Roles and Cross-Shelter States ───────────────────────────────────────
+	const roles = $derived(authStore.user?.roles ?? []);
+	const isSA = $derived(isSystemAdmin(roles));
+	let showOverall = $state(false);
+
+	const sheltersQuery = useShelters();
+	const shelterCodes = $derived((sheltersQuery.data ?? []).map((s) => s.code));
+
+	const crossBalanceQuery = useCrossShelterStockBalances(
+		() => shelterCodes,
+		() => isSA && showOverall
+	);
+	const crossLedgerQuery = useCrossShelterLedger(
+		() => shelterCodes,
+		() => isSA && showOverall
+	);
+
 	// ─── Filter state ─────────────────────────────────────────────────────────
 	let searchQuery = $state('');
 	let categoryFilter = $state<string>('all');
@@ -53,8 +78,8 @@
 	let currentPage = $state(1);
 
 	$effect(() => {
-		// Reset to page 1 on filter/search change
-		void [searchQuery, categoryFilter, locationFilter, statusFilter];
+		// Reset to page 1 on filter/search/showOverall change
+		void [searchQuery, categoryFilter, locationFilter, statusFilter, showOverall];
 		currentPage = 1;
 	});
 
@@ -87,8 +112,51 @@
 
 		return [...supplyItems, ...mappedItemMasters];
 	});
-	const balance = $derived(balanceQuery.data ?? new Map<string, string>());
-	const ledger = $derived(ledgerQuery.data ?? []);
+	const balance = $derived.by(() => {
+		if (isSA && showOverall) {
+			const agg = new SvelteMap<string, string>();
+			const data = crossBalanceQuery.data ?? [];
+			for (const { balance: b } of data) {
+				for (const [itemId, qty] of b.entries()) {
+					agg.set(itemId, addQty(agg.get(itemId) ?? '0', qty));
+				}
+			}
+			return agg;
+		}
+		return balanceQuery.data ?? new SvelteMap<string, string>();
+	});
+
+	const ledger = $derived(
+		isSA && showOverall ? (crossLedgerQuery.data ?? []) : (ledgerQuery.data ?? [])
+	);
+
+	function formatDateTime(isoString: string): string {
+		try {
+			return (
+				new Date(isoString).toLocaleString('th-TH', {
+					day: '2-digit',
+					month: 'short',
+					year: 'numeric',
+					hour: '2-digit',
+					minute: '2-digit',
+					second: '2-digit'
+				}) + ' น.'
+			);
+		} catch {
+			return isoString;
+		}
+	}
+
+	const lastUpdated = $derived.by(() => {
+		if (ledger.length === 0) return null;
+		let maxTime = '';
+		for (const entry of ledger) {
+			if (entry.occurred_at && entry.occurred_at > maxTime) {
+				maxTime = entry.occurred_at;
+			}
+		}
+		return maxTime ? formatDateTime(maxTime) : null;
+	});
 
 	/**
 	 * Unique locations list extracted from ledger entries
@@ -180,10 +248,11 @@
 
 	const isLoading = $derived(
 		itemsQuery.isLoading ||
-			balanceQuery.isLoading ||
-			ledgerQuery.isLoading ||
 			itemMastersQuery.isLoading ||
-			overridesQuery.isLoading
+			overridesQuery.isLoading ||
+			(isSA && showOverall
+				? crossBalanceQuery.isLoading || crossLedgerQuery.isLoading
+				: balanceQuery.isLoading || ledgerQuery.isLoading)
 	);
 
 	// ─── Helpers ──────────────────────────────────────────────────────────────
@@ -403,6 +472,19 @@
 						<ChevronDown class="h-4 w-4" />
 					</div>
 				</div>
+				{#if isSA}
+					<div class="flex items-center gap-2 pl-2">
+						<input
+							type="checkbox"
+							id="show-overall"
+							bind:checked={showOverall}
+							class="h-4 w-4 cursor-pointer rounded border-border bg-background text-primary focus:ring-primary"
+						/>
+						<label for="show-overall" class="cursor-pointer text-xs font-semibold text-foreground">
+							แสดงยอดรวมทุกศูนย์ (Cross-shelter aggregate)
+						</label>
+					</div>
+				{/if}
 			</div>
 		</div>
 
@@ -589,16 +671,22 @@
 
 									<!-- Action -->
 									<Table.Cell class="p-4 px-5 text-center">
-										<button
-											onclick={() => {
-												selectedItemId = item._id;
-												activeModalTab = 'checkin';
-												isManageModalOpen = true;
-											}}
-											class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background p-1.5 px-3 text-[12px] font-bold text-foreground shadow-sm transition-all duration-200 hover:scale-[1.05] hover:bg-muted active:scale-[0.95]"
-										>
-											<History class="h-3.5 w-3.5 text-muted-foreground" /> จัดการ
-										</button>
+										{#if showOverall}
+											<span class="text-[11px] font-semibold text-muted-foreground/60 italic">
+												(ดูภาพรวม)
+											</span>
+										{:else}
+											<button
+												onclick={() => {
+													selectedItemId = item._id;
+													activeModalTab = 'checkin';
+													isManageModalOpen = true;
+												}}
+												class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background p-1.5 px-3 text-[12px] font-bold text-foreground shadow-sm transition-all duration-200 hover:scale-[1.05] hover:bg-muted active:scale-[0.95]"
+											>
+												<History class="h-3.5 w-3.5 text-muted-foreground" /> จัดการ
+											</button>
+										{/if}
 									</Table.Cell>
 								</Table.Row>
 							{/each}
@@ -662,13 +750,16 @@
 
 		<!-- Timing note -->
 		{#if !isLoading}
-			<p class="mt-3 text-right text-[10px] text-muted-foreground/50">
-				<Clock class="mr-0.5 inline h-3 w-3" />
-				ข้อมูลอัปเดตอัตโนมัติผ่าน event channel
-			</p>
-			<p class="mt-1 text-right text-[10px] text-muted-foreground/50">
-				* หมายเหตุ: จุดจัดเก็บและวันหมดอายุจะอ้างอิงจากรายการล่าสุดที่มีการระบุข้อมูล
-			</p>
+			<div class="mt-3 flex flex-col items-end gap-1 text-[10px] text-muted-foreground/50">
+				<p>
+					<Clock class="mr-0.5 inline h-3 w-3" />
+					ข้อมูลอัปเดตอัตโนมัติผ่าน event channel
+				</p>
+				{#if lastUpdated}
+					<p>อัปเดตล่าสุดจากประวัติ: {lastUpdated}</p>
+				{/if}
+				<p>* หมายเหตุ: จุดจัดเก็บและวันหมดอายุจะอ้างอิงจากรายการล่าสุดที่มีการระบุข้อมูล</p>
+			</div>
 		{/if}
 	</div>
 </div>
