@@ -78,7 +78,7 @@
 						<td class="px-4 py-4 align-top">
 							<div class="font-medium text-foreground">{typeLabel(shelter.shelter_type)}</div>
 							<div class="mt-1 text-xs font-semibold text-primary">
-								{SITE_KIND_LABELS[shelter.site_kind]}
+								{SITE_KIND_LABELS[shelter.site_kind] ?? SITE_KIND_LABELS.evacuation_center}
 							</div>
 							{#if locationLine(shelter)}
 								<div class="mt-0.5 text-xs text-muted-foreground">{locationLine(shelter)}</div>
