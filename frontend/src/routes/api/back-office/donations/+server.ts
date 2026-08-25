@@ -19,9 +19,7 @@ import type { PublicDonationDoc, PendingDonationRow } from '$lib/features/donati
  */
 function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 	const items = d.items ?? [];
-	const itemNotes = items
-		.map((it) => it.note?.trim())
-		.filter((n): n is string => Boolean(n));
+	const itemNotes = items.map((it) => it.note?.trim()).filter((n): n is string => Boolean(n));
 	const donorNote = itemNotes.length > 0 ? itemNotes.join('\n') : null;
 	const isUnsolicited = items.length === 0 || items.some((it) => !it.item_id);
 

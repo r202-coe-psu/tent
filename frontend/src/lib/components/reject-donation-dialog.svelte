@@ -54,7 +54,9 @@
 		>
 			<div class="flex items-center justify-between border-b border-border p-5">
 				<div class="flex items-center gap-2">
-					<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-950/50 dark:text-red-400">
+					<div
+						class="flex h-9 w-9 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-950/50 dark:text-red-400"
+					>
 						<AlertCircle class="h-5 w-5" />
 					</div>
 					<div>
@@ -73,7 +75,9 @@
 
 			<div class="space-y-4 p-5">
 				<p class="text-xs text-muted-foreground">
-					คุณต้องการปฏิเสธคำขอรับบริจาคจาก <strong class="text-foreground">{request.donor_name || 'ผู้บริจาค'}</strong> หรือไม่? กรุณาระบุเหตุผลเพื่อบันทึกในประวัติการตรวจสอบ
+					คุณต้องการปฏิเสธคำขอรับบริจาคจาก <strong class="text-foreground"
+						>{request.donor_name || 'ผู้บริจาค'}</strong
+					> หรือไม่? กรุณาระบุเหตุผลเพื่อบันทึกในประวัติการตรวจสอบ
 				</p>
 
 				<div class="space-y-1.5">
