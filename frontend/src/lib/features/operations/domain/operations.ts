@@ -56,6 +56,7 @@ export const donationStatusSchema = z.enum([
 	'pending_review',
 	'verifying',
 	'received',
+	'redirected',
 	'rejected',
 	'expired',
 	'cancelled'
@@ -73,6 +74,59 @@ export type DonationChannel = z.infer<typeof donationChannelSchema>;
 export interface StockLot {
 	expiry?: Timestamp;
 	note?: string;
+	/**
+	 * Human-readable lot label `L-YYMMDD-XXX` minted at receive time (CR-088).
+	 * A LABEL only — no business rule keys off it, so a duplicate would be a
+	 * cosmetic clash, never a wrong balance. Balances always come from `qty`.
+	 */
+	lot_no?: string;
+	/** Where the goods were physically put away. Free text — no zone master data yet (CR-088). */
+	storage_zone?: string;
+}
+
+/** `L-YYMMDD-XXX` — `YYMMDD` = receive date, `XXX` = 3-digit per-day per-shelter sequence. */
+export const LOT_NO_PATTERN = /^L-\d{6}-\d{3}$/;
+
+/**
+ * Single source of truth for the shape of `stock_ledger.lot` (schema.md §2.1) —
+ * every ledger/receipt input schema reuses it so the four writers cannot drift.
+ */
+export const stockLotSchema = z.object({
+	expiry: z.string().optional(),
+	note: z.string().trim().optional(),
+	lot_no: z.string().regex(LOT_NO_PATTERN, 'lot_no must look like L-YYMMDD-XXX').optional(),
+	storage_zone: z.string().trim().max(100).optional()
+});
+
+/** `YYMMDD` of a date, in the caller's local time (the lot label is read by staff on site). */
+export function lotDateStamp(date: Date): string {
+	const yy = String(date.getFullYear() % 100).padStart(2, '0');
+	const mm = String(date.getMonth() + 1).padStart(2, '0');
+	const dd = String(date.getDate()).padStart(2, '0');
+	return `${yy}${mm}${dd}`;
+}
+
+/**
+ * Mint the next `count` lot numbers for a day, continuing after whatever already
+ * exists. `existing` is every `lot_no` already on that shelter's ledger — entries
+ * from other days are ignored, so the caller may pass the lot unfiltered.
+ *
+ * Not atomic: two staff receiving in the same second can be handed the same
+ * sequence. Accepted in CR-088 — the worst case is two lots sharing a label.
+ */
+export function nextLotNos(existing: readonly string[], date: Date, count: number): string[] {
+	const stamp = lotDateStamp(date);
+	const prefix = `L-${stamp}-`;
+	let max = 0;
+	for (const lot of existing) {
+		if (!lot.startsWith(prefix)) continue;
+		const seq = Number.parseInt(lot.slice(prefix.length), 10);
+		if (Number.isFinite(seq) && seq > max) max = seq;
+	}
+	return Array.from(
+		{ length: count },
+		(_, i) => `${prefix}${String(max + i + 1).padStart(3, '0')}`
+	);
 }
 
 export interface StockLedger extends BaseDoc {
@@ -132,6 +186,13 @@ export interface Donation extends BaseDoc {
 	expires_at: Timestamp;
 	booking_ref?: string;
 	logistics?: DonationLogistics;
+	/**
+	 * Destination shelter this request was handed to (CR-087). Set
+	 * only alongside `status: 'redirected'`; the ticket the destination actually
+	 * works from is a separate `donation_redirect` doc in THAT shelter's DB —
+	 * scope isolation means a field here is invisible to them.
+	 */
+	redirect_to_shelter_code?: string | null;
 }
 
 export interface DonationSlot extends BaseDoc {
@@ -228,7 +289,7 @@ export const stockLedgerInputSchema = z
 		unit: z.string().trim().min(1),
 		reason: ledgerReasonSchema,
 		ref_id: z.string().nullable().default(null),
-		lot: z.object({ expiry: z.string().optional(), note: z.string().trim().optional() }).optional(),
+		lot: stockLotSchema.optional(),
 		occurred_at: z.string().optional()
 	})
 	.superRefine((d, ctx) => checkRefId(d.reason, d.ref_id, ctx));
@@ -240,7 +301,7 @@ export const stockLedgerDocSchema = z
 		_id: z.string().regex(/^stock_ledger:/),
 		_rev: z.string().optional(),
 		type: z.literal('stock_ledger'),
-		schema_v: z.union([z.literal(2), z.literal(3)]),
+		schema_v: z.union([z.literal(2), z.literal(3), z.literal(4)]),
 		shelter_code: z.string().min(1),
 		created_at: z.string().datetime(),
 		updated_at: z.string().datetime(),
@@ -250,7 +311,7 @@ export const stockLedgerDocSchema = z
 		unit: z.string().trim().min(1),
 		reason: ledgerReasonSchema,
 		ref_id: z.string().nullable(),
-		lot: z.object({ expiry: z.string().optional(), note: z.string().trim().optional() }).optional(),
+		lot: stockLotSchema.optional(),
 		occurred_at: z.string().datetime()
 	})
 	.passthrough()
@@ -287,7 +348,7 @@ export function createStockLedger(
 	const d = stockLedgerInputSchema.parse(input);
 	return makeDoc(
 		'stock_ledger',
-		3,
+		4,
 		{
 			item_id: d.item_id,
 			qty: persistQty(d.qty),
@@ -337,12 +398,7 @@ export const receiveInputSchema = z
 		unit: z.string().trim().min(1),
 		source: receiveSourceSchema,
 		ref_id: z.string().nullable().default(null),
-		lot: z
-			.object({
-				expiry: z.string().optional(),
-				note: z.string().trim().optional()
-			})
-			.optional(),
+		lot: stockLotSchema.optional(),
 		occurred_at: z.string().optional()
 	})
 	.superRefine((d, ctx) => checkRefId(REASON_BY_RECEIVE_SOURCE[d.source], d.ref_id, ctx));
@@ -408,12 +464,7 @@ export const adjustInputSchema = z.object({
 	// CR-055 R8: a manual correction has no originating doc — the comment used to
 	// say "always null" while the type still allowed a string.
 	ref_id: z.null().default(null),
-	lot: z
-		.object({
-			expiry: z.string().optional(),
-			note: z.string().trim().optional()
-		})
-		.optional(),
+	lot: stockLotSchema.optional(),
 	occurred_at: z.string().optional()
 });
 export type AdjustInput = z.input<typeof adjustInputSchema>;
@@ -490,9 +541,10 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	).toISOString();
 	return makeDoc(
 		'donation',
-		// 4 since CR-080 added revisions[] — a walk-in has none yet, but the version has
-		// to say which shape a reader should expect.
-		4,
+		// 5 since CR-087 added redirect_to_shelter_code (4 was CR-080's revisions[]). A
+		// walk-in has neither yet, but the version has to say which shape a reader should
+		// expect — and the public writer (worker/inbound/donations.py) stamps the same.
+		5,
 		{
 			channel: 'walk_in' as const,
 			donor: d.donor,
@@ -513,9 +565,12 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 /** Forward-only transitions for a donation (schema.md §2.3). */
 const DONATION_TRANSITIONS: Record<DonationStatus, DonationStatus[]> = {
 	declared: ['pending_review', 'received', 'expired', 'cancelled'],
-	pending_review: ['verifying', 'rejected', 'expired', 'cancelled'],
+	// `redirected` is terminal HERE — the destination shelter continues on its own
+	// `donation_redirect` ticket, not on this doc (CR-087).
+	pending_review: ['verifying', 'redirected', 'rejected', 'expired', 'cancelled'],
 	verifying: ['received', 'cancelled'],
 	received: [],
+	redirected: [],
 	rejected: [],
 	expired: [],
 	cancelled: []
@@ -653,12 +708,7 @@ export const purchaseReceiptInputSchema = z.object({
 				item_id: z.string().min(1),
 				qty: qtyStrCoercePositiveSchema,
 				unit: z.string().trim().min(1),
-				lot: z
-					.object({
-						expiry: z.string().optional(),
-						note: z.string().trim().optional()
-					})
-					.optional()
+				lot: stockLotSchema.optional()
 			})
 		)
 		.min(1, 'A receipt needs at least one counted line')

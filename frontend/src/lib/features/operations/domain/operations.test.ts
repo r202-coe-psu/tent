@@ -26,6 +26,9 @@ import {
 	purchaseReceiptInputSchema,
 	isPurchase,
 	mapNeedItemHeuristic,
+	nextLotNos,
+	lotDateStamp,
+	stockLotSchema,
 	type Donation,
 	type LedgerReason,
 	type ReceiveSource
@@ -62,6 +65,17 @@ describe('donation lifecycle (forward-only)', () => {
 		expect(canTransitionDonation('declared', 'received')).toBe(true);
 		expect(canTransitionDonation('received', 'declared')).toBe(false);
 		expect(canTransitionDonation('received', 'expired')).toBe(false);
+	});
+
+	// CR-087 — redirecting hands the request to another shelter, and is terminal on
+	// THIS doc: the destination continues on its own `donation_redirect` ticket.
+	it('allows pending_review → redirected only, and never leaves redirected', () => {
+		expect(canTransitionDonation('pending_review', 'redirected')).toBe(true);
+		expect(canTransitionDonation('declared', 'redirected')).toBe(false);
+		expect(canTransitionDonation('verifying', 'redirected')).toBe(false);
+		expect(canTransitionDonation('received', 'redirected')).toBe(false);
+		expect(canTransitionDonation('redirected', 'received')).toBe(false);
+		expect(canTransitionDonation('redirected', 'pending_review')).toBe(false);
 	});
 
 	it('receiveDonation moves lifecycle but creates NO stock', () => {
@@ -124,12 +138,14 @@ describe('stockBalance', () => {
 });
 
 describe('stock_ledger schema_v + reason enum (CR-032)', () => {
-	it('stamps schema_v 3 on every ledger entry', () => {
+	// Bumped 3 → 4 by CR-088 (lot.lot_no / lot.storage_zone). Every writer goes
+	// through `createStockLedger`, so one assertion covers all of them.
+	it('stamps schema_v 4 on every ledger entry', () => {
 		const entry = createStockLedger(
 			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'receive' },
 			ctx
 		);
-		expect(entry.schema_v).toBe(3);
+		expect(entry.schema_v).toBe(4);
 	});
 
 	it('accepts `purchase` as a valid reason (CR-032)', () => {
@@ -291,7 +307,7 @@ describe('purchase — createPurchase + keyPurchaseReceipt (CR-032)', () => {
 		expect(ledger[0].reason).toBe('purchase');
 		expect(ledger[0].ref_id).toBe(purchase._id);
 		expect(ledger[0].qty).toBe('90'); // counted, not the planned 100
-		expect(ledger[0].schema_v).toBe(3);
+		expect(ledger[0].schema_v).toBe(4); // CR-088 bumped the ledger to 4
 	});
 
 	it('rejects a purchase without a vendor or without items', () => {
@@ -996,5 +1012,69 @@ describe('mapNeedItemHeuristic', () => {
 	it('slugs unknown items correctly', () => {
 		expect(mapNeedItemHeuristic('ปลากระป๋องรสเผ็ด')).toBe('item:ปลากระป๋องรสเผ็ด');
 		expect(mapNeedItemHeuristic('  Spoons & Forks  ')).toBe('item:spoons-forks');
+	});
+});
+
+// CR-088 — lot_no / storage_zone on `stock_ledger.lot` (schema.md §2.1)
+describe('lot numbering (CR-088)', () => {
+	const aug25 = new Date(2026, 7, 25); // local time — the label is read on site
+
+	it('stamps YYMMDD in local time, zero-padded', () => {
+		expect(lotDateStamp(aug25)).toBe('260825');
+		expect(lotDateStamp(new Date(2026, 0, 3))).toBe('260103');
+	});
+
+	it('starts a fresh day at 001 and pads the sequence to 3 digits', () => {
+		expect(nextLotNos([], aug25, 2)).toEqual(['L-260825-001', 'L-260825-002']);
+	});
+
+	it('continues after the highest existing lot of the SAME day only', () => {
+		const existing = ['L-260825-001', 'L-260825-007', 'L-260824-099', 'L-260826-050'];
+		expect(nextLotNos(existing, aug25, 1)).toEqual(['L-260825-008']);
+	});
+
+	it('ignores malformed lot numbers instead of throwing', () => {
+		expect(nextLotNos(['L-260825-abc', 'garbage', ''], aug25, 1)).toEqual(['L-260825-001']);
+	});
+
+	it('returns nothing when no lines were counted', () => {
+		expect(nextLotNos([], aug25, 0)).toEqual([]);
+	});
+
+	it('rolls past 999 without truncating (label stays readable, no wrap)', () => {
+		expect(nextLotNos(['L-260825-999'], aug25, 1)).toEqual(['L-260825-1000']);
+	});
+
+	it('accepts a well-formed lot_no and a storage_zone', () => {
+		const parsed = stockLotSchema.parse({
+			lot_no: 'L-260825-001',
+			storage_zone: '  A-01  ',
+			expiry: '2026-12-01'
+		});
+		expect(parsed.lot_no).toBe('L-260825-001');
+		expect(parsed.storage_zone).toBe('A-01');
+	});
+
+	it('rejects a lot_no that is not L-YYMMDD-XXX', () => {
+		expect(() => stockLotSchema.parse({ lot_no: 'LOT-1' })).toThrow();
+		expect(() => stockLotSchema.parse({ lot_no: 'L-260825-1' })).toThrow();
+	});
+
+	it('carries the lot through createStockLedger onto the persisted doc', () => {
+		const ctx = { shelterCode: 'SH001', createdBy: 'staff01' };
+		const entry = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'donation',
+				ref_id: 'donation:123',
+				lot: { lot_no: 'L-260825-001', storage_zone: 'A-01' }
+			},
+			ctx
+		);
+		expect(entry.lot).toEqual({ lot_no: 'L-260825-001', storage_zone: 'A-01' });
+		expect(entry.schema_v).toBe(4);
+		expect(parseStockLedger(entry)).toEqual(entry);
 	});
 });
