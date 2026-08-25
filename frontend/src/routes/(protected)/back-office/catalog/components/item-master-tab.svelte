@@ -28,6 +28,12 @@
 		type ItemMaster
 	} from '$lib/features/catalog';
 
+	let {
+		basePath = '/back-office/catalog'
+	}: {
+		basePath?: string;
+	} = $props();
+
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 
@@ -124,7 +130,9 @@
 	function backToList() {
 		viewMode = 'list';
 		selectedId = undefined;
-		goto(resolve('/back-office/catalog?tab=item_master'), { replaceState: true });
+		goto(resolve(`${basePath}?tab=item_master` as '/back-office/catalog?tab=item_master'), {
+			replaceState: true
+		});
 	}
 
 	const typeClassMap = {

@@ -10,11 +10,13 @@
 	let {
 		entity,
 		mode,
-		id = ''
+		id = '',
+		basePath = '/back-office/catalog'
 	}: {
 		entity: 'item-categories' | 'item-masters' | 'recipe' | 'recipes';
 		mode: 'create' | 'edit';
 		id?: string;
+		basePath?: string;
 	} = $props();
 
 	const title = $derived(
@@ -28,7 +30,7 @@
 	);
 
 	function handleBack() {
-		goto(resolve('/back-office/catalog'));
+		goto(resolve(basePath as '/back-office/catalog'));
 	}
 </script>
 

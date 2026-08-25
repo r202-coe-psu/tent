@@ -906,32 +906,33 @@ async function seedCatalog(): Promise<void> {
 	const itemMasterBase = {
 		conversions: [],
 		distribution_type: 'recurring',
-		type_class: 'CONSUMABLE'
+		type_class: 'CONSUMABLE',
+		dietary: []
 	} as const;
 	const itemMasters = [
 		catalogDoc(
 			'item_master:rice',
 			'item_master',
 			{ name: 'ข้าวสาร', category: 'food', base_unit: 'kg', ...itemMasterBase },
-			3
+			4
 		),
 		catalogDoc(
 			'item_master:egg',
 			'item_master',
 			{ name: 'ไข่ไก่', category: 'food', base_unit: 'piece', ...itemMasterBase },
-			3
+			4
 		),
 		catalogDoc(
 			'item_master:vegetable',
 			'item_master',
 			{ name: 'ผักรวม', category: 'food', base_unit: 'kg', ...itemMasterBase },
-			3
+			4
 		),
 		catalogDoc(
 			'item_master:canned-fish',
 			'item_master',
 			{ name: 'ปลากระป๋อง', category: 'food', base_unit: 'can', ...itemMasterBase },
-			3
+			4
 		)
 	];
 	const recipes = [
@@ -945,10 +946,9 @@ async function seedCatalog(): Promise<void> {
 				ingredients: [
 					{ item_master_id: 'item_master:rice', quantity: '0.2', uom: 'kg' },
 					{ item_master_id: 'item_master:egg', quantity: '2', uom: 'piece' }
-				],
-				is_default: false
+				]
 			},
-			3
+			4
 		),
 		catalogDoc(
 			'recipe:congee',
@@ -957,10 +957,9 @@ async function seedCatalog(): Promise<void> {
 				label: 'ข้าวต้ม',
 				standard_portions: '1',
 				standard_duration_hours: '1',
-				ingredients: [{ item_master_id: 'item_master:rice', quantity: '0.15', uom: 'kg' }],
-				is_default: false
+				ingredients: [{ item_master_id: 'item_master:rice', quantity: '0.15', uom: 'kg' }]
 			},
-			3
+			4
 		),
 		// Uses canned-fish (no matching supply_item) → BOM stays unresolved, so the
 		// plan can't be confirmed/withdrawn until the name is linked (demo step 2).
@@ -974,10 +973,9 @@ async function seedCatalog(): Promise<void> {
 				ingredients: [
 					{ item_master_id: 'item_master:rice', quantity: '0.2', uom: 'kg' },
 					{ item_master_id: 'item_master:canned-fish', quantity: '0.5', uom: 'can' }
-				],
-				is_default: false
+				]
 			},
-			3
+			4
 		)
 	];
 
