@@ -11,11 +11,12 @@ export function toUiShelterStatus(status: string | null | undefined): string {
 	return status.toUpperCase();
 }
 
-export function isInShelterStatus(status: string | null | undefined): boolean {
-	if (!status || typeof status !== 'string') return false;
-	return status.trim().toLowerCase() === 'in_shelter';
-}
-
+/**
+ * `id` is the shelter `code`, falling back to the display name for the
+ * defensive null/`{}` cases the tests cover. It used to try `(item as any).id`
+ * in between — `ShelterItem` has no `id` in the contract, so that branch could
+ * never fire and only existed to defeat the type checker.
+ */
 export function toPublicShelterCard(
 	item: Partial<PublicShelterItem> | null | undefined,
 	distance = 0
@@ -28,8 +29,11 @@ export function toPublicShelterCard(
 	const parts = [subdistrict, district, province].filter(Boolean);
 	const address = parts.length > 0 ? parts.join(' ') : code || name;
 
+	const rawId = (item as Record<string, unknown> | null | undefined)?.id;
+	const itemId = typeof rawId === 'string' ? rawId : '';
+
 	return {
-		id: code || (item as any)?.id || name,
+		id: code || itemId || name,
 		code,
 		name,
 		status: toUiShelterStatus(item?.status),
@@ -46,7 +50,23 @@ export function toPublicShelterCard(
 	};
 }
 
+/**
+ * `{#each}` key for a public search result.
+ *
+ * A result carries no id — the projection masks the surname and the national ID
+ * and exposes neither the evacuee doc id nor the hash (public search must not
+ * become a person-identity oracle). So the visible fields are NOT unique: the
+ * same human registered twice at one shelter produces two rows that agree on
+ * every field the API returns, and keying on those alone crashes the list with
+ * `each_key_duplicate`. Position is therefore part of the key, appended to the
+ * identity rather than replacing it, so the key still tracks a row across a
+ * re-render of the same result set.
+ *
+ * `index` must be the result's index in the FULL result list, not within a page
+ * — otherwise two rows on different pages of one list collide again.
+ */
 export function searchResultKey(result: FamilySearchResult, index: number): string {
 	if (!result) return `result-${index}`;
-	return `${result.shelter_name ?? 'shelter'}:${result.name ?? 'person'}:${result.national_id ?? index}`;
+	const identity = `${result.shelter_name ?? 'shelter'}:${result.name ?? 'person'}:${result.national_id ?? 'no-id'}`;
+	return `${identity}:${index}`;
 }

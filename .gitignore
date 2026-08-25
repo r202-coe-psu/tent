@@ -36,3 +36,4 @@ __pycache__/
 .antigravitycli/
 
 node_modules/
+backend/uv.lock

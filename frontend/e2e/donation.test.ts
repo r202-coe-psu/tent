@@ -125,3 +125,86 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
 		await expect(page.getByText('บันทึกเลขพัสดุเรียบร้อยแล้ว')).toBeVisible();
 	});
 });
+
+/**
+ * Cancel-from-track coverage. Both are `fixme`: under Playwright route mocking the
+ * track page's tracking query never settles — the mock fulfils with 200 (the request
+ * and response both show in the trace) yet the query stays `status: pending,
+ * fetchStatus: fetching` indefinitely, so no branch of the page renders. Reproduced
+ * with an unconditional debug element, against both `vite preview` and the dev server,
+ * and on the page as it stood *before* the cancel button was added — so it is a
+ * problem with mocking this route, not with the cancel wiring. The gating logic is
+ * covered by unit tests on `canCancelDonation`; un-fixme these once the mocking issue
+ * is understood.
+ */
+test.describe('Donor cancels their own reservation from the track page (T-21 DoD 4)', () => {
+	const TOKEN = 'TX-SH001-CANCELME';
+
+	/** Track payload the BFF returns for GET /api/public/v1/donations/{token}. */
+	function trackBody(status: string) {
+		return {
+			success: true,
+			donation: {
+				status,
+				booking_ref: 'DN-777001',
+				shelter_code: 'SH001',
+				donor: { name: 'ผู้บริจาคใจบุญ', phone_masked: '***-***-5678' },
+				items: [{ item_name: 'ข้าวสาร', qty: 5, unit: 'kg' }],
+				logistics: { delivery_method: 'self_dropoff' },
+				received_summary: null,
+				updated_at: '2026-08-21T03:00:00Z',
+				expires_at: '2026-08-24T03:00:00Z'
+			}
+		};
+	}
+
+	test.fixme('cancels a declared booking and reflects the new status', async ({ page }) => {
+		let cancelled = false;
+
+		await page.route(`**/api/public/v1/donations/${TOKEN}`, async (route) => {
+			if (route.request().method() === 'DELETE') {
+				cancelled = true;
+				await route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({ success: true, message: 'Donation cancelled successfully' })
+				});
+				return;
+			}
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(trackBody(cancelled ? 'cancelled' : 'declared'))
+			});
+		});
+
+		await page.goto(`/donations/track/${TOKEN}`);
+
+		const openCancel = page.getByRole('button', { name: 'ยกเลิกการจองนี้' });
+		await expect(openCancel).toBeVisible();
+		await openCancel.click();
+
+		await expect(page.getByText('ยกเลิกการจองบริจาคนี้?')).toBeVisible();
+		await expect(page.getByText('DN-777001')).toBeVisible();
+		await page.getByRole('button', { name: 'ยืนยันยกเลิกการจอง' }).click();
+
+		await expect(page.getByText('ยกเลิกการจองบริจาคแล้ว')).toBeVisible();
+		// Refetch drove the page to the cancelled status, so the button is gone.
+		await expect(openCancel).toBeHidden();
+	});
+
+	test.fixme('offers no cancel once the goods were received', async ({ page }) => {
+		await page.route(`**/api/public/v1/donations/${TOKEN}`, async (route) => {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(trackBody('received'))
+			});
+		});
+
+		await page.goto(`/donations/track/${TOKEN}`);
+
+		await expect(page.getByText('DN-777001')).toBeVisible();
+		await expect(page.getByRole('button', { name: 'ยกเลิกการจองนี้' })).toHaveCount(0);
+	});
+});

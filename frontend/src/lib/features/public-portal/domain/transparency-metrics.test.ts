@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { countVulnerableFromBirthYearRows, isValidThaiBirthYear } from './transparency-metrics';
+import {
+	countVulnerableFromBirthYearRows,
+	isValidThaiBirthYear,
+	sumOccupancyFromStatusRows
+} from './transparency-metrics';
 
 describe('transparency metrics', () => {
 	it('accepts only integer Buddhist Era birth years in the expected range', () => {
@@ -30,5 +34,40 @@ describe('transparency metrics', () => {
 				2026
 			)
 		).toBe(7);
+	});
+});
+
+describe('sumOccupancyFromStatusRows (CR-070 D-BOOK-OCC=C)', () => {
+	it('counts active + pre_registered and ignores every other status', () => {
+		const rows = [
+			{ key: 'active', value: 3 },
+			{ key: 'pre_registered', value: 2 },
+			{ key: 'cancelled', value: 9 },
+			{ key: 'checked_out', value: 4 },
+			{ key: 'deceased', value: 1 }
+		];
+		expect(sumOccupancyFromStatusRows(rows)).toBe(5);
+	});
+
+	it('returns 0 when nothing holds a place', () => {
+		expect(sumOccupancyFromStatusRows([{ key: 'cancelled', value: 9 }])).toBe(0);
+		expect(sumOccupancyFromStatusRows([])).toBe(0);
+	});
+
+	it('tolerates a missing or malformed view payload', () => {
+		expect(sumOccupancyFromStatusRows(undefined)).toBe(0);
+		expect(sumOccupancyFromStatusRows(null)).toBe(0);
+		expect(sumOccupancyFromStatusRows('nope')).toBe(0);
+		expect(sumOccupancyFromStatusRows([null, 'x', 42])).toBe(0);
+	});
+
+	it('skips rows whose value is not a usable count', () => {
+		const rows = [
+			{ key: 'active', value: 3 },
+			{ key: 'pre_registered', value: -1 },
+			{ key: 'active', value: Number.NaN },
+			{ key: 'active', value: '7' }
+		];
+		expect(sumOccupancyFromStatusRows(rows)).toBe(3);
 	});
 });

@@ -9,17 +9,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
-	import { useSearchEvacuees } from '$lib/features/people';
-
-	const STATUS_LABELS: Record<string, string> = {
-		pre_registered: 'ลงทะเบียนล่วงหน้า',
-		active: 'เข้าพักแล้ว',
-		temporary_leave: 'ออกชั่วคราว',
-		transferred: 'ย้ายไปแล้ว',
-		checked_out: 'ย้ายออก/กลับภูมิลำเนา',
-		deceased: 'เสียชีวิต',
-		cancelled: 'ยกเลิกการลงทะเบียนล่วงหน้า'
-	};
+	import { useSearchEvacuees, STATUS_LABELS } from '$lib/features/people';
 
 	let { onNext }: { onNext: () => void } = $props();
 

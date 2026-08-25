@@ -17,7 +17,7 @@ import { peopleRepository, type Evacuee } from '$lib/features/people';
 import { operationsRepository } from '$lib/features/operations';
 import { sheltersRepository } from '$lib/features/shelters';
 import {
-	getActiveSopProfile,
+	getVerifiedActiveSopProfile,
 	SOP_RATIO_KIND,
 	type SopMaster,
 	type SopOverride,
@@ -105,7 +105,7 @@ export class DailyCalcRemoteRepository implements DailyCalcRepository {
 		// 1. Read all inputs through peer barrels (parallel).
 		const [evacuees, active, stock, shelter] = await Promise.all([
 			peopleRepository().listEvacuees(),
-			getActiveSopProfile(ctx.shelterCode),
+			getVerifiedActiveSopProfile(ctx.shelterCode),
 			operationsRepository().getBalance(),
 			sheltersRepository().getShelter(ctx.shelterCode)
 		]);

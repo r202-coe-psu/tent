@@ -8,7 +8,7 @@ import { sopRatioKeys } from './queries';
 
 export function startSopRatioLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
 	const catalogHandle = subscribeDataChanges(queryClient, 'catalog', (type) => {
-		return type === 'sop_profile' ? [sopRatioKeys.all] : [];
+		return type === 'sop_profile' || type === 'sop_profile_active' ? [sopRatioKeys.all] : [];
 	});
 
 	const shelterHandle = subscribeDataChanges(queryClient, getShelterDb, (type) => {

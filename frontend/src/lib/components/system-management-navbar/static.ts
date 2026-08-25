@@ -92,8 +92,14 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						icon: Home,
 						requiresAdmin: true
 					},
-					{ label: '4. อาสาสมัคร', href: null, icon: Users },
-					{ label: '5. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{
+						label: '4. FAQ Public Portal',
+						href: resolve(`${base}/public-portal-config`),
+						icon: Megaphone,
+						requiresAdmin: true
+					},
+					{ label: '5. อาสาสมัคร', href: null, icon: Users },
+					{ label: '6. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}
 		]

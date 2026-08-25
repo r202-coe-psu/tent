@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { checkEvacueeHouseholdConflict } from '../index';
+	import { checkEvacueeHouseholdConflict, STATUS_LABELS } from '../index';
 	import type { Evacuee, Household } from '../domain/people';
 
 	let {
@@ -141,9 +141,19 @@
 										{/if}
 									</div>
 
-									<Button size="sm" class="h-7 px-2.5 text-[11px]" onclick={() => onAddMember(c)}>
-										เพิ่มเข้ากลุ่ม
-									</Button>
+									{#if household.status === 'checked_in' && c.current_stay.status !== 'active'}
+										<Button
+											size="sm"
+											disabled
+											class="h-7 bg-slate-100 px-2.5 text-[11px] text-slate-400"
+										>
+											{STATUS_LABELS[c.current_stay.status] ?? 'ยังไม่เช็คอิน'}
+										</Button>
+									{:else}
+										<Button size="sm" class="h-7 px-2.5 text-[11px]" onclick={() => onAddMember(c)}>
+											เพิ่มเข้ากลุ่ม
+										</Button>
+									{/if}
 								</div>
 							{/each}
 						{/if}

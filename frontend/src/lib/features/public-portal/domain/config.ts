@@ -11,6 +11,7 @@ export const faqItemSchema = z.object({
 
 export const publicConfigBodySchema = z.object({
 	faqs: z.record(z.string(), z.array(faqItemSchema)).default({ public: [] }),
+	phone_number: z.string().or(z.literal('')).optional(),
 	line_oa_url: z.string().url('URL ไม่ถูกต้อง').or(z.literal('')).optional(),
 	facebook_url: z.string().url('URL ไม่ถูกต้อง').or(z.literal('')).optional()
 });

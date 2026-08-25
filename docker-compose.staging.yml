@@ -104,6 +104,9 @@ services:
       ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
       # Server-only — never bundled into the browser
       COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@couchdb:5984
+      # Roleless writer for anonymous public writes (CR-070 booking, CR-052
+      # courier PATCH). putAsPublicWriter fails closed without it outside dev.
+      COUCHDB_PUBLIC_WRITER_URL: http://${COUCHDB_PUBLIC_WRITER_USER:-public_writer}:${COUCHDB_PUBLIC_WRITER_PASSWORD}@couchdb:5984
       # BFF donations/needs → FastAPI on the compose network (not localhost)
       FASTAPI_INTERNAL_URL: http://fastapi:9000
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}

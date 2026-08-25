@@ -5,11 +5,12 @@ import type { Announcement } from '$lib/features/announcements';
 export const load: PageLoad = async ({ fetch }) => {
 	let faqs: FaqItem[] = [];
 	let announcements: Announcement[] = [];
+	let configData: Record<string, unknown> = {};
 	try {
 		const configRes = await fetch('/api/public/v1/config/faqs');
 		if (configRes.ok) {
-			const configData = await configRes.json();
-			faqs = configData.faqs || [];
+			configData = await configRes.json();
+			faqs = (configData.faqs as FaqItem[]) || [];
 		}
 	} catch (e) {
 		console.error('Failed to fetch config', e);
@@ -19,7 +20,7 @@ export const load: PageLoad = async ({ fetch }) => {
 		const annRes = await fetch('/api/public/v1/announcements');
 		if (annRes.ok) {
 			const annData = await annRes.json();
-			announcements = annData.items || [];
+			announcements = (annData.items as Announcement[]) || [];
 		}
 	} catch (e) {
 		console.error('Failed to fetch announcements', e);
@@ -29,7 +30,7 @@ export const load: PageLoad = async ({ fetch }) => {
 		const response = await fetch('/api/public/v1/transparency/summary');
 		if (response.ok) {
 			const data = await response.json();
-			return { ...data, faqs, announcements };
+			return { ...data, configData, announcements, faqs };
 		}
 	} catch (e) {
 		console.error('Failed to fetch summary metrics', e);

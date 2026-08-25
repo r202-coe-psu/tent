@@ -20,6 +20,8 @@ x-node-seed: &node-seed
     - ./frontend:/app
   environment:
     COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@${COUCHDB_HOST:-couchdb}:${COUCHDB_PORT:-5984}
+    # Seed creates this _users doc and grants it on each shelter _security.
+    COUCHDB_PUBLIC_WRITER_URL: http://${COUCHDB_PUBLIC_WRITER_USER:-public_writer}:${COUCHDB_PUBLIC_WRITER_PASSWORD}@${COUCHDB_HOST:-couchdb}:${COUCHDB_PORT:-5984}
 
 x-worker-bootstrap: &worker-bootstrap
   build:

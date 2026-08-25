@@ -20,7 +20,12 @@
 	} = $props();
 </script>
 
-{#snippet socialInput(name: 'line_oa_url' | 'facebook_url', label: string, placeholder: string)}
+{#snippet socialInput(
+	name: 'line_oa_url' | 'facebook_url' | 'phone_number',
+	label: string,
+	placeholder: string,
+	desc: string = 'เว้นว่างไว้หากไม่มี'
+)}
 	<Form.Field {form} {name}>
 		<Form.Control>
 			{#snippet children({ props })}
@@ -33,7 +38,7 @@
 				/>
 			{/snippet}
 		</Form.Control>
-		<Form.Description class="text-xs">เว้นว่างไว้หากไม่มี</Form.Description>
+		<Form.Description class="text-xs">{desc}</Form.Description>
 		<Form.FieldErrors />
 	</Form.Field>
 {/snippet}
@@ -45,15 +50,16 @@
 				<Share2 class="h-5 w-5" />
 			</div>
 			<div>
-				<Card.Title class="text-lg">ช่องทางการติดต่อ (Social Media)</Card.Title>
+				<Card.Title class="text-lg">ช่องทางการติดต่อ</Card.Title>
 				<Card.Description class="mt-1">
-					ลิงก์สำหรับติดต่อผ่าน LINE OA และ Facebook (จะแสดงในหน้า Public)
+					ลิงก์และเบอร์โทรศัพท์สำหรับติดต่อสอบถาม (จะแสดงในหน้า Public)
 				</Card.Description>
 			</div>
 		</div>
 	</div>
 	<Card.Content class="space-y-6 p-6">
 		<div class="grid gap-6 md:grid-cols-2">
+			{@render socialInput('phone_number', 'เบอร์โทรศัพท์ติดต่อ', 'เช่น 02-123-4567')}
 			{@render socialInput('line_oa_url', 'LINE OA URL', 'https://line.me/ti/p/...')}
 			{@render socialInput('facebook_url', 'Facebook URL', 'https://facebook.com/...')}
 		</div>

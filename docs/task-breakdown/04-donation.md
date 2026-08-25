@@ -75,6 +75,13 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - จองผ่าน `tracking_token` (no-auth) — จองที่ยืนยันแล้ว reserve โควตา กันบริจาคซ้อนเกินเป้าจากหลายคนพร้อมกัน
 - **CR-047 Atomic Quota Counter:** ใช้ Mongo Collection `donation_need_counter` และ atomic `find_one_and_update` ป้องกัน Race Condition และ overbooking
 - Donor แก้/ยกเลิกการจองของตนผ่าน token ได้โดยไม่ login (FR-35)
+- **CR-080 ขอบเขตของคำว่า "แก้":** donor แก้ `items[].qty` และเพิ่ม/ลบรายการได้เอง (ไม่ใช่แค่เลขพัสดุ)
+  — เจ้าหน้าที่ค่อย adjust ตอนรับของจริง. เงื่อนไขที่เจ้าของเคาะ:
+  - แก้ได้เฉพาะสถานะ **`declared`** เท่านั้น — เข้า `pending_review` แล้วเป็นของเจ้าหน้าที่
+  - ยอดที่แก้ทำให้โควตาไม่พอ → **ปฏิเสธทั้งคำขอ** ของเดิมไม่เปลี่ยน (ไม่รับบางส่วน)
+  - TTL **นับต่อจาก `declared_at` เดิม** ไม่รีเซ็ต — กันต่ออายุไม่รู้จบด้วยการแก้รัวๆ
+  - ทุกครั้งที่แก้บันทึก `revisions[]` (snapshot `items` ก่อน-หลังทั้งชุด) ใน donation doc — `schema_v 3 → 4`
+  - **ไม่จำกัดจำนวนครั้ง** ต่อใบจอง คุมด้วย rate-limit ต่อ IP ที่มีอยู่แล้ว
 - Item ที่ยอดครบแล้วจองไม่ได้ แสดงเหตุผล + ชี้ทางไป redirect (T-23)
 - TTL หมดอายุ → โควตาคืนอัตโนมัติ + rate-limit ต่อเบอร์/IP กัน abuse จองทิ้ง; OTP support อยู่หลัง `public_otp_required`, CAPTCHA เป็น production public gate (test การหมดอายุ + race ระหว่างจองพร้อมกัน)
 - Demo จองจนเต็มเป้าแล้วเห็นระบบปิดรับ item นั้น
