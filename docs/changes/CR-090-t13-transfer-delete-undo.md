@@ -18,7 +18,7 @@ affects:
 
 # CR-090 — T-13 โอนย้ายข้ามศูนย์: ลบคำร้อง + Undo
 
-> Spun out จาก [CR-089](CR-089-t13-transfer-lot-driver-dispute.md) เมื่อ 2026-08-25 — เดิมรวมอยู่ใน CR
+> Spun out จาก [CR-089](CR-089-t13-transfer-driver-dispute.md) เมื่อ 2026-08-25 — เดิมรวมอยู่ใน CR
 > เดียวกับ lot/driver-plate/dispute แต่การลบไม่เปลี่ยน shape ของ `stock_transfer` doc เลย (ไม่มี field
 > ใหม่ค้างอยู่บน doc ที่รอด — ลบคือลบ) จึงไม่มีเหตุผลทางเทคนิคให้ต้องรอ approve พร้อมกับ CR-089 ที่ต้องเคาะ
 > `schema_v` ร่วมกัน — approve/ship อิสระจาก CR-089/CR-091 ได้ทั้งหมด
@@ -69,7 +69,7 @@ application + ui layer) และ 1 API route · **status ยังเป็น 
 - CR-059 §4.5 (UI Safety Standards, ผูกกับ Task #13) กำหนด "ปุ่ม Undo การลบแถวรายการผ่าน Toast
   Notification ค้างไว้ 5 วินาที เพื่อป้องกันการกดลบพลาด" — ตรวจโค้ดจริงพบว่า `stock_transfer`
   ทั้งฟีเจอร์ไม่มีปุ่มลบเลยแม้แต่ปุ่มเดียว (`71fd0b35` ทำแค่ create/dispatch/receive/cancel)
-- แยกออกจาก [CR-089](CR-089-t13-transfer-lot-driver-dispute.md) เพราะการลบไม่เปลี่ยน shape ของ
+- แยกออกจาก [CR-089](CR-089-t13-transfer-driver-dispute.md) เพราะการลบไม่เปลี่ยน shape ของ
   `stock_transfer` doc ที่ยังอยู่ (ลบคือลบทั้ง doc) — ไม่มีเหตุผลทางเทคนิคให้ผูก schema_v เดียวกับ
   lot/driver-plate/dispute ซึ่งเป็นคนละเรื่องกัน (project owner ถามหลัง CR-089 ฉบับแรกว่าทำไมไม่แยก)
 - **ข้อควรระวังที่ต้องตัดสินใจก่อน approve:** ระบบทั้งระบบยึดหลัก append-only (`stock_ledger`) หรือ
