@@ -1,5 +1,5 @@
 ---
-id: CR-084
+id: CR-089
 title: T-13 โอนย้ายข้ามศูนย์ — Lot metadata (interim) + Driver/Plate + Dispute (schema_v 2 → 3)
 status: proposed
 date: 2026-08-25
@@ -17,15 +17,15 @@ affects:
   - frontend/src/lib/features/operations/ui/transfer-form.svelte
   - frontend/src/lib/features/operations/ui/transfer-list.svelte
   - frontend/src/routes/api/back-office/transfer/[id]/transition/+server.ts (รองรับ to: disputed/requested)
-  - CR-059 (ปิด backlog note "field ละเอียด...ยังไม่ approve ในรอบนี้" บางส่วน — ที่เหลือแยกไป CR-085/CR-086)
-  - CR-085 (delete+undo — spun out, ไม่แตะ schema_v), CR-086 (หน้ารายละเอียด Ticket — spun out, ไม่แตะ schema_v)
+  - CR-059 (ปิด backlog note "field ละเอียด...ยังไม่ approve ในรอบนี้" บางส่วน — ที่เหลือแยกไป CR-090/CR-091)
+  - CR-090 (delete+undo — spun out, ไม่แตะ schema_v), CR-091 (หน้ารายละเอียด Ticket — spun out, ไม่แตะ schema_v)
 ---
 
-# CR-084 — T-13 โอนย้ายข้ามศูนย์: Lot metadata + Driver/Plate + Dispute
+# CR-089 — T-13 โอนย้ายข้ามศูนย์: Lot metadata + Driver/Plate + Dispute
 
 > เดิม CR นี้รวม 5 กลุ่ม (Lot/Driver-Plate/Dispute/Delete+Undo/Detail Page) — แยก **Delete+Undo** ออกเป็น
-> [CR-085](CR-085-t13-transfer-delete-undo.md) และ **หน้ารายละเอียด Ticket** ออกเป็น
-> [CR-086](CR-086-t13-transfer-detail-page.md) แล้ว (2026-08-25) เพราะสองกลุ่มนั้นไม่แตะ `schema_v` เลย
+> [CR-090](CR-090-t13-transfer-delete-undo.md) และ **หน้ารายละเอียด Ticket** ออกเป็น
+> [CR-091](CR-091-t13-transfer-detail-page.md) แล้ว (2026-08-25) เพราะสองกลุ่มนั้นไม่แตะ `schema_v` เลย
 > ไม่มีเหตุผลทางเทคนิคให้ต้องรอ approve พร้อมกับกลุ่มที่เปลี่ยน doc shape จริง — ดู Decision log ท้ายไฟล์
 
 ## สรุป (TL;DR)
@@ -92,11 +92,11 @@ affects:
 - **FR-14** — `disputed` reach ได้จาก `requested` เท่านั้น และออกได้แค่กลับไป `requested` เท่านั้น (ไม่ไป
   `shipped`/`received`/`cancelled` ตรงจาก `disputed`)
 - **FR-15** — ปุ่ม "คัดค้าน/ระงับ" และ "กลับมาดำเนินการต่อ" (resume) ขึ้นที่ตาราง `transfer-list.svelte`
-  เดิม (แถวเดียวกับปุ่ม dispatch/receive/cancel ที่มีอยู่แล้ว) — ไม่ผูกกับหน้ารายละเอียดใน CR-086 เพื่อให้
-  CR นี้ ship ได้เองโดยไม่ต้องรอ CR-086
+  เดิม (แถวเดียวกับปุ่ม dispatch/receive/cancel ที่มีอยู่แล้ว) — ไม่ผูกกับหน้ารายละเอียดใน CR-091 เพื่อให้
+  CR นี้ ship ได้เองโดยไม่ต้องรอ CR-091
 
-> ดู [CR-085](CR-085-t13-transfer-delete-undo.md) สำหรับลบคำร้อง+Undo และ
-> [CR-086](CR-086-t13-transfer-detail-page.md) สำหรับหน้ารายละเอียด Ticket — ทั้งสองไม่แตะ `schema_v`
+> ดู [CR-090](CR-090-t13-transfer-delete-undo.md) สำหรับลบคำร้อง+Undo และ
+> [CR-091](CR-091-t13-transfer-detail-page.md) สำหรับหน้ารายละเอียด Ticket — ทั้งสองไม่แตะ `schema_v`
 > ของ `stock_transfer` จึง approve/ship แยกจาก CR นี้ได้อิสระ ไม่ต้องเรียงลำดับก่อนหลัง
 
 ---
@@ -111,7 +111,7 @@ affects:
       (FR-11, FR-12)
 - [ ] ปลายทางเรียก dispatch/receive/resume บนคำร้องของศูนย์ตนเองไม่ได้ตาม role เดิม แม้สถานะเป็น
       `disputed` (FR-13)
-- [ ] ปุ่มคัดค้าน/ระงับ/resume ใช้งานได้จากตาราง list เดิมโดยไม่ต้องมี CR-085/CR-086 ship มาก่อน (FR-15)
+- [ ] ปุ่มคัดค้าน/ระงับ/resume ใช้งานได้จากตาราง list เดิมโดยไม่ต้องมี CR-090/CR-091 ship มาก่อน (FR-15)
 
 ---
 
@@ -130,7 +130,7 @@ affects:
   — รายละเอียดการเทียบและเหตุผลที่เลือกแต่ละอันดู Decision log ด้านล่าง
 - แยก D (delete+undo) และ E (หน้ารายละเอียด) ออกจาก CR นี้เพราะทั้งสองไม่เปลี่ยน doc shape ของ
   `stock_transfer` เลย — ไม่มีเหตุผลทางเทคนิคให้ต้องรอ approve พร้อมกับ A/B/C ที่ต้องเคาะ `schema_v` ร่วมกัน
-  (ดู CR-085, CR-086)
+  (ดู CR-090, CR-091)
 
 ---
 
@@ -142,7 +142,7 @@ affects:
 | Driver/Plate | ไม่มี field นี้เลย | บังคับกรอกก่อน transition เป็น `shipped` |
 | Dispute | ไม่มี — มีแค่ `cancelled` (ไม่มี reason บังคับ) | เพิ่ม `disputed` (resumable) + `cancel_reason` บังคับ |
 
-Delete+Undo และ Ticket detail page — ดู CR-085/CR-086 ตามลำดับ (spun out, ไม่กระทบตารางนี้)
+Delete+Undo และ Ticket detail page — ดู CR-090/CR-091 ตามลำดับ (spun out, ไม่กระทบตารางนี้)
 
 ---
 
@@ -169,7 +169,7 @@ Delete+Undo และ Ticket detail page — ดู CR-085/CR-086 ตามล�
   `transfer.authorization.test.ts`, `transfer.server-repository.test.ts`, `server.test.ts` ของ
   `api/back-office/transfer/[id]/transition/`)
 - ปิด backlog note ที่ค้างใน CR-059 (§5.5 "ยังไม่ approve ในรอบนี้") บางส่วน — Delete/Detail-page อยู่ใน
-  CR-085/CR-086
+  CR-090/CR-091
 
 ---
 
@@ -192,13 +192,13 @@ pre-prod ไม่มี production data จริง ไม่ต้อง back
   `stock_ledger` ซึ่งเป็น stable core ระดับหลายสัปดาห์ ไม่ทันเดดไลน์; ตัวเลือก "เลื่อนออกไปทั้งหมด" ถูกตัด
   ออกเพราะเสีย traceability ที่ตกลงกับ Logistics ไปแล้ว) · กลุ่ม C (Dispute) → **ใช้ `cancelled` เดิมแทน
   ปฏิเสธ + เพิ่ม `disputed` ใหม่ 1 ตัวแทนระงับ** (schema surface เพิ่มน้อยสุดเทียบกับแยก 2 state ใหม่ทั้งคู่)
-  — กลุ่ม D/E ดู decision log ของ CR-085/CR-086 แทน (แยกไฟล์แล้ว)
+  — กลุ่ม D/E ดู decision log ของ CR-090/CR-091 แทน (แยกไฟล์แล้ว)
 - 2026-08-25 — **แยก CR ออกเป็น 3 ไฟล์** หลัง project owner ถามว่าทำไมไม่แยก — เหตุผลทางเทคนิค: กลุ่ม A/B/C
   เปลี่ยน doc shape ของ `stock_transfer` จริง (ต้องเคาะ `schema_v` 2 → 3 ร่วมกันเป็นก้อนเดียว กันปัญหา
   สอง CR ประกาศ "2 → 3" ชนกันถ้า approve ไม่พร้อมกัน) ส่วนกลุ่ม D (delete+undo) และ E (หน้ารายละเอียด)
   ไม่แตะ `schema_v` เลย ไม่มีเหตุผลทางเทคนิคให้ผูกกับ A/B/C ⇒ แยกเป็น
-  **[CR-085](CR-085-t13-transfer-delete-undo.md)** (D) และ
-  **[CR-086](CR-086-t13-transfer-detail-page.md)** (E) — CR นี้เหลือแค่ A+B+C
+  **[CR-090](CR-090-t13-transfer-delete-undo.md)** (D) และ
+  **[CR-091](CR-091-t13-transfer-detail-page.md)** (E) — CR นี้เหลือแค่ A+B+C
 - **ยังไม่ตัดสินใจ (รอ owner เคาะจริงในไฟล์นี้ก่อนเริ่มโค้ด):** สถานะ CR นี้ยังเป็น `proposed` — การเลือก
   tier ข้างต้นเป็นข้อเสนอจาก session สนทนาวันนี้ ยังไม่ใช่ `approved` อย่างเป็นทางการตาม
   `docs/change-management.md` §5 ข้อ 4

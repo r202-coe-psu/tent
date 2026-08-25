@@ -9,6 +9,8 @@ layer: volatile
 parent: CR-066
 affects:
   - docs/data/schema.md §1.1 `registered_via` (ร่วม CR-070)
+  - docs/data/schema.md §1.7 `people_import_log` (ใหม่, schema_v 1 — T-72)
+  - frontend `src/lib/server/shelter-access-design.ts` (whitelist + append-only)
   - docs/task-breakdown/00-baseline.md (T-55 overlap)
   - docs/task-breakdown/02-people.md (T-72, T-73)
   - frontend people import UI (ใหม่หรือขยาย `/import`)
@@ -79,7 +81,7 @@ affects:
 ## Impact
 
 - Team B = ไฟล์ import; Lead = plane/auth ของ inbound
-- อาจต้อง doc type `people_import_log` ใน registry — เปิดใน amend หลัง approve ถ้าเลือกไม่ reuse `shelter_import_log` (source คนละชนิด)
+- doc type `people_import_log` — **ล็อกแล้ว: อยู่ใน `shelter_*` ไม่ใช่ `registry`** (ดู Decision log 2026-08-22 และ schema.md §1.7)
 
 ## Migration
 
@@ -99,3 +101,8 @@ Additive. คนที่ import แล้วเป็น evacuee schema ปั�
 - 2026-08-13 — **Wave 3 ล็อก D-REG-VIA:** คง `app`/`import`/`paper` เพิ่ม `web` (CR-070) และ `api` (inbound). D-INBOUND-PLANE ยังเปิด (Wave 4). **ไม่ bump schema.md.**
 - 2026-08-13 — **T-72 ล็อก** (decision ≠ approve CR): **T-72 initial stay=A** (ทุกแถว `pre_registered`; นับ occupancy ตาม D-BOOK-OCC=C; เป็น `active` ที่ประตู/staff เท่านั้น — ห้ามเลือกต่อแถวในไฟล์) · **T-72 import permission=RS+SA+SM** (เจ้าของขยายจาก proposed SM+SA). T-73 / D-INBOUND-PLANE ยัง blocked. **ไม่ bump schema.md.**
 - 2026-08-13 — **approved** โดยเจ้าของโครงการ (IMPS) เฉพาะ **slice A / T-72** (initial stay=A, import permission=RS+SA+SM, D-REG-VIA ชื่อค่า `api`). Slice B / T-73 / D-INBOUND-PLANE **ไม่ถูก approve** — จอดรอบ CR ถัดไป; **ห้ามเดา JSON**. **ไม่ bump schema.md ในรอบนี้.**
+- 2026-08-22 — **ล็อกที่เก็บ import log:** ไม่ reuse `shelter_import_log` และ**ไม่**อยู่ใน `registry` —
+  ใช้ doc type ใหม่ `people_import_log` (schema_v 1, append-only) ใน **`shelter_{code}`** เพราะ `results[]`
+  มีชื่อผู้ประสบภัย ต้องอยู่ใน shelter scope เดียวกับข้อมูลคน. บันทึกเป็น **schema.md §1.7** และเพิ่มใน
+  `_design/access` ของ `shelter_*` ทั้ง whitelist และ append-only list (§8 ข้อ 2); shelter db เดิมต้องรัน
+  `pnpm redeploy:access` (อยู่ใน `pnpm db:sync` ของ Jenkins deploy อยู่แล้ว). **ไม่ bump schema_v ของ doc เดิม.**
