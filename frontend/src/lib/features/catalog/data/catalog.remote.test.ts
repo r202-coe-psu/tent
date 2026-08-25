@@ -34,8 +34,7 @@ describe('CatalogRemoteRepository.deleteRecipe', () => {
 				label: 'ข้าวผัด',
 				ingredients: [{ item_master_id: 'item_1', quantity: '10', uom: 'kg' }],
 				standard_portions: '100',
-				standard_duration_hours: '1',
-				is_default: false
+				standard_duration_hours: '1'
 			},
 			ctx
 		);
@@ -62,8 +61,7 @@ describe('CatalogRemoteRepository.deleteRecipe', () => {
 				label: 'ข้าวต้ม',
 				ingredients: [{ item_master_id: 'item_1', quantity: '10', uom: 'kg' }],
 				standard_portions: '100',
-				standard_duration_hours: '1',
-				is_default: false
+				standard_duration_hours: '1'
 			},
 			ctx
 		);

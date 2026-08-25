@@ -126,6 +126,24 @@
 		selectedId = undefined;
 		goto(resolve('/back-office/catalog?tab=item_master'), { replaceState: true });
 	}
+
+	const typeClassMap = {
+		CONSUMABLE: {
+			label: 'วัสดุสิ้นเปลือง',
+			class:
+				'bg-blue-50 text-blue-700 ring-blue-600/10 dark:bg-blue-950/40 dark:text-blue-400 dark:ring-blue-500/20'
+		},
+		DURABLE: {
+			label: 'สิ่งของคงทน',
+			class:
+				'bg-amber-50 text-amber-700 ring-amber-600/10 dark:bg-amber-950/40 dark:text-amber-400 dark:ring-amber-500/20'
+		},
+		EQUIPMENT: {
+			label: 'อุปกรณ์/ครุภัณฑ์',
+			class:
+				'bg-purple-50 text-purple-700 ring-purple-600/10 dark:bg-purple-950/40 dark:text-purple-400 dark:ring-purple-500/20'
+		}
+	};
 </script>
 
 {#if viewMode === 'list'}
@@ -170,9 +188,15 @@
 						</Table.Row>
 					{:else}
 						{#each paginatedItems as e (e._id)}
+							{@const tc = typeClassMap[e.type_class || 'CONSUMABLE']}
 							<Table.Row>
 								<Table.Cell class="font-bold text-foreground">
 									{e.name}
+									<span
+										class="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset {tc.class}"
+									>
+										{tc.label}
+									</span>
 									{#if e.deactivated}
 										<span
 											class="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-600/10 ring-inset"

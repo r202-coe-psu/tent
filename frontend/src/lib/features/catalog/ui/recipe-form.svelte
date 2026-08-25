@@ -1,7 +1,6 @@
 <!-- src/lib/features/catalog/ui/recipe-form.svelte -->
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -43,7 +42,6 @@
 				ingredients: [{ item_master_id: '', quantity: '1', uom: '' }],
 				standard_portions: '100',
 				standard_duration_hours: '1',
-				is_default: false,
 				deactivated: false
 			}
 		}),
@@ -103,7 +101,6 @@
 			$formData.ingredients = item.ingredients ? JSON.parse(JSON.stringify(item.ingredients)) : [];
 			$formData.standard_portions = item.standard_portions;
 			$formData.standard_duration_hours = item.standard_duration_hours;
-			$formData.is_default = item.is_default || false;
 			$formData.deactivated = item.deactivated ?? false;
 		}
 	});
@@ -298,28 +295,6 @@
 					</Form.Field>
 				</div>
 			</section>
-
-			<div
-				class="flex items-start gap-4 rounded-xl border border-blue-50/50 bg-[#f4f8fc] p-5 dark:border-zinc-800/60 dark:bg-zinc-900/30"
-			>
-				<Checkbox
-					id="is_default"
-					bind:checked={$formData.is_default}
-					class="mt-0.5 h-5 w-5 rounded border-slate-300 data-[state=checked]:border-[#002f6c] data-[state=checked]:bg-[#002f6c]"
-				/>
-				<div class="grid gap-1.5 leading-none">
-					<label
-						for="is_default"
-						class="cursor-pointer text-[13px] font-bold text-slate-800 dark:text-slate-200"
-					>
-						ตั้งค่าเป็นค่าเริ่มต้นสำหรับประเภทนี้ (Set as Default Option)
-					</label>
-					<p class="text-[11px] leading-relaxed font-medium text-slate-400 dark:text-slate-400/85">
-						เมื่อเลือก
-						ตัวเลือกนี้จะถูกตั้งเป็นตัวเลือกเริ่มต้นอัตโนมัติในการลงทะเบียนหรือเรียกใช้งานของหัวข้อนี้
-					</p>
-				</div>
-			</div>
 
 			<div class="flex items-center gap-3 pt-2">
 				<Button

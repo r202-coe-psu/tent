@@ -905,10 +905,8 @@ async function seedCatalog(): Promise<void> {
 	// stays "unresolved" (demonstrates the block-on-unlinked-ingredient path).
 	const itemMasterBase = {
 		conversions: [],
-		distribution_type: 'consumable',
-		target_audience_type: 'all',
-		target_restrictions: {},
-		is_default: false
+		distribution_type: 'recurring',
+		type_class: 'CONSUMABLE'
 	} as const;
 	const itemMasters = [
 		catalogDoc(

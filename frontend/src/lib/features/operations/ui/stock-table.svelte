@@ -77,12 +77,12 @@
 			_id: im._id,
 			name: im.name,
 			category: im.category || 'other',
-			unit: im.base_unit || im.unit || 'ชิ้น',
+			unit: im.base_unit || 'ชิ้น',
 			reorder_level: null,
 			perishable: false,
-			target_reserve_days: im.target_reserve_days,
-			consumption_rate: im.consumption_rate,
-			timeframe: im.timeframe
+			target_reserve_days: undefined,
+			consumption_rate: undefined,
+			timeframe: undefined
 		}));
 
 		return [...supplyItems, ...mappedItemMasters];

@@ -20,7 +20,8 @@
 	import {
 		useItemCategories,
 		ItemCategoryForm,
-		useDeleteItemCategory
+		useDeleteItemCategory,
+		useItemMasters
 	} from '$lib/features/catalog';
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -28,6 +29,18 @@
 
 	const query = useItemCategories();
 	const deleteMutation = useDeleteItemCategory();
+	const itemMastersQuery = useItemMasters();
+
+	const itemCounts = $derived.by(() => {
+		const masters = itemMastersQuery.data ?? [];
+		const counts: Record<string, number> = {};
+		for (const item of masters) {
+			if (item.category) {
+				counts[item.category] = (counts[item.category] || 0) + 1;
+			}
+		}
+		return counts;
+	});
 
 	let deleteConfirmOpen = $state(false);
 	let pendingDeleteCategory = $state<{ id: string; name: string } | null>(null);
@@ -147,19 +160,7 @@
 							<Table.Row>
 								<Table.Cell class="font-bold text-foreground">{e.name}</Table.Cell>
 								<Table.Cell class="text-muted-foreground">
-									{#if e.is_default}
-										<span
-											class="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-green-600/20 ring-inset"
-										>
-											ค่าเริ่มต้น (Default)
-										</span>
-									{:else}
-										<span
-											class="inline-flex items-center rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset"
-										>
-											-
-										</span>
-									{/if}
+									{itemCounts[e.name] || 0} รายการ
 								</Table.Cell>
 								<Table.Cell class="text-center">
 									{#if isSA}

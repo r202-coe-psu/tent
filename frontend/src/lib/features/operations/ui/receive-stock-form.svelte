@@ -73,7 +73,7 @@
 				_id: im._id,
 				name: im.name,
 				category: im.category || 'other',
-				unit: im.base_unit || im.unit || 'ชิ้น',
+				unit: im.base_unit || 'ชิ้น',
 				reorder_level: null,
 				perishable: false
 			}));
