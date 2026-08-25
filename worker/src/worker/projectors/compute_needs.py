@@ -26,7 +26,10 @@ from typing import Any
 #: A donation stops owing the shelter anything once it is expired or cancelled. The
 #: wider set is kept deliberately — narrowing it here would change what the public board
 #: counts, which is a separate decision from wiring the warehouse in.
-_SETTLED_STATUSES = frozenset({"expired", "cancelled"})
+# Settled: the goods are never arriving at this shelter, so they cannot cover a
+# need. "redirected" joins the set with CR-087 (handed to another shelter);
+# "rejected" belongs here for the same reason and had been missed.
+_SETTLED_STATUSES = frozenset({"expired", "cancelled", "redirected", "rejected"})
 
 
 def _to_float(value: Any) -> float:
