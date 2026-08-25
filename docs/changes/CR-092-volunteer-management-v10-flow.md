@@ -91,6 +91,7 @@ affects:
    - **High-Resolution QR Code** บรรจุ Signed JWT Token สำหรับให้เจ้าหน้าที่สแกนหน้างาน
    - ข้อมูลนัดหมาย (วัน-เวลากะ, จุดนัดพบ, ชื่อ-เบอร์โทรผู้สมัคร)
 3. ตั๋วดิจิทัลต้อง มี 3 ปุ่ม Action หลัก: `[ 📥 บันทึกรูป QR Code ลงเครื่อง ]`, `[ 🔗 คัดลอกลิงก์ตั๋วนี้ ]`, และ `[ ❌ ขอยกเลิกการสมัครล่วงหน้า ]`
+4. **การคุ้มครองข้อมูลส่วนบุคคล (Data Privacy & PII Protection):** ในหน้าตั๋วดิจิทัล ระบบต้อง **ไม่ส่งและไม่แสดงผลเลขประจำตัวประชาชน 13 หลัก (`national_id`)** ออกทาง Response/UI และต้องแสดงเบอร์โทรศัพท์แบบ Masked (เช่น `xxx-xxx-1234`) เพื่อความปลอดภัยตามมาตรฐาน PDPA
 
 ### FR-VOL-04: จุดเช็คอินรายงานตัวหน้างานผ่าน Tablet (On-Site Tablet Check-In)
 
@@ -419,7 +420,8 @@ sequenceDiagram
 | Ticket Card (1) | ชื่องาน, สังกัดศูนย์พักพิง, รหัส Token, วันที่สมัคร                                                    |
 | Ticket Card (2) | Badge สถานะ: `🟢 ยืนยันแล้ว (Confirmed)` หรือ `🟡 รอการพิจารณา (Pending Review)`                       |
 | Ticket Card (3) | **QR Code ขนาดใหญ่ความละเอียดสูง** (บรรจุ JWT Token Signed สำหรับยิงสแกนหน้างาน)                       |
-| Ticket Card (4) | ข้อมูลนัดหมาย: วันที่, เวลากะ, จุดนัดพบ, ชื่อและเบอร์โทรผู้สมัคร                                       |
+| Ticket Card (4) | ข้อมูลนัดหมาย: วันที่, เวลากะ, จุดนัดพบ, ชื่อ และเบอร์โทรผู้สมัครแบบ Masked (`xxx-xxx-1234`)            |
+| Privacy Guard   | **PII Redaction:** ห้ามส่งฟิลด์ `national_id` ใน API Response และ Mask เบอร์โทรศัพท์ตามมาตรฐาน PDPA    |
 | Actions         | `[ 📥 บันทึกรูป QR Code ลงเครื่อง ]` / `[ 🔗 คัดลอกลิงก์ตั๋วนี้ ]` / `[ ❌ ขอยกเลิกการสมัครล่วงหน้า ]` |
 
 ---
@@ -499,7 +501,7 @@ sequenceDiagram
 
 ---
 
-## 4. สรุปรายการ Route URLs ทั้งหมด (System Navigation & Routing Table)
+## 5. สรุปรายการ Route URLs ทั้งหมด (System Navigation & Routing Table)
 
 | ฝั่งงาน       | Route URL                              | หน้าที่หลัก                                                              |
 | ------------- | -------------------------------------- | ------------------------------------------------------------------------ |
@@ -515,11 +517,11 @@ sequenceDiagram
 
 ---
 
-## 5. เงื่อนไขการส่งมอบและการทดสอบ (Acceptance Criteria & DoD)
+## 6. เงื่อนไขการส่งมอบและการทดสอบ (Acceptance Criteria & DoD)
 
 - [ ] **AC-VOL-01 (Unified Identity & App Mapping):** เมื่อออกสิทธิ์หลังบ้านให้อาสาที่มีเบอร์โทรตรงกับบุคคลเดิมในระบบ ระบบ Server BFF ต้องผูกความสัมพันธ์ผ่าน `volunteer.user_name` โดยไม่สร้าง User ซ้ำใน `_users` และไม่เพิ่มฟิลด์แปลกปลอมในฐานข้อมูล `_users`
 - [ ] **AC-VOL-02 (No-SMS OTP):** ประชาชนสามารถส่งฟอร์มสมัครงานผ่าน `/volunteers/jobs` ได้สำเร็จโดยไม่ต้องรับรหัส SMS OTP และได้รับตั๋วดิจิทัล QR Code ทันทีภายใน 30 วินาที
-- [ ] **AC-VOL-03 (Digital Pass View):** หน้า `/volunteer/ticket/:token` แสดง QR Code JWT แบบ Clean Single Ticket View และสามารถกดบันทึกรูป QR Code หรือคัดลอกลิงก์ได้
+- [ ] **AC-VOL-03 (Digital Pass View & PII Protection):** หน้า `/volunteer/ticket/:token` แสดง QR Code JWT แบบ Clean Single Ticket View สามารถกดบันทึกรูป QR Code หรือคัดลอกลิงก์ได้ โดยระบบต้องไม่ส่ง/ไม่แสดง `national_id` และแสดงเบอร์โทรศัพท์แบบ Masked (`xxx-xxx-1234`)
 - [ ] **AC-VOL-04 (POS Check-in):** หน้า `/volunteers/checkin` รองรับทั้งการยิงสแกน QR และการพิมพ์ค้นหาเบอร์โทร 4 ตัวท้าย กดเช็คอินแล้วเพิ่มยอด `volunteers_active` สดทันที
 - [ ] **AC-VOL-05 (Server BFF Time-Bound Write Guard):** ระบบ Server BFF (`+server.ts`) บังคับใช้ Time-Bound Guard โดยอนุญาตให้บัญชีอาสาสมัคร Staff-Capable ส่งคำขอ Write ได้เฉพาะช่วงกะงาน $\pm 5$ นาที และ `checked_in = true` เท่านั้น หากอยู่นอกกะหรือยังไม่เช็คอิน คำขอ Write ต้องถูก Server ปฏิเสธด้วย HTTP 403 Forbidden ทันที
 - [ ] **AC-VOL-06 (3-Color Quota):** แถบโควตาแสดงยอด `Accepted`, `Dispatched`, และ `Remaining` ตรงตามสถานะ เมื่อ SM กด Dispatch ยอด Dispatched เพิ่ม +1 และเมื่ออาสากด Decline ยอด คืนกลับไปที่ Remaining +1
@@ -528,17 +530,18 @@ sequenceDiagram
 
 ---
 
-## 6. ประวัติการตัดสินใจ (Decision Log)
+## 7. ประวัติการตัดสินใจ (Decision Log)
 
 - **2026-08-24 — Proposed:** ถอดบทเรียนจาก UIv10 และแปลงเป็น CR-092 (renumbered จาก CR-089 เพื่อหลบ CR ID collision) สำหรับเตรียมพร้อมจัดทำ Task implementation และ Handover สู่ทีมพัฒนา
 - **2026-08-25 — Revised:** ปรับปรุงตามข้อเสนอแนะด้านความปลอดภัยและสถาปัตยกรรม:
   1. ยกเลิกการแก้ไข schema `_users` โดยเปลี่ยนมาใช้ Application Database Mapping Model ผ่าน `volunteer.user_name` และ Server BFF
   2. ปรับปรุงกลไก Password Provisioning ให้มี Mandatory First-Time Password Reset ตาม [Password Policy](../data/password-policy.md) แทนการใช้เบอร์โทรศัพท์เป็น default password
   3. ระบุ Enforcement Layer สำหรับ Time-Bound Shift Access Control ให้ชัดเจนว่าบังคับใช้ที่ระดับ Server BFF Middleware / Endpoints (`+server.ts`)
+  4. เพิ่มมาตรการคุ้มครองข้อมูลส่วนบุคคล (PII Protection) สำหรับหน้าตั๋วดิจิทัล `/volunteer/ticket/:token` (ห้ามส่ง `national_id`, Mask เบอร์โทรศัพท์) ตามมาตรฐาน PDPA
 
 ---
 
-## 7. ข้อเสนอวิธี Track การเปลี่ยนแปลง (Tracking Proposal — Policy §6)
+## 8. ข้อเสนอวิธี Track การเปลี่ยนแปลง (Tracking Proposal — Policy §6)
 
 > [!IMPORTANT]
 > **เรียน เจ้าของโครงการ (Project Owner):**
