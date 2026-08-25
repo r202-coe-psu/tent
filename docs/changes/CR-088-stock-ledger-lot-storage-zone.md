@@ -1,10 +1,10 @@
 ---
 id: CR-088
 title: stock_ledger.lot — เพิ่ม lot_no (L-YYMMDD-XXX) และ storage_zone สำหรับขั้นตรวจรับบริจาค (T-16 R-16.5)
-status: proposed
+status: approved
 date: 2026-08-25
 requested_by: Team A (T-16 implementation) / Kunanon Nusaeng
-decided_by: <รอเจ้าของโครงการ>
+decided_by: project owner (อนุมัติ 2026-08-25)
 layer: volatile
 affects:
   - docs/data/schema.md §2.1 stock_ledger (field `lot`)
@@ -49,3 +49,4 @@ B-3 ในบันทึกสถานะ T-16) ระบุว่าแท็
 ## Decision log
 
 - 2026-08-25 — proposed
+- 2026-08-25 — approved by project owner
