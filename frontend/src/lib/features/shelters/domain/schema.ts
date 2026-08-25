@@ -550,18 +550,25 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
 	};
 }
 
+/**
+ * Current persisted shelter master schema version. Bump alongside a new
+ * `migrateVxToVy` step so migration runners (`scripts/migrate-shelter.ts`) stop
+ * skipping docs that are behind by less than a whole major shape change.
+ */
+export const SHELTER_MASTER_SCHEMA_V = 5;
+
 /** v4 → v5 default-fill (CR-067). Old registry docs are evacuation centers. */
 function migrateV4ToV5(v4: ShelterMaster): ShelterMaster {
 	return {
 		...v4,
-		schema_v: 5,
+		schema_v: SHELTER_MASTER_SCHEMA_V,
 		site_kind: v4.site_kind ?? 'evacuation_center'
 	};
 }
 
 /** Idempotent v2 → current migration. Safe to call multiple times. */
 export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaster): ShelterMaster {
-	if (master.schema_v >= 5) {
+	if (master.schema_v >= SHELTER_MASTER_SCHEMA_V) {
 		if ('site_kind' in master && master.site_kind) return master as ShelterMaster;
 		return migrateV4ToV5(master as ShelterMaster);
 	}

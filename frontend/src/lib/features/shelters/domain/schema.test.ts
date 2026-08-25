@@ -11,6 +11,7 @@ import {
 	riskSchema,
 	subStorageItemSchema,
 	migrateShelterV2ToCurrent,
+	SHELTER_MASTER_SCHEMA_V,
 	type ShelterMasterV2
 } from './schema';
 
@@ -677,5 +678,38 @@ describe('CR-023 — migrate v3 → v4 default-fill', () => {
 		expect(m.facilities?.car_toilet_supported).toBeNull();
 		expect(m.risk?.secondary_muster_point).toBeNull();
 		expect(m.zones?.[0].area_m2).toBeNull();
+	});
+});
+
+describe('CR-067 — migrate v4 → v5 site_kind back-fill', () => {
+	const v4doc = {
+		_id: 'shelter:x',
+		type: 'shelter' as const,
+		schema_v: 4,
+		code: 'SH001',
+		name: 'X',
+		operation_status: 'standby' as const,
+		capacity: 10,
+		zones: [],
+		created_at: '2024-01-01T00:00:00Z',
+		updated_at: '2024-01-01T00:00:00Z'
+	} as unknown as ShelterMasterV2;
+
+	it('defaults a v4 doc to evacuation_center', () => {
+		const m = migrateShelterV2ToCurrent(v4doc);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
+		expect(m.site_kind).toBe('evacuation_center');
+	});
+
+	it('back-fills a doc already stamped at the current version but missing site_kind', () => {
+		// The exact shape `scripts/migrate-shelter.ts` used to skip: version is
+		// current, the additive field never landed.
+		const stamped = { ...v4doc, schema_v: SHELTER_MASTER_SCHEMA_V } as unknown as ShelterMasterV2;
+		expect(migrateShelterV2ToCurrent(stamped).site_kind).toBe('evacuation_center');
+	});
+
+	it('preserves an explicit host_house', () => {
+		const host = { ...v4doc, site_kind: 'host_house' } as unknown as ShelterMasterV2;
+		expect(migrateShelterV2ToCurrent(host).site_kind).toBe('host_house');
 	});
 });
