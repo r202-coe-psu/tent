@@ -45,6 +45,10 @@ vi.mock('$lib/features/people', () => ({
 	startPeopleLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
 }));
 
+vi.mock('$lib/features/people-import', () => ({
+	startPeopleImportLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
+}));
+
 vi.mock('$lib/features/operations', () => ({
 	startOperationsLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
 }));

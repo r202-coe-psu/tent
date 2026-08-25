@@ -23,12 +23,19 @@ import {
 	type GasCylinderTypeInput
 } from '../domain/kitchen';
 import {
+	createGasLedgerEntry,
+	isGasLedgerEntry,
+	gasCylinderBalance,
+	maxRefillKg,
+	type GasLedgerEntry
+} from '../domain/gas-ledger';
+import {
 	createStockLedger,
 	stockBalance,
 	isStockLedger,
 	type StockLedger
 } from '$lib/features/operations';
-import { qtyGt, qtyNeg } from '$lib/utils/qty';
+import { qtyGt, qtyLte, qtyNeg } from '$lib/utils/qty';
 import type { KitchenRepository } from './kitchen.repository';
 
 export class KitchenRemoteRepository implements KitchenRepository {
@@ -79,6 +86,31 @@ export class KitchenRemoteRepository implements KitchenRepository {
 			}
 		}
 
+		// Gas (CR-085) — the plan being requisitioned may carry a planned draw
+		// from real cylinders. Checked against every OTHER pending validation
+		// before anything is written, so a shortfall here blocks the whole
+		// requisition exactly like an insufficient food item does above.
+		const plan = input.meal_plan_id ? await this.getMealPlanById(input.meal_plan_id) : null;
+		const gasUsage = plan?.gas_usage ?? [];
+		if (gasUsage.length > 0) {
+			const [types, gasLedger] = await Promise.all([
+				this.listGasCylinderTypes(),
+				this.listGasLedger()
+			]);
+			for (const g of gasUsage) {
+				const cyl = types.find((t) => t._id === g.cylinder_id);
+				if (!cyl) {
+					throw new Error(`issueRequisition: gas cylinder ${g.cylinder_id} not found`);
+				}
+				const remaining = gasCylinderBalance(gasLedger, g.cylinder_id, cyl.capacity_kg);
+				if (qtyGt(g.consumption_kg, remaining)) {
+					throw new Error(
+						`issueRequisition: cannot draw ${g.consumption_kg} kg from "${cyl.name}" — only ${remaining} kg remaining`
+					);
+				}
+			}
+		}
+
 		// The requisition stores its ledger `_id`s, so they must exist before either
 		// doc is built — mint the ULIDs first, then hand each one to
 		// `createStockLedger` (CR-055 R7: no writer assembles a ledger doc by hand,
@@ -102,8 +134,19 @@ export class KitchenRemoteRepository implements KitchenRepository {
 				ledgerUlids[i]
 			)
 		);
+		const gasLedgerEntries = gasUsage.map((g) =>
+			createGasLedgerEntry(
+				{
+					cylinder_id: g.cylinder_id,
+					qty_kg: qtyNeg(g.consumption_kg),
+					reason: 'consumption',
+					ref_id: requisition._id
+				},
+				ctx
+			)
+		);
 
-		await bulkDocs(this.dbName, [requisition, ...ledgerEntries]);
+		await bulkDocs(this.dbName, [requisition, ...ledgerEntries, ...gasLedgerEntries]);
 		return requisition;
 	}
 
@@ -155,15 +198,19 @@ export class KitchenRemoteRepository implements KitchenRepository {
 
 	async updateMealPlanDraft(
 		plan: MealPlan,
-		patch: Pick<MealPlan, 'headcount' | 'recipes' | 'calc_source' | 'override_reason' | 'label'>
+		patch: Pick<
+			MealPlan,
+			'headcount' | 'recipes' | 'calc_source' | 'override_reason' | 'label' | 'gas_usage'
+		>
 	): Promise<MealPlan> {
 		if (plan.status !== 'draft') {
 			throw new Error('updateMealPlanDraft: only draft plans can be edited');
 		}
 		const next = { ...touch(plan), ...patch };
-		// An explicit `label: undefined` in the patch means "clear it" — drop the
-		// key so the stored doc loses the old label instead of keeping it.
+		// An explicit `undefined` in the patch means "clear it" — drop the key so
+		// the stored doc loses the old value instead of keeping it.
 		if (patch.label === undefined) delete next.label;
+		if (patch.gas_usage === undefined) delete next.gas_usage;
 		return this.repo.put(next);
 	}
 
@@ -192,6 +239,56 @@ export class KitchenRemoteRepository implements KitchenRepository {
 
 	async deleteGasCylinderType(doc: GasCylinderType): Promise<void> {
 		await this.repo.remove(doc);
+	}
+
+	listGasLedger(): Promise<GasLedgerEntry[]> {
+		return this.repo.allByType('gas_ledger', isGasLedgerEntry);
+	}
+
+	async refillGasCylinder(
+		cylinderId: string,
+		qtyKg: string,
+		ctx: AuthorContext
+	): Promise<GasLedgerEntry> {
+		const [types, gasLedger] = await Promise.all([
+			this.listGasCylinderTypes(),
+			this.listGasLedger()
+		]);
+		const cyl = types.find((t) => t._id === cylinderId);
+		if (!cyl) {
+			throw new Error(`refillGasCylinder: cylinder ${cylinderId} not found`);
+		}
+		const remaining = gasCylinderBalance(gasLedger, cylinderId, cyl.capacity_kg);
+		const room = maxRefillKg(remaining, cyl.capacity_kg);
+		if (qtyGt(qtyKg, room)) {
+			throw new Error(
+				`refillGasCylinder: refilling ${qtyKg} kg would exceed "${cyl.name}"'s capacity — only ${room} kg of room left`
+			);
+		}
+		return this.repo.put(
+			createGasLedgerEntry({ cylinder_id: cylinderId, qty_kg: qtyKg, reason: 'refill' }, ctx)
+		);
+	}
+
+	async writeOffGasCylinder(cylinderId: string, ctx: AuthorContext): Promise<GasLedgerEntry> {
+		const [types, gasLedger] = await Promise.all([
+			this.listGasCylinderTypes(),
+			this.listGasLedger()
+		]);
+		const cyl = types.find((t) => t._id === cylinderId);
+		if (!cyl) {
+			throw new Error(`writeOffGasCylinder: cylinder ${cylinderId} not found`);
+		}
+		const remaining = gasCylinderBalance(gasLedger, cylinderId, cyl.capacity_kg);
+		if (qtyLte(remaining, 0)) {
+			throw new Error(`writeOffGasCylinder: "${cyl.name}" is already empty — nothing to write off`);
+		}
+		return this.repo.put(
+			createGasLedgerEntry(
+				{ cylinder_id: cylinderId, qty_kg: qtyNeg(remaining), reason: 'adjust' },
+				ctx
+			)
+		);
 	}
 }
 

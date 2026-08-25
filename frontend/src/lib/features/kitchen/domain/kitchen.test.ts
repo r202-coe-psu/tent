@@ -203,6 +203,97 @@ describe('createMealService', () => {
 		};
 		expect(createMealService(input, ctx)._id).not.toBe(createMealService(input, ctx)._id);
 	});
+
+	it('carries actual_yield through when provided (CR-084)', () => {
+		const svc = createMealService(
+			{
+				date: '2026-07-15',
+				meal: 'lunch',
+				actual_yield: 90,
+				served: 85,
+				waste: 3,
+				external: { volunteers: 1, outside_evacuees: 0 }
+			},
+			ctx
+		);
+		expect(svc.actual_yield).toBe(90);
+	});
+
+	it('keeps actual_yield = 0 (explicit zero yield, not dropped as falsy)', () => {
+		const svc = createMealService(
+			{
+				date: '2026-07-15',
+				meal: 'lunch',
+				actual_yield: 0,
+				served: 0,
+				waste: 0,
+				external: { volunteers: 0, outside_evacuees: 0 }
+			},
+			ctx
+		);
+		expect(svc.actual_yield).toBe(0);
+	});
+
+	it('omits actual_yield entirely when absent', () => {
+		const svc = createMealService(
+			{
+				date: '2026-07-15',
+				meal: 'lunch',
+				served: 80,
+				waste: 5,
+				external: { volunteers: 0, outside_evacuees: 0 }
+			},
+			ctx
+		);
+		expect('actual_yield' in svc).toBe(false);
+	});
+
+	it('rejects a negative actual_yield', () => {
+		expect(() =>
+			createMealService(
+				{
+					date: '2026-07-15',
+					meal: 'lunch',
+					actual_yield: -1,
+					served: 80,
+					waste: 5,
+					external: { volunteers: 0, outside_evacuees: 0 }
+				},
+				ctx
+			)
+		).toThrow();
+	});
+
+	it('rejects a fractional actual_yield (portions are whole counts)', () => {
+		expect(() =>
+			createMealService(
+				{
+					date: '2026-07-15',
+					meal: 'lunch',
+					actual_yield: 90.5,
+					served: 80,
+					waste: 5,
+					external: { volunteers: 0, outside_evacuees: 0 }
+				},
+				ctx
+			)
+		).toThrow();
+	});
+
+	it('keeps schema_v 2 — optional field, no bump (CR-084)', () => {
+		const svc = createMealService(
+			{
+				date: '2026-07-15',
+				meal: 'lunch',
+				actual_yield: 90,
+				served: 85,
+				waste: 3,
+				external: { volunteers: 0, outside_evacuees: 0 }
+			},
+			ctx
+		);
+		expect(svc.schema_v).toBe(2);
+	});
 });
 
 // ---- type guards ----

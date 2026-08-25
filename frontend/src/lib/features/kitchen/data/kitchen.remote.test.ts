@@ -409,6 +409,23 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 		await repo.recordMealService(planless, ctx);
 		expect(await repo.listMealServices()).toHaveLength(2);
 	});
+
+	it('persists actual_yield onto the stored doc (CR-084)', async () => {
+		const svc = await repo.recordMealService({ ...serviceInput, actual_yield: 90 }, ctx);
+		const stored = (await memoryRepo.get(svc._id)) as Record<string, unknown>;
+		expect(stored.actual_yield).toBe(90);
+	});
+
+	it('persists actual_yield = 0 rather than dropping it', async () => {
+		const svc = await repo.recordMealService({ ...serviceInput, actual_yield: 0 }, ctx);
+		const stored = (await memoryRepo.get(svc._id)) as Record<string, unknown>;
+		expect(stored.actual_yield).toBe(0);
+	});
+
+	it('reads back a service with no actual_yield as undefined', async () => {
+		const svc = await repo.recordMealService(serviceInput, ctx);
+		expect(svc.actual_yield).toBeUndefined();
+	});
 });
 
 describe('KitchenRemoteRepository.gasCylinderType — CRUD', () => {
@@ -504,5 +521,224 @@ describe('T-27 demo chain — requisition → service record → variance', () =
 			.filter((d) => d.item_id === 'item:rice')
 			.reduce((sum, d) => sum + Number(d.qty), 0);
 		expect(riceOnHand).toBeCloseTo(85, 6);
+	});
+
+	it('records yield 90 / served 85 → variance under-plan and yield_variance −10 (CR-084)', async () => {
+		const plan = await repo.createMealPlan(
+			{
+				date: '2026-07-21',
+				meal: 'dinner',
+				headcount: { total: 100, halal: 0, soft_food: 0, infant: 0 },
+				recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 15000 }]
+			},
+			ctx
+		);
+		await repo.confirmMealPlan(plan);
+
+		const reqInput = toRequisitionInput(plan);
+		const issued = reqInput.items.map((i) => ({ ...i, qty_issued: i.qty_requested }));
+		await repo.issueRequisition({ meal_plan_id: plan._id, items: issued }, ctx);
+
+		const svc = await repo.recordMealService(
+			{
+				date: '2026-07-21',
+				meal: 'dinner',
+				meal_plan_id: plan._id,
+				actual_yield: 90,
+				served: 85,
+				waste: 3,
+				external: { volunteers: 4, outside_evacuees: 3 }
+			},
+			ctx
+		);
+
+		const storedPlan = await repo.getMealPlanById(plan._id);
+		const v = computeMealVariance(svc, storedPlan);
+
+		expect(v.variance).toBe(-15);
+		expect(v.status).toBe('under');
+		expect(v.actual_yield).toBe(90);
+		expect(v.yield_variance).toBe(-10); // actual_yield 90 − planned 100
+	});
+});
+
+describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
+	let repo: KitchenRemoteRepository;
+
+	beforeEach(async () => {
+		memoryRepo = createInMemoryRepository();
+		repo = new KitchenRemoteRepository('shelter_sh001');
+		await seedStock('item:rice', 100);
+	});
+
+	async function planWithGas(cylinderId: string, consumptionKg: string, date: string) {
+		const plan = await repo.createMealPlan(
+			{
+				date,
+				meal: 'dinner',
+				headcount: { total: 10, halal: 0, soft_food: 0, infant: 0 },
+				recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 1000 }],
+				gas_usage: [{ cylinder_id: cylinderId, consumption_kg: consumptionKg }]
+			},
+			ctx
+		);
+		return repo.confirmMealPlan(plan);
+	}
+
+	it('issueRequisition writes a gas_ledger consumption entry alongside the food ledger', async () => {
+		const cyl = await repo.createGasCylinderType(
+			{ name: 'ถังทดสอบ', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+			ctx
+		);
+		const plan = await planWithGas(cyl._id, '2', '2026-08-22');
+
+		const reqInput = toRequisitionInput(plan);
+		const issued = reqInput.items.map((i) => ({ ...i, qty_issued: i.qty_requested }));
+		const requisition = await repo.issueRequisition({ meal_plan_id: plan._id, items: issued }, ctx);
+
+		const gasLedger = await repo.listGasLedger();
+		expect(gasLedger).toHaveLength(1);
+		expect(gasLedger[0].cylinder_id).toBe(cyl._id);
+		expect(gasLedger[0].qty_kg).toBe('-2');
+		expect(gasLedger[0].reason).toBe('consumption');
+		expect(gasLedger[0].ref_id).toBe(requisition._id);
+	});
+
+	it('cannot draw more gas than remains — throws and writes nothing at all (all-or-nothing)', async () => {
+		const cyl = await repo.createGasCylinderType(
+			{ name: 'ถังเล็ก', capacity_kg: '5', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+			ctx
+		);
+		const plan = await planWithGas(cyl._id, '10', '2026-08-22'); // more than the 5 kg capacity
+
+		const reqInput = toRequisitionInput(plan);
+		const issued = reqInput.items.map((i) => ({ ...i, qty_issued: i.qty_requested }));
+
+		await expect(
+			repo.issueRequisition({ meal_plan_id: plan._id, items: issued }, ctx)
+		).rejects.toThrow(/only 5 kg remaining/);
+
+		expect(await repo.listGasLedger()).toHaveLength(0);
+		expect(await repo.listRequisitions()).toHaveLength(0);
+		// The food side didn't get written either — same atomic guarantee.
+		const ledger = await memoryRepo.allByType('stock_ledger', isStockLedger);
+		expect(ledger.filter((d) => d.reason === 'requisition')).toHaveLength(0);
+	});
+
+	it('a plan with no gas_usage issues normally with no gas_ledger writes', async () => {
+		const plan = await repo.createMealPlan(
+			{
+				date: '2026-08-22',
+				meal: 'lunch',
+				headcount: { total: 10, halal: 0, soft_food: 0, infant: 0 },
+				recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 1000 }]
+			},
+			ctx
+		);
+		await repo.confirmMealPlan(plan);
+		const reqInput = toRequisitionInput(plan);
+		const issued = reqInput.items.map((i) => ({ ...i, qty_issued: i.qty_requested }));
+		await repo.issueRequisition({ meal_plan_id: plan._id, items: issued }, ctx);
+
+		expect(await repo.listGasLedger()).toHaveLength(0);
+	});
+
+	it('refillGasCylinder tops up a partially-used tank', async () => {
+		const cyl = await repo.createGasCylinderType(
+			{ name: 'ถังเติม', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+			ctx
+		);
+		// Consume 10 kg by hand (equivalent to a prior requisition).
+		await memoryRepo.put({
+			_id: `gas_ledger:seed-${cyl._id}`,
+			type: 'gas_ledger',
+			schema_v: 1,
+			cylinder_id: cyl._id,
+			qty_kg: '-10',
+			reason: 'consumption',
+			ref_id: null,
+			occurred_at: new Date().toISOString()
+		});
+
+		const refill = await repo.refillGasCylinder(cyl._id, '5', ctx);
+		expect(refill.qty_kg).toBe('5');
+		expect(refill.reason).toBe('refill');
+
+		const gasLedger = await repo.listGasLedger();
+		expect(gasLedger).toHaveLength(2);
+	});
+
+	it('refillGasCylinder rejects a refill that would overflow the tank', async () => {
+		const cyl = await repo.createGasCylinderType(
+			{ name: 'ถังเติม', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+			ctx
+		);
+		await memoryRepo.put({
+			_id: `gas_ledger:seed-${cyl._id}`,
+			type: 'gas_ledger',
+			schema_v: 1,
+			cylinder_id: cyl._id,
+			qty_kg: '-10', // remaining = 5 kg, room = 10 kg
+			reason: 'consumption',
+			ref_id: null,
+			occurred_at: new Date().toISOString()
+		});
+
+		await expect(repo.refillGasCylinder(cyl._id, '11', ctx)).rejects.toThrow(
+			/only 10 kg of room left/
+		);
+	});
+
+	// CR-085 addendum — a dust remainder can never be drawn to 0 through
+	// consumption (all-or-nothing), so writeOffGasCylinder is the only path.
+	it('writeOffGasCylinder zeroes out a dust remainder', async () => {
+		const cyl = await repo.createGasCylinderType(
+			{ name: 'ถังเล็ก', capacity_kg: '4', burn_rate_kg_per_hour: '0.3', time_multiplier: '1' },
+			ctx
+		);
+		await memoryRepo.put({
+			_id: `gas_ledger:seed-${cyl._id}`,
+			type: 'gas_ledger',
+			schema_v: 1,
+			cylinder_id: cyl._id,
+			qty_kg: '-3.999', // remaining = 0.001 kg — too small for any real requisition to hit exactly
+			reason: 'consumption',
+			ref_id: null,
+			occurred_at: new Date().toISOString()
+		});
+
+		const adjustEntry = await repo.writeOffGasCylinder(cyl._id, ctx);
+		expect(adjustEntry.reason).toBe('adjust');
+		expect(adjustEntry.qty_kg).toBe('-0.001');
+		expect(adjustEntry.ref_id).toBeNull();
+
+		const gasLedger = await repo.listGasLedger();
+		expect(gasLedger).toHaveLength(2);
+	});
+
+	it('writeOffGasCylinder rejects a cylinder that is already empty', async () => {
+		const cyl = await repo.createGasCylinderType(
+			{ name: 'ถังหมดแล้ว', capacity_kg: '4', burn_rate_kg_per_hour: '0.3', time_multiplier: '1' },
+			ctx
+		);
+		await memoryRepo.put({
+			_id: `gas_ledger:seed-${cyl._id}`,
+			type: 'gas_ledger',
+			schema_v: 1,
+			cylinder_id: cyl._id,
+			qty_kg: '-4',
+			reason: 'consumption',
+			ref_id: null,
+			occurred_at: new Date().toISOString()
+		});
+
+		await expect(repo.writeOffGasCylinder(cyl._id, ctx)).rejects.toThrow(/already empty/);
+		expect(await repo.listGasLedger()).toHaveLength(1); // nothing new written
+	});
+
+	it('writeOffGasCylinder rejects an unknown cylinder', async () => {
+		await expect(repo.writeOffGasCylinder('gas_cylinder_type:missing', ctx)).rejects.toThrow(
+			/not found/
+		);
 	});
 });
