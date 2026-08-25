@@ -25,7 +25,10 @@ Module,Back-Office,ระบบส่วนหลัง,evacuee / supply / kitch
 Module,Shelters,ศูนย์พักพิง + ความจุ,รวม capacity guide
 Module,System Management,ทะเบียนพื้นที่,SA only
 Module,Public,พอร์ทัลสาธารณะ,shelters / search / donations
+Module,Me,ข้อมูลผู้ใช้,โปรไฟล์ผู้ใช้ปัจจุบัน (/me)
+Module,Nav,แถบนำทาง,การทำงานของ Navbar และ เมนูนำทาง
 Module,Cross-cutting,ข้ามโมดูล,scope / privacy / concurrency / E2E
 Environment,Staging,Staging,แนะนำสำหรับ UAT ทีม
 Environment,Local,Local/dev,smoke ของ developer
 Environment,Prod-like,ใกล้ production,ก่อน go-live
+
