@@ -1,5 +1,5 @@
 ---
-id: CR-089
+id: CR-092
 title: ระบบบริหารจัดการจิตอาสาฉบับสมบูรณ์ V10 — Unified Identity, No-SMS OTP, Digital Pass QR, Time-Bound RBAC และ 6 หน้าจอหลัก
 status: proposed
 date: 2026-08-24
@@ -18,11 +18,11 @@ affects:
   - frontend/src/routes/
 ---
 
-# CR-089 — ระบบบริหารจัดการจิตอาสาฉบับสมบูรณ์ V10 (SmartShelter Volunteer Management System)
+# CR-092 — ระบบบริหารจัดการจิตอาสาฉบับสมบูรณ์ V10 (SmartShelter Volunteer Management System)
 
 ## สรุป (TL;DR)
 
-- **เปลี่ยนอะไร:** แปลงข้อกำหนด `volunteer_flow.md` (V10) เป็น CR-089 ครอบคลุมสถาปัตยกรรมจิตอาสาแบบครบวงจร:
+- **เปลี่ยนอะไร:** แปลงข้อกำหนด `volunteer_flow.md` (V10) เป็น CR-092 ครอบคลุมสถาปัตยกรรมจิตอาสาแบบครบวงจร:
   - **Unified Person Identity:** ผูกตัวตน 3 สถานะ (ผู้ประสบภัย/อาสา/เจ้าหน้าที่) ด้วย `national_id` / `phone_number` เป็น Single Source of Truth
   - **Zero-Friction No-SMS OTP:** สมัครงานได้ใน 30 วินาที รับ QR Code ตั๋วดิจิทัลทันที ป้องกัน Abuse ด้วย reCAPTCHA v3 (Invisible) + Rate Limiting
   - **Time-Bound Write Access:** ปลดล็อกสิทธิ์บันทึกข้อมูลเฉพาะช่วงเวลากะงาน $\pm 5$ นาที และต้องเช็คอินเข้างานแล้ว (`checked_in = true`)
@@ -127,7 +127,7 @@ affects:
 
 ### 1.1 รายละเอียดการปรับแก้ Schema & Database Fields (Data Field Modifications)
 
-เปรียบเทียบโครงสร้างฐานข้อมูลระหว่าง **โครงสร้างเดิม (Legacy Schema)** กับ **สิ่งที่ปรับปรุงเพิ่มใน CR-089 (New & Modified Fields)** แยกตาม Document Type:
+เปรียบเทียบโครงสร้างฐานข้อมูลระหว่าง **โครงสร้างเดิม (Legacy Schema)** กับ **สิ่งที่ปรับปรุงเพิ่มใน CR-092 (New & Modified Fields)** แยกตาม Document Type:
 
 #### 1. `volunteer` — `volunteer:{ulid}` (Schema v1)
 
@@ -144,7 +144,7 @@ affects:
     user_name?: string | null;
   }
   ```
-- **สิ่งที่ปรับเปลี่ยนใน CR-089:**
+- **สิ่งที่ปรับเปลี่ยนใน CR-092:**
   - ✨ **[เพิ่มฟิลด์ใหม่] `national_id: string | null` (optional):** เลขประจำตัวประชาชน 13 หลัก เพื่อผูกตัวตน Single Source of Truth (Unified Multi-Role Person Identity)
   - ✨ **[เพิ่มฟิลด์ใหม่] `checked_in: boolean` (system, default: `false`):** ติดตามสถานะเช็คอินปฏิบัติหน้าที่สดหน้างาน
   - ✨ **[เพิ่มฟิลด์ใหม่] `current_shelter_code: string | null` (optional):** รหัสศูนย์พักพิงที่อาสากำลังปฏิบัติงานอยู่ในกะปัจจุบัน
@@ -164,7 +164,7 @@ affects:
     status: 'assigned' | 'no_show' | 'cancelled';
   }
   ```
-- **สิ่งที่ปรับเปลี่ยนใน CR-089 (Schema v2):**
+- **สิ่งที่ปรับเปลี่ยนใน CR-092 (Schema v2):**
   - ✨ **[เพิ่มฟิลด์ใหม่] `duty_window: { start_ts: string, end_ts: string }` (required):** หน้าต่างเวลากะงานจริง สำหรับระบบบังคับ Time-Bound Shift Access Control ($\pm 5$ นาที)
   - ✨ **[เพิ่มฟิลด์ใหม่] `check_in_at: string | null` (optional):** Timestamp สแกน QR Ticket รายงานตัวเข้างานที่จุด Tablet เช็คอิน
   - ✨ **[เพิ่มฟิลด์ใหม่] `check_out_at: string | null` (optional):** Timestamp เช็คเอาท์ออกงาน
@@ -187,7 +187,7 @@ affects:
     status: 'open' | 'almost_full' | 'full' | 'closed' | 'cancelled';
   }
   ```
-- **สิ่งที่ปรับเปลี่ยนใน CR-089:**
+- **สิ่งที่ปรับเปลี่ยนใน CR-092:**
   - ✨ **[เพิ่มฟิลด์ใหม่] `slots_dispatched: number` (required, default: `0`):** ยอดอาสาสมัครที่อยู่ระหว่างเสนอจ่ายงานรอตอบรับ (🟡 Dispatched Quota)
   - 🔄 **[เปลี่ยนชื่อฟิลด์ & ปรับวิธีคำนวณ] `slots_pending` $\rightarrow$ `slots_remaining`:** เปลี่ยนมาเก็บยอดกำลังพลที่ยังขาดอยู่สด (⚪ Remaining Quota = `quota` - `slots_confirmed` - `slots_dispatched`)
 
@@ -205,7 +205,7 @@ affects:
     status: 'pending' | 'accepted' | 'rejected' | 'cancelled'; // 🔴 Enum เดิม
   }
   ```
-- **สิ่งที่ปรับเปลี่ยนใน CR-089:**
+- **สิ่งที่ปรับเปลี่ยนใน CR-092:**
   - ✨ **[เพิ่มฟิลด์ใหม่] `applicant.national_id: string | null` (optional):** เลขบัตรประชาชน 13 หลักตอนกรอกฟอร์มสมัครด่วน No-SMS OTP
   - 🔄 **[ปรับปรุง Enum] `status`:** เปลี่ยนค่าสถานะจาก `pending/accepted/rejected` เป็น `confirmed` (อนุมัติทันที/auto-accept), `pending_review` (รอตรวจวิชาชีพควบคุม), `cancelled` (ยกเลิกตั๋ว) เพื่อให้สอดคล้องกับตั๋วดิจิทัล
 
@@ -214,7 +214,7 @@ affects:
 #### 5. `_users` (System User Account — Multi-Role Identity)
 
 - **โครงสร้างเดิม (Legacy Schema):** บัญชีผู้ใช้งานระบบหลังบ้านทั่วไป
-- **สิ่งที่ปรับเปลี่ยนใน CR-089:**
+- **สิ่งที่ปรับเปลี่ยนใน CR-092:**
   - ✨ **[เพิ่มฟิลด์ใหม่] `linked_person_id: string | null` (optional):** Foreign Key เชื่อมโยงบัญชีผู้ใช้หลังบ้านกับ `volunteer_id` / `national_id` เพื่อตรวจสอบสิทธิ์ Time-Bound Access Control
 
 ---
@@ -521,7 +521,7 @@ sequenceDiagram
 
 ## 6. ประวัติการตัดสินใจ (Decision Log)
 
-- **2026-08-24 — Proposed:** ถอดบทเรียนจาก UIv10 และแปลงเป็น CR-089 สำหรับเตรียมพร้อมจัดทำ Task implementation และ Handover สู่ทีมพัฒนา
+- **2026-08-24 — Proposed:** ถอดบทเรียนจาก UIv10 และแปลงเป็น CR-092 (renumbered จาก CR-089 เพื่อหลบ CR ID collision) สำหรับเตรียมพร้อมจัดทำ Task implementation และ Handover สู่ทีมพัฒนา
 
 ---
 
@@ -529,8 +529,8 @@ sequenceDiagram
 
 > [!IMPORTANT]
 > **เรียน เจ้าของโครงการ (Project Owner):**
-> ตาม Change Management Policy (§6) ห้าม AI ตัดสินใจเคาะ approved หรือเลือกช่องทาง track เองโดยไม่มีคำสั่ง โปรดพิจารณาเคาะเลือกช่องทางติดตามงานสำหรับ CR-089 ดังนี้:
+> ตาม Change Management Policy (§6) ห้าม AI ตัดสินใจเคาะ approved หรือเลือกช่องทาง track เองโดยไม่มีคำสั่ง โปรดพิจารณาเคาะเลือกช่องทางติดตามงานสำหรับ CR-092 ดังนี้:
 >
-> 1. **Option A (แนะนำ):** ติดตามผ่านไฟล์ CR Markdown ในคลังโค้ด (`docs/changes/CR-089-volunteer-management-v10-flow.md` + อัปเดต `docs/changes/_index.md`)
-> 2. **Option B:** ติดตามผ่าน Notion Projects Tasks (สร้าง Card CR-089 ในตาราง Notion)
+> 1. **Option A (แนะนำ):** ติดตามผ่านไฟล์ CR Markdown ในคลังโค้ด (`docs/changes/CR-092-volunteer-management-v10-flow.md` + อัปเดต `docs/changes/_index.md`)
+> 2. **Option B:** ติดตามผ่าน Notion Projects Tasks (สร้าง Card CR-092 ในตาราง Notion)
 > 3. **Option C:** ติดตามผ่าน Decision Sync Note
