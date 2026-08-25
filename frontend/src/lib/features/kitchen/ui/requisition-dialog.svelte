@@ -5,12 +5,16 @@
 	import { Input } from '$lib/components/ui/input';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
+	import Flame from '@lucide/svelte/icons/flame';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		useIssueRequisition,
 		toRequisitionInput,
 		assessRequisition,
+		useGasCylinderTypes,
+		useGasLedger,
+		gasCylinderBalance,
 		MEAL_PERIOD_LABELS,
 		type MealPlan,
 		type RequisitionLineAssessment
@@ -24,6 +28,31 @@
 
 	const balance = useStockBalance();
 	const issue = useIssueRequisition();
+	const gasTypes = useGasCylinderTypes();
+	const gasLedger = useGasLedger();
+
+	// Pre-check the plan's gas draw (CR-085) the same way food is pre-checked
+	// below — so a shortfall is visible and blocks the submit button here,
+	// instead of surfacing only as a raw throw from issueRequisition at the
+	// moment of submit. issueRequisition still re-checks server-side (the real
+	// balance can shift between opening this dialog and actually submitting);
+	// this is the UI half of that same guard.
+	const gasRows = $derived.by(() => {
+		if (!plan?.gas_usage?.length) return [];
+		return plan.gas_usage.map((g) => {
+			const cyl = (gasTypes.data ?? []).find((t) => t._id === g.cylinder_id);
+			const remaining = cyl
+				? gasCylinderBalance(gasLedger.data ?? [], g.cylinder_id, cyl.capacity_kg)
+				: '0';
+			return {
+				name: cyl?.name ?? g.cylinder_id,
+				consumption_kg: g.consumption_kg,
+				remaining,
+				insufficient: qtyGt(g.consumption_kg, remaining)
+			};
+		});
+	});
+	const hasGasShortfall = $derived(gasRows.some((g) => g.insufficient));
 
 	// Requested lines from the plan (pure). toRequisitionInput throws when a
 	// recipe has no stock mapping — surface that instead of letting it bubble.
@@ -66,7 +95,10 @@
 	);
 
 	const hasShortfall = $derived(assessment.some((a) => qtyGt(a.shortfall, 0)));
-	const canIssue = $derived(rows.some((r) => qtyGt(r.qty, 0)));
+	// Gas is a hard block, not a partial-issue like food — there's no meaningful
+	// "issue less gas than the plan needs" fallback, so any shortfall here keeps
+	// the submit button disabled entirely rather than clamping a quantity.
+	const canIssue = $derived(rows.some((r) => qtyGt(r.qty, 0)) && !hasGasShortfall);
 
 	const STATUS: Record<string, { label: string; class: string }> = {
 		ok: { label: 'สต็อกพอ', class: 'bg-green-100 text-green-800' },
@@ -196,6 +228,56 @@
 					>
 						<PackageCheck class="h-4 w-4 shrink-0" />
 						<span>สต็อกเพียงพอสำหรับทุกวัตถุดิบในแผนนี้</span>
+					</div>
+				{/if}
+
+				{#if gasRows.length > 0}
+					<div class="space-y-2">
+						<p class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+							<Flame class="h-3.5 w-3.5 text-orange-500" />
+							แก๊สที่จะเบิก
+						</p>
+						<div class="overflow-x-auto rounded-md border">
+							<Table.Root>
+								<Table.Header>
+									<Table.Row class="text-xs">
+										<Table.Head class="px-3">ถังแก๊ส</Table.Head>
+										<Table.Head class="px-3 text-right">ต้องใช้</Table.Head>
+										<Table.Head class="px-3 text-right">เหลือ</Table.Head>
+										<Table.Head class="px-3 text-center">สถานะ</Table.Head>
+									</Table.Row>
+								</Table.Header>
+								<Table.Body>
+									{#each gasRows as g (g.name)}
+										<Table.Row>
+											<Table.Cell class="px-3 text-sm">{g.name}</Table.Cell>
+											<Table.Cell class="px-3 text-right text-sm">{g.consumption_kg} kg</Table.Cell>
+											<Table.Cell class="px-3 text-right text-sm">{g.remaining} kg</Table.Cell>
+											<Table.Cell class="px-3 text-center">
+												<span
+													class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium {g.insufficient
+														? 'bg-red-100 text-red-700'
+														: 'bg-green-100 text-green-800'}"
+												>
+													{g.insufficient ? 'ไม่พอ' : 'พอ'}
+												</span>
+											</Table.Cell>
+										</Table.Row>
+									{/each}
+								</Table.Body>
+							</Table.Root>
+						</div>
+						{#if hasGasShortfall}
+							<div
+								class="flex items-start gap-2 rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-800"
+							>
+								<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
+								<span>
+									ถังแก๊สบางใบเหลือไม่พอตามที่แผนนี้คำนวณไว้ — เบิกไม่ได้จนกว่าจะเติมแก๊สหรือแก้แผน
+									ให้เลือกถังอื่น (แก๊สเบิกบางส่วนไม่ได้ ต่างจากวัตถุดิบ)
+								</span>
+							</div>
+						{/if}
 					</div>
 				{/if}
 
