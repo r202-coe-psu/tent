@@ -2,7 +2,7 @@
 title: Smart Shelter — Database ER Diagram v3
 status: draft for review
 created: 2026-06-17
-updated: 2026-07-23
+updated: 2026-08-26
 source: docs/data/schema.md
 ---
 
@@ -73,7 +73,11 @@ erDiagram
     KITCHEN_REQUISITION ||--o{ STOCK_LEDGER : "ledger_ids"
     MEAL_PLAN ||--o| MEAL_SERVICE : "date and meal"
 
+    JOB ||--o{ SHIFT_ASSIGNMENT : "job_id"
+    JOB ||--o{ JOB_APPLICATION : "job_id"
+    JOB_APPLICATION |o--o| VOLUNTEER : "volunteer_id nullable"
     VOLUNTEER ||--o{ SHIFT_ASSIGNMENT : "volunteer_id"
+    VOLUNTEER ||--o{ VOLUNTEER_TRANSFER : "volunteer_id"
     AUDIT }o--|| DOC_TARGET : "target_type target_id"
     COUCH_USER |o--o{ VOLUNTEER : "user_name"
     COUCH_USER ||--o{ EXPORT_JOB : "requested_by"
@@ -339,7 +343,7 @@ erDiagram
     MEAL_PLAN ||--o| MEAL_SERVICE : "same date meal"
 ```
 
-## Volunteer, shelter report, referral, audit — `shelter_{shelter_code}`
+## Volunteer, job board, shelter report, referral, audit — `shelter_{shelter_code}`
 
 ```mermaid
 erDiagram
@@ -357,17 +361,69 @@ erDiagram
         string phone "nullable req"
         json skills "string array"
         string organization "nullable"
+        string national_id "nullable opt SSOT identity v2"
+        boolean checked_in "default false v2"
+        string current_shelter_code "nullable opt v2"
+        string volunteer_code "req V-NNN per shelter v2"
+        boolean identity_verified "default false v2"
+        enum source "public_apply walk_in staff_entry transfer v2"
         enum status "active inactive"
         string user_name FK "nullable _users name"
     }
 
+    JOB {
+        string _id PK "job:ulid"
+        string title "req"
+        enum tier "operational staff-capable"
+        json required_roles "RoleKey array"
+        json skills_required "string array opt"
+        int quota "positive"
+        int slots_confirmed "default 0"
+        int slots_dispatched "default 0 v2"
+        int slots_remaining "quota - confirmed - dispatched v2"
+        boolean is_urgent "default false v2"
+        boolean auto_accept "operational tier only"
+        enum status "draft open paused almost_full full closed cancelled"
+    }
+
+    JOB_APPLICATION {
+        string _id PK "job_application:ulid"
+        string job_id FK "job:ulid"
+        string volunteer_id FK "nullable volunteer:ulid"
+        json applicant "first_name last_name phone national_id v2 snapshot"
+        json selected_shift "date start_time end_time"
+        string tracking_token UK "CSPRNG"
+        enum status "pending_review confirmed rejected cancelled"
+        string reviewed_by FK "nullable _users name"
+    }
+
     SHIFT_ASSIGNMENT {
         string _id PK "shift_assignment:ulid"
+        string job_id FK "job:ulid"
         string volunteer_id FK "volunteer:ulid"
         string date "YYYY-MM-DD"
-        enum shift "morning afternoon night"
+        enum shift "morning afternoon night flex custom v3"
         string station "req"
-        enum status "assigned done no_show cancelled"
+        json duty_window "start_ts end_ts"
+        datetime check_in_at "nullable"
+        datetime check_out_at "nullable"
+        string check_in_by FK "nullable _users name"
+        enum check_in_method "qr manual_override v3"
+        string check_in_reason "nullable req when manual_override v3"
+        enum dispatch_status "dispatched accepted declined nullable v3"
+        enum status "assigned standby checked_in completed no_show cancelled v3"
+    }
+
+    VOLUNTEER_TRANSFER {
+        string _id PK "volunteer_transfer:ulid"
+        string volunteer_id FK "volunteer:ulid"
+        string from_shelter_code "req"
+        string to_shelter_code "req"
+        string reason "nullable opt"
+        enum status "pending accepted rejected cancelled"
+        string requested_by FK "_users name"
+        string decided_by FK "nullable _users name"
+        datetime decided_at "nullable"
     }
 
     SHELTER_REPORT {
@@ -425,6 +481,10 @@ erDiagram
 
     COUCH_USER |o--o{ VOLUNTEER : "optional login"
     VOLUNTEER ||--o{ SHIFT_ASSIGNMENT : "assigned shifts"
+    JOB ||--o{ SHIFT_ASSIGNMENT : "job_id"
+    JOB ||--o{ JOB_APPLICATION : "job_id"
+    JOB_APPLICATION |o--o| VOLUNTEER : "volunteer_id nullable"
+    VOLUNTEER ||--o{ VOLUNTEER_TRANSFER : "requested transfer"
     EVACUEE }o--o{ SHELTER_REPORT : "evacuee_ids"
     HOUSEHOLD }o--o{ SHELTER_REPORT : "pet_refs"
     SHELTER_REPORT ||--o| REFERRAL : "escalation"

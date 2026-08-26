@@ -17,6 +17,7 @@
  * | seedShelter — stock ledger   | createStockLedger     | operations domain   |
  * | seedShelter — donations      | createWalkInDonation  | operations domain   |
  * | seedShelter — campaigns      | createCampaign        | operations domain   |
+ * | seedVolunteers — jobs/volunteers/shifts/applications/transfer | makeJob, makeVolunteer, makeJobApplication, makeShiftAssignment, makeVolunteerTransfer | volunteers domain (00-foundation.md §00.5) |
  * | seedDailyCalc — daily_calc   | calculateResources    | resource-calc domain (real engine; CR-042 have map) |
  * | seedRegistry — shelter master| plain object          | no factory (server-side only) |
  * | seedCatalog — supply items   | plain object          | no factory (no catalog feature) |
@@ -101,6 +102,31 @@ import {
 	dailyCalcDocSchema,
 	DAILY_CALC_SCHEMA_VERSION
 } from '$lib/features/resource-calc/domain/calc.schema';
+import { makeJob, jobSchema, type JobInput } from '$lib/features/volunteers/domain/job.schema';
+import {
+	makeVolunteer,
+	volunteerSchema,
+	type VolunteerInput
+} from '$lib/features/volunteers/domain/volunteer.schema';
+import {
+	makeJobApplication,
+	jobApplicationSchema,
+	type JobApplicationInput
+} from '$lib/features/volunteers/domain/job-application.schema';
+import {
+	makeShiftAssignment,
+	shiftAssignmentSchema,
+	type ShiftAssignmentInput,
+	type ShiftKind
+} from '$lib/features/volunteers/domain/shift-assignment.schema';
+import {
+	makeVolunteerTransfer,
+	volunteerTransferSchema,
+	type VolunteerTransferInput
+} from '$lib/features/volunteers/domain/volunteer-transfer.schema';
+import { bangkokDateString, resolveDutyWindow } from '$lib/features/volunteers/domain/duty-window';
+import { nextVolunteerCode } from '$lib/features/volunteers/domain/volunteer-code';
+import { initialStatusForSkills } from '$lib/features/volunteers/domain/skills';
 import { shelterCodeSchema, type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
@@ -1633,6 +1659,344 @@ async function seedShelter2(master: MasterLookup): Promise<void> {
 	console.log(`  ✓ ${SHELTER_DB_2}: 1 household, 1 evacuee, 1 movement, 1 stock entry`);
 }
 
+// ─── seedVolunteers ───────────────────────────────────────────────────────────
+
+/**
+ * `docs/plans/volunteer-backoffice/00-foundation.md` §00.5 — seed the
+ * `volunteers` feature slice (jobs, volunteers, shift_assignments,
+ * job_applications, volunteer_transfer) into `SHELTER_DB` (SH001), built
+ * exclusively through the feature's own domain factories (`makeJob`,
+ * `makeVolunteer`, `makeJobApplication`, `makeShiftAssignment`,
+ * `makeVolunteerTransfer`) — never a hand-rolled envelope.
+ *
+ * `resolveDutyWindow(date, shift)` (Bangkok wall-clock → UTC, `duty-window.ts`)
+ * is the ONLY source of `duty_window` values here — no hand-written ISO
+ * literals — and `date` is always "today" computed the same way
+ * `application/queries.ts#todayDateString` computes it (`bangkokDateString()`,
+ * the Asia/Bangkok calendar date), so the seeded shift_assignments
+ * land inside the Control Hub's "today" window (`useHubMetrics` /
+ * `useTodayAttendance`) the moment the seed finishes.
+ *
+ * Quota reconciliation (job 1, "ทีมอำนวยการและต้อนรับผู้ประสานงาน EOC",
+ * quota 6): 3 volunteers already hold an accepted slot (v1 standby, v2
+ * checked_in, v3 completed → `slots_confirmed = 3`), 1 volunteer holds an
+ * outstanding dispatch offer (v4, `dispatch_status: 'dispatched'` →
+ * `slots_dispatched = 1`), leaving `slots_remaining = 2` — `3 + 1 + 2 = 6 =
+ * quota`, satisfying `quota.ts#assertQuotaInvariant`. Jobs 2/3 seed no
+ * assignments/applications, so their default `makeJob` slots
+ * (`0 confirmed + 0 dispatched + quota remaining`) already satisfy the
+ * invariant untouched.
+ *
+ * Like `seedShelter` (and unlike the ULID-keyed-but-existence-checked
+ * `seedShelter2`), every doc here is minted with a ULID `_id` and this
+ * function performs no "already seeded" guard — re-running `pnpm seed` adds
+ * another batch, matching the documented convention at the top of this file.
+ */
+async function seedVolunteers(): Promise<void> {
+	await ensureDb(SHELTER_DB);
+
+	// "Today" — Asia/Bangkok calendar date, matching
+	// `application/queries.ts#todayDateString` exactly (the Control Hub /
+	// attendance tab query by this same string).
+	const today = bangkokDateString();
+
+	function dutyWindowFor(shift: ShiftKind) {
+		const window = resolveDutyWindow(today, shift);
+		if (!window) throw new Error(`seedVolunteers: resolveDutyWindow(${today}, ${shift}) was null`);
+		return window;
+	}
+
+	// — jobs ————————————————————————————————————————————————————————————————————
+	const jobInputs: JobInput[] = [
+		{
+			title: 'ทีมอำนวยการและต้อนรับผู้ประสานงาน EOC',
+			description:
+				'ต้อนรับและอำนวยความสะดวกผู้ประสานงานหน่วยงานภายนอกที่มาติดต่อศูนย์ประสานงานเหตุฉุกเฉิน (EOC) ' +
+				'พร้อมประสานงานส่งต่อคำร้องไปยังฝ่ายที่เกี่ยวข้อง แต่งกายสุภาพ พูดจาดี ไม่จำเป็นต้องมีประสบการณ์',
+			tier: 'operational',
+			required_roles: [],
+			skills_required: ['ต้อนรับ', 'ประสานงาน'],
+			quota: 6,
+			shift_template: {
+				shift_name: 'กะเช้า-บ่าย',
+				start_time: '08:00',
+				end_time: '16:00',
+				days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+			},
+			auto_accept: false,
+			is_urgent: true
+		},
+		{
+			title: 'เจ้าหน้าที่คัดกรองผู้ประสบภัย (Registration & Screening)',
+			description:
+				'ช่วยคีย์ข้อมูลลงทะเบียนผู้ประสบภัยเข้าศูนย์และคัดกรองอาการเบื้องต้นผ่านระบบ ต้องมีสิทธิ์เข้าระบบ ' +
+				'(staff-capable) และผ่านการอบรมการใช้งานระบบลงทะเบียนก่อนเริ่มปฏิบัติงาน',
+			tier: 'staff-capable',
+			required_roles: ['registration_staff'],
+			skills_required: ['ลงทะเบียน', 'คัดกรอง'],
+			quota: 3,
+			shift_template: { shift_name: 'กะเต็มวัน', start_time: '08:00', end_time: '17:00' },
+			auto_accept: false,
+			is_urgent: false
+		},
+		{
+			title: 'ทีมพลาธิการช่วยยกของ (Heavy Lifting)',
+			description:
+				'ช่วยขนย้ายของบริจาคและเสบียงระหว่างจุดพักของกับคลังศูนย์ ต้องมีร่างกายแข็งแรง ' +
+				'สามารถยกของหนักได้ต่อเนื่อง ปิดรับสมัครชั่วคราวจนกว่าจะเปิดรับรอบถัดไป',
+			tier: 'operational',
+			required_roles: [],
+			skills_required: ['ยกของหนัก'],
+			quota: 8,
+			shift_template: { shift_name: 'กะเช้า', start_time: '08:00', end_time: '16:00' },
+			auto_accept: false,
+			is_urgent: false
+		}
+	];
+	const [job1, job2, job3] = jobInputs.map((j) => makeJob(j, ctx));
+
+	// job1: `open` + urgent, quota reconciled against the 4 shift_assignments
+	// below (see the docblock invariant walkthrough above).
+	job1.status = 'open';
+	job1.slots_confirmed = 3;
+	job1.slots_dispatched = 1;
+	job1.slots_remaining = 2;
+	// job2 stays `draft` (makeJob's default) with its full quota unclaimed.
+	// job3: `paused` — temporarily not accepting, quota still fully unclaimed.
+	job3.status = 'paused';
+	for (const j of [job1, job2, job3]) jobSchema.parse(j);
+
+	// — volunteers ————————————————————————————————————————————————————————————
+	// `source` covers all 4 enum values across the 5 profiles (public_apply
+	// repeats once); `identity_verified` mixes true/false; v5 carries a
+	// controlled skill (การแพทย์/ปฐมพยาบาล) and is left unverified — her
+	// job_application below lands on `pending_review`, never `confirmed`
+	// (`skills.ts#initialStatusForSkills`).
+	const volunteerCodes: string[] = [];
+	function mintVolunteerCode(): string {
+		const c = nextVolunteerCode(volunteerCodes);
+		volunteerCodes.push(c);
+		return c;
+	}
+
+	const v1Input: VolunteerInput = {
+		first_name: 'อรุณ',
+		last_name: 'ใจกล้า',
+		nickname: 'อรุณ',
+		phone: '0821111111',
+		email: null,
+		skills: ['ต้อนรับ', 'ประสานงาน'],
+		organization: null,
+		national_id: null,
+		source: 'public_apply'
+	};
+	const v2Input: VolunteerInput = {
+		first_name: 'สมพงษ์',
+		last_name: 'ยิ้มแย้ม',
+		phone: '0822222222',
+		email: null,
+		skills: ['ครัว', 'ขนของ'],
+		organization: null,
+		national_id: null,
+		source: 'walk_in'
+	};
+	const v3Input: VolunteerInput = {
+		first_name: 'ปิยะดา',
+		last_name: 'คงมั่น',
+		phone: '0823333333',
+		email: null,
+		skills: ['ขับรถ', 'วิทยุสื่อสาร'],
+		organization: 'มูลนิธิกู้ภัยหาดใหญ่',
+		national_id: null,
+		source: 'staff_entry'
+	};
+	const v4Input: VolunteerInput = {
+		first_name: 'วราภรณ์',
+		last_name: 'ศรีสุข',
+		phone: '0824444444',
+		email: null,
+		skills: ['พลาธิการ', 'ยกของหนัก'],
+		organization: null,
+		national_id: null,
+		source: 'transfer'
+	};
+	const v5Input: VolunteerInput = {
+		first_name: 'สุนิสา',
+		last_name: 'แพทย์ทอง',
+		nickname: 'หมอนิด',
+		phone: '0825555555',
+		email: null,
+		skills: ['การแพทย์', 'ปฐมพยาบาล'],
+		organization: 'รพ.สต. บ้านพรุ',
+		national_id: null,
+		source: 'public_apply'
+	};
+
+	const v1 = makeVolunteer(v1Input, ctx, { volunteer_code: mintVolunteerCode() });
+	const v2 = makeVolunteer(v2Input, ctx, { volunteer_code: mintVolunteerCode() });
+	const v3 = makeVolunteer(v3Input, ctx, { volunteer_code: mintVolunteerCode() });
+	const v4 = makeVolunteer(v4Input, ctx, { volunteer_code: mintVolunteerCode() });
+	const v5 = makeVolunteer(v5Input, ctx, { volunteer_code: mintVolunteerCode() });
+
+	// identity_verified mix — `makeVolunteer` always mints `false` (CR-094 §6
+	// default); flip the 3 already-vetted profiles here.
+	v1.identity_verified = true;
+	v3.identity_verified = true;
+	v4.identity_verified = true;
+	// v2, v5 stay unverified — v5 doubles as the "controlled skill, not yet
+	// approved" fixture required by 00-foundation.md §00.5.
+
+	// v2 is presently on-shift (see shift_assignment a2 below) — reflects the
+	// live flag `useCheckIn` would have set.
+	v2.checked_in = true;
+	v2.current_shelter_code = SH001_CODE;
+
+	for (const v of [v1, v2, v3, v4, v5]) volunteerSchema.parse(v);
+
+	// — shift_assignments ————————————————————————————————————————————————————
+	// All 4 against job1 (the `open` job), dated "today" so the Control Hub /
+	// attendance tab show non-zero counts immediately after seeding.
+	const a1Input: ShiftAssignmentInput = {
+		job_id: job1._id,
+		volunteer_id: v1._id,
+		date: today,
+		shift: 'morning',
+		station: 'จุดต้อนรับ',
+		duty_window: dutyWindowFor('morning')
+	};
+	const a2Input: ShiftAssignmentInput = {
+		job_id: job1._id,
+		volunteer_id: v2._id,
+		date: today,
+		shift: 'morning',
+		station: 'ครัว',
+		duty_window: dutyWindowFor('morning')
+	};
+	const a3Input: ShiftAssignmentInput = {
+		job_id: job1._id,
+		volunteer_id: v3._id,
+		date: today,
+		shift: 'night',
+		station: 'จุดตรวจ',
+		duty_window: dutyWindowFor('night')
+	};
+	const a4Input: ShiftAssignmentInput = {
+		job_id: job1._id,
+		volunteer_id: v4._id,
+		date: today,
+		shift: 'afternoon',
+		station: 'พลาธิการ',
+		duty_window: dutyWindowFor('afternoon')
+	};
+
+	// a1 — accepted, standing by before the shift starts.
+	const a1 = makeShiftAssignment(a1Input, ctx, { status: 'standby' });
+	// a2 — currently checked in (mirrors v2.checked_in above).
+	const a2 = makeShiftAssignment(a2Input, ctx, {
+		status: 'checked_in',
+		check_in_at: now(),
+		check_in_by: 'seed'
+	});
+	// a3 — finished an earlier shift today; check-in AND check-out both set.
+	const a3 = makeShiftAssignment(a3Input, ctx, {
+		status: 'completed',
+		check_in_at: now(),
+		check_in_by: 'seed'
+	});
+	a3.check_out_at = now();
+	// a4 — dispatch offer outstanding, not yet accepted/declined
+	// (`dispatch_status: 'dispatched'` ↔ job1.slots_dispatched = 1 above).
+	const a4 = makeShiftAssignment(a4Input, ctx, {
+		status: 'assigned',
+		dispatch_status: 'dispatched'
+	});
+
+	for (const a of [a1, a2, a3, a4]) shiftAssignmentSchema.parse(a);
+
+	// — job_applications ————————————————————————————————————————————————————
+	const confirmedApplicationInput: JobApplicationInput = {
+		job_id: job1._id,
+		volunteer_id: v1._id,
+		applicant: {
+			first_name: v1.first_name,
+			last_name: v1.last_name,
+			phone: v1.phone ?? '',
+			phone_hash: 'mock-hash-v-001',
+			email: v1.email ?? null,
+			skills: v1.skills,
+			national_id: v1.national_id ?? null
+		},
+		selected_shift: { date: today, start_time: '08:00', end_time: '16:00' },
+		tracking_token: ulid()
+	};
+	const confirmedApplication = makeJobApplication(confirmedApplicationInput, ctx, 'confirmed');
+	confirmedApplication.reviewed_at = now();
+	confirmedApplication.reviewed_by = 'seed';
+	confirmedApplication.review_notes = 'ตรวจสอบแล้ว ทักษะตรงตามที่ต้องการ อนุมัติเข้าปฏิบัติงาน';
+
+	// v5's controlled skill (การแพทย์/ปฐมพยาบาล) forces `pending_review` even
+	// though job1.auto_accept is false anyway (skills.ts#initialStatusForSkills).
+	const pendingApplicationInput: JobApplicationInput = {
+		job_id: job1._id,
+		volunteer_id: v5._id,
+		applicant: {
+			first_name: v5.first_name,
+			last_name: v5.last_name,
+			phone: v5.phone ?? '',
+			phone_hash: 'mock-hash-v-005',
+			email: v5.email ?? null,
+			skills: v5.skills,
+			national_id: v5.national_id ?? null
+		},
+		selected_shift: { date: today, start_time: '08:00', end_time: '16:00' },
+		tracking_token: ulid()
+	};
+	const pendingStatus = initialStatusForSkills(v5.skills, {
+		auto_accept: job1.auto_accept,
+		tier: job1.tier
+	});
+	const pendingApplication = makeJobApplication(pendingApplicationInput, ctx, pendingStatus);
+
+	for (const app of [confirmedApplication, pendingApplication]) jobApplicationSchema.parse(app);
+
+	// — volunteer_transfer ——————————————————————————————————————————————————
+	// v2 requests a move to SH002 — written into the *origin* shelter DB
+	// (SH001), matching `VolunteerTransferRemoteRepository` (bound to the
+	// active shelter DB only; see TODO(D-VOL-TRANSFER-APPROVE) there — this
+	// seed never reads/writes SH002's DB, so it does not touch that open gap).
+	const transferInput: VolunteerTransferInput = {
+		volunteer_id: v2._id,
+		from_shelter_code: SH001_CODE,
+		to_shelter_code: SHELTER_CODE_2,
+		reason: 'ต้องการช่วยเสริมกำลังอาสาสมัครที่ศูนย์ปลายทางซึ่งขาดแคลนกำลังคน'
+	};
+	const transfer = makeVolunteerTransfer(transferInput, ctx);
+	volunteerTransferSchema.parse(transfer);
+
+	const allDocs = [
+		job1,
+		job2,
+		job3,
+		v1,
+		v2,
+		v3,
+		v4,
+		v5,
+		a1,
+		a2,
+		a3,
+		a4,
+		confirmedApplication,
+		pendingApplication,
+		transfer
+	];
+	await bulkDocs(SHELTER_DB, allDocs);
+
+	console.log(
+		`  ✓ ${SHELTER_DB}: 3 job, 5 volunteer, 4 shift_assignment, 2 job_application, 1 volunteer_transfer (today=${today})`
+	);
+}
+
 // ─── seedDashboardData ────────────────────────────────────────────────────────
 async function seedDashboardData(master: MasterLookup): Promise<void> {
 	await ensureDb(SHELTER_DB);
@@ -2049,6 +2413,7 @@ async function main() {
 		await seedCatalogSopRatios();
 		await seedShelter(master);
 		await seedShelter2(master);
+		await seedVolunteers();
 		await seedDashboardData(master);
 		await seedDailyCalc();
 		console.log('\nDone.\n');

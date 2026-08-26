@@ -1,0 +1,58 @@
+/**
+ * capacity.ts — shift-level fill-rate (CR-094 FR-VOL-09.4).
+ *
+ * "แถบสรุปอัตราจองกะต้องคำนวณระดับกะ (ไม่ใช่ระดับงาน)" — fill rate is computed
+ * per shift bucket (e.g. one `job_id` + `date` + `shift` combination), never
+ * aggregated at the job level first. Buckets: critical(<50%), near(50–99%),
+ * met(100%).
+ */
+
+export type FillBucket = 'critical' | 'near' | 'met';
+
+export interface ShiftCapacity {
+	/** Opaque grouping key, e.g. `${job_id}:${date}:${shift}`. Not interpreted here. */
+	key: string;
+	/** How many volunteers this shift needs. */
+	target: number;
+	/** How many are confirmed for this shift right now. */
+	confirmed: number;
+}
+
+/** Fill rate for a single shift, clamped to [0, 1]. `target <= 0` reads as 0 (critical). */
+export function shiftFillRate(capacity: Pick<ShiftCapacity, 'target' | 'confirmed'>): number {
+	if (capacity.target <= 0) return 0;
+	return Math.min(Math.max(capacity.confirmed, 0) / capacity.target, 1);
+}
+
+/** critical < 50% · near 50–99% · met 100% (CR-094 FR-VOL-09.4). */
+export function bucketFillRate(rate: number): FillBucket {
+	if (rate >= 1) return 'met';
+	if (rate >= 0.5) return 'near';
+	return 'critical';
+}
+
+/** Aggregate booking rate across shift buckets: sum(confirmed) / sum(target). */
+export function overallBookingRate(
+	capacities: readonly Pick<ShiftCapacity, 'target' | 'confirmed'>[]
+): number {
+	const totals = capacities.reduce(
+		(acc, c) => ({
+			target: acc.target + c.target,
+			confirmed: acc.confirmed + Math.max(c.confirmed, 0)
+		}),
+		{ target: 0, confirmed: 0 }
+	);
+	if (totals.target <= 0) return 0;
+	return Math.min(totals.confirmed / totals.target, 1);
+}
+
+/** Count shift buckets per fill bucket — backs the clickable summary chips. */
+export function bucketCounts(
+	capacities: readonly Pick<ShiftCapacity, 'target' | 'confirmed'>[]
+): Record<FillBucket, number> {
+	const counts: Record<FillBucket, number> = { critical: 0, near: 0, met: 0 };
+	for (const c of capacities) {
+		counts[bucketFillRate(shiftFillRate(c))] += 1;
+	}
+	return counts;
+}
