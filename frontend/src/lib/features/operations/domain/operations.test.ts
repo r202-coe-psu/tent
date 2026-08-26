@@ -1104,29 +1104,46 @@ describe('Inter-shelter Transfers', () => {
 		expect(() => receiveTransfer(t, [{ item_id: 'item:rice', qty: 100 }], ctx)).toThrow();
 	});
 
+	it('rejects receiving more than the dispatched quantity (over-receipt)', () => {
+		const t = createTransfer(
+			{
+				from_shelter: 'SH001',
+				to_shelter: 'SH002',
+				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
+			},
+			ctx
+		);
+		const { transfer: shipped } = dispatchTransfer(t, ctx);
+
+		expect(() => receiveTransfer(shipped, [{ item_id: 'item:rice', qty: 150 }], ctx)).toThrow(
+			/exceeds dispatched quantity/
+		);
+	});
+
 	it('keeps decimal qty exact through dispatch and receive (CR-038)', () => {
 		const t = createTransfer(
 			{
 				from_shelter: 'SH001',
 				to_shelter: 'SH002',
-				items: [{ item_id: 'item:rice', qty: '0.1', unit: 'kg' }]
+				items: [{ item_id: 'item:rice', qty: '0.2', unit: 'kg' }]
 			},
 			ctx
 		);
-		expect(t.items[0].qty).toBe('0.1');
+		expect(t.items[0].qty).toBe('0.2');
 
 		const { transfer: shipped, ledgers: out } = dispatchTransfer(t, ctx);
-		expect(out[0].qty).toBe('-0.1');
+		expect(out[0].qty).toBe('-0.2');
 
+		// Partial receipt (0.1 of the 0.2 dispatched) — received qty can never exceed dispatched.
 		const { ledgers: incoming } = receiveTransfer(
 			shipped,
-			[{ item_id: 'item:rice', qty: '0.2' }],
+			[{ item_id: 'item:rice', qty: '0.1' }],
 			ctx
 		);
-		expect(incoming[0].qty).toBe('0.2');
+		expect(incoming[0].qty).toBe('0.1');
 
-		// The float trap CR-038 exists to close: 0.1 + 0.2 must not drift to 0.30000000000000004
-		expect(stockBalance([out[0], incoming[0]])).toEqual(new Map([['item:rice', '0.1']]));
+		// The float trap CR-038 exists to close: -0.2 + 0.1 must not drift off of -0.1
+		expect(stockBalance([out[0], incoming[0]])).toEqual(new Map([['item:rice', '-0.1']]));
 	});
 
 	it('records a discrepancy reason via notes on partial receipt', () => {

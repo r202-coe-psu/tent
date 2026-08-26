@@ -849,10 +849,15 @@ export function receiveTransfer(
 
 	const receivedQtyMap = new Map(receivedItems.map((i) => [i.item_id, persistQty(i.qty)]));
 
-	const updatedItems = transfer.items.map((item) => ({
-		...item,
-		received_qty: receivedQtyMap.get(item.item_id) ?? '0'
-	}));
+	const updatedItems = transfer.items.map((item) => {
+		const receivedQty = receivedQtyMap.get(item.item_id) ?? '0';
+		if (qtyGt(receivedQty, item.qty)) {
+			throw new Error(
+				`Received quantity for item "${item.item_id}" (${receivedQty}) exceeds dispatched quantity (${item.qty})`
+			);
+		}
+		return { ...item, received_qty: receivedQty };
+	});
 
 	const updatedTransfer: StockTransfer = {
 		...transfer,

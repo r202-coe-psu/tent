@@ -3,7 +3,10 @@ import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
 import { authorizeTransfer, resolveShelterCode, handleEndpointError } from '../../_auth';
-import { TransferServerRepository } from '$lib/features/operations/data/transfer.server-repository';
+import {
+	TransferServerRepository,
+	TransferServerRepositoryError
+} from '$lib/features/operations/data/transfer.server-repository';
 import { transferStatusSchema, receivedItemSchema } from '$lib/features/operations/server';
 
 export const prerender = false;
@@ -74,13 +77,12 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 			{ status: 409 }
 		);
 	} catch (e: unknown) {
-		// dispatchTransfer/receiveTransfer/cancelTransfer throw a plain Error for an invalid status
-		// transition (not TransferServerRepositoryError) — map it to 422, same as referral's
-		// "Invalid referral transition" catch, instead of falling through to handleEndpointError's 500.
-		if (
-			e instanceof Error &&
-			/^Cannot (dispatch|receive|cancel) transfer in status/.test(e.message)
-		) {
+		// dispatchTransfer/receiveTransfer/cancelTransfer throw a plain Error for a domain
+		// validation failure (invalid status transition, over-receipt) — not a
+		// TransferServerRepositoryError (which already carries its own HTTP status and goes
+		// through handleEndpointError below). Map any such plain Error to 422, same as
+		// referral's "Invalid referral transition" catch.
+		if (e instanceof Error && !(e instanceof TransferServerRepositoryError)) {
 			return json({ error: e.message }, { status: 422 });
 		}
 		return handleEndpointError(e, 'Transfer API Transition PATCH');

@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PATCH } from './+server';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
+import { TransferServerRepositoryError } from '$lib/features/operations/data/transfer.server-repository';
 import type { RequestEvent } from './$types';
 import type { StockTransfer } from '$lib/features/operations/domain/operations';
 
@@ -23,8 +24,17 @@ vi.mock('$lib/features/operations/data/transfer.server-repository', () => {
 	class MockTransferServerRepository {
 		transition = mockTransition;
 	}
+	class TransferServerRepositoryError extends Error {
+		constructor(
+			message: string,
+			public readonly status: number
+		) {
+			super(message);
+		}
+	}
 	return {
-		TransferServerRepository: MockTransferServerRepository
+		TransferServerRepository: MockTransferServerRepository,
+		TransferServerRepositoryError
 	};
 });
 
@@ -121,6 +131,22 @@ describe('PATCH /api/back-office/transfer/[id]/transition', () => {
 		expect(data.error).toContain('Cannot dispatch transfer in status "shipped"');
 	});
 
+	it('returns 422 for an over-receipt rejected by the domain layer', async () => {
+		mockTransition.mockRejectedValue(
+			new Error('Received quantity for item "item:rice" (150) exceeds dispatched quantity (100)')
+		);
+
+		const event = createMockEvent('stock_transfer:1', {
+			to: 'received',
+			receivedItems: [{ item_id: 'item:rice', qty: 150 }]
+		});
+		const res = await PATCH(event);
+		expect(res.status).toBe(422);
+
+		const data = await res.json();
+		expect(data.error).toContain('exceeds dispatched quantity');
+	});
+
 	it('returns 403 for an authorization failure surfaced by the repository', async () => {
 		mockTransition.mockRejectedValue({
 			status: 403,
@@ -130,6 +156,17 @@ describe('PATCH /api/back-office/transfer/[id]/transition', () => {
 		const event = createMockEvent('stock_transfer:1', { to: 'shipped' });
 		const res = await PATCH(event);
 		expect(res.status).toBe(403);
+	});
+
+	it('routes a non-conflict TransferServerRepositoryError through handleEndpointError, not the 422 domain-error branch', async () => {
+		mockTransition.mockRejectedValue(new TransferServerRepositoryError('Failed to write x', 500));
+
+		const event = createMockEvent('stock_transfer:1', { to: 'shipped' });
+		const res = await PATCH(event);
+		expect(res.status).toBe(500);
+
+		const data = await res.json();
+		expect(data.error).toBe('Failed to write x');
 	});
 
 	it('fails after 3 retries on conflict', async () => {

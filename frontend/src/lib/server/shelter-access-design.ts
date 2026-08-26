@@ -82,6 +82,26 @@ export const TRANSFER_MANGO_INDEXES = [
 ];
 
 /**
+ * Mango index definitions required by `stock_ledger` `_find` lookups on a *shelter* DB
+ * (CR-059 T-13) — `TransferServerRepository.assertSufficientStock`'s `item_id: { $in }`
+ * balance check and `ledgerAlreadyWritten`'s `ref_id` + `item_id` + `reason` idempotency
+ * check. `stock_ledger` is append-only (grows unbounded), so without these, both queries
+ * fall back to a full DB scan as a shelter's ledger history grows.
+ */
+export const TRANSFER_LEDGER_MANGO_INDEXES = [
+	{
+		index: { fields: ['type', 'item_id'] },
+		name: 'ledger-type-itemid-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'ref_id', 'item_id', 'reason'] },
+		name: 'ledger-type-refid-itemid-reason-idx',
+		type: 'json' as const
+	}
+];
+
+/**
  * Server-side `validate_doc_update` for a shelter db. Enforces the common
  * envelope (schema.md §0) + shelter_code match + allowed doc types, then the
  * integrity rules of T-16:
