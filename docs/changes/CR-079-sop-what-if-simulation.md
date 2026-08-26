@@ -11,7 +11,7 @@ depends:
   - T-31 — daily resource calculation engine
 layer: volatile
 affects:
-  - docs/data/schema.md §2.17 — เพิ่ม document type `simulation:{ulid}`, schema_v 1
+  - docs/data/schema.md §2.20 — เพิ่ม document type `simulation:{ulid}`, schema_v 1
   - docs/prd/role-permission-matrix.md FR-54 — shelter_manager / system_admin scope
   - frontend/src/lib/features/sop-simulation/
   - frontend/src/lib/server/shelter-access-design.ts — validator allowlist/invariants
@@ -57,7 +57,7 @@ T-31 มี engine คำนวณความต้องการทรัพ�
 
 ### Data contract
 
-- เพิ่ม `simulation:{ulid}` schema_v 1 ใน `docs/data/schema.md` §2.17.
+- เพิ่ม `simulation:{ulid}` schema_v 1 ใน `docs/data/schema.md` §2.20.
 - ไม่ bump schema version ของ `daily_calc` และไม่มี backfill เอกสารเดิม.
 - ต้องเพิ่ม `simulation` ใน shelter access validator พร้อมกฎ shelter scope, immutable update,
   authorized delete และ shape ของ frozen result.
