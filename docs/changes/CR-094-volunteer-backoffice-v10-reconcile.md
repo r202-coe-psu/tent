@@ -1,5 +1,5 @@
 ---
-id: CR-093
+id: CR-094
 title: Volunteer Backoffice V10 — back-office path, CouchDB-native time-bound access, job CRUD in back-office, Couch→Mongo public sync + UI V10 schema deltas
 status: proposed
 date: 2026-08-26
@@ -23,7 +23,7 @@ affects:
   - backend/apiapp/modules/ — `/public/v1/volunteer/*`
 ---
 
-# CR-093 — Volunteer Backoffice V10 (ต่อยอด/แก้ CR-092)
+# CR-094 — Volunteer Backoffice V10 (ต่อยอด/แก้ CR-092)
 
 ## สรุป (TL;DR)
 
@@ -203,15 +203,15 @@ affects:
 
 ## 5. Acceptance (เพิ่มจาก CR-092 §6)
 
-- [ ] **AC-093-01** — ทุกหน้าหลังบ้านอยู่ใต้ `/back-office/volunteers*`; ไม่มี route `/admin/volunteers/*` ในบิลด์
-- [ ] **AC-093-02** — บัญชีอาสา staff-capable ที่ยังไม่เช็คอิน เขียน CouchDB ตรงถูก reject ด้วย `ERR_OUTSIDE_SHIFT_WINDOW` (ทดสอบด้วย HTTP call ตรงไป CouchDB ไม่ผ่าน UI)
-- [ ] **AC-093-03** — เช็คเอาต์แล้ว role ถูก revoke ภายใน 1 คำขอถัดไป และการเขียนถูก reject
-- [ ] **AC-093-04** — สร้าง job สถานะ `draft` แล้ว **ไม่ปรากฏ** บน public board; เปลี่ยนเป็น `open` แล้วปรากฏภายใน 1 รอบ sync
-- [ ] **AC-093-05** — `slots_confirmed + slots_dispatched + slots_remaining == quota` คงจริงหลัง dispatch / accept / decline ทุกกรณี
-- [ ] **AC-093-06** — walk-in + ติ๊ก "เช็คอินทันที" สร้าง `volunteer` + `shift_assignment` + `check_in_at` ครบในครั้งเดียว และตัวนับ "ปฏิบัติหน้าที่อยู่ขณะนี้" +1
-- [ ] **AC-093-07** — manual override บันทึก actor + เหตุผล และปรากฏใน Audit Trail
-- [ ] **AC-093-08** — เลือกทักษะ controlled ตอน walk-in แล้วสถานะเป็น `pending_review` ไม่ใช่ active
-- [ ] **AC-093-09** — ตัวนับบน Control Hub ทั้ง 5 ค่า ตรงกับข้อมูลในทั้ง 3 แท็บ (เรียกฟังก์ชัน domain เดียวกัน)
+- [ ] **AC-094-01** — ทุกหน้าหลังบ้านอยู่ใต้ `/back-office/volunteers*`; ไม่มี route `/admin/volunteers/*` ในบิลด์
+- [ ] **AC-094-02** — บัญชีอาสา staff-capable ที่ยังไม่เช็คอิน เขียน CouchDB ตรงถูก reject ด้วย `ERR_OUTSIDE_SHIFT_WINDOW` (ทดสอบด้วย HTTP call ตรงไป CouchDB ไม่ผ่าน UI)
+- [ ] **AC-094-03** — เช็คเอาต์แล้ว role ถูก revoke ภายใน 1 คำขอถัดไป และการเขียนถูก reject
+- [ ] **AC-094-04** — สร้าง job สถานะ `draft` แล้ว **ไม่ปรากฏ** บน public board; เปลี่ยนเป็น `open` แล้วปรากฏภายใน 1 รอบ sync
+- [ ] **AC-094-05** — `slots_confirmed + slots_dispatched + slots_remaining == quota` คงจริงหลัง dispatch / accept / decline ทุกกรณี
+- [ ] **AC-094-06** — walk-in + ติ๊ก "เช็คอินทันที" สร้าง `volunteer` + `shift_assignment` + `check_in_at` ครบในครั้งเดียว และตัวนับ "ปฏิบัติหน้าที่อยู่ขณะนี้" +1
+- [ ] **AC-094-07** — manual override บันทึก actor + เหตุผล และปรากฏใน Audit Trail
+- [ ] **AC-094-08** — เลือกทักษะ controlled ตอน walk-in แล้วสถานะเป็น `pending_review` ไม่ใช่ active
+- [ ] **AC-094-09** — ตัวนับบน Control Hub ทั้ง 5 ค่า ตรงกับข้อมูลในทั้ง 3 แท็บ (เรียกฟังก์ชัน domain เดียวกัน)
 
 ---
 
