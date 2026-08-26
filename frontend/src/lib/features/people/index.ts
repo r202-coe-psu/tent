@@ -144,3 +144,6 @@ export {
 	formatSaveFailureReport,
 	type SaveFailureReport
 } from '$lib/utils/errors';
+
+// UI — i18n dictionaries used directly by route pages
+export { EVACUEE_PAGE_I18N, type EvacueePageI18n } from './ui/_constants/evacuee-page.i18n';

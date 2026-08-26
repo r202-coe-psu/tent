@@ -8,6 +8,9 @@
 	import type { Evacuee } from '../domain/people';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { EVACUEE_SELECT_ZONE_I18N } from './_constants/evacuee-select-zone.i18n';
 
 	let {
 		evacuee,
@@ -20,6 +23,8 @@
 		onBack: () => void;
 		onSubmit: (zone: string) => void;
 	} = $props();
+
+	const t = $derived(getTranslation(EVACUEE_SELECT_ZONE_I18N, languageStore.current));
 
 	let selectedZone = $state('');
 
@@ -56,21 +61,21 @@
 	{#if shelterQuery.isError}
 		<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5">
 			<CircleAlert class="size-4" />
-			<Alert.Title class="font-semibold">โหลดข้อมูลโซนไม่สำเร็จ</Alert.Title>
+			<Alert.Title class="font-semibold">{t.errorTitle}</Alert.Title>
 			<Alert.Description class="space-y-3">
-				<p>ยังเลือกพื้นที่พักพิงไม่ได้ กรุณาลองโหลดรายการโซนอีกครั้ง</p>
+				<p>{t.errorDesc}</p>
 				<Button type="button" variant="outline" size="sm" onclick={() => shelterQuery.refetch()}>
-					ลองใหม่
+					{t.retry}
 				</Button>
 			</Alert.Description>
 		</Alert.Root>
 	{:else}
 		<div class="space-y-3 text-center">
-			<p class="text-base font-medium text-foreground">โซนแนะนำ</p>
+			<p class="text-base font-medium text-foreground">{t.recommendedHeader}</p>
 			{#if shelterQuery.isLoading}
 				<p class="flex items-center justify-center gap-2 text-sm text-muted-foreground">
 					<Loader2 class="size-4 animate-spin" />
-					กำลังโหลดข้อมูลโซน...
+					{t.loading}
 				</p>
 			{:else if recommendedZone}
 				<p class="text-2xl font-bold">
@@ -78,13 +83,13 @@
 					{recommendedZone.name}
 				</p>
 				<p class="text-xs text-muted-foreground">
-					แนะนำตามสถานะของผู้อพยพ ({recommendedZone.type === 'vulnerable'
-						? 'กลุ่มเปราะบาง'
-						: 'บุคคลทั่วไป'})
+					{t.recommendedNote(
+						recommendedZone.type === 'vulnerable' ? t.typeVulnerable : t.typeGeneral
+					)}
 				</p>
 			{:else}
 				<p class="text-base font-semibold text-muted-foreground" role="status">
-					ไม่มีโซนที่เปิดให้บริการในศูนย์นี้
+					{t.noZones}
 				</p>
 			{/if}
 		</div>
@@ -95,7 +100,7 @@
 					<Select.Trigger class="h-12 w-full rounded-xl border-border bg-background">
 						{@const currentZone = activeZones.find((z: Zone) => z.code === selectedZone)}
 						<span class="flex items-center gap-2 text-base font-medium">
-							{currentZone ? `📍 ${currentZone.name}` : 'เลือกโซน...'}
+							{currentZone ? `📍 ${currentZone.name}` : t.selectPlaceholder}
 						</span>
 					</Select.Trigger>
 					<Select.Content class="rounded-xl">
@@ -117,7 +122,7 @@
 			class="h-12 w-full rounded-xl bg-[#003B71] text-sm font-medium hover:bg-[#002a50] md:text-base"
 			onclick={() => onSubmit(selectedZone)}
 		>
-			{pending ? 'กำลังบันทึกโซน...' : 'ยืนยันการเลือกโซน และไปขั้นตอนถัดไป >'}
+			{pending ? t.btnSaving : t.btnConfirm}
 		</Button>
 		<Button
 			type="button"
@@ -126,7 +131,7 @@
 			onclick={onBack}
 			disabled={pending}
 		>
-			ย้อนกลับ
+			{t.back}
 		</Button>
 	</div>
 </div>
