@@ -124,7 +124,8 @@ describe('KitchenRemoteRepository.issueRequisition — ledger deduction pattern'
 		>[];
 
 		for (const row of rows) {
-			expect(row.schema_v).toBe(3);
+			// Every ledger writer stamps the same version; CR-088 bumped it 3 → 4.
+			expect(row.schema_v).toBe(4);
 			expect(row.shelter_code).toBe(ctx.shelterCode);
 			expect(row.created_by).toBe(ctx.createdBy);
 			expect(row.ref_id).toBe(result._id);
