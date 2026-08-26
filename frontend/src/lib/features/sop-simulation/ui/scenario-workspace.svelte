@@ -33,7 +33,12 @@
 	let savedView = $state(false);
 	let historyOpen = $state(false);
 	let openedScenarioId = $state<string | null>(null);
-	const savedScenarios = $derived(scenariosQuery.data?.pages.flatMap((page) => page.items) ?? []);
+	let deletedScenarioIds = $state<string[]>([]);
+	const savedScenarios = $derived(
+		(scenariosQuery.data?.pages.flatMap((page) => page.items) ?? []).filter(
+			(scenario) => !deletedScenarioIds.includes(scenario.id)
+		)
+	);
 	const syncedStockCount = $derived(
 		currentQuery.data
 			? Object.values(currentQuery.data.stock_snapshot).filter((value) => value !== null).length
@@ -99,6 +104,8 @@
 	}
 
 	async function deleteScenario(id: string) {
+		const wasHidden = deletedScenarioIds.includes(id);
+		if (!wasHidden) deletedScenarioIds = [...deletedScenarioIds, id];
 		try {
 			await deleteMutation.mutateAsync({
 				id,
@@ -111,6 +118,8 @@
 			}
 			toast.success('ลบสถานการณ์แล้ว');
 		} catch (error) {
+			if (!wasHidden)
+				deletedScenarioIds = deletedScenarioIds.filter((scenarioId) => scenarioId !== id);
 			toast.error(errorMessage(error, 'ลบสถานการณ์ไม่สำเร็จ'));
 		}
 	}

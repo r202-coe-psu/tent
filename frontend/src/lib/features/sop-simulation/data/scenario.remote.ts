@@ -17,7 +17,7 @@ import {
 } from './scenario.repository';
 
 interface ScenarioRowsResponse {
-	rows: Array<{ id: string; doc?: unknown }>;
+	rows: Array<{ id: string; doc?: unknown; value?: { deleted?: boolean } }>;
 }
 
 export class ScenarioRemoteRepository implements ScenarioRepository {
@@ -56,12 +56,15 @@ export class ScenarioRemoteRepository implements ScenarioRepository {
 			this.dbName,
 			`/_all_docs?${query.toString()}`
 		);
-		const parsed = response.rows.map((row) => {
-			if (!row.doc) throw new Error(`CouchDB returned an empty scenario document for ${row.id}`);
+		const parsed = response.rows.flatMap((row) => {
+			if (!row.doc) {
+				if (row.value?.deleted === true) return [];
+				throw new Error(`CouchDB returned an empty scenario document for ${row.id}`);
+			}
 			const scenario = scenarioSchema.parse(row.doc);
 			if (scenario._id !== row.id)
 				throw new Error(`Scenario row/document id mismatch for ${row.id}`);
-			return scenario;
+			return [scenario];
 		});
 		const pageItems = parsed.slice(0, safeLimit);
 		const items: ScenarioSummary[] = pageItems.map((scenario) => ({

@@ -224,6 +224,8 @@ test.describe('T-42 SOP what-if simulation', () => {
 
 			savedScenario = await findScenarioByName(scenarioName);
 			expect(savedScenario).not.toBeNull();
+			const savedScenarioId = savedScenario?._id;
+			expect(savedScenarioId).toMatch(/^simulation:/);
 
 			await page.reload();
 			await page.getByRole('button', { name: /ผลที่บันทึก/ }).click();
@@ -235,7 +237,14 @@ test.describe('T-42 SOP what-if simulation', () => {
 			page.once('dialog', (dialog) => dialog.accept());
 			await page.getByRole('button', { name: `ลบผล ${scenarioName}` }).click();
 			await expect(page.getByRole('button', { name: `เปิดผล ${scenarioName}` })).not.toBeVisible();
-			expect(await findScenarioByName(scenarioName)).toBeNull();
+			await expect
+				.poll(
+					async () =>
+						(await couchReq('GET', `/${SHELTER_DB}/${encodeURIComponent(savedScenarioId!)}`))
+							.status,
+					{ timeout: 10_000 }
+				)
+				.toBe(404);
 			savedScenario = null;
 
 			const [dailyCalcAfter, auditAfter] = await Promise.all([

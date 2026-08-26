@@ -4,9 +4,10 @@ import { SOP_RATIO_KEYS, SOP_RATIO_KIND, type SopRatioKey } from '$lib/features/
 import type { CalculationSnapshot } from '$lib/features/resource-calc';
 import type { AuthorContext } from '$lib/db/model';
 
-const { store, writes } = vi.hoisted(() => ({
+const { store, writes, tombstones } = vi.hoisted(() => ({
 	store: new Map<string, { _id: string; _rev?: string; type: string; [key: string]: unknown }>(),
-	writes: [] as string[]
+	writes: [] as string[],
+	tombstones: [] as Array<{ id: string; value: { deleted: true } }>
 }));
 
 vi.mock('$lib/db/shelter', () => ({ getShelterDb: () => 'shelter_sh001' }));
@@ -30,12 +31,16 @@ vi.mock('$lib/db/repository', () => ({
 }));
 
 vi.mock('$lib/db/couch-db', () => ({
-	couchDbFetch: async () => ({
-		rows: [...store.values()]
-			.filter((doc) => doc.type === 'simulation')
-			.sort((left, right) => right._id.localeCompare(left._id))
-			.map((doc) => ({ id: doc._id, doc }))
-	})
+	couchDbFetch: async () => {
+		const rows: Array<{ id: string; doc?: unknown; value?: { deleted?: boolean } }> = [
+			...[...store.values()]
+				.filter((doc) => doc.type === 'simulation')
+				.sort((left, right) => right._id.localeCompare(left._id))
+				.map((doc) => ({ id: doc._id, doc })),
+			...tombstones
+		];
+		return { rows };
+	}
 }));
 
 import { runSimulation } from '../application/use-run-simulation';
@@ -76,6 +81,7 @@ const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'manager' };
 beforeEach(() => {
 	store.clear();
 	writes.length = 0;
+	tombstones.length = 0;
 	store.set('daily_calc:2026-08-17', {
 		_id: 'daily_calc:2026-08-17',
 		_rev: '7-real',
@@ -136,6 +142,20 @@ describe('ScenarioRemoteRepository', () => {
 		expect(await repository.get(saved._id)).toBeNull();
 		expect(store.get('daily_calc:2026-08-17')).toEqual(before);
 		expect(store.get('daily_calc:2026-08-17')?._rev).toBe('7-real');
+	});
+
+	it('ignores CouchDB tombstones when listing saved scenarios', async () => {
+		const result = await runSimulation(
+			{ name: 'tombstone', occupancy: 10, days: 1, ratio_overrides: {} },
+			'SH001',
+			async () => structuredClone(snapshot)
+		);
+		const repository = new ScenarioRemoteRepository('shelter_sh001');
+		const saved = await repository.save(result, ctx);
+		store.delete(saved._id);
+		tombstones.push({ id: saved._id, value: { deleted: true } });
+
+		expect((await repository.listPage()).items).toEqual([]);
 	});
 
 	it('rejects saving a result under a different shelter context', async () => {
