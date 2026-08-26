@@ -14,7 +14,12 @@ from worker.masking import (
 from worker.projectors.compute_needs import compute_needs
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
-from worker.projectors.shelter import is_shelter_open, map_public_shelter_status, project_shelter
+from worker.projectors.shelter import (
+    is_shelter_open,
+    map_public_shelter_status,
+    project_shelter,
+    resolve_site_kind,
+)
 
 
 def test_sha256_hex_matches_frontend_contract():
@@ -66,7 +71,29 @@ def test_project_shelter_v1_open():
     assert payload["capacity"] == 200
     assert payload["geo"] == {"lat": 7.0, "lng": 100.5}
     assert payload["location"] == {"type": "Point", "coordinates": [100.5, 7.0]}
+    assert payload["site_kind"] == "evacuation_center"
     assert "national_id" not in payload
+
+
+def test_project_shelter_preserves_host_house_site_kind():
+    action, payload = project_shelter(
+        {
+            "type": "shelter",
+            "code": "SH002",
+            "name": "บ้านทดสอบ",
+            "site_kind": "host_house",
+            "operation_status": "active",
+            "updated_at": "2026-01-01T00:00:00.000Z",
+        }
+    )
+    assert action == "upsert"
+    assert payload is not None
+    assert payload["site_kind"] == "host_house"
+
+
+def test_resolve_site_kind_defaults_unknown_values_to_evacuation_center():
+    assert resolve_site_kind({}) == "evacuation_center"
+    assert resolve_site_kind({"site_kind": "host"}) == "evacuation_center"
 
 
 def test_project_shelter_closed_deletes():

@@ -29,6 +29,7 @@
 		district?: string;
 		subdistrict?: string;
 		type?: string;
+		site_kind?: 'evacuation_center' | 'host_house';
 		distance?: string;
 		user_lat?: string | number;
 		user_lng?: string | number;
@@ -70,6 +71,7 @@
 	let selectedProvince = $state<string>('');
 	let selectedDistrict = $state<string>('');
 	let selectedSubdistrict = $state<string>('');
+	let selectedSiteKind = $state<string>('');
 	let distanceValue = $state<string>('5');
 
 	const t = $derived(getTranslation(PUBLIC_FILTER_PANEL_I18N, langState.current));
@@ -79,6 +81,7 @@
 		selectedProvince = filters.province ?? '';
 		selectedDistrict = filters.district ?? '';
 		selectedSubdistrict = filters.subdistrict ?? '';
+		selectedSiteKind = filters.site_kind ?? '';
 		distanceValue = filters.distance || '5';
 
 		if (filters.user_lat && !userLat) userLat = filters.user_lat.toString();
@@ -265,10 +268,26 @@
 					/>
 				</div>
 
-				<!-- Type -->
+				<!-- Site kind -->
 				<div class="space-y-1.5">
-					<Label for="type" class="text-xs font-semibold text-muted-foreground">{t.typeLabel}</Label
+					<Label for="site_kind" class="text-xs font-semibold text-muted-foreground"
+						>ชนิดสถานที่</Label
 					>
+					<Select.Root type="single" name="site_kind" bind:value={selectedSiteKind}>
+						<Select.Trigger class="w-full rounded-xl">
+							<Select.Value placeholder="ชนิดสถานที่ (ทั้งหมด)" />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="">ชนิดสถานที่ (ทั้งหมด)</Select.Item>
+							<Select.Item value="evacuation_center">ศูนย์อพยพ</Select.Item>
+							<Select.Item value="host_house">บ้านพี่เลี้ยง</Select.Item>
+						</Select.Content>
+					</Select.Root>
+				</div>
+
+				<!-- Building type -->
+				<div class="space-y-1.5">
+					<Label for="type" class="text-xs font-semibold text-muted-foreground">{t.typeLabel}</Label>
 					<Select.Root type="single" name="type" value={filters.type ?? ''}>
 						<Select.Trigger class="w-full rounded-xl">
 							<Select.Value placeholder={t.typePlaceholder} />

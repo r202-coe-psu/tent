@@ -1,6 +1,7 @@
 <script lang="ts">
 	/* eslint-disable @typescript-eslint/no-explicit-any */
 	import { onMount, onDestroy } from 'svelte';
+	import type { PublicSiteKind } from '../domain/types';
 
 	interface ShelterGeo {
 		lat: number;
@@ -13,6 +14,7 @@
 		status: string;
 		capacity: number;
 		distance: number;
+		site_kind?: PublicSiteKind;
 		type?: string;
 		admin_type?: string | null;
 		geo?: ShelterGeo | null;
@@ -66,13 +68,12 @@
 		}
 	}
 
-	function getTypeIcon(type: string | undefined): string {
-		if (!type) return '🏠';
-		if (type.includes('อพยพ')) return '⛺';
-		if (type.includes('แพทย์') || type.includes('พยาบาล')) return '🏥';
-		if (type.includes('วัด')) return '🛕';
-		if (type.includes('โรงเรียน')) return '🏫';
-		return '🏠';
+	function getTypeIcon(siteKind: PublicSiteKind | undefined): string {
+		return siteKind === 'host_house' ? '🏠' : '⛺';
+	}
+
+	function getSiteKindText(siteKind: PublicSiteKind | undefined): string {
+		return siteKind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์อพยพ';
 	}
 
 	function translateAdminType(type: string): string {
@@ -211,7 +212,7 @@
 				bounds.extend(lngLat);
 
 				const color = getStatusColorCode(shelter.status);
-				const icon = getTypeIcon(shelter.type);
+				const icon = getTypeIcon(shelter.site_kind);
 
 				const el = document.createElement('div');
 				// Do not apply position: relative to the root element,
@@ -240,7 +241,7 @@
 				const popup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
 					<div style="font-size:12px;font-family:sans-serif;color:#1e293b;min-width:160px;">
 						<strong style="font-size:14px;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
-						<div style="margin-bottom:2px;font-size:11px;color:#64748b;">${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
+						<div style="margin-bottom:2px;font-size:11px;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
 						${t.status} <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
 						${t.capacity} <strong>${shelter.capacity}</strong> ${t.people}<br/>
 						${shelter.distance > 0 ? `${t.distance} <strong>${shelter.distance}</strong> ${t.km}` : ''}

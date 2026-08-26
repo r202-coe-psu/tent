@@ -4,6 +4,61 @@
  */
 
 export interface paths {
+	'/public/v1/announcements': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Active Announcements
+		 * @description Retrieve active announcements sorted by newest first, paginated.
+		 */
+		get: operations['get_active_announcements_public_v1_announcements_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/admin/api-keys': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** List Api Keys */
+		get: operations['list_api_keys_v1_admin_api_keys_get'];
+		put?: never;
+		/** Create Api Key */
+		post: operations['create_api_key_v1_admin_api_keys_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/admin/api-keys/{key_id}/revoke': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Revoke Api Key */
+		post: operations['revoke_api_key_v1_admin_api_keys__key_id__revoke_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/v1/auth/verify': {
 		parameters: {
 			query?: never;
@@ -15,7 +70,27 @@ export interface paths {
 		 * Verify Auth
 		 * @description Verify connectivity using EXTERNAL_API_SECRET Bearer token.
 		 */
-		get: operations['verify_auth'];
+		get: operations['verify_auth_v1_auth_verify_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/config/faqs': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Faqs
+		 * @description Get public FAQs from the MongoDB read model.
+		 */
+		get: operations['get_faqs_public_v1_config_faqs_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -34,7 +109,27 @@ export interface paths {
 		get?: never;
 		put?: never;
 		/** Create Donation */
-		post: operations['create_donation'];
+		post: operations['create_donation_public_v1_donations_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/donations/track-search': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Track Search Donation
+		 * @description Resolve booking_ref (DN-…) + phone → tracking_token (CR-052 §2.6).
+		 */
+		post: operations['track_search_donation_public_v1_donations_track_search_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -49,17 +144,45 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Donation */
-		get: operations['get_donation'];
+		get: operations['get_donation_public_v1_donations__tracking_token__get'];
 		put?: never;
 		post?: never;
-		delete?: never;
+		/**
+		 * Cancel Donation
+		 * @description Cancel on the Mongo intake buffer (pre-inbound only).
+		 */
+		delete: operations['cancel_donation_public_v1_donations__tracking_token__delete'];
 		options?: never;
 		head?: never;
 		/**
 		 * Patch Donation Courier
 		 * @description Update courier tracking on the Mongo intake buffer (pre-inbound only).
 		 */
-		patch: operations['patch_donation_courier'];
+		patch: operations['patch_donation_courier_public_v1_donations__tracking_token__patch'];
+		trace?: never;
+	};
+	'/public/v1/donations/{tracking_token}/items': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		/**
+		 * Patch Donation Items
+		 * @description Donor edits their own declared items, moving the quota by the difference (CR-080).
+		 *
+		 *     A separate path from the courier PATCH above: that one touches only the intake
+		 *     buffer and can never be refused, while this one moves the atomic counter and answers
+		 *     409 when the target is full.
+		 */
+		patch: operations['patch_donation_items_public_v1_donations__tracking_token__items_patch'];
 		trace?: never;
 	};
 	'/public/v1/occupants': {
@@ -75,7 +198,132 @@ export interface paths {
 		 * Search Evacuees
 		 * @description Search evacuees in the public read model (masked, no PII leakage).
 		 */
-		post: operations['search_evacuees'];
+		post: operations['search_evacuees_public_v1_occupants_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/v1/shelters': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * ดึงรายการศูนย์พักพิง (get-list-shelter)
+		 * @description ดึงรายการศูนย์พักพิงสำหรับระบบภายนอก (M2).
+		 */
+		get: operations['list_shelters_external_v1_shelters_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/v1/persons/shelter-residency': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * ตรวจสอบสถานะการเข้าพัก (get-person-shelter-residency)
+		 * @description ตรวจสอบสถานะการเข้าพักศูนย์พักพิงของผู้ประสบภัยจากเลขประจำตัวประชาชน (CID).
+		 */
+		get: operations['get_person_shelter_residency_external_v1_persons_shelter_residency_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/v1/shelters/{code}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Shelter */
+		get: operations['get_shelter_external_v1_shelters__code__get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/v1/needs': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** List Needs */
+		get: operations['list_needs_external_v1_needs_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/v1/occupants': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Search Evacuees */
+		post: operations['search_evacuees_external_v1_occupants_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/v1/announcements': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Active Announcements */
+		get: operations['get_active_announcements_external_v1_announcements_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/v1/config/faqs': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Faqs */
+		get: operations['get_faqs_external_v1_config_faqs_get'];
+		put?: never;
+		post?: never;
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -94,7 +342,7 @@ export interface paths {
 		 * @description Health check endpoint to verify the service is running.
 		 *     Returns a simple message indicating the service is healthy.
 		 */
-		get: operations['health_check'];
+		get: operations['health_check_v1_health_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -111,7 +359,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** List Needs */
-		get: operations['list_needs'];
+		get: operations['list_needs_public_v1_needs_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -131,7 +379,7 @@ export interface paths {
 		 * List Shelters
 		 * @description List shelters from the MongoDB read model.
 		 */
-		get: operations['list_shelters'];
+		get: operations['list_shelters_public_v1_shelters_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -151,7 +399,7 @@ export interface paths {
 		 * Get Shelter
 		 * @description Get shelter detail from the MongoDB read model.
 		 */
-		get: operations['get_shelter'];
+		get: operations['get_shelter_public_v1_shelters__code__get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -174,6 +422,128 @@ export interface components {
 		/** ApiErrorResponse */
 		ApiErrorResponse: {
 			error: components['schemas']['ApiErrorBody'];
+		};
+		/** ApiKeyCreateRequest */
+		ApiKeyCreateRequest: {
+			/** Name */
+			name: string;
+			/** Owner */
+			owner: string;
+			/**
+			 * Expires At
+			 * Format: date-time
+			 */
+			expires_at: string;
+			/**
+			 * Created By
+			 * @description SA Couch username who issues the key
+			 */
+			created_by: string;
+		};
+		/**
+		 * ApiKeyCreateResponse
+		 * @description Create response — plaintext ``api_key`` is returned once.
+		 */
+		ApiKeyCreateResponse: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Owner */
+			owner: string;
+			/** Key Prefix */
+			key_prefix: string;
+			/**
+			 * Expires At
+			 * Format: date-time
+			 */
+			expires_at: string;
+			/** Created By */
+			created_by: string;
+			/**
+			 * Created At
+			 * Format: date-time
+			 */
+			created_at: string;
+			/** Revoked At */
+			revoked_at?: string | null;
+			/** Last Used At */
+			last_used_at?: string | null;
+			/** Api Key */
+			api_key: string;
+		};
+		/** ApiKeyListResponse */
+		ApiKeyListResponse: {
+			/** Keys */
+			keys: components['schemas']['ApiKeyPublic'][];
+			/** Count */
+			count: number;
+		};
+		/**
+		 * ApiKeyPublic
+		 * @description Key metadata without secret material.
+		 */
+		ApiKeyPublic: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Owner */
+			owner: string;
+			/** Key Prefix */
+			key_prefix: string;
+			/**
+			 * Expires At
+			 * Format: date-time
+			 */
+			expires_at: string;
+			/** Created By */
+			created_by: string;
+			/**
+			 * Created At
+			 * Format: date-time
+			 */
+			created_at: string;
+			/** Revoked At */
+			revoked_at?: string | null;
+			/** Last Used At */
+			last_used_at?: string | null;
+		};
+		/** ApiKeyRevokeResponse */
+		ApiKeyRevokeResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			key: components['schemas']['ApiKeyPublic'];
+		};
+		/** ConfigResponse */
+		ConfigResponse: {
+			/**
+			 * Faqs
+			 * @default []
+			 */
+			faqs: components['schemas']['FaqItem'][];
+			/** Line Oa Url */
+			line_oa_url?: string | null;
+			/** Facebook Url */
+			facebook_url?: string | null;
+			/** Phone Number */
+			phone_number?: string | null;
+		};
+		/** DonationCancelResponse */
+		DonationCancelResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Message
+			 * @default Donation cancelled successfully
+			 */
+			message: string;
 		};
 		/** DonationCourierPatchRequest */
 		DonationCourierPatchRequest: {
@@ -238,6 +608,59 @@ export interface components {
 			/** Note */
 			note?: string | null;
 		};
+		/** DonationItemsPatchRequest */
+		DonationItemsPatchRequest: {
+			/** Items */
+			items: components['schemas']['DonationItemInput'][];
+		};
+		/** DonationItemsPatchResponse */
+		DonationItemsPatchResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Message
+			 * @default Donation items updated
+			 */
+			message: string;
+			/**
+			 * Revisions
+			 * @default 0
+			 */
+			revisions: number;
+			/** Items */
+			items?: {
+				[key: string]: unknown;
+			}[];
+			/** Revision */
+			revision?: {
+				[key: string]: unknown;
+			};
+		};
+		/**
+		 * DonationTrackSearchRequest
+		 * @description CR-052 §2.6 — human booking_ref + phone exact match (not token alone).
+		 */
+		DonationTrackSearchRequest: {
+			/** Booking Ref */
+			booking_ref: string;
+			/** Phone */
+			phone: string;
+		};
+		/** DonationTrackSearchResponse */
+		DonationTrackSearchResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Tracking Token */
+			tracking_token: string;
+			/** Booking Ref */
+			booking_ref: string;
+		};
 		/** DonationTrackingResponse */
 		DonationTrackingResponse: {
 			/**
@@ -270,6 +693,35 @@ export interface components {
 			/** Shelter Name */
 			shelter_name: string;
 		};
+		/** FaqItem */
+		FaqItem: {
+			/** Id */
+			id?: string | null;
+			/** Question */
+			question: string;
+			/** Answer */
+			answer: string;
+			/**
+			 * Is Published
+			 * @default true
+			 */
+			is_published: boolean;
+			/**
+			 * Order
+			 * @default 0
+			 */
+			order: number;
+		};
+		/** GeoJsonPoint */
+		GeoJsonPoint: {
+			/**
+			 * Type
+			 * @default Point
+			 */
+			type: string;
+			/** Coordinates */
+			coordinates: number[];
+		};
 		/** GeoPoint */
 		GeoPoint: {
 			/** Lat */
@@ -286,6 +738,71 @@ export interface components {
 		HealthCheckResponse: {
 			/** Status */
 			status: string;
+		};
+		/** M2ErrorDetail */
+		M2ErrorDetail: {
+			/** Code */
+			code: string;
+			/** Message */
+			message: string;
+		};
+		/** M2ErrorResponse */
+		M2ErrorResponse: {
+			error: components['schemas']['M2ErrorDetail'];
+		};
+		/** M2PersonResidencyResponse */
+		M2PersonResidencyResponse: {
+			/**
+			 * Shelter Id
+			 * @description รหัสศูนย์พักพิง
+			 */
+			shelter_id: string;
+			/**
+			 * Shelter Name
+			 * @description ชื่อศูนย์พักพิง
+			 */
+			shelter_name: string;
+			/**
+			 * Checkin Datetime
+			 * @description วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)
+			 */
+			checkin_datetime: string;
+			/**
+			 * Status
+			 * @description สถานะการเข้าพัก
+			 * @enum {string}
+			 */
+			status: 'CHECKED_IN' | 'CHECKED_OUT';
+		};
+		/** M2ShelterItem */
+		M2ShelterItem: {
+			/**
+			 * Shelter Id
+			 * @description รหัสศูนย์พักพิง เช่น SH001
+			 */
+			shelter_id: string;
+			/**
+			 * Shelter Name
+			 * @description ชื่อศูนย์พักพิง
+			 */
+			shelter_name: string;
+			/**
+			 * Site Kind
+			 * @description ชนิดสถานที่
+			 * @default evacuation_center
+			 * @enum {string}
+			 */
+			site_kind: 'evacuation_center' | 'host_house';
+			/**
+			 * Lat
+			 * @description พิกัดละติจูด (WGS 84)
+			 */
+			lat?: number | null;
+			/**
+			 * Long
+			 * @description พิกัดลองจิจูด (WGS 84)
+			 */
+			long?: number | null;
 		};
 		/** NeedItemResponse */
 		NeedItemResponse: {
@@ -309,6 +826,47 @@ export interface components {
 			 * Format: date-time
 			 */
 			as_of: string;
+		};
+		/** PaginatedAnnouncements */
+		PaginatedAnnouncements: {
+			/** Items */
+			items: components['schemas']['PublicAnnouncement'][];
+			/** Total */
+			total: number;
+			/** Page */
+			page: number;
+			/** Size */
+			size: number;
+			/** Total Pages */
+			total_pages: number;
+		};
+		/**
+		 * PublicAnnouncement
+		 * @description Public snapshot of a system announcement, stored in MongoDB `public_announcements`.
+		 *     Sourced from `announcement` docs in CouchDB `registry`.
+		 */
+		PublicAnnouncement: {
+			/**
+			 * Id
+			 * @description The CouchDB announcement document ID
+			 */
+			_id: string;
+			/** Title */
+			title: string;
+			/** Description */
+			description: string;
+			/**
+			 * Severity
+			 * @enum {string}
+			 */
+			severity: 'info' | 'warning' | 'emergency';
+			/** Is Active */
+			is_active: boolean;
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
 		};
 		/** SearchRequest */
 		SearchRequest: {
@@ -375,6 +933,12 @@ export interface components {
 			id: string;
 			/** Name */
 			name: string;
+			/**
+			 * Site Kind
+			 * @default evacuation_center
+			 * @enum {string}
+			 */
+			site_kind: 'evacuation_center' | 'host_house';
 			/** Status */
 			status: string;
 			/** Admin Type */
@@ -387,6 +951,7 @@ export interface components {
 			/** Building Status */
 			building_status: string;
 			geo?: components['schemas']['GeoPoint'] | null;
+			location?: components['schemas']['GeoJsonPoint'] | null;
 			admission_policy: components['schemas']['ShelterAdmissionPolicyDetail'];
 			travel: components['schemas']['ShelterTravelDetail'];
 			facilities: components['schemas']['ShelterFacilitiesDetail'];
@@ -443,6 +1008,12 @@ export interface components {
 			code: string;
 			/** Name */
 			name: string;
+			/**
+			 * Site Kind
+			 * @default evacuation_center
+			 * @enum {string}
+			 */
+			site_kind: 'evacuation_center' | 'host_house';
 			/** Status */
 			status: string;
 			/**
@@ -451,6 +1022,7 @@ export interface components {
 			 */
 			capacity: number;
 			geo?: components['schemas']['GeoPoint'] | null;
+			location?: components['schemas']['GeoJsonPoint'] | null;
 			/** Province */
 			province?: string | null;
 			/** District */
@@ -540,7 +1112,125 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-	verify_auth: {
+	get_active_announcements_public_v1_announcements_get: {
+		parameters: {
+			query?: {
+				/** @description Page number */
+				page?: number;
+				/** @description Items per page */
+				size?: number;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PaginatedAnnouncements'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	list_api_keys_v1_admin_api_keys_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ApiKeyListResponse'];
+				};
+			};
+		};
+	};
+	create_api_key_v1_admin_api_keys_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ApiKeyCreateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ApiKeyCreateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	revoke_api_key_v1_admin_api_keys__key_id__revoke_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				key_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ApiKeyRevokeResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	verify_auth_v1_auth_verify_get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -560,7 +1250,27 @@ export interface operations {
 			};
 		};
 	};
-	create_donation: {
+	get_faqs_public_v1_config_faqs_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ConfigResponse'];
+				};
+			};
+		};
+	};
+	create_donation_public_v1_donations_post: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -593,7 +1303,40 @@ export interface operations {
 			};
 		};
 	};
-	get_donation: {
+	track_search_donation_public_v1_donations_track_search_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DonationTrackSearchRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DonationTrackSearchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_donation_public_v1_donations__tracking_token__get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -624,7 +1367,38 @@ export interface operations {
 			};
 		};
 	};
-	patch_donation_courier: {
+	cancel_donation_public_v1_donations__tracking_token__delete: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				tracking_token: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DonationCancelResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	patch_donation_courier_public_v1_donations__tracking_token__patch: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -659,7 +1433,42 @@ export interface operations {
 			};
 		};
 	};
-	search_evacuees: {
+	patch_donation_items_public_v1_donations__tracking_token__items_patch: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				tracking_token: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DonationItemsPatchRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DonationItemsPatchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	search_evacuees_public_v1_occupants_post: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -681,7 +1490,7 @@ export interface operations {
 					'application/json': components['schemas']['SearchResponse'];
 				};
 			};
-			/** @description Unprocessable Entity */
+			/** @description Unprocessable Content */
 			422: {
 				headers: {
 					[name: string]: unknown;
@@ -701,9 +1510,12 @@ export interface operations {
 			};
 		};
 	};
-	health_check: {
+	list_shelters_external_v1_shelters_get: {
 		parameters: {
-			query?: never;
+			query?: {
+				/** @description กรองสถานะ เช่น open */
+				status?: string | null;
+			};
 			header?: never;
 			path?: never;
 			cookie?: never;
@@ -716,12 +1528,147 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['HealthCheckResponse'];
+					'application/json': components['schemas']['M2ShelterItem'][];
+				};
+			};
+			/** @description Unauthorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M2ErrorResponse'];
+				};
+			};
+			/** @description Forbidden */
+			403: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M2ErrorResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+			/** @description Internal Server Error */
+			500: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M2ErrorResponse'];
 				};
 			};
 		};
 	};
-	list_needs: {
+	get_person_shelter_residency_external_v1_persons_shelter_residency_get: {
+		parameters: {
+			query: {
+				/** @description เลขประจำตัวประชาชน 13 หลัก */
+				cid: string;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M2PersonResidencyResponse'];
+				};
+			};
+			/** @description Unauthorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M2ErrorResponse'];
+				};
+			};
+			/** @description Forbidden */
+			403: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M2ErrorResponse'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M2ErrorResponse'];
+				};
+			};
+			/** @description Unprocessable Content */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M2ErrorResponse'];
+				};
+			};
+			/** @description Internal Server Error */
+			500: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M2ErrorResponse'];
+				};
+			};
+		};
+	};
+	get_shelter_external_v1_shelters__code__get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ShelterDetailResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	list_needs_external_v1_needs_get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -741,13 +1688,156 @@ export interface operations {
 			};
 		};
 	};
-	list_shelters: {
+	search_evacuees_external_v1_occupants_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['SearchRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['SearchResponse'];
+				};
+			};
+			/** @description Unprocessable Content */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ApiErrorResponse'];
+				};
+			};
+			/** @description Too Many Requests */
+			429: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ApiErrorResponse'];
+				};
+			};
+		};
+	};
+	get_active_announcements_external_v1_announcements_get: {
+		parameters: {
+			query?: {
+				/** @description Page number */
+				page?: number;
+				/** @description Items per page */
+				size?: number;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PaginatedAnnouncements'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_faqs_external_v1_config_faqs_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ConfigResponse'];
+				};
+			};
+		};
+	};
+	health_check_v1_health_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HealthCheckResponse'];
+				};
+			};
+		};
+	};
+	list_needs_public_v1_needs_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['NeedsListResponse'];
+				};
+			};
+		};
+	};
+	list_shelters_public_v1_shelters_get: {
 		parameters: {
 			query?: {
 				province?: string | null;
 				district?: string | null;
 				subdistrict?: string | null;
 				status?: string | null;
+				site_kind?: ('evacuation_center' | 'host_house') | null;
+				/** @description User latitude */
+				lat?: number | null;
+				/** @description User longitude */
+				lng?: number | null;
+				/** @description Search radius in kilometers */
+				radius_km?: number | null;
 			};
 			header?: never;
 			path?: never;
@@ -775,7 +1865,7 @@ export interface operations {
 			};
 		};
 	};
-	get_shelter: {
+	get_shelter_public_v1_shelters__code__get: {
 		parameters: {
 			query?: never;
 			header?: never;

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { useMasterData } from '$lib/features/master-data';
+	import { SITE_KIND_LABELS } from '../domain/schema';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Building from '@lucide/svelte/icons/building';
@@ -10,11 +11,13 @@
 	let {
 		shelters,
 		onedit,
-		ondelete
+		ondelete,
+		emptyLabel = 'ศูนย์พักพิง'
 	}: {
 		shelters: ShelterSummary[];
 		onedit: (shelter: ShelterSummary) => void;
 		ondelete?: (shelter: ShelterSummary) => void;
+		emptyLabel?: string;
 	} = $props();
 
 	// Resolve shelter_type codes to human labels via the master-data engine.
@@ -44,8 +47,8 @@
 		<div class="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
 			<Building class="h-5 w-5 text-muted-foreground" />
 		</div>
-		<p class="text-sm font-medium text-foreground">ยังไม่มีศูนย์พักพิงในระบบ</p>
-		<p class="text-xs text-muted-foreground">เริ่มต้นด้วยการเพิ่มศูนย์พักพิงใหม่</p>
+		<p class="text-sm font-medium text-foreground">ยังไม่มี{emptyLabel}ในระบบ</p>
+		<p class="text-xs text-muted-foreground">เริ่มต้นด้วยการเพิ่ม{emptyLabel}ใหม่</p>
 	</div>
 {:else}
 	<div class="overflow-x-auto">
@@ -74,6 +77,9 @@
 						<!-- Type / location -->
 						<td class="px-4 py-4 align-top">
 							<div class="font-medium text-foreground">{typeLabel(shelter.shelter_type)}</div>
+							<div class="mt-1 text-xs font-semibold text-primary">
+								{SITE_KIND_LABELS[shelter.site_kind] ?? SITE_KIND_LABELS.evacuation_center}
+							</div>
 							{#if locationLine(shelter)}
 								<div class="mt-0.5 text-xs text-muted-foreground">{locationLine(shelter)}</div>
 							{/if}

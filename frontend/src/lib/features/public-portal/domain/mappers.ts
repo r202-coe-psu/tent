@@ -36,6 +36,7 @@ export function toPublicShelterCard(
 		id: code || itemId || name,
 		code,
 		name,
+		site_kind: item?.site_kind === 'host_house' ? 'host_house' : 'evacuation_center',
 		status: toUiShelterStatus(item?.status),
 		address,
 		distance: typeof distance === 'number' && !isNaN(distance) ? distance : 0,
