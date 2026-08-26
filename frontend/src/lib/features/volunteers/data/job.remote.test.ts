@@ -22,11 +22,15 @@ const baseInput: JobInput = {
 	tier: 'operational',
 	required_roles: [],
 	skills_required: [],
-	quota: 5,
-	shift_template: { shift_name: 'morning', start_time: '08:00', end_time: '12:00' },
+	shifts: [{ id: 's1', date: '2026-08-26', start_time: '08:00', end_time: '12:00', quota: 5 }],
 	auto_accept: false,
 	is_urgent: false
 };
+
+/** Same fixture with the sub-shift resized — `quota` is derived from `shifts[]`. */
+function withQuota(seats: number): JobInput {
+	return { ...baseInput, shifts: [{ ...baseInput.shifts[0], quota: seats }] };
+}
 
 /** Simulate N transient 409s on `repo.put`, then fall through to the real in-memory write. */
 function simulateConflictsOnPut(times: number): void {
@@ -131,7 +135,7 @@ describe('JobRemoteRepository — quota mutations', () => {
 	it('dispatch/acceptDispatch re-derive job.status via deriveJobStatus (F7)', async () => {
 		const repo = createJobRepositoryForTest('shelter_sh001');
 		// quota 5 -> almostFullCutoff = max(1, ceil(5 * 0.2)) = 1 remaining
-		const created = await repo.create({ ...baseInput, quota: 5 }, ctx);
+		const created = await repo.create(withQuota(5), ctx);
 		expect(created.status).toBe('open');
 
 		// dispatched slots count toward the cutoff — 4 offered out leaves 1
@@ -187,7 +191,7 @@ describe('JobRemoteRepository — quota mutations', () => {
 
 	it('update() rejects a quota that breaks the invariant (D2)', async () => {
 		const repo = createJobRepositoryForTest('shelter_sh001');
-		const created = await repo.create({ ...baseInput, quota: 5 }, ctx);
+		const created = await repo.create(withQuota(5), ctx);
 
 		await expect(
 			repo.update({ ...created, slots_confirmed: 99, slots_dispatched: 0, slots_remaining: 5 })
@@ -196,7 +200,7 @@ describe('JobRemoteRepository — quota mutations', () => {
 
 	it('update() re-derives status so a metadata edit cannot leave a full job open (D2)', async () => {
 		const repo = createJobRepositoryForTest('shelter_sh001');
-		const created = await repo.create({ ...baseInput, quota: 2 }, ctx);
+		const created = await repo.create(withQuota(2), ctx);
 		await repo.dispatch(created._id, 2); // remaining 0 -> full
 		const full = await repo.get(created._id);
 		expect(full?.status).toBe('full');

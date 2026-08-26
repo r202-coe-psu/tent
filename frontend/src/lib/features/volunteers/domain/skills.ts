@@ -15,9 +15,17 @@
 
 import type { Job } from './job.schema';
 import type { JobApplicationStatus } from './job-application.schema';
+import { CONTROLLED_SKILL_KEYS } from './skill-master';
 
-/** Fallback controlled-skill keys (Thai + English) until settings master data is wired. */
+/**
+ * Fallback controlled-skill list until the settings master data is wired.
+ *
+ * Derived from `skill-master.ts` so the cards the SM ticks on the job form and
+ * the gate that forces `pending_review` can never disagree, plus the loose
+ * Thai/English synonyms a free-text walk-in entry may produce.
+ */
 export const DEFAULT_CONTROLLED_SKILLS: readonly string[] = [
+	...CONTROLLED_SKILL_KEYS,
 	'medical',
 	'nursing',
 	'first aid',

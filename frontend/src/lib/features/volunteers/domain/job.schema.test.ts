@@ -7,7 +7,7 @@ function validJobDoc() {
 	return {
 		_id: 'job:01AAAAAAAAAAAAAAAAAAAAAAAA',
 		type: 'job' as const,
-		schema_v: 2 as const,
+		schema_v: 3 as const,
 		shelter_code: 'SH001',
 		created_at: '2026-08-26T00:00:00.000Z',
 		updated_at: '2026-08-26T00:00:00.000Z',
@@ -21,7 +21,11 @@ function validJobDoc() {
 		slots_confirmed: 4,
 		slots_dispatched: 1,
 		slots_remaining: 5,
-		shift_template: { shift_name: 'morning', start_time: '08:00', end_time: '16:00' },
+		// schema_v 3 — quota (10) must equal the sum of the sub-shift headcounts.
+		shifts: [
+			{ id: 's1', date: '2026-08-26', start_time: '08:00', end_time: '16:00', quota: 6 },
+			{ id: 's2', date: '2026-08-27', start_time: '08:00', end_time: '16:00', quota: 4 }
+		],
 		auto_accept: false,
 		status: 'open' as const,
 		is_urgent: false
@@ -34,8 +38,7 @@ const baseInput: JobInput = {
 	tier: 'operational',
 	required_roles: [],
 	skills_required: [],
-	quota: 5,
-	shift_template: { shift_name: 'morning', start_time: '08:00', end_time: '16:00' },
+	shifts: [{ id: 's1', date: '2026-08-26', start_time: '08:00', end_time: '16:00', quota: 5 }],
 	auto_accept: false,
 	is_urgent: false
 };
@@ -188,11 +191,12 @@ describe('makeJob', () => {
 	it('mints an open job with the full quota unclaimed (schema.md §2.17 default)', () => {
 		const job = makeJob(baseInput, ctx);
 		expect(job._id).toMatch(/^job:/);
-		expect(job.schema_v).toBe(2);
+		expect(job.schema_v).toBe(3);
 		expect(job.status).toBe('open');
 		expect(job.slots_confirmed).toBe(0);
 		expect(job.slots_dispatched).toBe(0);
-		expect(job.slots_remaining).toBe(baseInput.quota);
+		expect(job.quota).toBe(5);
+		expect(job.slots_remaining).toBe(5);
 	});
 
 	it('produces a document that itself satisfies jobSchema (including the quota invariant)', () => {
@@ -204,5 +208,30 @@ describe('makeJob', () => {
 		expect(() =>
 			makeJob({ ...baseInput, tier: 'staff-capable', auto_accept: true }, ctx)
 		).toThrow();
+	});
+
+	it('honours an explicit draft status so a draft is created in one write', () => {
+		const job = makeJob({ ...baseInput, status: 'draft' }, ctx);
+		expect(job.status).toBe('draft');
+	});
+
+	it('accepts every status the LIFECYCLE STATUS control offers', () => {
+		for (const status of ['draft', 'open', 'paused', 'full', 'closed']) {
+			expect(
+				jobInputSchema.safeParse({ ...baseInput, status }).success,
+				`status ${status} must be choosable on the form`
+			).toBe(true);
+		}
+	});
+
+	it('rejects a status that is only ever derived, never chosen', () => {
+		// `almost_full` comes solely from `deriveJobStatus`; `cancelled` is a
+		// transition applied to an existing job, not an initial state.
+		for (const status of ['almost_full', 'cancelled']) {
+			expect(
+				jobInputSchema.safeParse({ ...baseInput, status }).success,
+				`status ${status} must not be choosable at create time`
+			).toBe(false);
+		}
 	});
 });

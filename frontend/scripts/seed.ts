@@ -1716,13 +1716,11 @@ async function seedVolunteers(): Promise<void> {
 			tier: 'operational',
 			required_roles: [],
 			skills_required: ['ต้อนรับ', 'ประสานงาน'],
-			quota: 6,
-			shift_template: {
-				shift_name: 'กะเช้า-บ่าย',
-				start_time: '08:00',
-				end_time: '16:00',
-				days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-			},
+			// schema_v 3 — capacity lives in the sub-shifts; quota = 3 + 3 = 6.
+			shifts: [
+				{ id: `js-${today}-a`, date: today, start_time: '08:00', end_time: '16:00', quota: 3 },
+				{ id: `js-${today}-b`, date: today, start_time: '16:00', end_time: '00:00', quota: 3 }
+			],
 			auto_accept: false,
 			is_urgent: true
 		},
@@ -1734,8 +1732,9 @@ async function seedVolunteers(): Promise<void> {
 			tier: 'staff-capable',
 			required_roles: ['registration_staff'],
 			skills_required: ['ลงทะเบียน', 'คัดกรอง'],
-			quota: 3,
-			shift_template: { shift_name: 'กะเต็มวัน', start_time: '08:00', end_time: '17:00' },
+			shifts: [
+				{ id: `js-${today}-c`, date: today, start_time: '08:00', end_time: '17:00', quota: 3 }
+			],
 			auto_accept: false,
 			is_urgent: false
 		},
@@ -1747,8 +1746,9 @@ async function seedVolunteers(): Promise<void> {
 			tier: 'operational',
 			required_roles: [],
 			skills_required: ['ยกของหนัก'],
-			quota: 8,
-			shift_template: { shift_name: 'กะเช้า', start_time: '08:00', end_time: '16:00' },
+			shifts: [
+				{ id: `js-${today}-d`, date: today, start_time: '08:00', end_time: '16:00', quota: 8 }
+			],
 			auto_accept: false,
 			is_urgent: false
 		}

@@ -2,7 +2,7 @@
 title: "Step 00 — Foundation: schema + feature slice"
 status: done
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-08-27
 blocked_by: CR-094 approval (แก้ schema.md + bump schema_v ต้องรอเคาะ)
 ---
 
@@ -95,3 +95,29 @@ blocked_by: CR-094 approval (แก้ schema.md + bump schema_v ต้องร
 **ตัวนับที่ 6 `completed`** — เพิ่มจาก 5 ตัวในตารางข้างบน เพราะแถบ attendance (FR-VOL-11.3) ต้องใช้ "เสร็จสิ้นภารกิจ/เช็คเอาต์แล้ว" และ FR-VOL-08.2 ห้ามแท็บคำนวณเอง · นิยาม: distinct อาสาที่มี `shift_assignment` ของวันนี้สถานะ `completed`
 
 **"วันนี้" ทุกที่ = Asia/Bangkok** ผ่าน `domain/duty-window.ts#bangkokDateString()` — ทั้ง `useHubMetrics`, `useTodayAttendance` และ `scripts/seed.ts` ห้ามใช้ UTC date เพราะช่วง 00:00–07:00 น. จะไปดึง roster ของเมื่อวาน ซึ่งคือทั้งกะดึก (00:00–08:00)
+
+---
+
+## ภาคผนวก — `job.shifts[]` (2026-08-27) · ⚠️ ยังไม่มี CR รองรับ
+
+ฟอร์ม "ประกาศภารกิจงานอาสาใหม่" ที่เจ้าของโครงการส่งมา (2026-08-27) เก็บ **กะย่อยหลายแถว** แต่ละแถวมีวันที่ + เวลาเข้า/ออก + จำนวนรับของตัวเอง ซึ่ง `job` เดิม (schema_v 2) เก็บได้แค่ `shift_template` อันเดียว + `quota` ก้อนเดียว
+
+**สิ่งที่เปลี่ยน (implement แล้ว):**
+
+| | |
+| --- | --- |
+| `job.shifts[]` | `{id, date, start_time, end_time, quota}` — req, อย่างน้อย 1 แถว |
+| `job.quota` | **derive** = `sum(shifts[].quota)` — บังคับด้วย `.refine` ทั้งใน doc schema และคำนวณใน `makeJob` |
+| `job.shift_template` | เปลี่ยนเป็น opt + mark deprecated (คงไว้อ่าน doc schema_v 2) |
+| `schema_v` | **2 → 3** |
+| `jobInputSchema.status` | ขยายเป็น `draft` / `open` / `paused` / `full` / `closed` ตามปุ่ม LIFECYCLE STATUS 5 ตัวในดีไซน์ (`almost_full` และ `cancelled` ไม่อยู่ในนี้ — `almost_full` มาจาก `deriveJobStatus` เท่านั้น) |
+| KPI ระดับกะ (FR-VOL-09.4) | เปลี่ยนจาก 1 bucket ต่องาน → **1 bucket ต่อกะจริง** |
+
+**Domain modules ใหม่:**
+
+- `domain/skill-master.ts` — master list ทักษะ 9 รายการ (`key`/`label`/`description`/`icon`/`controlled`) · `skills.ts#DEFAULT_CONTROLLED_SKILLS` derive จากที่นี่ ทำให้การ์ดที่ SM ติ๊กกับ gate ที่บังคับ `pending_review` ไม่มีทางไม่ตรงกัน
+- `domain/shift-batch.ts` — ตัวขยายช่วงวันของ Batch Generator (pure + test 21 เคส) · เพดาน `MAX_BATCH_SHIFTS = 180` แถวต่อการกด Generate หนึ่งครั้ง และปฏิเสธช่วงยาวเกิน 1 ปี
+
+> **[NEEDS CR]** การเปลี่ยนรูป doc ที่ persist แล้ว + bump `schema_v` ต้องมี Change Record ตาม [change-management.md](../../change-management.md) §2 — ต้องเปิด CR amend CR-094 ย้อนหลังให้ครบ (ยังไม่ได้ทำ เพราะยังไม่ได้เคาะวิธี track)
+
+**Migration (2 → 3):** doc เดิมสร้าง `shifts` 1 แถวจาก `shift_template` + `quota` เดิม; `date` ไม่มีข้อมูลเดิม → ใช้วันที่ของ `created_at` ตามเวลา Asia/Bangkok

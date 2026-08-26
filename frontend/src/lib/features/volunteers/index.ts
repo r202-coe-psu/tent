@@ -74,3 +74,13 @@ export {
 
 // application — query-key factory + every hook
 export * from './application/queries';
+
+// ui — Tab 1 (Job Board & Capacity), 01-tab-job-board.md
+export { default as VolunteerHubHeader } from './ui/volunteer-hub-header.svelte';
+export { default as JobBoardTab } from './ui/job-board-tab.svelte';
+export { default as JobCapacitySummary } from './ui/job-capacity-summary.svelte';
+export { default as JobFilterChips } from './ui/job-filter-chips.svelte';
+export type { JobBoardStatusFilter } from './ui/job-filter-chips.svelte';
+export { default as JobCard } from './ui/job-card.svelte';
+export { default as JobQuotaBar } from './ui/job-quota-bar.svelte';
+export { default as JobFormDialog } from './ui/job-form-dialog.svelte';

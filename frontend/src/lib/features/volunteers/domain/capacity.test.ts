@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { shiftFillRate, bucketFillRate, overallBookingRate, bucketCounts } from './capacity';
+import {
+	shiftFillRate,
+	bucketFillRate,
+	overallBookingRate,
+	bucketCounts,
+	jobShiftCapacities
+} from './capacity';
 
 describe('shiftFillRate', () => {
 	it('computes confirmed / target', () => {
@@ -70,5 +76,53 @@ describe('bucketCounts', () => {
 
 	it('is all zero for an empty input', () => {
 		expect(bucketCounts([])).toEqual({ critical: 0, near: 0, met: 0 });
+	});
+});
+
+describe('jobShiftCapacities', () => {
+	const job = (shifts: { id: string; quota: number }[], confirmed: number) => ({
+		_id: 'job:X',
+		shifts,
+		slots_confirmed: confirmed
+	});
+
+	it('produces one bucket per sub-shift, keyed by job and shift', () => {
+		const out = jobShiftCapacities(
+			job(
+				[
+					{ id: 'a', quota: 3 },
+					{ id: 'b', quota: 2 }
+				],
+				0
+			)
+		);
+		expect(out.map((c) => c.key)).toEqual(['job:X#a', 'job:X#b']);
+		expect(out.map((c) => c.target)).toEqual([3, 2]);
+	});
+
+	it('fills earlier shifts first', () => {
+		const out = jobShiftCapacities(
+			job(
+				[
+					{ id: 'a', quota: 3 },
+					{ id: 'b', quota: 2 }
+				],
+				4
+			)
+		);
+		expect(out.map((c) => c.confirmed)).toEqual([3, 1]);
+	});
+
+	it('never over-fills a shift or goes negative', () => {
+		expect(jobShiftCapacities(job([{ id: 'a', quota: 2 }], 99)).map((c) => c.confirmed)).toEqual([
+			2
+		]);
+		expect(jobShiftCapacities(job([{ id: 'a', quota: 2 }], -5)).map((c) => c.confirmed)).toEqual([
+			0
+		]);
+	});
+
+	it('returns nothing for a job with no shifts', () => {
+		expect(jobShiftCapacities(job([], 3))).toEqual([]);
 	});
 });

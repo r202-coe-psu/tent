@@ -27,11 +27,15 @@ const jobInput: JobInput = {
 	tier: 'operational',
 	required_roles: [],
 	skills_required: [],
-	quota: 2,
-	shift_template: { shift_name: 'morning', start_time: '08:00', end_time: '12:00' },
+	shifts: [{ id: 's1', date: '2026-08-26', start_time: '08:00', end_time: '12:00', quota: 2 }],
 	auto_accept: true,
 	is_urgent: false
 };
+
+/** Same fixture with the sub-shift resized — `quota` is derived from `shifts[]`. */
+function withQuota(seats: number): JobInput {
+	return { ...jobInput, shifts: [{ ...jobInput.shifts[0], quota: seats }] };
+}
 
 function applicationInput(jobId: string, skills: string[] = ['ขับรถ']): JobApplicationInput {
 	return {
@@ -110,7 +114,7 @@ describe('JobApplicationRemoteRepository', () => {
 	it('removes the application doc when the job has no slots left to confirm', async () => {
 		const jobs = createJobRepositoryForTest('shelter_sh001');
 		const applications = createJobApplicationRepositoryForTest('shelter_sh001');
-		const job = await jobs.create({ ...jobInput, quota: 1 }, ctx);
+		const job = await jobs.create(withQuota(1), ctx);
 		await applications.create(applicationInput(job._id), ctx); // consumes the only slot
 
 		await expect(applications.create(applicationInput(job._id), ctx)).rejects.toThrow();
@@ -158,7 +162,7 @@ describe('JobApplicationRemoteRepository', () => {
 	it('review() reverts the application status when the job has no slots left', async () => {
 		const jobs = createJobRepositoryForTest('shelter_sh001');
 		const applications = createJobApplicationRepositoryForTest('shelter_sh001');
-		const job = await jobs.create({ ...jobInput, quota: 2 }, ctx);
+		const job = await jobs.create(withQuota(2), ctx);
 		await applications.create(applicationInput(job._id), ctx); // auto-accepted, consumes 1 of 2
 		const second = await applications.create(applicationInput(job._id, ['พยาบาล']), ctx);
 		expect(second.status).toBe('pending_review'); // controlled skill — no slot consumed yet

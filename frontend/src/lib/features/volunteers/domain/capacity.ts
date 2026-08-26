@@ -56,3 +56,28 @@ export function bucketCounts(
 	}
 	return counts;
 }
+
+/**
+ * One capacity bucket per SUB-SHIFT of a job (CR-094 FR-VOL-09.4 counts "กะ",
+ * not jobs).
+ *
+ * ⚠️ Approximation, deliberately explicit: `shift_assignment` does not yet
+ * carry the id of the specific `job.shifts[]` row it fills, so there is no
+ * per-shift confirmed count to read. The job-level `slots_confirmed` is
+ * therefore allocated greedily — earliest shift filled first — which keeps the
+ * NUMBER of shifts in each bucket right even though which particular shift is
+ * short may be off. Replace this with a real per-shift tally once
+ * `shift_assignment` gains a `job_shift_id` (follow-up, needs a CR).
+ */
+export function jobShiftCapacities(job: {
+	_id: string;
+	shifts: readonly { id: string; quota: number }[];
+	slots_confirmed: number;
+}): ShiftCapacity[] {
+	let left = Math.max(job.slots_confirmed, 0);
+	return job.shifts.map((shift) => {
+		const confirmed = Math.min(left, shift.quota);
+		left -= confirmed;
+		return { key: `${job._id}#${shift.id}`, target: shift.quota, confirmed };
+	});
+}
