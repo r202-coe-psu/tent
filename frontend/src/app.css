@@ -254,3 +254,39 @@
 		@apply bg-background text-foreground;
 	}
 }
+
+@layer utilities {
+	/* Semantic Status Badge Styles (Food Sphere / DoC / Inventory Alerts) */
+	.badge-status-critical {
+		@apply border-danger-border bg-danger-muted text-danger;
+	}
+	.badge-status-warning {
+		@apply border-warning-border bg-warning-muted text-warning-dark;
+	}
+	.badge-status-adequate {
+		@apply border-success-border bg-success-muted text-success-dark;
+	}
+	.badge-status-overstock {
+		@apply border-shelter-blue-text/20 bg-shelter-blue-bg text-shelter-blue-text;
+	}
+	.badge-status-unconfigured {
+		@apply border-border bg-muted text-muted-foreground;
+	}
+
+	/* Status Badge Indicator Dots */
+	.badge-dot-critical {
+		@apply animate-pulse bg-danger;
+	}
+	.badge-dot-warning {
+		@apply bg-warning;
+	}
+	.badge-dot-adequate {
+		@apply bg-success;
+	}
+	.badge-dot-overstock {
+		@apply bg-shelter-blue-text;
+	}
+	.badge-dot-unconfigured {
+		@apply bg-muted-foreground/40;
+	}
+}

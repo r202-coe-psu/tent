@@ -287,7 +287,8 @@
 
 				<!-- Building type -->
 				<div class="space-y-1.5">
-					<Label for="type" class="text-xs font-semibold text-muted-foreground">{t.typeLabel}</Label>
+					<Label for="type" class="text-xs font-semibold text-muted-foreground">{t.typeLabel}</Label
+					>
 					<Select.Root type="single" name="type" value={filters.type ?? ''}>
 						<Select.Trigger class="w-full rounded-xl">
 							<Select.Value placeholder={t.typePlaceholder} />

@@ -110,3 +110,80 @@ export {
 
 // Live-sync wiring (call once per layout, pass QueryClient)
 export { startSopRatioLiveQuery } from './application/sop-ratio-sync';
+
+// --- Food Sphere, Requirement Group & Replenishment (CR-093) ---
+
+// Domain: Food Sphere Standard
+export {
+	targetSegmentSchema,
+	TARGET_SEGMENT_LABELS,
+	foodSphereSourceSchema,
+	foodSphereStandardInputSchema,
+	isFoodSphereStandard,
+	type TargetSegment,
+	type FoodSphereSource,
+	type FoodSphereStandard,
+	type FoodSphereStandardInput
+} from './domain/food-sphere';
+export { DEFAULT_FOOD_SPHERE_STANDARDS } from './domain/food-sphere.fixture';
+export { calculateTotalDailyDemand, type HeadcountBySegment } from './domain/food-sphere-calc';
+
+// Domain: Requirement Group
+export {
+	itemMapSchema,
+	requirementGroupInputSchema,
+	isRequirementGroup,
+	type ItemMap,
+	type RequirementGroup,
+	type RequirementGroupInput
+} from './domain/requirement-group';
+
+// Domain: Replenishment Policy
+export {
+	replenishmentScopeSchema,
+	REPLENISHMENT_SCOPE_LABELS,
+	replenishmentPolicyInputSchema,
+	isReplenishmentPolicy,
+	type ReplenishmentScope,
+	type ReplenishmentPolicy,
+	type ReplenishmentPolicyInput
+} from './domain/replenishment-policy';
+export { DEFAULT_REPLENISHMENT_POLICIES } from './domain/replenishment-policy.fixture';
+export {
+	calculateStandardReorderDays,
+	calculateItemDailyDemand,
+	calculateReplenishmentAnalysis,
+	type DocAlertStatus,
+	type ReplenishmentAnalysisResult
+} from './domain/replenishment-calc';
+
+// Repositories
+export { FoodSphereRemoteRepository, foodSphereRepository } from './data/food-sphere.remote';
+export {
+	RequirementGroupRemoteRepository,
+	requirementGroupRepository
+} from './data/requirement-group.remote';
+export {
+	ReplenishmentPolicyRemoteRepository,
+	replenishmentPolicyRepository
+} from './data/replenishment-policy.remote';
+
+// Application Queries & Mutations
+export {
+	foodSphereKeys,
+	useFoodSphereStandards,
+	useSaveFoodSphereStandard,
+	useDeleteFoodSphereOverride
+} from './application/food-sphere-queries';
+export {
+	requirementGroupKeys,
+	useRequirementGroups,
+	useSaveRequirementGroup,
+	useDeleteRequirementGroup
+} from './application/requirement-group-queries';
+export {
+	replenishmentKeys,
+	useReplenishmentPolicies,
+	useSaveReplenishmentPolicy,
+	useDeleteReplenishmentOverride
+} from './application/replenishment-queries';
