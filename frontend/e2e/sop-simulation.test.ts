@@ -4,6 +4,7 @@ import {
 	couchReq,
 	createCouchUser,
 	deleteCouchUser,
+	COUCH_BASE,
 	SM_SH001_ROLES,
 	STAFF_SH001_ROLES,
 	type TestUser
@@ -14,6 +15,41 @@ type CouchDocument = { _id: string; _rev: string; [key: string]: unknown };
 type AllDocsResult = { rows?: Array<{ doc?: CouchDocument }> };
 
 const SHELTER_DB = 'shelter_sh001';
+const APP_BASE_URL = 'http://localhost:4173';
+
+/**
+ * Keep T-42's browser transport self-contained when the shared test environment
+ * intentionally leaves PUBLIC_COUCH_PROXY empty. Requests still reach the real
+ * CouchDB through Vite's existing /couch proxy; no response data is mocked.
+ */
+async function routeBrowserCouchThroughApp(page: Page) {
+	await page.route(`${COUCH_BASE}/**`, async (route) => {
+		const request = route.request();
+		const origin = new URL(request.url());
+		const allowOrigin = new URL(APP_BASE_URL).origin;
+		const corsHeaders = {
+			'access-control-allow-origin': allowOrigin,
+			'access-control-allow-credentials': 'true',
+			'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+			'access-control-allow-headers':
+				request.headers()['access-control-request-headers'] ?? 'Content-Type, Accept',
+			'access-control-expose-headers': 'ETag, Location, Content-Type'
+		};
+
+		if (request.method() === 'OPTIONS') {
+			await route.fulfill({ status: 204, headers: corsHeaders });
+			return;
+		}
+
+		const response = await route.fetch({
+			url: `${APP_BASE_URL}/couch${origin.pathname}${origin.search}`
+		});
+		await route.fulfill({
+			response,
+			headers: { ...response.headers(), ...corsHeaders }
+		});
+	});
+}
 
 function uniqueUser(prefix: string, roles: string[]): TestUser {
 	const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
@@ -26,6 +62,7 @@ function uniqueUser(prefix: string, roles: string[]): TestUser {
 }
 
 async function openAs(page: Page, user: TestUser, path: string) {
+	await routeBrowserCouchThroughApp(page);
 	await createCouchUser(user);
 	const session = await couchLogin(user.name, user.password);
 	await injectSession(page, user, session);
