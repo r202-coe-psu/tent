@@ -3,6 +3,7 @@
 	import ArrowDown from '@lucide/svelte/icons/arrow-down';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import Timer from '@lucide/svelte/icons/timer';
+	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 </script>
 
 <svelte:head>
@@ -10,44 +11,137 @@
 </svelte:head>
 
 <div
-	class="flex w-full max-w-5xl flex-col items-center justify-center gap-8 text-center lg:flex-row lg:items-center lg:gap-12 lg:text-left"
+	class="flex h-full w-full max-w-2xl flex-1 flex-col items-center justify-between gap-6 py-2 text-center"
 >
-	<!-- Left / Top Column: 3D Smart Card Mockup with Slot Animation -->
-	<div class="flex w-full max-w-sm shrink-0 flex-col items-center justify-center">
+	<!-- ========================================== -->
+	<!-- ส่วนที่ 1 (บน): Wizard Step UI กลม เชื่อมเส้น (Step 1 Active) -->
+	<!-- ========================================== -->
+	<div class="w-full px-2 sm:px-4">
+		<div class="relative flex items-start justify-between">
+			<!-- Connecting Background Track Lines -->
+			<div class="absolute top-5 right-10 left-10 h-1 -translate-y-1/2 bg-slate-300 sm:top-6"></div>
+			<!-- Active Progress Line (from Step 1 to half) -->
+			<div
+				class="absolute top-5 left-10 h-1 w-1/2 -translate-y-1/2 bg-gradient-to-r from-blue-600 to-slate-300 sm:top-6"
+			></div>
+
+			<!-- Step 1: Current / Active -->
+			<div class="relative z-10 flex flex-col items-center">
+				<div
+					class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 font-mono text-sm font-black text-white shadow-lg ring-4 shadow-blue-500/30 ring-blue-100 sm:h-12 sm:w-12 sm:text-base"
+				>
+					1
+				</div>
+				<div class="mt-2 text-center">
+					<p class="text-xs font-black text-blue-700 sm:text-sm">เสียบบัตร</p>
+					<p class="text-[10px] font-semibold text-slate-500 sm:text-xs">หงายชิปทองขึ้น</p>
+				</div>
+			</div>
+
+			<!-- Step 2: Pending -->
+			<div class="relative z-10 flex flex-col items-center">
+				<div
+					class="flex h-10 w-10 items-center justify-center rounded-full border-2 border-slate-300 bg-white font-mono text-sm font-bold text-slate-500 shadow-sm sm:h-12 sm:w-12 sm:text-base"
+				>
+					2
+				</div>
+				<div class="mt-2 text-center">
+					<p class="text-xs font-bold text-slate-700 sm:text-sm">รอระบบอ่าน</p>
+					<p
+						class="flex items-center justify-center gap-0.5 text-[10px] font-medium text-slate-400 sm:text-xs"
+					>
+						<Timer class="h-3 w-3 text-slate-400" />
+						1-2 วินาที
+					</p>
+				</div>
+			</div>
+
+			<!-- Step 3: Pending -->
+			<div class="relative z-10 flex flex-col items-center">
+				<div
+					class="flex h-10 w-10 items-center justify-center rounded-full border-2 border-slate-300 bg-white font-mono text-sm font-bold text-slate-500 shadow-sm sm:h-12 sm:w-12 sm:text-base"
+				>
+					3
+				</div>
+				<div class="mt-2 text-center">
+					<p class="text-xs font-bold text-slate-700 sm:text-sm">ถอดบัตรออก</p>
+					<p
+						class="flex items-center justify-center gap-0.5 text-[10px] font-medium text-slate-400 sm:text-xs"
+					>
+						<CheckCircle2 class="h-3 w-3 text-slate-400" />
+						เมื่อขึ้นไฟเขียว
+					</p>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- ========================================== -->
+	<!-- ส่วนที่ 2 (กลาง): ข้อความหลัก & ป้ายเตือนชิปทอง -->
+	<!-- ========================================== -->
+	<div class="my-auto flex w-full flex-col items-center space-y-3.5">
+		<!-- Primary Headline -->
+		<h2
+			class="text-3xl leading-tight font-black tracking-tight text-slate-900 sm:text-4xl md:text-5xl"
+		>
+			กรุณาเสียบบัตรประจำตัวประชาชน
+		</h2>
+
+		<!-- Urgent Key Highlight (Gold Chip Up) -->
+		<div
+			class="inline-flex items-center gap-3 rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 px-5 py-3 text-base font-bold text-amber-950 shadow-md sm:text-lg md:text-xl"
+		>
+			<Sparkles class="h-6 w-6 shrink-0 text-amber-600" />
+			<span>
+				เสียบบัตรเข้าเครื่อง โดยหงาย <b
+					class="font-black text-amber-700 underline decoration-amber-500 underline-offset-4"
+					>ด้านชิปสีทองขึ้น</b
+				>
+			</span>
+		</div>
+	</div>
+
+	<!-- ========================================== -->
+	<!-- ส่วนที่ 3 (ล่าง): กราฟิกบัตรประชาชน & ช่องเสียบ & สถานะ -->
+	<!-- ========================================== -->
+	<div class="flex w-full flex-col items-center">
 		<!-- Card Graphic -->
 		<div
-			class="relative flex h-48 w-72 flex-col justify-between overflow-hidden rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 p-5 shadow-2xl ring-1 shadow-cyan-500/10 ring-white/10 backdrop-blur-xl transition-transform hover:scale-[1.02] sm:h-56 sm:w-80"
+			class="relative flex h-52 w-80 flex-col justify-between overflow-hidden rounded-3xl border-2 border-blue-200/80 bg-gradient-to-br from-white via-sky-50 to-blue-50/80 p-5 shadow-2xl ring-1 shadow-blue-500/15 ring-black/5 backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] sm:h-60 sm:w-96 md:h-68 md:w-[420px]"
 		>
-			<!-- Top row: Thai flag accent & Card type -->
+			<!-- Top Row: Thai Flag & Official Card Type -->
 			<div class="flex items-center justify-between">
-				<div class="flex h-2.5 w-12 overflow-hidden rounded shadow-sm">
+				<div class="flex h-3 w-16 overflow-hidden rounded shadow-sm ring-1 ring-black/10">
 					<div class="w-1/5 bg-red-600"></div>
 					<div class="w-1/5 bg-white"></div>
 					<div class="w-1/5 bg-blue-800"></div>
 					<div class="w-1/5 bg-white"></div>
 					<div class="w-1/5 bg-red-600"></div>
 				</div>
-				<div class="flex items-center gap-1 font-mono text-[9px] font-bold text-slate-400">
-					<CreditCard class="h-3.5 w-3.5 text-cyan-400" />
-					<span>THAI NATIONAL ID</span>
+				<div
+					class="flex items-center gap-1.5 font-mono text-[11px] font-black text-slate-600 sm:text-xs"
+				>
+					<CreditCard class="h-4 w-4 text-blue-600" />
+					<span>บัตรประจำตัวประชาชน THAI ID</span>
 				</div>
 			</div>
 
-			<!-- Middle row: Gold Smart Chip with Golden Glow -->
-			<div class="my-auto flex items-center gap-4">
+			<!-- Middle Row: Large Gold Smart Chip with Metallic Circuit Lines & Gleam -->
+			<div class="my-auto flex items-center gap-5 sm:gap-6">
+				<!-- Gold Chip -->
 				<div
-					class="relative flex h-11 w-14 items-center justify-center rounded-lg border border-amber-300/60 bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-200 shadow-md ring-2 shadow-amber-500/30 ring-amber-400/40 sm:h-12 sm:w-16"
+					class="relative flex h-13 w-17 items-center justify-center rounded-xl border-2 border-amber-300 bg-gradient-to-tr from-amber-400 via-yellow-300 to-amber-100 shadow-lg ring-4 shadow-amber-400/40 ring-amber-300/30 sm:h-16 sm:w-20"
 				>
-					<!-- Chip circuit lines -->
-					<div class="grid grid-cols-2 grid-rows-2 gap-1 opacity-75">
-						<div class="h-2.5 w-4 rounded-sm border border-amber-700/60 bg-amber-600/20"></div>
-						<div class="h-2.5 w-4 rounded-sm border border-amber-700/60 bg-amber-600/20"></div>
-						<div class="h-2.5 w-4 rounded-sm border border-amber-700/60 bg-amber-600/20"></div>
-						<div class="h-2.5 w-4 rounded-sm border border-amber-700/60 bg-amber-600/20"></div>
+					<!-- Circuit lines -->
+					<div class="grid grid-cols-2 grid-rows-2 gap-1.5 opacity-80">
+						<div class="h-3 w-5 rounded-sm border border-amber-700/60 bg-amber-600/30"></div>
+						<div class="h-3 w-5 rounded-sm border border-amber-700/60 bg-amber-600/30"></div>
+						<div class="h-3 w-5 rounded-sm border border-amber-700/60 bg-amber-600/30"></div>
+						<div class="h-3 w-5 rounded-sm border border-amber-700/60 bg-amber-600/30"></div>
 					</div>
 					<!-- Gleam effect -->
 					<span
-						class="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-yellow-200 text-[8px] text-amber-900 shadow-sm"
+						class="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-yellow-200 text-xs shadow-md"
 					>
 						✨
 					</span>
@@ -55,116 +149,46 @@
 
 				<!-- Mock photo placeholder & ID lines -->
 				<div class="flex-1 space-y-2 text-left">
-					<div class="h-2.5 w-24 rounded bg-slate-700/80"></div>
-					<div class="h-2 w-32 rounded bg-slate-800"></div>
-					<div class="h-1.5 w-16 rounded bg-slate-800"></div>
+					<div class="h-3.5 w-32 rounded-md bg-slate-300/80"></div>
+					<div class="h-2.5 w-40 rounded-md bg-slate-200"></div>
+					<div class="h-2.5 w-24 rounded-md bg-slate-200"></div>
 				</div>
 			</div>
 
-			<!-- Bottom row: Card specs -->
+			<!-- Bottom Row: 13 Digits Indicator -->
 			<div
-				class="flex items-center justify-between border-t border-slate-800/60 pt-2 font-mono text-[9px] text-slate-500"
+				class="flex items-center justify-between border-t border-slate-200 pt-2 font-mono text-[10px] font-bold text-slate-500 sm:text-xs"
 			>
-				<span>13 DIGITS CHIP CARD</span>
-				<span class="text-cyan-400/80">SMART CARD</span>
+				<span>เลขประจำตัวประชาชน 13 หลัก</span>
+				<span class="font-extrabold text-blue-600">SMART CARD CHIP</span>
 			</div>
 		</div>
 
-		<!-- Card Slot Insertion Base with animated down arrow -->
+		<!-- Card Slot Insertion Base with animated bouncing down arrow -->
 		<div
-			class="relative -mt-3 flex h-12 w-80 items-center justify-center rounded-b-2xl border-2 border-dashed border-cyan-400/50 bg-slate-900/90 shadow-xl backdrop-blur-md sm:w-88"
+			class="relative -mt-4 flex h-14 w-84 items-center justify-center rounded-b-3xl border-2 border-dashed border-blue-400 bg-white/95 px-6 shadow-xl backdrop-blur-md sm:w-96 md:w-[440px]"
 		>
-			<div class="flex items-center gap-2 text-xs font-semibold text-cyan-300">
+			<div class="flex items-center gap-3 text-sm font-extrabold text-blue-700 sm:text-base">
 				<div
-					class="flex h-7 w-7 animate-bounce items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/50"
+					class="flex h-9 w-9 animate-bounce items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-500/40"
 				>
-					<ArrowDown class="h-4 w-4 stroke-[3]" />
+					<ArrowDown class="h-5 w-5 stroke-[3]" />
 				</div>
 				<span>ช่องเสียบบัตร Smart Card Reader</span>
 			</div>
 		</div>
 
 		<!-- Status Pulse Indicator -->
-		<div class="mt-4 flex items-center gap-2 font-mono text-xs text-slate-400">
-			<span class="relative flex h-2 w-2">
-				<span
-					class="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75"
-				></span>
-				<span class="relative inline-flex h-2 w-2 rounded-full bg-cyan-500"></span>
-			</span>
-			<span>กำลังรอการเสียบบัตร...</span>
-		</div>
-	</div>
-
-	<!-- Right / Bottom Column: Instructions & Steps -->
-	<div class="flex max-w-lg flex-1 flex-col items-center lg:items-start">
-		<!-- Primary Action Title -->
-		<h2 class="text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-4xl">
-			กรุณาเสียบบัตรประจำตัวประชาชน
-		</h2>
-
 		<div
-			class="mt-3 inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-300 shadow-sm"
+			class="mt-4 flex items-center gap-2.5 font-mono text-sm font-bold text-slate-600 sm:text-base"
 		>
-			<Sparkles class="h-4 w-4 shrink-0 text-amber-400" />
-			<span class="font-medium">
-				เสียบบัตรเข้าเครื่อง โดยหงาย <b class="font-bold text-amber-200">ด้านชิปสีทองขึ้น</b>
+			<span class="relative flex h-3 w-3">
+				<span
+					class="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-75"
+				></span>
+				<span class="relative inline-flex h-3 w-3 rounded-full bg-blue-600"></span>
 			</span>
-		</div>
-
-		<!-- 3-Step Flow Guide -->
-		<div class="mt-6 w-full space-y-3 text-left">
-			<div
-				class="flex items-center gap-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/60 p-3.5 shadow-sm transition-all hover:bg-slate-900/80"
-			>
-				<div
-					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-500/20 font-mono text-sm font-bold text-cyan-400 ring-1 ring-cyan-400/30"
-				>
-					1
-				</div>
-				<div>
-					<p class="text-sm font-bold text-slate-200">เสียบบัตรเข้าเครื่องอ่าน</p>
-					<p class="text-xs text-slate-400">หงายด้านชิปสีทองขึ้น และเสียบให้สุดช่องอ่าน</p>
-				</div>
-			</div>
-
-			<div
-				class="flex items-center gap-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/60 p-3.5 shadow-sm transition-all hover:bg-slate-900/80"
-			>
-				<div
-					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 font-mono text-sm font-bold text-blue-400 ring-1 ring-blue-400/30"
-				>
-					2
-				</div>
-				<div>
-					<div class="flex items-center gap-1.5">
-						<p class="text-sm font-bold text-slate-200">รอระบบอ่านข้อมูล</p>
-						<span
-							class="flex items-center gap-1 rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-400"
-						>
-							<Timer class="h-3 w-3 text-cyan-400" />
-							1-2 วิ
-						</span>
-					</div>
-					<p class="text-xs text-slate-400">ระบบจะดึงข้อมูลและรูปถ่ายเข้าสู่ระบบศูนย์พักพิง</p>
-				</div>
-			</div>
-
-			<div
-				class="flex items-center gap-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/60 p-3.5 shadow-sm transition-all hover:bg-slate-900/80"
-			>
-				<div
-					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 font-mono text-sm font-bold text-emerald-400 ring-1 ring-emerald-400/30"
-				>
-					3
-				</div>
-				<div>
-					<p class="text-sm font-bold text-slate-200">ถอดบัตรออกเมื่อเสร็จสิ้น</p>
-					<p class="text-xs text-slate-400">
-						เมื่อหน้าจอเปลี่ยนเป็นสีเขียว สามารถดึงบัตรออกได้ทันที
-					</p>
-				</div>
-			</div>
+			<span>กำลังรอการเสียบบัตรประชาชน...</span>
 		</div>
 	</div>
 </div>

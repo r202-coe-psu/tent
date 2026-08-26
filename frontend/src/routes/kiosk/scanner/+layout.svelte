@@ -28,106 +28,111 @@
 </script>
 
 <div
-	class="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-slate-950 font-sans text-slate-100 selection:bg-cyan-500 selection:text-white"
+	class="relative flex min-h-screen w-full flex-col justify-between overflow-x-hidden bg-slate-100 font-sans text-slate-900 selection:bg-blue-600 selection:text-white"
 >
-	<!-- Ambient atmospheric glow backgrounds with fluid positioning -->
+	<!-- Ambient bright gradient backgrounds for light white tone -->
 	<div
-		class="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-cyan-500/15 blur-[120px]"
+		class="pointer-events-none absolute -top-40 left-1/2 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-cyan-400/10 blur-[140px]"
 	></div>
 	<div
-		class="pointer-events-none absolute top-1/4 -left-32 h-80 w-80 rounded-full bg-blue-600/10 blur-[120px]"
+		class="pointer-events-none absolute top-1/3 -left-40 h-[450px] w-[450px] rounded-full bg-blue-500/10 blur-[140px]"
 	></div>
 	<div
-		class="pointer-events-none absolute -right-32 bottom-12 h-96 w-96 rounded-full bg-indigo-600/15 blur-[140px]"
+		class="pointer-events-none absolute -right-40 bottom-10 h-[500px] w-[500px] rounded-full bg-indigo-400/10 blur-[150px]"
 	></div>
 
-	<!-- Top Header (Responsive for Portrait, Landscape, Mobile, Desktop) -->
+	<!-- Top Header (Clean White / Light Theme, Big Typography) -->
 	<header
-		class="relative z-10 flex shrink-0 flex-col gap-3 border-b border-slate-800/80 bg-slate-900/80 px-4 py-3 backdrop-blur-xl sm:px-6 sm:py-4 md:flex-row md:items-center md:justify-between"
+		class="relative z-10 flex shrink-0 flex-col gap-3 border-b border-slate-200/90 bg-white/95 px-5 py-4 shadow-sm backdrop-blur-md sm:px-8 sm:py-5 md:flex-row md:items-center md:justify-between"
 	>
 		<!-- Brand & Station Identity -->
-		<div class="flex items-center justify-between md:justify-start md:gap-4">
-			<div class="flex items-center gap-3">
+		<div class="flex items-center justify-between md:justify-start md:gap-5">
+			<div class="flex items-center gap-3.5 sm:gap-4">
 				<div
-					class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 shadow-md ring-1 shadow-cyan-500/25 ring-white/20"
+					class="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 shadow-md ring-2 shadow-blue-500/25 ring-white sm:h-14 sm:w-14"
 				>
-					<Tent class="h-6 w-6 text-white" />
+					<Tent class="h-7 w-7 text-white sm:h-8 sm:w-8" />
 				</div>
 				<div>
 					<div class="flex items-center gap-2">
-						<h1 class="text-base font-black tracking-tight text-white sm:text-lg">SmartShelter</h1>
+						<h1 class="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
+							SmartShelter
+						</h1>
 						<span
-							class="rounded-md bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-bold text-cyan-300"
+							class="rounded-lg bg-blue-100 px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-blue-300/50"
 							>KIOSK</span
 						>
 					</div>
-					<p class="text-xs font-medium text-slate-400">จุดบริการสแกนบัตรประชาชน</p>
+					<p class="text-xs font-semibold text-slate-500 sm:text-sm">
+						จุดบริการสแกนบัตรประชาชน (Smart Card Station)
+					</p>
 				</div>
 			</div>
 
 			<!-- Mobile Ready Badge -->
 			<div
-				class="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400 shadow-sm shadow-emerald-500/10 md:hidden"
+				class="flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3.5 py-1.5 text-xs font-bold text-emerald-700 shadow-sm md:hidden"
 			>
-				<span class="relative flex h-2 w-2">
+				<span class="relative flex h-2.5 w-2.5">
 					<span
 						class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"
 					></span>
-					<span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+					<span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
 				</span>
-				<span class="text-[11px] font-bold">พร้อมทำงาน</span>
+				<span>พร้อมทำงาน</span>
 			</div>
 		</div>
 
 		<!-- Clock & Desktop Status Badge -->
 		<div class="flex items-center justify-between gap-4 md:justify-end">
 			<div
-				class="flex flex-1 items-center justify-between gap-3 rounded-xl border border-slate-800/80 bg-slate-950/60 px-3.5 py-1.5 font-mono text-xs shadow-inner sm:px-4 sm:py-2 md:flex-initial"
+				class="flex flex-1 items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 font-mono text-xs shadow-inner sm:px-5 sm:py-2.5 sm:text-sm md:flex-initial"
 			>
-				<div class="flex items-center gap-1.5 text-slate-400">
-					<Cpu class="h-3.5 w-3.5 text-cyan-400" />
-					<span class="hidden text-[11px] sm:inline">Smart Card Station</span>
+				<div class="flex items-center gap-2 text-slate-500">
+					<Cpu class="h-4 w-4 text-blue-600" />
+					<span class="hidden text-xs font-bold sm:inline">Kiosk Station</span>
 				</div>
-				<div class="flex items-center gap-2.5">
-					<span class="font-sans text-[11px] text-slate-400">{dateString}</span>
-					<span class="font-bold tracking-wider text-cyan-400 sm:text-sm">{timeString}</span>
+				<div class="flex items-center gap-3">
+					<span class="font-sans text-xs font-semibold text-slate-600 sm:text-sm">{dateString}</span
+					>
+					<span class="text-sm font-black tracking-wider text-blue-600 sm:text-base"
+						>{timeString}</span
+					>
 				</div>
 			</div>
 
 			<!-- Desktop Ready Badge -->
 			<div
-				class="hidden items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs font-semibold text-emerald-400 shadow-sm shadow-emerald-500/10 md:flex"
+				class="hidden items-center gap-2.5 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-extrabold text-emerald-700 shadow-sm sm:text-sm md:flex"
 			>
-				<span class="relative flex h-2 w-2">
+				<span class="relative flex h-3 w-3">
 					<span
 						class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"
 					></span>
-					<span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+					<span class="relative inline-flex h-3 w-3 rounded-full bg-emerald-500"></span>
 				</span>
-				<span class="text-xs font-bold tracking-wide">พร้อมทำงาน</span>
+				<span class="tracking-wide">พร้อมทำงาน</span>
 			</div>
 		</div>
 	</header>
 
-	<!-- Main Responsive Stage -->
+	<!-- Main Stage: Takes full height and scales flexibly across vertical/horizontal screens -->
 	<main
-		class="relative z-10 flex w-full flex-1 items-center justify-center p-4 sm:p-6 md:p-8 lg:p-10"
+		class="relative z-10 flex w-full flex-1 flex-col items-center justify-center overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12"
 	>
 		{@render children()}
 	</main>
 
-	<!-- Bottom Footer (Fluid Responsive) -->
+	<!-- Bottom Footer (Light Theme, Clear Compliance) -->
 	<footer
-		class="relative z-10 flex shrink-0 flex-col items-center justify-between gap-2 border-t border-slate-800/80 bg-slate-900/60 px-4 py-3 text-center text-xs text-slate-400 backdrop-blur-md sm:flex-row sm:px-6"
+		class="relative z-10 flex shrink-0 flex-col items-center justify-between gap-2 border-t border-slate-200/90 bg-white/95 px-6 py-3.5 text-center text-xs font-medium text-slate-600 shadow-sm backdrop-blur-md sm:flex-row sm:px-8 sm:text-sm"
 	>
-		<div class="flex items-center gap-2 text-slate-300">
-			<ShieldCheck class="h-4 w-4 shrink-0 text-cyan-400" />
-			<span class="text-[11px] font-medium sm:text-xs">
-				ระบบคุ้มครองข้อมูลส่วนบุคคล (PDPA Compliant) — เข้ารหัสความปลอดภัย
+		<div class="flex items-center gap-2 text-slate-700">
+			<ShieldCheck class="h-4 w-4 shrink-0 text-blue-600 sm:h-5 sm:w-5" />
+			<span class="font-semibold">
+				ระบบคุ้มครองข้อมูลส่วนบุคคล (PDPA Compliant) — ข้อมูลถูกเข้ารหัสความปลอดภัยระดับสูง
 			</span>
 		</div>
-		<p class="text-[10px] text-slate-500 sm:text-[11px]">
-			SmartShelter OS • Smart Card Kiosk Edition
-		</p>
+		<p class="text-xs font-bold text-slate-500">SmartShelter OS • Smart Card Kiosk Edition</p>
 	</footer>
 </div>
