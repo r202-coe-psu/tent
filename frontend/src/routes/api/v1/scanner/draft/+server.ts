@@ -1,7 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { hashSecret, scannerRepository, smartCardDataSchema } from '$lib/features/scanners';
-import { now } from '$lib/db/model';
+import {
+	hashSecret,
+	scannerServerRepository,
+	smartCardDataSchema
+} from '$lib/features/scanners/server';
 
 export const prerender = false;
 
@@ -25,7 +28,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// Find device in catalog
-		const device = await scannerRepository.getDeviceByDeviceId(deviceId);
+		const device = await scannerServerRepository.getDeviceByDeviceId(deviceId);
 		if (!device || device.status !== 'active') {
 			return json({ error: 'Device not found or inactive' }, { status: 401 });
 		}
@@ -48,7 +51,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const cardData = parsed.data;
 
 		// Save draft in shelter DB
-		const draft = await scannerRepository.saveDraft(
+		const draft = await scannerServerRepository.saveDraft(
 			device.shelter_code,
 			device.device_id,
 			device.station_name,
@@ -57,7 +60,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		// Update device heartbeat
 		try {
-			await scannerRepository.updateDevice(device._id, { last_seen_at: now() });
+			await scannerServerRepository.updateDeviceLastSeen(device._id);
 		} catch (heartbeatErr) {
 			console.warn('[Scanner Inbound] Heartbeat update warning:', heartbeatErr);
 		}

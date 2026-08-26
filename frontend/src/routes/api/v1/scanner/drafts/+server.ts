@@ -1,13 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { scannerRepository } from '$lib/features/scanners';
+import { scannerServerRepository } from '$lib/features/scanners/server';
 
 export const prerender = false;
 
 export const GET: RequestHandler = async ({ url }) => {
 	try {
-		const shelterCode = url.searchParams.get('shelter_code') || undefined;
-		const drafts = await scannerRepository.listPendingDrafts(shelterCode);
+		const shelterCode = url.searchParams.get('shelter_code') || 'SH001';
+		const drafts = await scannerServerRepository.listPendingDrafts(shelterCode);
 
 		return json({
 			ok: true,

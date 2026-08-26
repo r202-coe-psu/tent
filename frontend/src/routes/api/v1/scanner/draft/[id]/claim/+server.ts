@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { scannerRepository } from '$lib/features/scanners';
+import { scannerServerRepository } from '$lib/features/scanners/server';
 
 export const prerender = false;
 
@@ -13,9 +13,9 @@ export const POST: RequestHandler = async ({ params, request, url }) => {
 
 		const body = await request.json().catch(() => ({}));
 		const claimedBy = body.claimed_by || 'staff';
-		const shelterCode = body.shelter_code || url.searchParams.get('shelter_code') || undefined;
+		const shelterCode = body.shelter_code || url.searchParams.get('shelter_code') || 'SH001';
 
-		const claimed = await scannerRepository.claimDraft(id, claimedBy, shelterCode);
+		const claimed = await scannerServerRepository.claimDraft(id, claimedBy, shelterCode);
 
 		return json({
 			ok: true,
