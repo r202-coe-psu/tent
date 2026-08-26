@@ -10,6 +10,7 @@ import {
 	PET_POLICY_CHOICES,
 	POWER_SOURCE_CHOICES,
 	PROJECT_LEVEL_CHOICES,
+	SITE_KIND_CHOICES,
 	SUB_STORAGE_TYPE_CHOICES,
 	WATER_SOURCE_CHOICES,
 	ZONE_STATUS_CHOICES,
@@ -59,6 +60,7 @@ export function buildSampleWorkbook(masters: TemplateMasters): SampleWorkbook {
 
 	const shelter: Record<string, string | number> = {
 		[H.name]: 'โรงเรียนบ้านคอหงส์',
+		[H.site_kind]: labelOf(SITE_KIND_CHOICES, 'evacuation_center'),
 		[H.operation_status]: labelOf(OPERATION_STATUS_CHOICES, 'active'),
 		...(shelterTypeLabel ? { [H.shelter_type]: shelterTypeLabel } : {}),
 		[H.project_level]: labelOf(PROJECT_LEVEL_CHOICES, 'lao'),

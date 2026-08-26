@@ -26,7 +26,9 @@ async function runLoad(url: URL) {
 	return result;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type LoadEventInput = Parameters<typeof load>[0];
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type LoadResult = {
 	shelters: PublicShelterCardModel[];
 	count: number;

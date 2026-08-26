@@ -6,6 +6,8 @@ import {
 	type PublicShelterItem
 } from '$lib/features/public-portal';
 
+const SITE_KINDS = new Set(['evacuation_center', 'host_house']);
+
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
 	const R = 6371;
 	const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -26,6 +28,10 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const district = url.searchParams.get('district') || '';
 	const subdistrict = url.searchParams.get('subdistrict') || '';
 	const statusParam = url.searchParams.getAll('status').join(',') || '';
+	const siteKindParam = url.searchParams.get('site_kind') || '';
+	const siteKind = SITE_KINDS.has(siteKindParam)
+		? (siteKindParam as 'evacuation_center' | 'host_house')
+		: undefined;
 	const distance = url.searchParams.get('distance') ?? '5';
 	const user_lat = url.searchParams.get('user_lat') || '';
 	const user_lng = url.searchParams.get('user_lng') || '';
@@ -49,6 +55,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			district: district || undefined,
 			subdistrict: subdistrict || undefined,
 			status: status || undefined,
+			site_kind: siteKind,
 			lat: hasUser ? userLatNum : undefined,
 			lng: hasUser ? userLngNum : undefined,
 			radius_km: hasUser && !Number.isNaN(maxDistance) && maxDistance > 0 ? maxDistance : undefined,
@@ -105,6 +112,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			district,
 			subdistrict,
 			status: statusParam,
+			site_kind: siteKind,
 			distance,
 			user_lat,
 			user_lng

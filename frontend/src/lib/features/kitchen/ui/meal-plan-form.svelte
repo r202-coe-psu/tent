@@ -5,18 +5,26 @@
 	import { Label } from '$lib/components/ui/label';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Users from '@lucide/svelte/icons/users';
+	import Flame from '@lucide/svelte/icons/flame';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { resolve } from '$app/paths';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import {
 		useCreateMealPlanCalc,
 		useUpdateMealPlanCalc,
 		useOccupancyHeadcount,
+		useGasCylinderTypes,
+		useGasLedger,
 		calculateMealIngredients,
 		calculateMealIngredientsFromRecipe,
 		calculateMealIngredientsFromCustom,
+		calculateGasConsumptionKg,
+		cookingHoursFromConsumptionKg,
+		cylindersNeeded,
+		gasCylinderBalance,
 		resolveItemMasterStock,
 		DEFAULT_RICE_G_PER_PERSON_MEAL,
 		RECIPE_LABELS,
@@ -24,12 +32,14 @@
 		type MealPeriod,
 		type MealPlan,
 		type MealPlanHeadcount,
+		type MealPlanGasUsage,
 		type CustomIngredientInput
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
 	import { useRecipes, useItemMasters } from '$lib/features/catalog';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
+	import { addQty, qtyGt } from '$lib/utils/qty';
 
 	// `plan` present ⇒ edit an existing draft in place (date/meal/_id stay fixed
 	// because the doc is patched in place, not re-created); absent ⇒ create a new one.
@@ -72,6 +82,26 @@
 	const itemMasters = useItemMasters();
 	const supplyItems = useSupplyItems();
 	const stockBalance = useStockBalance();
+	const gasTypes = useGasCylinderTypes();
+	const gasLedger = useGasLedger();
+
+	// Kitchen LPG gas consumption (CR-058 §2.2) — display-only this round: not
+	// saved onto `meal_plan`, no requisition line, no stock_ledger write. Real
+	// gas drawdown belongs to the TKT-KITCHEN ticket flow, which is out of scope.
+	// Multiple tanks/stoves in one meal, same add/remove-row shape as the custom
+	// ingredient rows below — each row has its own cylinder type + cooking time.
+	let gasRows = $state<{ gasTypeId: string | null; cookingHoursInput: string }[]>([
+		{ gasTypeId: null, cookingHoursInput: '' }
+	]);
+
+	function addGasRow() {
+		gasRows.push({ gasTypeId: null, cookingHoursInput: '' });
+	}
+
+	function removeGasRow(i: number) {
+		if (gasRows.length <= 1) return;
+		gasRows.splice(i, 1);
+	}
 
 	// Kitchen only cooks with food supply — hide water/medicine/clothing/etc.
 	// from the ingredient picker so staff can't accidentally build a menu out
@@ -172,6 +202,7 @@
 			applied = false;
 			appliedMode = false;
 			editedPlanId = null;
+			gasRows = [{ gasTypeId: null, cookingHoursInput: '' }];
 			return;
 		}
 		if (plan) {
@@ -196,6 +227,25 @@
 						: [{ itemId: null, unit: '', qtyPerPerson: 0 }];
 				fillFromOccupancy(plan.headcount);
 				overrideReason = plan.override_reason ?? '';
+				// Cooking hours aren't stored separately from the resulting
+				// consumption_kg (CR-085) — reconstruct them from the cylinder's own
+				// coefficients (inverse of calculateGasConsumptionKg) so the field
+				// shows the hours instead of coming back blank. Falls back to blank
+				// only if the cylinder type itself can no longer be found (deleted).
+				gasRows = plan.gas_usage?.length
+					? plan.gas_usage.map((g) => {
+							const cyl = (gasTypes.data ?? []).find((t) => t._id === g.cylinder_id);
+							let cookingHoursInput = '';
+							if (cyl) {
+								try {
+									cookingHoursInput = cookingHoursFromConsumptionKg(g.consumption_kg, cyl);
+								} catch {
+									cookingHoursInput = '';
+								}
+							}
+							return { gasTypeId: g.cylinder_id, cookingHoursInput };
+						})
+					: [{ gasTypeId: null, cookingHoursInput: '' }];
 				editedPlanId = plan._id;
 			}
 			return;
@@ -243,6 +293,76 @@
 	}
 
 	const selectedRecipe = $derived(validRecipes.find((r) => r._id === recipeId) ?? null);
+
+	// Gas types not already picked by ANOTHER row — same one-of-a-kind-per-row
+	// rule as the custom ingredient picker's `foodSupplyItems`, but enforced by
+	// filtering the dropdown instead of just displaying, since two rows on the
+	// same tank type would double-count consumption against the same physical tank.
+	function availableGasTypes(rowIndex: number) {
+		const usedByOthers = new Set(
+			gasRows
+				.filter((_, i) => i !== rowIndex)
+				.map((r) => r.gasTypeId)
+				.filter(Boolean)
+		);
+		return (gasTypes.data ?? []).filter((g) => !usedByOthers.has(g._id));
+	}
+
+	// Recipe cooking time is the default per row; a typed value overrides it.
+	// Derived (no prefill $effect) so it stays in sync as the recipe selection changes.
+	const gasRowResults = $derived.by(() =>
+		gasRows.map((row) => {
+			const cyl = (gasTypes.data ?? []).find((g) => g._id === row.gasTypeId) ?? null;
+			const effectiveHours =
+				row.cookingHoursInput.trim() || selectedRecipe?.standard_duration_hours || '';
+			if (!cyl || !/^\d+(\.\d{1,4})?$/.test(effectiveHours)) {
+				return {
+					cyl,
+					effectiveHours,
+					result: null as { consumptionKg: string; cylinders: number } | null
+				};
+			}
+			try {
+				const consumptionKg = calculateGasConsumptionKg(effectiveHours, cyl);
+				const cylinders = cylindersNeeded(consumptionKg, cyl.capacity_kg);
+				return { cyl, effectiveHours, result: { consumptionKg, cylinders } };
+			} catch {
+				return { cyl, effectiveHours, result: null };
+			}
+		})
+	);
+
+	// Total across all rows — summed with addQty (CR-038), never native `+`.
+	const gasTotal = $derived.by(() => {
+		const solved = gasRowResults.filter((r) => r.result !== null);
+		if (solved.length < 2) return null; // a single row already shows its own total
+		let totalKg = '0';
+		let totalCylinders = 0;
+		for (const r of solved) {
+			totalKg = addQty(totalKg, r.result!.consumptionKg);
+			totalCylinders += r.result!.cylinders;
+		}
+		return { totalKg, totalCylinders };
+	});
+
+	// Real remaining stock for one cylinder (CR-085) — computed from its ledger,
+	// never stored. Used only to warn if this plan's draw would come up short;
+	// the hard block is at issueRequisition time, since the real balance can
+	// shift between drafting a plan and actually requisitioning it.
+	function remainingGasOf(cylinderId: string): string {
+		const cyl = (gasTypes.data ?? []).find((g) => g._id === cylinderId);
+		if (!cyl) return '0';
+		return gasCylinderBalance(gasLedger.data ?? [], cylinderId, cyl.capacity_kg);
+	}
+
+	// What actually gets persisted onto the plan (CR-085) — only rows with a
+	// picked cylinder AND a resolvable consumption figure; a half-filled row is
+	// silently dropped rather than blocking the whole plan submission.
+	const validGasUsage = $derived.by((): MealPlanGasUsage[] =>
+		gasRowResults
+			.filter((r) => r.cyl !== null && r.result !== null)
+			.map((r) => ({ cylinder_id: r.cyl!._id, consumption_kg: r.result!.consumptionKg }))
+	);
 
 	const preview = $derived.by(() => {
 		if (!sopProfile.data || total <= 0) return null;
@@ -297,7 +417,8 @@
 					headcount,
 					override_reason: isOverridden ? overrideReason.trim() : null,
 					recipeId: sourceMode === 'recipe' && !isLockedEdit ? (recipeId ?? undefined) : undefined,
-					custom: sourceMode === 'custom' || isLockedEdit ? customIngredients : undefined
+					custom: sourceMode === 'custom' || isLockedEdit ? customIngredients : undefined,
+					gasUsage: validGasUsage
 				});
 				toast.success(`แก้ไขแผน ${MEAL_PERIOD_LABELS[meal]} วันที่ ${date} แล้ว`);
 			} else {
@@ -309,6 +430,7 @@
 					override_reason: isOverridden ? overrideReason.trim() : null,
 					recipeId: sourceMode === 'recipe' ? (recipeId ?? undefined) : undefined,
 					custom: sourceMode === 'custom' ? customIngredients : undefined,
+					gasUsage: validGasUsage,
 					ctx
 				});
 				toast.success(`สร้างแผน ${MEAL_PERIOD_LABELS[meal]} วันที่ ${date} แล้ว`);
@@ -322,7 +444,7 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="sm:max-w-lg">
+	<Dialog.Content class="sm:max-w-2xl">
 		<Dialog.Header>
 			<Dialog.Title>
 				{#if sourceMode === 'recipe'}
@@ -470,7 +592,7 @@
 					{#if occupancy.isPending}
 						กำลังอ่านยอดผู้พักพิง...
 					{:else}
-						ยอดผู้พักพิงล่าสุด (checked-in): <span class="font-semibold text-foreground"
+						ยอดผู้พักพิงล่าสุด (กำลังพักพิง): <span class="font-semibold text-foreground"
 							>{occupancy.data?.total ?? 0}</span
 						> คน
 					{/if}
@@ -580,6 +702,95 @@
 					{/if}
 				</div>
 			{/if}
+
+			<!--
+				Kitchen LPG gas consumption (CR-058 §2.2) — a top-level block, not nested
+				inside {#if preview}, because gas applies to every source mode
+				(sop/recipe/custom) and must not vanish when the ingredient preview is
+				null. Display-only this round: not saved onto `meal_plan`, no
+				requisition line, no stock_ledger write — real gas drawdown belongs to
+				the out-of-scope TKT-KITCHEN ticket flow.
+			-->
+			<div class="space-y-2 rounded-md border bg-muted/50 p-3">
+				<p class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+					<Flame class="h-3.5 w-3.5 text-orange-500" />
+					แก๊สหุงต้ม (LPG)
+				</p>
+				{#if !gasTypes.data?.length}
+					<p class="text-xs text-muted-foreground">
+						ยังไม่มีข้อมูลถังแก๊ส —
+						<a
+							href={resolve('/back-office/kitchen/gas')}
+							target="_blank"
+							rel="noopener"
+							class="underline">ตั้งค่าที่นี่</a
+						>
+					</p>
+				{:else}
+					<div class="space-y-2">
+						{#each gasRows as row, i (i)}
+							{@const rowResult = gasRowResults[i]}
+							<div class="flex items-center gap-2">
+								<select
+									bind:value={row.gasTypeId}
+									class="flex h-9 min-w-0 flex-1 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+								>
+									<option value={null} disabled>เลือกถังแก๊ส...</option>
+									{#each availableGasTypes(i) as g (g._id)}
+										<option value={g._id}>
+											{g.name} ({g.capacity_kg} kg · {g.burn_rate_kg_per_hour} kg/ชม.)
+										</option>
+									{/each}
+								</select>
+								<Input
+									type="text"
+									inputmode="decimal"
+									class="w-28"
+									placeholder={selectedRecipe?.standard_duration_hours ?? '1 ชม.'}
+									bind:value={row.cookingHoursInput}
+								/>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									class="text-destructive hover:text-destructive"
+									onclick={() => removeGasRow(i)}
+									disabled={gasRows.length <= 1}
+								>
+									<Trash2 class="h-3.5 w-3.5" />
+								</Button>
+							</div>
+							{#if rowResult.result}
+								{@const remaining = row.gasTypeId ? remainingGasOf(row.gasTypeId) : '0'}
+								{@const short = qtyGt(rowResult.result.consumptionKg, remaining)}
+								<p class="pl-0.5 text-xs">
+									แก๊สที่ต้องใช้ <b>{rowResult.result.consumptionKg}</b> kg · ประมาณ {rowResult
+										.result.cylinders}
+									ถัง
+									<span class="text-muted-foreground">
+										({rowResult.effectiveHours} ชม. × {rowResult.cyl?.burn_rate_kg_per_hour} kg/ชม. ×
+										{rowResult.cyl?.time_multiplier} เท่า)
+									</span>
+								</p>
+								{#if short}
+									<p class="pl-0.5 text-xs text-amber-600">
+										⚠ ถังนี้เหลือ {remaining} kg — น้อยกว่าที่คำนวณไว้ อาจต้องเติมแก๊สหรือเปลี่ยนถังก่อนเบิกจริง
+									</p>
+								{/if}
+							{/if}
+						{/each}
+						<Button type="button" size="sm" variant="outline" onclick={addGasRow}>
+							<Plus class="mr-1 h-3.5 w-3.5" />
+							เพิ่มถัง
+						</Button>
+						{#if gasTotal}
+							<p class="text-xs font-medium">
+								รวมทุกถัง: แก๊สที่ต้องใช้ {gasTotal.totalKg} kg · ประมาณ {gasTotal.totalCylinders} ถัง
+							</p>
+						{/if}
+					</div>
+				{/if}
+			</div>
 
 			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={() => (open = false)}>ยกเลิก</Button>

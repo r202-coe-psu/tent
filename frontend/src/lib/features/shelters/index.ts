@@ -1,6 +1,8 @@
 // Domain (public)
 export {
 	operationStatusSchema,
+	siteKindSchema,
+	SITE_KIND_LABELS,
 	zoneTypeSchema,
 	zoneStatusSchema,
 	powerSourceSchema,
@@ -41,6 +43,7 @@ export {
 	EMPTY_LUGGAGE_POLICY,
 	EMPTY_PARKING_POLICY,
 	type OperationStatus,
+	type SiteKind,
 	type ZoneType,
 	type ZoneStatus,
 	type PowerSource,
@@ -101,6 +104,7 @@ export {
 export {
 	createShelter,
 	getShelter,
+	listShelters,
 	updateShelter,
 	closeZone,
 	reopenZone

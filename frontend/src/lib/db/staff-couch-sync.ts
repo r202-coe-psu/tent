@@ -3,6 +3,7 @@ import { startCatalogMasterLiveQuery } from '$lib/features/catalog';
 import { startKitchenLiveQuery } from '$lib/features/kitchen';
 import { startOperationsLiveQuery } from '$lib/features/operations';
 import { startPeopleLiveQuery } from '$lib/features/people';
+import { startPeopleImportLiveQuery } from '$lib/features/people-import';
 import { startReferralsLiveQuery } from '$lib/features/referrals';
 import { startDailyCalcLiveQuery } from '$lib/features/resource-calc';
 import { startShelterImportLiveQuery } from '$lib/features/shelter-import';
@@ -33,6 +34,7 @@ export const STAFF_LIVE_QUERY_STARTERS: readonly LiveQueryStarter[] = [
 	startCatalogLiveQuery,
 	startCatalogMasterLiveQuery,
 	startPeopleLiveQuery,
+	startPeopleImportLiveQuery,
 	startOperationsLiveQuery,
 	startKitchenLiveQuery,
 	startSopRatioLiveQuery,

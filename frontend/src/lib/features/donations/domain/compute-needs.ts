@@ -41,7 +41,16 @@ export function computeNeeds(
 		const covered = new Map(onHand);
 		for (const don of donations) {
 			if (don.campaign_id !== campaign._id) continue;
-			if (don.status === 'expired' || don.status === 'cancelled') continue;
+			// Settled: the goods are never arriving here, so they cannot cover a need.
+			// `redirected` joins the set with CR-087 (it went to another shelter) —
+			// `rejected` belongs here for the same reason and had been missed.
+			if (
+				don.status === 'expired' ||
+				don.status === 'cancelled' ||
+				don.status === 'redirected' ||
+				don.status === 'rejected'
+			)
+				continue;
 			// Received *and* already booked into the ledger: the goods are on the shelf,
 			// counted in onHand. Counting them again here closes the need at half.
 			if (don.status === 'received' && keyed.has(don._id)) continue;

@@ -22,6 +22,7 @@ import {
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
 import { isSupplyItem, type SupplyItem, CATALOG_DB } from '$lib/features/supply/server';
 import { fetchDocs } from '$lib/server/donation-docs';
+import { allocateLotNos } from '$lib/server/lot-number';
 
 function routeErrorResponse(e: unknown) {
 	const { message, status } = toRouteError(e);
@@ -161,18 +162,31 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			await assertCountedAgainstCatalog(counted);
 		} catch (e) {
 			return json(
-				{ success: false, error: e instanceof Error ? e.message : 'Invalid counted items' },
+				{
+					success: false,
+					error_code: 'CATALOG_MISMATCH',
+					error: e instanceof Error ? e.message : 'Invalid counted items'
+				},
 				{ status: 422 }
 			);
 		}
 
 		const ctx = { shelterCode: donation.shelter_code, createdBy: caller.name };
 
+		// Lot labels are minted here, not on the client: the per-day sequence needs
+		// to see every row already on this shelter's ledger (CR-088 · schema.md §2.1).
+		// One label per counted line, in the order the lines are keyed.
+		const lotNos = await allocateLotNos(dbName, counted.length);
+		const countedWithLots: CountedItem[] = counted.map((line, i) => ({
+			...line,
+			lot: { ...(line.lot ?? {}), lot_no: lotNos[i] }
+		}));
+
 		// 1) Ledger — the ONLY path from a donation into stock. Positive entries,
 		//    reason `donation`, ref_id back to the donation (couchdb-mongodb-sync.md §4.2).
 		const ledgers: StockLedger[] = keyDonationReceipt(
 			donation as unknown as Donation,
-			counted,
+			countedWithLots,
 			ctx
 		);
 
@@ -203,6 +217,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					received_items: receivedSnapshot,
 					has_discrepancy: JSON.stringify(declaredSnapshot) !== JSON.stringify(receivedSnapshot),
 					ledger_ids: ledgers.map((l) => l._id),
+					lot_nos: lotNos,
 					free_text_lines_skipped: (countedLines ?? []).length - counted.length
 				}
 			},
@@ -253,7 +268,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		return json({
 			success: true,
-			donation: toScanView(updated)
+			donation: toScanView(updated),
+			// Staff label the physical boxes from this (CR-088) — `toScanView` is the
+			// donation projection and has no room for per-ledger-row data.
+			lots: ledgers.map((l) => ({ item_id: l.item_id, lot_no: l.lot?.lot_no ?? null }))
 		});
 	} catch (e) {
 		return routeErrorResponse(e);

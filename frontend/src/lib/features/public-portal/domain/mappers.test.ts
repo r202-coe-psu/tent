@@ -33,8 +33,20 @@ describe('toPublicShelterCard', () => {
 		expect(card.id).toBe('SH001');
 		expect(card.status).toBe('OPEN');
 		expect(card.capacity).toBe(100);
+		expect(card.site_kind).toBe('evacuation_center');
 		expect(card.distance).toBe(3.2);
 		expect(card.geo).toEqual({ lat: 7, lng: 100 });
+	});
+
+	it('preserves host house site kind', () => {
+		const card = toPublicShelterCard({
+			code: 'SH002',
+			name: 'บ้านทดสอบ',
+			status: 'open',
+			capacity: 10,
+			site_kind: 'host_house'
+		});
+		expect(card.site_kind).toBe('host_house');
 	});
 
 	it('handles null, undefined, or empty shelter item gracefully without throwing', () => {
@@ -44,6 +56,7 @@ describe('toPublicShelterCard', () => {
 		expect(emptyCard.capacity).toBe(0);
 		expect(emptyCard.distance).toBe(0);
 		expect(emptyCard.geo).toBeNull();
+		expect(emptyCard.site_kind).toBe('evacuation_center');
 		expect(emptyCard.vulnerable_groups).toBeNull();
 
 		const undefinedCard = toPublicShelterCard(undefined);

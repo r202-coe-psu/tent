@@ -8,4 +8,5 @@
 	id={data.id ?? ''}
 	isEdit={data.mode === 'edit'}
 	basePath="/portal/system-management/shelters"
+	siteKind={data.siteKind}
 />

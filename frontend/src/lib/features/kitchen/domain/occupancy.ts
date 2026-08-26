@@ -7,7 +7,11 @@ import type { MealPlanHeadcount } from './kitchen';
  * layer never imports the `people` feature. The application layer maps real
  * `Evacuee` docs (which are structurally compatible) into this shape.
  *
- * Business rule (CR-022): only currently-present evacuees (`checked_in`) count.
+ * Business rule (CR-022, amended by CR-035): only currently-present evacuees
+ * count — `current_stay.status === 'active'` (`docs/data/schema.md` §2.5).
+ * CR-035 renamed the old `checked_in` stay status to `active`; this is the
+ * same predicate `resource-calc`'s `countActive` and the dashboard occupancy
+ * view use, which is what makes it "unified" per CR-058 T-39.
  * Sub-counts are **orthogonal dimensions**, each derived independently — a
  * person may fall into more than one (e.g. a Muslim infant counts in both
  * `halal` and `infant`). Therefore each sub-count is ≤ `total`, but their sum
@@ -25,7 +29,7 @@ export const SOFT_FOOD_NEEDS: readonly string[] = ['bedridden', 'chronic_illness
 export function deriveHeadcountFromOccupancy(
 	occupants: readonly OccupantView[]
 ): MealPlanHeadcount {
-	const present = occupants.filter((o) => o.current_stay?.status === 'checked_in');
+	const present = occupants.filter((o) => o.current_stay?.status === 'active');
 	const hasNeed = (o: OccupantView, needs: readonly string[]) =>
 		(o.special_needs ?? []).some((n) => needs.includes(n));
 	return {

@@ -405,7 +405,13 @@ async def test_cancel_releases_reserved_quota(
         shelter_code="SH001",
         donor=DonorBuffer(name="Cancel Donor", phone="0833333333"),
         items_declared=[
-            {"item_id": "item:rice", "free_text": "ข้าวสาร", "qty": 4, "unit": "kg", "reserved_qty": "4"}
+            {
+                "item_id": "item:rice",
+                "free_text": "ข้าวสาร",
+                "qty": 4,
+                "unit": "kg",
+                "reserved_qty": "4",
+            }
         ],
         campaign_id="donation_campaign:c4",
         booking_ref="DN-777004",
@@ -449,7 +455,13 @@ async def test_cancel_twice_does_not_underflow_quota(
         shelter_code="SH001",
         donor=DonorBuffer(name="Cancel Donor", phone="0833333333"),
         items_declared=[
-            {"item_id": "item:rice", "free_text": "ข้าวสาร", "qty": 4, "unit": "kg", "reserved_qty": "4"}
+            {
+                "item_id": "item:rice",
+                "free_text": "ข้าวสาร",
+                "qty": 4,
+                "unit": "kg",
+                "reserved_qty": "4",
+            }
         ],
         campaign_id="donation_campaign:c5",
         booking_ref="DN-777005",
@@ -468,8 +480,11 @@ async def test_cancel_twice_does_not_underflow_quota(
     # transition is visible — release_quota's own underflow guard is what protects
     # reserved_qty here, so call it directly the way the retry path would.
     await release_quota(
-        shelter_code="SH001", campaign_id="donation_campaign:c5", item_id="item:rice",
-        qty=Decimal("4"), now=datetime.now(UTC),
+        shelter_code="SH001",
+        campaign_id="donation_campaign:c5",
+        item_id="item:rice",
+        qty=Decimal("4"),
+        now=datetime.now(UTC),
     )
 
     counter = await DonationNeedCounter.get(counter_id)
@@ -480,9 +495,7 @@ async def test_cancel_twice_does_not_underflow_quota(
 async def test_cancel_missing_donation_returns_404(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
-    response = await client.delete(
-        "/public/v1/donations/TX-SH001-NOPE0000", headers=auth_headers
-    )
+    response = await client.delete("/public/v1/donations/TX-SH001-NOPE0000", headers=auth_headers)
     assert response.status_code == 404
 
 
@@ -674,9 +687,7 @@ async def test_concurrent_bookings_never_exceed_the_target(
                 "shelter_code": "SH001",
                 "campaign_id": "donation_campaign:race",
                 "donor": {"name": f"Donor {index}", "phone": "0812345678"},
-                "items": [
-                    {"item_id": "item:rice", "free_text": "ข้าวสาร", "qty": 2, "unit": "kg"}
-                ],
+                "items": [{"item_id": "item:rice", "free_text": "ข้าวสาร", "qty": 2, "unit": "kg"}],
             },
         )
 
@@ -1190,9 +1201,7 @@ async def test_dropping_a_line_still_releases_it(
         ],
     )
 
-    await _edit(
-        client, auth_headers, token, [{"free_text": "สบู่ก้อน", "qty": "10", "unit": "bar"}]
-    )
+    await _edit(client, auth_headers, token, [{"free_text": "สบู่ก้อน", "qty": "10", "unit": "bar"}])
 
     assert await _reserved("item:soap") == Decimal("10")
     assert await _reserved("item:blanket") == Decimal("0")

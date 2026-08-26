@@ -637,8 +637,7 @@ class DonationsUseCase:
                         )
                     if result is ReserveResult.NOT_SEEDED:
                         logger.warning(
-                            "donation_need_counter not seeded for %s/%s/%s — editing "
-                            "unreserved",
+                            "donation_need_counter not seeded for %s/%s/%s — editing unreserved",
                             buffer.shelter_code,
                             buffer.campaign_id,
                             item_id,

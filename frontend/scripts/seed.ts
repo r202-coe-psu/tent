@@ -274,6 +274,10 @@ const CTX_2: AuthorContext = { shelterCode: SHELTER_CODE_2, createdBy: 'seed' };
 
 const SHELTER_CODE_3 = 'SH003';
 
+// Registry-only, like SH003 — no per-shelter database. Exists so the host-house
+// site kind (CR-067) has a fixture in list/filter/public-projection screens.
+const SHELTER_CODE_4 = 'SH004';
+
 /**
  * Registry master records — upserted on every seed run (name + location always applied).
  *
@@ -282,6 +286,10 @@ const SHELTER_CODE_3 = 'SH003';
  * for the persisted master_data item codes, which is what those two fields store.
  * A shelter must list every vulnerable-group code its evacuees use — the
  * registration/health forms only offer chips whose code is in this list.
+ *
+ * `site_kind` is optional here: omitting it seeds the pre-CR-067 shape that the
+ * read-time migration back-fills to `evacuation_center`, so both the migrated and
+ * the explicitly-tagged paths stay covered.
  */
 const REGISTRY_SHELTERS = [
 	{
@@ -361,6 +369,31 @@ const REGISTRY_SHELTERS = [
 			showers: 4,
 			water_points: 2,
 			handwashing_stations: 4
+		}
+	},
+	{
+		// Host house (CR-067) — the only fixture that carries `site_kind`
+		// explicitly. Small capacity, single zone, no pets: what a private home
+		// taking in evacuees actually looks like.
+		code: SHELTER_CODE_4,
+		name: 'บ้านพี่เลี้ยงชุมชนคอหงส์',
+		site_kind: 'host_house',
+		location: { lat: 7.006114303226103, lng: 100.4967812435841 },
+		shelter_type_key: 'community_hall',
+		capacity: 8,
+		zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 8 }],
+		area_m2: 60,
+		facilities: {
+			toilets_female: 1,
+			toilets_male: 1,
+			toilets_accessible: 0,
+			showers: 1,
+			water_points: 1,
+			handwashing_stations: 1
+		},
+		admission_policy: {
+			pet_policy: { policy: 'not_allowed' },
+			supported_vulnerable_group_keys: ['elderly', 'young_child']
 		}
 	}
 ] as const;
@@ -539,6 +572,7 @@ async function seedRegistry(master: MasterLookup): Promise<void> {
 		const extras: Record<string, unknown> = {
 			shelter_type: masterCode(master, 'shelter_type', shelter.shelter_type_key)
 		};
+		if ('site_kind' in shelter) extras.site_kind = shelter.site_kind;
 		if ('admission_policy' in shelter) {
 			const { supported_vulnerable_group_keys, ...policy } = shelter.admission_policy;
 			extras.admission_policy = {

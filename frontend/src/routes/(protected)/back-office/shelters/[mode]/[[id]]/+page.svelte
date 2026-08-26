@@ -29,4 +29,4 @@
 	});
 </script>
 
-<ShelterFormPage id={data.id ?? ''} isEdit={data.mode === 'edit'} />
+<ShelterFormPage id={data.id ?? ''} isEdit={data.mode === 'edit'} siteKind={data.siteKind} />
