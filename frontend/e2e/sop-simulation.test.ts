@@ -208,6 +208,7 @@ test.describe('T-42 SOP what-if simulation', () => {
 		let savedScenario: CouchDocument | null = null;
 		try {
 			const dailyCalcBefore = await documentsWithPrefix('daily_calc');
+			const auditBefore = await documentsWithPrefix('audit');
 			await openAs(page, user, '/back-office/sop-simulation');
 			await waitForWorkspace(page);
 
@@ -230,8 +231,19 @@ test.describe('T-42 SOP what-if simulation', () => {
 			await expect(output.getByRole('heading', { name: scenarioName })).toBeVisible();
 			await expect(output.getByText('ผลที่บันทึกไว้ · เปิดดูโดยไม่คำนวณใหม่')).toBeVisible();
 
-			const dailyCalcAfter = await documentsWithPrefix('daily_calc');
+			await page.getByRole('button', { name: /ผลที่บันทึก/ }).click();
+			page.once('dialog', (dialog) => dialog.accept());
+			await page.getByRole('button', { name: `ลบผล ${scenarioName}` }).click();
+			await expect(page.getByRole('button', { name: `เปิดผล ${scenarioName}` })).not.toBeVisible();
+			expect(await findScenarioByName(scenarioName)).toBeNull();
+			savedScenario = null;
+
+			const [dailyCalcAfter, auditAfter] = await Promise.all([
+				documentsWithPrefix('daily_calc'),
+				documentsWithPrefix('audit')
+			]);
 			expect(dailyCalcAfter).toEqual(dailyCalcBefore);
+			expect(auditAfter).toEqual(auditBefore);
 		} finally {
 			await deleteDocument(savedScenario ?? (await findScenarioByName(scenarioName)));
 			await deleteCouchUser(user.name);
