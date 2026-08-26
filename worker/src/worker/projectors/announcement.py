@@ -32,6 +32,8 @@ def project_announcement(
         "_id": doc_id,
         "title": doc.get("title", ""),
         "description": doc.get("description", ""),
+        "title_en": doc.get("title_en"),
+        "description_en": doc.get("description_en"),
         "severity": doc.get("severity", "info"),
         "is_active": bool(doc.get("is_active", False)),
         "updated_at": updated_at,

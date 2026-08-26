@@ -12,6 +12,10 @@
 
 	import type { PublicShelterCardModel } from '../domain/types';
 
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_CARD_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+
 	let {
 		shelter,
 		getStatusColor,
@@ -22,32 +26,63 @@
 		getStatusText: (status: string) => string;
 	} = $props();
 
+	let t = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
+
+	function translateAdminType(type: string): string {
+		if (langState.current !== 'en') return type;
+		const map: Record<string, string> = {
+			วัด: 'Temple',
+			โรงเรียน: 'School',
+			หน่วยงานราชการ: 'Government Agency',
+			ศูนย์อพยพ: 'Evacuation Center',
+			มหาวิทยาลัย: 'University',
+			มัสยิด: 'Mosque',
+			โบสถ์: 'Church',
+			พื้นที่เอกชน: 'Private Area',
+			อื่นๆ: 'Other',
+			unspecified: 'Unspecified'
+		};
+		return map[type] || type;
+	}
+
 	function translateVulnerableGroup(group: string): string {
 		const map: Record<string, string> = {
-			general_vulnerable: 'กลุ่มเปราะบางทั่วไป',
-			quarantine: 'ผู้ป่วยแยกกักโรค',
-			wheelchair: 'ผู้ใช้วีลแชร์',
-			none: 'ไม่มีโซนเฉพาะ'
+			general_vulnerable: t.generalVulnerable,
+			quarantine: t.quarantine,
+			wheelchair: t.wheelchair,
+			none: t.noSpecificZone
 		};
+		if (langState.current === 'en') {
+			Object.assign(map, {
+				ผู้ป่วยติดเตียง: 'Bedridden Patient',
+				ผู้ใช้วีลแชร์: 'Wheelchair User',
+				เด็กอ่อน: 'Infant/Baby',
+				ผู้สูงอายุ: 'Elderly',
+				สตรีมีครรภ์: 'Pregnant Women',
+				ผู้พิการ: 'Disabled Person',
+				ผู้ป่วยจิตเวช: 'Psychiatric Patient',
+				ผู้ป่วยแยกกักโรค: 'Quarantine Patient'
+			});
+		}
 		return map[group] || group;
 	}
 
 	function translatePetPolicy(policyStr: string | undefined): string {
 		if (!policyStr) return '-';
-		if (policyStr === 'not_allowed') return 'ไม่อนุญาต';
-		if (policyStr === 'allowed') return 'อนุญาต (มีโซนสัตว์เลี้ยง)';
+		if (policyStr === 'not_allowed' || policyStr === 'ไม่อนุญาต') return t.notAllowed;
+		if (policyStr === 'allowed' || policyStr === 'อนุญาต') return t.allowed;
 		if (policyStr.startsWith('conditional:')) {
 			const categories = policyStr.split(':')[1];
 			const map: Record<string, string> = {
-				small_general: 'สัตว์เล็กทั่วไป',
-				large_dog: 'สุนัขพันธุ์ใหญ่',
-				livestock: 'ปศุสัตว์'
+				small_general: t.smallGeneral,
+				large_dog: t.largeDog,
+				livestock: t.livestock
 			};
 			const translated = categories
 				.split(',')
 				.map((c) => map[c] || c)
 				.join(', ');
-			return `อนุญาตแบบมีเงื่อนไข (${translated})`;
+			return `${t.conditionalAllowed} (${translated})`;
 		}
 		return policyStr;
 	}
@@ -65,7 +100,7 @@
 			{#if shelter.admin_type}
 				<div class="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
 					<span class="h-1.5 w-1.5 rounded-full bg-primary/40"></span>
-					{shelter.admin_type}
+					{translateAdminType(shelter.admin_type)}
 				</div>
 			{/if}
 		</div>
@@ -86,14 +121,14 @@
 			<MapPin class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/70" />
 			<span class="leading-relaxed"
 				>{shelter.address || '-'}{#if shelter.district}
-					อ.{shelter.district}{/if}{#if shelter.province}, จ.{shelter.province}{/if}
+					{t.districtPrefix}{shelter.district}{/if}{#if shelter.province}, {t.provincePrefix}{shelter.province}{/if}
 			</span>
 		</div>
 		<div class="ml-5 flex items-center gap-1.5">
 			<Navigation class="h-3 w-3 opacity-70" />
-			ระยะห่าง:
+			{t.distance}
 			{#if shelter.distance !== undefined && shelter.distance !== null && !isNaN(shelter.distance) && shelter.distance > 0}
-				<span class="font-bold text-foreground">{shelter.distance} กม.</span>
+				<span class="font-bold text-foreground">{shelter.distance} {t.km}</span>
 			{:else}
 				<span class="font-medium text-muted-foreground/70">-</span>
 			{/if}
@@ -104,11 +139,11 @@
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
 				<Users class="h-3.5 w-3.5" />
-				รองรับได้สูงสุด
+				{t.maxCapacity}
 			</div>
 			<div class="font-bold text-foreground">
 				<span class="text-sm">{shelter.capacity ?? 0}</span>
-				<span class="ml-0.5 text-[10px] font-bold text-muted-foreground">คน</span>
+				<span class="ml-0.5 text-[10px] font-bold text-muted-foreground">{t.people}</span>
 			</div>
 		</div>
 		{#if shelter.pet_policy || (Array.isArray(shelter.vulnerable_groups) && shelter.vulnerable_groups.filter((g) => g && g !== 'none' && g !== 'ไม่มีโซนเฉพาะ').length > 0)}
@@ -117,7 +152,7 @@
 					<div class="flex flex-col gap-1.5">
 						<div class="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
 							<HeartPulse class="h-3 w-3" />
-							กลุ่มเปราะบางที่รองรับ
+							{t.vulnerableGroups}
 						</div>
 						<div class="flex flex-wrap gap-1">
 							{#each shelter.vulnerable_groups.filter((g) => g && g !== 'none' && g !== 'ไม่มีโซนเฉพาะ') as group, i (i)}
@@ -142,7 +177,7 @@
 					>
 						<div class="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
 							<PawPrint class="h-3 w-3" />
-							นโยบายสัตว์เลี้ยง
+							{t.petPolicy}
 						</div>
 						<div class="flex flex-wrap">
 							<Badge
@@ -169,7 +204,8 @@
 			size="sm"
 			class="h-9 flex-1 rounded-xl border-border text-xs font-bold text-foreground hover:bg-muted"
 		>
-			<Eye class="mr-1.5 h-3.5 w-3.5" /> ดูรายละเอียด
+			<Eye class="mr-1.5 h-3.5 w-3.5" />
+			{t.viewDetails}
 		</Button>
 		<Button
 			href={shelter.geo?.lat != null && shelter.geo?.lng != null
@@ -181,7 +217,8 @@
 			size="sm"
 			class="h-9 flex-1 rounded-xl bg-primary-dark text-xs font-bold text-primary-foreground hover:bg-primary disabled:opacity-50"
 		>
-			<Navigation class="mr-1.5 h-3.5 w-3.5" /> นำทาง
+			<Navigation class="mr-1.5 h-3.5 w-3.5" />
+			{t.navigate}
 		</Button>
 	</div>
 </Card.Root>

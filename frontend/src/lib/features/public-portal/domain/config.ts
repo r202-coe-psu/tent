@@ -5,6 +5,8 @@ export const faqItemSchema = z.object({
 	id: z.string().optional(),
 	question: z.string().min(1, 'กรุณาระบุคำถาม'),
 	answer: z.string().min(1, 'กรุณาระบุคำตอบ'),
+	question_en: z.string().optional(),
+	answer_en: z.string().optional(),
 	is_published: z.boolean().default(true),
 	order: z.number().default(0)
 });

@@ -4,12 +4,17 @@
 	import type { PublicShelterDetail } from '$lib/features/public-portal';
 
 	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
+
+	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
 </script>
 
 <section>
 	<div class="mb-4 flex items-center gap-2">
 		<Phone class="h-5 w-5 text-success-dark" />
-		<h2 class="text-lg font-bold text-foreground">ติดต่อสอบถาม</h2>
+		<h2 class="text-lg font-bold text-foreground">{t.contactInfo}</h2>
 	</div>
 
 	<div
@@ -22,14 +27,13 @@
 		</div>
 		<div>
 			<div class="text-sm font-bold text-success-dark">
-				ผู้ดูแลศูนย์: {shelter.contact?.manager === 'unspecified'
-					? 'ไม่มีชื่อผู้ประสานงาน'
+				{t.shelterManager}
+				{shelter.contact?.manager === 'unspecified'
+					? t.noCoordinatorName
 					: shelter.contact?.manager || '-'}
 			</div>
 			<div class="text-xl font-bold text-success-dark">
-				{shelter.contact?.phone === 'unspecified'
-					? 'ไม่มีข้อมูลติดต่อ'
-					: shelter.contact?.phone || '-'}
+				{shelter.contact?.phone === 'unspecified' ? t.noContactInfo : shelter.contact?.phone || '-'}
 			</div>
 		</div>
 	</div>
