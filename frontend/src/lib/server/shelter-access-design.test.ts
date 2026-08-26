@@ -150,7 +150,7 @@ describe('buildValidateDocUpdate', () => {
 		expect(buildValidateDocUpdate('SH001')).toContain("'daily_calc'");
 	});
 
-	it('allows managers to create immutable simulations and rejects staff or updates', () => {
+	it('allows managers to create/delete immutable simulations and rejects staff or updates', () => {
 		const simulation = {
 			...envelope,
 			schema_v: 1,
@@ -177,13 +177,20 @@ describe('buildValidateDocUpdate', () => {
 				}),
 			/Saved simulations are immutable/
 		);
+		expect(() =>
+			compile()({ _id: simulation._id, _rev: '1-simulation', _deleted: true }, simulation, {
+				name: 'sm',
+				roles: ['shelter:SH001', 'shelter_manager']
+			})
+		).not.toThrow();
 		expectForbidden(
 			() =>
-				compile()({ ...simulation, _deleted: true }, simulation, {
-					name: 'sm',
-					roles: ['shelter:SH001', 'shelter_manager']
-				}),
-			/cannot be deleted/
+				compile()(
+					{ _id: simulation._id, _rev: '1-simulation', _deleted: true },
+					simulation,
+					REGISTRATION
+				),
+			/Only shelter managers or system admins can delete simulations/
 		);
 	});
 

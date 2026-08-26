@@ -83,7 +83,16 @@ export function buildValidateDocUpdate(code: string): string {
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
     if (oldDoc && oldDoc.type === 'simulation') {
-      throw { forbidden: 'Saved simulations are immutable and cannot be deleted' };
+      var canDeleteSimulation =
+        userCtx.roles.indexOf('shelter_manager') !== -1 ||
+        userCtx.roles.indexOf('system_admin') !== -1;
+      if (!canDeleteSimulation) {
+        throw { forbidden: 'Only shelter managers or system admins can delete simulations' };
+      }
+      if (newDoc._id !== oldDoc._id || oldDoc.shelter_code !== '${code}') {
+        throw { forbidden: 'Simulation delete context is invalid' };
+      }
+      return;
     }
     if (wasAppendOnly) {
       throw { forbidden: 'Cannot delete append-only ' + oldDoc.type + ' documents' };
