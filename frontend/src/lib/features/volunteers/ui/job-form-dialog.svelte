@@ -9,6 +9,12 @@
 	 * Errors surface through the Superforms `$errors` store via
 	 * `Form.FieldErrors` — never hand-rolled.
 	 *
+	 * `tier` and `auto_accept` are NOT on this form (owner decision 2026-08-27):
+	 * every job created here is `operational` with `auto_accept: false`, the
+	 * schema defaults. A `staff-capable` job — the tier that grants time-bound
+	 * write access (FR-VOL-05R) — therefore cannot be created from this screen
+	 * and needs its own UI later.
+	 *
 	 * Capacity comes from the sub-shift rows (`shifts[]`, schema_v 3): the job's
 	 * `quota` is their headcount sum, so there is no separate total to keep in
 	 * sync. Rows are added one at a time or generated over a date range by
@@ -26,13 +32,13 @@
 	import Check from '@lucide/svelte/icons/check';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
-	import * as Select from '$lib/components/ui/select/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import DatePicker from '$lib/components/date-picker.svelte';
+	import TimePicker from '$lib/components/time-picker.svelte';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { ulid } from '$lib/db/ulid';
 	import { jobInputSchema, totalShiftQuota } from '../domain/job.schema';
 	import type { Job, JobShift } from '../domain/job.schema';
@@ -43,6 +49,7 @@
 		WEEKDAYS_MON_FRI,
 		WEEKENDS,
 		appendShifts,
+		defaultShiftEndDate,
 		generateBatchShifts,
 		isDuplicateShift,
 		type Weekday
@@ -71,21 +78,41 @@
 	 * `deriveJobStatus` produces it, and it will overwrite `full` too on the
 	 * next dispatch/accept/decline.
 	 */
-	const STATUS_OPTIONS: { value: JobFormValues['status']; label: string }[] = [
-		{ value: 'draft', label: 'ร่าง' },
-		{ value: 'open', label: 'เปิดรับ' },
-		{ value: 'paused', label: 'พักรับ' },
-		{ value: 'full', label: 'เต็มโควตา' },
-		{ value: 'closed', label: 'ปิดงาน' }
+	/**
+	 * `selectedClass` is written out in full per option — Tailwind scans source
+	 * text, so a class name assembled at runtime would never be generated.
+	 */
+	const STATUS_OPTIONS: {
+		value: JobFormValues['status'];
+		label: string;
+		selectedClass: string;
+	}[] = [
+		{
+			value: 'draft',
+			label: 'ร่าง',
+			selectedClass: 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100'
+		},
+		{
+			value: 'open',
+			label: 'เปิดรับ',
+			selectedClass: 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+		},
+		{
+			value: 'paused',
+			label: 'พักรับ',
+			selectedClass: 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+		},
+		{
+			value: 'full',
+			label: 'เต็มโควตา',
+			selectedClass: 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100'
+		},
+		{
+			value: 'closed',
+			label: 'ปิดงาน',
+			selectedClass: 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
+		}
 	];
-
-	const TIER_OPTIONS: { value: 'operational' | 'staff-capable'; label: string }[] = [
-		{ value: 'operational', label: 'งานปฏิบัติการ (ไม่ต้องมีบัญชีระบบ)' },
-		{ value: 'staff-capable', label: 'งานช่วยงานระบบ (ต้องได้รับสิทธิ์หลังบ้าน)' }
-	];
-
-	const selectTriggerClass =
-		"flex !h-11 w-full items-center rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
 
 	function newShiftId(): string {
 		return `js-${ulid()}`;
@@ -179,12 +206,12 @@
 
 	const { form: formData, errors, submitting } = form;
 
-	let newRole = $state('');
 	let lastOpenedKey = $state<string | null>(null);
 
 	// Shift builder local state
 	let shiftMode = $state<'single' | 'batch'>('single');
 	let singleDate = $state('');
+	let singleEndDate = $state('');
 	let singleStart = $state('08:00');
 	let singleEnd = $state('16:00');
 	let singleSeats = $state(5);
@@ -211,7 +238,6 @@
 		const key = job?._id ?? 'create';
 		if (lastOpenedKey === key) return;
 		$formData = job ? valuesFromJob(job) : emptyValues();
-		newRole = '';
 		shiftMode = 'single';
 		singleDate = '';
 		batchStart = '';
@@ -220,30 +246,11 @@
 		lastOpenedKey = key;
 	});
 
-	// F-AUTO: force auto_accept off the instant tier becomes staff-capable, so a
-	// tainted `true` from before the tier switch can never reach submit.
-	$effect(() => {
-		if ($formData.tier === 'staff-capable' && $formData.auto_accept) {
-			$formData.auto_accept = false;
-		}
-	});
-
 	function toggleSkill(key: string) {
 		const current = $formData.skills_required;
 		$formData.skills_required = current.includes(key)
 			? current.filter((s) => s !== key)
 			: [...current, key];
-	}
-
-	function addRole() {
-		const value = newRole.trim();
-		if (!value || $formData.required_roles.includes(value)) return;
-		$formData.required_roles = [...$formData.required_roles, value];
-		newRole = '';
-	}
-
-	function removeRole(role: string) {
-		$formData.required_roles = $formData.required_roles.filter((r) => r !== role);
 	}
 
 	function mergeShifts(incoming: JobShift[]) {
@@ -258,8 +265,19 @@
 		}
 	}
 
+	// Prefill the end date from the start date + times; a shift that crosses
+	// midnight lands on the next day. Editable afterwards.
+	$effect(() => {
+		if (!singleDate) {
+			singleEndDate = '';
+			return;
+		}
+		singleEndDate = defaultShiftEndDate(singleDate, singleStart, singleEnd);
+	});
+
 	const canAddSingle = $derived(
 		singleDate !== '' &&
+			singleEndDate !== '' &&
 			singleStart !== '' &&
 			singleEnd !== '' &&
 			Number.isInteger(singleSeats) &&
@@ -271,16 +289,22 @@
 		const row: JobShift = {
 			id: newShiftId(),
 			date: singleDate,
+			end_date: singleEndDate,
 			start_time: singleStart,
 			end_time: singleEnd,
 			quota: singleSeats
 		};
+		if (`${row.end_date}T${row.end_time}` <= `${row.date}T${row.start_time}`) {
+			toast.error('เวลาสิ้นสุดกะต้องอยู่หลังเวลาเริ่มกะ');
+			return;
+		}
 		if (isDuplicateShift(row, $formData.shifts)) {
 			toast.info('มีกะวันและเวลานี้อยู่แล้ว');
 			return;
 		}
 		$formData.shifts = [...$formData.shifts, row];
 		singleDate = '';
+		singleEndDate = '';
 	}
 
 	const canGenerateBatch = $derived(
@@ -337,7 +361,7 @@
 </script>
 
 <Dialog.Root bind:open onOpenChange={handleOpenChange}>
-	<Dialog.Content class="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-3xl">
+	<Dialog.Content class="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-5xl">
 		<div class="flex items-center gap-2 border-b border-border px-6 py-4 pr-12">
 			<Dialog.Title class="flex items-center gap-2 text-lg font-semibold">
 				<Briefcase class="size-5 text-primary" />
@@ -383,8 +407,10 @@
 				<div class="grid grid-cols-2 gap-2">
 					<Button
 						type="button"
-						variant={$formData.is_urgent ? 'outline' : 'secondary'}
-						class="!h-11 justify-center"
+						variant="outline"
+						class="!h-11 justify-center {!$formData.is_urgent
+							? 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100'
+							: ''}"
 						aria-pressed={!$formData.is_urgent}
 						onclick={() => ($formData.is_urgent = false)}
 					>
@@ -392,9 +418,9 @@
 					</Button>
 					<Button
 						type="button"
-						variant={$formData.is_urgent ? 'secondary' : 'outline'}
+						variant="outline"
 						class="!h-11 justify-center {$formData.is_urgent
-							? 'border-destructive/40 text-destructive'
+							? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
 							: ''}"
 						aria-pressed={$formData.is_urgent}
 						onclick={() => ($formData.is_urgent = true)}
@@ -408,13 +434,12 @@
 				<span class="text-sm font-medium">สถานะการรับสมัคร (LIFECYCLE STATUS)</span>
 				<div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
 					{#each STATUS_OPTIONS as option (option.value)}
+						{@const selected = $formData.status === option.value}
 						<Button
 							type="button"
-							variant={$formData.status === option.value ? 'secondary' : 'outline'}
-							class="!h-11 justify-center {$formData.status === option.value
-								? 'border-primary text-primary'
-								: ''}"
-							aria-pressed={$formData.status === option.value}
+							variant="outline"
+							class="!h-11 justify-center {selected ? option.selectedClass : ''}"
+							aria-pressed={selected}
 							onclick={() => ($formData.status = option.value)}
 						>
 							{option.label}
@@ -468,144 +493,73 @@
 				</Form.Field>
 			</div>
 
-			<Separator />
-
-			<div class="grid gap-4 sm:grid-cols-2">
-				<Form.Field {form} name="tier">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>ระดับงาน (TIER)</Form.Label>
-							<Select.Root type="single" bind:value={$formData.tier}>
-								<Select.Trigger {...props} class={selectTriggerClass}>
-									{TIER_OPTIONS.find((o) => o.value === $formData.tier)?.label ??
-										'— เลือกระดับงาน —'}
-								</Select.Trigger>
-								<Select.Content>
-									{#each TIER_OPTIONS as opt (opt.value)}
-										<Select.Item value={opt.value} label={opt.label} />
-									{/each}
-								</Select.Content>
-							</Select.Root>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-
-				<div class="space-y-1.5">
-					<span class="text-sm font-medium">การตอบรับอัตโนมัติ</span>
-					<label
-						class="flex h-11 items-center gap-2 rounded-md border border-input px-3 {$formData.tier ===
-						'staff-capable'
-							? 'opacity-60'
-							: ''}"
-					>
-						<Checkbox
-							bind:checked={$formData.auto_accept}
-							disabled={$formData.tier === 'staff-capable'}
-						/>
-						<span class="text-xs">
-							ตอบรับผู้สมัครทันที (auto-accept)
-							{#if $formData.tier === 'staff-capable'}
-								<span class="block text-muted-foreground">งานช่วยงานระบบต้องผ่านการอนุมัติเสมอ</span
-								>
-							{/if}
-						</span>
-					</label>
-					<Form.Field {form} name="auto_accept">
-						<Form.FieldErrors />
-					</Form.Field>
-				</div>
-			</div>
-
-			{#if $formData.tier === 'staff-capable'}
-				<div class="space-y-1.5">
-					<span class="text-sm font-medium">สิทธิ์ระบบที่ต้องได้รับ (required_roles)</span>
-					<div class="flex gap-2">
-						<Input
-							bind:value={newRole}
-							class="!h-11"
-							placeholder="เช่น registration_staff"
-							onkeydown={(e: KeyboardEvent) => {
-								if (e.key === 'Enter') {
-									e.preventDefault();
-									addRole();
-								}
-							}}
-						/>
-						<Button type="button" variant="secondary" class="!h-11" onclick={addRole}>เพิ่ม</Button>
-					</div>
-					{#if $formData.required_roles.length > 0}
-						<div class="flex flex-wrap gap-1.5">
-							{#each $formData.required_roles as role (role)}
-								<Badge variant="secondary" class="gap-1">
-									{role}
-									<button type="button" aria-label={`ลบ ${role}`} onclick={() => removeRole(role)}>
-										<X class="size-3" />
-									</button>
-								</Badge>
-							{/each}
-						</div>
-					{/if}
-					<Form.Field {form} name="required_roles">
-						<Form.FieldErrors />
-					</Form.Field>
-				</div>
-			{/if}
-
 			<div class="space-y-3 rounded-xl border border-border p-4">
 				<div class="flex flex-wrap items-start justify-between gap-3">
-					<div>
+					<div class="min-w-0">
 						<p class="text-sm font-semibold">📚 กำหนดกะย่อย (Shifts Schedule Configuration)</p>
 						<p class="text-xs text-muted-foreground">
 							เลือกโหมดการสร้างกะย่อย: เพิ่มทีละวัน หรือสร้างอัตโนมัติเป็นช่วงเวลาต่อเนื่อง
 						</p>
 					</div>
-					<div class="flex gap-1 rounded-lg bg-muted p-1">
+					<!-- Full-width 2-up on narrow screens; the English suffixes are the
+					     first thing to go, since they only restate the Thai label. -->
+					<div class="grid w-full grid-cols-2 gap-1 rounded-lg bg-muted p-1 sm:flex sm:w-auto">
 						<Button
 							type="button"
 							size="sm"
 							variant={shiftMode === 'single' ? 'default' : 'ghost'}
+							class="w-full justify-center text-xs sm:w-auto"
 							onclick={() => (shiftMode = 'single')}
 						>
-							<Plus class="mr-1 size-3.5" /> เพิ่มทีละวัน (Single)
+							<Plus class="mr-1 size-3.5 shrink-0" />
+							<span class="truncate"
+								>เพิ่มทีละวัน<span class="hidden lg:inline"> (Single)</span></span
+							>
 						</Button>
 						<Button
 							type="button"
 							size="sm"
 							variant={shiftMode === 'batch' ? 'default' : 'ghost'}
+							class="w-full justify-center text-xs sm:w-auto"
 							onclick={() => (shiftMode = 'batch')}
 						>
-							<Zap class="mr-1 size-3.5" /> สร้างเป็นช่วงวัน (Batch Generator)
+							<Zap class="mr-1 size-3.5 shrink-0" />
+							<span class="truncate">
+								สร้างเป็นช่วงวัน<span class="hidden lg:inline"> (Batch Generator)</span>
+							</span>
 						</Button>
 					</div>
 				</div>
 
 				{#if shiftMode === 'single'}
-					<div class="grid items-end gap-3 rounded-lg border border-border p-3 sm:grid-cols-9">
+					<div class="grid items-end gap-3 rounded-lg border border-border p-3 sm:grid-cols-12">
 						<label class="space-y-1 sm:col-span-3">
 							<span class="text-xs font-medium">วันที่ทำงาน</span>
-							<Input type="date" bind:value={singleDate} class="!h-11" />
+							<DatePicker bind:value={singleDate} />
+						</label>
+						<label class="space-y-1 sm:col-span-3">
+							<span class="text-xs font-medium">วันที่สิ้นสุดกะ</span>
+							<DatePicker bind:value={singleEndDate} />
 						</label>
 						<label class="space-y-1 sm:col-span-2">
 							<span class="text-xs font-medium">เวลาเข้ากะ</span>
-							<Input type="time" bind:value={singleStart} class="!h-11" />
+							<TimePicker bind:value={singleStart} />
 						</label>
 						<label class="space-y-1 sm:col-span-2">
 							<span class="text-xs font-medium">เวลาออกกะ</span>
-							<Input type="time" bind:value={singleEnd} class="!h-11" />
+							<TimePicker bind:value={singleEnd} />
 						</label>
-						<label class="space-y-1 sm:col-span-1">
+						<label class="space-y-1 sm:col-span-2">
 							<span class="text-xs font-medium">จำนวนรับ (คน)</span>
 							<Input type="number" min="1" bind:value={singleSeats} class="!h-11" />
 						</label>
 						<Button
 							type="button"
-							class="!h-11 sm:col-span-1"
+							class="!h-11 sm:col-span-2 sm:col-start-11"
 							disabled={!canAddSingle}
-							aria-label="เพิ่มกะย่อย"
 							onclick={addSingleShift}
 						>
-							<Plus class="size-4" />
+							<Plus class="mr-1 size-4" /> เพิ่มกะ
 						</Button>
 					</div>
 				{:else}
@@ -613,21 +567,21 @@
 						<div class="grid gap-3 sm:grid-cols-2">
 							<label class="space-y-1">
 								<span class="text-xs font-medium">📅 วันที่เริ่มสร้างกะ (Start Date)</span>
-								<Input type="date" bind:value={batchStart} class="!h-11" />
+								<DatePicker bind:value={batchStart} />
 							</label>
 							<label class="space-y-1">
 								<span class="text-xs font-medium">🏁 วันที่สิ้นสุดกะ (End Date)</span>
-								<Input type="date" bind:value={batchEnd} class="!h-11" />
+								<DatePicker bind:value={batchEnd} />
 							</label>
 						</div>
 						<div class="grid gap-3 sm:grid-cols-3">
 							<label class="space-y-1">
 								<span class="text-xs font-medium">⏰ เวลาเข้ากะ (Start)</span>
-								<Input type="time" bind:value={batchStartTime} class="!h-11" />
+								<TimePicker bind:value={batchStartTime} />
 							</label>
 							<label class="space-y-1">
 								<span class="text-xs font-medium">⏰ เวลาออกกะ (End)</span>
-								<Input type="time" bind:value={batchEndTime} class="!h-11" />
+								<TimePicker bind:value={batchEndTime} />
 							</label>
 							<label class="space-y-1">
 								<span class="text-xs font-medium">👥 จำนวนคนต่อกะ (Seats)</span>
@@ -717,27 +671,38 @@
 							ยังไม่มีกะย่อย — เพิ่มอย่างน้อย 1 กะก่อนบันทึก
 						</p>
 					{:else}
-						<ul class="space-y-1.5">
+						<ul class="max-h-72 space-y-2 overflow-y-auto pr-1">
 							{#each shifts as shift, index (shift.id)}
 								<li
-									class="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs"
+									class="flex items-center gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm"
 								>
-									<span class="text-muted-foreground">#{index + 1}</span>
+									<span
+										class="flex size-7 shrink-0 items-center justify-center rounded-full bg-background text-xs font-semibold text-muted-foreground"
+									>
+										{index + 1}
+									</span>
 									<span class="font-semibold text-primary">📅 {shift.date}</span>
-									<span class="text-muted-foreground">|</span>
+									<span class="text-muted-foreground/50">|</span>
 									<span class="font-semibold text-destructive">
 										⏰ {shift.start_time} - {shift.end_time}
 									</span>
-									<span class="text-muted-foreground">|</span>
+									{#if shift.end_date !== shift.date}
+										<Badge variant="outline" class="shrink-0 text-[10px]">
+											ถึง {shift.end_date}
+										</Badge>
+									{/if}
+									<span class="text-muted-foreground/50">|</span>
 									<span class="font-semibold text-emerald-600">👥 รับ {shift.quota} คน</span>
-									<button
+									<Button
 										type="button"
-										class="ml-auto text-muted-foreground hover:text-destructive"
+										variant="ghost"
+										size="icon"
+										class="ml-auto shrink-0 text-muted-foreground hover:text-destructive"
 										aria-label={`ลบกะวันที่ ${shift.date}`}
 										onclick={() => removeShift(shift.id)}
 									>
 										<X class="size-4" />
-									</button>
+									</Button>
 								</li>
 							{/each}
 						</ul>

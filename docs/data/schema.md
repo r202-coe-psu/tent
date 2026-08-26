@@ -698,7 +698,7 @@ open → escalated
 | `slots_confirmed` | int≥0 | req | จำนวนผู้สมัครที่ได้รับการตอบรับ/ยืนยันแล้ว (default `0`) — 🟢 ตอบรับแล้ว |
 | `slots_dispatched` | int≥0 | req | จำนวนที่เสนอแล้วรอตอบรับ (default `0`) — 🟡 เสนอแล้ว — schema_v 2 |
 | `slots_remaining` | int≥0 | req | `quota − slots_confirmed − slots_dispatched` — ⚪ ยังขาดอีก — schema_v 2 |
-| `shifts` | [{`id`:str, `date`:`YYYY-MM-DD`, `start_time`:`HH:mm`, `end_time`:`HH:mm`, `quota`:int>0}] | req | กะย่อยรายวัน อย่างน้อย 1 กะ · `id` คงที่ตลอดอายุแถว (ใช้ key รายการที่ลบได้ และให้ `shift_assignment` ชี้กลับได้ในอนาคต) — schema_v 3 |
+| `shifts` | [{`id`:str, `date`:`YYYY-MM-DD`, `end_date`:`YYYY-MM-DD`, `start_time`:`HH:mm`, `end_time`:`HH:mm`, `quota`:int>0}] | req | กะย่อยรายวัน อย่างน้อย 1 กะ · `id` คงที่ตลอดอายุแถว (ใช้ key รายการที่ลบได้ และให้ `shift_assignment` ชี้กลับได้ในอนาคต) · `end_date` แยกจาก `date` เพราะกะข้ามเที่ยงคืนได้ (16:00–00:00, 22:00–06:00) · invariant `end_date+end_time > date+start_time` — schema_v 3 |
 | `shift_template` | {`shift_name`:str, `start_time`:str, `end_time`:str, `days`:[str]?} | opt | **deprecated schema_v 3** — แทนที่ด้วย `shifts[]`; คงไว้อ่าน doc ที่เขียนไว้ตอน schema_v 2 |
 | `auto_accept` | bool | req | `true` = ตอบรับอัตโนมัติเมื่อโควตาว่าง (เปิดได้เฉพาะ `operational`, ห้ามเปิดบน `staff-capable` - F-AUTO) |
 | `is_urgent` | bool | req | default `false` — chip "ด่วนพิเศษ" — schema_v 2 |
@@ -711,7 +711,7 @@ open → escalated
 > ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`).
 > **Index:** `(status)` · `(tier, status)` · `(shelter_code, status)`
 
-**Migration (schema_v 2 → 3):** สร้าง `shifts` 1 แถวจาก `shift_template` + `quota` เดิม (`id` = ulid ใหม่, `start_time`/`end_time` จาก template, `quota` = `quota` เดิม); `date` ไม่มีข้อมูลเดิม → ใช้วันที่ของ `created_at` ตามเวลา Asia/Bangkok; `shift_template` คงไว้ตามเดิม
+**Migration (schema_v 2 → 3):** สร้าง `shifts` 1 แถวจาก `shift_template` + `quota` เดิม (`id` = ulid ใหม่, `start_time`/`end_time` จาก template, `quota` = `quota` เดิม); `date` ไม่มีข้อมูลเดิม → ใช้วันที่ของ `created_at` ตามเวลา Asia/Bangkok; `end_date` = `date` หรือ +1 วันถ้า `end_time <= start_time`; `shift_template` คงไว้ตามเดิม
 
 **Migration (schema_v 1 → 2):** `slots_remaining = quota − slots_confirmed`; `slots_dispatched = 0`; ทิ้งค่า `slots_pending` เดิม (ใบสมัครที่ค้างยังนับจาก `job_application.status='pending_review'`); `is_urgent=false` ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §6)
 

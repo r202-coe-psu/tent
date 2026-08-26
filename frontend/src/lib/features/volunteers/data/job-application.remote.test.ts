@@ -27,7 +27,16 @@ const jobInput: JobInput = {
 	tier: 'operational',
 	required_roles: [],
 	skills_required: [],
-	shifts: [{ id: 's1', date: '2026-08-26', start_time: '08:00', end_time: '12:00', quota: 2 }],
+	shifts: [
+		{
+			id: 's1',
+			date: '2026-08-26',
+			end_date: '2026-08-26',
+			start_time: '08:00',
+			end_time: '12:00',
+			quota: 2
+		}
+	],
 	auto_accept: true,
 	is_urgent: false
 };

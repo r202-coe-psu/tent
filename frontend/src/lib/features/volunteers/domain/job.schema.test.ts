@@ -23,8 +23,22 @@ function validJobDoc() {
 		slots_remaining: 5,
 		// schema_v 3 — quota (10) must equal the sum of the sub-shift headcounts.
 		shifts: [
-			{ id: 's1', date: '2026-08-26', start_time: '08:00', end_time: '16:00', quota: 6 },
-			{ id: 's2', date: '2026-08-27', start_time: '08:00', end_time: '16:00', quota: 4 }
+			{
+				id: 's1',
+				date: '2026-08-26',
+				end_date: '2026-08-26',
+				start_time: '08:00',
+				end_time: '16:00',
+				quota: 6
+			},
+			{
+				id: 's2',
+				date: '2026-08-27',
+				end_date: '2026-08-27',
+				start_time: '08:00',
+				end_time: '16:00',
+				quota: 4
+			}
 		],
 		auto_accept: false,
 		status: 'open' as const,
@@ -38,7 +52,16 @@ const baseInput: JobInput = {
 	tier: 'operational',
 	required_roles: [],
 	skills_required: [],
-	shifts: [{ id: 's1', date: '2026-08-26', start_time: '08:00', end_time: '16:00', quota: 5 }],
+	shifts: [
+		{
+			id: 's1',
+			date: '2026-08-26',
+			end_date: '2026-08-26',
+			start_time: '08:00',
+			end_time: '16:00',
+			quota: 5
+		}
+	],
 	auto_accept: false,
 	is_urgent: false
 };

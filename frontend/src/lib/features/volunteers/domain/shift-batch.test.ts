@@ -6,6 +6,7 @@ import {
 	WEEKDAYS_MON_FRI,
 	WEEKENDS,
 	appendShifts,
+	defaultShiftEndDate,
 	expandDateRange,
 	generateBatchShifts,
 	isDuplicateShift,
@@ -98,10 +99,40 @@ describe('generateBatchShifts', () => {
 
 	it('mints one row per date carrying the shared time and headcount', () => {
 		expect(generateBatchShifts(base, id)).toEqual([
-			{ id: 'shift-0', date: '2026-08-26', start_time: '08:00', end_time: '16:00', quota: 5 },
-			{ id: 'shift-1', date: '2026-08-27', start_time: '08:00', end_time: '16:00', quota: 5 },
-			{ id: 'shift-2', date: '2026-08-28', start_time: '08:00', end_time: '16:00', quota: 5 }
+			{
+				id: 'shift-0',
+				date: '2026-08-26',
+				end_date: '2026-08-26',
+				start_time: '08:00',
+				end_time: '16:00',
+				quota: 5
+			},
+			{
+				id: 'shift-1',
+				date: '2026-08-27',
+				end_date: '2026-08-27',
+				start_time: '08:00',
+				end_time: '16:00',
+				quota: 5
+			},
+			{
+				id: 'shift-2',
+				date: '2026-08-28',
+				end_date: '2026-08-28',
+				start_time: '08:00',
+				end_time: '16:00',
+				quota: 5
+			}
 		]);
+	});
+
+	it('rolls the end date to the next day when the shift crosses midnight', () => {
+		const [row] = generateBatchShifts(
+			{ ...base, endDate: '2026-08-26', start_time: '16:00', end_time: '00:00' },
+			id
+		);
+		expect(row.date).toBe('2026-08-26');
+		expect(row.end_date).toBe('2026-08-27');
 	});
 
 	it('rejects malformed times', () => {
@@ -129,6 +160,7 @@ describe('appendShifts / isDuplicateShift', () => {
 	const row = (date: string, start = '08:00', end = '16:00') => ({
 		id: `id-${date}-${start}`,
 		date,
+		end_date: defaultShiftEndDate(date, start, end),
 		start_time: start,
 		end_time: end,
 		quota: 5

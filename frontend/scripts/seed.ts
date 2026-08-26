@@ -1699,6 +1699,8 @@ async function seedVolunteers(): Promise<void> {
 	// `application/queries.ts#todayDateString` exactly (the Control Hub /
 	// attendance tab query by this same string).
 	const today = bangkokDateString();
+	// The 16:00–00:00 shift ends after midnight, so it carries the next day.
+	const tomorrow = bangkokDateString(new Date(Date.now() + 86_400_000));
 
 	function dutyWindowFor(shift: ShiftKind) {
 		const window = resolveDutyWindow(today, shift);
@@ -1718,8 +1720,22 @@ async function seedVolunteers(): Promise<void> {
 			skills_required: ['ต้อนรับ', 'ประสานงาน'],
 			// schema_v 3 — capacity lives in the sub-shifts; quota = 3 + 3 = 6.
 			shifts: [
-				{ id: `js-${today}-a`, date: today, start_time: '08:00', end_time: '16:00', quota: 3 },
-				{ id: `js-${today}-b`, date: today, start_time: '16:00', end_time: '00:00', quota: 3 }
+				{
+					id: `js-${today}-a`,
+					date: today,
+					end_date: today,
+					start_time: '08:00',
+					end_time: '16:00',
+					quota: 3
+				},
+				{
+					id: `js-${today}-b`,
+					date: today,
+					end_date: tomorrow,
+					start_time: '16:00',
+					end_time: '00:00',
+					quota: 3
+				}
 			],
 			auto_accept: false,
 			is_urgent: true
@@ -1733,7 +1749,14 @@ async function seedVolunteers(): Promise<void> {
 			required_roles: ['registration_staff'],
 			skills_required: ['ลงทะเบียน', 'คัดกรอง'],
 			shifts: [
-				{ id: `js-${today}-c`, date: today, start_time: '08:00', end_time: '17:00', quota: 3 }
+				{
+					id: `js-${today}-c`,
+					date: today,
+					end_date: today,
+					start_time: '08:00',
+					end_time: '17:00',
+					quota: 3
+				}
 			],
 			auto_accept: false,
 			is_urgent: false
@@ -1747,7 +1770,14 @@ async function seedVolunteers(): Promise<void> {
 			required_roles: [],
 			skills_required: ['ยกของหนัก'],
 			shifts: [
-				{ id: `js-${today}-d`, date: today, start_time: '08:00', end_time: '16:00', quota: 8 }
+				{
+					id: `js-${today}-d`,
+					date: today,
+					end_date: today,
+					start_time: '08:00',
+					end_time: '16:00',
+					quota: 8
+				}
 			],
 			auto_accept: false,
 			is_urgent: false

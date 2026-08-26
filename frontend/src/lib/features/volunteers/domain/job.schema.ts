@@ -49,13 +49,25 @@ export type ShiftTemplate = z.infer<typeof shiftTemplateSchema>;
  * `id` is stable for the lifetime of the row so the UI can key a removable
  * list by it, and so a `shift_assignment` can later point at a specific shift.
  */
-export const jobShiftSchema = z.object({
-	id: z.string().min(1),
-	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD'),
-	start_time: z.string().regex(/^\d{2}:\d{2}$/, 'เวลาต้องอยู่ในรูปแบบ HH:mm'),
-	end_time: z.string().regex(/^\d{2}:\d{2}$/, 'เวลาต้องอยู่ในรูปแบบ HH:mm'),
-	quota: z.number().int().positive('จำนวนรับต่อกะต้องมากกว่า 0')
-});
+export const jobShiftSchema = z
+	.object({
+		id: z.string().min(1),
+		/** Start date (Asia/Bangkok wall-clock), `YYYY-MM-DD`. */
+		date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD'),
+		/**
+		 * End date — the shift may cross midnight (16:00–00:00, 22:00–06:00), in
+		 * which case it lands on the following day, so the end cannot be inferred
+		 * from `date` alone.
+		 */
+		end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD'),
+		start_time: z.string().regex(/^\d{2}:\d{2}$/, 'เวลาต้องอยู่ในรูปแบบ HH:mm'),
+		end_time: z.string().regex(/^\d{2}:\d{2}$/, 'เวลาต้องอยู่ในรูปแบบ HH:mm'),
+		quota: z.number().int().positive('จำนวนรับต่อกะต้องมากกว่า 0')
+	})
+	.refine((s) => `${s.end_date}T${s.end_time}` > `${s.date}T${s.start_time}`, {
+		message: 'เวลาสิ้นสุดกะต้องอยู่หลังเวลาเริ่มกะ',
+		path: ['end_date']
+	});
 export type JobShift = z.infer<typeof jobShiftSchema>;
 
 /** Total headcount across every sub-shift — the job's `quota`. */

@@ -123,6 +123,7 @@ export function generateBatchShifts(
 		(date, index) => ({
 			id: makeId(index),
 			date,
+			end_date: defaultShiftEndDate(date, start_time, end_time),
 			start_time,
 			end_time,
 			quota
@@ -163,4 +164,17 @@ export function appendShifts(
 		added++;
 	}
 	return { shifts, added, skipped };
+}
+
+/**
+ * The date a shift ends on: the same day, or the next one when the shift
+ * crosses midnight (`end_time <= start_time`, e.g. 16:00–00:00 or 22:00–06:00).
+ * Used to prefill "วันที่สิ้นสุดกะ" — the field stays editable, so a shift
+ * running longer than 24h can still be entered by hand.
+ */
+export function defaultShiftEndDate(date: string, startTime: string, endTime: string): string {
+	if (endTime > startTime) return date;
+	const ms = new Date(`${date}T00:00:00.000Z`).getTime();
+	if (Number.isNaN(ms)) throw new ShiftBatchError(`วันที่ไม่ถูกต้อง: ${date}`);
+	return new Date(ms + MS_PER_DAY).toISOString().slice(0, 10);
 }
