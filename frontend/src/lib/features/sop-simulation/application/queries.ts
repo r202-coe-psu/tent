@@ -60,3 +60,15 @@ export const useSaveScenario = (shelterCode: () => string) => {
 		}
 	}));
 };
+
+export const useDeleteScenario = (shelterCode: () => string) => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ id, ctx }: { id: string; ctx: AuthorContext }) =>
+			scenarioRepository(shelterCode()).delete(id, ctx),
+		onSuccess: (_result, variables) => {
+			queryClient.removeQueries({ queryKey: scenarioKeys.detail(shelterCode(), variables.id) });
+			queryClient.invalidateQueries({ queryKey: scenarioKeys.lists(shelterCode()) });
+		}
+	}));
+};

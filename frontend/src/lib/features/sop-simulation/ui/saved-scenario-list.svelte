@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { ScenarioSummary } from '../data/scenario.repository';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 
 	let {
 		scenarios,
@@ -11,7 +12,9 @@
 		loadingMore,
 		hasMore,
 		onLoadMore,
-		onOpen
+		onOpen,
+		onDelete,
+		deleting
 	}: {
 		scenarios: ScenarioSummary[];
 		loading: boolean;
@@ -21,7 +24,15 @@
 		hasMore: boolean;
 		onLoadMore: () => void;
 		onOpen: (id: string) => void;
+		onDelete: (id: string) => void;
+		deleting: boolean;
 	} = $props();
+
+	function confirmDelete(scenario: ScenarioSummary) {
+		if (window.confirm(`ลบสถานการณ์ “${scenario.name}” หรือไม่? การลบไม่กระทบ Daily Calc`)) {
+			onDelete(scenario.id);
+		}
+	}
 </script>
 
 <div class="saved-list">
@@ -72,7 +83,7 @@
 				<div class="saved-date hidden text-xs text-muted-foreground sm:block">
 					{new Date(scenario.created_at).toLocaleString('th-TH')}
 				</div>
-				<div class="shrink-0">
+				<div class="flex shrink-0 gap-1">
 					<Button
 						type="button"
 						variant="outline"
@@ -81,6 +92,17 @@
 						onclick={() => onOpen(scenario.id)}
 					>
 						<FolderOpen class="size-3.5" /> เปิดผล
+					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						class="text-destructive hover:text-destructive"
+						disabled={deleting}
+						aria-label={`ลบผล ${scenario.name}`}
+						onclick={() => confirmDelete(scenario)}
+					>
+						<Trash2 class="size-3.5" /> <span class="sr-only sm:not-sr-only">ลบ</span>
 					</Button>
 				</div>
 			</div>

@@ -5,6 +5,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		useCurrentCalculationSnapshot,
+		useDeleteScenario,
 		useOpenScenario,
 		useSaveScenario,
 		useScenarios
@@ -25,11 +26,13 @@
 	const currentQuery = useCurrentCalculationSnapshot(() => shelterCode);
 	const runMutation = useRunSimulation(() => shelterCode);
 	const saveMutation = useSaveScenario(() => shelterCode);
+	const deleteMutation = useDeleteScenario(() => shelterCode);
 	const scenariosQuery = useScenarios(() => shelterCode);
 	const openMutation = useOpenScenario(() => shelterCode);
 	let result = $state<ScenarioResult | null>(null);
 	let savedView = $state(false);
 	let historyOpen = $state(false);
+	let openedScenarioId = $state<string | null>(null);
 	const savedScenarios = $derived(scenariosQuery.data?.pages.flatMap((page) => page.items) ?? []);
 	const syncedStockCount = $derived(
 		currentQuery.data
@@ -75,6 +78,7 @@
 				ctx: { shelterCode, createdBy: authStore.user?.name ?? 'unknown' }
 			});
 			result = saved.result;
+			openedScenarioId = saved._id;
 			savedView = true;
 			toast.success('บันทึกสถานการณ์แล้ว');
 		} catch (error) {
@@ -86,10 +90,28 @@
 		try {
 			const scenario = await openMutation.mutateAsync(id);
 			result = scenario.result;
+			openedScenarioId = id;
 			savedView = true;
 			historyOpen = false;
 		} catch (error) {
 			toast.error(errorMessage(error, 'เปิดสถานการณ์ไม่สำเร็จ'));
+		}
+	}
+
+	async function deleteScenario(id: string) {
+		try {
+			await deleteMutation.mutateAsync({
+				id,
+				ctx: { shelterCode, createdBy: authStore.user?.name ?? 'unknown' }
+			});
+			if (openedScenarioId === id) {
+				result = null;
+				savedView = false;
+				openedScenarioId = null;
+			}
+			toast.success('ลบสถานการณ์แล้ว');
+		} catch (error) {
+			toast.error(errorMessage(error, 'ลบสถานการณ์ไม่สำเร็จ'));
 		}
 	}
 </script>
@@ -256,6 +278,8 @@
 				hasMore={scenariosQuery.hasNextPage}
 				onLoadMore={() => scenariosQuery.fetchNextPage()}
 				onOpen={openScenario}
+				onDelete={deleteScenario}
+				deleting={deleteMutation.isPending}
 			/>
 		</Dialog.Content>
 	</Dialog.Root>
