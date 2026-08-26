@@ -28,16 +28,8 @@
 </script>
 
 <div
-	class="relative z-[60] flex min-h-screen w-full flex-col justify-between overflow-x-hidden bg-slate-100 font-sans text-slate-900 selection:bg-blue-600 selection:text-white"
+	class="relative flex min-h-screen w-full flex-col justify-between overflow-x-hidden bg-slate-100 pb-[var(--testing-banner-height)] font-sans text-slate-900 selection:bg-blue-600 selection:text-white"
 >
-	<!-- Top Testing Banner (Dedicated for SmartShelter Kiosk) -->
-	<div
-		class="relative z-20 flex h-7 shrink-0 items-center justify-center border-b border-amber-200/80 bg-amber-50 px-3 text-center text-xs font-medium tracking-wide text-amber-800 shadow-sm"
-		role="status"
-	>
-		ระบบอยู่ในช่วงการทดสอบ
-	</div>
-
 	<!-- Ambient bright gradient backgrounds for light white tone -->
 	<div
 		class="pointer-events-none absolute -top-40 left-1/2 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-cyan-400/10 blur-[140px]"
