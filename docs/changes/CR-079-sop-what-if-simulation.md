@@ -4,7 +4,7 @@ title: เพิ่ม SOP what-if simulation แบบไม่เขียน�
 status: approved
 date: 2026-08-19
 created: 2026-08-19
-updated: 2026-08-21
+updated: 2026-08-26
 requested_by: T-42 / project owner
 decided_by: project owner (2026-08-21)
 depends:
@@ -38,8 +38,9 @@ T-31 มี engine คำนวณความต้องการทรัพ�
    โดยไม่ fork สูตรและไม่เขียน `daily_calc`.
 3. เพิ่ม comparison ของ Current → Scenario สำหรับ daily need, horizon need, available, gap และ delta
    โดยใช้ semantics `ResourceKind` ของ T-31.
-4. เพิ่ม Saved Scenario เป็น immutable `simulation:{ulid}` (`schema_v: 1`) ใน shelter database
-   แยกจาก `daily_calc`; Open อ่านผลเดิมโดยไม่ rerun engine.
+4. เพิ่ม Saved Scenario เป็น immutable-on-update `simulation:{ulid}` (`schema_v: 1`) ใน shelter database
+   แยกจาก `daily_calc`; Open อ่านผลเดิมโดยไม่ rerun engine. ผู้มีสิทธิ์สามารถลบเอกสารด้วย
+   authorized tombstone ได้ โดยไม่แก้ผล snapshot และไม่แตะ `daily_calc`.
 5. จำกัดการใช้งานตาม shelter scope: `shelter_manager` ของศูนย์ตนเอง และ `system_admin`
    ตามศูนย์ที่เลือก.
 6. เพิ่มหน้า Back Office และ application contract สำหรับกรอก, รัน, เปรียบเทียบ, บันทึก และเปิด Scenario.
@@ -58,8 +59,8 @@ T-31 มี engine คำนวณความต้องการทรัพ�
 
 - เพิ่ม `simulation:{ulid}` schema_v 1 ใน `docs/data/schema.md` §2.17.
 - ไม่ bump schema version ของ `daily_calc` และไม่มี backfill เอกสารเดิม.
-- ต้องเพิ่ม `simulation` ใน shelter access validator พร้อมกฎ shelter scope, immutable save/delete
-  และ shape ของ frozen result.
+- ต้องเพิ่ม `simulation` ใน shelter access validator พร้อมกฎ shelter scope, immutable update,
+  authorized delete และ shape ของ frozen result.
 
 ### Application
 
@@ -93,7 +94,12 @@ CR นี้ขออนุมัติเฉพาะ contract, scope, persiste
 **Approval clarification:** ยืนยันว่า “UI/API” ใน T-42 หมายถึง UI + internal application contract
 ตามข้อ Change 6 ไม่ใช่ public HTTP API.
 
+**Scope clarification (2026-08-26):** ตามคำสั่งเจ้าของงาน ให้ Scenario repository มี `delete` ด้วย.
+การลบเป็น CouchDB tombstone ที่อนุญาตเฉพาะ `shelter_manager`/`system_admin` ใน shelter scope;
+เอกสารที่บันทึกแล้วห้าม update และผลที่ถูกลบต้องไม่ถูกนำกลับมาเปิดหรือเขียนทับ `daily_calc`.
+
 ## Decision log
 
 - 2026-08-19 — proposed; รอ project owner review/approval ก่อนเริ่ม PR.
 - 2026-08-21 — approved (project owner อนุมัติสเปก CR-079)
+- 2026-08-26 — owner clarification: เพิ่ม authorized delete/tombstone ให้ตรงกับ Scenario repository contract

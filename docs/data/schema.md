@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-25
+updated: 2026-08-26
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -737,7 +737,8 @@ open → escalated
 > ผลการจำลอง SOP แบบ what-if สำหรับการวางแผนล่วงหน้า ใช้ input snapshot เดียวกับ T-31 และ
 > ใช้ engine เดียวกัน แต่ **ไม่เขียนทับ `daily_calc`** และไม่แก้ occupancy, active SOP,
 > stock หรือ facilities จริง. `Run` ไม่ persist; `Save` สร้างเอกสารใหม่เท่านั้น และเอกสารที่บันทึกแล้ว
-> ห้าม update หรือ delete. การเปิดผลเดิมอ่าน `result` ที่ freeze ไว้โดยไม่ rerun engine.
+> ห้าม update. การลบทำได้เฉพาะ `shelter_manager`/`system_admin` ใน shelter scope ผ่าน CouchDB
+> tombstone; การเปิดผลเดิมอ่าน `result` ที่ freeze ไว้โดยไม่ rerun engine.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
