@@ -1,10 +1,24 @@
 import Decimal from 'decimal.js';
 import type { ScenarioComparisonRow } from './scenario.schema';
 
-const number = new Intl.NumberFormat('th-TH', { maximumFractionDigits: 2 });
+const locale = new Intl.NumberFormat('th-TH');
+const groupSeparator =
+	locale.formatToParts(1000).find((part) => part.type === 'group')?.value ?? ',';
+const decimalSeparator =
+	locale.formatToParts(1.1).find((part) => part.type === 'decimal')?.value ?? '.';
 
-export const formatScenarioQuantity = (value: string | null): string =>
-	value === null ? 'ไม่มีข้อมูล' : number.format(Number(value));
+/** Format qty_str values without converting through an imprecise JavaScript Number. */
+export const formatScenarioQuantity = (value: string | null): string => {
+	if (value === null) return 'ไม่มีข้อมูล';
+
+	const rounded = new Decimal(value).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+	const fixed = rounded.abs().toFixed(2);
+	const [integer, fraction] = fixed.split('.');
+	const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, groupSeparator);
+	const trimmedFraction = fraction.replace(/0+$/, '');
+	const sign = rounded.isNegative() && !rounded.isZero() ? '-' : '';
+	return `${sign}${grouped}${trimmedFraction ? `${decimalSeparator}${trimmedFraction}` : ''}`;
+};
 
 export function scenarioRequirementLabel(
 	row: ScenarioComparisonRow,

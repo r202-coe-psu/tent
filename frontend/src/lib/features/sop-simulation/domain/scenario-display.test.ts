@@ -5,6 +5,7 @@ import {
 	scenarioAvailabilityLabel,
 	scenarioGapLabel,
 	scenarioKindLabel,
+	formatScenarioQuantity,
 	scenarioRequirementLabel,
 	scenarioStockBalanceLabel,
 	scenarioStockBalanceState
@@ -31,6 +32,11 @@ const row = (overrides: Partial<ScenarioComparisonRow> = {}): ScenarioComparison
 });
 
 describe('scenario comparison presentation', () => {
+	it('formats large qty_str values without Number precision loss', () => {
+		expect(formatScenarioQuantity('9007199254740993')).toBe('9,007,199,254,740,993');
+		expect(formatScenarioQuantity('1.005')).toBe('1.01');
+	});
+
 	it('labels cumulative resources using the selected horizon', () => {
 		expect(scenarioKindLabel(row(), 14)).toBe('14 วัน');
 		expect(scenarioRequirementLabel(row(), 'scenario')).toContain('420,000');
