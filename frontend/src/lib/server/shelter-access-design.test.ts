@@ -61,6 +61,7 @@ describe('buildValidateDocUpdate', () => {
 		expect(validateFn).toContain("'audit'");
 		expect(validateFn).toContain("'purchase'");
 		expect(validateFn).toContain("'referral'");
+		expect(validateFn).toContain("'scanner_draft'");
 	});
 
 	it('includes daily_calc in the allowed doc type whitelist for on-demand writes', () => {

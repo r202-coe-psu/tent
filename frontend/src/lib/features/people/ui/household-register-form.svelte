@@ -19,9 +19,11 @@
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import CheckSquare from '@lucide/svelte/icons/check-square';
 	import Check from '@lucide/svelte/icons/check';
+	import Cpu from '@lucide/svelte/icons/cpu';
 	import { toast } from 'svelte-sonner';
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { getAllLocations } from '$lib/features/shelters/data/thailand-location.api';
+	import { ScannerDraftModal, type ScannerDraft } from '$lib/features/scanners';
 
 	let {
 		allEvacuees = [],
@@ -117,6 +119,8 @@
 	let selectedHouseholdId = $state<string | null>(null);
 	let selectedResult = $derived(foundResults.find((r) => r.household._id === selectedHouseholdId));
 
+	let scannerDraftOpen = $state(false);
+
 	let formData = $state({
 		address_no: '',
 		village_no: '',
@@ -125,6 +129,17 @@
 		province: '',
 		postal_code: ''
 	});
+
+	function handleSelectScannerDraft(draft: ScannerDraft) {
+		const card = draft.card_data;
+		if (card.address_no) formData.address_no = card.address_no;
+		if (card.village_no) formData.village_no = `หมู่ ${card.village_no}`;
+		if (card.province) formData.province = card.province;
+		if (card.district) formData.district = card.district;
+		if (card.subdistrict) formData.subdistrict = card.subdistrict;
+		showNewHouseholdForm = true;
+		toast.success(`ดึงที่อยู่จากบัตรของ "${card.full_name_th || card.first_name_th}" สำเร็จ`);
+	}
 
 	const provincesQuery = useProvinces();
 	const districtsQuery = useDistricts(() => formData.province || null);
@@ -591,13 +606,26 @@
 	<!-- New Household Form -->
 	{#if showNewHouseholdForm}
 		<form class="space-y-6 border-t border-border pt-6" onsubmit={handleNewHouseholdSubmit}>
-			<div>
-				<h3 class="flex items-center gap-2 text-lg font-bold">
-					🏡 กรอกข้อมูลที่อยู่ (สร้างครอบครัวใหม่)
-				</h3>
-				<p class="mt-1 text-xs text-muted-foreground">
-					ที่อยู่นี้จะถูกใช้สร้างฐานข้อมูลกลุ่มครอบครัวใหม่ และคุณจะเป็นหัวหน้าครอบครัวโดยอัตโนมัติ
-				</p>
+			<div class="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+				<div>
+					<h3 class="flex items-center gap-2 text-lg font-bold">
+						🏡 กรอกข้อมูลที่อยู่ (สร้างครอบครัวใหม่)
+					</h3>
+					<p class="mt-1 text-xs text-muted-foreground">
+						ที่อยู่นี้จะถูกใช้สร้างฐานข้อมูลกลุ่มครอบครัวใหม่
+						และคุณจะเป็นหัวหน้าครอบครัวโดยอัตโนมัติ
+					</p>
+				</div>
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					class="shrink-0 gap-1.5 border-cyan-500/40 text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
+					onclick={() => (scannerDraftOpen = true)}
+				>
+					<Cpu class="h-4 w-4" />
+					<span>ดึงที่อยู่จากเครื่องสแกน</span>
+				</Button>
 			</div>
 			<div class="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-3">
 				<div class="space-y-3">
@@ -707,3 +735,5 @@
 		</form>
 	{/if}
 </div>
+
+<ScannerDraftModal bind:open={scannerDraftOpen} onselect={handleSelectScannerDraft} />

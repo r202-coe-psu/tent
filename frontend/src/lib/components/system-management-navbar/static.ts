@@ -11,7 +11,8 @@ import {
 	Tent,
 	Users,
 	Building,
-	UserCog
+	UserCog,
+	Cpu
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -62,6 +63,12 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 				label: 'API Keys',
 				href: resolve(`${base}/api-keys`),
 				icon: KeyRound,
+				requiresAdmin: true
+			},
+			{
+				label: 'เครื่องสแกนบัตร (Scanners)',
+				href: resolve(`${base}/scanners`),
+				icon: Cpu,
 				requiresAdmin: true
 			}
 		]
