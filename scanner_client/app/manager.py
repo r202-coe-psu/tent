@@ -22,6 +22,8 @@ class ScannerClientManager:
         self.browser_type = config.get("BROWSER", "chromium").lower()
         self.is_debug = str(config.get("DEBUG", "true")).lower() in ("true", "1", "yes")
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
+        self.window_width = int(config.get("WINDOW_WIDTH", "540"))
+        self.window_height = int(config.get("WINDOW_HEIGHT", "960"))
 
         # Kiosk Routes on Tent Server
         self.waiting_url = f"{self.tent_base_url}/kiosk/scanner/waiting"
@@ -142,6 +144,7 @@ class ScannerClientManager:
             "--disable-session-crashed-bubble",
             "--disable-features=Translate",
             "--no-first-run",
+            f"--window-size={self.window_width},{self.window_height}",
         ]
         if not self.is_debug:
             args.extend(["--kiosk", "--start-fullscreen"])
@@ -149,7 +152,7 @@ class ScannerClientManager:
 
     async def run(self):
         """Launch Playwright browser context and start card reader loop"""
-        logger.info(f"Starting Scanner Client Manager (Device: {self.device_id})...")
+        logger.info(f"Starting Scanner Client Manager (Device: {self.device_id}, Portrait: {self.window_width}x{self.window_height})...")
         args = self._build_browser_args()
 
         async with async_playwright() as p:
@@ -163,7 +166,7 @@ class ScannerClientManager:
                 headless=False,
                 args=args,
                 ignore_default_args=["--enable-automation"],
-                no_viewport=not self.is_debug,
+                no_viewport=True,
             )
 
             self.context = context
