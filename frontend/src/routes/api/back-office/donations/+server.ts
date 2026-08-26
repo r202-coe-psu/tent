@@ -7,7 +7,7 @@ import {
 	shelterDb
 } from '$lib/server/donation-intake';
 import { fetchDocs } from '$lib/server/donation-docs';
-import type { PublicDonationDoc } from '$lib/features/donations';
+import type { PublicDonationDoc, PendingDonationRow } from '$lib/features/donations';
 
 /**
  * Pending intake queue — the pre-declared donations a shelter is still waiting on
@@ -17,31 +17,37 @@ import type { PublicDonationDoc } from '$lib/features/donations';
  * `tracking_token_hash`, no `phone_hash`, no `_rev`. Donor `phone` is included —
  * warehouse staff need it to chase a late delivery.
  */
-export interface PendingDonationRow {
-	booking_ref?: string;
-	shelter_code: string;
-	status: string;
-	donor_name: string;
-	donor_phone: string | null;
-	item_count: number;
-	declared_at?: string;
-	eta?: string;
-	slot?: { date: string; from: string; to: string };
-	delivery_method?: string;
-}
-
 function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
+	const items = d.items ?? [];
+	const itemNotes = items.map((it) => it.note?.trim()).filter((n): n is string => Boolean(n));
+	const donorNote = itemNotes.length > 0 ? itemNotes.join('\n') : null;
+	const isUnsolicited = items.length === 0 || items.some((it) => !it.item_id);
+
 	return {
 		booking_ref: d.booking_ref,
 		shelter_code: d.shelter_code,
 		status: d.status,
 		donor_name: d.donor?.name ?? '',
 		donor_phone: d.donor?.phone ?? null,
-		item_count: (d.items ?? []).length,
+		donor_email: d.donor?.email ?? null,
+		item_count: items.length,
+		items: items.map((it) => ({
+			item_id: it.item_id,
+			free_text: it.free_text,
+			category: it.category,
+			qty: it.qty,
+			unit: it.unit,
+			condition: it.condition,
+			note: it.note
+		})),
 		declared_at: d.declared_at,
 		eta: d.logistics?.eta,
 		slot: d.logistics?.slot,
-		delivery_method: d.logistics?.delivery_method
+		delivery_method: d.logistics?.delivery_method,
+		vehicle: d.logistics?.vehicle ?? null,
+		pickup_address: d.logistics?.pickup_address ?? null,
+		donor_note: donorNote,
+		is_unsolicited: isUnsolicited
 	};
 }
 

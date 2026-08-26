@@ -27,7 +27,11 @@ export {
 	stockLedgerDocSchema,
 	parseStockLedger,
 	donationStatusSchema,
-	ledgerReasonSchema
+	ledgerReasonSchema,
+	nextLotNos,
+	lotDateStamp,
+	stockLotSchema,
+	LOT_NO_PATTERN
 } from './domain/operations';
 
 export type {

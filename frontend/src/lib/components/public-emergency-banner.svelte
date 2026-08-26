@@ -4,42 +4,66 @@
 	import Info from '@lucide/svelte/icons/info';
 	import type { Announcement } from '$lib/features/announcements';
 
-	export let announcement: Partial<Announcement>;
-	export let alerts: { name: string; capacity: string; variant: string }[] = [];
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_EMERGENCY_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
 
-	$: isDanger = announcement?.severity === 'emergency';
-	$: isWarning = announcement?.severity === 'warning';
+	let {
+		announcement,
+		alerts = []
+	}: {
+		announcement: Partial<Announcement>;
+		alerts?: { name: string; capacity: string; variant: string }[];
+	} = $props();
 
-	$: bannerClass = isDanger
-		? 'border-danger-border bg-danger-muted/30'
-		: isWarning
-			? 'border-warning/30 bg-warning/10'
-			: 'border-primary-muted bg-primary-muted/10';
+	let isDanger = $derived(announcement?.severity === 'emergency');
+	let isWarning = $derived(announcement?.severity === 'warning');
 
-	$: borderClass = isDanger ? 'border-danger' : isWarning ? 'border-warning' : 'border-primary';
-	$: iconBgClass = isDanger
-		? 'bg-danger-muted text-danger'
-		: isWarning
-			? 'bg-warning/20 text-warning'
-			: 'bg-primary/20 text-primary';
-	$: titleClass = isDanger ? 'text-danger' : isWarning ? 'text-warning-foreground' : 'text-primary';
-	$: descClass = isDanger
-		? 'text-danger-subtle'
-		: isWarning
-			? 'text-muted-foreground'
-			: 'text-muted-foreground';
+	let bannerClass = $derived(
+		isDanger
+			? 'border-danger-border bg-danger-muted/30'
+			: isWarning
+				? 'border-warning/30 bg-warning/10'
+				: 'border-primary-muted bg-primary-muted/10'
+	);
 
-	$: badgeColor = isDanger
-		? 'bg-red-50 text-red-700 border-red-200'
-		: isWarning
-			? 'bg-amber-50 text-amber-700 border-amber-200'
-			: 'bg-blue-50 text-blue-700 border-blue-200';
+	let borderClass = $derived(
+		isDanger ? 'border-danger' : isWarning ? 'border-warning' : 'border-primary'
+	);
+	let iconBgClass = $derived(
+		isDanger
+			? 'bg-danger-muted text-danger'
+			: isWarning
+				? 'bg-warning/20 text-warning'
+				: 'bg-primary/20 text-primary'
+	);
+	let titleClass = $derived(
+		isDanger ? 'text-danger' : isWarning ? 'text-warning-foreground' : 'text-primary'
+	);
+	let descClass = $derived(
+		isDanger ? 'text-danger-subtle' : isWarning ? 'text-muted-foreground' : 'text-muted-foreground'
+	);
 
-	$: badgeLabel = isDanger
-		? 'ฉุกเฉิน (Emergency)'
-		: isWarning
-			? 'แจ้งเตือน (Warning)'
-			: 'ทั่วไป (Info)';
+	let badgeColor = $derived(
+		isDanger
+			? 'bg-red-50 text-red-700 border-red-200'
+			: isWarning
+				? 'bg-amber-50 text-amber-700 border-amber-200'
+				: 'bg-blue-50 text-blue-700 border-blue-200'
+	);
+
+	let t = $derived(getTranslation(PUBLIC_EMERGENCY_I18N, langState.current));
+	let badgeLabel = $derived(isDanger ? t.emergency : isWarning ? t.warning : t.info);
+
+	let isEnglish = $derived(langState.current === 'en');
+	let displayTitle = $derived(
+		isEnglish && announcement?.title_en ? announcement.title_en : announcement?.title || t.urgent
+	);
+	let displayDesc = $derived(
+		isEnglish && announcement?.description_en
+			? announcement.description_en
+			: announcement?.description || ''
+	);
 </script>
 
 <div
@@ -67,10 +91,12 @@
 					<span class="hidden md:inline">{badgeLabel}</span>
 					<span class="md:hidden">{badgeLabel.split(' ')[0]}</span>
 				</span>
-				<h3 class="text-base font-bold {titleClass}">{announcement?.title || 'ประกาศด่วน'}</h3>
+				<h3 class="text-base font-bold {titleClass}">
+					{displayTitle}
+				</h3>
 			</div>
 			<p class="h-full text-sm leading-relaxed break-words {descClass}">
-				{announcement?.description || ''}
+				{displayDesc}
 			</p>
 			<!-- Shelter Badges (optional) -->
 			{#if alerts.length > 0}

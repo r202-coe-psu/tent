@@ -104,6 +104,7 @@ export {
 export {
 	createShelter,
 	getShelter,
+	listShelters,
 	updateShelter,
 	closeZone,
 	reopenZone

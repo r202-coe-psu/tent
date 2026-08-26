@@ -4,15 +4,18 @@
 	import Button from '$lib/components/ui/button/button.svelte';
 	import type { Component } from 'svelte';
 
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_HERO_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+
 	let {
-		title = 'ระบบค้นหาผู้ประสบภัยในศูนย์อพยพ',
-		description = 'เชื่อมต่อ อำนวยความสะดวก และรายงานความช่วยเหลือสาธารณะเพื่อความโปร่งใสแบบตามเวลาจริง (Real-Time Transparency) สามารถสืบหาญาติ ติดตามผู้ประสบภัย หรือร่วมแจกจ่ายเสบียงผ่านเครือข่ายของเรา',
-		badgeText = 'LIVE DISASTER COORDINATION LINK',
+		title,
+		description,
+		badgeText,
 		badgeIcon: BadgeIcon = null,
 		showLivePing = true,
 		bgClass = 'bg-primary',
 		showSearch = true,
-
 		summary,
 		flags,
 		lastUpdated,
@@ -40,6 +43,12 @@
 	import { goto } from '$app/navigation';
 
 	let searchQuery = $state('');
+
+	const t = $derived(getTranslation(PUBLIC_HERO_I18N, langState.current));
+
+	let displayTitle = $derived(title ?? t.defaultTitle);
+	let displayDescription = $derived(description ?? t.defaultDesc);
+	let displayBadgeText = $derived(badgeText ?? t.defaultBadge);
 
 	function handleSearch() {
 		if (searchQuery.trim()) {
@@ -74,21 +83,21 @@
 				{#if BadgeIcon}
 					<BadgeIcon class="h-4 w-4" />
 				{/if}
-				{badgeText}
+				{displayBadgeText}
 			</div>
 			<h1
 				class="mb-4 text-3xl leading-tight font-bold tracking-tight text-white md:text-4xl lg:text-5xl"
 			>
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				{@html title}
+				{@html displayTitle}
 			</h1>
 			<p class="max-w-2xl text-base text-white/80 md:text-lg {showSearch ? 'mb-8' : ''}">
-				{description}
+				{displayDescription}
 			</p>
 
 			{#if showSearch}
 				<div
-					class="mt-2 flex w-full max-w-xl flex-col justify-between gap-2 rounded-xl bg-white p-2 sm:flex-row sm:items-center"
+					class="mt-2 flex w-full max-w-xl flex-col justify-between gap-2 rounded-xl bg-white p-2 sm:flex-row sm:items-center md:max-w-4xl"
 				>
 					<div class="relative flex w-full flex-1 items-center gap-3 pl-2">
 						<Search class="text-bold size-5 shrink-0 text-muted-foreground" />
@@ -96,7 +105,7 @@
 							type="text"
 							bind:value={searchQuery}
 							onkeydown={handleKeydown}
-							placeholder="สืบค้นด้วย ชื่อ สกุล เบอร์โทรศัพท์ หรือ รหัสบัตรประชาชน"
+							placeholder={t.searchPlaceholder}
 							class="h-10 w-full bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none"
 						/>
 					</div>
@@ -104,7 +113,7 @@
 						onclick={handleSearch}
 						class="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary-strong px-6 py-2 text-xs font-bold text-white transition-colors hover:bg-primary"
 					>
-						ค้นหาญาติตอนนี้
+						{t.searchBtn}
 					</Button>
 				</div>
 			{/if}
@@ -119,16 +128,19 @@
 						<div
 							class="absolute -top-3 right-6 flex items-center gap-1 rounded-full border-2 border-white bg-warning px-3 py-1 text-[10px] font-bold text-white shadow-sm"
 						>
-							<AlertCircle class="h-3 w-3" /> ข้อมูลอาจไม่เป็นปัจจุบัน
+							<AlertCircle class="h-3 w-3" />
+							{t.staleWarning}
 						</div>
 					{/if}
 
 					<div class=" flex items-center justify-between border-b border-border/50 pb-4">
 						<h3 class="text-xs font-bold tracking-wider text-card-foreground uppercase">
-							สถานการณ์ปัจจุบัน ณ ขณะนี้
+							{t.currentStatus}
 						</h3>
 						<span class="text-[10px] text-muted-foreground"
-							>อัปเดตล่าสุด: {new Date(lastUpdated).toLocaleTimeString('th-TH')}</span
+							>{t.lastUpdated}: {new Date(lastUpdated).toLocaleTimeString(
+								langState.current === 'th' ? 'th-TH' : 'en-US'
+							)}</span
 						>
 					</div>
 
@@ -137,15 +149,14 @@
 						<div
 							class="flex flex-col justify-center rounded-xl border border-border/50 bg-muted/30 p-4"
 						>
-							<span class="mb-2 text-xs font-semibold text-muted-foreground"
-								>ศูนย์พักพิงพร้อมให้บริการ</span
+							<span class="mb-2 text-xs font-semibold text-muted-foreground">{t.sheltersReady}</span
 							>
 							<div class="flex items-baseline gap-1">
 								<span class="text-3xl font-bold text-card-foreground"
 									>{summary?.shelters_open ?? '-'}</span
 								>
 								<span class="text-sm font-medium text-muted-foreground"
-									>/{summary?.shelters_total ?? '-'} แห่ง</span
+									>/{summary?.shelters_total ?? '-'} {t.sheltersUnit}</span
 								>
 							</div>
 						</div>
@@ -155,14 +166,13 @@
 							<div
 								class="flex flex-col justify-center rounded-xl border border-border/50 bg-muted/30 p-4"
 							>
-								<span class="mb-2 text-xs font-semibold text-muted-foreground"
-									>ผู้ประสบภัยปลอดภัย</span
+								<span class="mb-2 text-xs font-semibold text-muted-foreground">{t.victimsSafe}</span
 								>
 								<div class="flex items-baseline gap-1">
 									<span class="text-3xl font-bold text-card-foreground"
 										>{summary?.occupancy_total ?? '-'}</span
 									>
-									<span class="text-sm font-medium text-muted-foreground">คน</span>
+									<span class="text-sm font-medium text-muted-foreground">{t.victimsUnit}</span>
 								</div>
 							</div>
 						{/if}

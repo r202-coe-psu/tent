@@ -12,6 +12,16 @@ export {
 	isDonorEditable
 } from './domain/public-donation';
 export type { ReceiveDonationInput } from './domain/public-donation';
+export type { PendingDonationRow } from './domain/back-office';
+
+// Domain — redirect ticket (R-16.4 · CR-087)
+export type { DonationRedirect, DonationRedirectInput } from './domain/donation-redirect';
+export {
+	createDonationRedirect,
+	donationRedirectInputSchema,
+	donationRedirectDocSchema,
+	isDonationRedirect
+} from './domain/donation-redirect';
 
 // Domain — public tracking ticket (DN-6)
 export type {
