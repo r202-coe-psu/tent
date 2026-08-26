@@ -167,6 +167,16 @@ describe('TransferServerRepository', () => {
 			if (method === 'GET' && decoded === `/central_ops/${TRANSFER_ID}`) {
 				return { status: 200, data: doc };
 			}
+			// `ref_id` is checked first — it's unique to the ledgerAlreadyWritten idempotency
+			// query, whereas `item_id` is present on both that query (post-fix) and the
+			// balance-check query below.
+			if (
+				method === 'POST' &&
+				decoded === '/shelter_sh001/_find' &&
+				isFindWithField(body, 'ref_id')
+			) {
+				return { status: 200, data: { docs: [] } }; // not written yet
+			}
 			if (
 				method === 'POST' &&
 				decoded === '/shelter_sh001/_find' &&
@@ -178,13 +188,6 @@ describe('TransferServerRepository', () => {
 						docs: [{ type: 'stock_ledger', item_id: 'item:rice', qty: '500', reason: 'receive' }]
 					}
 				};
-			}
-			if (
-				method === 'POST' &&
-				decoded === '/shelter_sh001/_find' &&
-				isFindWithField(body, 'ref_id')
-			) {
-				return { status: 200, data: { docs: [] } }; // not written yet
 			}
 			if (method === 'PUT') {
 				putCalls.push({ path: decoded, body });
@@ -249,6 +252,65 @@ describe('TransferServerRepository', () => {
 		await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001');
 
 		expect(ledgerPuts).toHaveLength(0);
+	});
+
+	it('dispatches a multi-item transfer: writes a ledger entry for every item, not just the first', async () => {
+		const doc = requestedTransfer({
+			items: [
+				{ item_id: 'item:rice', qty: '50', unit: 'kg' },
+				{ item_id: 'item:beans', qty: '30', unit: 'kg' }
+			]
+		});
+		const writtenLedgers: { item_id: unknown; ref_id: unknown; reason: unknown }[] = [];
+		adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
+			const decoded = decodeURIComponent(path);
+			if (method === 'GET' && decoded === `/central_ops/${TRANSFER_ID}`) {
+				return { status: 200, data: doc };
+			}
+			if (method === 'POST' && decoded === '/shelter_sh001/_find') {
+				const selector = (body as { selector: Record<string, unknown> }).selector;
+				if ('ref_id' in selector) {
+					// idempotency check — reflect what has actually been PUT so far, keyed on
+					// item_id too, so item A's write can't shadow item B's check.
+					const match = writtenLedgers.some(
+						(l) =>
+							l.ref_id === selector.ref_id &&
+							l.item_id === selector.item_id &&
+							l.reason === selector.reason
+					);
+					return { status: 200, data: { docs: match ? [{ _id: 'stock_ledger:existing' }] : [] } };
+				}
+				// balance check — plenty of stock for both items
+				return {
+					status: 200,
+					data: {
+						docs: [
+							{ type: 'stock_ledger', item_id: 'item:rice', qty: '500', reason: 'receive' },
+							{ type: 'stock_ledger', item_id: 'item:beans', qty: '500', reason: 'receive' }
+						]
+					}
+				};
+			}
+			if (method === 'PUT' && decoded.startsWith('/shelter_sh001/stock_ledger:')) {
+				const ledger = body as { item_id: unknown; ref_id: unknown; reason: unknown };
+				writtenLedgers.push({
+					item_id: ledger.item_id,
+					ref_id: ledger.ref_id,
+					reason: ledger.reason
+				});
+				return { status: 201, data: { ok: true, id: 'x', rev: '1-a' } };
+			}
+			if (method === 'PUT' && decoded === `/central_ops/${TRANSFER_ID}`) {
+				return { status: 201, data: { ok: true, id: 'x', rev: '2-shipped' } };
+			}
+			return { status: 200, data: {} };
+		});
+
+		const repo = new TransferServerRepository('central_ops', 'SH001');
+		await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001');
+
+		expect(writtenLedgers).toHaveLength(2);
+		expect(writtenLedgers.map((l) => l.item_id).sort()).toEqual(['item:beans', 'item:rice']);
 	});
 
 	it('receives: writes transfer_in ledger to the destination shelter', async () => {

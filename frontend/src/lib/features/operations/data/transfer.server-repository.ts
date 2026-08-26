@@ -29,9 +29,11 @@ import { qtyGte } from '$lib/utils/qty';
  * Retry-safety note (CR-059 decision 2026-08-22): ledger entries use the same
  * `stock_ledger:{ulid}` `_id` as every other ledger reason (no deterministic id
  * — that would change stable-core `_id` pattern). Instead, `transition()` checks
- * whether a ledger with this transfer's `ref_id` + `reason` already exists before
- * writing, so retrying the 409 loop in `[id]/transition/+server.ts` cannot
- * double-write. There is no mirror-write into the other shelter's DB this round
+ * whether a ledger with this transfer's `ref_id` + `item_id` + `reason` already
+ * exists before writing (per item, so multi-item transfers can't have one item's
+ * ledger entry shadow another's), so retrying the 409 loop in
+ * `[id]/transition/+server.ts` cannot double-write. There is no mirror-write into
+ * the other shelter's DB this round
  * (see CR-059 Decision Log 2026-08-22) — cross-shelter status sync is
  * refetch-on-interaction, same as `referral` today.
  */
@@ -133,10 +135,11 @@ export class TransferServerRepository {
 	private async ledgerAlreadyWritten(
 		dbName: string,
 		transferId: string,
+		itemId: string,
 		reason: string
 	): Promise<boolean> {
 		const { status, data } = await this.couchPost<MangoFindResponse>(dbName, '/_find', {
-			selector: { type: 'stock_ledger', ref_id: transferId, reason },
+			selector: { type: 'stock_ledger', ref_id: transferId, item_id: itemId, reason },
 			limit: 1,
 			fields: ['_id']
 		});
@@ -282,7 +285,12 @@ export class TransferServerRepository {
 
 		const ledgerDb = shelterDbName(actorShelter);
 		for (const ledger of ledgers) {
-			const alreadyWritten = await this.ledgerAlreadyWritten(ledgerDb, transfer._id, ledger.reason);
+			const alreadyWritten = await this.ledgerAlreadyWritten(
+				ledgerDb,
+				transfer._id,
+				ledger.item_id,
+				ledger.reason
+			);
 			if (!alreadyWritten) {
 				await this.putDoc(ledgerDb, ledger);
 			}
