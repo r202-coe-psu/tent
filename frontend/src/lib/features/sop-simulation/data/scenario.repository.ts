@@ -22,4 +22,5 @@ export interface ScenarioRepository {
 	save(result: ScenarioResult, ctx: AuthorContext): Promise<Scenario>;
 	listPage(cursor?: string | null, limit?: number): Promise<ScenarioPage>;
 	get(id: string): Promise<Scenario | null>;
+	delete(id: string, ctx: AuthorContext): Promise<void>;
 }

@@ -85,6 +85,17 @@ export class ScenarioRemoteRepository implements ScenarioRepository {
 		if (value === null) return null;
 		return scenarioSchema.parse(value);
 	}
+
+	async delete(id: string, ctx: AuthorContext): Promise<void> {
+		if (!id.startsWith(`${SCENARIO_ID_PREFIX}:`)) return;
+		const value = await this.repository.get<{ _id: string }>(id);
+		if (value === null) return;
+		const scenario = scenarioSchema.parse(value);
+		if (scenario.shelter_code !== ctx.shelterCode) {
+			throw new Error('Scenario does not belong to the delete context');
+		}
+		await this.repository.remove(scenario);
+	}
 }
 
 let singleton: ScenarioRepository | null = null;
