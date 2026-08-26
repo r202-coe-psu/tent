@@ -19,7 +19,9 @@ vi.mock('$lib/db/repository', () => ({
 			return saved;
 		},
 		get: async (id: string) => store.get(id) ?? null,
-		remove: vi.fn(),
+		remove: vi.fn(async (doc: { _id: string }) => {
+			store.delete(doc._id);
+		}),
 		allByType: async (type: string, guard: (value: unknown) => boolean) =>
 			[...store.values()].filter((doc) => doc.type === type && guard(doc)),
 		pageByType: vi.fn(),
@@ -117,6 +119,23 @@ describe('ScenarioRemoteRepository', () => {
 	it('rejects non-simulation ids on get', async () => {
 		const repository = new ScenarioRemoteRepository('shelter_sh001');
 		expect(await repository.get('daily_calc:2026-08-17')).toBeNull();
+	});
+
+	it('deletes an authorized saved snapshot without touching daily_calc', async () => {
+		const before = structuredClone(store.get('daily_calc:2026-08-17'));
+		const result = await runSimulation(
+			{ name: 'deletable', occupancy: 10, days: 1, ratio_overrides: {} },
+			'SH001',
+			async () => structuredClone(snapshot)
+		);
+		const repository = new ScenarioRemoteRepository('shelter_sh001');
+		const saved = await repository.save(result, ctx);
+
+		await repository.delete(saved._id, ctx);
+
+		expect(await repository.get(saved._id)).toBeNull();
+		expect(store.get('daily_calc:2026-08-17')).toEqual(before);
+		expect(store.get('daily_calc:2026-08-17')?._rev).toBe('7-real');
 	});
 
 	it('rejects saving a result under a different shelter context', async () => {
