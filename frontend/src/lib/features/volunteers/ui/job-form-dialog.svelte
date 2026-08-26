@@ -592,7 +592,7 @@
 						<div class="space-y-2">
 							<div class="flex flex-wrap items-center justify-between gap-2">
 								<span class="text-xs font-medium">📅 วันในสัปดาห์ที่ต้องการเปิดกะ</span>
-								<div class="flex gap-1">
+								<div class="flex flex-wrap gap-1">
 									<Button
 										type="button"
 										size="sm"
@@ -622,7 +622,7 @@
 									</Button>
 								</div>
 							</div>
-							<div class="flex flex-wrap gap-2">
+							<div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
 								{#each WEEKDAYS as day (day.value)}
 									{@const active = batchWeekdays.includes(day.value)}
 									<Button
@@ -630,6 +630,7 @@
 										size="sm"
 										variant={active ? 'default' : 'outline'}
 										aria-pressed={active}
+										class="w-full justify-center px-1 text-xs"
 										onclick={() => toggleWeekday(day.value)}
 									>
 										{#if active}<Check class="mr-1 size-3" />{/if}
