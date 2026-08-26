@@ -42,18 +42,20 @@
 	<VolunteerHubHeader />
 
 	<Tabs.Root value={activeTab} onValueChange={(v) => selectTab(v as TabKey)}>
-		<Tabs.List>
-			<Tabs.Trigger value="jobs" class="gap-1.5">
-				<ClipboardList class="h-4 w-4" />
-				จัดการงานอาสา
+		<!-- Narrow screens stack the three triggers into a grid so none is clipped;
+		     from `sm` up they sit inline as a normal tab strip. -->
+		<Tabs.List class="grid h-auto w-full grid-cols-1 gap-1 sm:inline-flex sm:h-9 sm:w-auto">
+			<Tabs.Trigger value="jobs" class="w-full gap-1.5 sm:w-auto">
+				<ClipboardList class="h-4 w-4 shrink-0" />
+				<span class="truncate">จัดการงานอาสา</span>
 			</Tabs.Trigger>
-			<Tabs.Trigger value="roster" class="gap-1.5">
-				<CalendarCheck class="h-4 w-4" />
-				ตารางกะและเช็คอิน
+			<Tabs.Trigger value="roster" class="w-full gap-1.5 sm:w-auto">
+				<CalendarCheck class="h-4 w-4 shrink-0" />
+				<span class="truncate">ตารางกะและเช็คอิน</span>
 			</Tabs.Trigger>
-			<Tabs.Trigger value="people" class="gap-1.5">
-				<Users class="h-4 w-4" />
-				รายชื่อและการอนุมัติ
+			<Tabs.Trigger value="people" class="w-full gap-1.5 sm:w-auto">
+				<Users class="h-4 w-4 shrink-0" />
+				<span class="truncate">รายชื่อและการอนุมัติ</span>
 			</Tabs.Trigger>
 		</Tabs.List>
 
