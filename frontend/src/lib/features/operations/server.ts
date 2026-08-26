@@ -36,7 +36,11 @@ export {
 	transferInputSchema,
 	transferStatusSchema,
 	transferFilterSchema,
-	receivedItemSchema
+	receivedItemSchema,
+	nextLotNos,
+	lotDateStamp,
+	stockLotSchema,
+	LOT_NO_PATTERN
 } from './domain/operations';
 
 export type {

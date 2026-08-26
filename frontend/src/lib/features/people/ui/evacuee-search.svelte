@@ -10,8 +10,13 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import { useSearchEvacuees, STATUS_LABELS } from '$lib/features/people';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { EVACUEE_SEARCH_I18N } from './_constants/evacuee-search.i18n';
 
 	let { onNext }: { onNext: () => void } = $props();
+
+	const t = $derived(getTranslation(EVACUEE_SEARCH_I18N, languageStore.current));
 
 	let query = $state('');
 	let debouncedQuery = $state('');
@@ -59,7 +64,7 @@
 			{/if}
 			<Input
 				type="text"
-				placeholder="เลขบัตรประชาชน / เบอร์โทร / ชื่อ-นามสกุล"
+				placeholder={t.placeholder}
 				bind:value={query}
 				class="h-12 border-transparent bg-muted/50 pl-10 focus-visible:border-primary"
 			/>
@@ -72,23 +77,23 @@
 			onclick={onNext}
 		>
 			<UserPlus class="h-5 w-5" />
-			ลงทะเบียนใหม่
+			{t.btnNewRegister}
 		</Button>
 	</div>
 
 	{#if isSearching}
 		<div class="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
 			<Loader2 class="h-4 w-4 animate-spin" />
-			กำลังค้นหา...
+			{t.searching}
 		</div>
 	{:else if searchQuery.isError}
 		<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5">
 			<CircleAlert class="size-4" />
-			<Alert.Title class="font-semibold">ค้นหาไม่สำเร็จ</Alert.Title>
+			<Alert.Title class="font-semibold">{t.errorTitle}</Alert.Title>
 			<Alert.Description class="space-y-3">
-				<p>เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง</p>
+				<p>{t.errorDesc}</p>
 				<Button type="button" variant="outline" size="sm" onclick={() => searchQuery.refetch()}>
-					ลองใหม่
+					{t.retry}
 				</Button>
 			</Alert.Description>
 		</Alert.Root>
@@ -97,7 +102,7 @@
 			<div class="space-y-3">
 				<div class="flex items-center gap-2">
 					<Check class="h-5 w-5 text-green-600" />
-					<h3 class="font-bold text-green-800">พบข้อมูลในระบบ {searchResults.length} ราย</h3>
+					<h3 class="font-bold text-green-800">{t.foundTitle(searchResults.length)}</h3>
 				</div>
 
 				<div class="space-y-2">
@@ -111,7 +116,10 @@
 									{evacuee.last_name}
 								</p>
 								<p class="text-xs text-green-700">
-									สถานะ: {STATUS_LABELS[evacuee.current_stay.status] ?? evacuee.current_stay.status}
+									{t.statusLabel}
+									{t.statusLabels[evacuee.current_stay.status] ??
+										STATUS_LABELS[evacuee.current_stay.status] ??
+										evacuee.current_stay.status}
 									{#if evacuee.phone}
 										· {evacuee.phone}
 									{/if}
@@ -123,7 +131,7 @@
 								class="h-11 w-full shrink-0 bg-[#10b981] font-semibold text-white hover:bg-[#059669] sm:h-9 sm:w-auto"
 								onclick={() => viewEvacueeDetail(evacuee._id)}
 							>
-								ดู / แก้ไข
+								{t.btnViewEdit}
 							</Button>
 						</div>
 					{/each}
@@ -136,21 +144,21 @@
 					onclick={onNext}
 				>
 					<UserPlus class="h-4 w-4" />
-					ลงทะเบียนใหม่แทน
+					{t.btnRegisterInstead}
 				</Button>
 			</div>
 		{:else}
 			<div class="space-y-3 rounded-xl border border-blue-100 bg-[#F4F8FA] p-4">
-				<h3 class="text-base font-bold text-[#0C2D4E]">ไม่พบข้อมูลในระบบ</h3>
+				<h3 class="text-base font-bold text-[#0C2D4E]">{t.notFoundTitle}</h3>
 				<p class="text-sm text-[#0C2D4E]/80">
-					ผู้ลี้ภัยรายนี้ยังไม่เคยลงทะเบียน กรุณาดำเนินการลงทะเบียนใหม่
+					{t.notFoundDesc}
 				</p>
 				<Button
 					type="button"
 					class="h-12 w-full bg-[#0C2D4E] text-white hover:bg-[#0A2647]"
 					onclick={onNext}
 				>
-					ลงทะเบียนใหม่
+					{t.btnNewRegister}
 				</Button>
 			</div>
 		{/if}

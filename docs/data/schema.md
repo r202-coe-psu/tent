@@ -1,12 +1,12 @@
 ---
-title: Smart Shelter — Database Schema v4
+title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-22
+updated: 2026-08-25
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
-# Database Schema v4 — field-level
+# Database Schema v5 — field-level
 
 Canonical ระดับ field ของทุก doc type. Zod schema ฝั่ง client และ `validate_doc_update` ฝั่ง
 CouchDB ต้อง generate/เขียนให้ตรงกับเอกสารนี้
@@ -229,6 +229,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 
 ### 2.1 `stock_ledger` — `stock_ledger:{ulid}` · **append-only**
 
+> **schema_v 4** — เพิ่ม `lot.lot_no` (`L-YYMMDD-XXX`) + `lot.storage_zone` ([CR-088](../changes/CR-088-stock-ledger-lot-storage-zone.md)) — ขั้นตรวจรับบริจาค (T-16 R-16.5) ต้องมีที่เก็บเลขล็อตกับโซนจัดเก็บ. optional ทั้งคู่ ⇒ แถวเก่าไม่ต้อง backfill. `lot_no` ออกโดย **server** ตอนเขียน ledger (`lib/server/lot-number.ts`) ไม่รับจาก client. ผู้เขียน ledger ทุกที่ stamp `schema_v 4` เท่ากัน (`createStockLedger`)
 > **schema_v 3** — เพิ่ม `purchase` ใน reason enum (CR-032) — รองรับรับสต็อกจากแหล่ง "จัดซื้อจัดจ้าง" แยกจากบริจาค; ยอดจริงยังมาจาก ledger. doc type `purchase` (§2.16) + write path มาใน slice ถัดไปของ CR-032. ผู้เขียน ledger ทุกที่ stamp `schema_v 3` เท่ากัน (operations `createStockLedger`, kitchen `issueRequisition`).
 > schema_v 2 — `qty` เป็น `qty_str` (ไม่ใช่ JSON number). CR-038.
 
@@ -239,8 +240,17 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `unit` | str | req | ต้องตรงกับ `item_master.base_unit` |
 | `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`,`purchase`) | req | `purchase` = รับจากจัดซื้อ (CR-032) |
 | `ref_id` | str\|null | ตาม `reason` | doc ต้นเหตุ — **ค่าที่ยอมรับผูกกับ `reason` ตามตาราง "`reason` → `ref_id`" ด้านล่าง** (CR-055) |
-| `lot` | {`expiry`:ts?, `note`:str?} | opt | ของหมดอายุได้ (อาหาร/ยา) |
+| `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088 (ดูตารางย่อยด้านล่าง) |
 | `occurred_at` | ts | req | — |
+
+**`lot` (CR-088)**
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `expiry` | ts | opt | วันหมดอายุ — บังคับโดย caller เมื่อ `item_master.perishable` (catalog อยู่คนละ DB, domain มองไม่เห็น) |
+| `note` | str | opt | — |
+| `lot_no` | str | opt | `L-YYMMDD-XXX` — `YYMMDD` = วันที่รับจริง, `XXX` = ลำดับ 3 หลัก **ต่อวันต่อศูนย์** นับต่อจากเลขสูงสุดที่มีใน ledger ของ DB นั้น · **label สำหรับคนอ่านเท่านั้น** ไม่มี business rule ใดผูกกับค่านี้ ⇒ การชนกันในเคสรับพร้อมกันให้ป้ายซ้ำ ไม่ทำให้ยอดผิด (CR-088 ยอมรับความเสี่ยงนี้ แลกกับการไม่ต้องมี counter doc) · **server ออกให้เท่านั้น** (`lib/server/lot-number.ts`) — schema ฝั่งรับ input จาก client strip ค่านี้ทิ้ง |
+| `storage_zone` | str | opt | โซนที่เก็บของจริง — free text ≤100 ตัวอักษร, ยังไม่มี master data โซน |
 
 **Index:** `(item_id, occurred_at)` · `(reason)` · `stock_balance` = **client** Decimal sum ของ `qty` ต่อ item (อย่าพึ่ง CouchDB `_sum` ของ float/string)
 
@@ -280,6 +290,7 @@ intake ไม่ผ่าน guard นี้อยู่แล้ว) ⇒ **ห�
 
 ### 2.3 `donation` — `donation:{ulid}` · state machine
 
+> **schema_v 5** — เพิ่ม `redirect_to_shelter_code` ([CR-087](../changes/CR-087-donation-redirect-target.md)) — ที่เก็บ "ส่งต่อไปศูนย์ไหน" ตอน `status: redirected` (T-16 R-16.4). optional ⇒ doc เดิมไม่ต้อง backfill. ตั๋วที่ศูนย์ปลายทางทำงานจริงคือ doc แยก `donation_redirect` (§2.19) ใน DB ของศูนย์ปลายทาง — field นี้เพียงบอกว่าใบนี้ถูกส่งไปไหน (scope isolation: ปลายทางมองไม่เห็น DB ต้นทาง)
 > **schema_v 4** — เพิ่ม `revisions[]` (log การแก้ `items[]` โดย donor ผ่าน tracking_token). CR-080.
 > schema_v 3 — `items[].qty` เป็น `qty_str`. CR-038.
 > schema_v 2 — เพิ่ม `donor.line_id`/`donor.email` (optional), `items[].category`/`condition`/`note`, `booking_ref`, และ `logistics{}` (วิธีส่ง/ยานพาหนะ/slot/eta/courier tracking) รองรับ public donation + queue booking flow ของหน้า `/donate`. CR-005 §F (DN-2/DN-6/DN-7). ใบอนุโมทนา/ลดหย่อนภาษี (DN-3) **ระบบไม่รองรับ** — ไม่มี `tax_receipt_requested`. field-level canonical ของ [Donation & Queue Booking spec](../features/public-tier-donation-spec.html).
@@ -298,6 +309,7 @@ intake ไม่ผ่าน guard นี้อยู่แล้ว) ⇒ **ห�
 | `tracking_token_hash` | str | sys | SHA-256 ของ token — **ไม่เก็บ token ตรง**; public service lookup/แก้ (PATCH) ด้วย hash |
 | `declared_at` / `received_at` | ts / ts\|null | req/sys | — |
 | `expires_at` | ts | sys | `declared_at` + `config.donation_reservation_ttl_hours` (default 72) |
+| `redirect_to_shelter_code` | str\|null | opt | **ตั้งค่าเฉพาะตอน `status → redirected`** (CR-087); สถานะอื่นไม่มี field นี้/เป็น `null`. ใครกด/เมื่อไร/เพราะอะไร ไม่เก็บซ้ำที่นี่ — อยู่ใน `audit` (§2.12, `action: manual_adjust`) เหมือน approve/reject |
 | `revisions` | [{`at`:ts, `by`:enum(`donor`), `items_before`:[{`item_id`:str?, `free_text`:str?, `qty`:qty_str, `unit`:str}], `items_after`:[…เหมือน `items_before`]}] | opt | append-only; donor แก้ `items[]` ผ่าน `PATCH /public/v1/donations/{token}` (CR-080). เก็บ **snapshot ทั้งชุด** ก่อน-หลัง ไม่ใช่ diff — เจ้าหน้าที่ต้องอ่านออกว่าใบนี้เคยเป็นอะไรโดยไม่ต้องประกอบ diff เอง. ไม่มีเพดานจำนวนครั้ง (คุมด้วย rate-limit ต่อ IP); `by` เป็น enum เผื่อขยายไป `staff` เมื่อเจ้าหน้าที่ adjust ตอนรับของ |
 
 **Index:** `(status)` · `(tracking_token_hash)` · `(booking_ref)` · `(campaign_id)` · `(logistics.slot.date)`
@@ -690,12 +702,37 @@ open → escalated
 > ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`).
 > **Index:** `(job_id, status)` · `(tracking_token)` · `(volunteer_id, status)`
 
+### 2.19 `donation_redirect` — `donation_redirect:{ulid}` · **schema_v 1**
+
+> **schema_v 1** — doc type ใหม่ ([CR-087](../changes/CR-087-donation-redirect-target.md), T-16 R-16.4).
+> ตั๋วที่ **ศูนย์ปลายทาง** ได้รับ เมื่อศูนย์อื่นรับของชิ้นนั้นไม่ได้แล้วส่งต่อมาให้พิจารณา.
+> **ทำไมต้องเป็น doc แยก ไม่ใช่แค่ field:** DB แยกต่อศูนย์ (`shelter_{code}`) + shelter-scope isolation
+> ⇒ `donation.redirect_to_shelter_code` (§2.3) ที่ยังอยู่ใน DB ต้นทาง **ปลายทางมองไม่เห็นเลย** ต้องมีของจริง
+> เขียนเข้า DB ปลายทาง.
+> เป็น **snapshot** ตอนส่งต่อ — ไม่ sync กลับไปหา donation ต้นทางอีก และไม่ copy donation ทั้งใบ (เลี่ยง PII ซ้ำ).
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `origin_shelter_code` | str | req | ศูนย์ต้นทางที่ส่งต่อมา |
+| `origin_donation_id` | str | req | → `donation:{ulid}` **ข้าม DB** — เก็บไว้ให้ SA สอบย้อนกลับได้ (ปลายทางเปิดอ่านเองไม่ได้ตาม scope) |
+| `booking_ref` | str\|null | opt | รหัสจองเดิม — ให้ปลายทางอ้างอิงกับ donor ได้ |
+| `donor` | {`name`:str, `phone`:str\|null} | req | เท่าที่จำเป็นให้ติดต่อได้ — **ไม่ลาก** `phone_hash`/`line_id`/`email` ตามมา (data minimization) |
+| `items` | [{`item_id`:str?, `free_text`:str?, `qty`:qty_str, `unit`:str, `category`:str?, `condition`:str?, `note`:str?}] | req | snapshot ของ `donation.items` ตอนส่งต่อ |
+| `note` | str\|null | opt | หมายเหตุจากเจ้าหน้าที่ต้นทาง (≤500) |
+| `status` | enum(`pending_review`) | req | ปลายทางเริ่มพิจารณาใหม่ตั้งแต่ต้น — **ไม่สืบทอด**สถานะของใบต้นทาง |
+
+> ใช้ envelope มาตรฐาน `BaseDoc`; `shelter_code` = **ศูนย์ปลายทาง** (DB ที่ doc นี้อยู่), ต้นทางอยู่ใน `origin_shelter_code`.
+> **ไม่ใช่ append-only** — เผื่อปลายทางอัปเดต `status` เมื่อมี flow พิจารณาตั๋วในภายหลัง (ยังไม่อยู่ในขอบเขต CR-087).
+> **ห้ามเขียน `stock_ledger` ที่ศูนย์ต้นทาง** ตอนส่งต่อ — ของยังไม่เคยเข้าคลังที่ไหน (R-16.4 acceptance).
+> **Index:** `(status)` · `(origin_shelter_code)`
+
 ---
 
 ## 3. DB `registry` (central-managed → pull ลง device; edge fallback replica)
 
 ### 3.1 `shelter` — `shelter:{ulid}`
 
+> **schema_v 5** — เพิ่ม `site_kind` เพื่อแยกศูนย์อพยพกับบ้านพี่เลี้ยงโดยใช้ doc type `shelter` เดิม (CR-067).
 > **schema_v 4** — ขยาย shelter form v4/v5: structured address, project level, key personnel,
 > zone area/specifics, admission/luggage/parking policy และ risk/common-area เพิ่มเติม. CR-023.
 > **schema_v 3** — เพิ่ม `feature_flags` (allow_pets, allow_vehicles, allow_assets) ควบคุม step ลงทะเบียน. CR-016.
@@ -704,6 +741,7 @@ open → escalated
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `code` | str | sys | code ที่อ่านออก เช่น `SH001` — **unique**, immutable; central mint ตอน provisioning (จาก `central_ops` counter §5.3) เป็นชื่อ db `shelter_{code}` + ใช้อ้างข้ามศูนย์ทุกที่ (`shelter_code`). pattern `^SH\d{3,}$`: เลข 1–999 pad 3 หลัก (`SH001`), ≥1000 ความกว้างตามจริง (`SH1000`) |
+| `site_kind` | enum(`evacuation_center`,`host_house`) | req | ชนิดสถานที่; เอกสารเก่าที่ไม่มี field อ่านเป็น `evacuation_center`; ใช้ doc type และ code sequence เดิมร่วมกัน |
 | `name` | str | req | — |
 | `operation_status` | enum(`standby`,`active`,`full_capacity`,`closed`) | req | default `standby`; ใช้แทน `status` เดิม |
 | `capacity` | int>0 | req | จำนวนคนสูงสุด — ควรสอดคล้องกับ `area_m2` (Sphere ≥3.5 m²/คน); ผลรวม zone capacity ≤ ค่านี้ |
@@ -735,6 +773,8 @@ open → escalated
 | `opened_at` / `closed_at` | ts / ts\|null | sys | — |
 
 **Migration (schema_v 3 → 4):** additive default-fill บน read/write — field ใหม่เติม `null`/`[]`/default object ตาม domain schema; `status` เดิม migrate เป็น `operation_status` (`open`→`active`, `closed`→`closed`).
+
+**Migration (schema_v 4 → 5, CR-067):** `site_kind` เป็น required สำหรับ shelter ที่สร้าง/เขียนใหม่. Reader ของเอกสาร v4 ที่ไม่มี field ให้ default เป็น `evacuation_center` แบบ lazy; ไม่บังคับ backfill batch. เมื่อเอกสารเดิมถูกเขียนใหม่ ให้ persist `site_kind` และ `schema_v: 5`. `code` ยังคงใช้ pattern `SH\d{3,}` และ database name `shelter_{code}`; ไม่มี sequence `HH` แยก.
 
 ### 3.2 `config` — `config:app` (singleton)
 

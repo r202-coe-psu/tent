@@ -133,6 +133,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			return {
 				id: m._id,
 				name: m.name,
+				site_kind: m.site_kind,
 				status: mappedStatus,
 				address: m.location?.address || '',
 				province: m.province || '',

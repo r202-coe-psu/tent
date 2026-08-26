@@ -10,6 +10,7 @@
 	import { toast } from 'svelte-sonner';
 	import { LOGOUT_ROUTE } from '$lib/guards/auth';
 	import { SessionExpiredBar } from '$lib/features/login';
+	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children, data }: LayoutProps = $props();
@@ -35,6 +36,7 @@
 			<a href={resolve('/portal')} class="font-semibold">Smart Shelter</a>
 			<div class="flex items-center gap-4">
 				<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
+				<LanguageSwitcher />
 				<Separator orientation="vertical" class="h-4" />
 				<Button variant="outline" size="sm" onclick={logout}>Logout</Button>
 			</div>

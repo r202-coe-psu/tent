@@ -32,8 +32,12 @@ export function useAnnouncement(id: string) {
 export function useCreateAnnouncement() {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (data: Pick<Announcement, 'title' | 'description' | 'severity' | 'is_active'>) =>
-			createAnnouncementApi(data),
+		mutationFn: (
+			data: Pick<
+				Announcement,
+				'title' | 'description' | 'title_en' | 'description_en' | 'severity' | 'is_active'
+			>
+		) => createAnnouncementApi(data),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: announcementKeys.lists() });
 		}
@@ -48,7 +52,12 @@ export function useUpdateAnnouncement() {
 			data
 		}: {
 			id: string;
-			data: Partial<Pick<Announcement, 'title' | 'description' | 'severity' | 'is_active'>>;
+			data: Partial<
+				Pick<
+					Announcement,
+					'title' | 'description' | 'title_en' | 'description_en' | 'severity' | 'is_active'
+				>
+			>;
 		}) => updateAnnouncementApi(id, data),
 		onSuccess: (_res, variables) => {
 			queryClient.invalidateQueries({ queryKey: announcementKeys.detail(variables.id) });

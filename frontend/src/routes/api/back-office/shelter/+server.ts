@@ -59,7 +59,7 @@ function seedEvacuee(
 	};
 }
 
-/** Auto-assign the next shelter code in the SHxxx sequence. */
+/** Auto-assign the shared shelter/host-house code sequence in the SHxxx format. */
 async function nextShelterCode(): Promise<string> {
 	const masters = await listShelterMasters();
 	let max = 0;
@@ -141,7 +141,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			const master = {
 				_id: `shelter:${ulid()}`,
 				type: 'shelter' as const,
-				schema_v: 4 as const,
+				schema_v: 5 as const,
 				code,
 				...input,
 				created_at: ts,
@@ -185,6 +185,7 @@ export const GET: RequestHandler = async ({ request }) => {
 				return {
 					code: migrated.code,
 					name: migrated.name,
+					site_kind: migrated.site_kind ?? 'evacuation_center',
 					db: shelterDbName(migrated.code),
 					operation_status: migrated.operation_status ?? 'standby',
 					capacity: migrated.capacity ?? 0,

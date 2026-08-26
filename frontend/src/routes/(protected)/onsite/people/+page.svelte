@@ -7,6 +7,7 @@
 		RegistrationSaveErrorAlert,
 		useCreateEvacueeWithScreening,
 		buildSaveFailureReport,
+		EVACUEE_PAGE_I18N,
 		type EvacueeInput,
 		type Evacuee,
 		type SaveFailureReport
@@ -17,7 +18,10 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { languageStore } from '$lib/stores/language.svelte';
 
+	const t = $derived(getTranslation(EVACUEE_PAGE_I18N, languageStore.current));
 	const createMutation = useCreateEvacueeWithScreening();
 
 	let isFastTrack = $derived(page.url.searchParams.get('mode') === 'fast_track');
@@ -50,12 +54,12 @@
 			return evacuee;
 		} catch (err) {
 			saveError = buildSaveFailureReport(err, {
-				summaryTh: 'บันทึกไม่สำเร็จ — ระบบปฏิเสธเอกสาร',
+				summaryTh: t.saveErrorSummary,
 				shelterCode,
 				rollbackNote:
 					'compensated: deleted medical + evacuee created in this submit (screening is append-only and is not deleted if it was written)'
 			});
-			toast.error('บันทึกไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน');
+			toast.error(t.toastSaveFailed);
 			throw err;
 		}
 	}
@@ -64,7 +68,7 @@
 </script>
 
 <svelte:head>
-	<title>ลงทะเบียนผู้ประสบภัย | SmartShelter Thailand</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-5xl px-4 py-4 md:px-6 md:py-6">
@@ -81,10 +85,10 @@
 			class="mb-3 inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
 		>
 			<ArrowLeft class="size-4" />
-			<span>กลับ</span>
+			<span>{t.back}</span>
 		</button>
 
-		<h1 class="mb-4 text-2xl font-bold md:mb-6 md:text-3xl">ลงทะเบียนผู้ประสบภัย</h1>
+		<h1 class="mb-4 text-2xl font-bold md:mb-6 md:text-3xl">{t.title}</h1>
 
 		{#if saveError}
 			<RegistrationSaveErrorAlert report={saveError} ondismiss={() => (saveError = null)} />
@@ -100,9 +104,9 @@
 					<Zap class="size-5 fill-yellow-500" />
 				</div>
 				<div>
-					<h2 class="text-sm font-bold text-purple-900">การลงทะเบียนช่องทางพิเศษ (Fast Track)</h2>
+					<h2 class="text-sm font-bold text-purple-900">{t.fastTrackTitle}</h2>
 					<p class="text-xs font-semibold text-purple-700">
-						สำหรับกลุ่มเปราะบาง มีความต้องการพิเศษ หรือกรณีฉุกเฉินทางการแพทย์
+						{t.fastTrackDesc}
 					</p>
 				</div>
 			</div>

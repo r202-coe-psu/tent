@@ -21,6 +21,7 @@ function masterToBasic(master: ShelterMaster): ShelterBasic {
 	return {
 		code: master.code,
 		name: master.name,
+		site_kind: master.site_kind ?? 'evacuation_center',
 		operation_status: master.operation_status ?? 'standby',
 		capacity: master.capacity ?? 0,
 		province: master.province ?? null
@@ -31,6 +32,7 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 	return {
 		code: master.code,
 		name: master.name,
+		site_kind: master.site_kind ?? 'evacuation_center',
 		db: shelterDbName(master.code),
 		operation_status: master.operation_status ?? 'standby',
 		capacity: master.capacity ?? 0,

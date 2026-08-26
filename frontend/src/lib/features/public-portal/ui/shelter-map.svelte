@@ -1,6 +1,7 @@
 <script lang="ts">
 	/* eslint-disable @typescript-eslint/no-explicit-any */
 	import { onMount, onDestroy } from 'svelte';
+	import type { PublicSiteKind } from '../domain/types';
 
 	interface ShelterGeo {
 		lat: number;
@@ -13,7 +14,9 @@
 		status: string;
 		capacity: number;
 		distance: number;
+		site_kind?: PublicSiteKind;
 		type?: string;
+		admin_type?: string | null;
 		geo?: ShelterGeo | null;
 	}
 
@@ -53,25 +56,41 @@
 	function getStatusText(status: string): string {
 		switch (status) {
 			case 'OPEN':
-				return 'เปิดใช้งาน';
+				return t.statusOpen;
 			case 'FULL':
-				return 'เต็มความจุ';
+				return t.statusFull;
 			case 'PREPARE':
-				return 'เตรียมพร้อม';
+				return t.statusStandby;
 			case 'CLOSED':
-				return 'ปิดทำการ';
+				return t.statusClosed;
 			default:
-				return 'ปิดทำการ';
+				return t.statusClosed;
 		}
 	}
 
-	function getTypeIcon(type: string | undefined): string {
-		if (!type) return '🏠';
-		if (type.includes('อพยพ')) return '⛺';
-		if (type.includes('แพทย์') || type.includes('พยาบาล')) return '🏥';
-		if (type.includes('วัด')) return '🛕';
-		if (type.includes('โรงเรียน')) return '🏫';
-		return '🏠';
+	function getTypeIcon(siteKind: PublicSiteKind | undefined): string {
+		return siteKind === 'host_house' ? '🏠' : '⛺';
+	}
+
+	function getSiteKindText(siteKind: PublicSiteKind | undefined): string {
+		return siteKind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์อพยพ';
+	}
+
+	function translateAdminType(type: string): string {
+		if (langState.current !== 'en') return type;
+		const map: Record<string, string> = {
+			วัด: 'Temple',
+			โรงเรียน: 'School',
+			หน่วยงานราชการ: 'Government Agency',
+			ศูนย์อพยพ: 'Evacuation Center',
+			มหาวิทยาลัย: 'University',
+			มัสยิด: 'Mosque',
+			โบสถ์: 'Church',
+			พื้นที่เอกชน: 'Private Area',
+			อื่นๆ: 'Other',
+			unspecified: 'Unspecified'
+		};
+		return map[type] || type;
 	}
 
 	onMount(async () => {
@@ -193,7 +212,7 @@
 				bounds.extend(lngLat);
 
 				const color = getStatusColorCode(shelter.status);
-				const icon = getTypeIcon(shelter.type);
+				const icon = getTypeIcon(shelter.site_kind);
 
 				const el = document.createElement('div');
 				// Do not apply position: relative to the root element,
@@ -222,10 +241,10 @@
 				const popup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
 					<div style="font-size:12px;font-family:sans-serif;color:#1e293b;min-width:160px;">
 						<strong style="font-size:14px;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
-						<div style="margin-bottom:2px;font-size:11px;color:#64748b;">${shelter.type || 'ศูนย์พักพิง'}</div>
-						สถานะ: <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
-						ความจุ: <strong>${shelter.capacity}</strong> คน<br/>
-						${shelter.distance > 0 ? `ระยะทาง: <strong>${shelter.distance}</strong> กม.` : ''}
+						<div style="margin-bottom:2px;font-size:11px;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
+						${t.status} <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
+						${t.capacity} <strong>${shelter.capacity}</strong> ${t.people}<br/>
+						${shelter.distance > 0 ? `${t.distance} <strong>${shelter.distance}</strong> ${t.km}` : ''}
 					</div>
 				`);
 
@@ -248,6 +267,11 @@
 			}
 		}
 	});
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_MAP_I18N } from '$lib/constants/i18n';
+
+	let t = $derived(getTranslation(PUBLIC_SHELTER_MAP_I18N, langState.current));
 </script>
 
 <svelte:head>
@@ -260,23 +284,23 @@
 <div
 	class="absolute bottom-8 left-2 z-10 rounded-xl border border-border bg-card/95 px-3 py-2.5 text-xs shadow-lg backdrop-blur-md"
 >
-	<div class="mb-2 font-bold text-foreground">สถานะศูนย์พักพิง</div>
+	<div class="mb-2 font-bold text-foreground">{t.shelterStatus}</div>
 	<div class="flex flex-col gap-1.5">
 		<div class="flex items-center gap-2">
 			<div class="h-3 w-3 rounded-full border border-white bg-[#22c55e] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">เปิดใช้งาน</span>
+			<span class="font-medium text-muted-foreground">{t.statusOpen}</span>
 		</div>
 		<div class="flex items-center gap-2">
 			<div class="h-3 w-3 rounded-full border border-white bg-[#f59e0b] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">เตรียมพร้อม</span>
+			<span class="font-medium text-muted-foreground">{t.statusStandby}</span>
 		</div>
 		<div class="flex items-center gap-2">
 			<div class="h-3 w-3 rounded-full border border-white bg-[#ef4444] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">เต็มความจุ</span>
+			<span class="font-medium text-muted-foreground">{t.statusFull}</span>
 		</div>
 		<div class="flex items-center gap-2">
 			<div class="h-3 w-3 rounded-full border border-white bg-[#94a3b8] shadow-sm"></div>
-			<span class="font-medium text-muted-foreground">ปิดทำการ</span>
+			<span class="font-medium text-muted-foreground">{t.statusClosed}</span>
 		</div>
 	</div>
 </div>
