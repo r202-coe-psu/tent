@@ -137,6 +137,16 @@ describe('TransferServerRepository', () => {
 			if (method === 'GET' && decoded === `/central_ops/${TRANSFER_ID}`) {
 				return { status: 200, data: doc };
 			}
+			// `ref_id` is checked first — it's unique to the ledgerAlreadyWritten idempotency
+			// query, whereas `item_id` is present on both that query and the balance-check query
+			// below (see the "dispatches" test further down for the same distinction).
+			if (
+				method === 'POST' &&
+				decoded === '/shelter_sh001/_find' &&
+				isFindWithField(body, 'ref_id')
+			) {
+				return { status: 200, data: { docs: [] } }; // not written yet — sufficiency still applies
+			}
 			if (
 				method === 'POST' &&
 				decoded === '/shelter_sh001/_find' &&
@@ -252,6 +262,56 @@ describe('TransferServerRepository', () => {
 		await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001');
 
 		expect(ledgerPuts).toHaveLength(0);
+	});
+
+	it('does not re-check stock sufficiency for a retry whose ledger already reduced the balance to exactly zero', async () => {
+		// Regression test: a prior attempt wrote the transfer_out ledger (100kg dispatched,
+		// draining stock to 0) but the final central_ops PUT failed (e.g. a 409), forcing a
+		// retry. The retry's `assertSufficientStock` must not see the now-zero live balance and
+		// wrongly reject an already-committed dispatch as "insufficient stock".
+		const doc = requestedTransfer();
+		const centralPuts: unknown[] = [];
+		adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
+			const decoded = decodeURIComponent(path);
+			if (method === 'GET' && decoded === `/central_ops/${TRANSFER_ID}`) {
+				return { status: 200, data: doc };
+			}
+			if (
+				method === 'POST' &&
+				decoded === '/shelter_sh001/_find' &&
+				isFindWithField(body, 'ref_id')
+			) {
+				// already written by the prior attempt
+				return { status: 200, data: { docs: [{ _id: 'stock_ledger:existing' }] } };
+			}
+			if (
+				method === 'POST' &&
+				decoded === '/shelter_sh001/_find' &&
+				isFindWithField(body, 'item_id')
+			) {
+				// live balance already reflects the prior attempt's ledger write: 100 in, 100 out
+				return {
+					status: 200,
+					data: {
+						docs: [
+							{ type: 'stock_ledger', item_id: 'item:rice', qty: '100', reason: 'receive' },
+							{ type: 'stock_ledger', item_id: 'item:rice', qty: '-100', reason: 'transfer_out' }
+						]
+					}
+				};
+			}
+			if (method === 'PUT' && decoded === `/central_ops/${TRANSFER_ID}`) {
+				centralPuts.push(body);
+				return { status: 201, data: { ok: true, id: 'x', rev: '2-shipped' } };
+			}
+			return { status: 200, data: {} };
+		});
+
+		const repo = new TransferServerRepository('central_ops', 'SH001');
+		const result = await repo.transition(TRANSFER_ID, 'shipped', 'Staff A', 'SH001');
+
+		expect(result.status).toBe('shipped');
+		expect(centralPuts).toHaveLength(1);
 	});
 
 	it('dispatches a multi-item transfer: writes a ledger entry for every item, not just the first', async () => {

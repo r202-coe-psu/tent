@@ -20,7 +20,7 @@ import {
 	assertActorMayTransition,
 	TransferAuthorizationError
 } from '../domain/transfer.authorization';
-import { qtyGte } from '$lib/utils/qty';
+import { qtyAbs, qtyGte } from '$lib/utils/qty';
 
 /**
  * Server-only repository for `stock_transfer` (CR-059 Flow 1 / T-13) — writes
@@ -36,6 +36,12 @@ import { qtyGte } from '$lib/utils/qty';
  * the other shelter's DB this round
  * (see CR-059 Decision Log 2026-08-22) — cross-shelter status sync is
  * refetch-on-interaction, same as `referral` today.
+ *
+ * The same already-written check also gates the `shipped` sufficiency check: a
+ * retry after the ledger write succeeded but the final `central_ops` PUT below
+ * failed must not re-validate stock against a balance this transfer's own
+ * (already-committed) ledger entries already reduced — `assertSufficientStock`
+ * only runs against ledger entries still pending, never ones already written.
  */
 
 const HTTP_OK = 200;
@@ -265,7 +271,6 @@ export class TransferServerRepository {
 		let ledgers: StockLedger[] = [];
 
 		if (to === 'shipped') {
-			await this.assertSufficientStock(latest.from_shelter, latest.items);
 			({ transfer, ledgers } = dispatchTransfer(latest, ctx));
 		} else if (to === 'received') {
 			({ transfer, ledgers } = receiveTransfer(
@@ -283,7 +288,12 @@ export class TransferServerRepository {
 			);
 		}
 
+		// A retry after a partial failure (ledger already written, but the central status PUT
+		// below failed last time — e.g. a 409) must not re-validate stock against a balance this
+		// same transfer's own ledger entries already reduced. Only the entries NOT yet written
+		// are "pending" — sufficiency and the write itself apply to those only.
 		const ledgerDb = shelterDbName(actorShelter);
+		const pendingLedgers: StockLedger[] = [];
 		for (const ledger of ledgers) {
 			const alreadyWritten = await this.ledgerAlreadyWritten(
 				ledgerDb,
@@ -292,8 +302,19 @@ export class TransferServerRepository {
 				ledger.reason
 			);
 			if (!alreadyWritten) {
-				await this.putDoc(ledgerDb, ledger);
+				pendingLedgers.push(ledger);
 			}
+		}
+
+		if (to === 'shipped' && pendingLedgers.length > 0) {
+			await this.assertSufficientStock(
+				latest.from_shelter,
+				pendingLedgers.map((ledger) => ({ item_id: ledger.item_id, qty: qtyAbs(ledger.qty) }))
+			);
+		}
+
+		for (const ledger of pendingLedgers) {
+			await this.putDoc(ledgerDb, ledger);
 		}
 
 		const { status, data } = await this.couchPut<PutResultResponse>(

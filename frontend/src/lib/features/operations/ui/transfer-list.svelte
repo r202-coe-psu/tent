@@ -101,18 +101,24 @@
 							{#if isOutgoing(t) && t.status === 'requested'}
 								<button
 									onclick={() => handleDispatch(t._id)}
+									disabled={dispatchMutation.isPending || cancelMutation.isPending}
 									class={buttonVariants({ size: 'sm' })}
 								>
 									<Truck class="mr-1 h-3.5 w-3.5" />อนุมัติส่งมอบ
 								</button>
 								<button
 									onclick={() => handleCancel(t._id)}
+									disabled={dispatchMutation.isPending || cancelMutation.isPending}
 									class={buttonVariants({ size: 'sm', variant: 'outline' })}
 								>
 									<Ban class="mr-1 h-3.5 w-3.5" />ยกเลิก
 								</button>
 							{:else if !isOutgoing(t) && t.status === 'shipped'}
-								<button onclick={() => handleReceive(t)} class={buttonVariants({ size: 'sm' })}>
+								<button
+									onclick={() => handleReceive(t)}
+									disabled={receiveMutation.isPending}
+									class={buttonVariants({ size: 'sm' })}
+								>
 									<PackageCheck class="mr-1 h-3.5 w-3.5" />ยืนยันรับเข้า
 								</button>
 							{/if}
