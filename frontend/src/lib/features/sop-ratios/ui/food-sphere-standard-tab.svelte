@@ -39,7 +39,7 @@
 
 	// Lookup map for standard UOM from requirement groups
 	const uomMap = $derived(
-		new Map(reqGroups.map((g) => [g._id.replace(/^req_group:/, ''), g.standard_uom]))
+		new Map(reqGroups.map((g) => [g._id.replace(/^requirement_group:/, ''), g.standard_uom]))
 	);
 
 	const filteredStandards = $derived(
@@ -152,7 +152,7 @@
 				>
 					<option value="ALL_GROUPS">ทั้งหมด (ทุกกลุ่ม)</option>
 					{#each reqGroups as g (g)}
-						{@const cleanId = g._id.replace(/^req_group:/, '')}
+						{@const cleanId = g._id.replace(/^requirement_group:/, '')}
 						<option value={cleanId}>{g.name} ({cleanId})</option>
 					{/each}
 				</select>

@@ -64,7 +64,7 @@
 
 	function openEditModal(group: RequirementGroup) {
 		editingId = group._id;
-		formGroupId = group._id.replace(/^req_group:/, '');
+		formGroupId = group._id.replace(/^requirement_group:/, '');
 		formName = group.name;
 		formStandardUom = group.standard_uom;
 		formSource = group.source;
@@ -123,7 +123,7 @@
 			return;
 		}
 
-		const fullId = editingId ? editingId : `req_group:${cleanGroupId}`;
+		const fullId = editingId ? editingId : `requirement_group:${cleanGroupId}`;
 		await saveMutation.mutateAsync({
 			id: fullId,
 			input: {

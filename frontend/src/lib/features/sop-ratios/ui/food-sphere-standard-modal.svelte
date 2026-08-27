@@ -40,7 +40,7 @@
 	const selectedGroup = $derived(
 		groups.find(
 			(g) =>
-				g._id === `req_group:${formReqGroupId}` ||
+				g._id === `requirement_group:${formReqGroupId}` ||
 				g._id === formReqGroupId ||
 				g.name === formReqGroupId
 		)
@@ -56,7 +56,7 @@
 			formSource = standard.source;
 		} else {
 			formSegment = 'ALL';
-			formReqGroupId = groups[0] ? groups[0]._id.replace(/^req_group:/, '') : '';
+			formReqGroupId = groups[0] ? groups[0]._id.replace(/^requirement_group:/, '') : '';
 			formDailyDemand = '';
 			formEffectiveDate = new Date().toISOString().slice(0, 10);
 			formSource = shelterCode && !isSA ? 'SHELTER_OVERRIDE' : 'SPHERE_BASELINE';
@@ -74,7 +74,7 @@
 		const cleanGroupId = formReqGroupId
 			.trim()
 			.toUpperCase()
-			.replace(/^REQ_GROUP:/, '');
+			.replace(/^REQUIREMENT_GROUP:/, '');
 		if (!cleanGroupId) {
 			formErrors.reqGroupId = 'กรุณาระบุกลุ่มความต้องการ';
 		}
@@ -90,7 +90,7 @@
 			return;
 		}
 
-		const docId = `sphere:${formSegment}:${cleanGroupId}`;
+		const docId = `food_sphere_standard:${formSegment}:${cleanGroupId}`;
 		await saveMutation.mutateAsync({
 			id: docId,
 			input: {
@@ -156,7 +156,7 @@
 							class="mt-1 w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
 						>
 							{#each groups as g (g)}
-								{@const cleanId = g._id.replace(/^req_group:/, '')}
+								{@const cleanId = g._id.replace(/^requirement_group:/, '')}
 								<option value={cleanId}>{g.name} ({cleanId})</option>
 							{/each}
 						</select>

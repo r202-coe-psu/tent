@@ -43,7 +43,7 @@ describe('Food Sphere Calculation Engine', () => {
 	it('does not fallback across different req_group_id', () => {
 		const customStandards: FoodSphereStandard[] = [
 			{
-				_id: 'sphere:ALL:FOOD_ENERGY',
+				_id: 'food_sphere_standard:ALL:FOOD_ENERGY',
 				type: 'food_sphere_standard',
 				schema_v: 1,
 				target_segment: 'ALL',

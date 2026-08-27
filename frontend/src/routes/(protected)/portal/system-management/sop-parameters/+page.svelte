@@ -101,7 +101,6 @@
 	}
 </script>
 
-น
 <svelte:head>
 	<title>พารามิเตอร์ระบบส่วนกลาง — SmartShelter</title>
 	<meta

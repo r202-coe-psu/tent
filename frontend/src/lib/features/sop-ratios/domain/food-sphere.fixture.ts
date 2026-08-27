@@ -2,7 +2,7 @@ import type { FoodSphereStandard } from './food-sphere';
 
 export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
-		_id: 'sphere:ALL:FOOD_ENERGY',
+		_id: 'food_sphere_standard:ALL:FOOD_ENERGY',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'ALL',
@@ -16,7 +16,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:ALL:FOOD_FAT',
+		_id: 'food_sphere_standard:ALL:FOOD_FAT',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'ALL',
@@ -30,7 +30,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:ALL:FOOD_PROTEIN',
+		_id: 'food_sphere_standard:ALL:FOOD_PROTEIN',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'ALL',
@@ -44,7 +44,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:INFANT_0_6:FOOD_ENERGY',
+		_id: 'food_sphere_standard:INFANT_0_6:FOOD_ENERGY',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'INFANT_0_6',
@@ -58,7 +58,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:INFANT_6_23:FOOD_ENERGY',
+		_id: 'food_sphere_standard:INFANT_6_23:FOOD_ENERGY',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'INFANT_6_23',
@@ -72,7 +72,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:CHILD_2_5:FOOD_ENERGY',
+		_id: 'food_sphere_standard:CHILD_2_5:FOOD_ENERGY',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'CHILD_2_5',
@@ -86,7 +86,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:CHILD_2_5:FOOD_PROTEIN',
+		_id: 'food_sphere_standard:CHILD_2_5:FOOD_PROTEIN',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'CHILD_2_5',
@@ -100,7 +100,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:PREGNANT:FOOD_ENERGY',
+		_id: 'food_sphere_standard:PREGNANT:FOOD_ENERGY',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'PREGNANT',
@@ -114,7 +114,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:PREGNANT:FOOD_PROTEIN',
+		_id: 'food_sphere_standard:PREGNANT:FOOD_PROTEIN',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'PREGNANT',
@@ -128,7 +128,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:PREGNANT:FOOD_FAT',
+		_id: 'food_sphere_standard:PREGNANT:FOOD_FAT',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'PREGNANT',
@@ -142,7 +142,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:LACTATING:FOOD_ENERGY',
+		_id: 'food_sphere_standard:LACTATING:FOOD_ENERGY',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'LACTATING',
@@ -156,7 +156,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:LACTATING:FOOD_PROTEIN',
+		_id: 'food_sphere_standard:LACTATING:FOOD_PROTEIN',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'LACTATING',
@@ -170,7 +170,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:ELDERLY:FOOD_ENERGY',
+		_id: 'food_sphere_standard:ELDERLY:FOOD_ENERGY',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'ELDERLY',
@@ -184,7 +184,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 		created_by: 'system'
 	},
 	{
-		_id: 'sphere:ELDERLY:FOOD_PROTEIN',
+		_id: 'food_sphere_standard:ELDERLY:FOOD_PROTEIN',
 		type: 'food_sphere_standard',
 		schema_v: 1,
 		target_segment: 'ELDERLY',
