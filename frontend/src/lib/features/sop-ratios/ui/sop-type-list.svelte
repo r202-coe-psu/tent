@@ -24,6 +24,16 @@
 
 	const tabs = $derived([
 		{
+			key: 'sphere_standard' as const,
+			label: 'ตัวคูณมาตรฐานดำรงชีพ (Sphere Standard)',
+			count: sphereCount
+		},
+		{
+			key: 'alert_threshold' as const,
+			label: 'เกณฑ์การแจ้งเตือน (Alert Threshold)',
+			count: alertCount
+		},
+		{
 			key: 'food_sphere_standard' as const,
 			label: 'มาตรฐานการดำรงชีพด้านอาหาร (Food Sphere Standard)',
 			count: foodSphereCount
@@ -37,16 +47,6 @@
 			key: 'replenishment_policy' as const,
 			label: 'นโยบายการเติมสต็อก (Replenishment Policy)',
 			count: replenishmentCount
-		},
-		{
-			key: 'sphere_standard' as const,
-			label: 'ตัวคูณมาตรฐานดำรงชีพ (Sphere Standard)',
-			count: sphereCount
-		},
-		{
-			key: 'alert_threshold' as const,
-			label: 'เกณฑ์การแจ้งเตือน (Alert Threshold)',
-			count: alertCount
 		}
 	]);
 </script>
