@@ -137,6 +137,7 @@ export {
 	type RequirementGroup,
 	type RequirementGroupInput
 } from './domain/requirement-group';
+export { DEFAULT_REQUIREMENT_GROUPS } from './domain/requirement-group.fixture';
 
 // Domain: Replenishment Policy
 export {

@@ -87,6 +87,9 @@ import {
 	type SopRatioKey
 } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
+import { DEFAULT_FOOD_SPHERE_STANDARDS } from '$lib/features/sop-ratios/domain/food-sphere.fixture';
+import { DEFAULT_REPLENISHMENT_POLICIES } from '$lib/features/sop-ratios/domain/replenishment-policy.fixture';
+import { DEFAULT_REQUIREMENT_GROUPS } from '$lib/features/sop-ratios/domain/requirement-group.fixture';
 import {
 	calculateResources,
 	FORMULA_V,
@@ -223,10 +226,11 @@ async function setSecurity(db: string, security: CouchDbSecurity): Promise<void>
 }
 
 // PUT individual doc — 201 created, 409 conflict (idempotent seed) both ok.
-async function putDoc(db: string, doc: Record<string, unknown>): Promise<void> {
-	const { status } = await couchReq('PUT', `/${db}/${encodeURIComponent(doc._id as string)}`, doc);
+async function putDoc(db: string, doc: Record<string, unknown> | { _id: string }): Promise<void> {
+	const id = (doc as { _id: string })._id;
+	const { status } = await couchReq('PUT', `/${db}/${encodeURIComponent(id)}`, doc);
 	if (status !== 201 && status !== 409)
-		throw new Error(`PUT ${doc._id} → ${db} failed (HTTP ${status})`);
+		throw new Error(`PUT ${id} → ${db} failed (HTTP ${status})`);
 }
 
 async function bulkDocs(
@@ -1096,6 +1100,28 @@ async function seedCatalogSopRatios(): Promise<void> {
 	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
 }
 
+async function seedCatalogFoodSphereParameters(): Promise<void> {
+	await ensureDb('catalog');
+
+	for (const doc of DEFAULT_REQUIREMENT_GROUPS) {
+		await putDoc('catalog', doc);
+	}
+
+	for (const doc of DEFAULT_FOOD_SPHERE_STANDARDS) {
+		await putDoc('catalog', doc);
+	}
+
+	for (const doc of DEFAULT_REPLENISHMENT_POLICIES) {
+		await putDoc('catalog', doc);
+	}
+
+	console.log(
+		`  ✓ catalog: ${DEFAULT_REQUIREMENT_GROUPS.length} requirement groups, ` +
+			`${DEFAULT_FOOD_SPHERE_STANDARDS.length} food sphere standards, ` +
+			`${DEFAULT_REPLENISHMENT_POLICIES.length} replenishment policies seeded`
+	);
+}
+
 async function deployShelterAccessDesign(db: string, shelterCode: string): Promise<void> {
 	const ddocId = '_design/access';
 	const { status: getStatus, data: existingDdoc } = await couchReq(
@@ -1198,7 +1224,19 @@ async function deployCatalogMangoIndexes(db: string): Promise<void> {
 		name: 'catalog-type-target-idx',
 		type: 'json'
 	});
-	console.log(`  ✓ ${db}: Mango indexes for sop_profile and audit queries deployed`);
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'target_segment', 'req_group_id', 'effective_date'] },
+		name: 'catalog-food-sphere-idx',
+		type: 'json'
+	});
+	await couchReq('POST', `/${db}/_index`, {
+		index: { fields: ['type', 'scope_type', 'target_id'] },
+		name: 'catalog-replenishment-policy-idx',
+		type: 'json'
+	});
+	console.log(
+		`  ✓ ${db}: Mango indexes for sop_profile, audit, food_sphere, replenishment_policy deployed`
+	);
 }
 
 // ─── seedShelter ──────────────────────────────────────────────────────────────
@@ -2047,6 +2085,7 @@ async function main() {
 		await provisionRegistryShelterDbs();
 		await seedCatalog();
 		await seedCatalogSopRatios();
+		await seedCatalogFoodSphereParameters();
 		await seedShelter(master);
 		await seedShelter2(master);
 		await seedDashboardData(master);
