@@ -159,7 +159,7 @@
 	<meta name="description" content="จัดการค่า SOP ratio มาตรฐานและการปรับแต่งเฉพาะศูนย์พักพิง" />
 </svelte:head>
 
-<div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
+<main class="container mx-auto space-y-4 px-4 py-6">
 	<ConsoleBanner
 		title="5. พารามิเตอร์มาตรฐานและกฎเกณฑ์ (SOP Parameters & Rules)"
 		description="กำหนดพารามิเตอร์ SOP มาตรฐาน (Sphere Standard) สำหรับการคำนวณทรัพยากร และค่าปรับแต่งเฉพาะศูนย์พักพิง"
@@ -253,7 +253,7 @@
 			<AlertThresholdEditor />
 		{/if}
 	</div>
-</div>
+</main>
 
 {#if bulkEditOpen && activeProfile}
 	<SopEditForm profile={activeProfile} onClose={() => (bulkEditOpen = false)} />

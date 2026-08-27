@@ -109,7 +109,7 @@
 	/>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
+<main class="container mx-auto space-y-4 px-4 py-6">
 	<ConsoleBanner
 		title="4. พารามิเตอร์ระบบส่วนกลาง (Global Master Parameters)"
 		description="จัดการพารามิเตอร์ SOP มาตรฐาน (Sphere Standard) ระดับระบบ — เขียนลงฐานข้อมูลกลาง catalog ทั้งหมด ไม่ผูกกับศูนย์พักพิงใด"
@@ -201,7 +201,7 @@
 			<AlertThresholdEditor />
 		{/if}
 	</div>
-</div>
+</main>
 
 {#if bulkEditOpen && activeProfile}
 	<SopEditForm profile={activeProfile} onClose={() => (bulkEditOpen = false)} />
