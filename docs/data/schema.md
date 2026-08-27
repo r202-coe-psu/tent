@@ -1011,19 +1011,20 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `updated_at` | str | req | เวลา ISO-8601 UTC |
 | `updated_by` | str | req | ผู้ดำเนินการอัปเดต |
 
-### 4.6 `food_sphere_standard` — `sphere:{target_segment}:{req_group_id}` · **schema_v 1**
+### 4.6 `food_sphere_standard` — `food_sphere_standard:{target_segment}:{req_group_id}` · **schema_v 1**
 
-> **schema_v 1** — กำหนดเกณฑ์มาตรฐานปริมาณความต้องการสารอาหารและเสบียงต่อคนต่อวัน อ้างอิงตามมาตรฐาน Sphere Handbook (CR-058, CR-093)
+> **schema_v 1** — กำหนดเกณฑ์มาตรฐานปริมาณความต้องการสารอาหารและเสบียงต่อคนต่อวัน อ้างอิงตามมาตรฐาน Sphere Handbook (CR-058, CR-095)
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `_id` | str | req | รูปแบบ `"sphere:{target_segment}:{req_group_id}"` เช่น `"sphere:ALL:FOOD_ENERGY"` หรือ `"sphere:INFANT_0_6:FOOD_ENERGY"` |
+| `_id` | str | req | รูปแบบ `"food_sphere_standard:{target_segment}:{req_group_id}"` เช่น `"food_sphere_standard:ALL:FOOD_ENERGY"` หรือ `"food_sphere_standard:INFANT_0_6:FOOD_ENERGY"` |
 | `_rev` | str | sys | MVCC revision ของ CouchDB |
 | `type` | str | req | บังคับเป็น `"food_sphere_standard"` |
 | `schema_v` | int | req | เวอร์ชันของสกีมา เริ่มต้น `1` |
 | `target_segment` | enum(`ALL`,`INFANT_0_6`,`INFANT_6_23`,`CHILD_2_5`,`PREGNANT`,`LACTATING`,`ELDERLY`) | req | กลุ่มเป้าหมายประชากร |
-| `req_group_id` | str | req | รหัสกลุ่มความต้องการ (Raw group ID เช่น `"FOOD_ENERGY"`, `"FOOD_FAT"`, `"FOOD_PROTEIN"` อ้างอิงเอกสาร `req_group:{group_id}`) |
+| `req_group_id` | str | req | รหัสกลุ่มความต้องการ (Raw group ID เช่น `"FOOD_ENERGY"`, `"FOOD_FAT"`, `"FOOD_PROTEIN"` อ้างอิงเอกสาร `requirement_group:{group_id}`) |
 | `daily_demand` | num>0 | req | ปริมาณความต้องการต่อคนต่อวัน (> 0) เช่น `2100` |
+| `standard_uom` | str | opt | หน่วยนับมาตรฐานที่แสดงผล (ดึงค่าตั้งต้นจาก `requirement_group.standard_uom`) เช่น `"kcal"`, `"gram"` |
 | `effective_date` | str | req | วันที่มีผลบังคับใช้ รูปแบบ ISO Date (`YYYY-MM-DD`) |
 | `source` | enum(`SPHERE_BASELINE`,`SHELTER_OVERRIDE`) | req | แหล่งที่มา: `SPHERE_BASELINE` (ส่วนกลางใน catalog DB) หรือ `SHELTER_OVERRIDE` (เฉพาะศูนย์ใน `shelter_{shelter_code}` DB) |
 | `shelter_code` | str | opt | มีค่าเฉพาะเมื่อ `source = SHELTER_OVERRIDE`; ไม่มีเมื่อเป็น `SPHERE_BASELINE` (ใช้ตรวจ doc หลง db) |
@@ -1032,19 +1033,19 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `updated_by` | str | req | Username ของผู้แก้ไขล่าสุด (audit trail) |
 
 **Index & Views:**
-- Primary Key lookup: `sphere:{target_segment}:{req_group_id}`
+- Primary Key lookup: `food_sphere_standard:{target_segment}:{req_group_id}`
 - Mango index: `(type, target_segment, req_group_id, effective_date)`
 
 ---
 
-### 4.7 `requirement_group` — `req_group:{group_id}` · **schema_v 1**
+### 4.7 `requirement_group` — `requirement_group:{group_id}` · **schema_v 1**
 
-> **schema_v 1** — กลุ่มความต้องการสารอาหารหลักและเกณฑ์การแปลงหน่วยสินค้าเข้าสู่มาตรฐานโภชนาการ (CR-058, CR-093)  
-> **ID Pattern:** ใช้ prefix `req_group:` (เช่น `req_group:FOOD_ENERGY`)
+> **schema_v 1** — กลุ่มความต้องการสารอาหารหลักและเกณฑ์การแปลงหน่วยสินค้าเข้าสู่มาตรฐานโภชนาการ (CR-058, CR-095)  
+> **ID Pattern:** ใช้ prefix `requirement_group:` (เช่น `requirement_group:FOOD_ENERGY`)
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `_id` | str | req | รูปแบบ `"req_group:{group_id}"` เช่น `"req_group:FOOD_ENERGY"` |
+| `_id` | str | req | รูปแบบ `"requirement_group:{group_id}"` เช่น `"requirement_group:FOOD_ENERGY"` |
 | `_rev` | str | sys | MVCC revision ของ CouchDB |
 | `type` | str | req | บังคับเป็น `"requirement_group"` |
 | `schema_v` | int | req | เวอร์ชันของสกีมา เริ่มต้น `1` |
@@ -1064,14 +1065,14 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 - `share_percent`: `num (opt)` — สัดส่วนเป้าหมายในเมนู (0–100%); validation warning เมื่อผลรวมในกลุ่ม ≠ 100% แต่ไม่บล็อก save
 
 **Index & Views:**
-- Primary Key lookup: `req_group:{group_id}`
+- Primary Key lookup: `requirement_group:{group_id}`
 - Mango index: `(type, name)`
 
 ---
 
 ### 4.8 `replenishment_policy` — `replenishment_policy:{scope_type}:{target_id}` · **schema_v 1**
 
-> **schema_v 1** — นโยบายการเติมสต็อกและเกณฑ์ความปลอดภัยสำหรับแจ้งเตือน Days of Coverage (DoC) (CR-058, CR-093, Task T-22)
+> **schema_v 1** — นโยบายการเติมสต็อกและเกณฑ์ความปลอดภัยสำหรับแจ้งเตือน Days of Coverage (DoC) (CR-058, CR-095, Task T-22)
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |

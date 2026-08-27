@@ -1,8 +1,8 @@
 ---
-id: CR-093
+id: CR-095
 title: Food Sphere Standard, Requirement Group และ Replenishment Policy Canonical Schemas (โภชนาการและการเติมสต็อกเสบียง)
 status: proposed
-date: 2026-08-26
+date: 2026-08-27
 requested_by: ทีมพัฒนาคลังสินค้าและโภชนาการ (Module D Kitchen & Module C Supply) / Sphere Standard Plan
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -18,7 +18,7 @@ affects:
   - frontend/src/lib/features/kitchen/
 ---
 
-# CR-093 — Food Sphere Standard, Requirement Group & Replenishment Policy Canonical Schemas
+# CR-095 — Food Sphere Standard, Requirement Group & Replenishment Policy Canonical Schemas
 
 ## สรุป (TL;DR)
 
@@ -40,16 +40,17 @@ affects:
 ### FR-01: โครงสร้างข้อมูลเกณฑ์โภชนาการมาตรฐาน Sphere (`food_sphere_standard`)
 
 1. ระบบต้องรองรับเอกสาร `food_sphere_standard` (`schema_v: 1`) ในฐานข้อมูล `catalog` (ส่วนกลาง, `source = SPHERE_BASELINE`) และ `shelter_{shelter_code}` (ศูนย์ปรับแต่ง, `source = SHELTER_OVERRIDE`)
-2. รูปแบบ Primary Key (`_id`): `"sphere:{target_segment}:{req_group_id}"` โดย `req_group_id` คือ Raw Group ID (เช่น `"FOOD_ENERGY"`, `"FOOD_FAT"`, `"FOOD_PROTEIN"` อ้างอิงเอกสาร `req_group:{group_id}`)
+2. รูปแบบ Primary Key (`_id`): `"food_sphere_standard:{target_segment}:{req_group_id}"` โดย `req_group_id` คือ Raw Group ID (เช่น `"FOOD_ENERGY"`, `"FOOD_FAT"`, `"FOOD_PROTEIN"` อ้างอิงเอกสาร `requirement_group:{group_id}`)
 3. ค่า `target_segment` ต้องอยู่ใน Whitelist: `ALL`, `INFANT_0_6`, `INFANT_6_23`, `CHILD_2_5`, `PREGNANT`, `LACTATING`, `ELDERLY`
 4. ค่า `daily_demand` ต้องเป็นตัวเลขมากกว่า 0 (`num > 0`)
-5. ค่า `effective_date` ต้องเป็นรูปแบบ ISO Date (`YYYY-MM-DD`)
-6. เมื่อ `source = SHELTER_OVERRIDE` ต้องระบุฟิลด์ `shelter_code`; หากเป็น `SPHERE_BASELINE` ต้องไม่มีฟิลด์ `shelter_code`
+5. ฟิลด์ `standard_uom` (opt, เช่น `"kcal"`, `"gram"`) แคชหน่วยนับมาตรฐานจาก Requirement Group เพื่อแสดงผล
+6. ค่า `effective_date` ต้องเป็นรูปแบบ ISO Date (`YYYY-MM-DD`)
+7. เมื่อ `source = SHELTER_OVERRIDE` ต้องระบุฟิลด์ `shelter_code`; หากเป็น `SPHERE_BASELINE` ต้องไม่มีฟิลด์ `shelter_code`
 
 ### FR-02: โครงสร้างข้อมูลกลุ่มความต้องการสารอาหารและการแปลงหน่วยสินค้า (`requirement_group`)
 
 1. ระบบต้องรองรับเอกสาร `requirement_group` (`schema_v: 1`) ในฐานข้อมูล `catalog` (ส่วนกลาง, `source = SPHERE_BASELINE`) และ `shelter_{shelter_code}` (ศูนย์ปรับแต่ง, `source = SHELTER_OVERRIDE`)
-2. รูปแบบ Primary Key (`_id`): `"req_group:{group_id}"` (เช่น `"req_group:FOOD_ENERGY"`, `"req_group:FOOD_FAT"`, `"req_group:FOOD_PROTEIN"`)
+2. รูปแบบ Primary Key (`_id`): `"requirement_group:{group_id}"` (เช่น `"requirement_group:FOOD_ENERGY"`, `"requirement_group:FOOD_FAT"`, `"requirement_group:FOOD_PROTEIN"`)
 3. ฟิลด์ `standard_uom` (เช่น `"kcal"`, `"gram"`, `"litre"`) ต้องถูกใช้เป็นค่าตั้งต้น (Auto-fill) สำหรับแสดงผลหน่วยนับในหน้าจอ Food Sphere Standard
 4. รายการ `item_maps[]` ประกอบด้วย:
    - `item_id`: `str (req)` อ้างอิง `item_master:{sku|ulid}`
@@ -147,13 +148,14 @@ affects:
 ## 5. Acceptance Criteria & Definition of Done
 
 - [ ] **AC-01:** `docs/data/schema.md` ระบุสเปกระดับฟิลด์ของ `food_sphere_standard`, `requirement_group`, และ `replenishment_policy` ครบถ้วน พร้อม Index และ Validation Rules
-- [ ] **AC-02:** Primary Key pattern ตรงตามมาตรฐาน: `sphere:{target_segment}:{req_group_id}`, `req_group:{group_id}`, `replenishment_policy:{scope_type}:{target_id}`
+- [ ] **AC-02:** Primary Key pattern ตรงตามมาตรฐาน: `food_sphere_standard:{target_segment}:{req_group_id}`, `requirement_group:{group_id}`, `replenishment_policy:{scope_type}:{target_id}`
 - [ ] **AC-03:** Zod schemas และ Model Interfaces ฝั่ง client ตรวจสอบ Type, Positive number constraints, และ Enums ตรงกับ Canonical Schema
-- [ ] **AC-04:** ระบบคำนวณ DoC คืนค่า `'UNCONFIGURED'` (ไม่เกิด $+\infty$ / `NaN`) เมื่อ $\text{Demand} = 0$ หรือยังไม่มีนโยบาย
+- [ ] **AC-04:** ระบบคำนวณ DoC คืนค่า `'UNCONFIGURED'` (ไม่เกิด $+\infty$ / `NaN`) เมื่อ $\text{Demand} = 0$ หรือยังไม่ได้ตั้งค่านโยบาย
 - [ ] **AC-05:** Seed data ทั้ง 14 รายการ Sphere Baseline และ 3 รายการ Replenishment Policies ถูกนำเข้าสู่ฐานข้อมูล `catalog` อย่างถูกต้อง
 
 ---
 
 ## 6. Decision Log
 
-- 2026-08-26 — Proposed ตามแผนงาน `docs/plans/food-sphere-replenishment-schema-cr-plan.md`
+- 2026-08-26 — Proposed ตามแผนงาน `docs/plans/food-sphere-replenishment-schema-cr-plan.md` (เดิมกำหนดเลข CR-093)
+- 2026-08-27 — เปลี่ยนหมายเลขเป็น CR-095 (เนื่องจาก CR-093 ซ้ำ) และปรับแต่ง ID prefix (`food_sphere_standard:`, `requirement_group:`) พร้อมเพิ่มฟิลด์ `standard_uom` ใน `food_sphere_standard` ให้ตรงตาม Code Implementation
