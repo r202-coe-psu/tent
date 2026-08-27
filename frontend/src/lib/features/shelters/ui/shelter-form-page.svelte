@@ -11,6 +11,7 @@
 		useCreateShelter,
 		useUpdateShelter,
 		shelterSchema,
+		type SiteKind,
 		BasicInfoSection,
 		CapacitySection,
 		ZonesFacilitiesSection,
@@ -49,11 +50,13 @@
 	let {
 		id = '',
 		isEdit,
-		basePath
+		basePath,
+		siteKind
 	}: {
 		id?: string;
 		isEdit: boolean;
 		basePath?: string;
+		siteKind?: SiteKind;
 	} = $props();
 
 	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/shelters'));
@@ -137,12 +140,17 @@
 	if (!$formData.luggage_policy) $formData.luggage_policy = { ...EMPTY_LUGGAGE_POLICY };
 	if (!$formData.parking_policy) $formData.parking_policy = { ...EMPTY_PARKING_POLICY };
 
+	$effect(() => {
+		if (!isEdit && siteKind && !$formData.site_kind) $formData.site_kind = siteKind;
+	});
+
 	// Populate form data when edit query loads.
 	$effect(() => {
 		if (shelterQuery.data) {
 			const d = shelterQuery.data;
 			$formData = {
 				name: d.name,
+				site_kind: d.site_kind,
 				operation_status: d.operation_status,
 				shelter_type: d.shelter_type ?? null,
 				project_level: d.project_level ?? null,

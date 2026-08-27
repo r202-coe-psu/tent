@@ -85,19 +85,6 @@ describe('POST /api/public/v1/donations', () => {
 		// Mock needs recheck: remaining need is plenty (100 kg)
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 			// Shelter validation: registry lookup
-			if (method === 'GET' && path.includes('/registry')) {
-				return Promise.resolve({
-					status: 200,
-					data: {
-						rows: [
-							{
-								id: 'shelter:01ABCSHELTER',
-								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
-							}
-						]
-					}
-				});
-			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
@@ -155,19 +142,6 @@ describe('POST /api/public/v1/donations', () => {
 
 	it('forwards shelter_pickup logistics to FastAPI', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
-			if (method === 'GET' && path.includes('/registry')) {
-				return Promise.resolve({
-					status: 200,
-					data: {
-						rows: [
-							{
-								id: 'shelter:01ABCSHELTER',
-								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
-							}
-						]
-					}
-				});
-			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
@@ -222,19 +196,6 @@ describe('POST /api/public/v1/donations', () => {
 	it('returns 409 NEED_FULL if the item need target is already fully met', async () => {
 		// Mock needs recheck: target is 50, but we already have 50 or more donated
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
-			if (method === 'GET' && path.includes('/registry')) {
-				return Promise.resolve({
-					status: 200,
-					data: {
-						rows: [
-							{
-								id: 'shelter:01ABCSHELTER',
-								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
-							}
-						]
-					}
-				});
-			}
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
@@ -289,21 +250,169 @@ describe('POST /api/public/v1/donations', () => {
 		expect(data.item_id).toBe('item:rice');
 	});
 
-	it('returns 409 SLOT_FULL if the logistics slot is already fully booked', async () => {
-		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
-			if (method === 'GET' && path.includes('/registry')) {
+	// Race guard: a concurrent donor consumed most of the quota before this
+	// submission read state. The re-check must reject when the requested qty
+	// exceeds what remains — not only when the need is fully closed.
+	function needsMock(qtyTarget: number, existingDeclaredQty: number) {
+		return (path: string, method: string) => {
+			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,
 					data: {
 						rows: [
 							{
-								id: 'shelter:01ABCSHELTER',
-								doc: { _id: 'shelter:01ABCSHELTER', type: 'shelter', code: 'SH001', status: 'open' }
+								doc: {
+									_id: 'donation_campaign:c1',
+									type: 'donation_campaign',
+									status: 'open',
+									needs: [{ item_id: 'item:rice', qty_target: qtyTarget, unit: 'kg' }]
+								}
 							}
 						]
 					}
 				});
 			}
+			if (method === 'GET' && path.includes('donation:')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									_id: 'donation:d1',
+									type: 'donation',
+									campaign_id: 'donation_campaign:c1',
+									status: 'declared',
+									items: [{ item_id: 'item:rice', qty: existingDeclaredQty }]
+								}
+							}
+						]
+					}
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		};
+	}
+
+	/**
+	 * Two open campaigns want rice: c1 has 90 left, c2 has 500. The board sums them into
+	 * 590, but a donation carries one campaign_id, so binding to whichever came first
+	 * refused a 200 kg gift while c2 sat on quota nobody could reach.
+	 */
+	function twoRiceCampaignsMock(firstTarget: number, secondTarget: number) {
+		return (path: string, method: string) => {
+			if (method === 'GET' && path.includes('donation_campaign:')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									_id: 'donation_campaign:c1',
+									type: 'donation_campaign',
+									status: 'open',
+									needs: [{ item_id: 'item:rice', qty_target: firstTarget, unit: 'kg' }]
+								}
+							},
+							{
+								doc: {
+									_id: 'donation_campaign:c2',
+									type: 'donation_campaign',
+									status: 'open',
+									needs: [{ item_id: 'item:rice', qty_target: secondTarget, unit: 'kg' }]
+								}
+							}
+						]
+					}
+				});
+			}
+			if (method === 'GET' && path.includes('donation:')) {
+				return Promise.resolve({ status: 200, data: { rows: [] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		};
+	}
+
+	it('routes a donation to a campaign that can take it, not merely the first', async () => {
+		vi.mocked(adminRaw).mockImplementation(twoRiceCampaignsMock(90, 500));
+		mockFastapiCreate();
+
+		const response = await POST({
+			request: {
+				json: () =>
+					Promise.resolve({
+						...validPayload,
+						items: [{ item_id: 'item:rice', free_text: 'ข้าวสาร', qty: '200', unit: 'kg' }]
+					})
+			},
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		expect(response.status).toBe(200);
+		const [, init] = vi.mocked(fetch).mock.calls[0]!;
+		const body = JSON.parse(String((init as RequestInit).body));
+		expect(body.campaign_id).toBe('donation_campaign:c2');
+	});
+
+	it('refuses a qty only reachable by splitting across campaigns', async () => {
+		// 90 + 500 shows as 590 on the board; no single booking can draw on both.
+		vi.mocked(adminRaw).mockImplementation(twoRiceCampaignsMock(90, 500));
+		mockFastapiCreate();
+
+		const response = await POST({
+			request: {
+				json: () =>
+					Promise.resolve({
+						...validPayload,
+						items: [{ item_id: 'item:rice', free_text: 'ข้าวสาร', qty: '550', unit: 'kg' }]
+					})
+			},
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toBe('NEED_FULL');
+	});
+
+	it('returns 409 NEED_FULL when the requested qty exceeds the remaining quota', async () => {
+		// target 50, already 48 declared → only 2 left, but payload asks for 5
+		vi.mocked(adminRaw).mockImplementation(needsMock(50, 48));
+		mockFastapiCreate();
+
+		const response = await POST({
+			request: { json: () => Promise.resolve(validPayload) },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(409);
+		expect(data.error).toBe('NEED_FULL');
+		expect(data.item_id).toBe('item:rice');
+		// Rejected before the write path — nothing reaches the FastAPI intake buffer.
+		expect(fetch).not.toHaveBeenCalled();
+	});
+
+	it('accepts the booking when the requested qty exactly fits the remaining quota', async () => {
+		// target 50, already 45 declared → exactly 5 left, payload asks for 5
+		vi.mocked(adminRaw).mockImplementation(needsMock(50, 45));
+		mockFastapiCreate();
+
+		const response = await POST({
+			request: { json: () => Promise.resolve(validPayload) },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(200);
+		expect(data.success).toBe(true);
+		expect(fetch).toHaveBeenCalledWith(
+			'http://localhost:9000/public/v1/donations',
+			expect.objectContaining({ method: 'POST' })
+		);
+	});
+
+	it('returns 409 SLOT_FULL if the logistics slot is already fully booked', async () => {
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 			if (method === 'GET' && path.includes('donation_campaign:')) {
 				return Promise.resolve({
 					status: 200,

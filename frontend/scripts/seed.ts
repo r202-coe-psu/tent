@@ -43,6 +43,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { APP_CONFIG_DEFAULTS, APP_CONFIG_DOC_ID } from '$lib/features/shared';
 import {
 	applyMovementToStay,
 	createEvacuee,
@@ -103,11 +104,13 @@ import {
 import { shelterCodeSchema, type AuthorContext, makeDoc, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
+import { parseCouchCredentialUrl } from '$lib/server/couch-credentials';
 import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
 	shelterDbName
 } from '$lib/server/shelter-access-design';
+import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
 import { assertBulkWriteResults, prefixRangeEnd, type BulkWriteResult } from './t31-seed-support';
 // ─── env ──────────────────────────────────────────────────────────────────────
 
@@ -135,6 +138,18 @@ function loadEnv(): Record<string, string> {
 const env = loadEnv();
 const rawCouchUrl =
 	process.env.COUCHDB_ADMIN_URL ?? env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984';
+
+/**
+ * Username of the limited-permission public writer (`putAsPublicWriter`), added
+ * to each shelter's `_security.members.names`. Empty when unset — dev then falls
+ * back to admin credentials inside `putAsPublicWriter`.
+ */
+const PUBLIC_WRITER_NAMES: string[] = (() => {
+	const creds = parseCouchCredentialUrl(
+		process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL
+	);
+	return creds ? [creds.user] : [];
+})();
 
 // Node's native fetch rejects URLs with embedded credentials — split them out.
 function parseCouchUrl(raw: string): { baseUrl: string; authHeader: string } {
@@ -259,6 +274,10 @@ const CTX_2: AuthorContext = { shelterCode: SHELTER_CODE_2, createdBy: 'seed' };
 
 const SHELTER_CODE_3 = 'SH003';
 
+// Registry-only, like SH003 — no per-shelter database. Exists so the host-house
+// site kind (CR-067) has a fixture in list/filter/public-projection screens.
+const SHELTER_CODE_4 = 'SH004';
+
 /**
  * Registry master records — upserted on every seed run (name + location always applied).
  *
@@ -267,6 +286,10 @@ const SHELTER_CODE_3 = 'SH003';
  * for the persisted master_data item codes, which is what those two fields store.
  * A shelter must list every vulnerable-group code its evacuees use — the
  * registration/health forms only offer chips whose code is in this list.
+ *
+ * `site_kind` is optional here: omitting it seeds the pre-CR-067 shape that the
+ * read-time migration back-fills to `evacuation_center`, so both the migrated and
+ * the explicitly-tagged paths stay covered.
  */
 const REGISTRY_SHELTERS = [
 	{
@@ -347,6 +370,31 @@ const REGISTRY_SHELTERS = [
 			water_points: 2,
 			handwashing_stations: 4
 		}
+	},
+	{
+		// Host house (CR-067) — the only fixture that carries `site_kind`
+		// explicitly. Small capacity, single zone, no pets: what a private home
+		// taking in evacuees actually looks like.
+		code: SHELTER_CODE_4,
+		name: 'บ้านพี่เลี้ยงชุมชนคอหงส์',
+		site_kind: 'host_house',
+		location: { lat: 7.006114303226103, lng: 100.4967812435841 },
+		shelter_type_key: 'community_hall',
+		capacity: 8,
+		zones: [{ code: 'Z1', name: 'โซนรวม', capacity: 8 }],
+		area_m2: 60,
+		facilities: {
+			toilets_female: 1,
+			toilets_male: 1,
+			toilets_accessible: 0,
+			showers: 1,
+			water_points: 1,
+			handwashing_stations: 1
+		},
+		admission_policy: {
+			pet_policy: { policy: 'not_allowed' },
+			supported_vulnerable_group_keys: ['elderly', 'young_child']
+		}
 	}
 ] as const;
 
@@ -416,9 +464,79 @@ async function seedUsers(): Promise<void> {
 	console.log(
 		`  ✓ _users: sa01 + staff01–staff03 (password shared; ${created} created, ${skipped} already exist)`
 	);
+
+	await seedPublicWriter();
+}
+
+/**
+ * Create the limited-permission public writer used by `putAsPublicWriter`
+ * (public booking POST — CR-070/T-71 — and the donation courier PATCH).
+ *
+ * Roleless on purpose: it is granted per-shelter access as a plain
+ * `_security.members.names` entry, so every write still passes through
+ * `_design/access` validate_doc_update. Only seeded when
+ * `COUCHDB_PUBLIC_WRITER_URL` is configured; local dev without it falls back to
+ * admin credentials inside `putAsPublicWriter`.
+ */
+async function seedPublicWriter(): Promise<void> {
+	const creds = parseCouchCredentialUrl(
+		process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL
+	);
+	if (!creds) {
+		console.log('  – _users: COUCHDB_PUBLIC_WRITER_URL unset — public writer not seeded');
+		return;
+	}
+
+	const { status } = await couchReq(
+		'PUT',
+		`/_users/${USER_PREFIX}${encodeURIComponent(creds.user)}`,
+		{
+			name: creds.user,
+			password: creds.password,
+			display_name: 'Public Writer (BFF)',
+			roles: [],
+			type: 'user',
+			shelter_id: null,
+			affiliation_tags: []
+		}
+	);
+	if (status !== 201 && status !== 409) {
+		throw new Error(`PUT _users/${creds.user} failed (HTTP ${status})`);
+	}
+	console.log(
+		`  ✓ _users: public writer "${creds.user}" (${status === 201 ? 'created' : 'already exists'})`
+	);
 }
 
 // ─── seedRegistry ─────────────────────────────────────────────────────────────
+
+/**
+ * Idempotent PUT of the registry `_design/app` (`by_code` view) so
+ * `findMasterByCode` and the public booking BFF can look a shelter up by code
+ * instead of scanning the whole registry.
+ */
+async function deployRegistryDesign(): Promise<void> {
+	const desired = buildRegistryDesignDoc();
+	const existing = await couchReq('GET', `/registry/${REGISTRY_DESIGN_ID}`);
+	const current =
+		existing.status === 200
+			? (existing.data as { _rev?: string; views?: Record<string, { map: string }> })
+			: null;
+
+	if (current && current.views?.by_code?.map === desired.views.by_code.map) {
+		console.log('  ✓ registry: _design/app already current');
+		return;
+	}
+
+	const { status } = await couchReq('PUT', `/registry/${REGISTRY_DESIGN_ID}`, {
+		...desired,
+		...(current?._rev ? { _rev: current._rev } : {})
+	});
+	if (status !== 201 && status !== 202) {
+		throw new Error(`Cannot deploy registry _design/app (HTTP ${status})`);
+	}
+	console.log('  ✓ registry: _design/app (by_code view) deployed');
+}
 
 async function seedRegistry(master: MasterLookup): Promise<void> {
 	await ensureDb('registry');
@@ -429,6 +547,7 @@ async function seedRegistry(master: MasterLookup): Promise<void> {
 			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
 		}
 	});
+	await deployRegistryDesign();
 
 	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
 	const existingByCode = new Map<string, Record<string, unknown>>();
@@ -453,6 +572,7 @@ async function seedRegistry(master: MasterLookup): Promise<void> {
 		const extras: Record<string, unknown> = {
 			shelter_type: masterCode(master, 'shelter_type', shelter.shelter_type_key)
 		};
+		if ('site_kind' in shelter) extras.site_kind = shelter.site_kind;
 		if ('admission_policy' in shelter) {
 			const { supported_vulnerable_group_keys, ...policy } = shelter.admission_policy;
 			extras.admission_policy = {
@@ -698,6 +818,37 @@ async function seedMasterData(): Promise<MasterLookup> {
 	return master;
 }
 
+/**
+ * `config:app` — the app-wide singleton (schema.md §3.2).
+ *
+ * Seeded at the documented defaults so the document exists to be edited. Readers fall
+ * back to the same values when it is missing, so seeding changes no behaviour; it just
+ * means an operator has somewhere to change the donation TTL without creating a document
+ * by hand.
+ */
+async function seedAppConfig(): Promise<void> {
+	await ensureDb('registry');
+	const ts = now();
+	const id = APP_CONFIG_DOC_ID;
+	const { status: getStatus } = await couchReq('GET', `/registry/${encodeURIComponent(id)}`);
+	if (getStatus === 200) {
+		// Never overwrite: this is operator-tuned configuration, not fixture data.
+		console.log(`  · registry: ${id} already present — left as is`);
+		return;
+	}
+
+	await putDoc('registry', {
+		_id: id,
+		type: 'config',
+		schema_v: 1,
+		...APP_CONFIG_DEFAULTS,
+		created_at: ts,
+		updated_at: ts,
+		created_by: 'seed'
+	});
+	console.log(`  ✓ registry: ${id} (defaults)`);
+}
+
 // ─── seedCatalog ──────────────────────────────────────────────────────────────
 
 async function seedCatalog(): Promise<void> {
@@ -877,7 +1028,24 @@ async function seedCatalog(): Promise<void> {
 async function seedCatalogSopRatios(): Promise<void> {
 	await ensureDb('catalog');
 
-	// Idempotent check: check if the Sphere Baseline master profile already exists in catalog DB
+	// Never overwrite manually managed master profiles. The seed only supplies a
+	// local-development baseline when the catalog has no master at all.
+	const { status: findStatus, data: findData } = await couchReq('POST', '/catalog/_find', {
+		selector: { type: 'sop_profile' },
+		limit: 1
+	});
+	if (findStatus !== 200) {
+		throw new Error(
+			`seedCatalogSopRatios: unable to inspect existing profiles (HTTP ${findStatus})`
+		);
+	}
+	const existingProfiles = (findData as { docs?: unknown[] }).docs ?? [];
+	if (existingProfiles.length > 0) {
+		console.log('  ✓ catalog: SOP Profiles already exist, skipping seed');
+		return;
+	}
+
+	// Idempotent fallback for older development catalog snapshots.
 	// We use the deterministic ID 'master_sphere_baseline' to do an O(1) direct document lookup
 	// NOTE: If the name "Sphere Baseline" is changed in the future, remember to update this deterministicId
 	// to prevent the script from accidentally creating a duplicate master profile.
@@ -913,7 +1081,18 @@ async function seedCatalogSopRatios(): Promise<void> {
 	audit.target_id = fullDocId;
 	audit._id = `audit:seed_sphere_baseline`;
 
-	await bulkDocs('catalog', [profile, audit]);
+	const pointerDoc = {
+		_id: 'sop_profile_active:global',
+		type: 'sop_profile_active',
+		schema_v: 1,
+		active_profile_id: fullDocId,
+		active_slug: profile.slug,
+		active_version: profile.version,
+		updated_at: new Date().toISOString(),
+		updated_by: 'seed'
+	};
+
+	await bulkDocs('catalog', [profile, audit, pointerDoc]);
 	console.log('  ✓ catalog: SOP Ratio "Sphere Baseline" seeded (upgraded if stale)');
 }
 
@@ -986,7 +1165,9 @@ async function provisionShelterDb(shelterCode: string): Promise<void> {
 	await ensureDb(db);
 	await setSecurity(db, {
 		admins: { names: [], roles: ['system_admin'] },
-		members: { names: [], roles: [`shelter:${code}`] }
+		// Public writer joins by name (roleless) so its writes still go through
+		// `_design/access` validate_doc_update — see seedPublicWriter().
+		members: { names: [...PUBLIC_WRITER_NAMES], roles: [`shelter:${code}`] }
 	});
 	await deployShelterViewsFn(db, (path, method, body) => couchReq(method, path, body));
 	await deployShelterAccessDesign(db, code);
@@ -1861,6 +2042,7 @@ async function main() {
 		// Master data first: the shelter masters and every people doc below persist
 		// its item codes, and seedMasterData is what resolves key → code.
 		const master = await seedMasterData();
+		await seedAppConfig();
 		await seedRegistry(master);
 		await provisionRegistryShelterDbs();
 		await seedCatalog();

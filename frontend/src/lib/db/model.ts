@@ -120,8 +120,13 @@ export const phoneSchema = z
 	.regex(/^[0-9]+$/, 'กรุณากรอกเบอร์โทรศัพท์เป็นตัวเลขเท่านั้น')
 	.nullable();
 
-/** Reusable enum for the registration channel. */
-export const registeredViaSchema = z.enum(['app', 'import', 'paper']);
+/**
+ * Reusable enum for the registration channel.
+ *
+ * `web` = public self-booking through the portal (CR-070 D-REG-VIA, T-71).
+ * `api` is reserved for the CR-071 inbound plane and is not accepted yet.
+ */
+export const registeredViaSchema = z.enum(['app', 'import', 'paper', 'web']);
 
 /**
  * Codify the shelter-code shape used across registry + docs (schema.md §3.1):

@@ -22,9 +22,11 @@ import {
 	mergeShelterSecurity,
 	nowIso,
 	deployShelterViews,
-	deployReferralMangoIndexes
+	deployReferralMangoIndexes,
+	deployRegistryDesign
 } from '$lib/server/shelters.admin';
 import { buildValidateDocUpdate, shelterDbName } from '$lib/server/shelter-access-design';
+import { publicWriterName } from '$lib/server/couch-public-writer';
 
 export const prerender = false;
 
@@ -56,7 +58,7 @@ function seedEvacuee(
 	};
 }
 
-/** Auto-assign the next shelter code in the SHxxx sequence. */
+/** Auto-assign the shared shelter/host-house code sequence in the SHxxx format. */
 async function nextShelterCode(): Promise<string> {
 	const masters = await listShelterMasters();
 	let max = 0;
@@ -87,7 +89,15 @@ export const POST: RequestHandler = async ({ request }) => {
 		// 2. _security — read-modify-write to avoid clobbering existing members
 		// (skill: couchdb-pouchdb-bestpractices §4). On first provision this is
 		// a no-op merge; on re-runs it preserves any staff added since.
-		await mergeShelterSecurity(db, { roles: ['system_admin'] }, { roles: [`shelter:${code}`] });
+		// The public writer (CR-070 booking / CR-052 courier PATCH) joins as a plain
+		// member by name — it holds no role, so its writes still pass through
+		// `_design/access` validate_doc_update below.
+		const writerName = publicWriterName();
+		await mergeShelterSecurity(
+			db,
+			{ roles: ['system_admin'] },
+			{ names: writerName ? [writerName] : [], roles: [`shelter:${code}`] }
+		);
 		steps.push({ step: 'security', status: 200 });
 
 		// 3. validate_doc_update design doc (idempotent re-PUT with _rev).
@@ -116,13 +126,17 @@ export const POST: RequestHandler = async ({ request }) => {
 			{ roles: ['system_admin'] },
 			{ roles: [...SHELTER_CAPABILITIES] }
 		);
+		// `_design/app/_view/by_code` — findMasterByCode + the public booking BFF
+		// look shelters up by code; without it both fall back to a full scan.
+		const registryDesign = await deployRegistryDesign();
+		steps.push({ step: 'registry-design', status: registryDesign.status });
 		const masters = await listShelterMasters();
 		if (!masters.some((m) => m.code === code)) {
 			const ts = nowIso();
 			const master = {
 				_id: `shelter:${ulid()}`,
 				type: 'shelter' as const,
-				schema_v: 4 as const,
+				schema_v: 5 as const,
 				code,
 				...input,
 				created_at: ts,
@@ -166,6 +180,7 @@ export const GET: RequestHandler = async ({ request }) => {
 				return {
 					code: migrated.code,
 					name: migrated.name,
+					site_kind: migrated.site_kind ?? 'evacuation_center',
 					db: shelterDbName(migrated.code),
 					operation_status: migrated.operation_status ?? 'standby',
 					capacity: migrated.capacity ?? 0,

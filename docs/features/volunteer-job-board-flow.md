@@ -1,27 +1,25 @@
 ---
 title: "Feature Flow — Volunteer Job Board, Registration & Shifts"
-status: draft for review
+status: active
 created: 2026-07-14
-updated: 2026-07-15
+updated: 2026-08-21
 module: A
-audience: team + stakeholder discussion
+audience: team + developer implementation
 note: >
-  Draft for review ผูก [CR-041](../changes/CR-041-module-a-volunteer-job-board.md) (status: proposed).
-  อิง FR-42/43, T-28/T-29, role-permission-matrix, CR-002 (affiliation_tags).
-  Locked: D-OWNER, D-AFFIL. Open: D-DUTY-ACCESS, D-TIER, D-SHIFT, ….
-  ยังไม่ apply schema/PRD/06-A จนกว่า CR approved + ปิด open decisions ที่บล็อก schema.
+  ผูก CR-041 (status: approved) ครบถ้วนตามมติ 2026-07-22 และ 2026-08-21.
+  อิง FR-42/43, T-28/T-29, role-permission-matrix, schema job/job_application/volunteer/shift_assignment.
 ---
 
 # Volunteer Job Board — Feature Flow & User Journeys
 
 ## สรุป (TL;DR)
 
-- เพิ่ม flow **Job Board** ต่อศูนย์: ประกาศงาน → อาสาสมัคร → จัดกะ → ปรับงานได้ตลอดโดย **Shelter Manager**
-- ขยาย Module A (FR-42/43, T-28/T-29) จาก "ลงทะเบียน + มอบหมายกะ" เป็น **"ตลาดงาน + กะตั้งค่าได้ + ปรับงานได้เสมอ"**
-- **เจ้าของ Job Board = SM เท่านั้น** · SA ไม่ทำ job ops · (ถ้าเปิด) หัวหน้างานช่วยภายใต้ SM
-- อาสามี **อย่างน้อย 2 ชั้น:** *operational* / *staff-capable* — วิธีมอบสิทธิ์ตามกะยังเปิดที่ **D-DUTY-ACCESS**
+- เพิ่ม flow **Job Board** ต่อศูนย์: ประกาศงาน → อาสาสมัครสมัครผ่าน Public (No-Auth) → รับ Digital Ticket / QR Code → สแกน Check-in หน้างาน → จัดกะ → ปรับงานได้ตลอดโดย **Shelter Manager**
+- ขยาย Module A (FR-42/43, T-28/T-29) จาก "ลงทะเบียน + มอบหมายกะ" เป็น **"ตลาดงาน + กะตั้งค่าได้ + Digital Ticket/QR Check-in + ปรับงานได้เสมอ"**
+- **เจ้าของ Job Board = SM เท่านั้น** · SA ไม่ทำ job ops · ไม่มีหัวหน้างานแยกใน R3
+- อาสามี **2 ชั้น:** *operational* (ไม่ต้องมี account) / *staff-capable* (มี account `_users` + **Time-bound Shift Access** สิทธิ์เขียนเปิดเฉพาะในกะ)
+- **Anti-Spam & Zero SMS Cost:** ใช้ Digital Ticket URL/QR Code เป็นหลัก และใช้ reCAPTCHA v3 + Rate Limiting ป้องกันสแปม โดยไม่มีต้นทุน SMS OTP
 - **Track ตัวตนบน login:** แยกว่า user เป็น **อาสา (volunteer)** หรือ **staff ประจำ** ได้ชัดเจนผ่าน `_users.affiliation_tags` (CR-002) — **ไม่**ใช้ RoleKey เป็นตัวบอก (เคาะ **D-AFFIL**)
-- เอกสารนี้เป็น **draft for review** ผูก **[CR-041](../changes/CR-041-module-a-volunteer-job-board.md)** (`proposed`) — ยังไม่ bump schema / ยังไม่แก้ PRD·`06-A` จนกว่า CR approved
 
 ---
 

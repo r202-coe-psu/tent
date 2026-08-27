@@ -5,12 +5,15 @@ export const faqItemSchema = z.object({
 	id: z.string().optional(),
 	question: z.string().min(1, 'กรุณาระบุคำถาม'),
 	answer: z.string().min(1, 'กรุณาระบุคำตอบ'),
+	question_en: z.string().optional(),
+	answer_en: z.string().optional(),
 	is_published: z.boolean().default(true),
 	order: z.number().default(0)
 });
 
 export const publicConfigBodySchema = z.object({
 	faqs: z.record(z.string(), z.array(faqItemSchema)).default({ public: [] }),
+	phone_number: z.string().or(z.literal('')).optional(),
 	line_oa_url: z.string().url('URL ไม่ถูกต้อง').or(z.literal('')).optional(),
 	facebook_url: z.string().url('URL ไม่ถูกต้อง').or(z.literal('')).optional()
 });

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Donation, Donor } from '$lib/features/operations';
+import type { Donation, DonationStatus, Donor } from '$lib/features/operations';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
 
 export interface PublicDonor extends Donor {
@@ -32,6 +32,19 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 		condition?: string;
 		note?: string;
 	}>;
+	/**
+	 * Append-only log of donor edits to `items` (schema.md §2.3, CR-080). Snapshots of
+	 * the whole basket before and after, not diffs — staff reading the booking before
+	 * accepting goods need to see what it used to be without reassembling it.
+	 */
+	revisions?: DonationRevision[];
+}
+
+export interface DonationRevision {
+	at: string;
+	by: 'donor' | 'staff';
+	items_before: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
+	items_after: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
 }
 
 /**
@@ -68,14 +81,40 @@ export const receiveDonationInputSchema = z.object({
 				free_text: z.string().optional(),
 				qty: qtyStrCoercePositiveSchema,
 				unit: z.string().min(1),
+				/**
+				 * `lot_no` is NOT accepted from the client — the server mints it at
+				 * receive time so the per-day sequence stays under one authority
+				 * (CR-088). Zod strips it if a caller sends one anyway.
+				 */
 				lot: z
-					.object({ expiry: z.string().optional(), note: z.string().trim().optional() })
+					.object({
+						expiry: z.string().optional(),
+						note: z.string().trim().optional(),
+						storage_zone: z.string().trim().max(100).optional()
+					})
 					.optional()
 			})
 		)
 		.optional()
 });
 export type ReceiveDonationInput = z.infer<typeof receiveDonationInputSchema>;
+
+/**
+ * Statuses in which a donor may still change their own booking through the public
+ * token routes (T-21 DoD — "Donor แก้/ยกเลิกการจองของตนผ่าน token ได้").
+ *
+ * Only a reservation still awaiting drop-off qualifies. Once goods arrive the count
+ * belongs to staff and the stock ledger, and `cancelled`/`expired` have already
+ * released their quota — reopening either would desync the counter.
+ *
+ * CR-052 adds `pending_review`/`verifying`, which also await drop-off; add them here
+ * when those statuses land so both routes pick the change up at once.
+ */
+const DONOR_EDITABLE_STATUSES = new Set<DonationStatus>(['declared']);
+
+export function isDonorEditable(status: DonationStatus): boolean {
+	return DONOR_EDITABLE_STATUSES.has(status);
+}
 
 const PUBLIC_DONATION_ERROR_MESSAGES: Record<string, string> = {
 	NEED_FULL: 'รายการนี้รับบริจาคครบแล้ว กรุณาเลือกรายการอื่น',

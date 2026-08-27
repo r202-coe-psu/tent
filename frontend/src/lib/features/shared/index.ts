@@ -8,3 +8,12 @@ export {
 	type AuditAction,
 	type AuditEntryInput
 } from './domain/audit';
+
+export {
+	APP_CONFIG_DEFAULTS,
+	APP_CONFIG_DOC_ID,
+	appConfigSchema,
+	isAppConfig,
+	readAppConfig,
+	type AppConfig
+} from './domain/app-config';

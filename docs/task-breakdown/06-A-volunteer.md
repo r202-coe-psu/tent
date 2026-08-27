@@ -2,16 +2,16 @@
 title: "Task Breakdown — Module A — Volunteer"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
+updated: 2026-08-21
 module: A
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
+note: decision-synced 2026-08-21 — CR-041 Module A Job Board, Digital Ticket & Time-Bound Access
 ---
 
 # Module A — Volunteer
 
-> volunteer registration + skills, skill-match + shift assignment
+> volunteer job board, public application, digital ticket & QR check-in, configurable shifts & time-bound duty access
 
-> **หมายเหตุ (CR-002):** คำว่า "Volunteer" ในโมดูลนี้คือ **domain/profile concept** (`volunteer:{ulid}` doc ใน `shelter_{code}`) ไม่ใช่ RBAC RoleKey. การจัดการอาสา (FR-42/43) เป็นความรับผิดชอบของ `shelter_manager` — ไม่มี `volunteer_coordinator` เป็น role แยก. ผู้ที่มี login account สามารถมี `affiliation_tags: ["volunteer"]` เป็น metadata แต่ไม่ให้สิทธิ์ใด ๆ เพิ่ม
+> **หมายเหตุ (CR-002, CR-041):** คำว่า "Volunteer" ในโมดูลนี้คือ **domain/profile concept** (`volunteer:{ulid}`, `job:{ulid}`, `job_application:{ulid}`, `shift_assignment:{ulid}` doc ใน `shelter_{code}`) ไม่ใช่ RBAC RoleKey. การจัดการ Job Board และกะงาน (FR-42/43) เป็นความรับผิดชอบของ `shelter_manager`. ผู้ที่มี login account สามารถมี `affiliation_tags: ["volunteer"]` เป็น metadata เพื่อระบุตัวตน แต่ไม่ให้สิทธิ์ใด ๆ นอกเหนือจาก RoleKey ที่ได้รับในช่วงกะงานที่ active (Time-Bound Duty Access).
 
 - **Team owner:** Team A — ชิโน, นัท, กาน (Volunteer; ดู [Squad Roster](../prd/squad-roster.md))
 - **Phase:** R3
@@ -22,41 +22,42 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 | ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-28 | ⬜ | Volunteer registration + skills + availability | FR-42 | R3 | prod | ส.ค. | 5 | ÷1.6 | 3 | T-18 |
-| T-29 | ⬜ | Skill match + task/shift assignment | FR-43 | R3 | prod | ส.ค. | 6 | ÷1.4 | 4.5 | T-28 |
-|  |  | **รวมทั้งโมดูล** |  |  |  |  | **11** |  | **7.5** |  |
+| T-28 | ⬜ | Volunteer registration + Public Application + Digital Ticket | FR-42 | R3 | prod | ส.ค. | 6 | ÷1.5 | 4 | T-18 |
+| T-29 | ⬜ | Job Board + Configurable Shifts + Time-Bound Access Guard | FR-43 | R3 | prod | ส.ค. | 7 | ÷1.4 | 5 | T-28 |
+|  |  | **รวมทั้งโมดูล** |  |  |  |  | **13** |  | **9** |  |
 
 ## Task Details
 
 > DoD ทุก prod task ยึด [Standard DoD](_index.md#standard-dod): **UI + data/write path + validation + permission + test + demo ของ slice** — รายการด้านล่างคือเกณฑ์เฉพาะของ task นั้นเพิ่มจากมาตรฐานกลาง
 
-### T-28 — Volunteer registration + skills + availability (FR-42)
+### T-28 — Volunteer registration + Public Application + Digital Ticket (FR-42)
 
-**Description:** รับสมัครอาสาสมัคร (Super Volunteers ตาม source Module A) พร้อมบันทึกทักษะ (พยาบาล, ครัว, ขนของ, ล่าม ฯลฯ) และช่วงเวลาที่สะดวก (availability) — ฐานข้อมูลให้ skill match (T-29) และยอดอาสาเป็น input ของ resource calc (T-31)
-
-**Definition of Done:**
-- ฟอร์มสมัคร + profile อาสา: ข้อมูลติดต่อ, skill tags (เลือกจาก master list ตาม schema T-18), availability, ศูนย์ที่สังกัด
-- แก้ไข profile/ทักษะ/ช่วงเวลาของตัวเองได้ภายหลัง
-- เจ้าหน้าที่ค้น/กรองอาสาตามทักษะและช่วงเวลาได้
-- PII อาสา mask ตาม role เช่นเดียวกับผู้พักพิง (NFR-5) + ลง RoPA (T-43) และ test + demo สมัครจริง
-
-### T-29 — Skill match + task/shift assignment (FR-43)
-
-**Description:** จับคู่อาสากับงานตามทักษะที่ต้องการ + จัดตาราง shift — ตอบโจทย์ source Module A "จับคู่อาสาสมัครกับทักษะที่ต้องการ" จำนวนอาสาที่ต้องการต่อวันมาจาก SOP calc (T-31/30)
+**Description:** รับสมัครอาสาสมัครผ่านหน้า Public No-Auth Form พร้อมออก Digital Ticket (URL + QR Code) สำหรับตรวจสอบสถานะและรายงานตัวหน้างาน — ป้องกันสแปมด้วย reCAPTCHA v3 + Rate Limiting (ไม่มีต้นทุน SMS OTP)
 
 **Definition of Done:**
-- สร้างงาน/กะ พร้อมระบุทักษะและจำนวนคนที่ต้องการ → ระบบเสนอรายชื่ออาสาที่ match (ทักษะ + ว่างตรงช่วง)
-- Demand จาก resource calc (T-31 เช่น "ต้องการอาสาครัว N คน") สร้างเป็นงานให้จับคู่ได้ (FR-45 → FR-43)
-- Assign/ถอนอาสาจาก shift ได้พร้อม assignment history, อาสาคนเดียวไม่ถูกซ้อน shift เวลาเดียวกัน (validation)
-- อาสาเห็นตารางงานของตัวเอง, เจ้าหน้าที่เห็นภาพรวมว่ากะไหนยังขาดกี่คน
-- Test matching logic + demo จัดกะ 1 วันที่มีหลายทักษะ
+- ฟอร์มรับสมัครสาธารณะ (`/volunteer`, `/volunteer/jobs/[id]/apply`): ข้อมูลติดต่อ, skill tags (เลือกจาก master list), กะงานที่เลือก, reCAPTCHA v3 check
+- หน้า Digital Ticket (`/volunteer/ticket/[token]`): แสดง QR Code ประจำตัว, สถานะการสมัคร (`pending`/`accepted`), วันเวลานัดหมาย, ปุ่มกดยกเลิก
+- จุดสแกนรายงานตัวหน้างาน (`/volunteers/checkin`): เจ้าหน้าที่สแกน QR Ticket หรือค้นหาชื่อ/เบอร์ เพื่อบันทึกเวลา Check-in/Check-out และ feed ยอด `volunteers_active`
+- บันทึกโปรไฟล์ลง `volunteer:{ulid}` และ `job_application:{ulid}`
+- PII อาสา mask ตาม role (NFR-5) + ลง RoPA และ Unit/E2E tests ครบถ้วน
+
+### T-29 — Job Board + Configurable Shifts + Time-Bound Access Guard (FR-43)
+
+**Description:** Shelter Manager จัดการ Job Board ประจำศูนย์ (สร้าง/แก้ไข/ปิดรับสมัคร), ตั้งค่าโควตาและสถานะ, จัดการกะงาน (Template + Custom Override), และควบคุมสิทธิ์ **Time-bound Shift Access** สำหรับอาสากลุ่ม staff-capable
+
+**Definition of Done:**
+- Back-office Job Board (`/volunteers/jobs`): แสดงรายการงาน, โควตา (`quota`, `slots_confirmed`, `slots_pending`), ป้ายสถานะเปิดรับ, toggle auto-accept (เฉพาะ operational)
+- Review & Approval flow: SM ตรวจสอบใบสมัคร กดยืนยัน/ปฏิเสธ, สร้าง account `_users` พร้อม tag `affiliation_tags: ["volunteer"]` สำหรับงาน staff-capable
+- Shift Scheduling (`/volunteers/shifts`): กำหนดกะงาน, ตรวจสอบเวลาทับซ้อน (Overlap validation), บันทึก `shift_assignment:{ulid}` v2
+- **Time-bound Shift Access Guard**: บังคับใช้ client & server guard ปฏิเสธ write path ของอาสา staff-capable ถ้านอกหน้าต่างกะที่ active (±5 นาที clock skew)
+- Test matching logic, shift guard & demo flow ครบวงจร
 
 ## Effort by phase (Adj MD)
 
 | Phase | Raw MD | Adj MD |
 | --- | --- | --- |
-| R3 | 11 | 7.5 |
-| **รวม** | **11** | **7.5** |
+| R3 | 13 | 9 |
+| **รวม** | **13** | **9** |
 
 ## Dependencies
 

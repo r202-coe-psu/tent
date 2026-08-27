@@ -13,8 +13,13 @@
 		searchResultKey,
 		PublicHeroMetrics,
 		PublicPageShell,
+		StayStatusChip,
 		type FamilySearchResult
 	} from '$lib/features/public-portal';
+
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SEARCH_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let query = $state('');
 	let isLoading = $state(false);
@@ -23,6 +28,8 @@
 
 	let currentPage = $state(1);
 	const itemsPerPage = 5;
+
+	const t = $derived(getTranslation(PUBLIC_SEARCH_I18N, langState.current));
 
 	let paginatedResults = $derived(
 		results ? results.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage) : null
@@ -39,7 +46,7 @@
 
 	async function performSearch() {
 		if (query.length < 3) {
-			error = 'กรุณากรอกข้อมูลอย่างน้อย 3 ตัวอักษร';
+			error = t.errorMinChars;
 			return;
 		}
 		isLoading = true;
@@ -51,7 +58,7 @@
 			results = data.results;
 			currentPage = 1;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้';
+			error = e instanceof Error ? e.message : t.errorConnect;
 		} finally {
 			isLoading = false;
 		}
@@ -62,26 +69,29 @@
 	}
 
 	function formatDateTime(isoString: string) {
-		if (!isoString) return 'ไม่ระบุเวลา';
-		return new Date(isoString).toLocaleString('th-TH') + ' น.';
+		if (!isoString) return t.notSpecifiedTime;
+		return (
+			new Date(isoString).toLocaleString(langState.current === 'th' ? 'th-TH' : 'en-US') +
+			(langState.current === 'th' ? ' น.' : '')
+		);
 	}
 
 	function genderLabel(gender: string | null | undefined) {
-		if (gender === 'male') return 'ชาย';
-		if (gender === 'female') return 'หญิง';
-		return 'อื่นๆ';
+		if (gender === 'male') return t.genderMale;
+		if (gender === 'female') return t.genderFemale;
+		return t.genderOther;
 	}
 </script>
 
 <svelte:head>
-	<title>ระบบสืบค้นญาติและครอบครัว - Smart Shelter</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <PublicPageShell class="space-y-8">
 	<PublicHeroMetrics
-		title="ระบบสืบค้นญาติและครอบครัว"
-		description="สืบค้นและตรวจสอบสถานะความปลอดภัยของบุคคลในครอบครัว เพื่อบรรเทาความเครียดโดยไม่ต้องออกเดินทางตามหา ด้วยระบบคุ้มครองข้อมูลส่วนบุคคล (PDPA)"
-		badgeText="Restoring Family Links"
+		title={t.heroTitle}
+		description={t.heroDesc}
+		badgeText={t.heroBadge}
 		badgeIcon={Search}
 		showLivePing={false}
 		bgClass="bg-primary-dark"
@@ -90,9 +100,9 @@
 
 	<!-- Search Box -->
 	<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
-		<h2 class="mb-2 text-center text-xl font-bold">กรอกข้อมูลเพื่อค้นหา</h2>
+		<h2 class="mb-2 text-center text-xl font-bold">{t.searchBoxTitle}</h2>
 		<p class="mb-6 text-center text-sm text-muted-foreground">
-			รองรับการค้นหาด้วย ชื่อ สกุล เบอร์โทรศัพท์ หรือ รหัสบัตรประชาชน
+			{t.searchBoxDesc}
 		</p>
 
 		<!-- Input -->
@@ -105,7 +115,7 @@
 					type="text"
 					bind:value={query}
 					onkeydown={handleKeydown}
-					placeholder="พิมพ์ชื่อ สกุล เบอร์โทรศัพท์ หรือ รหัสบัตรประชาชน..."
+					placeholder={t.searchPlaceholder}
 					class="h-12 w-full bg-transparent outline-none"
 				/>
 			</div>
@@ -115,9 +125,9 @@
 				class="h-12 min-w-30 rounded-xl bg-primary text-white hover:bg-primary-dark"
 			>
 				{#if isLoading}
-					กำลังค้นหา...
+					{t.searchingBtn}
 				{:else}
-					ค้นหา
+					{t.searchBtn}
 				{/if}
 			</Button>
 		</div>
@@ -135,59 +145,43 @@
 					class="mb-4 flex items-center gap-2 rounded-lg bg-muted p-3 text-sm font-semibold text-foreground/90"
 				>
 					<CheckCircle class="h-5 w-5 text-primary" />
-					พบข้อมูลทั้งหมด {results.length} รายการ
+					{t.foundResults}
+					{results.length}
+					{t.itemsCount}
 				</div>
 
 				<div class="flex flex-col gap-6">
-					{#each paginatedResults ?? [] as person, i (searchResultKey(person, i))}
+					{#each paginatedResults ?? [] as person, i (searchResultKey(person, (currentPage - 1) * itemsPerPage + i))}
 						<div class="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
 							<!-- Card Header -->
-							<div class="flex items-start justify-between border-b border-border/50 p-5">
+							<div
+								class="items-start justify-between space-y-1 border-b border-border/50 p-5 md:flex"
+							>
 								<div>
-									<div class="flex items-center gap-3">
+									<div class="items-center gap-3 space-y-1 md:flex">
 										<h3 class="text-xl font-bold text-foreground">
-											{person.name || 'ไม่ระบุชื่อ'}
+											{person.name || t.unnamed}
 										</h3>
 										{#if person.family_members && person.family_members.length > 0}
 											<span
 												class="rounded-md bg-primary/20 px-2 py-0.5 text-xs font-bold text-primary"
-												>มากับครอบครัว</span
+												>{t.withFamily}</span
 											>
 										{:else}
 											<span
 												class="rounded-md bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground"
-												>มาเดี่ยว</span
+												>{t.alone}</span
 											>
 										{/if}
 									</div>
-									<div class="mt-2 flex gap-4 text-sm text-muted-foreground">
-										<span>ID: <span class="font-mono">{person.national_id || '-'}</span></span>
-										<span>เพศ: {genderLabel(person.gender)}</span>
+									<div class="mt-2 gap-4 text-sm text-muted-foreground md:flex">
+										<p>ID: <span class="font-mono">{person.national_id || '-'}</span></p>
+										<p>{t.genderPrefix} {genderLabel(person.gender)}</p>
 									</div>
 								</div>
 
-								{#if person.status === 'in_shelter'}
-									<div
-										class="flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-bold text-green-700"
-									>
-										<div class="h-2 w-2 rounded-full bg-green-500"></div>
-										ปลอดภัย (อยู่ในศูนย์แล้ว)
-									</div>
-								{:else if person.status === 'moved'}
-									<div
-										class="flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-bold text-orange-700"
-									>
-										<div class="h-2 w-2 rounded-full bg-orange-500"></div>
-										ย้ายศูนย์พักพิงแล้ว
-									</div>
-								{:else}
-									<div
-										class="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-bold text-blue-700"
-									>
-										<div class="h-2 w-2 rounded-full bg-blue-500"></div>
-										ออกจากศูนย์แล้ว (กลับบ้าน/ส่งต่อ)
-									</div>
-								{/if}
+								<!-- Real stay status, labelled exactly as the backoffice labels it (CR-080). -->
+								<StayStatusChip status={person.status} />
 							</div>
 
 							<!-- Card Body -->
@@ -195,21 +189,21 @@
 								<div class="flex gap-3">
 									<MapPin class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
-										<div class="text-xs text-muted-foreground">อาศัยอยู่ที่ศูนย์พักพิง</div>
+										<div class="text-xs text-muted-foreground">{t.stayingAt}</div>
 										<div class="font-medium text-foreground">{person.shelter_name || '-'}</div>
 									</div>
 								</div>
 								<div class="flex gap-3">
 									<MapPin class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
-										<div class="text-xs text-muted-foreground">ภูมิลำเนาเดิม</div>
+										<div class="text-xs text-muted-foreground">{t.origin}</div>
 										<div class="font-medium text-foreground">{person.origin_address || '-'}</div>
 									</div>
 								</div>
 								<div class="flex gap-3">
 									<Clock class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
-										<div class="text-xs text-muted-foreground">เวลาลงทะเบียนเข้าพัก</div>
+										<div class="text-xs text-muted-foreground">{t.checkinTime}</div>
 										<div class="font-medium text-foreground">
 											{person.checked_in_at ? formatDateTime(person.checked_in_at) : '-'}
 										</div>
@@ -218,47 +212,49 @@
 								<div class="flex gap-3">
 									<User class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
-										<div class="text-xs text-muted-foreground">สถานะความดูแล (โซน)</div>
+										<div class="text-xs text-muted-foreground">{t.careZone}</div>
 										<div class="font-medium text-foreground">{person.care_zone || '-'}</div>
 									</div>
 								</div>
 							</div>
 
 							{#if person.family_members && person.family_members.length > 0}
-								<details class="group border-t border-border/50 p-5">
+								<!--
+									Open by default: someone searching for a relative wants the rest of
+									the household on screen without a second click — that is usually the
+									answer they came for ("did the whole family make it?").
+								-->
+								<details open class="group border-t border-border/50 p-5">
 									<summary
 										class="mb-4 flex cursor-pointer list-none items-center gap-2 font-bold text-foreground/90 transition-colors hover:text-primary"
 									>
 										<Users class="h-5 w-5" />
-										ข้อมูลสมาชิกในครอบครัว ({person.family_members.length} คน)
+										{t.familyInfo} ({person.family_members.length}
+										{t.people})
 										<span
 											class="ml-auto text-xs font-normal text-muted-foreground group-open:hidden"
-											>คลิกเพื่อดู</span
+											>{t.clickToView}</span
 										>
 										<span
 											class="ml-auto hidden text-xs font-normal text-muted-foreground group-open:inline"
-											>ซ่อน</span
+											>{t.hide}</span
 										>
 									</summary>
 									<div class="mt-4 flex flex-col gap-3">
 										{#each person.family_members as member, i (i)}
 											<div
-												class="flex items-center justify-between rounded-xl border border-border bg-card p-4"
+												class="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center"
 											>
 												<div>
 													<div class="font-bold text-foreground">
 														{member.name || '-'}
 													</div>
 												</div>
-												{#if member.status === 'in_shelter'}
-													<div class="text-sm font-bold text-green-600">
-														ปลอดภัยอยู่ในศูนย์ ({member.shelter_name || '-'})
-													</div>
-												{:else if member.status === 'moved'}
-													<div class="text-sm font-bold text-orange-600">ย้ายศูนย์พักพิงแล้ว</div>
-												{:else}
-													<div class="text-sm font-bold text-blue-600">ออกจากศูนย์แล้ว</div>
-												{/if}
+												<StayStatusChip
+													status={member.status}
+													detail={member.shelter_name || null}
+													size="sm"
+												/>
 											</div>
 										{/each}
 									</div>
@@ -277,10 +273,13 @@
 							onclick={() => currentPage--}
 							class="rounded-lg"
 						>
-							ก่อนหน้า
+							{t.prevBtn}
 						</Button>
 						<span class="text-sm font-bold text-muted-foreground">
-							หน้า {currentPage} จาก {totalPages}
+							{t.page}
+							{currentPage}
+							{t.of}
+							{totalPages}
 						</span>
 						<Button
 							variant="outline"
@@ -288,7 +287,7 @@
 							onclick={() => currentPage++}
 							class="rounded-lg"
 						>
-							ถัดไป
+							{t.nextBtn}
 						</Button>
 					</div>
 				{/if}
@@ -302,8 +301,8 @@
 				>
 					<Search class="size-10 text-muted-foreground" />
 				</div>
-				<h3 class="mb-2 text-lg font-bold text-foreground/90">ไม่พบรายชื่อ</h3>
-				<p class="text-sm">ไม่พบข้อมูลที่ตรงกับการค้นหา กรุณาตรวจสอบความถูกต้องอีกครั้ง</p>
+				<h3 class="mb-2 text-lg font-bold text-foreground/90">{t.noResultsTitle}</h3>
+				<p class="text-sm">{t.noResultsDesc}</p>
 			</div>
 		{/if}
 	{:else}
@@ -315,9 +314,9 @@
 			>
 				<Search class="size-10 text-muted-foreground" />
 			</div>
-			<h3 class="mb-2 text-lg font-bold text-foreground/90">เริ่มการค้นหา</h3>
+			<h3 class="mb-2 text-lg font-bold text-foreground/90">{t.startSearchTitle}</h3>
 			<p class="text-sm">
-				พิมพ์ชื่อ สกุล เบอร์โทรศัพท์ หรือ รหัสบัตรประชาชน เพื่อทำการสืบค้นข้อมูล
+				{t.startSearchDesc}
 			</p>
 		</div>
 	{/if}

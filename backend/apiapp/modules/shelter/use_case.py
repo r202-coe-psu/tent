@@ -6,7 +6,12 @@ from datetime import UTC, datetime
 
 from tent_model.public_shelter import PublicShelter
 
-from .schemas import ShelterDetailResponse, ShelterItem, ShelterListResponse
+from .schemas import ShelterDetailResponse, ShelterItem, ShelterListResponse, SiteKind
+
+# Stay statuses that hold a place at a shelter (CR-070 D-BOOK-OCC=C, FR-66):
+# a web booking reserves the seat the moment it is made, so `pre_registered`
+# counts alongside `active`. Kitchen/SOP head-counts stay `active`-only (CR-022).
+OCCUPANCY_STATUSES = ("active", "pre_registered")
 
 
 class ShelterUseCase:
@@ -19,6 +24,7 @@ class ShelterUseCase:
         district: str | None = None,
         subdistrict: str | None = None,
         status: str | None = None,
+        site_kind: SiteKind | None = None,
         lat: float | None = None,
         lng: float | None = None,
         radius_km: float | None = None,
@@ -32,6 +38,8 @@ class ShelterUseCase:
             filters["subdistrict"] = subdistrict
         if status:
             filters["status"] = status
+        if site_kind:
+            filters["site_kind"] = site_kind
 
         has_near = False
         if lat is not None and lng is not None:
@@ -88,6 +96,7 @@ class ShelterUseCase:
                 ShelterItem(
                     code=doc.shelter_code,
                     name=doc.name,
+                    site_kind=doc.site_kind,
                     status=doc.status,
                     capacity=doc.capacity,
                     geo=doc.geo,
@@ -128,7 +137,9 @@ class ShelterUseCase:
 
         occupancy = 0
         if mapped_status in ("OPEN", "FULL"):
-            occupancy = await PublicPerson.find({"shelter_code": code, "status": "active"}).count()
+            occupancy = await PublicPerson.find(
+                {"shelter_code": code, "status": {"$in": list(OCCUPANCY_STATUSES)}}
+            ).count()
 
         capacity_total = m.get("capacity") or 0
         capacity_available = max(0, capacity_total - occupancy)
@@ -199,6 +210,7 @@ class ShelterUseCase:
             shelter={
                 "id": code,
                 "name": m.get("name") or doc.name or code,
+                "site_kind": doc.site_kind,
                 "status": mapped_status,
                 "admin_type": m.get("shelter_type") or "unspecified",
                 "address": location.get("address") or "unspecified",

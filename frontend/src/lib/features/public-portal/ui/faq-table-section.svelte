@@ -30,6 +30,8 @@
 		id: '',
 		question: '',
 		answer: '',
+		question_en: '',
+		answer_en: '',
 		is_published: true,
 		order: 0
 	});
@@ -40,6 +42,8 @@
 			id: crypto.randomUUID(),
 			question: '',
 			answer: '',
+			question_en: '',
+			answer_en: '',
 			is_published: true,
 			order: $formData.faqs?.[activeType]?.length || 0
 		};

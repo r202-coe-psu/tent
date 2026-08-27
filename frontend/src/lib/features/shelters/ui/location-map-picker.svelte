@@ -10,6 +10,7 @@
 		NavigationControl,
 		MapMouseEvent
 	} from 'maplibre-gl';
+	import { DEFAULT_MAP_STYLE, DEFAULT_MAP_CENTER } from '$lib/constants/maps';
 
 	// The dynamic import's `.default` is the UMD-style namespace object (Map,
 	// Marker, NavigationControl, …) that Vite's dep pre-bundling synthesizes —
@@ -25,7 +26,7 @@
 		lat = null,
 		lng = null,
 		disabled = false,
-		center = [100.473531, 7.009425] as [number, number],
+		center = DEFAULT_MAP_CENTER,
 		zoom = 12,
 		onchange
 	}: {
@@ -88,26 +89,7 @@
 
 		mapInstance = new L.Map({
 			container: mapElement,
-			style: {
-				version: 8,
-				sources: {
-					osm: {
-						type: 'raster',
-						tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-						tileSize: 256,
-						attribution: '&copy; OpenStreetMap contributors'
-					}
-				},
-				layers: [
-					{
-						id: 'osm',
-						type: 'raster',
-						source: 'osm',
-						minzoom: 0,
-						maxzoom: 19
-					}
-				]
-			},
+			style: DEFAULT_MAP_STYLE,
 			center: initialCenter,
 			zoom: lat != null && lng != null ? 16 : zoom
 		});

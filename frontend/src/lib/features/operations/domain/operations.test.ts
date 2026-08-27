@@ -6,12 +6,15 @@ import {
 	canTransitionDonation,
 	keyDonationReceipt,
 	createStockLedger,
+	stockLedgerInputSchema,
 	parseStockLedger,
 	ledgerReasonSchema,
 	stockBalance,
 	createCampaign,
 	openNeeds,
 	calculateReserved,
+	keyedDonationIds,
+	keyableDonations,
 	isNeedCutOff,
 	deriveNeedAvailability,
 	createReceiveEntry,
@@ -23,12 +26,20 @@ import {
 	purchaseReceiptInputSchema,
 	isPurchase,
 	mapNeedItemHeuristic,
+	nextLotNos,
+	lotDateStamp,
+	stockLotSchema,
 	type Donation,
+	type LedgerReason,
 	type ReceiveSource
 } from './operations';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
+
+// CR-055 R2: a 'donation' receipt must point at a real donation doc, so fixtures
+// that only need stock on hand still have to name one.
+const DONATION_REF = 'donation:01JFIXTUREDONATION';
 
 function declaredItemsDonation(): Donation {
 	return createWalkInDonation(
@@ -54,6 +65,17 @@ describe('donation lifecycle (forward-only)', () => {
 		expect(canTransitionDonation('declared', 'received')).toBe(true);
 		expect(canTransitionDonation('received', 'declared')).toBe(false);
 		expect(canTransitionDonation('received', 'expired')).toBe(false);
+	});
+
+	// CR-087 — redirecting hands the request to another shelter, and is terminal on
+	// THIS doc: the destination continues on its own `donation_redirect` ticket.
+	it('allows pending_review → redirected only, and never leaves redirected', () => {
+		expect(canTransitionDonation('pending_review', 'redirected')).toBe(true);
+		expect(canTransitionDonation('declared', 'redirected')).toBe(false);
+		expect(canTransitionDonation('verifying', 'redirected')).toBe(false);
+		expect(canTransitionDonation('received', 'redirected')).toBe(false);
+		expect(canTransitionDonation('redirected', 'received')).toBe(false);
+		expect(canTransitionDonation('redirected', 'pending_review')).toBe(false);
 	});
 
 	it('receiveDonation moves lifecycle but creates NO stock', () => {
@@ -116,18 +138,26 @@ describe('stockBalance', () => {
 });
 
 describe('stock_ledger schema_v + reason enum (CR-032)', () => {
-	it('stamps schema_v 3 on every ledger entry', () => {
+	// Bumped 3 → 4 by CR-088 (lot.lot_no / lot.storage_zone). Every writer goes
+	// through `createStockLedger`, so one assertion covers all of them.
+	it('stamps schema_v 4 on every ledger entry', () => {
 		const entry = createStockLedger(
 			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'receive' },
 			ctx
 		);
-		expect(entry.schema_v).toBe(3);
+		expect(entry.schema_v).toBe(4);
 	});
 
 	it('accepts `purchase` as a valid reason (CR-032)', () => {
 		expect(ledgerReasonSchema.safeParse('purchase').success).toBe(true);
 		const entry = createStockLedger(
-			{ item_id: 'item:rice', qty: 5, unit: 'kg', reason: 'purchase' },
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'purchase',
+				ref_id: 'purchase:01JFIXTUREPURCHASE'
+			},
 			ctx
 		);
 		expect(entry.reason).toBe('purchase');
@@ -155,6 +185,83 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 		expect(() => parseStockLedger({ ...entry, schema_v: 2, reason: 'purchase' })).toThrow(
 			/purchase requires stock_ledger schema_v 3/
 		);
+	});
+});
+
+// CR-055 R1/R2/R6 — the reason ↔ ref_id table, enforced on write. Every reason
+// gets both an accept and a reject case; the table below IS the spec table, so a
+// new reason that is not listed here fails to compile.
+describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
+	const base = { item_id: 'item:rice', qty: 5, unit: 'kg' } as const;
+	const write = (reason: LedgerReason, ref_id: string | null) =>
+		createStockLedger({ ...base, reason, ref_id }, ctx);
+
+	const cases: Record<LedgerReason, { valid: string | null; invalid: string | null }> = {
+		donation: { valid: 'donation:01J', invalid: 'purchase:01J' },
+		purchase: { valid: 'purchase:01J', invalid: 'donation:01J' },
+		requisition: { valid: 'kitchen_requisition:01J', invalid: 'donation:01J' },
+		transfer_in: { valid: 'stock_transfer:01J', invalid: 'transfer:01J' },
+		transfer_out: { valid: 'stock_transfer:01J', invalid: null },
+		adjust: { valid: null, invalid: 'donation:01J' },
+		distribute: { valid: null, invalid: 'donation:01J' },
+		receive: { valid: null, invalid: 'donation:01J' }
+	};
+
+	for (const [reason, { valid, invalid }] of Object.entries(cases) as [
+		LedgerReason,
+		{ valid: string | null; invalid: string | null }
+	][]) {
+		it(`accepts ${reason} with ${valid ?? 'no'} ref_id`, () => {
+			expect(write(reason, valid).ref_id).toBe(valid);
+		});
+
+		it(`rejects ${reason} with ${invalid ?? 'no'} ref_id`, () => {
+			expect(() => write(reason, invalid)).toThrow();
+		});
+	}
+
+	it('rejects a reason that requires a ref_id when none is given', () => {
+		expect(() => createStockLedger({ ...base, reason: 'donation' }, ctx)).toThrow();
+	});
+
+	it('reports the failure on the ref_id field so forms can show it inline', () => {
+		const result = stockLedgerInputSchema.safeParse({ ...base, reason: 'adjust', ref_id: 'x:1' });
+		expect(result.success).toBe(false);
+		expect(result.error?.issues[0].path).toEqual(['ref_id']);
+	});
+
+	// R5 — the guard is write-only. Rows written before it existed still have to
+	// flow through the read paths untouched.
+	it('still sums a pre-existing row that violates the invariant', () => {
+		const legal = write('receive', null);
+		const illegal = {
+			...legal,
+			_id: 'stock_ledger:legacy',
+			reason: 'adjust' as const,
+			ref_id: 'x:1'
+		};
+		expect(stockBalance([legal, illegal]).get('item:rice')).toBe('10');
+	});
+
+	it('still reserves against a legacy donation row whose ref_id is malformed', () => {
+		// pre-invariant rows used a truncated prefix; `calculateReserved` must keep
+		// reading them rather than throwing or silently dropping the donation
+		const donation: Donation = {
+			...declaredItemsDonation(),
+			_id: 'donation:legacy-A',
+			status: 'received',
+			items: [{ item_id: 'item:water', qty: '20', unit: 'ขวด' }]
+		};
+		const malformed = {
+			...write('receive', null),
+			reason: 'donation' as const,
+			ref_id: 'don:legacy-A'
+		};
+
+		// the malformed pointer does not match the donation, so it stays unkeyed
+		expect(calculateReserved([donation], [malformed]).get('item:water')).toBe('20');
+		// and the read path did not throw on the way through
+		expect(keyedDonationIds([malformed]).has('don:legacy-A')).toBe(true);
 	});
 });
 
@@ -200,7 +307,7 @@ describe('purchase — createPurchase + keyPurchaseReceipt (CR-032)', () => {
 		expect(ledger[0].reason).toBe('purchase');
 		expect(ledger[0].ref_id).toBe(purchase._id);
 		expect(ledger[0].qty).toBe('90'); // counted, not the planned 100
-		expect(ledger[0].schema_v).toBe(3);
+		expect(ledger[0].schema_v).toBe(4); // CR-088 bumped the ledger to 4
 	});
 
 	it('rejects a purchase without a vendor or without items', () => {
@@ -242,10 +349,17 @@ describe('purchaseReceiptStatus + canEditPurchase (CR-032)', () => {
 			],
 			ctx
 		);
-		const donationRow = createStockLedger(
-			{ item_id: 'item:rice', qty: '100', unit: 'kg', reason: 'donation', ref_id: purchase._id },
-			ctx
-		);
+		// Deliberately mismatched: reason 'donation' pointing at a purchase _id.
+		// CR-055 R2 forbids writing this, so it is assembled directly rather than
+		// through the factory — it stands in for a row written before the invariant
+		// existed, which read paths must still tolerate (R5).
+		const donationRow = {
+			...createStockLedger(
+				{ item_id: 'item:rice', qty: '100', unit: 'kg', reason: 'donation', ref_id: DONATION_REF },
+				ctx
+			),
+			ref_id: purchase._id
+		};
 		expect(purchaseReceiptStatus(purchase, [...other, donationRow])).toBe('not_received');
 	});
 
@@ -428,6 +542,69 @@ describe('openNeeds', () => {
 	});
 });
 
+// CR-055 R4 — what the receive form's picker is allowed to offer. The picker is
+// the reason `ref_id` can no longer be mistyped, so the filter deciding what
+// goes in it carries the same weight as the write guard itself.
+describe('keyableDonations + keyedDonationIds (CR-055 R4)', () => {
+	const donation = (over: Partial<Donation>): Donation => ({
+		...declaredItemsDonation(),
+		...over
+	});
+
+	const keyedRow = (refId: string | null, reason: LedgerReason = 'donation') => ({
+		...createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: '10',
+				unit: 'kg',
+				reason: 'receive' as LedgerReason,
+				ref_id: null
+			},
+			ctx
+		),
+		reason,
+		ref_id: refId
+	});
+
+	it('collects the donation ids that already have a donation ledger row', () => {
+		const keyed = keyedDonationIds([
+			keyedRow('donation:A'),
+			keyedRow('purchase:P', 'purchase'),
+			keyedRow(null, 'adjust')
+		]);
+		expect([...keyed]).toEqual(['donation:A']);
+	});
+
+	it('offers declared and unkeyed received donations', () => {
+		const declared = donation({ _id: 'donation:A', status: 'declared' });
+		const received = donation({ _id: 'donation:B', status: 'received' });
+		const offered = keyableDonations([declared, received], []);
+		expect(offered.map((d) => d._id)).toEqual(['donation:A', 'donation:B']);
+	});
+
+	it('drops a donation once a ledger row keys it', () => {
+		const declared = donation({ _id: 'donation:A', status: 'declared' });
+		const keyed = donation({ _id: 'donation:B', status: 'received' });
+		const offered = keyableDonations([declared, keyed], [keyedRow('donation:B')]);
+		expect(offered.map((d) => d._id)).toEqual(['donation:A']);
+	});
+
+	it('drops terminal donations and money donations', () => {
+		const expired = donation({ _id: 'donation:A', status: 'expired' });
+		const cancelled = donation({ _id: 'donation:B', status: 'cancelled' });
+		const money = donation({ _id: 'donation:C', kind: 'money', items: undefined });
+		expect(keyableDonations([expired, cancelled, money], [])).toEqual([]);
+	});
+
+	it('is not fooled by a ledger row pointing at another doc type', () => {
+		// a `purchase` row carrying a purchase id must not un-offer a donation
+		// that happens to share the suffix
+		const declared = donation({ _id: 'donation:A', status: 'declared' });
+		const offered = keyableDonations([declared], [keyedRow('purchase:A', 'purchase')]);
+		expect(offered.map((d) => d._id)).toEqual(['donation:A']);
+	});
+});
+
 describe('calculateReserved', () => {
 	it('sums declared and unkeyed received donations, ignoring keyed, expired, cancelled, or mismatched campaigns', () => {
 		const campaignA = 'camp-A';
@@ -445,7 +622,7 @@ describe('calculateReserved', () => {
 		// 2. Unkeyed received donation for Campaign A
 		const donationUnkeyedReceived: Donation = {
 			...declaredItemsDonation(),
-			_id: 'don:unkeyed-A',
+			_id: 'donation:unkeyed-A',
 			campaign_id: campaignA,
 			status: 'received',
 			items: [{ item_id: 'item:water', qty: '30', unit: 'ขวด' }]
@@ -454,7 +631,7 @@ describe('calculateReserved', () => {
 		// 3. Keyed received donation for Campaign A (has ledger entry)
 		const donationKeyedReceived: Donation = {
 			...declaredItemsDonation(),
-			_id: 'don:keyed-A',
+			_id: 'donation:keyed-A',
 			campaign_id: campaignA,
 			status: 'received',
 			items: [{ item_id: 'item:water', qty: '20', unit: 'ขวด' }]
@@ -504,7 +681,7 @@ describe('calculateReserved', () => {
 					qty: 20,
 					unit: 'ขวด',
 					reason: 'donation',
-					ref_id: 'don:keyed-A'
+					ref_id: 'donation:keyed-A'
 				},
 				ctx
 			)
@@ -523,6 +700,46 @@ describe('calculateReserved', () => {
 		const reservedAll = calculateReserved(donations, stockLedgers);
 		// Should include campaignA (80) + campaignB (100) = 180
 		expect(reservedAll.get('item:water')).toBe('180');
+	});
+
+	it('correctly maps and sums public donations without campaign_id and using free_text', () => {
+		const donations: Donation[] = [
+			{
+				...declaredItemsDonation(),
+				_id: 'don:public-1',
+				campaign_id: null,
+				status: 'declared',
+				items: [{ free_text: 'ข้าวสาร', qty: '15', unit: 'kg' }] // Maps to item:rice
+			},
+			{
+				...declaredItemsDonation(),
+				_id: 'don:public-2',
+				campaign_id: null,
+				status: 'declared',
+				items: [{ free_text: 'น้ำดื่ม', qty: '25', unit: 'bottle' }] // Maps to item:water
+			}
+		];
+
+		const reserved = calculateReserved(donations, [], 'camp-any');
+		expect(reserved.get('item:rice')).toBe('15');
+		expect(reserved.get('item:water')).toBe('25');
+	});
+
+	it('returns the reserved quota once a donation is expired past its TTL (T-21)', () => {
+		const donation: Donation = {
+			...declaredItemsDonation(),
+			_id: 'don:ttl',
+			campaign_id: 'camp-ttl',
+			status: 'declared',
+			items: [{ item_id: 'item:rice', qty: '30', unit: 'kg' }]
+		};
+
+		// While declared, the quota is held.
+		expect(calculateReserved([donation], [], 'camp-ttl').get('item:rice')).toBe('30');
+
+		// After the TTL job flips it to expired, the quota is released.
+		const expired = expireDonation(donation);
+		expect(calculateReserved([expired], [], 'camp-ttl').get('item:rice')).toBeUndefined();
 	});
 });
 
@@ -610,25 +827,28 @@ describe('deriveNeedAvailability', () => {
 });
 
 describe('createReceiveEntry', () => {
-	it('maps sources to correct reasons', () => {
-		const sourcesAndReasons = {
-			donation: 'donation',
-			transfer_in: 'transfer_in',
-			manual: 'adjust'
-		} as const;
+	it('maps sources to correct reasons, each with the ref_id its reason requires', () => {
+		// The ref_id column is not decoration: CR-055 R2 pairs each reason with the
+		// kind of doc it may point at, and R9 makes this schema reject a mismatch.
+		const cases = [
+			{ source: 'donation', reason: 'donation', ref_id: DONATION_REF },
+			{ source: 'transfer_in', reason: 'transfer_in', ref_id: 'stock_transfer:01JFIXTUREXFER' },
+			{ source: 'manual', reason: 'adjust', ref_id: null }
+		] as const;
 
-		for (const [source, reason] of Object.entries(sourcesAndReasons)) {
+		for (const { source, reason, ref_id } of cases) {
 			const entry = createReceiveEntry(
 				{
 					item_id: 'item:rice',
 					qty: 5,
 					unit: 'kg',
 					source: source as ReceiveSource,
-					ref_id: null
+					ref_id
 				},
 				ctx
 			);
 			expect(entry.reason).toBe(reason);
+			expect(entry.ref_id).toBe(ref_id);
 		}
 	});
 
@@ -640,7 +860,7 @@ describe('createReceiveEntry', () => {
 					qty: 0,
 					unit: 'kg',
 					source: 'donation',
-					ref_id: null
+					ref_id: DONATION_REF
 				},
 				ctx
 			)
@@ -655,7 +875,7 @@ describe('createReceiveEntry', () => {
 					qty: -5,
 					unit: 'kg',
 					source: 'donation',
-					ref_id: null
+					ref_id: DONATION_REF
 				},
 				ctx
 			)
@@ -669,7 +889,7 @@ describe('createReceiveEntry', () => {
 				qty: 10,
 				unit: 'kg',
 				source: 'donation',
-				ref_id: null,
+				ref_id: DONATION_REF,
 				lot: {
 					expiry: '2026-12-31T00:00:00Z',
 					note: 'Zone A'
@@ -690,7 +910,7 @@ describe('createReceiveEntry', () => {
 				qty: 10,
 				unit: 'kg',
 				source: 'donation',
-				ref_id: null
+				ref_id: DONATION_REF
 			},
 			ctx
 		);
@@ -707,7 +927,7 @@ describe('createReceiveEntry', () => {
 				qty: 5,
 				unit: 'ขวด',
 				source: 'donation',
-				ref_id: null
+				ref_id: DONATION_REF
 				// missing lot.expiry
 			},
 			ctx
@@ -792,5 +1012,69 @@ describe('mapNeedItemHeuristic', () => {
 	it('slugs unknown items correctly', () => {
 		expect(mapNeedItemHeuristic('ปลากระป๋องรสเผ็ด')).toBe('item:ปลากระป๋องรสเผ็ด');
 		expect(mapNeedItemHeuristic('  Spoons & Forks  ')).toBe('item:spoons-forks');
+	});
+});
+
+// CR-088 — lot_no / storage_zone on `stock_ledger.lot` (schema.md §2.1)
+describe('lot numbering (CR-088)', () => {
+	const aug25 = new Date(2026, 7, 25); // local time — the label is read on site
+
+	it('stamps YYMMDD in local time, zero-padded', () => {
+		expect(lotDateStamp(aug25)).toBe('260825');
+		expect(lotDateStamp(new Date(2026, 0, 3))).toBe('260103');
+	});
+
+	it('starts a fresh day at 001 and pads the sequence to 3 digits', () => {
+		expect(nextLotNos([], aug25, 2)).toEqual(['L-260825-001', 'L-260825-002']);
+	});
+
+	it('continues after the highest existing lot of the SAME day only', () => {
+		const existing = ['L-260825-001', 'L-260825-007', 'L-260824-099', 'L-260826-050'];
+		expect(nextLotNos(existing, aug25, 1)).toEqual(['L-260825-008']);
+	});
+
+	it('ignores malformed lot numbers instead of throwing', () => {
+		expect(nextLotNos(['L-260825-abc', 'garbage', ''], aug25, 1)).toEqual(['L-260825-001']);
+	});
+
+	it('returns nothing when no lines were counted', () => {
+		expect(nextLotNos([], aug25, 0)).toEqual([]);
+	});
+
+	it('rolls past 999 without truncating (label stays readable, no wrap)', () => {
+		expect(nextLotNos(['L-260825-999'], aug25, 1)).toEqual(['L-260825-1000']);
+	});
+
+	it('accepts a well-formed lot_no and a storage_zone', () => {
+		const parsed = stockLotSchema.parse({
+			lot_no: 'L-260825-001',
+			storage_zone: '  A-01  ',
+			expiry: '2026-12-01'
+		});
+		expect(parsed.lot_no).toBe('L-260825-001');
+		expect(parsed.storage_zone).toBe('A-01');
+	});
+
+	it('rejects a lot_no that is not L-YYMMDD-XXX', () => {
+		expect(() => stockLotSchema.parse({ lot_no: 'LOT-1' })).toThrow();
+		expect(() => stockLotSchema.parse({ lot_no: 'L-260825-1' })).toThrow();
+	});
+
+	it('carries the lot through createStockLedger onto the persisted doc', () => {
+		const ctx = { shelterCode: 'SH001', createdBy: 'staff01' };
+		const entry = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'donation',
+				ref_id: 'donation:123',
+				lot: { lot_no: 'L-260825-001', storage_zone: 'A-01' }
+			},
+			ctx
+		);
+		expect(entry.lot).toEqual({ lot_no: 'L-260825-001', storage_zone: 'A-01' });
+		expect(entry.schema_v).toBe(4);
+		expect(parseStockLedger(entry)).toEqual(entry);
 	});
 });

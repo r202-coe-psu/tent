@@ -14,6 +14,7 @@ export const GET = async () => {
 			visible.map((m) => ({
 				code: m.code,
 				name: m.name,
+				site_kind: m.site_kind,
 				status: m.operation_status,
 				capacity: m.capacity ?? 0
 			}))

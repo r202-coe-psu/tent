@@ -19,7 +19,7 @@ import { calcKeys } from './queries';
 
 export function startDailyCalcLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
 	const catalogHandle = subscribeDataChanges(queryClient, 'catalog', (type) =>
-		type === 'sop_profile' ? [calcKeys.all] : []
+		type === 'sop_profile' || type === 'sop_profile_active' ? [calcKeys.all] : []
 	);
 
 	const shelterHandle = subscribeDataChanges(queryClient, getShelterDb, (type) =>

@@ -2,7 +2,6 @@ import type { ResolvedPathname } from '$app/types';
 import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
 import {
-	House,
 	Home,
 	KeyRound,
 	MapPin,
@@ -51,7 +50,6 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 				icon: Building,
 				requiresAdmin: true
 			},
-			{ label: 'จัดการบ้านพี่เลี้ยง', href: resolve(`${base}/host-houses`), icon: House },
 			{
 				label: 'จัดการผู้ใช้งานและสิทธิ์',
 				href: resolve(`${base}/users`),
@@ -92,8 +90,14 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						icon: Home,
 						requiresAdmin: true
 					},
-					{ label: '4. อาสาสมัคร', href: null, icon: Users },
-					{ label: '5. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{
+						label: '4. FAQ Public Portal',
+						href: resolve(`${base}/public-portal-config`),
+						icon: Megaphone,
+						requiresAdmin: true
+					},
+					{ label: '5. อาสาสมัคร', href: null, icon: Users },
+					{ label: '6. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}
 		]

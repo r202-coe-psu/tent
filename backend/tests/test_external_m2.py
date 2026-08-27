@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
-from motor.motor_asyncio import AsyncIOMotorClient
 from tent_model.api_key import ApiKey
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import GeoPoint, PublicShelter
 
-from apiapp.core.config import Settings
 from apiapp.utils.masking import national_id_hash, sha256_hex
 from apiapp.utils.ulid import new_ulid
 

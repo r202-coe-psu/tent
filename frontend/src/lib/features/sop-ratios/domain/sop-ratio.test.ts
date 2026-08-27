@@ -11,6 +11,7 @@ import {
 	SOP_OVERRIDE_SCHEMA_VERSION,
 	isSopMaster,
 	isSopOverride,
+	createProfileSlug,
 	type SopRatioKey
 } from './sop-ratio';
 import { validRatios } from './sop-ratio.fixture';
@@ -23,6 +24,15 @@ describe('SOP Ratio Domain', () => {
 		createdBy: 'admin',
 		base_profile_id: 'sop_profile:base-id'
 	};
+
+	describe('master profile slug', () => {
+		it('creates a stable URL-safe, distinct identity for Thai-only names', () => {
+			const thai = createProfileSlug('มาตรฐานสุขภาพ');
+			expect(thai).toMatch(/^[a-z0-9-]+$/);
+			expect(thai).not.toBe(createProfileSlug('มาตรฐานน้ำ'));
+			expect(createProfileSlug('มาตรฐานสุขภาพ')).toBe(thai);
+		});
+	});
 
 	describe('createInitialProfile - Master', () => {
 		it('should create a valid initial master profile with whitelist keys and audit trail', () => {
@@ -210,6 +220,35 @@ describe('SOP Ratio Domain', () => {
 					masterCtx
 				);
 			}).toThrow();
+		});
+
+		it('should produce monotonic version maxVersion + 1 when editing a historical version', () => {
+			const { profile: v1 } = createInitialProfile(
+				'sop_profile',
+				'Sphere baseline',
+				validRatios,
+				masterCtx
+			);
+			const { profile: v2 } = createNewVersion(
+				v1,
+				{ water_l_per_person_day: '20' },
+				'Updated to v2',
+				masterCtx
+			);
+			expect(v2.version).toBe(2);
+
+			// Now edit v1 (historical rollback) while maxVersion is 2
+			const { profile: v3 } = createNewVersion(
+				v1,
+				{ water_l_per_person_day: '25' },
+				'Updated historical v1',
+				masterCtx,
+				v2.version // maxVersion = 2
+			);
+
+			expect(v3.version).toBe(3);
+			expect(v3._id).toBe(`sop_profile:${v1.slug}:3`);
+			expect(v3.ratios.water_l_per_person_day).toBe('25');
 		});
 	});
 

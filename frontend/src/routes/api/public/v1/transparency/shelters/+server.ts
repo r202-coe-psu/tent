@@ -4,7 +4,10 @@ import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import type { ShelterMaster } from '$lib/features/shelters/server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
-import { countVulnerableFromBirthYearRows } from '$lib/features/public-portal/server';
+import {
+	countVulnerableFromBirthYearRows,
+	sumOccupancyFromStatusRows
+} from '$lib/features/public-portal/server';
 
 export const GET: RequestHandler = async ({ url, setHeaders }) => {
 	// Cache the response for 60 seconds on the client and CDN to mitigate N+1 query load
@@ -105,14 +108,9 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 						occRes.data &&
 						(occRes.data as Record<string, unknown>).rows
 					) {
-						const rows = (occRes.data as Record<string, unknown>).rows as Array<{
-							key: string;
-							value: unknown;
-						}>;
-						const activeRow = rows.find((r) => r.key === 'active');
-						if (activeRow) {
-							occupancy = activeRow.value as number;
-						}
+						// active + pre_registered (CR-070 D-BOOK-OCC=C) — a web booking
+						// holds the seat immediately, so the public number must move too.
+						occupancy = sumOccupancyFromStatusRows((occRes.data as Record<string, unknown>).rows);
 					}
 
 					if (
@@ -135,6 +133,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			return {
 				id: m._id,
 				name: m.name,
+				site_kind: m.site_kind,
 				status: mappedStatus,
 				address: m.location?.address || '',
 				province: m.province || '',

@@ -62,6 +62,7 @@ async def list_shelters(
         M2ShelterItem(
             shelter_id=doc.shelter_code,
             shelter_name=doc.name,
+            site_kind=doc.site_kind,
             lat=doc.geo.lat if doc.geo else None,
             long=doc.geo.lng if doc.geo else None,
         )

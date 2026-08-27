@@ -28,6 +28,9 @@
 		MealPlanForm,
 		RequisitionDialog,
 		MealServiceForm,
+		useGasCylinderTypes,
+		useGasLedger,
+		gasCylinderBalance,
 		type MealPlan,
 		type MealPlanRecipe
 	} from '$lib/features/kitchen';
@@ -35,11 +38,14 @@
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useItemMasters } from '$lib/features/catalog';
 	import { useStockBalance } from '$lib/features/operations';
+	import { qtyGt } from '$lib/utils/qty';
 
 	const plans = useMealPlans();
 	const supplyItems = useSupplyItems();
 	const itemMasters = useItemMasters();
 	const stockBalance = useStockBalance();
+	const gasTypes = useGasCylinderTypes();
+	const gasLedger = useGasLedger();
 	let createOpen = $state(false);
 	let createDefaultMode = $state<'sop' | 'recipe' | 'custom'>('sop');
 
@@ -173,6 +179,16 @@
 			);
 			return;
 		}
+		// Same fail-fast for gas (CR-085) — a plan whose planned draw already
+		// exceeds a cylinder's remaining balance can never actually be
+		// withdrawn (requisition-dialog hard-blocks it), so don't let it move
+		// past draft looking "ready".
+		if (gasShortfalls(plan).length > 0) {
+			toast.error(
+				'ยืนยันไม่ได้ — ถังแก๊สบางใบเหลือไม่พอตามที่แผนนี้คำนวณไว้ เติมแก๊สหรือแก้แผนก่อนแล้วค่อยยืนยัน'
+			);
+			return;
+		}
 		try {
 			await confirm.mutateAsync(plan);
 			toast.success(`ยืนยันแผน ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
@@ -215,6 +231,25 @@
 		const onHand = Number(stockBalance.data?.get(stock?.item_id ?? recipe.recipe_id) ?? '0');
 		const onHandDisplayUnit = stock ? onHand * stock.recipe_per_stock_unit : onHand;
 		return Math.max(0, recipe.planned_qty - onHandDisplayUnit);
+	}
+
+	// Gas cylinders (CR-085) this plan would draw short of — same "flag it in
+	// the table" treatment as stockShortfall above, so a gas shortfall is
+	// visible before staff even open the requisition dialog where it's a hard
+	// block.
+	function gasShortfalls(
+		plan: MealPlan
+	): { name: string; remaining: string; consumption_kg: string }[] {
+		if (!plan.gas_usage?.length) return [];
+		return plan.gas_usage
+			.map((g) => {
+				const cyl = (gasTypes.data ?? []).find((t) => t._id === g.cylinder_id);
+				const remaining = cyl
+					? gasCylinderBalance(gasLedger.data ?? [], g.cylinder_id, cyl.capacity_kg)
+					: '0';
+				return { name: cyl?.name ?? g.cylinder_id, remaining, consumption_kg: g.consumption_kg };
+			})
+			.filter((g) => qtyGt(g.consumption_kg, g.remaining));
 	}
 </script>
 
@@ -325,6 +360,15 @@
 												{/if}
 											</p>
 										{/each}
+										{#each gasShortfalls(plan) as g (g.name)}
+											<p
+												class="mt-0.5 flex items-center gap-1 text-xs text-amber-600"
+												title="ถังแก๊สเหลือไม่พอตามที่แผนนี้คำนวณไว้ — เติมแก๊สหรือแก้แผนก่อนเบิก"
+											>
+												<TriangleAlert class="h-3 w-3 shrink-0" />
+												แก๊ส {g.name}: เหลือ {g.remaining} kg (ต้องใช้ {g.consumption_kg} kg)
+											</p>
+										{/each}
 										{#if plan.override_reason}
 											<p class="mt-0.5 text-xs text-amber-700" title={plan.override_reason}>
 												⚑ แก้ยอด: {plan.override_reason}
@@ -369,12 +413,16 @@
 									</Table.Cell>
 									<Table.Cell class="px-6 text-center">
 										{#if stage === 'draft'}
+											{@const blocked = isBomSourced(plan) || gasShortfalls(plan).length > 0}
 											<div class="flex items-center justify-center gap-1.5">
 												<Button
 													size="sm"
 													variant="outline"
 													onclick={() => handleConfirm(plan)}
-													disabled={confirm.isPending}
+													disabled={confirm.isPending || blocked}
+													title={blocked
+														? 'มีคำเตือนในแผนนี้ (วัตถุดิบยังไม่เชื่อมสต็อก หรือแก๊สไม่พอ) — แก้ก่อนยืนยัน'
+														: undefined}
 												>
 													ยืนยันแผน
 												</Button>
