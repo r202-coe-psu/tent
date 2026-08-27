@@ -2,6 +2,7 @@
 	/* eslint-disable @typescript-eslint/no-explicit-any */
 	import { onMount, onDestroy } from 'svelte';
 	import type { PublicSiteKind } from '../domain/types';
+	import { DEFAULT_MAP_STYLE, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '$lib/constants/maps';
 
 	interface ShelterGeo {
 		lat: number;
@@ -23,8 +24,8 @@
 	let {
 		shelters = [],
 		userLocation,
-		center = [100.473531, 7.009425] as [number, number],
-		zoom = 11
+		center = DEFAULT_MAP_CENTER,
+		zoom = DEFAULT_MAP_ZOOM
 	}: {
 		shelters?: Shelter[];
 		userLocation?: { lat?: number | string; lng?: number | string };
@@ -99,33 +100,7 @@
 
 		mapInstance = new L.Map({
 			container: mapElement,
-			style: {
-				version: 8,
-				sources: {
-					// Carto Voyager — light, labeled streets; no API key (unlike Stadia domain auth).
-					basemap: {
-						type: 'raster',
-						tiles: [
-							'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-							'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-							'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-							'https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'
-						],
-						tileSize: 256,
-						attribution:
-							'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-					}
-				},
-				layers: [
-					{
-						id: 'basemap',
-						type: 'raster',
-						source: 'basemap',
-						minzoom: 0,
-						maxzoom: 19
-					}
-				]
-			},
+			style: DEFAULT_MAP_STYLE,
 			center,
 			zoom
 		});
