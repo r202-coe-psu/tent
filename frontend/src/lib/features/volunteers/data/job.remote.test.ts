@@ -198,13 +198,31 @@ describe('JobRemoteRepository — quota mutations', () => {
 		expect(reloaded).toMatchObject({ tier: created.tier, auto_accept: created.auto_accept });
 	});
 
-	it('update() rejects a quota that breaks the invariant (D2)', async () => {
+	it('update() ignores stale quota buckets from the client snapshot (D2 — lost update)', async () => {
 		const repo = createJobRepositoryForTest('shelter_sh001');
 		const created = await repo.create(withQuota(5), ctx);
+		// A dispatch lands while the edit form sits open on `created`.
+		await repo.dispatch(created._id, 2);
 
-		await expect(
-			repo.update({ ...created, slots_confirmed: 99, slots_dispatched: 0, slots_remaining: 5 })
-		).rejects.toThrow();
+		const saved = await repo.update({ ...created, title: 'ชื่อใหม่' });
+
+		expect(saved).toMatchObject({
+			title: 'ชื่อใหม่',
+			quota: 5,
+			slots_confirmed: 0,
+			slots_dispatched: 2,
+			slots_remaining: 3
+		});
+	});
+
+	it('update() rejects a quota lower than what is already claimed (D2)', async () => {
+		const repo = createJobRepositoryForTest('shelter_sh001');
+		const created = await repo.create(withQuota(5), ctx);
+		await repo.dispatch(created._id, 3);
+
+		await expect(repo.update({ ...created, quota: 2 })).rejects.toThrow(QuotaError);
+
+		expect(await repo.get(created._id)).toMatchObject({ quota: 5, slots_dispatched: 3 });
 	});
 
 	it('update() re-derives status so a metadata edit cannot leave a full job open (D2)', async () => {

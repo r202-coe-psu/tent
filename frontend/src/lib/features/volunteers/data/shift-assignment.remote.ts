@@ -103,11 +103,11 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 		try {
 			await jobRepository().declineDispatch(saved.job_id);
 		} catch (err) {
-			await this.repo
-				.put(touch({ ...saved, dispatch_status: 'dispatched' as const, status: latest.status }))
-				.catch(() => {
-					/* best-effort; original error still surfaces below */
-				});
+			await this.save(
+				touch({ ...saved, dispatch_status: 'dispatched' as const, status: latest.status })
+			).catch(() => {
+				/* best-effort; original error still surfaces below */
+			});
 			throw err;
 		}
 		return saved;

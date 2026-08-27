@@ -9,6 +9,7 @@ import {
 	applyDispatch,
 	assertQuotaInvariant,
 	deriveJobStatus,
+	QuotaError,
 	type JobQuota
 } from '../domain/quota';
 import type { JobFilter, JobRepository } from './volunteer.repository';
@@ -79,12 +80,38 @@ export class JobRemoteRepository implements JobRepository {
 	}
 
 	async update(job: Job): Promise<Job> {
-		const latest = await this.repo.get<Job>(job._id);
-		if (!latest) throw new Error(`ไม่พบงาน: ${job._id}`);
-		const merged = touch({ ...job, _rev: latest._rev });
-		// `status` is re-derived here too, so a metadata edit cannot leave a
-		// full job sitting on `open` (F7 hole found in review round 2).
-		return this.repo.put(assertWritable({ ...merged, status: deriveJobStatus(merged) }));
+		let lastError: unknown;
+		for (let attempt = 0; attempt < MAX_QUOTA_RETRIES; attempt++) {
+			const latest = await this.repo.get<Job>(job._id);
+			if (!latest) throw new Error(`ไม่พบงาน: ${job._id}`);
+
+			const claimed = latest.slots_confirmed + latest.slots_dispatched;
+			if (job.quota < claimed) {
+				throw new QuotaError(`จำนวนรับรวม ${job.quota} คน น้อยกว่าที่รับไปแล้ว ${claimed} คน`);
+			}
+
+			const merged: Job = {
+				...job,
+				_rev: latest._rev,
+				slots_confirmed: latest.slots_confirmed,
+				slots_dispatched: latest.slots_dispatched,
+				slots_remaining: job.quota - claimed
+			};
+			// `status` is re-derived here too, so a metadata edit cannot leave a
+			// full job sitting on `open` (F7 hole found in review round 2).
+			const nextJob = assertWritable(touch({ ...merged, status: deriveJobStatus(merged) }));
+
+			try {
+				return await this.repo.put(nextJob);
+			} catch (err) {
+				lastError = err;
+				if (err instanceof ConflictError) continue; // re-read latest _rev and retry
+				throw err;
+			}
+		}
+		throw lastError instanceof Error
+			? lastError
+			: new ConflictError(`update: exceeded ${MAX_QUOTA_RETRIES} retries for ${job._id}`);
 	}
 
 	/**
