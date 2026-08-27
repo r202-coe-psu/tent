@@ -31,7 +31,7 @@
 	import ConsoleBanner from '$lib/components/console-banner.svelte';
 
 	// Tab and context state
-	let activeTab = $state<SopTabType>('food_sphere_standard');
+	let activeTab = $state<SopTabType>('sphere_standard');
 	let activeContext = $state<'master' | 'override'>('master');
 
 	// Modal / Drawer state
