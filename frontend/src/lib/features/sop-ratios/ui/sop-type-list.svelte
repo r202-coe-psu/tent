@@ -35,12 +35,12 @@
 		},
 		{
 			key: 'food_sphere_standard' as const,
-			label: 'มาตรฐานการดำรงชีพด้านอาหาร (Food Sphere Standard)',
+			label: 'พารามิเตอร์อ้างอิงสำหรับอาหาร (Food Sphere Standard)',
 			count: foodSphereCount
 		},
 		{
 			key: 'requirement_group' as const,
-			label: 'กลุ่มสารอาหาร (Requirement Group)',
+			label: 'กลุ่มสำหรับการคำนวณ (Requirement Group)',
 			count: reqGroupCount
 		},
 		{

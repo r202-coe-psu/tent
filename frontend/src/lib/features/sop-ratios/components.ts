@@ -12,9 +12,12 @@ export { default as DeactivateConfirmDialog } from './ui/deactivate-confirm-dial
 
 // New Food Sphere & Replenishment components (CR-093)
 export { default as FoodSphereStandardTab } from './ui/food-sphere-standard-tab.svelte';
+export { default as FoodSphereStandardForm } from './ui/food-sphere-standard-form.svelte';
 export { default as FoodSphereStandardModal } from './ui/food-sphere-standard-modal.svelte';
 export { default as RequirementGroupTab } from './ui/requirement-group-tab.svelte';
+export { default as RequirementGroupForm } from './ui/requirement-group-form.svelte';
 export { default as ReplenishmentPolicyTab } from './ui/replenishment-policy-tab.svelte';
+export { default as ReplenishmentPolicyForm } from './ui/replenishment-policy-form.svelte';
 export { default as ReplenishmentPolicyModal } from './ui/replenishment-policy-modal.svelte';
 export { default as DocStatusBadge } from './ui/doc-status-badge.svelte';
 export { default as FoodSphereHistoryDrawer } from './ui/food-sphere-history-drawer.svelte';
