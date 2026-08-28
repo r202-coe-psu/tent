@@ -112,9 +112,8 @@ export async function deployRegistryDesign(): Promise<{ status: number; updated:
 	return { status: res.status, updated: true };
 }
 
-/** Idempotent v2 → v3 migration wrapper. */
+/** Idempotent legacy → current migration wrapper. */
 export function migrate(master: ShelterMasterV2 | ShelterMaster): ShelterMaster {
-	if (master.schema_v >= 3) return master as ShelterMaster;
 	return migrateShelterV2ToCurrent(master);
 }
 

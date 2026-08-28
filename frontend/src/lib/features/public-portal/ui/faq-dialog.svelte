@@ -60,7 +60,7 @@
 
 		<div class="space-y-4 py-4">
 			<div class="space-y-2">
-				<Label for="question">คำถาม</Label>
+				<Label for="question">คำถาม (ไทย)</Label>
 				<Input
 					id="question"
 					bind:value={editingItem.question}
@@ -69,8 +69,27 @@
 			</div>
 
 			<div class="space-y-2">
-				<Label for="answer">คำตอบ</Label>
-				<Textarea id="answer" bind:value={editingItem.answer} placeholder="คำตอบ..." rows={4} />
+				<Label for="answer">คำตอบ (ไทย)</Label>
+				<Textarea id="answer" bind:value={editingItem.answer} placeholder="คำตอบ..." rows={3} />
+			</div>
+
+			<div class="space-y-2">
+				<Label for="question_en">คำถาม (English)</Label>
+				<Input
+					id="question_en"
+					bind:value={editingItem.question_en}
+					placeholder="e.g. How to register?"
+				/>
+			</div>
+
+			<div class="space-y-2">
+				<Label for="answer_en">คำตอบ (English)</Label>
+				<Textarea
+					id="answer_en"
+					bind:value={editingItem.answer_en}
+					placeholder="Answer..."
+					rows={3}
+				/>
 			</div>
 
 			<div class="flex items-center justify-between rounded-lg border p-3">

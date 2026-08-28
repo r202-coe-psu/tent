@@ -460,7 +460,7 @@
 													เบิกวัตถุดิบ
 												</Button>
 												{#if isBomSourced(plan)}
-													<p class="max-w-[220px] text-center text-[11px] text-amber-600">
+													<p class="max-w-[220px] text-center text-2xs text-amber-600">
 														มีวัตถุดิบยังไม่เชื่อมกับสต็อกจริง (ชื่อไม่ตรงกับคลัง)
 													</p>
 												{/if}

@@ -279,7 +279,7 @@
 							<span class="font-semibold">ลงบันทึกใบร่างครั้งแรก:</span>
 							<span class="text-muted-foreground">{formatDate(referral.created_at)}</span>
 							<span
-								class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+								class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
 							>
 								<User class="h-3 w-3" /> By: {referral.created_by}
 							</span>
@@ -296,7 +296,7 @@
 								<span class="font-semibold text-blue-600">ส่งข้อมูลออก (Sent):</span>
 								<span class="text-muted-foreground">{formatDate(referral.timeline.sent.at)}</span>
 								<span
-									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
 								>
 									<User class="h-3 w-3" /> By: {referral.timeline.sent.by}
 								</span>
@@ -318,7 +318,7 @@
 									>{formatDate(referral.timeline.responded.at)}</span
 								>
 								<span
-									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
 								>
 									<User class="h-3 w-3" /> By: {referral.timeline.responded.by}
 								</span>
@@ -336,7 +336,7 @@
 								<span class="font-semibold text-slate-600">ปิดรายการ (Closed):</span>
 								<span class="text-muted-foreground">{formatDate(referral.timeline.closed.at)}</span>
 								<span
-									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
 								>
 									<User class="h-3 w-3" /> By: {referral.timeline.closed.by}
 								</span>

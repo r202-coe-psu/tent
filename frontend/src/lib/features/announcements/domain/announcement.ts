@@ -11,6 +11,8 @@ export const announcementSchema = z.object({
 	schema_v: z.literal(1),
 	title: z.string().trim().min(1, 'ระบุหัวข้อประกาศ'),
 	description: z.string().trim().min(1, 'ระบุรายละเอียดประกาศ'),
+	title_en: z.string().trim().optional(),
+	description_en: z.string().trim().optional(),
 	severity: announcementSeveritySchema,
 	is_active: z.boolean(),
 	created_at: z.string().datetime(),
@@ -41,6 +43,8 @@ export function createAnnouncement(
 		schema_v: 1,
 		title: data.title,
 		description: data.description,
+		title_en: data.title_en,
+		description_en: data.description_en,
 		severity: data.severity,
 		is_active: data.is_active,
 		created_at: ts,
@@ -51,7 +55,12 @@ export function createAnnouncement(
 
 export function touchAnnouncement(
 	doc: Announcement,
-	data: Partial<Pick<Announcement, 'title' | 'description' | 'severity' | 'is_active'>>
+	data: Partial<
+		Pick<
+			Announcement,
+			'title' | 'description' | 'title_en' | 'description_en' | 'severity' | 'is_active'
+		>
+	>
 ): Announcement {
 	return {
 		...doc,

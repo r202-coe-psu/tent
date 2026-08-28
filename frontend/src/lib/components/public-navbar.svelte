@@ -12,6 +12,12 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import Globe from '@lucide/svelte/icons/globe';
+
+	import * as Select from '$lib/components/ui/select';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_NAVBAR_I18N, SUPPORTED_LANGUAGES } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { BookingModal } from '$lib/features/public-register';
 
 	function isActive(path: string) {
@@ -41,6 +47,8 @@
 	let mobileMenuOpen = $state(false);
 	let donationsMenuOpen = $state(false);
 	let donationsMenuEl: HTMLDivElement | undefined = $state();
+
+	const t = $derived(getTranslation(PUBLIC_NAVBAR_I18N, langState.current));
 	// Booking has no route of its own — the navbar opens the dialog in place.
 	let bookingOpen = $state(false);
 
@@ -89,26 +97,52 @@
 					<Compass class="h-5 w-5" />
 				</div>
 				<div class="flex flex-col">
-					<span class="text-base font-bold tracking-tight text-foreground">Smart Shelter</span>
-					<span class="text-[10px] font-semibold tracking-wider text-primary uppercase"
-						>Public & RFL Portal</span
+					<span class="text-base font-bold tracking-tight text-foreground">{t.appTitle}</span>
+					<span class="text-2xs font-semibold tracking-wider text-primary uppercase"
+						>{t.appSubtitle}</span
 					>
 				</div>
 			</a>
 		</div>
 
 		<!-- Mobile Menu Button -->
-		<button
-			class="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted md:hidden"
-			onclick={toggleMobileMenu}
-			aria-label="Toggle mobile menu"
-		>
-			{#if mobileMenuOpen}
-				<X class="h-6 w-6" />
-			{:else}
-				<Menu class="h-6 w-6" />
-			{/if}
-		</button>
+		<div class="flex items-center gap-2 md:hidden">
+			<!-- Language Switcher (Mobile) -->
+			<Select.Root
+				type="single"
+				value={langState.current}
+				onValueChange={(v) => {
+					if (v) langState.current = v;
+				}}
+			>
+				<Select.Trigger
+					class="h-8 w-[60px] border-none bg-transparent px-2 text-xs shadow-none focus:ring-0"
+				>
+					{langState.current.toUpperCase()}
+				</Select.Trigger>
+				<Select.Content>
+					{#each SUPPORTED_LANGUAGES as lang (lang.code)}
+						<Select.Item value={lang.code} label={lang.name}>
+							<div class="flex items-center gap-2">
+								<span class="text-sm">{lang.name}</span>
+							</div>
+						</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
+
+			<button
+				class="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
+				onclick={toggleMobileMenu}
+				aria-label="Toggle mobile menu"
+			>
+				{#if mobileMenuOpen}
+					<X class="h-6 w-6" />
+				{:else}
+					<Menu class="h-6 w-6" />
+				{/if}
+			</button>
+		</div>
 
 		<!-- Navbar Links -->
 		<nav class="hidden items-center gap-1 md:flex">
@@ -119,7 +153,7 @@
 					: 'text-muted-foreground'}"
 			>
 				<Home class="h-4 w-4" />
-				หน้าแรก
+				{t.home}
 			</a>
 
 			<a
@@ -131,7 +165,7 @@
 					: 'text-muted-foreground'}"
 			>
 				<Compass class="h-4 w-4" />
-				ตรวจสอบศูนย์พักพิง
+				{t.shelters}
 			</a>
 
 			<a
@@ -143,7 +177,7 @@
 					: 'text-muted-foreground'}"
 			>
 				<Search class="h-4 w-4" />
-				สืบค้นญาติ
+				{t.search}
 			</a>
 
 			<!-- Donations: donate + track (CR-052 §2.6) — click toggle (not hover) -->
@@ -160,7 +194,7 @@
 						: 'text-muted-foreground'}"
 				>
 					<Heart class="h-4 w-4" />
-					บริจาค
+					{t.donate}
 					<ChevronDown
 						class="h-3.5 w-3.5 text-muted-foreground/75 transition-transform {donationsMenuOpen
 							? 'rotate-180'
@@ -182,7 +216,7 @@
 								: 'text-muted-foreground'}"
 						>
 							<Heart class="h-3.5 w-3.5" />
-							บริจาคและจองคิว
+							{t.donateAndBook}
 						</a>
 						<a
 							role="menuitem"
@@ -193,7 +227,7 @@
 								: 'text-muted-foreground'}"
 						>
 							<PackageSearch class="h-3.5 w-3.5" />
-							ตรวจสอบสถานะ
+							{t.trackDonation}
 						</a>
 					</div>
 				{/if}
@@ -208,8 +242,35 @@
 					: ''}"
 			>
 				<Building2 class="h-4 w-4" />
-				ระบบหลังบ้าน
+				{t.backoffice}
 			</a>
+
+			<div class="ml-2 flex items-center border-l border-border pl-3">
+				<Globe class="mr-1 h-4 w-4 text-muted-foreground" />
+				<Select.Root
+					type="single"
+					value={langState.current}
+					onValueChange={(v) => {
+						if (v) langState.current = v;
+					}}
+				>
+					<Select.Trigger
+						class="h-8 w-[80px] border-none bg-transparent px-2 text-sm shadow-none focus:ring-0"
+					>
+						{SUPPORTED_LANGUAGES.find((l) => l.code === langState.current)?.name ||
+							langState.current.toUpperCase()}
+					</Select.Trigger>
+					<Select.Content>
+						{#each SUPPORTED_LANGUAGES as lang (lang.code)}
+							<Select.Item value={lang.code} label={lang.name}>
+								<div class="flex items-center gap-2">
+									<span class="text-sm">{lang.name}</span>
+								</div>
+							</Select.Item>
+						{/each}
+					</Select.Content>
+				</Select.Root>
+			</div>
 		</nav>
 	</div>
 
@@ -225,7 +286,7 @@
 						: 'text-muted-foreground'}"
 				>
 					<Home class="h-5 w-5" />
-					หน้าแรก
+					{t.home}
 				</a>
 
 				<a
@@ -238,7 +299,7 @@
 						: 'text-muted-foreground'}"
 				>
 					<Compass class="h-5 w-5" />
-					ตรวจสอบศูนย์พักพิง
+					{t.shelters}
 				</a>
 
 				<a
@@ -251,7 +312,7 @@
 						: 'text-muted-foreground'}"
 				>
 					<Search class="h-5 w-5" />
-					สืบค้นญาติ
+					{t.search}
 				</a>
 
 				<button
@@ -274,7 +335,7 @@
 						: 'text-muted-foreground'}"
 				>
 					<Heart class="h-5 w-5" />
-					บริจาคและจองคิว
+					{t.donateAndBook}
 				</a>
 
 				<a
@@ -285,7 +346,7 @@
 						: 'text-muted-foreground'}"
 				>
 					<PackageSearch class="h-5 w-5" />
-					ตรวจสอบสถานะบริจาค
+					{t.trackDonationLong}
 				</a>
 
 				<a
@@ -298,7 +359,7 @@
 						: ''}"
 				>
 					<Building2 class="h-5 w-5" />
-					ระบบหลังบ้าน
+					{t.backoffice}
 				</a>
 			</nav>
 		</div>

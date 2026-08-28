@@ -13,6 +13,9 @@
 	import { useShelter } from '$lib/features/shelters/index.js';
 	import { buildDisclaimerGroups } from '../domain/disclaimer';
 	import type { Household, HouseholdVehicle, PetGroup } from '../domain/people';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { EVACUEE_PET_ASSET_VEHICLE_I18N } from './_constants/evacuee-pet-asset-vehicle.i18n';
 
 	let {
 		household = null,
@@ -20,8 +23,6 @@
 		onBack,
 		onNext
 	}: {
-		// When an existing household is selected in step 4, its pets/assets/vehicles
-		// are fetched in so the user edits them in place instead of creating over.
 		household?: Household | null;
 		pending?: boolean;
 		onBack: () => void;
@@ -32,8 +33,8 @@
 		}) => void;
 	} = $props();
 
-	// A household may bring several pets (schema.md §1.3 `pets[]`).
-	// `id` is a client-only key for the {#each} — stripped before onNext.
+	const t = $derived(getTranslation(EVACUEE_PET_ASSET_VEHICLE_I18N, languageStore.current));
+
 	type PetRow = {
 		id: number;
 		species: 'dog' | 'cat' | 'bird' | 'other';
@@ -43,9 +44,6 @@
 	};
 	let nextPetId = 0;
 
-	// Prefill from the selected household (edit mode); otherwise start empty (new).
-	// The prop is stable for this component's lifetime (mounted fresh at step 5),
-	// so this init-only read is intentional — untrack keeps it non-reactive.
 	let assetDescription = $state(untrack(() => household?.assets?.description ?? ''));
 	let petRows = $state<PetRow[]>(
 		untrack(() =>
@@ -59,12 +57,12 @@
 		)
 	);
 
-	const petSpeciesOptions = [
-		{ value: 'dog', label: '🐶 สุนัข' },
-		{ value: 'cat', label: '🐱 แมว' },
-		{ value: 'bird', label: '🐦 นก' },
-		{ value: 'other', label: '🐾 อื่นๆ' }
-	] as const;
+	const petSpeciesOptions = $derived([
+		{ value: 'dog', label: t.pets.options.dog },
+		{ value: 'cat', label: t.pets.options.cat },
+		{ value: 'bird', label: t.pets.options.bird },
+		{ value: 'other', label: t.pets.options.other }
+	] as const);
 
 	function addPet() {
 		petRows = [
@@ -77,7 +75,6 @@
 		petRows = petRows.filter((p) => p.id !== id);
 	}
 
-	// A household may bring several vehicles (schema.md §1.3 `vehicles[]`, CR-016).
 	type VehicleRow = { id: number; type: 'car' | 'motorcycle' | 'other'; license_plate: string };
 	let nextVehicleId = 0;
 	let vehicleRows = $state<VehicleRow[]>(
@@ -90,11 +87,11 @@
 		)
 	);
 
-	const vehicleTypeOptions = [
-		{ value: 'car', label: 'รถยนต์' },
-		{ value: 'motorcycle', label: 'จักรยานยนต์' },
-		{ value: 'other', label: 'อื่นๆ' }
-	] as const;
+	const vehicleTypeOptions = $derived([
+		{ value: 'car', label: t.vehicles.options.car },
+		{ value: 'motorcycle', label: t.vehicles.options.motorcycle },
+		{ value: 'other', label: t.vehicles.options.other }
+	] as const);
 
 	function addVehicle() {
 		vehicleRows = [...vehicleRows, { id: nextVehicleId++, type: 'car', license_plate: '' }];
@@ -104,16 +101,9 @@
 		vehicleRows = vehicleRows.filter((v) => v.id !== id);
 	}
 
-	// Disclaimer text is not free-form — it's read from this shelter's configured
-	// luggage_policy / parking_policy / admission_policy.pet_policy (CR-023 Addendum A),
-	// so it reflects what the shelter admin actually selected, not a hardcoded list.
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelter = $derived(shelterQuery.data);
 
-	// Grouped by section — everything the shelter admin actually configured across the
-	// three CR-023 policies this step touches (assets/luggage, vehicles/parking, pets),
-	// falling back to a generic notice per section when the shelter has nothing configured.
-	// Grouping rules live in ../domain/disclaimer so they're unit-testable.
 	const disclaimerGroups = $derived(
 		buildDisclaimerGroups({
 			assetDescription,
@@ -131,7 +121,7 @@
 	<!-- Pets Section — a household may bring several -->
 	<section class="space-y-3">
 		<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-			<h3 class="text-sm font-semibold">🐶 สัตว์เลี้ยงที่นำมาด้วย</h3>
+			<h3 class="text-sm font-semibold">{t.pets.title}</h3>
 			<Button
 				type="button"
 				variant="outline"
@@ -139,13 +129,14 @@
 				class="h-10 w-full shrink-0 bg-background sm:h-8 sm:w-auto"
 				onclick={addPet}
 			>
-				<Plus class="mr-1 h-3.5 w-3.5" /> เพิ่มสัตว์เลี้ยง
+				<Plus class="mr-1 h-3.5 w-3.5" />
+				{t.pets.btnAdd}
 			</Button>
 		</div>
 
 		{#if petRows.length === 0}
 			<p class="text-xs text-muted-foreground">
-				ยังไม่มีสัตว์เลี้ยง — กด "เพิ่มสัตว์เลี้ยง" เพื่อเพิ่มรายการ
+				{t.pets.empty}
 			</p>
 		{:else}
 			<div class="space-y-2">
@@ -154,10 +145,11 @@
 						class="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-end"
 					>
 						<div class="w-full space-y-1 sm:w-[110px] sm:shrink-0">
-							<Label class="text-[10px] text-muted-foreground">ชนิดสัตว์</Label>
+							<Label class="text-2xs text-muted-foreground">{t.pets.speciesLabel}</Label>
 							<Select.Root type="single" bind:value={pet.species}>
 								<Select.Trigger class="h-11 w-full bg-background text-sm sm:h-9">
-									{petSpeciesOptions.find((o) => o.value === pet.species)?.label ?? 'ชนิด'}
+									{petSpeciesOptions.find((o) => o.value === pet.species)?.label ??
+										t.pets.speciesLabel}
 								</Select.Trigger>
 								<Select.Content>
 									{#each petSpeciesOptions as opt (opt.value)}
@@ -167,7 +159,7 @@
 							</Select.Root>
 						</div>
 						<div class="w-full space-y-1 sm:w-[72px] sm:shrink-0">
-							<Label class="text-[10px] text-muted-foreground">จำนวน</Label>
+							<Label class="text-2xs text-muted-foreground">{t.pets.countLabel}</Label>
 							<Input
 								type="number"
 								min={1}
@@ -176,11 +168,11 @@
 							/>
 						</div>
 						<div class="flex-1 space-y-1">
-							<Label class="text-[10px] text-muted-foreground">หมายเหตุ</Label>
+							<Label class="text-2xs text-muted-foreground">{t.pets.notesLabel}</Label>
 							<Input
 								class="h-11 bg-background text-sm sm:h-9"
 								bind:value={pet.notes}
-								placeholder="เช่น พันธุ์ / สี"
+								placeholder={t.pets.notesPlaceholder}
 							/>
 						</div>
 						<div class="flex items-center justify-between gap-2">
@@ -193,7 +185,7 @@
 									onCheckedChange={(v) => (pet.has_cage = !!v)}
 								/>
 								<label for="pet_cage_{pet.id}" class="cursor-pointer text-xs whitespace-nowrap">
-									มีกรง
+									{t.pets.cageLabel}
 								</label>
 							</div>
 							<Button
@@ -214,10 +206,10 @@
 
 	<!-- Assets Section -->
 	<section class="space-y-3">
-		<h3 class="text-sm font-semibold">🎒 ทรัพย์สินมีค่า / สัมภาระ</h3>
+		<h3 class="text-sm font-semibold">{t.assets.title}</h3>
 		<Input
 			bind:value={assetDescription}
-			placeholder="รายละเอียดทรัพย์สิน/สัมภาระ"
+			placeholder={t.assets.placeholder}
 			class="h-12 bg-background sm:h-10"
 		/>
 	</section>
@@ -225,7 +217,7 @@
 	<!-- Vehicles Section -->
 	<section class="space-y-3">
 		<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-			<h3 class="text-sm font-semibold">🚗 ยานพาหนะ</h3>
+			<h3 class="text-sm font-semibold">{t.vehicles.title}</h3>
 			<Button
 				type="button"
 				variant="outline"
@@ -233,19 +225,21 @@
 				class="h-10 w-full shrink-0 bg-background sm:h-8 sm:w-auto"
 				onclick={addVehicle}
 			>
-				<Plus class="mr-1 h-3.5 w-3.5" /> เพิ่มคัน
+				<Plus class="mr-1 h-3.5 w-3.5" />
+				{t.vehicles.btnAdd}
 			</Button>
 		</div>
 
 		{#if vehicleRows.length === 0}
-			<p class="text-xs text-muted-foreground">ยังไม่มียานพาหนะ — กด "เพิ่มคัน" เพื่อเพิ่มรายการ</p>
+			<p class="text-xs text-muted-foreground">{t.vehicles.empty}</p>
 		{:else}
 			<div class="space-y-2">
 				{#each vehicleRows as vehicle (vehicle.id)}
 					<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 						<Select.Root type="single" bind:value={vehicle.type}>
 							<Select.Trigger class="h-12 w-full bg-background sm:h-10 sm:w-[120px] sm:shrink-0">
-								{vehicleTypeOptions.find((o) => o.value === vehicle.type)?.label ?? 'ประเภท'}
+								{vehicleTypeOptions.find((o) => o.value === vehicle.type)?.label ??
+									t.vehicles.typeLabel}
 							</Select.Trigger>
 							<Select.Content>
 								{#each vehicleTypeOptions as opt (opt.value)}
@@ -256,7 +250,7 @@
 						<div class="flex items-center gap-2">
 							<Input
 								bind:value={vehicle.license_plate}
-								placeholder="ทะเบียนรถ"
+								placeholder={t.vehicles.platePlaceholder}
 								class="h-12 flex-1 bg-background sm:h-10"
 							/>
 							<Button
@@ -280,7 +274,7 @@
 			<div class="flex items-center gap-2">
 				<ShieldAlert class="h-5 w-5 text-amber-600" />
 				<h3 class="text-sm font-bold text-amber-800">
-					ข้อตกลงและเงื่อนไขของศูนย์พักพิง (Disclaimer)
+					{t.disclaimer.title}
 				</h3>
 			</div>
 			<div class="space-y-3">
@@ -307,8 +301,7 @@
 				<span
 					class="text-sm leading-relaxed font-semibold text-amber-950 select-none dark:text-amber-100"
 				>
-					ข้าพเจ้าและครอบครัวรับทราบและยินยอมปฏิบัติตามกฎระเบียบของศูนย์พักพิง
-					รวมถึงรับผิดชอบต่อทรัพย์สินมีค่าของตนเองหากเกิดการสูญหาย
+					{t.disclaimer.acknowledge}
 				</span>
 			</label>
 		</section>
@@ -336,7 +329,7 @@
 					}))
 				})}
 		>
-			ลงทะเบียนสำเร็จ
+			{t.actions.next}
 		</Button>
 		<Button
 			type="button"
@@ -344,7 +337,7 @@
 			class="h-12 w-full text-base font-medium sm:w-auto sm:px-8"
 			onclick={onBack}
 		>
-			ย้อนกลับ
+			{t.actions.back}
 		</Button>
 	</div>
 </div>

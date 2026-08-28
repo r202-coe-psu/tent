@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from ...core.security import verify_external_secret
-from .schemas import ShelterDetailResponse, ShelterListResponse
+from .schemas import ShelterDetailResponse, ShelterListResponse, SiteKind
 from .use_case import ShelterUseCase, get_shelter_use_case
 
 router = APIRouter(
@@ -23,6 +23,7 @@ async def list_shelters(
     district: str | None = Query(default=None),
     subdistrict: str | None = Query(default=None),
     status: str | None = Query(default=None),
+    site_kind: SiteKind | None = Query(default=None),
     lat: float | None = Query(default=None, ge=-90.0, le=90.0, description="User latitude"),
     lng: float | None = Query(default=None, ge=-180.0, le=180.0, description="User longitude"),
     radius_km: float | None = Query(default=None, gt=0, description="Search radius in kilometers"),
@@ -35,6 +36,7 @@ async def list_shelters(
         district=district,
         subdistrict=subdistrict,
         status=status,
+        site_kind=site_kind,
         lat=lat,
         lng=lng,
         radius_km=radius_km,

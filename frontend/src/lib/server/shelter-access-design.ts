@@ -105,7 +105,7 @@ export function buildValidateDocUpdate(code: string): string {
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
     'people_import_log',
-    'donation', 'donation_campaign', 'stock_ledger', 'donation_slot',
+    'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'purchase', 'referral',
     'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
     'item_category', 'item_master', 'recipe'

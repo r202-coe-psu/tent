@@ -14,9 +14,11 @@ export type {
 	PublicShelterCardModel,
 	PublicShelterDetail,
 	PublicShelterItem,
-	PublicShelterListResponse
+	PublicShelterListResponse,
+	PublicSiteKind
 } from './domain/types';
 export { searchResultKey, toPublicShelterCard, toUiShelterStatus } from './domain/mappers';
+export { resolveMasterLabel, toLabelMap } from './domain/master-labels';
 export {
 	isInShelterStatus,
 	publicStayStatusLabel,
@@ -27,11 +29,18 @@ export {
 	type StayStatusTone
 } from './domain/stay-status';
 export { default as StayStatusChip } from './ui/stay-status-chip.svelte';
-export { familySearch, listPublicShelters } from './data/public-api';
+export {
+	familySearch,
+	fetchShelterTypeLabels,
+	fetchVulnerableGroupLabels,
+	listPublicShelters
+} from './data/public-api';
 export {
 	publicPortalKeys,
 	useFamilySearchMutation,
-	usePublicShelters
+	usePublicShelters,
+	useShelterTypeLabelMap,
+	useVulnerableGroupLabelMap
 } from './application/queries';
 
 export {

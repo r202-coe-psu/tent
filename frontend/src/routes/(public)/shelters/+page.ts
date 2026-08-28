@@ -6,6 +6,8 @@ import {
 	type PublicShelterItem
 } from '$lib/features/public-portal';
 
+const SITE_KINDS = new Set(['evacuation_center', 'host_house']);
+
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
 	const R = 6371;
 	const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -26,16 +28,23 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const district = url.searchParams.get('district') || '';
 	const subdistrict = url.searchParams.get('subdistrict') || '';
 	const statusParam = url.searchParams.getAll('status').join(',') || '';
+	const siteKindParam = url.searchParams.get('site_kind') || '';
+	const siteKind = SITE_KINDS.has(siteKindParam)
+		? (siteKindParam as 'evacuation_center' | 'host_house')
+		: undefined;
 	const distance = url.searchParams.get('distance') ?? '5';
 	const user_lat = url.searchParams.get('user_lat') || '';
 	const user_lng = url.searchParams.get('user_lng') || '';
 
-	// FastAPI accepts a single status; map common UI values to Mongo status.
-	const status =
+	// FastAPI accepts a single Mongo status; map UI `prepare` → `standby`.
+	const statusRaw =
 		statusParam
 			.split(',')
 			.map((s) => s.trim().toLowerCase())
-			.find((s) => s === 'open' || s === 'closed' || s === 'full' || s === 'prepare') || '';
+			.find(
+				(s) => s === 'open' || s === 'closed' || s === 'full' || s === 'prepare' || s === 'standby'
+			) || '';
+	const status = statusRaw === 'prepare' ? 'standby' : statusRaw;
 
 	const userLatNum = user_lat ? parseFloat(user_lat) : NaN;
 	const userLngNum = user_lng ? parseFloat(user_lng) : NaN;
@@ -49,6 +58,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			district: district || undefined,
 			subdistrict: subdistrict || undefined,
 			status: status || undefined,
+			site_kind: siteKind,
 			lat: hasUser ? userLatNum : undefined,
 			lng: hasUser ? userLngNum : undefined,
 			radius_km: hasUser && !Number.isNaN(maxDistance) && maxDistance > 0 ? maxDistance : undefined,
@@ -89,7 +99,16 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		shelters = shelters.filter((s) => !s.geo || s.distance <= maxDistance);
 	}
 
-	const openCount = shelters.filter((s) => s.status === 'OPEN').length;
+	// Closest-first when a search origin (GPS or map pin) is present.
+	if (hasUser) {
+		shelters = [...shelters].sort((a, b) => {
+			const da = a.geo ? (a.distance ?? Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
+			const db = b.geo ? (b.distance ?? Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
+			return da - db;
+		});
+	}
+
+	const openCount = shelters.filter((s) => s.status === 'OPEN' || s.status === 'FULL').length;
 
 	return {
 		shelters,
@@ -105,6 +124,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			district,
 			subdistrict,
 			status: statusParam,
+			site_kind: siteKind,
 			distance,
 			user_lat,
 			user_lng

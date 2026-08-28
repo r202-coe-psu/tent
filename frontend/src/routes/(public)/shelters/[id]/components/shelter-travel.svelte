@@ -3,29 +3,32 @@
 	import type { PublicShelterDetail } from '$lib/features/public-portal';
 
 	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
+
+	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
 </script>
 
 <section>
 	<div class="mb-4 flex items-center gap-2">
 		<AlertTriangle class="h-5 w-5 text-warning" />
-		<h2 class="text-lg font-bold text-foreground">การเดินทางและข้อจำกัด</h2>
+		<h2 class="text-lg font-bold text-foreground">{t.travelRestrictions}</h2>
 	</div>
 
 	<div class="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
 		<div class="flex items-center justify-between border-b border-border/50 p-4">
-			<span class="text-sm font-semibold text-muted-foreground">เส้นทางเข้าศูนย์</span>
+			<span class="text-sm font-semibold text-muted-foreground">{t.entranceRoute}</span>
 			<span class="ml-4 text-right text-sm font-bold text-foreground"
-				>{shelter.travel?.route === 'unspecified'
-					? 'ไม่มีข้อมูล'
-					: shelter.travel?.route || '-'}</span
+				>{shelter.travel?.route === 'unspecified' ? t.noData : shelter.travel?.route || '-'}</span
 			>
 		</div>
 		<div class="flex items-center justify-between border-b border-border/50 p-4">
-			<span class="text-sm font-semibold text-muted-foreground">ระดับความสูงจากน้ำทะเล</span>
+			<span class="text-sm font-semibold text-muted-foreground">{t.altitudeSeaLevel}</span>
 			<span class="ml-4 text-right text-sm font-bold text-foreground"
 				>{shelter.travel?.altitude === 'unspecified'
-					? 'ไม่มีข้อมูล'
-					: (shelter.travel?.altitude || '-') + ' เมตร'}</span
+					? t.noData
+					: `${shelter.travel?.altitude || '-'} ${t.meters}`}</span
 			>
 		</div>
 		{#if shelter.travel?.flood_warning}

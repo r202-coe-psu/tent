@@ -38,6 +38,7 @@ export async function listPublicShelters(
 	if (params.district) url.searchParams.set('district', params.district);
 	if (params.subdistrict) url.searchParams.set('subdistrict', params.subdistrict);
 	if (params.status) url.searchParams.set('status', params.status);
+	if (params.site_kind) url.searchParams.set('site_kind', params.site_kind);
 	if (params.lat !== undefined && !Number.isNaN(params.lat))
 		url.searchParams.set('lat', params.lat.toString());
 	if (params.lng !== undefined && !Number.isNaN(params.lng))
@@ -53,4 +54,44 @@ export async function listPublicShelters(
 		throw publicApiError(data, response.status, 'ไม่สามารถโหลดรายการศูนย์พักพิงได้');
 	}
 	return data as PublicShelterListResponse;
+}
+
+export type MasterLabelOption = { code: string; label: string };
+
+/**
+ * Code → label for `master_data:vulnerable_group`. Degrades to `[]` on any
+ * failure — shelter cards must still render without the badge text.
+ */
+export async function fetchVulnerableGroupLabels(
+	fetchFn: typeof fetch = fetch
+): Promise<MasterLabelOption[]> {
+	try {
+		const response = await fetchFn('/api/public/v1/config/vulnerable-groups');
+		if (!response.ok) return [];
+		const body = (await response.json().catch(() => null)) as {
+			groups?: MasterLabelOption[];
+		} | null;
+		return body?.groups ?? [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Code → label for `master_data:shelter_type` (public field `admin_type`).
+ * Same degrade-to-empty contract as vulnerable groups.
+ */
+export async function fetchShelterTypeLabels(
+	fetchFn: typeof fetch = fetch
+): Promise<MasterLabelOption[]> {
+	try {
+		const response = await fetchFn('/api/public/v1/config/shelter-types');
+		if (!response.ok) return [];
+		const body = (await response.json().catch(() => null)) as {
+			types?: MasterLabelOption[];
+		} | null;
+		return body?.types ?? [];
+	} catch {
+		return [];
+	}
 }

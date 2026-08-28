@@ -2,12 +2,150 @@
 	"openapi": "3.1.0",
 	"info": { "title": "CouchDB Lab Public API", "version": "0.1.0" },
 	"paths": {
+		"/public/v1/announcements": {
+			"get": {
+				"tags": ["Announcements"],
+				"summary": "Get Active Announcements",
+				"description": "Retrieve active announcements sorted by newest first, paginated.",
+				"operationId": "get_active_announcements_public_v1_announcements_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "page",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"description": "Page number",
+							"default": 1,
+							"title": "Page"
+						},
+						"description": "Page number"
+					},
+					{
+						"name": "size",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"description": "Items per page",
+							"default": 20,
+							"title": "Size"
+						},
+						"description": "Items per page"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/PaginatedAnnouncements" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/admin/api-keys": {
+			"get": {
+				"tags": ["API Keys"],
+				"summary": "List Api Keys",
+				"operationId": "list_api_keys_v1_admin_api_keys_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ApiKeyListResponse" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			},
+			"post": {
+				"tags": ["API Keys"],
+				"summary": "Create Api Key",
+				"operationId": "create_api_key_v1_admin_api_keys_post",
+				"requestBody": {
+					"content": {
+						"application/json": { "schema": { "$ref": "#/components/schemas/ApiKeyCreateRequest" } }
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ApiKeyCreateResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/v1/admin/api-keys/{key_id}/revoke": {
+			"post": {
+				"tags": ["API Keys"],
+				"summary": "Revoke Api Key",
+				"operationId": "revoke_api_key_v1_admin_api_keys__key_id__revoke_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "key_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Key Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ApiKeyRevokeResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
 		"/v1/auth/verify": {
 			"get": {
 				"tags": ["Authentication"],
 				"summary": "Verify Auth",
 				"description": "Verify connectivity using EXTERNAL_API_SECRET Bearer token.",
-				"operationId": "verify_auth",
+				"operationId": "verify_auth_v1_auth_verify_get",
 				"responses": {
 					"200": {
 						"description": "Successful Response",
@@ -19,11 +157,28 @@
 				"security": [{ "HTTPBearer": [] }]
 			}
 		},
+		"/public/v1/config/faqs": {
+			"get": {
+				"tags": ["Config"],
+				"summary": "Get Faqs",
+				"description": "Get public FAQs from the MongoDB read model.",
+				"operationId": "get_faqs_public_v1_config_faqs_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/ConfigResponse" } }
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
 		"/public/v1/donations": {
 			"post": {
 				"tags": ["Donations"],
 				"summary": "Create Donation",
-				"operationId": "create_donation",
+				"operationId": "create_donation_public_v1_donations_post",
 				"requestBody": {
 					"content": {
 						"application/json": {
@@ -53,11 +208,46 @@
 				"security": [{ "HTTPBearer": [] }]
 			}
 		},
+		"/public/v1/donations/track-search": {
+			"post": {
+				"tags": ["Donations"],
+				"summary": "Track Search Donation",
+				"description": "Resolve booking_ref (DN-\u2026) + phone \u2192 tracking_token (CR-052 \u00a72.6).",
+				"operationId": "track_search_donation_public_v1_donations_track_search_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/DonationTrackSearchRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/DonationTrackSearchResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
 		"/public/v1/donations/{tracking_token}": {
 			"get": {
 				"tags": ["Donations"],
 				"summary": "Get Donation",
-				"operationId": "get_donation",
+				"operationId": "get_donation_public_v1_donations__tracking_token__get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -90,7 +280,7 @@
 				"tags": ["Donations"],
 				"summary": "Patch Donation Courier",
 				"description": "Update courier tracking on the Mongo intake buffer (pre-inbound only).",
-				"operationId": "patch_donation_courier",
+				"operationId": "patch_donation_courier_public_v1_donations__tracking_token__patch",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
@@ -126,6 +316,82 @@
 						}
 					}
 				}
+			},
+			"delete": {
+				"tags": ["Donations"],
+				"summary": "Cancel Donation",
+				"description": "Cancel on the Mongo intake buffer (pre-inbound only).",
+				"operationId": "cancel_donation_public_v1_donations__tracking_token__delete",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "tracking_token",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Tracking Token" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/DonationCancelResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/donations/{tracking_token}/items": {
+			"patch": {
+				"tags": ["Donations"],
+				"summary": "Patch Donation Items",
+				"description": "Donor edits their own declared items, moving the quota by the difference (CR-080).\n\nA separate path from the courier PATCH above: that one touches only the intake\nbuffer and can never be refused, while this one moves the atomic counter and answers\n409 when the target is full.",
+				"operationId": "patch_donation_items_public_v1_donations__tracking_token__items_patch",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "tracking_token",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Tracking Token" }
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/DonationItemsPatchRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/DonationItemsPatchResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
 			}
 		},
 		"/public/v1/occupants": {
@@ -133,7 +399,7 @@
 				"tags": ["Occupants"],
 				"summary": "Search Evacuees",
 				"description": "Search evacuees in the public read model (masked, no PII leakage).",
-				"operationId": "search_evacuees",
+				"operationId": "search_evacuees_public_v1_occupants_post",
 				"requestBody": {
 					"content": {
 						"application/json": { "schema": { "$ref": "#/components/schemas/SearchRequest" } }
@@ -154,12 +420,292 @@
 						}
 					},
 					"422": {
-						"description": "Unprocessable Entity",
+						"description": "Unprocessable Content",
 						"content": {
 							"application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } }
 						}
 					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/external/v1/shelters": {
+			"get": {
+				"tags": ["External"],
+				"summary": "\u0e14\u0e36\u0e07\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07 (get-list-shelter)",
+				"description": "\u0e14\u0e36\u0e07\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07\u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e23\u0e30\u0e1a\u0e1a\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01 (M2).",
+				"operationId": "list_shelters_external_v1_shelters_get",
+				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
+				"parameters": [
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"description": "\u0e01\u0e23\u0e2d\u0e07\u0e2a\u0e16\u0e32\u0e19\u0e30 \u0e40\u0e0a\u0e48\u0e19 open",
+							"title": "Status"
+						},
+						"description": "\u0e01\u0e23\u0e2d\u0e07\u0e2a\u0e16\u0e32\u0e19\u0e30 \u0e40\u0e0a\u0e48\u0e19 open"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": { "$ref": "#/components/schemas/M2ShelterItem" },
+									"title": "Response List Shelters External V1 Shelters Get"
+								}
+							}
+						}
+					},
+					"401": {
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
+						},
+						"description": "Unauthorized"
+					},
+					"403": {
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
+						},
+						"description": "Forbidden"
+					},
+					"500": {
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
+						},
+						"description": "Internal Server Error"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
 				}
+			}
+		},
+		"/external/v1/persons/shelter-residency": {
+			"get": {
+				"tags": ["External"],
+				"summary": "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01 (get-person-shelter-residency)",
+				"description": "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07\u0e02\u0e2d\u0e07\u0e1c\u0e39\u0e49\u0e1b\u0e23\u0e30\u0e2a\u0e1a\u0e20\u0e31\u0e22\u0e08\u0e32\u0e01\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 (CID).",
+				"operationId": "get_person_shelter_residency_external_v1_persons_shelter_residency_get",
+				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
+				"parameters": [
+					{
+						"name": "cid",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01",
+							"title": "Cid"
+						},
+						"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/M2PersonResidencyResponse" }
+							}
+						}
+					},
+					"401": {
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
+						},
+						"description": "Unauthorized"
+					},
+					"403": {
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
+						},
+						"description": "Unprocessable Content"
+					},
+					"500": {
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
+						},
+						"description": "Internal Server Error"
+					}
+				}
+			}
+		},
+		"/external/v1/shelters/{code}": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Shelter",
+				"operationId": "get_shelter_external_v1_shelters__code__get",
+				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
+				"parameters": [
+					{
+						"name": "code",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Code" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ShelterDetailResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/external/v1/needs": {
+			"get": {
+				"tags": ["External"],
+				"summary": "List Needs",
+				"operationId": "list_needs_external_v1_needs_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/NeedsListResponse" } }
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }]
+			}
+		},
+		"/external/v1/occupants": {
+			"post": {
+				"tags": ["External"],
+				"summary": "Search Evacuees",
+				"operationId": "search_evacuees_external_v1_occupants_post",
+				"requestBody": {
+					"content": {
+						"application/json": { "schema": { "$ref": "#/components/schemas/SearchRequest" } }
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/SearchResponse" } }
+						}
+					},
+					"429": {
+						"description": "Too Many Requests",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } }
+						}
+					},
+					"422": {
+						"description": "Unprocessable Content",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } }
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }]
+			}
+		},
+		"/external/v1/announcements": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Active Announcements",
+				"operationId": "get_active_announcements_external_v1_announcements_get",
+				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
+				"parameters": [
+					{
+						"name": "page",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"description": "Page number",
+							"default": 1,
+							"title": "Page"
+						},
+						"description": "Page number"
+					},
+					{
+						"name": "size",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"description": "Items per page",
+							"default": 20,
+							"title": "Size"
+						},
+						"description": "Items per page"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/PaginatedAnnouncements" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/external/v1/config/faqs": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Faqs",
+				"operationId": "get_faqs_external_v1_config_faqs_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/ConfigResponse" } }
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }]
 			}
 		},
 		"/v1/health": {
@@ -167,7 +713,7 @@
 				"tags": ["Health"],
 				"summary": "Health Check",
 				"description": "Health check endpoint to verify the service is running.\nReturns a simple message indicating the service is healthy.",
-				"operationId": "health_check",
+				"operationId": "health_check_v1_health_get",
 				"responses": {
 					"200": {
 						"description": "Successful Response",
@@ -184,7 +730,7 @@
 			"get": {
 				"tags": ["Needs"],
 				"summary": "List Needs",
-				"operationId": "list_needs",
+				"operationId": "list_needs_public_v1_needs_get",
 				"responses": {
 					"200": {
 						"description": "Successful Response",
@@ -192,7 +738,8 @@
 							"application/json": { "schema": { "$ref": "#/components/schemas/NeedsListResponse" } }
 						}
 					}
-				}
+				},
+				"security": [{ "HTTPBearer": [] }]
 			}
 		},
 		"/public/v1/shelters": {
@@ -200,7 +747,8 @@
 				"tags": ["Shelters"],
 				"summary": "List Shelters",
 				"description": "List shelters from the MongoDB read model.",
-				"operationId": "list_shelters",
+				"operationId": "list_shelters_public_v1_shelters_get",
+				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
 						"name": "province",
@@ -228,6 +776,57 @@
 						"in": "query",
 						"required": false,
 						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Status" }
+					},
+					{
+						"name": "site_kind",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{ "enum": ["evacuation_center", "host_house"], "type": "string" },
+								{ "type": "null" }
+							],
+							"title": "Site Kind"
+						}
+					},
+					{
+						"name": "lat",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{ "type": "number", "maximum": 90.0, "minimum": -90.0 },
+								{ "type": "null" }
+							],
+							"description": "User latitude",
+							"title": "Lat"
+						},
+						"description": "User latitude"
+					},
+					{
+						"name": "lng",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{ "type": "number", "maximum": 180.0, "minimum": -180.0 },
+								{ "type": "null" }
+							],
+							"description": "User longitude",
+							"title": "Lng"
+						},
+						"description": "User longitude"
+					},
+					{
+						"name": "radius_km",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "number", "exclusiveMinimum": 0 }, { "type": "null" }],
+							"description": "Search radius in kilometers",
+							"title": "Radius Km"
+						},
+						"description": "Search radius in kilometers"
 					}
 				],
 				"responses": {
@@ -255,7 +854,8 @@
 				"tags": ["Shelters"],
 				"summary": "Get Shelter",
 				"description": "Get shelter detail from the MongoDB read model.",
-				"operationId": "get_shelter",
+				"operationId": "get_shelter_public_v1_shelters__code__get",
+				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
 					{
 						"name": "code",
@@ -301,6 +901,136 @@
 				"type": "object",
 				"required": ["error"],
 				"title": "ApiErrorResponse"
+			},
+			"ApiKeyCreateRequest": {
+				"properties": {
+					"name": { "type": "string", "minLength": 1, "title": "Name" },
+					"owner": { "type": "string", "minLength": 1, "title": "Owner" },
+					"expires_at": { "type": "string", "format": "date-time", "title": "Expires At" },
+					"created_by": {
+						"type": "string",
+						"minLength": 1,
+						"title": "Created By",
+						"description": "SA Couch username who issues the key"
+					}
+				},
+				"type": "object",
+				"required": ["name", "owner", "expires_at", "created_by"],
+				"title": "ApiKeyCreateRequest"
+			},
+			"ApiKeyCreateResponse": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"name": { "type": "string", "title": "Name" },
+					"owner": { "type": "string", "title": "Owner" },
+					"key_prefix": { "type": "string", "title": "Key Prefix" },
+					"expires_at": { "type": "string", "format": "date-time", "title": "Expires At" },
+					"created_by": { "type": "string", "title": "Created By" },
+					"created_at": { "type": "string", "format": "date-time", "title": "Created At" },
+					"revoked_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Revoked At"
+					},
+					"last_used_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Last Used At"
+					},
+					"api_key": { "type": "string", "title": "Api Key" }
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"owner",
+					"key_prefix",
+					"expires_at",
+					"created_by",
+					"created_at",
+					"api_key"
+				],
+				"title": "ApiKeyCreateResponse",
+				"description": "Create response \u2014 plaintext ``api_key`` is returned once."
+			},
+			"ApiKeyListResponse": {
+				"properties": {
+					"keys": {
+						"items": { "$ref": "#/components/schemas/ApiKeyPublic" },
+						"type": "array",
+						"title": "Keys"
+					},
+					"count": { "type": "integer", "title": "Count" }
+				},
+				"type": "object",
+				"required": ["keys", "count"],
+				"title": "ApiKeyListResponse"
+			},
+			"ApiKeyPublic": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"name": { "type": "string", "title": "Name" },
+					"owner": { "type": "string", "title": "Owner" },
+					"key_prefix": { "type": "string", "title": "Key Prefix" },
+					"expires_at": { "type": "string", "format": "date-time", "title": "Expires At" },
+					"created_by": { "type": "string", "title": "Created By" },
+					"created_at": { "type": "string", "format": "date-time", "title": "Created At" },
+					"revoked_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Revoked At"
+					},
+					"last_used_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Last Used At"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "owner", "key_prefix", "expires_at", "created_by", "created_at"],
+				"title": "ApiKeyPublic",
+				"description": "Key metadata without secret material."
+			},
+			"ApiKeyRevokeResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"key": { "$ref": "#/components/schemas/ApiKeyPublic" }
+				},
+				"type": "object",
+				"required": ["key"],
+				"title": "ApiKeyRevokeResponse"
+			},
+			"ConfigResponse": {
+				"properties": {
+					"faqs": {
+						"items": { "$ref": "#/components/schemas/FaqItem" },
+						"type": "array",
+						"title": "Faqs",
+						"default": []
+					},
+					"line_oa_url": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Line Oa Url"
+					},
+					"facebook_url": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Facebook Url"
+					},
+					"phone_number": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Phone Number"
+					}
+				},
+				"type": "object",
+				"title": "ConfigResponse"
+			},
+			"DonationCancelResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"message": {
+						"type": "string",
+						"title": "Message",
+						"default": "Donation cancelled successfully"
+					}
+				},
+				"type": "object",
+				"title": "DonationCancelResponse"
 			},
 			"DonationCourierPatchRequest": {
 				"properties": {
@@ -381,6 +1111,53 @@
 				"required": ["qty"],
 				"title": "DonationItemInput"
 			},
+			"DonationItemsPatchRequest": {
+				"properties": {
+					"items": {
+						"items": { "$ref": "#/components/schemas/DonationItemInput" },
+						"type": "array",
+						"title": "Items"
+					}
+				},
+				"type": "object",
+				"required": ["items"],
+				"title": "DonationItemsPatchRequest"
+			},
+			"DonationItemsPatchResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"message": { "type": "string", "title": "Message", "default": "Donation items updated" },
+					"revisions": { "type": "integer", "title": "Revisions", "default": 0 },
+					"items": {
+						"items": { "additionalProperties": true, "type": "object" },
+						"type": "array",
+						"title": "Items"
+					},
+					"revision": { "additionalProperties": true, "type": "object", "title": "Revision" }
+				},
+				"type": "object",
+				"title": "DonationItemsPatchResponse"
+			},
+			"DonationTrackSearchRequest": {
+				"properties": {
+					"booking_ref": { "type": "string", "title": "Booking Ref" },
+					"phone": { "type": "string", "title": "Phone" }
+				},
+				"type": "object",
+				"required": ["booking_ref", "phone"],
+				"title": "DonationTrackSearchRequest",
+				"description": "CR-052 \u00a72.6 \u2014 human booking_ref + phone exact match (not token alone)."
+			},
+			"DonationTrackSearchResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"tracking_token": { "type": "string", "title": "Tracking Token" },
+					"booking_ref": { "type": "string", "title": "Booking Ref" }
+				},
+				"type": "object",
+				"required": ["tracking_token", "booking_ref"],
+				"title": "DonationTrackSearchResponse"
+			},
 			"DonationTrackingResponse": {
 				"properties": {
 					"success": { "type": "boolean", "title": "Success", "default": true },
@@ -411,6 +1188,27 @@
 				"required": ["name", "status", "shelter_name"],
 				"title": "FamilyMember"
 			},
+			"FaqItem": {
+				"properties": {
+					"id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Id" },
+					"question": { "type": "string", "title": "Question" },
+					"answer": { "type": "string", "title": "Answer" },
+					"is_published": { "type": "boolean", "title": "Is Published", "default": true },
+					"order": { "type": "integer", "title": "Order", "default": 0 }
+				},
+				"type": "object",
+				"required": ["question", "answer"],
+				"title": "FaqItem"
+			},
+			"GeoJsonPoint": {
+				"properties": {
+					"type": { "type": "string", "title": "Type", "default": "Point" },
+					"coordinates": { "items": { "type": "number" }, "type": "array", "title": "Coordinates" }
+				},
+				"type": "object",
+				"required": ["coordinates"],
+				"title": "GeoJsonPoint"
+			},
 			"GeoPoint": {
 				"properties": {
 					"lat": { "type": "number", "title": "Lat" },
@@ -437,6 +1235,83 @@
 				"required": ["status"],
 				"title": "HealthCheckResponse"
 			},
+			"M2ErrorDetail": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"message": { "type": "string", "title": "Message" }
+				},
+				"type": "object",
+				"required": ["code", "message"],
+				"title": "M2ErrorDetail"
+			},
+			"M2ErrorResponse": {
+				"properties": { "error": { "$ref": "#/components/schemas/M2ErrorDetail" } },
+				"type": "object",
+				"required": ["error"],
+				"title": "M2ErrorResponse"
+			},
+			"M2PersonResidencyResponse": {
+				"properties": {
+					"shelter_id": {
+						"type": "string",
+						"title": "Shelter Id",
+						"description": "\u0e23\u0e2b\u0e31\u0e2a\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
+					},
+					"shelter_name": {
+						"type": "string",
+						"title": "Shelter Name",
+						"description": "\u0e0a\u0e37\u0e48\u0e2d\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
+					},
+					"checkin_datetime": {
+						"type": "string",
+						"title": "Checkin Datetime",
+						"description": "\u0e27\u0e31\u0e19\u0e40\u0e27\u0e25\u0e32\u0e17\u0e35\u0e48\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (ISO 8601 \u0e1e\u0e23\u0e49\u0e2d\u0e21 timezone \u0e40\u0e0a\u0e48\u0e19 2026-08-20T14:30:00+07:00)"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["CHECKED_IN", "CHECKED_OUT"],
+						"title": "Status",
+						"description": "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e01\u0e32\u0e23\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01"
+					}
+				},
+				"type": "object",
+				"required": ["shelter_id", "shelter_name", "checkin_datetime", "status"],
+				"title": "M2PersonResidencyResponse"
+			},
+			"M2ShelterItem": {
+				"properties": {
+					"shelter_id": {
+						"type": "string",
+						"title": "Shelter Id",
+						"description": "\u0e23\u0e2b\u0e31\u0e2a\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07 \u0e40\u0e0a\u0e48\u0e19 SH001"
+					},
+					"shelter_name": {
+						"type": "string",
+						"title": "Shelter Name",
+						"description": "\u0e0a\u0e37\u0e48\u0e2d\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
+					},
+					"site_kind": {
+						"type": "string",
+						"enum": ["evacuation_center", "host_house"],
+						"title": "Site Kind",
+						"description": "\u0e0a\u0e19\u0e34\u0e14\u0e2a\u0e16\u0e32\u0e19\u0e17\u0e35\u0e48",
+						"default": "evacuation_center"
+					},
+					"lat": {
+						"anyOf": [{ "type": "number" }, { "type": "null" }],
+						"title": "Lat",
+						"description": "\u0e1e\u0e34\u0e01\u0e31\u0e14\u0e25\u0e30\u0e15\u0e34\u0e08\u0e39\u0e14 (WGS 84)"
+					},
+					"long": {
+						"anyOf": [{ "type": "number" }, { "type": "null" }],
+						"title": "Long",
+						"description": "\u0e1e\u0e34\u0e01\u0e31\u0e14\u0e25\u0e2d\u0e07\u0e08\u0e34\u0e08\u0e39\u0e14 (WGS 84)"
+					}
+				},
+				"type": "object",
+				"required": ["shelter_id", "shelter_name"],
+				"title": "M2ShelterItem"
+			},
 			"NeedItemResponse": {
 				"properties": {
 					"item_id": { "type": "string", "title": "Item Id" },
@@ -461,6 +1336,44 @@
 				"type": "object",
 				"required": ["shelters", "as_of"],
 				"title": "NeedsListResponse"
+			},
+			"PaginatedAnnouncements": {
+				"properties": {
+					"items": {
+						"items": { "$ref": "#/components/schemas/PublicAnnouncement" },
+						"type": "array",
+						"title": "Items"
+					},
+					"total": { "type": "integer", "title": "Total" },
+					"page": { "type": "integer", "title": "Page" },
+					"size": { "type": "integer", "title": "Size" },
+					"total_pages": { "type": "integer", "title": "Total Pages" }
+				},
+				"type": "object",
+				"required": ["items", "total", "page", "size", "total_pages"],
+				"title": "PaginatedAnnouncements"
+			},
+			"PublicAnnouncement": {
+				"properties": {
+					"_id": {
+						"type": "string",
+						"title": "Id",
+						"description": "The CouchDB announcement document ID"
+					},
+					"title": { "type": "string", "title": "Title" },
+					"description": { "type": "string", "title": "Description" },
+					"severity": {
+						"type": "string",
+						"enum": ["info", "warning", "emergency"],
+						"title": "Severity"
+					},
+					"is_active": { "type": "boolean", "title": "Is Active" },
+					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
+				},
+				"type": "object",
+				"required": ["_id", "title", "description", "severity", "is_active", "updated_at"],
+				"title": "PublicAnnouncement",
+				"description": "Public snapshot of a system announcement, stored in MongoDB `public_announcements`.\nSourced from `announcement` docs in CouchDB `registry`."
 			},
 			"SearchRequest": {
 				"properties": {
@@ -551,6 +1464,12 @@
 				"properties": {
 					"id": { "type": "string", "title": "Id" },
 					"name": { "type": "string", "title": "Name" },
+					"site_kind": {
+						"type": "string",
+						"enum": ["evacuation_center", "host_house"],
+						"title": "Site Kind",
+						"default": "evacuation_center"
+					},
 					"status": { "type": "string", "title": "Status" },
 					"admin_type": { "type": "string", "title": "Admin Type" },
 					"address": { "type": "string", "title": "Address" },
@@ -558,6 +1477,9 @@
 					"occupancy_rate": { "type": "integer", "title": "Occupancy Rate" },
 					"building_status": { "type": "string", "title": "Building Status" },
 					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
+					"location": {
+						"anyOf": [{ "$ref": "#/components/schemas/GeoJsonPoint" }, { "type": "null" }]
+					},
 					"admission_policy": { "$ref": "#/components/schemas/ShelterAdmissionPolicyDetail" },
 					"travel": { "$ref": "#/components/schemas/ShelterTravelDetail" },
 					"facilities": { "$ref": "#/components/schemas/ShelterFacilitiesDetail" },
@@ -637,9 +1559,18 @@
 				"properties": {
 					"code": { "type": "string", "title": "Code", "description": "Shelter code, e.g. SH001" },
 					"name": { "type": "string", "title": "Name" },
+					"site_kind": {
+						"type": "string",
+						"enum": ["evacuation_center", "host_house"],
+						"title": "Site Kind",
+						"default": "evacuation_center"
+					},
 					"status": { "type": "string", "title": "Status" },
 					"capacity": { "type": "integer", "title": "Capacity", "default": 0 },
 					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
+					"location": {
+						"anyOf": [{ "$ref": "#/components/schemas/GeoJsonPoint" }, { "type": "null" }]
+					},
 					"province": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" },
 					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
 					"subdistrict": {
@@ -738,6 +1669,9 @@
 				"title": "VerifyResponse"
 			}
 		},
-		"securitySchemes": { "HTTPBearer": { "type": "http", "scheme": "bearer" } }
+		"securitySchemes": {
+			"HTTPBearer": { "type": "http", "scheme": "bearer" },
+			"APIKeyHeader": { "type": "apiKey", "in": "header", "name": "X-API-Key" }
+		}
 	}
 }

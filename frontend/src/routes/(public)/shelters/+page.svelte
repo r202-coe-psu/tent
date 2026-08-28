@@ -1,5 +1,9 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 
 	// Icons
 	import Building2 from '@lucide/svelte/icons/building-2';
@@ -15,11 +19,20 @@
 		PublicPageShell,
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
+	import { BookingModal } from '$lib/features/public-register';
+
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTERS_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let { data }: { data: PageData } = $props();
 
 	let liveUserLat = $state('');
 	let liveUserLng = $state('');
+	let bookingOpen = $state(false);
+	let bookingShelterCode = $state('');
+
+	const t = $derived(getTranslation(PUBLIC_SHELTERS_I18N, langState.current));
 
 	function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
 		const R = 6371; // km
@@ -35,8 +48,8 @@
 		return R * c;
 	}
 
-	let displayShelters = $derived(
-		((data?.shelters ?? []) as PublicShelterCardModel[]).map((s) => {
+	let displayShelters = $derived.by(() => {
+		const mapped = ((data?.shelters ?? []) as PublicShelterCardModel[]).map((s) => {
 			if (liveUserLat && liveUserLng && s?.geo?.lat != null && s?.geo?.lng != null) {
 				const uLat = parseFloat(liveUserLat);
 				const uLng = parseFloat(liveUserLng);
@@ -46,13 +59,44 @@
 				}
 			}
 			return s;
-		})
-	);
+		});
+
+		if (!(liveUserLat && liveUserLng)) return mapped;
+
+		return [...mapped].sort((a, b) => {
+			const da = a.geo ? (a.distance ?? Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
+			const db = b.geo ? (b.distance ?? Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
+			return da - db;
+		});
+	});
+
+	let mapRadiusKm = $derived.by(() => {
+		const d = parseFloat(data?.filters?.distance ?? '');
+		return Number.isFinite(d) && d > 0 ? d : undefined;
+	});
 
 	$effect(() => {
 		if (data?.filters?.user_lat) liveUserLat = data.filters.user_lat.toString();
 		if (data?.filters?.user_lng) liveUserLng = data.filters.user_lng.toString();
 	});
+
+	function openBooking(shelterCode: string) {
+		bookingShelterCode = shelterCode;
+		bookingOpen = true;
+	}
+
+	/** Map pin / GPS origin → sync filter panel + reload list with radius. */
+	function applySearchOrigin(lat: number, lng: number) {
+		liveUserLat = lat.toFixed(6);
+		liveUserLng = lng.toFixed(6);
+		const params = new SvelteURLSearchParams(page.url.searchParams);
+		params.set('user_lat', liveUserLat);
+		params.set('user_lng', liveUserLng);
+		if (!params.get('distance')) {
+			params.set('distance', data?.filters?.distance || '5');
+		}
+		void goto(resolve(`/shelters?${params.toString()}`), { keepFocus: true, noScroll: true });
+	}
 
 	function getStatusColor(status: string) {
 		switch (status) {
@@ -70,27 +114,27 @@
 	function getStatusText(status: string) {
 		switch (status) {
 			case 'OPEN':
-				return 'เปิดใช้งาน';
+				return t.statusOpen;
 			case 'FULL':
-				return 'เต็มความจุ';
+				return t.statusFull;
 			case 'PREPARE':
-				return 'เตรียมพร้อม';
+				return t.statusPrepare;
 			default:
-				return 'ปิดทำการ';
+				return t.statusClosed;
 		}
 	}
 </script>
 
 <svelte:head>
-	<title>ตรวจสอบสถานะศูนย์พักพิง - Smart Shelter</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <PublicPageShell class="space-y-8">
 	<!-- Header / Hero Section -->
 	<PublicHeroMetrics
-		title="ตรวจสอบสถานะศูนย์พักพิง"
-		description="ข้อมูลศูนย์พักพิงจากระบบสาธารณะ — ชื่อ พิกัด สถานะ และความจุ เพื่อประกอบการตัดสินใจเคลื่อนย้ายและขอรับความช่วยเหลือ"
-		badgeText="Public Shelter Dashboard"
+		title={t.heroTitle}
+		description={t.heroDesc}
+		badgeText={t.heroBadge}
 		badgeIcon={Building2}
 		showLivePing={false}
 		bgClass="bg-primary-dark"
@@ -100,17 +144,17 @@
 	<!-- Metric Cards (capacity directory — no occupancy aggregates per CR-017) -->
 	<div class="grid grid-cols-2 gap-4 md:grid-cols-4 lg:gap-6">
 		<PublicShelterMetricCard
-			title="ศูนย์พักพิงทั้งหมด"
+			title={t.totalShelters}
 			value={data?.summary?.shelters_total ?? 0}
-			unit="แห่ง"
+			unit={t.locationsUnit}
 			icon={ClipboardList}
 			iconClass="border-accent-purple shadow-accent-purple/15 text-accent-purple"
 		/>
 
 		<PublicShelterMetricCard
-			title="ศูนย์พักพิงที่เปิดใช้งาน"
+			title={t.openShelters}
 			value={data?.summary?.shelters_open ?? 0}
-			unit="แห่ง"
+			unit={t.locationsUnit}
 			icon={Building2}
 			iconClass="border-success shadow-success/15 text-success"
 		/>
@@ -139,6 +183,8 @@
 					userLocation={liveUserLat && liveUserLng
 						? { lat: liveUserLat, lng: liveUserLng }
 						: undefined}
+					radiusKm={mapRadiusKm}
+					onLocationPick={applySearchOrigin}
 				/>
 			</div>
 		</div>
@@ -147,8 +193,9 @@
 		<div class="flex h-100 min-h-125 flex-col gap-4 lg:col-span-4 lg:h-auto">
 			<div class="flex items-center justify-between rounded-t-2xl bg-card px-1 py-1">
 				<h3 class="font-bold text-foreground">
-					รายชื่อศูนย์พักพิง <span class="ml-1 text-sm font-medium text-muted-foreground"
-						>{displayShelters.length} แห่ง</span
+					{t.listTitle}
+					<span class="ml-1 text-sm font-medium text-muted-foreground"
+						>{displayShelters.length} {t.locationsUnit}</span
 					>
 				</h3>
 			</div>
@@ -158,20 +205,27 @@
 				style="max-height: 700px;"
 			>
 				{#each displayShelters as shelter, i (shelter.id || shelter.code || i)}
-					<PublicShelterCard {shelter} {getStatusColor} {getStatusText} />
+					<PublicShelterCard
+						{shelter}
+						{getStatusColor}
+						{getStatusText}
+						onPreRegister={openBooking}
+					/>
 				{:else}
 					<div
 						class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border p-8 text-center text-muted-foreground"
 					>
 						<AlertTriangle class="mb-2 h-8 w-8 text-muted-foreground/50" />
-						<p class="font-medium">ไม่พบข้อมูลศูนย์พักพิง</p>
-						<p class="text-sm">ลองเปลี่ยนเงื่อนไขการค้นหาอีกครั้ง</p>
+						<p class="font-medium">{t.noShelters}</p>
+						<p class="text-sm">{t.tryChangeFilter}</p>
 					</div>
 				{/each}
 			</div>
 		</div>
 	</div>
 </PublicPageShell>
+
+<BookingModal bind:open={bookingOpen} shelterCode={bookingShelterCode} />
 
 <style>
 	/* Custom scrollbar for the list */

@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-21
+updated: 2026-08-25
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -146,7 +146,7 @@ State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc 
                                           // (central_ops:counter:shelter) ตอน provisioning;
                                           // เป็นชื่อ db shelter_{code} + อ้างข้ามศูนย์ทุกที่ (shelter_code)
                                           // pattern ^SH\d{3,}$: 1–999 pad 3 หลัก, ≥1000 กว้างตามจริง (SH1000)
-  name, status: "open|closed", capacity,
+  name, site_kind: "evacuation_center|host_house", status: "open|closed", capacity,
   zones: [{ code, name, capacity }],
   area_m2: 1200,                          // opt — พื้นที่ปิดรวม m² (Sphere ≥3.5 m²/คน)
   facilities: {                           // opt — นับจริง ใช้คำนวณ Sphere ratio vs occupancy

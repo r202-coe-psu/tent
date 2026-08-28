@@ -1,7 +1,15 @@
-from pymongo import MongoClient
+import asyncio
 
-client = MongoClient("mongodb://localhost:27017")
-db = client["tent"]
-doc = db.public_shelters.find_one({"shelter_code": "SH004"})
-print(doc.get("contact"))
-print(doc.get("key_personnel"))
+from motor.motor_asyncio import AsyncIOMotorClient
+
+
+async def main():
+    client = AsyncIOMotorClient("mongodb://root:example@localhost:27017")
+    db = client["tent_db"]
+    collection = db["public_announcements"]
+    docs = await collection.find({}).to_list(length=10)
+    for doc in docs:
+        print(doc)
+
+
+asyncio.run(main())

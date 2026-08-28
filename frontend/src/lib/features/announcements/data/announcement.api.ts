@@ -12,7 +12,10 @@ export function getAnnouncement(id: string): Promise<Announcement> {
 }
 
 export function createAnnouncement(
-	data: Pick<Announcement, 'title' | 'description' | 'severity' | 'is_active'>
+	data: Pick<
+		Announcement,
+		'title' | 'description' | 'title_en' | 'description_en' | 'severity' | 'is_active'
+	>
 ): Promise<{ ok: boolean; id: string; rev: string; doc: Announcement }> {
 	return serviceFetch(`${BASE}`, {
 		method: 'POST',
@@ -23,7 +26,12 @@ export function createAnnouncement(
 
 export function updateAnnouncement(
 	id: string,
-	data: Partial<Pick<Announcement, 'title' | 'description' | 'severity' | 'is_active'>>
+	data: Partial<
+		Pick<
+			Announcement,
+			'title' | 'description' | 'title_en' | 'description_en' | 'severity' | 'is_active'
+		>
+	>
 ): Promise<{ ok: boolean; id: string; rev: string; doc: Announcement }> {
 	return serviceFetch(`${BASE}/${encodeURIComponent(id)}`, {
 		method: 'PUT',

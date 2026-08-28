@@ -7,7 +7,23 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
+	import { onMount } from 'svelte';
 	import type { ScanDonationView } from '$lib/features/donations';
+
+	/**
+	 * `initialQuery` — set when opened from the "กำลังตรวจรับ (Verifying)" tab
+	 * (R-16.5): the row is already known, so the lookup runs immediately instead
+	 * of waiting on a manual search. `onSaved` lets that tab refresh its list.
+	 *
+	 * `onClose` is what the verifying tab passes to get its LIST back. Without it,
+	 * dismissing the card dropped staff on a bare search box that looks exactly
+	 * like the scan tab, with no way back to the queue they came from.
+	 */
+	let {
+		initialQuery = '',
+		onSaved,
+		onClose
+	}: { initialQuery?: string; onSaved?: () => void; onClose?: () => void } = $props();
 
 	let scanState = $state<'idle' | 'scanning' | 'result'>('idle');
 	let searchQuery = $state('');
@@ -25,13 +41,22 @@
 		item_id?: string;
 		/** Required by the API for perishable catalog items (schema.md §2.1). */
 		expiry: string;
+		/** Where the goods are put away — free text, no zone master data yet (CR-088). */
+		storage_zone: string;
 	};
 	let scannedItems = $state<ScannedItem[]>([]);
 	let remarks = $state('');
 	let saving = $state(false);
+	/**
+	 * Lot labels the server minted on the last successful receive (CR-088). Staff
+	 * write these on the physical boxes, so they must survive the form resetting
+	 * back to the idle state.
+	 */
+	let lastLots = $state<{ item_id: string; lot_no: string | null }[]>([]);
 
 	async function performLookup(query: string) {
 		if (!query.trim()) return;
+		lastLots = [];
 		scanState = 'scanning';
 		try {
 			const res = await fetch(`/api/back-office/donations/${encodeURIComponent(query.trim())}`);
@@ -39,6 +64,7 @@
 				const errorData = await res.json().catch(() => ({}));
 				toast.error(errorData.error || 'ไม่พบข้อมูลการจองบริจาคนี้');
 				scanState = 'idle';
+				onClose?.();
 				return;
 			}
 			const data = await res.json();
@@ -52,7 +78,8 @@
 					qty: it.qty != null && it.qty !== '' ? String(it.qty) : '0',
 					unit: it.unit || 'ชิ้น',
 					item_id: it.item_id,
-					expiry: ''
+					expiry: '',
+					storage_zone: ''
 				}));
 				scanState = 'result';
 			} else {
@@ -67,10 +94,14 @@
 
 	function handleCancel() {
 		scanState = 'idle';
+		lastLots = [];
 		searchQuery = '';
 		donationDoc = null;
 		scannedItems = [];
 		remarks = '';
+		// Opened from a queue → hand control back to it instead of leaving staff on
+		// an idle search box that belongs to a different tab.
+		onClose?.();
 	}
 
 	async function handleSave() {
@@ -85,21 +116,45 @@
 					...(remarks.trim() ? { remarks: remarks.trim() } : {}),
 					// A line is either a catalog item (item_id → stock ledger) or free text
 					// (stays on the donation) — never both.
+					// `lot_no` is not sent — the server mints the per-day sequence (CR-088).
 					items: scannedItems.map((it) => ({
 						...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
 						qty: it.qty,
 						unit: it.unit,
-						...(it.item_id && it.expiry ? { lot: { expiry: it.expiry } } : {})
+						...(it.item_id && (it.expiry || it.storage_zone.trim())
+							? {
+									lot: {
+										...(it.expiry ? { expiry: it.expiry } : {}),
+										...(it.storage_zone.trim() ? { storage_zone: it.storage_zone.trim() } : {})
+									}
+								}
+							: {})
 					}))
 				})
 			});
 			const data = await res.json();
 			if (data.success) {
-				toast.success(`บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef})`);
+				lastLots = (data.lots ?? []) as { item_id: string; lot_no: string | null }[];
+				const labels = lastLots.map((l) => l.lot_no).filter(Boolean);
+				toast.success(
+					labels.length
+						? `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef}) · เลขล็อต ${labels.join(', ')}`
+						: `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef})`
+				);
 				scanState = 'idle';
 				searchQuery = '';
 				donationDoc = null;
 				remarks = '';
+				onSaved?.();
+			} else if (data.error_code === 'CATALOG_MISMATCH') {
+				// R-16.6 — a raw English invariant message ("Unit mismatch for item
+				// item:soap: expected bar, got ก้อน") tells warehouse staff nothing they
+				// can act on: the offending unit is on the BOOKING, and this screen has
+				// no field to correct it. Say who has to fix it, and keep the detail.
+				toast.error('หน่วยในใบจองไม่ตรงกับหน่วยมาตรฐานในคลัง — รับเข้าคลังไม่ได้', {
+					description: `${data.error} · แก้ที่ต้นทางใบจอง หรือแจ้งผู้ดูแลระบบ`,
+					duration: 12_000
+				});
 			} else {
 				toast.error(data.error || 'บันทึกไม่สำเร็จ');
 			}
@@ -109,6 +164,15 @@
 			saving = false;
 		}
 	}
+
+	// One-shot at mount, deliberately NOT a reactive binding: the verifying tab
+	// remounts this component per booking ref, so `initialQuery` never changes
+	// under a live instance.
+	onMount(() => {
+		if (!initialQuery) return;
+		searchQuery = initialQuery;
+		performLookup(initialQuery);
+	});
 </script>
 
 <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
@@ -121,7 +185,7 @@
 				<Scan class="h-5 w-5 text-primary" />
 				ระบบสแกนรับของเข้าคลัง (Ref. Scan Station)
 			</h2>
-			<p class="mt-1 text-[11px] text-muted-foreground">
+			<p class="mt-1 text-2xs text-muted-foreground">
 				สแกนคิวอาร์โค้ดใบจองจากมือถือผู้บริจาค เพื่อตรวจรับสินค้าและอัปเดตระบบคลังพัสดุแบบทันที
 				(Real-time Sync)
 			</p>
@@ -161,6 +225,26 @@
 						ค้นหา
 					</Button>
 				</div>
+
+				{#if lastLots.length}
+					<div
+						class="w-full rounded-xl border border-emerald-500/30 bg-emerald-50/60 p-3 text-left dark:bg-emerald-950/20"
+					>
+						<p
+							class="text-2xs font-extrabold tracking-wider text-emerald-700 uppercase dark:text-emerald-400"
+						>
+							เลขล็อตที่ระบบออกให้ (เขียนติดกล่อง)
+						</p>
+						<ul class="mt-1.5 space-y-1">
+							{#each lastLots as lot (lot.item_id + (lot.lot_no ?? ''))}
+								<li class="flex items-center justify-between gap-2 text-2xs">
+									<span class="text-muted-foreground">{lot.item_id}</span>
+									<span class="font-mono font-bold text-foreground">{lot.lot_no ?? '—'}</span>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
 			</div>
 		{:else if scanState === 'scanning'}
 			<!-- Scanning State -->
@@ -191,10 +275,10 @@
 				>
 					<div>
 						<div class="mb-1.5 flex items-center gap-2">
-							<span class="text-[9px] font-bold tracking-wide text-zinc-400 uppercase"
+							<span class="text-3xs font-bold tracking-wide text-zinc-400 uppercase"
 								>BOOKING REF.</span
 							>
-							<span class="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-extrabold text-black"
+							<span class="rounded bg-amber-500 px-1.5 py-0.5 text-2xs font-extrabold text-black"
 								>{bookingRef}</span
 							>
 						</div>
@@ -213,7 +297,7 @@
 
 				<!-- Body (Quantities Editing) -->
 				<div class="space-y-4 bg-card p-5">
-					<h4 class="text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase">
+					<h4 class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase">
 						รายการที่จองไว้ (ตรวจนับความถูกต้อง)
 					</h4>
 
@@ -229,24 +313,36 @@
 											bind:value={item.qty}
 											class="h-8 w-20 rounded-lg bg-card px-2 text-right text-xs font-semibold"
 										/>
-										<span class="w-12 text-[11px] font-semibold text-muted-foreground"
+										<span class="w-12 text-2xs font-semibold text-muted-foreground"
 											>{item.unit}</span
 										>
 									</div>
 								</div>
 								{#if item.item_id}
 									<label
-										class="mt-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-muted-foreground"
+										class="mt-2 flex items-center justify-between gap-2 text-2xs font-semibold text-muted-foreground"
 									>
 										วันหมดอายุ (เฉพาะของที่มีวันหมดอายุ)
 										<Input
 											type="date"
 											bind:value={item.expiry}
-											class="h-7 w-36 rounded-lg bg-card px-2 text-[11px]"
+											class="h-7 w-36 rounded-lg bg-card px-2 text-2xs"
+										/>
+									</label>
+									<label
+										class="mt-1.5 flex items-center justify-between gap-2 text-2xs font-semibold text-muted-foreground"
+									>
+										โซนจัดเก็บ
+										<Input
+											type="text"
+											bind:value={item.storage_zone}
+											placeholder="เช่น A-01"
+											maxlength={100}
+											class="h-7 w-36 rounded-lg bg-card px-2 text-2xs"
 										/>
 									</label>
 								{:else}
-									<p class="mt-1.5 text-[10px] text-muted-foreground">
+									<p class="mt-1.5 text-2xs text-muted-foreground">
 										ไม่มีรหัสสินค้าในคลัง — บันทึกไว้ในใบบริจาค ไม่ตัดยอดเข้าคลัง
 									</p>
 								{/if}
@@ -255,7 +351,7 @@
 					</div>
 
 					<label class="block">
-						<span class="text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase"
+						<span class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase"
 							>หมายเหตุการตรวจรับ</span
 						>
 						<Input
