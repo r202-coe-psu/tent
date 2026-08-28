@@ -16,6 +16,9 @@ import {
 	keyedDonationIds,
 	keyableDonations,
 	isNeedCutOff,
+	forceCutOffNeed,
+	reopenNeed,
+	isDonationOutstanding,
 	deriveNeedAvailability,
 	createReceiveEntry,
 	createDistributeEntry,
@@ -996,5 +999,136 @@ describe('mapNeedItemHeuristic', () => {
 	it('slugs unknown items correctly', () => {
 		expect(mapNeedItemHeuristic('ปลากระป๋องรสเผ็ด')).toBe('item:ปลากระป๋องรสเผ็ด');
 		expect(mapNeedItemHeuristic('  Spoons & Forks  ')).toBe('item:spoons-forks');
+	});
+});
+
+// CR-052 §1.6 — a manual cut-off stops donors mid-flow while the target is still
+// short, so the reason is what the audit trail and the transparency report are built
+// from. Enforced in the domain, not the dialog, so no caller can skip it.
+describe('forceCutOffNeed + reopenNeed (T-22 manual force cut-off)', () => {
+	const campaign = () =>
+		createCampaign(
+			{
+				title: 'ของใช้จำเป็น',
+				needs: [
+					{ item_id: 'item:water', qty_target: 100, unit: 'ขวด' },
+					{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }
+				]
+			},
+			ctx
+		);
+
+	it('refuses an empty reason', () => {
+		expect(() => forceCutOffNeed(campaign(), 'item:water', '')).toThrow(/reason/i);
+	});
+
+	it('refuses a whitespace-only reason', () => {
+		expect(() => forceCutOffNeed(campaign(), 'item:water', '     ')).toThrow(/reason/i);
+	});
+
+	it('closes only the named need when a reason is given', () => {
+		const closed = forceCutOffNeed(campaign(), 'item:water', 'พื้นที่คลังเต็ม');
+		expect(closed.needs.find((n) => n.item_id === 'item:water')?.status).toBe('closed');
+		expect(closed.needs.find((n) => n.item_id === 'item:rice')?.status).toBe('open');
+	});
+
+	it('does not mutate the campaign it was handed', () => {
+		const original = campaign();
+		forceCutOffNeed(original, 'item:water', 'พื้นที่คลังเต็ม');
+		expect(original.needs.find((n) => n.item_id === 'item:water')?.status).toBe('open');
+	});
+
+	it('rejects an item the campaign does not ask for', () => {
+		expect(() => forceCutOffNeed(campaign(), 'item:soap', 'พื้นที่คลังเต็ม')).toThrow(/item:soap/);
+	});
+
+	it('a closed need cuts off regardless of how far the target still is', () => {
+		const closed = forceCutOffNeed(campaign(), 'item:water', 'พื้นที่คลังเต็ม');
+		const need = closed.needs.find((n) => n.item_id === 'item:water');
+		expect(isNeedCutOff(need!.qty_target, '0', '0', need!.status, closed.status)).toBe(true);
+	});
+
+	it('reopens without demanding a reason', () => {
+		const closed = forceCutOffNeed(campaign(), 'item:water', 'พื้นที่คลังเต็ม');
+		const reopened = reopenNeed(closed, 'item:water');
+		expect(reopened.needs.find((n) => n.item_id === 'item:water')?.status).toBe('open');
+		expect(reopened.needs.find((n) => n.item_id === 'item:rice')?.status).toBe('open');
+	});
+});
+
+// CR-052 moves a public booking through pending_review → verifying before it becomes
+// stock. Every quota/cut-off reader has to treat those as still owed to the shelter,
+// or the board reopens a need the donor is already on their way to fill.
+describe('donation statuses that still owe the shelter goods (CR-052)', () => {
+	it('counts declared, pending_review and verifying as outstanding', () => {
+		expect(isDonationOutstanding('declared')).toBe(true);
+		expect(isDonationOutstanding('pending_review')).toBe(true);
+		expect(isDonationOutstanding('verifying')).toBe(true);
+	});
+
+	it('does not count statuses whose goods will never arrive here', () => {
+		expect(isDonationOutstanding('received')).toBe(false);
+		expect(isDonationOutstanding('redirected')).toBe(false);
+		expect(isDonationOutstanding('rejected')).toBe(false);
+		expect(isDonationOutstanding('expired')).toBe(false);
+		expect(isDonationOutstanding('cancelled')).toBe(false);
+	});
+
+	it('reserves quota for a pending_review booking', () => {
+		const reserved = calculateReserved(
+			[
+				{
+					...declaredItemsDonation(),
+					status: 'pending_review',
+					items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }]
+				}
+			],
+			[]
+		);
+		expect(reserved.get('item:rice')).toBe('10');
+	});
+
+	it('releases quota once a booking is redirected or rejected', () => {
+		for (const status of ['redirected', 'rejected'] as const) {
+			const reserved = calculateReserved(
+				[
+					{
+						...declaredItemsDonation(),
+						status,
+						items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }]
+					}
+				],
+				[]
+			);
+			expect(reserved.get('item:rice')).toBeUndefined();
+		}
+	});
+
+	it('offers a verifying booking to the receive form and drops a redirected one', () => {
+		const verifying = {
+			...declaredItemsDonation(),
+			_id: 'donation:A',
+			status: 'verifying' as const
+		};
+		const redirected = {
+			...declaredItemsDonation(),
+			_id: 'donation:B',
+			status: 'redirected' as const
+		};
+		expect(keyableDonations([verifying, redirected], []).map((d) => d._id)).toEqual(['donation:A']);
+	});
+
+	it('walks the CR-052 review chain forward only', () => {
+		expect(canTransitionDonation('declared', 'pending_review')).toBe(true);
+		expect(canTransitionDonation('pending_review', 'verifying')).toBe(true);
+		expect(canTransitionDonation('verifying', 'received')).toBe(true);
+		expect(canTransitionDonation('pending_review', 'redirected')).toBe(true);
+		expect(canTransitionDonation('pending_review', 'rejected')).toBe(true);
+
+		// No skipping the review step, and nothing comes back out of a terminal status.
+		expect(canTransitionDonation('pending_review', 'received')).toBe(false);
+		expect(canTransitionDonation('verifying', 'pending_review')).toBe(false);
+		expect(canTransitionDonation('received', 'verifying')).toBe(false);
+		expect(canTransitionDonation('rejected', 'pending_review')).toBe(false);
 	});
 });

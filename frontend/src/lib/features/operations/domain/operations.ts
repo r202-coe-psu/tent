@@ -46,8 +46,37 @@ export const ledgerReasonSchema = z.enum([
 ]);
 export type LedgerReason = z.infer<typeof ledgerReasonSchema>;
 
-export const donationStatusSchema = z.enum(['declared', 'received', 'expired', 'cancelled']);
+export const donationStatusSchema = z.enum([
+	'declared',
+	'pending_review',
+	'verifying',
+	'received',
+	'redirected',
+	'rejected',
+	'expired',
+	'cancelled'
+]);
 export type DonationStatus = z.infer<typeof donationStatusSchema>;
+
+/**
+ * Statuses where the goods have not reached the shelf yet but the booking still
+ * holds its share of a campaign's target (schema.md §2.3 / §2.13).
+ *
+ * Since CR-052 a public booking opens at `pending_review`, walks through
+ * `verifying`, and only becomes `received` once staff key the count. Every place
+ * that asks "how much is still owed to us?" — reserved totals, cut-off, slot
+ * capacity — has to count all three, or the moment the initial status moved off
+ * `declared` the quota would read as free and the board would reopen a full need.
+ */
+export const DONATION_OUTSTANDING_STATUSES: readonly DonationStatus[] = [
+	'declared',
+	'pending_review',
+	'verifying'
+];
+
+export function isDonationOutstanding(status: DonationStatus): boolean {
+	return DONATION_OUTSTANDING_STATUSES.includes(status);
+}
 
 export const transferStatusSchema = z.enum(['requested', 'shipped', 'received', 'cancelled']);
 export type TransferStatus = z.infer<typeof transferStatusSchema>;
@@ -497,10 +526,21 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	);
 }
 
-/** Forward-only transitions for a donation (schema.md §2.3). */
+/**
+ * Forward-only transitions for a donation (schema.md §2.3).
+ *
+ * The CR-052 review chain is `declared → pending_review → verifying → received`,
+ * with `redirected` / `rejected` branching out of the review step. `declared` keeps
+ * its direct edge to `received` for the walk-in path (`createWalkInDonation`), which
+ * is keyed by staff at the counter and never goes through public review.
+ */
 const DONATION_TRANSITIONS: Record<DonationStatus, DonationStatus[]> = {
-	declared: ['received', 'expired', 'cancelled'],
+	declared: ['pending_review', 'received', 'expired', 'cancelled'],
+	pending_review: ['verifying', 'redirected', 'rejected', 'expired', 'cancelled'],
+	verifying: ['received'],
 	received: [],
+	redirected: [],
+	rejected: [],
 	expired: [],
 	cancelled: []
 };
@@ -784,17 +824,18 @@ export function keyedDonationIds(stockLedgers: StockLedger[]): Set<string> {
 /**
  * Donations the receive form may still key stock against (CR-055 R4).
  *
- * Goods-in-kind only — a `money` donation never produces a ledger row. A
- * `declared` donation is one whose goods are arriving now; a `received` one was
- * marked as arrived but never keyed. Both still owe stock. `expired` and
- * `cancelled` are terminal, and anything already keyed would double-count.
+ * Goods-in-kind only — a `money` donation never produces a ledger row. An
+ * outstanding donation is one whose goods are arriving now; a `received` one was
+ * marked as arrived but never keyed. Both still owe stock. `expired`, `cancelled`,
+ * `redirected` and `rejected` are terminal, and anything already keyed would
+ * double-count.
  */
 export function keyableDonations(donations: Donation[], stockLedgers: StockLedger[]): Donation[] {
 	const keyed = keyedDonationIds(stockLedgers);
 	return donations.filter(
 		(d) =>
 			d.kind === 'items' &&
-			(d.status === 'declared' || d.status === 'received') &&
+			(isDonationOutstanding(d.status) || d.status === 'received') &&
 			!keyed.has(d._id)
 	);
 }
@@ -809,9 +850,8 @@ export function calculateReserved(
 	const reserved = new Map<string, string>();
 	for (const don of donations) {
 		if (campaignId && don.campaign_id && don.campaign_id !== campaignId) continue;
-		if (don.status === 'expired' || don.status === 'cancelled') continue;
 		const isUnkeyedReceived = don.status === 'received' && !keyed.has(don._id);
-		if (don.status !== 'declared' && !isUnkeyedReceived) continue;
+		if (!isDonationOutstanding(don.status) && !isUnkeyedReceived) continue;
 		for (const item of don.items ?? []) {
 			const itemId =
 				item.item_id || (item.free_text ? mapNeedItemHeuristic(item.free_text) : undefined);
@@ -926,6 +966,56 @@ export function isNeedCutOff(
 ): boolean {
 	if (campaignStatus === 'closed' || needStatus === 'closed') return true;
 	return qtyGte(addQty(onHandStock, reservedQty), qtyTarget);
+}
+
+/**
+ * Manual force cut-off of a single need (T-22 / CR-052 §1.6).
+ *
+ * Closing a need by hand stops donors mid-flow while the target is still short, so
+ * CR-052 makes the reason mandatory: it is what the transparency report shows and
+ * what the audit entry is written from. Enforcing it here rather than in the dialog
+ * means no caller — board button, keyboard shortcut, future API — can close a need
+ * with an empty explanation.
+ *
+ * Returns a new campaign; the caller persists it together with the audit entry.
+ */
+export function forceCutOffNeed(
+	campaign: DonationCampaign,
+	itemId: string,
+	reason: string
+): DonationCampaign {
+	const trimmed = reason.trim();
+	if (!trimmed) {
+		throw new Error('Force cut-off requires a reason');
+	}
+	if (!campaign.needs.some((need) => need.item_id === itemId)) {
+		throw new Error(`Campaign ${campaign._id} has no need for ${itemId}`);
+	}
+	return {
+		...campaign,
+		needs: campaign.needs.map((need) =>
+			need.item_id === itemId ? { ...need, status: 'closed' as const } : need
+		),
+		updated_at: now()
+	};
+}
+
+/**
+ * Reopen a need staff had closed by hand (FR-36 — stock falling back under target
+ * reopens automatically; this is the manual counterpart). No reason required: going
+ * back to the campaign's declared target needs no justification.
+ */
+export function reopenNeed(campaign: DonationCampaign, itemId: string): DonationCampaign {
+	if (!campaign.needs.some((need) => need.item_id === itemId)) {
+		throw new Error(`Campaign ${campaign._id} has no need for ${itemId}`);
+	}
+	return {
+		...campaign,
+		needs: campaign.needs.map((need) =>
+			need.item_id === itemId ? { ...need, status: 'open' as const } : need
+		),
+		updated_at: now()
+	};
 }
 
 // public donation time-slot booking (R2.3)

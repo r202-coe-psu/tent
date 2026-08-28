@@ -28,6 +28,8 @@ export type {
 export {
 	ledgerReasonSchema,
 	donationStatusSchema,
+	DONATION_OUTSTANDING_STATUSES,
+	isDonationOutstanding,
 	transferStatusSchema,
 	donationChannelSchema,
 	stockLedgerInputSchema,
@@ -60,6 +62,8 @@ export {
 	keyedDonationIds,
 	keyableDonations,
 	isNeedCutOff,
+	forceCutOffNeed,
+	reopenNeed,
 	deriveNeedAvailability,
 	isStockLedger,
 	isDonation,

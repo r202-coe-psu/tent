@@ -1,5 +1,5 @@
 import type { Donation, DonationCampaign, StockLedger } from '$lib/features/operations';
-import { keyedDonationIds, stockBalance } from '$lib/features/operations';
+import { isDonationOutstanding, keyedDonationIds, stockBalance } from '$lib/features/operations';
 import { addQty, subQty, qtyGt } from '$lib/utils/qty';
 
 /**
@@ -41,7 +41,9 @@ export function computeNeeds(
 		const covered = new Map(onHand);
 		for (const don of donations) {
 			if (don.campaign_id !== campaign._id) continue;
-			if (don.status === 'expired' || don.status === 'cancelled') continue;
+			// Terminal without goods ever landing here — `redirected`/`rejected` joined
+			// the enum with CR-052 and release their share just like expiry does.
+			if (!isDonationOutstanding(don.status) && don.status !== 'received') continue;
 			// Received *and* already booked into the ledger: the goods are on the shelf,
 			// counted in onHand. Counting them again here closes the need at half.
 			if (don.status === 'received' && keyed.has(don._id)) continue;
