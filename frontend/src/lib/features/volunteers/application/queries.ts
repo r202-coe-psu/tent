@@ -27,7 +27,7 @@ import { computeHubMetrics } from '../domain/hub-metrics';
 import type { Job, JobInput } from '../domain/job.schema';
 import type { JobApplicationStatus } from '../domain/job-application.schema';
 import type { CheckInMethod, ShiftAssignmentInput } from '../domain/shift-assignment.schema';
-import type { VolunteerInput } from '../domain/volunteer.schema';
+import type { Volunteer, VolunteerInput } from '../domain/volunteer.schema';
 import type {
 	VolunteerTransferInput,
 	VolunteerTransferStatus
@@ -282,6 +282,21 @@ export const useCheckOut = (queryClient: QueryClient) =>
 export const useCreateWalkInVolunteer = (queryClient: QueryClient) =>
 	createMutation(() => ({
 		mutationFn: (input: VolunteerInput) => volunteerRepository().create(input, authorContext()),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
+		}
+	}));
+
+/**
+ * Read-modify-write edit of an existing volunteer profile (name/phone/skills
+ * from the People roster's "จัดการข้อมูล" dialog). A skill edit can move the
+ * `hasControlledSkill` badge and (via `computeHubMetrics`) the pending-review
+ * mix, so invalidate volunteers and hub metrics.
+ */
+export const useUpdateVolunteer = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: (volunteer: Volunteer) => volunteerRepository().update(volunteer),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });

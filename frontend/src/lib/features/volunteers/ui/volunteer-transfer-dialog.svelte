@@ -21,6 +21,9 @@
 	import X from '@lucide/svelte/icons/x';
 	import Check from '@lucide/svelte/icons/check';
 	import Zap from '@lucide/svelte/icons/zap';
+	import Send from '@lucide/svelte/icons/send';
+	import ShieldCheck from '@lucide/svelte/icons/shield-check';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
@@ -38,7 +41,10 @@
 	} from '../application/queries';
 	import type { VolunteerTransfer } from '../domain/volunteer-transfer.schema';
 
-	let { open = $bindable(false) }: { open?: boolean } = $props();
+	let {
+		open = $bindable(false),
+		presetVolunteerId = null
+	}: { open?: boolean; presetVolunteerId?: string | null } = $props();
 
 	const queryClient = useQueryClient();
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
@@ -91,12 +97,41 @@
 	let newVolunteerId = $state('');
 	let newToShelter = $state('');
 	let newReason = $state('');
+	let newNote = $state('');
 	const requestMutation = useRequestTransfer(queryClient);
+
+	/** Quick-fill chips for the reason textarea — append, don't replace what's already typed. */
+	const REASON_EXAMPLES = [
+		'เสริมกำลังภารกิจเร่งด่วน',
+		'ผู้ปฏิบัติงานย้ายที่พักใกล้ศูนย์ปลายทาง',
+		'สนับสนุนทักษะเฉพาะทางตามคำร้องขอ',
+		'สลับสับเปลี่ยนกำลังพลตามรอบ'
+	];
+	function appendReasonExample(example: string) {
+		if (newReason.includes(example)) return;
+		newReason = newReason.trim() ? `${newReason.trim()}, ${example}` : example;
+	}
+
+	// Opened from a roster row's "ขอโอนย้ายศูนย์" button (`volunteer-card.svelte`) —
+	// jump straight to the new-request sub-form with that volunteer preselected,
+	// instead of the default incoming-requests view.
+	let lastPresetVolunteerId = $state<string | null>(null);
+	$effect(() => {
+		if (!open) {
+			lastPresetVolunteerId = null;
+			return;
+		}
+		if (!presetVolunteerId || lastPresetVolunteerId === presetVolunteerId) return;
+		view = 'new';
+		newVolunteerId = presetVolunteerId;
+		lastPresetVolunteerId = presetVolunteerId;
+	});
 
 	function resetNewForm() {
 		newVolunteerId = '';
 		newToShelter = '';
 		newReason = '';
+		newNote = '';
 	}
 
 	async function submitNewRequest() {
@@ -104,12 +139,22 @@
 			toast.error('กรุณาเลือกอาสาสมัครและศูนย์ปลายทาง');
 			return;
 		}
+		if (!newReason.trim()) {
+			toast.error('กรุณากรอกเหตุผลและความจำเป็นในการขอโอนย้าย');
+			return;
+		}
+		// `หมายเหตุเพิ่มเติม` has no field of its own on `VolunteerTransferInput`
+		// (schema.md §2.20 only has `reason`) — fold it into the same string
+		// rather than silently dropping whatever staff typed there.
+		const reason = newNote.trim()
+			? `${newReason.trim()}\n\nหมายเหตุ: ${newNote.trim()}`
+			: newReason.trim();
 		try {
 			await requestMutation.mutateAsync({
 				volunteer_id: newVolunteerId,
 				from_shelter_code: shelterCode,
 				to_shelter_code: newToShelter,
-				reason: newReason.trim() || null
+				reason
 			});
 			toast.success('ยื่นคำขอโอนย้ายแล้ว');
 			resetNewForm();
@@ -176,15 +221,33 @@
 
 		<div class="max-h-[60vh] space-y-3 overflow-y-auto px-6 py-4">
 			{#if view === 'new'}
-				<div class="space-y-3 rounded-xl border border-border p-4">
+				<div class="space-y-4 rounded-xl border border-border p-4">
+					<div class="flex items-start gap-2">
+						<div
+							class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"
+						>
+							<Send class="h-4 w-4" />
+						</div>
+						<div class="min-w-0">
+							<p class="text-sm font-bold text-foreground">
+								แบบฟอร์มยื่นคำขอโอนย้ายกำลังพลข้ามศูนย์
+							</p>
+							<p class="text-xs text-muted-foreground">
+								ระบุบุคคลและศูนย์ปลายทาง พร้อมเหตุผลความจำเป็นในการขอโอนย้าย
+							</p>
+						</div>
+					</div>
+
 					<div class="space-y-1.5">
-						<span class="text-xs font-semibold text-foreground">อาสาสมัคร / กำลังพล</span>
+						<span class="text-xs font-semibold text-foreground">
+							เลือกจิตอาสา / เจ้าหน้าที่ต้นทาง <span class="text-destructive">*</span>
+						</span>
 						<Select.Root type="single" bind:value={newVolunteerId}>
 							<Select.Trigger class="h-11 w-full rounded-xl bg-background px-3">
 								<span class="truncate">
 									{newVolunteerId
 										? `${volunteerLabel(newVolunteerId).name} (${volunteerLabel(newVolunteerId).code})`
-										: '— เลือกอาสาสมัคร —'}
+										: '-- กรุณาเลือกบุคคลจากศูนย์นี้ --'}
 								</span>
 							</Select.Trigger>
 							<Select.Content>
@@ -198,11 +261,13 @@
 						</Select.Root>
 					</div>
 					<div class="space-y-1.5">
-						<span class="text-xs font-semibold text-foreground">ศูนย์ปลายทาง</span>
+						<span class="text-xs font-semibold text-foreground">
+							ศูนย์พักพิงปลายทางที่ต้องการส่งตัวไป <span class="text-destructive">*</span>
+						</span>
 						<Select.Root type="single" bind:value={newToShelter}>
 							<Select.Trigger class="h-11 w-full rounded-xl bg-background px-3">
 								<span class="truncate">
-									{newToShelter ? shelterLabel(newToShelter) : '— เลือกศูนย์ปลายทาง —'}
+									{newToShelter ? shelterLabel(newToShelter) : '-- กรุณาเลือกศูนย์ปลายทาง --'}
 								</span>
 							</Select.Trigger>
 							<Select.Content>
@@ -213,18 +278,69 @@
 						</Select.Root>
 					</div>
 					<div class="space-y-1.5">
-						<span class="text-xs font-semibold text-foreground">เหตุผลการโอนย้าย</span>
+						<span class="text-xs font-semibold text-foreground">
+							เหตุผลและความจำเป็นในการขอโอนย้าย <span class="text-destructive">*</span>
+						</span>
 						<Textarea
 							bind:value={newReason}
 							rows={3}
-							placeholder="เช่น ศูนย์ปลายทางต้องการกำลังพลสนับสนุนด้านปฐมพยาบาลเพิ่มเติม"
+							placeholder="เช่น ต้องการเสริมทัพด้านปฐมพยาบาลในพื้นที่ลุ่มต่ำ, อาสาสมัครย้ายที่พักชั่วคราวมาใกล้ศูนย์ปลายทาง..."
+						/>
+						<div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+							<span class="text-muted-foreground">ตัวอย่างเหตุผล:</span>
+							{#each REASON_EXAMPLES as example (example)}
+								<button
+									type="button"
+									class="rounded-full border border-border px-2.5 py-1 text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+									onclick={() => appendReasonExample(example)}
+								>
+									+ {example}
+								</button>
+							{/each}
+						</div>
+					</div>
+					<div class="space-y-1.5">
+						<span class="text-xs font-semibold text-foreground">
+							หมายเหตุเพิ่มเติม / ข้อควรระวัง (ไม่บังคับ)
+						</span>
+						<Input
+							bind:value={newNote}
+							class="h-11"
+							placeholder="เช่น มีทักษะขับรถกระบะยกสูง, สะดวกปฏิบัติงานเฉพาะกลางวัน"
 						/>
 					</div>
+
+					<div
+						class="space-y-1.5 rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-amber-900"
+					>
+						<p class="flex items-center gap-1.5 text-xs font-semibold">
+							<ShieldCheck class="h-3.5 w-3.5" />
+							กฎการโอนย้าย (Pattern Request-Accept Flow):
+						</p>
+						<ul class="list-disc space-y-1 pl-5 text-[11px]">
+							<li>
+								คำขอนี้จะเข้าคิวที่ศูนย์ปลายทาง และจะมีผลสมบูรณ์เมื่อ SM ศูนย์ปลายทางกด
+								"อนุมัติรับตัว" เท่านั้น
+							</li>
+							<li>เมื่อรับตัวสำเร็จ สังกัด (affiliation) จะเปลี่ยนเป็นศูนย์ใหม่โดยอัตโนมัติ</li>
+							<li>
+								กะเดิมที่ศูนย์เก่าที่ยังไม่เริ่มจะถูกยกเลิก
+								แต่ประวัติการทำงานเดิมจะถูกเก็บรักษาไว้อย่างครบถ้วน
+							</li>
+						</ul>
+					</div>
+
 					<div class="flex justify-end gap-2">
-						<Button variant="ghost" onclick={() => (view = 'outgoing')}>ยกเลิก</Button>
-						<Button class="gap-1.5" disabled={requestMutation.isPending} onclick={submitNewRequest}>
-							<Zap class="h-3.5 w-3.5" />
-							ยื่นคำขอโอนย้าย
+						<Button variant="outline" onclick={() => (view = 'outgoing')}>
+							ดูรายการคำขอทั้งหมด
+						</Button>
+						<Button
+							class="gap-1.5 bg-amber-500 text-white hover:bg-amber-600"
+							disabled={requestMutation.isPending}
+							onclick={submitNewRequest}
+						>
+							<Send class="h-3.5 w-3.5" />
+							ยื่นคำขอโอนย้ายไปยังศูนย์ปลายทาง
 						</Button>
 					</div>
 				</div>

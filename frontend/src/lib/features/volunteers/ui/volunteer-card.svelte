@@ -2,32 +2,34 @@
 	/**
 	 * "People" tab roster row (owner-approved mockup, 2026-08-28).
 	 *
-	 * All 4 action buttons (จัดการข้อมูล / ออกสิทธิ์ใช้งานระบบ / ขอโอนย้ายศูนย์ /
-	 * ลบ) and the pending row's "ตรวจสอบ & อนุมัติ" button are UI-only stubs
-	 * for this pass (explicit scope call from the requester) — none of them
-	 * are wired to a mutation yet, they just toast that the flow isn't built:
-	 *   - edit: no `Volunteer` edit form exists yet.
+	 * Of the 4 action buttons (จัดการข้อมูล / ออกสิทธิ์ใช้งานระบบ / ขอโอนย้ายศูนย์ /
+	 * ลบ):
+	 *   - "จัดการข้อมูล" opens `volunteer-manage-dialog.svelte` (see its header
+	 *     comment for the fields it actually persists vs. stubs).
+	 *   - "ขอโอนย้ายศูนย์" opens the existing `volunteer-transfer-dialog.svelte`
+	 *     (the same one `people-tab.svelte`'s header button uses), jumped
+	 *     straight to its new-request sub-form with this row's volunteer
+	 *     preselected via `presetVolunteerId`.
+	 * The remaining two stay UI-only stubs for this pass (explicit scope call
+	 * from the requester) — they just toast that the flow isn't built:
 	 *   - grant/revoke system access: no RoleKey-grant repository call exists
 	 *     yet (FR-VOL-05R is a CouchDB-native time-bound grant, not modelled
 	 *     here).
-	 *   - "ตรวจสอบ & อนุมัติ": no `verifyIdentity`-shaped repository method
-	 *     exists — `VolunteerRepository` only has a generic `update()`, and an
-	 *     identity-check flow deserves its own reviewed method, not a
-	 *     freeform PUT from the UI.
 	 *   - delete: `VolunteerRepository` has no `delete()` at all.
-	 * All four are flagged for the CR alongside the schema gaps.
+	 * Flagged for the CR alongside the schema gaps.
 	 */
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
-	import Search from '@lucide/svelte/icons/search';
 	import Phone from '@lucide/svelte/icons/phone';
 	import Lock from '@lucide/svelte/icons/lock';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
+	import VolunteerTransferDialog from './volunteer-transfer-dialog.svelte';
 	import { findSkill } from '../domain/skill-master';
 	import { isControlledSkill } from '../domain/skills';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
@@ -70,6 +72,9 @@
 	function stub(label: string) {
 		toast.info(`${label} — ฟีเจอร์นี้อยู่ระหว่างการพัฒนา`);
 	}
+
+	let manageDialogOpen = $state(false);
+	let transferDialogOpen = $state(false);
 </script>
 
 <div
@@ -188,13 +193,13 @@
 			<Button
 				size="sm"
 				class="gap-1.5 border-amber-400 bg-amber-500 text-white hover:bg-amber-600"
-				onclick={() => stub('ตรวจสอบ & อนุมัติ')}
+				onclick={() => (manageDialogOpen = true)}
 			>
-				<Search class="h-3.5 w-3.5" />
-				ตรวจสอบ & อนุมัติ
+				<Pencil class="h-3.5 w-3.5" />
+				จัดการข้อมูล
 			</Button>
 		{:else}
-			<Button size="sm" variant="outline" class="gap-1.5" onclick={() => stub('จัดการข้อมูล')}>
+			<Button size="sm" variant="outline" class="gap-1.5" onclick={() => (manageDialogOpen = true)}>
 				<Pencil class="h-3.5 w-3.5" />
 				จัดการข้อมูล
 			</Button>
@@ -229,7 +234,7 @@
 								size="icon"
 								variant="outline"
 								class="shrink-0 border-amber-300 text-amber-700 hover:bg-amber-50"
-								onclick={() => stub('ขอโอนย้ายศูนย์')}
+								onclick={() => (transferDialogOpen = true)}
 							>
 								<ArrowLeftRight class="h-4 w-4" />
 							</Button>
@@ -260,3 +265,11 @@
 		</div>
 	</div>
 </div>
+
+<VolunteerManageDialog
+	bind:open={manageDialogOpen}
+	{volunteer}
+	{shelterLine}
+	todayShift={todayAssignment?.shift}
+/>
+<VolunteerTransferDialog bind:open={transferDialogOpen} presetVolunteerId={volunteer._id} />
