@@ -52,7 +52,7 @@
 				</button>
 			{:else}
 				<div
-					class="hidden text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase md:block"
+					class="hidden text-2xs font-bold tracking-widest text-muted-foreground/80 uppercase md:block"
 				>
 					{t.shelterDetailSubtitle}
 				</div>

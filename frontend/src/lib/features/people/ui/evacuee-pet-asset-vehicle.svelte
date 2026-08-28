@@ -145,7 +145,7 @@
 						class="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-end"
 					>
 						<div class="w-full space-y-1 sm:w-[110px] sm:shrink-0">
-							<Label class="text-[10px] text-muted-foreground">{t.pets.speciesLabel}</Label>
+							<Label class="text-2xs text-muted-foreground">{t.pets.speciesLabel}</Label>
 							<Select.Root type="single" bind:value={pet.species}>
 								<Select.Trigger class="h-11 w-full bg-background text-sm sm:h-9">
 									{petSpeciesOptions.find((o) => o.value === pet.species)?.label ??
@@ -159,7 +159,7 @@
 							</Select.Root>
 						</div>
 						<div class="w-full space-y-1 sm:w-[72px] sm:shrink-0">
-							<Label class="text-[10px] text-muted-foreground">{t.pets.countLabel}</Label>
+							<Label class="text-2xs text-muted-foreground">{t.pets.countLabel}</Label>
 							<Input
 								type="number"
 								min={1}
@@ -168,7 +168,7 @@
 							/>
 						</div>
 						<div class="flex-1 space-y-1">
-							<Label class="text-[10px] text-muted-foreground">{t.pets.notesLabel}</Label>
+							<Label class="text-2xs text-muted-foreground">{t.pets.notesLabel}</Label>
 							<Input
 								class="h-11 bg-background text-sm sm:h-9"
 								bind:value={pet.notes}

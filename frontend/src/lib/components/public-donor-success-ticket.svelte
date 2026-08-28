@@ -163,11 +163,11 @@
 				{/if}
 			</div>
 
-			<div class="mb-1 text-[10px] font-bold tracking-[0.2em] text-slate-400">{t.refIdLabel}</div>
+			<div class="mb-1 text-2xs font-bold tracking-[0.2em] text-slate-400">{t.refIdLabel}</div>
 			<div class="font-mono text-xl font-bold text-slate-800">
 				{donationStore.bookingRef || 'DN-XXXXXX'}
 			</div>
-			<div class="mt-2 text-[10px] font-semibold text-slate-400">{t.trackingTokenLabel}</div>
+			<div class="mt-2 text-2xs font-semibold text-slate-400">{t.trackingTokenLabel}</div>
 			<div class="font-mono text-xs font-bold text-[#013365] select-all">
 				{donationStore.trackingToken || '-'}
 			</div>
@@ -240,9 +240,7 @@
 							</span>
 						{/each}
 						{#if donationStore.items.length > 5}
-							<span
-								class="block pl-4 text-left text-[11px] font-black text-primary hover:underline"
-							>
+							<span class="block pl-4 text-left text-2xs font-black text-primary hover:underline">
 								{t.viewAllRemaining.replace('{count}', String(donationStore.items.length - 5))}
 							</span>
 						{/if}
@@ -266,7 +264,7 @@
 					class="flex min-h-[72px] flex-col justify-between rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs"
 				>
 					<div>
-						<span class="mb-0.5 block text-[10px] font-bold tracking-wider text-slate-400 uppercase"
+						<span class="mb-0.5 block text-2xs font-bold tracking-wider text-slate-400 uppercase"
 							>{t.refIdLabel}</span
 						>
 						<span class="block truncate font-mono text-sm font-black text-slate-800 select-all">
@@ -277,7 +275,7 @@
 						<button
 							type="button"
 							onclick={handleCopyRef}
-							class="flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-bold transition-all duration-200 {isCopied
+							class="flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-2xs font-bold transition-all duration-200 {isCopied
 								? 'border-emerald-200 bg-emerald-50 text-emerald-600'
 								: 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-[#013365]'}"
 						>
@@ -291,14 +289,14 @@
 					class="flex min-h-[72px] flex-col justify-between rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs"
 				>
 					<div>
-						<span class="mb-0.5 block text-[10px] font-bold tracking-wider text-slate-400 uppercase"
+						<span class="mb-0.5 block text-2xs font-bold tracking-wider text-slate-400 uppercase"
 							>{t.phoneLabel}</span
 						>
 						<span class="block truncate text-sm font-black text-slate-800 select-all">
 							{donationStore.donorPhone || t.unspecified}
 						</span>
 					</div>
-					<span class="mt-2 block text-[10px] font-medium text-slate-400">{t.usedForTracking}</span>
+					<span class="mt-2 block text-2xs font-medium text-slate-400">{t.usedForTracking}</span>
 				</div>
 			</div>
 
@@ -334,10 +332,10 @@
 					</Button>
 				</div>
 				{#if courierSaved}
-					<p class="mt-2 text-[11px] font-bold text-emerald-600">{t.courierSavedMsg}</p>
+					<p class="mt-2 text-2xs font-bold text-emerald-600">{t.courierSavedMsg}</p>
 				{/if}
 				{#if courierError}
-					<p class="mt-2 text-[11px] font-bold text-red-500">{courierError}</p>
+					<p class="mt-2 text-2xs font-bold text-red-500">{courierError}</p>
 				{/if}
 			</div>
 		{/if}
@@ -345,7 +343,7 @@
 		<button
 			type="button"
 			onclick={() => toast.success(t.openingMapsToast)}
-			class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 py-4 text-[15px] font-bold text-white shadow-md transition-colors hover:bg-slate-800"
+			class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 py-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-slate-800"
 		>
 			<Navigation class="h-4.5 w-4.5" />
 			{t.navigateGoogleMaps}

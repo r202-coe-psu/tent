@@ -356,7 +356,7 @@
 							<span class="font-semibold">ลงบันทึกใบร่างครั้งแรก:</span>
 							<span class="text-muted-foreground">{formatReferralDate(sample.created_at)}</span>
 							<span
-								class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+								class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
 							>
 								<User class="h-3 w-3" /> By: {sample.created_by}
 							</span>
@@ -374,7 +374,7 @@
 									>{formatReferralDate(sample.timeline.sent.at)}</span
 								>
 								<span
-									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
 								>
 									<User class="h-3 w-3" /> By: {sample.timeline.sent.by}
 								</span>
@@ -395,7 +395,7 @@
 									>{formatReferralDate(sample.timeline.responded.at)}</span
 								>
 								<span
-									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
 								>
 									<User class="h-3 w-3" /> By: {sample.timeline.responded.by}
 								</span>
@@ -414,7 +414,7 @@
 									>{formatReferralDate(sample.timeline.closed.at)}</span
 								>
 								<span
-									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+									class="ml-1.5 flex inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
 								>
 									<User class="h-3 w-3" /> By: {sample.timeline.closed.by}
 								</span>

@@ -212,7 +212,7 @@
 						</div>
 						<span class="text-base text-white">{t.call} 1669</span>
 					</div>
-					<span class="rounded-lg bg-black/20 px-3 py-1.5 text-[11px] text-white"
+					<span class="rounded-lg bg-black/20 px-3 py-1.5 text-2xs text-white"
 						>{t.contact1669Label}</span
 					>
 				</a>
@@ -226,7 +226,7 @@
 						<PhoneCall class="h-4 w-4 text-white" />
 						<span class="text-base text-white">{t.call} 1784</span>
 					</div>
-					<span class="rounded-lg bg-black/20 px-3 py-1.5 text-[11px] text-white"
+					<span class="rounded-lg bg-black/20 px-3 py-1.5 text-2xs text-white"
 						>{t.contact1784Label}</span
 					>
 				</a>
@@ -244,7 +244,7 @@
 										<PhoneCall class="h-4 w-4 text-white" />
 										<span class="text-sm text-white">{t.call} {data.configData.phone_number}</span>
 									</div>
-									<span class="rounded-lg bg-black/20 px-3 py-1 text-[11px] text-white"
+									<span class="rounded-lg bg-black/20 px-3 py-1 text-2xs text-white"
 										>{t.directLine}</span
 									>
 								</a>

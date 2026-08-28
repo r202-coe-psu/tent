@@ -65,7 +65,7 @@
 	<!-- Header -->
 	<div class="flex items-start justify-between border-b border-black/[0.06] px-6 py-5">
 		<div>
-			<p class="text-[11px] font-black tracking-wider text-brand uppercase">
+			<p class="text-2xs font-black tracking-wider text-brand uppercase">
 				ประวัติการแก้ไข {isMaster ? 'Master' : 'Override'}
 			</p>
 			<h3 class="mt-0.5 text-lg font-bold text-slate-900">{profile.name}</h3>
@@ -127,7 +127,7 @@
 						<div class="rounded-2xl border border-black/[0.06] bg-white p-4 shadow-sm">
 							<div class="mb-2 flex items-center justify-between">
 								<span
-									class="rounded-full px-2.5 py-0.5 font-mono text-[12px] font-bold {version.active
+									class="rounded-full px-2.5 py-0.5 font-mono text-xs font-bold {version.active
 										? 'bg-brand/10 text-brand'
 										: 'bg-slate-100 text-slate-500'}"
 								>
@@ -149,14 +149,14 @@
 											: ''}
 									>
 										<p
-											class="font-mono text-[13px] font-bold {isDifferent
+											class="font-mono text-xs font-bold {isDifferent
 												? 'text-white'
 												: 'text-brand'}"
 										>
 											{v}
 										</p>
 										<p
-											class="block w-full truncate text-[10px] {isDifferent
+											class="block w-full truncate text-2xs {isDifferent
 												? 'text-white/90'
 												: 'text-slate-500'}"
 											title={RATIO_LABELS[k as SopRatioKey]?.label ?? k}
@@ -177,7 +177,7 @@
 								{:else}
 									<p class="mb-2 text-xs text-slate-400 italic">ไม่มีเหตุผลที่บันทึกไว้</p>
 								{/if}
-								<p class="flex items-center gap-1.5 text-[12px] text-slate-500">
+								<p class="flex items-center gap-1.5 text-xs text-slate-500">
 									<User size={12} />
 									{version.created_by}
 								</p>
@@ -202,7 +202,7 @@
 										{/if}
 									</div>
 								{/if}
-								<p class="flex items-center gap-1.5 text-[12px] text-slate-500">
+								<p class="flex items-center gap-1.5 text-xs text-slate-500">
 									<Clock size={12} />
 									{formatThaiDateTime(version.updated_at)}
 								</p>

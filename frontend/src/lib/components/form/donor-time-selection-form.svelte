@@ -247,7 +247,7 @@
 					</span>
 				{/each}
 				{#if donationStore.items.length > 5}
-					<span class="block pl-4 text-left text-[11px] font-black text-[#013481] hover:underline">
+					<span class="block pl-4 text-left text-2xs font-black text-[#013481] hover:underline">
 						{t.viewAllRemaining.replace('{count}', String(donationStore.items.length - 5))}
 					</span>
 				{/if}
@@ -451,9 +451,7 @@
 										: 'cursor-pointer border-slate-200 bg-white text-slate-600 hover:border-[#ff9f0a]'}"
 							>
 								<span class="text-sm font-bold">{slot.label}</span>
-								<span
-									class="text-[10px] font-bold {isSelected ? 'text-white/80' : 'text-slate-400'}"
-								>
+								<span class="text-2xs font-bold {isSelected ? 'text-white/80' : 'text-slate-400'}">
 									{isFull ? t.slotFull : t.slotAvailable}
 								</span>
 							</button>

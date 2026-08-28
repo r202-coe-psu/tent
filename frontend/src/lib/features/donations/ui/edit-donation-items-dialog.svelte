@@ -100,7 +100,7 @@
 			{#each rows as row, index (index)}
 				<div class="flex items-end gap-2 rounded-2xl border border-border bg-card p-3">
 					<div class="min-w-0 flex-1 space-y-1">
-						<label class="text-[10px] font-bold text-muted-foreground uppercase" for="name-{index}">
+						<label class="text-2xs font-bold text-muted-foreground uppercase" for="name-{index}">
 							{t.editItemLabel}
 						</label>
 						<Input
@@ -111,7 +111,7 @@
 						/>
 					</div>
 					<div class="w-20 space-y-1">
-						<label class="text-[10px] font-bold text-muted-foreground uppercase" for="qty-{index}">
+						<label class="text-2xs font-bold text-muted-foreground uppercase" for="qty-{index}">
 							{t.editQtyLabel}
 						</label>
 						<Input
@@ -124,7 +124,7 @@
 						/>
 					</div>
 					<div class="w-20 space-y-1">
-						<label class="text-[10px] font-bold text-muted-foreground uppercase" for="unit-{index}">
+						<label class="text-2xs font-bold text-muted-foreground uppercase" for="unit-{index}">
 							{t.editUnitLabel}
 						</label>
 						<Input

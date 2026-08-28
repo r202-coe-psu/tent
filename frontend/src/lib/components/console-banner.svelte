@@ -28,7 +28,7 @@
 			<div>
 				{#if subtitle}
 					<span
-						class="inline-block rounded-md border border-indigo-900/50 bg-[#013365]/30 px-2.5 py-1 font-mono text-[10px] font-bold tracking-wider text-blue-400 uppercase"
+						class="inline-block rounded-md border border-indigo-900/50 bg-[#013365]/30 px-2.5 py-1 font-mono text-2xs font-bold tracking-wider text-blue-400 uppercase"
 					>
 						{subtitle}
 					</span>

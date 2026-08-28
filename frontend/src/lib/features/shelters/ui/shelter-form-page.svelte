@@ -257,7 +257,7 @@
 	}
 </script>
 
-<main class="text-[13px] text-foreground">
+<main class="text-xs text-foreground">
 	<div
 		class="sticky top-0 z-10 flex items-center justify-between border-b border-shelter-border bg-background/95 px-6 py-4 backdrop-blur-sm"
 	>
@@ -310,7 +310,7 @@
 						หมวดหมู่ข้อมูล
 					</p>
 					{#if !usersViewActive}
-						<span class="text-[11px] font-semibold text-muted-foreground tabular-nums">
+						<span class="text-2xs font-semibold text-muted-foreground tabular-nums">
 							{step + 1} / {steps.length}
 						</span>
 					{/if}
@@ -375,7 +375,7 @@
 									>ผู้ใช้งานและสิทธิ์</span
 								>
 							</button>
-							<p class="mt-1 px-3 text-[11px] text-muted-foreground">
+							<p class="mt-1 px-3 text-2xs text-muted-foreground">
 								บันทึกศูนย์ก่อนจึงเพิ่มผู้ใช้ได้
 							</p>
 						{/if}

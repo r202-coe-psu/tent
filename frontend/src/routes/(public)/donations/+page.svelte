@@ -128,7 +128,7 @@
 						</div>
 						<div class="mt-1 flex flex-col items-center sm:mt-0 sm:items-start">
 							<span
-								class="hidden text-[10px] font-bold tracking-widest uppercase sm:block
+								class="hidden text-2xs font-bold tracking-widest uppercase sm:block
 								{isActive || isCompleted ? 'text-[#013365]' : 'text-slate-400'}"
 							>
 								STEP 0{idx + 1}

@@ -301,7 +301,7 @@
 						<small class="mb-1 text-xs text-muted-foreground">{k.unit}</small>
 					</div>
 					<div class="mt-1 flex items-end justify-between gap-2">
-						<span class="text-[11px] text-muted-foreground">{k.foot}</span>
+						<span class="text-2xs text-muted-foreground">{k.foot}</span>
 						{#if k.spark && spark}
 							<svg
 								class="h-8 w-24 shrink-0 {sparkColor[k.tint]}"
@@ -359,7 +359,7 @@
 					)}"
 				>
 					ทุกหมวดหมู่
-					<span class="rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
+					<span class="rounded-full bg-muted px-1.5 text-2xs text-muted-foreground">
 						{results.length}
 					</span>
 				</button>
@@ -372,7 +372,7 @@
 						)}"
 					>
 						{CATEGORY_LABELS[c]}
-						<span class="rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
+						<span class="rounded-full bg-muted px-1.5 text-2xs text-muted-foreground">
 							{catCounts[c]}
 						</span>
 					</button>
@@ -401,7 +401,7 @@
 						>
 							<span class="h-2 w-2 rounded-full {severityBar(s)}"></span>
 							{SEVERITY_LABEL[s]}
-							<span class="text-[10px] text-muted-foreground">{summary[s]}</span>
+							<span class="text-2xs text-muted-foreground">{summary[s]}</span>
 						</button>
 					{/each}
 				</div>

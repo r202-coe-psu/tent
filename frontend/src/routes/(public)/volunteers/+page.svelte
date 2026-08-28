@@ -149,7 +149,7 @@
 											<ChefHat class="h-3.5 w-3.5 text-warning" />
 											ประกอบอาหาร (Cooking)
 										</span>
-										<p class="mt-1 text-[10px] text-muted-foreground">
+										<p class="mt-1 text-2xs text-muted-foreground">
 											ศูนย์ขาดแคลนกำลังทำอาหารจำนวนมาก
 										</p>
 									</div>
@@ -167,7 +167,7 @@
 											<Ambulance class="h-3.5 w-3.5 text-danger" />
 											การแพทย์/ปฐมพยาบาล (Medical)
 										</span>
-										<p class="mt-1 text-[10px] text-muted-foreground">
+										<p class="mt-1 text-2xs text-muted-foreground">
 											ต้องการพยาบาลและผู้ดูแลผู้ป่วยไข้
 										</p>
 									</div>
@@ -185,7 +185,7 @@
 											<FileText class="h-3.5 w-3.5 text-primary" />
 											คัดกรองประวัติ (Screening)
 										</span>
-										<p class="mt-1 text-[10px] text-muted-foreground">
+										<p class="mt-1 text-2xs text-muted-foreground">
 											บันทึกข้อมูลหน้าจุดลงทะเบียนร่วมกับระบบคลาวด์
 										</p>
 									</div>
@@ -203,7 +203,7 @@
 											<Truck class="h-3.5 w-3.5 text-warning-foreground" />
 											ขนย้ายสิ่งของ (Lifting/Logistics)
 										</span>
-										<p class="mt-1 text-[10px] text-muted-foreground">
+										<p class="mt-1 text-2xs text-muted-foreground">
 											ใช้แรงจัดขนของ ยานพาหนะ อุปกรณ์ช่วยเหลือภัยน้ำท่วม
 										</p>
 									</div>
@@ -229,7 +229,7 @@
 						<Heart class="h-4.5 w-4.5 text-danger" />
 						คุณจะได้รับสวัสดิการอะไรบ้าง?
 					</h3>
-					<p class="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+					<p class="mt-2 text-2xs leading-relaxed text-muted-foreground">
 						โครงการยึดถือมาตรฐานสากลในการดูแลช่วยเหลือและสนับสนุนปัจจัยสี่ให้กับอาสาสมัครส่วนหน้าระหว่างปฏิบัติงาน:
 					</p>
 
@@ -238,7 +238,7 @@
 							<span class="text-sm">🍱</span>
 							<div>
 								<h4 class="text-xs font-bold text-foreground">โภชนาการประจำมื้อ</h4>
-								<p class="text-[9px] text-muted-foreground">
+								<p class="text-3xs text-muted-foreground">
 									รับสิทธิ์อาหารหลักกล่องฟรีตามที่จองลงกะงาน
 								</p>
 							</div>
@@ -247,7 +247,7 @@
 							<span class="text-sm">💧</span>
 							<div>
 								<h4 class="text-xs font-bold text-foreground">น้ำดื่มผลิตสะอาด</h4>
-								<p class="text-[9px] text-muted-foreground">
+								<p class="text-3xs text-muted-foreground">
 									ได้รับการจัดสรรน้ำขวดพกพาปฏิบัติงานอย่างต่อเนื่อง
 								</p>
 							</div>
@@ -256,7 +256,7 @@
 							<span class="text-sm">🦺</span>
 							<div>
 								<h4 class="text-xs font-bold text-foreground">ชุดเครื่องแต่งกาย & อุปกรณ์ PPE</h4>
-								<p class="text-[9px] text-muted-foreground">
+								<p class="text-3xs text-muted-foreground">
 									เสื้อสะท้อนแสง หน้ากาก ถุงมือ ปฐมพยาบาลครบครัน
 								</p>
 							</div>
@@ -360,7 +360,7 @@
 							<h3 class="text-sm font-bold text-foreground">
 								ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)
 							</h3>
-							<p class="mt-0.5 text-[10px] text-muted-foreground">
+							<p class="mt-0.5 text-2xs text-muted-foreground">
 								อปท. เทศบาลนครหาดใหญ่ | จำนวนผู้พักพิง 1/250 คน
 							</p>
 						</div>
@@ -410,7 +410,7 @@
 							<h3 class="text-sm font-bold text-foreground">
 								ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)
 							</h3>
-							<p class="mt-0.5 text-[10px] text-muted-foreground">
+							<p class="mt-0.5 text-2xs text-muted-foreground">
 								อปท. เทศบาลเมืองคลองแห | จำนวนผู้พักพิง 1/180 คน
 							</p>
 						</div>
