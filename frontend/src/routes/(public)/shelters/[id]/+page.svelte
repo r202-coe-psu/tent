@@ -12,9 +12,13 @@
 	import ShelterFacilities from './components/shelter-facilities.svelte';
 	import ShelterContact from './components/shelter-contact.svelte';
 	import { PublicPageShell } from '$lib/features/public-portal';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
 
 	let { data }: { data: PageData } = $props();
 	let shelter = $derived(data.shelter);
+	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
 
 	// CR-070 / T-71 — a closed shelter cannot be booked; everything else can
 	// (a full one warns inside the wizard rather than blocking, per FR-72).
@@ -23,7 +27,7 @@
 </script>
 
 <svelte:head>
-	<title>{shelter?.name || 'ข้อมูลศูนย์พักพิง'} - Smart Shelter</title>
+	<title>{shelter?.name || t.shelterDetailFallback} - Smart Shelter</title>
 </svelte:head>
 
 <div class="pb-20">
@@ -35,7 +39,7 @@
 				class="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm font-bold text-foreground/90 transition-colors hover:text-primary"
 			>
 				<ChevronLeft class="h-4 w-4" />
-				ย้อนกลับหน้าตรวจสอบสถานะ
+				{t.backToShelters}
 			</a>
 			{#if canBook && shelter}
 				<button
@@ -44,13 +48,13 @@
 					class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 py-1.5 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
 				>
 					<ClipboardCheck class="h-4 w-4" />
-					จองที่ศูนย์นี้
+					{t.bookThisShelter}
 				</button>
 			{:else}
 				<div
 					class="hidden text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase md:block"
 				>
-					SMARTSHELTER • ข้อมูลศูนย์พักพิงฉบับสมบูรณ์
+					{t.shelterDetailSubtitle}
 				</div>
 			{/if}
 		</div>
@@ -79,15 +83,15 @@
 	{:else}
 		<div class="flex min-h-[50vh] flex-col items-center justify-center px-4 py-20 text-center">
 			<AlertTriangle class="mb-4 h-12 w-12 text-muted-foreground/60" />
-			<h2 class="text-xl font-bold text-foreground/90">ไม่พบข้อมูลศูนย์พักพิง</h2>
+			<h2 class="text-xl font-bold text-foreground/90">{t.shelterNotFound}</h2>
 			<p class="mt-2 text-sm text-muted-foreground">
-				ขออภัย ข้อมูลที่คุณต้องการค้นหาอาจถูกลบหรือไม่มีอยู่ในระบบ
+				{t.shelterNotFoundDesc}
 			</p>
 			<a
 				href="/shelters"
 				class="mt-6 inline-flex h-10 items-center justify-center rounded-lg bg-primary px-6 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90"
 			>
-				กลับไปหน้าตรวจสอบสถานะ
+				{t.backToShelters}
 			</a>
 		</div>
 	{/if}

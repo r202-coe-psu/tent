@@ -25,6 +25,9 @@
 				? {
 						วัด: 'Temple',
 						โรงเรียน: 'School',
+						ศาลาประชาคม: 'Community Hall',
+						ศูนย์กีฬา: 'Sports Centre',
+						อาคารราชการ: 'Government Building',
 						หน่วยงานราชการ: 'Government Agency',
 						ศูนย์อพยพ: 'Evacuation Center',
 						มหาวิทยาลัย: 'University',

@@ -34,7 +34,6 @@
 
 	let t = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
 
-	// CR-070 / T-71 — closed shelters cannot book; FULL warns inside the wizard.
 	let canBook = $derived(Boolean(shelter.code) && shelter.status !== 'CLOSED');
 
 	const shelterTypeLabels = useShelterTypeLabelMap();
@@ -46,6 +45,9 @@
 				? {
 						วัด: 'Temple',
 						โรงเรียน: 'School',
+						ศาลาประชาคม: 'Community Hall',
+						ศูนย์กีฬา: 'Sports Centre',
+						อาคารราชการ: 'Government Building',
 						หน่วยงานราชการ: 'Government Agency',
 						ศูนย์อพยพ: 'Evacuation Center',
 						มหาวิทยาลัย: 'University',
@@ -131,7 +133,7 @@
 				</div>
 			{/if}
 			<div class="mt-1 text-[11px] font-semibold text-primary">
-				{shelter.site_kind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์อพยพ'}
+				{shelter.site_kind === 'host_house' ? t.hostHouse : t.evacCenter}
 			</div>
 		</div>
 		<span

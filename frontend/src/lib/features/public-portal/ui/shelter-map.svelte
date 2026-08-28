@@ -1,6 +1,12 @@
 <script lang="ts">
-	/* eslint-disable @typescript-eslint/no-explicit-any */
 	import { onMount, onDestroy } from 'svelte';
+	import type {
+		Map as MapLibreMap,
+		Marker as MapLibreMarker,
+		Popup as MapLibrePopup,
+		NavigationControl,
+		GeoJSONSource
+	} from 'maplibre-gl';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { PublicSiteKind } from '../domain/types';
 	import { resolveMasterLabel } from '../domain/master-labels';
@@ -10,6 +16,13 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_SHELTER_MAP_I18N } from '$lib/constants/i18n';
+
+	type MapLibreNamespace = {
+		Map: typeof MapLibreMap;
+		Marker: typeof MapLibreMarker;
+		Popup: typeof MapLibrePopup;
+		NavigationControl: typeof NavigationControl;
+	};
 
 	interface ShelterGeo {
 		lat: number;
@@ -57,9 +70,9 @@
 	};
 
 	let mapElement: HTMLElement;
-	let mapInstance: any = null;
-	let markersLayer: any[] = [];
-	let L: any = null;
+	let mapInstance: MapLibreMap | null = null;
+	let markersLayer: MapLibreMarker[] = [];
+	let L: MapLibreNamespace | null = null;
 	let mapLoaded = $state(false);
 	let placingPin = $state(false);
 
@@ -130,9 +143,9 @@
 	function setSearchRadiusData(data: { type: 'FeatureCollection'; features: unknown[] }) {
 		if (!mapInstance) return;
 		ensureSearchRadiusLayers();
-		const source = mapInstance.getSource(SEARCH_RADIUS_SOURCE);
+		const source = mapInstance.getSource(SEARCH_RADIUS_SOURCE) as GeoJSONSource | undefined;
 		if (source && typeof source.setData === 'function') {
-			source.setData(data);
+			source.setData(data as never);
 		}
 	}
 
@@ -171,7 +184,7 @@
 	}
 
 	function getSiteKindText(siteKind: PublicSiteKind | undefined): string {
-		return siteKind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์อพยพ';
+		return siteKind === 'host_house' ? t.hostHouse : t.evacCenter;
 	}
 
 	function translateAdminType(type: string): string {
@@ -180,6 +193,9 @@
 				? {
 						วัด: 'Temple',
 						โรงเรียน: 'School',
+						ศาลาประชาคม: 'Community Hall',
+						ศูนย์กีฬา: 'Sports Centre',
+						อาคารราชการ: 'Government Building',
 						หน่วยงานราชการ: 'Government Agency',
 						ศูนย์อพยพ: 'Evacuation Center',
 						มหาวิทยาลัย: 'University',
@@ -195,21 +211,23 @@
 
 	onMount(async () => {
 		const maplibre = await import('maplibre-gl');
-		L = maplibre.default;
+		const namespace = maplibre.default as unknown as MapLibreNamespace;
+		L = namespace;
 
-		mapInstance = new L.Map({
+		const map = new namespace.Map({
 			container: mapElement,
 			style: DEFAULT_MAP_STYLE,
 			center,
 			zoom
 		});
+		mapInstance = map;
 
 		// Add zoom and rotation controls to the map.
-		mapInstance.addControl(new L.NavigationControl(), 'bottom-right');
+		map.addControl(new namespace.NavigationControl(), 'bottom-right');
 
 		const updateLabelsVisibility = () => {
-			if (mapInstance && mapElement) {
-				if (mapInstance.getZoom() >= 12) {
+			if (map && mapElement) {
+				if (map.getZoom() >= 12) {
 					mapElement.classList.add('show-labels');
 				} else {
 					mapElement.classList.remove('show-labels');
@@ -217,16 +235,16 @@
 			}
 		};
 
-		mapInstance.on('zoom', updateLabelsVisibility);
+		map.on('zoom', updateLabelsVisibility);
 
-		mapInstance.on('click', (e: { lngLat: { lat: number; lng: number } }) => {
+		map.on('click', (e: { lngLat: { lat: number; lng: number } }) => {
 			if (!placingPin) return;
 			const { lat, lng } = e.lngLat;
 			placingPin = false;
 			onLocationPick?.(lat, lng);
 		});
 
-		mapInstance.on('load', () => {
+		map.on('load', () => {
 			mapLoaded = true;
 			updateLabelsVisibility(); // Initial check
 		});
@@ -240,100 +258,105 @@
 	});
 
 	$effect(() => {
-		if (!mapElement) return;
-		mapElement.style.cursor = placingPin ? 'crosshair' : '';
-	});
-
-	// Search-radius circle — separate from markers so radius changes skip fitBounds/marker rebuild.
-	$effect(() => {
-		if (!mapLoaded || !mapInstance) return;
-
-		const rawLat = userLocation?.lat;
-		const rawLng = userLocation?.lng;
-		const uLat = rawLat != null && rawLat !== '' ? Number(rawLat) : NaN;
-		const uLng = rawLng != null && rawLng !== '' ? Number(rawLng) : NaN;
-		const radius =
-			typeof radiusKm === 'number' && Number.isFinite(radiusKm) && radiusKm > 0 ? radiusKm : NaN;
-
-		if (!Number.isFinite(uLat) || !Number.isFinite(uLng) || !Number.isFinite(radius)) {
-			setSearchRadiusData(EMPTY_FEATURE_COLLECTION);
-			return;
+		// When placement mode turns on, switch cursor to crosshair; revert on off.
+		if (mapElement) {
+			mapElement.style.cursor = placingPin ? 'crosshair' : '';
 		}
-
-		setSearchRadiusData(circlePolygon(uLng, uLat, radius));
 	});
 
 	$effect(() => {
-		if (!mapLoaded || !L || !mapInstance) return;
-		// Re-render popups when master-data labels arrive.
-		void shelterTypeLabels.data;
+		if (!mapInstance || !mapLoaded || !L) return;
 
-		// Clear old markers
+		// 1. Clear existing markers
 		markersLayer.forEach((marker) => marker.remove());
 		markersLayer = [];
 
-		const bounds = new L.LngLatBounds();
-		let hasMarkers = false;
+		// 2. Draw or clear the search radius polygon on the map
+		const userLat = Number(userLocation?.lat);
+		const userLng = Number(userLocation?.lng);
+		const hasValidUserOrigin =
+			!Number.isNaN(userLat) &&
+			!Number.isNaN(userLng) &&
+			userLat >= -90 &&
+			userLat <= 90 &&
+			userLng >= -180 &&
+			userLng <= 180 &&
+			(userLat !== 0 || userLng !== 0);
 
-		// 1. Draw User Location if available
-		if (userLocation?.lat && userLocation?.lng) {
-			const uLat = Number(userLocation.lat);
-			const uLng = Number(userLocation.lng);
-			if (!isNaN(uLat) && !isNaN(uLng)) {
-				hasMarkers = true;
-				bounds.extend([uLng, uLat]);
-
-				const userEl = document.createElement('div');
-				userEl.className = 'custom-user-marker';
-				userEl.innerHTML = `
-					<div style="width: 16px; height: 16px; border-radius: 50%; background: #3b82f6; border: 3px solid white; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3), 0 2px 6px rgba(0,0,0,0.4); cursor: pointer;"></div>
-				`;
-
-				const userPopup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
-					<div style="font-size:12px;font-family:sans-serif;color:#1e293b;text-align:center;font-weight:bold;">
-						${t.yourLocation}
-					</div>
-				`);
-
-				const userMarker = new L.Marker({ element: userEl, anchor: 'center' })
-					.setLngLat([uLng, uLat])
-					.setPopup(userPopup)
-					.addTo(mapInstance);
-
-				markersLayer.push(userMarker);
-			}
+		if (hasValidUserOrigin && radiusKm && radiusKm > 0) {
+			setSearchRadiusData(circlePolygon(userLng, userLat, radiusKm));
+		} else {
+			setSearchRadiusData(EMPTY_FEATURE_COLLECTION);
 		}
 
-		// 2. Draw Shelters
+		// 3. Populate new markers
+		const bounds: [[number, number], [number, number]] = [
+			[Infinity, Infinity],
+			[-Infinity, -Infinity]
+		];
+		let hasMarkers = false;
+
+		const extendBounds = (lngLat: [number, number]) => {
+			bounds[0][0] = Math.min(bounds[0][0], lngLat[0]);
+			bounds[0][1] = Math.min(bounds[0][1], lngLat[1]);
+			bounds[1][0] = Math.max(bounds[1][0], lngLat[0]);
+			bounds[1][1] = Math.max(bounds[1][1], lngLat[1]);
+			hasMarkers = true;
+		};
+
+		// Include user location in bounds calculation if present
+		if (hasValidUserOrigin) {
+			extendBounds([userLng, userLat]);
+		}
+
 		if (shelters && shelters.length > 0) {
 			shelters.forEach((shelter) => {
-				if (!shelter.geo || shelter.geo.lng == null || shelter.geo.lat == null) return;
+				const lat = Number(shelter.geo?.lat);
+				const lng = Number(shelter.geo?.lng);
+				if (Number.isNaN(lat) || Number.isNaN(lng) || (lat === 0 && lng === 0)) return;
 
-				const lng = Number(shelter.geo.lng);
-				const lat = Number(shelter.geo.lat);
-
-				if (isNaN(lng) || isNaN(lat)) return;
-
-				hasMarkers = true;
 				const lngLat: [number, number] = [lng, lat];
-				bounds.extend(lngLat);
+				extendBounds(lngLat);
 
 				const color = getStatusColorCode(shelter.status);
 				const icon = getTypeIcon(shelter.site_kind);
 
+				// Create DOM element for marker
 				const el = document.createElement('div');
-				// Do not apply position: relative to the root element,
-				// as it overrides MapLibre's .maplibregl-marker class (which uses position: absolute).
 				el.className = 'custom-shelter-marker';
+				el.style.width = '18px';
+				el.style.height = '18px';
+				el.style.display = 'flex';
+				el.style.alignItems = 'center';
+				el.style.justifyContent = 'center';
+				el.style.cursor = 'pointer';
+
 				el.innerHTML = `
-					<div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 24px; height: 24px;">
-						<div class="marker-dot" style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition: transform 0.2s;"></div>
-						<!-- Pin pointer triangle to anchor to exact location -->
-						<div style="position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid white;"></div>
-						<div class="marker-label" style="position: absolute; top: 28px; white-space: nowrap; font-size: 11px; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-							${icon} ${shelter.name}
-						</div>
-					</div>
+					<div class="marker-dot" style="
+						background-color: ${color};
+						width: 14px;
+						height: 14px;
+						border-radius: 50%;
+						border: 2px solid white;
+						box-shadow: 0 0 4px rgba(0,0,0,0.4);
+						transition: transform 0.15s ease-out;
+					"></div>
+					<div class="marker-label" style="
+						position: absolute;
+						bottom: -18px;
+						left: 50%;
+						transform: translateX(-50%);
+						background: rgba(255, 255, 255, 0.9);
+						padding: 1px 4px;
+						border-radius: 4px;
+						font-size: 10px;
+						font-weight: bold;
+						color: #334155;
+						white-space: nowrap;
+						border: 1px solid #cbd5e1;
+						box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+						pointer-events: none;
+					">${shelter.name}</div>
 				`;
 
 				// Add hover effect to the inner dot, not the root element
@@ -345,7 +368,11 @@
 					if (dot) dot.style.transform = 'scale(1)';
 				};
 
-				const popup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
+				const lib = L;
+				const currentMap = mapInstance;
+				if (!lib || !currentMap) return;
+
+				const popup = new lib.Popup({ offset: 12, closeButton: false }).setHTML(`
 					<div style="font-size:12px;font-family:sans-serif;color:#1e293b;min-width:160px;">
 						<strong style="font-size:14px;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
 						<div style="margin-bottom:2px;font-size:11px;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
@@ -355,10 +382,10 @@
 					</div>
 				`);
 
-				const marker = new L.Marker({ element: el }) // Default anchor is 'center', which is perfect for the 18x18 wrapper
+				const marker = new lib.Marker({ element: el }) // Default anchor is 'center', which is perfect for the 18x18 wrapper
 					.setLngLat(lngLat)
 					.setPopup(popup)
-					.addTo(mapInstance);
+					.addTo(currentMap);
 
 				markersLayer.push(marker);
 			});
