@@ -89,3 +89,31 @@ export const registerIpLimiter = new RateLimiter(60000, 3);
 export const registerPhoneLimiter = new RateLimiter(60000, 3);
 // Lookup is a read but also an enumeration surface — hold it tighter.
 export const registerLookupIpLimiter = new RateLimiter(60000, 10);
+
+// Public volunteer board (CR-092 / T-28). Its own buckets so a donation drive and a
+// volunteer callout cannot starve each other.
+/**
+ * Submitting an application. CR-092 FR-VOL-02.3 sets this at 3 per 10 minutes per IP
+ * and per phone — a longer window than the donation limiter because the abuse being
+ * priced here is filling a shelter's roster with people who will not turn up, and one
+ * genuine volunteer signs up for a handful of shifts at most.
+ */
+export const volunteerApplyIpLimiter = new RateLimiter(600000, 3);
+/** Same window, keyed by phone, so one abuser cannot spread across IPs. */
+export const volunteerApplyPhoneLimiter = new RateLimiter(600000, 3);
+/**
+ * Looking a ticket up by phone number. An enumeration surface — it answers "does this
+ * number have a ticket" — so it is held tighter than reading a ticket you hold the
+ * token for.
+ */
+export const volunteerTicketFindLimiter = new RateLimiter(60000, 5);
+/** Reading or cancelling one's own ticket. Token-gated; the page refetches after a change. */
+export const volunteerTicketLimiter = new RateLimiter(60000, 30);
+/**
+ * Answering a dispatched shift. The tightest of the volunteer limiters: it is the only
+ * public volunteer surface where a correct guess performs a write, the code is six
+ * characters rather than 128 bits, and a declined shift cannot be un-declined by the
+ * volunteer. Ten a minute leaves room for mistyping a code read over a bad phone line,
+ * and nothing like enough for a search.
+ */
+export const volunteerDispatchRespondLimiter = new RateLimiter(60000, 10);
