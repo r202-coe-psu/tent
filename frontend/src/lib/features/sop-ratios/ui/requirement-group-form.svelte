@@ -297,118 +297,152 @@
 					<div class="space-y-3">
 						{#each formItemMaps as itemMap, index (index)}
 							<div
-								class="flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-background/80 p-3.5 text-xs sm:flex-nowrap"
+								class="rounded-xl border border-border/60 bg-background/80 p-3.5 text-xs shadow-sm transition-colors"
 							>
-								<div class="min-w-[200px] flex-1">
-									<label
-										for={`item-map-id-${index}`}
-										class="block pb-1 font-semibold text-foreground">สิ่งของ</label
+								<!-- Header for small screens with delete button -->
+								<div
+									class="mb-3 flex items-center justify-between border-b border-border/40 pb-2 xl:hidden"
+								>
+									<span class="font-semibold text-muted-foreground">
+										สินค้าคู่เทียบ #{index + 1}
+									</span>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										class="h-7 px-2 text-destructive hover:bg-destructive/10"
+										onclick={() => removeItemMap(index)}
+										aria-label={`ลบสินค้าคู่เทียบที่ ${index + 1}`}
 									>
-									<Combobox
-										items={getItemOptions(itemMap.item_id)}
-										bind:value={() => itemMap.item_id, (v) => handleItemSelect(index, v)}
-										placeholder="-- เลือกสิ่งของ --"
-										searchPlaceholder="ค้นหาชื่อสิ่งของ หรือ SKU..."
-										emptyText="ไม่พบรายการสิ่งของ"
-										disabled={itemMastersQuery.isLoading}
-										class="h-9 w-full justify-between rounded-md border-input bg-background px-3 text-xs font-normal shadow-sm"
-									>
-										{#snippet children({ item })}
-											<div class="flex w-full items-center justify-between gap-2">
-												<div class="flex min-w-0 flex-col text-left">
-													<span class="truncate text-xs font-semibold text-foreground"
-														>{item.label}</span
-													>
-													{#if item.sku}
-														<span class="truncate font-mono text-[10px] text-muted-foreground"
-															>{item.sku}</span
+										<Trash2 class="mr-1 h-3.5 w-3.5" />
+										<span class="text-xs">ลบรายการ</span>
+									</Button>
+								</div>
+
+								<div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:gap-3">
+									<div class="w-full xl:min-w-[200px] xl:flex-1">
+										<label
+											for={`item-map-id-${index}`}
+											class="block pb-1 font-semibold text-foreground"
+										>
+											สิ่งของ
+										</label>
+										<Combobox
+											items={getItemOptions(itemMap.item_id)}
+											bind:value={() => itemMap.item_id, (v) => handleItemSelect(index, v)}
+											placeholder="-- เลือกสิ่งของ --"
+											searchPlaceholder="ค้นหาชื่อสิ่งของ หรือ SKU..."
+											emptyText="ไม่พบรายการสิ่งของ"
+											disabled={itemMastersQuery.isLoading}
+											class="h-9 w-full justify-between rounded-md border-input bg-background px-3 text-xs font-normal shadow-sm"
+										>
+											{#snippet children({ item })}
+												<div class="flex w-full items-center justify-between gap-2">
+													<div class="flex min-w-0 flex-col text-left">
+														<span class="truncate text-xs font-semibold text-foreground"
+															>{item.label}</span
 														>
+														{#if item.sku}
+															<span class="truncate font-mono text-[10px] text-muted-foreground"
+																>{item.sku}</span
+															>
+														{/if}
+													</div>
+													{#if item.base_unit}
+														<span
+															class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+														>
+															{item.base_unit}
+														</span>
 													{/if}
 												</div>
-												{#if item.base_unit}
-													<span
-														class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-													>
-														{item.base_unit}
-													</span>
-												{/if}
-											</div>
-										{/snippet}
-									</Combobox>
-									{#if formErrors[`item_${index}_id`]}
-										<p class="mt-1 text-[10px] text-destructive">
-											{formErrors[`item_${index}_id`]}
-										</p>
-									{/if}
-								</div>
+											{/snippet}
+										</Combobox>
+										{#if formErrors[`item_${index}_id`]}
+											<p class="mt-1 text-[10px] text-destructive">
+												{formErrors[`item_${index}_id`]}
+											</p>
+										{/if}
+									</div>
 
-								<div class="w-full sm:w-28">
-									<label
-										for={`item-map-uom-${index}`}
-										class="block pb-1 font-semibold text-foreground">หน่วยนับ</label
-									>
-									<Input
-										id={`item-map-uom-${index}`}
-										bind:value={itemMap.base_uom}
-										placeholder="ดึงจากสิ่งของ"
-										readonly
-										class="h-9 cursor-not-allowed bg-muted font-medium text-muted-foreground"
-									/>
-									{#if formErrors[`item_${index}_uom`]}
-										<p class="mt-1 text-[10px] text-destructive">
-											{formErrors[`item_${index}_uom`]}
-										</p>
-									{/if}
-								</div>
+									<div class="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:flex xl:items-end xl:gap-3">
+										<div class="w-full xl:w-28">
+											<label
+												for={`item-map-uom-${index}`}
+												class="block pb-1 font-semibold text-foreground"
+											>
+												หน่วยนับ
+											</label>
+											<Input
+												id={`item-map-uom-${index}`}
+												bind:value={itemMap.base_uom}
+												placeholder="ดึงจากสิ่งของ"
+												readonly
+												class="h-9 cursor-not-allowed bg-muted font-medium text-muted-foreground"
+											/>
+											{#if formErrors[`item_${index}_uom`]}
+												<p class="mt-1 text-[10px] text-destructive">
+													{formErrors[`item_${index}_uom`]}
+												</p>
+											{/if}
+										</div>
 
-								<div class="w-full sm:w-32">
-									<label
-										for={`item-map-cf-${index}`}
-										class="block pb-1 font-semibold text-foreground">ตัวคูณแปลงค่า</label
-									>
-									<Input
-										id={`item-map-cf-${index}`}
-										type="number"
-										step="any"
-										bind:value={itemMap.conversion_factor}
-										placeholder="1"
-									/>
-									{#if formErrors[`item_${index}_cf`]}
-										<p class="mt-1 text-[10px] text-destructive">
-											{formErrors[`item_${index}_cf`]}
-										</p>
-									{/if}
-								</div>
+										<div class="w-full xl:w-32">
+											<label
+												for={`item-map-cf-${index}`}
+												class="block pb-1 font-semibold text-foreground"
+											>
+												ตัวคูณแปลงค่า
+											</label>
+											<Input
+												id={`item-map-cf-${index}`}
+												type="number"
+												step="any"
+												bind:value={itemMap.conversion_factor}
+												placeholder="1"
+											/>
+											{#if formErrors[`item_${index}_cf`]}
+												<p class="mt-1 text-[10px] text-destructive">
+													{formErrors[`item_${index}_cf`]}
+												</p>
+											{/if}
+										</div>
 
-								<div class="w-full sm:w-28">
-									<label
-										for={`item-map-share-${index}`}
-										class="block pb-1 font-semibold text-foreground">สัดส่วน (%)</label
-									>
-									<Input
-										id={`item-map-share-${index}`}
-										type="number"
-										step="any"
-										bind:value={itemMap.share_percent}
-										placeholder="100"
-									/>
-									{#if formErrors[`item_${index}_share`]}
-										<p class="mt-1 text-[10px] text-destructive">
-											{formErrors[`item_${index}_share`]}
-										</p>
-									{/if}
-								</div>
+										<div class="w-full xl:w-28">
+											<label
+												for={`item-map-share-${index}`}
+												class="block pb-1 font-semibold text-foreground"
+											>
+												สัดส่วน (%)
+											</label>
+											<Input
+												id={`item-map-share-${index}`}
+												type="number"
+												step="any"
+												bind:value={itemMap.share_percent}
+												placeholder="100"
+											/>
+											{#if formErrors[`item_${index}_share`]}
+												<p class="mt-1 text-[10px] text-destructive">
+													{formErrors[`item_${index}_share`]}
+												</p>
+											{/if}
+										</div>
+									</div>
 
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon"
-									class="shrink-0 text-destructive hover:bg-destructive/10"
-									onclick={() => removeItemMap(index)}
-									aria-label="ลบสินค้าคู่เทียบ"
-								>
-									<Trash2 class="h-4 w-4" />
-								</Button>
+									<div class="hidden xl:block">
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											class="h-9 w-9 shrink-0 text-destructive hover:bg-destructive/10"
+											onclick={() => removeItemMap(index)}
+											aria-label={`ลบสินค้าคู่เทียบที่ ${index + 1}`}
+										>
+											<Trash2 class="h-4 w-4" />
+										</Button>
+									</div>
+								</div>
 							</div>
 						{/each}
 					</div>

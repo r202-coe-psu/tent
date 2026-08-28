@@ -175,7 +175,7 @@
 		</div>
 	{/if}
 
-	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
+	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-6">
 		<SopTypeList
 			bind:activeTab
 			foodSphereCount={foodSphereQuery.data ? foodSphereQuery.data.length : 0}

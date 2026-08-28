@@ -57,7 +57,7 @@
 	]);
 </script>
 
-<aside class="rounded-xl border bg-card p-4 text-card-foreground shadow-sm">
+<aside class="min-w-0 rounded-xl border bg-card p-4 text-card-foreground shadow-sm">
 	<h2 class="mb-3 text-sm font-semibold text-muted-foreground">ประเภทพารามิเตอร์มาสเตอร์</h2>
 	<nav class="flex flex-col gap-2">
 		{#each tabs as tab (tab.key)}

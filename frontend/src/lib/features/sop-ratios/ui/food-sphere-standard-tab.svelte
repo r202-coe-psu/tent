@@ -111,11 +111,9 @@
 </script>
 
 {#if viewMode === 'list'}
-	<section class="rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
+	<section class="min-w-0 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
 		<header class="mb-6 flex flex-col gap-4">
-			<div
-				class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-			>
+			<div class="flex w-full flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
 				<div>
 					<h1 class="text-xl font-semibold">เกณฑ์มาตรฐานโภชนาการ</h1>
 					<p class="text-sm text-muted-foreground">
@@ -123,7 +121,7 @@
 					</p>
 				</div>
 
-				<div class="flex items-center gap-2">
+				<div class="flex flex-wrap items-center gap-2">
 					<div class="relative w-full sm:w-56">
 						<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
 						<Input
@@ -136,7 +134,7 @@
 					</div>
 
 					{#if isSA || canEditOverride}
-						<Button onclick={showCreateForm} class="flex shrink-0 items-center gap-1.5">
+						<Button onclick={showCreateForm} class="ml-auto flex shrink-0 items-center gap-1.5">
 							<Plus class="h-4 w-4" />
 							เพิ่มเกณฑ์โภชนาการ
 						</Button>
@@ -271,7 +269,7 @@
 	</section>
 {:else}
 	<div
-		class="w-full rounded-2xl border border-slate-100 bg-card p-6 shadow-sm md:p-8 dark:border-zinc-800"
+		class="w-full min-w-0 rounded-2xl border border-slate-100 bg-card p-6 shadow-sm md:p-8 dark:border-zinc-800"
 	>
 		<div class="flex items-start justify-between gap-4">
 			<div class="flex flex-col gap-1.5">
