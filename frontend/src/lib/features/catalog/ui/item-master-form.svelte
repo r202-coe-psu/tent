@@ -615,12 +615,14 @@
 					</div>
 
 					{#if $formData.type_class === 'CONSUMABLE'}
-						<div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+						<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
 							<!-- Row 1: Shelf Life, Storage Type, Allergens -->
 							<Form.Field {form} name="shelf_life_days" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+										<Form.Label
+											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
+										>
 											อายุการเก็บรักษา (วัน) (Shelf Life Days)
 										</Form.Label>
 										<Input
@@ -642,7 +644,9 @@
 							<Form.Field {form} name="storage_type" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+										<Form.Label
+											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
+										>
 											ประเภทการจัดเก็บ (Storage Type)
 										</Form.Label>
 										<select
@@ -664,7 +668,9 @@
 							<Form.Field {form} name="allergens" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+										<Form.Label
+											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
+										>
 											สารก่อภูมิแพ้ (Allergens)
 										</Form.Label>
 										<Input
@@ -682,7 +688,9 @@
 							<Form.Field {form} name="target_gender" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+										<Form.Label
+											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
+										>
 											เพศที่ใช้ได้ (Target Gender)
 										</Form.Label>
 										<select
@@ -702,7 +710,9 @@
 							<Form.Field {form} name="age_group" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+										<Form.Label
+											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
+										>
 											ช่วงวัยที่เหมาะสม (Age Group)
 										</Form.Label>
 										<select
@@ -723,7 +733,9 @@
 							<Form.Field {form} name="dietary" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+										<Form.Label
+											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
+										>
 											ข้อจำกัดด้านอาหาร (Dietary)
 										</Form.Label>
 										<select
@@ -750,7 +762,9 @@
 							<Form.Field {form} name="distribution_type" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+										<Form.Label
+											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
+										>
 											ประเภทการแจก (Distribution Type)
 										</Form.Label>
 										<select
@@ -767,12 +781,14 @@
 							</Form.Field>
 						</div>
 					{:else if $formData.type_class === 'DURABLE'}
-						<div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+						<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
 							<!-- Row 1: Qty per Person, Returnable -->
 							<Form.Field {form} name="qty_per_person" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+										<Form.Label
+											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
+										>
 											จำนวนที่ต้องมีต่อคน (Qty per Person)
 										</Form.Label>
 										<Input
@@ -793,7 +809,7 @@
 								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 							</Form.Field>
 
-							<Form.Field {form} name="returnable" class="col-span-2 space-y-2">
+							<Form.Field {form} name="returnable" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
 										<div class="hidden h-[20px] md:block"></div>
@@ -822,13 +838,13 @@
 								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 							</Form.Field>
 
-							<div class="hidden md:block"></div>
-
 							<!-- Row 2: Target Gender, Age Group -->
 							<Form.Field {form} name="target_gender" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+										<Form.Label
+											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
+										>
 											เพศที่ใช้ได้ (Target Gender)
 										</Form.Label>
 										<select
@@ -848,7 +864,9 @@
 							<Form.Field {form} name="age_group" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+										<Form.Label
+											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
+										>
 											ช่วงวัยที่เหมาะสม (Age Group)
 										</Form.Label>
 										<select
@@ -866,13 +884,13 @@
 								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 							</Form.Field>
 
-							<div class="hidden md:block"></div>
-
 							<!-- Row 3: Distribution Type -->
 							<Form.Field {form} name="distribution_type" class="space-y-2">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+										<Form.Label
+											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
+										>
 											ประเภทการแจก (Distribution Type)
 										</Form.Label>
 										<select

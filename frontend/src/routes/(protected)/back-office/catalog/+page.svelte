@@ -7,10 +7,11 @@
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { useItemCategories, useItemMasters, useRecipes } from '$lib/features/catalog';
 	import { page } from '$app/state';
+	import { getShelterCode } from '$lib/db/shelter';
 
-	const itemCategoriesQuery = useItemCategories();
-	const itemMastersQuery = useItemMasters();
-	const recipesQuery = useRecipes();
+	const itemCategoriesQuery = useItemCategories(() => getShelterCode());
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const recipesQuery = useRecipes(() => getShelterCode());
 
 	const totalItemCategories = $derived(itemCategoriesQuery.data?.length ?? 0);
 	const totalItemMasters = $derived(itemMastersQuery.data?.length ?? 0);

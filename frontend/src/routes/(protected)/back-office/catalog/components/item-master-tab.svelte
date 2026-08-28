@@ -253,7 +253,12 @@
 								<Table.Cell class="text-center">
 									{#if canModifyItem(e)}
 										<div class="inline-flex gap-2">
-											<Button variant="outline" size="sm" onclick={() => showEditForm(e._id)}>
+											<Button
+												variant="outline"
+												size="sm"
+												onclick={() => showEditForm(e._id)}
+												class="border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20"
+											>
 												<Settings2 class="h-4 w-4" />
 												จัดการ
 											</Button>
@@ -264,7 +269,7 @@
 														size="sm"
 														onclick={() => activateItem(e)}
 														disabled={updateItemMutation.isPending}
-														class="text-green-600 hover:text-green-700 dark:text-green-400"
+														class="border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-950/20"
 													>
 														<RotateCcw class="h-4 w-4" />
 														นำกลับมาใช้
@@ -275,6 +280,9 @@
 														size="sm"
 														onclick={() => showDeleteConfirm(e._id, e.name)}
 														disabled={deleteMutation.isPending}
+														class={e.override
+															? 'border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950/20'
+															: 'border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20'}
 													>
 														<Trash2 class="h-4 w-4" />
 														{e.override ? 'รีเซ็ต' : 'ลบ'}
