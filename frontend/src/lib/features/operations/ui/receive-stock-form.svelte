@@ -12,7 +12,7 @@
 		type WalkInDonationInput
 	} from '../domain/operations';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { sha256Hex } from '$lib/db/hash';
@@ -71,7 +71,7 @@
 			_id: im._id,
 			name: im.name,
 			category: im.category || 'other',
-			unit: im.base_unit || im.unit || 'ชิ้น',
+			unit: itemMasterUnit(im),
 			reorder_level: null,
 			perishable: false
 		}));

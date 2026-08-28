@@ -33,20 +33,37 @@ import {
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
+import { isItemMaster, itemMasterUnit, type ItemMaster } from '$lib/features/catalog';
 import { qtyAbs, qtyGte, qtyLte } from '$lib/utils/qty';
 
-export function assertReceiveAgainstCatalog(entry: StockLedger, item: SupplyItem | null): void {
+/**
+ * A catalog row a ledger entry can point at. The `catalog` database holds two
+ * shapes: the T-10 `item:{ulid}` supply stub (`unit`, `perishable`) and the
+ * CR-013 `item_master:{ulid}` master (`base_unit`, no perishable flag). Item
+ * pickers already offer both, so both must survive the guards below.
+ */
+export type CatalogItem = SupplyItem | ItemMaster;
+
+/** The unit + expiry rules a receive/adjust must satisfy, whichever shape it is. */
+export function catalogItemRules(item: CatalogItem): { unit: string; perishable: boolean } {
+	return isItemMaster(item)
+		? { unit: itemMasterUnit(item), perishable: false }
+		: { unit: item.unit, perishable: item.perishable };
+}
+
+export function assertReceiveAgainstCatalog(entry: StockLedger, item: CatalogItem | null): void {
 	if (!item) {
 		throw new Error(
 			`Unknown item: ${entry.item_id} — item must exist in the catalog before receiving stock`
 		);
 	}
-	if (item.unit !== entry.unit) {
+	const rules = catalogItemRules(item);
+	if (rules.unit !== entry.unit) {
 		throw new Error(
-			`Unit mismatch for item ${entry.item_id}: expected ${item.unit}, got ${entry.unit}`
+			`Unit mismatch for item ${entry.item_id}: expected ${rules.unit}, got ${entry.unit}`
 		);
 	}
-	if (item.perishable && !entry.lot?.expiry) {
+	if (rules.perishable && !entry.lot?.expiry) {
 		throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
 	}
 }
@@ -58,6 +75,15 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	constructor(dbName: string = getShelterDb()) {
 		this.dbName = dbName;
 		this.repo = createRemoteRepository(dbName);
+	}
+
+	/**
+	 * Read the catalog row backing a ledger entry. `getItem` fetches by `_id` from
+	 * the single `catalog` database, so it returns either shape — the `type`
+	 * discriminator, not the typing here, decides which rules apply.
+	 */
+	private async loadCatalogItem(itemId: string): Promise<CatalogItem | null> {
+		return supplyRepository().getItem(itemId);
 	}
 
 	// --- Ledger Methods ---
@@ -82,7 +108,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 	async receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger> {
 		const entry = createReceiveEntry(input, ctx);
-		const item = await supplyRepository().getItem(entry.item_id);
+		const item = await this.loadCatalogItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
 		return this.addLedgerEntry(entry);
 	}
@@ -100,7 +126,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			ctx
 		);
 
-		const item = await supplyRepository().getItem(entry.item_id);
+		const item = await this.loadCatalogItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
 
 		// One request for both docs (mirrors kitchen `issueRequisition` and
@@ -152,20 +178,13 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 	async adjustStock(input: AdjustInput, ctx: AuthorContext): Promise<StockLedger> {
 		const entry = createAdjustEntry(input, ctx);
-		const item = await supplyRepository().getItem(entry.item_id);
+		const item = await this.loadCatalogItem(entry.item_id);
 		if (!item) {
 			throw new Error(
 				`Unknown item: ${entry.item_id} — item must exist in the catalog before adjusting stock`
 			);
 		}
-		if (item.unit !== entry.unit) {
-			throw new Error(
-				`Unit mismatch for item ${entry.item_id}: expected ${item.unit}, got ${entry.unit}`
-			);
-		}
-		if (item.perishable && !entry.lot?.expiry) {
-			throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
-		}
+		assertReceiveAgainstCatalog(entry, item);
 
 		// NOTE: This balance check is aggregate (cross-lot total), not per-lot.
 		// Acceptable for single-user shelter; per-lot validation requires FIFO tracking.

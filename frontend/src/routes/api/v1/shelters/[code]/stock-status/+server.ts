@@ -11,7 +11,7 @@ import {
 	calculateReorderLevel
 } from '$lib/features/supply/server';
 import type { SupplyItem, StockThresholdOverride } from '$lib/features/supply/server';
-import { isItemMaster } from '$lib/features/catalog/server';
+import { isItemMaster, itemMasterUnit } from '$lib/features/catalog/server';
 import type { ItemMaster } from '$lib/features/catalog/server';
 import { qtyLte, subQty } from '$lib/utils/qty';
 
@@ -89,7 +89,7 @@ export const GET: RequestHandler = async ({ params }) => {
 				_id: im._id,
 				name: im.name,
 				category: im.category || 'other',
-				unit: im.base_unit || im.unit || 'ชิ้น',
+				unit: itemMasterUnit(im),
 				reorder_level: null,
 				target_reserve_days: im.target_reserve_days,
 				consumption_rate: im.consumption_rate,

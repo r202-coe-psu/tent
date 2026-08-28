@@ -8,7 +8,7 @@
 	} from '../application/queries';
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -102,7 +102,7 @@
 			_id: im._id,
 			name: im.name,
 			category: im.category || 'other',
-			unit: im.base_unit || im.unit || 'ชิ้น',
+			unit: itemMasterUnit(im),
 			reorder_level: null,
 			perishable: false,
 			target_reserve_days: im.target_reserve_days,

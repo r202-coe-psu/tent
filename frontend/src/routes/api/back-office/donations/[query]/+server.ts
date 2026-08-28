@@ -21,6 +21,7 @@ import {
 } from '$lib/features/operations/server';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
 import { isSupplyItem, type SupplyItem, CATALOG_DB } from '$lib/features/supply/server';
+import { isItemMaster, itemMasterUnit, type ItemMaster } from '$lib/features/catalog/server';
 import { fetchDocs } from '$lib/server/donation-docs';
 
 function routeErrorResponse(e: unknown) {
@@ -70,8 +71,19 @@ function toCountedItems(lines: ReceiveDonationInput['items']): CountedItem[] {
  */
 async function assertCountedAgainstCatalog(counted: CountedItem[]): Promise<void> {
 	if (counted.length === 0) return;
-	const items = (await fetchDocs<SupplyItem>(CATALOG_DB, 'item:')).filter(isSupplyItem);
-	const byId = new Map(items.map((i) => [i._id, i]));
+
+	// Two shapes share the `catalog` database and the `_id` prefixes do not nest:
+	// `item:{ulid}` is the T-10 supply stub (`unit`, `perishable`), `item_master:{ulid}`
+	// the CR-013 master (`base_unit`, no perishable flag). Scanning only `item:` left
+	// every item_master line rejected as an unknown item.
+	const supplyItems = (await fetchDocs<SupplyItem>(CATALOG_DB, 'item:')).filter(isSupplyItem);
+	const itemMasters = (await fetchDocs<ItemMaster>(CATALOG_DB, 'item_master:')).filter(
+		isItemMaster
+	);
+	const byId = new Map<string, { unit: string; perishable: boolean }>([
+		...supplyItems.map((i) => [i._id, { unit: i.unit, perishable: i.perishable }] as const),
+		...itemMasters.map((m) => [m._id, { unit: itemMasterUnit(m), perishable: false }] as const)
+	]);
 
 	for (const line of counted) {
 		const item = byId.get(line.item_id);
