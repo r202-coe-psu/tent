@@ -98,10 +98,15 @@ export type ReceiveDonationInput = z.infer<typeof receiveDonationInputSchema>;
  * belongs to staff and the stock ledger, and `cancelled`/`expired` have already
  * released their quota — reopening either would desync the counter.
  *
- * CR-052 adds `pending_review`/`verifying`, which also await drop-off; add them here
- * when those statuses land so both routes pick the change up at once.
+ * `pending_review` is in (decision D-1): since CR-052 every public booking opens
+ * there rather than at `declared`, so leaving it out would take the donor's own
+ * edit/cancel away from every booking the wizard creates. `verifying` is out —
+ * at that point the goods are at the shelter and the count is staff's.
+ *
+ * Mirrored by `DONOR_EDITABLE_STATUSES` in the FastAPI donations use case; the two
+ * gate the same routes and have to move together.
  */
-const DONOR_EDITABLE_STATUSES = new Set<DonationStatus>(['declared']);
+const DONOR_EDITABLE_STATUSES = new Set<DonationStatus>(['declared', 'pending_review']);
 
 export function isDonorEditable(status: DonationStatus): boolean {
 	return DONOR_EDITABLE_STATUSES.has(status);

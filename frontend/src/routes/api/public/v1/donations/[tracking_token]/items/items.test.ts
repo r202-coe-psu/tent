@@ -153,7 +153,9 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 	it('refuses before moving quota once staff have taken the booking', async () => {
 		// The buffer follows CouchDB a few seconds behind, so checking the record first
 		// means no quota is moved and rolled back for a booking that cannot be edited.
-		couchHas(couchDoc('pending_review'));
+		// `verifying`, not `pending_review`: since CR-052 every booking opens in review
+		// and stays the donor's until the goods are at the counter (decision D-1).
+		couchHas(couchDoc('verifying'));
 		fastapiOk();
 
 		const response = await call();
@@ -161,6 +163,18 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		expect(response.status).toBe(400);
 		expect(fetch).not.toHaveBeenCalled();
 		expect(putAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	it('still lets the donor edit while the booking sits in review', async () => {
+		// CR-052 §1.4 opens every wizard booking at `pending_review`, so gating on
+		// `declared` alone would take edit away from every donation the public makes.
+		couchHas(couchDoc('pending_review'));
+		fastapiOk();
+
+		const response = await call();
+
+		expect(response.status).toBe(200);
+		expect(putAsPublicWriter).toHaveBeenCalled();
 	});
 
 	// `undefined` is deliberately not in this list: it would hit `call`'s default.
