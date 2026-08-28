@@ -8,7 +8,9 @@
  * Needs:  COUCHDB_ADMIN_URL in frontend/.env (no default — security)
  *         Format: http://admin:<password>@localhost:5984
  *
- * Idempotent — safe to re-run. Only updates docs with `schema_v < 3`.
+ * Idempotent — safe to re-run. Updates any doc behind the current schema version
+ * (`SHELTER_MASTER_SCHEMA_V`), including v3/v4 docs that only need the additive
+ * back-fills (`site_kind`, CR-067) rather than the full v2 reshape.
  * The migration logic is shared with $lib/features/shelters/domain/schema.ts
  * via `migrateShelterV2ToCurrent` — this script is a thin runner around it.
  */
@@ -85,7 +87,10 @@ async function couchReq(
 // with the `.ts` extension. Vitest is set up to run this; the script invokes
 // it via `tsx scripts/migrate-shelter.ts` (configured in package.json).
 
-import { migrateShelterV2ToCurrent } from '../src/lib/features/shelters/server';
+import {
+	migrateShelterV2ToCurrent,
+	SHELTER_MASTER_SCHEMA_V
+} from '../src/lib/features/shelters/server';
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
@@ -128,6 +133,7 @@ async function main() {
 		_id: string;
 		_rev?: string;
 		schema_v?: number;
+		site_kind?: string;
 		code?: string;
 		type?: string;
 	}
@@ -145,8 +151,10 @@ async function main() {
 
 	for (const row of shelterMasters) {
 		const v2 = row.doc;
-		if ((v2.schema_v ?? 0) >= 3) {
-			console.log(`  ⊘ ${v2.code} (${row.id}) — already v3, skip`);
+		// Mirror `migrateShelterV2ToCurrent`'s own idempotence check: a doc at the
+		// current version still needs a write if an additive field never landed.
+		if ((v2.schema_v ?? 0) >= SHELTER_MASTER_SCHEMA_V && v2.site_kind) {
+			console.log(`  ⊘ ${v2.code} (${row.id}) — already v${SHELTER_MASTER_SCHEMA_V}, skip`);
 			skipped++;
 			continue;
 		}
@@ -155,6 +163,7 @@ async function main() {
 
 		console.log(`  → ${v2.code} (${row.id}) v${v2.schema_v} → current`);
 		console.log(`    capacity backfill: ${v3.capacity}`);
+		console.log(`    site_kind: ${v3.site_kind}`);
 		console.log(`    zones: ${Array.isArray(v3.zones) ? (v3.zones as unknown[]).length : 0}`);
 
 		if (!DRY_RUN) {
@@ -179,7 +188,7 @@ async function main() {
 	console.log('');
 	console.log(`📊 Summary:`);
 	console.log(`   migrated: ${migrated}`);
-	console.log(`   skipped (already v3): ${skipped}`);
+	console.log(`   skipped (already v${SHELTER_MASTER_SCHEMA_V}): ${skipped}`);
 	console.log(`   failed: ${failed}`);
 	if (DRY_RUN && migrated > 0) {
 		console.log('');

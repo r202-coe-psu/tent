@@ -30,7 +30,7 @@
 			>
 				<div class="flex items-center gap-3">
 					<span
-						class="inline-flex items-center gap-1.5 rounded-full bg-brand px-2.5 py-1 text-[11px] font-bold text-white shadow-sm"
+						class="inline-flex items-center gap-1.5 rounded-full bg-brand px-2.5 py-1 text-2xs font-bold text-white shadow-sm"
 					>
 						<ShieldAlert size={12} />
 						ใช้งานอยู่
@@ -39,7 +39,7 @@
 						<h3 class="font-bold text-slate-900">
 							{profile.name}
 						</h3>
-						<p class="font-mono text-[11px] text-slate-400">{profile._id}</p>
+						<p class="font-mono text-2xs text-slate-400">{profile._id}</p>
 					</div>
 				</div>
 			</div>
@@ -51,10 +51,10 @@
 						<div
 							class="rounded-xl border border-black/5 bg-slate-50/50 p-3 shadow-sm transition-colors hover:bg-slate-50"
 						>
-							<p class="text-[11px] text-slate-500">
+							<p class="text-2xs text-slate-500">
 								{RATIO_LABELS[key]?.label ?? key}
 								{#if RATIO_LABELS[key]?.unit}
-									<span class="text-[10px] opacity-70">({RATIO_LABELS[key].unit})</span>
+									<span class="text-2xs opacity-70">({RATIO_LABELS[key].unit})</span>
 								{/if}
 							</p>
 							<p class="mt-1 font-mono text-lg font-bold text-brand">
@@ -71,7 +71,7 @@
 			>
 				<button
 					onclick={() => onViewHistory(profile)}
-					class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-bold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+					class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
 				>
 					<History size={13} />
 					ประวัติ
@@ -79,7 +79,7 @@
 				{#if onEdit}
 					<button
 						onclick={() => onEdit(profile)}
-						class="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-brand-hover"
+						class="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-brand-hover"
 					>
 						<Pencil size={13} />
 						แก้ไข

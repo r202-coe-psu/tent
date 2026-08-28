@@ -20,6 +20,7 @@ import {
 	PET_POLICY_CHOICES,
 	POWER_SOURCE_CHOICES,
 	PROJECT_LEVEL_CHOICES,
+	SITE_KIND_CHOICES,
 	WATER_SOURCE_CHOICES,
 	ZONE_STATUS_CHOICES,
 	ZONE_TYPE_CHOICES
@@ -172,7 +173,7 @@ function splitMulti(v: string): string[] {
 		.filter((s) => s !== '');
 }
 
-/** The Thai part before " (" — so "เตรียมพร้อม (Standby)" also matches "เตรียมพร้อม". */
+/** The Thai part before " (" — so "กำลังเตรียมการ (Preparing)" also matches "กำลังเตรียมการ". */
 function labelBase(label: string): string {
 	const i = label.indexOf(' (');
 	return (i === -1 ? label : label.slice(0, i)).trim();
@@ -489,6 +490,7 @@ export function validateRow(
 
 	// -- sheet 1: identity, address, people --
 	const status = resolveEnum(raw, H.operation_status, OPERATION_STATUS_CHOICES, sink);
+	const siteKind = resolveEnum(raw, H.site_kind, SITE_KIND_CHOICES, sink) ?? 'evacuation_center';
 	const level = resolveEnum(raw, H.project_level, PROJECT_LEVEL_CHOICES, sink);
 	const areaType = resolveEnum(raw, H.area_type, AREA_TYPE_CHOICES, sink);
 	const shelterType = resolveMaster(raw, H.shelter_type, lookups.shelter_type, sink);
@@ -543,6 +545,7 @@ export function validateRow(
 
 	const input = {
 		name: nameCell,
+		site_kind: siteKind,
 		operation_status: status,
 		shelter_type: shelterType,
 		project_level: level ?? null,

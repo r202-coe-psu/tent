@@ -6,6 +6,7 @@
 export const SHELTER_STEP_FIELDS: readonly (readonly string[])[] = [
 	[
 		'name',
+		'site_kind',
 		'operation_status',
 		'shelter_type',
 		'project_level',

@@ -7,13 +7,18 @@
 	import { previewElementAsPdf } from '$lib/utils/pdf';
 	import type { Evacuee, StayStatus } from '$lib/features/people';
 	import { maskNationalId } from '$lib/features/people';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { EVACUEE_QR_MODAL_I18N } from './_constants/evacuee-qr-modal.i18n';
+
+	const t = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, languageStore.current));
 
 	let {
 		show,
 		evacuee,
 		onClose,
 		embedded = false,
-		closeLabel = 'ปิดหน้าต่าง'
+		closeLabel
 	}: {
 		show: boolean;
 		evacuee: Evacuee;
@@ -21,6 +26,8 @@
 		embedded?: boolean;
 		closeLabel?: string;
 	} = $props();
+
+	const effectiveCloseLabel = $derived(closeLabel ?? t.closeWindow);
 
 	let qrUrl = $state<string | null>(null);
 	let cardEl = $state<HTMLDivElement | null>(null);
@@ -42,7 +49,7 @@
 		// can be treated as an unsolicited popup, especially outside localhost.
 		const previewWindow = window.open('', '_blank');
 		if (!previewWindow) {
-			toast.error('เบราว์เซอร์บล็อกหน้าต่าง PDF กรุณาอนุญาตป๊อปอัปแล้วลองใหม่');
+			toast.error(t.pdfBlockedToast);
 			return;
 		}
 
@@ -57,7 +64,7 @@
 			});
 		} catch (err) {
 			previewWindow.close();
-			toast.error(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ');
+			toast.error(err instanceof Error ? err.message : t.pdfFailedToast);
 		} finally {
 			cardEl.classList.remove('print-capture');
 			isExportingPdf = false;
@@ -108,7 +115,7 @@
 			<!-- Header -->
 			<div class="mb-6 flex flex-col items-center gap-1 text-center sm:mb-8">
 				<h2 class="text-2xl font-bold text-slate-900 dark:text-slate-50">
-					บัตรประจำตัวผู้ประสบภัย
+					{t.cardTitle}
 				</h2>
 				<p class="text-sm text-muted-foreground">
 					{evacuee.first_name}
@@ -134,12 +141,12 @@
 						{#if qrUrl}
 							<img
 								src={qrUrl}
-								alt="QR Code สำหรับ {evacuee.first_name} {evacuee.last_name}"
+								alt={t.qrAlt(`${evacuee.first_name} ${evacuee.last_name}`)}
 								class="card-qr-image size-36 object-contain sm:size-36 md:size-40"
 							/>
 						{:else}
 							<div
-								class="flex size-36 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400 sm:size-36 md:size-40"
+								class="flex size-36 items-center justify-center rounded bg-slate-100 text-2xs text-slate-400 sm:size-36 md:size-40"
 							>
 								...
 							</div>
@@ -150,7 +157,7 @@
 						class="card-details order-2 flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-4 py-5 sm:order-1 sm:px-5"
 					>
 						<span
-							class="card-zone font-mono text-[11px] font-bold tracking-widest text-slate-400 uppercase sm:text-xs"
+							class="card-zone font-mono text-2xs font-bold tracking-widest text-slate-400 uppercase sm:text-xs"
 						>
 							ZONE: {zoneName}
 						</span>
@@ -165,7 +172,7 @@
 								{fullId}
 							</span>
 							<span
-								class="card-national-id inline-block rounded bg-slate-900 px-2 py-1 text-[11px] font-bold tracking-wide whitespace-nowrap text-white uppercase sm:text-xs"
+								class="card-national-id inline-block rounded bg-slate-900 px-2 py-1 text-2xs font-bold tracking-wide whitespace-nowrap text-white uppercase sm:text-xs"
 							>
 								{maskNationalId(evacuee.person_id?.number)}
 							</span>
@@ -182,13 +189,13 @@
 					class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#0d2240] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#1a3a5c] disabled:cursor-not-allowed disabled:opacity-60"
 				>
 					<Printer class="size-4" />
-					{isExportingPdf ? 'กำลังสร้าง PDF...' : 'พิมพ์บัตรประจำตัว'}
+					{isExportingPdf ? t.generatingPdf : t.printIdCard}
 				</button>
 				<button
 					onclick={onClose}
 					class="cursor-pointer py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
 				>
-					{closeLabel}
+					{effectiveCloseLabel}
 				</button>
 			</div>
 		</div>
@@ -228,20 +235,20 @@
 	}
 
 	:global(#qr-identity-card.print-capture .card-zone) {
-		font-size: 16px !important;
+		font-size: 1rem !important;
 	}
 
 	:global(#qr-identity-card.print-capture .card-name) {
-		font-size: 30px !important;
+		font-size: 1.875rem !important;
 	}
 
 	:global(#qr-identity-card.print-capture .card-id) {
-		font-size: 20px !important;
+		font-size: 1.25rem !important;
 		padding: 6px 10px !important;
 	}
 
 	:global(#qr-identity-card.print-capture .card-national-id) {
-		font-size: 16px !important;
+		font-size: 1rem !important;
 		padding: 7px 10px !important;
 	}
 
@@ -286,17 +293,17 @@
 			width: 160px !important;
 		}
 		#qr-identity-card .card-zone {
-			font-size: 16px !important;
+			font-size: 1rem !important;
 		}
 		#qr-identity-card .card-name {
-			font-size: 30px !important;
+			font-size: 1.875rem !important;
 		}
 		#qr-identity-card .card-id {
-			font-size: 20px !important;
+			font-size: 1.25rem !important;
 			padding: 6px 10px !important;
 		}
 		#qr-identity-card .card-national-id {
-			font-size: 16px !important;
+			font-size: 1rem !important;
 			padding: 7px 10px !important;
 		}
 	}

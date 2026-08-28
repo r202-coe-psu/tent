@@ -306,11 +306,11 @@
 				<div class="grid gap-1.5 leading-none">
 					<label
 						for="is_default"
-						class="cursor-pointer text-[13px] font-bold text-slate-800 dark:text-slate-200"
+						class="cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-200"
 					>
 						ตั้งค่าเป็นค่าเริ่มต้นสำหรับประเภทนี้ (Set as Default Option)
 					</label>
-					<p class="text-[11px] leading-relaxed font-medium text-slate-400 dark:text-slate-400/85">
+					<p class="text-2xs leading-relaxed font-medium text-slate-400 dark:text-slate-400/85">
 						เมื่อเลือก
 						ตัวเลือกนี้จะถูกตั้งเป็นตัวเลือกเริ่มต้นอัตโนมัติในการลงทะเบียนหรือเรียกใช้งานของหัวข้อนี้
 					</p>

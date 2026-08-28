@@ -81,8 +81,17 @@ export const receiveDonationInputSchema = z.object({
 				free_text: z.string().optional(),
 				qty: qtyStrCoercePositiveSchema,
 				unit: z.string().min(1),
+				/**
+				 * `lot_no` is NOT accepted from the client — the server mints it at
+				 * receive time so the per-day sequence stays under one authority
+				 * (CR-088). Zod strips it if a caller sends one anyway.
+				 */
 				lot: z
-					.object({ expiry: z.string().optional(), note: z.string().trim().optional() })
+					.object({
+						expiry: z.string().optional(),
+						note: z.string().trim().optional(),
+						storage_zone: z.string().trim().max(100).optional()
+					})
 					.optional()
 			})
 		)

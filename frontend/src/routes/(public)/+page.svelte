@@ -22,22 +22,22 @@
 	import { BookingModal } from '$lib/features/public-register';
 	import PublicActionBtn from '$lib/components/public-action-btn.svelte';
 
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_HOME_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+
 	let { data }: { data: PageData } = $props();
 
-	// Booking and family search open in place (CR-070 / T-71) — a citizen looking
-	// for shelter should not lose the landing page they just found.
 	let bookingOpen = $state(false);
 	let searchOpen = $state(false);
-
-	// Real alerts logic should be implemented later, removing demo data
 	const alerts: { name: string; capacity: string; variant: string }[] = [];
-
-	// OP-7: Polling state
 	let lastUpdated = $state(0);
 	$effect(() => {
 		if (!lastUpdated) lastUpdated = data.lastUpdated;
 	});
 	let isStale = $state(false);
+
+	const t = $derived(getTranslation(PUBLIC_HOME_I18N, langState.current));
 
 	onMount(() => {
 		const pollInterval = setInterval(async () => {
@@ -74,11 +74,11 @@
 </script>
 
 <svelte:head>
-	<title>Smart Shelter — Public & RFL Portal</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <PublicPageShell class="space-y-8">
-	<!-- 1. ประกาศด่วนและอื่นๆ -->
+	<!-- 1. Urgent Announcements and Others -->
 	{#if data.announcements && data.announcements.length > 0}
 		{#each data.announcements as announcement (announcement._id || announcement.id)}
 			<!-- Show shelter alerts demo only in the first emergency announcement if emergency_mode is on -->
@@ -95,88 +95,84 @@
 			class="rounded-xl border border-destructive/20 bg-destructive/10 p-6 text-center text-destructive"
 		>
 			<ShieldAlert class="mx-auto mb-2 h-8 w-8" />
-			<h3 class="text-lg font-bold">ระบบขัดข้อง</h3>
-			<p class="text-sm">ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาลองใหม่ภายหลัง</p>
+			<h3 class="text-lg font-bold">{t.sysError}</h3>
+			<p class="text-sm">{t.sysErrorDesc}</p>
 		</div>
 	{:else}
 		<PublicHeroMetrics summary={data.summary} flags={data.flags} {lastUpdated} {isStale} />
 	{/if}
 
-	<!-- 3. เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์ -->
+	<!-- 3. Service Menu and Eligibility Checking -->
 	<section>
 		<div class="mb-8">
 			<div class="mb-2 flex items-center gap-2">
 				<Compass class="h-5 w-5 text-muted-foreground" />
 				<h2 class="text-xl font-bold text-foreground">
-					เมนูช่องทางบริการความช่วยเหลือและตรวจสอบสิทธิ์
+					{t.menuSectionTitle}
 				</h2>
 			</div>
 			<p class="text-xs text-muted-foreground">
-				ดำเนินการติดต่อ ลงทะเบียน หรือประสานขอโอนย้ายเพื่อรับรองความช่วยเหลือที่รวดเร็ว
+				{t.menuSectionDesc}
 			</p>
 		</div>
 
 		<div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-			<!-- ลงทะเบียนผู้ประสบภัย -->
+			<!-- Victim Registration -->
 			<PublicQuickServiceCard
-				title="ลงทะเบียนผู้ประสบภัย"
-				badge="ด่วนที่สุด"
+				title={t.regTitle}
+				badge={t.regBadge}
 				badgeClass="bg-danger-muted text-danger"
-				description="ท่านสามารถยื่นขอลงทะเบียนเข้าพัก สแกนเข้าออก หรือจองสิทธิ์ล่วงหน้าเพื่อจัดสรรเต็นท์ส่วนตัว ยา และเครื่องนุ่งห่ม"
+				description={t.regDesc}
 				icon={ShieldAlert}
 				iconClass="bg-danger-muted/30 text-danger"
 			>
-				<PublicActionBtn onclick={() => (bookingOpen = true)}>จองเข้าศูนย์ล่วงหน้า</PublicActionBtn>
+				<PublicActionBtn onclick={() => (bookingOpen = true)}>{t.regBtn}</PublicActionBtn>
 			</PublicQuickServiceCard>
 
-			<!-- สำหรับผู้ใจบุญ / บริจาค -->
+			<!-- For Donors / Donations -->
 			<PublicQuickServiceCard
-				title="สำหรับผู้ใจบุญ/บริจาค"
-				badge="Wishlist"
+				title={t.donateTitle}
+				badge={t.donateBadge}
 				badgeClass="bg-primary-muted text-primary"
-				description="ร่วมประสานงานมอบอาหารปรุงสุก วัตถุดิบ น้ำดื่ม หรือสมทบกองทุน EOC ข้อมูลจัดซื้อโปร่งใส ตรวจสอบได้ทันที"
+				description={t.donateDesc}
 				icon={Package}
 				iconClass="bg-primary-muted/50 text-primary"
 			>
-				<PublicActionBtn href="/donations">แจ้งบริจาคสิ่งของล่วงหน้า</PublicActionBtn>
-				<PublicActionBtn variant="outline" disabled
-					>ดูบัญชีรับบริจาค / บอร์ดขอของ (เร็วๆนี้)</PublicActionBtn
-				>
+				<PublicActionBtn href="/donations">{t.donateBtn1}</PublicActionBtn>
+				<PublicActionBtn variant="outline" disabled>{t.donateBtn2}</PublicActionBtn>
 			</PublicQuickServiceCard>
 
-			<!-- สำหรับทีมอาสาสมัคร -->
+			<!-- For Volunteers -->
 			<div>
 				<PublicQuickServiceCard
-					title="สำหรับทีมอาสาสมัคร"
-					badge="ร่วมแรงกาย"
+					title={t.volTitle}
+					badge={t.volBadge}
 					badgeClass="bg-chart-2/15 text-chart-2"
-					description="ร่วมลงทะเบียนจองกะงานฝ่ายสวัสดิการ แจกจ่าย ขนย้าย แพทย์สนาม หรือสนับสนุนเจ้าหน้าที่ ณ พื้นที่อุทกภัยชายแดนใต้"
+					description={t.volDesc}
 					icon={UserPlus}
 					iconClass="bg-chart-2/15 text-chart-2"
 				>
-					<PublicActionBtn disabled>สมัคร / จองกะช่วยเหลือ (เร็วๆนี้)</PublicActionBtn>
+					<PublicActionBtn disabled>{t.volBtn}</PublicActionBtn>
 				</PublicQuickServiceCard>
 			</div>
 
-			<!-- สืบค้นผู้ประสบภัย -->
+			<!-- Urgent Person Search -->
 			<PublicQuickServiceCard
-				title="สืบค้นผู้ประสบภัย"
-				badge="PDPA Shield"
+				title={t.searchTitle}
+				badge={t.searchBadge}
 				badgeClass="bg-accent-purple-muted text-accent-purple"
-				description="เช็ครายชื่อผู้ประสบภัย ปลอดภัยในพิกัดศูนย์ควบคุม ตรึงระบบเก็บรวบรวมหลักฐานและส่งต่ออย่างเป็นความลับขั้นสูงสุด"
+				description={t.searchDesc}
 				icon={Search}
 				iconClass="bg-accent-purple-muted/50 text-accent-purple"
 			>
-				<PublicActionBtn onclick={() => (searchOpen = true)}
-					>ค้นหารายบุคคลด่วนที่สุด</PublicActionBtn
-				>
+				<PublicActionBtn onclick={() => (searchOpen = true)}>{t.searchBtn}</PublicActionBtn>
 			</PublicQuickServiceCard>
 		</div>
 	</section>
 
 	<!-- 4. Help Center & Emergency Contacts -->
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<!-- ศูนย์รวมความช่วยเหลือ (Help Center) -->
+		<!-- Help Center (EOC Help Center & FAQ) -->
 		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
 			<div class="mb-2 flex items-center gap-2">
 				<div
@@ -185,13 +181,12 @@
 					<HelpCircle class="h-4 w-4" />
 				</div>
 				<h2 class="text-lg font-bold text-foreground">
-					ศูนย์รวมความช่วยเหลือ (EOC Help Center & FAQ)
+					{t.faqTitle}
 				</h2>
 			</div>
 
 			<p class="mb-5 text-sm text-muted-foreground">
-				คำถามที่พบบ่อยระดับศูนย์รวมคำชักซ้อมจากประชาชน ดึงพิกัดข้อมูลจัดตั้งเรียลไทม์จากระบบตั้งค่า
-				FAQ ของฝ่ายบริหารศูนย์ (EOC Dashboard Setup)
+				{t.faqDesc}
 			</p>
 
 			<div class="flex flex-col gap-4">
@@ -208,18 +203,20 @@
 									>
 										{i + 1}
 									</div>
-									<span class="text-sm font-bold">{faq.question}</span>
+									<span class="text-sm font-bold">
+										{langState.current === 'en' && faq.question_en ? faq.question_en : faq.question}
+									</span>
 								</div>
 							</Accordion.Trigger>
 							<Accordion.Content
 								class="pt-2 text-sm leading-relaxed whitespace-pre-line text-muted-foreground"
 							>
-								{faq.answer}
+								{langState.current === 'en' && faq.answer_en ? faq.answer_en : faq.answer}
 							</Accordion.Content>
 						</Accordion.Item>
 					{:else}
 						<div class="py-4 text-center text-sm text-muted-foreground">
-							ยังไม่มีข้อมูลคำถามที่พบบ่อย
+							{t.faqEmpty}
 						</div>
 					{/each}
 				</Accordion.Root>
@@ -229,35 +226,34 @@
 					class="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary-muted/30 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary-muted/50"
 				>
 					<MapPin class="h-4 w-4" />
-					ตรวจสอบพิกัดแผนที่แต่ละศูนย์และบ้านพี่เลี้ยง
+					{t.faqLink}
 					<ExternalLink class="h-3 w-3" />
 				</a>
 			</div>
 		</div>
 
-		<!-- ติดต่อฉุกเฉินและด่วน -->
+		<!-- Emergency and Urgent Contacts -->
 		<div
 			class="flex h-fit flex-col justify-center rounded-2xl bg-[#1e293b] p-6 text-white shadow-sm lg:p-8"
 		>
 			<div
 				class="mb-4 inline-flex w-fit items-center rounded-full bg-white/10 px-3 py-1 text-xs font-bold tracking-wider text-white"
 			>
-				OPERATIONS ON STANDBY 24/7
+				{t.contactStandby}
 			</div>
 
 			<div class="mb-3 flex items-start gap-3">
 				<PhoneCall class="mt-1 h-6 w-6 shrink-0 text-chart-2" />
 				<h2 class="text-xl leading-tight font-bold">
-					ประสานการกู้ชีพฉุกเฉินและหน่วยเคลื่อนที่เร็ว
+					{t.contactTitle}
 				</h2>
 			</div>
 			<p class="mb-6 text-sm leading-relaxed text-white/70">
-				หากติดค้างอยู่ในตึกจมน้ำ เจ็บครรภ์คลอด สัตว์มีพิษกัด หรือต้องการรถย้ายระดับสูงพิกัดตำบล
-				ประสานงานโดยอัตโนมัติ
+				{t.contactDesc}
 			</p>
 
 			<div class="flex flex-col gap-3">
-				<!-- โทร 1669 -->
+				<!-- Call 1669 -->
 				<a
 					href="tel:1669"
 					class="flex items-center justify-between rounded-xl bg-danger px-5 py-4 font-bold transition-colors hover:bg-danger/90"
@@ -268,30 +264,30 @@
 						>
 							i
 						</div>
-						<span class="text-base text-white">โทร 1669</span>
+						<span class="text-base text-white">{t.call} 1669</span>
 					</div>
-					<span class="rounded-lg bg-black/20 px-3 py-1.5 text-[11px] text-white"
-						>สายด่วนกู้ชีพแพทย์ฉุกเฉิน</span
+					<span class="rounded-lg bg-black/20 px-3 py-1.5 text-2xs text-white"
+						>{t.contact1669Label}</span
 					>
 				</a>
 
-				<!-- โทร 1784 -->
+				<!-- Call 1784 -->
 				<a
 					href="tel:1784"
 					class="flex items-center justify-between rounded-xl bg-warning px-5 py-4 font-bold transition-colors hover:bg-[#b45309]"
 				>
 					<div class="flex items-center gap-3">
 						<PhoneCall class="h-4 w-4 text-white" />
-						<span class="text-base text-white">โทร 1784</span>
+						<span class="text-base text-white">{t.call} 1784</span>
 					</div>
-					<span class="rounded-lg bg-black/20 px-3 py-1.5 text-[11px] text-white"
-						>ศูนย์เตือนภัย ปภ. พายุคุกคาม</span
+					<span class="rounded-lg bg-black/20 px-3 py-1.5 text-2xs text-white"
+						>{t.contact1784Label}</span
 					>
 				</a>
 
 				{#if data.configData?.phone_number || data.configData?.line_oa_url || data.configData?.facebook_url}
 					<div class="mt-4 border-t border-white/10 pt-4">
-						<h3 class="mb-3 text-sm font-bold text-white/90">สอบถามข้อมูลเพิ่มเติม</h3>
+						<h3 class="mb-3 text-sm font-bold text-white/90">{t.moreInfo}</h3>
 						<div class="flex flex-col gap-2">
 							{#if data.configData?.phone_number}
 								<a
@@ -300,10 +296,10 @@
 								>
 									<div class="flex items-center gap-3">
 										<PhoneCall class="h-4 w-4 text-white" />
-										<span class="text-sm text-white">โทร {data.configData.phone_number}</span>
+										<span class="text-sm text-white">{t.call} {data.configData.phone_number}</span>
 									</div>
-									<span class="rounded-lg bg-black/20 px-3 py-1 text-[11px] text-white"
-										>สายตรงศูนย์ฯ</span
+									<span class="rounded-lg bg-black/20 px-3 py-1 text-2xs text-white"
+										>{t.directLine}</span
 									>
 								</a>
 							{/if}

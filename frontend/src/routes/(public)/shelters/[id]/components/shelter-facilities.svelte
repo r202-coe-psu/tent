@@ -8,34 +8,41 @@
 	import type { PublicShelterDetail } from '$lib/features/public-portal';
 
 	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
+
+	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
 </script>
 
 <section>
 	<div class="mb-4 flex items-center gap-2">
 		<Droplets class="h-5 w-5 text-primary" />
-		<h2 class="text-lg font-bold text-foreground">สิ่งอำนวยความสะดวกในศูนย์</h2>
+		<h2 class="text-lg font-bold text-foreground">{t.facilitiesCommonAreas}</h2>
 	</div>
 
 	<div class="flex flex-col gap-4">
 		<!-- Hygiene -->
 		<div class="rounded-xl border border-border bg-white p-5 shadow-sm">
-			<h3 class="mb-3 text-sm font-bold text-foreground">สุขอนามัย (ห้องน้ำ/ห้องอาบน้ำ)</h3>
+			<h3 class="mb-3 text-sm font-bold text-foreground">{t.hygieneLabel}</h3>
 			<div class="mb-3 flex flex-wrap gap-3 text-sm">
 				<div class="rounded-lg border border-border/50 bg-muted/50 px-3 py-1.5">
-					<span class="text-muted-foreground">ห้องน้ำชาย:</span>
-					<span class="ml-1 font-bold">{shelter.facilities?.hygiene?.male ?? '-'} ห้อง</span>
+					<span class="text-muted-foreground">{t.maleToilets}</span>
+					<span class="ml-1 font-bold">{shelter.facilities?.hygiene?.male ?? '-'} {t.rooms}</span>
 				</div>
 				<div class="rounded-lg border border-border/50 bg-muted/50 px-3 py-1.5">
-					<span class="text-muted-foreground">ห้องน้ำหญิง:</span>
-					<span class="ml-1 font-bold">{shelter.facilities?.hygiene?.female ?? '-'} ห้อง</span>
+					<span class="text-muted-foreground">{t.femaleToilets}</span>
+					<span class="ml-1 font-bold">{shelter.facilities?.hygiene?.female ?? '-'} {t.rooms}</span>
 				</div>
 				<div class="rounded-lg border border-border/50 bg-muted/50 px-3 py-1.5">
-					<span class="text-muted-foreground">ห้องน้ำคนพิการ:</span>
-					<span class="ml-1 font-bold">{shelter.facilities?.hygiene?.accessible ?? '-'} ห้อง</span>
+					<span class="text-muted-foreground">{t.accessibleToilets}:</span>
+					<span class="ml-1 font-bold"
+						>{shelter.facilities?.hygiene?.accessible ?? '-'} {t.rooms}</span
+					>
 				</div>
 				<div class="rounded-lg border border-border/50 bg-muted/50 px-3 py-1.5">
-					<span class="text-muted-foreground">ห้องอาบน้ำ:</span>
-					<span class="ml-1 font-bold">{shelter.facilities?.hygiene?.shower ?? '-'} ห้อง</span>
+					<span class="text-muted-foreground">{t.showers}:</span>
+					<span class="ml-1 font-bold">{shelter.facilities?.hygiene?.shower ?? '-'} {t.rooms}</span>
 				</div>
 			</div>
 			{#if (shelter.facilities?.hygiene?.mobile_toilet ?? 0) > 0}
@@ -44,10 +51,10 @@
 						class="inline-flex items-center gap-1.5 rounded-md bg-success-muted px-2 py-1 text-xs font-bold text-success-dark"
 					>
 						<CheckCircle2 class="h-3 w-3" />
-						มีรถสุขาเคลื่อนที่ให้บริการ
+						{t.mobileToiletsAvailable}
 					</div>
 					<span class="text-xs text-muted-foreground"
-						>จำนวน {shelter.facilities?.hygiene?.mobile_toilet} คัน</span
+						>{t.amountLabel} {shelter.facilities?.hygiene?.mobile_toilet} {t.spots}</span
 					>
 				</div>
 			{/if}
@@ -58,34 +65,34 @@
 			<div class="rounded-xl border border-border bg-white p-4 shadow-sm">
 				<div class="mb-3 flex items-center gap-1.5">
 					<Zap class="h-4 w-4 text-primary" />
-					<h3 class="text-sm font-bold text-foreground">พลังงานประปา</h3>
+					<h3 class="text-sm font-bold text-foreground">{t.powerWater}</h3>
 				</div>
 				<div class="space-y-2 text-xs">
 					<div class="flex justify-between border-b border-border/50 pb-1">
-						<span class="text-muted-foreground">ไฟฟ้าหลัก:</span>
+						<span class="text-muted-foreground">{t.mainPower}</span>
 						<span class="ml-2 text-right font-bold">
 							{#if shelter.facilities?.power === 'generator'}
-								เครื่องปั่นไฟ
+								{t.generator}
 							{:else if shelter.facilities?.power === 'solar'}
-								โซลาร์เซลล์
+								{t.solar}
 							{:else if shelter.facilities?.power === 'city_grid'}
-								การไฟฟ้า
+								{t.cityGrid}
 							{:else}
-								ไม่มีข้อมูล
+								{t.noData}
 							{/if}
 						</span>
 					</div>
 					<div class="flex justify-between">
-						<span class="text-muted-foreground">น้ำประปา:</span>
+						<span class="text-muted-foreground">{t.waterSupply}</span>
 						<span class="ml-2 text-right font-bold">
 							{#if shelter.facilities?.water === 'groundwater'}
-								น้ำบาดาล
+								{t.groundwater}
 							{:else if shelter.facilities?.water === 'water_tank'}
-								รถบรรทุกน้ำ
+								{t.waterTruck}
 							{:else if shelter.facilities?.water === 'city_water'}
-								การประปา
+								{t.cityWater}
 							{:else}
-								ไม่มีข้อมูล
+								{t.noData}
 							{/if}
 						</span>
 					</div>
@@ -95,19 +102,19 @@
 			<div class="rounded-xl border border-border bg-white p-4 shadow-sm">
 				<div class="mb-3 flex items-center gap-1.5">
 					<Signal class="h-4 w-4 text-primary" />
-					<h3 class="text-sm font-bold text-foreground">การสื่อสาร</h3>
+					<h3 class="text-sm font-bold text-foreground">{t.communications}</h3>
 				</div>
 				<div class="space-y-2 text-xs">
 					<div class="flex justify-between border-b border-border/50 pb-1">
-						<span class="text-muted-foreground">สัญญาณมือถือ</span>
+						<span class="text-muted-foreground">{t.cellularSignal}</span>
 						<span class="ml-2 text-right font-bold"
-							>{shelter.facilities?.comms?.includes('cellular') ? 'มี' : 'ไม่มี'}</span
+							>{shelter.facilities?.comms?.includes('cellular') ? t.yes : t.no}</span
 						>
 					</div>
 					<div class="flex justify-between">
 						<span class="text-muted-foreground">VHF</span>
 						<span class="ml-2 text-right font-bold"
-							>{shelter.facilities?.comms?.includes('vhf_radio') ? 'มี' : 'ไม่มี'}</span
+							>{shelter.facilities?.comms?.includes('vhf_radio') ? t.yes : t.no}</span
 						>
 					</div>
 				</div>
@@ -121,7 +128,7 @@
 					class="flex items-center gap-1.5 rounded-xl bg-warning px-3 py-2 text-sm font-bold text-warning-foreground shadow-sm"
 				>
 					<ChefHat class="h-4 w-4 shrink-0" />
-					{shelter.facilities.kitchen === 'central_kitchen' ? 'โรงครัวกลาง' : 'ไม่มีโรงครัว'}
+					{shelter.facilities.kitchen === 'central_kitchen' ? t.centralKitchen : t.noKitchen}
 				</div>
 			{/if}
 			{#if shelter.facilities?.parking}
@@ -129,7 +136,8 @@
 					class="flex items-center gap-1.5 rounded-xl border border-border bg-muted px-3 py-2 text-sm font-bold text-foreground/90 shadow-sm"
 				>
 					<Car class="h-4 w-4 shrink-0" />
-					{shelter.facilities.parking} คัน
+					{shelter.facilities.parking}
+					{t.spots}
 				</div>
 			{/if}
 		</div>

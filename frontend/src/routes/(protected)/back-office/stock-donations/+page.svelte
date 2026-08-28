@@ -3,19 +3,22 @@
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
+	import Inbox from '@lucide/svelte/icons/inbox';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { toast } from 'svelte-sonner';
 	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
 	import SpecialRequestDialog from '$lib/components/special-request-dialog.svelte';
 	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
-	import PendingReviewDialog from '$lib/components/pending-review-dialog.svelte';
+	import PendingReviewDetail from '$lib/components/pending-review-detail.svelte';
+	import VerifyingBoard from '$lib/components/verifying-board.svelte';
+	import IncomingRedirectsBoard from '$lib/components/incoming-redirects-board.svelte';
 	import ScanStation from './components/scan-station.svelte';
-	import VerifyingTab from './components/verifying-tab.svelte';
-	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
+	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
 	import { useDonationNeedsBoard } from '$lib/features/operations';
+	import type { DonationRedirect, PendingDonationRow } from '$lib/features/donations';
 
-	// 'scan' | 'pending' (รอการประเมิน) | 'verifying' (กำลังตรวจรับ) | 'needs'
-	let activeSubTab = $state('scan');
+	let activeSubTab = $state('scan'); // 'scan', 'pending', 'verifying', 'incoming', 'needs'
 	let viewState = $state<'list' | 'create'>('list');
 	let isModalOpen = $state(false);
 
@@ -28,46 +31,10 @@
 		}
 	});
 
-	let pendingRequests = $state([
-		{
-			id: '1',
-			donorName: 'มูลนิธิใจบุญอารี',
-			donorSubtitle: '(ล็อตใหญ่พิเศษ)',
-			refId: 'RQ-9901',
-			submittedTime: '10 นาทีที่แล้ว',
-			triggerReason: 'โควต้าล็อตใหญ่เกินขีดจำกัดหน่วยคลังย่อยปกติ (Over-Limit Volume)',
-			itemsList: 'เสื้อผ้าเครื่องนุ่งห่มมือสอง 5 รถบรรทุก, ข้าวสารหอมมะลิ 10 ตัน',
-			statement:
-				'เครื่องนุ่งห่มคัดแยกสภาพพร้อมใช้งานบรรจุกล่องกระดาษขนาดกลาง 250 กล่อง และข้าวสารขาวหอมมะลิอบพ่นฆ่ามอดบรรจุถุงพลาสติกหนาถุงละ 5 กิโลกรัม จำนวน 2,000 ถุง มีน้ำหนักรวมประมาณ 10,000 กิโลกรัม (10 ตัน) จำเป็นต้องเตรียมพนักงานยกขนย้ายและหาพาหนะรองรับวางเฉพาะเพื่อกันความชื้นและสะสม',
-			vehicle: 'รถบรรทุกสิบล้อทะเบียนส่งออกพิเศษ (ต้องการจุดเลี่ยงรถติด)',
-			location: 'อาคารคลังสินค้าอเนกประสงค์ (โซนปีกกลางแจ้ง)',
-			schedule: '13 มิถุนายน 2026 (ช่วงเวลา 10:00 น. เป็นต้นไป)',
-			contact: 'คุณพิมพ์มาดา (ผู้ประสานงาน) โทร. 081-456-7890 contact@jaiboon-foundation.or.th'
-		},
-		{
-			id: '2',
-			donorName: 'ห้างหุ้นส่วนจำกัด ร้านขายยาพิทักษ์ภัย',
-			donorSubtitle: '',
-			refId: 'RQ-9902',
-			submittedTime: '30 นาทีที่แล้ว',
-			triggerReason: 'เคมีภัณฑ์ประเภทพิเศษต้องการความเย็นควบคุมเฉพาะเจาะจง (Cold-Chain Req.)',
-			itemsList: 'ยาปฏิชีวนะและวัคซีนพื้นฐาน 10,000 โดส, เจลลดไข้ 5,000 แผ่น',
-			statement:
-				'เวชภัณฑ์และเคมีภัณฑ์ควบคุมอุณหภูมิ บรรจุในกล่องโฟมรักษาความเย็นพิเศษพร้อม Ice Pack อุณหภูมิเป้าหมาย 2-8 องศาเซลเซียส จำเป็นต้องคัดกรองจัดสรรและขนย้ายเข้าตู้แช่เย็นของสถานพยาบาลหรือคลังควบคุมอุณหภูมิโดยทันทีเพื่อไม่ให้เสื่อมสภาพ',
-			vehicle: 'รถกระบะห้องเย็นควบคุมอุณหภูมิ (มีเครื่องทำความเย็นทำงานตลอดเวลา)',
-			location: 'คลังควบคุมอุณหภูมิ EOC (โซนยาและเวชภัณฑ์)',
-			schedule: '14 มิถุนายน 2026 (ช่วงเวลา 09:00 - 12:00 น.)',
-			contact: 'ภญ.วิภาวรรณ (เภสัชกรประจำคลัง) โทร. 089-765-4321 wipawan@pitakpai.co.th'
-		}
-	]);
-
-	let selectedPendingRequest = $state<(typeof pendingRequests)[0] | null>(null);
-	let isPendingModalOpen = $state(false);
-
 	/**
-	 * Force cut-off needs a reason (CR-052 §1.6), restore does not. The board hands the
-	 * action up as a prop, so the prompt is intercepted here and the shared board
-	 * component stays as it is.
+	 * T-22 / CR-052 §1.6 — closing a need by hand needs a reason, reopening does not.
+	 * `NeedsBoardAdmin` is shared with other screens and hands the action up as a prop, so
+	 * the prompt is intercepted here rather than inside the board.
 	 */
 	let cutOffTarget = $state<{ id: string; itemId: string; name: string } | null>(null);
 
@@ -82,35 +49,168 @@
 		cutOffTarget = { id, itemId, name: need?.name ?? itemId };
 	}
 
-	function handleApprovePending(id: string, memo: string) {
-		const req = pendingRequests.find((r) => r.id === id);
-		if (req) {
-			toast.success(`อนุมัติคำขอ ${req.refId} เรียบร้อยแล้ว`);
-			if (memo) toast.info(`บันทึกข้อความ: ${memo}`);
-			pendingRequests = pendingRequests.filter((r) => r.id !== id);
+	// R-16.1 — pending-review queue, loaded from the real intake API (no mock array).
+	let pendingRequests = $state<PendingDonationRow[]>([]);
+	let pendingLoading = $state(false);
+	let selectedPendingRequest = $state<PendingDonationRow | null>(null);
+	let pendingActionSaving = $state(false);
+
+	// R-16.4 — redirect tickets other shelters handed to this one (CR-087).
+	let incomingRedirects = $state<DonationRedirect[]>([]);
+	let incomingLoading = $state(false);
+
+	// R-16.5 — verifying (drop-off) queue.
+	let verifyingRequests = $state<PendingDonationRow[]>([]);
+	let verifyingLoading = $state(false);
+	let verifyingBookingRef = $state<string | null>(null);
+
+	async function loadPending() {
+		pendingLoading = true;
+		try {
+			const res = await fetch('/api/back-office/donations?status=pending_review');
+			const data = await res.json();
+			pendingRequests = data.success ? (data.donations as PendingDonationRow[]) : [];
+		} catch {
+			toast.error('โหลดรายการรอการประเมินไม่สำเร็จ');
+		} finally {
+			pendingLoading = false;
 		}
-		isPendingModalOpen = false;
 	}
 
-	function handleForwardPending(id: string, memo: string) {
-		const req = pendingRequests.find((r) => r.id === id);
-		if (req) {
-			toast.success(`ส่งต่อคำขอ ${req.refId} ไปยังส่วนประสานงานแล้ว`);
-			if (memo) toast.info(`บันทึกข้อความ: ${memo}`);
-			pendingRequests = pendingRequests.filter((r) => r.id !== id);
+	async function loadVerifying() {
+		verifyingLoading = true;
+		try {
+			const res = await fetch('/api/back-office/donations?status=verifying');
+			const data = await res.json();
+			verifyingRequests = data.success ? (data.donations as PendingDonationRow[]) : [];
+		} catch {
+			toast.error('โหลดรายการกำลังตรวจรับไม่สำเร็จ');
+		} finally {
+			verifyingLoading = false;
 		}
-		isPendingModalOpen = false;
 	}
 
-	function handleRejectPending(id: string, memo: string) {
-		const req = pendingRequests.find((r) => r.id === id);
-		if (req) {
-			toast.error(`ปฏิเสธคำขอ ${req.refId} เรียบร้อยแล้ว`);
-			if (memo) toast.info(`เหตุผลการปฏิเสธ: ${memo}`);
-			pendingRequests = pendingRequests.filter((r) => r.id !== id);
+	async function loadIncomingRedirects() {
+		incomingLoading = true;
+		try {
+			const res = await fetch('/api/back-office/donations/redirects');
+			const data = await res.json();
+			incomingRedirects = data.success ? (data.redirects as DonationRedirect[]) : [];
+		} catch {
+			toast.error('โหลดคำขอที่ถูกส่งต่อมาไม่สำเร็จ');
+		} finally {
+			incomingLoading = false;
 		}
-		isPendingModalOpen = false;
 	}
+
+	function switchTab(tab: string) {
+		activeSubTab = tab;
+		viewState = 'list';
+		selectedPendingRequest = null;
+		verifyingBookingRef = null;
+		if (tab === 'pending') loadPending();
+		if (tab === 'verifying') loadVerifying();
+		if (tab === 'incoming') loadIncomingRedirects();
+	}
+
+	async function handleApprovePending(bookingRef: string, memo: string) {
+		if (!bookingRef || pendingActionSaving) return;
+		pendingActionSaving = true;
+		try {
+			const res = await fetch(
+				`/api/back-office/donations/${encodeURIComponent(bookingRef)}/approve`,
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ memo })
+				}
+			);
+			const data = await res.json();
+			if (data.success) {
+				toast.success(`อนุมัติคำขอ ${bookingRef} เข้าสู่การตรวจรับแล้ว`);
+				selectedPendingRequest = null;
+				await loadPending();
+			} else {
+				toast.error(data.error || 'อนุมัติไม่สำเร็จ');
+			}
+		} catch {
+			toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+		} finally {
+			pendingActionSaving = false;
+		}
+	}
+
+	async function handleRejectPending(bookingRef: string, reason: string) {
+		if (!bookingRef || pendingActionSaving) return;
+		pendingActionSaving = true;
+		try {
+			const res = await fetch(
+				`/api/back-office/donations/${encodeURIComponent(bookingRef)}/reject`,
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ reason })
+				}
+			);
+			const data = await res.json();
+			if (data.success) {
+				toast.success(`ปฏิเสธคำขอ ${bookingRef} เรียบร้อยแล้ว`);
+				selectedPendingRequest = null;
+				await loadPending();
+			} else {
+				toast.error(data.error || 'ปฏิเสธไม่สำเร็จ');
+			}
+		} catch {
+			toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+		} finally {
+			pendingActionSaving = false;
+		}
+	}
+
+	// R-16.4 (CR-087) — writes a `donation_redirect` ticket into the destination
+	// shelter's db and closes this one out as `redirected`. No ledger row here.
+	async function handleRedirectPending(
+		bookingRef: string,
+		targetShelterCode: string,
+		note: string
+	) {
+		if (!bookingRef || pendingActionSaving) return;
+		pendingActionSaving = true;
+		try {
+			const res = await fetch(
+				`/api/back-office/donations/${encodeURIComponent(bookingRef)}/redirect`,
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						target_shelter_code: targetShelterCode,
+						...(note ? { note } : {})
+					})
+				}
+			);
+			const data = await res.json();
+			if (data.success) {
+				toast.success(
+					`ส่งต่อคำขอ ${bookingRef} ไปยังศูนย์ ${targetShelterCode} เรียบร้อยแล้ว — ศูนย์ปลายทางจะเห็นคำขอนี้ในคิวของตัวเอง`
+				);
+				selectedPendingRequest = null;
+				await loadPending();
+			} else {
+				toast.error(data.error || 'ส่งต่อไม่สำเร็จ');
+			}
+		} catch {
+			toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+		} finally {
+			pendingActionSaving = false;
+		}
+	}
+
+	// Every queue loads at mount, not on first click: the tab badges are the only
+	// signal that something is waiting, and a badge that appears only after you
+	// open the tab tells you nothing.
+	loadPending();
+	loadVerifying();
+	loadIncomingRedirects();
 </script>
 
 <div class="flex w-full flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
@@ -119,10 +219,7 @@
 	>
 		<div class="-mb-px flex gap-2 whitespace-nowrap">
 			<button
-				onclick={() => {
-					activeSubTab = 'scan';
-					viewState = 'list';
-				}}
+				onclick={() => switchTab('scan')}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'scan'
 					? 'border-primary text-primary'
@@ -133,30 +230,24 @@
 			</button>
 
 			<button
-				onclick={() => {
-					activeSubTab = 'pending';
-					viewState = 'list';
-				}}
+				onclick={() => switchTab('pending')}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'pending'
 					? 'border-primary text-primary'
 					: 'border-transparent text-muted-foreground hover:text-foreground'}"
 			>
 				<ClipboardList class="h-3.5 w-3.5" />
-				รายการรอตรวจสอบ
+				รอการประเมิน
 				{#if pendingRequests.length > 0}
 					<span
-						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] leading-none font-bold text-white"
+						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
 						>{pendingRequests.length}</span
 					>
 				{/if}
 			</button>
 
 			<button
-				onclick={() => {
-					activeSubTab = 'verifying';
-					viewState = 'list';
-				}}
+				onclick={() => switchTab('verifying')}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'verifying'
 					? 'border-primary text-primary'
@@ -164,13 +255,33 @@
 			>
 				<PackageCheck class="h-3.5 w-3.5" />
 				กำลังตรวจรับ
+				{#if verifyingRequests.length > 0}
+					<span
+						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
+						>{verifyingRequests.length}</span
+					>
+				{/if}
 			</button>
 
 			<button
-				onclick={() => {
-					activeSubTab = 'needs';
-					viewState = 'list';
-				}}
+				onclick={() => switchTab('incoming')}
+				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
+				'incoming'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:text-foreground'}"
+			>
+				<Inbox class="h-3.5 w-3.5" />
+				ส่งต่อเข้ามา
+				{#if incomingRedirects.length > 0}
+					<span
+						class="rounded-full bg-blue-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
+						>{incomingRedirects.length}</span
+					>
+				{/if}
+			</button>
+
+			<button
+				onclick={() => switchTab('needs')}
 				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
 				'needs'
 					? 'border-primary text-primary'
@@ -185,15 +296,52 @@
 	{#if activeSubTab === 'scan'}
 		<ScanStation />
 	{:else if activeSubTab === 'pending'}
-		<PendingReviewBoard
-			requests={pendingRequests}
-			onViewDetails={(req) => {
-				selectedPendingRequest = req;
-				isPendingModalOpen = true;
-			}}
-		/>
+		{#if selectedPendingRequest}
+			<PendingReviewDetail
+				request={selectedPendingRequest}
+				saving={pendingActionSaving}
+				onBack={() => (selectedPendingRequest = null)}
+				onApprove={handleApprovePending}
+				onReject={handleRejectPending}
+				onRedirect={handleRedirectPending}
+			/>
+		{:else}
+			<PendingReviewBoard
+				requests={pendingRequests}
+				loading={pendingLoading}
+				onViewDetails={(req) => {
+					selectedPendingRequest = req;
+				}}
+			/>
+		{/if}
 	{:else if activeSubTab === 'verifying'}
-		<VerifyingTab />
+		{#if verifyingBookingRef}
+			<div class="flex flex-col gap-3">
+				<button
+					onclick={() => (verifyingBookingRef = null)}
+					class="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-foreground transition-colors hover:bg-muted"
+				>
+					<ArrowLeft class="h-3.5 w-3.5" />
+					กลับไปรายการกำลังตรวจรับ
+				</button>
+				<ScanStation
+					initialQuery={verifyingBookingRef}
+					onSaved={() => {
+						verifyingBookingRef = null;
+						loadVerifying();
+					}}
+					onClose={() => (verifyingBookingRef = null)}
+				/>
+			</div>
+		{:else}
+			<VerifyingBoard
+				requests={verifyingRequests}
+				loading={verifyingLoading}
+				onVerify={(bookingRef) => (verifyingBookingRef = bookingRef)}
+			/>
+		{/if}
+	{:else if activeSubTab === 'incoming'}
+		<IncomingRedirectsBoard redirects={incomingRedirects} loading={incomingLoading} />
 	{:else if activeSubTab === 'needs'}
 		{#if viewState === 'list'}
 			<NeedsBoardAdmin
@@ -225,13 +373,4 @@
 		if (cutOffTarget) needsBoard.toggleCutOff(cutOffTarget.id, cutOffTarget.itemId, reason);
 		cutOffTarget = null;
 	}}
-/>
-
-<PendingReviewDialog
-	open={isPendingModalOpen}
-	request={selectedPendingRequest}
-	onclose={() => (isPendingModalOpen = false)}
-	onApprove={handleApprovePending}
-	onForward={handleForwardPending}
-	onReject={handleRejectPending}
 />

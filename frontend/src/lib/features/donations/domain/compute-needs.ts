@@ -41,8 +41,9 @@ export function computeNeeds(
 		const covered = new Map(onHand);
 		for (const don of donations) {
 			if (don.campaign_id !== campaign._id) continue;
-			// Terminal without goods ever landing here — `redirected`/`rejected` joined
-			// the enum with CR-052 and release their share just like expiry does.
+			// Only goods that are still coming, or already here, cover a need. `redirected`
+			// and `rejected` joined the enum with CR-052 and release their share exactly as
+			// expiry does (CR-087). The set itself lives in `DONATION_OUTSTANDING_STATUSES`.
 			if (!isDonationOutstanding(don.status) && don.status !== 'received') continue;
 			// Received *and* already booked into the ledger: the goods are on the shelf,
 			// counted in onHand. Counting them again here closes the need at half.

@@ -8,6 +8,7 @@ import type {
 	PetCondition,
 	PowerSource,
 	ProjectLevel,
+	SiteKind,
 	SubStorageType,
 	VehicleType,
 	WaterSource,
@@ -15,6 +16,7 @@ import type {
 	ZoneType
 } from '$lib/features/shelters';
 import {
+	SITE_KIND_LABELS,
 	luggageRuleLabels,
 	parkingRuleLabels,
 	petCategoryConditions,
@@ -65,10 +67,15 @@ export const BOOLEAN_CHOICES: EnumChoice<'true' | 'false'>[] = [
 ];
 
 export const OPERATION_STATUS_CHOICES: EnumChoice<OperationStatus>[] = [
-	{ value: 'standby', label: 'เตรียมพร้อม (Standby)' },
+	{ value: 'standby', label: 'กำลังเตรียมการ (Preparing)' },
 	{ value: 'active', label: 'เปิดรับผู้อพยพ (Active)' },
 	{ value: 'full_capacity', label: 'เต็มความจุ (Full Capacity)' },
 	{ value: 'closed', label: 'ปิดศูนย์ (Closed)' }
+];
+
+export const SITE_KIND_CHOICES: EnumChoice<SiteKind>[] = [
+	{ value: 'evacuation_center', label: SITE_KIND_LABELS.evacuation_center },
+	{ value: 'host_house', label: SITE_KIND_LABELS.host_house }
 ];
 
 export const PROJECT_LEVEL_CHOICES: EnumChoice<ProjectLevel>[] = [
@@ -213,6 +220,7 @@ export const H = {
 
 	// -- sheet 1: ข้อมูลศูนย์ --
 	name: 'ชื่อศูนย์พักพิง',
+	site_kind: 'ชนิดสถานที่',
 	operation_status: 'สถานะ',
 	shelter_type: 'ประเภทศูนย์พักพิง',
 	project_level: 'ระดับโครงการ',
@@ -426,12 +434,20 @@ const SHEET_MAIN: SheetDef = {
 			hint: 'ชื่อศูนย์พักพิง (จำเป็น)'
 		},
 		{
+			header: H.site_kind,
+			kind: 'enum',
+			required: true,
+			choices: SITE_KIND_CHOICES,
+			path: 'site_kind',
+			hint: 'ชนิดสถานที่ — เลือกจากรายการ (จำเป็น)'
+		},
+		{
 			header: H.operation_status,
 			kind: 'enum',
 			required: false,
 			choices: OPERATION_STATUS_CHOICES,
 			path: 'operation_status',
-			hint: 'สถานะการเปิดให้บริการ (ว่าง = เตรียมพร้อม)'
+			hint: 'สถานะการเปิดให้บริการ (ว่าง = กำลังเตรียมการ)'
 		},
 		{
 			header: H.shelter_type,

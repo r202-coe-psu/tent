@@ -4,6 +4,9 @@
 	import { EWAR_SYMPTOM_GROUPS } from '../domain/people';
 	import type { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { EVACUEE_EWAR_I18N } from './_constants/evacuee-ewar.i18n';
 
 	let {
 		onNext,
@@ -16,6 +19,8 @@
 		selectedSymptoms: SvelteSet<string>;
 		isHealthy: boolean;
 	} = $props();
+
+	const t = $derived(getTranslation(EVACUEE_EWAR_I18N, languageStore.current));
 
 	function toggleSymptom(id: string) {
 		if (isHealthy) return;
@@ -40,7 +45,7 @@
 
 	function handleNext() {
 		if (!isHealthy && selectedSymptoms.size === 0) {
-			toast.error('กรุณาเลือกอาการที่พบ หรือระบุว่า "ไม่มีอาการ" ก่อนดำเนินการต่อ');
+			toast.error(t.toastSelectRequired);
 			return;
 		}
 		onNext();
@@ -57,10 +62,10 @@
 			<ShieldAlert class="size-7 shrink-0" aria-hidden="true" />
 			<div>
 				<p class="text-base leading-snug font-bold">
-					ระวัง! ต้องส่งไปยังโซนกักกันโรคด่วน <span class="font-extrabold">(ISOLATION NEEDED)</span>
+					{t.isolationTitle} <span class="font-extrabold">{t.isolationBadge}</span>
 				</p>
 				<p class="mt-0.5 text-sm font-medium opacity-90">
-					พบอาการกลุ่มเสี่ยงโรคระบาด ให้ดำเนินการย้ายไปยังโซนกักกันโรคทันที และทำรายการต่อ
+					{t.isolationDesc}
 				</p>
 			</div>
 		</div>
@@ -76,7 +81,8 @@
 			? 'border-green-500 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-950/50'
 			: 'border-border bg-muted/30 text-muted-foreground hover:border-green-400 hover:bg-green-50/50'}"
 	>
-		{isHealthy ? '✅' : '🟩'} ไม่มีอาการป่วย (Healthy / No Symptoms)
+		{isHealthy ? '✅' : '🟩'}
+		{t.healthyLabel}
 	</Button>
 
 	<!-- Symptom groups -->
@@ -116,7 +122,7 @@
 			onclick={handleNext}
 			class="h-12 w-full px-6 text-sm font-semibold sm:h-10 sm:w-auto"
 		>
-			ถัดไป →
+			{t.next}
 		</Button>
 		<Button
 			type="button"
@@ -124,7 +130,7 @@
 			onclick={onBack}
 			class="h-12 w-full px-6 text-sm font-medium sm:h-10 sm:w-auto"
 		>
-			ย้อนกลับ
+			{t.back}
 		</Button>
 	</div>
 </div>

@@ -10,6 +10,7 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 		'district',
 		'subdistrict',
 		'status',
+		'site_kind',
 		'lat',
 		'lng',
 		'radius_km'

@@ -167,7 +167,7 @@
 										{evacuee.first_name}
 										{evacuee.last_name}
 									</p>
-									<p class="text-[11px] text-muted-foreground">
+									<p class="text-2xs text-muted-foreground">
 										สถานะ: {STATUS_LABELS[evacuee.current_stay.status] ??
 											evacuee.current_stay.status}
 										{#if evacuee.phone}
@@ -185,7 +185,7 @@
 										<Eye class="mr-1 size-4" /> ดูโปรไฟล์
 									</Button>
 									{#if conflict.conflicted}
-										<Badge variant="destructive" class="flex items-center gap-1 py-0.5 text-[10px]">
+										<Badge variant="destructive" class="flex items-center gap-1 py-0.5 text-2xs">
 											<ShieldAlert class="size-3" />
 											สังกัด: {conflict.label}
 										</Badge>
@@ -238,7 +238,7 @@
 								</p>
 								<p class="text-xs text-muted-foreground">
 									{#if selectedHead?._id === evac._id}
-										<Badge class="bg-green-600 px-1.5 py-0 text-[10px] text-white">หัวหน้า</Badge>
+										<Badge class="bg-green-600 px-1.5 py-0 text-2xs text-white">หัวหน้า</Badge>
 									{:else}
 										สมาชิก
 									{/if}

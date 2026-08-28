@@ -22,6 +22,9 @@
 	import { useCreateBooking, usePetTypes } from '../application/queries';
 	import { isCaptchaKeyConfigured, publicBookingInputSchema } from '../domain/booking';
 	import type { BookingTicket } from '../application/booking-store.svelte';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 
 	interface VulnerableGroup {
 		code: string;
@@ -38,15 +41,17 @@
 
 	const { shelters, vulnerableGroups, lockedShelterCode = '', onbooked }: Props = $props();
 
+	let t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+
 	const createBooking = useCreateBooking();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
 
-	const GENDERS = [
-		{ value: 'male', label: 'ชาย' },
-		{ value: 'female', label: 'หญิง' },
-		{ value: 'other', label: 'อื่น ๆ' }
-	] as const;
+	let GENDERS = $derived([
+		{ value: 'male', label: t.genderMale },
+		{ value: 'female', label: t.genderFemale },
+		{ value: 'other', label: t.genderOther }
+	]) as { value: string; label: string }[];
 
 	/**
 	 * Vehicle is a single three-way choice rather than the staff form's repeatable
@@ -56,13 +61,13 @@
 	 * with the staff Thai labels — `other` is simply not offered here, since a
 	 * citizen picking "อื่น ๆ" on a phone tells the parking marshal nothing.
 	 */
-	const VEHICLE_CHOICES = [
-		{ value: 'none', label: 'ไม่มีพาหนะ' },
-		{ value: 'car', label: 'รถยนต์' },
-		{ value: 'motorcycle', label: 'มอเตอร์ไซค์' }
-	] as const;
+	let VEHICLE_CHOICES = $derived([
+		{ value: 'none', label: t.vehicleNone },
+		{ value: 'car', label: t.vehicleCar },
+		{ value: 'motorcycle', label: t.vehicleMotorcycle }
+	]) as { value: string; label: string }[];
 
-	type VehicleChoice = (typeof VEHICLE_CHOICES)[number]['value'];
+	type VehicleChoice = 'none' | 'car' | 'motorcycle';
 
 	function blankMember() {
 		return {
@@ -82,7 +87,7 @@
 		resetForm: false,
 		onUpdate: async ({ form: validated }) => {
 			if (!validated.valid) {
-				toast.error('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง');
+				toast.error(t.validationError);
 				return;
 			}
 			await submit(validated.data);
@@ -174,8 +179,8 @@
 	/** "ว่าง/ทั้งหมด" when vacancy is known, else just the total capacity. */
 	function capacityLabel(shelter: { capacity: number; available: number | null }): string {
 		return shelter.available === null
-			? `${shelter.capacity} ที่`
-			: `${shelter.available}/${shelter.capacity} ที่`;
+			? `${shelter.capacity} ${t.unitPlaces}`
+			: `${shelter.available}/${shelter.capacity} ${t.unitPlaces}`;
 	}
 
 	function setMemberCount(next: number) {
@@ -218,7 +223,7 @@
 		try {
 			const token = await captchaToken();
 			if (token === null) {
-				submitError = 'ระบบยืนยันตัวตน (reCAPTCHA) ขัดข้อง กรุณาลองใหม่อีกครั้ง';
+				submitError = t.recaptchaError;
 				toast.error(submitError);
 				return;
 			}
@@ -229,12 +234,12 @@
 				vehicles: vehicleChoice === 'none' ? [] : data.vehicles,
 				...(token ? { captchaToken: token } : {})
 			});
-			toast.success('จองเข้าศูนย์สำเร็จ');
+			toast.success(t.bookingSuccess);
 			// The surname is not in the response by design (see `BookingTicket`) —
 			// carry over the one the contact just typed so the ticket can show a full name.
 			onbooked({ ...ticket, last_name: data.members[0].last_name });
 		} catch (err) {
-			submitError = err instanceof Error ? err.message : 'จองไม่สำเร็จ กรุณาลองใหม่';
+			submitError = err instanceof Error ? err.message : t.bookingErrorFallback;
 			toast.error(submitError);
 		}
 	}
@@ -256,7 +261,7 @@
 		class="flex items-start gap-2 rounded-xl border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground"
 	>
 		<Info class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-		<span>กรุณาเลือกศูนย์พักพิงในขั้นตอนที่ 1 ก่อน — {what}</span>
+		<span>{t.selectShelterFirst} {what}</span>
 	</p>
 {/snippet}
 
@@ -268,19 +273,17 @@
 				class="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
 				>1</span
 			>
-			ศูนย์พักพิงและข้อมูลผู้ติดต่อหลัก
+			{t.step1Title}
 		</h3>
 
 		<Form.Field {form} name="shelter_code">
 			<Form.Control>
 				{#snippet children({ props })}
 					<div class="flex items-center justify-between gap-2">
-						<Form.Label
-							>ศูนย์พักพิงที่ต้องการเข้าพัก <span class="text-destructive">*</span></Form.Label
-						>
+						<Form.Label>{t.shelterLabel} <span class="text-destructive">*</span></Form.Label>
 						{#if selected && selected.capacity > 0}
 							<span
-								class="rounded-full border border-success/30 bg-success-muted/40 px-2 py-0.5 text-[11px] font-bold text-success"
+								class="rounded-full border border-success/30 bg-success-muted/40 px-2 py-0.5 text-2xs font-bold text-success"
 							>
 								{capacityLabel(selected)}
 							</span>
@@ -293,21 +296,21 @@
 						disabled={Boolean(lockedShelterCode)}
 					>
 						<Select.Trigger {...props} class="!h-11 w-full font-semibold">
-							{selected?.name ?? '— เลือกศูนย์พักพิง —'}
+							{selected?.name ?? t.selectShelterPlaceholder}
 						</Select.Trigger>
 						<Select.Content>
 							{#each bookable as shelter (shelter.code)}
 								<Select.Item
 									value={shelter.code}
-									label="{shelter.name}{shelter.status === 'FULL' ? ' (เต็ม)' : ''}"
+									label="{shelter.name}{shelter.status === 'FULL' ? t.shelterFullSuffix : ''}"
 								>
 									<span class="flex w-full items-center justify-between gap-2">
 										<span class="truncate">
-											{shelter.name}{shelter.status === 'FULL' ? ' (เต็ม)' : ''}
+											{shelter.name}{shelter.status === 'FULL' ? t.shelterFullSuffix : ''}
 										</span>
 										{#if shelter.capacity > 0}
 											<span
-												class="shrink-0 rounded-full bg-success-muted px-2 py-0.5 text-[11px] font-bold text-success"
+												class="shrink-0 rounded-full bg-success-muted px-2 py-0.5 text-2xs font-bold text-success"
 											>
 												{capacityLabel(shelter)}
 											</span>
@@ -333,14 +336,14 @@
 				class="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-muted/40 p-2.5 text-xs text-danger"
 			>
 				<AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-				<span>ศูนย์นี้เต็มความจุแล้ว ยังจองได้ แต่เจ้าหน้าที่อาจจัดสรรพื้นที่ใหม่เมื่อไปถึง</span>
+				<span>{t.shelterFullWarning}</span>
 			</p>
 		{/if}
 
 		<Form.Field {form} name="phone">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>เบอร์โทรศัพท์มือถือ <span class="text-destructive">*</span></Form.Label>
+					<Form.Label>{t.phoneLabel} <span class="text-destructive">*</span></Form.Label>
 					<Input
 						{...props}
 						bind:value={$formData.phone}
@@ -352,14 +355,14 @@
 					/>
 				{/snippet}
 			</Form.Control>
-			<Form.Description>ใช้คู่กับรหัสการจองเพื่อตรวจสอบสถานะภายหลัง</Form.Description>
+			<Form.Description>{t.phoneDesc}</Form.Description>
 			<Form.FieldErrors />
 		</Form.Field>
 
 		<Form.Field {form} name="national_id">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>เลขบัตรประจำตัวประชาชน (ถ้ามี)</Form.Label>
+					<Form.Label>{t.idCardLabel}</Form.Label>
 					<Input
 						{...props}
 						bind:value={$formData.national_id}
@@ -371,7 +374,7 @@
 					/>
 				{/snippet}
 			</Form.Control>
-			<Form.Description>ทางเลือก — ช่วยเจ้าหน้าที่ดึงประวัติได้เร็วขึ้น</Form.Description>
+			<Form.Description>{t.idCardDesc}</Form.Description>
 			<Form.FieldErrors />
 		</Form.Field>
 	</section>
@@ -383,15 +386,15 @@
 				class="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
 				>2</span
 			>
-			จำนวนสมาชิกครอบครัว และความต้องการพิเศษ
+			{t.step2Title}
 		</h3>
 
 		<div class="flex items-center justify-between gap-4 rounded-xl bg-muted/40 p-4">
 			<div class="flex items-start gap-2">
 				<Users class="mt-0.5 h-4 w-4 text-muted-foreground" />
 				<div>
-					<p class="text-sm font-bold text-foreground">จำนวนผู้พักพิงรวม</p>
-					<p class="text-xs text-muted-foreground">รวมตัวท่านเองและสมาชิกครอบครัวที่มาด้วยกัน</p>
+					<p class="text-sm font-bold text-foreground">{t.totalEvacuees}</p>
+					<p class="text-xs text-muted-foreground">{t.totalEvacueesDesc}</p>
 				</div>
 			</div>
 			<div class="flex items-center gap-1">
@@ -399,7 +402,7 @@
 					type="button"
 					variant="outline"
 					size="icon-sm"
-					aria-label="ลดจำนวนผู้พักพิง"
+					aria-label={t.decreaseAria}
 					disabled={$formData.members.length <= 1}
 					onclick={() => setMemberCount($formData.members.length - 1)}
 				>
@@ -407,13 +410,13 @@
 				</Button>
 				<div class="w-12 text-center">
 					<span class="block text-lg font-bold text-foreground">{$formData.members.length}</span>
-					<span class="block text-[10px] text-muted-foreground">คน</span>
+					<span class="block text-2xs text-muted-foreground">{t.peopleUnit}</span>
 				</div>
 				<Button
 					type="button"
 					variant="outline"
 					size="icon-sm"
-					aria-label="เพิ่มจำนวนผู้พักพิง"
+					aria-label={t.increaseAria}
 					disabled={$formData.members.length >= 20}
 					onclick={() => setMemberCount($formData.members.length + 1)}
 				>
@@ -423,15 +426,15 @@
 		</div>
 
 		{#if !hasShelter}
-			{@render chooseShelterFirst('รายการความต้องการพิเศษจะแสดงตามที่ศูนย์นั้นรองรับ')}
+			{@render chooseShelterFirst(t.needsDependOnShelter)}
 		{/if}
 
 		{#each $formData.members as member, idx (idx)}
-			{@const who = idx === 0 ? 'ผู้ติดต่อหลัก (ท่านเอง)' : `สมาชิกคนที่ ${idx + 1}`}
+			{@const who = idx === 0 ? t.mainContact : `สมาชิกคนที่ ${idx + 1}`}
 			<div class="space-y-3 rounded-xl border border-border p-4">
 				<p class="flex items-center gap-2 text-sm font-bold text-foreground">
 					<span
-						class="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
+						class="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-2xs font-bold text-primary-foreground"
 						>{idx + 1}</span
 					>
 					{who}
@@ -441,12 +444,12 @@
 					<Form.Field {form} name={`members[${idx}].first_name`} class="space-y-1.5">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ชื่อ <span class="text-destructive">*</span></Form.Label>
+								<Form.Label>{t.firstNameLabel} <span class="text-destructive">*</span></Form.Label>
 								<Input
 									{...props}
 									bind:value={member.first_name}
 									class="!h-11"
-									placeholder="เช่น สมศักดิ์"
+									placeholder="t.firstNamePlaceholder"
 									autocomplete="off"
 								/>
 							{/snippet}
@@ -457,12 +460,12 @@
 					<Form.Field {form} name={`members[${idx}].last_name`} class="space-y-1.5">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>นามสกุล <span class="text-destructive">*</span></Form.Label>
+								<Form.Label>{t.lastNameLabel} <span class="text-destructive">*</span></Form.Label>
 								<Input
 									{...props}
 									bind:value={member.last_name}
 									class="!h-11"
-									placeholder="เช่น มีสุข"
+									placeholder="t.lastNamePlaceholder"
 									autocomplete="off"
 								/>
 							{/snippet}
@@ -473,14 +476,19 @@
 					<Form.Field {form} name={`members[${idx}].gender`} class="space-y-1.5">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เพศ <span class="text-destructive">*</span></Form.Label>
+								<Form.Label>{t.genderLabel} <span class="text-destructive">*</span></Form.Label>
 								<Select.Root
 									type="single"
 									value={member.gender}
 									onValueChange={(v) => ($formData.members[idx].gender = v as typeof member.gender)}
 								>
-									<Select.Trigger {...props} class="!h-11 w-full" aria-label="เพศ — {who}">
-										{GENDERS.find((g) => g.value === member.gender)?.label ?? '— เลือกเพศ —'}
+									<Select.Trigger
+										{...props}
+										class="!h-11 w-full"
+										aria-label={`\${t.genderAria} \${who}`}
+									>
+										{GENDERS.find((g) => g.value === member.gender)?.label ??
+											t.selectGenderPlaceholder}
 									</Select.Trigger>
 									<Select.Content>
 										{#each GENDERS as option (option.value)}
@@ -498,7 +506,7 @@
 					<!-- A group of checkboxes is a fieldset, not a single control: `Form.Label`
 					     only works inside `Form.Control`, and using it here throws in formsnap. -->
 					<Form.Fieldset {form} name={`members[${idx}].special_needs`} class="space-y-1.5">
-						<Form.Legend>ความต้องการพิเศษเฉพาะบุคคล</Form.Legend>
+						<Form.Legend>{t.specialNeedsLegend}</Form.Legend>
 						<div class="grid gap-2 sm:grid-cols-3">
 							{#each availableTags as tag (tag)}
 								{@const id = `m${idx}-${tag}`}
@@ -535,7 +543,7 @@
 				class="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
 				>3</span
 			>
-			{sectionCoversPets ? 'สัตว์เลี้ยงและยานพาหนะที่นำมาด้วย' : 'ยานพาหนะที่นำมาด้วย'}
+			{sectionCoversPets ? t.step3PetsTitle : t.step3VehiclesTitle}
 		</h3>
 
 		{#if petsAllowed}
@@ -554,14 +562,14 @@
 					}}
 				/>
 				<PawPrint class="h-4 w-4 text-muted-foreground" />
-				นำสัตว์เลี้ยงมาด้วย
+				{t.bringPets}
 			</label>
 
 			{#if bringsPets}
 				{#each $formData.pets as pet, idx (idx)}
 					<div class="space-y-3 rounded-xl border border-warning/40 bg-warning/10 p-4">
 						<div class="flex items-center justify-between">
-							<p class="text-sm font-bold text-foreground">สัตว์เลี้ยงตัวที่ {idx + 1}</p>
+							<p class="text-sm font-bold text-foreground">{t.petNum} {idx + 1}</p>
 							<Button
 								type="button"
 								variant="outline"
@@ -577,7 +585,9 @@
 							<Form.Field {form} name={`pets[${idx}].species`} class="space-y-1.5">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label>ชนิดสัตว์เลี้ยง <span class="text-destructive">*</span></Form.Label>
+										<Form.Label
+											>{t.petSpeciesLabel} <span class="text-destructive">*</span></Form.Label
+										>
 										<Select.Root
 											type="single"
 											value={pet.species}
@@ -586,11 +596,12 @@
 											<Select.Trigger
 												{...props}
 												class="!h-11 w-full bg-background"
-												aria-label="ชนิดสัตว์เลี้ยงตัวที่ {idx + 1}"
+												aria-label="{t.petSpeciesAria} {idx + 1}"
 											>
 												{petTypesQuery.isPending
-													? 'กำลังโหลดชนิดสัตว์เลี้ยง…'
-													: (petTypes.find((s) => s.code === pet.species)?.label ?? '— เลือก —')}
+													? t.loadingPetSpecies
+													: (petTypes.find((s) => s.code === pet.species)?.label ??
+														t.selectPlaceholder)}
 											</Select.Trigger>
 											<Select.Content>
 												{#each petTypes as option (option.code)}
@@ -611,12 +622,12 @@
 							<Form.Field {form} name={`pets[${idx}].notes`} class="space-y-1.5">
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label>ชื่อ / พันธุ์ / รายละเอียด</Form.Label>
+										<Form.Label>{t.petDetailsLabel}</Form.Label>
 										<Input
 											{...props}
 											bind:value={pet.notes}
 											class="!h-11"
-											placeholder="เช่น โกโก้ / ชิวาว่า 1 ตัว"
+											placeholder="t.petDetailsPlaceholder"
 										/>
 									{/snippet}
 								</Form.Control>
@@ -633,7 +644,7 @@
 								checked={pet.has_cage}
 								onCheckedChange={(v) => (pet.has_cage = v === true)}
 							/>
-							นำกรง/สายจูง/ตะกร้าติดตัวมาด้วย
+							{t.bringCage}
 						</label>
 					</div>
 				{/each}
@@ -650,18 +661,18 @@
 						])}
 				>
 					<Plus class="h-4 w-4" />
-					เพิ่มสัตว์เลี้ยงตัวถัดไป
+					{t.addNextPet}
 				</Button>
 			{/if}
 
 			<hr class="border-border" />
 		{:else if !hasShelter}
-			{@render chooseShelterFirst('ตัวเลือกสัตว์เลี้ยงจะแสดงตามนโยบายของศูนย์ที่เลือก')}
+			{@render chooseShelterFirst(t.petsDependOnShelter)}
 
 			<hr class="border-border" />
 		{/if}
 
-		<fieldset class="space-y-2" aria-label="ยานพาหนะที่นำมาด้วย">
+		<fieldset class="space-y-2" aria-label={t.vehiclesBrought}>
 			{#if sectionCoversPets}
 				<p class="flex items-center gap-2 text-sm font-medium text-foreground">
 					<Car class="h-4 w-4 text-muted-foreground" />
@@ -679,7 +690,7 @@
 				{#each VEHICLE_CHOICES as choice (choice.value)}
 					{@const active = vehicleChoice === choice.value}
 					<label
-						class="flex h-11 cursor-pointer items-center justify-center rounded-lg border px-2 text-center text-[13px] font-semibold transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 sm:text-sm {active
+						class="flex h-11 cursor-pointer items-center justify-center rounded-lg border px-2 text-center text-xs font-semibold transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 sm:text-sm {active
 							? 'border-primary bg-primary text-primary-foreground'
 							: 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50'}"
 					>
@@ -688,7 +699,7 @@
 							name="vehicle-choice"
 							value={choice.value}
 							checked={active}
-							onchange={() => setVehicleChoice(choice.value)}
+							onchange={() => setVehicleChoice(choice.value as VehicleChoice)}
 							class="sr-only"
 						/>
 						{choice.label}
@@ -701,18 +712,18 @@
 			<Form.Field {form} name="vehicles[0].license_plate">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label>ทะเบียนรถ</Form.Label>
+						<Form.Label>{t.licensePlateLabel}</Form.Label>
 						<Input
 							{...props}
 							bind:value={$formData.vehicles[0].license_plate}
 							class="!h-11"
 							maxlength={20}
-							placeholder="เช่น กข 1234 สงขลา"
+							placeholder="t.licensePlatePlaceholder"
 							autocomplete="off"
 						/>
 					{/snippet}
 				</Form.Control>
-				<Form.Description>ทางเลือก — ช่วยเจ้าหน้าที่จัดที่จอดรถให้</Form.Description>
+				<Form.Description>{t.licensePlateDesc}</Form.Description>
 				<Form.FieldErrors />
 			</Form.Field>
 		{/if}
@@ -728,6 +739,6 @@
 	{/if}
 
 	<Form.Button class="w-full" size="lg" disabled={$submitting}>
-		{$submitting ? 'กำลังจอง…' : 'ยืนยันการจองเข้าศูนย์'}
+		{$submitting ? t.submitting : t.submitConfirm}
 	</Form.Button>
 </form>

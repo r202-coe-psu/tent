@@ -1,4 +1,4 @@
-﻿Test_ID,Module,Sub_Module,Priority,Roles,Route_URL,Test_Case,Preconditions,Steps,Expected_Result,Status,Actual_Result,Bug_Link,Tester,Test_Date,Environment,Notes
+Test_ID,Module,Sub_Module,Priority,Roles,Route_URL,Test_Case,Preconditions,Steps,Expected_Result,Status,Actual_Result,Bug_Link,Tester,Test_Date,Environment,Notes
 UAT-000,Setup,บัญชีทดสอบ,P0,"SA,SM,REG,KS,WS,PUB",-,เตรียมบัญชีทดสอบครบทุก role,มีสิทธิ์สร้าง user หรือมี seed data,"1) สร้าง/ยืนยันบัญชี SA, SM (ศูนย์ A), REG, KS, WS
 2) ยืนยัน SM อยู่ศูนย์เดียว
 3) เตรียมบัญชี anonymous (ไม่ login) สำหรับ public",มีบัญชีครบ 6 กลุ่ม พร้อมรหัสผ่าน และ shelter scope ถูกต้อง,Not Tested,,,,,Staging,ขั้นต่ำก่อนเริ่ม UAT
@@ -68,6 +68,11 @@ UAT-044,Back-Office,Household edit + QR,P1,"SA,SM,REG",/back-office/households/e
 UAT-045,Back-Office,Shelter scope PII,P0,"SM,REG",/back-office/evacuee-management,Staff ศูนย์ A มองไม่เห็น PII ศูนย์ B,มีข้อมูล 2 ศูนย์; login SM/REG ศูนย์ A,"1) ดูรายชื่อผู้ประสบภัย
 2) พยายามเปิด id ของศูนย์อื่น (ถ้าทราบ)",เห็นเฉพาะศูนย์ตน; ข้ามศูนย์ถูกปฏิเสธ,Not Tested,,,,,Staging,Privacy critical
 UAT-046,Back-Office,KS/WS blocked from PII,P0,"KS,WS",/back-office/evacuee-management,KS/WS เข้าหน้าจัดการผู้ประสบภัยไม่ได้,Login KS หรือ WS,1) เปิด /back-office/evacuee-management,ถูกกัน/redirect — ไม่เห็น medical หรือ national ID,Not Tested,,,,,Staging,
+UAT-047,Back-Office,People import (CR-071),P0,"SA,SM,REG",/back-office/households/import,นำเข้าข้อมูลผู้ประสบภัยและครัวเรือนแบบไฟล์ (Import Inbound),มีไฟล์ template CSV/XLSX ที่มีข้อมูลตัวอย่าง และ shelter scope ถูกต้อง,"1) เปิด /back-office/households/import
+2) ดาวน์โหลด template และอัปโหลดไฟล์
+3) ตรวจสอบ column auto-mapping
+4) ดูตัวอย่างข้อมูล (Preview) และผลตรวจ duplicate
+5) ยืนยันการนำเข้า (Confirm Import)",นำเข้าข้อมูลสำเร็จ รายชื่อปรากฏในแท็บ evacuee/household และมีบันทึกใน Import Log History,Not Tested,,,,,Staging,CR-071 Inbound Import
 UAT-050,Back-Office,Referral create,P0,"SA,SM",/back-office/referrals,สร้าง referral และส่งต่อ,มีผู้ประสบภัย + ศูนย์ปลายทางมีที่ว่าง,"1) สร้าง referral
 2) เปลี่ยน draft → sent",สถานะเป็น sent และศูนย์ปลายทางเห็นรายการ,Not Tested,,,,,Staging,
 UAT-051,Back-Office,Referral accept,P0,"SA,SM",/back-office/referrals,ศูนย์ปลายทาง accept referral,มี referral สถานะ sent,"1) Login SM ศูนย์ปลายทาง (หรือ SA)
@@ -124,6 +129,9 @@ UAT-089,Back-Office,Catalog CRUD,P0,SA,/back-office/catalog,SA จัดกา�
 3) สร้าง/แก้สูตร
 4) แก้ไข/ปิดใช้งาน",CRUD สำเร็จ; item ใช้รับเข้าได้,Not Tested,,,,,Staging,Catalog master = SA only
 UAT-090,Back-Office,Catalog non-SA,P1,"SM,WS",/back-office/catalog,Non-SA ไม่สามารถ CRUD catalog master ได้,Login SM หรือ WS,1) พยายามสร้าง/แก้ catalog entity,ถูกกันตาม requireAdmin สำหรับ CRUD,Not Tested,,,,,Staging,
+UAT-091,Back-Office,Stock lot & storage zone (CR-088),P1,"SA,WS",/back-office/supply,บันทึกรับเข้า/จ่ายออกระบุ Lot Number และ Storage Zone,มี catalog item,"1) รับเข้าพัสดุพร้อมระบุ lot_no และ storage_zone
+2) จ่ายออกระบุ lot
+3) ตรวจสอบ stock ledger history",ข้อมูล lot และ zone ถูกบันทึกลง ledger และแสดงในประวัติ,Not Tested,,,,,Staging,CR-088 Stock ledger lot & storage zone
 UAT-100,Back-Office,Meal plan,P0,"SA,SM,KS",/back-office/kitchen,สร้าง/ยืนยันแผนอาหารจาก occupancy,มีผู้พักพิง + สูตร,"1) แท็บแผนอาหาร
 2) สร้างแผน
 3) Confirm",แผนถูกสร้างอิง occupancy,Not Tested,,,,,Staging,
@@ -135,6 +143,12 @@ UAT-102,Back-Office,Meal service,P1,"SA,KS",/back-office/kitchen,บันทึ
 UAT-103,Back-Office,Gas cylinders,P1,"SA,SM,KS",/back-office/kitchen/gas,จัดการถังแก๊ส,-,1) เพิ่ม/แก้ประเภทถังหรือทรัพยากรแก๊ส,บันทึกและแสดงสถานะถูกต้อง,Not Tested,,,,,Staging,
 UAT-104,Back-Office,Production board stub,P3,KS,/back-office/kitchen/production-board,กระดานการผลิต (เร็วๆ นี้),-,1) เปิดหน้า,แสดง coming soon — Skip เป็น expected,Not Tested,,,,,Staging,Known stub
 UAT-105,Back-Office,REG blocked kitchen,P1,REG,/back-office/kitchen,REG เข้า kitchen ไม่ได้,Login REG,1) เปิด /back-office/kitchen,ถูกกัน/redirect,Not Tested,,,,,Staging,
+UAT-106,Back-Office,Meal actual yield (CR-085),P1,"SA,KS",/back-office/kitchen,บันทึกสรุปบริการอาหารพร้อม Actual Yield และคำนวณส่วนต่าง (Variance),มี meal plan ที่ confirm แล้ว,"1) แท็บสรุปบริการ
+2) บันทึก actual_yield_portions และ wasted_portions
+3) ตรวจสอบการคำนวณ variance rate",บันทึก yield สำเร็จ และคำนวณอัตราส่วนต่าง (yield variance %) แสดงผลถูกต้อง,Not Tested,,,,,Staging,CR-085 Meal service actual yield
+UAT-107,Back-Office,Gas usage ledger & runout (CR-086),P1,"SA,SM,KS",/back-office/kitchen/gas,บันทึกธุรกรรมการใช้แก๊สและคำนวณวันคงเหลือ (Runout estimation),มีถังแก๊สที่ลงทะเบียนไว้,"1) เปิด /back-office/kitchen/gas
+2) บันทึกน้ำหนักแก๊สคงเหลือ / การเปลี่ยนถัง
+3) ตรวจสอบ burn rate และ estimated runout days",บันทึกลง gas cylinder ledger สำเร็จ และแสดงประมาณการวันที่แก๊สจะหมด,Not Tested,,,,,Staging,CR-086 Gas cylinder usage ledger
 UAT-110,Back-Office,Daily SOP dashboard,P0,"SA,SM",/back-office/resource-dashboard,รัน/ดูการประเมินประจำวัน (Daily SOP),มี occupancy + SOP params,"1) เปิด resource-dashboard
 2) รัน/รีเฟรชการคำนวณ
 3) ตรวจ alert",แสดงผลคำนวณทรัพยากรตามอัตราส่วน SOP,Not Tested,,,,,Staging,
@@ -161,11 +175,17 @@ UAT-132,Back-Office,Household master data,P1,"SA,SM",/back-office/household-mast
 UAT-133,Back-Office,Public portal FAQ config,P1,"SA,SM",/back-office/public-portal-config,ตั้งค่า FAQ/ช่องทางติดต่อบน public,-,"1) เพิ่ม/แก้ FAQ
 2) เปิด /public ตรวจ accordion",FAQ และลิงก์ติดต่ออัปเดตบนหน้าสาธารณะ,Not Tested,,,,,Staging,
 UAT-134,System Management,Global master data,P1,SA,/portal/system-management/registration-config,SA ตั้งค่า master ระดับระบบ,Login SA,1) แก้ registration/shelter/household config ฝั่ง system-management,บันทึกได้และมีผลทั่วระบบตาม design,Not Tested,,,,,Staging,
+UAT-135,Back-Office,Location config,P1,"SA,SM",/back-office/location-config,จัดการข้อมูลพิกัดและที่ตั้งตำบล/อำเภอ/จังหวัด,-,"1) เปิด /back-office/location-config
+2) ตรวจสอบและค้นหารหัสจังหวัด อำเภอ ตำบล",โหลดข้อมูล Master Location สำเร็จ และสะท้อนตัวเลือกในฟอร์มของระบบ,Not Tested,,,,,Staging,
 UAT-140,System Management,Announcements CRUD,P0,SA,/portal/system-management/announcements,สร้าง/แก้/ลบประกาศด่วน,Login SA,"1) สร้างประกาศ severity info/warning/emergency
 2) ตั้ง is_active
 3) แก้/ลบ",CRUD สำเร็จ,Not Tested,,,,,Staging,
 UAT-141,Public,Announcements on home,P0,PUB,/public,ประกาศ active แสดงบนหน้า public,มีประกาศ active,"1) เปิด /public
 2) ตรวจแบนเนอร์ตาม severity",เห็นประกาศที่ active; inactive ไม่ขึ้น,Not Tested,,,,,Staging,
+UAT-142,System Management,API Keys (Module 10 / Open API),P0,SA,/portal/system-management/api-keys,SA สร้างและยกเลิก API Key สำหรับหน่วยงานภายนอก (EOC / Open API),Login SA,"1) เปิด /portal/system-management/api-keys
+2) สร้าง API Key ใหม่ กำหนดชื่อองค์กรและวันหมดอายุ
+3) คัดลอก Secret Token (แสดงครั้งเดียว)
+4) กด Revoke เพื่อยกเลิก Key",สร้าง Key สำเร็จ ได้ Secret และสามารถ Revoke Key โดยสถานะเปลี่ยนเป็น revoked,Not Tested,,,,,Staging,Module 10 EOC & Open API Management
 UAT-150,Public,Landing,P0,PUB,/public,หน้าแรกสาธารณะโหลดครบองค์ประกอบหลัก,-,"1) เปิด /public
 2) ตรวจ metrics, quick services, FAQ, hotlines 1669/1784",หน้าโหลด; metrics แสดงหรือแจ้งระบบขัดข้องชัดเจนถ้า API fail,Not Tested,,,,,Staging,
 UAT-151,Public,Disabled CTAs,P2,PUB,/public,CTA ที่ยังไม่เปิดแสดงเร็วๆนี้/disabled,-,1) ตรวจปุ่มลงทะเบียนผู้ประสบภัย / อาสาสมัคร,ไม่พาไป flow ที่ยังไม่พร้อม (disabled หรือเร็วๆนี้),Not Tested,,,,,Staging,Expected Skip/Pass for disabled
