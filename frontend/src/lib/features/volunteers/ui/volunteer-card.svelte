@@ -6,17 +6,17 @@
 	 * ลบ):
 	 *   - "จัดการข้อมูล" opens `volunteer-manage-dialog.svelte` (see its header
 	 *     comment for the fields it actually persists vs. stubs).
+	 *   - "ออกสิทธิ์ใช้งานระบบ" opens `volunteer-access-dialog.svelte` (see its
+	 *     header comment — it persists `volunteer.user_name` but does NOT mint
+	 *     a real CouchDB account/password/role grant, since no such repository
+	 *     call exists).
 	 *   - "ขอโอนย้ายศูนย์" opens the existing `volunteer-transfer-dialog.svelte`
 	 *     (the same one `people-tab.svelte`'s header button uses), jumped
 	 *     straight to its new-request sub-form with this row's volunteer
 	 *     preselected via `presetVolunteerId`.
-	 * The remaining two stay UI-only stubs for this pass (explicit scope call
-	 * from the requester) — they just toast that the flow isn't built:
-	 *   - grant/revoke system access: no RoleKey-grant repository call exists
-	 *     yet (FR-VOL-05R is a CouchDB-native time-bound grant, not modelled
-	 *     here).
-	 *   - delete: `VolunteerRepository` has no `delete()` at all.
-	 * Flagged for the CR alongside the schema gaps.
+	 * "ลบ" stays a UI-only stub for this pass (explicit scope call from the
+	 * requester) — `VolunteerRepository` has no `delete()` at all, flagged for
+	 * the CR alongside the other schema gaps.
 	 */
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import KeyRound from '@lucide/svelte/icons/key-round';
@@ -29,6 +29,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
+	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
 	import VolunteerTransferDialog from './volunteer-transfer-dialog.svelte';
 	import { findSkill } from '../domain/skill-master';
 	import { isControlledSkill } from '../domain/skills';
@@ -74,6 +75,7 @@
 	}
 
 	let manageDialogOpen = $state(false);
+	let accessDialogOpen = $state(false);
 	let transferDialogOpen = $state(false);
 </script>
 
@@ -214,7 +216,7 @@
 								{...props}
 								size="sm"
 								class="flex-1 gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
-								onclick={() => stub('ออกสิทธิ์ใช้งานระบบ')}
+								onclick={() => (accessDialogOpen = true)}
 							>
 								<KeyRound class="h-3.5 w-3.5" />
 								ออกสิทธิ์ใช้งานระบบ
@@ -272,4 +274,5 @@
 	{shelterLine}
 	todayShift={todayAssignment?.shift}
 />
+<VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
 <VolunteerTransferDialog bind:open={transferDialogOpen} presetVolunteerId={volunteer._id} />
