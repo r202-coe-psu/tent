@@ -289,6 +289,33 @@ export const useCreateWalkInVolunteer = (queryClient: QueryClient) =>
 	}));
 
 /**
+ * Flips `volunteer.checked_in` + `current_shelter_code` directly (no
+ * `shift_assignment`) — the walk-in registration form's "เช็คอินเข้ากะและ
+ * เริ่มปฏิบัติงานทันที" checkbox uses this, since a walk-in volunteer is not
+ * necessarily dispatched to a `job` (`ShiftAssignmentRepository#dispatch`
+ * requires a `job_id`). `checked_in` feeds hub metrics only via
+ * `shift_assignment.status` (see `domain/hub-metrics.ts`), not this field, but
+ * invalidate both volunteers and hub metrics anyway since the roster/people
+ * tab reads `volunteer.checked_in` directly.
+ */
+export const useSetVolunteerCheckedIn = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: ({
+			id,
+			checkedIn,
+			shelterCode
+		}: {
+			id: string;
+			checkedIn: boolean;
+			shelterCode: string | null;
+		}) => volunteerRepository().setCheckedIn(id, checkedIn, shelterCode),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
+		}
+	}));
+
+/**
  * Requests a `volunteer_transfer` (`status: 'pending'`). Transfers are not
  * part of `computeHubMetrics`'s input, so this only invalidates transfers.
  */
@@ -317,6 +344,16 @@ export const useDecideTransfer = (queryClient: QueryClient) =>
 			id: string;
 			decision: Extract<VolunteerTransferStatus, 'accepted' | 'rejected'>;
 		}) => volunteerTransferRepository().decide(id, decision, authStore.user?.name ?? 'unknown'),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.transfersAll() });
+		}
+	}));
+
+/** Requester cancels their own still-`pending` transfer request. */
+export const useCancelTransfer = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: (id: string) =>
+			volunteerTransferRepository().cancel(id, authStore.user?.name ?? 'unknown'),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.transfersAll() });
 		}

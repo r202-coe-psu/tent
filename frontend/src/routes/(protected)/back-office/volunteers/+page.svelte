@@ -1,8 +1,9 @@
 <script lang="ts">
 	/**
 	 * `/back-office/volunteers` — shell + 3 tabs (CR-094 FR-VOL-08.1,
-	 * 01-tab-job-board.md §01.1). Only Tab 1 (Job Board & Capacity) is built
-	 * here; Tabs 2/3 render a placeholder until their own steps land.
+	 * 01-tab-job-board.md §01.1). Tab 1 (Job Board & Capacity) and Tab 3
+	 * (People — `people-tab.svelte`) are built; Tab 2 (roster/attendance)
+	 * still renders a placeholder until its own step lands.
 	 *
 	 * Tab state lives in the URL (`?tab=jobs|roster|people`) so a refresh
 	 * returns to the same tab — mirrors
@@ -15,7 +16,12 @@
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import UsersRound from '@lucide/svelte/icons/users-round';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
-	import { VolunteerHubHeader, JobBoardTab, useHubMetrics } from '$lib/features/volunteers';
+	import {
+		VolunteerHubHeader,
+		JobBoardTab,
+		PeopleTab,
+		useHubMetrics
+	} from '$lib/features/volunteers';
 
 	type TabKey = 'jobs' | 'roster' | 'people';
 	const tabKeys: readonly TabKey[] = ['jobs', 'roster', 'people'];
@@ -99,11 +105,7 @@
 		</Tabs.Content>
 
 		<Tabs.Content value="people" class="pt-4">
-			<div
-				class="rounded-2xl border border-dashed border-border py-16 text-center text-muted-foreground"
-			>
-				<p class="text-sm font-medium">อยู่ระหว่างพัฒนา</p>
-			</div>
+			<PeopleTab />
 		</Tabs.Content>
 	</Tabs.Root>
 </div>

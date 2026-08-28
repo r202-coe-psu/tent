@@ -10,10 +10,9 @@
  * FR-VOL-08.5 moves this to editable master data on the settings screen in a
  * later step — until then this constant is the source of truth.
  *
- * Scope (owner decision 2026-08-27): the job form lists these four only. The
- * walk-in mockup shows a wider set (ประสานงาน/ต้อนรับ, แจกจ่ายของยังชีพ,
- * ทำความสะอาด/สุขอนามัย, สันทนาการ/ดูแลเด็ก, ขับขี่ยานพาหนะ/ขนส่ง) — add them
- * here when that screen is built, so both screens keep reading one list.
+ * `job-form-dialog.svelte` and the walk-in registration screen both iterate
+ * this single list unfiltered (owner decision 2026-08-29: the job form's
+ * skill list grows to match the walk-in set).
  */
 
 export interface SkillMasterEntry {
@@ -55,6 +54,41 @@ export const SKILL_MASTER: readonly SkillMasterEntry[] = [
 		description: 'ปฐมพยาบาลเบื้องต้น วัดสัญญาณชีพ (ต้องผ่านการตรวจรับรองใบประกอบวิชาชีพ)',
 		icon: '🩺',
 		controlled: true
+	},
+	{
+		key: 'ประสานงาน / ต้อนรับ',
+		label: 'ประสานงาน / ต้อนรับ',
+		description: 'ต้อนรับผู้ประสบภัย ประสานงานระหว่างจุดบริการ',
+		icon: '🤝',
+		controlled: false
+	},
+	{
+		key: 'แจกจ่ายของยังชีพ',
+		label: 'แจกจ่ายของยังชีพ',
+		description: 'แจกจ่ายถุงยังชีพ น้ำดื่ม เครื่องอุปโภคบริโภค',
+		icon: '🎒',
+		controlled: false
+	},
+	{
+		key: 'ทำความสะอาด / สุขอนามัย',
+		label: 'ทำความสะอาด / สุขอนามัย',
+		description: 'ทำความสะอาดพื้นที่ส่วนกลาง ดูแลสุขอนามัยในศูนย์',
+		icon: '🧹',
+		controlled: false
+	},
+	{
+		key: 'สันทนาการ / ดูแลเด็ก',
+		label: 'สันทนาการ / ดูแลเด็ก',
+		description: 'กิจกรรมสันทนาการ ดูแลเด็กและผู้สูงอายุ',
+		icon: '🎈',
+		controlled: false
+	},
+	{
+		key: 'ขับขี่ยานพาหนะ / ขนส่ง',
+		label: 'ขับขี่ยานพาหนะ / ขนส่ง',
+		description: 'ขับขี่ยานพาหนะขนส่งคนและสิ่งของ',
+		icon: '🚗',
+		controlled: false
 	}
 ];
 

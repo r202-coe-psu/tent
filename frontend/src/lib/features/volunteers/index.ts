@@ -92,3 +92,14 @@ export { default as JobDetailOverviewTab } from './ui/job-detail-overview-tab.sv
 export { default as JobLifecyclePanel } from './ui/job-lifecycle-panel.svelte';
 export { default as JobShiftsTab } from './ui/job-shifts-tab.svelte';
 export { default as JobShiftCard } from './ui/job-shift-card.svelte';
+
+// ui — Tab 3 (People / รายชื่อและการอนุมัติ)
+export { default as PeopleTab } from './ui/people-tab.svelte';
+export { default as VolunteerStatPills } from './ui/volunteer-stat-pills.svelte';
+export type { PeopleStatFilter } from './ui/volunteer-stat-pills.svelte';
+export { default as VolunteerFilterBar } from './ui/volunteer-filter-bar.svelte';
+export { default as VolunteerApprovalChips } from './ui/volunteer-approval-chips.svelte';
+export type { ApprovalChip } from './ui/volunteer-approval-chips.svelte';
+export { default as VolunteerCard } from './ui/volunteer-card.svelte';
+export { default as VolunteerTransferDialog } from './ui/volunteer-transfer-dialog.svelte';
+export { default as WalkInRegistrationDialog } from './ui/walk-in-registration-dialog.svelte';
