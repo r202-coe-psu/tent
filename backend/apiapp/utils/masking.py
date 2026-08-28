@@ -63,3 +63,16 @@ def phone_hash(phone: str | None) -> str | None:
     if not phone:
         return None
     return sha256_hex(normalize_phone(phone))
+
+
+def mask_phone(phone: str | None) -> str:
+    """``xxx-xxx-1234`` — the only phone form a public volunteer ticket may show.
+
+    FR-VOL-03.4 (CR-092). Keeps the last four digits so an applicant can recognise
+    their own ticket, and nothing more: the number itself is on the shelter's CouchDB
+    doc, not in any public response.
+    """
+    digits = normalize_phone(phone or "")
+    if len(digits) < 4:
+        return "xxx-xxx-xxxx"
+    return f"xxx-xxx-{digits[-4:]}"
