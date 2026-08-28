@@ -53,9 +53,6 @@ export {
 } from './domain/compute-needs';
 export { carryItemIds, type BareItem } from './domain/carry-item-ids';
 
-// Domain — drop-off verification lot numbering (CR-052 §1.2)
-export { generateLotNo, formatLotNote } from './domain/lot';
-
 // Domain — input schemas + factories + transitions + guards
 export {
 	donationPreDeclarationInputSchema,
@@ -79,22 +76,6 @@ export {
 	useDonationTrackSearch,
 	useUpdateCourierTracking,
 	useUpdateDonationItems
-} from './application/queries';
-
-// Data + application — back-office intake queue (BFF, admin-credentialed route)
-export {
-	fetchDonationsByStatus,
-	fetchDonationDetail,
-	receiveDonationCount,
-	type BackOfficeDonationRow,
-	type BackOfficeDonationDetail,
-	type CountedLineInput
-} from './data/back-office-donations';
-export {
-	backOfficeDonationKeys,
-	useDonationQueue,
-	useBackOfficeDonation,
-	useReceiveDonationCount
 } from './application/queries';
 
 // UI
