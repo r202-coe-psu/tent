@@ -31,7 +31,10 @@
 	);
 
 	// 1. Data queries and mutations
-	const categoryQuery = useItemCategory(() => id);
+	const categoryQuery = useItemCategory(
+		() => id,
+		() => shelterCode ?? null
+	);
 	const createMutation = useCreateItemCategory();
 	const updateMutation = useUpdateItemCategory();
 

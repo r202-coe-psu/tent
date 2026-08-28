@@ -36,7 +36,10 @@
 		basePath.includes('system-management') ? undefined : getShelterCode()
 	);
 
-	const itemRecipeQuery = useRecipe(() => id);
+	const itemRecipeQuery = useRecipe(
+		() => id,
+		() => shelterCode ?? null
+	);
 	const createMutation = useCreateRecipe();
 	const updateMutation = useUpdateRecipe();
 	const itemMastersQuery = useItemMasters(() => shelterCode ?? null);

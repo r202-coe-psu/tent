@@ -38,7 +38,10 @@
 	);
 
 	// Data queries & mutations
-	const itemMasterQuery = useItemMaster(() => id);
+	const itemMasterQuery = useItemMaster(
+		() => id,
+		() => shelterCode ?? null
+	);
 	const itemCategoriesQuery = useItemCategories(() => shelterCode ?? null);
 	const createMutation = useCreateItemMaster();
 	const updateMutation = useUpdateItemMaster();
