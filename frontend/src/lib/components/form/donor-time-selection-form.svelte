@@ -17,9 +17,13 @@
 	import { onMount } from 'svelte';
 	import { publicDonationErrorMessage } from '$lib/features/donations';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 
 	const donationStore = getDonationStore();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
+	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	let selectedDate = $state<DateValue>(today(getLocalTimeZone()));
 	let shelters = $state<Array<{ code: string; name: string }>>([]);
@@ -38,7 +42,7 @@
 				}
 			}
 		} catch {
-			toast.error('ไม่สามารถโหลดรายชื่อศูนย์พักพิงได้ กรุณาลองใหม่อีกครั้ง');
+			toast.error(t.errorLoadingShelters);
 		}
 	});
 
@@ -46,12 +50,12 @@
 		donationStore.errorMessage = '';
 
 		if (!donationStore.deliveryMethod) {
-			donationStore.errorMessage = 'กรุณาเลือกวิธีการจัดส่ง';
+			donationStore.errorMessage = t.errSelectDelivery;
 			toast.error(donationStore.errorMessage);
 			return;
 		}
 		if (donationStore.deliveryMethod === 'self_dropoff' && !donationStore.vehicleType) {
-			donationStore.errorMessage = 'กรุณาเลือกประเภทยานพาหนะ';
+			donationStore.errorMessage = t.errSelectVehicle;
 			toast.error(donationStore.errorMessage);
 			return;
 		}
@@ -60,27 +64,27 @@
 				donationStore.deliveryMethod === 'shelter_pickup') &&
 			(!selectedDate || !donationStore.slotTime)
 		) {
-			donationStore.errorMessage = 'กรุณาเลือกวันที่และช่วงเวลา';
+			donationStore.errorMessage = t.errSelectDateTime;
 			toast.error(donationStore.errorMessage);
 			return;
 		}
 		if (donationStore.deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress) {
-			donationStore.errorMessage = 'กรุณาระบุที่อยู่สำหรับไปรับของ';
+			donationStore.errorMessage = t.errSpecifyPickupAddr;
 			toast.error(donationStore.errorMessage);
 			return;
 		}
 		if (!donationStore.donorName.trim()) {
-			donationStore.errorMessage = 'กรุณากรอกชื่อผู้บริจาคใน Step 2';
+			donationStore.errorMessage = t.errDonorNameRequired;
 			toast.error(donationStore.errorMessage);
 			return;
 		}
 		if (!donationStore.donorPhone.trim()) {
-			donationStore.errorMessage = 'กรุณากรอกเบอร์โทรศัพท์ใน Step 2';
+			donationStore.errorMessage = t.errDonorPhoneRequired;
 			toast.error(donationStore.errorMessage);
 			return;
 		}
 		if (!donationStore.shelterCode) {
-			donationStore.errorMessage = 'กรุณาเลือกศูนย์พักพิงปลายทาง';
+			donationStore.errorMessage = t.errSelectShelter;
 			toast.error(donationStore.errorMessage);
 			return;
 		}
@@ -98,15 +102,13 @@
 			try {
 				token = await window.grecaptcha.execute(siteKey, { action: 'donate' });
 			} catch {
-				donationStore.errorMessage =
-					'ระบบยืนยันตัวตนขัดข้อง (reCAPTCHA) กรุณาลองใหม่อีกครั้ง หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต';
+				donationStore.errorMessage = t.errRecaptchaFailed;
 				toast.error(donationStore.errorMessage);
 				donationStore.isSubmitting = false;
 				return;
 			}
 		} else if (!token) {
-			donationStore.errorMessage =
-				'ยังไม่ได้ตั้งค่า reCAPTCHA (PUBLIC_RECAPTCHA_SITE_KEY) — ไม่สามารถส่งแบบฟอร์มได้';
+			donationStore.errorMessage = t.errRecaptchaNotConfigured;
 			toast.error(donationStore.errorMessage);
 			donationStore.isSubmitting = false;
 			return;
@@ -151,14 +153,14 @@
 						donationStore.items.length > 0
 							? donationStore.items.map((it) => ({
 									item_id: it.item_id || undefined,
-									free_text: it.name || 'ไม่ได้ระบุ',
+									free_text: it.name || t.unspecified,
 									category: it.category || undefined,
 									qty: it.amount || 1,
-									unit: it.unit || 'ชิ้น',
+									unit: it.unit || t.defaultItemUnit,
 									condition: it.condition || undefined,
 									note: it.remark || undefined
 								}))
-							: [{ free_text: 'ของบริจาคทั่วไป', qty: 1, unit: 'ชิ้น' }],
+							: [{ free_text: t.generalItemsFallback, qty: 1, unit: t.defaultItemUnit }],
 					logistics: logistics,
 					captchaToken: token
 				})
@@ -173,10 +175,10 @@
 				donationStore.slotDate = slotDateStr;
 				donationStore.activeTab = 'ticket';
 				if (donationStore.reachedStep < 4) donationStore.reachedStep = 4;
-				toast.success('ยืนยันการจองคิวบริจาคสำเร็จ!');
+				toast.success(t.bookingSuccess);
 			}
 		} catch {
-			donationStore.errorMessage = 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์';
+			donationStore.errorMessage = t.errorConnect;
 			toast.error(donationStore.errorMessage);
 		} finally {
 			donationStore.isSubmitting = false;
@@ -209,8 +211,8 @@
 			<Navigation class="h-5 w-5 text-[#ff9f0a]" />
 		</div>
 		<div>
-			<h3 class="text-xl font-bold text-slate-800">ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์</h3>
-			<p class="mt-1 text-xs font-medium text-slate-500">ระบุวิธีการจัดส่งและเวลาที่จะมาถึง</p>
+			<h3 class="text-xl font-bold text-slate-800">{t.section3Title}</h3>
+			<p class="mt-1 text-xs font-medium text-slate-500">{t.section3Desc}</p>
 		</div>
 	</div>
 
@@ -219,14 +221,14 @@
 		<div class="border-b border-slate-100 pb-5 text-left">
 			<div class="mb-2.5 flex items-center justify-between text-xs font-bold text-slate-500">
 				<span class="flex items-center gap-1 text-slate-700"
-					>📦 รายการสิ่งของที่คุณเลือกบริจาค ({donationStore.items.length} รายการ)</span
+					>📦 {t.reviewSelectedItems.replace('{count}', String(donationStore.items.length))}</span
 				>
 				<button
 					type="button"
 					onclick={() => (isItemsModalOpen = true)}
 					class="flex cursor-pointer items-center gap-0.5 text-xs font-black text-[#013481] hover:underline"
 				>
-					ดูทั้งหมด
+					{t.viewAll}
 				</button>
 			</div>
 			<button
@@ -239,14 +241,14 @@
 					<span class="flex items-center gap-2 text-xs font-bold">
 						<span class="h-2 w-2 shrink-0 rounded-full {dotClass.split(' ')[0]}"></span>
 						<span class="{dotClass.split(' ')[1]} truncate">
-							{item.name || 'ไม่ได้ระบุ'} — {item.amount}
+							{item.name || t.unspecified} — {item.amount}
 							{item.unit}
 						</span>
 					</span>
 				{/each}
 				{#if donationStore.items.length > 5}
 					<span class="block pl-4 text-left text-[11px] font-black text-[#013481] hover:underline">
-						+ ดูทั้งหมดอีก {donationStore.items.length - 5} รายการ (กดเพื่อดูทั้งหมด)
+						{t.viewAllRemaining.replace('{count}', String(donationStore.items.length - 5))}
 					</span>
 				{/if}
 			</button>
@@ -255,7 +257,7 @@
 		<!-- 1. วิธีการจัดส่ง -->
 		<div>
 			<span class="mb-3 block text-sm font-bold text-slate-800">
-				วิธีการจัดส่ง <span class="text-red-500">*</span>
+				{t.deliveryMethodLabel} <span class="text-red-500">*</span>
 			</span>
 			<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
 				<button
@@ -266,7 +268,7 @@
 						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
 						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
 				>
-					นำมาส่งด้วยตนเอง
+					{t.deliverySelf}
 				</button>
 				<button
 					type="button"
@@ -276,7 +278,7 @@
 						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
 						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
 				>
-					ส่งผ่านขนส่งพัสดุ
+					{t.deliveryParcel}
 				</button>
 				<button
 					type="button"
@@ -286,7 +288,7 @@
 						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
 						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
 				>
-					ต้องการให้รถศูนย์ไปรับ (ของเยอะมาก)
+					{t.deliveryShelterPickup}
 				</button>
 			</div>
 		</div>
@@ -294,23 +296,21 @@
 		<!-- กรณีส่งไปรษณีย์ -->
 		{#if donationStore.deliveryMethod === 'parcel'}
 			<div class="animate-in space-y-4 duration-200 fade-in">
-				<h4 class="block text-sm font-bold text-slate-800">ข้อมูลขนส่งพัสดุ</h4>
+				<h4 class="block text-sm font-bold text-slate-800">{t.parcelInfoTitle}</h4>
 				<div class="grid gap-4 md:grid-cols-2">
 					<div>
-						<Label class="mb-1.5 block text-xs font-bold text-slate-600">คาดว่าจะถึง (ETA)</Label>
+						<Label class="mb-1.5 block text-xs font-bold text-slate-600">{t.etaLabel}</Label>
 						<Input
 							bind:value={donationStore.eta}
-							placeholder="เช่น พรุ่งนี้ช่วงบ่าย"
+							placeholder={t.etaPlaceholder}
 							class="h-12 rounded-xl border-2 border-slate-200 focus:border-[#ff9f0a]"
 						/>
 					</div>
 					<div>
-						<Label class="mb-1.5 block text-xs font-bold text-slate-600"
-							>เลขพัสดุ (Tracking No.)</Label
-						>
+						<Label class="mb-1.5 block text-xs font-bold text-slate-600">{t.trackingNoLabel}</Label>
 						<Input
 							bind:value={donationStore.courierTrackingNo}
-							placeholder="ระบุภายหลังได้"
+							placeholder={t.trackingNoPlaceholder}
 							class="h-12 rounded-xl border-2 border-slate-200 focus:border-[#ff9f0a]"
 						/>
 					</div>
@@ -322,10 +322,10 @@
 		{#if donationStore.deliveryMethod === 'self_dropoff'}
 			<div class="animate-in space-y-3 duration-200 fade-in">
 				<span class="block text-sm font-bold text-slate-800">
-					ประเภทยานพาหนะที่จะนำมาส่ง <span class="text-red-500">*</span>
+					{t.vehicleTypeLabel} <span class="text-red-500">*</span>
 				</span>
 				<p class="text-xs leading-relaxed text-slate-500">
-					ข้อมูลนี้สำคัญมาก เพื่อให้จุดรับของกะพื้นที่จอดและเตรียมคนยกของ
+					{t.vehicleTypeDesc}
 				</p>
 				<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
 					{#each ['motorcycle', 'car', 'pickup', 'truck'] as vtype (vtype)}
@@ -339,13 +339,13 @@
 								: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
 						>
 							{#if vtype === 'motorcycle'}
-								รถจักรยานยนต์
+								{t.vehicleMotorcycle}
 							{:else if vtype === 'car'}
-								รถเก๋ง / รถยนต์
+								{t.vehicleCar}
 							{:else if vtype === 'pickup'}
-								รถกระบะ
+								{t.vehiclePickup}
 							{:else if vtype === 'truck'}
-								รถบรรทุก
+								{t.vehicleTruck}
 							{/if}
 						</button>
 					{/each}
@@ -357,11 +357,11 @@
 		{#if donationStore.deliveryMethod === 'shelter_pickup'}
 			<div class="animate-in space-y-2 duration-200 fade-in">
 				<label class="block text-sm font-bold text-slate-800" for="pickup-address">
-					ที่อยู่ / จุดนัดรับของ <span class="text-red-500">*</span>
+					{t.pickupAddressLabel} <span class="text-red-500">*</span>
 				</label>
 				<textarea
 					id="pickup-address"
-					placeholder="ระบุบ้านเลขที่ ซอย ถนน หรือจุดสังเกตเพื่อความสะดวกในการเข้ารับของ..."
+					placeholder={t.pickupAddressPlaceholder}
 					bind:value={donationStore.pickupAddress}
 					class="min-h-[100px] w-full resize-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-all focus:border-[#ff9f0a]"
 				></textarea>
@@ -375,14 +375,15 @@
 					class="mb-3 block flex items-center gap-2 text-sm font-bold text-slate-800"
 					for="shelter-select"
 				>
-					<MapPin class="h-4 w-4 text-slate-500" /> เลือกศูนย์รับบริจาค
+					<MapPin class="h-4 w-4 text-slate-500" />
+					{t.selectShelterLabel}
 					<span class="text-red-500">*</span>
 					{#if donationStore.shelterLocked}
 						<span
 							class="ml-2 inline-flex items-center gap-1 rounded-md bg-slate-200/60 px-2 py-0.5 text-xs font-semibold text-slate-600"
 						>
 							<Lock class="h-3 w-3" />
-							ล็อกตามความต้องการที่เลือก
+							{t.shelterLockedBadge}
 						</span>
 					{/if}
 				</label>
@@ -393,7 +394,7 @@
 					disabled={donationStore.shelterLocked}
 					class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-4 font-bold text-slate-800 shadow-2xs outline-hidden focus:border-[#ff9f0a] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
 				>
-					<option value="" disabled selected>-- เลือกศูนย์พักพิงปลายทาง --</option>
+					<option value="" disabled selected>{t.selectShelterPlaceholder}</option>
 					{#each shelters as shelter (shelter.code)}
 						<option value={shelter.code}>{shelter.name}</option>
 					{/each}
@@ -404,10 +405,11 @@
 			{#if donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup'}
 				<div class="animate-in space-y-4 duration-200 fade-in">
 					<span class="block flex items-center gap-2 text-sm font-bold text-slate-800">
-						<CalendarIcon class="h-4 w-4 text-slate-500" /> เลือกวันที่และช่วงเวลา {donationStore.deliveryMethod ===
-						'shelter_pickup'
-							? 'ที่ต้องการให้ไปรับ'
-							: 'ที่จะนำของมาส่ง'} <span class="text-red-500">*</span>
+						<CalendarIcon class="h-4 w-4 text-slate-500" />
+						{t.selectDateTimeLabel}
+						{donationStore.deliveryMethod === 'shelter_pickup'
+							? t.pickupTimeSuffix
+							: t.dropoffTimeSuffix} <span class="text-red-500">*</span>
 					</span>
 
 					<div class="w-full">
@@ -421,7 +423,7 @@
 									{#if selectedDate}
 										{selectedDate.toString()}
 									{:else}
-										<span>เลือกวันที่</span>
+										<span>{t.selectDatePlaceholder}</span>
 									{/if}
 								</Button>
 							</PopoverTrigger>
@@ -452,7 +454,7 @@
 								<span
 									class="text-[10px] font-bold {isSelected ? 'text-white/80' : 'text-slate-400'}"
 								>
-									{isFull ? 'คิวเต็ม (งด)' : 'ว่าง'}
+									{isFull ? t.slotFull : t.slotAvailable}
 								</span>
 							</button>
 						{/each}
@@ -476,7 +478,7 @@
 			onclick={() => (donationStore.activeTab = 'form')}
 			class="cursor-pointer rounded-xl bg-slate-100 px-6 py-4 text-lg font-bold text-slate-600 transition-colors hover:bg-slate-200"
 		>
-			กลับ
+			{t.backBtn}
 		</button>
 		<button
 			type="button"
@@ -490,9 +492,9 @@
 			class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013481] py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-[#002244] active:scale-95 disabled:opacity-50"
 		>
 			{#if donationStore.isSubmitting}
-				กำลังดำเนินการ...
+				{t.processingBtn}
 			{:else}
-				ยืนยันการจองคิวบริจาค <CircleCheckBig class="h-5 w-5" />
+				{t.confirmBookingBtn} <CircleCheckBig class="h-5 w-5" />
 			{/if}
 		</button>
 	</div>
@@ -511,13 +513,13 @@
 			<div class="flex shrink-0 items-center justify-between bg-slate-900 p-5 text-white">
 				<div class="flex items-center gap-2">
 					<Package class="h-5 w-5 text-white" />
-					<h4 class="text-lg font-black tracking-tight">รายการสิ่งของบริจาคทั้งหมด</h4>
+					<h4 class="text-lg font-black tracking-tight">{t.allItemsModalTitle}</h4>
 				</div>
 				<button
 					type="button"
 					onclick={() => (isItemsModalOpen = false)}
 					class="cursor-pointer rounded-lg p-1 text-white/80 transition hover:bg-white/10 hover:text-white"
-					aria-label="ปิด"
+					aria-label={t.closeModalAria}
 				>
 					<X class="h-6 w-6" />
 				</button>
@@ -528,7 +530,7 @@
 				<div
 					class="border-b border-slate-100 pb-1 text-xs font-bold tracking-wider text-slate-400 uppercase"
 				>
-					รายการที่คุณเลือก ({donationStore.items.length} รายการ)
+					{t.selectedItemsSummary.replace('{count}', String(donationStore.items.length))}
 				</div>
 				<div class="divide-y divide-slate-100">
 					{#each donationStore.items as item, index (item.id)}
@@ -539,7 +541,7 @@
 							<div class="flex-1 space-y-0.5">
 								<div class="flex items-baseline justify-between gap-2">
 									<span class="text-sm font-black text-slate-800">
-										{item.name || 'ไม่ได้ระบุ'}
+										{item.name || t.unspecified}
 									</span>
 									<span
 										class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-800"
@@ -552,11 +554,11 @@
 									class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold text-slate-500"
 								>
 									<span
-										>สภาพ: {item.condition === 'new'
-											? 'ของใหม่ 100%'
+										>{t.conditionPrefix}: {item.condition === 'new'
+											? t.conditionNew
 											: item.condition === 'used'
-												? 'ของมือสอง สภาพดี'
-												: 'ไม่ได้ระบุ'}</span
+												? t.conditionUsed
+												: t.unspecified}</span
 									>
 									{#if item.remark}
 										<span class="text-slate-300">|</span>
@@ -576,7 +578,7 @@
 					onclick={() => (isItemsModalOpen = false)}
 					class="cursor-pointer rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
 				>
-					ปิดหน้าต่าง
+					{t.closeModalBtn}
 				</button>
 			</div>
 		</div>

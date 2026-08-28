@@ -30,9 +30,13 @@
 		EditDonationItemsDialog
 	} from '$lib/features/donations';
 	import { PublicPageShell } from '$lib/features/public-portal';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 
 	let { data }: { data: { token: string } } = $props();
 	const token = $derived(data.token);
+	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	const trackingQuery = useDonationTracking(() => token);
 	const courierMutation = useUpdateCourierTracking();
@@ -45,9 +49,7 @@
 	const isLoading = $derived(trackingQuery.isPending);
 	const isError = $derived(trackingQuery.isError);
 	const errorMessage = $derived(
-		trackingQuery.error instanceof Error
-			? trackingQuery.error.message
-			: 'ไม่สามารถโหลดสถานะบริจาคได้'
+		trackingQuery.error instanceof Error ? trackingQuery.error.message : t.loadingStatus
 	);
 
 	const status = $derived(donation?.status ?? '');
@@ -80,7 +82,7 @@
 		link.href = qrCodeUrl;
 		link.download = `QR-${donation?.booking_ref ?? token}.png`;
 		link.click();
-		toast.success('บันทึกรูป QR แล้ว');
+		toast.success(t.savedQrToast);
 	}
 	const showCourierEdit = $derived(
 		donation ? canEditCourierTracking(donation.status, donation.logistics) : false
@@ -93,15 +95,17 @@
 	async function saveCourier() {
 		const value = courierInput.trim();
 		if (!value) {
-			toast.error('กรุณากรอกเลขพัสดุ');
+			toast.error(
+				langState.current === 'en' ? 'Please enter tracking number' : 'กรุณากรอกเลขพัสดุ'
+			);
 			return;
 		}
 		try {
 			await courierMutation.mutateAsync({ token, courierTrackingNo: value });
-			toast.success('บันทึกเลขพัสดุแล้ว');
+			toast.success(t.savedCourierToast);
 			await trackingQuery.refetch();
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'บันทึกเลขพัสดุไม่สำเร็จ');
+			toast.error(err instanceof Error ? err.message : t.errorSavedCourier);
 		}
 	}
 
@@ -116,7 +120,7 @@
 </script>
 
 <svelte:head>
-	<title>รายละเอียดสถานะของบริจาค — Smart Shelter</title>
+	<title>{t.trackDetailTitle}</title>
 </svelte:head>
 
 <PublicPageShell maxWidth="max-w-5xl">
@@ -125,7 +129,7 @@
 		class="mb-6 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
 	>
 		<ArrowLeft class="h-3.5 w-3.5" />
-		กลับหน้ารายการค้นหา
+		{t.backToSearch}
 	</a>
 
 	{#if isLoading}
@@ -133,7 +137,7 @@
 			class="flex items-center justify-center gap-3 rounded-3xl border border-border bg-card p-12 text-sm text-muted-foreground"
 		>
 			<LoaderCircle class="h-5 w-5 animate-spin" />
-			กำลังโหลดสถานะบริจาค…
+			{t.loadingStatus}
 		</div>
 	{:else if isError}
 		<div class="rounded-3xl border border-danger-border bg-card p-8 text-center shadow-sm">
@@ -142,14 +146,14 @@
 			>
 				<AlertCircle class="h-6 w-6" />
 			</div>
-			<h2 class="text-base font-bold text-foreground">ไม่พบรายการบริจาค</h2>
+			<h2 class="text-base font-bold text-foreground">{t.notFoundTitle}</h2>
 			<p class="mt-2 text-xs text-muted-foreground">{errorMessage}</p>
 			<p class="mt-1 font-mono text-[11px] break-all text-muted-foreground">{token}</p>
 			<a
 				href={resolve('/donations/track')}
 				class="mt-6 inline-flex rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground"
 			>
-				ค้นหาใหม่
+				{t.searchAgain}
 			</a>
 		</div>
 	{:else if donation}
@@ -160,7 +164,7 @@
 				<div>
 					<div class="flex items-center gap-2">
 						<QrCode class="h-4.5 w-4.5 text-primary" />
-						<span class="text-xs font-medium text-zinc-400">รหัสอ้างอิง (Booking Ref)</span>
+						<span class="text-xs font-medium text-zinc-400">{t.bookingRefFieldLabel}</span>
 					</div>
 					<h2 class="mt-1 text-xl font-extrabold text-white">
 						{donation.booking_ref ?? '—'}
@@ -173,7 +177,7 @@
 					)}"
 				>
 					<span class="h-1.5 w-1.5 rounded-full bg-current"></span>
-					{donationStatusLabel(status)}
+					{donationStatusLabel(status, langState.current)}
 				</span>
 			</div>
 
@@ -183,26 +187,26 @@
 						class="flex flex-col items-center gap-3 rounded-2xl border border-border bg-muted/30 p-6 text-center"
 					>
 						<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
-							รหัสตอบรับ (QR Code)
+							{t.qrTitle}
 						</h4>
 						<img
 							src={qrCodeUrl}
-							alt="QR Code สำหรับรายการบริจาค {donation.booking_ref ?? token}"
+							alt="QR Code for {donation.booking_ref ?? token}"
 							class="h-44 w-44 rounded-xl bg-white p-2 shadow-sm"
 						/>
 						<Button type="button" variant="outline" size="sm" onclick={downloadQr}>
 							<Download class="h-3.5 w-3.5" />
-							บันทึกรูป QR
+							{t.saveQrBtn}
 						</Button>
 						<p class="max-w-xs text-[11px] text-muted-foreground">
-							แสดง QR Code นี้แก่เจ้าหน้าที่เมื่อนำของมาส่ง เพื่อความรวดเร็วในการตรวจรับ
+							{t.qrHint}
 						</p>
 					</div>
 				{/if}
 
 				<div class="space-y-4">
 					<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
-						ไทม์ไลน์สถานะ
+						{t.timelineTitle}
 					</h4>
 					<div
 						class="relative space-y-5 pl-6 before:absolute before:top-2 before:bottom-2 before:left-[11px] before:w-0.5 before:bg-border/60"
@@ -212,9 +216,10 @@
 								class="absolute -left-[20px] z-10 h-3 w-3 rounded-full border-2 border-primary bg-primary"
 							></div>
 							<div class="text-xs">
-								<span class="font-bold text-foreground">ส่งข้อมูลบริจาคเข้าสู่ระบบ</span>
+								<span class="font-bold text-foreground">{t.stepSubmitted}</span>
 								<p class="mt-0.5 text-[10px] text-muted-foreground">
-									อัปเดตล่าสุด {formatTrackTimestamp(donation.updated_at)}
+									{t.lastUpdated}
+									{formatTrackTimestamp(donation.updated_at, langState.current)}
 								</p>
 							</div>
 						</div>
@@ -224,9 +229,11 @@
 									class="absolute -left-[20px] z-10 h-3 w-3 animate-pulse rounded-full border-2 border-warning bg-warning"
 								></div>
 								<div class="text-xs">
-									<span class="font-bold text-warning">{donationStatusLabel(status)}</span>
+									<span class="font-bold text-warning"
+										>{donationStatusLabel(status, langState.current)}</span
+									>
 									<p class="mt-0.5 text-[10px] text-muted-foreground">
-										เจ้าหน้าที่กำลังดำเนินการกับรายการนี้
+										{t.staffProcessing}
 									</p>
 								</div>
 							</div>
@@ -237,7 +244,9 @@
 									class="absolute -left-[20px] z-10 h-3 w-3 rounded-full border-2 border-danger bg-danger"
 								></div>
 								<div class="text-xs">
-									<span class="font-bold text-danger">{donationStatusLabel(status)}</span>
+									<span class="font-bold text-danger"
+										>{donationStatusLabel(status, langState.current)}</span
+									>
 								</div>
 							</div>
 						{:else}
@@ -249,10 +258,13 @@
 										: 'border-border bg-card'}"
 								></div>
 								<div class="text-xs {status !== 'received' ? 'opacity-50' : ''}">
-									<span class="font-bold text-foreground">ตรวจรับของเข้าคลังเรียบร้อย</span>
+									<span class="font-bold text-foreground">{t.stepReceived}</span>
 									{#if donation.received_summary?.received_at}
 										<p class="mt-0.5 text-[10px] text-muted-foreground">
-											{formatTrackTimestamp(donation.received_summary.received_at)}
+											{formatTrackTimestamp(
+												donation.received_summary.received_at,
+												langState.current
+											)}
 										</p>
 									{/if}
 								</div>
@@ -264,21 +276,22 @@
 				<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
 					<div class="space-y-4">
 						<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
-							ข้อมูลผู้บริจาคและการนัดหมาย
+							{t.donorAndScheduleTitle}
 						</h4>
 						<div class="space-y-3.5 rounded-2xl border border-border bg-card p-4 text-xs">
 							<div class="flex gap-2.5">
 								<User class="h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 								<div>
 									<span class="text-[10px] font-bold text-muted-foreground uppercase"
-										>ผู้ประสงค์บริจาค</span
+										>{t.donorLabel}</span
 									>
 									<p class="mt-0.5 font-bold text-foreground">
-										{donation.donor.name ?? '—'}
+										{donation.donor.name ?? t.noData}
 									</p>
 									{#if donation.donor.phone_masked}
 										<p class="text-[10px] text-muted-foreground">
-											โทร. {donation.donor.phone_masked}
+											{t.phonePrefix}
+											{donation.donor.phone_masked}
 										</p>
 									{/if}
 								</div>
@@ -287,14 +300,15 @@
 								<Calendar class="h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 								<div>
 									<span class="text-[10px] font-bold text-muted-foreground uppercase"
-										>เวลานัดหมายจัดส่ง</span
+										>{t.deliveryScheduleLabel}</span
 									>
 									<p class="mt-0.5 font-semibold text-foreground">
-										{formatTrackSchedule(donation.logistics)}
+										{formatTrackSchedule(donation.logistics, langState.current)}
 									</p>
 									{#if donation.expires_at}
 										<p class="mt-0.5 text-[10px] text-muted-foreground">
-											หมดอายุการจอง {formatTrackTimestamp(donation.expires_at)}
+											{t.expiresAt}
+											{formatTrackTimestamp(donation.expires_at, langState.current)}
 										</p>
 									{/if}
 								</div>
@@ -303,18 +317,19 @@
 								<MapPin class="h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 								<div>
 									<span class="text-[10px] font-bold text-muted-foreground uppercase"
-										>ศูนย์ปลายทาง</span
+										>{t.destinationShelterLabel}</span
 									>
 									<p class="mt-0.5 font-semibold text-foreground">{donation.shelter_code}</p>
 									<p class="mt-0.5 text-[10px] text-muted-foreground">
-										{deliveryMethodLabel(donation.logistics?.delivery_method)}
+										{deliveryMethodLabel(donation.logistics?.delivery_method, langState.current)}
 										{#if donation.logistics?.vehicle}
-											· {vehicleLabel(donation.logistics.vehicle)}
+											· {vehicleLabel(donation.logistics.vehicle, langState.current)}
 										{/if}
 									</p>
 									{#if donation.logistics?.pickup_address}
 										<p class="mt-1 text-[10px] text-muted-foreground">
-											จุดรับ: {donation.logistics.pickup_address}
+											{langState.current === 'en' ? 'Pickup Address:' : 'จุดรับ:'}
+											{donation.logistics.pickup_address}
 										</p>
 									{/if}
 								</div>
@@ -324,13 +339,14 @@
 									<Truck class="h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 									<div class="min-w-0 flex-1">
 										<span class="text-[10px] font-bold text-muted-foreground uppercase"
-											>เลขพัสดุขนส่ง</span
+											>{t.courierTrackingLabel}</span
 										>
 										{#if showCourierEdit}
 											<div class="mt-1.5 flex flex-col gap-2 sm:flex-row">
 												<Input
 													bind:value={courierInput}
-													placeholder={donation.logistics?.courier_tracking_no || 'กรอกเลขพัสดุ'}
+													placeholder={donation.logistics?.courier_tracking_no ||
+														(langState.current === 'en' ? 'Enter tracking no.' : 'กรอกเลขพัสดุ')}
 													class="h-9 rounded-xl text-xs"
 												/>
 												<Button
@@ -338,12 +354,12 @@
 													disabled={courierMutation.isPending}
 													class="h-9 shrink-0 rounded-xl px-3 text-xs font-bold"
 												>
-													{courierMutation.isPending ? 'กำลังบันทึก…' : 'บันทึก'}
+													{courierMutation.isPending ? t.saving : t.saveBtn}
 												</Button>
 											</div>
 										{:else}
 											<p class="mt-0.5 font-semibold text-foreground">
-												{donation.logistics.courier_tracking_no || '—'}
+												{donation.logistics.courier_tracking_no || t.noData}
 											</p>
 										{/if}
 									</div>
@@ -354,13 +370,13 @@
 
 					<div class="space-y-4">
 						<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
-							รายการสิ่งของที่บริจาค
+							{t.itemsListTitle}
 						</h4>
 						<div class="overflow-hidden rounded-2xl border border-border bg-card text-xs">
 							{#if donation.items.length === 0}
 								<div class="flex items-center gap-2 p-4 text-muted-foreground">
 									<Package class="h-4 w-4" />
-									ไม่มีรายการสิ่งของ
+									{langState.current === 'en' ? 'No donation items' : 'ไม่มีรายการสิ่งของ'}
 								</div>
 							{:else}
 								<table class="w-full border-collapse text-left">
@@ -368,9 +384,9 @@
 										<tr
 											class="border-b border-border bg-muted/30 text-[10px] font-bold text-muted-foreground uppercase"
 										>
-											<th class="px-4 py-2.5">รายการ</th>
-											<th class="px-4 py-2.5 text-right">จำนวน</th>
-											<th class="px-4 py-2.5">หน่วย</th>
+											<th class="px-4 py-2.5">{t.editItemLabel}</th>
+											<th class="px-4 py-2.5 text-right">{t.amountLabel}</th>
+											<th class="px-4 py-2.5">{t.unitLabel}</th>
 										</tr>
 									</thead>
 									<tbody class="divide-y divide-border/60 font-semibold text-foreground">
@@ -378,9 +394,13 @@
 											<tr>
 												<td class="px-4 py-3">{item.item_name}</td>
 												<td class="px-4 py-3 text-right">
-													{item.qty != null ? Number(item.qty).toLocaleString('th-TH') : '—'}
+													{item.qty != null
+														? Number(item.qty).toLocaleString(
+																langState.current === 'en' ? 'en-US' : 'th-TH'
+															)
+														: t.noData}
 												</td>
-												<td class="px-4 py-3 text-muted-foreground">{item.unit ?? '—'}</td>
+												<td class="px-4 py-3 text-muted-foreground">{item.unit ?? t.noData}</td>
 											</tr>
 										{/each}
 									</tbody>
@@ -397,12 +417,16 @@
 								class="h-10 rounded-xl text-xs font-bold"
 							>
 								<Pencil class="h-4 w-4" />
-								แก้ไขรายการที่จะบริจาค
+								{t.editItemsBtn}
 							</Button>
 							<p class="text-[11px] leading-relaxed text-muted-foreground">
-								ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าเจ้าหน้าที่จะเริ่มตรวจรับ
+								{langState.current === 'en'
+									? 'Adjust quantity or add/remove items until staff begins check-in'
+									: 'ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าเจ้าหน้าที่จะเริ่มตรวจรับ'}
 								{#if donation.revisions.length}
-									· แก้ไขแล้ว {donation.revisions.length} ครั้ง
+									· {langState.current === 'en'
+										? `Edited ${donation.revisions.length} times`
+										: `แก้ไขแล้ว ${donation.revisions.length} ครั้ง`}
 								{/if}
 							</p>
 						</div>
@@ -416,10 +440,12 @@
 								class="h-10 rounded-xl border-destructive/40 text-xs font-bold text-destructive hover:bg-destructive/10 hover:text-destructive"
 							>
 								<Ban class="h-4 w-4" />
-								ยกเลิกการจองนี้
+								{t.cancelDonationBtn}
 							</Button>
 							<p class="text-[11px] leading-relaxed text-muted-foreground">
-								ยกเลิกแล้วจำนวนที่จองไว้จะถูกคืนให้ผู้บริจาคท่านอื่นทันที และย้อนกลับไม่ได้
+								{langState.current === 'en'
+									? 'Once cancelled, the reserved quota will be immediately released to other donors and cannot be undone'
+									: 'ยกเลิกแล้วจำนวนที่จองไว้จะถูกคืนให้ผู้บริจาคท่านอื่นทันที และย้อนกลับไม่ได้'}
 							</p>
 						</div>
 					{/if}

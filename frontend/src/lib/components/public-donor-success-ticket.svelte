@@ -14,8 +14,12 @@
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import QRCode from 'qrcode';
 	import { toast } from 'svelte-sonner';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 
 	const donationStore = getDonationStore();
+	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	let courierTracking = $state('');
 	let savingCourier = $state(false);
@@ -47,7 +51,7 @@
 		if (!token) return;
 		QRCode.toDataURL(token, { margin: 1, width: 256 })
 			.then((url) => (qrCodeUrl = url))
-			.catch(() => toast.error('ไม่สามารถสร้าง QR Code ได้ กรุณาใช้รหัส Tracking Token แทน'));
+			.catch(() => toast.error(t.qrError));
 	});
 
 	async function saveCourier() {
@@ -64,12 +68,12 @@
 			const data = await res.json();
 			if (data.success) {
 				courierSaved = true;
-				toast.success('บันทึกเลขพัสดุเรียบร้อยแล้ว');
+				toast.success(t.courierSavedMsg);
 			} else {
-				courierError = data.error || 'บันทึกเลขพัสดุไม่สำเร็จ';
+				courierError = data.error || t.courierErrorMsg;
 			}
 		} catch {
-			courierError = 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์';
+			courierError = t.errorConnect;
 		} finally {
 			savingCourier = false;
 		}
@@ -80,7 +84,7 @@
 		if (code) {
 			navigator.clipboard.writeText(code);
 			isCopied = true;
-			toast.success('คัดลอกรหัสอ้างอิงแล้ว!');
+			toast.success(t.copiedRef);
 			setTimeout(() => (isCopied = false), 2000);
 		}
 	}
@@ -114,12 +118,10 @@
 			{/if}
 		</div>
 		<h3 class="relative z-10 text-2xl font-bold">
-			{isPendingReview ? 'ส่งรายการรอเจ้าหน้าที่ตรวจสอบ' : 'สำเร็จ! ตั๋วบริจาคของคุณ'}
+			{isPendingReview ? t.pendingReviewTitle : t.successTitle}
 		</h3>
 		<p class="relative z-10 text-xs leading-relaxed font-medium text-white/80">
-			{isPendingReview
-				? 'ระบบได้รับข้อมูลการบริจาคของคุณแล้ว และได้ส่งรายการนี้ให้แอดมินประเมินความสามารถในการจัดเก็บของคลัง แอดมินจะติดต่อกลับให้เร็วที่สุดครับ'
-				: 'แสดง QR Code นี้ให้ รปภ. หรือเจ้าหน้าที่ศูนย์'}
+			{isPendingReview ? t.pendingReviewDesc : t.successDesc}
 		</p>
 
 		<!-- Decorative background circles -->
@@ -149,23 +151,23 @@
 					>
 						<div class="flex flex-col items-center gap-2 text-center text-amber-600">
 							<Clock class="h-10 w-10 animate-pulse" />
-							<span class="text-sm font-bold">กำลังรอประเมินพื้นที่คลัง</span>
+							<span class="text-sm font-bold">{t.pendingWarehouse}</span>
 						</div>
 					</div>
 				{:else if qrCodeUrl}
 					<img src={qrCodeUrl} alt="QR Code" class="mx-auto h-[180px] w-[180px]" />
 				{:else}
 					<div class="flex h-[180px] w-[180px] items-center justify-center rounded-xl bg-slate-50">
-						<span class="text-xs text-slate-400">สร้าง QR Code ไม่สำเร็จ</span>
+						<span class="text-xs text-slate-400">{t.qrFailed}</span>
 					</div>
 				{/if}
 			</div>
 
-			<div class="mb-1 text-[10px] font-bold tracking-[0.2em] text-slate-400">REF.</div>
+			<div class="mb-1 text-[10px] font-bold tracking-[0.2em] text-slate-400">{t.refIdLabel}</div>
 			<div class="font-mono text-xl font-bold text-slate-800">
 				{donationStore.bookingRef || 'DN-XXXXXX'}
 			</div>
-			<div class="mt-2 text-[10px] font-semibold text-slate-400">TRACKING TOKEN</div>
+			<div class="mt-2 text-[10px] font-semibold text-slate-400">{t.trackingTokenLabel}</div>
 			<div class="font-mono text-xs font-bold text-[#013365] select-all">
 				{donationStore.trackingToken || '-'}
 			</div>
@@ -174,46 +176,52 @@
 		<div class="space-y-4 text-left">
 			<div>
 				<div class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-500">
-					<MapPin class="h-3.5 w-3.5" /> ศูนย์พักพิงปลายทาง
+					<MapPin class="h-3.5 w-3.5" />
+					{t.destShelter}
 				</div>
 				<div class="text-base font-bold text-slate-800">
-					{donationStore.selectedShelterName || donationStore.shelterCode || 'ศูนย์ส่วนกลาง'}
+					{donationStore.selectedShelterName || donationStore.shelterCode || t.centralShelter}
 				</div>
 			</div>
 
 			<div class="grid grid-cols-2 gap-4">
 				<div>
 					<div class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-500">
-						<Clock class="h-3.5 w-3.5" /> เวลานัดหมาย
+						<Clock class="h-3.5 w-3.5" />
+						{t.appointmentTime}
 					</div>
 					<div class="text-sm font-bold text-slate-800">
 						{#if donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup'}
 							{donationStore.slotDate} {donationStore.slotTime}
 						{:else}
-							{donationStore.eta || 'ตามเงื่อนไขส่งของ'}
+							{donationStore.eta || t.accordingToDelivery}
 						{/if}
 					</div>
 				</div>
 				<div>
 					<div class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-500">
-						<ShieldCheck class="h-3.5 w-3.5" /> สถานะคิว
+						<ShieldCheck class="h-3.5 w-3.5" />
+						{t.queueStatus}
 					</div>
 					<div class="text-sm font-bold {isPendingReview ? 'text-amber-600' : 'text-[#137333]'}">
-						{isPendingReview ? 'รอการประเมิน' : 'ยืนยันคิวแล้ว'}
+						{isPendingReview ? t.statusPendingReview : t.statusQueueConfirmed}
 					</div>
 				</div>
 
 				<div class="col-span-2 mt-1 border-t border-slate-100 pt-3">
 					<div class="mb-2.5 flex items-center justify-between text-xs font-bold text-slate-500">
 						<span class="flex items-center gap-1"
-							>📦 รายการสิ่งของที่เลือกไว้ ({donationStore.items.length} รายการ)</span
+							>📦 {t.selectedItemsSummary.replace(
+								'{count}',
+								String(donationStore.items.length)
+							)}</span
 						>
 						<button
 							type="button"
 							onclick={() => (isItemsModalOpen = true)}
 							class="flex cursor-pointer items-center gap-0.5 text-xs font-black text-[#013481] hover:underline"
 						>
-							ดูทั้งหมด
+							{t.viewAll}
 						</button>
 					</div>
 					<button
@@ -226,7 +234,7 @@
 							<span class="flex items-center gap-2 text-xs font-bold">
 								<span class="h-2 w-2 shrink-0 rounded-full {dotClass.split(' ')[0]}"></span>
 								<span class="{dotClass.split(' ')[1]} truncate">
-									{item.name || 'ไม่ได้ระบุ'} — {item.amount}
+									{item.name || t.unspecified} — {item.amount}
 									{item.unit}
 								</span>
 							</span>
@@ -235,7 +243,7 @@
 							<span
 								class="block pl-4 text-left text-[11px] font-black text-primary hover:underline"
 							>
-								+ ดูทั้งหมดอีก {donationStore.items.length - 5} รายการ
+								{t.viewAllRemaining.replace('{count}', String(donationStore.items.length - 5))}
 							</span>
 						{/if}
 					</button>
@@ -247,10 +255,10 @@
 		<div class="mt-8 rounded-2xl border border-slate-200/80 bg-slate-50 p-5 text-left">
 			<div class="mb-3 flex items-center gap-1.5 text-sm font-extrabold text-slate-800">
 				<ShieldCheck class="h-4 w-4 text-[#013365]" />
-				<span>วิธีติดตามสถานะการบริจาค</span>
+				<span>{t.trackingGuideTitle}</span>
 			</div>
 			<p class="mb-4 text-xs leading-relaxed font-bold text-slate-500">
-				บันทึกข้อมูลเหล่านี้ไว้เพื่อใช้ตรวจสอบสถานะการรับของภายหลัง
+				{t.trackingGuideDesc}
 			</p>
 
 			<div class="mb-4 grid grid-cols-2 gap-3">
@@ -259,7 +267,7 @@
 				>
 					<div>
 						<span class="mb-0.5 block text-[10px] font-bold tracking-wider text-slate-400 uppercase"
-							>รหัสอ้างอิง (Ref ID)</span
+							>{t.refIdLabel}</span
 						>
 						<span class="block truncate font-mono text-sm font-black text-slate-800 select-all">
 							{donationStore.bookingRef || 'DN-XXXXXX'}
@@ -274,7 +282,7 @@
 								: 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-[#013365]'}"
 						>
 							<Copy class="h-3 w-3" />
-							{isCopied ? 'คัดลอกแล้ว!' : 'คัดลอกรหัส'}
+							{isCopied ? t.copiedBtn : t.copyCodeBtn}
 						</button>
 					</div>
 				</div>
@@ -284,13 +292,13 @@
 				>
 					<div>
 						<span class="mb-0.5 block text-[10px] font-bold tracking-wider text-slate-400 uppercase"
-							>เบอร์โทรศัพท์</span
+							>{t.phoneLabel}</span
 						>
 						<span class="block truncate text-sm font-black text-slate-800 select-all">
-							{donationStore.donorPhone || 'ไม่ระบุ'}
+							{donationStore.donorPhone || t.unspecified}
 						</span>
 					</div>
-					<span class="mt-2 block text-[10px] font-medium text-slate-400">ใช้ตรวจสอบสถานะ</span>
+					<span class="mt-2 block text-[10px] font-medium text-slate-400">{t.usedForTracking}</span>
 				</div>
 			</div>
 
@@ -299,7 +307,7 @@
 				class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#013365] py-3 text-xs font-bold text-white shadow-xs transition-all duration-200 hover:bg-[#013365]/90"
 			>
 				<Search class="h-3.5 w-3.5" />
-				ตรวจสอบสถานะการบริจาคของฉัน
+				{t.checkMyDonationStatus}
 			</a>
 		</div>
 
@@ -308,12 +316,12 @@
 			<div class="mt-6 mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left">
 				<div class="mb-2 flex items-center gap-2 text-xs font-bold text-slate-700">
 					<Truck class="h-4 w-4 text-slate-500" />
-					ส่งทางขนส่งพัสดุ? เพิ่ม/แก้ไขเลขติดตาม (Tracking No.)
+					{t.parcelCourierGuide}
 				</div>
 				<div class="flex items-center gap-2">
 					<Input
 						type="text"
-						placeholder="เลขพัสดุ เช่น TH12345678"
+						placeholder={t.parcelCourierPlaceholder}
 						bind:value={courierTracking}
 						class="flex-1 rounded-xl border-2 border-slate-200"
 					/>
@@ -322,11 +330,11 @@
 						disabled={savingCourier || !courierTracking.trim()}
 						class="shrink-0 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
 					>
-						{savingCourier ? 'กำลังบันทึก...' : 'บันทึก'}
+						{savingCourier ? t.savingCourierBtn : t.saveCourierBtn}
 					</Button>
 				</div>
 				{#if courierSaved}
-					<p class="mt-2 text-[11px] font-bold text-emerald-600">บันทึกเลขพัสดุเรียบร้อยแล้ว</p>
+					<p class="mt-2 text-[11px] font-bold text-emerald-600">{t.courierSavedMsg}</p>
 				{/if}
 				{#if courierError}
 					<p class="mt-2 text-[11px] font-bold text-red-500">{courierError}</p>
@@ -336,10 +344,11 @@
 
 		<button
 			type="button"
-			onclick={() => toast.success('กำลังเปิดแผนที่เพื่อนำทางไปยังศูนย์พักพิง')}
+			onclick={() => toast.success(t.openingMapsToast)}
 			class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 py-4 text-[15px] font-bold text-white shadow-md transition-colors hover:bg-slate-800"
 		>
-			<Navigation class="h-4.5 w-4.5" /> นำทางด้วย Google Maps
+			<Navigation class="h-4.5 w-4.5" />
+			{t.navigateGoogleMaps}
 		</button>
 
 		<button
@@ -347,7 +356,7 @@
 			onclick={() => donationStore.reset()}
 			class="mt-3 w-full cursor-pointer rounded-xl py-3 text-sm font-bold text-slate-500 transition-colors hover:bg-slate-100"
 		>
-			กลับสู่หน้าหลัก
+			{t.backToHome}
 		</button>
 	</div>
 </div>
@@ -364,12 +373,13 @@
 			<div class="flex shrink-0 items-center justify-between bg-slate-900 p-5 text-white">
 				<div class="flex items-center gap-2">
 					<Package class="h-5 w-5 text-white" />
-					<h4 class="text-lg font-black tracking-tight">รายการสิ่งของบริจาคทั้งหมด</h4>
+					<h4 class="text-lg font-black tracking-tight">{t.allItemsModalTitle}</h4>
 				</div>
 				<button
 					type="button"
 					onclick={() => (isItemsModalOpen = false)}
-					class="rounded-lg p-1 text-white/80 transition hover:bg-white/10 hover:text-white"
+					class="cursor-pointer rounded-lg p-1 text-white/80 transition hover:bg-white/10 hover:text-white"
+					aria-label={t.closeModalAria}
 				>
 					<X class="h-6 w-6" />
 				</button>
@@ -380,7 +390,7 @@
 				<div
 					class="border-b border-slate-100 pb-1 text-xs font-bold tracking-wider text-slate-400 uppercase"
 				>
-					รายการที่คุณเลือก ({donationStore.items.length} รายการ)
+					{t.selectedItemsSummary.replace('{count}', String(donationStore.items.length))}
 				</div>
 				<div class="divide-y divide-slate-100">
 					{#each donationStore.items as item, index (item.id)}
@@ -391,7 +401,7 @@
 							<div class="flex-1 space-y-0.5">
 								<div class="flex items-baseline justify-between gap-2">
 									<span class="text-sm font-black text-slate-800">
-										{item.name || 'ไม่ได้ระบุ'}
+										{item.name || t.unspecified}
 									</span>
 									<span
 										class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-800"
@@ -404,11 +414,11 @@
 									class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold text-slate-500"
 								>
 									<span
-										>สภาพ: {item.condition === 'new'
-											? 'ของใหม่ 100%'
+										>{t.conditionPrefix}: {item.condition === 'new'
+											? t.conditionNew
 											: item.condition === 'used'
-												? 'ของมือสอง สภาพดี'
-												: 'ไม่ได้ระบุ'}</span
+												? t.conditionUsed
+												: t.unspecified}</span
 									>
 									{#if item.remark}
 										<span class="text-slate-300">|</span>
@@ -428,7 +438,7 @@
 					onclick={() => (isItemsModalOpen = false)}
 					class="cursor-pointer rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
 				>
-					ปิดหน้าต่าง
+					{t.closeModalBtn}
 				</button>
 			</div>
 		</div>
