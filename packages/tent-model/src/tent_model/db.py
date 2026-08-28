@@ -11,12 +11,18 @@ from tent_model.donation_buffer import DonationBuffer
 from tent_model.donation_need_counter import DonationNeedCounter
 from tent_model.public_announcement import PublicAnnouncement
 from tent_model.public_donation import PublicDonation
+from tent_model.public_job import PublicJob
+from tent_model.public_job_application import PublicJobApplication
 from tent_model.public_need import PublicNeed
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
+from tent_model.public_shift_assignment import PublicShiftAssignment
 from tent_model.retention_audit import RetentionAudit
 from tent_model.search_audit import SearchAudit
+from tent_model.shift_response_buffer import ShiftResponseBuffer
 from tent_model.sync_checkpoint import SyncCheckpoint
+from tent_model.volunteer_application_buffer import VolunteerApplicationBuffer
+from tent_model.volunteer_job_slot import VolunteerJobSlot
 
 ALL_DOCUMENTS = [
 	SyncCheckpoint,
@@ -30,6 +36,12 @@ ALL_DOCUMENTS = [
 	SearchAudit,
 	PublicAnnouncement,
 	ApiKey,
+	PublicJob,
+	PublicJobApplication,
+	VolunteerApplicationBuffer,
+	VolunteerJobSlot,
+	PublicShiftAssignment,
+	ShiftResponseBuffer,
 ]
 
 _client: AsyncIOMotorClient | None = None
