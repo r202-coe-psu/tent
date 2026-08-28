@@ -24,16 +24,22 @@
 	let {
 		id = '',
 		isEdit = false,
+		basePath = '/back-office/catalog',
 		onsuccess
 	}: {
 		id?: string;
 		isEdit?: boolean;
+		basePath?: string;
 		onsuccess?: () => void;
 	} = $props();
 
+	const shelterCode = $derived(
+		basePath.includes('system-management') ? undefined : getShelterCode()
+	);
+
 	// Data queries & mutations
 	const itemMasterQuery = useItemMaster(() => id);
-	const itemCategoriesQuery = useItemCategories();
+	const itemCategoriesQuery = useItemCategories(() => shelterCode ?? null);
 	const createMutation = useCreateItemMaster();
 	const updateMutation = useUpdateItemMaster();
 
@@ -143,20 +149,38 @@
 						toast.error('ไม่พบข้อมูลมาสเตอร์ต้นทาง');
 						return;
 					}
-					const updatedDoc: ItemMaster = {
-						...itemMasterQuery.data,
-						...submitData
-					};
-					updateMutation.mutate(updatedDoc, {
-						onSuccess: () => {
-							toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
-							onsuccess?.();
-						},
-						onError: (err: Error) => toast.error(err.message)
-					});
+					if (basePath.includes('back-office') && !itemMasterQuery.data.shelter_code) {
+						// eslint-disable-next-line @typescript-eslint/no-unused-vars
+						const { _rev, ...itemData } = itemMasterQuery.data;
+						const overrideDoc = {
+							...itemData,
+							...submitData,
+							shelter_code: shelterCode,
+							override: true
+						};
+						updateMutation.mutate(overrideDoc, {
+							onSuccess: () => {
+								toast.success(`ปรับแต่งรายการ ${validated.data.name} สำหรับศูนย์นี้สำเร็จ`);
+								onsuccess?.();
+							},
+							onError: (err: Error) => toast.error(err.message)
+						});
+					} else {
+						const updatedDoc: ItemMaster = {
+							...itemMasterQuery.data,
+							...submitData
+						};
+						updateMutation.mutate(updatedDoc, {
+							onSuccess: () => {
+								toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
+								onsuccess?.();
+							},
+							onError: (err: Error) => toast.error(err.message)
+						});
+					}
 				} else {
 					createMutation.mutate(
-						{ input: submitData as ItemMasterInput, ctx },
+						{ input: submitData as ItemMasterInput, ctx, shelterCode },
 						{
 							onSuccess: () => {
 								toast.success(`เพิ่มข้อมูล ${validated.data.name} สำเร็จ`);

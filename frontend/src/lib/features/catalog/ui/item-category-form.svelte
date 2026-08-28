@@ -17,12 +17,18 @@
 	let {
 		id = '',
 		isEdit = false,
+		basePath = '/back-office/catalog',
 		onsuccess
 	}: {
 		id?: string;
 		isEdit?: boolean;
+		basePath?: string;
 		onsuccess?: () => void;
 	} = $props();
+
+	const shelterCode = $derived(
+		basePath.includes('system-management') ? undefined : getShelterCode()
+	);
 
 	// 1. Data queries and mutations
 	const categoryQuery = useItemCategory(() => id);
@@ -46,20 +52,38 @@
 					toast.error('ไม่พบข้อมูลหมวดหมู่ต้นทาง');
 					return;
 				}
-				const updatedDoc = {
-					...categoryQuery.data,
-					name: validated.data.name
-				};
-				updateMutation.mutate(updatedDoc, {
-					onSuccess: () => {
-						toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
-						onsuccess?.();
-					},
-					onError: (err: Error) => toast.error(err.message)
-				});
+				if (basePath.includes('back-office') && !categoryQuery.data.shelter_code) {
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
+					const { _rev, ...catData } = categoryQuery.data;
+					const overrideDoc = {
+						...catData,
+						name: validated.data.name,
+						shelter_code: shelterCode,
+						override: true
+					};
+					updateMutation.mutate(overrideDoc, {
+						onSuccess: () => {
+							toast.success(`ปรับแต่งหมวดหมู่ ${validated.data.name} สำหรับศูนย์นี้สำเร็จ`);
+							onsuccess?.();
+						},
+						onError: (err: Error) => toast.error(err.message)
+					});
+				} else {
+					const updatedDoc = {
+						...categoryQuery.data,
+						name: validated.data.name
+					};
+					updateMutation.mutate(updatedDoc, {
+						onSuccess: () => {
+							toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
+							onsuccess?.();
+						},
+						onError: (err: Error) => toast.error(err.message)
+					});
+				}
 			} else {
 				createMutation.mutate(
-					{ input: validated.data, ctx },
+					{ input: validated.data, ctx, shelterCode },
 					{
 						onSuccess: () => {
 							toast.success(`เพิ่มหมวดหมู่ ${validated.data.name} สำเร็จ`);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ConsoleBanner from '$lib/components/console-banner.svelte';
 	import ItemCategoryTab from '../../../back-office/catalog/components/item-category-tab.svelte';
 	import ItemMasterTab from '../../../back-office/catalog/components/item-master-tab.svelte';
 	import RecipeTab from '../../../back-office/catalog/components/recipe-tab.svelte';
@@ -32,17 +33,11 @@
 	<title>จัดการคลังสินค้า · SmartShelter</title>
 </svelte:head>
 
-<div class="flex w-full flex-1 flex-col gap-6 p-6">
-	<div class="flex flex-wrap items-end justify-between gap-4">
-		<div>
-			<h2 class="text-2xl font-bold tracking-tight text-foreground">
-				จัดการคลังสินค้า (Central Catalog)
-			</h2>
-			<p class="mt-1 text-sm text-muted-foreground">
-				จัดการประเภทสิ่งของ รายการสินค้าหลัก และสูตรอาหารมาตรฐานในระบบส่วนกลาง
-			</p>
-		</div>
-	</div>
+<div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
+	<ConsoleBanner
+		title="4. หมวดคลังสินค้าและทรัพยากร (Inventory & Resource)"
+		description="จัดการหมวดหมู่สินค้า รายการคลังสิ่งของบรรเทาทุกข์ และสูตรอาหารมาตรฐาน"
+	/>
 
 	<div class="item-start mt-2 grid w-full grid-cols-1 gap-6 lg:grid-cols-3">
 		<div class="border-md flex h-fit flex-col rounded-xl border bg-card p-4 shadow-xs">
@@ -80,11 +75,11 @@
 		</div>
 		<div class="col-span-1 flex lg:col-span-2">
 			{#if activeTab === 'item_category'}
-				<ItemCategoryTab />
+				<ItemCategoryTab {basePath} />
 			{:else if activeTab === 'item_master'}
 				<ItemMasterTab {basePath} />
 			{:else if activeTab === 'recipe'}
-				<RecipeTab />
+				<RecipeTab {basePath} />
 			{/if}
 		</div>
 	</div>

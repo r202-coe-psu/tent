@@ -23,17 +23,23 @@
 	let {
 		id = '',
 		isEdit = false,
+		basePath = '/back-office/catalog',
 		onsuccess
 	}: {
 		id?: string;
 		isEdit?: boolean;
+		basePath?: string;
 		onsuccess?: () => void;
 	} = $props();
+
+	const shelterCode = $derived(
+		basePath.includes('system-management') ? undefined : getShelterCode()
+	);
 
 	const itemRecipeQuery = useRecipe(() => id);
 	const createMutation = useCreateRecipe();
 	const updateMutation = useUpdateRecipe();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => shelterCode ?? null);
 
 	const form = superForm(
 		defaults(zod4(recipeInputSchema), {
@@ -66,20 +72,38 @@
 						toast.error('ไม่พบข้อมูลมาสเตอร์ต้นทาง');
 						return;
 					}
-					const updatedDoc: Recipe = {
-						...itemRecipeQuery.data,
-						...submitData
-					};
-					updateMutation.mutate(updatedDoc, {
-						onSuccess: () => {
-							toast.success(`ปรับปรุงข้อมูล ${validated.data.label} สำเร็จ`);
-							onsuccess?.();
-						},
-						onError: (err: Error) => toast.error(err.message)
-					});
+					if (basePath.includes('back-office') && !itemRecipeQuery.data.shelter_code) {
+						// eslint-disable-next-line @typescript-eslint/no-unused-vars
+						const { _rev, ...recipeData } = itemRecipeQuery.data;
+						const overrideDoc = {
+							...recipeData,
+							...submitData,
+							shelter_code: shelterCode,
+							override: true
+						};
+						updateMutation.mutate(overrideDoc, {
+							onSuccess: () => {
+								toast.success(`ปรับแต่งสูตรอาหาร ${validated.data.label} สำหรับศูนย์นี้สำเร็จ`);
+								onsuccess?.();
+							},
+							onError: (err: Error) => toast.error(err.message)
+						});
+					} else {
+						const updatedDoc: Recipe = {
+							...itemRecipeQuery.data,
+							...submitData
+						};
+						updateMutation.mutate(updatedDoc, {
+							onSuccess: () => {
+								toast.success(`ปรับปรุงข้อมูล ${validated.data.label} สำเร็จ`);
+								onsuccess?.();
+							},
+							onError: (err: Error) => toast.error(err.message)
+						});
+					}
 				} else {
 					createMutation.mutate(
-						{ input: submitData, ctx },
+						{ input: submitData, ctx, shelterCode },
 						{
 							onSuccess: () => {
 								toast.success(`เพิ่มข้อมูล ${validated.data.label} สำเร็จ`);

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import BackofficeHeader from '$lib/components/backoffice-header.svelte';
+	import ConsoleBanner from '$lib/components/console-banner.svelte';
 	import ItemCategoryTab from './components/item-category-tab.svelte';
 	import ItemMasterTab from './components/item-master-tab.svelte';
 	import RecipeTab from './components/recipe-tab.svelte';
@@ -26,8 +26,11 @@
 	});
 </script>
 
-<main class="container mx-auto px-4">
-	<BackofficeHeader title="2. หมวดคลังสินค้าและทรัพยากร (Inventory & Resource)" />
+<main class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
+	<ConsoleBanner
+		title="4. หมวดคลังสินค้าและทรัพยากร (Inventory & Resource)"
+		description="จัดการหมวดหมู่สินค้า รายการคลังสิ่งของบรรเทาทุกข์ และสูตรอาหารมาตรฐาน"
+	/>
 	<div class="item-start mt-4 grid w-full grid-cols-1 gap-6 lg:grid-cols-3">
 		<div class="border-md flex h-fit flex-col rounded-xl border p-4 shadow-md">
 			<span>ประเภทพารามิเตอร์มาสเตอร์</span>

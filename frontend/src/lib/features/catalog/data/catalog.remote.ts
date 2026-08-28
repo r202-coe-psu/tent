@@ -19,6 +19,15 @@ import type { CatalogRepository } from './catalog.repository';
 
 export const CATALOG_DB = 'catalog';
 
+function paginate<T>(items: T[], page: number, pageSize: number): PaginatedResult<T> {
+	const total = items.length;
+	const totalPages = Math.max(1, Math.ceil(total / pageSize));
+	const safePage = Math.max(1, Math.min(page, totalPages));
+	const start = (safePage - 1) * pageSize;
+	const slicedItems = items.slice(start, start + pageSize);
+	return { items: slicedItems, total, page: safePage, pageSize, totalPages };
+}
+
 /**
  * Remote CouchDB implementation of the catalog master-data repository.
  * Reads/writes the `catalog` database via the active central endpoint.
@@ -30,74 +39,159 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		this.repo = createRemoteRepository(dbName);
 	}
 
-	createItemCategory(input: ItemCategoryInput, ctx: AuthorContext): Promise<ItemCategory> {
-		return this.repo.put(createItemCategory(input, ctx));
+	private getWriteRepo(shelterCode?: string): Repository {
+		if (shelterCode) {
+			return createRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
+		}
+		return this.repo;
 	}
 
-	listItemCategories(): Promise<ItemCategory[]> {
-		return this.repo.allByType('item_category', isItemCategory);
+	createItemCategory(
+		input: ItemCategoryInput,
+		ctx: AuthorContext,
+		shelterCode?: string
+	): Promise<ItemCategory> {
+		const repo = this.getWriteRepo(shelterCode);
+		return repo.put(createItemCategory(input, ctx, shelterCode));
 	}
 
-	listItemCategoriesPaginated(
+	async listItemCategories(shelterCode?: string | null): Promise<ItemCategory[]> {
+		const centralItems = await this.repo.allByType('item_category', isItemCategory);
+		const centralFiltered = centralItems.filter((i) => !i.shelter_code);
+
+		if (shelterCode) {
+			const localRepo = createRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
+			const localItems = await localRepo.allByType('item_category', isItemCategory);
+
+			const localMap = new Map(localItems.map((i) => [i._id, i]));
+			return [...localItems, ...centralFiltered.filter((i) => !localMap.has(i._id))];
+		}
+		return centralFiltered;
+	}
+
+	async listItemCategoriesPaginated(
 		page: number,
-		pageSize: number
+		pageSize: number,
+		shelterCode?: string | null
 	): Promise<PaginatedResult<ItemCategory>> {
-		return this.repo.pageByType('item_category', isItemCategory, page, pageSize);
+		const items = await this.listItemCategories(shelterCode);
+		return paginate(items, page, pageSize);
 	}
 
-	getItemCategory(id: string): Promise<ItemCategory | null> {
+	async getItemCategory(id: string, shelterCode?: string | null): Promise<ItemCategory | null> {
+		if (shelterCode) {
+			const localRepo = createRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
+			const localDoc = await localRepo.get<ItemCategory>(id);
+			if (localDoc) return localDoc;
+		}
 		return this.repo.get<ItemCategory>(id);
 	}
 
 	updateItemCategory(itemCategory: ItemCategory): Promise<ItemCategory> {
-		return this.repo.put(touch(itemCategory));
+		const repo = this.getWriteRepo(itemCategory.shelter_code);
+		return repo.put(touch(itemCategory));
 	}
 
-	createItemMaster(input: ItemMasterInput, ctx: AuthorContext): Promise<ItemMaster> {
-		return this.repo.put(createItemMaster(input, ctx));
+	createItemMaster(
+		input: ItemMasterInput,
+		ctx: AuthorContext,
+		shelterCode?: string
+	): Promise<ItemMaster> {
+		const repo = this.getWriteRepo(shelterCode);
+		return repo.put(createItemMaster(input, ctx, shelterCode));
 	}
 
-	listItemMasters(): Promise<ItemMaster[]> {
-		return this.repo.allByType('item_master', isItemMaster);
+	async listItemMasters(shelterCode?: string | null): Promise<ItemMaster[]> {
+		const centralItems = await this.repo.allByType('item_master', isItemMaster);
+		const centralFiltered = centralItems.filter((i) => !i.shelter_code);
+
+		if (shelterCode) {
+			const localRepo = createRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
+			const localItems = await localRepo.allByType('item_master', isItemMaster);
+
+			const localMap = new Map(localItems.map((i) => [i._id, i]));
+			return [...localItems, ...centralFiltered.filter((i) => !localMap.has(i._id))];
+		}
+		return centralFiltered;
 	}
 
-	listItemMastersPaginated(page: number, pageSize: number): Promise<PaginatedResult<ItemMaster>> {
-		return this.repo.pageByType('item_master', isItemMaster, page, pageSize);
+	async listItemMastersPaginated(
+		page: number,
+		pageSize: number,
+		shelterCode?: string | null
+	): Promise<PaginatedResult<ItemMaster>> {
+		const items = await this.listItemMasters(shelterCode);
+		return paginate(items, page, pageSize);
 	}
 
-	getItemMaster(id: string): Promise<ItemMaster | null> {
+	async getItemMaster(id: string, shelterCode?: string | null): Promise<ItemMaster | null> {
+		if (shelterCode) {
+			const localRepo = createRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
+			const localDoc = await localRepo.get<ItemMaster>(id);
+			if (localDoc) return localDoc;
+		}
 		return this.repo.get<ItemMaster>(id);
 	}
 
 	updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster> {
-		return this.repo.put(touch(itemMaster));
+		const repo = this.getWriteRepo(itemMaster.shelter_code);
+		return repo.put(touch(itemMaster));
 	}
 
-	createRecipe(input: RecipeInput, ctx: AuthorContext): Promise<Recipe> {
-		return this.repo.put(createRecipe(input, ctx));
+	createRecipe(input: RecipeInput, ctx: AuthorContext, shelterCode?: string): Promise<Recipe> {
+		const repo = this.getWriteRepo(shelterCode);
+		return repo.put(createRecipe(input, ctx, shelterCode));
 	}
 
-	listRecipes(): Promise<Recipe[]> {
-		return this.repo.allByType('recipe', isRecipe);
+	async listRecipes(shelterCode?: string | null): Promise<Recipe[]> {
+		const centralItems = await this.repo.allByType('recipe', isRecipe);
+		const centralFiltered = centralItems.filter((i) => !i.shelter_code);
+
+		if (shelterCode) {
+			const localRepo = createRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
+			const localItems = await localRepo.allByType('recipe', isRecipe);
+
+			const localMap = new Map(localItems.map((i) => [i._id, i]));
+			return [...localItems, ...centralFiltered.filter((i) => !localMap.has(i._id))];
+		}
+		return centralFiltered;
 	}
 
-	listRecipesPaginated(page: number, pageSize: number): Promise<PaginatedResult<Recipe>> {
-		return this.repo.pageByType('recipe', isRecipe, page, pageSize);
+	async listRecipesPaginated(
+		page: number,
+		pageSize: number,
+		shelterCode?: string | null
+	): Promise<PaginatedResult<Recipe>> {
+		const items = await this.listRecipes(shelterCode);
+		return paginate(items, page, pageSize);
 	}
 
-	getRecipe(id: string): Promise<Recipe | null> {
+	async getRecipe(id: string, shelterCode?: string | null): Promise<Recipe | null> {
+		if (shelterCode) {
+			const localRepo = createRemoteRepository(`shelter_${shelterCode.toLowerCase()}`);
+			const localDoc = await localRepo.get<Recipe>(id);
+			if (localDoc) return localDoc;
+		}
 		return this.repo.get<Recipe>(id);
 	}
 
 	updateRecipe(recipe: Recipe): Promise<Recipe> {
-		return this.repo.put(touch(recipe));
+		const repo = this.getWriteRepo(recipe.shelter_code);
+		return repo.put(touch(recipe));
 	}
 
-	async deleteItemMaster(id: string): Promise<boolean> {
-		const item = await this.getItemMaster(id);
+	async deleteItemMaster(id: string, shelterCode?: string | null): Promise<boolean> {
+		const item = await this.getItemMaster(id, shelterCode);
 		if (!item) return false;
 
-		const shelterRepo = createRemoteRepository(getShelterDb());
+		if (item.override) {
+			const repo = this.getWriteRepo(item.shelter_code);
+			await repo.remove(item);
+			return true;
+		}
+
+		const shelterDb = shelterCode ? `shelter_${shelterCode.toLowerCase()}` : getShelterDb();
+		const shelterRepo = createRemoteRepository(shelterDb);
 		const ledgerEntries = await shelterRepo.allByType(
 			'stock_ledger',
 			(d): d is { _id: string; type: string; item_id: string } => {
@@ -111,16 +205,23 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			await this.updateItemMaster(item);
 			return false;
 		} else {
-			await this.repo.remove(item);
+			const repo = this.getWriteRepo(item.shelter_code);
+			await repo.remove(item);
 			return true;
 		}
 	}
 
-	async deleteItemCategory(id: string): Promise<boolean> {
-		const category = await this.getItemCategory(id);
+	async deleteItemCategory(id: string, shelterCode?: string | null): Promise<boolean> {
+		const category = await this.getItemCategory(id, shelterCode);
 		if (!category) return false;
 
-		const itemMasters = await this.listItemMasters();
+		if (category.override) {
+			const repo = this.getWriteRepo(category.shelter_code);
+			await repo.remove(category);
+			return true;
+		}
+
+		const itemMasters = await this.listItemMasters(shelterCode);
 		const isUsed = itemMasters.some((item) => item.category === category.name);
 
 		if (isUsed) {
@@ -129,15 +230,23 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			);
 		}
 
-		await this.repo.remove(category);
+		const repo = this.getWriteRepo(category.shelter_code);
+		await repo.remove(category);
 		return true;
 	}
 
-	async deleteRecipe(id: string): Promise<boolean> {
-		const recipe = await this.getRecipe(id);
+	async deleteRecipe(id: string, shelterCode?: string | null): Promise<boolean> {
+		const recipe = await this.getRecipe(id, shelterCode);
 		if (!recipe) return false;
 
-		const shelterRepo = createRemoteRepository(getShelterDb());
+		if (recipe.override) {
+			const repo = this.getWriteRepo(recipe.shelter_code);
+			await repo.remove(recipe);
+			return true;
+		}
+
+		const shelterDb = shelterCode ? `shelter_${shelterCode.toLowerCase()}` : getShelterDb();
+		const shelterRepo = createRemoteRepository(shelterDb);
 		const mealPlans = await shelterRepo.allByType(
 			'meal_plan',
 			(d): d is { _id: string; type: string; recipes: { recipe_id: string }[] } => {
@@ -151,7 +260,8 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			await this.updateRecipe(recipe);
 			return false;
 		} else {
-			await this.repo.remove(recipe);
+			const repo = this.getWriteRepo(recipe.shelter_code);
+			await repo.remove(recipe);
 			return true;
 		}
 	}

@@ -838,7 +838,18 @@ async function seedCatalog(): Promise<void> {
   if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
     return;
   }
-  throw({ forbidden: 'Only System Admins can write to the catalog database.' });
+  if (oldDoc && oldDoc.shelter_code !== newDoc.shelter_code) {
+    throw({ forbidden: 'shelter_code is immutable' });
+  }
+  if (newDoc.shelter_code) {
+    var hasScope = userCtx.roles.indexOf('shelter:' + newDoc.shelter_code) !== -1;
+    var isManager = userCtx.roles.indexOf('shelter_manager') !== -1;
+    var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1;
+    if (hasScope && (isManager || isWS)) {
+      return;
+    }
+  }
+  throw({ forbidden: 'Only System Admins can write to global catalog documents, and only authorized shelter staff can write local documents.' });
 }`;
 	await couchReq('PUT', `/catalog/${encodeURIComponent(ddocId)}`, {
 		_id: ddocId,

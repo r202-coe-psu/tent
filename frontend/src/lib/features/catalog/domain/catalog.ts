@@ -40,6 +40,8 @@ export interface UomConversion {
 export interface ItemCategory extends CatalogDoc {
 	type: 'item_category';
 	name: string;
+	shelter_code?: string;
+	override?: boolean;
 }
 
 export interface ItemMaster extends CatalogDoc {
@@ -55,6 +57,8 @@ export interface ItemMaster extends CatalogDoc {
 	distribution_type: DistributionType;
 	type_class: TypeClass;
 	deactivated?: boolean;
+	shelter_code?: string;
+	override?: boolean;
 
 	// New fields
 	shelf_life_days?: number;
@@ -77,11 +81,14 @@ export interface Recipe extends CatalogDoc {
 	standard_portions: string; // qty_str
 	standard_duration_hours: string; // qty_str
 	deactivated?: boolean;
+	shelter_code?: string;
+	override?: boolean;
 }
 
 // ---------------------------------------------------------------- input schemas
 export const itemCategoryInputSchema = z.object({
-	name: z.string().trim().min(1, 'Name is required')
+	name: z.string().trim().min(1, 'Name is required'),
+	override: z.boolean().optional()
 });
 
 export type ItemCategoryInput = z.input<typeof itemCategoryInputSchema>;
@@ -119,7 +126,8 @@ export const itemMasterInputSchema = z
 		// Durable & Equipment specific fields
 		qty_per_person: z.number().min(0).optional(),
 		returnable: z.boolean().optional(),
-		asset_status: assetStatusSchema.optional()
+		asset_status: assetStatusSchema.optional(),
+		override: z.boolean().optional()
 	})
 	.superRefine((data, ctx) => {
 		if (data.type_class !== 'EQUIPMENT') {
@@ -162,27 +170,38 @@ export const recipeInputSchema = z.object({
 		.default([]),
 	standard_portions: qtyStrCoercePositiveSchema,
 	standard_duration_hours: qtyStrCoercePositiveSchema,
-	deactivated: z.boolean().optional()
+	deactivated: z.boolean().optional(),
+	override: z.boolean().optional()
 });
 
 export type RecipeInput = z.infer<typeof recipeInputSchema>;
 
 // ---------------------------------------------------------------- factories
 
-export function createItemCategory(input: ItemCategoryInput, ctx: AuthorContext): ItemCategory {
+export function createItemCategory(
+	input: ItemCategoryInput,
+	ctx: AuthorContext,
+	shelterCode?: string
+): ItemCategory {
 	const d = itemCategoryInputSchema.parse(input);
 	const doc = catalogDoc(
 		'item_category',
 		2,
 		{
-			name: d.name
+			name: d.name,
+			...(shelterCode ? { shelter_code: shelterCode } : {}),
+			...(d.override ? { override: d.override } : {})
 		},
 		ctx.createdBy
 	);
 	return doc;
 }
 
-export function createItemMaster(input: ItemMasterInput, ctx: AuthorContext): ItemMaster {
+export function createItemMaster(
+	input: ItemMasterInput,
+	ctx: AuthorContext,
+	shelterCode?: string
+): ItemMaster {
 	const d = itemMasterInputSchema.parse(input);
 	const doc = catalogDoc(
 		'item_master',
@@ -202,6 +221,8 @@ export function createItemMaster(input: ItemMasterInput, ctx: AuthorContext): It
 			distribution_type: d.distribution_type || 'recurring',
 			type_class: d.type_class,
 			deactivated: d.deactivated ?? false,
+			...(shelterCode ? { shelter_code: shelterCode } : {}),
+			...(d.override ? { override: d.override } : {}),
 
 			// New fields
 			shelf_life_days: d.shelf_life_days,
@@ -221,7 +242,7 @@ export function createItemMaster(input: ItemMasterInput, ctx: AuthorContext): It
 	return doc;
 }
 
-export function createRecipe(input: RecipeInput, ctx: AuthorContext): Recipe {
+export function createRecipe(input: RecipeInput, ctx: AuthorContext, shelterCode?: string): Recipe {
 	const d = recipeInputSchema.parse(input);
 	return catalogDoc(
 		'recipe',
@@ -234,7 +255,9 @@ export function createRecipe(input: RecipeInput, ctx: AuthorContext): Recipe {
 			})),
 			standard_portions: persistQty(d.standard_portions),
 			standard_duration_hours: persistQty(d.standard_duration_hours),
-			deactivated: d.deactivated ?? false
+			deactivated: d.deactivated ?? false,
+			...(shelterCode ? { shelter_code: shelterCode } : {}),
+			...(d.override ? { override: d.override } : {})
 		},
 		ctx.createdBy
 	);
