@@ -36,12 +36,15 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const user_lat = url.searchParams.get('user_lat') || '';
 	const user_lng = url.searchParams.get('user_lng') || '';
 
-	// FastAPI accepts a single status; map common UI values to Mongo status.
-	const status =
+	// FastAPI accepts a single Mongo status; map UI `prepare` → `standby`.
+	const statusRaw =
 		statusParam
 			.split(',')
 			.map((s) => s.trim().toLowerCase())
-			.find((s) => s === 'open' || s === 'closed' || s === 'full' || s === 'prepare') || '';
+			.find(
+				(s) => s === 'open' || s === 'closed' || s === 'full' || s === 'prepare' || s === 'standby'
+			) || '';
+	const status = statusRaw === 'prepare' ? 'standby' : statusRaw;
 
 	const userLatNum = user_lat ? parseFloat(user_lat) : NaN;
 	const userLngNum = user_lng ? parseFloat(user_lng) : NaN;
@@ -96,7 +99,16 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		shelters = shelters.filter((s) => !s.geo || s.distance <= maxDistance);
 	}
 
-	const openCount = shelters.filter((s) => s.status === 'OPEN').length;
+	// Closest-first when a search origin (GPS or map pin) is present.
+	if (hasUser) {
+		shelters = [...shelters].sort((a, b) => {
+			const da = a.geo ? (a.distance ?? Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
+			const db = b.geo ? (b.distance ?? Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
+			return da - db;
+		});
+	}
+
+	const openCount = shelters.filter((s) => s.status === 'OPEN' || s.status === 'FULL').length;
 
 	return {
 		shelters,

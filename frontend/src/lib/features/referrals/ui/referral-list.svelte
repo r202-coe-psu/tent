@@ -165,21 +165,21 @@
 					<div class="flex flex-wrap items-center gap-2">
 						{#if isIncomingListItem(group.sample, actorShelter)}
 							<Badge
-								class="h-5 bg-violet-100 px-1.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-950/40 dark:text-violet-300"
+								class="h-5 bg-violet-100 px-1.5 text-2xs font-semibold text-violet-800 dark:bg-violet-950/40 dark:text-violet-300"
 							>
 								ขาเข้า
 							</Badge>
 						{/if}
 						{#if group.count > 1}
 							<Badge
-								class="h-5 gap-1 bg-sky-100 px-1.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
+								class="h-5 gap-1 bg-sky-100 px-1.5 text-2xs font-semibold text-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
 							>
 								<Users class="h-3 w-3" />
 								{group.count} คน
 							</Badge>
 						{/if}
 						<Badge
-							class="{getUrgencyStyle(group.sample.urgency)} h-5 px-1.5 text-[10px] font-semibold"
+							class="{getUrgencyStyle(group.sample.urgency)} h-5 px-1.5 text-2xs font-semibold"
 						>
 							{getUrgencyLabel(group.sample.urgency)}
 						</Badge>
@@ -202,12 +202,12 @@
 						<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
 							<span>{formatReferralDate(group.createdAt)}</span>
 							{#if group.sharedStatus}
-								<Badge class="{getStatusBadgeVariant(group.sharedStatus)} h-4 px-1 text-[10px]">
+								<Badge class="{getStatusBadgeVariant(group.sharedStatus)} h-4 px-1 text-2xs">
 									{getStatusLabel(group.sharedStatus)}
 								</Badge>
 							{:else}
 								<Badge
-									class="h-4 bg-amber-100 px-1 text-[10px] text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+									class="h-4 bg-amber-100 px-1 text-2xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
 								>
 									หลายสถานะ
 								</Badge>
@@ -215,7 +215,7 @@
 							{#if group.sample.referral_type === 'capacity'}
 								{@const direction = getReferralDirection(group.sample)}
 								{#if direction !== 'internal'}
-									<Badge class="{getDirectionBadgeVariant(direction)} h-4 px-1 text-[10px]">
+									<Badge class="{getDirectionBadgeVariant(direction)} h-4 px-1 text-2xs">
 										{getDirectionLabel(direction)}
 										{#if direction === 'outgoing'}
 											→ {group.sample.to_shelter_code}

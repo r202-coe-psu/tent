@@ -2,9 +2,19 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Dog from '@lucide/svelte/icons/dog';
 	import Users from '@lucide/svelte/icons/users';
-	import type { PublicShelterDetail } from '$lib/features/public-portal';
+	import {
+		resolveMasterLabel,
+		useVulnerableGroupLabelMap,
+		type PublicShelterDetail
+	} from '$lib/features/public-portal';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
 
 	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
+
+	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
+	const vulnerableGroupLabels = useVulnerableGroupLabelMap();
 
 	function translatePetCategories(categoriesStr: string): string {
 		if (!categoriesStr) return '';
@@ -18,21 +28,17 @@
 			.map((c) => map[c] || c)
 			.join(', ');
 	}
-	import { langState } from '$lib/states/i18n.svelte';
-	import { getTranslation } from '$lib/utils/i18n';
-	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
 
-	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
-
-	function translateVulnerableGroup(group: string): string {
-		const map: Record<string, string> = {
+	let visibleVulnerableGroups = $derived.by(() => {
+		const groups = shelter.admission_policy?.vulnerable_groups ?? [];
+		const legacy: Record<string, string> = {
 			general_vulnerable: t.generalVulnerable,
 			quarantine: t.quarantinePatients,
 			wheelchair: t.wheelchairUsers,
 			none: t.noSpecificZone
 		};
 		if (langState.current === 'en') {
-			Object.assign(map, {
+			Object.assign(legacy, {
 				ผู้ป่วยติดเตียง: 'Bedridden Patient',
 				ผู้ใช้วีลแชร์: 'Wheelchair User',
 				เด็กอ่อน: 'Infant/Baby',
@@ -43,8 +49,13 @@
 				ผู้ป่วยแยกกักโรค: 'Quarantine Patient'
 			});
 		}
-		return map[group] || group;
-	}
+		return groups
+			.map((code) => ({
+				code,
+				label: resolveMasterLabel(code, vulnerableGroupLabels.data, legacy)
+			}))
+			.filter((g) => g.label);
+	});
 </script>
 
 <section>
@@ -101,17 +112,17 @@
 			</div>
 			<div>
 				<h3 class="mb-1 text-sm font-bold text-foreground">{t.supportedVulnerableGroups}</h3>
-				{#if shelter.admission_policy?.vulnerable_groups && shelter.admission_policy.vulnerable_groups.length > 0}
+				{#if visibleVulnerableGroups.length > 0}
 					<div class="mt-2 flex flex-wrap gap-2">
-						{#each shelter.admission_policy.vulnerable_groups as group, i (i)}
+						{#each visibleVulnerableGroups as group (group.code)}
 							<span
 								class="inline-flex items-center rounded-full bg-accent-purple/10 px-2.5 py-0.5 text-xs font-semibold text-accent-purple"
 							>
-								{translateVulnerableGroup(group)}
+								{group.label}
 							</span>
 						{/each}
 					</div>
-					{#if !shelter.admission_policy.vulnerable_groups.includes('bedridden')}
+					{#if !(shelter.admission_policy?.vulnerable_groups ?? []).includes('bedridden')}
 						<p class="mt-2 text-xs text-muted-foreground">
 							{t.bedriddenNotExplicitlySupported}
 						</p>

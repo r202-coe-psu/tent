@@ -185,7 +185,7 @@
 				<Scan class="h-5 w-5 text-primary" />
 				ระบบสแกนรับของเข้าคลัง (Ref. Scan Station)
 			</h2>
-			<p class="mt-1 text-[11px] text-muted-foreground">
+			<p class="mt-1 text-2xs text-muted-foreground">
 				สแกนคิวอาร์โค้ดใบจองจากมือถือผู้บริจาค เพื่อตรวจรับสินค้าและอัปเดตระบบคลังพัสดุแบบทันที
 				(Real-time Sync)
 			</p>
@@ -231,13 +231,13 @@
 						class="w-full rounded-xl border border-emerald-500/30 bg-emerald-50/60 p-3 text-left dark:bg-emerald-950/20"
 					>
 						<p
-							class="text-[10px] font-extrabold tracking-wider text-emerald-700 uppercase dark:text-emerald-400"
+							class="text-2xs font-extrabold tracking-wider text-emerald-700 uppercase dark:text-emerald-400"
 						>
 							เลขล็อตที่ระบบออกให้ (เขียนติดกล่อง)
 						</p>
 						<ul class="mt-1.5 space-y-1">
 							{#each lastLots as lot (lot.item_id + (lot.lot_no ?? ''))}
-								<li class="flex items-center justify-between gap-2 text-[11px]">
+								<li class="flex items-center justify-between gap-2 text-2xs">
 									<span class="text-muted-foreground">{lot.item_id}</span>
 									<span class="font-mono font-bold text-foreground">{lot.lot_no ?? '—'}</span>
 								</li>
@@ -275,10 +275,10 @@
 				>
 					<div>
 						<div class="mb-1.5 flex items-center gap-2">
-							<span class="text-[9px] font-bold tracking-wide text-zinc-400 uppercase"
+							<span class="text-3xs font-bold tracking-wide text-zinc-400 uppercase"
 								>BOOKING REF.</span
 							>
-							<span class="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-extrabold text-black"
+							<span class="rounded bg-amber-500 px-1.5 py-0.5 text-2xs font-extrabold text-black"
 								>{bookingRef}</span
 							>
 						</div>
@@ -297,7 +297,7 @@
 
 				<!-- Body (Quantities Editing) -->
 				<div class="space-y-4 bg-card p-5">
-					<h4 class="text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase">
+					<h4 class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase">
 						รายการที่จองไว้ (ตรวจนับความถูกต้อง)
 					</h4>
 
@@ -313,24 +313,24 @@
 											bind:value={item.qty}
 											class="h-8 w-20 rounded-lg bg-card px-2 text-right text-xs font-semibold"
 										/>
-										<span class="w-12 text-[11px] font-semibold text-muted-foreground"
+										<span class="w-12 text-2xs font-semibold text-muted-foreground"
 											>{item.unit}</span
 										>
 									</div>
 								</div>
 								{#if item.item_id}
 									<label
-										class="mt-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-muted-foreground"
+										class="mt-2 flex items-center justify-between gap-2 text-2xs font-semibold text-muted-foreground"
 									>
 										วันหมดอายุ (เฉพาะของที่มีวันหมดอายุ)
 										<Input
 											type="date"
 											bind:value={item.expiry}
-											class="h-7 w-36 rounded-lg bg-card px-2 text-[11px]"
+											class="h-7 w-36 rounded-lg bg-card px-2 text-2xs"
 										/>
 									</label>
 									<label
-										class="mt-1.5 flex items-center justify-between gap-2 text-[10px] font-semibold text-muted-foreground"
+										class="mt-1.5 flex items-center justify-between gap-2 text-2xs font-semibold text-muted-foreground"
 									>
 										โซนจัดเก็บ
 										<Input
@@ -338,11 +338,11 @@
 											bind:value={item.storage_zone}
 											placeholder="เช่น A-01"
 											maxlength={100}
-											class="h-7 w-36 rounded-lg bg-card px-2 text-[11px]"
+											class="h-7 w-36 rounded-lg bg-card px-2 text-2xs"
 										/>
 									</label>
 								{:else}
-									<p class="mt-1.5 text-[10px] text-muted-foreground">
+									<p class="mt-1.5 text-2xs text-muted-foreground">
 										ไม่มีรหัสสินค้าในคลัง — บันทึกไว้ในใบบริจาค ไม่ตัดยอดเข้าคลัง
 									</p>
 								{/if}
@@ -351,7 +351,7 @@
 					</div>
 
 					<label class="block">
-						<span class="text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase"
+						<span class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase"
 							>หมายเหตุการตรวจรับ</span
 						>
 						<Input

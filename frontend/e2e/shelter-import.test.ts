@@ -151,7 +151,7 @@ test('imports valid spreadsheet rows, skips invalid rows, and records the outcom
 
 	const valid = Array(HEADERS.length).fill('');
 	valid[0] = 'ศูนย์พักพิง E2E พร้อมนำเข้า';
-	valid[1] = 'เตรียมพร้อม';
+	valid[1] = 'กำลังเตรียมการ';
 	valid[6] = 'โซน 1';
 	valid[7] = 'ชุมชน 1';
 	valid[16] = '120';
