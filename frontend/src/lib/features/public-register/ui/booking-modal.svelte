@@ -106,12 +106,14 @@
 		{:else if shelters.length === 0}
 			<p class="p-8 text-center text-sm text-muted-foreground">กำลังโหลดรายชื่อศูนย์พักพิง…</p>
 		{:else}
-			<BookingForm
-				{shelters}
-				{vulnerableGroups}
-				lockedShelterCode={shelterCode}
-				onbooked={(t) => (ticket = t)}
-			/>
+			{#key shelterCode}
+				<BookingForm
+					{shelters}
+					{vulnerableGroups}
+					lockedShelterCode={shelterCode}
+					onbooked={(t) => (ticket = t)}
+				/>
+			{/key}
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>

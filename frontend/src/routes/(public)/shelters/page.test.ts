@@ -122,6 +122,45 @@ describe('public/shelters load function', () => {
 		expect(result.shelters[1].status).toBe('CLOSED');
 	});
 
+	it('counts OPEN+FULL as open and maps standby to PREPARE', async () => {
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: [
+				{
+					code: 'SH001',
+					name: 'สแตนด์บาย',
+					status: 'standby',
+					capacity: 100,
+					updated_at: '2026-08-19T00:00:00Z'
+				},
+				{
+					code: 'SH002',
+					name: 'เปิด',
+					status: 'open',
+					capacity: 100,
+					updated_at: '2026-08-19T00:00:00Z'
+				},
+				{
+					code: 'SH003',
+					name: 'เต็ม',
+					status: 'full',
+					capacity: 100,
+					updated_at: '2026-08-19T00:00:00Z'
+				}
+			],
+			count: 3,
+			as_of: '2026-08-19T10:00:00Z'
+		});
+
+		const url = new URL('http://localhost/shelters');
+		const result = await runLoad(url);
+
+		expect(result.summary.shelters_total).toBe(3);
+		expect(result.summary.shelters_open).toBe(2);
+		expect(result.shelters[0].status).toBe('PREPARE');
+		expect(result.shelters[1].status).toBe('OPEN');
+		expect(result.shelters[2].status).toBe('FULL');
+	});
+
 	it('filters by search keyword safely even if fields are partially missing', async () => {
 		vi.mocked(listPublicShelters).mockResolvedValue({
 			shelters: [
@@ -153,5 +192,44 @@ describe('public/shelters load function', () => {
 
 		expect(result.shelters).toHaveLength(1);
 		expect(result.shelters[0].code).toBe('SH001');
+	});
+
+	it('sorts shelters closest-first when user_lat/user_lng are set', async () => {
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: [
+				{
+					code: 'FAR',
+					name: 'ไกล',
+					status: 'open',
+					capacity: 50,
+					geo: { lat: 7.1, lng: 100.6 },
+					updated_at: '2026-08-19T00:00:00Z'
+				},
+				{
+					code: 'NEAR',
+					name: 'ใกล้',
+					status: 'open',
+					capacity: 50,
+					geo: { lat: 7.01, lng: 100.48 },
+					updated_at: '2026-08-19T00:00:00Z'
+				},
+				{
+					code: 'NOGEO',
+					name: 'ไม่มีพิกัด',
+					status: 'open',
+					capacity: 50,
+					geo: null,
+					updated_at: '2026-08-19T00:00:00Z'
+				}
+			],
+			count: 3,
+			as_of: '2026-08-19T10:00:00Z'
+		});
+
+		const url = new URL('http://localhost/shelters?user_lat=7.008&user_lng=100.476&distance=50');
+		const result = await runLoad(url);
+
+		expect(result.shelters.map((s) => s.code)).toEqual(['NEAR', 'FAR', 'NOGEO']);
+		expect(result.shelters[0].distance).toBeLessThan(result.shelters[1].distance);
 	});
 });

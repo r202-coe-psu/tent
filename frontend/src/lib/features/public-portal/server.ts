@@ -5,10 +5,10 @@
  * components (`PublicShelterCard`, `ShelterFilterPanel`, …). Importing that
  * barrel from a `+server.ts` pulls those component modules into the server's
  * SSR module graph even though nothing there renders them — which is what
- * broke `routes/api/public/v1/transparency/summary/+server.ts` (a circular
- * import through the shared UI kit surfaced as
- * "Class extends value undefined" from an unrelated superforms adapter).
- * Server code that only needs pure domain logic must import from here.
+ * broke CouchDB-era `transparency/summary` when it imported occupancy helpers
+ * through the UI barrel. Prefer this module for pure domain helpers from
+ * `+server.ts`. Landing metrics themselves now come from FastAPI/Mongo via
+ * the BFF proxy — not these CouchDB view helpers.
  */
 export {
 	countVulnerableFromBirthYearRows,
