@@ -5,7 +5,8 @@
 		Marker as MapLibreMarker,
 		Popup as MapLibrePopup,
 		NavigationControl,
-		GeoJSONSource
+		GeoJSONSource,
+		LngLatBounds as MapLibreLngLatBounds
 	} from 'maplibre-gl';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { PublicSiteKind } from '../domain/types';
@@ -22,6 +23,7 @@
 		Marker: typeof MapLibreMarker;
 		Popup: typeof MapLibrePopup;
 		NavigationControl: typeof NavigationControl;
+		LngLatBounds: typeof MapLibreLngLatBounds;
 	};
 
 	interface ShelterGeo {
@@ -265,93 +267,85 @@
 	});
 
 	$effect(() => {
-		if (!mapInstance || !mapLoaded || !L) return;
+		if (!mapLoaded || !mapInstance) return;
 
-		// 1. Clear existing markers
+		const uLat = Number(userLocation?.lat);
+		const uLng = Number(userLocation?.lng);
+		const radius = Number(radiusKm);
+
+		if (!Number.isFinite(uLat) || !Number.isFinite(uLng) || !Number.isFinite(radius)) {
+			setSearchRadiusData(EMPTY_FEATURE_COLLECTION);
+			return;
+		}
+
+		setSearchRadiusData(circlePolygon(uLng, uLat, radius));
+	});
+
+	$effect(() => {
+		if (!mapLoaded || !L || !mapInstance) return;
+		const lib = L;
+		const map = mapInstance;
+
+		// Re-render popups when master-data labels arrive.
+		void shelterTypeLabels.data;
+
+		// Clear old markers
 		markersLayer.forEach((marker) => marker.remove());
 		markersLayer = [];
 
-		// 2. Draw or clear the search radius polygon on the map
-		const userLat = Number(userLocation?.lat);
-		const userLng = Number(userLocation?.lng);
-		const hasValidUserOrigin =
-			!Number.isNaN(userLat) &&
-			!Number.isNaN(userLng) &&
-			userLat >= -90 &&
-			userLat <= 90 &&
-			userLng >= -180 &&
-			userLng <= 180 &&
-			(userLat !== 0 || userLng !== 0);
-
-		if (hasValidUserOrigin && radiusKm && radiusKm > 0) {
-			setSearchRadiusData(circlePolygon(userLng, userLat, radiusKm));
-		} else {
-			setSearchRadiusData(EMPTY_FEATURE_COLLECTION);
-		}
-
-		// 3. Populate new markers
-		const bounds: [[number, number], [number, number]] = [
-			[Infinity, Infinity],
-			[-Infinity, -Infinity]
-		];
+		const bounds = new lib.LngLatBounds();
 		let hasMarkers = false;
 
-		const extendBounds = (lngLat: [number, number]) => {
-			bounds[0][0] = Math.min(bounds[0][0], lngLat[0]);
-			bounds[0][1] = Math.min(bounds[0][1], lngLat[1]);
-			bounds[1][0] = Math.max(bounds[1][0], lngLat[0]);
-			bounds[1][1] = Math.max(bounds[1][1], lngLat[1]);
-			hasMarkers = true;
-		};
-
 		// 1. Draw User Location if available
-		if (hasValidUserOrigin) {
-			extendBounds([userLng, userLat]);
+		if (userLocation?.lat && userLocation?.lng) {
+			const uLat = Number(userLocation.lat);
+			const uLng = Number(userLocation.lng);
+			if (!isNaN(uLat) && !isNaN(uLng)) {
+				hasMarkers = true;
+				bounds.extend([uLng, uLat]);
 
-			if (L && mapInstance) {
 				const userEl = document.createElement('div');
 				userEl.className = 'custom-user-marker';
 				userEl.innerHTML = `
 					<div style="width: 16px; height: 16px; border-radius: 50%; background: #3b82f6; border: 3px solid white; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3), 0 2px 6px rgba(0,0,0,0.4); cursor: pointer;"></div>
 				`;
 
-				const userPopup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
+				const userPopup = new lib.Popup({ offset: 12, closeButton: false }).setHTML(`
 					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;text-align:center;font-weight:bold;">
 						${t.yourLocation}
 					</div>
 				`);
 
-				const userMarker = new L.Marker({ element: userEl, anchor: 'center' })
-					.setLngLat([userLng, userLat])
+				const userMarker = new lib.Marker({ element: userEl, anchor: 'center' })
+					.setLngLat([uLng, uLat])
 					.setPopup(userPopup)
-					.addTo(mapInstance);
+					.addTo(map);
 
 				markersLayer.push(userMarker);
 			}
 		}
 
+		// 2. Draw Shelters
 		if (shelters && shelters.length > 0) {
 			shelters.forEach((shelter) => {
-				const lat = Number(shelter.geo?.lat);
-				const lng = Number(shelter.geo?.lng);
-				if (Number.isNaN(lat) || Number.isNaN(lng) || (lat === 0 && lng === 0)) return;
+				if (!shelter.geo || shelter.geo.lng == null || shelter.geo.lat == null) return;
 
+				const lng = Number(shelter.geo.lng);
+				const lat = Number(shelter.geo.lat);
+
+				if (isNaN(lng) || isNaN(lat)) return;
+
+				hasMarkers = true;
 				const lngLat: [number, number] = [lng, lat];
-				extendBounds(lngLat);
+				bounds.extend(lngLat);
 
 				const color = getStatusColorCode(shelter.status);
 				const icon = getTypeIcon(shelter.site_kind);
 
-				// Create DOM element for marker
 				const el = document.createElement('div');
+				// Do not apply position: relative to the root element,
+				// as it overrides MapLibre's .maplibregl-marker class (which uses position: absolute).
 				el.className = 'custom-shelter-marker';
-				el.style.width = '24px';
-				el.style.height = '24px';
-				el.style.display = 'flex';
-				el.style.alignItems = 'center';
-				el.style.justifyContent = 'center';
-				el.style.cursor = 'pointer';
-
 				el.innerHTML = `
 					<div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 24px; height: 24px;">
 						<div class="marker-dot" style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition: transform 0.2s;"></div>
@@ -372,10 +366,6 @@
 					if (dot) dot.style.transform = 'scale(1)';
 				};
 
-				const lib = L;
-				const currentMap = mapInstance;
-				if (!lib || !currentMap) return;
-
 				const popup = new lib.Popup({ offset: 12, closeButton: false }).setHTML(`
 					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;min-width:160px;">
 						<strong style="font-size:0.875rem;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
@@ -389,7 +379,7 @@
 				const marker = new lib.Marker({ element: el }) // Default anchor is 'center', which is perfect for the 18x18 wrapper
 					.setLngLat(lngLat)
 					.setPopup(popup)
-					.addTo(currentMap);
+					.addTo(map);
 
 				markersLayer.push(marker);
 			});
@@ -398,10 +388,10 @@
 		if (hasMarkers) {
 			const markerCount = markersLayer.length;
 			if (markerCount === 1) {
-				// We already have bounds, just use bounds with maxZoom
-				mapInstance.fitBounds(bounds, { padding: 50, maxZoom: 14 });
+				const centerLngLat = bounds.getCenter();
+				map.easeTo({ center: [centerLngLat.lng, centerLngLat.lat], zoom: 13 });
 			} else {
-				mapInstance.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+				map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
 			}
 		}
 	});
