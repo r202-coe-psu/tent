@@ -3,6 +3,7 @@
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Compass from '@lucide/svelte/icons/compass';
+	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 	import Users from '@lucide/svelte/icons/users';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
@@ -11,11 +12,17 @@
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 	const canSeeBackoffice = $derived(isSA || isShelterManager(roles));
-	// onsite + public are always shown; system-management is SA-only; back-office
+	// onsite + public + volunteer are always shown; system-management is SA-only; back-office
 	// is SA/SM — size the grid to the number of visible cards.
-	const visibleCards = $derived(2 + (isSA ? 1 : 0) + (canSeeBackoffice ? 1 : 0));
-	const lgCols = $derived(
-		visibleCards >= 4 ? 'lg:grid-cols-4' : visibleCards === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+	const visibleCards = $derived(3 + (isSA ? 1 : 0) + (canSeeBackoffice ? 1 : 0));
+	const gridCols = $derived(
+		visibleCards >= 5
+			? 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
+			: visibleCards === 4
+				? 'sm:grid-cols-2 lg:grid-cols-4'
+				: visibleCards === 3
+					? 'sm:grid-cols-2 lg:grid-cols-3'
+					: 'sm:grid-cols-2'
 	);
 </script>
 
@@ -34,12 +41,12 @@
 			</p>
 		</header>
 
-		<main class="grid grid-cols-1 gap-6 md:grid-cols-2 {lgCols}">
+		<main class="grid grid-cols-1 gap-5 {gridCols}">
 			<HomePortalCard
 				icon={Users}
 				accent="brand"
 				title="ระบบส่วนหน้า ณ ศูนย์พักพิง"
-				description="ระบบลงทะเบียน (Smart Registration), คัดกรองทางการแพทย์, และจัดสรรโซนที่พักสำหรับผู้ปฏิบัติงานหน้างาน"
+				description="ระบบลงทะเบียน (Smart Registration), คัดกรองทางการแพทย์, และจัดสรรโซนที่พัก สำหรับผู้ปฏิบัติงานหน้างาน"
 				href={resolve('/onsite')}
 			/>
 
@@ -48,6 +55,7 @@
 				accent="neutral"
 				title="เว็บพอร์ทัลสาธารณะ"
 				badge="ประชาชน / อาสาสมัคร"
+				badgeVariant="neutral"
 				description="ค้นหาญาติ, นัดหมายบริจาคสิ่งของ และลงทะเบียนอาสาสมัคร (Public & Volunteer Portal)"
 				href={resolve('/')}
 			/>
@@ -57,16 +65,26 @@
 					icon={Building2}
 					accent="accent-purple"
 					title="ระบบส่วนกลาง"
-					description="จัดการข้อมูลศูนย์พักพิง, ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
+					description="จัดการข้อมูลศูนย์พักพิง ลงทะเบียนบ้านพี่เลี้ยง และตั้งค่าข้อมูลหลักของระบบ"
 					href={resolve('/portal/system-management')}
 				/>
 			{/if}
+
+			<HomePortalCard
+				icon={HeartHandshake}
+				accent="success"
+				title="ระบบบริการจิตอาสา"
+				badge="สำหรับอาสาสมัคร"
+				badgeVariant="success"
+				description="ตารางงานจิตอาสาประจำตัว (My Schedule), อัปเดตความพร้อมปฏิบัติงาน, รายงานตัวปฏิบัติภารกิจ และดูตลาดงานด่วน"
+				href={resolve('/volunteers')}
+			/>
 
 			{#if canSeeBackoffice}
 				<HomePortalCard
 					icon={Boxes}
 					accent="muted"
-					title="ระบบส่วนหลัง (Back-Office)"
+					title="ระบบส่วนหลัง (Back-End)"
 					description="ระบบ ERP บริหารจัดการศูนย์พักพิงแบบครบวงจร, คลังสิ่งของ, ครัวกลาง และ SOP ภาพรวมจังหวัด"
 					href={resolve('/back-office')}
 				/>
