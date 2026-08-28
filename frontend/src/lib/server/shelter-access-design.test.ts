@@ -84,6 +84,18 @@ describe('buildValidateDocUpdate', () => {
 		}
 	});
 
+	it('includes sop and food sphere doc types in the allowed whitelist', () => {
+		const validateFn = buildValidateDocUpdate('SH001');
+		for (const type of [
+			'requirement_group',
+			'food_sphere_standard',
+			'replenishment_policy',
+			'sop_override'
+		] as const) {
+			expect(validateFn).toContain(`'${type}'`);
+		}
+	});
+
 	// CR-071 / T-72: the people importer writes its batch log to the shelter db
 	// (its results[] carry evacuee names). Without the whitelist entry the whole
 	// import succeeds but the history write 403s.

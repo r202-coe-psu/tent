@@ -9,20 +9,26 @@
 	let {
 		activeTab = $bindable(),
 		sphereCount = 20,
-		foodSphereCount = 14,
-		reqGroupCount = 3,
-		replenishmentCount = 3,
-		alertCount = 8
+		alertCount = 8,
+		reqGroupCount,
+		foodSphereCount,
+		replenishmentCount
 	}: {
 		activeTab: SopTabType;
 		sphereCount?: number;
-		foodSphereCount?: number;
-		reqGroupCount?: number;
-		replenishmentCount?: number;
 		alertCount?: number;
+		reqGroupCount?: number;
+		foodSphereCount?: number;
+		replenishmentCount?: number;
 	} = $props();
 
-	const tabs = $derived([
+	const tabs = $derived<
+		{
+			key: SopTabType;
+			label: string;
+			count?: number;
+		}[]
+	>([
 		{
 			key: 'sphere_standard' as const,
 			label: 'ตัวคูณมาตรฐานดำรงชีพ (Sphere Standard)',
@@ -35,17 +41,17 @@
 		},
 		{
 			key: 'requirement_group' as const,
-			label: 'กลุ่มสำหรับการคำนวณ (Requirement Group)',
+			label: 'กลุ่มสำหรับการคำนวณ',
 			count: reqGroupCount
 		},
 		{
 			key: 'food_sphere_standard' as const,
-			label: 'พารามิเตอร์อ้างอิงสำหรับอาหาร (Food Sphere Standard)',
+			label: 'พารามิเตอร์อ้างอิงสำหรับอาหาร',
 			count: foodSphereCount
 		},
 		{
 			key: 'replenishment_policy' as const,
-			label: 'นโยบายการเติมสต็อก (Replenishment Policy)',
+			label: 'นโยบายการเติมสต็อก',
 			count: replenishmentCount
 		}
 	]);
@@ -75,12 +81,14 @@
 						{isActive ? 'กำลังแสดงข้อมูล' : 'คลิกเพื่อเลือก'}
 					</div>
 				</div>
-				<span
-					class="flex h-7 min-w-7 shrink-0 items-center justify-center rounded-full px-2 text-xs font-semibold
-						{isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-foreground'}"
-				>
-					{tab.count}
-				</span>
+				{#if tab.count !== undefined}
+					<span
+						class="flex h-7 min-w-7 shrink-0 items-center justify-center rounded-full px-2 text-xs font-semibold
+							{isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-foreground'}"
+					>
+						{tab.count}
+					</span>
+				{/if}
 			</button>
 		{/each}
 	</nav>

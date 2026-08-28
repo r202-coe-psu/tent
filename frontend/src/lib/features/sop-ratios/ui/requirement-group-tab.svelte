@@ -8,7 +8,9 @@
 	} from '../application/requirement-group-queries';
 	import { type RequirementGroup } from '../domain/requirement-group';
 	import { SOURCE_LABELS } from '$lib/utils/source';
+	import { useItemMasters } from '$lib/features/catalog';
 	import RequirementGroupForm from './requirement-group-form.svelte';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 
 	// Icons
 	import Plus from '@lucide/svelte/icons/plus';
@@ -16,6 +18,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import Settings2 from '@lucide/svelte/icons/settings-2';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Loader from '@lucide/svelte/icons/loader';
 
 	let {
 		shelterCode = '',
@@ -29,19 +32,42 @@
 
 	const reqGroupsQuery = useRequirementGroups(() => shelterCode);
 	const deleteMutation = useDeleteRequirementGroup();
+	const itemMastersQuery = useItemMasters();
 
 	let search = $state('');
 	let viewMode = $state<'list' | 'create' | 'edit'>('list');
 	let selectedGroup = $state<RequirementGroup | null>(null);
+	let groupToDelete = $state<RequirementGroup | null>(null);
+	let isDeleteDialogOpen = $state(false);
 
 	const groups = $derived(reqGroupsQuery.data ?? []);
-	const filteredGroups = $derived(
-		groups.filter(
-			(g) =>
-				g.name.toLowerCase().includes(search.toLowerCase()) ||
-				g._id.toLowerCase().includes(search.toLowerCase()) ||
-				g.standard_uom.toLowerCase().includes(search.toLowerCase())
+	const itemNameMap = $derived(
+		new Map(
+			(itemMastersQuery.data ?? []).map((im) => [
+				im._id,
+				im.sku ? `${im.name} (${im.sku})` : im.name
+			])
 		)
+	);
+	const filteredGroups = $derived(
+		groups.filter((g) => {
+			const q = search.trim().toLowerCase();
+			if (!q) return true;
+			const matchesBasic =
+				g.name.toLowerCase().includes(q) ||
+				g._id.toLowerCase().includes(q) ||
+				g.standard_uom.toLowerCase().includes(q);
+			if (matchesBasic) return true;
+
+			return (g.item_maps ?? []).some((m) => {
+				const im = (itemMastersQuery.data ?? []).find((item) => item._id === m.item_id);
+				return (
+					m.item_id.toLowerCase().includes(q) ||
+					(im?.name && im.name.toLowerCase().includes(q)) ||
+					(im?.sku && im.sku.toLowerCase().includes(q))
+				);
+			});
+		})
 	);
 
 	function showCreateForm() {
@@ -59,14 +85,23 @@
 		selectedGroup = null;
 	}
 
-	async function handleDelete(group: RequirementGroup) {
-		if (!confirm(`คุณต้องการลบกลุ่มความต้องการ "${group.name}" (${group._id}) หรือไม่?`)) {
-			return;
+	function openDeleteDialog(group: RequirementGroup) {
+		groupToDelete = group;
+		isDeleteDialogOpen = true;
+	}
+
+	async function handleConfirmDelete() {
+		if (!groupToDelete) return;
+		try {
+			await deleteMutation.mutateAsync({
+				id: groupToDelete._id,
+				shelterCode: groupToDelete.source === 'SHELTER_OVERRIDE' ? shelterCode : undefined
+			});
+			isDeleteDialogOpen = false;
+			groupToDelete = null;
+		} catch (err) {
+			console.error('Failed to delete requirement group:', err);
 		}
-		await deleteMutation.mutateAsync({
-			id: group._id,
-			shelterCode: group.source === 'SHELTER_OVERRIDE' ? shelterCode : undefined
-		});
 	}
 </script>
 
@@ -149,7 +184,7 @@
 									{#if (group.item_maps ?? []).length > 0}
 										<span class="text-xs text-muted-foreground">
 											{(group.item_maps ?? []).length} รายการ ({(group.item_maps ?? [])
-												.map((m) => m.item_id)
+												.map((m) => itemNameMap.get(m.item_id) ?? m.item_id)
 												.join(', ')})
 										</span>
 									{:else}
@@ -186,7 +221,7 @@
 											<Button
 												variant="destructive"
 												size="sm"
-												onclick={() => handleDelete(group)}
+												onclick={() => openDeleteDialog(group)}
 												class="flex items-center gap-1"
 											>
 												<Trash2 class="h-3.5 w-3.5" />
@@ -248,3 +283,45 @@
 		{/if}
 	</div>
 {/if}
+
+<AlertDialog.Root bind:open={isDeleteDialogOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>ยืนยันการลบกลุ่มสารอาหาร & หน่วยนับมาตรฐาน</AlertDialog.Title>
+			<AlertDialog.Description>
+				{#if groupToDelete}
+					คุณต้องการลบกลุ่มความต้องการ <span class="font-semibold text-foreground"
+						>"{groupToDelete.name}"</span
+					>
+					({groupToDelete._id.replace(/^requirement_group:/, '')}) ใช่หรือไม่?
+					การดำเนินการนี้ไม่สามารถเรียกคืนได้
+				{/if}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel
+				disabled={deleteMutation.isPending}
+				onclick={() => {
+					groupToDelete = null;
+				}}
+			>
+				ยกเลิก
+			</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="bg-destructive text-white hover:bg-destructive/90"
+				disabled={deleteMutation.isPending}
+				onclick={(e) => {
+					e.preventDefault();
+					handleConfirmDelete();
+				}}
+			>
+				{#if deleteMutation.isPending}
+					<Loader class="mr-2 h-4 w-4 animate-spin" />
+					กำลังลบ...
+				{:else}
+					ยืนยันการลบ
+				{/if}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

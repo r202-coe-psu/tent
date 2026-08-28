@@ -935,45 +935,6 @@ async function seedCatalog(): Promise<void> {
 			reorder_level: 30
 		})
 	];
-	// item_master docs (catalog schema_v 3) — BOM recipes reference these, and the
-	// kitchen resolves each to real stock (supply_item) by matching name AND unit
-	// (resolveItemMasterStock). rice/egg/vegetable names+units match the
-	// supply_items above, so BOM plans from them เบิก against real stock; the
-	// canned-fish master has no supply_item counterpart, so a recipe using it
-	// stays "unresolved" (demonstrates the block-on-unlinked-ingredient path).
-	const itemMasterBase = {
-		conversions: [],
-		distribution_type: 'consumable',
-		target_audience_type: 'all',
-		target_restrictions: {},
-		is_default: false
-	} as const;
-	const itemMasters = [
-		catalogDoc(
-			'item_master:rice',
-			'item_master',
-			{ name: 'ข้าวสาร', category: 'food', base_unit: 'kg', ...itemMasterBase },
-			3
-		),
-		catalogDoc(
-			'item_master:egg',
-			'item_master',
-			{ name: 'ไข่ไก่', category: 'food', base_unit: 'piece', ...itemMasterBase },
-			3
-		),
-		catalogDoc(
-			'item_master:vegetable',
-			'item_master',
-			{ name: 'ผักรวม', category: 'food', base_unit: 'kg', ...itemMasterBase },
-			3
-		),
-		catalogDoc(
-			'item_master:canned-fish',
-			'item_master',
-			{ name: 'ปลากระป๋อง', category: 'food', base_unit: 'can', ...itemMasterBase },
-			3
-		)
-	];
 	const recipes = [
 		catalogDoc(
 			'recipe:fried-egg-rice',
@@ -1021,10 +982,8 @@ async function seedCatalog(): Promise<void> {
 		)
 	];
 
-	for (const doc of [...items, ...itemMasters, ...recipes]) await putDoc('catalog', doc);
-	console.log(
-		`  ✓ catalog: ${items.length} supply items, ${itemMasters.length} item masters, ${recipes.length} recipes`
-	);
+	for (const doc of [...items, ...recipes]) await putDoc('catalog', doc);
+	console.log(`  ✓ catalog: ${items.length} supply items, ${recipes.length} recipes`);
 
 	await deployCatalogMangoIndexes('catalog');
 }

@@ -136,14 +136,11 @@
 							id="form-segment"
 							class="h-9 w-full rounded-md border-input bg-background"
 						>
-							{TARGET_SEGMENT_LABELS[formSegment] ?? formSegment} ({formSegment})
+							{TARGET_SEGMENT_LABELS[formSegment] ?? formSegment}
 						</Select.Trigger>
 						<Select.Content>
 							{#each targetSegmentSchema.options as segment (segment)}
-								<Select.Item
-									value={segment}
-									label="{TARGET_SEGMENT_LABELS[segment] ?? segment} ({segment})"
-								/>
+								<Select.Item value={segment} label={TARGET_SEGMENT_LABELS[segment] ?? segment} />
 							{/each}
 						</Select.Content>
 					</Select.Root>
@@ -212,11 +209,11 @@
 
 				<Field.Field>
 					<div class="flex items-center gap-2">
-						<Field.Label>หน่วยนับ (UOM)</Field.Label>
+						<Field.Label>หน่วยนับ</Field.Label>
 						<span
 							class="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
 						>
-							AUTO-FILL
+							เติมอัตโนมัติ
 						</span>
 					</div>
 					<div
@@ -227,7 +224,7 @@
 				</Field.Field>
 			</Field.FieldGroup>
 
-			<!-- Row 3: วันที่มีผลบังคับใช้ (Effective Date) -->
+			<!-- Row 3: วันที่มีผลบังคับใช้ -->
 			<Field.FieldGroup class="grid grid-cols-1 gap-5 md:grid-cols-2">
 				<Field.Field>
 					<Field.Label for="form-effective-date">

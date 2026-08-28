@@ -128,9 +128,9 @@
 	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
 		<SopTypeList
 			bind:activeTab
-			foodSphereCount={foodSphereQuery.data?.length ?? 14}
-			reqGroupCount={reqGroupQuery.data?.length ?? 3}
-			replenishmentCount={replenishmentQuery.data?.length ?? 3}
+			foodSphereCount={foodSphereQuery.data ? foodSphereQuery.data.length : 0}
+			reqGroupCount={reqGroupQuery.data ? reqGroupQuery.data.length : 0}
+			replenishmentCount={replenishmentQuery.data ? replenishmentQuery.data.length : 0}
 			sphereCount={20}
 			alertCount={8}
 		/>

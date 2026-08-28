@@ -3,6 +3,8 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { Combobox } from '$lib/components/ui/combobox/index.js';
+	import { useItemMasters } from '$lib/features/catalog';
 	import {
 		STANDARD_UOM_OPTIONS,
 		type RequirementGroup,
@@ -29,12 +31,49 @@
 	} = $props();
 
 	const saveMutation = useSaveRequirementGroup();
+	const itemMastersQuery = useItemMasters();
 
 	let formGroupId = $state('');
 	let formName = $state('');
 	let formStandardUom = $state('');
 	let formItemMaps = $state<ItemMap[]>([]);
 	let formErrors = $state<Record<string, string>>({});
+
+	const itemMasters = $derived(itemMastersQuery.data ?? []);
+	const itemOptions = $derived.by(() => {
+		return itemMasters.map((im) => ({
+			value: im._id,
+			label: im.name,
+			sku: im.sku,
+			base_unit: im.base_unit || im.unit || '',
+			keywords: [im.name, im.sku ?? '', im._id].filter(Boolean)
+		}));
+	});
+
+	function getItemOptions(currentId?: string) {
+		const base = [...itemOptions];
+		if (currentId && !base.some((b) => b.value === currentId)) {
+			const matched = itemMasters.find((im) => im._id === currentId || im.sku === currentId);
+			base.unshift({
+				value: currentId,
+				label: matched?.name ?? currentId,
+				sku: matched?.sku,
+				base_unit: matched?.base_unit || matched?.unit || '',
+				keywords: matched
+					? [matched.name, matched.sku ?? '', matched._id].filter(Boolean)
+					: [currentId]
+			});
+		}
+		return base;
+	}
+
+	function handleItemSelect(index: number, selectedId: string) {
+		formItemMaps[index].item_id = selectedId;
+		const matched = itemMasters.find((im) => im._id === selectedId || im.sku === selectedId);
+		if (matched) {
+			formItemMaps[index].base_uom = matched.base_unit || matched.unit || '';
+		}
+	}
 
 	const sharePercentSum = $derived(
 		formItemMaps.reduce((sum, item) => sum + (Number(item.share_percent) || 0), 0)
@@ -56,6 +95,20 @@
 			formItemMaps = [];
 		}
 		formErrors = {};
+	});
+
+	$effect(() => {
+		if (itemMasters.length > 0 && formItemMaps.length > 0) {
+			for (let i = 0; i < formItemMaps.length; i++) {
+				const map = formItemMaps[i];
+				if (map.item_id && !map.base_uom) {
+					const matched = itemMasters.find((im) => im._id === map.item_id);
+					if (matched) {
+						map.base_uom = matched.base_unit || matched.unit || '';
+					}
+				}
+			}
+		}
 	});
 
 	function addItemMap() {
@@ -88,7 +141,7 @@
 		for (let i = 0; i < formItemMaps.length; i++) {
 			const item = formItemMaps[i];
 			if (!item.item_id.trim()) {
-				formErrors[`item_${i}_id`] = 'กรุณาระบุรหัสสินค้า';
+				formErrors[`item_${i}_id`] = 'กรุณาเลือกสิ่งของ';
 			}
 			if (!item.base_uom.trim()) {
 				formErrors[`item_${i}_uom`] = 'กรุณาระบุหน่วยนับ';
@@ -246,16 +299,42 @@
 							<div
 								class="flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-background/80 p-3.5 text-xs sm:flex-nowrap"
 							>
-								<div class="min-w-[140px] flex-1">
+								<div class="min-w-[200px] flex-1">
 									<label
 										for={`item-map-id-${index}`}
-										class="block pb-1 font-semibold text-foreground">รหัสสินค้า (Item ID)</label
+										class="block pb-1 font-semibold text-foreground">สิ่งของ</label
 									>
-									<Input
-										id={`item-map-id-${index}`}
-										bind:value={itemMap.item_id}
-										placeholder="e.g. item_master:RICE_5KG"
-									/>
+									<Combobox
+										items={getItemOptions(itemMap.item_id)}
+										bind:value={() => itemMap.item_id, (v) => handleItemSelect(index, v)}
+										placeholder="-- เลือกสิ่งของ --"
+										searchPlaceholder="ค้นหาชื่อสิ่งของ หรือ SKU..."
+										emptyText="ไม่พบรายการสิ่งของ"
+										disabled={itemMastersQuery.isLoading}
+										class="h-9 w-full justify-between rounded-md border-input bg-background px-3 text-xs font-normal shadow-sm"
+									>
+										{#snippet children({ item })}
+											<div class="flex w-full items-center justify-between gap-2">
+												<div class="flex min-w-0 flex-col text-left">
+													<span class="truncate text-xs font-semibold text-foreground"
+														>{item.label}</span
+													>
+													{#if item.sku}
+														<span class="truncate font-mono text-[10px] text-muted-foreground"
+															>{item.sku}</span
+														>
+													{/if}
+												</div>
+												{#if item.base_unit}
+													<span
+														class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+													>
+														{item.base_unit}
+													</span>
+												{/if}
+											</div>
+										{/snippet}
+									</Combobox>
 									{#if formErrors[`item_${index}_id`]}
 										<p class="mt-1 text-[10px] text-destructive">
 											{formErrors[`item_${index}_id`]}
@@ -271,7 +350,9 @@
 									<Input
 										id={`item-map-uom-${index}`}
 										bind:value={itemMap.base_uom}
-										placeholder="ถุง/kg"
+										placeholder="ดึงจากสิ่งของ"
+										readonly
+										class="h-9 cursor-not-allowed bg-muted font-medium text-muted-foreground"
 									/>
 									{#if formErrors[`item_${index}_uom`]}
 										<p class="mt-1 text-[10px] text-destructive">

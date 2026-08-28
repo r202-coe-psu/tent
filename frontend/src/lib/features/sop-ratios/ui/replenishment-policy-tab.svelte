@@ -11,6 +11,7 @@
 	} from '../application/replenishment-queries';
 	import { useRequirementGroups } from '../application/requirement-group-queries';
 	import ReplenishmentPolicyForm from './replenishment-policy-form.svelte';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 
 	// Icons
 	import Plus from '@lucide/svelte/icons/plus';
@@ -18,6 +19,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import Settings2 from '@lucide/svelte/icons/settings-2';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Loader from '@lucide/svelte/icons/loader';
 
 	let {
 		shelterCode = '',
@@ -38,6 +40,8 @@
 
 	let viewMode = $state<'list' | 'create' | 'edit'>('list');
 	let selectedPolicy = $state<ReplenishmentPolicy | null>(null);
+	let policyToDelete = $state<ReplenishmentPolicy | null>(null);
+	let isDeleteDialogOpen = $state(false);
 
 	const policies = $derived(policiesQuery.data ?? []);
 	const reqGroups = $derived(reqGroupsQuery.data ?? []);
@@ -74,15 +78,23 @@
 		selectedPolicy = null;
 	}
 
-	async function handleDelete(pol: ReplenishmentPolicy) {
-		const groupName = groupMap.get(pol.target_id) ?? pol.target_id;
-		if (!confirm(`คุณต้องการลบนโยบายการเติมสต็อก ${groupName} หรือไม่?`)) {
-			return;
+	function openDeleteDialog(pol: ReplenishmentPolicy) {
+		policyToDelete = pol;
+		isDeleteDialogOpen = true;
+	}
+
+	async function handleConfirmDelete() {
+		if (!policyToDelete) return;
+		try {
+			await deleteMutation.mutateAsync({
+				id: policyToDelete._id,
+				shelterCode: policyToDelete.source === 'SHELTER_OVERRIDE' ? shelterCode : undefined
+			});
+			isDeleteDialogOpen = false;
+			policyToDelete = null;
+		} catch (err) {
+			console.error('Failed to delete replenishment policy:', err);
 		}
-		await deleteMutation.mutateAsync({
-			id: pol._id,
-			shelterCode: pol.source === 'SHELTER_OVERRIDE' ? shelterCode : undefined
-		});
 	}
 </script>
 
@@ -225,7 +237,7 @@
 											<Button
 												variant="destructive"
 												size="sm"
-												onclick={() => handleDelete(pol)}
+												onclick={() => openDeleteDialog(pol)}
 												class="flex items-center gap-1"
 											>
 												<Trash2 class="h-3.5 w-3.5" />
@@ -287,3 +299,44 @@
 		{/if}
 	</div>
 {/if}
+
+<AlertDialog.Root bind:open={isDeleteDialogOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>ยืนยันการลบนโยบายการเติมสต็อก</AlertDialog.Title>
+			<AlertDialog.Description>
+				{#if policyToDelete}
+					{@const groupName = groupMap.get(policyToDelete.target_id) ?? policyToDelete.target_id}
+					คุณต้องการลบนโยบายการเติมสต็อกสำหรับ
+					<span class="font-semibold text-foreground">{groupName}</span>
+					({policyToDelete.target_id}) ใช่หรือไม่? การดำเนินการนี้ไม่สามารถเรียกคืนได้
+				{/if}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel
+				disabled={deleteMutation.isPending}
+				onclick={() => {
+					policyToDelete = null;
+				}}
+			>
+				ยกเลิก
+			</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="bg-destructive text-white hover:bg-destructive/90"
+				disabled={deleteMutation.isPending}
+				onclick={(e) => {
+					e.preventDefault();
+					handleConfirmDelete();
+				}}
+			>
+				{#if deleteMutation.isPending}
+					<Loader class="mr-2 h-4 w-4 animate-spin" />
+					กำลังลบ...
+				{:else}
+					ยืนยันการลบ
+				{/if}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

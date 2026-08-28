@@ -14,6 +14,7 @@
 	} from '../application/food-sphere-queries';
 	import { useRequirementGroups } from '../application/requirement-group-queries';
 	import FoodSphereStandardForm from './food-sphere-standard-form.svelte';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 
 	// Icons
 	import Plus from '@lucide/svelte/icons/plus';
@@ -21,6 +22,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import Settings2 from '@lucide/svelte/icons/settings-2';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Loader from '@lucide/svelte/icons/loader';
 
 	let {
 		shelterCode = '',
@@ -42,6 +44,8 @@
 
 	let viewMode = $state<'list' | 'create' | 'edit'>('list');
 	let selectedStandard = $state<FoodSphereStandard | null>(null);
+	let standardToDelete = $state<FoodSphereStandard | null>(null);
+	let isDeleteDialogOpen = $state(false);
 
 	const standards = $derived(standardsQuery.data ?? []);
 	const reqGroups = $derived(reqGroupsQuery.data ?? []);
@@ -86,18 +90,23 @@
 		selectedStandard = null;
 	}
 
-	async function handleDelete(std: FoodSphereStandard) {
-		if (
-			!confirm(
-				`คุณต้องการลบเกณฑ์โภชนาการสำหรับ ${std.target_segment} - ${std.req_group_id} หรือไม่?`
-			)
-		) {
-			return;
+	function openDeleteDialog(std: FoodSphereStandard) {
+		standardToDelete = std;
+		isDeleteDialogOpen = true;
+	}
+
+	async function handleConfirmDelete() {
+		if (!standardToDelete) return;
+		try {
+			await deleteMutation.mutateAsync({
+				id: standardToDelete._id,
+				shelterCode: standardToDelete.source === 'SHELTER_OVERRIDE' ? shelterCode : undefined
+			});
+			isDeleteDialogOpen = false;
+			standardToDelete = null;
+		} catch (err) {
+			console.error('Failed to delete food sphere standard:', err);
 		}
-		await deleteMutation.mutateAsync({
-			id: std._id,
-			shelterCode: std.source === 'SHELTER_OVERRIDE' ? shelterCode : undefined
-		});
 	}
 </script>
 
@@ -138,7 +147,9 @@
 			<!-- Filters bar -->
 			<div class="flex flex-wrap items-center gap-3 border-t pt-3 text-xs">
 				<div class="flex items-center gap-1.5">
-					<label for="filter-segment" class="font-medium text-muted-foreground">Segment:</label>
+					<label for="filter-segment" class="font-medium text-muted-foreground"
+						>กลุ่มเป้าหมาย:</label
+					>
 					<select
 						id="filter-segment"
 						bind:value={filterSegment}
@@ -190,8 +201,8 @@
 				<table class="w-full text-left text-sm">
 					<thead class="bg-muted/50 text-xs font-semibold text-muted-foreground uppercase">
 						<tr>
-							<th class="p-3">กลุ่มเป้าหมาย (Segment)</th>
-							<th class="p-3">กลุ่มความต้องการ (Group)</th>
+							<th class="p-3">กลุ่มเป้าหมาย</th>
+							<th class="p-3">กลุ่มความต้องการ</th>
 							<th class="p-3 text-right">ปริมาณต่อคนต่อวัน</th>
 							<th class="p-3">หน่วยนับ</th>
 							<th class="p-3">วันบังคับใช้</th>
@@ -203,9 +214,8 @@
 						{#each filteredStandards as std (std._id)}
 							{@const uom = uomMap.get(std.req_group_id) ?? std.standard_uom ?? '—'}
 							<tr class="hover:bg-muted/30">
-								<td class="p-3 font-medium">
-									<div>{TARGET_SEGMENT_LABELS[std.target_segment] ?? std.target_segment}</div>
-									<div class="font-mono text-xs text-muted-foreground">{std.target_segment}</div>
+								<td class="p-3 font-medium text-foreground">
+									{TARGET_SEGMENT_LABELS[std.target_segment] ?? std.target_segment}
 								</td>
 								<td class="p-3 font-mono font-medium">{std.req_group_id}</td>
 								<td class="p-3 text-right font-mono font-semibold text-foreground">
@@ -244,7 +254,7 @@
 												variant="destructive"
 												size="sm"
 												aria-label={`ลบ ${std.req_group_id}`}
-												onclick={() => handleDelete(std)}
+												onclick={() => openDeleteDialog(std)}
 											>
 												<Trash2 class="h-3.5 w-3.5" />
 												ลบ
@@ -305,3 +315,46 @@
 		{/if}
 	</div>
 {/if}
+
+<AlertDialog.Root bind:open={isDeleteDialogOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>ยืนยันการลบเกณฑ์มาตรฐานโภชนาการ</AlertDialog.Title>
+			<AlertDialog.Description>
+				{#if standardToDelete}
+					คุณต้องการลบเกณฑ์โภชนาการสำหรับ <span class="font-semibold text-foreground"
+						>{TARGET_SEGMENT_LABELS[standardToDelete.target_segment] ??
+							standardToDelete.target_segment}</span
+					>
+					— <span class="font-semibold text-foreground">{standardToDelete.req_group_id}</span> ใช่หรือไม่?
+					การดำเนินการนี้ไม่สามารถเรียกคืนได้
+				{/if}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel
+				disabled={deleteMutation.isPending}
+				onclick={() => {
+					standardToDelete = null;
+				}}
+			>
+				ยกเลิก
+			</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="bg-destructive text-white hover:bg-destructive/90"
+				disabled={deleteMutation.isPending}
+				onclick={(e) => {
+					e.preventDefault();
+					handleConfirmDelete();
+				}}
+			>
+				{#if deleteMutation.isPending}
+					<Loader class="mr-2 h-4 w-4 animate-spin" />
+					กำลังลบ...
+				{:else}
+					ยืนยันการลบ
+				{/if}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

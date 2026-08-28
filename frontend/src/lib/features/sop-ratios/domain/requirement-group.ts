@@ -13,7 +13,7 @@ export const STANDARD_UOM_OPTIONS = [
 ] as const;
 
 export const itemMapSchema = z.object({
-	item_id: z.string().min(1, 'กรุณาระบุรหัสสินค้า'),
+	item_id: z.string().min(1, 'กรุณาเลือกสิ่งของ'),
 	base_uom: z.string().min(1, 'กรุณาระบุหน่วยนับพื้นฐาน'),
 	conversion_factor: z.coerce.number().positive('ตัวคูณแปลงค่าต้องมากกว่า 0'),
 	share_percent: z.coerce.number().min(0).max(100).optional()
