@@ -286,27 +286,27 @@
 	}
 </script>
 
-<div class="space-y-6">
+<div class="space-y-4 sm:space-y-6">
 	<!-- Summary KPI Cards -->
-	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+	<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-6">
 		<button
 			type="button"
 			onclick={() => {
 				riskFilter = 'ALL';
 			}}
-			class="flex flex-col gap-1.5 rounded-2xl border p-3.5 text-left transition-all hover:border-primary/50 {riskFilter ===
+			class="flex flex-col gap-1 rounded-xl border p-2.5 text-left transition-all hover:border-primary/50 sm:gap-1.5 sm:rounded-2xl sm:p-3.5 {riskFilter ===
 			'ALL'
 				? 'border-primary bg-primary/5 shadow-sm'
 				: 'border-border/60 bg-card/60'}"
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-xs font-semibold text-muted-foreground">พัสดุทั้งหมด</span>
-				<Boxes class="h-4 w-4 text-muted-foreground" />
+				<span class="text-[11px] font-semibold text-muted-foreground sm:text-xs">พัสดุทั้งหมด</span>
+				<Boxes class="h-3.5 w-3.5 text-muted-foreground sm:h-4 sm:w-4" />
 			</div>
-			<div class="text-2xl font-bold tracking-tight text-foreground">
+			<div class="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
 				{tableData.summary.totalItems}
 			</div>
-			<span class="text-[11px] text-muted-foreground">รายการ</span>
+			<span class="text-[10px] text-muted-foreground sm:text-[11px]">รายการ</span>
 		</button>
 
 		<button
@@ -314,19 +314,19 @@
 			onclick={() => {
 				riskFilter = 'CRITICAL';
 			}}
-			class="flex flex-col gap-1.5 rounded-2xl border p-3.5 text-left transition-all hover:border-danger/50 {riskFilter ===
+			class="flex flex-col gap-1 rounded-xl border p-2.5 text-left transition-all hover:border-danger/50 sm:gap-1.5 sm:rounded-2xl sm:p-3.5 {riskFilter ===
 			'CRITICAL'
 				? 'border-danger bg-danger/10 shadow-sm'
 				: 'border-border/60 bg-card/60'}"
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-xs font-semibold text-danger">สต็อกวิกฤต</span>
-				<ShieldAlert class="h-4 w-4 animate-pulse text-danger" />
+				<span class="text-[11px] font-semibold text-danger sm:text-xs">สต็อกวิกฤต</span>
+				<ShieldAlert class="h-3.5 w-3.5 animate-pulse text-danger sm:h-4 sm:w-4" />
 			</div>
-			<div class="text-2xl font-bold tracking-tight text-danger">
+			<div class="text-xl font-bold tracking-tight text-danger sm:text-2xl">
 				{tableData.summary.criticalCount}
 			</div>
-			<span class="text-[11px] text-danger/80">เสี่ยงของขาด</span>
+			<span class="text-[10px] text-danger/80 sm:text-[11px]">เสี่ยงของขาด</span>
 		</button>
 
 		<button
@@ -334,20 +334,23 @@
 			onclick={() => {
 				riskFilter = 'WARNING_REORDER';
 			}}
-			class="flex flex-col gap-1.5 rounded-2xl border p-3.5 text-left transition-all hover:border-warning/50 {riskFilter ===
+			class="flex flex-col gap-1 rounded-xl border p-2.5 text-left transition-all hover:border-warning/50 sm:gap-1.5 sm:rounded-2xl sm:p-3.5 {riskFilter ===
 			'WARNING_REORDER'
 				? 'border-warning bg-warning/10 shadow-sm'
 				: 'border-border/60 bg-card/60'}"
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-xs font-semibold text-warning-dark dark:text-warning">ถึงจุดสั่งเติม</span
+				<span class="text-[11px] font-semibold text-warning-dark sm:text-xs dark:text-warning"
+					>ถึงจุดสั่งเติม</span
 				>
-				<AlertTriangle class="h-4 w-4 text-warning" />
+				<AlertTriangle class="h-3.5 w-3.5 text-warning sm:h-4 sm:w-4" />
 			</div>
-			<div class="text-2xl font-bold tracking-tight text-warning-dark dark:text-warning">
+			<div class="text-xl font-bold tracking-tight text-warning-dark sm:text-2xl dark:text-warning">
 				{tableData.summary.warningCount}
 			</div>
-			<span class="text-[11px] text-warning-dark/80 dark:text-warning/80">ถึงเกณฑ์สั่งเติม</span>
+			<span class="text-[10px] text-warning-dark/80 sm:text-[11px] dark:text-warning/80"
+				>ถึงเกณฑ์สั่งเติม</span
+			>
 		</button>
 
 		<button
@@ -355,19 +358,23 @@
 			onclick={() => {
 				riskFilter = 'ADEQUATE';
 			}}
-			class="flex flex-col gap-1.5 rounded-2xl border p-3.5 text-left transition-all hover:border-success/50 {riskFilter ===
+			class="flex flex-col gap-1 rounded-xl border p-2.5 text-left transition-all hover:border-success/50 sm:gap-1.5 sm:rounded-2xl sm:p-3.5 {riskFilter ===
 			'ADEQUATE'
 				? 'border-success bg-success/10 shadow-sm'
 				: 'border-border/60 bg-card/60'}"
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-xs font-semibold text-success-dark dark:text-success">สต็อกปลอดภัย</span>
-				<CheckCircle2 class="h-4 w-4 text-success" />
+				<span class="text-[11px] font-semibold text-success-dark sm:text-xs dark:text-success"
+					>สต็อกปลอดภัย</span
+				>
+				<CheckCircle2 class="h-3.5 w-3.5 text-success sm:h-4 sm:w-4" />
 			</div>
-			<div class="text-2xl font-bold tracking-tight text-success-dark dark:text-success">
+			<div class="text-xl font-bold tracking-tight text-success-dark sm:text-2xl dark:text-success">
 				{tableData.summary.adequateCount}
 			</div>
-			<span class="text-[11px] text-success-dark/80 dark:text-success/80">เพียงพอตามแผน</span>
+			<span class="text-[10px] text-success-dark/80 sm:text-[11px] dark:text-success/80"
+				>เพียงพอตามแผน</span
+			>
 		</button>
 
 		<button
@@ -375,19 +382,23 @@
 			onclick={() => {
 				riskFilter = 'OVERSTOCK';
 			}}
-			class="flex flex-col gap-1.5 rounded-2xl border p-3.5 text-left transition-all hover:border-blue-500/50 {riskFilter ===
+			class="flex flex-col gap-1 rounded-xl border p-2.5 text-left transition-all hover:border-blue-500/50 sm:gap-1.5 sm:rounded-2xl sm:p-3.5 {riskFilter ===
 			'OVERSTOCK'
 				? 'border-blue-500 bg-blue-500/10 shadow-sm'
 				: 'border-border/60 bg-card/60'}"
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-xs font-semibold text-blue-600 dark:text-blue-400">สต็อกเกินเกณฑ์</span>
-				<Info class="h-4 w-4 text-blue-500" />
+				<span class="text-[11px] font-semibold text-blue-600 sm:text-xs dark:text-blue-400"
+					>สต็อกเกินเกณฑ์</span
+				>
+				<Info class="h-3.5 w-3.5 text-blue-500 sm:h-4 sm:w-4" />
 			</div>
-			<div class="text-2xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
+			<div class="text-xl font-bold tracking-tight text-blue-600 sm:text-2xl dark:text-blue-400">
 				{tableData.summary.overstockCount}
 			</div>
-			<span class="text-[11px] text-blue-600/80 dark:text-blue-400/80">สต็อกเกินความจำเป็น</span>
+			<span class="text-[10px] text-blue-600/80 sm:text-[11px] dark:text-blue-400/80"
+				>สต็อกเกินความจำเป็น</span
+			>
 		</button>
 
 		<button
@@ -395,28 +406,29 @@
 			onclick={() => {
 				riskFilter = 'UNCONFIGURED';
 			}}
-			class="flex flex-col gap-1.5 rounded-2xl border p-3.5 text-left transition-all hover:border-muted-foreground/50 {riskFilter ===
+			class="flex flex-col gap-1 rounded-xl border p-2.5 text-left transition-all hover:border-muted-foreground/50 sm:gap-1.5 sm:rounded-2xl sm:p-3.5 {riskFilter ===
 			'UNCONFIGURED'
 				? 'border-muted-foreground bg-muted/40 shadow-sm'
 				: 'border-border/60 bg-card/60'}"
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-xs font-semibold text-muted-foreground">ยังไม่ตั้งค่า</span>
-				<AlertCircle class="h-4 w-4 text-muted-foreground" />
+				<span class="text-[11px] font-semibold text-muted-foreground sm:text-xs">ยังไม่ตั้งค่า</span
+				>
+				<AlertCircle class="h-3.5 w-3.5 text-muted-foreground sm:h-4 sm:w-4" />
 			</div>
-			<div class="text-2xl font-bold tracking-tight text-muted-foreground">
+			<div class="text-xl font-bold tracking-tight text-muted-foreground sm:text-2xl">
 				{tableData.summary.unconfiguredCount}
 			</div>
-			<span class="text-[11px] text-muted-foreground">ยังไม่มีนโยบาย</span>
+			<span class="text-[10px] text-muted-foreground sm:text-[11px]">ยังไม่มีนโยบาย</span>
 		</button>
 	</div>
 
 	<!-- Main Card Table with Toolbar -->
 	<div
-		class="flex h-full min-h-[55vh] flex-col rounded-[24px] border border-border/80 bg-card/85 p-6 shadow-md backdrop-blur-xl transition-all"
+		class="flex h-full min-h-[55vh] flex-col rounded-2xl border border-border/80 bg-card/85 p-3.5 shadow-md backdrop-blur-xl transition-all sm:rounded-[24px] sm:p-6"
 	>
 		<!-- Toolbar & Filters -->
-		<div class="mb-6 flex flex-col gap-4">
+		<div class="mb-4 flex flex-col gap-3 sm:mb-6 sm:gap-4">
 			<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 				<!-- Search -->
 				<div class="relative w-full lg:max-w-md">
@@ -425,7 +437,7 @@
 					/>
 					<Input
 						bind:value={searchQuery}
-						placeholder="ค้นหารหัสข้อมูล (SKU), ชื่อรายการ หรือกลุ่มความต้องการ..."
+						placeholder="ค้นหา SKU, ชื่อรายการ หรือกลุ่มความต้องการ..."
 						class="rounded-xl border-border/60 bg-background/80 pr-9 pl-9.5 text-xs shadow-inner transition-all focus-visible:ring-primary/40 md:text-sm"
 					/>
 					{#if searchQuery}
@@ -441,12 +453,12 @@
 				</div>
 
 				<!-- Action Controls & Expand/Collapse -->
-				<div class="flex flex-wrap items-center gap-2">
+				<div class="flex items-center gap-2">
 					<Button
 						variant="outline"
 						size="sm"
 						onclick={expandAll}
-						class="rounded-xl border-border/60 text-xs font-medium"
+						class="flex-1 rounded-xl border-border/60 text-xs font-medium sm:flex-initial"
 					>
 						ขยายทั้งหมด
 					</Button>
@@ -454,7 +466,7 @@
 						variant="outline"
 						size="sm"
 						onclick={collapseAll}
-						class="rounded-xl border-border/60 text-xs font-medium"
+						class="flex-1 rounded-xl border-border/60 text-xs font-medium sm:flex-initial"
 					>
 						ยุบทั้งหมด
 					</Button>
@@ -462,13 +474,15 @@
 			</div>
 
 			<!-- Filter Selectors Bar -->
-			<div class="flex flex-wrap items-center gap-3 border-t border-border/40 pt-4 text-xs">
-				<div class="flex items-center gap-2">
-					<Filter class="h-3.5 w-3.5 text-muted-foreground" />
-					<span class="font-semibold text-muted-foreground">หมวดหมู่:</span>
+			<div
+				class="flex flex-col gap-2.5 border-t border-border/40 pt-3.5 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 sm:pt-4"
+			>
+				<div class="flex w-full items-center gap-2 sm:w-auto">
+					<Filter class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+					<span class="shrink-0 font-semibold text-muted-foreground">หมวดหมู่:</span>
 					<select
 						bind:value={categoryFilter}
-						class="rounded-lg border border-border/60 bg-background px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition hover:border-primary/40 focus:ring-1 focus:ring-primary focus:outline-none"
+						class="min-w-0 flex-1 rounded-lg border border-border/60 bg-background px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition hover:border-primary/40 focus:ring-1 focus:ring-primary focus:outline-none sm:flex-initial"
 					>
 						<option value="ALL_GROUPS">ทุกหมวดหมู่ ({tableData.groups.length} กลุ่ม)</option>
 						{#each tableData.groups as g (g.id)}
@@ -477,11 +491,11 @@
 					</select>
 				</div>
 
-				<div class="flex items-center gap-2">
-					<span class="font-semibold text-muted-foreground">สถานะความเสี่ยง:</span>
+				<div class="flex w-full items-center gap-2 sm:w-auto">
+					<span class="shrink-0 font-semibold text-muted-foreground">สถานะความเสี่ยง:</span>
 					<select
 						bind:value={riskFilter}
-						class="rounded-lg border border-border/60 bg-background px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition hover:border-primary/40 focus:ring-1 focus:ring-primary focus:outline-none"
+						class="min-w-0 flex-1 rounded-lg border border-border/60 bg-background px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition hover:border-primary/40 focus:ring-1 focus:ring-primary focus:outline-none sm:flex-initial"
 					>
 						<option value="ALL">ทั้งหมด ({tableData.summary.totalItems} รายการ)</option>
 						<option value="CRITICAL">สต็อกวิกฤต ({tableData.summary.criticalCount})</option>
@@ -500,14 +514,16 @@
 					<button
 						type="button"
 						onclick={clearFilters}
-						class="inline-flex items-center gap-1 rounded-lg bg-muted/80 px-2.5 py-1 text-xs font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"
+						class="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-muted/80 px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground sm:w-auto sm:py-1"
 					>
 						<RefreshCw class="h-3 w-3" />
 						ล้างตัวกรอง
 					</button>
 				{/if}
 
-				<div class="ml-auto text-xs text-muted-foreground">
+				<div
+					class="w-full pt-1 text-[11px] text-muted-foreground sm:ml-auto sm:w-auto sm:pt-0 sm:text-xs"
+				>
 					แสดง {filteredGroups.reduce((acc, g) => acc + g.items.length, 0)} รายการใน {filteredGroups.length}
 					กลุ่ม
 					{#if effectiveOccupancy > 0}
@@ -531,7 +547,7 @@
 			</div>
 		{:else if filteredGroups.length === 0}
 			<div
-				class="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-8 text-center"
+				class="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-6 text-center sm:p-8"
 			>
 				<div class="rounded-full bg-muted/60 p-3">
 					<Search class="h-6 w-6 text-muted-foreground" />
@@ -547,21 +563,21 @@
 				</Button>
 			</div>
 		{:else}
-			<div class="space-y-4">
+			<div class="space-y-3 sm:space-y-4">
 				{#each filteredGroups as group (group.id)}
 					{@const isExpanded = expandedGroupIds.has(group.id)}
 					<div
-						class="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm transition-all duration-200"
+						class="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm transition-all duration-200 sm:rounded-2xl"
 					>
 						<!-- Group Accordion Header -->
 						<button
 							type="button"
 							onclick={() => toggleGroup(group.id)}
-							class="flex w-full items-center justify-between gap-3 bg-muted/40 px-4 py-3.5 text-left transition-colors hover:bg-muted/60 sm:px-5"
+							class="flex w-full items-center justify-between gap-2.5 bg-muted/40 px-3.5 py-3 text-left transition-colors hover:bg-muted/60 sm:px-5 sm:py-3.5"
 						>
-							<div class="flex items-center gap-3">
+							<div class="flex min-w-0 items-center gap-2.5 sm:gap-3">
 								<div
-									class="rounded-lg border border-border/60 bg-background/80 p-1 text-muted-foreground shadow-sm"
+									class="shrink-0 rounded-lg border border-border/60 bg-background/80 p-1 text-muted-foreground shadow-sm"
 								>
 									{#if isExpanded}
 										<ChevronDown class="h-4 w-4 text-primary" />
@@ -570,55 +586,187 @@
 									{/if}
 								</div>
 
-								<div class="flex flex-wrap items-center gap-2">
-									<span class="text-sm font-bold text-foreground sm:text-base">
+								<div class="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+									<span class="text-sm font-bold break-words text-foreground sm:text-base">
 										{group.name}
 									</span>
 									<span
-										class="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
+										class="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary sm:text-xs"
 									>
 										{group.items.length} รายการ
 									</span>
 									{#if group.totalGroupDemand > 0}
 										<span
-											class="rounded-full border border-border/60 bg-background/80 px-2.5 py-0.5 font-mono text-xs font-medium text-muted-foreground"
+											class="shrink-0 rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground sm:text-xs"
 										>
-											เป้าหมายรวม: {group.totalGroupDemand.toLocaleString()}
+											เป้าหมาย: {group.totalGroupDemand.toLocaleString()}
 											{group.standardUom}/วัน
 										</span>
 									{/if}
 								</div>
 							</div>
 
-							<div class="text-xs font-semibold text-muted-foreground">
+							<div class="hidden shrink-0 text-xs font-semibold text-muted-foreground sm:block">
 								{isExpanded ? 'คลิกเพื่อยุบ' : 'คลิกเพื่อเปิดดู'}
 							</div>
 						</button>
 
-						<!-- Table Rows inside Accordion -->
+						<!-- Rows inside Accordion -->
 						{#if isExpanded}
-							<div class="overflow-x-auto">
-								<table class="w-full text-left text-xs sm:text-sm">
+							<!-- Mobile View (< md screens): Touch-friendly Card List -->
+							<div class="divide-y divide-border/40 md:hidden">
+								{#each group.items as item (item.itemId)}
+									<div class="flex flex-col gap-2.5 p-3.5 transition-colors hover:bg-muted/20">
+										<!-- Header: Icon, Name, SKU, and Status Badge -->
+										<div class="flex items-start justify-between gap-2">
+											<div class="flex min-w-0 items-start gap-2.5">
+												<div
+													class="mt-0.5 shrink-0 rounded-lg border border-border/60 bg-muted/50 p-1.5 text-muted-foreground"
+												>
+													{#if item.category === 'food'}
+														<Utensils class="h-4 w-4 text-orange-500" />
+													{:else}
+														<Package class="h-4 w-4 text-blue-500" />
+													{/if}
+												</div>
+												<div class="flex min-w-0 flex-col">
+													<span class="text-sm font-bold break-words text-foreground"
+														>{item.name}</span
+													>
+													<div
+														class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground"
+													>
+														{#if item.sku}
+															<span class="font-mono">{item.sku}</span>
+															<span>·</span>
+														{/if}
+														<span>หน่วย: {item.baseUom}</span>
+														{#if item.expiryDate}
+															<span>·</span>
+															<span class="text-amber-600 dark:text-amber-400"
+																>หมดอายุ: {item.expiryDate}</span
+															>
+														{/if}
+													</div>
+												</div>
+											</div>
+											<div class="shrink-0">
+												<DocStatusBadge
+													status={item.status}
+													docDays={item.docDays}
+													itemId={item.itemId}
+													compact={true}
+												/>
+											</div>
+										</div>
+
+										<!-- Target group info -->
+										<div class="flex flex-wrap items-center gap-1.5 text-xs">
+											{#if item.reqGroupId !== 'GENERAL'}
+												<span
+													class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-foreground"
+												>
+													คำนวณ: {group.name}
+													{#if item.sharePercent < 100}
+														<span class="font-semibold text-primary">({item.sharePercent}%)</span>
+													{/if}
+												</span>
+											{:else}
+												<span
+													class="inline-flex items-center rounded-md border border-border/60 bg-muted/30 px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+												>
+													รายการทั่วไป
+												</span>
+											{/if}
+											<span class="text-[11px] text-muted-foreground">
+												ผู้ประสบภัย: <strong class="text-foreground">{effectiveOccupancy}</strong> คน
+											</span>
+										</div>
+
+										<!-- 3 Key Metric Blocks -->
+										<div
+											class="grid grid-cols-3 gap-1.5 rounded-xl border border-border/50 bg-muted/30 p-2 text-center"
+										>
+											<div class="flex flex-col justify-center">
+												<span class="text-[10px] font-medium text-muted-foreground"
+													>เป้าหมาย/วัน</span
+												>
+												<span class="font-mono text-xs font-bold text-foreground">
+													{formatDemand(item.itemDailyDemand)}
+												</span>
+												<span class="text-[9px] text-muted-foreground">{item.baseUom}</span>
+											</div>
+											<div class="flex flex-col justify-center border-x border-border/40 px-1">
+												<span class="text-[10px] font-medium text-muted-foreground">สต็อกจริง</span>
+												<span class="font-mono text-xs font-semibold text-foreground">
+													{formatStock(item.physicalStock)}
+												</span>
+												<span class="text-[9px] text-muted-foreground">{item.baseUom}</span>
+											</div>
+											<div class="flex flex-col justify-center">
+												<span class="text-[10px] font-medium text-primary">ใช้งานได้จริง</span>
+												<span class="font-mono text-xs font-bold text-primary">
+													{formatStock(item.usableStock)}
+												</span>
+												<span class="text-[9px] text-primary/80">{item.baseUom}</span>
+											</div>
+										</div>
+
+										<!-- Explanation footer -->
+										{#if getStatusExplanation(item)}
+											<div
+												class="flex flex-wrap items-center justify-between gap-1 text-[11px] text-muted-foreground"
+											>
+												<span>{getStatusExplanation(item)}</span>
+												{#if item.conversionFactor > 1}
+													<span class="text-[10px] text-muted-foreground/80">
+														1 {item.baseUom} = {item.conversionFactor}
+														{group.standardUom}
+													</span>
+												{/if}
+											</div>
+										{/if}
+									</div>
+								{/each}
+							</div>
+
+							<!-- Desktop Table View (>= md screens) with safe overflow scrolling -->
+							<div class="hidden overflow-x-auto md:block">
+								<table class="w-full min-w-[920px] text-left text-xs sm:text-sm">
 									<thead
 										class="border-b border-border/40 bg-muted/20 text-[11px] font-bold text-muted-foreground uppercase"
 									>
 										<tr>
-											<th class="p-3.5 pl-5">หมวดหมู่ / ความต้องการ</th>
-											<th class="p-3.5">กลุ่มเป้าหมาย &amp; จำนวนคน</th>
-											<th class="p-3.5 text-right">เป้าหมายรายวัน</th>
-											<th class="p-3.5 text-right">สต็อกจริง</th>
-											<th class="p-3.5 text-right font-bold text-primary">ใช้งานได้จริง</th>
-											<th class="p-3.5 pr-5 text-right">ความคุ้มครอง (DoC)</th>
+											<th class="w-[28%] max-w-[320px] min-w-[220px] p-3.5 pl-5">
+												หมวดหมู่ / รายการพัสดุ
+											</th>
+											<th class="w-[18%] max-w-[220px] min-w-[160px] p-3.5">
+												กลุ่มเป้าหมาย &amp; จำนวนคน
+											</th>
+											<th class="w-[13%] max-w-[160px] min-w-[120px] p-3.5 text-right">
+												เป้าหมายรายวัน
+											</th>
+											<th class="w-[11%] max-w-[130px] min-w-[100px] p-3.5 text-right">
+												สต็อกจริง
+											</th>
+											<th
+												class="w-[12%] max-w-[140px] min-w-[110px] p-3.5 text-right font-bold text-primary"
+											>
+												ใช้งานได้จริง
+											</th>
+											<th class="w-[18%] max-w-[280px] min-w-[210px] p-3.5 pr-5 text-right">
+												ความคุ้มครอง (DoC)
+											</th>
 										</tr>
 									</thead>
 									<tbody class="divide-y divide-border/40">
 										{#each group.items as item (item.itemId)}
 											<tr class="transition-colors hover:bg-muted/30">
-												<!-- Col 1: Item info -->
-												<td class="p-3.5 pl-5">
+												<!-- Col 1: Item info (with width constraints) -->
+												<td class="max-w-[320px] min-w-[220px] p-3.5 pl-5">
 													<div class="flex items-start gap-3">
 														<div
-															class="mt-0.5 rounded-lg border border-border/60 bg-muted/50 p-1.5 text-muted-foreground"
+															class="mt-0.5 shrink-0 rounded-lg border border-border/60 bg-muted/50 p-1.5 text-muted-foreground"
 														>
 															{#if item.category === 'food'}
 																<Utensils class="h-4 w-4 text-orange-500" />
@@ -626,10 +774,12 @@
 																<Package class="h-4 w-4 text-blue-500" />
 															{/if}
 														</div>
-														<div class="flex flex-col">
-															<span class="font-bold text-foreground">{item.name}</span>
+														<div class="flex min-w-0 flex-col">
+															<span class="font-bold break-words text-foreground" title={item.name}>
+																{item.name}
+															</span>
 															<div
-																class="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+																class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground"
 															>
 																{#if item.sku}
 																	<span class="font-mono">{item.sku}</span>
@@ -647,8 +797,8 @@
 													</div>
 												</td>
 
-												<!-- Col 2: Target segment & Headcount -->
-												<td class="p-3.5">
+												<!-- Col 2: Target segment & Headcount (with width constraints) -->
+												<td class="max-w-[220px] min-w-[160px] p-3.5">
 													<div class="flex flex-col gap-1">
 														{#if item.reqGroupId !== 'GENERAL'}
 															<span
@@ -676,8 +826,10 @@
 													</div>
 												</td>
 
-												<!-- Col 3: Daily demand target -->
-												<td class="p-3.5 text-right font-mono font-bold text-foreground">
+												<!-- Col 3: Daily demand target (with width constraints) -->
+												<td
+													class="max-w-[160px] min-w-[120px] p-3.5 text-right font-mono font-bold whitespace-nowrap text-foreground"
+												>
 													<div>
 														{formatDemand(item.itemDailyDemand)}
 														<span class="text-xs font-normal text-muted-foreground"
@@ -692,32 +844,39 @@
 													{/if}
 												</td>
 
-												<!-- Col 4: Physical On-hand -->
-												<td class="p-3.5 text-right font-mono font-semibold text-foreground">
+												<!-- Col 4: Physical On-hand (with width constraints) -->
+												<td
+													class="max-w-[130px] min-w-[100px] p-3.5 text-right font-mono font-semibold whitespace-nowrap text-foreground"
+												>
 													{formatStock(item.physicalStock)}
 													<span class="text-xs font-normal text-muted-foreground"
 														>{item.baseUom}</span
 													>
 												</td>
 
-												<!-- Col 5: Usable stock (highlighted) -->
-												<td class="p-3.5 text-right font-mono font-bold text-primary">
-													<span class="rounded-lg bg-primary/10 px-2 py-1">
+												<!-- Col 5: Usable stock (with width constraints) -->
+												<td
+													class="max-w-[140px] min-w-[110px] p-3.5 text-right font-mono font-bold whitespace-nowrap text-primary"
+												>
+													<span class="inline-block rounded-lg bg-primary/10 px-2 py-1">
 														{formatStock(item.usableStock)}
 														{item.baseUom}
 													</span>
 												</td>
 
-												<!-- Col 6: DoC & Status Badge -->
-												<td class="p-3.5 pr-5 text-right">
+												<!-- Col 6: DoC & Status Badge (with width constraints) -->
+												<td class="max-w-[280px] min-w-[210px] p-3.5 pr-5 text-right">
 													<div class="flex flex-col items-end gap-1">
 														<DocStatusBadge
 															status={item.status}
 															docDays={item.docDays}
 															itemId={item.itemId}
-															compact={false}
+															compact={true}
 														/>
-														<span class="text-[11px] text-muted-foreground">
+														<span
+															class="text-[11px] whitespace-nowrap text-muted-foreground"
+															title={getStatusExplanation(item)}
+														>
 															{getStatusExplanation(item)}
 														</span>
 													</div>

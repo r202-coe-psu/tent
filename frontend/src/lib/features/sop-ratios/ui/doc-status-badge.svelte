@@ -24,7 +24,7 @@
 		CRITICAL: {
 			badgeClass: 'badge-status-critical',
 			dotClass: 'badge-dot-critical',
-			label: 'สต็อกวิกฤต (ของจะหมดก่อนของใหม่มา)',
+			label: 'สต็อกวิกฤต',
 			compactLabel: 'สต็อกวิกฤต'
 		},
 		WARNING_REORDER: {
@@ -48,8 +48,8 @@
 		UNCONFIGURED: {
 			badgeClass: 'badge-status-unconfigured',
 			dotClass: 'badge-dot-unconfigured',
-			label: 'ยังไม่ได้ตั้งค่านโยบาย',
-			compactLabel: 'ยังไม่ได้ตั้งค่านโยบาย'
+			label: 'ยังไม่ได้ตั้งค่า',
+			compactLabel: 'ยังไม่ได้ตั้งค่า'
 		}
 	};
 
@@ -58,13 +58,13 @@
 
 <span
 	data-testid={testId}
-	class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold {current.badgeClass}"
+	class="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap {current.badgeClass}"
 >
-	<span class="h-2 w-2 rounded-full {current.dotClass}"></span>
+	<span class="h-2 w-2 shrink-0 rounded-full {current.dotClass}"></span>
 
-	<span>{compact ? current.compactLabel : current.label}</span>
+	<span class="shrink-0">{compact ? current.compactLabel : current.label}</span>
 
 	{#if docDays !== null && docDays !== undefined}
-		<span class="font-mono opacity-80">({docDays.toFixed(1)} วัน)</span>
+		<span class="shrink-0 font-mono opacity-80">({docDays.toFixed(1)} วัน)</span>
 	{/if}
 </span>
