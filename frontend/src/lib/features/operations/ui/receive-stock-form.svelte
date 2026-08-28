@@ -660,14 +660,14 @@
 						<div class="flex gap-1.5">
 							<button
 								type="button"
-								class="cursor-pointer rounded-full border border-border bg-background px-2.5 py-0.5 text-[10px] font-bold text-muted-foreground shadow-sm transition hover:bg-muted"
+								class="cursor-pointer rounded-full border border-border bg-background px-2.5 py-0.5 text-2xs font-bold text-muted-foreground shadow-sm transition hover:bg-muted"
 								onclick={() => setQuickExpiry(3)}
 							>
 								+3 วัน
 							</button>
 							<button
 								type="button"
-								class="cursor-pointer rounded-full border border-border bg-background px-2.5 py-0.5 text-[10px] font-bold text-muted-foreground shadow-sm transition hover:bg-muted"
+								class="cursor-pointer rounded-full border border-border bg-background px-2.5 py-0.5 text-2xs font-bold text-muted-foreground shadow-sm transition hover:bg-muted"
 								onclick={() => setQuickExpiry(7)}
 							>
 								+7 วัน

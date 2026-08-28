@@ -69,7 +69,7 @@
 				class="bg-background"
 				required
 			/>
-			<p class="text-[11px] text-muted-foreground">
+			<p class="text-2xs text-muted-foreground">
 				จะบันทึกใน emergency contact ของ {headEvac.first_name}
 				{headEvac.last_name}
 			</p>

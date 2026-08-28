@@ -396,7 +396,7 @@
 							<button
 								type="button"
 								disabled={distanceLocked}
-								class="min-w-[3.25rem] flex-1 rounded-md px-1 py-1.5 text-center text-[12px] font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 {distanceValue ===
+								class="min-w-[3.25rem] flex-1 rounded-md px-1 py-1.5 text-center text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 {distanceValue ===
 								km
 									? 'bg-primary-dark font-bold text-white'
 									: 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
@@ -409,7 +409,7 @@
 					</div>
 					<div class="flex items-center gap-2" title={geoHint || undefined}>
 						<span
-							class="shrink-0 text-[12px] font-medium {isCustomDistance
+							class="shrink-0 text-xs font-medium {isCustomDistance
 								? 'font-bold text-foreground'
 								: 'text-muted-foreground'}">{t.radiusCustom}</span
 						>
@@ -421,20 +421,20 @@
 							placeholder={t.radiusCustomPlaceholder}
 							aria-invalid={customDistanceError}
 							aria-label={t.radiusCustom}
-							class="h-8 w-full rounded-md text-[13px] {isCustomDistance
+							class="h-8 w-full rounded-md text-xs {isCustomDistance
 								? 'border-primary-dark/40'
 								: ''} {customDistanceError ? 'border-destructive' : ''}"
 							onfocus={() => onCustomDistanceFocus()}
 							onblur={() => applyCustomDistance()}
 							onchange={() => applyCustomDistance()}
 						/>
-						<span class="shrink-0 text-[12px] text-muted-foreground">{t.km}</span>
+						<span class="shrink-0 text-xs text-muted-foreground">{t.km}</span>
 					</div>
 					{#if customDistanceError}
-						<p class="text-[11px] text-destructive">{t.radiusInvalid}</p>
+						<p class="text-2xs text-destructive">{t.radiusInvalid}</p>
 					{/if}
 					{#if geoHint}
-						<p class="text-[11px] text-muted-foreground">{geoHint}</p>
+						<p class="text-2xs text-muted-foreground">{geoHint}</p>
 					{/if}
 				</div>
 
@@ -458,7 +458,7 @@
 							class="cursor-pointer text-sm leading-tight font-bold text-foreground"
 							>{t.hideFullTitle}</Label
 						>
-						<span class="text-[11px] text-muted-foreground">{t.hideFullDesc}</span>
+						<span class="text-2xs text-muted-foreground">{t.hideFullDesc}</span>
 					</div>
 				</div>
 
@@ -475,7 +475,7 @@
 								<div class="space-y-6 px-2 pt-2 pb-2">
 									<!-- Category 1 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
-										<div class="text-[13px] font-bold text-foreground">{t.cat1}</div>
+										<div class="text-xs font-bold text-foreground">{t.cat1}</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
@@ -536,7 +536,7 @@
 									</div>
 									<!-- Category 2 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
-										<div class="text-[13px] font-bold text-foreground">{t.cat2}</div>
+										<div class="text-xs font-bold text-foreground">{t.cat2}</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
@@ -575,7 +575,7 @@
 									</div>
 									<!-- Category 3 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
-										<div class="text-[13px] font-bold text-foreground">{t.cat3}</div>
+										<div class="text-xs font-bold text-foreground">{t.cat3}</div>
 										<div class="flex flex-col gap-3">
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
@@ -614,7 +614,7 @@
 									</div>
 									<!-- Category 4 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
-										<div class="text-[13px] font-bold text-foreground">
+										<div class="text-xs font-bold text-foreground">
 											{t.cat4}
 										</div>
 										<div class="flex flex-col gap-3">

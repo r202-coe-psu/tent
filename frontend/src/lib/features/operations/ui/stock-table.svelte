@@ -511,7 +511,7 @@
 			>
 				<Table.Root class="min-w-[900px] text-xs whitespace-nowrap">
 					<Table.Header class="sticky top-0 z-10 border-b border-border/60 bg-muted/50">
-						<Table.Row class="text-[11px] font-bold tracking-wider text-foreground uppercase">
+						<Table.Row class="text-2xs font-bold tracking-wider text-foreground uppercase">
 							<Table.Head class="p-4 px-5">รายการสินค้า (SKU)</Table.Head>
 							<Table.Head class="p-4">หมวดหมู่</Table.Head>
 							<Table.Head class="p-4 text-center">สถานที่จัดเก็บ</Table.Head>
@@ -556,16 +556,16 @@
 									<!-- Item name + ID -->
 									<Table.Cell class="p-4 px-5">
 										<div class="flex flex-col gap-1">
-											<span class="text-[14px] font-semibold text-foreground">
+											<span class="text-sm font-semibold text-foreground">
 												{item.name}
 											</span>
 											<div class="flex items-center gap-2">
-												<span class="font-mono text-[11px] text-muted-foreground">
+												<span class="font-mono text-2xs text-muted-foreground">
 													{item._id}
 												</span>
 												{#if item.perishable}
 													<span
-														class="rounded border border-orange-500/20 bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-bold text-orange-600 dark:text-orange-400"
+														class="rounded border border-orange-500/20 bg-orange-500/10 px-1.5 py-0.5 text-2xs font-bold text-orange-600 dark:text-orange-400"
 													>
 														เน่าเสียได้
 													</span>
@@ -577,7 +577,7 @@
 									<!-- Category badge -->
 									<Table.Cell class="p-4">
 										<span
-											class="rounded-md border px-2.5 py-1 text-center text-[10px] font-bold whitespace-nowrap {getCategoryStyle(
+											class="rounded-md border px-2.5 py-1 text-center text-2xs font-bold whitespace-nowrap {getCategoryStyle(
 												item.category
 											)}"
 										>
@@ -589,7 +589,7 @@
 									<Table.Cell class="p-4 text-center">
 										{#if lot?.note}
 											<span
-												class="rounded-lg border border-border/80 bg-muted/60 px-2.5 py-1 text-[12px] font-medium text-foreground"
+												class="rounded-lg border border-border/80 bg-muted/60 px-2.5 py-1 text-xs font-medium text-foreground"
 											>
 												📍 {lot.note}
 											</span>
@@ -602,7 +602,7 @@
 									<Table.Cell class="p-4 text-center">
 										{#if lot?.expiry}
 											<span
-												class="rounded-md px-2 py-1 text-[12px] font-bold {expired
+												class="rounded-md px-2 py-1 text-xs font-bold {expired
 													? 'border border-rose-500/20 bg-rose-500/10 text-rose-600'
 													: expiring
 														? 'border border-orange-500/20 bg-orange-500/10 text-orange-600'
@@ -627,12 +627,10 @@
 														: 'border border-border/60 bg-muted/80 text-foreground'}"
 											>
 												{qty}
-												<span class="text-[11px] font-normal text-muted-foreground"
-													>{item.unit}</span
-												>
+												<span class="text-2xs font-normal text-muted-foreground">{item.unit}</span>
 											</span>
 											{#if item.reorderThreshold !== null}
-												<span class="text-[10px] font-normal text-muted-foreground/60">
+												<span class="text-2xs font-normal text-muted-foreground/60">
 													เกณฑ์: {item.reorderThreshold}
 													{item.unit}
 												</span>
@@ -760,19 +758,9 @@
 				{/if}
 				<p>* หมายเหตุ: จุดจัดเก็บและวันหมดอายุจะอ้างอิงจากรายการล่าสุดที่มีการระบุข้อมูล</p>
 			</div>
-		{/if}
 	</div>
 </div>
 
-<!-- Manage / History Modal (Dialog) -->
-<Dialog.Root bind:open={isManageModalOpen}>
-	<Dialog.Content
-		class="max-h-[92vh] w-full overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl sm:max-w-7xl"
-	>
-		<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
-			{#if selectedItemId}
-				{@const item = items.find((i) => i._id === selectedItemId)}
-				<Dialog.Title class="flex items-center gap-2 text-xl font-bold text-foreground">
 					<Boxes class="h-5 w-5 text-primary" />
 					จัดการสต็อก: {item?.name ?? ''}
 				</Dialog.Title>

@@ -91,25 +91,25 @@
 					<Table.Header class="border-b border-border/60 bg-muted/40">
 						<Table.Row class="hover:bg-transparent">
 							<Table.Head
-								class="w-[120px] text-[11px] font-bold tracking-wider text-foreground uppercase"
+								class="w-[120px] text-2xs font-bold tracking-wider text-foreground uppercase"
 								>วัน-เวลา</Table.Head
 							>
 							{#if !filterItemId}
-								<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase"
+								<Table.Head class="text-2xs font-bold tracking-wider text-foreground uppercase"
 									>รายการสิ่งของ</Table.Head
 								>
 							{/if}
-							<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase"
+							<Table.Head class="text-2xs font-bold tracking-wider text-foreground uppercase"
 								>จำนวน</Table.Head
 							>
-							<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase"
+							<Table.Head class="text-2xs font-bold tracking-wider text-foreground uppercase"
 								>ประเภท</Table.Head
 							>
-							<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase"
+							<Table.Head class="text-2xs font-bold tracking-wider text-foreground uppercase"
 								>สถานที่เก็บ / เลขอ้างอิง</Table.Head
 							>
 							<Table.Head
-								class="w-[120px] text-[11px] font-bold tracking-wider text-foreground uppercase"
+								class="w-[120px] text-2xs font-bold tracking-wider text-foreground uppercase"
 								>ผู้บันทึก</Table.Head
 							>
 						</Table.Row>
@@ -125,7 +125,7 @@
 
 								{#if !filterItemId}
 									<!-- Item Name -->
-									<Table.Cell class="text-[13px] font-semibold text-foreground">
+									<Table.Cell class="text-xs font-semibold text-foreground">
 										{itemName}
 									</Table.Cell>
 								{/if}
@@ -155,7 +155,7 @@
 								<!-- Reason -->
 								<Table.Cell class="whitespace-nowrap">
 									<span
-										class="rounded-full border px-2.5 py-0.5 text-[11px] font-bold shadow-sm
+										class="rounded-full border px-2.5 py-0.5 text-2xs font-bold shadow-sm
 										{qtyGt(entry.qty, 0)
 											? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
 											: 'border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400'}"
@@ -168,12 +168,10 @@
 								<Table.Cell class="max-w-[220px] truncate text-xs text-muted-foreground">
 									<div class="flex flex-col gap-1 py-1">
 										{#if entry.lot?.note}
-											<span class="text-[12px] font-medium text-foreground"
-												>📍 {entry.lot.note}</span
-											>
+											<span class="text-xs font-medium text-foreground">📍 {entry.lot.note}</span>
 										{/if}
 										{#if entry.lot?.expiry}
-											<span class="text-[11px] font-medium text-muted-foreground/90">
+											<span class="text-2xs font-medium text-muted-foreground/90">
 												⌛ หมดอายุ: {new Date(entry.lot.expiry).toLocaleDateString('th-TH', {
 													day: '2-digit',
 													month: 'short',
@@ -183,7 +181,7 @@
 										{/if}
 										{#if entry.ref_id}
 											<span
-												class="w-fit rounded border border-border/80 bg-muted/80 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80"
+												class="w-fit rounded border border-border/80 bg-muted/80 px-1.5 py-0.5 font-mono text-2xs text-foreground/80"
 												>Ref: {entry.ref_id}</span
 											>
 										{/if}
