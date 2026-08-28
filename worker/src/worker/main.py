@@ -14,6 +14,8 @@ from worker.couch.bootstrap import bootstrap_all, needs_bootstrap
 from worker.couch.client import CouchClient
 from worker.inbound.donations import run_inbound_loop
 from worker.inbound.search_audit import run_search_audit_inbound_loop
+from worker.inbound.shift_responses import run_shift_response_inbound_loop
+from worker.inbound.volunteer_applications import run_volunteer_inbound_loop
 from worker.listeners.registry import ListenerManager
 from worker.retention.job import run_retention_loop
 
@@ -43,6 +45,8 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
     inbound_task: asyncio.Task[None] | None = None
     search_audit_task: asyncio.Task[None] | None = None
     retention_task: asyncio.Task[None] | None = None
+    volunteer_task: asyncio.Task[None] | None = None
+    shift_response_task: asyncio.Task[None] | None = None
 
     try:
         if force_bootstrap or bootstrap_only or await needs_bootstrap():
@@ -60,12 +64,26 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
         retention_task = asyncio.create_task(
             run_retention_loop(stop_event=stop, couch=couch), name="retention"
         )
+        volunteer_task = asyncio.create_task(
+            run_volunteer_inbound_loop(couch, stop_event=stop),
+            name="inbound-volunteer-applications",
+        )
+        shift_response_task = asyncio.create_task(
+            run_shift_response_inbound_loop(couch, stop_event=stop),
+            name="inbound-shift-responses",
+        )
         await manager.start()
         logger.info("Sync worker running — Ctrl+C to stop")
         await stop.wait()
     finally:
         await manager.stop_all()
-        for task in (inbound_task, search_audit_task, retention_task):
+        for task in (
+            inbound_task,
+            search_audit_task,
+            retention_task,
+            volunteer_task,
+            shift_response_task,
+        ):
             if task:
                 task.cancel()
                 try:

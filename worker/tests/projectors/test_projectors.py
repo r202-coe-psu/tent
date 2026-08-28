@@ -20,6 +20,7 @@ from worker.projectors.shelter import (
     project_shelter,
     resolve_site_kind,
 )
+from worker.projectors.shift_assignment import project_shift_assignment
 
 
 def test_sha256_hex_matches_frontend_contract():
@@ -443,3 +444,67 @@ def test_compute_needs_without_ledgers_behaves_as_before():
         [_don("donation:1", "c1", "declared", "item:rice", "50")],
     )
     assert remaining["item:rice"] == "450.0"
+
+
+# ── volunteer shift assignments (CR-092 หน้าจอ 6) ──────────────────────────────
+
+
+def _shift_doc(**overrides):
+    doc = {
+        "_id": "shift_assignment:01ABC",
+        "type": "shift_assignment",
+        "job_id": "job:01JOB",
+        "volunteer_id": "volunteer:01VOL",
+        "date": "2026-09-01",
+        "shift": "custom",
+        "station": "ครัวกลาง",
+        "duty_window": {"start_ts": "2026-09-01T08:00:00Z", "end_ts": "2026-09-01T12:00:00Z"},
+        "status": "assigned",
+        "updated_at": "2026-08-28T00:00:00Z",
+    }
+    doc.update(overrides)
+    return doc
+
+
+def test_project_shift_assignment_takes_the_phone_hash_from_the_profile():
+    """It is the only route from a phone number to a schedule."""
+    action, payload = project_shift_assignment(
+        _shift_doc(),
+        shelter_code="SH001",
+        volunteer={"phone_hash": "deadbeef", "phone": "0812345678"},
+    )
+    assert action == "upsert"
+    assert payload["phone_hash"] == "deadbeef"
+    assert payload["station"] == "ครัวกลาง"
+
+
+def test_project_shift_assignment_hashes_a_profile_written_before_phone_hash_existed():
+    _, payload = project_shift_assignment(
+        _shift_doc(), shelter_code="SH001", volunteer={"phone": "0812345678"}
+    )
+    assert payload["phone_hash"] == sha256_hex("0812345678")
+
+
+def test_project_shift_assignment_drops_a_cancelled_shift():
+    """Leaving it listed is how someone turns up to a shift that was withdrawn."""
+    action, payload = project_shift_assignment(
+        _shift_doc(status="cancelled"), shelter_code="SH001", volunteer={}
+    )
+    assert action == "delete"
+    assert payload == {"_id": "shift_assignment:01ABC"}
+
+
+def test_project_shift_assignment_survives_an_unparseable_duty_window():
+    _, payload = project_shift_assignment(
+        _shift_doc(duty_window={"start_ts": "not-a-date", "end_ts": None}),
+        shelter_code="SH001",
+        volunteer={},
+    )
+    assert payload["duty_window"] == {"start_ts": None, "end_ts": None}
+
+
+def test_project_shift_assignment_ignores_another_doc_type():
+    action, _ = project_shift_assignment(
+        _shift_doc(type="job"), shelter_code="SH001", volunteer={}
+    )
+    assert action == "ignore"
