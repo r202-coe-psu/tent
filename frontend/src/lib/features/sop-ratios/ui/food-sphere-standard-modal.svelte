@@ -7,6 +7,7 @@
 		type FoodSphereStandard,
 		type TargetSegment
 	} from '../domain/food-sphere';
+	import { resolveSource, type Source } from '$lib/utils/source';
 	import { useRequirementGroups } from '../application/requirement-group-queries';
 	import { useSaveFoodSphereStandard } from '../application/food-sphere-queries';
 
@@ -14,13 +15,11 @@
 		open = $bindable(false),
 		standard = null,
 		shelterCode = '',
-		isSA = false,
 		onClose
 	}: {
 		open: boolean;
 		standard: FoodSphereStandard | null;
 		shelterCode?: string;
-		isSA?: boolean;
 		onClose: () => void;
 	} = $props();
 
@@ -31,7 +30,6 @@
 	let formReqGroupId = $state('');
 	let formDailyDemand = $state<number | string>('');
 	let formEffectiveDate = $state(new Date().toISOString().slice(0, 10));
-	let formSource = $state<'SPHERE_BASELINE' | 'SHELTER_OVERRIDE'>('SPHERE_BASELINE');
 	let formErrors = $state<Record<string, string>>({});
 
 	const groups = $derived(reqGroupsQuery.data ?? []);
@@ -53,13 +51,11 @@
 			formReqGroupId = standard.req_group_id;
 			formDailyDemand = standard.daily_demand;
 			formEffectiveDate = standard.effective_date;
-			formSource = standard.source;
 		} else {
 			formSegment = 'ALL';
 			formReqGroupId = groups[0] ? groups[0]._id.replace(/^requirement_group:/, '') : '';
 			formDailyDemand = '';
 			formEffectiveDate = new Date().toISOString().slice(0, 10);
-			formSource = shelterCode && !isSA ? 'SHELTER_OVERRIDE' : 'SPHERE_BASELINE';
 		}
 		formErrors = {};
 	});
@@ -90,6 +86,7 @@
 			return;
 		}
 
+		const computedSource: Source = resolveSource(shelterCode);
 		const docId = `food_sphere_standard:${formSegment}:${cleanGroupId}`;
 		await saveMutation.mutateAsync({
 			id: docId,
@@ -99,10 +96,10 @@
 				daily_demand: demand,
 				standard_uom: autoUom !== '—' ? autoUom : undefined,
 				effective_date: formEffectiveDate,
-				source: formSource,
-				shelter_code: formSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
+				source: computedSource,
+				shelter_code: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 			},
-			shelterCode: formSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
+			shelterCode: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 		});
 
 		open = false;
@@ -216,21 +213,6 @@
 					{#if formErrors.effectiveDate}
 						<p class="mt-1 text-xs text-destructive">{formErrors.effectiveDate}</p>
 					{/if}
-				</div>
-
-				<div>
-					<label for="form-source-sphere" class="block text-sm font-medium">
-						แหล่งที่มา (Source)
-					</label>
-					<select
-						id="form-source-sphere"
-						bind:value={formSource}
-						disabled={!isSA}
-						class="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-					>
-						<option value="SPHERE_BASELINE">ส่วนกลาง (SPHERE_BASELINE)</option>
-						<option value="SHELTER_OVERRIDE">ศูนย์พักพิง (SHELTER_OVERRIDE)</option>
-					</select>
 				</div>
 
 				<div class="flex justify-end gap-2 border-t pt-4">

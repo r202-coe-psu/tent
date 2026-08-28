@@ -7,11 +7,11 @@ import {
 import { DEFAULT_REPLENISHMENT_POLICIES } from './replenishment-policy.fixture';
 
 describe('Replenishment Calculation Engine', () => {
-	const defaultPolicy = DEFAULT_REPLENISHMENT_POLICIES[0]; // lead: 2, review: 3, safety: 2, min: 2, max: 30 -> reorderDays: 7
+	const defaultPolicy = DEFAULT_REPLENISHMENT_POLICIES[0]; // FOOD_ENERGY: lead: 3, review: 4, safety: 3, min: 3, max: 45 -> reorderDays: 10
 
 	it('calculates Standard Reorder Days correctly', () => {
 		const days = calculateStandardReorderDays(defaultPolicy);
-		expect(days).toBe(7); // 2 + 3 + 2 = 7
+		expect(days).toBe(10); // 3 + 4 + 3 = 10
 
 		expect(calculateStandardReorderDays(null)).toBe(0);
 	});
@@ -45,42 +45,42 @@ describe('Replenishment Calculation Engine', () => {
 	});
 
 	it('evaluates CRITICAL status when DoC <= Lead Time or DoC <= min_doc_days', () => {
-		// Policy: lead: 2, min: 2, reorder: 7, max: 30
+		// Policy: lead: 3, min: 3, reorder: 10, max: 45
 		// Daily demand = 5
-		// Stock = 5 -> DoC = 1 day (<= 2)
+		// Stock = 5 -> DoC = 1 day (<= 3)
 		const result = calculateReplenishmentAnalysis(5, 5, defaultPolicy);
 		expect(result.docDays).toBe(1);
 		expect(result.status).toBe('CRITICAL');
-		expect(result.reorderLevel).toBe(35); // 7 * 5
-		expect(result.shortageQty).toBe(30); // 35 - 5
+		expect(result.reorderLevel).toBe(50); // 10 * 5
+		expect(result.shortageQty).toBe(45); // 50 - 5
 	});
 
 	it('evaluates WARNING_REORDER status when DoC is between Lead Time and Reorder Days', () => {
-		// Policy: lead: 2, min: 2, reorder: 7, max: 30
+		// Policy: lead: 3, min: 3, reorder: 10, max: 45
 		// Daily demand = 5
-		// Stock = 20 -> DoC = 4 days (> 2 and <= 7)
-		const result = calculateReplenishmentAnalysis(20, 5, defaultPolicy);
-		expect(result.docDays).toBe(4);
+		// Stock = 25 -> DoC = 5 days (> 3 and <= 10)
+		const result = calculateReplenishmentAnalysis(25, 5, defaultPolicy);
+		expect(result.docDays).toBe(5);
 		expect(result.status).toBe('WARNING_REORDER');
-		expect(result.shortageQty).toBe(15); // 35 - 20
+		expect(result.shortageQty).toBe(25); // 50 - 25
 	});
 
 	it('evaluates ADEQUATE status when DoC is between Reorder Days and Max DoC', () => {
-		// Policy: lead: 2, min: 2, reorder: 7, max: 30
+		// Policy: lead: 3, min: 3, reorder: 10, max: 45
 		// Daily demand = 5
-		// Stock = 60 -> DoC = 12 days (> 7 and <= 30)
-		const result = calculateReplenishmentAnalysis(60, 5, defaultPolicy);
-		expect(result.docDays).toBe(12);
+		// Stock = 100 -> DoC = 20 days (> 10 and <= 45)
+		const result = calculateReplenishmentAnalysis(100, 5, defaultPolicy);
+		expect(result.docDays).toBe(20);
 		expect(result.status).toBe('ADEQUATE');
 		expect(result.shortageQty).toBe(0);
 	});
 
 	it('evaluates OVERSTOCK status when DoC > Max DoC', () => {
-		// Policy: lead: 2, min: 2, reorder: 7, max: 30
+		// Policy: lead: 3, min: 3, reorder: 10, max: 45
 		// Daily demand = 5
-		// Stock = 200 -> DoC = 40 days (> 30)
-		const result = calculateReplenishmentAnalysis(200, 5, defaultPolicy);
-		expect(result.docDays).toBe(40);
+		// Stock = 300 -> DoC = 60 days (> 45)
+		const result = calculateReplenishmentAnalysis(300, 5, defaultPolicy);
+		expect(result.docDays).toBe(60);
 		expect(result.status).toBe('OVERSTOCK');
 		expect(result.shortageQty).toBe(0);
 	});

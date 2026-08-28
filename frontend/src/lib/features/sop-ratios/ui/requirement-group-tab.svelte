@@ -6,7 +6,12 @@
 		useSaveRequirementGroup,
 		useDeleteRequirementGroup
 	} from '../application/requirement-group-queries';
-	import type { RequirementGroup, ItemMap } from '../domain/requirement-group';
+	import {
+		STANDARD_UOM_OPTIONS,
+		type RequirementGroup,
+		type ItemMap
+	} from '../domain/requirement-group';
+	import { SOURCE_LABELS, resolveSource, type Source } from '$lib/utils/source';
 
 	let {
 		shelterCode = '',
@@ -30,7 +35,6 @@
 	let formGroupId = $state('');
 	let formName = $state('');
 	let formStandardUom = $state('');
-	let formSource = $state<'SPHERE_BASELINE' | 'SHELTER_OVERRIDE'>('SPHERE_BASELINE');
 	let formItemMaps = $state<ItemMap[]>([]);
 	let formErrors = $state<Record<string, string>>({});
 
@@ -56,7 +60,6 @@
 		formGroupId = '';
 		formName = '';
 		formStandardUom = '';
-		formSource = shelterCode && !isSA ? 'SHELTER_OVERRIDE' : 'SPHERE_BASELINE';
 		formItemMaps = [];
 		formErrors = {};
 		isModalOpen = true;
@@ -67,7 +70,6 @@
 		formGroupId = group._id.replace(/^requirement_group:/, '');
 		formName = group.name;
 		formStandardUom = group.standard_uom;
-		formSource = group.source;
 		formItemMaps = group.item_maps ? JSON.parse(JSON.stringify(group.item_maps)) : [];
 		formErrors = {};
 		isModalOpen = true;
@@ -123,22 +125,23 @@
 			return;
 		}
 
+		const computedSource: Source = resolveSource(shelterCode);
 		const fullId = editingId ? editingId : `requirement_group:${cleanGroupId}`;
 		await saveMutation.mutateAsync({
 			id: fullId,
 			input: {
 				name: formName.trim(),
 				standard_uom: formStandardUom.trim(),
-				source: formSource,
+				source: computedSource,
 				item_maps: formItemMaps.map((im) => ({
 					item_id: im.item_id.trim(),
 					base_uom: im.base_uom.trim(),
 					conversion_factor: Number(im.conversion_factor),
 					share_percent: im.share_percent !== undefined ? Number(im.share_percent) : undefined
 				})),
-				shelter_code: formSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
+				shelter_code: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 			},
-			shelterCode: formSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
+			shelterCode: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 		});
 
 		isModalOpen = false;
@@ -214,8 +217,8 @@
 			<table class="w-full text-left text-sm">
 				<thead class="bg-muted/50 text-xs font-semibold text-muted-foreground uppercase">
 					<tr>
-						<th class="p-3">รหัสกลุ่ม (ID)</th>
 						<th class="p-3">ชื่อกลุ่มความต้องการ</th>
+						<th class="p-3">รหัสกลุ่ม (ID)</th>
 						<th class="p-3">หน่วยนับมาตรฐาน</th>
 						<th class="p-3">สินค้าคู่เทียบ (Item Maps)</th>
 						<th class="p-3">แหล่งที่มา</th>
@@ -225,8 +228,10 @@
 				<tbody class="divide-y">
 					{#each filteredGroups as group (group._id)}
 						<tr class="hover:bg-muted/30">
-							<td class="p-3 font-mono font-medium text-foreground">{group._id}</td>
-							<td class="p-3 font-medium">{group.name}</td>
+							<td class="p-3 font-medium text-foreground">{group.name}</td>
+							<td class="p-3 font-mono text-muted-foreground">
+								{group._id.replace(/^requirement_group:/, '')}
+							</td>
 							<td class="p-3">
 								<span class="rounded bg-muted px-2 py-0.5 font-mono text-xs font-semibold">
 									{group.standard_uom}
@@ -248,13 +253,13 @@
 									<span
 										class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
 									>
-										ศูนย์พักพิง {group.shelter_code ?? ''}
+										{SOURCE_LABELS.SHELTER_OVERRIDE}
 									</span>
 								{:else}
 									<span
 										class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
 									>
-										ส่วนกลาง (Sphere Baseline)
+										{SOURCE_LABELS.SPHERE_BASELINE}
 									</span>
 								{/if}
 							</td>
@@ -293,6 +298,21 @@
 			<form onsubmit={handleSubmit} class="mt-4 space-y-4">
 				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<div>
+						<label for="form-name" class="block text-sm font-medium">
+							ชื่อกลุ่มความต้องการ (ภาษาไทย) <span class="text-destructive">*</span>
+						</label>
+						<Input
+							id="form-name"
+							bind:value={formName}
+							placeholder="เช่น พลังงานอาหาร"
+							class="mt-1"
+						/>
+						{#if formErrors.name}
+							<p class="mt-1 text-xs text-destructive">{formErrors.name}</p>
+						{/if}
+					</div>
+
+					<div>
 						<label for="form-group-id" class="block text-sm font-medium">
 							รหัสกลุ่ม (ID) <span class="text-destructive">*</span>
 						</label>
@@ -309,46 +329,25 @@
 					</div>
 
 					<div>
-						<label for="form-name" class="block text-sm font-medium">
-							ชื่อกลุ่มความต้องการ (ภาษาไทย) <span class="text-destructive">*</span>
-						</label>
-						<Input
-							id="form-name"
-							bind:value={formName}
-							placeholder="เช่น พลังงานอาหาร"
-							class="mt-1"
-						/>
-						{#if formErrors.name}
-							<p class="mt-1 text-xs text-destructive">{formErrors.name}</p>
-						{/if}
-					</div>
-
-					<div>
 						<label for="form-standard-uom" class="block text-sm font-medium">
 							หน่วยนับมาตรฐาน (Standard UOM) <span class="text-destructive">*</span>
 						</label>
-						<Input
+						<select
 							id="form-standard-uom"
 							bind:value={formStandardUom}
-							placeholder="เช่น kcal, gram, litre"
-							class="mt-1 font-mono"
-						/>
+							class="mt-1 w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
+						>
+							<option value="" disabled selected>-- เลือกหน่วยนับมาตรฐาน --</option>
+							{#each STANDARD_UOM_OPTIONS as opt (opt.value)}
+								<option value={opt.value}>{opt.label}</option>
+							{/each}
+							{#if formStandardUom && !STANDARD_UOM_OPTIONS.some((c) => c.value === formStandardUom)}
+								<option value={formStandardUom}>{formStandardUom} (ระบุเอง)</option>
+							{/if}
+						</select>
 						{#if formErrors.standardUom}
 							<p class="mt-1 text-xs text-destructive">{formErrors.standardUom}</p>
 						{/if}
-					</div>
-
-					<div>
-						<label for="form-source" class="block text-sm font-medium"> แหล่งที่มา (Source) </label>
-						<select
-							id="form-source"
-							bind:value={formSource}
-							disabled={!isSA}
-							class="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-						>
-							<option value="SPHERE_BASELINE">ส่วนกลาง (SPHERE_BASELINE)</option>
-							<option value="SHELTER_OVERRIDE">ศูนย์พักพิง (SHELTER_OVERRIDE)</option>
-						</select>
 					</div>
 				</div>
 

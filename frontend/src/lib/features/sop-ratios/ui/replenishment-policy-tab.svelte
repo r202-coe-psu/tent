@@ -1,16 +1,14 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import {
-		replenishmentScopeSchema,
-		REPLENISHMENT_SCOPE_LABELS,
-		type ReplenishmentPolicy
-	} from '../domain/replenishment-policy';
+	import { type ReplenishmentPolicy } from '../domain/replenishment-policy';
+	import { SOURCE_LABELS } from '$lib/utils/source';
 	import { calculateStandardReorderDays } from '../domain/replenishment-calc';
 	import {
 		useReplenishmentPolicies,
 		useDeleteReplenishmentOverride
 	} from '../application/replenishment-queries';
+	import { useRequirementGroups } from '../application/requirement-group-queries';
 	import ReplenishmentPolicyModal from './replenishment-policy-modal.svelte';
 
 	let {
@@ -24,27 +22,30 @@
 	} = $props();
 
 	const policiesQuery = useReplenishmentPolicies(() => shelterCode);
+	const reqGroupsQuery = useRequirementGroups(() => shelterCode);
 	const deleteMutation = useDeleteReplenishmentOverride();
 
 	let search = $state('');
-	let filterScope = $state<string>('ALL_SCOPES');
+	let filterGroup = $state<string>('ALL_GROUPS');
 
 	let isModalOpen = $state(false);
 	let selectedPolicy = $state<ReplenishmentPolicy | null>(null);
 
 	const policies = $derived(policiesQuery.data ?? []);
+	const reqGroups = $derived(reqGroupsQuery.data ?? []);
+	const groupMap = $derived(
+		new Map(reqGroups.map((g) => [g._id.replace(/^requirement_group:/, ''), g.name]))
+	);
+
 	const filteredPolicies = $derived(
 		policies.filter((p) => {
-			if (filterScope !== 'ALL_SCOPES' && p.scope_type !== filterScope) {
+			if (filterGroup !== 'ALL_GROUPS' && p.target_id !== filterGroup) {
 				return false;
 			}
 			if (search.trim()) {
 				const query = search.toLowerCase();
-				return (
-					p.scope_type.toLowerCase().includes(query) ||
-					p.target_id.toLowerCase().includes(query) ||
-					(REPLENISHMENT_SCOPE_LABELS[p.scope_type] ?? '').toLowerCase().includes(query)
-				);
+				const groupName = groupMap.get(p.target_id) ?? '';
+				return p.target_id.toLowerCase().includes(query) || groupName.toLowerCase().includes(query);
 			}
 			return true;
 		})
@@ -61,7 +62,8 @@
 	}
 
 	async function handleDelete(pol: ReplenishmentPolicy) {
-		if (!confirm(`คุณต้องการลบนโยบายการเติมสต็อก ${pol.scope_type} - ${pol.target_id} หรือไม่?`)) {
+		const groupName = groupMap.get(pol.target_id) ?? pol.target_id;
+		if (!confirm(`คุณต้องการลบนโยบายการเติมสต็อก ${groupName} หรือไม่?`)) {
 			return;
 		}
 		await deleteMutation.mutateAsync({
@@ -114,15 +116,16 @@
 		<!-- Filter bar -->
 		<div class="flex flex-wrap items-center gap-3 border-t pt-3 text-xs">
 			<div class="flex items-center gap-1.5">
-				<label for="filter-scope" class="font-medium text-muted-foreground">ขอบเขต (Scope):</label>
+				<label for="filter-group" class="font-medium text-muted-foreground">กลุ่มสารอาหาร:</label>
 				<select
-					id="filter-scope"
-					bind:value={filterScope}
+					id="filter-group"
+					bind:value={filterGroup}
 					class="rounded-md border bg-background px-2.5 py-1 text-xs"
 				>
-					<option value="ALL_SCOPES">ทั้งหมด (ทุกขอบเขต)</option>
-					{#each replenishmentScopeSchema.options as scope (scope)}
-						<option value={scope}>{REPLENISHMENT_SCOPE_LABELS[scope] ?? scope}</option>
+					<option value="ALL_GROUPS">ทั้งหมด (ทุกกลุ่ม)</option>
+					{#each reqGroups as g (g._id)}
+						{@const cleanId = g._id.replace(/^requirement_group:/, '')}
+						<option value={cleanId}>{g.name} ({cleanId})</option>
 					{/each}
 				</select>
 			</div>
@@ -151,12 +154,11 @@
 			<table class="w-full text-left text-sm">
 				<thead class="bg-muted/50 text-xs font-semibold text-muted-foreground uppercase">
 					<tr>
-						<th class="p-3">ขอบเขต (Scope)</th>
-						<th class="p-3">เป้าหมาย (Target ID)</th>
-						<th class="p-3 text-center">Lead Time</th>
-						<th class="p-3 text-center">Review</th>
-						<th class="p-3 text-center">Safety</th>
-						<th class="p-3 text-center">Reorder Days</th>
+						<th class="p-3">กลุ่มสำหรับการคำนวณ</th>
+						<th class="p-3 text-center">ระยะเวลารอคอย</th>
+						<th class="p-3 text-center">รอบสั่งซื้อ</th>
+						<th class="p-3 text-center">วันสำรอง</th>
+						<th class="p-3 text-center">วันสั่งเติมมาตรฐาน</th>
 						<th class="p-3 text-center">Min DoC</th>
 						<th class="p-3 text-center">Max DoC</th>
 						<th class="p-3">แหล่งที่มา</th>
@@ -166,13 +168,16 @@
 				<tbody class="divide-y">
 					{#each filteredPolicies as pol (pol._id)}
 						{@const reorderDays = calculateStandardReorderDays(pol)}
+						{@const groupName = groupMap.get(pol.target_id)}
 						<tr class="hover:bg-muted/30">
 							<td class="p-3 font-medium">
-								<span class="rounded bg-muted px-2 py-0.5 font-mono text-xs">
-									{pol.scope_type}
-								</span>
+								{#if groupName}
+									<div class="font-medium text-foreground">{groupName}</div>
+									<div class="font-mono text-xs text-muted-foreground">{pol.target_id}</div>
+								{:else}
+									<div class="font-mono font-medium">{pol.target_id}</div>
+								{/if}
 							</td>
-							<td class="p-3 font-mono font-medium">{pol.target_id}</td>
 							<td class="p-3 text-center font-mono text-xs">{pol.lead_time_days} วัน</td>
 							<td class="p-3 text-center font-mono text-xs">{pol.review_period_days} วัน</td>
 							<td class="p-3 text-center font-mono text-xs">{pol.safety_days} วัน</td>
@@ -188,13 +193,13 @@
 									<span
 										class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
 									>
-										ศูนย์พักพิง {pol.shelter_code ?? ''}
+										{SOURCE_LABELS.SHELTER_OVERRIDE}
 									</span>
 								{:else}
 									<span
 										class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
 									>
-										ส่วนกลาง (SPHERE_BASELINE)
+										{SOURCE_LABELS.SPHERE_BASELINE}
 									</span>
 								{/if}
 							</td>
@@ -222,7 +227,6 @@
 	bind:open={isModalOpen}
 	policy={selectedPolicy}
 	{shelterCode}
-	{isSA}
 	onClose={() => {
 		selectedPolicy = null;
 	}}

@@ -22,8 +22,14 @@ export const TARGET_SEGMENT_LABELS: Record<TargetSegment, string> = {
 	ELDERLY: 'ผู้สูงอายุ'
 };
 
-export const foodSphereSourceSchema = z.enum(['SPHERE_BASELINE', 'SHELTER_OVERRIDE']);
-export type FoodSphereSource = z.infer<typeof foodSphereSourceSchema>;
+import { sourceSchema, SOURCE_LABELS, SOURCE_OPTIONS, type Source } from '$lib/utils/source';
+
+export const foodSphereSourceSchema = sourceSchema;
+export type FoodSphereSource = Source;
+
+export { SOURCE_LABELS, SOURCE_OPTIONS };
+export const FOOD_SPHERE_SOURCE_LABELS = SOURCE_LABELS;
+export const FOOD_SPHERE_SOURCE_OPTIONS = SOURCE_OPTIONS;
 
 export interface FoodSphereStandard extends CatalogDoc {
 	type: 'food_sphere_standard';

@@ -502,52 +502,74 @@ test('TC-E2E-06: creates Replenishment Policy and shows reactive Standard Reorde
 	page
 }) => {
 	await injectSession(page, SA, sessions[SA.name]);
-	const { policies } = await mockSopApi(page, {});
+	const { policies } = await mockSopApi(page, {
+		reqGroups: [
+			{
+				_id: 'requirement_group:FOOD_ENERGY',
+				type: 'requirement_group',
+				name: 'พลังงานอาหาร',
+				standard_uom: 'kcal',
+				source: 'SPHERE_BASELINE'
+			}
+		]
+	});
 	await page.goto(`${BASE}${SOP_PATH}`);
 
 	await page.getByRole('button', { name: /นโยบายการเติมสต็อก/i }).click();
 	await page.getByRole('button', { name: /เพิ่มนโยบาย|เพิ่ม|Add/i }).click();
 	await expect(page.getByRole('dialog')).toBeVisible();
 
-	await page.getByLabel(/Scope/i).selectOption('GLOBAL');
-	await page.getByLabel(/Target ID/i).fill('DEFAULT');
-	await page.getByLabel(/Lead Time/i).fill('2');
-	await page.getByLabel(/Review Period/i).fill('3');
-	await page.getByLabel(/Safety Days/i).fill('2');
+	await page.getByLabel(/กลุ่มสำหรับการคำนวณ/i).selectOption('FOOD_ENERGY');
+	await page.getByLabel(/ระยะเวลารอคอย|Lead Time/i).fill('2');
+	await page.getByLabel(/รอบการสั่งซื้อ|Review Period/i).fill('3');
+	await page.getByLabel(/วันสำรอง|Safety Days/i).fill('2');
 
 	// Reactive Reorder Days: 2+3+2 = 7 — must show automatically
 	await expect(page.getByTestId('standard-reorder-days')).toHaveText('7');
 
-	await page.getByLabel(/Min DoC/i).fill('2');
-	await page.getByLabel(/Max DoC/i).fill('30');
+	await page.getByLabel(/วันคงคลังขั้นต่ำ|Min DoC/i).fill('2');
+	await page.getByLabel(/วันคงคลังสูงสุด|Max DoC/i).fill('30');
 	await page.getByRole('button', { name: /บันทึก|Save/i }).click();
 
 	await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
-	await expect(page.getByText('GLOBAL')).toBeVisible();
-	expect(policies.some((p) => p.scope_type === 'GLOBAL' && p.target_id === 'DEFAULT')).toBe(true);
+	await expect(page.getByText('FOOD_ENERGY')).toBeVisible();
+	expect(policies.some((p) => p.target_id === 'FOOD_ENERGY')).toBe(true);
 });
 
 test('TC-E2E-07: blocks submit when min_doc_days >= Standard Reorder Days', async ({ page }) => {
 	await injectSession(page, SA, sessions[SA.name]);
-	const { policies } = await mockSopApi(page, {});
+	const { policies } = await mockSopApi(page, {
+		reqGroups: [
+			{
+				_id: 'requirement_group:FOOD_ENERGY',
+				type: 'requirement_group',
+				name: 'พลังงานอาหาร',
+				standard_uom: 'kcal',
+				source: 'SPHERE_BASELINE'
+			}
+		]
+	});
 	await page.goto(`${BASE}${SOP_PATH}`);
 
 	await page.getByRole('button', { name: /นโยบายการเติมสต็อก/i }).click();
 	await page.getByRole('button', { name: /เพิ่มนโยบาย|เพิ่ม|Add/i }).click();
 	await expect(page.getByRole('dialog')).toBeVisible();
 
-	await page.getByLabel(/Scope/i).selectOption('GLOBAL');
-	await page.getByLabel(/Target ID/i).fill('DEFAULT');
-	await page.getByLabel(/Lead Time/i).fill('2');
-	await page.getByLabel(/Review Period/i).fill('3');
-	await page.getByLabel(/Safety Days/i).fill('2'); // Reorder Days = 7
-	await page.getByLabel(/Min DoC/i).fill('7'); // 7 >= 7 -> Invariant 9 violation
-	await page.getByLabel(/Max DoC/i).fill('30');
+	await page.getByLabel(/กลุ่มสำหรับการคำนวณ/i).selectOption('FOOD_ENERGY');
+	await page.getByLabel(/ระยะเวลารอคอย|Lead Time/i).fill('2');
+	await page.getByLabel(/รอบการสั่งซื้อ|Review Period/i).fill('3');
+	await page.getByLabel(/วันสำรอง|Safety Days/i).fill('2'); // Reorder Days = 7
+	await page.getByLabel(/วันคงคลังขั้นต่ำ|Min DoC/i).fill('7'); // 7 >= 7 -> Invariant 9 violation
+	await page.getByLabel(/วันคงคลังสูงสุด|Max DoC/i).fill('30');
 	await page.getByRole('button', { name: /บันทึก|Save/i }).click();
 
 	// Dialog remains open (not submitted) and error message is displayed
 	await expect(page.getByRole('dialog')).toBeVisible();
-	await expect(page.getByText(/Min DoC Days ต้องน้อยกว่า Standard Reorder Days/i)).toBeVisible();
+	await expect(
+		page.getByText(
+			/วันคงคลังขั้นต่ำ.*ต้องน้อยกว่า.*วันสั่งเติมมาตรฐาน|Min DoC Days ต้องน้อยกว่า Standard Reorder Days/i
+		)
+	).toBeVisible();
 	expect(policies).toHaveLength(0);
 });
 

@@ -2,6 +2,16 @@ import { z } from 'zod';
 import type { CatalogDoc } from '$lib/db/model';
 import { foodSphereSourceSchema, type FoodSphereSource } from './food-sphere';
 
+export const STANDARD_UOM_OPTIONS = [
+	{ value: 'kcal', label: 'กิโลแคลอรี' },
+	{ value: 'gram', label: 'กรัม' },
+	{ value: 'mg', label: 'มิลลิกรัม' },
+	{ value: 'mcg', label: 'ไมโครกรัม' },
+	{ value: 'litre', label: 'ลิตร' },
+	{ value: 'ml', label: 'มิลลิลิตร' },
+	{ value: 'piece', label: 'ชิ้น' }
+] as const;
+
 export const itemMapSchema = z.object({
 	item_id: z.string().min(1, 'กรุณาระบุรหัสสินค้า'),
 	base_uom: z.string().min(1, 'กรุณาระบุหน่วยนับพื้นฐาน'),

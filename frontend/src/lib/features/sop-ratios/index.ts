@@ -118,6 +118,10 @@ export {
 	targetSegmentSchema,
 	TARGET_SEGMENT_LABELS,
 	foodSphereSourceSchema,
+	SOURCE_LABELS,
+	SOURCE_OPTIONS,
+	FOOD_SPHERE_SOURCE_LABELS,
+	FOOD_SPHERE_SOURCE_OPTIONS,
 	foodSphereStandardInputSchema,
 	isFoodSphereStandard,
 	type TargetSegment,
@@ -130,6 +134,7 @@ export { calculateTotalDailyDemand, type HeadcountBySegment } from './domain/foo
 
 // Domain: Requirement Group
 export {
+	STANDARD_UOM_OPTIONS,
 	itemMapSchema,
 	requirementGroupInputSchema,
 	isRequirementGroup,

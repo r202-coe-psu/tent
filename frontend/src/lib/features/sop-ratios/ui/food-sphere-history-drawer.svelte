@@ -4,6 +4,7 @@
 	import User from '@lucide/svelte/icons/user';
 	import { fade, fly } from 'svelte/transition';
 	import { formatThaiDateTime } from '$lib/utils/date';
+	import { getSourceLabel } from '$lib/utils/source';
 	import type { FoodSphereStandard } from '../domain/food-sphere';
 
 	interface Props {
@@ -78,7 +79,7 @@
 				</div>
 				<div class="flex justify-between">
 					<span class="text-muted-foreground">แหล่งที่มา:</span>
-					<span class="font-medium">{standard.source}</span>
+					<span class="font-medium">{getSourceLabel(standard.source)}</span>
 				</div>
 			</div>
 		</div>

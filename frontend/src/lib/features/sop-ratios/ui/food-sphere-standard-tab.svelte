@@ -6,6 +6,7 @@
 		TARGET_SEGMENT_LABELS,
 		type FoodSphereStandard
 	} from '../domain/food-sphere';
+	import { SOURCE_LABELS } from '$lib/utils/source';
 	import {
 		useFoodSphereStandards,
 		useDeleteFoodSphereOverride
@@ -210,13 +211,13 @@
 									<span
 										class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
 									>
-										ศูนย์พักพิง {std.shelter_code ?? ''}
+										{SOURCE_LABELS.SHELTER_OVERRIDE}
 									</span>
 								{:else}
 									<span
 										class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
 									>
-										ส่วนกลาง (Sphere Baseline)
+										{SOURCE_LABELS.SPHERE_BASELINE}
 									</span>
 								{/if}
 							</td>
@@ -254,7 +255,6 @@
 	bind:open={isModalOpen}
 	standard={selectedStandard}
 	{shelterCode}
-	{isSA}
 	onClose={() => {
 		selectedStandard = null;
 	}}
