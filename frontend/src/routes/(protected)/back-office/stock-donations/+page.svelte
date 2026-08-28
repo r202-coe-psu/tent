@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Scan from '@lucide/svelte/icons/scan';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
 	import { toast } from 'svelte-sonner';
 	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
@@ -8,10 +9,13 @@
 	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
 	import PendingReviewDialog from '$lib/components/pending-review-dialog.svelte';
 	import ScanStation from './components/scan-station.svelte';
+	import VerifyingTab from './components/verifying-tab.svelte';
+	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
 	import { useDonationNeedsBoard } from '$lib/features/operations';
 
-	let activeSubTab = $state('scan'); // 'scan', 'pending', 'needs'
+	// 'scan' | 'pending' (รอการประเมิน) | 'verifying' (กำลังตรวจรับ) | 'needs'
+	let activeSubTab = $state('scan');
 	let viewState = $state<'list' | 'create'>('list');
 	let isModalOpen = $state(false);
 
@@ -59,6 +63,24 @@
 
 	let selectedPendingRequest = $state<(typeof pendingRequests)[0] | null>(null);
 	let isPendingModalOpen = $state(false);
+
+	/**
+	 * Force cut-off needs a reason (CR-052 §1.6), restore does not. The board hands the
+	 * action up as a prop, so the prompt is intercepted here and the shared board
+	 * component stays as it is.
+	 */
+	let cutOffTarget = $state<{ id: string; itemId: string; name: string } | null>(null);
+
+	function handleToggleCutOff(id: string, itemId: string) {
+		const need = needsBoard.derivedItems
+			.find((i) => i.id === id)
+			?.needs.find((n) => n.itemId === itemId);
+		if (need?.isManualClosed) {
+			needsBoard.toggleCutOff(id, itemId);
+			return;
+		}
+		cutOffTarget = { id, itemId, name: need?.name ?? itemId };
+	}
 
 	function handleApprovePending(id: string, memo: string) {
 		const req = pendingRequests.find((r) => r.id === id);
@@ -132,6 +154,20 @@
 
 			<button
 				onclick={() => {
+					activeSubTab = 'verifying';
+					viewState = 'list';
+				}}
+				class="flex items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-bold transition-all md:px-4 md:py-3 {activeSubTab ===
+				'verifying'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:text-foreground'}"
+			>
+				<PackageCheck class="h-3.5 w-3.5" />
+				กำลังตรวจรับ
+			</button>
+
+			<button
+				onclick={() => {
 					activeSubTab = 'needs';
 					viewState = 'list';
 				}}
@@ -156,13 +192,15 @@
 				isPendingModalOpen = true;
 			}}
 		/>
+	{:else if activeSubTab === 'verifying'}
+		<VerifyingTab />
 	{:else if activeSubTab === 'needs'}
 		{#if viewState === 'list'}
 			<NeedsBoardAdmin
 				items={needsBoard.derivedItems}
 				onAddRequest={() => (viewState = 'create')}
 				onToggleShowOnHome={needsBoard.toggleShowOnHome}
-				onToggleCutOff={needsBoard.toggleCutOff}
+				onToggleCutOff={handleToggleCutOff}
 			/>
 		{:else}
 			<CreateCampaignForm
@@ -177,6 +215,16 @@
 	open={isModalOpen}
 	onclose={() => (isModalOpen = false)}
 	onsubmit={needsBoard.handleAddRequest}
+/>
+
+<ForceCutoffDialog
+	open={cutOffTarget !== null}
+	itemName={cutOffTarget?.name ?? ''}
+	oncancel={() => (cutOffTarget = null)}
+	onconfirm={(reason) => {
+		if (cutOffTarget) needsBoard.toggleCutOff(cutOffTarget.id, cutOffTarget.itemId, reason);
+		cutOffTarget = null;
+	}}
 />
 
 <PendingReviewDialog

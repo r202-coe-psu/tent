@@ -1,4 +1,5 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
+import type { DonationStatus } from '$lib/features/operations';
 import {
 	cancelDonation,
 	fetchDonationTracking,
@@ -7,6 +8,12 @@ import {
 	updateDonationItems,
 	type DonationItemEdit
 } from '../data/public-tracking';
+import {
+	fetchDonationDetail,
+	fetchDonationsByStatus,
+	receiveDonationCount,
+	type CountedLineInput
+} from '../data/back-office-donations';
 
 export const donationTrackingKeys = {
 	all: ['donations', 'tracking'] as const,
@@ -54,5 +61,41 @@ export function useUpdateDonationItems() {
 		// two drift apart.
 		onSuccess: (_data, input) =>
 			queryClient.invalidateQueries({ queryKey: donationTrackingKeys.detail(input.token) })
+	}));
+}
+
+// ---------------------------------------------------------------- back-office intake
+
+export const backOfficeDonationKeys = {
+	all: ['donations', 'back-office'] as const,
+	queue: (status: DonationStatus) => [...backOfficeDonationKeys.all, 'queue', status] as const,
+	detail: (query: string) => [...backOfficeDonationKeys.all, 'detail', query] as const
+};
+
+/** The intake queue for one status — `verifying` backs the drop-off tab (CR-052 §1.2). */
+export function useDonationQueue(status: () => DonationStatus) {
+	return createQuery(() => ({
+		queryKey: backOfficeDonationKeys.queue(status()),
+		queryFn: () => fetchDonationsByStatus(status())
+	}));
+}
+
+export function useBackOfficeDonation(query: () => string) {
+	return createQuery(() => ({
+		queryKey: backOfficeDonationKeys.detail(query()),
+		queryFn: () => fetchDonationDetail(query()),
+		enabled: Boolean(query().trim()),
+		retry: false
+	}));
+}
+
+export function useReceiveDonationCount() {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (input: { query: string; items: CountedLineInput[]; remarks?: string }) =>
+			receiveDonationCount(input),
+		// The booking leaves the queue and the ledger gains rows — refetch rather than
+		// patch, so the list and the stock views agree on what the server actually wrote.
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: backOfficeDonationKeys.all })
 	}));
 }
