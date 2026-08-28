@@ -126,7 +126,7 @@
 					<!-- Stale Warning -->
 					{#if isStale}
 						<div
-							class="absolute -top-3 right-6 flex items-center gap-1 rounded-full border-2 border-white bg-warning px-3 py-1 text-[10px] font-bold text-white shadow-sm"
+							class="absolute -top-3 right-6 flex items-center gap-1 rounded-full border-2 border-white bg-warning px-3 py-1 text-2xs font-bold text-white shadow-sm"
 						>
 							<AlertCircle class="h-3 w-3" />
 							{t.staleWarning}
@@ -137,7 +137,7 @@
 						<h3 class="text-xs font-bold tracking-wider text-card-foreground uppercase">
 							{t.currentStatus}
 						</h3>
-						<span class="text-[10px] text-muted-foreground"
+						<span class="text-2xs text-muted-foreground"
 							>{t.lastUpdated}: {new Date(lastUpdated).toLocaleTimeString(
 								langState.current === 'th' ? 'th-TH' : 'en-US'
 							)}</span

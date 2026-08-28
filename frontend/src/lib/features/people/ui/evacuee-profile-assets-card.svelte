@@ -107,23 +107,23 @@
 							class="flex flex-col gap-1 rounded-md border border-amber-100 bg-amber-50/50 p-2.5 dark:border-amber-900/30 dark:bg-amber-950/20"
 						>
 							<div
-								class="flex items-center justify-between text-[11px] font-bold text-amber-800 dark:text-amber-400"
+								class="flex items-center justify-between text-2xs font-bold text-amber-800 dark:text-amber-400"
 							>
 								<span><PawPrint class="mr-1 inline size-3.5" />{speciesLabel}</span>
-								<span class="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] dark:bg-amber-950">
+								<span class="rounded bg-amber-100 px-1.5 py-0.5 text-3xs dark:bg-amber-950">
 									{pet.count} ตัว
 								</span>
 							</div>
 							{#if pet.has_cage}
 								<span
-									class="mt-0.5 flex items-center gap-0.5 text-[9px] font-bold text-green-700 dark:text-green-400"
+									class="mt-0.5 flex items-center gap-0.5 text-3xs font-bold text-green-700 dark:text-green-400"
 								>
 									<Check class="size-3" /> มีกรง
 								</span>
 							{/if}
 							{#if pet.notes}
 								<span
-									class="mt-0.5 flex items-center gap-0.5 text-[9px] font-bold text-slate-600 dark:text-slate-400"
+									class="mt-0.5 flex items-center gap-0.5 text-3xs font-bold text-slate-600 dark:text-slate-400"
 								>
 									{pet.notes}
 								</span>

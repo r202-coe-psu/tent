@@ -458,7 +458,7 @@
 							<div class="flex-1 space-y-2">
 								<div class="flex flex-wrap items-center gap-2">
 									<User class="h-5 w-5 text-[#003B71]" />
-									<span class="text-[15px] font-bold"
+									<span class="text-sm font-bold"
 										>{t.results.headLabel}
 										{result.evacuee
 											? `${result.evacuee.first_name} ${result.evacuee.last_name}`
@@ -560,8 +560,8 @@
 				<div class="flex items-start gap-3">
 					<CheckSquare class="mt-0.5 h-6 w-6 shrink-0 text-[#00a86b]" />
 					<div class="space-y-1.5 text-green-900">
-						<div class="text-[17px] font-bold">{t.results.selectedTitle}</div>
-						<div class="text-[14px]">
+						<div class="text-base font-bold">{t.results.selectedTitle}</div>
+						<div class="text-sm">
 							{t.results.headLabel}
 							{selectedResult.evacuee
 								? `${selectedResult.evacuee.first_name} ${selectedResult.evacuee.last_name}`
@@ -569,7 +569,7 @@
 								? selectedResult.count
 								: 1} คน)
 						</div>
-						<div class="mt-2 text-[14px]">
+						<div class="mt-2 text-sm">
 							<strong>{t.results.addressLabel}</strong>
 							{formatAddress(selectedResult.household)}
 						</div>

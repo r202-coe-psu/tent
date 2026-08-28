@@ -30,7 +30,7 @@
 			<IconComponent class="size-7" />
 		</div>
 		{#if badge}
-			<span class="w-fit rounded-full px-2.5 py-1 text-[9px] font-bold {badgeClass} text-center">
+			<span class="w-fit rounded-full px-2.5 py-1 text-3xs font-bold {badgeClass} text-center">
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				{@html badge}
 			</span>
@@ -41,7 +41,7 @@
 		{@html title}
 	</h3>
 
-	<p class="mb-6 text-[11px] leading-relaxed text-muted-foreground">{description}</p>
+	<p class="mb-6 text-2xs leading-relaxed text-muted-foreground">{description}</p>
 
 	<div class="mt-auto flex flex-col gap-3">
 		{@render children?.()}

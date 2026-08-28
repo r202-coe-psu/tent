@@ -336,9 +336,7 @@
 							{:else}
 								<Scan class="mb-4 size-16 text-[#003B71]/30 dark:text-blue-500/20" />
 								<p class="text-xs font-bold text-slate-400">กล้องสแกนเนอร์ปิดอยู่</p>
-								<p class="mt-1 text-[10px] text-slate-500">
-									สามารถค้นหาด้วยชื่อหรือพิมพ์รหัสแทนได้
-								</p>
+								<p class="mt-1 text-2xs text-slate-500">สามารถค้นหาด้วยชื่อหรือพิมพ์รหัสแทนได้</p>
 							{/if}
 						</div>
 					{/if}
@@ -419,7 +417,7 @@
 									</h4>
 									<div class="mt-1.5 flex flex-wrap items-center gap-1.5">
 										<span
-											class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold
+											class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-bold
 											{canCheckOut
 												? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
 												: isTerminal
@@ -439,7 +437,7 @@
 										</span>
 										{#if found.current_stay?.zone}
 											<span
-												class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 uppercase dark:bg-slate-800 dark:text-slate-300"
+												class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-600 uppercase dark:bg-slate-800 dark:text-slate-300"
 											>
 												<MapPin class="size-2.5" />
 												{found.current_stay.zone}
@@ -514,14 +512,14 @@
 														{member.last_name}
 														{#if isScanned}
 															<span
-																class="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary"
+																class="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs font-bold text-primary"
 																>คนที่สแกน</span
 															>
 														{/if}
 													</span>
 												</div>
 												<span
-													class="rounded-full px-2 py-0.5 text-[10px] font-semibold {isEligible
+													class="rounded-full px-2 py-0.5 text-2xs font-semibold {isEligible
 														? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
 														: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}"
 												>
@@ -540,7 +538,7 @@
 								<button
 									type="button"
 									onclick={() => goto(resolve(`/onsite/people/evacuee-profile-view/${found._id}`))}
-									class="flex h-11 shrink-0 items-center gap-0.5 rounded-xl px-2.5 text-[11px] font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+									class="flex h-11 shrink-0 items-center gap-0.5 rounded-xl px-2.5 text-2xs font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
 								>
 									โปรไฟล์
 									<ChevronRight class="size-3.5" />
@@ -588,7 +586,7 @@
 									<p class="text-xs font-bold text-slate-900 dark:text-white">
 										{scanResult.message}
 									</p>
-									<p class="mt-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+									<p class="mt-0.5 text-2xs font-medium text-slate-500 dark:text-slate-400">
 										โปรดตรวจสอบข้อมูลรหัสบัตรประชาชน หรือ QR code ของผู้ประสบภัยอีกครั้ง
 									</p>
 								</div>

@@ -86,7 +86,7 @@
 		<div class="flex min-w-0 flex-1 flex-col gap-1">
 			<div class="flex items-center gap-2">
 				<span
-					class="inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold shadow-sm md:text-xs {badgeColor}"
+					class="inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-semibold shadow-sm md:text-xs {badgeColor}"
 				>
 					<span class="hidden md:inline">{badgeLabel}</span>
 					<span class="md:hidden">{badgeLabel.split(' ')[0]}</span>
@@ -107,7 +107,7 @@
 						>
 							<span class="text-xs font-semibold text-card-foreground">{alert.name}</span>
 							<span
-								class="rounded-md px-2 py-0.5 text-[10px] font-bold uppercase
+								class="rounded-md px-2 py-0.5 text-2xs font-bold uppercase
 								{alert.variant === 'danger' ? 'bg-danger-muted text-danger' : 'bg-chart-2/15 text-chart-2'}"
 							>
 								{alert.capacity}

@@ -34,7 +34,7 @@
 				tickLabelProps: { class: 'text-xs fill-muted-foreground', dy: 10 }
 			},
 			yAxis: {
-				tickLabelProps: { class: 'text-[11px] fill-muted-foreground', dx: -10 }
+				tickLabelProps: { class: 'text-2xs fill-muted-foreground', dx: -10 }
 			},
 			grid: { x: true, y: false, class: 'stroke-border stroke-1 stroke-dasharray-4' }
 		}}

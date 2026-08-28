@@ -244,7 +244,7 @@
 							</Table.Cell>
 							<Table.Cell class="py-5 align-middle">
 								<span
-									class="inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold shadow-sm md:text-xs {config.color} {item.is_active
+									class="inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-semibold shadow-sm md:text-xs {config.color} {item.is_active
 										? ''
 										: 'opacity-60'}"
 								>
@@ -262,7 +262,7 @@
 										onCheckedChange={() => toggleActive(item._id, item.is_active)}
 									/>
 									<span
-										class="hidden text-[11px] font-medium lg:inline-block {item.is_active
+										class="hidden text-2xs font-medium lg:inline-block {item.is_active
 											? 'text-primary'
 											: 'text-muted-foreground'}"
 									>

@@ -290,7 +290,7 @@
 				`;
 
 				const userPopup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
-					<div style="font-size:12px;font-family:sans-serif;color:#1e293b;text-align:center;font-weight:bold;">
+					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;text-align:center;font-weight:bold;">
 						${t.yourLocation}
 					</div>
 				`);
@@ -330,7 +330,7 @@
 						<div class="marker-dot" style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition: transform 0.2s;"></div>
 						<!-- Pin pointer triangle to anchor to exact location -->
 						<div style="position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid white;"></div>
-						<div class="marker-label" style="position: absolute; top: 28px; white-space: nowrap; font-size: 11px; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+						<div class="marker-label" style="position: absolute; top: 28px; white-space: nowrap; font-size: 0.625rem; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
 							${icon} ${shelter.name}
 						</div>
 					</div>
@@ -346,9 +346,9 @@
 				};
 
 				const popup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
-					<div style="font-size:12px;font-family:sans-serif;color:#1e293b;min-width:160px;">
-						<strong style="font-size:14px;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
-						<div style="margin-bottom:2px;font-size:11px;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
+					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;min-width:160px;">
+						<strong style="font-size:0.875rem;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
+						<div style="margin-bottom:2px;font-size:0.625rem;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
 						${t.status} <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
 						${t.capacity} <strong>${shelter.capacity}</strong> ${t.people}<br/>
 						${shelter.distance > 0 ? `${t.distance} <strong>${shelter.distance}</strong> ${t.km}` : ''}
@@ -396,7 +396,7 @@
 		</Button>
 		{#if placingPin}
 			<p
-				class="rounded-lg border border-border bg-card/95 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur-md"
+				class="rounded-lg border border-border bg-card/95 px-2.5 py-1.5 text-2xs font-medium text-muted-foreground shadow-sm backdrop-blur-md"
 			>
 				{t.placingPin}
 			</p>

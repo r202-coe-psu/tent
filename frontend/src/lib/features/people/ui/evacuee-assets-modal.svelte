@@ -166,7 +166,7 @@
 											>
 												<Form.Control>
 													{#snippet children({ props })}
-														<Form.Label class="text-[10px]"
+														<Form.Label class="text-2xs"
 															>ประเภทยานพาหนะ <span class="text-destructive">*</span></Form.Label
 														>
 														<Select.Root type="single" bind:value={vehicle.type}>
@@ -187,7 +187,7 @@
 											<Form.Field {form} name={`vehicles[${index}].license_plate`} class="flex-1">
 												<Form.Control>
 													{#snippet children({ props })}
-														<Form.Label class="text-[10px]">เลขทะเบียนรถ</Form.Label>
+														<Form.Label class="text-2xs">เลขทะเบียนรถ</Form.Label>
 														<Input
 															{...props}
 															class="h-9"
@@ -266,7 +266,7 @@
 												<Form.Field {form} name={`pets[${i}].species`}>
 													<Form.Control>
 														{#snippet children({ props })}
-															<Form.Label class="text-[10px]"
+															<Form.Label class="text-2xs"
 																>ชนิดสัตว์ <span class="text-destructive">*</span></Form.Label
 															>
 															<Select.Root type="single" bind:value={pet.species}>
@@ -296,7 +296,7 @@
 												<Form.Field {form} name={`pets[${i}].count`}>
 													<Form.Control>
 														{#snippet children({ props })}
-															<Form.Label class="text-[10px]"
+															<Form.Label class="text-2xs"
 																>จำนวน (ตัว) <span class="text-destructive">*</span></Form.Label
 															>
 															<Input
@@ -314,7 +314,7 @@
 												<Form.Field {form} name={`pets[${i}].notes`}>
 													<Form.Control>
 														{#snippet children({ props })}
-															<Form.Label class="text-[10px]">หมายเหตุ</Form.Label>
+															<Form.Label class="text-2xs">หมายเหตุ</Form.Label>
 															<Input
 																{...props}
 																id={`pet_notes_${i}`}
@@ -336,7 +336,7 @@
 																		checked={pet.has_cage ?? false}
 																		onCheckedChange={(v) => (pet.has_cage = !!v)}
 																	/>
-																	<Form.Label class="cursor-pointer text-[10px]">มีกรง</Form.Label>
+																	<Form.Label class="cursor-pointer text-2xs">มีกรง</Form.Label>
 																</div>
 															</div>
 														{/snippet}
