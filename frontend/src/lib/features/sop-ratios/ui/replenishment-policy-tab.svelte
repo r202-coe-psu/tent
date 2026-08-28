@@ -93,10 +93,9 @@
 				class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
 			>
 				<div>
-					<h1 class="text-xl font-semibold">นโยบายการเติมสต็อก (Replenishment Policy)</h1>
+					<h1 class="text-xl font-semibold">นโยบายการเติมสต็อก</h1>
 					<p class="text-sm text-muted-foreground">
-						กำหนดระยะเวลารอคอยสินค้า (Lead Time), รอบการสั่งซื้อ, จุดสั่งเติม (ROP) และจุดวิกฤต
-						(DoC)
+						กำหนดระยะเวลารอคอยสินค้า, รอบการสั่งซื้อ และจุดวิกฤต
 					</p>
 				</div>
 

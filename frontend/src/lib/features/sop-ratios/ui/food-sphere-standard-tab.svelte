@@ -108,9 +108,9 @@
 				class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
 			>
 				<div>
-					<h1 class="text-xl font-semibold">เกณฑ์มาตรฐานโภชนาการ (Food Sphere Standard)</h1>
+					<h1 class="text-xl font-semibold">เกณฑ์มาตรฐานโภชนาการ</h1>
 					<p class="text-sm text-muted-foreground">
-						จัดการพารามิเตอร์เกณฑ์โภชนาการตามกลุ่มเป้าหมาย (Sphere Project Handbook)
+						จัดการพารามิเตอร์เกณฑ์โภชนาการตามกลุ่มเป้าหมาย
 					</p>
 				</div>
 

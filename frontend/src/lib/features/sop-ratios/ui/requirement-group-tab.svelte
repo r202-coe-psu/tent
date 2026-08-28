@@ -77,11 +77,9 @@
 				class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
 			>
 				<div>
-					<h1 class="text-xl font-semibold">
-						กลุ่มสารอาหาร & หน่วยนับมาตรฐาน (Requirement Groups)
-					</h1>
+					<h1 class="text-xl font-semibold">กลุ่มสารอาหาร & หน่วยนับมาตรฐาน</h1>
 					<p class="text-sm text-muted-foreground">
-						จัดการกลุ่มความต้องการสารอาหาร หน่วยนับกลาง และรายการสินค้าคู่เทียบ (Item Mapping)
+						จัดการกลุ่มความต้องการสารอาหาร หน่วยนับกลาง และรายการสินค้าคู่เทียบ
 					</p>
 				</div>
 
