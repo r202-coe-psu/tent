@@ -81,3 +81,47 @@ export function jobShiftCapacities(job: {
 		return { key: `${job._id}#${shift.id}`, target: shift.quota, confirmed };
 	});
 }
+
+/** Per-sub-shift 3-way quota split, mirroring `quota.ts#computeQuota` at job level. */
+export interface ShiftQuotaSplit extends ShiftCapacity {
+	/** Offered, awaiting accept/decline (🟡). */
+	dispatched: number;
+	/** `target - confirmed - dispatched` (⚪). */
+	remaining: number;
+}
+
+/**
+ * Allocate a job's `slots_confirmed` and `slots_dispatched` down to its
+ * sub-shifts so the detail screen can draw one 3-colour bar per shift.
+ *
+ * Same deliberate approximation (and the same reason) as
+ * {@link jobShiftCapacities}: `shift_assignment` carries no `job_shift_id`
+ * yet, so there is no real per-shift tally to read. Confirmed is filled
+ * greedily earliest-shift-first, then dispatched into what is left. The
+ * per-shift TOTALS therefore always reconcile with the job document
+ * (`sum(confirmed) === job.slots_confirmed`, likewise dispatched/remaining),
+ * while WHICH shift holds a given seat is a best guess. This lives here, not
+ * in the UI, so no screen recomputes the split itself.
+ */
+export function jobShiftQuotaSplits(job: {
+	_id: string;
+	shifts: readonly { id: string; quota: number }[];
+	slots_confirmed: number;
+	slots_dispatched: number;
+}): ShiftQuotaSplit[] {
+	let confirmedLeft = Math.max(job.slots_confirmed, 0);
+	let dispatchedLeft = Math.max(job.slots_dispatched, 0);
+	return job.shifts.map((shift) => {
+		const confirmed = Math.min(confirmedLeft, shift.quota);
+		confirmedLeft -= confirmed;
+		const dispatched = Math.min(dispatchedLeft, shift.quota - confirmed);
+		dispatchedLeft -= dispatched;
+		return {
+			key: `${job._id}#${shift.id}`,
+			target: shift.quota,
+			confirmed,
+			dispatched,
+			remaining: shift.quota - confirmed - dispatched
+		};
+	});
+}

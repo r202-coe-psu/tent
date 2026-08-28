@@ -2,10 +2,10 @@
 	/**
 	 * Job board card (CR-094 FR-VOL-09.2): status badge + ด่วนพิเศษ badge, title/
 	 * description, skill tags, 3-color quota bar, shift count, applicant count,
-	 * edit button, and a "ดูรายละเอียด" affordance kept disabled — the job
-	 * detail/dispatch route is 01.5, a later step; this must not link to a
-	 * route that doesn't exist yet.
+	 * edit button, and a "ดูรายละเอียด" link to the job detail screen
+	 * (`/back-office/volunteers/jobs/[id]`, 01-tab-job-board.md §01.5).
 	 */
+	import { resolve } from '$app/paths';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Flame from '@lucide/svelte/icons/flame';
 	import Users from '@lucide/svelte/icons/users';
@@ -37,6 +37,14 @@
 	};
 
 	const statusDisplay = $derived(STATUS_DISPLAY[job.status]);
+	/**
+	 * `resolve()` in this SvelteKit version only prefixes `base`, so the `[id]`
+	 * segment is built here. `job._id` contains a colon (`job:01J…`) — encode it
+	 * so the path stays a single valid segment; SvelteKit decodes `params.id`.
+	 */
+	const detailHref = $derived(
+		resolve(`/back-office/volunteers/jobs/${encodeURIComponent(job._id)}`)
+	);
 	/**
 	 * schema_v 3 — capacity lives in `shifts[]`. Show the span the sub-shifts
 	 * cover; a single-day job just shows that one date.
@@ -76,15 +84,15 @@
 		</Tooltip.Provider>
 	</div>
 
-	<div>
-		<h3 class="text-sm font-bold text-foreground">{job.title}</h3>
-		<p class="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{job.description}</p>
+	<div class="min-w-0">
+		<h3 class="text-sm font-bold break-words text-foreground">{job.title}</h3>
+		<p class="mt-0.5 line-clamp-2 text-xs break-words text-muted-foreground">{job.description}</p>
 	</div>
 
 	{#if job.skills_required && job.skills_required.length > 0}
 		<div class="flex flex-wrap gap-1">
 			{#each job.skills_required as skill (skill)}
-				<Badge variant="outline" class="text-[11px]">{skill}</Badge>
+				<Badge variant="outline" class="max-w-full text-[11px] break-words">{skill}</Badge>
 			{/each}
 		</div>
 	{/if}
@@ -104,17 +112,6 @@
 				ผู้สมัคร {applicantCount}
 			</span>
 		</div>
-		<Tooltip.Provider>
-			<Tooltip.Root>
-				<Tooltip.Trigger>
-					{#snippet child({ props })}
-						<span {...props}>
-							<Button size="sm" variant="outline" disabled>ดูรายละเอียด</Button>
-						</span>
-					{/snippet}
-				</Tooltip.Trigger>
-				<Tooltip.Content>หน้ารายละเอียดงาน/มอบหมายกะ — เปิดใช้งานในขั้นตอนถัดไป</Tooltip.Content>
-			</Tooltip.Root>
-		</Tooltip.Provider>
+		<Button size="sm" variant="outline" href={detailHref}>ดูรายละเอียด</Button>
 	</div>
 </div>

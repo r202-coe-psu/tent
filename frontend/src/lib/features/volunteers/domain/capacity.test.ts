@@ -4,7 +4,8 @@ import {
 	bucketFillRate,
 	overallBookingRate,
 	bucketCounts,
-	jobShiftCapacities
+	jobShiftCapacities,
+	jobShiftQuotaSplits
 } from './capacity';
 
 describe('shiftFillRate', () => {
@@ -124,5 +125,42 @@ describe('jobShiftCapacities', () => {
 
 	it('returns nothing for a job with no shifts', () => {
 		expect(jobShiftCapacities(job([], 3))).toEqual([]);
+	});
+});
+
+describe('jobShiftQuotaSplits', () => {
+	const job = (slots_confirmed: number, slots_dispatched: number) => ({
+		_id: 'job:1',
+		shifts: [
+			{ id: 's1', quota: 3 },
+			{ id: 's2', quota: 2 }
+		],
+		slots_confirmed,
+		slots_dispatched
+	});
+
+	it('splits confirmed then dispatched greedily, earliest shift first', () => {
+		expect(jobShiftQuotaSplits(job(2, 2))).toEqual([
+			{ key: 'job:1#s1', target: 3, confirmed: 2, dispatched: 1, remaining: 0 },
+			{ key: 'job:1#s2', target: 2, confirmed: 0, dispatched: 1, remaining: 1 }
+		]);
+	});
+
+	it('reconciles with the job document totals', () => {
+		const splits = jobShiftQuotaSplits(job(3, 1));
+		expect(splits.reduce((n, s) => n + s.confirmed, 0)).toBe(3);
+		expect(splits.reduce((n, s) => n + s.dispatched, 0)).toBe(1);
+		expect(splits.reduce((n, s) => n + s.remaining, 0)).toBe(1);
+	});
+
+	it('reports a fully unclaimed job as all remaining', () => {
+		expect(jobShiftQuotaSplits(job(0, 0)).map((s) => s.remaining)).toEqual([3, 2]);
+	});
+
+	it('never emits a negative bucket when the job doc carries junk', () => {
+		const splits = jobShiftQuotaSplits(job(-5, 99));
+		expect(splits.every((s) => s.confirmed >= 0 && s.dispatched >= 0 && s.remaining >= 0)).toBe(
+			true
+		);
 	});
 });

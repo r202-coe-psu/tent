@@ -1,0 +1,123 @@
+<script lang="ts">
+	/**
+	 * One sub-shift row of the job detail "กะและตารางกะ" tab (approved mockup
+	 * 2026-08-27).
+	 *
+	 * The 3-colour split shown here comes from
+	 * `domain/capacity.ts#jobShiftQuotaSplits` (computed once for the whole job
+	 * by the parent and passed in) — this component performs no capacity maths
+	 * of its own. Note the documented approximation in that function: per-shift
+	 * TOTALS reconcile with the job doc, but which shift holds a given seat is a
+	 * best guess until `shift_assignment` carries a `job_shift_id`.
+	 */
+	import X from '@lucide/svelte/icons/x';
+	import CalendarDays from '@lucide/svelte/icons/calendar-days';
+	import Clock from '@lucide/svelte/icons/clock';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import type { ShiftQuotaSplit } from '../domain/capacity';
+	import type { JobShift } from '../domain/job.schema';
+
+	let {
+		shift,
+		split,
+		canRemove,
+		pending = false,
+		onremove
+	}: {
+		shift: JobShift;
+		split: ShiftQuotaSplit;
+		/** A job must keep at least one sub-shift (`jobSchema.shifts.min(1)`). */
+		canRemove: boolean;
+		pending?: boolean;
+		onremove: (shiftId: string) => void;
+	} = $props();
+
+	const total = $derived(split.target > 0 ? split.target : 1);
+	const crossesMidnight = $derived(shift.end_date !== shift.date);
+</script>
+
+<div class="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-xs">
+	<div class="flex items-start justify-between gap-2">
+		<div class="min-w-0">
+			<p class="inline-flex items-center gap-1.5 text-sm font-bold text-foreground">
+				<CalendarDays class="h-3.5 w-3.5 text-primary" />
+				{shift.date}
+			</p>
+			<p class="mt-0.5 inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+				<Clock class="h-3.5 w-3.5" />
+				{shift.start_time} - {shift.end_time} น.
+				{#if crossesMidnight}
+					<span class="text-muted-foreground">(ถึง {shift.end_date})</span>
+				{/if}
+			</p>
+		</div>
+
+		{#if canRemove}
+			<Tooltip.Provider>
+				<Tooltip.Root>
+					<Tooltip.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								size="icon"
+								variant="ghost"
+								class="h-7 w-7 shrink-0"
+								disabled={pending}
+								onclick={() => onremove(shift.id)}
+							>
+								<X class="h-4 w-4" />
+							</Button>
+						{/snippet}
+					</Tooltip.Trigger>
+					<Tooltip.Content>ลบกะนี้ออกจากงาน</Tooltip.Content>
+				</Tooltip.Root>
+			</Tooltip.Provider>
+		{/if}
+	</div>
+
+	<div>
+		<div class="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+			<div class="h-full bg-emerald-500" style:width="{(split.confirmed / total) * 100}%"></div>
+			<div class="h-full bg-amber-400" style:width="{(split.dispatched / total) * 100}%"></div>
+		</div>
+		<div class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+			<span
+				class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-muted-foreground"
+			>
+				<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+				ตอบรับแล้ว: <span class="font-bold text-foreground tabular-nums">{split.confirmed}</span>
+			</span>
+			<span
+				class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-muted-foreground"
+			>
+				<span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
+				เสนอแล้ว: <span class="font-bold text-foreground tabular-nums">{split.dispatched}</span>
+			</span>
+			<span
+				class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-muted-foreground"
+			>
+				<span class="h-1.5 w-1.5 rounded-full bg-muted-foreground/40"></span>
+				ยังขาดอีก: <span class="font-bold text-foreground tabular-nums">{split.remaining}</span>
+			</span>
+			<span class="ml-auto text-muted-foreground">(เป้า {split.target} คน)</span>
+		</div>
+	</div>
+
+	<Tooltip.Provider>
+		<Tooltip.Root>
+			<Tooltip.Trigger class="w-full">
+				{#snippet child({ props })}
+					<span {...props} class="block w-full">
+						<Button variant="default" size="sm" class="w-full gap-1.5" disabled>
+							<UserPlus class="h-3.5 w-3.5" />
+							มอบหมายอาสาในกะนี้ (Dispatch)
+						</Button>
+					</span>
+				{/snippet}
+			</Tooltip.Trigger>
+			<Tooltip.Content>ต้องมีหน้าทะเบียนอาสาสมัครก่อน — เปิดใช้งานในขั้นตอนถัดไป</Tooltip.Content>
+		</Tooltip.Root>
+	</Tooltip.Provider>
+</div>

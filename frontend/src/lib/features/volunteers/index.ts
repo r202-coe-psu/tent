@@ -84,3 +84,11 @@ export type { JobBoardStatusFilter } from './ui/job-filter-chips.svelte';
 export { default as JobCard } from './ui/job-card.svelte';
 export { default as JobQuotaBar } from './ui/job-quota-bar.svelte';
 export { default as JobFormDialog } from './ui/job-form-dialog.svelte';
+
+// ui — Job detail + shift schedule (01-tab-job-board.md §01.5)
+export { default as JobDetailPage } from './ui/job-detail-page.svelte';
+export { default as JobDetailHero } from './ui/job-detail-hero.svelte';
+export { default as JobDetailOverviewTab } from './ui/job-detail-overview-tab.svelte';
+export { default as JobLifecyclePanel } from './ui/job-lifecycle-panel.svelte';
+export { default as JobShiftsTab } from './ui/job-shifts-tab.svelte';
+export { default as JobShiftCard } from './ui/job-shift-card.svelte';
