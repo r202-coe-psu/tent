@@ -162,6 +162,14 @@ export {
 	type DocAlertStatus,
 	type ReplenishmentAnalysisResult
 } from './domain/replenishment-calc';
+export {
+	buildFoodSphereTable,
+	resolveItemPolicy,
+	type FoodSphereTableItem,
+	type FoodSphereTableGroup,
+	type FoodSphereSummaryStats,
+	type BuildFoodSphereTableOptions
+} from './domain/food-sphere-table';
 
 // Repositories
 export { FoodSphereRemoteRepository, foodSphereRepository } from './data/food-sphere.remote';

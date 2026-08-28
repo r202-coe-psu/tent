@@ -30,7 +30,7 @@
 		WARNING_REORDER: {
 			badgeClass: 'badge-status-warning',
 			dotClass: 'badge-dot-warning',
-			label: 'ถึงจุดสั่งเติม (Reorder Point)',
+			label: 'ถึงจุดสั่งเติม',
 			compactLabel: 'ถึงจุดสั่งเติม'
 		},
 		ADEQUATE: {
@@ -42,7 +42,7 @@
 		OVERSTOCK: {
 			badgeClass: 'badge-status-overstock',
 			dotClass: 'badge-dot-overstock',
-			label: 'สต็อกเกินเกณฑ์ (Overstock)',
+			label: 'สต็อกเกินเกณฑ์',
 			compactLabel: 'สต็อกเกินเกณฑ์'
 		},
 		UNCONFIGURED: {

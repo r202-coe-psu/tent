@@ -21,3 +21,4 @@ export { default as ReplenishmentPolicyForm } from './ui/replenishment-policy-fo
 export { default as ReplenishmentPolicyModal } from './ui/replenishment-policy-modal.svelte';
 export { default as DocStatusBadge } from './ui/doc-status-badge.svelte';
 export { default as FoodSphereHistoryDrawer } from './ui/food-sphere-history-drawer.svelte';
+export { default as FoodSphereStockTab } from './ui/food-sphere-stock-tab.svelte';

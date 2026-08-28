@@ -4,7 +4,10 @@
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import Scale from '@lucide/svelte/icons/scale';
+	import Utensils from '@lucide/svelte/icons/utensils';
 	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
+	import { FoodSphereStockTab } from '$lib/features/sop-ratios/components';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { shelterCodeFromRoles } from '$lib/auth/roles';
 	import { useDashboardOccupancy } from '$lib/features/dashboard';
 	import { page } from '$app/state';
@@ -14,14 +17,20 @@
 	const isOffline = $derived(authStore.needsReauth);
 
 	const roles = $derived(authStore.user?.roles ?? []);
-	const shelterCode = $derived(shelterCodeFromRoles(roles));
+	const shelterCode = $derived(
+		shelterStore.selectedShelterCode ?? shelterCodeFromRoles(roles) ?? ''
+	);
 
-	const occupancyQuery = useDashboardOccupancy(() => shelterCode ?? '');
+	const occupancyQuery = useDashboardOccupancy(() => shelterCode);
 	const occupancy = $derived(occupancyQuery.data?.active ?? 0);
 
-	type TabKey = 'inventory' | 'sphere';
+	type TabKey = 'inventory' | 'sphere' | 'food-sphere';
 	const activeTab = $derived<TabKey>(
-		page.url.searchParams.get('tab') === 'sphere' ? 'sphere' : 'inventory'
+		page.url.searchParams.get('tab') === 'food-sphere'
+			? 'food-sphere'
+			: page.url.searchParams.get('tab') === 'sphere'
+				? 'sphere'
+				: 'inventory'
 	);
 
 	function setTab(tab: TabKey) {
@@ -65,7 +74,7 @@
 					: 'border border-transparent text-muted-foreground hover:text-foreground'}"
 			>
 				<Boxes class="h-4 w-4" />
-				รายการพัสดุในคลัง (Stock Inventory)
+				รายการพัสดุในคลัง
 			</button>
 			<button
 				onclick={() => setTab('sphere')}
@@ -75,7 +84,17 @@
 					: 'border border-transparent text-muted-foreground hover:text-foreground'}"
 			>
 				<Scale class="h-4 w-4" />
-				วิเคราะห์ความต้องการเสบียง (Sphere Standard)
+				วิเคราะห์ความต้องการพื้นฐาน
+			</button>
+			<button
+				onclick={() => setTab('food-sphere')}
+				class="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold tracking-wide transition-all duration-300 active:scale-[0.98] md:px-5 md:py-2.5 {activeTab ===
+				'food-sphere'
+					? 'border border-border/60 bg-background text-primary shadow-sm'
+					: 'border border-transparent text-muted-foreground hover:text-foreground'}"
+			>
+				<Utensils class="h-4 w-4" />
+				วิเคราะห์เสบียงอาหาร
 			</button>
 		</div>
 	</div>
@@ -88,6 +107,10 @@
 	{:else if activeTab === 'sphere'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
 			<ResourceNeedsDashboard />
+		</div>
+	{:else if activeTab === 'food-sphere'}
+		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
+			<FoodSphereStockTab {occupancy} {shelterCode} />
 		</div>
 	{/if}
 </div>
