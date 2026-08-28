@@ -9,7 +9,11 @@ vi.mock('$lib/features/public-portal', async (importOriginal) => {
 	};
 });
 
-import { listPublicShelters, type PublicShelterListResponse } from '$lib/features/public-portal';
+import {
+	listPublicShelters,
+	type PublicShelterListResponse,
+	type PublicShelterCardModel
+} from '$lib/features/public-portal';
 
 /**
  * `load` is typed against SvelteKit's full `LoadEvent`, but this page reads only
@@ -229,7 +233,11 @@ describe('public/shelters load function', () => {
 		const url = new URL('http://localhost/shelters?user_lat=7.008&user_lng=100.476&distance=50');
 		const result = await runLoad(url);
 
-		expect(result.shelters.map((s) => s.code)).toEqual(['NEAR', 'FAR', 'NOGEO']);
+		expect(result.shelters.map((s: PublicShelterCardModel) => s.code)).toEqual([
+			'NEAR',
+			'FAR',
+			'NOGEO'
+		]);
 		expect(result.shelters[0].distance).toBeLessThan(result.shelters[1].distance);
 	});
 });

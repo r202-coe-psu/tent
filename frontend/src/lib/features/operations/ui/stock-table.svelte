@@ -1,18 +1,11 @@
 <script lang="ts">
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
-	import {
-		useStockBalance,
-		useLedger,
-		useCrossShelterStockBalances,
-		useCrossShelterLedger
-	} from '../application/queries';
+	import { useStockBalance, useLedger } from '../application/queries';
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
 	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
-	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { cn } from '$lib/utils/shadcn.js';
 	import LedgerTable from './ledger-table.svelte';
 	import ReceiveStockForm from './receive-stock-form.svelte';
 	import DistributeStockForm from './distribute-stock-form.svelte';
@@ -22,24 +15,20 @@
 	import Settings from '@lucide/svelte/icons/settings';
 	import { qtyGt, qtyLte, addQty } from '$lib/utils/qty';
 	import { calculateReorderLevel } from '$lib/features/supply/domain/threshold-calc';
-	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin } from '$lib/auth/roles';
-	import { useShelters } from '$lib/features/shelters';
 
 	// Icon
 	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
 	import Filter from '@lucide/svelte/icons/filter';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Activity from '@lucide/svelte/icons/activity';
 	import Boxes from '@lucide/svelte/icons/boxes';
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Clock from '@lucide/svelte/icons/clock';
-	import CheckCircle from '@lucide/svelte/icons/check-circle';
-	import XCircle from '@lucide/svelte/icons/x-circle';
-	import History from '@lucide/svelte/icons/history';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
+	import Eye from '@lucide/svelte/icons/eye';
+	import Pencil from '@lucide/svelte/icons/pencil';
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
@@ -50,22 +39,7 @@
 
 	const overrides = $derived(overridesQuery.data ?? []);
 
-	// ─── Roles and Cross-Shelter States ───────────────────────────────────────
-	const roles = $derived(authStore.user?.roles ?? []);
-	const isSA = $derived(isSystemAdmin(roles));
-	let showOverall = $state(false);
-
-	const sheltersQuery = useShelters();
-	const shelterCodes = $derived((sheltersQuery.data ?? []).map((s) => s.code));
-
-	const crossBalanceQuery = useCrossShelterStockBalances(
-		() => shelterCodes,
-		() => isSA && showOverall
-	);
-	const crossLedgerQuery = useCrossShelterLedger(
-		() => shelterCodes,
-		() => isSA && showOverall
-	);
+	// ─── States ───────────────────────────────────────────────────────────────
 
 	// ─── Filter state ─────────────────────────────────────────────────────────
 	let searchQuery = $state('');
@@ -73,13 +47,24 @@
 	let locationFilter = $state<string | 'all'>('all');
 	let statusFilter = $state<'all' | 'normal' | 'low' | 'empty' | 'expiring' | 'expired'>('all');
 
+	// ─── Collapsed groups state ──────────────────────────────────────────────
+	let collapsedGroups = new SvelteSet<string>();
+
+	function toggleGroup(category: string) {
+		if (collapsedGroups.has(category)) {
+			collapsedGroups.delete(category);
+		} else {
+			collapsedGroups.add(category);
+		}
+	}
+
 	// ─── Pagination state ─────────────────────────────────────────────────────
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
 
 	$effect(() => {
-		// Reset to page 1 on filter/search/showOverall change
-		void [searchQuery, categoryFilter, locationFilter, statusFilter, showOverall];
+		// Reset to page 1 on filter/search change
+		void [searchQuery, categoryFilter, locationFilter, statusFilter];
 		currentPage = 1;
 	});
 
@@ -112,23 +97,9 @@
 
 		return [...supplyItems, ...mappedItemMasters];
 	});
-	const balance = $derived.by(() => {
-		if (isSA && showOverall) {
-			const agg = new SvelteMap<string, string>();
-			const data = crossBalanceQuery.data ?? [];
-			for (const { balance: b } of data) {
-				for (const [itemId, qty] of b.entries()) {
-					agg.set(itemId, addQty(agg.get(itemId) ?? '0', qty));
-				}
-			}
-			return agg;
-		}
-		return balanceQuery.data ?? new SvelteMap<string, string>();
-	});
+	const balance = $derived(balanceQuery.data ?? new SvelteMap<string, string>());
 
-	const ledger = $derived(
-		isSA && showOverall ? (crossLedgerQuery.data ?? []) : (ledgerQuery.data ?? [])
-	);
+	const ledger = $derived(ledgerQuery.data ?? []);
 
 	function formatDateTime(isoString: string): string {
 		try {
@@ -250,9 +221,8 @@
 		itemsQuery.isLoading ||
 			itemMastersQuery.isLoading ||
 			overridesQuery.isLoading ||
-			(isSA && showOverall
-				? crossBalanceQuery.isLoading || crossLedgerQuery.isLoading
-				: balanceQuery.isLoading || ledgerQuery.isLoading)
+			balanceQuery.isLoading ||
+			ledgerQuery.isLoading
 	);
 
 	// ─── Helpers ──────────────────────────────────────────────────────────────
@@ -279,19 +249,6 @@
 			.sort((a, b) => a.label.localeCompare(b.label, 'th'));
 	});
 
-	function formatExpiry(expiryStr: string | undefined): string {
-		if (!expiryStr) return '-';
-		try {
-			return new Date(expiryStr).toLocaleDateString('th-TH', {
-				day: '2-digit',
-				month: 'short',
-				year: '2-digit'
-			});
-		} catch {
-			return expiryStr;
-		}
-	}
-
 	const CATEGORY_STYLES: Record<SupplyCategory, string> = {
 		food: 'bg-[#e8f0fe] text-[#0071e3] border-[#d2e3fc] dark:bg-[#0071e3]/10 dark:text-[#66b2ff] dark:border-[#0071e3]/20',
 		water:
@@ -308,6 +265,20 @@
 			'bg-[#f8f9fa] text-[#5f6368] border-[#dadce0] dark:bg-[#f8f9fa]/10 dark:text-[#9ca3af] dark:border-[#dadce0]/20',
 		other:
 			'bg-[#f8f9fa] text-[#5f6368] border-[#dadce0] dark:bg-[#f8f9fa]/10 dark:text-[#9ca3af] dark:border-[#dadce0]/20'
+	};
+
+	/** English group label for category group header (mockup style). */
+	const CATEGORY_GROUP_EN: Record<string, string> = {
+		food: 'Staple Foods',
+		water: 'Drinking Water',
+		medicine: 'Medicine',
+		clothing: 'Clothing',
+		hygiene: 'Hygiene Supplies',
+		bedding: 'Bedding',
+		equipment: 'Equipment',
+		other: 'General',
+		supplies: 'Supplies',
+		fuel: 'Fuel'
 	};
 
 	// ─── Props ────────────────────────────────────────────────────────────────
@@ -360,6 +331,76 @@
 			};
 		})
 	);
+
+	// ─── Grouped items by category ───────────────────────────────────────────
+	interface CategoryGroup {
+		category: string;
+		label: string;
+		labelEn: string;
+		items: typeof itemsWithCalculatedStatus;
+		totalQty: string;
+		primaryUnit: string;
+		totalCount: number;
+	}
+
+	/**
+	 * Parse a category value that may be an enum key (e.g., 'food') or a display label
+	 * (e.g., 'อาหาร (Food)') into separate Thai and English parts for the group header.
+	 */
+	function parseCategoryForGroup(cat: string): { thai: string; en: string } {
+		// 1. Try enum key match (lowercase)
+		const catLower = cat.toLowerCase();
+		if (SUPPLY_CATEGORY_LABELS[catLower as SupplyCategory]) {
+			return {
+				thai: SUPPLY_CATEGORY_LABELS[catLower as SupplyCategory],
+				en: CATEGORY_GROUP_EN[catLower] ?? catLower.charAt(0).toUpperCase() + catLower.slice(1)
+			};
+		}
+
+		// 2. Try to parse display label format "ThaiName (EnglishName)"
+		const match = cat.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+		if (match) {
+			const thaiPart = match[1].trim();
+			const enPart = match[2].trim();
+			const enLower = enPart.toLowerCase();
+			return {
+				thai: thaiPart,
+				en: CATEGORY_GROUP_EN[enLower] ?? enPart
+			};
+		}
+
+		// 3. Fallback: use raw value
+		return { thai: cat, en: CATEGORY_GROUP_EN[catLower] ?? cat };
+	}
+
+	const groupedDisplayedItems = $derived.by(() => {
+		const groups = new SvelteMap<string, typeof paginatedItems>();
+		for (const item of paginatedItems) {
+			const cat = item.category || 'other';
+			if (!groups.has(cat)) groups.set(cat, []);
+			groups.get(cat)!.push(item);
+		}
+
+		const result: CategoryGroup[] = [];
+		for (const [cat, catItems] of groups.entries()) {
+			const allItemsInCat = displayedItems.filter((i) => (i.category || 'other') === cat);
+			let totalQty = '0';
+			for (const item of allItemsInCat) {
+				totalQty = addQty(totalQty, item.qtyOnHand);
+			}
+			const parsed = parseCategoryForGroup(cat);
+			result.push({
+				category: cat,
+				label: parsed.thai,
+				labelEn: parsed.en,
+				items: catItems,
+				totalQty,
+				primaryUnit: allItemsInCat[0]?.unit ?? 'UOM',
+				totalCount: allItemsInCat.length
+			});
+		}
+		return result.sort((a, b) => a.label.localeCompare(b.label, 'th'));
+	});
 </script>
 
 <div class="space-y-6">
@@ -374,17 +415,18 @@
 			<div>
 				<h2 class="flex items-center gap-2 text-2xl font-bold text-foreground">
 					<Boxes class="h-6 w-6 text-primary" />
-					รายการสิ่งของในคลัง (Inventory)
+					เบราว์สรายการสินค้าจริงในคลัง (Real-time Inventory)
 				</h2>
-				<p class="mt-2 max-w-2xl text-sm text-muted-foreground">
-					แสดงผลรายการสินค้าและยอดคงเหลือในคลัง
-					ประเมินความเพียงพอของสต๊อกอ้างอิงตามระดับเกณฑ์เตือนภัยเพื่อป้องกันของขาดแคลน
+				<p class="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+					เบราว์สรายการสินค้า คือ รายการของจริง และยอดคงเหลือในคลังสินค้าจริงในระบบ
+					สำหรับการสืบค้นรายการ สิ่งของในระบบ การจัดการยอดตามมาตรฐาน ความต้องการเสบียง Sphere
+					Standard เท่านั้น
 				</p>
 			</div>
 			<div>
 				<a
 					href="/back-office/catalog?tab=item_master&action=create"
-					class={cn(buttonVariants({ size: 'lg' }), 'flex items-center gap-2')}
+					class="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-md transition-all duration-200 hover:bg-primary-strong active:scale-[0.97]"
 				>
 					<Plus class="h-4 w-4" />
 					เพิ่มของใหม่
@@ -417,7 +459,7 @@
 						bind:value={categoryFilter}
 						class="w-full cursor-pointer appearance-none truncate rounded-lg border border-border/80 bg-background py-2.5 pr-8 pl-9 text-sm font-semibold text-foreground shadow-sm transition-all outline-none focus:border-primary"
 					>
-						<option value="all">ทุกหมวดหมู่ (Category)</option>
+						<option value="all">หมวดหมู่: ทุกหมวดหมู่</option>
 						{#each uniqueCategories as cat (cat.value)}
 							<option value={cat.value}>{cat.label}</option>
 						{/each}
@@ -459,7 +501,7 @@
 						bind:value={statusFilter}
 						class="w-full cursor-pointer appearance-none rounded-lg border border-border/80 bg-background py-2.5 pr-8 pl-9 text-sm font-semibold text-foreground shadow-sm transition-all outline-none focus:border-primary"
 					>
-						<option value="all">ทุกสถานะความเสี่ยง (Status)</option>
+						<option value="all">สถาณชี้เก็บ: พื้นคลัง</option>
 						<option value="normal">🟢 ปกติ (Healthy)</option>
 						<option value="low">🟡 เฝ้าระวัง (Warning)</option>
 						<option value="empty">🔴 วิกฤตสต๊อก (Critical)</option>
@@ -472,19 +514,6 @@
 						<ChevronDown class="h-4 w-4" />
 					</div>
 				</div>
-				{#if isSA}
-					<div class="flex items-center gap-2 pl-2">
-						<input
-							type="checkbox"
-							id="show-overall"
-							bind:checked={showOverall}
-							class="h-4 w-4 cursor-pointer rounded border-border bg-background text-primary focus:ring-primary"
-						/>
-						<label for="show-overall" class="cursor-pointer text-xs font-semibold text-foreground">
-							แสดงยอดรวมทุกศูนย์ (Cross-shelter aggregate)
-						</label>
-					</div>
-				{/if}
 			</div>
 		</div>
 
@@ -515,10 +544,10 @@
 							<Table.Head class="p-4 px-5">รายการสินค้า (SKU)</Table.Head>
 							<Table.Head class="p-4">หมวดหมู่</Table.Head>
 							<Table.Head class="p-4 text-center">สถานที่จัดเก็บ</Table.Head>
-							<Table.Head class="p-4 text-center">วันหมดอายุ</Table.Head>
-							<Table.Head class="p-4 text-center">ยอดคงเหลือ</Table.Head>
-							<Table.Head class="p-4 text-center">สถานะ</Table.Head>
-							<Table.Head class="w-[100px] p-4 px-5 text-center">จัดการ</Table.Head>
+							<Table.Head class="p-4 text-center">โรงพยาบาล</Table.Head>
+							<Table.Head class="p-4 text-center">สต็อกทั้งหมด (PHYSICAL ON-HAND)</Table.Head>
+							<Table.Head class="p-4 text-center">ใช้งานได้จริง (USABLE STOCK)</Table.Head>
+							<Table.Head class="w-[200px] p-4 px-5 text-center">จัดการ</Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body class="divide-y divide-border/40">
@@ -532,161 +561,146 @@
 								</Table.Cell>
 							</Table.Row>
 						{:else}
-							{#each paginatedItems as item (item._id)}
-								{@const qty = item.qtyOnHand}
-								{@const status = item.status}
-								{@const lot = latestLotByItem[item._id]}
-								{@const expired = isExpired(lot?.expiry)}
-								{@const expiring = isExpiringSoon(lot?.expiry)}
-
-								<Table.Row
-									class={[
-										'border-l-4 transition-all duration-200 hover:translate-x-0.5 hover:bg-muted/40',
-										expired
-											? 'border-l-rose-600 bg-rose-500/5'
-											: status === 'empty'
-												? 'border-l-rose-500 bg-rose-500/5'
-												: expiring
-													? 'border-l-orange-500 bg-orange-500/5'
-													: status === 'low'
-														? 'border-l-amber-500 bg-amber-500/5'
-														: 'border-l-transparent'
-									]}
-								>
-									<!-- Item name + ID -->
-									<Table.Cell class="p-4 px-5">
-										<div class="flex flex-col gap-1">
-											<span class="text-sm font-semibold text-foreground">
-												{item.name}
-											</span>
-											<div class="flex items-center gap-2">
-												<span class="font-mono text-2xs text-muted-foreground">
-													{item._id}
-												</span>
-												{#if item.perishable}
-													<span
-														class="rounded border border-orange-500/20 bg-orange-500/10 px-1.5 py-0.5 text-2xs font-bold text-orange-600 dark:text-orange-400"
-													>
-														เน่าเสียได้
-													</span>
-												{/if}
-											</div>
-										</div>
-									</Table.Cell>
-
-									<!-- Category badge -->
-									<Table.Cell class="p-4">
-										<span
-											class="rounded-md border px-2.5 py-1 text-center text-2xs font-bold whitespace-nowrap {getCategoryStyle(
-												item.category
-											)}"
+							{#each groupedDisplayedItems as group (group.category)}
+								<!-- Category Group Header -->
+								<Table.Row class="border-b border-border/60 bg-[#f8f9fb] dark:bg-muted/30">
+									<Table.Cell colspan={7} class="p-0">
+										<button
+											type="button"
+											onclick={() => toggleGroup(group.category)}
+											class="flex w-full cursor-pointer items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-muted/50"
 										>
-											{getCategoryLabel(item.category)}
-										</span>
-									</Table.Cell>
-
-									<!-- Storage location -->
-									<Table.Cell class="p-4 text-center">
-										{#if lot?.note}
 											<span
-												class="rounded-lg border border-border/80 bg-muted/60 px-2.5 py-1 text-xs font-medium text-foreground"
+												class="flex items-center text-muted-foreground transition-transform duration-200 {collapsedGroups.has(
+													group.category
+												)
+													? ''
+													: 'rotate-90'}"
 											>
-												📍 {lot.note}
+												<ChevronRight class="h-4 w-4" />
 											</span>
-										{:else}
-											<span class="text-xs text-muted-foreground/40">-</span>
-										{/if}
-									</Table.Cell>
-
-									<!-- Expiry date -->
-									<Table.Cell class="p-4 text-center">
-										{#if lot?.expiry}
+											<span class="text-sm font-bold text-foreground">
+												กลุ่ม{group.label} ({group.labelEn})
+											</span>
 											<span
-												class="rounded-md px-2 py-1 text-xs font-bold {expired
-													? 'border border-rose-500/20 bg-rose-500/10 text-rose-600'
-													: expiring
-														? 'border border-orange-500/20 bg-orange-500/10 text-orange-600'
-														: 'border border-border/80 bg-muted/60 text-foreground'}"
+												class="rounded-full bg-primary px-2.5 py-0.5 text-2xs font-bold text-primary-foreground"
 											>
-												{expired ? '❌ ' : expiring ? '⏳ ' : '📅 '}
-												{formatExpiry(lot.expiry)}
+												{group.totalCount} รายการ
 											</span>
-										{:else}
-											<span class="text-xs text-muted-foreground/40">-</span>
-										{/if}
-									</Table.Cell>
-
-									<!-- Balance -->
-									<Table.Cell class="p-4 text-center font-mono text-sm font-bold">
-										<div class="flex flex-col items-center gap-0.5">
-											<span
-												class="rounded-md px-2.5 py-1 {expired || status === 'empty'
-													? 'border border-rose-500/20 bg-rose-500/10 text-rose-600'
-													: status === 'low'
-														? 'border border-amber-500/20 bg-amber-500/10 text-amber-600'
-														: 'border border-border/60 bg-muted/80 text-foreground'}"
-											>
-												{qty}
-												<span class="text-2xs font-normal text-muted-foreground">{item.unit}</span>
+											<span class="ml-4 text-xs font-medium text-muted-foreground">
+												ยอดรวมกลุ่ม {Number(group.totalQty).toLocaleString('th-TH')} UOM
 											</span>
-											{#if item.reorderThreshold !== null}
-												<span class="text-2xs font-normal text-muted-foreground/60">
-													เกณฑ์: {item.reorderThreshold}
-													{item.unit}
-												</span>
-											{/if}
-										</div>
-									</Table.Cell>
-
-									<!-- Status -->
-									<Table.Cell class="p-4 text-center">
-										{#if expired}
-											<span
-												class="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-xs font-bold text-rose-600"
-											>
-												<XCircle class="h-3.5 w-3.5" /> หมดอายุแล้ว
-											</span>
-										{:else if status === 'empty'}
-											<span
-												class="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-xs font-bold text-rose-600"
-											>
-												<XCircle class="h-3.5 w-3.5" /> วิกฤตสต๊อก
-											</span>
-										{:else if status === 'low'}
-											<span
-												class="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-600"
-											>
-												<AlertTriangle class="h-3.5 w-3.5" /> เฝ้าระวัง
-											</span>
-										{:else}
-											<span
-												class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-600"
-											>
-												<CheckCircle class="h-3.5 w-3.5" /> ปกติ
-											</span>
-										{/if}
-									</Table.Cell>
-
-									<!-- Action -->
-									<Table.Cell class="p-4 px-5 text-center">
-										{#if showOverall}
-											<span class="text-[11px] font-semibold text-muted-foreground/60 italic">
-												(ดูภาพรวม)
-											</span>
-										{:else}
-											<button
-												onclick={() => {
-													selectedItemId = item._id;
-													activeModalTab = 'checkin';
-													isManageModalOpen = true;
-												}}
-												class="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-border/80 bg-background p-1.5 px-3 text-[12px] font-bold text-foreground shadow-sm transition-all duration-200 hover:scale-[1.05] hover:bg-muted active:scale-[0.95]"
-											>
-												<History class="h-3.5 w-3.5 text-muted-foreground" /> จัดการ
-											</button>
-										{/if}
+										</button>
 									</Table.Cell>
 								</Table.Row>
+
+								<!-- Items in this group (shown when not collapsed) -->
+								{#if !collapsedGroups.has(group.category)}
+									{#each group.items as item (item._id)}
+										{@const qty = item.qtyOnHand}
+										{@const status = item.status}
+										{@const lot = latestLotByItem[item._id]}
+										{@const expired = isExpired(lot?.expiry)}
+
+										<Table.Row class="transition-all duration-200 hover:bg-muted/40">
+											<!-- Item name + ID -->
+											<Table.Cell class="p-4 px-5 pl-12">
+												<div class="flex flex-col gap-0.5">
+													<span class="text-sm font-semibold text-foreground">
+														{item.name}
+													</span>
+													<span class="font-mono text-2xs text-muted-foreground">
+														ID: {item._id}
+													</span>
+												</div>
+											</Table.Cell>
+
+											<!-- Category badge -->
+											<Table.Cell class="p-4">
+												<span
+													class="rounded-md border px-2.5 py-1 text-center text-2xs font-bold whitespace-nowrap {getCategoryStyle(
+														item.category
+													)}"
+												>
+													{getCategoryLabel(item.category)}
+												</span>
+											</Table.Cell>
+
+											<!-- Storage location -->
+											<Table.Cell class="p-4 text-center">
+												{#if lot?.note}
+													<span class="text-xs text-foreground">
+														{lot.note}
+													</span>
+												{:else}
+													<span class="text-xs text-muted-foreground/40">-</span>
+												{/if}
+											</Table.Cell>
+
+											<!-- โรงพยาบาล (mapped from lot.note / location description) -->
+											<Table.Cell class="p-4 text-center">
+												{#if lot?.note}
+													<span class="text-xs text-foreground">
+														{lot.note}
+													</span>
+												{:else}
+													<span class="text-xs text-muted-foreground/40">-</span>
+												{/if}
+											</Table.Cell>
+
+											<!-- สต็อกทั้งหมด (PHYSICAL ON-HAND) -->
+											<Table.Cell class="p-4 text-center">
+												<span class="text-sm font-bold text-foreground">
+													{qty}
+													<span class="text-2xs font-normal text-muted-foreground">{item.unit}</span
+													>
+												</span>
+											</Table.Cell>
+
+											<!-- ใช้งานได้จริง (USABLE STOCK) -->
+											<Table.Cell class="p-4 text-center">
+												<span
+													class="inline-block rounded-md px-2.5 py-1 text-sm font-bold {expired ||
+													status === 'empty'
+														? 'bg-rose-500/10 text-rose-600'
+														: status === 'low'
+															? 'bg-amber-500/10 text-amber-600'
+															: 'text-[#0b6e4f]'}"
+												>
+													{qty}
+													<span class="text-2xs font-normal text-muted-foreground">{item.unit}</span
+													>
+												</span>
+											</Table.Cell>
+
+											<!-- Action buttons -->
+											<Table.Cell class="p-4 px-5 text-center">
+												<div class="flex items-center justify-center gap-2">
+													<button
+														onclick={() => {
+															selectedItemId = item._id;
+															activeModalTab = 'history';
+															isManageModalOpen = true;
+														}}
+														class="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-[12px] font-semibold text-foreground shadow-sm transition-all duration-200 hover:bg-muted active:scale-[0.97]"
+													>
+														<Eye class="h-3.5 w-3.5 text-muted-foreground" /> ดูรายสิน
+													</button>
+													<button
+														onclick={() => {
+															selectedItemId = item._id;
+															activeModalTab = 'adjust';
+															isManageModalOpen = true;
+														}}
+														class="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-bold text-primary-foreground shadow-sm transition-all duration-200 hover:bg-primary-strong active:scale-[0.97]"
+													>
+														<Pencil class="h-3.5 w-3.5" /> ปรับปรุงยอด
+													</button>
+												</div>
+											</Table.Cell>
+										</Table.Row>
+									{/each}
+								{/if}
 							{/each}
 						{/if}
 					</Table.Body>
@@ -728,7 +742,7 @@
 					class="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground shadow-sm"
 				>
 					<span
-						>แสดง {paginatedItems.length} จากทั้งหมด {displayedItems.length} รายการที่ตรงเงื่อนไข (ในคลังมี
+						>แสดง {displayedItems.length} จากทั้งหมด {displayedItems.length} รายการที่ตรงเงื่อนไข (ในคลังมี
 						{items.length} รายการ)</span
 					>
 					<div class="flex gap-3">
@@ -758,9 +772,19 @@
 				{/if}
 				<p>* หมายเหตุ: จุดจัดเก็บและวันหมดอายุจะอ้างอิงจากรายการล่าสุดที่มีการระบุข้อมูล</p>
 			</div>
+		{/if}
 	</div>
 </div>
 
+<!-- Manage / History Modal (Dialog) -->
+<Dialog.Root bind:open={isManageModalOpen}>
+	<Dialog.Content
+		class="max-h-[92vh] w-full overflow-y-auto rounded-[24px] border border-border bg-card p-6 shadow-2xl sm:max-w-7xl"
+	>
+		<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
+			{#if selectedItemId}
+				{@const item = items.find((i) => i._id === selectedItemId)}
+				<Dialog.Title class="flex items-center gap-2 text-xl font-bold text-foreground">
 					<Boxes class="h-5 w-5 text-primary" />
 					จัดการสต็อก: {item?.name ?? ''}
 				</Dialog.Title>
