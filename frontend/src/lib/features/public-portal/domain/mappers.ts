@@ -6,7 +6,8 @@ export function toUiShelterStatus(status: string | null | undefined): string {
 	const s = status.trim().toLowerCase();
 	if (s === 'open') return 'OPEN';
 	if (s === 'full') return 'FULL';
-	if (s === 'prepare' || s === 'preparing' || s === 'ready') return 'PREPARE';
+	// Mongo `standby` (schema §9.1) + legacy prepare labels → PREPARE UI chip
+	if (s === 'standby' || s === 'prepare' || s === 'preparing' || s === 'ready') return 'PREPARE';
 	if (s === 'closed') return 'CLOSED';
 	return status.toUpperCase();
 }

@@ -27,7 +27,7 @@
 	} = $props();
 
 	const operationStatusOptions: { value: Shelter['operation_status']; label: string }[] = [
-		{ value: 'standby', label: 'เตรียมพร้อม (Standby)' },
+		{ value: 'standby', label: 'กำลังเตรียมการ (Preparing)' },
 		{ value: 'active', label: 'เปิดรับผู้อพยพ (Active)' },
 		{ value: 'full_capacity', label: 'เต็มความจุ (Full Capacity)' },
 		{ value: 'closed', label: 'ปิดศูนย์ (Closed)' }

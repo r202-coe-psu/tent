@@ -5,12 +5,15 @@
 	import Users from '@lucide/svelte/icons/users';
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import PawPrint from '@lucide/svelte/icons/paw-print';
+	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
 
 	import type { PublicShelterCardModel } from '../domain/types';
+	import { resolveMasterLabel } from '../domain/master-labels';
+	import { useShelterTypeLabelMap, useVulnerableGroupLabelMap } from '../application/queries';
 
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_SHELTER_CARD_I18N } from '$lib/constants/i18n';
@@ -19,41 +22,52 @@
 	let {
 		shelter,
 		getStatusColor,
-		getStatusText
+		getStatusText,
+		onPreRegister
 	}: {
 		shelter: PublicShelterCardModel;
 		getStatusColor: (status: string) => string;
 		getStatusText: (status: string) => string;
+		/** Opens booking with this shelter locked. Omit on surfaces that do not book. */
+		onPreRegister?: (shelterCode: string) => void;
 	} = $props();
 
 	let t = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
 
-	function translateAdminType(type: string): string {
-		if (langState.current !== 'en') return type;
-		const map: Record<string, string> = {
-			วัด: 'Temple',
-			โรงเรียน: 'School',
-			หน่วยงานราชการ: 'Government Agency',
-			ศูนย์อพยพ: 'Evacuation Center',
-			มหาวิทยาลัย: 'University',
-			มัสยิด: 'Mosque',
-			โบสถ์: 'Church',
-			พื้นที่เอกชน: 'Private Area',
-			อื่นๆ: 'Other',
-			unspecified: 'Unspecified'
-		};
-		return map[type] || type;
+	// CR-070 / T-71 — closed shelters cannot book; FULL warns inside the wizard.
+	let canBook = $derived(Boolean(shelter.code) && shelter.status !== 'CLOSED');
+
+	const shelterTypeLabels = useShelterTypeLabelMap();
+	const vulnerableGroupLabels = useVulnerableGroupLabelMap();
+
+	function adminTypeLabel(type: string): string {
+		const legacyEn: Record<string, string> =
+			langState.current === 'en'
+				? {
+						วัด: 'Temple',
+						โรงเรียน: 'School',
+						หน่วยงานราชการ: 'Government Agency',
+						ศูนย์อพยพ: 'Evacuation Center',
+						มหาวิทยาลัย: 'University',
+						มัสยิด: 'Mosque',
+						โบสถ์: 'Church',
+						พื้นที่เอกชน: 'Private Area',
+						อื่นๆ: 'Other',
+						unspecified: 'Unspecified'
+					}
+				: { unspecified: '' };
+		return resolveMasterLabel(type, shelterTypeLabels.data, legacyEn);
 	}
 
-	function translateVulnerableGroup(group: string): string {
-		const map: Record<string, string> = {
+	function vulnerableGroupLabel(group: string): string {
+		const legacy: Record<string, string> = {
 			general_vulnerable: t.generalVulnerable,
 			quarantine: t.quarantine,
 			wheelchair: t.wheelchair,
 			none: t.noSpecificZone
 		};
 		if (langState.current === 'en') {
-			Object.assign(map, {
+			Object.assign(legacy, {
 				ผู้ป่วยติดเตียง: 'Bedridden Patient',
 				ผู้ใช้วีลแชร์: 'Wheelchair User',
 				เด็กอ่อน: 'Infant/Baby',
@@ -64,7 +78,7 @@
 				ผู้ป่วยแยกกักโรค: 'Quarantine Patient'
 			});
 		}
-		return map[group] || group;
+		return resolveMasterLabel(group, vulnerableGroupLabels.data, legacy);
 	}
 
 	function translatePetPolicy(policyStr: string | undefined): string {
@@ -86,6 +100,19 @@
 		}
 		return policyStr;
 	}
+
+	let visibleVulnerableGroups = $derived(
+		(Array.isArray(shelter.vulnerable_groups) ? shelter.vulnerable_groups : [])
+			.filter((g) => g && g !== 'none' && g !== 'ไม่มีโซนเฉพาะ')
+			.map((g) => ({ code: g, label: vulnerableGroupLabel(g) }))
+			.filter((g) => g.label)
+	);
+
+	let adminTypeDisplay = $derived(
+		shelter.admin_type && shelter.admin_type !== 'unspecified'
+			? adminTypeLabel(shelter.admin_type)
+			: ''
+	);
 </script>
 
 <Card.Root
@@ -97,10 +124,10 @@
 			<h4 class="line-clamp-2 leading-tight font-bold text-foreground transition-colors">
 				{shelter.name}
 			</h4>
-			{#if shelter.admin_type}
+			{#if adminTypeDisplay}
 				<div class="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
 					<span class="h-1.5 w-1.5 rounded-full bg-primary/40"></span>
-					{translateAdminType(shelter.admin_type)}
+					{adminTypeDisplay}
 				</div>
 			{/if}
 			<div class="mt-1 text-[11px] font-semibold text-primary">
@@ -149,21 +176,21 @@
 				<span class="ml-0.5 text-[10px] font-bold text-muted-foreground">{t.people}</span>
 			</div>
 		</div>
-		{#if shelter.pet_policy || (Array.isArray(shelter.vulnerable_groups) && shelter.vulnerable_groups.filter((g) => g && g !== 'none' && g !== 'ไม่มีโซนเฉพาะ').length > 0)}
+		{#if shelter.pet_policy || visibleVulnerableGroups.length > 0}
 			<div class="flex flex-col gap-2 border-t border-border/60 pt-2.5">
-				{#if Array.isArray(shelter.vulnerable_groups) && shelter.vulnerable_groups.filter((g) => g && g !== 'none' && g !== 'ไม่มีโซนเฉพาะ').length > 0}
+				{#if visibleVulnerableGroups.length > 0}
 					<div class="flex flex-col gap-1.5">
 						<div class="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
 							<HeartPulse class="h-3 w-3" />
 							{t.vulnerableGroups}
 						</div>
 						<div class="flex flex-wrap gap-1">
-							{#each shelter.vulnerable_groups.filter((g) => g && g !== 'none' && g !== 'ไม่มีโซนเฉพาะ') as group, i (i)}
+							{#each visibleVulnerableGroups as group (group.code)}
 								<Badge
 									variant="secondary"
 									class="h-auto min-h-5 border-primary/10 bg-primary/5 py-1 text-left text-[10px] leading-tight whitespace-normal text-foreground hover:bg-primary/10"
 								>
-									{translateVulnerableGroup(group)}
+									{group.label}
 								</Badge>
 							{/each}
 						</div>
@@ -171,13 +198,7 @@
 				{/if}
 
 				{#if shelter.pet_policy}
-					<div
-						class="flex flex-col gap-1.5 {Array.isArray(shelter.vulnerable_groups) &&
-						shelter.vulnerable_groups.filter((g) => g && g !== 'none' && g !== 'ไม่มีโซนเฉพาะ')
-							.length > 0
-							? 'mt-1'
-							: ''}"
-					>
+					<div class="flex flex-col gap-1.5 {visibleVulnerableGroups.length > 0 ? 'mt-1' : ''}">
 						<div class="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
 							<PawPrint class="h-3 w-3" />
 							{t.petPolicy}
@@ -200,28 +221,45 @@
 	</div>
 
 	<!-- Actions -->
-	<div class="mt-auto flex gap-2 pt-2">
-		<Button
-			href={`/shelters/${shelter.id}`}
-			variant="outline"
-			size="sm"
-			class="h-9 flex-1 rounded-xl border-border text-xs font-bold text-foreground hover:bg-muted"
-		>
-			<Eye class="mr-1.5 h-3.5 w-3.5" />
-			{t.viewDetails}
-		</Button>
-		<Button
-			href={shelter.geo?.lat != null && shelter.geo?.lng != null
-				? `https://www.google.com/maps/dir/?api=1&destination=${shelter.geo.lat},${shelter.geo.lng}`
-				: undefined}
-			target={shelter.geo?.lat != null && shelter.geo?.lng != null ? '_blank' : null}
-			rel={shelter.geo?.lat != null && shelter.geo?.lng != null ? 'noopener noreferrer' : null}
-			disabled={shelter.geo?.lat == null || shelter.geo?.lng == null}
-			size="sm"
-			class="h-9 flex-1 rounded-xl bg-primary-dark text-xs font-bold text-primary-foreground hover:bg-primary disabled:opacity-50"
-		>
-			<Navigation class="mr-1.5 h-3.5 w-3.5" />
-			{t.navigate}
-		</Button>
+	<div class="mt-auto flex flex-col gap-2 pt-2">
+		{#if onPreRegister}
+			<Button
+				type="button"
+				size="sm"
+				disabled={!canBook}
+				title={canBook ? undefined : t.preRegisterClosed}
+				class="h-9 w-full rounded-xl bg-primary text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+				onclick={() => {
+					if (canBook) onPreRegister(shelter.code);
+				}}
+			>
+				<ClipboardCheck class="mr-1.5 h-3.5 w-3.5" />
+				{t.preRegister}
+			</Button>
+		{/if}
+		<div class="flex gap-2">
+			<Button
+				href={`/shelters/${shelter.id}`}
+				variant="outline"
+				size="sm"
+				class="h-9 flex-1 rounded-xl border-border text-xs font-bold text-foreground hover:bg-muted"
+			>
+				<Eye class="mr-1.5 h-3.5 w-3.5" />
+				{t.viewDetails}
+			</Button>
+			<Button
+				href={shelter.geo?.lat != null && shelter.geo?.lng != null
+					? `https://www.google.com/maps/dir/?api=1&destination=${shelter.geo.lat},${shelter.geo.lng}`
+					: undefined}
+				target={shelter.geo?.lat != null && shelter.geo?.lng != null ? '_blank' : null}
+				rel={shelter.geo?.lat != null && shelter.geo?.lng != null ? 'noopener noreferrer' : null}
+				disabled={shelter.geo?.lat == null || shelter.geo?.lng == null}
+				size="sm"
+				class="h-9 flex-1 rounded-xl bg-primary-dark text-xs font-bold text-primary-foreground hover:bg-primary disabled:opacity-50"
+			>
+				<Navigation class="mr-1.5 h-3.5 w-3.5" />
+				{t.navigate}
+			</Button>
+		</div>
 	</div>
 </Card.Root>

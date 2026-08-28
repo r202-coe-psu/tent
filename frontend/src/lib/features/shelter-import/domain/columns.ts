@@ -67,7 +67,7 @@ export const BOOLEAN_CHOICES: EnumChoice<'true' | 'false'>[] = [
 ];
 
 export const OPERATION_STATUS_CHOICES: EnumChoice<OperationStatus>[] = [
-	{ value: 'standby', label: 'เตรียมพร้อม (Standby)' },
+	{ value: 'standby', label: 'กำลังเตรียมการ (Preparing)' },
 	{ value: 'active', label: 'เปิดรับผู้อพยพ (Active)' },
 	{ value: 'full_capacity', label: 'เต็มความจุ (Full Capacity)' },
 	{ value: 'closed', label: 'ปิดศูนย์ (Closed)' }
@@ -447,7 +447,7 @@ const SHEET_MAIN: SheetDef = {
 			required: false,
 			choices: OPERATION_STATUS_CHOICES,
 			path: 'operation_status',
-			hint: 'สถานะการเปิดให้บริการ (ว่าง = เตรียมพร้อม)'
+			hint: 'สถานะการเปิดให้บริการ (ว่าง = กำลังเตรียมการ)'
 		},
 		{
 			header: H.shelter_type,
