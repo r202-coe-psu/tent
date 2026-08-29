@@ -129,13 +129,17 @@
 		});
 	}
 
-	// Automatically pre-fill the selected item when preselectedItemId changes
+	/**
+	 * Keep the modal's locked item pinned to the form — see the same effect in
+	 * `receive-stock-form.svelte`. `clearSelection()` on a successful submit
+	 * empties `item_id`/`unit` while the combobox is `disabled`, so the pin has to
+	 * re-apply on `$formData.item_id` rather than only when `items` loads.
+	 */
 	$effect(() => {
-		if (preselectedItemId && (itemsQuery.data || itemMastersQuery.data)) {
-			const item = items.find((i) => i._id === preselectedItemId);
-			if (item) {
-				selectItem(item);
-			}
+		if (!preselectedItemId || $formData.item_id === preselectedItemId) return;
+		const item = items.find((i) => i._id === preselectedItemId);
+		if (item) {
+			selectItem(item);
 		}
 	});
 

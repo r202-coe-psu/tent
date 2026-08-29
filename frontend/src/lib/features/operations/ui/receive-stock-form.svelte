@@ -266,13 +266,22 @@
 		});
 	}
 
-	// Automatically pre-fill the selected item when preselectedItemId changes
+	/**
+	 * Keep the modal's locked item pinned to the form.
+	 *
+	 * More than a first-render pre-fill: a successful submit calls
+	 * `clearSelection()`, and the combobox is `disabled` whenever
+	 * `preselectedItemId` is set, so nothing could put the item back and every
+	 * later submit in the same modal failed on an empty `item_id`/`unit` the user
+	 * had no way to refill. Tracking `$formData.item_id` re-applies the pin after
+	 * each reset — `useReceiveStock` only invalidates the operations keys, so
+	 * `items` never changes identity to re-trigger the effect on its own.
+	 */
 	$effect(() => {
-		if (preselectedItemId && (itemsQuery.data || itemMastersQuery.data)) {
-			const item = items.find((i) => i._id === preselectedItemId);
-			if (item) {
-				selectItem(item);
-			}
+		if (!preselectedItemId || $formData.item_id === preselectedItemId) return;
+		const item = items.find((i) => i._id === preselectedItemId);
+		if (item) {
+			selectItem(item);
 		}
 	});
 

@@ -221,13 +221,17 @@
 		});
 	}
 
-	// Pre-fill
+	/**
+	 * Keep the modal's locked item pinned — see `receive-stock-form.svelte`.
+	 * Guarding on `selectedItem` also stops a background refetch of `items` from
+	 * re-running `selectItem()` mid-edit, which would wipe the lot, quantity and
+	 * reason the user is part-way through typing.
+	 */
 	$effect(() => {
-		if (preselectedItemId && (itemsQuery.data || itemMastersQuery.data)) {
-			const item = items.find((i) => i._id === preselectedItemId);
-			if (item) {
-				selectItem(item);
-			}
+		if (!preselectedItemId || selectedItem?._id === preselectedItemId) return;
+		const item = items.find((i) => i._id === preselectedItemId);
+		if (item) {
+			selectItem(item);
 		}
 	});
 
