@@ -15,18 +15,30 @@ import {
 	type PublicShelterCardModel
 } from '$lib/features/public-portal';
 
+type LoadResult = {
+	shelters: PublicShelterCardModel[];
+	count: number;
+	as_of: string;
+	summary: {
+		shelters_total: number;
+		shelters_open: number;
+	};
+	filters: Record<string, string>;
+	available_types: string[];
+};
+
 /**
  * `load` is typed against SvelteKit's full `LoadEvent`, but this page reads only
  * `url` and `fetch`. Building the rest of the event would test SvelteKit, not the
  * page — so the narrowing lives here once, described, rather than as a pair of
  * bare `as any` at each of the five call sites.
  */
-async function runLoad(url: URL) {
+async function runLoad(url: URL): Promise<LoadResult> {
 	const result = await load({ url, fetch: vi.fn() } as unknown as Parameters<typeof load>[0]);
 	// `PageLoad` is allowed to return nothing; this one always returns data, and
 	// narrowing here is what lets each assertion below read a real property.
 	if (!result) throw new Error('load() returned no data');
-	return result;
+	return result as LoadResult;
 }
 
 describe('public/shelters load function', () => {

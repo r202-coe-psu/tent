@@ -349,7 +349,7 @@
 					/>
 				</div>
 
-				<!-- Type -->
+				<!-- Site kind -->
 				<div class="space-y-1.5">
 					<Label for="site_kind" class="text-xs font-semibold text-muted-foreground"
 						>ชนิดสถานที่</Label
@@ -368,8 +368,7 @@
 
 				<!-- Building type -->
 				<div class="space-y-1.5">
-					<Label for="type" class="text-xs font-semibold text-muted-foreground"
-						>ประเภทศูนย์พักพิง</Label
+					<Label for="type" class="text-xs font-semibold text-muted-foreground">{t.typeLabel}</Label
 					>
 					<Select.Root type="single" name="type" value={filters.type ?? ''}>
 						<Select.Trigger class="w-full rounded-xl">

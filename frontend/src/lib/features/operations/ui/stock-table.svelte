@@ -140,34 +140,6 @@
 		isSA && showOverall ? (crossLedgerQuery.data ?? []) : (ledgerQuery.data ?? [])
 	);
 
-	function formatDateTime(isoString: string): string {
-		try {
-			return (
-				new Date(isoString).toLocaleString('th-TH', {
-					day: '2-digit',
-					month: 'short',
-					year: 'numeric',
-					hour: '2-digit',
-					minute: '2-digit',
-					second: '2-digit'
-				}) + ' น.'
-			);
-		} catch {
-			return isoString;
-		}
-	}
-
-	const lastUpdated = $derived.by(() => {
-		if (ledger.length === 0) return null;
-		let maxTime = '';
-		for (const entry of ledger) {
-			if (entry.occurred_at && entry.occurred_at > maxTime) {
-				maxTime = entry.occurred_at;
-			}
-		}
-		return maxTime ? formatDateTime(maxTime) : null;
-	});
-
 	/**
 	 * Unique locations list extracted from ledger entries
 	 */
@@ -809,16 +781,13 @@
 
 		<!-- Timing note -->
 		{#if !isLoading}
-			<div class="mt-3 flex flex-col items-end gap-1 text-[10px] text-muted-foreground/50">
-				<p>
-					<Clock class="mr-0.5 inline h-3 w-3" />
-					ข้อมูลอัปเดตอัตโนมัติผ่าน event channel
-				</p>
-				{#if lastUpdated}
-					<p>อัปเดตล่าสุดจากประวัติ: {lastUpdated}</p>
-				{/if}
-				<p>* หมายเหตุ: จุดจัดเก็บและวันหมดอายุจะอ้างอิงจากรายการล่าสุดที่มีการระบุข้อมูล</p>
-			</div>
+			<p class="mt-3 text-right text-2xs text-muted-foreground/50">
+				<Clock class="mr-0.5 inline h-3 w-3" />
+				ข้อมูลอัปเดตอัตโนมัติผ่าน event channel
+			</p>
+			<p class="mt-1 text-right text-2xs text-muted-foreground/50">
+				* หมายเหตุ: จุดจัดเก็บและวันหมดอายุจะอ้างอิงจากรายการล่าสุดที่มีการระบุข้อมูล
+			</p>
 		{/if}
 	</div>
 </div>

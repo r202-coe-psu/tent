@@ -3,7 +3,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { PublicSiteKind } from '../domain/types';
-
+	import { resolveMasterLabel } from '../domain/master-labels';
 	import { useShelterTypeLabelMap } from '../application/queries';
 	import { DEFAULT_MAP_STYLE, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '$lib/constants/maps';
 	import { Button } from '$lib/components/ui/button';
@@ -23,6 +23,8 @@
 		capacity: number;
 		distance: number;
 		site_kind?: PublicSiteKind;
+		type?: string;
+		admin_type?: string | null;
 		geo?: ShelterGeo | null;
 	}
 
@@ -170,6 +172,25 @@
 
 	function getSiteKindText(siteKind: PublicSiteKind | undefined): string {
 		return siteKind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์อพยพ';
+	}
+
+	function translateAdminType(type: string): string {
+		const legacyEn: Record<string, string> =
+			langState.current === 'en'
+				? {
+						วัด: 'Temple',
+						โรงเรียน: 'School',
+						หน่วยงานราชการ: 'Government Agency',
+						ศูนย์อพยพ: 'Evacuation Center',
+						มหาวิทยาลัย: 'University',
+						มัสยิด: 'Mosque',
+						โบสถ์: 'Church',
+						พื้นที่เอกชน: 'Private Area',
+						อื่นๆ: 'Other',
+						unspecified: 'Unspecified'
+					}
+				: { unspecified: '' };
+		return resolveMasterLabel(type, shelterTypeLabels.data, legacyEn);
 	}
 
 	onMount(async () => {
@@ -325,12 +346,12 @@
 				};
 
 				const popup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
-					<div style="font-size:12px;font-family:sans-serif;color:#1e293b;min-width:160px;">
-						<strong style="font-size:14px;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
-						<div style="margin-bottom:2px;font-size:11px;color:#64748b;">${getSiteKindText(shelter.site_kind)}</div>
-						สถานะ: <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
-						ความจุ: <strong>${shelter.capacity}</strong> คน<br/>
-						${shelter.distance > 0 ? `ระยะทาง: <strong>${shelter.distance}</strong> กม.` : ''}
+					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;min-width:160px;">
+						<strong style="font-size:0.875rem;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
+						<div style="margin-bottom:2px;font-size:0.625rem;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
+						${t.status} <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
+						${t.capacity} <strong>${shelter.capacity}</strong> ${t.people}<br/>
+						${shelter.distance > 0 ? `${t.distance} <strong>${shelter.distance}</strong> ${t.km}` : ''}
 					</div>
 				`);
 
