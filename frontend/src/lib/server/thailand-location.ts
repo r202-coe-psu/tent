@@ -67,6 +67,47 @@ export async function listAllLocations(): Promise<LocationRecord[]> {
 	return DATA.map((row) => ({ ...row })).sort((a, b) => thCompare(a.subdistrict, b.subdistrict));
 }
 
+/** Find zipcode by province, district, and subdistrict names (handles Thai prefixes). */
+export function lookupZipcode(
+	province?: string | null,
+	district?: string | null,
+	subdistrict?: string | null
+): string | null {
+	if (!subdistrict || !province) return null;
+
+	const cleanProv = province.replace(/^(จ\.|จังหวัด\s*)/, '').trim();
+	const cleanDist = district ? district.replace(/^(อ\.|อำเภอ\s*|เขต\s*)/, '').trim() : '';
+	const cleanSub = subdistrict.replace(/^(ต\.|ตำบล\s*|แขวง\s*)/, '').trim();
+
+	// 1. Exact match with cleaned names
+	const match = DATA.find((row) => {
+		const rowProv = row.province.trim();
+		const rowDist = row.district.trim();
+		const rowSub = row.subdistrict.trim();
+
+		const provMatches = rowProv === cleanProv || rowProv === province.trim();
+		const distMatches =
+			!cleanDist || rowDist === cleanDist || (district && rowDist === district.trim());
+		const subMatches = rowSub === cleanSub || rowSub === subdistrict.trim();
+
+		return provMatches && distMatches && subMatches;
+	});
+
+	if (match) return String(match.zipcode);
+
+	// 2. Fallback: match province and subdistrict only
+	const subMatch = DATA.find((row) => {
+		const rowProv = row.province.trim();
+		const rowSub = row.subdistrict.trim();
+		return (
+			(rowProv === cleanProv || rowProv === province.trim()) &&
+			(rowSub === cleanSub || rowSub === subdistrict.trim())
+		);
+	});
+
+	return subMatch ? String(subMatch.zipcode) : null;
+}
+
 // ── writes (SA-only; callers must requireAdmin first) ────────────────────────
 
 /** PUT a brand-new doc; translate CouchDB 409 into a friendly "exists" error. */

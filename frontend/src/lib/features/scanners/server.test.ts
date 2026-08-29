@@ -33,6 +33,7 @@ describe('ScannerServerRepository.processCardScan', () => {
 		subdistrict: 'บางนา',
 		district: 'บางนา',
 		province: 'กรุงเทพมหานคร',
+		postal_code: null,
 		photo_base64: 'data:image/jpeg;base64,...',
 		issuer: 'ที่ว่าการอำเภอ',
 		issue_date: '25600101',
@@ -60,6 +61,7 @@ describe('ScannerServerRepository.processCardScan', () => {
 		expect(res.evacuee.last_name).toBe('ใจดี');
 		expect(res.evacuee.card_snapshot?.citizen_id).toBe('1234567890123');
 		expect(res.evacuee.card_snapshot?.station_name).toBe('โต๊ะ 1');
+		expect(res.evacuee.card_snapshot?.postal_code).toBe('10260');
 		expect(res.message).toContain('อ่านบัตรสำเร็จ');
 	});
 

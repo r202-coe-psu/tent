@@ -71,6 +71,7 @@ describe('scanner.schema', () => {
 				subdistrict: 'บางนา',
 				district: 'บางนา',
 				province: 'กรุงเทพมหานคร',
+				postal_code: null,
 				photo_base64: 'data:image/jpeg;base64,...',
 				issuer: 'ที่ว่าการอำเภอ',
 				issue_date: '25600101',

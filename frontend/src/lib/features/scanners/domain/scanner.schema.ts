@@ -74,6 +74,7 @@ export const smartCardDataSchema = z.object({
 	subdistrict: z.string().trim().nullable().default(null),
 	district: z.string().trim().nullable().default(null),
 	province: z.string().trim().nullable().default(null),
+	postal_code: z.string().trim().nullable().optional().default(null),
 	photo_base64: z.string().nullable().default(null),
 	issuer: z.string().trim().nullable().default(null),
 	issue_date: z.string().trim().nullable().default(null),

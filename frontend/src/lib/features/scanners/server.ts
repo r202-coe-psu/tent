@@ -1,5 +1,6 @@
 import { adminFetch, adminRaw } from '$lib/server/couch-admin';
 import { now } from '$lib/db/model';
+import { lookupZipcode } from '$lib/server/thailand-location';
 import {
 	createScannerDraftDoc,
 	isScannerDevice,
@@ -93,6 +94,11 @@ export class ScannerServerRepository {
 					? Math.max(0, currentYearBE - birthYearBE)
 					: undefined;
 
+		const postalCode =
+			cardData.postal_code ||
+			lookupZipcode(cardData.province, cardData.district, cardData.subdistrict) ||
+			undefined;
+
 		const cardSnapshot: CardSnapshot = {
 			citizen_id: cardData.citizen_id,
 			title_th: cardData.title_th || undefined,
@@ -109,6 +115,7 @@ export class ScannerServerRepository {
 			subdistrict: cardData.subdistrict || undefined,
 			district: cardData.district || undefined,
 			province: cardData.province || undefined,
+			postal_code: postalCode,
 			photo_base64: cardData.photo_base64 || undefined,
 			scanned_at: now(),
 			device_id: deviceId,

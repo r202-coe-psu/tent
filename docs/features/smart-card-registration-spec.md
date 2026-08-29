@@ -76,7 +76,7 @@ flowchart TD
   - `current_stay.status`: `"draft"`
   - `person_id`: `{ cardType: 'national_id', number: card.citizen_id }`
   - `first_name`, `last_name`, `gender`, `birth_year`, `age`: Map จากชิปบัตร (คำนวณ `age = currentBEYear() - birth_year` อัตโนมัติเสมอ)
-  - `card_snapshot`: เก็บ snapshot ข้อมูลบัตรและที่อยู่ตามทะเบียนบ้าน
+  - `card_snapshot`: เก็บ snapshot ข้อมูลบัตรและที่อยู่ตามทะเบียนบ้าน พร้อม **คำนวณและบันทึกรหัสไปรษณีย์ (`postal_code`) อัตโนมัติ** ผ่านพจนานุกรมตำบล/อำเภอ/จังหวัดของระบบ (`thailand-location`)
   - `household_id`: `null`
 - **FR-CARD-03 (Pre-registered Overwrite):** หาก CID 13 หลักมีสถานะเป็น `pre_registered` อยู่แล้ว:
   - คงสถานะ `pre_registered` ไว้
@@ -97,7 +97,7 @@ flowchart TD
 - **FR-STAFF-02 (Step 1 - Screening):** เมื่อเปิดฟอร์มลงทะเบียน ระบบต้องเริ่มที่ Step 1 คัดกรองสุขภาพ (EWAR Symptoms & Medical Triage) เสมอ
 - **FR-STAFF-03 (Step 2 - Personal Info):** Autofill ข้อมูลจาก `card_snapshot` (คำนำหน้า, ชื่อ, นามสกุล, เลข 13 หลัก, เพศ, วันเกิด/อายุ, รูปถ่าย) และคำนวณอายุจากปีเกิด พ.ศ. อัตโนมัติ โดยเจ้าหน้าที่ซักถามเพิ่มเติมเฉพาะ เบอร์โทรศัพท์, ศาสนา, โรคประจำตัว, ประวัติแพ้ยา/อาหาร, และกลุ่มเปราะบาง
 - **FR-STAFF-04 (Step 3 - Household & Address):**
-  - Autofill ข้อมูลที่อยู่ตามทะเบียนบ้านจาก `card_snapshot` ลงในฟอร์มที่อยู่อัตโนมัติไปก่อน
+  - Autofill ข้อมูลที่อยู่ตามทะเบียนบ้านจาก `card_snapshot` ลงในฟอร์มที่อยู่อัตโนมัติไปก่อน (รวมถึง **รหัสไปรษณีย์ `postal_code`** ที่ระบบดึงมาจาก `card_snapshot` หรือ map อัตโนมัติจากตำบล/อำเภอ/จังหวัด)
   - แสดงป้ายแจ้งเตือนให้เจ้าหน้าที่สอบถามยืนยันกับผู้ประสบภัยว่า "ปัจจุบันพักอาศัยอยู่ที่นี่จริงหรือไม่"
   - เจ้าหน้าที่สามารถคลิกแก้ไข (Manual Override) ได้อิสระ
   - ระบบทำการค้นหาและจับคู่ครอบครัวเดิมอัตโนมัติ (Automated Family Matching)

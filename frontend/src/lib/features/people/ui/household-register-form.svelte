@@ -189,6 +189,15 @@
 	});
 
 	$effect(() => {
+		if (formData.subdistrict && !formData.postal_code && subdistrictsQuery.data?.length) {
+			const match = subdistrictsQuery.data.find((s) => s.subdistrict === formData.subdistrict);
+			if (match) {
+				formData.postal_code = String(match.zipcode);
+			}
+		}
+	});
+
+	$effect(() => {
 		if (showNewHouseholdForm && selectedLocation) {
 			formData.province = selectedLocation.province;
 			formData.district = selectedLocation.district;
