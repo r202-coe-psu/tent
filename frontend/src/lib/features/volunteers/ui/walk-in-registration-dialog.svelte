@@ -27,23 +27,29 @@
 	 * person at the desk — also flagged for the CR (should `source: 'walk_in'`
 	 * / `'staff_entry'` auto-verify identity?).
 	 */
+	import { defaults, superForm, setError } from 'sveltekit-superforms';
+	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import Zap from '@lucide/svelte/icons/zap';
 	import Check from '@lucide/svelte/icons/check';
 	import Lock from '@lucide/svelte/icons/lock';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Form from '$lib/components/ui/form/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
 	import { SKILL_MASTER } from '../domain/skill-master';
-	import { nationalIdSchema } from '../domain/volunteer.schema';
+	import {
+		walkInVolunteerFormSchema,
+		type WalkInVolunteerFormValues
+	} from '../domain/volunteer.schema';
 	import type { ShiftKind } from '../domain/shift-assignment.schema';
 	import { useCreateWalkInVolunteer, useSetVolunteerCheckedIn } from '../application/queries';
 
@@ -54,14 +60,13 @@
 	const shelterQuery = useShelter(() => shelterCode);
 	const shelterLabel = $derived(shelterQuery.data?.name ?? shelterCode);
 
-	let firstName = $state('');
-	let lastName = $state('');
-	let phone = $state('');
-	let nationalId = $state('');
+	function emptyValues(): WalkInVolunteerFormValues {
+		return { first_name: '', last_name: '', phone: '', email: '', national_id: '' };
+	}
+
 	let selectedSkills = $state<string[]>([]);
 	let shift = $state<Exclude<ShiftKind, 'custom'>>('morning');
 	let instantCheckIn = $state(true);
-	let formError = $state<string | null>(null);
 
 	const SHIFT_TILES: { value: Exclude<ShiftKind, 'custom'>; label: string; time: string }[] = [
 		{ value: 'morning', label: 'กะเช้า', time: '08:00 - 16:00' },
@@ -76,69 +81,61 @@
 			: [...selectedSkills, key];
 	}
 
-	function reset() {
-		firstName = '';
-		lastName = '';
-		phone = '';
-		nationalId = '';
-		selectedSkills = [];
-		shift = 'morning';
-		instantCheckIn = true;
-		formError = null;
-	}
-
 	const createMutation = useCreateWalkInVolunteer(queryClient);
 	const checkInMutation = useSetVolunteerCheckedIn(queryClient);
 
-	async function submit() {
-		formError = null;
-		const first_name = firstName.trim();
-		const last_name = lastName.trim();
-		if (!first_name || !last_name) {
-			formError = 'กรุณากรอกชื่อและนามสกุล';
-			return;
-		}
-		if (!phone.trim()) {
-			formError = 'กรุณากรอกเบอร์โทรศัพท์';
-			return;
-		}
-		const trimmedNationalId = nationalId.trim();
-		if (trimmedNationalId && !nationalIdSchema.safeParse(trimmedNationalId).success) {
-			formError = 'เลขบัตร ปชช. ต้องเป็นตัวเลข 13 หลัก';
-			return;
-		}
+	const form = superForm(defaults(emptyValues(), zod4(walkInVolunteerFormSchema)), {
+		SPA: true,
+		dataType: 'json',
+		validators: zod4(walkInVolunteerFormSchema),
+		resetForm: false,
+		onUpdate: async ({ form: validated }) => {
+			if (!validated.valid) return;
+			const data = validated.data;
 
-		try {
-			const volunteer = await createMutation.mutateAsync({
-				first_name,
-				last_name,
-				phone: phone.trim(),
-				email: null,
-				skills: selectedSkills,
-				organization: null,
-				national_id: trimmedNationalId || null,
-				source: 'walk_in'
-			});
-
-			if (instantCheckIn) {
-				await checkInMutation.mutateAsync({
-					id: volunteer._id,
-					checkedIn: true,
-					shelterCode
+			try {
+				const volunteer = await createMutation.mutateAsync({
+					first_name: data.first_name,
+					last_name: data.last_name,
+					phone: data.phone,
+					email: data.email || null,
+					skills: selectedSkills,
+					organization: null,
+					national_id: data.national_id || null,
+					source: 'walk_in'
 				});
-			}
 
-			toast.success(`ลงทะเบียน ${first_name} ${last_name} (${volunteer.volunteer_code}) แล้ว`);
-			reset();
-			open = false;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : 'ลงทะเบียนไม่สำเร็จ';
-			formError = message;
-			toast.error(message);
+				if (instantCheckIn) {
+					await checkInMutation.mutateAsync({
+						id: volunteer._id,
+						checkedIn: true,
+						shelterCode
+					});
+				}
+
+				toast.success(
+					`ลงทะเบียน ${data.first_name} ${data.last_name} (${volunteer.volunteer_code}) แล้ว`
+				);
+				reset();
+				open = false;
+			} catch (err) {
+				const message = err instanceof Error ? err.message : 'ลงทะเบียนไม่สำเร็จ';
+				setError(validated, message);
+				toast.error(message);
+			}
 		}
+	});
+
+	const { form: formData, errors, submitting } = form;
+
+	function reset() {
+		$formData = emptyValues();
+		selectedSkills = [];
+		shift = 'morning';
+		instantCheckIn = true;
 	}
 
-	const isPending = $derived(createMutation.isPending || checkInMutation.isPending);
+	const isPending = $derived($submitting || createMutation.isPending || checkInMutation.isPending);
 </script>
 
 <Dialog.Root
@@ -160,42 +157,87 @@
 			</div>
 		</div>
 
-		<div class="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
+		<form method="POST" use:form.enhance class="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
 			<div class="space-y-3">
 				<p class="text-xs font-bold text-foreground">1. ข้อมูลบุคคล (PERSONAL INFO)</p>
 				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-					<div class="space-y-1.5">
-						<Label for="wi-first-name">ชื่อ <span class="text-destructive">*</span></Label>
-						<Input
-							id="wi-first-name"
-							bind:value={firstName}
-							placeholder="เช่น สมชาย"
-							class="h-11"
-						/>
-					</div>
-					<div class="space-y-1.5">
-						<Label for="wi-last-name">นามสกุล <span class="text-destructive">*</span></Label>
-						<Input id="wi-last-name" bind:value={lastName} placeholder="เช่น ใจดี" class="h-11" />
-					</div>
+					<Form.Field {form} name="first_name">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>ชื่อ <span class="text-destructive">*</span></Form.Label>
+								<Input
+									{...props}
+									bind:value={$formData.first_name}
+									placeholder="เช่น สมชาย"
+									class="h-11"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Form.Field {form} name="last_name">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>นามสกุล <span class="text-destructive">*</span></Form.Label>
+								<Input
+									{...props}
+									bind:value={$formData.last_name}
+									placeholder="เช่น ใจดี"
+									class="h-11"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 				</div>
-				<div class="space-y-1.5">
-					<Label for="wi-phone">เบอร์โทรศัพท์ <span class="text-destructive">*</span></Label>
-					<Input id="wi-phone" bind:value={phone} placeholder="08X-XXX-XXXX" class="h-11" />
-				</div>
-				<div class="space-y-1.5">
-					<Label for="wi-national-id">เลขบัตร ปชช. (13 หลัก) (ทางเลือก / Optional)</Label>
-					<Input
-						id="wi-national-id"
-						bind:value={nationalId}
-						oninput={(e) => {
-							nationalId = e.currentTarget.value.replace(/\D/g, '').slice(0, 13);
-						}}
-						inputmode="numeric"
-						maxlength={13}
-						placeholder="X-XXXX-XXXXX-XX-X (ไม่บังคับ)"
-						class="h-11"
-					/>
-				</div>
+				<Form.Field {form} name="phone">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>เบอร์โทรศัพท์ <span class="text-destructive">*</span></Form.Label>
+							<Input
+								{...props}
+								bind:value={$formData.phone}
+								placeholder="08X-XXX-XXXX"
+								class="h-11"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Field {form} name="email">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>อีเมล (ทางเลือก / Optional)</Form.Label>
+							<Input
+								{...props}
+								type="email"
+								bind:value={$formData.email}
+								placeholder="เช่น somchai@example.com (ไม่บังคับ)"
+								class="h-11"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Field {form} name="national_id">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>เลขบัตร ปชช. (13 หลัก) (ทางเลือก / Optional)</Form.Label>
+							<Input
+								{...props}
+								bind:value={$formData.national_id}
+								oninput={(e) => {
+									$formData.national_id = e.currentTarget.value.replace(/\D/g, '').slice(0, 13);
+								}}
+								inputmode="numeric"
+								maxlength={13}
+								placeholder="X-XXXX-XXXXX-XX-X (ไม่บังคับ)"
+								class="h-11"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
 				<div class="space-y-1.5">
 					<Label>สังกัดศูนย์พักพิง <span class="text-destructive">*</span></Label>
 					<Select.Root type="single" value={shelterCode} disabled>
@@ -299,22 +341,22 @@
 				</label>
 			</div>
 
-			{#if formError}
+			{#if $errors._errors && $errors._errors.length > 0}
 				<p
 					class="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive"
 				>
-					{formError}
+					{$errors._errors.join(', ')}
 				</p>
 			{/if}
-		</div>
+		</form>
 
 		<div class="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
 			<Button type="button" variant="ghost" onclick={() => (open = false)}>ยกเลิก</Button>
 			<Button
-				type="button"
+				type="submit"
 				class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
 				disabled={isPending}
-				onclick={submit}
+				onclick={() => form.submit()}
 			>
 				{#if isPending}
 					กำลังบันทึก...

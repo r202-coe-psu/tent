@@ -114,6 +114,25 @@ export const volunteerInputSchema = z.object({
 export type VolunteerInput = z.input<typeof volunteerInputSchema>;
 
 /**
+ * Walk-in front-desk form shape (CR-094 FR-VOL-10.1). Narrower than
+ * `volunteerInputSchema`: `phone` is required here (front-desk staff always
+ * capture it in person), and `email`/`national_id` bind to plain text
+ * `Input`s so they use `''` — not `null` — as "not provided", converted to
+ * `null` at submission time.
+ */
+export const walkInVolunteerFormSchema = z.object({
+	first_name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
+	last_name: z.string().trim().min(1, 'กรุณากรอกนามสกุล'),
+	phone: z.string().trim().min(1, 'กรุณากรอกเบอร์โทรศัพท์'),
+	email: z.string().trim().email('อีเมลไม่ถูกต้อง').optional().or(z.literal('')),
+	national_id: z
+		.string()
+		.trim()
+		.refine((v) => v === '' || /^\d{13}$/.test(v), 'เลขบัตร ปชช. ต้องเป็นตัวเลข 13 หลักเท่านั้น')
+});
+export type WalkInVolunteerFormValues = z.infer<typeof walkInVolunteerFormSchema>;
+
+/**
  * Build a new `volunteer` doc. `volunteer_code` and `status` are decided by the
  * caller (see `volunteer-code.ts` / `skills.ts`) — this factory only stamps the
  * envelope and CR-094 defaults (§6 migration: `checked_in=false`,
