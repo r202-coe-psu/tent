@@ -1,9 +1,17 @@
 <script lang="ts">
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
-	import { useStockBalance, useLedger } from '../application/queries';
+	import {
+		useStockBalance,
+		useLedger,
+		useCrossShelterStockBalances,
+		useCrossShelterLedger
+	} from '../application/queries';
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
 	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { isSystemAdmin } from '$lib/auth/roles';
+	import { useShelters } from '$lib/features/shelters';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import LedgerTable from './ledger-table.svelte';
@@ -39,6 +47,23 @@
 
 	const overrides = $derived(overridesQuery.data ?? []);
 
+	// ─── Roles and Cross-Shelter States ───────────────────────────────────────
+	const roles = $derived(authStore.user?.roles ?? []);
+	const isSA = $derived(isSystemAdmin(roles));
+	let showOverall = $state(false);
+
+	const sheltersQuery = useShelters();
+	const shelterCodes = $derived((sheltersQuery.data ?? []).map((s) => s.code));
+
+	const crossBalanceQuery = useCrossShelterStockBalances(
+		() => shelterCodes,
+		() => isSA && showOverall
+	);
+	const crossLedgerQuery = useCrossShelterLedger(
+		() => shelterCodes,
+		() => isSA && showOverall
+	);
+
 	// ─── States ───────────────────────────────────────────────────────────────
 
 	// ─── Filter state ─────────────────────────────────────────────────────────
@@ -48,7 +73,7 @@
 	let statusFilter = $state<'all' | 'normal' | 'low' | 'empty' | 'expiring' | 'expired'>('all');
 
 	// ─── Collapsed groups state ──────────────────────────────────────────────
-	let collapsedGroups = new SvelteSet<string>();
+	const collapsedGroups = new SvelteSet<string>();
 
 	function toggleGroup(category: string) {
 		if (collapsedGroups.has(category)) {
@@ -63,8 +88,8 @@
 	let currentPage = $state(1);
 
 	$effect(() => {
-		// Reset to page 1 on filter/search change
-		void [searchQuery, categoryFilter, locationFilter, statusFilter];
+		// Reset to page 1 on filter/search/showOverall change
+		void [searchQuery, categoryFilter, locationFilter, statusFilter, showOverall];
 		currentPage = 1;
 	});
 
@@ -97,9 +122,23 @@
 
 		return [...supplyItems, ...mappedItemMasters];
 	});
-	const balance = $derived(balanceQuery.data ?? new SvelteMap<string, string>());
+	const balance = $derived.by(() => {
+		if (isSA && showOverall) {
+			const agg = new SvelteMap<string, string>();
+			const data = crossBalanceQuery.data ?? [];
+			for (const { balance: b } of data) {
+				for (const [itemId, qty] of b.entries()) {
+					agg.set(itemId, addQty(agg.get(itemId) ?? '0', qty));
+				}
+			}
+			return agg;
+		}
+		return balanceQuery.data ?? new SvelteMap<string, string>();
+	});
 
-	const ledger = $derived(ledgerQuery.data ?? []);
+	const ledger = $derived(
+		isSA && showOverall ? (crossLedgerQuery.data ?? []) : (ledgerQuery.data ?? [])
+	);
 
 	function formatDateTime(isoString: string): string {
 		try {
@@ -221,8 +260,9 @@
 		itemsQuery.isLoading ||
 			itemMastersQuery.isLoading ||
 			overridesQuery.isLoading ||
-			balanceQuery.isLoading ||
-			ledgerQuery.isLoading
+			(isSA && showOverall
+				? crossBalanceQuery.isLoading || crossLedgerQuery.isLoading
+				: balanceQuery.isLoading || ledgerQuery.isLoading)
 	);
 
 	// ─── Helpers ──────────────────────────────────────────────────────────────
@@ -514,6 +554,19 @@
 						<ChevronDown class="h-4 w-4" />
 					</div>
 				</div>
+				{#if isSA}
+					<div class="flex items-center gap-2 pl-2">
+						<input
+							type="checkbox"
+							id="show-overall"
+							bind:checked={showOverall}
+							class="h-4 w-4 cursor-pointer rounded border-border bg-background text-primary focus:ring-primary"
+						/>
+						<label for="show-overall" class="cursor-pointer text-xs font-semibold text-foreground">
+							แสดงยอดรวมทุกศูนย์ (Cross-shelter aggregate)
+						</label>
+					</div>
+				{/if}
 			</div>
 		</div>
 
@@ -544,7 +597,6 @@
 							<Table.Head class="p-4 px-5">รายการสินค้า (SKU)</Table.Head>
 							<Table.Head class="p-4">หมวดหมู่</Table.Head>
 							<Table.Head class="p-4 text-center">สถานที่จัดเก็บ</Table.Head>
-							<Table.Head class="p-4 text-center">โรงพยาบาล</Table.Head>
 							<Table.Head class="p-4 text-center">สต็อกทั้งหมด (PHYSICAL ON-HAND)</Table.Head>
 							<Table.Head class="p-4 text-center">ใช้งานได้จริง (USABLE STOCK)</Table.Head>
 							<Table.Head class="w-[200px] p-4 px-5 text-center">จัดการ</Table.Head>
@@ -554,7 +606,7 @@
 						{#if displayedItems.length === 0}
 							<Table.Row>
 								<Table.Cell
-									colspan={7}
+									colspan={6}
 									class="p-12 text-center text-sm font-medium text-muted-foreground"
 								>
 									ไม่พบข้อมูลสิ่งของที่ตรงกับเงื่อนไขการค้นหา
@@ -564,7 +616,7 @@
 							{#each groupedDisplayedItems as group (group.category)}
 								<!-- Category Group Header -->
 								<Table.Row class="border-b border-border/60 bg-[#f8f9fb] dark:bg-muted/30">
-									<Table.Cell colspan={7} class="p-0">
+									<Table.Cell colspan={6} class="p-0">
 										<button
 											type="button"
 											onclick={() => toggleGroup(group.category)}
@@ -637,17 +689,6 @@
 												{/if}
 											</Table.Cell>
 
-											<!-- โรงพยาบาล (mapped from lot.note / location description) -->
-											<Table.Cell class="p-4 text-center">
-												{#if lot?.note}
-													<span class="text-xs text-foreground">
-														{lot.note}
-													</span>
-												{:else}
-													<span class="text-xs text-muted-foreground/40">-</span>
-												{/if}
-											</Table.Cell>
-
 											<!-- สต็อกทั้งหมด (PHYSICAL ON-HAND) -->
 											<Table.Cell class="p-4 text-center">
 												<span class="text-sm font-bold text-foreground">
@@ -675,28 +716,34 @@
 
 											<!-- Action buttons -->
 											<Table.Cell class="p-4 px-5 text-center">
-												<div class="flex items-center justify-center gap-2">
-													<button
-														onclick={() => {
-															selectedItemId = item._id;
-															activeModalTab = 'history';
-															isManageModalOpen = true;
-														}}
-														class="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-[12px] font-semibold text-foreground shadow-sm transition-all duration-200 hover:bg-muted active:scale-[0.97]"
-													>
-														<Eye class="h-3.5 w-3.5 text-muted-foreground" /> ดูรายสิน
-													</button>
-													<button
-														onclick={() => {
-															selectedItemId = item._id;
-															activeModalTab = 'adjust';
-															isManageModalOpen = true;
-														}}
-														class="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-bold text-primary-foreground shadow-sm transition-all duration-200 hover:bg-primary-strong active:scale-[0.97]"
-													>
-														<Pencil class="h-3.5 w-3.5" /> ปรับปรุงยอด
-													</button>
-												</div>
+												{#if showOverall}
+													<span class="text-[11px] font-semibold text-muted-foreground/60 italic">
+														(ดูภาพรวม)
+													</span>
+												{:else}
+													<div class="flex items-center justify-center gap-2">
+														<button
+															onclick={() => {
+																selectedItemId = item._id;
+																activeModalTab = 'history';
+																isManageModalOpen = true;
+															}}
+															class="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-[12px] font-semibold text-foreground shadow-sm transition-all duration-200 hover:bg-muted active:scale-[0.97]"
+														>
+															<Eye class="h-3.5 w-3.5 text-muted-foreground" /> ดูรายสิน
+														</button>
+														<button
+															onclick={() => {
+																selectedItemId = item._id;
+																activeModalTab = 'adjust';
+																isManageModalOpen = true;
+															}}
+															class="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-bold text-primary-foreground shadow-sm transition-all duration-200 hover:bg-primary-strong active:scale-[0.97]"
+														>
+															<Pencil class="h-3.5 w-3.5" /> ปรับปรุงยอด
+														</button>
+													</div>
+												{/if}
 											</Table.Cell>
 										</Table.Row>
 									{/each}
