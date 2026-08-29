@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-26
+updated: 2026-08-30
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -1026,11 +1026,19 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `daily_demand` | num>0 | req | ปริมาณความต้องการต่อคนต่อวัน (> 0) เช่น `2100` |
 | `standard_uom` | str | opt | หน่วยนับมาตรฐานที่แสดงผล (ดึงค่าตั้งต้นจาก `requirement_group.standard_uom`) เช่น `"kcal"`, `"gram"` |
 | `effective_date` | str | req | วันที่มีผลบังคับใช้ รูปแบบ ISO Date (`YYYY-MM-DD`) |
+| `status` | enum(`active`,`inactive`) | req | สถานะการใช้งาน: `active` = นำไปคำนวณ demand, `inactive` = ปิดการใช้งาน (Soft-deleted) (ค่าเริ่มต้น `active`, read fallback `active`) |
 | `source` | enum(`SPHERE_BASELINE`,`SHELTER_OVERRIDE`) | req | แหล่งที่มา: `SPHERE_BASELINE` (ส่วนกลางใน catalog DB) หรือ `SHELTER_OVERRIDE` (เฉพาะศูนย์ใน `shelter_{shelter_code}` DB) |
 | `shelter_code` | str | opt | มีค่าเฉพาะเมื่อ `source = SHELTER_OVERRIDE`; ไม่มีเมื่อเป็น `SPHERE_BASELINE` (ใช้ตรวจ doc หลง db) |
 | `created_at` / `updated_at` | ts | req | เวลาสร้าง / ปรับปรุงเอกสาร (ISO-8601 UTC) |
 | `created_by` | str | req | Username ของผู้สร้างหรือแก้ไขข้อมูล |
 | `updated_by` | str | req | Username ของผู้แก้ไขล่าสุด (audit trail) |
+
+**Soft-delete & Calculation rules (`status`):**
+- **ห้ามทำ Hard-Delete (`repo.remove()`) เด็ดขาด:** การลบให้ปรับสถานะเป็น `{ status: 'inactive', updated_at: now() }` เพื่อป้องกัน Orphaned References และไม่ให้ประวัติการคำนวณย้อนหลังใน `daily_calc` เสียหาย (Delete-in-use Policy ตาม CR-053 / §3.3)
+- **การกู้คืน (Reactivate):** รองรับ action ให้ผู้ใช้เปิดใช้งานกลับมาเป็น `status: 'active'` ได้ตลอดเวลา
+- **Dropdown & Form rules:** ฟอร์มสร้างใหม่กรองเฉพาะ `status === 'active'`; ฟอร์มแก้ไขและตารางประวัติ/Audit trail ไม่กรองทิ้ง สามารถ resolve ค่าเดิมได้แม้เป็น inactive
+- **Calculation Engine (`food-sphere-calc.ts`):** กรองเฉพาะเกณฑ์ที่ `(s.status ?? 'active') === 'active'` หากกลุ่มใดไม่มีเกณฑ์ active ให้ demand เป็น `0`
+- **Backward compatibility:** Additive `schema_v: 1` ไม่ bump เวอร์ชัน, read-time fallback เป็น `'active'`, ไม่ต้อง batch migration
 
 **Index & Views:**
 - Primary Key lookup: `food_sphere_standard:{target_segment}:{req_group_id}`
@@ -1051,6 +1059,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `schema_v` | int | req | เวอร์ชันของสกีมา เริ่มต้น `1` |
 | `name` | str | req | ชื่อแสดงผลภาษาไทย เช่น `"พลังงานอาหาร"`, `"ไขมัน"`, `"โปรตีน"` |
 | `standard_uom` | str | req | หน่วยนับมาตรฐานประจำกลุ่ม เช่น `"kcal"`, `"gram"`, `"litre"` (ใช้ Auto-fill ในหน้าจอกำหนด Sphere) |
+| `status` | enum(`active`,`inactive`) | req | สถานะการใช้งาน: `active` = ใช้งานปกติ, `inactive` = ปิดการใช้งาน (Soft-deleted) (ค่าเริ่มต้น `active`, read fallback `active`) |
 | `item_maps` | [{`item_id`:str, `base_uom`:str, `conversion_factor`:num>0, `share_percent`:num?}] | opt | รายการสินค้าที่จับคู่เข้ากลุ่มความต้องการนี้ (ดูโครงสร้างย่อยด้านล่าง) |
 | `source` | enum(`SPHERE_BASELINE`,`SHELTER_OVERRIDE`) | req | แหล่งที่มา: `SPHERE_BASELINE` (ส่วนกลางใน catalog DB) หรือ `SHELTER_OVERRIDE` (เฉพาะศูนย์ใน `shelter_{shelter_code}` DB) |
 | `shelter_code` | str | opt | มีค่าเฉพาะเมื่อ `source = SHELTER_OVERRIDE`; ไม่มีเมื่อเป็น `SPHERE_BASELINE` (ใช้ตรวจ doc หลง db) |
@@ -1063,6 +1072,11 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 - `base_uom`: `str (req)` — หน่วยนับพื้นฐานของสินค้า (Read-only อ้างอิงจาก `item_master`)
 - `conversion_factor`: `num>0 (req)` — ตัวคูณแปลงจาก Base UOM ไปเป็น Standard UOM
 - `share_percent`: `num (opt)` — สัดส่วนเป้าหมายในเมนู (0–100%); validation warning เมื่อผลรวมในกลุ่ม ≠ 100% แต่ไม่บล็อก save
+
+**Soft-delete & Dropdown rules (`status`):**
+- **ห้ามทำ Hard-Delete (`repo.remove()`) เด็ดขาด:** การลบให้ปรับสถานะเป็น `{ status: 'inactive', updated_at: now() }` ป้องกัน orphaned references; รองรับการ Reactivate กลับเป็น `active` ได้ตลอดเวลา
+- **Dropdown & Form rules:** Dropdown ในการเลือกกลุ่มความต้องการ (หน้าเกณฑ์โภชนาการ หรือหน้านโยบายเติมสต็อก) กรองเฉพาะ `status === 'active'`; ฟอร์มแก้ไขและ audit trail ไม่กรองทิ้ง สามารถ resolve ชื่อกลุ่มและ UOM ได้ตามปกติ
+- **Backward compatibility:** Additive `schema_v: 1` ไม่ bump เวอร์ชัน, read-time fallback เป็น `'active'`, ไม่ต้อง batch migration
 
 **Index & Views:**
 - Primary Key lookup: `requirement_group:{group_id}`
@@ -1082,16 +1096,23 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `schema_v` | int | req | เวอร์ชันของสกีมา เริ่มต้น `1` |
 | `scope_type` | enum(`GLOBAL`,`REQUIREMENT_GROUP`,`ITEM`) | req | ขอบเขตนโยบาย: `GLOBAL`, `REQUIREMENT_GROUP`, `ITEM` |
 | `target_id` | str | req | รหัสเป้าหมายตามขอบเขต: `GLOBAL` → `"DEFAULT"` · `REQUIREMENT_GROUP` → เช่น `"FOOD_ENERGY"` · `ITEM` → เช่น `"item_master:RICE_5KG"` |
-| `shelter_code` | str | opt | มีค่าเฉพาะเมื่อ `source = SHELTER_OVERRIDE`; ไม่มีเมื่อเป็น `SPHERE_BASELINE` (ใช้ตรวจ doc หลง db) |
 | `lead_time_days` | int≥0 | req | ระยะเวลารอคอยสินค้า (วัน) เช่น `2` |
 | `review_period_days` | int≥0 | req | รอบระยะเวลาตรวจนับ/สั่งเติม (วัน) เช่น `3` |
 | `safety_days` | int≥0 | req | วันสำรองเผื่อฉุกเฉิน (วัน) เช่น `2` |
 | `min_doc_days` | int≥0 | req | DoC จุดวิกฤต (วัน) — เมื่อ DoC ต่ำกว่าค่านี้จะระบุ alert สั่งซื้อจำเป็น; ต้อง $< \text{Standard Reorder Days}$ และ $< \text{max\_doc\_days}$ |
 | `max_doc_days` | int≥0 | req | DoC เพดานสูงสุด (วัน) — เมื่อ DoC เกินค่านี้จะระบุ Overstock alert; ต้อง $> \text{min\_doc\_days}$ |
+| `status` | enum(`active`,`inactive`) | req | สถานะการใช้งาน: `active` = มีผลประเมิน DoC, `inactive` = ปิดการใช้งาน (Soft-deleted) (ค่าเริ่มต้น `active`, read fallback `active`) |
 | `source` | enum(`SPHERE_BASELINE`,`SHELTER_OVERRIDE`) | req | แหล่งที่มา: `SPHERE_BASELINE` (ส่วนกลางใน catalog DB) หรือ `SHELTER_OVERRIDE` (เฉพาะศูนย์ใน `shelter_{shelter_code}` DB) |
+| `shelter_code` | str | opt | มีค่าเฉพาะเมื่อ `source = SHELTER_OVERRIDE`; ไม่มีเมื่อเป็น `SPHERE_BASELINE` (ใช้ตรวจ doc หลง db) |
 | `created_at` / `updated_at` | ts | req | เวลาสร้าง / ปรับปรุงเอกสาร (ISO-8601 UTC) |
 | `created_by` | str | req | Username ของผู้สร้างหรือแก้ไขข้อมูล |
 | `updated_by` | str | req | Username ของผู้แก้ไขล่าสุด (audit trail) |
+
+**Soft-delete & Policy Resolution rules (`status`):**
+- **ห้ามทำ Hard-Delete (`repo.remove()`) เด็ดขาด:** การลบให้ปรับสถานะเป็น `{ status: 'inactive', updated_at: now() }`; รองรับการ Reactivate กลับเป็น `active` ได้ตลอดเวลา
+- **Dropdown & Form rules:** Dropdown ในการเลือก Target กรองเฉพาะ `status === 'active'`; ฟอร์มแก้ไขและ audit trail ไม่กรองทิ้ง
+- **DoC & Policy Resolution (`food-sphere-table.ts`):** ฟังก์ชัน `resolveItemPolicy` จะเลือกเฉพาะนโยบายที่มีสถานะ `(p.status ?? 'active') === 'active'` ตามลำดับ Priority (`ITEM` $\rightarrow$ `REQUIREMENT_GROUP` $\rightarrow$ `GLOBAL`) ถ้านโยบายถูกปิดใช้งาน จะ fallback ตกไปใช้นโยบายระดับถัดไป
+- **Backward compatibility:** Additive `schema_v: 1` ไม่ bump เวอร์ชัน, read-time fallback เป็น `'active'`, ไม่ต้อง batch migration
 
 **Index & Views:**
 - Primary Key lookup: `replenishment_policy:{scope_type}:{target_id}`
