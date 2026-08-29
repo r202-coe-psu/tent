@@ -430,7 +430,7 @@
 		{/if}
 
 		{#each $formData.members as member, idx (idx)}
-			{@const who = idx === 0 ? t.mainContact : `สมาชิกคนที่ ${idx + 1}`}
+			{@const who = idx === 0 ? t.mainContact : `${t.memberNum} ${idx + 1}`}
 			<div class="space-y-3 rounded-xl border border-border p-4">
 				<p class="flex items-center gap-2 text-sm font-bold text-foreground">
 					<span
@@ -449,7 +449,7 @@
 									{...props}
 									bind:value={member.first_name}
 									class="!h-11"
-									placeholder="t.firstNamePlaceholder"
+									placeholder={t.firstNamePlaceholder}
 									autocomplete="off"
 								/>
 							{/snippet}
@@ -465,7 +465,7 @@
 									{...props}
 									bind:value={member.last_name}
 									class="!h-11"
-									placeholder="t.lastNamePlaceholder"
+									placeholder={t.lastNamePlaceholder}
 									autocomplete="off"
 								/>
 							{/snippet}
@@ -485,7 +485,7 @@
 									<Select.Trigger
 										{...props}
 										class="!h-11 w-full"
-										aria-label={`\${t.genderAria} \${who}`}
+										aria-label={`${t.genderAria} ${who}`}
 									>
 										{GENDERS.find((g) => g.value === member.gender)?.label ??
 											t.selectGenderPlaceholder}
@@ -577,7 +577,7 @@
 								onclick={() => ($formData.pets = $formData.pets.filter((_, i) => i !== idx))}
 							>
 								<Trash2 class="h-3.5 w-3.5" />
-								ลบ
+								{t.removeBtn}
 							</Button>
 						</div>
 
@@ -608,7 +608,7 @@
 													<Select.Item
 														value={option.code}
 														label={option.is_default
-															? `${option.label} (ค่าเริ่มต้น)`
+															? `${option.label} ${t.defaultSuffix}`
 															: option.label}
 													/>
 												{/each}
@@ -627,7 +627,7 @@
 											{...props}
 											bind:value={pet.notes}
 											class="!h-11"
-											placeholder="t.petDetailsPlaceholder"
+											placeholder={t.petDetailsPlaceholder}
 										/>
 									{/snippet}
 								</Form.Control>
@@ -676,7 +676,7 @@
 			{#if sectionCoversPets}
 				<p class="flex items-center gap-2 text-sm font-medium text-foreground">
 					<Car class="h-4 w-4 text-muted-foreground" />
-					ยานพาหนะที่นำมาด้วย
+					{t.vehiclesBrought}
 				</p>
 			{/if}
 			<!--
@@ -718,7 +718,7 @@
 							bind:value={$formData.vehicles[0].license_plate}
 							class="!h-11"
 							maxlength={20}
-							placeholder="t.licensePlatePlaceholder"
+							placeholder={t.licensePlatePlaceholder}
 							autocomplete="off"
 						/>
 					{/snippet}
