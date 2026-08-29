@@ -33,7 +33,7 @@
 				<ClipboardCheck class="h-5 w-5 text-primary" />
 				รายการรอการประเมิน (Pending Review Board)
 			</h2>
-			<p class="mt-1 text-[11px] text-muted-foreground">
+			<p class="mt-1 text-2xs text-muted-foreground">
 				รายการบริจาคที่ยังไม่ผ่านการอนุมัติเข้าสู่การตรวจรับ —
 				พิจารณาแล้วอนุมัติหรือปฏิเสธได้จากหน้านี้
 			</p>
@@ -44,7 +44,7 @@
 		<Table.Root class="w-full border-collapse text-left">
 			<Table.Header>
 				<Table.Row
-					class="border-b border-border bg-muted/20 text-[11px] font-bold text-muted-foreground uppercase"
+					class="border-b border-border bg-muted/20 text-2xs font-bold text-muted-foreground uppercase"
 				>
 					<Table.Head class="px-6 py-4">ผู้บริจาคและรหัสการจอง</Table.Head>
 					<Table.Head class="px-6 py-4">รายการที่แจ้ง</Table.Head>
@@ -67,12 +67,12 @@
 								</div>
 								<div class="mt-2 flex flex-wrap items-center gap-2">
 									<span
-										class="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
+										class="rounded bg-amber-100 px-2 py-0.5 text-2xs font-extrabold text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
 									>
 										รอการประเมิน
 									</span>
 									<span
-										class="rounded border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+										class="rounded border border-border bg-muted/50 px-2 py-0.5 text-2xs font-medium text-muted-foreground"
 									>
 										{req.booking_ref}
 									</span>

@@ -216,7 +216,7 @@
 		<div class="col-span-1 space-y-2 sm:col-span-2">
 			<div class="flex flex-wrap items-center justify-between gap-1">
 				<span class="text-xs font-bold text-foreground">รายการที่สั่งซื้อ</span>
-				<span class="text-[11px] text-muted-foreground">
+				<span class="text-2xs text-muted-foreground">
 					ยอดจริงมาจากตอนกดรับเข้าคลัง — รายการนี้ใช้เทียบว่าของมาครบหรือยัง
 				</span>
 			</div>
@@ -243,7 +243,7 @@
 								</select>
 							{/snippet}
 						</Form.Control>
-						<Form.FieldErrors class="text-[11px]" />
+						<Form.FieldErrors class="text-2xs" />
 					</Form.ElementField>
 
 					<Form.ElementField {form} name="items[{i}].qty" class="w-28">
@@ -261,7 +261,7 @@
 								/>
 							{/snippet}
 						</Form.Control>
-						<Form.FieldErrors class="text-[11px]" />
+						<Form.FieldErrors class="text-2xs" />
 					</Form.ElementField>
 
 					<div

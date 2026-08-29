@@ -146,7 +146,7 @@
 							/>
 						{:else}
 							<div
-								class="flex size-36 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400 sm:size-36 md:size-40"
+								class="flex size-36 items-center justify-center rounded bg-slate-100 text-2xs text-slate-400 sm:size-36 md:size-40"
 							>
 								...
 							</div>
@@ -157,7 +157,7 @@
 						class="card-details order-2 flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-4 py-5 sm:order-1 sm:px-5"
 					>
 						<span
-							class="card-zone font-mono text-[11px] font-bold tracking-widest text-slate-400 uppercase sm:text-xs"
+							class="card-zone font-mono text-2xs font-bold tracking-widest text-slate-400 uppercase sm:text-xs"
 						>
 							ZONE: {zoneName}
 						</span>
@@ -172,7 +172,7 @@
 								{fullId}
 							</span>
 							<span
-								class="card-national-id inline-block rounded bg-slate-900 px-2 py-1 text-[11px] font-bold tracking-wide whitespace-nowrap text-white uppercase sm:text-xs"
+								class="card-national-id inline-block rounded bg-slate-900 px-2 py-1 text-2xs font-bold tracking-wide whitespace-nowrap text-white uppercase sm:text-xs"
 							>
 								{maskNationalId(evacuee.person_id?.number)}
 							</span>
@@ -235,20 +235,20 @@
 	}
 
 	:global(#qr-identity-card.print-capture .card-zone) {
-		font-size: 16px !important;
+		font-size: 1rem !important;
 	}
 
 	:global(#qr-identity-card.print-capture .card-name) {
-		font-size: 30px !important;
+		font-size: 1.875rem !important;
 	}
 
 	:global(#qr-identity-card.print-capture .card-id) {
-		font-size: 20px !important;
+		font-size: 1.25rem !important;
 		padding: 6px 10px !important;
 	}
 
 	:global(#qr-identity-card.print-capture .card-national-id) {
-		font-size: 16px !important;
+		font-size: 1rem !important;
 		padding: 7px 10px !important;
 	}
 
@@ -293,17 +293,17 @@
 			width: 160px !important;
 		}
 		#qr-identity-card .card-zone {
-			font-size: 16px !important;
+			font-size: 1rem !important;
 		}
 		#qr-identity-card .card-name {
-			font-size: 30px !important;
+			font-size: 1.875rem !important;
 		}
 		#qr-identity-card .card-id {
-			font-size: 20px !important;
+			font-size: 1.25rem !important;
 			padding: 6px 10px !important;
 		}
 		#qr-identity-card .card-national-id {
-			font-size: 16px !important;
+			font-size: 1rem !important;
 			padding: 7px 10px !important;
 		}
 	}

@@ -401,7 +401,7 @@
 					<div class="flex flex-col gap-0.5">
 						<span class="text-xs font-medium text-muted-foreground">คำนวณการปรับยอด (Delta):</span>
 						{#if selectedLotKey !== 'new'}
-							<span class="text-[11px] text-muted-foreground/80">
+							<span class="text-2xs text-muted-foreground/80">
 								(ยอดเดิมในคลัง: {currentLotQty}
 								{selectedItem.unit})
 							</span>

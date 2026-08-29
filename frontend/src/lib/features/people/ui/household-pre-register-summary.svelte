@@ -399,7 +399,7 @@
 										{#if m.special_needs?.length > 0}
 											{#each m.special_needs as need (need)}
 												<span
-													class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+													class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-2xs font-medium text-amber-700"
 												>
 													{SPECIAL_NEED_CHIPS[need]?.emoji}
 													{SPECIAL_NEED_CHIPS[need]?.label}

@@ -144,7 +144,7 @@
 			</div>
 			<h2 class="text-base font-bold text-foreground">ไม่พบรายการบริจาค</h2>
 			<p class="mt-2 text-xs text-muted-foreground">{errorMessage}</p>
-			<p class="mt-1 font-mono text-[11px] break-all text-muted-foreground">{token}</p>
+			<p class="mt-1 font-mono text-2xs break-all text-muted-foreground">{token}</p>
 			<a
 				href={resolve('/donations/track')}
 				class="mt-6 inline-flex rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground"
@@ -165,7 +165,7 @@
 					<h2 class="mt-1 text-xl font-extrabold text-white">
 						{donation.booking_ref ?? '—'}
 					</h2>
-					<p class="mt-1 font-mono text-[10px] break-all text-zinc-500">{token}</p>
+					<p class="mt-1 font-mono text-2xs break-all text-zinc-500">{token}</p>
 				</div>
 				<span
 					class="inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1 text-xs font-bold {statusBadgeClass(
@@ -182,7 +182,7 @@
 					<div
 						class="flex flex-col items-center gap-3 rounded-2xl border border-border bg-muted/30 p-6 text-center"
 					>
-						<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
+						<h4 class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase">
 							รหัสตอบรับ (QR Code)
 						</h4>
 						<img
@@ -194,14 +194,14 @@
 							<Download class="h-3.5 w-3.5" />
 							บันทึกรูป QR
 						</Button>
-						<p class="max-w-xs text-[11px] text-muted-foreground">
+						<p class="max-w-xs text-2xs text-muted-foreground">
 							แสดง QR Code นี้แก่เจ้าหน้าที่เมื่อนำของมาส่ง เพื่อความรวดเร็วในการตรวจรับ
 						</p>
 					</div>
 				{/if}
 
 				<div class="space-y-4">
-					<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
+					<h4 class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase">
 						ไทม์ไลน์สถานะ
 					</h4>
 					<div
@@ -213,7 +213,7 @@
 							></div>
 							<div class="text-xs">
 								<span class="font-bold text-foreground">ส่งข้อมูลบริจาคเข้าสู่ระบบ</span>
-								<p class="mt-0.5 text-[10px] text-muted-foreground">
+								<p class="mt-0.5 text-2xs text-muted-foreground">
 									อัปเดตล่าสุด {formatTrackTimestamp(donation.updated_at)}
 								</p>
 							</div>
@@ -225,7 +225,7 @@
 								></div>
 								<div class="text-xs">
 									<span class="font-bold text-warning">{donationStatusLabel(status)}</span>
-									<p class="mt-0.5 text-[10px] text-muted-foreground">
+									<p class="mt-0.5 text-2xs text-muted-foreground">
 										เจ้าหน้าที่กำลังดำเนินการกับรายการนี้
 									</p>
 								</div>
@@ -251,7 +251,7 @@
 								<div class="text-xs {status !== 'received' ? 'opacity-50' : ''}">
 									<span class="font-bold text-foreground">ตรวจรับของเข้าคลังเรียบร้อย</span>
 									{#if donation.received_summary?.received_at}
-										<p class="mt-0.5 text-[10px] text-muted-foreground">
+										<p class="mt-0.5 text-2xs text-muted-foreground">
 											{formatTrackTimestamp(donation.received_summary.received_at)}
 										</p>
 									{/if}
@@ -263,21 +263,21 @@
 
 				<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
 					<div class="space-y-4">
-						<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
+						<h4 class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase">
 							ข้อมูลผู้บริจาคและการนัดหมาย
 						</h4>
 						<div class="space-y-3.5 rounded-2xl border border-border bg-card p-4 text-xs">
 							<div class="flex gap-2.5">
 								<User class="h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 								<div>
-									<span class="text-[10px] font-bold text-muted-foreground uppercase"
+									<span class="text-2xs font-bold text-muted-foreground uppercase"
 										>ผู้ประสงค์บริจาค</span
 									>
 									<p class="mt-0.5 font-bold text-foreground">
 										{donation.donor.name ?? '—'}
 									</p>
 									{#if donation.donor.phone_masked}
-										<p class="text-[10px] text-muted-foreground">
+										<p class="text-2xs text-muted-foreground">
 											โทร. {donation.donor.phone_masked}
 										</p>
 									{/if}
@@ -286,14 +286,14 @@
 							<div class="flex gap-2.5">
 								<Calendar class="h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 								<div>
-									<span class="text-[10px] font-bold text-muted-foreground uppercase"
+									<span class="text-2xs font-bold text-muted-foreground uppercase"
 										>เวลานัดหมายจัดส่ง</span
 									>
 									<p class="mt-0.5 font-semibold text-foreground">
 										{formatTrackSchedule(donation.logistics)}
 									</p>
 									{#if donation.expires_at}
-										<p class="mt-0.5 text-[10px] text-muted-foreground">
+										<p class="mt-0.5 text-2xs text-muted-foreground">
 											หมดอายุการจอง {formatTrackTimestamp(donation.expires_at)}
 										</p>
 									{/if}
@@ -302,18 +302,18 @@
 							<div class="flex gap-2.5">
 								<MapPin class="h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 								<div>
-									<span class="text-[10px] font-bold text-muted-foreground uppercase"
+									<span class="text-2xs font-bold text-muted-foreground uppercase"
 										>ศูนย์ปลายทาง</span
 									>
 									<p class="mt-0.5 font-semibold text-foreground">{donation.shelter_code}</p>
-									<p class="mt-0.5 text-[10px] text-muted-foreground">
+									<p class="mt-0.5 text-2xs text-muted-foreground">
 										{deliveryMethodLabel(donation.logistics?.delivery_method)}
 										{#if donation.logistics?.vehicle}
 											· {vehicleLabel(donation.logistics.vehicle)}
 										{/if}
 									</p>
 									{#if donation.logistics?.pickup_address}
-										<p class="mt-1 text-[10px] text-muted-foreground">
+										<p class="mt-1 text-2xs text-muted-foreground">
 											จุดรับ: {donation.logistics.pickup_address}
 										</p>
 									{/if}
@@ -323,7 +323,7 @@
 								<div class="flex gap-2.5">
 									<Truck class="h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 									<div class="min-w-0 flex-1">
-										<span class="text-[10px] font-bold text-muted-foreground uppercase"
+										<span class="text-2xs font-bold text-muted-foreground uppercase"
 											>เลขพัสดุขนส่ง</span
 										>
 										{#if showCourierEdit}
@@ -353,7 +353,7 @@
 					</div>
 
 					<div class="space-y-4">
-						<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
+						<h4 class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase">
 							รายการสิ่งของที่บริจาค
 						</h4>
 						<div class="overflow-hidden rounded-2xl border border-border bg-card text-xs">
@@ -366,7 +366,7 @@
 								<table class="w-full border-collapse text-left">
 									<thead>
 										<tr
-											class="border-b border-border bg-muted/30 text-[10px] font-bold text-muted-foreground uppercase"
+											class="border-b border-border bg-muted/30 text-2xs font-bold text-muted-foreground uppercase"
 										>
 											<th class="px-4 py-2.5">รายการ</th>
 											<th class="px-4 py-2.5 text-right">จำนวน</th>
@@ -399,7 +399,7 @@
 								<Pencil class="h-4 w-4" />
 								แก้ไขรายการที่จะบริจาค
 							</Button>
-							<p class="text-[11px] leading-relaxed text-muted-foreground">
+							<p class="text-2xs leading-relaxed text-muted-foreground">
 								ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าเจ้าหน้าที่จะเริ่มตรวจรับ
 								{#if donation.revisions.length}
 									· แก้ไขแล้ว {donation.revisions.length} ครั้ง
@@ -418,7 +418,7 @@
 								<Ban class="h-4 w-4" />
 								ยกเลิกการจองนี้
 							</Button>
-							<p class="text-[11px] leading-relaxed text-muted-foreground">
+							<p class="text-2xs leading-relaxed text-muted-foreground">
 								ยกเลิกแล้วจำนวนที่จองไว้จะถูกคืนให้ผู้บริจาคท่านอื่นทันที และย้อนกลับไม่ได้
 							</p>
 						</div>

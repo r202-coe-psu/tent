@@ -126,22 +126,20 @@ class ShelterUseCase:
 
         m = doc.raw_data or {}
 
-        mapped_status = "CLOSED"
-        op_status = m.get("operation_status")
-        if op_status == "active":
-            mapped_status = "OPEN"
-        elif op_status == "full_capacity":
-            mapped_status = "FULL"
-        elif op_status == "standby":
-            mapped_status = "PREPARE"
+        status_ui = {
+            "open": "OPEN",
+            "full": "FULL",
+            "standby": "PREPARE",
+            "closed": "CLOSED",
+        }
+        # Prefer projected status (Mongo SoR for public) over re-deriving from raw_data.
+        mapped_status = status_ui.get(doc.status, "CLOSED")
 
-        occupancy = 0
-        if mapped_status in ("OPEN", "FULL"):
-            occupancy = await PublicPerson.find(
-                {"shelter_code": code, "status": {"$in": list(OCCUPANCY_STATUSES)}}
-            ).count()
+        occupancy = await PublicPerson.find(
+            {"shelter_code": code, "status": {"$in": list(OCCUPANCY_STATUSES)}}
+        ).count()
 
-        capacity_total = m.get("capacity") or 0
+        capacity_total = m.get("capacity") or doc.capacity or 0
         capacity_available = max(0, capacity_total - occupancy)
         occupancy_rate = round((occupancy / capacity_total) * 100) if capacity_total > 0 else 0
 

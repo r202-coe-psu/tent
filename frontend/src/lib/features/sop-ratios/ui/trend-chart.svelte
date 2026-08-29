@@ -149,7 +149,7 @@
 			<!-- y-axis value labels (HTML keeps text crisp regardless of width) -->
 			{#each Y_RATIOS as ratio (ratio)}
 				<span
-					class="absolute left-0 -translate-y-1/2 rounded bg-card/80 px-1 text-[10px] text-muted-foreground tabular-nums"
+					class="absolute left-0 -translate-y-1/2 rounded bg-card/80 px-1 text-2xs text-muted-foreground tabular-nums"
 					style="top:{pct(yAt(ratio * yMax), VIEW_H)}%"
 				>
 					{formatNum(ratio * yMax)}
@@ -162,7 +162,7 @@
 			{#each tickIndices as i (i)}
 				{#if axisDates[i]}
 					<span
-						class="absolute -translate-x-1/2 text-[10px] text-muted-foreground tabular-nums"
+						class="absolute -translate-x-1/2 text-2xs text-muted-foreground tabular-nums"
 						style="left:{pct(xAt(i), VIEW_W)}%"
 					>
 						{formatDayLabel(axisDates[i])}

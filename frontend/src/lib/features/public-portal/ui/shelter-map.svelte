@@ -1,7 +1,15 @@
 <script lang="ts">
 	/* eslint-disable @typescript-eslint/no-explicit-any */
 	import { onMount, onDestroy } from 'svelte';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { PublicSiteKind } from '../domain/types';
+	import { resolveMasterLabel } from '../domain/master-labels';
+	import { useShelterTypeLabelMap } from '../application/queries';
+	import { DEFAULT_MAP_STYLE, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '$lib/constants/maps';
+	import { Button } from '$lib/components/ui/button';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_MAP_I18N } from '$lib/constants/i18n';
 
 	interface ShelterGeo {
 		lat: number;
@@ -23,20 +31,110 @@
 	let {
 		shelters = [],
 		userLocation,
-		center = [100.473531, 7.009425] as [number, number],
-		zoom = 11
+		radiusKm,
+		center = DEFAULT_MAP_CENTER,
+		zoom = DEFAULT_MAP_ZOOM,
+		onLocationPick
 	}: {
 		shelters?: Shelter[];
 		userLocation?: { lat?: number | string; lng?: number | string };
+		/** Search radius in km; when set with a valid origin, draws a subtle circle. */
+		radiusKm?: number;
 		center?: [number, number];
 		zoom?: number;
+		/** Called when the user places a search-origin pin on the map. */
+		onLocationPick?: (lat: number, lng: number) => void;
 	} = $props();
+
+	const shelterTypeLabels = useShelterTypeLabelMap();
+
+	const SEARCH_RADIUS_SOURCE = 'search-radius';
+	const SEARCH_RADIUS_FILL = 'search-radius-fill';
+	const SEARCH_RADIUS_LINE = 'search-radius-line';
+	const EMPTY_FEATURE_COLLECTION = {
+		type: 'FeatureCollection' as const,
+		features: [] as never[]
+	};
 
 	let mapElement: HTMLElement;
 	let mapInstance: any = null;
 	let markersLayer: any[] = [];
 	let L: any = null;
 	let mapLoaded = $state(false);
+	let placingPin = $state(false);
+
+	let t = $derived(getTranslation(PUBLIC_SHELTER_MAP_I18N, langState.current));
+
+	/** Approximate a circle as a GeoJSON Polygon (~64 steps), km → degrees by latitude. */
+	function circlePolygon(lng: number, lat: number, radiusKmValue: number, steps = 64) {
+		const coords: [number, number][] = [];
+		const latRad = (lat * Math.PI) / 180;
+		const kmPerDegLat = 110.574;
+		const kmPerDegLng = 111.32 * Math.cos(latRad);
+		const dLat = radiusKmValue / kmPerDegLat;
+		const dLng = kmPerDegLng > 0 ? radiusKmValue / kmPerDegLng : 0;
+
+		for (let i = 0; i <= steps; i++) {
+			const angle = (i / steps) * 2 * Math.PI;
+			coords.push([lng + dLng * Math.cos(angle), lat + dLat * Math.sin(angle)]);
+		}
+
+		return {
+			type: 'FeatureCollection' as const,
+			features: [
+				{
+					type: 'Feature' as const,
+					properties: {},
+					geometry: {
+						type: 'Polygon' as const,
+						coordinates: [coords]
+					}
+				}
+			]
+		};
+	}
+
+	function ensureSearchRadiusLayers() {
+		if (!mapInstance) return;
+		if (!mapInstance.getSource(SEARCH_RADIUS_SOURCE)) {
+			mapInstance.addSource(SEARCH_RADIUS_SOURCE, {
+				type: 'geojson',
+				data: EMPTY_FEATURE_COLLECTION
+			});
+		}
+		if (!mapInstance.getLayer(SEARCH_RADIUS_FILL)) {
+			mapInstance.addLayer({
+				id: SEARCH_RADIUS_FILL,
+				type: 'fill',
+				source: SEARCH_RADIUS_SOURCE,
+				paint: {
+					'fill-color': '#3b82f6',
+					'fill-opacity': 0.1
+				}
+			});
+		}
+		if (!mapInstance.getLayer(SEARCH_RADIUS_LINE)) {
+			mapInstance.addLayer({
+				id: SEARCH_RADIUS_LINE,
+				type: 'line',
+				source: SEARCH_RADIUS_SOURCE,
+				paint: {
+					'line-color': '#3b82f6',
+					'line-opacity': 0.4,
+					'line-width': 1.5
+				}
+			});
+		}
+	}
+
+	function setSearchRadiusData(data: { type: 'FeatureCollection'; features: unknown[] }) {
+		if (!mapInstance) return;
+		ensureSearchRadiusLayers();
+		const source = mapInstance.getSource(SEARCH_RADIUS_SOURCE);
+		if (source && typeof source.setData === 'function') {
+			source.setData(data);
+		}
+	}
 
 	function getStatusColorCode(status: string): string {
 		switch (status) {
@@ -77,20 +175,22 @@
 	}
 
 	function translateAdminType(type: string): string {
-		if (langState.current !== 'en') return type;
-		const map: Record<string, string> = {
-			วัด: 'Temple',
-			โรงเรียน: 'School',
-			หน่วยงานราชการ: 'Government Agency',
-			ศูนย์อพยพ: 'Evacuation Center',
-			มหาวิทยาลัย: 'University',
-			มัสยิด: 'Mosque',
-			โบสถ์: 'Church',
-			พื้นที่เอกชน: 'Private Area',
-			อื่นๆ: 'Other',
-			unspecified: 'Unspecified'
-		};
-		return map[type] || type;
+		const legacyEn: Record<string, string> =
+			langState.current === 'en'
+				? {
+						วัด: 'Temple',
+						โรงเรียน: 'School',
+						หน่วยงานราชการ: 'Government Agency',
+						ศูนย์อพยพ: 'Evacuation Center',
+						มหาวิทยาลัย: 'University',
+						มัสยิด: 'Mosque',
+						โบสถ์: 'Church',
+						พื้นที่เอกชน: 'Private Area',
+						อื่นๆ: 'Other',
+						unspecified: 'Unspecified'
+					}
+				: { unspecified: '' };
+		return resolveMasterLabel(type, shelterTypeLabels.data, legacyEn);
 	}
 
 	onMount(async () => {
@@ -99,33 +199,7 @@
 
 		mapInstance = new L.Map({
 			container: mapElement,
-			style: {
-				version: 8,
-				sources: {
-					// Carto Voyager — light, labeled streets; no API key (unlike Stadia domain auth).
-					basemap: {
-						type: 'raster',
-						tiles: [
-							'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-							'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-							'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-							'https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'
-						],
-						tileSize: 256,
-						attribution:
-							'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-					}
-				},
-				layers: [
-					{
-						id: 'basemap',
-						type: 'raster',
-						source: 'basemap',
-						minzoom: 0,
-						maxzoom: 19
-					}
-				]
-			},
+			style: DEFAULT_MAP_STYLE,
 			center,
 			zoom
 		});
@@ -145,6 +219,13 @@
 
 		mapInstance.on('zoom', updateLabelsVisibility);
 
+		mapInstance.on('click', (e: { lngLat: { lat: number; lng: number } }) => {
+			if (!placingPin) return;
+			const { lat, lng } = e.lngLat;
+			placingPin = false;
+			onLocationPick?.(lat, lng);
+		});
+
 		mapInstance.on('load', () => {
 			mapLoaded = true;
 			updateLabelsVisibility(); // Initial check
@@ -159,7 +240,33 @@
 	});
 
 	$effect(() => {
+		if (!mapElement) return;
+		mapElement.style.cursor = placingPin ? 'crosshair' : '';
+	});
+
+	// Search-radius circle — separate from markers so radius changes skip fitBounds/marker rebuild.
+	$effect(() => {
+		if (!mapLoaded || !mapInstance) return;
+
+		const rawLat = userLocation?.lat;
+		const rawLng = userLocation?.lng;
+		const uLat = rawLat != null && rawLat !== '' ? Number(rawLat) : NaN;
+		const uLng = rawLng != null && rawLng !== '' ? Number(rawLng) : NaN;
+		const radius =
+			typeof radiusKm === 'number' && Number.isFinite(radiusKm) && radiusKm > 0 ? radiusKm : NaN;
+
+		if (!Number.isFinite(uLat) || !Number.isFinite(uLng) || !Number.isFinite(radius)) {
+			setSearchRadiusData(EMPTY_FEATURE_COLLECTION);
+			return;
+		}
+
+		setSearchRadiusData(circlePolygon(uLng, uLat, radius));
+	});
+
+	$effect(() => {
 		if (!mapLoaded || !L || !mapInstance) return;
+		// Re-render popups when master-data labels arrive.
+		void shelterTypeLabels.data;
 
 		// Clear old markers
 		markersLayer.forEach((marker) => marker.remove());
@@ -183,8 +290,8 @@
 				`;
 
 				const userPopup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
-					<div style="font-size:12px;font-family:sans-serif;color:#1e293b;text-align:center;font-weight:bold;">
-						📍 ตำแหน่งของคุณ
+					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;text-align:center;font-weight:bold;">
+						${t.yourLocation}
 					</div>
 				`);
 
@@ -223,7 +330,7 @@
 						<div class="marker-dot" style="width:24px;height:24px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition: transform 0.2s;"></div>
 						<!-- Pin pointer triangle to anchor to exact location -->
 						<div style="position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid white;"></div>
-						<div class="marker-label" style="position: absolute; top: 28px; white-space: nowrap; font-size: 11px; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+						<div class="marker-label" style="position: absolute; top: 28px; white-space: nowrap; font-size: 0.625rem; font-weight: bold; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #1e293b; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
 							${icon} ${shelter.name}
 						</div>
 					</div>
@@ -239,9 +346,9 @@
 				};
 
 				const popup = new L.Popup({ offset: 12, closeButton: false }).setHTML(`
-					<div style="font-size:12px;font-family:sans-serif;color:#1e293b;min-width:160px;">
-						<strong style="font-size:14px;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
-						<div style="margin-bottom:2px;font-size:11px;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
+					<div style="font-size:0.75rem;font-family:sans-serif;color:#1e293b;min-width:160px;">
+						<strong style="font-size:0.875rem;display:block;margin-bottom:4px;">${icon} ${shelter.name}</strong>
+						<div style="margin-bottom:2px;font-size:0.625rem;color:#64748b;">${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}</div>
 						${t.status} <strong style="color:${color};">${getStatusText(shelter.status)}</strong><br/>
 						${t.capacity} <strong>${shelter.capacity}</strong> ${t.people}<br/>
 						${shelter.distance > 0 ? `${t.distance} <strong>${shelter.distance}</strong> ${t.km}` : ''}
@@ -267,11 +374,6 @@
 			}
 		}
 	});
-	import { langState } from '$lib/states/i18n.svelte';
-	import { getTranslation } from '$lib/utils/i18n';
-	import { PUBLIC_SHELTER_MAP_I18N } from '$lib/constants/i18n';
-
-	let t = $derived(getTranslation(PUBLIC_SHELTER_MAP_I18N, langState.current));
 </script>
 
 <svelte:head>
@@ -279,6 +381,28 @@
 </svelte:head>
 
 <div bind:this={mapElement} class="absolute inset-0 z-0 h-full w-full"></div>
+
+{#if onLocationPick}
+	<div class="absolute top-3 left-3 z-10 flex max-w-[min(100%-1.5rem,16rem)] flex-col gap-1.5">
+		<Button
+			type="button"
+			size="sm"
+			variant={placingPin ? 'default' : 'secondary'}
+			class="rounded-xl border border-border bg-card/95 text-xs font-bold shadow-md backdrop-blur-md"
+			onclick={() => (placingPin = !placingPin)}
+		>
+			<MapPin class="mr-1.5 h-3.5 w-3.5" />
+			{placingPin ? t.cancelPlacePin : t.placePin}
+		</Button>
+		{#if placingPin}
+			<p
+				class="rounded-lg border border-border bg-card/95 px-2.5 py-1.5 text-2xs font-medium text-muted-foreground shadow-sm backdrop-blur-md"
+			>
+				{t.placingPin}
+			</p>
+		{/if}
+	</div>
+{/if}
 
 <!-- Legend overlay -->
 <div

@@ -221,7 +221,7 @@
 				รอการประเมิน
 				{#if pendingRequests.length > 0}
 					<span
-						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] leading-none font-bold text-white"
+						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
 						>{pendingRequests.length}</span
 					>
 				{/if}
@@ -238,7 +238,7 @@
 				กำลังตรวจรับ
 				{#if verifyingRequests.length > 0}
 					<span
-						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] leading-none font-bold text-white"
+						class="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
 						>{verifyingRequests.length}</span
 					>
 				{/if}
@@ -255,7 +255,7 @@
 				ส่งต่อเข้ามา
 				{#if incomingRedirects.length > 0}
 					<span
-						class="rounded-full bg-blue-500 px-1.5 py-0.5 text-[10px] leading-none font-bold text-white"
+						class="rounded-full bg-blue-500 px-1.5 py-0.5 text-2xs leading-none font-bold text-white"
 						>{incomingRedirects.length}</span
 					>
 				{/if}
