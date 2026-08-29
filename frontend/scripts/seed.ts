@@ -39,6 +39,7 @@
  * never reported as freshly seeded; wipe the local seed data before regenerating that window.
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -583,6 +584,28 @@ async function seedRegistry(master: MasterLookup): Promise<void> {
 			console.log(`  ✓ registry: 1 shelter master (${shelter.code})`);
 		}
 	}
+
+	// Seed test scanner device (kiosk-test / kisok-test-secret) in registry
+	const testScannerSecret = 'kisok-test-secret';
+	const testScannerDoc = {
+		_id: 'scanner_device:kiosk-test',
+		type: 'scanner_device',
+		schema_v: 1,
+		device_id: 'kiosk-test',
+		name: 'Kiosk Test Scanner',
+		shelter_code: SH001_CODE,
+		station_name: 'จุดสแกน Kiosk ทดสอบ (Kiosk Test)',
+		secret: testScannerSecret,
+		secret_hash: createHash('sha256').update(testScannerSecret).digest('hex'),
+		secret_prefix: testScannerSecret.slice(0, 16) + '...',
+		status: 'active',
+		last_seen_at: null,
+		created_at: ts,
+		updated_at: ts,
+		created_by: 'seed'
+	};
+	await putDoc('registry', testScannerDoc);
+	console.log(`  ✓ registry: 1 scanner device (kiosk-test)`);
 }
 
 // ─── seedMasterData ───────────────────────────────────────────────────────────
