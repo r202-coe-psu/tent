@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { windowsOverlap, hasTimeCollision, type CollisionCandidate } from './collision';
+import {
+	windowsOverlap,
+	hasTimeCollision,
+	findTimeCollision,
+	type CollisionCandidate
+} from './collision';
 import type { DutyWindow } from './shift-assignment.schema';
 
 const morning: DutyWindow = {
@@ -113,5 +118,29 @@ describe('windowsOverlap — garbage timestamps fail closed', () => {
 		const garbage: DutyWindow = { start_ts: 'nope', end_ts: 'nope' };
 		expect(windowsOverlap(garbage, morning)).toBe(true);
 		expect(windowsOverlap(morning, garbage)).toBe(true);
+	});
+});
+
+describe('findTimeCollision', () => {
+	it('returns the offending row itself, so the UI can name the clash', () => {
+		const held = [
+			{ duty_window: afternoon, status: 'standby' as const, label: 'พลาธิการ' },
+			{ duty_window: morning, status: 'standby' as const, label: 'ครัวกลาง' }
+		];
+		expect(findTimeCollision(morning, held)?.label).toBe('ครัวกลาง');
+	});
+
+	it('returns undefined when the slot is clear, and agrees with hasTimeCollision', () => {
+		const held: CollisionCandidate[] = [{ duty_window: afternoon, status: 'standby' }];
+		expect(findTimeCollision(morning, held)).toBeUndefined();
+		expect(hasTimeCollision(morning, held)).toBe(false);
+	});
+
+	it('skips released rows the same way hasTimeCollision does', () => {
+		const held: CollisionCandidate[] = [
+			{ duty_window: morning, status: 'cancelled' },
+			{ duty_window: morning, status: 'no_show' }
+		];
+		expect(findTimeCollision(morning, held)).toBeUndefined();
 	});
 });

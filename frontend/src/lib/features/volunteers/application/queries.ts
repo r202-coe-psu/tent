@@ -212,6 +212,25 @@ export const useDispatchVolunteers = (queryClient: QueryClient) =>
 	}));
 
 /**
+ * SM assigns volunteers outright — no offer, no waiting for them to accept
+ * (owner decision 2026-08-29). `ShiftAssignmentRepository#assign` creates the
+ * `shift_assignment` already accepted AND moves `job.slots_remaining ->
+ * slots_confirmed`. Quota-changing, and it makes the volunteer count as booked
+ * for today — invalidate jobs, shift assignments (covers today's attendance)
+ * and the hub metrics.
+ */
+export const useAssignVolunteers = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: (input: ShiftAssignmentInput) =>
+			shiftAssignmentRepository().assign(input, authorContext()),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
+		}
+	}));
+
+/**
  * SM reviews a `pending_review` application. `confirmed` consumes one job
  * slot (`job.slots_remaining -> slots_confirmed`); either decision moves the
  * application out of `pending_review`, changing the hub metrics

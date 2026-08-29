@@ -3,7 +3,8 @@ import {
 	resolveDutyWindow,
 	isWithinDutyWindow,
 	DEFAULT_GRACE_MINUTES,
-	DutyWindowError
+	DutyWindowError,
+	shiftDutyWindow
 } from './duty-window';
 
 // CR-094 §3.2 / schema.md §2.9 — shift templates are Asia/Bangkok (UTC+7, no
@@ -100,5 +101,61 @@ describe('isWithinDutyWindow', () => {
 
 	it('flex (null window) DENIES — a null window must fail closed, not open (CR-094 FR-VOL-05R.4)', () => {
 		expect(isWithinDutyWindow('2026-01-01T00:00:00.000Z', null)).toBe(false);
+	});
+});
+
+describe('shiftDutyWindow', () => {
+	const base = {
+		date: '2026-08-26',
+		end_date: '2026-08-26',
+		start_time: '09:00',
+		end_time: '15:00'
+	};
+
+	it('converts an arbitrary Bangkok wall-clock span to UTC', () => {
+		expect(shiftDutyWindow(base)).toEqual({
+			start_ts: '2026-08-26T02:00:00.000Z',
+			end_ts: '2026-08-26T08:00:00.000Z'
+		});
+	});
+
+	it('keeps minutes, not just whole hours', () => {
+		expect(shiftDutyWindow({ ...base, start_time: '08:30', end_time: '12:45' })).toEqual({
+			start_ts: '2026-08-26T01:30:00.000Z',
+			end_ts: '2026-08-26T05:45:00.000Z'
+		});
+	});
+
+	it('agrees with the morning template for 08:00–16:00', () => {
+		expect(shiftDutyWindow({ ...base, start_time: '08:00', end_time: '16:00' })).toEqual(
+			resolveDutyWindow('2026-08-26', 'morning')
+		);
+	});
+
+	it('uses end_date for a shift that crosses midnight', () => {
+		expect(
+			shiftDutyWindow({
+				date: '2026-08-26',
+				end_date: '2026-08-27',
+				start_time: '16:00',
+				end_time: '00:00'
+			})
+		).toEqual(resolveDutyWindow('2026-08-26', 'afternoon'));
+	});
+
+	it('rejects malformed times and dates rather than returning a garbage window', () => {
+		expect(() => shiftDutyWindow({ ...base, start_time: '25:00' })).toThrow(DutyWindowError);
+		expect(() => shiftDutyWindow({ ...base, end_time: '08:60' })).toThrow(DutyWindowError);
+		expect(() => shiftDutyWindow({ ...base, start_time: '9:00' })).toThrow(DutyWindowError);
+		expect(() => shiftDutyWindow({ ...base, date: '2026-02-29', end_date: '2026-02-29' })).toThrow(
+			DutyWindowError
+		);
+	});
+
+	it('rejects a zero-length or inverted span', () => {
+		expect(() => shiftDutyWindow({ ...base, end_time: '09:00' })).toThrow(DutyWindowError);
+		expect(() => shiftDutyWindow({ ...base, start_time: '15:00', end_time: '09:00' })).toThrow(
+			DutyWindowError
+		);
 	});
 });

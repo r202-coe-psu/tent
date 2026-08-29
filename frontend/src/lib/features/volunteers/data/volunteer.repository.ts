@@ -273,6 +273,17 @@ export interface ShiftAssignmentRepository {
 	 * 'dispatched'`) and calls `JobRepository#dispatch` in the same call.
 	 */
 	dispatch(input: ShiftAssignmentInput, ctx: AuthorContext): Promise<ShiftAssignment>;
+	/**
+	 * SM assigns a volunteer outright — no offer, no waiting for the volunteer
+	 * to accept (owner decision 2026-08-29). The `shift_assignment` is minted
+	 * already `dispatch_status: 'accepted'` and the slot goes straight from
+	 * `slots_remaining` to `slots_confirmed` (`JobRepository#confirmSlot`), so
+	 * the quota never parks in `slots_dispatched`.
+	 *
+	 * Distinct from `dispatch()`, which is kept for the offer/accept flow the
+	 * volunteer-facing side still uses.
+	 */
+	assign(input: ShiftAssignmentInput, ctx: AuthorContext): Promise<ShiftAssignment>;
 	/** Volunteer accepts the offer: `dispatch_status → accepted` + `JobRepository#acceptDispatch`. */
 	acceptDispatch(id: string): Promise<ShiftAssignment>;
 	/** Volunteer declines: `dispatch_status → declined`, `status → cancelled` + `JobRepository#declineDispatch`. */

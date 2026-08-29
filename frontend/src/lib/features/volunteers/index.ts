@@ -38,6 +38,7 @@ export * from './domain/quota';
 export * from './domain/capacity';
 export * from './domain/duty-window';
 export * from './domain/collision';
+export * from './domain/assign-roster';
 export * from './domain/skills';
 export * from './domain/volunteer-code';
 export * from './domain/hub-metrics';
@@ -105,3 +106,5 @@ export { default as VolunteerManageDialog } from './ui/volunteer-manage-dialog.s
 export { default as VolunteerAccessDialog } from './ui/volunteer-access-dialog.svelte';
 export { default as VolunteerTransferDialog } from './ui/volunteer-transfer-dialog.svelte';
 export { default as WalkInRegistrationDialog } from './ui/walk-in-registration-dialog.svelte';
+export { default as JobAssignPage } from './ui/job-assign-page.svelte';
+export { default as AssignRosterRow } from './ui/assign-roster-row.svelte';

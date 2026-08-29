@@ -42,6 +42,26 @@ export interface CollisionCandidate {
 }
 
 /**
+ * The FIRST still-blocking assignment `candidateWindow` overlaps, or
+ * `undefined` when the slot is clear.
+ *
+ * The assign-volunteers screen has to name the clash ("เวลาชนกับกะอื่น (ทีม
+ * พลาธิการ 09:00-15:00 น.)"), not merely know that one exists — returning the
+ * offending row keeps that lookup on the same blocking-status set as
+ * {@link hasTimeCollision} instead of a second, drifting copy in the UI.
+ * Generic in the element type so the caller gets its own row back, with
+ * whatever extra fields it attached.
+ */
+export function findTimeCollision<T extends CollisionCandidate>(
+	candidateWindow: DutyWindow,
+	existingAssignments: readonly T[]
+): T | undefined {
+	return existingAssignments.find(
+		(a) => BLOCKING_STATUSES.has(a.status) && windowsOverlap(candidateWindow, a.duty_window)
+	);
+}
+
+/**
  * True when `candidateWindow` overlaps any of `existingAssignments` that are
  * still holding the volunteer's time. Empty input never collides.
  */
@@ -49,7 +69,5 @@ export function hasTimeCollision(
 	candidateWindow: DutyWindow,
 	existingAssignments: readonly CollisionCandidate[]
 ): boolean {
-	return existingAssignments.some(
-		(a) => BLOCKING_STATUSES.has(a.status) && windowsOverlap(candidateWindow, a.duty_window)
-	);
+	return findTimeCollision(candidateWindow, existingAssignments) !== undefined;
 }

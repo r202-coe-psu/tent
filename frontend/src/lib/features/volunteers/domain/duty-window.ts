@@ -94,6 +94,47 @@ export function resolveDutyWindow(date: string, shift: ShiftKind): DutyWindow | 
 	return { start_ts: start.toISOString(), end_ts: end.toISOString() };
 }
 
+/** `HH:mm` (24h) → hours-since-midnight, fractional. Rejects `25:00` / `08:60`. */
+function parseWallClockTime(time: string): number {
+	const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+	if (!match) {
+		throw new DutyWindowError(`Invalid time (expected HH:mm, 00:00-23:59): ${time}`);
+	}
+	return Number(match[1]) + Number(match[2]) / 60;
+}
+
+/**
+ * Duty window for an explicit Bangkok wall-clock span — one `job.shifts[]` row
+ * (schema_v 3), which carries its own `end_date`, so a shift crossing midnight
+ * needs no special case here.
+ *
+ * This is the counterpart of {@link resolveDutyWindow} for shifts that are NOT
+ * one of the three 8h templates: the job form lets an SM pick any start/end,
+ * and dispatching from such a shift still has to store the same UTC
+ * `duty_window` shape that `collision.ts` compares. Keeping the conversion
+ * here means no screen (and no seed script) does Bangkok→UTC arithmetic of its
+ * own.
+ *
+ * Throws `DutyWindowError` on a malformed date/time or a non-positive span,
+ * so an unusable window can never reach `shiftAssignmentSchema` (where it
+ * would only be caught as a generic parse failure).
+ */
+export function shiftDutyWindow(shift: {
+	date: string;
+	end_date: string;
+	start_time: string;
+	end_time: string;
+}): DutyWindow {
+	const start = bangkokWallClockToUtc(shift.date, parseWallClockTime(shift.start_time));
+	const end = bangkokWallClockToUtc(shift.end_date, parseWallClockTime(shift.end_time));
+	if (start.getTime() >= end.getTime()) {
+		throw new DutyWindowError(
+			`Shift ends before it starts: ${shift.date} ${shift.start_time} → ${shift.end_date} ${shift.end_time}`
+		);
+	}
+	return { start_ts: start.toISOString(), end_ts: end.toISOString() };
+}
+
 /**
  * True when `now` falls within `[window.start_ts - grace, window.end_ts + grace]`
  * (inclusive both ends — CR-094 FR-VOL-05R.3/CR-092 FR-VOL-05 use `>=`/`<=`).

@@ -101,6 +101,46 @@ describe('ShiftAssignmentRemoteRepository', () => {
 		expect(assignment.status).toBe('standby');
 	});
 
+	it('assign() books the slot outright — accepted, confirmed, nothing left dispatched', async () => {
+		const { jobs, assignments, job, volunteer } = await setup();
+
+		const assignment = await assignments.assign(assignmentInput(job._id, volunteer._id), ctx);
+		expect(assignment.dispatch_status).toBe('accepted');
+		expect(assignment.status).toBe('standby');
+
+		const reloadedJob = await jobs.get(job._id);
+		expect(reloadedJob).toMatchObject({
+			slots_confirmed: 1,
+			slots_dispatched: 0,
+			slots_remaining: 1
+		});
+	});
+
+	it('assign() fills the job and derives its status once the quota is gone', async () => {
+		const { jobs, volunteers, assignments, job, volunteer } = await setup();
+		const second = await volunteers.create({ ...volunteerInput, phone: '0899999999' }, ctx);
+
+		await assignments.assign(assignmentInput(job._id, volunteer._id), ctx);
+		await assignments.assign(assignmentInput(job._id, second._id), ctx);
+
+		const reloadedJob = await jobs.get(job._id);
+		expect(reloadedJob).toMatchObject({ slots_confirmed: 2, slots_remaining: 0 });
+	});
+
+	it('assign() rolls the assignment back when the quota move fails', async () => {
+		const { jobs, volunteers, assignments, job, volunteer } = await setup();
+		const second = await volunteers.create({ ...volunteerInput, phone: '0899999999' }, ctx);
+		const third = await volunteers.create({ ...volunteerInput, phone: '0888888888' }, ctx);
+
+		// quota is 2 — the third assignment has no slot left to consume
+		await assignments.assign(assignmentInput(job._id, volunteer._id), ctx);
+		await assignments.assign(assignmentInput(job._id, second._id), ctx);
+		await expect(assignments.assign(assignmentInput(job._id, third._id), ctx)).rejects.toThrow();
+
+		expect(await assignments.list({ volunteerId: third._id })).toEqual([]);
+		expect(await jobs.get(job._id)).toMatchObject({ slots_confirmed: 2, slots_remaining: 0 });
+	});
+
 	it('acceptDispatch() moves dispatch_status -> accepted and job dispatched -> confirmed', async () => {
 		const { jobs, assignments, job, volunteer } = await setup();
 		const assignment = await assignments.dispatch(assignmentInput(job._id, volunteer._id), ctx);

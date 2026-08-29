@@ -81,6 +81,33 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 		return saved;
 	}
 
+	/**
+	 * Direct assignment — the back-office roster screen's only write path
+	 * (owner decision 2026-08-29: "ไม่มีการรออนุมัติ ให้ assign ให้เลย").
+	 *
+	 * Same write order and compensation as {@link dispatch}: the assignment doc
+	 * first, then the quota move. The difference is only which quota transition
+	 * runs — `confirmSlot` (remaining → confirmed) instead of `dispatch`
+	 * (remaining → dispatched) — so `slots_dispatched` stays 0 for work booked
+	 * this way and the shift's 3-colour bar shows it as filled immediately.
+	 */
+	async assign(input: ShiftAssignmentInput, ctx: AuthorContext): Promise<ShiftAssignment> {
+		const doc = makeShiftAssignment(input, ctx, {
+			status: 'standby',
+			dispatch_status: 'accepted'
+		});
+		const saved = await this.save(doc);
+		try {
+			await jobRepository().confirmSlot(input.job_id);
+		} catch (err) {
+			await this.repo.remove(saved).catch(() => {
+				/* best-effort; original error still surfaces below */
+			});
+			throw err;
+		}
+		return saved;
+	}
+
 	async acceptDispatch(id: string): Promise<ShiftAssignment> {
 		const latest = await this.getDispatched(id);
 		const saved = await this.save(touch({ ...latest, dispatch_status: 'accepted' as const }));

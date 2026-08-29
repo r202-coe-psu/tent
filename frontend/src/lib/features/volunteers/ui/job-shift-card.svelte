@@ -24,7 +24,8 @@
 		split,
 		canRemove,
 		pending = false,
-		onremove
+		onremove,
+		onassign
 	}: {
 		shift: JobShift;
 		split: ShiftQuotaSplit;
@@ -32,6 +33,8 @@
 		canRemove: boolean;
 		pending?: boolean;
 		onremove: (shiftId: string) => void;
+		/** Opens the assign screen on THIS shift. */
+		onassign: (shiftId: string) => void;
 	} = $props();
 
 	const total = $derived(split.target > 0 ? split.target : 1);
@@ -105,19 +108,14 @@
 		</div>
 	</div>
 
-	<Tooltip.Provider>
-		<Tooltip.Root>
-			<Tooltip.Trigger class="w-full">
-				{#snippet child({ props })}
-					<span {...props} class="block w-full">
-						<Button variant="default" size="sm" class="w-full gap-1.5" disabled>
-							<UserPlus class="h-3.5 w-3.5" />
-							มอบหมายอาสาในกะนี้ (Dispatch)
-						</Button>
-					</span>
-				{/snippet}
-			</Tooltip.Trigger>
-			<Tooltip.Content>ต้องมีหน้าทะเบียนอาสาสมัครก่อน — เปิดใช้งานในขั้นตอนถัดไป</Tooltip.Content>
-		</Tooltip.Root>
-	</Tooltip.Provider>
+	<Button
+		variant="default"
+		size="sm"
+		class="w-full gap-1.5"
+		disabled={pending}
+		onclick={() => onassign(shift.id)}
+	>
+		<UserPlus class="h-3.5 w-3.5" />
+		มอบหมายอาสาในกะนี้ (Assign)
+	</Button>
 </div>

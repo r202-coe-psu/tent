@@ -15,6 +15,8 @@
 	 * fallen below what volunteers already hold. Dispatch itself needs the
 	 * volunteer roster screen, so those buttons stay disabled here.
 	 */
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import Layers from '@lucide/svelte/icons/layers';
@@ -25,7 +27,6 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import DatePicker from '$lib/components/date-picker.svelte';
 	import TimePicker from '$lib/components/time-picker.svelte';
 	import { ulid } from '$lib/db/ulid';
@@ -52,6 +53,16 @@
 	const saving = $derived(updateMutation.isPending);
 
 	let mode = $state<'single' | 'batch'>('single');
+
+	/**
+	 * Assigning volunteers lives on its own page. `resolve()` in this SvelteKit version only
+	 * prefixes `base`, so the `[id]` segment is built here — `job._id` contains
+	 * a colon, hence the encode (same as `job-card.svelte`).
+	 */
+	function openAssign(shiftId?: string) {
+		const query = shiftId ? `?shift=${encodeURIComponent(shiftId)}` : '';
+		goto(resolve(`/back-office/volunteers/jobs/${encodeURIComponent(job._id)}/assign${query}`));
+	}
 
 	let singleDate = $state('');
 	let singleStart = $state('08:00');
@@ -369,23 +380,10 @@
 				<CalendarRange class="h-4 w-4 text-primary" />
 				รายการกะย่อยทั้งหมด ({job.shifts.length} กะ · รวม {job.quota} คน)
 			</h3>
-			<Tooltip.Provider>
-				<Tooltip.Root>
-					<Tooltip.Trigger>
-						{#snippet child({ props })}
-							<span {...props}>
-								<Button size="sm" class="gap-1.5" disabled>
-									<UserPlus class="h-3.5 w-3.5" />
-									มอบหมายงานให้อาสา (Assign Volunteer)
-								</Button>
-							</span>
-						{/snippet}
-					</Tooltip.Trigger>
-					<Tooltip.Content
-						>ต้องมีหน้าทะเบียนอาสาสมัครก่อน — เปิดใช้งานในขั้นตอนถัดไป</Tooltip.Content
-					>
-				</Tooltip.Root>
-			</Tooltip.Provider>
+			<Button size="sm" class="gap-1.5" onclick={() => openAssign()}>
+				<UserPlus class="h-3.5 w-3.5" />
+				มอบหมายงานให้อาสา (Assign Volunteer)
+			</Button>
 		</div>
 
 		<div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -396,6 +394,7 @@
 					canRemove={job.shifts.length > 1}
 					pending={saving}
 					onremove={removeShift}
+					onassign={openAssign}
 				/>
 			{/each}
 		</div>
