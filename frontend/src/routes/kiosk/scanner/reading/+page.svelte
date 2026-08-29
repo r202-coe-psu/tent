@@ -6,6 +6,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Timer from '@lucide/svelte/icons/timer';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
+	import CheckCircle from '@lucide/svelte/icons/check-circle';
 </script>
 
 <svelte:head>
@@ -13,12 +14,12 @@
 </svelte:head>
 
 <div
-	class="flex h-full w-full max-w-2xl flex-1 flex-col items-center justify-between gap-6 py-2 text-center"
+	class="flex h-full w-full max-w-6xl flex-1 flex-col justify-between gap-4 py-2 lg:gap-6 xl:max-w-7xl"
 >
 	<!-- ========================================== -->
 	<!-- ส่วนที่ 1 (บน): Wizard Step UI กลม เชื่อมเส้น (Step 2 Active) -->
 	<!-- ========================================== -->
-	<div class="w-full px-2 sm:px-4">
+	<div class="mx-auto w-full max-w-3xl px-2 sm:px-4">
 		<div class="relative flex items-start justify-between">
 			<!-- Connecting Background Track Lines -->
 			<div class="absolute top-5 right-10 left-10 h-1 -translate-y-1/2 bg-slate-300 sm:top-6"></div>
@@ -80,45 +81,24 @@
 	</div>
 
 	<!-- ========================================== -->
-	<!-- ส่วนที่ 2 (กลาง): Radar Scanning & Typography -->
+	<!-- ส่วนที่ 2 (กลาง): 2-Column Grid สำหรับจอกว้าง Kiosk แนวนอน -->
 	<!-- ========================================== -->
-	<div class="my-auto flex w-full flex-col items-center">
-		<!-- Radar Animation -->
-		<div class="relative my-2 flex h-48 w-48 items-center justify-center sm:my-4 sm:h-56 sm:w-56">
+	<div
+		class="my-auto grid w-full grid-cols-1 items-center gap-6 lg:grid-cols-12 lg:gap-10 xl:gap-14"
+	>
+		<!-- คอลัมน์ซ้าย: ข้อความสถานะ, Progress bar และคำเตือนห้ามดึงบัตร -->
+		<div
+			class="flex flex-col items-center space-y-4 text-center lg:col-span-6 lg:items-start lg:text-left xl:col-span-7 xl:space-y-5"
+		>
 			<div
-				class="absolute h-full w-full animate-ping rounded-full bg-blue-500/15 duration-1000"
-			></div>
-			<div
-				class="absolute h-44 w-44 animate-spin rounded-full border-4 border-dashed border-blue-300 duration-3000 sm:h-52 sm:w-52"
-			></div>
-			<div
-				class="absolute h-36 w-36 animate-spin rounded-full border-4 border-cyan-400 border-t-blue-600 sm:h-44 sm:w-44"
-			></div>
-
-			<!-- Core Circular Visual -->
-			<div
-				class="relative flex h-24 w-24 items-center justify-center rounded-full border-4 border-blue-400 bg-white shadow-2xl ring-4 shadow-blue-500/20 ring-blue-100 sm:h-32 sm:w-32"
+				class="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-4 py-1.5 font-mono text-xs font-black text-cyan-800 shadow-sm sm:text-sm"
 			>
-				<CreditCard class="h-12 w-12 text-blue-600 sm:h-16 sm:w-16" />
-				<div class="absolute -top-1 -right-1 flex h-7 w-7 items-center justify-center">
-					<span class="absolute h-full w-full animate-ping rounded-full bg-blue-500 opacity-75"
-					></span>
-					<span class="relative h-3.5 w-3.5 rounded-full bg-blue-600 shadow-md"></span>
-				</div>
-			</div>
-		</div>
-
-		<!-- Typography & Progress Bar -->
-		<div class="mt-2 w-full max-w-lg space-y-2">
-			<div
-				class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 font-mono text-xs font-black text-blue-700 shadow-sm sm:text-sm"
-			>
-				<Cpu class="h-4 w-4 animate-spin text-blue-600" />
+				<Cpu class="h-4 w-4 animate-spin text-cyan-600" />
 				<span>SMART CARD READING IN PROGRESS</span>
 			</div>
 
 			<h2
-				class="text-3xl leading-tight font-black tracking-tight text-slate-900 sm:text-4xl md:text-5xl"
+				class="text-3xl leading-tight font-black tracking-tight text-slate-900 sm:text-4xl lg:text-5xl"
 			>
 				กำลังอ่านข้อมูลจากบัตร...
 			</h2>
@@ -128,45 +108,98 @@
 			</p>
 
 			<!-- Scanning Progress Bar -->
-			<div class="mt-3 w-full overflow-hidden rounded-full bg-slate-200 p-1 shadow-inner">
-				<div class="relative h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+			<div class="w-full overflow-hidden rounded-full bg-slate-200 p-1 shadow-inner">
+				<div class="relative h-3 w-full overflow-hidden rounded-full bg-slate-200">
 					<div
-						class="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-blue-600 to-transparent"
+						class="absolute inset-y-0 w-1/2 rounded-full bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600"
 						style="animation: shimmer 1.2s infinite;"
 					></div>
 				</div>
 			</div>
-		</div>
-	</div>
 
-	<!-- ========================================== -->
-	<!-- ส่วนที่ 3 (ล่าง): Urgent Warning & PDPA -->
-	<!-- ========================================== -->
-	<div class="w-full max-w-xl space-y-3">
-		<!-- Critical Warning Callout -->
-		<div
-			class="flex items-center gap-4 rounded-3xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 p-4 text-left text-amber-950 shadow-md"
-		>
-			<AlertCircle class="h-7 w-7 shrink-0 text-amber-600" />
-			<div>
-				<p class="text-base font-black text-amber-900 sm:text-lg">โปรดอย่าเพิ่งดึงบัตรออก</p>
-				<p class="text-xs font-semibold text-amber-800 sm:text-sm">
-					ระบบกำลังประมวลผลข้อมูล โปรดรอสักครู่ (ประมาณ 1-2 วินาที)
-				</p>
+			<!-- Critical Warning Callout -->
+			<div
+				class="flex w-full items-center gap-4 rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 p-4 text-left text-amber-950 shadow-md"
+			>
+				<AlertCircle class="h-7 w-7 shrink-0 text-amber-600" />
+				<div>
+					<p class="text-base font-black text-amber-900 sm:text-lg">โปรดอย่าเพิ่งดึงบัตรออก</p>
+					<p class="text-xs font-semibold text-amber-800 sm:text-sm">
+						ระบบกำลังประมวลผลข้อมูล โปรดรอสักครู่ (ประมาณ 1-2 วินาที)
+					</p>
+				</div>
+			</div>
+
+			<!-- PDPA Disclaimer Card -->
+			<div
+				class="w-full rounded-2xl border border-slate-200 bg-white/90 p-3.5 text-left text-xs text-slate-600 shadow-sm sm:text-sm"
+			>
+				<div class="flex items-start gap-2.5">
+					<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+					<div class="space-y-0.5">
+						<p class="font-bold text-slate-900">นโยบายความคุ้มครองข้อมูลส่วนบุคคล (PDPA)</p>
+						<p class="text-[11px] leading-relaxed font-medium text-slate-500">
+							ข้อมูลส่วนบุคคลนี้จะถูกใช้เพื่อการลงทะเบียนคัดกรอง จัดสรรที่พักพิง และรับสิทธิประโยชน์
+						</p>
+					</div>
+				</div>
 			</div>
 		</div>
 
-		<!-- PDPA Disclaimer Card -->
-		<div
-			class="rounded-2xl border border-slate-200 bg-white/90 p-3.5 text-left text-xs text-slate-600 shadow-sm sm:text-sm"
-		>
-			<div class="flex items-start gap-2.5">
-				<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-				<div class="space-y-0.5">
-					<p class="font-bold text-slate-900">นโยบายความคุ้มครองข้อมูลส่วนบุคคล (PDPA)</p>
-					<p class="text-[11px] leading-relaxed font-medium text-slate-500">
-						ข้อมูลส่วนบุคคลนี้จะถูกใช้เพื่อการลงทะเบียนคัดกรอง จัดสรรที่พักพิง และรับสิทธิประโยชน์
-					</p>
+		<!-- คอลัมน์ขวา: Radar Animation & Data Stream Checklist -->
+		<div class="flex flex-col items-center justify-center space-y-5 lg:col-span-6 xl:col-span-5">
+			<!-- Radar Animation -->
+			<div class="relative flex h-52 w-52 items-center justify-center sm:h-60 sm:w-60">
+				<div
+					class="absolute h-full w-full animate-ping rounded-full bg-cyan-500/15 duration-1000"
+				></div>
+				<div
+					class="absolute h-48 w-48 animate-spin rounded-full border-4 border-dashed border-cyan-300 duration-3000 sm:h-56 sm:w-56"
+				></div>
+				<div
+					class="absolute h-40 w-40 animate-spin rounded-full border-4 border-cyan-400 border-t-blue-600 sm:h-48 sm:w-48"
+				></div>
+
+				<!-- Core Circular Visual -->
+				<div
+					class="relative flex h-28 w-28 items-center justify-center rounded-full border-4 border-blue-400 bg-white shadow-2xl ring-4 shadow-blue-500/20 ring-blue-100 sm:h-34 sm:w-34"
+				>
+					<CreditCard class="h-14 w-14 text-blue-600 sm:h-16 sm:w-16" />
+					<div class="absolute -top-1 -right-1 flex h-7 w-7 items-center justify-center">
+						<span class="absolute h-full w-full animate-ping rounded-full bg-cyan-500 opacity-75"
+						></span>
+						<span class="relative h-3.5 w-3.5 rounded-full bg-cyan-600 shadow-md"></span>
+					</div>
+				</div>
+			</div>
+
+			<!-- Live Reading Checklist -->
+			<div
+				class="grid w-full max-w-md grid-cols-2 gap-2 text-left text-xs font-bold text-slate-700"
+			>
+				<div
+					class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2.5 shadow-sm"
+				>
+					<CheckCircle class="h-4 w-4 shrink-0 text-emerald-600" />
+					<span class="truncate">เลขประจำตัว 13 หลัก</span>
+				</div>
+				<div
+					class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2.5 shadow-sm"
+				>
+					<CheckCircle class="h-4 w-4 shrink-0 text-emerald-600" />
+					<span class="truncate">ชื่อ - สกุล และเพศ</span>
+				</div>
+				<div
+					class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2.5 shadow-sm"
+				>
+					<CheckCircle class="h-4 w-4 shrink-0 text-emerald-600" />
+					<span class="truncate">ที่อยู่ตามทะเบียนบ้าน</span>
+				</div>
+				<div
+					class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 p-2.5 shadow-sm"
+				>
+					<CheckCircle class="h-4 w-4 shrink-0 text-emerald-600" />
+					<span class="truncate">รูปถ่ายจากบัตร</span>
 				</div>
 			</div>
 		</div>

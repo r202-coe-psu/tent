@@ -118,7 +118,7 @@
 
 	<!-- Main Stage: Takes full height and scales flexibly across vertical/horizontal screens -->
 	<main
-		class="relative z-10 flex w-full flex-1 flex-col items-center justify-center overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-12"
+		class="relative z-10 flex w-full flex-1 flex-col items-center justify-center overflow-y-auto p-4 sm:p-6 lg:px-8 lg:py-4 xl:px-12 xl:py-6"
 	>
 		{@render children()}
 	</main>
