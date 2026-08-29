@@ -1,9 +1,13 @@
 <script lang="ts">
 	/**
 	 * Tab 3 — "รายชื่อและการอนุมัติ / People" (owner-approved mockup,
-	 * 2026-08-28). Composes the stat pills, search/filter bar, the "รออนุมัติ"
-	 * sub-filter chips, and the roster card list; owns the transfer + walk-in
-	 * registration dialogs.
+	 * 2026-08-28; switched the roster from a stack of div-grid cards to a real
+	 * `Table.Root`/`Table.Header`/`Table.Body` 2026-08-30 so rows sit flush
+	 * against each other under one column-label header, mirroring
+	 * `users/ui/user-list.svelte`). Composes the stat pills, search/filter bar,
+	 * the "รออนุมัติ" sub-filter chips, and the roster table; owns the transfer +
+	 * walk-in registration dialogs. `volunteer-card.svelte` (per-row
+	 * `Table.Row`) owns the per-row action dialogs.
 	 *
 	 * Every filter here runs client-side over one unfiltered `useVolunteers()`
 	 * fetch (mirrors `job-board-tab.svelte`'s `useJobs()` + in-memory
@@ -17,6 +21,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import * as Table from '$lib/components/ui/table/index.js';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
@@ -186,15 +191,38 @@
 			</p>
 		</div>
 	{:else}
-		<div class="space-y-3">
-			{#each filteredVolunteers as volunteer (volunteer._id)}
-				<VolunteerCard
-					{volunteer}
-					shelterName={shelterQuery.data?.name}
-					shelterType={shelterQuery.data?.shelter_type}
-					todayAssignment={attendanceByVolunteer.get(volunteer._id)}
-				/>
-			{/each}
+		<div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+			<Table.Root>
+				<Table.Header class="bg-muted/30">
+					<Table.Row class="hover:bg-transparent">
+						<Table.Head class="w-[27%] p-4 text-sm font-bold whitespace-normal text-foreground/70">
+							ข้อมูลบุคคล (VOLUNTEER INFO)
+						</Table.Head>
+						<Table.Head class="w-[16%] p-4 text-sm font-bold whitespace-normal text-foreground/70">
+							ทักษะ (SKILLS)
+						</Table.Head>
+						<Table.Head class="w-[17%] p-4 text-sm font-bold whitespace-normal text-foreground/70">
+							สังกัดศูนย์ (SHELTER)
+						</Table.Head>
+						<Table.Head class="w-[19%] p-4 text-sm font-bold whitespace-normal text-foreground/70">
+							สถานะยืนยันตัวตน &amp; กะงาน
+						</Table.Head>
+						<Table.Head class="w-[21%] p-4 text-sm font-bold whitespace-normal text-foreground/70">
+							จัดการ (ACTIONS)
+						</Table.Head>
+					</Table.Row>
+				</Table.Header>
+				<Table.Body>
+					{#each filteredVolunteers as volunteer (volunteer._id)}
+						<VolunteerCard
+							{volunteer}
+							shelterName={shelterQuery.data?.name}
+							shelterType={shelterQuery.data?.shelter_type}
+							todayAssignment={attendanceByVolunteer.get(volunteer._id)}
+						/>
+					{/each}
+				</Table.Body>
+			</Table.Root>
 		</div>
 	{/if}
 </div>

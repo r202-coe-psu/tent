@@ -1,6 +1,9 @@
 <script lang="ts">
 	/**
-	 * "People" tab roster row (owner-approved mockup, 2026-08-28).
+	 * "People" tab roster row (owner-approved mockup, 2026-08-28; switched from a
+	 * div-grid card to a real `<Table.Row>` 2026-08-30 so rows sit flush against
+	 * each other with a shared header — mirrors `users/ui/user-list.svelte`).
+	 * Rendered inside `people-tab.svelte`'s `<Table.Body>`.
 	 *
 	 * Of the 4 action buttons (จัดการข้อมูล/ตรวจสอบ & อนุมัติ / ออกสิทธิ์ใช้งานระบบ /
 	 * ขอโอนย้ายศูนย์ / ลบ):
@@ -30,7 +33,7 @@
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import * as Table from '$lib/components/ui/table/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
 	import VolunteerQualificationsAuditDialog from './volunteer-qualifications-audit-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
@@ -84,194 +87,177 @@
 	let transferDialogOpen = $state(false);
 </script>
 
-<div
-	class="grid grid-cols-1 gap-4 rounded-2xl border border-border bg-card p-4 shadow-xs lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.2fr)_minmax(0,1.3fr)_minmax(0,1.5fr)_minmax(0,1.6fr)] lg:items-start lg:gap-3"
->
+<Table.Row>
 	<!-- ข้อมูลบุคคล (VOLUNTEER INFO) -->
-	<div class="flex items-start gap-3">
-		<div
-			class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-bold text-primary"
-		>
-			{initial}
-		</div>
-		<div class="min-w-0 space-y-1.5">
-			<div class="flex flex-wrap items-center gap-1.5">
-				<span class="text-sm font-bold text-foreground">{fullName}</span>
-				<Badge variant="outline" class="text-[11px]">{volunteer.volunteer_code}</Badge>
+	<Table.Cell class="w-[27%] p-4 align-top whitespace-normal">
+		<div class="flex items-start gap-3">
+			<div
+				class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-bold text-primary"
+			>
+				{initial}
 			</div>
-			<div class="flex flex-wrap items-center gap-1.5">
-				<Badge variant="secondary" class="text-[11px]">{SOURCE_LABELS[volunteer.source]}</Badge>
-				{#if hasControlledSkill}
-					<Badge
-						variant="outline"
-						class="border-violet-300 bg-violet-50 text-[11px] text-violet-700"
+			<div class="min-w-0 space-y-1.5">
+				<div class="flex flex-wrap items-center gap-1.5">
+					<span class="text-sm font-bold text-foreground">{fullName}</span>
+					<Badge variant="outline" class="text-[11px]">{volunteer.volunteer_code}</Badge>
+				</div>
+				<div class="flex flex-wrap items-center gap-1.5">
+					<Badge variant="secondary" class="text-[11px]">{SOURCE_LABELS[volunteer.source]}</Badge>
+					{#if hasControlledSkill}
+						<Badge
+							variant="outline"
+							class="border-violet-300 bg-violet-50 text-[11px] text-violet-700"
+						>
+							ทักษะวิชาชีพ/ควบคุม
+						</Badge>
+					{/if}
+					{#if !volunteer.checked_in}
+						<Badge variant="outline" class="gap-1 text-[11px] text-muted-foreground">
+							<span class="h-1.5 w-1.5 rounded-full bg-muted-foreground/50"></span>
+							Off-site
+						</Badge>
+					{/if}
+				</div>
+				{#if volunteer.checked_in}
+					<p
+						class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
 					>
-						ทักษะวิชาชีพ/ควบคุม
-					</Badge>
+						<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"></span>
+						On-site ปฏิบัติหน้าที่ ณ {shelterLine}
+					</p>
 				{/if}
-				{#if !volunteer.checked_in}
-					<Badge variant="outline" class="gap-1 text-[11px] text-muted-foreground">
-						<span class="h-1.5 w-1.5 rounded-full bg-muted-foreground/50"></span>
-						Off-site
-					</Badge>
+				{#if volunteer.phone}
+					<p class="flex items-center gap-1.5 text-xs text-muted-foreground">
+						<Phone class="h-3.5 w-3.5" />
+						{volunteer.phone}
+					</p>
 				{/if}
 			</div>
-			{#if volunteer.checked_in}
-				<p
-					class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
-				>
-					<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"></span>
-					On-site ปฏิบัติหน้าที่ ณ {shelterLine}
-				</p>
-			{/if}
-			{#if volunteer.phone}
-				<p class="flex items-center gap-1.5 text-xs text-muted-foreground">
-					<Phone class="h-3.5 w-3.5" />
-					{volunteer.phone}
-				</p>
-			{/if}
 		</div>
-	</div>
+	</Table.Cell>
 
 	<!-- ทักษะ (SKILLS) -->
-	<div class="flex flex-wrap content-start gap-1.5">
-		{#each volunteer.skills as skill (skill)}
-			{@const master = findSkill(skill)}
-			<Badge
-				variant="outline"
-				class="max-w-full gap-1 text-[11px] break-words {isControlledSkill(skill)
-					? 'border-amber-300 bg-amber-50 text-amber-800'
-					: ''}"
-			>
-				{#if master}<span aria-hidden="true">{master.icon}</span>{/if}
-				{master?.label ?? skill}
-			</Badge>
-		{:else}
-			<span class="text-xs text-muted-foreground">—</span>
-		{/each}
-	</div>
+	<Table.Cell class="w-[16%] p-4 align-top whitespace-normal">
+		<div class="flex flex-wrap content-start gap-1.5">
+			{#each volunteer.skills as skill (skill)}
+				{@const master = findSkill(skill)}
+				<Badge
+					variant="outline"
+					class="max-w-full gap-1 text-[11px] break-words {isControlledSkill(skill)
+						? 'border-amber-300 bg-amber-50 text-amber-800'
+						: ''}"
+				>
+					{#if master}<span aria-hidden="true">{master.icon}</span>{/if}
+					{master?.label ?? skill}
+				</Badge>
+			{:else}
+				<span class="text-xs text-muted-foreground">—</span>
+			{/each}
+		</div>
+	</Table.Cell>
 
 	<!-- สังกัดศูนย์ (SHELTER) -->
-	<div class="text-sm font-medium text-foreground">
+	<Table.Cell class="w-[17%] p-4 align-top text-sm font-medium whitespace-normal text-foreground">
 		{shelterLine}
-	</div>
+	</Table.Cell>
 
 	<!-- สถานะยืนยันตัวตน & กะงาน -->
-	<div class="space-y-1.5">
-		{#if volunteer.identity_verified}
-			<Badge class="gap-1 border-emerald-300 bg-emerald-50 text-emerald-700" variant="outline">
-				<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-				ยืนยันตัวตนแล้ว
-			</Badge>
-		{:else}
-			<Badge class="gap-1 border-amber-300 bg-amber-50 text-amber-700" variant="outline">
-				<span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-				รอยืนยันตัวตน
-			</Badge>
-		{/if}
+	<Table.Cell class="w-[19%] p-4 align-top whitespace-normal">
+		<div class="space-y-1.5">
+			{#if volunteer.identity_verified}
+				<Badge class="gap-1 border-emerald-300 bg-emerald-50 text-emerald-700" variant="outline">
+					<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+					ยืนยันตัวตนแล้ว
+				</Badge>
+			{:else}
+				<Badge class="gap-1 border-amber-300 bg-amber-50 text-amber-700" variant="outline">
+					<span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+					รอยืนยันตัวตน
+				</Badge>
+			{/if}
 
-		{#if volunteer.checked_in}
-			<Badge class="gap-1 border-emerald-300 bg-emerald-50 text-emerald-700" variant="outline">
-				<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-				ปฏิบัติหน้าที่อยู่
-			</Badge>
-		{:else if volunteer.identity_verified}
-			<Badge class="gap-1 border-sky-300 bg-sky-50 text-sky-700" variant="outline">
-				<span class="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
-				รอสแตนด์บาย
-			</Badge>
-		{:else}
-			<Badge variant="outline" class="gap-1 text-muted-foreground">
-				<Lock class="h-3 w-3" />
-				รอสแตนด์บาย
-			</Badge>
-		{/if}
+			{#if volunteer.checked_in}
+				<Badge class="gap-1 border-emerald-300 bg-emerald-50 text-emerald-700" variant="outline">
+					<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+					ปฏิบัติหน้าที่อยู่
+				</Badge>
+			{:else if volunteer.identity_verified}
+				<Badge class="gap-1 border-sky-300 bg-sky-50 text-sky-700" variant="outline">
+					<span class="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
+					รอสแตนด์บาย
+				</Badge>
+			{:else}
+				<Badge variant="outline" class="gap-1 text-muted-foreground">
+					<Lock class="h-3 w-3" />
+					รอสแตนด์บาย
+				</Badge>
+			{/if}
 
-		{#if todayAssignment}
-			<p class="text-xs text-muted-foreground">{SHIFT_LABELS[todayAssignment.shift]}</p>
-		{:else if !volunteer.identity_verified}
-			<p class="text-[11px] text-amber-700">ต้องให้ จนท. ตรวจบัตร ปชช. ก่อนเข้ากะ</p>
-		{/if}
-	</div>
+			{#if todayAssignment}
+				<p class="text-xs text-muted-foreground">{SHIFT_LABELS[todayAssignment.shift]}</p>
+			{:else if !volunteer.identity_verified}
+				<p class="text-[11px] text-amber-700">ต้องให้ จนท. ตรวจบัตร ปชช. ก่อนเข้ากะ</p>
+			{/if}
+		</div>
+	</Table.Cell>
 
 	<!-- จัดการ (ACTIONS) -->
-	<div class="flex flex-wrap items-center gap-1.5 lg:flex-col lg:items-stretch">
-		{#if !volunteer.identity_verified}
-			<Button
-				size="sm"
-				class="gap-1.5 border-amber-400 bg-amber-500 text-white hover:bg-amber-600"
-				onclick={() => (qualificationsDialogOpen = true)}
-			>
-				<Pencil class="h-3.5 w-3.5" />
-				ตรวจสอบ & อนุมัติ
-			</Button>
-		{:else}
-			<Button size="sm" variant="outline" class="gap-1.5" onclick={() => (manageDialogOpen = true)}>
-				<Pencil class="h-3.5 w-3.5" />
-				จัดการข้อมูล
-			</Button>
-		{/if}
+	<Table.Cell class="w-[21%] p-4 align-top whitespace-normal">
+		<div class="flex flex-wrap items-center gap-1.5 lg:flex-col lg:items-stretch">
+			{#if !volunteer.identity_verified}
+				<Button
+					size="sm"
+					class="gap-1.5 border-amber-400 bg-amber-500 text-white hover:bg-amber-600"
+					onclick={() => (qualificationsDialogOpen = true)}
+				>
+					<Pencil class="h-3.5 w-3.5" />
+					ตรวจสอบ & อนุมัติ
+				</Button>
+			{:else}
+				<Button
+					size="sm"
+					variant="outline"
+					class="gap-1.5"
+					onclick={() => (manageDialogOpen = true)}
+				>
+					<Pencil class="h-3.5 w-3.5" />
+					จัดการข้อมูล
+				</Button>
+			{/if}
 
-		<div class="flex items-center gap-1.5">
-			<Tooltip.Provider>
-				<Tooltip.Root>
-					<Tooltip.Trigger>
-						{#snippet child({ props })}
-							<Button
-								{...props}
-								size="sm"
-								class="flex-1 gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
-								onclick={() => (accessDialogOpen = true)}
-							>
-								<KeyRound class="h-3.5 w-3.5" />
-								ออกสิทธิ์ใช้งานระบบ
-							</Button>
-						{/snippet}
-					</Tooltip.Trigger>
-					<Tooltip.Content>ให้/เพิกถอนสิทธิ์เข้าสู่ระบบ (Time-bound Write Access)</Tooltip.Content>
-				</Tooltip.Root>
-			</Tooltip.Provider>
+			<div class="flex items-center gap-1.5">
+				<Button
+					size="sm"
+					class="flex-1 gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
+					onclick={() => (accessDialogOpen = true)}
+				>
+					<KeyRound class="h-3.5 w-3.5" />
+					ออกสิทธิ์ใช้งานระบบ
+				</Button>
 
-			<Tooltip.Provider>
-				<Tooltip.Root>
-					<Tooltip.Trigger>
-						{#snippet child({ props })}
-							<Button
-								{...props}
-								size="icon"
-								variant="outline"
-								class="shrink-0 border-amber-300 text-amber-700 hover:bg-amber-50"
-								onclick={() => (transferDialogOpen = true)}
-							>
-								<ArrowLeftRight class="h-4 w-4" />
-							</Button>
-						{/snippet}
-					</Tooltip.Trigger>
-					<Tooltip.Content>ขอโอนย้ายศูนย์</Tooltip.Content>
-				</Tooltip.Root>
-			</Tooltip.Provider>
+				<Button
+					size="icon"
+					variant="outline"
+					class="shrink-0 border-amber-300 text-amber-700 hover:bg-amber-50"
+					aria-label="ขอโอนย้ายศูนย์"
+					onclick={() => (transferDialogOpen = true)}
+				>
+					<ArrowLeftRight class="h-4 w-4" />
+				</Button>
 
-			<Tooltip.Provider>
-				<Tooltip.Root>
-					<Tooltip.Trigger>
-						{#snippet child({ props })}
-							<Button
-								{...props}
-								size="icon"
-								variant="outline"
-								class="shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50"
-								onclick={() => stub('ลบอาสาสมัคร')}
-							>
-								<Trash2 class="h-4 w-4" />
-							</Button>
-						{/snippet}
-					</Tooltip.Trigger>
-					<Tooltip.Content>ลบอาสาสมัคร</Tooltip.Content>
-				</Tooltip.Root>
-			</Tooltip.Provider>
+				<Button
+					size="icon"
+					variant="outline"
+					class="shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50"
+					aria-label="ลบอาสาสมัคร"
+					onclick={() => stub('ลบอาสาสมัคร')}
+				>
+					<Trash2 class="h-4 w-4" />
+				</Button>
+			</div>
 		</div>
-	</div>
-</div>
+	</Table.Cell>
+</Table.Row>
 
 <VolunteerManageDialog
 	bind:open={manageDialogOpen}
