@@ -36,9 +36,19 @@
 	let formReqGroupId = $state('');
 	let formDailyDemand = $state<number | string>('');
 	let formEffectiveDate = $state(new Date().toISOString().slice(0, 10));
+	let formStatus = $state<'active' | 'inactive'>('active');
 	let formErrors = $state<Record<string, string>>({});
 
 	const groups = $derived(reqGroupsQuery.data ?? []);
+	const availableGroups = $derived(
+		groups.filter(
+			(g) =>
+				(g.status ?? 'active') === 'active' ||
+				g._id === `requirement_group:${formReqGroupId}` ||
+				g._id === formReqGroupId ||
+				g.name === formReqGroupId
+		)
+	);
 
 	// Auto-fill UOM from selected requirement group (Invariant 2, FR-SPHERE-02)
 	const selectedGroup = $derived(
@@ -57,11 +67,14 @@
 			formReqGroupId = standard.req_group_id;
 			formDailyDemand = standard.daily_demand;
 			formEffectiveDate = standard.effective_date;
+			formStatus = standard.status ?? 'active';
 		} else {
 			formSegment = 'ALL';
-			formReqGroupId = groups[0] ? groups[0]._id.replace(/^requirement_group:/, '') : '';
+			const defaultGroup = groups.find((g) => (g.status ?? 'active') === 'active') ?? groups[0];
+			formReqGroupId = defaultGroup ? defaultGroup._id.replace(/^requirement_group:/, '') : '';
 			formDailyDemand = '';
 			formEffectiveDate = new Date().toISOString().slice(0, 10);
+			formStatus = 'active';
 		}
 		formErrors = {};
 	});
@@ -103,6 +116,7 @@
 					daily_demand: demand,
 					standard_uom: autoUom !== '—' ? autoUom : undefined,
 					effective_date: formEffectiveDate,
+					status: formStatus,
 					source: computedSource,
 					shelter_code: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 				},
@@ -155,7 +169,7 @@
 					<Field.Label for="form-req-group">
 						หมวดความต้องการ <span class="font-bold text-destructive">*</span>
 					</Field.Label>
-					{#if groups.length > 0}
+					{#if availableGroups.length > 0}
 						<Select.Root type="single" bind:value={formReqGroupId} disabled={isEdit}>
 							<Select.Trigger
 								id="form-req-group"
@@ -166,9 +180,13 @@
 									: formReqGroupId || 'เลือกหมวดความต้องการ'}
 							</Select.Trigger>
 							<Select.Content>
-								{#each groups as g (g._id)}
+								{#each availableGroups as g (g._id)}
 									{@const cleanId = g._id.replace(/^requirement_group:/, '')}
-									<Select.Item value={cleanId} label="{g.name} ({cleanId})" />
+									{@const isInactive = (g.status ?? 'active') === 'inactive'}
+									<Select.Item
+										value={cleanId}
+										label="{g.name} ({cleanId}){isInactive ? ' [ปิดใช้งาน]' : ''}"
+									/>
 								{/each}
 							</Select.Content>
 						</Select.Root>
@@ -225,7 +243,7 @@
 				</Field.Field>
 			</Field.FieldGroup>
 
-			<!-- Row 3: วันที่มีผลบังคับใช้ -->
+			<!-- Row 3: วันที่มีผลบังคับใช้ & สถานะ -->
 			<Field.FieldGroup class="grid grid-cols-1 gap-5 md:grid-cols-2">
 				<Field.Field>
 					<Field.Label for="form-effective-date">
@@ -239,6 +257,22 @@
 					{#if formErrors.effectiveDate}
 						<Field.Error>{formErrors.effectiveDate}</Field.Error>
 					{/if}
+				</Field.Field>
+
+				<Field.Field>
+					<Field.Label for="form-status">สถานะการใช้งาน</Field.Label>
+					<Select.Root type="single" bind:value={formStatus}>
+						<Select.Trigger
+							id="form-status"
+							class="h-9 w-full rounded-md border-input bg-background"
+						>
+							{formStatus === 'active' ? 'เปิดใช้งาน (Active)' : 'ปิดใช้งาน (Inactive)'}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="active" label="เปิดใช้งาน (Active)" />
+							<Select.Item value="inactive" label="ปิดใช้งาน (Inactive)" />
+						</Select.Content>
+					</Select.Root>
 				</Field.Field>
 			</Field.FieldGroup>
 		</div>

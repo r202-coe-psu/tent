@@ -97,6 +97,7 @@
 				daily_demand: demand,
 				standard_uom: autoUom !== '—' ? autoUom : undefined,
 				effective_date: formEffectiveDate,
+				status: standard?.status ?? 'active',
 				source: computedSource,
 				shelter_code: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 			},

@@ -38,7 +38,18 @@
 	let formSafetyDays = $state<number | string>(2);
 	let formMinDoc = $state<number | string>(2);
 	let formMaxDoc = $state<number | string>(30);
+	let formStatus = $state<'active' | 'inactive'>('active');
 	let formErrors = $state<Record<string, string>>({});
+
+	const availableGroups = $derived(
+		groups.filter(
+			(g) =>
+				(g.status ?? 'active') === 'active' ||
+				g._id === `requirement_group:${formTargetId}` ||
+				g._id === formTargetId ||
+				g.name === formTargetId
+		)
+	);
 
 	const selectedGroup = $derived(
 		groups.find(
@@ -63,14 +74,17 @@
 			formSafetyDays = policy.safety_days;
 			formMinDoc = policy.min_doc_days;
 			formMaxDoc = policy.max_doc_days;
+			formStatus = policy.status ?? 'active';
 		} else {
 			formScope = 'REQUIREMENT_GROUP';
-			formTargetId = groups[0] ? groups[0]._id.replace(/^requirement_group:/, '') : '';
+			const defaultGroup = groups.find((g) => (g.status ?? 'active') === 'active') ?? groups[0];
+			formTargetId = defaultGroup ? defaultGroup._id.replace(/^requirement_group:/, '') : '';
 			formLeadTime = 2;
 			formReviewPeriod = 3;
 			formSafetyDays = 2;
 			formMinDoc = 2;
 			formMaxDoc = 30;
+			formStatus = 'active';
 		}
 		formErrors = {};
 	});
@@ -93,23 +107,19 @@
 		const minDoc = Number(formMinDoc);
 		const maxDoc = Number(formMaxDoc);
 
-		if (isNaN(lead) || lead < 0) formErrors.leadTime = 'ระยะเวลารอคอยสินค้าต้องไม่ติดลบ';
-		if (isNaN(review) || review < 0) formErrors.reviewPeriod = 'รอบการสั่งซื้อต้องไม่ติดลบ';
-		if (isNaN(safety) || safety < 0) formErrors.safetyDays = 'วันสำรองเผื่อฉุกเฉินต้องไม่ติดลบ';
-		if (isNaN(minDoc) || minDoc < 0) formErrors.minDoc = 'วันคงคลังขั้นต่ำต้องไม่ติดลบ';
-		if (isNaN(maxDoc) || maxDoc < 0) formErrors.maxDoc = 'วันคงคลังสูงสุดต้องไม่ติดลบ';
+		if (isNaN(lead) || lead < 0) formErrors.leadTime = 'Lead time ต้องไม่ติดลบ';
+		if (isNaN(review) || review < 0) formErrors.reviewPeriod = 'Review period ต้องไม่ติดลบ';
+		if (isNaN(safety) || safety < 0) formErrors.safetyDays = 'Safety days ต้องไม่ติดลบ';
+		if (isNaN(minDoc) || minDoc < 0) formErrors.minDoc = 'Min DoC ต้องไม่ติดลบ';
+		if (isNaN(maxDoc) || maxDoc < 0) formErrors.maxDoc = 'Max DoC ต้องไม่ติดลบ';
 
-		const reorderDays =
-			(isNaN(lead) ? 0 : lead) + (isNaN(review) ? 0 : review) + (isNaN(safety) ? 0 : safety);
-
-		// Invariant 9 & TC-E2E-07: Validation guard
-		if (!isNaN(minDoc) && !isNaN(reorderDays) && minDoc >= reorderDays) {
-			formErrors.minDoc =
-				'วันคงคลังขั้นต่ำ (Min DoC) ต้องน้อยกว่าจำนวนวันสั่งเติมมาตรฐาน (ระยะเวลารอคอย + รอบสั่งซื้อ + วันสำรอง)';
+		const standardReorder = lead + review + safety;
+		if (!isNaN(minDoc) && !isNaN(standardReorder) && minDoc >= standardReorder) {
+			formErrors.minDoc = `Min DoC (${minDoc}) ต้องน้อยกว่า Standard Reorder Days (${standardReorder})`;
 		}
 
 		if (!isNaN(minDoc) && !isNaN(maxDoc) && minDoc >= maxDoc) {
-			formErrors.maxDoc = 'วันคงคลังขั้นต่ำ (Min DoC) ต้องน้อยกว่าวันคงคลังสูงสุด (Max DoC)';
+			formErrors.maxDoc = `Max DoC (${maxDoc}) ต้องมากกว่า Min DoC (${minDoc})`;
 		}
 
 		if (Object.keys(formErrors).length > 0) {
@@ -129,6 +139,7 @@
 					safety_days: safety,
 					min_doc_days: minDoc,
 					max_doc_days: maxDoc,
+					status: formStatus,
 					source: computedSource,
 					shelter_code: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 				},
@@ -151,13 +162,13 @@
 	<div class="space-y-5">
 		<!-- Field Group Card -->
 		<div class="space-y-5 rounded-2xl border border-border/60 bg-muted/20 p-5 sm:p-6">
-			<!-- Row 1: กลุ่มสำหรับการคำนวณ -->
+			<!-- Row 1: กลุ่มสำหรับการคำนวณ & สถานะ -->
 			<Field.FieldGroup class="grid grid-cols-1 gap-5 md:grid-cols-2">
 				<Field.Field>
 					<Field.Label for="form-replen-group">
 						กลุ่มสำหรับการคำนวณ <span class="font-bold text-destructive">*</span>
 					</Field.Label>
-					{#if groups.length > 0}
+					{#if availableGroups.length > 0}
 						<Select.Root type="single" bind:value={formTargetId} disabled={isEdit}>
 							<Select.Trigger
 								id="form-replen-group"
@@ -168,9 +179,13 @@
 									: formTargetId || 'เลือกกลุ่มสำหรับการคำนวณ'}
 							</Select.Trigger>
 							<Select.Content>
-								{#each groups as g (g._id)}
+								{#each availableGroups as g (g._id)}
 									{@const cleanId = g._id.replace(/^requirement_group:/, '')}
-									<Select.Item value={cleanId} label="{g.name} ({cleanId})" />
+									{@const isInactive = (g.status ?? 'active') === 'inactive'}
+									<Select.Item
+										value={cleanId}
+										label="{g.name} ({cleanId}){isInactive ? ' [ปิดใช้งาน]' : ''}"
+									/>
 								{/each}
 							</Select.Content>
 						</Select.Root>
@@ -187,6 +202,22 @@
 					{#if formErrors.targetId}
 						<Field.Error>{formErrors.targetId}</Field.Error>
 					{/if}
+				</Field.Field>
+
+				<Field.Field>
+					<Field.Label for="form-replen-status">สถานะการใช้งาน</Field.Label>
+					<Select.Root type="single" bind:value={formStatus}>
+						<Select.Trigger
+							id="form-replen-status"
+							class="h-9 w-full rounded-md border-input bg-background"
+						>
+							{formStatus === 'active' ? 'เปิดใช้งาน (Active)' : 'ปิดใช้งาน (Inactive)'}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="active" label="เปิดใช้งาน (Active)" />
+							<Select.Item value="inactive" label="ปิดใช้งาน (Inactive)" />
+						</Select.Content>
+					</Select.Root>
 				</Field.Field>
 			</Field.FieldGroup>
 

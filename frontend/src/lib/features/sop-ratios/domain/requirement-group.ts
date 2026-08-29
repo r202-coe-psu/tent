@@ -25,6 +25,7 @@ export interface RequirementGroup extends CatalogDoc {
 	schema_v: 1;
 	name: string;
 	standard_uom: string;
+	status?: 'active' | 'inactive';
 	item_maps?: ItemMap[];
 	source: FoodSphereSource;
 	shelter_code?: string;
@@ -33,6 +34,7 @@ export interface RequirementGroup extends CatalogDoc {
 export const requirementGroupInputSchema = z.object({
 	name: z.string().trim().min(1, 'กรุณาระบุชื่อกลุ่มความต้องการ'),
 	standard_uom: z.string().trim().min(1, 'กรุณาระบุหน่วยนับมาตรฐาน'),
+	status: z.enum(['active', 'inactive']).optional().default('active'),
 	item_maps: z.array(itemMapSchema).optional(),
 	source: foodSphereSourceSchema.default('SPHERE_BASELINE'),
 	shelter_code: z.string().optional()

@@ -36,6 +36,7 @@
 	let formGroupId = $state('');
 	let formName = $state('');
 	let formStandardUom = $state('');
+	let formStatus = $state<'active' | 'inactive'>('active');
 	let formItemMaps = $state<ItemMap[]>([]);
 	let formErrors = $state<Record<string, string>>({});
 
@@ -87,11 +88,13 @@
 			formGroupId = group._id.replace(/^requirement_group:/, '');
 			formName = group.name;
 			formStandardUom = group.standard_uom;
+			formStatus = group.status ?? 'active';
 			formItemMaps = group.item_maps ? JSON.parse(JSON.stringify(group.item_maps)) : [];
 		} else {
 			formGroupId = '';
 			formName = '';
 			formStandardUom = '';
+			formStatus = 'active';
 			formItemMaps = [];
 		}
 		formErrors = {};
@@ -169,6 +172,7 @@
 				input: {
 					name: formName.trim(),
 					standard_uom: formStandardUom.trim(),
+					status: formStatus,
 					source: computedSource,
 					item_maps: formItemMaps.map((im) => ({
 						item_id: im.item_id.trim(),
@@ -226,7 +230,7 @@
 				</Field.Field>
 			</Field.FieldGroup>
 
-			<!-- Row 2: หน่วยนับมาตรฐาน (Standard UOM) -->
+			<!-- Row 2: หน่วยนับมาตรฐาน (Standard UOM) & สถานะ -->
 			<Field.FieldGroup class="grid grid-cols-1 gap-5 md:grid-cols-2">
 				<Field.Field>
 					<Field.Label for="form-standard-uom">
@@ -252,6 +256,22 @@
 					{#if formErrors.standardUom}
 						<Field.Error>{formErrors.standardUom}</Field.Error>
 					{/if}
+				</Field.Field>
+
+				<Field.Field>
+					<Field.Label for="form-group-status">สถานะการใช้งาน</Field.Label>
+					<Select.Root type="single" bind:value={formStatus}>
+						<Select.Trigger
+							id="form-group-status"
+							class="h-9 w-full rounded-md border-input bg-background"
+						>
+							{formStatus === 'active' ? 'เปิดใช้งาน (Active)' : 'ปิดใช้งาน (Inactive)'}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="active" label="เปิดใช้งาน (Active)" />
+							<Select.Item value="inactive" label="ปิดใช้งาน (Inactive)" />
+						</Select.Content>
+					</Select.Root>
 				</Field.Field>
 			</Field.FieldGroup>
 

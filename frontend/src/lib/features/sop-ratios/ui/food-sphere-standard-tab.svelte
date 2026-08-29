@@ -10,7 +10,8 @@
 	import { SOURCE_LABELS } from '$lib/utils/source';
 	import {
 		useFoodSphereStandards,
-		useDeleteFoodSphereOverride
+		useDeleteFoodSphereOverride,
+		useSetFoodSphereStandardStatus
 	} from '../application/food-sphere-queries';
 	import { useRequirementGroups } from '../application/requirement-group-queries';
 	import FoodSphereStandardForm from './food-sphere-standard-form.svelte';
@@ -22,6 +23,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import Settings2 from '@lucide/svelte/icons/settings-2';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Loader from '@lucide/svelte/icons/loader';
 
 	let {
@@ -37,10 +39,12 @@
 	const standardsQuery = useFoodSphereStandards(() => shelterCode);
 	const reqGroupsQuery = useRequirementGroups(() => shelterCode);
 	const deleteMutation = useDeleteFoodSphereOverride();
+	const setStatusMutation = useSetFoodSphereStandardStatus();
 
 	let search = $state('');
 	let filterSegment = $state<string>('ALL_SEGMENTS');
 	let filterGroup = $state<string>('ALL_GROUPS');
+	let filterStatus = $state<'ALL' | 'active' | 'inactive'>('ALL');
 
 	let viewMode = $state<'list' | 'create' | 'edit'>('list');
 	let selectedStandard = $state<FoodSphereStandard | null>(null);
@@ -57,6 +61,10 @@
 
 	const filteredStandards = $derived(
 		standards.filter((s) => {
+			const status = s.status ?? 'active';
+			if (filterStatus !== 'ALL' && status !== filterStatus) {
+				return false;
+			}
 			if (filterSegment !== 'ALL_SEGMENTS' && s.target_segment !== filterSegment) {
 				return false;
 			}
@@ -105,7 +113,19 @@
 			isDeleteDialogOpen = false;
 			standardToDelete = null;
 		} catch (err) {
-			console.error('Failed to delete food sphere standard:', err);
+			console.error('Failed to deactivate food sphere standard:', err);
+		}
+	}
+
+	async function handleReactivate(std: FoodSphereStandard) {
+		try {
+			await setStatusMutation.mutateAsync({
+				id: std._id,
+				status: 'active',
+				shelterCode: std.source === 'SHELTER_OVERRIDE' ? shelterCode : undefined
+			});
+		} catch (err) {
+			console.error('Failed to activate food sphere standard:', err);
 		}
 	}
 </script>
@@ -175,6 +195,19 @@
 					</select>
 				</div>
 
+				<div class="flex items-center gap-1.5">
+					<label for="filter-status" class="font-medium text-muted-foreground">สถานะ:</label>
+					<select
+						id="filter-status"
+						bind:value={filterStatus}
+						class="rounded-md border bg-background px-2.5 py-1 text-xs"
+					>
+						<option value="ALL">ทุกสถานะ</option>
+						<option value="active">ใช้งานอยู่</option>
+						<option value="inactive">ปิดใช้งาน</option>
+					</select>
+				</div>
+
 				<div class="ml-auto text-xs text-muted-foreground">
 					แสดง {filteredStandards.length} จาก {standards.length} รายการ
 				</div>
@@ -204,6 +237,7 @@
 							<th class="p-3 text-right">ปริมาณต่อคนต่อวัน</th>
 							<th class="p-3">หน่วยนับ</th>
 							<th class="p-3">วันบังคับใช้</th>
+							<th class="p-3">สถานะ</th>
 							<th class="p-3">แหล่งที่มา</th>
 							<th class="p-3 text-right">การจัดการ</th>
 						</tr>
@@ -221,6 +255,21 @@
 								</td>
 								<td class="p-3 font-mono text-xs">{uom}</td>
 								<td class="p-3 text-xs text-muted-foreground">{std.effective_date}</td>
+								<td class="p-3">
+									{#if (std.status ?? 'active') === 'active'}
+										<span
+											class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+										>
+											ใช้งาน
+										</span>
+									{:else}
+										<span
+											class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-zinc-800 dark:text-zinc-400"
+										>
+											ปิดใช้งาน
+										</span>
+									{/if}
+								</td>
 								<td class="p-3">
 									{#if std.source === 'SHELTER_OVERRIDE'}
 										<span
@@ -248,15 +297,29 @@
 												<Settings2 class="h-3.5 w-3.5" />
 												แก้ไข
 											</Button>
-											<Button
-												variant="destructive"
-												size="sm"
-												aria-label={`ลบ ${std.req_group_id}`}
-												onclick={() => openDeleteDialog(std)}
-											>
-												<Trash2 class="h-3.5 w-3.5" />
-												ลบ
-											</Button>
+											{#if (std.status ?? 'active') === 'active'}
+												<Button
+													variant="destructive"
+													size="sm"
+													aria-label={`ปิดใช้งาน ${std.req_group_id}`}
+													onclick={() => openDeleteDialog(std)}
+												>
+													<Trash2 class="h-3.5 w-3.5" />
+													ปิดใช้งาน
+												</Button>
+											{:else}
+												<Button
+													variant="outline"
+													size="sm"
+													disabled={setStatusMutation.isPending}
+													aria-label={`เปิดใช้งาน ${std.req_group_id}`}
+													onclick={() => handleReactivate(std)}
+													class="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+												>
+													<RotateCcw class="h-3.5 w-3.5" />
+													เปิดใช้งาน
+												</Button>
+											{/if}
 										{/if}
 									</div>
 								</td>
@@ -317,15 +380,20 @@
 <AlertDialog.Root bind:open={isDeleteDialogOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>ยืนยันการลบเกณฑ์มาตรฐานโภชนาการ</AlertDialog.Title>
+			<AlertDialog.Title>ยืนยันการปิดใช้งานเกณฑ์มาตรฐานโภชนาการ</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if standardToDelete}
-					คุณต้องการลบเกณฑ์โภชนาการสำหรับ <span class="font-semibold text-foreground"
+					คุณต้องการปิดการใช้งานเกณฑ์โภชนาการสำหรับ <span class="font-semibold text-foreground"
 						>{TARGET_SEGMENT_LABELS[standardToDelete.target_segment] ??
 							standardToDelete.target_segment}</span
 					>
-					— <span class="font-semibold text-foreground">{standardToDelete.req_group_id}</span> ใช่หรือไม่?
-					การดำเนินการนี้ไม่สามารถเรียกคืนได้
+					— <span class="font-semibold text-foreground">{standardToDelete.req_group_id}</span>
+					ใช่หรือไม่?
+					<br /><br />
+					<span class="text-xs text-muted-foreground">
+						การปิดใช้งานจะทำให้เกณฑ์นี้ไม่ถูกนำไปคำนวณความต้องการประจำวัน (Daily Demand)
+						แต่ข้อมูลเดิมจะยังคงอยู่และสามารถเปิดใช้งานกลับมาได้ตลอดเวลา
+					</span>
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
@@ -348,9 +416,9 @@
 			>
 				{#if deleteMutation.isPending}
 					<Loader class="mr-2 h-4 w-4 animate-spin" />
-					กำลังลบ...
+					กำลังปิดใช้งาน...
 				{:else}
-					ยืนยันการลบ
+					ยืนยันปิดใช้งาน
 				{/if}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>

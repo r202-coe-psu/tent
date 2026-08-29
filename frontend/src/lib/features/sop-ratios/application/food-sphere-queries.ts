@@ -57,10 +57,39 @@ export const useDeleteFoodSphereOverride = () => {
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: foodSphereKeys.all });
-			toast.success('ลบเกณฑ์โภชนาการสำเร็จ');
+			toast.success('ปิดใช้งานเกณฑ์โภชนาการสำเร็จ');
 		},
 		onError: (error: Error) => {
-			toast.error(`ลบเกณฑ์โภชนาการไม่สำเร็จ: ${error.message}`);
+			toast.error(`ปิดใช้งานเกณฑ์โภชนาการไม่สำเร็จ: ${error.message}`);
+		}
+	}));
+};
+
+export const useSetFoodSphereStandardStatus = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({
+			id,
+			status,
+			shelterCode
+		}: {
+			id: string;
+			status: 'active' | 'inactive';
+			shelterCode?: string;
+		}) => {
+			const repo = foodSphereRepository();
+			await repo.setStatus(id, status, shelterCode);
+		},
+		onSuccess: (_, variables) => {
+			queryClient.invalidateQueries({ queryKey: foodSphereKeys.all });
+			toast.success(
+				variables.status === 'active'
+					? 'เปิดใช้งานเกณฑ์โภชนาการสำเร็จ'
+					: 'ปิดใช้งานเกณฑ์โภชนาการสำเร็จ'
+			);
+		},
+		onError: (error: Error) => {
+			toast.error(`เปลี่ยนสถานะเกณฑ์โภชนาการไม่สำเร็จ: ${error.message}`);
 		}
 	}));
 };

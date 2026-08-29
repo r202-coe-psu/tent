@@ -57,10 +57,39 @@ export const useDeleteRequirementGroup = () => {
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: requirementGroupKeys.all });
-			toast.success('ลบกลุ่มความต้องการสำเร็จ');
+			toast.success('ปิดใช้งานกลุ่มความต้องการสำเร็จ');
 		},
 		onError: (error: Error) => {
-			toast.error(`ลบกลุ่มความต้องการไม่สำเร็จ: ${error.message}`);
+			toast.error(`ปิดใช้งานกลุ่มความต้องการไม่สำเร็จ: ${error.message}`);
+		}
+	}));
+};
+
+export const useSetRequirementGroupStatus = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({
+			id,
+			status,
+			shelterCode
+		}: {
+			id: string;
+			status: 'active' | 'inactive';
+			shelterCode?: string;
+		}) => {
+			const repo = requirementGroupRepository();
+			await repo.setStatus(id, status, shelterCode);
+		},
+		onSuccess: (_, variables) => {
+			queryClient.invalidateQueries({ queryKey: requirementGroupKeys.all });
+			toast.success(
+				variables.status === 'active'
+					? 'เปิดใช้งานกลุ่มความต้องการสำเร็จ'
+					: 'ปิดใช้งานกลุ่มความต้องการสำเร็จ'
+			);
+		},
+		onError: (error: Error) => {
+			toast.error(`เปลี่ยนสถานะกลุ่มความต้องการไม่สำเร็จ: ${error.message}`);
 		}
 	}));
 };

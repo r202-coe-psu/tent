@@ -114,6 +114,7 @@
 				safety_days: safety,
 				min_doc_days: minDoc,
 				max_doc_days: maxDoc,
+				status: policy?.status ?? 'active',
 				source: computedSource,
 				shelter_code: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 			},

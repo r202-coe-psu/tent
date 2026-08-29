@@ -57,10 +57,39 @@ export const useDeleteReplenishmentOverride = () => {
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: replenishmentKeys.all });
-			toast.success('ลบนโยบายการเติมสต็อกสำเร็จ');
+			toast.success('ปิดใช้งานนโยบายการเติมสต็อกสำเร็จ');
 		},
 		onError: (error: Error) => {
-			toast.error(`ลบนโยบายไม่สำเร็จ: ${error.message}`);
+			toast.error(`ปิดใช้งานนโยบายไม่สำเร็จ: ${error.message}`);
+		}
+	}));
+};
+
+export const useSetReplenishmentPolicyStatus = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({
+			id,
+			status,
+			shelterCode
+		}: {
+			id: string;
+			status: 'active' | 'inactive';
+			shelterCode?: string;
+		}) => {
+			const repo = replenishmentPolicyRepository();
+			await repo.setStatus(id, status, shelterCode);
+		},
+		onSuccess: (_, variables) => {
+			queryClient.invalidateQueries({ queryKey: replenishmentKeys.all });
+			toast.success(
+				variables.status === 'active'
+					? 'เปิดใช้งานนโยบายการเติมสต็อกสำเร็จ'
+					: 'ปิดใช้งานนโยบายการเติมสต็อกสำเร็จ'
+			);
+		},
+		onError: (error: Error) => {
+			toast.error(`เปลี่ยนสถานะนโยบายไม่สำเร็จ: ${error.message}`);
 		}
 	}));
 };

@@ -39,6 +39,7 @@ export interface FoodSphereStandard extends CatalogDoc {
 	daily_demand: number; // > 0
 	standard_uom?: string;
 	effective_date: string; // "YYYY-MM-DD"
+	status?: 'active' | 'inactive';
 	source: FoodSphereSource;
 	shelter_code?: string;
 }
@@ -49,6 +50,7 @@ export const foodSphereStandardInputSchema = z.object({
 	daily_demand: z.coerce.number().positive('ปริมาณความต้องการต้องมากกว่า 0'),
 	standard_uom: z.string().trim().optional(),
 	effective_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD'),
+	status: z.enum(['active', 'inactive']).optional().default('active'),
 	source: foodSphereSourceSchema.default('SPHERE_BASELINE'),
 	shelter_code: z.string().optional()
 });

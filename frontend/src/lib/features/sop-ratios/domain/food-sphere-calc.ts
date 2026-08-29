@@ -15,7 +15,9 @@ export function calculateTotalDailyDemand(
 	standards: FoodSphereStandard[]
 ): number {
 	let total = new Decimal(0);
-	const groupStandards = standards.filter((s) => s.req_group_id === reqGroupId);
+	const groupStandards = standards.filter(
+		(s) => s.req_group_id === reqGroupId && (s.status ?? 'active') === 'active'
+	);
 	const fallbackAll = groupStandards.find((s) => s.target_segment === 'ALL');
 
 	for (const [segment, count] of Object.entries(headcounts) as [

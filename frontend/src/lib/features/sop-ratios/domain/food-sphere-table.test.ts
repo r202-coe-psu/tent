@@ -90,6 +90,31 @@ describe('Food Sphere Table Domain Logic', () => {
 			const resolved = resolveItemPolicy('item_master:unknown', 'UNKNOWN_GROUP', []);
 			expect(resolved).toBeNull();
 		});
+
+		it('ignores inactive policies when resolving', () => {
+			const inactiveItemPolicy: ReplenishmentPolicy = {
+				_id: 'replenishment_policy:ITEM:item_master:rice',
+				type: 'replenishment_policy',
+				schema_v: 1,
+				scope_type: 'ITEM',
+				target_id: 'item_master:rice',
+				lead_time_days: 1,
+				review_period_days: 1,
+				safety_days: 1,
+				min_doc_days: 1,
+				max_doc_days: 10,
+				status: 'inactive',
+				source: 'SPHERE_BASELINE',
+				created_at: '2026-07-16T00:00:00.000Z',
+				updated_at: '2026-07-16T00:00:00.000Z',
+				created_by: 'system'
+			};
+
+			const policies = [...DEFAULT_REPLENISHMENT_POLICIES, inactiveItemPolicy];
+			// Because ITEM policy is inactive, it should fall back to active REQUIREMENT_GROUP
+			const resolved = resolveItemPolicy('item_master:rice', 'FOOD_ENERGY', policies);
+			expect(resolved?._id).toBe('replenishment_policy:REQUIREMENT_GROUP:FOOD_ENERGY');
+		});
 	});
 
 	describe('buildFoodSphereTable', () => {
@@ -246,6 +271,28 @@ describe('Food Sphere Table Domain Logic', () => {
 					expect(item.status).toBe('UNCONFIGURED');
 				}
 			}
+		});
+
+		it('skips inactive requirement groups from generating table groups and daily demand', () => {
+			const groupsWithInactive: RequirementGroup[] = DEFAULT_REQUIREMENT_GROUPS.map((g) => {
+				if (g._id === 'requirement_group:FOOD_PROTEIN') {
+					return { ...g, status: 'inactive' };
+				}
+				return g;
+			});
+
+			const result = buildFoodSphereTable({
+				itemMasters: mockItemMasters,
+				balance: new Map([['item_master:rice', '100']]),
+				requirementGroups: groupsWithInactive,
+				standards: DEFAULT_FOOD_SPHERE_STANDARDS,
+				policies: DEFAULT_REPLENISHMENT_POLICIES,
+				headcounts: { ALL: 10 }
+			});
+
+			// FOOD_PROTEIN should be skipped from active table groups
+			expect(result.groups.some((g) => g.id === 'FOOD_PROTEIN')).toBe(false);
+			expect(result.groups.some((g) => g.id === 'FOOD_ENERGY')).toBe(true);
 		});
 	});
 });

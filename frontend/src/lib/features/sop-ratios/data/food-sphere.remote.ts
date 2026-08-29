@@ -24,7 +24,7 @@ export class FoodSphereRemoteRepository {
 		);
 
 		if (!shelterCode) {
-			return baselineDocs;
+			return baselineDocs.map((doc) => ({ ...doc, status: doc.status ?? 'active' }));
 		}
 
 		try {
@@ -41,9 +41,12 @@ export class FoodSphereRemoteRepository {
 			for (const o of overrideDocs) {
 				effectiveMap.set(o._id, o);
 			}
-			return Array.from(effectiveMap.values());
+			return Array.from(effectiveMap.values()).map((doc) => ({
+				...doc,
+				status: doc.status ?? 'active'
+			}));
 		} catch {
-			return baselineDocs;
+			return baselineDocs.map((doc) => ({ ...doc, status: doc.status ?? 'active' }));
 		}
 	}
 
@@ -52,13 +55,17 @@ export class FoodSphereRemoteRepository {
 			try {
 				const shelterRepo = this.getShelterRepo(shelterCode);
 				const override = await shelterRepo.get<FoodSphereStandard>(id);
-				if (override && isFoodSphereStandard(override)) return override;
+				if (override && isFoodSphereStandard(override)) {
+					return { ...override, status: override.status ?? 'active' };
+				}
 			} catch {
 				// fallback to catalog
 			}
 		}
 		const baseline = await this.catalogRepo.get<FoodSphereStandard>(id);
-		if (baseline && isFoodSphereStandard(baseline)) return baseline;
+		if (baseline && isFoodSphereStandard(baseline)) {
+			return { ...baseline, status: baseline.status ?? 'active' };
+		}
 		return null;
 	}
 
@@ -83,6 +90,7 @@ export class FoodSphereRemoteRepository {
 			daily_demand: Number(input.daily_demand),
 			standard_uom: input.standard_uom,
 			effective_date: input.effective_date,
+			status: input.status ?? existing?.status ?? 'active',
 			source: isOverride ? 'SHELTER_OVERRIDE' : 'SPHERE_BASELINE',
 			...(isOverride ? { shelter_code: ctx.shelterCode } : {}),
 			created_at: existing?.created_at ?? ts,
@@ -94,11 +102,25 @@ export class FoodSphereRemoteRepository {
 	}
 
 	async delete(id: string, shelterCode?: string): Promise<void> {
+		await this.setStatus(id, 'inactive', shelterCode);
+	}
+
+	async setStatus(
+		id: string,
+		status: 'active' | 'inactive',
+		shelterCode?: string
+	): Promise<FoodSphereStandard | null> {
 		const repo = shelterCode ? this.getShelterRepo(shelterCode) : this.catalogRepo;
 		const doc = await repo.get<FoodSphereStandard>(id);
 		if (doc) {
-			await repo.remove(doc);
+			const updated: FoodSphereStandard = {
+				...doc,
+				status,
+				updated_at: now()
+			};
+			return repo.put(updated);
 		}
+		return null;
 	}
 }
 

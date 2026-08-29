@@ -77,4 +77,25 @@ describe('Food Sphere Calculation Engine', () => {
 		);
 		expect(total).toBe(4800);
 	});
+
+	it('ignores inactive standards during calculation', () => {
+		const headcounts = {
+			ALL: 10,
+			PREGNANT: 2
+		};
+		// Mark PREGNANT as inactive
+		const standardsWithInactive: FoodSphereStandard[] = DEFAULT_FOOD_SPHERE_STANDARDS.map((s) => {
+			if (s.target_segment === 'PREGNANT' && s.req_group_id === 'FOOD_ENERGY') {
+				return { ...s, status: 'inactive' };
+			}
+			return s;
+		});
+
+		// For FOOD_ENERGY:
+		// ALL (10 * 2100) = 21000
+		// PREGNANT standard is inactive -> falls back to active ALL standard (2 * 2100 = 4200)
+		// Total = 25200
+		const total = calculateTotalDailyDemand('FOOD_ENERGY', headcounts, standardsWithInactive);
+		expect(total).toBe(25200);
+	});
 });

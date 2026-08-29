@@ -58,18 +58,19 @@ export function resolveItemPolicy(
 	reqGroupId: string,
 	policies: ReplenishmentPolicy[]
 ): ReplenishmentPolicy | null {
+	const activePolicies = policies.filter((p) => (p.status ?? 'active') === 'active');
 	const cleanItemId = itemId.replace(/^item_master:/, '');
 	const cleanGroupId = reqGroupId.replace(/^requirement_group:/, '');
 
 	// 1. Policy for specific item
-	const itemPolicy = policies.find(
+	const itemPolicy = activePolicies.find(
 		(p) => p.scope_type === 'ITEM' && (p.target_id === itemId || p.target_id === cleanItemId)
 	);
 	if (itemPolicy) return itemPolicy;
 
 	// 2. Policy for requirement group
 	if (cleanGroupId && cleanGroupId !== 'GENERAL') {
-		const groupPolicy = policies.find(
+		const groupPolicy = activePolicies.find(
 			(p) =>
 				p.scope_type === 'REQUIREMENT_GROUP' &&
 				(p.target_id === reqGroupId || p.target_id === cleanGroupId)
@@ -78,7 +79,7 @@ export function resolveItemPolicy(
 	}
 
 	// 3. Global policy
-	const globalPolicy = policies.find((p) => p.scope_type === 'GLOBAL');
+	const globalPolicy = activePolicies.find((p) => p.scope_type === 'GLOBAL');
 	return globalPolicy ?? null;
 }
 
@@ -158,6 +159,7 @@ export function buildFoodSphereTable(options: BuildFoodSphereTableOptions): {
 
 	// 1. Process configured RequirementGroups
 	for (const rg of requirementGroups) {
+		if ((rg.status ?? 'active') === 'inactive') continue;
 		const cleanGroupId = rg._id.replace(/^requirement_group:/, '');
 		const totalGroupDemand = calculateTotalDailyDemand(cleanGroupId, headcounts, standards);
 		const groupItems: FoodSphereTableItem[] = [];

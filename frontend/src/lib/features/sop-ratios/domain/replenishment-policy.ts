@@ -21,6 +21,7 @@ export interface ReplenishmentPolicy extends CatalogDoc {
 	safety_days: number;
 	min_doc_days: number;
 	max_doc_days: number;
+	status?: 'active' | 'inactive';
 	source: FoodSphereSource;
 	shelter_code?: string;
 }
@@ -34,6 +35,7 @@ export const replenishmentPolicyInputSchema = z
 		safety_days: z.coerce.number().int().min(0, 'Safety days ต้องไม่ติดลบ'),
 		min_doc_days: z.coerce.number().int().min(0, 'Min DoC ต้องไม่ติดลบ'),
 		max_doc_days: z.coerce.number().int().min(0, 'Max DoC ต้องไม่ติดลบ'),
+		status: z.enum(['active', 'inactive']).optional().default('active'),
 		source: foodSphereSourceSchema.default('SPHERE_BASELINE'),
 		shelter_code: z.string().optional()
 	})

@@ -4,13 +4,15 @@
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import {
 		useRequirementGroups,
-		useDeleteRequirementGroup
+		useDeleteRequirementGroup,
+		useSetRequirementGroupStatus
 	} from '../application/requirement-group-queries';
 	import { type RequirementGroup } from '../domain/requirement-group';
 	import { SOURCE_LABELS } from '$lib/utils/source';
 	import { useItemMasters } from '$lib/features/catalog';
 	import RequirementGroupForm from './requirement-group-form.svelte';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 
 	// Icons
 	import Plus from '@lucide/svelte/icons/plus';
@@ -18,6 +20,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import Settings2 from '@lucide/svelte/icons/settings-2';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Loader from '@lucide/svelte/icons/loader';
 
 	let {
@@ -32,9 +35,11 @@
 
 	const reqGroupsQuery = useRequirementGroups(() => shelterCode);
 	const deleteMutation = useDeleteRequirementGroup();
+	const setStatusMutation = useSetRequirementGroupStatus();
 	const itemMastersQuery = useItemMasters();
 
 	let search = $state('');
+	let filterStatus = $state<'ALL' | 'active' | 'inactive'>('ALL');
 	let viewMode = $state<'list' | 'create' | 'edit'>('list');
 	let selectedGroup = $state<RequirementGroup | null>(null);
 	let groupToDelete = $state<RequirementGroup | null>(null);
@@ -51,6 +56,9 @@
 	);
 	const filteredGroups = $derived(
 		groups.filter((g) => {
+			const status = g.status ?? 'active';
+			if (filterStatus !== 'ALL' && status !== filterStatus) return false;
+
 			const q = search.trim().toLowerCase();
 			if (!q) return true;
 			const matchesBasic =
@@ -100,7 +108,19 @@
 			isDeleteDialogOpen = false;
 			groupToDelete = null;
 		} catch (err) {
-			console.error('Failed to delete requirement group:', err);
+			console.error('Failed to deactivate requirement group:', err);
+		}
+	}
+
+	async function handleReactivate(group: RequirementGroup) {
+		try {
+			await setStatusMutation.mutateAsync({
+				id: group._id,
+				status: 'active',
+				shelterCode: group.source === 'SHELTER_OVERRIDE' ? shelterCode : undefined
+			});
+		} catch (err) {
+			console.error('Failed to activate requirement group:', err);
 		}
 	}
 </script>
@@ -117,7 +137,7 @@
 				</div>
 
 				<div class="flex flex-wrap items-center gap-2">
-					<div class="relative w-full sm:w-64">
+					<div class="relative w-full sm:w-56">
 						<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
 						<Input
 							bind:value={search}
@@ -126,6 +146,23 @@
 							class="pl-9"
 							aria-label="ค้นหากลุ่มความต้องการ"
 						/>
+					</div>
+
+					<div class="w-full sm:w-36">
+						<Select.Root type="single" bind:value={filterStatus}>
+							<Select.Trigger class="h-9 w-full rounded-md border-input bg-background text-xs">
+								{filterStatus === 'ALL'
+									? 'ทุกสถานะ'
+									: filterStatus === 'active'
+										? 'ใช้งานอยู่'
+										: 'ปิดใช้งาน'}
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="ALL" label="ทุกสถานะ" />
+								<Select.Item value="active" label="ใช้งานอยู่" />
+								<Select.Item value="inactive" label="ปิดใช้งาน" />
+							</Select.Content>
+						</Select.Root>
 					</div>
 
 					{#if isSA || canEditOverride}
@@ -162,6 +199,7 @@
 							<th class="p-3">รหัสกลุ่ม (ID)</th>
 							<th class="p-3">หน่วยนับมาตรฐาน</th>
 							<th class="p-3">สินค้าคู่เทียบ (Item Maps)</th>
+							<th class="p-3">สถานะ</th>
 							<th class="p-3">แหล่งที่มา</th>
 							<th class="p-3 text-right">การจัดการ</th>
 						</tr>
@@ -187,6 +225,21 @@
 										</span>
 									{:else}
 										<span class="text-xs text-muted-foreground italic">ไม่มีสินค้าคู่เทียบ</span>
+									{/if}
+								</td>
+								<td class="p-3">
+									{#if (group.status ?? 'active') === 'active'}
+										<span
+											class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+										>
+											ใช้งาน
+										</span>
+									{:else}
+										<span
+											class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-zinc-800 dark:text-zinc-400"
+										>
+											ปิดใช้งาน
+										</span>
 									{/if}
 								</td>
 								<td class="p-3">
@@ -216,15 +269,28 @@
 												<Settings2 class="h-3.5 w-3.5" />
 												แก้ไข
 											</Button>
-											<Button
-												variant="destructive"
-												size="sm"
-												onclick={() => openDeleteDialog(group)}
-												class="flex items-center gap-1"
-											>
-												<Trash2 class="h-3.5 w-3.5" />
-												ลบ
-											</Button>
+											{#if (group.status ?? 'active') === 'active'}
+												<Button
+													variant="destructive"
+													size="sm"
+													onclick={() => openDeleteDialog(group)}
+													class="flex items-center gap-1"
+												>
+													<Trash2 class="h-3.5 w-3.5" />
+													ปิดใช้งาน
+												</Button>
+											{:else}
+												<Button
+													variant="outline"
+													size="sm"
+													disabled={setStatusMutation.isPending}
+													onclick={() => handleReactivate(group)}
+													class="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+												>
+													<RotateCcw class="h-3.5 w-3.5" />
+													เปิดใช้งาน
+												</Button>
+											{/if}
 										{/if}
 									</div>
 								</td>
@@ -285,14 +351,18 @@
 <AlertDialog.Root bind:open={isDeleteDialogOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>ยืนยันการลบกลุ่มสารอาหาร & หน่วยนับมาตรฐาน</AlertDialog.Title>
+			<AlertDialog.Title>ยืนยันการปิดใช้งานกลุ่มสารอาหาร & หน่วยนับมาตรฐาน</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if groupToDelete}
-					คุณต้องการลบกลุ่มความต้องการ <span class="font-semibold text-foreground"
+					คุณต้องการปิดการใช้งานกลุ่มความต้องการ <span class="font-semibold text-foreground"
 						>"{groupToDelete.name}"</span
 					>
 					({groupToDelete._id.replace(/^requirement_group:/, '')}) ใช่หรือไม่?
-					การดำเนินการนี้ไม่สามารถเรียกคืนได้
+					<br /><br />
+					<span class="text-xs text-muted-foreground">
+						การปิดใช้งานจะทำให้ไม่สามารถเลือกกลุ่มนี้ในเกณฑ์โภชนาการใหม่ได้
+						แต่ข้อมูลเดิมที่เคยบันทึกไว้จะยังคงแสดงผลตามปกติ และสามารถเปิดใช้งานกลับมาได้ตลอดเวลา
+					</span>
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
@@ -315,9 +385,9 @@
 			>
 				{#if deleteMutation.isPending}
 					<Loader class="mr-2 h-4 w-4 animate-spin" />
-					กำลังลบ...
+					กำลังปิดใช้งาน...
 				{:else}
-					ยืนยันการลบ
+					ยืนยันปิดใช้งาน
 				{/if}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>

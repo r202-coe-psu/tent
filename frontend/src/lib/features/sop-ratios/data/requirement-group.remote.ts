@@ -24,7 +24,7 @@ export class RequirementGroupRemoteRepository {
 		);
 
 		if (!shelterCode) {
-			return baselineDocs;
+			return baselineDocs.map((doc) => ({ ...doc, status: doc.status ?? 'active' }));
 		}
 
 		try {
@@ -41,9 +41,12 @@ export class RequirementGroupRemoteRepository {
 			for (const o of overrideDocs) {
 				effectiveMap.set(o._id, o);
 			}
-			return Array.from(effectiveMap.values());
+			return Array.from(effectiveMap.values()).map((doc) => ({
+				...doc,
+				status: doc.status ?? 'active'
+			}));
 		} catch {
-			return baselineDocs;
+			return baselineDocs.map((doc) => ({ ...doc, status: doc.status ?? 'active' }));
 		}
 	}
 
@@ -52,13 +55,17 @@ export class RequirementGroupRemoteRepository {
 			try {
 				const shelterRepo = this.getShelterRepo(shelterCode);
 				const override = await shelterRepo.get<RequirementGroup>(id);
-				if (override && isRequirementGroup(override)) return override;
+				if (override && isRequirementGroup(override)) {
+					return { ...override, status: override.status ?? 'active' };
+				}
 			} catch {
 				// fallback to catalog
 			}
 		}
 		const baseline = await this.catalogRepo.get<RequirementGroup>(id);
-		if (baseline && isRequirementGroup(baseline)) return baseline;
+		if (baseline && isRequirementGroup(baseline)) {
+			return { ...baseline, status: baseline.status ?? 'active' };
+		}
 		return null;
 	}
 
@@ -80,6 +87,7 @@ export class RequirementGroupRemoteRepository {
 			schema_v: 1,
 			name: input.name,
 			standard_uom: input.standard_uom,
+			status: input.status ?? existing?.status ?? 'active',
 			item_maps: input.item_maps ?? [],
 			source: isOverride ? 'SHELTER_OVERRIDE' : 'SPHERE_BASELINE',
 			...(isOverride ? { shelter_code: ctx.shelterCode } : {}),
@@ -92,11 +100,25 @@ export class RequirementGroupRemoteRepository {
 	}
 
 	async delete(id: string, shelterCode?: string): Promise<void> {
+		await this.setStatus(id, 'inactive', shelterCode);
+	}
+
+	async setStatus(
+		id: string,
+		status: 'active' | 'inactive',
+		shelterCode?: string
+	): Promise<RequirementGroup | null> {
 		const repo = shelterCode ? this.getShelterRepo(shelterCode) : this.catalogRepo;
 		const doc = await repo.get<RequirementGroup>(id);
 		if (doc) {
-			await repo.remove(doc);
+			const updated: RequirementGroup = {
+				...doc,
+				status,
+				updated_at: now()
+			};
+			return repo.put(updated);
 		}
+		return null;
 	}
 }
 

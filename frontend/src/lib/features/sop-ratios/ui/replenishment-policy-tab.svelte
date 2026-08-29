@@ -7,7 +7,8 @@
 	import { calculateStandardReorderDays } from '../domain/replenishment-calc';
 	import {
 		useReplenishmentPolicies,
-		useDeleteReplenishmentOverride
+		useDeleteReplenishmentOverride,
+		useSetReplenishmentPolicyStatus
 	} from '../application/replenishment-queries';
 	import { useRequirementGroups } from '../application/requirement-group-queries';
 	import ReplenishmentPolicyForm from './replenishment-policy-form.svelte';
@@ -19,6 +20,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import Settings2 from '@lucide/svelte/icons/settings-2';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Loader from '@lucide/svelte/icons/loader';
 
 	let {
@@ -34,9 +36,11 @@
 	const policiesQuery = useReplenishmentPolicies(() => shelterCode);
 	const reqGroupsQuery = useRequirementGroups(() => shelterCode);
 	const deleteMutation = useDeleteReplenishmentOverride();
+	const setStatusMutation = useSetReplenishmentPolicyStatus();
 
 	let search = $state('');
 	let filterGroup = $state<string>('ALL_GROUPS');
+	let filterStatus = $state<'ALL' | 'active' | 'inactive'>('ALL');
 
 	let viewMode = $state<'list' | 'create' | 'edit'>('list');
 	let selectedPolicy = $state<ReplenishmentPolicy | null>(null);
@@ -51,6 +55,10 @@
 
 	const filteredPolicies = $derived(
 		policies.filter((p) => {
+			const status = p.status ?? 'active';
+			if (filterStatus !== 'ALL' && status !== filterStatus) {
+				return false;
+			}
 			if (filterGroup !== 'ALL_GROUPS' && p.target_id !== filterGroup) {
 				return false;
 			}
@@ -93,7 +101,19 @@
 			isDeleteDialogOpen = false;
 			policyToDelete = null;
 		} catch (err) {
-			console.error('Failed to delete replenishment policy:', err);
+			console.error('Failed to deactivate replenishment policy:', err);
+		}
+	}
+
+	async function handleReactivate(pol: ReplenishmentPolicy) {
+		try {
+			await setStatusMutation.mutateAsync({
+				id: pol._id,
+				status: 'active',
+				shelterCode: pol.source === 'SHELTER_OVERRIDE' ? shelterCode : undefined
+			});
+		} catch (err) {
+			console.error('Failed to activate replenishment policy:', err);
 		}
 	}
 </script>
@@ -147,6 +167,19 @@
 					</select>
 				</div>
 
+				<div class="flex items-center gap-1.5">
+					<label for="filter-status" class="font-medium text-muted-foreground">สถานะ:</label>
+					<select
+						id="filter-status"
+						bind:value={filterStatus}
+						class="rounded-md border bg-background px-2.5 py-1 text-xs"
+					>
+						<option value="ALL">ทุกสถานะ</option>
+						<option value="active">ใช้งานอยู่</option>
+						<option value="inactive">ปิดใช้งาน</option>
+					</select>
+				</div>
+
 				<div class="ml-auto text-xs text-muted-foreground">
 					แสดง {filteredPolicies.length} จาก {policies.length} รายการ
 				</div>
@@ -178,6 +211,7 @@
 							<th class="p-3 text-center">วันสั่งเติมมาตรฐาน</th>
 							<th class="p-3 text-center">Min DoC</th>
 							<th class="p-3 text-center">Max DoC</th>
+							<th class="p-3">สถานะ</th>
 							<th class="p-3">แหล่งที่มา</th>
 							<th class="p-3 text-right">การจัดการ</th>
 						</tr>
@@ -206,6 +240,21 @@
 									>{pol.max_doc_days} วัน</td
 								>
 								<td class="p-3">
+									{#if (pol.status ?? 'active') === 'active'}
+										<span
+											class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+										>
+											ใช้งาน
+										</span>
+									{:else}
+										<span
+											class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-zinc-800 dark:text-zinc-400"
+										>
+											ปิดใช้งาน
+										</span>
+									{/if}
+								</td>
+								<td class="p-3">
 									{#if pol.source === 'SHELTER_OVERRIDE'}
 										<span
 											class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
@@ -232,15 +281,28 @@
 												<Settings2 class="h-3.5 w-3.5" />
 												แก้ไข
 											</Button>
-											<Button
-												variant="destructive"
-												size="sm"
-												onclick={() => openDeleteDialog(pol)}
-												class="flex items-center gap-1"
-											>
-												<Trash2 class="h-3.5 w-3.5" />
-												ลบ
-											</Button>
+											{#if (pol.status ?? 'active') === 'active'}
+												<Button
+													variant="destructive"
+													size="sm"
+													onclick={() => openDeleteDialog(pol)}
+													class="flex items-center gap-1"
+												>
+													<Trash2 class="h-3.5 w-3.5" />
+													ปิดใช้งาน
+												</Button>
+											{:else}
+												<Button
+													variant="outline"
+													size="sm"
+													disabled={setStatusMutation.isPending}
+													onclick={() => handleReactivate(pol)}
+													class="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+												>
+													<RotateCcw class="h-3.5 w-3.5" />
+													เปิดใช้งาน
+												</Button>
+											{/if}
 										{/if}
 									</div>
 								</td>
@@ -301,13 +363,18 @@
 <AlertDialog.Root bind:open={isDeleteDialogOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>ยืนยันการลบนโยบายการเติมสต็อก</AlertDialog.Title>
+			<AlertDialog.Title>ยืนยันการปิดใช้งานนโยบายการเติมสต็อก</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if policyToDelete}
 					{@const groupName = groupMap.get(policyToDelete.target_id) ?? policyToDelete.target_id}
-					คุณต้องการลบนโยบายการเติมสต็อกสำหรับ
+					คุณต้องการปิดการใช้งานนโยบายการเติมสต็อกสำหรับ
 					<span class="font-semibold text-foreground">{groupName}</span>
-					({policyToDelete.target_id}) ใช่หรือไม่? การดำเนินการนี้ไม่สามารถเรียกคืนได้
+					({policyToDelete.target_id}) ใช่หรือไม่?
+					<br /><br />
+					<span class="text-xs text-muted-foreground">
+						การปิดใช้งานจะทำให้นโยบายนี้ไม่ถูกนำไปคำนวณ Standard Reorder Days และ Min/Max DoC
+						ในตารางวางแผน แต่ข้อมูลเดิมจะยังคงอยู่และสามารถเปิดใช้งานกลับมาได้ตลอดเวลา
+					</span>
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
@@ -330,9 +397,9 @@
 			>
 				{#if deleteMutation.isPending}
 					<Loader class="mr-2 h-4 w-4 animate-spin" />
-					กำลังลบ...
+					กำลังปิดใช้งาน...
 				{:else}
-					ยืนยันการลบ
+					ยืนยันปิดใช้งาน
 				{/if}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>

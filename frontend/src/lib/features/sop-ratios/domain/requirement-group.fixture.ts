@@ -7,6 +7,7 @@ export const DEFAULT_REQUIREMENT_GROUPS: RequirementGroup[] = [
 		schema_v: 1,
 		name: 'พลังงานอาหาร',
 		standard_uom: 'kcal',
+		status: 'active',
 		item_maps: [
 			{
 				item_id: 'item_master:rice',
@@ -26,6 +27,7 @@ export const DEFAULT_REQUIREMENT_GROUPS: RequirementGroup[] = [
 		schema_v: 1,
 		name: 'โปรตีน',
 		standard_uom: 'gram',
+		status: 'active',
 		item_maps: [
 			{
 				item_id: 'item_master:egg',
@@ -45,6 +47,7 @@ export const DEFAULT_REQUIREMENT_GROUPS: RequirementGroup[] = [
 		schema_v: 1,
 		name: 'ไขมัน',
 		standard_uom: 'gram',
+		status: 'active',
 		item_maps: [],
 		source: 'SPHERE_BASELINE',
 		created_at: '2026-07-16T00:00:00.000Z',

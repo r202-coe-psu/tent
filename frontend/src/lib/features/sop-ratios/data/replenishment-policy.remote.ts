@@ -24,7 +24,7 @@ export class ReplenishmentPolicyRemoteRepository {
 		);
 
 		if (!shelterCode) {
-			return baselineDocs;
+			return baselineDocs.map((doc) => ({ ...doc, status: doc.status ?? 'active' }));
 		}
 
 		try {
@@ -41,9 +41,12 @@ export class ReplenishmentPolicyRemoteRepository {
 			for (const o of overrideDocs) {
 				effectiveMap.set(o._id, o);
 			}
-			return Array.from(effectiveMap.values());
+			return Array.from(effectiveMap.values()).map((doc) => ({
+				...doc,
+				status: doc.status ?? 'active'
+			}));
 		} catch {
-			return baselineDocs;
+			return baselineDocs.map((doc) => ({ ...doc, status: doc.status ?? 'active' }));
 		}
 	}
 
@@ -52,13 +55,17 @@ export class ReplenishmentPolicyRemoteRepository {
 			try {
 				const shelterRepo = this.getShelterRepo(shelterCode);
 				const override = await shelterRepo.get<ReplenishmentPolicy>(id);
-				if (override && isReplenishmentPolicy(override)) return override;
+				if (override && isReplenishmentPolicy(override)) {
+					return { ...override, status: override.status ?? 'active' };
+				}
 			} catch {
 				// fallback to catalog
 			}
 		}
 		const baseline = await this.catalogRepo.get<ReplenishmentPolicy>(id);
-		if (baseline && isReplenishmentPolicy(baseline)) return baseline;
+		if (baseline && isReplenishmentPolicy(baseline)) {
+			return { ...baseline, status: baseline.status ?? 'active' };
+		}
 		return null;
 	}
 
@@ -85,6 +92,7 @@ export class ReplenishmentPolicyRemoteRepository {
 			safety_days: Number(input.safety_days),
 			min_doc_days: Number(input.min_doc_days),
 			max_doc_days: Number(input.max_doc_days),
+			status: input.status ?? existing?.status ?? 'active',
 			source: isOverride ? 'SHELTER_OVERRIDE' : 'SPHERE_BASELINE',
 			...(isOverride ? { shelter_code: ctx.shelterCode } : {}),
 			created_at: existing?.created_at ?? ts,
@@ -96,11 +104,25 @@ export class ReplenishmentPolicyRemoteRepository {
 	}
 
 	async delete(id: string, shelterCode?: string): Promise<void> {
+		await this.setStatus(id, 'inactive', shelterCode);
+	}
+
+	async setStatus(
+		id: string,
+		status: 'active' | 'inactive',
+		shelterCode?: string
+	): Promise<ReplenishmentPolicy | null> {
 		const repo = shelterCode ? this.getShelterRepo(shelterCode) : this.catalogRepo;
 		const doc = await repo.get<ReplenishmentPolicy>(id);
 		if (doc) {
-			await repo.remove(doc);
+			const updated: ReplenishmentPolicy = {
+				...doc,
+				status,
+				updated_at: now()
+			};
+			return repo.put(updated);
 		}
+		return null;
 	}
 }
 
