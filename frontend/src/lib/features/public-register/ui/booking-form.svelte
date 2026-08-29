@@ -283,7 +283,7 @@
 						<Form.Label>{t.shelterLabel} <span class="text-destructive">*</span></Form.Label>
 						{#if selected && selected.capacity > 0}
 							<span
-								class="rounded-full border border-success/30 bg-success-muted/40 px-2 py-0.5 text-[11px] font-bold text-success"
+								class="rounded-full border border-success/30 bg-success-muted/40 px-2 py-0.5 text-2xs font-bold text-success"
 							>
 								{capacityLabel(selected)}
 							</span>
@@ -310,7 +310,7 @@
 										</span>
 										{#if shelter.capacity > 0}
 											<span
-												class="shrink-0 rounded-full bg-success-muted px-2 py-0.5 text-[11px] font-bold text-success"
+												class="shrink-0 rounded-full bg-success-muted px-2 py-0.5 text-2xs font-bold text-success"
 											>
 												{capacityLabel(shelter)}
 											</span>
@@ -410,7 +410,7 @@
 				</Button>
 				<div class="w-12 text-center">
 					<span class="block text-lg font-bold text-foreground">{$formData.members.length}</span>
-					<span class="block text-[10px] text-muted-foreground">{t.peopleUnit}</span>
+					<span class="block text-2xs text-muted-foreground">{t.peopleUnit}</span>
 				</div>
 				<Button
 					type="button"
@@ -434,7 +434,7 @@
 			<div class="space-y-3 rounded-xl border border-border p-4">
 				<p class="flex items-center gap-2 text-sm font-bold text-foreground">
 					<span
-						class="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
+						class="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-2xs font-bold text-primary-foreground"
 						>{idx + 1}</span
 					>
 					{who}
@@ -690,7 +690,7 @@
 				{#each VEHICLE_CHOICES as choice (choice.value)}
 					{@const active = vehicleChoice === choice.value}
 					<label
-						class="flex h-11 cursor-pointer items-center justify-center rounded-lg border px-2 text-center text-[13px] font-semibold transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 sm:text-sm {active
+						class="flex h-11 cursor-pointer items-center justify-center rounded-lg border px-2 text-center text-xs font-semibold transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 sm:text-sm {active
 							? 'border-primary bg-primary text-primary-foreground'
 							: 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50'}"
 					>

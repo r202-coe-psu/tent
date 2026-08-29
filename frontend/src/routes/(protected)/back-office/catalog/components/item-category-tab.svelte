@@ -185,7 +185,7 @@
 		<div class="flex items-start justify-between gap-4">
 			<div class="flex flex-col gap-1.5">
 				<span
-					class="text-[11px] font-semibold tracking-wider text-[#002f6c] uppercase dark:text-blue-400"
+					class="text-2xs font-semibold tracking-wider text-[#002f6c] uppercase dark:text-blue-400"
 				>
 					ฐานข้อมูลมาสเตอร์ส่วนกลาง (MASTER DATA ENGINE)
 				</span>

@@ -128,14 +128,14 @@
 			</a>
 		</div>
 
-		<div class="space-y-6 px-4 pt-2 pb-4 text-[13px] font-medium text-muted-foreground">
+		<div class="space-y-6 px-4 pt-2 pb-4 text-xs font-medium text-muted-foreground">
 			{#each systemManagementNavbarGroups as group (group.title)}
 				{@const visibleItems = group.items.filter(canSee)}
 				{#if visibleItems.length > 0}
 					<div>
 						{#if !collapsed}
 							<div
-								class="mb-2 px-3 text-[11px] font-bold tracking-wider text-muted-foreground/70 uppercase"
+								class="mb-2 px-3 text-2xs font-bold tracking-wider text-muted-foreground/70 uppercase"
 							>
 								{group.title}
 							</div>
@@ -266,7 +266,7 @@
 						>{authStore.user?.name}</span
 					>
 					<span
-						class="mt-1 max-w-full self-start truncate rounded-lg border border-primary/10 bg-primary/5 px-2 py-1 text-[11px] font-medium text-primary"
+						class="mt-1 max-w-full self-start truncate rounded-lg border border-primary/10 bg-primary/5 px-2 py-1 text-2xs font-medium text-primary"
 						title={formatRoleList(roles)}
 					>
 						{formatRoleList(roles)}
@@ -299,9 +299,7 @@
 			</div>
 			<span class="text-lg font-bold tracking-tight text-foreground">
 				Smart<span class="text-primary">Shelter</span>
-				<span
-					class="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
-				>
+				<span class="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary">
 					System Management
 				</span>
 			</span>
@@ -326,7 +324,7 @@
 					{@const visibleItems = group.items.filter(canSee)}
 					<div>
 						<div
-							class="mb-2 px-3 text-[11px] font-bold tracking-wider text-muted-foreground/70 uppercase"
+							class="mb-2 px-3 text-2xs font-bold tracking-wider text-muted-foreground/70 uppercase"
 						>
 							{group.title}
 						</div>

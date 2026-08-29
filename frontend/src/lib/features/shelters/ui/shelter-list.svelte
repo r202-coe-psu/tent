@@ -85,7 +85,7 @@
 							{/if}
 							{#if shelter.project_level}
 								<span
-									class="mt-1.5 inline-block rounded-md bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+									class="mt-1.5 inline-block rounded-md bg-violet-100 px-2 py-0.5 text-2xs font-bold text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
 								>
 									{projectLevelLabel[shelter.project_level]}
 								</span>

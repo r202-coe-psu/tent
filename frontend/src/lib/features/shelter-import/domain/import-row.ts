@@ -173,7 +173,7 @@ function splitMulti(v: string): string[] {
 		.filter((s) => s !== '');
 }
 
-/** The Thai part before " (" — so "เตรียมพร้อม (Standby)" also matches "เตรียมพร้อม". */
+/** The Thai part before " (" — so "กำลังเตรียมการ (Preparing)" also matches "กำลังเตรียมการ". */
 function labelBase(label: string): string {
 	const i = label.indexOf(' (');
 	return (i === -1 ? label : label.slice(0, i)).trim();

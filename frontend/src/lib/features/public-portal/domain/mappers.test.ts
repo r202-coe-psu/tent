@@ -3,10 +3,12 @@ import { searchResultKey, toPublicShelterCard, toUiShelterStatus } from './mappe
 import type { FamilySearchResult, PublicShelterItem } from './types';
 
 describe('toUiShelterStatus', () => {
-	it('maps open/full/closed', () => {
+	it('maps open/full/closed/standby', () => {
 		expect(toUiShelterStatus('open')).toBe('OPEN');
 		expect(toUiShelterStatus('full')).toBe('FULL');
 		expect(toUiShelterStatus('closed')).toBe('CLOSED');
+		expect(toUiShelterStatus('standby')).toBe('PREPARE');
+		expect(toUiShelterStatus('prepare')).toBe('PREPARE');
 	});
 
 	it('handles empty or invalid status safely', () => {

@@ -140,7 +140,7 @@
 			{/await}
 
 			<div class="text-center">
-				<p class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+				<p class="text-2xs font-semibold tracking-wider text-muted-foreground uppercase">
 					ชื่อผู้จอง
 				</p>
 				<p class="text-base font-bold text-foreground">{fullName}</p>

@@ -13,7 +13,7 @@
 	>
 		<span class="inline-flex items-center gap-2">
 			<span
-				class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase"
+				class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-2xs font-bold tracking-wide uppercase"
 			>
 				<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-600"></span>
 				Session หมดอายุ

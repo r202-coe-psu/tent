@@ -108,6 +108,8 @@ services:
     environment:
       # adapter-node requires ORIGIN in production
       ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
+      # node:cluster workers for BFF/SPA (clamped to CPUs); see .env.example scale map
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
       # Server-only — never bundled into the browser
       COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@couchdb:5984
       # Roleless writer for anonymous public writes (CR-070 booking, CR-052

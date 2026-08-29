@@ -63,7 +63,7 @@
 			>
 				<div>
 					<div class="mb-2 flex items-center gap-2">
-						<span class="rounded bg-amber-500 px-2 py-0.5 text-[10px] font-extrabold text-black">
+						<span class="rounded bg-amber-500 px-2 py-0.5 text-2xs font-extrabold text-black">
 							รอการประเมิน
 						</span>
 						<span class="text-xs font-medium text-zinc-400">Ref: {request.booking_ref}</span>
@@ -83,7 +83,7 @@
 				<!-- Items -->
 				<div class="space-y-2">
 					<h5
-						class="flex items-center gap-1.5 text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase"
+						class="flex items-center gap-1.5 text-2xs font-extrabold tracking-wider text-muted-foreground uppercase"
 					>
 						<ClipboardList class="h-3.5 w-3.5" />
 						รายการที่แจ้งบริจาค
@@ -104,7 +104,7 @@
 					<div class="flex gap-3 rounded-xl border border-border bg-card p-4">
 						<Truck class="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
 						<div>
-							<span class="text-[10px] font-bold text-muted-foreground uppercase">วิธีจัดส่ง</span>
+							<span class="text-2xs font-bold text-muted-foreground uppercase">วิธีจัดส่ง</span>
 							<p class="mt-1 text-xs font-semibold text-foreground">
 								{request.delivery_method ?? 'ไม่ระบุ'}
 							</p>
@@ -113,7 +113,7 @@
 					<div class="flex gap-3 rounded-xl border border-border bg-card p-4">
 						<Calendar class="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
 						<div>
-							<span class="text-[10px] font-bold text-muted-foreground uppercase">นัดหมาย/ETA</span>
+							<span class="text-2xs font-bold text-muted-foreground uppercase">นัดหมาย/ETA</span>
 							<p class="mt-1 text-xs font-semibold text-foreground">
 								{request.slot
 									? `${request.slot.date} ${request.slot.from}-${request.slot.to}`
@@ -124,7 +124,7 @@
 					<div class="flex gap-3 rounded-xl border border-border bg-card p-4 sm:col-span-2">
 						<Phone class="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
 						<div>
-							<span class="text-[10px] font-bold text-muted-foreground uppercase"
+							<span class="text-2xs font-bold text-muted-foreground uppercase"
 								>ข้อมูลติดต่อผู้บริจาค</span
 							>
 							<p class="mt-1 text-xs font-semibold text-foreground">
@@ -137,7 +137,7 @@
 				<div class="space-y-2">
 					<label
 						for="memo"
-						class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase"
+						class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase"
 						>บันทึกความเห็นเจ้าหน้าที่ (ถ้ามี — ใช้ตอนอนุมัติ)</label
 					>
 					<textarea
@@ -152,7 +152,7 @@
 				<div class="space-y-2">
 					<label
 						for="reject-reason"
-						class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase"
+						class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase"
 						>เหตุผลการปฏิเสธ (จำเป็นเมื่อกดปฏิเสธ)</label
 					>
 					<textarea
@@ -166,7 +166,7 @@
 							: 'border-border bg-muted/20 focus:border-primary focus:ring-primary'}"
 					></textarea>
 					{#if showRejectReasonError}
-						<p class="text-[11px] font-bold text-red-600 dark:text-red-400">
+						<p class="text-2xs font-bold text-red-600 dark:text-red-400">
 							กรุณาระบุเหตุผลก่อนปฏิเสธคำขอ
 						</p>
 					{/if}

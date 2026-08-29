@@ -31,7 +31,7 @@
 			<Inbox class="h-5 w-5 text-primary" />
 			คำขอที่ถูกส่งต่อมา (Incoming Redirects)
 		</h2>
-		<p class="mt-1 text-[11px] text-muted-foreground">
+		<p class="mt-1 text-2xs text-muted-foreground">
 			รายการบริจาคที่ศูนย์อื่นรับไม่ได้และส่งต่อมาให้ศูนย์นี้พิจารณา — ยังไม่ได้ลงบัญชีคลังที่ใด
 		</p>
 	</div>
@@ -45,26 +45,26 @@
 						<span class="text-sm font-bold text-foreground">{r.donor.name || 'ไม่ระบุชื่อ'}</span>
 						{#if r.booking_ref}
 							<span
-								class="rounded border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+								class="rounded border border-border bg-muted/50 px-2 py-0.5 text-2xs font-medium text-muted-foreground"
 							>
 								{r.booking_ref}
 							</span>
 						{/if}
 						<span
-							class="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950/50 dark:text-blue-400"
+							class="rounded bg-blue-100 px-2 py-0.5 text-2xs font-bold text-blue-700 dark:bg-blue-950/50 dark:text-blue-400"
 						>
 							ส่งต่อจาก {r.origin_shelter_code}
 						</span>
 					</div>
-					<p class="text-[11px] text-muted-foreground">{itemsSummary(r)}</p>
+					<p class="text-2xs text-muted-foreground">{itemsSummary(r)}</p>
 					{#if r.donor.phone}
-						<p class="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+						<p class="flex items-center gap-1.5 text-2xs text-muted-foreground">
 							<Phone class="h-3 w-3" />
 							{r.donor.phone}
 						</p>
 					{/if}
 					{#if r.note}
-						<p class="rounded-lg bg-muted/40 p-2 text-[11px] text-foreground">
+						<p class="rounded-lg bg-muted/40 p-2 text-2xs text-foreground">
 							หมายเหตุจากศูนย์ต้นทาง: {r.note}
 						</p>
 					{/if}
