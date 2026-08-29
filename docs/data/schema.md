@@ -40,6 +40,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 8** — เพิ่ม `draft` ใน `current_stay.status` และเพิ่ม `card_snapshot` (CR-084) — สำหรับการสแกนบัตรประชาชน Smart Card Kiosk รอเจ้าหน้าที่คัดกรองและยืนยันตัวตน; ไม่นับ occupancy; ไม่แสดงใน public search.
 > **schema_v 7** — เพิ่ม `web` ใน `registered_via` (CR-070 D-REG-VIA) — ประชาชนจองเข้าศูนย์เอง
 > ผ่าน public portal (T-71). `api` (inbound, CR-071) ยังไม่เพิ่มในรอบนี้.
 > **schema_v 6** — เพิ่ม `cancelled` ใน `current_stay.status` (CR-070 D-HOLD-CANCEL) — ยกเลิก
@@ -67,35 +68,18 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `country` | str | req | ประเทศ | 
 | `special_needs` | [str] | opt | free-form, nonempty หลัง trim; default `[]` (CR-046 — เดิม fixed enum; ไม่ผูก whitelist ในโค้ด, ไม่ใช่ master_data-wired — รอ CR แยกถ้าจะ wire ไป master_data) |
 | `emergency_contact` | {`name`:str, `phone`:str, `relation`:str} | opt | — |
-| `household_id` | str\|null | opt | → `household:{ulid}` |
+| `household_id` | str\|null | opt | → `household:{ulid}` (null ได้เฉพาะเมื่อ `current_stay.status === 'draft'`) |
 | `photo` | str\|null | opt | → image:{ulid} (§1.6) (CR-049) null/ไม่มี field = ไม่มีรูป |
-| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) เริ่ม `pre_registered` · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement (ยกเว้น `cancelled` จาก cancel-hold path, ไม่ผ่าน movement) |
+| `card_snapshot` | {...} | opt | snapshot ข้อมูลชิปบัตรและที่อยู่ตามบัตรประชาชน (CR-084) |
+| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`draft`,`pre_registered`,`active`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
-| `registered_via` | enum(`app`,`import`,`paper`,`web`) | req | `web` = ประชาชนจองเองผ่าน public portal (CR-070 D-REG-VIA) |
+| `registered_via` | enum(`app`,`import`,`paper`,`web`,`kiosk`) | req | `web` = public portal (CR-070), `kiosk` = Smart Card Reader (CR-084) |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
 
-**Index:** `(last_name, first_name)` · `(phone)` · `(household_id)` · `(current_stay.status)`
+**Index:** `(last_name, first_name)` · `(phone)` · `(household_id)` · `(current_stay.status)` · `(person_id.number)`
 
-**Migration (schema_v 2 → 3):** rename บน read — `registered`→`pre_registered`, `checked_in`→`active`;
-`checked_out` เดิม (ออกทั่วไป) → `checked_out` ใหม่ (กลับภูมิลำเนา) ชั่วคราวจนกว่า manual review แยก
-เคสที่ควรเป็น `transferred`; ไม่มี legacy value map ไป `temporary_leave`/`deceased` (เกิดจาก movement
-action ใหม่เท่านั้น). `special_needs` (CR-046) ไม่ต้อง rename/transform — ค่า enum เดิม (เช่น
-`"elderly"`) เป็น subset ของ "any nonempty string" อ่านผ่านได้ตรง ๆ
+**Migration (schema_v 7 → 8, CR-084):** purely additive — `draft` เป็นค่าใหม่ของ `current_stay.status` และเพิ่ม `card_snapshot` เป็น optional metadata; doc เดิมไม่ต้อง backfill. สถานะ `draft` ไม่นับรวมใน occupancy และไม่นำออกแสดงใน public portal
 
-**Migration (schema_v 3 → 5, CR-057):** purely additive — `age` เป็น field เสริมล้วนๆ, doc เดิม
-(schema_v ≤3) ไม่มี `age` ก็อ่านได้ปกติ ไม่ต้อง backfill; UI fallback ไปคำนวณอายุจาก `birth_year`
-เมื่อไม่มี `age` (`evacueeAgeYears()` helper). เลข `4` (`photo`, CR-054) ถูกข้ามในโค้ดเพราะยังไม่
-implement — ไม่กระทบ migration นี้
-
-**Migration (schema_v 5 → 6, CR-070):** purely additive enum — `cancelled` เป็นค่าใหม่ของ
-`current_stay.status`; doc เดิมไม่ต้อง backfill. ตั้งผ่าน `cancelPreRegistration` /
-`cancelEvacueePreRegistration` (ไม่ผ่าน movement). Occupancy view ยัง emit ตาม status key;
-`cancelled` ไม่รวมใน total/pre_registered buckets ของ dashboard payload
-
-**Migration (schema_v 6 → 7, CR-070):** purely additive enum — `web` เป็นค่าใหม่ของ
-`registered_via`; doc เดิมไม่ต้อง backfill และไม่มีโค้ดไหน branch บนค่านี้ (เขียนอย่างเดียว).
-เขียนโดย public booking BFF เท่านั้น (`POST /api/public/v1/registrations`, T-71); staff UI
-ยังใช้ `app` เหมือนเดิม. `api` (CR-071 inbound) ยังไม่เพิ่ม — รอ D-INBOUND-PLANE
 
 ### 1.2 `medical` — `medical:{ulid}` (1 doc ต่อ 1 evacuee)
 

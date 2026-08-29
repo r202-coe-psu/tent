@@ -94,6 +94,7 @@ describe('ScannerRemoteRepository', () => {
 			const fetched = await scannerRepo.getDeviceByDeviceId('SCAN-01');
 			expect(fetched).not.toBeNull();
 			expect(fetched?.name).toBe('จุดคัดกรอง 1');
+			expect(fetched?.secret).toBe(created.plaintext_secret);
 		});
 
 		it('throws error when creating duplicate device_id', async () => {

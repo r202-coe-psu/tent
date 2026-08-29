@@ -28,6 +28,7 @@
 	let {
 		allEvacuees = [],
 		households = [],
+		initialAddress = null,
 		onsubmit,
 		onselect,
 		pending = false,
@@ -35,6 +36,7 @@
 	}: {
 		allEvacuees?: Evacuee[];
 		households?: Household[];
+		initialAddress?: Partial<HouseholdInput> | null;
 		onsubmit?: (input: Partial<HouseholdInput>) => void;
 		onselect?: (household: Household) => void;
 		pending?: boolean;
@@ -173,6 +175,18 @@
 		const match = (subdistrictsQuery.data ?? []).find((s) => s.subdistrict === value);
 		formData.postal_code = match ? String(match.zipcode) : '';
 	}
+
+	$effect(() => {
+		if (initialAddress && (initialAddress.province || initialAddress.address_no)) {
+			if (initialAddress.address_no) formData.address_no = initialAddress.address_no;
+			if (initialAddress.village_no) formData.village_no = initialAddress.village_no;
+			if (initialAddress.province) formData.province = initialAddress.province;
+			if (initialAddress.district) formData.district = initialAddress.district;
+			if (initialAddress.subdistrict) formData.subdistrict = initialAddress.subdistrict;
+			if (initialAddress.postal_code) formData.postal_code = initialAddress.postal_code;
+			showNewHouseholdForm = true;
+		}
+	});
 
 	$effect(() => {
 		if (showNewHouseholdForm && selectedLocation) {
@@ -627,6 +641,22 @@
 					<span>ดึงที่อยู่จากเครื่องสแกน</span>
 				</Button>
 			</div>
+
+			{#if initialAddress && (initialAddress.province || initialAddress.address_no)}
+				<div
+					class="rounded-xl border border-cyan-300 bg-cyan-50/80 p-3.5 text-xs text-cyan-900 shadow-sm dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200"
+				>
+					<div class="flex items-center gap-2 font-bold text-cyan-950 dark:text-cyan-100">
+						<Cpu class="size-4 text-cyan-700 dark:text-cyan-400" />
+						<span>ที่อยู่ตามทะเบียนบ้านดึงมาจากบัตรประชาชน (Autofilled)</span>
+					</div>
+					<p class="mt-1 text-cyan-800/90 dark:text-cyan-300/90">
+						โปรดสอบถามยืนยันกับผู้ประสบภัยว่าปัจจุบันพักอาศัยอยู่ที่นี่จริงหรือไม่
+						หากไม่ตรงสามารถพิมพ์แก้ไขในช่องด้านล่างได้ทันที
+					</p>
+				</div>
+			{/if}
+
 			<div class="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-3">
 				<div class="space-y-3">
 					<Label class="font-semibold">บ้านเลขที่</Label>

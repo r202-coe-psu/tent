@@ -50,8 +50,8 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		const cardData = parsed.data;
 
-		// Save draft in shelter DB
-		const draft = await scannerServerRepository.saveDraft(
+		// Process card scan in shelter DB (unified evacuee draft & pre-registered handler)
+		const scanResult = await scannerServerRepository.processCardScan(
 			device.shelter_code,
 			device.device_id,
 			device.station_name,
@@ -65,12 +65,28 @@ export const POST: RequestHandler = async ({ request }) => {
 			console.warn('[Scanner Inbound] Heartbeat update warning:', heartbeatErr);
 		}
 
+		if (scanResult.status === 'duplicate_draft' || scanResult.status === 'already_active') {
+			return json(
+				{
+					ok: false,
+					status: scanResult.status,
+					error: scanResult.error,
+					message: scanResult.message,
+					evacuee_id: scanResult.evacuee._id,
+					citizen_id: cardData.citizen_id
+				},
+				{ status: 409 }
+			);
+		}
+
 		return json({
 			ok: true,
-			draft_id: draft._id,
+			status: scanResult.status,
+			message: scanResult.message,
+			evacuee_id: scanResult.evacuee._id,
 			shelter_code: device.shelter_code,
-			citizen_id: draft.card_data.citizen_id,
-			created_at: draft.created_at
+			citizen_id: cardData.citizen_id,
+			created_at: scanResult.evacuee.created_at
 		});
 	} catch (err) {
 		console.error('[Scanner Inbound] Error processing scan draft:', err);

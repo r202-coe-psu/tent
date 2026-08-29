@@ -37,6 +37,7 @@ export const religionSchema = z.enum(['buddhist', 'muslim', 'christian', 'other'
 export type Religion = z.infer<typeof religionSchema>;
 
 export const stayStatusSchema = z.enum([
+	'draft',
 	'pre_registered',
 	'active',
 	'temporary_leave',
@@ -48,6 +49,7 @@ export const stayStatusSchema = z.enum([
 export type StayStatus = z.infer<typeof stayStatusSchema>;
 
 export const STATUS_LABELS: Record<StayStatus, string> = {
+	draft: 'เสียบบัตรแล้ว (รอคัดกรอง)',
 	pre_registered: 'ลงทะเบียนล่วงหน้า (ยังไม่เช็คอิน)',
 	active: 'เช็คอินเข้าพักแล้ว',
 	temporary_leave: 'ออกชั่วคราว',
@@ -139,6 +141,31 @@ export interface EmergencyContact {
 	relation: string;
 }
 
+export const cardSnapshotSchema = z.object({
+	citizen_id: z.string(),
+	title_th: z.string().optional(),
+	first_name_th: z.string().optional(),
+	last_name_th: z.string().optional(),
+	gender: z.enum(['male', 'female', 'other']).optional(),
+	birth_date: z.string().optional(),
+	birth_year_ce: z.number().optional(),
+	age: z.number().optional(),
+	address_no: z.string().optional(),
+	village_no: z.string().optional(),
+	lane: z.string().optional(),
+	road: z.string().optional(),
+	subdistrict: z.string().optional(),
+	district: z.string().optional(),
+	province: z.string().optional(),
+	postal_code: z.string().optional(),
+	photo_base64: z.string().optional(),
+	scanned_at: z.string(),
+	device_id: z.string(),
+	station_name: z.string().optional(),
+	expires_at: z.string().optional()
+});
+export type CardSnapshot = z.infer<typeof cardSnapshotSchema>;
+
 export interface Evacuee extends BaseDoc {
 	type: 'evacuee';
 	first_name: string;
@@ -154,6 +181,7 @@ export interface Evacuee extends BaseDoc {
 	special_needs: string[];
 	emergency_contact?: EmergencyContact;
 	photo?: string | null;
+	card_snapshot?: CardSnapshot | null;
 	household_id: string | null;
 	current_stay: CurrentStay;
 	privacy: { search_excluded: boolean };
@@ -404,6 +432,7 @@ export const evacueeInputSchema = z.object({
 		.optional(),
 	household_id: z.string().nullable().default(null),
 	photo: z.string().nullable().optional().default(null),
+	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
 	registered_via: registeredViaSchema.default('app')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
@@ -758,7 +787,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 	const d = evacueeInputSchema.parse(input);
 	return makeDoc(
 		'evacuee',
-		7, // schema_v 7: registered_via `web` (CR-070 D-REG-VIA); 6 = stay cancelled (CR-070); 5 = age (CR-057); 4 reserved for photo (CR-054)
+		8, // schema_v 8: draft status & card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -773,12 +802,49 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext): Evacuee 
 			special_needs: d.special_needs,
 			...(d.emergency_contact ? { emergency_contact: d.emergency_contact } : {}),
 			...(d.photo ? { photo: d.photo } : {}),
+			...(d.card_snapshot ? { card_snapshot: d.card_snapshot } : {}),
 			household_id: d.household_id,
 			current_stay: { status: 'pre_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},
 		ctx
+	);
+}
+
+export function createDraftEvacueeFromCard(
+	cardSnapshot: CardSnapshot,
+	ctx: AuthorContext,
+	id?: string
+): Evacuee {
+	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
+	const lastName = cardSnapshot.last_name_th || '';
+	const gender = cardSnapshot.gender || 'other';
+
+	return makeDoc(
+		'evacuee',
+		8,
+		{
+			first_name: firstName,
+			last_name: lastName,
+			gender,
+			phone: null,
+			...(cardSnapshot.birth_year_ce ? { birth_year: cardSnapshot.birth_year_ce + 543 } : {}),
+			...(cardSnapshot.age !== undefined ? { age: cardSnapshot.age } : {}),
+			person_id: {
+				cardType: 'national_id',
+				number: cardSnapshot.citizen_id
+			},
+			country: 'THAILAND',
+			special_needs: [],
+			household_id: null,
+			card_snapshot: cardSnapshot,
+			current_stay: { status: 'draft', zone: null, since: now() },
+			privacy: { search_excluded: false },
+			registered_via: 'kiosk'
+		},
+		ctx,
+		id
 	);
 }
 
@@ -894,6 +960,7 @@ export function createScreening(input: ScreeningInput, ctx: AuthorContext): Scre
 
 /** Stay statuses that may receive a scan/check-in (`check_in`) action. */
 export const CHECK_IN_ELIGIBLE_STATUSES = [
+	'draft',
 	'pre_registered',
 	'temporary_leave',
 	'checked_out',

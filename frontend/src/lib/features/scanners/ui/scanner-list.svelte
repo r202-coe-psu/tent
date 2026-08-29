@@ -4,14 +4,18 @@
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import Building from '@lucide/svelte/icons/building';
 	import Activity from '@lucide/svelte/icons/activity';
+	import Key from '@lucide/svelte/icons/key';
+	import Eye from '@lucide/svelte/icons/eye';
 	import type { ScannerDevice } from '../domain/scanner.schema';
 	import { useDeleteScannerDevice, useUpdateScannerDevice } from '../application/queries';
 	import { toast } from 'svelte-sonner';
 
 	let {
-		devices = []
+		devices = [],
+		onviewsecret
 	}: {
 		devices: ScannerDevice[];
+		onviewsecret?: (device: ScannerDevice) => void;
 	} = $props();
 
 	const deleteMutation = useDeleteScannerDevice();
@@ -55,7 +59,7 @@
 			<tr>
 				<th class="px-6 py-4">เครื่องสแกน / รหัสอุปกรณ์</th>
 				<th class="px-6 py-4">ศูนย์พักพิง & จุดบริการ</th>
-				<th class="px-6 py-4">API Secret Prefix</th>
+				<th class="px-6 py-4">API Secret</th>
 				<th class="px-6 py-4">สถานะ</th>
 				<th class="px-6 py-4">การเชื่อมต่อล่าสุด</th>
 				<th class="px-6 py-4 text-right">จัดการ</th>
@@ -96,9 +100,16 @@
 							</div>
 						</td>
 						<td class="px-6 py-4">
-							<code class="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-								{device.secret_prefix}
-							</code>
+							<button
+								type="button"
+								onclick={() => onviewsecret?.(device)}
+								class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-muted/60 px-2.5 py-1 font-mono text-xs text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+								title="คลิกเพื่อดู Device Secret ตัวเต็ม"
+							>
+								<Key class="h-3.5 w-3.5 text-muted-foreground" />
+								<span>{device.secret_prefix}</span>
+								<Eye class="ml-1 h-3 w-3 text-muted-foreground" />
+							</button>
 						</td>
 						<td class="px-6 py-4">
 							{#if device.status === 'active'}
@@ -126,14 +137,27 @@
 							</div>
 						</td>
 						<td class="px-6 py-4 text-right">
-							<Button
-								variant="ghost"
-								size="sm"
-								class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-								onclick={() => handleDelete(device)}
-							>
-								<Trash2 class="h-4 w-4" />
-							</Button>
+							<div class="flex items-center justify-end gap-1">
+								<Button
+									variant="ghost"
+									size="sm"
+									class="h-8 gap-1 text-xs text-primary hover:bg-primary/10"
+									onclick={() => onviewsecret?.(device)}
+									title="ดู Device Secret"
+								>
+									<Key class="h-3.5 w-3.5" />
+									<span class="hidden sm:inline">ดู Secret</span>
+								</Button>
+								<Button
+									variant="ghost"
+									size="sm"
+									class="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+									onclick={() => handleDelete(device)}
+									title="ลบเครื่องสแกน"
+								>
+									<Trash2 class="h-4 w-4" />
+								</Button>
+							</div>
 						</td>
 					</tr>
 				{/each}

@@ -6,6 +6,7 @@
 	import { toast } from 'svelte-sonner';
 	import { scannerDeviceInputSchema, type CreatedScannerDevice } from '../domain/scanner.schema';
 	import { useCreateScannerDevice } from '../application/queries';
+	import { useShelters } from '$lib/features/shelters';
 
 	let {
 		open = $bindable(false),
@@ -16,16 +17,27 @@
 	} = $props();
 
 	const createMutation = useCreateScannerDevice();
+	const sheltersQuery = useShelters();
+
+	const shelters = $derived(
+		(sheltersQuery.data ?? []).slice().sort((a, b) => a.name.localeCompare(b.name, 'th'))
+	);
 
 	let deviceId = $state('');
 	let name = $state('');
 	let shelterCode = $state('SH001');
 	let stationName = $state('จุดคัดกรองหลัก');
 
+	$effect(() => {
+		if (shelters.length > 0 && (!shelterCode || !shelters.some((s) => s.code === shelterCode))) {
+			shelterCode = shelters[0].code;
+		}
+	});
+
 	function resetForm() {
 		deviceId = '';
 		name = '';
-		shelterCode = 'SH001';
+		shelterCode = shelters.length > 0 ? shelters[0].code : 'SH001';
 		stationName = 'จุดคัดกรองหลัก';
 	}
 
@@ -67,7 +79,7 @@
 </script>
 
 <Dialog.Root bind:open onOpenChange={handleOpenChange}>
-	<Dialog.Content class="sm:max-w-[480px]">
+	<Dialog.Content class="sm:max-w-[500px]">
 		<Dialog.Header>
 			<Dialog.Title class="text-xl font-bold">ลงทะเบียนเครื่องสแกนบัตร (Scanner)</Dialog.Title>
 			<Dialog.Description class="text-sm text-muted-foreground">
@@ -100,18 +112,35 @@
 				/>
 			</div>
 
-			<div class="grid grid-cols-2 gap-4">
-				<div class="grid gap-2">
-					<Label for="shelter-code" class="text-sm font-semibold">
-						รหัสศูนย์พักพิง <span class="text-destructive">*</span>
-					</Label>
-					<Input id="shelter-code" bind:value={shelterCode} placeholder="SH001" />
-				</div>
+			<div class="grid gap-2">
+				<Label for="shelter-select" class="text-sm font-semibold">
+					ศูนย์พักพิง <span class="text-destructive">*</span>
+				</Label>
+				<select
+					id="shelter-select"
+					bind:value={shelterCode}
+					class="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+				>
+					{#if shelters.length === 0}
+						<option value="SH001">ศูนย์พักพิงหลัก (SH001)</option>
+					{:else}
+						{#each shelters as s (s.code)}
+							<option value={s.code}>
+								{s.name} ({s.code}){s.province ? ` — จ.${s.province}` : ''}
+							</option>
+						{/each}
+					{/if}
+				</select>
+				<p class="text-xs text-muted-foreground">เลือกศูนย์พักพิงประจำเครื่องสแกน</p>
+			</div>
 
-				<div class="grid gap-2">
-					<Label for="station-name" class="text-sm font-semibold">จุดบริการ / เคาน์เตอร์</Label>
-					<Input id="station-name" bind:value={stationName} placeholder="เช่น เคาน์เตอร์ 1" />
-				</div>
+			<div class="grid gap-2">
+				<Label for="station-name" class="text-sm font-semibold">จุดบริการ / เคาน์เตอร์</Label>
+				<Input
+					id="station-name"
+					bind:value={stationName}
+					placeholder="เช่น จุดคัดกรองหลัก, ประตู 1"
+				/>
 			</div>
 		</div>
 

@@ -24,7 +24,8 @@ export type {
 	MovementAction,
 	CareTrack,
 	BloodGroup,
-	CardType
+	CardType,
+	CardSnapshot
 } from './domain/people';
 
 // Domain — input schemas + factories + transitions + guards
@@ -37,6 +38,7 @@ export {
 	movementActionSchema,
 	careTrackSchema,
 	bloodGroupSchema,
+	cardSnapshotSchema,
 	evacueeInputSchema,
 	medicalInputSchema,
 	householdInputSchema,
@@ -49,6 +51,7 @@ export {
 	movementInputSchema,
 	screeningInputSchema,
 	createEvacuee,
+	createDraftEvacueeFromCard,
 	createMedical,
 	createHousehold,
 	createMovement,

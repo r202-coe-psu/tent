@@ -145,16 +145,65 @@
 	const updateEvacueeMutation = useUpdateEvacuee();
 	const checkInMutation = useCheckInEvacuee();
 
+	let activeDraftEvacuee = $state<Evacuee | null>(null);
+
 	function goToStep(next: 1 | 2 | 3 | 4 | 5 | 6) {
 		zoneError = null;
 		if (next === 3) registrationDraftActive = true;
 		step = next;
 	}
 
+	function handleSelectDraft(draft: Evacuee) {
+		activeDraftEvacuee = draft;
+		const card = draft.card_snapshot;
+
+		// 1. Populate Personal Info for Step 3
+		registrationDraft = {
+			first_name: draft.first_name || card?.first_name_th || '',
+			last_name: draft.last_name || card?.last_name_th || '',
+			gender: draft.gender || card?.gender || 'other',
+			phone: draft.phone ?? null,
+			birth_year: draft.birth_year ?? (card?.birth_year_ce ? card.birth_year_ce + 543 : undefined),
+			age: draft.age ?? card?.age ?? undefined,
+			person_id:
+				draft.person_id ??
+				(card?.citizen_id ? { cardType: 'national_id', number: card.citizen_id } : undefined),
+			country: draft.country || 'THAILAND',
+			religion: draft.religion || 'buddhist',
+			special_needs: draft.special_needs || [],
+			photo: draft.photo || card?.photo_base64 || null,
+			card_snapshot: card || null
+		};
+
+		if (draft.photo || card?.photo_base64) {
+			registrationFacePhotoUrl = draft.photo || card?.photo_base64 || null;
+		}
+
+		// 2. Populate Address for Step 4 (Household)
+		if (card) {
+			newHouseholdAddress = {
+				address_no: card.address_no || null,
+				village_no: card.village_no ? `หมู่ ${card.village_no}` : null,
+				subdistrict: card.subdistrict || null,
+				district: card.district || null,
+				province: card.province || null,
+				postal_code: card.postal_code || null
+			};
+			isCreatingNewHousehold = true;
+		}
+
+		// 3. Start at Step 2 (EWAR Symptoms)
+		goToStep(2);
+		toast.info(
+			`โหลดข้อมูลจากบัตร "${draft.first_name} ${draft.last_name}" แล้ว — กรุณาคัดกรองสุขภาพ (Step 1)`
+		);
+	}
+
 	function clearRegistrationDraft() {
 		if (registrationFacePhotoUrl) URL.revokeObjectURL(registrationFacePhotoUrl);
 		registrationDraft = null;
 		registrationFacePhotoUrl = null;
+		activeDraftEvacuee = null;
 	}
 
 	onDestroy(() => {
@@ -168,7 +217,14 @@
 
 	function handleRegistrationSubmit(input: EvacueeInput) {
 		registrationDraft = structuredClone(input);
-		pendingEvacueeInput = input;
+		if (activeDraftEvacuee) {
+			pendingEvacueeInput = {
+				...input,
+				...(activeDraftEvacuee ? { draft_id: activeDraftEvacuee._id } : {})
+			} as EvacueeInput;
+		} else {
+			pendingEvacueeInput = input;
+		}
 		pendingSymptoms = Array.from(selectedSymptoms);
 		selectedSymptoms.clear();
 		isHealthy = false;
@@ -376,10 +432,11 @@
 
 			// Notify parent to show the success/wristband screen
 			onComplete?.(finishedEvacuee);
-		} catch {
-			zoneError =
-				'จัดสรรพื้นที่ไม่สำเร็จ — ข้อมูลผู้ประสบภัยถูกบันทึกแล้ว กรุณาลองเลือกโซนอีกครั้ง ไม่ต้องลงทะเบียนใหม่';
-			toast.error('จัดสรรพื้นที่ไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน');
+		} catch (err) {
+			console.error('[EvacueeForm] Zone assignment check-in error:', err);
+			const detail = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึกโซน';
+			zoneError = `จัดสรรพื้นที่ไม่สำเร็จ (${detail}) — กรุณาลองเลือกโซนอีกครั้ง ไม่ต้องลงทะเบียนใหม่`;
+			toast.error(`จัดสรรพื้นที่ไม่สำเร็จ: ${detail}`);
 		}
 	}
 </script>
@@ -482,7 +539,7 @@
 {/if}
 
 {#if step === 1}
-	<SearchSection onNext={() => goToStep(2)} />
+	<SearchSection onNext={() => goToStep(2)} onSelectDraft={handleSelectDraft} />
 {:else if step === 2}
 	<EwarSymptomSection
 		bind:isHealthy
@@ -523,12 +580,14 @@
 			<HouseholdRegisterForm
 				allEvacuees={combinedEvacuees}
 				households={householdsQuery.data ?? []}
+				initialAddress={newHouseholdAddress}
 				onsubmit={handleHouseholdRegisterSubmit}
 				onselect={handleHouseholdSelect}
 				pending={isSubmittingHousehold}
 				bind:showNewHouseholdForm={isCreatingNewHousehold}
 			/>
 		{/if}
+
 		<div
 			class="flex flex-col gap-3 border-t border-border pt-6 sm:flex-row-reverse sm:items-center sm:justify-between"
 		>

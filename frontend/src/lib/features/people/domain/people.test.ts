@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	createEvacuee,
+	createDraftEvacueeFromCard,
 	createMovement,
 	createScreening,
 	applyMovementToStay,
@@ -40,7 +41,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(7);
+		expect(e.schema_v).toBe(8);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -51,6 +52,32 @@ describe('createEvacuee', () => {
 		expect(e.special_needs).toEqual([]);
 		expect(e.registered_via).toBe('app');
 		expect(isEvacuee(e)).toBe(true);
+	});
+
+	it('creates draft evacuee from card snapshot with schema_v 8 and status draft', () => {
+		const card = {
+			citizen_id: '1234567890123',
+			title_th: 'นาย',
+			first_name_th: 'สมศักดิ์',
+			last_name_th: 'รักชาติ',
+			gender: 'male' as const,
+			birth_year_ce: 1990,
+			age: 36,
+			scanned_at: '2026-08-29T10:00:00Z',
+			device_id: 'DEV-01',
+			station_name: 'จุดสแกน Kiosk 1'
+		};
+		const draft = createDraftEvacueeFromCard(card, ctx);
+		expect(draft._id.startsWith('evacuee:')).toBe(true);
+		expect(draft.type).toBe('evacuee');
+		expect(draft.schema_v).toBe(8);
+		expect(draft.first_name).toBe('สมศักดิ์');
+		expect(draft.last_name).toBe('รักชาติ');
+		expect(draft.current_stay.status).toBe('draft');
+		expect(draft.household_id).toBeNull();
+		expect(draft.registered_via).toBe('kiosk');
+		expect(draft.person_id?.number).toBe('1234567890123');
+		expect(draft.card_snapshot?.station_name).toBe('จุดสแกน Kiosk 1');
 	});
 
 	it('accepts "no phone" as null', () => {
@@ -305,6 +332,39 @@ describe('movement → current_stay', () => {
 		expect(updated.current_stay.since).toBe('2026-06-11T03:00:00.000Z');
 	});
 
+	it('allows check_in from eligible stay statuses only', () => {
+		const statuses = [
+			'draft',
+			'pre_registered',
+			'temporary_leave',
+			'checked_out',
+			'transferred',
+			'active',
+			'deceased',
+			'cancelled'
+		] as const;
+
+		const base = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx
+		);
+
+		const allowed = statuses.filter((status) =>
+			canCheckInEvacuee({
+				...base,
+				current_stay: { status, zone: null, since: base.current_stay.since }
+			})
+		);
+
+		expect(allowed).toEqual([
+			'draft',
+			'pre_registered',
+			'temporary_leave',
+			'checked_out',
+			'transferred'
+		]);
+	});
+
 	it('rejects check_in from deceased (terminal status)', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		const deceased = {
@@ -358,6 +418,7 @@ describe('movement → current_stay', () => {
 	it('allows check_in from eligible stay statuses only', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		expect(canCheckInEvacuee(e)).toBe(true); // pre_registered
+		expect(CHECK_IN_ELIGIBLE_STATUSES).toContain('draft');
 		expect(CHECK_IN_ELIGIBLE_STATUSES).toContain('pre_registered');
 		expect(CHECK_OUT_ELIGIBLE_STATUSES).toEqual(['active']);
 

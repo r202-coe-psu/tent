@@ -443,6 +443,25 @@ describe('check-in / check-out', () => {
 			expect(promoted?.status).toBe('checked_in');
 			expect(promoted?.updated_at).not.toBe('2000-01-01T00:00:00.000Z');
 		});
+
+		it('successfully checks in an evacuee from draft status and sets zone', async () => {
+			const draftEvacuee = await repo.createEvacuee(
+				evInput({ first_name: 'บัตร', last_name: 'สแกน' }),
+				ctx
+			);
+			// Manually set status to draft
+			const asDraft = await memoryRepo.put({
+				...draftEvacuee,
+				current_stay: { status: 'draft' as const, zone: null, since: '2026-08-29T10:00:00Z' }
+			});
+
+			const checkedIn = await repo.checkInEvacuee(asDraft, ctx, 'zone-b');
+			expect(checkedIn.current_stay.status).toBe('active');
+			expect(checkedIn.current_stay.zone).toBe('zone-b');
+
+			const movements = await repo.listMovements();
+			expect(movements.some((m) => m.evacuee_id === asDraft._id && m.zone === 'zone-b')).toBe(true);
+		});
 	});
 
 	describe('checkOutEvacuee', () => {

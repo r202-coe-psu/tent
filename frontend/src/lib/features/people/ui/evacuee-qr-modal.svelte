@@ -33,7 +33,8 @@
 		transferred: '#a855f7',
 		checked_out: '#ef4444',
 		deceased: '#020617',
-		cancelled: '#94a3b8'
+		cancelled: '#94a3b8',
+		draft: '#06b6d4'
 	};
 
 	async function handlePrintPreview() {

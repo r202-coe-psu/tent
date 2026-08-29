@@ -5,29 +5,38 @@
 	import { toast } from 'svelte-sonner';
 	import Copy from '@lucide/svelte/icons/copy';
 	import Check from '@lucide/svelte/icons/check';
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
-	import type { CreatedScannerDevice } from '../domain/scanner.schema';
+	import Key from '@lucide/svelte/icons/key';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import type { CreatedScannerDevice, ScannerDevice } from '../domain/scanner.schema';
 
 	let {
 		open = $bindable(false),
-		created = null
+		device = null,
+		isNew = false
 	}: {
 		open?: boolean;
-		created?: CreatedScannerDevice | null;
+		device?: ScannerDevice | CreatedScannerDevice | null;
+		isNew?: boolean;
 	} = $props();
 
 	let copied = $state(false);
 	let copiedEnv = $state(false);
 
+	const secretValue = $derived.by(() => {
+		if (!device) return '';
+		const created = device as CreatedScannerDevice;
+		return created.plaintext_secret || device.secret || '';
+	});
+
 	const envSnippet = $derived.by(() => {
-		if (!created) return '';
-		return `TENT_BASE_URL=http://localhost:5173\nDEVICE_ID=${created.device_id}\nDEVICE_SECRET=${created.plaintext_secret}`;
+		if (!device) return '';
+		return `TENT_BASE_URL=http://localhost:5173\nDEVICE_ID=${device.device_id}\nDEVICE_SECRET=${secretValue || device.secret_prefix}`;
 	});
 
 	async function copySecret() {
-		if (!created?.plaintext_secret) return;
+		if (!secretValue) return;
 		try {
-			await navigator.clipboard.writeText(created.plaintext_secret);
+			await navigator.clipboard.writeText(secretValue);
 			copied = true;
 			toast.success('คัดลอก Device Secret แล้ว');
 			setTimeout(() => (copied = false), 2000);
@@ -52,26 +61,31 @@
 <Dialog.Root bind:open>
 	<Dialog.Content class="sm:max-w-[560px]">
 		<Dialog.Header>
-			<Dialog.Title class="flex items-center gap-2 text-xl font-bold text-emerald-600">
-				<span>ลงทะเบียนอุปกรณ์สำเร็จ</span>
+			<Dialog.Title
+				class="flex items-center gap-2 text-xl font-bold {isNew
+					? 'text-emerald-600'
+					: 'text-foreground'}"
+			>
+				<Key class="h-5 w-5 text-primary" />
+				<span>{isNew ? 'ลงทะเบียนอุปกรณ์สำเร็จ' : 'ข้อมูล Device Secret'}</span>
 			</Dialog.Title>
 			<Dialog.Description class="text-sm text-muted-foreground">
-				คัดลอก Device Secret เพื่อนำไปใส่ในไฟล์ <code>.env</code> ของ <code>scanner_client</code>
+				นำ Device Secret ไปใส่ในไฟล์ <code>.env</code> ของโปรแกรม <code>scanner_client</code> เพื่อยืนยันตัวตนอุปกรณ์
 			</Dialog.Description>
 		</Dialog.Header>
 
-		{#if created}
+		{#if device}
 			<div class="space-y-4 py-2">
 				<div
-					class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-700 dark:text-amber-300"
+					class="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3.5 text-xs text-blue-800 dark:text-blue-200"
 				>
 					<div class="flex items-start gap-2">
-						<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+						<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
 						<div>
-							<p class="font-semibold">โปรดบันทึก Secret นี้ไว้ทันที</p>
-							<p class="mt-0.5">
-								ระบบจะแสดง Secret ตัวเต็มนี้เพียงครั้งเดียวเท่านั้น
-								เพื่อความปลอดภัยจะไม่สามารถดูซ้ำได้อีก
+							<p class="font-semibold">ข้อแนะนำความปลอดภัย</p>
+							<p class="mt-0.5 leading-relaxed">
+								Device Secret เปรียบเสมือนรหัสผ่านของเครื่องอ่านบัตร
+								โปรดเก็บรักษาเป็นความลับและใส่ในเครื่องอ่านบัตรประจำจุดบริการเท่านั้น
 							</p>
 						</div>
 					</div>
@@ -79,29 +93,37 @@
 
 				<div class="grid grid-cols-2 gap-3 text-xs">
 					<div class="rounded-lg bg-muted/60 p-2.5">
-						<span class="text-muted-foreground">Device ID:</span>
-						<p class="font-mono font-semibold text-foreground">{created.device_id}</p>
+						<span class="text-muted-foreground">Device ID / ชื่อ:</span>
+						<p class="font-mono font-semibold text-foreground">{device.device_id}</p>
+						<p class="text-[11px] text-muted-foreground">{device.name}</p>
 					</div>
 					<div class="rounded-lg bg-muted/60 p-2.5">
-						<span class="text-muted-foreground">ศูนย์พักพิง:</span>
+						<span class="text-muted-foreground">ศูนย์พักพิง / จุดบริการ:</span>
 						<p class="font-mono font-semibold text-foreground">
-							{created.shelter_code} ({created.station_name})
+							{device.shelter_code}
 						</p>
+						<p class="text-[11px] text-muted-foreground">{device.station_name}</p>
 					</div>
 				</div>
 
 				<div class="space-y-1.5">
-					<label for="device-secret" class="text-xs font-semibold text-muted-foreground"
-						>Device Secret:</label
-					>
+					<label for="device-secret" class="text-xs font-semibold text-muted-foreground">
+						Device Secret (รหัสความปลอดภัย):
+					</label>
 					<div class="flex gap-2">
 						<Input
 							id="device-secret"
 							readonly
-							value={created.plaintext_secret}
+							value={secretValue || device.secret_prefix}
 							class="bg-muted/50 font-mono text-xs select-all"
 						/>
-						<Button variant="outline" size="sm" onclick={copySecret} class="shrink-0 gap-1.5">
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={copySecret}
+							disabled={!secretValue}
+							class="shrink-0 gap-1.5"
+						>
 							{#if copied}
 								<Check class="h-4 w-4 text-emerald-500" />
 							{:else}
@@ -110,13 +132,18 @@
 							<span>คัดลอก</span>
 						</Button>
 					</div>
+					{#if !secretValue}
+						<p class="text-[11px] text-amber-600">
+							(อุปกรณ์รุ่นเก่าก่อนการอัปเดตระบบ แสดงเฉพาะ Prefix: {device.secret_prefix})
+						</p>
+					{/if}
 				</div>
 
 				<div class="space-y-1.5">
 					<div class="flex items-center justify-between">
-						<label for="env-snippet" class="text-xs font-semibold text-muted-foreground"
-							>ตัวอย่างไฟล์ .env สำหรับ scanner_client:</label
-						>
+						<label for="env-snippet" class="text-xs font-semibold text-muted-foreground">
+							ตัวอย่างไฟล์ .env สำหรับ scanner_client:
+						</label>
 						<Button variant="ghost" size="sm" onclick={copyEnvSnippet} class="h-7 gap-1 text-xs">
 							{#if copiedEnv}
 								<Check class="h-3.5 w-3.5 text-emerald-500" />

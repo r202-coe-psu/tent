@@ -126,7 +126,7 @@ export const phoneSchema = z
  * `web` = public self-booking through the portal (CR-070 D-REG-VIA, T-71).
  * `api` is reserved for the CR-071 inbound plane and is not accepted yet.
  */
-export const registeredViaSchema = z.enum(['app', 'import', 'paper', 'web']);
+export const registeredViaSchema = z.enum(['app', 'import', 'paper', 'web', 'kiosk']);
 
 /**
  * Codify the shelter-code shape used across registry + docs (schema.md §3.1):

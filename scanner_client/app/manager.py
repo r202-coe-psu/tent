@@ -1,7 +1,8 @@
 import asyncio
 import logging
 import urllib.parse
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+
 
 import httpx
 from playwright.async_api import async_playwright, BrowserContext, Page
@@ -50,7 +51,8 @@ class ScannerClientManager:
                 await asyncio.sleep(2.0)
         return False
 
-    async def submit_draft(self, card_data: Dict[str, Any]) -> bool:
+    async def submit_draft(self, card_data: Dict[str, Any]) -> Tuple[bool, str, Optional[str]]:
+
         """Send scanned card payload to Tent Inbound API"""
         headers = {
             "Content-Type": "application/json",
@@ -61,16 +63,25 @@ class ScannerClientManager:
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
                 response = await client.post(self.inbound_api_url, json={"card_data": card_data}, headers=headers)
+                resp_json = response.json() if response.content else {}
+
                 if response.status_code == 200:
-                    resp_json = response.json()
-                    logger.info(f"Successfully posted scan draft: ID={resp_json.get('draft_id')}, Shelter={resp_json.get('shelter_code')}")
-                    return True
+                    msg = resp_json.get("message", "อ่านบัตรสำเร็จ กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรองและยืนยันข้อมูล")
+                    status = resp_json.get("status", "created_draft")
+                    logger.info(f"Successfully processed scan draft: Evacuee ID={resp_json.get('evacuee_id')}, Status={status}")
+                    return True, msg, status
+                elif response.status_code == 409:
+                    err_msg = resp_json.get("error") or resp_json.get("message") or "มีข้อมูลการสแกนบัตรนี้รออยู่แล้ว กรุณาไปพบเจ้าหน้าที่"
+                    status = resp_json.get("status", "duplicate_draft")
+                    logger.warning(f"Inbound API 409 Notice: {err_msg}")
+                    return False, err_msg, status
                 else:
+                    err_msg = resp_json.get("error") or "ไม่สามารถบันทึกข้อมูลเข้าสู่ระบบส่วนกลางได้"
                     logger.error(f"Inbound API error [{response.status_code}]: {response.text}")
-                    return False
+                    return False, err_msg, None
             except Exception as e:
                 logger.error(f"Failed to connect to Tent API ({self.inbound_api_url}): {e}")
-                return False
+                return False, f"เชื่อมต่อระบบส่วนกลางไม่สำเร็จ ({e})", None
 
     async def card_reading_loop(self):
         """Main lifecycle loop: Waiting -> Reading -> Inbound Submit -> Remove Card -> Waiting"""
@@ -113,18 +124,20 @@ class ScannerClientManager:
                     logger.info(f"Read card: CID={card_data.get('citizen_id')}, Name={card_data.get('full_name_th')}")
 
                     # 3. Submit to Tent Server
-                    success = await self.submit_draft(card_data)
+                    success, msg, status = await self.submit_draft(card_data)
                     if success:
-                        # 4. Show Remove Card screen
-                        await self.page.goto(self.remove_card_url)
+                        # 4. Show Remove Card screen with message
+                        encoded_msg = urllib.parse.quote(msg)
+                        await self.page.goto(f"{self.remove_card_url}?message={encoded_msg}")
                     else:
-                        error_msg = urllib.parse.quote("ไม่สามารถบันทึกข้อมูลเข้าสู่ระบบส่วนกลางได้")
+                        error_msg = urllib.parse.quote(msg)
                         await self.page.goto(f"{self.error_url}?error_msg={error_msg}")
 
                 except Exception as read_err:
                     logger.error(f"Error reading smart card data: {read_err}")
                     error_msg = urllib.parse.quote(str(read_err))
                     await self.page.goto(f"{self.error_url}?error_msg={error_msg}")
+
 
                 # 5. Wait for card removal
                 logger.info("Waiting for card to be removed...")

@@ -7,19 +7,28 @@
 		RevealScannerSecretDialog,
 		ScannerList,
 		useScannerDevices,
-		type CreatedScannerDevice
+		type CreatedScannerDevice,
+		type ScannerDevice
 	} from '$lib/features/scanners';
 
 	const devicesQuery = useScannerDevices();
 
 	let createOpen = $state(false);
 	let revealOpen = $state(false);
-	let revealed = $state.raw<CreatedScannerDevice | null>(null);
+	let isNewCreated = $state(false);
+	let selectedDevice = $state.raw<ScannerDevice | CreatedScannerDevice | null>(null);
 
 	const devices = $derived(devicesQuery.data ?? []);
 
 	function handleCreated(created: CreatedScannerDevice) {
-		revealed = created;
+		selectedDevice = created;
+		isNewCreated = true;
+		revealOpen = true;
+	}
+
+	function handleViewSecret(device: ScannerDevice) {
+		selectedDevice = device;
+		isNewCreated = false;
 		revealOpen = true;
 	}
 </script>
@@ -64,10 +73,10 @@
 					: 'Failed to load scanners'}
 			</div>
 		{:else}
-			<ScannerList {devices} />
+			<ScannerList {devices} onviewsecret={handleViewSecret} />
 		{/if}
 	</div>
 </div>
 
 <CreateScannerDialog bind:open={createOpen} oncreated={handleCreated} />
-<RevealScannerSecretDialog bind:open={revealOpen} created={revealed} />
+<RevealScannerSecretDialog bind:open={revealOpen} device={selectedDevice} isNew={isNewCreated} />

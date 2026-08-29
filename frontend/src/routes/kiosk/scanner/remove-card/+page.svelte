@@ -1,9 +1,15 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import Send from '@lucide/svelte/icons/send';
 	import Check from '@lucide/svelte/icons/check';
+
+	const message = $derived(
+		page.url.searchParams.get('message') ||
+			'อ่านบัตรสำเร็จ กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรองและยืนยันข้อมูล'
+	);
 </script>
 
 <svelte:head>
@@ -101,6 +107,9 @@
 			>
 				สแกนข้อมูลสำเร็จเรียบร้อย!
 			</h2>
+			<p class="mt-1 text-base font-bold text-emerald-800 sm:text-lg">
+				{message}
+			</p>
 		</div>
 	</div>
 
