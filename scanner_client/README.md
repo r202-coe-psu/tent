@@ -274,33 +274,58 @@ python main.py
 
 เพื่อให้ Raspberry Pi ทำงานเป็น Kiosk Standalone เปิดเครื่องแล้วเข้าโปรแกรมสแกนบัตรทันที:
 
-### วิธีสร้าง Desktop Autostart:
+### Step 1: ให้สิทธิ์รันสคริปต์ `start_kiosk.sh`
+ในโฟลเดอร์ `scanner_client` มีสคริปต์ `start_kiosk.sh` ที่ช่วยจัดการ Environment Variables, Display และ Log ไว้ให้แล้ว:
+```bash
+cd ~/tent/scanner_client
+chmod +x start_kiosk.sh
+```
 
-1. สร้างไดเรกทอรี autostart (หากยังไม่มี):
+### Step 2: เลือกวิธีตั้งค่า Autostart (แนะนำวิธีที่ 1 หรือ 2)
+
+#### วิธีที่ 1: ผ่าน Desktop Autostart (`.desktop`)
+1. สร้างโฟลเดอร์ autostart ใน Home directory ของคุณ:
    ```bash
-   mkdir -p /home/pi/.config/autostart
+   mkdir -p ~/.config/autostart
    ```
-
 2. สร้างไฟล์ `.desktop`:
    ```bash
-   nano /home/pi/.config/autostart/scanner-kiosk.desktop
+   nano ~/.config/autostart/scanner-kiosk.desktop
    ```
-
-3. ใส่ข้อความคอนฟิกต่อไปนี้:
+3. ใส่ข้อความคอนฟิกต่อไปนี้ *(แทนที่ `/home/kiosk` ด้วย path บัญชีผู้ใช้ของคุณ)*:
    ```ini
    [Desktop Entry]
    Type=Application
-   Name=SmartCard Scanner Kiosk
+   Name=SmartShelter Kiosk
    Comment=Start SmartShelter Card Scanner Kiosk
-   Exec=/bin/bash -c "sleep 5 && cd /home/pi/tent/scanner_client && /home/pi/tent/scanner_client/.venv/bin/python main.py"
+   Exec=/home/kiosk/tent/scanner_client/start_kiosk.sh
    Terminal=false
    X-GNOME-Autostart-enabled=true
    ```
+4. บันทึกไฟล์ (`Ctrl+O` $\rightarrow$ `Enter` $\rightarrow$ `Ctrl+X`)
 
-4. กำหนดสิทธิ์ในการรันไฟล์:
+---
+
+#### วิธีที่ 2: สำหรับ Raspberry Pi OS Bookworm (Wayland / Wayfire)
+หากใช้ระบบปฏิบัติการ Bookworm เวอร์ชันล่าสุดที่เป็น Wayland สามารถเพิ่มคำสั่งในตัวจัดการหน้าต่างโดยตรง:
+1. เปิดไฟล์ตั้งค่า Wayfire:
    ```bash
-   chmod +x /home/pi/.config/autostart/scanner-kiosk.desktop
+   nano ~/.config/wayfire.ini
    ```
+2. เลื่อนลงไปที่หมวด `[autostart]` (หากไม่มีให้พิมพ์เพิ่มล่างสุด):
+   ```ini
+   [autostart]
+   kiosk = /home/kiosk/tent/scanner_client/start_kiosk.sh
+   ```
+*(กรณีเป็น Labwc รุ่นล่าสุด ให้ใส่ `/home/kiosk/tent/scanner_client/start_kiosk.sh &` ใน `~/.config/labwc/autostart`)*
+
+---
+
+### 🔍 วิธีตรวจสอบ Log เมื่อ Autostart ไม่ทำงาน
+หากบูตเครื่องใหม่แล้วโปรแกรมไม่เปิดขึ้นมา ให้เปิดดู Log ความผิดพลาดได้ที่:
+```bash
+cat /tmp/kiosk_autostart.log
+```
 
 ---
 
