@@ -729,6 +729,8 @@ open → escalated
 > **ไม่ใช่ append-only** — เผื่อปลายทางอัปเดต `status` เมื่อมี flow พิจารณาตั๋วในภายหลัง (ยังไม่อยู่ในขอบเขต CR-087).
 > **ห้ามเขียน `stock_ledger` ที่ศูนย์ต้นทาง** ตอนส่งต่อ — ของยังไม่เคยเข้าคลังที่ไหน (R-16.4 acceptance).
 > **Index:** `(status)` · `(origin_shelter_code)`
+>
+> **หมายเหตุ:** สำหรับเอกสารเกณฑ์โภชนาการและการเติมสต็อกเสบียงระดับศูนย์ (`source = SHELTER_OVERRIDE`) ได้แก่ `food_sphere_standard`, `requirement_group`, และ `replenishment_policy` ให้ดูโครงสร้างฟิลด์ในหมวด [§4.6–§4.8](#46-food_sphere_standard--food_sphere_standardtarget_segmentreq_group_id--schema_v-1)
 
 ---
 
@@ -1031,7 +1033,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `shelter_code` | str | opt | มีค่าเฉพาะเมื่อ `source = SHELTER_OVERRIDE`; ไม่มีเมื่อเป็น `SPHERE_BASELINE` (ใช้ตรวจ doc หลง db) |
 | `created_at` / `updated_at` | ts | req | เวลาสร้าง / ปรับปรุงเอกสาร (ISO-8601 UTC) |
 | `created_by` | str | req | Username ของผู้สร้างหรือแก้ไขข้อมูล |
-| `updated_by` | str | req | Username ของผู้แก้ไขล่าสุด (audit trail) |
+| `updated_by` | str | opt | Username ของผู้แก้ไขล่าสุด (audit trail); opt เพื่อให้สอดคล้องกับ Common Envelope §0 |
 
 **Soft-delete & Calculation rules (`status`):**
 - **ห้ามทำ Hard-Delete (`repo.remove()`) เด็ดขาด:** การลบให้ปรับสถานะเป็น `{ status: 'inactive', updated_at: now() }` เพื่อป้องกัน Orphaned References และไม่ให้ประวัติการคำนวณย้อนหลังใน `daily_calc` เสียหาย (Delete-in-use Policy ตาม CR-053 / §3.3)
@@ -1065,7 +1067,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `shelter_code` | str | opt | มีค่าเฉพาะเมื่อ `source = SHELTER_OVERRIDE`; ไม่มีเมื่อเป็น `SPHERE_BASELINE` (ใช้ตรวจ doc หลง db) |
 | `created_at` / `updated_at` | ts | req | เวลาสร้าง / ปรับปรุงเอกสาร (ISO-8601 UTC) |
 | `created_by` | str | req | Username ของผู้สร้างหรือแก้ไขข้อมูล |
-| `updated_by` | str | req | Username ของผู้แก้ไขล่าสุด (audit trail) |
+| `updated_by` | str | opt | Username ของผู้แก้ไขล่าสุด (audit trail); opt เพื่อให้สอดคล้องกับ Common Envelope §0 |
 
 **โครงสร้างย่อย `item_maps[]`:**
 - `item_id`: `str (req)` — อ้างอิง `item_master:{sku|ulid}`
@@ -1106,7 +1108,7 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `shelter_code` | str | opt | มีค่าเฉพาะเมื่อ `source = SHELTER_OVERRIDE`; ไม่มีเมื่อเป็น `SPHERE_BASELINE` (ใช้ตรวจ doc หลง db) |
 | `created_at` / `updated_at` | ts | req | เวลาสร้าง / ปรับปรุงเอกสาร (ISO-8601 UTC) |
 | `created_by` | str | req | Username ของผู้สร้างหรือแก้ไขข้อมูล |
-| `updated_by` | str | req | Username ของผู้แก้ไขล่าสุด (audit trail) |
+| `updated_by` | str | opt | Username ของผู้แก้ไขล่าสุด (audit trail); opt เพื่อให้สอดคล้องกับ Common Envelope §0 |
 
 **Soft-delete & Policy Resolution rules (`status`):**
 - **ห้ามทำ Hard-Delete (`repo.remove()`) เด็ดขาด:** การลบให้ปรับสถานะเป็น `{ status: 'inactive', updated_at: now() }`; รองรับการ Reactivate กลับเป็น `active` ได้ตลอดเวลา
