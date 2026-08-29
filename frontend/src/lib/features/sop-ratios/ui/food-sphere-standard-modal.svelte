@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import {
 		targetSegmentSchema,
 		TARGET_SEGMENT_LABELS,
@@ -201,12 +202,11 @@
 
 				<div>
 					<label for="form-effective-date" class="block text-sm font-medium">
-						วันที่มีผลบังคับใช้ (Effective Date) <span class="text-destructive">*</span>
+						วันที่มีผลบังคับใช้ (วัน/เดือน/ปี) <span class="text-destructive">*</span>
 					</label>
-					<Input
+					<DatePicker
 						id="form-effective-date"
-						aria-label="วันบังคับใช้"
-						type="date"
+						ariaLabel="วันบังคับใช้"
 						bind:value={formEffectiveDate}
 						class="mt-1"
 					/>

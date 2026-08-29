@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import {
@@ -228,12 +229,11 @@
 			<Field.FieldGroup class="grid grid-cols-1 gap-5 md:grid-cols-2">
 				<Field.Field>
 					<Field.Label for="form-effective-date">
-						วันที่มีผลบังคับใช้ <span class="font-bold text-destructive">*</span>
+						วันที่มีผลบังคับใช้ (วัน/เดือน/ปี) <span class="font-bold text-destructive">*</span>
 					</Field.Label>
-					<Input
+					<DatePicker
 						id="form-effective-date"
-						aria-label="วันบังคับใช้"
-						type="date"
+						ariaLabel="วันบังคับใช้"
 						bind:value={formEffectiveDate}
 					/>
 					{#if formErrors.effectiveDate}
