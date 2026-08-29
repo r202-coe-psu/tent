@@ -1,5 +1,5 @@
 ---
-id: CR-084
+id: CR-097
 title: ระบบอ่านบัตรประชาชน Smart Card — ย้าย scanner_draft สู่ evacuee:draft, รองรับ pre_registered fast-track, และ autofill ที่อยู่ Step 3
 status: approved
 date: 2026-08-29
@@ -16,7 +16,7 @@ affects:
   - frontend/src/routes/api/v1/scanner/
 ---
 
-# CR-084 — ระบบอ่านบัตรประชาชน Smart Card สู่ Evacuee Draft Flow
+# CR-097 — ระบบอ่านบัตรประชาชน Smart Card สู่ Evacuee Draft Flow
 
 **สรุป (BLUF):**  
 ยกเลิก doc type `scanner_draft` โดยเปลี่ยนมาสร้าง entity `evacuee` โดยตรง กำหนดสถานะ `current_stay.status = 'draft'` พร้อมเก็บข้อมูลชิปการ์ดและที่อยู่ตามบัตรในฟิลด์ `card_snapshot` · สำหรับผู้ที่ลงทะเบียนล่วงหน้า (`pre_registered`) เมื่อเสียบบัตรหน้างานให้ **overwrite ข้อมูลส่วนตัว (ชื่อ-นามสกุล, เพศ, ปีเกิด, อายุ, รูปถ่าย, เลข 13 หลัก) จากบัตรประชาชนลงใน doc เดิมทันที** และคงสถานะ `pre_registered` ไว้ · หน้าจอ Kiosk หากตรวจพบการเสียบบัตรซ้ำ ให้แสดงผล **UI สีเหลือง (Amber Warning)** พร้อมข้อความ *"ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว"* · ระบบรองรับการคำนวณอายุอัตโนมัติจากปีเกิด (พ.ศ.) · หน้าจอเจ้าหน้าที่ (`/onsite/people`) ใช้ช่องค้นหาเดิมตรวจพบสถานะ *"เสียบบัตรแล้ว"* แล้วเข้าสู่กระบวนการคัดกรองสุขภาพ (Step 1 EWAR) ตั้งแต่ต้นทุกกรณี · Autofill ข้อมูลบุคคล (Step 2) และที่อยู่ตามบัตร (Step 3) เพื่อให้เจ้าหน้าที่ถามยืนยันและแก้ไขได้อิสระ · ไม่นับยอดสถานะ `draft` ใน Occupancy และไม่แสดงใน Public Portal

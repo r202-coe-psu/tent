@@ -6,7 +6,7 @@ updated: 2026-08-29
 author: Soravit Sukkarn (Team Lead)
 affects:
   - docs/data/schema.md §1.1
-  - docs/changes/CR-084-smart-card-evacuee-draft-flow.md
+  - docs/changes/CR-097-smart-card-evacuee-draft-flow.md
   - frontend/src/lib/features/scanners/
   - frontend/src/lib/features/people/
   - frontend/src/routes/(protected)/onsite/people/
