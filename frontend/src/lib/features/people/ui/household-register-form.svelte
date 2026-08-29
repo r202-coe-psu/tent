@@ -24,6 +24,9 @@
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { getAllLocations } from '$lib/features/shelters/data/thailand-location.api';
 	import { ScannerDraftModal, type ScannerDraft } from '$lib/features/scanners';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { HOUSEHOLD_REGISTER_I18N } from './_constants/household-register.i18n';
 
 	let {
 		allEvacuees = [],
@@ -42,6 +45,8 @@
 		pending?: boolean;
 		showNewHouseholdForm?: boolean;
 	} = $props();
+
+	const t = $derived(getTranslation(HOUSEHOLD_REGISTER_I18N, languageStore.current));
 
 	let searchMode: 'exact' | 'fuzzy' = $state('fuzzy');
 	let searchQuery = $state('');
@@ -65,9 +70,8 @@
 			});
 			locationsError = null;
 		} catch {
-			locationsError =
-				'โหลดรายการที่อยู่ไม่สำเร็จ กรุณาลองใหม่ หรือกรอกที่อยู่เองตอนสร้างครอบครัวใหม่';
-			toast.error('โหลดรายการที่อยู่ไม่สำเร็จ — ค้นหาด้วยที่อยู่ยังใช้ไม่ได้ชั่วคราว');
+			locationsError = t.addressSearch.errorLoading;
+			toast.error(t.addressSearch.toastError);
 		} finally {
 			locationsLoading = false;
 		}
@@ -86,9 +90,8 @@
 				};
 			});
 		} catch {
-			locationsError =
-				'โหลดรายการที่อยู่ไม่สำเร็จ กรุณาลองใหม่ หรือกรอกที่อยู่เองตอนสร้างครอบครัวใหม่';
-			toast.error('โหลดรายการที่อยู่ไม่สำเร็จ — ค้นหาด้วยที่อยู่ยังใช้ไม่ได้ชั่วคราว');
+			locationsError = t.addressSearch.errorLoading;
+			toast.error(t.addressSearch.toastError);
 		} finally {
 			locationsLoading = false;
 		}
@@ -365,7 +368,8 @@
 			>
 				<span class="mr-2 {searchMode === 'exact' ? 'text-primary' : 'text-muted-foreground'}"
 					>◉</span
-				> ค้นหาด้วยบุคคล
+				>
+				{t.tabs.person}
 			</button>
 			<button
 				type="button"
@@ -385,13 +389,14 @@
 			>
 				<span class="mr-2 {searchMode === 'fuzzy' ? 'text-primary' : 'text-muted-foreground'}"
 					>◎</span
-				> ค้นหาด้วยที่อยู่
+				>
+				{t.tabs.address}
 			</button>
 		</div>
 
 		{#if searchMode === 'exact'}
 			<div class="space-y-3">
-				<Label class="text-sm font-medium">เบอร์โทรศัพท์ หรือ เลขบัตรประจำตัวประชาชน</Label>
+				<Label class="text-sm font-medium">{t.personSearch.label}</Label>
 				<div class="flex flex-col gap-3 sm:flex-row">
 					<div class="relative flex-1">
 						<Search
@@ -399,12 +404,13 @@
 						/>
 						<Input
 							bind:value={searchQuery}
-							placeholder="089-999-9999"
+							placeholder={t.personSearch.placeholder}
 							class="h-12 bg-muted/20 pl-9 sm:h-11"
 						/>
 					</div>
 					<Button type="submit" variant="default" class="h-12 px-6 sm:h-11">
-						<Search class="mr-2 h-4 w-4" /> ค้นหาครอบครัว
+						<Search class="mr-2 h-4 w-4" />
+						{t.personSearch.btnSearch}
 					</Button>
 					<Button
 						type="button"
@@ -415,7 +421,8 @@
 							selectedHouseholdId = null;
 						}}
 					>
-						<Plus class="mr-2 h-4 w-4" /> ลงทะเบียนเป็นครอบครัวใหม่
+						<Plus class="mr-2 h-4 w-4" />
+						{t.personSearch.btnNew}
 					</Button>
 				</div>
 			</div>
@@ -428,28 +435,28 @@
 					>
 						<p>{locationsError}</p>
 						<Button type="button" variant="outline" size="sm" onclick={retryLocations}>
-							ลองใหม่
+							{t.addressSearch.retry}
 						</Button>
 					</div>
 				{/if}
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div class="space-y-2">
-						<Label class="text-sm font-medium">บ้านเลขที่ / ซอย / ถนน</Label>
+						<Label class="text-sm font-medium">{t.addressSearch.addressNoLabel}</Label>
 						<Input
 							bind:value={searchAddressNo}
-							placeholder="พิมพ์ตัวเลขนำหน้า เช่น 12/3 หรือ 45"
+							placeholder={t.addressSearch.addressNoPlaceholder}
 							class="h-12 bg-muted/20 sm:h-11"
 						/>
 					</div>
 					<div class="relative space-y-2">
-						<Label class="text-sm font-medium">ค้นหา ตำบล / อำเภอ / รหัสไปรษณีย์</Label>
+						<Label class="text-sm font-medium">{t.addressSearch.locationLabel}</Label>
 						<SearchSelect
 							name="household_location"
 							options={locationItems}
 							bind:value={selectedLocationValue}
-							placeholder="พิมพ์เพื่อค้นหา เช่น บ้านพรุ หรือ 90250"
+							placeholder={t.addressSearch.locationPlaceholder}
 							loading={locationsLoading}
-							loadingText="กำลังโหลดข้อมูลที่อยู่..."
+							loadingText={t.addressSearch.locationLoading}
 							disabled={!!locationsError}
 							class="h-12 rounded-md border-border bg-muted/20 sm:h-11"
 						/>
@@ -461,7 +468,8 @@
 					variant="default"
 					class="flex h-12 w-full items-center justify-center gap-2 rounded-xl font-bold"
 				>
-					<Search class="mr-2 h-4 w-4" /> ค้นหาครอบครัวจากที่อยู่ (Fuzzy Match)
+					<Search class="mr-2 h-4 w-4" />
+					{t.addressSearch.btnSearch}
 				</Button>
 			</div>
 		{/if}
@@ -471,7 +479,7 @@
 	{#if searchState === 'found' && foundResults.length > 0}
 		<div class="space-y-4">
 			<h3 class="flex items-center gap-2 text-lg font-bold">
-				🏡 พบ {foundResults.length} ครอบครัวที่ลงทะเบียนในระบบ
+				{t.results.foundCount(foundResults.length)}
 			</h3>
 
 			<div class="space-y-3">
@@ -488,8 +496,9 @@
 							<div class="flex-1 space-y-2">
 								<div class="flex flex-wrap items-center gap-2">
 									<User class="h-5 w-5 text-[#003B71]" />
-									<span class="text-[15px] font-bold"
-										>หัวหน้าครอบครัว: {result.evacuee
+									<span class="text-sm font-bold"
+										>{t.results.headLabel}
+										{result.evacuee
 											? `${result.evacuee.first_name} ${result.evacuee.last_name}`
 											: result.household.label}</span
 									>
@@ -501,7 +510,7 @@
 											: 'border-transparent bg-blue-50 text-blue-700 hover:bg-blue-100'}"
 										onclick={() => (result.expanded = !result.expanded)}
 									>
-										{result.count > 0 ? result.count : 1} คน (กดดูรายชื่อเพิ่มเติม)
+										{t.results.memberCount(result.count > 0 ? result.count : 1)}
 										{#if result.expanded}
 											<ChevronUp class="h-3 w-3" />
 										{:else}
@@ -511,7 +520,7 @@
 								</div>
 								<div class="ml-[2px] flex items-start gap-2 text-sm text-muted-foreground">
 									<MapPin class="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-									<span>ที่อยู่: {formatAddress(result.household)}</span>
+									<span>{t.results.addressLabel} {formatAddress(result.household)}</span>
 								</div>
 							</div>
 							<Button
@@ -525,21 +534,21 @@
 								}}
 							>
 								{#if isSelected}
-									<Check class="mr-2 h-4 w-4" /> เข้าร่วมแล้ว
+									<Check class="mr-2 h-4 w-4" /> {t.results.btnJoined}
 								{:else}
 									<span
 										class="mr-2 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-muted-foreground"
 									>
 										<span class="h-1.5 w-1.5 rounded-full bg-transparent"></span>
 									</span>
-									เลือกร่วมครอบครัวนี้
+									{t.results.btnJoin}
 								{/if}
 							</Button>
 						</div>
 
 						{#if result.expanded}
 							<div class="mt-1 border-t pt-4">
-								<h4 class="mb-3 text-sm font-bold text-[#003B71]">รายชื่อสมาชิกในครอบครัว:</h4>
+								<h4 class="mb-3 text-sm font-bold text-[#003B71]">{t.results.membersTitle}</h4>
 
 								{#if result.members.filter((m) => m._id !== result.household.head_evacuee_id).length > 0}
 									<ul class="space-y-2 pl-1 text-sm text-muted-foreground">
@@ -554,14 +563,14 @@
 														? member.person_id.number
 														: member.phone
 															? member.phone
-															: 'ไม่มีข้อมูลระบุตัวตน'})
+															: t.results.noId})
 												</span>
 											</li>
 										{/each}
 									</ul>
 								{:else}
 									<p class="text-sm text-muted-foreground italic">
-										ยังไม่มีสมาชิกอื่นในครอบครัวนี้
+										{t.results.noOtherMembers}
 									</p>
 								{/if}
 							</div>
@@ -578,7 +587,8 @@
 					selectedHouseholdId = null;
 				}}
 			>
-				<Plus class="h-4 w-4" /> หรือ ต้องการลงทะเบียนแยกเป็นครอบครัวใหม่ในที่อยู่นี้
+				<Plus class="h-4 w-4" />
+				{t.results.btnSeparateNew}
 			</button>
 		</div>
 
@@ -588,16 +598,17 @@
 				<div class="flex items-start gap-3">
 					<CheckSquare class="mt-0.5 h-6 w-6 shrink-0 text-[#00a86b]" />
 					<div class="space-y-1.5 text-green-900">
-						<div class="text-[17px] font-bold">คุณเข้าร่วมครอบครัวเรียบร้อย!</div>
-						<div class="text-[14px]">
-							หัวหน้าครอบครัว: {selectedResult.evacuee
+						<div class="text-base font-bold">{t.results.selectedTitle}</div>
+						<div class="text-sm">
+							{t.results.headLabel}
+							{selectedResult.evacuee
 								? `${selectedResult.evacuee.first_name} ${selectedResult.evacuee.last_name}`
 								: selectedResult.household.label} ({selectedResult.count > 0
 								? selectedResult.count
 								: 1} คน)
 						</div>
-						<div class="mt-2 text-[14px]">
-							<strong>ที่อยู่ครอบครัว:</strong>
+						<div class="mt-2 text-sm">
+							<strong>{t.results.addressLabel}</strong>
 							{formatAddress(selectedResult.household)}
 						</div>
 					</div>
@@ -613,7 +624,8 @@
 			role="status"
 		>
 			<div class="flex items-center gap-2 text-base font-bold text-red-600">
-				<X class="h-6 w-6 stroke-[3]" /> ไม่พบครอบครัวลงทะเบียนด้วยข้อมูลนี้ในระบบ
+				<X class="h-6 w-6 stroke-[3]" />
+				{t.notFound.title}
 			</div>
 			<Button
 				type="button"
@@ -621,7 +633,8 @@
 				class="h-12 w-full rounded-xl px-6 sm:h-10 sm:w-auto"
 				onclick={() => (showNewHouseholdForm = true)}
 			>
-				<Plus class="mr-2 h-4 w-4" /> ลงทะเบียนเป็นครอบครัวใหม่ที่อยู่นี้
+				<Plus class="mr-2 h-4 w-4" />
+				{t.notFound.btnNew}
 			</Button>
 		</div>
 	{/if}
@@ -632,11 +645,10 @@
 			<div class="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
 				<div>
 					<h3 class="flex items-center gap-2 text-lg font-bold">
-						🏡 กรอกข้อมูลที่อยู่ (สร้างครอบครัวใหม่)
+						🏡 {t.newForm.title}
 					</h3>
 					<p class="mt-1 text-xs text-muted-foreground">
-						ที่อยู่นี้จะถูกใช้สร้างฐานข้อมูลกลุ่มครอบครัวใหม่
-						และคุณจะเป็นหัวหน้าครอบครัวโดยอัตโนมัติ
+						{t.notFound.desc}
 					</p>
 				</div>
 				<Button
@@ -668,89 +680,81 @@
 
 			<div class="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-3">
 				<div class="space-y-3">
-					<Label class="font-semibold">บ้านเลขที่</Label>
+					<Label class="font-semibold">{t.newForm.addressNoLabel}</Label>
 					<Input
 						bind:value={formData.address_no}
-						placeholder="เช่น 12/3"
+						placeholder={t.newForm.addressNoPlaceholder}
 						class="h-9 bg-background"
 						required
 					/>
 				</div>
 				<div class="space-y-3">
-					<Label class="font-semibold">หมู่ที่ / ตรอก / ซอย / ถนน</Label>
+					<Label class="font-semibold">{t.newForm.villageNoLabel}</Label>
 					<Input
 						bind:value={formData.village_no}
-						placeholder="เช่น หมู่ 2"
+						placeholder={t.newForm.villageNoPlaceholder}
 						class="h-9 bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
-					<Label class="font-semibold">จังหวัด</Label>
+					<Label class="font-semibold">{t.newForm.provinceLabel}</Label>
 					<SearchSelect
 						name="province"
 						options={provinceItems}
 						bind:value={() => formData.province ?? '', (v) => selectProvince(v || null)}
-						placeholder={provincesQuery.isLoading ? 'กำลังโหลด...' : 'เลือกจังหวัด...'}
-						searchPlaceholder="ค้นหาจังหวัด..."
-						emptyText="ไม่พบจังหวัด"
+						placeholder={provincesQuery.isLoading ? t.newForm.loading : t.newForm.provinceSelect}
+						searchPlaceholder={t.newForm.provinceSearch}
+						emptyText={t.newForm.provinceEmpty}
 						disabled={pending || provincesQuery.isLoading}
 						class="h-9 rounded-md border-border bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
-					<Label class="font-semibold">อำเภอ / เขต</Label>
+					<Label class="font-semibold">{t.newForm.districtLabel}</Label>
 					<SearchSelect
 						name="district"
 						options={districtItems}
 						bind:value={() => formData.district ?? '', (v) => selectDistrict(v || null)}
 						placeholder={!formData.province
-							? 'เลือกจังหวัดก่อน'
+							? t.newForm.provinceSelect
 							: districtsQuery.isLoading
-								? 'กำลังโหลด...'
-								: 'เลือกอำเภอ...'}
-						searchPlaceholder="ค้นหาอำเภอ..."
-						emptyText="ไม่พบอำเภอ"
+								? t.newForm.loading
+								: t.newForm.districtSelect}
+						searchPlaceholder={t.newForm.districtSearch}
+						emptyText={t.newForm.districtEmpty}
 						disabled={pending || !formData.province || districtsQuery.isLoading}
 						class="h-9 rounded-md border-border bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
-					<Label class="font-semibold">ตำบล / แขวง</Label>
+					<Label class="font-semibold">{t.newForm.subdistrictLabel}</Label>
 					<SearchSelect
 						name="subdistrict"
 						options={subdistrictItems}
 						bind:value={() => formData.subdistrict ?? '', (v) => selectSubdistrict(v || null)}
 						placeholder={!formData.district
-							? 'เลือกอำเภอก่อน'
+							? t.newForm.districtSelect
 							: subdistrictsQuery.isLoading
-								? 'กำลังโหลด...'
-								: 'เลือกตำบล...'}
-						searchPlaceholder="ค้นหาตำบล..."
-						emptyText="ไม่พบตำบล"
+								? t.newForm.loading
+								: t.newForm.subdistrictSelect}
+						searchPlaceholder={t.newForm.subdistrictSearch}
+						emptyText={t.newForm.subdistrictEmpty}
 						disabled={pending || !formData.district || subdistrictsQuery.isLoading}
 						class="h-9 rounded-md border-border bg-background"
 					/>
 				</div>
 				<div class="space-y-3">
-					<Label class="font-semibold">รหัสไปรษณีย์</Label>
+					<Label class="font-semibold">{t.newForm.postalCodeLabel}</Label>
 					<Input
 						bind:value={formData.postal_code}
 						disabled={pending || !formData.subdistrict}
-						placeholder={!formData.subdistrict ? 'เลือกตำบลก่อน' : 'เช่น 90110'}
+						placeholder={!formData.subdistrict
+							? t.newForm.subdistrictSelect
+							: t.newForm.postalCodePlaceholder}
 						class="h-9 rounded-md border-border bg-background"
 						required
 					/>
 				</div>
-			</div>
-
-			<div class="mt-8 rounded-xl border border-orange-200 bg-orange-50/50 p-4">
-				<p class="flex items-start gap-2 text-sm font-medium text-orange-800">
-					<span class="mt-0.5 text-base">👑</span>
-					<span class="leading-relaxed">
-						คุณได้รับการตั้งค่าเป็น <span class="font-bold">หัวหน้าครอบครัว (Family Head)</span>
-						ของที่อยู่นี้โดยอัตโนมัติ สมาชิกครอบครัวคนอื่นที่ลงทะเบียนด้วยที่อยู่นี้จะสามารถเข้าร่วมกลุ่มภายหลังได้
-					</span>
-				</p>
 			</div>
 
 			<div class="mt-8 flex flex-col gap-3 border-t pt-6 sm:flex-row-reverse sm:justify-start">
@@ -760,7 +764,7 @@
 					disabled={pending}
 					class="h-12 w-full px-6 sm:h-11 sm:w-auto"
 				>
-					ถัดไป (ข้อมูลสัตว์เลี้ยง/ยานพาหนะ)
+					{t.newForm.btnSave}
 				</Button>
 				<Button
 					type="button"
@@ -768,7 +772,7 @@
 					class="h-12 w-full px-6 sm:h-11 sm:w-auto"
 					onclick={() => (showNewHouseholdForm = false)}
 				>
-					ยกเลิก
+					{t.newForm.btnCancel}
 				</Button>
 			</div>
 		</form>

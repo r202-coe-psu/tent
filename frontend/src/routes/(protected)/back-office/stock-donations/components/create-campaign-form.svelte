@@ -136,7 +136,7 @@
 		<div class="space-y-4">
 			<h3 class="flex items-center gap-2 text-sm font-bold text-foreground">
 				<span
-					class="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground"
+					class="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-2xs font-bold text-primary-foreground"
 					>1</span
 				>
 				ข้อมูลสิ่งของ (Item Details)
@@ -207,7 +207,7 @@
 		<div class="space-y-4">
 			<h3 class="flex items-center gap-2 text-sm font-bold text-foreground">
 				<span
-					class="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground"
+					class="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-2xs font-bold text-primary-foreground"
 					>2</span
 				>
 				เป้าหมายและเหตุผล (Target & Storytelling)

@@ -10,6 +10,7 @@ ProjectionAction = Literal["upsert", "delete"]
 
 OPEN_STATUSES = frozenset({"open", "active", "standby", "full_capacity"})
 CLOSED_STATUSES = frozenset({"closed"})
+SITE_KINDS = frozenset({"evacuation_center", "host_house"})
 
 
 def resolve_operation_status(doc: dict[str, Any]) -> str | None:
@@ -32,12 +33,21 @@ def is_shelter_open(doc: dict[str, Any]) -> bool:
 
 
 def map_public_shelter_status(doc: dict[str, Any]) -> str:
+    """Map registry operation_status → public_shelters.status (schema §9.1)."""
     status = resolve_operation_status(doc)
     if status in CLOSED_STATUSES:
         return "closed"
     if status == "full_capacity":
         return "full"
+    if status == "standby":
+        return "standby"
+    # active / legacy "open"
     return "open"
+
+
+def resolve_site_kind(doc: dict[str, Any]) -> str:
+    site_kind = doc.get("site_kind")
+    return site_kind if site_kind in SITE_KINDS else "evacuation_center"
 
 
 def backfill_capacity(doc: dict[str, Any]) -> int:
@@ -90,6 +100,7 @@ def project_shelter(doc: dict[str, Any]) -> tuple[ProjectionAction, dict[str, An
         "shelter_code": code,
         "registry_id": registry_id,
         "name": doc.get("name") or code,
+        "site_kind": resolve_site_kind(doc),
         "status": map_public_shelter_status(doc),
         "capacity": backfill_capacity(doc),
         "province": doc.get("province"),

@@ -116,14 +116,14 @@
 								{evacuee.first_name}
 								{evacuee.last_name}
 							</h4>
-							<p class="mt-0.5 text-[10px] font-semibold text-slate-400">
+							<p class="mt-0.5 text-2xs font-semibold text-slate-400">
 								เลขบัตร: {maskNationalId(evacuee.person_id?.number) || 'ไม่ระบุ'} • โทร: {evacuee.phone ||
 									'ไม่ระบุ'}
 							</p>
 						</div>
 						<div class="flex items-center gap-3">
 							<span
-								class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold shadow-xs
+								class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-2xs font-bold shadow-xs
 								{canCheckOutEvacuee(evacuee)
 									? 'bg-emerald-100 text-emerald-800'
 									: canCheckInEvacuee(evacuee)

@@ -152,7 +152,7 @@
 			<h3 class="truncate text-sm font-bold text-foreground">
 				รับของเข้าคลัง — {purchase.vendor}
 			</h3>
-			<p class="truncate text-[11px] text-muted-foreground">
+			<p class="truncate text-2xs text-muted-foreground">
 				{purchase.po_ref ? `เลขที่ ${purchase.po_ref} · ` : ''}นับได้เท่าไรกรอกเท่านั้น
 				รับหลายรอบได้
 			</p>
@@ -175,7 +175,7 @@
 				<div class="flex items-start justify-between gap-2">
 					<div class="min-w-0">
 						<p class="truncate text-sm font-bold text-foreground">{itemName(row.item_id)}</p>
-						<p class="text-[11px] text-muted-foreground">
+						<p class="text-2xs text-muted-foreground">
 							สั่ง {orderedQty(row.item_id) ?? '—'}
 							{row.unit} · รับแล้ว {receivedByItem[row.item_id] ?? '0'}
 							{row.unit}{remaining ? ` · ค้าง ${remaining} ${row.unit}` : ''}
@@ -195,8 +195,7 @@
 					<Form.ElementField {form} name="counted[{i}].qty" class="col-span-1">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label class="text-[11px] font-bold text-foreground">จำนวนที่นับได้</Form.Label
-								>
+								<Form.Label class="text-2xs font-bold text-foreground">จำนวนที่นับได้</Form.Label>
 								<Input
 									{...props}
 									type="number"
@@ -207,14 +206,14 @@
 								/>
 							{/snippet}
 						</Form.Control>
-						<Form.FieldErrors class="text-[11px]" />
+						<Form.FieldErrors class="text-2xs" />
 					</Form.ElementField>
 
 					<Form.ElementField {form} name="counted[{i}].lot.expiry" class="col-span-1">
 						<Form.Control>
 							{#snippet children({ props })}
 								<div class="flex items-center justify-between gap-1">
-									<Form.Label class="text-[11px] font-bold text-foreground">
+									<Form.Label class="text-2xs font-bold text-foreground">
 										วันหมดอายุ
 										{#if item?.perishable}
 											<span class="font-bold text-rose-600 dark:text-rose-400">* บังคับ</span>
@@ -223,14 +222,14 @@
 									<div class="flex gap-1">
 										<button
 											type="button"
-											class="cursor-pointer rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-bold text-muted-foreground transition hover:bg-muted"
+											class="cursor-pointer rounded-full border border-border bg-background px-2 py-0.5 text-2xs font-bold text-muted-foreground transition hover:bg-muted"
 											onclick={() => setQuickExpiry(i, 3)}
 										>
 											+3 วัน
 										</button>
 										<button
 											type="button"
-											class="cursor-pointer rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-bold text-muted-foreground transition hover:bg-muted"
+											class="cursor-pointer rounded-full border border-border bg-background px-2 py-0.5 text-2xs font-bold text-muted-foreground transition hover:bg-muted"
 											onclick={() => setQuickExpiry(i, 7)}
 										>
 											+7 วัน
@@ -246,14 +245,13 @@
 								/>
 							{/snippet}
 						</Form.Control>
-						<Form.FieldErrors class="text-[11px]" />
+						<Form.FieldErrors class="text-2xs" />
 					</Form.ElementField>
 
 					<Form.ElementField {form} name="counted[{i}].lot.note" class="col-span-1">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label class="text-[11px] font-bold text-foreground">สถานที่จัดเก็บ</Form.Label
-								>
+								<Form.Label class="text-2xs font-bold text-foreground">สถานที่จัดเก็บ</Form.Label>
 								<select
 									{...props}
 									value={row.lot?.note ?? ''}
@@ -267,7 +265,7 @@
 								</select>
 							{/snippet}
 						</Form.Control>
-						<Form.FieldErrors class="text-[11px]" />
+						<Form.FieldErrors class="text-2xs" />
 					</Form.ElementField>
 				</div>
 			</div>

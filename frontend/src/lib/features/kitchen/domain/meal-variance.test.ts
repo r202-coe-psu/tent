@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { computeMealVariance, VARIANCE_TOLERANCE_PCT } from './meal-variance';
+import {
+	computeMealVariance,
+	VARIANCE_TOLERANCE_PCT,
+	MEAL_VARIANCE_STATUS_LABELS
+} from './meal-variance';
+import type { MealVarianceStatus } from './meal-variance';
 import type { MealPlan, MealService } from './kitchen';
 
 // Minimal fixtures — only the fields computeMealVariance reads. Cast keeps the
@@ -86,5 +91,58 @@ describe('computeMealVariance', () => {
 
 	it('exposes the default tolerance constant', () => {
 		expect(VARIANCE_TOLERANCE_PCT).toBe(5);
+	});
+
+	it('passes actual_yield through when recorded (CR-084)', () => {
+		const v = computeMealVariance(service({ served: 85, actual_yield: 90 }), plan(100));
+		expect(v.actual_yield).toBe(90);
+	});
+
+	it('actual_yield is null on a service with no yield recorded (pre-CR-084 doc)', () => {
+		const v = computeMealVariance(service({ served: 85 }), plan(100));
+		expect(v.actual_yield).toBeNull();
+	});
+
+	it('yield_variance = actual_yield − planned', () => {
+		const v = computeMealVariance(service({ served: 85, actual_yield: 90 }), plan(100));
+		expect(v.yield_variance).toBe(-10);
+	});
+
+	it('yield_variance is null when there is no plan', () => {
+		const v = computeMealVariance(service({ served: 85, actual_yield: 90 }), null);
+		expect(v.yield_variance).toBeNull();
+		expect(v.actual_yield).toBe(90);
+	});
+
+	it('yield_variance is null when actual_yield is absent', () => {
+		const v = computeMealVariance(service({ served: 85 }), plan(100));
+		expect(v.yield_variance).toBeNull();
+	});
+
+	it('actual_yield does not change variance / variance_pct / status', () => {
+		const v = computeMealVariance(service({ served: 80, actual_yield: 200 }), plan(100));
+		expect(v.variance).toBe(-20);
+		expect(v.variance_pct).toBe(-20);
+		expect(v.status).toBe('under');
+	});
+
+	it('produced stays served + waste even when actual_yield is recorded', () => {
+		const v = computeMealVariance(service({ served: 90, waste: 12, actual_yield: 200 }), plan(100));
+		expect(v.produced).toBe(102);
+	});
+
+	it('no_plan branch still reports actual_yield', () => {
+		const v = computeMealVariance(service({ served: 40, waste: 2, actual_yield: 45 }), null);
+		expect(v.status).toBe('no_plan');
+		expect(v.actual_yield).toBe(45);
+		expect(v.yield_variance).toBeNull();
+	});
+
+	it('exposes a Thai label for every variance status', () => {
+		const statuses: MealVarianceStatus[] = ['on_target', 'over', 'under', 'no_plan'];
+		for (const s of statuses) {
+			expect(MEAL_VARIANCE_STATUS_LABELS[s]).toBeTruthy();
+		}
+		expect(Object.keys(MEAL_VARIANCE_STATUS_LABELS)).toHaveLength(4);
 	});
 });

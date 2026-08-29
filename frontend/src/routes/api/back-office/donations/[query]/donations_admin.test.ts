@@ -39,7 +39,10 @@ const catalogRows = [
 	}
 ];
 
-function mockCouch(donation: PublicDonationDoc, over: { putStatus?: number } = {}) {
+function mockCouch(
+	donation: PublicDonationDoc,
+	over: { putStatus?: number; existingLotNos?: string[] } = {}
+) {
 	vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 		if (method === 'GET' && path.includes('/registry/')) {
 			return Promise.resolve({
@@ -52,6 +55,13 @@ function mockCouch(donation: PublicDonationDoc, over: { putStatus?: number } = {
 		}
 		if (method === 'GET' && path.includes('donation:')) {
 			return Promise.resolve({ status: 200, data: { rows: [{ doc: donation }] } });
+		}
+		// Lot-number allocation reads the day's existing labels (CR-088).
+		if (method === 'POST' && path.includes('_find')) {
+			return Promise.resolve({
+				status: 200,
+				data: { docs: (over.existingLotNos ?? []).map((lot_no) => ({ lot: { lot_no } })) }
+			});
 		}
 		if (method === 'POST' && path.includes('_bulk_docs')) {
 			return Promise.resolve({ status: 201, data: [{ ok: true }] });
@@ -191,11 +201,68 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 				unit: 'kg',
 				reason: 'donation',
 				ref_id: 'donation:123',
-				schema_v: 3, // stock_ledger bumped 2 → 3 when `purchase` joined the reason enum (CR-032)
+				schema_v: 4, // bumped 3 → 4 by CR-088 (lot.lot_no / lot.storage_zone)
 				shelter_code: 'SH001',
 				created_by: 'admin'
 			});
 			expect(ledgers[0]._id.startsWith('stock_ledger:')).toBe(true);
+		});
+
+		// CR-088 — the lot label is minted server-side, one per counted catalog line.
+		it('mints a lot_no per counted line, continuing the shelter day sequence', async () => {
+			mockCouch(
+				withItems([
+					{ item_id: 'item:rice', qty: '10', unit: 'kg' },
+					{ item_id: 'item:milk', qty: '2', unit: 'ลัง' }
+				]),
+				{ existingLotNos: ['L-260825-004'] }
+			);
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					items: [
+						{ item_id: 'item:rice', qty: '10', unit: 'kg' },
+						{ item_id: 'item:milk', qty: '2', unit: 'ลัง', lot: { expiry: '2026-12-01' } }
+					]
+				})
+			);
+			expect(response.status).toBe(200);
+
+			const ledgers = appendedDocs().filter((d): d is StockLedger => d.type === 'stock_ledger');
+			expect(ledgers).toHaveLength(2);
+			const lots = ledgers.map((l) => l.lot?.lot_no);
+			expect(lots.every((l) => /^L-\d{6}-\d{3}$/.test(l ?? ''))).toBe(true);
+			expect(new Set(lots).size).toBe(2); // never the same label twice in one receipt
+
+			// Handed back so staff can label the physical boxes.
+			const body = await response.json();
+			expect(body.lots).toEqual([
+				{ item_id: 'item:rice', lot_no: lots[0] },
+				{ item_id: 'item:milk', lot_no: lots[1] }
+			]);
+		});
+
+		it('keeps the storage_zone staff typed and ignores a client-sent lot_no', async () => {
+			mockCouch(withItems([{ item_id: 'item:rice', qty: '10', unit: 'kg' }]));
+
+			await POST(
+				postEvent({
+					status: 'received',
+					items: [
+						{
+							item_id: 'item:rice',
+							qty: '10',
+							unit: 'kg',
+							lot: { storage_zone: 'A-01', lot_no: 'L-990101-999' }
+						}
+					]
+				})
+			);
+
+			const ledger = appendedDocs().find((d): d is StockLedger => d.type === 'stock_ledger');
+			expect(ledger?.lot?.storage_zone).toBe('A-01');
+			expect(ledger?.lot?.lot_no).not.toBe('L-990101-999');
 		});
 
 		it('never writes a ledger entry for a free-text line', async () => {

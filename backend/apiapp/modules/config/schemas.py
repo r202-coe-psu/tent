@@ -5,6 +5,8 @@ class FaqItem(BaseModel):
     id: str | None = None
     question: str
     answer: str
+    question_en: str | None = None
+    answer_en: str | None = None
     is_published: bool = True
     order: int = 0
 

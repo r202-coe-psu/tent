@@ -2,7 +2,12 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
-	import type { Shelter, ProjectLevel } from '../domain/schema';
+	import {
+		SITE_KIND_LABELS,
+		type Shelter,
+		type ProjectLevel,
+		type SiteKind
+	} from '../domain/schema';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -22,10 +27,15 @@
 	} = $props();
 
 	const operationStatusOptions: { value: Shelter['operation_status']; label: string }[] = [
-		{ value: 'standby', label: 'เตรียมพร้อม (Standby)' },
+		{ value: 'standby', label: 'กำลังเตรียมการ (Preparing)' },
 		{ value: 'active', label: 'เปิดรับผู้อพยพ (Active)' },
 		{ value: 'full_capacity', label: 'เต็มความจุ (Full Capacity)' },
 		{ value: 'closed', label: 'ปิดศูนย์ (Closed)' }
+	];
+
+	const siteKindOptions: { value: SiteKind; label: string }[] = [
+		{ value: 'evacuation_center', label: SITE_KIND_LABELS.evacuation_center },
+		{ value: 'host_house', label: SITE_KIND_LABELS.host_house }
 	];
 
 	const projectLevelOptions: { value: ProjectLevel; label: string }[] = [
@@ -158,6 +168,26 @@
 	</Form.Field>
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+		<Form.Field {form} name="site_kind">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>ชนิดสถานที่<span class="text-destructive">*</span></Form.Label>
+					<Select.Root type="single" bind:value={$formData.site_kind} {disabled}>
+						<Select.Trigger {...props} class={selectTriggerClass}>
+							{siteKindOptions.find((o) => o.value === $formData.site_kind)?.label ??
+								'— เลือกชนิดสถานที่ —'}
+						</Select.Trigger>
+						<Select.Content>
+							{#each siteKindOptions as opt (opt.value)}
+								<Select.Item value={opt.value} label={opt.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+
 		<Form.Field {form} name="operation_status">
 			<Form.Control>
 				{#snippet children({ props })}

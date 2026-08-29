@@ -33,40 +33,12 @@
 		type SaveFailureReport
 	} from '../index';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { EVACUEE_FORM_I18N } from './_constants/evacuee-form.i18n';
 
-	const STEPS = [
-		{
-			title: 'ตรวจสอบประวัติการลงทะเบียน',
-			short: 'ตรวจสอบประวัติ',
-			description: 'ค้นหาด้วยเลขบัตรประชาชน, เบอร์โทรศัพท์ หรือชื่อ-นามสกุล ก่อนลงทะเบียนใหม่'
-		},
-		{
-			title: 'ส่วนประเมินอาการเจ็บป่วยและกลุ่มอาการเฝ้าระวัง (EWAR Symptoms)',
-			short: 'ประเมินอาการ',
-			description: 'โปรดสังเกตอาการหรือสอบถามผู้ประสบภัยก่อนเริ่มลงทะเบียน หากพบอาการให้แจ้งเตือน'
-		},
-		{
-			title: 'ข้อมูลผู้ประสบภัย (Registration)',
-			short: 'ข้อมูลผู้ประสบภัย',
-			description: 'กรอกข้อมูลพื้นฐานและประเมินสถานะ'
-		},
-		{
-			title: 'หน้าค้นหาครัวเรือน (Head of Household)',
-			short: 'ข้อมูลครัวเรือน',
-			description:
-				'เลือกครัวเรือนเดิม หรือสร้างครัวเรือนใหม่ (ผู้ที่มาเพียงคนเดียวให้สร้างครัวเรือน 1 คน)'
-		},
-		{
-			title: 'ทรัพย์สินและสัตว์เลี้ยง (Assets & Pets)',
-			short: 'ทรัพย์สินและสัตว์เลี้ยง',
-			description: 'บันทึกข้อมูลสัมภาระ ยานพาหนะ สัตว์เลี้ยง และสถานะบ้าน'
-		},
-		{
-			title: 'จัดสรรพื้นที่ (Zoning)',
-			short: 'จัดสรรพื้นที่',
-			description: 'เลือกโซนพักพิงและพิมพ์สลิปข้อปฏิบัติ'
-		}
-	] as const;
+	const t = $derived(getTranslation(EVACUEE_FORM_I18N, languageStore.current));
+	const STEPS = $derived(t.steps);
 
 	let {
 		onsubmit,
@@ -92,7 +64,7 @@
 			...opts
 		});
 		onsaveerror?.(report);
-		toast.error('บันทึกไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน');
+		toast.error(t.toastSaveFailed);
 	}
 
 	const selectedSymptoms = new SvelteSet<string>();
@@ -260,7 +232,7 @@
 	}) {
 		if (isSubmittingHousehold) return;
 		if (!selectedHousehold && (!isCreatingNewHousehold || !newHouseholdAddress)) {
-			toast.error('กรุณาเลือกครัวเรือนเดิม หรือสร้างครัวเรือนใหม่ก่อนดำเนินการต่อ');
+			toast.error(t.toastSelectHouseholdFirst);
 			goToStep(4);
 			return;
 		}
@@ -288,7 +260,7 @@
 			}
 
 			if (!registeredEvacuee) {
-				throw new Error('ไม่พบข้อมูลผู้ประสบภัยที่กำลังลงทะเบียน');
+				throw new Error(t.errorMissingEvacueeData);
 			}
 
 			// 2. Map pets — a household may bring several (schema pets[])
@@ -316,7 +288,7 @@
 				householdId = selectedHousehold._id;
 
 				const latestHousehold = await peopleRepository().getHousehold(selectedHousehold._id);
-				if (!latestHousehold) throw new Error('ไม่พบครัวเรือนในระบบ');
+				if (!latestHousehold) throw new Error(t.errorHouseholdNotFound);
 
 				await updateHouseholdMutation.mutateAsync({
 					...latestHousehold,
@@ -354,7 +326,7 @@
 
 			// 6. Link evacuee to household
 			if (!householdId) {
-				throw new Error('ต้องเลือกหรือสร้างครัวเรือนก่อนลงทะเบียนผู้ประสบภัย');
+				throw new Error(t.errorMustSelectHousehold);
 			}
 
 			const updated = await updateEvacueeMutation.mutateAsync({
@@ -362,7 +334,7 @@
 				household_id: householdId
 			});
 			newlyRegisteredEvacuee = updated;
-			toast.success('ลงทะเบียนผู้ประสบภัยและครัวเรือนสำเร็จ');
+			toast.success(t.toastSuccessRegistration);
 
 			// Go to step 6 (Zoning)
 			goToStep(6);
@@ -401,8 +373,8 @@
 		zoneError = null;
 
 		if (!newlyRegisteredEvacuee) {
-			zoneError = 'ไม่พบข้อมูลผู้ประสบภัยที่กำลังคัดแยก กรุณาย้อนกลับไปตรวจสอบขั้นตอนก่อนหน้า';
-			toast.error('จัดสรรพื้นที่ไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน');
+			zoneError = t.zoneErrorMissingEvacuee;
+			toast.error(t.toastZoneFailed);
 			return;
 		}
 
@@ -410,9 +382,8 @@
 			// Fetch the latest evacuee document to avoid CouchDB MVCC revision conflicts
 			const latestEvacuee = await peopleRepository().getEvacuee(newlyRegisteredEvacuee._id);
 			if (!latestEvacuee) {
-				zoneError =
-					'ไม่พบข้อมูลผู้ประสบภัยในระบบ — ข้อมูลอาจยังไม่ถูกบันทึกครบ กรุณาย้อนกลับหรือลองใหม่อีกครั้ง';
-				toast.error('จัดสรรพื้นที่ไม่สำเร็จ — ดูรายละเอียดในกล่องแจ้งเตือนด้านบน');
+				zoneError = t.zoneErrorNotFound;
+				toast.error(t.toastZoneFailed);
 				return;
 			}
 
@@ -428,7 +399,7 @@
 				ctx,
 				zone
 			});
-			toast.success('บันทึกข้อมูลและจัดสรรพื้นที่สำเร็จ');
+			toast.success(t.toastSuccessZoning);
 
 			// Reset internal state
 			goToStep(1);
@@ -443,9 +414,8 @@
 			onComplete?.(finishedEvacuee);
 		} catch (err) {
 			console.error('[EvacueeForm] Zone assignment check-in error:', err);
-			const detail = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึกโซน';
-			zoneError = `จัดสรรพื้นที่ไม่สำเร็จ (${detail}) — กรุณาลองเลือกโซนอีกครั้ง ไม่ต้องลงทะเบียนใหม่`;
-			toast.error(`จัดสรรพื้นที่ไม่สำเร็จ: ${detail}`);
+			zoneError = t.zoneErrorRetry;
+			toast.error(t.toastZoneFailed);
 		}
 	}
 </script>
@@ -453,7 +423,7 @@
 <!-- ── Step progress ──────────────────────────────────────────────────────────── -->
 <div class="mb-6 space-y-3">
 	<div class="sm:hidden">
-		<p class="text-xs font-medium text-muted-foreground">ขั้น {step} จาก 6</p>
+		<p class="text-xs font-medium text-muted-foreground">{t.stepOf(step, 6)}</p>
 		<h2 class="text-lg font-semibold">{currentStep.title}</h2>
 		<p class="text-sm text-muted-foreground">{currentStep.description}</p>
 		<div
@@ -462,7 +432,7 @@
 			aria-valuenow={step}
 			aria-valuemin={1}
 			aria-valuemax={6}
-			aria-label="ความคืบหน้าการลงทะเบียน"
+			aria-label={t.progressAria}
 		>
 			<div
 				class="h-full rounded-full bg-primary transition-all"
@@ -515,19 +485,21 @@
 				</div>
 			{/each}
 		</div>
-		<h2 class="text-xl font-semibold">{currentStep.title}</h2>
-		<p class="text-sm text-muted-foreground">{currentStep.description}</p>
+		<div>
+			<h2 class="text-xl font-semibold">{currentStep.title}</h2>
+			<p class="text-sm text-muted-foreground">{currentStep.description}</p>
+		</div>
 	</div>
 </div>
 
 {#if zoneError}
 	<Alert.Root variant="destructive" class="mb-4 border-destructive/40 bg-destructive/5">
 		<CircleAlert class="size-4" />
-		<Alert.Title class="font-semibold">จัดสรรพื้นที่ไม่สำเร็จ</Alert.Title>
+		<Alert.Title class="font-semibold">{t.zoneErrorTitle}</Alert.Title>
 		<Alert.Description class="space-y-3">
 			<p>{zoneError}</p>
 			<Button type="button" variant="outline" size="sm" onclick={() => (zoneError = null)}>
-				ปิดการแจ้งเตือน
+				{t.closeAlert}
 			</Button>
 		</Alert.Description>
 	</Alert.Root>
@@ -560,27 +532,26 @@
 	<div class="space-y-6">
 		<Alert.Root class="border-primary/30 bg-primary/5">
 			<CircleAlert class="size-4" />
-			<Alert.Title class="font-semibold">ผู้ประสบภัยทุกคนต้องมีครัวเรือน</Alert.Title>
+			<Alert.Title class="font-semibold">{t.householdAlertTitle}</Alert.Title>
 			<Alert.Description>
-				เลือกครัวเรือนเดิม หรือสร้างครัวเรือนใหม่ หากมาเพียงคนเดียวให้สร้างครัวเรือน 1 คน
-				โดยผู้ลงทะเบียนจะเป็นหัวหน้าครัวเรือน
+				{t.householdAlertDesc}
 			</Alert.Description>
 		</Alert.Root>
 
 		{#if householdDataLoading}
 			<div class="flex items-center gap-2 py-8 text-sm text-muted-foreground">
 				<Loader2 class="size-4 animate-spin" />
-				กำลังโหลดข้อมูลครัวเรือน...
+				{t.householdLoading}
 			</div>
 		{:else}
 			{#if householdDataError}
 				<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5">
 					<CircleAlert class="size-4" />
-					<Alert.Title class="font-semibold">โหลดข้อมูลครัวเรือนไม่สำเร็จ</Alert.Title>
+					<Alert.Title class="font-semibold">{t.householdLoadErrorTitle}</Alert.Title>
 					<Alert.Description class="space-y-3">
-						<p>ยังค้นหาครัวเรือนที่มีอยู่ไม่ได้ แต่ยังสามารถสร้างครัวเรือนใหม่ได้</p>
+						<p>{t.householdLoadErrorDesc}</p>
 						<Button type="button" variant="outline" size="sm" onclick={retryHouseholdData}>
-							ลองใหม่
+							{t.retry}
 						</Button>
 					</Alert.Description>
 				</Alert.Root>
@@ -608,7 +579,7 @@
 					disabled={isSubmittingHousehold || !selectedHousehold}
 					onclick={() => goToStep(5)}
 				>
-					ถัดไป (ข้อมูลสัตว์เลี้ยง/ยานพาหนะ)
+					{t.nextAssetsPets}
 				</Button>
 			{/if}
 			<Button
@@ -617,7 +588,7 @@
 				onclick={() => goToStep(3)}
 				class="h-12 w-full text-sm font-medium sm:h-10 sm:w-auto sm:px-6"
 			>
-				ย้อนกลับ
+				{t.back}
 			</Button>
 		</div>
 	</div>

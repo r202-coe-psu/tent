@@ -11,6 +11,7 @@
 		useCreateShelter,
 		useUpdateShelter,
 		shelterSchema,
+		type SiteKind,
 		BasicInfoSection,
 		CapacitySection,
 		ZonesFacilitiesSection,
@@ -49,11 +50,13 @@
 	let {
 		id = '',
 		isEdit,
-		basePath
+		basePath,
+		siteKind
 	}: {
 		id?: string;
 		isEdit: boolean;
 		basePath?: string;
+		siteKind?: SiteKind;
 	} = $props();
 
 	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/shelters'));
@@ -137,12 +140,17 @@
 	if (!$formData.luggage_policy) $formData.luggage_policy = { ...EMPTY_LUGGAGE_POLICY };
 	if (!$formData.parking_policy) $formData.parking_policy = { ...EMPTY_PARKING_POLICY };
 
+	$effect(() => {
+		if (!isEdit && siteKind && !$formData.site_kind) $formData.site_kind = siteKind;
+	});
+
 	// Populate form data when edit query loads.
 	$effect(() => {
 		if (shelterQuery.data) {
 			const d = shelterQuery.data;
 			$formData = {
 				name: d.name,
+				site_kind: d.site_kind,
 				operation_status: d.operation_status,
 				shelter_type: d.shelter_type ?? null,
 				project_level: d.project_level ?? null,
@@ -249,7 +257,7 @@
 	}
 </script>
 
-<main class="text-[13px] text-foreground">
+<main class="text-xs text-foreground">
 	<div
 		class="sticky top-0 z-10 flex items-center justify-between border-b border-shelter-border bg-background/95 px-6 py-4 backdrop-blur-sm"
 	>
@@ -302,7 +310,7 @@
 						หมวดหมู่ข้อมูล
 					</p>
 					{#if !usersViewActive}
-						<span class="text-[11px] font-semibold text-muted-foreground tabular-nums">
+						<span class="text-2xs font-semibold text-muted-foreground tabular-nums">
 							{step + 1} / {steps.length}
 						</span>
 					{/if}
@@ -367,7 +375,7 @@
 									>ผู้ใช้งานและสิทธิ์</span
 								>
 							</button>
-							<p class="mt-1 px-3 text-[11px] text-muted-foreground">
+							<p class="mt-1 px-3 text-2xs text-muted-foreground">
 								บันทึกศูนย์ก่อนจึงเพิ่มผู้ใช้ได้
 							</p>
 						{/if}

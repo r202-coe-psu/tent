@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from tent_model.public_shelter import PublicShelter
 
-from .schemas import ShelterDetailResponse, ShelterItem, ShelterListResponse
+from .schemas import ShelterDetailResponse, ShelterItem, ShelterListResponse, SiteKind
 
 # Stay statuses that hold a place at a shelter (CR-070 D-BOOK-OCC=C, FR-66):
 # a web booking reserves the seat the moment it is made, so `pre_registered`
@@ -24,6 +24,7 @@ class ShelterUseCase:
         district: str | None = None,
         subdistrict: str | None = None,
         status: str | None = None,
+        site_kind: SiteKind | None = None,
         lat: float | None = None,
         lng: float | None = None,
         radius_km: float | None = None,
@@ -37,6 +38,8 @@ class ShelterUseCase:
             filters["subdistrict"] = subdistrict
         if status:
             filters["status"] = status
+        if site_kind:
+            filters["site_kind"] = site_kind
 
         has_near = False
         if lat is not None and lng is not None:
@@ -93,6 +96,7 @@ class ShelterUseCase:
                 ShelterItem(
                     code=doc.shelter_code,
                     name=doc.name,
+                    site_kind=doc.site_kind,
                     status=doc.status,
                     capacity=doc.capacity,
                     geo=doc.geo,
@@ -122,22 +126,20 @@ class ShelterUseCase:
 
         m = doc.raw_data or {}
 
-        mapped_status = "CLOSED"
-        op_status = m.get("operation_status")
-        if op_status == "active":
-            mapped_status = "OPEN"
-        elif op_status == "full_capacity":
-            mapped_status = "FULL"
-        elif op_status == "standby":
-            mapped_status = "PREPARE"
+        status_ui = {
+            "open": "OPEN",
+            "full": "FULL",
+            "standby": "PREPARE",
+            "closed": "CLOSED",
+        }
+        # Prefer projected status (Mongo SoR for public) over re-deriving from raw_data.
+        mapped_status = status_ui.get(doc.status, "CLOSED")
 
-        occupancy = 0
-        if mapped_status in ("OPEN", "FULL"):
-            occupancy = await PublicPerson.find(
-                {"shelter_code": code, "status": {"$in": list(OCCUPANCY_STATUSES)}}
-            ).count()
+        occupancy = await PublicPerson.find(
+            {"shelter_code": code, "status": {"$in": list(OCCUPANCY_STATUSES)}}
+        ).count()
 
-        capacity_total = m.get("capacity") or 0
+        capacity_total = m.get("capacity") or doc.capacity or 0
         capacity_available = max(0, capacity_total - occupancy)
         occupancy_rate = round((occupancy / capacity_total) * 100) if capacity_total > 0 else 0
 
@@ -206,6 +208,7 @@ class ShelterUseCase:
             shelter={
                 "id": code,
                 "name": m.get("name") or doc.name or code,
+                "site_kind": doc.site_kind,
                 "status": mapped_status,
                 "admin_type": m.get("shelter_type") or "unspecified",
                 "address": location.get("address") or "unspecified",

@@ -2,28 +2,66 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Dog from '@lucide/svelte/icons/dog';
 	import Users from '@lucide/svelte/icons/users';
-	import type { PublicShelterDetail } from '$lib/features/public-portal';
+	import {
+		resolveMasterLabel,
+		useVulnerableGroupLabelMap,
+		type PublicShelterDetail
+	} from '$lib/features/public-portal';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
 
 	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
+
+	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
+	const vulnerableGroupLabels = useVulnerableGroupLabelMap();
 
 	function translatePetCategories(categoriesStr: string): string {
 		if (!categoriesStr) return '';
 		const map: Record<string, string> = {
-			small_general: 'สัตว์เล็กทั่วไป',
-			large_dog: 'สุนัขพันธุ์ใหญ่',
-			livestock: 'ปศุสัตว์'
+			small_general: t.smallGeneral,
+			large_dog: t.largeDogs,
+			livestock: t.livestock
 		};
 		return categoriesStr
 			.split(',')
 			.map((c) => map[c] || c)
 			.join(', ');
 	}
+
+	let visibleVulnerableGroups = $derived.by(() => {
+		const groups = shelter.admission_policy?.vulnerable_groups ?? [];
+		const legacy: Record<string, string> = {
+			general_vulnerable: t.generalVulnerable,
+			quarantine: t.quarantinePatients,
+			wheelchair: t.wheelchairUsers,
+			none: t.noSpecificZone
+		};
+		if (langState.current === 'en') {
+			Object.assign(legacy, {
+				ผู้ป่วยติดเตียง: 'Bedridden Patient',
+				ผู้ใช้วีลแชร์: 'Wheelchair User',
+				เด็กอ่อน: 'Infant/Baby',
+				ผู้สูงอายุ: 'Elderly',
+				สตรีมีครรภ์: 'Pregnant Women',
+				ผู้พิการ: 'Disabled Person',
+				ผู้ป่วยจิตเวช: 'Psychiatric Patient',
+				ผู้ป่วยแยกกักโรค: 'Quarantine Patient'
+			});
+		}
+		return groups
+			.map((code) => ({
+				code,
+				label: resolveMasterLabel(code, vulnerableGroupLabels.data, legacy)
+			}))
+			.filter((g) => g.label);
+	});
 </script>
 
 <section>
 	<div class="mb-4 flex items-center gap-2">
 		<CheckCircle2 class="h-5 w-5 text-success-dark" />
-		<h2 class="text-lg font-bold text-foreground">นโยบายการรับเข้าพัก (Admission Policy)</h2>
+		<h2 class="text-lg font-bold text-foreground">{t.admissionPolicy}</h2>
 	</div>
 
 	<div class="flex flex-col gap-3">
@@ -43,7 +81,7 @@
 						? 'text-danger'
 						: 'text-foreground'}"
 				>
-					นโยบายสัตว์เลี้ยง
+					{t.petPolicy}
 				</h3>
 				<p
 					class="text-sm {shelter.admission_policy?.pets === 'not_allowed'
@@ -51,11 +89,11 @@
 						: 'text-muted-foreground'}"
 				>
 					{#if shelter.admission_policy?.pets === 'not_allowed'}
-						ไม่อนุญาต
+						{t.notAllowed}
 					{:else if shelter.admission_policy?.pets === 'allowed'}
-						อนุญาต (มีโซนสัตว์เลี้ยง)
+						{t.allowedPetZone}
 					{:else if shelter.admission_policy?.pets?.startsWith('conditional')}
-						อนุญาตแบบมีเงื่อนไข ({translatePetCategories(
+						{t.conditionallyAllowed} ({translatePetCategories(
 							shelter.admission_policy.pets.split(':')[1]
 						)})
 					{:else}
@@ -73,30 +111,20 @@
 				<Users class="h-5 w-5" />
 			</div>
 			<div>
-				<h3 class="mb-1 text-sm font-bold text-foreground">กลุ่มเปราะบางที่รองรับได้เป็นพิเศษ</h3>
-				{#if shelter.admission_policy?.vulnerable_groups && shelter.admission_policy.vulnerable_groups.length > 0}
+				<h3 class="mb-1 text-sm font-bold text-foreground">{t.supportedVulnerableGroups}</h3>
+				{#if visibleVulnerableGroups.length > 0}
 					<div class="mt-2 flex flex-wrap gap-2">
-						{#each shelter.admission_policy.vulnerable_groups as group, i (i)}
+						{#each visibleVulnerableGroups as group (group.code)}
 							<span
 								class="inline-flex items-center rounded-full bg-accent-purple/10 px-2.5 py-0.5 text-xs font-semibold text-accent-purple"
 							>
-								{#if group === 'general_vulnerable'}
-									กลุ่มเปราะบางทั่วไป
-								{:else if group === 'quarantine'}
-									ผู้ป่วยแยกกักโรค
-								{:else if group === 'wheelchair'}
-									ผู้ใช้วีลแชร์
-								{:else if group === 'none'}
-									ไม่มีโซนเฉพาะ
-								{:else}
-									{group}
-								{/if}
+								{group.label}
 							</span>
 						{/each}
 					</div>
-					{#if !shelter.admission_policy.vulnerable_groups.includes('bedridden')}
+					{#if !(shelter.admission_policy?.vulnerable_groups ?? []).includes('bedridden')}
 						<p class="mt-2 text-xs text-muted-foreground">
-							* ไม่ได้ระบุว่ารองรับผู้ป่วยติดเตียงเป็นพิเศษ
+							{t.bedriddenNotExplicitlySupported}
 						</p>
 					{/if}
 				{:else}

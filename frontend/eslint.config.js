@@ -27,6 +27,15 @@ export default ts.config(
 			// see: https://typescript-eslint.io/troubleshooting/faqs/eslint/#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors
 			'no-undef': 'off',
 			'svelte/no-navigation-without-resolve': 'off',
+			// Prefer typography tokens over arbitrary px font sizes (text-[Npx]).
+			'no-restricted-syntax': [
+				'warn',
+				{
+					selector: 'Literal[value=/text-\\[\\d+px\\]/]',
+					message:
+						'Use typography tokens (text-3xs, text-2xs, text-xs, text-sm, text-base, text-lg, text-xl) instead of text-[Npx].'
+				}
+			],
 			// Enforce feature encapsulation: import a feature only via its barrel
 			// ($lib/features/<x>), never reach into its internal layers.
 			'no-restricted-imports': [

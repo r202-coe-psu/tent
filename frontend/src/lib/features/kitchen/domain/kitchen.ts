@@ -49,6 +49,15 @@ export interface MealPlanRecipe {
 	unit?: string;
 }
 
+// One gas cylinder (kitchen.ts GasCylinderType) this plan draws from, and how
+// much it's expected to draw — CR-085. `issueRequisition` reads this array to
+// write the matching `gas_ledger` consumption entries; absence means the plan
+// doesn't use gas (not an empty draw of 0).
+export interface MealPlanGasUsage {
+	cylinder_id: string;
+	consumption_kg: string; // qty_str
+}
+
 export interface MealPlan extends BaseDoc {
 	type: 'meal_plan';
 	date: string;
@@ -61,6 +70,7 @@ export interface MealPlan extends BaseDoc {
 	status: MealPlanStatus;
 	override_reason?: string | null;
 	calc_source?: MealCalcSource | null;
+	gas_usage?: MealPlanGasUsage[];
 }
 
 export const mealPlanInputSchema = z.object({
@@ -97,6 +107,14 @@ export const mealPlanInputSchema = z.object({
 			headcount_as_of: z.string().datetime()
 		})
 		.nullable()
+		.optional(),
+	gas_usage: z
+		.array(
+			z.object({
+				cylinder_id: z.string().min(1),
+				consumption_kg: qtyStrCoercePositiveSchema
+			})
+		)
 		.optional()
 });
 export type MealPlanInput = z.input<typeof mealPlanInputSchema>;
@@ -119,7 +137,15 @@ export function createMealPlan(input: MealPlanInput, ctx: AuthorContext): MealPl
 			status: d.status,
 			...(d.label != null ? { label: d.label } : {}),
 			...(d.override_reason != null ? { override_reason: d.override_reason } : {}),
-			...(d.calc_source != null ? { calc_source: d.calc_source } : {})
+			...(d.calc_source != null ? { calc_source: d.calc_source } : {}),
+			...(d.gas_usage != null
+				? {
+						gas_usage: d.gas_usage.map((g) => ({
+							cylinder_id: g.cylinder_id,
+							consumption_kg: persistQty(g.consumption_kg)
+						}))
+					}
+				: {})
 		},
 		ctx
 	);
@@ -212,6 +238,11 @@ export interface MealService extends BaseDoc {
 	date: string;
 	meal: MealPeriod;
 	meal_plan_id: string | null;
+	// Portions the kitchen actually produced (ช่วง C, CR-084). Distinct from
+	// `served` (how many were handed out) — yield is the ceiling on distribution.
+	// Absent on docs written before CR-084 and whenever the kitchen skips it —
+	// absence means "not recorded", not zero.
+	actual_yield?: number;
 	served: number;
 	waste: number;
 	external: MealServiceExternal;
@@ -222,6 +253,7 @@ export const mealServiceInputSchema = z.object({
 	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
 	meal: mealPeriodSchema,
 	meal_plan_id: z.string().nullable().default(null),
+	actual_yield: z.number().int().min(0).optional(),
 	served: z.number().int().min(0),
 	waste: z.number().int().min(0),
 	external: z.object({
@@ -241,6 +273,9 @@ export function createMealService(input: MealServiceInput, ctx: AuthorContext): 
 			date: d.date,
 			meal: d.meal,
 			meal_plan_id: d.meal_plan_id,
+			// != null (not truthy) — 0 is a legitimate recorded yield and must not
+			// be dropped the way an empty `notes` string is.
+			...(d.actual_yield != null ? { actual_yield: d.actual_yield } : {}),
 			served: d.served,
 			waste: d.waste,
 			external: d.external,

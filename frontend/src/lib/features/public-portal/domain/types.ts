@@ -2,11 +2,20 @@ import type { components } from '$lib/api/openapi';
 
 export type FamilySearchResult = components['schemas']['SearchResult'];
 export type FamilySearchResponse = components['schemas']['SearchResponse'];
-export type PublicShelterItem = components['schemas']['ShelterItem'] & {
+export type PublicSiteKind = 'evacuation_center' | 'host_house';
+export type PublicShelterItem = Omit<components['schemas']['ShelterItem'], 'site_kind'> & {
+	site_kind?: PublicSiteKind;
 	vulnerable_groups?: string[];
 };
-export type PublicShelterDetail = components['schemas']['ShelterDetail'];
-export type PublicShelterListResponse = components['schemas']['ShelterListResponse'];
+export type PublicShelterDetail = Omit<components['schemas']['ShelterDetail'], 'site_kind'> & {
+	site_kind?: PublicSiteKind;
+};
+export type PublicShelterListResponse = Omit<
+	components['schemas']['ShelterListResponse'],
+	'shelters'
+> & {
+	shelters: PublicShelterItem[];
+};
 export type PublicGeoPoint = components['schemas']['GeoPoint'];
 
 /** UI list/map shape derived from the public shelters API (no occupancy). */
@@ -14,6 +23,7 @@ export type PublicShelterCardModel = {
 	id: string;
 	code: string;
 	name: string;
+	site_kind: PublicSiteKind;
 	status: string;
 	address: string;
 	distance: number;
@@ -32,6 +42,7 @@ export type ListPublicSheltersParams = {
 	district?: string;
 	subdistrict?: string;
 	status?: string;
+	site_kind?: PublicSiteKind;
 	lat?: number;
 	lng?: number;
 	radius_km?: number;

@@ -39,6 +39,8 @@ export const PUT: RequestHandler = async ({ request, params }) => {
 		const updatedDoc = touchAnnouncement(doc, {
 			title: body.title ?? doc.title,
 			description: body.description ?? doc.description,
+			title_en: body.title_en !== undefined ? body.title_en : doc.title_en,
+			description_en: body.description_en !== undefined ? body.description_en : doc.description_en,
 			severity: body.severity ?? doc.severity,
 			is_active: body.is_active ?? doc.is_active
 		});

@@ -71,9 +71,7 @@
 				<Form.Field {form} name="name">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label
-								class="mb-1.5 block text-[11px] font-bold text-muted-foreground uppercase"
-							>
+							<Form.Label class="mb-1.5 block text-2xs font-bold text-muted-foreground uppercase">
 								รายการพัสดุ / ประกาศพิเศษ
 							</Form.Label>
 							<Input
@@ -92,9 +90,7 @@
 					<Form.Field {form} name="target">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label
-									class="mb-1.5 block text-[11px] font-bold text-muted-foreground uppercase"
-								>
+								<Form.Label class="mb-1.5 block text-2xs font-bold text-muted-foreground uppercase">
 									เป้าหมายจำนวนที่ต้องการ
 								</Form.Label>
 								<Input
@@ -112,9 +108,7 @@
 					<Form.Field {form} name="location">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label
-									class="mb-1.5 block text-[11px] font-bold text-muted-foreground uppercase"
-								>
+								<Form.Label class="mb-1.5 block text-2xs font-bold text-muted-foreground uppercase">
 									คลังเป้าหมาย
 								</Form.Label>
 								<select

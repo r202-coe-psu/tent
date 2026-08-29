@@ -11,6 +11,7 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
+	import Upload from '@lucide/svelte/icons/upload';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import {
 		useHouseholdsPaginated,
@@ -202,6 +203,14 @@
 			<Button
 				variant="outline"
 				size="sm"
+				onclick={() => goto(resolve('/back-office/households/import'))}
+			>
+				<Upload class="h-3.5 w-3.5" />
+				นำเข้าจาก Excel
+			</Button>
+			<Button
+				variant="outline"
+				size="sm"
 				onclick={() => goto(resolve('/back-office/households/pre-register'))}
 			>
 				<Plus class="h-3.5 w-3.5" />
@@ -350,12 +359,12 @@
 									{#if members.length > 0}
 										{#each members as m (m._id)}
 											<span
-												class="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground"
+												class="rounded-full bg-muted px-2 py-0.5 text-2xs font-medium text-foreground"
 												>{m.first_name} {m.last_name}</span
 											>
 										{/each}
 									{:else}
-										<span class="text-[11px] text-muted-foreground italic">ไม่มีสมาชิก</span>
+										<span class="text-2xs text-muted-foreground italic">ไม่มีสมาชิก</span>
 									{/if}
 								</div>
 							</Table.Cell>
@@ -364,18 +373,18 @@
 									{#if h.municipality_zone || h.community}
 										{#if h.municipality_zone}
 											<span
-												class="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700"
+												class="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-2xs font-medium text-blue-700"
 												>{municipalityZoneLabels[h.municipality_zone] ?? h.municipality_zone}</span
 											>
 										{/if}
 										{#if h.community}
 											<span
-												class="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700"
+												class="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-2xs font-medium text-green-700"
 												>{communityLabels[h.community] ?? h.community}</span
 											>
 										{/if}
 									{:else}
-										<span class="text-[11px] text-muted-foreground italic">ไม่ระบุ</span>
+										<span class="text-2xs text-muted-foreground italic">ไม่ระบุ</span>
 									{/if}
 								</div>
 							</Table.Cell>
@@ -392,19 +401,19 @@
 															? '🐦'
 															: '🐾'}
 											<span
-												class="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-secondary-foreground"
+												class="rounded-full bg-secondary px-2 py-0.5 text-2xs font-semibold text-secondary-foreground"
 												>{petEmoji} {p.count}</span
 											>
 										{/each}
 									{:else}
-										<span class="text-[11px] text-muted-foreground">ไม่มี</span>
+										<span class="text-2xs text-muted-foreground">ไม่มี</span>
 									{/if}
 								</div>
 							</Table.Cell>
 							<Table.Cell>
 								{@const config = statusConfig[h.status]}
 								<span
-									class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {config.colorClass}"
+									class="inline-flex items-center rounded-full border px-2 py-0.5 text-2xs font-medium {config.colorClass}"
 								>
 									{config.label}
 								</span>

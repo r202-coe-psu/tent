@@ -13,7 +13,7 @@
 <div class="mt-6 rounded-2xl bg-[#002f6c] p-6 text-white shadow-sm transition-all duration-300">
 	<div class="flex flex-col gap-1.5">
 		{#if subtitle}
-			<span class="text-[10px] font-semibold tracking-wider text-sky-400 uppercase">
+			<span class="text-2xs font-semibold tracking-wider text-sky-400 uppercase">
 				{subtitle}
 			</span>
 		{/if}
@@ -23,7 +23,7 @@
 		</h1>
 
 		{#if description}
-			<p class="text-[11px] leading-relaxed font-normal text-slate-300 opacity-90 md:text-xs">
+			<p class="text-2xs leading-relaxed font-normal text-slate-300 opacity-90 md:text-xs">
 				{description}
 			</p>
 		{/if}
