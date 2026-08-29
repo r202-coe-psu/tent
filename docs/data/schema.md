@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-25
+updated: 2026-08-29
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes)
 ---
 
@@ -485,9 +485,11 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 
 **Migration:** N/A — doc type ใหม่ ไม่มีของเดิมต้อง migrate
 
-### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 1**
+### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 3**
 
-> **schema_v 1** — โปรไฟล์อาสาสมัคร (CR-041 D-MULTI=A). สมัครได้จากหน้า public form (No-Auth) หรือเจ้าหน้าที่บันทึก. เมื่อสมัครจะได้รับ `tracking_token` สำหรับเปิด Digital Ticket / QR code บนมือถือ.
+> **schema_v 3** — เพิ่ม `personnel_type` แยกอาสาสมัคร vs เจ้าหน้าที่ประจำ สำหรับตัวกรอง "บุคลากร" ในแท็บ 3 ([CR-095](../changes/CR-095-volunteer-job-shifts-personnel-type.md) §2) — `affiliation_tags` บน `_users` (CR-041 D-AFFIL) ใช้แทนไม่ได้เพราะอาสาส่วนใหญ่ไม่มี login.
+> **schema_v 2** — field ที่ back-office V10 ต้องใช้แต่ CR-092 ไม่ได้ระบุ ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §3.1): รหัสอาสา `V-{NNN}`, สถานะเช็คอิน/ยืนยันตัวตน, ศูนย์ปัจจุบัน (สำหรับ walk-in + โอนย้ายศูนย์), และ `source` ตัวกรอง "แหล่งที่มา".
+> schema_v 1 — โปรไฟล์อาสาสมัคร (CR-041 D-MULTI=A). สมัครได้จากหน้า public form (No-Auth) หรือเจ้าหน้าที่บันทึก. เมื่อสมัครจะได้รับ `tracking_token` สำหรับเปิด Digital Ticket / QR code บนมือถือ.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
@@ -499,15 +501,26 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 | `skills` | [str] | opt | เช่น "พยาบาล", "ขับรถ", "ครัว", "ช่างไฟ", "ล่าม" |
 | `organization` | str\|null | opt | สังกัด/หน่วยงาน |
 | `tracking_token` | str\|null | opt | CSPRNG token (สำหรับเปิด Digital Ticket / ดูสถานะแบบ No-Auth) |
+| `checked_in` | bool | req | default `false` — schema_v 2 |
+| `current_shelter_code` | str\|null | opt | ศูนย์ที่สังกัดอยู่ตอนนี้ (walk-in / หลังโอนย้าย) — schema_v 2 |
+| `volunteer_code` | str | req | รหัสอาสาอ่านง่าย `V-{NNN}` นับต่อศูนย์ (UI V10 แสดงในตาราง) — schema_v 2 |
+| `identity_verified` | bool | req | default `false` — badge "ยืนยันตัวตนแล้ว" — schema_v 2 |
+| `source` | enum(`public_apply`,`walk_in`,`staff_entry`,`transfer`) | req | ตัวกรอง "แหล่งที่มา" — schema_v 2 |
+| `personnel_type` | enum(`volunteer`,`staff`) | req | default `volunteer` — ตัวกรอง "บุคลากร" / toggle "ชนิดบุคคล" · **ไม่ให้สิทธิ์ใด ๆ** (สิทธิ์มาจาก RoleKey + time-bound grant เท่านั้น) — schema_v 3 |
 | `status` | enum(`active`,`inactive`) | req | default `active` |
 | `user_name` | str\|null | opt | ผูกกับ `_users` ถ้าเป็น staff-capable volunteer ที่มี login |
 | `central_profile_id` | str\|null | opt | อ้างอิงโปรไฟล์กลางข้ามศูนย์ (D-MULTI=A) |
 
 **Index:** `(phone_hash)` · `(tracking_token)` · `(status)`
 
-### 2.9 `shift_assignment` — `shift_assignment:{ulid}` · **schema_v 2**
+**Migration (schema_v 2 → 3):** additive — เติม `personnel_type='volunteer'` ทุกแถว ([CR-095](../changes/CR-095-volunteer-job-shifts-personnel-type.md) §4)
 
-> **schema_v 2** — ผูกกับ `job_id` (CR-041 D-SHIFT=C), เพิ่ม `duty_window` สำหรับ Time-bound Shift Access (D-DUTY-ACCESS=B), และเพิ่มฟิลด์ Check-in / Check-out หน้างาน (D-CHECKIN).
+**Migration (schema_v 1 → 2):** additive — เติม `checked_in=false`, `identity_verified=false`, `source='staff_entry'`, `national_id=null`, `current_shelter_code=null`; generate `volunteer_code` เรียงตาม `created_at` ต่อศูนย์ ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §6). ยังไม่มี production data ณ วันที่เขียน CR — migration เป็น safety net สำหรับ seed/dev data เท่านั้น
+
+### 2.9 `shift_assignment` — `shift_assignment:{ulid}` · **schema_v 3**
+
+> **schema_v 3** — CouchDB-native time-bound write access + manual override check-in + กะมาตรฐาน 8 ชม. ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §3.2): rename `status: done → completed` เพิ่ม `standby`; `shift` เพิ่ม `flex`; เพิ่ม `dispatch_status`, `check_in_method`, `check_in_reason`.
+> schema_v 2 — ผูกกับ `job_id` (CR-041 D-SHIFT=C), เพิ่ม `duty_window` สำหรับ Time-bound Shift Access (D-DUTY-ACCESS=B), และเพิ่มฟิลด์ Check-in / Check-out หน้างาน (D-CHECKIN).
 > schema_v 1 — baseline `(volunteer_id, date, shift, station)`.
 
 | Field | ชนิด | req | หมายเหตุ |
@@ -668,7 +681,9 @@ open → escalated
 
 ### 2.17 `job` — `job:{ulid}` · **schema_v 1**
 
-> **schema_v 1** — งานประกาศรับสมัครอาสาสมัครประจำศูนย์พักพิง (CR-041 D-TIER=A / D-APP=A / D-SHIFT=C). จัดการโดย Shelter Manager เพื่อระดมกำลังอาสาสมัครทั้งแบบ Operational (งานทั่วไป) และ Staff-Capable (งานคีย์ข้อมูลระบบ).
+> **schema_v 3** — กะย่อยรายวัน (`shifts[]`): งานหนึ่งประกาศครอบคลุมหลายวัน/หลายช่วงเวลา แต่ละกะมีจำนวนรับของตัวเอง และ `quota` กลายเป็น**ผลรวม**ของทุกกะ (ฟอร์ม "ประกาศภารกิจงานอาสาใหม่" — Single / Batch Generator). `shift_template` เป็น opt (deprecated). ([CR-095](../changes/CR-095-volunteer-job-shifts-personnel-type.md) §1 — amend CR-094 §3.3)
+> schema_v 2 — Job CRUD ใน back-office + 3-Color Quota Bar + สถานะ `draft`/`paused`/ด่วนพิเศษ ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §3.3): ลบ `slots_pending` (แทนที่ด้วย `slots_dispatched` + `slots_remaining`), เพิ่ม `is_urgent`, `status` เพิ่ม `draft`/`paused`.
+> schema_v 1 — งานประกาศรับสมัครอาสาสมัครประจำศูนย์พักพิง (CR-041 D-TIER=A / D-APP=A / D-SHIFT=C). จัดการโดย Shelter Manager เพื่อระดมกำลังอาสาสมัครทั้งแบบ Operational (งานทั่วไป) และ Staff-Capable (งานคีย์ข้อมูลระบบ).
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
@@ -687,7 +702,11 @@ open → escalated
 > ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`).
 > **Index:** `(status)` · `(tier, status)` · `(shelter_code, status)`
 
-### 2.18 `job_application` — `job_application:{ulid}` · **schema_v 1**
+**Migration (schema_v 2 → 3):** สร้าง `shifts` 1 แถวจาก `shift_template` + `quota` เดิม (`id` = ulid ใหม่, `start_time`/`end_time` จาก template, `quota` = `quota` เดิม); `date` ไม่มีข้อมูลเดิม → ใช้วันที่ของ `created_at` ตามเวลา Asia/Bangkok; `end_date` = `date` หรือ +1 วันถ้า `end_time <= start_time`; `shift_template` คงไว้ตามเดิม ([CR-095](../changes/CR-095-volunteer-job-shifts-personnel-type.md) §4)
+
+**Migration (schema_v 1 → 2):** `slots_remaining = quota − slots_confirmed`; `slots_dispatched = 0`; ทิ้งค่า `slots_pending` เดิม (ใบสมัครที่ค้างยังนับจาก `job_application.status='pending_review'`); `is_urgent=false` ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §6)
+
+### 2.18 `job_application` — `job_application:{ulid}` · **schema_v 2**
 
 > **schema_v 1** — ใบสมัครงานอาสาสมัคร (CR-041 D-APP=A). เกิดจากการสมัครผ่าน Public Job Board (No-Auth) หรือการบันทึกโดยเจ้าหน้าที่. มาพร้อม `tracking_token` สำหรับติดตามสถานะผ่าน Digital Ticket.
 
