@@ -21,6 +21,17 @@ def main():
         **dotenv_values(".env"),
     }
 
+    # Ensure display environment variable is set for Linux headed mode (e.g. when launching via SSH)
+    if sys.platform.startswith("linux"):
+        if "DISPLAY" not in os.environ and "WAYLAND_DISPLAY" not in os.environ:
+            display_val = config.get("DISPLAY", ":0")
+            os.environ["DISPLAY"] = display_val
+            logging.info(f"Setting default DISPLAY={display_val} for headed browser on Linux")
+        if "XDG_RUNTIME_DIR" not in os.environ:
+            uid = os.getuid()
+            if os.path.exists(f"/run/user/{uid}"):
+                os.environ["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
+
     if not config.get("DEVICE_SECRET"):
         logging.warning("⚠️  คำเตือน: ยังไม่ได้ระบุ DEVICE_SECRET ในไฟล์ .env โปรดสร้าง Secret จากหน้า Back Office")
 

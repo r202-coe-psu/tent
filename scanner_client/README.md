@@ -8,7 +8,7 @@
 1. [ภาพรวมสถาปัตยกรรม (Architecture)](#-ภาพรวมสถาปัตยกรรม-architecture)
 2. [อุปกรณ์ฮาร์ดแวร์ที่แนะนำ (Hardware Requirements)](#-อุปกรณ์ฮาร์ดแวร์ที่แนะนำ-hardware-requirements)
 3. [ขั้นตอนการติดตั้งตั้งแต่เริ่มต้น (Step-by-Step Installation)](#-ขั้นตอนการติดตั้งตั้งแต่เริ่มต้น-step-by-step-installation)
-   - [Step 1: เตรียมระบบปฏิบัติการ (OS Preparation)](#step-1-เตรียมระบบปฏิบัติการ-os-preparation)
+   - [Step 1: การเตรียมความพร้อมก่อนเริ่มต้น (Pre-Preparation & SSH Remote Access)](#step-1-การเตรียมความพร้อมก่อนเริ่มต้น-pre-preparation--ssh-remote-access)
    - [Step 2: ติดตั้ง System Packages & Smart Card Driver](#step-2-ติดตั้ง-system-packages--smart-card-driver)
    - [Step 3: ทดสอบการทำงานของเครื่องอ่านบัตร (Hardware Check)](#step-3-ทดสอบการทำงานของเครื่องอ่านบัตร-hardware-check)
    - [Step 4: Clone โปรเจกต์ & สร้าง Python Virtual Environment](#step-4-clone-โปรเจกต์--สร้าง-python-virtual-environment)
@@ -58,20 +58,54 @@ flowchart LR
 
 ## 🚀 ขั้นตอนการติดตั้งตั้งแต่เริ่มต้น (Step-by-Step Installation)
 
-### Step 1: เตรียมระบบปฏิบัติการ (OS Preparation)
+### Step 1: การเตรียมความพร้อมก่อนเริ่มต้น (Pre-Preparation & SSH Remote Access)
 
+#### 1.1 เขียนระบบปฏิบัติการ (Flash OS)
 1. ดาวน์โหลดและเปิดโปรแกรม [Raspberry Pi Imager](https://www.raspberrypi.com/software/) บนคอมพิวเตอร์ของคุณ
 2. เลือก **OS**: `Raspberry Pi OS (64-bit)` (Debian Bookworm with Desktop)
-3. กดรูปเฟือง (⚙️) เพื่อตั้งค่าล่วงหน้า:
-   - กำหนด Hostname (เช่น `kiosk-pi`)
-   - กำหนด Username และ Password (เช่น user: `pi`, pass: `yourpassword`)
-   - ตั้งค่า Wi-Fi และ Timezone (`Asia/Bangkok`)
-   - เปิดใช้งาน **Enable SSH**
-4. เขียนระบบลงใน MicroSD Card แล้วนำไปเสียบเข้า Raspberry Pi เปิดเครื่องและเชื่อมต่ออินเทอร์เน็ต
-5. อัปเดตแพ็กเกจระบบให้เป็นเวอร์ชันล่าสุด:
+3. กดรูปเฟือง (⚙️) หรือ Edit Settings เพื่อตั้งค่าล่วงหน้า:
+   - กำหนด **Hostname** (เช่น `kiosk-pi`)
+   - กำหนด **Username** และ **Password** (เช่น user: `pi`, pass: `yourpassword`)
+   - ตั้งค่า **Wi-Fi SSID/Password** และ **Timezone** (`Asia/Bangkok`)
+   - ติ๊กถูกเลือก **Enable SSH** (เลือก Use password authentication)
+4. กด Write เพื่อเขียนระบบลงใน MicroSD Card แล้วนำไปเสียบเข้า Raspberry Pi เปิดเครื่องและเชื่อมต่อเครือข่าย
+
+#### 1.2 วิธีเปิดใช้งาน SSH บนตัวเครื่อง Kiosk (เลือกวิธีใดวิธีหนึ่ง)
+หากไม่ได้เปิด SSH ไว้ตั้งแต่ตอน Flash หรือต้องการเปิดใช้งานบนเครื่องโดยตรง:
+
+- **วิธีที่ 1: สั่งผ่าน Terminal (เร็วที่สุด):**
+  ```bash
+  sudo systemctl enable --now ssh
+  ```
+- **วิธีที่ 2: ผ่านเมนูตั้งค่า `raspi-config`:**
+  ```bash
+  sudo raspi-config
+  # เลือก 3. Interface Options -> I2. SSH -> เลือก <Yes> -> <Finish>
+  ```
+- **วิธีที่ 3: เปิดล่วงหน้าผ่านไฟล์บน MicroSD Card (Headless):**
+  เสียบ MicroSD Card เข้าคอมพิวเตอร์ เปิดไดรฟ์ `boot` (หรือ `bootfs`) แล้วสร้างไฟล์เปล่าชื่อ `ssh` (ไม่มีนามสกุลไฟล์) วางไว้ที่ Root ของไดรฟ์ จากนั้นนำการ์ดไปเปิดเครื่อง
+
+#### 1.3 วิธีดู IP Address และ Remote เข้าเครื่อง
+1. ตรวจสอบ IP Address ของ Raspberry Pi:
    ```bash
-   sudo apt update && sudo apt full-upgrade -y
+   hostname -I
    ```
+   *(จะได้ IP เช่น `192.168.1.105`)*
+2. รีโมตจากคอมพิวเตอร์เครื่องอื่นผ่าน Terminal หรือ VS Code Remote SSH:
+   ```bash
+   ssh pi@192.168.1.105
+   ```
+
+#### 1.4 ทริกการสลับหน้าจอ Terminal ขณะโปรแกรม Kiosk รันเต็มจอ
+หากต้องการสลับออกมาสั่งงาน Command Line ขณะที่หน้าจอ Kiosk เปิดค้างอยู่:
+- กด **`Ctrl + Alt + T`** เพื่อเปิดหน้าต่าง Terminal
+- กด **`Ctrl + Alt + F2`** เพื่อสลับเข้าหน้าจอ TTY Console (กด **`Ctrl + Alt + F1`** หรือ **`F7`** เพื่อกลับหน้าจอกราฟิก)
+- กด **`Alt + F4`** เพื่อปิดโปรแกรม Kiosk ชั่วคราว
+
+#### 1.5 อัปเดตแพ็กเกจระบบให้เป็นเวอร์ชันล่าสุด
+```bash
+sudo apt update && sudo apt full-upgrade -y
+```
 
 ---
 
@@ -296,5 +330,6 @@ python main.py
 | **`No readers found` / `SCardListReaders failed`** | Service `pcscd` ยังไม่เริ่มทำงาน หรือพอร์ต USB จ่ายไฟไม่พอ | ตรวจสอบด้วย `sudo systemctl status pcscd` หากหยุดทำงานให้รัน `sudo systemctl restart pcscd` และเสียบสาย USB ให้แน่น |
 | **`Reader is busy` / `Sharing violation`** | มีโปรเซสอื่นแย่งจองเครื่องอ่านบัตร | ปิดโปรแกรมหรือคำสั่ง `pcsc_scan` หรือ Python script อื่นที่รันค้างอยู่ |
 | **Playwright Browser Crash บน ARM** | ขาด shared libraries ของ Chromium | ใช้ System Chromium โดยกำหนด `BROWSER_EXECUTABLE_PATH=/usr/bin/chromium-browser` ใน `.env` |
+| **`Missing X server or $DISPLAY`** เมื่อรันผ่าน SSH | เซสชัน SSH ไม่ได้รับค่าตัวแปรการแสดงผลกราฟิก | สั่งรันด้วย `DISPLAY=:0 python main.py` (หรือ `WAYLAND_DISPLAY=wayland-0 DISPLAY=:0 python main.py`) หรือตั้งค่า `HEADLESS=true` ใน `.env` หากต้องการทดสอบโดยไม่เปิดหน้าต่าง UI |
 | **Server ตอบกลับ 401 Unauthorized** | `DEVICE_ID` หรือ `DEVICE_SECRET` ไม่ตรงกับที่ลงทะเบียนใน Tent Central Server | ตรวจสอบค่าใน `.env` หรือรันสคริปต์ `pnpm seed:scanner` บนเซิร์ฟเวอร์เพื่อสร้างอุปกรณ์ `kiosk-test` |
 | **อ่านบัตรแล้วรูปถ่ายไม่ขึ้น** | ขาดไลบรารีประมวลผลรูปภาพ `libjpeg` | รัน `sudo apt install -y libjpeg-dev zlib1g-dev` แล้วติดตั้ง `Pillow` ใหม่: `pip install --upgrade --force-reinstall pillow` |
