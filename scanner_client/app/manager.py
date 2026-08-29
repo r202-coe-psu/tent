@@ -21,6 +21,7 @@ class ScannerClientManager:
         self.device_id = config.get("DEVICE_ID", "SCAN-01")
         self.device_secret = config.get("DEVICE_SECRET", "")
         self.browser_type = config.get("BROWSER", "chromium").lower()
+        self.executable_path = config.get("BROWSER_EXECUTABLE_PATH") or None
         self.is_debug = str(config.get("DEBUG", "true")).lower() in ("true", "1", "yes")
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
         self.window_width = int(config.get("WINDOW_WIDTH", "540"))
@@ -181,6 +182,7 @@ class ScannerClientManager:
             context = await browser_launcher.launch_persistent_context(
                 user_data_dir="/tmp/scanner_client_browser_profile",
                 headless=False,
+                executable_path=self.executable_path,
                 args=args,
                 ignore_default_args=["--enable-automation"],
                 no_viewport=True,
