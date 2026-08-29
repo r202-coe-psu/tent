@@ -1087,6 +1087,76 @@
 					}
 				}
 			}
+		},
+		"/public/v1/volunteer/schedule": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Volunteer Schedule",
+				"description": "ตารางทำงานจิตอาสา — the roster behind the Access Portal (CR-092 หน้าจอ 6).",
+				"operationId": "volunteer_schedule_public_v1_volunteer_schedule_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/ScheduleLookupRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/VolunteerScheduleResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/volunteer/schedule/respond": {
+			"post": {
+				"tags": ["Volunteers"],
+				"summary": "Respond To Dispatch",
+				"description": "Accept or decline an offered shift with the code a manager read out.",
+				"operationId": "respond_to_dispatch_public_v1_volunteer_schedule_respond_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/DispatchRespondRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/DispatchRespondResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
 		}
 	},
 	"components": {
@@ -1223,6 +1293,33 @@
 				},
 				"type": "object",
 				"title": "ConfigResponse"
+			},
+			"DispatchRespondRequest": {
+				"properties": {
+					"assignment_id": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Assignment Id"
+					},
+					"phone": { "type": "string", "maxLength": 30, "minLength": 6, "title": "Phone" },
+					"code": { "type": "string", "maxLength": 20, "minLength": 4, "title": "Code" },
+					"action": { "type": "string", "enum": ["accepted", "declined"], "title": "Action" }
+				},
+				"type": "object",
+				"required": ["assignment_id", "phone", "code", "action"],
+				"title": "DispatchRespondRequest",
+				"description": "Answering an offered shift — two factors, neither enough alone.\n\n``phone`` is what the portal signed in with and must match the assignment;\n``code`` is the short code a manager read out. A six-character code is only safe\nbecause the caller has to know whose shift it is as well."
+			},
+			"DispatchRespondResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"assignment_id": { "type": "string", "title": "Assignment Id" },
+					"dispatch_status": { "type": "string", "title": "Dispatch Status" }
+				},
+				"type": "object",
+				"required": ["assignment_id", "dispatch_status"],
+				"title": "DispatchRespondResponse"
 			},
 			"DonationCancelResponse": {
 				"properties": {
@@ -1649,6 +1746,46 @@
 				"type": "object",
 				"title": "PublicJobListResponse"
 			},
+			"ScheduleLookupRequest": {
+				"properties": {
+					"phone": { "type": "string", "maxLength": 30, "minLength": 6, "title": "Phone" }
+				},
+				"type": "object",
+				"required": ["phone"],
+				"title": "ScheduleLookupRequest",
+				"description": "Same key as the ticket lookup — the portal signs in by phone."
+			},
+			"ScheduleShift": {
+				"properties": {
+					"assignment_id": { "type": "string", "title": "Assignment Id" },
+					"job_id": { "type": "string", "title": "Job Id" },
+					"job_title": { "type": "string", "title": "Job Title", "default": "" },
+					"shelter_code": { "type": "string", "title": "Shelter Code" },
+					"shelter_name": { "type": "string", "title": "Shelter Name", "default": "" },
+					"date": { "type": "string", "title": "Date", "default": "" },
+					"shift": { "type": "string", "title": "Shift", "default": "" },
+					"station": { "type": "string", "title": "Station", "default": "" },
+					"start_ts": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Start Ts" },
+					"end_ts": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "End Ts" },
+					"check_in_at": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Check In At"
+					},
+					"check_out_at": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Check Out At"
+					},
+					"status": { "type": "string", "title": "Status" },
+					"dispatch_status": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dispatch Status"
+					}
+				},
+				"type": "object",
+				"required": ["assignment_id", "job_id", "shelter_code", "status"],
+				"title": "ScheduleShift",
+				"description": "One shift the volunteer is actually on (schema.md §2.9, CR-092 หน้าจอ 6).\n\nDistinct from a ticket: a ticket is the application they filed, this is the roster\nentry a manager put them on, with the duty window the Time-Bound access guard reads\nand the check-in stamps the tablet station writes."
+			},
 			"SearchRequest": {
 				"properties": {
 					"search": { "type": "string", "maxLength": 200, "minLength": 1, "title": "Search" }
@@ -1924,6 +2061,7 @@
 			"TicketFindItem": {
 				"properties": {
 					"view_token": { "type": "string", "title": "View Token" },
+					"applicant_name": { "type": "string", "title": "Applicant Name", "default": "" },
 					"status": { "type": "string", "title": "Status" },
 					"job_title": { "type": "string", "title": "Job Title", "default": "" },
 					"shelter_code": { "type": "string", "title": "Shelter Code" },
@@ -2072,6 +2210,18 @@
 				},
 				"type": "object",
 				"title": "VolunteerCancelResponse"
+			},
+			"VolunteerScheduleResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"shifts": {
+						"items": { "$ref": "#/components/schemas/ScheduleShift" },
+						"type": "array",
+						"title": "Shifts"
+					}
+				},
+				"type": "object",
+				"title": "VolunteerScheduleResponse"
 			},
 			"VolunteerTicket": {
 				"properties": {

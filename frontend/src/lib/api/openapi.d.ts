@@ -513,6 +513,46 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/volunteer/schedule': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Volunteer Schedule
+		 * @description ตารางทำงานจิตอาสา — the roster behind the Access Portal (CR-092 หน้าจอ 6).
+		 */
+		post: operations['volunteer_schedule_public_v1_volunteer_schedule_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/schedule/respond': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Respond To Dispatch
+		 * @description Accept or decline an offered shift with the code a manager read out.
+		 */
+		post: operations['respond_to_dispatch_public_v1_volunteer_schedule_respond_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -636,6 +676,39 @@ export interface components {
 			facebook_url?: string | null;
 			/** Phone Number */
 			phone_number?: string | null;
+		};
+		/**
+		 * DispatchRespondRequest
+		 * @description Answering an offered shift — two factors, neither enough alone.
+		 *
+		 *     ``phone`` is what the portal signed in with and must match the assignment;
+		 *     ``code`` is the short code a manager read out. A six-character code is only safe
+		 *     because the caller has to know whose shift it is as well.
+		 */
+		DispatchRespondRequest: {
+			/** Assignment Id */
+			assignment_id: string;
+			/** Phone */
+			phone: string;
+			/** Code */
+			code: string;
+			/**
+			 * Action
+			 * @enum {string}
+			 */
+			action: 'accepted' | 'declined';
+		};
+		/** DispatchRespondResponse */
+		DispatchRespondResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Assignment Id */
+			assignment_id: string;
+			/** Dispatch Status */
+			dispatch_status: string;
 		};
 		/** DonationCancelResponse */
 		DonationCancelResponse: {
@@ -1052,6 +1125,67 @@ export interface components {
 			/** Jobs */
 			jobs?: components['schemas']['PublicJobItem'][];
 		};
+		/**
+		 * ScheduleLookupRequest
+		 * @description Same key as the ticket lookup — the portal signs in by phone.
+		 */
+		ScheduleLookupRequest: {
+			/** Phone */
+			phone: string;
+		};
+		/**
+		 * ScheduleShift
+		 * @description One shift the volunteer is actually on (schema.md §2.9, CR-092 หน้าจอ 6).
+		 *
+		 *     Distinct from a ticket: a ticket is the application they filed, this is the roster
+		 *     entry a manager put them on, with the duty window the Time-Bound access guard reads
+		 *     and the check-in stamps the tablet station writes.
+		 */
+		ScheduleShift: {
+			/** Assignment Id */
+			assignment_id: string;
+			/** Job Id */
+			job_id: string;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/**
+			 * Shift
+			 * @default
+			 */
+			shift: string;
+			/**
+			 * Station
+			 * @default
+			 */
+			station: string;
+			/** Start Ts */
+			start_ts?: string | null;
+			/** End Ts */
+			end_ts?: string | null;
+			/** Check In At */
+			check_in_at?: string | null;
+			/** Check Out At */
+			check_out_at?: string | null;
+			/** Status */
+			status: string;
+			/** Dispatch Status */
+			dispatch_status?: string | null;
+		};
 		/** SearchRequest */
 		SearchRequest: {
 			/** Search */
@@ -1270,6 +1404,11 @@ export interface components {
 		TicketFindItem: {
 			/** View Token */
 			view_token: string;
+			/**
+			 * Applicant Name
+			 * @default
+			 */
+			applicant_name: string;
 			/** Status */
 			status: string;
 			/**
@@ -1434,6 +1573,16 @@ export interface components {
 			 * @default Application cancelled
 			 */
 			message: string;
+		};
+		/** VolunteerScheduleResponse */
+		VolunteerScheduleResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Shifts */
+			shifts?: components['schemas']['ScheduleShift'][];
 		};
 		/**
 		 * VolunteerTicket
@@ -2449,6 +2598,72 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['VolunteerCancelResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	volunteer_schedule_public_v1_volunteer_schedule_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ScheduleLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerScheduleResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	respond_to_dispatch_public_v1_volunteer_schedule_respond_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DispatchRespondRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DispatchRespondResponse'];
 				};
 			};
 			/** @description Validation Error */

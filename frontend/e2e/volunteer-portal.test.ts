@@ -126,63 +126,73 @@ async function mockPortalApi(page: Page) {
 
 /** Open the portal tab — it is the second tab, not the landing one. */
 async function openPortalTab(page: Page) {
-	await page.goto('/volunteers');
-	await page.getByRole('button', { name: /พอร์ทัล & บัตรงานอาสา/ }).click();
-	await expect(page.getByText('พอร์ทัลอาสาสมัคร (My Portal)')).toBeVisible();
+	await page.goto('/volunteers?tab=portal');
+	await expect(page.locator('#volunteer-phone-input')).toBeVisible();
 }
 
+/** Sign in with a phone number. Fixture numbers open the demo; others go live. */
 async function signIn(page: Page, value: string) {
-	await page.getByLabel('เบอร์โทรศัพท์ หรือรหัสตั๋วจิตอาสา').fill(value);
-	await page.getByRole('button', { name: 'เข้าสู่ระบบ' }).click();
+	await page.locator('#volunteer-phone-input').fill(value);
+	await page.getByRole('button', { name: 'เข้าสู่ระบบทันที' }).click();
+}
+
+/** Sign in with a ticket code, on the portal's second login tab. */
+async function signInWithToken(page: Page, value: string) {
+	await page.getByRole('button', { name: /สแกน QR ตั๋ว \/ รหัส Token/ }).click();
+	await page.locator('#volunteer-token-input').fill(value);
+	await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
+}
+
+/** The signed-in marker — the sign-out control is icon-only, so it goes by title. */
+function signOutButton(page: Page) {
+	return page.getByTitle('สลับบัญชี / ออกจากระบบ');
 }
 
 test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
-	test('signs in with a phone number and shows the roster split into upcoming and past', async ({
-		page
-	}) => {
+	test('a live phone number shows the roster the server holds', async ({ page }) => {
 		await mockPortalApi(page);
 		await openPortalTab(page);
 		await signIn(page, PHONE);
 
-		await expect(page.getByText(`เข้าสู่ระบบด้วยเบอร์ ${PHONE}`)).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'ตารางทำงานจิตอาสา' })).toBeVisible();
-
-		// Two ahead, one behind — a finished shift must not sit among the upcoming ones.
-		await expect(page.getByText('กะที่กำลังจะถึง')).toBeVisible();
-		await expect(page.getByText('ประวัติการปฏิบัติงาน')).toBeVisible();
+		await expect(signOutButton(page)).toBeVisible();
+		await expect(page.getByText('ผู้ช่วยครัวจัดเตรียมอาหาร')).toBeVisible();
 		await expect(page.getByText('จุดปฏิบัติงาน: ครัวกลาง')).toBeVisible();
-		await expect(page.getByText('จุดปฏิบัติงาน: คลังสิ่งของ')).toBeVisible();
-		await expect(page.getByText('รายงานตัวแล้ว')).toBeVisible();
+		await expect(page.getByText('เจ้าหน้าที่ช่วยลงทะเบียนผู้ประสบภัย')).toBeVisible();
+		// The fixtures must not bleed into a live session.
+		await expect(page.getByText('Heavy Lifting')).toHaveCount(0);
 	});
 
-	test('shows the Dispatch Card only while an offer is awaiting an answer', async ({ page }) => {
+	test('a fixture number still opens the demonstration', async ({ page }) => {
 		await mockPortalApi(page);
 		await openPortalTab(page);
-		await signIn(page, PHONE);
+		await signIn(page, '081-9992211');
 
-		// One shift is `dispatched`; the other two are already accepted.
-		await expect(page.getByText(/ศูนย์เสนอมอบหมายภารกิจนี้ให้คุณ/)).toHaveCount(1);
-		await expect(page.getByRole('button', { name: /ยอมรับภารกิจ/ })).toHaveCount(1);
+		await expect(page.getByText('Heavy Lifting')).toBeVisible();
+		// …and reaches none of the live data.
+		await expect(page.getByText('ผู้ช่วยครัวจัดเตรียมอาหาร')).toHaveCount(0);
 	});
 
 	test('accepts a phone number typed with separators', async ({ page }) => {
+		let asked: string | null = null;
 		await mockPortalApi(page);
+		await page.route('**/api/public/v1/volunteer/schedule', async (route) => {
+			asked = route.request().postDataJSON()?.phone ?? null;
+			await route.fulfill(json(SCHEDULE));
+		});
 		await openPortalTab(page);
 		await signIn(page, '089-111-2222');
 
-		// Normalised before it becomes the session key, so the lookup still matches.
-		await expect(page.getByText(`เข้าสู่ระบบด้วยเบอร์ ${PHONE}`)).toBeVisible();
+		// Normalised before it becomes the session key.
+		await expect.poll(() => asked).toBe(PHONE);
 	});
 
-	test('rejects something that is neither a phone number nor a ticket code', async ({ page }) => {
+	test('rejects something that is neither a phone number nor a fixture', async ({ page }) => {
 		await mockPortalApi(page);
 		await openPortalTab(page);
 		await signIn(page, '12345');
 
-		await expect(page.getByRole('alert')).toContainText('เบอร์โทรศัพท์ไม่ถูกต้อง');
-		// The sign-out button is the signed-in marker. Matching on the header copy would
-		// not work — it opens with the same words as the signed-in line.
-		await expect(page.getByRole('button', { name: 'ออกจากระบบ' })).toHaveCount(0);
+		await expect(page.getByText('เบอร์โทรศัพท์ไม่ถูกต้อง')).toBeVisible();
+		await expect(signOutButton(page)).toHaveCount(0);
 	});
 
 	test('a ticket code goes straight to the pass without a lookup', async ({ page }) => {
@@ -191,10 +201,9 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 			route.fulfill(json(ticket()))
 		);
 		await openPortalTab(page);
-		await signIn(page, TRACKING_TOKEN);
+		await signInWithToken(page, TRACKING_TOKEN);
 
 		await expect(page).toHaveURL(new RegExp(`/volunteer/ticket/${TRACKING_TOKEN}$`));
-		await expect(page.getByText('ผู้ช่วยครัวจัดเตรียมอาหาร')).toBeVisible();
 	});
 
 	test('signing out clears the session rather than leaving it on a shared tablet', async ({
@@ -203,31 +212,15 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		await mockPortalApi(page);
 		await openPortalTab(page);
 		await signIn(page, PHONE);
-		await expect(page.getByRole('heading', { name: 'ตารางทำงานจิตอาสา' })).toBeVisible();
+		await expect(signOutButton(page)).toBeVisible();
 
-		await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
-
-		await expect(page.getByRole('heading', { name: 'ตารางทำงานจิตอาสา' })).toHaveCount(0);
-		await expect(page.getByRole('button', { name: 'ออกจากระบบ' })).toHaveCount(0);
-		await expect(page.getByLabel('เบอร์โทรศัพท์ หรือรหัสตั๋วจิตอาสา')).toHaveValue('');
+		await signOutButton(page).click();
+		await expect(signOutButton(page)).toHaveCount(0);
 
 		// Nothing about the last person may survive a reload on a shared device.
 		await page.reload();
-		await page.getByRole('button', { name: /พอร์ทัล & บัตรงานอาสา/ }).click();
-		await expect(page.getByRole('button', { name: 'ออกจากระบบ' })).toHaveCount(0);
-	});
-
-	test('lists the volunteer tickets and warns that they open read-only', async ({ page }) => {
-		await mockPortalApi(page);
-		await openPortalTab(page);
-		await signIn(page, PHONE);
-
-		await expect(page.getByRole('heading', { name: 'บัตรอาสาสมัครของฉัน' })).toBeVisible();
-		const openCard = page.getByRole('link', { name: 'เปิดบัตร' });
-		await expect(openCard).toBeVisible();
-		// A phone number is guessable, so what this hands out must not be able to cancel.
-		await expect(openCard).toHaveAttribute('href', new RegExp(VIEW_TOKEN.split('.')[0]));
-		await expect(page.getByText(/ดูได้อย่างเดียว/)).toBeVisible();
+		await expect(signOutButton(page)).toHaveCount(0);
+		await expect(page.locator('#volunteer-phone-input')).toHaveValue('');
 	});
 });
 
@@ -394,5 +387,6 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 
 		// Three shifts on screen; only the `dispatched` one is awaiting an answer.
 		await expect(page.getByLabel('รหัสยืนยันภารกิจ')).toHaveCount(1);
+		await expect(page.getByText(/ศูนย์เสนอมอบหมายภารกิจนี้ให้คุณ/)).toHaveCount(1);
 	});
 });

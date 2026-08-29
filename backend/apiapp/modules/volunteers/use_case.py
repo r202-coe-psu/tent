@@ -398,6 +398,7 @@ class VolunteersUseCase:
         for b in buffers:
             merged[b.id] = TicketFindItem(
                 view_token=mint_view_token(b.id),
+                applicant_name=f"{b.applicant.first_name} {b.applicant.last_name}".strip(),
                 status=b.status,
                 job_title="",
                 shelter_code=b.shelter_code,
@@ -406,6 +407,7 @@ class VolunteersUseCase:
         for a in projected:
             merged[a.id] = TicketFindItem(
                 view_token=mint_view_token(a.id),
+                applicant_name=f"{a.applicant.first_name} {a.applicant.last_name}".strip(),
                 # The projection wins on status: a manager may have confirmed or
                 # rejected this since the buffer was written.
                 status=a.status,

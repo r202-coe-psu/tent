@@ -119,6 +119,10 @@ class TicketFindItem(BaseModel):
     #: knows the phone number can reach this list, so what it hands out must not be able
     #: to cancel a shift.
     view_token: str
+    #: The name on the application, so the portal can greet the person who signed in
+    #: rather than invent one. Already shown on the pass this reference opens, so it
+    #: exposes nothing the same caller could not already read.
+    applicant_name: str = ""
     status: str
     job_title: str = ""
     shelter_code: str

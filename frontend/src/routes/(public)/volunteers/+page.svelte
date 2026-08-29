@@ -8,7 +8,6 @@
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Search from '@lucide/svelte/icons/search';
 	import Truck from '@lucide/svelte/icons/truck';
-	import UserCheck from '@lucide/svelte/icons/user-check';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { page } from '$app/state';
 	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';

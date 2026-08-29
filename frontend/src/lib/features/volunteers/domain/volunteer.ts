@@ -105,6 +105,8 @@ export type ScheduleShift = {
 export type TicketSummary = {
 	/** Read-only and expiring — never the applicant's tracking token. */
 	view_token: string;
+	/** The name on the application, so the portal can greet the right person. */
+	applicant_name: string;
 	status: TicketStatus | string;
 	job_title: string;
 	shelter_code: string;
