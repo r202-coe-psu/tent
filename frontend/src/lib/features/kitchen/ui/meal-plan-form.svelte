@@ -79,7 +79,7 @@
 	const createCalc = useCreateMealPlanCalc();
 	const updateCalc = useUpdateMealPlanCalc();
 	const recipes = useRecipes();
-	const itemMasters = useItemMasters();
+	const itemMasters = useItemMasters(() => getShelterCode());
 	const supplyItems = useSupplyItems();
 	const stockBalance = useStockBalance();
 	const gasTypes = useGasCylinderTypes();

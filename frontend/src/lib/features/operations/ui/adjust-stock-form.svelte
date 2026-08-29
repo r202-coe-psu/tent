@@ -20,7 +20,7 @@
 
 	// Queries & Mutations
 	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const ledgerQuery = useLedger();
 	const adjustMutation = useAdjustStock();
 

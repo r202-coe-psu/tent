@@ -21,7 +21,7 @@
 
 	// Fetch supply catalog items and stock balance
 	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const balanceQuery = useStockBalance();
 	const distributeMutation = useDistributeStock();
 

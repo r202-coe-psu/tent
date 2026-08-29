@@ -32,7 +32,7 @@
 
 	// Fetch supply catalog items
 	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const receiveMutation = useReceiveStock();
 	const donationsQuery = useDonations();
 	const ledgersQuery = useStockLedgers();

@@ -32,7 +32,8 @@ import {
 } from '../domain/operations';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
-import { supplyRepository, type SupplyItem } from '$lib/features/supply';
+import { supplyRepository, type SupplyItem, type SupplyCategory } from '$lib/features/supply';
+import { catalogRepository } from '$lib/features/catalog';
 import { qtyAbs, qtyGte, qtyLte } from '$lib/utils/qty';
 
 export function assertReceiveAgainstCatalog(entry: StockLedger, item: SupplyItem | null): void {
@@ -60,6 +61,35 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		this.repo = createRemoteRepository(dbName);
 	}
 
+	private async findItem(itemId: string): Promise<SupplyItem | null> {
+		const item = await supplyRepository().getItem(itemId);
+		if (item) return item;
+
+		if (itemId.startsWith('item_master:')) {
+			const shelterCode = this.dbName.startsWith('shelter_')
+				? this.dbName.replace('shelter_', '').toUpperCase()
+				: null;
+			const itemMaster = await catalogRepository().getItemMaster(itemId, shelterCode);
+			if (itemMaster) {
+				return {
+					_id: itemMaster._id,
+					type: 'supply_item',
+					name: itemMaster.name,
+					category: (itemMaster.category || 'other') as SupplyCategory,
+					unit: itemMaster.base_unit || 'ชิ้น',
+					reorder_level: null,
+					perishable: false,
+					shelter_code: itemMaster.shelter_code || shelterCode || 'SH001',
+					schema_v: itemMaster.schema_v,
+					created_at: itemMaster.created_at,
+					updated_at: itemMaster.updated_at,
+					created_by: itemMaster.created_by
+				};
+			}
+		}
+		return null;
+	}
+
 	// --- Ledger Methods ---
 
 	async addLedgerEntry(entry: StockLedger): Promise<StockLedger> {
@@ -82,7 +112,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 	async receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger> {
 		const entry = createReceiveEntry(input, ctx);
-		const item = await supplyRepository().getItem(entry.item_id);
+		const item = await this.findItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
 		return this.addLedgerEntry(entry);
 	}
@@ -100,7 +130,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			ctx
 		);
 
-		const item = await supplyRepository().getItem(entry.item_id);
+		const item = await this.findItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
 
 		// One request for both docs (mirrors kitchen `issueRequisition` and
@@ -152,7 +182,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 	async adjustStock(input: AdjustInput, ctx: AuthorContext): Promise<StockLedger> {
 		const entry = createAdjustEntry(input, ctx);
-		const item = await supplyRepository().getItem(entry.item_id);
+		const item = await this.findItem(entry.item_id);
 		if (!item) {
 			throw new Error(
 				`Unknown item: ${entry.item_id} — item must exist in the catalog before adjusting stock`
@@ -333,7 +363,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		const catalog = new Map<string, SupplyItem | null>();
 		for (const row of rows) {
 			if (!catalog.has(row.item_id)) {
-				catalog.set(row.item_id, await supplyRepository().getItem(row.item_id));
+				catalog.set(row.item_id, await this.findItem(row.item_id));
 			}
 			assertReceiveAgainstCatalog(row, catalog.get(row.item_id) ?? null);
 		}
