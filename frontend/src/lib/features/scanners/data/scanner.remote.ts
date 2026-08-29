@@ -2,7 +2,7 @@ import {
 	createScannerDraftDoc,
 	isScannerDevice,
 	isScannerDraft,
-	SCANNER_CATALOG_DB,
+	SCANNER_REGISTRY_DB,
 	SCANNER_SCHEMA_V,
 	type CreatedScannerDevice,
 	type ScannerDevice,
@@ -41,23 +41,23 @@ export async function hashSecret(secret: string): Promise<string> {
 }
 
 export class ScannerRemoteRepository {
-	private readonly catalogRepo: Repository;
+	private readonly registryRepo: Repository;
 
 	constructor(
-		private readonly catalogDb: string = SCANNER_CATALOG_DB,
-		catalogRepository?: Repository
+		private readonly registryDb: string = SCANNER_REGISTRY_DB,
+		registryRepository?: Repository
 	) {
-		this.catalogRepo = catalogRepository ?? createRemoteRepository(catalogDb);
+		this.registryRepo = registryRepository ?? createRemoteRepository(registryDb);
 	}
 
 	// ---------------------------------------------------------------- Device Management
 
 	async listDevices(): Promise<ScannerDevice[]> {
-		return this.catalogRepo.allByType<ScannerDevice>('scanner_device', isScannerDevice);
+		return this.registryRepo.allByType<ScannerDevice>('scanner_device', isScannerDevice);
 	}
 
 	async getDevice(id: string): Promise<ScannerDevice | null> {
-		return this.catalogRepo.get<ScannerDevice>(id);
+		return this.registryRepo.get<ScannerDevice>(id);
 	}
 
 	async getDeviceByDeviceId(deviceId: string): Promise<ScannerDevice | null> {
@@ -101,7 +101,7 @@ export class ScannerRemoteRepository {
 			createdBy
 		);
 
-		await this.catalogRepo.put(doc);
+		await this.registryRepo.put(doc);
 
 		return {
 			...doc,
@@ -126,13 +126,13 @@ export class ScannerRemoteRepository {
 			updated_at: now()
 		};
 
-		return this.catalogRepo.put(updated);
+		return this.registryRepo.put(updated);
 	}
 
 	async deleteDevice(id: string): Promise<void> {
 		const existing = await this.getDevice(id);
 		if (existing) {
-			await this.catalogRepo.remove(existing);
+			await this.registryRepo.remove(existing);
 		}
 	}
 

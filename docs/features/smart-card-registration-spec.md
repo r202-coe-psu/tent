@@ -107,6 +107,18 @@ flowchart TD
   - บันทึก `movement` แอ็กชัน `check_in`
   - ออกบัตรผ่าน Digital Pass / Wristband
 
+### 3.3 การลงทะเบียนและจัดการเครื่องสแกน (Device Hardware Registry)
+
+- **FR-DEVICE-01:** เครื่องอ่านบัตร Kiosk ทุกเครื่องต้องลงทะเบียนเป็นเอกสาร `scanner_device` ใน DB `registry` ตรงกลาง
+- **FR-DEVICE-02:** ประกอบด้วยข้อมูล: `device_id`, `name`, `shelter_code`, `station_name`, `secret_hash`, `status`
+- **FR-DEVICE-03:** Inbound API (`POST /api/v1/scanner/draft`) ตรวจสอบความถูกต้องของ `X-Device-Id` และ `X-Device-Secret` กับ DB `registry` ก่อนอนุญาตให้บันทึกข้อมูลเข้าสู่ฐานข้อมูลศูนย์พักพิง (`shelter_{shelter_code}`)
+
+> ❓ **Architecture Open Question (Registry vs Shelter DB):**
+> - **การออกแบบปัจจุบัน (Current Design):** จัดเก็บ `scanner_device` ไว้ใน DB `registry` ตรงกลาง เพื่อให้ Inbound Gateway สามารถตรวจพิสูจน์ตัวตนเครื่องอ่านบัตร (Authentication & Shelter Routing) ได้รวดเร็วใน 1 query โดยตัว Kiosk ไม่ต้องแนบ `shelter_code` มาใน Header
+> - **แนวทางวิเคราะห์เพื่อตัดสินใจในอนาคต (Tradeoffs):**
+>   - *กรณีคงไว้ที่ `registry`:* บริหารจัดการ Hardware Asset และ Heartbeat ได้จากส่วนกลาง ป้องกัน Device ID ซ้ำซ้อน เหมาะกับโมเดล Remote-First Cloud
+>   - *กรณีย้ายลง `shelter_{shelter_code}`:* ให้สิทธิ์ผู้จัดการศูนย์พักพิง (`shelter_manager`) เพิ่ม/ลบเครื่องได้เอง และรองรับ Disaster Edge Node (Offline แยกศูนย์) ได้ดียิ่งขึ้น โดยจะต้องปรับ Kiosk Client ให้ส่ง Header `X-Shelter-Code` แนบมาด้วย
+
 ---
 
 ## 4. มาตรฐานความปลอดภัยและการคุ้มครองข้อมูล (PDPA & Data Governance)
@@ -114,3 +126,4 @@ flowchart TD
 1. **Isolation from Occupancy Views:** สถานะ `draft` จะต้องไม่ถูกนับรวมในผลรวมยอดผู้เข้าพัก (Active Occupancy) หรือยอดจอง (Pre-registered Quota) ในหน้า Dashboard และสถิติศูนย์พักพิง
 2. **Isolation from Public Tier:** สถานะ `draft` จะต้องถูกกรองออก ไม่แสดงใน Public Directory / Search ทุกกรณี
 3. **Draft Retention & Expiry (24 Hours):** เอกสารสถานะ `draft` ที่ไม่มีการมายืนยันตัวตนกับเจ้าหน้าที่ภายใน 24 ชั่วโมง จะถูกซ่อนจากผลการค้นหา และมี Batch / Purge job ดำเนินการล้างข้อมูลตามนโยบาย PDPA
+

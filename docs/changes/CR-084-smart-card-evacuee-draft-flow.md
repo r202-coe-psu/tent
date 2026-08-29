@@ -92,3 +92,22 @@ affects:
 ## Decision Log
 - 2026-08-29 — Jk (Project Owner) เคาะแนวทางย้ายสู่ `evacuee:draft`, จัดการ `pre_registered + card_snapshot`, คัดกรอง Step 1 ใหม่ และ Autofill ที่อยู่ Step 3
 - 2026-08-29 — Jk (Project Owner) เพิ่มข้อกำหนด: 1) UI สีเหลืองแจ้งเตือนสแกนซ้ำ "ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว", 2) คำนวณอายุอัตโนมัติจากปีเกิด, 3) Overwrite ข้อมูลจากบัตรสำหรับผู้ลงทะเบียนล่วงหน้า
+- 2026-08-29 — Jk (Project Owner) ปรับการจัดเก็บทะเบียนอุปกรณ์ `scanner_device` ให้เก็บใน DB `registry` ตรงกลางก่อน เพื่อความรวดเร็วในการ lookup API authentication และบันทึก Open Question สำหรับการตัดสินใจเรื่อง Edge/Shelter Autonomy ในอนาคต
+
+---
+
+## Open Architecture Question
+
+### Q: ทะเบียนอุปกรณ์ `scanner_device` ควรจัดเก็บที่ DB `registry` (ตรงกลาง) หรือกระจายใน `shelter_{shelter_code}` (ประจำศูนย์)?
+
+| มิติการเปรียบเทียบ | ทางเลือกที่ 1: DB `registry` (เลือกใช้ปัจจุบัน) | ทางเลือกที่ 2: DB `shelter_{shelter_code}` (ทางเลือกอนาคต) |
+| :--- | :--- | :--- |
+| **Inbound API Auth Lookup** | ✅ เร็วมาก (1 query) โดย Client ส่งแค่ `X-Device-Id` และ `X-Device-Secret` Server รู้ศูนย์ทันที | ⚠️ Client ต้องแนบ Header `X-Shelter-Code` มาด้วยทุก request เพื่อให้ Server รู้ว่าต้องไปตรวจใน DB ไหน |
+| **RBAC / การบริหารจัดการ** | เจ้าหน้าที่ระดับ `system_admin` เป็นผู้ลงทะเบียน/แจกจ่าย Hardware | เจ้าหน้าที่ระดับ `shelter_manager` ประจำศูนย์สามารถเพิ่ม/ลบอุปกรณ์เองได้ |
+| **Edge / Disaster Offline** | หากเน็ตตัดขาด เครื่อง Edge ต้องมี registry replica | เครื่อง Edge ซิงค์เฉพาะฐานข้อมูลศูนย์ของตนเองได้สมบูรณ์แบบ |
+| **Uniqueness ของ Device ID** | การันตี ID ไม่ซ้ำกันทั่วประเทศ (Global Unique) | อาจเกิด ID ซ้ำกันระหว่างศูนย์ได้หากไม่มี Convention |
+
+**แนวทางการตัดสินใจในอนาคต:**
+- หากโปรเจกต์ยังเน้นโมเดล **Remote-First Server (Central Cloud):** ใช้ **`registry`** ต่อไปเพราะเรียบง่ายและเสถียรที่สุด
+- หากเริ่มขยายสู่โมเดล **Edge Disaster Continuity (Offline Isolated Nodes):** พิจารณาเพิ่ม Header `X-Shelter-Code` ใน Kiosk Client แล้วย้าย `scanner_device` ลงไปไว้ที่ `shelter_{shelter_code}` ต่อไป
+

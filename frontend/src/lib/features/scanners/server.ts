@@ -4,7 +4,7 @@ import {
 	createScannerDraftDoc,
 	isScannerDevice,
 	isScannerDraft,
-	SCANNER_CATALOG_DB,
+	SCANNER_REGISTRY_DB,
 	smartCardDataSchema,
 	type ScannerDevice,
 	type ScannerDraft,
@@ -30,7 +30,7 @@ export type ProcessCardResult =
 
 export class ScannerServerRepository {
 	async getDeviceByDeviceId(deviceId: string): Promise<ScannerDevice | null> {
-		const res = await adminFetch<{ docs: ScannerDevice[] }>(`/${SCANNER_CATALOG_DB}/_find`, {
+		const res = await adminFetch<{ docs: ScannerDevice[] }>(`/${SCANNER_REGISTRY_DB}/_find`, {
 			method: 'POST',
 			body: JSON.stringify({
 				selector: {
@@ -44,14 +44,14 @@ export class ScannerServerRepository {
 	}
 
 	async updateDeviceLastSeen(id: string): Promise<void> {
-		const res = await adminRaw(`/${SCANNER_CATALOG_DB}/${encodeURIComponent(id)}`, 'GET');
+		const res = await adminRaw(`/${SCANNER_REGISTRY_DB}/${encodeURIComponent(id)}`, 'GET');
 		if (res.status === 200 && res.data && isScannerDevice(res.data)) {
 			const updated: ScannerDevice = {
 				...res.data,
 				last_seen_at: now(),
 				updated_at: now()
 			};
-			await adminRaw(`/${SCANNER_CATALOG_DB}/${encodeURIComponent(id)}`, 'PUT', updated);
+			await adminRaw(`/${SCANNER_REGISTRY_DB}/${encodeURIComponent(id)}`, 'PUT', updated);
 		}
 	}
 

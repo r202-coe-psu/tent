@@ -6,10 +6,11 @@ import {
 	makeDoc,
 	shelterCodeSchema
 } from '$lib/db/model';
-import { CATALOG_DB } from '$lib/features/catalog/data/catalog.remote';
 
 export const SCANNER_SCHEMA_V = 1;
-export const SCANNER_CATALOG_DB = CATALOG_DB;
+export const SCANNER_REGISTRY_DB = 'registry';
+export const SCANNER_CATALOG_DB = SCANNER_REGISTRY_DB;
+export const SCANNER_DEVICE_DB = SCANNER_REGISTRY_DB;
 
 // ---------------------------------------------------------------- Device Schema
 
