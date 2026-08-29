@@ -21,7 +21,8 @@ export type {
 	TransferStatus,
 	DonationChannel,
 	DonationSlot,
-	NeedAvailability
+	NeedAvailability,
+	StockLotBalance
 } from './domain/operations';
 
 // Domain — schemas + factories + transitions + read models + guards
@@ -76,6 +77,11 @@ export {
 	distributeInputSchema,
 	createDistributeEntry,
 	type DistributeInput,
+	distributionReturnInputSchema,
+	createDistributionReturnEntry,
+	type DistributionReturnInput,
+	projectStockLotBalances,
+	StockLotIntegrityError,
 	adjustInputSchema,
 	createAdjustEntry,
 	type AdjustInput
