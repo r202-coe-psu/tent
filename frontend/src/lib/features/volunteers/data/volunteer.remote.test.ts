@@ -42,7 +42,7 @@ describe('VolunteerRemoteRepository', () => {
 		const volunteer = await repo.create(baseInput, ctx);
 
 		expect(volunteer._id).toMatch(/^volunteer:/);
-		expect(volunteer.schema_v).toBe(2);
+		expect(volunteer.schema_v).toBe(3);
 		expect(volunteer.checked_in).toBe(false);
 		expect(volunteer.identity_verified).toBe(false);
 		expect(volunteer.current_shelter_code).toBeNull();

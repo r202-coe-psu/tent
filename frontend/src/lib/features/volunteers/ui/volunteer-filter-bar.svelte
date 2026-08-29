@@ -7,34 +7,40 @@
 	 * and re-query the server; `skill` and `shiftStatus` filter the already-
 	 * fetched list client-side (there is no server-side index for either).
 	 *
-	 * "ทุกศูนย์พักพิง" and "บุคลากร" stay single-option/disabled — flagged for a
-	 * CR, not wired:
-	 *   - `volunteerRepository().list()` only ever reads the *active* shelter's
-	 *     CouchDB (`getShelterDb()`, per CONTRIBUTING.md §4 remote-first
-	 *     model) — there is no cross-shelter roster query to back a shelter
-	 *     picker here.
-	 *   - "บุคลากร" (personnel type — the mockup implies a จิตอาสา/อาสาสมัคร/
-	 *     staff-capable split) has no backing field on `volunteer`
-	 *     (schema.md §2.8 has `source`, not a personnel-type enum).
+	 * "ทุกศูนย์พักพิง" stays single-option/disabled — flagged for a CR, not
+	 * wired: `volunteerRepository().list()` only ever reads the *active*
+	 * shelter's CouchDB (`getShelterDb()`, per CONTRIBUTING.md §4 remote-first
+	 * model) — there is no cross-shelter roster query to back a shelter
+	 * picker here.
+	 *
+	 * "บุคลากร" (personnel type) filters on `volunteer.personnel_type`
+	 * (CR-095, schema_v 3) client-side, same pattern as `source`.
 	 */
 	import Search from '@lucide/svelte/icons/search';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { SKILL_MASTER } from '../domain/skill-master';
 	import { shiftAssignmentStatusSchema } from '../domain/shift-assignment.schema';
-	import { volunteerSourceSchema, type VolunteerSource } from '../domain/volunteer.schema';
+	import {
+		volunteerSourceSchema,
+		personnelTypeSchema,
+		type VolunteerSource,
+		type PersonnelType
+	} from '../domain/volunteer.schema';
 	import type { ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
 
 	let {
 		search = $bindable(''),
 		skill = $bindable(''),
 		shiftStatus = $bindable<ShiftAssignmentStatus | ''>(''),
-		source = $bindable<VolunteerSource | ''>('')
+		source = $bindable<VolunteerSource | ''>(''),
+		personnelType = $bindable<PersonnelType | ''>('')
 	}: {
 		search?: string;
 		skill?: string;
 		shiftStatus?: ShiftAssignmentStatus | '';
 		source?: VolunteerSource | '';
+		personnelType?: PersonnelType | '';
 	} = $props();
 
 	const skillOptions = [
@@ -64,6 +70,15 @@
 	const sourceOptions = [
 		{ value: '', label: 'แหล่งที่มา: ทั้งหมด' },
 		...volunteerSourceSchema.options.map((v) => ({ value: v, label: SOURCE_LABELS[v] }))
+	];
+
+	const PERSONNEL_TYPE_LABELS: Record<PersonnelType, string> = {
+		volunteer: 'อาสาสมัคร',
+		staff: 'จนท.ประจำ'
+	};
+	const personnelTypeOptions = [
+		{ value: '', label: 'บุคลากร: ทั้งหมด' },
+		...personnelTypeSchema.options.map((v) => ({ value: v, label: PERSONNEL_TYPE_LABELS[v] }))
 	];
 
 	const selectTriggerClass = 'h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs';
@@ -133,12 +148,16 @@
 			</Select.Content>
 		</Select.Root>
 
-		<Select.Root type="single" value="" disabled>
+		<Select.Root type="single" bind:value={personnelType}>
 			<Select.Trigger class={selectTriggerClass} aria-label="บุคลากร">
-				<span class="truncate">บุคลากร: ทั้งหมด</span>
+				<span class="truncate">
+					{personnelTypeOptions.find((o) => o.value === personnelType)?.label ?? 'บุคลากร: ทั้งหมด'}
+				</span>
 			</Select.Trigger>
 			<Select.Content>
-				<Select.Item value="" label="บุคลากร: ทั้งหมด" />
+				{#each personnelTypeOptions as opt (opt.value)}
+					<Select.Item value={opt.value} label={opt.label} />
+				{/each}
 			</Select.Content>
 		</Select.Root>
 	</div>

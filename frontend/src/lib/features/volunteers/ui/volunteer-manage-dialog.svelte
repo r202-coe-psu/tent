@@ -5,11 +5,11 @@
 	 * per-row "จัดการข้อมูล" button.
 	 *
 	 * Scope split (mirrors `volunteer-card.svelte`'s header comment): ชื่อ-นามสกุล
-	 * / เบอร์โทรศัพท์ / ทักษะทั่วไป are real edits through
-	 * `VolunteerRepository#update()` (`useUpdateVolunteer`, LWW read-modify-write).
+	 * / เบอร์โทรศัพท์ / ทักษะทั่วไป / ชนิดบุคคล are real edits through
+	 * `VolunteerRepository#update()` (`useUpdateVolunteer`, LWW read-modify-write) —
+	 * ชนิดบุคคล backed by `volunteer.personnel_type` (CR-095, schema_v 2 → 3).
 	 * Everything else here has no backing repository method yet, so it stays a
 	 * UI-only stub that toasts, same convention as the rest of the card:
-	 *   - ชนิดบุคคล (PERSONNEL TYPE): no such field exists on `Volunteer` at all.
 	 *   - กะที่มอบหมาย (ASSIGNED SHIFT): lives on `shift_assignment` (via job
 	 *     dispatch), not on `volunteer` — there is no "set default shift" call.
 	 *   - ออกสิทธิ์เข้าใช้งานระบบหลังบ้าน: no RoleKey-grant repository call
@@ -36,7 +36,7 @@
 	import { useUpdateVolunteer } from '../application/queries';
 	import { SKILL_MASTER } from '../domain/skill-master';
 	import { isControlledSkill } from '../domain/skills';
-	import type { Volunteer } from '../domain/volunteer.schema';
+	import type { PersonnelType, Volunteer } from '../domain/volunteer.schema';
 	import type { ShiftKind } from '../domain/shift-assignment.schema';
 
 	let {
@@ -69,6 +69,7 @@
 	let fullName = $state('');
 	let phone = $state('');
 	let selectedSkills = $state<string[]>([]);
+	let personnelType = $state<PersonnelType>('volunteer');
 	let assignedShift = $state<ShiftKind | 'unset'>('unset');
 
 	// Rehydrate from the volunteer prop each time the dialog opens on a
@@ -83,6 +84,7 @@
 		fullName = `${volunteer.first_name} ${volunteer.last_name}`.trim();
 		phone = volunteer.phone ?? '';
 		selectedSkills = [...volunteer.skills];
+		personnelType = volunteer.personnel_type;
 		assignedShift = todayShift ?? 'unset';
 		lastOpenedId = volunteer._id;
 	});
@@ -113,7 +115,8 @@
 				first_name: name.slice(0, spaceIndex).trim(),
 				last_name: name.slice(spaceIndex + 1).trim(),
 				phone: phone.trim(),
-				skills: selectedSkills
+				skills: selectedSkills,
+				personnel_type: personnelType
 			});
 			toast.success('บันทึกข้อมูลอาสาสมัครแล้ว');
 			open = false;
@@ -196,16 +199,22 @@
 					<Button
 						type="button"
 						variant="outline"
-						class="!h-11 justify-center border-primary bg-primary/5 text-primary"
-						aria-pressed="true"
+						class="!h-11 justify-center {personnelType === 'volunteer'
+							? 'border-primary bg-primary/5 text-primary'
+							: ''}"
+						aria-pressed={personnelType === 'volunteer'}
+						onclick={() => (personnelType = 'volunteer')}
 					>
 						🎫 อาสาสมัคร
 					</Button>
 					<Button
 						type="button"
 						variant="outline"
-						class="!h-11 justify-center"
-						onclick={() => stub('เปลี่ยนชนิดบุคคล')}
+						class="!h-11 justify-center {personnelType === 'staff'
+							? 'border-primary bg-primary/5 text-primary'
+							: ''}"
+						aria-pressed={personnelType === 'staff'}
+						onclick={() => (personnelType = 'staff')}
 					>
 						🏢 จนท.ประจำ
 					</Button>

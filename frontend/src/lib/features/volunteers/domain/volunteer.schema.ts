@@ -1,5 +1,6 @@
 /**
- * Volunteer domain schema — CR-094 §3.1 (schema.md §2.8, `volunteer` schema_v 1 → 2).
+ * Volunteer domain schema — CR-094 §3.1 (schema.md §2.8, `volunteer` schema_v 1 → 2)
+ * and CR-095 (schema.md §2.8, `volunteer` schema_v 2 → 3 — `personnel_type`).
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
  */
@@ -18,6 +19,10 @@ export type VolunteerStatus = z.infer<typeof volunteerStatusSchema>;
 export const volunteerSourceSchema = z.enum(['public_apply', 'walk_in', 'staff_entry', 'transfer']);
 export type VolunteerSource = z.infer<typeof volunteerSourceSchema>;
 
+/** CR-095 — ชนิดบุคคล: อาสาสมัคร vs เจ้าหน้าที่ประจำ (drives "ชนิดบุคคล" toggle). */
+export const personnelTypeSchema = z.enum(['volunteer', 'staff']);
+export type PersonnelType = z.infer<typeof personnelTypeSchema>;
+
 /** National ID: 13 digits, optional everywhere (CR-094 FR-VOL-10.2 amends CR-092 FR-VOL-01). */
 export const nationalIdSchema = z
 	.string()
@@ -30,7 +35,7 @@ export const nationalIdSchema = z
 
 export interface Volunteer extends BaseDoc {
 	type: 'volunteer';
-	schema_v: 2;
+	schema_v: 3;
 	first_name: string;
 	last_name: string;
 	nickname?: string;
@@ -54,13 +59,15 @@ export interface Volunteer extends BaseDoc {
 	/** CR-094 §3.1 — backs the "ยืนยันตัวตนแล้ว" badge. */
 	identity_verified: boolean;
 	source: VolunteerSource;
+	/** CR-095 — backs the "ชนิดบุคคล" toggle, default `'volunteer'`. */
+	personnel_type: PersonnelType;
 }
 
 export const volunteerSchema = z.object({
 	_id: z.string().startsWith('volunteer:'),
 	_rev: z.string().optional(),
 	type: z.literal('volunteer'),
-	schema_v: z.literal(2),
+	schema_v: z.literal(3),
 	shelter_code: z.string().min(1),
 	created_at: z.string(),
 	updated_at: z.string(),
@@ -82,7 +89,8 @@ export const volunteerSchema = z.object({
 	current_shelter_code: z.string().nullable().optional(),
 	volunteer_code: z.string().min(1),
 	identity_verified: z.boolean(),
-	source: volunteerSourceSchema
+	source: volunteerSourceSchema,
+	personnel_type: personnelTypeSchema
 });
 
 export const isVolunteer = (d: unknown): d is Volunteer => volunteerSchema.safeParse(d).success;
@@ -100,9 +108,10 @@ export const volunteerInputSchema = z.object({
 	skills: z.array(z.string()).default([]),
 	organization: z.string().trim().nullable().optional(),
 	national_id: nationalIdSchema.nullable().default(null),
-	source: volunteerSourceSchema
+	source: volunteerSourceSchema,
+	personnel_type: personnelTypeSchema.default('volunteer')
 });
-export type VolunteerInput = z.infer<typeof volunteerInputSchema>;
+export type VolunteerInput = z.input<typeof volunteerInputSchema>;
 
 /**
  * Build a new `volunteer` doc. `volunteer_code` and `status` are decided by the
@@ -118,7 +127,7 @@ export function makeVolunteer(
 	const d = volunteerInputSchema.parse(input);
 	return makeDoc(
 		'volunteer',
-		2,
+		3,
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -136,7 +145,8 @@ export function makeVolunteer(
 			current_shelter_code: null,
 			volunteer_code: fields.volunteer_code,
 			identity_verified: false,
-			source: d.source
+			source: d.source,
+			personnel_type: d.personnel_type
 		},
 		ctx
 	) as Volunteer;

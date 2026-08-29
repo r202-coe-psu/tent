@@ -28,7 +28,7 @@
 	import WalkInRegistrationDialog from './walk-in-registration-dialog.svelte';
 	import { useVolunteers, useTodayAttendance, useTransfers } from '../application/queries';
 	import { isControlledSkill } from '../domain/skills';
-	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
+	import type { PersonnelType, Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
 
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
@@ -58,6 +58,7 @@
 	let skillFilter = $state('');
 	let shiftStatusFilter = $state<ShiftAssignmentStatus | ''>('');
 	let sourceFilter = $state<VolunteerSource | ''>('');
+	let personnelTypeFilter = $state<PersonnelType | ''>('');
 
 	const pendingCount = $derived(volunteers.filter((v) => !v.identity_verified).length);
 	const readyCount = $derived(volunteers.filter((v) => v.identity_verified).length);
@@ -90,6 +91,7 @@
 		if (search) list = list.filter((v) => matchesSearch(v, search));
 		if (skillFilter) list = list.filter((v) => v.skills.includes(skillFilter));
 		if (sourceFilter) list = list.filter((v) => v.source === sourceFilter);
+		if (personnelTypeFilter) list = list.filter((v) => v.personnel_type === personnelTypeFilter);
 		if (shiftStatusFilter) {
 			list = list.filter((v) => attendanceByVolunteer.get(v._id)?.status === shiftStatusFilter);
 		}
@@ -144,6 +146,7 @@
 		bind:skill={skillFilter}
 		bind:shiftStatus={shiftStatusFilter}
 		bind:source={sourceFilter}
+		bind:personnelType={personnelTypeFilter}
 	/>
 
 	{#if statFilter === 'pending'}

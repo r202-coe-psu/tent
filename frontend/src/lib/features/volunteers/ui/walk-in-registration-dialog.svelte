@@ -4,10 +4,7 @@
 	 * mockup 2026-08-28).
 	 *
 	 * `volunteer.first_name`/`last_name` are separate required fields
-	 * (schema.md §2.8), but the mockup's front-desk form has one "ชื่อ-นามสกุล"
-	 * field — split on the first space here (first token → `first_name`, rest
-	 * → `last_name`); a name with no space is rejected with an inline error
-	 * rather than silently duplicated into both fields.
+	 * (schema.md §2.8) and are entered as two separate fields here.
 	 *
 	 * "สังกัดศูนย์พักพิง" is locked to the active shelter, not a real picker —
 	 * `volunteerRepository().create()` always writes to the active shelter's
@@ -57,7 +54,8 @@
 	const shelterQuery = useShelter(() => shelterCode);
 	const shelterLabel = $derived(shelterQuery.data?.name ?? shelterCode);
 
-	let fullName = $state('');
+	let firstName = $state('');
+	let lastName = $state('');
 	let phone = $state('');
 	let nationalId = $state('');
 	let selectedSkills = $state<string[]>([]);
@@ -79,7 +77,8 @@
 	}
 
 	function reset() {
-		fullName = '';
+		firstName = '';
+		lastName = '';
 		phone = '';
 		nationalId = '';
 		selectedSkills = [];
@@ -93,10 +92,10 @@
 
 	async function submit() {
 		formError = null;
-		const name = fullName.trim();
-		const spaceIndex = name.indexOf(' ');
-		if (!name || spaceIndex < 1) {
-			formError = 'กรุณากรอกชื่อและนามสกุล คั่นด้วยเว้นวรรค เช่น "สมชาย ใจดี"';
+		const first_name = firstName.trim();
+		const last_name = lastName.trim();
+		if (!first_name || !last_name) {
+			formError = 'กรุณากรอกชื่อและนามสกุล';
 			return;
 		}
 		if (!phone.trim()) {
@@ -108,9 +107,6 @@
 			formError = 'เลขบัตร ปชช. ต้องเป็นตัวเลข 13 หลัก';
 			return;
 		}
-
-		const first_name = name.slice(0, spaceIndex).trim();
-		const last_name = name.slice(spaceIndex + 1).trim();
 
 		try {
 			const volunteer = await createMutation.mutateAsync({
@@ -169,19 +165,33 @@
 				<p class="text-xs font-bold text-foreground">1. ข้อมูลบุคคล (PERSONAL INFO)</p>
 				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 					<div class="space-y-1.5">
-						<Label for="wi-name">ชื่อ-นามสกุล <span class="text-destructive">*</span></Label>
-						<Input id="wi-name" bind:value={fullName} placeholder="เช่น สมชาย ใจดี" class="h-11" />
+						<Label for="wi-first-name">ชื่อ <span class="text-destructive">*</span></Label>
+						<Input
+							id="wi-first-name"
+							bind:value={firstName}
+							placeholder="เช่น สมชาย"
+							class="h-11"
+						/>
 					</div>
 					<div class="space-y-1.5">
-						<Label for="wi-phone">เบอร์โทรศัพท์ <span class="text-destructive">*</span></Label>
-						<Input id="wi-phone" bind:value={phone} placeholder="08X-XXX-XXXX" class="h-11" />
+						<Label for="wi-last-name">นามสกุล <span class="text-destructive">*</span></Label>
+						<Input id="wi-last-name" bind:value={lastName} placeholder="เช่น ใจดี" class="h-11" />
 					</div>
+				</div>
+				<div class="space-y-1.5">
+					<Label for="wi-phone">เบอร์โทรศัพท์ <span class="text-destructive">*</span></Label>
+					<Input id="wi-phone" bind:value={phone} placeholder="08X-XXX-XXXX" class="h-11" />
 				</div>
 				<div class="space-y-1.5">
 					<Label for="wi-national-id">เลขบัตร ปชช. (13 หลัก) (ทางเลือก / Optional)</Label>
 					<Input
 						id="wi-national-id"
 						bind:value={nationalId}
+						oninput={(e) => {
+							nationalId = e.currentTarget.value.replace(/\D/g, '').slice(0, 13);
+						}}
+						inputmode="numeric"
+						maxlength={13}
 						placeholder="X-XXXX-XXXXX-XX-X (ไม่บังคับ)"
 						class="h-11"
 					/>

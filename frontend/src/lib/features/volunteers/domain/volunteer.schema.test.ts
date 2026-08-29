@@ -13,7 +13,7 @@ function validVolunteerDoc() {
 	return {
 		_id: 'volunteer:01AAAAAAAAAAAAAAAAAAAAAAAA',
 		type: 'volunteer' as const,
-		schema_v: 2 as const,
+		schema_v: 3 as const,
 		shelter_code: 'SH001',
 		created_at: '2026-08-26T00:00:00.000Z',
 		updated_at: '2026-08-26T00:00:00.000Z',
@@ -28,7 +28,8 @@ function validVolunteerDoc() {
 		current_shelter_code: null,
 		volunteer_code: 'V-001',
 		identity_verified: false,
-		source: 'walk_in' as const
+		source: 'walk_in' as const,
+		personnel_type: 'volunteer' as const
 	};
 }
 
@@ -78,9 +79,9 @@ describe('volunteerSchema', () => {
 		);
 	});
 
-	it('requires schema_v to be the literal 2', () => {
-		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 1 }).success).toBe(false);
-		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 3 }).success).toBe(false);
+	it('requires schema_v to be the literal 3', () => {
+		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 2 }).success).toBe(false);
+		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 4 }).success).toBe(false);
 	});
 
 	it('national_id is optional (F13) — a document without the key at all is still valid', () => {
@@ -113,6 +114,18 @@ describe('volunteerSchema', () => {
 		).toBe(false);
 	});
 
+	it('rejects an unknown personnel_type enum value', () => {
+		expect(
+			volunteerSchema.safeParse({ ...validVolunteerDoc(), personnel_type: 'contractor' }).success
+		).toBe(false);
+	});
+
+	it('rejects a missing personnel_type', () => {
+		const doc = validVolunteerDoc() as Record<string, unknown>;
+		delete doc.personnel_type;
+		expect(volunteerSchema.safeParse(doc).success).toBe(false);
+	});
+
 	it('rejects a missing required field (first_name)', () => {
 		const doc = validVolunteerDoc() as Record<string, unknown>;
 		delete doc.first_name;
@@ -138,16 +151,28 @@ describe('isVolunteer', () => {
 });
 
 describe('makeVolunteer', () => {
-	it('stamps volunteer: id prefix, schema_v 2, and CR-094 §6 migration defaults', () => {
+	it('stamps volunteer: id prefix, schema_v 3, and CR-094 §6 migration defaults', () => {
 		const v = makeVolunteer(baseInput, ctx, { volunteer_code: 'V-001' });
 		expect(v._id).toMatch(/^volunteer:/);
 		expect(v.type).toBe('volunteer');
-		expect(v.schema_v).toBe(2);
+		expect(v.schema_v).toBe(3);
 		expect(v.checked_in).toBe(false);
 		expect(v.identity_verified).toBe(false);
 		expect(v.current_shelter_code).toBeNull();
 		expect(v.volunteer_code).toBe('V-001');
 		expect(v.status).toBe('active');
+	});
+
+	it('defaults personnel_type to volunteer when not provided (CR-095)', () => {
+		const v = makeVolunteer(baseInput, ctx, { volunteer_code: 'V-006' });
+		expect(v.personnel_type).toBe('volunteer');
+	});
+
+	it('accepts an explicit personnel_type override', () => {
+		const v = makeVolunteer({ ...baseInput, personnel_type: 'staff' }, ctx, {
+			volunteer_code: 'V-007'
+		});
+		expect(v.personnel_type).toBe('staff');
 	});
 
 	it('defaults status to active, overridable via fields', () => {
