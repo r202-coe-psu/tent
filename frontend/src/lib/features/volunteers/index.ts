@@ -94,6 +94,14 @@ export { default as JobLifecyclePanel } from './ui/job-lifecycle-panel.svelte';
 export { default as JobShiftsTab } from './ui/job-shifts-tab.svelte';
 export { default as JobShiftCard } from './ui/job-shift-card.svelte';
 
+// ui — Tab 2 (Roster & Live Attendance / ตารางกะและเช็คอิน)
+export { default as RosterAttendanceTab } from './ui/roster-attendance-tab.svelte';
+export { default as RosterLiveAttendanceBar } from './ui/roster-live-attendance-bar.svelte';
+export { default as RosterScanBar } from './ui/roster-scan-bar.svelte';
+export { default as RosterRow } from './ui/roster-row.svelte';
+export { default as RosterManualCheckinDialog } from './ui/roster-manual-checkin-dialog.svelte';
+export { default as RosterAuditTrailDialog } from './ui/roster-audit-trail-dialog.svelte';
+
 // ui — Tab 3 (People / รายชื่อและการอนุมัติ)
 export { default as PeopleTab } from './ui/people-tab.svelte';
 export { default as VolunteerStatPills } from './ui/volunteer-stat-pills.svelte';
@@ -103,6 +111,7 @@ export { default as VolunteerApprovalChips } from './ui/volunteer-approval-chips
 export type { ApprovalChip } from './ui/volunteer-approval-chips.svelte';
 export { default as VolunteerCard } from './ui/volunteer-card.svelte';
 export { default as VolunteerManageDialog } from './ui/volunteer-manage-dialog.svelte';
+export { default as VolunteerQualificationsAuditDialog } from './ui/volunteer-qualifications-audit-dialog.svelte';
 export { default as VolunteerAccessDialog } from './ui/volunteer-access-dialog.svelte';
 export { default as VolunteerTransferDialog } from './ui/volunteer-transfer-dialog.svelte';
 export { default as WalkInRegistrationDialog } from './ui/walk-in-registration-dialog.svelte';

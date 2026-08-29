@@ -102,12 +102,19 @@ export function buildValidateDocUpdate(code: string): string {
   // kitchen_staff could never actually write a meal plan, requisition, service
   // record, or gas cylinder/ledger without an _admin session (bug found + fixed
   // alongside CR-080).
+  // Volunteers (CR-092/CR-094/CR-095, schema.md §2.8/§2.9/§2.17/§2.18/§2.20) was
+  // missing here entirely too — same class of bug: the back-office volunteers
+  // UI shipped and worked in dev only because dev testing used an _admin
+  // session; any real session-staff write (walk-in registration, job
+  // create/dispatch, check-in/out, transfer, identity approval) 403'd with
+  // "doc type not allowed yet" (bug found + fixed as CR-096).
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
     'people_import_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'purchase', 'referral',
-    'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger'
+    'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
+    'volunteer', 'job', 'job_application', 'shift_assignment', 'volunteer_transfer'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };

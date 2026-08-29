@@ -7,7 +7,9 @@
 	 *
 	 * Tab state lives in the URL (`?tab=jobs|roster|people`) so a refresh
 	 * returns to the same tab — mirrors
-	 * `back-office/evacuee-management/+page.svelte`.
+	 * `back-office/evacuee-management/+page.svelte`. All 3 tabs (Job Board,
+	 * Roster & Live Attendance — `roster-attendance-tab.svelte` — and People)
+	 * are built.
 	 */
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -19,6 +21,7 @@
 	import {
 		VolunteerHubHeader,
 		JobBoardTab,
+		RosterAttendanceTab,
 		PeopleTab,
 		useHubMetrics
 	} from '$lib/features/volunteers';
@@ -97,11 +100,7 @@
 		</Tabs.Content>
 
 		<Tabs.Content value="roster" class="pt-4">
-			<div
-				class="rounded-2xl border border-dashed border-border py-16 text-center text-muted-foreground"
-			>
-				<p class="text-sm font-medium">อยู่ระหว่างพัฒนา</p>
-			</div>
+			<RosterAttendanceTab />
 		</Tabs.Content>
 
 		<Tabs.Content value="people" class="pt-4">

@@ -2,10 +2,13 @@
 	/**
 	 * "People" tab roster row (owner-approved mockup, 2026-08-28).
 	 *
-	 * Of the 4 action buttons (จัดการข้อมูล / ออกสิทธิ์ใช้งานระบบ / ขอโอนย้ายศูนย์ /
-	 * ลบ):
-	 *   - "จัดการข้อมูล" opens `volunteer-manage-dialog.svelte` (see its header
-	 *     comment for the fields it actually persists vs. stubs).
+	 * Of the 4 action buttons (จัดการข้อมูล/ตรวจสอบ & อนุมัติ / ออกสิทธิ์ใช้งานระบบ /
+	 * ขอโอนย้ายศูนย์ / ลบ):
+	 *   - Not yet `identity_verified` → "ตรวจสอบ & อนุมัติ" opens
+	 *     `volunteer-qualifications-audit-dialog.svelte` (approve/reject the
+	 *     pending application — see its header comment for what it persists).
+	 *   - Already verified → "จัดการข้อมูล" opens `volunteer-manage-dialog.svelte`
+	 *     (see its header comment for the fields it actually persists vs. stubs).
 	 *   - "ออกสิทธิ์ใช้งานระบบ" opens `volunteer-access-dialog.svelte` (see its
 	 *     header comment — it persists `volunteer.user_name` but does NOT mint
 	 *     a real CouchDB account/password/role grant, since no such repository
@@ -29,6 +32,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
+	import VolunteerQualificationsAuditDialog from './volunteer-qualifications-audit-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
 	import VolunteerTransferDialog from './volunteer-transfer-dialog.svelte';
 	import { findSkill } from '../domain/skill-master';
@@ -75,6 +79,7 @@
 	}
 
 	let manageDialogOpen = $state(false);
+	let qualificationsDialogOpen = $state(false);
 	let accessDialogOpen = $state(false);
 	let transferDialogOpen = $state(false);
 </script>
@@ -195,10 +200,10 @@
 			<Button
 				size="sm"
 				class="gap-1.5 border-amber-400 bg-amber-500 text-white hover:bg-amber-600"
-				onclick={() => (manageDialogOpen = true)}
+				onclick={() => (qualificationsDialogOpen = true)}
 			>
 				<Pencil class="h-3.5 w-3.5" />
-				จัดการข้อมูล
+				ตรวจสอบ & อนุมัติ
 			</Button>
 		{:else}
 			<Button size="sm" variant="outline" class="gap-1.5" onclick={() => (manageDialogOpen = true)}>
@@ -273,6 +278,11 @@
 	{volunteer}
 	{shelterLine}
 	todayShift={todayAssignment?.shift}
+/>
+<VolunteerQualificationsAuditDialog
+	bind:open={qualificationsDialogOpen}
+	{volunteer}
+	{shelterLine}
 />
 <VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
 <VolunteerTransferDialog bind:open={transferDialogOpen} presetVolunteerId={volunteer._id} />

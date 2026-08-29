@@ -342,6 +342,77 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
+	// Volunteers (CR-092/CR-094/CR-095) shipped without an entry here — every
+	// session-staff write (walk-in registration, job create/dispatch,
+	// check-in/out, transfer, identity approval) 403'd with "doc type not
+	// allowed yet", even though the UI let staff into the flow. Dev testing
+	// never caught it because it ran under an _admin session (bug found + fixed
+	// as CR-096, same class as the kitchen gap above).
+	describe('volunteer doc types (CR-092/CR-094/CR-095, schema.md §2.8/§2.9/§2.17/§2.18/§2.20)', () => {
+		it('includes every volunteer-feature doc type in the allowed whitelist', () => {
+			const validateFn = buildValidateDocUpdate('SH001');
+			for (const type of [
+				'volunteer',
+				'job',
+				'job_application',
+				'shift_assignment',
+				'volunteer_transfer'
+			] as const) {
+				expect(validateFn).toContain(`'${type}'`);
+			}
+		});
+
+		it('accepts a new volunteer from registration staff', () => {
+			expect(() =>
+				compile()(
+					{
+						_id: 'volunteer:01J',
+						type: 'volunteer',
+						...envelope,
+						schema_v: 3,
+						first_name: 'สมชาย',
+						last_name: 'ใจดี',
+						phone: '0800000000',
+						skills: [],
+						status: 'active',
+						checked_in: false,
+						volunteer_code: 'V-001',
+						identity_verified: false,
+						source: 'walk_in',
+						personnel_type: 'volunteer'
+					},
+					null,
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('accepts a shift_assignment check-in update from registration staff', () => {
+			const assignment = {
+				...envelope,
+				schema_v: 3,
+				_id: 'shift_assignment:01J',
+				type: 'shift_assignment',
+				job_id: 'job:01J',
+				volunteer_id: 'volunteer:01J',
+				date: '2026-08-29',
+				shift: 'morning',
+				station: 'Zone A',
+				duty_window: { start_ts: '2026-08-29T01:00:00.000Z', end_ts: '2026-08-29T09:00:00.000Z' },
+				status: 'assigned',
+				check_in_method: 'qr',
+				check_in_reason: null
+			};
+			expect(() =>
+				compile()(
+					{ ...assignment, status: 'checked_in', check_in_at: '2026-08-29T01:05:00.000Z' },
+					assignment,
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+	});
+
 	describe('stock_ledger role gate', () => {
 		it('rejects a writer without a warehouse/manager role', () => {
 			expectForbidden(
