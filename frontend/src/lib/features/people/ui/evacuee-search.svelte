@@ -117,30 +117,30 @@
 						{@const hasCard = !!evacuee.card_snapshot}
 
 						{#if isDraft}
-							<!-- 🪪 Card Scanned Draft Card -->
+							<!-- 🪪 Card Scanned Draft Card (Amber Theme) -->
 							<div
-								class="flex flex-col gap-3 rounded-xl border border-cyan-300 bg-cyan-50/70 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-cyan-800 dark:bg-cyan-950/30"
+								class="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50/80 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-amber-700 dark:bg-amber-950/30"
 							>
 								<div class="flex items-start gap-3">
 									<div
-										class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-600 text-white shadow-sm"
+										class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-slate-950 shadow-sm"
 									>
-										<Cpu class="h-5 w-5" />
+										<Cpu class="h-5 w-5 stroke-[2.5]" />
 									</div>
 									<div class="min-w-0">
 										<div class="flex flex-wrap items-center gap-2">
-											<p class="font-bold text-cyan-950 dark:text-cyan-100">
+											<p class="font-bold text-amber-950 dark:text-amber-100">
 												{evacuee.first_name}
 												{evacuee.last_name}
 											</p>
 											<span
-												class="inline-flex items-center gap-1 rounded-full bg-cyan-200/80 px-2.5 py-0.5 text-xs font-semibold text-cyan-800 dark:bg-cyan-900/60 dark:text-cyan-300"
+												class="inline-flex items-center gap-1 rounded-full bg-amber-200/90 px-2.5 py-0.5 text-xs font-bold text-amber-900 dark:bg-amber-900/60 dark:text-amber-200"
 											>
 												<Sparkles class="h-3 w-3" />
 												เสียบบัตรแล้ว (รอคัดกรอง)
 											</span>
 										</div>
-										<p class="mt-0.5 font-mono text-xs text-cyan-800/80 dark:text-cyan-300/80">
+										<p class="mt-0.5 font-mono text-xs text-amber-900/80 dark:text-amber-300/80">
 											{#if evacuee.person_id?.number}
 												เลขบัตร: {evacuee.person_id.number}
 											{/if}
@@ -152,7 +152,7 @@
 								</div>
 								<Button
 									type="button"
-									class="h-11 w-full shrink-0 gap-1.5 bg-cyan-700 font-semibold text-white shadow hover:bg-cyan-800 sm:h-9 sm:w-auto"
+									class="h-11 w-full shrink-0 gap-1.5 bg-amber-600 font-semibold text-white shadow hover:bg-amber-700 sm:h-9 sm:w-auto"
 									onclick={() => (onSelectDraft ? onSelectDraft(evacuee) : onNext())}
 								>
 									<span>ดำเนินการคัดกรองและลงทะเบียน (Step 1)</span>

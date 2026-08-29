@@ -129,6 +129,10 @@ class ScannerClientManager:
                         # 4. Show Remove Card screen with message
                         encoded_msg = urllib.parse.quote(msg)
                         await self.page.goto(f"{self.remove_card_url}?message={encoded_msg}")
+                    elif status == "duplicate_draft" or "เคยเสียบบัตร" in msg:
+                        # 4b. Show Yellow Warning screen for duplicate scans
+                        encoded_msg = urllib.parse.quote(msg)
+                        await self.page.goto(f"{self.remove_card_url}?type=warning&message={encoded_msg}")
                     else:
                         error_msg = urllib.parse.quote(msg)
                         await self.page.goto(f"{self.error_url}?error_msg={error_msg}")

@@ -73,11 +73,27 @@ describe('createEvacuee', () => {
 		expect(draft.schema_v).toBe(8);
 		expect(draft.first_name).toBe('สมศักดิ์');
 		expect(draft.last_name).toBe('รักชาติ');
+		expect(draft.birth_year).toBe(2533);
+		expect(draft.age).toBe(36);
 		expect(draft.current_stay.status).toBe('draft');
 		expect(draft.household_id).toBeNull();
 		expect(draft.registered_via).toBe('kiosk');
 		expect(draft.person_id?.number).toBe('1234567890123');
 		expect(draft.card_snapshot?.station_name).toBe('จุดสแกน Kiosk 1');
+	});
+
+	it('creates draft evacuee and calculates age automatically from birth_year_ce when age is not provided', () => {
+		const card = {
+			citizen_id: '1234567890123',
+			first_name_th: 'วิชัย',
+			last_name_th: 'ใจดี',
+			birth_year_ce: 1996,
+			scanned_at: '2026-08-29T10:00:00Z',
+			device_id: 'DEV-01'
+		};
+		const draft = createDraftEvacueeFromCard(card, ctx);
+		expect(draft.birth_year).toBe(2539);
+		expect(draft.age).toBe(new Date().getFullYear() + 543 - 2539);
 	});
 
 	it('accepts "no phone" as null', () => {

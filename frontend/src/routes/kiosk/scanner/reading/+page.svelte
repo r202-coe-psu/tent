@@ -95,12 +95,12 @@
 				class="absolute h-36 w-36 animate-spin rounded-full border-4 border-cyan-400 border-t-blue-600 sm:h-44 sm:w-44"
 			></div>
 
-			<!-- Core Visual -->
+			<!-- Core Circular Visual -->
 			<div
-				class="relative flex h-24 w-24 items-center justify-center rounded-3xl border-2 border-blue-200 bg-white shadow-2xl ring-4 shadow-blue-500/20 ring-blue-100 sm:h-32 sm:w-32"
+				class="relative flex h-24 w-24 items-center justify-center rounded-full border-4 border-blue-400 bg-white shadow-2xl ring-4 shadow-blue-500/20 ring-blue-100 sm:h-32 sm:w-32"
 			>
 				<CreditCard class="h-12 w-12 text-blue-600 sm:h-16 sm:w-16" />
-				<div class="absolute -top-1.5 -right-1.5 flex h-7 w-7 items-center justify-center">
+				<div class="absolute -top-1 -right-1 flex h-7 w-7 items-center justify-center">
 					<span class="absolute h-full w-full animate-ping rounded-full bg-blue-500 opacity-75"
 					></span>
 					<span class="relative h-3.5 w-3.5 rounded-full bg-blue-600 shadow-md"></span>

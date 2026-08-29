@@ -63,7 +63,7 @@ describe('ScannerServerRepository.processCardScan', () => {
 		expect(res.message).toContain('อ่านบัตรสำเร็จ');
 	});
 
-	it('Branch 2: attaches card_snapshot when pre_registered evacuee exists', async () => {
+	it('Branch 2: overwrites evacuee personal details and attaches card_snapshot when pre_registered exists', async () => {
 		const existingPreReg: Evacuee = {
 			_id: 'evacuee:PREREG01',
 			type: 'evacuee',
@@ -72,9 +72,9 @@ describe('ScannerServerRepository.processCardScan', () => {
 			created_by: 'public',
 			created_at: '2026-08-29T00:00:00Z',
 			updated_at: '2026-08-29T00:00:00Z',
-			first_name: 'สมชาย',
-			last_name: 'ใจดี',
-			gender: 'male',
+			first_name: 'สมชายเก่า',
+			last_name: 'ใจดีเก่า',
+			gender: 'female',
 			phone: '0812345678',
 			person_id: { cardType: 'national_id', number: '1234567890123' },
 			country: 'THAILAND',
@@ -96,11 +96,18 @@ describe('ScannerServerRepository.processCardScan', () => {
 
 		expect(res.status).toBe('attached_to_preregistered');
 		expect(res.evacuee.current_stay.status).toBe('pre_registered');
+		// Overwritten from card data
+		expect(res.evacuee.first_name).toBe('สมชาย');
+		expect(res.evacuee.last_name).toBe('ใจดี');
+		expect(res.evacuee.gender).toBe('male');
+		expect(res.evacuee.birth_year).toBe(2535); // 1992 + 543
+		expect(res.evacuee.age).toBe(34);
+		expect(res.evacuee.photo).toBe('data:image/jpeg;base64,...');
 		expect(res.evacuee.card_snapshot?.citizen_id).toBe('1234567890123');
-		expect(res.message).toContain('พบข้อมูลการจองล่วงหน้า');
+		expect(res.message).toContain('พบข้อมูลการจองล่วงหน้าและอัปเดตข้อมูลจากบัตรแล้ว');
 	});
 
-	it('Branch 3: rejects with duplicate_draft when draft already exists', async () => {
+	it('Branch 3: rejects with duplicate_draft when draft already exists with custom warning message', async () => {
 		const existingDraft: Evacuee = {
 			_id: 'evacuee:DRAFT01',
 			type: 'evacuee',
@@ -133,7 +140,8 @@ describe('ScannerServerRepository.processCardScan', () => {
 
 		expect(res.status).toBe('duplicate_draft');
 		if (res.status === 'duplicate_draft') {
-			expect(res.error).toBe('มีข้อมูลการสแกนบัตรนี้รออยู่แล้ว กรุณาไปพบเจ้าหน้าที่');
+			expect(res.error).toBe('ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว');
+			expect(res.message).toBe('ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว');
 		}
 	});
 

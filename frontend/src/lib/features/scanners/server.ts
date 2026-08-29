@@ -84,6 +84,15 @@ export class ScannerServerRepository {
 				d.current_stay.status !== 'deceased'
 		);
 
+		const birthYearBE = cardData.birth_year_ce ? cardData.birth_year_ce + 543 : undefined;
+		const currentYearBE = new Date().getFullYear() + 543;
+		const calculatedAge =
+			cardData.age !== null && cardData.age !== undefined
+				? cardData.age
+				: birthYearBE !== undefined
+					? Math.max(0, currentYearBE - birthYearBE)
+					: undefined;
+
 		const cardSnapshot: CardSnapshot = {
 			citizen_id: cardData.citizen_id,
 			title_th: cardData.title_th || undefined,
@@ -92,7 +101,7 @@ export class ScannerServerRepository {
 			gender: cardData.gender,
 			birth_date: cardData.birth_date || undefined,
 			birth_year_ce: cardData.birth_year_ce || undefined,
-			age: cardData.age !== null ? cardData.age : undefined,
+			age: calculatedAge,
 			address_no: cardData.address_no || undefined,
 			village_no: cardData.village_no || undefined,
 			lane: cardData.lane || undefined,
@@ -114,8 +123,8 @@ export class ScannerServerRepository {
 				return {
 					status: 'duplicate_draft',
 					evacuee: existing,
-					error: 'มีข้อมูลการสแกนบัตรนี้รออยู่แล้ว กรุณาไปพบเจ้าหน้าที่',
-					message: 'มีข้อมูลการสแกนบัตรนี้รออยู่แล้ว กรุณาไปพบเจ้าหน้าที่'
+					error: 'ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว',
+					message: 'ท่านได้เคยเสียบบัตรเพื่อบันทึกข้อมูลแล้ว'
 				};
 			}
 
@@ -129,11 +138,25 @@ export class ScannerServerRepository {
 			}
 
 			if (stayStatus === 'pre_registered') {
-				// Attach card snapshot and update
+				// Overwrite evacuee personal details from authoritative card data
 				const updated: Evacuee = {
 					...existing,
+					first_name: cardData.first_name_th || existing.first_name,
+					last_name: cardData.last_name_th || existing.last_name,
+					gender:
+						cardData.gender === 'male' ||
+						cardData.gender === 'female' ||
+						cardData.gender === 'other'
+							? cardData.gender
+							: existing.gender,
+					birth_year: birthYearBE ?? existing.birth_year,
+					age: calculatedAge ?? existing.age,
+					person_id: {
+						cardType: 'national_id',
+						number: cardData.citizen_id
+					},
+					photo: cardData.photo_base64 || existing.photo || null,
 					card_snapshot: cardSnapshot,
-					...(cardData.photo_base64 && !existing.photo ? { photo: cardData.photo_base64 } : {}),
 					updated_at: now()
 				};
 
@@ -145,7 +168,8 @@ export class ScannerServerRepository {
 				return {
 					status: 'attached_to_preregistered',
 					evacuee: updated,
-					message: 'อ่านบัตรสำเร็จ พบข้อมูลการจองล่วงหน้า กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรอง'
+					message:
+						'อ่านบัตรสำเร็จ พบข้อมูลการจองล่วงหน้าและอัปเดตข้อมูลจากบัตรแล้ว กรุณาไปพบเจ้าหน้าที่เพื่อคัดกรอง'
 				};
 			}
 		}

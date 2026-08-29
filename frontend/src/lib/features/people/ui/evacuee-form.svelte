@@ -157,26 +157,35 @@
 		activeDraftEvacuee = draft;
 		const card = draft.card_snapshot;
 
-		// 1. Populate Personal Info for Step 3
+		const cardBirthYearBE = card?.birth_year_ce ? card.birth_year_ce + 543 : undefined;
+		const currentYearBE = new Date().getFullYear() + 543;
+		const cardAge =
+			card?.age !== undefined
+				? card.age
+				: cardBirthYearBE !== undefined
+					? Math.max(0, currentYearBE - cardBirthYearBE)
+					: undefined;
+
+		// 1. Populate Personal Info for Step 3 (prefer authoritative card data)
 		registrationDraft = {
-			first_name: draft.first_name || card?.first_name_th || '',
-			last_name: draft.last_name || card?.last_name_th || '',
-			gender: draft.gender || card?.gender || 'other',
+			first_name: card?.first_name_th || draft.first_name || '',
+			last_name: card?.last_name_th || draft.last_name || '',
+			gender: card?.gender || draft.gender || 'other',
 			phone: draft.phone ?? null,
-			birth_year: draft.birth_year ?? (card?.birth_year_ce ? card.birth_year_ce + 543 : undefined),
-			age: draft.age ?? card?.age ?? undefined,
-			person_id:
-				draft.person_id ??
-				(card?.citizen_id ? { cardType: 'national_id', number: card.citizen_id } : undefined),
+			birth_year: cardBirthYearBE ?? draft.birth_year,
+			age: cardAge ?? draft.age,
+			person_id: card?.citizen_id
+				? { cardType: 'national_id', number: card.citizen_id }
+				: (draft.person_id ?? { cardType: 'national_id', number: '' }),
 			country: draft.country || 'THAILAND',
 			religion: draft.religion || 'buddhist',
 			special_needs: draft.special_needs || [],
-			photo: draft.photo || card?.photo_base64 || null,
+			photo: card?.photo_base64 || draft.photo || null,
 			card_snapshot: card || null
 		};
 
-		if (draft.photo || card?.photo_base64) {
-			registrationFacePhotoUrl = draft.photo || card?.photo_base64 || null;
+		if (card?.photo_base64 || draft.photo) {
+			registrationFacePhotoUrl = card?.photo_base64 || draft.photo || null;
 		}
 
 		// 2. Populate Address for Step 4 (Household)

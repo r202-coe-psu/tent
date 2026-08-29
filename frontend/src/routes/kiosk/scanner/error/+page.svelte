@@ -29,9 +29,9 @@
 
 		<!-- Central Error Shield -->
 		<div
-			class="flex h-28 w-28 items-center justify-center rounded-3xl border-2 border-rose-300 bg-white shadow-2xl ring-4 shadow-rose-500/25 ring-rose-100 sm:h-36 sm:w-36 md:h-44 md:w-44"
+			class="flex h-28 w-28 items-center justify-center rounded-full border-4 border-rose-400 bg-white shadow-2xl ring-4 shadow-rose-500/25 ring-rose-100 sm:h-36 sm:w-36 md:h-44 md:w-44"
 		>
-			<AlertOctagon class="h-16 w-16 text-rose-600 sm:h-20 sm:w-20 md:h-24 md:w-24" />
+			<AlertOctagon class="h-14 w-14 text-rose-600 sm:h-18 sm:w-18 md:h-22 md:w-22" />
 		</div>
 	</div>
 

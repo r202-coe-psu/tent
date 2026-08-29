@@ -820,6 +820,13 @@ export function createDraftEvacueeFromCard(
 	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
 	const lastName = cardSnapshot.last_name_th || '';
 	const gender = cardSnapshot.gender || 'other';
+	const birthYearBE = cardSnapshot.birth_year_ce ? cardSnapshot.birth_year_ce + 543 : undefined;
+	const age =
+		cardSnapshot.age !== undefined
+			? cardSnapshot.age
+			: birthYearBE !== undefined
+				? Math.max(0, currentBEYear() - birthYearBE)
+				: undefined;
 
 	return makeDoc(
 		'evacuee',
@@ -829,8 +836,8 @@ export function createDraftEvacueeFromCard(
 			last_name: lastName,
 			gender,
 			phone: null,
-			...(cardSnapshot.birth_year_ce ? { birth_year: cardSnapshot.birth_year_ce + 543 } : {}),
-			...(cardSnapshot.age !== undefined ? { age: cardSnapshot.age } : {}),
+			...(birthYearBE ? { birth_year: birthYearBE } : {}),
+			...(age !== undefined ? { age } : {}),
 			person_id: {
 				cardType: 'national_id',
 				number: cardSnapshot.citizen_id
