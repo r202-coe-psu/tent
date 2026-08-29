@@ -26,23 +26,19 @@
 	<Table.Root>
 		<Table.Header class="bg-muted/50">
 			<Table.Row>
-				<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase">
+				<Table.Head class="text-2xs font-bold tracking-wider text-foreground uppercase">
 					หมวดหมู่ / ความต้องการ
 				</Table.Head>
-				<Table.Head
-					class="text-right text-[11px] font-bold tracking-wider text-foreground uppercase"
-				>
+				<Table.Head class="text-right text-2xs font-bold tracking-wider text-foreground uppercase">
 					เป้าหมายใช้/วัน
 				</Table.Head>
-				<Table.Head
-					class="text-right text-[11px] font-bold tracking-wider text-foreground uppercase"
-				>
+				<Table.Head class="text-right text-2xs font-bold tracking-wider text-foreground uppercase">
 					สต็อกปัจจุบัน
 				</Table.Head>
-				<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase">
+				<Table.Head class="text-2xs font-bold tracking-wider text-foreground uppercase">
 					ความคงเหลือ
 				</Table.Head>
-				<Table.Head class="text-[11px] font-bold tracking-wider text-foreground uppercase">
+				<Table.Head class="text-2xs font-bold tracking-wider text-foreground uppercase">
 					สถานะ
 				</Table.Head>
 			</Table.Row>

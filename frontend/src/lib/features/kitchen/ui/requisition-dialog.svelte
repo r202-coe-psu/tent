@@ -186,7 +186,7 @@
 									</Table.Cell>
 									<Table.Cell class="px-3 text-center">
 										<span
-											class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium {STATUS[
+											class="inline-flex rounded-full px-2 py-0.5 text-2xs font-medium {STATUS[
 												r.a.status
 											].class}"
 										>
@@ -255,7 +255,7 @@
 											<Table.Cell class="px-3 text-right text-sm">{g.remaining} kg</Table.Cell>
 											<Table.Cell class="px-3 text-center">
 												<span
-													class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium {g.insufficient
+													class="inline-flex rounded-full px-2 py-0.5 text-2xs font-medium {g.insufficient
 														? 'bg-red-100 text-red-700'
 														: 'bg-green-100 text-green-800'}"
 												>

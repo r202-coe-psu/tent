@@ -51,7 +51,7 @@
 				<Megaphone class="h-4 w-4 text-primary" />
 				จัดการกระดานแจ้งความต้องการด่วน (Public Needs Board)
 			</h2>
-			<p class="mt-1 text-[11px] text-muted-foreground">
+			<p class="mt-1 text-2xs text-muted-foreground">
 				สับสวิตช์เปิด-ปิด
 				หรือจำกัดจำนวนรายการสิ่งของที่ศูนย์ต้องการแจ้งให้สาธารณชนรับทราบผ่านทางหน้าเว็บแรก
 			</p>
@@ -71,7 +71,7 @@
 		<Table.Root class="w-full border-collapse text-left">
 			<Table.Header>
 				<Table.Row
-					class="border-b border-border bg-muted/20 text-[11px] font-bold text-muted-foreground uppercase"
+					class="border-b border-border bg-muted/20 text-2xs font-bold text-muted-foreground uppercase"
 				>
 					<Table.Head class="px-6 py-4">แคมเปญ / ประกาศพิเศษ</Table.Head>
 					<Table.Head class="px-6 py-4">รายการความต้องการและความคืบหน้า</Table.Head>
@@ -90,13 +90,13 @@
 							<div class="flex items-center gap-2 font-bold text-foreground">
 								{#if item.isCutOff}
 									<span
-										class="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-extrabold text-red-600 dark:bg-red-950/50 dark:text-red-400"
+										class="rounded bg-red-100 px-1.5 py-0.5 text-2xs font-extrabold text-red-600 dark:bg-red-950/50 dark:text-red-400"
 										>CUT-OFF</span
 									>
 								{/if}
 								{item.title}
 							</div>
-							<div class="mt-1 text-[10px] text-muted-foreground">{item.location}</div>
+							<div class="mt-1 text-2xs text-muted-foreground">{item.location}</div>
 						</Table.Cell>
 
 						<Table.Cell class="px-6 py-4">
@@ -111,13 +111,13 @@
 											)}
 									<div class="flex flex-col gap-1">
 										<div
-											class="flex items-center justify-between text-[11px] font-medium text-foreground"
+											class="flex items-center justify-between text-2xs font-medium text-foreground"
 										>
 											<div class="flex items-center gap-1.5">
 												<span>{need.name}</span>
 												{#if need.isCutOff}
 													<span
-														class="py-0.2 rounded bg-amber-100 px-1 text-[8px] font-extrabold text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+														class="py-0.2 rounded bg-amber-100 px-1 text-3xs font-extrabold text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
 													>
 														FULL
 													</span>
@@ -148,7 +148,7 @@
 								type="button"
 								onclick={() => onToggleShowOnHome(item.id)}
 								disabled={item.isCutOff}
-								class="inline-flex cursor-pointer items-center justify-center rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-all
+								class="inline-flex cursor-pointer items-center justify-center rounded-lg border px-3 py-1.5 text-2xs font-bold transition-all
 								{item.showOnHome && !item.isCutOff
 									? 'border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:border-blue-900/30 dark:bg-blue-950/20 dark:text-blue-400'
 									: 'cursor-not-allowed border-transparent bg-muted text-muted-foreground opacity-50'}"
@@ -165,7 +165,7 @@
 											<button
 												type="button"
 												disabled
-												class="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-muted bg-muted/50 px-3 py-1.5 text-[11px] font-bold text-muted-foreground opacity-70"
+												class="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-muted bg-muted/50 px-3 py-1.5 text-2xs font-bold text-muted-foreground opacity-70"
 											>
 												ปิดอัตโนมัติ (ครบเป้า)
 											</button>
@@ -173,7 +173,7 @@
 											<button
 												type="button"
 												onclick={() => onToggleCutOff(item.id, need.itemId)}
-												class="inline-flex cursor-pointer items-center justify-center rounded-lg border px-3 py-1.5 text-[11px] font-bold transition-colors
+												class="inline-flex cursor-pointer items-center justify-center rounded-lg border px-3 py-1.5 text-2xs font-bold transition-colors
 												{need.isManualClosed
 													? 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400'
 													: 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100/70 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-400'}"

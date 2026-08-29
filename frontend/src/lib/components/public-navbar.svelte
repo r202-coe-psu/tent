@@ -98,7 +98,7 @@
 				</div>
 				<div class="flex flex-col">
 					<span class="text-base font-bold tracking-tight text-foreground">{t.appTitle}</span>
-					<span class="text-[10px] font-semibold tracking-wider text-primary uppercase"
+					<span class="text-2xs font-semibold tracking-wider text-primary uppercase"
 						>{t.appSubtitle}</span
 					>
 				</div>

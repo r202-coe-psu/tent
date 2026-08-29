@@ -112,11 +112,30 @@ def test_project_shelter_closed_deletes():
 def test_map_public_shelter_status():
     assert map_public_shelter_status({"operation_status": "full_capacity"}) == "full"
     assert map_public_shelter_status({"operation_status": "active"}) == "open"
+    assert map_public_shelter_status({"operation_status": "standby"}) == "standby"
     assert map_public_shelter_status({"operation_status": "closed"}) == "closed"
+
+
+def test_project_shelter_standby_keeps_status():
+    action, payload = project_shelter(
+        {
+            "_id": "shelter:01STANDBY",
+            "type": "shelter",
+            "code": "SH001",
+            "name": "ศูนย์สแตนด์บาย",
+            "operation_status": "standby",
+            "capacity": 100,
+            "updated_at": "2026-01-01T00:00:00.000Z",
+        }
+    )
+    assert action == "upsert"
+    assert payload is not None
+    assert payload["status"] == "standby"
 
 
 def test_is_shelter_open_variants():
     assert is_shelter_open({"operation_status": "active"}) is True
+    assert is_shelter_open({"operation_status": "standby"}) is True
     assert is_shelter_open({"status": "open"}) is True
     assert is_shelter_open({"operation_status": "closed"}) is False
 

@@ -63,7 +63,7 @@
 			</div>
 		{:else}
 			{#if enableSearch && searchQuery.trim()}
-				<div class="text-center text-sm text-muted-foreground py-4">ไม่พบประเทศที่ค้นหา</div>
+				<div class="py-4 text-center text-sm text-muted-foreground">ไม่พบประเทศที่ค้นหา</div>
 			{/if}
 		{/each}
 	</div>

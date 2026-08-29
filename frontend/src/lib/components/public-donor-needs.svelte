@@ -294,7 +294,7 @@
 							รหัสศูนย์: {selectedShelterDetail.code}
 						</span>
 						<span
-							class="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 shadow-2xs"
+							class="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-2xs font-bold text-emerald-700 shadow-2xs"
 						>
 							<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
 							เปิดรับบริจาค
@@ -397,7 +397,7 @@
 												<div class="flex flex-wrap gap-1.5">
 													{#if isCritical}
 														<span
-															class="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold tracking-wider text-red-700 uppercase shadow-2xs"
+															class="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-2xs font-bold tracking-wider text-red-700 uppercase shadow-2xs"
 														>
 															<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500"
 															></span>
@@ -405,7 +405,7 @@
 														</span>
 													{:else if isHigh}
 														<span
-															class="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold tracking-wider text-orange-700 uppercase shadow-2xs"
+															class="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-2xs font-bold tracking-wider text-orange-700 uppercase shadow-2xs"
 														>
 															<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
 															สำคัญ (High)
@@ -428,7 +428,7 @@
 										<!-- Progress Bars -->
 										<div class="mt-2 flex w-full flex-col gap-1.5">
 											<div
-												class="flex flex-col gap-0.5 text-[10px] leading-tight font-semibold text-slate-500"
+												class="flex flex-col gap-0.5 text-2xs leading-tight font-semibold text-slate-500"
 											>
 												<div class="flex items-center justify-between">
 													<span class="text-emerald-700"
@@ -626,14 +626,14 @@
 							<div class="mb-2 flex items-center gap-2">
 								{#if hasCritical}
 									<span
-										class="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[10px] font-bold tracking-wider text-red-700 uppercase shadow-2xs"
+										class="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-2xs font-bold tracking-wider text-red-700 uppercase shadow-2xs"
 									>
 										<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500"></span>
 										วิกฤต (Critical)
 									</span>
 								{:else}
 									<span
-										class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold tracking-wider text-emerald-700 uppercase shadow-2xs"
+										class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-2xs font-bold tracking-wider text-emerald-700 uppercase shadow-2xs"
 									>
 										<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
 										เปิดรับบริจาค
@@ -697,7 +697,7 @@
 												</span>
 											</span>
 											<span
-												class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black whitespace-nowrap text-slate-600 shadow-xs"
+												class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-black whitespace-nowrap text-slate-600 shadow-xs"
 											>
 												{need.qty_needed > 0
 													? `เปิดรับอีก ${need.qty_needed} ${formatUnit(need.unit)}`
@@ -722,7 +722,7 @@
 								{#if displayedNeeds.length > 3}
 									<div class="mt-1 pl-3">
 										<span
-											class="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500"
+											class="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-500"
 										>
 											+{displayedNeeds.length - 3} รายการอื่น
 										</span>
@@ -735,7 +735,7 @@
 								<button
 									type="button"
 									onclick={() => goToShelterDetails(shelter)}
-									class="flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013365] px-4 py-3 text-[13px] font-bold text-white shadow-xs transition-colors hover:bg-[#1557b0] sm:text-sm"
+									class="flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013365] px-4 py-3 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#1557b0] sm:text-sm"
 								>
 									ดูรายละเอียดและบริจาค
 									<ArrowRight class="h-4 w-4 transition-transform group-hover:translate-x-1" />

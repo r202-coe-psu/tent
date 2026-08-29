@@ -144,7 +144,7 @@
 				<Scan class="h-5 w-5 text-primary" />
 				ระบบรับของเข้าคลัง (Intake Station)
 			</h2>
-			<p class="mt-1 text-[11px] text-muted-foreground">
+			<p class="mt-1 text-2xs text-muted-foreground">
 				สแกนคิวอาร์โค้ดใบจองจากมือถือผู้บริจาค หรือลงทะเบียนรับของบริจาคแบบ Walk-in
 			</p>
 		</div>
@@ -223,11 +223,10 @@
 					>
 						<div>
 							<div class="mb-1.5 flex items-center gap-2">
-								<span class="text-[9px] font-bold tracking-wide text-zinc-400 uppercase"
+								<span class="text-3xs font-bold tracking-wide text-zinc-400 uppercase"
 									>BOOKING REF.</span
 								>
-								<span
-									class="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-extrabold text-black"
+								<span class="rounded bg-amber-500 px-1.5 py-0.5 text-2xs font-extrabold text-black"
 									>{bookingRef}</span
 								>
 							</div>
@@ -245,7 +244,7 @@
 					</div>
 
 					<div class="space-y-4 bg-card p-5">
-						<h4 class="text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase">
+						<h4 class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase">
 							รายการที่จองไว้ (กรอกจำนวนที่รับจริง)
 						</h4>
 						<div class="space-y-2.5">
@@ -261,7 +260,7 @@
 											bind:value={item.qty}
 											class="h-8 w-20 rounded-lg border-primary/50 bg-card px-2 text-right text-xs font-semibold focus:border-primary"
 										/>
-										<span class="w-12 text-[11px] font-semibold text-muted-foreground"
+										<span class="w-12 text-2xs font-semibold text-muted-foreground"
 											>{item.unit}</span
 										>
 									</div>
@@ -308,14 +307,14 @@
 				</div>
 
 				<div class="mb-4 flex items-center justify-between">
-					<h4 class="text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase">
+					<h4 class="text-2xs font-extrabold tracking-wider text-muted-foreground uppercase">
 						รายการสิ่งของที่รับบริจาค
 					</h4>
 					<Button
 						variant="outline"
 						size="sm"
 						onclick={() => (walkinItems = [...walkinItems, { name: '', qty: 1, unit: 'ชิ้น' }])}
-						class="h-7 text-[10px] font-bold"
+						class="h-7 text-2xs font-bold"
 					>
 						<Plus class="mr-1 h-3 w-3" />
 						เพิ่มรายการ

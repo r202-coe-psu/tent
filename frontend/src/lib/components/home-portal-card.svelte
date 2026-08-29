@@ -49,7 +49,7 @@
 	>
 		{#if badge}
 			<div
-				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl bg-primary-muted px-3 py-1 text-[11px] font-bold text-primary-strong"
+				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl bg-primary-muted px-3 py-1 text-2xs font-bold text-primary-strong"
 			>
 				{badge}
 			</div>
@@ -81,7 +81,7 @@
 	>
 		{#if badge}
 			<div
-				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl bg-primary-muted px-3 py-1 text-[11px] font-bold text-primary-strong"
+				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl bg-primary-muted px-3 py-1 text-2xs font-bold text-primary-strong"
 			>
 				{badge}
 			</div>

@@ -139,7 +139,7 @@
 			<!-- Header -->
 			<Dialog.Header class="border-b border-black/[0.06] px-6 py-5">
 				<div>
-					<p class="text-[11px] font-black tracking-wider text-brand uppercase">
+					<p class="text-2xs font-black tracking-wider text-brand uppercase">
 						{isCreating ? 'สร้าง' : 'แก้ไข'}
 						{isMaster ? 'Master' : 'Override'} SOP Profile
 					</p>
@@ -153,14 +153,14 @@
 			<div class="flex-1 space-y-4 overflow-y-auto px-6 pt-5 pb-10">
 				{#if isCreating}
 					<div>
-						<label for="profile-name" class="mb-1.5 block text-[13px] font-bold text-slate-700">
+						<label for="profile-name" class="mb-1.5 block text-xs font-bold text-slate-700">
 							ชื่อ Master Profile <span class="text-red-500">*</span>
 						</label>
 						<input
 							id="profile-name"
 							bind:value={$formData.name}
 							maxlength="100"
-							class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[14px]"
+							class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm"
 						/>
 					</div>
 				{/if}
@@ -169,11 +169,11 @@
 					<div class="rounded-2xl border border-black/[0.06] bg-slate-50/60 p-4">
 						<div class="mb-2 flex items-center justify-between">
 							<div>
-								<p class="text-[14px] font-bold text-slate-800">{meta?.label ?? key}</p>
-								<p class="text-[11px] text-slate-500">{meta?.description ?? ''}</p>
+								<p class="text-sm font-bold text-slate-800">{meta?.label ?? key}</p>
+								<p class="text-2xs text-slate-500">{meta?.description ?? ''}</p>
 							</div>
 							<span
-								class="rounded-full border border-black/[0.06] bg-white px-2.5 py-1 text-[11px] font-bold text-slate-500 shadow-sm"
+								class="rounded-full border border-black/[0.06] bg-white px-2.5 py-1 text-2xs font-bold text-slate-500 shadow-sm"
 							>
 								{meta?.unit}
 							</span>
@@ -190,14 +190,14 @@
 								$formData.ratios[key] = val;
 							}}
 							class={[
-								'w-full rounded-xl border bg-white px-4 py-2.5 font-mono text-[15px] font-semibold transition-colors outline-none',
+								'w-full rounded-xl border bg-white px-4 py-2.5 font-mono text-sm font-semibold transition-colors outline-none',
 								$formErrors.ratios?.[key]
 									? 'border-red-500 text-red-600 focus:border-red-600 focus:ring-2 focus:ring-red-600/15'
 									: 'border-black/10 text-brand focus:border-brand focus:ring-2 focus:ring-brand/15'
 							]}
 						/>
 						{#if $formErrors.ratios?.[key]}
-							<p class="mt-1.5 text-[12px] font-medium text-red-500">
+							<p class="mt-1.5 text-xs font-medium text-red-500">
 								{$formErrors.ratios[key]}
 							</p>
 						{/if}
@@ -206,7 +206,7 @@
 
 				<!-- Reason field -->
 				{#if !isCreating}<div>
-						<label for="reason-input" class="mb-1.5 block text-[13px] font-bold text-slate-700">
+						<label for="reason-input" class="mb-1.5 block text-xs font-bold text-slate-700">
 							เหตุผลในการแก้ไข <span class="text-red-500">*</span>
 						</label>
 						<textarea
@@ -214,10 +214,10 @@
 							bind:value={$formData.reason}
 							placeholder="เช่น ปรับตามมติ EOC ประชุมวันที่ 4 ก.ค. 2568"
 							rows={2}
-							class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-[14px] text-slate-700 transition-colors outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/15"
+							class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-slate-700 transition-colors outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/15"
 						></textarea>
 						{#if !hasAnyChange}
-							<p class="mt-1 text-[12px] font-medium text-amber-600">
+							<p class="mt-1 text-xs font-medium text-amber-600">
 								⚠️ ยังไม่มีข้อมูลพารามิเตอร์ใดเปลี่ยนแปลง
 							</p>
 						{/if}
@@ -230,7 +230,7 @@
 				<button
 					type="button"
 					onclick={onClose}
-					class="rounded-xl px-4 py-2 text-[14px] font-bold text-slate-600 transition-colors hover:bg-slate-100"
+					class="rounded-xl px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-100"
 				>
 					ยกเลิก
 				</button>
@@ -238,7 +238,7 @@
 					type="submit"
 					disabled={isSaving ||
 						(isCreating ? !$formData.name.trim() : !$formData.reason?.trim() || !hasAnyChange)}
-					class="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
+					class="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					<Save size={15} />
 					{isSaving ? 'กำลังบันทึก...' : isCreating ? 'สร้าง Profile' : 'บันทึกเวอร์ชันใหม่'}

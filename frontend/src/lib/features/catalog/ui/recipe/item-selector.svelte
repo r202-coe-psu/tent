@@ -81,7 +81,7 @@
 							<span class="ml-1 text-xs text-muted-foreground">({item.sku})</span>
 						{/if}
 						<span
-							class="ml-2 rounded-lg bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
+							class="ml-2 rounded-lg bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
 						>
 							{item.base_unit}
 						</span>

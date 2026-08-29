@@ -1,0 +1,1 @@
+"""Transparency public aggregate module."""

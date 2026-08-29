@@ -55,3 +55,43 @@ export async function listPublicShelters(
 	}
 	return data as PublicShelterListResponse;
 }
+
+export type MasterLabelOption = { code: string; label: string };
+
+/**
+ * Code → label for `master_data:vulnerable_group`. Degrades to `[]` on any
+ * failure — shelter cards must still render without the badge text.
+ */
+export async function fetchVulnerableGroupLabels(
+	fetchFn: typeof fetch = fetch
+): Promise<MasterLabelOption[]> {
+	try {
+		const response = await fetchFn('/api/public/v1/config/vulnerable-groups');
+		if (!response.ok) return [];
+		const body = (await response.json().catch(() => null)) as {
+			groups?: MasterLabelOption[];
+		} | null;
+		return body?.groups ?? [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Code → label for `master_data:shelter_type` (public field `admin_type`).
+ * Same degrade-to-empty contract as vulnerable groups.
+ */
+export async function fetchShelterTypeLabels(
+	fetchFn: typeof fetch = fetch
+): Promise<MasterLabelOption[]> {
+	try {
+		const response = await fetchFn('/api/public/v1/config/shelter-types');
+		if (!response.ok) return [];
+		const body = (await response.json().catch(() => null)) as {
+			types?: MasterLabelOption[];
+		} | null;
+		return body?.types ?? [];
+	} catch {
+		return [];
+	}
+}

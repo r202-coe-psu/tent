@@ -58,14 +58,14 @@
 						<span>{member.first_name} {member.last_name}</span>
 						{#if hasOther}
 							<span
-								class="rounded border border-amber-200 bg-amber-50 px-1 text-[9px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-400"
+								class="rounded border border-amber-200 bg-amber-50 px-1 text-3xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-400"
 							>
 								ย้ายจาก: {otherLabel}
 							</span>
 						{/if}
 						{#if headEvacueeId === memberId}
 							<span
-								class="rounded border border-primary/20 bg-primary/10 px-1 text-[9px] font-semibold text-primary"
+								class="rounded border border-primary/20 bg-primary/10 px-1 text-3xs font-semibold text-primary"
 							>
 								หัวหน้า
 							</span>

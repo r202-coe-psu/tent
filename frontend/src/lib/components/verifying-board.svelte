@@ -30,7 +30,7 @@
 				<PackageCheck class="h-5 w-5 text-primary" />
 				กำลังตรวจรับ (Verifying Drop-off)
 			</h2>
-			<p class="mt-1 text-[11px] text-muted-foreground">
+			<p class="mt-1 text-2xs text-muted-foreground">
 				รายการที่ผ่านการอนุมัติแล้ว รอเจ้าหน้าที่ตรวจนับจำนวนจริงและกระทบยอดเข้าคลัง
 			</p>
 		</div>
@@ -47,12 +47,12 @@
 								>{req.donor_name || 'ไม่ระบุชื่อ'}</span
 							>
 							<span
-								class="rounded border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+								class="rounded border border-border bg-muted/50 px-2 py-0.5 text-2xs font-medium text-muted-foreground"
 							>
 								{req.booking_ref}
 							</span>
 						</div>
-						<p class="mt-1 text-[11px] text-muted-foreground">{itemsSummary(req)}</p>
+						<p class="mt-1 text-2xs text-muted-foreground">{itemsSummary(req)}</p>
 					</div>
 					<button
 						onclick={() => req.booking_ref && onVerify(req.booking_ref)}

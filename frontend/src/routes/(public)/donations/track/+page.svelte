@@ -76,7 +76,7 @@
 			<div class="space-y-2">
 				<label
 					for="booking-ref-field"
-					class="block text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase"
+					class="block text-2xs font-extrabold tracking-wider text-muted-foreground uppercase"
 				>
 					รหัสอ้างอิง (Booking Ref)
 				</label>
@@ -91,7 +91,7 @@
 			<div class="space-y-2">
 				<label
 					for="phone-field"
-					class="block text-[11px] font-extrabold tracking-wider text-muted-foreground uppercase"
+					class="block text-2xs font-extrabold tracking-wider text-muted-foreground uppercase"
 				>
 					เบอร์โทรศัพท์ที่ใช้ตอนจอง
 				</label>
@@ -118,7 +118,7 @@
 		</div>
 
 		<div class="mt-8 space-y-3 border-t border-border/60 pt-6">
-			<div class="flex items-start gap-2.5 text-[11px] leading-relaxed text-muted-foreground">
+			<div class="flex items-start gap-2.5 text-2xs leading-relaxed text-muted-foreground">
 				<AlertCircle class="mt-0.5 h-4.5 w-4.5 shrink-0 text-warning" />
 				<div>
 					<span class="font-bold text-foreground">ทำไมต้องใส่เบอร์ด้วย?</span>
