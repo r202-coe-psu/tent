@@ -5,12 +5,12 @@
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import { BookingModal } from '$lib/features/public-register';
 
-	import ShelterHero from './components/shelter-hero.svelte';
-	import ShelterAdmission from './components/shelter-admission.svelte';
-	import ShelterTravel from './components/shelter-travel.svelte';
-	import ShelterZones from './components/shelter-zones.svelte';
-	import ShelterFacilities from './components/shelter-facilities.svelte';
-	import ShelterContact from './components/shelter-contact.svelte';
+	import ShelterHero from '$lib/components/shelter-hero.svelte';
+	import ShelterAdmission from '$lib/components/shelter-admission.svelte';
+	import ShelterTravel from '$lib/components/shelter-travel.svelte';
+	import ShelterZones from '$lib/components/shelter-zones.svelte';
+	import ShelterFacilities from '$lib/components/shelter-facilities.svelte';
+	import ShelterContact from '$lib/components/shelter-contact.svelte';
 	import { PublicPageShell } from '$lib/features/public-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
