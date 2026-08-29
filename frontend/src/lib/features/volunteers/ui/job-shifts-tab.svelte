@@ -327,7 +327,7 @@
 							type="button"
 							onclick={() => toggleWeekday(day.value)}
 							class={[
-								'cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+								'cursor-pointer rounded-full border px-2.5 py-1 text-2xs font-medium transition-colors',
 								active
 									? 'border-primary bg-primary text-primary-foreground'
 									: 'border-border bg-background text-muted-foreground hover:bg-muted'
