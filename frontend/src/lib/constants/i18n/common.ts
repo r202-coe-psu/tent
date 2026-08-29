@@ -20,6 +20,7 @@ export const PUBLIC_NAVBAR_I18N = {
 		donateAndBook: 'บริจาคและจองคิว',
 		trackDonation: 'ตรวจสอบสถานะ',
 		trackDonationLong: 'ตรวจสอบสถานะบริจาค',
+		volunteers: 'อาสาฯ / พี่เลี้ยง',
 		backoffice: 'ระบบหลังบ้าน'
 	},
 	en: {
@@ -32,6 +33,7 @@ export const PUBLIC_NAVBAR_I18N = {
 		donateAndBook: 'Donate & Queue',
 		trackDonation: 'Track Status',
 		trackDonationLong: 'Track Donation Status',
+		volunteers: 'Volunteer',
 		backoffice: 'Backoffice'
 	}
 } as const;

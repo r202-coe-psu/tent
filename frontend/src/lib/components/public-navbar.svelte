@@ -13,6 +13,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Globe from '@lucide/svelte/icons/globe';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
 
 	import * as Select from '$lib/components/ui/select';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -47,6 +48,8 @@
 	let mobileMenuOpen = $state(false);
 	let donationsMenuOpen = $state(false);
 	let donationsMenuEl: HTMLDivElement | undefined = $state();
+	let volunteersMenuOpen = $state(false);
+	let volunteersMenuEl: HTMLDivElement | undefined = $state();
 
 	const t = $derived(getTranslation(PUBLIC_NAVBAR_I18N, langState.current));
 	// Booking has no route of its own — the navbar opens the dialog in place.
@@ -69,15 +72,20 @@
 		if (donationsMenuOpen && donationsMenuEl && !donationsMenuEl.contains(target)) {
 			closeDonationsMenu();
 		}
+		if (volunteersMenuOpen && volunteersMenuEl && !volunteersMenuEl.contains(target)) {
+			volunteersMenuOpen = false;
+		}
 	}
 
 	function handleWindowKeydown(event: KeyboardEvent) {
 		if (event.key !== 'Escape') return;
 		closeDonationsMenu();
+		volunteersMenuOpen = false;
 	}
 
 	afterNavigate(() => {
 		donationsMenuOpen = false;
+		volunteersMenuOpen = false;
 		mobileMenuOpen = false;
 	});
 </script>
@@ -233,6 +241,79 @@
 				{/if}
 			</div>
 
+			<!-- Volunteers Dropdown -->
+			<div class="relative" bind:this={volunteersMenuEl}>
+				<button
+					type="button"
+					onclick={() => (volunteersMenuOpen = !volunteersMenuOpen)}
+					aria-haspopup="menu"
+					aria-expanded={volunteersMenuOpen}
+					aria-controls={volunteersMenuOpen ? 'volunteers-menu' : undefined}
+					class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/volunteers'
+					) || volunteersMenuOpen
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<UserPlus class="h-4 w-4" />
+					{t.volunteers}
+					<ChevronDown
+						class="h-3.5 w-3.5 text-muted-foreground/75 transition-transform {volunteersMenuOpen
+							? 'rotate-180'
+							: ''}"
+					/>
+				</button>
+				{#if volunteersMenuOpen}
+					<div
+						id="volunteers-menu"
+						role="menu"
+						class="absolute right-0 mt-1 w-60 rounded-xl border border-border bg-card p-1.5 shadow-sm"
+					>
+						<a
+							role="menuitem"
+							href={resolve('/volunteers/jobs')}
+							onclick={() => (volunteersMenuOpen = false)}
+							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-bold transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
+								'/volunteers/jobs'
+							)
+								? 'bg-primary-muted text-primary'
+								: 'text-muted-foreground'}"
+						>
+							<UserPlus class="h-4 w-4 shrink-0" />
+							<span>สมัครอาสาสมัคร (Job Board)</span>
+						</a>
+						<a
+							role="menuitem"
+							href={resolve('/volunteer/portal')}
+							onclick={() => (volunteersMenuOpen = false)}
+							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-bold transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
+								'/volunteer/portal'
+							)
+								? 'bg-primary-muted text-primary'
+								: 'text-muted-foreground'}"
+						>
+							<span class="text-sm">🔐</span>
+							<span class="leading-relaxed">เข้าสู่ระบบจิตอาสา / ตารางงาน</span>
+						</a>
+						<a
+							role="menuitem"
+							href={resolve('/volunteers/host-home')}
+							onclick={() => {
+								volunteersMenuOpen = false;
+							}}
+							class="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-bold transition-colors hover:bg-muted hover:text-foreground {page.url.pathname.includes(
+								'/volunteers/host-home'
+							)
+								? 'bg-primary-muted text-primary'
+								: 'text-muted-foreground'}"
+						>
+							<Home class="h-4 w-4 shrink-0" />
+							<span>ลงทะเบียนบ้านพี่เลี้ยง</span>
+						</a>
+					</div>
+				{/if}
+			</div>
+
 			<a
 				href={resolve('/login')}
 				class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
@@ -348,6 +429,48 @@
 					<PackageSearch class="h-5 w-5" />
 					{t.trackDonationLong}
 				</a>
+
+				<div class="space-y-1 py-1">
+					<div class="px-4 py-2 text-xs font-bold tracking-widest text-muted-foreground uppercase">
+						{t.volunteers}
+					</div>
+					<a
+						href={resolve('/volunteers/jobs')}
+						onclick={() => (mobileMenuOpen = false)}
+						class="ml-2 flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 {page.url.pathname.includes(
+							'/volunteers/jobs'
+						)
+							? 'bg-primary-muted text-primary'
+							: 'text-muted-foreground'}"
+					>
+						<UserPlus class="h-5 w-5" />
+						สมัครอาสาสมัคร
+					</a>
+					<a
+						href={resolve('/volunteer/portal')}
+						onclick={() => (mobileMenuOpen = false)}
+						class="ml-2 flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 {page.url.pathname.includes(
+							'/volunteer/portal'
+						)
+							? 'bg-primary-muted text-primary'
+							: 'text-muted-foreground'}"
+					>
+						<span class="text-base">🔐</span>
+						เข้าสู่ระบบจิตอาสา
+					</a>
+					<a
+						href={resolve('/volunteers/host-home')}
+						onclick={() => (mobileMenuOpen = false)}
+						class="ml-2 flex w-full cursor-pointer items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50 {page.url.pathname.includes(
+							'/volunteers/host-home'
+						)
+							? 'bg-primary-muted text-primary'
+							: 'text-muted-foreground'}"
+					>
+						<Home class="h-5 w-5" />
+						ลงทะเบียนบ้านพี่เลี้ยง
+					</a>
+				</div>
 
 				<a
 					href={resolve('/login')}
