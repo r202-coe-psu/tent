@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateRandomSecret, hashSecret, ScannerRemoteRepository } from './scanner.remote';
 import type { Repository } from '$lib/db/repository';
 
@@ -69,6 +69,17 @@ describe('ScannerRemoteRepository', () => {
 			const hash2 = await hashSecret(secret);
 			expect(hash1).toBe(hash2);
 			expect(hash1.length).toBe(64);
+		});
+
+		it('throws error when crypto.subtle is not available', async () => {
+			vi.stubGlobal('crypto', { ...globalThis.crypto, subtle: undefined });
+			try {
+				await expect(hashSecret('secret_123')).rejects.toThrow(
+					'Web Crypto API (crypto.subtle) is required for secure hashing'
+				);
+			} finally {
+				vi.unstubAllGlobals();
+			}
 		});
 	});
 

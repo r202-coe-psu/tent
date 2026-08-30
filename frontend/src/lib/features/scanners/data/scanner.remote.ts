@@ -31,8 +31,7 @@ export async function hashSecret(secret: string): Promise<string> {
 		const hashArray = Array.from(new Uint8Array(hashBuffer));
 		return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 	}
-	// Fallback for non-subtle environments
-	return 'hash_' + secret;
+	throw new Error('Web Crypto API (crypto.subtle) is required for secure hashing');
 }
 
 export class ScannerRemoteRepository {

@@ -10,15 +10,10 @@ export const prerender = false;
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		const deviceIdHeader = request.headers.get('x-device-id');
-		const deviceSecretHeader =
+		const deviceId = request.headers.get('x-device-id');
+		const secret =
 			request.headers.get('x-device-secret') ||
 			request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-
-		const body = await request.json().catch(() => ({}));
-
-		const deviceId = deviceIdHeader || body.device_id;
-		const secret = deviceSecretHeader || body.device_secret;
 
 		if (!deviceId || !secret) {
 			return json(
@@ -26,6 +21,8 @@ export const POST: RequestHandler = async ({ request }) => {
 				{ status: 401 }
 			);
 		}
+
+		const body = await request.json().catch(() => ({}));
 
 		// Find device in catalog
 		const device = await scannerServerRepository.getDeviceByDeviceId(deviceId);
