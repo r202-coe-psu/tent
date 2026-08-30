@@ -91,9 +91,9 @@ export const GET: RequestHandler = async ({ params }) => {
 				category: im.category || 'other',
 				unit: itemMasterUnit(im),
 				reorder_level: null,
-				target_reserve_days: undefined,
-				consumption_rate: undefined,
-				timeframe: undefined
+				target_reserve_days: (im as { target_reserve_days?: number }).target_reserve_days,
+				consumption_rate: (im as { consumption_rate?: string }).consumption_rate,
+				timeframe: (im as { timeframe?: 'daily' | 'meal' | 'person' }).timeframe
 			}))
 		];
 
