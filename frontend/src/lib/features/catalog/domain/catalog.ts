@@ -1,25 +1,28 @@
 import { z } from 'zod';
 import { catalogDoc, type CatalogDoc, type AuthorContext } from '$lib/db/model';
-import { persistQty, qtyStrCoercePositiveSchema, qtyStrCoerceSchema } from '$lib/utils/qty';
+import { persistQty, qtyStrCoercePositiveSchema } from '$lib/utils/qty';
 
 // ---------------------------------------------------------------- enums
-export const distributionTypeSchema = z.enum(['consumable', 'one_time']);
+export const distributionTypeSchema = z.enum(['recurring', 'one_time']);
 export type DistributionType = z.infer<typeof distributionTypeSchema>;
 
-export const timeFrameSchema = z.enum(['daily', 'weekly']);
-export type TimeFrame = z.infer<typeof timeFrameSchema>;
+export const typeClassSchema = z.enum(['CONSUMABLE', 'DURABLE', 'EQUIPMENT']);
+export type TypeClass = z.infer<typeof typeClassSchema>;
 
-export const targetAudienceTypeSchema = z.enum(['all', 'specific_segments']);
-export type TargetAudienceType = z.infer<typeof targetAudienceTypeSchema>;
+export const storageTypeSchema = z.enum(['DRY', 'CHILLED', 'FROZEN', 'CONTROLLED_MED']);
+export type StorageType = z.infer<typeof storageTypeSchema>;
 
-export const genders = z.enum(['male', 'female', 'other']);
-export type Genders = z.infer<typeof genders>;
+export const targetGenderSchema = z.enum(['ALL', 'FEMALE', 'MALE']);
+export type TargetGender = z.infer<typeof targetGenderSchema>;
 
-export const vulnerableGroups = z.enum(['elderly', 'pregnant', 'bedridden', 'infant', 'isolated']);
-export type VulnerableGroups = z.infer<typeof vulnerableGroups>;
+export const ageGroupSchema = z.enum(['ALL', 'INFANT', 'CHILD', 'ELDERLY']);
+export type AgeGroup = z.infer<typeof ageGroupSchema>;
 
-export const dietReligions = z.enum(['halal', 'vegetarian', 'vegan']);
-export type DietReligions = z.infer<typeof dietReligions>;
+export const dietarySchema = z.enum(['HALAL', 'VEGAN']);
+export type Dietary = z.infer<typeof dietarySchema>;
+
+export const assetStatusSchema = z.enum(['READY', 'IN_USE', 'MAINTENANCE', 'BROKEN']);
+export type AssetStatus = z.infer<typeof assetStatusSchema>;
 
 // ---------------------------------------------------------------- documents
 export interface Ingredient {
@@ -34,16 +37,11 @@ export interface UomConversion {
 	barcode?: string;
 }
 
-export interface TargetRestrictions {
-	genders?: Genders[];
-	vulnerable_groups?: VulnerableGroups[];
-	diet_religions?: DietReligions[];
-}
-
 export interface ItemCategory extends CatalogDoc {
 	type: 'item_category';
 	name: string;
-	is_default: boolean;
+	shelter_code?: string;
+	override?: boolean;
 }
 
 export interface ItemMaster extends CatalogDoc {
@@ -54,19 +52,26 @@ export interface ItemMaster extends CatalogDoc {
 	description?: string;
 	base_unit: string;
 	conversions: UomConversion[];
-	default_purchasing_uom?: string;
 	default_inventory_uom?: string;
 	default_issue_uom?: string;
 	distribution_type: DistributionType;
-	target_reserve_days?: number;
-	consumption_rate?: string; // qty_str
-	unit?: string;
-	timeframe?: string;
-	sphere_standard?: number;
-	overstock_alert_days?: number;
-	target_audience_type: TargetAudienceType;
-	target_restrictions: TargetRestrictions;
-	is_default: boolean;
+	type_class: TypeClass;
+	deactivated?: boolean;
+	shelter_code?: string;
+	override?: boolean;
+
+	// New fields
+	shelf_life_days?: number;
+	storage_type?: StorageType;
+	allergens?: string;
+	target_gender?: TargetGender;
+	age_group?: AgeGroup;
+	dietary: Dietary[];
+
+	// Durable & Equipment specific fields
+	qty_per_person?: number;
+	returnable?: boolean;
+	asset_status?: AssetStatus;
 }
 
 export interface Recipe extends CatalogDoc {
@@ -75,51 +80,82 @@ export interface Recipe extends CatalogDoc {
 	ingredients: Ingredient[];
 	standard_portions: string; // qty_str
 	standard_duration_hours: string; // qty_str
-	is_default: boolean;
+	deactivated?: boolean;
+	shelter_code?: string;
+	override?: boolean;
 }
 
 // ---------------------------------------------------------------- input schemas
 export const itemCategoryInputSchema = z.object({
 	name: z.string().trim().min(1, 'Name is required'),
-	is_default: z.boolean().default(false)
+	override: z.boolean().optional()
 });
 
 export type ItemCategoryInput = z.input<typeof itemCategoryInputSchema>;
 
-export const itemMasterInputSchema = z.object({
-	name: z.string().trim().min(1, 'Name is required'),
-	category: z.string().trim().optional(),
-	sku: z.string().trim().optional(),
-	description: z.string().trim().optional(),
-	base_unit: z.string().trim().min(1, 'Unit is required'),
-	conversions: z
-		.array(
-			z.object({
-				uom_name: z.string().trim(),
-				multiplier: qtyStrCoercePositiveSchema,
-				barcode: z.string().trim().optional()
-			})
-		)
-		.default([]),
-	default_purchasing_uom: z.string().trim().optional(),
-	default_inventory_uom: z.string().trim().optional(),
-	default_issue_uom: z.string().trim().optional(),
-	distribution_type: distributionTypeSchema,
-	target_reserve_days: z.number().optional(),
-	consumption_rate: qtyStrCoerceSchema.optional(),
-	unit: z.string().trim().optional(),
-	timeframe: timeFrameSchema.optional(),
-	sphere_standard: z.number().optional(),
-	overstock_alert_days: z.number().optional(),
-	target_audience_type: targetAudienceTypeSchema,
-	target_restrictions: z.object({
-		genders: z.array(genders).optional(),
-		vulnerable_groups: z.array(vulnerableGroups).optional(),
-		diet_religions: z.array(dietReligions).optional()
-	}),
-	is_default: z.boolean().default(false)
-});
-export type ItemMasterInput = z.infer<typeof itemMasterInputSchema>;
+export const itemMasterInputSchema = z
+	.object({
+		name: z.string().trim().min(1, 'Name is required'),
+		category: z.string().trim().optional(),
+		sku: z.string().trim().optional(),
+		description: z.string().trim().optional(),
+		base_unit: z.string().trim().optional(),
+		conversions: z
+			.array(
+				z.object({
+					uom_name: z.string().trim(),
+					multiplier: qtyStrCoercePositiveSchema,
+					barcode: z.string().trim().optional()
+				})
+			)
+			.default([]),
+		default_inventory_uom: z.string().trim().optional(),
+		default_issue_uom: z.string().trim().optional(),
+		distribution_type: distributionTypeSchema.optional(),
+		type_class: typeClassSchema,
+		deactivated: z.boolean().optional(),
+
+		// New fields
+		shelf_life_days: z.number().optional(),
+		storage_type: storageTypeSchema.optional(),
+		allergens: z.string().trim().optional(),
+		target_gender: targetGenderSchema.optional(),
+		age_group: ageGroupSchema.optional(),
+		dietary: z.array(dietarySchema).default([]),
+
+		// Durable & Equipment specific fields
+		qty_per_person: z.number().min(0).optional(),
+		returnable: z.boolean().optional(),
+		asset_status: assetStatusSchema.optional(),
+		override: z.boolean().optional()
+	})
+	.superRefine((data, ctx) => {
+		if (data.type_class !== 'EQUIPMENT') {
+			if (!data.base_unit || data.base_unit.trim() === '') {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: 'Unit is required',
+					path: ['base_unit']
+				});
+			}
+			if (!data.distribution_type) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: 'Distribution type is required',
+					path: ['distribution_type']
+				});
+			}
+		} else {
+			if (!data.asset_status) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: 'Asset status is required',
+					path: ['asset_status']
+				});
+			}
+		}
+	});
+export type ItemMasterInput = z.input<typeof itemMasterInputSchema>;
 
 export const recipeInputSchema = z.object({
 	label: z.string().trim().min(1, 'Name is required'),
@@ -134,66 +170,83 @@ export const recipeInputSchema = z.object({
 		.default([]),
 	standard_portions: qtyStrCoercePositiveSchema,
 	standard_duration_hours: qtyStrCoercePositiveSchema,
-	is_default: z.boolean()
+	deactivated: z.boolean().optional(),
+	override: z.boolean().optional()
 });
 
 export type RecipeInput = z.infer<typeof recipeInputSchema>;
 
 // ---------------------------------------------------------------- factories
 
-export function createItemCategory(input: ItemCategoryInput, ctx: AuthorContext): ItemCategory {
+export function createItemCategory(
+	input: ItemCategoryInput,
+	ctx: AuthorContext,
+	shelterCode?: string
+): ItemCategory {
 	const d = itemCategoryInputSchema.parse(input);
 	const doc = catalogDoc(
 		'item_category',
-		1,
+		2,
 		{
 			name: d.name,
-			is_default: d.is_default
+			...(shelterCode ? { shelter_code: shelterCode } : {}),
+			...(d.override ? { override: d.override } : {})
 		},
 		ctx.createdBy
 	);
 	return doc;
 }
 
-export function createItemMaster(input: ItemMasterInput, ctx: AuthorContext): ItemMaster {
+export function createItemMaster(
+	input: ItemMasterInput,
+	ctx: AuthorContext,
+	shelterCode?: string
+): ItemMaster {
 	const d = itemMasterInputSchema.parse(input);
 	const doc = catalogDoc(
 		'item_master',
-		3,
+		4,
 		{
 			name: d.name,
 			category: d.category,
 			sku: d.sku,
 			description: d.description,
-			base_unit: d.base_unit,
+			base_unit: d.base_unit || 'ชิ้น',
 			conversions: d.conversions.map((c) => ({
 				...c,
 				multiplier: persistQty(c.multiplier)
 			})),
-			default_purchasing_uom: d.default_purchasing_uom,
 			default_inventory_uom: d.default_inventory_uom,
 			default_issue_uom: d.default_issue_uom,
-			distribution_type: d.distribution_type,
-			target_reserve_days: d.target_reserve_days,
-			consumption_rate: d.consumption_rate != null ? persistQty(d.consumption_rate) : undefined,
-			unit: d.unit,
-			timeframe: d.timeframe,
-			sphere_standard: d.sphere_standard,
-			overstock_alert_days: d.overstock_alert_days,
-			target_audience_type: d.target_audience_type,
-			target_restrictions: d.target_restrictions,
-			is_default: d.is_default
+			distribution_type: d.distribution_type || 'recurring',
+			type_class: d.type_class,
+			deactivated: d.deactivated ?? false,
+			...(shelterCode ? { shelter_code: shelterCode } : {}),
+			...(d.override ? { override: d.override } : {}),
+
+			// New fields
+			shelf_life_days: d.shelf_life_days,
+			storage_type: d.storage_type,
+			allergens: d.allergens,
+			target_gender: d.target_gender,
+			age_group: d.age_group,
+			dietary: d.dietary,
+
+			// Durable & Equipment specific fields
+			qty_per_person: d.qty_per_person,
+			returnable: d.returnable,
+			asset_status: d.asset_status
 		},
 		ctx.createdBy
 	);
 	return doc;
 }
 
-export function createRecipe(input: RecipeInput, ctx: AuthorContext): Recipe {
+export function createRecipe(input: RecipeInput, ctx: AuthorContext, shelterCode?: string): Recipe {
 	const d = recipeInputSchema.parse(input);
 	return catalogDoc(
 		'recipe',
-		3,
+		4,
 		{
 			label: d.label,
 			ingredients: d.ingredients.map((i) => ({
@@ -202,7 +255,9 @@ export function createRecipe(input: RecipeInput, ctx: AuthorContext): Recipe {
 			})),
 			standard_portions: persistQty(d.standard_portions),
 			standard_duration_hours: persistQty(d.standard_duration_hours),
-			is_default: d.is_default
+			deactivated: d.deactivated ?? false,
+			...(shelterCode ? { shelter_code: shelterCode } : {}),
+			...(d.override ? { override: d.override } : {})
 		},
 		ctx.createdBy
 	);

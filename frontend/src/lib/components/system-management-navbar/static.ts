@@ -10,7 +10,8 @@ import {
 	Tent,
 	Users,
 	Building,
-	UserCog
+	UserCog,
+	Warehouse
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -91,13 +92,19 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						requiresAdmin: true
 					},
 					{
-						label: '4. FAQ Public Portal',
+						label: '4. คลังสินค้า',
+						href: resolve(`${base}/catalog`),
+						icon: Warehouse,
+						requiresAdmin: true
+					},
+					{
+						label: '5. FAQ Public Portal',
 						href: resolve(`${base}/public-portal-config`),
 						icon: Megaphone,
 						requiresAdmin: true
 					},
-					{ label: '5. อาสาสมัคร', href: null, icon: Users },
-					{ label: '6. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{ label: '6. อาสาสมัคร', href: null, icon: Users },
+					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}
 		]

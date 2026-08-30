@@ -146,6 +146,13 @@ describe('buildValidateDocUpdate', () => {
 		expect(validateFn).toContain("'referral'");
 	});
 
+	it('includes catalog-related doc types in the allowed whitelist', () => {
+		const validateFn = buildValidateDocUpdate('SH001');
+		expect(validateFn).toContain("'item_category'");
+		expect(validateFn).toContain("'item_master'");
+		expect(validateFn).toContain("'recipe'");
+	});
+
 	it('includes daily_calc in the allowed doc type whitelist for on-demand writes', () => {
 		expect(buildValidateDocUpdate('SH001')).toContain("'daily_calc'");
 	});

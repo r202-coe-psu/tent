@@ -4,6 +4,7 @@
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
 	import { useItemMasters } from '$lib/features/catalog';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -35,7 +36,7 @@
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const overridesQuery = useThresholdOverrides();
@@ -77,12 +78,12 @@
 			_id: im._id,
 			name: im.name,
 			category: im.category || 'other',
-			unit: im.base_unit || im.unit || 'ชิ้น',
+			unit: im.base_unit || 'ชิ้น',
 			reorder_level: null,
 			perishable: false,
-			target_reserve_days: im.target_reserve_days,
-			consumption_rate: im.consumption_rate,
-			timeframe: im.timeframe
+			target_reserve_days: undefined,
+			consumption_rate: undefined,
+			timeframe: undefined
 		}));
 
 		return [...supplyItems, ...mappedItemMasters];
