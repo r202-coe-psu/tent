@@ -2,6 +2,9 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { toast } from 'svelte-sonner';
 	import { useCancelDonation } from '../application/queries';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 
 	let {
 		open = $bindable(false),
@@ -15,6 +18,7 @@
 		onCancelled?: () => void;
 	} = $props();
 
+	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 	const cancelMutation = useCancelDonation();
 
 	function handleOpenChange(next: boolean) {
@@ -26,12 +30,12 @@
 			{ token },
 			{
 				onSuccess: () => {
-					toast.success('ยกเลิกการจองบริจาคแล้ว — คืนสิทธิ์ให้ผู้บริจาคท่านอื่น');
+					toast.success(t.cancelSuccessToast);
 					open = false;
 					onCancelled?.();
 				},
 				onError: (err) => {
-					toast.error(err instanceof Error ? err.message : 'ยกเลิกการจองไม่สำเร็จ');
+					toast.error(err instanceof Error ? err.message : t.cancelFailToast);
 				}
 			}
 		);
@@ -41,18 +45,20 @@
 <AlertDialog.Root bind:open={() => open, handleOpenChange}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>ยกเลิกการจองบริจาคนี้?</AlertDialog.Title>
+			<AlertDialog.Title>{t.cancelDialogTitle}</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if bookingRef}
-					รายการ <span class="font-bold text-foreground">{bookingRef}</span> จะถูกยกเลิก
+					{t.cancelDialogItemWillCancel.replace('{ref}', bookingRef)}
 				{:else}
-					รายการจองนี้จะถูกยกเลิก
+					{t.cancelDialogThisWillCancel}
 				{/if}
-				และจำนวนที่จองไว้จะถูกคืนให้ผู้บริจาคท่านอื่นทันที การยกเลิกนี้ย้อนกลับไม่ได้ หากยังต้องการบริจาคต้องจองคิวใหม่
+				{t.cancelDialogDesc}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel disabled={cancelMutation.isPending}>ไม่ยกเลิก</AlertDialog.Cancel>
+			<AlertDialog.Cancel disabled={cancelMutation.isPending}
+				>{t.cancelDialogCancelBtn}</AlertDialog.Cancel
+			>
 			<AlertDialog.Action
 				class="text-destructive-foreground bg-destructive hover:bg-destructive/90"
 				onclick={(e) => {
@@ -62,9 +68,9 @@
 				disabled={cancelMutation.isPending}
 			>
 				{#if cancelMutation.isPending}
-					กำลังยกเลิก…
+					{t.cancelling}
 				{:else}
-					ยืนยันยกเลิกการจอง
+					{t.cancelDialogConfirmBtn}
 				{/if}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>

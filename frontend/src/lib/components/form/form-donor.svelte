@@ -8,13 +8,28 @@
 	import { toast } from 'svelte-sonner';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { PUBLIC_DONATION_CATEGORIES } from '$lib/features/donations';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 
 	const donationStore = getDonationStore();
+	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
-	/** Thai label for a category value, for the read-only solicited view. */
+	const CATEGORY_MAP: Record<string, { th: string; en: string }> = {
+		food: { th: 'อาหาร/เครื่องดื่ม', en: 'Food & Beverage' },
+		clothing: { th: 'เสื้อผ้า/เครื่องนุ่งห่ม', en: 'Clothing & Apparel' },
+		medicine: { th: 'ยารักษาโรค/เวชภัณฑ์', en: 'Medicine & Supplies' },
+		supply: { th: 'ของใช้ทั่วไป', en: 'General Supplies' },
+		other: { th: 'อื่นๆ', en: 'Other' }
+	};
+
 	function categoryLabel(value: string | undefined): string {
+		if (!value) return '';
+		const cat = CATEGORY_MAP[value];
+		if (cat) return cat[langState.current === 'en' ? 'en' : 'th'];
 		return PUBLIC_DONATION_CATEGORIES.find((c) => c.value === value)?.label ?? value ?? '';
 	}
+
 	let validationErrors = $state<string[]>([]);
 
 	function handleImageUpload(index: number, e: Event) {
@@ -44,32 +59,30 @@
 
 		// 1. Validate donor name
 		if (!donationStore.donorName.trim()) {
-			validationErrors.push('กรุณาระบุชื่อ-นามสกุล / นามแฝง / องค์กร');
+			validationErrors.push(t.valName);
 		}
 
 		// 2. Validate donor phone
 		const phoneRegex = /^0[0-9]{9}$/;
 		if (!donationStore.donorPhone.trim()) {
-			validationErrors.push('กรุณาระบุเบอร์โทรศัพท์มือถือ');
+			validationErrors.push(t.valPhone);
 		} else if (!phoneRegex.test(donationStore.donorPhone.trim())) {
-			validationErrors.push(
-				'กรุณาระบุเบอร์โทรศัพท์มือถือให้ถูกต้อง (รูปแบบ 10 หลัก ขึ้นต้นด้วย 0)'
-			);
+			validationErrors.push(t.valPhoneInvalid);
 		}
 
 		// 3. Validate items
 		if (donationStore.items.length === 0) {
-			validationErrors.push('กรุณาเพิ่มรายการสิ่งของบริจาคอย่างน้อย 1 รายการ');
+			validationErrors.push(t.valMinItems);
 		} else {
 			donationStore.items.forEach((item, index) => {
 				if (!item.name || !item.name.trim()) {
-					validationErrors.push(`รายการที่ ${index + 1}: กรุณาระบุชื่อสิ่งของ`);
+					validationErrors.push(t.valItemName.replace('{index}', String(index + 1)));
 				}
 				if (!item.amount || item.amount <= 0) {
-					validationErrors.push(`รายการที่ ${index + 1}: จำนวนสิ่งของต้องมีค่ามากกว่า 0`);
+					validationErrors.push(t.valItemAmount.replace('{index}', String(index + 1)));
 				}
 				if (!item.unit || !item.unit.trim()) {
-					validationErrors.push(`รายการที่ ${index + 1}: กรุณาระบุหน่วยนับ`);
+					validationErrors.push(t.valItemUnit.replace('{index}', String(index + 1)));
 				}
 			});
 		}
@@ -78,7 +91,7 @@
 			donationStore.activeTab = 'time';
 			if (donationStore.reachedStep < 3) donationStore.reachedStep = 3;
 		} else {
-			toast.error('กรุณากรอกข้อมูลให้ถูกต้องครบถ้วน');
+			toast.error(t.valToastError);
 		}
 	}
 </script>
@@ -91,9 +104,9 @@
 				<ShieldCheck class="h-5 w-5 text-[#013481]" />
 			</div>
 			<div>
-				<h3 class="text-xl font-bold text-slate-800">ส่วนที่ 1: ข้อมูลผู้บริจาค</h3>
+				<h3 class="text-xl font-bold text-slate-800">{t.section1Title}</h3>
 				<p class="mt-1 text-sm font-medium text-slate-500">
-					ข้อมูลนี้จะใช้สำหรับการติดต่อประสานงานและการออกตั๋วส่งมอบ
+					{t.section1Desc}
 				</p>
 			</div>
 		</div>
@@ -101,49 +114,49 @@
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 			<div>
 				<label class="mb-2 block text-sm font-bold text-slate-800" for="donor-name">
-					ชื่อ-นามสกุล / ชื่อองค์กร <span class="text-red-500">*</span>
+					{t.donorNameLabel} <span class="text-red-500">*</span>
 				</label>
 				<input
 					type="text"
 					id="donor-name"
 					bind:value={donationStore.donorName}
-					placeholder="ระบุชื่อผู้บริจาค เช่น บจก. ใจดี หรือ นายสมชาย"
+					placeholder={t.donorNamePlaceholder}
 					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
 				/>
 			</div>
 			<div>
 				<label class="mb-2 block text-sm font-bold text-slate-800" for="donor-phone">
-					เบอร์โทรศัพท์ <span class="text-red-500">*</span>
+					{t.phoneLabel} <span class="text-red-500">*</span>
 				</label>
 				<input
 					type="tel"
 					id="donor-phone"
 					bind:value={donationStore.donorPhone}
-					placeholder="08X-XXX-XXXX"
+					placeholder={t.phonePlaceholder}
 					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
 				/>
 			</div>
 			<div>
 				<label class="mb-2 block text-sm font-bold text-slate-800" for="donor-line">
-					LINE ID (ทางเลือก)
+					{t.lineLabel}
 				</label>
 				<input
 					type="text"
 					id="donor-line"
 					bind:value={donationStore.donorLine}
-					placeholder="ไอดีไลน์สำหรับการติดต่อ"
+					placeholder={t.linePlaceholder}
 					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
 				/>
 			</div>
 			<div>
 				<label class="mb-2 block text-sm font-bold text-slate-800" for="donor-email">
-					อีเมล (ทางเลือก)
+					{t.emailLabel}
 				</label>
 				<input
 					type="email"
 					id="donor-email"
 					bind:value={donationStore.donorEmail}
-					placeholder="example@email.com"
+					placeholder={t.emailPlaceholder}
 					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
 				/>
 			</div>
@@ -157,13 +170,13 @@
 				<Package class="h-5 w-5 text-[#fbbc04]" />
 			</div>
 			<div>
-				<h3 class="text-xl font-bold text-slate-800">ส่วนที่ 2: รายละเอียดสิ่งของบริจาค</h3>
+				<h3 class="text-xl font-bold text-slate-800">{t.section2Title}</h3>
 				<p
 					class="mt-1 inline-block rounded bg-[#013365]/10 px-3 py-1 text-sm font-medium text-[#013365]"
 				>
 					{donationStore.flowMode === 'solicited'
-						? '💡 เลือกลบรายการที่ไม่ต้องการบริจาคออก และปรับระบุจำนวนที่คุณต้องการบริจาคได้ตามสะดวก'
-						: 'ระบุรายการสิ่งของที่คุณจะนำมามอบให้'}
+						? t.section2DescSolicited
+						: t.section2DescUnsolicited}
 				</p>
 			</div>
 		</div>
@@ -177,8 +190,8 @@
 						type="button"
 						onclick={() => donationStore.removeItem(item.id)}
 						class="absolute top-2 right-2 cursor-pointer rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
-						title="ลบรายการนี้"
-						aria-label="ลบรายการนี้"
+						title={t.deleteItemAria}
+						aria-label={t.deleteItemAria}
 					>
 						<Trash2 class="h-4.5 w-4.5" />
 					</button>
@@ -186,7 +199,7 @@
 					<div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
 						<div>
 							<label class="mb-1 block text-xs font-bold text-slate-600" for="category-{item.id}">
-								หมวดหมู่
+								{t.categoryLabel}
 							</label>
 							{#if donationStore.flowMode === 'solicited'}
 								<input
@@ -202,17 +215,18 @@
 									bind:value={item.category}
 									class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
 								>
-									<option value="" disabled>-- เลือกหมวดหมู่ --</option>
-									{#each PUBLIC_DONATION_CATEGORIES as cat (cat.value)}
-										<option value={cat.value}>{cat.label}</option>
-									{/each}
-									<option value="other">อื่นๆ (ระบุในหมายเหตุ)</option>
+									<option value="" disabled>{t.categorySelectPlaceholder}</option>
+									<option value="food">{categoryLabel('food')}</option>
+									<option value="clothing">{categoryLabel('clothing')}</option>
+									<option value="medicine">{categoryLabel('medicine')}</option>
+									<option value="supply">{categoryLabel('supply')}</option>
+									<option value="other">{t.categoryOther}</option>
 								</select>
 							{/if}
 						</div>
 						<div>
 							<label class="mb-1 block text-xs font-bold text-slate-600" for="name-{item.id}">
-								ประเภทสิ่งของ
+								{t.itemNameLabel}
 							</label>
 							{#if donationStore.flowMode === 'solicited'}
 								<input
@@ -226,7 +240,7 @@
 								<input
 									type="text"
 									id="name-{item.id}"
-									placeholder="ระบุชื่อสิ่งของ เช่น น้ำดื่ม 600ml หรือ ปีกไก่แช่แข็ง"
+									placeholder={t.itemNamePlaceholder}
 									bind:value={item.name}
 									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
 								/>
@@ -237,7 +251,7 @@
 					<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
 						<div class="col-span-1">
 							<label class="mb-1 block text-xs font-bold text-slate-600" for="amount-{item.id}">
-								ปริมาณ
+								{t.amountLabel}
 							</label>
 							<input
 								type="number"
@@ -249,7 +263,7 @@
 						</div>
 						<div class="col-span-1">
 							<label class="mb-1 block text-xs font-bold text-slate-600" for="unit-{item.id}">
-								หน่วย
+								{t.unitLabel}
 							</label>
 							{#if donationStore.flowMode === 'solicited'}
 								<input
@@ -263,7 +277,7 @@
 								<input
 									type="text"
 									id="unit-{item.id}"
-									placeholder="แพ็ค, ลัง, ชิ้น"
+									placeholder={t.unitPlaceholder}
 									bind:value={item.unit}
 									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
 								/>
@@ -271,28 +285,28 @@
 						</div>
 						<div class="col-span-2 md:col-span-1">
 							<label class="mb-1 block text-xs font-bold text-slate-600" for="condition-{item.id}">
-								สภาพสิ่งของ
+								{t.conditionLabel}
 							</label>
 							<select
 								id="condition-{item.id}"
 								bind:value={item.condition}
 								class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
 							>
-								<option value="new">ของใหม่ 100%</option>
-								<option value="used">ของมือสอง สภาพดี</option>
-								<option value="other">อื่นๆ</option>
+								<option value="new">{t.conditionNew}</option>
+								<option value="used">{t.conditionUsed}</option>
+								<option value="other">{t.conditionOther}</option>
 							</select>
 						</div>
 					</div>
 
 					<div>
 						<label class="mb-1 block text-xs font-bold text-slate-600" for="remark-{item.id}">
-							หมายเหตุเพิ่มเติม (Optional)
+							{t.remarkLabel}
 						</label>
 						<input
 							type="text"
 							id="remark-{item.id}"
-							placeholder="เช่น ข้าวกล่องมังสวิรัติ, เสื้อผ้าเด็ก 5 ขวบ"
+							placeholder={t.remarkPlaceholder}
 							bind:value={item.remark}
 							class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
 						/>
@@ -305,7 +319,7 @@
 								class="mb-1 block text-xs font-bold text-slate-600"
 								for="file-upload-{item.id}"
 							>
-								แนบรูปภาพสิ่งของที่จะบริจาค (ไม่บังคับ)
+								{t.imageUploadLabel}
 							</label>
 							<input
 								type="file"
@@ -323,7 +337,7 @@
 										type="button"
 										onclick={() => removeImage(idx)}
 										class="absolute top-1 right-1 cursor-pointer rounded-full bg-white/90 p-1 text-red-500 opacity-0 shadow-xs transition-opacity group-hover:opacity-100 hover:bg-red-50"
-										aria-label="ลบรูปภาพ"
+										aria-label={t.removeImageAria}
 									>
 										<Trash2 class="h-3 w-3" />
 									</button>
@@ -340,7 +354,8 @@
 					onclick={() => donationStore.addItem()}
 					class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#013481]/30 bg-blue-50/50 py-4 font-bold text-[#013481] transition-colors hover:bg-blue-50"
 				>
-					<PlusCircle class="h-5 w-5" /> เพิ่มรายการสิ่งของ
+					<PlusCircle class="h-5 w-5" />
+					{t.addItemBtn}
 				</button>
 			{/if}
 		</div>
@@ -351,7 +366,7 @@
 		<div class="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-700">
 			<div class="mb-2 flex items-center gap-2 font-bold">
 				<AlertCircle class="h-5 w-5" />
-				พบข้อมูลไม่ถูกต้อง:
+				{t.validationErrorTitle}
 			</div>
 			<ul class="list-disc space-y-1 pl-5">
 				{#each validationErrors as err (err)}
@@ -367,7 +382,8 @@
 			onclick={handleNext}
 			class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013481] py-4 text-lg font-bold text-white shadow-md transition-colors hover:bg-[#002244] active:scale-95 disabled:opacity-50"
 		>
-			ถัดไป: เลือกจุดส่งมอบ <ArrowRight class="h-5 w-5" />
+			{t.nextBtn}
+			<ArrowRight class="h-5 w-5" />
 		</button>
 	</div>
 </div>

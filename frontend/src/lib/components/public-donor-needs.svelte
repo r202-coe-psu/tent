@@ -9,12 +9,17 @@
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 
 	const donationStore = getDonationStore();
+	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	interface Need {
 		item_id: string;
 		name: string;
+		raw_name?: string;
 		qty_needed: number;
 		unit: string;
 		status: 'open' | 'closed';
@@ -49,8 +54,9 @@
 				set.add(s.name);
 			}
 			s.needs.forEach((n) => {
-				if (n.name.toLowerCase().includes(q)) {
-					set.add(n.name);
+				const localizedName = formatItemName(n.raw_name || n.name || n.item_id);
+				if (localizedName.toLowerCase().includes(q) || n.name.toLowerCase().includes(q)) {
+					set.add(localizedName);
 				}
 			});
 		});
@@ -70,10 +76,9 @@
 						const target = n.target || (qty > 0 ? qty * 2 : 100);
 						const received = n.received ?? Math.max(0, target - qty);
 						const pending = n.pending ?? 0;
-						const displayName = formatItemName(n.name || n.item_id);
 						return {
 							...n,
-							name: displayName,
+							raw_name: n.name || n.item_id,
 							qty_needed: qty,
 							target,
 							received,
@@ -83,10 +88,10 @@
 					})
 				}));
 			} else {
-				loadError = 'ไม่สามารถโหลดข้อมูลความต้องการได้ในขณะนี้';
+				loadError = t.errorLoadingNeeds;
 			}
 		} catch {
-			loadError = 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์';
+			loadError = t.errorConnect;
 		} finally {
 			isLoading = false;
 		}
@@ -97,24 +102,26 @@
 		shelters.find((s) => s.code === donationStore.selectedShelterForNeeds) || null
 	);
 
-	const ITEM_NAMES: Record<string, string> = {
-		'item:rice': 'ข้าวสาร (อาหารแห้ง)',
-		'item:water': 'น้ำดื่มสะอาด',
-		'item:soap': 'สบู่และของใช้ส่วนตัว',
-		'item:blanket': 'ผ้าห่มกันหนาว',
-		'item:paracetamol': 'ยาพาราเซตามอล (ยาสามัญ)',
-		'item:canned_fish': 'ปลากระป๋อง',
-		'item:instant_noodle': 'บะหมี่กึ่งสำเร็จรูป',
-		'item:mosquito_net': 'มุ้งกันยุง',
-		'item:sanitary_pad': 'ผ้าอนามัย'
+	const ITEM_NAMES: Record<string, { th: string; en: string }> = {
+		'item:rice': { th: 'ข้าวสาร (อาหารแห้ง)', en: 'Rice (Dry Food)' },
+		'item:water': { th: 'น้ำดื่มสะอาด', en: 'Clean Drinking Water' },
+		'item:soap': { th: 'สบู่และของใช้ส่วนตัว', en: 'Soap & Personal Care' },
+		'item:blanket': { th: 'ผ้าห่มกันหนาว', en: 'Blanket' },
+		'item:paracetamol': { th: 'ยาพาราเซตามอล (ยาสามัญ)', en: 'Paracetamol' },
+		'item:canned_fish': { th: 'ปลากระป๋อง', en: 'Canned Fish' },
+		'item:instant_noodle': { th: 'บะหมี่กึ่งสำเร็จรูป', en: 'Instant Noodles' },
+		'item:mosquito_net': { th: 'มุ้งกันยุง', en: 'Mosquito Net' },
+		'item:sanitary_pad': { th: 'ผ้าอนามัย', en: 'Sanitary Pads' }
 	};
 
 	function formatItemName(rawName: string): string {
-		if (!rawName) return 'สิ่งของจำเป็น';
-		if (ITEM_NAMES[rawName]) return ITEM_NAMES[rawName];
+		if (!rawName) return langState.current === 'en' ? 'Essential Items' : 'สิ่งของจำเป็น';
+		const item = ITEM_NAMES[rawName];
+		if (item) return item[langState.current === 'en' ? 'en' : 'th'];
 		if (rawName.startsWith('item:')) {
 			const clean = rawName.replace('item:', '');
-			return ITEM_NAMES[`item:${clean}`] || clean;
+			const match = ITEM_NAMES[`item:${clean}`];
+			return match ? match[langState.current === 'en' ? 'en' : 'th'] : clean;
 		}
 		return rawName;
 	}
@@ -125,9 +132,14 @@
 			.map((s) => {
 				let filteredNeeds = s.needs;
 				if (q) {
-					filteredNeeds = filteredNeeds.filter(
-						(n) => n.name.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)
-					);
+					filteredNeeds = filteredNeeds.filter((n) => {
+						const localizedName = formatItemName(n.raw_name || n.name || n.item_id).toLowerCase();
+						return (
+							localizedName.includes(q) ||
+							n.name.toLowerCase().includes(q) ||
+							s.name.toLowerCase().includes(q)
+						);
+					});
 				}
 
 				if (filterType === 'critical') {
@@ -144,28 +156,35 @@
 					filteredNeeds = filteredNeeds.filter((n) => n.status !== 'closed');
 				} else if (filterType !== 'all') {
 					filteredNeeds = filteredNeeds.filter((n) => {
-						const name = n.name.toLowerCase();
+						const name = (n.raw_name || n.name).toLowerCase();
 						const cat = (n.category || '').toLowerCase();
 						if (filterType === 'food')
 							return (
 								cat === 'food' ||
 								name.includes('อาหาร') ||
 								name.includes('น้ำ') ||
-								name.includes('ข้าว')
+								name.includes('ข้าว') ||
+								name.includes('food') ||
+								name.includes('rice') ||
+								name.includes('water')
 							);
 						if (filterType === 'medicine')
 							return (
 								cat === 'medicine' ||
 								name.includes('ยา') ||
 								name.includes('พยาบาล') ||
-								name.includes('เวชภัณฑ์')
+								name.includes('เวชภัณฑ์') ||
+								name.includes('medicine') ||
+								name.includes('medical')
 							);
 						if (filterType === 'clothing')
 							return (
 								cat === 'clothing' ||
 								name.includes('เสื้อ') ||
 								name.includes('ผ้า') ||
-								name.includes('กางเกง')
+								name.includes('กางเกง') ||
+								name.includes('cloth') ||
+								name.includes('blanket')
 							);
 						if (filterType === 'supply')
 							return (
@@ -175,7 +194,10 @@
 								name.includes('เต็นท์') ||
 								name.includes('เตียง') ||
 								name.includes('สบู่') ||
-								name.includes('ทิชชู่')
+								name.includes('ทิชชู่') ||
+								name.includes('supply') ||
+								name.includes('tent') ||
+								name.includes('soap')
 							);
 						return true;
 					});
@@ -196,19 +218,21 @@
 			});
 	});
 
-	const UNIT_LABEL: Record<string, string> = {
-		kg: 'กก.',
-		bottle: 'ขวด',
-		bar: 'ก้อน',
-		piece: 'ชิ้น',
-		tablet: 'เม็ด',
-		box: 'กล่อง',
-		pack: 'แพ็ค',
-		unit: 'ชิ้น'
+	const UNIT_LABEL: Record<string, { th: string; en: string }> = {
+		kg: { th: 'กก.', en: 'kg' },
+		bottle: { th: 'ขวด', en: 'bottle' },
+		bar: { th: 'ก้อน', en: 'bar' },
+		piece: { th: 'ชิ้น', en: 'pcs' },
+		tablet: { th: 'เม็ด', en: 'tab' },
+		box: { th: 'กล่อง', en: 'box' },
+		pack: { th: 'แพ็ค', en: 'pack' },
+		unit: { th: 'ชิ้น', en: 'unit' }
 	};
 
 	function formatUnit(unit: string): string {
-		return UNIT_LABEL[unit] ?? unit;
+		const u = UNIT_LABEL[unit];
+		if (u) return u[langState.current === 'en' ? 'en' : 'th'];
+		return unit;
 	}
 
 	function goToShelterDetails(shelter: ShelterNeeds) {
@@ -228,9 +252,8 @@
 				id: crypto.randomUUID(),
 				item_id: need.item_id,
 				category: need.category || 'food',
-				name: need.name,
+				name: formatItemName(need.raw_name || need.name || need.item_id),
 				amount: need.qty_needed > 0 ? need.qty_needed : 1,
-				// show the Thai unit label, not the raw code (the board already formats it)
 				unit: formatUnit(need.unit),
 				condition: 'new',
 				remark: '',
@@ -253,7 +276,7 @@
 				category: 'food',
 				name: '',
 				amount: 1,
-				unit: 'ชิ้น',
+				unit: t.defaultItemUnit,
 				condition: 'new',
 				remark: '',
 				image: ''
@@ -280,7 +303,7 @@
 						donationStore.activeTab = 'needs';
 					}}
 					class="-ml-2 shrink-0 cursor-pointer rounded-xl p-2 text-white/80 transition hover:bg-white/10 hover:text-white"
-					aria-label="ย้อนกลับ"
+					aria-label={t.backToShelterList}
 				>
 					<ArrowLeft class="h-6 w-6" />
 				</button>
@@ -291,13 +314,14 @@
 					<div class="flex flex-wrap items-center gap-3">
 						<span class="flex items-center gap-1.5 text-sm font-medium text-white/80">
 							<MapPin class="h-4 w-4" />
-							รหัสศูนย์: {selectedShelterDetail.code}
+							{langState.current === 'en' ? 'Shelter Code:' : 'รหัสศูนย์:'}
+							{selectedShelterDetail.code}
 						</span>
 						<span
 							class="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-2xs font-bold text-emerald-700 shadow-2xs"
 						>
 							<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
-							เปิดรับบริจาค
+							{t.openDonationBadge}
 						</span>
 					</div>
 				</div>
@@ -310,7 +334,7 @@
 				<div class="flex items-center justify-between">
 					<h3 class="flex items-center gap-2 text-xl font-black text-slate-800">
 						<ClipboardList class="h-6 w-6 text-[#013481]" />
-						รายการสิ่งของที่ศูนย์ต้องการ
+						{t.shelterNeedsTitle}
 					</h3>
 				</div>
 
@@ -318,12 +342,13 @@
 					<div
 						class="rounded-2xl border border-slate-200 bg-white py-12 text-center text-slate-500"
 					>
-						ศูนย์นี้ยังไม่มีรายการเร่งด่วนในขณะนี้
+						{t.noUrgentItems}
 					</div>
 				{/if}
 
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					{#each selectedShelterDetail.needs as need, index (need.item_id || index)}
+						{@const itemName = formatItemName(need.raw_name || need.name || need.item_id)}
 						{#if need.status === 'closed'}
 							<!-- Overstocked Item Card -->
 							<div
@@ -334,19 +359,19 @@
 										class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
 									>
 										{#if need.image}
-											<img src={need.image} alt={need.name} class="h-full w-full object-cover" />
+											<img src={need.image} alt={itemName} class="h-full w-full object-cover" />
 										{:else}
 											<Package class="h-6 w-6 text-slate-400" />
 										{/if}
 									</div>
 									<div class="flex flex-col gap-1">
 										<span class="text-lg font-bold text-slate-600 line-through">
-											{need.name}
+											{itemName}
 										</span>
 										<span
 											class="mt-1 w-fit rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600"
 										>
-											ล้นสต็อก (ไม่ต้องนำมา)
+											{t.overstocked}
 										</span>
 									</div>
 								</div>
@@ -370,7 +395,7 @@
 										class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50 shadow-inner"
 									>
 										{#if need.image}
-											<img src={need.image} alt={need.name} class="h-full w-full object-cover" />
+											<img src={need.image} alt={itemName} class="h-full w-full object-cover" />
 										{:else}
 											<Package class="h-7 w-7 text-slate-300" />
 										{/if}
@@ -392,7 +417,7 @@
 															? 'text-orange-700'
 															: 'text-emerald-700'}"
 												>
-													{need.name}
+													{itemName}
 												</span>
 												<div class="flex flex-wrap gap-1.5">
 													{#if isCritical}
@@ -401,14 +426,14 @@
 														>
 															<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500"
 															></span>
-															วิกฤต (Critical)
+															{t.criticalBadge}
 														</span>
 													{:else if isHigh}
 														<span
 															class="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-2xs font-bold tracking-wider text-orange-700 uppercase shadow-2xs"
 														>
 															<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
-															สำคัญ (High)
+															{t.highBadge}
 														</span>
 													{/if}
 												</div>
@@ -420,8 +445,11 @@
 												class="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-sm font-black text-slate-700 shadow-xs"
 											>
 												{need.qty_needed > 0
-													? `ยังขาด ${need.qty_needed} ${formatUnit(need.unit)} (จองแล้ว ${pending} รอส่งมอบ)`
-													: 'เปิดรับเรื่อยๆ ไม่จำกัดจำนวน'}
+													? t.needShortage
+															.replace('{qty}', String(need.qty_needed))
+															.replace('{unit}', formatUnit(need.unit))
+															.replace('{pending}', String(pending))
+													: t.openIndefinitely}
 											</span>
 										</div>
 
@@ -432,13 +460,15 @@
 											>
 												<div class="flex items-center justify-between">
 													<span class="text-emerald-700"
-														>ได้รับแล้วจริง: {received}
+														>{t.receivedActual}
+														{received}
 														{formatUnit(need.unit)}</span
 													>
 												</div>
 												<div class="flex items-center justify-between">
 													<span class="text-amber-600"
-														>จองไว้ รอส่งมอบ: {pending}
+														>{t.pendingReserved}
+														{pending}
 														{formatUnit(need.unit)}</span
 													>
 													<span>{Math.round(receivedPct + pendingPct)}%</span>
@@ -463,7 +493,7 @@
 									onclick={() => donateSingleNeed(selectedShelterDetail, need)}
 									class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition-all hover:bg-emerald-100"
 								>
-									บริจาครายการนี้
+									{t.donateThisItem}
 									<PackagePlus class="h-4 w-4" />
 								</button>
 							</div>
@@ -477,18 +507,17 @@
 						class="space-y-4 rounded-2xl border border-[#013481]/10 bg-[#013481]/5 p-6 text-center"
 					>
 						<h4 class="text-lg font-bold text-[#013481]">
-							ต้องการบริจาคสิ่งของอื่นๆ นอกเหนือจากรายการ?
+							{t.unsolicitedCardTitle}
 						</h4>
 						<p class="mx-auto max-w-lg text-sm text-slate-600">
-							หากคุณมีสิ่งของที่ต้องการบริจาคเพิ่มเติม แต่ไม่มีในรายการข้างต้น
-							สามารถทำรายการบริจาคเพิ่มเติมได้
+							{t.unsolicitedCardDesc}
 						</p>
 						<button
 							type="button"
 							onclick={() => donateOtherItems(selectedShelterDetail)}
 							class="inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-[#013481] bg-white px-8 py-3 text-sm font-bold text-[#013481] shadow-xs transition-colors hover:bg-[#013481] hover:text-white"
 						>
-							บริจาคสิ่งของอื่นๆ
+							{t.donateOtherBtn}
 						</button>
 					</div>
 				</div>
@@ -503,9 +532,9 @@
 			class="relative z-10 space-y-5 rounded-2xl border border-[#dadce0] bg-white p-6 text-left shadow-xs md:p-8"
 		>
 			<div>
-				<h3 class="text-xl font-black text-[#013365]">ค้นหาศูนย์พักพิง หรือ สิ่งของ</h3>
+				<h3 class="text-xl font-black text-[#013365]">{t.searchTitle}</h3>
 				<p class="mt-1 text-sm text-slate-500">
-					ระบุชื่อศูนย์ หรือสิ่งของที่คุณต้องการช่วยเหลือ เช่น "น้ำดื่ม"
+					{t.searchDesc}
 				</p>
 			</div>
 
@@ -516,8 +545,8 @@
 					bind:value={search}
 					onfocus={() => (isSearchFocused = true)}
 					onblur={() => setTimeout(() => (isSearchFocused = false), 200)}
-					placeholder="ค้นหาศูนย์ หรือ สิ่งของ เช่น น้ำดื่ม..."
-					aria-label="ค้นหาศูนย์พักพิงหรือสิ่งของ"
+					placeholder={t.searchPlaceholder}
+					aria-label={t.searchAriaLabel}
 					class="w-full rounded-xl border-2 border-slate-200 bg-slate-50 py-3.5 pr-4 pl-12 text-base font-semibold text-[#1d1d1f] shadow-xs outline-hidden transition-all placeholder:font-medium placeholder:text-slate-400 focus:border-[#013365] focus:ring-2 focus:ring-[#013365]/20"
 				/>
 
@@ -539,7 +568,7 @@
 							</button>
 						{/each}
 						{#if suggestions.length === 0}
-							<div class="px-4 py-3 text-sm text-slate-500">ไม่พบสิ่งของในระบบ</div>
+							<div class="px-4 py-3 text-sm text-slate-500">{t.noItemFound}</div>
 						{/if}
 					</div>
 				{/if}
@@ -556,7 +585,7 @@
 					? 'border-transparent bg-slate-900 text-white shadow-xs'
 					: 'border border-slate-200 bg-white text-slate-900 hover:bg-slate-50'}"
 			>
-				ทั้งหมด
+				{t.filterAll}
 			</button>
 			<button
 				type="button"
@@ -566,7 +595,8 @@
 					? 'border border-red-200 bg-red-50 text-red-700 shadow-xs'
 					: 'border border-slate-200 bg-white text-slate-900 hover:bg-slate-50'}"
 			>
-				<span class="h-2 w-2 animate-pulse rounded-full bg-red-500"></span> วิกฤต
+				<span class="h-2 w-2 animate-pulse rounded-full bg-red-500"></span>
+				{t.filterCritical}
 			</button>
 			<button
 				type="button"
@@ -576,7 +606,8 @@
 					? 'border border-orange-200 bg-orange-50 text-orange-700 shadow-xs'
 					: 'border border-slate-200 bg-white text-slate-900 hover:bg-slate-50'}"
 			>
-				<span class="h-2 w-2 rounded-full bg-orange-500"></span> สำคัญ
+				<span class="h-2 w-2 rounded-full bg-orange-500"></span>
+				{t.filterHigh}
 			</button>
 			<button
 				type="button"
@@ -586,7 +617,8 @@
 					? 'border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-xs'
 					: 'border border-slate-200 bg-white text-slate-900 hover:bg-slate-50'}"
 			>
-				<span class="h-2 w-2 rounded-full bg-emerald-500"></span> ปกติ
+				<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+				{t.filterNormal}
 			</button>
 		</div>
 
@@ -596,13 +628,13 @@
 				<div
 					class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[#013365] border-t-transparent"
 				></div>
-				<p class="mt-4 text-sm text-slate-500">กำลังโหลดข้อมูลความต้องการ...</p>
+				<p class="mt-4 text-sm text-slate-500">{t.loadingNeeds}</p>
 			</div>
 		{:else if loadError}
 			<p class="py-10 text-center text-sm font-bold text-red-500">{loadError}</p>
 		{:else if filteredShelters.length === 0}
 			<p class="py-10 text-center text-sm text-slate-400">
-				{search.trim() ? 'ไม่พบศูนย์พักพิงหรือสิ่งของที่ค้นหา' : 'ขณะนี้ยังไม่มีรายการความต้องการ'}
+				{search.trim() ? t.noSheltersOrItems : t.noNeedsCurrently}
 			</p>
 		{:else}
 			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -629,14 +661,14 @@
 										class="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-2xs font-bold tracking-wider text-red-700 uppercase shadow-2xs"
 									>
 										<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500"></span>
-										วิกฤต (Critical)
+										{t.criticalBadge}
 									</span>
 								{:else}
 									<span
 										class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-2xs font-bold tracking-wider text-emerald-700 uppercase shadow-2xs"
 									>
 										<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
-										เปิดรับบริจาค
+										{t.openDonationBadge}
 									</span>
 								{/if}
 							</div>
@@ -648,9 +680,11 @@
 							</h3>
 							<p class="mb-4 text-xs font-semibold text-[#86868b]">
 								{#if displayedNeeds.length > 0}
-									ต้องการ {displayedNeeds.length} รายการ · ได้รับแล้ว {overallPct}% ของทั้งหมด
+									{t.needsCount
+										.replace('{count}', String(displayedNeeds.length))
+										.replace('{pct}', String(overallPct))}
 								{:else}
-									ขณะนี้ศูนย์มีสิ่งของเพียงพอแล้ว
+									{t.shelterSufficient}
 								{/if}
 							</p>
 
@@ -658,7 +692,7 @@
 							<div class="mb-6 flex flex-1 flex-col gap-2">
 								{#if displayedNeeds.length === 0}
 									<div class="mt-4 text-center text-sm text-slate-500">
-										ศูนย์นี้ยังไม่มีรายการเร่งด่วนในขณะนี้
+										{t.noUrgentItems}
 									</div>
 								{/if}
 
@@ -671,6 +705,7 @@
 									{@const receivedPct = target > 0 ? Math.min(100, (received / target) * 100) : 0}
 									{@const pendingPct =
 										target > 0 ? Math.min(100 - receivedPct, (pending / target) * 100) : 0}
+									{@const itemName = formatItemName(need.raw_name || need.name || need.item_id)}
 
 									<div class="flex flex-col gap-1.5 py-1">
 										<div class="flex items-center justify-between gap-2">
@@ -690,18 +725,20 @@
 												></span>
 												<span class="truncate leading-tight">
 													{isCrit
-														? `[วิกฤต] ${need.name}`
+														? `${t.urgentPrefix} ${itemName}`
 														: isHig
-															? `[สำคัญ] ${need.name}`
-															: need.name}
+															? `${t.highPrefix} ${itemName}`
+															: itemName}
 												</span>
 											</span>
 											<span
 												class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-black whitespace-nowrap text-slate-600 shadow-xs"
 											>
 												{need.qty_needed > 0
-													? `เปิดรับอีก ${need.qty_needed} ${formatUnit(need.unit)}`
-													: 'เปิดรับ'}
+													? t.openForMore
+															.replace('{qty}', String(need.qty_needed))
+															.replace('{unit}', formatUnit(need.unit))
+													: t.openFor}
 											</span>
 										</div>
 										<div class="w-full pl-3">
@@ -724,7 +761,7 @@
 										<span
 											class="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-500"
 										>
-											+{displayedNeeds.length - 3} รายการอื่น
+											{t.moreItems.replace('{count}', String(displayedNeeds.length - 3))}
 										</span>
 									</div>
 								{/if}
@@ -737,7 +774,7 @@
 									onclick={() => goToShelterDetails(shelter)}
 									class="flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013365] px-4 py-3 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#1557b0] sm:text-sm"
 								>
-									ดูรายละเอียดและบริจาค
+									{t.viewDetailsAndDonate}
 									<ArrowRight class="h-4 w-4 transition-transform group-hover:translate-x-1" />
 								</button>
 							</div>
