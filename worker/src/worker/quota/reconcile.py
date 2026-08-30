@@ -32,13 +32,19 @@ from typing import Any
 from tent_model import DonationBuffer, DonationNeedCounter, set_reserved_qty
 
 from worker.couch.client import CouchClient
+from worker.donation_status import DONATION_OUTSTANDING_STATUSES
 from worker.masking import shelter_db_name
 
 logger = logging.getLogger(__name__)
 
 # A donation holds quota until it is explicitly given back. "cancelled"/"expired"
 # release via cancel()/purge_expired_buffers(); everything else still consumes.
-QUOTA_HOLDING_STATUSES = frozenset({"declared", "received"})
+#
+# The pre-shelf half of this is every outstanding status, not just "declared": since
+# CR-052 a public booking sits in "pending_review"/"verifying" while it waits, and
+# leaving those out would make reconcile read their quota as unheld and zero out
+# counters for reservations that are very much still live.
+QUOTA_HOLDING_STATUSES = DONATION_OUTSTANDING_STATUSES | {"received"}
 
 QuotaKey = tuple[str, str]  # (campaign_id, item_id)
 

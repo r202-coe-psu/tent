@@ -21,6 +21,18 @@ def test_keeps_a_declared_reservation_still_within_ttl():
     assert should_expire("declared", FUTURE, now=NOW) is False
 
 
+def test_expires_a_reservation_waiting_in_the_review_chain():
+    """CR-052 opens public bookings at ``pending_review``, not ``declared``.
+
+    Their TTL has to run all the same — gating on ``declared`` alone would leave every
+    booking the wizard creates to sit past its expiry with the quota never handed back
+    (CR-045).
+    """
+    for status in ("pending_review", "verifying"):
+        assert should_expire(status, PAST, now=NOW) is True, status
+        assert should_expire(status, FUTURE, now=NOW) is False, status
+
+
 def test_never_expires_a_received_donation():
     """Goods arrived and consumed the target — the TTL must not undo that."""
     assert should_expire("received", PAST, now=NOW) is False

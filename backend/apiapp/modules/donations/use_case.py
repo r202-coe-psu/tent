@@ -43,10 +43,17 @@ DEFAULT_RESERVATION_TTL_HOURS = 72
 
 #: Statuses in which a donor may still change their own booking through the public token
 #: routes. Only a reservation awaiting drop-off qualifies: once goods arrive the count
-#: belongs to staff, and cancelled/expired have already released their quota. Mirrors
-#: ``isDonorEditable`` on the BFF — CR-052's pending_review/verifying belong here too
-#: once those statuses land.
-DONOR_EDITABLE_STATUSES = frozenset({"declared"})
+#: belongs to staff, and cancelled/expired have already released their quota.
+#:
+#: ``pending_review`` is in (decision D-1): CR-052 §1.4 opens every public booking there
+#: instead of at ``declared``, so without it the donor would lose edit/cancel on every
+#: booking the wizard creates. ``verifying`` is out — the goods are at the shelter by
+#: then. Mirrors ``isDonorEditable`` on the BFF; the two gate the same routes.
+DONOR_EDITABLE_STATUSES = frozenset({"declared", "pending_review"})
+
+#: Status every public donation opens in — CR-052 §1.4 (Task #52): no submission skips
+#: the staff review step, cold-chain or not.
+INITIAL_DONATION_STATUS = "pending_review"
 
 
 def reservation_expiry(now: datetime, ttl_hours: int | None) -> datetime:
@@ -377,7 +384,7 @@ class DonationsUseCase:
                     booking_ref=booking_ref,
                     tracking_token=tracking_token,
                     tracking_token_hash=token_hash,
-                    status="declared",
+                    status=INITIAL_DONATION_STATUS,
                     synced_to_couch=False,
                     created_at=now,
                     expires_at=expires_at,
@@ -414,7 +421,7 @@ class DonationsUseCase:
             id=donation_id,
             tracking_token_hash=token_hash,
             shelter_code=payload.shelter_code.upper(),
-            status="declared",
+            status=INITIAL_DONATION_STATUS,
             booking_ref=booking_ref,
             items_declared=declared,
             received_summary=None,
