@@ -2,6 +2,7 @@ import type { ResolvedPathname } from '$app/types';
 import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
 import {
+	Calculator,
 	Home,
 	KeyRound,
 	MapPin,
@@ -98,13 +99,19 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						requiresAdmin: true
 					},
 					{
-						label: '5. FAQ Public Portal',
+						label: '5. พารามิเตอร์มาตรฐาน',
+						href: resolve(`${base}/sop-parameters`),
+						icon: Calculator,
+						requiresAdmin: true
+					},
+					{
+						label: '6. FAQ Public Portal',
 						href: resolve(`${base}/public-portal-config`),
 						icon: Megaphone,
 						requiresAdmin: true
 					},
-					{ label: '6. อาสาสมัคร', href: null, icon: Users },
-					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{ label: '7. อาสาสมัคร', href: null, icon: Users },
+					{ label: '8. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}
 		]
