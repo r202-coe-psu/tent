@@ -938,7 +938,6 @@ Log 1 doc ต่อ 1 batch ของการ import ศูนย์พัก�
 | `name` | str | req | ชื่อเรียกเครื่อง (เช่น `"จุดคัดกรองหน้าประตู 1"`) |
 | `shelter_code` | str | req | รหัสศูนย์พักพิงที่เครื่องนี้สังกัด (เช่น `"SH001"`) |
 | `station_name` | str | req | จุดติดตั้ง/สถานีคัดกรอง (default `"จุดคัดกรองทั่วไป"`) |
-| `secret` | str | opt | Plaintext token (เฉพาะตอนสร้างใหม่หรือ seed สำหรับ initial provisioning) |
 | `secret_hash` | str | req | SHA-256 hash ของ Device Secret สำหรับ Inbound Authentication |
 | `secret_prefix` | str | req | 16 ตัวอักษรแรกของ secret เพื่อแสดงในหน้าตั้งค่า (เช่น `"sk_scan_a1b2c3d4..."`) |
 | `status` | enum(`active`,`inactive`) | req | สถานะเปิด/ปิดการใช้งานเครื่อง |

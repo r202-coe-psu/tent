@@ -94,7 +94,6 @@ export class ScannerRemoteRepository {
 				name: input.name,
 				shelter_code: input.shelter_code,
 				station_name: input.station_name,
-				secret: plaintextSecret,
 				secret_hash: secretHash,
 				secret_prefix: secretPrefix,
 				status: input.status,

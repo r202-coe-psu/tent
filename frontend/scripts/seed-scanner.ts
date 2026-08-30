@@ -88,7 +88,6 @@ export async function seedScannerDevice(): Promise<void> {
 		name: 'Kiosk Test Scanner',
 		shelter_code: 'SH001',
 		station_name: 'จุดสแกน Kiosk ทดสอบ (Kiosk Test)',
-		secret: secret,
 		secret_hash: secretHash,
 		secret_prefix: secretPrefix,
 		status: 'active',

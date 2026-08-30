@@ -30,7 +30,6 @@ export interface ScannerDevice extends CatalogDoc {
 	name: string;
 	shelter_code: string;
 	station_name: string;
-	secret?: string;
 	secret_hash: string;
 	secret_prefix: string;
 	status: DeviceStatus;

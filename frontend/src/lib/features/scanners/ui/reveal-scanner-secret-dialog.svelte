@@ -25,7 +25,7 @@
 	const secretValue = $derived.by(() => {
 		if (!device) return '';
 		const created = device as CreatedScannerDevice;
-		return created.plaintext_secret || device.secret || '';
+		return created.plaintext_secret || '';
 	});
 
 	const envSnippet = $derived.by(() => {
@@ -134,7 +134,7 @@
 					</div>
 					{#if !secretValue}
 						<p class="text-[11px] text-amber-600">
-							(อุปกรณ์รุ่นเก่าก่อนการอัปเดตระบบ แสดงเฉพาะ Prefix: {device.secret_prefix})
+							(เพื่อความปลอดภัย ระบบจะไม่จัดเก็บรหัสผ่านแบบข้อความธรรมดา แสดงเฉพาะ Prefix: {device.secret_prefix})
 						</p>
 					{/if}
 				</div>
