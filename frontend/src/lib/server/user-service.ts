@@ -21,12 +21,21 @@ import { validatePassword } from '$lib/server/password-policy';
 
 const USER_PREFIX = 'org.couchdb.user:';
 
+/** A duty window recorded on a login (CR-094 §2.3) — stored, not yet enforced. */
+export interface DutyWindow {
+	start_ts: string;
+	end_ts: string;
+}
+
 export interface UserSummary {
 	name: string;
 	roles: string[];
 	display_name?: string | null;
 	shelter_id?: string | null;
 	affiliation_tags?: string[];
+	volunteer_id?: string | null;
+	duty_window?: DutyWindow | null;
+	active?: boolean;
 }
 
 interface CouchUserDoc {
@@ -38,6 +47,9 @@ interface CouchUserDoc {
 	display_name?: string | null;
 	shelter_id?: string | null;
 	affiliation_tags?: string[];
+	volunteer_id?: string | null;
+	duty_window?: DutyWindow | null;
+	active?: boolean;
 }
 
 function userDocId(name: string): string {
@@ -50,7 +62,11 @@ function toSummary(doc: CouchUserDoc): UserSummary {
 		roles: doc.roles ?? [],
 		display_name: doc.display_name ?? null,
 		shelter_id: doc.shelter_id ?? null,
-		affiliation_tags: doc.affiliation_tags ?? []
+		affiliation_tags: doc.affiliation_tags ?? [],
+		volunteer_id: doc.volunteer_id ?? null,
+		duty_window: doc.duty_window ?? null,
+		// Legacy docs predate the field; an account without it is active (CR-094 §4).
+		active: doc.active ?? true
 	};
 }
 
@@ -102,6 +118,9 @@ export async function createUser(input: {
 	display_name: string;
 	roles: string[];
 	affiliation_tags?: string[];
+	volunteer_id?: string | null;
+	duty_window?: DutyWindow | null;
+	active?: boolean;
 }): Promise<void> {
 	const { name, display_name, roles, affiliation_tags } = input;
 	const bootstrap = bootstrapAdminName();
@@ -116,7 +135,10 @@ export async function createUser(input: {
 		roles,
 		type: 'user',
 		shelter_id: shelterCodeFromRoles(roles),
-		affiliation_tags: affiliation_tags ?? []
+		affiliation_tags: affiliation_tags ?? [],
+		volunteer_id: input.volunteer_id ?? null,
+		duty_window: input.duty_window ?? null,
+		active: input.active ?? true
 	});
 	if (res.status === 409) throw new ServiceError('CONFLICT', `User "${name}" already exists`);
 	if (res.status >= 400) throw serviceErrorFromCouch('create user', res.status, res.data);
@@ -166,6 +188,9 @@ export async function updateUser(
 		display_name?: string;
 		roles?: string[];
 		affiliation_tags?: string[];
+		volunteer_id?: string | null;
+		duty_window?: DutyWindow | null;
+		active?: boolean;
 	},
 	caller: Caller
 ): Promise<void> {
@@ -203,7 +228,12 @@ export async function updateUser(
 		...doc,
 		...(input.display_name !== undefined ? { display_name: input.display_name } : {}),
 		...(input.roles ? { roles: input.roles, shelter_id: shelterCodeFromRoles(input.roles) } : {}),
-		...(input.affiliation_tags ? { affiliation_tags: input.affiliation_tags } : {})
+		...(input.affiliation_tags ? { affiliation_tags: input.affiliation_tags } : {}),
+		// `null` is a meaningful value here (unlink / grant permanent access), so these three
+		// check for `undefined` rather than falsiness.
+		...(input.volunteer_id !== undefined ? { volunteer_id: input.volunteer_id } : {}),
+		...(input.duty_window !== undefined ? { duty_window: input.duty_window } : {}),
+		...(input.active !== undefined ? { active: input.active } : {})
 	} as CouchUserDoc & { password?: string; password_sha?: string; salt?: string };
 
 	if (input.password) {

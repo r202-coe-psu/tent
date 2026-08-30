@@ -37,7 +37,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { STAFF_CAPABILITIES, type StaffCapability } from '$lib/auth/roles';
+	import { STAFF_CAPABILITIES, roleOptionLabel, type StaffCapability } from '$lib/auth/roles';
 	import { useUpdateVolunteer } from '../application/queries';
 	import type { Volunteer } from '../domain/volunteer.schema';
 
@@ -53,12 +53,6 @@
 
 	const queryClient = useQueryClient();
 	const updateMutation = useUpdateVolunteer(queryClient);
-
-	const ROLE_LABELS: Record<StaffCapability, string> = {
-		registration_staff: 'เจ้าหน้าที่ปฏิบัติการทั่วไป (Operations Staff)',
-		kitchen_staff: 'เจ้าหน้าที่ครัว (Kitchen Staff)',
-		warehouse_staff: 'เจ้าหน้าที่คลังพัสดุ (Warehouse Staff)'
-	};
 
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
 
@@ -141,11 +135,11 @@
 				</p>
 				<Select.Root type="single" bind:value={role}>
 					<Select.Trigger class="h-11 w-full rounded-xl bg-background px-3">
-						<span class="truncate">{ROLE_LABELS[role]}</span>
+						<span class="truncate">{roleOptionLabel(role)}</span>
 					</Select.Trigger>
 					<Select.Content>
 						{#each STAFF_CAPABILITIES as capability (capability)}
-							<Select.Item value={capability} label={ROLE_LABELS[capability]} />
+							<Select.Item value={capability} label={roleOptionLabel(capability)} />
 						{/each}
 					</Select.Content>
 				</Select.Root>

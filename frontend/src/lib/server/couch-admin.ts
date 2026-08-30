@@ -335,7 +335,7 @@ export function assertCanGrant(caller: Caller, requestedRoles: readonly string[]
 	if (!isStaffOnly(requestedRoles)) {
 		throw new ServiceError(
 			'FORBIDDEN',
-			'A manager may only grant registration_staff/kitchen_staff/warehouse_staff'
+			'A manager may only grant staff capabilities, not shelter_manager or system_admin'
 		);
 	}
 }
