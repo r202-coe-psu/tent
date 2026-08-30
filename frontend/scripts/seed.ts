@@ -1914,7 +1914,7 @@ async function seedVolunteers(): Promise<void> {
 				'พร้อมประสานงานส่งต่อคำร้องไปยังฝ่ายที่เกี่ยวข้อง แต่งกายสุภาพ พูดจาดี ไม่จำเป็นต้องมีประสบการณ์',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['ต้อนรับ', 'ประสานงาน'],
+			skills_required: ['ประสานงาน / ต้อนรับ'], // matches domain/skill-master.ts
 			// schema_v 3 — capacity lives in the sub-shifts; quota = 3 + 3 = 6.
 			shifts: [
 				{
@@ -1944,7 +1944,7 @@ async function seedVolunteers(): Promise<void> {
 				'(staff-capable) และผ่านการอบรมการใช้งานระบบลงทะเบียนก่อนเริ่มปฏิบัติงาน',
 			tier: 'staff-capable',
 			required_roles: ['registration_staff'],
-			skills_required: ['ลงทะเบียน', 'คัดกรอง'],
+			skills_required: ['คัดกรองและสแกนประวัติ'], // matches domain/skill-master.ts
 			shifts: [
 				{
 					id: `js-${today}-c`,
@@ -1965,7 +1965,7 @@ async function seedVolunteers(): Promise<void> {
 				'สามารถยกของหนักได้ต่อเนื่อง ปิดรับสมัครชั่วคราวจนกว่าจะเปิดรับรอบถัดไป',
 			tier: 'operational',
 			required_roles: [],
-			skills_required: ['ยกของหนัก'],
+			skills_required: ['ขนย้ายสิ่งของ / พลาธิการ'], // matches domain/skill-master.ts
 			shifts: [
 				{
 					id: `js-${today}-d`,
@@ -2012,7 +2012,7 @@ async function seedVolunteers(): Promise<void> {
 		nickname: 'อรุณ',
 		phone: '0821111111',
 		email: null,
-		skills: ['ต้อนรับ', 'ประสานงาน'],
+		skills: ['ประสานงาน / ต้อนรับ'], // matches domain/skill-master.ts — same key as job1.skills_required
 		organization: null,
 		national_id: null,
 		source: 'public_apply'
@@ -2022,7 +2022,7 @@ async function seedVolunteers(): Promise<void> {
 		last_name: 'ยิ้มแย้ม',
 		phone: '0822222222',
 		email: null,
-		skills: ['ครัว', 'ขนของ'],
+		skills: ['ประกอบอาหาร / ครัวสนาม', 'ขนย้ายสิ่งของ / พลาธิการ'], // matches domain/skill-master.ts
 		organization: null,
 		national_id: null,
 		source: 'walk_in'
@@ -2032,7 +2032,7 @@ async function seedVolunteers(): Promise<void> {
 		last_name: 'คงมั่น',
 		phone: '0823333333',
 		email: null,
-		skills: ['ขับรถ', 'วิทยุสื่อสาร'],
+		skills: ['ขับขี่ยานพาหนะ / ขนส่ง'], // matches domain/skill-master.ts (no radio-comms entry there)
 		organization: 'มูลนิธิกู้ภัยหาดใหญ่',
 		national_id: null,
 		source: 'staff_entry'
@@ -2042,7 +2042,7 @@ async function seedVolunteers(): Promise<void> {
 		last_name: 'ศรีสุข',
 		phone: '0824444444',
 		email: null,
-		skills: ['พลาธิการ', 'ยกของหนัก'],
+		skills: ['ขนย้ายสิ่งของ / พลาธิการ'], // matches domain/skill-master.ts
 		organization: null,
 		national_id: null,
 		source: 'transfer'
@@ -2053,7 +2053,7 @@ async function seedVolunteers(): Promise<void> {
 		nickname: 'หมอนิด',
 		phone: '0825555555',
 		email: null,
-		skills: ['การแพทย์', 'ปฐมพยาบาล'],
+		skills: ['การแพทย์ / ปฐมพยาบาล'], // matches domain/skill-master.ts — the master's own controlled key
 		organization: 'รพ.สต. บ้านพรุ',
 		national_id: null,
 		source: 'public_apply'

@@ -5,6 +5,7 @@ import {
 	applyDispatch,
 	applyAccept,
 	applyDecline,
+	applyRelease,
 	deriveJobStatus,
 	almostFullCutoff,
 	QuotaError,
@@ -231,6 +232,48 @@ describe('applyDecline', () => {
 		const input = baseQuota({ slots_dispatched: 4, slots_remaining: 6 });
 		const frozen = { ...input };
 		applyDecline(input, 2);
+		expect(input).toEqual(frozen);
+	});
+});
+
+describe('applyRelease', () => {
+	it('moves confirmed -> remaining', () => {
+		const confirmed = baseQuota({ slots_confirmed: 4, slots_remaining: 6 });
+		const released = applyRelease(confirmed, 2);
+		expect(released).toEqual({
+			quota: 10,
+			slots_confirmed: 2,
+			slots_dispatched: 0,
+			slots_remaining: 8
+		});
+	});
+
+	it('leaves slots_dispatched untouched', () => {
+		const job = baseQuota({ slots_confirmed: 3, slots_dispatched: 4, slots_remaining: 3 });
+		const released = applyRelease(job, 1);
+		expect(released.slots_dispatched).toBe(4);
+	});
+
+	it('rejects releasing more than confirmed', () => {
+		expect(() => applyRelease(baseQuota(), 1)).toThrow(QuotaError);
+	});
+
+	it('rejects a non-positive count', () => {
+		expect(() => applyRelease(baseQuota({ slots_confirmed: 4, slots_remaining: 6 }), 0)).toThrow(
+			QuotaError
+		);
+	});
+
+	it('rejects a non-integer count (F5)', () => {
+		expect(() => applyRelease(baseQuota({ slots_confirmed: 4, slots_remaining: 6 }), 0.5)).toThrow(
+			QuotaError
+		);
+	});
+
+	it('does not mutate the input', () => {
+		const input = baseQuota({ slots_confirmed: 4, slots_remaining: 6 });
+		const frozen = { ...input };
+		applyRelease(input, 2);
 		expect(input).toEqual(frozen);
 	});
 });

@@ -7,6 +7,7 @@ import {
 	applyAccept,
 	applyDecline,
 	applyDispatch,
+	applyRelease,
 	assertQuotaInvariant,
 	deriveJobStatus,
 	QuotaError,
@@ -167,6 +168,11 @@ export class JobRemoteRepository implements JobRepository {
 	 */
 	confirmSlot(jobId: string, count = 1): Promise<Job> {
 		return this.mutateQuota(jobId, (quota) => applyAccept(applyDispatch(quota, count), count));
+	}
+
+	/** Direct `confirmed -> remaining` (`applyRelease`) — the inverse of {@link confirmSlot}. */
+	releaseSlot(jobId: string, count = 1): Promise<Job> {
+		return this.mutateQuota(jobId, (quota) => applyRelease(quota, count));
 	}
 }
 

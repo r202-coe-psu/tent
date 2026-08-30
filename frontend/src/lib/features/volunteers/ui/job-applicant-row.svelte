@@ -17,6 +17,7 @@
 	import IdCard from '@lucide/svelte/icons/id-card';
 	import Phone from '@lucide/svelte/icons/phone';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import UserRound from '@lucide/svelte/icons/user-round';
 	import Check from '@lucide/svelte/icons/check';
 	import X from '@lucide/svelte/icons/x';
@@ -37,7 +38,13 @@
 		application: JobApplication;
 		/** `volunteer.volunteer_code` when the application is linked to a roster record. */
 		volunteerCode?: string | null;
-		/** "กะย่อย #n" — resolved by the parent against `job.shifts`, null when unmatched. */
+		/**
+		 * "กะย่อย #n" resolved by the parent against `job.shifts`, or `null` when
+		 * nothing on the job matches the application's `selected_shift` anymore
+		 * — the SM deleted that sub-shift after this application was filed
+		 * (`applicant-queue.ts`'s parent tab never removes the application
+		 * itself, only the job's shift row).
+		 */
 		shiftLabel?: string | null;
 		onreview: (application: JobApplication, decision: 'confirmed' | 'rejected') => void;
 	} = $props();
@@ -127,9 +134,17 @@
 	{/if}
 
 	<div
-		class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs"
+		class={[
+			'flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs',
+			shiftLabel === null ? 'border-amber-200 bg-amber-50/60' : 'border-border bg-background'
+		]}
 	>
-		<span class="inline-flex flex-wrap items-center gap-x-3 gap-y-1 font-bold text-foreground">
+		<span
+			class={[
+				'inline-flex flex-wrap items-center gap-x-3 gap-y-1 font-bold',
+				shiftLabel === null ? 'text-amber-900 line-through decoration-amber-400' : 'text-foreground'
+			]}
+		>
 			<span class="inline-flex items-center gap-1.5">
 				<CalendarDays class="h-3.5 w-3.5 text-primary" />
 				กะวันที่: {shift.date}
@@ -141,6 +156,11 @@
 		</span>
 		{#if shiftLabel}
 			<span class="text-2xs text-muted-foreground">{shiftLabel}</span>
+		{:else}
+			<span class="inline-flex items-center gap-1 text-2xs font-bold text-amber-700">
+				<TriangleAlert class="h-3 w-3" />
+				กะนี้ถูกลบออกจากงานแล้ว
+			</span>
 		{/if}
 	</div>
 

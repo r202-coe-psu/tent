@@ -3,9 +3,9 @@
 	 * One candidate row of the "มอบหมายอาสาเข้ากะ" roster (approved mockup
 	 * 2026-08-28).
 	 *
-	 * Purely presentational: the row's state — available / dispatched /
-	 * accepted / collision — is decided by `domain/assign-roster.ts` and passed
-	 * in. This component never inspects assignments or duty windows itself.
+	 * Purely presentational: the row's state — available / accepted / collision
+	 * — is decided by `domain/assign-roster.ts` and passed in. This component
+	 * never inspects assignments or duty windows itself.
 	 */
 	import Phone from '@lucide/svelte/icons/phone';
 	import IdCard from '@lucide/svelte/icons/id-card';
@@ -127,13 +127,6 @@
 					>
 						<CircleCheck class="h-3.5 w-3.5 shrink-0" />
 						ยืนยันเข้าร่วมกะนี้แล้ว (Approved)
-					</span>
-				{:else if candidate.state.kind === 'dispatched'}
-					<span
-						class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200"
-					>
-						<Clock class="h-3.5 w-3.5 shrink-0" />
-						มอบหมายในกะนี้แล้ว (รออาสาตอบรับ)
 					</span>
 				{:else}
 					<span

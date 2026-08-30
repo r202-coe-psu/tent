@@ -199,6 +199,14 @@ export interface JobRepository {
 	 * transitions) so no new domain logic is introduced here.
 	 */
 	confirmSlot(jobId: string, count?: number): Promise<Job>;
+	/**
+	 * Direct `slots_confirmed -1, slots_remaining +1` (`applyRelease`) — the
+	 * inverse of {@link confirmSlot}. Backs
+	 * `ShiftAssignmentRepository#unassign`: an SM removing a volunteer who was
+	 * outright-assigned (never went through an offer, so nothing sits in
+	 * `slots_dispatched` for them) gives the seat straight back to `open`.
+	 */
+	releaseSlot(jobId: string, count?: number): Promise<Job>;
 }
 
 // ---------------------------------------------------------------------------
@@ -300,6 +308,22 @@ export interface ShiftAssignmentRepository {
 	): Promise<ShiftAssignment>;
 	/** Record check-out (`status → completed`). */
 	checkOut(id: string): Promise<ShiftAssignment>;
+	/**
+	 * SM removes a volunteer from a shift before they've worked it — the
+	 * "ลบออกจากกะ" affordance on the job detail shifts tab.
+	 *
+	 * Refuses `checked_in`/`completed` (use check-out instead; erasing a
+	 * worked shift destroys attendance history) and an already
+	 * `cancelled`/`no_show` row (nothing to undo). For a `standby`/`assigned`
+	 * row: an outstanding offer (`dispatch_status: 'dispatched'`) is removed
+	 * via the existing {@link declineDispatch} transition (`slots_dispatched
+	 * -1, slots_remaining +1`); an outright assignment (`dispatch_status:
+	 * 'accepted'`, the roster page's only write path) releases a CONFIRMED
+	 * slot instead (`JobRepository#releaseSlot`, `slots_confirmed -1,
+	 * slots_remaining +1`) — picking the wrong one would either under- or
+	 * over-credit the job's quota.
+	 */
+	unassign(id: string): Promise<ShiftAssignment>;
 }
 
 // ---------------------------------------------------------------------------

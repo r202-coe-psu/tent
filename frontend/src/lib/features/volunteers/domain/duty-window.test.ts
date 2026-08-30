@@ -4,7 +4,8 @@ import {
 	isWithinDutyWindow,
 	DEFAULT_GRACE_MINUTES,
 	DutyWindowError,
-	shiftDutyWindow
+	shiftDutyWindow,
+	sameDutyWindow
 } from './duty-window';
 
 // CR-094 §3.2 / schema.md §2.9 — shift templates are Asia/Bangkok (UTC+7, no
@@ -157,5 +158,39 @@ describe('shiftDutyWindow', () => {
 		expect(() => shiftDutyWindow({ ...base, start_time: '15:00', end_time: '09:00' })).toThrow(
 			DutyWindowError
 		);
+	});
+});
+
+describe('sameDutyWindow', () => {
+	it('is true for two windows with identical instants', () => {
+		const a = shiftDutyWindow({
+			date: '2026-06-13',
+			end_date: '2026-06-13',
+			start_time: '08:00',
+			end_time: '16:00'
+		});
+		const b = shiftDutyWindow({
+			date: '2026-06-13',
+			end_date: '2026-06-13',
+			start_time: '08:00',
+			end_time: '16:00'
+		});
+		expect(sameDutyWindow(a, b)).toBe(true);
+	});
+
+	it('is false when only one edge differs', () => {
+		const a = shiftDutyWindow({
+			date: '2026-06-13',
+			end_date: '2026-06-13',
+			start_time: '08:00',
+			end_time: '16:00'
+		});
+		const b = shiftDutyWindow({
+			date: '2026-06-13',
+			end_date: '2026-06-13',
+			start_time: '08:00',
+			end_time: '17:00'
+		});
+		expect(sameDutyWindow(a, b)).toBe(false);
 	});
 });

@@ -15,22 +15,29 @@
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import Clock from '@lucide/svelte/icons/clock';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
+	import UserRound from '@lucide/svelte/icons/user-round';
+	import UserMinus from '@lucide/svelte/icons/user-minus';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import type { ShiftQuotaSplit } from '../domain/capacity';
 	import type { JobShift } from '../domain/job.schema';
+	import { SHIFT_ASSIGNMENT_STATUS_LABEL, type ShiftRosterEntry } from '../domain/shift-roster';
 
 	let {
 		shift,
 		split,
+		roster,
 		canRemove,
 		pending = false,
 		onedit,
 		onremove,
-		onassign
+		onassign,
+		onunassign
 	}: {
 		shift: JobShift;
 		split: ShiftQuotaSplit;
+		/** Volunteers currently on this exact sub-shift — `domain/shift-roster.ts#shiftRoster`. */
+		roster: ShiftRosterEntry[];
 		/** A job must keep at least one sub-shift (`jobSchema.shifts.min(1)`). */
 		canRemove: boolean;
 		pending?: boolean;
@@ -39,6 +46,8 @@
 		onremove: (shiftId: string) => void;
 		/** Opens the assign screen on THIS shift. */
 		onassign: (shiftId: string) => void;
+		/** Removes one volunteer (by `shift_assignment._id`) from this shift. */
+		onunassign: (entry: ShiftRosterEntry) => void;
 	} = $props();
 
 	const total = $derived(split.target > 0 ? split.target : 1);
@@ -133,6 +142,54 @@
 			<span class="ml-auto text-muted-foreground">(เป้า {split.target} คน)</span>
 		</div>
 	</div>
+
+	{#if roster.length > 0}
+		<div class="space-y-1.5 border-t border-border pt-2.5">
+			<p class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+				<UserRound class="h-3.5 w-3.5" />
+				อาสาในกะนี้ ({roster.length} คน)
+			</p>
+			<ul class="space-y-1">
+				{#each roster as entry (entry.assignmentId)}
+					<li
+						class="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs"
+					>
+						<span class="min-w-0 truncate">
+							<span class="font-medium text-foreground">{entry.volunteerName}</span>
+							<span class="text-muted-foreground"> · {entry.volunteerCode}</span>
+						</span>
+						<span class="flex shrink-0 items-center gap-1.5">
+							<span class="text-2xs text-muted-foreground">
+								{SHIFT_ASSIGNMENT_STATUS_LABEL[entry.status]}
+							</span>
+							{#if entry.status === 'assigned' || entry.status === 'standby'}
+								<Tooltip.Provider>
+									<Tooltip.Root>
+										<Tooltip.Trigger>
+											{#snippet child({ props })}
+												<Button
+													{...props}
+													size="icon"
+													variant="ghost"
+													class="h-6 w-6 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+													disabled={pending}
+													aria-label={`ลบ ${entry.volunteerName} ออกจากกะนี้`}
+													onclick={() => onunassign(entry)}
+												>
+													<UserMinus class="h-3.5 w-3.5" />
+												</Button>
+											{/snippet}
+										</Tooltip.Trigger>
+										<Tooltip.Content>ลบออกจากกะนี้</Tooltip.Content>
+									</Tooltip.Root>
+								</Tooltip.Provider>
+							{/if}
+						</span>
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
 
 	<Button
 		variant="default"

@@ -35,6 +35,7 @@
 	import JobShiftCard from './job-shift-card.svelte';
 	import JobShiftEditDialog from './job-shift-edit-dialog.svelte';
 	import { jobShiftQuotaSplits } from '../domain/capacity';
+	import { shiftRoster, type ShiftRosterEntry } from '../domain/shift-roster';
 	import { totalShiftQuota, type Job, type JobShift } from '../domain/job.schema';
 	import {
 		ALL_WEEKDAYS,
@@ -47,13 +48,23 @@
 		isDuplicateShift,
 		type Weekday
 	} from '../domain/shift-batch';
-	import { useUpdateJob } from '../application/queries';
+	import {
+		useShiftAssignments,
+		useUnassignVolunteer,
+		useUpdateJob,
+		useVolunteers
+	} from '../application/queries';
 
 	let { job }: { job: Job } = $props();
 
 	const queryClient = useQueryClient();
 	const updateMutation = useUpdateJob(queryClient);
+	const unassignMutation = useUnassignVolunteer(queryClient);
 	const saving = $derived(updateMutation.isPending);
+
+	const assignmentsQuery = useShiftAssignments();
+	const volunteersQuery = useVolunteers();
+	const volunteersById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
 
 	let mode = $state<'single' | 'batch'>('single');
 
@@ -96,7 +107,27 @@
 		)
 	);
 	const splits = $derived(jobShiftQuotaSplits({ ...job, shifts: orderedShifts }));
-	const rows = $derived(orderedShifts.map((shift, index) => ({ shift, split: splits[index] })));
+	const rows = $derived(
+		orderedShifts.map((shift, index) => ({
+			shift,
+			split: splits[index],
+			roster: shiftRoster(shift, job._id, assignmentsQuery.data ?? [], volunteersById)
+		}))
+	);
+
+	let unassignTarget = $state<ShiftRosterEntry | null>(null);
+
+	async function confirmUnassign() {
+		const target = unassignTarget;
+		unassignTarget = null;
+		if (!target) return;
+		try {
+			await unassignMutation.mutateAsync(target.assignmentId);
+			toast.success(`ลบ ${target.volunteerName} ออกจากกะแล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ลบออกจากกะไม่สำเร็จ');
+		}
+	}
 
 	const canAddSingle = $derived(
 		singleDate !== '' &&
@@ -198,9 +229,73 @@
 	const editMinQuota = $derived(editRow ? editRow.split.confirmed + editRow.split.dispatched : 0);
 
 	const removeRow = $derived(rows.find((r) => r.shift.id === removeShiftId) ?? null);
-	const removeHeldSeats = $derived(
-		removeRow ? removeRow.split.confirmed + removeRow.split.dispatched : 0
+	/**
+	 * Deleting a shift cascades: every volunteer still `assigned`/`standby` on
+	 * it is automatically unassigned first (owner feedback 2026-08-31 —
+	 * previously the SM had to release each one by hand before the quota cut
+	 * would be accepted). `checked_in`/`completed` rows are never cascaded —
+	 * `unassign()` refuses them on purpose, to protect attendance history — so
+	 * a shift someone already worked still blocks deletion.
+	 */
+	const removeCascade = $derived(
+		(removeRow?.roster ?? []).filter((e) => e.status === 'assigned' || e.status === 'standby')
 	);
+	const removeBlocking = $derived(
+		(removeRow?.roster ?? []).filter((e) => e.status === 'checked_in' || e.status === 'completed')
+	);
+
+	/**
+	 * Cascading THIS shift's own roster is not always enough: `job.quota` /
+	 * `slots_confirmed` / `slots_dispatched` are JOB-LEVEL totals, so a job
+	 * with two shifts (5 + 7 seats, say) can have all 7 confirmed volunteers
+	 * sitting on the shift that ISN'T being deleted — removing the other one
+	 * still shrinks `job.quota` below what those 7 already hold, and
+	 * `JobRepository#update` throws a `QuotaError` no matter how clean this
+	 * shift's own roster is (owner-reported case 2026-08-31).
+	 *
+	 * Precompute that overflow up front (rather than reacting to the error
+	 * after the fact) so the confirm dialog can show exactly who else would be
+	 * removed, from OTHER shifts of this job, before the SM commits — most
+	 * recently assigned first, since that is the least operationally
+	 * disruptive volunteer to bump. `checked_in`/`completed` rows are never
+	 * candidates (same rule as `removeBlocking`), so if there aren't enough
+	 * releasable rows to close the gap, deletion stays blocked rather than
+	 * guessing.
+	 */
+	const removeOverflow = $derived.by(() => {
+		if (!removeRow) return { needed: 0, candidates: [] as ShiftRosterEntry[] };
+		const newQuota = job.quota - removeRow.shift.quota;
+		const claimedAfterCascade = job.slots_confirmed + job.slots_dispatched - removeCascade.length;
+		const needed = claimedAfterCascade - newQuota;
+		if (needed <= 0) return { needed: 0, candidates: [] };
+
+		const alreadyCascaded = new Set(removeCascade.map((e) => e.assignmentId));
+		const candidates = (assignmentsQuery.data ?? [])
+			.filter(
+				(a) =>
+					a.job_id === job._id &&
+					!alreadyCascaded.has(a._id) &&
+					(a.status === 'assigned' || a.status === 'standby')
+			)
+			.sort((a, b) => b.created_at.localeCompare(a.created_at))
+			.slice(0, needed)
+			.map((a): ShiftRosterEntry => {
+				const volunteer = volunteersById.get(a.volunteer_id);
+				return {
+					assignmentId: a._id,
+					volunteerId: a.volunteer_id,
+					volunteerName: volunteer
+						? `${volunteer.first_name} ${volunteer.last_name}`
+						: 'ไม่พบข้อมูลอาสาสมัคร',
+					volunteerCode: volunteer?.volunteer_code ?? '—',
+					status: a.status,
+					dispatchStatus: a.dispatch_status ?? null
+				};
+			});
+		return { needed, candidates };
+	});
+	/** Not enough releasable (non-worked) seats elsewhere to close the gap. */
+	const removeOverflowBlocked = $derived(removeOverflow.candidates.length < removeOverflow.needed);
 
 	function openEdit(shiftId: string) {
 		editShiftId = shiftId;
@@ -224,8 +319,28 @@
 
 	async function confirmRemove() {
 		const id = removeShiftId;
+		if (removeOverflowBlocked) {
+			removeShiftId = null;
+			return;
+		}
+		const toRelease = [...removeCascade, ...removeOverflow.candidates];
 		removeShiftId = null;
-		if (id) await removeShift(id);
+		if (!id) return;
+
+		// Sequential, not `Promise.all`: every unassign is a read-modify-write on
+		// the SAME job document (`JobRepository#releaseSlot`), so firing them in
+		// parallel would just make each one conflict-retry against the others.
+		for (const entry of toRelease) {
+			try {
+				await unassignMutation.mutateAsync(entry.assignmentId);
+			} catch (err) {
+				toast.error(
+					`ถอดอาสา ${entry.volunteerName} ออกจากกะไม่สำเร็จ: ${err instanceof Error ? err.message : 'เกิดข้อผิดพลาด'} — ยกเลิกการลบกะ`
+				);
+				return;
+			}
+		}
+		await removeShift(id);
 	}
 
 	function toggleWeekday(day: Weekday) {
@@ -435,11 +550,13 @@
 				<JobShiftCard
 					shift={row.shift}
 					split={row.split}
+					roster={row.roster}
 					canRemove={job.shifts.length > 1}
 					pending={saving}
 					onedit={openEdit}
 					onremove={(id) => (removeShiftId = id)}
 					onassign={openAssign}
+					onunassign={(entry) => (unassignTarget = entry)}
 				/>
 			{/each}
 		</div>
@@ -470,10 +587,33 @@
 					{#if removeRow}
 						กะวันที่ {removeRow.shift.date} เวลา {removeRow.shift.start_time}–{removeRow.shift
 							.end_time} น. (เป้า {removeRow.shift.quota} คน) จะถูกลบออก และโควตารวมของงานจะลดลงตาม
-						{#if removeHeldSeats > 0}
+						{#if removeCascade.length > 0}
+							<span class="mt-2 block font-bold text-foreground">
+								ระบบจะถอดอาสาที่มอบหมายไว้ในกะนี้ {removeCascade.length} คนออกอัตโนมัติ ({removeCascade
+									.map((e) => e.volunteerName)
+									.join(', ')}) และคืนที่นั่งเข้าโควตาของงาน
+							</span>
+						{/if}
+						{#if removeBlocking.length > 0}
 							<span class="mt-2 block font-bold text-destructive">
-								กะนี้มีอาสาถือที่นั่งอยู่แล้ว {removeHeldSeats} คน — ระบบจะปฏิเสธการลบถ้าโควตาที่เหลือไม่พอ
-								กรุณายกเลิกการมอบหมายก่อน
+								กะนี้มีอาสาเช็คอิน/ปฏิบัติงานเสร็จแล้ว {removeBlocking.length} คน ({removeBlocking
+									.map((e) => e.volunteerName)
+									.join(', ')}) — ระบบจะไม่ถอดออกให้อัตโนมัติ เพื่อรักษาประวัติการเข้าเวร
+								ลบกะนี้ไม่ได้จนกว่าจะจัดการรายชื่อเหล่านี้ก่อน
+							</span>
+						{/if}
+						{#if removeOverflow.needed > 0 && !removeOverflowBlocked}
+							<span class="mt-2 block font-bold text-foreground">
+								โควตารวมของงานจะเหลือน้อยกว่าที่อาสาถืออยู่ในกะอื่นของงานนี้อีก {removeOverflow.needed}
+								ที่นั่ง — ระบบจะถอดอาสาที่มอบหมายล่าสุดในกะอื่น {removeOverflow.candidates.length} คนออก
+								ด้วย ({removeOverflow.candidates.map((e) => e.volunteerName).join(', ')})
+							</span>
+						{/if}
+						{#if removeOverflowBlocked}
+							<span class="mt-2 block font-bold text-destructive">
+								ลบกะนี้ไม่ได้ — โควตารวมของงานจะเหลือน้อยกว่าที่อาสาถืออยู่ในกะอื่นอีก
+								{removeOverflow.needed} ที่นั่ง แต่มีอาสาที่ยังพอถอดได้ (ยังไม่เช็คอิน) เหลือเพียง
+								{removeOverflow.candidates.length} คน กรุณาเพิ่มโควตา หรือจัดการอาสาในกะอื่นก่อน
 							</span>
 						{/if}
 					{/if}
@@ -483,10 +623,42 @@
 				<AlertDialog.Cancel>ยกเลิก</AlertDialog.Cancel>
 				<AlertDialog.Action
 					class="bg-destructive text-white hover:bg-destructive/90"
-					disabled={saving}
+					disabled={saving || removeBlocking.length > 0 || removeOverflowBlocked}
 					onclick={confirmRemove}
 				>
 					ยืนยันลบกะนี้
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog.Root>
+
+	<AlertDialog.Root
+		open={unassignTarget !== null}
+		onOpenChange={(next) => {
+			if (!next) unassignTarget = null;
+		}}
+	>
+		<AlertDialog.Content>
+			<AlertDialog.Header>
+				<AlertDialog.Title class="flex items-center gap-2">
+					<TriangleAlert class="h-4.5 w-4.5 text-destructive" />
+					ลบอาสาออกจากกะนี้?
+				</AlertDialog.Title>
+				<AlertDialog.Description>
+					{#if unassignTarget}
+						{unassignTarget.volunteerName} ({unassignTarget.volunteerCode}) จะถูกถอดออกจากกะนี้
+						และที่นั่งจะถูกคืนเข้าโควตาของงานทันที
+					{/if}
+				</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>ยกเลิก</AlertDialog.Cancel>
+				<AlertDialog.Action
+					class="bg-destructive text-white hover:bg-destructive/90"
+					disabled={unassignMutation.isPending}
+					onclick={confirmUnassign}
+				>
+					ยืนยันลบออกจากกะ
 				</AlertDialog.Action>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>

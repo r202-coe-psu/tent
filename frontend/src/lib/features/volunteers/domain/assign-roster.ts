@@ -32,13 +32,19 @@ import { isControlledSkill } from './skills';
  * What the badge on the right of a candidate row says.
  *
  * - `accepted`    ✓ ยืนยันเข้าร่วมกะนี้แล้ว (Approved)
- * - `dispatched`  ⏱ มอบหมายในกะนี้แล้ว (รออาสาตอบรับ)
  * - `collision`   ⚠️ เวลาชนกับกะอื่น — names the clashing shift
  * - `available`   ● ว่างในกะนี้ (พร้อมปฏิบัติงาน)
+ *
+ * There is no separate "รออาสาตอบรับ" (awaiting-response) state: the
+ * back-office roster's only write path is `assign()`, which commits outright
+ * with no offer step (owner decision 2026-08-29), so any assignment already
+ * held on this shift reads as `accepted` regardless of `dispatch_status` —
+ * treating a still-`dispatched` row (the offer/accept path some other
+ * screen might use) as a pending response would show a wait that never
+ * actually happens here (owner feedback 2026-08-31).
  */
 export type AssignRowState =
 	| { kind: 'accepted' }
-	| { kind: 'dispatched' }
 	| {
 			kind: 'collision';
 			/** Title of the job whose shift clashes, for the badge text. */
@@ -62,18 +68,6 @@ export interface AssignCandidate {
 
 /** Statuses that mean the volunteer no longer holds the slot on THIS shift. */
 const RELEASED_STATUSES: ReadonlySet<ShiftAssignment['status']> = new Set(['cancelled', 'no_show']);
-
-/**
- * `true` when the offer on this shift has been taken up — accepted outright,
- * or already worked (checked in / completed, which can only follow an accept).
- */
-function isAccepted(assignment: ShiftAssignment): boolean {
-	return (
-		assignment.dispatch_status === 'accepted' ||
-		assignment.status === 'checked_in' ||
-		assignment.status === 'completed'
-	);
-}
 
 function sameWindow(a: DutyWindow, b: DutyWindow): boolean {
 	return a.start_ts === b.start_ts && a.end_ts === b.end_ts;
@@ -131,7 +125,10 @@ export function buildAssignRoster(input: AssignRosterInput): AssignCandidate[] {
 
 		let state: AssignRowState;
 		if (onThisShift) {
-			state = isAccepted(onThisShift) ? { kind: 'accepted' } : { kind: 'dispatched' };
+			// Any non-released row on this shift already holds the seat — see the
+			// `AssignRowState` doc comment for why there is no separate pending
+			// state here.
+			state = { kind: 'accepted' };
 		} else {
 			const clash = findTimeCollision(targetWindow, held);
 			if (clash) {

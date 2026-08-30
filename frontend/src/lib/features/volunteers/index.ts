@@ -41,6 +41,7 @@ export * from './domain/collision';
 export * from './domain/assign-roster';
 export * from './domain/skills';
 export * from './domain/applicant-queue';
+export * from './domain/shift-roster';
 export * from './domain/volunteer-code';
 export * from './domain/hub-metrics';
 

@@ -126,6 +126,30 @@ export function applyAccept(job: JobQuota, count = 1): JobQuota {
 	return next;
 }
 
+/**
+ * Release a previously CONFIRMED slot back to remaining — the inverse of
+ * {@link JobRepository#confirmSlot} (`applyAccept(applyDispatch(...))`, which
+ * always ends with `slots_dispatched` unchanged). Used when an SM removes a
+ * volunteer from a shift they were already outright-assigned to
+ * (`ShiftAssignmentRepository#unassign`): confirmed -1, remaining +1.
+ */
+export function applyRelease(job: JobQuota, count = 1): JobQuota {
+	if (!isNonNegativeInteger(count) || count === 0) {
+		throw new QuotaError('Release count must be a positive integer');
+	}
+	if (job.slots_confirmed < count) {
+		throw new QuotaError(`Cannot release ${count}: only ${job.slots_confirmed} confirmed`);
+	}
+	const next: JobQuota = {
+		quota: job.quota,
+		slots_confirmed: job.slots_confirmed - count,
+		slots_dispatched: job.slots_dispatched,
+		slots_remaining: job.slots_remaining + count
+	};
+	assertQuotaInvariant(next);
+	return next;
+}
+
 /** Volunteer declines a dispatched offer: dispatched -1, remaining +1. */
 export function applyDecline(job: JobQuota, count = 1): JobQuota {
 	if (!isNonNegativeInteger(count) || count === 0) {

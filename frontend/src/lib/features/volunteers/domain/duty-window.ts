@@ -153,3 +153,16 @@ export function isWithinDutyWindow(
 	const endMs = new Date(window.end_ts).getTime() + graceMs;
 	return nowMs >= startMs && nowMs <= endMs;
 }
+/**
+ * Exact-match comparison of two duty windows — the ONLY reliable way to tell
+ * which `shift_assignment` rows belong to a given `job.shifts[]` row, since
+ * `shift_assignment` carries no `job_shift_id` (schema.md §2.9 gap, same one
+ * `domain/capacity.ts` documents). `job-assign-page.svelte` always writes
+ * `duty_window: shiftDutyWindow(shift)` for the exact row being assigned, so
+ * comparing the stored window against a freshly recomputed one for a
+ * candidate row is exact, not a best guess — unlike the confirmed/dispatched
+ * COUNT split in `capacity.ts`, which only reconciles totals.
+ */
+export function sameDutyWindow(a: DutyWindow, b: DutyWindow): boolean {
+	return a.start_ts === b.start_ts && a.end_ts === b.end_ts;
+}

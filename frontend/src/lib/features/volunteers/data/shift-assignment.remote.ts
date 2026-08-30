@@ -185,6 +185,47 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 		await volunteerRepository().setCheckedIn(saved.volunteer_id, false, null);
 		return saved;
 	}
+
+	/**
+	 * SM removes a volunteer from a shift — the job detail shifts tab's
+	 * "ลบออกจากกะ". See the interface doc (`volunteer.repository.ts`) for why
+	 * an outstanding offer and an outright assignment take different quota
+	 * paths.
+	 *
+	 * Same write order and compensation as every other mutation here: the
+	 * assignment doc is set to `cancelled` first, and only then is the job's
+	 * quota given back; if that fails, the doc is reverted to its prior state.
+	 */
+	async unassign(id: string): Promise<ShiftAssignment> {
+		const latest = await this.repo.get<ShiftAssignment>(id);
+		if (!latest) throw new Error(`ไม่พบตารางเข้าเวร: ${id}`);
+		if (latest.status === 'checked_in' || latest.status === 'completed') {
+			throw new Error(
+				`ถอดอาสาออกจากกะนี้ไม่ได้ — เช็คอินไปแล้ว (สถานะ: ${latest.status}) กรุณาเช็คเอาต์แทน`
+			);
+		}
+		if (latest.status === 'cancelled' || latest.status === 'no_show') {
+			throw new Error(`ตารางเข้าเวรนี้ถูกยกเลิกไปแล้ว (สถานะ: ${latest.status})`);
+		}
+
+		// An unanswered offer never touched `slots_confirmed` — removing it is
+		// exactly what declining already does, so reuse that transition rather
+		// than duplicate it.
+		if (latest.dispatch_status === 'dispatched') {
+			return this.declineDispatch(id);
+		}
+
+		const saved = await this.save(touch({ ...latest, status: 'cancelled' as const }));
+		try {
+			await jobRepository().releaseSlot(saved.job_id);
+		} catch (err) {
+			await this.save(touch({ ...saved, status: latest.status })).catch(() => {
+				/* best-effort; original error still surfaces below */
+			});
+			throw err;
+		}
+		return saved;
+	}
 }
 
 let singleton: ShiftAssignmentRepository | null = null;

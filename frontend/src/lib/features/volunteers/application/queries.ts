@@ -301,6 +301,22 @@ export const useCheckOut = (queryClient: QueryClient) =>
 	}));
 
 /**
+ * SM removes a volunteer from a shift before they've worked it
+ * (`ShiftAssignmentRepository#unassign`). Quota-changing either way (gives
+ * back a confirmed or a dispatched slot) — invalidate shift assignments,
+ * jobs, and hub metrics, same set as `useReviewApplication`.
+ */
+export const useUnassignVolunteer = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: (id: string) => shiftAssignmentRepository().unassign(id),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
+		}
+	}));
+
+/**
  * Mints a volunteer profile from the SM-facing walk-in form
  * (`input.source` carries `'walk_in'`). A newly active volunteer changes the
  * hub metrics `ready`/`pendingIdentity` counters — invalidate volunteers and

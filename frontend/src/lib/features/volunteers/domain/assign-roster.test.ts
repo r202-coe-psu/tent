@@ -121,7 +121,7 @@ describe('buildAssignRoster — row state', () => {
 		expect(rows.map((r) => r.state.kind)).toEqual(['accepted', 'accepted']);
 	});
 
-	it('marks an outstanding offer on this shift as dispatched', () => {
+	it('marks an outstanding offer on this shift as accepted — the back-office roster has no wait-for-response state', () => {
 		const v = volunteer();
 		const [row] = roster({
 			volunteers: [v],
@@ -129,7 +129,7 @@ describe('buildAssignRoster — row state', () => {
 				assignment({ volunteer_id: v._id, status: 'assigned', dispatch_status: 'dispatched' })
 			]
 		});
-		expect(row.state).toEqual({ kind: 'dispatched' });
+		expect(row.state).toEqual({ kind: 'accepted' });
 		expect(row.assignable).toBe(false);
 	});
 
