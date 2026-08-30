@@ -1,5 +1,5 @@
 ---
-id: CR-096
+id: CR-098
 title: User Management V10 — ขยาย Role Taxonomy เป็น 10 บทบาท + Redesign ฟอร์มสร้าง/แก้ผู้ใช้ ให้ผูกกับ volunteer feature (Personnel Type, Volunteer Link, Duty-Access Window)
 status: proposed
 date: 2026-08-30
@@ -7,7 +7,7 @@ requested_by: Dev Team-B (UI V10 mockup — user management redesign)
 depends_on:
   - CR-092 (Volunteer Management V10 — Unified Identity, Time-Bound RBAC)
   - CR-094 (Volunteer Back-office V10 reconcile — `volunteer` schema_v 2)
-  - CR-095 (Volunteer job shifts + `personnel_type` — `volunteer` schema_v 3)
+  - CR-097 (Volunteer job shifts + `personnel_type` — `volunteer` schema_v 3)
 decided_by: project owner
 layer: volatile
 affects:
@@ -23,9 +23,9 @@ affects:
   - schema_v: `_users` metadata (ไม่ bump — เพิ่ม optional field เท่านั้น)
 ---
 
-# CR-096 — Role Taxonomy 10 บทบาท + Redesign ฟอร์มจัดการผู้ใช้งาน (V10)
+# CR-098 — Role Taxonomy 10 บทบาท + Redesign ฟอร์มจัดการผู้ใช้งาน (V10)
 
-> **สรุป (TL;DR):** ต่อยอด **UI V10** ของสายจิตอาสา (CR-092 / CR-094 / CR-095) มาที่หน้าจัดการผู้ใช้งาน:
+> **สรุป (TL;DR):** ต่อยอด **UI V10** ของสายจิตอาสา (CR-092 / CR-094 / CR-097) มาที่หน้าจัดการผู้ใช้งาน:
 > ขยายชุด RoleKey จาก 5 เป็น **10 บทบาท** ให้ตรงกับหน้าที่จริงหน้างาน และ redesign ฟอร์ม
 > "เพิ่มผู้ใช้ใหม่ในระบบ" ให้เลือก **ชนิดคน (Staff ประจำ / อาสาสมัคร)** ตาม R-AFFIL-1/2,
 > **ผูกกับโปรไฟล์ในทะเบียนจิตอาสาที่มีอยู่จริง** (อ่านผ่าน barrel `$lib/features/volunteers`)
@@ -132,12 +132,12 @@ CR นี้ขยายให้ SM grant RoleKey ใหม่ทั้ง 5 �
 
 ### 2.4 `personnel_type` — ใช้ของเดิม ห้ามนิยามซ้ำ
 
-CR-095 นิยาม `personnelTypeSchema = z.enum(['volunteer', 'staff'])` ไว้แล้วใน
+CR-097 นิยาม `personnelTypeSchema = z.enum(['volunteer', 'staff'])` ไว้แล้วใน
 `features/volunteers/domain/volunteer.schema.ts` และ export ผ่าน barrel. ฟอร์มผู้ใช้ต้อง
 **import ตัวเดิมจาก `$lib/features/volunteers`** ไม่สร้าง enum ชุดที่สองในฝั่ง `users` —
 มิฉะนั้นค่าจะ drift กันระหว่างหน้า roster กับหน้าจัดการผู้ใช้
 
-- ฝั่ง `volunteer` doc: เก็บใน `volunteer.personnel_type` (CR-095)
+- ฝั่ง `volunteer` doc: เก็บใน `volunteer.personnel_type` (CR-097)
 - ฝั่ง `_users`: ยังเก็บเป็น `affiliation_tags` ตาม R-AFFIL-1/2/5 (ไม่เพิ่ม field ใหม่)
 
 ### 2.5 หมายเหตุการ implement (ต่างจาก mockup เล็กน้อย)
@@ -164,7 +164,7 @@ CR-095 นิยาม `personnelTypeSchema = z.enum(['volunteer', 'staff'])` �
 - ❌ ไม่ทำ compound roles ของ CR-093 (ยังคง 1 user = 1 shelter) — ฟอร์มออกแบบให้ต่อยอดได้
 - ❌ ไม่แก้ feature `volunteers` — รอบนี้เรียกผ่าน barrel เท่านั้น (`useVolunteers`,
   `useUpdateVolunteer`, `personnelTypeSchema`) ไม่แตะ domain/data ภายในของ volunteers
-- ❌ ไม่ทำหน้าจอ roster / dispatch / check-in ใด ๆ (เป็นของ CR-092 / CR-094 / CR-095)
+- ❌ ไม่ทำหน้าจอ roster / dispatch / check-in ใด ๆ (เป็นของ CR-092 / CR-094 / CR-097)
 
 ---
 
@@ -204,3 +204,8 @@ CR-095 นิยาม `personnelTypeSchema = z.enum(['volunteer', 'staff'])` �
    หรือเพิ่มฟิลด์ `access_email` แยก? (ถ้าไม่แก้ การผูกจากฟอร์มผู้ใช้จะทับค่าอีเมลเดิมทิ้ง)
 7. **การเขียนสองฝั่งพลาดกลางทาง** — `_users` สำเร็จแต่ `volunteer.user_name` ล้มเหลว จะ
    retry, rollback, หรือปล่อยแล้วให้ reconcile job ตามเก็บ?
+
+## 7. Decision log
+
+- 2026-08-30 — เปิด CR (proposed) จาก UI V10 mockup ของหน้าจัดการผู้ใช้งาน
+- 2026-08-30 — renumber CR-096 → **CR-098**: หมายเลข CR-096 ถูกใช้ไปแล้วโดย `CR-096-volunteer-portal-dispatch-response.md` บน `develop` — เลี่ยงเลขชนใน `_index.md`

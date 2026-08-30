@@ -1,5 +1,5 @@
 ---
-id: CR-095
+id: CR-097
 title: "amend CR-094 — `job.shifts[]` (กะย่อยรายวัน, quota derive) + `volunteer.personnel_type` (อาสา/เจ้าหน้าที่) + skill master list"
 status: proposed
 date: 2026-08-29
@@ -16,7 +16,7 @@ affects:
   - frontend/src/lib/features/volunteers/ui/job-form-dialog.svelte · volunteer-filter-bar.svelte · volunteer-manage-dialog.svelte · people-tab.svelte
 ---
 
-# CR-095 — `job.shifts[]` + `volunteer.personnel_type` (amend CR-094)
+# CR-097 — `job.shifts[]` + `volunteer.personnel_type` (amend CR-094)
 
 ## สรุป (TL;DR)
 
@@ -91,7 +91,7 @@ FR-VOL-09.4 เปลี่ยนจาก 1 bucket ต่องาน → **1 b
 
 | ที่ | ผล |
 | --- | --- |
-| `docs/data/schema.md` §2.17 | ตาราง `job` — `shifts[]`, `shift_template` deprecated, `quota` = derive, invariant + migration (มีอยู่แล้ว — รอบนี้แค่เปลี่ยนคำเตือน "ต้องมี CR" ให้ชี้มาที่ CR-095) |
+| `docs/data/schema.md` §2.17 | ตาราง `job` — `shifts[]`, `shift_template` deprecated, `quota` = derive, invariant + migration (มีอยู่แล้ว — รอบนี้แค่เปลี่ยนคำเตือน "ต้องมี CR" ให้ชี้มาที่ CR-097) |
 | `docs/data/schema.md` §2.8 | ตาราง `volunteer` — เพิ่ม `personnel_type`, bump หัวข้อเป็น schema_v 3 + migration |
 | `docs/plans/volunteer-backoffice/00-foundation.md` | ภาคผนวก `job.shifts[]` — ปิด `[NEEDS CR]` ชี้มาที่ CR นี้ |
 | `frontend/.../domain/job.schema.ts` | `jobShiftSchema`, `totalShiftQuota`, `.refine` quota, `schema_v: z.literal(3)` |
@@ -130,4 +130,5 @@ FR-VOL-09.4 เปลี่ยนจาก 1 bucket ต่องาน → **1 b
 
 - 2026-08-27 — implement `job.shifts[]` ตามฟอร์มที่เจ้าของโครงการส่งมา, กำกับ `[NEEDS CR]` ไว้ใน `00-foundation.md`
 - 2026-08-28 — implement `volunteer.personnel_type` ตามตัวกรอง "บุคลากร" ในแท็บ 3
-- 2026-08-29 — เจ้าของโครงการเคาะให้ track เป็น **ไฟล์ CR** → เปิด CR-095 บันทึกย้อนหลัง + sync `schema.md` · `proposed`
+- 2026-08-29 — เจ้าของโครงการเคาะให้ track เป็น **ไฟล์ CR** → เปิด CR-097 บันทึกย้อนหลัง + sync `schema.md` · `proposed`
+- 2026-08-30 — renumber CR-095 → **CR-097**: หมายเลข CR-095 ถูกใช้ไปแล้วโดย `CR-095-food-sphere-replenishment-schema.md` (PR #183) — เลี่ยงเลขชนใน `_index.md`

@@ -483,7 +483,7 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 
 ### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 3**
 
-> **schema_v 3** — เพิ่ม `personnel_type` แยกอาสาสมัคร vs เจ้าหน้าที่ประจำ สำหรับตัวกรอง "บุคลากร" ในแท็บ 3 ([CR-095](../changes/CR-095-volunteer-job-shifts-personnel-type.md) §2) — `affiliation_tags` บน `_users` (CR-041 D-AFFIL) ใช้แทนไม่ได้เพราะอาสาส่วนใหญ่ไม่มี login.
+> **schema_v 3** — เพิ่ม `personnel_type` แยกอาสาสมัคร vs เจ้าหน้าที่ประจำ สำหรับตัวกรอง "บุคลากร" ในแท็บ 3 ([CR-097](../changes/CR-097-volunteer-job-shifts-personnel-type.md) §2) — `affiliation_tags` บน `_users` (CR-041 D-AFFIL) ใช้แทนไม่ได้เพราะอาสาส่วนใหญ่ไม่มี login.
 > **schema_v 2** — field ที่ back-office V10 ต้องใช้แต่ CR-092 ไม่ได้ระบุ ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §3.1): รหัสอาสา `V-{NNN}`, สถานะเช็คอิน/ยืนยันตัวตน, ศูนย์ปัจจุบัน (สำหรับ walk-in + โอนย้ายศูนย์), และ `source` ตัวกรอง "แหล่งที่มา".
 > schema_v 1 — โปรไฟล์อาสาสมัคร (CR-041 D-MULTI=A). สมัครได้จากหน้า public form (No-Auth) หรือเจ้าหน้าที่บันทึก. เมื่อสมัครจะได้รับ `tracking_token` สำหรับเปิด Digital Ticket / QR code บนมือถือ.
 
@@ -509,7 +509,7 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 
 **Index:** `(phone_hash)` · `(tracking_token)` · `(status)`
 
-**Migration (schema_v 2 → 3):** additive — เติม `personnel_type='volunteer'` ทุกแถว ([CR-095](../changes/CR-095-volunteer-job-shifts-personnel-type.md) §4)
+**Migration (schema_v 2 → 3):** additive — เติม `personnel_type='volunteer'` ทุกแถว ([CR-097](../changes/CR-097-volunteer-job-shifts-personnel-type.md) §4)
 
 **Migration (schema_v 1 → 2):** additive — เติม `checked_in=false`, `identity_verified=false`, `source='staff_entry'`, `national_id=null`, `current_shelter_code=null`; generate `volunteer_code` เรียงตาม `created_at` ต่อศูนย์ ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §6). ยังไม่มี production data ณ วันที่เขียน CR — migration เป็น safety net สำหรับ seed/dev data เท่านั้น
 
@@ -677,7 +677,7 @@ open → escalated
 
 ### 2.17 `job` — `job:{ulid}` · **schema_v 1**
 
-> **schema_v 3** — กะย่อยรายวัน (`shifts[]`): งานหนึ่งประกาศครอบคลุมหลายวัน/หลายช่วงเวลา แต่ละกะมีจำนวนรับของตัวเอง และ `quota` กลายเป็น**ผลรวม**ของทุกกะ (ฟอร์ม "ประกาศภารกิจงานอาสาใหม่" — Single / Batch Generator). `shift_template` เป็น opt (deprecated). ([CR-095](../changes/CR-095-volunteer-job-shifts-personnel-type.md) §1 — amend CR-094 §3.3)
+> **schema_v 3** — กะย่อยรายวัน (`shifts[]`): งานหนึ่งประกาศครอบคลุมหลายวัน/หลายช่วงเวลา แต่ละกะมีจำนวนรับของตัวเอง และ `quota` กลายเป็น**ผลรวม**ของทุกกะ (ฟอร์ม "ประกาศภารกิจงานอาสาใหม่" — Single / Batch Generator). `shift_template` เป็น opt (deprecated). ([CR-097](../changes/CR-097-volunteer-job-shifts-personnel-type.md) §1 — amend CR-094 §3.3)
 > schema_v 2 — Job CRUD ใน back-office + 3-Color Quota Bar + สถานะ `draft`/`paused`/ด่วนพิเศษ ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §3.3): ลบ `slots_pending` (แทนที่ด้วย `slots_dispatched` + `slots_remaining`), เพิ่ม `is_urgent`, `status` เพิ่ม `draft`/`paused`.
 > schema_v 1 — งานประกาศรับสมัครอาสาสมัครประจำศูนย์พักพิง (CR-041 D-TIER=A / D-APP=A / D-SHIFT=C). จัดการโดย Shelter Manager เพื่อระดมกำลังอาสาสมัครทั้งแบบ Operational (งานทั่วไป) และ Staff-Capable (งานคีย์ข้อมูลระบบ).
 
@@ -698,7 +698,7 @@ open → escalated
 > ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`).
 > **Index:** `(status)` · `(tier, status)` · `(shelter_code, status)`
 
-**Migration (schema_v 2 → 3):** สร้าง `shifts` 1 แถวจาก `shift_template` + `quota` เดิม (`id` = ulid ใหม่, `start_time`/`end_time` จาก template, `quota` = `quota` เดิม); `date` ไม่มีข้อมูลเดิม → ใช้วันที่ของ `created_at` ตามเวลา Asia/Bangkok; `end_date` = `date` หรือ +1 วันถ้า `end_time <= start_time`; `shift_template` คงไว้ตามเดิม ([CR-095](../changes/CR-095-volunteer-job-shifts-personnel-type.md) §4)
+**Migration (schema_v 2 → 3):** สร้าง `shifts` 1 แถวจาก `shift_template` + `quota` เดิม (`id` = ulid ใหม่, `start_time`/`end_time` จาก template, `quota` = `quota` เดิม); `date` ไม่มีข้อมูลเดิม → ใช้วันที่ของ `created_at` ตามเวลา Asia/Bangkok; `end_date` = `date` หรือ +1 วันถ้า `end_time <= start_time`; `shift_template` คงไว้ตามเดิม ([CR-097](../changes/CR-097-volunteer-job-shifts-personnel-type.md) §4)
 
 **Migration (schema_v 1 → 2):** `slots_remaining = quota − slots_confirmed`; `slots_dispatched = 0`; ทิ้งค่า `slots_pending` เดิม (ใบสมัครที่ค้างยังนับจาก `job_application.status='pending_review'`); `is_urgent=false` ([CR-094](../changes/CR-094-volunteer-backoffice-v10-reconcile.md) §6)
 
