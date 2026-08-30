@@ -425,3 +425,59 @@ describe('on-hand stock (T-22 cut-off)', () => {
 		});
 	});
 });
+
+// CR-052 gave a public booking a review chain before it becomes stock. computeNeeds
+// backs the public needs board and the NEED_FULL re-check, so it has to agree with
+// the back-office board on which bookings still owe the shelter goods — otherwise the
+// board reopens a need that donors are already on their way to fill.
+describe('computeNeeds across the CR-052 statuses', () => {
+	const camp = campaign('camp-1', [need('item:rice', '100')]);
+
+	it('still holds the target for a booking in review or being checked in', () => {
+		for (const status of ['declared', 'pending_review', 'verifying'] as const) {
+			const { remaining } = computeNeeds(
+				[camp],
+				[donation(`don-${status}`, 'camp-1', status, [{ item_id: 'item:rice', qty: '40' }])],
+				[]
+			);
+			expect(remaining.get('item:rice')).toBe('60');
+		}
+	});
+
+	it('releases the target once a booking is redirected or rejected', () => {
+		for (const status of ['redirected', 'rejected'] as const) {
+			const { remaining } = computeNeeds(
+				[camp],
+				[donation(`don-${status}`, 'camp-1', status, [{ item_id: 'item:rice', qty: '40' }])],
+				[]
+			);
+			expect(remaining.get('item:rice')).toBe('100');
+		}
+	});
+
+	it('keeps releasing on expired and cancelled, as before', () => {
+		for (const status of ['expired', 'cancelled'] as const) {
+			const { remaining } = computeNeeds(
+				[camp],
+				[donation(`don-${status}`, 'camp-1', status, [{ item_id: 'item:rice', qty: '40' }])],
+				[]
+			);
+			expect(remaining.get('item:rice')).toBe('100');
+		}
+	});
+
+	it('does not bind an item to a campaign through a released booking', () => {
+		const { campaignRemaining } = computeNeeds(
+			[camp],
+			[donation('don-r', 'camp-1', 'rejected', [{ item_id: 'item:rice', qty: '100' }])],
+			[]
+		);
+		// The whole target is still bookable, so the next donor is not refused NEED_FULL.
+		expect(pickCampaignForItems(campaignRemaining, [{ item_id: 'item:rice', qty: '100' }])).toEqual(
+			{
+				ok: true,
+				campaignId: 'camp-1'
+			}
+		);
+	});
+});

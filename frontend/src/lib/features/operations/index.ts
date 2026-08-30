@@ -21,13 +21,19 @@ export type {
 	TransferStatus,
 	DonationChannel,
 	DonationSlot,
-	NeedAvailability
+	NeedAvailability,
+	StockTransfer,
+	StockTransferItem,
+	TransferInput,
+	TransferFilter
 } from './domain/operations';
 
 // Domain — schemas + factories + transitions + read models + guards
 export {
 	ledgerReasonSchema,
 	donationStatusSchema,
+	DONATION_OUTSTANDING_STATUSES,
+	isDonationOutstanding,
 	transferStatusSchema,
 	donationChannelSchema,
 	stockLedgerInputSchema,
@@ -60,6 +66,8 @@ export {
 	keyedDonationIds,
 	keyableDonations,
 	isNeedCutOff,
+	forceCutOffNeed,
+	reopenNeed,
 	deriveNeedAvailability,
 	isStockLedger,
 	isDonation,
@@ -78,12 +86,21 @@ export {
 	type DistributeInput,
 	adjustInputSchema,
 	createAdjustEntry,
-	type AdjustInput
+	type AdjustInput,
+	createTransfer,
+	dispatchTransfer,
+	receiveTransfer,
+	cancelTransfer,
+	isStockTransfer,
+	transferInputSchema,
+	transferFilterSchema,
+	receivedItemSchema,
+	type ReceivedItemInput
 } from './domain/operations';
 
 // Data — repository contract + remote CouchDB binding
 export type { OperationsRepository } from './data/operations.repository';
-export { operationsRepository } from './data/operations.remote';
+export { operationsRepository, OperationsRemoteRepository } from './data/operations.remote';
 
 // Application — TanStack Query hooks + live-query wiring
 export {
@@ -104,6 +121,14 @@ export {
 	useCreatePurchase,
 	useUpdatePurchase,
 	useReceivePurchase,
+	useTransfers,
+	useTransfer,
+	useCreateTransfer,
+	useDispatchTransfer,
+	useReceiveTransfer,
+	useCancelTransfer,
+	useCrossShelterStockBalances,
+	useCrossShelterLedger,
 	startOperationsLiveQuery
 } from './application/queries';
 export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';
@@ -118,3 +143,5 @@ export { default as AdjustStockForm } from './ui/adjust-stock-form.svelte';
 export { default as PurchaseForm } from './ui/PurchaseForm.svelte';
 export { default as PurchaseReceiptForm } from './ui/PurchaseReceiptForm.svelte';
 export { default as PurchaseTable } from './ui/PurchaseTable.svelte';
+export { default as TransferForm } from './ui/transfer-form.svelte';
+export { default as TransferList } from './ui/transfer-list.svelte';
