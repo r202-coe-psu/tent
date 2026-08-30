@@ -24,13 +24,16 @@
 	import Zap from '@lucide/svelte/icons/zap';
 	import CalendarRange from '@lucide/svelte/icons/calendar-range';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import DatePicker from '$lib/components/date-picker.svelte';
 	import TimePicker from '$lib/components/time-picker.svelte';
 	import { ulid } from '$lib/db/ulid';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import JobShiftCard from './job-shift-card.svelte';
+	import JobShiftEditDialog from './job-shift-edit-dialog.svelte';
 	import { jobShiftQuotaSplits } from '../domain/capacity';
 	import { totalShiftQuota, type Job, type JobShift } from '../domain/job.schema';
 	import {
@@ -182,6 +185,47 @@
 			return;
 		}
 		await persistShifts(shifts, 'ลบกะออกจากงานแล้ว');
+	}
+
+	let editOpen = $state(false);
+	let editShiftId = $state<string | null>(null);
+	let removeShiftId = $state<string | null>(null);
+
+	const editRow = $derived(rows.find((r) => r.shift.id === editShiftId) ?? null);
+	/** Every OTHER shift — the edit dialog's duplicate check must not match the row itself. */
+	const editSiblings = $derived(job.shifts.filter((s) => s.id !== editShiftId));
+	/** Seats this shift already holds; the edit dialog refuses to cut below it. */
+	const editMinQuota = $derived(editRow ? editRow.split.confirmed + editRow.split.dispatched : 0);
+
+	const removeRow = $derived(rows.find((r) => r.shift.id === removeShiftId) ?? null);
+	const removeHeldSeats = $derived(
+		removeRow ? removeRow.split.confirmed + removeRow.split.dispatched : 0
+	);
+
+	function openEdit(shiftId: string) {
+		editShiftId = shiftId;
+		editOpen = true;
+	}
+
+	/**
+	 * Replace one row in place. Position matters: `jobShiftQuotaSplits`
+	 * allocates seats "earliest shift first" by array position, so an edit must
+	 * not reorder `shifts[]` — `persistShifts` re-derives `job.quota` from the
+	 * result either way.
+	 */
+	async function saveEdit(updated: JobShift) {
+		if (saving) return;
+		editOpen = false;
+		await persistShifts(
+			job.shifts.map((s) => (s.id === updated.id ? updated : s)),
+			'แก้ไขกะเรียบร้อยแล้ว'
+		);
+	}
+
+	async function confirmRemove() {
+		const id = removeShiftId;
+		removeShiftId = null;
+		if (id) await removeShift(id);
 	}
 
 	function toggleWeekday(day: Weekday) {
@@ -393,10 +437,58 @@
 					split={row.split}
 					canRemove={job.shifts.length > 1}
 					pending={saving}
-					onremove={removeShift}
+					onedit={openEdit}
+					onremove={(id) => (removeShiftId = id)}
 					onassign={openAssign}
 				/>
 			{/each}
 		</div>
 	</div>
+
+	<JobShiftEditDialog
+		bind:open={editOpen}
+		shift={editRow?.shift ?? null}
+		siblings={editSiblings}
+		minQuota={editMinQuota}
+		pending={saving}
+		onsave={saveEdit}
+	/>
+
+	<AlertDialog.Root
+		open={removeShiftId !== null}
+		onOpenChange={(next) => {
+			if (!next) removeShiftId = null;
+		}}
+	>
+		<AlertDialog.Content>
+			<AlertDialog.Header>
+				<AlertDialog.Title class="flex items-center gap-2">
+					<TriangleAlert class="h-4.5 w-4.5 text-destructive" />
+					ลบกะนี้ออกจากงาน?
+				</AlertDialog.Title>
+				<AlertDialog.Description>
+					{#if removeRow}
+						กะวันที่ {removeRow.shift.date} เวลา {removeRow.shift.start_time}–{removeRow.shift
+							.end_time} น. (เป้า {removeRow.shift.quota} คน) จะถูกลบออก และโควตารวมของงานจะลดลงตาม
+						{#if removeHeldSeats > 0}
+							<span class="mt-2 block font-bold text-destructive">
+								กะนี้มีอาสาถือที่นั่งอยู่แล้ว {removeHeldSeats} คน — ระบบจะปฏิเสธการลบถ้าโควตาที่เหลือไม่พอ
+								กรุณายกเลิกการมอบหมายก่อน
+							</span>
+						{/if}
+					{/if}
+				</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>ยกเลิก</AlertDialog.Cancel>
+				<AlertDialog.Action
+					class="bg-destructive text-white hover:bg-destructive/90"
+					disabled={saving}
+					onclick={confirmRemove}
+				>
+					ยืนยันลบกะนี้
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog.Root>
 </div>

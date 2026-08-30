@@ -11,6 +11,7 @@
 	 * best guess until `shift_assignment` carries a `job_shift_id`.
 	 */
 	import X from '@lucide/svelte/icons/x';
+	import Pencil from '@lucide/svelte/icons/pencil';
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import Clock from '@lucide/svelte/icons/clock';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
@@ -24,6 +25,7 @@
 		split,
 		canRemove,
 		pending = false,
+		onedit,
 		onremove,
 		onassign
 	}: {
@@ -32,6 +34,8 @@
 		/** A job must keep at least one sub-shift (`jobSchema.shifts.min(1)`). */
 		canRemove: boolean;
 		pending?: boolean;
+		/** Opens the edit dialog for THIS shift. */
+		onedit: (shiftId: string) => void;
 		onremove: (shiftId: string) => void;
 		/** Opens the assign screen on THIS shift. */
 		onassign: (shiftId: string) => void;
@@ -57,7 +61,7 @@
 			</p>
 		</div>
 
-		{#if canRemove}
+		<div class="flex shrink-0 items-center gap-0.5">
 			<Tooltip.Provider>
 				<Tooltip.Root>
 					<Tooltip.Trigger>
@@ -68,16 +72,38 @@
 								variant="ghost"
 								class="h-7 w-7 shrink-0"
 								disabled={pending}
-								onclick={() => onremove(shift.id)}
+								onclick={() => onedit(shift.id)}
 							>
-								<X class="h-4 w-4" />
+								<Pencil class="h-3.5 w-3.5" />
 							</Button>
 						{/snippet}
 					</Tooltip.Trigger>
-					<Tooltip.Content>ลบกะนี้ออกจากงาน</Tooltip.Content>
+					<Tooltip.Content>แก้ไขวัน เวลา และจำนวนคนของกะนี้</Tooltip.Content>
 				</Tooltip.Root>
 			</Tooltip.Provider>
-		{/if}
+
+			{#if canRemove}
+				<Tooltip.Provider>
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									size="icon"
+									variant="ghost"
+									class="h-7 w-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+									disabled={pending}
+									onclick={() => onremove(shift.id)}
+								>
+									<X class="h-4 w-4" />
+								</Button>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content>ลบกะนี้ออกจากงาน</Tooltip.Content>
+					</Tooltip.Root>
+				</Tooltip.Provider>
+			{/if}
+		</div>
 	</div>
 
 	<div>

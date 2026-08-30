@@ -40,6 +40,7 @@ export * from './domain/duty-window';
 export * from './domain/collision';
 export * from './domain/assign-roster';
 export * from './domain/skills';
+export * from './domain/applicant-queue';
 export * from './domain/volunteer-code';
 export * from './domain/hub-metrics';
 
@@ -94,6 +95,8 @@ export { default as JobDetailOverviewTab } from './ui/job-detail-overview-tab.sv
 export { default as JobLifecyclePanel } from './ui/job-lifecycle-panel.svelte';
 export { default as JobShiftsTab } from './ui/job-shifts-tab.svelte';
 export { default as JobShiftCard } from './ui/job-shift-card.svelte';
+export { default as JobShiftEditDialog } from './ui/job-shift-edit-dialog.svelte';
+export { default as JobApplicantsTab } from './ui/job-applicants-tab.svelte';
 
 // ui — Tab 2 (Roster & Live Attendance / ตารางกะและเช็คอิน)
 export { default as RosterAttendanceTab } from './ui/roster-attendance-tab.svelte';

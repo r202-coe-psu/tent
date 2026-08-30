@@ -4,10 +4,11 @@
 	 * — hero summary + 3 tabs. Composed here rather than in the route so the
 	 * route stays a thin shell, as every other feature in this codebase does.
 	 *
-	 * Tab 3 (ผู้สมัคร / Applicants & Queue) is intentionally a placeholder: the
-	 * approve/reject queue and the dispatch panel both need the volunteer
-	 * roster screen, which is a later step. The tab still shows its real
-	 * applicant count so the number is never fabricated.
+	 * Tab 3 (ผู้สมัคร / Applicants & Queue) is the approve/reject queue
+	 * (`job-applicants-tab.svelte`). The dispatch panel — offering a shift and
+	 * waiting for the volunteer's accept/decline — is NOT here: assignment is
+	 * outright from `job-assign-page.svelte` (owner decision 2026-08-29), and
+	 * the volunteer-facing response flow is still CR-096 `proposed`.
 	 */
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -17,7 +18,6 @@
 	import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import Users from '@lucide/svelte/icons/users';
-	import Construction from '@lucide/svelte/icons/construction';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
@@ -25,6 +25,7 @@
 	import JobDetailHero from './job-detail-hero.svelte';
 	import JobDetailOverviewTab from './job-detail-overview-tab.svelte';
 	import JobShiftsTab from './job-shifts-tab.svelte';
+	import JobApplicantsTab from './job-applicants-tab.svelte';
 	import JobFormDialog from './job-form-dialog.svelte';
 	import { useJob, useJobApplications } from '../application/queries';
 
@@ -40,8 +41,13 @@
 	const applicationsQuery = useJobApplications();
 
 	const job = $derived(jobQuery.data ?? null);
-	const applicantCount = $derived(
-		(applicationsQuery.data ?? []).filter((a) => a.job_id === jobId).length
+	const jobApplications = $derived(
+		(applicationsQuery.data ?? []).filter((a) => a.job_id === jobId)
+	);
+	const applicantCount = $derived(jobApplications.length);
+	/** Drives the "N รออนุมัติ" chip — the tab's one call to action. */
+	const pendingCount = $derived(
+		jobApplications.filter((a) => a.status === 'pending_review').length
 	);
 
 	const shelterQuery = useShelter(() => job?.shelter_code ?? '');
@@ -68,11 +74,12 @@
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<Button
 			variant="outline"
-			class="gap-1.5 rounded-xl text-xs sm:text-sm"
+			class="shrink-0 gap-1.5 rounded-xl text-xs sm:text-sm"
 			onclick={() => goto(resolve('/back-office/volunteers'))}
 		>
-			<ArrowLeft class="h-4 w-4" />
-			ย้อนกลับไปหน้ากระดานควบคุมงานอาสา (Volunteer Job Board)
+			<ArrowLeft class="h-4 w-4 shrink-0" />
+			<span class="sm:hidden">ย้อนกลับ</span>
+			<span class="hidden sm:inline">ย้อนกลับไปหน้ากระดานควบคุมงานอาสา (Volunteer Job Board)</span>
 		</Button>
 
 		<div class="flex flex-wrap items-center gap-3">
@@ -121,11 +128,13 @@
 			>
 				<Tabs.Trigger value="overview" class={TRIGGER_CLASS}>
 					<LayoutDashboard class="h-4 w-4 shrink-0" />
-					<span class="whitespace-nowrap">1. ภาพรวม (Overview)</span>
+					<span class="whitespace-nowrap">ภาพรวม</span>
+					<span class="hidden whitespace-nowrap sm:inline">(Overview)</span>
 				</Tabs.Trigger>
 				<Tabs.Trigger value="shifts" class={TRIGGER_CLASS}>
 					<CalendarDays class="h-4 w-4 shrink-0" />
-					<span class="whitespace-nowrap">2. กะและตารางกะ (Shifts &amp; Schedule)</span>
+					<span class="whitespace-nowrap">กะและตารางกะ</span>
+					<span class="hidden whitespace-nowrap sm:inline">(Shifts &amp; Schedule)</span>
 					<span
 						class="grid h-5 min-w-5 place-items-center rounded-full bg-muted px-1.5 text-[11px] font-bold text-muted-foreground tabular-nums"
 					>
@@ -134,12 +143,20 @@
 				</Tabs.Trigger>
 				<Tabs.Trigger value="applicants" class={TRIGGER_CLASS}>
 					<Users class="h-4 w-4 shrink-0" />
-					<span class="whitespace-nowrap">3. ผู้สมัคร (Applicants &amp; Queue)</span>
+					<span class="whitespace-nowrap">ผู้สมัคร</span>
+					<span class="hidden whitespace-nowrap sm:inline">(Applicants &amp; Queue)</span>
 					<span
 						class="grid h-5 min-w-5 place-items-center rounded-full bg-primary-dark px-1.5 text-[11px] font-bold text-white tabular-nums"
 					>
 						{applicantCount}
 					</span>
+					{#if pendingCount > 0}
+						<span
+							class="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-bold whitespace-nowrap text-white tabular-nums"
+						>
+							{pendingCount} รออนุมัติ
+						</span>
+					{/if}
 				</Tabs.Trigger>
 			</Tabs.List>
 
@@ -152,16 +169,7 @@
 			</Tabs.Content>
 
 			<Tabs.Content value="applicants" class="pt-4">
-				<div
-					class="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-16 text-center text-muted-foreground"
-				>
-					<Construction class="h-8 w-8" />
-					<p class="text-sm font-medium">อยู่ระหว่างพัฒนา</p>
-					<p class="max-w-md text-xs">
-						คิวอนุมัติผู้สมัครและการมอบหมายงาน (Dispatch) ต้องรอหน้าทะเบียนอาสาสมัครก่อน
-						จึงจะเปิดใช้งานได้
-					</p>
-				</div>
+				<JobApplicantsTab {job} />
 			</Tabs.Content>
 		</Tabs.Root>
 

@@ -20,12 +20,14 @@
 	 * sync. Rows are added one at a time or generated over a date range by
 	 * `domain/shift-batch.ts`, which is pure and unit-tested.
 	 */
+	import { untrack } from 'svelte';
 	import { defaults, superForm, setError } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { z } from 'zod';
 	import X from '@lucide/svelte/icons/x';
+	import Pencil from '@lucide/svelte/icons/pencil';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Zap from '@lucide/svelte/icons/zap';
 	import Briefcase from '@lucide/svelte/icons/briefcase';
@@ -43,6 +45,8 @@
 	import { jobInputSchema, totalShiftQuota } from '../domain/job.schema';
 	import type { Job, JobShift } from '../domain/job.schema';
 	import { SKILL_MASTER } from '../domain/skill-master';
+	import { jobShiftQuotaSplits } from '../domain/capacity';
+	import JobShiftEditDialog from './job-shift-edit-dialog.svelte';
 	import {
 		ALL_WEEKDAYS,
 		WEEKDAYS,
@@ -150,7 +154,34 @@
 		};
 	}
 
+	/**
+	 * Explicit `id`: without one, Superforms derives an id from the schema
+	 * shape, and every `JobFormDialog` instance shares `jobInputSchema` — so
+	 * the create dialog on the job board tab and an edit dialog on a job's
+	 * detail page collide ("Duplicate form id's found") whenever both stay
+	 * mounted at once (SvelteKit keeps the previous route's components alive
+	 * for a beat during a client-side navigation). Each job gets its own id;
+	 * the create form (no `job`) gets a fixed one, since only one create
+	 * dialog exists per screen.
+	 *
+	 * `warnings.duplicateId: false`: Superforms tracks registered ids per
+	 * SvelteKit `page` object and never clears an entry on unmount
+	 * (sveltekit-superforms `superForm.js`). `back-office/volunteers/+page.svelte`
+	 * keeps its 3 tabs on one `page` and unmounts/remounts `JobBoardTab` (and
+	 * this dialog with it) every time the "จัดการงาน" tab is switched away and
+	 * back — which re-registers the SAME id against the same lingering entry
+	 * and fires this warning even though only one `JobFormDialog` is ever
+	 * mounted at a time. The `id` above still does its real job (keeping this
+	 * form's data separate from every other form on the page); this only
+	 * silences the stale-registration false positive from the tab remount.
+	 */
 	const form = superForm(defaults(emptyValues(), zod4(jobInputSchema)), {
+		// `untrack`: this id is fixed for the lifetime of the dialog instance —
+		// reading `job` here is a one-time initialization, not a reactive
+		// dependency (`job-detail-page.svelte` swaps its `job` object on every
+		// refetch without ever remounting this dialog).
+		id: untrack(() => (job ? `volunteer-job-edit-${job._id}` : 'volunteer-job-create')),
+		warnings: { duplicateId: false },
 		SPA: true,
 		dataType: 'json',
 		validators: zod4(jobInputSchema),
@@ -347,7 +378,60 @@
 			: [...batchWeekdays, day];
 	}
 
+	/**
+	 * Shift editing reopens the standalone `JobShiftEditDialog` used on the job
+	 * detail tab — NOT inline in the row. It was inline at first, but editing a
+	 * row changes that row's height while the surrounding scroll container is
+	 * this dialog's own body: expanding a row near the bottom of a long list
+	 * pushed content below the fold, and on at least one browser the layout
+	 * shift jumped the scroll position back to the top of the form. A second
+	 * `Dialog.Root` avoids that — bits-ui portals dialog content to
+	 * `document.body`, so it never actually nests inside THIS dialog's DOM,
+	 * and both stay independently scrollable.
+	 */
+	let editShiftId = $state<string | null>(null);
+	let editShiftOpen = $state(false);
+
+	const editShift = $derived($formData.shifts.find((s) => s.id === editShiftId) ?? null);
+	/** Every OTHER row — the edit dialog's duplicate check must not match itself. */
+	const editSiblings = $derived($formData.shifts.filter((s) => s.id !== editShiftId));
+
+	/**
+	 * Seats already held per PERSISTED shift, so editing an existing job cannot
+	 * cut a shift below what volunteers hold. Keyed by shift id off the same
+	 * chronological ordering `jobShiftQuotaSplits` assumes (it allocates
+	 * "earliest shift first" BY POSITION, so it must be handed sorted rows).
+	 * Empty while creating — a job that does not exist yet holds nothing.
+	 */
+	const heldSeatsById = $derived.by<Record<string, number>>(() => {
+		if (!job) return {};
+		const ordered = [...job.shifts].sort((a, b) =>
+			`${a.date}T${a.start_time}`.localeCompare(`${b.date}T${b.start_time}`)
+		);
+		const splits = jobShiftQuotaSplits({ ...job, shifts: ordered });
+		return Object.fromEntries(
+			ordered.map((shift, index) => {
+				const split = splits[index];
+				return [shift.id, split ? split.confirmed + split.dispatched : 0];
+			})
+		);
+	});
+
+	const editMinQuota = $derived(editShiftId ? (heldSeatsById[editShiftId] ?? 0) : 0);
+
+	function openEditShift(shift: JobShift) {
+		editShiftId = shift.id;
+		editShiftOpen = true;
+	}
+
+	/** Replace in place — row order drives the per-shift seat split. */
+	function saveShiftEdit(updated: JobShift) {
+		$formData.shifts = $formData.shifts.map((s) => (s.id === updated.id ? updated : s));
+		editShiftOpen = false;
+	}
+
 	function removeShift(id: string) {
+		if (editShiftId === id) editShiftOpen = false;
 		$formData.shifts = $formData.shifts.filter((s) => s.id !== id);
 	}
 
@@ -362,14 +446,18 @@
 
 <Dialog.Root bind:open onOpenChange={handleOpenChange}>
 	<Dialog.Content class="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-5xl">
-		<div class="flex items-center gap-2 border-b border-border px-6 py-4 pr-12">
+		<div class="flex items-center gap-2 border-b border-border px-4 py-4 pr-12 sm:px-6">
 			<Dialog.Title class="flex items-center gap-2 text-lg font-semibold">
 				<Briefcase class="size-5 text-primary" />
 				{isEdit ? 'แก้ไขภารกิจงานอาสา' : 'ประกาศภารกิจงานอาสาใหม่'}
 			</Dialog.Title>
 		</div>
 
-		<form method="POST" use:form.enhance class="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
+		<form
+			method="POST"
+			use:form.enhance
+			class="max-h-[70vh] space-y-6 overflow-y-auto px-4 py-5 sm:px-6"
+		>
 			<Form.Field {form} name="title">
 				<Form.Control>
 					{#snippet children({ props })}
@@ -408,24 +496,24 @@
 					<Button
 						type="button"
 						variant="outline"
-						class="!h-11 justify-center {!$formData.is_urgent
+						class="!h-11 justify-center gap-1 {!$formData.is_urgent
 							? 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100'
 							: ''}"
 						aria-pressed={!$formData.is_urgent}
 						onclick={() => ($formData.is_urgent = false)}
 					>
-						🟢 งานทั่วไป (Normal)
+						🟢 งานทั่วไป <span class="hidden sm:inline">(Normal)</span>
 					</Button>
 					<Button
 						type="button"
 						variant="outline"
-						class="!h-11 justify-center {$formData.is_urgent
+						class="!h-11 justify-center gap-1 {$formData.is_urgent
 							? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
 							: ''}"
 						aria-pressed={$formData.is_urgent}
 						onclick={() => ($formData.is_urgent = true)}
 					>
-						🚨 ด่วนพิเศษ (Urgent)
+						🚨 ด่วนพิเศษ <span class="hidden sm:inline">(Urgent)</span>
 					</Button>
 				</div>
 			</div>
@@ -646,7 +734,9 @@
 							disabled={!canGenerateBatch}
 							onclick={generateBatch}
 						>
-							<Zap class="mr-1 size-4" /> ประมวลผลสร้างชุดกะย่อย (Generate Batch Shifts)
+							<Zap class="mr-1 size-4 shrink-0" />
+							<span class="sm:hidden">สร้างชุดกะย่อย</span>
+							<span class="hidden sm:inline">ประมวลผลสร้างชุดกะย่อย (Generate Batch Shifts)</span>
 						</Button>
 					</div>
 				{/if}
@@ -675,7 +765,7 @@
 						<ul class="max-h-72 space-y-2 overflow-y-auto pr-1">
 							{#each shifts as shift, index (shift.id)}
 								<li
-									class="flex items-center gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm"
+									class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm"
 								>
 									<span
 										class="flex size-7 shrink-0 items-center justify-center rounded-full bg-background text-xs font-semibold text-muted-foreground"
@@ -683,7 +773,7 @@
 										{index + 1}
 									</span>
 									<span class="font-semibold text-primary">📅 {shift.date}</span>
-									<span class="text-muted-foreground/50">|</span>
+									<span class="hidden text-muted-foreground/50 sm:inline">|</span>
 									<span class="font-semibold text-destructive">
 										⏰ {shift.start_time} - {shift.end_time}
 									</span>
@@ -692,13 +782,23 @@
 											ถึง {shift.end_date}
 										</Badge>
 									{/if}
-									<span class="text-muted-foreground/50">|</span>
+									<span class="hidden text-muted-foreground/50 sm:inline">|</span>
 									<span class="font-semibold text-emerald-600">👥 รับ {shift.quota} คน</span>
 									<Button
 										type="button"
 										variant="ghost"
 										size="icon"
-										class="ml-auto shrink-0 text-muted-foreground hover:text-destructive"
+										class="ml-auto shrink-0 text-muted-foreground hover:text-foreground"
+										aria-label={`แก้ไขกะวันที่ ${shift.date}`}
+										onclick={() => openEditShift(shift)}
+									>
+										<Pencil class="size-3.5" />
+									</Button>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon"
+										class="shrink-0 text-muted-foreground hover:text-destructive"
 										aria-label={`ลบกะวันที่ ${shift.date}`}
 										onclick={() => removeShift(shift.id)}
 									>
@@ -722,11 +822,20 @@
 			{/if}
 		</form>
 
-		<div class="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
-			<Button type="button" variant="ghost" onclick={() => handleOpenChange(false)}>ยกเลิก</Button>
+		<div
+			class="flex flex-col-reverse gap-2 border-t border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6"
+		>
+			<Button
+				type="button"
+				variant="ghost"
+				class="w-full sm:w-auto"
+				onclick={() => handleOpenChange(false)}
+			>
+				ยกเลิก
+			</Button>
 			<Button
 				type="submit"
-				class="!h-11 min-w-[220px]"
+				class="!h-11 w-full sm:w-auto sm:min-w-[220px]"
 				disabled={isPending}
 				onclick={() => form.submit()}
 			>
@@ -734,9 +843,20 @@
 					กำลังบันทึก...
 				{:else}
 					<Check class="mr-1 size-4" />
-					{isEdit ? 'บันทึกการแก้ไข' : 'บันทึกและเผยแพร่ (Save & Post)'}
+					<span class="sm:hidden">{isEdit ? 'บันทึกการแก้ไข' : 'บันทึกและเผยแพร่'}</span>
+					<span class="hidden sm:inline"
+						>{isEdit ? 'บันทึกการแก้ไข' : 'บันทึกและเผยแพร่ (Save & Post)'}</span
+					>
 				{/if}
 			</Button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
+
+<JobShiftEditDialog
+	bind:open={editShiftOpen}
+	shift={editShift}
+	siblings={editSiblings}
+	minQuota={editMinQuota}
+	onsave={saveShiftEdit}
+/>
