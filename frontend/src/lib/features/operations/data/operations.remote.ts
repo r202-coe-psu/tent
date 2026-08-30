@@ -358,10 +358,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			throw new Error(`receivePurchase: ${purchase._id} needs at least one counted line`);
 		}
 
-		const catalog = new Map<string, SupplyItem | null>();
+		const catalog = new Map<string, CatalogItem | null>();
 		for (const row of rows) {
 			if (!catalog.has(row.item_id)) {
-				catalog.set(row.item_id, await this.findItem(row.item_id));
+				catalog.set(row.item_id, await this.loadCatalogItem(row.item_id));
 			}
 			assertReceiveAgainstCatalog(row, catalog.get(row.item_id) ?? null);
 		}
